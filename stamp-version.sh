@@ -15,4 +15,24 @@ sed -i "s|.*// __STAMP__|    var BUILD = {version:${NUM},built:\"${BUILT}\"}; //
 # Write the server-side manifest the page fetches to detect staleness.
 printf '{"version":%s,"built":"%s"}\n' "${NUM}" "${BUILT}" > version.json
 
+# Regenerate the docs manifest: every .md file in the repo (excluding git,
+# vendored libs, and node_modules). The Docs viewer fetches this to list files.
+FILES="$(find . -type f -name '*.md' \
+  -not -path './.git/*' -not -path './vendor/*' -not -path './node_modules/*' \
+  | sed 's|^\./||' | sort)"
+{
+  printf '{"generated":"%s","files":[' "${BUILT}"
+  first=1
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    dir="$(dirname "$f")"; name="$(basename "$f")"
+    if [ "${first}" -eq 1 ]; then first=0; else printf ','; fi
+    printf '{"path":"%s","dir":"%s","name":"%s"}' "$f" "$dir" "$name"
+  done <<EOF
+${FILES}
+EOF
+  printf ']}\n'
+} > docs-manifest.json
+
 echo "Stamped v${NUM} @ ${BUILT}"
+echo "Docs manifest: $(printf '%s\n' "${FILES}" | grep -c . ) markdown file(s)"

@@ -19,7 +19,7 @@
   <script>
   (function () {
     "use strict";
-    var BUILD = {version:6,built:"2026-07-21T02:40:08Z"}; // __STAMP__
+    var BUILD = {version:7,built:"2026-07-21T03:14:31Z"}; // __STAMP__
     window.__BUILD = BUILD;
     var STORE_KEY = "dbgConsole:v1";
     var MAX = 300;               // cap stored entries
@@ -346,6 +346,9 @@
   })();
   </script>
 
+  <!-- Self-hosted markdown renderer (marked v12) for the doc viewers. -->
+  <script src="vendor/marked.min.js"></script>
+
   <style>
     :root {
       --bg: #0f172a;
@@ -423,6 +426,59 @@
     .test-btns { display: flex; gap: 10px; flex-wrap: wrap; }
     .test-btns button { flex: 1; min-width: 120px; font-size: 0.9rem; padding: 12px; }
     footer { text-align: center; color: var(--muted); font-size: 0.8rem; margin-top: 8px; }
+
+    /* ---- doc viewer launchers (stacked above the console button) ---- */
+    .doc-launch {
+      position: fixed; right: 14px; z-index: 2147483646;
+      width: 46px; height: 46px; border-radius: 12px;
+      background: #1e293b; color: #cbd5e1; border: 1px solid #334155;
+      box-shadow: 0 4px 14px rgba(0,0,0,.4);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 1px; cursor: pointer; padding: 0;
+    }
+    .doc-launch:active { background: #273449; }
+    .doc-launch svg { width: 18px; height: 18px; display: block; }
+    .doc-launch .lbl { font-size: 8px; letter-spacing: .5px; color: #94a3b8; }
+    #doc-claude { bottom: 68px; }
+    #doc-all { bottom: 122px; }
+
+    /* ---- doc viewer overlay ---- */
+    #doc-view { position: fixed; inset: 0; z-index: 2147483647; background: #0b1220;
+      color: #e2e8f0; display: none; flex-direction: column; }
+    #doc-view.open { display: flex; }
+    #doc-head { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+      background: #111827; border-bottom: 1px solid #1e293b; }
+    #doc-head .t { font-weight: 700; font-size: 15px; flex: 1; white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis; }
+    #doc-head button { background: #334155; color: #fff; border: none; border-radius: 8px;
+      padding: 8px 12px; font-size: 14px; cursor: pointer; width: auto; }
+    #doc-bar { flex: 0 0 auto; display: none; gap: 8px; padding: 8px 12px; background: #0f172a;
+      border-bottom: 1px solid #1e293b; flex-wrap: wrap; }
+    #doc-bar.show { display: flex; }
+    #doc-bar select { flex: 1; min-width: 120px; background: #0b1220; color: #e2e8f0;
+      border: 1px solid #334155; border-radius: 8px; padding: 10px; font-size: 16px; }
+    #doc-body { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch;
+      padding: 16px 16px 64px; line-height: 1.6; font-size: 15px; }
+    #doc-body > *:first-child { margin-top: 0; }
+    #doc-body h1, #doc-body h2, #doc-body h3 { line-height: 1.25; margin: 1.2em 0 .5em; }
+    #doc-body h1 { font-size: 1.6em; border-bottom: 1px solid #1e293b; padding-bottom: .3em; }
+    #doc-body h2 { font-size: 1.3em; border-bottom: 1px solid #1e293b; padding-bottom: .2em; }
+    #doc-body h3 { font-size: 1.1em; }
+    #doc-body a { color: #818cf8; }
+    #doc-body code { background: #1e293b; padding: .15em .4em; border-radius: 5px; font-size: .9em;
+      font-family: ui-monospace, Menlo, Consolas, monospace; }
+    #doc-body pre { background: #111827; padding: 12px; border-radius: 10px; overflow-x: auto; }
+    #doc-body pre code { background: none; padding: 0; }
+    #doc-body blockquote { border-left: 3px solid #4f46e5; margin: 1em 0; padding: .2em 1em; color: #94a3b8; }
+    #doc-body table { border-collapse: collapse; width: 100%; display: block; overflow-x: auto; }
+    #doc-body th, #doc-body td { border: 1px solid #334155; padding: 8px 10px; text-align: left; }
+    #doc-body th { background: #1e293b; }
+    #doc-body img { max-width: 100%; }
+    #doc-body hr { border: none; border-top: 1px solid #1e293b; margin: 1.5em 0; }
+    #doc-body ul, #doc-body ol { padding-left: 1.4em; }
+    #doc-body .doc-file-sep { color: #64748b; font-size: 12px; margin: 24px 0 8px;
+      border-top: 1px dashed #334155; padding-top: 12px; }
+    #doc-body .doc-err { color: #fca5a5; }
   </style>
 </head>
 <body>
@@ -515,6 +571,144 @@
     refreshInfo();
     window.addEventListener('resize', refreshInfo);
     console.log('page ready ✓');
+  </script>
+
+  <!-- ============================================================= -->
+  <!-- DOC VIEWERS: CLAUDE.md button + all-.md Docs button           -->
+  <!-- ============================================================= -->
+  <script>
+  (function () {
+    "use strict";
+    function el(t, a, h) {
+      var n = document.createElement(t);
+      if (a) for (var k in a) n.setAttribute(k, a[k]);
+      if (h != null) n.innerHTML = h;
+      return n;
+    }
+    function bust(u) { return u + (u.indexOf("?") < 0 ? "?" : "&") + "t=" + (new Date().getTime()); }
+    function render(md) {
+      if (window.marked && window.marked.parse) {
+        try { return window.marked.parse(md); } catch (e) { /* fall through */ }
+      }
+      var d = document.createElement("div"); d.textContent = md;
+      return "<pre>" + d.innerHTML + "</pre>";
+    }
+    function fetchText(path) {
+      return fetch(bust(path), { cache: "no-store" }).then(function (r) {
+        if (!r.ok) throw new Error(r.status + " " + path);
+        return r.text();
+      });
+    }
+    function fetchManifest() {
+      return fetch(bust("docs-manifest.json"), { cache: "no-store" })
+        .then(function (r) { return r.ok ? r.json() : { files: [] }; })
+        .catch(function () { return { files: [] }; });
+    }
+
+    // ---- overlay ----
+    var view = el("div", { id: "doc-view" });
+    var head = el("div", { id: "doc-head" });
+    var title = el("span", { "class": "t" }); title.textContent = "Docs";
+    var close = el("button", {}, "Close ✕");
+    head.appendChild(title); head.appendChild(close);
+
+    var bar = el("div", { id: "doc-bar" });
+    var dirSel = el("select", { "aria-label": "Directory" });
+    var fileSel = el("select", { "aria-label": "File" });
+    bar.appendChild(dirSel); bar.appendChild(fileSel);
+
+    var body = el("div", { id: "doc-body" });
+    view.appendChild(head); view.appendChild(bar); view.appendChild(body);
+    close.addEventListener("click", function () { view.classList.remove("open"); });
+    function open() { view.classList.add("open"); }
+
+    // ---- launchers ----
+    var docIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"></path><polyline points="14 3 14 8 19 8"></polyline></svg>';
+    var stackIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v12"></path><path d="M20 7h-9a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"></path></svg>';
+    var bClaude = el("button", { id: "doc-claude", "class": "doc-launch", "aria-label": "View CLAUDE.md" },
+      docIcon + '<span class="lbl">CLAUDE</span>');
+    var bAll = el("button", { id: "doc-all", "class": "doc-launch", "aria-label": "View all docs" },
+      stackIcon + '<span class="lbl">DOCS</span>');
+
+    // ---- CLAUDE.md view ----
+    function showClaude() {
+      title.textContent = "CLAUDE.md";
+      bar.classList.remove("show");
+      body.innerHTML = '<p style="color:#94a3b8">Loading…</p>';
+      open();
+      fetchManifest().then(function (m) {
+        var claudes = (m.files || []).filter(function (f) { return f.name.toLowerCase() === "claude.md"; });
+        if (!claudes.length) claudes = [{ path: "CLAUDE.md", name: "CLAUDE.md" }];
+        var parts = [];
+        var seq = Promise.resolve();
+        claudes.forEach(function (f) {
+          seq = seq.then(function () {
+            return fetchText(f.path).then(
+              function (t) { parts.push((claudes.length > 1 ? '<div class="doc-file-sep">' + f.path + "</div>" : "") + render(t)); },
+              function () { parts.push('<div class="doc-err">Could not load ' + f.path + "</div>"); }
+            );
+          });
+        });
+        seq.then(function () { body.innerHTML = parts.join(""); body.scrollTop = 0; });
+      });
+    }
+
+    // ---- all-docs view ----
+    var manifest = [];
+    function showAll() {
+      title.textContent = "Docs";
+      bar.classList.add("show");
+      body.innerHTML = '<p style="color:#94a3b8">Loading…</p>';
+      open();
+      fetchManifest().then(function (m) {
+        manifest = (m.files || []).slice().sort(function (a, b) { return a.path < b.path ? -1 : 1; });
+        var dirs = [], seen = {};
+        manifest.forEach(function (f) { if (!seen[f.dir]) { seen[f.dir] = 1; dirs.push(f.dir); } });
+        dirs.sort();
+        dirSel.innerHTML = "";
+        var allOpt = el("option", { value: "*" });
+        allOpt.textContent = "All directories (" + manifest.length + ")";
+        dirSel.appendChild(allOpt);
+        dirs.forEach(function (d) {
+          var o = el("option", { value: d }); o.textContent = (d === "." ? "(root)" : d); dirSel.appendChild(o);
+        });
+        populateFiles("*");
+        if (manifest.length) loadFile(manifest[0].path);
+        else body.innerHTML = '<p class="doc-err">No .md files found.</p>';
+      });
+    }
+    function populateFiles(dir) {
+      fileSel.innerHTML = "";
+      manifest.filter(function (f) { return dir === "*" || f.dir === dir; }).forEach(function (f) {
+        var o = el("option", { value: f.path });
+        o.textContent = f.name + (dir === "*" && f.dir !== "." ? "  (" + f.dir + ")" : "");
+        fileSel.appendChild(o);
+      });
+    }
+    function loadFile(path) {
+      body.innerHTML = '<p style="color:#94a3b8">Loading ' + path + "…</p>";
+      fetchText(path).then(
+        function (t) { body.innerHTML = render(t); body.scrollTop = 0; },
+        function () { body.innerHTML = '<p class="doc-err">Could not load ' + path + "</p>"; }
+      );
+      fileSel.value = path;
+    }
+    dirSel.addEventListener("change", function () {
+      populateFiles(dirSel.value);
+      if (fileSel.value) loadFile(fileSel.value);
+    });
+    fileSel.addEventListener("change", function () { loadFile(fileSel.value); });
+
+    bClaude.addEventListener("click", showClaude);
+    bAll.addEventListener("click", showAll);
+
+    function mount() {
+      var root = document.body || document.documentElement;
+      root.appendChild(bClaude); root.appendChild(bAll); root.appendChild(view);
+    }
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mount);
+    else mount();
+  })();
   </script>
 </body>
 </html>
