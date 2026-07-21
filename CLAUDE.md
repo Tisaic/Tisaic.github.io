@@ -49,8 +49,11 @@ and feed console output back to Claude.
    `cache: no-store`; if the server build is newer than the loaded page, a
    red top banner offers a cache-busting reload. Beats the Pages/CDN/browser
    cache lag.
-4. **CLAUDE.md viewer** and **Docs viewer** — render this file and every
-   `.md` in the repo (with a directory selector), using self-hosted marked.
+4. **Docs viewer** (bottom-right `DOCS` launcher) — renders every `.md` in
+   the repo with self-hosted marked. A directory selector filters by folder,
+   and files are split into two groups: **◆ CLAUDE context** (any `CLAUDE.md`,
+   shown with an indigo tag) and **Docs** (everything else). Opens `CLAUDE.md`
+   by default so the current state is one tap away.
 
 ## Versioning
 

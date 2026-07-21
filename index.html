@@ -19,7 +19,7 @@
   <script>
   (function () {
     "use strict";
-    var BUILD = {version:7,built:"2026-07-21T03:14:31Z"}; // __STAMP__
+    var BUILD = {version:8,built:"2026-07-21T03:26:48Z"}; // __STAMP__
     window.__BUILD = BUILD;
     var STORE_KEY = "dbgConsole:v1";
     var MAX = 300;               // cap stored entries
@@ -439,8 +439,7 @@
     .doc-launch:active { background: #273449; }
     .doc-launch svg { width: 18px; height: 18px; display: block; }
     .doc-launch .lbl { font-size: 8px; letter-spacing: .5px; color: #94a3b8; }
-    #doc-claude { bottom: 68px; }
-    #doc-all { bottom: 122px; }
+    #doc-all { bottom: 68px; }
 
     /* ---- doc viewer overlay ---- */
     #doc-view { position: fixed; inset: 0; z-index: 2147483647; background: #0b1220;
@@ -450,6 +449,11 @@
       background: #111827; border-bottom: 1px solid #1e293b; }
     #doc-head .t { font-weight: 700; font-size: 15px; flex: 1; white-space: nowrap;
       overflow: hidden; text-overflow: ellipsis; }
+    #doc-head .doc-tag { flex: 0 0 auto; font-size: 10px; font-weight: 700; letter-spacing: .5px;
+      padding: 3px 7px; border-radius: 6px; background: #334155; color: #cbd5e1;
+      text-transform: uppercase; display: none; }
+    #doc-head .doc-tag.claude { background: #4f46e5; color: #fff; }
+    #doc-bar optgroup { font-weight: 700; }
     #doc-head button { background: #334155; color: #fff; border: none; border-radius: 8px;
       padding: 8px 12px; font-size: 14px; cursor: pointer; width: auto; }
     #doc-bar { flex: 0 0 auto; display: none; gap: 8px; padding: 8px 12px; background: #0f172a;
@@ -608,9 +612,11 @@
     // ---- overlay ----
     var view = el("div", { id: "doc-view" });
     var head = el("div", { id: "doc-head" });
+    var tag = el("span", { "class": "doc-tag" });
     var title = el("span", { "class": "t" }); title.textContent = "Docs";
     var close = el("button", {}, "Close ✕");
-    head.appendChild(title); head.appendChild(close);
+    head.appendChild(tag); head.appendChild(title); head.appendChild(close);
+    function isClaude(f) { return f && f.name && f.name.toLowerCase() === "claude.md"; }
 
     var bar = el("div", { id: "doc-bar" });
     var dirSel = el("select", { "aria-label": "Directory" });
@@ -622,46 +628,24 @@
     close.addEventListener("click", function () { view.classList.remove("open"); });
     function open() { view.classList.add("open"); }
 
-    // ---- launchers ----
-    var docIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"></path><polyline points="14 3 14 8 19 8"></polyline></svg>';
+    // ---- launcher ----
     var stackIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v12"></path><path d="M20 7h-9a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"></path></svg>';
-    var bClaude = el("button", { id: "doc-claude", "class": "doc-launch", "aria-label": "View CLAUDE.md" },
-      docIcon + '<span class="lbl">CLAUDE</span>');
-    var bAll = el("button", { id: "doc-all", "class": "doc-launch", "aria-label": "View all docs" },
+    var bAll = el("button", { id: "doc-all", "class": "doc-launch", "aria-label": "View docs" },
       stackIcon + '<span class="lbl">DOCS</span>');
 
-    // ---- CLAUDE.md view ----
-    function showClaude() {
-      title.textContent = "CLAUDE.md";
-      bar.classList.remove("show");
-      body.innerHTML = '<p style="color:#94a3b8">Loading…</p>';
-      open();
-      fetchManifest().then(function (m) {
-        var claudes = (m.files || []).filter(function (f) { return f.name.toLowerCase() === "claude.md"; });
-        if (!claudes.length) claudes = [{ path: "CLAUDE.md", name: "CLAUDE.md" }];
-        var parts = [];
-        var seq = Promise.resolve();
-        claudes.forEach(function (f) {
-          seq = seq.then(function () {
-            return fetchText(f.path).then(
-              function (t) { parts.push((claudes.length > 1 ? '<div class="doc-file-sep">' + f.path + "</div>" : "") + render(t)); },
-              function () { parts.push('<div class="doc-err">Could not load ' + f.path + "</div>"); }
-            );
-          });
-        });
-        seq.then(function () { body.innerHTML = parts.join(""); body.scrollTop = 0; });
-      });
-    }
-
-    // ---- all-docs view ----
+    // ---- docs view ----
     var manifest = [];
     function showAll() {
-      title.textContent = "Docs";
       bar.classList.add("show");
       body.innerHTML = '<p style="color:#94a3b8">Loading…</p>';
       open();
       fetchManifest().then(function (m) {
-        manifest = (m.files || []).slice().sort(function (a, b) { return a.path < b.path ? -1 : 1; });
+        // sort: CLAUDE files first, then by path
+        manifest = (m.files || []).slice().sort(function (a, b) {
+          var ca = isClaude(a), cb = isClaude(b);
+          if (ca !== cb) return ca ? -1 : 1;
+          return a.path < b.path ? -1 : 1;
+        });
         var dirs = [], seen = {};
         manifest.forEach(function (f) { if (!seen[f.dir]) { seen[f.dir] = 1; dirs.push(f.dir); } });
         dirs.sort();
@@ -673,19 +657,43 @@
           var o = el("option", { value: d }); o.textContent = (d === "." ? "(root)" : d); dirSel.appendChild(o);
         });
         populateFiles("*");
-        if (manifest.length) loadFile(manifest[0].path);
+        // default to CLAUDE.md so "our state" is one tap away
+        var first = manifest.filter(isClaude)[0] || manifest[0];
+        if (first) { loadFile(first.path); }
         else body.innerHTML = '<p class="doc-err">No .md files found.</p>';
       });
     }
+    function optFor(f, dir) {
+      var o = el("option", { value: f.path });
+      o.textContent = (isClaude(f) ? "◆ " : "") + f.name +
+        (dir === "*" && f.dir !== "." ? "  (" + f.dir + ")" : "");
+      return o;
+    }
     function populateFiles(dir) {
       fileSel.innerHTML = "";
-      manifest.filter(function (f) { return dir === "*" || f.dir === dir; }).forEach(function (f) {
-        var o = el("option", { value: f.path });
-        o.textContent = f.name + (dir === "*" && f.dir !== "." ? "  (" + f.dir + ")" : "");
-        fileSel.appendChild(o);
-      });
+      var list = manifest.filter(function (f) { return dir === "*" || f.dir === dir; });
+      var claude = list.filter(isClaude);
+      var docs = list.filter(function (f) { return !isClaude(f); });
+      if (claude.length) {
+        var g1 = el("optgroup", { label: "◆ CLAUDE context" });
+        claude.forEach(function (f) { g1.appendChild(optFor(f, dir)); });
+        fileSel.appendChild(g1);
+      }
+      if (docs.length) {
+        var g2 = el("optgroup", { label: "Docs" });
+        docs.forEach(function (f) { g2.appendChild(optFor(f, dir)); });
+        fileSel.appendChild(g2);
+      }
+    }
+    function setTag(f) {
+      if (isClaude(f)) { tag.textContent = "CLAUDE"; tag.className = "doc-tag claude"; }
+      else { tag.textContent = "DOC"; tag.className = "doc-tag"; }
+      tag.style.display = "inline-block";
     }
     function loadFile(path) {
+      var f = manifest.filter(function (x) { return x.path === path; })[0];
+      setTag(f);
+      title.textContent = f ? f.name : path;
       body.innerHTML = '<p style="color:#94a3b8">Loading ' + path + "…</p>";
       fetchText(path).then(
         function (t) { body.innerHTML = render(t); body.scrollTop = 0; },
@@ -699,12 +707,11 @@
     });
     fileSel.addEventListener("change", function () { loadFile(fileSel.value); });
 
-    bClaude.addEventListener("click", showClaude);
     bAll.addEventListener("click", showAll);
 
     function mount() {
       var root = document.body || document.documentElement;
-      root.appendChild(bClaude); root.appendChild(bAll); root.appendChild(view);
+      root.appendChild(bAll); root.appendChild(view);
     }
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mount);
     else mount();
