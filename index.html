@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#4f46e5" />
+  <title>Android Chrome Test Page</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --accent: #6366f1;
+      --accent-2: #22c55e;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 16px;
+      line-height: 1.5;
+    }
+    header { text-align: center; margin: 12px 0 24px; }
+    h1 { font-size: 1.5rem; margin: 0 0 4px; }
+    header p { color: var(--muted); margin: 0; font-size: 0.9rem; }
+    .card {
+      background: var(--card);
+      border-radius: 14px;
+      padding: 18px;
+      margin-bottom: 16px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+    }
+    .card h2 { font-size: 1rem; margin: 0 0 12px; color: var(--accent); }
+    button {
+      font-size: 1.05rem;
+      padding: 14px 18px;
+      border: none;
+      border-radius: 12px;
+      background: var(--accent);
+      color: white;
+      width: 100%;
+      cursor: pointer;
+      touch-action: manipulation;
+      transition: transform 0.05s ease, background 0.15s ease;
+    }
+    button:active { transform: scale(0.97); background: #4f46e5; }
+    button.secondary { background: #334155; }
+    button.secondary:active { background: #475569; }
+    .counter-value {
+      font-size: 3rem;
+      font-weight: 700;
+      text-align: center;
+      margin: 8px 0 16px;
+      color: var(--accent-2);
+    }
+    .row { display: flex; gap: 10px; }
+    .row button { width: 100%; }
+    input[type="text"] {
+      width: 100%;
+      font-size: 1rem;
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid #334155;
+      background: #0f172a;
+      color: var(--text);
+      margin-bottom: 12px;
+    }
+    #echo-output { color: var(--accent-2); font-weight: 600; min-height: 1.5em; word-break: break-word; }
+    .info-grid { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 0.85rem; }
+    .info-grid dt { color: var(--muted); }
+    .info-grid dd { margin: 0; word-break: break-word; }
+    #toggle-box {
+      height: 60px; border-radius: 12px; background: #334155;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 600; transition: background 0.2s ease;
+    }
+    #toggle-box.on { background: var(--accent-2); color: #052e16; }
+    footer { text-align: center; color: var(--muted); font-size: 0.8rem; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>📱 Android Chrome Test Page</h1>
+    <p>A sandbox for browser-driven testing workflows</p>
+  </header>
+
+  <div class="card">
+    <h2>Tap Counter</h2>
+    <div class="counter-value" id="counter" aria-live="polite">0</div>
+    <div class="row">
+      <button id="increment" onclick="changeCounter(1)">+1</button>
+      <button id="decrement" class="secondary" onclick="changeCounter(-1)">−1</button>
+    </div>
+    <button id="reset" class="secondary" style="margin-top:10px" onclick="resetCounter()">Reset</button>
+  </div>
+
+  <div class="card">
+    <h2>Echo Input</h2>
+    <input type="text" id="text-input" placeholder="Type something…" />
+    <button id="echo-btn" onclick="echoText()">Echo it below</button>
+    <p id="echo-output" aria-live="polite"></p>
+  </div>
+
+  <div class="card">
+    <h2>Toggle</h2>
+    <div id="toggle-box" onclick="toggleBox()">OFF</div>
+  </div>
+
+  <div class="card">
+    <h2>Device Info</h2>
+    <dl class="info-grid">
+      <dt>Viewport</dt><dd id="info-viewport">—</dd>
+      <dt>Screen</dt><dd id="info-screen">—</dd>
+      <dt>Pixel ratio</dt><dd id="info-dpr">—</dd>
+      <dt>Touch</dt><dd id="info-touch">—</dd>
+      <dt>Online</dt><dd id="info-online">—</dd>
+      <dt>Loaded at</dt><dd id="info-time">—</dd>
+    </dl>
+  </div>
+
+  <footer>Tisaic.github.io · built for in-browser test workflows</footer>
+
+  <script>
+    let count = 0;
+    const counterEl = document.getElementById('counter');
+
+    function changeCounter(delta) {
+      count += delta;
+      counterEl.textContent = count;
+    }
+    function resetCounter() {
+      count = 0;
+      counterEl.textContent = count;
+    }
+    function echoText() {
+      const val = document.getElementById('text-input').value;
+      document.getElementById('echo-output').textContent = val ? '👉 ' + val : '(nothing typed yet)';
+    }
+    function toggleBox() {
+      const box = document.getElementById('toggle-box');
+      const on = box.classList.toggle('on');
+      box.textContent = on ? 'ON' : 'OFF';
+    }
+
+    function refreshInfo() {
+      document.getElementById('info-viewport').textContent = window.innerWidth + ' × ' + window.innerHeight;
+      document.getElementById('info-screen').textContent = screen.width + ' × ' + screen.height;
+      document.getElementById('info-dpr').textContent = window.devicePixelRatio;
+      document.getElementById('info-touch').textContent = ('ontouchstart' in window) ? 'yes' : 'no';
+      document.getElementById('info-online').textContent = navigator.onLine ? 'yes' : 'no';
+    }
+    document.getElementById('info-time').textContent = new Date().toLocaleTimeString();
+    refreshInfo();
+    window.addEventListener('resize', refreshInfo);
+  </script>
+</body>
+</html>
