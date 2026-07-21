@@ -23,7 +23,7 @@ and feed console output back to Claude.
 
 | File | Purpose |
 |------|---------|
-| `index.html` | The entire app: test widgets, debug console, doc viewers. |
+| `index.html` | The entire app: header, debug console, doc viewers. |
 | `version.json` | Server-side build manifest for stale-page detection. |
 | `docs-manifest.json` | Generated list of every `.md` file, for the Docs viewer. |
 | `stamp-version.sh` | Pre-commit build step: stamps version + regenerates the docs manifest. |
@@ -32,9 +32,7 @@ and feed console output back to Claude.
 
 ## Features on the page
 
-1. **Test widgets** — tap counter, echo input, toggle, device info, and
-   buttons that emit console log/warn/error/throw for testing.
-2. **Debug console** (bottom-right `>_` launcher) — a self-contained mobile
+1. **Debug console** (bottom-right `>_` launcher) — a self-contained mobile
    console:
    - Captures `console.*`, uncaught errors (with stack + file:line), and
      unhandled promise rejections.
@@ -45,11 +43,11 @@ and feed console output back to Claude.
    - Badge shows error (red) / warning (amber) counts.
    - **Copy all** (clipboard), **Clear**, a live **JS eval** input, and a
      build/version status line.
-3. **Stale-page detection** — on load the page fetches `version.json` with
+2. **Stale-page detection** — on load the page fetches `version.json` with
    `cache: no-store`; if the server build is newer than the loaded page, a
    red top banner offers a cache-busting reload. Beats the Pages/CDN/browser
    cache lag.
-4. **Docs viewer** (bottom-right `DOCS` launcher) — renders every `.md` in
+3. **Docs viewer** (bottom-right `DOCS` launcher) — renders every `.md` in
    the repo with self-hosted marked. A directory selector filters by folder,
    and files are split into two groups: **◆ CLAUDE context** (any `CLAUDE.md`,
    shown with an indigo tag) and **Docs** (everything else). Opens `CLAUDE.md`

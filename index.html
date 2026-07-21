@@ -19,7 +19,7 @@
   <script>
   (function () {
     "use strict";
-    var BUILD = {version:9,built:"2026-07-21T03:36:17Z"}; // __STAMP__
+    var BUILD = {version:10,built:"2026-07-21T03:44:18Z"}; // __STAMP__
     window.__BUILD = BUILD;
     var STORE_KEY = "dbgConsole:v1";
     var MAX = 300;               // cap stored entries
@@ -371,60 +371,6 @@
     header { text-align: center; margin: 12px 0 24px; }
     h1 { font-size: 1.5rem; margin: 0 0 4px; }
     header p { color: var(--muted); margin: 0; font-size: 0.9rem; }
-    .card {
-      background: var(--card);
-      border-radius: 14px;
-      padding: 18px;
-      margin-bottom: 16px;
-      box-shadow: 0 4px 14px rgba(0,0,0,0.25);
-    }
-    .card h2 { font-size: 1rem; margin: 0 0 12px; color: var(--accent); }
-    button {
-      font-size: 1.05rem;
-      padding: 14px 18px;
-      border: none;
-      border-radius: 12px;
-      background: var(--accent);
-      color: white;
-      width: 100%;
-      cursor: pointer;
-      touch-action: manipulation;
-      transition: transform 0.05s ease, background 0.15s ease;
-    }
-    button:active { transform: scale(0.97); background: #4f46e5; }
-    button.secondary { background: #334155; }
-    button.secondary:active { background: #475569; }
-    .counter-value {
-      font-size: 3rem;
-      font-weight: 700;
-      text-align: center;
-      margin: 8px 0 16px;
-      color: var(--accent-2);
-    }
-    .row { display: flex; gap: 10px; }
-    .row button { width: 100%; }
-    input[type="text"] {
-      width: 100%;
-      font-size: 1rem;
-      padding: 12px;
-      border-radius: 10px;
-      border: 1px solid #334155;
-      background: #0f172a;
-      color: var(--text);
-      margin-bottom: 12px;
-    }
-    #echo-output { color: var(--accent-2); font-weight: 600; min-height: 1.5em; word-break: break-word; }
-    .info-grid { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 0.85rem; }
-    .info-grid dt { color: var(--muted); }
-    .info-grid dd { margin: 0; word-break: break-word; }
-    #toggle-box {
-      height: 60px; border-radius: 12px; background: #334155;
-      display: flex; align-items: center; justify-content: center;
-      font-weight: 600; transition: background 0.2s ease;
-    }
-    #toggle-box.on { background: var(--accent-2); color: #052e16; }
-    .test-btns { display: flex; gap: 10px; flex-wrap: wrap; }
-    .test-btns button { flex: 1; min-width: 120px; font-size: 0.9rem; padding: 12px; }
     footer { text-align: center; color: var(--muted); font-size: 0.8rem; margin-top: 8px; }
 
     /* ---- doc viewer launchers (stacked above the console button) ---- */
@@ -491,171 +437,9 @@
     <p>A sandbox for browser-driven testing workflows</p>
   </header>
 
-  <div class="card">
-    <h2>Tap Counter</h2>
-    <div class="counter-value" id="counter" aria-live="polite">0</div>
-    <div class="row">
-      <button id="increment" onclick="changeCounter(1)">+1</button>
-      <button id="decrement" class="secondary" onclick="changeCounter(-1)">−1</button>
-    </div>
-    <button id="reset" class="secondary" style="margin-top:10px" onclick="resetCounter()">Reset</button>
-  </div>
-
-  <div class="card">
-    <h2>Echo Input</h2>
-    <input type="text" id="text-input" placeholder="Type something…" />
-    <button id="echo-btn" onclick="echoText()">Echo it below</button>
-    <p id="echo-output" aria-live="polite"></p>
-  </div>
-
-  <div class="card">
-    <h2>Toggle</h2>
-    <div id="toggle-box" onclick="toggleBox()">OFF</div>
-  </div>
-
-  <div class="card">
-    <h2>Console Test Buttons</h2>
-    <p style="color:var(--muted);font-size:0.85rem;margin-top:0">Tap these, then open the 🐛 console (bottom-right) to see the output.</p>
-    <div class="test-btns">
-      <button class="secondary" onclick="console.log('Hello from a log at', new Date().toLocaleTimeString())">log</button>
-      <button class="secondary" onclick="console.warn('This is a warning ⚠️')">warn</button>
-      <button class="secondary" onclick="console.error('This is an error 💥')">error</button>
-      <button class="secondary" onclick="throw new Error('Deliberate uncaught error for testing')">throw</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>Device Info</h2>
-    <dl class="info-grid">
-      <dt>Viewport</dt><dd id="info-viewport">—</dd>
-      <dt>Screen</dt><dd id="info-screen">—</dd>
-      <dt>Pixel ratio</dt><dd id="info-dpr">—</dd>
-      <dt>Touch</dt><dd id="info-touch">—</dd>
-      <dt>Online</dt><dd id="info-online">—</dd>
-      <dt>Loaded at</dt><dd id="info-time">—</dd>
-    </dl>
-  </div>
-
-  <div class="card">
-    <h2>Accelerometer</h2>
-    <p style="color:var(--muted);font-size:0.85rem;margin-top:0">DeviceMotion API. Tap Start, then move or tilt the phone. Values update live.</p>
-    <button id="accel-btn" onclick="toggleAccel()">Start accelerometer</button>
-    <p id="accel-status" style="color:var(--muted);font-size:0.85rem;min-height:1.2em">Not started.</p>
-    <dl class="info-grid" id="accel-grid" style="display:none">
-      <dt>Accel + gravity</dt><dd id="accel-g">—</dd>
-      <dt>Accel (linear)</dt><dd id="accel-lin">—</dd>
-      <dt>Rotation rate</dt><dd id="accel-rot">—</dd>
-      <dt>Interval</dt><dd id="accel-int">—</dd>
-    </dl>
-  </div>
-
   <footer>Tisaic.github.io · built for in-browser test workflows</footer>
 
   <script>
-    let count = 0;
-    const counterEl = document.getElementById('counter');
-
-    function changeCounter(delta) {
-      count += delta;
-      counterEl.textContent = count;
-      console.log('counter ->', count);
-    }
-    function resetCounter() {
-      count = 0;
-      counterEl.textContent = count;
-      console.log('counter reset');
-    }
-    function echoText() {
-      const val = document.getElementById('text-input').value;
-      document.getElementById('echo-output').textContent = val ? '👉 ' + val : '(nothing typed yet)';
-      console.log('echo:', val);
-    }
-    function toggleBox() {
-      const box = document.getElementById('toggle-box');
-      const on = box.classList.toggle('on');
-      box.textContent = on ? 'ON' : 'OFF';
-      console.log('toggle ->', on ? 'ON' : 'OFF');
-    }
-
-    function refreshInfo() {
-      document.getElementById('info-viewport').textContent = window.innerWidth + ' × ' + window.innerHeight;
-      document.getElementById('info-screen').textContent = screen.width + ' × ' + screen.height;
-      document.getElementById('info-dpr').textContent = window.devicePixelRatio;
-      document.getElementById('info-touch').textContent = ('ontouchstart' in window) ? 'yes' : 'no';
-      document.getElementById('info-online').textContent = navigator.onLine ? 'yes' : 'no';
-    }
-    document.getElementById('info-time').textContent = new Date().toLocaleTimeString();
-    refreshInfo();
-    window.addEventListener('resize', refreshInfo);
-    // ---- Accelerometer (DeviceMotion) ----
-    var accelOn = false, accelHandler = null, accelSawData = false, accelTimer = null;
-    function a3(v) { return (v == null) ? '—' : v.toFixed(2); }
-    function setAccelStatus(s) { document.getElementById('accel-status').textContent = s; }
-
-    function toggleAccel() {
-      if (accelOn) { stopAccel(); return; }
-      if (typeof DeviceMotionEvent === 'undefined') {
-        setAccelStatus('DeviceMotionEvent is not supported on this browser.');
-        console.warn('accelerometer: DeviceMotionEvent unsupported');
-        return;
-      }
-      // iOS 13+ needs an explicit permission request from a user gesture.
-      if (typeof DeviceMotionEvent.requestPermission === 'function') {
-        DeviceMotionEvent.requestPermission().then(function (state) {
-          console.log('accelerometer: permission', state);
-          if (state === 'granted') startAccel();
-          else setAccelStatus('Permission ' + state + ' — cannot read motion.');
-        }).catch(function (err) {
-          setAccelStatus('Permission error: ' + err);
-          console.error('accelerometer: permission error', err);
-        });
-      } else {
-        startAccel();
-      }
-    }
-
-    function startAccel() {
-      accelSawData = false;
-      accelHandler = function (e) {
-        var g = e.accelerationIncludingGravity || {}, a = e.acceleration || {}, r = e.rotationRate || {};
-        document.getElementById('accel-g').textContent = 'x ' + a3(g.x) + '   y ' + a3(g.y) + '   z ' + a3(g.z);
-        document.getElementById('accel-lin').textContent = 'x ' + a3(a.x) + '   y ' + a3(a.y) + '   z ' + a3(a.z);
-        document.getElementById('accel-rot').textContent = 'α ' + a3(r.alpha) + '   β ' + a3(r.beta) + '   γ ' + a3(r.gamma);
-        document.getElementById('accel-int').textContent = (e.interval != null ? e.interval + ' ms' : '—');
-        if (!accelSawData) {
-          accelSawData = true;
-          console.log('accelerometer: first sample', {
-            withGravity: { x: g.x, y: g.y, z: g.z },
-            linear: { x: a.x, y: a.y, z: a.z },
-            rotation: { alpha: r.alpha, beta: r.beta, gamma: r.gamma },
-            intervalMs: e.interval
-          });
-        }
-      };
-      window.addEventListener('devicemotion', accelHandler);
-      accelOn = true;
-      document.getElementById('accel-grid').style.display = 'grid';
-      document.getElementById('accel-btn').textContent = 'Stop accelerometer';
-      setAccelStatus('Reading… move the phone.');
-      console.log('accelerometer: started');
-      // Diagnose the silent case: listener attached but no events arriving.
-      accelTimer = setTimeout(function () {
-        if (accelOn && !accelSawData) {
-          setAccelStatus('No motion data received — sensor may be blocked (needs HTTPS + motion permission) or unavailable.');
-          console.warn('accelerometer: no devicemotion events after 2s');
-        }
-      }, 2000);
-    }
-
-    function stopAccel() {
-      if (accelHandler) window.removeEventListener('devicemotion', accelHandler);
-      if (accelTimer) { clearTimeout(accelTimer); accelTimer = null; }
-      accelOn = false;
-      document.getElementById('accel-btn').textContent = 'Start accelerometer';
-      setAccelStatus('Stopped.');
-      console.log('accelerometer: stopped');
-    }
-
     console.log('page ready ✓');
   </script>
 
