@@ -1,0 +1,99 @@
+// Smoke test: drives the real page in a mobile-emulated Chromium, exercises
+// the console + docs viewer, asserts behavior, and writes screenshots for
+// visual review. Exits non-zero if any check fails.
+//
+// Run via ./test/run.sh (starts a local server, ensures deps, tears down).
+import { chromium } from 'playwright-core';
+import { existsSync, readdirSync, mkdirSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const SHOTS = join(HERE, 'screenshots');
+const BASE = process.env.BASE_URL || 'http://127.0.0.1:8137/';
+
+function findChrome() {
+  if (process.env.CHROME_BIN && existsSync(process.env.CHROME_BIN)) return process.env.CHROME_BIN;
+  const root = process.env.PLAYWRIGHT_BROWSERS_PATH || '/opt/pw-browsers';
+  try {
+    for (const d of readdirSync(root).filter(x => x.startsWith('chromium-')).sort().reverse()) {
+      const p = join(root, d, 'chrome-linux', 'chrome');
+      if (existsSync(p)) return p;
+    }
+  } catch { /* ignore */ }
+  for (const c of ['/usr/bin/chromium', '/usr/bin/chromium-browser', '/usr/bin/google-chrome']) {
+    if (existsSync(c)) return c;
+  }
+  throw new Error('No Chromium found. Set CHROME_BIN to a Chrome/Chromium binary.');
+}
+
+let failed = 0;
+function check(name, cond, detail) {
+  const ok = !!cond;
+  console.log(`  ${ok ? '✓' : '✗'} ${name}${(!ok && detail) ? '  → ' + detail : ''}`);
+  if (!ok) failed++;
+}
+
+mkdirSync(SHOTS, { recursive: true });
+const browser = await chromium.launch({ executablePath: findChrome() });
+const ctx = await browser.newContext({
+  viewport: { width: 412, height: 915 },
+  deviceScaleFactor: 2.625,
+  isMobile: true,
+  hasTouch: true,
+  userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36',
+});
+const page = await ctx.newPage();
+const pageErrors = [];
+page.on('pageerror', e => pageErrors.push(String(e)));
+
+console.log(`\nSmoke test → ${BASE}\n`);
+
+// ---- load ----
+await page.goto(BASE, { waitUntil: 'networkidle' });
+await page.waitForTimeout(600);
+await page.screenshot({ path: join(SHOTS, '01-home.png') });
+check('page loads with no uncaught errors', pageErrors.length === 0, pageErrors.join(' | '));
+
+const build = await page.evaluate(() => window.__BUILD);
+check('build version is stamped (> 0)', build && build.version > 0, JSON.stringify(build));
+
+// ---- console capture ----
+check('debug launcher present', await page.$('#dbg-launch') !== null);
+await page.evaluate(() => { console.log('smoke log'); console.warn('smoke warn'); console.error('smoke error'); });
+const buf = await page.evaluate(() => window.__dbg.buffer().map(e => e.type));
+check('console captured log/warn/error', buf.includes('log') && buf.includes('warn') && buf.includes('error'), buf.join(','));
+
+await page.click('#dbg-launch');
+await page.waitForTimeout(300);
+check('console panel opens', await page.isVisible('#dbg-list'));
+const buildText = (await page.textContent('#dbg-build')) || '';
+check('version status reads "latest" vs local server', /latest/.test(buildText), buildText);
+await page.screenshot({ path: join(SHOTS, '02-console.png') });
+
+// ---- eval box ----
+await page.fill('#dbg-input', '1 + 2');
+await page.click('#dbg-run');
+await page.waitForTimeout(200);
+const evalOk = await page.evaluate(() => window.__dbg.buffer().some(e => e.text.trim() === '3'));
+check('eval box evaluates JS (1 + 2 → 3)', evalOk);
+
+// ---- docs viewer ----
+await page.click('#dbg-close');
+check('docs launcher present', await page.$('#doc-all') !== null);
+await page.click('#doc-all');
+await page.waitForTimeout(700);
+check('marked library loaded', await page.evaluate(() => !!(window.marked && window.marked.parse)));
+const tag = await page.textContent('#doc-head .doc-tag').catch(() => '');
+check('opens CLAUDE.md with CLAUDE tag', tag === 'CLAUDE', tag);
+const h1 = await page.textContent('#doc-body h1').catch(() => '');
+check('CLAUDE.md renders markdown (h1 element)', /CLAUDE/.test(h1 || ''), h1);
+const groups = await page.$$eval('#doc-bar optgroup', gs => gs.map(g => g.label));
+check('file list groups CLAUDE context + Docs',
+  groups.some(g => /CLAUDE/.test(g)) && groups.some(g => /Docs/.test(g)), groups.join(' | '));
+await page.screenshot({ path: join(SHOTS, '03-docs.png') });
+
+await browser.close();
+
+console.log(`\n${failed === 0 ? 'PASS' : 'FAIL'} — ${failed} check(s) failed. Screenshots in test/screenshots/\n`);
+process.exit(failed === 0 ? 0 : 1);

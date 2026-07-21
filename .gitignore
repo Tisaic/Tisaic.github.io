@@ -1,0 +1,4 @@
+# Dev-only test harness artifacts (never shipped by Pages).
+test/node_modules/
+test/screenshots/
+test/package-lock.json

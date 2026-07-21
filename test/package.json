@@ -1,0 +1,9 @@
+{
+  "name": "tisaic-smoke-test",
+  "private": true,
+  "type": "module",
+  "description": "Dev-only smoke test harness (not served by the page).",
+  "dependencies": {
+    "playwright-core": "1.44.0"
+  }
+}

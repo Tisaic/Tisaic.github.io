@@ -18,7 +18,8 @@ printf '{"version":%s,"built":"%s"}\n' "${NUM}" "${BUILT}" > version.json
 # Regenerate the docs manifest: every .md file in the repo (excluding git,
 # vendored libs, and node_modules). The Docs viewer fetches this to list files.
 FILES="$(find . -type f -name '*.md' \
-  -not -path './.git/*' -not -path './vendor/*' -not -path './node_modules/*' \
+  -not -path './.git/*' -not -path './vendor/*' \
+  -not -path '*/node_modules/*' -not -path './test/*' \
   | sed 's|^\./||' | sort)"
 {
   printf '{"generated":"%s","files":[' "${BUILT}"

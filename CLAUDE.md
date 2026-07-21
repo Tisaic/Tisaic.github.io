@@ -19,6 +19,26 @@ and feed console output back to Claude.
 - **`.nojekyll`** is present so Pages serves files as-is (no Jekyll
   processing), which lets the app fetch raw `.md` files at runtime.
 
+## Verification (required before every push)
+
+**No change ships unverified.** Before committing and pushing, every change
+must be:
+
+1. **Verified** — run the smoke test (`./test/run.sh`). It serves the repo the
+   way Pages does and drives it in a mobile-emulated Chromium. All checks must
+   pass (exit 0) with **zero uncaught page errors**. Static-parse the inline
+   scripts too (the `node -e` vm check) so a syntax error can't ship.
+2. **Scrutinized** — re-read the actual diff. Confirm nothing unintended was
+   touched, no dead references were left behind, and the console bootstrap
+   stays first and dependency-free.
+3. **Visually analyzed** — open the screenshots in `test/screenshots/`
+   (`01-home`, `02-console`, `03-docs`) and actually look at them. Layout,
+   spacing, colors, and rendered content must look right on a phone-sized
+   viewport, not just pass assertions.
+
+If any step fails, fix it first — do not push. Run `stamp-version.sh` last so
+the shipped commit carries the correct version.
+
 ## Key files
 
 | File | Purpose |
@@ -28,6 +48,8 @@ and feed console output back to Claude.
 | `docs-manifest.json` | Generated list of every `.md` file, for the Docs viewer. |
 | `stamp-version.sh` | Pre-commit build step: stamps version + regenerates the docs manifest. |
 | `vendor/marked.min.js` | Self-hosted markdown renderer (marked v12), no CDN. |
+| `test/run.sh` | Dev-only: serves the repo + runs the smoke test in a mobile Chromium. |
+| `test/smoke.mjs` | Playwright checks + screenshots for the console and doc viewer. |
 | `CLAUDE.md` | This file. |
 
 ## Features on the page
