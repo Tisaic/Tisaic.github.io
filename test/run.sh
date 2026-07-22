@@ -16,6 +16,7 @@ fi
 # NGRC library unit tests (pure Node, golden-vector parity — no server needed).
 if [ -d lib/ngrc ]; then
   node test/ngrc/primitives.test.mjs
+  node test/ngrc/afm.test.mjs
 fi
 
 # Serve the repo and always clean up the server on exit.
