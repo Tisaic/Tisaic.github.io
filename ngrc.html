@@ -20,7 +20,6 @@
     header { padding:12px 14px 6px; text-align:center; }
     header h1 { font-size:1.15rem; margin:0; }
     header a { color:var(--muted); font-size:.8rem; text-decoration:none; }
-    /* tab bar */
     #tabs { display:flex; gap:6px; padding:8px 10px; position:sticky; top:0; background:var(--bg); z-index:5; }
     .tab { flex:1; padding:10px 6px; border:1px solid var(--line); border-radius:10px; background:var(--card);
       color:var(--muted); font-size:.85rem; font-weight:600; text-align:center; cursor:pointer; }
@@ -28,7 +27,7 @@
     .panel { display:none; padding:0 12px 40px; }
     .panel.on { display:block; }
     .stage { width:100%; height:52vh; border-radius:14px; overflow:hidden; background:#060a14;
-      border:1px solid var(--line); touch-action:none; }
+      border:1px solid var(--line); touch-action:none; position:relative; }
     canvas { display:block; }
     .controls { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; align-items:center; }
     button { font-size:.95rem; padding:11px 14px; border:none; border-radius:10px; background:var(--accent);
@@ -36,15 +35,13 @@
     button.sec { background:#334155; }
     button:active { filter:brightness(1.15); }
     .slider { flex:1 1 100%; display:flex; align-items:center; gap:10px; font-size:.82rem; color:var(--muted); }
-    .slider input { flex:1; }
+    .slider input[type=range] { flex:1; }
     .stat { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-size:.82rem; margin-top:12px;
       background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px; }
     .stat dt { color:var(--muted); } .stat dd { margin:0; font-variant-numeric:tabular-nums; }
-    .stat .good { color:var(--accent2); } .stat .warn { color:#fca5a5; }
+    .stat .good { color:var(--accent2); } .stat .warn { color:#fca5a5; } .stat .amber { color:#f59e0b; }
     .plot { width:100%; height:230px; margin-top:12px; background:var(--panel); border:1px solid var(--line); border-radius:10px; }
     .lead { color:var(--muted); font-size:.85rem; line-height:1.5; margin:10px 0 4px; }
-    .soon { color:var(--muted); text-align:center; padding:60px 20px; }
-    .pill { display:inline-block; background:#312e81; color:#c7d2fe; font-size:.72rem; padding:2px 8px; border-radius:6px; }
   </style>
 </head>
 <body>
@@ -59,15 +56,20 @@
     <div class="tab" data-tab="finger">③ Finger-trace</div>
   </div>
 
-  <!-- ================= Tab 1: Lorenz ================= -->
+  <!-- ================= Tab 1: Lorenz — NGRC vs linear ARX ================= -->
   <section class="panel on" id="p-lorenz">
-    <p class="lead">The model watches a <b>Lorenz attractor</b> and learns its dynamics online.
-      Tap <b>Let it dream</b> and it stops seeing the real data and <b>generates the chaos itself</b>
-      from what it learned. Drag to rotate.</p>
+    <p class="lead">Two models learn a <b>Lorenz attractor</b> from the same live data:
+      <span style="color:#f59e0b"><b>NGRC</b></span> vs a classical
+      <span style="color:#f87171"><b>linear ARX</b></span> (standard system-ID). Their 1-step errors look
+      similar — so tap <b>Dream</b>: both free-run blind.
+      <span style="color:#f59e0b">NGRC keeps generating the butterfly</span>;
+      <span style="color:#f87171">the linear model can't sustain the chaos</span>.
+      <b>1 finger orbits · 2 fingers zoom.</b></p>
     <div class="stage" id="lz-stage"></div>
     <div class="controls">
-      <button id="lz-dream">Let it dream 🌀</button>
-      <button id="lz-reset" class="sec">Reset brain</button>
+      <button id="lz-dream">Dream: NGRC vs linear 🌀</button>
+      <button id="lz-reset" class="sec">Reset</button>
+      <button id="lz-view" class="sec" style="flex:0 0 auto;min-width:88px">⟲ view</button>
       <div class="slider">InitVariance (stability)
         <input id="lz-iv" type="range" min="-1" max="3" step="0.1" value="0" />
         <span id="lz-ivv">1.0</span>
@@ -75,47 +77,51 @@
     </div>
     <dl class="stat">
       <dt>Mode</dt><dd id="lz-mode">learning from real data</dd>
-      <dt>Samples seen</dt><dd id="lz-n">0</dd>
-      <dt>Warm</dt><dd id="lz-warm">no</dd>
-      <dt>1-step nRMSE</dt><dd id="lz-rmse">—</dd>
+      <dt>Samples</dt><dd id="lz-n">0</dd>
+      <dt>Warm</dt><dd id="lz-warm" class="warn">no</dd>
+      <dt>NGRC 1-step error</dt><dd id="lz-rmse" class="amber">—</dd>
+      <dt>Linear ARX 1-step error</dt><dd id="lz-rmse2">—</dd>
     </dl>
     <div class="plot" id="lz-plot"></div>
   </section>
 
-  <!-- ================= Tab 2: Soft-sensor ================= -->
+  <!-- ================= Tab 2: Soft-sensor — NGRC vs naive ================= -->
   <section class="panel" id="p-pendulum">
-    <p class="lead">Two masses on a spring. The model <b>measures only the motor</b> (blue, left) — the
-      load on the right is <b>hidden</b>. The SoftSensor estimates the load's position from the motor's
-      history alone. The <b>outline</b> is the true hidden load; the <span style="color:#f59e0b">amber</span>
-      block is the estimate. Watch it lock on.</p>
-    <div class="stage" id="ss-stage" style="height:34vh"></div>
+    <p class="lead"><b>Drag the blue motor with your finger.</b> It pulls a <b>hidden load</b> through a
+      soft, springy coupling — so the load lags and overshoots. The model measures <b>only the motor</b>.
+      <span style="color:#f59e0b">Amber = NGRC estimate</span> · outline = the hidden truth ·
+      <span style="color:#7c8aa0">gray = the naive guess ("load follows the motor")</span> that a
+      standard semi-closed-loop setup assumes.</p>
+    <div class="stage" id="ss-stage" style="height:32vh"></div>
     <div class="controls">
       <button id="ss-kick">Kick it 👊</button>
       <button id="ss-reset" class="sec">Reset brain</button>
       <label class="slider" style="flex:0 0 auto; gap:6px;"><input id="ss-truth" type="checkbox" checked /> show truth</label>
     </div>
     <dl class="stat">
-      <dt>Measured</dt><dd>motor position, velocity, drive force</dd>
-      <dt>Hidden target</dt><dd>load position (never an input)</dd>
       <dt>Warm</dt><dd id="ss-warm" class="warn">no</dd>
-      <dt>Estimate nRMSE</dt><dd id="ss-rmse">—</dd>
+      <dt>NGRC estimate error</dt><dd id="ss-rmse" class="amber">—</dd>
+      <dt>Naive "load = motor"</dt><dd id="ss-naive">—</dd>
+      <dt>NGRC advantage</dt><dd id="ss-adv" class="good">—</dd>
     </dl>
     <div class="plot" id="ss-plot"></div>
   </section>
 
-  <!-- ================= Tab 3: Finger-trace ================= -->
+  <!-- ================= Tab 3: Finger-trace — NGRC vs straight-line ================= -->
   <section class="panel" id="p-finger">
-    <p class="lead">Drag your finger around the box. The model learns <b>your hand's motion</b> online and
-      forecasts where you're going — the <span style="color:#f59e0b">amber</span> ghost rides <b>ahead</b>
-      of your fingertip via multi-step roll-out. Draw loops and figure-8s to teach it.</p>
-    <div class="stage" id="fg-stage" style="height:46vh"></div>
+    <p class="lead">Draw <b>loops and figure-8s</b>. Two forecasters race to predict your fingertip
+      <b>10 steps ahead</b>: <span style="color:#7c8aa0">gray = straight-line extrapolation</span>
+      (the common constant-velocity approach) vs <span style="color:#f59e0b">amber = NGRC</span>, which
+      learns <b>your</b> motion online. On curves the gray ghost flies off the arc — amber turns with you.</p>
+    <div class="stage" id="fg-stage" style="height:44vh"></div>
     <div class="controls">
       <button id="fg-reset" class="sec">Reset brain</button>
     </div>
     <dl class="stat">
-      <dt>Predicting</dt><dd>your fingertip, up to 10 steps ahead</dd>
-      <dt>Samples seen</dt><dd id="fg-n">0</dd>
-      <dt>1-step nRMSE</dt><dd id="fg-rmse">—</dd>
+      <dt>Samples</dt><dd id="fg-n">0</dd>
+      <dt>NGRC error @10 ahead</dt><dd id="fg-rmse" class="amber">—</dd>
+      <dt>Straight-line @10 ahead</dt><dd id="fg-naive">—</dd>
+      <dt>NGRC advantage</dt><dd id="fg-skill" class="good">—</dd>
     </dl>
     <div class="plot" id="fg-plot"></div>
   </section>
@@ -126,6 +132,7 @@
     import { SoftSensor } from './lib/ngrc/softsensor.js';
 
     console.log('ngrc playground: modules loaded, THREE', THREE.REVISION);
+    const clamp = (x, lo, hi) => (x < lo ? lo : (x > hi ? hi : x));
 
     // ---- tab switching ----
     let activeTab = 'lorenz';
@@ -139,7 +146,9 @@
       if (activeTab === 'finger') resizeFinger();
     }));
 
-    // ================= Lorenz =================
+    // =====================================================================
+    // Tab 1: Lorenz — NGRC vs linear ARX, learning + dual free-run "dream"
+    // =====================================================================
     const SIGMA = 10, RHO = 28, BETA = 8 / 3, DT = 0.01;
     const lorenzDeriv = (p) => [SIGMA * (p[1] - p[0]), p[0] * (RHO - p[2]) - p[1], p[0] * p[1] - BETA * p[2]];
     function rk4(s) {
@@ -150,15 +159,14 @@
       return s.map((v, i) => v + DT / 6 * (k1[i] + 2 * k2[i] + 2 * k3[i] + k4[i]));
     }
 
-    // three.js scene
     const stage = document.getElementById('lz-stage');
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     stage.appendChild(renderer.domElement);
     const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x060a14, 0.06);
+    scene.fog = new THREE.FogExp2(0x060a14, 0.05);
     const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 100);
-    camera.position.set(0, 0, 9);
+    camera.position.set(0, 0, 10.5);
     const group = new THREE.Group();
     scene.add(group);
 
@@ -167,15 +175,15 @@
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MAXPTS * 3), 3));
       g.setDrawRange(0, 0);
-      const m = new THREE.LineBasicMaterial({ color });
-      const line = new THREE.Line(g, m);
+      const line = new THREE.Line(g, new THREE.LineBasicMaterial({ color }));
       line.frustumCulled = false;
       line.count = 0; line.arr = g.attributes.position.array;
       group.add(line);
       return line;
     }
-    const realLine = makeLine(0x60a5fa);   // blue
-    const dreamLine = makeLine(0xf59e0b);  // amber
+    const realLine = makeLine(0x60a5fa);    // blue: real system
+    const dreamLine = makeLine(0xf59e0b);   // amber: NGRC free-run
+    const rivalLine = makeLine(0xf87171);   // red: linear ARX free-run
     function pushPoint(line, p) {
       const i = line.count % MAXPTS;
       line.arr[i * 3] = p[0] * SC; line.arr[i * 3 + 1] = (p[2] - ZC) * SC; line.arr[i * 3 + 2] = p[1] * SC;
@@ -193,31 +201,58 @@
     }
     window.addEventListener('resize', resizeLorenz);
 
-    // drag to rotate
-    let drag = null, rotX = 0.2, rotY = 0;
-    stage.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY }; });
-    stage.addEventListener('pointermove', (e) => {
-      if (!drag) return;
-      rotY += (e.clientX - drag.x) * 0.008; rotX += (e.clientY - drag.y) * 0.008;
-      drag = { x: e.clientX, y: e.clientY };
+    // touch camera: 1 finger = orbit, 2 fingers = pinch zoom; gentle auto-spin until first touch
+    const ptrs = new Map();
+    let rotX = 0.25, rotY = 0, pinch0 = 0, camZ0 = 9, spin = true;
+    stage.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      if (stage.setPointerCapture) { try { stage.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ } }
+      ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (ptrs.size === 2) {
+        const [a, b] = [...ptrs.values()];
+        pinch0 = Math.hypot(a.x - b.x, a.y - b.y); camZ0 = camera.position.z;
+      }
+      spin = false;
     });
-    window.addEventListener('pointerup', () => { drag = null; });
+    stage.addEventListener('pointermove', (e) => {
+      const p = ptrs.get(e.pointerId);
+      if (!p) return;
+      if (ptrs.size === 1) {
+        rotY += (e.clientX - p.x) * 0.006;
+        rotX = clamp(rotX + (e.clientY - p.y) * 0.006, -1.5, 1.5);
+      }
+      p.x = e.clientX; p.y = e.clientY;
+      if (ptrs.size === 2 && pinch0 > 0) {
+        const [a, b] = [...ptrs.values()];
+        const d = Math.hypot(a.x - b.x, a.y - b.y);
+        if (d > 0) camera.position.z = clamp(camZ0 * pinch0 / d, 3.5, 22);
+      }
+    });
+    const endPtr = (e) => { ptrs.delete(e.pointerId); pinch0 = 0; };
+    stage.addEventListener('pointerup', endPtr);
+    stage.addEventListener('pointercancel', endPtr);
+    document.getElementById('lz-view').addEventListener('click', () => {
+      rotX = 0.25; rotY = 0; camera.position.z = 10.5; spin = true;
+    });
 
-    // NGRC model + sim state
-    let model, state, dreamState, dreaming, snap, samples, rmseSum, rmseCnt, lastPred;
+    let model, rival, state, dreamState, rivalDream, dreaming, snapN, snapL, samples;
+    let eN2, eL2, x2sum, lastPredN, lastPredL;
     const ivSlider = document.getElementById('lz-iv');
     const ivVal = document.getElementById('lz-ivv');
-    const initVarFromSlider = () => Math.pow(10, parseFloat(ivSlider.value)); // 0.1 .. 1000, default 1
+    const initVarFromSlider = () => Math.pow(10, parseFloat(ivSlider.value));
 
     function makeModel() {
       const iv = initVarFromSlider();
+      // NGRC: quadratic feature map. Rival: same lags/RLS but LINEAR features (classical ARX).
       model = new Continuous(3, 2, 2, true, { predictionSteps: 1, lam: 1.0, initVariance: iv, autoNormalize: true, calibSamples: 250 });
+      rival = new Continuous(3, 2, 1, true, { predictionSteps: 1, lam: 1.0, initVariance: iv, autoNormalize: true, calibSamples: 250 });
       state = [1.0, 1.0, 1.0];
-      dreaming = false; snap = null; samples = 0; rmseSum = 0; rmseCnt = 0; lastPred = null;
-      clearLine(realLine); clearLine(dreamLine);
-      document.getElementById('lz-dream').textContent = 'Let it dream 🌀';
+      dreaming = false; snapN = null; snapL = null; samples = 0;
+      eN2 = 0; eL2 = 0; x2sum = 0; lastPredN = null; lastPredL = null;
+      clearLine(realLine); clearLine(dreamLine); clearLine(rivalLine);
+      document.getElementById('lz-dream').textContent = 'Dream: NGRC vs linear 🌀';
       document.getElementById('lz-mode').textContent = 'learning from real data';
-      plotX.length = 0; plotReal.length = 0; plotPred.length = 0;
+      plotReal.length = 0; plotPredN.length = 0; plotPredL.length = 0;
     }
     ivSlider.addEventListener('input', () => { ivVal.textContent = initVarFromSlider().toFixed(1); });
     ivSlider.addEventListener('change', () => { ivVal.textContent = initVarFromSlider().toFixed(1); makeModel(); });
@@ -226,81 +261,82 @@
       dreaming = !dreaming;
       const btn = document.getElementById('lz-dream');
       if (dreaming) {
-        snap = model.snapshot();
-        dreamState = state.slice();
-        clearLine(dreamLine);
+        snapN = model.snapshot(); snapL = rival.snapshot();
+        dreamState = state.slice(); rivalDream = state.slice();
+        clearLine(dreamLine); clearLine(rivalLine);
         btn.textContent = 'Back to reality ▶';
-        document.getElementById('lz-mode').textContent = '🌀 dreaming (model free-run)';
+        document.getElementById('lz-mode').textContent = '🌀 dreaming — both models free-run';
       } else {
-        if (snap) model.restore(snap);
-        btn.textContent = 'Let it dream 🌀';
+        if (snapN) model.restore(snapN);
+        if (snapL) rival.restore(snapL);
+        btn.textContent = 'Dream: NGRC vs linear 🌀';
         document.getElementById('lz-mode').textContent = 'learning from real data';
       }
     });
 
-    // Plotly live trace: real x(t) vs the model's 1-step prediction
-    const plotX = [], plotReal = [], plotPred = [];
+    const plotReal = [], plotPredN = [], plotPredL = [];
     const PLOT_WIN = 160;
     let plotInited = false, plotTick = 0;
-    function initPlot() {
-      Plotly.newPlot('lz-plot', [
-        { y: [], name: 'real x', line: { color: '#60a5fa', width: 2 }, mode: 'lines' },
-        { y: [], name: 'predicted x', line: { color: '#f59e0b', width: 2, dash: 'dot' }, mode: 'lines' },
-      ], {
-        margin: { l: 34, r: 8, t: 8, b: 20 }, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
-        font: { color: '#94a3b8', size: 10 }, showlegend: true, legend: { orientation: 'h', y: 1.15 },
-        xaxis: { showgrid: false }, yaxis: { gridcolor: '#1e293b', zerolinecolor: '#334155' },
-      }, { displayModeBar: false, responsive: true });
-      plotInited = true;
-    }
     function updatePlot() {
-      if (!plotInited) initPlot();
-      const r = plotReal.slice(-PLOT_WIN), p = plotPred.slice(-PLOT_WIN);
-      Plotly.react('lz-plot', [
-        { y: r, name: 'real x', line: { color: '#60a5fa', width: 2 }, mode: 'lines' },
-        { y: p, name: 'predicted x', line: { color: '#f59e0b', width: 2, dash: 'dot' }, mode: 'lines' },
-      ], document.getElementById('lz-plot').layout, { displayModeBar: false, responsive: true });
+      const layout = { margin: { l: 34, r: 8, t: 8, b: 20 }, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+        font: { color: '#94a3b8', size: 10 }, showlegend: true, legend: { orientation: 'h', y: 1.18 },
+        xaxis: { showgrid: false }, yaxis: { gridcolor: '#1e293b', zerolinecolor: '#334155' } };
+      const data = [
+        { y: plotReal.slice(-PLOT_WIN), name: 'real x', line: { color: '#60a5fa', width: 2 }, mode: 'lines' },
+        { y: plotPredN.slice(-PLOT_WIN), name: 'NGRC', line: { color: '#f59e0b', width: 2, dash: 'dot' }, mode: 'lines' },
+        { y: plotPredL.slice(-PLOT_WIN), name: 'linear ARX', line: { color: '#f87171', width: 1.5, dash: 'dot' }, mode: 'lines' },
+      ];
+      if (!plotInited) { Plotly.newPlot('lz-plot', data, layout, { displayModeBar: false, responsive: true }); plotInited = true; }
+      else Plotly.react('lz-plot', data, layout, { displayModeBar: false, responsive: true });
     }
 
-    // main loop
     function tick() {
       if (activeTab !== 'lorenz') { requestAnimationFrame(tick); return; }
-      const SUB = 2; // sim substeps per frame
+      const SUB = 2;
       for (let k = 0; k < SUB; k++) {
         if (!dreaming) {
           state = rk4(state);
-          const res = model.step(state);
+          const resN = model.step(state);
+          const resL = rival.step(state);
           samples++;
-          if (res.warm && lastPred != null) { const e = state[0] - lastPred; rmseSum += e * e; rmseCnt++; }
-          lastPred = res.prediction[0][0];
+          if (model.warm && lastPredN != null) {
+            const eN = state[0] - lastPredN, eL = state[0] - lastPredL;
+            eN2 += eN * eN; eL2 += eL * eL; x2sum += state[0] * state[0];
+          }
+          lastPredN = resN.prediction[0][0];
+          lastPredL = resL.prediction[0][0];
           pushPoint(realLine, state);
-          plotReal.push(state[0]); plotPred.push(lastPred);
+          plotReal.push(state[0]); plotPredN.push(lastPredN); plotPredL.push(lastPredL);
         } else {
-          const res = model.step(dreamState, null, true);
-          dreamState = [res.prediction[0][0], res.prediction[1][0], res.prediction[2][0]];
+          const resN = model.step(dreamState, null, true);
+          dreamState = [resN.prediction[0][0], resN.prediction[1][0], resN.prediction[2][0]];
           if (dreamState.every(Number.isFinite) && Math.abs(dreamState[0]) < 200) pushPoint(dreamLine, dreamState);
+          const resL = rival.step(rivalDream, null, true);
+          rivalDream = [resL.prediction[0][0], resL.prediction[1][0], resL.prediction[2][0]];
+          if (rivalDream.every(Number.isFinite) && Math.abs(rivalDream[0]) < 200) pushPoint(rivalLine, rivalDream);
         }
       }
-      // status
       document.getElementById('lz-n').textContent = samples;
       const warmEl = document.getElementById('lz-warm');
-      warmEl.textContent = (model.warm ? 'yes' : 'no'); warmEl.className = model.warm ? 'good' : 'warn';
-      document.getElementById('lz-rmse').textContent = rmseCnt ? Math.sqrt(rmseSum / rmseCnt).toFixed(4) : '—';
-      // plot throttle
+      warmEl.textContent = model.warm ? 'yes' : 'no'; warmEl.className = model.warm ? 'good' : 'warn';
+      document.getElementById('lz-rmse').textContent = x2sum > 0 ? Math.sqrt(eN2 / x2sum).toFixed(4) : '—';
+      document.getElementById('lz-rmse2').textContent = x2sum > 0 ? Math.sqrt(eL2 / x2sum).toFixed(4) : '—';
       if (!dreaming && (++plotTick % 8 === 0)) updatePlot();
-      // render
-      group.rotation.y = rotY + performance.now() * 0.00004;
+      if (spin) rotY += 0.0012;
+      group.rotation.y = rotY;
       group.rotation.x = rotX;
       renderer.render(scene, camera);
       requestAnimationFrame(tick);
     }
 
-    // ================= Soft-sensor (two-mass spring) =================
+    // =====================================================================
+    // Tab 2: Soft-sensor — drag the motor, NGRC vs the naive guess
+    // =====================================================================
     const ssStage = document.getElementById('ss-stage');
     const ssCanvas = document.createElement('canvas');
     ssStage.appendChild(ssCanvas);
     const ssCtx = ssCanvas.getContext('2d');
-    let ssW = 0, ssH = 0;
+    let ssW = 0, ssH = 0, ssPx = 40, ssMotorRest = 0, ssLoadRest = 0;
     const ssDPR = Math.min(window.devicePixelRatio, 2);
     function resizePendulum() {
       ssW = ssStage.clientWidth; ssH = ssStage.clientHeight;
@@ -308,30 +344,46 @@
       ssCanvas.width = ssW * ssDPR; ssCanvas.height = ssH * ssDPR;
       ssCanvas.style.width = ssW + 'px'; ssCanvas.style.height = ssH + 'px';
       ssCtx.setTransform(ssDPR, 0, 0, ssDPR, 0, 0);
+      ssPx = ssW * 0.13;                    // fixed pixels per world unit (no adaptive zoom)
+      ssMotorRest = ssW * 0.28; ssLoadRest = ssW * 0.72;
     }
     window.addEventListener('resize', resizePendulum);
 
-    const PM = { m1: 1.0, m2: 1.4, k: 26, c: 0.35, b1: 0.5, b2: 0.22, dt: 0.010 };
-    let x1, v1, x2, v2, ssT, ss, ssSamples, ssRmseSum, ssTrueSq, ssRmseCnt, ssKick, ssScale;
+    // soft coupling + heavier hidden load => the load visibly lags/overshoots the motor
+    const PM = { m1: 1.0, m2: 2.0, k: 10, c: 0.3, b1: 1.0, b2: 0.2, dt: 0.010 };
+    let x1, v1, x2, v2, ssT, ss, ssSamples, ssEN, ssEC, ssET, ssKick, ssTouchX, ssTouched;
     let ssShowTruth = true;
-    const ssPlotTrue = [], ssPlotEst = [];
-    const ssDrive = (t) => 2.4 * Math.sin(2 * Math.PI * 0.55 * t) + 1.1 * Math.sin(2 * Math.PI * 1.3 * t + 1) + 0.7 * Math.sin(2 * Math.PI * 2.7 * t + 2);
+    const ssPlotTrue = [], ssPlotEst = [], ssPlotNaive = [];
+    const ssDrive = (t) => 5.5 * Math.sin(2 * Math.PI * 0.20 * t) + 2.2 * Math.sin(2 * Math.PI * 0.50 * t + 1) + 1.3 * Math.sin(2 * Math.PI * 0.95 * t + 2);
 
     function makeSS() {
-      ss = new SoftSensor(3, 1, 6, 2, 300, { fmap: null, initVariance: 10.0, lam: 1.0 });
-      x1 = 0; v1 = 0; x2 = 0; v2 = 0; ssT = 0; ssSamples = 0; ssRmseSum = 0; ssTrueSq = 0; ssRmseCnt = 0; ssKick = 0; ssScale = 0;
-      ssPlotTrue.length = 0; ssPlotEst.length = 0;
+      ss = new SoftSensor(3, 1, 6, 5, 300, { fmap: null, initVariance: 10.0, lam: 1.0 });
+      x1 = 0; v1 = 0; x2 = 0; v2 = 0; ssT = 0; ssSamples = 0;
+      ssEN = 0; ssEC = 0; ssET = 0; ssKick = 0; ssTouchX = null; ssTouched = false;
+      ssPlotTrue.length = 0; ssPlotEst.length = 0; ssPlotNaive.length = 0;
     }
     document.getElementById('ss-reset').addEventListener('click', makeSS);
-    document.getElementById('ss-kick').addEventListener('click', () => { ssKick += 12; });
+    document.getElementById('ss-kick').addEventListener('click', () => { ssKick += 15; });
     document.getElementById('ss-truth').addEventListener('change', (e) => { ssShowTruth = e.target.checked; });
+    const ssPointer = (e) => {
+      const r = ssCanvas.getBoundingClientRect();
+      ssTouchX = clamp(((e.clientX - r.left) - ssMotorRest) / ssPx, -1.6, 1.6);
+      ssTouched = true;
+    };
+    ssCanvas.addEventListener('pointerdown', (e) => { e.preventDefault(); ssPointer(e); });
+    ssCanvas.addEventListener('pointermove', (e) => { if (ssTouchX != null) ssPointer(e); });
+    window.addEventListener('pointerup', () => { ssTouchX = null; });
 
     function ssStepSim() {
-      const u = ssDrive(ssT) + ssKick; ssKick *= 0.88;
+      let u;
+      if (ssTouchX != null) u = clamp(50 * (ssTouchX - x1) - 8 * v1, -25, 25);  // PD-follow your finger
+      else u = ssDrive(ssT) + ssKick;
+      ssKick *= 0.90;
       const fs = PM.k * (x1 - x2) + PM.c * (v1 - v2);
       const a1 = (u - fs - PM.b1 * v1) / PM.m1;
       const a2 = (fs - PM.b2 * v2) / PM.m2;
       v1 += a1 * PM.dt; x1 += v1 * PM.dt; v2 += a2 * PM.dt; x2 += v2 * PM.dt; ssT += PM.dt;
+      x1 = clamp(x1, -2.0, 2.0); x2 = clamp(x2, -2.0, 2.0);
       ss.push([x1, v1, u]);
       let est = null;
       if (!ss.frozen) ss.warmupStep(ss._raw());
@@ -339,13 +391,11 @@
       if (ss.ready() && ss.frozen) est = ss.estimate()[0];
       ssSamples++;
       if (est != null) {
-        const e = est - x2; ssRmseSum += e * e; ssTrueSq += x2 * x2; ssRmseCnt++;
-        ssPlotTrue.push(x2); ssPlotEst.push(est);
-        if (ssPlotTrue.length > 400) { ssPlotTrue.shift(); ssPlotEst.shift(); }
+        const eN = est - x2, eC = x1 - x2;
+        ssEN += eN * eN; ssEC += eC * eC; ssET += x2 * x2;
+        ssPlotTrue.push(x2); ssPlotEst.push(est); ssPlotNaive.push(x1);
+        if (ssPlotTrue.length > 400) { ssPlotTrue.shift(); ssPlotEst.shift(); ssPlotNaive.shift(); }
       }
-      const amp = Math.max(Math.abs(x1), Math.abs(x2), 0.02);
-      const target = 0.22 * Math.min(ssW || 300, ssH || 200) / amp;
-      ssScale = ssScale ? ssScale * 0.99 + target * 0.01 : target;
       return est;
     }
 
@@ -364,29 +414,43 @@
     function ssRender(est) {
       if (!ssW) resizePendulum();
       ssCtx.clearRect(0, 0, ssW, ssH);
-      const y = ssH * 0.5;
-      const motorRest = ssW * 0.30, loadRest = ssW * 0.70;
-      const mx = motorRest + x1 * ssScale;
-      const trueX = loadRest + x2 * ssScale;
-      const estX = loadRest + (est == null ? 0 : est) * ssScale;
-      ssCtx.strokeStyle = '#1e293b'; ssCtx.lineWidth = 1; ssCtx.beginPath(); ssCtx.moveTo(0, y + 30); ssCtx.lineTo(ssW, y + 30); ssCtx.stroke();
-      ssSpring(mx + 17, trueX - 15, y);
-      if (ssShowTruth) ssBox(trueX, y, 30, 44, null, '#94a3b8');
-      if (est != null) ssBox(estX, y, 30, 44, 'rgba(245,158,11,0.8)', '#f59e0b');
-      ssBox(mx, y, 34, 50, '#2563eb', '#60a5fa');
+      const y = ssH * 0.48;
+      const mx = ssMotorRest + x1 * ssPx;
+      const trueX = ssLoadRest + x2 * ssPx;
+      const naiveX = ssLoadRest + x1 * ssPx;
+      const estX = ssLoadRest + (est == null ? 0 : est) * ssPx;
+      ssCtx.strokeStyle = '#1e293b'; ssCtx.lineWidth = 1;
+      ssCtx.beginPath(); ssCtx.moveTo(0, y + 30); ssCtx.lineTo(ssW, y + 30); ssCtx.stroke();
+      ssSpring(mx + 18, trueX - 16, y);
+      ssBox(naiveX, y, 30, 44, 'rgba(124,138,160,0.30)', '#64748b');       // naive guess (gray)
+      if (ssShowTruth) ssBox(trueX, y, 30, 44, null, '#e2e8f0');           // truth outline
+      if (est != null) ssBox(estX, y, 30, 44, 'rgba(245,158,11,0.85)', '#f59e0b'); // NGRC (amber)
+      ssBox(mx, y, 34, 50, '#2563eb', '#60a5fa');                          // motor (blue)
+      if (ssTouchX != null) {
+        const tx = ssMotorRest + ssTouchX * ssPx;
+        ssCtx.beginPath(); ssCtx.arc(tx, y, 6, 0, 2 * Math.PI); ssCtx.fillStyle = '#93c5fd'; ssCtx.fill();
+      }
       ssCtx.fillStyle = '#94a3b8'; ssCtx.font = '11px sans-serif'; ssCtx.textAlign = 'center';
-      ssCtx.fillText('motor (measured)', mx, y + 46);
-      ssCtx.fillText('load (hidden)', loadRest, y + 46);
+      ssCtx.fillText('motor — drag me', mx, y + 46);
+      ssCtx.fillText('hidden load', ssLoadRest, y + 46);
+      if (!ss.frozen) {
+        ssCtx.fillStyle = '#64748b'; ssCtx.font = '13px sans-serif';
+        ssCtx.fillText('calibrating… ' + Math.min(100, Math.round(100 * ss._cnt / ss.warmup)) + '%', ssW / 2, 22);
+      } else if (!ssTouched) {
+        ssCtx.fillStyle = '#64748b'; ssCtx.font = '13px sans-serif';
+        ssCtx.fillText('⬌ drag the blue motor', ssW / 2, 22);
+      }
     }
 
     let ssPlotInited = false, ssPlotTick = 0;
     function ssUpdatePlot() {
       const layout = { margin: { l: 30, r: 8, t: 8, b: 18 }, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
-        font: { color: '#94a3b8', size: 10 }, showlegend: true, legend: { orientation: 'h', y: 1.18 },
+        font: { color: '#94a3b8', size: 10 }, showlegend: true, legend: { orientation: 'h', y: 1.22 },
         xaxis: { showgrid: false }, yaxis: { gridcolor: '#1e293b', zerolinecolor: '#334155' } };
       const data = [
-        { y: ssPlotTrue.slice(-160), name: 'true load', line: { color: '#94a3b8', width: 2 }, mode: 'lines' },
-        { y: ssPlotEst.slice(-160), name: 'estimated', line: { color: '#f59e0b', width: 2 }, mode: 'lines' },
+        { y: ssPlotTrue.slice(-160), name: 'true load', line: { color: '#e2e8f0', width: 2 }, mode: 'lines' },
+        { y: ssPlotEst.slice(-160), name: 'NGRC', line: { color: '#f59e0b', width: 2 }, mode: 'lines' },
+        { y: ssPlotNaive.slice(-160), name: 'naive (=motor)', line: { color: '#7c8aa0', width: 1.5, dash: 'dot' }, mode: 'lines' },
       ];
       if (!ssPlotInited) { Plotly.newPlot('ss-plot', data, layout, { displayModeBar: false, responsive: true }); ssPlotInited = true; }
       else Plotly.react('ss-plot', data, layout, { displayModeBar: false, responsive: true });
@@ -399,13 +463,17 @@
       ssRender(est);
       const warmEl = document.getElementById('ss-warm');
       warmEl.textContent = ss.frozen ? 'yes' : 'no'; warmEl.className = ss.frozen ? 'good' : 'warn';
-      document.getElementById('ss-rmse').textContent = ssTrueSq > 0 ? Math.sqrt(ssRmseSum / ssTrueSq).toFixed(4) : '—';
+      document.getElementById('ss-rmse').textContent = ssET > 0 ? Math.sqrt(ssEN / ssET).toFixed(4) : '—';
+      document.getElementById('ss-naive').textContent = ssET > 0 ? Math.sqrt(ssEC / ssET).toFixed(4) : '—';
+      document.getElementById('ss-adv').textContent = (ssEN > 0 && ssEC > 0) ? (Math.sqrt(ssEC / ssEN)).toFixed(1) + '× better' : '—';
       if (++ssPlotTick % 8 === 0) ssUpdatePlot();
       requestAnimationFrame(ssTick);
     }
 
-    // ================= Finger-trace predictor =================
-    const FK = 10; // forecast horizon (steps ahead)
+    // =====================================================================
+    // Tab 3: Finger-trace — NGRC vs straight-line extrapolation
+    // =====================================================================
+    const FK = 10;
     const fgStage = document.getElementById('fg-stage');
     const fgCanvas = document.createElement('canvas');
     fgStage.appendChild(fgCanvas);
@@ -422,21 +490,27 @@
     }
     window.addEventListener('resize', resizeFinger);
 
-    let fgModel, fgPtr, fgTrail, fgPredRing, fgPredMat, fgLast1, fgSamples, fgErrSum, fgTrueSq;
-    const hErr = new Array(FK).fill(0), hTrue = new Array(FK).fill(0);
+    const FG_DECAY = 0.993;                          // EMA so the skill reflects RECENT performance
+    let fgModel, fgPtr, fgTrail, fgRingN, fgRingC, fgPredMat, fgCvMat, fgPrev, fgVel, fgSamples;
+    let fgEN, fgEC, fgET;                            // per-horizon EMA accumulators + shared scale
     function makeFinger() {
-      fgModel = new Continuous(2, 4, 2, true, { predictionSteps: FK, lam: 1.0, initVariance: 2.0 });
+      // delta-dynamics: learn the MOTION (dy), not the absolute position map — generalizes across the canvas
+      fgModel = new Continuous(2, 3, 2, true, {
+        predictionSteps: FK, lam: 1.0, initVariance: 1.0, useDelta: true,
+        useClamp: true, clampMin: [-2, -2], clampMax: [2, 2],
+      });
       fgPtr = { x: 0, y: 0, down: false };
-      fgTrail = []; fgPredRing = []; fgPredMat = null; fgLast1 = null;
-      fgSamples = 0; fgErrSum = 0; fgTrueSq = 0;
-      hErr.fill(0); hTrue.fill(0);
+      fgTrail = []; fgRingN = []; fgRingC = []; fgPredMat = null; fgCvMat = null; fgPrev = null;
+      fgVel = [0, 0];
+      fgSamples = 0;
+      fgEN = new Array(FK).fill(0); fgEC = new Array(FK).fill(0); fgET = 0;
     }
     document.getElementById('fg-reset').addEventListener('click', makeFinger);
     const fgAt = (e) => {
       const r = fgCanvas.getBoundingClientRect();
       fgPtr.x = e.clientX - r.left; fgPtr.y = e.clientY - r.top;
     };
-    fgCanvas.addEventListener('pointerdown', (e) => { fgAt(e); fgPtr.down = true; fgTrail = []; });
+    fgCanvas.addEventListener('pointerdown', (e) => { e.preventDefault(); fgAt(e); fgPtr.down = true; fgTrail = []; fgPrev = null; });
     fgCanvas.addEventListener('pointermove', (e) => { if (fgPtr.down) fgAt(e); });
     window.addEventListener('pointerup', () => { fgPtr.down = false; });
 
@@ -445,59 +519,79 @@
 
     function fgStepSim() {
       const a = nrm(fgPtr.x, fgPtr.y);
-      // horizon errors: the prediction made h frames ago that targeted NOW
+      // score the predictions made h frames ago that targeted NOW (both racers, EMA-weighted)
       for (let h = 1; h <= FK; h++) {
-        const idx = fgPredRing.length - h;
-        if (idx >= 0) {
-          const pm = fgPredRing[idx];
-          const ex = a[0] - pm[0][h - 1], ey = a[1] - pm[1][h - 1];
-          hErr[h - 1] += ex * ex + ey * ey; hTrue[h - 1] += a[0] * a[0] + a[1] * a[1];
+        const iN = fgRingN.length - h, iC = fgRingC.length - h;
+        if (iN >= 0 && iC >= 0) {
+          const pn = fgRingN[iN], pc = fgRingC[iC];
+          const sn = (a[0] - pn[0][h - 1]) ** 2 + (a[1] - pn[1][h - 1]) ** 2;
+          const sc = (a[0] - pc[0][h - 1]) ** 2 + (a[1] - pc[1][h - 1]) ** 2;
+          fgEN[h - 1] = FG_DECAY * fgEN[h - 1] + (1 - FG_DECAY) * sn;
+          fgEC[h - 1] = FG_DECAY * fgEC[h - 1] + (1 - FG_DECAY) * sc;
         }
       }
-      // 1-step nRMSE (last frame's 1-step forecast vs now)
-      if (fgLast1) { const ex = a[0] - fgLast1[0], ey = a[1] - fgLast1[1]; fgErrSum += ex * ex + ey * ey; fgTrueSq += a[0] * a[0] + a[1] * a[1]; }
+      fgET = FG_DECAY * fgET + (1 - FG_DECAY) * (a[0] * a[0] + a[1] * a[1] + 1e-4);
+      // straight-line (constant-velocity) rival — velocity smoothed over recent frames
+      let cv = null;
+      if (fgPrev) {
+        fgVel[0] = 0.6 * fgVel[0] + 0.4 * (a[0] - fgPrev[0]);
+        fgVel[1] = 0.6 * fgVel[1] + 0.4 * (a[1] - fgPrev[1]);
+        cv = [[], []];
+        for (let k = 1; k <= FK; k++) { cv[0].push(a[0] + fgVel[0] * k); cv[1].push(a[1] + fgVel[1] * k); }
+      }
       const res = fgModel.step(a);
       fgSamples++;
-      fgPredMat = res.prediction;                    // [2][FK], normalized
-      fgLast1 = [res.prediction[0][0], res.prediction[1][0]];
-      fgPredRing.push(res.prediction);
-      if (fgPredRing.length > FK) fgPredRing.shift();
+      fgPredMat = res.prediction;
+      fgCvMat = cv;
+      fgRingN.push(res.prediction);
+      fgRingC.push(cv || [[...Array(FK)].map(() => a[0]), [...Array(FK)].map(() => a[1])]);
+      if (fgRingN.length > FK) fgRingN.shift();
+      if (fgRingC.length > FK) fgRingC.shift();
+      fgPrev = a;
       fgTrail.push([fgPtr.x, fgPtr.y]);
       if (fgTrail.length > 90) fgTrail.shift();
     }
 
+    function fgGhost(mat, stroke, fill, dashed) {
+      fgCtx.beginPath();
+      let p0 = den(mat[0][0], mat[1][0]); fgCtx.moveTo(p0[0], p0[1]);
+      for (let k = 1; k < FK; k++) { const p = den(mat[0][k], mat[1][k]); fgCtx.lineTo(p[0], p[1]); }
+      if (dashed) fgCtx.setLineDash([6, 5]);
+      fgCtx.strokeStyle = stroke; fgCtx.lineWidth = 3; fgCtx.stroke();
+      fgCtx.setLineDash([]);
+      const pe = den(mat[0][FK - 1], mat[1][FK - 1]);
+      fgCtx.beginPath(); fgCtx.arc(pe[0], pe[1], 8, 0, 2 * Math.PI); fgCtx.fillStyle = fill; fgCtx.fill();
+    }
     function fgRender() {
       if (!fgW) resizeFinger();
       fgCtx.clearRect(0, 0, fgW, fgH);
-      // fading finger trail (blue)
       for (let i = 1; i < fgTrail.length; i++) {
         fgCtx.beginPath(); fgCtx.moveTo(fgTrail[i - 1][0], fgTrail[i - 1][1]); fgCtx.lineTo(fgTrail[i][0], fgTrail[i][1]);
         fgCtx.strokeStyle = 'rgba(96,165,250,' + (i / fgTrail.length).toFixed(2) + ')'; fgCtx.lineWidth = 3; fgCtx.stroke();
       }
-      // predicted roll-out (amber comet leading ahead)
-      if (fgPredMat) {
-        fgCtx.beginPath();
-        let p0 = den(fgPredMat[0][0], fgPredMat[1][0]); fgCtx.moveTo(p0[0], p0[1]);
-        for (let k = 1; k < FK; k++) { const p = den(fgPredMat[0][k], fgPredMat[1][k]); fgCtx.lineTo(p[0], p[1]); }
-        fgCtx.strokeStyle = 'rgba(245,158,11,0.9)'; fgCtx.lineWidth = 3; fgCtx.stroke();
-        const pe = den(fgPredMat[0][FK - 1], fgPredMat[1][FK - 1]);
-        fgCtx.beginPath(); fgCtx.arc(pe[0], pe[1], 9, 0, 2 * Math.PI);
-        fgCtx.fillStyle = '#f59e0b'; fgCtx.fill();
-        fgCtx.fillStyle = '#0b1220'; fgCtx.font = '9px sans-serif'; fgCtx.textAlign = 'center'; fgCtx.fillText(FK + '', pe[0], pe[1] + 3);
-      }
-      // fingertip (blue)
+      if (fgPtr.down && fgCvMat) fgGhost(fgCvMat, 'rgba(124,138,160,0.7)', '#7c8aa0', true);   // straight-line rival
+      if (fgPtr.down && fgPredMat) fgGhost(fgPredMat, 'rgba(245,158,11,0.9)', '#f59e0b', false); // NGRC
       fgCtx.beginPath(); fgCtx.arc(fgPtr.x, fgPtr.y, 8, 0, 2 * Math.PI); fgCtx.fillStyle = '#2563eb'; fgCtx.fill();
       fgCtx.strokeStyle = '#93c5fd'; fgCtx.lineWidth = 2; fgCtx.stroke();
-      if (fgSamples === 0) { fgCtx.fillStyle = '#64748b'; fgCtx.font = '14px sans-serif'; fgCtx.textAlign = 'center'; fgCtx.fillText('drag your finger here', fgW / 2, fgH / 2); }
+      if (fgSamples === 0) {
+        fgCtx.fillStyle = '#64748b'; fgCtx.font = '14px sans-serif'; fgCtx.textAlign = 'center';
+        fgCtx.fillText('draw loops and figure-8s here', fgW / 2, fgH / 2);
+      }
     }
 
     let fgPlotInited = false, fgPlotTick = 0;
     function fgUpdatePlot() {
-      const nr = hErr.map((e, i) => (hTrue[i] > 0 ? Math.sqrt(e / hTrue[i]) : 0));
+      const nN = fgEN.map((e) => (fgET > 0 ? Math.sqrt(e / fgET) : 0));
+      const nC = fgEC.map((e) => (fgET > 0 ? Math.sqrt(e / fgET) : 0));
+      const xs = nN.map((_, i) => i + 1);
       const layout = { margin: { l: 34, r: 8, t: 8, b: 28 }, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
-        font: { color: '#94a3b8', size: 10 }, showlegend: false,
-        xaxis: { title: { text: 'steps ahead', font: { size: 10 } }, dtick: 1 }, yaxis: { title: { text: 'nRMSE', font: { size: 10 } }, gridcolor: '#1e293b', rangemode: 'tozero' } };
-      const data = [{ x: nr.map((_, i) => i + 1), y: nr, type: 'bar', marker: { color: '#f59e0b' } }];
+        font: { color: '#94a3b8', size: 10 }, showlegend: true, legend: { orientation: 'h', y: 1.22 }, barmode: 'group',
+        xaxis: { title: { text: 'steps ahead', font: { size: 10 } }, dtick: 1 },
+        yaxis: { title: { text: 'error (recent)', font: { size: 10 } }, gridcolor: '#1e293b', rangemode: 'tozero' } };
+      const data = [
+        { x: xs, y: nC, type: 'bar', name: 'straight-line', marker: { color: '#7c8aa0' } },
+        { x: xs, y: nN, type: 'bar', name: 'NGRC', marker: { color: '#f59e0b' } },
+      ];
       if (!fgPlotInited) { Plotly.newPlot('fg-plot', data, layout, { displayModeBar: false, responsive: true }); fgPlotInited = true; }
       else Plotly.react('fg-plot', data, layout, { displayModeBar: false, responsive: true });
     }
@@ -507,12 +601,16 @@
       if (fgPtr.down) fgStepSim();
       fgRender();
       document.getElementById('fg-n').textContent = fgSamples;
-      document.getElementById('fg-rmse').textContent = fgTrueSq > 0 ? Math.sqrt(fgErrSum / fgTrueSq).toFixed(4) : '—';
+      const ready = fgSamples > 60 && fgET > 0 && fgEN[FK - 1] > 0;
+      document.getElementById('fg-rmse').textContent = ready ? Math.sqrt(fgEN[FK - 1] / fgET).toFixed(3) : '—';
+      document.getElementById('fg-naive').textContent = ready ? Math.sqrt(fgEC[FK - 1] / fgET).toFixed(3) : '—';
+      document.getElementById('fg-skill').textContent = (ready && fgEC[FK - 1] > 0)
+        ? Math.sqrt(fgEC[FK - 1] / fgEN[FK - 1]).toFixed(1) + '× better' : '—';
       if (++fgPlotTick % 10 === 0) fgUpdatePlot();
       requestAnimationFrame(fgTick);
     }
 
-    // boot
+    // ---- boot ----
     ivVal.textContent = initVarFromSlider().toFixed(1);
     makeModel();
     makeSS();

@@ -82,14 +82,17 @@ the shipped commit carries the correct version.
    shown with an indigo tag) and **Docs** (everything else). Opens `CLAUDE.md`
    by default so the current state is one tap away.
 4. **NGRC playground** (bottom-right `NGRC` launcher → `ngrc.html`) — a 3-tab
-   interactive showcase of the ported `lib/ngrc` library: **① Lorenz** (a
-   three.js attractor the model learns online, then free-runs to "dream" the
-   chaos itself, with an InitVariance stability slider and a live Plotly
-   real-vs-predicted trace), **② soft-sensor** (a two-mass spring; the
-   `SoftSensor` estimates the hidden load from the motor's history alone —
-   canvas viz + Plotly true-vs-estimate), and **③ finger-trace** (drag your
-   finger; a `Continuous` multi-step roll-out rides an amber ghost ahead of
-   your fingertip, with a Plotly nRMSE-vs-horizon bar chart). All three built.
+   interactive showcase of `lib/ngrc`, each tab framed as **NGRC vs a common
+   alternative** so the value is visible: **① Lorenz** (three.js attractor,
+   1-finger orbit / 2-finger pinch zoom; NGRC and a classical **linear ARX**
+   learn side-by-side — near-tied 1-step errors — then "Dream" free-runs both:
+   amber NGRC keeps the butterfly, red linear collapses; Plotly
+   real-vs-both-predictions trace), **② soft-sensor** (drag the blue motor;
+   a soft coupling makes the hidden load lag; amber `SoftSensor` estimate vs
+   the gray **naive "load = motor"** guess — ~12× better, with a 3-trace
+   Plotly chart), **③ finger-trace** (draw loops; amber NGRC ghost vs the
+   gray **straight-line extrapolation** ghost 10 steps ahead, live "×-better"
+   skill readout + grouped error-vs-horizon bars — 2–3× on curves).
 
 ## Versioning
 
