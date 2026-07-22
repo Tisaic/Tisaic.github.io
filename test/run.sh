@@ -20,6 +20,7 @@ if [ -d lib/ngrc ]; then
   node test/ngrc/universal.test.mjs
   node test/ngrc/softsensor.test.mjs
   node test/ngrc/commission.test.mjs
+  node test/ngrc/continuous.test.mjs
 fi
 
 # Serve the repo and always clean up the server on exit.
