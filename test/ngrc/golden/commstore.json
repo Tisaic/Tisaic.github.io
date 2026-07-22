@@ -1,0 +1,74 @@
+{
+ "sig": 2882343476,
+ "theta": [
+  0.123456789,
+  -1.5,
+  42.0,
+  1e-07,
+  -3.14159
+ ],
+ "norm": [
+  0.5,
+  2.0
+ ],
+ "checksum": 1570537406,
+ "blob_checksum": 1570537406,
+ "load_good": [
+  true,
+  "ok"
+ ],
+ "restored_theta": [
+  0.123456789,
+  -1.5,
+  42.0,
+  1e-07,
+  -3.14159
+ ],
+ "load_bad": [
+  false,
+  "checksum mismatch (corrupt)"
+ ],
+ "load_sig": [
+  false,
+  "signature mismatch (config changed)"
+ ],
+ "monitor": [
+  {
+   "recommission": false,
+   "state": 1,
+   "reason": ""
+  },
+  {
+   "recommission": false,
+   "state": 1,
+   "reason": ""
+  },
+  {
+   "recommission": false,
+   "state": 1,
+   "reason": ""
+  },
+  {
+   "recommission": false,
+   "state": 1,
+   "reason": ""
+  },
+  {
+   "recommission": true,
+   "state": 2,
+   "reason": "quality below floor"
+  },
+  {
+   "recommission": true,
+   "state": 2,
+   "reason": "quality below floor"
+  },
+  {
+   "recommission": true,
+   "state": 2,
+   "reason": "quality below floor"
+  }
+ ],
+ "saved1": false,
+ "saved2": true
+}

@@ -23,6 +23,8 @@ if [ -d lib/ngrc ]; then
   node test/ngrc/continuous.test.mjs
   node test/ngrc/dropin.test.mjs
   node test/ngrc/robotcomp.test.mjs
+  node test/ngrc/commstore.test.mjs
+  node test/ngrc/autotune.test.mjs
 fi
 
 # Serve the repo and always clean up the server on exit.

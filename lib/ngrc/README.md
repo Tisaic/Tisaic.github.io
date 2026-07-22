@@ -25,6 +25,8 @@ against golden vectors generated from that reference.
 | `continuous.js` — `Continuous` online forecaster: score→build→train→push→forecast roll-out; NARX inputs, delta-target, gray-box baseline, guards+clamp, auto-normalize, adaptive/directional forgetting, direct multi-horizon readouts, snapshot/restore | ✅ ported, 12/12 golden checks (4 feature combos) |
 | `dropin.js` — `DropInEstimator` turnkey front-end: angular `[sin,cos]` auto-embed + `atan2` map-back, auto-normalize, lean linear NVAR, one forgetting mode | ✅ ported, 6/6 golden checks |
 | `robotcomp.js` — `RobotComp` N-axis compliance + tool-force feedforward (exact-RLS calibration) and `CompCommissioner` (zero-tune per-pose gate) | ✅ ported, 5/5 golden checks |
+| `commstore.js` — `CommStore` commissioning store/lifecycle (versioned payload, BigInt checksum, fail-safe load, health monitor, throttled autosave) | ✅ ported, 8/8 golden checks |
+| `autotune.js` — `autotune` offline commissioner for `Continuous` (linear-first, ridge sweep, free-run stability reject, derived clamps + windup bound) + `makeModel` | ✅ ported, 12/12 golden checks |
 
 ### Roadmap
 
