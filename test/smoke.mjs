@@ -124,6 +124,19 @@ check('ngrc: soft-sensor estimate error is finite', Number.isFinite(parseFloat(a
 check('ngrc: soft-sensor has no errors', demoErrors.length === 0, demoErrors.join(' | '));
 await demo.screenshot({ path: join(SHOTS, '05-softsensor.png') });
 
+// finger-trace tab: a simulated circular drag makes the model learn
+await demo.click('.tab[data-tab="finger"]');
+await demo.waitForTimeout(200);
+const fbox = await demo.locator('#fg-stage').boundingBox();
+const fcx = fbox.x + fbox.width / 2, fcy = fbox.y + fbox.height / 2, fr = Math.min(fbox.width, fbox.height) * 0.3;
+await demo.mouse.move(fcx + fr, fcy); await demo.mouse.down();
+for (let i = 0; i < 150; i++) { const a = i * 0.12; await demo.mouse.move(fcx + fr * Math.cos(a), fcy + fr * Math.sin(a)); await demo.waitForTimeout(8); }
+await demo.mouse.up();
+check('ngrc: finger-trace learns from a drag (samples > 0)', (parseInt(await demo.textContent('#fg-n')) || 0) > 0);
+check('ngrc: finger-trace error is finite', Number.isFinite(parseFloat(await demo.textContent('#fg-rmse'))));
+check('ngrc: playground has no errors overall', demoErrors.length === 0, demoErrors.join(' | '));
+await demo.screenshot({ path: join(SHOTS, '06-finger.png') });
+
 await browser.close();
 
 console.log(`\n${failed === 0 ? 'PASS' : 'FAIL'} — ${failed} check(s) failed. Screenshots in test/screenshots/\n`);

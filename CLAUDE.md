@@ -87,7 +87,9 @@ the shipped commit carries the correct version.
    chaos itself, with an InitVariance stability slider and a live Plotly
    real-vs-predicted trace), **② soft-sensor** (a two-mass spring; the
    `SoftSensor` estimates the hidden load from the motor's history alone —
-   canvas viz + Plotly true-vs-estimate), and **③ finger-trace** (next).
+   canvas viz + Plotly true-vs-estimate), and **③ finger-trace** (drag your
+   finger; a `Continuous` multi-step roll-out rides an amber ghost ahead of
+   your fingertip, with a Plotly nRMSE-vs-horizon bar chart). All three built.
 
 ## Versioning
 

@@ -103,10 +103,21 @@
     <div class="plot" id="ss-plot"></div>
   </section>
 
-  <!-- ================= Tab 3: Finger-trace (stub) ================= -->
+  <!-- ================= Tab 3: Finger-trace ================= -->
   <section class="panel" id="p-finger">
-    <p class="soon"><span class="pill">next</span><br><br>Finger-trace predictor — drag your finger, a ghost
-      rides ahead of it via multi-step roll-out. Coming next.</p>
+    <p class="lead">Drag your finger around the box. The model learns <b>your hand's motion</b> online and
+      forecasts where you're going — the <span style="color:#f59e0b">amber</span> ghost rides <b>ahead</b>
+      of your fingertip via multi-step roll-out. Draw loops and figure-8s to teach it.</p>
+    <div class="stage" id="fg-stage" style="height:46vh"></div>
+    <div class="controls">
+      <button id="fg-reset" class="sec">Reset brain</button>
+    </div>
+    <dl class="stat">
+      <dt>Predicting</dt><dd>your fingertip, up to 10 steps ahead</dd>
+      <dt>Samples seen</dt><dd id="fg-n">0</dd>
+      <dt>1-step nRMSE</dt><dd id="fg-rmse">—</dd>
+    </dl>
+    <div class="plot" id="fg-plot"></div>
   </section>
 
   <script type="module">
@@ -125,6 +136,7 @@
       document.querySelectorAll('.panel').forEach((p) => p.classList.toggle('on', p.id === 'p-' + activeTab));
       if (activeTab === 'lorenz') resizeLorenz();
       if (activeTab === 'pendulum') resizePendulum();
+      if (activeTab === 'finger') resizeFinger();
     }));
 
     // ================= Lorenz =================
@@ -392,13 +404,123 @@
       requestAnimationFrame(ssTick);
     }
 
+    // ================= Finger-trace predictor =================
+    const FK = 10; // forecast horizon (steps ahead)
+    const fgStage = document.getElementById('fg-stage');
+    const fgCanvas = document.createElement('canvas');
+    fgStage.appendChild(fgCanvas);
+    const fgCtx = fgCanvas.getContext('2d');
+    let fgW = 0, fgH = 0, fgNorm = 1;
+    const fgDPR = Math.min(window.devicePixelRatio, 2);
+    function resizeFinger() {
+      fgW = fgStage.clientWidth; fgH = fgStage.clientHeight;
+      if (!fgW || !fgH) return;
+      fgCanvas.width = fgW * fgDPR; fgCanvas.height = fgH * fgDPR;
+      fgCanvas.style.width = fgW + 'px'; fgCanvas.style.height = fgH + 'px';
+      fgCtx.setTransform(fgDPR, 0, 0, fgDPR, 0, 0);
+      fgNorm = 0.5 * Math.min(fgW, fgH);
+    }
+    window.addEventListener('resize', resizeFinger);
+
+    let fgModel, fgPtr, fgTrail, fgPredRing, fgPredMat, fgLast1, fgSamples, fgErrSum, fgTrueSq;
+    const hErr = new Array(FK).fill(0), hTrue = new Array(FK).fill(0);
+    function makeFinger() {
+      fgModel = new Continuous(2, 4, 2, true, { predictionSteps: FK, lam: 1.0, initVariance: 2.0 });
+      fgPtr = { x: 0, y: 0, down: false };
+      fgTrail = []; fgPredRing = []; fgPredMat = null; fgLast1 = null;
+      fgSamples = 0; fgErrSum = 0; fgTrueSq = 0;
+      hErr.fill(0); hTrue.fill(0);
+    }
+    document.getElementById('fg-reset').addEventListener('click', makeFinger);
+    const fgAt = (e) => {
+      const r = fgCanvas.getBoundingClientRect();
+      fgPtr.x = e.clientX - r.left; fgPtr.y = e.clientY - r.top;
+    };
+    fgCanvas.addEventListener('pointerdown', (e) => { fgAt(e); fgPtr.down = true; fgTrail = []; });
+    fgCanvas.addEventListener('pointermove', (e) => { if (fgPtr.down) fgAt(e); });
+    window.addEventListener('pointerup', () => { fgPtr.down = false; });
+
+    const nrm = (px, py) => [(px - fgW / 2) / fgNorm, (py - fgH / 2) / fgNorm];
+    const den = (nx, ny) => [nx * fgNorm + fgW / 2, ny * fgNorm + fgH / 2];
+
+    function fgStepSim() {
+      const a = nrm(fgPtr.x, fgPtr.y);
+      // horizon errors: the prediction made h frames ago that targeted NOW
+      for (let h = 1; h <= FK; h++) {
+        const idx = fgPredRing.length - h;
+        if (idx >= 0) {
+          const pm = fgPredRing[idx];
+          const ex = a[0] - pm[0][h - 1], ey = a[1] - pm[1][h - 1];
+          hErr[h - 1] += ex * ex + ey * ey; hTrue[h - 1] += a[0] * a[0] + a[1] * a[1];
+        }
+      }
+      // 1-step nRMSE (last frame's 1-step forecast vs now)
+      if (fgLast1) { const ex = a[0] - fgLast1[0], ey = a[1] - fgLast1[1]; fgErrSum += ex * ex + ey * ey; fgTrueSq += a[0] * a[0] + a[1] * a[1]; }
+      const res = fgModel.step(a);
+      fgSamples++;
+      fgPredMat = res.prediction;                    // [2][FK], normalized
+      fgLast1 = [res.prediction[0][0], res.prediction[1][0]];
+      fgPredRing.push(res.prediction);
+      if (fgPredRing.length > FK) fgPredRing.shift();
+      fgTrail.push([fgPtr.x, fgPtr.y]);
+      if (fgTrail.length > 90) fgTrail.shift();
+    }
+
+    function fgRender() {
+      if (!fgW) resizeFinger();
+      fgCtx.clearRect(0, 0, fgW, fgH);
+      // fading finger trail (blue)
+      for (let i = 1; i < fgTrail.length; i++) {
+        fgCtx.beginPath(); fgCtx.moveTo(fgTrail[i - 1][0], fgTrail[i - 1][1]); fgCtx.lineTo(fgTrail[i][0], fgTrail[i][1]);
+        fgCtx.strokeStyle = 'rgba(96,165,250,' + (i / fgTrail.length).toFixed(2) + ')'; fgCtx.lineWidth = 3; fgCtx.stroke();
+      }
+      // predicted roll-out (amber comet leading ahead)
+      if (fgPredMat) {
+        fgCtx.beginPath();
+        let p0 = den(fgPredMat[0][0], fgPredMat[1][0]); fgCtx.moveTo(p0[0], p0[1]);
+        for (let k = 1; k < FK; k++) { const p = den(fgPredMat[0][k], fgPredMat[1][k]); fgCtx.lineTo(p[0], p[1]); }
+        fgCtx.strokeStyle = 'rgba(245,158,11,0.9)'; fgCtx.lineWidth = 3; fgCtx.stroke();
+        const pe = den(fgPredMat[0][FK - 1], fgPredMat[1][FK - 1]);
+        fgCtx.beginPath(); fgCtx.arc(pe[0], pe[1], 9, 0, 2 * Math.PI);
+        fgCtx.fillStyle = '#f59e0b'; fgCtx.fill();
+        fgCtx.fillStyle = '#0b1220'; fgCtx.font = '9px sans-serif'; fgCtx.textAlign = 'center'; fgCtx.fillText(FK + '', pe[0], pe[1] + 3);
+      }
+      // fingertip (blue)
+      fgCtx.beginPath(); fgCtx.arc(fgPtr.x, fgPtr.y, 8, 0, 2 * Math.PI); fgCtx.fillStyle = '#2563eb'; fgCtx.fill();
+      fgCtx.strokeStyle = '#93c5fd'; fgCtx.lineWidth = 2; fgCtx.stroke();
+      if (fgSamples === 0) { fgCtx.fillStyle = '#64748b'; fgCtx.font = '14px sans-serif'; fgCtx.textAlign = 'center'; fgCtx.fillText('drag your finger here', fgW / 2, fgH / 2); }
+    }
+
+    let fgPlotInited = false, fgPlotTick = 0;
+    function fgUpdatePlot() {
+      const nr = hErr.map((e, i) => (hTrue[i] > 0 ? Math.sqrt(e / hTrue[i]) : 0));
+      const layout = { margin: { l: 34, r: 8, t: 8, b: 28 }, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+        font: { color: '#94a3b8', size: 10 }, showlegend: false,
+        xaxis: { title: { text: 'steps ahead', font: { size: 10 } }, dtick: 1 }, yaxis: { title: { text: 'nRMSE', font: { size: 10 } }, gridcolor: '#1e293b', rangemode: 'tozero' } };
+      const data = [{ x: nr.map((_, i) => i + 1), y: nr, type: 'bar', marker: { color: '#f59e0b' } }];
+      if (!fgPlotInited) { Plotly.newPlot('fg-plot', data, layout, { displayModeBar: false, responsive: true }); fgPlotInited = true; }
+      else Plotly.react('fg-plot', data, layout, { displayModeBar: false, responsive: true });
+    }
+
+    function fgTick() {
+      if (activeTab !== 'finger') { requestAnimationFrame(fgTick); return; }
+      if (fgPtr.down) fgStepSim();
+      fgRender();
+      document.getElementById('fg-n').textContent = fgSamples;
+      document.getElementById('fg-rmse').textContent = fgTrueSq > 0 ? Math.sqrt(fgErrSum / fgTrueSq).toFixed(4) : '—';
+      if (++fgPlotTick % 10 === 0) fgUpdatePlot();
+      requestAnimationFrame(fgTick);
+    }
+
     // boot
     ivVal.textContent = initVarFromSlider().toFixed(1);
     makeModel();
     makeSS();
+    makeFinger();
     resizeLorenz();
     requestAnimationFrame(tick);
     requestAnimationFrame(ssTick);
+    requestAnimationFrame(fgTick);
   </script>
 </body>
 </html>
