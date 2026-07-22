@@ -24,6 +24,7 @@ against golden vectors generated from that reference.
 | `commission.js` — `commissionSoftSensor` offline model search (linear-first → pruned-universal, per-target held-out gating, importance-ranked pruning) | ✅ ported, 12/12 golden checks |
 | `continuous.js` — `Continuous` online forecaster: score→build→train→push→forecast roll-out; NARX inputs, delta-target, gray-box baseline, guards+clamp, auto-normalize, adaptive/directional forgetting, direct multi-horizon readouts, snapshot/restore | ✅ ported, 12/12 golden checks (4 feature combos) |
 | `dropin.js` — `DropInEstimator` turnkey front-end: angular `[sin,cos]` auto-embed + `atan2` map-back, auto-normalize, lean linear NVAR, one forgetting mode | ✅ ported, 6/6 golden checks |
+| `robotcomp.js` — `RobotComp` N-axis compliance + tool-force feedforward (exact-RLS calibration) and `CompCommissioner` (zero-tune per-pose gate) | ✅ ported, 5/5 golden checks |
 
 ### Roadmap
 
