@@ -21,15 +21,15 @@ against golden vectors generated from that reference.
 | `universal.js` — portable LCG/Box-Muller RNG, universal feature map (bias+linear+quadratic+ReLU+Fourier+reciprocal), full + pruned expand, structured prior | ✅ ported, 24/24 golden checks (incl. RNG parity) |
 | `feature_map.js` — `universalMap` / `prunedMap` objects (`.expand`/`.m`/`.prior`) | ✅ ported |
 | `softsensor.js` — `SoftSensor` multi-target virtual-sensor bank (standardizer + shared feature vector + per-target online-RLS readout) | ✅ ported, 10/10 golden checks (linear + universal) |
+| `commission.js` — `commissionSoftSensor` offline model search (linear-first → pruned-universal, per-target held-out gating, importance-ranked pruning) | ✅ ported, 12/12 golden checks |
 
 ### Roadmap
 
 1. **Core** — primitives ✅; AFM feature-selection blocks ✅; universal map ✅ →
    `Continuous` online forecaster (build → train → forecast loop with roll-out).
-2. **Soft sensors / AFM** (prioritized) — AFM trainer/runner ✅; universal map ✅;
-   `SoftSensor` runtime ✅ → `commission_softsensor` (offline model search:
-   linear-first → pruned-universal, held-out gating).
-3. Later — DropIn, servo blocks, commissioners.
+2. **Soft sensors / AFM** (prioritized) — **complete**: AFM trainer/runner ✅;
+   universal map ✅; `SoftSensor` runtime ✅; `commissionSoftSensor` ✅.
+3. Next — DropIn, servo blocks (`ServoFF`, `AxisComp`), `Continuous` forecaster.
 
 ### SoftSensor quickstart
 
