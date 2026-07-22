@@ -27,15 +27,16 @@ against golden vectors generated from that reference.
 | `robotcomp.js` — `RobotComp` N-axis compliance + tool-force feedforward (exact-RLS calibration) and `CompCommissioner` (zero-tune per-pose gate) | ✅ ported, 5/5 golden checks |
 | `commstore.js` — `CommStore` commissioning store/lifecycle (versioned payload, BigInt checksum, fail-safe load, health monitor, throttled autosave) | ✅ ported, 8/8 golden checks |
 | `autotune.js` — `autotune` offline commissioner for `Continuous` (linear-first, ridge sweep, free-run stability reject, derived clamps + windup bound) + `makeModel` | ✅ ported, 12/12 golden checks |
+| `servoff.js` — `ServoFF` self-commissioning feedforward torque (Universal Servo Basis + structured prior + auto-normalize + directional forgetting + significance pruning + preview delay + GMS pre-sliding) | ✅ ported, 10/10 golden checks |
+| `axiscomp.js` — `AxisComp` ballscrew pitch + backlash position compensation (`AxisFeat` basis, fixed-scale standardization, exact-RLS calibration) | ✅ ported, 4/4 spec-parity checks |
 
-### Roadmap
+### Status — the TC_NGRC library port is **complete**
 
-1. **Core** — primitives ✅; AFM feature-selection blocks ✅; universal map ✅;
-   `Continuous` online forecaster ✅.
-2. **Soft sensors / AFM** (prioritized) — **complete**: AFM trainer/runner ✅;
-   universal map ✅; `SoftSensor` runtime ✅; `commissionSoftSensor` ✅.
-3. **Turnkey** — `DropIn` estimator ✅.
-4. Next — servo blocks (`ServoFF`, `AxisComp`) and their feature bases.
+Every deployable block ported to production JavaScript and validated against the
+Python reference (or the ST spec) — **181 golden checks**, all green:
+primitives, AFM online selection, the universal random-feature map, `SoftSensor`
++ `commissionSoftSensor`, the full `Continuous` forecaster, `DropIn`, `RobotComp`
++ `CompCommissioner`, `CommStore`, `autotune`, `ServoFF`, and `AxisComp`.
 
 ### SoftSensor quickstart
 
