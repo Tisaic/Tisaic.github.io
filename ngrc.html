@@ -82,10 +82,25 @@
     <div class="plot" id="lz-plot"></div>
   </section>
 
-  <!-- ================= Tab 2: Soft-sensor (stub) ================= -->
+  <!-- ================= Tab 2: Soft-sensor ================= -->
   <section class="panel" id="p-pendulum">
-    <p class="soon"><span class="pill">next</span><br><br>Sensorless pendulum — measure only the motor,
-      watch the SoftSensor estimate the hidden mass. Coming next.</p>
+    <p class="lead">Two masses on a spring. The model <b>measures only the motor</b> (blue, left) — the
+      load on the right is <b>hidden</b>. The SoftSensor estimates the load's position from the motor's
+      history alone. The <b>outline</b> is the true hidden load; the <span style="color:#f59e0b">amber</span>
+      block is the estimate. Watch it lock on.</p>
+    <div class="stage" id="ss-stage" style="height:34vh"></div>
+    <div class="controls">
+      <button id="ss-kick">Kick it 👊</button>
+      <button id="ss-reset" class="sec">Reset brain</button>
+      <label class="slider" style="flex:0 0 auto; gap:6px;"><input id="ss-truth" type="checkbox" checked /> show truth</label>
+    </div>
+    <dl class="stat">
+      <dt>Measured</dt><dd>motor position, velocity, drive force</dd>
+      <dt>Hidden target</dt><dd>load position (never an input)</dd>
+      <dt>Warm</dt><dd id="ss-warm" class="warn">no</dd>
+      <dt>Estimate nRMSE</dt><dd id="ss-rmse">—</dd>
+    </dl>
+    <div class="plot" id="ss-plot"></div>
   </section>
 
   <!-- ================= Tab 3: Finger-trace (stub) ================= -->
@@ -97,15 +112,19 @@
   <script type="module">
     import * as THREE from './vendor/three.module.js';
     import { Continuous } from './lib/ngrc/continuous.js';
+    import { SoftSensor } from './lib/ngrc/softsensor.js';
 
     console.log('ngrc playground: modules loaded, THREE', THREE.REVISION);
 
     // ---- tab switching ----
+    let activeTab = 'lorenz';
     const tabs = [...document.querySelectorAll('.tab')];
     tabs.forEach((t) => t.addEventListener('click', () => {
+      activeTab = t.dataset.tab;
       tabs.forEach((x) => x.classList.toggle('on', x === t));
-      document.querySelectorAll('.panel').forEach((p) => p.classList.toggle('on', p.id === 'p-' + t.dataset.tab));
-      if (t.dataset.tab === 'lorenz') resizeLorenz();
+      document.querySelectorAll('.panel').forEach((p) => p.classList.toggle('on', p.id === 'p-' + activeTab));
+      if (activeTab === 'lorenz') resizeLorenz();
+      if (activeTab === 'pendulum') resizePendulum();
     }));
 
     // ================= Lorenz =================
@@ -233,6 +252,7 @@
 
     // main loop
     function tick() {
+      if (activeTab !== 'lorenz') { requestAnimationFrame(tick); return; }
       const SUB = 2; // sim substeps per frame
       for (let k = 0; k < SUB; k++) {
         if (!dreaming) {
@@ -263,11 +283,122 @@
       requestAnimationFrame(tick);
     }
 
+    // ================= Soft-sensor (two-mass spring) =================
+    const ssStage = document.getElementById('ss-stage');
+    const ssCanvas = document.createElement('canvas');
+    ssStage.appendChild(ssCanvas);
+    const ssCtx = ssCanvas.getContext('2d');
+    let ssW = 0, ssH = 0;
+    const ssDPR = Math.min(window.devicePixelRatio, 2);
+    function resizePendulum() {
+      ssW = ssStage.clientWidth; ssH = ssStage.clientHeight;
+      if (!ssW || !ssH) return;
+      ssCanvas.width = ssW * ssDPR; ssCanvas.height = ssH * ssDPR;
+      ssCanvas.style.width = ssW + 'px'; ssCanvas.style.height = ssH + 'px';
+      ssCtx.setTransform(ssDPR, 0, 0, ssDPR, 0, 0);
+    }
+    window.addEventListener('resize', resizePendulum);
+
+    const PM = { m1: 1.0, m2: 1.4, k: 26, c: 0.35, b1: 0.5, b2: 0.22, dt: 0.010 };
+    let x1, v1, x2, v2, ssT, ss, ssSamples, ssRmseSum, ssTrueSq, ssRmseCnt, ssKick, ssScale;
+    let ssShowTruth = true;
+    const ssPlotTrue = [], ssPlotEst = [];
+    const ssDrive = (t) => 2.4 * Math.sin(2 * Math.PI * 0.55 * t) + 1.1 * Math.sin(2 * Math.PI * 1.3 * t + 1) + 0.7 * Math.sin(2 * Math.PI * 2.7 * t + 2);
+
+    function makeSS() {
+      ss = new SoftSensor(3, 1, 6, 2, 300, { fmap: null, initVariance: 10.0, lam: 1.0 });
+      x1 = 0; v1 = 0; x2 = 0; v2 = 0; ssT = 0; ssSamples = 0; ssRmseSum = 0; ssTrueSq = 0; ssRmseCnt = 0; ssKick = 0; ssScale = 0;
+      ssPlotTrue.length = 0; ssPlotEst.length = 0;
+    }
+    document.getElementById('ss-reset').addEventListener('click', makeSS);
+    document.getElementById('ss-kick').addEventListener('click', () => { ssKick += 12; });
+    document.getElementById('ss-truth').addEventListener('change', (e) => { ssShowTruth = e.target.checked; });
+
+    function ssStepSim() {
+      const u = ssDrive(ssT) + ssKick; ssKick *= 0.88;
+      const fs = PM.k * (x1 - x2) + PM.c * (v1 - v2);
+      const a1 = (u - fs - PM.b1 * v1) / PM.m1;
+      const a2 = (fs - PM.b2 * v2) / PM.m2;
+      v1 += a1 * PM.dt; x1 += v1 * PM.dt; v2 += a2 * PM.dt; x2 += v2 * PM.dt; ssT += PM.dt;
+      ss.push([x1, v1, u]);
+      let est = null;
+      if (!ss.frozen) ss.warmupStep(ss._raw());
+      else ss.adapt([x2]);
+      if (ss.ready() && ss.frozen) est = ss.estimate()[0];
+      ssSamples++;
+      if (est != null) {
+        const e = est - x2; ssRmseSum += e * e; ssTrueSq += x2 * x2; ssRmseCnt++;
+        ssPlotTrue.push(x2); ssPlotEst.push(est);
+        if (ssPlotTrue.length > 400) { ssPlotTrue.shift(); ssPlotEst.shift(); }
+      }
+      const amp = Math.max(Math.abs(x1), Math.abs(x2), 0.02);
+      const target = 0.22 * Math.min(ssW || 300, ssH || 200) / amp;
+      ssScale = ssScale ? ssScale * 0.99 + target * 0.01 : target;
+      return est;
+    }
+
+    function ssBox(cx, cy, w, h, fill, stroke) {
+      ssCtx.beginPath(); ssCtx.rect(cx - w / 2, cy - h / 2, w, h);
+      if (fill) { ssCtx.fillStyle = fill; ssCtx.fill(); }
+      if (stroke) { ssCtx.lineWidth = 2; ssCtx.strokeStyle = stroke; ssCtx.stroke(); }
+    }
+    function ssSpring(x0, xE, y) {
+      ssCtx.beginPath(); ssCtx.moveTo(x0, y);
+      const n = 12, dx = (xE - x0) / n;
+      for (let i = 1; i < n; i++) ssCtx.lineTo(x0 + i * dx, y + (i % 2 ? -8 : 8));
+      ssCtx.lineTo(xE, y);
+      ssCtx.strokeStyle = '#475569'; ssCtx.lineWidth = 2; ssCtx.stroke();
+    }
+    function ssRender(est) {
+      if (!ssW) resizePendulum();
+      ssCtx.clearRect(0, 0, ssW, ssH);
+      const y = ssH * 0.5;
+      const motorRest = ssW * 0.30, loadRest = ssW * 0.70;
+      const mx = motorRest + x1 * ssScale;
+      const trueX = loadRest + x2 * ssScale;
+      const estX = loadRest + (est == null ? 0 : est) * ssScale;
+      ssCtx.strokeStyle = '#1e293b'; ssCtx.lineWidth = 1; ssCtx.beginPath(); ssCtx.moveTo(0, y + 30); ssCtx.lineTo(ssW, y + 30); ssCtx.stroke();
+      ssSpring(mx + 17, trueX - 15, y);
+      if (ssShowTruth) ssBox(trueX, y, 30, 44, null, '#94a3b8');
+      if (est != null) ssBox(estX, y, 30, 44, 'rgba(245,158,11,0.8)', '#f59e0b');
+      ssBox(mx, y, 34, 50, '#2563eb', '#60a5fa');
+      ssCtx.fillStyle = '#94a3b8'; ssCtx.font = '11px sans-serif'; ssCtx.textAlign = 'center';
+      ssCtx.fillText('motor (measured)', mx, y + 46);
+      ssCtx.fillText('load (hidden)', loadRest, y + 46);
+    }
+
+    let ssPlotInited = false, ssPlotTick = 0;
+    function ssUpdatePlot() {
+      const layout = { margin: { l: 30, r: 8, t: 8, b: 18 }, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+        font: { color: '#94a3b8', size: 10 }, showlegend: true, legend: { orientation: 'h', y: 1.18 },
+        xaxis: { showgrid: false }, yaxis: { gridcolor: '#1e293b', zerolinecolor: '#334155' } };
+      const data = [
+        { y: ssPlotTrue.slice(-160), name: 'true load', line: { color: '#94a3b8', width: 2 }, mode: 'lines' },
+        { y: ssPlotEst.slice(-160), name: 'estimated', line: { color: '#f59e0b', width: 2 }, mode: 'lines' },
+      ];
+      if (!ssPlotInited) { Plotly.newPlot('ss-plot', data, layout, { displayModeBar: false, responsive: true }); ssPlotInited = true; }
+      else Plotly.react('ss-plot', data, layout, { displayModeBar: false, responsive: true });
+    }
+
+    function ssTick() {
+      if (activeTab !== 'pendulum') { requestAnimationFrame(ssTick); return; }
+      let est = null;
+      for (let k = 0; k < 2; k++) est = ssStepSim();
+      ssRender(est);
+      const warmEl = document.getElementById('ss-warm');
+      warmEl.textContent = ss.frozen ? 'yes' : 'no'; warmEl.className = ss.frozen ? 'good' : 'warn';
+      document.getElementById('ss-rmse').textContent = ssTrueSq > 0 ? Math.sqrt(ssRmseSum / ssTrueSq).toFixed(4) : '—';
+      if (++ssPlotTick % 8 === 0) ssUpdatePlot();
+      requestAnimationFrame(ssTick);
+    }
+
     // boot
     ivVal.textContent = initVarFromSlider().toFixed(1);
     makeModel();
+    makeSS();
     resizeLorenz();
     requestAnimationFrame(tick);
+    requestAnimationFrame(ssTick);
   </script>
 </body>
 </html>

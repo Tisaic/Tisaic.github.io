@@ -116,6 +116,14 @@ await demo.waitForTimeout(500);
 check('ngrc: dream (free-run) toggles', /dreaming/.test(await demo.textContent('#lz-mode')));
 await demo.screenshot({ path: join(SHOTS, '04-ngrc.png') });
 
+// soft-sensor tab: warms up + produces a hidden-state estimate
+await demo.click('.tab[data-tab="pendulum"]');
+await demo.waitForTimeout(3800);
+check('ngrc: soft-sensor warms up', (await demo.textContent('#ss-warm')) === 'yes');
+check('ngrc: soft-sensor estimate error is finite', Number.isFinite(parseFloat(await demo.textContent('#ss-rmse'))));
+check('ngrc: soft-sensor has no errors', demoErrors.length === 0, demoErrors.join(' | '));
+await demo.screenshot({ path: join(SHOTS, '05-softsensor.png') });
+
 await browser.close();
 
 console.log(`\n${failed === 0 ? 'PASS' : 'FAIL'} — ${failed} check(s) failed. Screenshots in test/screenshots/\n`);

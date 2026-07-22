@@ -85,7 +85,9 @@ the shipped commit carries the correct version.
    interactive showcase of the ported `lib/ngrc` library: **① Lorenz** (a
    three.js attractor the model learns online, then free-runs to "dream" the
    chaos itself, with an InitVariance stability slider and a live Plotly
-   real-vs-predicted trace), **② soft-sensor** and **③ finger-trace** (next).
+   real-vs-predicted trace), **② soft-sensor** (a two-mass spring; the
+   `SoftSensor` estimates the hidden load from the motor's history alone —
+   canvas viz + Plotly true-vs-estimate), and **③ finger-trace** (next).
 
 ## Versioning
 
