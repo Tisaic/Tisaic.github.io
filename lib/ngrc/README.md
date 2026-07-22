@@ -18,14 +18,16 @@ against golden vectors generated from that reference.
 | `primitives.js` — Block, build-lags, poly-expand, add-bias, predict, RLS init/update, rolling-update, RMSE, calc-mem | ✅ ported, 70/70 golden checks |
 | `afm_select.js` — ridge Gauss-Jordan solve, working-set Gram/admit/screen, nRMSE, structured-prior ridge | ✅ ported |
 | `afm.js` — `LoggedTrainer`, `LiveTrainer`, `Runner` (online feature selection + frozen inference) | ✅ ported, 8/8 golden checks |
+| `universal.js` — portable LCG/Box-Muller RNG, universal feature map (bias+linear+quadratic+ReLU+Fourier+reciprocal), full + pruned expand, structured prior | ✅ ported, 24/24 golden checks (incl. RNG parity) |
 
 ### Roadmap
 
-1. **Core** — primitives ✅; AFM feature-selection blocks ✅ →
+1. **Core** — primitives ✅; AFM feature-selection blocks ✅; universal map ✅ →
    `Continuous` online forecaster (build → train → forecast loop with roll-out).
-2. **Soft sensors / AFM** (prioritized) — AFM trainer/runner ✅ →
-   `SoftSensor` multi-target virtual sensors (universal map + structured prior).
-3. Later — DropIn, servo blocks, universal feature map, commissioners.
+2. **Soft sensors / AFM** (prioritized) — AFM trainer/runner ✅; universal map ✅ →
+   `SoftSensor` multi-target virtual sensors (standardizer + RLS bank over the
+   universal or linear feature map).
+3. Later — DropIn, servo blocks, commissioners.
 
 ### Feature-selection quickstart
 
