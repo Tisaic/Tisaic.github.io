@@ -60,11 +60,11 @@
   <section class="panel on" id="p-lorenz">
     <p class="lead">Two models learn a <b>Lorenz attractor</b> from the same live data:
       <span style="color:#f59e0b"><b>NGRC</b></span> vs a classical
-      <span style="color:#f87171"><b>linear ARX</b></span> (standard system-ID). Their 1-step errors look
-      similar — so tap <b>Dream</b>: both free-run blind.
-      <span style="color:#f59e0b">NGRC keeps generating the butterfly</span>;
-      <span style="color:#f87171">the linear model can't sustain the chaos</span>.
-      <b>1 finger orbits · 2 fingers zoom.</b></p>
+      <span style="color:#f87171"><b>linear ARX</b></span> (standard system-ID). 1-step errors look
+      similar — so tap <b>Dream</b>: both free-run blind while
+      <span style="color:#22c55e"><b>reality keeps running in green</b></span>.
+      NGRC keeps the butterfly; the linear model loses it.
+      <b>1 finger orbit · 2 fingers pinch-zoom &amp; pan.</b></p>
     <div class="stage" id="lz-stage"></div>
     <div class="controls">
       <button id="lz-dream">Dream: NGRC vs linear 🌀</button>
@@ -85,14 +85,15 @@
     <div class="plot" id="lz-plot"></div>
   </section>
 
-  <!-- ================= Tab 2: Soft-sensor — NGRC vs naive ================= -->
+  <!-- ================= Tab 2: Soft-sensor — NGRC vs tuned lag filter ================= -->
   <section class="panel" id="p-pendulum">
-    <p class="lead"><b>Drag the blue motor with your finger.</b> It pulls a <b>hidden load</b> through a
-      soft, springy coupling — so the load lags and overshoots. The model measures <b>only the motor</b>.
-      <span style="color:#f59e0b">Amber = NGRC estimate</span> · outline = the hidden truth ·
-      <span style="color:#7c8aa0">gray = the naive guess ("load follows the motor")</span> that a
-      standard semi-closed-loop setup assumes.</p>
-    <div class="stage" id="ss-stage" style="height:32vh"></div>
+    <p class="lead"><b>Drag the blue motor, then kick it.</b> A soft coupling makes the <b>hidden load</b>
+      lag, overshoot and ring. The model measures <b>only the motor</b>. The realistic DIY competitor is an
+      <span style="color:#7c8aa0"><b>auto-tuned lag filter</b></span> ("the load follows the motor with some
+      lag") — we even tune its time constant for it. <span style="color:#f59e0b">Amber caret = NGRC</span> ·
+      <span style="color:#7c8aa0">gray caret = filter</span> · block = the hidden truth. The caret glued to
+      the block is winning; the error meter keeps score.</p>
+    <div class="stage" id="ss-stage" style="height:34vh"></div>
     <div class="controls">
       <button id="ss-kick">Kick it 👊</button>
       <button id="ss-reset" class="sec">Reset brain</button>
@@ -100,27 +101,29 @@
     </div>
     <dl class="stat">
       <dt>Warm</dt><dd id="ss-warm" class="warn">no</dd>
-      <dt>NGRC estimate error</dt><dd id="ss-rmse" class="amber">—</dd>
-      <dt>Naive "load = motor"</dt><dd id="ss-naive">—</dd>
+      <dt>NGRC error (recent)</dt><dd id="ss-rmse" class="amber">—</dd>
+      <dt>Tuned lag filter</dt><dd id="ss-naive">—</dd>
       <dt>NGRC advantage</dt><dd id="ss-adv" class="good">—</dd>
     </dl>
     <div class="plot" id="ss-plot"></div>
   </section>
 
-  <!-- ================= Tab 3: Finger-trace — NGRC vs straight-line ================= -->
+  <!-- ================= Tab 3: Finger-trace — ghost race + autopilot ================= -->
   <section class="panel" id="p-finger">
-    <p class="lead">Draw <b>loops and figure-8s</b>. Two forecasters race to predict your fingertip
-      <b>10 steps ahead</b>: <span style="color:#7c8aa0">gray = straight-line extrapolation</span>
-      (the common constant-velocity approach) vs <span style="color:#f59e0b">amber = NGRC</span>, which
-      learns <b>your</b> motion online. On curves the gray ghost flies off the arc — amber turns with you.</p>
+    <p class="lead">Draw <b>loops and figure-8s</b> for a few seconds. Two ghosts predict your fingertip
+      <b>~0.6&nbsp;s ahead</b>: <span style="color:#7c8aa0">gray = straight-line extrapolation</span> vs
+      <span style="color:#f59e0b">amber = NGRC</span>, which learns <b>your</b> motion. Then the showpiece —
+      tap <b>Autopilot</b>: NGRC <b>keeps drawing your doodle by itself</b>; the straight-line approach just
+      leaves the screen.</p>
     <div class="stage" id="fg-stage" style="height:44vh"></div>
     <div class="controls">
+      <button id="fg-auto">Autopilot ✍️</button>
       <button id="fg-reset" class="sec">Reset brain</button>
     </div>
     <dl class="stat">
       <dt>Samples</dt><dd id="fg-n">0</dd>
-      <dt>NGRC error @10 ahead</dt><dd id="fg-rmse" class="amber">—</dd>
-      <dt>Straight-line @10 ahead</dt><dd id="fg-naive">—</dd>
+      <dt>NGRC error @0.6s</dt><dd id="fg-rmse" class="amber">—</dd>
+      <dt>Straight-line @0.6s</dt><dd id="fg-naive">—</dd>
       <dt>NGRC advantage</dt><dd id="fg-skill" class="good">—</dd>
     </dl>
     <div class="plot" id="fg-plot"></div>
@@ -147,7 +150,7 @@
     }));
 
     // =====================================================================
-    // Tab 1: Lorenz — NGRC vs linear ARX, learning + dual free-run "dream"
+    // Tab 1: Lorenz — NGRC vs linear ARX; reality keeps running during dream
     // =====================================================================
     const SIGMA = 10, RHO = 28, BETA = 8 / 3, DT = 0.01;
     const lorenzDeriv = (p) => [SIGMA * (p[1] - p[0]), p[0] * (RHO - p[2]) - p[1], p[0] * p[1] - BETA * p[2]];
@@ -181,7 +184,8 @@
       group.add(line);
       return line;
     }
-    const realLine = makeLine(0x60a5fa);    // blue: real system
+    const realLine = makeLine(0x60a5fa);    // blue: the data the models learned from
+    const liveLine = makeLine(0x22c55e);    // green: reality continuing DURING the dream
     const dreamLine = makeLine(0xf59e0b);   // amber: NGRC free-run
     const rivalLine = makeLine(0xf87171);   // red: linear ARX free-run
     function pushPoint(line, p) {
@@ -201,9 +205,13 @@
     }
     window.addEventListener('resize', resizeLorenz);
 
-    // touch camera: 1 finger = orbit, 2 fingers = pinch zoom; gentle auto-spin until first touch
+    // touch camera: 1 finger orbit · 2 fingers pinch-zoom AND pan; auto-spin until first touch
     const ptrs = new Map();
-    let rotX = 0.25, rotY = 0, pinch0 = 0, camZ0 = 9, spin = true;
+    let rotX = 0.25, rotY = 0, pinch0 = 0, camZ0 = 10.5, panPrev = null, spin = true;
+    const centroid = () => {
+      const vs = [...ptrs.values()];
+      return { x: (vs[0].x + vs[1].x) / 2, y: (vs[0].y + vs[1].y) / 2 };
+    };
     stage.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       if (stage.setPointerCapture) { try { stage.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ } }
@@ -211,6 +219,7 @@
       if (ptrs.size === 2) {
         const [a, b] = [...ptrs.values()];
         pinch0 = Math.hypot(a.x - b.x, a.y - b.y); camZ0 = camera.position.z;
+        panPrev = centroid();
       }
       spin = false;
     });
@@ -222,17 +231,24 @@
         rotX = clamp(rotX + (e.clientY - p.y) * 0.006, -1.5, 1.5);
       }
       p.x = e.clientX; p.y = e.clientY;
-      if (ptrs.size === 2 && pinch0 > 0) {
+      if (ptrs.size === 2) {
         const [a, b] = [...ptrs.values()];
         const d = Math.hypot(a.x - b.x, a.y - b.y);
-        if (d > 0) camera.position.z = clamp(camZ0 * pinch0 / d, 3.5, 22);
+        if (pinch0 > 0 && d > 0) camera.position.z = clamp(camZ0 * pinch0 / d, 3.5, 22);
+        const c = centroid();
+        if (panPrev) {
+          const upp = 2 * camera.position.z * Math.tan(27.5 * Math.PI / 180) / Math.max(1, stage.clientHeight);
+          camera.position.x -= (c.x - panPrev.x) * upp;
+          camera.position.y += (c.y - panPrev.y) * upp;
+        }
+        panPrev = c;
       }
     });
-    const endPtr = (e) => { ptrs.delete(e.pointerId); pinch0 = 0; };
+    const endPtr = (e) => { ptrs.delete(e.pointerId); pinch0 = 0; panPrev = null; };
     stage.addEventListener('pointerup', endPtr);
     stage.addEventListener('pointercancel', endPtr);
     document.getElementById('lz-view').addEventListener('click', () => {
-      rotX = 0.25; rotY = 0; camera.position.z = 10.5; spin = true;
+      rotX = 0.25; rotY = 0; camera.position.set(0, 0, 10.5); spin = true;
     });
 
     let model, rival, state, dreamState, rivalDream, dreaming, snapN, snapL, samples;
@@ -243,13 +259,12 @@
 
     function makeModel() {
       const iv = initVarFromSlider();
-      // NGRC: quadratic feature map. Rival: same lags/RLS but LINEAR features (classical ARX).
       model = new Continuous(3, 2, 2, true, { predictionSteps: 1, lam: 1.0, initVariance: iv, autoNormalize: true, calibSamples: 250 });
       rival = new Continuous(3, 2, 1, true, { predictionSteps: 1, lam: 1.0, initVariance: iv, autoNormalize: true, calibSamples: 250 });
       state = [1.0, 1.0, 1.0];
       dreaming = false; snapN = null; snapL = null; samples = 0;
       eN2 = 0; eL2 = 0; x2sum = 0; lastPredN = null; lastPredL = null;
-      clearLine(realLine); clearLine(dreamLine); clearLine(rivalLine);
+      clearLine(realLine); clearLine(liveLine); clearLine(dreamLine); clearLine(rivalLine);
       document.getElementById('lz-dream').textContent = 'Dream: NGRC vs linear 🌀';
       document.getElementById('lz-mode').textContent = 'learning from real data';
       plotReal.length = 0; plotPredN.length = 0; plotPredL.length = 0;
@@ -263,12 +278,15 @@
       if (dreaming) {
         snapN = model.snapshot(); snapL = rival.snapshot();
         dreamState = state.slice(); rivalDream = state.slice();
-        clearLine(dreamLine); clearLine(rivalLine);
+        clearLine(dreamLine); clearLine(rivalLine); clearLine(liveLine);
+        plotReal.length = 0; plotPredN.length = 0; plotPredL.length = 0;
         btn.textContent = 'Back to reality ▶';
-        document.getElementById('lz-mode').textContent = '🌀 dreaming — both models free-run';
+        document.getElementById('lz-mode').textContent = '🌀 dreaming — green = reality · amber = NGRC · red = linear';
       } else {
         if (snapN) model.restore(snapN);
         if (snapL) rival.restore(snapL);
+        clearLine(liveLine);
+        plotReal.length = 0; plotPredN.length = 0; plotPredL.length = 0;
         btn.textContent = 'Dream: NGRC vs linear 🌀';
         document.getElementById('lz-mode').textContent = 'learning from real data';
       }
@@ -278,13 +296,15 @@
     const PLOT_WIN = 160;
     let plotInited = false, plotTick = 0;
     function updatePlot() {
+      const realColor = dreaming ? '#22c55e' : '#60a5fa';
+      const realName = dreaming ? 'reality' : 'real x';
       const layout = { margin: { l: 34, r: 8, t: 8, b: 20 }, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
         font: { color: '#94a3b8', size: 10 }, showlegend: true, legend: { orientation: 'h', y: 1.18 },
         xaxis: { showgrid: false }, yaxis: { gridcolor: '#1e293b', zerolinecolor: '#334155' } };
       const data = [
-        { y: plotReal.slice(-PLOT_WIN), name: 'real x', line: { color: '#60a5fa', width: 2 }, mode: 'lines' },
-        { y: plotPredN.slice(-PLOT_WIN), name: 'NGRC', line: { color: '#f59e0b', width: 2, dash: 'dot' }, mode: 'lines' },
-        { y: plotPredL.slice(-PLOT_WIN), name: 'linear ARX', line: { color: '#f87171', width: 1.5, dash: 'dot' }, mode: 'lines' },
+        { y: plotReal.slice(-PLOT_WIN), name: realName, line: { color: realColor, width: 2 }, mode: 'lines' },
+        { y: plotPredN.slice(-PLOT_WIN), name: 'NGRC', line: { color: '#f59e0b', width: 2, dash: dreaming ? 'solid' : 'dot' }, mode: 'lines' },
+        { y: plotPredL.slice(-PLOT_WIN), name: 'linear ARX', line: { color: '#f87171', width: 1.5, dash: dreaming ? 'solid' : 'dot' }, mode: 'lines' },
       ];
       if (!plotInited) { Plotly.newPlot('lz-plot', data, layout, { displayModeBar: false, responsive: true }); plotInited = true; }
       else Plotly.react('lz-plot', data, layout, { displayModeBar: false, responsive: true });
@@ -308,12 +328,18 @@
           pushPoint(realLine, state);
           plotReal.push(state[0]); plotPredN.push(lastPredN); plotPredL.push(lastPredL);
         } else {
+          // reality keeps running (green) — the models do NOT see it
+          state = rk4(state);
+          pushPoint(liveLine, state);
           const resN = model.step(dreamState, null, true);
           dreamState = [resN.prediction[0][0], resN.prediction[1][0], resN.prediction[2][0]];
           if (dreamState.every(Number.isFinite) && Math.abs(dreamState[0]) < 200) pushPoint(dreamLine, dreamState);
           const resL = rival.step(rivalDream, null, true);
           rivalDream = [resL.prediction[0][0], resL.prediction[1][0], resL.prediction[2][0]];
           if (rivalDream.every(Number.isFinite) && Math.abs(rivalDream[0]) < 200) pushPoint(rivalLine, rivalDream);
+          plotReal.push(state[0]);
+          plotPredN.push(Number.isFinite(dreamState[0]) ? clamp(dreamState[0], -60, 60) : null);
+          plotPredL.push(Number.isFinite(rivalDream[0]) ? clamp(rivalDream[0], -60, 60) : null);
         }
       }
       document.getElementById('lz-n').textContent = samples;
@@ -321,7 +347,7 @@
       warmEl.textContent = model.warm ? 'yes' : 'no'; warmEl.className = model.warm ? 'good' : 'warn';
       document.getElementById('lz-rmse').textContent = x2sum > 0 ? Math.sqrt(eN2 / x2sum).toFixed(4) : '—';
       document.getElementById('lz-rmse2').textContent = x2sum > 0 ? Math.sqrt(eL2 / x2sum).toFixed(4) : '—';
-      if (!dreaming && (++plotTick % 8 === 0)) updatePlot();
+      if (++plotTick % 8 === 0) updatePlot();
       if (spin) rotY += 0.0012;
       group.rotation.y = rotY;
       group.rotation.x = rotX;
@@ -330,7 +356,7 @@
     }
 
     // =====================================================================
-    // Tab 2: Soft-sensor — drag the motor, NGRC vs the naive guess
+    // Tab 2: Soft-sensor — drag/kick the motor; NGRC vs an auto-tuned lag filter
     // =====================================================================
     const ssStage = document.getElementById('ss-stage');
     const ssCanvas = document.createElement('canvas');
@@ -344,14 +370,19 @@
       ssCanvas.width = ssW * ssDPR; ssCanvas.height = ssH * ssDPR;
       ssCanvas.style.width = ssW + 'px'; ssCanvas.style.height = ssH + 'px';
       ssCtx.setTransform(ssDPR, 0, 0, ssDPR, 0, 0);
-      ssPx = ssW * 0.13;                    // fixed pixels per world unit (no adaptive zoom)
-      ssMotorRest = ssW * 0.28; ssLoadRest = ssW * 0.72;
+      ssPx = ssW * 0.11;
+      ssMotorRest = ssW * 0.26; ssLoadRest = ssW * 0.68;
     }
     window.addEventListener('resize', resizePendulum);
 
-    // soft coupling + heavier hidden load => the load visibly lags/overshoots the motor
-    const PM = { m1: 1.0, m2: 2.0, k: 10, c: 0.3, b1: 1.0, b2: 0.2, dt: 0.010 };
+    // soft, lightly-damped coupling => the load lags, overshoots and RINGS after a kick
+    const PM = { m1: 1.0, m2: 2.0, k: 10, c: 0.2, b1: 1.0, b2: 0.12, dt: 0.010 };
+    const SS_DECAY = 0.995;                              // recent-weighted scoring
+    // the realistic DIY baseline: a bank of first-order lag filters y += a*(motor - y);
+    // we auto-tune it by always scoring its BEST member (generous to the baseline).
+    const ALPHAS = [0.01, 0.02, 0.04, 0.07, 0.12, 0.20, 0.35];
     let x1, v1, x2, v2, ssT, ss, ssSamples, ssEN, ssEC, ssET, ssKick, ssTouchX, ssTouched;
+    let ssFilt, ssFiltErr;
     let ssShowTruth = true;
     const ssPlotTrue = [], ssPlotEst = [], ssPlotNaive = [];
     const ssDrive = (t) => 5.5 * Math.sin(2 * Math.PI * 0.20 * t) + 2.2 * Math.sin(2 * Math.PI * 0.50 * t + 1) + 1.3 * Math.sin(2 * Math.PI * 0.95 * t + 2);
@@ -360,10 +391,12 @@
       ss = new SoftSensor(3, 1, 6, 5, 300, { fmap: null, initVariance: 10.0, lam: 1.0 });
       x1 = 0; v1 = 0; x2 = 0; v2 = 0; ssT = 0; ssSamples = 0;
       ssEN = 0; ssEC = 0; ssET = 0; ssKick = 0; ssTouchX = null; ssTouched = false;
+      ssFilt = ALPHAS.map(() => 0);
+      ssFiltErr = ALPHAS.map(() => 0);
       ssPlotTrue.length = 0; ssPlotEst.length = 0; ssPlotNaive.length = 0;
     }
     document.getElementById('ss-reset').addEventListener('click', makeSS);
-    document.getElementById('ss-kick').addEventListener('click', () => { ssKick += 15; });
+    document.getElementById('ss-kick').addEventListener('click', () => { ssKick += 8; });
     document.getElementById('ss-truth').addEventListener('change', (e) => { ssShowTruth = e.target.checked; });
     const ssPointer = (e) => {
       const r = ssCanvas.getBoundingClientRect();
@@ -376,7 +409,7 @@
 
     function ssStepSim() {
       let u;
-      if (ssTouchX != null) u = clamp(50 * (ssTouchX - x1) - 8 * v1, -25, 25);  // PD-follow your finger
+      if (ssTouchX != null) u = clamp(50 * (ssTouchX - x1) - 8 * v1, -25, 25);
       else u = ssDrive(ssT) + ssKick;
       ssKick *= 0.90;
       const fs = PM.k * (x1 - x2) + PM.c * (v1 - v2);
@@ -384,6 +417,15 @@
       const a2 = (fs - PM.b2 * v2) / PM.m2;
       v1 += a1 * PM.dt; x1 += v1 * PM.dt; v2 += a2 * PM.dt; x2 += v2 * PM.dt; ssT += PM.dt;
       x1 = clamp(x1, -2.0, 2.0); x2 = clamp(x2, -2.0, 2.0);
+      // lag-filter bank tracks the motor; each member scored against truth (auto-tune)
+      let best = 0;
+      for (let i = 0; i < ALPHAS.length; i++) {
+        ssFilt[i] += ALPHAS[i] * (x1 - ssFilt[i]);
+        const e = ssFilt[i] - x2;
+        ssFiltErr[i] = 0.999 * ssFiltErr[i] + 0.001 * e * e;
+        if (ssFiltErr[i] < ssFiltErr[best]) best = i;
+      }
+      const naive = ssFilt[best];
       ss.push([x1, v1, u]);
       let est = null;
       if (!ss.frozen) ss.warmupStep(ss._raw());
@@ -391,54 +433,83 @@
       if (ss.ready() && ss.frozen) est = ss.estimate()[0];
       ssSamples++;
       if (est != null) {
-        const eN = est - x2, eC = x1 - x2;
-        ssEN += eN * eN; ssEC += eC * eC; ssET += x2 * x2;
-        ssPlotTrue.push(x2); ssPlotEst.push(est); ssPlotNaive.push(x1);
+        const eN = est - x2, eC = naive - x2;
+        ssEN = SS_DECAY * ssEN + (1 - SS_DECAY) * eN * eN;
+        ssEC = SS_DECAY * ssEC + (1 - SS_DECAY) * eC * eC;
+        ssET = SS_DECAY * ssET + (1 - SS_DECAY) * (x2 * x2 + 1e-6);
+        ssPlotTrue.push(x2); ssPlotEst.push(est); ssPlotNaive.push(naive);
         if (ssPlotTrue.length > 400) { ssPlotTrue.shift(); ssPlotEst.shift(); ssPlotNaive.shift(); }
       }
-      return est;
+      return { est, naive };
     }
 
-    function ssBox(cx, cy, w, h, fill, stroke) {
-      ssCtx.beginPath(); ssCtx.rect(cx - w / 2, cy - h / 2, w, h);
-      if (fill) { ssCtx.fillStyle = fill; ssCtx.fill(); }
-      if (stroke) { ssCtx.lineWidth = 2; ssCtx.strokeStyle = stroke; ssCtx.stroke(); }
+    function ssCaret(cx, y, up, color) {
+      ssCtx.beginPath();
+      if (up) { ssCtx.moveTo(cx, y - 6); ssCtx.lineTo(cx - 9, y - 22); ssCtx.lineTo(cx + 9, y - 22); }
+      else { ssCtx.moveTo(cx, y + 6); ssCtx.lineTo(cx - 9, y + 22); ssCtx.lineTo(cx + 9, y + 22); }
+      ssCtx.closePath(); ssCtx.fillStyle = color; ssCtx.fill();
     }
-    function ssSpring(x0, xE, y) {
-      ssCtx.beginPath(); ssCtx.moveTo(x0, y);
-      const n = 12, dx = (xE - x0) / n;
-      for (let i = 1; i < n; i++) ssCtx.lineTo(x0 + i * dx, y + (i % 2 ? -8 : 8));
-      ssCtx.lineTo(xE, y);
-      ssCtx.strokeStyle = '#475569'; ssCtx.lineWidth = 2; ssCtx.stroke();
-    }
-    function ssRender(est) {
+    function ssRender(out) {
       if (!ssW) resizePendulum();
       ssCtx.clearRect(0, 0, ssW, ssH);
-      const y = ssH * 0.48;
+      const y = ssH * 0.56;
       const mx = ssMotorRest + x1 * ssPx;
       const trueX = ssLoadRest + x2 * ssPx;
-      const naiveX = ssLoadRest + x1 * ssPx;
-      const estX = ssLoadRest + (est == null ? 0 : est) * ssPx;
+      // rail
       ssCtx.strokeStyle = '#1e293b'; ssCtx.lineWidth = 1;
-      ssCtx.beginPath(); ssCtx.moveTo(0, y + 30); ssCtx.lineTo(ssW, y + 30); ssCtx.stroke();
-      ssSpring(mx + 18, trueX - 16, y);
-      ssBox(naiveX, y, 30, 44, 'rgba(124,138,160,0.30)', '#64748b');       // naive guess (gray)
-      if (ssShowTruth) ssBox(trueX, y, 30, 44, null, '#e2e8f0');           // truth outline
-      if (est != null) ssBox(estX, y, 30, 44, 'rgba(245,158,11,0.85)', '#f59e0b'); // NGRC (amber)
-      ssBox(mx, y, 34, 50, '#2563eb', '#60a5fa');                          // motor (blue)
+      ssCtx.beginPath(); ssCtx.moveTo(0, y + 28); ssCtx.lineTo(ssW, y + 28); ssCtx.stroke();
+      // spring + truth + motor
+      ssCtx.beginPath(); ssCtx.moveTo(mx + 18, y);
+      const n = 12, dx = (trueX - 16 - (mx + 18)) / n;
+      for (let i = 1; i < n; i++) ssCtx.lineTo(mx + 18 + i * dx, y + (i % 2 ? -8 : 8));
+      ssCtx.lineTo(trueX - 16, y);
+      ssCtx.strokeStyle = '#475569'; ssCtx.lineWidth = 2; ssCtx.stroke();
+      if (ssShowTruth) {
+        ssCtx.beginPath(); ssCtx.rect(trueX - 15, y - 22, 30, 44);
+        ssCtx.fillStyle = 'rgba(226,232,240,0.10)'; ssCtx.fill();
+        ssCtx.lineWidth = 2; ssCtx.strokeStyle = '#e2e8f0'; ssCtx.stroke();
+      }
+      ssCtx.beginPath(); ssCtx.rect(mx - 17, y - 25, 34, 50);
+      ssCtx.fillStyle = '#2563eb'; ssCtx.fill(); ssCtx.lineWidth = 2; ssCtx.strokeStyle = '#60a5fa'; ssCtx.stroke();
       if (ssTouchX != null) {
         const tx = ssMotorRest + ssTouchX * ssPx;
         ssCtx.beginPath(); ssCtx.arc(tx, y, 6, 0, 2 * Math.PI); ssCtx.fillStyle = '#93c5fd'; ssCtx.fill();
       }
+      // estimate carets: amber above (NGRC), gray below (lag filter), with error drop-lines to truth
+      if (out && out.est != null) {
+        const estX = ssLoadRest + out.est * ssPx;
+        const naiveX = ssLoadRest + out.naive * ssPx;
+        ssCtx.strokeStyle = 'rgba(245,158,11,0.5)'; ssCtx.lineWidth = 2;
+        ssCtx.beginPath(); ssCtx.moveTo(estX, y - 24); ssCtx.lineTo(trueX, y - 24); ssCtx.stroke();
+        ssCaret(estX, y, true, '#f59e0b');
+        ssCtx.strokeStyle = 'rgba(124,138,160,0.5)'; ssCtx.lineWidth = 2;
+        ssCtx.beginPath(); ssCtx.moveTo(naiveX, y + 24); ssCtx.lineTo(trueX, y + 24); ssCtx.stroke();
+        ssCaret(naiveX, y, false, '#7c8aa0');
+        // live error meter (recent nRMSE) — two bars + the score
+        const eNr = ssET > 0 ? Math.sqrt(ssEN / ssET) : 0;
+        const eCr = ssET > 0 ? Math.sqrt(ssEC / ssET) : 0;
+        const bw = ssW * 0.42, bx = 12, sc = bw / 1.0;
+        ssCtx.font = '11px sans-serif'; ssCtx.textAlign = 'left';
+        ssCtx.fillStyle = '#f59e0b';
+        ssCtx.fillRect(bx, 14, clamp(eNr * sc, 2, bw), 8);
+        ssCtx.fillText('NGRC ' + eNr.toFixed(2), bx + bw + 8, 22);
+        ssCtx.fillStyle = '#7c8aa0';
+        ssCtx.fillRect(bx, 30, clamp(eCr * sc, 2, bw), 8);
+        ssCtx.fillText('lag filter ' + eCr.toFixed(2), bx + bw + 8, 38);
+        if (eNr > 0) {
+          ssCtx.fillStyle = '#22c55e'; ssCtx.font = 'bold 15px sans-serif'; ssCtx.textAlign = 'right';
+          ssCtx.fillText((eCr / eNr).toFixed(1) + '× better', ssW - 12, 60);
+        }
+      }
       ssCtx.fillStyle = '#94a3b8'; ssCtx.font = '11px sans-serif'; ssCtx.textAlign = 'center';
-      ssCtx.fillText('motor — drag me', mx, y + 46);
-      ssCtx.fillText('hidden load', ssLoadRest, y + 46);
+      ssCtx.fillText('motor — drag me', clamp(mx, 50, ssW - 50), y + 44);
+      ssCtx.fillText('hidden load', ssLoadRest, y + 44);
       if (!ss.frozen) {
         ssCtx.fillStyle = '#64748b'; ssCtx.font = '13px sans-serif';
-        ssCtx.fillText('calibrating… ' + Math.min(100, Math.round(100 * ss._cnt / ss.warmup)) + '%', ssW / 2, 22);
+        ssCtx.fillText('calibrating… ' + Math.min(100, Math.round(100 * ss._cnt / ss.warmup)) + '%', ssW / 2, ssH - 12);
       } else if (!ssTouched) {
         ssCtx.fillStyle = '#64748b'; ssCtx.font = '13px sans-serif';
-        ssCtx.fillText('⬌ drag the blue motor', ssW / 2, 22);
+        ssCtx.fillText('⬌ drag the motor, or kick it', ssW / 2, ssH - 12);
       }
     }
 
@@ -450,7 +521,7 @@
       const data = [
         { y: ssPlotTrue.slice(-160), name: 'true load', line: { color: '#e2e8f0', width: 2 }, mode: 'lines' },
         { y: ssPlotEst.slice(-160), name: 'NGRC', line: { color: '#f59e0b', width: 2 }, mode: 'lines' },
-        { y: ssPlotNaive.slice(-160), name: 'naive (=motor)', line: { color: '#7c8aa0', width: 1.5, dash: 'dot' }, mode: 'lines' },
+        { y: ssPlotNaive.slice(-160), name: 'lag filter', line: { color: '#7c8aa0', width: 1.5, dash: 'dot' }, mode: 'lines' },
       ];
       if (!ssPlotInited) { Plotly.newPlot('ss-plot', data, layout, { displayModeBar: false, responsive: true }); ssPlotInited = true; }
       else Plotly.react('ss-plot', data, layout, { displayModeBar: false, responsive: true });
@@ -458,9 +529,9 @@
 
     function ssTick() {
       if (activeTab !== 'pendulum') { requestAnimationFrame(ssTick); return; }
-      let est = null;
-      for (let k = 0; k < 2; k++) est = ssStepSim();
-      ssRender(est);
+      let out = null;
+      for (let k = 0; k < 2; k++) out = ssStepSim();
+      ssRender(out);
       const warmEl = document.getElementById('ss-warm');
       warmEl.textContent = ss.frozen ? 'yes' : 'no'; warmEl.className = ss.frozen ? 'good' : 'warn';
       document.getElementById('ss-rmse').textContent = ssET > 0 ? Math.sqrt(ssEN / ssET).toFixed(4) : '—';
@@ -471,9 +542,10 @@
     }
 
     // =====================================================================
-    // Tab 3: Finger-trace — NGRC vs straight-line extrapolation
+    // Tab 3: Finger-trace — 0.6 s ghost race + AUTOPILOT free-run
     // =====================================================================
-    const FK = 10;
+    const FK = 12;            // horizon in model steps
+    const DS = 3;             // sample every DS frames (~20 Hz) so the horizon is ~0.6 s
     const fgStage = document.getElementById('fg-stage');
     const fgCanvas = document.createElement('canvas');
     fgStage.appendChild(fgCanvas);
@@ -490,27 +562,49 @@
     }
     window.addEventListener('resize', resizeFinger);
 
-    const FG_DECAY = 0.993;                          // EMA so the skill reflects RECENT performance
-    let fgModel, fgPtr, fgTrail, fgRingN, fgRingC, fgPredMat, fgCvMat, fgPrev, fgVel, fgSamples;
-    let fgEN, fgEC, fgET;                            // per-horizon EMA accumulators + shared scale
+    const FG_DECAY = 0.99;
+    let fgModel, fgPtr, fgTrail, fgRingN, fgRingC, fgPredMat, fgCvMat, fgPrev, fgVel, fgSamples, fgFrame;
+    let fgEN, fgEC, fgET;
+    let fgAuto = false, fgAutoState = null, fgAutoTrail = [], fgAutoRay = null, fgSnap = null;
     function makeFinger() {
-      // delta-dynamics: learn the MOTION (dy), not the absolute position map — generalizes across the canvas
       fgModel = new Continuous(2, 3, 2, true, {
         predictionSteps: FK, lam: 1.0, initVariance: 1.0, useDelta: true,
-        useClamp: true, clampMin: [-2, -2], clampMax: [2, 2],
+        useClamp: true, clampMin: [-1.6, -1.6], clampMax: [1.6, 1.6],
       });
       fgPtr = { x: 0, y: 0, down: false };
       fgTrail = []; fgRingN = []; fgRingC = []; fgPredMat = null; fgCvMat = null; fgPrev = null;
       fgVel = [0, 0];
-      fgSamples = 0;
+      fgSamples = 0; fgFrame = 0;
       fgEN = new Array(FK).fill(0); fgEC = new Array(FK).fill(0); fgET = 0;
+      stopAutopilot();
+    }
+    function stopAutopilot() {
+      if (fgAuto && fgSnap) fgModel.restore(fgSnap);
+      fgAuto = false; fgAutoState = null; fgAutoTrail = []; fgAutoRay = null; fgSnap = null;
+      const b = document.getElementById('fg-auto');
+      if (b) b.textContent = 'Autopilot ✍️';
     }
     document.getElementById('fg-reset').addEventListener('click', makeFinger);
+    document.getElementById('fg-auto').addEventListener('click', () => {
+      if (fgAuto) { stopAutopilot(); return; }
+      if (fgSamples < 3 * FK || !fgPrev) return;      // needs a doodle first
+      fgAuto = true;
+      fgSnap = fgModel.snapshot();
+      fgAutoState = [...fgPrev];
+      fgAutoTrail = [den(fgPrev[0], fgPrev[1])];
+      const sp = Math.hypot(fgVel[0], fgVel[1]) || 1e-6;
+      fgAutoRay = { x: fgPrev[0], y: fgPrev[1], vx: fgVel[0] / sp, vy: fgVel[1] / sp };
+      document.getElementById('fg-auto').textContent = 'Stop autopilot ⏹';
+    });
     const fgAt = (e) => {
       const r = fgCanvas.getBoundingClientRect();
       fgPtr.x = e.clientX - r.left; fgPtr.y = e.clientY - r.top;
     };
-    fgCanvas.addEventListener('pointerdown', (e) => { e.preventDefault(); fgAt(e); fgPtr.down = true; fgTrail = []; fgPrev = null; });
+    fgCanvas.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      if (fgAuto) stopAutopilot();                    // touching takes back control
+      fgAt(e); fgPtr.down = true; fgTrail = []; fgPrev = null; fgVel = [0, 0];
+    });
     fgCanvas.addEventListener('pointermove', (e) => { if (fgPtr.down) fgAt(e); });
     window.addEventListener('pointerup', () => { fgPtr.down = false; });
 
@@ -519,7 +613,7 @@
 
     function fgStepSim() {
       const a = nrm(fgPtr.x, fgPtr.y);
-      // score the predictions made h frames ago that targeted NOW (both racers, EMA-weighted)
+      if (fgPrev && Math.hypot(a[0] - fgPrev[0], a[1] - fgPrev[1]) < 0.003) return; // stationary: don't teach "stay put"
       for (let h = 1; h <= FK; h++) {
         const iN = fgRingN.length - h, iC = fgRingC.length - h;
         if (iN >= 0 && iC >= 0) {
@@ -531,7 +625,6 @@
         }
       }
       fgET = FG_DECAY * fgET + (1 - FG_DECAY) * (a[0] * a[0] + a[1] * a[1] + 1e-4);
-      // straight-line (constant-velocity) rival — velocity smoothed over recent frames
       let cv = null;
       if (fgPrev) {
         fgVel[0] = 0.6 * fgVel[0] + 0.4 * (a[0] - fgPrev[0]);
@@ -548,8 +641,6 @@
       if (fgRingN.length > FK) fgRingN.shift();
       if (fgRingC.length > FK) fgRingC.shift();
       fgPrev = a;
-      fgTrail.push([fgPtr.x, fgPtr.y]);
-      if (fgTrail.length > 90) fgTrail.shift();
     }
 
     function fgGhost(mat, stroke, fill, dashed) {
@@ -569,13 +660,40 @@
         fgCtx.beginPath(); fgCtx.moveTo(fgTrail[i - 1][0], fgTrail[i - 1][1]); fgCtx.lineTo(fgTrail[i][0], fgTrail[i][1]);
         fgCtx.strokeStyle = 'rgba(96,165,250,' + (i / fgTrail.length).toFixed(2) + ')'; fgCtx.lineWidth = 3; fgCtx.stroke();
       }
-      if (fgPtr.down && fgCvMat) fgGhost(fgCvMat, 'rgba(124,138,160,0.7)', '#7c8aa0', true);   // straight-line rival
-      if (fgPtr.down && fgPredMat) fgGhost(fgPredMat, 'rgba(245,158,11,0.9)', '#f59e0b', false); // NGRC
-      fgCtx.beginPath(); fgCtx.arc(fgPtr.x, fgPtr.y, 8, 0, 2 * Math.PI); fgCtx.fillStyle = '#2563eb'; fgCtx.fill();
-      fgCtx.strokeStyle = '#93c5fd'; fgCtx.lineWidth = 2; fgCtx.stroke();
-      if (fgSamples === 0) {
-        fgCtx.fillStyle = '#64748b'; fgCtx.font = '14px sans-serif'; fgCtx.textAlign = 'center';
-        fgCtx.fillText('draw loops and figure-8s here', fgW / 2, fgH / 2);
+      if (fgAuto) {
+        // the baseline's "free-run": a straight dashed ray out of the screen
+        if (fgAutoRay) {
+          const p0 = den(fgAutoRay.x, fgAutoRay.y);
+          const p1 = den(fgAutoRay.x + fgAutoRay.vx * 5, fgAutoRay.y + fgAutoRay.vy * 5);
+          fgCtx.setLineDash([7, 6]);
+          fgCtx.strokeStyle = 'rgba(124,138,160,0.6)'; fgCtx.lineWidth = 2;
+          fgCtx.beginPath(); fgCtx.moveTo(p0[0], p0[1]); fgCtx.lineTo(p1[0], p1[1]); fgCtx.stroke();
+          fgCtx.setLineDash([]);
+          fgCtx.fillStyle = '#7c8aa0'; fgCtx.font = '11px sans-serif'; fgCtx.textAlign = 'center';
+          fgCtx.fillText('straight-line “autopilot” →', (p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2 - 8);
+        }
+        // NGRC's free-run doodle
+        for (let i = 1; i < fgAutoTrail.length; i++) {
+          fgCtx.beginPath(); fgCtx.moveTo(fgAutoTrail[i - 1][0], fgAutoTrail[i - 1][1]); fgCtx.lineTo(fgAutoTrail[i][0], fgAutoTrail[i][1]);
+          fgCtx.strokeStyle = 'rgba(245,158,11,' + (0.25 + 0.75 * i / fgAutoTrail.length).toFixed(2) + ')';
+          fgCtx.lineWidth = 3; fgCtx.stroke();
+        }
+        const last = fgAutoTrail[fgAutoTrail.length - 1];
+        if (last) { fgCtx.beginPath(); fgCtx.arc(last[0], last[1], 8, 0, 2 * Math.PI); fgCtx.fillStyle = '#f59e0b'; fgCtx.fill(); }
+        fgCtx.fillStyle = '#f59e0b'; fgCtx.font = 'bold 13px sans-serif'; fgCtx.textAlign = 'center';
+        fgCtx.fillText('✍️ NGRC is drawing from what it learned', fgW / 2, 24);
+      } else {
+        if (fgPtr.down && fgCvMat) fgGhost(fgCvMat, 'rgba(124,138,160,0.7)', '#7c8aa0', true);
+        if (fgPtr.down && fgPredMat) fgGhost(fgPredMat, 'rgba(245,158,11,0.9)', '#f59e0b', false);
+        fgCtx.beginPath(); fgCtx.arc(fgPtr.x, fgPtr.y, 8, 0, 2 * Math.PI); fgCtx.fillStyle = '#2563eb'; fgCtx.fill();
+        fgCtx.strokeStyle = '#93c5fd'; fgCtx.lineWidth = 2; fgCtx.stroke();
+        if (fgSamples === 0) {
+          fgCtx.fillStyle = '#64748b'; fgCtx.font = '14px sans-serif'; fgCtx.textAlign = 'center';
+          fgCtx.fillText('draw loops and figure-8s here', fgW / 2, fgH / 2);
+        } else if (fgSamples >= 3 * FK) {
+          fgCtx.fillStyle = '#64748b'; fgCtx.font = '12px sans-serif'; fgCtx.textAlign = 'center';
+          fgCtx.fillText('ready — try Autopilot ✍️', fgW / 2, 20);
+        }
       }
     }
 
@@ -586,7 +704,7 @@
       const xs = nN.map((_, i) => i + 1);
       const layout = { margin: { l: 34, r: 8, t: 8, b: 28 }, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
         font: { color: '#94a3b8', size: 10 }, showlegend: true, legend: { orientation: 'h', y: 1.22 }, barmode: 'group',
-        xaxis: { title: { text: 'steps ahead', font: { size: 10 } }, dtick: 1 },
+        xaxis: { title: { text: 'steps ahead (~50 ms each)', font: { size: 10 } }, dtick: 1 },
         yaxis: { title: { text: 'error (recent)', font: { size: 10 } }, gridcolor: '#1e293b', rangemode: 'tozero' } };
       const data = [
         { x: xs, y: nC, type: 'bar', name: 'straight-line', marker: { color: '#7c8aa0' } },
@@ -598,10 +716,24 @@
 
     function fgTick() {
       if (activeTab !== 'finger') { requestAnimationFrame(fgTick); return; }
-      if (fgPtr.down) fgStepSim();
+      fgFrame++;
+      if (fgAuto) {
+        const res = fgModel.step(fgAutoState, null, true);
+        fgAutoState = [res.prediction[0][0], res.prediction[1][0]];
+        if (fgAutoState.every(Number.isFinite)) {
+          fgAutoTrail.push(den(fgAutoState[0], fgAutoState[1]));
+          if (fgAutoTrail.length > 600) fgAutoTrail.shift();
+        }
+      } else if (fgPtr.down && fgFrame % DS === 0) {
+        fgStepSim();
+      }
+      if (fgPtr.down) {
+        fgTrail.push([fgPtr.x, fgPtr.y]);
+        if (fgTrail.length > 120) fgTrail.shift();
+      }
       fgRender();
       document.getElementById('fg-n').textContent = fgSamples;
-      const ready = fgSamples > 60 && fgET > 0 && fgEN[FK - 1] > 0;
+      const ready = fgSamples > 3 * FK && fgET > 0 && fgEN[FK - 1] > 0;
       document.getElementById('fg-rmse').textContent = ready ? Math.sqrt(fgEN[FK - 1] / fgET).toFixed(3) : '—';
       document.getElementById('fg-naive').textContent = ready ? Math.sqrt(fgEC[FK - 1] / fgET).toFixed(3) : '—';
       document.getElementById('fg-skill').textContent = (ready && fgEC[FK - 1] > 0)

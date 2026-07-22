@@ -83,16 +83,20 @@ the shipped commit carries the correct version.
    by default so the current state is one tap away.
 4. **NGRC playground** (bottom-right `NGRC` launcher → `ngrc.html`) — a 3-tab
    interactive showcase of `lib/ngrc`, each tab framed as **NGRC vs a common
-   alternative** so the value is visible: **① Lorenz** (three.js attractor,
-   1-finger orbit / 2-finger pinch zoom; NGRC and a classical **linear ARX**
-   learn side-by-side — near-tied 1-step errors — then "Dream" free-runs both:
-   amber NGRC keeps the butterfly, red linear collapses; Plotly
-   real-vs-both-predictions trace), **② soft-sensor** (drag the blue motor;
-   a soft coupling makes the hidden load lag; amber `SoftSensor` estimate vs
-   the gray **naive "load = motor"** guess — ~12× better, with a 3-trace
-   Plotly chart), **③ finger-trace** (draw loops; amber NGRC ghost vs the
-   gray **straight-line extrapolation** ghost 10 steps ahead, live "×-better"
-   skill readout + grouped error-vs-horizon bars — 2–3× on curves).
+   alternative** so the value is visible: **① Lorenz** (three.js attractor;
+   1-finger orbit, 2-finger pinch-zoom **and pan**; NGRC and a classical
+   **linear ARX** learn side-by-side — near-tied 1-step errors — then "Dream"
+   free-runs both while **reality keeps running in green**: amber NGRC keeps
+   the butterfly, red linear collapses; the Plotly trace follows both modes),
+   **② soft-sensor** (drag/kick the blue motor; a soft lightly-damped coupling
+   makes the hidden load lag and ring; amber `SoftSensor` caret vs a gray
+   **auto-tuned lag-filter** caret — the realistic DIY baseline, best of a
+   scored filter bank — with an on-stage error meter + ×-better readout, ~4×,
+   and a 3-trace Plotly chart), **③ finger-trace** (draw loops at ~20 Hz
+   sampling; amber NGRC ghost vs gray **straight-line extrapolation** ~0.6 s
+   ahead — ~7× better on curves — plus **Autopilot**: NGRC free-runs and keeps
+   drawing your doodle by itself while the straight-line "autopilot" is a
+   dashed ray off-screen; grouped error-vs-horizon bars).
 
 ## Versioning
 

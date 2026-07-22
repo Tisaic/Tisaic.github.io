@@ -130,12 +130,16 @@ await demo.waitForTimeout(200);
 const fbox = await demo.locator('#fg-stage').boundingBox();
 const fcx = fbox.x + fbox.width / 2, fcy = fbox.y + fbox.height / 2, fr = Math.min(fbox.width, fbox.height) * 0.3;
 await demo.mouse.move(fcx + fr, fcy); await demo.mouse.down();
-for (let i = 0; i < 150; i++) { const a = i * 0.12; await demo.mouse.move(fcx + fr * Math.cos(a), fcy + fr * Math.sin(a)); await demo.waitForTimeout(8); }
+for (let i = 0; i < 350; i++) { const a = i * 0.1; await demo.mouse.move(fcx + fr * Math.cos(a), fcy + fr * Math.sin(a)); await demo.waitForTimeout(8); }
 await demo.mouse.up();
 check('ngrc: finger-trace learns from a drag (samples > 0)', (parseInt(await demo.textContent('#fg-n')) || 0) > 0);
 check('ngrc: finger-trace error is finite', Number.isFinite(parseFloat(await demo.textContent('#fg-rmse'))));
-check('ngrc: playground has no errors overall', demoErrors.length === 0, demoErrors.join(' | '));
+await demo.click('#fg-auto');
+await demo.waitForTimeout(800);
+check('ngrc: autopilot free-runs without errors', demoErrors.length === 0, demoErrors.join(' | '));
 await demo.screenshot({ path: join(SHOTS, '06-finger.png') });
+await demo.click('#fg-auto');
+check('ngrc: playground has no errors overall', demoErrors.length === 0, demoErrors.join(' | '));
 
 await browser.close();
 
