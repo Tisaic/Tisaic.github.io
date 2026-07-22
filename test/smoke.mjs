@@ -35,7 +35,11 @@ function check(name, cond, detail) {
 }
 
 mkdirSync(SHOTS, { recursive: true });
-const browser = await chromium.launch({ executablePath: findChrome() });
+const browser = await chromium.launch({
+  executablePath: findChrome(),
+  // SwiftShader so the WebGL (three.js) NGRC demo renders headless
+  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
+});
 const ctx = await browser.newContext({
   viewport: { width: 412, height: 915 },
   deviceScaleFactor: 2.625,
@@ -92,6 +96,25 @@ const groups = await page.$$eval('#doc-bar optgroup', gs => gs.map(g => g.label)
 check('file list groups CLAUDE context + Docs',
   groups.some(g => /CLAUDE/.test(g)) && groups.some(g => /Docs/.test(g)), groups.join(' | '));
 await page.screenshot({ path: join(SHOTS, '03-docs.png') });
+
+// ---- NGRC playground (ngrc.html): three.js + Plotly + the ported library ----
+const demoBase = BASE.replace(/index\.html$/, '') + 'ngrc.html';
+const demo = await ctx.newPage();
+const demoErrors = [];
+demo.on('pageerror', e => demoErrors.push(String(e)));
+demo.on('console', m => { if (m.type() === 'error') demoErrors.push('console.error: ' + m.text()); });
+await demo.goto(demoBase, { waitUntil: 'networkidle' });
+await demo.waitForTimeout(2500);
+check('ngrc.html loads with no errors', demoErrors.length === 0, demoErrors.join(' | '));
+const three = await demo.evaluate(() => !!(window.THREE || document.querySelector('#lz-stage canvas')));
+check('ngrc: WebGL/three canvas present', three);
+const nSamp = parseInt(await demo.textContent('#lz-n')) || 0;
+check('ngrc: Lorenz model runs (samples > 0)', nSamp > 0, String(nSamp));
+check('ngrc: model warms up', (await demo.textContent('#lz-warm')) === 'yes');
+await demo.click('#lz-dream');
+await demo.waitForTimeout(500);
+check('ngrc: dream (free-run) toggles', /dreaming/.test(await demo.textContent('#lz-mode')));
+await demo.screenshot({ path: join(SHOTS, '04-ngrc.png') });
 
 await browser.close();
 

@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0b1220" />
+  <link rel="icon" href="data:," />
+  <title>NGRC Playground</title>
+
+  <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
+  <script src="console-boot.js"></script>
+  <!-- Self-hosted Plotly (basic bundle) for the charts. -->
+  <script src="vendor/plotly-basic.min.js"></script>
+
+  <style>
+    :root { --bg:#0b1220; --panel:#111827; --card:#1e293b; --line:#334155; --text:#e2e8f0; --muted:#94a3b8; --accent:#6366f1; --accent2:#22c55e; }
+    * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+    html, body { margin:0; padding:0; background:var(--bg); color:var(--text);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; overflow-x:hidden; }
+    header { padding:12px 14px 6px; text-align:center; }
+    header h1 { font-size:1.15rem; margin:0; }
+    header a { color:var(--muted); font-size:.8rem; text-decoration:none; }
+    /* tab bar */
+    #tabs { display:flex; gap:6px; padding:8px 10px; position:sticky; top:0; background:var(--bg); z-index:5; }
+    .tab { flex:1; padding:10px 6px; border:1px solid var(--line); border-radius:10px; background:var(--card);
+      color:var(--muted); font-size:.85rem; font-weight:600; text-align:center; cursor:pointer; }
+    .tab.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+    .panel { display:none; padding:0 12px 40px; }
+    .panel.on { display:block; }
+    .stage { width:100%; height:52vh; border-radius:14px; overflow:hidden; background:#060a14;
+      border:1px solid var(--line); touch-action:none; }
+    canvas { display:block; }
+    .controls { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; align-items:center; }
+    button { font-size:.95rem; padding:11px 14px; border:none; border-radius:10px; background:var(--accent);
+      color:#fff; cursor:pointer; touch-action:manipulation; flex:1; min-width:110px; }
+    button.sec { background:#334155; }
+    button:active { filter:brightness(1.15); }
+    .slider { flex:1 1 100%; display:flex; align-items:center; gap:10px; font-size:.82rem; color:var(--muted); }
+    .slider input { flex:1; }
+    .stat { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-size:.82rem; margin-top:12px;
+      background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px; }
+    .stat dt { color:var(--muted); } .stat dd { margin:0; font-variant-numeric:tabular-nums; }
+    .stat .good { color:var(--accent2); } .stat .warn { color:#fca5a5; }
+    .plot { width:100%; height:230px; margin-top:12px; background:var(--panel); border:1px solid var(--line); border-radius:10px; }
+    .lead { color:var(--muted); font-size:.85rem; line-height:1.5; margin:10px 0 4px; }
+    .soon { color:var(--muted); text-align:center; padding:60px 20px; }
+    .pill { display:inline-block; background:#312e81; color:#c7d2fe; font-size:.72rem; padding:2px 8px; border-radius:6px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>NGRC Playground</h1>
+    <a href="index.html">&larr; back to test page</a>
+  </header>
+
+  <div id="tabs">
+    <div class="tab on" data-tab="lorenz">① Lorenz</div>
+    <div class="tab" data-tab="pendulum">② Soft-sensor</div>
+    <div class="tab" data-tab="finger">③ Finger-trace</div>
+  </div>
+
+  <!-- ================= Tab 1: Lorenz ================= -->
+  <section class="panel on" id="p-lorenz">
+    <p class="lead">The model watches a <b>Lorenz attractor</b> and learns its dynamics online.
+      Tap <b>Let it dream</b> and it stops seeing the real data and <b>generates the chaos itself</b>
+      from what it learned. Drag to rotate.</p>
+    <div class="stage" id="lz-stage"></div>
+    <div class="controls">
+      <button id="lz-dream">Let it dream 🌀</button>
+      <button id="lz-reset" class="sec">Reset brain</button>
+      <div class="slider">InitVariance (stability)
+        <input id="lz-iv" type="range" min="-1" max="3" step="0.1" value="0" />
+        <span id="lz-ivv">1.0</span>
+      </div>
+    </div>
+    <dl class="stat">
+      <dt>Mode</dt><dd id="lz-mode">learning from real data</dd>
+      <dt>Samples seen</dt><dd id="lz-n">0</dd>
+      <dt>Warm</dt><dd id="lz-warm">no</dd>
+      <dt>1-step nRMSE</dt><dd id="lz-rmse">—</dd>
+    </dl>
+    <div class="plot" id="lz-plot"></div>
+  </section>
+
+  <!-- ================= Tab 2: Soft-sensor (stub) ================= -->
+  <section class="panel" id="p-pendulum">
+    <p class="soon"><span class="pill">next</span><br><br>Sensorless pendulum — measure only the motor,
+      watch the SoftSensor estimate the hidden mass. Coming next.</p>
+  </section>
+
+  <!-- ================= Tab 3: Finger-trace (stub) ================= -->
+  <section class="panel" id="p-finger">
+    <p class="soon"><span class="pill">next</span><br><br>Finger-trace predictor — drag your finger, a ghost
+      rides ahead of it via multi-step roll-out. Coming next.</p>
+  </section>
+
+  <script type="module">
+    import * as THREE from './vendor/three.module.js';
+    import { Continuous } from './lib/ngrc/continuous.js';
+
+    console.log('ngrc playground: modules loaded, THREE', THREE.REVISION);
+
+    // ---- tab switching ----
+    const tabs = [...document.querySelectorAll('.tab')];
+    tabs.forEach((t) => t.addEventListener('click', () => {
+      tabs.forEach((x) => x.classList.toggle('on', x === t));
+      document.querySelectorAll('.panel').forEach((p) => p.classList.toggle('on', p.id === 'p-' + t.dataset.tab));
+      if (t.dataset.tab === 'lorenz') resizeLorenz();
+    }));
+
+    // ================= Lorenz =================
+    const SIGMA = 10, RHO = 28, BETA = 8 / 3, DT = 0.01;
+    const lorenzDeriv = (p) => [SIGMA * (p[1] - p[0]), p[0] * (RHO - p[2]) - p[1], p[0] * p[1] - BETA * p[2]];
+    function rk4(s) {
+      const k1 = lorenzDeriv(s);
+      const k2 = lorenzDeriv(s.map((v, i) => v + 0.5 * DT * k1[i]));
+      const k3 = lorenzDeriv(s.map((v, i) => v + 0.5 * DT * k2[i]));
+      const k4 = lorenzDeriv(s.map((v, i) => v + DT * k3[i]));
+      return s.map((v, i) => v + DT / 6 * (k1[i] + 2 * k2[i] + 2 * k3[i] + k4[i]));
+    }
+
+    // three.js scene
+    const stage = document.getElementById('lz-stage');
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    stage.appendChild(renderer.domElement);
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x060a14, 0.06);
+    const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 100);
+    camera.position.set(0, 0, 9);
+    const group = new THREE.Group();
+    scene.add(group);
+
+    const MAXPTS = 5000, SC = 0.16, ZC = 25;
+    function makeLine(color) {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MAXPTS * 3), 3));
+      g.setDrawRange(0, 0);
+      const m = new THREE.LineBasicMaterial({ color });
+      const line = new THREE.Line(g, m);
+      line.frustumCulled = false;
+      line.count = 0; line.arr = g.attributes.position.array;
+      group.add(line);
+      return line;
+    }
+    const realLine = makeLine(0x60a5fa);   // blue
+    const dreamLine = makeLine(0xf59e0b);  // amber
+    function pushPoint(line, p) {
+      const i = line.count % MAXPTS;
+      line.arr[i * 3] = p[0] * SC; line.arr[i * 3 + 1] = (p[2] - ZC) * SC; line.arr[i * 3 + 2] = p[1] * SC;
+      line.count++;
+      line.geometry.setDrawRange(0, Math.min(line.count, MAXPTS));
+      line.geometry.attributes.position.needsUpdate = true;
+    }
+    function clearLine(line) { line.count = 0; line.geometry.setDrawRange(0, 0); }
+
+    function resizeLorenz() {
+      const w = stage.clientWidth, h = stage.clientHeight;
+      if (!w || !h) return;
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h; camera.updateProjectionMatrix();
+    }
+    window.addEventListener('resize', resizeLorenz);
+
+    // drag to rotate
+    let drag = null, rotX = 0.2, rotY = 0;
+    stage.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY }; });
+    stage.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      rotY += (e.clientX - drag.x) * 0.008; rotX += (e.clientY - drag.y) * 0.008;
+      drag = { x: e.clientX, y: e.clientY };
+    });
+    window.addEventListener('pointerup', () => { drag = null; });
+
+    // NGRC model + sim state
+    let model, state, dreamState, dreaming, snap, samples, rmseSum, rmseCnt, lastPred;
+    const ivSlider = document.getElementById('lz-iv');
+    const ivVal = document.getElementById('lz-ivv');
+    const initVarFromSlider = () => Math.pow(10, parseFloat(ivSlider.value)); // 0.1 .. 1000, default 1
+
+    function makeModel() {
+      const iv = initVarFromSlider();
+      model = new Continuous(3, 2, 2, true, { predictionSteps: 1, lam: 1.0, initVariance: iv, autoNormalize: true, calibSamples: 250 });
+      state = [1.0, 1.0, 1.0];
+      dreaming = false; snap = null; samples = 0; rmseSum = 0; rmseCnt = 0; lastPred = null;
+      clearLine(realLine); clearLine(dreamLine);
+      document.getElementById('lz-dream').textContent = 'Let it dream 🌀';
+      document.getElementById('lz-mode').textContent = 'learning from real data';
+      plotX.length = 0; plotReal.length = 0; plotPred.length = 0;
+    }
+    ivSlider.addEventListener('input', () => { ivVal.textContent = initVarFromSlider().toFixed(1); });
+    ivSlider.addEventListener('change', () => { ivVal.textContent = initVarFromSlider().toFixed(1); makeModel(); });
+    document.getElementById('lz-reset').addEventListener('click', makeModel);
+    document.getElementById('lz-dream').addEventListener('click', () => {
+      dreaming = !dreaming;
+      const btn = document.getElementById('lz-dream');
+      if (dreaming) {
+        snap = model.snapshot();
+        dreamState = state.slice();
+        clearLine(dreamLine);
+        btn.textContent = 'Back to reality ▶';
+        document.getElementById('lz-mode').textContent = '🌀 dreaming (model free-run)';
+      } else {
+        if (snap) model.restore(snap);
+        btn.textContent = 'Let it dream 🌀';
+        document.getElementById('lz-mode').textContent = 'learning from real data';
+      }
+    });
+
+    // Plotly live trace: real x(t) vs the model's 1-step prediction
+    const plotX = [], plotReal = [], plotPred = [];
+    const PLOT_WIN = 160;
+    let plotInited = false, plotTick = 0;
+    function initPlot() {
+      Plotly.newPlot('lz-plot', [
+        { y: [], name: 'real x', line: { color: '#60a5fa', width: 2 }, mode: 'lines' },
+        { y: [], name: 'predicted x', line: { color: '#f59e0b', width: 2, dash: 'dot' }, mode: 'lines' },
+      ], {
+        margin: { l: 34, r: 8, t: 8, b: 20 }, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+        font: { color: '#94a3b8', size: 10 }, showlegend: true, legend: { orientation: 'h', y: 1.15 },
+        xaxis: { showgrid: false }, yaxis: { gridcolor: '#1e293b', zerolinecolor: '#334155' },
+      }, { displayModeBar: false, responsive: true });
+      plotInited = true;
+    }
+    function updatePlot() {
+      if (!plotInited) initPlot();
+      const r = plotReal.slice(-PLOT_WIN), p = plotPred.slice(-PLOT_WIN);
+      Plotly.react('lz-plot', [
+        { y: r, name: 'real x', line: { color: '#60a5fa', width: 2 }, mode: 'lines' },
+        { y: p, name: 'predicted x', line: { color: '#f59e0b', width: 2, dash: 'dot' }, mode: 'lines' },
+      ], document.getElementById('lz-plot').layout, { displayModeBar: false, responsive: true });
+    }
+
+    // main loop
+    function tick() {
+      const SUB = 2; // sim substeps per frame
+      for (let k = 0; k < SUB; k++) {
+        if (!dreaming) {
+          state = rk4(state);
+          const res = model.step(state);
+          samples++;
+          if (res.warm && lastPred != null) { const e = state[0] - lastPred; rmseSum += e * e; rmseCnt++; }
+          lastPred = res.prediction[0][0];
+          pushPoint(realLine, state);
+          plotReal.push(state[0]); plotPred.push(lastPred);
+        } else {
+          const res = model.step(dreamState, null, true);
+          dreamState = [res.prediction[0][0], res.prediction[1][0], res.prediction[2][0]];
+          if (dreamState.every(Number.isFinite) && Math.abs(dreamState[0]) < 200) pushPoint(dreamLine, dreamState);
+        }
+      }
+      // status
+      document.getElementById('lz-n').textContent = samples;
+      const warmEl = document.getElementById('lz-warm');
+      warmEl.textContent = (model.warm ? 'yes' : 'no'); warmEl.className = model.warm ? 'good' : 'warn';
+      document.getElementById('lz-rmse').textContent = rmseCnt ? Math.sqrt(rmseSum / rmseCnt).toFixed(4) : '—';
+      // plot throttle
+      if (!dreaming && (++plotTick % 8 === 0)) updatePlot();
+      // render
+      group.rotation.y = rotY + performance.now() * 0.00004;
+      group.rotation.x = rotX;
+      renderer.render(scene, camera);
+      requestAnimationFrame(tick);
+    }
+
+    // boot
+    ivVal.textContent = initVarFromSlider().toFixed(1);
+    makeModel();
+    resizeLorenz();
+    requestAnimationFrame(tick);
+  </script>
+</body>
+</html>

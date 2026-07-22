@@ -43,13 +43,18 @@ the shipped commit carries the correct version.
 
 | File | Purpose |
 |------|---------|
-| `index.html` | The entire app: header, debug console, doc viewers. |
+| `index.html` | The main app: header, debug console, doc viewers, NGRC launcher. |
+| `console-boot.js` | The debug-console bootstrap, **shared** by `index.html` and `ngrc.html` (loaded first in `<head>`). |
+| `ngrc.html` | NGRC playground: 3-tab interactive demo (Lorenz forecaster, soft-sensor, finger-trace) using `lib/ngrc`. |
+| `lib/ngrc/` | The ported NGRC library (see `lib/ngrc/README.md`). |
 | `version.json` | Server-side build manifest for stale-page detection. |
 | `docs-manifest.json` | Generated list of every `.md` file, for the Docs viewer. |
 | `stamp-version.sh` | Pre-commit build step: stamps version + regenerates the docs manifest. |
 | `vendor/marked.min.js` | Self-hosted markdown renderer (marked v12), no CDN. |
-| `test/run.sh` | Dev-only: serves the repo + runs the smoke test in a mobile Chromium. |
-| `test/smoke.mjs` | Playwright checks + screenshots for the console and doc viewer. |
+| `vendor/three.module.js` | Self-hosted three.js (r160) for the 3D demos. |
+| `vendor/plotly-basic.min.js` | Self-hosted Plotly (basic bundle) for the demo charts. |
+| `test/run.sh` | Dev-only: NGRC unit tests + serves the repo + runs the smoke test in a mobile Chromium. |
+| `test/smoke.mjs` | Playwright checks + screenshots for the console, doc viewer, and NGRC demo. |
 | `CLAUDE.md` | This file. |
 
 ## Features on the page
@@ -58,8 +63,10 @@ the shipped commit carries the correct version.
    console:
    - Captures `console.*`, uncaught errors (with stack + file:line), and
      unhandled promise rejections.
-   - Bootstrap runs **first in `<head>`** so it catches load-time errors
-     before `<body>` renders; it injects its own UI onto `<html>`.
+   - Bootstrap (`console-boot.js`) loads **first in `<head>`** so it catches
+     load-time errors before `<body>` renders; it injects its own UI onto
+     `<html>`. Shared by `index.html` and `ngrc.html`; the page sets a stamped
+     `window.__BUILD` just before it (unstamped pages skip stale-detection).
    - Persists logs to `localStorage`, so a white-screen crash is recoverable
      after reload.
    - Badge shows error (red) / warning (amber) counts.
@@ -74,6 +81,11 @@ the shipped commit carries the correct version.
    and files are split into two groups: **◆ CLAUDE context** (any `CLAUDE.md`,
    shown with an indigo tag) and **Docs** (everything else). Opens `CLAUDE.md`
    by default so the current state is one tap away.
+4. **NGRC playground** (bottom-right `NGRC` launcher → `ngrc.html`) — a 3-tab
+   interactive showcase of the ported `lib/ngrc` library: **① Lorenz** (a
+   three.js attractor the model learns online, then free-runs to "dream" the
+   chaos itself, with an InitVariance stability slider and a live Plotly
+   real-vs-predicted trace), **② soft-sensor** and **③ finger-trace** (next).
 
 ## Versioning
 
