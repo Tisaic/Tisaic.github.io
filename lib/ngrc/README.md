@@ -19,15 +19,34 @@ against golden vectors generated from that reference.
 | `afm_select.js` — ridge Gauss-Jordan solve, working-set Gram/admit/screen, nRMSE, structured-prior ridge | ✅ ported |
 | `afm.js` — `LoggedTrainer`, `LiveTrainer`, `Runner` (online feature selection + frozen inference) | ✅ ported, 8/8 golden checks |
 | `universal.js` — portable LCG/Box-Muller RNG, universal feature map (bias+linear+quadratic+ReLU+Fourier+reciprocal), full + pruned expand, structured prior | ✅ ported, 24/24 golden checks (incl. RNG parity) |
+| `feature_map.js` — `universalMap` / `prunedMap` objects (`.expand`/`.m`/`.prior`) | ✅ ported |
+| `softsensor.js` — `SoftSensor` multi-target virtual-sensor bank (standardizer + shared feature vector + per-target online-RLS readout) | ✅ ported, 10/10 golden checks (linear + universal) |
 
 ### Roadmap
 
 1. **Core** — primitives ✅; AFM feature-selection blocks ✅; universal map ✅ →
    `Continuous` online forecaster (build → train → forecast loop with roll-out).
-2. **Soft sensors / AFM** (prioritized) — AFM trainer/runner ✅; universal map ✅ →
-   `SoftSensor` multi-target virtual sensors (standardizer + RLS bank over the
-   universal or linear feature map).
+2. **Soft sensors / AFM** (prioritized) — AFM trainer/runner ✅; universal map ✅;
+   `SoftSensor` runtime ✅ → `commission_softsensor` (offline model search:
+   linear-first → pruned-universal, held-out gating).
 3. Later — DropIn, servo blocks, commissioners.
+
+### SoftSensor quickstart
+
+```js
+import { SoftSensor } from './lib/ngrc/softsensor.js';
+import { universalMap } from './lib/ngrc/feature_map.js';
+
+const fmap = universalMap(numSignals * lag, 16, 16, 7);   // or null for a lean linear map
+const s = new SoftSensor(numSignals, numTargets, lag, stride, warmup,
+                         { fmap, prior: fmap.prior(), lam: 1.0 });
+for (const scan of stream) {
+  s.push(scan.signals);                    // measured signals only
+  if (!s.frozen) s.warmupStep(s._raw());   // freeze mean/std over `warmup`
+  else s.adapt(scan.targets);              // online RLS toward known truth
+}
+const est = s.estimate();                  // sensorless estimate per target
+```
 
 ### Feature-selection quickstart
 
