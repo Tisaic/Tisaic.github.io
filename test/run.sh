@@ -13,6 +13,11 @@ if ! node -e "require.resolve('playwright-core',{paths:['${ROOT}/test']})" >/dev
   (cd test && npm install --no-audit --no-fund --silent)
 fi
 
+# NGRC library unit tests (pure Node, golden-vector parity — no server needed).
+if [ -d lib/ngrc ]; then
+  node test/ngrc/primitives.test.mjs
+fi
+
 # Serve the repo and always clean up the server on exit.
 python3 -m http.server "${PORT}" >/dev/null 2>&1 &
 SRV=$!
