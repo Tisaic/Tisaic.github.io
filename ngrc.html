@@ -626,10 +626,16 @@
     let fgA, fgPend, fgEN, fgEC, fgET;
     let fgAuto = false, fgAutoState = null, fgAutoPos = null, fgAutoDrift = null, fgAutoLastT = 0;
     let fgAutoTrail = [], fgAutoRay = null, fgSnap = null;
+    let fgLog = [], fgAutoInfo = '', fgCommissioning = false;
     // scoring resets at stroke boundaries so a lift/relocation can't be scored
     // against predictions made on the previous stroke
     function fgClearScoring() { fgA = []; fgPend = []; fgPrev = null; fgVel = [0, 0]; fgStill = 0; }
     function makeFinger() {
+      // Reset MUST kill any autopilot FIRST: stopAutopilot() restores the
+      // pre-autopilot snapshot, and doing that after the new model exists would
+      // resurrect the old brain into it (the "Reset doesn't reset" bug).
+      stopAutopilot();
+      fgLog = [];
       // HYBRID translation-invariant state: [dx·25, dy·25, x−cx, y−cy] — scaled
       // deltas keep the loop's energy alive in free-run (pure-delta drifted;
       // pure-centered-position contracted 10×), while the centroid-relative
@@ -645,12 +651,11 @@
       fgSamples = 0; fgLastT = 0; fgLastS = null; fgCent = null;
       fgEN = new Array(FK).fill(0); fgEC = new Array(FK).fill(0); fgET = 0;
       fgClearScoring();
-      stopAutopilot();
     }
     function stopAutopilot() {
       if (fgAuto && fgSnap) fgModel.restore(fgSnap);
       fgAuto = false; fgAutoState = null; fgAutoPos = null; fgAutoDrift = null;
-      fgAutoTrail = []; fgAutoRay = null; fgSnap = null;
+      fgAutoTrail = []; fgAutoRay = null; fgSnap = null; fgAutoInfo = ''; fgCommissioning = false;
       const b = document.getElementById('fg-auto');
       if (b) b.textContent = 'Autopilot ✍️';
     }
@@ -666,16 +671,77 @@
         setTimeout(() => { if (!fgAuto) btn.textContent = orig; }, 1400);
         return;
       }
-      fgAuto = true;
-      fgSnap = fgModel.snapshot();
-      fgAutoState = [...fgLastS];                     // seed = last hybrid state
-      fgAutoPos = [...fgCent];                        // anchor: the doodle's centroid
-      fgAutoLastT = 0;
-      fgAutoTrail = [den(fgLastA[0], fgLastA[1])];
-      const sp = Math.hypot(fgLastVel[0], fgLastVel[1]) || 1e-6;
-      fgAutoRay = { x: fgLastA[0], y: fgLastA[1], vx: fgLastVel[0] / sp, vy: fgLastVel[1] / sp };
-      console.log('autopilot started at ' + fgSamples + ' samples');
-      btn.textContent = 'Stop autopilot ⏹';
+      if (fgCommissioning) return;
+      // COMMISSION the autopilot (the library's autotune philosophy in miniature):
+      // sweep ridge strength × replay passes, free-run each candidate briefly,
+      // score orbit health (radius retention + revolutions + boundedness), and
+      // deploy the winner refit on the full log. Replaying the log K times
+      // divides the effective ridge by K, which kills the spiral-in on short
+      // doodles; the free-run test rejects the configs that diverge instead.
+      fgCommissioning = true;
+      btn.textContent = 'commissioning… 🔧';
+      setTimeout(() => {
+        try {
+          const log = fgLog.slice(-500);
+          const rT = log.reduce((s, q) => s + Math.hypot(q[2], q[3]), 0) / log.length;
+          const seed = log[log.length - 1];
+          const CL = { useClamp: true, clampMin: [-6, -6, -1.8, -1.8], clampMax: [6, 6, 1.8, 1.8] };
+          const fit = (c, steps) => {
+            const m = new Continuous(4, c.lag, 2, true, { predictionSteps: steps, lam: 1.0, initVariance: c.iv, ...CL });
+            const lg = steps === 1 ? log : fgLog.slice(-800);
+            for (let p = 0; p < c.passes; p++) for (const q of lg) m.step(q);
+            return m;
+          };
+          const cands = [];
+          for (const iv of [0.5, 2, 8]) for (const passes of [1, 3]) cands.push({ lag: 2, iv, passes });
+          cands.push({ lag: 3, iv: 2, passes: 3 });
+          let best = null;
+          for (const c of cands) {
+            const m = fit(c, 1);
+            let s = [...seed]; const tail = []; let alive = true;
+            for (let i = 0; i < 300; i++) {
+              const r = m.step(s, null, true);
+              s = [r.prediction[0][0], r.prediction[1][0], r.prediction[2][0], r.prediction[3][0]];
+              if (!s.every(Number.isFinite)) { alive = false; break; }
+              if (i >= 100) tail.push([s[2], s[3]]);
+            }
+            if (!alive || !tail.length) continue;
+            const cx = tail.reduce((a, p) => a + p[0], 0) / tail.length;
+            const cy = tail.reduce((a, p) => a + p[1], 0) / tail.length;
+            const rM = tail.reduce((a, p) => a + Math.hypot(p[0] - cx, p[1] - cy), 0) / tail.length;
+            let revs = 0, pa = null;
+            for (const p of tail) {
+              const an = Math.atan2(p[1] - cy, p[0] - cx);
+              if (pa != null) { let dd = an - pa; if (dd > Math.PI) dd -= 2 * Math.PI; if (dd < -Math.PI) dd += 2 * Math.PI; revs += dd / (2 * Math.PI); }
+              pa = an;
+            }
+            const retention = rM / (rT || 1e-9);
+            const healthy = Math.abs(revs) > 2 && retention > 0.25 && retention < 2.5;
+            const score = healthy ? -Math.abs(Math.log(retention)) : -99 + Math.min(retention, 1);
+            if (!best || score > best.score) best = { ...c, score, retention };
+          }
+          if (!best || best.score <= -50) {
+            console.log('autopilot commissioning: no healthy free-run — need more doodle');
+            btn.textContent = '✍️ draw a few more loops';
+            setTimeout(() => { if (!fgAuto) btn.textContent = 'Autopilot ✍️'; }, 1600);
+            return;
+          }
+          fgModel = fit(best, FK);                     // deploy the winner (keeps learning online)
+          console.log(`autopilot commissioned: lag${best.lag} iv=${best.iv} ×${best.passes}, holding ${(100 * best.retention).toFixed(0)}% of the loop`);
+          fgAutoInfo = `commissioned iv=${best.iv} ×${best.passes} · holding ${(100 * best.retention).toFixed(0)}% of your loop`;
+          fgAuto = true;
+          fgSnap = fgModel.snapshot();
+          fgAutoState = [...fgLastS];
+          fgAutoPos = [...fgCent];
+          fgAutoLastT = 0;
+          fgAutoTrail = [den(fgLastA[0], fgLastA[1])];
+          const sp = Math.hypot(fgLastVel[0], fgLastVel[1]) || 1e-6;
+          fgAutoRay = { x: fgLastA[0], y: fgLastA[1], vx: fgLastVel[0] / sp, vy: fgLastVel[1] / sp };
+          btn.textContent = 'Stop autopilot ⏹';
+        } finally {
+          fgCommissioning = false;
+        }
+      }, 30);
     });
     const fgAt = (e) => {
       const r = fgCanvas.getBoundingClientRect();
@@ -714,6 +780,8 @@
       const res = fgModel.step(s);
       fgSamples++;
       fgLastS = s;
+      fgLog.push(s);
+      if (fgLog.length > 1200) fgLog.shift();
       // ghost = the predicted centered-position variables, re-anchored at the centroid
       const pred = [[], []];
       for (let k = 0; k < FK; k++) {
@@ -791,6 +859,7 @@
         if (last) { fgCtx.beginPath(); fgCtx.arc(last[0], last[1], 8, 0, 2 * Math.PI); fgCtx.fillStyle = '#f59e0b'; fgCtx.fill(); }
         fgCtx.fillStyle = '#f59e0b'; fgCtx.font = 'bold 13px sans-serif'; fgCtx.textAlign = 'center';
         fgCtx.fillText('✍️ NGRC is drawing from what it learned', fgW / 2, 24);
+        if (fgAutoInfo) { fgCtx.fillStyle = '#94a3b8'; fgCtx.font = '11px sans-serif'; fgCtx.fillText(fgAutoInfo, fgW / 2, 42); }
       } else {
         if (fgPtr.down && fgCvMat) fgGhost(fgCvMat, 'rgba(124,138,160,0.7)', '#7c8aa0', true);
         if (fgPtr.down && fgPredMat) fgGhost(fgPredMat, 'rgba(245,158,11,0.9)', '#f59e0b', false);
