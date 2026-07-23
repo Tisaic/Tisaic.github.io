@@ -61,9 +61,9 @@
     <p class="lead">Two models learn a <b>Lorenz attractor</b> from the same live data:
       <span style="color:#f59e0b"><b>NGRC</b></span> vs a classical
       <span style="color:#f87171"><b>linear ARX</b></span> (standard system-ID). 1-step errors look
-      similar — so tap <b>Dream</b>: both free-run blind while
-      <span style="color:#22c55e"><b>reality keeps running in green</b></span>.
-      NGRC keeps the butterfly; the linear model loses it.
+      similar — so once both have seen the whole butterfly (~8&nbsp;s), <b>Dream</b> unlocks: both free-run
+      blind while <span style="color:#22c55e"><b>reality keeps running in green</b></span>.
+      NGRC keeps flying wing-to-wing; the linear model goes still.
       <b>1 finger orbit · 2 fingers pinch-zoom &amp; pan.</b></p>
     <div class="stage" id="lz-stage"></div>
     <div class="controls">
@@ -81,6 +81,7 @@
       <dt>Warm</dt><dd id="lz-warm" class="warn">no</dd>
       <dt>NGRC 1-step error</dt><dd id="lz-rmse" class="amber">—</dd>
       <dt>Linear ARX 1-step error</dt><dd id="lz-rmse2">—</dd>
+      <dt>Dream check</dt><dd id="lz-dstat">—</dd>
     </dl>
     <div class="plot" id="lz-plot"></div>
   </section>
@@ -112,7 +113,8 @@
   <section class="panel" id="p-finger">
     <p class="lead">Draw <b>loops and figure-8s</b> for a few seconds. Two ghosts predict your fingertip
       <b>~0.6&nbsp;s ahead</b>: <span style="color:#7c8aa0">gray = straight-line extrapolation</span> vs
-      <span style="color:#f59e0b">amber = NGRC</span>, which learns <b>your</b> motion. Then the showpiece —
+      <span style="color:#f59e0b">amber = NGRC</span>, which learns <b>your</b> motion. The score is the
+      <b>path miss</b> — how far each ghost lands from where your finger actually went. Then the showpiece —
       tap <b>Autopilot</b>: NGRC <b>keeps drawing your doodle by itself</b>; the straight-line approach just
       leaves the screen.</p>
     <div class="stage" id="fg-stage" style="height:44vh"></div>
@@ -122,8 +124,8 @@
     </div>
     <dl class="stat">
       <dt>Samples</dt><dd id="fg-n">0</dd>
-      <dt>NGRC error @0.6s</dt><dd id="fg-rmse" class="amber">—</dd>
-      <dt>Straight-line @0.6s</dt><dd id="fg-naive">—</dd>
+      <dt>NGRC path miss @0.6s</dt><dd id="fg-rmse" class="amber">—</dd>
+      <dt>Straight-line path miss</dt><dd id="fg-naive">—</dd>
       <dt>NGRC advantage</dt><dd id="fg-skill" class="good">—</dd>
     </dl>
     <div class="plot" id="fg-plot"></div>
@@ -152,7 +154,8 @@
     // =====================================================================
     // Tab 1: Lorenz — NGRC vs linear ARX; reality keeps running during dream
     // =====================================================================
-    const SIGMA = 10, RHO = 28, BETA = 8 / 3, DT = 0.01;
+    const SIGMA = 10, RHO = 28, BETA = 8 / 3, DT = 0.02;
+    const LZ_GATE = 1800;   // dream unlock: free-run reliably reproduces the butterfly from ~1500 samples at dt=0.02 (measured)
     const lorenzDeriv = (p) => [SIGMA * (p[1] - p[0]), p[0] * (RHO - p[2]) - p[1], p[0] * p[1] - BETA * p[2]];
     function rk4(s) {
       const k1 = lorenzDeriv(s);
@@ -253,6 +256,15 @@
 
     let model, rival, state, dreamState, rivalDream, dreaming, snapN, snapL, samples;
     let eN2, eL2, x2sum, lastPredN, lastPredL;
+    let dreamXs = [], rivalXs = [];
+    function wingCrossings(xs) {
+      let sw = 0, lobe = 0;
+      for (const x of xs) {
+        if (x > 4 && lobe <= 0) { if (lobe < 0) sw++; lobe = 1; }
+        else if (x < -4 && lobe >= 0) { if (lobe > 0) sw++; lobe = -1; }
+      }
+      return sw;
+    }
     const ivSlider = document.getElementById('lz-iv');
     const ivVal = document.getElementById('lz-ivv');
     const initVarFromSlider = () => Math.pow(10, parseFloat(ivSlider.value));
@@ -265,7 +277,9 @@
       dreaming = false; snapN = null; snapL = null; samples = 0;
       eN2 = 0; eL2 = 0; x2sum = 0; lastPredN = null; lastPredL = null;
       clearLine(realLine); clearLine(liveLine); clearLine(dreamLine); clearLine(rivalLine);
-      document.getElementById('lz-dream').textContent = 'Dream: NGRC vs linear 🌀';
+      dreamXs = []; rivalXs = [];
+      const btn = document.getElementById('lz-dream');
+      btn.textContent = '🧠 learning… 0%'; btn.disabled = true;
       document.getElementById('lz-mode').textContent = 'learning from real data';
       plotReal.length = 0; plotPredN.length = 0; plotPredL.length = 0;
     }
@@ -273,12 +287,14 @@
     ivSlider.addEventListener('change', () => { ivVal.textContent = initVarFromSlider().toFixed(1); makeModel(); });
     document.getElementById('lz-reset').addEventListener('click', makeModel);
     document.getElementById('lz-dream').addEventListener('click', () => {
+      if (!dreaming && samples < LZ_GATE) return;
       dreaming = !dreaming;
       const btn = document.getElementById('lz-dream');
       if (dreaming) {
         snapN = model.snapshot(); snapL = rival.snapshot();
         dreamState = state.slice(); rivalDream = state.slice();
         clearLine(dreamLine); clearLine(rivalLine); clearLine(liveLine);
+        dreamXs = []; rivalXs = [];
         plotReal.length = 0; plotPredN.length = 0; plotPredL.length = 0;
         btn.textContent = 'Back to reality ▶';
         document.getElementById('lz-mode').textContent = '🌀 dreaming — green = reality · amber = NGRC · red = linear';
@@ -312,7 +328,7 @@
 
     function tick() {
       if (activeTab !== 'lorenz') { requestAnimationFrame(tick); return; }
-      const SUB = 2;
+      const SUB = 4;
       for (let k = 0; k < SUB; k++) {
         if (!dreaming) {
           state = rk4(state);
@@ -337,6 +353,8 @@
           const resL = rival.step(rivalDream, null, true);
           rivalDream = [resL.prediction[0][0], resL.prediction[1][0], resL.prediction[2][0]];
           if (rivalDream.every(Number.isFinite) && Math.abs(rivalDream[0]) < 200) pushPoint(rivalLine, rivalDream);
+          if (Number.isFinite(dreamState[0])) { dreamXs.push(dreamState[0]); if (dreamXs.length > 900) dreamXs.shift(); }
+          if (Number.isFinite(rivalDream[0])) { rivalXs.push(rivalDream[0]); if (rivalXs.length > 900) rivalXs.shift(); }
           plotReal.push(state[0]);
           plotPredN.push(Number.isFinite(dreamState[0]) ? clamp(dreamState[0], -60, 60) : null);
           plotPredL.push(Number.isFinite(rivalDream[0]) ? clamp(rivalDream[0], -60, 60) : null);
@@ -347,6 +365,21 @@
       warmEl.textContent = model.warm ? 'yes' : 'no'; warmEl.className = model.warm ? 'good' : 'warn';
       document.getElementById('lz-rmse').textContent = x2sum > 0 ? Math.sqrt(eN2 / x2sum).toFixed(4) : '—';
       document.getElementById('lz-rmse2').textContent = x2sum > 0 ? Math.sqrt(eL2 / x2sum).toFixed(4) : '—';
+      const dreamBtn = document.getElementById('lz-dream');
+      if (!dreaming) {
+        if (samples < LZ_GATE) {
+          dreamBtn.disabled = true;
+          dreamBtn.textContent = '🧠 learning… ' + Math.min(99, Math.round(100 * samples / LZ_GATE)) + '%';
+        } else if (dreamBtn.disabled) {
+          dreamBtn.disabled = false;
+          dreamBtn.textContent = 'Dream: NGRC vs linear 🌀';
+        }
+        document.getElementById('lz-dstat').textContent = '—';
+      } else {
+        const cn = wingCrossings(dreamXs), cl = wingCrossings(rivalXs);
+        document.getElementById('lz-dstat').textContent =
+          `NGRC ${cn} wing crossings ${cn > 2 ? '✓ alive' : ''} · linear ${cl}${cl <= 1 ? ' ✗ dead' : ''}`;
+      }
       if (++plotTick % 8 === 0) updatePlot();
       if (spin) rotY += 0.0012;
       group.rotation.y = rotY;
@@ -544,8 +577,9 @@
     // =====================================================================
     // Tab 3: Finger-trace — 0.6 s ghost race + AUTOPILOT free-run
     // =====================================================================
-    const FK = 12;            // horizon in model steps
-    const DS = 3;             // sample every DS frames (~20 Hz) so the horizon is ~0.6 s
+    const FK = 12;            // horizon in samples (~0.6 s)
+    const SAMPLE_MS = 48;     // fixed-TIME sampling — same cadence on 60 and 120 Hz displays
+    const FPAD = 5;           // future window for path-miss scoring
     const fgStage = document.getElementById('fg-stage');
     const fgCanvas = document.createElement('canvas');
     fgStage.appendChild(fgCanvas);
@@ -563,19 +597,22 @@
     window.addEventListener('resize', resizeFinger);
 
     const FG_DECAY = 0.99;
-    let fgModel, fgPtr, fgTrail, fgRingN, fgRingC, fgPredMat, fgCvMat, fgPrev, fgVel, fgSamples, fgFrame;
-    let fgEN, fgEC, fgET;
+    let fgModel, fgPtr, fgTrail, fgPredMat, fgCvMat, fgPrev, fgVel, fgSamples, fgLastT, fgStill;
+    let fgA, fgPend, fgEN, fgEC, fgET;
     let fgAuto = false, fgAutoState = null, fgAutoTrail = [], fgAutoRay = null, fgSnap = null;
+    // scoring resets at stroke boundaries so a lift/relocation can't be scored
+    // against predictions made on the previous stroke
+    function fgClearScoring() { fgA = []; fgPend = []; fgPrev = null; fgVel = [0, 0]; fgStill = 0; }
     function makeFinger() {
       fgModel = new Continuous(2, 3, 2, true, {
         predictionSteps: FK, lam: 1.0, initVariance: 1.0, useDelta: true,
         useClamp: true, clampMin: [-1.6, -1.6], clampMax: [1.6, 1.6],
       });
       fgPtr = { x: 0, y: 0, down: false };
-      fgTrail = []; fgRingN = []; fgRingC = []; fgPredMat = null; fgCvMat = null; fgPrev = null;
-      fgVel = [0, 0];
-      fgSamples = 0; fgFrame = 0;
+      fgTrail = []; fgPredMat = null; fgCvMat = null;
+      fgSamples = 0; fgLastT = 0;
       fgEN = new Array(FK).fill(0); fgEC = new Array(FK).fill(0); fgET = 0;
+      fgClearScoring();
       stopAutopilot();
     }
     function stopAutopilot() {
@@ -585,15 +622,16 @@
       if (b) b.textContent = 'Autopilot ✍️';
     }
     document.getElementById('fg-reset').addEventListener('click', makeFinger);
+    let fgLastA = null, fgLastVel = [0, 0];           // survives scoring resets (autopilot seed)
     document.getElementById('fg-auto').addEventListener('click', () => {
       if (fgAuto) { stopAutopilot(); return; }
-      if (fgSamples < 3 * FK || !fgPrev) return;      // needs a doodle first
+      if (fgSamples < 3 * FK || !fgLastA) return;     // needs a doodle first
       fgAuto = true;
       fgSnap = fgModel.snapshot();
-      fgAutoState = [...fgPrev];
-      fgAutoTrail = [den(fgPrev[0], fgPrev[1])];
-      const sp = Math.hypot(fgVel[0], fgVel[1]) || 1e-6;
-      fgAutoRay = { x: fgPrev[0], y: fgPrev[1], vx: fgVel[0] / sp, vy: fgVel[1] / sp };
+      fgAutoState = [...fgLastA];
+      fgAutoTrail = [den(fgLastA[0], fgLastA[1])];
+      const sp = Math.hypot(fgLastVel[0], fgLastVel[1]) || 1e-6;
+      fgAutoRay = { x: fgLastA[0], y: fgLastA[1], vx: fgLastVel[0] / sp, vy: fgLastVel[1] / sp };
       document.getElementById('fg-auto').textContent = 'Stop autopilot ⏹';
     });
     const fgAt = (e) => {
@@ -603,7 +641,8 @@
     fgCanvas.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       if (fgAuto) stopAutopilot();                    // touching takes back control
-      fgAt(e); fgPtr.down = true; fgTrail = []; fgPrev = null; fgVel = [0, 0];
+      fgAt(e); fgPtr.down = true; fgTrail = [];
+      fgClearScoring();
     });
     fgCanvas.addEventListener('pointermove', (e) => { if (fgPtr.down) fgAt(e); });
     window.addEventListener('pointerup', () => { fgPtr.down = false; });
@@ -613,17 +652,11 @@
 
     function fgStepSim() {
       const a = nrm(fgPtr.x, fgPtr.y);
-      if (fgPrev && Math.hypot(a[0] - fgPrev[0], a[1] - fgPrev[1]) < 0.003) return; // stationary: don't teach "stay put"
-      for (let h = 1; h <= FK; h++) {
-        const iN = fgRingN.length - h, iC = fgRingC.length - h;
-        if (iN >= 0 && iC >= 0) {
-          const pn = fgRingN[iN], pc = fgRingC[iC];
-          const sn = (a[0] - pn[0][h - 1]) ** 2 + (a[1] - pn[1][h - 1]) ** 2;
-          const sc = (a[0] - pc[0][h - 1]) ** 2 + (a[1] - pc[1][h - 1]) ** 2;
-          fgEN[h - 1] = FG_DECAY * fgEN[h - 1] + (1 - FG_DECAY) * sn;
-          fgEC[h - 1] = FG_DECAY * fgEC[h - 1] + (1 - FG_DECAY) * sc;
-        }
+      if (fgPrev && Math.hypot(a[0] - fgPrev[0], a[1] - fgPrev[1]) < 0.003) {
+        if (++fgStill >= 4) fgClearScoring();          // paused: don't score across the pause
+        return;
       }
+      fgStill = 0;
       fgET = FG_DECAY * fgET + (1 - FG_DECAY) * (a[0] * a[0] + a[1] * a[1] + 1e-4);
       let cv = null;
       if (fgPrev) {
@@ -636,11 +669,34 @@
       fgSamples++;
       fgPredMat = res.prediction;
       fgCvMat = cv;
-      fgRingN.push(res.prediction);
-      fgRingC.push(cv || [[...Array(FK)].map(() => a[0]), [...Array(FK)].map(() => a[1])]);
-      if (fgRingN.length > FK) fgRingN.shift();
-      if (fgRingC.length > FK) fgRingC.shift();
+      fgA.push(a);
+      fgPend.push({ i: fgA.length - 1, n: res.prediction, c: cv || [[...Array(FK)].map(() => a[0]), [...Array(FK)].map(() => a[1])] });
+      // PATH-MISS scoring: each horizon's prediction is scored by its distance to
+      // the NEAREST sample of the actual future path (window h-2..h+3) — this is
+      // what the eye judges: "did the ghost land on where I actually went?"
+      while (fgPend.length && fgPend[0].i + FK + FPAD < fgA.length) {
+        const q = fgPend.shift();
+        for (let h = 1; h <= FK; h++) {
+          const px = q.n[0][h - 1], py = q.n[1][h - 1];
+          const cx = q.c[0][h - 1], cy = q.c[1][h - 1];
+          let dn = Infinity, dc = Infinity;
+          const j0 = q.i + Math.max(1, h - 2), j1 = q.i + h + 3;
+          for (let j = j0; j <= j1; j++) {
+            const s = fgA[j];
+            const t1 = (px - s[0]) ** 2 + (py - s[1]) ** 2; if (t1 < dn) dn = t1;
+            const t2 = (cx - s[0]) ** 2 + (cy - s[1]) ** 2; if (t2 < dc) dc = t2;
+          }
+          fgEN[h - 1] = FG_DECAY * fgEN[h - 1] + (1 - FG_DECAY) * dn;
+          fgEC[h - 1] = FG_DECAY * fgEC[h - 1] + (1 - FG_DECAY) * dc;
+        }
+      }
+      if (fgA.length > 400) {                          // bound memory; keep indices valid
+        const cut = fgA.length - 100;
+        fgA = fgA.slice(cut);
+        for (const q of fgPend) q.i -= cut;
+      }
       fgPrev = a;
+      fgLastA = a; fgLastVel = [...fgVel];
     }
 
     function fgGhost(mat, stroke, fill, dashed) {
@@ -705,7 +761,7 @@
       const layout = { margin: { l: 34, r: 8, t: 8, b: 28 }, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
         font: { color: '#94a3b8', size: 10 }, showlegend: true, legend: { orientation: 'h', y: 1.22 }, barmode: 'group',
         xaxis: { title: { text: 'steps ahead (~50 ms each)', font: { size: 10 } }, dtick: 1 },
-        yaxis: { title: { text: 'error (recent)', font: { size: 10 } }, gridcolor: '#1e293b', rangemode: 'tozero' } };
+        yaxis: { title: { text: 'path miss (recent)', font: { size: 10 } }, gridcolor: '#1e293b', rangemode: 'tozero' } };
       const data = [
         { x: xs, y: nC, type: 'bar', name: 'straight-line', marker: { color: '#7c8aa0' } },
         { x: xs, y: nN, type: 'bar', name: 'NGRC', marker: { color: '#f59e0b' } },
@@ -716,7 +772,6 @@
 
     function fgTick() {
       if (activeTab !== 'finger') { requestAnimationFrame(fgTick); return; }
-      fgFrame++;
       if (fgAuto) {
         const res = fgModel.step(fgAutoState, null, true);
         fgAutoState = [res.prediction[0][0], res.prediction[1][0]];
@@ -724,7 +779,8 @@
           fgAutoTrail.push(den(fgAutoState[0], fgAutoState[1]));
           if (fgAutoTrail.length > 600) fgAutoTrail.shift();
         }
-      } else if (fgPtr.down && fgFrame % DS === 0) {
+      } else if (fgPtr.down && (performance.now() - fgLastT) >= SAMPLE_MS) {
+        fgLastT = performance.now();
         fgStepSim();
       }
       if (fgPtr.down) {

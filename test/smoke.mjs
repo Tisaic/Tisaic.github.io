@@ -111,6 +111,7 @@ check('ngrc: WebGL/three canvas present', three);
 const nSamp = parseInt(await demo.textContent('#lz-n')) || 0;
 check('ngrc: Lorenz model runs (samples > 0)', nSamp > 0, String(nSamp));
 check('ngrc: model warms up', (await demo.textContent('#lz-warm')) === 'yes');
+await demo.waitForSelector('#lz-dream:not([disabled])', { timeout: 30000 });  // dream gated until the attractor is seen
 await demo.click('#lz-dream');
 await demo.waitForTimeout(500);
 check('ngrc: dream (free-run) toggles', /dreaming/.test(await demo.textContent('#lz-mode')));
