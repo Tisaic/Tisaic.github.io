@@ -415,7 +415,7 @@
     // we auto-tune it by always scoring its BEST member (generous to the baseline).
     const ALPHAS = [0.01, 0.02, 0.04, 0.07, 0.12, 0.20, 0.35];
     let x1, v1, x2, v2, ssT, ss, ssSamples, ssEN, ssEC, ssET, ssKick, ssTouchX, ssTouched;
-    let ssFilt, ssFiltErr;
+    let ssFilt, ssFiltErr, ssTouchF, ssU;
     let ssShowTruth = true;
     const ssPlotTrue = [], ssPlotEst = [], ssPlotNaive = [];
     const ssDrive = (t) => 5.5 * Math.sin(2 * Math.PI * 0.20 * t) + 2.2 * Math.sin(2 * Math.PI * 0.50 * t + 1) + 1.3 * Math.sin(2 * Math.PI * 0.95 * t + 2);
@@ -424,6 +424,7 @@
       ss = new SoftSensor(3, 1, 6, 5, 300, { fmap: null, initVariance: 10.0, lam: 1.0 });
       x1 = 0; v1 = 0; x2 = 0; v2 = 0; ssT = 0; ssSamples = 0;
       ssEN = 0; ssEC = 0; ssET = 0; ssKick = 0; ssTouchX = null; ssTouched = false;
+      ssTouchF = 0; ssU = 0;
       ssFilt = ALPHAS.map(() => 0);
       ssFiltErr = ALPHAS.map(() => 0);
       ssPlotTrue.length = 0; ssPlotEst.length = 0; ssPlotNaive.length = 0;
@@ -439,11 +440,24 @@
     ssCanvas.addEventListener('pointerdown', (e) => { e.preventDefault(); ssPointer(e); });
     ssCanvas.addEventListener('pointermove', (e) => { if (ssTouchX != null) ssPointer(e); });
     window.addEventListener('pointerup', () => { ssTouchX = null; });
+    window.addEventListener('pointercancel', () => { ssTouchX = null; });
 
     function ssStepSim() {
-      let u;
-      if (ssTouchX != null) u = clamp(50 * (ssTouchX - x1) - 8 * v1, -25, 25);
-      else u = ssDrive(ssT) + ssKick;
+      // Drive conditioning: the finger target is pixel-quantized, and the PD's
+      // sign flips at reversals — both inject force steps that leak into the
+      // estimate through the u features (measured: 0.15-unit spikes). Smooth the
+      // target, moderate the PD, and slew-limit the applied force; the sensor
+      // sees the same conditioned u the plant feels, so it stays honest.
+      let uDes;
+      if (ssTouchX != null) {
+        ssTouchF += 0.25 * (ssTouchX - ssTouchF);
+        uDes = clamp(30 * (ssTouchF - x1) - 8 * v1, -18, 18);
+      } else {
+        ssTouchF = x1;                                  // re-seed so the next grab starts smooth
+        uDes = ssDrive(ssT) + ssKick;
+      }
+      ssU += clamp(uDes - ssU, -1.2, 1.2);
+      const u = ssU;
       ssKick *= 0.90;
       const fs = PM.k * (x1 - x2) + PM.c * (v1 - v2);
       const a1 = (u - fs - PM.b1 * v1) / PM.m1;
@@ -580,6 +594,7 @@
     const FK = 12;            // horizon in samples (~0.6 s)
     const SAMPLE_MS = 48;     // fixed-TIME sampling — same cadence on 60 and 120 Hz displays
     const FPAD = 5;           // future window for path-miss scoring
+    const DSCALE = 25;        // delta scaling to O(1) features (raw deltas ~0.02 would drown in the ridge)
     const fgStage = document.getElementById('fg-stage');
     const fgCanvas = document.createElement('canvas');
     fgStage.appendChild(fgCanvas);
@@ -597,27 +612,33 @@
     window.addEventListener('resize', resizeFinger);
 
     const FG_DECAY = 0.99;
-    let fgModel, fgPtr, fgTrail, fgPredMat, fgCvMat, fgPrev, fgVel, fgSamples, fgLastT, fgStill;
+    let fgModel, fgPtr, fgTrail, fgPredMat, fgCvMat, fgPrev, fgVel, fgSamples, fgLastT, fgStill, fgLastD;
     let fgA, fgPend, fgEN, fgEC, fgET;
-    let fgAuto = false, fgAutoState = null, fgAutoTrail = [], fgAutoRay = null, fgSnap = null;
+    let fgAuto = false, fgAutoState = null, fgAutoPos = null, fgAutoDrift = null, fgAutoLastT = 0;
+    let fgAutoTrail = [], fgAutoRay = null, fgSnap = null;
     // scoring resets at stroke boundaries so a lift/relocation can't be scored
     // against predictions made on the previous stroke
     function fgClearScoring() { fgA = []; fgPend = []; fgPrev = null; fgVel = [0, 0]; fgStill = 0; }
     function makeFinger() {
+      // TRANSLATION-INVARIANT dynamics: the model's variables are the scaled
+      // per-sample DELTAS (dx, dy), not positions — so loops drawn anywhere on
+      // the canvas are consistent training data, and stroke lifts/relocations
+      // can never inject a teleport delta (a lone sample only seeds the differencer).
       fgModel = new Continuous(2, 3, 2, true, {
-        predictionSteps: FK, lam: 1.0, initVariance: 1.0, useDelta: true,
-        useClamp: true, clampMin: [-1.6, -1.6], clampMax: [1.6, 1.6],
+        predictionSteps: FK, lam: 1.0, initVariance: 1.0,
+        useClamp: true, clampMin: [-5, -5], clampMax: [5, 5],
       });
       fgPtr = { x: 0, y: 0, down: false };
       fgTrail = []; fgPredMat = null; fgCvMat = null;
-      fgSamples = 0; fgLastT = 0;
+      fgSamples = 0; fgLastT = 0; fgLastD = null;
       fgEN = new Array(FK).fill(0); fgEC = new Array(FK).fill(0); fgET = 0;
       fgClearScoring();
       stopAutopilot();
     }
     function stopAutopilot() {
       if (fgAuto && fgSnap) fgModel.restore(fgSnap);
-      fgAuto = false; fgAutoState = null; fgAutoTrail = []; fgAutoRay = null; fgSnap = null;
+      fgAuto = false; fgAutoState = null; fgAutoPos = null; fgAutoDrift = null;
+      fgAutoTrail = []; fgAutoRay = null; fgSnap = null;
       const b = document.getElementById('fg-auto');
       if (b) b.textContent = 'Autopilot ✍️';
     }
@@ -625,14 +646,25 @@
     let fgLastA = null, fgLastVel = [0, 0];           // survives scoring resets (autopilot seed)
     document.getElementById('fg-auto').addEventListener('click', () => {
       if (fgAuto) { stopAutopilot(); return; }
-      if (fgSamples < 3 * FK || !fgLastA) return;     // needs a doodle first
+      const btn = document.getElementById('fg-auto');
+      if (fgSamples < 3 * FK || !fgLastA || !fgLastD) {   // needs a doodle first — say so
+        console.log('autopilot blocked: samples=' + fgSamples + ' (need ' + 3 * FK + ')');
+        const orig = 'Autopilot ✍️';
+        btn.textContent = '✍️ draw a bit more first';
+        setTimeout(() => { if (!fgAuto) btn.textContent = orig; }, 1400);
+        return;
+      }
       fgAuto = true;
       fgSnap = fgModel.snapshot();
-      fgAutoState = [...fgLastA];
+      fgAutoState = [...fgLastD];                     // seed = last scaled delta
+      fgAutoPos = [...fgLastA];
+      fgAutoDrift = [0, 0];
+      fgAutoLastT = 0;
       fgAutoTrail = [den(fgLastA[0], fgLastA[1])];
       const sp = Math.hypot(fgLastVel[0], fgLastVel[1]) || 1e-6;
       fgAutoRay = { x: fgLastA[0], y: fgLastA[1], vx: fgLastVel[0] / sp, vy: fgLastVel[1] / sp };
-      document.getElementById('fg-auto').textContent = 'Stop autopilot ⏹';
+      console.log('autopilot started at ' + fgSamples + ' samples');
+      btn.textContent = 'Stop autopilot ⏹';
     });
     const fgAt = (e) => {
       const r = fgCanvas.getBoundingClientRect();
@@ -646,6 +678,7 @@
     });
     fgCanvas.addEventListener('pointermove', (e) => { if (fgPtr.down) fgAt(e); });
     window.addEventListener('pointerup', () => { fgPtr.down = false; });
+    window.addEventListener('pointercancel', () => { fgPtr.down = false; });
 
     const nrm = (px, py) => [(px - fgW / 2) / fgNorm, (py - fgH / 2) / fgNorm];
     const den = (nx, ny) => [nx * fgNorm + fgW / 2, ny * fgNorm + fgH / 2];
@@ -657,20 +690,27 @@
         return;
       }
       fgStill = 0;
+      if (!fgPrev) { fgPrev = a; return; }             // first sample of a stroke only seeds the differencer
       fgET = FG_DECAY * fgET + (1 - FG_DECAY) * (a[0] * a[0] + a[1] * a[1] + 1e-4);
-      let cv = null;
-      if (fgPrev) {
-        fgVel[0] = 0.6 * fgVel[0] + 0.4 * (a[0] - fgPrev[0]);
-        fgVel[1] = 0.6 * fgVel[1] + 0.4 * (a[1] - fgPrev[1]);
-        cv = [[], []];
-        for (let k = 1; k <= FK; k++) { cv[0].push(a[0] + fgVel[0] * k); cv[1].push(a[1] + fgVel[1] * k); }
-      }
-      const res = fgModel.step(a);
+      fgVel[0] = 0.6 * fgVel[0] + 0.4 * (a[0] - fgPrev[0]);
+      fgVel[1] = 0.6 * fgVel[1] + 0.4 * (a[1] - fgPrev[1]);
+      const cv = [[], []];
+      for (let k = 1; k <= FK; k++) { cv[0].push(a[0] + fgVel[0] * k); cv[1].push(a[1] + fgVel[1] * k); }
+      const d = [(a[0] - fgPrev[0]) * DSCALE, (a[1] - fgPrev[1]) * DSCALE];
+      const res = fgModel.step(d);
       fgSamples++;
-      fgPredMat = res.prediction;
+      fgLastD = d;
+      // the model forecasts future DELTAS — integrate into an absolute ghost path
+      const pred = [[], []];
+      let px = a[0], py = a[1];
+      for (let k = 0; k < FK; k++) {
+        px += res.prediction[0][k] / DSCALE; py += res.prediction[1][k] / DSCALE;
+        pred[0].push(px); pred[1].push(py);
+      }
+      fgPredMat = pred;
       fgCvMat = cv;
       fgA.push(a);
-      fgPend.push({ i: fgA.length - 1, n: res.prediction, c: cv || [[...Array(FK)].map(() => a[0]), [...Array(FK)].map(() => a[1])] });
+      fgPend.push({ i: fgA.length - 1, n: pred, c: cv });
       // PATH-MISS scoring: each horizon's prediction is scored by its distance to
       // the NEAREST sample of the actual future path (window h-2..h+3) — this is
       // what the eye judges: "did the ghost land on where I actually went?"
@@ -773,11 +813,20 @@
     function fgTick() {
       if (activeTab !== 'finger') { requestAnimationFrame(fgTick); return; }
       if (fgAuto) {
-        const res = fgModel.step(fgAutoState, null, true);
-        fgAutoState = [res.prediction[0][0], res.prediction[1][0]];
-        if (fgAutoState.every(Number.isFinite)) {
-          fgAutoTrail.push(den(fgAutoState[0], fgAutoState[1]));
-          if (fgAutoTrail.length > 600) fgAutoTrail.shift();
+        if (performance.now() - fgAutoLastT >= 33) {  // paced: same speed on 60/120 Hz displays
+          fgAutoLastT = performance.now();
+          const res = fgModel.step(fgAutoState, null, true);
+          fgAutoState = [res.prediction[0][0], res.prediction[1][0]];
+          if (fgAutoState.every(Number.isFinite)) {
+            fgAutoPos[0] += fgAutoState[0] / DSCALE;
+            fgAutoPos[1] += fgAutoState[1] / DSCALE;
+            // slow high-pass keeps the free-run doodle centered on screen without
+            // touching the learned dynamics (pure display re-centering)
+            fgAutoDrift[0] += 0.01 * (fgAutoPos[0] - fgAutoDrift[0]);
+            fgAutoDrift[1] += 0.01 * (fgAutoPos[1] - fgAutoDrift[1]);
+            fgAutoTrail.push(den(fgAutoPos[0] - fgAutoDrift[0], fgAutoPos[1] - fgAutoDrift[1]));
+            if (fgAutoTrail.length > 600) fgAutoTrail.shift();
+          }
         }
       } else if (fgPtr.down && (performance.now() - fgLastT) >= SAMPLE_MS) {
         fgLastT = performance.now();
