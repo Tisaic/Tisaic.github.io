@@ -8,6 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
+  <script>window.__BUILD = {version:32,built:"2026-07-23T05:17:33Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -127,6 +128,7 @@
       <dt>NGRC path miss @0.6s</dt><dd id="fg-rmse" class="amber">—</dd>
       <dt>Straight-line path miss</dt><dd id="fg-naive">—</dd>
       <dt>NGRC advantage</dt><dd id="fg-skill" class="good">—</dd>
+      <dt>Autopilot brain</dt><dd id="fg-ap">—</dd>
     </dl>
     <div class="plot" id="fg-plot"></div>
   </section>
@@ -627,9 +629,12 @@
     let fgAuto = false, fgAutoState = null, fgAutoPos = null, fgAutoDrift = null, fgAutoLastT = 0;
     let fgAutoTrail = [], fgAutoRay = null, fgSnap = null;
     let fgLog = [], fgAutoInfo = '', fgCommissioning = false;
-    // scoring resets at stroke boundaries so a lift/relocation can't be scored
-    // against predictions made on the previous stroke
-    function fgClearScoring() { fgA = []; fgPend = []; fgPrev = null; fgVel = [0, 0]; fgStill = 0; }
+    // Scoring resets so a pause/lift can't be scored against stale predictions.
+    // CRITICAL: fgPrev is KEPT — humans dwell at doodle corners, and nulling
+    // fgPrev there deleted the corner transition from the training log every
+    // time (the star's corners never reached the model → it could only learn a
+    // circle). Only a NEW STROKE (pointerdown) resets fgPrev.
+    function fgClearScoring() { fgA = []; fgPend = []; fgStill = 0; }
     function makeFinger() {
       // Reset MUST kill any autopilot FIRST: stopAutopilot() restores the
       // pre-autopilot snapshot, and doing that after the new model exists would
@@ -649,8 +654,11 @@
       fgPtr = { x: 0, y: 0, down: false };
       fgTrail = []; fgPredMat = null; fgCvMat = null;
       fgSamples = 0; fgLastT = 0; fgLastS = null; fgCent = null;
+      fgPrev = null; fgVel = [0, 0];
       fgEN = new Array(FK).fill(0); fgEC = new Array(FK).fill(0); fgET = 0;
       fgClearScoring();
+      const ap = document.getElementById('fg-ap');
+      if (ap) ap.textContent = '—';
     }
     function stopAutopilot() {
       if (fgAuto && fgSnap) fgModel.restore(fgSnap);
@@ -707,6 +715,18 @@
           };
           const trainPts = log.map((q) => [q[2], q[3]]);
           const trainHist = radHist(trainPts);
+          // Estimate the doodle's lap period (autocorrelation of the centered x)
+          // so the harmonic-bank lag windows can MATCH the user's drawing tempo.
+          let period = 60;
+          {
+            const xs = trainPts.map((p) => p[0]);
+            let bestV = -Infinity;
+            for (let L = 16; L <= Math.min(220, xs.length - 20); L++) {
+              let sAc = 0, cAc = 0;
+              for (let i = 0; i + L < xs.length; i += 2) { sAc += xs[i] * xs[i + L]; cAc++; }
+              if (cAc > 8 && sAc / cAc > bestV) { bestV = sAc / cAc; period = L; }
+            }
+          }
           // Candidates: short-lag poly2 (smooth loops) + long-lag LINEAR — a lag
           // window spanning ~a lap is a harmonic bank that can SUSTAIN sharp
           // shapes (stars) which poly2/lag2 physically cannot (its features
@@ -717,6 +737,11 @@
           cands.push({ poly: 1, lag: 8, stride: 3, iv: 2, passes: 3 });
           cands.push({ poly: 1, lag: 8, stride: 3, iv: 8, passes: 3 });
           cands.push({ poly: 1, lag: 10, stride: 4, iv: 2, passes: 3 });
+          for (const frac of [0.5, 1.0]) {             // tempo-matched windows: ~half and ~one lap
+            const st = clamp(Math.round(period * frac / 9), 1, 8);
+            for (const iv of [2, 8]) cands.push({ poly: 1, lag: 10, stride: st, iv, passes: 3 });
+          }
+          console.log(`autopilot commissioning: ${log.length} samples, est. lap period ${period}`);
           let best = null;
           for (const c of cands) {
             const m = fit(c, 1);
@@ -734,6 +759,7 @@
             const tailHist = radHist(tail);
             const shape = trainHist.reduce((a, x, i2) => a + x * tailHist[i2], 0);
             const score = shape - 0.4 * Math.abs(Math.log(retention));
+            console.log(`  cand poly${c.poly} lag${c.lag}/s${c.stride || 1} iv${c.iv} x${c.passes}: shape ${(100 * shape).toFixed(0)}% size ${(100 * retention).toFixed(0)}% score ${score.toFixed(2)}`);
             if (!best || score > best.score) best = { ...c, score, retention, shape };
           }
           if (!best) {
@@ -743,9 +769,10 @@
             return;
           }
           fgModel = fit(best, FK);                     // deploy the winner (keeps learning online)
-          const desc = best.poly === 1 ? `linear lag${best.lag}` : `poly2 lag${best.lag}`;
+          const desc = best.poly === 1 ? `linear lag${best.lag}/s${best.stride || 1}` : `poly2 lag${best.lag}`;
           console.log(`autopilot commissioned: ${desc} iv=${best.iv} ×${best.passes} — shape ${(100 * best.shape).toFixed(0)}%, size ${(100 * best.retention).toFixed(0)}%`);
           fgAutoInfo = `commissioned ${desc} ×${best.passes} · shape ${(100 * best.shape).toFixed(0)}% · size ${(100 * best.retention).toFixed(0)}%`;
+          document.getElementById('fg-ap').textContent = fgAutoInfo.replace('commissioned ', '');
           fgAuto = true;
           fgSnap = fgModel.snapshot();
           fgAutoState = [...fgLastS];
@@ -769,6 +796,7 @@
       if (fgAuto) stopAutopilot();                    // touching takes back control
       fgAt(e); fgPtr.down = true; fgTrail = [];
       fgCent = null;                                  // each stroke gets its own centroid
+      fgPrev = null; fgVel = [0, 0];                  // relocation: restart the differencer
       fgClearScoring();
     });
     fgCanvas.addEventListener('pointermove', (e) => { if (fgPtr.down) fgAt(e); });
@@ -780,8 +808,8 @@
 
     function fgStepSim() {
       const a = nrm(fgPtr.x, fgPtr.y);
-      if (fgPrev && Math.hypot(a[0] - fgPrev[0], a[1] - fgPrev[1]) < 0.003) {
-        if (++fgStill >= 4) fgClearScoring();          // paused: don't score across the pause
+      if (fgPrev && Math.hypot(a[0] - fgPrev[0], a[1] - fgPrev[1]) < 0.002) {
+        if (++fgStill >= 10) fgClearScoring();         // real pause: stop scoring across it (fgPrev kept)
         return;
       }
       fgStill = 0;

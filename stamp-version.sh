@@ -11,6 +11,7 @@ NUM="$(( $(git rev-list --count HEAD) + 1 ))"
 
 # Replace the marked line in index.html (marker survives so it's re-stampable).
 sed -i "s|.*// __STAMP__.*|  <script>window.__BUILD = {version:${NUM},built:\"${BUILT}\"}; // __STAMP__</script>|" index.html
+sed -i "s|.*// __NGRC_STAMP__.*|  <script>window.__BUILD = {version:${NUM},built:\"${BUILT}\"}; // __NGRC_STAMP__</script>|" ngrc.html
 
 # Write the server-side manifest the page fetches to detect staleness.
 printf '{"version":%s,"built":"%s"}\n' "${NUM}" "${BUILT}" > version.json
