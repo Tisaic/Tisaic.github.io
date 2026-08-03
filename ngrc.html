@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:34,built:"2026-08-03T18:44:44Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:35,built:"2026-08-03T20:15:17Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -692,7 +692,19 @@
     // free-run (the spiral-decay-to-a-circle bug). Constant-speed resampling
     // removes every stall and speed cue while keeping the geometry exact.
     function resamplePath(log) {
-      const pts = log.map((q) => [q[2], q[3]]);
+      let pts = log.map((q) => [q[2], q[3]]);
+      // Two light [.25,.5,.25] passes kill finger tremor BEFORE it becomes the
+      // training target (the autopilot was faithfully reproducing hand wobble).
+      // Corners survive: dwells oversample them, so the kernel barely moves them.
+      for (let p = 0; p < 2; p++) {
+        const nx = [pts[0]];
+        for (let i = 1; i < pts.length - 1; i++) {
+          nx.push([0.25 * pts[i - 1][0] + 0.5 * pts[i][0] + 0.25 * pts[i + 1][0],
+                   0.25 * pts[i - 1][1] + 0.5 * pts[i][1] + 0.25 * pts[i + 1][1]]);
+        }
+        nx.push(pts[pts.length - 1]);
+        pts = nx;
+      }
       const sp = log.map((q) => Math.hypot(q[0], q[1]) / DSCALE).sort((a, b) => a - b);
       // 60th-pct speed: brisk but honest. Capped at 0.05/step — a very fast
       // drag otherwise yields ~20 steps/lap, too coarse for a stable orbit.
@@ -881,15 +893,16 @@
           const mode = document.getElementById('fg-brain').value;
           const st10 = clamp(Math.round(period / 9), 1, 8);
           // Short doodles need more replay (each pass divides the effective
-          // ridge); ~3600 presented samples total is the sweet spot.
-          const nP = Math.min(800, rs.length - 1);
-          const afmPasses = Math.max(6, Math.min(12, Math.round(3600 / Math.max(nP, 1))));
+          // ridge); ~2400 presented samples total is the sweet spot.
+          const nP = Math.min(600, rs.length - 1);
+          const afmPasses = Math.max(3, Math.min(12, Math.round(2400 / Math.max(nP, 1))));
           const cands = [];
           if (mode !== 'linear') {
             // Three AFM variants: different strides/noise fail on different
             // doodles, but at least one holds — the long scored free-run
-            // picks the right one for THIS doodle.
-            const AF = { kind: 'afm', lag: 4, nh: 64, nf: 64, PS: 3, passes: afmPasses, guard: true };
+            // picks the right one for THIS doodle (early exit skips the rest
+            // when the first is already excellent).
+            const AF = { kind: 'afm', lag: 4, nh: 48, nf: 48, PS: 3, passes: afmPasses, guard: true };
             cands.push({ ...AF, stride: 1, noise: 0.2, desc: 'AFM lag4/s1' });
             cands.push({ ...AF, stride: 4, noise: 0.2, desc: 'AFM lag4/s4' });
             cands.push({ ...AF, stride: 2, noise: 0.3, desc: 'AFM lag4/s2 n.3' });
@@ -905,7 +918,7 @@
             btn.textContent = `commissioning… ${++ci}/${cands.length} 🔧`;
             await tick();
             const t0 = performance.now();
-            const st = statesPS(rs, c.PS).slice(-800);
+            const st = statesPS(rs, c.PS).slice(-600);
             const m = fitCand(c, st);
             const snap = m.snapshot();               // pre-scoring state: the verified orbit's start
             // 5000-step scored free-run (~3 min of autopilot), judged on the
@@ -937,6 +950,12 @@
             console.log(`  ${c.desc}: mid shape ${(100 * mid.shape).toFixed(0)}% / late ${(100 * lateW.shape).toFixed(0)}% (rad ${(100 * lateW.radCos).toFixed(0)}/ang ${(100 * lateW.ang).toFixed(0)}) size ${(100 * pickW.retention).toFixed(0)}% horizon ${horizon}${pickW.gated ? '' : ' (size-gated)'} score ${pickW.score.toFixed(2)} (${Math.round(performance.now() - t0)}ms)`);
             if (pickW.gated && (!best || pickW.score > best.score)) {
               best = { c, m, snap, seed: [...st[st.length - 1]], score: pickW.score, shape: pickW.shape, retention: pickW.retention, horizon };
+            }
+            // Early exit: an excellent full-horizon candidate ends the sweep —
+            // this is what keeps typical commissioning to ONE AFM fit.
+            if (best && best.c === c && best.horizon === 5000 && best.score >= 0.85) {
+              console.log('  early exit — candidate is excellent');
+              break;
             }
           }
           if (!best) { fail('draw a few more loops'); return; }
@@ -1083,12 +1102,25 @@
           fgCtx.fillStyle = '#7c8aa0'; fgCtx.font = '11px sans-serif'; fgCtx.textAlign = 'center';
           fgCtx.fillText('straight-line “autopilot” →', (p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2 - 8);
         }
-        // NGRC's free-run doodle (null entries = pen-up gaps at orbit restarts)
-        for (let i = 1; i < fgAutoTrail.length; i++) {
-          if (!fgAutoTrail[i - 1] || !fgAutoTrail[i]) continue;
-          fgCtx.beginPath(); fgCtx.moveTo(fgAutoTrail[i - 1][0], fgAutoTrail[i - 1][1]); fgCtx.lineTo(fgAutoTrail[i][0], fgAutoTrail[i][1]);
-          fgCtx.strokeStyle = 'rgba(245,158,11,' + (0.25 + 0.75 * i / fgAutoTrail.length).toFixed(2) + ')';
-          fgCtx.lineWidth = 3; fgCtx.stroke();
+        // NGRC's free-run doodle (null entries = pen-up gaps at orbit restarts).
+        // Drawn through a light 3-point kernel: the model's small step-to-step
+        // jitter is real but shouldn't read as shaky ink.
+        const T = fgAutoTrail;
+        const smAt = (i) => {
+          const a = T[i - 1], b = T[i], c = T[i + 1];
+          if (!b) return null;
+          if (!a || !c) return b;
+          return [0.25 * a[0] + 0.5 * b[0] + 0.25 * c[0], 0.25 * a[1] + 0.5 * b[1] + 0.25 * c[1]];
+        };
+        let prevSm = smAt(0) || (T[0] || null);
+        for (let i = 1; i < T.length; i++) {
+          const cur = smAt(i);
+          if (prevSm && cur) {
+            fgCtx.beginPath(); fgCtx.moveTo(prevSm[0], prevSm[1]); fgCtx.lineTo(cur[0], cur[1]);
+            fgCtx.strokeStyle = 'rgba(245,158,11,' + (0.25 + 0.75 * i / T.length).toFixed(2) + ')';
+            fgCtx.lineWidth = 3; fgCtx.stroke();
+          }
+          prevSm = cur;
         }
         const last = fgAutoTrail[fgAutoTrail.length - 1];
         if (last) { fgCtx.beginPath(); fgCtx.arc(last[0], last[1], 8, 0, 2 * Math.PI); fgCtx.fillStyle = '#f59e0b'; fgCtx.fill(); }
