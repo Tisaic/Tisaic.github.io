@@ -136,8 +136,11 @@ await demo.mouse.up();
 check('ngrc: finger-trace learns from a drag (samples > 0)', (parseInt(await demo.textContent('#fg-n')) || 0) > 0);
 check('ngrc: finger-trace error is finite', Number.isFinite(parseFloat(await demo.textContent('#fg-rmse'))));
 await demo.click('#fg-auto');
+// commissioning fits the AFM brain (a few seconds) then flips the button
+await demo.waitForFunction(() => document.getElementById('fg-auto').textContent.includes('Stop'), null, { timeout: 60000 });
 await demo.waitForTimeout(800);
-check('ngrc: autopilot free-runs without errors', demoErrors.length === 0, demoErrors.join(' | '));
+check('ngrc: autopilot commissions + free-runs without errors', demoErrors.length === 0, demoErrors.join(' | '));
+check('ngrc: autopilot brain row is populated', /shape/.test(await demo.textContent('#fg-ap')));
 await demo.screenshot({ path: join(SHOTS, '06-finger.png') });
 await demo.click('#fg-auto');
 check('ngrc: playground has no errors overall', demoErrors.length === 0, demoErrors.join(' | '));

@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:32,built:"2026-07-23T05:17:33Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:33,built:"2026-08-03T18:04:58Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -34,6 +34,8 @@
     button { font-size:.95rem; padding:11px 14px; border:none; border-radius:10px; background:var(--accent);
       color:#fff; cursor:pointer; touch-action:manipulation; flex:1; min-width:110px; }
     button.sec { background:#334155; }
+    select { font-size:.9rem; padding:11px 10px; border:1px solid var(--line); border-radius:10px;
+      background:#334155; color:#fff; flex:1; min-width:110px; -webkit-appearance:none; appearance:none; text-align:center; }
     button:active { filter:brightness(1.15); }
     .slider { flex:1 1 100%; display:flex; align-items:center; gap:10px; font-size:.82rem; color:var(--muted); }
     .slider input[type=range] { flex:1; }
@@ -117,10 +119,17 @@
       <span style="color:#f59e0b">amber = NGRC</span>, which learns <b>your</b> motion. The score is the
       <b>path miss</b> — how far each ghost lands from where your finger actually went. Then the showpiece —
       tap <b>Autopilot</b>: NGRC <b>keeps drawing your doodle by itself</b>; the straight-line approach just
-      leaves the screen.</p>
+      leaves the screen. The <b>brain</b> selector picks the autopilot's model: <b>AFM</b> is the library's
+      universal feature map (ReLU + Fourier), noise-hardened so your doodle becomes a true attractor —
+      <b>linear</b> is kept for comparison and slowly spirals into a circle.</p>
     <div class="stage" id="fg-stage" style="height:44vh"></div>
     <div class="controls">
       <button id="fg-auto">Autopilot ✍️</button>
+      <select id="fg-brain" title="autopilot brain">
+        <option value="auto">brain: auto</option>
+        <option value="afm">brain: AFM</option>
+        <option value="linear">brain: linear</option>
+      </select>
       <button id="fg-reset" class="sec">Reset brain</button>
     </div>
     <dl class="stat">
@@ -136,6 +145,7 @@
   <script type="module">
     import * as THREE from './vendor/three.module.js';
     import { Continuous } from './lib/ngrc/continuous.js';
+    import { universalMap } from './lib/ngrc/feature_map.js';
     import { SoftSensor } from './lib/ngrc/softsensor.js';
 
     console.log('ngrc playground: modules loaded, THREE', THREE.REVISION);
@@ -627,7 +637,9 @@
     let fgModel, fgPtr, fgTrail, fgPredMat, fgCvMat, fgPrev, fgVel, fgSamples, fgLastT, fgStill, fgLastS, fgCent;
     let fgA, fgPend, fgEN, fgEC, fgET;
     let fgAuto = false, fgAutoState = null, fgAutoPos = null, fgAutoDrift = null, fgAutoLastT = 0;
-    let fgAutoTrail = [], fgAutoRay = null, fgSnap = null;
+    let fgAutoTrail = [], fgAutoRay = null, fgAutoModel = null, fgAutoMeta = null;
+    let fgAutoSnap = null, fgAutoSeed = null;       // verified-orbit restart point (escape watchdog)
+    let fgAutoSteps = 0;
     let fgLog = [], fgAutoInfo = '', fgCommissioning = false;
     // Scoring resets so a pause/lift can't be scored against stale predictions.
     // CRITICAL: fgPrev is KEPT — humans dwell at doodle corners, and nulling
@@ -636,10 +648,7 @@
     // circle). Only a NEW STROKE (pointerdown) resets fgPrev.
     function fgClearScoring() { fgA = []; fgPend = []; fgStill = 0; }
     function makeFinger() {
-      // Reset MUST kill any autopilot FIRST: stopAutopilot() restores the
-      // pre-autopilot snapshot, and doing that after the new model exists would
-      // resurrect the old brain into it (the "Reset doesn't reset" bug).
-      stopAutopilot();
+      stopAutopilot();                               // clear any running autopilot first
       fgLog = [];
       // HYBRID translation-invariant state: [dx·25, dy·25, x−cx, y−cy] — scaled
       // deltas keep the loop's energy alive in free-run (pure-delta drifted;
@@ -661,121 +670,286 @@
       if (ap) ap.textContent = '—';
     }
     function stopAutopilot() {
-      if (fgAuto && fgSnap) fgModel.restore(fgSnap);
+      // The autopilot runs its own commissioned model; dropping it is a full
+      // stop — the online predictor (fgModel) was never touched.
       fgAuto = false; fgAutoState = null; fgAutoPos = null; fgAutoDrift = null;
-      fgAutoTrail = []; fgAutoRay = null; fgSnap = null; fgAutoInfo = ''; fgCommissioning = false;
+      fgAutoTrail = []; fgAutoRay = null; fgAutoModel = null; fgAutoMeta = null;
+      fgAutoSnap = null; fgAutoSeed = null; fgAutoInfo = ''; fgCommissioning = false;
       const b = document.getElementById('fg-auto');
       if (b) b.textContent = 'Autopilot ✍️';
     }
     document.getElementById('fg-reset').addEventListener('click', makeFinger);
     let fgLastA = null, fgLastVel = [0, 0];           // survives scoring resets (autopilot seed)
+
+    // ---- autopilot commissioning ----
+    // The autopilot learns the PATH, not the gesture: the drawn path is
+    // resampled at uniform arc length before fitting. Dwells, finger tremor
+    // and the ease-in/out at corners taught the model a "stall" fixed point
+    // and a decelerate-into-the-corner rule — both of which captured the
+    // free-run (the spiral-decay-to-a-circle bug). Constant-speed resampling
+    // removes every stall and speed cue while keeping the geometry exact.
+    function resamplePath(log) {
+      const pts = log.map((q) => [q[2], q[3]]);
+      const sp = log.map((q) => Math.hypot(q[0], q[1]) / DSCALE).sort((a, b) => a - b);
+      // 60th-pct speed: brisk but honest. Capped at 0.05/step — a very fast
+      // drag otherwise yields ~20 steps/lap, too coarse for a stable orbit.
+      const h = Math.max(Math.min(sp[Math.floor(sp.length * 0.6)] || 0, 0.05), 1e-4);
+      const rs = [pts[0]];
+      let prev = pts[0], carry = 0;
+      for (let i = 1; i < pts.length; i++) {
+        let a = prev; const b = pts[i];
+        let seg = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        while (carry + seg >= h) {
+          const t = (h - carry) / seg;
+          const p = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+          rs.push(p); a = p;
+          seg = Math.hypot(b[0] - a[0], b[1] - a[1]);
+          carry = 0;
+        }
+        carry += seg; prev = b;
+      }
+      return { rs, h };
+    }
+    // 4-var states from the resampled path: [dx·25, dy·25, x·PS, y·PS].
+    // PS upscales the position channels so the AFM's random projections get
+    // real angular resolution — corners must be position-triggered.
+    function statesPS(rs, PS) {
+      const out = [];
+      for (let i = 1; i < rs.length; i++) {
+        out.push([(rs[i][0] - rs[i - 1][0]) * DSCALE, (rs[i][1] - rs[i - 1][1]) * DSCALE, rs[i][0] * PS, rs[i][1] * PS]);
+      }
+      return out;
+    }
+    // SHAPE score: cosine similarity of radius histograms binned against a
+    // SHARED scale (the training max radius) — normalizing each set by its own
+    // max would make the histogram scale-invariant, letting a shrunken circle
+    // score as well as a full-size one. A star has a broad radius profile, a
+    // circle a tight one — a free-run that rounds the corners off (or spirals
+    // inward) no longer beats one that keeps them.
+    const radHist = (pts, mx) => {
+      const h = new Array(12).fill(0);
+      for (const p of pts) {
+        const r = Math.hypot(p[0], p[1]);
+        h[Math.max(0, Math.min(11, Math.floor(12 * r / (mx * 1.001))))]++;
+      }
+      const n = Math.hypot(...h) || 1;
+      return h.map((x) => x / n);
+    };
+    // Angular radius profile r(θ), 40 bins — the radius histogram alone is
+    // blind to WHERE the radius lives: a crescent sweeping radii 0.2–0.6 can
+    // perfectly match a star's radius DISTRIBUTION. Comparing r(θ) bin-by-bin
+    // (same centered frame, no rotation expected) catches that.
+    function angProf(pts) {
+      const NB = 40;
+      const sum = new Array(NB).fill(0), cnt = new Array(NB).fill(0);
+      for (const p of pts) {
+        const r = Math.hypot(p[0], p[1]);
+        if (r < 1e-6) continue;
+        const b = Math.min(NB - 1, Math.floor(NB * (Math.atan2(p[1], p[0]) + Math.PI) / (2 * Math.PI + 1e-9)));
+        sum[b] += r; cnt[b]++;
+      }
+      let mean = 0, nf = 0;
+      for (let i = 0; i < NB; i++) if (cnt[i]) { mean += sum[i] / cnt[i]; nf++; }
+      mean = nf ? mean / nf : 0;
+      return { prof: sum.map((s, i) => (cnt[i] ? s / cnt[i] : mean)), mean, filled: nf };
+    }
+    function angScore(train, pts) {
+      const late = angProf(pts);
+      if (late.filled < 20) return 0;                // stalled / partial orbit
+      const a = train.prof.map((x) => x - train.mean);
+      const b = late.prof.map((x) => x - late.mean);
+      const na = Math.hypot(...a), nb = Math.hypot(...b);
+      if (na / (train.mean || 1) < 0.08) return 1;   // near-circle doodle: no arm structure to match
+      if (!na || !nb) return 0;
+      return Math.max(0, a.reduce((s, x, i) => s + x * b[i], 0) / (na * nb));
+    }
+    function estPeriodPts(pts) {                       // lap period via autocorrelation of x
+      const xs = pts.map((p) => p[0]);
+      let period = 60, bestV = -Infinity;
+      for (let L = 16; L <= Math.min(300, xs.length - 20); L++) {
+        let sAc = 0, cAc = 0;
+        for (let i = 0; i + L < xs.length; i += 2) { sAc += xs[i] * xs[i + L]; cAc++; }
+        if (cAc > 8 && sAc / cAc > bestV) { bestV = sAc / cAc; period = L; }
+      }
+      return period;
+    }
+    function makeGauss(seed) {
+      let s = seed >>> 0;
+      const uni = () => { s = (Math.imul(1664525, s) + 1013904223) >>> 0; return s / 4294967296; };
+      return () => { let u = uni(); if (u < 1e-12) u = 1e-12; return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * uni()); };
+    }
+    function fitCand(c, st) {
+      const cl = { useClamp: true, clampMin: [-8, -8, -8, -8], clampMax: [8, 8, 8, 8] };
+      let opts = { predictionSteps: 1, lam: 1.0, stride: c.stride || 1, ...cl };
+      if (c.kind === 'afm') {
+        const uni = universalMap(4 * c.lag, c.nh, c.nf, 1234);
+        // The universal map's DEFAULT prior all but ridges-out the random
+        // features (rand=0.001 → 1000× the quad ridge). The doodle's shape
+        // lives in exactly those features, so give them variance 1.
+        opts = { ...opts, featureMap: uni, initVariance: uni.prior({ lin: 100, quad: 1, rand: 1 }) };
+      } else {
+        opts = { ...opts, initVariance: c.iv };
+      }
+      const m = new Continuous(4, c.lag, c.poly || 2, true, opts);
+      // Noise-injected replay: independent per-presentation noise makes the
+      // regression target the MEAN path from each perturbed state — i.e. the
+      // fitted map contracts back onto the doodle. That turns the drawn loop
+      // into a genuine attractor instead of a decaying eigenmode.
+      const g = makeGauss(0x51ed1234);
+      const sig = c.noise || 0;
+      let std = null;
+      if (sig) {
+        std = [0, 1, 2, 3].map((j) => {
+          const v = st.map((q) => q[j]);
+          const mu = v.reduce((a, x) => a + x, 0) / v.length;
+          return Math.sqrt(v.reduce((a, x) => a + (x - mu) ** 2, 0) / v.length) || 1e-6;
+        });
+      }
+      for (let p = 0; p < c.passes; p++) for (const q of st) {
+        m.step(sig ? q.map((x, j) => x + sig * std[j] * g()) : q);
+      }
+      return m;
+    }
+    // One free-run step with the anti-stall watchdog: a doodle never stops,
+    // so if the predicted step collapses (a leftover stall state), restore
+    // nominal speed along the current heading.
+    function autoStep(m, s, meta) {
+      const r = m.step(s, null, true);
+      const n = [r.prediction[0][0], r.prediction[1][0], r.prediction[2][0], r.prediction[3][0]];
+      if (!n.every(Number.isFinite)) return null;
+      if (meta.guard) {
+        const v = Math.hypot(n[0], n[1]);
+        if (v < 0.5 * meta.vNom) {
+          const hd = v > 1e-6 ? [n[0] / v, n[1] / v] : [1, 0];
+          n[0] = hd[0] * meta.vNom; n[1] = hd[1] * meta.vNom;
+        }
+      }
+      return n;
+    }
+    function autoFreeRun(m, seed, c, h, n) {
+      const meta = { guard: !!c.guard, vNom: h * DSCALE };
+      let s = [...seed];
+      const tr = [];
+      for (let i = 0; i < n; i++) {
+        s = autoStep(m, s, meta);
+        if (!s) return null;
+        tr.push([s[2] / c.PS, s[3] / c.PS]);
+      }
+      return { tr, s };
+    }
+
     document.getElementById('fg-auto').addEventListener('click', () => {
       if (fgAuto) { stopAutopilot(); return; }
       const btn = document.getElementById('fg-auto');
+      const fail = (msg) => {
+        console.log('autopilot commissioning: ' + msg);
+        btn.textContent = '✍️ ' + msg;
+        setTimeout(() => { if (!fgAuto && !fgCommissioning) btn.textContent = 'Autopilot ✍️'; }, 1600);
+      };
       if (fgSamples < 3 * FK || !fgLastA || !fgLastS || !fgCent) {   // needs a doodle first — say so
         console.log('autopilot blocked: samples=' + fgSamples + ' (need ' + 3 * FK + ')');
-        const orig = 'Autopilot ✍️';
-        btn.textContent = '✍️ draw a bit more first';
-        setTimeout(() => { if (!fgAuto) btn.textContent = orig; }, 1400);
+        fail('draw a bit more first');
         return;
       }
       if (fgCommissioning) return;
-      // COMMISSION the autopilot (the library's autotune philosophy in miniature):
-      // sweep ridge strength × replay passes, free-run each candidate briefly,
-      // score orbit health (radius retention + revolutions + boundedness), and
-      // deploy the winner refit on the full log. Replaying the log K times
-      // divides the effective ridge by K, which kills the spiral-in on short
-      // doodles; the free-run test rejects the configs that diverge instead.
+      // COMMISSION the autopilot (the library's autotune philosophy): fit each
+      // candidate brain on the resampled path, free-run it LONG with the
+      // watchdog, and score shape retention on the LATE window — a slow spiral
+      // decay can't hide the way it could in a short scoring window. The
+      // winner is deployed as its OWN model; the online predictor keeps its.
       fgCommissioning = true;
       btn.textContent = 'commissioning… 🔧';
-      setTimeout(() => {
+      (async () => {
+        const tick = () => new Promise((r) => setTimeout(r, 0));
         try {
-          const log = fgLog.slice(-500);
-          const rT = log.reduce((s, q) => s + Math.hypot(q[2], q[3]), 0) / log.length;
-          const seed = log[log.length - 1];
-          const CL = { useClamp: true, clampMin: [-6, -6, -1.8, -1.8], clampMax: [6, 6, 1.8, 1.8] };
-          const fit = (c, steps) => {
-            const m = new Continuous(4, c.lag, c.poly, true, {
-              predictionSteps: steps, lam: 1.0, initVariance: c.iv, stride: c.stride || 1, ...CL,
-            });
-            const lg = steps === 1 ? log : fgLog.slice(-800);
-            for (let p = 0; p < c.passes; p++) for (const q of lg) m.step(q);
-            return m;
-          };
-          // SHAPE score: cosine similarity of radius histograms. A star has a
-          // broad radius profile, a circle a tight one — so a free-run that
-          // rounds the corners off no longer beats one that keeps them.
-          const radHist = (pts) => {
-            const rs = pts.map((p) => Math.hypot(p[0], p[1]));
-            const mx = Math.max(...rs) || 1;
-            const h = new Array(12).fill(0);
-            for (const r of rs) h[Math.min(11, Math.floor(12 * r / (mx * 1.001)))]++;
-            const n = Math.hypot(...h) || 1;
-            return h.map((x) => x / n);
-          };
-          const trainPts = log.map((q) => [q[2], q[3]]);
-          const trainHist = radHist(trainPts);
-          // Estimate the doodle's lap period (autocorrelation of the centered x)
-          // so the harmonic-bank lag windows can MATCH the user's drawing tempo.
-          let period = 60;
-          {
-            const xs = trainPts.map((p) => p[0]);
-            let bestV = -Infinity;
-            for (let L = 16; L <= Math.min(220, xs.length - 20); L++) {
-              let sAc = 0, cAc = 0;
-              for (let i = 0; i + L < xs.length; i += 2) { sAc += xs[i] * xs[i + L]; cAc++; }
-              if (cAc > 8 && sAc / cAc > bestV) { bestV = sAc / cAc; period = L; }
-            }
-          }
-          // Candidates: short-lag poly2 (smooth loops) + long-lag LINEAR — a lag
-          // window spanning ~a lap is a harmonic bank that can SUSTAIN sharp
-          // shapes (stars) which poly2/lag2 physically cannot (its features
-          // can't generate 5th harmonics, so corners decay into a circle).
+          await tick();
+          const { rs, h } = resamplePath(fgLog);
+          if (rs.length < 40) { fail('draw a few more loops'); return; }
+          const mxT = 1.3 * (rs.reduce((s, p) => Math.max(s, Math.hypot(p[0], p[1])), 0) || 1);
+          const trainHist = radHist(rs, mxT);
+          const trainAng = angProf(rs);
+          const rT = rs.reduce((s, p) => s + Math.hypot(p[0], p[1]), 0) / rs.length;
+          const period = estPeriodPts(rs);
+          const mode = document.getElementById('fg-brain').value;
+          const st10 = clamp(Math.round(period / 9), 1, 8);
+          // Short doodles need more replay (each pass divides the effective
+          // ridge); ~3600 presented samples total is the sweet spot.
+          const nP = Math.min(800, rs.length - 1);
+          const afmPasses = Math.max(6, Math.min(12, Math.round(3600 / Math.max(nP, 1))));
           const cands = [];
-          for (const iv of [0.5, 2, 8]) for (const passes of [1, 3]) cands.push({ poly: 2, lag: 2, iv, passes });
-          cands.push({ poly: 1, lag: 6, stride: 5, iv: 2, passes: 3 });
-          cands.push({ poly: 1, lag: 8, stride: 3, iv: 2, passes: 3 });
-          cands.push({ poly: 1, lag: 8, stride: 3, iv: 8, passes: 3 });
-          cands.push({ poly: 1, lag: 10, stride: 4, iv: 2, passes: 3 });
-          for (const frac of [0.5, 1.0]) {             // tempo-matched windows: ~half and ~one lap
-            const st = clamp(Math.round(period * frac / 9), 1, 8);
-            for (const iv of [2, 8]) cands.push({ poly: 1, lag: 10, stride: st, iv, passes: 3 });
+          if (mode !== 'linear') {
+            // Three AFM variants: different strides/noise fail on different
+            // doodles, but at least one holds — the long scored free-run
+            // picks the right one for THIS doodle.
+            const AF = { kind: 'afm', lag: 4, nh: 64, nf: 64, PS: 3, passes: afmPasses, guard: true };
+            cands.push({ ...AF, stride: 1, noise: 0.2, desc: 'AFM lag4/s1' });
+            cands.push({ ...AF, stride: 4, noise: 0.2, desc: 'AFM lag4/s4' });
+            cands.push({ ...AF, stride: 2, noise: 0.3, desc: 'AFM lag4/s2 n.3' });
           }
-          console.log(`autopilot commissioning: ${log.length} samples, est. lap period ${period}`);
+          if (mode !== 'afm') {
+            for (const iv of [2, 8]) cands.push({ kind: 'poly', poly: 1, lag: 10, stride: st10, iv, PS: 1, passes: 3, guard: true, desc: `linear lag10/s${st10} iv${iv}` });
+            if (mode === 'auto') cands.push({ kind: 'poly', poly: 2, lag: 2, iv: 8, PS: 1, passes: 3, guard: true, desc: 'poly2 lag2 iv8' });
+          }
+          console.log(`autopilot commissioning: path ${rs.length} pts, step ${h.toFixed(4)}, lap ~${period} steps, brain=${mode}, passes ${afmPasses}`);
           let best = null;
+          let ci = 0;
           for (const c of cands) {
-            const m = fit(c, 1);
-            let s = [...seed]; const tail = []; let alive = true;
-            for (let i = 0; i < 560; i++) {
-              const r = m.step(s, null, true);
-              s = [r.prediction[0][0], r.prediction[1][0], r.prediction[2][0], r.prediction[3][0]];
-              if (!s.every(Number.isFinite)) { alive = false; break; }
-              if (i >= 240) tail.push([s[2], s[3]]);   // score the LATE laps — where detail used to fade
+            btn.textContent = `commissioning… ${++ci}/${cands.length} 🔧`;
+            await tick();
+            const t0 = performance.now();
+            const st = statesPS(rs, c.PS).slice(-800);
+            const m = fitCand(c, st);
+            const snap = m.snapshot();               // pre-scoring state: the verified orbit's start
+            // 5000-step scored free-run (~3 min of autopilot), judged on the
+            // LATE window — escapes and slow decay both get caught here, and
+            // the deploy continues from deep inside a proven-stable orbit.
+            const run = autoFreeRun(m, st[st.length - 1], c, h, 5000);
+            await tick();
+            if (!run) { console.log(`  ${c.desc}: diverged (${Math.round(performance.now() - t0)}ms)`); continue; }
+            const win = (a, b) => {                   // score one window of the run
+              const w = run.tr.slice(a, b);
+              const rM = w.reduce((s, p) => s + Math.hypot(p[0], p[1]), 0) / w.length;
+              const retention = rM / (rT || 1e-9);
+              const hh = radHist(w, mxT);
+              const radCos = trainHist.reduce((x, y, i) => x + y * hh[i], 0);
+              const ang = angScore(trainAng, w);
+              const shape = 0.5 * radCos + 0.5 * ang;
+              return { retention, radCos, ang, shape, gated: retention > 0.25 && retention < 2.5,
+                score: shape - 0.4 * Math.abs(Math.log(Math.max(retention, 1e-6))) };
+            };
+            const early = win(400, 1000), mid = win(1200, 2400), lateW = win(3500, 5000);
+            // Adaptive verified horizon: replay only as far as the orbit stays
+            // faithful — a doodle whose arms soften late gets a shorter loop
+            // (restarts are near-invisible: the seed is on the doodle). The
+            // early window is the floor: the first ~30 s are always verified.
+            let horizon, pickW;
+            if (lateW.shape >= 0.75 && lateW.gated) { horizon = 5000; pickW = lateW; }
+            else if (mid.shape >= 0.75 && mid.gated) { horizon = 2400; pickW = mid; }
+            else { horizon = 1000; pickW = early; }
+            console.log(`  ${c.desc}: mid shape ${(100 * mid.shape).toFixed(0)}% / late ${(100 * lateW.shape).toFixed(0)}% (rad ${(100 * lateW.radCos).toFixed(0)}/ang ${(100 * lateW.ang).toFixed(0)}) size ${(100 * pickW.retention).toFixed(0)}% horizon ${horizon}${pickW.gated ? '' : ' (size-gated)'} score ${pickW.score.toFixed(2)} (${Math.round(performance.now() - t0)}ms)`);
+            if (pickW.gated && (!best || pickW.score > best.score)) {
+              best = { c, m, snap, seed: [...st[st.length - 1]], score: pickW.score, shape: pickW.shape, retention: pickW.retention, horizon };
             }
-            if (!alive || !tail.length) continue;
-            const rM = tail.reduce((a, p) => a + Math.hypot(p[0], p[1]), 0) / tail.length;
-            const retention = rM / (rT || 1e-9);
-            if (!(retention > 0.25 && retention < 2.5)) continue;
-            const tailHist = radHist(tail);
-            const shape = trainHist.reduce((a, x, i2) => a + x * tailHist[i2], 0);
-            const score = shape - 0.4 * Math.abs(Math.log(retention));
-            console.log(`  cand poly${c.poly} lag${c.lag}/s${c.stride || 1} iv${c.iv} x${c.passes}: shape ${(100 * shape).toFixed(0)}% size ${(100 * retention).toFixed(0)}% score ${score.toFixed(2)}`);
-            if (!best || score > best.score) best = { ...c, score, retention, shape };
           }
-          if (!best) {
-            console.log('autopilot commissioning: no healthy free-run — need more doodle');
-            btn.textContent = '✍️ draw a few more loops';
-            setTimeout(() => { if (!fgAuto) btn.textContent = 'Autopilot ✍️'; }, 1600);
-            return;
-          }
-          fgModel = fit(best, FK);                     // deploy the winner (keeps learning online)
-          const desc = best.poly === 1 ? `linear lag${best.lag}/s${best.stride || 1}` : `poly2 lag${best.lag}`;
-          console.log(`autopilot commissioned: ${desc} iv=${best.iv} ×${best.passes} — shape ${(100 * best.shape).toFixed(0)}%, size ${(100 * best.retention).toFixed(0)}%`);
-          fgAutoInfo = `commissioned ${desc} ×${best.passes} · shape ${(100 * best.shape).toFixed(0)}% · size ${(100 * best.retention).toFixed(0)}%`;
-          document.getElementById('fg-ap').textContent = fgAutoInfo.replace('commissioned ', '');
+          if (!best) { fail('draw a few more loops'); return; }
+          // Deploy by snapshot-RESTORE: the runtime replays the verified orbit
+          // from its start (not from wherever the scoring run drifted to), and
+          // the escape watchdog below can restart it from the same point.
+          const maxTR = mxT / 1.3;
+          fgAutoModel = best.m;
+          fgAutoModel.restore(best.snap);
+          fgAutoSnap = best.snap;
+          fgAutoSeed = [...best.seed];
+          // horizon: the orbit is VERIFIED for this many steps — restart it
+          // there rather than free-running into unverified territory
+          fgAutoMeta = { PS: best.c.PS, guard: !!best.c.guard, vNom: h * DSCALE, maxR: Math.max(2 * maxTR, maxTR + 0.3), horizon: best.horizon };
+          fgAutoSteps = 0;
+          const desc = `${best.c.desc} · shape ${(100 * best.shape).toFixed(0)}% · size ${(100 * best.retention).toFixed(0)}%`;
+          console.log(`autopilot commissioned: ${desc}`);
+          fgAutoInfo = 'commissioned ' + desc;
+          document.getElementById('fg-ap').textContent = desc;
           fgAuto = true;
-          fgSnap = fgModel.snapshot();
-          fgAutoState = [...fgLastS];
+          fgAutoState = [...best.seed];
           fgAutoPos = [...fgCent];
           fgAutoLastT = 0;
           fgAutoTrail = [den(fgLastA[0], fgLastA[1])];
@@ -785,7 +959,7 @@
         } finally {
           fgCommissioning = false;
         }
-      }, 30);
+      })();
     });
     const fgAt = (e) => {
       const r = fgCanvas.getBoundingClientRect();
@@ -894,8 +1068,9 @@
           fgCtx.fillStyle = '#7c8aa0'; fgCtx.font = '11px sans-serif'; fgCtx.textAlign = 'center';
           fgCtx.fillText('straight-line “autopilot” →', (p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2 - 8);
         }
-        // NGRC's free-run doodle
+        // NGRC's free-run doodle (null entries = pen-up gaps at orbit restarts)
         for (let i = 1; i < fgAutoTrail.length; i++) {
+          if (!fgAutoTrail[i - 1] || !fgAutoTrail[i]) continue;
           fgCtx.beginPath(); fgCtx.moveTo(fgAutoTrail[i - 1][0], fgAutoTrail[i - 1][1]); fgCtx.lineTo(fgAutoTrail[i][0], fgAutoTrail[i][1]);
           fgCtx.strokeStyle = 'rgba(245,158,11,' + (0.25 + 0.75 * i / fgAutoTrail.length).toFixed(2) + ')';
           fgCtx.lineWidth = 3; fgCtx.stroke();
@@ -942,11 +1117,22 @@
       if (fgAuto) {
         if (performance.now() - fgAutoLastT >= 33) {  // paced: same speed on 60/120 Hz displays
           fgAutoLastT = performance.now();
-          const res = fgModel.step(fgAutoState, null, true);
-          fgAutoState = [res.prediction[0][0], res.prediction[1][0], res.prediction[2][0], res.prediction[3][0]];
-          if (fgAutoState.every(Number.isFinite)) {
+          const n = autoStep(fgAutoModel, fgAutoState, fgAutoMeta);
+          // Escape watchdog: if the model goes non-finite or the pen leaves
+          // ~2× the doodle's radius, restart the VERIFIED orbit from its
+          // snapshot instead of flying off-screen. Healthy runs never trip it.
+          const past = ++fgAutoSteps > fgAutoMeta.horizon;
+          if (!n || past || Math.hypot(n[2] / fgAutoMeta.PS, n[3] / fgAutoMeta.PS) > fgAutoMeta.maxR) {
+            if (!past) console.log('autopilot watchdog: orbit ' + (n ? 'escaped' : 'diverged') + ' — restarting the verified orbit');
+            fgAutoModel.restore(fgAutoSnap);
+            fgAutoState = [...fgAutoSeed];
+            if (past) fgAutoTrail.push(null);        // pen-up gap, keep the drawn doodle
+            else fgAutoTrail = [];
+            fgAutoSteps = 0;
+          } else {
+            fgAutoState = n;
             // draw the centered-position variables directly (no integration → no drift)
-            fgAutoTrail.push(den(fgAutoPos[0] + fgAutoState[2], fgAutoPos[1] + fgAutoState[3]));
+            fgAutoTrail.push(den(fgAutoPos[0] + n[2] / fgAutoMeta.PS, fgAutoPos[1] + n[3] / fgAutoMeta.PS));
             if (fgAutoTrail.length > 600) fgAutoTrail.shift();
           }
         }

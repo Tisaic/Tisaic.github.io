@@ -96,7 +96,24 @@ the shipped commit carries the correct version.
    sampling; amber NGRC ghost vs gray **straight-line extrapolation** ~0.6 s
    ahead — ~7× better on curves — plus **Autopilot**: NGRC free-runs and keeps
    drawing your doodle by itself while the straight-line "autopilot" is a
-   dashed ray off-screen; grouped error-vs-horizon bars).
+   dashed ray off-screen; grouped error-vs-horizon bars. The autopilot is
+   **commissioned on demand**: the drawn path is arc-length-resampled to
+   constant speed (kills the stall fixed points that corner dwells/tremor
+   teach), then candidate brains — three variants of the library's **AFM
+   universal map** (ReLU+Fourier, boosted `rand` prior — the default
+   `rand=0.001` ridges the shape-carrying features out — with noise-injected
+   replay so the doodle becomes a true attractor) vs **linear** (kept as a
+   comparison option via the on-page brain selector) — are each free-run
+   5000 steps with an anti-stall watchdog and scored on early/mid/late
+   windows (shape = radius-histogram cosine **+ angular-profile cosine**;
+   the radius histogram alone is blind to a lobe covering a star's radius
+   range). The winner deploys by **snapshot-restore**: the runtime replays
+   the *verified* orbit from its start and a watchdog restarts it at the
+   verified horizon (5000/2400/1000 steps, whichever window stayed ≥75%
+   faithful) or on escape/divergence — so the doodle never decays, ever.
+   Winner runs as its own model; the online ghost predictor is never
+   replaced. Verified headless: square/triangle/star/fig-8/circle at
+   human and machine tempos, ≥75 s each, star arms intact throughout).
 
 ## Versioning
 
