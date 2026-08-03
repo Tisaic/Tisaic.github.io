@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:36,built:"2026-08-03T20:39:02Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:37,built:"2026-08-03T21:12:30Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -700,27 +700,40 @@
     // removes every stall and speed cue while keeping the geometry exact.
     function resamplePath(log) {
       let pts = log.map((q) => [q[2], q[3]]);
+      // Per-step lengths from raw POSITIONS (immune to state conventions), and
+      // a jump threshold: a step far beyond the median is a stroke lift or
+      // relocation — never path.
+      const steps = [];
+      for (let i = 1; i < pts.length; i++) steps.push(Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+      const sorted = steps.filter((x) => x > 0).sort((a, b) => a - b);
+      const med = sorted[Math.floor(sorted.length / 2)] || 0.01;
+      const jump = Math.max(0.12, 5 * med);
       // Two light [.25,.5,.25] passes kill finger tremor BEFORE it becomes the
-      // training target (the autopilot was faithfully reproducing hand wobble).
-      // Corners survive: dwells oversample them, so the kernel barely moves them.
+      // training target — corners survive (dwells oversample them) and the
+      // kernel NEVER averages across a stroke jump.
       for (let p = 0; p < 2; p++) {
         const nx = [pts[0]];
         for (let i = 1; i < pts.length - 1; i++) {
-          nx.push([0.25 * pts[i - 1][0] + 0.5 * pts[i][0] + 0.25 * pts[i + 1][0],
-                   0.25 * pts[i - 1][1] + 0.5 * pts[i][1] + 0.25 * pts[i + 1][1]]);
+          const dP = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+          const dN = Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]);
+          nx.push((dP > jump || dN > jump) ? pts[i]
+            : [0.25 * pts[i - 1][0] + 0.5 * pts[i][0] + 0.25 * pts[i + 1][0],
+               0.25 * pts[i - 1][1] + 0.5 * pts[i][1] + 0.25 * pts[i + 1][1]]);
         }
         nx.push(pts[pts.length - 1]);
         pts = nx;
       }
-      const sp = log.map((q) => Math.hypot(q[0], q[1]) / DSCALE).sort((a, b) => a - b);
-      // 60th-pct speed: brisk but honest. Capped at 0.05/step — a very fast
-      // drag otherwise yields ~20 steps/lap, too coarse for a stable orbit.
-      const h = Math.max(Math.min(sp[Math.floor(sp.length * 0.6)] || 0, 0.05), 1e-4);
+      // 60th-pct speed (jump steps excluded): brisk but honest. Capped at
+      // 0.05/step — a very fast drag otherwise yields too few steps per lap.
+      const walkable = sorted.filter((x) => x <= jump);
+      const h = Math.max(Math.min(walkable[Math.floor(walkable.length * 0.6)] || 0, 0.05), 1e-4);
       const rs = [pts[0]];
       let prev = pts[0], carry = 0;
       for (let i = 1; i < pts.length; i++) {
-        let a = prev; const b = pts[i];
-        let seg = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        const b = pts[i];
+        let seg = Math.hypot(b[0] - prev[0], b[1] - prev[1]);
+        if (seg > jump) { prev = b; carry = 0; continue; }   // pen jump: do NOT bridge it
+        let a = prev;
         while (carry + seg >= h) {
           const t = (h - carry) / seg;
           const p = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
@@ -900,32 +913,32 @@
           const mode = document.getElementById('fg-brain').value;
           const st10 = clamp(Math.round(period / 9), 1, 8);
           // Short doodles need more replay (each pass divides the effective
-          // ridge); ~2400 presented samples total is the sweet spot.
-          const nP = Math.min(600, rs.length - 1);
-          const afmPasses = Math.max(3, Math.min(12, Math.round(2400 / Math.max(nP, 1))));
+          // ridge). Adaptive escalation: a LEAN fast fit runs first and
+          // deploys immediately only if excellent; otherwise the sweep
+          // escalates to FULL-strength fits — speed for easy doodles, full
+          // quality for hard ones.
+          const passesFor = (take, target, lo) => Math.max(lo, Math.min(12, Math.round(target / Math.max(Math.min(take, rs.length - 1), 1))));
           const cands = [];
           if (mode !== 'linear') {
-            // Three AFM variants: different strides/noise fail on different
-            // doodles, but at least one holds — the long scored free-run
-            // picks the right one for THIS doodle (early exit skips the rest
-            // when the first is already excellent).
-            const AF = { kind: 'afm', lag: 4, nh: 48, nf: 48, PS: 3, passes: afmPasses, guard: true };
-            cands.push({ ...AF, stride: 1, noise: 0.2, desc: 'AFM lag4/s1' });
-            cands.push({ ...AF, stride: 4, noise: 0.2, desc: 'AFM lag4/s4' });
-            cands.push({ ...AF, stride: 2, noise: 0.3, desc: 'AFM lag4/s2 n.3' });
+            const LEAN = { kind: 'afm', lag: 4, nh: 48, nf: 48, PS: 3, take: 600, passes: passesFor(600, 2400, 3), guard: true };
+            const FULL = { kind: 'afm', lag: 4, nh: 64, nf: 64, PS: 3, take: 800, passes: passesFor(800, 3600, 6), guard: true };
+            cands.push({ ...LEAN, stride: 1, noise: 0.2, exitScore: 0.9, desc: 'AFM lean/s1' });
+            cands.push({ ...FULL, stride: 1, noise: 0.2, desc: 'AFM full/s1' });
+            cands.push({ ...FULL, stride: 4, noise: 0.2, desc: 'AFM full/s4' });
+            cands.push({ ...FULL, stride: 2, noise: 0.3, desc: 'AFM full/s2 n.3' });
           }
           if (mode !== 'afm') {
-            for (const iv of [2, 8]) cands.push({ kind: 'poly', poly: 1, lag: 10, stride: st10, iv, PS: 1, passes: 3, guard: true, desc: `linear lag10/s${st10} iv${iv}` });
-            if (mode === 'auto') cands.push({ kind: 'poly', poly: 2, lag: 2, iv: 8, PS: 1, passes: 3, guard: true, desc: 'poly2 lag2 iv8' });
+            for (const iv of [2, 8]) cands.push({ kind: 'poly', poly: 1, lag: 10, stride: st10, iv, PS: 1, take: 600, passes: 3, guard: true, desc: `linear lag10/s${st10} iv${iv}` });
+            if (mode === 'auto') cands.push({ kind: 'poly', poly: 2, lag: 2, iv: 8, PS: 1, take: 600, passes: 3, guard: true, desc: 'poly2 lag2 iv8' });
           }
-          console.log(`autopilot commissioning: path ${rs.length} pts, step ${h.toFixed(4)}, lap ~${period} steps, brain=${mode}, passes ${afmPasses}`);
+          console.log(`autopilot commissioning: path ${rs.length} pts, step ${h.toFixed(4)}, lap ~${period} steps, brain=${mode}`);
           let best = null;
           let ci = 0;
           for (const c of cands) {
             btn.textContent = `commissioning… ${++ci}/${cands.length} 🔧`;
             await tick();
             const t0 = performance.now();
-            const st = statesPS(rs, c.PS).slice(-600);
+            const st = statesPS(rs, c.PS).slice(-(c.take || 600));
             const m = fitCand(c, st);
             const snap = m.snapshot();               // pre-scoring state: the verified orbit's start
             // 5000-step scored free-run (~3 min of autopilot), judged on the
@@ -958,10 +971,11 @@
             if (pickW.gated && (!best || pickW.score > best.score)) {
               best = { c, m, snap, seed: [...st[st.length - 1]], score: pickW.score, shape: pickW.shape, retention: pickW.retention, horizon };
             }
-            // Early exit: an excellent full-horizon candidate ends the sweep —
-            // this is what keeps typical commissioning to ONE AFM fit.
-            if (best && best.c === c && best.horizon === 5000 && best.score >= 0.85) {
-              console.log('  early exit — candidate is excellent');
+            // Early exit: only the LEAN candidate carries an exit bar, and only
+            // an excellent full-horizon result clears it — anything less
+            // escalates to the full-strength sweep.
+            if (best && best.c === c && c.exitScore && best.horizon === 5000 && best.score >= c.exitScore) {
+              console.log('  early exit — lean candidate is excellent');
               break;
             }
           }
@@ -995,6 +1009,9 @@
           fgAutoRay = { x: cLastA[0], y: cLastA[1], vx: cLastVel[0] / sp, vy: cLastVel[1] / sp };
           fgAuto = true;                             // last: everything the render loop needs is set
           btn.textContent = 'Stop autopilot ⏹';
+        } catch (err) {
+          console.error('autopilot commissioning failed: ' + (err && err.message ? err.message : err));
+          btn.textContent = 'Autopilot ✍️';
         } finally {
           fgCommissioning = false;
         }
@@ -1036,24 +1053,28 @@
       if (!fgCent) fgCent = [...a];
       fgCent[0] += 0.05 * (a[0] - fgCent[0]); fgCent[1] += 0.05 * (a[1] - fgCent[1]);
       fgCentLast = fgCent;
-      // EMA velocity in the state (not the raw one-sample diff): tremor lives
-      // in the raw diff, and the model shouldn't be asked to predict it
-      const s = [fgVel[0] * DSCALE, fgVel[1] * DSCALE, a[0] - fgCent[0], a[1] - fgCent[1]];
+      const s = [(a[0] - fgPrev[0]) * DSCALE, (a[1] - fgPrev[1]) * DSCALE, a[0] - fgCent[0], a[1] - fgCent[1]];
       const res = fgModel.step(s);
       fgSamples++;
       fgLastS = s;
       fgLog.push(s);
       if (fgLog.length > 1200) fgLog.shift();
       // ghosts = predicted centered-position variables, re-anchored at the
-      // centroid: DIRECT readouts (shown) and the 1-step rollout (plot only)
-      const pred = [[], []], rolled = [[], []];
+      // centroid. The DISPLAYED ghost picks, per horizon, whichever family is
+      // measurably better right now (tracked misses below): the 1-step rollout
+      // converges within seconds, the direct readouts overtake it soon after —
+      // so a fresh doodle never shows a cold, collapsed direct ghost.
+      const pred = [[], []], rolled = [[], []], shown = [[], []];
       for (let k = 0; k < FK; k++) {
         pred[0].push(fgCent[0] + res.directPrediction[2][k]);
         pred[1].push(fgCent[1] + res.directPrediction[3][k]);
         rolled[0].push(fgCent[0] + res.prediction[2][k]);
         rolled[1].push(fgCent[1] + res.prediction[3][k]);
+        const useDirect = fgSamples > 60 && fgEN[k] < fgEI[k];
+        shown[0].push(useDirect ? pred[0][k] : rolled[0][k]);
+        shown[1].push(useDirect ? pred[1][k] : rolled[1][k]);
       }
-      fgPredMat = pred;
+      fgPredMat = shown;
       fgCvMat = cv;
       fgA.push(a);
       fgPend.push({ i: fgA.length - 1, n: pred, r: rolled, c: cv });
