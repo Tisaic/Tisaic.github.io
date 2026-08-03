@@ -94,7 +94,11 @@ the shipped commit carries the correct version.
    scored filter bank — with an on-stage error meter + ×-better readout, ~4×,
    and a 3-trace Plotly chart), **③ finger-trace** (draw loops at ~20 Hz
    sampling; amber NGRC ghost vs gray **straight-line extrapolation** ~0.6 s
-   ahead — ~7× better on curves — plus **Autopilot**: NGRC free-runs and keeps
+   ahead. The ghost uses the library's **direct multi-horizon readouts**
+   (`directHorizons`) — iterating the 1-step model compounds its error, a
+   known-poor mode that the chart shows explicitly as a third bar series —
+   and the model state uses the EMA velocity, not the raw one-sample diff,
+   so finger tremor isn't a prediction target. Plus **Autopilot**: NGRC free-runs and keeps
    drawing your doodle by itself while the straight-line "autopilot" is a
    dashed ray off-screen; grouped error-vs-horizon bars. The autopilot is
    **commissioned on demand**: the drawn path is arc-length-resampled to
