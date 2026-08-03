@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:33,built:"2026-08-03T18:04:58Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:34,built:"2026-08-03T18:44:44Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -640,6 +640,8 @@
     let fgAutoTrail = [], fgAutoRay = null, fgAutoModel = null, fgAutoMeta = null;
     let fgAutoSnap = null, fgAutoSeed = null;       // verified-orbit restart point (escape watchdog)
     let fgAutoSteps = 0;
+    let fgCentLast = null;                          // last stroke's centroid — survives pointerdown
+    let fgAutoGen = 0;                              // bumped on any new input/stop → cancels an in-flight commissioning
     let fgLog = [], fgAutoInfo = '', fgCommissioning = false;
     // Scoring resets so a pause/lift can't be scored against stale predictions.
     // CRITICAL: fgPrev is KEPT — humans dwell at doodle corners, and nulling
@@ -672,6 +674,7 @@
     function stopAutopilot() {
       // The autopilot runs its own commissioned model; dropping it is a full
       // stop — the online predictor (fgModel) was never touched.
+      fgAutoGen++;                                  // invalidate any in-flight commissioning
       fgAuto = false; fgAutoState = null; fgAutoPos = null; fgAutoDrift = null;
       fgAutoTrail = []; fgAutoRay = null; fgAutoModel = null; fgAutoMeta = null;
       fgAutoSnap = null; fgAutoSeed = null; fgAutoInfo = ''; fgCommissioning = false;
@@ -846,12 +849,17 @@
         btn.textContent = '✍️ ' + msg;
         setTimeout(() => { if (!fgAuto && !fgCommissioning) btn.textContent = 'Autopilot ✍️'; }, 1600);
       };
-      if (fgSamples < 3 * FK || !fgLastA || !fgLastS || !fgCent) {   // needs a doodle first — say so
-        console.log('autopilot blocked: samples=' + fgSamples + ' (need ' + 3 * FK + ')');
+      if (fgSamples < 3 * FK || !fgLastA || !fgLastS || !fgCentLast) {   // needs a doodle first — say so
+        console.log('autopilot blocked: samples=' + fgSamples + ' of ' + 3 * FK + ', lastA=' + !!fgLastA + ', cent=' + !!fgCentLast);
         fail('draw a bit more first');
         return;
       }
       if (fgCommissioning) return;
+      // Capture the anchor NOW: a touch during the multi-second commissioning
+      // nulls fgCent (new stroke) — dereferencing it at deploy crashed. The
+      // generation token cancels the deploy entirely if new input arrives.
+      const gen = ++fgAutoGen;
+      const cCent = [...fgCentLast], cLastA = [...fgLastA], cLastVel = [...fgLastVel];
       // COMMISSION the autopilot (the library's autotune philosophy): fit each
       // candidate brain on the resampled path, free-run it LONG with the
       // watchdog, and score shape retention on the LATE window — a slow spiral
@@ -932,6 +940,11 @@
             }
           }
           if (!best) { fail('draw a few more loops'); return; }
+          if (gen !== fgAutoGen) {                   // user drew / reset while we were commissioning
+            console.log('autopilot commissioning: cancelled — new input during commissioning');
+            btn.textContent = 'Autopilot ✍️';
+            return;
+          }
           // Deploy by snapshot-RESTORE: the runtime replays the verified orbit
           // from its start (not from wherever the scoring run drifted to), and
           // the escape watchdog below can restart it from the same point.
@@ -948,13 +961,13 @@
           console.log(`autopilot commissioned: ${desc}`);
           fgAutoInfo = 'commissioned ' + desc;
           document.getElementById('fg-ap').textContent = desc;
-          fgAuto = true;
           fgAutoState = [...best.seed];
-          fgAutoPos = [...fgCent];
+          fgAutoPos = cCent;
           fgAutoLastT = 0;
-          fgAutoTrail = [den(fgLastA[0], fgLastA[1])];
-          const sp = Math.hypot(fgLastVel[0], fgLastVel[1]) || 1e-6;
-          fgAutoRay = { x: fgLastA[0], y: fgLastA[1], vx: fgLastVel[0] / sp, vy: fgLastVel[1] / sp };
+          fgAutoTrail = [den(cLastA[0], cLastA[1])];
+          const sp = Math.hypot(cLastVel[0], cLastVel[1]) || 1e-6;
+          fgAutoRay = { x: cLastA[0], y: cLastA[1], vx: cLastVel[0] / sp, vy: cLastVel[1] / sp };
+          fgAuto = true;                             // last: everything the render loop needs is set
           btn.textContent = 'Stop autopilot ⏹';
         } finally {
           fgCommissioning = false;
@@ -968,6 +981,7 @@
     fgCanvas.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       if (fgAuto) stopAutopilot();                    // touching takes back control
+      fgAutoGen++;                                    // also cancels an in-flight commissioning
       fgAt(e); fgPtr.down = true; fgTrail = [];
       fgCent = null;                                  // each stroke gets its own centroid
       fgPrev = null; fgVel = [0, 0];                  // relocation: restart the differencer
@@ -995,6 +1009,7 @@
       for (let k = 1; k <= FK; k++) { cv[0].push(a[0] + fgVel[0] * k); cv[1].push(a[1] + fgVel[1] * k); }
       if (!fgCent) fgCent = [...a];
       fgCent[0] += 0.05 * (a[0] - fgCent[0]); fgCent[1] += 0.05 * (a[1] - fgCent[1]);
+      fgCentLast = fgCent;
       const s = [(a[0] - fgPrev[0]) * DSCALE, (a[1] - fgPrev[1]) * DSCALE, a[0] - fgCent[0], a[1] - fgCent[1]];
       const res = fgModel.step(s);
       fgSamples++;
@@ -1115,7 +1130,7 @@
     function fgTick() {
       if (activeTab !== 'finger') { requestAnimationFrame(fgTick); return; }
       if (fgAuto) {
-        if (performance.now() - fgAutoLastT >= 33) {  // paced: same speed on 60/120 Hz displays
+        if (fgAutoModel && fgAutoPos && performance.now() - fgAutoLastT >= 33) {  // paced: same speed on 60/120 Hz displays
           fgAutoLastT = performance.now();
           const n = autoStep(fgAutoModel, fgAutoState, fgAutoMeta);
           // Escape watchdog: if the model goes non-finite or the pen leaves
