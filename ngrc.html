@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:47,built:"2026-08-04T13:48:01Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:48,built:"2026-08-04T14:11:47Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -131,11 +131,6 @@
     <div class="stage" id="fg-stage" style="height:44vh"></div>
     <div class="controls">
       <button id="fg-auto">Autopilot ✍️</button>
-      <select id="fg-brain" title="autopilot brain">
-        <option value="auto">brain: auto</option>
-        <option value="afm">brain: AFM</option>
-        <option value="linear">brain: linear</option>
-      </select>
       <button id="fg-reset" class="sec">Reset brain</button>
       <select id="fg-guide" title="tracing guide (visual only — the model never sees it)">
         <option value="none">guide: none</option>
@@ -700,11 +695,11 @@
     // locked loop's constant-speed states with light noise — so brain=AFM
     // deploys INSTANTLY (no commissioning sweep).
     let fgCyc = null, fgLastFam = 'roll';
-    function cycRefresh() {
-      if (!fgLoop) return;
-      const lp = fgLoop;
+    function cycRefresh(ptsIn, closed) {
+      const lp = ptsIn || fgLoop;
+      if (!lp || lp.length < 20) return;
       const st = [];
-      for (let i = 0; i < lp.length; i++) {
+      for (let i = closed ? 0 : 1; i < lp.length; i++) {
         const a2 = lp[(i + lp.length - 1) % lp.length], b2 = lp[i];
         st.push([(b2[0] - a2[0]) * DSCALE, (b2[1] - a2[1]) * DSCALE, b2[0] * 3, b2[1] * 3]);
       }
@@ -728,7 +723,8 @@
       if (!C || !C.st.length) return;
       while (performance.now() < deadline) {
         const q = C.st[C.i];
-        C.m.step(q.map((x, j) => x + 0.2 * C.std[j] * C.g()));
+        const r = C.m.step(q.map((x, j) => x + 0.2 * C.std[j] * C.g()));
+        C.err = r.overallRmse;
         C.i = (C.i + 1) % C.st.length;
         C.fed++;
       }
@@ -1028,10 +1024,10 @@
         return;
       }
       if (fgCommissioning) return;
-      // brain=AFM with a warm cyclic model: deploy INSTANTLY — the model has
-      // been training continuously on the loop the whole time
-      if (document.getElementById('fg-brain').value === 'afm' && fgCyc && fgCyc.fed > 1500 && fgLoop) {
-        const maxTR2 = fgLoop.reduce((x, p) => Math.max(x, Math.hypot(p[0], p[1])), 0) || 1;
+      // The autopilot IS the continuously-trained AFM. Warm model: deploy
+      // INSTANTLY — it has been training the whole time you traced.
+      if (fgCyc && fgCyc.fed > 1200 && fgCyc.st.length) {
+        const maxTR2 = fgCyc.st.reduce((x, q) => Math.max(x, Math.hypot(q[2], q[3]) / 3), 0) || 1;
         fgAutoModel = fgCyc.m;
         fgAutoSnap = fgCyc.m.snapshot();
         fgAutoSeed = [...fgCyc.st[(fgCyc.i + fgCyc.st.length - 1) % fgCyc.st.length]];
@@ -1048,26 +1044,6 @@
         document.getElementById('fg-ap').textContent = fgAutoInfo;
         console.log('autopilot: AFM deployed from CYCLIC training (no commissioning) — ' + fgCyc.fed + ' steps fed');
         fgAuto = true;
-        btn.textContent = 'Stop autopilot ⏹';
-        return;
-      }
-      // AUTO mode with a locked path: the autopilot IS the phase-domain
-      // engine — replay the user's own stored loop at their learned tempo
-      // (crisp corners, exact geometry, cannot decay). Instant: no fitting.
-      // The AFM / linear brains remain on the selector for comparison.
-      if (document.getElementById('fg-brain').value === 'auto' && fgLoop && fgLoop.length > 30) {
-        fgAutoMode = 'path';
-        fgAutoPh = fgPhase;
-        fgAutoDs = [...fgDsLags];
-        fgAutoDsSm = fgDsMed || 1;
-        fgAuto = true;
-        fgAutoLastT = 0;
-        fgAutoTrail = [den(fgLastA[0], fgLastA[1])];
-        const sp0 = Math.hypot(fgLastVel[0], fgLastVel[1]) || 1e-6;
-        fgAutoRay = { x: fgLastA[0], y: fgLastA[1], vx: fgLastVel[0] / sp0, vy: fgLastVel[1] / sp0 };
-        fgAutoInfo = `path-locked replay · lap ~${fgLoop.length} steps · your tempo`;
-        document.getElementById('fg-ap').textContent = `path-locked replay · lap ~${fgLoop.length} steps`;
-        console.log('autopilot: path-locked replay (no fit needed) — lap ~' + fgLoop.length + ' steps');
         btn.textContent = 'Stop autopilot ⏹';
         return;
       }
@@ -1094,7 +1070,7 @@
           const trainAng = angProf(rs);
           const rT = rs.reduce((s, p) => s + Math.hypot(p[0], p[1]), 0) / rs.length;
           const period = estPeriodPts(rs);
-          const mode = document.getElementById('fg-brain').value;
+          const mode = 'afm';                       // one brain: AFM only
           const st10 = clamp(Math.round(period / 9), 1, 8);
           // Short doodles need more replay (each pass divides the effective
           // ridge). Adaptive escalation: a LEAN fast fit runs first and
@@ -1298,7 +1274,7 @@
       if (fgLog.length > 1200) fgLog.shift();
       // PATH refresh (cheap — no fitting): keep the stored loop tracking the
       // doodle so path-locked predictions stay pinned to fresh geometry
-      if (fgSamples >= 160 && fgSamples % 24 === 0) {
+      if (fgSamples >= 80 && fgSamples % 16 === 0) {
         const abs = fgA.slice(-900).map((p) => [p[0], p[1]]);
         abs.push(a);
         const rp = resamplePath(abs.map((p) => [0, 0, p[0], p[1]]));
@@ -1340,10 +1316,13 @@
         if (!ok) {
           fgLoopMiss++;
           if (fgLoopMiss > 5) { fgLoop = null; fgLoopMiss = 0; fgLoopAge = 0; }  // force global re-lock
+          if (!fgLoop) cycRefresh(rp.rs.slice(-600), false);   // continuous training starts BEFORE lap lock
         }
         if (ok) {
           fgLoopMiss = 0;
-          fgLoopAge = (fgLoop && Math.abs(fgLoop.length - L) <= 6) ? fgLoopAge + 24 : 0;
+          // age persists across refined adoptions (refinement keeps lap
+          // continuity); it resets only when the lock was lost outright
+          fgLoopAge = fgLoop ? fgLoopAge + 16 : 0;
           const lp = rp.rs.slice(-L).map((p) => [p[0], p[1]]);
           // close the seam: lap-to-lap drift leaves a wrap gap that replays as
           // a jagged hitch every lap — distribute it linearly around the loop
@@ -1361,7 +1340,7 @@
             for (let i2 = 0; i2 < lp.length; i2++) lp[i2] = nx[i2];
           }
           fgLoop = lp; fgLoopH = rp.h;
-          cycRefresh();
+          cycRefresh(fgLoop, true);
           let bi = 0, bd = Infinity;                 // re-acquire phase on the fresh loop
           for (let i2 = 0; i2 < fgLoop.length; i2++) { const d = (fgLoop[i2][0] - a[0]) ** 2 + (fgLoop[i2][1] - a[1]) ** 2; if (d < bd) { bd = d; bi = i2; } }
           fgPhase = bi;
@@ -1688,6 +1667,10 @@
       const opReady = ready && fgOPn[si] > 0 && fgOPl[si] > 0;
       document.getElementById('fg-op').textContent = opReady
         ? `${Math.sqrt(fgOPn[si] / fgET).toFixed(3)} vs line ${Math.sqrt(fgOPl[si] / fgET).toFixed(3)}` : '—';
+      if (!fgAuto && fgCyc) {
+        document.getElementById('fg-ap').textContent =
+          `training live · ${fgCyc.fed} steps · fit err ${(fgCyc.err || 0).toFixed(3)}` + (fgLoop ? ' · lap locked' : '');
+      }
       document.getElementById('fg-opadv').textContent = opReady
         ? `${Math.sqrt(fgOPl[si] / fgOPn[si]).toFixed(0)}× closer · ${Math.round(fgOPl[si] / fgOPn[si]).toLocaleString()}× less error energy` : '—';
       if (++fgPlotTick % 10 === 0) fgUpdatePlot();

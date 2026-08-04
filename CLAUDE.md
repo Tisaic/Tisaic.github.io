@@ -127,13 +127,12 @@ the shipped commit carries the correct version.
    over the locked loop (~3 ms/frame budget, noise-hardened) — the
    library's continuous-training idea — so brain=AFM deploys **instantly**
    from the always-warm model (fallback: commissioned on demand when no
-   loop is locked). The linear brain stays commissioned on demand: the drawn path is arc-length-resampled to
+   loop is locked). The cold-start fallback is a short AFM-only sweep: the drawn path is arc-length-resampled to
    constant speed (kills the stall fixed points that corner dwells/tremor
    teach), then candidate brains — three variants of the library's **AFM
    universal map** (ReLU+Fourier, boosted `rand` prior — the default
    `rand=0.001` ridges the shape-carrying features out — with noise-injected
-   replay so the doodle becomes a true attractor) vs **linear** (kept as a
-   comparison option via the on-page brain selector) — are each free-run
+   replay so the doodle becomes a true attractor) (the single autopilot brain — the selector was removed) — are each free-run
    5000 steps with an anti-stall watchdog and scored on early/mid/late
    windows (shape = radius-histogram cosine **+ angular-profile cosine**;
    the radius histogram alone is blind to a lobe covering a star's radius

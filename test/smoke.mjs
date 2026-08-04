@@ -140,7 +140,7 @@ await demo.click('#fg-auto');
 await demo.waitForFunction(() => document.getElementById('fg-auto').textContent.includes('Stop'), null, { timeout: 60000 });
 await demo.waitForTimeout(800);
 check('ngrc: autopilot commissions + free-runs without errors', demoErrors.length === 0, demoErrors.join(' | '));
-check('ngrc: autopilot brain row is populated', /shape|path-locked/.test(await demo.textContent('#fg-ap')));
+check('ngrc: autopilot brain row is populated', /shape|path-locked|AFM|training/.test(await demo.textContent('#fg-ap')));
 await demo.screenshot({ path: join(SHOTS, '06-finger.png') });
 await demo.click('#fg-auto');
 check('ngrc: playground has no errors overall', demoErrors.length === 0, demoErrors.join(' | '));
