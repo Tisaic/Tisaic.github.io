@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:52,built:"2026-08-04T18:59:38Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:53,built:"2026-08-04T20:17:10Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -704,6 +704,7 @@
     // loop indices whose incoming step is a teleport — never interpolated,
     // never smoothed, never trained, drawn as a pen-up.
     let fgAbs = [], fgLoopGaps = null, fgUpMs = 0;
+    let fgKnnJ = -1;                                // tracked analogue index into fgAbs (kNN baseline)
     function cycRefresh(ptsIn, closedIn, gapsIn) {
       const lp = ptsIn || fgLoop;
       if (!lp || lp.length < 20) return;
@@ -855,7 +856,7 @@
       fgLoop = null; fgPhase = 0; fgDsLags = [1, 1, 1];
       fgDsObs = []; fgDsMed = 1; fgGhostArc = null; fgLoopMiss = 0; fgLoopAge = 0;
       fgCyc = null;
-      fgAbs = []; fgLoopGaps = null; fgUpMs = 0;
+      fgAbs = []; fgLoopGaps = null; fgUpMs = 0; fgKnnJ = -1;
       fgFrozen = false;
       const fz = document.getElementById('fg-freeze');
       if (fz) fz.textContent = 'Freeze ❄️';
@@ -903,8 +904,11 @@
       let pts = log.map((q) => [q[2], q[3]]);
       // Explicit pen-lift flags (q[4] truthy = the step INTO this point is a
       // lift) — a multi-stroke doodle's lifts can be spatially SHORT (two
-      // nearby strokes), so distance alone can't catch them.
-      const brkF = log.map((q) => !!q[4]);
+      // nearby strokes), so distance alone can't catch them. But a flagged
+      // step that barely MOVES is a touch skip, not a teleport: honor the
+      // flag only when the pen actually lands somewhere else.
+      const brkF = log.map((q, i) => !!q[4] && i > 0
+        && Math.hypot(q[2] - log[i - 1][2], q[3] - log[i - 1][3]) > 0.06);
       // Per-step lengths from raw POSITIONS (immune to state conventions), and
       // a jump threshold: a step far beyond the median is a stroke lift or
       // relocation — never path.
@@ -1103,7 +1107,12 @@
       // MULTI-STROKE patterns (pen lifts inside the lap): an AFM free-run
       // cannot teleport, so the autopilot IS the phase-domain engine — replay
       // the stored loop at the learned tempo, lifting the pen at each gap.
-      if (fgLoop && fgLoopGaps && fgLoopGaps.size && fgLoopAge >= 48 && fgDsTh) {
+      // Corroborate with the lift count: a structural pattern lifts EVERY lap
+      // (≥2 recent lifts), while one stray marker transiting the lap window
+      // must not hijack a circle's AFM deploy.
+      const recentLifts = fgLoop ? fgAbs.slice(-Math.max(200, 3 * fgLoop.length)).filter((p) => p === null).length : 0;
+      const structuralGaps = !!(fgLoop && fgLoopGaps && fgLoopGaps.size && recentLifts >= 2);
+      if (structuralGaps && fgLoopAge >= 48 && fgDsTh) {
         fgAutoMode = 'path';
         fgAutoPh = fgPhase; fgAutoDs = [...fgDsLags]; fgAutoDsSm = fgDsMed || 1;
         fgAutoLastT = 0;
@@ -1118,16 +1127,18 @@
         btn.textContent = 'Stop autopilot ⏹';
         return;
       }
-      // Lifts present but no usable lap yet (no lock, or a gapped lock still
-      // too young for replay): the commissioning sweep would fit an AFM across
-      // fake bridges — ask for more pattern instead.
-      if (fgAbs.slice(-500).some((p) => p === null) && !(fgLoop && (!fgLoopGaps || !fgLoopGaps.size))) {
+      // Lifts present but no usable lap yet (no lock, or a structurally
+      // gapped lock still too young for replay): the commissioning sweep
+      // would fit an AFM across fake bridges — ask for more pattern instead.
+      // A lock with only TRANSIENT gaps (one stray lift marker) falls through
+      // to the normal AFM deploy.
+      if (fgAbs.slice(-500).some((p) => p === null) && !(fgLoop && !structuralGaps)) {
         fail('multi-stroke — repeat the pattern until it locks');
         return;
       }
       // The autopilot IS the continuously-trained AFM. Warm model: deploy
       // INSTANTLY — it has been training the whole time you traced.
-      if (fgCyc && fgCyc.closed && (!fgLoopGaps || !fgLoopGaps.size) && fgCyc.fed > 1500 && fgCyc.st.length) {
+      if (fgCyc && fgCyc.closed && !structuralGaps && fgCyc.fed > 1500 && fgCyc.st.length) {
         const maxTR2 = fgCyc.st.reduce((x, q) => Math.max(x, Math.hypot(q[2], q[3]) / 3), 0) || 1;
         fgAutoModel = fgCyc.m;
         fgAutoSnap = fgCyc.m.snapshot();
@@ -1295,6 +1306,8 @@
       if (fgAbs.length) {
         const upFor = fgUpMs ? performance.now() - fgUpMs : 0;
         const a0 = nrm(fgPtr.x, fgPtr.y);
+        const lastP = fgAbs[fgAbs.length - 1];
+        const hop = lastP ? Math.hypot(a0[0] - lastP[0], a0[1] - lastP[1]) : 1;
         const recent = fgAbs.slice(-300).filter(Boolean);
         let far = false;
         if (recent.length > 10) {
@@ -1312,9 +1325,15 @@
           // fresh doodle: reset the multi-stroke LOG only — the locked loop
           // stays (exactly like continuous doodles always behaved) and the
           // validation/miss machinery replaces or drops it as new data comes
-          fgAbs = [];
+          fgAbs = []; fgKnnJ = -1;
           freshStart = true;
-        } else if (fgAbs[fgAbs.length - 1] !== null) fgAbs.push(null);
+        } else if ((upFor >= 150 || hop > 0.05) && fgAbs[fgAbs.length - 1] !== null) {
+          // real pen lift only — a touch SKIP (a few ms up, restarting where
+          // it left) is not a lift, and a phantom gap marker poisons the lap:
+          // a circle "locked with 1 pen lift" replays with a stall + a hole,
+          // and the autopilot wrongly deploys as path replay instead of AFM
+          fgAbs.push(null);
+        }
       }
       fgCent = null;                                  // each stroke gets its own centroid
       fgPrev = null; fgVel = [0, 0];                  // relocation: restart the differencer
@@ -1396,43 +1415,66 @@
       fgVel[0] = 0.6 * fgVel[0] + 0.4 * (a[0] - fgPrev[0]);
       fgVel[1] = 0.6 * fgVel[1] + 0.4 * (a[1] - fgPrev[1]);
       // ANALOGUE k-NN baseline (Lorenz's method of analogues) — a real rival,
-      // not a strawman: find the nearest past (position, velocity) state in
+      // not a strawman: find the nearest past (position, velocity) moment of
       // YOUR OWN drawing and predict that history repeats itself:
-      // pred(h) = now + (past[j+h] − past[j]). Per rung, the best match that
-      // still has h samples of recorded future is used (prefix-argmin over
-      // the multi-stroke log, so it handles pen lifts by replaying them).
-      // Straight-line survives only as the cold-start fallback.
+      // pred(h) = now + (past[j+h] − past[j]).
+      // ONE COHERENT analogue serves the whole rung ladder: a tracked match
+      // index advances in lockstep with you and only re-locks when a clearly
+      // better match exists (3× hysteresis) or it runs out of displayed
+      // future — per-rung independent argmins under real finger tremor pick
+      // DIFFERENT past laps per rung and the ladder zigzags into scribble.
+      // Matching uses the STORED EMA velocity (same estimator both sides), so
+      // tremor doesn't randomize the match. Straight-line survives only as
+      // the cold-start fallback (fb rungs, excluded from scoring).
       const cv = [[], []];
       {
         const H = fgAbs, n = H.length;
-        const dm = new Array(n), pm = new Array(n);  // match distance + prefix-argmin
+        const Hneed = HLAD[fgHzIdx];                 // a lock must cover the displayed ladder
+        const dOf = (j) => {
+          const pj = H[j];
+          if (!pj) return Infinity;
+          return (pj[0] - a[0]) ** 2 + (pj[1] - a[1]) ** 2
+               + ((pj[2] - fgVel[0]) * DSCALE) ** 2 + ((pj[3] - fgVel[1]) * DSCALE) ** 2;
+        };
+        if (fgKnnJ >= 0) fgKnnJ++;                   // the analogue advances with you
+        const trackedOk = fgKnnJ >= 0 && fgKnnJ < n && H[fgKnnJ] && fgKnnJ + Hneed <= n - 1;
         let bj = -1, bd = Infinity;
-        for (let j = 0; j < n; j++) {
-          let dj = Infinity;
-          const pj = H[j], p1 = j >= 1 ? H[j - 1] : null, p2 = j >= 2 ? H[j - 2] : null;
-          if (pj && p1 && p2) {                      // contiguous 2-step window → valid velocity
-            const vx = (pj[0] - p2[0]) / 2, vy = (pj[1] - p2[1]) / 2;
-            dj = (pj[0] - a[0]) ** 2 + (pj[1] - a[1]) ** 2
-               + ((vx - fgVel[0]) * DSCALE) ** 2 + ((vy - fgVel[1]) * DSCALE) ** 2;
-          }
-          dm[j] = dj;
+        for (let j = 2; j <= n - 1 - Hneed; j++) {   // eligible: enough recorded future
+          const dj = dOf(j);
           if (dj < bd) { bd = dj; bj = j; }
-          pm[j] = bj;
         }
-        cv.fb = new Array(NLAD).fill(false);         // rungs still on the cold-start fallback
+        if (!trackedOk || (bj >= 0 && dOf(fgKnnJ) > 3 * bd + 0.01)) fgKnnJ = bj;
+        cv.fb = new Array(NLAD).fill(false);
+        cv.brkAt = new Array(NLAD).fill(false);      // exact pen-lift replay flags
+        const j = fgKnnJ;
+        let prevH = 0;
         for (let k = 0; k < NLAD; k++) {
-          const h = HLAD[k], cut = n - 1 - h;
+          const h = HLAD[k];
           let px = null;
-          if (cut >= 2 && pm[cut] >= 0 && dm[pm[cut]] < Infinity) {
-            const j = pm[cut];
-            let t = H[j + h];
-            if (!t) t = H[j + h + 1] || H[j + h - 1];  // rung landed on a lift marker
-            if (t) px = [a[0] + (t[0] - H[j][0]), a[1] + (t[1] - H[j][1])];
+          if (j >= 0 && j + h <= n - 1) {
+            // ±1-sample average of the replayed target: raw history carries
+            // finger tremor, and at 1-sample rung spacing that tremor IS the
+            // polyline (fair — it helps the analogue's score too)
+            let sx = 0, sy = 0, sc = 0;
+            for (let m = Math.max(0, j + h - 1); m <= Math.min(n - 1, j + h + 1); m++) {
+              if (H[m]) { sx += H[m][0]; sy += H[m][1]; sc++; }
+            }
+            if (sc) {
+              px = [a[0] + (sx / sc - H[j][0]), a[1] + (sy / sc - H[j][1])];
+              for (let m = j + prevH + 1; m <= Math.min(j + h, n - 1); m++) {
+                if (H[m] === null) { cv.brkAt[k] = true; break; }   // replayed pen lift
+              }
+            }
           }
           if (!px) { px = [a[0] + fgVel[0] * h, a[1] + fgVel[1] * h]; cv.fb[k] = true; }  // cold start
           cv[0].push(px[0]); cv[1].push(px[1]);
+          prevH = h;
         }
-        cv.jumpBreak = true;                         // render: don't ink analogue teleports
+        // draw the gray ghost only as far as the analogue reaches — splicing
+        // linear-fallback rungs onto a replayed arc kinks the polyline
+        let gm = -1;
+        for (let k = 0; k < NLAD; k++) if (!cv.fb[k]) gm = k;
+        cv.gm = gm >= 0 ? gm : NLAD - 1;             // all-fallback: plain linear ghost
       }
       if (!fgCent) fgCent = [...a];
       fgCent[0] += 0.05 * (a[0] - fgCent[0]); fgCent[1] += 0.05 * (a[1] - fgCent[1]);
@@ -1647,10 +1689,14 @@
       if (fgGhostArc && arcEnd < HLAD[fgHzIdx]) fgGhostArc.tip = phaseFc[HLAD[fgHzIdx] - 1];
       fgCvMat = cv;
       fgA.push(a);
-      fgAbs.push(a);                                 // the multi-stroke log survives pen lifts
+      // the multi-stroke log survives pen lifts; the stored EMA velocity is
+      // what the analogue baseline matches on (same estimator as "now")
+      fgAbs.push([a[0], a[1], fgVel[0], fgVel[1]]);
       if (fgAbs.length > 1000) {
-        fgAbs = fgAbs.slice(fgAbs.length - 900);
-        while (fgAbs.length && fgAbs[0] === null) fgAbs.shift();
+        const cutA = fgAbs.length - 900;
+        fgAbs = fgAbs.slice(cutA);
+        fgKnnJ = fgKnnJ >= cutA ? fgKnnJ - cutA : -1;
+        while (fgAbs.length && fgAbs[0] === null) { fgAbs.shift(); if (fgKnnJ > 0) fgKnnJ--; else fgKnnJ = -1; }
       }
       fgPend.push({ i: fgA.length - 1, n: pred, r: rolled, s: shape, w: shown, c: cv, gm: fgGhostMax });
       // PATH-MISS scoring: each horizon's prediction is scored by its distance to
@@ -1730,14 +1776,9 @@
       for (let k = 0; k <= kEnd; k++) {
         if (mat[0][k] == null) break;
         const p = den(mat[0][k], mat[1][k]);
-        // analogue baseline: a rung-to-rung jump far beyond what the current
-        // speed explains is a replayed pen lift (or an analogue switch) —
-        // lift the pen instead of inking a bridge
-        if (mat.jumpBreak && k > 0) {
-          const gp = Math.hypot(mat[0][k] - mat[0][k - 1], mat[1][k] - mat[1][k - 1]);
-          const exp2 = Math.hypot(fgVel[0], fgVel[1]) * (HLAD[k] - HLAD[k - 1]);
-          if (gp > Math.max(0.3, 3 * exp2)) { fgCtx.moveTo(p[0], p[1]); lastK = k; continue; }
-        }
+        // analogue baseline: this rung's replayed history crossed a pen lift
+        // — lift the pen instead of inking the teleport
+        if (mat.brkAt && mat.brkAt[k]) { fgCtx.moveTo(p[0], p[1]); lastK = k; continue; }
         fgCtx.lineTo(p[0], p[1]); lastK = k;
       }
       if (dashed) fgCtx.setLineDash([6, 5]);
@@ -1792,7 +1833,7 @@
         fgCtx.fillText('✍️ NGRC is drawing from what it learned', fgW / 2, 24);
         if (fgAutoInfo) { fgCtx.fillStyle = '#94a3b8'; fgCtx.font = '11px sans-serif'; fgCtx.fillText(fgAutoInfo, fgW / 2, 42); }
       } else {
-        if (fgPtr.down && fgCvMat) fgGhost(fgCvMat, 'rgba(124,138,160,0.7)', '#7c8aa0', true);
+        if (fgPtr.down && fgCvMat) fgGhost(fgCvMat, 'rgba(124,138,160,0.7)', '#7c8aa0', true, fgCvMat.gm);
         if (fgPtr.down && fgGhostArc && fgGhostArc.length > 1) {
           fgCtx.beginPath();
           fgCtx.moveTo(fgPtr.x, fgPtr.y);                 // anchored at the fingertip
@@ -1943,8 +1984,13 @@
         const kEnd = Math.min(fgHzIdx, fgGhostMax);
         for (let k = 0; k <= kEnd; k++) { if (fgPredMat[0][k] == null) break; pts.push([fgPredMat[0][k], fgPredMat[1][k]]); }
       }
+      let knn = null;
+      if (fgCvMat) {
+        knn = [];
+        for (let k = 0; k <= Math.min(fgHzIdx, NLAD - 1); k++) knn.push([fgCvMat[0][k], fgCvMat[1][k], fgCvMat.fb ? (fgCvMat.fb[k] ? 1 : 0) : 0]);
+      }
       return { fam: fgLastFam, loopAge: fgLoopAge, lap: fgLoop ? fgLoop.length : 0, pts, cycFed: fgCyc ? fgCyc.fed : 0,
-        gaps: fgLoopGaps ? fgLoopGaps.size : 0, absLen: fgAbs.length, lifts: fgAbs.filter((p) => p === null).length };
+        gaps: fgLoopGaps ? fgLoopGaps.size : 0, absLen: fgAbs.length, lifts: fgAbs.filter((p) => p === null).length, knn };
     };
 
     // ---- boot ----

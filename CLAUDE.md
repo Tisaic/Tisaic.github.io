@@ -97,11 +97,17 @@ the shipped commit carries the correct version.
    stencil shapes — circle/ellipse/square/triangle/hexagon/star/figure-8/
    heart/rose/lissajous — purely visual, never read by any model, default
    none; amber NGRC ghost vs a gray **analogue k-NN** rival (Lorenz's
-   method of analogues: per-rung nearest past (position, velocity) state in
-   the multi-stroke log via prefix-argmin, pred(h) = now + (past[j+h] −
-   past[j]) — it replays pen lifts too; straight-line survives only as its
-   cold-start fallback, and fallback rungs are excluded from the analogue's
-   score. Head-to-head scoring is PAIRWISE: the SHOWN ghost and the
+   method of analogues: ONE COHERENT tracked match — nearest past
+   (position, stored-EMA-velocity) moment of the multi-stroke log, advanced
+   in lockstep each sample, re-locked only on 3× hysteresis or running out
+   of displayed future — serves the whole rung ladder: pred(h) = now +
+   (past[j+h] − past[j]), targets ±1-sample smoothed. Per-rung independent
+   argmins under real finger tremor picked DIFFERENT past laps per rung and
+   the ladder zigzagged into scribble. It replays pen lifts too (exact
+   brkAt flags from the history's own lift markers); straight-line survives
+   only as its cold-start fallback, fallback rungs are excluded from the
+   analogue's score, and the drawn gray ghost stops at the last analogue
+   rung. Head-to-head scoring is PAIRWISE: the SHOWN ghost and the
    analogue are judged on the same prediction instances, only on rungs the
    ghost actually displayed — anything else poisons one side with warmup
    the other never served), with a
@@ -122,10 +128,12 @@ the shipped commit carries the correct version.
    distance from the prediction to the stroke actually drawn over the
    horizon) scores the shown ghost against the analogue. Honest
    human-realistic steady state (jitter + tempo random-walk, measured
-   headless): at 1.2 s the analogue wins TIMED (its velocity-matching
-   picks analogues at the current tempo) while NGRC is ~2.6× closer
-   on-path (~7× less error energy); at 10 s NGRC wins both (~2.3×
-   timed, ~1.7× less energy). Sub-10× ratios display with one decimal.
+   headless): the race is TIGHT — at 1.2 s the analogue is slightly
+   ahead (its velocity-matching picks analogues at the current tempo);
+   at 10 s NGRC wins (~1.2× timed, ~1.4× closer on-path, ~2× less
+   error energy). On metronome-perfect machine traces the analogue is
+   near-optimal by construction — don't panic-tune against that
+   regime. Sub-10× ratios display with one decimal.
    The resample step is clamped to [0.03, 0.05]: the floor keeps slow
    careful stencil-tracing from drowning the fit in ridge (tiny deltas)
    or blowing the fit window past one lap. Iterating the 1-step model
@@ -164,8 +172,13 @@ the shipped commit carries the correct version.
    **Disjointed (multi-stroke) doodles** — e.g. two vertical lines drawn
    alternately with pen lifts — are a first-class pattern: the lap is the
    strokes PLUS the teleports. A persistent multi-stroke log survives
-   lifts (a quick lift = a gap marker; a >3 s pause or a restart >2.5×
-   the doodle's span away = a fresh doodle), `resamplePath` carries
+   lifts (a REAL lift = a gap marker — ≥150 ms up or landing >0.05 away;
+   a touch SKIP is bridged, and a flagged step that doesn't teleport
+   >0.06 is ignored by `resamplePath`, else phantom gaps hijacked a
+   circle's AFM deploy into path replay with a stall hole; the
+   path-replay deploy also demands ≥2 recent lifts so one stray marker
+   can't hijack it. A >3 s pause or a restart >2.5× the doodle's span
+   away = a fresh doodle), `resamplePath` carries
    explicit break flags and returns gap indices, and lap detection uses
    mean-centered x+y autocorrelation (x-only was blind to vertical
    strokes AND locked onto multi-lap harmonics). The locked loop stores
