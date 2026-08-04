@@ -97,15 +97,21 @@ the shipped commit carries the correct version.
    **ghost-horizon slider (0.2–4 s)** — a 21-rung ladder of the library's
    **direct multi-horizon readouts** (`directHorizons`) trains continuously,
    so the slider needs no refit and the chart plots miss-vs-horizon curves
-   over the whole range (dotted marker = slider). After ~10 s of doodling a
-   **shape brain** (lean AFM) is commissioned in the **background** (chunked
-   ≤4 ms/frame, no jank, re-fit as the doodle grows) and long-horizon
-   prediction switches to **riding the learned orbit**, tempo-compensated
-   via a private-history rollout — the per-rung best-of (rolled / direct /
-   shape-locked, judged by live-tracked misses) is what the ghost draws.
-   New **on-path miss** stat (untimed: distance from the prediction to the
-   stroke actually drawn over the horizon): at 4 s the shape ghost is
-   ~30–40× closer than straight-line (≈1000× less error energy). Iterating the 1-step model
+   over the whole range (dotted marker = slider). After ~8 s of doodling the ghost goes
+   **path-locked** — the phase-domain rethink: a doodle factors into a PATH
+   (kept as a fresh resampled loop, refreshed every ~1 s, first-peak
+   autocorrelation for the lap length) traversed at a PHASE RATE, so the
+   finger's phase is tracked PLL-style on the loop and an NGRC readout
+   (library `rls`/`predict` primitives on lagged speed + phase-Fourier
+   features) learns the tempo-vs-phase profile — you slow at the same
+   corners every lap. Prediction = advance phase along the loop (transverse
+   offset decays on), so it lands ON the future stroke by construction.
+   Per-rung best-of (rolled / direct / path-locked, judged by live-tracked
+   misses) is what the ghost draws. New **on-path miss** stat (untimed:
+   distance from the prediction to the stroke actually drawn over the
+   horizon): at 4 s the path-locked ghost measures ~40–60× closer than
+   straight-line (~1,500–3,300× less error energy) live in-browser, with
+   timed advantage 13–23×. Iterating the 1-step model
    compounds its error, a known-poor mode shown explicitly as a third series —
    and the model state uses the EMA velocity, not the raw one-sample diff,
    so finger tremor isn't a prediction target. Plus **Autopilot**: NGRC free-runs and keeps

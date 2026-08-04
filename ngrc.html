@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:39,built:"2026-08-04T01:26:24Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:40,built:"2026-08-04T02:06:02Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -124,9 +124,10 @@
       tap <b>Autopilot</b>: NGRC <b>keeps drawing your doodle by itself</b>; the straight-line approach just
       leaves the screen. The <b>brain</b> selector picks the autopilot's model: <b>AFM</b> is the library's
       universal feature map (ReLU + Fourier), noise-hardened so your doodle becomes a true attractor —
-      <b>linear</b> is kept for comparison and slowly spirals into a circle. Keep doodling ~10&nbsp;s and a <span style="color:#a78bfa"><b>shape brain</b></span>
-      quietly locks your doodle in the background — the long-horizon ghost then <b>rides your own path</b>
-      seconds ahead, and the <b>on-path advantage</b> shows how far off the straight line is by comparison.</p>
+      <b>linear</b> is kept for comparison and slowly spirals into a circle. Keep doodling ~10&nbsp;s and the ghost <span style="color:#a78bfa"><b>locks onto your path</b></span>:
+      it tracks your <b>phase</b> around the doodle and learns your <b>tempo profile</b> (you slow at the same
+      corners every lap), then predicts by riding the path ahead — the <b>on-path advantage</b> shows the
+      orders of magnitude between that and a straight line.</p>
     <div class="stage" id="fg-stage" style="height:44vh"></div>
     <div class="controls">
       <button id="fg-auto">Autopilot ✍️</button>
@@ -158,7 +159,7 @@
     import * as THREE from './vendor/three.module.js';
     import { Continuous } from './lib/ngrc/continuous.js';
     import { universalMap } from './lib/ngrc/feature_map.js';
-    import { Block, buildLagsStride, predict } from './lib/ngrc/primitives.js';
+    import { Block, predict, rls, rlsInit } from './lib/ngrc/primitives.js';
     import { SoftSensor } from './lib/ngrc/softsensor.js';
 
     console.log('ngrc playground: modules loaded, THREE', THREE.REVISION);
@@ -662,12 +663,50 @@
     let fgAutoSteps = 0;
     let fgCentLast = null;                          // last stroke's centroid — survives pointerdown
     let fgAutoGen = 0;                              // bumped on any new input/stop → cancels an in-flight commissioning
-    // SHAPE-LOCKED ghost: an AFM shape brain commissioned in the BACKGROUND
-    // (time-budgeted chunks, no UI jank) while the user doodles. Long-horizon
-    // prediction then rides the learned orbit instead of extrapolating.
-    let fgShapeM = null, fgShapeH = 0, fgShapeJob = null, fgShapeFitAt = -1e9;
-    let fgSpHist = [], fgVLive = 0.02;
-    let fgES, fgOPn, fgOPl;                         // per-rung: shape miss, on-path (ghost/line)
+    // PATH-LOCKED ghost — the phase-domain rethink. A doodle factors into a
+    // PATH (geometry: fully known after one lap) traversed at a PHASE RATE (a
+    // 1-D tempo signal whose profile repeats each lap — you slow at the same
+    // corners every time). So: keep a fresh resampled loop of the path, track
+    // the finger's phase on it (PLL-style continuity-constrained matching),
+    // and learn tempo-vs-phase with an NGRC readout built from the library's
+    // RLS primitives (lagged speed + phase-Fourier features). Prediction =
+    // advance phase along the loop → it lands ON the future stroke by
+    // construction.
+    let fgLoop = null, fgLoopH = 0, fgPhase = 0, fgDsTh = null, fgDsP = null, fgDsLags = [1, 1, 1];
+    let fgES, fgOPn, fgOPl;                         // per-rung: path-locked miss, on-path (ghost/line)
+    const DS_NF = 10;
+    const dsFeat = (lags, ph01) => {
+      const w = 2 * Math.PI * ph01;
+      return new Block(DS_NF, 1, [1, lags[0], lags[1], lags[2],
+        Math.sin(w), Math.cos(w), Math.sin(2 * w), Math.cos(2 * w), Math.sin(3 * w), Math.cos(3 * w)]);
+    };
+    function loopAt(idx) {                          // linear interp on the loop, wrapped
+      const L = fgLoop.length;
+      let t = ((idx % L) + L) % L;
+      const i0 = Math.floor(t), fr = t - i0, i1 = (i0 + 1) % L;
+      return [fgLoop[i0][0] * (1 - fr) + fgLoop[i1][0] * fr, fgLoop[i0][1] * (1 - fr) + fgLoop[i1][1] * fr];
+    }
+    function lapLenOf(rs) {                         // lap length in resampled steps (autocorrelation)
+      const xs = rs.map((p) => p[0]);
+      const Lmax = Math.min(400, xs.length - 20);
+      const ac = [];
+      let mx = -Infinity;
+      for (let L = 20; L <= Lmax; L++) {
+        let s = 0, c = 0;
+        for (let i = 0; i + L < xs.length; i += 2) { s += xs[i] * xs[i + L]; c++; }
+        const v = c > 8 ? s / c : -Infinity;
+        ac.push(v);
+        if (v > mx) mx = v;
+      }
+      // FIRST local peak within 90% of the max — the fundamental lap, not a
+      // multiple (the global max often lands on 2-6 laps)
+      for (let j = 1; j < ac.length - 1; j++) {
+        if (ac[j] >= 0.9 * mx && ac[j] >= ac[j - 1] && ac[j] >= ac[j + 1]) return 20 + j;
+      }
+      let best = 0, bestV = -Infinity;
+      for (let j = 0; j < ac.length; j++) if (ac[j] > bestV) { bestV = ac[j]; best = 20 + j; }
+      return best;
+    }
     let fgLog = [], fgAutoInfo = '', fgCommissioning = false;
     // Scoring resets so a pause/lift can't be scored against stale predictions.
     // CRITICAL: fgPrev is KEPT — humans dwell at doodle corners, and nulling
@@ -698,7 +737,8 @@
       fgPrev = null; fgVel = [0, 0];
       fgEN = new Array(NLAD).fill(0); fgEI = new Array(NLAD).fill(0); fgEC = new Array(NLAD).fill(0); fgET = 0;
       fgES = new Array(NLAD).fill(0); fgOPn = new Array(NLAD).fill(0); fgOPl = new Array(NLAD).fill(0);
-      fgShapeM = null; fgShapeJob = null; fgShapeFitAt = -1e9; fgSpHist = []; fgVLive = 0.02;
+      fgLoop = null; fgPhase = 0; fgDsLags = [1, 1, 1];
+      ({ theta: fgDsTh, P: fgDsP } = rlsInit(DS_NF, 10.0));
       fgClearScoring();
       const ap = document.getElementById('fg-ap');
       if (ap) ap.textContent = '—';
@@ -713,115 +753,6 @@
       const b = document.getElementById('fg-auto');
       if (b) b.textContent = 'Autopilot ✍️';
     }
-    // ---- background shape-brain job (chunked; ~4 ms per frame budget) ----
-    function startShapeJob() {
-      const { rs, h } = resamplePath(fgLog);
-      if (rs.length < 60) return;
-      const st = statesPS(rs, 3).slice(-600);
-      const uni = universalMap(16, 48, 48, 1234);
-      const m = new Continuous(4, 4, 2, true, {
-        predictionSteps: 1, lam: 1.0, stride: 1,
-        useClamp: true, clampMin: [-8, -8, -8, -8], clampMax: [8, 8, 8, 8],
-        featureMap: uni, initVariance: uni.prior({ lin: 100, quad: 1, rand: 1 }),
-      });
-      const std = [0, 1, 2, 3].map((j) => {
-        const v = st.map((q) => q[j]);
-        const mu = v.reduce((a2, x) => a2 + x, 0) / v.length;
-        return Math.sqrt(v.reduce((a2, x) => a2 + (x - mu) ** 2, 0) / v.length) || 1e-6;
-      });
-      const rT = st.reduce((a2, q) => a2 + Math.hypot(q[2], q[3]) / 3, 0) / st.length;
-      fgShapeJob = {
-        m, st, h, rT, std, g: makeGauss(0x7e57c0de),
-        passes: Math.max(3, Math.min(12, Math.round(2400 / st.length))),
-        p: 0, i: 0, phase: 'fit', vi: 0, acc: 0, vs: null, snap: null,
-      };
-      fgShapeFitAt = fgSamples;
-    }
-    function pumpShapeJob(deadline) {
-      const J = fgShapeJob;
-      if (!J) return;
-      if (J.phase === 'fit') {
-        while (performance.now() < deadline) {
-          if (J.i >= J.st.length) {
-            J.i = 0; J.p++;
-            if (J.p >= J.passes) {
-              J.phase = 'verify'; J.snap = J.m.snapshot(); J.vs = [...J.st[J.st.length - 1]];
-              break;
-            }
-          }
-          const q = J.st[J.i++];
-          J.m.step(q.map((x, j) => x + 0.2 * J.std[j] * J.g()));
-        }
-      } else {
-        const vNom = J.h * DSCALE;
-        while (performance.now() < deadline && J.vi < 1200) {
-          const r = J.m.step(J.vs, null, true);
-          const n = [r.prediction[0][0], r.prediction[1][0], r.prediction[2][0], r.prediction[3][0]];
-          if (!n.every(Number.isFinite)) { fgShapeJob = null; return; }
-          const v = Math.hypot(n[0], n[1]);
-          if (v < 0.5 * vNom) { const hd = v > 1e-6 ? [n[0] / v, n[1] / v] : [1, 0]; n[0] = hd[0] * vNom; n[1] = hd[1] * vNom; }
-          J.vs = n;
-          if (J.vi >= 400) J.acc += Math.hypot(n[2], n[3]) / 3;
-          J.vi++;
-        }
-        if (J.vi >= 1200) {
-          const ret = (J.acc / 800) / (J.rT || 1e-9);
-          if (ret > 0.25 && ret < 2.5) {
-            J.m.restore(J.snap);                     // rewind the verify roll-out
-            fgShapeM = J.m; fgShapeH = J.h;
-            console.log(`shape brain locked: ${J.st.length} pts, step ${J.h.toFixed(3)}, size ${(100 * ret).toFixed(0)}%`);
-          } else {
-            console.log(`shape brain rejected: size ${(100 * ret).toFixed(0)}%`);
-          }
-          fgShapeJob = null;
-        }
-      }
-    }
-    // Private-history rollout on the shape brain: same theta + feature map,
-    // but never mutates the model (safe to call every sample).
-    function shapeRoll(seed, nSteps) {
-      const m = fgShapeM;
-      const depth = m.depth, vNom = fgShapeH * DSCALE;
-      const bases = Array.from({ length: 4 }, () => new Block(depth, 1));
-      for (const s of seed.slice(-depth)) {
-        for (let v = 0; v < 4; v++) { for (let r = depth - 1; r > 0; r--) bases[v].m[r] = bases[v].m[r - 1]; bases[v].m[0] = s[v]; }
-      }
-      const out = [];
-      for (let i = 0; i < nSteps; i++) {
-        const z = buildLagsStride(bases, m.lagOrder, 4, m.stride, [], 0);
-        if (!z) return null;
-        const feat = new Block(m.featureMap.m, 1, m.featureMap.expand(z.m));
-        const n = [];
-        for (let v = 0; v < 4; v++) n.push(Math.max(-8, Math.min(8, predict(feat, m.theta[v]))));
-        const sp = Math.hypot(n[0], n[1]);
-        if (sp < 0.5 * vNom) { const hd = sp > 1e-6 ? [n[0] / sp, n[1] / sp] : [1, 0]; n[0] = hd[0] * vNom; n[1] = hd[1] * vNom; }
-        for (let v = 0; v < 4; v++) { for (let r = depth - 1; r > 0; r--) bases[v].m[r] = bases[v].m[r - 1]; bases[v].m[0] = n[v]; }
-        out.push([n[2] / 3, n[3] / 3]);
-      }
-      return out;
-    }
-    // seed = the recent live path, arc-length-resampled at the shape brain's
-    // own step so the live state lands ON its constant-speed manifold
-    function shapeSeed() {
-      const need = (fgShapeM ? fgShapeM.depth : 8) + 4;
-      const tail = fgA.slice(-160);
-      if (tail.length < 10 || !fgCent) return null;
-      const rev = [[tail[tail.length - 1][0] - fgCent[0], tail[tail.length - 1][1] - fgCent[1]]];
-      let acc = 0;
-      for (let i = tail.length - 2; i >= 0 && rev.length < need; i--) {
-        const p = [tail[i][0] - fgCent[0], tail[i][1] - fgCent[1]];
-        acc += Math.hypot(tail[i + 1][0] - tail[i][0], tail[i + 1][1] - tail[i][1]);
-        while (acc >= fgShapeH && rev.length < need) { rev.push(p); acc -= fgShapeH; }
-      }
-      if (rev.length < 8) return null;
-      rev.reverse();
-      const seed = [];
-      for (let i = 1; i < rev.length; i++) {
-        seed.push([(rev[i][0] - rev[i - 1][0]) * DSCALE, (rev[i][1] - rev[i - 1][1]) * DSCALE, rev[i][0] * 3, rev[i][1] * 3]);
-      }
-      return seed;
-    }
-
     document.getElementById('fg-reset').addEventListener('click', makeFinger);
     document.getElementById('fg-hz').addEventListener('input', (e) => {
       fgHzIdx = Math.max(0, Math.min(NLAD - 1, parseInt(e.target.value, 10) || 0));
@@ -1201,19 +1132,46 @@
       fgLastS = s;
       fgLog.push(s);
       if (fgLog.length > 1200) fgLog.shift();
-      // live tempo (median recent speed) — scales the shape-brain rollout
-      fgSpHist.push(Math.hypot(a[0] - fgPrev[0], a[1] - fgPrev[1]));
-      if (fgSpHist.length > 120) fgSpHist.shift();
-      if (fgSpHist.length > 10) { const so = [...fgSpHist].sort((x, y) => x - y); fgVLive = so[Math.floor(so.length / 2)] || 0.01; }
-      // SHAPE-LOCKED forecast: ride the learned orbit from the current state,
-      // tempo-compensated (the brain runs at constant resampled speed)
-      let shapeIdx = null, shapeArc = null;
-      if (fgShapeM) {
-        const seed = shapeSeed();
-        if (seed) {
-          const maxSteps = Math.max(2, Math.min(180, Math.round(HMAX * fgVLive / fgShapeH) + 2));
-          shapeArc = shapeRoll(seed, maxSteps);
-          if (shapeArc) shapeIdx = HLAD.map((hs) => Math.min(shapeArc.length - 1, Math.max(0, Math.round(hs * fgVLive / fgShapeH) - 1)));
+      // PATH refresh (cheap — no fitting): keep the stored loop tracking the
+      // doodle so path-locked predictions stay pinned to fresh geometry
+      if (fgSamples >= 160 && fgSamples % 24 === 0) {
+        const abs = fgA.slice(-900).map((p) => [p[0], p[1]]);
+        abs.push(a);
+        const rp = resamplePath(abs.map((p) => [0, 0, p[0], p[1]]));
+        const L = lapLenOf(rp.rs);
+        if (L > 20 && rp.rs.length > L + 10) {
+          fgLoop = rp.rs.slice(-L); fgLoopH = rp.h;
+          let bi = 0, bd = Infinity;                 // re-acquire phase on the fresh loop
+          for (let i2 = 0; i2 < fgLoop.length; i2++) { const d = (fgLoop[i2][0] - a[0]) ** 2 + (fgLoop[i2][1] - a[1]) ** 2; if (d < bd) { bd = d; bi = i2; } }
+          fgPhase = bi;
+          if (fgSamples % 384 === 0) console.log(`path locked: lap ~${L} steps (${(L * fgLoopH).toFixed(2)} units)`);
+        }
+      }
+      // PLL phase track + tempo readout train + PHASE-DOMAIN forecast
+      let phaseFc = null;
+      if (fgLoop) {
+        let bi = fgPhase, bd = Infinity;
+        for (let w = -4; w <= Math.max(6, Math.ceil(3 * fgDsLags[0])); w++) {
+          const p = loopAt(fgPhase + w);
+          const d = (p[0] - a[0]) ** 2 + (p[1] - a[1]) ** 2;
+          if (d < bd) { bd = d; bi = fgPhase + w; }
+        }
+        const dsObs = Math.max(0, bi - fgPhase);
+        fgPhase = ((bi % fgLoop.length) + fgLoop.length) % fgLoop.length;
+        rls(fgDsTh, fgDsP, dsFeat(fgDsLags, fgPhase / fgLoop.length), dsObs, 0.995, 0, false);
+        fgDsLags = [dsObs, fgDsLags[0], fgDsLags[1]];
+        // one 84-step phase forecast covers every rung (rung k = step HLAD[k])
+        const anchor = loopAt(fgPhase);
+        const off = [a[0] - anchor[0], a[1] - anchor[1]];
+        let ph = fgPhase, lags = [...fgDsLags], dec = 1;
+        phaseFc = new Array(HMAX);
+        for (let i2 = 0; i2 < HMAX; i2++) {
+          const dsHat = Math.max(0, Math.min(4, predict(dsFeat(lags, ((ph % fgLoop.length) + fgLoop.length) % fgLoop.length / fgLoop.length), fgDsTh)));
+          ph += dsHat;
+          lags = [dsHat, lags[0], lags[1]];
+          dec *= 0.88;                               // transverse offset decays onto the path
+          const p = loopAt(ph);
+          phaseFc[i2] = [p[0] + off[0] * dec, p[1] + off[1] * dec];
         }
       }
       // ghosts = predicted centered-position variables, re-anchored at the
@@ -1227,9 +1185,9 @@
         pred[1].push(fgCent[1] + res.directPrediction[3][k]);
         rolled[0].push(fgCent[0] + res.prediction[2][HLAD[k] - 1]);
         rolled[1].push(fgCent[1] + res.prediction[3][HLAD[k] - 1]);
-        const sp = shapeIdx ? shapeArc[shapeIdx[k]] : null;
-        shape[0].push(sp ? fgCent[0] + sp[0] : null);
-        shape[1].push(sp ? fgCent[1] + sp[1] : null);
+        const sp = phaseFc ? phaseFc[HLAD[k] - 1] : null;
+        shape[0].push(sp ? sp[0] : null);
+        shape[1].push(sp ? sp[1] : null);
         // best-of per rung by the live-tracked misses (untracked → Infinity)
         let bx = rolled[0][k], by = rolled[1][k];
         if (fgSamples > 60) {
@@ -1283,8 +1241,8 @@
           fgOPl[k] = FG_DECAY * fgOPl[k] + (1 - FG_DECAY) * ol;
         }
       }
-      if (fgA.length > 400) {                          // bound memory; keep indices valid
-        const cut = fgA.length - 100;
+      if (fgA.length > 1000) {                         // bound memory; keep indices valid
+        const cut = fgA.length - 900;
         fgA = fgA.slice(cut);
         for (const q of fgPend) q.i -= cut;
       }
@@ -1376,7 +1334,7 @@
       const mk = (y, name, color) => ({ x: xs, y, type: 'scatter', mode: 'lines+markers', name, line: { color, width: 2 }, marker: { size: 4 } });
       const data = [mk(nC, 'straight-line', '#7c8aa0'), mk(nI, '1-step rolled', 'rgba(245,158,11,0.45)'), mk(nN, 'NGRC direct', '#f59e0b')];
       if (fgES.some((e) => e > 0)) {
-        data.push(mk(fgES.map((e, i) => (fgET > 0 && e > 0 ? Math.sqrt(e / fgET) : null)), 'shape-locked', '#a78bfa'));
+        data.push(mk(fgES.map((e, i) => (fgET > 0 && e > 0 ? Math.sqrt(e / fgET) : null)), 'path-locked', '#a78bfa'));
       }
       if (!fgPlotInited) { Plotly.newPlot('fg-plot', data, layout, { displayModeBar: false, responsive: true }); fgPlotInited = true; }
       else Plotly.react('fg-plot', data, layout, { displayModeBar: false, responsive: true });
@@ -1409,11 +1367,6 @@
       } else if (fgPtr.down && (performance.now() - fgLastT) >= SAMPLE_MS) {
         fgLastT = performance.now();
         fgStepSim();
-      }
-      // background shape-brain: start / advance in ~4 ms slices (no jank)
-      if (!fgAuto && !fgCommissioning) {
-        if (!fgShapeJob && fgSamples >= 160 && (fgSamples - fgShapeFitAt) >= (fgShapeM ? 400 : 100)) startShapeJob();
-        if (fgShapeJob) pumpShapeJob(performance.now() + 4);
       }
       if (fgPtr.down) {
         fgTrail.push([fgPtr.x, fgPtr.y]);
