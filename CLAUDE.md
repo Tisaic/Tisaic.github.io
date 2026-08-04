@@ -119,9 +119,12 @@ the shipped commit carries the correct version.
    or blowing the fit window past one lap. Iterating the 1-step model
    compounds its error, a known-poor mode shown explicitly as a third series —
    and the model state uses the EMA velocity, not the raw one-sample diff,
-   so finger tremor isn't a prediction target. Plus **Autopilot**: NGRC free-runs and keeps
-   drawing your doodle by itself while the straight-line "autopilot" is a
-   dashed ray off-screen; grouped error-vs-horizon bars. The autopilot is
+   so finger tremor isn't a prediction target. Plus **Autopilot**: with brain=auto
+   and a locked path it deploys INSTANTLY as a **path-locked replay** — the
+   phase-domain engine draws the user's own stored loop at their learned
+   tempo (crisp corners, exact geometry, cannot decay) while the
+   straight-line "autopilot" is a dashed ray off-screen. The AFM / linear
+   brains stay on the selector for comparison; those are
    **commissioned on demand**: the drawn path is arc-length-resampled to
    constant speed (kills the stall fixed points that corner dwells/tremor
    teach), then candidate brains — three variants of the library's **AFM

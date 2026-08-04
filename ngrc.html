@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:42,built:"2026-08-04T02:43:25Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:43,built:"2026-08-04T02:58:34Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -680,6 +680,7 @@
     let fgAutoTrail = [], fgAutoRay = null, fgAutoModel = null, fgAutoMeta = null;
     let fgAutoSnap = null, fgAutoSeed = null;       // verified-orbit restart point (escape watchdog)
     let fgAutoSteps = 0;
+    let fgAutoMode = 'model', fgAutoPh = 0, fgAutoDs = [1, 1, 1];  // 'path' = path-locked replay
     let fgCentLast = null;                          // last stroke's centroid — survives pointerdown
     let fgAutoGen = 0;                              // bumped on any new input/stop → cancels an in-flight commissioning
     // PATH-LOCKED ghost — the phase-domain rethink. A doodle factors into a
@@ -769,6 +770,7 @@
       fgAuto = false; fgAutoState = null; fgAutoPos = null; fgAutoDrift = null;
       fgAutoTrail = []; fgAutoRay = null; fgAutoModel = null; fgAutoMeta = null;
       fgAutoSnap = null; fgAutoSeed = null; fgAutoInfo = ''; fgCommissioning = false;
+      fgAutoMode = 'model';
       const b = document.getElementById('fg-auto');
       if (b) b.textContent = 'Autopilot ✍️';
     }
@@ -982,6 +984,25 @@
         return;
       }
       if (fgCommissioning) return;
+      // AUTO mode with a locked path: the autopilot IS the phase-domain
+      // engine — replay the user's own stored loop at their learned tempo
+      // (crisp corners, exact geometry, cannot decay). Instant: no fitting.
+      // The AFM / linear brains remain on the selector for comparison.
+      if (document.getElementById('fg-brain').value === 'auto' && fgLoop && fgLoop.length > 30) {
+        fgAutoMode = 'path';
+        fgAutoPh = fgPhase;
+        fgAutoDs = [...fgDsLags];
+        fgAuto = true;
+        fgAutoLastT = 0;
+        fgAutoTrail = [den(fgLastA[0], fgLastA[1])];
+        const sp0 = Math.hypot(fgLastVel[0], fgLastVel[1]) || 1e-6;
+        fgAutoRay = { x: fgLastA[0], y: fgLastA[1], vx: fgLastVel[0] / sp0, vy: fgLastVel[1] / sp0 };
+        fgAutoInfo = `path-locked replay · lap ~${fgLoop.length} steps · your tempo`;
+        document.getElementById('fg-ap').textContent = `path-locked replay · lap ~${fgLoop.length} steps`;
+        console.log('autopilot: path-locked replay (no fit needed) — lap ~' + fgLoop.length + ' steps');
+        btn.textContent = 'Stop autopilot ⏹';
+        return;
+      }
       // Capture the anchor NOW: a touch during the multi-second commissioning
       // nulls fgCent (new stroke) — dereferencing it at deploy crashed. The
       // generation token cancels the deploy entirely if new input arrives.
@@ -1423,7 +1444,21 @@
 
     function fgTick() {
       if (activeTab !== 'finger') { requestAnimationFrame(fgTick); return; }
-      if (fgAuto) {
+      if (fgAuto && fgAutoMode === 'path') {
+        if (fgLoop && performance.now() - fgAutoLastT >= 33) {
+          fgAutoLastT = performance.now();
+          // one tempo-readout step per tick; 33/48 rescales sample-rate ds to tick rate
+          const L = fgLoop.length;
+          const ph01 = ((fgAutoPh % L) + L) % L / L;
+          let dsHat = Math.max(0, Math.min(4, predict(dsFeat(fgAutoDs, ph01), fgDsTh)));
+          if (!(dsHat > 0.05)) dsHat = 1;            // under-trained tempo: nominal pace
+          fgAutoPh += dsHat * (33 / 48);
+          fgAutoDs = [dsHat, fgAutoDs[0], fgAutoDs[1]];
+          const p = loopAt(fgAutoPh);
+          fgAutoTrail.push(den(p[0], p[1]));
+          if (fgAutoTrail.length > 600) fgAutoTrail.shift();
+        }
+      } else if (fgAuto) {
         if (fgAutoModel && fgAutoPos && performance.now() - fgAutoLastT >= 33) {  // paced: same speed on 60/120 Hz displays
           fgAutoLastT = performance.now();
           const n = autoStep(fgAutoModel, fgAutoState, fgAutoMeta);
