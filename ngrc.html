@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:48,built:"2026-08-04T14:11:47Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:49,built:"2026-08-04T14:28:25Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -695,11 +695,11 @@
     // locked loop's constant-speed states with light noise — so brain=AFM
     // deploys INSTANTLY (no commissioning sweep).
     let fgCyc = null, fgLastFam = 'roll';
-    function cycRefresh(ptsIn, closed) {
+    function cycRefresh(ptsIn, closedIn) {
       const lp = ptsIn || fgLoop;
       if (!lp || lp.length < 20) return;
       const st = [];
-      for (let i = closed ? 0 : 1; i < lp.length; i++) {
+      for (let i = closedIn ? 0 : 1; i < lp.length; i++) {
         const a2 = lp[(i + lp.length - 1) % lp.length], b2 = lp[i];
         st.push([(b2[0] - a2[0]) * DSCALE, (b2[1] - a2[1]) * DSCALE, b2[0] * 3, b2[1] * 3]);
       }
@@ -708,22 +708,31 @@
         const mu = v.reduce((x, y) => x + y, 0) / v.length;
         return Math.sqrt(v.reduce((x, y) => x + (y - mu) ** 2, 0) / v.length) || 1e-6;
       });
+      const closed = !!closedIn;
       if (!fgCyc) {
-        const uni = universalMap(16, 48, 48, 1234);
+        const uni = universalMap(16, 64, 64, 1234);
         const m = new Continuous(4, 4, 2, true, {
           predictionSteps: 1, lam: 0.9995, stride: 1,
           useClamp: true, clampMin: [-8, -8, -8, -8], clampMax: [8, 8, 8, 8],
           featureMap: uni, initVariance: uni.prior({ lin: 100, quad: 1, rand: 1 }),
         });
-        fgCyc = { m, st, std, i: 0, fed: 0, g: makeGauss(0xc1c11c) };
-      } else { fgCyc.st = st; fgCyc.std = std; fgCyc.i = 0; }
+        fgCyc = { m, st, std, i: 0, fed: 0, closed, g: makeGauss(0xc1c11c) };
+      } else { fgCyc.st = st; fgCyc.std = std; fgCyc.i = 0; fgCyc.closed = closed; }
     }
     function pumpCyc(deadline) {
       const C = fgCyc;
       if (!C || !C.st.length) return;
       while (performance.now() < deadline) {
+        if (C.i === 0 && !C.closed) {
+          // open path: re-seed history across the wrap WITHOUT training —
+          // otherwise the model learns a fake end-to-start teleport
+          const d = Math.min(C.m.depth + 1, C.st.length);
+          for (let k2 = 0; k2 < d; k2++) C.m.step(C.st[k2], null, true);
+          C.i = d;
+          continue;
+        }
         const q = C.st[C.i];
-        const r = C.m.step(q.map((x, j) => x + 0.2 * C.std[j] * C.g()));
+        const r = C.m.step(q.map((x, j) => x + 0.15 * C.std[j] * C.g()));
         C.err = r.overallRmse;
         C.i = (C.i + 1) % C.st.length;
         C.fed++;
@@ -1026,7 +1035,7 @@
       if (fgCommissioning) return;
       // The autopilot IS the continuously-trained AFM. Warm model: deploy
       // INSTANTLY — it has been training the whole time you traced.
-      if (fgCyc && fgCyc.fed > 1200 && fgCyc.st.length) {
+      if (fgCyc && fgCyc.closed && fgCyc.fed > 1500 && fgCyc.st.length) {
         const maxTR2 = fgCyc.st.reduce((x, q) => Math.max(x, Math.hypot(q[2], q[3]) / 3), 0) || 1;
         fgAutoModel = fgCyc.m;
         fgAutoSnap = fgCyc.m.snapshot();
@@ -1405,9 +1414,11 @@
         const mR = (rolled[0][k0] != null && fgEI[k0] > 0) ? fgEI[k0] : Infinity;
         const mD = fgEN[k0] > 0 ? fgEN[k0] : Infinity;
         if (phaseFc && fgLoopAge >= 48) {
-          const mS = fgES[k0] > 0 ? fgES[k0] : Infinity;
-          const rival = Math.min(mD, mR);
-          fam = (rival < 0.5 * mS) ? (mD <= mR ? 'direct' : 'roll') : 'path';
+          // locked → ALWAYS the path family. Timed-miss comparisons prefer
+          // center-collapsed direct points at long horizons (they minimize
+          // worst-case phase error) — correct metric, wrong master: the
+          // display's job is to show WHERE you'll draw.
+          fam = 'path';
         } else {
           fam = (fgSamples > 60 && mD < Infinity && (rolled[0][k0] == null || mD < mR)) ? 'direct' : 'roll';
           if (fam === 'roll' && rolled[0][k0] == null) fam = 'direct';
@@ -1444,7 +1455,7 @@
       // tip dot still marks the full-horizon prediction
       let arcEnd = HLAD[fgHzIdx];
       if (fam === 'path' && phaseFc && fgLoop && fgDsMed > 0.02) {
-        arcEnd = Math.min(arcEnd, Math.ceil(fgLoop.length / fgDsMed) + 2);
+        arcEnd = Math.min(arcEnd, Math.ceil(1.6 * fgLoop.length / fgDsMed) + 2);
       }
       fgGhostArc = (fam === 'path' && phaseFc) ? phaseFc.slice(0, arcEnd) : null;
       if (fgGhostArc && arcEnd < HLAD[fgHzIdx]) fgGhostArc.tip = phaseFc[HLAD[fgHzIdx] - 1];
@@ -1504,13 +1515,19 @@
     function fgGhost(mat, stroke, fill, dashed, kMax) {
       const kEnd = Math.min(fgHzIdx, kMax == null ? fgHzIdx : kMax);
       if (mat[0][0] == null) return;
+      // ALWAYS anchored at the fingertip — a preview that starts elsewhere
+      // reads as broken
       fgCtx.beginPath();
-      let p0 = den(mat[0][0], mat[1][0]); fgCtx.moveTo(p0[0], p0[1]);
-      for (let k = 1; k <= kEnd; k++) { if (mat[0][k] == null) break; const p = den(mat[0][k], mat[1][k]); fgCtx.lineTo(p[0], p[1]); }
+      fgCtx.moveTo(fgPtr.x, fgPtr.y);
+      let lastK = 0;
+      for (let k = 0; k <= kEnd; k++) {
+        if (mat[0][k] == null) break;
+        const p = den(mat[0][k], mat[1][k]); fgCtx.lineTo(p[0], p[1]); lastK = k;
+      }
       if (dashed) fgCtx.setLineDash([6, 5]);
       fgCtx.strokeStyle = stroke; fgCtx.lineWidth = 3; fgCtx.stroke();
       fgCtx.setLineDash([]);
-      const pe = den(mat[0][Math.min(kEnd, mat[0].length - 1)] ?? mat[0][0], mat[1][Math.min(kEnd, mat[1].length - 1)] ?? mat[1][0]);
+      const pe = den(mat[0][lastK], mat[1][lastK]);
       fgCtx.beginPath(); fgCtx.arc(pe[0], pe[1], 8, 0, 2 * Math.PI); fgCtx.fillStyle = fill; fgCtx.fill();
     }
     function fgRender() {
@@ -1562,14 +1579,27 @@
         if (fgPtr.down && fgCvMat) fgGhost(fgCvMat, 'rgba(124,138,160,0.7)', '#7c8aa0', true);
         if (fgPtr.down && fgGhostArc && fgGhostArc.length > 1) {
           fgCtx.beginPath();
-          let p0 = den(fgGhostArc[0][0], fgGhostArc[0][1]);
-          fgCtx.moveTo(p0[0], p0[1]);
-          for (let i = 1; i < fgGhostArc.length; i++) { const p = den(fgGhostArc[i][0], fgGhostArc[i][1]); fgCtx.lineTo(p[0], p[1]); }
+          fgCtx.moveTo(fgPtr.x, fgPtr.y);                 // anchored at the fingertip
+          for (let i = 0; i < fgGhostArc.length; i++) { const p = den(fgGhostArc[i][0], fgGhostArc[i][1]); fgCtx.lineTo(p[0], p[1]); }
           fgCtx.strokeStyle = 'rgba(245,158,11,0.9)'; fgCtx.lineWidth = 3; fgCtx.stroke();
-          const tp = fgGhostArc.tip || fgGhostArc[fgGhostArc.length - 1];
-          const pe = den(tp[0], tp[1]);
-          fgCtx.beginPath(); fgCtx.arc(pe[0], pe[1], 8, 0, 2 * Math.PI); fgCtx.fillStyle = '#f59e0b'; fgCtx.fill();
-        } else if (fgPtr.down && fgPredMat) fgGhost(fgPredMat, 'rgba(245,158,11,0.9)', '#f59e0b', false, fgGhostMax);
+          // solid tip at the end of the drawn arc; when the arc is capped at a
+          // lap, an OUTLINED tip rides the loop at the full slider horizon so
+          // the slider's effect stays visible
+          const endA = fgGhostArc[fgGhostArc.length - 1];
+          const peA = den(endA[0], endA[1]);
+          fgCtx.beginPath(); fgCtx.arc(peA[0], peA[1], 8, 0, 2 * Math.PI); fgCtx.fillStyle = '#f59e0b'; fgCtx.fill();
+          if (fgGhostArc.tip) {
+            const pt2 = den(fgGhostArc.tip[0], fgGhostArc.tip[1]);
+            fgCtx.beginPath(); fgCtx.arc(pt2[0], pt2[1], 7, 0, 2 * Math.PI);
+            fgCtx.strokeStyle = '#f59e0b'; fgCtx.lineWidth = 2.5; fgCtx.stroke();
+          }
+        } else if (fgPtr.down && fgPredMat) {
+          fgGhost(fgPredMat, 'rgba(245,158,11,0.9)', '#f59e0b', false, fgGhostMax);
+          if (fgGhostMax < fgHzIdx) {                     // capped: say why
+            fgCtx.fillStyle = '#64748b'; fgCtx.font = '11px sans-serif'; fgCtx.textAlign = 'center';
+            fgCtx.fillText('ghost limited to trusted horizon — keep tracing', fgW / 2, fgH - 12);
+          }
+        }
         fgCtx.beginPath(); fgCtx.arc(fgPtr.x, fgPtr.y, 8, 0, 2 * Math.PI); fgCtx.fillStyle = '#2563eb'; fgCtx.fill();
         fgCtx.strokeStyle = '#93c5fd'; fgCtx.lineWidth = 2; fgCtx.stroke();
         if (fgSamples === 0) {
