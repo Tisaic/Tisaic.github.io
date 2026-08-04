@@ -94,10 +94,18 @@ the shipped commit carries the correct version.
    scored filter bank — with an on-stage error meter + ×-better readout, ~4×,
    and a 3-trace Plotly chart), **③ finger-trace** (draw loops at ~20 Hz
    sampling; amber NGRC ghost vs gray **straight-line extrapolation**, with a
-   **ghost-horizon slider (0.1–2 s)** — a 21-rung ladder of the library's
+   **ghost-horizon slider (0.2–4 s)** — a 21-rung ladder of the library's
    **direct multi-horizon readouts** (`directHorizons`) trains continuously,
    so the slider needs no refit and the chart plots miss-vs-horizon curves
-   over the whole range (dotted marker = slider). Iterating the 1-step model
+   over the whole range (dotted marker = slider). After ~10 s of doodling a
+   **shape brain** (lean AFM) is commissioned in the **background** (chunked
+   ≤4 ms/frame, no jank, re-fit as the doodle grows) and long-horizon
+   prediction switches to **riding the learned orbit**, tempo-compensated
+   via a private-history rollout — the per-rung best-of (rolled / direct /
+   shape-locked, judged by live-tracked misses) is what the ghost draws.
+   New **on-path miss** stat (untimed: distance from the prediction to the
+   stroke actually drawn over the horizon): at 4 s the shape ghost is
+   ~30–40× closer than straight-line (≈1000× less error energy). Iterating the 1-step model
    compounds its error, a known-poor mode shown explicitly as a third series —
    and the model state uses the EMA velocity, not the raw one-sample diff,
    so finger tremor isn't a prediction target. Plus **Autopilot**: NGRC free-runs and keeps
