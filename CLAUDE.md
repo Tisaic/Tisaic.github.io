@@ -97,7 +97,7 @@ the shipped commit carries the correct version.
    stencil shapes — circle/ellipse/square/triangle/hexagon/star/figure-8/
    heart/rose/lissajous — purely visual, never read by any model, default
    none; amber NGRC ghost vs gray **straight-line extrapolation**, with a
-   **ghost-horizon slider (0.2–4 s)** — a 21-rung ladder of the library's
+   **ghost-horizon slider (0.2–10 s, geometric rungs)** — a 21-rung ladder of the library's
    **direct multi-horizon readouts** (`directHorizons`) trains continuously,
    so the slider needs no refit and the chart plots miss-vs-horizon curves
    over the whole range (dotted marker = slider). After ~8 s of doodling the ghost goes
@@ -112,9 +112,11 @@ the shipped commit carries the correct version.
    Per-rung best-of (rolled / direct / path-locked, judged by live-tracked
    misses) is what the ghost draws. New **on-path miss** stat (untimed:
    distance from the prediction to the stroke actually drawn over the
-   horizon): at 4 s the path-locked ghost measures ~40–60× closer than
-   straight-line (~1,500–3,300× less error energy) live in-browser, with
-   timed advantage 13–23×. Iterating the 1-step model
+   horizon): at 10 s the path-locked ghost measures ~70× closer than straight-line
+   (~5,000× less error energy) live in-browser, timed advantage ~40×.
+   The resample step is clamped to [0.03, 0.05]: the floor keeps slow
+   careful stencil-tracing from drowning the fit in ridge (tiny deltas)
+   or blowing the fit window past one lap. Iterating the 1-step model
    compounds its error, a known-poor mode shown explicitly as a third series —
    and the model state uses the EMA velocity, not the raw one-sample diff,
    so finger tremor isn't a prediction target. Plus **Autopilot**: NGRC free-runs and keeps

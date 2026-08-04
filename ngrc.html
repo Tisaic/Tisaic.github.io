@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:41,built:"2026-08-04T02:14:04Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:42,built:"2026-08-04T02:43:25Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -115,7 +115,7 @@
   <!-- ================= Tab 3: Finger-trace — ghost race + autopilot ================= -->
   <section class="panel" id="p-finger">
     <p class="lead">Draw <b>loops and figure-8s</b> for a few seconds. Two ghosts predict your fingertip
-      <b>0.2–4&nbsp;s ahead</b> (set by the <b>ghost horizon</b> slider):
+      <b>0.2–10&nbsp;s ahead</b> (set by the <b>ghost horizon</b> slider):
       <span style="color:#7c8aa0">gray = straight-line extrapolation</span> vs
       <span style="color:#f59e0b">amber = NGRC</span>, which learns <b>your</b> motion — using the library's
       <b>direct multi-horizon readouts</b>, because iterating a 1-step model compounds its error (the chart
@@ -151,7 +151,7 @@
         <option value="lissajous">guide: lissajous</option>
       </select>
       <div class="slider">Ghost horizon
-        <input id="fg-hz" type="range" min="0" max="20" step="1" value="5" />
+        <input id="fg-hz" type="range" min="0" max="20" step="1" value="9" />
         <span id="fg-hzv">1.2s</span>
       </div>
     </div>
@@ -643,11 +643,17 @@
     // Ghost horizon LADDER: direct readouts are trained at every rung all the
     // time (that's what makes the slider free — no refit on change); the
     // slider only picks which rung the ghost and the stats display.
-    const HLAD = Array.from({ length: 21 }, (_, i) => 4 * (i + 1));  // 4..84 samples ≈ 0.2–4.0 s
+    // Geometric ladder 4..208 samples ≈ 0.2–10 s: dense short horizons, and
+    // the top rung reaches a full 10 seconds ahead.
+    const HLAD = (() => {
+      const out = [];
+      for (let i = 0; i < 21; i++) out.push(Math.max((out[i - 1] || 0) + 1, Math.round(4 * Math.pow(52, i / 20))));
+      return out;
+    })();
     const HMAX = HLAD[HLAD.length - 1];
     const NLAD = HLAD.length;
     const SEC = 0.048;        // seconds per sample
-    let fgHzIdx = 5;          // displayed rung (HLAD[5] = 24 samples ≈ 1.2 s)
+    let fgHzIdx = 9;          // displayed rung ≈ 1.2 s on the geometric ladder
     const SAMPLE_MS = 48;     // fixed-TIME sampling — same cadence on 60 and 120 Hz displays
     const FPAD = 5;           // future window for path-miss scoring
     const DSCALE = 25;        // delta scaling to O(1) features (raw deltas ~0.02 would drown in the ridge)
@@ -740,7 +746,7 @@
       // known poor at 0.6 s); the library's DIRECT multi-horizon readouts map
       // the current features straight to each future step instead.
       fgModel = new Continuous(4, 2, 2, true, {
-        predictionSteps: HMAX, lam: 1.0, initVariance: 1.0,
+        predictionSteps: Math.min(HMAX, 100), lam: 1.0, initVariance: 1.0,
         useClamp: true, clampMin: [-6, -6, -1.8, -1.8], clampMax: [6, 6, 1.8, 1.8],
         directHorizons: [...HLAD],
       });
@@ -809,10 +815,13 @@
         nx.push(pts[pts.length - 1]);
         pts = nx;
       }
-      // 60th-pct speed (jump steps excluded): brisk but honest. Capped at
-      // 0.05/step — a very fast drag otherwise yields too few steps per lap.
+      // 60th-pct speed (jump steps excluded), clamped to [0.03, 0.05]: the cap
+      // keeps fast drags from yielding too few steps per lap; the FLOOR keeps
+      // slow careful tracing (stencil-following) from yielding tiny deltas
+      // that drown in the RLS ridge AND from blowing the fit window past a
+      // single lap (both silently wrecked commissioning quality).
       const walkable = sorted.filter((x) => x <= jump);
-      const h = Math.max(Math.min(walkable[Math.floor(walkable.length * 0.6)] || 0, 0.05), 1e-4);
+      const h = Math.max(Math.min(walkable[Math.floor(walkable.length * 0.6)] || 0, 0.05), 0.03);
       const rs = [pts[0]];
       let prev = pts[0], carry = 0;
       for (let i = 1; i < pts.length; i++) {
@@ -1249,15 +1258,17 @@
       for (let k = 0; k < NLAD; k++) {
         pred[0].push(fgCent[0] + res.directPrediction[2][k]);
         pred[1].push(fgCent[1] + res.directPrediction[3][k]);
-        rolled[0].push(fgCent[0] + res.prediction[2][HLAD[k] - 1]);
-        rolled[1].push(fgCent[1] + res.prediction[3][HLAD[k] - 1]);
+        const canRoll = HLAD[k] <= 100;              // library rollout cap
+        rolled[0].push(canRoll ? fgCent[0] + res.prediction[2][HLAD[k] - 1] : null);
+        rolled[1].push(canRoll ? fgCent[1] + res.prediction[3][HLAD[k] - 1] : null);
         const sp = phaseFc ? phaseFc[HLAD[k] - 1] : null;
         shape[0].push(sp ? sp[0] : null);
         shape[1].push(sp ? sp[1] : null);
         // best-of per rung by the live-tracked misses (untracked → Infinity)
-        let bx = rolled[0][k], by = rolled[1][k];
+        let bx = rolled[0][k] != null ? rolled[0][k] : (shape[0][k] != null ? shape[0][k] : pred[0][k]);
+        let by = rolled[0][k] != null ? rolled[1][k] : (shape[0][k] != null ? shape[1][k] : pred[1][k]);
         if (fgSamples > 60) {
-          const mI = fgEI[k] > 0 ? fgEI[k] : Infinity;
+          const mI = (rolled[0][k] != null && fgEI[k] > 0) ? fgEI[k] : Infinity;
           const mN = fgEN[k] > 0 ? fgEN[k] : Infinity;
           const mS = (sp && fgES[k] > 0) ? fgES[k] : Infinity;
           if (mN < mI && mN <= mS) { bx = pred[0][k]; by = pred[1][k]; }
@@ -1272,9 +1283,11 @@
       // PATH-MISS scoring: each horizon's prediction is scored by its distance to
       // the NEAREST sample of the actual future path (window h-2..h+3) — this is
       // what the eye judges: "did the ghost land on where I actually went?"
-      while (fgPend.length && fgPend[0].i + HMAX + FPAD < fgA.length) {
-        const q = fgPend.shift();
-        for (let k = 0; k < NLAD; k++) {
+      while (fgPend.length) {
+        const q = fgPend[0];
+        if (q.next == null) q.next = 0;
+        while (q.next < NLAD && q.i + HLAD[q.next] + FPAD < fgA.length) {
+          const k = q.next++;
           const h = HLAD[k];
           const px = q.n[0][k], py = q.n[1][k];
           const rx = q.r[0][k], ry = q.r[1][k];
@@ -1285,12 +1298,12 @@
           for (let j = j0; j <= j1; j++) {
             const s = fgA[j];
             const t1 = (px - s[0]) ** 2 + (py - s[1]) ** 2; if (t1 < dn) dn = t1;
-            const t2 = (rx - s[0]) ** 2 + (ry - s[1]) ** 2; if (t2 < di) di = t2;
+            if (rx != null) { const t2 = (rx - s[0]) ** 2 + (ry - s[1]) ** 2; if (t2 < di) di = t2; }
             const t3 = (cx - s[0]) ** 2 + (cy - s[1]) ** 2; if (t3 < dc) dc = t3;
             if (sx != null) { const t4 = (sx - s[0]) ** 2 + (sy - s[1]) ** 2; if (t4 < ds) ds = t4; }
           }
           fgEN[k] = FG_DECAY * fgEN[k] + (1 - FG_DECAY) * dn;
-          fgEI[k] = FG_DECAY * fgEI[k] + (1 - FG_DECAY) * di;
+          if (rx != null) fgEI[k] = FG_DECAY * fgEI[k] + (1 - FG_DECAY) * di;
           fgEC[k] = FG_DECAY * fgEC[k] + (1 - FG_DECAY) * dc;
           if (sx != null) fgES[k] = FG_DECAY * fgES[k] + (1 - FG_DECAY) * ds;
           // ON-PATH miss (untimed): distance from the prediction to ANY point
@@ -1306,6 +1319,7 @@
           fgOPn[k] = FG_DECAY * fgOPn[k] + (1 - FG_DECAY) * on;
           fgOPl[k] = FG_DECAY * fgOPl[k] + (1 - FG_DECAY) * ol;
         }
+        if (q.next >= NLAD) fgPend.shift(); else break;
       }
       if (fgA.length > 1000) {                         // bound memory; keep indices valid
         const cut = fgA.length - 900;
@@ -1444,7 +1458,7 @@
       const si = fgHzIdx;
       const ready = fgSamples > 36 && fgET > 0 && fgEN[si] > 0;
       document.getElementById('fg-rmse').textContent = ready ? Math.sqrt(fgEN[si] / fgET).toFixed(3) : '—';
-      document.getElementById('fg-iter').textContent = ready ? Math.sqrt(fgEI[si] / fgET).toFixed(3) : '—';
+      document.getElementById('fg-iter').textContent = (ready && HLAD[si] <= 100 && fgEI[si] > 0) ? Math.sqrt(fgEI[si] / fgET).toFixed(3) : '—';
       document.getElementById('fg-naive').textContent = ready ? Math.sqrt(fgEC[si] / fgET).toFixed(3) : '—';
       document.getElementById('fg-skill').textContent = (ready && fgEC[si] > 0)
         ? Math.sqrt(fgEC[si] / fgEN[si]).toFixed(1) + '× better' : '—';
