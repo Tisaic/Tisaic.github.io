@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:49,built:"2026-08-04T14:28:25Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:50,built:"2026-08-04T14:39:17Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -132,6 +132,7 @@
     <div class="controls">
       <button id="fg-auto">Autopilot ✍️</button>
       <button id="fg-reset" class="sec">Reset brain</button>
+      <button id="fg-freeze" class="sec">Freeze ❄️</button>
       <select id="fg-guide" title="tracing guide (visual only — the model never sees it)">
         <option value="none">guide: none</option>
         <option value="circle">guide: circle</option>
@@ -695,6 +696,7 @@
     // locked loop's constant-speed states with light noise — so brain=AFM
     // deploys INSTANTLY (no commissioning sweep).
     let fgCyc = null, fgLastFam = 'roll';
+    let fgFrozen = false;                           // freeze ALL learning; predictions keep running
     function cycRefresh(ptsIn, closedIn) {
       const lp = ptsIn || fgLoop;
       if (!lp || lp.length < 20) return;
@@ -806,6 +808,9 @@
       fgLoop = null; fgPhase = 0; fgDsLags = [1, 1, 1];
       fgDsObs = []; fgDsMed = 1; fgGhostArc = null; fgLoopMiss = 0; fgLoopAge = 0;
       fgCyc = null;
+      fgFrozen = false;
+      const fz = document.getElementById('fg-freeze');
+      if (fz) fz.textContent = 'Freeze ❄️';
       ({ theta: fgDsTh, P: fgDsP } = rlsInit(DS_NF, 10.0));
       fgClearScoring();
       const ap = document.getElementById('fg-ap');
@@ -824,6 +829,11 @@
       if (b) b.textContent = 'Autopilot ✍️';
     }
     document.getElementById('fg-reset').addEventListener('click', makeFinger);
+    document.getElementById('fg-freeze').addEventListener('click', () => {
+      fgFrozen = !fgFrozen;
+      document.getElementById('fg-freeze').textContent = fgFrozen ? 'Unfreeze ▶' : 'Freeze ❄️';
+      console.log('training ' + (fgFrozen ? 'FROZEN — play freely, nothing learns' : 'resumed'));
+    });
     document.getElementById('fg-hz').addEventListener('input', (e) => {
       fgHzIdx = Math.max(0, Math.min(NLAD - 1, parseInt(e.target.value, 10) || 0));
       const sec = (HLAD[fgHzIdx] * SEC).toFixed(1);
@@ -1276,14 +1286,14 @@
       fgCent[0] += 0.05 * (a[0] - fgCent[0]); fgCent[1] += 0.05 * (a[1] - fgCent[1]);
       fgCentLast = fgCent;
       const s = [(a[0] - fgPrev[0]) * DSCALE, (a[1] - fgPrev[1]) * DSCALE, a[0] - fgCent[0], a[1] - fgCent[1]];
-      const res = fgModel.step(s);
+      const res = fgModel.step(s, null, fgFrozen);
       fgSamples++;
       fgLastS = s;
       fgLog.push(s);
       if (fgLog.length > 1200) fgLog.shift();
       // PATH refresh (cheap — no fitting): keep the stored loop tracking the
       // doodle so path-locked predictions stay pinned to fresh geometry
-      if (fgSamples >= 80 && fgSamples % 16 === 0) {
+      if (!fgFrozen && fgSamples >= 80 && fgSamples % 16 === 0) {
         const abs = fgA.slice(-900).map((p) => [p[0], p[1]]);
         abs.push(a);
         const rp = resamplePath(abs.map((p) => [0, 0, p[0], p[1]]));
@@ -1367,7 +1377,7 @@
         }
         const dsObs = Math.max(0, bi - fgPhase);
         fgPhase = ((bi % fgLoop.length) + fgLoop.length) % fgLoop.length;
-        rls(fgDsTh, fgDsP, dsFeat(fgDsLags, fgPhase / fgLoop.length), dsObs, 0.995, 0, false);
+        if (!fgFrozen) rls(fgDsTh, fgDsP, dsFeat(fgDsLags, fgPhase / fgLoop.length), dsObs, 0.995, 0, false);
         fgDsLags = [dsObs, fgDsLags[0], fgDsLags[1]];
         fgDsObs.push(dsObs);
         if (fgDsObs.length > 90) fgDsObs.shift();
@@ -1678,7 +1688,7 @@
         fgLastT = performance.now();
         fgStepSim();
       }
-      if (!fgAuto && !fgCommissioning && fgCyc) pumpCyc(performance.now() + 3);
+      if (!fgAuto && !fgCommissioning && !fgFrozen && fgCyc) pumpCyc(performance.now() + 3);
       if (fgPtr.down) {
         fgTrail.push([fgPtr.x, fgPtr.y]);
         if (fgTrail.length > 120) fgTrail.shift();
@@ -1698,8 +1708,8 @@
       document.getElementById('fg-op').textContent = opReady
         ? `${Math.sqrt(fgOPn[si] / fgET).toFixed(3)} vs line ${Math.sqrt(fgOPl[si] / fgET).toFixed(3)}` : '—';
       if (!fgAuto && fgCyc) {
-        document.getElementById('fg-ap').textContent =
-          `training live · ${fgCyc.fed} steps · fit err ${(fgCyc.err || 0).toFixed(3)}` + (fgLoop ? ' · lap locked' : '');
+        document.getElementById('fg-ap').textContent = (fgFrozen ? 'training FROZEN ❄️ · ' : 'training live · ')
+          + `${fgCyc.fed} steps · fit err ${(fgCyc.err || 0).toFixed(3)}` + (fgLoop ? ' · lap locked' : '');
       }
       document.getElementById('fg-opadv').textContent = opReady
         ? `${Math.sqrt(fgOPl[si] / fgOPn[si]).toFixed(0)}× closer · ${Math.round(fgOPl[si] / fgOPn[si]).toLocaleString()}× less error energy` : '—';

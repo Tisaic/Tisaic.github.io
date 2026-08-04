@@ -142,7 +142,13 @@ the shipped commit carries the correct version.
    faithful) or on escape/divergence — so the doodle never decays, ever.
    Winner runs as its own model; the online ghost predictor is never
    replaced. Verified headless: square/triangle/star/fig-8/circle at
-   human and machine tempos, ≥75 s each, star arms intact throughout).
+   human and machine tempos, ≥75 s each, star arms intact throughout.
+   A **Freeze ❄️ / Unfreeze ▶** button halts ALL learning — the online
+   ghost model steps predict-only, the tempo-readout RLS pauses, the
+   stored loop stops refreshing, and the cyclic AFM pump stops feeding —
+   while predictions, the ghost, and Autopilot keep working, so the model
+   can be played with without being affected. The brain row shows
+   "training FROZEN ❄️" vs "training live"; Reset brain also unfreezes).
 
 ## Versioning
 
