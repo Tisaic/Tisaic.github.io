@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:51,built:"2026-08-04T17:51:26Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:52,built:"2026-08-04T18:59:38Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -116,18 +116,18 @@
   <section class="panel" id="p-finger">
     <p class="lead">Draw <b>loops and figure-8s</b> for a few seconds. Two ghosts predict your fingertip
       <b>0.2–10&nbsp;s ahead</b> (set by the <b>ghost horizon</b> slider):
-      <span style="color:#7c8aa0">gray = straight-line extrapolation</span> vs
-      <span style="color:#f59e0b">amber = NGRC</span>, which learns <b>your</b> motion — using the library's
-      <b>direct multi-horizon readouts</b>, because iterating a 1-step model compounds its error (the chart
-      shows all three). The score is the
+      <span style="color:#7c8aa0">gray = analogue k-NN</span> (Lorenz's method of analogues: it finds the
+      nearest past moment of <b>your own drawing</b> and bets history repeats — a real rival, not a strawman) vs
+      <span style="color:#f59e0b">amber = NGRC</span>, which learns a <b>model</b> of your motion — using the
+      library's <b>direct multi-horizon readouts</b>, because iterating a 1-step model compounds its error (the
+      chart shows all three). The score is the
       <b>path miss</b> — how far each ghost lands from where your finger actually went. Then the showpiece —
-      tap <b>Autopilot</b>: NGRC <b>keeps drawing your doodle by itself</b>; the straight-line approach just
-      leaves the screen. The <b>brain</b> selector picks the autopilot's model: <b>AFM</b> is the library's
-      universal feature map (ReLU + Fourier), noise-hardened so your doodle becomes a true attractor —
-      <b>linear</b> is kept for comparison and slowly spirals into a circle. Keep doodling ~10&nbsp;s and the ghost <span style="color:#a78bfa"><b>locks onto your path</b></span>:
+      tap <b>Autopilot</b>: NGRC <b>keeps drawing your doodle by itself</b> (the library's <b>AFM</b> universal
+      feature map, ReLU + Fourier, noise-hardened so your doodle becomes a true attractor); a no-learning
+      straight-line approach just leaves the screen. Keep doodling ~10&nbsp;s and the ghost <span style="color:#a78bfa"><b>locks onto your path</b></span>:
       it tracks your <b>phase</b> around the doodle and learns your <b>tempo profile</b> (you slow at the same
-      corners every lap), then predicts by riding the path ahead — the <b>on-path advantage</b> shows the
-      orders of magnitude between that and a straight line.</p>
+      corners every lap), then predicts by riding the path ahead — the <b>on-path advantage</b> scores that
+      against the analogue's replay.</p>
     <div class="stage" id="fg-stage" style="height:44vh"></div>
     <div class="controls">
       <button id="fg-auto">Autopilot ✍️</button>
@@ -155,7 +155,7 @@
       <dt>Samples</dt><dd id="fg-n">0</dd>
       <dt id="fg-rmse-label">NGRC direct @1.2s</dt><dd id="fg-rmse" class="amber">—</dd>
       <dt>NGRC 1-step rolled</dt><dd id="fg-iter">—</dd>
-      <dt>Straight-line path miss</dt><dd id="fg-naive">—</dd>
+      <dt>Analogue k-NN path miss</dt><dd id="fg-naive">—</dd>
       <dt>NGRC advantage</dt><dd id="fg-skill" class="good">—</dd>
       <dt id="fg-op-label">On-path miss</dt><dd id="fg-op">—</dd>
       <dt>On-path advantage</dt><dd id="fg-opadv" class="good">—</dd>
@@ -764,7 +764,8 @@
       }
     }
     const ROLLMAX = (() => { let m = 0; for (let i = 0; i < 21; i++) if (HLAD[i] <= 100) m = i; return m; })();
-    let fgES, fgOPn, fgOPl;                         // per-rung: path-locked miss, on-path (ghost/line)
+    let fgES, fgOPn, fgOPl;                         // per-rung: path-locked miss, on-path (ghost/analogue)
+    let fgHHn;                                      // per-rung timed miss of the SHOWN ghost, head-to-head-gated
     const DS_NF = 10;
     const dsFeat = (lags, ph01) => {
       const w = 2 * Math.PI * ph01;
@@ -850,6 +851,7 @@
       fgPrev = null; fgVel = [0, 0];
       fgEN = new Array(NLAD).fill(0); fgEI = new Array(NLAD).fill(0); fgEC = new Array(NLAD).fill(0); fgET = 0;
       fgES = new Array(NLAD).fill(0); fgOPn = new Array(NLAD).fill(0); fgOPl = new Array(NLAD).fill(0);
+      fgHHn = new Array(NLAD).fill(0);
       fgLoop = null; fgPhase = 0; fgDsLags = [1, 1, 1];
       fgDsObs = []; fgDsMed = 1; fgGhostArc = null; fgLoopMiss = 0; fgLoopAge = 0;
       fgCyc = null;
@@ -1393,8 +1395,45 @@
       fgET = FG_DECAY * fgET + (1 - FG_DECAY) * (a[0] * a[0] + a[1] * a[1] + 1e-4);
       fgVel[0] = 0.6 * fgVel[0] + 0.4 * (a[0] - fgPrev[0]);
       fgVel[1] = 0.6 * fgVel[1] + 0.4 * (a[1] - fgPrev[1]);
+      // ANALOGUE k-NN baseline (Lorenz's method of analogues) — a real rival,
+      // not a strawman: find the nearest past (position, velocity) state in
+      // YOUR OWN drawing and predict that history repeats itself:
+      // pred(h) = now + (past[j+h] − past[j]). Per rung, the best match that
+      // still has h samples of recorded future is used (prefix-argmin over
+      // the multi-stroke log, so it handles pen lifts by replaying them).
+      // Straight-line survives only as the cold-start fallback.
       const cv = [[], []];
-      for (const hs of HLAD) { cv[0].push(a[0] + fgVel[0] * hs); cv[1].push(a[1] + fgVel[1] * hs); }
+      {
+        const H = fgAbs, n = H.length;
+        const dm = new Array(n), pm = new Array(n);  // match distance + prefix-argmin
+        let bj = -1, bd = Infinity;
+        for (let j = 0; j < n; j++) {
+          let dj = Infinity;
+          const pj = H[j], p1 = j >= 1 ? H[j - 1] : null, p2 = j >= 2 ? H[j - 2] : null;
+          if (pj && p1 && p2) {                      // contiguous 2-step window → valid velocity
+            const vx = (pj[0] - p2[0]) / 2, vy = (pj[1] - p2[1]) / 2;
+            dj = (pj[0] - a[0]) ** 2 + (pj[1] - a[1]) ** 2
+               + ((vx - fgVel[0]) * DSCALE) ** 2 + ((vy - fgVel[1]) * DSCALE) ** 2;
+          }
+          dm[j] = dj;
+          if (dj < bd) { bd = dj; bj = j; }
+          pm[j] = bj;
+        }
+        cv.fb = new Array(NLAD).fill(false);         // rungs still on the cold-start fallback
+        for (let k = 0; k < NLAD; k++) {
+          const h = HLAD[k], cut = n - 1 - h;
+          let px = null;
+          if (cut >= 2 && pm[cut] >= 0 && dm[pm[cut]] < Infinity) {
+            const j = pm[cut];
+            let t = H[j + h];
+            if (!t) t = H[j + h + 1] || H[j + h - 1];  // rung landed on a lift marker
+            if (t) px = [a[0] + (t[0] - H[j][0]), a[1] + (t[1] - H[j][1])];
+          }
+          if (!px) { px = [a[0] + fgVel[0] * h, a[1] + fgVel[1] * h]; cv.fb[k] = true; }  // cold start
+          cv[0].push(px[0]); cv[1].push(px[1]);
+        }
+        cv.jumpBreak = true;                         // render: don't ink analogue teleports
+      }
       if (!fgCent) fgCent = [...a];
       fgCent[0] += 0.05 * (a[0] - fgCent[0]); fgCent[1] += 0.05 * (a[1] - fgCent[1]);
       fgCentLast = fgCent;
@@ -1613,7 +1652,7 @@
         fgAbs = fgAbs.slice(fgAbs.length - 900);
         while (fgAbs.length && fgAbs[0] === null) fgAbs.shift();
       }
-      fgPend.push({ i: fgA.length - 1, n: pred, r: rolled, s: shape, w: shown, c: cv });
+      fgPend.push({ i: fgA.length - 1, n: pred, r: rolled, s: shape, w: shown, c: cv, gm: fgGhostMax });
       // PATH-MISS scoring: each horizon's prediction is scored by its distance to
       // the NEAREST sample of the actual future path (window h-2..h+3) — this is
       // what the eye judges: "did the ghost land on where I actually went?"
@@ -1627,7 +1666,8 @@
           const rx = q.r[0][k], ry = q.r[1][k];
           const sx = q.s[0][k], sy = q.s[1][k];
           const cx = q.c[0][k], cy = q.c[1][k];
-          let dn = Infinity, di = Infinity, ds = Infinity, dc = Infinity;
+          const wx = q.w[0][k], wy = q.w[1][k];
+          let dn = Infinity, di = Infinity, ds = Infinity, dc = Infinity, dw = Infinity;
           const j0 = q.i + Math.max(1, h - 2), j1 = q.i + h + 3;
           for (let j = j0; j <= j1; j++) {
             const s = fgA[j];
@@ -1635,23 +1675,38 @@
             if (rx != null) { const t2 = (rx - s[0]) ** 2 + (ry - s[1]) ** 2; if (t2 < di) di = t2; }
             const t3 = (cx - s[0]) ** 2 + (cy - s[1]) ** 2; if (t3 < dc) dc = t3;
             if (sx != null) { const t4 = (sx - s[0]) ** 2 + (sy - s[1]) ** 2; if (t4 < ds) ds = t4; }
+            const t7 = (wx - s[0]) ** 2 + (wy - s[1]) ** 2; if (t7 < dw) dw = t7;
           }
           fgEN[k] = FG_DECAY * fgEN[k] + (1 - FG_DECAY) * dn;
           if (rx != null) fgEI[k] = FG_DECAY * fgEI[k] + (1 - FG_DECAY) * di;
-          fgEC[k] = FG_DECAY * fgEC[k] + (1 - FG_DECAY) * dc;
           if (sx != null) fgES[k] = FG_DECAY * fgES[k] + (1 - FG_DECAY) * ds;
+          // HEAD-TO-HEAD scoring is PAIRWISE: the analogue and the SHOWN ghost
+          // are scored on the same prediction instances, and only when a real
+          // analogue existed (not its cold-start fallback). Anything else
+          // poisons one side with warmup the other never served — the analogue
+          // looked 16× worse than reality, then the exemption alone made NGRC
+          // look worse than ITS reality.
+          // …and only on rungs the ghost actually DISPLAYED (k ≤ gm): scoring
+          // the trust-capped, invisible long-rung points would judge NGRC on
+          // predictions nobody saw
+          const hh = (!q.c.fb || !q.c.fb[k]) && k <= q.gm;
+          if (hh) {
+            fgEC[k] = FG_DECAY * fgEC[k] + (1 - FG_DECAY) * dc;
+            fgHHn[k] = FG_DECAY * fgHHn[k] + (1 - FG_DECAY) * dw;
+          }
           // ON-PATH miss (untimed): distance from the prediction to ANY point
           // of the stroke actually drawn over the horizon — "did it land on
           // where you were about to draw", the number the eye judges
           let on = Infinity, ol = Infinity;
-          const wx = q.w[0][k], wy = q.w[1][k];
           for (let j = q.i + 1; j <= Math.min(fgA.length - 1, q.i + h + 5); j++) {
             const s = fgA[j];
             const t5 = (wx - s[0]) ** 2 + (wy - s[1]) ** 2; if (t5 < on) on = t5;
             const t6 = (cx - s[0]) ** 2 + (cy - s[1]) ** 2; if (t6 < ol) ol = t6;
           }
-          fgOPn[k] = FG_DECAY * fgOPn[k] + (1 - FG_DECAY) * on;
-          fgOPl[k] = FG_DECAY * fgOPl[k] + (1 - FG_DECAY) * ol;
+          if (hh) {
+            fgOPn[k] = FG_DECAY * fgOPn[k] + (1 - FG_DECAY) * on;
+            fgOPl[k] = FG_DECAY * fgOPl[k] + (1 - FG_DECAY) * ol;
+          }
         }
         if (q.next >= NLAD) fgPend.shift(); else break;
       }
@@ -1674,7 +1729,16 @@
       let lastK = 0;
       for (let k = 0; k <= kEnd; k++) {
         if (mat[0][k] == null) break;
-        const p = den(mat[0][k], mat[1][k]); fgCtx.lineTo(p[0], p[1]); lastK = k;
+        const p = den(mat[0][k], mat[1][k]);
+        // analogue baseline: a rung-to-rung jump far beyond what the current
+        // speed explains is a replayed pen lift (or an analogue switch) —
+        // lift the pen instead of inking a bridge
+        if (mat.jumpBreak && k > 0) {
+          const gp = Math.hypot(mat[0][k] - mat[0][k - 1], mat[1][k] - mat[1][k - 1]);
+          const exp2 = Math.hypot(fgVel[0], fgVel[1]) * (HLAD[k] - HLAD[k - 1]);
+          if (gp > Math.max(0.3, 3 * exp2)) { fgCtx.moveTo(p[0], p[1]); lastK = k; continue; }
+        }
+        fgCtx.lineTo(p[0], p[1]); lastK = k;
       }
       if (dashed) fgCtx.setLineDash([6, 5]);
       fgCtx.strokeStyle = stroke; fgCtx.lineWidth = 3; fgCtx.stroke();
@@ -1771,8 +1835,8 @@
     let fgPlotInited = false, fgPlotTick = 0;
     function fgUpdatePlot() {
       const nN = fgEN.map((e) => (fgET > 0 ? Math.sqrt(e / fgET) : 0));
-      const nI = fgEI.map((e) => (fgET > 0 ? Math.sqrt(e / fgET) : 0));
-      const nC = fgEC.map((e) => (fgET > 0 ? Math.sqrt(e / fgET) : 0));
+      const nI = fgEI.map((e) => (fgET > 0 && e > 0 ? Math.sqrt(e / fgET) : null));   // null = never scored (rollout cap)
+      const nC = fgEC.map((e) => (fgET > 0 && e > 0 ? Math.sqrt(e / fgET) : null));   // null = analogue has no history yet
       const xs = HLAD.map((h) => +(h * SEC).toFixed(2));
       const sel = +(HLAD[fgHzIdx] * SEC).toFixed(2);
       const layout = { margin: { l: 34, r: 8, t: 8, b: 28 }, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
@@ -1781,7 +1845,7 @@
         yaxis: { title: { text: 'path miss (recent)', font: { size: 10 } }, gridcolor: '#1e293b', rangemode: 'tozero' },
         shapes: [{ type: 'line', x0: sel, x1: sel, y0: 0, y1: 1, yref: 'paper', line: { color: '#6366f1', width: 1.5, dash: 'dot' } }] };
       const mk = (y, name, color) => ({ x: xs, y, type: 'scatter', mode: 'lines+markers', name, line: { color, width: 2 }, marker: { size: 4 } });
-      const data = [mk(nC, 'straight-line', '#7c8aa0'), mk(nI, '1-step rolled', 'rgba(245,158,11,0.45)'), mk(nN, 'NGRC direct', '#f59e0b')];
+      const data = [mk(nC, 'analogue k-NN', '#7c8aa0'), mk(nI, '1-step rolled', 'rgba(245,158,11,0.45)'), mk(nN, 'NGRC direct', '#f59e0b')];
       if (fgES.some((e) => e > 0)) {
         data.push(mk(fgES.map((e, i) => (fgET > 0 && e > 0 ? Math.sqrt(e / fgET) : null)), 'path-locked', '#a78bfa'));
       }
@@ -1847,21 +1911,25 @@
       const ready = fgSamples > 36 && fgET > 0 && fgEN[si] > 0;
       document.getElementById('fg-rmse').textContent = ready ? Math.sqrt(fgEN[si] / fgET).toFixed(3) : '—';
       document.getElementById('fg-iter').textContent = (ready && HLAD[si] <= 100 && fgEI[si] > 0) ? Math.sqrt(fgEI[si] / fgET).toFixed(3) : '—';
-      document.getElementById('fg-naive').textContent = ready ? Math.sqrt(fgEC[si] / fgET).toFixed(3) : '—';
-      document.getElementById('fg-skill').textContent = (ready && fgEC[si] > 0)
-        ? Math.sqrt(fgEC[si] / fgEN[si]).toFixed(1) + '× better' : '—';
+      document.getElementById('fg-naive').textContent = (ready && fgEC[si] > 0) ? Math.sqrt(fgEC[si] / fgET).toFixed(3) : '—';
+      // ratios: one decimal below 10× so a close race (or an analogue win,
+      // ratio < 1) reads honestly instead of rounding to "0×"
+      const rFmt = (r) => (r < 10 ? r.toFixed(1) : Math.round(r).toLocaleString());
+      // head-to-head: the SHOWN ghost vs the analogue on the SAME instances
+      document.getElementById('fg-skill').textContent = (ready && fgEC[si] > 0 && fgHHn[si] > 0)
+        ? rFmt(Math.sqrt(fgEC[si] / fgHHn[si])) + '× better' : '—';
       // ON-PATH: the "did the ghost land on your stroke" scoreboard — this is
       // where the shape brain earns its orders of magnitude at long horizons
       const opReady = ready && fgOPn[si] > 0 && fgOPl[si] > 0;
       document.getElementById('fg-op').textContent = opReady
-        ? `${Math.sqrt(fgOPn[si] / fgET).toFixed(3)} vs line ${Math.sqrt(fgOPl[si] / fgET).toFixed(3)}` : '—';
+        ? `${Math.sqrt(fgOPn[si] / fgET).toFixed(3)} vs kNN ${Math.sqrt(fgOPl[si] / fgET).toFixed(3)}` : '—';
       if (!fgAuto && fgCyc) {
         document.getElementById('fg-ap').textContent = (fgFrozen ? 'training FROZEN ❄️ · ' : 'training live · ')
           + `${fgCyc.fed} steps · fit err ${(fgCyc.err || 0).toFixed(3)}`
           + (fgLoop ? (' · lap locked' + (fgLoopGaps && fgLoopGaps.size ? ` · ${fgLoopGaps.size} lifts` : '')) : '');
       }
       document.getElementById('fg-opadv').textContent = opReady
-        ? `${Math.sqrt(fgOPl[si] / fgOPn[si]).toFixed(0)}× closer · ${Math.round(fgOPl[si] / fgOPn[si]).toLocaleString()}× less error energy` : '—';
+        ? `${rFmt(Math.sqrt(fgOPl[si] / fgOPn[si]))}× closer · ${rFmt(fgOPl[si] / fgOPn[si])}× less error energy` : '—';
       if (++fgPlotTick % 10 === 0) fgUpdatePlot();
       requestAnimationFrame(fgTick);
     }

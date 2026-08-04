@@ -96,7 +96,15 @@ the shipped commit carries the correct version.
    sampling; an optional **tracing guide** selector overlays one of 10 faint
    stencil shapes — circle/ellipse/square/triangle/hexagon/star/figure-8/
    heart/rose/lissajous — purely visual, never read by any model, default
-   none; amber NGRC ghost vs gray **straight-line extrapolation**, with a
+   none; amber NGRC ghost vs a gray **analogue k-NN** rival (Lorenz's
+   method of analogues: per-rung nearest past (position, velocity) state in
+   the multi-stroke log via prefix-argmin, pred(h) = now + (past[j+h] −
+   past[j]) — it replays pen lifts too; straight-line survives only as its
+   cold-start fallback, and fallback rungs are excluded from the analogue's
+   score. Head-to-head scoring is PAIRWISE: the SHOWN ghost and the
+   analogue are judged on the same prediction instances, only on rungs the
+   ghost actually displayed — anything else poisons one side with warmup
+   the other never served), with a
    **ghost-horizon slider (0.2–10 s, geometric rungs)** — a 21-rung ladder of the library's
    **direct multi-horizon readouts** (`directHorizons`) trains continuously,
    so the slider needs no refit and the chart plots miss-vs-horizon curves
@@ -110,10 +118,14 @@ the shipped commit carries the correct version.
    corners every lap. Prediction = advance phase along the loop (transverse
    offset decays on), so it lands ON the future stroke by construction.
    Per-rung best-of (rolled / direct / path-locked, judged by live-tracked
-   misses) is what the ghost draws. New **on-path miss** stat (untimed:
+   misses) is what the ghost draws. The **on-path miss** stat (untimed:
    distance from the prediction to the stroke actually drawn over the
-   horizon): at 10 s the path-locked ghost measures ~70× closer than straight-line
-   (~5,000× less error energy) live in-browser, timed advantage ~40×.
+   horizon) scores the shown ghost against the analogue. Honest
+   human-realistic steady state (jitter + tempo random-walk, measured
+   headless): at 1.2 s the analogue wins TIMED (its velocity-matching
+   picks analogues at the current tempo) while NGRC is ~2.6× closer
+   on-path (~7× less error energy); at 10 s NGRC wins both (~2.3×
+   timed, ~1.7× less energy). Sub-10× ratios display with one decimal.
    The resample step is clamped to [0.03, 0.05]: the floor keeps slow
    careful stencil-tracing from drowning the fit in ridge (tiny deltas)
    or blowing the fit window past one lap. Iterating the 1-step model
@@ -162,7 +174,8 @@ the shipped commit carries the correct version.
    index (so the visual jump and the pen-lift flag land on the same
    render segment); the phase forecast marks crossings so the ghost
    LIFTS and lands on the next stroke; and scoring survives pattern
-   lifts (the straight-line baseline honestly misses the next stroke).
+   lifts (and the analogue baseline replays them, so the ghost race is
+   fair across strokes).
    Autopilot on a gapped lap deploys instantly as **path-locked replay**
    (an AFM free-run cannot teleport) drawing each stroke with a real
    pen-up; the cyclic AFM pump feeds predict-only across teleport steps
