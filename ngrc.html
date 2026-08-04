@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:44,built:"2026-08-04T03:00:41Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:45,built:"2026-08-04T12:45:12Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -680,7 +680,7 @@
     let fgAutoTrail = [], fgAutoRay = null, fgAutoModel = null, fgAutoMeta = null;
     let fgAutoSnap = null, fgAutoSeed = null;       // verified-orbit restart point (escape watchdog)
     let fgAutoSteps = 0;
-    let fgAutoMode = 'model', fgAutoPh = 0, fgAutoDs = [1, 1, 1];  // 'path' = path-locked replay
+    let fgAutoMode = 'model', fgAutoPh = 0, fgAutoDs = [1, 1, 1], fgAutoDsSm = 1;  // 'path' = path-locked replay
     let fgCentLast = null;                          // last stroke's centroid — survives pointerdown
     let fgAutoGen = 0;                              // bumped on any new input/stop → cancels an in-flight commissioning
     // PATH-LOCKED ghost — the phase-domain rethink. A doodle factors into a
@@ -693,6 +693,7 @@
     // advance phase along the loop → it lands ON the future stroke by
     // construction.
     let fgLoop = null, fgLoopH = 0, fgPhase = 0, fgDsTh = null, fgDsP = null, fgDsLags = [1, 1, 1];
+    let fgDsObs = [], fgDsMed = 1, fgGhostArc = null;
     let fgES, fgOPn, fgOPl;                         // per-rung: path-locked miss, on-path (ghost/line)
     const DS_NF = 10;
     const dsFeat = (lags, ph01) => {
@@ -758,6 +759,7 @@
       fgEN = new Array(NLAD).fill(0); fgEI = new Array(NLAD).fill(0); fgEC = new Array(NLAD).fill(0); fgET = 0;
       fgES = new Array(NLAD).fill(0); fgOPn = new Array(NLAD).fill(0); fgOPl = new Array(NLAD).fill(0);
       fgLoop = null; fgPhase = 0; fgDsLags = [1, 1, 1];
+      fgDsObs = []; fgDsMed = 1; fgGhostArc = null;
       ({ theta: fgDsTh, P: fgDsP } = rlsInit(DS_NF, 10.0));
       fgClearScoring();
       const ap = document.getElementById('fg-ap');
@@ -992,6 +994,7 @@
         fgAutoMode = 'path';
         fgAutoPh = fgPhase;
         fgAutoDs = [...fgDsLags];
+        fgAutoDsSm = fgDsMed || 1;
         fgAuto = true;
         fgAutoLastT = 0;
         fgAutoTrail = [den(fgLastA[0], fgLastA[1])];
@@ -1236,7 +1239,23 @@
         const rp = resamplePath(abs.map((p) => [0, 0, p[0], p[1]]));
         const L = lapLenOf(rp.rs);
         if (L > 20 && rp.rs.length > L + 10) {
-          fgLoop = rp.rs.slice(-L); fgLoopH = rp.h;
+          const lp = rp.rs.slice(-L).map((p) => [p[0], p[1]]);
+          // close the seam: lap-to-lap drift leaves a wrap gap that replays as
+          // a jagged hitch every lap — distribute it linearly around the loop
+          const gx = lp[0][0] - lp[lp.length - 1][0], gy = lp[0][1] - lp[lp.length - 1][1];
+          for (let i2 = 1; i2 < lp.length; i2++) {
+            const w2 = i2 / (lp.length - 1);
+            lp[i2][0] += gx * w2; lp[i2][1] += gy * w2;
+          }
+          for (let p2 = 0; p2 < 2; p2++) {           // wrapped smoothing: tremor out, corners stay
+            const nx = [];
+            for (let i2 = 0; i2 < lp.length; i2++) {
+              const a2 = lp[(i2 + lp.length - 1) % lp.length], b2 = lp[i2], c2 = lp[(i2 + 1) % lp.length];
+              nx.push([0.25 * a2[0] + 0.5 * b2[0] + 0.25 * c2[0], 0.25 * a2[1] + 0.5 * b2[1] + 0.25 * c2[1]]);
+            }
+            for (let i2 = 0; i2 < lp.length; i2++) lp[i2] = nx[i2];
+          }
+          fgLoop = lp; fgLoopH = rp.h;
           let bi = 0, bd = Infinity;                 // re-acquire phase on the fresh loop
           for (let i2 = 0; i2 < fgLoop.length; i2++) { const d = (fgLoop[i2][0] - a[0]) ** 2 + (fgLoop[i2][1] - a[1]) ** 2; if (d < bd) { bd = d; bi = i2; } }
           fgPhase = bi;
@@ -1256,13 +1275,17 @@
         fgPhase = ((bi % fgLoop.length) + fgLoop.length) % fgLoop.length;
         rls(fgDsTh, fgDsP, dsFeat(fgDsLags, fgPhase / fgLoop.length), dsObs, 0.995, 0, false);
         fgDsLags = [dsObs, fgDsLags[0], fgDsLags[1]];
+        fgDsObs.push(dsObs);
+        if (fgDsObs.length > 90) fgDsObs.shift();
+        if (fgDsObs.length > 12) { const so = [...fgDsObs].sort((x, y) => x - y); fgDsMed = so[Math.floor(so.length / 2)] || 1; }
         // one 84-step phase forecast covers every rung (rung k = step HLAD[k])
         const anchor = loopAt(fgPhase);
         const off = [a[0] - anchor[0], a[1] - anchor[1]];
         let ph = fgPhase, lags = [...fgDsLags], dec = 1;
         phaseFc = new Array(HMAX);
+        const dsLo = fgDsMed > 0.05 ? 0.35 * fgDsMed : 0, dsHi = fgDsMed > 0.05 ? 2.8 * fgDsMed : 4;
         for (let i2 = 0; i2 < HMAX; i2++) {
-          const dsHat = Math.max(0, Math.min(4, predict(dsFeat(lags, ((ph % fgLoop.length) + fgLoop.length) % fgLoop.length / fgLoop.length), fgDsTh)));
+          const dsHat = Math.max(dsLo, Math.min(dsHi, predict(dsFeat(lags, ((ph % fgLoop.length) + fgLoop.length) % fgLoop.length / fgLoop.length), fgDsTh)));
           ph += dsHat;
           lags = [dsHat, lags[0], lags[1]];
           dec *= 0.88;                               // transverse offset decays onto the path
@@ -1285,19 +1308,29 @@
         const sp = phaseFc ? phaseFc[HLAD[k] - 1] : null;
         shape[0].push(sp ? sp[0] : null);
         shape[1].push(sp ? sp[1] : null);
-        // best-of per rung by the live-tracked misses (untracked → Infinity)
-        let bx = rolled[0][k] != null ? rolled[0][k] : (shape[0][k] != null ? shape[0][k] : pred[0][k]);
-        let by = rolled[0][k] != null ? rolled[1][k] : (shape[0][k] != null ? shape[1][k] : pred[1][k]);
-        if (fgSamples > 60) {
-          const mI = (rolled[0][k] != null && fgEI[k] > 0) ? fgEI[k] : Infinity;
-          const mN = fgEN[k] > 0 ? fgEN[k] : Infinity;
-          const mS = (sp && fgES[k] > 0) ? fgES[k] : Infinity;
-          if (mN < mI && mN <= mS) { bx = pred[0][k]; by = pred[1][k]; }
-          else if (mS < mI && mS < mN) { bx = shape[0][k]; by = shape[1][k]; }
+      }
+      // ONE family for the whole displayed ghost, judged at the SELECTED rung —
+      // mixing families across rungs drew a zigzag tangle (long-horizon direct
+      // readouts regress to the doodle's center; stitching those to path
+      // points scribbled the middle of the shape)
+      let fam = 'roll';
+      {
+        const k0 = fgHzIdx;
+        const mR = (rolled[0][k0] != null && fgEI[k0] > 0) ? fgEI[k0] : Infinity;
+        const mD = fgEN[k0] > 0 ? fgEN[k0] : Infinity;
+        const mS = (phaseFc && fgES[k0] > 0) ? fgES[k0] : Infinity;
+        if (fgSamples > 60 && (mR < Infinity || mD < Infinity || mS < Infinity)) {
+          fam = (mS <= mD && mS <= mR) ? 'path' : (mD <= mR ? 'direct' : 'roll');
         }
-        shown[0].push(bx); shown[1].push(by);
+        if (fam === 'roll' && rolled[0][fgHzIdx] == null) fam = phaseFc ? 'path' : 'direct';
+      }
+      const src2 = fam === 'path' ? shape : (fam === 'direct' ? pred : rolled);
+      for (let k = 0; k < NLAD; k++) {
+        shown[0].push(src2[0][k] != null ? src2[0][k] : pred[0][k]);
+        shown[1].push(src2[1][k] != null ? src2[1][k] : pred[1][k]);
       }
       fgPredMat = shown;
+      fgGhostArc = (fam === 'path' && phaseFc) ? phaseFc.slice(0, HLAD[fgHzIdx]) : null;
       fgCvMat = cv;
       fgA.push(a);
       fgPend.push({ i: fgA.length - 1, n: pred, r: rolled, s: shape, w: shown, c: cv });
@@ -1408,7 +1441,15 @@
         if (fgAutoInfo) { fgCtx.fillStyle = '#94a3b8'; fgCtx.font = '11px sans-serif'; fgCtx.fillText(fgAutoInfo, fgW / 2, 42); }
       } else {
         if (fgPtr.down && fgCvMat) fgGhost(fgCvMat, 'rgba(124,138,160,0.7)', '#7c8aa0', true);
-        if (fgPtr.down && fgPredMat) fgGhost(fgPredMat, 'rgba(245,158,11,0.9)', '#f59e0b', false);
+        if (fgPtr.down && fgGhostArc && fgGhostArc.length > 1) {
+          fgCtx.beginPath();
+          let p0 = den(fgGhostArc[0][0], fgGhostArc[0][1]);
+          fgCtx.moveTo(p0[0], p0[1]);
+          for (let i = 1; i < fgGhostArc.length; i++) { const p = den(fgGhostArc[i][0], fgGhostArc[i][1]); fgCtx.lineTo(p[0], p[1]); }
+          fgCtx.strokeStyle = 'rgba(245,158,11,0.9)'; fgCtx.lineWidth = 3; fgCtx.stroke();
+          const pe = den(fgGhostArc[fgGhostArc.length - 1][0], fgGhostArc[fgGhostArc.length - 1][1]);
+          fgCtx.beginPath(); fgCtx.arc(pe[0], pe[1], 8, 0, 2 * Math.PI); fgCtx.fillStyle = '#f59e0b'; fgCtx.fill();
+        } else if (fgPtr.down && fgPredMat) fgGhost(fgPredMat, 'rgba(245,158,11,0.9)', '#f59e0b', false);
         fgCtx.beginPath(); fgCtx.arc(fgPtr.x, fgPtr.y, 8, 0, 2 * Math.PI); fgCtx.fillStyle = '#2563eb'; fgCtx.fill();
         fgCtx.strokeStyle = '#93c5fd'; fgCtx.lineWidth = 2; fgCtx.stroke();
         if (fgSamples === 0) {
@@ -1450,9 +1491,12 @@
           // one tempo-readout step per tick; 33/48 rescales sample-rate ds to tick rate
           const L = fgLoop.length;
           const ph01 = ((fgAutoPh % L) + L) % L / L;
-          let dsHat = Math.max(0, Math.min(4, predict(dsFeat(fgAutoDs, ph01), fgDsTh)));
-          if (!(dsHat > 0.05)) dsHat = 1;            // under-trained tempo: nominal pace
-          fgAutoPh += dsHat * (33 / 48);
+          let dsHat = predict(dsFeat(fgAutoDs, ph01), fgDsTh);
+          const lo = fgDsMed > 0.05 ? 0.35 * fgDsMed : 0.2, hi = fgDsMed > 0.05 ? 2.8 * fgDsMed : 4;
+          dsHat = Math.max(lo, Math.min(hi, dsHat));
+          if (!(dsHat > 0.05)) dsHat = fgDsMed || 1;
+          fgAutoDsSm = 0.75 * fgAutoDsSm + 0.25 * dsHat;   // smooth tempo — no jerks
+          fgAutoPh += fgAutoDsSm * (33 / 48);
           fgAutoDs = [dsHat, fgAutoDs[0], fgAutoDs[1]];
           const p = loopAt(fgAutoPh);
           fgAutoTrail.push(den(p[0], p[1]));
