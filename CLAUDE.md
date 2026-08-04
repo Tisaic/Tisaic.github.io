@@ -93,10 +93,12 @@ the shipped commit carries the correct version.
    **auto-tuned lag-filter** caret — the realistic DIY baseline, best of a
    scored filter bank — with an on-stage error meter + ×-better readout, ~4×,
    and a 3-trace Plotly chart), **③ finger-trace** (draw loops at ~20 Hz
-   sampling; amber NGRC ghost vs gray **straight-line extrapolation** ~0.6 s
-   ahead. The ghost uses the library's **direct multi-horizon readouts**
-   (`directHorizons`) — iterating the 1-step model compounds its error, a
-   known-poor mode that the chart shows explicitly as a third bar series —
+   sampling; amber NGRC ghost vs gray **straight-line extrapolation**, with a
+   **ghost-horizon slider (0.1–2 s)** — a 21-rung ladder of the library's
+   **direct multi-horizon readouts** (`directHorizons`) trains continuously,
+   so the slider needs no refit and the chart plots miss-vs-horizon curves
+   over the whole range (dotted marker = slider). Iterating the 1-step model
+   compounds its error, a known-poor mode shown explicitly as a third series —
    and the model state uses the EMA velocity, not the raw one-sample diff,
    so finger tremor isn't a prediction target. Plus **Autopilot**: NGRC free-runs and keeps
    drawing your doodle by itself while the straight-line "autopilot" is a

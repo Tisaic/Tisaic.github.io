@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:37,built:"2026-08-03T21:12:30Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:38,built:"2026-08-04T00:57:24Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -115,7 +115,8 @@
   <!-- ================= Tab 3: Finger-trace — ghost race + autopilot ================= -->
   <section class="panel" id="p-finger">
     <p class="lead">Draw <b>loops and figure-8s</b> for a few seconds. Two ghosts predict your fingertip
-      <b>~0.6&nbsp;s ahead</b>: <span style="color:#7c8aa0">gray = straight-line extrapolation</span> vs
+      <b>0.1–2&nbsp;s ahead</b> (set by the <b>ghost horizon</b> slider):
+      <span style="color:#7c8aa0">gray = straight-line extrapolation</span> vs
       <span style="color:#f59e0b">amber = NGRC</span>, which learns <b>your</b> motion — using the library's
       <b>direct multi-horizon readouts</b>, because iterating a 1-step model compounds its error (the chart
       shows all three). The score is the
@@ -133,10 +134,14 @@
         <option value="linear">brain: linear</option>
       </select>
       <button id="fg-reset" class="sec">Reset brain</button>
+      <div class="slider">Ghost horizon
+        <input id="fg-hz" type="range" min="0" max="20" step="1" value="5" />
+        <span id="fg-hzv">0.6s</span>
+      </div>
     </div>
     <dl class="stat">
       <dt>Samples</dt><dd id="fg-n">0</dd>
-      <dt>NGRC direct @0.6s</dt><dd id="fg-rmse" class="amber">—</dd>
+      <dt id="fg-rmse-label">NGRC direct @0.6s</dt><dd id="fg-rmse" class="amber">—</dd>
       <dt>NGRC 1-step rolled</dt><dd id="fg-iter">—</dd>
       <dt>Straight-line path miss</dt><dd id="fg-naive">—</dd>
       <dt>NGRC advantage</dt><dd id="fg-skill" class="good">—</dd>
@@ -616,7 +621,14 @@
     // =====================================================================
     // Tab 3: Finger-trace — 0.6 s ghost race + AUTOPILOT free-run
     // =====================================================================
-    const FK = 12;            // horizon in samples (~0.6 s)
+    // Ghost horizon LADDER: direct readouts are trained at every rung all the
+    // time (that's what makes the slider free — no refit on change); the
+    // slider only picks which rung the ghost and the stats display.
+    const HLAD = Array.from({ length: 21 }, (_, i) => 2 * (i + 1));  // 2..42 samples ≈ 0.1–2.0 s
+    const HMAX = HLAD[HLAD.length - 1];
+    const NLAD = HLAD.length;
+    const SEC = 0.048;        // seconds per sample
+    let fgHzIdx = 5;          // displayed rung (HLAD[5] = 12 samples ≈ 0.6 s)
     const SAMPLE_MS = 48;     // fixed-TIME sampling — same cadence on 60 and 120 Hz displays
     const FPAD = 5;           // future window for path-miss scoring
     const DSCALE = 25;        // delta scaling to O(1) features (raw deltas ~0.02 would drown in the ridge)
@@ -665,15 +677,15 @@
       // known poor at 0.6 s); the library's DIRECT multi-horizon readouts map
       // the current features straight to each future step instead.
       fgModel = new Continuous(4, 2, 2, true, {
-        predictionSteps: FK, lam: 1.0, initVariance: 1.0,
+        predictionSteps: HMAX, lam: 1.0, initVariance: 1.0,
         useClamp: true, clampMin: [-6, -6, -1.8, -1.8], clampMax: [6, 6, 1.8, 1.8],
-        directHorizons: Array.from({ length: FK }, (_, i) => i + 1),
+        directHorizons: [...HLAD],
       });
       fgPtr = { x: 0, y: 0, down: false };
       fgTrail = []; fgPredMat = null; fgCvMat = null;
       fgSamples = 0; fgLastT = 0; fgLastS = null; fgCent = null;
       fgPrev = null; fgVel = [0, 0];
-      fgEN = new Array(FK).fill(0); fgEI = new Array(FK).fill(0); fgEC = new Array(FK).fill(0); fgET = 0;
+      fgEN = new Array(NLAD).fill(0); fgEI = new Array(NLAD).fill(0); fgEC = new Array(NLAD).fill(0); fgET = 0;
       fgClearScoring();
       const ap = document.getElementById('fg-ap');
       if (ap) ap.textContent = '—';
@@ -689,6 +701,13 @@
       if (b) b.textContent = 'Autopilot ✍️';
     }
     document.getElementById('fg-reset').addEventListener('click', makeFinger);
+    document.getElementById('fg-hz').addEventListener('input', (e) => {
+      fgHzIdx = Math.max(0, Math.min(NLAD - 1, parseInt(e.target.value, 10) || 0));
+      const sec = (HLAD[fgHzIdx] * SEC).toFixed(1);
+      document.getElementById('fg-hzv').textContent = sec + 's';
+      document.getElementById('fg-rmse-label').textContent = 'NGRC direct @' + sec + 's';
+      fgUpdatePlot();
+    });
     let fgLastA = null, fgLastVel = [0, 0];           // survives scoring resets (autopilot seed)
 
     // ---- autopilot commissioning ----
@@ -881,8 +900,8 @@
         btn.textContent = '✍️ ' + msg;
         setTimeout(() => { if (!fgAuto && !fgCommissioning) btn.textContent = 'Autopilot ✍️'; }, 1600);
       };
-      if (fgSamples < 3 * FK || !fgLastA || !fgLastS || !fgCentLast) {   // needs a doodle first — say so
-        console.log('autopilot blocked: samples=' + fgSamples + ' of ' + 3 * FK + ', lastA=' + !!fgLastA + ', cent=' + !!fgCentLast);
+      if (fgSamples < 36 || !fgLastA || !fgLastS || !fgCentLast) {   // needs a doodle first — say so
+        console.log('autopilot blocked: samples=' + fgSamples + ' of 36, lastA=' + !!fgLastA + ', cent=' + !!fgCentLast);
         fail('draw a bit more first');
         return;
       }
@@ -1049,7 +1068,7 @@
       fgVel[0] = 0.6 * fgVel[0] + 0.4 * (a[0] - fgPrev[0]);
       fgVel[1] = 0.6 * fgVel[1] + 0.4 * (a[1] - fgPrev[1]);
       const cv = [[], []];
-      for (let k = 1; k <= FK; k++) { cv[0].push(a[0] + fgVel[0] * k); cv[1].push(a[1] + fgVel[1] * k); }
+      for (const hs of HLAD) { cv[0].push(a[0] + fgVel[0] * hs); cv[1].push(a[1] + fgVel[1] * hs); }
       if (!fgCent) fgCent = [...a];
       fgCent[0] += 0.05 * (a[0] - fgCent[0]); fgCent[1] += 0.05 * (a[1] - fgCent[1]);
       fgCentLast = fgCent;
@@ -1065,11 +1084,11 @@
       // converges within seconds, the direct readouts overtake it soon after —
       // so a fresh doodle never shows a cold, collapsed direct ghost.
       const pred = [[], []], rolled = [[], []], shown = [[], []];
-      for (let k = 0; k < FK; k++) {
+      for (let k = 0; k < NLAD; k++) {
         pred[0].push(fgCent[0] + res.directPrediction[2][k]);
         pred[1].push(fgCent[1] + res.directPrediction[3][k]);
-        rolled[0].push(fgCent[0] + res.prediction[2][k]);
-        rolled[1].push(fgCent[1] + res.prediction[3][k]);
+        rolled[0].push(fgCent[0] + res.prediction[2][HLAD[k] - 1]);
+        rolled[1].push(fgCent[1] + res.prediction[3][HLAD[k] - 1]);
         const useDirect = fgSamples > 60 && fgEN[k] < fgEI[k];
         shown[0].push(useDirect ? pred[0][k] : rolled[0][k]);
         shown[1].push(useDirect ? pred[1][k] : rolled[1][k]);
@@ -1081,12 +1100,13 @@
       // PATH-MISS scoring: each horizon's prediction is scored by its distance to
       // the NEAREST sample of the actual future path (window h-2..h+3) — this is
       // what the eye judges: "did the ghost land on where I actually went?"
-      while (fgPend.length && fgPend[0].i + FK + FPAD < fgA.length) {
+      while (fgPend.length && fgPend[0].i + HMAX + FPAD < fgA.length) {
         const q = fgPend.shift();
-        for (let h = 1; h <= FK; h++) {
-          const px = q.n[0][h - 1], py = q.n[1][h - 1];
-          const rx = q.r[0][h - 1], ry = q.r[1][h - 1];
-          const cx = q.c[0][h - 1], cy = q.c[1][h - 1];
+        for (let k = 0; k < NLAD; k++) {
+          const h = HLAD[k];
+          const px = q.n[0][k], py = q.n[1][k];
+          const rx = q.r[0][k], ry = q.r[1][k];
+          const cx = q.c[0][k], cy = q.c[1][k];
           let dn = Infinity, di = Infinity, dc = Infinity;
           const j0 = q.i + Math.max(1, h - 2), j1 = q.i + h + 3;
           for (let j = j0; j <= j1; j++) {
@@ -1095,9 +1115,9 @@
             const t2 = (rx - s[0]) ** 2 + (ry - s[1]) ** 2; if (t2 < di) di = t2;
             const t3 = (cx - s[0]) ** 2 + (cy - s[1]) ** 2; if (t3 < dc) dc = t3;
           }
-          fgEN[h - 1] = FG_DECAY * fgEN[h - 1] + (1 - FG_DECAY) * dn;
-          fgEI[h - 1] = FG_DECAY * fgEI[h - 1] + (1 - FG_DECAY) * di;
-          fgEC[h - 1] = FG_DECAY * fgEC[h - 1] + (1 - FG_DECAY) * dc;
+          fgEN[k] = FG_DECAY * fgEN[k] + (1 - FG_DECAY) * dn;
+          fgEI[k] = FG_DECAY * fgEI[k] + (1 - FG_DECAY) * di;
+          fgEC[k] = FG_DECAY * fgEC[k] + (1 - FG_DECAY) * dc;
         }
       }
       if (fgA.length > 400) {                          // bound memory; keep indices valid
@@ -1112,11 +1132,11 @@
     function fgGhost(mat, stroke, fill, dashed) {
       fgCtx.beginPath();
       let p0 = den(mat[0][0], mat[1][0]); fgCtx.moveTo(p0[0], p0[1]);
-      for (let k = 1; k < FK; k++) { const p = den(mat[0][k], mat[1][k]); fgCtx.lineTo(p[0], p[1]); }
+      for (let k = 1; k <= fgHzIdx; k++) { const p = den(mat[0][k], mat[1][k]); fgCtx.lineTo(p[0], p[1]); }
       if (dashed) fgCtx.setLineDash([6, 5]);
       fgCtx.strokeStyle = stroke; fgCtx.lineWidth = 3; fgCtx.stroke();
       fgCtx.setLineDash([]);
-      const pe = den(mat[0][FK - 1], mat[1][FK - 1]);
+      const pe = den(mat[0][fgHzIdx], mat[1][fgHzIdx]);
       fgCtx.beginPath(); fgCtx.arc(pe[0], pe[1], 8, 0, 2 * Math.PI); fgCtx.fillStyle = fill; fgCtx.fill();
     }
     function fgRender() {
@@ -1171,7 +1191,7 @@
         if (fgSamples === 0) {
           fgCtx.fillStyle = '#64748b'; fgCtx.font = '14px sans-serif'; fgCtx.textAlign = 'center';
           fgCtx.fillText('draw loops and figure-8s here', fgW / 2, fgH / 2);
-        } else if (fgSamples >= 3 * FK) {
+        } else if (fgSamples >= 36) {
           fgCtx.fillStyle = '#64748b'; fgCtx.font = '12px sans-serif'; fgCtx.textAlign = 'center';
           fgCtx.fillText('ready — try Autopilot ✍️ (more loops = stronger autopilot)', fgW / 2, 20);
         }
@@ -1183,16 +1203,15 @@
       const nN = fgEN.map((e) => (fgET > 0 ? Math.sqrt(e / fgET) : 0));
       const nI = fgEI.map((e) => (fgET > 0 ? Math.sqrt(e / fgET) : 0));
       const nC = fgEC.map((e) => (fgET > 0 ? Math.sqrt(e / fgET) : 0));
-      const xs = nN.map((_, i) => i + 1);
+      const xs = HLAD.map((h) => +(h * SEC).toFixed(2));
+      const sel = +(HLAD[fgHzIdx] * SEC).toFixed(2);
       const layout = { margin: { l: 34, r: 8, t: 8, b: 28 }, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
-        font: { color: '#94a3b8', size: 10 }, showlegend: true, legend: { orientation: 'h', y: 1.22 }, barmode: 'group',
-        xaxis: { title: { text: 'steps ahead (~50 ms each)', font: { size: 10 } }, dtick: 1 },
-        yaxis: { title: { text: 'path miss (recent)', font: { size: 10 } }, gridcolor: '#1e293b', rangemode: 'tozero' } };
-      const data = [
-        { x: xs, y: nC, type: 'bar', name: 'straight-line', marker: { color: '#7c8aa0' } },
-        { x: xs, y: nI, type: 'bar', name: '1-step rolled', marker: { color: 'rgba(245,158,11,0.4)' } },
-        { x: xs, y: nN, type: 'bar', name: 'NGRC direct', marker: { color: '#f59e0b' } },
-      ];
+        font: { color: '#94a3b8', size: 10 }, showlegend: true, legend: { orientation: 'h', y: 1.22 },
+        xaxis: { title: { text: 'horizon (s) — dotted line = slider', font: { size: 10 } } },
+        yaxis: { title: { text: 'path miss (recent)', font: { size: 10 } }, gridcolor: '#1e293b', rangemode: 'tozero' },
+        shapes: [{ type: 'line', x0: sel, x1: sel, y0: 0, y1: 1, yref: 'paper', line: { color: '#6366f1', width: 1.5, dash: 'dot' } }] };
+      const mk = (y, name, color) => ({ x: xs, y, type: 'scatter', mode: 'lines+markers', name, line: { color, width: 2 }, marker: { size: 4 } });
+      const data = [mk(nC, 'straight-line', '#7c8aa0'), mk(nI, '1-step rolled', 'rgba(245,158,11,0.45)'), mk(nN, 'NGRC direct', '#f59e0b')];
       if (!fgPlotInited) { Plotly.newPlot('fg-plot', data, layout, { displayModeBar: false, responsive: true }); fgPlotInited = true; }
       else Plotly.react('fg-plot', data, layout, { displayModeBar: false, responsive: true });
     }
@@ -1231,12 +1250,13 @@
       }
       fgRender();
       document.getElementById('fg-n').textContent = fgSamples;
-      const ready = fgSamples > 3 * FK && fgET > 0 && fgEN[FK - 1] > 0;
-      document.getElementById('fg-rmse').textContent = ready ? Math.sqrt(fgEN[FK - 1] / fgET).toFixed(3) : '—';
-      document.getElementById('fg-iter').textContent = ready ? Math.sqrt(fgEI[FK - 1] / fgET).toFixed(3) : '—';
-      document.getElementById('fg-naive').textContent = ready ? Math.sqrt(fgEC[FK - 1] / fgET).toFixed(3) : '—';
-      document.getElementById('fg-skill').textContent = (ready && fgEC[FK - 1] > 0)
-        ? Math.sqrt(fgEC[FK - 1] / fgEN[FK - 1]).toFixed(1) + '× better' : '—';
+      const si = fgHzIdx;
+      const ready = fgSamples > 36 && fgET > 0 && fgEN[si] > 0;
+      document.getElementById('fg-rmse').textContent = ready ? Math.sqrt(fgEN[si] / fgET).toFixed(3) : '—';
+      document.getElementById('fg-iter').textContent = ready ? Math.sqrt(fgEI[si] / fgET).toFixed(3) : '—';
+      document.getElementById('fg-naive').textContent = ready ? Math.sqrt(fgEC[si] / fgET).toFixed(3) : '—';
+      document.getElementById('fg-skill').textContent = (ready && fgEC[si] > 0)
+        ? Math.sqrt(fgEC[si] / fgEN[si]).toFixed(1) + '× better' : '—';
       if (++fgPlotTick % 10 === 0) fgUpdatePlot();
       requestAnimationFrame(fgTick);
     }
