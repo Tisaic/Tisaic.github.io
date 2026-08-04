@@ -143,6 +143,30 @@ check('ngrc: autopilot commissions + free-runs without errors', demoErrors.lengt
 check('ngrc: autopilot brain row is populated', /shape|path-locked|AFM|training/.test(await demo.textContent('#fg-ap')));
 await demo.screenshot({ path: join(SHOTS, '06-finger.png') });
 await demo.click('#fg-auto');
+
+// multi-stroke (disjointed) doodle: two vertical lines drawn with pen lifts —
+// the lap must lock WITH gaps, the ghost goes path-family, and the autopilot
+// deploys as a path-locked replay (an AFM free-run cannot teleport)
+await demo.click('#fg-reset');
+await demo.waitForTimeout(300);
+const f2 = await demo.locator('#fg-stage').boundingBox();
+const mx = f2.x + f2.width / 2, myT = f2.y + f2.height / 2 - 120, myB = f2.y + f2.height / 2 + 120;
+for (let rep = 0; rep < 7; rep++) {
+  for (const lx of [mx - 65, mx + 65]) {
+    await demo.mouse.move(lx, myT); await demo.mouse.down();
+    for (let i = 1; i <= 16; i++) { await demo.mouse.move(lx, myT + (myB - myT) * (i / 16)); await demo.waitForTimeout(42); }
+    await demo.mouse.up();
+    await demo.waitForTimeout(230);
+  }
+}
+const dj = await demo.evaluate(() => window.__fgDbg());
+check('ngrc: multi-stroke lap locks with pen-lift gaps', dj.lap > 0 && dj.gaps >= 2, JSON.stringify(dj));
+await demo.click('#fg-auto');
+await demo.waitForFunction(() => document.getElementById('fg-auto').textContent.includes('Stop'), null, { timeout: 30000 });
+check('ngrc: multi-stroke autopilot is path-locked replay', /path-locked replay/.test(await demo.textContent('#fg-ap')), await demo.textContent('#fg-ap'));
+await demo.waitForTimeout(2500);
+await demo.screenshot({ path: join(SHOTS, '07-multistroke.png') });
+await demo.click('#fg-auto');
 check('ngrc: playground has no errors overall', demoErrors.length === 0, demoErrors.join(' | '));
 
 await browser.close();

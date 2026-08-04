@@ -148,7 +148,27 @@ the shipped commit carries the correct version.
    stored loop stops refreshing, and the cyclic AFM pump stops feeding —
    while predictions, the ghost, and Autopilot keep working, so the model
    can be played with without being affected. The brain row shows
-   "training FROZEN ❄️" vs "training live"; Reset brain also unfreezes).
+   "training FROZEN ❄️" vs "training live"; Reset brain also unfreezes.
+   **Disjointed (multi-stroke) doodles** — e.g. two vertical lines drawn
+   alternately with pen lifts — are a first-class pattern: the lap is the
+   strokes PLUS the teleports. A persistent multi-stroke log survives
+   lifts (a quick lift = a gap marker; a >3 s pause or a restart >2.5×
+   the doodle's span away = a fresh doodle), `resamplePath` carries
+   explicit break flags and returns gap indices, and lap detection uses
+   mean-centered x+y autocorrelation (x-only was blind to vertical
+   strokes AND locked onto multi-lap harmonics). The locked loop stores
+   its gap set: never interpolated, smoothed, or seam-bridged across;
+   the phase stays pinned to the stroke end until it crosses the gap
+   index (so the visual jump and the pen-lift flag land on the same
+   render segment); the phase forecast marks crossings so the ghost
+   LIFTS and lands on the next stroke; and scoring survives pattern
+   lifts (the straight-line baseline honestly misses the next stroke).
+   Autopilot on a gapped lap deploys instantly as **path-locked replay**
+   (an AFM free-run cannot teleport) drawing each stroke with a real
+   pen-up; the cyclic AFM pump feeds predict-only across teleport steps
+   so they never train. Verified headless: 2-line and 1-line lift
+   patterns lock with gaps and replay cleanly, continuous shapes stay
+   gapless with instant AFM deploy, far relocation still resets).
 
 ## Versioning
 

@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:50,built:"2026-08-04T14:39:17Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:51,built:"2026-08-04T17:51:26Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -697,7 +697,14 @@
     // deploys INSTANTLY (no commissioning sweep).
     let fgCyc = null, fgLastFam = 'roll';
     let fgFrozen = false;                           // freeze ALL learning; predictions keep running
-    function cycRefresh(ptsIn, closedIn) {
+    // MULTI-STROKE doodles (e.g. two vertical lines drawn with a pen lift
+    // between them): the pattern is periodic in drawing time INCLUDING the
+    // lifts, so the lap is strokes + teleports. fgAbs is the absolute-position
+    // log that SURVIVES pen lifts (null = a lift), and fgLoopGaps marks the
+    // loop indices whose incoming step is a teleport — never interpolated,
+    // never smoothed, never trained, drawn as a pen-up.
+    let fgAbs = [], fgLoopGaps = null, fgUpMs = 0;
+    function cycRefresh(ptsIn, closedIn, gapsIn) {
       const lp = ptsIn || fgLoop;
       if (!lp || lp.length < 20) return;
       const st = [];
@@ -705,12 +712,20 @@
         const a2 = lp[(i + lp.length - 1) % lp.length], b2 = lp[i];
         st.push([(b2[0] - a2[0]) * DSCALE, (b2[1] - a2[1]) * DSCALE, b2[0] * 3, b2[1] * 3]);
       }
+      // teleport steps in st-index space: st[k] arrives at lp[k + (closed?0:1)]
+      let gs = null;
+      if (gapsIn && gapsIn.size) {
+        gs = new Set();
+        const off = closedIn ? 0 : 1;
+        for (const g of gapsIn) { const k = g - off; if (k >= 0 && k < st.length) gs.add(k); }
+      }
       const std = [0, 1, 2, 3].map((j) => {
         const v = st.map((q) => q[j]);
         const mu = v.reduce((x, y) => x + y, 0) / v.length;
         return Math.sqrt(v.reduce((x, y) => x + (y - mu) ** 2, 0) / v.length) || 1e-6;
       });
       const closed = !!closedIn;
+      if (fgCyc) { fgCyc.gapSet = gs; }
       if (!fgCyc) {
         const uni = universalMap(16, 64, 64, 1234);
         const m = new Continuous(4, 4, 2, true, {
@@ -718,7 +733,7 @@
           useClamp: true, clampMin: [-8, -8, -8, -8], clampMax: [8, 8, 8, 8],
           featureMap: uni, initVariance: uni.prior({ lin: 100, quad: 1, rand: 1 }),
         });
-        fgCyc = { m, st, std, i: 0, fed: 0, closed, g: makeGauss(0xc1c11c) };
+        fgCyc = { m, st, std, i: 0, fed: 0, closed, gapSet: gs, g: makeGauss(0xc1c11c) };
       } else { fgCyc.st = st; fgCyc.std = std; fgCyc.i = 0; fgCyc.closed = closed; }
     }
     function pumpCyc(deadline) {
@@ -731,6 +746,14 @@
           const d = Math.min(C.m.depth + 1, C.st.length);
           for (let k2 = 0; k2 < d; k2++) C.m.step(C.st[k2], null, true);
           C.i = d;
+          continue;
+        }
+        if (C.gapSet && C.gapSet.has(C.i)) {
+          // pen lift inside the lap: the teleport step is not dynamics — feed
+          // it and the history window after it predict-only, then resume
+          const d = Math.min(C.m.depth + 1, C.st.length);
+          for (let k2 = 0; k2 < d; k2++) C.m.step(C.st[(C.i + k2) % C.st.length], null, true);
+          C.i = (C.i + d) % C.st.length;
           continue;
         }
         const q = C.st[C.i];
@@ -752,16 +775,38 @@
       const L = fgLoop.length;
       let t = ((idx % L) + L) % L;
       const i0 = Math.floor(t), fr = t - i0, i1 = (i0 + 1) % L;
+      if (fgLoopGaps && fgLoopGaps.has(i1)) {       // teleport step: never interpolate mid-air.
+        // Pin to the stroke END until the phase crosses the integer boundary —
+        // gapCross() fires exactly there, so the visual jump and the pen-lift
+        // flag can never straddle different render segments (that inked one
+        // of the two teleports as a diagonal bridge).
+        return [fgLoop[i0][0], fgLoop[i0][1]];
+      }
       return [fgLoop[i0][0] * (1 - fr) + fgLoop[i1][0] * fr, fgLoop[i0][1] * (1 - fr) + fgLoop[i1][1] * fr];
     }
+    function gapCross(ph0, ph1) {                   // does phase segment (ph0, ph1] cross a pen lift?
+      if (!fgLoopGaps || !fgLoopGaps.size || !fgLoop) return false;
+      const L = fgLoop.length;
+      for (let j = Math.floor(ph0) + 1; j <= Math.floor(ph1); j++) {
+        if (fgLoopGaps.has(((j % L) + L) % L)) return true;
+      }
+      return false;
+    }
     function lapLenOf(rs) {                         // lap length in resampled steps (autocorrelation)
-      const xs = rs.map((p) => p[0]);
+      // mean-centered x AND y: x alone is blind to a vertical stroke (constant
+      // x → flat autocorrelation), and uncentered products bury the peak under
+      // the DC offset
+      const n = rs.length;
+      let mxm = 0, mym = 0;
+      for (const p of rs) { mxm += p[0]; mym += p[1]; }
+      mxm /= n || 1; mym /= n || 1;
+      const xs = rs.map((p) => p[0] - mxm), ys = rs.map((p) => p[1] - mym);
       const Lmax = Math.min(400, xs.length - 20);
       const ac = [];
       let mx = -Infinity;
       for (let L = 20; L <= Lmax; L++) {
         let s = 0, c = 0;
-        for (let i = 0; i + L < xs.length; i += 2) { s += xs[i] * xs[i + L]; c++; }
+        for (let i = 0; i + L < xs.length; i += 2) { s += xs[i] * xs[i + L] + ys[i] * ys[i + L]; c++; }
         const v = c > 8 ? s / c : -Infinity;
         ac.push(v);
         if (v > mx) mx = v;
@@ -808,6 +853,7 @@
       fgLoop = null; fgPhase = 0; fgDsLags = [1, 1, 1];
       fgDsObs = []; fgDsMed = 1; fgGhostArc = null; fgLoopMiss = 0; fgLoopAge = 0;
       fgCyc = null;
+      fgAbs = []; fgLoopGaps = null; fgUpMs = 0;
       fgFrozen = false;
       const fz = document.getElementById('fg-freeze');
       if (fz) fz.textContent = 'Freeze ❄️';
@@ -853,6 +899,10 @@
     // removes every stall and speed cue while keeping the geometry exact.
     function resamplePath(log) {
       let pts = log.map((q) => [q[2], q[3]]);
+      // Explicit pen-lift flags (q[4] truthy = the step INTO this point is a
+      // lift) — a multi-stroke doodle's lifts can be spatially SHORT (two
+      // nearby strokes), so distance alone can't catch them.
+      const brkF = log.map((q) => !!q[4]);
       // Per-step lengths from raw POSITIONS (immune to state conventions), and
       // a jump threshold: a step far beyond the median is a stroke lift or
       // relocation — never path.
@@ -869,7 +919,7 @@
         for (let i = 1; i < pts.length - 1; i++) {
           const dP = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
           const dN = Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]);
-          nx.push((dP > jump || dN > jump) ? pts[i]
+          nx.push((dP > jump || dN > jump || brkF[i] || brkF[i + 1]) ? pts[i]
             : [0.25 * pts[i - 1][0] + 0.5 * pts[i][0] + 0.25 * pts[i + 1][0],
                0.25 * pts[i - 1][1] + 0.5 * pts[i][1] + 0.25 * pts[i + 1][1]]);
         }
@@ -884,11 +934,16 @@
       const walkable = sorted.filter((x) => x <= jump);
       const h = Math.max(Math.min(walkable[Math.floor(walkable.length * 0.6)] || 0, 0.05), 0.03);
       const rs = [pts[0]];
+      const gaps = [];                              // rs indices whose incoming step is a teleport
       let prev = pts[0], carry = 0;
       for (let i = 1; i < pts.length; i++) {
         const b = pts[i];
         let seg = Math.hypot(b[0] - prev[0], b[1] - prev[1]);
-        if (seg > jump) { prev = b; carry = 0; continue; }   // pen jump: do NOT bridge it
+        if (seg > jump || brkF[i]) {                // pen jump: do NOT bridge it — record the gap
+          gaps.push(rs.length);
+          rs.push([b[0], b[1]]);                    // new stroke starts exactly at its first point
+          prev = b; carry = 0; continue;
+        }
         let a = prev;
         while (carry + seg >= h) {
           const t = (h - carry) / seg;
@@ -899,7 +954,7 @@
         }
         carry += seg; prev = b;
       }
-      return { rs, h };
+      return { rs, h, gaps };
     }
     // 4-var states from the resampled path: [dx·25, dy·25, x·PS, y·PS].
     // PS upscales the position channels so the AFM's random projections get
@@ -1043,9 +1098,34 @@
         return;
       }
       if (fgCommissioning) return;
+      // MULTI-STROKE patterns (pen lifts inside the lap): an AFM free-run
+      // cannot teleport, so the autopilot IS the phase-domain engine — replay
+      // the stored loop at the learned tempo, lifting the pen at each gap.
+      if (fgLoop && fgLoopGaps && fgLoopGaps.size && fgLoopAge >= 48 && fgDsTh) {
+        fgAutoMode = 'path';
+        fgAutoPh = fgPhase; fgAutoDs = [...fgDsLags]; fgAutoDsSm = fgDsMed || 1;
+        fgAutoLastT = 0;
+        const p0 = loopAt(fgAutoPh);
+        fgAutoTrail = [den(p0[0], p0[1])];
+        const spP = Math.hypot(fgLastVel[0], fgLastVel[1]) || 1e-6;
+        fgAutoRay = { x: fgLastA[0], y: fgLastA[1], vx: fgLastVel[0] / spP, vy: fgLastVel[1] / spP };
+        fgAutoInfo = `path-locked replay · ${fgLoopGaps.size} pen lift${fgLoopGaps.size > 1 ? 's' : ''} learned`;
+        document.getElementById('fg-ap').textContent = fgAutoInfo;
+        console.log('autopilot: path-locked replay (multi-stroke, ' + fgLoopGaps.size + ' pen lifts in the lap)');
+        fgAuto = true;
+        btn.textContent = 'Stop autopilot ⏹';
+        return;
+      }
+      // Lifts present but no usable lap yet (no lock, or a gapped lock still
+      // too young for replay): the commissioning sweep would fit an AFM across
+      // fake bridges — ask for more pattern instead.
+      if (fgAbs.slice(-500).some((p) => p === null) && !(fgLoop && (!fgLoopGaps || !fgLoopGaps.size))) {
+        fail('multi-stroke — repeat the pattern until it locks');
+        return;
+      }
       // The autopilot IS the continuously-trained AFM. Warm model: deploy
       // INSTANTLY — it has been training the whole time you traced.
-      if (fgCyc && fgCyc.closed && fgCyc.fed > 1500 && fgCyc.st.length) {
+      if (fgCyc && fgCyc.closed && (!fgLoopGaps || !fgLoopGaps.size) && fgCyc.fed > 1500 && fgCyc.st.length) {
         const maxTR2 = fgCyc.st.reduce((x, q) => Math.max(x, Math.hypot(q[2], q[3]) / 3), 0) || 1;
         fgAutoModel = fgCyc.m;
         fgAutoSnap = fgCyc.m.snapshot();
@@ -1205,13 +1285,46 @@
       if (fgAuto) stopAutopilot();                    // touching takes back control
       fgAutoGen++;                                    // also cancels an in-flight commissioning
       fgAt(e); fgPtr.down = true; fgTrail = [];
+      // Multi-stroke vs fresh doodle: a QUICK lift is part of the pattern
+      // (two strokes drawn alternately) → record a gap marker. A long pause
+      // or a restart far outside the recent doodle is a new doodle → clear
+      // the multi-stroke log so stale strokes can't pollute the lap.
+      let freshStart = !fgAbs.length;
+      if (fgAbs.length) {
+        const upFor = fgUpMs ? performance.now() - fgUpMs : 0;
+        const a0 = nrm(fgPtr.x, fgPtr.y);
+        const recent = fgAbs.slice(-300).filter(Boolean);
+        let far = false;
+        if (recent.length > 10) {
+          let mx = 0, my = 0;
+          for (const p of recent) { mx += p[0]; my += p[1]; }
+          mx /= recent.length; my /= recent.length;
+          let span = 0;
+          for (const p of recent) { const d = Math.hypot(p[0] - mx, p[1] - my); if (d > span) span = d; }
+          // 2.5×: strokes of one pattern naturally start up to ~1.5× the span
+          // from the centroid (two parallel lines measure ~1.47×) — a real
+          // relocation is several spans away, not fractionally outside
+          far = Math.hypot(a0[0] - mx, a0[1] - my) > Math.max(2.5 * span, 0.5);
+        }
+        if (upFor > 3000 || far) {
+          // fresh doodle: reset the multi-stroke LOG only — the locked loop
+          // stays (exactly like continuous doodles always behaved) and the
+          // validation/miss machinery replaces or drops it as new data comes
+          fgAbs = [];
+          freshStart = true;
+        } else if (fgAbs[fgAbs.length - 1] !== null) fgAbs.push(null);
+      }
       fgCent = null;                                  // each stroke gets its own centroid
       fgPrev = null; fgVel = [0, 0];                  // relocation: restart the differencer
-      fgClearScoring();
+      // Scoring SURVIVES a pattern lift (multi-stroke doodles): predictions
+      // made before the lift are honestly judged against the next stroke —
+      // the path family lands on it, the straight-line baseline can't. Only
+      // a fresh doodle (long pause / far relocation) clears the buffers.
+      if (freshStart) fgClearScoring(); else fgStill = 0;
     });
     fgCanvas.addEventListener('pointermove', (e) => { if (fgPtr.down) fgAt(e); });
-    window.addEventListener('pointerup', () => { fgPtr.down = false; });
-    window.addEventListener('pointercancel', () => { fgPtr.down = false; });
+    window.addEventListener('pointerup', () => { if (fgPtr.down) fgUpMs = performance.now(); fgPtr.down = false; });
+    window.addEventListener('pointercancel', () => { if (fgPtr.down) fgUpMs = performance.now(); fgPtr.down = false; });
 
     const nrm = (px, py) => [(px - fgW / 2) / fgNorm, (py - fgH / 2) / fgNorm];
     const den = (nx, ny) => [nx * fgNorm + fgW / 2, ny * fgNorm + fgH / 2];
@@ -1294,9 +1407,18 @@
       // PATH refresh (cheap — no fitting): keep the stored loop tracking the
       // doodle so path-locked predictions stay pinned to fresh geometry
       if (!fgFrozen && fgSamples >= 80 && fgSamples % 16 === 0) {
-        const abs = fgA.slice(-900).map((p) => [p[0], p[1]]);
-        abs.push(a);
-        const rp = resamplePath(abs.map((p) => [0, 0, p[0], p[1]]));
+        // source from the MULTI-STROKE log (survives pen lifts, null = lift →
+        // explicit break flag) so a pattern of several strokes can lock a lap
+        const src = fgAbs.slice(-900);
+        const abs = [];
+        let liftNext = false;
+        for (const p of src) {
+          if (p === null) { liftNext = true; continue; }
+          abs.push([0, 0, p[0], p[1], liftNext ? 1 : 0]);
+          liftNext = false;
+        }
+        abs.push([0, 0, a[0], a[1], 0]);
+        const rp = resamplePath(abs);
         // Lap-length STABILITY: re-detecting from scratch each refresh gave a
         // slightly different L every time, and each change remaps the phase-
         // Fourier features — scrambling the tempo readout it just trained
@@ -1334,8 +1456,13 @@
         }
         if (!ok) {
           fgLoopMiss++;
-          if (fgLoopMiss > 5) { fgLoop = null; fgLoopMiss = 0; fgLoopAge = 0; }  // force global re-lock
-          if (!fgLoop) cycRefresh(rp.rs.slice(-600), false);   // continuous training starts BEFORE lap lock
+          if (fgLoopMiss > 5) { fgLoop = null; fgLoopGaps = null; fgLoopMiss = 0; fgLoopAge = 0; }  // force global re-lock
+          if (!fgLoop) {                             // continuous training starts BEFORE lap lock
+            const off6 = Math.max(0, rp.rs.length - 600);
+            const g6 = new Set();
+            for (const g of rp.gaps) if (g - off6 > 0) g6.add(g - off6);
+            cycRefresh(rp.rs.slice(-600), false, g6);
+          }
         }
         if (ok) {
           fgLoopMiss = 0;
@@ -1343,6 +1470,11 @@
           // continuity); it resets only when the lock was lost outright
           fgLoopAge = fgLoop ? fgLoopAge + 16 : 0;
           const lp = rp.rs.slice(-L).map((p) => [p[0], p[1]]);
+          // pen lifts inside the lap, mapped to lap-local indices (0 = the
+          // wrap step itself is a teleport)
+          const base = rp.rs.length - L;
+          const lg = new Set();
+          for (const g of rp.gaps) { const gl = g - base; if (gl >= 0 && gl < L) lg.add(gl); }
           // close the seam: lap-to-lap drift leaves a wrap gap that replays as
           // a jagged hitch every lap — distribute it linearly around the loop
           const gx = lp[0][0] - lp[lp.length - 1][0], gy = lp[0][1] - lp[lp.length - 1][1];
@@ -1353,13 +1485,15 @@
           for (let p2 = 0; p2 < 2; p2++) {           // wrapped smoothing: tremor out, corners stay
             const nx = [];
             for (let i2 = 0; i2 < lp.length; i2++) {
+              if (lg.has(i2) || lg.has((i2 + 1) % lp.length)) { nx.push(lp[i2]); continue; }  // never smooth across a lift
               const a2 = lp[(i2 + lp.length - 1) % lp.length], b2 = lp[i2], c2 = lp[(i2 + 1) % lp.length];
               nx.push([0.25 * a2[0] + 0.5 * b2[0] + 0.25 * c2[0], 0.25 * a2[1] + 0.5 * b2[1] + 0.25 * c2[1]]);
             }
             for (let i2 = 0; i2 < lp.length; i2++) lp[i2] = nx[i2];
           }
           fgLoop = lp; fgLoopH = rp.h;
-          cycRefresh(fgLoop, true);
+          fgLoopGaps = lg.size ? lg : null;
+          cycRefresh(fgLoop, true, lg);
           let bi = 0, bd = Infinity;                 // re-acquire phase on the fresh loop
           for (let i2 = 0; i2 < fgLoop.length; i2++) { const d = (fgLoop[i2][0] - a[0]) ** 2 + (fgLoop[i2][1] - a[1]) ** 2; if (d < bd) { bd = d; bi = i2; } }
           fgPhase = bi;
@@ -1390,11 +1524,14 @@
         const dsLo = fgDsMed > 0.05 ? 0.35 * fgDsMed : 0, dsHi = fgDsMed > 0.05 ? 2.8 * fgDsMed : 4;
         for (let i2 = 0; i2 < HMAX; i2++) {
           const dsHat = Math.max(dsLo, Math.min(dsHi, predict(dsFeat(lags, ((ph % fgLoop.length) + fgLoop.length) % fgLoop.length / fgLoop.length), fgDsTh)));
+          const ph0 = ph;
           ph += dsHat;
           lags = [dsHat, lags[0], lags[1]];
+          const lifted = gapCross(ph0, ph);          // pen lift: next point starts a new stroke
+          if (lifted) dec = 0;                       // …and the transverse offset dies with the lift
           dec *= 0.88;                               // transverse offset decays onto the path
           const p = loopAt(ph);
-          phaseFc[i2] = [p[0] + off[0] * dec, p[1] + off[1] * dec];
+          phaseFc[i2] = [p[0] + off[0] * dec, p[1] + off[1] * dec, lifted ? 1 : 0];
         }
       }
       // ghosts = predicted centered-position variables, re-anchored at the
@@ -1471,6 +1608,11 @@
       if (fgGhostArc && arcEnd < HLAD[fgHzIdx]) fgGhostArc.tip = phaseFc[HLAD[fgHzIdx] - 1];
       fgCvMat = cv;
       fgA.push(a);
+      fgAbs.push(a);                                 // the multi-stroke log survives pen lifts
+      if (fgAbs.length > 1000) {
+        fgAbs = fgAbs.slice(fgAbs.length - 900);
+        while (fgAbs.length && fgAbs[0] === null) fgAbs.shift();
+      }
       fgPend.push({ i: fgA.length - 1, n: pred, r: rolled, s: shape, w: shown, c: cv });
       // PATH-MISS scoring: each horizon's prediction is scored by its distance to
       // the NEAREST sample of the actual future path (window h-2..h+3) — this is
@@ -1590,7 +1732,11 @@
         if (fgPtr.down && fgGhostArc && fgGhostArc.length > 1) {
           fgCtx.beginPath();
           fgCtx.moveTo(fgPtr.x, fgPtr.y);                 // anchored at the fingertip
-          for (let i = 0; i < fgGhostArc.length; i++) { const p = den(fgGhostArc[i][0], fgGhostArc[i][1]); fgCtx.lineTo(p[0], p[1]); }
+          for (let i = 0; i < fgGhostArc.length; i++) {
+            const p = den(fgGhostArc[i][0], fgGhostArc[i][1]);
+            if (fgGhostArc[i][2]) fgCtx.moveTo(p[0], p[1]);   // predicted pen lift — don't ink the teleport
+            else fgCtx.lineTo(p[0], p[1]);
+          }
           fgCtx.strokeStyle = 'rgba(245,158,11,0.9)'; fgCtx.lineWidth = 3; fgCtx.stroke();
           // solid tip at the end of the drawn arc; when the arc is capped at a
           // lap, an OUTLINED tip rides the loop at the full slider horizon so
@@ -1656,8 +1802,10 @@
           dsHat = Math.max(lo, Math.min(hi, dsHat));
           if (!(dsHat > 0.05)) dsHat = fgDsMed || 1;
           fgAutoDsSm = 0.75 * fgAutoDsSm + 0.25 * dsHat;   // smooth tempo — no jerks
+          const phPrev = fgAutoPh;
           fgAutoPh += fgAutoDsSm * (33 / 48);
           fgAutoDs = [dsHat, fgAutoDs[0], fgAutoDs[1]];
+          if (gapCross(phPrev, fgAutoPh)) fgAutoTrail.push(null);   // pen lift between strokes
           const p = loopAt(fgAutoPh);
           fgAutoTrail.push(den(p[0], p[1]));
           if (fgAutoTrail.length > 600) fgAutoTrail.shift();
@@ -1709,7 +1857,8 @@
         ? `${Math.sqrt(fgOPn[si] / fgET).toFixed(3)} vs line ${Math.sqrt(fgOPl[si] / fgET).toFixed(3)}` : '—';
       if (!fgAuto && fgCyc) {
         document.getElementById('fg-ap').textContent = (fgFrozen ? 'training FROZEN ❄️ · ' : 'training live · ')
-          + `${fgCyc.fed} steps · fit err ${(fgCyc.err || 0).toFixed(3)}` + (fgLoop ? ' · lap locked' : '');
+          + `${fgCyc.fed} steps · fit err ${(fgCyc.err || 0).toFixed(3)}`
+          + (fgLoop ? (' · lap locked' + (fgLoopGaps && fgLoopGaps.size ? ` · ${fgLoopGaps.size} lifts` : '')) : '');
       }
       document.getElementById('fg-opadv').textContent = opReady
         ? `${Math.sqrt(fgOPl[si] / fgOPn[si]).toFixed(0)}× closer · ${Math.round(fgOPl[si] / fgOPn[si]).toLocaleString()}× less error energy` : '—';
@@ -1726,7 +1875,8 @@
         const kEnd = Math.min(fgHzIdx, fgGhostMax);
         for (let k = 0; k <= kEnd; k++) { if (fgPredMat[0][k] == null) break; pts.push([fgPredMat[0][k], fgPredMat[1][k]]); }
       }
-      return { fam: fgLastFam, loopAge: fgLoopAge, lap: fgLoop ? fgLoop.length : 0, pts, cycFed: fgCyc ? fgCyc.fed : 0 };
+      return { fam: fgLastFam, loopAge: fgLoopAge, lap: fgLoop ? fgLoop.length : 0, pts, cycFed: fgCyc ? fgCyc.fed : 0,
+        gaps: fgLoopGaps ? fgLoopGaps.size : 0, absLen: fgAbs.length, lifts: fgAbs.filter((p) => p === null).length };
     };
 
     // ---- boot ----
