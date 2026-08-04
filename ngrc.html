@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:46,built:"2026-08-04T13:37:34Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:47,built:"2026-08-04T13:48:01Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -695,6 +695,44 @@
     let fgLoop = null, fgLoopH = 0, fgPhase = 0, fgDsTh = null, fgDsP = null, fgDsLags = [1, 1, 1];
     let fgDsObs = [], fgDsMed = 1, fgGhostArc = null, fgGhostMax = 20;
     let fgLoopMiss = 0, fgLoopAge = 0;
+    // CYCLIC AFM training (the library's continuous-training idea): a single
+    // AFM model trains forever in tiny per-frame budgets, cycling over the
+    // locked loop's constant-speed states with light noise — so brain=AFM
+    // deploys INSTANTLY (no commissioning sweep).
+    let fgCyc = null, fgLastFam = 'roll';
+    function cycRefresh() {
+      if (!fgLoop) return;
+      const lp = fgLoop;
+      const st = [];
+      for (let i = 0; i < lp.length; i++) {
+        const a2 = lp[(i + lp.length - 1) % lp.length], b2 = lp[i];
+        st.push([(b2[0] - a2[0]) * DSCALE, (b2[1] - a2[1]) * DSCALE, b2[0] * 3, b2[1] * 3]);
+      }
+      const std = [0, 1, 2, 3].map((j) => {
+        const v = st.map((q) => q[j]);
+        const mu = v.reduce((x, y) => x + y, 0) / v.length;
+        return Math.sqrt(v.reduce((x, y) => x + (y - mu) ** 2, 0) / v.length) || 1e-6;
+      });
+      if (!fgCyc) {
+        const uni = universalMap(16, 48, 48, 1234);
+        const m = new Continuous(4, 4, 2, true, {
+          predictionSteps: 1, lam: 0.9995, stride: 1,
+          useClamp: true, clampMin: [-8, -8, -8, -8], clampMax: [8, 8, 8, 8],
+          featureMap: uni, initVariance: uni.prior({ lin: 100, quad: 1, rand: 1 }),
+        });
+        fgCyc = { m, st, std, i: 0, fed: 0, g: makeGauss(0xc1c11c) };
+      } else { fgCyc.st = st; fgCyc.std = std; fgCyc.i = 0; }
+    }
+    function pumpCyc(deadline) {
+      const C = fgCyc;
+      if (!C || !C.st.length) return;
+      while (performance.now() < deadline) {
+        const q = C.st[C.i];
+        C.m.step(q.map((x, j) => x + 0.2 * C.std[j] * C.g()));
+        C.i = (C.i + 1) % C.st.length;
+        C.fed++;
+      }
+    }
     const ROLLMAX = (() => { let m = 0; for (let i = 0; i < 21; i++) if (HLAD[i] <= 100) m = i; return m; })();
     let fgES, fgOPn, fgOPl;                         // per-rung: path-locked miss, on-path (ghost/line)
     const DS_NF = 10;
@@ -762,6 +800,7 @@
       fgES = new Array(NLAD).fill(0); fgOPn = new Array(NLAD).fill(0); fgOPl = new Array(NLAD).fill(0);
       fgLoop = null; fgPhase = 0; fgDsLags = [1, 1, 1];
       fgDsObs = []; fgDsMed = 1; fgGhostArc = null; fgLoopMiss = 0; fgLoopAge = 0;
+      fgCyc = null;
       ({ theta: fgDsTh, P: fgDsP } = rlsInit(DS_NF, 10.0));
       fgClearScoring();
       const ap = document.getElementById('fg-ap');
@@ -771,6 +810,7 @@
       // The autopilot runs its own commissioned model; dropping it is a full
       // stop — the online predictor (fgModel) was never touched.
       fgAutoGen++;                                  // invalidate any in-flight commissioning
+      if (fgAutoModel && fgCyc && fgAutoModel === fgCyc.m && fgAutoSnap) fgCyc.m.restore(fgAutoSnap);
       fgAuto = false; fgAutoState = null; fgAutoPos = null; fgAutoDrift = null;
       fgAutoTrail = []; fgAutoRay = null; fgAutoModel = null; fgAutoMeta = null;
       fgAutoSnap = null; fgAutoSeed = null; fgAutoInfo = ''; fgCommissioning = false;
@@ -988,6 +1028,29 @@
         return;
       }
       if (fgCommissioning) return;
+      // brain=AFM with a warm cyclic model: deploy INSTANTLY — the model has
+      // been training continuously on the loop the whole time
+      if (document.getElementById('fg-brain').value === 'afm' && fgCyc && fgCyc.fed > 1500 && fgLoop) {
+        const maxTR2 = fgLoop.reduce((x, p) => Math.max(x, Math.hypot(p[0], p[1])), 0) || 1;
+        fgAutoModel = fgCyc.m;
+        fgAutoSnap = fgCyc.m.snapshot();
+        fgAutoSeed = [...fgCyc.st[(fgCyc.i + fgCyc.st.length - 1) % fgCyc.st.length]];
+        fgAutoMeta = { PS: 3, guard: true, vNom: fgLoopH * DSCALE, maxR: Math.max(2 * maxTR2, maxTR2 + 0.3), horizon: 2400 };
+        fgAutoSteps = 0;
+        fgAutoMode = 'model';
+        fgAutoState = [...fgAutoSeed];
+        fgAutoPos = [0, 0];
+        fgAutoLastT = 0;
+        fgAutoTrail = [den(fgLastA[0], fgLastA[1])];
+        const spA = Math.hypot(fgLastVel[0], fgLastVel[1]) || 1e-6;
+        fgAutoRay = { x: fgLastA[0], y: fgLastA[1], vx: fgLastVel[0] / spA, vy: fgLastVel[1] / spA };
+        fgAutoInfo = `AFM cyclic · trained ${fgCyc.fed} steps live`;
+        document.getElementById('fg-ap').textContent = fgAutoInfo;
+        console.log('autopilot: AFM deployed from CYCLIC training (no commissioning) — ' + fgCyc.fed + ' steps fed');
+        fgAuto = true;
+        btn.textContent = 'Stop autopilot ⏹';
+        return;
+      }
       // AUTO mode with a locked path: the autopilot IS the phase-domain
       // engine — replay the user's own stored loop at their learned tempo
       // (crisp corners, exact geometry, cannot decay). Instant: no fitting.
@@ -1280,7 +1343,7 @@
         }
         if (ok) {
           fgLoopMiss = 0;
-          fgLoopAge = (fgLoop && Math.abs(fgLoop.length - L) <= 3) ? fgLoopAge + 24 : 0;
+          fgLoopAge = (fgLoop && Math.abs(fgLoop.length - L) <= 6) ? fgLoopAge + 24 : 0;
           const lp = rp.rs.slice(-L).map((p) => [p[0], p[1]]);
           // close the seam: lap-to-lap drift leaves a wrap gap that replays as
           // a jagged hitch every lap — distribute it linearly around the loop
@@ -1298,6 +1361,7 @@
             for (let i2 = 0; i2 < lp.length; i2++) lp[i2] = nx[i2];
           }
           fgLoop = lp; fgLoopH = rp.h;
+          cycRefresh();
           let bi = 0, bd = Infinity;                 // re-acquire phase on the fresh loop
           for (let i2 = 0; i2 < fgLoop.length; i2++) { const d = (fgLoop[i2][0] - a[0]) ** 2 + (fgLoop[i2][1] - a[1]) ** 2; if (d < bd) { bd = d; bi = i2; } }
           fgPhase = bi;
@@ -1361,7 +1425,7 @@
         const k0 = fgHzIdx;
         const mR = (rolled[0][k0] != null && fgEI[k0] > 0) ? fgEI[k0] : Infinity;
         const mD = fgEN[k0] > 0 ? fgEN[k0] : Infinity;
-        if (phaseFc && fgLoopAge >= 72) {
+        if (phaseFc && fgLoopAge >= 48) {
           const mS = fgES[k0] > 0 ? fgES[k0] : Infinity;
           const rival = Math.min(mD, mR);
           fam = (rival < 0.5 * mS) ? (mD <= mR ? 'direct' : 'roll') : 'path';
@@ -1389,9 +1453,13 @@
         const E2 = fam === 'direct' ? fgEN : fgEI;
         let trustK = -1;
         while (trustK < NLAD - 1 && E2[trustK + 1] > 0) trustK++;
-        fgGhostMax = Math.max(0, Math.min(fgGhostMax, trustK));
+        // and NEVER draw a fallback family beyond ~1.2 s: past that, point
+        // forecasts of raw position are visually meaningless (they collapse
+        // toward the center) — a short honest ghost beats a long scribble
+        fgGhostMax = Math.max(0, Math.min(fgGhostMax, trustK, 9));
         if (trustK < 0) fgGhostMax = 0;
       }
+      fgLastFam = fam;
       // arc capped at ~one lap — at long horizons the forecast wraps the loop
       // several times and overdrawing identical laps just smears the ink; the
       // tip dot still marks the full-horizon prediction
@@ -1601,6 +1669,7 @@
         fgLastT = performance.now();
         fgStepSim();
       }
+      if (!fgAuto && !fgCommissioning && fgCyc) pumpCyc(performance.now() + 3);
       if (fgPtr.down) {
         fgTrail.push([fgPtr.x, fgPtr.y]);
         if (fgTrail.length > 120) fgTrail.shift();
@@ -1624,6 +1693,18 @@
       if (++fgPlotTick % 10 === 0) fgUpdatePlot();
       requestAnimationFrame(fgTick);
     }
+
+    // debug: the actual polyline the ghost is drawing right now
+    window.__fgDbg = () => {
+      let pts = null;
+      if (fgGhostArc) pts = fgGhostArc.slice(0, fgGhostArc.length);
+      else if (fgPredMat) {
+        pts = [];
+        const kEnd = Math.min(fgHzIdx, fgGhostMax);
+        for (let k = 0; k <= kEnd; k++) { if (fgPredMat[0][k] == null) break; pts.push([fgPredMat[0][k], fgPredMat[1][k]]); }
+      }
+      return { fam: fgLastFam, loopAge: fgLoopAge, lap: fgLoop ? fgLoop.length : 0, pts, cycFed: fgCyc ? fgCyc.fed : 0 };
+    };
 
     // ---- boot ----
     ivVal.textContent = initVarFromSlider().toFixed(1);

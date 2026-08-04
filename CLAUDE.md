@@ -123,9 +123,11 @@ the shipped commit carries the correct version.
    and a locked path it deploys INSTANTLY as a **path-locked replay** — the
    phase-domain engine draws the user's own stored loop at their learned
    tempo (crisp corners, exact geometry, cannot decay) while the
-   straight-line "autopilot" is a dashed ray off-screen. The AFM / linear
-   brains stay on the selector for comparison; those are
-   **commissioned on demand**: the drawn path is arc-length-resampled to
+   straight-line "autopilot" is a dashed ray off-screen. The AFM brain now trains **continuously (cyclically)** in the background
+   over the locked loop (~3 ms/frame budget, noise-hardened) — the
+   library's continuous-training idea — so brain=AFM deploys **instantly**
+   from the always-warm model (fallback: commissioned on demand when no
+   loop is locked). The linear brain stays commissioned on demand: the drawn path is arc-length-resampled to
    constant speed (kills the stall fixed points that corner dwells/tremor
    teach), then candidate brains — three variants of the library's **AFM
    universal map** (ReLU+Fourier, boosted `rand` prior — the default
