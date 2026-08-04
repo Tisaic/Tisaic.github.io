@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:40,built:"2026-08-04T02:06:02Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:41,built:"2026-08-04T02:14:04Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -137,6 +137,19 @@
         <option value="linear">brain: linear</option>
       </select>
       <button id="fg-reset" class="sec">Reset brain</button>
+      <select id="fg-guide" title="tracing guide (visual only — the model never sees it)">
+        <option value="none">guide: none</option>
+        <option value="circle">guide: circle</option>
+        <option value="ellipse">guide: ellipse</option>
+        <option value="square">guide: square</option>
+        <option value="triangle">guide: triangle</option>
+        <option value="hexagon">guide: hexagon</option>
+        <option value="star">guide: star</option>
+        <option value="fig8">guide: figure-8</option>
+        <option value="heart">guide: heart</option>
+        <option value="rose">guide: rose</option>
+        <option value="lissajous">guide: lissajous</option>
+      </select>
       <div class="slider">Ghost horizon
         <input id="fg-hz" type="range" min="0" max="20" step="1" value="5" />
         <span id="fg-hzv">1.2s</span>
@@ -1110,6 +1123,59 @@
     const nrm = (px, py) => [(px - fgW / 2) / fgNorm, (py - fgH / 2) / fgNorm];
     const den = (nx, ny) => [nx * fgNorm + fgW / 2, ny * fgNorm + fgH / 2];
 
+    // ---- tracing guides: faint stencils to draw over. VISUAL ONLY — nothing
+    // in the model pipeline reads them; they exist to steady the hand. ----
+    const GUIDES = {
+      circle: (t) => [0.62 * Math.cos(t), 0.62 * Math.sin(t)],
+      ellipse: (t) => {
+        const c = Math.cos(0.35), s = Math.sin(0.35), x = 0.72 * Math.cos(t), y = 0.42 * Math.sin(t);
+        return [x * c - y * s, x * s + y * c];
+      },
+      square: (t) => {
+        const u = (t / (2 * Math.PI)) * 4, i = Math.floor(u) % 4, f = u - Math.floor(u), s = 0.56;
+        return [[-s + 2 * s * f, -s], [s, -s + 2 * s * f], [s - 2 * s * f, s], [-s, s - 2 * s * f]][i];
+      },
+      triangle: (t) => {
+        const u = (t / (2 * Math.PI)) * 3, i = Math.floor(u) % 3, f = u - Math.floor(u), r = 0.66;
+        const v = (k) => [r * Math.cos(-Math.PI / 2 + k * 2 * Math.PI / 3), r * Math.sin(-Math.PI / 2 + k * 2 * Math.PI / 3)];
+        const a = v(i), b = v(i + 1);
+        return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
+      },
+      hexagon: (t) => {
+        const u = (t / (2 * Math.PI)) * 6, i = Math.floor(u) % 6, f = u - Math.floor(u), r = 0.62;
+        const v = (k) => [r * Math.cos(-Math.PI / 2 + k * Math.PI / 3), r * Math.sin(-Math.PI / 2 + k * Math.PI / 3)];
+        const a = v(i), b = v(i + 1);
+        return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
+      },
+      star: (t) => {                                 // pentagram {5/2}: vertex-skipping strokes
+        const u = (t / (2 * Math.PI)) * 5, i = Math.floor(u) % 5, f = u - Math.floor(u), r = 0.68;
+        const v = (k) => [r * Math.cos(-Math.PI / 2 + ((k * 2) % 5) * 2 * Math.PI / 5), r * Math.sin(-Math.PI / 2 + ((k * 2) % 5) * 2 * Math.PI / 5)];
+        const a = v(i), b = v(i + 1);
+        return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
+      },
+      fig8: (t) => [0.7 * Math.sin(t), 0.46 * Math.sin(2 * t)],
+      heart: (t) => [0.042 * (16 * Math.pow(Math.sin(t), 3)),
+        -0.042 * (13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)) + 0.05],
+      rose: (t) => [0.68 * Math.cos(2 * t) * Math.cos(t), 0.68 * Math.cos(2 * t) * Math.sin(t)],
+      lissajous: (t) => [0.68 * Math.sin(3 * t + Math.PI / 2), 0.5 * Math.sin(2 * t)],
+    };
+    let fgGuide = 'none';
+    document.getElementById('fg-guide').addEventListener('change', (e) => { fgGuide = e.target.value; });
+    function drawGuide() {
+      const fn = GUIDES[fgGuide];
+      if (!fn) return;
+      fgCtx.beginPath();
+      for (let i = 0; i <= 240; i++) {
+        const p = den(...fn((i / 240) * 2 * Math.PI));
+        if (i === 0) fgCtx.moveTo(p[0], p[1]); else fgCtx.lineTo(p[0], p[1]);
+      }
+      fgCtx.setLineDash([7, 7]);
+      fgCtx.strokeStyle = 'rgba(148,163,184,0.30)';
+      fgCtx.lineWidth = 2;
+      fgCtx.stroke();
+      fgCtx.setLineDash([]);
+    }
+
     function fgStepSim() {
       const a = nrm(fgPtr.x, fgPtr.y);
       if (fgPrev && Math.hypot(a[0] - fgPrev[0], a[1] - fgPrev[1]) < 0.002) {
@@ -1263,6 +1329,7 @@
     function fgRender() {
       if (!fgW) resizeFinger();
       fgCtx.clearRect(0, 0, fgW, fgH);
+      drawGuide();
       for (let i = 1; i < fgTrail.length; i++) {
         fgCtx.beginPath(); fgCtx.moveTo(fgTrail[i - 1][0], fgTrail[i - 1][1]); fgCtx.lineTo(fgTrail[i][0], fgTrail[i][1]);
         fgCtx.strokeStyle = 'rgba(96,165,250,' + (i / fgTrail.length).toFixed(2) + ')'; fgCtx.lineWidth = 3; fgCtx.stroke();

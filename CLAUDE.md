@@ -93,7 +93,10 @@ the shipped commit carries the correct version.
    **auto-tuned lag-filter** caret — the realistic DIY baseline, best of a
    scored filter bank — with an on-stage error meter + ×-better readout, ~4×,
    and a 3-trace Plotly chart), **③ finger-trace** (draw loops at ~20 Hz
-   sampling; amber NGRC ghost vs gray **straight-line extrapolation**, with a
+   sampling; an optional **tracing guide** selector overlays one of 10 faint
+   stencil shapes — circle/ellipse/square/triangle/hexagon/star/figure-8/
+   heart/rose/lissajous — purely visual, never read by any model, default
+   none; amber NGRC ghost vs gray **straight-line extrapolation**, with a
    **ghost-horizon slider (0.2–4 s)** — a 21-rung ladder of the library's
    **direct multi-horizon readouts** (`directHorizons`) trains continuously,
    so the slider needs no refit and the chart plots miss-vs-horizon curves
