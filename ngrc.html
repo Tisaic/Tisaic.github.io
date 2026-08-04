@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:45,built:"2026-08-04T12:45:12Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:46,built:"2026-08-04T13:37:34Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -693,7 +693,9 @@
     // advance phase along the loop → it lands ON the future stroke by
     // construction.
     let fgLoop = null, fgLoopH = 0, fgPhase = 0, fgDsTh = null, fgDsP = null, fgDsLags = [1, 1, 1];
-    let fgDsObs = [], fgDsMed = 1, fgGhostArc = null;
+    let fgDsObs = [], fgDsMed = 1, fgGhostArc = null, fgGhostMax = 20;
+    let fgLoopMiss = 0, fgLoopAge = 0;
+    const ROLLMAX = (() => { let m = 0; for (let i = 0; i < 21; i++) if (HLAD[i] <= 100) m = i; return m; })();
     let fgES, fgOPn, fgOPl;                         // per-rung: path-locked miss, on-path (ghost/line)
     const DS_NF = 10;
     const dsFeat = (lags, ph01) => {
@@ -759,7 +761,7 @@
       fgEN = new Array(NLAD).fill(0); fgEI = new Array(NLAD).fill(0); fgEC = new Array(NLAD).fill(0); fgET = 0;
       fgES = new Array(NLAD).fill(0); fgOPn = new Array(NLAD).fill(0); fgOPl = new Array(NLAD).fill(0);
       fgLoop = null; fgPhase = 0; fgDsLags = [1, 1, 1];
-      fgDsObs = []; fgDsMed = 1; fgGhostArc = null;
+      fgDsObs = []; fgDsMed = 1; fgGhostArc = null; fgLoopMiss = 0; fgLoopAge = 0;
       ({ theta: fgDsTh, P: fgDsP } = rlsInit(DS_NF, 10.0));
       fgClearScoring();
       const ap = document.getElementById('fg-ap');
@@ -1237,8 +1239,48 @@
         const abs = fgA.slice(-900).map((p) => [p[0], p[1]]);
         abs.push(a);
         const rp = resamplePath(abs.map((p) => [0, 0, p[0], p[1]]));
-        const L = lapLenOf(rp.rs);
-        if (L > 20 && rp.rs.length > L + 10) {
+        // Lap-length STABILITY: re-detecting from scratch each refresh gave a
+        // slightly different L every time, and each change remaps the phase-
+        // Fourier features — scrambling the tempo readout it just trained
+        // (the ghost snapped into shape, then back to scribbles, ~1 s cadence).
+        // Once locked, refine around the KNOWN length; global re-detect only
+        // after repeated failures.
+        let L = fgLoop ? fgLoop.length : lapLenOf(rp.rs);
+        // refine: snap L to the local wrap-gap minimum — a few steps of lap
+        // error rotates the seam and, at long horizons, piles misaligned lap
+        // overlays into a tangle
+        if (L > 20 && rp.rs.length > L + 12) {
+          let bestL = L, bestG = Infinity;
+          const e0 = rp.rs[rp.rs.length - 1];
+          for (let dL = -8; dL <= 8; dL++) {
+            const Lc = L + dL;
+            if (Lc < 20 || rp.rs.length <= Lc + 2) continue;
+            const s2 = rp.rs[rp.rs.length - 1 - Lc];
+            const g2 = Math.hypot(e0[0] - s2[0], e0[1] - s2[1]);
+            if (g2 < bestG) { bestG = g2; bestL = Lc; }
+          }
+          L = bestL;
+        }
+        // VALIDATE before adopting: an unreliable lap estimate (short
+        // recordings, autocorr noise) must never replace a good loop with a
+        // partial-lap slice — that scribbled the ghost until the next lucky
+        // refresh ("snaps into shape, then back to scribbles").
+        let ok = L > 20 && rp.rs.length > 2.2 * L;
+        if (ok) {
+          const cand = rp.rs.slice(-L);
+          let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+          for (const p of cand) { if (p[0] < x0) x0 = p[0]; if (p[0] > x1) x1 = p[0]; if (p[1] < y0) y0 = p[1]; if (p[1] > y1) y1 = p[1]; }
+          const span = Math.hypot(x1 - x0, y1 - y0) || 1e-9;
+          const gap = Math.hypot(cand[cand.length - 1][0] - cand[0][0], cand[cand.length - 1][1] - cand[0][1]);
+          ok = gap < 0.3 * span && span > 0.15;      // a real lap closes on itself
+        }
+        if (!ok) {
+          fgLoopMiss++;
+          if (fgLoopMiss > 5) { fgLoop = null; fgLoopMiss = 0; fgLoopAge = 0; }  // force global re-lock
+        }
+        if (ok) {
+          fgLoopMiss = 0;
+          fgLoopAge = (fgLoop && Math.abs(fgLoop.length - L) <= 3) ? fgLoopAge + 24 : 0;
           const lp = rp.rs.slice(-L).map((p) => [p[0], p[1]]);
           // close the seam: lap-to-lap drift leaves a wrap gap that replays as
           // a jagged hitch every lap — distribute it linearly around the loop
@@ -1310,27 +1352,55 @@
         shape[1].push(sp ? sp[1] : null);
       }
       // ONE family for the whole displayed ghost, judged at the SELECTED rung —
-      // mixing families across rungs drew a zigzag tangle (long-horizon direct
-      // readouts regress to the doodle's center; stitching those to path
-      // points scribbled the middle of the shape)
-      let fam = 'roll';
+      // mixing families across rungs drew a zigzag tangle. Selection is STICKY:
+      // once the path is locked, the path family is the default and a rival
+      // must measure 2x better to dethrone it — comparable EMAs otherwise flap
+      // the ghost between shape and scribble every few samples.
+      let fam;
       {
         const k0 = fgHzIdx;
         const mR = (rolled[0][k0] != null && fgEI[k0] > 0) ? fgEI[k0] : Infinity;
         const mD = fgEN[k0] > 0 ? fgEN[k0] : Infinity;
-        const mS = (phaseFc && fgES[k0] > 0) ? fgES[k0] : Infinity;
-        if (fgSamples > 60 && (mR < Infinity || mD < Infinity || mS < Infinity)) {
-          fam = (mS <= mD && mS <= mR) ? 'path' : (mD <= mR ? 'direct' : 'roll');
+        if (phaseFc && fgLoopAge >= 72) {
+          const mS = fgES[k0] > 0 ? fgES[k0] : Infinity;
+          const rival = Math.min(mD, mR);
+          fam = (rival < 0.5 * mS) ? (mD <= mR ? 'direct' : 'roll') : 'path';
+        } else {
+          fam = (fgSamples > 60 && mD < Infinity && (rolled[0][k0] == null || mD < mR)) ? 'direct' : 'roll';
+          if (fam === 'roll' && rolled[0][k0] == null) fam = 'direct';
         }
-        if (fam === 'roll' && rolled[0][fgHzIdx] == null) fam = phaseFc ? 'path' : 'direct';
       }
       const src2 = fam === 'path' ? shape : (fam === 'direct' ? pred : rolled);
       for (let k = 0; k < NLAD; k++) {
-        shown[0].push(src2[0][k] != null ? src2[0][k] : pred[0][k]);
-        shown[1].push(src2[1][k] != null ? src2[1][k] : pred[1][k]);
+        shown[0].push(src2[0][k]);
+        shown[1].push(src2[1][k]);
       }
       fgPredMat = shown;
-      fgGhostArc = (fam === 'path' && phaseFc) ? phaseFc.slice(0, HLAD[fgHzIdx]) : null;
+      // roll-family ghosts truncate at the library's rollout cap (no splicing
+      // another family beyond it); path draws the smooth per-step arc
+      fgGhostMax = fam === 'roll' ? ROLLMAX : NLAD - 1;
+      // CONFIDENCE horizon: an unscored long rung has nothing trustworthy to
+      // draw (its readout has seen ~1 example) — connecting those scattered
+      // points scribbles. The ghost extends only as far as the family has
+      // been scored, growing to the slider as data accumulates. The path
+      // family is exempt once stable: its points lie on the loop by
+      // construction.
+      if (fam !== 'path') {
+        const E2 = fam === 'direct' ? fgEN : fgEI;
+        let trustK = -1;
+        while (trustK < NLAD - 1 && E2[trustK + 1] > 0) trustK++;
+        fgGhostMax = Math.max(0, Math.min(fgGhostMax, trustK));
+        if (trustK < 0) fgGhostMax = 0;
+      }
+      // arc capped at ~one lap — at long horizons the forecast wraps the loop
+      // several times and overdrawing identical laps just smears the ink; the
+      // tip dot still marks the full-horizon prediction
+      let arcEnd = HLAD[fgHzIdx];
+      if (fam === 'path' && phaseFc && fgLoop && fgDsMed > 0.02) {
+        arcEnd = Math.min(arcEnd, Math.ceil(fgLoop.length / fgDsMed) + 2);
+      }
+      fgGhostArc = (fam === 'path' && phaseFc) ? phaseFc.slice(0, arcEnd) : null;
+      if (fgGhostArc && arcEnd < HLAD[fgHzIdx]) fgGhostArc.tip = phaseFc[HLAD[fgHzIdx] - 1];
       fgCvMat = cv;
       fgA.push(a);
       fgPend.push({ i: fgA.length - 1, n: pred, r: rolled, s: shape, w: shown, c: cv });
@@ -1384,14 +1454,16 @@
       fgLastA = a; fgLastVel = [...fgVel];
     }
 
-    function fgGhost(mat, stroke, fill, dashed) {
+    function fgGhost(mat, stroke, fill, dashed, kMax) {
+      const kEnd = Math.min(fgHzIdx, kMax == null ? fgHzIdx : kMax);
+      if (mat[0][0] == null) return;
       fgCtx.beginPath();
       let p0 = den(mat[0][0], mat[1][0]); fgCtx.moveTo(p0[0], p0[1]);
-      for (let k = 1; k <= fgHzIdx; k++) { const p = den(mat[0][k], mat[1][k]); fgCtx.lineTo(p[0], p[1]); }
+      for (let k = 1; k <= kEnd; k++) { if (mat[0][k] == null) break; const p = den(mat[0][k], mat[1][k]); fgCtx.lineTo(p[0], p[1]); }
       if (dashed) fgCtx.setLineDash([6, 5]);
       fgCtx.strokeStyle = stroke; fgCtx.lineWidth = 3; fgCtx.stroke();
       fgCtx.setLineDash([]);
-      const pe = den(mat[0][fgHzIdx], mat[1][fgHzIdx]);
+      const pe = den(mat[0][Math.min(kEnd, mat[0].length - 1)] ?? mat[0][0], mat[1][Math.min(kEnd, mat[1].length - 1)] ?? mat[1][0]);
       fgCtx.beginPath(); fgCtx.arc(pe[0], pe[1], 8, 0, 2 * Math.PI); fgCtx.fillStyle = fill; fgCtx.fill();
     }
     function fgRender() {
@@ -1447,9 +1519,10 @@
           fgCtx.moveTo(p0[0], p0[1]);
           for (let i = 1; i < fgGhostArc.length; i++) { const p = den(fgGhostArc[i][0], fgGhostArc[i][1]); fgCtx.lineTo(p[0], p[1]); }
           fgCtx.strokeStyle = 'rgba(245,158,11,0.9)'; fgCtx.lineWidth = 3; fgCtx.stroke();
-          const pe = den(fgGhostArc[fgGhostArc.length - 1][0], fgGhostArc[fgGhostArc.length - 1][1]);
+          const tp = fgGhostArc.tip || fgGhostArc[fgGhostArc.length - 1];
+          const pe = den(tp[0], tp[1]);
           fgCtx.beginPath(); fgCtx.arc(pe[0], pe[1], 8, 0, 2 * Math.PI); fgCtx.fillStyle = '#f59e0b'; fgCtx.fill();
-        } else if (fgPtr.down && fgPredMat) fgGhost(fgPredMat, 'rgba(245,158,11,0.9)', '#f59e0b', false);
+        } else if (fgPtr.down && fgPredMat) fgGhost(fgPredMat, 'rgba(245,158,11,0.9)', '#f59e0b', false, fgGhostMax);
         fgCtx.beginPath(); fgCtx.arc(fgPtr.x, fgPtr.y, 8, 0, 2 * Math.PI); fgCtx.fillStyle = '#2563eb'; fgCtx.fill();
         fgCtx.strokeStyle = '#93c5fd'; fgCtx.lineWidth = 2; fgCtx.stroke();
         if (fgSamples === 0) {
