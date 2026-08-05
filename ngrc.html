@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:70,built:"2026-08-05T20:34:41Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:71,built:"2026-08-05T20:39:58Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -111,14 +111,20 @@
       the block is winning; the error meter keeps score. And a
       <span style="color:#a78bfa">violet hollow caret</span> is the <b>preview</b>: a direct 1&nbsp;s-ahead
       readout predicting where the load <b>will</b> be — a virtual sensor that also sees the future, scored
-      against <b>persistence</b> ("it stays where it is"), the standard forecasting baseline.</p>
+      against <b>persistence</b> ("it stays where it is"), the standard forecasting baseline.
+      The sensor <b>trains until you lock it</b>: after calibration it adapts toward truth, and once it's
+      <b>minimally ready</b> the 🔒 button unlocks — drag and kick through a <b>full excitation</b> first
+      (or don't), then switch to estimation and see what showing it more of the dynamics was worth. The
+      error meters restart at each switch, so the scores judge the current mode only.</p>
     <div class="stage" id="ss-stage" style="height:34vh"></div>
     <div class="controls">
+      <button id="ss-lock" disabled>🧠 calibrating…</button>
       <button id="ss-kick">Kick it 👊</button>
       <button id="ss-reset" class="sec">Reset brain</button>
       <label class="slider" style="flex:0 0 auto; gap:6px;"><input id="ss-truth" type="checkbox" checked /> show truth</label>
     </div>
     <dl class="stat">
+      <dt>Mode</dt><dd id="ss-mode">calibrating</dd>
       <dt>Warm</dt><dd id="ss-warm" class="warn">no</dd>
       <dt>NGRC error (recent)</dt><dd id="ss-rmse" class="amber">—</dd>
       <dt>Tuned lag filter</dt><dd id="ss-naive">—</dd>
@@ -641,6 +647,18 @@
     const SS_PREV_H = 100;                           // 100 samples × dt 0.010 = 1.0 s of sim time
     const SS_PREV_D = 19;                            // bias + 6 lags × stride 5 × 3 signals
     let ssPrevTh, ssPrevP, ssRing, ssPrevPend, ssPrevTr, ssEP, ssEPer, ssPrevNow, ssPrevMat;
+    // MANUAL training→estimation switchover: after calibration the sensor
+    // ADAPTS (online RLS toward truth) until the user locks it — so you can
+    // put the plant through a full excitation (drags, kicks) before locking,
+    // then observe how much seeing the full dynamics was worth. "Minimally
+    // ready" = enough adapt samples for the RLS to have converged on
+    // whatever it was shown (the button unlocks at that point). Locking
+    // freezes the sensor readout, the preview readout, AND the lag-filter
+    // bank's auto-tune selection (it picks by truth, which estimation mode
+    // shouldn't peek at). Recent-error meters reset at each mode switch so
+    // the numbers score the CURRENT mode only.
+    const SS_MIN_TRAIN = 400;
+    let ssLocked, ssAdaptN, ssFiltBest;
     const ssDrive = (t) => 5.5 * Math.sin(2 * Math.PI * 0.20 * t) + 2.2 * Math.sin(2 * Math.PI * 0.50 * t + 1) + 1.3 * Math.sin(2 * Math.PI * 0.95 * t + 2);
 
     function makeSS() {
@@ -653,9 +671,19 @@
       ssFiltErr = ALPHAS.map(() => 0);
       ({ theta: ssPrevTh, P: ssPrevP } = rlsInit(SS_PREV_D, 10.0));
       ssRing = []; ssPrevPend = []; ssPrevTr = 0; ssEP = 0; ssEPer = 0; ssPrevNow = null; ssPrevMat = null;
+      ssLocked = false; ssAdaptN = 0; ssFiltBest = 0;
       ssPlotTrue.length = 0; ssPlotEst.length = 0; ssPlotNaive.length = 0; ssPlotPrev.length = 0;
     }
     document.getElementById('ss-reset').addEventListener('click', makeSS);
+    document.getElementById('ss-lock').addEventListener('click', () => {
+      if (!ss.frozen || (!ssLocked && ssAdaptN < SS_MIN_TRAIN)) return;
+      ssLocked = !ssLocked;
+      // recent-error meters restart so the numbers score THIS mode only
+      ssEN = 0; ssEC = 0; ssET = 0; ssEP = 0; ssEPer = 0;
+      console.log(ssLocked
+        ? `soft-sensor LOCKED after ${ssAdaptN} adapt samples — pure estimation, nothing learns`
+        : 'soft-sensor training resumed');
+    });
     document.getElementById('ss-kick').addEventListener('click', () => { ssKick += 8; });
     document.getElementById('ss-truth').addEventListener('change', (e) => { ssShowTruth = e.target.checked; });
     const ssPointer = (e) => {
@@ -690,15 +718,20 @@
       const a2 = (fs - PM.b2 * v2) / PM.m2;
       v1 += a1 * PM.dt; x1 += v1 * PM.dt; v2 += a2 * PM.dt; x2 += v2 * PM.dt; ssT += PM.dt;
       x1 = clamp(x1, -2.0, 2.0); x2 = clamp(x2, -2.0, 2.0);
-      // lag-filter bank tracks the motor; each member scored against truth (auto-tune)
-      let best = 0;
+      // lag-filter bank tracks the motor; each member scored against truth
+      // (auto-tune) — but the SELECTION freezes while locked: estimation
+      // mode must not keep peeking at truth to re-pick its best member
       for (let i = 0; i < ALPHAS.length; i++) {
         ssFilt[i] += ALPHAS[i] * (x1 - ssFilt[i]);
         const e = ssFilt[i] - x2;
         ssFiltErr[i] = 0.999 * ssFiltErr[i] + 0.001 * e * e;
-        if (ssFiltErr[i] < ssFiltErr[best]) best = i;
       }
-      const naive = ssFilt[best];
+      if (!ssLocked) {
+        let best = 0;
+        for (let i = 0; i < ALPHAS.length; i++) if (ssFiltErr[i] < ssFiltErr[best]) best = i;
+        ssFiltBest = best;
+      }
+      const naive = ssFilt[ssFiltBest];
       // SENSOR INPUT CONDITIONING (2-pole low-pass on velocity + force): the
       // heavy load physically can't move at high frequency, but jerky dragging
       // puts real HF content into v1/u that a linear-in-lags readout can't fully
@@ -711,7 +744,7 @@
       ss.push([x1, ssV1f2, ssUf2]);
       let est = null;
       if (!ss.frozen) ss.warmupStep(ss._raw());
-      else ss.adapt([x2]);
+      else if (!ssLocked) { ss.adapt([x2]); ssAdaptN++; }   // training until the user locks it
       if (ss.ready() && ss.frozen) est = ss.estimate()[0];
       ssSamples++;
       // 1 s-ahead preview: predict-then-train on the same conditioned signals
@@ -734,8 +767,10 @@
               ssEPer = SS_DECAY * ssEPer + (1 - SS_DECAY) * ePer * ePer;
               prevAligned = q.y;
             }
-            rls(ssPrevTh, ssPrevP, q.f, x2, 1.0, 0, false);
-            ssPrevTr++;
+            if (!ssLocked) {                         // lock freezes the preview readout too
+              rls(ssPrevTh, ssPrevP, q.f, x2, 1.0, 0, false);
+              ssPrevTr++;
+            }
           }
         }
       }
@@ -861,6 +896,9 @@
       }
     }
 
+    window.__ssDbg = () => ({ warm: ss.frozen, locked: ssLocked, adaptN: ssAdaptN,
+      prevTr: ssPrevTr, filtBest: ssFiltBest });
+
     let ssPlotInited = false, ssPlotTick = 0;
     function ssUpdatePlot() {
       const layout = { margin: { l: 30, r: 8, t: 8, b: 18 }, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
@@ -883,6 +921,27 @@
       ssRender(out);
       const warmEl = document.getElementById('ss-warm');
       warmEl.textContent = ss.frozen ? 'yes' : 'no'; warmEl.className = ss.frozen ? 'good' : 'warn';
+      // training→estimation switchover state machine
+      const lockBtn = document.getElementById('ss-lock');
+      const modeEl = document.getElementById('ss-mode');
+      if (!ss.frozen) {
+        lockBtn.disabled = true;
+        lockBtn.textContent = '🧠 calibrating…';
+        modeEl.textContent = 'calibrating (' + Math.min(100, Math.round(100 * ss._cnt / ss.warmup)) + '%)';
+        modeEl.className = '';
+      } else if (!ssLocked) {
+        const ready = ssAdaptN >= SS_MIN_TRAIN;
+        lockBtn.disabled = !ready;
+        lockBtn.textContent = ready ? 'Switch to estimation 🔒'
+          : `training… ${Math.round(100 * ssAdaptN / SS_MIN_TRAIN)}%`;
+        modeEl.textContent = `training (adapting) · ${ssAdaptN} samples` + (ready ? ' · minimally ready ✓' : '');
+        modeEl.className = ready ? 'good' : 'amber';
+      } else {
+        lockBtn.disabled = false;
+        lockBtn.textContent = 'Resume training ▶';
+        modeEl.textContent = `estimating 🔒 (locked) · trained on ${ssAdaptN} samples`;
+        modeEl.className = 'amber';
+      }
       document.getElementById('ss-rmse').textContent = ssET > 0 ? Math.sqrt(ssEN / ssET).toFixed(4) : '—';
       document.getElementById('ss-naive').textContent = ssET > 0 ? Math.sqrt(ssEC / ssET).toFixed(4) : '—';
       document.getElementById('ss-adv').textContent = (ssEN > 0 && ssEC > 0) ? (Math.sqrt(ssEC / ssEN)).toFixed(1) + '× better' : '—';

@@ -127,7 +127,19 @@ the shipped commit carries the correct version.
    each prediction is stored at make-time and judged when its target
    arrives, before that pair trains. Baseline: **persistence** ("the load
    stays put"), the standard honest forecasting reference — a ringing
-   load makes it genuinely bad. Rows: "Preview +1 s (NGRC)" /
+   load makes it genuinely bad. MANUAL SWITCHOVER: the sensor trains
+   (adapts toward truth) until the user locks it — the 🔒 button stays
+   disabled through calibration and until minimally ready (≥400 adapt
+   samples, "minimally ready ✓" in the Mode row), then "Switch to
+   estimation 🔒" freezes the sensor readout, the preview readout, AND
+   the lag-filter bank's truth-peeking auto-tune selection;
+   "Resume training ▶" toggles back, Reset re-calibrates. Recent-error
+   meters restart at every switch so scores judge the current mode only
+   — the point: excite the plant fully (or don't) before locking and
+   see what showing it the full dynamics was worth (verified: locked
+   after gentle-drive-only training, the estimate generalizes — near-
+   linear plant — but the frozen preview drops to ~1× vs persistence
+   on unseen kicks/drags). Rows: "Preview +1 s (NGRC)" /
    "Persistence +1 s" / "Preview advantage"; chart trace "preview (made
    1 s ago)" aligned at its target time. ON-STAGE VERIFICATION: a solid
    violet "made 1s ago" caret (upper row, drop-line to truth) is the
