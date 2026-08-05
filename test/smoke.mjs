@@ -134,7 +134,11 @@ await demo.mouse.move(fcx + fr, fcy); await demo.mouse.down();
 for (let i = 0; i < 350; i++) { const a = i * 0.1; await demo.mouse.move(fcx + fr * Math.cos(a), fcy + fr * Math.sin(a)); await demo.waitForTimeout(8); }
 await demo.mouse.up();
 check('ngrc: finger-trace learns from a drag (samples > 0)', (parseInt(await demo.textContent('#fg-n')) || 0) > 0);
-check('ngrc: finger-trace error is finite', Number.isFinite(parseFloat(await demo.textContent('#fg-rmse'))));
+// the default rung is 10 s — a 10 s horizon can't be scored by a short drag,
+// so read the miss at a short rung (the slider's whole point)
+await demo.evaluate(() => { const s = document.getElementById('fg-hz'); s.value = 9; s.dispatchEvent(new Event('input', { bubbles: true })); });
+await demo.waitForTimeout(300);
+check('ngrc: finger-trace error is finite (short rung)', Number.isFinite(parseFloat(await demo.textContent('#fg-rmse'))));
 check('ngrc: CPU readout populated (AFM/kNN/app)', /AFM .*%.*kNN .*%.*app .*%/.test(await demo.textContent('#fg-cpu')), await demo.textContent('#fg-cpu'));
 await demo.click('#fg-auto');
 // commissioning fits the AFM brain (a few seconds) then flips the button

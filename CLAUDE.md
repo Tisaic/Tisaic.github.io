@@ -137,10 +137,23 @@ the shipped commit carries the correct version.
    the ESN at every horizon — the published NG-RC claim, live: a
    105-weight-per-rung polynomial model edging a 100-neuron reservoir
    at a fraction of the compute), with a
-   **ghost-horizon slider (0.2–10 s, geometric rungs)** — a 21-rung ladder of the library's
-   **direct multi-horizon readouts** (`directHorizons`) trains continuously,
-   so the slider needs no refit and the chart plots miss-vs-horizon curves
-   over the whole range (dotted marker = slider). After ~8 s of doodling the ghost goes
+   **ghost-horizon slider (0.2–20 s, geometric rungs, default 10 s)** — a
+   25-rung ladder of the library's **direct multi-horizon readouts**
+   (`directHorizons`) trains continuously (the original 21 rungs 4..208
+   kept verbatim + 4 appended to 417 samples ≈ 20 s), so the slider needs
+   no refit and the chart plots miss-vs-horizon curves over the whole
+   range (dotted marker = slider). A rung can only score once its horizon
+   of future has been drawn — the 20 s rung populates after ~21 s of
+   drawing (physics, not a bug). Two scoring-pipeline fixes shipped with
+   the extension: a dwell pause no longer flushes the pending queue (it
+   silently discarded every long-horizon prediction whenever the finger
+   hesitated ~0.5 s), and pend entries advance independently per rung
+   (strict FIFO made every rung inherit the longest rung's 422-sample
+   latency). Also: within the multi-stroke log, only EXPLICIT lift flags
+   create lap gaps — `distJumps: false` — because an unflagged spatial
+   jump mid-stroke is a loaded-frame sampling artifact (the finger was
+   down; it did travel that path) and bridging it beats a phantom pen
+   lift (commissioning's flag-less log keeps distance-based jumps). After ~8 s of doodling the ghost goes
    **path-locked** — the phase-domain rethink: a doodle factors into a PATH
    (kept as a fresh resampled loop, refreshed every ~1 s, first-peak
    autocorrelation for the lap length) traversed at a PHASE RATE, so the

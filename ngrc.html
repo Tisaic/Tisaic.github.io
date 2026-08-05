@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:56,built:"2026-08-05T04:53:55Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:57,built:"2026-08-05T06:02:48Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -115,7 +115,7 @@
   <!-- ================= Tab 3: Finger-trace — ghost race + autopilot ================= -->
   <section class="panel" id="p-finger">
     <p class="lead">Draw <b>loops and figure-8s</b> for a few seconds. Two ghosts predict your fingertip
-      <b>0.2–10&nbsp;s ahead</b> (set by the <b>ghost horizon</b> slider):
+      <b>0.2–20&nbsp;s ahead</b> (set by the <b>ghost horizon</b> slider, default 10&nbsp;s):
       <span style="color:#7c8aa0">gray = analogue k-NN</span> (Lorenz's method of analogues: it finds the
       nearest past moment of <b>your own drawing</b> and bets history repeats — a real rival, not a strawman),
       <span style="color:#22d3ee">cyan = ESN</span> (an <b>echo state network</b> — the classical recurrent
@@ -152,13 +152,13 @@
         <option value="lissajous">guide: lissajous</option>
       </select>
       <div class="slider">Ghost horizon
-        <input id="fg-hz" type="range" min="0" max="20" step="1" value="9" />
-        <span id="fg-hzv">1.2s</span>
+        <input id="fg-hz" type="range" min="0" max="24" step="1" value="20" />
+        <span id="fg-hzv">10.0s</span>
       </div>
     </div>
     <dl class="stat">
       <dt>Samples</dt><dd id="fg-n">0</dd>
-      <dt id="fg-rmse-label">NGRC direct @1.2s</dt><dd id="fg-rmse" class="amber">—</dd>
+      <dt id="fg-rmse-label">NGRC direct @10.0s</dt><dd id="fg-rmse" class="amber">—</dd>
       <dt>NGRC 1-step rolled</dt><dd id="fg-iter">—</dd>
       <dt>Analogue k-NN path miss</dt><dd id="fg-naive">—</dd>
       <dt>ESN (reservoir NN) miss</dt><dd id="fg-esn">—</dd>
@@ -647,17 +647,20 @@
     // Ghost horizon LADDER: direct readouts are trained at every rung all the
     // time (that's what makes the slider free — no refit on change); the
     // slider only picks which rung the ghost and the stats display.
-    // Geometric ladder 4..208 samples ≈ 0.2–10 s: dense short horizons, and
-    // the top rung reaches a full 10 seconds ahead.
+    // Geometric ladder 4..417 samples ≈ 0.2–20 s: dense short horizons; the
+    // original 21 rungs (4..208 ≈ 10 s) are kept VERBATIM so their scoring
+    // histories stay comparable, with 4 more geometric rungs appended to
+    // reach a full 20 seconds ahead.
     const HLAD = (() => {
       const out = [];
       for (let i = 0; i < 21; i++) out.push(Math.max((out[i - 1] || 0) + 1, Math.round(4 * Math.pow(52, i / 20))));
+      for (const h of [248, 295, 351, 417]) out.push(h);
       return out;
     })();
     const HMAX = HLAD[HLAD.length - 1];
     const NLAD = HLAD.length;
     const SEC = 0.048;        // seconds per sample
-    let fgHzIdx = 9;          // displayed rung ≈ 1.2 s on the geometric ladder
+    let fgHzIdx = 20;         // default rung = 208 samples ≈ 10.0 s
     const SAMPLE_MS = 48;     // fixed-TIME sampling — same cadence on 60 and 120 Hz displays
     const FPAD = 5;           // future window for path-miss scoring
     const DSCALE = 25;        // delta scaling to O(1) features (raw deltas ~0.02 would drown in the ridge)
@@ -776,7 +779,7 @@
         C.fed++;
       }
     }
-    const ROLLMAX = (() => { let m = 0; for (let i = 0; i < 21; i++) if (HLAD[i] <= 100) m = i; return m; })();
+    const ROLLMAX = (() => { let m = 0; for (let i = 0; i < NLAD; i++) if (HLAD[i] <= 100) m = i; return m; })();
     let fgES, fgOPn, fgOPl;                         // per-rung: path-locked miss, on-path (ghost/analogue)
     let fgHHn;                                      // per-rung timed miss of the SHOWN ghost, head-to-head-gated
     let fgEEn, fgHHe;                               // ESN timed miss + shown-ghost miss on the SAME instances
@@ -1057,7 +1060,14 @@
     // and a decelerate-into-the-corner rule — both of which captured the
     // free-run (the spiral-decay-to-a-circle bug). Constant-speed resampling
     // removes every stall and speed cue while keeping the geometry exact.
-    function resamplePath(log) {
+    function resamplePath(log, opts) {
+      // distJumps: whether LARGE UNFLAGGED steps count as pen jumps. The lap
+      // refresh passes false — its log carries explicit lift flags, so an
+      // unflagged jump is a sampling artifact (a loaded frame skipping
+      // samples mid-stroke: the finger was DOWN and did travel that path) and
+      // must be bridged, not turned into a phantom pen lift. Commissioning
+      // (flag-less fgLog) keeps distance-based jump detection.
+      const distJumps = !opts || opts.distJumps !== false;
       let pts = log.map((q) => [q[2], q[3]]);
       // Explicit pen-lift flags (q[4] truthy = the step INTO this point is a
       // lift) — a multi-stroke doodle's lifts can be spatially SHORT (two
@@ -1102,7 +1112,7 @@
       for (let i = 1; i < pts.length; i++) {
         const b = pts[i];
         let seg = Math.hypot(b[0] - prev[0], b[1] - prev[1]);
-        if (seg > jump || brkF[i]) {                // pen jump: do NOT bridge it — record the gap
+        if (brkF[i] || (distJumps && seg > jump)) { // pen jump: do NOT bridge it — record the gap
           gaps.push(rs.length);
           rs.push([b[0], b[1]]);                    // new stroke starts exactly at its first point
           prev = b; carry = 0; continue;
@@ -1568,7 +1578,13 @@
     function fgStepSim() {
       const a = nrm(fgPtr.x, fgPtr.y);
       if (fgPrev && Math.hypot(a[0] - fgPrev[0], a[1] - fgPrev[1]) < 0.002) {
-        if (++fgStill >= 10) fgClearScoring();         // real pause: stop scoring across it (fgPrev kept)
+        // dwell pause: sampling simply stops (no samples = no scoring), and
+        // the pending queue WAITS — flushing it here silently discarded every
+        // long-horizon prediction whenever the finger hesitated ~0.5 s, so a
+        // 20 s rung could only score after 20+ s of uninterrupted motion.
+        // Sample-indexed scoring is pause-invariant by construction (same
+        // reasoning that lets scoring survive pattern pen lifts).
+        fgStill++;
         return;
       }
       fgStill = 0;
@@ -1698,7 +1714,7 @@
           liftNext = false;
         }
         abs.push([0, 0, a[0], a[1], 0]);
-        const rp = resamplePath(abs);
+        const rp = resamplePath(abs, { distJumps: false });
         // Lap-length STABILITY: re-detecting from scratch each refresh gave a
         // slightly different L every time, and each change remaps the phase-
         // Fourier features — scrambling the tempo readout it just trained
@@ -1796,7 +1812,7 @@
         fgDsObs.push(dsObs);
         if (fgDsObs.length > 90) fgDsObs.shift();
         if (fgDsObs.length > 12) { const so = [...fgDsObs].sort((x, y) => x - y); fgDsMed = so[Math.floor(so.length / 2)] || 1; }
-        // one 84-step phase forecast covers every rung (rung k = step HLAD[k])
+        // one HMAX-step phase forecast covers every rung (rung k = step HLAD[k])
         const anchor = loopAt(fgPhase);
         const off = [a[0] - anchor[0], a[1] - anchor[1]];
         let ph = fgPhase, lags = [...fgDsLags], dec = 1;
@@ -1901,8 +1917,11 @@
       // PATH-MISS scoring: each horizon's prediction is scored by its distance to
       // the NEAREST sample of the actual future path (window h-2..h+3) — this is
       // what the eye judges: "did the ghost land on where I actually went?"
-      while (fgPend.length) {
-        const q = fgPend[0];
+      // every entry advances independently — strict FIFO made EVERY rung wait
+      // for the head entry's 20 s rung (422-sample latency even for the 0.2 s
+      // rung); rungs are still scored oldest-entry-first, per rung
+      for (let qi = 0; qi < fgPend.length; qi++) {
+        const q = fgPend[qi];
         if (q.next == null) q.next = 0;
         while (q.next < NLAD && q.i + HLAD[q.next] + FPAD < fgA.length) {
           const k = q.next++;
@@ -1965,8 +1984,8 @@
             fgOPl[k] = FG_DECAY * fgOPl[k] + (1 - FG_DECAY) * ol;
           }
         }
-        if (q.next >= NLAD) fgPend.shift(); else break;
       }
+      while (fgPend.length && fgPend[0].next >= NLAD) fgPend.shift();
       if (fgA.length > 1000) {                         // bound memory; keep indices valid
         const cut = fgA.length - 900;
         fgA = fgA.slice(cut);
