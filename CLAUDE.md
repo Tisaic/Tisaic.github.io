@@ -129,7 +129,19 @@ the shipped commit carries the correct version.
    opponent: once locked it is the phase-domain pipeline whose
    structural prior ("this is a loop") the ESN was never given — that
    pipeline fairly races the kNN ("Ghost vs kNN" row: both exploit
-   repetition), and the row tooltips state the attribution; cyan ghost capped at warm rungs ≤ ~1.2 s like every
+   repetition), and the row tooltips state the attribution. A green
+   **raw AFM** trace shows the autopilot brain WITHOUT the shape-lock
+   scaffolding in both modes: in prediction it free-runs from the
+   finger's own last states out to the slider horizon (manual
+   predict-only rollout with a light history save/restore — θ/P are
+   untouched, so no snapshots; escape watchdog ends the arc; ~0.3 ms
+   per sample in the AFM CPU bucket), and during autopilot it free-runs
+   as a rival trail whenever it is NOT the deployed model (when the AFM
+   itself deploys, the amber trail IS the AFM — no duplicate). Verified
+   visuals: on a circle the green arc rides the loop (the attractor
+   training holds shape without scaffolding); on multi-stroke patterns
+   it slides off the stroke and curls (a free-run cannot teleport) —
+   the honest contrast justifying the path-replay deploy; cyan ghost capped at warm rungs ≤ ~1.2 s like every
    point-forecast family; ESN trace in the chart; its own CPU bucket
    (~1% of a core); freeze halts its training; Reset re-inits it.
    During **Autopilot the rivals race live**: the kNN replays its

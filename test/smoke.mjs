@@ -128,6 +128,8 @@ await demo.screenshot({ path: join(SHOTS, '05-softsensor.png') });
 // finger-trace tab: a simulated circular drag makes the model learn
 await demo.click('.tab[data-tab="finger"]');
 await demo.waitForTimeout(200);
+await demo.locator('#fg-stage').scrollIntoViewIfNeeded();
+await demo.waitForTimeout(200);
 const fbox = await demo.locator('#fg-stage').boundingBox();
 const fcx = fbox.x + fbox.width / 2, fcy = fbox.y + fbox.height / 2, fr = Math.min(fbox.width, fbox.height) * 0.3;
 await demo.mouse.move(fcx + fr, fcy); await demo.mouse.down();
@@ -154,6 +156,8 @@ await demo.click('#fg-auto');
 // deploys as a path-locked replay (an AFM free-run cannot teleport)
 await demo.click('#fg-reset');
 await demo.waitForTimeout(300);
+await demo.locator('#fg-stage').scrollIntoViewIfNeeded();
+await demo.waitForTimeout(200);
 const f2 = await demo.locator('#fg-stage').boundingBox();
 const mx = f2.x + f2.width / 2, myT = f2.y + f2.height / 2 - 120, myB = f2.y + f2.height / 2 + 120;
 for (let rep = 0; rep < 7; rep++) {
