@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:55,built:"2026-08-05T04:13:41Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:56,built:"2026-08-05T04:53:55Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -126,8 +126,10 @@
       chart shows all of them). The score is the
       <b>path miss</b> — how far each ghost lands from where your finger actually went. Then the showpiece —
       tap <b>Autopilot</b>: NGRC <b>keeps drawing your doodle by itself</b> (the library's <b>AFM</b> universal
-      feature map, ReLU + Fourier, noise-hardened so your doodle becomes a true attractor); a no-learning
-      straight-line approach just leaves the screen. Keep doodling ~10&nbsp;s and the ghost <span style="color:#a78bfa"><b>locks onto your path</b></span>:
+      feature map, ReLU + Fourier, noise-hardened so your doodle becomes a true attractor) — and the rivals
+      race it live: the <span style="color:#7c8aa0">analogue replays its recording</span>, the
+      <span style="color:#22d3ee">ESN free-runs its own learned dynamics</span>, and a no-learning
+      straight-line just leaves the screen. Keep doodling ~10&nbsp;s and the ghost <span style="color:#a78bfa"><b>locks onto your path</b></span>:
       it tracks your <b>phase</b> around the doodle and learns your <b>tempo profile</b> (you slow at the same
       corners every lap), then predicts by riding the path ahead — the <b>on-path advantage</b> scores that
       against the analogue's replay.</p>
@@ -806,12 +808,17 @@
       const Win = new Array(N).fill(0).map(() => [0, 1, 2, 3].map(() => 0.3 * gs()));
       const b = new Array(N).fill(0).map(() => 0.1 * gs());
       const d = 1 + 4 + N;
-      const rung = HLAD.map(() => {
+      const mkR = (nOut) => {
         const P = [];
         for (let i = 0; i < d; i++) { const r = new Array(d).fill(0); r[i] = 1.0; P.push(r); }
-        return { P, TH: [new Array(d).fill(0), new Array(d).fill(0)] };
-      });
-      return { N, d, W, Win, b, leak: 0.3, lam: 0.9995, x: new Array(N).fill(0), buf: [], rung, tr: new Array(NLAD).fill(0) };
+        const TH = []; for (let o = 0; o < nOut; o++) TH.push(new Array(d).fill(0));
+        return { P, TH };
+      };
+      const rung = HLAD.map(() => mkR(2));
+      // 1-step FULL-STATE readout — the ESN's generative mode, so it can
+      // free-run in autopilot (the rung readouts only map to fixed horizons)
+      const one = mkR(4);
+      return { N, d, W, Win, b, leak: 0.3, lam: 0.9995, x: new Array(N).fill(0), buf: [], rung, one, tr: new Array(NLAD).fill(0) };
     }
     function esnStep(E, u) {                        // reservoir update (state only — no learning)
       const { N, W, Win, b, leak, x } = E;
@@ -825,19 +832,18 @@
       E.x = nx;
       return nx;
     }
-    function esnRls(R2, f, y0, y1, lam) {           // shared-P RLS, two outputs
+    function esnRls(R2, f, ys, lam) {               // shared-P RLS, multi-output
       const P = R2.P, d = f.length;
       const Pf = new Array(d);
       for (let i = 0; i < d; i++) { let s2 = 0; const Pi = P[i]; for (let j = 0; j < d; j++) s2 += Pi[j] * f[j]; Pf[i] = s2; }
       let fPf = 0; for (let i = 0; i < d; i++) fPf += f[i] * Pf[i];
       const den = lam + fPf;
-      const t0 = R2.TH[0], t1 = R2.TH[1];
-      let p0 = 0, p1 = 0;
-      for (let i = 0; i < d; i++) { p0 += t0[i] * f[i]; p1 += t1[i] * f[i]; }
-      const e0 = y0 - p0, e1 = y1 - p1;
-      for (let i = 0; i < d; i++) {
-        const K = Pf[i] / den;
-        t0[i] += K * e0; t1[i] += K * e1;
+      for (let o = 0; o < ys.length; o++) {
+        const th = R2.TH[o];
+        let pr = 0;
+        for (let i = 0; i < d; i++) pr += th[i] * f[i];
+        const e = ys[o] - pr;
+        for (let i = 0; i < d; i++) th[i] += (Pf[i] / den) * e;
       }
       for (let i = 0; i < d; i++) {
         const Pi = P[i], Ki = Pf[i] / den;
@@ -845,6 +851,75 @@
       }
     }
     const esnDot = (th, f) => { let s2 = 0; for (let i = 0; i < th.length; i++) s2 += th[i] * f[i]; return s2; };
+    // ---- rival autopilots: while NGRC draws its learned attractor, the
+    // benchmarks free-run too — the kNN does the only thing a memorizer can
+    // (replay its recording from the nearest match, pen lifts included) and
+    // the ESN iterates its 1-step readout (its own dream). ----
+    let fgKnnAuto = null, fgEsnAuto = null, fgRivLastT = 0;
+    let fgKnnTrail = [], fgEsnTrail = [];
+    function rivalsDeploy() {
+      fgRivLastT = 0;
+      fgKnnAuto = null; fgKnnTrail = [];
+      const H = fgAbs, n = H.length;
+      if (n > 30 && fgLastA && fgLastVel) {
+        let bj = -1, bd = Infinity;
+        for (let j2 = 2; j2 < n - 5; j2++) {
+          const p = H[j2];
+          if (!p) continue;
+          const dj = (p[0] - fgLastA[0]) ** 2 + (p[1] - fgLastA[1]) ** 2
+            + ((p[2] - fgLastVel[0]) * DSCALE) ** 2 + ((p[3] - fgLastVel[1]) * DSCALE) ** 2;
+          if (dj < bd) { bd = dj; bj = j2; }
+        }
+        if (bj >= 0) { fgKnnAuto = { j: bj, last: [H[bj][0], H[bj][1]] }; fgKnnTrail = [den(H[bj][0], H[bj][1])]; }
+      }
+      fgEsnAuto = null; fgEsnTrail = [];
+      if (fgEsn && fgLastS && fgCentLast && fgEsn.tr[0] > 40) {
+        let mr = 0;
+        for (const q of fgLog.slice(-400)) { const r2 = Math.hypot(q[2], q[3]); if (r2 > mr) mr = r2; }
+        fgEsnAuto = { xSave: [...fgEsn.x], seedX: [...fgEsn.x], seedS: [...fgLastS],
+          s: [...fgLastS], cent: [...fgCentLast], maxR: Math.max(2 * mr, mr + 0.3) };
+        fgEsnTrail = [den(fgCentLast[0] + fgLastS[2], fgCentLast[1] + fgLastS[3])];
+      }
+    }
+    function knnAutoTick() {
+      const H = fgAbs, n = H.length, A = fgKnnAuto;
+      if (!A || n < 10) return;
+      A.j++;
+      if (A.j >= n) {                                // recording exhausted: re-match near the replay head
+        let bj = -1, bd = Infinity;
+        for (let j2 = 2; j2 < n - 5; j2++) {
+          const p = H[j2];
+          if (!p) continue;
+          const dj = (p[0] - A.last[0]) ** 2 + (p[1] - A.last[1]) ** 2;
+          if (dj < bd) { bd = dj; bj = j2; }
+        }
+        if (bj < 0) return;
+        if (Math.sqrt(bd) > 0.08) fgKnnTrail.push(null);
+        A.j = bj;
+      }
+      const p = H[A.j];
+      if (p === null) { fgKnnTrail.push(null); return; }   // replayed pen lift
+      A.last = [p[0], p[1]];
+      fgKnnTrail.push(den(p[0], p[1]));
+      if (fgKnnTrail.length > 600) fgKnnTrail.shift();
+    }
+    function esnAutoTick() {
+      const A = fgEsnAuto, E = fgEsn;
+      if (!A || !E) return;
+      const x = esnStep(E, A.s);                     // free-runs the shared reservoir; restored on stop
+      const f = [1, A.s[0], A.s[1], A.s[2], A.s[3], ...x];
+      const ns = E.one.TH.map((th) => esnDot(th, f));
+      ns[0] = Math.max(-6, Math.min(6, ns[0])); ns[1] = Math.max(-6, Math.min(6, ns[1]));
+      ns[2] = Math.max(-1.8, Math.min(1.8, ns[2])); ns[3] = Math.max(-1.8, Math.min(1.8, ns[3]));
+      if (!ns.every(Number.isFinite) || Math.hypot(ns[2], ns[3]) > A.maxR) {
+        E.x = [...A.seedX]; A.s = [...A.seedS];      // escape watchdog: restart its dream
+        fgEsnTrail.push(null);
+        return;
+      }
+      A.s = ns;
+      fgEsnTrail.push(den(A.cent[0] + ns[2], A.cent[1] + ns[3]));
+      if (fgEsnTrail.length > 600) fgEsnTrail.shift();
+    }
     const DS_NF = 10;
     const dsFeat = (lags, ph01) => {
       const w = 2 * Math.PI * ph01;
@@ -954,6 +1029,8 @@
       fgAutoTrail = []; fgAutoRay = null; fgAutoModel = null; fgAutoMeta = null;
       fgAutoSnap = null; fgAutoSeed = null; fgAutoInfo = ''; fgCommissioning = false;
       fgAutoMode = 'model';
+      if (fgEsnAuto && fgEsn) fgEsn.x = fgEsnAuto.xSave;   // un-dream the shared reservoir
+      fgKnnAuto = null; fgEsnAuto = null; fgKnnTrail = []; fgEsnTrail = [];
       const b = document.getElementById('fg-auto');
       if (b) b.textContent = 'Autopilot ✍️';
     }
@@ -1203,6 +1280,7 @@
         fgAutoInfo = `path-locked replay · ${fgLoopGaps.size} pen lift${fgLoopGaps.size > 1 ? 's' : ''} learned`;
         document.getElementById('fg-ap').textContent = fgAutoInfo;
         console.log('autopilot: path-locked replay (multi-stroke, ' + fgLoopGaps.size + ' pen lifts in the lap)');
+        rivalsDeploy();
         fgAuto = true;
         btn.textContent = 'Stop autopilot ⏹';
         return;
@@ -1235,6 +1313,7 @@
         fgAutoInfo = `AFM cyclic · trained ${fgCyc.fed} steps live`;
         document.getElementById('fg-ap').textContent = fgAutoInfo;
         console.log('autopilot: AFM deployed from CYCLIC training (no commissioning) — ' + fgCyc.fed + ' steps fed');
+        rivalsDeploy();
         fgAuto = true;
         btn.textContent = 'Stop autopilot ⏹';
         return;
@@ -1361,6 +1440,7 @@
           fgAutoTrail = [den(cLastA[0], cLastA[1])];
           const sp = Math.hypot(cLastVel[0], cLastVel[1]) || 1e-6;
           fgAutoRay = { x: cLastA[0], y: cLastA[1], vx: cLastVel[0] / sp, vy: cLastVel[1] / sp };
+          rivalsDeploy();
           fgAuto = true;                             // last: everything the render loop needs is set
           btn.textContent = 'Stop autopilot ⏹';
         } catch (err) {
@@ -1577,10 +1657,11 @@
           for (let k = 0; k < NLAD; k++) {
             const h = HLAD[k];
             if (E.buf.length > h) {
-              esnRls(E.rung[k], E.buf[E.buf.length - h], s[2], s[3], E.lam);
+              esnRls(E.rung[k], E.buf[E.buf.length - h], [s[2], s[3]], E.lam);
               E.tr[k]++;
             }
           }
+          if (E.buf.length) esnRls(E.one, E.buf[E.buf.length - 1], s, E.lam);
         }
         esnPe = [[], []];
         esnPe.live = new Array(NLAD);
@@ -1937,6 +2018,20 @@
           fgCtx.fillStyle = '#7c8aa0'; fgCtx.font = '11px sans-serif'; fgCtx.textAlign = 'center';
           fgCtx.fillText('straight-line “autopilot” →', (p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2 - 8);
         }
+        // rival autopilots first (underneath): gray = kNN replaying its
+        // recording, cyan = the ESN free-running its own learned dynamics
+        const drawRival = (T2, color, head) => {
+          for (let i = 1; i < T2.length; i++) {
+            const a2 = T2[i - 1], b2 = T2[i];
+            if (!a2 || !b2) continue;
+            fgCtx.beginPath(); fgCtx.moveTo(a2[0], a2[1]); fgCtx.lineTo(b2[0], b2[1]);
+            fgCtx.strokeStyle = color; fgCtx.lineWidth = 2; fgCtx.stroke();
+          }
+          const lastR = T2[T2.length - 1];
+          if (lastR) { fgCtx.beginPath(); fgCtx.arc(lastR[0], lastR[1], 5, 0, 2 * Math.PI); fgCtx.fillStyle = head; fgCtx.fill(); }
+        };
+        drawRival(fgEsnTrail, 'rgba(34,211,238,0.5)', '#22d3ee');
+        drawRival(fgKnnTrail, 'rgba(124,138,160,0.5)', '#7c8aa0');
         // NGRC's free-run doodle (null entries = pen-up gaps at orbit restarts).
         // Drawn through a light 3-point kernel: the model's small step-to-step
         // jitter is real but shouldn't read as shaky ink.
@@ -1962,6 +2057,13 @@
         fgCtx.fillStyle = '#f59e0b'; fgCtx.font = 'bold 13px sans-serif'; fgCtx.textAlign = 'center';
         fgCtx.fillText('✍️ NGRC is drawing from what it learned', fgW / 2, 24);
         if (fgAutoInfo) { fgCtx.fillStyle = '#94a3b8'; fgCtx.font = '11px sans-serif'; fgCtx.fillText(fgAutoInfo, fgW / 2, 42); }
+        if (fgKnnAuto || fgEsnAuto) {
+          fgCtx.fillStyle = '#64748b'; fgCtx.font = '10px sans-serif';
+          const parts = [];
+          if (fgKnnAuto) parts.push('gray = kNN replaying its recording');
+          if (fgEsnAuto) parts.push('cyan = ESN free-running');
+          fgCtx.fillText(parts.join(' · '), fgW / 2, 58);
+        }
       } else {
         if (fgPtr.down && fgEsnMat && fgEsnMat.gm >= 0) fgGhost(fgEsnMat, 'rgba(34,211,238,0.7)', '#22d3ee', false, fgEsnMat.gm);
         if (fgPtr.down && fgCvMat) fgGhost(fgCvMat, 'rgba(124,138,160,0.7)', '#7c8aa0', true, fgCvMat.gm);
@@ -2077,6 +2179,15 @@
         fgLastT = performance.now();
         fgStepSim();
       }
+      if (fgAuto && performance.now() - fgRivLastT >= 33) {   // rival autopilots race too
+        fgRivLastT = performance.now();
+        const tK = performance.now();
+        knnAutoTick();
+        fgProf.knn += performance.now() - tK;
+        const tE = performance.now();
+        esnAutoTick();
+        fgProf.esn += performance.now() - tE;
+      }
       if (!fgAuto && !fgCommissioning && !fgFrozen && fgCyc) {
         const tPump = performance.now();
         pumpCyc(tPump + 3);
@@ -2148,7 +2259,8 @@
       }
       return { fam: fgLastFam, loopAge: fgLoopAge, lap: fgLoop ? fgLoop.length : 0, pts, cycFed: fgCyc ? fgCyc.fed : 0,
         gaps: fgLoopGaps ? fgLoopGaps.size : 0, absLen: fgAbs.length, lifts: fgAbs.filter((p) => p === null).length, knn,
-        esnTr: fgEsn ? fgEsn.tr[fgHzIdx] : 0, esnGm: fgEsnMat ? fgEsnMat.gm : -1 };
+        esnTr: fgEsn ? fgEsn.tr[fgHzIdx] : 0, esnGm: fgEsnMat ? fgEsnMat.gm : -1,
+        knnTrail: fgKnnTrail.length, esnTrail: fgEsnTrail.length };
     };
 
     // ---- boot ----

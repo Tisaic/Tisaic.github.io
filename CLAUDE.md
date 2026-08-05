@@ -122,6 +122,17 @@ the shipped commit carries the correct version.
    displayed; cyan ghost capped at warm rungs ≤ ~1.2 s like every
    point-forecast family; ESN trace in the chart; its own CPU bucket
    (~1% of a core); freeze halts its training; Reset re-inits it.
+   During **Autopilot the rivals race live**: the kNN replays its
+   recording from the nearest (position, velocity) match — pen lifts
+   included, re-matching when the recording runs out — and the ESN
+   free-runs a 1-step full-state readout (trained online alongside the
+   rung readouts) from the current reservoir state, clamped, with an
+   escape watchdog; the shared reservoir is snapshot-restored on stop.
+   Verified visuals: on a circle the ESN dream contracts into a
+   smaller drifting orbit (classic 1-step rollout decay) while the
+   replay rides the recorded tremor; on multi-stroke patterns the
+   replay lifts the pen and the ESN parks near one stroke (a free-run
+   cannot teleport — same lesson as the AFM).
    Measured human-realistic steady state: NGRC ~1.1–1.2× better than
    the ESN at every horizon — the published NG-RC claim, live: a
    105-weight-per-rung polynomial model edging a 100-neuron reservoir
