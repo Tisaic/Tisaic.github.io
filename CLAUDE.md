@@ -84,10 +84,22 @@ the shipped commit carries the correct version.
 4. **NGRC playground** (bottom-right `NGRC` launcher → `ngrc.html`) — a 3-tab
    interactive showcase of `lib/ngrc`, each tab framed as **NGRC vs a common
    alternative** so the value is visible: **① Lorenz** (three.js attractor;
-   1-finger orbit, 2-finger pinch-zoom **and pan**; NGRC and a classical
-   **linear ARX** learn side-by-side — near-tied 1-step errors — then "Dream"
-   free-runs both while **reality keeps running in green**: amber NGRC keeps
-   the butterfly, red linear collapses; the Plotly trace follows both modes),
+   1-finger orbit, 2-finger pinch-zoom **and pan**; FOUR models learn
+   side-by-side from the same stream — NGRC, a cyan **ESN** (the finger
+   tab's 100-neuron recipe with 3 inputs, online-RLS 1-step readout — the
+   literature's canonical NG-RC-vs-reservoir head-to-head ON Lorenz), a
+   magenta **MLP** (shared `mlpCore`, [u(t),u(t−1)] → u(t+1), online Adam +
+   light replay), and a classical **linear ARX** — near-tied 1-step errors
+   (rows for all four, PAIRWISE-scored on the same instances so the shared
+   denominator stays honest; preds reset at dream boundaries so no scoring
+   across the gap) — then "Dream" free-runs ALL of them while **reality
+   keeps running in green**: amber NGRC keeps the butterfly, cyan/magenta/
+   red collapse or park (the shared reservoir is snapshot-restored on wake;
+   the stateless MLP needs nothing); the dream-check row counts wing
+   crossings per model and the Plotly trace follows every series in both
+   modes. Measured at the gate: 1-step errors 0.0067 / 0.0079 / 0.044 /
+   0.0064 (NGRC/ESN/MLP/ARX) — then dream wing crossings 9/0/0/0, the
+   whole point of the tab in one row),
    **② soft-sensor** (drag/kick the blue motor; a soft lightly-damped coupling
    makes the hidden load lag and ring; amber `SoftSensor` caret vs a gray
    **auto-tuned lag-filter** caret — the realistic DIY baseline, best of a

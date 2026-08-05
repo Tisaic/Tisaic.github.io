@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:66,built:"2026-08-05T19:54:45Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:67,built:"2026-08-05T20:05:15Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -61,16 +61,19 @@
 
   <!-- ================= Tab 1: Lorenz — NGRC vs linear ARX ================= -->
   <section class="panel on" id="p-lorenz">
-    <p class="lead">Two models learn a <b>Lorenz attractor</b> from the same live data:
-      <span style="color:#f59e0b"><b>NGRC</b></span> vs a classical
-      <span style="color:#f87171"><b>linear ARX</b></span> (standard system-ID). 1-step errors look
-      similar — so once both have seen the whole butterfly (~8&nbsp;s), <b>Dream</b> unlocks: both free-run
+    <p class="lead">Four models learn a <b>Lorenz attractor</b> from the same live data:
+      <span style="color:#f59e0b"><b>NGRC</b></span> vs an
+      <span style="color:#22d3ee"><b>ESN</b></span> (echo state network — the reservoir NG-RC was designed
+      to replace; this head-to-head <i>on Lorenz</i> is the canonical comparison of the NG-RC literature), an
+      <span style="color:#f472b6"><b>MLP</b></span> (plain feedforward net, online Adam + replay) and a
+      classical <span style="color:#f87171"><b>linear ARX</b></span> (standard system-ID). 1-step errors look
+      similar — so once they've seen the whole butterfly (~8&nbsp;s), <b>Dream</b> unlocks: all free-run
       blind while <span style="color:#22c55e"><b>reality keeps running in green</b></span>.
-      NGRC keeps flying wing-to-wing; the linear model goes still.
+      Watch who keeps flying wing-to-wing and who collapses or goes still.
       <b>1 finger orbit · 2 fingers pinch-zoom &amp; pan.</b></p>
     <div class="stage" id="lz-stage"></div>
     <div class="controls">
-      <button id="lz-dream">Dream: NGRC vs linear 🌀</button>
+      <button id="lz-dream">Dream: NGRC vs rivals 🌀</button>
       <button id="lz-reset" class="sec">Reset</button>
       <button id="lz-view" class="sec" style="flex:0 0 auto;min-width:88px">⟲ view</button>
       <div class="slider">InitVariance (stability)
@@ -83,6 +86,8 @@
       <dt>Samples</dt><dd id="lz-n">0</dd>
       <dt>Warm</dt><dd id="lz-warm" class="warn">no</dd>
       <dt>NGRC 1-step error</dt><dd id="lz-rmse" class="amber">—</dd>
+      <dt>ESN 1-step error</dt><dd id="lz-esn">—</dd>
+      <dt>MLP 1-step error</dt><dd id="lz-mlp">—</dd>
       <dt>Linear ARX 1-step error</dt><dd id="lz-rmse2">—</dd>
       <dt>Dream check</dt><dd id="lz-dstat">—</dd>
     </dl>
@@ -241,6 +246,8 @@
     const liveLine = makeLine(0x22c55e);    // green: reality continuing DURING the dream
     const dreamLine = makeLine(0xf59e0b);   // amber: NGRC free-run
     const rivalLine = makeLine(0xf87171);   // red: linear ARX free-run
+    const esnLine = makeLine(0x22d3ee);     // cyan: ESN free-run
+    const mlpLine = makeLine(0xf472b6);     // magenta: MLP free-run
     function pushPoint(line, p) {
       const i = line.count % MAXPTS;
       line.arr[i * 3] = p[0] * SC; line.arr[i * 3 + 1] = (p[2] - ZC) * SC; line.arr[i * 3 + 2] = p[1] * SC;
@@ -307,6 +314,39 @@
     let model, rival, state, dreamState, rivalDream, dreaming, snapN, snapL, samples;
     let eN2, eL2, x2sum, lastPredN, lastPredL;
     let dreamXs = [], rivalXs = [];
+    // ESN + MLP rivals on the SAME stream — the NG-RC literature's canonical
+    // comparison (vs a reservoir) on the system it was published for, plus
+    // the plain-NN reference from the finger tab. Both train online on the
+    // normalized state and free-run in Dream like the others.
+    let lzEsn = null, lzMlp = null, lzEsnXSave = null;
+    let eE2, eM2, lastPredE, lastPredM;
+    let esnDreamU = null, mlpDreamU = null, mlpDreamUp = null;
+    let esnXs = [], mlpXs = [];
+    const lzU = (s) => [s[0] / 20, s[1] / 20, (s[2] - 25) / 25];
+    const lzDeU = (u) => [u[0] * 20, u[1] * 20, u[2] * 25 + 25];
+    function lzEsnInit() {                           // same recipe as the finger tab's, 3 inputs
+      let sd = 0xE5E1;
+      const rnd = () => { sd |= 0; sd = (sd + 0x6D2B79F5) | 0; let t = Math.imul(sd ^ (sd >>> 15), 1 | sd); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+      const gs = () => { let u = rnd(); if (u < 1e-12) u = 1e-12; return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rnd()); };
+      const N = 100, rho = 0.9;
+      const W = [];
+      for (let i = 0; i < N; i++) { const row = []; for (let c = 0; c < 10; c++) row.push([Math.floor(rnd() * N), gs()]); W.push(row); }
+      let v = new Array(N).fill(0).map(gs);          // spectral radius by power iteration
+      for (let it = 0; it < 30; it++) {
+        const nv = new Array(N).fill(0);
+        for (let i = 0; i < N; i++) for (const e of W[i]) nv[i] += e[1] * v[e[0]];
+        const nrm = Math.hypot(...nv) || 1e-9;
+        if (it === 29) for (const row of W) for (const e of row) e[1] *= rho / nrm * (Math.hypot(...v) || 1);
+        v = nv.map((x) => x / nrm);
+      }
+      const Win = new Array(N).fill(0).map(() => [0, 1, 2].map(() => 0.3 * gs()));
+      const b = new Array(N).fill(0).map(() => 0.1 * gs());
+      const d = 1 + 3 + N;
+      const P = [];
+      for (let i = 0; i < d; i++) { const r = new Array(d).fill(0); r[i] = 1.0; P.push(r); }
+      const TH = [[], [], []].map(() => new Array(d).fill(0));
+      return { N, W, Win, b, leak: 0.3, lam: 0.9995, x: new Array(N).fill(0), one: { P, TH }, prevF: null, tr: 0 };
+    }
     function wingCrossings(xs) {
       let sw = 0, lobe = 0;
       for (const x of xs) {
@@ -326,12 +366,18 @@
       state = [1.0, 1.0, 1.0];
       dreaming = false; snapN = null; snapL = null; samples = 0;
       eN2 = 0; eL2 = 0; x2sum = 0; lastPredN = null; lastPredL = null;
+      lzEsn = lzEsnInit();
+      lzMlp = { ...mlpCore(6, 3, 32, 0x77a7), ring: [], u1: null, u2: null, tr: 0 };
+      eE2 = 0; eM2 = 0; lastPredE = null; lastPredM = null; lzEsnXSave = null;
+      esnDreamU = null; mlpDreamU = null; mlpDreamUp = null;
       clearLine(realLine); clearLine(liveLine); clearLine(dreamLine); clearLine(rivalLine);
-      dreamXs = []; rivalXs = [];
+      clearLine(esnLine); clearLine(mlpLine);
+      dreamXs = []; rivalXs = []; esnXs = []; mlpXs = [];
       const btn = document.getElementById('lz-dream');
       btn.textContent = '🧠 learning… 0%'; btn.disabled = true;
       document.getElementById('lz-mode').textContent = 'learning from real data';
       plotReal.length = 0; plotPredN.length = 0; plotPredL.length = 0;
+      plotPredE.length = 0; plotPredM.length = 0;
     }
     ivSlider.addEventListener('input', () => { ivVal.textContent = initVarFromSlider().toFixed(1); });
     ivSlider.addEventListener('change', () => { ivVal.textContent = initVarFromSlider().toFixed(1); makeModel(); });
@@ -340,25 +386,33 @@
       if (!dreaming && samples < LZ_GATE) return;
       dreaming = !dreaming;
       const btn = document.getElementById('lz-dream');
+      lastPredN = null; lastPredL = null; lastPredE = null; lastPredM = null;   // don't score across the dream gap
       if (dreaming) {
         snapN = model.snapshot(); snapL = rival.snapshot();
         dreamState = state.slice(); rivalDream = state.slice();
+        lzEsnXSave = [...lzEsn.x];                   // the dream free-runs the shared reservoir; restored on stop
+        esnDreamU = lzU(state);
+        mlpDreamU = lzU(state); mlpDreamUp = lzMlp.u1 ? [...lzMlp.u1] : lzU(state);
         clearLine(dreamLine); clearLine(rivalLine); clearLine(liveLine);
-        dreamXs = []; rivalXs = [];
+        clearLine(esnLine); clearLine(mlpLine);
+        dreamXs = []; rivalXs = []; esnXs = []; mlpXs = [];
         plotReal.length = 0; plotPredN.length = 0; plotPredL.length = 0;
+        plotPredE.length = 0; plotPredM.length = 0;
         btn.textContent = 'Back to reality ▶';
-        document.getElementById('lz-mode').textContent = '🌀 dreaming — green = reality · amber = NGRC · red = linear';
+        document.getElementById('lz-mode').textContent = '🌀 dreaming — green = reality · amber = NGRC · cyan = ESN · magenta = MLP · red = linear';
       } else {
         if (snapN) model.restore(snapN);
         if (snapL) rival.restore(snapL);
-        clearLine(liveLine);
+        if (lzEsnXSave) { lzEsn.x = lzEsnXSave; lzEsnXSave = null; }   // un-dream the reservoir
+        clearLine(liveLine);                         // dream trails stay visible until the next dream
         plotReal.length = 0; plotPredN.length = 0; plotPredL.length = 0;
-        btn.textContent = 'Dream: NGRC vs linear 🌀';
+        plotPredE.length = 0; plotPredM.length = 0;
+        btn.textContent = 'Dream: NGRC vs rivals 🌀';
         document.getElementById('lz-mode').textContent = 'learning from real data';
       }
     });
 
-    const plotReal = [], plotPredN = [], plotPredL = [];
+    const plotReal = [], plotPredN = [], plotPredL = [], plotPredE = [], plotPredM = [];
     const PLOT_WIN = 160;
     let plotInited = false, plotTick = 0;
     function updatePlot() {
@@ -370,11 +424,16 @@
       const data = [
         { y: plotReal.slice(-PLOT_WIN), name: realName, line: { color: realColor, width: 2 }, mode: 'lines' },
         { y: plotPredN.slice(-PLOT_WIN), name: 'NGRC', line: { color: '#f59e0b', width: 2, dash: dreaming ? 'solid' : 'dot' }, mode: 'lines' },
+        { y: plotPredE.slice(-PLOT_WIN), name: 'ESN', line: { color: '#22d3ee', width: 1.5, dash: dreaming ? 'solid' : 'dot' }, mode: 'lines' },
+        { y: plotPredM.slice(-PLOT_WIN), name: 'MLP', line: { color: '#f472b6', width: 1.5, dash: dreaming ? 'solid' : 'dot' }, mode: 'lines' },
         { y: plotPredL.slice(-PLOT_WIN), name: 'linear ARX', line: { color: '#f87171', width: 1.5, dash: dreaming ? 'solid' : 'dot' }, mode: 'lines' },
       ];
       if (!plotInited) { Plotly.newPlot('lz-plot', data, layout, { displayModeBar: false, responsive: true }); plotInited = true; }
       else Plotly.react('lz-plot', data, layout, { displayModeBar: false, responsive: true });
     }
+    window.__lzDbg = () => ({ n: samples, esnTr: lzEsn ? lzEsn.tr : 0, mlpTr: lzMlp ? lzMlp.tr : 0,
+      esnPts: esnLine.count, mlpPts: mlpLine.count, dreamPts: dreamLine.count,
+      wings: { n: wingCrossings(dreamXs), e: wingCrossings(esnXs), m: wingCrossings(mlpXs), l: wingCrossings(rivalXs) } });
 
     function tick() {
       if (activeTab !== 'lorenz') { requestAnimationFrame(tick); return; }
@@ -385,14 +444,39 @@
           const resN = model.step(state);
           const resL = rival.step(state);
           samples++;
-          if (model.warm && lastPredN != null) {
+          // PAIRWISE scoring (finger-tab lesson): all four series accumulate
+          // on the same instances, so the shared denominator stays honest
+          if (model.warm && lastPredN != null && lastPredE != null && lastPredM != null) {
             const eN = state[0] - lastPredN, eL = state[0] - lastPredL;
-            eN2 += eN * eN; eL2 += eL * eL; x2sum += state[0] * state[0];
+            const eE = state[0] - lastPredE, eM = state[0] - lastPredM;
+            eN2 += eN * eN; eL2 += eL * eL; eE2 += eE * eE; eM2 += eM * eM;
+            x2sum += state[0] * state[0];
           }
           lastPredN = resN.prediction[0][0];
           lastPredL = resL.prediction[0][0];
+          // rivals train online on the same stream (normalized state)
+          const u = lzU(state);
+          const E = lzEsn, xr = esnStep(E, u);
+          const fE = [1, u[0], u[1], u[2], ...xr];
+          if (E.prevF) { esnRls(E.one, E.prevF, u, E.lam); E.tr++; }
+          E.prevF = fE;
+          lastPredE = E.tr > 40 ? esnDot(E.one.TH[0], fE) * 20 : null;
+          const M = lzMlp;
+          if (M.u1 && M.u2) { mlpTrain(M, [...M.u1, ...M.u2], 0, u); M.tr++; }
+          M.ring.push(u);
+          if (M.ring.length > 1200) M.ring.shift();
+          for (let r2 = 0; r2 < 4; r2++) {           // light experience replay (finger-tab recipe)
+            const n2 = M.ring.length;
+            if (n2 > 3) {
+              const j2 = 2 + Math.floor(M.rnd() * (n2 - 3));
+              mlpTrain(M, [...M.ring[j2], ...M.ring[j2 - 1]], 0, M.ring[j2 + 1]);
+            }
+          }
+          lastPredM = (M.u1 && M.tr > 40) ? mlpHead(M, mlpForward(M, [...u, ...M.u1]), 0) * 20 : null;
+          M.u2 = M.u1; M.u1 = u;
           pushPoint(realLine, state);
           plotReal.push(state[0]); plotPredN.push(lastPredN); plotPredL.push(lastPredL);
+          plotPredE.push(lastPredE); plotPredM.push(lastPredM);
         } else {
           // reality keeps running (green) — the models do NOT see it
           state = rk4(state);
@@ -405,9 +489,27 @@
           if (rivalDream.every(Number.isFinite) && Math.abs(rivalDream[0]) < 200) pushPoint(rivalLine, rivalDream);
           if (Number.isFinite(dreamState[0])) { dreamXs.push(dreamState[0]); if (dreamXs.length > 900) dreamXs.shift(); }
           if (Number.isFinite(rivalDream[0])) { rivalXs.push(rivalDream[0]); if (rivalXs.length > 900) rivalXs.shift(); }
+          // ESN dream: free-run the shared reservoir on its own readout
+          const E = lzEsn;
+          const xe = esnStep(E, esnDreamU);
+          const fE2 = [1, esnDreamU[0], esnDreamU[1], esnDreamU[2], ...xe];
+          esnDreamU = E.one.TH.map((th) => clamp(esnDot(th, fE2), -3, 3));
+          const eDen = lzDeU(esnDreamU);
+          if (eDen.every(Number.isFinite) && Math.abs(eDen[0]) < 200) pushPoint(esnLine, eDen);
+          if (Number.isFinite(eDen[0])) { esnXs.push(eDen[0]); if (esnXs.length > 900) esnXs.shift(); }
+          // MLP dream: iterate the stateless net on its own output
+          const M = lzMlp;
+          const hD = mlpForward(M, [...mlpDreamU, ...mlpDreamUp]);
+          const nm = [0, 1, 2].map((o) => clamp(mlpHead(M, hD, o), -3, 3));
+          mlpDreamUp = mlpDreamU; mlpDreamU = nm;
+          const mDen = lzDeU(nm);
+          if (mDen.every(Number.isFinite) && Math.abs(mDen[0]) < 200) pushPoint(mlpLine, mDen);
+          if (Number.isFinite(mDen[0])) { mlpXs.push(mDen[0]); if (mlpXs.length > 900) mlpXs.shift(); }
           plotReal.push(state[0]);
           plotPredN.push(Number.isFinite(dreamState[0]) ? clamp(dreamState[0], -60, 60) : null);
           plotPredL.push(Number.isFinite(rivalDream[0]) ? clamp(rivalDream[0], -60, 60) : null);
+          plotPredE.push(Number.isFinite(eDen[0]) ? clamp(eDen[0], -60, 60) : null);
+          plotPredM.push(Number.isFinite(mDen[0]) ? clamp(mDen[0], -60, 60) : null);
         }
       }
       document.getElementById('lz-n').textContent = samples;
@@ -415,6 +517,8 @@
       warmEl.textContent = model.warm ? 'yes' : 'no'; warmEl.className = model.warm ? 'good' : 'warn';
       document.getElementById('lz-rmse').textContent = x2sum > 0 ? Math.sqrt(eN2 / x2sum).toFixed(4) : '—';
       document.getElementById('lz-rmse2').textContent = x2sum > 0 ? Math.sqrt(eL2 / x2sum).toFixed(4) : '—';
+      document.getElementById('lz-esn').textContent = (x2sum > 0 && eE2 > 0) ? Math.sqrt(eE2 / x2sum).toFixed(4) : '—';
+      document.getElementById('lz-mlp').textContent = (x2sum > 0 && eM2 > 0) ? Math.sqrt(eM2 / x2sum).toFixed(4) : '—';
       const dreamBtn = document.getElementById('lz-dream');
       if (!dreaming) {
         if (samples < LZ_GATE) {
@@ -422,13 +526,14 @@
           dreamBtn.textContent = '🧠 learning… ' + Math.min(99, Math.round(100 * samples / LZ_GATE)) + '%';
         } else if (dreamBtn.disabled) {
           dreamBtn.disabled = false;
-          dreamBtn.textContent = 'Dream: NGRC vs linear 🌀';
+          dreamBtn.textContent = 'Dream: NGRC vs rivals 🌀';
         }
         document.getElementById('lz-dstat').textContent = '—';
       } else {
         const cn = wingCrossings(dreamXs), cl = wingCrossings(rivalXs);
+        const ce = wingCrossings(esnXs), cm = wingCrossings(mlpXs);
         document.getElementById('lz-dstat').textContent =
-          `NGRC ${cn} wing crossings ${cn > 2 ? '✓ alive' : ''} · linear ${cl}${cl <= 1 ? ' ✗ dead' : ''}`;
+          `wing crossings — NGRC ${cn}${cn > 2 ? ' ✓' : ''} · ESN ${ce} · MLP ${cm} · linear ${cl}${cl <= 1 ? ' ✗' : ''}`;
       }
       if (++plotTick % 8 === 0) updatePlot();
       if (spin) rotY += 0.0012;
@@ -838,7 +943,8 @@
       for (let i = 0; i < N; i++) {
         let s2 = b[i];
         for (const e of W[i]) s2 += e[1] * x[e[0]];
-        s2 += Win[i][0] * u[0] + Win[i][1] * u[1] + Win[i][2] * u[2] + Win[i][3] * u[3];
+        const Wi = Win[i];
+        for (let j = 0; j < Wi.length; j++) s2 += Wi[j] * u[j];   // input count = Win row length (tabs differ)
         nx[i] = (1 - leak) * x[i] + leak * Math.tanh(s2);
       }
       E.x = nx;
@@ -874,33 +980,38 @@
     // worse; tuned offline, response is flat around this config).
     let fgMlp = null;
     const MLP_H = 32, MLP_IN = 8, MLP_REPLAY = 8;
-    function mlpInit() {
-      let sd = 0x11a5;
+    function mlpCore(IN, OUT, H, sd) {               // generic online-Adam MLP (shared by tabs)
       const rnd = () => { sd |= 0; sd = (sd + 0x6D2B79F5) | 0; let t = Math.imul(sd ^ (sd >>> 15), 1 | sd); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
       const gs = () => { let u = rnd(); if (u < 1e-12) u = 1e-12; return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rnd()); };
-      const OUT = 2 * NLAD + 4;                      // per-rung heads + the 1-step head
-      const W1 = new Float64Array(MLP_H * (MLP_IN + 1)), W2 = new Float64Array(OUT * (MLP_H + 1));
-      for (let i = 0; i < W1.length; i++) W1[i] = gs() * Math.sqrt(2 / (MLP_IN + 1));
-      for (let i = 0; i < W2.length; i++) W2[i] = gs() * Math.sqrt(1 / (MLP_H + 1));
+      const W1 = new Float64Array(H * (IN + 1)), W2 = new Float64Array(OUT * (H + 1));
+      for (let i = 0; i < W1.length; i++) W1[i] = gs() * Math.sqrt(2 / (IN + 1));
+      for (let i = 0; i < W2.length; i++) W2[i] = gs() * Math.sqrt(1 / (H + 1));
       const z = (n) => new Float64Array(n);
-      return { OUT, lr: 3e-3, W1, W2, m1: z(W1.length), v1: z(W1.length), m2: z(W2.length), v2: z(W2.length),
-        t: 0, rnd, buf: [], tr: new Array(NLAD).fill(0), trOne: 0, prevS: null };
+      return { IN, OUT, H, lr: 3e-3, W1, W2, m1: z(W1.length), v1: z(W1.length), m2: z(W2.length), v2: z(W2.length),
+        t: 0, rnd };
+    }
+    function mlpInit() {
+      return { ...mlpCore(MLP_IN, 2 * NLAD + 4, MLP_H, 0x11a5),   // per-rung heads + the 1-step head
+        buf: [], tr: new Array(NLAD).fill(0), trOne: 0, prevS: null };
     }
     function mlpForward(M, x) {
-      const h = new Float64Array(MLP_H);
-      for (let i = 0; i < MLP_H; i++) {
-        let s2 = M.W1[i * (MLP_IN + 1) + MLP_IN];
-        for (let j = 0; j < MLP_IN; j++) s2 += M.W1[i * (MLP_IN + 1) + j] * x[j];
+      const { H, IN, W1 } = M;
+      const h = new Float64Array(H);
+      for (let i = 0; i < H; i++) {
+        let s2 = W1[i * (IN + 1) + IN];
+        for (let j = 0; j < IN; j++) s2 += W1[i * (IN + 1) + j] * x[j];
         h[i] = Math.tanh(s2);
       }
       return h;
     }
     function mlpHead(M, h, o) {
-      let s2 = M.W2[o * (MLP_H + 1) + MLP_H];
-      for (let i = 0; i < MLP_H; i++) s2 += M.W2[o * (MLP_H + 1) + i] * h[i];
+      const { H, W2 } = M;
+      let s2 = W2[o * (H + 1) + H];
+      for (let i = 0; i < H; i++) s2 += W2[o * (H + 1) + i] * h[i];
       return s2;
     }
     function mlpTrain(M, x, o0, ys) {                // one Adam step: head rows o0.. + trunk
+      const { H, IN, W1, W2 } = M;
       M.t++;
       const h = mlpForward(M, x);
       const b1 = 0.9, b2 = 0.999, eps = 1e-8, lr = M.lr;
@@ -910,20 +1021,20 @@
         v[idx] = b2 * v[idx] + (1 - b2) * g * g;
         W[idx] -= lr * (m[idx] / bc1) / (Math.sqrt(v[idx] / bc2) + eps);
       };
-      const dh = new Float64Array(MLP_H);
+      const dh = new Float64Array(H);
       for (let r = 0; r < ys.length; r++) {
         const o = o0 + r, err = mlpHead(M, h, o) - ys[r];
-        for (let i = 0; i < MLP_H; i++) {
-          dh[i] += err * M.W2[o * (MLP_H + 1) + i];
-          adam(M.W2, M.m2, M.v2, o * (MLP_H + 1) + i, err * h[i]);
+        for (let i = 0; i < H; i++) {
+          dh[i] += err * W2[o * (H + 1) + i];
+          adam(W2, M.m2, M.v2, o * (H + 1) + i, err * h[i]);
         }
-        adam(M.W2, M.m2, M.v2, o * (MLP_H + 1) + MLP_H, err);
+        adam(W2, M.m2, M.v2, o * (H + 1) + H, err);
       }
-      for (let i = 0; i < MLP_H; i++) {
+      for (let i = 0; i < H; i++) {
         const di = dh[i] * (1 - h[i] * h[i]);
         if (di === 0) continue;
-        for (let j = 0; j < MLP_IN; j++) adam(M.W1, M.m1, M.v1, i * (MLP_IN + 1) + j, di * x[j]);
-        adam(M.W1, M.m1, M.v1, i * (MLP_IN + 1) + MLP_IN, di);
+        for (let j = 0; j < IN; j++) adam(W1, M.m1, M.v1, i * (IN + 1) + j, di * x[j]);
+        adam(W1, M.m1, M.v1, i * (IN + 1) + IN, di);
       }
     }
     // ---- rival autopilots: while NGRC draws its learned attractor, the
