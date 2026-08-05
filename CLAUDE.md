@@ -158,7 +158,12 @@ the shipped commit carries the correct version.
    rung-sparse ghosts (ESN, fallback families) draw through midpoint
    quadratics and are validity-limited (warm/scored rungs), never
    arbitrarily capped; autopilot rival trails get the SAME 3-pt kernel
-   as the amber trail. A rung can only score once its horizon
+   AND the same alpha ramp as the amber trail. Because a wrapped loop
+   re-inks the same pixels (raw length is invisible on a circle), the
+   amber arc carries a TIME RULER — a dot every 1 s of forecast — plus
+   a tip label ("10.0s ·×3.1 laps") and an alpha fade along the
+   horizon; the gray replay arc gets one 3-pt smoothing pass (recorded
+   tremor read as jagged ink; never smoothed across lifts). A rung can only score once its horizon
    of future has been drawn — the 20 s rung populates after ~21 s of
    drawing (physics, not a bug). Two scoring-pipeline fixes shipped with
    the extension: a dwell pause no longer flushes the pending queue (it

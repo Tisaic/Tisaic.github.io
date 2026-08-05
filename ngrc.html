@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:60,built:"2026-08-05T13:44:51Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:61,built:"2026-08-05T14:46:14Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -1677,6 +1677,17 @@
               const t = H[j + i2];
               fgCvArc.push(t ? [t[0] + ox0 * dec2, t[1] + oy0 * dec2] : null);
             }
+            // one 3-pt smoothing pass (never across lifts) — the raw replay
+            // carries recorded tremor, which reads as jagged ink, and every
+            // other drawn trace gets the same de-jitter treatment
+            const sm3 = [];
+            for (let i2 = 0; i2 < fgCvArc.length; i2++) {
+              const b3 = fgCvArc[i2];
+              if (!b3) { sm3.push(null); continue; }
+              const a3 = i2 > 0 ? fgCvArc[i2 - 1] : null, c3 = i2 < fgCvArc.length - 1 ? fgCvArc[i2 + 1] : null;
+              sm3.push((a3 && c3) ? [0.25 * a3[0] + 0.5 * b3[0] + 0.25 * c3[0], 0.25 * a3[1] + 0.5 * b3[1] + 0.25 * c3[1]] : b3);
+            }
+            fgCvArc = sm3;
           }
         }
         fgProf.knn += performance.now() - tKnn;
@@ -2088,15 +2099,17 @@
             const cur2 = sm2(i);
             if (prev2 && cur2) {
               fgCtx.beginPath(); fgCtx.moveTo(prev2[0], prev2[1]); fgCtx.lineTo(cur2[0], cur2[1]);
-              fgCtx.strokeStyle = color; fgCtx.lineWidth = 2; fgCtx.stroke();
+              // same alpha ramp as the amber trail — old ink fades equally
+              fgCtx.strokeStyle = color + (0.2 + 0.6 * i / T2.length).toFixed(2) + ')';
+              fgCtx.lineWidth = 2; fgCtx.stroke();
             }
             prev2 = cur2;
           }
           const lastR = T2[T2.length - 1];
           if (lastR) { fgCtx.beginPath(); fgCtx.arc(lastR[0], lastR[1], 5, 0, 2 * Math.PI); fgCtx.fillStyle = head; fgCtx.fill(); }
         };
-        drawRival(fgEsnTrail, 'rgba(34,211,238,0.5)', '#22d3ee');
-        drawRival(fgKnnTrail, 'rgba(124,138,160,0.5)', '#7c8aa0');
+        drawRival(fgEsnTrail, 'rgba(34,211,238,', '#22d3ee');
+        drawRival(fgKnnTrail, 'rgba(124,138,160,', '#7c8aa0');
         // NGRC's free-run doodle (null entries = pen-up gaps at orbit restarts).
         // Drawn through a light 3-point kernel: the model's small step-to-step
         // jitter is real but shouldn't read as shaky ink.
@@ -2131,30 +2144,60 @@
         }
       } else {
         // per-step arc renderer (path amber / analogue gray): every forecast
-        // sample drawn, nulls or [2]-flags = pen lifts, tip dot at the end
-        const drawStepArc = (arc, stroke, fill, width, dashed, anchor) => {
-          fgCtx.beginPath();
-          let pen = false;
-          if (anchor) { fgCtx.moveTo(fgPtr.x, fgPtr.y); pen = true; }
-          let last = null;
-          for (let i = 0; i < arc.length; i++) {
-            const q2 = arc[i];
-            if (!q2) { pen = false; continue; }        // replayed pen lift
-            const p = den(q2[0], q2[1]);
-            if (!pen || q2[2]) fgCtx.moveTo(p[0], p[1]);
-            else fgCtx.lineTo(p[0], p[1]);
-            pen = true; last = p;
-          }
+        // sample drawn, nulls or [2]-flags = pen lifts, alpha FADES with
+        // horizon (near = bright), tip dot at the end. On a closed loop the
+        // far laps overdraw the same pixels, so length alone is invisible —
+        // rgb is the base color string like '245,158,11'.
+        const drawStepArc = (arc, rgb, fill, width, dashed, anchor) => {
           if (dashed) fgCtx.setLineDash([6, 5]);
-          fgCtx.strokeStyle = stroke; fgCtx.lineWidth = width; fgCtx.stroke();
+          const CH = 8, chunk = Math.max(4, Math.ceil(arc.length / CH));
+          let pen = !!anchor, prevP = anchor ? [fgPtr.x, fgPtr.y] : null;
+          let last = null;
+          for (let c0 = 0; c0 < arc.length; c0 += chunk) {
+            fgCtx.beginPath();
+            if (pen && prevP) fgCtx.moveTo(prevP[0], prevP[1]);   // continue the ink across chunks — but never across a lift
+            for (let i = c0; i < Math.min(c0 + chunk, arc.length); i++) {
+              const q2 = arc[i];
+              if (!q2) { pen = false; continue; }      // replayed pen lift
+              const p = den(q2[0], q2[1]);
+              if (!pen || q2[2]) fgCtx.moveTo(p[0], p[1]);
+              else fgCtx.lineTo(p[0], p[1]);
+              pen = true; last = p; prevP = p;
+            }
+            const aF = 0.95 - 0.6 * (c0 / arc.length);
+            fgCtx.strokeStyle = `rgba(${rgb},${aF.toFixed(2)})`; fgCtx.lineWidth = width; fgCtx.stroke();
+          }
           fgCtx.setLineDash([]);
+          // TIME RULER: a dot every 1 s of forecast — on a wrapped loop the
+          // dot count (5 vs 20) makes the horizon visible where geometry
+          // overlaps
+          const perSec = 1 / SEC;
+          fgCtx.fillStyle = `rgba(${rgb},0.85)`;
+          for (let t2 = 1; t2 * perSec < arc.length; t2++) {
+            const q2 = arc[Math.round(t2 * perSec)];
+            if (!q2) continue;
+            const p = den(q2[0], q2[1]);
+            fgCtx.beginPath(); fgCtx.arc(p[0], p[1], 2.5, 0, 2 * Math.PI); fgCtx.fill();
+          }
           if (last) { fgCtx.beginPath(); fgCtx.arc(last[0], last[1], width >= 3 ? 8 : 6, 0, 2 * Math.PI); fgCtx.fillStyle = fill; fgCtx.fill(); }
+          return last;
         };
         if (fgPtr.down && fgEsnMat && fgEsnMat.gm >= 0) fgGhost(fgEsnMat, 'rgba(34,211,238,0.7)', '#22d3ee', false, fgEsnMat.gm);
-        if (fgPtr.down && fgCvArc && fgCvArc.length > 1) drawStepArc(fgCvArc, 'rgba(124,138,160,0.7)', '#7c8aa0', 2, true, true);
+        if (fgPtr.down && fgCvArc && fgCvArc.length > 1) drawStepArc(fgCvArc, '124,138,160', '#7c8aa0', 2, true, true);
         else if (fgPtr.down && fgCvMat) fgGhost(fgCvMat, 'rgba(124,138,160,0.7)', '#7c8aa0', true, fgCvMat.gm);
         if (fgPtr.down && fgGhostArc && fgGhostArc.length > 1) {
-          drawStepArc(fgGhostArc, 'rgba(245,158,11,0.9)', '#f59e0b', 3, false, true);
+          const tipP = drawStepArc(fgGhostArc, '245,158,11', '#f59e0b', 3, false, true);
+          // tip label: horizon seconds + lap-wrap count — unambiguous even
+          // when the forecast re-inks the same loop
+          if (tipP) {
+            let lbl = (HLAD[fgHzIdx] * SEC).toFixed(1) + 's';
+            if (fgLoop && fgDsMed > 0.02) {
+              const laps = (HLAD[fgHzIdx] * fgDsMed) / fgLoop.length;
+              if (laps >= 1.5) lbl += ` ·×${laps.toFixed(1)} laps`;
+            }
+            fgCtx.fillStyle = '#f59e0b'; fgCtx.font = 'bold 11px sans-serif'; fgCtx.textAlign = 'center';
+            fgCtx.fillText(lbl, tipP[0], tipP[1] - 13);
+          }
         } else if (fgPtr.down && fgPredMat) {
           fgGhost(fgPredMat, 'rgba(245,158,11,0.9)', '#f59e0b', false, fgGhostMax);
           if (fgGhostMax < fgHzIdx) {                     // capped: say why
