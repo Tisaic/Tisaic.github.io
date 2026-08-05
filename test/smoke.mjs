@@ -135,6 +135,7 @@ for (let i = 0; i < 350; i++) { const a = i * 0.1; await demo.mouse.move(fcx + f
 await demo.mouse.up();
 check('ngrc: finger-trace learns from a drag (samples > 0)', (parseInt(await demo.textContent('#fg-n')) || 0) > 0);
 check('ngrc: finger-trace error is finite', Number.isFinite(parseFloat(await demo.textContent('#fg-rmse'))));
+check('ngrc: CPU readout populated (AFM/kNN/app)', /AFM .*%.*kNN .*%.*app .*%/.test(await demo.textContent('#fg-cpu')), await demo.textContent('#fg-cpu'));
 await demo.click('#fg-auto');
 // commissioning fits the AFM brain (a few seconds) then flips the button
 await demo.waitForFunction(() => document.getElementById('fg-auto').textContent.includes('Stop'), null, { timeout: 60000 });

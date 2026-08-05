@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:53,built:"2026-08-04T20:17:10Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:54,built:"2026-08-05T03:13:13Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -160,6 +160,7 @@
       <dt id="fg-op-label">On-path miss</dt><dd id="fg-op">—</dd>
       <dt>On-path advantage</dt><dd id="fg-opadv" class="good">—</dd>
       <dt>Autopilot brain</dt><dd id="fg-ap">—</dd>
+      <dt title="main-thread time as % of one core">CPU load</dt><dd id="fg-cpu">—</dd>
     </dl>
     <div class="plot" id="fg-plot"></div>
   </section>
@@ -705,6 +706,10 @@
     // never smoothed, never trained, drawn as a pen-up.
     let fgAbs = [], fgLoopGaps = null, fgUpMs = 0;
     let fgKnnJ = -1;                                // tracked analogue index into fgAbs (kNN baseline)
+    // CPU profiler: main-thread ms spent per second, split AFM (cyclic pump +
+    // autopilot stepping + commissioning) / kNN (analogue baseline) / rest of
+    // the app's frame work. Displayed as % of one core, refreshed each second.
+    const fgProf = { afmIn: 0, afmOut: 0, knn: 0, tick: 0, t0: 0 };
     function cycRefresh(ptsIn, closedIn, gapsIn) {
       const lp = ptsIn || fgLoop;
       if (!lp || lp.length < 20) return;
@@ -1211,12 +1216,14 @@
             await tick();
             const t0 = performance.now();
             const st = statesPS(rs, c.PS).slice(-(c.take || 600));
+            const tFit = performance.now();
             const m = fitCand(c, st);
             const snap = m.snapshot();               // pre-scoring state: the verified orbit's start
             // 5000-step scored free-run (~3 min of autopilot), judged on the
             // LATE window — escapes and slow decay both get caught here, and
             // the deploy continues from deep inside a proven-stable orbit.
             const run = autoFreeRun(m, st[st.length - 1], c, h, 5000);
+            fgProf.afmOut += performance.now() - tFit;
             await tick();
             if (!run) { console.log(`  ${c.desc}: diverged (${Math.round(performance.now() - t0)}ms)`); continue; }
             const win = (a, b) => {                   // score one window of the run
@@ -1428,6 +1435,7 @@
       // the cold-start fallback (fb rungs, excluded from scoring).
       const cv = [[], []];
       {
+        const tKnn = performance.now();
         const H = fgAbs, n = H.length;
         const Hneed = HLAD[fgHzIdx];                 // a lock must cover the displayed ladder
         const dOf = (j) => {
@@ -1475,6 +1483,7 @@
         let gm = -1;
         for (let k = 0; k < NLAD; k++) if (!cv.fb[k]) gm = k;
         cv.gm = gm >= 0 ? gm : NLAD - 1;             // all-fallback: plain linear ghost
+        fgProf.knn += performance.now() - tKnn;
       }
       if (!fgCent) fgCent = [...a];
       fgCent[0] += 0.05 * (a[0] - fgCent[0]); fgCent[1] += 0.05 * (a[1] - fgCent[1]);
@@ -1896,6 +1905,7 @@
 
     function fgTick() {
       if (activeTab !== 'finger') { requestAnimationFrame(fgTick); return; }
+      const tTick = performance.now();
       if (fgAuto && fgAutoMode === 'path') {
         if (fgLoop && performance.now() - fgAutoLastT >= 33) {
           fgAutoLastT = performance.now();
@@ -1918,7 +1928,9 @@
       } else if (fgAuto) {
         if (fgAutoModel && fgAutoPos && performance.now() - fgAutoLastT >= 33) {  // paced: same speed on 60/120 Hz displays
           fgAutoLastT = performance.now();
+          const tAuto = performance.now();
           const n = autoStep(fgAutoModel, fgAutoState, fgAutoMeta);
+          fgProf.afmIn += performance.now() - tAuto;
           // Escape watchdog: if the model goes non-finite or the pen leaves
           // ~2× the doodle's radius, restart the VERIFIED orbit from its
           // snapshot instead of flying off-screen. Healthy runs never trip it.
@@ -1941,7 +1953,11 @@
         fgLastT = performance.now();
         fgStepSim();
       }
-      if (!fgAuto && !fgCommissioning && !fgFrozen && fgCyc) pumpCyc(performance.now() + 3);
+      if (!fgAuto && !fgCommissioning && !fgFrozen && fgCyc) {
+        const tPump = performance.now();
+        pumpCyc(tPump + 3);
+        fgProf.afmIn += performance.now() - tPump;
+      }
       if (fgPtr.down) {
         fgTrail.push([fgPtr.x, fgPtr.y]);
         if (fgTrail.length > 120) fgTrail.shift();
@@ -1972,6 +1988,20 @@
       document.getElementById('fg-opadv').textContent = opReady
         ? `${rFmt(Math.sqrt(fgOPl[si] / fgOPn[si]))}× closer · ${rFmt(fgOPl[si] / fgOPn[si])}× less error energy` : '—';
       if (++fgPlotTick % 10 === 0) fgUpdatePlot();
+      // CPU readout: % of one core over the last second. "app" = everything
+      // in the frame loop that is neither the AFM nor the kNN baseline
+      // (render, online NGRC model, path machinery, scoring, Plotly).
+      fgProf.tick += performance.now() - tTick;
+      const nowP = performance.now();
+      if (!fgProf.t0) fgProf.t0 = nowP;
+      if (nowP - fgProf.t0 >= 1000) {
+        const wall = nowP - fgProf.t0;
+        const afm = fgProf.afmIn + fgProf.afmOut;
+        const app = Math.max(0, fgProf.tick - fgProf.afmIn - fgProf.knn);
+        const pc = (x) => (100 * x / wall).toFixed(1) + '%';
+        document.getElementById('fg-cpu').textContent = `AFM ${pc(afm)} · kNN ${pc(fgProf.knn)} · app ${pc(app)}`;
+        fgProf.afmIn = 0; fgProf.afmOut = 0; fgProf.knn = 0; fgProf.tick = 0; fgProf.t0 = nowP;
+      }
       requestAnimationFrame(fgTick);
     }
 

@@ -133,7 +133,12 @@ the shipped commit carries the correct version.
    at 10 s NGRC wins (~1.2× timed, ~1.4× closer on-path, ~2× less
    error energy). On metronome-perfect machine traces the analogue is
    near-optimal by construction — don't panic-tune against that
-   regime. Sub-10× ratios display with one decimal.
+   regime. Sub-10× ratios display with one decimal. A **CPU load** row
+   (refreshed each second) splits main-thread time as % of one core:
+   AFM (cyclic pump + autopilot stepping + commissioning) / kNN (the
+   analogue baseline) / app (everything else in the frame loop).
+   Typical while drawing: AFM ~20% (the pump's designed 3 ms/frame
+   budget), kNN ~0.1%, app ~10%.
    The resample step is clamped to [0.03, 0.05]: the floor keeps slow
    careful stencil-tracing from drowning the fit in ridge (tiny deltas)
    or blowing the fit window past one lap. Iterating the 1-step model
