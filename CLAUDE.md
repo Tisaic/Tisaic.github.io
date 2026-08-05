@@ -110,7 +110,22 @@ the shipped commit carries the correct version.
    rung. Head-to-head scoring is PAIRWISE: the SHOWN ghost and the
    analogue are judged on the same prediction instances, only on rungs the
    ghost actually displayed — anything else poisons one side with warmup
-   the other never served), with a
+   the other never served), plus a cyan **ESN benchmark** (echo state
+   network — the classical recurrent NN that NG-RC was designed to
+   replace, the canonical rival of the NG-RC literature: N=100 sparse
+   reservoir, spectral radius 0.9 via power iteration, leak 0.3, input
+   scale 0.3 — tuned offline, response flat around this — driven by the
+   SAME 4-var state stream; per rung a [1, state, reservoir] readout
+   trains online by shared-P RLS λ=0.9995 on the same direct targets.
+   ESN rows: its own miss + a pairwise "NGRC vs ESN" ratio gated on
+   rungs where the readout was warm (>40 trainings) AND the ghost was
+   displayed; cyan ghost capped at warm rungs ≤ ~1.2 s like every
+   point-forecast family; ESN trace in the chart; its own CPU bucket
+   (~1% of a core); freeze halts its training; Reset re-inits it.
+   Measured human-realistic steady state: NGRC ~1.1–1.2× better than
+   the ESN at every horizon — the published NG-RC claim, live: a
+   105-weight-per-rung polynomial model edging a 100-neuron reservoir
+   at a fraction of the compute), with a
    **ghost-horizon slider (0.2–10 s, geometric rungs)** — a 21-rung ladder of the library's
    **direct multi-horizon readouts** (`directHorizons`) trains continuously,
    so the slider needs no refit and the chart plots miss-vs-horizon curves
@@ -136,9 +151,10 @@ the shipped commit carries the correct version.
    regime. Sub-10× ratios display with one decimal. A **CPU load** row
    (refreshed each second) splits main-thread time as % of one core:
    AFM (cyclic pump + autopilot stepping + commissioning) / kNN (the
-   analogue baseline) / app (everything else in the frame loop).
-   Typical while drawing: AFM ~20% (the pump's designed 3 ms/frame
-   budget), kNN ~0.1%, app ~10%.
+   analogue baseline) / ESN (reservoir + readout training) / app
+   (everything else in the frame loop). Typical while drawing: AFM
+   ~20% (the pump's designed 3 ms/frame budget), kNN ~0.1%, ESN ~1%,
+   app ~10%.
    The resample step is clamped to [0.03, 0.05]: the floor keeps slow
    careful stencil-tracing from drowning the fit in ridge (tiny deltas)
    or blowing the fit window past one lap. Iterating the 1-step model

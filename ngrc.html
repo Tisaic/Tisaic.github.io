@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:54,built:"2026-08-05T03:13:13Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:55,built:"2026-08-05T04:13:41Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -117,10 +117,13 @@
     <p class="lead">Draw <b>loops and figure-8s</b> for a few seconds. Two ghosts predict your fingertip
       <b>0.2–10&nbsp;s ahead</b> (set by the <b>ghost horizon</b> slider):
       <span style="color:#7c8aa0">gray = analogue k-NN</span> (Lorenz's method of analogues: it finds the
-      nearest past moment of <b>your own drawing</b> and bets history repeats — a real rival, not a strawman) vs
+      nearest past moment of <b>your own drawing</b> and bets history repeats — a real rival, not a strawman),
+      <span style="color:#22d3ee">cyan = ESN</span> (an <b>echo state network</b> — the classical recurrent
+      neural network NG-RC was designed to replace: 100 recurrent neurons, readouts trained online on the SAME
+      targets) vs
       <span style="color:#f59e0b">amber = NGRC</span>, which learns a <b>model</b> of your motion — using the
       library's <b>direct multi-horizon readouts</b>, because iterating a 1-step model compounds its error (the
-      chart shows all three). The score is the
+      chart shows all of them). The score is the
       <b>path miss</b> — how far each ghost lands from where your finger actually went. Then the showpiece —
       tap <b>Autopilot</b>: NGRC <b>keeps drawing your doodle by itself</b> (the library's <b>AFM</b> universal
       feature map, ReLU + Fourier, noise-hardened so your doodle becomes a true attractor); a no-learning
@@ -156,7 +159,9 @@
       <dt id="fg-rmse-label">NGRC direct @1.2s</dt><dd id="fg-rmse" class="amber">—</dd>
       <dt>NGRC 1-step rolled</dt><dd id="fg-iter">—</dd>
       <dt>Analogue k-NN path miss</dt><dd id="fg-naive">—</dd>
+      <dt>ESN (reservoir NN) miss</dt><dd id="fg-esn">—</dd>
       <dt>NGRC advantage</dt><dd id="fg-skill" class="good">—</dd>
+      <dt>NGRC vs ESN</dt><dd id="fg-esnadv" class="good">—</dd>
       <dt id="fg-op-label">On-path miss</dt><dd id="fg-op">—</dd>
       <dt>On-path advantage</dt><dd id="fg-opadv" class="good">—</dd>
       <dt>Autopilot brain</dt><dd id="fg-ap">—</dd>
@@ -671,7 +676,7 @@
     window.addEventListener('resize', resizeFinger);
 
     const FG_DECAY = 0.99;
-    let fgModel, fgPtr, fgTrail, fgPredMat, fgCvMat, fgPrev, fgVel, fgSamples, fgLastT, fgStill, fgLastS, fgCent;
+    let fgModel, fgPtr, fgTrail, fgPredMat, fgCvMat, fgEsnMat, fgPrev, fgVel, fgSamples, fgLastT, fgStill, fgLastS, fgCent;
     let fgA, fgPend, fgEN, fgEI, fgEC, fgET;
     let fgAuto = false, fgAutoState = null, fgAutoPos = null, fgAutoDrift = null, fgAutoLastT = 0;
     let fgAutoTrail = [], fgAutoRay = null, fgAutoModel = null, fgAutoMeta = null;
@@ -709,7 +714,7 @@
     // CPU profiler: main-thread ms spent per second, split AFM (cyclic pump +
     // autopilot stepping + commissioning) / kNN (analogue baseline) / rest of
     // the app's frame work. Displayed as % of one core, refreshed each second.
-    const fgProf = { afmIn: 0, afmOut: 0, knn: 0, tick: 0, t0: 0 };
+    const fgProf = { afmIn: 0, afmOut: 0, knn: 0, esn: 0, tick: 0, t0: 0 };
     function cycRefresh(ptsIn, closedIn, gapsIn) {
       const lp = ptsIn || fgLoop;
       if (!lp || lp.length < 20) return;
@@ -772,6 +777,74 @@
     const ROLLMAX = (() => { let m = 0; for (let i = 0; i < 21; i++) if (HLAD[i] <= 100) m = i; return m; })();
     let fgES, fgOPn, fgOPl;                         // per-rung: path-locked miss, on-path (ghost/analogue)
     let fgHHn;                                      // per-rung timed miss of the SHOWN ghost, head-to-head-gated
+    let fgEEn, fgHHe;                               // ESN timed miss + shown-ghost miss on the SAME instances
+    // ---- ESN benchmark (echo state network) — the classical recurrent NN
+    // that NG-RC was designed to replace (the canonical rival in the NG-RC
+    // literature). A fixed sparse random reservoir (N=100, spectral radius
+    // 0.9, leak 0.3 — tuned offline, response is flat around this) is driven
+    // by the SAME 4-var state stream the NGRC model sees; per rung, a linear
+    // readout [1, state, reservoir] is trained online by shared-P RLS
+    // (λ=0.9995) on the same direct multi-horizon targets. Same inputs, same
+    // sample rate, same targets — only the features differ: 100 recurrent
+    // neurons vs NGRC's polynomial expansion.
+    let fgEsn = null;
+    function esnInit() {
+      let sd = 0x5eed;
+      const rnd = () => { sd |= 0; sd = (sd + 0x6D2B79F5) | 0; let t = Math.imul(sd ^ (sd >>> 15), 1 | sd); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+      const gs = () => { let u = rnd(); if (u < 1e-12) u = 1e-12; return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rnd()); };
+      const N = 100, rho = 0.9;
+      const W = [];
+      for (let i = 0; i < N; i++) { const row = []; for (let c = 0; c < 10; c++) row.push([Math.floor(rnd() * N), gs()]); W.push(row); }
+      let v = new Array(N).fill(0).map(gs);           // spectral radius by power iteration
+      for (let it = 0; it < 30; it++) {
+        const nv = new Array(N).fill(0);
+        for (let i = 0; i < N; i++) for (const e of W[i]) nv[i] += e[1] * v[e[0]];
+        const nrm = Math.hypot(...nv) || 1e-9;
+        if (it === 29) for (const row of W) for (const e of row) e[1] *= rho / nrm * (Math.hypot(...v) || 1);
+        v = nv.map((x) => x / nrm);
+      }
+      const Win = new Array(N).fill(0).map(() => [0, 1, 2, 3].map(() => 0.3 * gs()));
+      const b = new Array(N).fill(0).map(() => 0.1 * gs());
+      const d = 1 + 4 + N;
+      const rung = HLAD.map(() => {
+        const P = [];
+        for (let i = 0; i < d; i++) { const r = new Array(d).fill(0); r[i] = 1.0; P.push(r); }
+        return { P, TH: [new Array(d).fill(0), new Array(d).fill(0)] };
+      });
+      return { N, d, W, Win, b, leak: 0.3, lam: 0.9995, x: new Array(N).fill(0), buf: [], rung, tr: new Array(NLAD).fill(0) };
+    }
+    function esnStep(E, u) {                        // reservoir update (state only — no learning)
+      const { N, W, Win, b, leak, x } = E;
+      const nx = new Array(N);
+      for (let i = 0; i < N; i++) {
+        let s2 = b[i];
+        for (const e of W[i]) s2 += e[1] * x[e[0]];
+        s2 += Win[i][0] * u[0] + Win[i][1] * u[1] + Win[i][2] * u[2] + Win[i][3] * u[3];
+        nx[i] = (1 - leak) * x[i] + leak * Math.tanh(s2);
+      }
+      E.x = nx;
+      return nx;
+    }
+    function esnRls(R2, f, y0, y1, lam) {           // shared-P RLS, two outputs
+      const P = R2.P, d = f.length;
+      const Pf = new Array(d);
+      for (let i = 0; i < d; i++) { let s2 = 0; const Pi = P[i]; for (let j = 0; j < d; j++) s2 += Pi[j] * f[j]; Pf[i] = s2; }
+      let fPf = 0; for (let i = 0; i < d; i++) fPf += f[i] * Pf[i];
+      const den = lam + fPf;
+      const t0 = R2.TH[0], t1 = R2.TH[1];
+      let p0 = 0, p1 = 0;
+      for (let i = 0; i < d; i++) { p0 += t0[i] * f[i]; p1 += t1[i] * f[i]; }
+      const e0 = y0 - p0, e1 = y1 - p1;
+      for (let i = 0; i < d; i++) {
+        const K = Pf[i] / den;
+        t0[i] += K * e0; t1[i] += K * e1;
+      }
+      for (let i = 0; i < d; i++) {
+        const Pi = P[i], Ki = Pf[i] / den;
+        for (let j = 0; j < d; j++) Pi[j] = (Pi[j] - Ki * Pf[j]) / lam;
+      }
+    }
+    const esnDot = (th, f) => { let s2 = 0; for (let i = 0; i < th.length; i++) s2 += th[i] * f[i]; return s2; };
     const DS_NF = 10;
     const dsFeat = (lags, ph01) => {
       const w = 2 * Math.PI * ph01;
@@ -852,12 +925,14 @@
         directHorizons: [...HLAD],
       });
       fgPtr = { x: 0, y: 0, down: false };
-      fgTrail = []; fgPredMat = null; fgCvMat = null;
+      fgTrail = []; fgPredMat = null; fgCvMat = null; fgEsnMat = null;
       fgSamples = 0; fgLastT = 0; fgLastS = null; fgCent = null;
       fgPrev = null; fgVel = [0, 0];
       fgEN = new Array(NLAD).fill(0); fgEI = new Array(NLAD).fill(0); fgEC = new Array(NLAD).fill(0); fgET = 0;
       fgES = new Array(NLAD).fill(0); fgOPn = new Array(NLAD).fill(0); fgOPl = new Array(NLAD).fill(0);
       fgHHn = new Array(NLAD).fill(0);
+      fgEEn = new Array(NLAD).fill(0); fgHHe = new Array(NLAD).fill(0);
+      fgEsn = esnInit();
       fgLoop = null; fgPhase = 0; fgDsLags = [1, 1, 1];
       fgDsObs = []; fgDsMed = 1; fgGhostArc = null; fgLoopMiss = 0; fgLoopAge = 0;
       fgCyc = null;
@@ -1490,6 +1565,40 @@
       fgCentLast = fgCent;
       const s = [(a[0] - fgPrev[0]) * DSCALE, (a[1] - fgPrev[1]) * DSCALE, a[0] - fgCent[0], a[1] - fgCent[1]];
       const res = fgModel.step(s, null, fgFrozen);
+      // ESN benchmark: reservoir step + per-rung direct readouts, trained on
+      // the SAME targets (centered position h ahead) at the same sample rate
+      let esnPe = null;
+      {
+        const tEsn = performance.now();
+        const E = fgEsn;
+        const x = esnStep(E, s);
+        const f = [1, s[0], s[1], s[2], s[3], ...x];
+        if (!fgFrozen) {                             // freeze halts ESN learning too
+          for (let k = 0; k < NLAD; k++) {
+            const h = HLAD[k];
+            if (E.buf.length > h) {
+              esnRls(E.rung[k], E.buf[E.buf.length - h], s[2], s[3], E.lam);
+              E.tr[k]++;
+            }
+          }
+        }
+        esnPe = [[], []];
+        esnPe.live = new Array(NLAD);
+        for (let k = 0; k < NLAD; k++) {
+          esnPe[0].push(fgCent[0] + esnDot(E.rung[k].TH[0], f));
+          esnPe[1].push(fgCent[1] + esnDot(E.rung[k].TH[1], f));
+          esnPe.live[k] = E.tr[k] > 40;
+        }
+        // cyan ghost cap: warm rungs only, and ≤ ~1.2 s like every point-
+        // forecast family (beyond that they collapse toward the center)
+        let em = -1;
+        for (let k = 0; k < NLAD; k++) { if (esnPe.live[k]) em = k; else break; }
+        esnPe.gm = Math.min(em, 9);
+        fgEsnMat = esnPe;
+        E.buf.push(f);
+        if (E.buf.length > HMAX + 2) E.buf.shift();
+        fgProf.esn += performance.now() - tEsn;
+      }
       fgSamples++;
       fgLastS = s;
       fgLog.push(s);
@@ -1707,7 +1816,7 @@
         fgKnnJ = fgKnnJ >= cutA ? fgKnnJ - cutA : -1;
         while (fgAbs.length && fgAbs[0] === null) { fgAbs.shift(); if (fgKnnJ > 0) fgKnnJ--; else fgKnnJ = -1; }
       }
-      fgPend.push({ i: fgA.length - 1, n: pred, r: rolled, s: shape, w: shown, c: cv, gm: fgGhostMax });
+      fgPend.push({ i: fgA.length - 1, n: pred, r: rolled, s: shape, w: shown, c: cv, gm: fgGhostMax, e: esnPe });
       // PATH-MISS scoring: each horizon's prediction is scored by its distance to
       // the NEAREST sample of the actual future path (window h-2..h+3) — this is
       // what the eye judges: "did the ghost land on where I actually went?"
@@ -1748,6 +1857,18 @@
           if (hh) {
             fgEC[k] = FG_DECAY * fgEC[k] + (1 - FG_DECAY) * dc;
             fgHHn[k] = FG_DECAY * fgHHn[k] + (1 - FG_DECAY) * dw;
+          }
+          // ESN pairing: scored only when its rung readout was warm at
+          // prediction time, against the shown ghost on the same instances
+          if (q.e && q.e.live[k] && k <= q.gm) {
+            const ex = q.e[0][k], ey = q.e[1][k];
+            let de = Infinity;
+            for (let j = j0; j <= j1; j++) {
+              const s = fgA[j];
+              const t8 = (ex - s[0]) ** 2 + (ey - s[1]) ** 2; if (t8 < de) de = t8;
+            }
+            fgEEn[k] = FG_DECAY * fgEEn[k] + (1 - FG_DECAY) * de;
+            fgHHe[k] = FG_DECAY * fgHHe[k] + (1 - FG_DECAY) * dw;
           }
           // ON-PATH miss (untimed): distance from the prediction to ANY point
           // of the stroke actually drawn over the horizon — "did it land on
@@ -1842,6 +1963,7 @@
         fgCtx.fillText('✍️ NGRC is drawing from what it learned', fgW / 2, 24);
         if (fgAutoInfo) { fgCtx.fillStyle = '#94a3b8'; fgCtx.font = '11px sans-serif'; fgCtx.fillText(fgAutoInfo, fgW / 2, 42); }
       } else {
+        if (fgPtr.down && fgEsnMat && fgEsnMat.gm >= 0) fgGhost(fgEsnMat, 'rgba(34,211,238,0.7)', '#22d3ee', false, fgEsnMat.gm);
         if (fgPtr.down && fgCvMat) fgGhost(fgCvMat, 'rgba(124,138,160,0.7)', '#7c8aa0', true, fgCvMat.gm);
         if (fgPtr.down && fgGhostArc && fgGhostArc.length > 1) {
           fgCtx.beginPath();
@@ -1895,7 +2017,9 @@
         yaxis: { title: { text: 'path miss (recent)', font: { size: 10 } }, gridcolor: '#1e293b', rangemode: 'tozero' },
         shapes: [{ type: 'line', x0: sel, x1: sel, y0: 0, y1: 1, yref: 'paper', line: { color: '#6366f1', width: 1.5, dash: 'dot' } }] };
       const mk = (y, name, color) => ({ x: xs, y, type: 'scatter', mode: 'lines+markers', name, line: { color, width: 2 }, marker: { size: 4 } });
-      const data = [mk(nC, 'analogue k-NN', '#7c8aa0'), mk(nI, '1-step rolled', 'rgba(245,158,11,0.45)'), mk(nN, 'NGRC direct', '#f59e0b')];
+      const nE = fgEEn.map((e) => (fgET > 0 && e > 0 ? Math.sqrt(e / fgET) : null));   // null = readout not warm yet
+      const data = [mk(nC, 'analogue k-NN', '#7c8aa0'), mk(nE, 'ESN', '#22d3ee'),
+        mk(nI, '1-step rolled', 'rgba(245,158,11,0.45)'), mk(nN, 'NGRC direct', '#f59e0b')];
       if (fgES.some((e) => e > 0)) {
         data.push(mk(fgES.map((e, i) => (fgET > 0 && e > 0 ? Math.sqrt(e / fgET) : null)), 'path-locked', '#a78bfa'));
       }
@@ -1975,6 +2099,9 @@
       // head-to-head: the SHOWN ghost vs the analogue on the SAME instances
       document.getElementById('fg-skill').textContent = (ready && fgEC[si] > 0 && fgHHn[si] > 0)
         ? rFmt(Math.sqrt(fgEC[si] / fgHHn[si])) + '× better' : '—';
+      document.getElementById('fg-esn').textContent = (ready && fgEEn[si] > 0) ? Math.sqrt(fgEEn[si] / fgET).toFixed(3) : '—';
+      document.getElementById('fg-esnadv').textContent = (ready && fgEEn[si] > 0 && fgHHe[si] > 0)
+        ? rFmt(Math.sqrt(fgEEn[si] / fgHHe[si])) + '× better' : '—';
       // ON-PATH: the "did the ghost land on your stroke" scoreboard — this is
       // where the shape brain earns its orders of magnitude at long horizons
       const opReady = ready && fgOPn[si] > 0 && fgOPl[si] > 0;
@@ -1997,10 +2124,10 @@
       if (nowP - fgProf.t0 >= 1000) {
         const wall = nowP - fgProf.t0;
         const afm = fgProf.afmIn + fgProf.afmOut;
-        const app = Math.max(0, fgProf.tick - fgProf.afmIn - fgProf.knn);
+        const app = Math.max(0, fgProf.tick - fgProf.afmIn - fgProf.knn - fgProf.esn);
         const pc = (x) => (100 * x / wall).toFixed(1) + '%';
-        document.getElementById('fg-cpu').textContent = `AFM ${pc(afm)} · kNN ${pc(fgProf.knn)} · app ${pc(app)}`;
-        fgProf.afmIn = 0; fgProf.afmOut = 0; fgProf.knn = 0; fgProf.tick = 0; fgProf.t0 = nowP;
+        document.getElementById('fg-cpu').textContent = `AFM ${pc(afm)} · kNN ${pc(fgProf.knn)} · ESN ${pc(fgProf.esn)} · app ${pc(app)}`;
+        fgProf.afmIn = 0; fgProf.afmOut = 0; fgProf.knn = 0; fgProf.esn = 0; fgProf.tick = 0; fgProf.t0 = nowP;
       }
       requestAnimationFrame(fgTick);
     }
@@ -2020,7 +2147,8 @@
         for (let k = 0; k <= Math.min(fgHzIdx, NLAD - 1); k++) knn.push([fgCvMat[0][k], fgCvMat[1][k], fgCvMat.fb ? (fgCvMat.fb[k] ? 1 : 0) : 0]);
       }
       return { fam: fgLastFam, loopAge: fgLoopAge, lap: fgLoop ? fgLoop.length : 0, pts, cycFed: fgCyc ? fgCyc.fed : 0,
-        gaps: fgLoopGaps ? fgLoopGaps.size : 0, absLen: fgAbs.length, lifts: fgAbs.filter((p) => p === null).length, knn };
+        gaps: fgLoopGaps ? fgLoopGaps.size : 0, absLen: fgAbs.length, lifts: fgAbs.filter((p) => p === null).length, knn,
+        esnTr: fgEsn ? fgEsn.tr[fgHzIdx] : 0, esnGm: fgEsnMat ? fgEsnMat.gm : -1 };
     };
 
     // ---- boot ----
