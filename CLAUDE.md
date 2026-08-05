@@ -110,8 +110,9 @@ the shipped commit carries the correct version.
    the ladder zigzagged into scribble. It replays pen lifts too (exact
    brkAt flags from the history's own lift markers); straight-line survives
    only as its cold-start fallback, fallback rungs are excluded from the
-   analogue's score, and the drawn gray ghost stops at the last analogue
-   rung. Head-to-head scoring is PAIRWISE: the SHOWN ghost and the
+   analogue's score, and the drawn gray ghost is the analogue's FULL
+   per-step replayed segment out to the slider horizon (nulls at
+   replayed lifts), not sparse rung chords. Head-to-head scoring is PAIRWISE: the SHOWN ghost and the
    analogue are judged on the same prediction instances, only on rungs the
    ghost actually displayed — anything else poisons one side with warmup
    the other never served), plus a cyan **ESN benchmark** (echo state
@@ -151,7 +152,13 @@ the shipped commit carries the correct version.
    (`directHorizons`) trains continuously (the original 21 rungs 4..208
    kept verbatim + 4 appended to 417 samples ≈ 20 s), so the slider needs
    no refit and the chart plots miss-vs-horizon curves over the whole
-   range (dotted marker = slider). A rung can only score once its horizon
+   range (dotted marker = slider). HONEST TRACES: the amber path arc
+   draws the full per-step forecast to the slider horizon (no lap cap —
+   wrapping the loop IS the prediction, so 5 s vs 20 s visibly differ);
+   rung-sparse ghosts (ESN, fallback families) draw through midpoint
+   quadratics and are validity-limited (warm/scored rungs), never
+   arbitrarily capped; autopilot rival trails get the SAME 3-pt kernel
+   as the amber trail. A rung can only score once its horizon
    of future has been drawn — the 20 s rung populates after ~21 s of
    drawing (physics, not a bug). Two scoring-pipeline fixes shipped with
    the extension: a dwell pause no longer flushes the pending queue (it

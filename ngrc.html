@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:59,built:"2026-08-05T13:24:45Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:60,built:"2026-08-05T13:44:51Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -681,7 +681,7 @@
     window.addEventListener('resize', resizeFinger);
 
     const FG_DECAY = 0.99;
-    let fgModel, fgPtr, fgTrail, fgPredMat, fgCvMat, fgEsnMat, fgPrev, fgVel, fgSamples, fgLastT, fgStill, fgLastS, fgCent;
+    let fgModel, fgPtr, fgTrail, fgPredMat, fgCvMat, fgCvArc, fgEsnMat, fgPrev, fgVel, fgSamples, fgLastT, fgStill, fgLastS, fgCent;
     let fgA, fgPend, fgEN, fgEI, fgEC, fgET;
     let fgAuto = false, fgAutoState = null, fgAutoPos = null, fgAutoDrift = null, fgAutoLastT = 0;
     let fgAutoTrail = [], fgAutoRay = null, fgAutoModel = null, fgAutoMeta = null;
@@ -1003,7 +1003,7 @@
         directHorizons: [...HLAD],
       });
       fgPtr = { x: 0, y: 0, down: false };
-      fgTrail = []; fgPredMat = null; fgCvMat = null; fgEsnMat = null;
+      fgTrail = []; fgPredMat = null; fgCvMat = null; fgCvArc = null; fgEsnMat = null;
       fgSamples = 0; fgLastT = 0; fgLastS = null; fgCent = null;
       fgPrev = null; fgVel = [0, 0];
       fgEN = new Array(NLAD).fill(0); fgEI = new Array(NLAD).fill(0); fgEC = new Array(NLAD).fill(0); fgET = 0;
@@ -1661,6 +1661,24 @@
         let gm = -1;
         for (let k = 0; k < NLAD; k++) if (!cv.fb[k]) gm = k;
         cv.gm = gm >= 0 ? gm : NLAD - 1;             // all-fallback: plain linear ghost
+        // HONEST per-step trace: the analogue's full prediction is the
+        // replayed history segment itself (offset decaying on) — draw every
+        // sample of it out to the slider horizon instead of sparse rung
+        // chords, with nulls at replayed pen lifts
+        fgCvArc = null;
+        if (j >= 0) {
+          const Hh = Math.min(HLAD[fgHzIdx], n - 1 - j);
+          if (Hh > 1) {
+            fgCvArc = [];
+            const ox0 = a[0] - H[j][0], oy0 = a[1] - H[j][1];
+            let dec2 = 1;
+            for (let i2 = 1; i2 <= Hh; i2++) {
+              dec2 *= 0.88;
+              const t = H[j + i2];
+              fgCvArc.push(t ? [t[0] + ox0 * dec2, t[1] + oy0 * dec2] : null);
+            }
+          }
+        }
         fgProf.knn += performance.now() - tKnn;
       }
       if (!fgCent) fgCent = [...a];
@@ -1693,11 +1711,11 @@
           esnPe[1].push(fgCent[1] + esnDot(E.rung[k].TH[1], f));
           esnPe.live[k] = E.tr[k] > 40;
         }
-        // cyan ghost cap: warm rungs only, and ≤ ~1.2 s like every point-
-        // forecast family (beyond that they collapse toward the center)
+        // cyan ghost: warm rungs only — validity-limited, so the trace
+        // honestly stretches toward the slider as its readouts warm up
         let em = -1;
         for (let k = 0; k < NLAD; k++) { if (esnPe.live[k]) em = k; else break; }
-        esnPe.gm = Math.min(em, 9);
+        esnPe.gm = em;
         fgEsnMat = esnPe;
         E.buf.push(f);
         if (E.buf.length > HMAX + 2) E.buf.shift();
@@ -1893,22 +1911,18 @@
         const E2 = fam === 'direct' ? fgEN : fgEI;
         let trustK = -1;
         while (trustK < NLAD - 1 && E2[trustK + 1] > 0) trustK++;
-        // and NEVER draw a fallback family beyond ~1.2 s: past that, point
-        // forecasts of raw position are visually meaningless (they collapse
-        // toward the center) — a short honest ghost beats a long scribble
-        fgGhostMax = Math.max(0, Math.min(fgGhostMax, trustK, 9));
+        // the ghost extends only as far as the family has actually been
+        // SCORED — validity-limited, not arbitrarily capped, so the slider
+        // honestly stretches the trace as trust accumulates
+        fgGhostMax = Math.max(0, Math.min(fgGhostMax, trustK));
         if (trustK < 0) fgGhostMax = 0;
       }
       fgLastFam = fam;
-      // arc capped at ~one lap — at long horizons the forecast wraps the loop
-      // several times and overdrawing identical laps just smears the ink; the
-      // tip dot still marks the full-horizon prediction
-      let arcEnd = HLAD[fgHzIdx];
-      if (fam === 'path' && phaseFc && fgLoop && fgDsMed > 0.02) {
-        arcEnd = Math.min(arcEnd, Math.ceil(1.6 * fgLoop.length / fgDsMed) + 2);
-      }
-      fgGhostArc = (fam === 'path' && phaseFc) ? phaseFc.slice(0, arcEnd) : null;
-      if (fgGhostArc && arcEnd < HLAD[fgHzIdx]) fgGhostArc.tip = phaseFc[HLAD[fgHzIdx] - 1];
+      // HONEST arc: the full per-step forecast out to the slider horizon —
+      // no lap cap. At long horizons the forecast wraps the loop and the
+      // overdraw IS the prediction ("keeps going around"); the tip dot marks
+      // the full-horizon landing point, so 5 s vs 20 s reads differently.
+      fgGhostArc = (fam === 'path' && phaseFc) ? phaseFc.slice(0, HLAD[fgHzIdx]) : null;
       fgCvMat = cv;
       fgA.push(a);
       // the multi-stroke log survives pen lifts; the stored EMA velocity is
@@ -2011,16 +2025,26 @@
       if (mat[0][0] == null) return;
       // ALWAYS anchored at the fingertip — a preview that starts elsewhere
       // reads as broken
-      fgCtx.beginPath();
-      fgCtx.moveTo(fgPtr.x, fgPtr.y);
+      // collect rung points, split at replayed pen lifts, then draw each
+      // segment through MIDPOINT QUADRATICS — the rungs are sparse samples of
+      // a smooth underlying forecast, and raw chords read as fake jaggedness
+      const segs = [[[fgPtr.x, fgPtr.y]]];
       let lastK = 0;
       for (let k = 0; k <= kEnd; k++) {
         if (mat[0][k] == null) break;
         const p = den(mat[0][k], mat[1][k]);
-        // analogue baseline: this rung's replayed history crossed a pen lift
-        // — lift the pen instead of inking the teleport
-        if (mat.brkAt && mat.brkAt[k]) { fgCtx.moveTo(p[0], p[1]); lastK = k; continue; }
-        fgCtx.lineTo(p[0], p[1]); lastK = k;
+        if (mat.brkAt && mat.brkAt[k]) segs.push([]);
+        segs[segs.length - 1].push(p);
+        lastK = k;
+      }
+      fgCtx.beginPath();
+      for (const sg of segs) {
+        if (!sg.length) continue;
+        fgCtx.moveTo(sg[0][0], sg[0][1]);
+        for (let i = 1; i < sg.length - 1; i++) {
+          fgCtx.quadraticCurveTo(sg[i][0], sg[i][1], (sg[i][0] + sg[i + 1][0]) / 2, (sg[i][1] + sg[i + 1][1]) / 2);
+        }
+        if (sg.length > 1) fgCtx.lineTo(sg[sg.length - 1][0], sg[sg.length - 1][1]);
       }
       if (dashed) fgCtx.setLineDash([6, 5]);
       fgCtx.strokeStyle = stroke; fgCtx.lineWidth = 3; fgCtx.stroke();
@@ -2049,13 +2073,24 @@
           fgCtx.fillText('straight-line “autopilot” →', (p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2 - 8);
         }
         // rival autopilots first (underneath): gray = kNN replaying its
-        // recording, cyan = the ESN free-running its own learned dynamics
+        // recording, cyan = the ESN free-running its own learned dynamics.
+        // Drawn through the SAME 3-point kernel as the amber trail — the star
+        // doesn't get an exclusive de-jitter pass.
         const drawRival = (T2, color, head) => {
+          const sm2 = (i) => {
+            const a2 = T2[i - 1], b2 = T2[i], c2 = T2[i + 1];
+            if (!b2) return null;
+            if (!a2 || !c2) return b2;
+            return [0.25 * a2[0] + 0.5 * b2[0] + 0.25 * c2[0], 0.25 * a2[1] + 0.5 * b2[1] + 0.25 * c2[1]];
+          };
+          let prev2 = sm2(0) || (T2[0] || null);
           for (let i = 1; i < T2.length; i++) {
-            const a2 = T2[i - 1], b2 = T2[i];
-            if (!a2 || !b2) continue;
-            fgCtx.beginPath(); fgCtx.moveTo(a2[0], a2[1]); fgCtx.lineTo(b2[0], b2[1]);
-            fgCtx.strokeStyle = color; fgCtx.lineWidth = 2; fgCtx.stroke();
+            const cur2 = sm2(i);
+            if (prev2 && cur2) {
+              fgCtx.beginPath(); fgCtx.moveTo(prev2[0], prev2[1]); fgCtx.lineTo(cur2[0], cur2[1]);
+              fgCtx.strokeStyle = color; fgCtx.lineWidth = 2; fgCtx.stroke();
+            }
+            prev2 = cur2;
           }
           const lastR = T2[T2.length - 1];
           if (lastR) { fgCtx.beginPath(); fgCtx.arc(lastR[0], lastR[1], 5, 0, 2 * Math.PI); fgCtx.fillStyle = head; fgCtx.fill(); }
@@ -2095,28 +2130,31 @@
           fgCtx.fillText(parts.join(' · '), fgW / 2, 58);
         }
       } else {
-        if (fgPtr.down && fgEsnMat && fgEsnMat.gm >= 0) fgGhost(fgEsnMat, 'rgba(34,211,238,0.7)', '#22d3ee', false, fgEsnMat.gm);
-        if (fgPtr.down && fgCvMat) fgGhost(fgCvMat, 'rgba(124,138,160,0.7)', '#7c8aa0', true, fgCvMat.gm);
-        if (fgPtr.down && fgGhostArc && fgGhostArc.length > 1) {
+        // per-step arc renderer (path amber / analogue gray): every forecast
+        // sample drawn, nulls or [2]-flags = pen lifts, tip dot at the end
+        const drawStepArc = (arc, stroke, fill, width, dashed, anchor) => {
           fgCtx.beginPath();
-          fgCtx.moveTo(fgPtr.x, fgPtr.y);                 // anchored at the fingertip
-          for (let i = 0; i < fgGhostArc.length; i++) {
-            const p = den(fgGhostArc[i][0], fgGhostArc[i][1]);
-            if (fgGhostArc[i][2]) fgCtx.moveTo(p[0], p[1]);   // predicted pen lift — don't ink the teleport
+          let pen = false;
+          if (anchor) { fgCtx.moveTo(fgPtr.x, fgPtr.y); pen = true; }
+          let last = null;
+          for (let i = 0; i < arc.length; i++) {
+            const q2 = arc[i];
+            if (!q2) { pen = false; continue; }        // replayed pen lift
+            const p = den(q2[0], q2[1]);
+            if (!pen || q2[2]) fgCtx.moveTo(p[0], p[1]);
             else fgCtx.lineTo(p[0], p[1]);
+            pen = true; last = p;
           }
-          fgCtx.strokeStyle = 'rgba(245,158,11,0.9)'; fgCtx.lineWidth = 3; fgCtx.stroke();
-          // solid tip at the end of the drawn arc; when the arc is capped at a
-          // lap, an OUTLINED tip rides the loop at the full slider horizon so
-          // the slider's effect stays visible
-          const endA = fgGhostArc[fgGhostArc.length - 1];
-          const peA = den(endA[0], endA[1]);
-          fgCtx.beginPath(); fgCtx.arc(peA[0], peA[1], 8, 0, 2 * Math.PI); fgCtx.fillStyle = '#f59e0b'; fgCtx.fill();
-          if (fgGhostArc.tip) {
-            const pt2 = den(fgGhostArc.tip[0], fgGhostArc.tip[1]);
-            fgCtx.beginPath(); fgCtx.arc(pt2[0], pt2[1], 7, 0, 2 * Math.PI);
-            fgCtx.strokeStyle = '#f59e0b'; fgCtx.lineWidth = 2.5; fgCtx.stroke();
-          }
+          if (dashed) fgCtx.setLineDash([6, 5]);
+          fgCtx.strokeStyle = stroke; fgCtx.lineWidth = width; fgCtx.stroke();
+          fgCtx.setLineDash([]);
+          if (last) { fgCtx.beginPath(); fgCtx.arc(last[0], last[1], width >= 3 ? 8 : 6, 0, 2 * Math.PI); fgCtx.fillStyle = fill; fgCtx.fill(); }
+        };
+        if (fgPtr.down && fgEsnMat && fgEsnMat.gm >= 0) fgGhost(fgEsnMat, 'rgba(34,211,238,0.7)', '#22d3ee', false, fgEsnMat.gm);
+        if (fgPtr.down && fgCvArc && fgCvArc.length > 1) drawStepArc(fgCvArc, 'rgba(124,138,160,0.7)', '#7c8aa0', 2, true, true);
+        else if (fgPtr.down && fgCvMat) fgGhost(fgCvMat, 'rgba(124,138,160,0.7)', '#7c8aa0', true, fgCvMat.gm);
+        if (fgPtr.down && fgGhostArc && fgGhostArc.length > 1) {
+          drawStepArc(fgGhostArc, 'rgba(245,158,11,0.9)', '#f59e0b', 3, false, true);
         } else if (fgPtr.down && fgPredMat) {
           fgGhost(fgPredMat, 'rgba(245,158,11,0.9)', '#f59e0b', false, fgGhostMax);
           if (fgGhostMax < fgHzIdx) {                     // capped: say why
