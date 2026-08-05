@@ -99,7 +99,18 @@ the shipped commit carries the correct version.
    crossings per model and the Plotly trace follows every series in both
    modes. Measured at the gate: 1-step errors 0.0067 / 0.0079 / 0.044 /
    0.0064 (NGRC/ESN/MLP/ARX) — then dream wing crossings 9/0/0/0, the
-   whole point of the tab in one row. A **Speed slider (0.05–1×)** scales
+   whole point of the tab in one row. A **Valid time (Λ)** row scores the
+   crossover itself: each free-run starts from reality's exact state and
+   stays "valid" until its error vs the now-hidden reality exceeds 0.4×
+   the attractor's fluctuation scale (tracked online, not hardcoded),
+   reported in Lyapunov times (λ≈0.906 → 1 Λ ≈ 1.10 time units ≈ 55
+   steps at dt=0.02; counted in sim steps so the Speed slider doesn't
+   skew it; "≥x…" = clock still running, freezes at first crossing,
+   persists after waking, resets on the next dream). Measured at the
+   gate: NGRC 1.2 Λ vs ESN 0.4 / MLP 0.2 / linear 0.2 — NGRC tracks
+   3–6× longer (published ~5 Λ figures are offline-tuned fits; this is
+   an online-RLS model scored right at the gate, and it grows with
+   training). A **Speed slider (0.05–1×)** scales
    sim steps per frame via a fractional accumulator (0.05× really is 20×
    slower); drop it right at the Dream switch to watch the crossover in
    slow motion — every model tracks reality for a while, then diverges
