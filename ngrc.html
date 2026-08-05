@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:57,built:"2026-08-05T06:02:48Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:58,built:"2026-08-05T13:02:56Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -1639,7 +1639,14 @@
               if (H[m]) { sx += H[m][0]; sy += H[m][1]; sc++; }
             }
             if (sc) {
-              px = [a[0] + (sx / sc - H[j][0]), a[1] + (sy / sc - H[j][1])];
+              // the CURRENT offset from the matched moment (tremor/drift) is
+              // transient — decay it onto the replayed path with the SAME
+              // 0.88/step schedule the NGRC path ghost uses. Carrying it
+              // undamped to every horizon hurt the analogue at long rungs
+              // (and quietly inflated NGRC's on-path advantage).
+              const dec = Math.pow(0.88, h);
+              const ox = (a[0] - H[j][0]) * dec, oy = (a[1] - H[j][1]) * dec;
+              px = [sx / sc + ox, sy / sc + oy];
               for (let m = j + prevH + 1; m <= Math.min(j + h, n - 1); m++) {
                 if (H[m] === null) { cv.brkAt[k] = true; break; }   // replayed pen lift
               }

@@ -100,8 +100,12 @@ the shipped commit carries the correct version.
    method of analogues: ONE COHERENT tracked match — nearest past
    (position, stored-EMA-velocity) moment of the multi-stroke log, advanced
    in lockstep each sample, re-locked only on 3× hysteresis or running out
-   of displayed future — serves the whole rung ladder: pred(h) = now +
-   (past[j+h] − past[j]), targets ±1-sample smoothed. Per-rung independent
+   of displayed future — serves the whole rung ladder: pred(h) =
+   past[j+h] + (now − past[j])·0.88^h — the current match offset DECAYS
+   onto the replayed path with the SAME schedule the NGRC path ghost
+   uses (carrying it undamped to every horizon hurt the analogue at
+   long rungs and quietly inflated NGRC's on-path advantage); targets
+   ±1-sample smoothed. Per-rung independent
    argmins under real finger tremor picked DIFFERENT past laps per rung and
    the ladder zigzagged into scribble. It replays pen lifts too (exact
    brkAt flags from the history's own lift markers); straight-line survives
