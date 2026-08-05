@@ -243,9 +243,18 @@ the shipped commit carries the correct version.
    human and machine tempos, ≥75 s each, star arms intact throughout.
    A **Freeze ❄️ / Unfreeze ▶** button halts ALL learning — the online
    ghost model steps predict-only, the tempo-readout RLS pauses, the
-   stored loop stops refreshing, and the cyclic AFM pump stops feeding —
-   while predictions, the ghost, and Autopilot keep working, so the model
-   can be played with without being affected. The brain row shows
+   stored loop stops refreshing, the cyclic AFM pump stops feeding, AND
+   the kNN's replay memory (fgAbs) stops growing and cannot be wiped by
+   the relocation rule (the memory IS the memorizer's model; a stray
+   frozen touch far from the doodle used to erase it while the
+   AFM/ESN kept their weights) — while predictions, the ghosts, and
+   Autopilot keep working, so the model can be played with without
+   being affected. A small LIVE ring (fgLive, freeze-immune pure state)
+   seeds the green AFM ghost so it always free-runs from the finger's
+   NOW. The ESN's autopilot free-run anchors at the locked loop's mean
+   (its state is centroid-relative; anchoring at the last stroke's
+   centroid drew a correct shape in the wrong place after a stray
+   touch). The brain row shows
    "training FROZEN ❄️" vs "training live"; Reset brain also unfreezes.
    **Disjointed (multi-stroke) doodles** — e.g. two vertical lines drawn
    alternately with pen lifts — are a first-class pattern: the lap is the
