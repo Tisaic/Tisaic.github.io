@@ -150,10 +150,11 @@ the shipped commit carries the correct version.
    (~1% of a core); freeze halts its training; Reset re-inits it.
    During **Autopilot the rivals race live**: the kNN replays its
    recording from the nearest (position, velocity) match — pen lifts
-   included, re-matching when the recording runs out — and the ESN
+   included, re-matching when the recording runs out — the ESN
    free-runs a 1-step full-state readout (trained online alongside the
    rung readouts) from the current reservoir state, clamped, with an
-   escape watchdog; the shared reservoir is snapshot-restored on stop.
+   escape watchdog (the shared reservoir is snapshot-restored on
+   stop), and the MLP free-runs its own 1-step head the same way.
    Verified visuals: on a circle the ESN dream contracts into a
    smaller drifting orbit (classic 1-step rollout decay) while the
    replay rides the recorded tremor; on multi-stroke patterns the
@@ -162,7 +163,34 @@ the shipped commit carries the correct version.
    Measured human-realistic steady state: NGRC ~1.1–1.2× better than
    the ESN at every horizon — the published NG-RC claim, live: a
    105-weight-per-rung polynomial model edging a 100-neuron reservoir
-   at a fraction of the compute), with a
+   at a fraction of the compute), plus a magenta **MLP benchmark**
+   (a plain feedforward net — the NN everyone learns first, added as a
+   reference for people who know ML but not reservoir computing: one
+   32-unit tanh hidden layer on a 2-lag input window ([s(t), s(t−1)] —
+   the SAME information NGRC's features are built from), a 2-output
+   linear head per rung + a 4-output 1-step head, trained ONLINE by
+   single-sample Adam (lr 3e-3) + experience replay — 8 random
+   (moment, rung) pairs per sample from a 1200-sample state ring;
+   without replay an online net forgets each rung between visits and
+   lands 2–3× worse (offline sweep; response flat around this config,
+   which matched the NGRC direct readouts on a human circle and edged
+   them on a two-line pattern). Page rows: "MLP (feedforward NN)
+   miss" + a like-for-like "NGRC vs MLP" ratio vs the raw DIRECT
+   readout (same convention + warm gating as the ESN row, >40
+   trainings per rung, pairwise same-instance scoring); magenta
+   rung-sparse ghost, chart trace, its own CPU bucket (~1% of a core
+   while drawing), freeze halts its training AND its replay-ring
+   growth (frozen play must not seep into training data — but the
+   prediction's s(t−1) lag comes from a freeze-immune slot, since a
+   stale ring lag would degrade frozen predictions the way a frozen
+   reservoir state would have degraded the ESN's), Reset
+   re-inits it. During Autopilot it free-runs its 1-step head as a
+   magenta rival trail — the net is stateless, so a rollout is pure
+   forward passes and nothing needs snapshot-restore on stop; same
+   loop-mean anchor, clamp, and escape watchdog as the ESN. Measured:
+   ~1.1–1.2× behind NGRC direct at the probed rungs — honest
+   same-league performance, which is the point of the reference),
+   with a
    **ghost-horizon slider (0.2–20 s, geometric rungs, default 10 s)** — a
    25-rung ladder of the library's **direct multi-horizon readouts**
    (`directHorizons`) trains continuously (the original 21 rungs 4..208
@@ -171,7 +199,7 @@ the shipped commit carries the correct version.
    range (dotted marker = slider). HONEST TRACES: the amber path arc
    draws the full per-step forecast to the slider horizon (no lap cap —
    wrapping the loop IS the prediction, so 5 s vs 20 s visibly differ);
-   rung-sparse ghosts (ESN, fallback families) draw through midpoint
+   rung-sparse ghosts (ESN, MLP, fallback families) draw through midpoint
    quadratics and are validity-limited (warm/scored rungs), never
    arbitrarily capped; autopilot rival trails get the SAME 3-pt kernel
    AND the same alpha ramp as the amber trail. Because a wrapped loop
@@ -212,10 +240,10 @@ the shipped commit carries the correct version.
    regime. Sub-10× ratios display with one decimal. A **CPU load** row
    (refreshed each second) splits main-thread time as % of one core:
    AFM (cyclic pump + autopilot stepping + commissioning) / kNN (the
-   analogue baseline) / ESN (reservoir + readout training) / app
-   (everything else in the frame loop). Typical while drawing: AFM
-   ~20% (the pump's designed 3 ms/frame budget), kNN ~0.1%, ESN ~1%,
-   app ~10%.
+   analogue baseline) / ESN (reservoir + readout training) / MLP
+   (feedforward training + replay) / app (everything else in the frame
+   loop). Typical while drawing: AFM ~20% (the pump's designed
+   3 ms/frame budget), kNN ~0.1%, ESN ~1%, MLP ~1%, app ~10%.
    The resample step is clamped to [0.03, 0.05]: the floor keeps slow
    careful stencil-tracing from drowning the fit in ridge (tiny deltas)
    or blowing the fit window past one lap. Iterating the 1-step model
