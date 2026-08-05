@@ -104,7 +104,20 @@ the shipped commit carries the correct version.
    makes the hidden load lag and ring; amber `SoftSensor` caret vs a gray
    **auto-tuned lag-filter** caret — the realistic DIY baseline, best of a
    scored filter bank — with an on-stage error meter + ×-better readout, ~4×,
-   and a 3-trace Plotly chart), **③ finger-trace** (draw loops at ~20 Hz
+   and a 4-trace Plotly chart. Plus PREDICTIVE soft-sensing (finger-tab
+   payback): a violet hollow dashed "+1s" caret previews where the load
+   WILL be in 1 s — a direct h-ahead readout (library `rls`/`predict`
+   primitives, bias + 6-lag × stride-5 window over the sensor's own
+   conditioned signals, SS_PREV_H=100 samples) scored OUT-OF-SAMPLE:
+   each prediction is stored at make-time and judged when its target
+   arrives, before that pair trains. Baseline: **persistence** ("the load
+   stays put"), the standard honest forecasting reference — a ringing
+   load makes it genuinely bad. Rows: "Preview +1 s (NGRC)" /
+   "Persistence +1 s" / "Preview advantage"; chart trace "preview (made
+   1 s ago)" aligned at its target time. Measured: ~7-8× better than
+   persistence under the autonomous drive, honestly narrowing to ~2-3×
+   during unpredictable dragging — future INPUT is unknowable, the
+   dynamics still aren't), **③ finger-trace** (draw loops at ~20 Hz
    sampling; an optional **tracing guide** selector overlays one of 10 faint
    stencil shapes — circle/ellipse/square/triangle/hexagon/star/figure-8/
    heart/rose/lissajous — purely visual, never read by any model, default

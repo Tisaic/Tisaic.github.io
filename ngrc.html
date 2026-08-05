@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:67,built:"2026-08-05T20:05:15Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:68,built:"2026-08-05T20:10:59Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -101,7 +101,10 @@
       <span style="color:#7c8aa0"><b>auto-tuned lag filter</b></span> ("the load follows the motor with some
       lag") — we even tune its time constant for it. <span style="color:#f59e0b">Amber caret = NGRC</span> ·
       <span style="color:#7c8aa0">gray caret = filter</span> · block = the hidden truth. The caret glued to
-      the block is winning; the error meter keeps score.</p>
+      the block is winning; the error meter keeps score. And a
+      <span style="color:#a78bfa">violet hollow caret</span> is the <b>preview</b>: a direct 1&nbsp;s-ahead
+      readout predicting where the load <b>will</b> be — a virtual sensor that also sees the future, scored
+      against <b>persistence</b> ("it stays where it is"), the standard forecasting baseline.</p>
     <div class="stage" id="ss-stage" style="height:34vh"></div>
     <div class="controls">
       <button id="ss-kick">Kick it 👊</button>
@@ -113,6 +116,9 @@
       <dt>NGRC error (recent)</dt><dd id="ss-rmse" class="amber">—</dd>
       <dt>Tuned lag filter</dt><dd id="ss-naive">—</dd>
       <dt>NGRC advantage</dt><dd id="ss-adv" class="good">—</dd>
+      <dt title="direct 1 s-ahead readout on the sensor's own conditioned lag window — scored out-of-sample when the future arrives">Preview +1 s (NGRC)</dt><dd id="ss-prev" style="color:#a78bfa">—</dd>
+      <dt title="the load stays where it is — the standard honest forecasting baseline">Persistence +1 s</dt><dd id="ss-per">—</dd>
+      <dt>Preview advantage</dt><dd id="ss-prevadv" class="good">—</dd>
     </dl>
     <div class="plot" id="ss-plot"></div>
   </section>
@@ -572,7 +578,17 @@
     let x1, v1, x2, v2, ssT, ss, ssSamples, ssEN, ssEC, ssET, ssKick, ssTouchX, ssTouched;
     let ssFilt, ssFiltErr, ssTouchF, ssU, ssV1f1, ssV1f2, ssUf1, ssUf2;
     let ssShowTruth = true;
-    const ssPlotTrue = [], ssPlotEst = [], ssPlotNaive = [];
+    const ssPlotTrue = [], ssPlotEst = [], ssPlotNaive = [], ssPlotPrev = [];
+    // PREDICTIVE soft-sensing (finger-tab payback): a direct h-ahead readout —
+    // library rls/predict primitives on the sensor's own conditioned lag
+    // window — estimates where the hidden load will be 1 s from now. The
+    // honest forecasting baseline is persistence ("the load stays where it
+    // is"), which a ringing load makes genuinely hard to beat by accident.
+    // Predictions are scored OUT-OF-SAMPLE: each is stored at make-time and
+    // judged when its target arrives, before that pair is trained on.
+    const SS_PREV_H = 100;                           // 100 samples × dt 0.010 = 1.0 s of sim time
+    const SS_PREV_D = 19;                            // bias + 6 lags × stride 5 × 3 signals
+    let ssPrevTh, ssPrevP, ssRing, ssPrevPend, ssPrevTr, ssEP, ssEPer, ssPrevNow;
     const ssDrive = (t) => 5.5 * Math.sin(2 * Math.PI * 0.20 * t) + 2.2 * Math.sin(2 * Math.PI * 0.50 * t + 1) + 1.3 * Math.sin(2 * Math.PI * 0.95 * t + 2);
 
     function makeSS() {
@@ -583,7 +599,9 @@
       ssV1f1 = 0; ssV1f2 = 0; ssUf1 = 0; ssUf2 = 0;
       ssFilt = ALPHAS.map(() => 0);
       ssFiltErr = ALPHAS.map(() => 0);
-      ssPlotTrue.length = 0; ssPlotEst.length = 0; ssPlotNaive.length = 0;
+      ({ theta: ssPrevTh, P: ssPrevP } = rlsInit(SS_PREV_D, 10.0));
+      ssRing = []; ssPrevPend = []; ssPrevTr = 0; ssEP = 0; ssEPer = 0; ssPrevNow = null;
+      ssPlotTrue.length = 0; ssPlotEst.length = 0; ssPlotNaive.length = 0; ssPlotPrev.length = 0;
     }
     document.getElementById('ss-reset').addEventListener('click', makeSS);
     document.getElementById('ss-kick').addEventListener('click', () => { ssKick += 8; });
@@ -644,15 +662,39 @@
       else ss.adapt([x2]);
       if (ss.ready() && ss.frozen) est = ss.estimate()[0];
       ssSamples++;
+      // 1 s-ahead preview: predict-then-train on the same conditioned signals
+      let prevAligned = null;
+      if (ss.frozen) {
+        ssRing.push([x1, ssV1f2, ssUf2]);
+        if (ssRing.length > 32) ssRing.shift();
+        if (ssRing.length >= 26) {                   // full 6-lag × stride-5 window
+          const fv = [1];
+          for (let sg = 0; sg < 3; sg++) for (let L = 0; L < 6; L++) fv.push(ssRing[ssRing.length - 1 - 5 * L][sg]);
+          const f = new Block(SS_PREV_D, 1, fv);
+          ssPrevNow = ssPrevTr > 40 ? predict(f, ssPrevTh) : null;
+          ssPrevPend.push({ f, y: ssPrevNow, x2now: x2 });
+          if (ssPrevPend.length > SS_PREV_H) {
+            const q = ssPrevPend.shift();            // matured: its target is NOW
+            if (q.y != null) {
+              const eP = q.y - x2, ePer = q.x2now - x2;   // vs persistence from the same moment
+              ssEP = SS_DECAY * ssEP + (1 - SS_DECAY) * eP * eP;
+              ssEPer = SS_DECAY * ssEPer + (1 - SS_DECAY) * ePer * ePer;
+              prevAligned = q.y;
+            }
+            rls(ssPrevTh, ssPrevP, q.f, x2, 1.0, 0, false);
+            ssPrevTr++;
+          }
+        }
+      }
       if (est != null) {
         const eN = est - x2, eC = naive - x2;
         ssEN = SS_DECAY * ssEN + (1 - SS_DECAY) * eN * eN;
         ssEC = SS_DECAY * ssEC + (1 - SS_DECAY) * eC * eC;
         ssET = SS_DECAY * ssET + (1 - SS_DECAY) * (x2 * x2 + 1e-6);
-        ssPlotTrue.push(x2); ssPlotEst.push(est); ssPlotNaive.push(naive);
-        if (ssPlotTrue.length > 400) { ssPlotTrue.shift(); ssPlotEst.shift(); ssPlotNaive.shift(); }
+        ssPlotTrue.push(x2); ssPlotEst.push(est); ssPlotNaive.push(naive); ssPlotPrev.push(prevAligned);
+        if (ssPlotTrue.length > 400) { ssPlotTrue.shift(); ssPlotEst.shift(); ssPlotNaive.shift(); ssPlotPrev.shift(); }
       }
-      return { est, naive };
+      return { est, naive, prev: ssPrevNow };
     }
 
     function ssCaret(cx, y, up, color) {
@@ -712,6 +754,17 @@
           ssCtx.fillStyle = '#22c55e'; ssCtx.font = 'bold 15px sans-serif'; ssCtx.textAlign = 'right';
           ssCtx.fillText((eCr / eNr).toFixed(1) + '× better', ssW - 12, 60);
         }
+        // hollow dashed caret = where the load WILL be in 1 s (the preview)
+        if (out.prev != null) {
+          const pX = ssLoadRest + clamp(out.prev, -2, 2) * ssPx;
+          ssCtx.beginPath();
+          ssCtx.moveTo(pX, y - 6); ssCtx.lineTo(pX - 9, y - 22); ssCtx.lineTo(pX + 9, y - 22); ssCtx.closePath();
+          ssCtx.setLineDash([3, 3]);
+          ssCtx.strokeStyle = '#a78bfa'; ssCtx.lineWidth = 2; ssCtx.stroke();
+          ssCtx.setLineDash([]);
+          ssCtx.fillStyle = '#a78bfa'; ssCtx.font = '10px sans-serif'; ssCtx.textAlign = 'center';
+          ssCtx.fillText('+1s', pX, y - 28);
+        }
       }
       ssCtx.fillStyle = '#94a3b8'; ssCtx.font = '11px sans-serif'; ssCtx.textAlign = 'center';
       ssCtx.fillText('motor — drag me', clamp(mx, 50, ssW - 50), y + 44);
@@ -734,6 +787,7 @@
         { y: ssPlotTrue.slice(-160), name: 'true load', line: { color: '#e2e8f0', width: 2 }, mode: 'lines' },
         { y: ssPlotEst.slice(-160), name: 'NGRC', line: { color: '#f59e0b', width: 2 }, mode: 'lines' },
         { y: ssPlotNaive.slice(-160), name: 'lag filter', line: { color: '#7c8aa0', width: 1.5, dash: 'dot' }, mode: 'lines' },
+        { y: ssPlotPrev.slice(-160), name: 'preview (made 1 s ago)', line: { color: '#a78bfa', width: 1.5, dash: 'dash' }, mode: 'lines' },
       ];
       if (!ssPlotInited) { Plotly.newPlot('ss-plot', data, layout, { displayModeBar: false, responsive: true }); ssPlotInited = true; }
       else Plotly.react('ss-plot', data, layout, { displayModeBar: false, responsive: true });
@@ -749,6 +803,9 @@
       document.getElementById('ss-rmse').textContent = ssET > 0 ? Math.sqrt(ssEN / ssET).toFixed(4) : '—';
       document.getElementById('ss-naive').textContent = ssET > 0 ? Math.sqrt(ssEC / ssET).toFixed(4) : '—';
       document.getElementById('ss-adv').textContent = (ssEN > 0 && ssEC > 0) ? (Math.sqrt(ssEC / ssEN)).toFixed(1) + '× better' : '—';
+      document.getElementById('ss-prev').textContent = (ssET > 0 && ssEP > 0) ? Math.sqrt(ssEP / ssET).toFixed(4) : '—';
+      document.getElementById('ss-per').textContent = (ssET > 0 && ssEPer > 0) ? Math.sqrt(ssEPer / ssET).toFixed(4) : '—';
+      document.getElementById('ss-prevadv').textContent = (ssEP > 0 && ssEPer > 0) ? (Math.sqrt(ssEPer / ssEP)).toFixed(1) + '× better' : '—';
       if (++ssPlotTick % 8 === 0) ssUpdatePlot();
       requestAnimationFrame(ssTick);
     }
