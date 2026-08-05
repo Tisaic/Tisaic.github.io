@@ -100,7 +100,11 @@ the shipped commit carries the correct version.
    method of analogues: ONE COHERENT tracked match — nearest past
    (position, stored-EMA-velocity) moment of the multi-stroke log, advanced
    in lockstep each sample, re-locked only on 3× hysteresis or running out
-   of displayed future — serves the whole rung ladder: pred(h) =
+   of displayed future, with BEST-EFFORT eligibility (require the
+   displayed horizon of recorded future when the memory has it, else as
+   much as the memory allows — a short memory at a long slider setting
+   used to leave no eligible match and the gray ghost collapsed to the
+   straight-line fallback ray) — serves the whole rung ladder: pred(h) =
    past[j+h] + (now − past[j])·0.88^h — the current match offset DECAYS
    onto the replayed path with the SAME schedule the NGRC path ghost
    uses (carrying it undamped to every horizon hurt the analogue at

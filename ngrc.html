@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:63,built:"2026-08-05T15:43:47Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:64,built:"2026-08-05T17:55:26Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -1703,7 +1703,12 @@
       {
         const tKnn = performance.now();
         const H = fgAbs, n = H.length;
-        const Hneed = HLAD[fgHzIdx];                 // a lock must cover the displayed ladder
+        // BEST-EFFORT eligibility: require the displayed horizon of recorded
+        // future when the memory has it, else as much as the memory allows.
+        // A short memory at a long slider setting used to leave NO eligible
+        // match and the gray ghost collapsed to the straight-line fallback
+        // ray (per-rung fb still limits scoring to real analogue rungs).
+        const Hneed = Math.min(HLAD[fgHzIdx], Math.max(HLAD[0], n - 4));
         const dOf = (j) => {
           const pj = H[j];
           if (!pj) return Infinity;
