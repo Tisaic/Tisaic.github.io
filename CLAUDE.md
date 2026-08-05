@@ -99,7 +99,11 @@ the shipped commit carries the correct version.
    crossings per model and the Plotly trace follows every series in both
    modes. Measured at the gate: 1-step errors 0.0067 / 0.0079 / 0.044 /
    0.0064 (NGRC/ESN/MLP/ARX) — then dream wing crossings 9/0/0/0, the
-   whole point of the tab in one row),
+   whole point of the tab in one row. A **Speed slider (0.05–1×)** scales
+   sim steps per frame via a fractional accumulator (0.05× really is 20×
+   slower); drop it right at the Dream switch to watch the crossover in
+   slow motion — every model tracks reality for a while, then diverges
+   at its own pace. Survives Reset; verified 231→24 steps/s at 0.10×),
    **② soft-sensor** (drag/kick the blue motor; a soft lightly-damped coupling
    makes the hidden load lag and ring; amber `SoftSensor` caret vs a gray
    **auto-tuned lag-filter** caret — the realistic DIY baseline, best of a
@@ -114,7 +118,11 @@ the shipped commit carries the correct version.
    stays put"), the standard honest forecasting reference — a ringing
    load makes it genuinely bad. Rows: "Preview +1 s (NGRC)" /
    "Persistence +1 s" / "Preview advantage"; chart trace "preview (made
-   1 s ago)" aligned at its target time. Measured: ~7-8× better than
+   1 s ago)" aligned at its target time. ON-STAGE VERIFICATION: a solid
+   violet "made 1s ago" caret (upper row, drop-line to truth) is the
+   matured prediction landing NOW — glued to the block = the preview
+   came true — plus preview/persistence meter bars in the same visual
+   language as the sensor pair, with their own ×-better readout. Measured: ~7-8× better than
    persistence under the autonomous drive, honestly narrowing to ~2-3×
    during unpredictable dragging — future INPUT is unknowable, the
    dynamics still aren't), **③ finger-trace** (draw loops at ~20 Hz
