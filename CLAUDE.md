@@ -121,9 +121,14 @@ the shipped commit carries the correct version.
    scale 0.3 — tuned offline, response flat around this — driven by the
    SAME 4-var state stream; per rung a [1, state, reservoir] readout
    trains online by shared-P RLS λ=0.9995 on the same direct targets.
-   ESN rows: its own miss + a pairwise "NGRC vs ESN" ratio gated on
-   rungs where the readout was warm (>40 trainings) AND the ghost was
-   displayed; cyan ghost capped at warm rungs ≤ ~1.2 s like every
+   ESN rows: its own miss + a "NGRC vs ESN" ratio that is LIKE-FOR-LIKE
+   — the library's raw DIRECT readout vs the ESN (same inputs, targets,
+   RLS; only features differ), gated only on the ESN readout being warm
+   (>40 trainings). The SHOWN ghost is deliberately NOT the ESN's
+   opponent: once locked it is the phase-domain pipeline whose
+   structural prior ("this is a loop") the ESN was never given — that
+   pipeline fairly races the kNN ("Ghost vs kNN" row: both exploit
+   repetition), and the row tooltips state the attribution; cyan ghost capped at warm rungs ≤ ~1.2 s like every
    point-forecast family; ESN trace in the chart; its own CPU bucket
    (~1% of a core); freeze halts its training; Reset re-inits it.
    During **Autopilot the rivals race live**: the kNN replays its

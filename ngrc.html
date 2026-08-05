@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:58,built:"2026-08-05T13:02:56Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:59,built:"2026-08-05T13:24:45Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -162,8 +162,8 @@
       <dt>NGRC 1-step rolled</dt><dd id="fg-iter">—</dd>
       <dt>Analogue k-NN path miss</dt><dd id="fg-naive">—</dd>
       <dt>ESN (reservoir NN) miss</dt><dd id="fg-esn">—</dd>
-      <dt>NGRC advantage</dt><dd id="fg-skill" class="good">—</dd>
-      <dt>NGRC vs ESN</dt><dd id="fg-esnadv" class="good">—</dd>
+      <dt title="the SHOWN ghost (path-locked once shape-locked) vs the analogue — a systems race: both exploit repetition">Ghost vs kNN</dt><dd id="fg-skill" class="good">—</dd>
+      <dt title="the library's raw direct readout vs the ESN — like-for-like: same inputs, targets, training; only the features differ">NGRC vs ESN</dt><dd id="fg-esnadv" class="good">—</dd>
       <dt id="fg-op-label">On-path miss</dt><dd id="fg-op">—</dd>
       <dt>On-path advantage</dt><dd id="fg-opadv" class="good">—</dd>
       <dt>Autopilot brain</dt><dd id="fg-ap">—</dd>
@@ -1965,9 +1965,13 @@
             fgEC[k] = FG_DECAY * fgEC[k] + (1 - FG_DECAY) * dc;
             fgHHn[k] = FG_DECAY * fgHHn[k] + (1 - FG_DECAY) * dw;
           }
-          // ESN pairing: scored only when its rung readout was warm at
-          // prediction time, against the shown ghost on the same instances
-          if (q.e && q.e.live[k] && k <= q.gm) {
+          // ESN pairing — LIKE-FOR-LIKE: the ESN's honest opponent is the
+          // library's DIRECT readout (same inputs, same targets, same RLS —
+          // only the features differ), NOT the shown ghost: once locked, the
+          // shown ghost is the phase-domain pipeline whose structural prior
+          // ("this is a loop") the ESN was never given. Gated only on the
+          // ESN's rung readout being warm at prediction time.
+          if (q.e && q.e.live[k]) {
             const ex = q.e[0][k], ey = q.e[1][k];
             let de = Infinity;
             for (let j = j0; j <= j1; j++) {
@@ -1975,7 +1979,7 @@
               const t8 = (ex - s[0]) ** 2 + (ey - s[1]) ** 2; if (t8 < de) de = t8;
             }
             fgEEn[k] = FG_DECAY * fgEEn[k] + (1 - FG_DECAY) * de;
-            fgHHe[k] = FG_DECAY * fgHHe[k] + (1 - FG_DECAY) * dw;
+            fgHHe[k] = FG_DECAY * fgHHe[k] + (1 - FG_DECAY) * dn;
           }
           // ON-PATH miss (untimed): distance from the prediction to ANY point
           // of the stroke actually drawn over the horizon — "did it land on
