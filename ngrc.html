@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:80,built:"2026-08-06T04:11:40Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:81,built:"2026-08-06T11:22:41Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -61,7 +61,10 @@
 
   <!-- ================= Tab 1: Lorenz — NGRC vs linear ARX ================= -->
   <section class="panel on" id="p-lorenz">
-    <p class="lead">Four models learn a <b>Lorenz attractor</b> from the same live data:
+    <p class="lead">Four models learn a <b>chaotic system</b> from the same live data — pick it with the
+      <b>system selector</b>: Lorenz-63, Rössler, driven Duffing, a double pendulum, Lorenz-96, a
+      Kuramoto–Sivashinsky Galerkin truncation, or Mackey–Glass (each with its own <b>numerically measured
+      λ</b>, so the Lyapunov clocks stay honest per system):
       <span style="color:#f59e0b"><b>NGRC</b></span> vs an
       <span style="color:#22d3ee"><b>ESN</b></span> (echo state network — the reservoir NG-RC was designed
       to replace; this head-to-head <i>on Lorenz</i> is the canonical comparison of the NG-RC literature), an
@@ -81,6 +84,15 @@
       <button id="lz-dream">Dream: NGRC vs rivals 🌀</button>
       <button id="lz-reset" class="sec">Reset</button>
       <button id="lz-view" class="sec" style="flex:0 0 auto;min-width:88px">⟲ view</button>
+      <select id="lz-sys" title="chaotic system — λ measured numerically for each exact parameter set, so the Lyapunov clocks stay honest per system (switching resets)">
+        <option value="lorenz" selected>system: Lorenz-63</option>
+        <option value="rossler">system: Rössler</option>
+        <option value="duffing">system: Duffing (driven)</option>
+        <option value="dpend">system: double pendulum</option>
+        <option value="l96">system: Lorenz-96 (N=5)</option>
+        <option value="ks">system: Kuramoto–Sivashinsky (Galerkin)</option>
+        <option value="mg">system: Mackey–Glass (τ=17)</option>
+      </select>
       <button id="lz-train">Start training ▶</button>
       <label class="slider" style="flex:0 0 auto; gap:6px;" title="when checked, Dream starts automatically the moment the training window is reached"><input id="lz-autodream" type="checkbox" /> auto-dream</label>
       <div class="slider" title="training window: how many TRAINED samples before auto-dream fires (log scale; 0 = dream immediately). Counts only samples actually trained — idle and washout don't count">Training window
@@ -91,16 +103,12 @@
         <input id="lz-speed" type="range" min="0.05" max="1" step="0.05" value="1" />
         <span id="lz-speedv">1.00×</span>
       </div>
-      <div class="slider">InitVariance (stability)
-        <input id="lz-iv" type="range" min="-1" max="3" step="0.1" value="2" />
-        <span id="lz-ivv">100.0</span>
-      </div>
     </div>
     <dl class="stat">
       <dt>Mode</dt><dd id="lz-mode">learning from real data</dd>
       <dt>Samples</dt><dd id="lz-n">0</dd>
       <dt title="samples the models actually trained on (idle/washout/re-entry excluded), also in Lyapunov times (1 Λ ≈ 55 steps at dt=0.02)">Trained</dt><dd id="lz-tr">0 · 0.0 Λ</dd>
-      <dt title="the sim advances 4 steps per display frame × Speed slider — frame-rate coupled, NOT a fixed cycle: ~240 steps/s on a 60 Hz display, ~480 on 120 Hz. Each step = dt 0.02 model time; the math is per-sample, so refresh rate changes wall speed only, never results">Sim rate</dt><dd id="lz-rate">—</dd>
+      <dt title="the sim advances a per-system number of steps per display frame × Speed slider — frame-rate coupled, NOT a fixed cycle (~240 steps/s on a 60 Hz display for most systems). Each step = one sample at the selected system's dt; the math is per-sample, so refresh rate changes wall speed only, never results">Sim rate</dt><dd id="lz-rate">—</dd>
       <dt>Warm</dt><dd id="lz-warm" class="warn">no</dd>
       <dt>NGRC 1-step error</dt><dd id="lz-rmse" class="amber">—</dd>
       <dt>ESN 1-step error</dt><dd id="lz-esn">—</dd>
@@ -237,17 +245,22 @@
     }));
 
     // =====================================================================
-    // Tab 1: Lorenz — NGRC vs linear ARX; reality keeps running during dream
+    // Tab 1: chaotic systems — NGRC vs rivals; reality keeps running during
+    // dream. A SYSTEM REGISTRY parameterizes everything: dynamics, dt,
+    // MEASURED λ_max (Benettin, per exact parameter set — validated on
+    // Lorenz 0.913 vs known 0.906; Rössler lands on the literature's
+    // 0.071), model dims/lags/stride, normalization (off/div → u-space),
+    // clamps, 3D projection, and steps-per-frame. The valid-time metric
+    // runs in u-space (scale-free across systems) and its phase window /
+    // sustain scale with each system's Λ.
     // =====================================================================
-    const SIGMA = 10, RHO = 28, BETA = 8 / 3, DT = 0.02;
     // MANUAL TRAINING LIFECYCLE: the attractor runs fully dynamic while the
     // models watch predict-only (normalization calibrates on real attractor
     // data during idle); "Start training ▶" opens the window, the Training
-    // window slider (log 0–20000, default 1800; measured knee ≈ 800 — full
-    // Λ performance from ~550 trained samples, flat to 20000) sets the
-    // auto-dream target, and with auto-dream checked the Dream starts
-    // itself the moment the window is reached. lzTrainedN counts ONLY
-    // samples actually trained — idle, washout, and re-entry don't count.
+    // window slider (log 0–20000, default 1800) sets the auto-dream
+    // target, and with auto-dream checked the Dream starts itself the
+    // moment the window is reached. lzTrainedN counts ONLY samples
+    // actually trained — idle, washout, and re-entry don't count.
     let lzGate = 1800, lzTraining = false, lzTrainedN = 0, lzTrainBeforeDream = false;
     let lzRateN = 0, lzRateT0 = 0;                   // measured sim rate (frame-rate coupled)
     const lzWarmN = (v) => {
@@ -257,14 +270,128 @@
       else if (n >= 100) n = Math.round(n / 10) * 10;
       return n;
     };
-    const lorenzDeriv = (p) => [SIGMA * (p[1] - p[0]), p[0] * (RHO - p[2]) - p[1], p[0] * p[1] - BETA * p[2]];
-    function rk4(s) {
-      const k1 = lorenzDeriv(s);
-      const k2 = lorenzDeriv(s.map((v, i) => v + 0.5 * DT * k1[i]));
-      const k3 = lorenzDeriv(s.map((v, i) => v + 0.5 * DT * k2[i]));
-      const k4 = lorenzDeriv(s.map((v, i) => v + DT * k3[i]));
-      return s.map((v, i) => v + DT / 6 * (k1[i] + 2 * k2[i] + 2 * k3[i] + k4[i]));
-    }
+    const mkRk4 = (f, dt) => (s) => {
+      const k1 = f(s);
+      const k2 = f(s.map((v, i) => v + 0.5 * dt * k1[i]));
+      const k3 = f(s.map((v, i) => v + 0.5 * dt * k2[i]));
+      const k4 = f(s.map((v, i) => v + dt * k3[i]));
+      return s.map((v, i) => v + dt / 6 * (k1[i] + 2 * k2[i] + 2 * k3[i] + k4[i]));
+    };
+    const LZ_SYSTEMS = (() => {
+      const out = {};
+      { // Lorenz-63 (σ10 ρ28 β8/3)
+        const st = mkRk4((p) => [10 * (p[1] - p[0]), p[0] * (28 - p[2]) - p[1], p[0] * p[1] - 8 / 3 * p[2]], 0.02);
+        out.lorenz = { label: 'Lorenz-63', dim: 3, dt: 0.02, lyap: 0.9133, lags: 2, stride: 1, spf: 4, transient: 0,
+          off: [0, 0, 25], div: [20, 20, 25], clampMin: [-25, -32, 0], clampMax: [25, 32, 55],
+          init: () => [1, 1, 1], step: st,
+          proj: (s) => [s[0] * 0.16, (s[2] - 25) * 0.16, s[1] * 0.16] };
+      }
+      { // Rössler (a .2 b .2 c 5.7)
+        const st = mkRk4((p) => [-p[1] - p[2], p[0] + 0.2 * p[1], 0.2 + p[2] * (p[0] - 5.7)], 0.1);
+        out.rossler = { label: 'Rössler', dim: 3, dt: 0.1, lyap: 0.0705, lags: 2, stride: 1, spf: 4, transient: 2000, poly: 3,   // measured: p3 5.5 Λ vs p2 2.9
+          off: [0, 0, 5], div: [8, 8, 8], clampMin: [-14, -15, -1], clampMax: [16, 12, 30],
+          init: () => [1, 1, 0], step: st,
+          proj: (s) => [s[0] * 0.22, (s[2] - 6) * 0.16, s[1] * 0.22] };
+      }
+      { // Duffing (δ .3 γ .5 ω 1.2) — drive embedded as [cosφ, sinφ] state
+        const OM = 1.2;
+        const st = mkRk4((p) => [p[1], -0.3 * p[1] + p[0] - p[0] ** 3 + 0.5 * p[2], -OM * p[3], OM * p[2]], 0.05);
+        out.duffing = { label: 'Duffing', dim: 4, dt: 0.05, lyap: 0.1117, lags: 2, stride: 1, spf: 4, transient: 2000, poly: 3, delta: true,   // cubic force needs poly 3, slow dynamics need delta targets: 0.06 → 3.7 Λ measured
+          off: [0, 0, 0, 0], div: [1.2, 1, 1, 1], clampMin: [-2.2, -1.6, -1.2, -1.2], clampMax: [2.2, 1.6, 1.2, 1.2],
+          init: () => [0.5, 0, 1, 0],
+          step: (s) => { const n = st(s); const r = Math.hypot(n[2], n[3]) || 1; n[2] /= r; n[3] /= r; return n; },
+          proj: (s) => [s[0] * 1.8, s[1] * 1.8, s[2] * 1.5] };
+      }
+      { // double pendulum (m=l=1, g 9.81, θ=2.0 start) — visible [c1,s1,ω1,c2,s2,ω2]
+        const G2 = 9.81;
+        const fq = (p) => {
+          const d = p[0] - p[2];
+          const den = 3 - Math.cos(2 * d);
+          const a1 = (-G2 * 3 * Math.sin(p[0]) - G2 * Math.sin(p[0] - 2 * p[2]) - 2 * Math.sin(d) * (p[3] * p[3] + p[1] * p[1] * Math.cos(d))) / den;
+          const a2 = (2 * Math.sin(d) * (2 * p[1] * p[1] + 2 * G2 * Math.cos(p[0]) + p[3] * p[3] * Math.cos(d))) / den;
+          return [p[1], a1, p[3], a2];
+        };
+        const stQ = mkRk4(fq, 0.005);
+        let q = [2.0, 0, 2.0, 0];
+        const emit = () => [Math.cos(q[0]), Math.sin(q[0]), q[1], Math.cos(q[2]), Math.sin(q[2]), q[3]];
+        out.dpend = { label: 'double pendulum', dim: 6, dt: 0.01, lyap: 1.4221, lags: 2, stride: 1, spf: 4, transient: 0,
+          off: [0, 0, 0, 0, 0, 0], div: [1, 1, 8, 1, 1, 10],
+          clampMin: [-1.15, -1.15, -13, -1.15, -1.15, -18], clampMax: [1.15, 1.15, 13, 1.15, 1.15, 18],
+          init: () => { q = [2.0, 0, 2.0, 0]; return emit(); },
+          step: () => { q = stQ(stQ(q)); return emit(); },
+          proj: (s) => [(s[1] + s[4]) * 1.4, -(s[0] + s[3]) * 1.4, s[2] * 0.22] };
+      }
+      { // Lorenz-96 (N=5, F=8)
+        const N5 = 5, F5 = 8;
+        const st = mkRk4((p) => p.map((_, i) => (p[(i + 1) % N5] - p[(i + 3) % N5]) * p[(i + 4) % N5] - p[i] + F5), 0.05);
+        out.l96 = { label: 'Lorenz-96 (N=5)', dim: 5, dt: 0.05, lyap: 0.4394, lags: 2, stride: 1, spf: 4, transient: 1000, delta: true,   // measured: delta 3.1 Λ vs abs 2.4
+          off: [2.3, 2.3, 2.3, 2.3, 2.3], div: [6, 6, 6, 6, 6],
+          clampMin: new Array(5).fill(-9), clampMax: new Array(5).fill(13),
+          init: () => [F5 + 0.01, F5, F5 + 0.02, F5, F5 + 0.03], step: st,
+          proj: (s) => [(s[0] - 2.3) * 0.35, (s[2] - 2.3) * 0.35, (s[1] - 2.3) * 0.35] };
+      }
+      { // Kuramoto–Sivashinsky, 5-mode Galerkin at L=22 (10 real vars);
+        // L=18 collapses to a fixed point, L≥26 is under-resolved at 5
+        // modes — 22 is the honest chaotic truncation (λ measured 0.050)
+        const M5 = 5, LKS = 22;
+        const kk = Array.from({ length: M5 }, (_, i) => 2 * Math.PI * (i + 1) / LKS);
+        const lin = kk.map((x) => x * x - x ** 4);
+        const fks = (s) => {
+          const re = (n) => s[2 * n], im = (n) => s[2 * n + 1];
+          const o = new Array(2 * M5).fill(0);
+          for (let n = 0; n < M5; n++) {
+            let cr = 0, ci = 0, dr = 0, di = 0;
+            for (let p = 0; p < M5; p++) {
+              const q1 = n - p - 1;
+              if (q1 >= 0 && q1 < M5) { cr += re(p) * re(q1) - im(p) * im(q1); ci += re(p) * im(q1) + im(p) * re(q1); }
+              const q2 = n + p + 1;
+              if (q2 >= 0 && q2 < M5) { dr += re(p) * re(q2) + im(p) * im(q2); di += re(p) * im(q2) - im(p) * re(q2); }
+            }
+            const cR = 0.5 * cr + dr, cI = 0.5 * ci + di;
+            o[2 * n] = lin[n] * re(n) + kk[n] * cI;
+            o[2 * n + 1] = lin[n] * im(n) - kk[n] * cR;
+          }
+          return o;
+        };
+        const st1 = mkRk4(fks, 0.05);
+        out.ks = { label: 'KS (Galerkin, L=22)', dim: 10, dt: 0.1, lyap: 0.0500, lags: 2, stride: 1, spf: 2, transient: 5000, delta: true,   // measured: delta 2.1 Λ vs abs 1.4
+          off: new Array(10).fill(0), div: [0.5, 0.5, 0.9, 0.9, 0.9, 0.9, 0.65, 0.65, 0.35, 0.35],
+          clampMin: [-0.7, -0.7, -1.3, -1.3, -1.3, -1.3, -1, -1, -0.6, -0.6],
+          clampMax: [0.7, 0.7, 1.3, 1.3, 1.3, 1.3, 1, 1, 0.6, 0.6],
+          init: () => Array.from({ length: 10 }, (_, i) => 0.1 + 0.02 * i),
+          step: (s) => st1(st1(s)),
+          proj: (s) => [s[0] * 5, s[2] * 2.8, s[1] * 5] };
+      }
+      { // Mackey–Glass (β .2 γ .1 n 10 τ 17) — DDE; visible x(t), sample Δ=1
+        const TAU = 170;
+        let buf = null;
+        const dv = (x, xd) => 0.2 * xd / (1 + xd ** 10) - 0.1 * x;
+        const inner = () => {
+          const x = buf[buf.length - 1];
+          const xd0 = buf[buf.length - 1 - TAU], xd1 = buf[buf.length - TAU], xdH = 0.5 * (xd0 + xd1);
+          const k1 = dv(x, xd0), k2 = dv(x + 0.05 * k1, xdH), k3 = dv(x + 0.05 * k2, xdH), k4 = dv(x + 0.1 * k3, xd1);
+          buf.shift();
+          buf.push(x + 0.1 / 6 * (k1 + 2 * k2 + 2 * k3 + k4));
+        };
+        out.mg = { label: 'Mackey–Glass', dim: 1, dt: 1.0, lyap: 0.0051, lags: 4, stride: 6, spf: 4, transient: 2000,
+          off: [0.9], div: [0.35], clampMin: [0.1], clampMax: [1.7],
+          init: () => { buf = Array.from({ length: TAU + 1 }, (_, i) => 1.1 + 0.05 * Math.sin(i / 20)); return [buf[buf.length - 1]]; },
+          step: () => { for (let j = 0; j < 10; j++) inner(); return [buf[buf.length - 1]]; },
+          // display: classic delay embedding [x(t), x(t−12), x(t−6)] — each
+          // line owns a ring so the dream embeds its own trajectory
+          proj: (s, ring) => {
+            ring.push(s[0]);
+            if (ring.length > 16) ring.shift();
+            if (ring.length < 13) return null;
+            const n = ring.length - 1;
+            return [(ring[n] - 0.9) * 4, (ring[n - 12] - 0.9) * 4, (ring[n - 6] - 0.9) * 4];
+          } };
+      }
+      return out;
+    })();
+    let lzSys = LZ_SYSTEMS.lorenz;
+    const lzU = (s) => s.map((v, i) => (v - lzSys.off[i]) / lzSys.div[i]);
+    const lzDeU = (u) => u.map((v, i) => v * lzSys.div[i] + lzSys.off[i]);
 
     const stage = document.getElementById('lz-stage');
     const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -294,14 +421,17 @@
     const rivalLine = makeLine(0xf87171);   // red: linear ARX free-run
     const esnLine = makeLine(0x22d3ee);     // cyan: ESN free-run
     const mlpLine = makeLine(0xf472b6);     // magenta: MLP free-run
-    function pushPoint(line, p) {
+    function pushPoint(line, s) {                    // per-system projection; each line owns a proj ring (MG delay-embeds)
+      if (!line.projRing) line.projRing = [];
+      const p = lzSys.proj(s, line.projRing);
+      if (!p) return;
       const i = line.count % MAXPTS;
-      line.arr[i * 3] = p[0] * SC; line.arr[i * 3 + 1] = (p[2] - ZC) * SC; line.arr[i * 3 + 2] = p[1] * SC;
+      line.arr[i * 3] = p[0]; line.arr[i * 3 + 1] = p[1]; line.arr[i * 3 + 2] = p[2];
       line.count++;
       line.geometry.setDrawRange(0, Math.min(line.count, MAXPTS));
       line.geometry.attributes.position.needsUpdate = true;
     }
-    function clearLine(line) { line.count = 0; line.geometry.setDrawRange(0, 0); }
+    function clearLine(line) { line.count = 0; line.projRing = []; line.geometry.setDrawRange(0, 0); }
 
     function resizeLorenz() {
       const w = stage.clientWidth, h = stage.clientHeight;
@@ -366,20 +496,25 @@
     // normalized state and free-run in Dream like the others.
     let lzEsn = null, lzMlp = null, lzEsnXSave = null;
     let eE2, eM2, lastPredE, lastPredM;
-    let esnDreamU = null, mlpDreamU = null, mlpDreamUp = null;
+    let esnDreamU = null, mlpDreamTaps = null, lzMlpTaps = [];
     let esnXs = [], mlpXs = [];
-    const lzU = (s) => [s[0] / 20, s[1] / 20, (s[2] - 25) / 25];
-    const lzDeU = (u) => [u[0] * 20, u[1] * 20, u[2] * 25 + 25];
+    // MLP features = the SAME lag/stride taps NGRC uses (dim × lags window)
+    const lzMlpSpan = () => (lzSys.lags - 1) * lzSys.stride + 1;
+    const lzMlpFeat = (taps) => {
+      const n = taps.length - 1, f = [];
+      for (let L2 = 0; L2 < lzSys.lags; L2++) { const t2 = taps[n - L2 * lzSys.stride]; for (const v of t2) f.push(v); }
+      return f;
+    };
     // VALID-TIME metric: on the Dream crossover every free-run starts from
     // reality's exact state; it stays "valid" until its error vs the reality
     // it can no longer see exceeds 0.4× the attractor's fluctuation scale
-    // (the literature's threshold convention), reported in LYAPUNOV TIMES
-    // (λ≈0.906 for σ=10 ρ=28 β=8/3 → 1 Λ ≈ 1.10 time units ≈ 55 steps at
-    // dt=0.02). Counted in sim steps, so the Speed slider doesn't skew it.
-    // The fluctuation scale (per-component mean + total variance) is tracked
-    // online from the real data, not hardcoded.
-    const LZ_LYAP_STEPS = 1 / (0.9056 * DT);
-    let lzMu = [0, 0, 25], lzVar2 = 200, lzDreamSteps = 0, lzVal = null;
+    // (the literature's threshold convention), reported in LYAPUNOV TIMES —
+    // per system, using each system's MEASURED λ and dt. Counted in sim
+    // steps, so the Speed slider doesn't skew it. The fluctuation scale
+    // (per-component mean + total variance) is tracked online, and the
+    // phase window / sustain lengths scale with each system's Λ.
+    let LZ_LYAP_STEPS = 1 / (0.9133 * 0.02), lzW = 5, lzSus = 14;
+    let lzMu = [0, 0, 25], lzVar2 = 200, lzVar0 = 60, lzDreamSteps = 0, lzVal = null;
     let lzValBest = -1;                              // best NGRC valid time across dreams (crossovers vary ~0.5–8 Λ)
     // PHASE-TOLERANT, SUSTAINED validity (user-verified: the strict
     // instantaneous first-crossing froze the clock while the dream was
@@ -406,7 +541,7 @@
     // it (1.48 Λ). Same washout class as LZ_WASH — the lag history must
     // re-fill with consecutive real samples before training resumes.
     let lzRewash = 0;
-    function lzEsnInit() {                           // same recipe as the finger tab's, 3 inputs
+    function lzEsnInit(nIn) {                        // same recipe as the finger tab's, nIn inputs
       let sd = 0xE5E1;
       const rnd = () => { sd |= 0; sd = (sd + 0x6D2B79F5) | 0; let t = Math.imul(sd ^ (sd >>> 15), 1 | sd); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
       const gs = () => { let u = rnd(); if (u < 1e-12) u = 1e-12; return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rnd()); };
@@ -421,25 +556,25 @@
         if (it === 29) for (const row of W) for (const e of row) e[1] *= rho / nrm * (Math.hypot(...v) || 1);
         v = nv.map((x) => x / nrm);
       }
-      const Win = new Array(N).fill(0).map(() => [0, 1, 2].map(() => 0.3 * gs()));
+      const Win = new Array(N).fill(0).map(() => Array.from({ length: nIn }, () => 0.3 * gs()));
       const b = new Array(N).fill(0).map(() => 0.1 * gs());
-      const d = 1 + 3 + N;
+      const d = 1 + nIn + N;
       const P = [];
       for (let i = 0; i < d; i++) { const r = new Array(d).fill(0); r[i] = 1.0; P.push(r); }
-      const TH = [[], [], []].map(() => new Array(d).fill(0));
+      const TH = Array.from({ length: nIn }, () => new Array(d).fill(0));
       return { N, W, Win, b, leak: 0.3, lam: 0.9995, x: new Array(N).fill(0), one: { P, TH }, prevF: null, tr: 0 };
     }
+    // generic oscillation counter (the Lorenz "wing crossings" generalized):
+    // alternations across mean ± 0.55σ of variable 0, thresholds tracked live
     function wingCrossings(xs) {
+      const hi = lzMu[0] + 0.55 * Math.sqrt(lzVar0), lo = lzMu[0] - 0.55 * Math.sqrt(lzVar0);
       let sw = 0, lobe = 0;
       for (const x of xs) {
-        if (x > 4 && lobe <= 0) { if (lobe < 0) sw++; lobe = 1; }
-        else if (x < -4 && lobe >= 0) { if (lobe > 0) sw++; lobe = -1; }
+        if (x > hi && lobe <= 0) { if (lobe < 0) sw++; lobe = 1; }
+        else if (x < lo && lobe >= 0) { if (lobe > 0) sw++; lobe = -1; }
       }
       return sw;
     }
-    const ivSlider = document.getElementById('lz-iv');
-    const ivVal = document.getElementById('lz-ivv');
-    const initVarFromSlider = () => Math.pow(10, parseFloat(ivSlider.value));
     // speed: scales how many sim steps run per frame (fractional steps
     // accumulate, so 0.05× really is 20× slower, not "rounds to zero").
     // Slowing it right at the Dream switch shows the crossover: how long
@@ -452,32 +587,31 @@
     });
 
     function makeModel() {
-      const iv = initVarFromSlider();
-      // Config from the offline JOINT sweep (valid time AND long-run wing
-      // crossings, 8 crossover anchors each). The decisive fix is the
-      // WASHOUT (below): training used to start while autoNormalize's
-      // stats were still settling, so the first ~250 RLS equations were
-      // written in shifting coordinates and — at lam=1.0 — stayed in the
-      // exact solution forever. Feeding the calibration window
-      // predict-only quadruples the dream's valid time (0.78 → 3.1 Λ,
-      // wings ≈ reality's rate at every anchor) and makes the ridge
-      // response flat over 5 decades. Rejected with data: poly 3 (kills
-      // the butterfly), more lags, delta targets, decimated dt,
-      // forgetting, training-noise dither (helped pre-washout, hurts
-      // post), and direct-horizon rungs at the crossover (0.25 Λ vs
-      // iterating). Attractor clamps guard the rollout.
-      const lzCl = { useClamp: true, clampMin: [-25, -32, 0], clampMax: [25, 32, 55] };
-      model = new Continuous(3, 2, 2, true, { predictionSteps: 1, lam: 1.0, initVariance: iv, autoNormalize: true, calibSamples: LZ_WASH, ...lzCl });
-      rival = new Continuous(3, 2, 1, true, { predictionSteps: 1, lam: 1.0, initVariance: iv, autoNormalize: true, calibSamples: LZ_WASH, ...lzCl });
+      const sys = lzSys;
+      // NGRC poly-2 with washout (see LZ_WASH note) — iv fixed at 100 (the
+      // washout regime's ridge response is flat over 5 decades, measured).
+      // Rejected with data on Lorenz: poly 3 (spurious attractors kill the
+      // oscillation), more lags, delta targets, decimated dt, forgetting,
+      // training-noise dither, direct-horizon rungs at the crossover.
+      const lzCl = { useClamp: true, clampMin: sys.clampMin, clampMax: sys.clampMax };
+      model = new Continuous(sys.dim, sys.lags, sys.poly || 2, true, { predictionSteps: 1, stride: sys.stride, lam: 1.0, initVariance: 100, autoNormalize: true, calibSamples: LZ_WASH, useDelta: !!sys.delta, ...lzCl });
+      rival = new Continuous(sys.dim, sys.lags, 1, true, { predictionSteps: 1, stride: sys.stride, lam: 1.0, initVariance: 100, autoNormalize: true, calibSamples: LZ_WASH, ...lzCl });
       lzTraining = false; lzTrainedN = 0; lzTrainBeforeDream = false;
-      state = [1.0, 1.0, 1.0];
+      state = sys.init();
+      for (let i = 0; i < sys.transient; i++) state = sys.step(state);   // burn onto the attractor instantly
       dreaming = false; snapN = null; snapL = null; samples = 0;
       eN2 = 0; eL2 = 0; x2sum = 0; lastPredN = null; lastPredL = null;
-      lzEsn = lzEsnInit();
-      lzMlp = { ...mlpCore(6, 3, 32, 0x77a7), ring: [], u1: null, u2: null, tr: 0 };
+      lzEsn = lzEsnInit(sys.dim);
+      lzMlp = { ...mlpCore(sys.dim * sys.lags, sys.dim, 32, 0x77a7), replay: [], prevF: null, tr: 0 };
+      lzMlpTaps = [];
       eE2 = 0; eM2 = 0; lastPredE = null; lastPredM = null; lzEsnXSave = null;
-      esnDreamU = null; mlpDreamU = null; mlpDreamUp = null;
-      lzMu = [0, 0, 25]; lzVar2 = 200; lzDreamSteps = 0; lzVal = null; lzRewash = 0; lzValBest = -1;
+      esnDreamU = null; mlpDreamTaps = null;
+      LZ_LYAP_STEPS = 1 / (sys.lyap * sys.dt);
+      lzW = Math.max(2, Math.round(0.09 * LZ_LYAP_STEPS));   // phase window ≈ 0.09 Λ (Lorenz: 5)
+      lzSus = Math.max(4, Math.round(0.25 * LZ_LYAP_STEPS)); // sustain ≈ 0.25 Λ (Lorenz: 14)
+      lzMu = [...sys.off]; lzVar2 = 0.16 * sys.div.reduce((a, d) => a + d * d, 0);
+      lzVar0 = 0.16 * sys.div[0] * sys.div[0];
+      lzDreamSteps = 0; lzVal = null; lzRewash = 0; lzValBest = -1;
       lzRr = []; lzMr = null; lzRun = null;
       const vt = document.getElementById('lz-vt');
       if (vt) vt.textContent = '—';
@@ -489,9 +623,15 @@
       document.getElementById('lz-mode').textContent = 'attractor running — training idle';
       plotReal.length = 0; plotPredN.length = 0; plotPredL.length = 0;
       plotPredE.length = 0; plotPredM.length = 0;
+      const wl = document.getElementById('lz-warmv');
+      if (wl) wl.textContent = `${lzGate} ≈ ${(lzGate / LZ_LYAP_STEPS).toFixed(0)} Λ`;
     }
-    ivSlider.addEventListener('input', () => { ivVal.textContent = initVarFromSlider().toFixed(1); });
-    ivSlider.addEventListener('change', () => { ivVal.textContent = initVarFromSlider().toFixed(1); makeModel(); });
+    document.getElementById('lz-sys').addEventListener('change', (e) => {
+      lzSys = LZ_SYSTEMS[e.target.value] || LZ_SYSTEMS.lorenz;
+      rotX = 0.25; rotY = 0; camera.position.set(0, 0, 10.5); spin = true;   // fresh canonical view per system
+      makeModel();
+      console.log(`system: ${lzSys.label} — dt ${lzSys.dt}, measured λ ${lzSys.lyap}, 1 Λ = ${(1 / (lzSys.lyap * lzSys.dt)).toFixed(0)} steps`);
+    });
     document.getElementById('lz-reset').addEventListener('click', makeModel);
     document.getElementById('lz-warm').addEventListener('input', (e) => {
       lzGate = lzWarmN(parseInt(e.target.value, 10) || 0);
@@ -515,7 +655,7 @@
         dreamState = state.slice(); rivalDream = state.slice();
         lzEsnXSave = [...lzEsn.x];                   // the dream free-runs the shared reservoir; restored on stop
         esnDreamU = lzU(state);
-        mlpDreamU = lzU(state); mlpDreamUp = lzMlp.u1 ? [...lzMlp.u1] : lzU(state);
+        mlpDreamTaps = lzMlpTaps.length ? lzMlpTaps.slice(-lzMlpSpan()).map((t) => [...t]) : null;
         clearLine(dreamLine); clearLine(rivalLine); clearLine(liveLine);
         clearLine(esnLine); clearLine(mlpLine);
         dreamXs = []; rivalXs = []; esnXs = []; mlpXs = [];
@@ -531,7 +671,7 @@
         if (lzEsnXSave) { lzEsn.x = lzEsnXSave; lzEsnXSave = null; }   // un-dream the reservoir
         lzRewash = 5;                                // refill lag history before training resumes
         lzEsn.prevF = null;                          // rivals: drop stale pre-dream pairings too
-        lzMlp.u1 = null; lzMlp.u2 = null;
+        lzMlp.prevF = null;
         lzTraining = lzTrainBeforeDream; lzTrainBeforeDream = false;   // auto-dream wakes stopped; manual resumes
         clearLine(liveLine);                         // dream trails stay visible until the next dream
         plotReal.length = 0; plotPredN.length = 0; plotPredL.length = 0;
@@ -563,17 +703,17 @@
     window.__lzDbg = () => ({ n: samples, esnTr: lzEsn ? lzEsn.tr : 0, mlpTr: lzMlp ? lzMlp.tr : 0,
       esnPts: esnLine.count, mlpPts: mlpLine.count, dreamPts: dreamLine.count,
       wings: { n: wingCrossings(dreamXs), e: wingCrossings(esnXs), m: wingCrossings(mlpXs), l: wingCrossings(rivalXs) },
-      trained: lzTrainedN, training: lzTraining, gate: lzGate,
+      trained: lzTrainedN, training: lzTraining, gate: lzGate, sys: lzSys.label,
       val: lzVal ? { ...lzVal, steps: lzDreamSteps, lyap: LZ_LYAP_STEPS } : null });
 
     function tick() {
       if (activeTab !== 'lorenz') { requestAnimationFrame(tick); return; }
-      lzAcc += 4 * lzSpeed;                          // 4 steps/frame at full speed
+      lzAcc += lzSys.spf * lzSpeed;                  // per-system steps/frame at full speed
       const SUB = Math.floor(lzAcc);
       lzAcc -= SUB;
       for (let k = 0; k < SUB; k++) {
         if (!dreaming) {
-          state = rk4(state);
+          state = lzSys.step(state);
           // training happens only inside the user's window: idle and dreams
           // are predict-only (state estimation + normalization stay live)
           const wash = samples < LZ_WASH || lzRewash > 0 || !lzTraining;
@@ -595,28 +735,32 @@
           // rivals train online on the same stream (normalized state)
           const u = lzU(state);
           const E = lzEsn, xr = esnStep(E, u);       // reservoir keeps evolving even while idle
-          const fE = [1, u[0], u[1], u[2], ...xr];
+          const fE = [1, ...u, ...xr];
           if (!wash && E.prevF) { esnRls(E.one, E.prevF, u, E.lam); E.tr++; }
           E.prevF = fE;
-          lastPredE = E.tr > 40 ? esnDot(E.one.TH[0], fE) * 20 : null;
+          lastPredE = E.tr > 40 ? esnDot(E.one.TH[0], fE) * lzSys.div[0] + lzSys.off[0] : null;
           const M = lzMlp;
-          if (!wash && M.u1 && M.u2) { mlpTrain(M, [...M.u1, ...M.u2], 0, u); M.tr++; }
-          if (!wash) {                               // the ring is training data — window only
-            M.ring.push(u);
-            if (M.ring.length > 1200) M.ring.shift();
+          if (!wash && M.prevF) {                    // pair: feature(t−1) → u(t)
+            mlpTrain(M, M.prevF, 0, u); M.tr++;
+            M.replay.push({ f: M.prevF, y: u });     // the replay ring is training data — window only
+            if (M.replay.length > 1200) M.replay.shift();
             for (let r2 = 0; r2 < 4; r2++) {         // light experience replay (finger-tab recipe)
-              const n2 = M.ring.length;
-              if (n2 > 3) {
-                const j2 = 2 + Math.floor(M.rnd() * (n2 - 3));
-                mlpTrain(M, [...M.ring[j2], ...M.ring[j2 - 1]], 0, M.ring[j2 + 1]);
+              if (M.replay.length > 2) {
+                const q2 = M.replay[Math.floor(M.rnd() * M.replay.length)];
+                mlpTrain(M, q2.f, 0, q2.y);
               }
             }
           }
-          lastPredM = (M.u1 && M.tr > 40) ? mlpHead(M, mlpForward(M, [...u, ...M.u1]), 0) * 20 : null;
-          M.u2 = M.u1; M.u1 = u;
-          for (let c = 0; c < 3; c++) lzMu[c] += 0.001 * (state[c] - lzMu[c]);
-          const dv2 = (state[0] - lzMu[0]) ** 2 + (state[1] - lzMu[1]) ** 2 + (state[2] - lzMu[2]) ** 2;
+          lzMlpTaps.push(u);                         // tap ring (lag/stride window) — state, always live
+          if (lzMlpTaps.length > lzMlpSpan() + 2) lzMlpTaps.shift();
+          const mf = lzMlpTaps.length >= lzMlpSpan() ? lzMlpFeat(lzMlpTaps) : null;
+          lastPredM = (mf && M.tr > 40) ? mlpHead(M, mlpForward(M, mf), 0) * lzSys.div[0] + lzSys.off[0] : null;
+          M.prevF = mf;
+          for (let c = 0; c < lzSys.dim; c++) lzMu[c] += 0.001 * (state[c] - lzMu[c]);
+          let dv2 = 0;
+          for (let c = 0; c < lzSys.dim; c++) dv2 += (state[c] - lzMu[c]) ** 2;
           lzVar2 += 0.001 * (dv2 - lzVar2);
+          lzVar0 += 0.001 * ((state[0] - lzMu[0]) ** 2 - lzVar0);
           // auto-dream: the moment the training window is reached
           if (document.getElementById('lz-autodream').checked && lzTraining && lzTrainedN >= lzGate) {
             lzTraining = false;
@@ -628,60 +772,70 @@
           plotPredE.push(lastPredE); plotPredM.push(lastPredM);
         } else {
           // reality keeps running (green) — the models do NOT see it
-          state = rk4(state);
+          state = lzSys.step(state);
           pushPoint(liveLine, state);
+          const dim = lzSys.dim;
+          const uOK = (s2) => s2.every(Number.isFinite) && Math.abs((s2[0] - lzSys.off[0]) / lzSys.div[0]) < 6;
+          const pClamp = (x) => clamp(x, lzSys.off[0] - 4 * lzSys.div[0], lzSys.off[0] + 4 * lzSys.div[0]);
           const resN = model.step(dreamState, null, true);
-          dreamState = [resN.prediction[0][0], resN.prediction[1][0], resN.prediction[2][0]];
-          if (dreamState.every(Number.isFinite) && Math.abs(dreamState[0]) < 200) pushPoint(dreamLine, dreamState);
+          dreamState = Array.from({ length: dim }, (_, v) => resN.prediction[v][0]);
+          if (uOK(dreamState)) pushPoint(dreamLine, dreamState);
           const resL = rival.step(rivalDream, null, true);
-          rivalDream = [resL.prediction[0][0], resL.prediction[1][0], resL.prediction[2][0]];
-          if (rivalDream.every(Number.isFinite) && Math.abs(rivalDream[0]) < 200) pushPoint(rivalLine, rivalDream);
+          rivalDream = Array.from({ length: dim }, (_, v) => resL.prediction[v][0]);
+          if (uOK(rivalDream)) pushPoint(rivalLine, rivalDream);
           if (Number.isFinite(dreamState[0])) { dreamXs.push(dreamState[0]); if (dreamXs.length > 900) dreamXs.shift(); }
           if (Number.isFinite(rivalDream[0])) { rivalXs.push(rivalDream[0]); if (rivalXs.length > 900) rivalXs.shift(); }
           // ESN dream: free-run the shared reservoir on its own readout
           const E = lzEsn;
           const xe = esnStep(E, esnDreamU);
-          const fE2 = [1, esnDreamU[0], esnDreamU[1], esnDreamU[2], ...xe];
+          const fE2 = [1, ...esnDreamU, ...xe];
           esnDreamU = E.one.TH.map((th) => clamp(esnDot(th, fE2), -3, 3));
           const eDen = lzDeU(esnDreamU);
-          if (eDen.every(Number.isFinite) && Math.abs(eDen[0]) < 200) pushPoint(esnLine, eDen);
+          if (uOK(eDen)) pushPoint(esnLine, eDen);
           if (Number.isFinite(eDen[0])) { esnXs.push(eDen[0]); if (esnXs.length > 900) esnXs.shift(); }
-          // MLP dream: iterate the stateless net on its own output
+          // MLP dream: iterate the stateless net on its own tap window
           const M = lzMlp;
-          const hD = mlpForward(M, [...mlpDreamU, ...mlpDreamUp]);
-          const nm = [0, 1, 2].map((o) => clamp(mlpHead(M, hD, o), -3, 3));
-          mlpDreamUp = mlpDreamU; mlpDreamU = nm;
-          const mDen = lzDeU(nm);
-          if (mDen.every(Number.isFinite) && Math.abs(mDen[0]) < 200) pushPoint(mlpLine, mDen);
-          if (Number.isFinite(mDen[0])) { mlpXs.push(mDen[0]); if (mlpXs.length > 900) mlpXs.shift(); }
+          let mDen = null;
+          if (mlpDreamTaps && mlpDreamTaps.length >= lzMlpSpan()) {
+            const hD = mlpForward(M, lzMlpFeat(mlpDreamTaps));
+            const nm = Array.from({ length: dim }, (_, o) => clamp(mlpHead(M, hD, o), -3, 3));
+            mlpDreamTaps.push(nm);
+            if (mlpDreamTaps.length > lzMlpSpan() + 2) mlpDreamTaps.shift();
+            mDen = lzDeU(nm);
+            if (uOK(mDen)) pushPoint(mlpLine, mDen);
+            if (Number.isFinite(mDen[0])) { mlpXs.push(mDen[0]); if (mlpXs.length > 900) mlpXs.shift(); }
+          }
           plotReal.push(state[0]);
-          plotPredN.push(Number.isFinite(dreamState[0]) ? clamp(dreamState[0], -60, 60) : null);
-          plotPredL.push(Number.isFinite(rivalDream[0]) ? clamp(rivalDream[0], -60, 60) : null);
-          plotPredE.push(Number.isFinite(eDen[0]) ? clamp(eDen[0], -60, 60) : null);
-          plotPredM.push(Number.isFinite(mDen[0]) ? clamp(mDen[0], -60, 60) : null);
-          // valid-time clocks: phase-tolerant (±5 steps) sustained (14-step)
-          // threshold crossing freezes each model's Λ at excursion start
+          plotPredN.push(Number.isFinite(dreamState[0]) ? pClamp(dreamState[0]) : null);
+          plotPredL.push(Number.isFinite(rivalDream[0]) ? pClamp(rivalDream[0]) : null);
+          plotPredE.push(Number.isFinite(eDen[0]) ? pClamp(eDen[0]) : null);
+          plotPredM.push(mDen && Number.isFinite(mDen[0]) ? pClamp(mDen[0]) : null);
+          // valid-time clocks: phase-tolerant (±lzW steps) sustained (lzSus)
+          // threshold crossing freezes each model's Λ at excursion start —
+          // windows scale with the selected system's Λ
           lzDreamSteps++;
           const vThr = 0.4 * Math.sqrt(lzVar2);
-          lzRr.push([state[0], state[1], state[2]]);
-          if (lzRr.length > 11) lzRr.shift();
+          lzRr.push([...state]);
+          if (lzRr.length > 2 * lzW + 1) lzRr.shift();
           const pushP = (p2, key) => {
-            lzMr[key].push(p2 && p2.every(Number.isFinite) ? [p2[0], p2[1], p2[2]] : null);
-            if (lzMr[key].length > 6) lzMr[key].shift();
+            lzMr[key].push(p2 && p2.every(Number.isFinite) ? [...p2] : null);
+            if (lzMr[key].length > lzW + 1) lzMr[key].shift();
           };
           pushP(dreamState, 'n'); pushP(eDen, 'e'); pushP(mDen, 'm'); pushP(rivalDream, 'l');
-          if (lzDreamSteps >= 6) {
-            const ev = lzDreamSteps - 5;             // evaluated dream step (5-step verdict lag)
+          if (lzDreamSteps >= lzW + 1) {
+            const ev = lzDreamSteps - lzW;           // evaluated dream step (lzW-step verdict lag)
             for (const key of ['n', 'e', 'm', 'l']) {
               if (lzVal[key] >= 0) continue;
               const p2 = lzMr[key][0];               // dream point at step ev
               let d = Infinity;
-              if (p2) for (const q2 of lzRr) {       // reality steps ev−5 .. ev+5
-                const dd = Math.hypot(p2[0] - q2[0], p2[1] - q2[1], p2[2] - q2[2]);
+              if (p2) for (const q2 of lzRr) {       // reality steps ev−lzW .. ev+lzW
+                let dd = 0;
+                for (let c = 0; c < dim; c++) dd += (p2[c] - q2[c]) ** 2;
+                dd = Math.sqrt(dd);
                 if (dd < d) d = dd;
               }
               if (!p2 || d > vThr) {
-                if (++lzRun[key] >= 14) lzVal[key] = Math.max(1, ev - 13);
+                if (++lzRun[key] >= lzSus) lzVal[key] = Math.max(1, ev - (lzSus - 1));
               } else lzRun[key] = 0;
             }
           }
@@ -695,7 +849,7 @@
       if (nowR - lzRateT0 >= 1000) {
         const sps = 1000 * lzRateN / (nowR - lzRateT0);
         document.getElementById('lz-rate').textContent =
-          `${sps.toFixed(0)} steps/s · dt 0.02 · ${(sps / LZ_LYAP_STEPS).toFixed(1)} Λ/s`;
+          `${sps.toFixed(0)} steps/s · dt ${lzSys.dt} · ${(sps / LZ_LYAP_STEPS).toFixed(1)} Λ/s`;
         lzRateN = 0; lzRateT0 = nowR;
       }
       const warmEl = document.getElementById('lz-warm');
@@ -3119,7 +3273,6 @@
     };
 
     // ---- boot ----
-    ivVal.textContent = initVarFromSlider().toFixed(1);
     makeModel();
     makeSS();
     makeFinger();

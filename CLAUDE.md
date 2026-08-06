@@ -83,13 +83,36 @@ the shipped commit carries the correct version.
    by default so the current state is one tap away.
 4. **NGRC playground** (bottom-right `NGRC` launcher → `ngrc.html`) — a 3-tab
    interactive showcase of `lib/ngrc`, each tab framed as **NGRC vs a common
-   alternative** so the value is visible: **① Lorenz** (three.js attractor;
-   1-finger orbit, 2-finger pinch-zoom **and pan**; FOUR models learn
-   side-by-side from the same stream — NGRC, a cyan **ESN** (the finger
-   tab's 100-neuron recipe with 3 inputs, online-RLS 1-step readout — the
-   literature's canonical NG-RC-vs-reservoir head-to-head ON Lorenz), a
-   magenta **MLP** (shared `mlpCore`, [u(t),u(t−1)] → u(t+1), online Adam +
-   light replay), and a classical **linear ARX** — near-tied 1-step errors
+   alternative** so the value is visible: **① Chaotic systems** (three.js
+   attractor; 1-finger orbit, 2-finger pinch-zoom **and pan**; a SYSTEM
+   SELECTOR switches between SEVEN systems, each with its own dynamics,
+   dt, and **numerically measured λ_max** (Benettin, validated: Lorenz
+   0.913 vs known 0.906, Rössler exactly the literature's 0.071) so every
+   Lyapunov clock stays honest per system — Lorenz-63 (dt.02 λ.913,
+   poly2), Rössler (dt.1 λ.071, poly3 — measured 5.5 vs 2.9 Λ), driven
+   Duffing (dt.05 λ.112, drive embedded as [cosφ,sinφ] state; poly3 +
+   DELTA targets — cubic force + slow dynamics, 0.06→3.7 Λ measured),
+   double pendulum (dt.01 λ1.42, 6D cos/sin/ω embed; the HONEST HARD
+   CASE — trig/rational dynamics defeat the polynomial basis, ~0.3 Λ,
+   and the ESN legitimately wins), Lorenz-96 N=5 (dt.05 λ.439, delta:
+   3.1 vs 2.4 Λ), Kuramoto–Sivashinsky as a 5-mode Galerkin truncation
+   at L=22, 10 real vars (dt.1 λ.050, delta, spf 2 — L=18 collapses,
+   L≥26 under-resolves, 22 is the honest chaotic truncation), and
+   Mackey–Glass τ=17 (DDE, visible x only, sample Δ=1; lags 4 × stride
+   6 spans the delay; λ.0051; so weakly chaotic every model tracks ≥4 Λ;
+   display = classic delay embedding, each line embeds its own
+   trajectory via per-line proj rings). The registry parameterizes
+   dims/lags/stride/poly/delta/normalization/clamps/projection/
+   steps-per-frame; valid-time phase windows and sustain scale with each
+   system's Λ (W≈0.09Λ, sustain≈0.25Λ); switching resets models AND the
+   camera to the canonical view; the InitVariance slider was REMOVED
+   (iv fixed at 100 — flat response in the washout regime). FOUR models
+   learn side-by-side from the same stream — NGRC, a cyan **ESN** (the
+   finger tab's 100-neuron recipe, input dim = system dim, online-RLS
+   1-step readout — the literature's canonical NG-RC-vs-reservoir
+   head-to-head), a magenta **MLP** (shared `mlpCore`, input = the SAME
+   lag/stride tap window NGRC uses, online Adam + stored-pair replay),
+   and a classical **linear ARX** — near-tied 1-step errors
    (rows for all four, PAIRWISE-scored on the same instances so the shared
    denominator stays honest; preds reset at dream boundaries so no scoring
    across the gap) — then "Dream" free-runs ALL of them while **reality
