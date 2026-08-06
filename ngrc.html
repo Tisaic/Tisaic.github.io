@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:79,built:"2026-08-06T03:41:22Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:80,built:"2026-08-06T04:11:40Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -85,7 +85,7 @@
       <label class="slider" style="flex:0 0 auto; gap:6px;" title="when checked, Dream starts automatically the moment the training window is reached"><input id="lz-autodream" type="checkbox" /> auto-dream</label>
       <div class="slider" title="training window: how many TRAINED samples before auto-dream fires (log scale; 0 = dream immediately). Counts only samples actually trained — idle and washout don't count">Training window
         <input id="lz-warm" type="range" min="0" max="200" step="1" value="120" />
-        <span id="lz-warmv">1800</span>
+        <span id="lz-warmv">1800 ≈ 33 Λ</span>
       </div>
       <div class="slider">Speed
         <input id="lz-speed" type="range" min="0.05" max="1" step="0.05" value="1" />
@@ -99,6 +99,8 @@
     <dl class="stat">
       <dt>Mode</dt><dd id="lz-mode">learning from real data</dd>
       <dt>Samples</dt><dd id="lz-n">0</dd>
+      <dt title="samples the models actually trained on (idle/washout/re-entry excluded), also in Lyapunov times (1 Λ ≈ 55 steps at dt=0.02)">Trained</dt><dd id="lz-tr">0 · 0.0 Λ</dd>
+      <dt title="the sim advances 4 steps per display frame × Speed slider — frame-rate coupled, NOT a fixed cycle: ~240 steps/s on a 60 Hz display, ~480 on 120 Hz. Each step = dt 0.02 model time; the math is per-sample, so refresh rate changes wall speed only, never results">Sim rate</dt><dd id="lz-rate">—</dd>
       <dt>Warm</dt><dd id="lz-warm" class="warn">no</dd>
       <dt>NGRC 1-step error</dt><dd id="lz-rmse" class="amber">—</dd>
       <dt>ESN 1-step error</dt><dd id="lz-esn">—</dd>
@@ -247,6 +249,7 @@
     // itself the moment the window is reached. lzTrainedN counts ONLY
     // samples actually trained — idle, washout, and re-entry don't count.
     let lzGate = 1800, lzTraining = false, lzTrainedN = 0, lzTrainBeforeDream = false;
+    let lzRateN = 0, lzRateT0 = 0;                   // measured sim rate (frame-rate coupled)
     const lzWarmN = (v) => {
       if (v <= 0) return 0;
       let n = Math.round(50 * Math.pow(400, (v - 1) / 199));
@@ -492,7 +495,7 @@
     document.getElementById('lz-reset').addEventListener('click', makeModel);
     document.getElementById('lz-warm').addEventListener('input', (e) => {
       lzGate = lzWarmN(parseInt(e.target.value, 10) || 0);
-      document.getElementById('lz-warmv').textContent = String(lzGate);
+      document.getElementById('lz-warmv').textContent = `${lzGate} ≈ ${(lzGate / LZ_LYAP_STEPS).toFixed(0)} Λ`;
     });
     document.getElementById('lz-train').addEventListener('click', () => {
       if (dreaming) return;
@@ -685,6 +688,16 @@
         }
       }
       document.getElementById('lz-n').textContent = samples;
+      document.getElementById('lz-tr').textContent = `${lzTrainedN} · ${(lzTrainedN / LZ_LYAP_STEPS).toFixed(1)} Λ`;
+      lzRateN += SUB;
+      const nowR = performance.now();
+      if (!lzRateT0) lzRateT0 = nowR;
+      if (nowR - lzRateT0 >= 1000) {
+        const sps = 1000 * lzRateN / (nowR - lzRateT0);
+        document.getElementById('lz-rate').textContent =
+          `${sps.toFixed(0)} steps/s · dt 0.02 · ${(sps / LZ_LYAP_STEPS).toFixed(1)} Λ/s`;
+        lzRateN = 0; lzRateT0 = nowR;
+      }
       const warmEl = document.getElementById('lz-warm');
       warmEl.textContent = model.warm ? 'yes' : 'no'; warmEl.className = model.warm ? 'good' : 'warn';
       document.getElementById('lz-rmse').textContent = x2sum > 0 ? Math.sqrt(eN2 / x2sum).toFixed(4) : '—';

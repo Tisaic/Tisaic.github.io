@@ -187,7 +187,13 @@ the shipped commit carries the correct version.
    (reservoir/lag state stays live while idle, weights don't move).
    Verified: idle trains nothing, slider maps log-style (47→200),
    auto-dream fires within a few samples of the window, stop freezes
-   the count while the attractor keeps running),
+   the count while the attractor keeps running. A **Trained row** shows
+   trained samples AND Lyapunov times (N/55.2; the window label shows
+   its Λ equivalent too), and a **Sim rate row** shows the measured
+   steps/s + Λ/s — the Lorenz sim is FRAME-RATE COUPLED (4 steps per
+   display frame × Speed slider, each step dt=0.02 model time; ~240
+   steps/s on 60 Hz, ~480 on 120 Hz, headless CI ~175): per-sample math
+   means refresh rate changes wall speed only, never results),
    **② soft-sensor** (drag/kick the blue motor; a soft lightly-damped coupling
    makes the hidden load lag and ring; amber `SoftSensor` caret vs a gray
    **auto-tuned lag-filter** caret — the realistic DIY baseline, best of a
