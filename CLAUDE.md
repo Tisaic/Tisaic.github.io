@@ -129,8 +129,24 @@ the shipped commit carries the correct version.
    direct-horizon rungs anchored at the crossover (0.25 Λ — each long
    rung is an independent noisy readout; iterating tracks far longer).
    Not suspects, checked: real-time determinism (stepping is
-   per-sample, RAF timing never enters the math) and precision (float64
-   end to end).
+   per-sample, RAF timing never enters the math), precision (float64
+   end to end), and the off-attractor [1,1,1] start transient (measured
+   immaterial). THE LIVE-ONLY DEGRADATION (device testing stuck at
+   ~1–1.5 Λ until huge training) was DREAM/WAKE POISONING: waking
+   restores the model's snapshot but reality ran ahead during the
+   dream, so the first post-wake training equations paired pre-dream
+   lag windows with post-teleport targets — full-attractor-scale
+   inconsistency, permanent at lam=1.0, accumulating with every dream
+   (measured: 8 cycles cut valid time 1.17 → 0.39 Λ). Fixed by a
+   5-sample RE-ENTRY WASHOUT on wake (predict-only until the lag
+   history refills; rivals' stale pairings dropped too) — repeated
+   dreams now leave training unharmed (endurance test: 9 cycles, mean
+   1.97 Λ and rising). Delta targets were re-checked in the clean
+   regime and still lose at 12 anchors (their 6-anchor win was noise).
+   Valid times remain anchor-dependent (~0.5–5 Λ spread, means ~2–3);
+   individual anchors reach 5–8 Λ, so cross-project comparisons must
+   match threshold convention and anchor counts before comparing
+   headline numbers.
    A **Speed slider (0.05–1×)** scales
    sim steps per frame via a fractional accumulator (0.05× really is 20×
    slower); drop it right at the Dream switch to watch the crossover in

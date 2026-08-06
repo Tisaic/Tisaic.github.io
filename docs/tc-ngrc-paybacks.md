@@ -128,6 +128,20 @@ statistics freeze — add a washout, or adopt the SoftSensor warmup contract.
 deployments are the places to check; directional forgetting mitigates but
 does not remove the pre-freeze leverage.
 
+**Second instance — snapshot-restore re-entry.** The same trap re-appeared
+in a different costume: restoring a model snapshot and resuming training
+after the plant moved on (the dream/wake flow; in ST terms, re-enabling a
+learned block after a hold, an E-stop, a mode switch, or a
+deploy-by-verification rollback). The first post-restore training equations
+pair the snapshot's stale lag window with post-jump targets —
+full-plant-scale inconsistency, permanent at λ=1.0, and it accumulates with
+every cycle (measured: 8 cycles cut free-run valid time 3×; a lag-depth
+predict-only re-entry washout fully repaired it). Rule: **after any restore
+or input-stream discontinuity, feed predict-only until the lag history
+holds consecutive real samples again.** This composes with the
+deploy-by-verification pattern in §3 — every watchdog restart is such a
+discontinuity.
+
 ## 8. Online scoring pipelines have two silent traps
 
 Found while extending horizons to 20 s, both silently biased results:
