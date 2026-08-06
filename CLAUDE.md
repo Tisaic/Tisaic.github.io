@@ -101,15 +101,23 @@ the shipped commit carries the correct version.
    0.0064 (NGRC/ESN/MLP/ARX) — then dream wing crossings 9/0/0/0, the
    whole point of the tab in one row. A **Valid time (Λ)** row scores the
    crossover itself: each free-run starts from reality's exact state and
-   stays "valid" until its error vs the now-hidden reality exceeds 0.4×
-   the attractor's fluctuation scale (tracked online, not hardcoded),
-   reported in Lyapunov times (λ≈0.906 → 1 Λ ≈ 1.10 time units ≈ 55
-   steps at dt=0.02; counted in sim steps so the Speed slider doesn't
-   skew it; "≥x…" = clock still running, freezes at first crossing,
-   persists after waking, resets on the next dream). Measured at the
-   gate (3-dream means): NGRC ~2.6–3 Λ (individual dreams up to ~4–5)
-   vs ESN ~0.5 / MLP ~0.3 / linear ~0.1 — literature territory for an
-   online one-pass fit (published ~5 Λ figures are offline-tuned).
+   stays "valid" until its distance to the NEAREST reality point within
+   ±5 steps (±0.1 s — the finger tab's phase-tolerant convention)
+   exceeds 0.4× the attractor's fluctuation scale (tracked online, not
+   hardcoded) for 14 CONSECUTIVE steps (0.25 Λ), frozen at excursion
+   start; reported in Lyapunov times (λ≈0.906 → 1 Λ ≈ 1.10 time units ≈
+   55 steps at dt=0.02; counted in sim steps so the Speed slider
+   doesn't skew it; "≥x…" = clock still running, persists after waking,
+   resets on the next dream; verdicts lag 5 steps for the phase
+   window). The strict instantaneous first-crossing was user-verified
+   too harsh — the dream still visibly tracked when the clock froze:
+   3/14 strict crossings recover and track ≥1 Λ more, because a slight
+   TIME lag at a fast wing transit reads as a large instantaneous
+   distance. Phase tolerance moved the mean 2.50 → 3.72 Λ (+49%);
+   sustain adds the rest (3.77). Measured at the gate (3-dream means):
+   NGRC ~2.3–3.8 Λ (individual dreams to ~7.5) vs ESN ~0.7 / MLP ~0.3
+   / linear ~0.1 — literature territory for an online one-pass fit
+   (published ~5 Λ figures are offline-tuned).
    THE DECISIVE FIX was a 250-sample WASHOUT (LZ_WASH): the library
    trains from sample 1 while autoNormalize's stats are still moving,
    so the pre-freeze RLS equations are written in shifting coordinates

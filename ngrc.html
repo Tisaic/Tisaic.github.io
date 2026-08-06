@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:76,built:"2026-08-06T02:53:46Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:77,built:"2026-08-06T03:00:47Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -96,7 +96,7 @@
       <dt>MLP 1-step error</dt><dd id="lz-mlp">—</dd>
       <dt>Linear ARX 1-step error</dt><dd id="lz-rmse2">—</dd>
       <dt>Dream check</dt><dd id="lz-dstat">—</dd>
-      <dt title="how long each free-run stays on reality's trajectory after the Dream switch: time until its error vs the (hidden) reality exceeds 0.4× the attractor's fluctuation scale, in Lyapunov times (λ≈0.906 → 1 Λ ≈ 1.10 time units ≈ 55 steps). ≥ = still valid, clock running">Valid time (Λ)</dt><dd id="lz-vt">—</dd>
+      <dt title="how long each free-run stays on reality's trajectory after the Dream switch: time until its distance to the nearest (hidden) reality point within ±0.1 s exceeds 0.4× the attractor's fluctuation scale for 14 consecutive steps, in Lyapunov times (λ≈0.906 → 1 Λ ≈ 1.10 time units ≈ 55 steps). Phase-tolerant + sustained so a momentary wing-transit lag doesn't end a run that is still tracking. ≥ = still valid, clock running">Valid time (Λ)</dt><dd id="lz-vt">—</dd>
     </dl>
     <div class="plot" id="lz-plot"></div>
   </section>
@@ -354,6 +354,16 @@
     const LZ_LYAP_STEPS = 1 / (0.9056 * DT);
     let lzMu = [0, 0, 25], lzVar2 = 200, lzDreamSteps = 0, lzVal = null;
     let lzValBest = -1;                              // best NGRC valid time across dreams (crossovers vary ~0.5–8 Λ)
+    // PHASE-TOLERANT, SUSTAINED validity (user-verified: the strict
+    // instantaneous first-crossing froze the clock while the dream was
+    // still visibly tracking — 3/14 strict crossings recover and track
+    // ≥1 Λ more; near wing transits both trajectories move fast, so a
+    // slight TIME lag reads as a large instantaneous distance). Error =
+    // distance to the NEAREST reality point within ±5 steps (±0.1 s, the
+    // finger tab's scoring convention), and the clock freezes only after
+    // 14 consecutive exceedances (0.25 Λ), recorded at excursion start.
+    // Measured: mean 2.50 → 3.77 Λ, phase tolerance contributing +49%.
+    let lzRr = [], lzMr = null, lzRun = null;        // reality ring + per-model dream-point rings + sustain counters
     // WASHOUT: feed the first LZ_WASH samples predict-only so autoNormalize
     // calibrates BEFORE any training equation is written (predictOnly still
     // updates the Welford stats). Without it, the pre-freeze equations —
@@ -440,6 +450,7 @@
       eE2 = 0; eM2 = 0; lastPredE = null; lastPredM = null; lzEsnXSave = null;
       esnDreamU = null; mlpDreamU = null; mlpDreamUp = null;
       lzMu = [0, 0, 25]; lzVar2 = 200; lzDreamSteps = 0; lzVal = null; lzRewash = 0; lzValBest = -1;
+      lzRr = []; lzMr = null; lzRun = null;
       const vt = document.getElementById('lz-vt');
       if (vt) vt.textContent = '—';
       clearLine(realLine); clearLine(liveLine); clearLine(dreamLine); clearLine(rivalLine);
@@ -469,6 +480,7 @@
         clearLine(esnLine); clearLine(mlpLine);
         dreamXs = []; rivalXs = []; esnXs = []; mlpXs = [];
         lzDreamSteps = 0; lzVal = { n: -1, e: -1, m: -1, l: -1 };   // fresh valid-time clocks
+        lzRr = []; lzMr = { n: [], e: [], m: [], l: [] }; lzRun = { n: 0, e: 0, m: 0, l: 0 };
         plotReal.length = 0; plotPredN.length = 0; plotPredL.length = 0;
         plotPredE.length = 0; plotPredM.length = 0;
         btn.textContent = 'Back to reality ▶';
@@ -594,15 +606,32 @@
           plotPredL.push(Number.isFinite(rivalDream[0]) ? clamp(rivalDream[0], -60, 60) : null);
           plotPredE.push(Number.isFinite(eDen[0]) ? clamp(eDen[0], -60, 60) : null);
           plotPredM.push(Number.isFinite(mDen[0]) ? clamp(mDen[0], -60, 60) : null);
-          // valid-time clocks: first threshold crossing freezes each model's Λ
+          // valid-time clocks: phase-tolerant (±5 steps) sustained (14-step)
+          // threshold crossing freezes each model's Λ at excursion start
           lzDreamSteps++;
           const vThr = 0.4 * Math.sqrt(lzVar2);
-          const vchk = (p2, key) => {
-            if (lzVal[key] >= 0) return;
-            if (!p2 || !p2.every(Number.isFinite)
-              || Math.hypot(p2[0] - state[0], p2[1] - state[1], p2[2] - state[2]) > vThr) lzVal[key] = lzDreamSteps;
+          lzRr.push([state[0], state[1], state[2]]);
+          if (lzRr.length > 11) lzRr.shift();
+          const pushP = (p2, key) => {
+            lzMr[key].push(p2 && p2.every(Number.isFinite) ? [p2[0], p2[1], p2[2]] : null);
+            if (lzMr[key].length > 6) lzMr[key].shift();
           };
-          vchk(dreamState, 'n'); vchk(eDen, 'e'); vchk(mDen, 'm'); vchk(rivalDream, 'l');
+          pushP(dreamState, 'n'); pushP(eDen, 'e'); pushP(mDen, 'm'); pushP(rivalDream, 'l');
+          if (lzDreamSteps >= 6) {
+            const ev = lzDreamSteps - 5;             // evaluated dream step (5-step verdict lag)
+            for (const key of ['n', 'e', 'm', 'l']) {
+              if (lzVal[key] >= 0) continue;
+              const p2 = lzMr[key][0];               // dream point at step ev
+              let d = Infinity;
+              if (p2) for (const q2 of lzRr) {       // reality steps ev−5 .. ev+5
+                const dd = Math.hypot(p2[0] - q2[0], p2[1] - q2[1], p2[2] - q2[2]);
+                if (dd < d) d = dd;
+              }
+              if (!p2 || d > vThr) {
+                if (++lzRun[key] >= 14) lzVal[key] = Math.max(1, ev - 13);
+              } else lzRun[key] = 0;
+            }
+          }
         }
       }
       document.getElementById('lz-n').textContent = samples;
