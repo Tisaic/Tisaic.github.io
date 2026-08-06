@@ -90,6 +90,44 @@ learning with a strongly boosted prior (`rand = 1`). An ST user hits the
 same wall silently. The prior should be an exposed, documented tunable with
 guidance: *if free-runs collapse to a blob, raise the random-feature prior.*
 
+## 7b. The washout trap — and the exact conditions that arm it
+
+Found on the Lorenz tab (it capped the free-run near 1 Λ and made weak
+ridge look catastrophic): `Continuous` trains from the first sample while
+`autoNormalize`'s statistics are still settling, so the pre-freeze RLS
+equations are written in **moving, badly-scaled coordinates** (a Welford σ
+estimated from a handful of samples can be near zero → normalized features
+10–100× too large) and — at λ=1.0 — they stay in the exact least-squares
+solution forever with full weight. Feeding the calibration window
+predict-only (stats still calibrate; nothing trains) fixed it: free-run
+valid time ×4, 1-step error ×4 better, ridge sensitivity flattened over
+five decades.
+
+The full-app audit then showed the trap needs **two ingredients at once**:
+
+1. a **never-forgetting fit** (λ=1.0 exact RLS — forgetting λ<1 or SGD
+   self-heals), AND
+2. **high-leverage early equations** — feature coordinates that move AND
+   mis-scale during warmup (normalization mid-calibration). Bounded,
+   hand-scaled coordinates are safe: the finger tab's per-stroke centroid
+   transient is the same *shape* of flaw, but its states stay clamped O(1),
+   so a measured washout changed steady-state misses by exactly nothing
+   (identical to 4 decimals on a circle).
+
+Audit results across this repo: `SoftSensor` is immune **by design** (its
+standardizer freezes before `adapt()` ever runs — the reference pattern);
+the preview readout uses raw settled features (immune); the cyclic AFM uses
+stable absolute coordinates + λ=0.9995 (immune); ESN/MLP/tempo readouts
+forget or overwrite (self-healing); only the Lorenz `Continuous` models had
+both ingredients.
+
+**ST audit rule**: any block combining `autoNormalize` (or any evolving
+standardization) with λ≈1 RLS must not write training equations until the
+statistics freeze — add a washout, or adopt the SoftSensor warmup contract.
+`ServoFF` (auto-normalize + directional forgetting) and `Continuous`-based
+deployments are the places to check; directional forgetting mitigates but
+does not remove the pre-freeze leverage.
+
 ## 8. Online scoring pipelines have two silent traps
 
 Found while extending horizons to 20 s, both silently biased results:
