@@ -190,6 +190,27 @@ the shipped commit carries the correct version.
    fully-excited stream. Both are real levers on plants that are
    non-polynomial or non-stationary; on textbook Lorenz the plain
    quadratic basis is the optimum. Not shipped.
+   A **Noise slider** (off, else 0.01–10% log) adds zero-mean Gaussian
+   OBSERVATION noise to the stream every model sees, scaled to the
+   attractor's per-variable RMS: the plant integrates cleanly, free-runs
+   seed from the last OBSERVATION (what the models actually know), and
+   every score is computed against the CLEAN trajectory — so noise
+   degrades what the models know, never what they're judged against.
+   **BATCH / statistics mode** (Run batch ▶ + Runs 2–50 + Start delay
+   log slider) automates the whole experiment: each run re-initialises
+   the models, advances the plant `delay ±50%` samples (randomised per
+   run so every run trains from an uncorrelated part of the attractor)
+   with the models watching predict-only, trains exactly the window,
+   free-runs until EVERY model's valid-time clock has stopped (12 Λ cap,
+   censored runs flagged), records per-model valid times + 1-step
+   errors, and repeats. It runs TURBO (per-frame time budget instead of
+   the Speed slider — 5 runs in ~2 s) and reports mean/sd/median/range
+   per model plus the experimental-vs-best-baseline ratio in the
+   summary. Measured 8-run means on Lorenz (window 1800): NGRC 3.7 Λ vs
+   ESN 0.9 / MLP 0.7 / ARX 0.6 clean, holding to ~1% noise (4.7/1.5/
+   0.4/0.8) and degrading at 3.3% (2.8/0.8/0.5/0.4). Also fixed here: a
+   long-standing unbounded growth of the Plotly source arrays (only the
+   last 160 samples are ever drawn; now trimmed in chunks).
    **Pause ⏸ / Resume ▶** freezes the plant and every model exactly where
    they are — no stepping, training, scoring, or valid-time clock
    advance (the fractional step accumulator is dropped so resuming can't

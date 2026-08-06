@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:83,built:"2026-08-06T15:40:22Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:84,built:"2026-08-06T16:58:40Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -109,6 +109,21 @@
       <div class="slider">Speed
         <input id="lz-speed" type="range" min="0.05" max="1" step="0.05" value="1" />
         <span id="lz-speedv">1.00×</span>
+      </div>
+      <div class="slider" title="additive Gaussian OBSERVATION noise on the stream every model sees, as % of the attractor's per-variable RMS scale. The plant itself stays clean and all grading is against the clean trajectory, so this measures forecasting through noise">Noise
+        <input id="lz-noise" type="range" min="0" max="100" step="1" value="0" />
+        <span id="lz-noisev">off</span>
+      </div>
+    </div>
+    <div class="controls">
+      <button id="lz-batch" class="sec" title="statistics mode: repeat an independent experiment N times — reset the models, advance the plant a randomised delay so each run starts somewhere else on the attractor, train the window, free-run until every model has diverged, and collect the valid times">Run batch ▶</button>
+      <div class="slider" title="how many independent runs the batch collects">Runs
+        <input id="lz-runs" type="range" min="2" max="50" step="1" value="10" />
+        <span id="lz-runsv">10</span>
+      </div>
+      <div class="slider" title="samples to advance the plant before training starts in each batch run — randomised ±50% per run so every run trains from a different part of the attractor">Start delay
+        <input id="lz-delay" type="range" min="0" max="200" step="1" value="98" />
+        <span id="lz-delayv">700 ±50%</span>
       </div>
     </div>
     <dl class="stat">
@@ -608,6 +623,24 @@
     // Slowing it right at the Dream switch shows the crossover: how long
     // each model tracks reality before diverging. Survives Reset.
     let lzSpeed = 1, lzAcc = 0, lzPaused = false;
+    // OBSERVATION NOISE: additive Gaussian noise on the stream the models
+    // see. The plant integrates cleanly and every metric is scored against
+    // the clean trajectory, so this measures forecasting THROUGH noise
+    // (the standard robustness setup) rather than making reality stochastic.
+    let lzNoise = 0;                                 // fraction of per-variable RMS scale
+    let lzNzSeed = 0x9e37;
+    const lzGauss = () => {
+      const r = () => { lzNzSeed |= 0; lzNzSeed = (lzNzSeed + 0x6D2B79F5) | 0; let t = Math.imul(lzNzSeed ^ (lzNzSeed >>> 15), 1 | lzNzSeed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+      let u = r(); if (u < 1e-12) u = 1e-12;
+      return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r());
+    };
+    const lzNoisePct = (v) => (v <= 0 ? 0 : 0.0001 * Math.pow(1000, (v - 1) / 99));   // 0.01% → 10%
+    let lzLastObs = null;                            // what the models last saw (dream seeds from this)
+    // BATCH / statistics mode: N independent runs, each one reset → randomised
+    // delay (so every run starts elsewhere on the attractor) → fixed training
+    // window → free-run until every model's valid-time clock has stopped.
+    let lzBatch = null, lzBatchStats = null;
+    let lzRuns = 10, lzDelay = 700;
     const spSlider = document.getElementById('lz-speed');
     spSlider.addEventListener('input', () => {
       lzSpeed = parseFloat(spSlider.value) || 1;
@@ -663,6 +696,63 @@
       makeModel();
       console.log(`system: ${lzSys.label} — dt ${lzSys.dt}, measured λ ${lzSys.lyap}, 1 Λ = ${(1 / (lzSys.lyap * lzSys.dt)).toFixed(0)} steps`);
     });
+    document.getElementById('lz-noise').addEventListener('input', (e) => {
+      lzNoise = lzNoisePct(parseInt(e.target.value, 10) || 0);
+      document.getElementById('lz-noisev').textContent = lzNoise > 0 ? (100 * lzNoise).toFixed(2) + '%' : 'off';
+    });
+    document.getElementById('lz-runs').addEventListener('input', (e) => {
+      lzRuns = parseInt(e.target.value, 10) || 10;
+      document.getElementById('lz-runsv').textContent = String(lzRuns);
+    });
+    document.getElementById('lz-delay').addEventListener('input', (e) => {
+      lzDelay = lzWarmN(parseInt(e.target.value, 10) || 0);
+      document.getElementById('lz-delayv').textContent = `${lzDelay} ±50%`;
+    });
+    // ---- batch runner ----
+    function lzBatchNextRun() {
+      if (dreaming) document.getElementById('lz-dream').click();   // wake first
+      makeModel();                                   // fresh models every run
+      lzBatch.phase = 'delay';
+      lzBatch.delaySteps = Math.max(LZ_WASH + 20, Math.round(lzBatch.delayBase * (0.5 + Math.random())));
+      lzBatch.capSteps = Math.round(12 * LZ_LYAP_STEPS);
+    }
+    function lzBatchFinish(msg) {
+      const runs = lzBatch ? lzBatch.results : [];
+      lzBatch = null;
+      document.getElementById('lz-batch').textContent = 'Run batch ▶';
+      if (runs.length) lzBatchStats = lzAggregate(runs);
+      lzRefreshSummary();
+      console.log(`batch ${msg}: ${runs.length} run(s) collected`);
+    }
+    function lzAggregate(runs) {
+      const keys = ['n', 'e', 'm', 'l'];
+      const st = (arr) => {
+        const a = [...arr].sort((x, y) => x - y);
+        const mean = a.reduce((x, y) => x + y, 0) / a.length;
+        const sd = Math.sqrt(a.reduce((x, y) => x + (y - mean) ** 2, 0) / Math.max(1, a.length - 1));
+        const med = a.length % 2 ? a[(a.length - 1) / 2] : 0.5 * (a[a.length / 2 - 1] + a[a.length / 2]);
+        return { mean, sd, med, min: a[0], max: a[a.length - 1] };
+      };
+      const out = { n: runs.length, cfg: runs[0].cfg, valid: {}, one: {}, censored: {} };
+      for (const k of keys) {
+        out.valid[k] = st(runs.map((r) => r.valid[k]));
+        out.censored[k] = runs.filter((r) => r.censored[k]).length;
+        const os = runs.map((r) => r.one[k]).filter(Number.isFinite);
+        out.one[k] = os.length ? os.reduce((x, y) => x + y, 0) / os.length : NaN;
+      }
+      return out;
+    }
+    document.getElementById('lz-batch').addEventListener('click', () => {
+      if (lzBatch) { lzBatchFinish('stopped'); return; }
+      lzBatchStats = null;
+      lzBatch = { target: lzRuns, idx: 0, delayBase: lzDelay, results: [], phase: 'delay',
+        cfg: { runs: lzRuns, delay: lzDelay, window: lzGate, noise: lzNoise, sys: lzSys.label } };
+      document.getElementById('lz-batch').textContent = 'Stop batch ■';
+      lzPaused = false;
+      document.getElementById('lz-pause').textContent = 'Pause ⏸';
+      lzBatchNextRun();
+      console.log(`batch started: ${lzRuns} runs · delay ${lzDelay} ±50% · window ${lzGate} · noise ${(100 * lzNoise).toFixed(2)}%`);
+    });
     document.getElementById('lz-pause').addEventListener('click', () => {
       lzPaused = !lzPaused;
       document.getElementById('lz-pause').textContent = lzPaused ? 'Resume ▶' : 'Pause ⏸';
@@ -698,9 +788,12 @@
       if (dreaming) {
         lzTrainBeforeDream = lzTraining; lzTraining = false;   // dreams never train; remember to resume
         snapN = model.snapshot(); snapL = rival.snapshot();
-        dreamState = state.slice(); rivalDream = state.slice();
+        // free-runs start from what the models KNOW (the last observation),
+        // but are graded against the clean trajectory
+        const seed0 = lzLastObs ? [...lzLastObs] : state.slice();
+        dreamState = [...seed0]; rivalDream = [...seed0];
         lzEsnXSave = [...lzEsn.x];                   // the dream free-runs the shared reservoir; restored on stop
-        esnDreamU = lzU(state);
+        esnDreamU = lzU(seed0);                      // same observed seed as the others
         mlpDreamTaps = lzMlpTaps.length ? lzMlpTaps.slice(-lzMlpSpan()).map((t) => [...t]) : null;
         clearLine(dreamLine); clearLine(rivalLine); clearLine(liveLine);
         clearLine(esnLine); clearLine(mlpLine);
@@ -710,7 +803,9 @@
         plotReal.length = 0; plotPredN.length = 0; plotPredL.length = 0;
         plotPredE.length = 0; plotPredM.length = 0;
         btn.textContent = 'Back to reality ▶';
-        document.getElementById('lz-mode').textContent = '🌀 dreaming — green = reality · amber = NGRC · cyan = ESN · magenta = MLP · red = linear';
+        document.getElementById('lz-mode').textContent = lzBatch
+          ? `📊 batch run ${lzBatch.idx + 1}/${lzBatch.target} — free-running until every model diverges`
+          : '🌀 dreaming — green = reality · amber = NGRC · cyan = ESN · magenta = MLP · red = linear';
       } else {
         if (snapN) model.restore(snapN);
         if (snapL) rival.restore(snapL);
@@ -729,6 +824,13 @@
 
     const plotReal = [], plotPredN = [], plotPredL = [], plotPredE = [], plotPredM = [];
     const PLOT_WIN = 160;
+    // only the last PLOT_WIN samples are ever drawn — trim in chunks so long
+    // runs (and turbo batches) can't grow these without bound
+    function lzTrimPlots() {
+      if (plotReal.length < 900) return;
+      const cut = plotReal.length - 400;
+      for (const a of [plotReal, plotPredN, plotPredL, plotPredE, plotPredM]) a.splice(0, cut);
+    }
     let plotInited = false, plotTick = 0;
     function updatePlot() {
       const realColor = dreaming ? '#22c55e' : '#60a5fa';
@@ -770,7 +872,10 @@
       const lines = [];
       lines.push(`SYSTEM. The plant is ${S.eq}. Sampling interval dt = ${S.dt} time units; the model sees a ${S.dim}-dimensional state [${S.vars.join(', ')}]. The largest Lyapunov exponent was measured numerically for this exact parameter set by two-trajectory (Benettin) estimation with renormalisation: λ_max ≈ ${S.lyap.toFixed(4)} per time unit, so one Lyapunov time Λ = 1/λ_max ≈ ${nf(lyTime, 2)} time units ≈ ${Math.round(L)} samples. (The same estimator reproduces the textbook value for Lorenz-63, measuring 0.913 against the published 0.906, and lands on the literature's 0.071 for Rössler.)`);
       lines.push('');
-      lines.push(`TASK AND SIGNALS. Every model receives the identical stream: the full state vector [${S.vars.join(', ')}], sampled every dt, standardised online (per-variable mean/scale frozen after calibration). The input to each model at time t is a lag window of ${S.lags} sample${S.lags > 1 ? 's' : ''} at stride ${S.stride} (spanning ${span} sample${span > 1 ? 's' : ''} ≈ ${nf(span / L, 2)} Λ of history). Every model predicts ${tgtTxt} — all ${S.dim} variable${S.dim > 1 ? 's' : ''}, one sample ahead. Free-running ("dream") forecasts are produced by iterating that same one-step map on its own output, with no access to the true trajectory.`);
+      const noiseTxt = lzNoise > 0
+        ? ` The observations are corrupted by additive zero-mean Gaussian measurement noise with σ = ${(100 * lzNoise).toFixed(2)}% of the attractor's per-variable RMS scale (σ ≈ ${nf(lzNoise * Math.sqrt(Math.max(lzVar2, 1e-12) / S.dim), 4)} in state units), drawn independently per variable and per sample; all models see the identical noisy stream, the plant itself is integrated cleanly, and every score below is computed against the CLEAN trajectory — so the noise degrades what the models know, never what they are judged against.`
+        : ' The observations are noise-free.';
+      lines.push(`TASK AND SIGNALS. Every model receives the identical stream: the full state vector [${S.vars.join(', ')}], sampled every dt, standardised online (per-variable mean/scale frozen after calibration).${noiseTxt} The input to each model at time t is a lag window of ${S.lags} sample${S.lags > 1 ? 's' : ''} at stride ${S.stride} (spanning ${span} sample${span > 1 ? 's' : ''} ≈ ${nf(span / L, 2)} Λ of history). Every model predicts ${tgtTxt} — all ${S.dim} variable${S.dim > 1 ? 's' : ''}, one sample ahead. Free-running ("dream") forecasts are produced by iterating that same one-step map on its own output, with no access to the true trajectory.`);
       lines.push('');
       lines.push(`MODELS. The EXPERIMENTAL MODEL is a nonlinear vector-autoregression readout (NVAR / next-generation reservoir computing): a ${polyTxt} feature expansion of the lag window — ${model ? model.numFeatures : '—'} features per predicted variable — fitted by exact recursive least squares (forgetting factor 1.0, initial covariance / ridge 100) and guarded by attractor-scale output clamps. Three baselines see exactly the same inputs, targets and sample rate: (1) an ECHO STATE NETWORK — 100 recurrent neurons, sparse random coupling (10 connections per unit), spectral radius 0.9 set by power iteration, leak rate 0.3, input scaling 0.3, with a linear [1, state, reservoir] readout trained online by RLS (λ = 0.9995); (2) a FEEDFORWARD MLP — one 32-unit tanh hidden layer over the same lag window, trained online with Adam (lr 3e-3) plus experience replay from a 1200-sample buffer; (3) a LINEAR ARX model — the same lag window with first-order features only, fitted by the same RLS, i.e. classical linear system identification.`);
       lines.push('');
@@ -778,6 +883,23 @@
       lines.push('');
       lines.push(`GRADING. Two measures are reported. (i) ONE-STEP ERROR: normalised RMS error of the one-sample-ahead forecast of the first state variable, accumulated only on instances where all four models produced a prediction, against a shared denominator, so the comparison is pairwise on identical data. (ii) VALID TIME: at the switch to free-running, every model is initialised from the plant's exact current state; a model remains "valid" until the distance from its forecast state to the NEAREST true state within ±${lzW} samples (a phase tolerance, so a small timing lag during a fast transit is not scored as divergence) exceeds 0.4× the attractor's RMS fluctuation scale — tracked online from the data, not hardcoded — for ${lzSus} consecutive samples; the clock is then recorded at the START of that excursion and reported in Lyapunov times. A free-run oscillation count (crossings of the mean ±0.55σ band of the first variable) is also reported, since a forecast can stay near the attractor while losing its dynamics.`);
       lines.push('');
+      if (lzBatchStats || lzBatch) {
+        const B = lzBatchStats;
+        const c = (B && B.cfg) || (lzBatch && lzBatch.cfg);
+        const head = `BATCH STATISTICS. ${B ? `${B.n} independent runs were collected` : `A batch is running (${lzBatch.results.length}/${lzBatch.target} runs collected so far)`} on ${c.sys} with the following protocol, repeated identically each run: the models are re-initialised from scratch; the plant then advances ${c.delay} samples randomised ±50% per run (so every run trains from a different, uncorrelated part of the attractor) while the models observe predict-only and the normalisation calibrates; training is then enabled for exactly ${c.window} samples (≈ ${nf(c.window / L, 1)} Λ); the models then free-run and the run ends when EVERY model's valid-time clock has stopped, or at a 12 Λ cap (runs still valid at the cap are counted at the cap and flagged as censored). Observation noise for the batch: ${c.noise > 0 ? (100 * c.noise).toFixed(2) + '% of RMS scale' : 'none'}.`;
+        lines.push(head);
+        if (B) {
+          const nm = { n: 'experimental model', e: 'echo state network', m: 'feedforward MLP', l: 'linear ARX' };
+          const row = (k) => `  ${nm[k].padEnd(20)} mean ${nf(B.valid[k].mean, 2)} Λ · sd ${nf(B.valid[k].sd, 2)} · median ${nf(B.valid[k].med, 2)} · range ${nf(B.valid[k].min, 2)}–${nf(B.valid[k].max, 2)}${B.censored[k] ? ` · ${B.censored[k]} censored at cap` : ''} · mean one-step nRMSE ${nf(B.one[k], 4)}`;
+          lines.push('');
+          lines.push(`VALID TIME OVER ${B.n} RUNS (Lyapunov times):`);
+          for (const k of ['n', 'e', 'm', 'l']) lines.push(row(k));
+          const adv = B.valid.n.mean / Math.max(1e-9, Math.max(B.valid.e.mean, B.valid.m.mean, B.valid.l.mean));
+          lines.push('');
+          lines.push(`The experimental model's mean valid time is ${nf(adv, 2)}× the best baseline mean over this batch. Because each run starts from an independent point on the attractor, the spread above is the honest run-to-run variability of the metric, and the mean over ${B.n} runs — not any single run — is the figure to compare against other work.`);
+        }
+        lines.push('');
+      }
       lines.push(`LATEST RESULT (${S.label}${lzVal ? '' : ' — no free-run yet'}). Valid time: experimental model ${valTxt('n')}; echo state network ${valTxt('e')}; feedforward MLP ${valTxt('m')}; linear ARX ${valTxt('l')}.${lzValBest >= 0 ? ` Best experimental free-run since reset: ${nf(lzValBest / L, 2)} Λ.` : ''} One-step normalised RMS error: experimental ${e1('lz-rmse')}, ESN ${e1('lz-esn')}, MLP ${e1('lz-mlp')}, linear ARX ${e1('lz-rmse2')}. Free-run oscillation crossings: ${wingsTxt}. Note that valid time on a chaotic attractor is strongly dependent on WHERE the free-run starts, so single runs vary substantially (typically 0.5–8 Λ for the same trained model) and means over several starts are the meaningful figure.`);
       return lines.join('\n');
     }
@@ -805,6 +927,9 @@
       esnPts: esnLine.count, mlpPts: mlpLine.count, dreamPts: dreamLine.count,
       wings: { n: wingCrossings(dreamXs), e: wingCrossings(esnXs), m: wingCrossings(mlpXs), l: wingCrossings(rivalXs) },
       trained: lzTrainedN, training: lzTraining, gate: lzGate, sys: lzSys.label,
+      noise: lzNoise, paused: lzPaused,
+      batch: lzBatchStats ? { n: lzBatchStats.n, valid: Object.fromEntries(['n', 'e', 'm', 'l'].map((k) => [k, +lzBatchStats.valid[k].mean.toFixed(2)])) }
+        : (lzBatch ? { running: true, done: lzBatch.results.length, target: lzBatch.target } : null),
       val: lzVal ? { ...lzVal, steps: lzDreamSteps, lyap: LZ_LYAP_STEPS } : null });
 
     function tick() {
@@ -815,17 +940,33 @@
       // fractional-step accumulator is dropped so resuming can't burst.
       if (!lzPaused) lzAcc += lzSys.spf * lzSpeed;   // per-system steps/frame at full speed
       else lzAcc = 0;
-      const SUB = Math.floor(lzAcc);
-      lzAcc -= SUB;
+      // batch mode runs TURBO: as many steps as fit a per-frame time budget,
+      // so a 10-run statistics sweep takes seconds, not minutes
+      const turbo = !!lzBatch && !lzPaused;
+      const tStep0 = performance.now();
+      const SUB = turbo ? 200000 : Math.floor(lzAcc);
+      if (!turbo) lzAcc -= SUB;
+      let did = 0;
       for (let k = 0; k < SUB; k++) {
+        if (turbo && (k & 63) === 63 && performance.now() - tStep0 > 12) break;
+        did++;
         if (!dreaming) {
           state = lzSys.step(state);
+          // OBSERVATION the models receive (clean state + optional noise).
+          // Scoring targets stay CLEAN, so noise degrades what the models
+          // know, never what they are judged against.
+          let obs = state;
+          if (lzNoise > 0) {
+            const sd = lzNoise * Math.sqrt(Math.max(lzVar2, 1e-12) / lzSys.dim);
+            obs = state.map((v) => v + sd * lzGauss());
+          }
+          lzLastObs = obs;
           // training happens only inside the user's window: idle and dreams
           // are predict-only (state estimation + normalization stay live)
           const wash = samples < LZ_WASH || lzRewash > 0 || !lzTraining;
           if (lzRewash > 0) lzRewash--;
-          const resN = model.step(state, null, wash);
-          const resL = rival.step(state, null, wash);
+          const resN = model.step(obs, null, wash);
+          const resL = rival.step(obs, null, wash);
           if (!wash) lzTrainedN++;
           samples++;
           // PAIRWISE scoring (finger-tab lesson): all four series accumulate
@@ -838,8 +979,8 @@
           }
           lastPredN = resN.prediction[0][0];
           lastPredL = resL.prediction[0][0];
-          // rivals train online on the same stream (normalized state)
-          const u = lzU(state);
+          // rivals train online on the same stream (normalized observation)
+          const u = lzU(obs);
           const E = lzEsn, xr = esnStep(E, u);       // reservoir keeps evolving even while idle
           const fE = [1, ...u, ...xr];
           if (!wash && E.prevF) { esnRls(E.one, E.prevF, u, E.lam); E.tr++; }
@@ -867,8 +1008,17 @@
           for (let c = 0; c < lzSys.dim; c++) dv2 += (state[c] - lzMu[c]) ** 2;
           lzVar2 += 0.001 * (dv2 - lzVar2);
           lzVar0 += 0.001 * ((state[0] - lzMu[0]) ** 2 - lzVar0);
-          // auto-dream: the moment the training window is reached
-          if (document.getElementById('lz-autodream').checked && lzTraining && lzTrainedN >= lzGate) {
+          // batch phases: delay (randomised start point) → train → dream
+          if (lzBatch) {
+            if (lzBatch.phase === 'delay' && samples >= lzBatch.delaySteps) {
+              lzBatch.phase = 'train'; lzTraining = true;
+            } else if (lzBatch.phase === 'train' && lzTrainedN >= lzGate) {
+              lzBatch.phase = 'dream'; lzTraining = false;
+              document.getElementById('lz-dream').click();
+              break;
+            }
+          } else if (document.getElementById('lz-autodream').checked && lzTraining && lzTrainedN >= lzGate) {
+            // auto-dream: the moment the training window is reached
             lzTraining = false;
             document.getElementById('lz-dream').click();
             break;                                   // mode flipped mid-frame — stop stepping
@@ -876,6 +1026,7 @@
           pushPoint(realLine, state);
           plotReal.push(state[0]); plotPredN.push(lastPredN); plotPredL.push(lastPredL);
           plotPredE.push(lastPredE); plotPredM.push(lastPredM);
+          lzTrimPlots();
         } else {
           // reality keeps running (green) — the models do NOT see it
           state = lzSys.step(state);
@@ -916,6 +1067,7 @@
           plotPredL.push(Number.isFinite(rivalDream[0]) ? pClamp(rivalDream[0]) : null);
           plotPredE.push(Number.isFinite(eDen[0]) ? pClamp(eDen[0]) : null);
           plotPredM.push(mDen && Number.isFinite(mDen[0]) ? pClamp(mDen[0]) : null);
+          lzTrimPlots();
           // valid-time clocks: phase-tolerant (±lzW steps) sustained (lzSus)
           // threshold crossing freezes each model's Λ at excursion start —
           // windows scale with the selected system's Λ
@@ -945,11 +1097,34 @@
               } else lzRun[key] = 0;
             }
           }
+          // batch: a run ends when EVERY model has diverged (or the cap hits)
+          if (lzBatch && lzBatch.phase === 'dream') {
+            const keys = ['n', 'e', 'm', 'l'];
+            const done = keys.every((k2) => lzVal[k2] >= 0);
+            const capped = lzDreamSteps >= lzBatch.capSteps;
+            if (done || capped) {
+              const L2 = LZ_LYAP_STEPS;
+              const rec = { valid: {}, censored: {}, one: {}, cfg: lzBatch.cfg };
+              for (const k2 of keys) {
+                rec.censored[k2] = lzVal[k2] < 0;
+                rec.valid[k2] = (rec.censored[k2] ? lzDreamSteps : lzVal[k2]) / L2;
+              }
+              rec.one.n = parseFloat(document.getElementById('lz-rmse').textContent);
+              rec.one.e = parseFloat(document.getElementById('lz-esn').textContent);
+              rec.one.m = parseFloat(document.getElementById('lz-mlp').textContent);
+              rec.one.l = parseFloat(document.getElementById('lz-rmse2').textContent);
+              lzBatch.results.push(rec);
+              lzBatch.idx++;
+              if (lzBatch.idx >= lzBatch.target) lzBatchFinish('complete');
+              else lzBatchNextRun();
+              break;                                 // models were just reset — stop stepping
+            }
+          }
         }
       }
       document.getElementById('lz-n').textContent = samples;
       document.getElementById('lz-tr').textContent = `${lzTrainedN} · ${(lzTrainedN / LZ_LYAP_STEPS).toFixed(1)} Λ`;
-      lzRateN += SUB;
+      lzRateN += did;                                // steps ACTUALLY executed (turbo/pause aware)
       const nowR = performance.now();
       if (!lzRateT0) lzRateT0 = nowR;
       if (nowR - lzRateT0 >= 1000) {
@@ -976,9 +1151,10 @@
         dreamBtn.disabled = samples < LZ_WASH;       // only calibration gates the dream now
         dreamBtn.textContent = samples < LZ_WASH ? '🧠 calibrating…' : 'Dream: NGRC vs rivals 🌀';
         trainBtn.disabled = false;
-        document.getElementById('lz-mode').textContent = lzTraining
-          ? `training (${lzTrainedN} samples trained)`
-          : (lzTrainedN > 0 ? `training stopped 🔒 · ${lzTrainedN} samples trained` : 'attractor running — training idle');
+        document.getElementById('lz-mode').textContent = lzBatch
+          ? `📊 batch run ${lzBatch.idx + 1}/${lzBatch.target} — ${lzBatch.phase === 'delay' ? `randomised start delay (${samples}/${lzBatch.delaySteps})` : `training ${lzTrainedN}/${lzGate}`}`
+          : (lzTraining ? `training (${lzTrainedN} samples trained)`
+            : (lzTrainedN > 0 ? `training stopped 🔒 · ${lzTrainedN} samples trained` : 'attractor running — training idle'));
         document.getElementById('lz-dstat').textContent = '—';
       } else {
         trainBtn.disabled = true;
