@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:77,built:"2026-08-06T03:00:47Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:78,built:"2026-08-06T03:09:12Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -78,6 +78,13 @@
       <button id="lz-dream">Dream: NGRC vs rivals 🌀</button>
       <button id="lz-reset" class="sec">Reset</button>
       <button id="lz-view" class="sec" style="flex:0 0 auto;min-width:88px">⟲ view</button>
+      <select id="lz-warmsel" title="mandatory warmup before Dream unlocks — lower it to test undertrained dreams; the washout/calibration window scales with it (resets the models)">
+        <option value="1800" selected>warmup: 1800 (default)</option>
+        <option value="900">warmup: 900</option>
+        <option value="450">warmup: 450</option>
+        <option value="200">warmup: 200</option>
+        <option value="100">warmup: 100</option>
+      </select>
       <div class="slider">Speed
         <input id="lz-speed" type="range" min="0.05" max="1" step="0.05" value="1" />
         <span id="lz-speedv">1.00×</span>
@@ -229,7 +236,12 @@
     // Tab 1: Lorenz — NGRC vs linear ARX; reality keeps running during dream
     // =====================================================================
     const SIGMA = 10, RHO = 28, BETA = 8 / 3, DT = 0.02;
-    const LZ_GATE = 1800;   // dream unlock: free-run reliably reproduces the butterfly from ~1500 samples at dt=0.02 (measured)
+    // dream unlock: free-run reliably reproduces the butterfly from ~1500
+    // samples at dt=0.02 (measured) — 1800 is the DEFAULT; the warmup
+    // selector drops it as low as 100 for testing undertrained dreams.
+    // The washout/calibration window scales with it (capped at 250) so a
+    // short warmup still trains before Dream unlocks.
+    let LZ_GATE = 1800;
     const lorenzDeriv = (p) => [SIGMA * (p[1] - p[0]), p[0] * (RHO - p[2]) - p[1], p[0] * p[1] - BETA * p[2]];
     function rk4(s) {
       const k1 = lorenzDeriv(s);
@@ -369,7 +381,7 @@
     // updates the Welford stats). Without it, the pre-freeze equations —
     // written in moving coordinates — are baked into the lam=1.0 exact-RLS
     // solution with full weight and cap the dream near 1 Λ.
-    const LZ_WASH = 250;
+    let LZ_WASH = 250;                               // scales with the warmup selector: min(250, gate/2)
     // RE-ENTRY WASHOUT: waking from a dream restores the model's snapshot,
     // but reality ran ahead during the dream — the first post-wake training
     // equations would pair pre-dream lag windows with post-teleport targets
@@ -440,8 +452,9 @@
       // post), and direct-horizon rungs at the crossover (0.25 Λ vs
       // iterating). Attractor clamps guard the rollout.
       const lzCl = { useClamp: true, clampMin: [-25, -32, 0], clampMax: [25, 32, 55] };
-      model = new Continuous(3, 2, 2, true, { predictionSteps: 1, lam: 1.0, initVariance: iv, autoNormalize: true, calibSamples: 250, ...lzCl });
-      rival = new Continuous(3, 2, 1, true, { predictionSteps: 1, lam: 1.0, initVariance: iv, autoNormalize: true, calibSamples: 250, ...lzCl });
+      LZ_WASH = Math.min(250, Math.floor(LZ_GATE / 2));
+      model = new Continuous(3, 2, 2, true, { predictionSteps: 1, lam: 1.0, initVariance: iv, autoNormalize: true, calibSamples: LZ_WASH, ...lzCl });
+      rival = new Continuous(3, 2, 1, true, { predictionSteps: 1, lam: 1.0, initVariance: iv, autoNormalize: true, calibSamples: LZ_WASH, ...lzCl });
       state = [1.0, 1.0, 1.0];
       dreaming = false; snapN = null; snapL = null; samples = 0;
       eN2 = 0; eL2 = 0; x2sum = 0; lastPredN = null; lastPredL = null;
@@ -465,6 +478,11 @@
     ivSlider.addEventListener('input', () => { ivVal.textContent = initVarFromSlider().toFixed(1); });
     ivSlider.addEventListener('change', () => { ivVal.textContent = initVarFromSlider().toFixed(1); makeModel(); });
     document.getElementById('lz-reset').addEventListener('click', makeModel);
+    document.getElementById('lz-warmsel').addEventListener('change', (e) => {
+      LZ_GATE = Math.max(50, parseInt(e.target.value, 10) || 1800);
+      makeModel();                                   // gate semantics mid-run are murky — fresh start
+      console.log(`Lorenz warmup gate set to ${LZ_GATE} samples (washout ${Math.min(250, Math.floor(LZ_GATE / 2))})`);
+    });
     document.getElementById('lz-dream').addEventListener('click', () => {
       if (!dreaming && samples < LZ_GATE) return;
       dreaming = !dreaming;

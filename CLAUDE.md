@@ -171,7 +171,12 @@ the shipped commit carries the correct version.
    sim steps per frame via a fractional accumulator (0.05× really is 20×
    slower); drop it right at the Dream switch to watch the crossover in
    slow motion — every model tracks reality for a while, then diverges
-   at its own pace. Survives Reset; verified 231→24 steps/s at 0.10×),
+   at its own pace. Survives Reset; verified 231→24 steps/s at 0.10×.
+   A **warmup selector** (1800 default / 900 / 450 / 200 / 100) sets the
+   mandatory training gate before Dream unlocks — drop it to test
+   undertrained dreams; the washout/calibration window scales with it
+   (min(250, gate/2)) so a short warmup still trains before the gate,
+   and changing it resets the models),
    **② soft-sensor** (drag/kick the blue motor; a soft lightly-damped coupling
    makes the hidden load lag and ring; amber `SoftSensor` caret vs a gray
    **auto-tuned lag-filter** caret — the realistic DIY baseline, best of a
