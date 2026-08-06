@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:75,built:"2026-08-06T02:39:11Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:76,built:"2026-08-06T02:53:46Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -353,6 +353,7 @@
     // online from the real data, not hardcoded.
     const LZ_LYAP_STEPS = 1 / (0.9056 * DT);
     let lzMu = [0, 0, 25], lzVar2 = 200, lzDreamSteps = 0, lzVal = null;
+    let lzValBest = -1;                              // best NGRC valid time across dreams (crossovers vary ~0.5–8 Λ)
     // WASHOUT: feed the first LZ_WASH samples predict-only so autoNormalize
     // calibrates BEFORE any training equation is written (predictOnly still
     // updates the Welford stats). Without it, the pre-freeze equations —
@@ -438,7 +439,7 @@
       lzMlp = { ...mlpCore(6, 3, 32, 0x77a7), ring: [], u1: null, u2: null, tr: 0 };
       eE2 = 0; eM2 = 0; lastPredE = null; lastPredM = null; lzEsnXSave = null;
       esnDreamU = null; mlpDreamU = null; mlpDreamUp = null;
-      lzMu = [0, 0, 25]; lzVar2 = 200; lzDreamSteps = 0; lzVal = null; lzRewash = 0;
+      lzMu = [0, 0, 25]; lzVar2 = 200; lzDreamSteps = 0; lzVal = null; lzRewash = 0; lzValBest = -1;
       const vt = document.getElementById('lz-vt');
       if (vt) vt.textContent = '—';
       clearLine(realLine); clearLine(liveLine); clearLine(dreamLine); clearLine(rivalLine);
@@ -627,11 +628,16 @@
         document.getElementById('lz-dstat').textContent =
           `wing crossings — NGRC ${cn}${cn > 2 ? ' ✓' : ''} · ESN ${ce} · MLP ${cm} · linear ${cl}${cl <= 1 ? ' ✗' : ''}`;
       }
-      // valid-time row: persists after waking so the last dream stays readable
+      // valid-time row: persists after waking so the last dream stays readable.
+      // "best" tracks the luckiest crossover — valid time is strongly
+      // anchor-dependent (~0.5–8 Λ for the same model), so one dream is not
+      // the model's ceiling.
       if (lzVal) {
+        if (lzVal.n >= 0 && lzVal.n > lzValBest) lzValBest = lzVal.n;
         const fmtV = (v) => (v >= 0 ? (v / LZ_LYAP_STEPS).toFixed(1) : '≥' + (lzDreamSteps / LZ_LYAP_STEPS).toFixed(1) + '…');
         document.getElementById('lz-vt').textContent =
-          `NGRC ${fmtV(lzVal.n)} · ESN ${fmtV(lzVal.e)} · MLP ${fmtV(lzVal.m)} · linear ${fmtV(lzVal.l)}`;
+          `NGRC ${fmtV(lzVal.n)} · ESN ${fmtV(lzVal.e)} · MLP ${fmtV(lzVal.m)} · linear ${fmtV(lzVal.l)}`
+          + (lzValBest >= 0 ? ` · best ${(lzValBest / LZ_LYAP_STEPS).toFixed(1)}` : '');
       }
       if (++plotTick % 8 === 0) updatePlot();
       if (spin) rotY += 0.0012;

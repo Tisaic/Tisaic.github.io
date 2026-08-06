@@ -143,10 +143,22 @@ the shipped commit carries the correct version.
    dreams now leave training unharmed (endurance test: 9 cycles, mean
    1.97 Λ and rising). Delta targets were re-checked in the clean
    regime and still lose at 12 anchors (their 6-anchor win was noise).
-   Valid times remain anchor-dependent (~0.5–5 Λ spread, means ~2–3);
+   Valid times remain anchor-dependent (~0.5–8 Λ spread, means ~2–3);
    individual anchors reach 5–8 Λ, so cross-project comparisons must
    match threshold convention and anchor counts before comparing
-   headline numbers.
+   headline numbers — the row therefore also shows "best N.N", the
+   luckiest crossover since reset. THE AFM RECIPE was investigated
+   (universal map with cross-variable quadratics + ReLU/Fourier,
+   structured prior {lin:100, quad:100, rand:1}, directional
+   forgetting — the elements that beat this on another project's
+   plant): measured equal to poly-2 at every training length
+   (1200→16000 samples) at ~10× the compute, because Lorenz's dynamics
+   are EXACTLY quadratic and Continuous poly-2 already contains all
+   cross-variable quadratic terms — the richer basis only adds
+   variance; directional forgetting is a no-op on this stationary
+   fully-excited stream. Both are real levers on plants that are
+   non-polynomial or non-stationary; on textbook Lorenz the plain
+   quadratic basis is the optimum. Not shipped.
    A **Speed slider (0.05–1×)** scales
    sim steps per frame via a fractional accumulator (0.05× really is 20×
    slower); drop it right at the Dream switch to watch the crossover in
