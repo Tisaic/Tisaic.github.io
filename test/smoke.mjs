@@ -111,7 +111,11 @@ check('ngrc: WebGL/three canvas present', three);
 const nSamp = parseInt(await demo.textContent('#lz-n')) || 0;
 check('ngrc: Lorenz model runs (samples > 0)', nSamp > 0, String(nSamp));
 check('ngrc: model warms up', (await demo.textContent('#lz-warm')) === 'yes');
-await demo.waitForSelector('#lz-dream:not([disabled])', { timeout: 30000 });  // dream gated until the attractor is seen
+// training is manual now: idle until Start training, then wait out the window
+check('ngrc: training idle until started', (await demo.evaluate(() => window.__lzDbg().trained)) === 0);
+await demo.click('#lz-train');
+await demo.waitForFunction(() => window.__lzDbg().trained >= 1500, null, { timeout: 30000 });
+await demo.waitForSelector('#lz-dream:not([disabled])', { timeout: 30000 });
 check('ngrc: ESN 1-step row populated', Number.isFinite(parseFloat(await demo.textContent('#lz-esn'))), await demo.textContent('#lz-esn'));
 check('ngrc: MLP 1-step row populated', Number.isFinite(parseFloat(await demo.textContent('#lz-mlp'))), await demo.textContent('#lz-mlp'));
 await demo.click('#lz-dream');

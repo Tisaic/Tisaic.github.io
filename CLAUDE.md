@@ -172,11 +172,22 @@ the shipped commit carries the correct version.
    slower); drop it right at the Dream switch to watch the crossover in
    slow motion — every model tracks reality for a while, then diverges
    at its own pace. Survives Reset; verified 231→24 steps/s at 0.10×.
-   A **warmup selector** (1800 default / 900 / 450 / 200 / 100) sets the
-   mandatory training gate before Dream unlocks — drop it to test
-   undertrained dreams; the washout/calibration window scales with it
-   (min(250, gate/2)) so a short warmup still trains before the gate,
-   and changing it resets the models),
+   MANUAL TRAINING LIFECYCLE: the attractor runs fully dynamic while
+   all four models watch predict-only (normalization calibrates on real
+   attractor data during idle — a 250-sample washout gates the Dream
+   button only); **Start training ▶ / ⏸** opens and closes the training
+   window at will, a **Training window slider** (log scale 0–20000,
+   default 1800; measured knee ≈ 800 — full Λ from ~550 trained
+   samples, dead flat to 20000) sets the target, and an **auto-dream
+   checkbox** fires the Dream itself the moment the window is reached
+   (training stops first, so the wake stays stopped; a manual dream
+   taken mid-training resumes training on wake). lzTrainedN counts ONLY
+   actually-trained samples — idle, washout, and post-dream re-entry
+   never count — and the ESN/MLP train in exactly the same window
+   (reservoir/lag state stays live while idle, weights don't move).
+   Verified: idle trains nothing, slider maps log-style (47→200),
+   auto-dream fires within a few samples of the window, stop freezes
+   the count while the attractor keeps running),
    **② soft-sensor** (drag/kick the blue motor; a soft lightly-damped coupling
    makes the hidden load lag and ring; amber `SoftSensor` caret vs a gray
    **auto-tuned lag-filter** caret — the realistic DIY baseline, best of a

@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:78,built:"2026-08-06T03:09:12Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:79,built:"2026-08-06T03:41:22Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -66,9 +66,12 @@
       <span style="color:#22d3ee"><b>ESN</b></span> (echo state network — the reservoir NG-RC was designed
       to replace; this head-to-head <i>on Lorenz</i> is the canonical comparison of the NG-RC literature), an
       <span style="color:#f472b6"><b>MLP</b></span> (plain feedforward net, online Adam + replay) and a
-      classical <span style="color:#f87171"><b>linear ARX</b></span> (standard system-ID). 1-step errors look
-      similar — so once they've seen the whole butterfly (~8&nbsp;s), <b>Dream</b> unlocks: all free-run
-      blind while <span style="color:#22c55e"><b>reality keeps running in green</b></span>.
+      classical <span style="color:#f87171"><b>linear ARX</b></span> (standard system-ID). The attractor runs
+      <b>fully dynamic</b> while the models just watch — <b>Start training ▶</b> opens the training window
+      (the <b>Training window</b> slider picks how many trained samples; check <b>auto-dream</b> and the
+      Dream fires itself the moment the window is reached — measured knee: ~800 samples is already full
+      performance). In <b>Dream</b>, all free-run blind while
+      <span style="color:#22c55e"><b>reality keeps running in green</b></span>.
       Watch who keeps flying wing-to-wing and who collapses or goes still — and drop the <b>Speed</b>
       slider right at the switch to watch the crossover in slow motion: every model tracks reality for a
       while, then diverges at its own pace.
@@ -78,13 +81,12 @@
       <button id="lz-dream">Dream: NGRC vs rivals 🌀</button>
       <button id="lz-reset" class="sec">Reset</button>
       <button id="lz-view" class="sec" style="flex:0 0 auto;min-width:88px">⟲ view</button>
-      <select id="lz-warmsel" title="mandatory warmup before Dream unlocks — lower it to test undertrained dreams; the washout/calibration window scales with it (resets the models)">
-        <option value="1800" selected>warmup: 1800 (default)</option>
-        <option value="900">warmup: 900</option>
-        <option value="450">warmup: 450</option>
-        <option value="200">warmup: 200</option>
-        <option value="100">warmup: 100</option>
-      </select>
+      <button id="lz-train">Start training ▶</button>
+      <label class="slider" style="flex:0 0 auto; gap:6px;" title="when checked, Dream starts automatically the moment the training window is reached"><input id="lz-autodream" type="checkbox" /> auto-dream</label>
+      <div class="slider" title="training window: how many TRAINED samples before auto-dream fires (log scale; 0 = dream immediately). Counts only samples actually trained — idle and washout don't count">Training window
+        <input id="lz-warm" type="range" min="0" max="200" step="1" value="120" />
+        <span id="lz-warmv">1800</span>
+      </div>
       <div class="slider">Speed
         <input id="lz-speed" type="range" min="0.05" max="1" step="0.05" value="1" />
         <span id="lz-speedv">1.00×</span>
@@ -236,12 +238,22 @@
     // Tab 1: Lorenz — NGRC vs linear ARX; reality keeps running during dream
     // =====================================================================
     const SIGMA = 10, RHO = 28, BETA = 8 / 3, DT = 0.02;
-    // dream unlock: free-run reliably reproduces the butterfly from ~1500
-    // samples at dt=0.02 (measured) — 1800 is the DEFAULT; the warmup
-    // selector drops it as low as 100 for testing undertrained dreams.
-    // The washout/calibration window scales with it (capped at 250) so a
-    // short warmup still trains before Dream unlocks.
-    let LZ_GATE = 1800;
+    // MANUAL TRAINING LIFECYCLE: the attractor runs fully dynamic while the
+    // models watch predict-only (normalization calibrates on real attractor
+    // data during idle); "Start training ▶" opens the window, the Training
+    // window slider (log 0–20000, default 1800; measured knee ≈ 800 — full
+    // Λ performance from ~550 trained samples, flat to 20000) sets the
+    // auto-dream target, and with auto-dream checked the Dream starts
+    // itself the moment the window is reached. lzTrainedN counts ONLY
+    // samples actually trained — idle, washout, and re-entry don't count.
+    let lzGate = 1800, lzTraining = false, lzTrainedN = 0, lzTrainBeforeDream = false;
+    const lzWarmN = (v) => {
+      if (v <= 0) return 0;
+      let n = Math.round(50 * Math.pow(400, (v - 1) / 199));
+      if (n >= 1000) n = Math.round(n / 100) * 100;
+      else if (n >= 100) n = Math.round(n / 10) * 10;
+      return n;
+    };
     const lorenzDeriv = (p) => [SIGMA * (p[1] - p[0]), p[0] * (RHO - p[2]) - p[1], p[0] * p[1] - BETA * p[2]];
     function rk4(s) {
       const k1 = lorenzDeriv(s);
@@ -381,7 +393,7 @@
     // updates the Welford stats). Without it, the pre-freeze equations —
     // written in moving coordinates — are baked into the lam=1.0 exact-RLS
     // solution with full weight and cap the dream near 1 Λ.
-    let LZ_WASH = 250;                               // scales with the warmup selector: min(250, gate/2)
+    const LZ_WASH = 250;                             // calibration washout: no equations before the stats freeze
     // RE-ENTRY WASHOUT: waking from a dream restores the model's snapshot,
     // but reality ran ahead during the dream — the first post-wake training
     // equations would pair pre-dream lag windows with post-teleport targets
@@ -452,9 +464,9 @@
       // post), and direct-horizon rungs at the crossover (0.25 Λ vs
       // iterating). Attractor clamps guard the rollout.
       const lzCl = { useClamp: true, clampMin: [-25, -32, 0], clampMax: [25, 32, 55] };
-      LZ_WASH = Math.min(250, Math.floor(LZ_GATE / 2));
       model = new Continuous(3, 2, 2, true, { predictionSteps: 1, lam: 1.0, initVariance: iv, autoNormalize: true, calibSamples: LZ_WASH, ...lzCl });
       rival = new Continuous(3, 2, 1, true, { predictionSteps: 1, lam: 1.0, initVariance: iv, autoNormalize: true, calibSamples: LZ_WASH, ...lzCl });
+      lzTraining = false; lzTrainedN = 0; lzTrainBeforeDream = false;
       state = [1.0, 1.0, 1.0];
       dreaming = false; snapN = null; snapL = null; samples = 0;
       eN2 = 0; eL2 = 0; x2sum = 0; lastPredN = null; lastPredL = null;
@@ -470,25 +482,32 @@
       clearLine(esnLine); clearLine(mlpLine);
       dreamXs = []; rivalXs = []; esnXs = []; mlpXs = [];
       const btn = document.getElementById('lz-dream');
-      btn.textContent = '🧠 learning… 0%'; btn.disabled = true;
-      document.getElementById('lz-mode').textContent = 'learning from real data';
+      btn.textContent = '🧠 calibrating…'; btn.disabled = true;
+      document.getElementById('lz-mode').textContent = 'attractor running — training idle';
       plotReal.length = 0; plotPredN.length = 0; plotPredL.length = 0;
       plotPredE.length = 0; plotPredM.length = 0;
     }
     ivSlider.addEventListener('input', () => { ivVal.textContent = initVarFromSlider().toFixed(1); });
     ivSlider.addEventListener('change', () => { ivVal.textContent = initVarFromSlider().toFixed(1); makeModel(); });
     document.getElementById('lz-reset').addEventListener('click', makeModel);
-    document.getElementById('lz-warmsel').addEventListener('change', (e) => {
-      LZ_GATE = Math.max(50, parseInt(e.target.value, 10) || 1800);
-      makeModel();                                   // gate semantics mid-run are murky — fresh start
-      console.log(`Lorenz warmup gate set to ${LZ_GATE} samples (washout ${Math.min(250, Math.floor(LZ_GATE / 2))})`);
+    document.getElementById('lz-warm').addEventListener('input', (e) => {
+      lzGate = lzWarmN(parseInt(e.target.value, 10) || 0);
+      document.getElementById('lz-warmv').textContent = String(lzGate);
+    });
+    document.getElementById('lz-train').addEventListener('click', () => {
+      if (dreaming) return;
+      lzTraining = !lzTraining;
+      console.log(lzTraining
+        ? `Lorenz training ${lzTrainedN ? 'resumed' : 'started'} (window target ${lzGate})`
+        : `Lorenz training stopped at ${lzTrainedN} trained samples`);
     });
     document.getElementById('lz-dream').addEventListener('click', () => {
-      if (!dreaming && samples < LZ_GATE) return;
+      if (!dreaming && samples < LZ_WASH) return;    // washout/calibration must finish first
       dreaming = !dreaming;
       const btn = document.getElementById('lz-dream');
       lastPredN = null; lastPredL = null; lastPredE = null; lastPredM = null;   // don't score across the dream gap
       if (dreaming) {
+        lzTrainBeforeDream = lzTraining; lzTraining = false;   // dreams never train; remember to resume
         snapN = model.snapshot(); snapL = rival.snapshot();
         dreamState = state.slice(); rivalDream = state.slice();
         lzEsnXSave = [...lzEsn.x];                   // the dream free-runs the shared reservoir; restored on stop
@@ -510,6 +529,7 @@
         lzRewash = 5;                                // refill lag history before training resumes
         lzEsn.prevF = null;                          // rivals: drop stale pre-dream pairings too
         lzMlp.u1 = null; lzMlp.u2 = null;
+        lzTraining = lzTrainBeforeDream; lzTrainBeforeDream = false;   // auto-dream wakes stopped; manual resumes
         clearLine(liveLine);                         // dream trails stay visible until the next dream
         plotReal.length = 0; plotPredN.length = 0; plotPredL.length = 0;
         plotPredE.length = 0; plotPredM.length = 0;
@@ -540,6 +560,7 @@
     window.__lzDbg = () => ({ n: samples, esnTr: lzEsn ? lzEsn.tr : 0, mlpTr: lzMlp ? lzMlp.tr : 0,
       esnPts: esnLine.count, mlpPts: mlpLine.count, dreamPts: dreamLine.count,
       wings: { n: wingCrossings(dreamXs), e: wingCrossings(esnXs), m: wingCrossings(mlpXs), l: wingCrossings(rivalXs) },
+      trained: lzTrainedN, training: lzTraining, gate: lzGate,
       val: lzVal ? { ...lzVal, steps: lzDreamSteps, lyap: LZ_LYAP_STEPS } : null });
 
     function tick() {
@@ -550,10 +571,13 @@
       for (let k = 0; k < SUB; k++) {
         if (!dreaming) {
           state = rk4(state);
-          const wash = samples < LZ_WASH || lzRewash > 0;   // initial calib + post-dream re-entry
+          // training happens only inside the user's window: idle and dreams
+          // are predict-only (state estimation + normalization stay live)
+          const wash = samples < LZ_WASH || lzRewash > 0 || !lzTraining;
           if (lzRewash > 0) lzRewash--;
           const resN = model.step(state, null, wash);
           const resL = rival.step(state, null, wash);
+          if (!wash) lzTrainedN++;
           samples++;
           // PAIRWISE scoring (finger-tab lesson): all four series accumulate
           // on the same instances, so the shared denominator stays honest
@@ -567,20 +591,22 @@
           lastPredL = resL.prediction[0][0];
           // rivals train online on the same stream (normalized state)
           const u = lzU(state);
-          const E = lzEsn, xr = esnStep(E, u);
+          const E = lzEsn, xr = esnStep(E, u);       // reservoir keeps evolving even while idle
           const fE = [1, u[0], u[1], u[2], ...xr];
-          if (E.prevF) { esnRls(E.one, E.prevF, u, E.lam); E.tr++; }
+          if (!wash && E.prevF) { esnRls(E.one, E.prevF, u, E.lam); E.tr++; }
           E.prevF = fE;
           lastPredE = E.tr > 40 ? esnDot(E.one.TH[0], fE) * 20 : null;
           const M = lzMlp;
-          if (M.u1 && M.u2) { mlpTrain(M, [...M.u1, ...M.u2], 0, u); M.tr++; }
-          M.ring.push(u);
-          if (M.ring.length > 1200) M.ring.shift();
-          for (let r2 = 0; r2 < 4; r2++) {           // light experience replay (finger-tab recipe)
-            const n2 = M.ring.length;
-            if (n2 > 3) {
-              const j2 = 2 + Math.floor(M.rnd() * (n2 - 3));
-              mlpTrain(M, [...M.ring[j2], ...M.ring[j2 - 1]], 0, M.ring[j2 + 1]);
+          if (!wash && M.u1 && M.u2) { mlpTrain(M, [...M.u1, ...M.u2], 0, u); M.tr++; }
+          if (!wash) {                               // the ring is training data — window only
+            M.ring.push(u);
+            if (M.ring.length > 1200) M.ring.shift();
+            for (let r2 = 0; r2 < 4; r2++) {         // light experience replay (finger-tab recipe)
+              const n2 = M.ring.length;
+              if (n2 > 3) {
+                const j2 = 2 + Math.floor(M.rnd() * (n2 - 3));
+                mlpTrain(M, [...M.ring[j2], ...M.ring[j2 - 1]], 0, M.ring[j2 + 1]);
+              }
             }
           }
           lastPredM = (M.u1 && M.tr > 40) ? mlpHead(M, mlpForward(M, [...u, ...M.u1]), 0) * 20 : null;
@@ -588,6 +614,12 @@
           for (let c = 0; c < 3; c++) lzMu[c] += 0.001 * (state[c] - lzMu[c]);
           const dv2 = (state[0] - lzMu[0]) ** 2 + (state[1] - lzMu[1]) ** 2 + (state[2] - lzMu[2]) ** 2;
           lzVar2 += 0.001 * (dv2 - lzVar2);
+          // auto-dream: the moment the training window is reached
+          if (document.getElementById('lz-autodream').checked && lzTraining && lzTrainedN >= lzGate) {
+            lzTraining = false;
+            document.getElementById('lz-dream').click();
+            break;                                   // mode flipped mid-frame — stop stepping
+          }
           pushPoint(realLine, state);
           plotReal.push(state[0]); plotPredN.push(lastPredN); plotPredL.push(lastPredL);
           plotPredE.push(lastPredE); plotPredM.push(lastPredM);
@@ -660,16 +692,20 @@
       document.getElementById('lz-esn').textContent = (x2sum > 0 && eE2 > 0) ? Math.sqrt(eE2 / x2sum).toFixed(4) : '—';
       document.getElementById('lz-mlp').textContent = (x2sum > 0 && eM2 > 0) ? Math.sqrt(eM2 / x2sum).toFixed(4) : '—';
       const dreamBtn = document.getElementById('lz-dream');
+      const trainBtn = document.getElementById('lz-train');
       if (!dreaming) {
-        if (samples < LZ_GATE) {
-          dreamBtn.disabled = true;
-          dreamBtn.textContent = '🧠 learning… ' + Math.min(99, Math.round(100 * samples / LZ_GATE)) + '%';
-        } else if (dreamBtn.disabled) {
-          dreamBtn.disabled = false;
-          dreamBtn.textContent = 'Dream: NGRC vs rivals 🌀';
-        }
+        dreamBtn.disabled = samples < LZ_WASH;       // only calibration gates the dream now
+        dreamBtn.textContent = samples < LZ_WASH ? '🧠 calibrating…' : 'Dream: NGRC vs rivals 🌀';
+        trainBtn.disabled = false;
+        trainBtn.textContent = lzTraining
+          ? `training ⏸ ${lzTrainedN}${document.getElementById('lz-autodream').checked ? '/' + lzGate : ''}`
+          : (lzTrainedN > 0 ? 'Resume training ▶' : 'Start training ▶');
+        document.getElementById('lz-mode').textContent = lzTraining
+          ? `training (${lzTrainedN} samples trained)`
+          : (lzTrainedN > 0 ? `training stopped 🔒 · ${lzTrainedN} samples trained` : 'attractor running — training idle');
         document.getElementById('lz-dstat').textContent = '—';
       } else {
+        trainBtn.disabled = true;
         const cn = wingCrossings(dreamXs), cl = wingCrossings(rivalXs);
         const ce = wingCrossings(esnXs), cm = wingCrossings(mlpXs);
         document.getElementById('lz-dstat').textContent =
