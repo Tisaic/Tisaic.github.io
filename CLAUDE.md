@@ -107,23 +107,30 @@ the shipped commit carries the correct version.
    steps at dt=0.02; counted in sim steps so the Speed slider doesn't
    skew it; "≥x…" = clock still running, freezes at first crossing,
    persists after waking, resets on the next dream). Measured at the
-   gate (3-dream means): NGRC ~0.8–1.3 Λ vs ESN ~0.6–0.8 / MLP ~0.25 /
-   linear ~0.1 — NGRC leads every mean (published ~5 Λ figures are
-   offline-tuned fits; this is an online-RLS model scored right at the
-   gate). ACCURACY TUNING (offline sweep, 8–12 crossover anchors, JOINT
-   objective valid-time × wing-survival): all four models now train on
-   the SAME 1%-of-scale noise-dithered stream (the AFM noise-hardening
-   lesson / Wikner's reservoir result) — +40% NGRC valid time (0.78 →
-   1.09 Λ mean) with wing crossings fully preserved (46/5k vs 47
-   before; reality 65); NGRC/ARX also gained attractor clamps.
-   Rejected with data: poly 3 (tracked longest, 1.56 Λ, but its cubic
-   terms learn spurious attractors that kill the butterfly — 3–12
-   wings/5k), more lags (hurt), weak ridge (catastrophic), delta
-   targets (no gain), decimated dt (hurt), forgetting (neutral), and
+   gate (3-dream means): NGRC ~2.6–3 Λ (individual dreams up to ~4–5)
+   vs ESN ~0.5 / MLP ~0.3 / linear ~0.1 — literature territory for an
+   online one-pass fit (published ~5 Λ figures are offline-tuned).
+   THE DECISIVE FIX was a 250-sample WASHOUT (LZ_WASH): the library
+   trains from sample 1 while autoNormalize's stats are still moving,
+   so the pre-freeze RLS equations are written in shifting coordinates
+   and — at lam=1.0 — stay in the exact solution forever; that capped
+   the dream near 1 Λ and made weak ridge catastrophic. Feeding the
+   calibration window predict-only (stats still calibrate) took valid
+   time 0.78 → ~3 Λ (4×), improved the 1-step row 0.0067 → 0.0015,
+   made the ridge response flat over 5 decades (initVariance default
+   now 100), and wing rate ≈ reality at every anchor (~60/5k vs 65).
+   NGRC/ARX also gained attractor clamps. Rejected with data: poly 3
+   (tracked longest pre-washout but its cubic terms learn spurious
+   attractors that kill the butterfly), more lags (hurt), delta
+   targets (no gain), decimated dt (hurt), forgetting (neutral),
+   training-noise dither (its +40% was a partial workaround for the
+   missing washout — post-washout it only hurts, and it degraded the
+   displayed 1-step tracking 6×, which is why it was reverted), and
    direct-horizon rungs anchored at the crossover (0.25 Λ — each long
-   rung is an independent noisy readout; iterating the 1-step model
-   tracks 2–4× longer). The dither honestly helps the ESN's dream too
-   (same data for everyone); NGRC still leads every mean.
+   rung is an independent noisy readout; iterating tracks far longer).
+   Not suspects, checked: real-time determinism (stepping is
+   per-sample, RAF timing never enters the math) and precision (float64
+   end to end).
    A **Speed slider (0.05–1×)** scales
    sim steps per frame via a fractional accumulator (0.05× really is 20×
    slower); drop it right at the Dream switch to watch the crossover in

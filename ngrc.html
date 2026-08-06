@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:72,built:"2026-08-05T21:07:14Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:73,built:"2026-08-06T01:51:19Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -83,8 +83,8 @@
         <span id="lz-speedv">1.00×</span>
       </div>
       <div class="slider">InitVariance (stability)
-        <input id="lz-iv" type="range" min="-1" max="3" step="0.1" value="0" />
-        <span id="lz-ivv">1.0</span>
+        <input id="lz-iv" type="range" min="-1" max="3" step="0.1" value="2" />
+        <span id="lz-ivv">100.0</span>
       </div>
     </div>
     <dl class="stat">
@@ -353,20 +353,12 @@
     // online from the real data, not hardcoded.
     const LZ_LYAP_STEPS = 1 / (0.9056 * DT);
     let lzMu = [0, 0, 25], lzVar2 = 200, lzDreamSteps = 0, lzVal = null;
-    // training-noise dither (the finger tab's AFM noise-hardening lesson,
-    // and Wikner et al.'s reservoir result): a light dither on the TRAINING
-    // stream makes every learned free-run more stable — measured on the
-    // joint objective, σ ≈ 1% of the fluctuation scale buys +40% dream
-    // valid time (0.78 → 1.09 Λ) with wing crossings fully preserved
-    // (heavier doses track longer but thin the butterfly). FAIRNESS: all
-    // four models train on the SAME dithered stream; reality, displays,
-    // and scoring targets stay clean.
-    let lzNzSeed = 0xd17e;
-    const lzGs = () => {
-      const r = () => { lzNzSeed |= 0; lzNzSeed = (lzNzSeed + 0x6D2B79F5) | 0; let t = Math.imul(lzNzSeed ^ (lzNzSeed >>> 15), 1 | lzNzSeed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-      let u = r(); if (u < 1e-12) u = 1e-12;
-      return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r());
-    };
+    // WASHOUT: feed the first LZ_WASH samples predict-only so autoNormalize
+    // calibrates BEFORE any training equation is written (predictOnly still
+    // updates the Welford stats). Without it, the pre-freeze equations —
+    // written in moving coordinates — are baked into the lam=1.0 exact-RLS
+    // solution with full weight and cap the dream near 1 Λ.
+    const LZ_WASH = 250;
     function lzEsnInit() {                           // same recipe as the finger tab's, 3 inputs
       let sd = 0xE5E1;
       const rnd = () => { sd |= 0; sd = (sd + 0x6D2B79F5) | 0; let t = Math.imul(sd ^ (sd >>> 15), 1 | sd); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
@@ -415,13 +407,18 @@
     function makeModel() {
       const iv = initVarFromSlider();
       // Config from the offline JOINT sweep (valid time AND long-run wing
-      // crossings, 8-12 crossover anchors each): poly stays 2 and ridge
-      // stays 1.0 — poly 3 tracked longest (1.56 Λ) but its cubic terms
-      // learn spurious attractors that KILL the butterfly (3-12 wings/5k
-      // vs reality's 65); more lags hurt; direct-horizon rungs anchored at
-      // the crossover were investigated and lose to iterating (0.25 Λ).
-      // The winning lever is the 1% training dither below (+40% valid
-      // time, wings intact); attractor clamps guard the rollout.
+      // crossings, 8 crossover anchors each). The decisive fix is the
+      // WASHOUT (below): training used to start while autoNormalize's
+      // stats were still settling, so the first ~250 RLS equations were
+      // written in shifting coordinates and — at lam=1.0 — stayed in the
+      // exact solution forever. Feeding the calibration window
+      // predict-only quadruples the dream's valid time (0.78 → 3.1 Λ,
+      // wings ≈ reality's rate at every anchor) and makes the ridge
+      // response flat over 5 decades. Rejected with data: poly 3 (kills
+      // the butterfly), more lags, delta targets, decimated dt,
+      // forgetting, training-noise dither (helped pre-washout, hurts
+      // post), and direct-horizon rungs at the crossover (0.25 Λ vs
+      // iterating). Attractor clamps guard the rollout.
       const lzCl = { useClamp: true, clampMin: [-25, -32, 0], clampMax: [25, 32, 55] };
       model = new Continuous(3, 2, 2, true, { predictionSteps: 1, lam: 1.0, initVariance: iv, autoNormalize: true, calibSamples: 250, ...lzCl });
       rival = new Continuous(3, 2, 1, true, { predictionSteps: 1, lam: 1.0, initVariance: iv, autoNormalize: true, calibSamples: 250, ...lzCl });
@@ -510,12 +507,9 @@
       for (let k = 0; k < SUB; k++) {
         if (!dreaming) {
           state = rk4(state);
-          // all four models train on the SAME lightly dithered stream;
-          // scoring targets and every display stay clean
-          const nz = 0.010 * Math.sqrt(lzVar2);
-          const fed = [state[0] + nz * lzGs(), state[1] + nz * lzGs(), state[2] + nz * lzGs()];
-          const resN = model.step(fed);
-          const resL = rival.step(fed);
+          const wash = samples < LZ_WASH;            // stats calibrate, no training yet
+          const resN = model.step(state, null, wash);
+          const resL = rival.step(state, null, wash);
           samples++;
           // PAIRWISE scoring (finger-tab lesson): all four series accumulate
           // on the same instances, so the shared denominator stays honest
@@ -528,7 +522,7 @@
           lastPredN = resN.prediction[0][0];
           lastPredL = resL.prediction[0][0];
           // rivals train online on the same stream (normalized state)
-          const u = lzU(fed);
+          const u = lzU(state);
           const E = lzEsn, xr = esnStep(E, u);
           const fE = [1, u[0], u[1], u[2], ...xr];
           if (E.prevF) { esnRls(E.one, E.prevF, u, E.lam); E.tr++; }
