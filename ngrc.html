@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:81,built:"2026-08-06T11:22:41Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:82,built:"2026-08-06T15:32:55Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -45,6 +45,11 @@
     .stat .good { color:var(--accent2); } .stat .warn { color:#fca5a5; } .stat .amber { color:#f59e0b; }
     .plot { width:100%; height:230px; margin-top:12px; background:var(--panel); border:1px solid var(--line); border-radius:10px; }
     .lead { color:var(--muted); font-size:.85rem; line-height:1.5; margin:10px 0 4px; }
+    .sumbox { margin-top:12px; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px; }
+    .sumhead { display:flex; align-items:center; gap:10px; font-size:.82rem; color:var(--muted); margin-bottom:8px; flex-wrap:wrap; }
+    .sumhead button { padding:6px 12px; font-size:.78rem; }
+    .sumtext { font-size:.78rem; line-height:1.55; color:#cbd5e1; white-space:pre-wrap; user-select:text;
+      -webkit-user-select:text; max-height:340px; overflow-y:auto; }
   </style>
 </head>
 <body>
@@ -118,6 +123,13 @@
       <dt title="how long each free-run stays on reality's trajectory after the Dream switch: time until its distance to the nearest (hidden) reality point within ±0.1 s exceeds 0.4× the attractor's fluctuation scale for 14 consecutive steps, in Lyapunov times (λ≈0.906 → 1 Λ ≈ 1.10 time units ≈ 55 steps). Phase-tolerant + sustained so a momentary wing-transit lag doesn't end a run that is still tracking. ≥ = still valid, clock running">Valid time (Λ)</dt><dd id="lz-vt">—</dd>
     </dl>
     <div class="plot" id="lz-plot"></div>
+    <div class="sumbox">
+      <div class="sumhead">
+        <b>Experiment summary</b> — live methods + results, written for papers and chats
+        <button id="lz-copy" class="sec" style="flex:0 0 auto">Copy 📋</button>
+      </div>
+      <div id="lz-sum" class="sumtext">—</div>
+    </div>
   </section>
 
   <!-- ================= Tab 2: Soft-sensor — NGRC vs tuned lag filter ================= -->
@@ -282,13 +294,17 @@
       { // Lorenz-63 (σ10 ρ28 β8/3)
         const st = mkRk4((p) => [10 * (p[1] - p[0]), p[0] * (28 - p[2]) - p[1], p[0] * p[1] - 8 / 3 * p[2]], 0.02);
         out.lorenz = { label: 'Lorenz-63', dim: 3, dt: 0.02, lyap: 0.9133, lags: 2, stride: 1, spf: 4, transient: 0,
+          vars: ['x', 'y', 'z'],
+          eq: 'the Lorenz-63 system (dx/dt = \u03c3(y\u2212x), dy/dt = x(\u03c1\u2212z)\u2212y, dz/dt = xy\u2212\u03b2z) with the classical parameters \u03c3=10, \u03c1=28, \u03b2=8/3, integrated by RK4',
           off: [0, 0, 25], div: [20, 20, 25], clampMin: [-25, -32, 0], clampMax: [25, 32, 55],
           init: () => [1, 1, 1], step: st,
           proj: (s) => [s[0] * 0.16, (s[2] - 25) * 0.16, s[1] * 0.16] };
       }
       { // Rössler (a .2 b .2 c 5.7)
         const st = mkRk4((p) => [-p[1] - p[2], p[0] + 0.2 * p[1], 0.2 + p[2] * (p[0] - 5.7)], 0.1);
-        out.rossler = { label: 'Rössler', dim: 3, dt: 0.1, lyap: 0.0705, lags: 2, stride: 1, spf: 4, transient: 2000, poly: 3,   // measured: p3 5.5 Λ vs p2 2.9
+        out.rossler = { label: 'Rössler', dim: 3, dt: 0.1, lyap: 0.0705, lags: 2, stride: 1, spf: 4, transient: 2000, poly: 3,
+          vars: ['x', 'y', 'z'],
+          eq: 'the R\u00f6ssler system (dx/dt = \u2212y\u2212z, dy/dt = x+ay, dz/dt = b+z(x\u2212c)) with a=b=0.2, c=5.7, integrated by RK4',   // measured: p3 5.5 Λ vs p2 2.9
           off: [0, 0, 5], div: [8, 8, 8], clampMin: [-14, -15, -1], clampMax: [16, 12, 30],
           init: () => [1, 1, 0], step: st,
           proj: (s) => [s[0] * 0.22, (s[2] - 6) * 0.16, s[1] * 0.22] };
@@ -296,7 +312,9 @@
       { // Duffing (δ .3 γ .5 ω 1.2) — drive embedded as [cosφ, sinφ] state
         const OM = 1.2;
         const st = mkRk4((p) => [p[1], -0.3 * p[1] + p[0] - p[0] ** 3 + 0.5 * p[2], -OM * p[3], OM * p[2]], 0.05);
-        out.duffing = { label: 'Duffing', dim: 4, dt: 0.05, lyap: 0.1117, lags: 2, stride: 1, spf: 4, transient: 2000, poly: 3, delta: true,   // cubic force needs poly 3, slow dynamics need delta targets: 0.06 → 3.7 Λ measured
+        out.duffing = { label: 'Duffing', dim: 4, dt: 0.05, lyap: 0.1117, lags: 2, stride: 1, spf: 4, transient: 2000, poly: 3, delta: true,
+          vars: ['x', 'dx/dt', 'cos \u03c6', 'sin \u03c6'],
+          eq: 'the driven Duffing oscillator (d\u00b2x/dt\u00b2 + \u03b4\u00b7dx/dt \u2212 x + x\u00b3 = \u03b3cos\u03c6, d\u03c6/dt = \u03c9) with \u03b4=0.3, \u03b3=0.5, \u03c9=1.2, integrated by RK4; the drive phase is embedded as two extra state variables [cos\u03c6, sin\u03c6] so the system presented to the models is autonomous',   // cubic force needs poly 3, slow dynamics need delta targets: 0.06 → 3.7 Λ measured
           off: [0, 0, 0, 0], div: [1.2, 1, 1, 1], clampMin: [-2.2, -1.6, -1.2, -1.2], clampMax: [2.2, 1.6, 1.2, 1.2],
           init: () => [0.5, 0, 1, 0],
           step: (s) => { const n = st(s); const r = Math.hypot(n[2], n[3]) || 1; n[2] /= r; n[3] /= r; return n; },
@@ -315,6 +333,8 @@
         let q = [2.0, 0, 2.0, 0];
         const emit = () => [Math.cos(q[0]), Math.sin(q[0]), q[1], Math.cos(q[2]), Math.sin(q[2]), q[3]];
         out.dpend = { label: 'double pendulum', dim: 6, dt: 0.01, lyap: 1.4221, lags: 2, stride: 1, spf: 4, transient: 0,
+          vars: ['cos \u03b8\u2081', 'sin \u03b8\u2081', '\u03c9\u2081', 'cos \u03b8\u2082', 'sin \u03b8\u2082', '\u03c9\u2082'],
+          eq: 'an ideal double pendulum with equal masses and lengths (m\u2081=m\u2082=1, l\u2081=l\u2082=1, g=9.81), released from \u03b8\u2081=\u03b8\u2082=2.0 rad, integrated by RK4 at a 0.005 internal step (2 sub-steps per sample); the angles are presented to the models as [cos\u03b8, sin\u03b8] pairs so the state is continuous across wrap-around',
           off: [0, 0, 0, 0, 0, 0], div: [1, 1, 8, 1, 1, 10],
           clampMin: [-1.15, -1.15, -13, -1.15, -1.15, -18], clampMax: [1.15, 1.15, 13, 1.15, 1.15, 18],
           init: () => { q = [2.0, 0, 2.0, 0]; return emit(); },
@@ -324,7 +344,9 @@
       { // Lorenz-96 (N=5, F=8)
         const N5 = 5, F5 = 8;
         const st = mkRk4((p) => p.map((_, i) => (p[(i + 1) % N5] - p[(i + 3) % N5]) * p[(i + 4) % N5] - p[i] + F5), 0.05);
-        out.l96 = { label: 'Lorenz-96 (N=5)', dim: 5, dt: 0.05, lyap: 0.4394, lags: 2, stride: 1, spf: 4, transient: 1000, delta: true,   // measured: delta 3.1 Λ vs abs 2.4
+        out.l96 = { label: 'Lorenz-96 (N=5)', dim: 5, dt: 0.05, lyap: 0.4394, lags: 2, stride: 1, spf: 4, transient: 1000, delta: true,
+          vars: ['x\u2081', 'x\u2082', 'x\u2083', 'x\u2084', 'x\u2085'],
+          eq: 'the Lorenz-96 system on N=5 cyclic sites (dx\u1d62/dt = (x\u1d62\u208a\u2081\u2212x\u1d62\u208b\u2082)x\u1d62\u208b\u2081 \u2212 x\u1d62 + F) with forcing F=8, integrated by RK4',   // measured: delta 3.1 Λ vs abs 2.4
           off: [2.3, 2.3, 2.3, 2.3, 2.3], div: [6, 6, 6, 6, 6],
           clampMin: new Array(5).fill(-9), clampMax: new Array(5).fill(13),
           init: () => [F5 + 0.01, F5, F5 + 0.02, F5, F5 + 0.03], step: st,
@@ -354,7 +376,9 @@
           return o;
         };
         const st1 = mkRk4(fks, 0.05);
-        out.ks = { label: 'KS (Galerkin, L=22)', dim: 10, dt: 0.1, lyap: 0.0500, lags: 2, stride: 1, spf: 2, transient: 5000, delta: true,   // measured: delta 2.1 Λ vs abs 1.4
+        out.ks = { label: 'KS (Galerkin, L=22)', dim: 10, dt: 0.1, lyap: 0.0500, lags: 2, stride: 1, spf: 2, transient: 5000, delta: true,
+          vars: ['Re a\u2081', 'Im a\u2081', 'Re a\u2082', 'Im a\u2082', 'Re a\u2083', 'Im a\u2083', 'Re a\u2084', 'Im a\u2084', 'Re a\u2085', 'Im a\u2085'],
+          eq: 'the Kuramoto\u2013Sivashinsky equation (u_t + u\u00b7u_x + u_xx + u_xxxx = 0) on a periodic domain of length L=22, truncated to a 5-mode Fourier\u2013Galerkin system (10 real variables = the real and imaginary parts of the first five Fourier coefficients), integrated by RK4 at a 0.05 internal step (2 sub-steps per sample). NOTE: this is a severe truncation chosen to fit a 10-variable model budget \u2014 L=18 collapses to a fixed point and L\u226526 is under-resolved at five modes, so L=22 is the smallest honestly chaotic truncation of this family',   // measured: delta 2.1 Λ vs abs 1.4
           off: new Array(10).fill(0), div: [0.5, 0.5, 0.9, 0.9, 0.9, 0.9, 0.65, 0.65, 0.35, 0.35],
           clampMin: [-0.7, -0.7, -1.3, -1.3, -1.3, -1.3, -1, -1, -0.6, -0.6],
           clampMax: [0.7, 0.7, 1.3, 1.3, 1.3, 1.3, 1, 1, 0.6, 0.6],
@@ -374,6 +398,8 @@
           buf.push(x + 0.1 / 6 * (k1 + 2 * k2 + 2 * k3 + k4));
         };
         out.mg = { label: 'Mackey–Glass', dim: 1, dt: 1.0, lyap: 0.0051, lags: 4, stride: 6, spf: 4, transient: 2000,
+          vars: ['x'],
+          eq: 'the Mackey\u2013Glass delay differential equation (dx/dt = \u03b2\u00b7x(t\u2212\u03c4)/(1+x(t\u2212\u03c4)\u207f) \u2212 \u03b3\u00b7x) with \u03b2=0.2, \u03b3=0.1, n=10, \u03c4=17, integrated by RK4 at a 0.1 internal step and sampled every \u0394=1.0 time units; only the scalar x(t) is observable, so the delay is spanned by the models\u2019 lag window rather than given as state',
           off: [0.9], div: [0.35], clampMin: [0.1], clampMax: [1.7],
           init: () => { buf = Array.from({ length: TAU + 1 }, (_, i) => 1.1 + 0.05 * Math.sin(i / 20)); return [buf[buf.length - 1]]; },
           step: () => { for (let j = 0; j < 10; j++) inner(); return [buf[buf.length - 1]]; },
@@ -700,6 +726,61 @@
       if (!plotInited) { Plotly.newPlot('lz-plot', data, layout, { displayModeBar: false, responsive: true }); plotInited = true; }
       else Plotly.react('lz-plot', data, layout, { displayModeBar: false, responsive: true });
     }
+    // ---- live experiment summary: a paste-ready methods + results block.
+    // Everything is read from the running configuration, so it can never
+    // drift from what the page actually did. NGRC is called "the
+    // experimental model" throughout; the rivals are named baselines.
+    function lzSummaryText() {
+      const S = lzSys, L = LZ_LYAP_STEPS;
+      const nf = (x, d = 2) => (Number.isFinite(x) ? x.toFixed(d) : '—');
+      const span = (S.lags - 1) * S.stride + 1;
+      const polyN = S.poly || 2;
+      const polyTxt = polyN === 3 ? 'cubic (bias, linear, all quadratic and cubic monomials)' : 'quadratic (bias, linear and all quadratic monomials, including cross-variable products)';
+      const tgtTxt = S.delta ? 'the one-sample state increment (delta targets), added back to the current state'
+        : 'the absolute next state';
+      const lyTime = 1 / S.lyap;
+      const valTxt = (k) => {
+        if (!lzVal) return 'not yet run';
+        return lzVal[k] >= 0 ? `${nf(lzVal[k] / L, 2)} Λ` : `still valid at ≥${nf(lzDreamSteps / L, 2)} Λ`;
+      };
+      const e1 = (id) => document.getElementById(id).textContent;
+      const wingsTxt = lzVal
+        ? `${wingCrossings(dreamXs)} (experimental) vs ${wingCrossings(esnXs)} / ${wingCrossings(mlpXs)} / ${wingCrossings(rivalXs)} for the ESN / MLP / linear baselines`
+        : 'not yet run';
+      const lines = [];
+      lines.push(`SYSTEM. The plant is ${S.eq}. Sampling interval dt = ${S.dt} time units; the model sees a ${S.dim}-dimensional state [${S.vars.join(', ')}]. The largest Lyapunov exponent was measured numerically for this exact parameter set by two-trajectory (Benettin) estimation with renormalisation: λ_max ≈ ${S.lyap.toFixed(4)} per time unit, so one Lyapunov time Λ = 1/λ_max ≈ ${nf(lyTime, 2)} time units ≈ ${Math.round(L)} samples. (The same estimator reproduces the textbook value for Lorenz-63, measuring 0.913 against the published 0.906, and lands on the literature's 0.071 for Rössler.)`);
+      lines.push('');
+      lines.push(`TASK AND SIGNALS. Every model receives the identical stream: the full state vector [${S.vars.join(', ')}], sampled every dt, standardised online (per-variable mean/scale frozen after calibration). The input to each model at time t is a lag window of ${S.lags} sample${S.lags > 1 ? 's' : ''} at stride ${S.stride} (spanning ${span} sample${span > 1 ? 's' : ''} ≈ ${nf(span / L, 2)} Λ of history). Every model predicts ${tgtTxt} — all ${S.dim} variable${S.dim > 1 ? 's' : ''}, one sample ahead. Free-running ("dream") forecasts are produced by iterating that same one-step map on its own output, with no access to the true trajectory.`);
+      lines.push('');
+      lines.push(`MODELS. The EXPERIMENTAL MODEL is a nonlinear vector-autoregression readout (NVAR / next-generation reservoir computing): a ${polyTxt} feature expansion of the lag window — ${model ? model.numFeatures : '—'} features per predicted variable — fitted by exact recursive least squares (forgetting factor 1.0, initial covariance / ridge 100) and guarded by attractor-scale output clamps. Three baselines see exactly the same inputs, targets and sample rate: (1) an ECHO STATE NETWORK — 100 recurrent neurons, sparse random coupling (10 connections per unit), spectral radius 0.9 set by power iteration, leak rate 0.3, input scaling 0.3, with a linear [1, state, reservoir] readout trained online by RLS (λ = 0.9995); (2) a FEEDFORWARD MLP — one 32-unit tanh hidden layer over the same lag window, trained online with Adam (lr 3e-3) plus experience replay from a 1200-sample buffer; (3) a LINEAR ARX model — the same lag window with first-order features only, fitted by the same RLS, i.e. classical linear system identification.`);
+      lines.push('');
+      lines.push(`PROTOCOL. The plant runs continuously and is never reset between phases. While training is idle the models still step predict-only, which lets the input normalisation calibrate on genuine attractor data. A ${LZ_WASH}-sample washout precedes any weight update, so no least-squares equation is written while the normalisation statistics are still moving (with a unit forgetting factor those early, badly-scaled equations would otherwise persist in the solution indefinitely). Training is then enabled for an operator-chosen window; the current setting is ${lzGate} samples (≈ ${nf(lzGate / L, 1)} Λ) and this run has trained on ${lzTrainedN} samples (≈ ${nf(lzTrainedN / L, 1)} Λ). Each return from a free-run is followed by a 5-sample re-entry washout, because the plant advances during the free-run and the first post-resume equations would otherwise pair a stale input window with a post-jump target.`);
+      lines.push('');
+      lines.push(`GRADING. Two measures are reported. (i) ONE-STEP ERROR: normalised RMS error of the one-sample-ahead forecast of the first state variable, accumulated only on instances where all four models produced a prediction, against a shared denominator, so the comparison is pairwise on identical data. (ii) VALID TIME: at the switch to free-running, every model is initialised from the plant's exact current state; a model remains "valid" until the distance from its forecast state to the NEAREST true state within ±${lzW} samples (a phase tolerance, so a small timing lag during a fast transit is not scored as divergence) exceeds 0.4× the attractor's RMS fluctuation scale — tracked online from the data, not hardcoded — for ${lzSus} consecutive samples; the clock is then recorded at the START of that excursion and reported in Lyapunov times. A free-run oscillation count (crossings of the mean ±0.55σ band of the first variable) is also reported, since a forecast can stay near the attractor while losing its dynamics.`);
+      lines.push('');
+      lines.push(`LATEST RESULT (${S.label}${lzVal ? '' : ' — no free-run yet'}). Valid time: experimental model ${valTxt('n')}; echo state network ${valTxt('e')}; feedforward MLP ${valTxt('m')}; linear ARX ${valTxt('l')}.${lzValBest >= 0 ? ` Best experimental free-run since reset: ${nf(lzValBest / L, 2)} Λ.` : ''} One-step normalised RMS error: experimental ${e1('lz-rmse')}, ESN ${e1('lz-esn')}, MLP ${e1('lz-mlp')}, linear ARX ${e1('lz-rmse2')}. Free-run oscillation crossings: ${wingsTxt}. Note that valid time on a chaotic attractor is strongly dependent on WHERE the free-run starts, so single runs vary substantially (typically 0.5–8 Λ for the same trained model) and means over several starts are the meaningful figure.`);
+      return lines.join('\n');
+    }
+    function lzRefreshSummary() {
+      const el = document.getElementById('lz-sum');
+      if (el) el.textContent = lzSummaryText();
+    }
+    document.getElementById('lz-copy').addEventListener('click', async () => {
+      const txt = lzSummaryText();
+      const btn = document.getElementById('lz-copy');
+      let ok = false;
+      try { await navigator.clipboard.writeText(txt); ok = true; } catch (_) {
+        try {                                        // fallback for non-secure contexts
+          const ta = document.createElement('textarea');
+          ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0';
+          document.body.appendChild(ta); ta.select();
+          ok = document.execCommand('copy');
+          document.body.removeChild(ta);
+        } catch (_2) { ok = false; }
+      }
+      btn.textContent = ok ? 'Copied ✓' : 'Select + copy';
+      setTimeout(() => { btn.textContent = 'Copy 📋'; }, 1600);
+    });
     window.__lzDbg = () => ({ n: samples, esnTr: lzEsn ? lzEsn.tr : 0, mlpTr: lzMlp ? lzMlp.tr : 0,
       esnPts: esnLine.count, mlpPts: mlpLine.count, dreamPts: dreamLine.count,
       wings: { n: wingCrossings(dreamXs), e: wingCrossings(esnXs), m: wingCrossings(mlpXs), l: wingCrossings(rivalXs) },
@@ -851,6 +932,7 @@
         document.getElementById('lz-rate').textContent =
           `${sps.toFixed(0)} steps/s · dt ${lzSys.dt} · ${(sps / LZ_LYAP_STEPS).toFixed(1)} Λ/s`;
         lzRateN = 0; lzRateT0 = nowR;
+        lzRefreshSummary();                          // 1 Hz — always current, cheap
       }
       const warmEl = document.getElementById('lz-warm');
       warmEl.textContent = model.warm ? 'yes' : 'no'; warmEl.className = model.warm ? 'good' : 'warn';

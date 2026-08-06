@@ -190,6 +190,19 @@ the shipped commit carries the correct version.
    fully-excited stream. Both are real levers on plants that are
    non-polynomial or non-stationary; on textbook Lorenz the plain
    quadratic basis is the optimum. Not shipped.
+   An **Experiment summary** block below the chart writes a paste-ready
+   methods + results text (6 sections: SYSTEM / TASK AND SIGNALS /
+   MODELS / PROTOCOL / GRADING / LATEST RESULT) generated entirely from
+   live state — equations and parameters, dt, the measured λ and its Λ
+   conversion, the exact signal vector, lag/stride window and feature
+   count, every model's hyperparameters, the washout + manual-window
+   protocol, both grading definitions with the live phase/sustain
+   windows, and the last free-run's valid times, 1-step errors and
+   oscillation counts. NGRC is called "the experimental model"
+   throughout (rivals are named baselines) so the text can be pasted
+   into papers or AI chats for comparison against other researchers'
+   numbers; it refreshes at 1 Hz and has a Copy button (clipboard API
+   with an execCommand fallback).
    A **Speed slider (0.05–1×)** scales
    sim steps per frame via a fractional accumulator (0.05× really is 20×
    slower); drop it right at the Dream switch to watch the crossover in
