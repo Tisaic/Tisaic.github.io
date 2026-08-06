@@ -190,6 +190,14 @@ the shipped commit carries the correct version.
    fully-excited stream. Both are real levers on plants that are
    non-polynomial or non-stationary; on textbook Lorenz the plain
    quadratic basis is the optimum. Not shipped.
+   **Pause ⏸ / Resume ▶** freezes the plant and every model exactly where
+   they are — no stepping, training, scoring, or valid-time clock
+   advance (the fractional step accumulator is dropped so resuming can't
+   burst) — while rendering and the camera stay live so a frozen dream
+   can be orbited and inspected; Reset always unpauses. **Clear charts**
+   erases the drawn trajectories and the time-series only: models,
+   weights, training counts and scores are deliberately untouched (a
+   view operation, not a reset).
    An **Experiment summary** block below the chart writes a paste-ready
    methods + results text (6 sections: SYSTEM / TASK AND SIGNALS /
    MODELS / PROTOCOL / GRADING / LATEST RESULT) generated entirely from

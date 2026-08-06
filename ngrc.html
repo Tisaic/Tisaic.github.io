@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:82,built:"2026-08-06T15:32:55Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:83,built:"2026-08-06T15:40:22Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -87,6 +87,8 @@
     <div class="stage" id="lz-stage"></div>
     <div class="controls">
       <button id="lz-dream">Dream: NGRC vs rivals 🌀</button>
+      <button id="lz-pause" class="sec" title="freeze the simulation where it is — nothing steps, trains or scores; the view stays interactive so you can orbit and inspect. Resume continues exactly where it stopped">Pause ⏸</button>
+      <button id="lz-clear" class="sec" title="erase the drawn trajectories and the time-series chart only — models, training and scores are untouched">Clear charts</button>
       <button id="lz-reset" class="sec">Reset</button>
       <button id="lz-view" class="sec" style="flex:0 0 auto;min-width:88px">⟲ view</button>
       <select id="lz-sys" title="chaotic system — λ measured numerically for each exact parameter set, so the Lyapunov clocks stay honest per system (switching resets)">
@@ -605,7 +607,7 @@
     // accumulate, so 0.05× really is 20× slower, not "rounds to zero").
     // Slowing it right at the Dream switch shows the crossover: how long
     // each model tracks reality before diverging. Survives Reset.
-    let lzSpeed = 1, lzAcc = 0;
+    let lzSpeed = 1, lzAcc = 0, lzPaused = false;
     const spSlider = document.getElementById('lz-speed');
     spSlider.addEventListener('input', () => {
       lzSpeed = parseFloat(spSlider.value) || 1;
@@ -623,6 +625,9 @@
       model = new Continuous(sys.dim, sys.lags, sys.poly || 2, true, { predictionSteps: 1, stride: sys.stride, lam: 1.0, initVariance: 100, autoNormalize: true, calibSamples: LZ_WASH, useDelta: !!sys.delta, ...lzCl });
       rival = new Continuous(sys.dim, sys.lags, 1, true, { predictionSteps: 1, stride: sys.stride, lam: 1.0, initVariance: 100, autoNormalize: true, calibSamples: LZ_WASH, ...lzCl });
       lzTraining = false; lzTrainedN = 0; lzTrainBeforeDream = false;
+      lzPaused = false; lzAcc = 0;                   // a reset always leaves the sim running
+      const pb = document.getElementById('lz-pause');
+      if (pb) pb.textContent = 'Pause ⏸';
       state = sys.init();
       for (let i = 0; i < sys.transient; i++) state = sys.step(state);   // burn onto the attractor instantly
       dreaming = false; snapN = null; snapL = null; samples = 0;
@@ -657,6 +662,21 @@
       rotX = 0.25; rotY = 0; camera.position.set(0, 0, 10.5); spin = true;   // fresh canonical view per system
       makeModel();
       console.log(`system: ${lzSys.label} — dt ${lzSys.dt}, measured λ ${lzSys.lyap}, 1 Λ = ${(1 / (lzSys.lyap * lzSys.dt)).toFixed(0)} steps`);
+    });
+    document.getElementById('lz-pause').addEventListener('click', () => {
+      lzPaused = !lzPaused;
+      document.getElementById('lz-pause').textContent = lzPaused ? 'Resume ▶' : 'Pause ⏸';
+      console.log('lorenz sim ' + (lzPaused ? 'PAUSED — nothing steps, trains or scores' : 'resumed'));
+    });
+    // Clear charts: erase the drawn trajectories and the time-series only.
+    // Models, weights, training counts and scores are deliberately untouched
+    // — this is a view operation, not a reset.
+    document.getElementById('lz-clear').addEventListener('click', () => {
+      clearLine(realLine); clearLine(liveLine); clearLine(dreamLine);
+      clearLine(rivalLine); clearLine(esnLine); clearLine(mlpLine);
+      plotReal.length = 0; plotPredN.length = 0; plotPredL.length = 0;
+      plotPredE.length = 0; plotPredM.length = 0;
+      updatePlot();
     });
     document.getElementById('lz-reset').addEventListener('click', makeModel);
     document.getElementById('lz-warm').addEventListener('input', (e) => {
@@ -789,7 +809,12 @@
 
     function tick() {
       if (activeTab !== 'lorenz') { requestAnimationFrame(tick); return; }
-      lzAcc += lzSys.spf * lzSpeed;                  // per-system steps/frame at full speed
+      // PAUSE freezes the plant and every model exactly where they are —
+      // no stepping, training, scoring or clock advance. Rendering and the
+      // camera stay live so the frozen state can be inspected, and the
+      // fractional-step accumulator is dropped so resuming can't burst.
+      if (!lzPaused) lzAcc += lzSys.spf * lzSpeed;   // per-system steps/frame at full speed
+      else lzAcc = 0;
       const SUB = Math.floor(lzAcc);
       lzAcc -= SUB;
       for (let k = 0; k < SUB; k++) {
@@ -942,13 +967,15 @@
       document.getElementById('lz-mlp').textContent = (x2sum > 0 && eM2 > 0) ? Math.sqrt(eM2 / x2sum).toFixed(4) : '—';
       const dreamBtn = document.getElementById('lz-dream');
       const trainBtn = document.getElementById('lz-train');
+      // label always reflects live state — a stale "training ⏸ N" used to
+      // linger on the disabled button for the whole dream
+      trainBtn.textContent = lzTraining
+        ? `training ⏸ ${lzTrainedN}${document.getElementById('lz-autodream').checked ? '/' + lzGate : ''}`
+        : (lzTrainedN > 0 ? 'Resume training ▶' : 'Start training ▶');
       if (!dreaming) {
         dreamBtn.disabled = samples < LZ_WASH;       // only calibration gates the dream now
         dreamBtn.textContent = samples < LZ_WASH ? '🧠 calibrating…' : 'Dream: NGRC vs rivals 🌀';
         trainBtn.disabled = false;
-        trainBtn.textContent = lzTraining
-          ? `training ⏸ ${lzTrainedN}${document.getElementById('lz-autodream').checked ? '/' + lzGate : ''}`
-          : (lzTrainedN > 0 ? 'Resume training ▶' : 'Start training ▶');
         document.getElementById('lz-mode').textContent = lzTraining
           ? `training (${lzTrainedN} samples trained)`
           : (lzTrainedN > 0 ? `training stopped 🔒 · ${lzTrainedN} samples trained` : 'attractor running — training idle');
