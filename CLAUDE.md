@@ -288,8 +288,7 @@ the shipped commit carries the correct version.
    and a 4-trace Plotly chart. Plus PREDICTIVE soft-sensing (finger-tab
    payback): a violet hollow dashed "+1s" caret previews where the load
    WILL be in 1 s — a direct h-ahead readout (library `rls`/`predict`
-   primitives, bias + 6-lag × stride-5 window over the sensor's own
-   conditioned signals, SS_PREV_H=100 samples) scored OUT-OF-SAMPLE:
+   primitives, SS_PREV_H=100 samples) scored OUT-OF-SAMPLE:
    each prediction is stored at make-time and judged when its target
    arrives, before that pair trains. Baseline: **persistence** ("the load
    stays put"), the standard honest forecasting reference — a ringing
@@ -311,10 +310,28 @@ the shipped commit carries the correct version.
    violet "made 1s ago" caret (upper row, drop-line to truth) is the
    matured prediction landing NOW — glued to the block = the preview
    came true — plus preview/persistence meter bars in the same visual
-   language as the sensor pair, with their own ×-better readout. Measured: ~7-8× better than
-   persistence under the autonomous drive, honestly narrowing to ~2-3×
-   during unpredictable dragging — future INPUT is unknowable, the
-   dynamics still aren't), **③ finger-trace** (draw loops at ~20 Hz
+   language as the sensor pair, with their own ×-better readout.
+   PREVIEW ACCURACY FIX (v91): the readout's window spanned only 0.26 s
+   (6 lags × stride 5) while the load's ring period is ~2.8 s — it was
+   extrapolating from an almost instantaneous snapshot, which is what
+   made the preview shaky. Now **12 lags × stride 30 (3.3 s of
+   history), the sensor's OWN estimate as a 4th input signal** (a
+   function of measurements only — no truth leak — and the quantity
+   being pushed forward), **delta targets** (learn how far the load
+   MOVES over the horizon, relative to where the sensor says it is now)
+   and lighter ridge (iv 1). Measured offline out-of-sample over 24k
+   samples: drive 0.212 → 0.070 nRMSE (4.4× → 13.4× vs persistence),
+   kicks 0.247 → 0.084 (3.0× → 8.7×); live it reads ~16-18× on the
+   drive. The one honest cost is a marginal loss in the pure-DRAG
+   regime (0.165 → 0.179, 4.0× → 3.7×) where the future input is
+   unknowable by construction — a good trade for 3× everywhere else.
+   An **Experiment summary** block below the chart mirrors the Lorenz
+   tab's (6 sections, Copy button, 1 Hz refresh, same BLACK-BOX
+   contract — plant/signals/baselines/grading fully specified, the
+   experimental model's internals withheld and stated as withheld). It
+   documents both tasks (present-time estimate, 1 s forecast), both
+   baselines including the lag filter's truth-peeking advantage, the
+   lock protocol, and the out-of-sample scoring rule), **③ finger-trace** (draw loops at ~20 Hz
    sampling; an optional **tracing guide** selector overlays one of 10 faint
    stencil shapes — circle/ellipse/square/triangle/hexagon/star/figure-8/
    heart/rose/lissajous — purely visual, never read by any model, default

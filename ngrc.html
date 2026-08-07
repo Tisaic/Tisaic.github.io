@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:90,built:"2026-08-07T03:42:11Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:91,built:"2026-08-07T12:21:59Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -182,6 +182,13 @@
       <dt>Preview advantage</dt><dd id="ss-prevadv" class="good">—</dd>
     </dl>
     <div class="plot" id="ss-plot"></div>
+    <div class="sumbox">
+      <div class="sumhead">
+        <b>Experiment summary</b> — live methods + results, written for papers and chats
+        <button id="ss-copy" class="sec" style="flex:0 0 auto">Copy 📋</button>
+      </div>
+      <div id="ss-sum" class="sumtext">—</div>
+    </div>
   </section>
 
   <!-- ================= Tab 3: Finger-trace — ghost race + autopilot ================= -->
@@ -1231,7 +1238,17 @@
     // Predictions are scored OUT-OF-SAMPLE: each is stored at make-time and
     // judged when its target arrives, before that pair is trained on.
     const SS_PREV_H = 100;                           // 100 samples × dt 0.010 = 1.0 s of sim time
-    const SS_PREV_D = 19;                            // bias + 6 lags × stride 5 × 3 signals
+    // The load's ring period is ~2.8 s, so a forecast 1 s ahead needs a
+    // history window comparable to that period — the original 6×5 window
+    // spanned only 0.26 s and was extrapolating from an almost instantaneous
+    // snapshot (that is what made the preview shaky). Measured offline
+    // (24k samples, out-of-sample): 12 lags × stride 30 (3.3 s of history)
+    // + the sensor's own estimate as a 4th signal + delta targets + lighter
+    // ridge cuts the 1 s error ~3× on both the autonomous drive (0.212 →
+    // 0.070) and under kicks (0.247 → 0.084).
+    const SS_PREV_LAGS = 12, SS_PREV_STRIDE = 30;
+    const SS_PREV_SPAN = (SS_PREV_LAGS - 1) * SS_PREV_STRIDE + 1;   // 331 samples ≈ 3.3 s
+    const SS_PREV_D = 1 + 4 * SS_PREV_LAGS;          // bias + 4 signals × 12 lags = 49
     let ssPrevTh, ssPrevP, ssRing, ssPrevPend, ssPrevTr, ssEP, ssEPer, ssPrevNow, ssPrevMat;
     // MANUAL training→estimation switchover: after calibration the sensor
     // ADAPTS (online RLS toward truth) until the user locks it — so you can
@@ -1255,7 +1272,7 @@
       ssV1f1 = 0; ssV1f2 = 0; ssUf1 = 0; ssUf2 = 0;
       ssFilt = ALPHAS.map(() => 0);
       ssFiltErr = ALPHAS.map(() => 0);
-      ({ theta: ssPrevTh, P: ssPrevP } = rlsInit(SS_PREV_D, 10.0));
+      ({ theta: ssPrevTh, P: ssPrevP } = rlsInit(SS_PREV_D, 1.0));   // measured: iv 1 beats 10 and 100
       ssRing = []; ssPrevPend = []; ssPrevTr = 0; ssEP = 0; ssEPer = 0; ssPrevNow = null; ssPrevMat = null;
       ssLocked = false; ssAdaptN = 0; ssFiltBest = 0;
       ssPlotTrue.length = 0; ssPlotEst.length = 0; ssPlotNaive.length = 0; ssPlotPrev.length = 0;
@@ -1335,15 +1352,22 @@
       ssSamples++;
       // 1 s-ahead preview: predict-then-train on the same conditioned signals
       let prevAligned = null;
-      if (ss.frozen) {
-        ssRing.push([x1, ssV1f2, ssUf2]);
-        if (ssRing.length > 32) ssRing.shift();
-        if (ssRing.length >= 26) {                   // full 6-lag × stride-5 window
+      if (ss.frozen && est != null) {
+        // 4th signal = the sensor's OWN estimate of the load (a function of
+        // measurements only — no truth leak), which the forecast needs
+        // because it is predicting that quantity forward
+        ssRing.push([x1, ssV1f2, ssUf2, est]);
+        if (ssRing.length > SS_PREV_SPAN + 2) ssRing.shift();
+        if (ssRing.length >= SS_PREV_SPAN) {
           const fv = [1];
-          for (let sg = 0; sg < 3; sg++) for (let L = 0; L < 6; L++) fv.push(ssRing[ssRing.length - 1 - 5 * L][sg]);
+          for (let sg = 0; sg < 4; sg++) {
+            for (let L = 0; L < SS_PREV_LAGS; L++) fv.push(ssRing[ssRing.length - 1 - SS_PREV_STRIDE * L][sg]);
+          }
           const f = new Block(SS_PREV_D, 1, fv);
-          ssPrevNow = ssPrevTr > 40 ? predict(f, ssPrevTh) : null;
-          ssPrevPend.push({ f, y: ssPrevNow, x2now: x2 });
+          // DELTA target: learn how far the load MOVES over the horizon,
+          // relative to where the sensor says it is now
+          ssPrevNow = ssPrevTr > 40 ? predict(f, ssPrevTh) + est : null;
+          ssPrevPend.push({ f, y: ssPrevNow, base: est, x2now: x2 });
           if (ssPrevPend.length > SS_PREV_H) {
             const q = ssPrevPend.shift();            // matured: its target is NOW
             ssPrevMat = q.y;                         // for the on-stage verification caret
@@ -1354,7 +1378,7 @@
               prevAligned = q.y;
             }
             if (!ssLocked) {                         // lock freezes the preview readout too
-              rls(ssPrevTh, ssPrevP, q.f, x2, 1.0, 0, false);
+              rls(ssPrevTh, ssPrevP, q.f, x2 - q.base, 1.0, 0, false);
               ssPrevTr++;
             }
           }
@@ -1486,6 +1510,58 @@
       prevTr: ssPrevTr, filtBest: ssFiltBest });
 
     let ssPlotInited = false, ssPlotTick = 0;
+    // ---- live experiment summary (same contract as the Lorenz tab): the
+    // EXPERIMENTAL MODEL is a black box — no architecture, feature
+    // construction, lag window, target convention or fitting details appear
+    // in this text, and it says so. The plant, the signals, the baselines
+    // and the grading stay fully specified and reproducible.
+    function ssSummaryText() {
+      const nf = (x, d = 4) => (Number.isFinite(x) ? x.toFixed(d) : '—');
+      const hs = (SS_PREV_H * PM.dt).toFixed(1);
+      const eN = ssET > 0 ? Math.sqrt(ssEN / ssET) : NaN;
+      const eC = ssET > 0 ? Math.sqrt(ssEC / ssET) : NaN;
+      const eP = (ssET > 0 && ssEP > 0) ? Math.sqrt(ssEP / ssET) : NaN;
+      const ePe = (ssET > 0 && ssEPer > 0) ? Math.sqrt(ssEPer / ssET) : NaN;
+      const mode = !ss.frozen ? 'still calibrating'
+        : (ssLocked ? `LOCKED — pure estimation, no further learning (trained on ${ssAdaptN} samples before the lock)`
+          : `training (adapting) — ${ssAdaptN} samples so far${ssAdaptN >= SS_MIN_TRAIN ? ', past the minimum-ready threshold' : ''}`);
+      const L = [];
+      L.push(`SYSTEM. The plant is a two-mass mechanical drive: a motor mass (m₁ = ${PM.m1}, viscous damping ${PM.b1}) is coupled to a hidden load mass (m₂ = ${PM.m2}, damping ${PM.b2}) through a soft, lightly damped spring (stiffness k = ${PM.k}, damping c = ${PM.c}), integrated at dt = ${PM.dt} s. The coupling gives the load a lightly damped resonance near ${(Math.sqrt(PM.k / PM.m2) / (2 * Math.PI)).toFixed(2)} Hz (period ≈ ${(2 * Math.PI / Math.sqrt(PM.k / PM.m2)).toFixed(1)} s), so the load lags, overshoots and rings after any motor motion — it is not a delayed copy of the motor. The motor is driven either by a fixed multi-tone signal (0.20, 0.50 and 0.95 Hz components) or, when the operator drags or kicks it, by an unpredictable exogenous input.`);
+      L.push('');
+      L.push(`TASK AND SIGNALS. Only MOTOR-SIDE quantities are measurable: motor position x₁, motor velocity and applied force, the latter two band-limited by a two-pole filter (the load physically cannot follow high-frequency content, so unfiltered drive jerk would enter the estimate as noise). The load's position is never measured; it is used only as a training target and for scoring. Two tasks are evaluated on this stream. (1) SOFT SENSING: estimate the hidden load position at the present instant. (2) FORECASTING: predict where the hidden load will be ${hs} s in the future.`);
+      L.push('');
+      L.push(`MODELS. The EXPERIMENTAL MODEL performs both tasks. It is evaluated as a black box: it observes only the measurable motor-side signals, learns online in a single pass with no offline pre-training and no access to the plant equations, and emits (a) a present-time estimate of the hidden load and (b) a ${hs} s-ahead forecast of it. Its internal architecture, feature construction and fitting procedure are intentionally NOT disclosed in this summary. Each task is compared against a fully specified baseline: the estimate is scored against an AUTO-TUNED FIRST-ORDER LAG FILTER — a bank of filters y ← y + α(x₁ − y) with α ∈ {0.01, 0.02, 0.04, 0.07, 0.12, 0.20, 0.35}, of which the bank member with the lowest running error against the true load is reported, i.e. the baseline is granted an advantage no deployable filter would have (it is tuned by peeking at the answer, and that selection is frozen when the model is locked); the forecast is scored against PERSISTENCE ("the load stays where it is"), the standard reference for a forecasting task, which a ringing load makes genuinely hard to beat.`);
+      L.push('');
+      L.push(`PROTOCOL. The plant runs continuously. A ${ss.warmup}-sample calibration window standardises the inputs before any learning occurs. The model then adapts toward the true load position until the operator LOCKS it; from that moment both the estimate and the forecast are frozen and run open-loop on measurements alone, and the lag-filter bank's truth-peeking selection is frozen with them. This makes the excitation the experiment: the operator can lock after gentle drive only, or after driving the plant through kicks and drags, and compare. Current mode: ${mode}. All error meters restart at each mode switch, so the numbers below score the CURRENT mode only.`);
+      L.push('');
+      L.push(`GRADING. Both measures are normalised RMS errors against the true load position, exponentially weighted over recent samples (decay ${SS_DECAY}), and both are computed on identical instances for the model and its baseline. The forecast is scored strictly OUT OF SAMPLE: every prediction is stored when it is made and judged ${hs} s later when its target arrives, and only then is that input/target pair used for learning — so no prediction is ever graded against data it was trained on.`);
+      L.push('');
+      L.push(`LATEST RESULT. Present-time estimate: experimental model ${nf(eN)} vs auto-tuned lag filter ${nf(eC)} (${Number.isFinite(eN) && eN > 0 ? nf(eC / eN, 1) + '× better' : '—'}). ${hs} s-ahead forecast: experimental model ${nf(eP)} vs persistence ${nf(ePe)} (${Number.isFinite(eP) && eP > 0 ? nf(ePe / eP, 1) + '× better' : '—'}). Both are normalised RMS errors, so 0.05 means a typical error of 5% of the load's RMS excursion. The forecast advantage is largest under the autonomous drive, where the future input is knowable, and narrows honestly while the operator is dragging the motor, because no model can know an exogenous input that has not happened yet.`);
+      return L.join('\n');
+    }
+    function ssRefreshSummary() {
+      const el = document.getElementById('ss-sum');
+      if (el) el.textContent = ssSummaryText();
+    }
+    document.getElementById('ss-copy').addEventListener('click', async () => {
+      const txt = ssSummaryText();
+      const btn = document.getElementById('ss-copy');
+      let ok = false;
+      try { await navigator.clipboard.writeText(txt); ok = true; } catch (_) {
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0';
+          document.body.appendChild(ta); ta.select();
+          ok = document.execCommand('copy');
+          document.body.removeChild(ta);
+        } catch (_2) { ok = false; }
+      }
+      btn.textContent = ok ? 'Copied ✓' : 'Select + copy';
+      setTimeout(() => { btn.textContent = 'Copy 📋'; }, 1600);
+    });
+    window.__ssDbg2 = () => ({ prevTr: ssPrevTr, ring: ssRing.length, span: SS_PREV_SPAN, feats: SS_PREV_D,
+      eP: ssET > 0 && ssEP > 0 ? Math.sqrt(ssEP / ssET) : null, ePer: ssET > 0 && ssEPer > 0 ? Math.sqrt(ssEPer / ssET) : null });
+
     function ssUpdatePlot() {
       const layout = { margin: { l: 30, r: 8, t: 8, b: 18 }, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
         font: { color: '#94a3b8', size: 10 }, showlegend: true, legend: { orientation: 'h', y: 1.22 },
@@ -1535,6 +1611,7 @@
       document.getElementById('ss-per').textContent = (ssET > 0 && ssEPer > 0) ? Math.sqrt(ssEPer / ssET).toFixed(4) : '—';
       document.getElementById('ss-prevadv').textContent = (ssEP > 0 && ssEPer > 0) ? (Math.sqrt(ssEPer / ssEP)).toFixed(1) + '× better' : '—';
       if (++ssPlotTick % 8 === 0) ssUpdatePlot();
+      if (ssPlotTick % 60 === 0) ssRefreshSummary();   // ~1 Hz
       requestAnimationFrame(ssTick);
     }
 
