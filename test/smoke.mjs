@@ -130,8 +130,10 @@ await demo.click('.tab[data-tab="pendulum"]');
 await demo.waitForTimeout(3800);
 check('ngrc: soft-sensor warms up', (await demo.textContent('#ss-warm')) === 'yes');
 check('ngrc: soft-sensor estimate error is finite', Number.isFinite(parseFloat(await demo.textContent('#ss-rmse'))));
-await demo.waitForFunction(() => document.getElementById('ss-prev').textContent !== '—', null, { timeout: 20000 });
-check('ngrc: 1 s preview row populated', Number.isFinite(parseFloat(await demo.textContent('#ss-prev'))), await demo.textContent('#ss-prev'));
+// the forecast is gated on the readout being warm, and says so until then
+check('ngrc: 1 s preview reports its warm-up', /^(warming \d+\/\d+|—)$/.test((await demo.textContent('#ss-prev')).trim()) || Number.isFinite(parseFloat(await demo.textContent('#ss-prev'))), await demo.textContent('#ss-prev'));
+await demo.waitForFunction(() => /^[0-9]/.test(document.getElementById('ss-prev').textContent), null, { timeout: 90000 });
+check('ngrc: 1 s preview row populated once warm', Number.isFinite(parseFloat(await demo.textContent('#ss-prev'))), await demo.textContent('#ss-prev'));
 check('ngrc: soft-sensor has no errors', demoErrors.length === 0, demoErrors.join(' | '));
 await demo.screenshot({ path: join(SHOTS, '05-softsensor.png') });
 

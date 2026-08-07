@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:92,built:"2026-08-07T13:33:32Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:93,built:"2026-08-07T14:14:28Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -1252,6 +1252,35 @@
     const SS_PREV_LAGS = 6, SS_PREV_STRIDE = 5;
     const SS_PREV_SPAN = (SS_PREV_LAGS - 1) * SS_PREV_STRIDE + 1;   // 26 samples
     const SS_PREV_D = 1 + 3 * SS_PREV_LAGS;          // bias + 3 signals x 6 lags = 19
+    // WARM GATE — the measured defect, and the only one that turned out to be
+    // real. CONVERGED, this readout is already at the linear ceiling: on a
+    // realistic drive/drag/kick stream, batch least squares fitted offline on
+    // the TRUE plant state (x1, v1, x2, v2, u) scores 0.215 nRMSE and this
+    // online readout scores 0.208, so there is nothing to win in steady state
+    // — what is left is the operator's future input, which is unknowable by
+    // construction. The first MINUTE was the problem: a fresh readout ran at
+    // 0.49 against a converged 0.20, and every session starts there, so the
+    // transient is what a user actually sees. It used to display a forecast
+    // after 40 updates, i.e. from the middle of the RLS excursion. Gating the
+    // display until the readout has genuinely trained measures, offline over
+    // 3 seeds, 0.49 -> 0.32 fresh on the drive and 0.39 -> 0.33 while
+    // interacting, worst case 0.52 -> 0.42, converged untouched (0.196); and
+    // LIVE, comparing builds at the SAME training age, 0.899 -> 0.423 at age
+    // 500 and 0.423 -> 0.362 at age 1200, converging to a tie by age 2500.
+    // (Comparing at the same age is the point: the first live harness read the
+    // meters at fixed wall-clock times, so runs landed at different ages and
+    // different phases of the drive — its persistence baseline swung 0.58 to
+    // 1.09 between runs, which is a property of the trajectory and of no
+    // model, and it made this change look like a regression.)
+    // Rejected, with data: standardising the inputs (no better than the gate
+    // alone, and it costs converged accuracy, 0.196 -> 0.206); a predict-only
+    // washout before training (a washout protects against statistics that
+    // MOVE, and with no standardisation nothing moves — measured 1.52 fresh,
+    // three times worse, so the Lorenz-tab analogy simply does not transfer);
+    // and averaging a ladder of horizons to smooth the output (cuts roughness
+    // 2.27x -> 1.28x but RAISES error 0.208 -> 0.251, which proves the
+    // roughness is signal, not noise).
+    const SS_PREV_GATE = 300;                        // trained updates before anything is shown
     let ssPrevTh, ssPrevP, ssRing, ssPrevPend, ssPrevTr, ssEP, ssEPer, ssPrevNow, ssPrevMat;
     // MANUAL training→estimation switchover: after calibration the sensor
     // ADAPTS (online RLS toward truth) until the user locks it — so you can
@@ -1364,7 +1393,7 @@
             for (let L = 0; L < SS_PREV_LAGS; L++) fv.push(ssRing[ssRing.length - 1 - SS_PREV_STRIDE * L][sg]);
           }
           const f = new Block(SS_PREV_D, 1, fv);
-          ssPrevNow = ssPrevTr > 40 ? predict(f, ssPrevTh) : null;
+          ssPrevNow = ssPrevTr > SS_PREV_GATE ? predict(f, ssPrevTh) : null;
           ssPrevPend.push({ f, y: ssPrevNow, x2now: x2 });
           if (ssPrevPend.length > SS_PREV_H) {
             const q = ssPrevPend.shift();            // matured: its target is NOW
@@ -1530,7 +1559,7 @@
       L.push('');
       L.push(`MODELS. The EXPERIMENTAL MODEL performs both tasks. It is evaluated as a black box: it observes only the measurable motor-side signals, learns online in a single pass with no offline pre-training and no access to the plant equations, and emits (a) a present-time estimate of the hidden load and (b) a ${hs} s-ahead forecast of it. Its internal architecture, feature construction and fitting procedure are intentionally NOT disclosed in this summary. Each task is compared against a fully specified baseline: the estimate is scored against an AUTO-TUNED FIRST-ORDER LAG FILTER — a bank of filters y ← y + α(x₁ − y) with α ∈ {0.01, 0.02, 0.04, 0.07, 0.12, 0.20, 0.35}, of which the bank member with the lowest running error against the true load is reported, i.e. the baseline is granted an advantage no deployable filter would have (it is tuned by peeking at the answer, and that selection is frozen when the model is locked); the forecast is scored against PERSISTENCE ("the load stays where it is"), the standard reference for a forecasting task, which a ringing load makes genuinely hard to beat.`);
       L.push('');
-      L.push(`PROTOCOL. The plant runs continuously. A ${ss.warmup}-sample calibration window standardises the inputs before any learning occurs. The model then adapts toward the true load position until the operator LOCKS it; from that moment both the estimate and the forecast are frozen and run open-loop on measurements alone, and the lag-filter bank's truth-peeking selection is frozen with them. This makes the excitation the experiment: the operator can lock after gentle drive only, or after driving the plant through kicks and drags, and compare. Current mode: ${mode}. All error meters restart at each mode switch, so the numbers below score the CURRENT mode only.`);
+      L.push(`PROTOCOL. The plant runs continuously. A ${ss.warmup}-sample calibration window standardises the inputs before any learning occurs. The model then adapts toward the true load position until the operator LOCKS it; from that moment both the estimate and the forecast are frozen and run open-loop on measurements alone, and the lag-filter bank's truth-peeking selection is frozen with them. This makes the excitation the experiment: the operator can lock after gentle drive only, or after driving the plant through kicks and drags, and compare. Current mode: ${mode}. All error meters restart at each mode switch, so the numbers below score the CURRENT mode only. The forecast is withheld, and not scored, until the model is warm; until then the forecast row reads "warming", so no reported number comes from a model that was still settling.`);
       L.push('');
       L.push(`GRADING. Both measures are normalised RMS errors against the true load position, exponentially weighted over recent samples (decay ${SS_DECAY}), and both are computed on identical instances for the model and its baseline. The forecast is scored strictly OUT OF SAMPLE: every prediction is stored when it is made and judged ${hs} s later when its target arrives, and only then is that input/target pair used for learning — so no prediction is ever graded against data it was trained on.`);
       L.push('');
@@ -1558,6 +1587,7 @@
       setTimeout(() => { btn.textContent = 'Copy 📋'; }, 1600);
     });
     window.__ssDbg2 = () => ({ prevTr: ssPrevTr, ring: ssRing.length, span: SS_PREV_SPAN, feats: SS_PREV_D,
+      gate: SS_PREV_GATE, warm: ssPrevTr > SS_PREV_GATE,
       eP: ssET > 0 && ssEP > 0 ? Math.sqrt(ssEP / ssET) : null, ePer: ssET > 0 && ssEPer > 0 ? Math.sqrt(ssEPer / ssET) : null });
 
     function ssUpdatePlot() {
@@ -1605,7 +1635,10 @@
       document.getElementById('ss-rmse').textContent = ssET > 0 ? Math.sqrt(ssEN / ssET).toFixed(4) : '—';
       document.getElementById('ss-naive').textContent = ssET > 0 ? Math.sqrt(ssEC / ssET).toFixed(4) : '—';
       document.getElementById('ss-adv').textContent = (ssEN > 0 && ssEC > 0) ? (Math.sqrt(ssEC / ssEN)).toFixed(1) + '× better' : '—';
-      document.getElementById('ss-prev').textContent = (ssET > 0 && ssEP > 0) ? Math.sqrt(ssEP / ssET).toFixed(4) : '—';
+      // the warm gate is stated, not silent: a forecast this readout is not
+      // ready to make is worth neither showing nor scoring
+      document.getElementById('ss-prev').textContent = (ssET > 0 && ssEP > 0) ? Math.sqrt(ssEP / ssET).toFixed(4)
+        : (ss.frozen && ssPrevTr <= SS_PREV_GATE ? `warming ${ssPrevTr}/${SS_PREV_GATE}` : '—');
       document.getElementById('ss-per').textContent = (ssET > 0 && ssEPer > 0) ? Math.sqrt(ssEPer / ssET).toFixed(4) : '—';
       document.getElementById('ss-prevadv').textContent = (ssEP > 0 && ssEPer > 0) ? (Math.sqrt(ssEPer / ssEP)).toFixed(1) + '× better' : '—';
       if (++ssPlotTick % 8 === 0) ssUpdatePlot();

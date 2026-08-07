@@ -331,8 +331,65 @@ the shipped commit carries the correct version.
    absolute targets, iv 10 — re-measured live at 0.361 / worst 0.514 /
    settled 0.205, i.e. v90 within run noise. THE RULE: optimize in the
    regime the thing is actually used in; an offline sweep on a
-   stationary trace is not that regime. The honest remaining limit is
-   that during a drag the future input is unknowable by construction.
+   stationary trace is not that regime.
+   PREVIEW, PROPERLY DIAGNOSED (v93). The revert removed a regression
+   but fixed nothing, so the readout was measured instead of tuned, on
+   a realistic drive/drag/kick stream (`scratchpad/ss-diag*.mjs`). Two
+   reported symptoms, two findings, and they are not what they looked
+   like. (1) The "bias" is not an offset — the bias weight is 0.010 and
+   the amplitude is right (shrinkage 0.97). It is a LEAD DEFICIT: the
+   issued forecast best correlates with the truth at 90 samples, not
+   the 100 it is trained for, so it predicts 0.90 s while claiming
+   1.00 s, which reads as the caret sitting short whenever the load
+   moves. (2) The jitter is real — the forecast is 2.27× rougher than
+   the load itself. BUT BOTH ARE PROPERTIES OF THE OPTIMAL PREDICTOR,
+   NOT DEFECTS: batch least squares fitted offline on the TRUE plant
+   state (x₁, v₁, x₂, v₂, u) shows the SAME lead 90 and the SAME 2.23×
+   roughness, because shrinking and staying rough is what least squares
+   should do when part of the target is unknowable. That oracle scores
+   0.215 nRMSE; the shipped online readout scores 0.208 — it is AT the
+   linear ceiling, so there was never anything to win in steady state.
+   THE REAL DEFECT WAS THE TRANSIENT: a fresh readout ran at 0.49
+   against a converged 0.20, and every session starts there, so the
+   transient is the whole user experience. Fixed by a WARM GATE — no
+   forecast is displayed or scored until the readout has genuinely
+   trained (300 updates, not the previous 40, which was the middle of
+   the RLS excursion); the row reads "warming N/300" so the gate is
+   stated rather than hidden. Measured live at MATCHED training age:
+   0.899 → 0.423 at age 500, 0.423 → 0.362 at age 1200, tied by 2500.
+   Rejected with data, all of them: input standardisation (moving stats
+   under an exact-RLS fit are strictly worse than none — bias +0.29;
+   frozen stats merely tie the gate and cost converged accuracy
+   0.196 → 0.206); a predict-only washout (a washout protects against
+   statistics that MOVE, and with no standardisation nothing moves —
+   measured 1.52 fresh, 3× worse, so the Lorenz-tab analogy does not
+   transfer); averaging a ladder of horizons (roughness 2.27× → 1.28×
+   but error 0.208 → 0.251, proving the roughness is signal); output
+   low-pass (0.208 → 0.280, and it eats the lead); forgetting and
+   directional forgetting (neutral to worse); ridge strength (flat);
+   declining to train on pairs whose horizon overlaps a touch — the
+   "don't learn the unlearnable" idea — which barely helps the drive
+   (0.230 → 0.216) and wrecks the drag (0.180 → 0.436), so those
+   targets are partly learnable after all; and POLY 2, the library's
+   signature expansion, which this readout has never used: batch liked
+   it (0.197 → 0.185) but online the 19 → 190 feature jump is
+   catastrophic (fresh 2.02 drive / 5.91 interacting) and worse even
+   converged, at 24× the CPU.
+   A MEASUREMENT LESSON worth as much as the fix: the first live A/B
+   read its meters at fixed WALL-CLOCK times, so builds landed at
+   different training ages and different phases of the drive — its
+   persistence baseline swung 0.58 → 1.09 between runs, which is a
+   property of the trajectory and of no model. It could resolve the v91
+   regression (a 3× effect) but reported this change as a regression
+   when it is an improvement. `scratchpad/ss-ab2.mjs` gates every read
+   on training age instead; compare builds at matched age.
+   The honest remaining limit stands and is now quantified: during a
+   drag the future input is unknowable by construction, so the ~2.8×
+   interacting advantage is near the ceiling while the autonomous-drive
+   advantage is ~7×. One unexploited lever remains — a long history
+   window infers the deterministic drive's phase and is worth ~10%
+   offline-converged (0.208 → 0.190) — but it is exactly what v91
+   shipped, and it is unsafe in the transient, so it stays out.
    An **Experiment summary** block below the chart mirrors the Lorenz
    tab's (6 sections, Copy button, 1 Hz refresh, same BLACK-BOX
    contract — plant/signals/baselines/grading fully specified, the
