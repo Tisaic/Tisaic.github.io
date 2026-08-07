@@ -311,20 +311,28 @@ the shipped commit carries the correct version.
    matured prediction landing NOW — glued to the block = the preview
    came true — plus preview/persistence meter bars in the same visual
    language as the sensor pair, with their own ×-better readout.
-   PREVIEW ACCURACY FIX (v91): the readout's window spanned only 0.26 s
-   (6 lags × stride 5) while the load's ring period is ~2.8 s — it was
-   extrapolating from an almost instantaneous snapshot, which is what
-   made the preview shaky. Now **12 lags × stride 30 (3.3 s of
-   history), the sensor's OWN estimate as a 4th input signal** (a
-   function of measurements only — no truth leak — and the quantity
-   being pushed forward), **delta targets** (learn how far the load
-   MOVES over the horizon, relative to where the sensor says it is now)
-   and lighter ridge (iv 1). Measured offline out-of-sample over 24k
-   samples: drive 0.212 → 0.070 nRMSE (4.4× → 13.4× vs persistence),
-   kicks 0.247 → 0.084 (3.0× → 8.7×); live it reads ~16-18× on the
-   drive. The one honest cost is a marginal loss in the pure-DRAG
-   regime (0.165 → 0.179, 4.0× → 3.7×) where the future input is
-   unknowable by construction — a good trade for 3× everywhere else.
+   PREVIEW WINDOW — A REVERTED "FIX" (v91 → v92), kept here because the
+   method mistake matters more than the code. v91 widened the readout's
+   history window from 0.26 s (6 lags × stride 5) to 3.3 s (12 × 30) to
+   match the load's ~2.8 s ring period, added the sensor's OWN estimate
+   as a 4th input signal, switched to delta targets and lightened the
+   ridge. Offline over 24k samples of a stationary trace it looked like
+   a 3× win (drive 0.212 → 0.070 nRMSE, kicks 0.247 → 0.084). **The
+   user reported it was way worse, and it was.** A live A/B harness
+   (`scratchpad/ss-ab.mjs`: identical scripted interaction — 6 cycles of
+   drag + kick — driven against each build) measured, on the metric that
+   matters, the INTERACTING regime: short window 0.338 nRMSE / worst
+   cycle 0.42, long window 0.486 / worst cycle **1.02**, and a
+   1 s-window variant 1.019 / worst **3.99**. Cause: real use is short
+   abrupt regime switches (drag → release → kick), not a stationary
+   drive; a 3.3 s memory carries stale context across the switch and the
+   delta base (anchored on the sensor's estimate) amplifies it. Reverted
+   to the v90 configuration exactly — 6 lags × stride 5, 3 signals,
+   absolute targets, iv 10 — re-measured live at 0.361 / worst 0.514 /
+   settled 0.205, i.e. v90 within run noise. THE RULE: optimize in the
+   regime the thing is actually used in; an offline sweep on a
+   stationary trace is not that regime. The honest remaining limit is
+   that during a drag the future input is unknowable by construction.
    An **Experiment summary** block below the chart mirrors the Lorenz
    tab's (6 sections, Copy button, 1 Hz refresh, same BLACK-BOX
    contract — plant/signals/baselines/grading fully specified, the
