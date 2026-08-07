@@ -293,24 +293,38 @@ the shipped commit carries the correct version.
    point: the EXACT filter is handed the true parameters and is an ORACLE,
    not a competitor — measured **0.0000** nRMSE, exact to numerical
    precision, because a noiseless observable linear plant is precisely what a
-   Kalman filter solves — while the IDENTIFIED filter has the plant
-   characterised imperfectly (m₂ 0.85×, k 1.25×, c 0.6×, b₂ 1.6×), the
-   realistic engineering case, and lands at 0.13–0.22 against the learner's
-   0.004–0.010. So the model-free model is ~20–35× better than a Kalman
-   filter whose model is wrong, and loses outright to one whose model is
-   right — which is the honest result and a far more informative demo than
-   beating a lag filter. The headline row is NGRC vs the IDENTIFIED filter
-   (like-for-like: neither was given the equations) and it renders
-   "N× worse" honestly if the learner loses. The forecast row is scored
+   Kalman filter solves — while the ENGINEERING filter carries the model a
+   practitioner actually has: **masses and spring stiffness exact** (off the
+   datasheet / CAD) but **friction and damping NOT MODELLED AT ALL**
+   (b₁ = b₂ = c = 0), because nobody has those numbers on a real machine.
+   Its noise settings are TUNED by sweep (q 1e-9…1e-1 × R_f 1e-6…1e1;
+   shipped q 1e-5, R_f 1e-1) — untuned it scores 0.062 and would have been a
+   fresh straw man, since raising the process noise is exactly how an
+   engineer makes a filter lean on its measurements instead of on dynamics
+   it does not know. Tuned it lands at ~0.017 against the learner's ~0.003.
+   The headline row is NGRC vs the ENGINEERING filter (like-for-like:
+   neither was given the damping) and it renders "N× worse" honestly if the
+   learner loses. The forecast row is scored
    against the exact filter's OWN 1 s prediction — its state estimate rolled
    forward on a HELD input, since the operator's future force is unknowable
    to it too — and the learner WINS there (~1.2–1.9× live), because it has
    learned how the drive and the drags actually evolve instead of assuming
    the force is constant. Measured offline on a realistic drive/drag/kick
-   stream: estimate 0.0000 (exact KF) / 0.0101 (learner) / 0.1223
-   (identified KF); 1 s forecast 0.1685 / 0.2163 / 0.2814 — but DURING A
-   DRAG 0.2495 / 0.1804 / 0.3682, where the learner beats even the exact
-   filter. A first attempt at this baseline scored the exact filter at 0.132
+   stream: estimate 0.0000 (exact KF) / 0.0051 (learner) / ~0.017
+   (engineering KF); 1 s forecast 0.1685 / 0.2081 / ~0.25 — but DURING A
+   DRAG 0.2495 / 0.1756 / ~0.34, where the learner beats even the exact
+   filter.
+   ALL MODELS NOW READ THE **COUPLING FORCE** (f = k(x₁−x₂) + c(v₁−v₂)) as a
+   fourth signal — what a load cell or torque transducer on the shaft gives
+   you. It helps the learner 2× (estimate 0.0101 → 0.0051) and the Kalman
+   filters take it as a second measurement row. But it carries the hidden
+   state: since k ≫ c, **x₂ ≈ x₁ − f/k**, and that ONE-LINE ALGEBRAIC
+   SHORTCUT — no model, no learning — scores **0.0175**, better than the
+   untuned engineering filter. So it is shipped as its own reported baseline
+   (row + on-stage text) rather than left implicit: adding a sensor that
+   nearly solves the task and then not saying so would make every other
+   number on the page look better than it is. The learner still wins, ~6×
+   over both the engineering filter and the algebra. A first attempt at this baseline scored the exact filter at 0.132
    and was WRONG (missing covariance symmetrisation and no state clamp); the
    tell was that theory says it must be near-exact, so it was debugged
    against a numerical Jacobian and a clamp-free stream rather than shipped.

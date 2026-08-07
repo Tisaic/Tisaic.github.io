@@ -136,8 +136,12 @@ check('ngrc: soft-sensor estimate error is finite', Number.isFinite(parseFloat(a
 {
   const kd = await demo.evaluate(() => window.__ssDbg2());
   check('ngrc: exact-model Kalman is an oracle (< 1e-3)', kd.eK != null && kd.eK < 1e-3, String(kd.eK));
-  check('ngrc: identified Kalman is degraded by model error', kd.eKm > 0.01, String(kd.eKm));
-  check('ngrc: Kalman rows rendered', /^0\./.test(await demo.textContent('#ss-kf')) && /^0\./.test(await demo.textContent('#ss-kfm')));
+  // the engineering filter must be visibly worse than the oracle (it is missing
+  // the damping) but still TUNED — a hobbled baseline would be a new straw man.
+  // How much worse depends on excitation, so bound it, don't pin it.
+  check('ngrc: engineering Kalman is degraded but tuned', kd.eKm > 20 * kd.eK && kd.eKm > 1e-3 && kd.eKm < 0.05, String(kd.eKm));
+  check('ngrc: algebraic x1-f/k baseline reported', kd.eA > 0 && kd.eA < 0.05, String(kd.eA));
+  check('ngrc: Kalman rows rendered', /^0\./.test(await demo.textContent('#ss-kf')) && /^0\./.test(await demo.textContent('#ss-kfm')) && /^0\./.test(await demo.textContent('#ss-alg')));
 }
 // the forecast is gated on the readout being warm, and says so until then
 check('ngrc: 1 s preview reports its warm-up', /^(warming \d+\/\d+|—)$/.test((await demo.textContent('#ss-prev')).trim()) || Number.isFinite(parseFloat(await demo.textContent('#ss-prev'))), await demo.textContent('#ss-prev'));
