@@ -211,7 +211,7 @@ the shipped commit carries the correct version.
    ESN 0.9 / MLP 0.7 / ARX 0.6 clean, holding to ~1% noise (4.7/1.5/
    0.4/0.8) and degrading at 3.3% (2.8/0.8/0.5/0.4); a 50-run batch
    measures NGRC 4.1 Λ (sd 2.1) vs ESN 1.0 / MLP 0.6 / ARX 0.6.
-   INDEPENDENCE BUG (fixed, v88): batch runs used to call `makeModel()`,
+   INDEPENDENCE BUG (fixed, v89): batch runs used to call `makeModel()`,
    which rewinds the plant to its fixed initial condition — with
    deterministic integration every run replayed the SAME trajectory, so
    the only entropy was the randomised delay LENGTH, and that was
