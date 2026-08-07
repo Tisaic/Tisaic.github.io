@@ -130,18 +130,25 @@ await demo.click('.tab[data-tab="pendulum"]');
 await demo.waitForTimeout(3800);
 check('ngrc: soft-sensor warms up', (await demo.textContent('#ss-warm')) === 'yes');
 check('ngrc: soft-sensor estimate error is finite', Number.isFinite(parseFloat(await demo.textContent('#ss-rmse'))));
-// the Kalman baseline must actually work: given the exact plant it is an
-// optimal observer, so it must be essentially exact, and the mis-identified
-// one must be visibly degraded — otherwise it is not a real reference
+// the baselines must be real, and the plant must stay nonlinear
 {
   const kd = await demo.evaluate(() => window.__ssDbg2());
-  check('ngrc: exact-model Kalman is an oracle (< 1e-3)', kd.eK != null && kd.eK < 1e-3, String(kd.eK));
-  // the engineering filter must be visibly worse than the oracle (it is missing
-  // the damping) but still TUNED — a hobbled baseline would be a new straw man.
-  // How much worse depends on excitation, so bound it, don't pin it.
-  check('ngrc: engineering Kalman is degraded but tuned', kd.eKm > 20 * kd.eK && kd.eKm > 1e-3 && kd.eKm < 0.05, String(kd.eKm));
-  check('ngrc: algebraic x1-f/k baseline reported', kd.eA > 0 && kd.eA < 0.05, String(kd.eA));
-  check('ngrc: Kalman rows rendered', /^0\./.test(await demo.textContent('#ss-kf')) && /^0\./.test(await demo.textContent('#ss-kfm')) && /^0\./.test(await demo.textContent('#ss-alg')));
+  // The plant must stay NONLINEAR. If a future edit neutralises the friction,
+  // backlash or hardening spring it reverts to a linear plant, where a Kalman
+  // filter is provably optimal and this whole comparison is void.
+  check('ngrc: plant exercises backlash + stiction', kd.nl && kd.nl.lash > 0.01 && kd.nl.stick > 0.01, JSON.stringify(kd.nl));
+  check('ngrc: sensor uses the nonlinear universal map', kd.sensorFeats > 100, String(kd.sensorFeats));
+  // no filter is an oracle here — that is the point of the nonlinear plant
+  check('ngrc: exact-linear Kalman is no longer exact', kd.eK > 0.01, String(kd.eK));
+  // the nonlinear basis needs data: measured, it ties the filters for ~1200
+  // adapt samples and leads from then on. Assert the converged claim on the
+  // SAMPLE COUNT, not at an arbitrary wall-clock moment.
+  await demo.waitForFunction(() => window.__ssDbg2().adaptN >= 2500, null, { timeout: 60000 });
+  const kd2 = await demo.evaluate(() => window.__ssDbg2());
+  check('ngrc: learner beats every model-based baseline once trained',
+    kd2.eN < kd2.eK && kd2.eN < kd2.eKm && kd2.eN < kd2.eA,
+    `n=${kd2.adaptN}: ${kd2.eN} vs ${kd2.eK}/${kd2.eKm}/${kd2.eA}`);
+  check('ngrc: Kalman + algebra rows rendered', /^0\./.test(await demo.textContent('#ss-kf')) && /^0\./.test(await demo.textContent('#ss-kfm')) && /^0\./.test(await demo.textContent('#ss-alg')));
 }
 // the forecast is gated on the readout being warm, and says so until then
 check('ngrc: 1 s preview reports its warm-up', /^(warming \d+\/\d+|—)$/.test((await demo.textContent('#ss-prev')).trim()) || Number.isFinite(parseFloat(await demo.textContent('#ss-prev'))), await demo.textContent('#ss-prev'));

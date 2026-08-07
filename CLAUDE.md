@@ -282,7 +282,35 @@ the shipped commit carries the correct version.
    steps/s on 60 Hz, ~480 on 120 Hz, headless CI ~175): per-sample math
    means refresh rate changes wall speed only, never results),
    **② soft-sensor** (drag/kick the blue motor; a soft lightly-damped coupling
-   makes the hidden load lag and ring; amber `SoftSensor` caret vs a green
+   makes the hidden load lag and ring. THE PLANT IS DELIBERATELY NONLINEAR —
+   a textbook linear plant is precisely where a Kalman filter is provably
+   optimal, so the old demo was showing the learner at its worst. Added:
+   **Stribeck friction** on both masses (stiction 0.9 / 0.20 breaking away to
+   Coulomb 0.55 / 0.12 at Stribeck velocity 0.05 / 0.04 — the canonical
+   unmodelable term), **backlash** ±0.02 in the coupling (inside it NO force
+   is transmitted and the load free-flies), a **hardening spring**
+   f = k·d + 35·d³ (which is also what breaks the algebraic shortcut),
+   **cogging** ripple 0.55 at spatial period 0.22 (a deterministic function
+   of motor position no linear state model can carry), and **encoder
+   quantisation** 0.002 on the measured motor position. The autonomous drive
+   was softened to 3.6/1.5/0.9 because the cubic spring transmits far more
+   force at large deflection and was pinning the load against its end stops
+   (18% → ~11% of samples). Plant-health counters (backlash-engaged,
+   Stribeck-regime, end-stop fractions) are exposed and ASSERTED, so a future
+   edit cannot silently neutralise the nonlinearity and revert the demo to a
+   linear plant. THE SENSOR NOW USES THE LIBRARY'S **UNIVERSAL MAP** (bias +
+   linear + quadratic + ReLU + Fourier, structured prior {lin 100, quad 1,
+   rand 1}) on a 4-lag × stride-6 window: 16 base terms → 169 features,
+   ~85 µs/sample (~2% of a core). Measured on the nonlinear plant: lean
+   LINEAR features 0.037, universal map **0.018**; a 6×5 window (341
+   features) is 4× the cost and WORSE (0.025) — more basis than the data
+   supports is just variance. THE COST IS DATA: the 169-feature basis ties
+   the filters for the first ~1200 adapt samples (~10 s) and leads by 2–5×
+   from then on, so the regressions assert the win on a SAMPLE COUNT rather
+   than at a wall-clock moment. Measured live once trained: NGRC 0.008 vs
+   exact-linear KF 0.021 / engineering KF 0.026 / algebra 0.026 / lag filter
+   0.135, and up to ~9× while the operator is dragging, where the
+   nonlinearity is most excited. Amber `SoftSensor` caret vs a green
    **KALMAN FILTER** caret — the FAIR baseline, since for a linear plant the
    Kalman filter is the OPTIMAL state estimator and the old auto-tuned
    lag-filter bank was a straw man (it stays in the rows for scale only, and
@@ -290,10 +318,13 @@ the shipped commit carries the correct version.
    semi-implicit integrator, driven by the known force, corrected by the
    measured motor position (C = [1 0 0 0]), symmetrised covariance, state
    clamped to the travel limits. TWO versions, and the pair is the whole
-   point: the EXACT filter is handed the true parameters and is an ORACLE,
-   not a competitor — measured **0.0000** nRMSE, exact to numerical
-   precision, because a noiseless observable linear plant is precisely what a
-   Kalman filter solves — while the ENGINEERING filter carries the model a
+   point. On the LINEAR plant the EXACT filter was an ORACLE — measured
+   **0.0000** nRMSE, exact to numerical precision, because a noiseless
+   observable linear plant is precisely what a Kalman filter solves. On the
+   NONLINEAR plant it is no longer an oracle at all (~0.021): it is merely
+   the ceiling for a linear model, since it cannot represent friction,
+   backlash, the cubic spring or cogging. That change is the entire point of
+   making the plant realistic. The ENGINEERING filter carries the model a
    practitioner actually has: **masses and spring stiffness exact** (off the
    datasheet / CAD) but **friction and damping NOT MODELLED AT ALL**
    (b₁ = b₂ = c = 0), because nobody has those numbers on a real machine.
