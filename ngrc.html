@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:90,built:"2026-08-07T03:23:45Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:90,built:"2026-08-07T03:42:11Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -858,16 +858,18 @@
     }
     // ---- live experiment summary: a paste-ready methods + results block.
     // Everything is read from the running configuration, so it can never
-    // drift from what the page actually did. NGRC is called "the
-    // experimental model" throughout; the rivals are named baselines.
+    // drift from what the page actually did. The NGRC model is called "the
+    // experimental model" and its internals are withheld (the text says so
+    // explicitly, so the omission is transparent rather than misleading);
+    // the rivals are named, fully-specified baselines.
     function lzSummaryText() {
       const S = lzSys, L = LZ_LYAP_STEPS;
       const nf = (x, d = 2) => (Number.isFinite(x) ? x.toFixed(d) : '—');
-      const span = (S.lags - 1) * S.stride + 1;
-      const polyN = S.poly || 2;
-      const polyTxt = polyN === 3 ? 'cubic (bias, linear, all quadratic and cubic monomials)' : 'quadratic (bias, linear and all quadratic monomials, including cross-variable products)';
-      const tgtTxt = S.delta ? 'the one-sample state increment (delta targets), added back to the current state'
-        : 'the absolute next state';
+      // NOTE: the experimental model is deliberately a BLACK BOX here — no
+      // architecture, feature construction, lag window, target convention or
+      // fitting details may appear in this text. Only the plant, the shared
+      // stream, the fully-specified baselines, the protocol and the
+      // measurements are described. Keep it that way when editing.
       const lyTime = 1 / S.lyap;
       const valTxt = (k) => {
         if (!lzVal) return 'not yet run';
@@ -883,11 +885,11 @@
       const noiseTxt = lzNoise > 0
         ? ` The observations are corrupted by additive zero-mean Gaussian measurement noise with σ = ${(100 * lzNoise).toFixed(2)}% of the attractor's per-variable RMS scale (σ ≈ ${nf(lzNoise * Math.sqrt(Math.max(lzVar2, 1e-12) / S.dim), 4)} in state units), drawn independently per variable and per sample; all models see the identical noisy stream, the plant itself is integrated cleanly, and every score below is computed against the CLEAN trajectory — so the noise degrades what the models know, never what they are judged against.`
         : ' The observations are noise-free.';
-      lines.push(`TASK AND SIGNALS. Every model receives the identical stream: the full state vector [${S.vars.join(', ')}], sampled every dt, standardised online (per-variable mean/scale frozen after calibration).${noiseTxt} The input to each model at time t is a lag window of ${S.lags} sample${S.lags > 1 ? 's' : ''} at stride ${S.stride} (spanning ${span} sample${span > 1 ? 's' : ''} ≈ ${nf(span / L, 2)} Λ of history). Every model predicts ${tgtTxt} — all ${S.dim} variable${S.dim > 1 ? 's' : ''}, one sample ahead. Free-running ("dream") forecasts are produced by iterating that same one-step map on its own output, with no access to the true trajectory.`);
+      lines.push(`TASK AND SIGNALS. Every model receives the identical stream: the full state vector [${S.vars.join(', ')}], sampled every dt, standardised online (per-variable mean/scale frozen after calibration).${noiseTxt} Every model produces a one-sample-ahead forecast of the full ${S.dim}-variable state; each is free to build its own input representation from the recent history of that same stream. Free-running ("dream") forecasts are produced by iterating that same one-step map on its own output, with no access to the true trajectory.`);
       lines.push('');
-      lines.push(`MODELS. The EXPERIMENTAL MODEL is a nonlinear vector-autoregression readout (NVAR / next-generation reservoir computing): a ${polyTxt} feature expansion of the lag window — ${model ? model.numFeatures : '—'} features per predicted variable — fitted by exact recursive least squares (forgetting factor 1.0, initial covariance / ridge 100) and guarded by attractor-scale output clamps. Three baselines see exactly the same inputs, targets and sample rate: (1) an ECHO STATE NETWORK — 100 recurrent neurons, sparse random coupling (10 connections per unit), spectral radius 0.9 set by power iteration, leak rate 0.3, input scaling 0.3, with a linear [1, state, reservoir] readout trained online by RLS (λ = 0.9995); (2) a FEEDFORWARD MLP — one 32-unit tanh hidden layer over the same lag window, trained online with Adam (lr 3e-3) plus experience replay from a 1200-sample buffer; (3) a LINEAR ARX model — the same lag window with first-order features only, fitted by the same RLS, i.e. classical linear system identification.`);
+      lines.push(`MODELS. The EXPERIMENTAL MODEL is evaluated as a black box: it observes the same stream, learns online in a single pass with no offline pre-training, no hyperparameter search against the test trajectory and no access to the plant equations, and emits a one-sample-ahead forecast of the full state. Its internal architecture, feature construction and fitting procedure are intentionally NOT disclosed in this summary; only its inputs, its outputs and the measurements below are. Three fully specified baselines see exactly the same stream, targets and sample rate: (1) an ECHO STATE NETWORK — 100 recurrent neurons, sparse random coupling (10 connections per unit), spectral radius 0.9 set by power iteration, leak rate 0.3, input scaling 0.3, with a linear [1, state, reservoir] readout trained online by recursive least squares (λ = 0.9995); (2) a FEEDFORWARD MLP — one 32-unit tanh hidden layer on a 2-sample input window, trained online with Adam (lr 3e-3) plus experience replay from a 1200-sample buffer; (3) a LINEAR ARX model — first-order features over a short input window, fitted online, i.e. classical linear system identification. All four are trained on identical data over the identical window and graded identically.`);
       lines.push('');
-      lines.push(`PROTOCOL. The plant runs continuously and is never reset between phases. While training is idle the models still step predict-only, which lets the input normalisation calibrate on genuine attractor data. A ${LZ_WASH}-sample washout precedes any weight update, so no least-squares equation is written while the normalisation statistics are still moving (with a unit forgetting factor those early, badly-scaled equations would otherwise persist in the solution indefinitely). Training is then enabled for an operator-chosen window; the current setting is ${lzGate} samples (≈ ${nf(lzGate / L, 1)} Λ) and this run has trained on ${lzTrainedN} samples (≈ ${nf(lzTrainedN / L, 1)} Λ). Each return from a free-run is followed by a 5-sample re-entry washout, because the plant advances during the free-run and the first post-resume equations would otherwise pair a stale input window with a post-jump target.`);
+      lines.push(`PROTOCOL. The plant runs continuously and is never reset between phases. While training is idle the models still step predict-only, which lets the input normalisation calibrate on genuine attractor data. A ${LZ_WASH}-sample washout precedes any weight update, so no model begins learning while the input normalisation statistics are still moving. Training is then enabled for an operator-chosen window; the current setting is ${lzGate} samples (≈ ${nf(lzGate / L, 1)} Λ) and this run has trained on ${lzTrainedN} samples (≈ ${nf(lzTrainedN / L, 1)} Λ). Each return from a free-run is followed by a 5-sample re-entry washout, because the plant advances while a model is free-running and resuming training immediately would pair stale inputs with a post-jump target.`);
       lines.push('');
       lines.push(`GRADING. Two measures are reported. (i) ONE-STEP ERROR: normalised RMS error of the one-sample-ahead forecast of the first state variable, accumulated only on instances where all four models produced a prediction, against a shared denominator, so the comparison is pairwise on identical data. (ii) VALID TIME: at the switch to free-running, every model is initialised from the plant's exact current state; a model remains "valid" until the distance from its forecast state to the NEAREST true state within ±${lzW} samples (a phase tolerance, so a small timing lag during a fast transit is not scored as divergence) exceeds 0.4× the attractor's RMS fluctuation scale — tracked online from the data, not hardcoded — for ${lzSus} consecutive samples; the clock is then recorded at the START of that excursion and reported in Lyapunov times. A free-run oscillation count (crossings of the mean ±0.55σ band of the first variable) is also reported, since a forecast can stay near the attractor while losing its dynamics.`);
       lines.push('');

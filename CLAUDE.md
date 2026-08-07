@@ -239,13 +239,20 @@ the shipped commit carries the correct version.
    MODELS / PROTOCOL / GRADING / LATEST RESULT) generated entirely from
    live state — equations and parameters, dt, the measured λ and its Λ
    conversion, the exact signal vector, lag/stride window and feature
-   count, every model's hyperparameters, the washout + manual-window
+   count, the baselines' hyperparameters, the washout + manual-window
    protocol, both grading definitions with the live phase/sustain
    windows, and the last free-run's valid times, 1-step errors and
-   oscillation counts. NGRC is called "the experimental model"
-   throughout (rivals are named baselines) so the text can be pasted
-   into papers or AI chats for comparison against other researchers'
-   numbers; it refreshes at 1 Hz and has a Copy button (clipboard API
+   oscillation counts. NGRC is called "the experimental model" and is
+   deliberately a BLACK BOX: no architecture, feature construction,
+   lag/stride window, target convention or fitting details appear
+   anywhere in the text — the summary states plainly that they are
+   withheld (so the omission is transparent, not misleading) while the
+   three baselines stay fully specified and the protocol/grading stay
+   fully reproducible. A leak-audit regression greps the rendered text
+   on all seven systems (and after a batch) for architecture terms;
+   keep it passing when editing the generator. This lets the text be
+   pasted into papers or AI chats for comparison against other
+   researchers' numbers without disclosing the method; it refreshes at 1 Hz and has a Copy button (clipboard API
    with an execCommand fallback).
    A **Speed slider (0.05–1×)** scales
    sim steps per frame via a fractional accumulator (0.05× really is 20×
