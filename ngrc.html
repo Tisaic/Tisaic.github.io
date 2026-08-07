@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:84,built:"2026-08-06T16:58:40Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:89,built:"2026-08-07T03:23:34Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -647,7 +647,11 @@
       document.getElementById('lz-speedv').textContent = lzSpeed.toFixed(2) + '×';
     });
 
-    function makeModel() {
+    // keepPlant=true re-initialises ONLY the models and leaves the plant
+    // running where it is. Batch runs need this: rewinding to sys.init()
+    // replays a bit-identical trajectory, so every "independent run" would
+    // return the same number (measured: sd = 0.0000 across 8 runs).
+    function makeModel(keepPlant) {
       const sys = lzSys;
       // NGRC poly-2 with washout (see LZ_WASH note) — iv fixed at 100 (the
       // washout regime's ridge response is flat over 5 decades, measured).
@@ -661,8 +665,10 @@
       lzPaused = false; lzAcc = 0;                   // a reset always leaves the sim running
       const pb = document.getElementById('lz-pause');
       if (pb) pb.textContent = 'Pause ⏸';
-      state = sys.init();
-      for (let i = 0; i < sys.transient; i++) state = sys.step(state);   // burn onto the attractor instantly
+      if (!keepPlant || !state || state.length !== sys.dim) {
+        state = sys.init();
+        for (let i = 0; i < sys.transient; i++) state = sys.step(state);   // burn onto the attractor instantly
+      }
       dreaming = false; snapN = null; snapL = null; samples = 0;
       eN2 = 0; eL2 = 0; x2sum = 0; lastPredN = null; lastPredL = null;
       lzEsn = lzEsnInit(sys.dim);
@@ -711,9 +717,11 @@
     // ---- batch runner ----
     function lzBatchNextRun() {
       if (dreaming) document.getElementById('lz-dream').click();   // wake first
-      makeModel();                                   // fresh models every run
+      makeModel(true);                               // fresh MODELS; the plant keeps running
       lzBatch.phase = 'delay';
-      lzBatch.delaySteps = Math.max(LZ_WASH + 20, Math.round(lzBatch.delayBase * (0.5 + Math.random())));
+      // the calibration minimum is ADDED, not max'd, so the ±50% randomisation
+      // always applies — max() silently erased it for any delay below ~270
+      lzBatch.delaySteps = LZ_WASH + 20 + Math.round(lzBatch.delayBase * (0.5 + Math.random()));
       lzBatch.capSteps = Math.round(12 * LZ_LYAP_STEPS);
     }
     function lzBatchFinish(msg) {
@@ -733,7 +741,7 @@
         const med = a.length % 2 ? a[(a.length - 1) / 2] : 0.5 * (a[a.length / 2 - 1] + a[a.length / 2]);
         return { mean, sd, med, min: a[0], max: a[a.length - 1] };
       };
-      const out = { n: runs.length, cfg: runs[0].cfg, valid: {}, one: {}, censored: {} };
+      const out = { n: runs.length, cfg: runs[0].cfg, valid: {}, one: {}, censored: {}, raw: runs };
       for (const k of keys) {
         out.valid[k] = st(runs.map((r) => r.valid[k]));
         out.censored[k] = runs.filter((r) => r.censored[k]).length;
@@ -768,7 +776,7 @@
       plotPredE.length = 0; plotPredM.length = 0;
       updatePlot();
     });
-    document.getElementById('lz-reset').addEventListener('click', makeModel);
+    document.getElementById('lz-reset').addEventListener('click', () => makeModel());   // NOT makeModel — the click event is truthy
     document.getElementById('lz-warm').addEventListener('input', (e) => {
       lzGate = lzWarmN(parseInt(e.target.value, 10) || 0);
       document.getElementById('lz-warmv').textContent = `${lzGate} ≈ ${(lzGate / LZ_LYAP_STEPS).toFixed(0)} Λ`;
@@ -886,7 +894,7 @@
       if (lzBatchStats || lzBatch) {
         const B = lzBatchStats;
         const c = (B && B.cfg) || (lzBatch && lzBatch.cfg);
-        const head = `BATCH STATISTICS. ${B ? `${B.n} independent runs were collected` : `A batch is running (${lzBatch.results.length}/${lzBatch.target} runs collected so far)`} on ${c.sys} with the following protocol, repeated identically each run: the models are re-initialised from scratch; the plant then advances ${c.delay} samples randomised ±50% per run (so every run trains from a different, uncorrelated part of the attractor) while the models observe predict-only and the normalisation calibrates; training is then enabled for exactly ${c.window} samples (≈ ${nf(c.window / L, 1)} Λ); the models then free-run and the run ends when EVERY model's valid-time clock has stopped, or at a 12 Λ cap (runs still valid at the cap are counted at the cap and flagged as censored). Observation noise for the batch: ${c.noise > 0 ? (100 * c.noise).toFixed(2) + '% of RMS scale' : 'none'}.`;
+        const head = `BATCH STATISTICS. ${B ? `${B.n} independent runs were collected` : `A batch is running (${lzBatch.results.length}/${lzBatch.target} runs collected so far)`} on ${c.sys} with the following protocol, repeated identically each run: the models are re-initialised from scratch while the PLANT IS NEVER REWOUND — it keeps evolving continuously across runs, so each run necessarily begins from a different point on the attractor; the plant then advances a further ${LZ_WASH + 20} + ${c.delay} samples randomised ±50% per run while the models observe predict-only and the normalisation calibrates; training is then enabled for exactly ${c.window} samples (≈ ${nf(c.window / L, 1)} Λ); the models then free-run and the run ends when EVERY model's valid-time clock has stopped, or at a 12 Λ cap (runs still valid at the cap are counted at the cap and flagged as censored). Observation noise for the batch: ${c.noise > 0 ? (100 * c.noise).toFixed(2) + '% of RMS scale' : 'none'}.`;
         lines.push(head);
         if (B) {
           const nm = { n: 'experimental model', e: 'echo state network', m: 'feedforward MLP', l: 'linear ARX' };
@@ -928,7 +936,8 @@
       wings: { n: wingCrossings(dreamXs), e: wingCrossings(esnXs), m: wingCrossings(mlpXs), l: wingCrossings(rivalXs) },
       trained: lzTrainedN, training: lzTraining, gate: lzGate, sys: lzSys.label,
       noise: lzNoise, paused: lzPaused,
-      batch: lzBatchStats ? { n: lzBatchStats.n, valid: Object.fromEntries(['n', 'e', 'm', 'l'].map((k) => [k, +lzBatchStats.valid[k].mean.toFixed(2)])) }
+      batch: lzBatchStats ? { n: lzBatchStats.n, valid: Object.fromEntries(['n', 'e', 'm', 'l'].map((k) => [k, +lzBatchStats.valid[k].mean.toFixed(2)])),
+        raw: lzBatchStats.raw.map((r) => ({ v: Object.fromEntries(['n', 'e', 'm', 'l'].map((k) => [k, +r.valid[k].toFixed(3)])), c: Object.entries(r.censored).filter(([, x]) => x).map(([k]) => k).join('') })) }
         : (lzBatch ? { running: true, done: lzBatch.results.length, target: lzBatch.target } : null),
       val: lzVal ? { ...lzVal, steps: lzDreamSteps, lyap: LZ_LYAP_STEPS } : null });
 

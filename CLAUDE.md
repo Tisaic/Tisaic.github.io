@@ -198,8 +198,9 @@ the shipped commit carries the correct version.
    degrades what the models know, never what they're judged against.
    **BATCH / statistics mode** (Run batch ▶ + Runs 2–50 + Start delay
    log slider) automates the whole experiment: each run re-initialises
-   the models, advances the plant `delay ±50%` samples (randomised per
-   run so every run trains from an uncorrelated part of the attractor)
+   the models but NEVER rewinds the plant (it evolves continuously
+   across runs, so each run necessarily starts from a different
+   attractor point), advances a further `250+20 + delay ±50%` samples
    with the models watching predict-only, trains exactly the window,
    free-runs until EVERY model's valid-time clock has stopped (12 Λ cap,
    censored runs flagged), records per-model valid times + 1-step
@@ -208,7 +209,21 @@ the shipped commit carries the correct version.
    per model plus the experimental-vs-best-baseline ratio in the
    summary. Measured 8-run means on Lorenz (window 1800): NGRC 3.7 Λ vs
    ESN 0.9 / MLP 0.7 / ARX 0.6 clean, holding to ~1% noise (4.7/1.5/
-   0.4/0.8) and degrading at 3.3% (2.8/0.8/0.5/0.4). Also fixed here: a
+   0.4/0.8) and degrading at 3.3% (2.8/0.8/0.5/0.4); a 50-run batch
+   measures NGRC 4.1 Λ (sd 2.1) vs ESN 1.0 / MLP 0.6 / ARX 0.6.
+   INDEPENDENCE BUG (fixed, v88): batch runs used to call `makeModel()`,
+   which rewinds the plant to its fixed initial condition — with
+   deterministic integration every run replayed the SAME trajectory, so
+   the only entropy was the randomised delay LENGTH, and that was
+   floored by `max(LZ_WASH+20, …)`, erasing it entirely for delays
+   below ~270. Result: N "independent runs" returned one identical
+   number (measured sd = 0.0000 over 8 runs; the user saw ~0.01 over
+   50). Fixed by `makeModel(keepPlant)` — batches reset the models only
+   — plus making the calibration floor ADDITIVE so the ±50% always
+   applies. Regression test asserts all-distinct runs and sd > 0.1 Λ at
+   delay = 0. NOTE the Reset handler must be `() => makeModel()`: the
+   click event object is truthy and would silently keep the plant.
+   Also fixed here: a
    long-standing unbounded growth of the Plotly source arrays (only the
    last 160 samples are ever drawn; now trimmed in chunks).
    **Pause ⏸ / Resume ▶** freezes the plant and every model exactly where
