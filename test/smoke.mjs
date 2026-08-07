@@ -130,6 +130,15 @@ await demo.click('.tab[data-tab="pendulum"]');
 await demo.waitForTimeout(3800);
 check('ngrc: soft-sensor warms up', (await demo.textContent('#ss-warm')) === 'yes');
 check('ngrc: soft-sensor estimate error is finite', Number.isFinite(parseFloat(await demo.textContent('#ss-rmse'))));
+// the Kalman baseline must actually work: given the exact plant it is an
+// optimal observer, so it must be essentially exact, and the mis-identified
+// one must be visibly degraded — otherwise it is not a real reference
+{
+  const kd = await demo.evaluate(() => window.__ssDbg2());
+  check('ngrc: exact-model Kalman is an oracle (< 1e-3)', kd.eK != null && kd.eK < 1e-3, String(kd.eK));
+  check('ngrc: identified Kalman is degraded by model error', kd.eKm > 0.01, String(kd.eKm));
+  check('ngrc: Kalman rows rendered', /^0\./.test(await demo.textContent('#ss-kf')) && /^0\./.test(await demo.textContent('#ss-kfm')));
+}
 // the forecast is gated on the readout being warm, and says so until then
 check('ngrc: 1 s preview reports its warm-up', /^(warming \d+\/\d+|—)$/.test((await demo.textContent('#ss-prev')).trim()) || Number.isFinite(parseFloat(await demo.textContent('#ss-prev'))), await demo.textContent('#ss-prev'));
 await demo.waitForFunction(() => /^[0-9]/.test(document.getElementById('ss-prev').textContent), null, { timeout: 90000 });

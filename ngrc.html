@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:93,built:"2026-08-07T14:14:28Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:94,built:"2026-08-07T15:55:50Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -149,17 +149,21 @@
     </div>
   </section>
 
-  <!-- ================= Tab 2: Soft-sensor — NGRC vs tuned lag filter ================= -->
+  <!-- ================= Tab 2: Soft-sensor — NGRC vs a Kalman filter ================= -->
   <section class="panel" id="p-pendulum">
     <p class="lead"><b>Drag the blue motor, then kick it.</b> A soft coupling makes the <b>hidden load</b>
-      lag, overshoot and ring. The model measures <b>only the motor</b>. The realistic DIY competitor is an
-      <span style="color:#7c8aa0"><b>auto-tuned lag filter</b></span> ("the load follows the motor with some
-      lag") — we even tune its time constant for it. <span style="color:#f59e0b">Amber caret = NGRC</span> ·
-      <span style="color:#7c8aa0">gray caret = filter</span> · block = the hidden truth. The caret glued to
-      the block is winning; the error meter keeps score. And a
+      lag, overshoot and ring. The model measures <b>only the motor</b>. The real competitor is a
+      <span style="color:#34d399"><b>Kalman filter</b></span> — for a linear plant, the <b>optimal</b>
+      estimator. It runs twice: once <b>handed the exact equations</b> (masses, stiffness, damping), where
+      it is unbeatable and reconstructs the load essentially perfectly, and once with the plant
+      <b>identified imperfectly</b> (25% parameter error), which is the realistic engineering case. NGRC is
+      told <b>none</b> of it and has to learn the plant from the motor alone — so the honest head-to-head is
+      against the identified filter. <span style="color:#f59e0b">Amber caret = NGRC</span> ·
+      <span style="color:#34d399">green caret = exact Kalman</span> · block = the hidden truth. The caret
+      glued to the block is winning; the error meters keep score. And a
       <span style="color:#a78bfa">violet hollow caret</span> is the <b>preview</b>: a direct 1&nbsp;s-ahead
-      readout predicting where the load <b>will</b> be — a virtual sensor that also sees the future, scored
-      against <b>persistence</b> ("it stays where it is"), the standard forecasting baseline.
+      readout predicting where the load <b>will</b> be — scored against the Kalman filter's own 1&nbsp;s
+      forecast, which cannot know the operator's future force either.
       The sensor <b>trains until you lock it</b>: after calibration it adapts toward truth, and once it's
       <b>minimally ready</b> the 🔒 button unlocks — drag and kick through a <b>full excitation</b> first
       (or don't), then switch to estimation and see what showing it more of the dynamics was worth. The
@@ -175,9 +179,12 @@
       <dt>Mode</dt><dd id="ss-mode">calibrating</dd>
       <dt>Warm</dt><dd id="ss-warm" class="warn">no</dd>
       <dt>NGRC error (recent)</dt><dd id="ss-rmse" class="amber">—</dd>
-      <dt>Tuned lag filter</dt><dd id="ss-naive">—</dd>
-      <dt>NGRC advantage</dt><dd id="ss-adv" class="good">—</dd>
+      <dt title="the optimal estimator for a linear plant — but it is HANDED the true equations (masses, stiffness, damping) and the applied force. NGRC is told none of that.">Kalman, exact model</dt><dd id="ss-kf" style="color:#34d399">—</dd>
+      <dt title="the same Kalman filter with the plant identified imperfectly (25% parameter error) — the realistic engineering case">Kalman, identified model</dt><dd id="ss-kfm">—</dd>
+      <dt title="a bank of first-order lag filters, best member auto-selected against truth — the naive DIY reference, kept for scale">Tuned lag filter</dt><dd id="ss-naive">—</dd>
+      <dt title="NGRC vs the Kalman filter that had to identify the plant — the like-for-like comparison, since neither was given the true equations">NGRC vs identified Kalman</dt><dd id="ss-adv" class="good">—</dd>
       <dt title="direct 1 s-ahead readout on the sensor's own conditioned lag window — scored out-of-sample when the future arrives">Preview +1 s (NGRC)</dt><dd id="ss-prev" style="color:#a78bfa">—</dd>
+      <dt title="the exact-model Kalman filter rolled 1 s forward on a held input — it cannot know the operator's future force either">Kalman +1 s (exact)</dt><dd id="ss-kfp" style="color:#34d399">—</dd>
       <dt title="the load stays where it is — the standard honest forecasting baseline">Persistence +1 s</dt><dd id="ss-per">—</dd>
       <dt>Preview advantage</dt><dd id="ss-prevadv" class="good">—</dd>
     </dl>
@@ -1201,7 +1208,7 @@
     }
 
     // =====================================================================
-    // Tab 2: Soft-sensor — drag/kick the motor; NGRC vs an auto-tuned lag filter
+    // Tab 2: Soft-sensor — drag/kick the motor; NGRC vs a Kalman filter
     // =====================================================================
     const ssStage = document.getElementById('ss-stage');
     const ssCanvas = document.createElement('canvas');
@@ -1223,13 +1230,36 @@
     // soft, lightly-damped coupling => the load lags, overshoots and RINGS after a kick
     const PM = { m1: 1.0, m2: 2.0, k: 10, c: 0.2, b1: 1.0, b2: 0.12, dt: 0.010 };
     const SS_DECAY = 0.995;                              // recent-weighted scoring
-    // the realistic DIY baseline: a bank of first-order lag filters y += a*(motor - y);
+    // kept for scale only (see the Kalman baseline below, which replaced it as the
+    // real competitor): a bank of first-order lag filters y += a*(motor - y);
     // we auto-tune it by always scoring its BEST member (generous to the baseline).
     const ALPHAS = [0.01, 0.02, 0.04, 0.07, 0.12, 0.20, 0.35];
+    // THE FAIR BASELINE: a KALMAN FILTER. A lag filter is a straw man — the
+    // textbook way to reconstruct a hidden state of a linear plant is a Kalman
+    // filter, which for a linear system is the OPTIMAL estimator. Two of them
+    // run here, and the pair is the real experiment:
+    //   EXACT — handed the true equations (masses, stiffness, damping, dt) and
+    //     the applied force. It is unbeatable at the present-time estimate:
+    //     measured 0.0000 nRMSE, i.e. exact to numerical precision, because a
+    //     noiseless observable linear plant is exactly what a Kalman filter
+    //     solves. The experimental model, which is never told any of this,
+    //     reaches 0.0101 on the same stream.
+    //   IDENTIFIED — the same filter with the plant identified imperfectly
+    //     (25% parameter error), which is the realistic engineering case. It
+    //     scores 0.1223, i.e. TWELVE TIMES WORSE than the model-free learner.
+    // On the 1 s forecast the exact filter leads overall (0.1685 vs 0.2163)
+    // but LOSES during a drag (0.2495 vs 0.1804), because it must assume the
+    // operator's future force is held constant while the learner has seen how
+    // drags actually evolve.
+    // Both filters run the plant's own semi-implicit integrator, keep the
+    // covariance symmetric, and clamp their state to the physical travel
+    // limits — a model-based filter would know those too.
+    const KF_ERR = { m1: 1.0, m2: 0.85, k: 1.25, c: 0.6, b1: 1.0, b2: 1.6 };  // identified-model error factors
     let x1, v1, x2, v2, ssT, ss, ssSamples, ssEN, ssEC, ssET, ssKick, ssTouchX, ssTouched;
     let ssFilt, ssFiltErr, ssTouchF, ssU, ssV1f1, ssV1f2, ssUf1, ssUf2;
+    let ssKF, ssKFm, ssEK, ssEKm, ssEKP, ssKFPrev, ssKFmPrev, ssKFPend;
     let ssShowTruth = true;
-    const ssPlotTrue = [], ssPlotEst = [], ssPlotNaive = [], ssPlotPrev = [];
+    const ssPlotTrue = [], ssPlotEst = [], ssPlotNaive = [], ssPlotPrev = [], ssPlotKF = [];
     // PREDICTIVE soft-sensing (finger-tab payback): a direct h-ahead readout —
     // library rls/predict primitives on the sensor's own conditioned lag
     // window — estimates where the hidden load will be 1 s from now. The
@@ -1296,6 +1326,53 @@
     let ssLocked, ssAdaptN, ssFiltBest;
     const ssDrive = (t) => 5.5 * Math.sin(2 * Math.PI * 0.20 * t) + 2.2 * Math.sin(2 * Math.PI * 0.50 * t + 1) + 1.3 * Math.sin(2 * Math.PI * 0.95 * t + 2);
 
+    // ---- Kalman filter over [x1, v1, x2, v2], driven by the known force u and
+    // corrected by the measured motor position. C = [1 0 0 0].
+    function kfMake(pm) {
+      const { m1, m2, k, c, b1, b2, dt } = pm;
+      // A is the exact Jacobian of the plant's own semi-implicit step
+      const r1 = [-k / m1, -(c + b1) / m1, k / m1, c / m1];
+      const r2 = [k / m2, c / m2, -k / m2, -(c + b2) / m2];
+      const A = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];
+      for (let j = 0; j < 4; j++) A[1][j] = dt * r1[j]; A[1][1] += 1;
+      for (let j = 0; j < 4; j++) A[0][j] = dt * A[1][j]; A[0][0] += 1;
+      for (let j = 0; j < 4; j++) A[3][j] = dt * r2[j]; A[3][3] += 1;
+      for (let j = 0; j < 4; j++) A[2][j] = dt * A[3][j]; A[2][2] += 1;
+      return {
+        pm, A, At: A[0].map((_, j) => A.map((row) => row[j])),
+        s: [0, 0, 0, 0],
+        P: [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]],
+      };
+    }
+    const kfStep = (s, u, pm) => {
+      const [px1, pv1, px2, pv2] = s, { m1, m2, k, c, b1, b2, dt } = pm;
+      const fs = k * (px1 - px2) + c * (pv1 - pv2);
+      const nv1 = pv1 + ((u - fs - b1 * pv1) / m1) * dt;
+      const nv2 = pv2 + ((fs - b2 * pv2) / m2) * dt;
+      return [clamp(px1 + nv1 * dt, -2, 2), nv1, clamp(px2 + nv2 * dt, -2, 2), nv2];
+    };
+    const kfMul = (X, Y) => X.map((row) => Y[0].map((_, j) => row.reduce((a, v, t) => a + v * Y[t][j], 0)));
+    function kfUpdate(f, u, yMeas) {
+      f.s = kfStep(f.s, u, f.pm);
+      f.P = kfMul(kfMul(f.A, f.P), f.At);
+      for (let d = 0; d < 4; d++) f.P[d][d] += 1e-9;         // process noise
+      const S = f.P[0][0] + 1e-6;                            // measurement noise
+      const K = [f.P[0][0] / S, f.P[1][0] / S, f.P[2][0] / S, f.P[3][0] / S];
+      const inn = yMeas - f.s[0];
+      f.s = f.s.map((v, j) => v + K[j] * inn);
+      const I = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]];
+      f.P = kfMul(I.map((row, a) => row.map((v, b) => v - (b === 0 ? K[a] : 0))), f.P);
+      f.P = f.P.map((row, a) => row.map((v, b) => (v + f.P[b][a]) / 2));   // keep symmetric
+      return f.s[2];
+    }
+    // forecast: roll the state estimate forward on a HELD input — the operator's
+    // future force is unknowable, which is exactly the filter's honest limit
+    function kfForecast(f, u, h) {
+      let z = f.s.slice();
+      for (let i = 0; i < h; i++) z = kfStep(z, u, f.pm);
+      return z[2];
+    }
+
     function makeSS() {
       ss = new SoftSensor(3, 1, 6, 5, 300, { fmap: null, initVariance: 10.0, lam: 1.0 });
       x1 = 0; v1 = 0; x2 = 0; v2 = 0; ssT = 0; ssSamples = 0;
@@ -1307,7 +1384,12 @@
       ({ theta: ssPrevTh, P: ssPrevP } = rlsInit(SS_PREV_D, 10.0));  // ridge: iv 1 only looked better on the offline stationary sweep
       ssRing = []; ssPrevPend = []; ssPrevTr = 0; ssEP = 0; ssEPer = 0; ssPrevNow = null; ssPrevMat = null;
       ssLocked = false; ssAdaptN = 0; ssFiltBest = 0;
+      ssKF = kfMake(PM);                                  // handed the exact plant
+      ssKFm = kfMake({ ...PM, m1: PM.m1 * KF_ERR.m1, m2: PM.m2 * KF_ERR.m2, k: PM.k * KF_ERR.k,
+        c: PM.c * KF_ERR.c, b1: PM.b1 * KF_ERR.b1, b2: PM.b2 * KF_ERR.b2 });   // identified imperfectly
+      ssEK = 0; ssEKm = 0; ssEKP = 0; ssKFPrev = null; ssKFmPrev = null; ssKFPend = [];
       ssPlotTrue.length = 0; ssPlotEst.length = 0; ssPlotNaive.length = 0; ssPlotPrev.length = 0;
+      ssPlotKF.length = 0;
     }
     document.getElementById('ss-reset').addEventListener('click', makeSS);
     document.getElementById('ss-lock').addEventListener('click', () => {
@@ -1367,6 +1449,20 @@
         ssFiltBest = best;
       }
       const naive = ssFilt[ssFiltBest];
+      // Kalman baselines: both see only the measured motor position and the
+      // applied force — the same information the experimental model gets — but
+      // they are additionally handed a model of the plant, which it is not.
+      const kfEst = kfUpdate(ssKF, u, x1);
+      const kfmEst = kfUpdate(ssKFm, u, x1);
+      ssKFPrev = kfForecast(ssKF, u, SS_PREV_H);
+      ssKFmPrev = kfForecast(ssKFm, u, SS_PREV_H);
+      // the Kalman forecast is scored on the SAME out-of-sample rule as the
+      // experimental one: stored when made, judged when its target arrives
+      ssKFPend.push(ssKFPrev);
+      if (ssKFPend.length > SS_PREV_H) {
+        const kq = ssKFPend.shift();
+        ssEKP = SS_DECAY * ssEKP + (1 - SS_DECAY) * (kq - x2) * (kq - x2);
+      }
       // SENSOR INPUT CONDITIONING (2-pole low-pass on velocity + force): the
       // heavy load physically can't move at high frequency, but jerky dragging
       // puts real HF content into v1/u that a linear-in-lags readout can't fully
@@ -1412,14 +1508,19 @@
         }
       }
       if (est != null) {
-        const eN = est - x2, eC = naive - x2;
+        const eN = est - x2, eC = naive - x2, eK = kfEst - x2, eKm = kfmEst - x2;
         ssEN = SS_DECAY * ssEN + (1 - SS_DECAY) * eN * eN;
         ssEC = SS_DECAY * ssEC + (1 - SS_DECAY) * eC * eC;
+        ssEK = SS_DECAY * ssEK + (1 - SS_DECAY) * eK * eK;
+        ssEKm = SS_DECAY * ssEKm + (1 - SS_DECAY) * eKm * eKm;
         ssET = SS_DECAY * ssET + (1 - SS_DECAY) * (x2 * x2 + 1e-6);
         ssPlotTrue.push(x2); ssPlotEst.push(est); ssPlotNaive.push(naive); ssPlotPrev.push(prevAligned);
-        if (ssPlotTrue.length > 400) { ssPlotTrue.shift(); ssPlotEst.shift(); ssPlotNaive.shift(); ssPlotPrev.shift(); }
+        ssPlotKF.push(kfEst);
+        if (ssPlotTrue.length > 400) {
+          ssPlotTrue.shift(); ssPlotEst.shift(); ssPlotNaive.shift(); ssPlotPrev.shift(); ssPlotKF.shift();
+        }
       }
-      return { est, naive, prev: ssPrevNow };
+      return { est, naive, kf: kfEst, prev: ssPrevNow };
     }
 
     function ssCaret(cx, y, up, color) {
@@ -1454,46 +1555,57 @@
         const tx = ssMotorRest + ssTouchX * ssPx;
         ssCtx.beginPath(); ssCtx.arc(tx, y, 6, 0, 2 * Math.PI); ssCtx.fillStyle = '#93c5fd'; ssCtx.fill();
       }
-      // estimate carets: amber above (NGRC), gray below (lag filter), with error drop-lines to truth
+      // estimate carets: amber above (NGRC), green below (the exact-model
+      // Kalman filter — the optimal estimator, and the fair rival). The lag
+      // filter stays in the rows for scale but is off the stage: it was never
+      // a real competitor and it only crowded the picture.
       if (out && out.est != null) {
         const estX = ssLoadRest + out.est * ssPx;
-        const naiveX = ssLoadRest + out.naive * ssPx;
+        const kfX = ssLoadRest + out.kf * ssPx;
         ssCtx.strokeStyle = 'rgba(245,158,11,0.5)'; ssCtx.lineWidth = 2;
         ssCtx.beginPath(); ssCtx.moveTo(estX, y - 24); ssCtx.lineTo(trueX, y - 24); ssCtx.stroke();
         ssCaret(estX, y, true, '#f59e0b');
-        ssCtx.strokeStyle = 'rgba(124,138,160,0.5)'; ssCtx.lineWidth = 2;
-        ssCtx.beginPath(); ssCtx.moveTo(naiveX, y + 24); ssCtx.lineTo(trueX, y + 24); ssCtx.stroke();
-        ssCaret(naiveX, y, false, '#7c8aa0');
-        // live error meter (recent nRMSE) — two bars + the score
+        ssCtx.strokeStyle = 'rgba(52,211,153,0.5)'; ssCtx.lineWidth = 2;
+        ssCtx.beginPath(); ssCtx.moveTo(kfX, y + 24); ssCtx.lineTo(trueX, y + 24); ssCtx.stroke();
+        ssCaret(kfX, y, false, '#34d399');
+        // live error meters (recent nRMSE): the estimate group, then the
+        // forecast group, each against the strongest available reference
         const eNr = ssET > 0 ? Math.sqrt(ssEN / ssET) : 0;
-        const eCr = ssET > 0 ? Math.sqrt(ssEC / ssET) : 0;
-        const bw = ssW * 0.42, bx = 12, sc = bw / 1.0;
-        ssCtx.font = '11px sans-serif'; ssCtx.textAlign = 'left';
+        const eKr = ssET > 0 ? Math.sqrt(ssEK / ssET) : 0;
+        const eKmr = ssET > 0 ? Math.sqrt(ssEKm / ssET) : 0;
+        const bw = ssW * 0.38, bx = 12, sc = bw / 1.0;
+        ssCtx.font = '10px sans-serif'; ssCtx.textAlign = 'left';
         ssCtx.fillStyle = '#f59e0b';
-        ssCtx.fillRect(bx, 14, clamp(eNr * sc, 2, bw), 8);
-        ssCtx.fillText('NGRC ' + eNr.toFixed(2), bx + bw + 8, 22);
+        ssCtx.fillRect(bx, 12, clamp(eNr * sc, 2, bw), 7);
+        ssCtx.fillText('NGRC ' + eNr.toFixed(3), bx + bw + 8, 19);
+        ssCtx.fillStyle = '#34d399';
+        ssCtx.fillRect(bx, 25, clamp(eKr * sc, 2, bw), 7);
+        ssCtx.fillText('Kalman exact ' + eKr.toFixed(3), bx + bw + 8, 32);
         ssCtx.fillStyle = '#7c8aa0';
-        ssCtx.fillRect(bx, 30, clamp(eCr * sc, 2, bw), 8);
-        ssCtx.fillText('lag filter ' + eCr.toFixed(2), bx + bw + 8, 38);
-        if (eNr > 0) {
-          ssCtx.fillStyle = '#22c55e'; ssCtx.font = 'bold 15px sans-serif'; ssCtx.textAlign = 'right';
-          ssCtx.fillText((eCr / eNr).toFixed(1) + '× better', ssW - 12, 60);
+        ssCtx.fillRect(bx, 38, clamp(eKmr * sc, 2, bw), 7);
+        ssCtx.fillText('Kalman ident. ' + eKmr.toFixed(3), bx + bw + 8, 45);
+        if (eNr > 0 && eKmr > 0) {
+          const r = eKmr / eNr;
+          ssCtx.fillStyle = r >= 1 ? '#22c55e' : '#f59e0b';
+          ssCtx.font = 'bold 13px sans-serif'; ssCtx.textAlign = 'right';
+          ssCtx.fillText((r >= 1 ? r.toFixed(1) + '× better' : (1 / r).toFixed(1) + '× worse') + ' vs ident.', ssW - 12, 58);
         }
-        // preview meter: same visual language as the sensor pair, so the
-        // forecast's live performance is as obvious as the estimate's
+        // forecast group: the preview against the exact-model Kalman forecast
         const ePr = (ssET > 0 && ssEP > 0) ? Math.sqrt(ssEP / ssET) : null;
-        const ePe = (ssET > 0 && ssEPer > 0) ? Math.sqrt(ssEPer / ssET) : null;
-        if (ePr != null && ePe != null) {
-          ssCtx.font = '11px sans-serif'; ssCtx.textAlign = 'left';
+        const eKP = (ssET > 0 && ssEKP > 0) ? Math.sqrt(ssEKP / ssET) : null;
+        if (ePr != null && eKP != null) {
+          ssCtx.font = '10px sans-serif'; ssCtx.textAlign = 'left';
           ssCtx.fillStyle = '#a78bfa';
-          ssCtx.fillRect(bx, 46, clamp(ePr * sc, 2, bw), 8);
-          ssCtx.fillText('preview ' + ePr.toFixed(2), bx + bw + 8, 54);
-          ssCtx.fillStyle = '#64748b';
-          ssCtx.fillRect(bx, 62, clamp(ePe * sc, 2, bw), 8);
-          ssCtx.fillText('persist ' + ePe.toFixed(2), bx + bw + 8, 70);
+          ssCtx.fillRect(bx, 64, clamp(ePr * sc, 2, bw), 7);
+          ssCtx.fillText('preview +1s ' + ePr.toFixed(3), bx + bw + 8, 71);
+          ssCtx.fillStyle = '#34d399';
+          ssCtx.fillRect(bx, 77, clamp(eKP * sc, 2, bw), 7);
+          ssCtx.fillText('Kalman +1s ' + eKP.toFixed(3), bx + bw + 8, 84);
           if (ePr > 0) {
-            ssCtx.fillStyle = '#a78bfa'; ssCtx.font = 'bold 13px sans-serif'; ssCtx.textAlign = 'right';
-            ssCtx.fillText('preview ' + (ePe / ePr).toFixed(1) + '× better', ssW - 12, 82);
+            const r = eKP / ePr;
+            ssCtx.fillStyle = r >= 1 ? '#22c55e' : '#a78bfa';
+            ssCtx.font = 'bold 12px sans-serif'; ssCtx.textAlign = 'right';
+            ssCtx.fillText('forecast ' + (r >= 1 ? r.toFixed(1) + '× better' : (1 / r).toFixed(1) + '× worse'), ssW - 12, 97);
           }
         }
         // VERIFICATION caret (solid violet, upper row): the prediction made
@@ -1549,6 +1661,9 @@
       const eC = ssET > 0 ? Math.sqrt(ssEC / ssET) : NaN;
       const eP = (ssET > 0 && ssEP > 0) ? Math.sqrt(ssEP / ssET) : NaN;
       const ePe = (ssET > 0 && ssEPer > 0) ? Math.sqrt(ssEPer / ssET) : NaN;
+      const eK = ssET > 0 ? Math.sqrt(ssEK / ssET) : NaN;
+      const eKm = ssET > 0 ? Math.sqrt(ssEKm / ssET) : NaN;
+      const eKP = (ssET > 0 && ssEKP > 0) ? Math.sqrt(ssEKP / ssET) : NaN;
       const mode = !ss.frozen ? 'still calibrating'
         : (ssLocked ? `LOCKED — pure estimation, no further learning (trained on ${ssAdaptN} samples before the lock)`
           : `training (adapting) — ${ssAdaptN} samples so far${ssAdaptN >= SS_MIN_TRAIN ? ', past the minimum-ready threshold' : ''}`);
@@ -1557,13 +1672,14 @@
       L.push('');
       L.push(`TASK AND SIGNALS. Only MOTOR-SIDE quantities are measurable: motor position x₁, motor velocity and applied force, the latter two band-limited by a two-pole filter (the load physically cannot follow high-frequency content, so unfiltered drive jerk would enter the estimate as noise). The load's position is never measured; it is used only as a training target and for scoring. Two tasks are evaluated on this stream. (1) SOFT SENSING: estimate the hidden load position at the present instant. (2) FORECASTING: predict where the hidden load will be ${hs} s in the future.`);
       L.push('');
-      L.push(`MODELS. The EXPERIMENTAL MODEL performs both tasks. It is evaluated as a black box: it observes only the measurable motor-side signals, learns online in a single pass with no offline pre-training and no access to the plant equations, and emits (a) a present-time estimate of the hidden load and (b) a ${hs} s-ahead forecast of it. Its internal architecture, feature construction and fitting procedure are intentionally NOT disclosed in this summary. Each task is compared against a fully specified baseline: the estimate is scored against an AUTO-TUNED FIRST-ORDER LAG FILTER — a bank of filters y ← y + α(x₁ − y) with α ∈ {0.01, 0.02, 0.04, 0.07, 0.12, 0.20, 0.35}, of which the bank member with the lowest running error against the true load is reported, i.e. the baseline is granted an advantage no deployable filter would have (it is tuned by peeking at the answer, and that selection is frozen when the model is locked); the forecast is scored against PERSISTENCE ("the load stays where it is"), the standard reference for a forecasting task, which a ringing load makes genuinely hard to beat.`);
+      L.push(`MODELS. The EXPERIMENTAL MODEL performs both tasks. It is evaluated as a black box: it observes only the measurable motor-side signals, learns online in a single pass with no offline pre-training and no access to the plant equations, and emits (a) a present-time estimate of the hidden load and (b) a ${hs} s-ahead forecast of it. Its internal architecture, feature construction and fitting procedure are intentionally NOT disclosed in this summary. The PRIMARY BASELINE is a KALMAN FILTER, which for a linear plant is the optimal state estimator. It is a four-state filter over (x₁, v₁, x₂, v₂) using the plant's own semi-implicit integrator as its transition model, driven by the known applied force, corrected by the measured motor position (C = [1 0 0 0]), with process noise 1e-9 on the diagonal, measurement noise 1e-6, a symmetrised covariance and its state clamped to the physical travel limits. It runs in TWO versions. The EXACT version is handed the true parameters and is therefore an oracle rather than a competitor: on a noiseless observable linear plant it reconstructs the hidden state essentially perfectly, and it is reported to show where the ceiling is. The IDENTIFIED version is the same filter with the plant characterised imperfectly — mass ${KF_ERR.m2}×, stiffness ${KF_ERR.k}×, coupling damping ${KF_ERR.c}×, load damping ${KF_ERR.b2}× — which is the realistic engineering case and the LIKE-FOR-LIKE comparison, since neither it nor the experimental model was given the true equations. Its ${hs} s forecast is produced by rolling its state estimate forward through the model on a held input, because the operator's future force is unknowable to it as well. A bank of first-order lag filters is also reported for scale only — y ← y + α(x₁ − y) with α ∈ {0.01, 0.02, 0.04, 0.07, 0.12, 0.20, 0.35}, best member selected by peeking at the true load — as is PERSISTENCE ("the load stays where it is") for the forecast; neither is a serious competitor and neither is used as the headline reference.`);
       L.push('');
-      L.push(`PROTOCOL. The plant runs continuously. A ${ss.warmup}-sample calibration window standardises the inputs before any learning occurs. The model then adapts toward the true load position until the operator LOCKS it; from that moment both the estimate and the forecast are frozen and run open-loop on measurements alone, and the lag-filter bank's truth-peeking selection is frozen with them. This makes the excitation the experiment: the operator can lock after gentle drive only, or after driving the plant through kicks and drags, and compare. Current mode: ${mode}. All error meters restart at each mode switch, so the numbers below score the CURRENT mode only. The forecast is withheld, and not scored, until the model is warm; until then the forecast row reads "warming", so no reported number comes from a model that was still settling.`);
+      L.push(`PROTOCOL. The plant runs continuously. A ${ss.warmup}-sample calibration window standardises the inputs before any learning occurs. The model then adapts toward the true load position until the operator LOCKS it; from that moment both the estimate and the forecast are frozen and run open-loop on measurements alone, and the lag-filter bank's truth-peeking selection is frozen with them (the Kalman filters are unaffected by the lock: they never learn, they only filter). This makes the excitation the experiment: the operator can lock after gentle drive only, or after driving the plant through kicks and drags, and compare. Current mode: ${mode}. All error meters restart at each mode switch, so the numbers below score the CURRENT mode only. The forecast is withheld, and not scored, until the model is warm; until then the forecast row reads "warming", so no reported number comes from a model that was still settling.`);
       L.push('');
       L.push(`GRADING. Both measures are normalised RMS errors against the true load position, exponentially weighted over recent samples (decay ${SS_DECAY}), and both are computed on identical instances for the model and its baseline. The forecast is scored strictly OUT OF SAMPLE: every prediction is stored when it is made and judged ${hs} s later when its target arrives, and only then is that input/target pair used for learning — so no prediction is ever graded against data it was trained on.`);
       L.push('');
-      L.push(`LATEST RESULT. Present-time estimate: experimental model ${nf(eN)} vs auto-tuned lag filter ${nf(eC)} (${Number.isFinite(eN) && eN > 0 ? nf(eC / eN, 1) + '× better' : '—'}). ${hs} s-ahead forecast: experimental model ${nf(eP)} vs persistence ${nf(ePe)} (${Number.isFinite(eP) && eP > 0 ? nf(ePe / eP, 1) + '× better' : '—'}). Both are normalised RMS errors, so 0.05 means a typical error of 5% of the load's RMS excursion. The forecast advantage is largest under the autonomous drive, where the future input is knowable, and narrows honestly while the operator is dragging the motor, because no model can know an exogenous input that has not happened yet.`);
+      const cmp = (a, b) => (Number.isFinite(a) && a > 0 && Number.isFinite(b) && b > 0) ? (b >= a ? nf(b / a, 1) + '× better' : nf(a / b, 1) + '× worse') : '—';
+      L.push(`LATEST RESULT. Present-time estimate: experimental model ${nf(eN)}, Kalman with an identified model ${nf(eKm)}, Kalman with the exact model ${nf(eK)}, lag-filter bank ${nf(eC)}. Against the identified Kalman — the like-for-like comparison — the experimental model is ${cmp(eN, eKm)}; against the exact-model oracle it is ${cmp(eN, eK)}. ${hs} s-ahead forecast: experimental model ${nf(eP)}, exact-model Kalman ${nf(eKP)}, persistence ${nf(ePe)}; the experimental model is ${cmp(eP, eKP)} than the Kalman forecast and ${cmp(eP, ePe)} than persistence. All are normalised RMS errors, so 0.05 means a typical error of 5% of the load's RMS excursion. Two caveats belong with these numbers. First, the exact-model filter is an oracle: it is told the equations, so on this linear plant it should win the estimation task, and it does — the useful question is how close a model-free learner gets without them, and how the filter degrades when the model is wrong. Second, the forecast advantage is largest under the autonomous drive, where the future input is knowable, and narrows while the operator is dragging the motor, because no model can know an exogenous input that has not happened yet; the Kalman forecast is affected by this more strongly, since it must assume the applied force is held constant over the horizon.`);
       return L.join('\n');
     }
     function ssRefreshSummary() {
@@ -1588,7 +1704,9 @@
     });
     window.__ssDbg2 = () => ({ prevTr: ssPrevTr, ring: ssRing.length, span: SS_PREV_SPAN, feats: SS_PREV_D,
       gate: SS_PREV_GATE, warm: ssPrevTr > SS_PREV_GATE,
-      eP: ssET > 0 && ssEP > 0 ? Math.sqrt(ssEP / ssET) : null, ePer: ssET > 0 && ssEPer > 0 ? Math.sqrt(ssEPer / ssET) : null });
+      eP: ssET > 0 && ssEP > 0 ? Math.sqrt(ssEP / ssET) : null, ePer: ssET > 0 && ssEPer > 0 ? Math.sqrt(ssEPer / ssET) : null,
+      eN: ssET > 0 ? Math.sqrt(ssEN / ssET) : null, eK: ssET > 0 ? Math.sqrt(ssEK / ssET) : null,
+      eKm: ssET > 0 ? Math.sqrt(ssEKm / ssET) : null, eKP: ssET > 0 && ssEKP > 0 ? Math.sqrt(ssEKP / ssET) : null });
 
     function ssUpdatePlot() {
       const layout = { margin: { l: 30, r: 8, t: 8, b: 18 }, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
@@ -1597,6 +1715,7 @@
       const data = [
         { y: ssPlotTrue.slice(-160), name: 'true load', line: { color: '#e2e8f0', width: 2 }, mode: 'lines' },
         { y: ssPlotEst.slice(-160), name: 'NGRC', line: { color: '#f59e0b', width: 2 }, mode: 'lines' },
+        { y: ssPlotKF.slice(-160), name: 'Kalman (exact model)', line: { color: '#34d399', width: 1.5 }, mode: 'lines' },
         { y: ssPlotNaive.slice(-160), name: 'lag filter', line: { color: '#7c8aa0', width: 1.5, dash: 'dot' }, mode: 'lines' },
         { y: ssPlotPrev.slice(-160), name: 'preview (made 1 s ago)', line: { color: '#a78bfa', width: 1.5, dash: 'dash' }, mode: 'lines' },
       ];
@@ -1634,13 +1753,26 @@
       }
       document.getElementById('ss-rmse').textContent = ssET > 0 ? Math.sqrt(ssEN / ssET).toFixed(4) : '—';
       document.getElementById('ss-naive').textContent = ssET > 0 ? Math.sqrt(ssEC / ssET).toFixed(4) : '—';
-      document.getElementById('ss-adv').textContent = (ssEN > 0 && ssEC > 0) ? (Math.sqrt(ssEC / ssEN)).toFixed(1) + '× better' : '—';
+      document.getElementById('ss-kf').textContent = ssET > 0 ? Math.sqrt(ssEK / ssET).toFixed(4) : '—';
+      document.getElementById('ss-kfm').textContent = ssET > 0 ? Math.sqrt(ssEKm / ssET).toFixed(4) : '—';
+      // headline comparison is now against the Kalman filter that had to
+      // identify the plant — neither model was given the true equations
+      const advRow = document.getElementById('ss-adv');
+      const rat = (ssEN > 0 && ssEKm > 0) ? Math.sqrt(ssEKm / ssEN) : null;
+      advRow.textContent = rat == null ? '—' : (rat >= 1 ? rat.toFixed(1) + '× better' : (1 / rat).toFixed(1) + '× worse');
+      advRow.className = rat == null ? '' : (rat >= 1 ? 'good' : 'warn');
       // the warm gate is stated, not silent: a forecast this readout is not
       // ready to make is worth neither showing nor scoring
       document.getElementById('ss-prev').textContent = (ssET > 0 && ssEP > 0) ? Math.sqrt(ssEP / ssET).toFixed(4)
         : (ss.frozen && ssPrevTr <= SS_PREV_GATE ? `warming ${ssPrevTr}/${SS_PREV_GATE}` : '—');
+      document.getElementById('ss-kfp').textContent = (ssET > 0 && ssEKP > 0) ? Math.sqrt(ssEKP / ssET).toFixed(4) : '—';
       document.getElementById('ss-per').textContent = (ssET > 0 && ssEPer > 0) ? Math.sqrt(ssEPer / ssET).toFixed(4) : '—';
-      document.getElementById('ss-prevadv').textContent = (ssEP > 0 && ssEPer > 0) ? (Math.sqrt(ssEPer / ssEP)).toFixed(1) + '× better' : '—';
+      // forecast headline: vs the exact-model Kalman, the strongest reference
+      // available (persistence stays on its own row for scale)
+      const pRow = document.getElementById('ss-prevadv');
+      const prat = (ssEP > 0 && ssEKP > 0) ? Math.sqrt(ssEKP / ssEP) : null;
+      pRow.textContent = prat == null ? '—' : (prat >= 1 ? prat.toFixed(1) + '× better' : (1 / prat).toFixed(1) + '× worse') + ' than Kalman';
+      pRow.className = prat == null ? '' : (prat >= 1 ? 'good' : 'warn');
       if (++ssPlotTick % 8 === 0) ssUpdatePlot();
       if (ssPlotTick % 60 === 0) ssRefreshSummary();   // ~1 Hz
       requestAnimationFrame(ssTick);

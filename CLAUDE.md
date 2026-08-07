@@ -282,10 +282,42 @@ the shipped commit carries the correct version.
    steps/s on 60 Hz, ~480 on 120 Hz, headless CI ~175): per-sample math
    means refresh rate changes wall speed only, never results),
    **② soft-sensor** (drag/kick the blue motor; a soft lightly-damped coupling
-   makes the hidden load lag and ring; amber `SoftSensor` caret vs a gray
-   **auto-tuned lag-filter** caret — the realistic DIY baseline, best of a
-   scored filter bank — with an on-stage error meter + ×-better readout, ~4×,
-   and a 4-trace Plotly chart. Plus PREDICTIVE soft-sensing (finger-tab
+   makes the hidden load lag and ring; amber `SoftSensor` caret vs a green
+   **KALMAN FILTER** caret — the FAIR baseline, since for a linear plant the
+   Kalman filter is the OPTIMAL state estimator and the old auto-tuned
+   lag-filter bank was a straw man (it stays in the rows for scale only, and
+   is off the stage). Four states (x₁,v₁,x₂,v₂) propagated by the plant's own
+   semi-implicit integrator, driven by the known force, corrected by the
+   measured motor position (C = [1 0 0 0]), symmetrised covariance, state
+   clamped to the travel limits. TWO versions, and the pair is the whole
+   point: the EXACT filter is handed the true parameters and is an ORACLE,
+   not a competitor — measured **0.0000** nRMSE, exact to numerical
+   precision, because a noiseless observable linear plant is precisely what a
+   Kalman filter solves — while the IDENTIFIED filter has the plant
+   characterised imperfectly (m₂ 0.85×, k 1.25×, c 0.6×, b₂ 1.6×), the
+   realistic engineering case, and lands at 0.13–0.22 against the learner's
+   0.004–0.010. So the model-free model is ~20–35× better than a Kalman
+   filter whose model is wrong, and loses outright to one whose model is
+   right — which is the honest result and a far more informative demo than
+   beating a lag filter. The headline row is NGRC vs the IDENTIFIED filter
+   (like-for-like: neither was given the equations) and it renders
+   "N× worse" honestly if the learner loses. The forecast row is scored
+   against the exact filter's OWN 1 s prediction — its state estimate rolled
+   forward on a HELD input, since the operator's future force is unknowable
+   to it too — and the learner WINS there (~1.2–1.9× live), because it has
+   learned how the drive and the drags actually evolve instead of assuming
+   the force is constant. Measured offline on a realistic drive/drag/kick
+   stream: estimate 0.0000 (exact KF) / 0.0101 (learner) / 0.1223
+   (identified KF); 1 s forecast 0.1685 / 0.2163 / 0.2814 — but DURING A
+   DRAG 0.2495 / 0.1804 / 0.3682, where the learner beats even the exact
+   filter. A first attempt at this baseline scored the exact filter at 0.132
+   and was WRONG (missing covariance symmetrisation and no state clamp); the
+   tell was that theory says it must be near-exact, so it was debugged
+   against a numerical Jacobian and a clamp-free stream rather than shipped.
+   A dedicated regression now asserts the exact filter really is an oracle
+   (< 1e-3) and the identified one really is degraded, so this baseline can
+   never silently rot back into a straw man. Plus a 5-trace Plotly chart.
+   Plus PREDICTIVE soft-sensing (finger-tab
    payback): a violet hollow dashed "+1s" caret previews where the load
    WILL be in 1 s — a direct h-ahead readout (library `rls`/`predict`
    primitives, SS_PREV_H=100 samples) scored OUT-OF-SAMPLE:
@@ -395,8 +427,10 @@ the shipped commit carries the correct version.
    contract — plant/signals/baselines/grading fully specified, the
    experimental model's internals withheld and stated as withheld). It
    documents both tasks (present-time estimate, 1 s forecast), both
-   baselines including the lag filter's truth-peeking advantage, the
-   lock protocol, and the out-of-sample scoring rule), **③ finger-trace** (draw loops at ~20 Hz
+   baselines — the exact and identified Kalman filters (stated plainly
+   as oracle vs like-for-like), the lag filter's truth-peeking
+   advantage, and persistence — the lock protocol, the warm gate, and
+   the out-of-sample scoring rule), **③ finger-trace** (draw loops at ~20 Hz
    sampling; an optional **tracing guide** selector overlays one of 10 faint
    stencil shapes — circle/ellipse/square/triangle/hexagon/star/figure-8/
    heart/rose/lissajous — purely visual, never read by any model, default
