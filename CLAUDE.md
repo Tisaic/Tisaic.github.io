@@ -45,7 +45,7 @@ the shipped commit carries the correct version.
 |------|---------|
 | `index.html` | The main app: header, debug console, doc viewers, NGRC launcher. |
 | `console-boot.js` | The debug-console bootstrap, **shared** by `index.html` and `ngrc.html` (loaded first in `<head>`). |
-| `ngrc.html` | NGRC playground: 3-tab interactive demo (Lorenz forecaster, soft-sensor, finger-trace) using `lib/ngrc`. |
+| `ngrc.html` | NGRC playground: 4-tab interactive demo (Lorenz forecaster, soft-sensor, finger-trace, anti-slosh axis) using `lib/ngrc`. |
 | `lib/ngrc/` | The ported NGRC library (see `lib/ngrc/README.md`). |
 | `version.json` | Server-side build manifest for stale-page detection. |
 | `docs-manifest.json` | Generated list of every `.md` file, for the Docs viewer. |
@@ -81,7 +81,7 @@ the shipped commit carries the correct version.
    and files are split into two groups: **◆ CLAUDE context** (any `CLAUDE.md`,
    shown with an indigo tag) and **Docs** (everything else). Opens `CLAUDE.md`
    by default so the current state is one tap away.
-4. **NGRC playground** (bottom-right `NGRC` launcher → `ngrc.html`) — a 3-tab
+4. **NGRC playground** (bottom-right `NGRC` launcher → `ngrc.html`) — a 4-tab
    interactive showcase of `lib/ngrc`, each tab framed as **NGRC vs a common
    alternative** so the value is visible: **① Chaotic systems** (three.js
    attractor; 1-finger orbit, 2-finger pinch-zoom **and pan**; a SYSTEM
@@ -771,7 +771,126 @@ the shipped commit carries the correct version.
    pen-up; the cyclic AFM pump feeds predict-only across teleport steps
    so they never train. Verified headless: 2-line and 1-line lift
    patterns lock with gaps and replay cleanly, continuous shapes stay
-   gapless with instant AFM deploy, far relocation still resets).
+   gapless with instant AFM deploy, far relocation still resets), and
+   **④ anti-slosh axis** — an industrial liquid-handling machine, and
+   the first tab whose experimental side is mostly CLASSICAL control: the
+   value is in what the single sensor is made to say. TWO IDENTICAL MACHINES
+   run the SAME command so the comparison is a controlled experiment rather
+   than a before/after: gray **conventional** (3-impulse ZVD shaper tuned once
+   at the nominal 0.12 m fill, PD loop Kp 4200 / Kd 260 / 260 N limit, textbook
+   feedforward M·a + B·v + Fc·sign(v) with M identified at that same fill —
+   the correct textbook design, NOT a strawman; it is wrong everywhere else
+   only because the load moves underneath it) vs amber **experimental** (same
+   loop, same shaper family, same three feedforward terms; it differs only in
+   reading the fill and the resonance off the SAME single gauge and retuning
+   both). Plant: the standard equivalent-pendulum slosh analogue COUPLED to
+   the carriage (the liquid pushes back), ω₁ = √(g(π/L)tanh(πh/L)) moving
+   **1.8× across the fill range** against the ~±20% a ZVD tolerates, sloshing
+   mass fraction (8/π³)(L/h)tanh(πh/L), Stribeck friction (9 N stiction → 5.5 N
+   Coulomb at 0.02 m/s, viscous 12 N per m/s), cogging 3 N at a 0.05 m spatial
+   period, and **wave breaking** past the freeboard. The ONLY liquid instrument
+   is one downward gauge at xr=0.18 reading mean depth PLUS the local wave with
+   no way to separate them from one sample — off-centre because the first mode
+   has a **node at the tank centre**, a commissioning requirement rather than a
+   detail. MEASURED LIVE, and it reproduces the mirror: at the fixed shaper's
+   OWN design fill both machines carry an identical shaper, so the difference
+   there is the feedforward alone — 0.31 vs 0.17 mm, against the mirror's
+   0.323 → 0.188; at fill 0.05 m the recent-window wave is 3.08 vs 0.56 mm
+   (**5.5×**) and the whole session 3.25 vs 1.37 mm (2.4×, which INCLUDES the
+   experimental machine's startup moves before it has seen any wave to tune
+   from — both numbers are shown, labelled). Following error 1.71 / 1.35 mm,
+   matching the mirror's ~1.5 mm scale. Only the RIGID mass is scheduled:
+   scheduling on TOTAL liquid mass measured WORSE than freezing it (0.446 vs
+   0.323 mm), because the sloshing fraction does not ride rigidly and the
+   surplus acceleration re-excites the mode the shaper just cancelled.
+   **Health check ▶** runs a deliberately UNSHAPED probe move, because a
+   well-shaped move leaves no wave to measure — success at control removes the
+   observability diagnosis needs, which is a general tension and not a quirk.
+   The probe feeds a **vote-of-three fault panel**: the gauge's slow level, the
+   wave's resonance and a load cell are three independent routes to one fill,
+   so the CONSENSUS is the real fill change and each channel's DEVIATION names
+   what moved (leak / gauge drift / mount / density, plus friction from the
+   axis fit). Independent threshold tests, never an if/elif chain — a chain
+   reports exactly one fault by construction and simultaneous faults are the
+   point. Five injectable faults and any PAIR of them; the conventional
+   following-error alarm stays silent throughout, because the position loop
+   absorbs the fault into control effort. THREE THINGS HAD TO BE MEASURED
+   INTO SHAPE before the panel worked, none of which a passing assertion would
+   have found: (i) the PROBE NEEDS A LONGER SETTLE WINDOW (8 s, not the
+   production 2.6) — a loosened mount or a leak LOWERS the resonance to a
+   ~1.3 s period and the production window holds barely two zero crossings, too
+   few to fit, so the panel reported "no usable wave" for precisely the faults
+   it exists to name; (ii) FRICTION HAD TO BE MADE IDENTIFIABLE — over one move
+   the carriage cruises at a nearly constant velocity, so `v` and
+   `tanh(v/ε)` are collinear and the viscous/Coulomb SPLIT is arbitrary: the
+   fitted Fc came back **−0.12 N against a true 5.5**, and a leak's mass change
+   then leaked into it and raised a false lubrication alarm. The resistive
+   force at the cruise velocity, B·v_max + Fc, is identifiable even when the
+   split is not, and it now recovers the injected fault almost exactly
+   (**9.83 N measured against 9.9 injected**, healthy 0.01, and 0.04 under a
+   gauge fault — no cross-talk); (iii) DENSITY IS TESTED AS A DENSITY, not as a
+   fill-equivalent — a density change displaces mass in proportion to the fill,
+   so a fixed fill-equivalent threshold silently stopped detecting it in a
+   half-empty tank (the mirror's own limitation, avoidable here). Comparing the
+   implied density m_liq/(A·h_consensus) is fill-independent by construction
+   and recovers **0.794 against an injected 0.78**.
+   A FOURTH thing had to be compensated rather than thresholded: a mount fault
+   ALONE drives the friction residual to 3.49 N at the nominal fill (29% of a
+   healthy 12.1) because the changed slosh reaction loads the fit — the
+   mirror's own false-lubrication finding, reproduced. The friction tolerance
+   therefore WIDENS with the measured resonance shift (0.25 + 8·|Δfill_wave|).
+   A flat 50% threshold would also have separated mount (29%) from a real
+   lubrication fault (81%), but would have gone blind to anything milder than
+   half severity; compensating keeps full sensitivity when the resonance has
+   NOT moved. Measured verdicts, both fills: **5/5 singles plus healthy** at
+   0.12 m and at 0.05 m, and at the default 0.12 m BOTH tested pairs resolve —
+   mount+leak names both (which the Python mirror missed) and
+   gauge_drift+density names both. At a shallow 0.05 m fill mount+leak
+   collapses to the leak alone: the mirror's pair ambiguity, since a median of
+   three tolerates ONE corrupted vote and that case corrupts two.
+   The debug hook was wrong before any of this was: it recomputed the panel
+   from whatever move had just finished rather than from the probe, so it
+   reported `dfw = NaN` and friction deltas no verdict was ever based on.
+   Fixed by storing what the diagnosis actually used — the recurring lesson of
+   this project, that the instrument fails before the model does. THE LOAD CELL REPLACES the
+   axis-identified mass as the third vote rather than joining it: keeping both
+   measured WORSE than either (pairs 4/10 against 7/10) because they measure
+   the same physical quantity, so a redundant reading drags the consensus
+   without adding independence. **Kill gauge 💀** shows analytical redundancy —
+   the inertia term falls back to the mass identified from the axis's own force
+   and motion, calibrated against the gauge WHILE IT STILL WORKED (it carries a
+   fixed offset and a 28% steeper slope, 76.7 vs the cell's exact 60.0 kg/m),
+   measured 0.42 mm experimental against 2.85 conventional. A crest forecast
+   warns before liquid goes over the rim and is fed the controller's
+   **look-ahead buffer**; look-ahead in the FEEDFORWARD is deliberately ABSENT
+   because it measured NEGATIVE there (following error 1.463 → 1.378 mm,
+   residual wave 0.188 → 0.477 mm, monotone, no interior optimum: shaping
+   cancels by exact TIMING and is a causal convolution, so preview only
+   time-shifts the excitation). Same free signal, opposite sign in the two
+   roles — see `slosh_evaluate.py` in the mirror.
+   THREE DEPLOYMENT BUGS, all found by disbelieving the numbers rather than by
+   a failing assertion, since every check passed while the numbers were wrong:
+   (a) the health check REBUILT THE REFERENCE MID-MOVE, restarting it from the
+   station while the carriage was elsewhere — a position-demand step of up to
+   the whole stroke into a 4200 N/m gain, which saturated the drive and drove
+   the slosh state to divergence (session waves read 33 mm against a physical
+   ~0.3, and spills were counted at a fill whose freeboard is 0.27 m). Probes
+   are now QUEUED for the next move boundary, as a real controller would.
+   (b) Probe moves were scored as production, and a probe rings for ~10 moves
+   at a shallow fill, so excluding just the probe was not enough. Fixed by a
+   **settling dwell** — after a probe the axis HOLDS POSITION until both tanks
+   are quiet, exactly as a commissioning routine does — which removes the
+   contamination instead of discarding moves; the probe itself is the only
+   thing ever excluded from scoring. (c) The healthy following-error reference
+   was captured FROM the probe move, inflating it and making the conventional
+   alarm too lenient — i.e. flattering the very baseline this tab exists to
+   beat; it now comes from a production-move EMA.
+   An **Experiment summary** completes the set (all four tabs have one): same
+   6-section, 1 Hz, Copy-button, BLACK-BOX contract — the plant equations, the
+   conventional baseline's every gain, the protocol and both grading rules are
+   fully specified and reproducible, while HOW the experimental estimates and
+   the forecast are constructed is withheld and stated as withheld. A
+   leak-audit regression greps the rendered text.
 
 ## Versioning
 

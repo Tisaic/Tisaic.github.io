@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:99,built:"2026-08-08T15:31:03Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:100,built:"2026-08-08T21:25:36Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -62,6 +62,7 @@
     <div class="tab on" data-tab="lorenz">① Lorenz</div>
     <div class="tab" data-tab="pendulum">② Soft-sensor</div>
     <div class="tab" data-tab="finger">③ Finger-trace</div>
+    <div class="tab" data-tab="slosh">④ Anti-slosh</div>
   </div>
 
   <!-- ================= Tab 1: Lorenz — NGRC vs linear ARX ================= -->
@@ -277,6 +278,77 @@
     </div>
   </section>
 
+  <!-- ================= Tab 4: Anti-slosh axis — liquid handling ================= -->
+  <section class="panel" id="p-slosh">
+    <p class="lead">A servo axis shuttles an <b>open tank of liquid</b> between two stations. The wave left
+      behind after each move is what limits cycle time on filling lines, ladle transfer and wet benches. The
+      textbook fix is <b>input shaping</b> — but the slosh resonance depends on the <b>fill depth</b>, which
+      moves it <b>1.8×</b> across the range, far outside the ±20% a robust shaper tolerates. And the only
+      instrument is <b>one gauge pointing straight down at one spot</b>, reading mean depth plus the local
+      wave with no way to separate them from a single sample.
+      Two identical machines run the <b>same command</b>:
+      <span style="color:#7c8aa0"><b>gray = conventional</b></span> (shaper and feedforward mass both fixed at
+      the nominal fill — what ships today) vs
+      <span style="color:#f59e0b"><b>amber = experimental</b></span>, which reads fill and resonance off that
+      <i>same single gauge</i> and retunes both. Move the <b>Fill</b> slider: the gray tank starts ringing,
+      the amber one settles back down.
+      Then <b>inject a fault</b> — amber cross-checks three independent routes to the same physical quantity
+      and <b>names</b> what broke, while the conventional following-error alarm sees nothing, because the
+      position loop absorbs the fault into control effort.
+      <b>Health check ▶</b> runs a deliberate <b>unshaped</b> probe: a well-controlled machine leaves no wave
+      to measure, so diagnosis has to ask for one.</p>
+    <div class="stage" id="sl-stage" style="height:34vh"></div>
+    <div class="controls">
+      <button id="sl-check">Health check ▶</button>
+      <button id="sl-pause" class="sec" title="freeze both machines exactly where they are; rendering stays live">Pause ⏸</button>
+      <button id="sl-gauge" class="sec" title="simulate the level gauge failing. The conventional machine freezes its last known mass; the experimental one substitutes the mass identified from the axis's own force and motion">Kill gauge 💀</button>
+      <button id="sl-reset" class="sec">Reset</button>
+      <select id="sl-f1" title="injected fault (both machines get it)">
+        <option value="none" selected>fault: none</option>
+        <option value="lubrication">fault: guideway lubrication</option>
+        <option value="gauge_drift">fault: gauge drift / fouling</option>
+        <option value="mount">fault: tank mount loosened</option>
+        <option value="leak">fault: unplanned leak</option>
+        <option value="density">fault: wrong liquid (density)</option>
+      </select>
+      <select id="sl-f2" title="a SECOND simultaneous fault — what a real plant actually hits, and where a single-signal monitor gives up">
+        <option value="none" selected>2nd fault: none</option>
+        <option value="lubrication">2nd: guideway lubrication</option>
+        <option value="gauge_drift">2nd: gauge drift / fouling</option>
+        <option value="mount">2nd: tank mount loosened</option>
+        <option value="leak">2nd: unplanned leak</option>
+        <option value="density">2nd: wrong liquid (density)</option>
+      </select>
+      <div class="slider" title="fill depth. The slosh resonance moves 1.8x across this range — the conventional shaper is tuned at 0.12 m and is mistuned everywhere else">Fill
+        <input id="sl-fill" type="range" min="30" max="270" step="1" value="120" />
+        <span id="sl-fillv">0.120 m</span>
+      </div>
+      <div class="slider">Speed
+        <input id="sl-speed" type="range" min="0.25" max="3" step="0.25" value="1.5" />
+        <span id="sl-speedv">1.50×</span>
+      </div>
+    </div>
+    <dl class="stat">
+      <dt>Moves completed</dt><dd id="sl-n">0</dd>
+      <dt title="RMS following error during the move — what a machine actually alarms on today">Following error</dt><dd id="sl-err">—</dd>
+      <dt title="RMS wall-wave left AFTER the move completes — the thing that actually limits cycle time">Residual wave</dt><dd id="sl-wave" class="amber">—</dd>
+      <dt title="experimental vs conventional on the residual wave, over the whole session">Wave advantage</dt><dd id="sl-adv" class="good">—</dd>
+      <dt title="crest forecast from the single gauge plus the controller's look-ahead buffer, warning before the liquid goes over the rim">Spill warning</dt><dd id="sl-spill">—</dd>
+      <dt title="liquid actually thrown over the rim, counted per machine">Spills</dt><dd id="sl-spilln">—</dd>
+      <dt title="three independent routes to the same fill: the gauge's slow level, the wave's resonance, and a load cell. The consensus is the real fill; each channel's deviation from it names what moved">Diagnosis</dt><dd id="sl-diag">—</dd>
+      <dt title="what a following-error threshold alone would report — the alarm a machine actually has today">Conventional alarm</dt><dd id="sl-alarm">—</dd>
+      <dt>Gauge / resonance</dt><dd id="sl-sense">—</dd>
+    </dl>
+    <div class="plot" id="sl-plot"></div>
+    <div class="sumbox">
+      <div class="sumhead">
+        <b>Experiment summary</b> — live methods + results, written for papers and chats
+        <button id="sl-copy" class="sec" style="flex:0 0 auto">Copy 📋</button>
+      </div>
+      <div id="sl-sum" class="sumtext">—</div>
+    </div>
+  </section>
+
   <script type="module">
     import * as THREE from './vendor/three.module.js';
     import { Continuous } from './lib/ngrc/continuous.js';
@@ -297,6 +369,7 @@
       if (activeTab === 'lorenz') resizeLorenz();
       if (activeTab === 'pendulum') resizePendulum();
       if (activeTab === 'finger') resizeFinger();
+      if (activeTab === 'slosh') resizeSlosh();
     }));
 
     // =====================================================================
@@ -4049,14 +4122,789 @@
         afmArc: fgAfmArc ? fgAfmArc.length : 0, afmTrail: fgAfmTrail.length };
     };
 
+    // =====================================================================
+    // Tab 4: Anti-slosh axis — a servo carrying an open tank of liquid.
+    //
+    // Everything here is a port of the validated study in the Python mirror
+    // (experiments/slosh_antislosh.py, slosh_axis.py, slosh_diagnose.py,
+    // slosh_evaluate.py). Only the findings that SURVIVED measurement are
+    // deployed; the ones that measured negative are deliberately absent, and
+    // the two most important absences are recorded here so a later edit does
+    // not "helpfully" add them back:
+    //   * NO LOOK-AHEAD IN THE FEEDFORWARD. Previewing the reference improves
+    //     the following error (1.463 -> 1.378 mm) and costs residual wave
+    //     monotonically (0.188 -> 0.477 mm). Input shaping cancels by exact
+    //     TIMING and is a causal convolution, so preview only time-shifts the
+    //     excitation the liquid sees. It was the top-ranked candidate and it
+    //     measured NEGATIVE. Look-ahead IS used for the crest forecast below,
+    //     where it measured positive — same signal, opposite sign.
+    //   * NO SECOND MASS ROUTE. The diagnosis takes its third vote from the
+    //     load cell alone. Keeping the axis-identified mass as a fourth vote
+    //     measured WORSE than either single route (pairs 4/10 against 7/10),
+    //     because the two measure the same physical quantity: a redundant
+    //     reading drags the consensus without adding independence.
+    // =====================================================================
+    const SLC = { dt: 0.005, G: 9.81, L: 0.30, TW: 0.20, WALL: 0.32, RHO: 1000, MCART: 6.0,
+      NOM: 0.12, BV: 12.0, FS: 9.0, FC: 5.5, VS: 0.02, COGA: 3.0, COGL: 0.05,
+      KP: 4200, KD: 260, FMAX: 260, ZNOM: 0.012, GX: 0.18, SETTLE: 2.6, PROBE_SETTLE: 8.0,
+      DIST: 0.40, VMAX: 0.55, AMAX: 2.2 };
+    const slOmega = (h) => Math.sqrt(SLC.G * (Math.PI / SLC.L) * Math.tanh(Math.PI * h / SLC.L));
+    const slZeta = (h) => Math.max(0.004, Math.min(0.05, 0.004 + 0.0010 / Math.max(h, 0.005)));
+    // fraction of the liquid that participates in the first mode: shallow tanks slosh almost
+    // entirely, deep ones carry a large quiescent bottom mass that rides rigidly with the carriage
+    const slFrac = (h) => Math.min(0.92, (8.0 / Math.PI ** 3) * (SLC.L / h) * Math.tanh(Math.PI * h / SLC.L));
+    let slGaussSpare = null;
+    function slGauss() {                                  // Box–Muller, for the load cell's noise
+      if (slGaussSpare !== null) { const s = slGaussSpare; slGaussSpare = null; return s; }
+      let u = 0, v = 0, s = 0;
+      do { u = Math.random() * 2 - 1; v = Math.random() * 2 - 1; s = u * u + v * v; } while (s === 0 || s >= 1);
+      const f = Math.sqrt(-2 * Math.log(s) / s);
+      slGaussSpare = v * f; return u * f;
+    }
+
+    // ---- the plant: the standard CART-PENDULUM analogue of the first sloshing mode, so the
+    // liquid pushes BACK on the carriage instead of riding along as a passive disturbance. The
+    // sloshing mass and the resonance both move with fill, so the axis inertia and the load's
+    // frequency change together as the tank drains.
+    class SlAxis {
+      constructor(h) { this.faults = {}; this.rho = SLC.RHO; this.hCmd = h; this.setFill(h); this.x = this.v = this.th = this.om = 0; this.broke = 0; }
+      setFill(h) {
+        this.h = h;
+        const mliq = this.rho * SLC.L * SLC.TW * h;
+        this.ms = mliq * slFrac(Math.max(h, 0.005));
+        this.mrigid = SLC.MCART + (mliq - this.ms);
+        // a loosened mount / changed liquid moves the RESONANCE without moving the mass — that
+        // independence is exactly what makes it separable from a fill change
+        this.w = slOmega(Math.max(h, 0.005)) * (1 - 0.28 * (this.faults.mount || 0));
+        this.z = slZeta(Math.max(h, 0.005));
+        this.leq = SLC.G / (this.w * this.w);
+        this.cd = 2 * this.z * this.w * this.ms * this.leq * this.leq;
+        this.freeboard = Math.max(0.01, SLC.WALL - h);
+      }
+      applyFill(hCmd, faults) {
+        this.hCmd = hCmd; this.faults = faults;
+        this.rho = SLC.RHO * (1 - 0.22 * (faults.density || 0));   // a solvent instead of water
+        this.setFill(hCmd * (1 - 0.55 * (faults.leak || 0)));       // a leak: less liquid than the recipe thinks
+      }
+      friction(v) {
+        const f = (SLC.FC + (SLC.FS - SLC.FC) * Math.exp(-((v / SLC.VS) ** 2))) * Math.tanh(v / 0.002);
+        const lub = SLC.FC * 1.8 * (this.faults.lubrication || 0);  // dry guideway: Coulomb rises
+        return f + SLC.BV * v + lub * Math.tanh(v / 0.002);
+      }
+      cogging(x) { return SLC.COGA * Math.sin(2 * Math.PI * x / SLC.COGL); }
+      step(force) {
+        const hs = SLC.dt / 4;
+        for (let i = 0; i < 4; i++) {
+          const c = Math.cos(this.th), s = Math.sin(this.th);
+          const ms = this.ms, l = this.leq;
+          const a11 = this.mrigid + ms, a12 = ms * l * c, a21 = a12, a22 = ms * l * l;
+          const b1 = force - this.friction(this.v) + this.cogging(this.x) + ms * l * this.om * this.om * s;
+          const b2 = -ms * SLC.G * l * s - this.cd * this.om;
+          const det = a11 * a22 - a12 * a21;
+          if (Math.abs(det) < 1e-12) return;
+          const xdd = (b1 * a22 - a12 * b2) / det, thdd = (a11 * b2 - b1 * a21) / det;
+          this.v += xdd * hs; this.x += this.v * hs;
+          this.om += thdd * hs; this.th += this.om * hs;
+        }
+        // wave breaking: past the freeboard the crest spills over the rim and sheds energy. A hard
+        // unmodelable nonlinearity, and the physical reason slosh limits cycle time.
+        const e = this.wallElev();
+        if (Math.abs(e) > this.freeboard) {
+          this.broke++;
+          const over = Math.abs(e) - this.freeboard;
+          this.th *= (1 - 0.35 * Math.min(1, over / this.freeboard));
+          this.om *= 0.55;
+        }
+      }
+      wallElev() { return 0.5 * SLC.L * Math.tan(clamp(this.th, -1.2, 1.2)); }
+      // THE ONLY INSTRUMENT: one downward gauge at ONE spot. It reads mean depth plus the local
+      // wave height and cannot separate them from a single sample. Mounted OFF-CENTRE on purpose —
+      // the first antisymmetric mode has a NODE at the tank centre, so a gauge at xr=0.5 is blind
+      // to the very thing it is there to measure.
+      gauge() { return this.h + this.wallElev() * Math.cos(Math.PI * SLC.GX) + 0.055 * (this.faults.gauge_drift || 0); }
+      cell() { return SLC.MCART + this.rho * SLC.L * SLC.TW * this.h + slGauss() * 0.02; }
+    }
+
+    // ---- the observer: everything the controller is missing, read off that SAME single gauge.
+    // Its slow component IS the fill depth (hence the liquid mass, hence the axis inertia); its
+    // fast component IS the wave (hence the resonance the shaper has to be tuned to).
+    class SlObs {
+      constructor() { this.k = Math.cos(Math.PI * SLC.GX); this.ah = SLC.dt / 2.0; this.h = null; this.th = 0; this.om = 0; }
+      update(level) {
+        if (this.h === null) this.h = level;
+        this.h += this.ah * (level - this.h);
+        const wave = (level - this.h) / this.k;
+        const th = Math.atan(2 * wave / SLC.L);
+        this.om += 0.25 * ((th - this.th) / SLC.dt - this.om);
+        this.th = th;
+      }
+      // the RIGID moving mass implied by the observed fill — NOT the total. The sloshing fraction
+      // does not ride rigidly with the carriage; scheduling on total mass over-commands by exactly
+      // the sloshing part and the surplus acceleration re-excites the mode the shaper just
+      // cancelled (measured 0.446 mm wave against 0.323 for a frozen feedforward — "more correct"
+      // mass was WORSE until the split was right).
+      mass() {
+        const h = Math.max(this.h || 0, 0);
+        const mliq = SLC.RHO * SLC.L * SLC.TW * h;
+        return SLC.MCART + (mliq - mliq * slFrac(Math.max(h, 0.005)));
+      }
+    }
+
+    // ---- motion command: trapezoid, optionally convolved with a ZVD shaper (3 impulses, robust
+    // to about +-20% frequency error — which is far less than the 1.8x the fill range moves it).
+    function slTrapezoid() {
+      let ta = SLC.VMAX / SLC.AMAX, tc;
+      const da = SLC.AMAX * ta * ta;
+      if (da > SLC.DIST) { ta = Math.sqrt(SLC.DIST / SLC.AMAX); tc = 0; } else tc = (SLC.DIST - da) / SLC.VMAX;
+      const na = Math.round(ta / SLC.dt), nc = Math.round(tc / SLC.dt);
+      const out = [];
+      for (let i = 0; i < na; i++) out.push(SLC.AMAX);
+      for (let i = 0; i < nc; i++) out.push(0);
+      for (let i = 0; i < na; i++) out.push(-SLC.AMAX);
+      return out;
+    }
+    function slZvd(w, z) {
+      const wd = w * Math.sqrt(Math.max(1e-9, 1 - z * z));
+      const d = Math.round((Math.PI / wd) / SLC.dt);
+      const K = Math.exp(-z * Math.PI / Math.sqrt(Math.max(1e-9, 1 - z * z)));
+      const s = (1 + K) ** 2;
+      return [[0, 1 / s], [d, 2 * K / s], [2 * d, K * K / s]];
+    }
+    function slBuildRef(w, settle) {
+      let cmd = slTrapezoid();
+      if (w) {
+        const taps = slZvd(w, SLC.ZNOM);
+        const out = new Array(cmd.length + taps[taps.length - 1][0] + 1).fill(0);
+        for (const [d, amp] of taps) for (let i = 0; i < cmd.length; i++) out[i + d] += amp * cmd[i];
+        cmd = out;
+      }
+      const nmove = cmd.length, n = nmove + Math.round((settle || SLC.SETTLE) / SLC.dt);
+      const a = new Array(n).fill(0), v = new Array(n).fill(0), p = new Array(n).fill(0);
+      for (let k = 0; k < n; k++) a[k] = k < nmove ? cmd[k] : 0;
+      for (let k = 1; k < n; k++) { v[k] = v[k - 1] + a[k - 1] * SLC.dt; p[k] = p[k - 1] + v[k - 1] * SLC.dt; }
+      return { p, v, a, nmove, n };
+    }
+
+    // ---- estimators used by the health check ----
+    function slFillFromOmega(w) {                    // invert w = sqrt(g*(pi/L)*tanh(pi*h/L))
+      const y = w * w * SLC.L / (SLC.G * Math.PI);
+      if (y >= 0.999) return 0.30;
+      return (SLC.L / Math.PI) * 0.5 * Math.log((1 + y) / (1 - y));
+    }
+    function slOmegaFromWave(tail) {                 // zero-crossing period of the free wave
+      const zc = [];
+      for (let k = 1; k < tail.length; k++) if (tail[k - 1] <= 0 && tail[k] > 0) zc.push(k);
+      if (zc.length < 3) return null;
+      const per = (zc[zc.length - 1] - zc[0]) / (zc.length - 1) * SLC.dt;
+      return per > 0 ? 2 * Math.PI / per : null;
+    }
+    // named, three-term, interpretable: F = M*a + B*v + Fc*sign(v), by least squares over one move
+    function slFitAxis(F, A, V) {
+      if (F.length < 20) return null;
+      const cols = [A, V, V.map((v) => Math.tanh(v / 0.002))];
+      const M = [];
+      for (let i = 0; i < 3; i++) {
+        const row = [];
+        for (let j = 0; j < 3; j++) { let s = 0; for (let k = 0; k < F.length; k++) s += cols[i][k] * cols[j][k]; row.push(s); }
+        let s = 0; for (let k = 0; k < F.length; k++) s += cols[i][k] * F[k];
+        row.push(s); M.push(row);
+      }
+      for (let i = 0; i < 3; i++) M[i][i] += 1e-6;
+      for (let c = 0; c < 3; c++) {                   // Gauss-Jordan
+        let p = c; for (let r = c; r < 3; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+        const t = M[c]; M[c] = M[p]; M[p] = t;
+        const d = M[c][c] || 1e-12;
+        for (let j = 0; j < 4; j++) M[c][j] /= d;
+        for (let r = 0; r < 3; r++) if (r !== c && M[r][c]) { const f = M[r][c]; for (let j = 0; j < 4; j++) M[r][j] -= f * M[c][j]; }
+      }
+      return { M: M[0][3], B: M[1][3], Fc: M[2][3] };
+    }
+
+    // ---- machine state ----
+    const SL_FAULTS = ['lubrication', 'gauge_drift', 'mount', 'leak', 'density'];
+    let slConv = null, slExp = null, slDir = 1, slK = 0, slMoves = 0, slPaused = false;
+    let slFill = 0.120, slFaults = {}, slGaugeDead = false, slProbe = false, slProbePending = false, slDwell = 0, slAcc = 0;
+    let slBase = null, slDiag = 'commissioning…', slDiagCls = '', slBaseErr = 0, slProdErr = 0;
+    let slLastPanel = null, slLastDeltas = null;
+    let slHist = { conv: [], exp: [] }, slPlotInited = false, slSumTick = 0;
+    let slFore = null, slForeK = 0, slSpillWarn = null, slSpillLead = [], slForeAlarm = null;
+
+    function slMakeMachine(isExp) {
+      const ax = new SlAxis(slFill);
+      ax.applyFill(slFill, slFaults);
+      const mn = new SlAxis(SLC.NOM);
+      return { ax, obs: new SlObs(), isExp, x0: 0,
+        // the CONVENTIONAL machine: shaper tuned once at the nominal fill, and a feedforward whose
+        // mass was identified there too. This is what ships today, and it is not a strawman —
+        // it is the correct textbook design, applied to a load that then moves underneath it.
+        mHat: mn.mrigid + mn.ms, wHat: slOmega(SLC.NOM),
+        mBackup: null, mOffset: 0, mOffN: 0,
+        se: 0, sec: 0, elev: [], waveObs: [], F: [], A: [], V: [], vp: 0, recent: [],
+        errRms: 0, waveRms: 0, cumW: 0, cumWn: 0, cumE: 0, cumEn: 0, spills: 0, cellSum: 0, cellN: 0 };
+    }
+
+    function slStartMove() {
+      slDir = -slDir;
+      // a health check is SCHEDULED for the next move boundary, never applied mid-travel. Rebuilding
+      // the reference mid-move restarts it from x0 while the carriage is somewhere else, which steps
+      // the position demand by up to the whole stroke into a 4200 N/m gain — that jerk saturated the
+      // drive and drove the slosh state to divergence, and it poisoned every score in the session.
+      // A real controller finishes the move it is executing.
+      slProbe = slProbePending; slProbePending = false;
+      for (const m of [slConv, slExp]) {
+        m.ax.applyFill(slFill, slFaults);
+        // probe = deliberately UNSHAPED, and given a LONGER settle window: a mount fault or a
+        // leak lowers the resonance to a ~1.3 s period, and the production window holds barely
+        // two zero crossings — too few to fit, so the panel used to report 'no usable wave' for
+        // precisely the faults it is there to name.
+        m.ref = slBuildRef(slProbe ? null : m.wHat, slProbe ? SLC.PROBE_SETTLE : SLC.SETTLE);
+        m.se = 0; m.sec = 0; m.elev = []; m.waveObs = []; m.F = []; m.A = []; m.V = [];
+        m.cellSum = 0; m.cellN = 0;
+        m.brokeAt = m.ax.broke;
+      }
+      slK = 0; slForeAlarm = null;
+    }
+
+    function slEndMove() {
+      for (const m of [slConv, slExp]) {
+        m.errRms = 1000 * Math.sqrt(m.se / Math.max(m.sec, 1));
+        const tail = m.elev.slice(m.ref.nmove);
+        m.waveRms = 1000 * Math.sqrt(tail.reduce((s, e) => s + e * e, 0) / Math.max(tail.length, 1));
+        // a PROBE is a deliberately unshaped test move — it is SUPPOSED to ring, so scoring it as
+        // production lets the health check dominate the session RMS (measured: a few probes at a
+        // shallow fill pushed the reported session wave from ~0.3 mm to 33 mm). It is the only
+        // move type ever excluded; the SETTLING DWELL below is what stops it contaminating the
+        // moves that follow, so nothing after it has to be thrown away.
+        if (!slProbe) {
+          if (m.isExp) slProdErr = slProdErr === 0 ? m.errRms : slProdErr + 0.25 * (m.errRms - slProdErr);
+          m.cumE += m.errRms * m.errRms; m.cumEn++;
+          m.cumW += m.waveRms * m.waveRms; m.cumWn++;
+          m.recent.push(m.waveRms);
+          if (m.recent.length > 8) m.recent.shift();
+        }
+        if (m.ax.broke > m.brokeAt) m.spills++;   // counted always; both machines get the same probe
+        // the experimental machine retunes its shaper from the resonance it can SEE. A well-shaped
+        // move leaves no wave to measure — which is exactly why this only updates when there IS
+        // one, and why the health check has to ask for an unshaped probe.
+        if (m.isExp) {
+          const wt = m.waveObs.slice(m.ref.nmove);
+          const rms = Math.sqrt(wt.reduce((s, e) => s + e * e, 0) / Math.max(wt.length, 1));
+          if (rms > 0.004) {
+            const w = slOmegaFromWave(wt);
+            if (w && w > 2 && w < 20) m.wHat += 0.6 * (w - m.wHat);
+          }
+          const fit = slFitAxis(m.F, m.A, m.V);
+          if (fit) {
+            m.lastFit = fit;
+            if (!slGaugeDead) {                       // calibrate the offset WHILE the gauge works
+              m.mOffset += fit.M - m.obs.mass(); m.mOffN++;
+              m.mBackup = m.obs.mass();
+            } else {
+              m.mBackup = Math.max(SLC.MCART, fit.M - m.mOffset / Math.max(m.mOffN, 1));
+            }
+          }
+        }
+      }
+      slMoves++;
+      if (!slProbe) {
+        slHist.conv.push(slConv.waveRms); slHist.exp.push(slExp.waveRms);
+        if (slHist.conv.length > 90) { slHist.conv.shift(); slHist.exp.shift(); }
+      }
+      if (slProbe) { slRunDiagnosis(); slDwell = Math.round(40 / SLC.dt); }   // let the tank calm down
+      slStartMove();
+    }
+
+    // ---- DIAGNOSIS: a VOTE OF THREE. Each instrument implies a fill; the plant only has one.
+    // The gauge's slow level, the wave's resonance and a load cell are three independent routes to
+    // the same number, so the CONSENSUS stands for the real fill change and each channel's
+    // DEVIATION from it names what moved. Independent threshold tests, not an if/elif chain — a
+    // chain reports exactly one fault by construction and simultaneous faults are the whole point.
+    function slPanel() {
+      const m = slExp;
+      const tail = m.waveObs.slice(m.ref.nmove);
+      const w = slOmegaFromWave(tail);
+      return { h_g: m.obs.h, h_w: w ? slFillFromOmega(w) : NaN,
+        m_c: m.cellN ? m.cellSum / m.cellN : NaN, w,
+        Fr: m.lastFit ? m.lastFit.B * SLC.VMAX + m.lastFit.Fc : NaN };
+    }
+    function slFlags(d) {
+      if (!slBase) return null;
+      const S = SLC.RHO * SLC.L * SLC.TW;              // the cell's exact kg per metre of fill
+      const dfg = d.h_g - slBase.h_g;
+      const dfw = d.h_w - slBase.h_w;
+      const dfm = (d.m_c - slBase.m_c) / S;
+      const dfr = d.Fr - slBase.Fr;
+      const votes = [dfg, dfw, dfm].filter((x) => x === x).sort((a, b) => a - b);
+      if (votes.length < 3) return null;
+      const med = votes[1];
+      const tol = 0.020, out = [];
+      // Relative, because the resistive force scales with the machine and not with a fixed newton
+      // count. The tolerance WIDENS when the resonance has moved, because a changed slosh reaction
+      // measurably contaminates the friction fit: a mount fault alone drives the residual to 3.49 N
+      // at the nominal fill (29% of a healthy 12.1) against a real lubrication fault's 9.79 N (81%).
+      // Contamination is compensated rather than thresholded away — a flat 50% tolerance would have
+      // separated these two but would also have gone blind to any fault milder than half severity.
+      const tolFr = 0.25 + 8.0 * Math.abs(dfw - med);
+      if (slBase.Fr > 1 && Math.abs(dfr / slBase.Fr) > tolFr) out.push('guideway lubrication');
+      if (med < -0.020) out.push('unplanned leak');
+      if (Math.abs(dfg - med) > tol) out.push('gauge drift / fouling');
+      if (Math.abs(dfw - med) > tol) out.push('tank mount / liquid change');
+      const A = SLC.L * SLC.TW;
+      const hNow = Math.max(slBase.h_g + med, 0.005), hBase = Math.max(slBase.h_g, 0.005);
+      const rhoNow = (d.m_c - SLC.MCART) / (A * hNow);
+      const rhoBase = (slBase.m_c - SLC.MCART) / (A * hBase);
+      if (rhoBase > 1 && Math.abs(rhoNow / rhoBase - 1) > 0.08) out.push('wrong liquid (density)');
+      return out;
+    }
+    function slDeltas(d) {                       // exposed for the tests: the raw residuals behind a verdict
+      if (!slBase) return null;
+      const S = SLC.RHO * SLC.L * SLC.TW, A = SLC.L * SLC.TW;
+      const med = [d.h_g - slBase.h_g, d.h_w - slBase.h_w, (d.m_c - slBase.m_c) / S]
+        .filter((x) => x === x).sort((a, b) => a - b)[1];
+      const hNow = Math.max(slBase.h_g + med, 0.005), hBase = Math.max(slBase.h_g, 0.005);
+      return { dfg: d.h_g - slBase.h_g, dfw: d.h_w - slBase.h_w, dfm: (d.m_c - slBase.m_c) / S,
+        med, dFr: d.Fr - slBase.Fr, FrBase: slBase.Fr,
+        rhoRatio: ((d.m_c - SLC.MCART) / (A * hNow)) / ((slBase.m_c - SLC.MCART) / (A * hBase)) };
+    }
+    function slRunDiagnosis() {
+      const d = slPanel();
+      slLastPanel = d;
+      if (!slBase) {
+        if (d.h_w === d.h_w && d.m_c === d.m_c && d.Fr === d.Fr) {
+          slBase = d; slBaseErr = slProdErr;   // production error, NOT the probe's
+          slLastDeltas = null;
+          slDiag = 'baseline captured — now inject a fault and re-run'; slDiagCls = 'good';
+        } else slDiag = 'baseline incomplete — run the health check again';
+        return;
+      }
+      const f = slFlags(d);
+      slLastDeltas = slDeltas(d);
+      if (!f) { slDiag = 'no usable wave — re-run the health check'; slDiagCls = ''; return; }
+      slDiag = f.length ? f.join(' + ') : 'healthy';
+      slDiagCls = f.length ? 'warn' : 'good';
+    }
+
+    // ---- crest forecast: warn BEFORE the liquid goes over the rim. Fed the controller's
+    // look-ahead buffer — the command the axis WILL be given at the horizon, not the one acting
+    // now — because a spill caused by a command the forecaster has not seen yet is unforecastable
+    // by construction. That same free signal measured NEGATIVE in the feedforward (see the header):
+    // there it perturbs timing, here it supplies information that was genuinely missing.
+    const SL_FH = [4, 8, 12, 20, 30], SL_DEC = 8;      // horizons in 25 Hz samples: 0.16 .. 1.2 s
+    function slMakeForecaster() {
+      // lag x stride spans 1.6 s, a useful fraction of the ~2 s slosh period. A window sized to a
+      // tenth of one cycle cannot characterise the oscillation at all.
+      return new Continuous(1, 4, 2, true, { predictionSteps: 1, stride: 10, lam: 0.9995,
+        initVariance: 100.0, numInputs: 1, autoNormalize: true, calibSamples: 400, directHorizons: SL_FH });
+    }
+
+    // ---- render ----
+    const slStage = document.getElementById('sl-stage');
+    const slCanvas = document.createElement('canvas');
+    slStage.appendChild(slCanvas);
+    const slCtx = slCanvas.getContext('2d');
+    const slDPR = Math.min(window.devicePixelRatio, 2);
+    let slW = 0, slH = 0;
+    function resizeSlosh() {
+      slW = slStage.clientWidth; slH = slStage.clientHeight;
+      if (!slW || !slH) return;
+      slCanvas.width = slW * slDPR; slCanvas.height = slH * slDPR;
+      slCanvas.style.width = slW + 'px'; slCanvas.style.height = slH + 'px';
+      slCtx.setTransform(slDPR, 0, 0, slDPR, 0, 0);
+    }
+    window.addEventListener('resize', resizeSlosh);
+
+    function slDrawLane(m, y0, laneH, color, label) {
+      const c = slCtx;
+      const padX = 14, railY = y0 + laneH - 12;
+      const travel = slW - 2 * padX;
+      c.strokeStyle = '#1e293b'; c.lineWidth = 3;
+      c.beginPath(); c.moveTo(padX, railY); c.lineTo(slW - padX, railY); c.stroke();
+      // the carriage shuttles between two stations DIST apart; map that stroke onto the rail so the
+      // tank stays fully on canvas at both ends (it used to be pinned against the right edge and
+      // half off it, because the shuttle runs 0 -> +DIST and the mapping assumed one direction).
+      // The tank is drawn to its REAL proportions (L long, WALL tall) rather than stretched to the
+      // lane: a box drawn to the lane height reads as 90% empty at a shallow fill, which is a
+      // drawing artefact and not what the machine looks like.
+      const tankW = Math.min(104, travel * 0.26, (laneH - 28) * SLC.L / SLC.WALL);
+      const tankH = tankW * SLC.WALL / SLC.L;
+      const usable = travel - tankW;
+      const tx = padX + usable * clamp(m.ax.x / SLC.DIST, 0, 1);
+      const cx = tx + tankW / 2, ty = railY - 11 - tankH;
+      // station marks, so the stroke is legible even when the carriage is stationary
+      c.fillStyle = '#1e293b';
+      c.fillRect(padX + tankW / 2 - 1, railY - 4, 2, 8);
+      c.fillRect(padX + usable + tankW / 2 - 1, railY - 4, 2, 8);
+      // carriage
+      c.fillStyle = '#334155'; c.fillRect(cx - tankW * 0.32, railY - 10, tankW * 0.64, 9);
+      // liquid: surface elevation across the tank is wallElev*cos(pi*xr)
+      const hPx = (v) => tankH * clamp(v / SLC.WALL, 0, 1);
+      const e = m.ax.wallElev();
+      c.save();
+      c.beginPath(); c.rect(tx, ty, tankW, tankH); c.clip();
+      c.beginPath(); c.moveTo(tx, ty + tankH);
+      for (let i = 0; i <= 24; i++) {
+        const xr = i / 24;
+        c.lineTo(tx + xr * tankW, ty + tankH - hPx(m.ax.h + e * Math.cos(Math.PI * xr)));
+      }
+      c.lineTo(tx + tankW, ty + tankH); c.closePath();
+      c.fillStyle = m.isExp ? 'rgba(56,189,248,0.55)' : 'rgba(100,116,139,0.5)'; c.fill();
+      c.restore();
+      // tank walls + freeboard line
+      c.strokeStyle = color; c.lineWidth = 2;
+      c.beginPath(); c.moveTo(tx, ty); c.lineTo(tx, ty + tankH); c.lineTo(tx + tankW, ty + tankH); c.lineTo(tx + tankW, ty); c.stroke();
+      // the single gauge: a beam straight down at ONE spot, off-centre (0.5 sits on the mode's node)
+      const gx = tx + SLC.GX * tankW;
+      c.fillStyle = '#475569'; c.fillRect(gx - 5, ty - 15, 10, 6);      // the sensor head above the rim
+      c.strokeStyle = 'rgba(226,232,240,0.45)'; c.lineWidth = 1; c.setLineDash([3, 3]);
+      c.beginPath(); c.moveTo(gx, ty - 8); c.lineTo(gx, ty + tankH - hPx(m.ax.gauge())); c.stroke();
+      c.setLineDash([]);
+      c.fillStyle = '#e2e8f0'; c.beginPath(); c.arc(gx, ty + tankH - hPx(m.ax.gauge()), 2.5, 0, 7); c.fill();
+      // spill flash
+      if (Math.abs(e) > m.ax.freeboard) {
+        c.fillStyle = 'rgba(248,113,113,0.85)';
+        c.fillRect(e > 0 ? tx + tankW - 3 : tx, ty, 3, 10);
+      }
+      c.fillStyle = color; c.font = '11px -apple-system,sans-serif'; c.textAlign = 'left';
+      c.fillText(label, padX, y0 + 12);
+      c.fillStyle = '#94a3b8';
+      c.fillText('wave ' + m.waveRms.toFixed(3) + ' mm   err ' + m.errRms.toFixed(2) + ' mm'
+        + (m.spills ? '   spills ' + m.spills : ''), padX + 96, y0 + 12);
+    }
+
+    function slDraw() {
+      if (!slW || !slH) return;
+      const c = slCtx;
+      c.clearRect(0, 0, slW, slH);
+      c.fillStyle = '#060a14'; c.fillRect(0, 0, slW, slH);
+      const laneH = (slH - 10) / 2;
+      slDrawLane(slConv, 4, laneH, '#7c8aa0', 'conventional');
+      slDrawLane(slExp, laneH + 8, laneH, '#f59e0b', 'experimental');
+      if (slProbe || slDwell > 0) {
+        c.fillStyle = '#f87171'; c.font = 'bold 11px -apple-system,sans-serif'; c.textAlign = 'right';
+        c.fillText(slDwell > 0 ? 'settling after the probe…' : 'UNSHAPED PROBE — health check', slW - 12, 13);
+      }
+      c.textAlign = 'left';
+    }
+
+    // ---- step ----
+    // After a deliberately unshaped probe the tank rings at ~36 mm and decays over ~10 moves at a
+    // shallow fill, so a probe used to contaminate every score that followed it. A real
+    // commissioning routine runs the test move and then WAITS for the liquid to calm before
+    // resuming production, so that is what happens here: hold position, score nothing, and go back
+    // to work once both tanks are quiet. This is why no post-probe move has to be discarded.
+    function slDwellStep() {
+      for (const m of [slConv, slExp]) {
+        m.obs.update(m.ax.gauge());
+        const u = clamp(SLC.KP * (m.x0 - m.ax.x) + SLC.KD * (0 - m.ax.v), -SLC.FMAX, SLC.FMAX);
+        m.vp = m.ax.v;
+        m.ax.step(u);
+      }
+      slDwell--;
+      if (Math.abs(slConv.ax.wallElev()) < 0.001 && Math.abs(slExp.ax.wallElev()) < 0.001
+          && Math.abs(slConv.ax.om) < 0.01 && Math.abs(slExp.ax.om) < 0.01) slDwell = 0;
+      if (slDwell <= 0) slStartMove();
+    }
+
+    function slStep() {
+      if (slDwell > 0) { slDwellStep(); return; }
+      const m0 = slConv, m1 = slExp;
+      for (const m of [m0, m1]) {
+        const ref = m.ref, j = Math.min(ref.n - 1, slK);
+        m.obs.update(m.ax.gauge());
+        const aMeas = (m.ax.v - m.vp) / SLC.dt;
+        const th = m.x0 + slDir * ref.p[j], rv = slDir * ref.v[j], ra = slDir * ref.a[j];
+        // the EXPERIMENTAL machine schedules the inertia term on the mass it reads off the gauge;
+        // the conventional one uses the mass identified once at the nominal fill. Same three smooth
+        // terms otherwise — a 43-term learned map tracks position slightly better and leaves ~2x
+        // MORE wave, because roughness near the slosh resonance is what the shaper cannot cancel.
+        let mm = m.mHat;
+        if (m.isExp) mm = slGaugeDead ? (m.mBackup || m.mHat) : m.obs.mass();
+        const ff = mm * ra + SLC.BV * rv + SLC.FC * Math.tanh(rv / 0.002);
+        const u = clamp(SLC.KP * (th - m.ax.x) + SLC.KD * (rv - m.ax.v) + ff, -SLC.FMAX, SLC.FMAX);
+        m.vp = m.ax.v;
+        m.ax.step(u);
+        if (slK < ref.nmove) {
+          const err = th - m.ax.x;
+          m.se += err * err; m.sec++;
+          if (Math.abs(m.ax.v) > 0.02) { m.F.push(u); m.A.push(aMeas); m.V.push(m.ax.v); }
+        }
+        m.elev.push(m.ax.wallElev());
+        m.waveObs.push(m.obs.th);
+        if (slK % 20 === 0) { m.cellSum += m.ax.cell(); m.cellN++; }
+      }
+      // crest forecast on the experimental machine's gauge, at 25 Hz
+      if (slK % SL_DEC === 0 && slFore) {
+        const ref = m1.ref, la = SL_FH[SL_FH.length - 1] * SL_DEC;
+        const aFut = slDir * ref.a[Math.min(ref.n - 1, slK + la)];   // the look-ahead buffer
+        const r = slFore.step([m1.ax.gauge()], [aFut]);
+        slForeK++;
+        if (r.directPrediction && r.warm && slForeK > 600) {
+          const hbar = m1.obs.h || m1.ax.h;
+          let peak = 0;
+          for (const p of r.directPrediction[0]) peak = Math.max(peak, Math.abs((p - hbar) / Math.cos(Math.PI * SLC.GX)));
+          if (slForeAlarm === null && peak > m1.ax.freeboard) slForeAlarm = slK;
+        }
+      }
+      if (slForeAlarm !== null && m1.ax.broke > m1.brokeAt && slSpillWarn === null) {
+        slSpillWarn = (slK - slForeAlarm) * SLC.dt * 1000;
+        slSpillLead.push(slSpillWarn);
+      }
+      slK++;
+      const done = Math.max(slConv.ref.n, slExp.ref.n);
+      if (slK >= done) {
+        for (const m of [slConv, slExp]) m.x0 += slDir * m.ref.p[m.ref.n - 1];
+        slEndMove();
+      }
+    }
+
+    function slUpdatePlot() {
+      const xs = slHist.conv.map((_, i) => i + 1);
+      const layout = { margin: { l: 40, r: 8, t: 8, b: 30 }, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+        font: { color: '#94a3b8', size: 10 }, showlegend: true, legend: { orientation: 'h', y: 1.25 },
+        xaxis: { title: { text: 'move', font: { size: 10 } }, gridcolor: '#1e293b' },
+        yaxis: { title: { text: 'residual wave (mm RMS)', font: { size: 10 } }, gridcolor: '#1e293b', rangemode: 'tozero' } };
+      const mk = (y, name, color) => ({ x: xs, y, type: 'scatter', mode: 'lines', name, line: { color, width: 2 } });
+      const data = [mk(slHist.conv, 'conventional', '#7c8aa0'), mk(slHist.exp, 'experimental', '#f59e0b')];
+      if (!slPlotInited) { Plotly.newPlot('sl-plot', data, layout, { displayModeBar: false, responsive: true }); slPlotInited = true; }
+      else Plotly.react('sl-plot', data, layout, { displayModeBar: false, responsive: true });
+    }
+
+    function slUpdateRows() {
+      const set = (id, txt, cls) => { const el = document.getElementById(id); el.textContent = txt; if (cls !== undefined) el.className = cls; };
+      set('sl-n', String(slMoves) + (slPaused ? '  (paused)' : ''));
+      set('sl-err', slConv.errRms.toFixed(3) + ' mm conventional / ' + slExp.errRms.toFixed(3) + ' mm experimental');
+      set('sl-wave', slConv.waveRms.toFixed(3) + ' mm conventional / ' + slExp.waveRms.toFixed(3) + ' mm experimental', 'amber');
+      const cw = slConv.cumWn ? Math.sqrt(slConv.cumW / slConv.cumWn) : 0;
+      const ew = slExp.cumWn ? Math.sqrt(slExp.cumW / slExp.cumWn) : 0;
+      const rc = slRms(slConv.recent), re = slRms(slExp.recent);
+      if (ew > 1e-6 && slConv.cumWn >= 2) {
+        const r = cw / ew, rr = re > 1e-9 ? rc / re : 0;
+        set('sl-adv', (rr >= 1 ? slFmtX(rr) + ' better' : slFmtX(1 / rr) + ' WORSE') + ' recent ('
+          + rc.toFixed(3) + ' vs ' + re.toFixed(3) + ' mm)   ·   ' + slFmtX(r) + ' over the whole session',
+          rr >= 1 ? 'good' : 'warn');
+      } else set('sl-adv', '—', '');
+      const lead = slSpillLead.length ? (slSpillLead.reduce((a, b) => a + b, 0) / slSpillLead.length).toFixed(0) + ' ms mean lead over ' + slSpillLead.length : 'none yet';
+      set('sl-spill', slForeAlarm !== null ? 'CREST PREDICTED OVER THE RIM' : 'clear   (' + lead + ')', slForeAlarm !== null ? 'warn' : '');
+      set('sl-spilln', slConv.spills + ' conventional / ' + slExp.spills + ' experimental');
+      set('sl-diag', slDiag, slDiagCls);
+      // the baseline a machine actually alarms on today: a following-error threshold. The position
+      // loop ABSORBS these faults into control effort, so the thing keeping the machine running is
+      // also what hides the degradation.
+      if (slBase && slBaseErr > 0) {
+        const trip = slProdErr > 1.4 * slBaseErr;
+        set('sl-alarm', (trip ? 'ALARM (cause unknown)' : 'no alarm') + '  (' + slProdErr.toFixed(2)
+          + ' mm vs healthy ' + slBaseErr.toFixed(2) + ')', trip ? 'warn' : '');
+      } else set('sl-alarm', '—', '');
+      const gs = slGaugeDead ? 'gauge DEAD — inertia from the axis’s own force and motion' : 'gauge live';
+      set('sl-sense', gs + '   ·   resonance ' + slExp.wHat.toFixed(2) + ' rad/s (true ' + slExp.ax.w.toFixed(2) + '), fixed shaper ' + slConv.wHat.toFixed(2), slGaugeDead ? 'warn' : '');
+    }
+    const slRms = (xs) => (xs.length ? Math.sqrt(xs.reduce((s2, x) => s2 + x * x, 0) / xs.length) : 0);
+    const slFmtX = (r) => (r >= 10 ? r.toFixed(0) : r.toFixed(1)) + '×';
+
+    // ---- live experiment summary (same BLACK-BOX contract as the other three tabs): the plant,
+    // the conventional baseline, the protocol and the grading are fully specified and reproducible;
+    // the experimental estimators' construction is withheld, and the summary SAYS it is withheld
+    // rather than quietly omitting it.
+    function slSummaryText() {
+      const cw = slConv.cumWn ? Math.sqrt(slConv.cumW / slConv.cumWn) : 0;
+      const ew = slExp.cumWn ? Math.sqrt(slExp.cumW / slExp.cumWn) : 0;
+      const ce = slConv.cumEn ? Math.sqrt(slConv.cumE / slConv.cumEn) : 0;
+      const ee = slExp.cumEn ? Math.sqrt(slExp.cumE / slExp.cumEn) : 0;
+      const fl = Object.keys(slFaults).filter((k) => slFaults[k]);
+      const L = [];
+      L.push('SYSTEM. A servo carriage of tare ' + SLC.MCART.toFixed(1) + ' kg carries an open rectangular tank '
+        + SLC.L.toFixed(2) + ' m long and ' + SLC.TW.toFixed(2) + ' m wide, walls ' + SLC.WALL.toFixed(2)
+        + ' m high, filled with liquid to ' + slFill.toFixed(3) + ' m. The first antisymmetric sloshing mode is '
+        + 'modelled by the standard equivalent-pendulum analogue COUPLED to the carriage, so the liquid pushes back:\n'
+        + '  (m_rigid + m_s)*xdd + m_s*l*(thdd*cos(th) - thd^2*sin(th)) = F - friction(v) + cogging(x)\n'
+        + '  m_s*l*xdd*cos(th) + m_s*l^2*thdd + m_s*g*l*sin(th) + c_d*thd = 0\n'
+        + 'with w1 = sqrt(g*(pi/L)*tanh(pi*h/L)) = ' + slOmega(slFill).toFixed(3) + ' rad/s at this fill, l = g/w1^2, '
+        + 'light depth-dependent damping, and the sloshing mass fraction (8/pi^3)(L/h)tanh(pi*h/L) - so BOTH the '
+        + 'axis inertia and the load resonance move with fill. Over the slider range the resonance moves 1.80x, '
+        + 'against the ~+-20% a robust shaper tolerates. Axis nonlinearities: Stribeck friction (stiction '
+        + SLC.FS.toFixed(1) + ' N breaking away to Coulomb ' + SLC.FC.toFixed(1) + ' N at ' + SLC.VS.toFixed(3)
+        + ' m/s, plus viscous ' + SLC.BV.toFixed(0) + ' N per m/s), and cogging ' + SLC.COGA.toFixed(1)
+        + ' N at a ' + SLC.COGL.toFixed(2) + ' m spatial period. Past the freeboard the crest breaks against the '
+        + 'rim and sheds energy - a hard unmodelable nonlinearity, and the reason slosh limits cycle time.');
+      L.push('TASK AND SIGNALS. Rest-to-rest ' + SLC.DIST.toFixed(2) + ' m moves, shuttling, at ' + SLC.VMAX.toFixed(2)
+        + ' m/s and ' + SLC.AMAX.toFixed(1) + ' m/s^2, control period ' + (SLC.dt * 1000).toFixed(0) + ' ms. '
+        + 'THE ONLY LIQUID INSTRUMENT IS ONE DOWNWARD GAUGE AT ONE SPOT, at relative position '
+        + SLC.GX.toFixed(2) + ' across the tank; it reads mean depth PLUS the local wave height and cannot '
+        + 'separate them from a single sample. (Off-centre is a commissioning requirement, not a detail: the '
+        + 'first mode has a node at the tank centre, so a gauge at 0.50 is blind to it.) Also available: the '
+        + 'motor force and the encoder, and - for the health check only - a load cell under the tank. '
+        + 'The two machines receive the SAME move sequence, the same fill and the same injected faults.');
+      L.push('MODELS. CONVENTIONAL (fully specified, the baseline): a 3-impulse ZVD input shaper tuned ONCE at '
+        + 'the nominal fill ' + SLC.NOM.toFixed(2) + ' m with assumed damping ' + SLC.ZNOM.toFixed(3)
+        + ', driving a PD loop (Kp ' + SLC.KP + ', Kd ' + SLC.KD + ', force limit ' + SLC.FMAX + ' N) with a '
+        + 'textbook feedforward M*a_ref + B*v_ref + Fc*sign(v_ref) whose M was identified at that same nominal '
+        + 'fill. This is the correct textbook design; it is not a strawman. It is wrong everywhere else only '
+        + 'because the load moves underneath it.\n'
+        + 'EXPERIMENTAL: the SAME PD loop, the SAME shaper family and the SAME three feedforward terms. It '
+        + 'differs in one respect: it reads the fill and the resonance off that single gauge and retunes both '
+        + 'online, and it carries a crest forecast and a fault panel built on the same instrument. HOW those '
+        + 'estimates and that forecast are constructed is intentionally NOT disclosed - no architecture, '
+        + 'feature construction, window, target convention or fitting detail appears anywhere in this text. '
+        + 'The plant, the baseline, the protocol and the grading below are fully specified, so every number '
+        + 'here is reproducible against your own method.');
+      L.push('PROTOCOL. Both machines shuttle continuously on one plant each - they are never re-created '
+        + 'between moves, because teleporting the carriage home would feed the controllers an input history '
+        + 'that never happened. The Fill slider takes effect at the START of the next move. Faults are '
+        + 'injected into BOTH machines. HEALTH CHECK runs one deliberately UNSHAPED probe move: a well-shaped '
+        + 'move leaves no wave to measure, so success at control removes the observability that diagnosis '
+        + 'needs. The first health check captures the healthy baseline; every later one is scored against it, '
+        + 'because each estimator carries its own fixed offset and it is the CHANGE in agreement that is the '
+        + 'signal, never absolute agreement. SCORING EXCLUSION, and there is exactly one: a probe move is not '
+        + 'scored, because it is deliberately unshaped and is supposed to ring. Every other move '
+        + 'is scored, including the experimental machine\'s startup moves before it has seen any wave to '
+        + 'tune from - which is why the session figure is worse than the recent one. After a probe the '
+        + 'axis HOLDS POSITION until both tanks are quiet again before production resumes, exactly as a '
+        + 'commissioning routine would; that is what keeps a probe from contaminating the moves after it, '
+        + 'rather than discarding them.');
+      L.push('GRADING. FOLLOWING ERROR is the RMS of (reference - position) over the moving phase, in mm - '
+        + 'what a machine actually alarms on today. RESIDUAL WAVE is the RMS wall elevation over the settle '
+        + 'window AFTER the move completes, in mm - the thing that actually limits cycle time. Both are '
+        + 'accumulated over the whole session, so the advantage row is a session RMS ratio and not a lucky '
+        + 'move. SPILLS are counted when the crest actually goes over the rim. The spill warning is scored '
+        + 'by LEAD TIME to the first breach; an instantaneous "crest is over the rim" rule has zero lead by '
+        + 'construction, since that crossing IS the spill. The CONVENTIONAL ALARM row is a following-error '
+        + 'threshold at 1.4x the healthy value.');
+      if (slMoves < 2) {
+        L.push('LATEST RESULT. Not enough moves yet - let the machines run.');
+      } else {
+        let s = 'LATEST RESULT after ' + slMoves + ' moves at fill ' + slFill.toFixed(3) + ' m'
+          + (fl.length ? ', faults injected: ' + fl.join(' + ') : ', no fault injected') + '.\n'
+          + '  Residual wave, last ' + slConv.recent.length + ' scored moves: conventional ' + slRms(slConv.recent).toFixed(3)
+          + ' mm, experimental ' + slRms(slExp.recent).toFixed(3) + ' mm - '
+          + (slRms(slExp.recent) > 1e-9 ? slFmtX(slRms(slConv.recent) / slRms(slExp.recent)) + (slRms(slConv.recent) >= slRms(slExp.recent) ? ' better' : ' worse') : 'n/a') + '.\n'
+          + '  Residual wave, whole session (' + slConv.cumWn + ' scored moves, INCLUDING the experimental\n'
+          + '  machine\'s startup transient before it has seen a wave to tune from): conventional '
+          + cw.toFixed(3) + ' mm, experimental ' + ew.toFixed(3) + ' mm - '
+          + (ew > 1e-9 ? slFmtX(cw / ew) + (cw >= ew ? ' better' : ' worse') : 'n/a') + '.\n'
+          + '  Following error, session RMS: conventional ' + ce.toFixed(3) + ' mm, experimental ' + ee.toFixed(3) + ' mm.\n'
+          + '  Spills over the rim: ' + slConv.spills + ' conventional, ' + slExp.spills + ' experimental.\n'
+          + '  Resonance: the experimental machine is tuned to ' + slExp.wHat.toFixed(3) + ' rad/s against a true '
+          + slExp.ax.w.toFixed(3) + '; the fixed shaper is stuck at ' + slConv.wHat.toFixed(3) + '.\n'
+          + '  Level gauge: ' + (slGaugeDead ? 'FAILED - the experimental machine is running its inertia term off the axis’s own force and motion instead.' : 'live.') + '\n'
+          + '  Diagnosis: ' + slDiag + '.';
+        if (slBase && slBaseErr > 0) s += '\n  A following-error threshold at 1.4x the healthy value ('
+          + slProdErr.toFixed(2) + ' mm against ' + slBaseErr.toFixed(2) + ') reports: '
+          + (slProdErr > 1.4 * slBaseErr ? 'ALARM, cause unknown.' : 'no alarm - the position loop absorbs the fault into control effort.');
+        if (slSpillLead.length) s += '\n  Spill warnings: ' + slSpillLead.length + ', mean lead '
+          + (slSpillLead.reduce((a, b) => a + b, 0) / slSpillLead.length).toFixed(0) + ' ms.';
+        L.push(s);
+      }
+      return L.join('\n\n');
+    }
+    function slRefreshSummary() { document.getElementById('sl-sum').textContent = slSummaryText(); }
+
+    // ---- controls ----
+    function slReset(keepFaults) {
+      if (!keepFaults) {
+        document.getElementById('sl-f1').value = 'none';
+        document.getElementById('sl-f2').value = 'none';
+        slFaults = {};
+      }
+      slConv = slMakeMachine(false); slExp = slMakeMachine(true);
+      slDir = -1; slMoves = 0; slPaused = false; slGaugeDead = false; slProbe = false; slAcc = 0;
+      slProbePending = false; slDwell = 0;
+      slBase = null; slBaseErr = 0; slProdErr = 0; slLastPanel = null; slLastDeltas = null; slDiag = 'commissioning — run a health check'; slDiagCls = '';
+      slHist = { conv: [], exp: [] };
+      slFore = slMakeForecaster(); slForeK = 0; slSpillLead = []; slSpillWarn = null; slForeAlarm = null;
+      document.getElementById('sl-gauge').textContent = 'Kill gauge 💀';
+      document.getElementById('sl-pause').textContent = 'Pause ⏸';
+      slStartMove();
+    }
+    function slReadFaults() {
+      const f = {};
+      for (const id of ['sl-f1', 'sl-f2']) {
+        const v = document.getElementById(id).value;
+        if (v !== 'none') f[v] = 1.0;
+      }
+      slFaults = f;
+    }
+    document.getElementById('sl-f1').addEventListener('change', slReadFaults);
+    document.getElementById('sl-f2').addEventListener('change', slReadFaults);
+    document.getElementById('sl-check').addEventListener('click', () => {
+      slProbePending = true; slDiag = 'probe queued — runs at the next move boundary'; slDiagCls = '';
+    });
+    document.getElementById('sl-reset').addEventListener('click', () => slReset(false));
+    document.getElementById('sl-pause').addEventListener('click', (e) => {
+      slPaused = !slPaused; slAcc = 0;
+      e.target.textContent = slPaused ? 'Resume ▶' : 'Pause ⏸';
+    });
+    document.getElementById('sl-gauge').addEventListener('click', (e) => {
+      slGaugeDead = !slGaugeDead;
+      e.target.textContent = slGaugeDead ? 'Revive gauge ✚' : 'Kill gauge 💀';
+    });
+    document.getElementById('sl-fill').addEventListener('input', (e) => {
+      slFill = +e.target.value / 1000;
+      document.getElementById('sl-fillv').textContent = slFill.toFixed(3) + ' m';
+    });
+    document.getElementById('sl-speed').addEventListener('input', (e) => {
+      document.getElementById('sl-speedv').textContent = (+e.target.value).toFixed(2) + '×';
+    });
+    document.getElementById('sl-copy').addEventListener('click', async (e) => {
+      const txt = document.getElementById('sl-sum').textContent;
+      try { await navigator.clipboard.writeText(txt); } catch (err) {
+        const ta = document.createElement('textarea');
+        ta.value = txt; document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); } catch (e2) { console.warn('copy failed', e2); }
+        document.body.removeChild(ta);
+      }
+      const b = e.target; b.textContent = 'Copied ✓';
+      setTimeout(() => { b.textContent = 'Copy 📋'; }, 1200);
+    });
+
+    let slFrames = 0;
+    function slTick() {
+      if (activeTab !== 'slosh') { requestAnimationFrame(slTick); return; }
+      if (!slW) resizeSlosh();
+      if (!slPaused) {
+        // real time is 200 steps/s; the Speed slider scales it through a fractional accumulator
+        slAcc += (SLC.dt > 0 ? (1 / 60) / SLC.dt : 0) * (+document.getElementById('sl-speed').value);
+        let steps = Math.floor(slAcc);
+        slAcc -= steps;
+        steps = Math.min(steps, 60);
+        for (let i = 0; i < steps; i++) slStep();
+      }
+      slDraw();
+      if (++slFrames % 6 === 0) slUpdateRows();
+      if (slFrames % 30 === 0) slUpdatePlot();
+      if (slFrames % 60 === 0) slRefreshSummary();
+      requestAnimationFrame(slTick);
+    }
+
+    window.__slDbg = () => ({
+      moves: slMoves, fill: slFill, faults: Object.keys(slFaults),
+      convWave: slConv.waveRms, expWave: slExp.waveRms,
+      convCum: slConv.cumWn ? Math.sqrt(slConv.cumW / slConv.cumWn) : 0,
+      expCum: slExp.cumWn ? Math.sqrt(slExp.cumW / slExp.cumWn) : 0,
+      convErr: slConv.errRms, expErr: slExp.errRms,
+      wHat: slExp.wHat, wTrue: slExp.ax.w, wFixed: slConv.wHat,
+      diag: slDiag, base: !!slBase, gaugeDead: slGaugeDead, probe: slProbe, probePending: slProbePending, dwell: slDwell,
+      scored: slConv.cumWn, prodErr: slProdErr, baseErr: slBaseErr, recentConv: slRms(slConv.recent), recentExp: slRms(slExp.recent),
+      spills: [slConv.spills, slExp.spills], leads: slSpillLead.length,
+      hTrue: slExp.ax.h, hObs: slExp.obs.h, paused: slPaused,
+      deltas: slLastDeltas });
+    window.__slHist = () => ({ conv: slHist.conv.slice(), exp: slHist.exp.slice() });
+    window.__slSet = (o) => {                       // test hook: drive the controls headlessly
+      if (o.fill !== undefined) { slFill = o.fill; document.getElementById('sl-fill').value = Math.round(o.fill * 1000); document.getElementById('sl-fillv').textContent = o.fill.toFixed(3) + ' m'; }
+      if (o.faults !== undefined) { slFaults = {}; for (const f of o.faults) slFaults[f] = 1.0; }
+      if (o.probe) slProbePending = true;
+      if (o.gaugeDead !== undefined) { slGaugeDead = o.gaugeDead; document.getElementById('sl-gauge').textContent = slGaugeDead ? 'Revive gauge ✚' : 'Kill gauge 💀'; }
+    };
+
     // ---- boot ----
     makeModel();
     makeSS();
     makeFinger();
+    slReset(false);
     resizeLorenz();
     requestAnimationFrame(tick);
     requestAnimationFrame(ssTick);
     requestAnimationFrame(fgTick);
+    requestAnimationFrame(slTick);
   </script>
 </body>
 </html>

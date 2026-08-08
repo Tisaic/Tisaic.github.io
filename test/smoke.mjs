@@ -222,6 +222,75 @@ check('ngrc: multi-stroke autopilot is path-locked replay', /path-locked replay/
 await demo.waitForTimeout(2500);
 await demo.screenshot({ path: join(SHOTS, '07-multistroke.png') });
 await demo.click('#fg-auto');
+
+// ---- tab 4: anti-slosh axis ----
+await demo.click('.tab[data-tab="slosh"]');
+await demo.waitForTimeout(400);
+await demo.evaluate(() => { const s = document.getElementById('sl-speed'); s.value = 3; s.dispatchEvent(new Event('input', { bubbles: true })); });
+// off the fixed shaper's design fill is where a frozen tuning is wrong; the experimental machine
+// has to retune toward the true resonance and leave less wave for it
+await demo.evaluate(() => { window.__slSet({ fill: 0.05 }); document.getElementById('sl-reset').click(); window.__slSet({ fill: 0.05 }); });
+await demo.evaluate(() => { const s = document.getElementById('sl-speed'); s.value = 3; s.dispatchEvent(new Event('input', { bubbles: true })); });
+await demo.waitForFunction(() => window.__slDbg().moves >= 10, null, { timeout: 120000 });
+let sl = await demo.evaluate(() => window.__slDbg());
+check('ngrc: anti-slosh axis runs and the plant sloshes', sl.moves >= 10 && sl.convCum > 0.05, JSON.stringify(sl));
+check('ngrc: experimental retunes toward the true resonance',
+  Math.abs(sl.wHat - sl.wTrue) < Math.abs(sl.wFixed - sl.wTrue), `${sl.wHat} true ${sl.wTrue} fixed ${sl.wFixed}`);
+check('ngrc: experimental leaves less wave off the design fill',
+  sl.recentConv / Math.max(sl.recentExp, 1e-9) > 2, JSON.stringify({ c: sl.recentConv, e: sl.recentExp }));
+// the physical scale must stay the mirror's (~1.5 mm following error, sub-10 mm waves) — a jump to
+// tens of mm means the slosh state has been kicked into divergence somewhere
+check('ngrc: following error is at the physical scale', sl.convErr > 0.4 && sl.convErr < 5, String(sl.convErr));
+// health check: an UNSHAPED probe, then a named fault. A shaped move leaves no wave to measure.
+await demo.click('#sl-check');
+await demo.waitForFunction((n) => window.__slDbg().base && window.__slDbg().moves > n, sl.moves, { timeout: 120000 });
+check('ngrc: health check captures a healthy baseline', (await demo.evaluate(() => window.__slDbg())).base === true);
+// all five faults, not a spot check: the friction route needed a statistic that is IDENTIFIABLE
+// over a single move (v and tanh(v/eps) are collinear at cruise, so the viscous/Coulomb split is
+// arbitrary and the raw Fc fitted to -0.12 N against a true 5.5), and mount/leak needed a longer
+// probe window to leave enough free wave to fit a period to.
+for (const [f, re] of [['lubrication', /lubric/i], ['gauge_drift', /gauge/i], ['mount', /mount/i],
+  ['leak', /leak/i], ['density', /density/i]]) {
+  await demo.evaluate((ff) => window.__slSet({ faults: [ff] }), f);
+  sl = await demo.evaluate(() => window.__slDbg());
+  await demo.click('#sl-check');
+  await demo.waitForFunction((n) => window.__slDbg().moves > n + 1 && !window.__slDbg().probePending
+    && window.__slDbg().dwell === 0, sl.moves, { timeout: 180000 });
+  sl = await demo.evaluate(() => window.__slDbg());
+  check(`ngrc: the fault panel names the ${f} fault`, re.test(sl.diag), sl.diag);
+  if (f === 'lubrication') {
+    check('ngrc: the conventional following-error alarm stays silent', sl.prodErr < 1.4 * sl.baseErr,
+      JSON.stringify({ prod: sl.prodErr, healthy: sl.baseErr }));
+  }
+  // a mount fault contaminates the friction fit; it must not be reported as a friction fault
+  if (f === 'mount') check('ngrc: a mount fault is not misreported as lubrication', !/lubric/i.test(sl.diag), sl.diag);
+}
+await demo.evaluate(() => window.__slSet({ faults: [] }));
+// the gauge can die and the axis keeps running off its own force and motion
+await demo.click('#sl-gauge');
+sl = await demo.evaluate(() => window.__slDbg());
+await demo.waitForFunction((n) => window.__slDbg().moves >= n + 4, sl.moves, { timeout: 120000 });
+sl = await demo.evaluate(() => window.__slDbg());
+check('ngrc: survives losing the level gauge', sl.gaugeDead && sl.expWave === sl.expWave && sl.expWave < 5, JSON.stringify(sl));
+await demo.click('#sl-gauge');
+const slSum = await demo.textContent('#sl-sum');
+check('ngrc: anti-slosh summary renders all six sections',
+  ['SYSTEM.', 'TASK AND SIGNALS.', 'MODELS.', 'PROTOCOL.', 'GRADING.', 'LATEST RESULT'].every((k) => slSum.includes(k)));
+{
+  // black-box contract, scoped to the experimental machine's OWN description: the plant, the
+  // conventional baseline, the protocol and the grading are fully specified; the method is not.
+  const own = slSum.split('PROTOCOL.')[0].split('EXPERIMENTAL:')[1] || '';
+  check('ngrc: anti-slosh experimental method stays a black box',
+    !/NVAR|NG-?RC|next-generation reservoir|polynomial|feature expansion|lag window|stride|recursive least squares|ridge|covariance/i.test(own),
+    own.slice(0, 160));
+  check('ngrc: anti-slosh withholding is stated explicitly', /intentionally NOT disclosed/.test(slSum));
+  check('ngrc: anti-slosh baseline is fully specified',
+    /ZVD input shaper/.test(slSum) && /Kp 4200/.test(slSum) && /M\*a_ref \+ B\*v_ref/.test(slSum));
+}
+await demo.evaluate(() => window.scrollTo(0, 0));
+await demo.waitForTimeout(300);
+await demo.screenshot({ path: join(SHOTS, '08-antislosh.png') });
+
 check('ngrc: playground has no errors overall', demoErrors.length === 0, demoErrors.join(' | '));
 
 await browser.close();
