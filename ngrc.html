@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:100,built:"2026-08-08T21:25:36Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:101,built:"2026-08-08T23:26:56Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -286,18 +286,21 @@
       moves it <b>1.8×</b> across the range, far outside the ±20% a robust shaper tolerates. And the only
       instrument is <b>one gauge pointing straight down at one spot</b>, reading mean depth plus the local
       wave with no way to separate them from a single sample.
-      Two identical machines run the <b>same command</b>:
+      Three identical machines run the <b>same command</b>:
+      <span style="color:#f87171"><b>red = the control</b></span>, with <b>no anti-slosh at all</b> — the raw
+      move, which is what the machine does before anyone addresses the liquid;
       <span style="color:#7c8aa0"><b>gray = conventional</b></span> (shaper and feedforward mass both fixed at
-      the nominal fill — what ships today) vs
+      the nominal fill — what ships today); and
       <span style="color:#f59e0b"><b>amber = experimental</b></span>, which reads fill and resonance off that
-      <i>same single gauge</i> and retunes both. Move the <b>Fill</b> slider: the gray tank starts ringing,
-      the amber one settles back down.
+      <i>same single gauge</i> and retunes both. Each step differs from the one above it by exactly one
+      thing, so you can read off what the shaper is worth and what tracking the load is worth separately.
+      Move the <b>Fill</b> slider: the gray tank starts ringing, the amber one settles back down.
       Then <b>inject a fault</b> — amber cross-checks three independent routes to the same physical quantity
       and <b>names</b> what broke, while the conventional following-error alarm sees nothing, because the
       position loop absorbs the fault into control effort.
       <b>Health check ▶</b> runs a deliberate <b>unshaped</b> probe: a well-controlled machine leaves no wave
       to measure, so diagnosis has to ask for one.</p>
-    <div class="stage" id="sl-stage" style="height:34vh"></div>
+    <div class="stage" id="sl-stage" style="height:46vh"></div>
     <div class="controls">
       <button id="sl-check">Health check ▶</button>
       <button id="sl-pause" class="sec" title="freeze both machines exactly where they are; rendering stays live">Pause ⏸</button>
@@ -330,9 +333,9 @@
     </div>
     <dl class="stat">
       <dt>Moves completed</dt><dd id="sl-n">0</dd>
-      <dt title="RMS following error during the move — what a machine actually alarms on today">Following error</dt><dd id="sl-err">—</dd>
+      <dt title="RMS following error during the move — what a machine actually alarms on today. Shown for all three machines">Following error</dt><dd id="sl-err">—</dd>
       <dt title="RMS wall-wave left AFTER the move completes — the thing that actually limits cycle time">Residual wave</dt><dd id="sl-wave" class="amber">—</dd>
-      <dt title="experimental vs conventional on the residual wave, over the whole session">Wave advantage</dt><dd id="sl-adv" class="good">—</dd>
+      <dt title="the experimental machine against both references, over the recent scored window">Wave advantage</dt><dd id="sl-adv" class="good">—</dd>
       <dt title="crest forecast from the single gauge plus the controller's look-ahead buffer, warning before the liquid goes over the rim">Spill warning</dt><dd id="sl-spill">—</dd>
       <dt title="liquid actually thrown over the rim, counted per machine">Spills</dt><dd id="sl-spilln">—</dd>
       <dt title="three independent routes to the same fill: the gauge's slow level, the wave's resonance, and a load cell. The consensus is the real fill; each channel's deviation from it names what moved">Diagnosis</dt><dd id="sl-diag">—</dd>
@@ -4322,18 +4325,18 @@
 
     // ---- machine state ----
     const SL_FAULTS = ['lubrication', 'gauge_drift', 'mount', 'leak', 'density'];
-    let slConv = null, slExp = null, slDir = 1, slK = 0, slMoves = 0, slPaused = false;
+    let slCtrl = null, slConv = null, slExp = null, slAll = [], slDir = 1, slK = 0, slMoves = 0, slPaused = false;
     let slFill = 0.120, slFaults = {}, slGaugeDead = false, slProbe = false, slProbePending = false, slDwell = 0, slAcc = 0;
     let slBase = null, slDiag = 'commissioning…', slDiagCls = '', slBaseErr = 0, slProdErr = 0;
     let slLastPanel = null, slLastDeltas = null;
-    let slHist = { conv: [], exp: [] }, slPlotInited = false, slSumTick = 0;
+    let slHist = { ctrl: [], conv: [], exp: [] }, slPlotInited = false, slSumTick = 0;
     let slFore = null, slForeK = 0, slSpillWarn = null, slSpillLead = [], slForeAlarm = null;
 
-    function slMakeMachine(isExp) {
+    function slMakeMachine(isExp, noShape) {
       const ax = new SlAxis(slFill);
       ax.applyFill(slFill, slFaults);
       const mn = new SlAxis(SLC.NOM);
-      return { ax, obs: new SlObs(), isExp, x0: 0,
+      return { ax, obs: new SlObs(), isExp, noShape: !!noShape, x0: 0,
         // the CONVENTIONAL machine: shaper tuned once at the nominal fill, and a feedforward whose
         // mass was identified there too. This is what ships today, and it is not a strawman —
         // it is the correct textbook design, applied to a load that then moves underneath it.
@@ -4351,13 +4354,13 @@
       // drive and drove the slosh state to divergence, and it poisoned every score in the session.
       // A real controller finishes the move it is executing.
       slProbe = slProbePending; slProbePending = false;
-      for (const m of [slConv, slExp]) {
+      for (const m of slAll) {
         m.ax.applyFill(slFill, slFaults);
         // probe = deliberately UNSHAPED, and given a LONGER settle window: a mount fault or a
         // leak lowers the resonance to a ~1.3 s period, and the production window holds barely
         // two zero crossings — too few to fit, so the panel used to report 'no usable wave' for
         // precisely the faults it is there to name.
-        m.ref = slBuildRef(slProbe ? null : m.wHat, slProbe ? SLC.PROBE_SETTLE : SLC.SETTLE);
+        m.ref = slBuildRef((slProbe || m.noShape) ? null : m.wHat, slProbe ? SLC.PROBE_SETTLE : SLC.SETTLE);
         m.se = 0; m.sec = 0; m.elev = []; m.waveObs = []; m.F = []; m.A = []; m.V = [];
         m.cellSum = 0; m.cellN = 0;
         m.brokeAt = m.ax.broke;
@@ -4366,9 +4369,10 @@
     }
 
     function slEndMove() {
-      for (const m of [slConv, slExp]) {
+      for (const m of slAll) {
         m.errRms = 1000 * Math.sqrt(m.se / Math.max(m.sec, 1));
-        const tail = m.elev.slice(m.ref.nmove);
+        const nset = Math.round(SLC.SETTLE / SLC.dt);
+        const tail = m.elev.slice(m.ref.nmove, m.ref.nmove + nset);
         m.waveRms = 1000 * Math.sqrt(tail.reduce((s, e) => s + e * e, 0) / Math.max(tail.length, 1));
         // a PROBE is a deliberately unshaped test move — it is SUPPOSED to ring, so scoring it as
         // production lets the health check dominate the session RMS (measured: a few probes at a
@@ -4407,8 +4411,8 @@
       }
       slMoves++;
       if (!slProbe) {
-        slHist.conv.push(slConv.waveRms); slHist.exp.push(slExp.waveRms);
-        if (slHist.conv.length > 90) { slHist.conv.shift(); slHist.exp.shift(); }
+        slHist.ctrl.push(slCtrl.waveRms); slHist.conv.push(slConv.waveRms); slHist.exp.push(slExp.waveRms);
+        if (slHist.conv.length > 90) { slHist.ctrl.shift(); slHist.conv.shift(); slHist.exp.shift(); }
       }
       if (slProbe) { slRunDiagnosis(); slDwell = Math.round(40 / SLC.dt); }   // let the tank calm down
       slStartMove();
@@ -4547,7 +4551,8 @@
         c.lineTo(tx + xr * tankW, ty + tankH - hPx(m.ax.h + e * Math.cos(Math.PI * xr)));
       }
       c.lineTo(tx + tankW, ty + tankH); c.closePath();
-      c.fillStyle = m.isExp ? 'rgba(56,189,248,0.55)' : 'rgba(100,116,139,0.5)'; c.fill();
+      c.fillStyle = m.isExp ? 'rgba(56,189,248,0.55)'
+        : (m.noShape ? 'rgba(248,113,113,0.30)' : 'rgba(100,116,139,0.5)'); c.fill();
       c.restore();
       // tank walls + freeboard line
       c.strokeStyle = color; c.lineWidth = 2;
@@ -4566,9 +4571,11 @@
       }
       c.fillStyle = color; c.font = '11px -apple-system,sans-serif'; c.textAlign = 'left';
       c.fillText(label, padX, y0 + 12);
-      c.fillStyle = '#94a3b8';
+      // right-aligned, so a longer lane label can never run into the numbers
+      c.fillStyle = '#94a3b8'; c.textAlign = 'right';
       c.fillText('wave ' + m.waveRms.toFixed(3) + ' mm   err ' + m.errRms.toFixed(2) + ' mm'
-        + (m.spills ? '   spills ' + m.spills : ''), padX + 96, y0 + 12);
+        + (m.spills ? '   spills ' + m.spills : ''), slW - padX, y0 + 12);
+      c.textAlign = 'left';
     }
 
     function slDraw() {
@@ -4576,9 +4583,10 @@
       const c = slCtx;
       c.clearRect(0, 0, slW, slH);
       c.fillStyle = '#060a14'; c.fillRect(0, 0, slW, slH);
-      const laneH = (slH - 10) / 2;
-      slDrawLane(slConv, 4, laneH, '#7c8aa0', 'conventional');
-      slDrawLane(slExp, laneH + 8, laneH, '#f59e0b', 'experimental');
+      const laneH = (slH - 12) / 3;
+      slDrawLane(slCtrl, 2, laneH, '#f87171', 'control · no anti-slosh');
+      slDrawLane(slConv, laneH + 7, laneH, '#7c8aa0', 'conventional');
+      slDrawLane(slExp, 2 * laneH + 12, laneH, '#f59e0b', 'experimental');
       if (slProbe || slDwell > 0) {
         c.fillStyle = '#f87171'; c.font = 'bold 11px -apple-system,sans-serif'; c.textAlign = 'right';
         c.fillText(slDwell > 0 ? 'settling after the probe…' : 'UNSHAPED PROBE — health check', slW - 12, 13);
@@ -4593,22 +4601,21 @@
     // resuming production, so that is what happens here: hold position, score nothing, and go back
     // to work once both tanks are quiet. This is why no post-probe move has to be discarded.
     function slDwellStep() {
-      for (const m of [slConv, slExp]) {
+      for (const m of slAll) {
         m.obs.update(m.ax.gauge());
         const u = clamp(SLC.KP * (m.x0 - m.ax.x) + SLC.KD * (0 - m.ax.v), -SLC.FMAX, SLC.FMAX);
         m.vp = m.ax.v;
         m.ax.step(u);
       }
       slDwell--;
-      if (Math.abs(slConv.ax.wallElev()) < 0.001 && Math.abs(slExp.ax.wallElev()) < 0.001
-          && Math.abs(slConv.ax.om) < 0.01 && Math.abs(slExp.ax.om) < 0.01) slDwell = 0;
+      if (slAll.every((m) => Math.abs(m.ax.wallElev()) < 0.001 && Math.abs(m.ax.om) < 0.01)) slDwell = 0;
       if (slDwell <= 0) slStartMove();
     }
 
     function slStep() {
       if (slDwell > 0) { slDwellStep(); return; }
-      const m0 = slConv, m1 = slExp;
-      for (const m of [m0, m1]) {
+      const m1 = slExp;
+      for (const m of slAll) {
         const ref = m.ref, j = Math.min(ref.n - 1, slK);
         m.obs.update(m.ax.gauge());
         const aMeas = (m.ax.v - m.vp) / SLC.dt;
@@ -4652,7 +4659,7 @@
       slK++;
       const done = Math.max(slConv.ref.n, slExp.ref.n);
       if (slK >= done) {
-        for (const m of [slConv, slExp]) m.x0 += slDir * m.ref.p[m.ref.n - 1];
+        for (const m of slAll) m.x0 += slDir * m.ref.p[m.ref.n - 1];
         slEndMove();
       }
     }
@@ -4662,9 +4669,11 @@
       const layout = { margin: { l: 40, r: 8, t: 8, b: 30 }, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
         font: { color: '#94a3b8', size: 10 }, showlegend: true, legend: { orientation: 'h', y: 1.25 },
         xaxis: { title: { text: 'move', font: { size: 10 } }, gridcolor: '#1e293b' },
-        yaxis: { title: { text: 'residual wave (mm RMS)', font: { size: 10 } }, gridcolor: '#1e293b', rangemode: 'tozero' } };
-      const mk = (y, name, color) => ({ x: xs, y, type: 'scatter', mode: 'lines', name, line: { color, width: 2 } });
-      const data = [mk(slHist.conv, 'conventional', '#7c8aa0'), mk(slHist.exp, 'experimental', '#f59e0b')];
+        yaxis: { title: { text: 'residual wave (mm RMS, log)', font: { size: 10 } }, gridcolor: '#1e293b', type: 'log' } };
+      const mk = (y, name, color) => ({ x: xs, y: y.map((v) => (v > 1e-4 ? v : null)), type: 'scatter',
+        mode: 'lines', name, line: { color, width: 2 } });
+      const data = [mk(slHist.ctrl, 'no anti-slosh', '#f87171'),
+        mk(slHist.conv, 'conventional', '#7c8aa0'), mk(slHist.exp, 'experimental', '#f59e0b')];
       if (!slPlotInited) { Plotly.newPlot('sl-plot', data, layout, { displayModeBar: false, responsive: true }); slPlotInited = true; }
       else Plotly.react('sl-plot', data, layout, { displayModeBar: false, responsive: true });
     }
@@ -4672,20 +4681,22 @@
     function slUpdateRows() {
       const set = (id, txt, cls) => { const el = document.getElementById(id); el.textContent = txt; if (cls !== undefined) el.className = cls; };
       set('sl-n', String(slMoves) + (slPaused ? '  (paused)' : ''));
-      set('sl-err', slConv.errRms.toFixed(3) + ' mm conventional / ' + slExp.errRms.toFixed(3) + ' mm experimental');
-      set('sl-wave', slConv.waveRms.toFixed(3) + ' mm conventional / ' + slExp.waveRms.toFixed(3) + ' mm experimental', 'amber');
+      const tri = (f) => slCtrl[f].toFixed(3) + ' none / ' + slConv[f].toFixed(3) + ' conventional / '
+        + slExp[f].toFixed(3) + ' experimental';
+      set('sl-err', tri('errRms') + ' mm');
+      set('sl-wave', tri('waveRms') + ' mm', 'amber');
       const cw = slConv.cumWn ? Math.sqrt(slConv.cumW / slConv.cumWn) : 0;
       const ew = slExp.cumWn ? Math.sqrt(slExp.cumW / slExp.cumWn) : 0;
-      const rc = slRms(slConv.recent), re = slRms(slExp.recent);
+      const rn = slRms(slCtrl.recent), rc = slRms(slConv.recent), re = slRms(slExp.recent);
       if (ew > 1e-6 && slConv.cumWn >= 2) {
-        const r = cw / ew, rr = re > 1e-9 ? rc / re : 0;
-        set('sl-adv', (rr >= 1 ? slFmtX(rr) + ' better' : slFmtX(1 / rr) + ' WORSE') + ' recent ('
-          + rc.toFixed(3) + ' vs ' + re.toFixed(3) + ' mm)   ·   ' + slFmtX(r) + ' over the whole session',
-          rr >= 1 ? 'good' : 'warn');
+        const rr = re > 1e-9 ? rc / re : 0, rz = re > 1e-9 ? rn / re : 0;
+        set('sl-adv', (rr >= 1 ? slFmtX(rr) + ' better' : slFmtX(1 / rr) + ' WORSE') + ' than conventional · '
+          + slFmtX(rz) + ' better than no anti-slosh   (recent ' + rn.toFixed(3) + ' / ' + rc.toFixed(3)
+          + ' / ' + re.toFixed(3) + ' mm)', rr >= 1 ? 'good' : 'warn');
       } else set('sl-adv', '—', '');
       const lead = slSpillLead.length ? (slSpillLead.reduce((a, b) => a + b, 0) / slSpillLead.length).toFixed(0) + ' ms mean lead over ' + slSpillLead.length : 'none yet';
       set('sl-spill', slForeAlarm !== null ? 'CREST PREDICTED OVER THE RIM' : 'clear   (' + lead + ')', slForeAlarm !== null ? 'warn' : '');
-      set('sl-spilln', slConv.spills + ' conventional / ' + slExp.spills + ' experimental');
+      set('sl-spilln', slCtrl.spills + ' none / ' + slConv.spills + ' conventional / ' + slExp.spills + ' experimental');
       set('sl-diag', slDiag, slDiagCls);
       // the baseline a machine actually alarms on today: a following-error threshold. The position
       // loop ABSORBS these faults into control effort, so the thing keeping the machine running is
@@ -4734,7 +4745,12 @@
         + 'first mode has a node at the tank centre, so a gauge at 0.50 is blind to it.) Also available: the '
         + 'motor force and the encoder, and - for the health check only - a load cell under the tank. '
         + 'The two machines receive the SAME move sequence, the same fill and the same injected faults.');
-      L.push('MODELS. CONVENTIONAL (fully specified, the baseline): a 3-impulse ZVD input shaper tuned ONCE at '
+      L.push('MODELS. Three machines, same plant, same command, same fill, same injected faults.\n'
+        + 'CONTROL (no anti-slosh): the same PD loop and the same textbook feedforward, driving the RAW '
+        + 'trapezoidal move with NO input shaping at all - the machine before anyone did anything about '
+        + 'the liquid. It is the reference for what anti-slosh is worth in the first place, and the only '
+        + 'difference between it and the conventional machine is the shaper.\n'
+        + 'CONVENTIONAL (fully specified, the baseline): a 3-impulse ZVD input shaper tuned ONCE at '
         + 'the nominal fill ' + SLC.NOM.toFixed(2) + ' m with assumed damping ' + SLC.ZNOM.toFixed(3)
         + ', driving a PD loop (Kp ' + SLC.KP + ', Kd ' + SLC.KD + ', force limit ' + SLC.FMAX + ' N) with a '
         + 'textbook feedforward M*a_ref + B*v_ref + Fc*sign(v_ref) whose M was identified at that same nominal '
@@ -4768,21 +4784,29 @@
         + 'move. SPILLS are counted when the crest actually goes over the rim. The spill warning is scored '
         + 'by LEAD TIME to the first breach; an instantaneous "crest is over the rim" rule has zero lead by '
         + 'construction, since that crossing IS the spill. The CONVENTIONAL ALARM row is a following-error '
-        + 'threshold at 1.4x the healthy value.');
+        + 'threshold at 1.4x the healthy value. Every machine is scored over the SAME settle duration '
+        + 'after its own move ends - the shapers have different delays, so their moves have different '
+        + 'lengths, and taking "everything after my move" would hand the shortest one the longest '
+        + 'window and flatter it.');
       if (slMoves < 2) {
         L.push('LATEST RESULT. Not enough moves yet - let the machines run.');
       } else {
         let s = 'LATEST RESULT after ' + slMoves + ' moves at fill ' + slFill.toFixed(3) + ' m'
           + (fl.length ? ', faults injected: ' + fl.join(' + ') : ', no fault injected') + '.\n'
-          + '  Residual wave, last ' + slConv.recent.length + ' scored moves: conventional ' + slRms(slConv.recent).toFixed(3)
-          + ' mm, experimental ' + slRms(slExp.recent).toFixed(3) + ' mm - '
-          + (slRms(slExp.recent) > 1e-9 ? slFmtX(slRms(slConv.recent) / slRms(slExp.recent)) + (slRms(slConv.recent) >= slRms(slExp.recent) ? ' better' : ' worse') : 'n/a') + '.\n'
+          + '  Residual wave, last ' + slConv.recent.length + ' scored moves: no anti-slosh '
+          + slRms(slCtrl.recent).toFixed(3) + ' mm, conventional ' + slRms(slConv.recent).toFixed(3)
+          + ' mm, experimental ' + slRms(slExp.recent).toFixed(3) + ' mm - the experimental machine is '
+          + (slRms(slExp.recent) > 1e-9 ? slFmtX(slRms(slConv.recent) / slRms(slExp.recent)) + (slRms(slConv.recent) >= slRms(slExp.recent) ? ' better' : ' worse') + ' than conventional and '
+            + slFmtX(slRms(slCtrl.recent) / slRms(slExp.recent)) + ' better than no anti-slosh' : 'n/a') + '.\n'
           + '  Residual wave, whole session (' + slConv.cumWn + ' scored moves, INCLUDING the experimental\n'
-          + '  machine\'s startup transient before it has seen a wave to tune from): conventional '
+          + '  machine\'s startup transient before it has seen a wave to tune from): no anti-slosh '
+          + (slCtrl.cumWn ? Math.sqrt(slCtrl.cumW / slCtrl.cumWn) : 0).toFixed(3) + ' mm, conventional '
           + cw.toFixed(3) + ' mm, experimental ' + ew.toFixed(3) + ' mm - '
-          + (ew > 1e-9 ? slFmtX(cw / ew) + (cw >= ew ? ' better' : ' worse') : 'n/a') + '.\n'
-          + '  Following error, session RMS: conventional ' + ce.toFixed(3) + ' mm, experimental ' + ee.toFixed(3) + ' mm.\n'
-          + '  Spills over the rim: ' + slConv.spills + ' conventional, ' + slExp.spills + ' experimental.\n'
+          + (ew > 1e-9 ? slFmtX(cw / ew) + (cw >= ew ? ' better' : ' worse') + ' than conventional' : 'n/a') + '.\n'
+          + '  Following error, session RMS: no anti-slosh '
+          + (slCtrl.cumEn ? Math.sqrt(slCtrl.cumE / slCtrl.cumEn) : 0).toFixed(3) + ' mm, conventional '
+          + ce.toFixed(3) + ' mm, experimental ' + ee.toFixed(3) + ' mm.\n'
+          + '  Spills over the rim: ' + slCtrl.spills + ' with no anti-slosh, ' + slConv.spills + ' conventional, ' + slExp.spills + ' experimental.\n'
           + '  Resonance: the experimental machine is tuned to ' + slExp.wHat.toFixed(3) + ' rad/s against a true '
           + slExp.ax.w.toFixed(3) + '; the fixed shaper is stuck at ' + slConv.wHat.toFixed(3) + '.\n'
           + '  Level gauge: ' + (slGaugeDead ? 'FAILED - the experimental machine is running its inertia term off the axis’s own force and motion instead.' : 'live.') + '\n'
@@ -4805,11 +4829,12 @@
         document.getElementById('sl-f2').value = 'none';
         slFaults = {};
       }
-      slConv = slMakeMachine(false); slExp = slMakeMachine(true);
+      slCtrl = slMakeMachine(false, true); slConv = slMakeMachine(false); slExp = slMakeMachine(true);
+      slAll = [slCtrl, slConv, slExp];
       slDir = -1; slMoves = 0; slPaused = false; slGaugeDead = false; slProbe = false; slAcc = 0;
       slProbePending = false; slDwell = 0;
       slBase = null; slBaseErr = 0; slProdErr = 0; slLastPanel = null; slLastDeltas = null; slDiag = 'commissioning — run a health check'; slDiagCls = '';
-      slHist = { conv: [], exp: [] };
+      slHist = { ctrl: [], conv: [], exp: [] };
       slFore = slMakeForecaster(); slForeK = 0; slSpillLead = []; slSpillWarn = null; slForeAlarm = null;
       document.getElementById('sl-gauge').textContent = 'Kill gauge 💀';
       document.getElementById('sl-pause').textContent = 'Pause ⏸';
@@ -4877,17 +4902,18 @@
 
     window.__slDbg = () => ({
       moves: slMoves, fill: slFill, faults: Object.keys(slFaults),
-      convWave: slConv.waveRms, expWave: slExp.waveRms,
+      ctrlWave: slCtrl.waveRms, convWave: slConv.waveRms, expWave: slExp.waveRms,
+      recentCtrl: slRms(slCtrl.recent),
       convCum: slConv.cumWn ? Math.sqrt(slConv.cumW / slConv.cumWn) : 0,
       expCum: slExp.cumWn ? Math.sqrt(slExp.cumW / slExp.cumWn) : 0,
       convErr: slConv.errRms, expErr: slExp.errRms,
       wHat: slExp.wHat, wTrue: slExp.ax.w, wFixed: slConv.wHat,
       diag: slDiag, base: !!slBase, gaugeDead: slGaugeDead, probe: slProbe, probePending: slProbePending, dwell: slDwell,
       scored: slConv.cumWn, prodErr: slProdErr, baseErr: slBaseErr, recentConv: slRms(slConv.recent), recentExp: slRms(slExp.recent),
-      spills: [slConv.spills, slExp.spills], leads: slSpillLead.length,
+      spills: [slCtrl.spills, slConv.spills, slExp.spills], leads: slSpillLead.length,
       hTrue: slExp.ax.h, hObs: slExp.obs.h, paused: slPaused,
       deltas: slLastDeltas });
-    window.__slHist = () => ({ conv: slHist.conv.slice(), exp: slHist.exp.slice() });
+    window.__slHist = () => ({ ctrl: slHist.ctrl.slice(), conv: slHist.conv.slice(), exp: slHist.exp.slice() });
     window.__slSet = (o) => {                       // test hook: drive the controls headlessly
       if (o.fill !== undefined) { slFill = o.fill; document.getElementById('sl-fill').value = Math.round(o.fill * 1000); document.getElementById('sl-fillv').textContent = o.fill.toFixed(3) + ' m'; }
       if (o.faults !== undefined) { slFaults = {}; for (const f of o.faults) slFaults[f] = 1.0; }

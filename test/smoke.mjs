@@ -238,6 +238,11 @@ check('ngrc: experimental retunes toward the true resonance',
   Math.abs(sl.wHat - sl.wTrue) < Math.abs(sl.wFixed - sl.wTrue), `${sl.wHat} true ${sl.wTrue} fixed ${sl.wFixed}`);
 check('ngrc: experimental leaves less wave off the design fill',
   sl.recentConv / Math.max(sl.recentExp, 1e-9) > 2, JSON.stringify({ c: sl.recentConv, e: sl.recentExp }));
+// the control must be the worst by a wide margin — if it is not, the "no anti-slosh" machine is
+// being shaped by accident and the three-way ladder means nothing
+check('ngrc: the no-anti-slosh control is far worse than both shaped machines',
+  sl.recentCtrl > sl.recentConv * 1.5 && sl.recentCtrl > sl.recentExp * 5,
+  JSON.stringify({ ctrl: sl.recentCtrl, conv: sl.recentConv, exp: sl.recentExp }));
 // the physical scale must stay the mirror's (~1.5 mm following error, sub-10 mm waves) — a jump to
 // tens of mm means the slosh state has been kicked into divergence somewhere
 check('ngrc: following error is at the physical scale', sl.convErr > 0.4 && sl.convErr < 5, String(sl.convErr));
@@ -274,6 +279,7 @@ sl = await demo.evaluate(() => window.__slDbg());
 check('ngrc: survives losing the level gauge', sl.gaugeDead && sl.expWave === sl.expWave && sl.expWave < 5, JSON.stringify(sl));
 await demo.click('#sl-gauge');
 const slSum = await demo.textContent('#sl-sum');
+check('ngrc: anti-slosh summary reports the control', /no anti-slosh/.test(slSum) && /CONTROL \(no anti-slosh\)/.test(slSum));
 check('ngrc: anti-slosh summary renders all six sections',
   ['SYSTEM.', 'TASK AND SIGNALS.', 'MODELS.', 'PROTOCOL.', 'GRADING.', 'LATEST RESULT'].every((k) => slSum.includes(k)));
 {

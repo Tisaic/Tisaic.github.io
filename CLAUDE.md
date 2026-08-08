@@ -774,9 +774,13 @@ the shipped commit carries the correct version.
    gapless with instant AFM deploy, far relocation still resets), and
    **④ anti-slosh axis** — an industrial liquid-handling machine, and
    the first tab whose experimental side is mostly CLASSICAL control: the
-   value is in what the single sensor is made to say. TWO IDENTICAL MACHINES
+   value is in what the single sensor is made to say. THREE IDENTICAL MACHINES
    run the SAME command so the comparison is a controlled experiment rather
-   than a before/after: gray **conventional** (3-impulse ZVD shaper tuned once
+   than a before/after, and each step differs from the one above it by exactly
+   ONE thing, so what the shaper is worth and what tracking the load is worth
+   can be read off separately: red **control** (no anti-slosh at all — the raw
+   trapezoidal move through the same PD loop and the same textbook feedforward;
+   the machine before anyone addresses the liquid), gray **conventional** (3-impulse ZVD shaper tuned once
    at the nominal 0.12 m fill, PD loop Kp 4200 / Kd 260 / 260 N limit, textbook
    feedforward M·a + B·v + Fc·sign(v) with M identified at that same fill —
    the correct textbook design, NOT a strawman; it is wrong everywhere else
@@ -795,8 +799,10 @@ the shipped commit carries the correct version.
    detail. MEASURED LIVE, and it reproduces the mirror: at the fixed shaper's
    OWN design fill both machines carry an identical shaper, so the difference
    there is the feedforward alone — 0.31 vs 0.17 mm, against the mirror's
-   0.323 → 0.188; at fill 0.05 m the recent-window wave is 3.08 vs 0.56 mm
-   (**5.5×**) and the whole session 3.25 vs 1.37 mm (2.4×, which INCLUDES the
+   0.323 → 0.188; at fill 0.05 m the three-way ladder measures **30.30 mm with
+   no anti-slosh → 8.78 conventional → 0.87 experimental** (10× better than
+   conventional, **35× better than no anti-slosh**), and the whole session
+   3.25 vs 1.37 mm conventional-vs-experimental (2.4×, which INCLUDES the
    experimental machine's startup moves before it has seen any wave to tune
    from — both numbers are shown, labelled). Following error 1.71 / 1.35 mm,
    matching the mirror's ~1.5 mm scale. Only the RIGID mass is scheduled:
@@ -848,6 +854,19 @@ the shipped commit carries the correct version.
    gauge_drift+density names both. At a shallow 0.05 m fill mount+leak
    collapses to the leak alone: the mirror's pair ambiguity, since a median of
    three tolerates ONE corrupted vote and that case corrupts two.
+   A SEVENTH defect surfaced only when the control was added, and it had been
+   biasing the shipped numbers: each machine's shaper has its own delay, so
+   their references have different LENGTHS, and the settle window was taken as
+   "everything after my own move ends" out of an array sized by the LONGEST
+   machine — so the machine with the shortest shaper silently got the longest
+   settle window (630 samples against 520 at a shallow fill). That flattered
+   the conventional baseline and would have flattered the unshaped control most
+   of all. Every machine is now scored over exactly SETTLE seconds after its
+   own move ends. The bias ran AGAINST the experimental machine, which is the
+   safe direction, but it was still wrong.
+   The residual-wave chart is **log-scaled**: the control leaves ~30 mm against
+   the experimental machine's ~0.9, and on a linear axis the comparison that
+   actually matters is an invisible line along the bottom.
    The debug hook was wrong before any of this was: it recomputed the panel
    from whatever move had just finished rather than from the probe, so it
    reported `dfw = NaN` and friction deltas no verdict was ever based on.
