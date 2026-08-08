@@ -345,6 +345,39 @@ the shipped commit carries the correct version.
    (engineering KF); 1 s forecast 0.1685 / 0.2081 / ~0.25 — but DURING A
    DRAG 0.2495 / 0.1756 / ~0.34, where the learner beats even the exact
    filter.
+   A **MANUAL-MODE BIT** is routed as a fifth signal — whether the machine
+   is running its program or being jogged by hand, which any real controller
+   knows and which costs nothing to route. Given it, the model learns a
+   distinct and appropriately humble response instead of extrapolating its
+   program-mode map over an operator who moves far faster and more randomly
+   than any drive. Measured LIVE under an identical scripted session, with
+   CUMULATIVE per-regime errors (not the EWMA meters — read at one instant
+   those reflect whatever the plant happened to be doing, which is why the
+   earlier live A/Bs disagreed with each other): estimate 0.024 → 0.017
+   autonomous and 0.111 → 0.065 manual; the 1 s forecast 0.901 → 0.735 in
+   manual, which FLIPS it from losing to the exact-linear Kalman (0.97×) to
+   beating it (1.20×). The autonomous forecast is unchanged (0.249 → 0.245)
+   and still LOSES to that filter by ~1.37×: under the gentle autonomous
+   drive the deflections are small, the plant is close to linear, and a
+   filter holding the exact linear terms forecasts it well — an honest split
+   worth keeping visible rather than tuning away.
+   THE SAME BIT WAS OFFERED TO THE KALMAN FILTERS as a mode-dependent
+   process noise (the standard engineering response). Swept over five
+   decades it made them monotonically WORSE, so they do not use it; a linear
+   filter has no mechanism for a regime switch short of an
+   interacting-multiple-model design. The summary states that asymmetry.
+   ARCHITECTURE, MEASURED AND REJECTED for the 1 s forecast: a TWO-STAGE
+   design (`Continuous` + `directHorizons` forecasting the whole measured
+   lag window at horizons 82/88/94/100, then pushing that predicted window
+   through the sensor's own map) scores 0.155 against the direct readout's
+   0.156 — identical; and a CONTROLLER LOOK-AHEAD (the commanded force at
+   t+1 s, what a motion-controller look-ahead buffer actually holds) scores
+   0.159, i.e. nothing, because this drive's phase is already recoverable
+   from history. The reason nothing helps is the CEILING: batch least
+   squares fitted offline on the TRUE plant state AND the future command,
+   with quadratic features, scores 0.133 — the shipped readout is at 1.17×
+   that. What is left is the plant's own unpredictability, which is exactly
+   what stick-slip and backlash buy you a second out.
    ALL MODELS NOW READ THE **COUPLING FORCE** (f = k(x₁−x₂) + c(v₁−v₂)) as a
    fourth signal — what a load cell or torque transducer on the shaft gives
    you. It helps the learner 2× (estimate 0.0101 → 0.0051) and the Kalman

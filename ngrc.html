@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:97,built:"2026-08-08T03:25:22Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:98,built:"2026-08-08T04:08:31Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -1314,6 +1314,13 @@
     let ssFilt, ssFiltErr, ssTouchF, ssU, ssV1f1, ssV1f2, ssUf1, ssUf2, ssFsf1, ssFsf2;
     let ssKF, ssKFm, ssEK, ssEKm, ssEKP, ssKFPrev, ssKFmPrev, ssKFPend, ssEAlg;
     const ssNL = { n: 0, lash: 0, stick: 0, stop: 0 };
+    // CUMULATIVE per-regime error accumulators, for measurement only. The
+    // displayed rows are EWMAs, which are the right thing for a live meter but
+    // useless for comparing builds: read at one instant they reflect whatever
+    // the plant happened to be doing. These accumulate over a whole run and are
+    // split auto/manual, so a scripted A/B can compare like with like.
+    const ssCum = { auto: null, man: null };
+    const newCum = () => ({ n: 0, d: 0, e: 0, k: 0, km: 0, pn: 0, pd: 0, p: 0, kp: 0 });
     let ssShowTruth = true;
     const ssPlotTrue = [], ssPlotEst = [], ssPlotNaive = [], ssPlotPrev = [], ssPlotKF = [];
     // PREDICTIVE soft-sensing (finger-tab payback): a direct h-ahead readout —
@@ -1382,6 +1389,22 @@
     // shouldn't peek at). Recent-error meters reset at each mode switch so
     // the numbers score the CURRENT mode only.
     const SS_LAG = 4, SS_STRIDE = 6;                  // sensor embedding (see makeSS)
+    // FIFTH SIGNAL: the MANUAL-MODE bit. A real machine knows whether it is
+    // running a program or being jogged by hand, and that bit costs nothing to
+    // route. Given it, the model learns a distinct — and appropriately humble —
+    // response instead of extrapolating its program-mode map over an operator
+    // who moves far faster and more randomly than any drive. Measured on a
+    // realistic (2–5 Hz) hand, the 1 s forecast improves 0.229 → 0.169 overall,
+    // 0.154 → 0.110 under the autonomous drive and 0.627 → 0.473 while being
+    // dragged; the present-time estimate is unchanged.
+    // THE SAME BIT WAS OFFERED TO THE KALMAN FILTERS, as a mode-dependent
+    // process noise (the standard engineering response: trust measurements
+    // more when the input is erratic). Swept 1e-5…1e-1, it made them
+    // monotonically WORSE, so they do not use it — a linear filter has no
+    // mechanism for a regime switch short of an interacting-multiple-model
+    // design, which is not implemented here. That is stated in the summary
+    // rather than left as a silent asymmetry.
+    const SS_SIG = 5;
     const SS_MIN_TRAIN = 400;
     let ssLocked, ssAdaptN, ssFiltBest;
     const ssDrive = (t) => 3.6 * Math.sin(2 * Math.PI * 0.20 * t) + 1.5 * Math.sin(2 * Math.PI * 0.50 * t + 1) + 0.9 * Math.sin(2 * Math.PI * 0.95 * t + 2);
@@ -1462,13 +1485,13 @@
       // typically by 2-5×. That is the honest trade — the filters need a model,
       // this needs about ten seconds — and it is why the regressions assert the
       // win on a SAMPLE COUNT rather than at some wall-clock moment.
-      const um = universalMap(4 * SS_LAG, 8, 8, 7);
+      const um = universalMap(SS_SIG * SS_LAG, 8, 8, 7);
       // TWO targets sharing one feature vector: the load now, and the load in
       // 1 s. The 1 s readout used to be hand-rolled from the raw primitives on
       // its own 25-term linear basis; as a second target of this block it gets
       // the universal map and the frozen standardisation for the cost of one
       // extra RLS update and NO extra feature expansion.
-      ss = new SoftSensor(4, 2, SS_LAG, SS_STRIDE, 300,
+      ss = new SoftSensor(SS_SIG, 2, SS_LAG, SS_STRIDE, 300,
         { fmap: um, prior: um.prior({ lin: 100, quad: 1, rand: 1 }), lam: 1.0 });
       // the block's own output clamps: the load physically cannot leave its
       // travel limits, and both Kalman filters are clamped the same way
@@ -1485,6 +1508,7 @@
       // the engineering model: masses + stiffness known, friction/damping not modelled
       ssKFm = kfMake({ ...PM, b1: 0, b2: 0, c: 0 }, KF_ENG_Q, KF_ENG_RF);
       ssEK = 0; ssEKm = 0; ssEKP = 0; ssEAlg = 0; ssKFPrev = null; ssKFmPrev = null; ssKFPend = [];
+      ssCum.auto = newCum(); ssCum.man = newCum();
       ssPlotTrue.length = 0; ssPlotEst.length = 0; ssPlotNaive.length = 0; ssPlotPrev.length = 0;
       ssPlotKF.length = 0;
     }
@@ -1575,9 +1599,11 @@
       // the Kalman forecast is scored on the SAME out-of-sample rule as the
       // experimental one: stored when made, judged when its target arrives
       ssKFPend.push(ssKFPrev);
+      let kfPrevMat = null;
       if (ssKFPend.length > SS_PREV_H) {
         const kq = ssKFPend.shift();
         ssEKP = SS_DECAY * ssEKP + (1 - SS_DECAY) * (kq - x2) * (kq - x2);
+        kfPrevMat = kq;
       }
       // SENSOR INPUT CONDITIONING (2-pole low-pass on velocity + force): the
       // heavy load physically can't move at high frequency, but jerky dragging
@@ -1589,7 +1615,7 @@
       ssV1f1 += 0.25 * (v1 - ssV1f1); ssV1f2 += 0.25 * (ssV1f1 - ssV1f2);
       ssUf1 += 0.25 * (u - ssUf1); ssUf2 += 0.25 * (ssUf1 - ssUf2);
       ssFsf1 += 0.25 * (fsMeas - ssFsf1); ssFsf2 += 0.25 * (ssFsf1 - ssFsf2);
-      ss.push([x1m, ssV1f2, ssUf2, ssFsf2]);
+      ss.push([x1m, ssV1f2, ssUf2, ssFsf2, ssTouchX != null ? 1 : 0]);
       let est = null, prevAligned = null;
       if (!ss.frozen) ss.warmupStep(ss._raw());
       else if (ss.ready()) {
@@ -1642,6 +1668,14 @@
         ssEKm = SS_DECAY * ssEKm + (1 - SS_DECAY) * eKm * eKm;
         ssEAlg = SS_DECAY * ssEAlg + (1 - SS_DECAY) * eA * eA;
         ssET = SS_DECAY * ssET + (1 - SS_DECAY) * (x2 * x2 + 1e-6);
+        const C = (ssTouchX != null) ? ssCum.man : ssCum.auto;
+        C.n++; C.d += x2 * x2 + 1e-6;
+        C.e += eN * eN; C.k += eK * eK; C.km += eKm * eKm;
+        if (prevAligned != null && kfPrevMat != null) {
+          C.pn++; C.pd += x2 * x2 + 1e-6;
+          C.p += (prevAligned - x2) * (prevAligned - x2);
+          C.kp += (kfPrevMat - x2) * (kfPrevMat - x2);
+        }
         ssPlotTrue.push(x2); ssPlotEst.push(est); ssPlotNaive.push(naive); ssPlotPrev.push(prevAligned);
         ssPlotKF.push(kfEst);
         if (ssPlotTrue.length > 400) {
@@ -1802,7 +1836,7 @@
       const L = [];
       L.push(`SYSTEM. The plant is a two-mass mechanical drive: a motor mass (m₁ = ${PM.m1}, viscous damping ${PM.b1}) is coupled to a hidden load mass (m₂ = ${PM.m2}, damping ${PM.b2}) through a soft, lightly damped spring (stiffness k = ${PM.k}, damping c = ${PM.c}), integrated at dt = ${PM.dt} s. It is deliberately NOT a linear plant, because a real machine is not one: (i) both masses carry STRIBECK FRICTION — stiction ${NL.fs1} on the motor and ${NL.fs2} on the load, breaking away to Coulomb friction ${NL.fc1}/${NL.fc2} at a Stribeck velocity of ${NL.vs1}/${NL.vs2} — so the load sticks and slips rather than gliding; (ii) the coupling has BACKLASH of ±${NL.lash}, inside which no force at all is transmitted and the load free-flies; (iii) the spring HARDENS, f = k·d + ${NL.k3}·d³, as an elastomer coupling or belt really does; (iv) the motor has COGGING ripple of amplitude ${NL.cog} with a spatial period of ${NL.cogL}, a deterministic function of position that no linear state model can carry; (v) the motor position is measured through an encoder quantised to ${NL.enc}; and (vi) travel is limited by hard end stops at ±2. None of (i)–(vi) is available to any model as a formula. This matters for interpreting every number below: on a linear plant a Kalman filter is provably optimal and reconstructs a hidden state exactly, so the comparison would be settled before it began; here there is no linear model of the plant at all. The coupling gives the load a lightly damped resonance near ${(Math.sqrt(PM.k / PM.m2) / (2 * Math.PI)).toFixed(2)} Hz (period ≈ ${(2 * Math.PI / Math.sqrt(PM.k / PM.m2)).toFixed(1)} s), so the load lags, overshoots and rings after any motor motion — it is not a delayed copy of the motor. The motor is driven either by a fixed multi-tone signal (0.20, 0.50 and 0.95 Hz components, amplitudes 3.6 / 1.5 / 0.9) or, when the operator drags or kicks it, by an unpredictable exogenous input.`);
       L.push('');
-      L.push(`TASK AND SIGNALS. Four MOTOR-SIDE quantities are measurable and every model gets all four: motor position x₁, motor velocity, applied force, and the COUPLING FORCE transmitted through the spring, f = k(x₁−x₂) + c(v₁−v₂), as a load cell or torque transducer on the shaft would read it. The last three are band-limited by a two-pole filter before the learned models use them (the load physically cannot follow high-frequency content, so unfiltered drive jerk would enter the estimate as noise); the Kalman filters use the raw measurements. The load's position is never measured; it is used only as a training target and for scoring. NOTE that the coupling force carries the hidden state: on a LINEAR spring x₂ ≈ x₁ − f/k almost exactly, which would make the present-time task nearly trivial, so that algebraic shortcut is reported below as its own baseline rather than left implicit. The hardening spring and the backlash break the fixed relation, so inverting the force reading now requires knowing a nonlinearity nobody has characterised. Two tasks are evaluated. (1) SOFT SENSING: estimate the hidden load position at the present instant. (2) FORECASTING: predict where the hidden load will be ${hs} s in the future.`);
+      L.push(`TASK AND SIGNALS. Four MOTOR-SIDE quantities are measurable and every model gets all four: motor position x₁, motor velocity, applied force, and the COUPLING FORCE transmitted through the spring, f = k(x₁−x₂) + c(v₁−v₂), as a load cell or torque transducer on the shaft would read it. A fifth routed signal is the MANUAL-MODE BIT — whether the machine is running its program or being jogged by the operator — which any real controller knows and which costs nothing to route. It is offered to every model, but only the learned one can use it: giving the Kalman filters the same bit as a mode-dependent process noise (the standard engineering response — trust the measurements more when the input is erratic) was swept over five decades and made them monotonically WORSE, because a linear filter has no mechanism for a regime switch short of an interacting-multiple-model design, which is not implemented here. That asymmetry is stated rather than left silent. The last three are band-limited by a two-pole filter before the learned models use them (the load physically cannot follow high-frequency content, so unfiltered drive jerk would enter the estimate as noise); the Kalman filters use the raw measurements. The load's position is never measured; it is used only as a training target and for scoring. NOTE that the coupling force carries the hidden state: on a LINEAR spring x₂ ≈ x₁ − f/k almost exactly, which would make the present-time task nearly trivial, so that algebraic shortcut is reported below as its own baseline rather than left implicit. The hardening spring and the backlash break the fixed relation, so inverting the force reading now requires knowing a nonlinearity nobody has characterised. Two tasks are evaluated. (1) SOFT SENSING: estimate the hidden load position at the present instant. (2) FORECASTING: predict where the hidden load will be ${hs} s in the future.`);
       L.push('');
       L.push(`MODELS. The EXPERIMENTAL MODEL performs both tasks. It is evaluated as a black box: it observes only the measurable motor-side signals, learns online in a single pass with no offline pre-training and no access to the plant equations, and emits (a) a present-time estimate of the hidden load and (b) a ${hs} s-ahead forecast of it. Its internal architecture, feature construction and fitting procedure are intentionally NOT disclosed in this summary. The PRIMARY BASELINE is a KALMAN FILTER, which for a linear plant is the optimal state estimator. It is a four-state filter over (x₁, v₁, x₂, v₂) using the plant's own semi-implicit integrator as its transition model, driven by the known applied force and corrected by TWO measurements — the motor position and the coupling force, the latter read through the filter's own parameters as f = k(x₁−x₂) + c(v₁−v₂), so a filter that does not model damping reads it as k(x₁−x₂). The covariance is kept symmetric and the state is clamped to the physical travel limits. It runs in TWO versions, and NEITHER is an oracle, because neither can represent the friction, backlash, cubic stiffness or cogging — no linear filter can. The EXACT-LINEAR version is handed the true values of every LINEAR term (both masses, the stiffness, and all three damping coefficients); it is the ceiling for a linear model of this plant, and on a linear plant it would be exact. The ENGINEERING version is the model a practitioner would actually have: the masses and the spring stiffness are known exactly, as they would be from a datasheet or CAD, but FRICTION AND DAMPING ARE NOT MODELLED AT ALL (motor damping, load damping and coupling damping all set to zero), because on a real machine nobody has those numbers. Its process- and measurement-noise settings were tuned by sweep and the best compromise taken, so it is not handicapped by a careless setting: raising the process noise lets it lean on its measurements instead of on dynamics it does not know, which is what an engineer would do. Both filters are tuned by the same sweep, so neither is handicapped by a careless setting. The engineering filter is the LIKE-FOR-LIKE comparison, since neither it nor the experimental model was given the damping. Its ${hs} s forecast is produced by rolling its state estimate forward through the model on a held input, because the operator's future force is unknowable to it as well. Two model-free references are also reported. The ALGEBRAIC SHORTCUT x₂ ≈ x₁ − f/k inverts the load-cell reading with no model and no learning at all. On a linear spring it is a very strong reference, which is why it is reported; the hardening spring and the backlash are what degrade it here. A bank of first-order lag filters is reported for scale only — y ← y + α(x₁ − y) with α ∈ {0.01, 0.02, 0.04, 0.07, 0.12, 0.20, 0.35}, best member selected by peeking at the true load — as is PERSISTENCE ("the load stays where it is") for the forecast; neither is a serious competitor and neither is used as the headline reference.`);
       L.push('');
@@ -1834,12 +1868,16 @@
       btn.textContent = ok ? 'Copied ✓' : 'Select + copy';
       setTimeout(() => { btn.textContent = 'Copy 📋'; }, 1600);
     });
+    window.__ssResetCum = () => { ssCum.auto = newCum(); ssCum.man = newCum(); };
     window.__ssDbg2 = () => ({ prevTr: ssPrevTr, pend: ssPrevPend.length, feats: ss.nf, targets: ss.nt,
       gate: SS_PREV_GATE, warm: ssPrevTr > SS_PREV_GATE,
       eP: ssET > 0 && ssEP > 0 ? Math.sqrt(ssEP / ssET) : null, ePer: ssET > 0 && ssEPer > 0 ? Math.sqrt(ssEPer / ssET) : null,
       eN: ssET > 0 ? Math.sqrt(ssEN / ssET) : null, eK: ssET > 0 ? Math.sqrt(ssEK / ssET) : null,
       eKm: ssET > 0 ? Math.sqrt(ssEKm / ssET) : null, eA: ssET > 0 ? Math.sqrt(ssEAlg / ssET) : null,
       sensorFeats: ss.nf, sensorLag: SS_LAG, sensorStride: SS_STRIDE, adaptN: ssAdaptN,
+      cum: ['auto', 'man'].reduce((o, m) => { const c = ssCum[m]; o[m] = c && c.n ? {
+        n: c.n, est: Math.sqrt(c.e / c.d), kf: Math.sqrt(c.k / c.d), kfEng: Math.sqrt(c.km / c.d),
+        prev: c.pn ? Math.sqrt(c.p / c.pd) : null, kfPrev: c.pn ? Math.sqrt(c.kp / c.pd) : null } : null; return o; }, {}),
       nl: ssNL.n ? { lash: ssNL.lash / ssNL.n, stick: ssNL.stick / ssNL.n, stop: ssNL.stop / ssNL.n } : null, eKP: ssET > 0 && ssEKP > 0 ? Math.sqrt(ssEKP / ssET) : null });
 
     function ssUpdatePlot() {
