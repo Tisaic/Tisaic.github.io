@@ -364,8 +364,36 @@ the shipped commit carries the correct version.
    never silently rot back into a straw man. Plus a 5-trace Plotly chart.
    Plus PREDICTIVE soft-sensing (finger-tab
    payback): a violet hollow dashed "+1s" caret previews where the load
-   WILL be in 1 s — a direct h-ahead readout (library `rls`/`predict`
-   primitives, SS_PREV_H=100 samples) scored OUT-OF-SAMPLE:
+   WILL be in 1 s. It is now a **SECOND TARGET of the same `SoftSensor`**
+   (SS_PREV_H=100 samples) rather than a hand-rolled readout on its own
+   25-term linear basis: target 0 is the load NOW, target 1 the load in
+   1 s, and the block's 169-term universal-map expansion is computed
+   ONCE per sample and shared, so the forecast costs one extra RLS
+   update and NO extra feature expansion. The block owns the map, the
+   frozen standardisation, the structured prior, the weights and the
+   output clamps (±2.05, the travel limits — the Kalman filters are
+   clamped the same way); only the PAIRING is local, because
+   `SoftSensor.adapt()` can express a contemporaneous pairing only.
+   Feeding a horizon needs features from H samples ago against the
+   target that has just arrived — exactly the `featRing` mechanism
+   `Continuous` already uses for `directHorizons`; `SoftSensor` has no
+   equivalent yet, so the ring lives in the page. (Adding
+   `directHorizons` to `SoftSensor` — ~15 lines mirroring `Continuous`,
+   opt-in and default-off — would move it into the library; not done,
+   because it touches a port with golden-vector parity tests.)
+   NOTE `estimate()` is deliberately NOT called: it recomputes the
+   feature vector internally, which would double the cost and lose the
+   whole point of sharing the expansion. Measured live at MATCHED
+   training age, the bigger basis is WORSE early and BETTER once
+   trained — 0.096 vs 0.059 at age 500 and 0.143 vs 0.074 at 1500, but
+   0.041 vs 0.056 at 3000, 0.186 vs 0.216 settled, and 0.235 vs 0.256
+   while interacting (excluding the first cycle, where the error meter
+   itself has just restarted in both builds); the advantage over the
+   Kalman forecast goes 1.05× → 1.26×. So the WARM GATE was raised
+   300 → 2500 trained pairs, placed past the crossover so the displayed
+   forecast is never the worse of the two — the cost is that the violet
+   caret appears ~25 s in rather than ~3 s, stated live as
+   "warming N/2500". Scored OUT-OF-SAMPLE:
    each prediction is stored at make-time and judged when its target
    arrives, before that pair trains. Baseline: **persistence** ("the load
    stays put"), the standard honest forecasting reference — a ringing

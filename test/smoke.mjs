@@ -152,7 +152,9 @@ check('ngrc: soft-sensor estimate error is finite', Number.isFinite(parseFloat(a
 }
 // the forecast is gated on the readout being warm, and says so until then
 check('ngrc: 1 s preview reports its warm-up', /^(warming \d+\/\d+|—)$/.test((await demo.textContent('#ss-prev')).trim()) || Number.isFinite(parseFloat(await demo.textContent('#ss-prev'))), await demo.textContent('#ss-prev'));
-await demo.waitForFunction(() => /^[0-9]/.test(document.getElementById('ss-prev').textContent), null, { timeout: 90000 });
+// the forecast shares the sensor's 169-term basis, so its warm gate is 2500
+// trained pairs — the row reads "warming N/2500" until then
+await demo.waitForFunction(() => /^[0-9]/.test(document.getElementById('ss-prev').textContent), null, { timeout: 180000 });
 check('ngrc: 1 s preview row populated once warm', Number.isFinite(parseFloat(await demo.textContent('#ss-prev'))), await demo.textContent('#ss-prev'));
 check('ngrc: soft-sensor has no errors', demoErrors.length === 0, demoErrors.join(' | '));
 await demo.screenshot({ path: join(SHOTS, '05-softsensor.png') });

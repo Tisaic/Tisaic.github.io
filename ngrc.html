@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:96,built:"2026-08-07T19:32:51Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:97,built:"2026-08-08T03:25:22Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -1335,10 +1335,7 @@
     // vs 1.02, and a 1 s window variant spiked to 3.99. Keep the short,
     // stable window; the honest limit is that during a drag the future
     // input is unknowable.
-    const SS_PREV_LAGS = 6, SS_PREV_STRIDE = 5;
-    const SS_PREV_SPAN = (SS_PREV_LAGS - 1) * SS_PREV_STRIDE + 1;   // 26 samples
-    const SS_PREV_SIG = 4;                           // x1, motor velocity, applied force, coupling force
-    const SS_PREV_D = 1 + SS_PREV_SIG * SS_PREV_LAGS;   // bias + 4 signals x 6 lags = 25
+
     // WARM GATE — the measured defect, and the only one that turned out to be
     // real. CONVERGED, this readout is already at the linear ceiling: on a
     // realistic drive/drag/kick stream, batch least squares fitted offline on
@@ -1349,11 +1346,16 @@
     // 0.49 against a converged 0.20, and every session starts there, so the
     // transient is what a user actually sees. It used to display a forecast
     // after 40 updates, i.e. from the middle of the RLS excursion. Gating the
-    // display until the readout has genuinely trained measures, offline over
-    // 3 seeds, 0.49 -> 0.32 fresh on the drive and 0.39 -> 0.33 while
-    // interacting, worst case 0.52 -> 0.42, converged untouched (0.196); and
-    // LIVE, comparing builds at the SAME training age, 0.899 -> 0.423 at age
-    // 500 and 0.423 -> 0.362 at age 1200, converging to a tie by age 2500.
+    // display until the readout has genuinely trained measured, live at a
+    // MATCHED training age, 0.899 -> 0.423 at age 500 and 0.423 -> 0.362 at
+    // age 1200 on the old 25-term linear basis.
+    // THE GATE IS NOW 2500, not 300, because this readout moved onto the
+    // shared 169-term universal map. Measured live at matched age, the bigger
+    // basis is WORSE early and BETTER once trained: 0.096 vs 0.059 at age 500
+    // and 0.143 vs 0.074 at 1500, but 0.041 vs 0.056 at 3000 and 0.170 vs
+    // 0.216 settled, with the advantage over the Kalman forecast going 1.05x
+    // -> 1.26x while the operator interacts. The gate is placed past the
+    // crossover so the displayed forecast is never the worse of the two.
     // (Comparing at the same age is the point: the first live harness read the
     // meters at fixed wall-clock times, so runs landed at different ages and
     // different phases of the drive — its persistence baseline swung 0.58 to
@@ -1367,8 +1369,8 @@
     // and averaging a ladder of horizons to smooth the output (cuts roughness
     // 2.27x -> 1.28x but RAISES error 0.208 -> 0.251, which proves the
     // roughness is signal, not noise).
-    const SS_PREV_GATE = 300;                        // trained updates before anything is shown
-    let ssPrevTh, ssPrevP, ssRing, ssPrevPend, ssPrevTr, ssEP, ssEPer, ssPrevNow, ssPrevMat;
+    const SS_PREV_GATE = 2500;                       // trained updates before anything is shown
+    let ssPrevPend, ssPrevTr, ssEP, ssEPer, ssPrevNow, ssPrevMat;
     // MANUAL training→estimation switchover: after calibration the sensor
     // ADAPTS (online RLS toward truth) until the user locks it — so you can
     // put the plant through a full excitation (drags, kicks) before locking,
@@ -1461,16 +1463,23 @@
       // this needs about ten seconds — and it is why the regressions assert the
       // win on a SAMPLE COUNT rather than at some wall-clock moment.
       const um = universalMap(4 * SS_LAG, 8, 8, 7);
-      ss = new SoftSensor(4, 1, SS_LAG, SS_STRIDE, 300,
+      // TWO targets sharing one feature vector: the load now, and the load in
+      // 1 s. The 1 s readout used to be hand-rolled from the raw primitives on
+      // its own 25-term linear basis; as a second target of this block it gets
+      // the universal map and the frozen standardisation for the cost of one
+      // extra RLS update and NO extra feature expansion.
+      ss = new SoftSensor(4, 2, SS_LAG, SS_STRIDE, 300,
         { fmap: um, prior: um.prior({ lin: 100, quad: 1, rand: 1 }), lam: 1.0 });
+      // the block's own output clamps: the load physically cannot leave its
+      // travel limits, and both Kalman filters are clamped the same way
+      ss.clampLo = [-2.05, -2.05]; ss.clampHi = [2.05, 2.05];
       x1 = 0; v1 = 0; x2 = 0; v2 = 0; ssT = 0; ssSamples = 0;
       ssEN = 0; ssEC = 0; ssET = 0; ssKick = 0; ssTouchX = null; ssTouched = false;
       ssTouchF = 0; ssU = 0;
       ssV1f1 = 0; ssV1f2 = 0; ssUf1 = 0; ssUf2 = 0; ssFsf1 = 0; ssFsf2 = 0;
       ssFilt = ALPHAS.map(() => 0);
       ssFiltErr = ALPHAS.map(() => 0);
-      ({ theta: ssPrevTh, P: ssPrevP } = rlsInit(SS_PREV_D, 10.0));  // ridge: iv 1 only looked better on the offline stationary sweep
-      ssRing = []; ssPrevPend = []; ssPrevTr = 0; ssEP = 0; ssEPer = 0; ssPrevNow = null; ssPrevMat = null;
+      ssPrevPend = []; ssPrevTr = 0; ssEP = 0; ssEPer = 0; ssPrevNow = null; ssPrevMat = null;
       ssLocked = false; ssAdaptN = 0; ssFiltBest = 0;
       ssKF = kfMake(PM, KF_EXACT_Q, KF_EXACT_RF);         // handed the exact plant
       // the engineering model: masses + stiffness known, friction/damping not modelled
@@ -1581,40 +1590,50 @@
       ssUf1 += 0.25 * (u - ssUf1); ssUf2 += 0.25 * (ssUf1 - ssUf2);
       ssFsf1 += 0.25 * (fsMeas - ssFsf1); ssFsf2 += 0.25 * (ssFsf1 - ssFsf2);
       ss.push([x1m, ssV1f2, ssUf2, ssFsf2]);
-      let est = null;
+      let est = null, prevAligned = null;
       if (!ss.frozen) ss.warmupStep(ss._raw());
-      else if (!ssLocked) { ss.adapt([x2]); ssAdaptN++; }   // training until the user locks it
-      if (ss.ready() && ss.frozen) est = ss.estimate()[0];
-      ssSamples++;
-      // 1 s-ahead preview: predict-then-train on the same conditioned signals
-      let prevAligned = null;
-      if (ss.frozen) {
-        ssRing.push([x1m, ssV1f2, ssUf2, ssFsf2]);
-        if (ssRing.length > SS_PREV_SPAN + 2) ssRing.shift();
-        if (ssRing.length >= SS_PREV_SPAN) {
-          const fv = [1];
-          for (let sg = 0; sg < SS_PREV_SIG; sg++) {
-            for (let L = 0; L < SS_PREV_LAGS; L++) fv.push(ssRing[ssRing.length - 1 - SS_PREV_STRIDE * L][sg]);
+      else if (ss.ready()) {
+        // BOTH readouts are targets of the SAME SoftSensor, so the feature
+        // expansion (169 universal-map terms) is computed ONCE per sample and
+        // shared: target 0 is the load NOW, target 1 is the load in 1 s. The
+        // block owns the map, the frozen standardisation, the structured prior,
+        // the weights and the output clamps.
+        // Only the PAIRING is local, because adapt() can express a
+        // contemporaneous pairing only — feeding a horizon needs features from
+        // H samples ago against the target that has just arrived. That is
+        // exactly the featRing mechanism Continuous uses for directHorizons;
+        // SoftSensor has no equivalent yet, so the ring lives here.
+        // ONE expansion, read twice. (estimate() would recompute the feature
+        // vector internally, so it is not called here — that would double the
+        // cost and lose the whole point of sharing the expansion.)
+        const f = ss._features(ss._raw());
+        const read = (j) => {
+          const y = predict(f, ss.theta[j]);
+          return (y === y) ? Math.min(ss.clampHi[j], Math.max(ss.clampLo[j], y)) : 0;
+        };
+        est = read(0);
+        ssPrevNow = ssPrevTr > SS_PREV_GATE ? read(1) : null;
+        if (!ssLocked) {                         // target 0 trains on the present
+          rls(ss.theta[0], ss.P[0], f, x2, ss.lam, ss.maxCovTrace);
+          ssAdaptN++;
+        }
+        ssPrevPend.push({ f, y: ssPrevNow, x2now: x2 });
+        if (ssPrevPend.length > SS_PREV_H) {
+          const q = ssPrevPend.shift();          // matured: its target is NOW
+          ssPrevMat = q.y;                       // for the on-stage verification caret
+          if (q.y != null) {
+            const eP = q.y - x2, ePer = q.x2now - x2;   // vs persistence from the same moment
+            ssEP = SS_DECAY * ssEP + (1 - SS_DECAY) * eP * eP;
+            ssEPer = SS_DECAY * ssEPer + (1 - SS_DECAY) * ePer * ePer;
+            prevAligned = q.y;
           }
-          const f = new Block(SS_PREV_D, 1, fv);
-          ssPrevNow = ssPrevTr > SS_PREV_GATE ? predict(f, ssPrevTh) : null;
-          ssPrevPend.push({ f, y: ssPrevNow, x2now: x2 });
-          if (ssPrevPend.length > SS_PREV_H) {
-            const q = ssPrevPend.shift();            // matured: its target is NOW
-            ssPrevMat = q.y;                         // for the on-stage verification caret
-            if (q.y != null) {
-              const eP = q.y - x2, ePer = q.x2now - x2;   // vs persistence from the same moment
-              ssEP = SS_DECAY * ssEP + (1 - SS_DECAY) * eP * eP;
-              ssEPer = SS_DECAY * ssEPer + (1 - SS_DECAY) * ePer * ePer;
-              prevAligned = q.y;
-            }
-            if (!ssLocked) {                         // lock freezes the preview readout too
-              rls(ssPrevTh, ssPrevP, q.f, x2, 1.0, 0, false);
-              ssPrevTr++;
-            }
+          if (!ssLocked) {                       // lock freezes the preview readout too
+            rls(ss.theta[1], ss.P[1], q.f, x2, ss.lam, ss.maxCovTrace);
+            ssPrevTr++;
           }
         }
       }
+      ssSamples++;
       if (est != null) {
         const eN = est - x2, eC = naive - x2, eK = kfEst - x2, eKm = kfmEst - x2, eA = alg - x2;
         ssEN = SS_DECAY * ssEN + (1 - SS_DECAY) * eN * eN;
@@ -1815,7 +1834,7 @@
       btn.textContent = ok ? 'Copied ✓' : 'Select + copy';
       setTimeout(() => { btn.textContent = 'Copy 📋'; }, 1600);
     });
-    window.__ssDbg2 = () => ({ prevTr: ssPrevTr, ring: ssRing.length, span: SS_PREV_SPAN, feats: SS_PREV_D,
+    window.__ssDbg2 = () => ({ prevTr: ssPrevTr, pend: ssPrevPend.length, feats: ss.nf, targets: ss.nt,
       gate: SS_PREV_GATE, warm: ssPrevTr > SS_PREV_GATE,
       eP: ssET > 0 && ssEP > 0 ? Math.sqrt(ssEP / ssET) : null, ePer: ssET > 0 && ssEPer > 0 ? Math.sqrt(ssEPer / ssET) : null,
       eN: ssET > 0 ? Math.sqrt(ssEN / ssET) : null, eK: ssET > 0 ? Math.sqrt(ssEK / ssET) : null,
