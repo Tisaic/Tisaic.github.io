@@ -243,6 +243,18 @@ check('ngrc: experimental leaves less wave off the design fill',
 check('ngrc: the no-anti-slosh control is far worse than both shaped machines',
   sl.recentCtrl > sl.recentConv * 1.5 && sl.recentCtrl > sl.recentExp * 5,
   JSON.stringify({ ctrl: sl.recentCtrl, conv: sl.recentConv, exp: sl.recentExp }));
+// THE HYBRID'S TWO-SIDED RESULT, and the negative half is the load-bearing one. This is running at
+// fill 0.05 where the fixed shaper is mistuned by a third, so the residual wave is a TIMING failure
+// and an additive force trim cannot re-time an impulse: the trim must leave the wave essentially
+// where it found it (measured 3.038 -> 2.958 mm) while still improving the tracking it CAN fix
+// (1.721 -> 1.540 mm). At the design fill, where the shaper is right, it cuts the wave by a third.
+check('ngrc: the hybrid trim improves tracking on the machine it is bolted onto',
+  sl.hybErr < sl.convErr, JSON.stringify({ conv: sl.convErr, hyb: sl.hybErr }));
+check('ngrc: a bolt-on trim cannot fix a MISTUNED shaper (timing, not force)',
+  sl.recentHyb > sl.recentConv * 0.75 && sl.recentHyb > sl.recentExp * 3,
+  JSON.stringify({ conv: sl.recentConv, hyb: sl.recentHyb, exp: sl.recentExp }));
+check('ngrc: the hybrid stays bounded and finite', sl.recentHyb === sl.recentHyb && sl.recentHyb < sl.recentCtrl,
+  JSON.stringify({ hyb: sl.recentHyb, ctrl: sl.recentCtrl }));
 // the physical scale must stay the mirror's (~1.5 mm following error, sub-10 mm waves) — a jump to
 // tens of mm means the slosh state has been kicked into divergence somewhere
 check('ngrc: following error is at the physical scale', sl.convErr > 0.4 && sl.convErr < 5, String(sl.convErr));
@@ -280,6 +292,8 @@ check('ngrc: survives losing the level gauge', sl.gaugeDead && sl.expWave === sl
 await demo.click('#sl-gauge');
 const slSum = await demo.textContent('#sl-sum');
 check('ngrc: anti-slosh summary reports the control', /no anti-slosh/.test(slSum) && /CONTROL \(no anti-slosh\)/.test(slSum));
+check('ngrc: anti-slosh summary reports the hybrid retrofit',
+  /HYBRID \(the retrofit\)/.test(slSum) && /NOT MODIFIED IN ANY WAY/.test(slSum) && /failure of TIMING/.test(slSum));
 check('ngrc: anti-slosh summary renders all six sections',
   ['SYSTEM.', 'TASK AND SIGNALS.', 'MODELS.', 'PROTOCOL.', 'GRADING.', 'LATEST RESULT'].every((k) => slSum.includes(k)));
 {

@@ -774,13 +774,16 @@ the shipped commit carries the correct version.
    gapless with instant AFM deploy, far relocation still resets), and
    **④ anti-slosh axis** — an industrial liquid-handling machine, and
    the first tab whose experimental side is mostly CLASSICAL control: the
-   value is in what the single sensor is made to say. THREE IDENTICAL MACHINES
+   value is in what the single sensor is made to say. FOUR IDENTICAL MACHINES
    run the SAME command so the comparison is a controlled experiment rather
    than a before/after, and each step differs from the one above it by exactly
-   ONE thing, so what the shaper is worth and what tracking the load is worth
-   can be read off separately: red **control** (no anti-slosh at all — the raw
-   trapezoidal move through the same PD loop and the same textbook feedforward;
-   the machine before anyone addresses the liquid), gray **conventional** (3-impulse ZVD shaper tuned once
+   ONE thing, so what each is worth can be read off separately: red **control**
+   (no anti-slosh at all — the raw trapezoidal move through the same PD loop
+   and the same textbook feedforward; the machine before anyone addresses the
+   liquid), violet **hybrid** (THE RETROFIT — the conventional controller
+   COMPLETELY UNTOUCHED with a learned additive force trim bolted on top, the
+   configuration available when the shipped controller cannot be recertified),
+   gray **conventional** (3-impulse ZVD shaper tuned once
    at the nominal 0.12 m fill, PD loop Kp 4200 / Kd 260 / 260 N limit, textbook
    feedforward M·a + B·v + Fc·sign(v) with M identified at that same fill —
    the correct textbook design, NOT a strawman; it is wrong everywhere else
@@ -854,6 +857,23 @@ the shipped commit carries the correct version.
    gauge_drift+density names both. At a shallow 0.05 m fill mount+leak
    collapses to the leak alone: the mirror's pair ambiguity, since a median of
    three tolerates ONE corrupted vote and that case corrupts two.
+   THE HYBRID'S RESULT IS TWO-SIDED, and the negative half is the more useful
+   one. Measured converged, wave in mm RMS / following error in mm:
+     fill 0.12 m, shaper CORRECTLY tuned — none 9.58 · conventional
+       0.305 / 1.524 · hybrid 0.214 / 1.464 · experimental 0.167 / 1.482
+     fill 0.05 m, shaper MISTUNED by a third — none 20.83 · conventional
+       3.038 / 1.721 · hybrid 2.958 / 1.540 · experimental 0.213 / 1.323
+   So the trim cuts the wave by a THIRD when the shaper is right (closing about
+   two thirds of the conventional→experimental gap) and by **2.6%, i.e.
+   nothing**, when the shaper is mistuned — while improving the FOLLOWING ERROR
+   in both cases (1.52→1.46 and 1.72→1.54). The mechanism is the whole point: a
+   mistuned shaper is a failure of **TIMING**, and an additive force correction
+   trims forces but cannot re-time a cancellation impulse. Only retuning the
+   shaper does that, which is what the experimental machine does. It is also the
+   third independent route by which this project has reached "tracking better
+   and sloshing less are not the same objective" — the trim improves tracking in
+   BOTH regimes and the wave in only one. A regression pins the NEGATIVE half
+   specifically, because that is the claim a later edit would quietly break.
    A SEVENTH defect surfaced only when the control was added, and it had been
    biasing the shipped numbers: each machine's shaper has its own delay, so
    their references have different LENGTHS, and the settle window was taken as
