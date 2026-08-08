@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:98,built:"2026-08-08T04:08:31Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:99,built:"2026-08-08T15:31:03Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -268,6 +268,13 @@
       <dt title="main-thread time as % of one core">CPU load</dt><dd id="fg-cpu">—</dd>
     </dl>
     <div class="plot" id="fg-plot"></div>
+    <div class="sumbox">
+      <div class="sumhead">
+        <b>Experiment summary</b> — live methods + results, written for papers and chats
+        <button id="fg-copy" class="sec" style="flex:0 0 auto">Copy 📋</button>
+      </div>
+      <div id="fg-sum" class="sumtext">—</div>
+    </div>
   </section>
 
   <script type="module">
@@ -3942,6 +3949,7 @@
       document.getElementById('fg-opadv').textContent = opReady
         ? `${rFmt(Math.sqrt(fgOPl[si] / fgOPn[si]))}× closer · ${rFmt(fgOPl[si] / fgOPn[si])}× less error energy` : '—';
       if (++fgPlotTick % 10 === 0) fgUpdatePlot();
+      if (fgPlotTick % 60 === 0) fgRefreshSummary();   // ~1 Hz
       // CPU readout: % of one core over the last second. "app" = everything
       // in the frame loop that is neither the AFM nor the kNN baseline
       // (render, online NGRC model, path machinery, scoring, Plotly).
@@ -3958,6 +3966,66 @@
       }
       requestAnimationFrame(fgTick);
     }
+
+    // ---- live experiment summary (same contract as the other two tabs): the
+    // EXPERIMENTAL MODEL is a black box — no architecture, feature
+    // construction, lag window, target convention or fitting details appear in
+    // this text, and it says so. The task, the signals, the three baselines and
+    // the grading rules stay fully specified and reproducible.
+    const FG_GUIDE_NAME = { none: 'none', circle: 'a circle', ellipse: 'an ellipse', square: 'a square',
+      triangle: 'a triangle', hexagon: 'a hexagon', star: 'a star', fig8: 'a figure-eight',
+      heart: 'a heart', rose: 'a rose curve', lissajous: 'a Lissajous curve' };
+    function fgSummaryText() {
+      const nf = (x, d = 3) => (Number.isFinite(x) ? x.toFixed(d) : '—');
+      const si = fgHzIdx, hs = (HLAD[si] * SEC).toFixed(1);
+      const ready = fgSamples > 36 && fgET > 0 && fgEN[si] > 0;
+      const g = (a) => (ready && a[si] > 0) ? Math.sqrt(a[si] / fgET) : NaN;
+      const eN = g(fgEN), eC = g(fgEC), eE = g(fgEEn), eM = g(fgMMn);
+      const opOk = ready && fgOPn[si] > 0 && fgOPl[si] > 0;
+      const opN = opOk ? Math.sqrt(fgOPn[si] / fgET) : NaN, opL = opOk ? Math.sqrt(fgOPl[si] / fgET) : NaN;
+      const cmp = (a, b) => (Number.isFinite(a) && a > 0 && Number.isFinite(b) && b > 0)
+        ? (b >= a ? nf(b / a, 1) + '× better' : nf(a / b, 1) + '× worse') : '—';
+      const state = fgAuto ? 'AUTOPILOT — the model is drawing, the operator is not'
+        : (fgLoop ? `tracking a locked lap of ${fgLoop.length} resampled points`
+          + (fgLoopGaps && fgLoopGaps.size ? ` with ${fgLoopGaps.size} pen-lift gap(s)` : ' with no pen lifts')
+          : 'no repeating lap detected yet — still drawing');
+      const L = [];
+      L.push(`SYSTEM. The "plant" is a HUMAN FINGER drawing on a touch screen. There are no equations: the trajectory is whatever the operator draws, sampled at a fixed ${SAMPLE_MS} ms cadence (${(1000 / SAMPLE_MS).toFixed(0)} Hz, the same on 60 Hz and 120 Hz displays) and arc-length resampled to a constant step so that dwelling in a corner does not flood the fit with near-duplicate points. This makes it the opposite of the other two tabs: instead of a known system driven by a known input, it is an unmodelled, non-stationary, human process with real tremor, drifting tempo, and pen lifts. Current state: ${state}. Drawn so far: ${fgSamples} samples. A tracing guide (currently ${FG_GUIDE_NAME[fgGuide] || fgGuide}) may be shown as a faint stencil; it is purely visual and is never given to any model.`);
+      L.push('');
+      L.push(`TASK AND SIGNALS. Every model sees the SAME four-variable state stream derived from the stroke — position and a smoothed velocity — and nothing else. No model is told the stencil, the shape, or that a shape exists. The task is MULTI-HORIZON FORECASTING: predict where the fingertip will be h samples from now, for a ladder of ${NLAD} horizons from ${HLAD[0]} samples (${(HLAD[0] * SEC).toFixed(2)} s) to ${HLAD[NLAD - 1]} samples (${(HLAD[NLAD - 1] * SEC).toFixed(1)} s). All rungs train continuously and simultaneously, so moving the horizon slider re-reads an already-trained rung rather than refitting. The reported rung is currently ${HLAD[si]} samples (${hs} s).`);
+      L.push('');
+      L.push(`MODELS. The EXPERIMENTAL MODEL is evaluated as a black box: it observes only the state stream above, learns online in a single pass with no offline pre-training, and emits a predicted position at each horizon. Its internal architecture, feature construction and fitting procedure are intentionally NOT disclosed in this summary. Three fully specified baselines run on the identical stream. (1) The ANALOGUE k-NN, Lorenz's method of analogues: find the past moment whose (position, velocity) most closely matches now, then replay what happened next — pred(h) = past[j+h] + (now − past[j])·0.88^h, one coherent tracked match advanced in lockstep and re-locked only on a 3× hysteresis, so the whole horizon ladder is served by a single consistent analogue rather than per-rung argmins that would zigzag under tremor. It replays recorded pen lifts too. (2) An ECHO STATE NETWORK, the classical recurrent alternative that NG-RC was designed to replace: 100 sparse reservoir neurons, spectral radius 0.9 set by power iteration, leak 0.3, input scale 0.3, with a per-horizon linear readout trained online by recursive least squares (λ=0.9995) on the same targets. (3) A FEEDFORWARD NEURAL NETWORK — the net most people learn first — with one 32-unit tanh hidden layer on a two-lag input window, a linear head per horizon, trained by single-sample Adam (learning rate 3e-3) plus experience replay of ${MLP_REPLAY} random past (moment, horizon) pairs per sample; without the replay an online net forgets each rung between visits and scores 2–3× worse.`);
+      L.push('');
+      L.push(`PROTOCOL. Everything is online and continuous — there is no train/test split and no batch pass. The models learn while the operator draws and are never reset between laps. A Freeze control halts ALL learning while leaving prediction running, so the model can be played with without being changed; the analogue's replay memory is frozen with it, since that memory IS its model. Autopilot hands the drawing over to the model and lets the baselines free-run alongside it as rival trails.`);
+      L.push('');
+      L.push(`GRADING. Two different questions are scored, because they are not the same question. The TIMED MISS asks "where is the fingertip at time t+h" and is a normalised RMS distance between the predicted and actual position at that instant. The ON-PATH MISS asks "did the prediction land on the stroke that was actually drawn" — the distance from the prediction to the nearest point of the path traced over the horizon, which forgives being early or late along a shape but not being off it. Both are computed PAIRWISE: a model is scored only on the prediction instances it actually issued, and its rival is scored on those same instances, so no model is charged for another's warm-up. A rung is scored only once its horizon of future has actually been drawn, which is why the ${(HLAD[NLAD - 1] * SEC).toFixed(1)} s rung populates only after about that much drawing. The head-to-head ratios gate on the baseline readout being warm (more than 40 trainings at that rung).`);
+      L.push('');
+      if (!ready) {
+        L.push(`LATEST RESULT. Not enough drawing yet at the ${hs} s horizon — draw a repeating loop for a few seconds and this fills in.`);
+      } else {
+        L.push(`LATEST RESULT, at the ${hs} s horizon (${HLAD[si]} samples). Timed miss: experimental model ${nf(eN)}, analogue k-NN ${nf(eC)}, echo state network ${nf(eE)}, feedforward network ${nf(eM)} — all normalised to the stroke's own scale, so 0.05 is a miss of 5% of the drawing's extent. Against the analogue the displayed prediction is ${cmp(eN, eC)}; against the echo state network ${cmp(eN, eE)}; against the feedforward network ${cmp(eN, eM)}. ${opOk ? `On-path miss: experimental model ${nf(opN)} versus analogue ${nf(opL)}, i.e. ${cmp(opN, opL)} — the measure that asks whether the prediction landed on the stroke at all.` : 'On-path miss not yet scored at this horizon.'} These numbers move with the operator: a metronome-steady machine trace flatters the analogue, which is near-optimal by construction when every lap is identical, while a real hand with tremor and drifting tempo is where a learned model separates from replay.`);
+      }
+      return L.join('\n');
+    }
+    function fgRefreshSummary() {
+      const el = document.getElementById('fg-sum');
+      if (el) el.textContent = fgSummaryText();
+    }
+    document.getElementById('fg-copy').addEventListener('click', async () => {
+      const txt = fgSummaryText();
+      const btn = document.getElementById('fg-copy');
+      let ok = false;
+      try { await navigator.clipboard.writeText(txt); ok = true; } catch (_) {
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0';
+          document.body.appendChild(ta); ta.select();
+          ok = document.execCommand('copy'); document.body.removeChild(ta);
+        } catch (_e) { ok = false; }
+      }
+      btn.textContent = ok ? 'Copied ✓' : 'Copy failed';
+      setTimeout(() => { btn.textContent = 'Copy 📋'; }, 1600);
+    });
 
     // debug: the actual polyline the ghost is drawing right now
     window.__fgDbg = () => {

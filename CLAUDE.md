@@ -688,6 +688,20 @@ the shipped commit carries the correct version.
    (feedforward training + replay) / app (everything else in the frame
    loop). Typical while drawing: AFM ~20% (the pump's designed
    3 ms/frame budget), kNN ~0.1%, ESN ~1%, MLP ~1%, app ~10%.
+   An **Experiment summary** block below the chart completes the set (all
+   three tabs now have one): 6 sections, Copy button, 1 Hz refresh, same
+   BLACK-BOX contract — the task, the signals, all three baselines and both
+   grading rules fully specified, the experimental model's internals withheld
+   and stated as withheld. It is the most different of the three because the
+   "plant" is a HUMAN: no equations, non-stationary, with tremor, drifting
+   tempo and pen lifts, so the SYSTEM section describes the sampling cadence
+   and arc-length resampling instead of dynamics, and states that the stencil
+   guide is never shown to any model. It reports the live rung (following the
+   horizon slider), the lap-lock/autopilot/freeze state, and both measures —
+   the TIMED miss and the ON-PATH miss — against all three baselines, noting
+   that a metronome-steady machine trace flatters the analogue by
+   construction. Before enough has been drawn it says so plainly rather than
+   printing zeros.
    The resample step is clamped to [0.03, 0.05]: the floor keeps slow
    careful stencil-tracing from drowning the fit in ridge (tiny deltas)
    or blowing the fit window past one lap. Iterating the 1-step model

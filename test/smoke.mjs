@@ -170,6 +170,18 @@ await demo.mouse.move(fcx + fr, fcy); await demo.mouse.down();
 for (let i = 0; i < 350; i++) { const a = i * 0.1; await demo.mouse.move(fcx + fr * Math.cos(a), fcy + fr * Math.sin(a)); await demo.waitForTimeout(8); }
 await demo.mouse.up();
 check('ngrc: finger-trace learns from a drag (samples > 0)', (parseInt(await demo.textContent('#fg-n')) || 0) > 0);
+// the experiment summary must render, keep the experimental model a black box,
+// and fully specify the three baselines
+{
+  await demo.waitForTimeout(1200);
+  const ft = await demo.textContent('#fg-sum');
+  check('ngrc: finger summary renders all six sections', ft.length > 1500
+    && ['SYSTEM.', 'TASK AND SIGNALS.', 'MODELS.', 'PROTOCOL.', 'GRADING.', 'LATEST RESULT'].every(k => ft.includes(k)), String(ft.length));
+  check('ngrc: finger summary keeps the experimental model a black box',
+    !/NVAR|NG-?RC|next-generation reservoir|polynomial|feature expansion|lag window|stride|delta target/i.test(ft.split('Three fully specified baselines')[0]));
+  check('ngrc: finger summary specifies the baselines',
+    /method of analogues/.test(ft) && /spectral radius 0\.9/.test(ft) && /32-unit tanh/.test(ft));
+}
 // the default rung is 10 s — a 10 s horizon can't be scored by a short drag,
 // so read the miss at a short rung (the slider's whole point)
 await demo.evaluate(() => { const s = document.getElementById('fg-hz'); s.value = 9; s.dispatchEvent(new Event('input', { bubbles: true })); });
