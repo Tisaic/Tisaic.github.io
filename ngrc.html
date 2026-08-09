@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:106,built:"2026-08-09T17:17:46Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:107,built:"2026-08-09T17:54:35Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -4247,6 +4247,16 @@
           this.om *= 0.55;
         }
       }
+      // Surface elevation at the tank's +x wall. The equivalent pendulum LAGS under
+      // forward acceleration (th < 0), so the liquid's centre of mass sits behind
+      // the carriage and the +x wall is the LOW one - which is why this is
+      // negative during a forward move, and it is correct.
+      // DO NOT NEGATE THIS TO FIX A DRAWING: gauge() is built on it and feeds the
+      // experimental machine and the trim, whose universal map contains ReLU terms
+      // that are ASYMMETRIC - flipping the sign changes which half-plane they
+      // activate on and is not a relabelling. Measured: it moved the super hybrid
+      // at fill 0.05 from 0.066 to 0.181 mm. The drawing negates at the point of
+      // drawing instead.
       wallElev() { return 0.5 * SLC.L * Math.tan(clamp(this.th, -1.2, 1.2)); }
       // THE ONLY INSTRUMENT: one downward gauge at ONE spot. It reads mean depth plus the local
       // wave height and cannot separate them from a single sample. Mounted OFF-CENTRE on purpose —
@@ -4606,7 +4616,11 @@
       c.fillRect(padX + usable + tankW / 2 - 1, railY - 4, 2, 8);
       // carriage
       c.fillStyle = '#334155'; c.fillRect(cx - tankW * 0.32, railY - 10, tankW * 0.64, 9);
-      // liquid: surface elevation across the tank is wallElev*cos(pi*xr)
+      // liquid: the surface profile is the first antisymmetric mode. wallElev() is the
+      // elevation at the +x wall and xr runs from the -x (left) wall, so the profile is
+      // MINUS wallElev*cos(pi*xr). The sign is not cosmetic: under forward acceleration
+      // the liquid lags and must pile against the REAR wall. Drawn without the negation
+      // it piled against the FRONT, which is what a user spotted on the live page.
       const hPx = (v) => tankH * clamp(v / SLC.WALL, 0, 1);
       const e = m.ax.wallElev();
       c.save();
@@ -4614,7 +4628,7 @@
       c.beginPath(); c.moveTo(tx, ty + tankH);
       for (let i = 0; i <= 24; i++) {
         const xr = i / 24;
-        c.lineTo(tx + xr * tankW, ty + tankH - hPx(m.ax.h + e * Math.cos(Math.PI * xr)));
+        c.lineTo(tx + xr * tankW, ty + tankH - hPx(m.ax.h - e * Math.cos(Math.PI * xr)));
       }
       c.lineTo(tx + tankW, ty + tankH); c.closePath();
       c.fillStyle = m.isExp ? 'rgba(56,189,248,0.55)'
@@ -4636,7 +4650,7 @@
       // spill flash
       if (Math.abs(e) > m.ax.freeboard) {
         c.fillStyle = 'rgba(248,113,113,0.85)';
-        c.fillRect(e > 0 ? tx + tankW - 3 : tx, ty, 3, 10);
+        c.fillRect(e > 0 ? tx + tankW - 3 : tx, ty, 3, 10);   // e is the +x wall's elevation
       }
       c.fillStyle = color; c.font = '11px -apple-system,sans-serif'; c.textAlign = 'left';
       c.fillText(label, padX, y0 + 12);

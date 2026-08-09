@@ -1062,6 +1062,49 @@ the shipped commit carries the correct version.
    was captured FROM the probe move, inflating it and making the conventional
    alarm too lenient — i.e. flattering the very baseline this tab exists to
    beat; it now comes from a production-move EMA.
+   THE DRAWN WAVE WAS ON THE WRONG WALL (fixed, v107), reported by the owner
+   watching the live page: the liquid piled against the FRONT of the tank when
+   inertia says it must lag and pile at the REAR. Verified numerically at the
+   shipped AMAX in the small-angle regime the analogue is valid in: the
+   equivalent pendulum lags, th = -0.049 rad, liquid CoM offset -5.5 mm
+   (backward) - so THE PLANT IS RIGHT. The renderer drew
+   `h + wallElev*cos(pi*xr)` with xr measured from the -x wall while
+   `wallElev()` is the +x wall's elevation, which mirrors the profile; the CoM
+   implied by the drawn surface came out +1.5e-3, opposite in sign to the
+   physical one. Fixed by negating AT THE POINT OF DRAWING.
+   THE OBVIOUS FIX WAS THE WRONG ONE, and the suite caught it. Negating
+   `wallElev()` itself looks equivalent - the residual-wave score is an RMS and
+   wave breaking tests |e|, so no METRIC is sign-sensitive - but `gauge()` is
+   built on it and feeds the experimental machine and the trim, and the trim's
+   universal map contains ReLU terms, which are ASYMMETRIC. Flipping the sign
+   changes which half-plane they activate on; it is not a relabelling. Measured:
+   the super hybrid at fill 0.05 went 0.066 -> 0.181 mm and a regression failed.
+   The lesson generalises past this file: a sign convention is only free to
+   change where every consumer is even in it.
+   SPEED vs SLOSH, measured by scaling VMAX and AMAX together (residual wave,
+   mm RMS, moves 18-26):
+     x1.0  none 9.58 · conv 0.305 · hyb 0.207 · param 0.101 · SUPER 0.085 · exp 0.167
+     x1.5  none 51.7 · conv 0.289 · hyb 0.193 · param 0.328 · SUPER 0.150 · exp 0.224
+     x2.0  none 75.4 · conv 0.838 · hyb 0.390 · param 0.979 · SUPER 0.310 · exp 0.842
+     x2.6  none 78.9 · conv 1.841 · hyb 0.907 · param 1.892 · SUPER 0.848 · exp 1.639
+   THE HEADLINE: the super hybrid at DOUBLE the commanded speed leaves 0.310 mm,
+   the same wave the conventional machine leaves at x1.0 (0.305). That is the
+   cycle-time payoff stated the way a plant buys it. NOTE it is not 2x
+   throughput: over the 0.40 m stroke the reference move only goes 0.977 s ->
+   0.614 s (1.6x, the ramp time does not shrink), and the ZVD shaper adds a
+   FIXED ~0.67 s delay that does not shrink at all, so end-to-end it is ~1.3x -
+   computed, not measured. The faster the move, the more the shaper delay
+   dominates.
+   THE PARAMETRIC MACHINE COLLAPSES WITH SPEED and this reverses the tab's
+   ranking: 0.101 -> 0.328 -> 0.979 -> 1.892, WORSE than conventional (0.838) by
+   x2.0, while the plain hybrid overtakes it (0.390). Identified constants win
+   on gentle moves; the learned trim wins on aggressive ones. Anyone quoting the
+   parametric result as general is quoting a baseline-speed result. Only the
+   unshaped control ever spills (26 moves from x2.0), and its wave saturates
+   near 79 mm because the crest breaks over the rim and sheds energy.
+   Honest oddity, not smoothed over: conventional is slightly BETTER at x1.5
+   than at x1.0 (0.289 vs 0.305), because a ZVD's residual depends on the move
+   duration relative to the slosh period.
    THE HYBRID TRIM'S WAVE IMPROVES TO A MINIMUM AND THEN DEGRADES ~2x, and the
    cause is RLS COVARIANCE WINDUP, not the plant and not the identified
    constants. The trim runs `lam 0.999` with a `maxCovTrace 1e7` guard; over
