@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:104,built:"2026-08-09T00:50:39Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:105,built:"2026-08-09T08:28:38Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -70,7 +70,9 @@
     <p class="lead">Four models learn a <b>chaotic system</b> from the same live data — pick it with the
       <b>system selector</b>: Lorenz-63, Rössler, driven Duffing, a double pendulum, Lorenz-96, a
       Kuramoto–Sivashinsky Galerkin truncation, or Mackey–Glass (each with its own <b>numerically measured
-      λ</b>, so the Lyapunov clocks stay honest per system):
+      λ</b>, so the Lyapunov clocks stay honest per system — and the <b>double pendulum</b> is the one that
+      <i>conserves energy</i>, so nothing pulls a free-run back onto an attractor the way the dissipative
+      systems do, and it needs its own tighter fit to stay stable):
       <span style="color:#f59e0b"><b>NGRC</b></span> vs an
       <span style="color:#22d3ee"><b>ESN</b></span> (echo state network — the reservoir NG-RC was designed
       to replace; this head-to-head <i>on Lorenz</i> is the canonical comparison of the NG-RC literature), an
@@ -464,7 +466,11 @@
         const stQ = mkRk4(fq, 0.005);
         let q = [2.0, 0, 2.0, 0];
         const emit = () => [Math.cos(q[0]), Math.sin(q[0]), q[1], Math.cos(q[2]), Math.sin(q[2]), q[3]];
-        out.dpend = { label: 'double pendulum', dim: 6, dt: 0.01, lyap: 1.4221, lags: 2, stride: 1, spf: 4, transient: 0,
+        // iv 0.1: the only system here that needs a tighter ridge than the
+        // default 100, and it needs it because it CONSERVES ENERGY. See the
+        // note at the model construction — measured 0.248 -> 0.596 Λ over 12
+        // held-out initial conditions (2.4x, paired t 2.90, wins 10/12).
+        out.dpend = { label: 'double pendulum', dim: 6, dt: 0.01, lyap: 1.4221, lags: 2, stride: 1, spf: 4, transient: 0, iv: 0.1,
           vars: ['cos \u03b8\u2081', 'sin \u03b8\u2081', '\u03c9\u2081', 'cos \u03b8\u2082', 'sin \u03b8\u2082', '\u03c9\u2082'],
           eq: 'an ideal double pendulum with equal masses and lengths (m\u2081=m\u2082=1, l\u2081=l\u2082=1, g=9.81), released from \u03b8\u2081=\u03b8\u2082=2.0 rad, integrated by RK4 at a 0.005 internal step (2 sub-steps per sample); the angles are presented to the models as [cos\u03b8, sin\u03b8] pairs so the state is continuous across wrap-around',
           off: [0, 0, 0, 0, 0, 0], div: [1, 1, 8, 1, 1, 10],
@@ -768,14 +774,23 @@
     // return the same number (measured: sd = 0.0000 across 8 runs).
     function makeModel(keepPlant) {
       const sys = lzSys;
-      // NGRC poly-2 with washout (see LZ_WASH note) — iv fixed at 100 (the
-      // washout regime's ridge response is flat over 5 decades, measured).
+      // NGRC poly-2 with washout (see LZ_WASH note). The ridge is PER SYSTEM
+      // (sys.iv, default 100) because its response is not universal: on a
+      // DISSIPATIVE attractor like Lorenz it is flat over 5 decades, since any
+      // error that pushes the roll-out off the butterfly gets contracted back
+      // onto it. A CONSERVATIVE system has no such contraction, so a loose
+      // ridge that is harmless on Lorenz produces a roll-out that pumps energy
+      // and saturates the clamps — measured on the double pendulum, where the
+      // ridge is worth 2.4x and the default 100 was costing most of the run.
+      // The rival gets the SAME ridge: it differs from the model in poly order
+      // and nothing else, which is what makes the race like-for-like.
       // Rejected with data on Lorenz: poly 3 (spurious attractors kill the
       // oscillation), more lags, delta targets, decimated dt, forgetting,
       // training-noise dither, direct-horizon rungs at the crossover.
+      const lzIv = sys.iv ?? 100;
       const lzCl = { useClamp: true, clampMin: sys.clampMin, clampMax: sys.clampMax };
-      model = new Continuous(sys.dim, sys.lags, sys.poly || 2, true, { predictionSteps: 1, stride: sys.stride, lam: 1.0, initVariance: 100, autoNormalize: true, calibSamples: LZ_WASH, useDelta: !!sys.delta, ...lzCl });
-      rival = new Continuous(sys.dim, sys.lags, 1, true, { predictionSteps: 1, stride: sys.stride, lam: 1.0, initVariance: 100, autoNormalize: true, calibSamples: LZ_WASH, ...lzCl });
+      model = new Continuous(sys.dim, sys.lags, sys.poly || 2, true, { predictionSteps: 1, stride: sys.stride, lam: 1.0, initVariance: lzIv, autoNormalize: true, calibSamples: LZ_WASH, useDelta: !!sys.delta, ...lzCl });
+      rival = new Continuous(sys.dim, sys.lags, 1, true, { predictionSteps: 1, stride: sys.stride, lam: 1.0, initVariance: lzIv, autoNormalize: true, calibSamples: LZ_WASH, ...lzCl });
       lzTraining = false; lzTrainedN = 0; lzTrainBeforeDream = false;
       lzPaused = false; lzAcc = 0;                   // a reset always leaves the sim running
       const pb = document.getElementById('lz-pause');
@@ -1052,7 +1067,7 @@
       esnPts: esnLine.count, mlpPts: mlpLine.count, dreamPts: dreamLine.count,
       wings: { n: wingCrossings(dreamXs), e: wingCrossings(esnXs), m: wingCrossings(mlpXs), l: wingCrossings(rivalXs) },
       trained: lzTrainedN, training: lzTraining, gate: lzGate, sys: lzSys.label,
-      noise: lzNoise, paused: lzPaused,
+      noise: lzNoise, paused: lzPaused, iv: lzSys.iv ?? 100,
       batch: lzBatchStats ? { n: lzBatchStats.n, valid: Object.fromEntries(['n', 'e', 'm', 'l'].map((k) => [k, +lzBatchStats.valid[k].mean.toFixed(2)])),
         raw: lzBatchStats.raw.map((r) => ({ v: Object.fromEntries(['n', 'e', 'm', 'l'].map((k) => [k, +r.valid[k].toFixed(3)])), c: Object.entries(r.censored).filter(([, x]) => x).map(([k]) => k).join('') })) }
         : (lzBatch ? { running: true, done: lzBatch.results.length, target: lzBatch.target } : null),

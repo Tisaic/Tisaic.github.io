@@ -92,9 +92,9 @@ the shipped commit carries the correct version.
    poly2), Rössler (dt.1 λ.071, poly3 — measured 5.5 vs 2.9 Λ), driven
    Duffing (dt.05 λ.112, drive embedded as [cosφ,sinφ] state; poly3 +
    DELTA targets — cubic force + slow dynamics, 0.06→3.7 Λ measured),
-   double pendulum (dt.01 λ1.42, 6D cos/sin/ω embed; the HONEST HARD
-   CASE — trig/rational dynamics defeat the polynomial basis, ~0.3 Λ,
-   and the ESN legitimately wins), Lorenz-96 N=5 (dt.05 λ.439, delta:
+   double pendulum (dt.01 λ1.42, 6D cos/sin/ω embed, **iv 0.1** — the
+   only system needing a ridge other than the default 100; see the
+   CONSERVATIVE-SYSTEM entry below), Lorenz-96 N=5 (dt.05 λ.439, delta:
    3.1 vs 2.4 Λ), Kuramoto–Sivashinsky as a 5-mode Galerkin truncation
    at L=22, 10 real vars (dt.1 λ.050, delta, spf 2 — L=18 collapses,
    L≥26 under-resolves, 22 is the honest chaotic truncation), and
@@ -159,6 +159,65 @@ the shipped commit carries the correct version.
    displayed 1-step tracking 6×, which is why it was reverted), and
    direct-horizon rungs anchored at the crossover (0.25 Λ — each long
    rung is an independent noisy readout; iterating tracks far longer).
+   THE RIDGE IS NOT UNIVERSAL — CONSERVATIVE SYSTEMS NEED A TIGHTER ONE,
+   and getting this wrong cost the double pendulum most of its run. The
+   app hardcoded initVariance 100 for every system on the strength of
+   the Lorenz measurement ("flat over 5 decades"). That flatness is a
+   property of LORENZ, not of the library: Lorenz is DISSIPATIVE, so any
+   error that pushes a free-run off the butterfly gets contracted back
+   onto it, and a loose ridge is forgiven. The double pendulum CONSERVES
+   ENERGY — there is no attractor and nothing contracts anything — so
+   the same loose ridge produced a roll-out that pumped energy and
+   saturated the ω clamps within ~10 steps. Measured in the app,
+   12-run batches: NGRC 0.24 → 0.64 Λ (2.7×) from `iv: 0.1` alone;
+   in the offline harness, selecting on 10 initial conditions and
+   REPORTING on 12 disjoint ones, 0.248 → 0.596 Λ (2.4×, paired
+   t 2.90, wins 10/12).
+   THE DIAGNOSIS OVERTURNED THIS FILE'S OWN EXPLANATION. The previous
+   entry said "trig/rational dynamics defeat the polynomial basis" —
+   that is FALSE. The held-out ONE-STEP fit is excellent (nRMSE 5.9e-4
+   cosθ₁ / 9.6e-4 sinθ₁ / 1.9e-2 ω₁), because two lags of [cos,sin,ω]
+   implicitly carry the 1/(3−cos2Δθ) denominator. The basis represents
+   the map fine; ITERATING it was broken. The evidence that separates
+   cause from consequence is the drift at FIXED free-run steps: energy
+   is 3% off at step 1, **149% off by step 5** and 1259% by step 10,
+   while the valid clock only dies around step 20 — so the energy
+   blow-up PRECEDES the collapse. The cos²+sin²=1 drift is a symptom,
+   not the cause (still only 1.3% off at collapse), which is why the
+   obvious first guess — projecting each (cos,sin) pair back onto the
+   unit circle — did NOTHING: 0.29 → 0.28 Λ.
+   IT IS OVER-FITTING, NOT UNDER-TRAINING, and the 2×3 grid separates
+   them: at iv 100 the window buys 0.248 → 0.339 → 0.373 Λ (w 1800 →
+   6000 → 16000) while at iv 0.1 it starts at 0.596. Nearly 9× the
+   data cannot rescue the wrong ridge.
+   WHAT THIS DOES TO THE ESN CLAIM: the old entry said the ESN
+   "legitimately wins" here, and against the shipped ridge it did —
+   2.95×, NGRC winning 1/12 initial conditions. At the corrected ridge
+   the race is a TIE (ESN 1.23× at a matched window; NGRC 1.40× with a
+   longer one, but only 6/12 initial conditions, so the mean is driven
+   by the tail — call it tied, not won). The ESN's win was mostly a
+   ridge artifact. NOTE the noise floor that keeps this honest: the ESN
+   is untouched by the change yet moved 0.44 → 0.57 between two 12-run
+   batches, so ±0.13 is batch-to-batch variance and NGRC's +0.40 is
+   ~3× that.
+   THE POLY-2 EXPANSION IS NOT WHAT CARRIES THIS SYSTEM. At both
+   ridges poly 2 and poly 1 are statistically indistinguishable on the
+   reporting set (0.248 vs 0.307, paired t −0.83; 0.596 vs 0.616,
+   t −0.18). The linear ARX rival was in fact BEATING NGRC before the
+   fix (0.56 vs 0.24 in the app). The rival therefore gets the SAME
+   per-system ridge — it differs in poly order and nothing else, which
+   is what makes the race like-for-like.
+   NOT SHIPPED, and stated so it stays visible: an ENERGY PROJECTION
+   (rescaling ω each free-run step to conserve the initial total
+   energy) roughly doubles it again — 0.58 Λ at the shipped ridge,
+   1.25 Λ combined with the tighter one. It uses the true Hamiltonian
+   with the true m, l, g, i.e. physics no other system on the tab is
+   given, so shipping it silently would break the tab's black-box
+   contract. It belongs as an explicitly labelled physics-informed
+   variant or not at all.
+   Rejected with data on the pendulum: unit-circle projection (0.28 vs
+   0.29), poly 3 (0.17, much worse), delta targets (0.45), more lags
+   (flat), stride 2 (flat).
    Not suspects, checked: real-time determinism (stepping is
    per-sample, RAF timing never enters the math), precision (float64
    end to end), and the off-attractor [1,1,1] start transient (measured

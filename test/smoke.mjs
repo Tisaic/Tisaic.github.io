@@ -124,6 +124,26 @@ check('ngrc: dream (free-run) toggles', /dreaming/.test(await demo.textContent('
 await demo.waitForTimeout(1500);
 check('ngrc: dream check row lists all four models', /NGRC.*ESN.*MLP.*linear/.test(await demo.textContent('#lz-dstat')), await demo.textContent('#lz-dstat'));
 await demo.screenshot({ path: join(SHOTS, '04-ngrc.png') });
+{
+  // PER-SYSTEM RIDGE. The double pendulum CONSERVES ENERGY, so nothing contracts
+  // a roll-out's error back onto an attractor the way Lorenz's dissipation does,
+  // and the ridge that is harmless there (flat over 5 decades, measured) let the
+  // pendulum's roll-out pump energy and saturate its clamps within ~10 steps.
+  // Measured in this app, 12-run batches: NGRC 0.24 -> 0.64 Λ. Pinning the values
+  // because the failure mode is silent — the 1-step fit stays excellent either
+  // way (nRMSE ~6e-4), so nothing else in the suite would notice a revert.
+  const ivLor = await demo.evaluate(() => window.__lzDbg().iv);
+  await demo.selectOption('#lz-sys', 'dpend');
+  await demo.waitForTimeout(400);
+  const dp = await demo.evaluate(() => window.__lzDbg());
+  check('ngrc: the double pendulum carries its own tighter ridge',
+    dp.sys === 'double pendulum' && dp.iv < 1 && ivLor === 100,
+    JSON.stringify({ lorenz: ivLor, dpend: dp.iv, sys: dp.sys }));
+  await demo.selectOption('#lz-sys', 'lorenz');
+  await demo.waitForTimeout(400);
+  check('ngrc: switching back restores the default ridge',
+    (await demo.evaluate(() => window.__lzDbg().iv)) === 100);
+}
 
 // soft-sensor tab: warms up + produces a hidden-state estimate
 await demo.click('.tab[data-tab="pendulum"]');
