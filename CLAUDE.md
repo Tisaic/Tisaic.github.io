@@ -774,7 +774,7 @@ the shipped commit carries the correct version.
    gapless with instant AFM deploy, far relocation still resets), and
    **④ anti-slosh axis** — an industrial liquid-handling machine, and
    the first tab whose experimental side is mostly CLASSICAL control: the
-   value is in what the single sensor is made to say. FOUR IDENTICAL MACHINES
+   value is in what the single sensor is made to say. FIVE IDENTICAL MACHINES
    run the SAME command so the comparison is a controlled experiment rather
    than a before/after, and each step differs from the one above it by exactly
    ONE thing, so what each is worth can be read off separately: red **control**
@@ -783,7 +783,10 @@ the shipped commit carries the correct version.
    liquid), violet **hybrid** (THE RETROFIT — the conventional controller
    COMPLETELY UNTOUCHED with a learned additive force trim bolted on top, the
    configuration available when the shipped controller cannot be recertified),
-   gray **conventional** (3-impulse ZVD shaper tuned once
+   green **parametric** (THE ARCHITECTURE THAT WINS — the conventional
+   STRUCTURE kept exactly, three smooth terms and the same shaper family, with
+   its CONSTANTS identified online instead of frozen at a nominal fill), gray
+   **conventional** (3-impulse ZVD shaper tuned once
    at the nominal 0.12 m fill, PD loop Kp 4200 / Kd 260 / 260 N limit, textbook
    feedforward M·a + B·v + Fc·sign(v) with M identified at that same fill —
    the correct textbook design, NOT a strawman; it is wrong everywhere else
@@ -857,6 +860,45 @@ the shipped commit carries the correct version.
    gauge_drift+density names both. At a shallow 0.05 m fill mount+leak
    collapses to the leak alone: the mirror's pair ambiguity, since a median of
    three tolerates ONE corrupted vote and that case corrupts two.
+   THE PARAMETRIC MACHINE IS THE BEST OF THE FIVE, and it is the answer to
+   "can the library learn the conventional model's tuning parameters and
+   physical constants rather than replace the model?" — yes, and it beats both
+   alternatives. Recent-window residual wave, mm RMS:
+     fill 0.12 healthy      none 9.58 · conv 0.305 · hybrid 0.213 ·
+                            **param 0.102** · exp 0.167
+     fill 0.05 healthy      none 20.83 · conv 3.038 · hybrid 2.959 ·
+                            param 0.233 · exp 0.213
+     fill 0.12 lubrication  none 8.20 · conv 1.716 · hybrid 1.061 ·
+                            **param 0.140** · exp 1.789
+     fill 0.05 lubrication  none 21.60 · conv 2.528 · hybrid 2.665 ·
+                            **param 0.112** · exp 0.730
+   It wins three of four outright and ties the fourth, and it has the best
+   FOLLOWING ERROR in three of four (1.463 / 1.303 / 1.468 / 1.276). Identified
+   values are accurate: M 9.3 kg against a true rigid 9.25 at the nominal fill,
+   ω exact to 3 significant figures, and B 12 → 10.6 / Fc 5.5 → 5.9 as the
+   effective coefficients the plant actually presents.
+   THE ADVANTAGE NEEDS TIME TO APPEAR, and the distinction matters. Those
+   numbers are with the fault present FROM THE FIRST MOVE, so the constants
+   converge before scoring. Inject the same fault MID-SESSION and check two
+   moves later — which is what the smoke test does — and it is a dead tie
+   (0.472 parametric against 0.472 experimental), because the friction estimate
+   is still moving and the 8-move scoring window is mostly pre-fault. The
+   regression therefore pins only what is true at that instant (adapting
+   friction is never worse, and both beat frozen constants); asserting the
+   converged ratio there would be reading a meter before it has settled.
+   THE SEPARATION IS FRICTION. It is the only machine here that adapts B and
+   Fc, so under a lubrication fault — where the Coulomb term rises 9.9 N and it
+   identifies **Fc 15.8 against a true 15.4** — it is 12× better than the
+   EXPERIMENTAL machine, which adapts mass and resonance but not friction and
+   there lands slightly WORSE than conventional (1.789 vs 1.716). That is the
+   predicted result, stated before the measurement: learn the parameters with no
+   closed form, compute the ones that have one.
+   HONEST LIMIT: the identified inertia carries a FILL-DEPENDENT bias (stage 4D
+   measured the slope at 76.7 kg/m against the truth's 60.0), and the
+   commissioning offset is calibrated at one fill and then frozen — visible as
+   M 6.3 against a true 6.77 at 0.05 m. It costs little here because the mass
+   term is not what limits the wave, but a wider fill range would need a
+   two-point calibration.
    THE HYBRID'S RESULT IS TWO-SIDED, and the negative half is the more useful
    one. Measured converged, wave in mm RMS / following error in mm:
      fill 0.12 m, shaper CORRECTLY tuned — none 9.58 · conventional

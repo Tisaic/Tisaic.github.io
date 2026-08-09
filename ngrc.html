@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:102,built:"2026-08-08T23:44:27Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:103,built:"2026-08-09T00:25:53Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -286,14 +286,17 @@
       moves it <b>1.8×</b> across the range, far outside the ±20% a robust shaper tolerates. And the only
       instrument is <b>one gauge pointing straight down at one spot</b>, reading mean depth plus the local
       wave with no way to separate them from a single sample.
-      Four identical machines run the <b>same command</b>, each differing from the one above by exactly
+      Five identical machines run the <b>same command</b>, each differing from the one above by exactly
       one thing: <span style="color:#f87171"><b>red = control</b></span> (no anti-slosh at all — the raw
       move); <span style="color:#7c8aa0"><b>gray = conventional</b></span> (shaper and feedforward mass
       both fixed at the nominal fill — what ships today);
       <span style="color:#a78bfa"><b>violet = hybrid</b></span>, the <b>retrofit</b> — that controller
       <i>completely untouched</i> with a learned trim added on top, for when you cannot recertify the
-      machine; and <span style="color:#f59e0b"><b>amber = experimental</b></span>, which reads fill and
-      resonance off that <i>same single gauge</i> and retunes both.
+      machine; <span style="color:#34d399"><b>green = parametric</b></span> — the conventional
+      <i>structure</i> kept exactly (same three smooth terms, same shaper) with its <b>constants
+      identified online</b> instead of frozen at a nominal fill; and
+      <span style="color:#f59e0b"><b>amber = experimental</b></span>, which reads fill and resonance off
+      that <i>same single gauge</i> and retunes both.
       Move the <b>Fill</b> slider: the gray tank starts ringing, the amber one settles back down.
       The hybrid answers what a plant actually asks — <b>how much do you get without touching the
       controller?</b> — and the measured answer is two-sided: with the shaper correctly tuned the trim
@@ -304,7 +307,7 @@
       because the position loop absorbs the fault into control effort. <b>Health check ▶</b> runs a
       deliberate <b>unshaped</b> probe: a well-controlled machine leaves no wave to measure, so diagnosis
       has to ask for one.</p>
-    <div class="stage" id="sl-stage" style="height:54vh"></div>
+    <div class="stage" id="sl-stage" style="height:60vh"></div>
     <div class="controls">
       <button id="sl-check">Health check ▶</button>
       <button id="sl-pause" class="sec" title="freeze both machines exactly where they are; rendering stays live">Pause ⏸</button>
@@ -4339,18 +4342,20 @@
 
     // ---- machine state ----
     const SL_FAULTS = ['lubrication', 'gauge_drift', 'mount', 'leak', 'density'];
-    let slCtrl = null, slConv = null, slHyb = null, slExp = null, slAll = [], slDir = 1, slK = 0, slMoves = 0, slPaused = false;
+    let slCtrl = null, slConv = null, slHyb = null, slPar = null, slExp = null, slAll = [], slDir = 1, slK = 0, slMoves = 0, slPaused = false;
     let slFill = 0.120, slFaults = {}, slGaugeDead = false, slProbe = false, slProbePending = false, slDwell = 0, slAcc = 0;
     let slBase = null, slDiag = 'commissioning…', slDiagCls = '', slBaseErr = 0, slProdErr = 0;
     let slLastPanel = null, slLastDeltas = null;
-    let slHist = { ctrl: [], conv: [], hyb: [], exp: [] }, slPlotInited = false, slSumTick = 0;
+    let slHist = { ctrl: [], conv: [], hyb: [], par: [], exp: [] }, slPlotInited = false, slSumTick = 0;
     let slFore = null, slForeK = 0, slSpillWarn = null, slSpillLead = [], slForeAlarm = null;
 
-    function slMakeMachine(isExp, noShape, isHybrid) {
+    function slMakeMachine(isExp, noShape, isHybrid, identifies) {
       const ax = new SlAxis(slFill);
       ax.applyFill(slFill, slFaults);
       const mn = new SlAxis(SLC.NOM);
       return { ax, obs: new SlObs(), isExp, noShape: !!noShape, isHybrid: !!isHybrid,
+        identifies: !!identifies, learnsOmega: !!(isExp || identifies),
+        pM: mn.mrigid + mn.ms, pB: SLC.BV, pFc: SLC.FC, pN: 0, pCal: 0,
         hy: isHybrid ? slMakeTrim() : null, hyTrim: 0, hyF: null, x0: 0,
         // the CONVENTIONAL machine: shaper tuned once at the nominal fill, and a feedforward whose
         // mass was identified there too. This is what ships today, and it is not a strawman —
@@ -4405,21 +4410,41 @@
         // the experimental machine retunes its shaper from the resonance it can SEE. A well-shaped
         // move leaves no wave to measure — which is exactly why this only updates when there IS
         // one, and why the health check has to ask for an unshaped probe.
-        if (m.isExp) {
+        if (m.learnsOmega) {
           const wt = m.waveObs.slice(m.ref.nmove);
           const rms = Math.sqrt(wt.reduce((s, e) => s + e * e, 0) / Math.max(wt.length, 1));
           if (rms > 0.004) {
             const w = slOmegaFromWave(wt);
             if (w && w > 2 && w < 20) m.wHat += 0.6 * (w - m.wHat);
           }
+        }
+        if (m.isExp || m.identifies) {
           const fit = slFitAxis(m.F, m.A, m.V);
           if (fit) {
             m.lastFit = fit;
-            if (!slGaugeDead) {                       // calibrate the offset WHILE the gauge works
-              m.mOffset += fit.M - m.obs.mass(); m.mOffN++;
-              m.mBackup = m.obs.mass();
-            } else {
-              m.mBackup = Math.max(SLC.MCART, fit.M - m.mOffset / Math.max(m.mOffN, 1));
+            if (m.isExp) {
+              if (!slGaugeDead) {                     // calibrate the offset WHILE the gauge works
+                m.mOffset += fit.M - m.obs.mass(); m.mOffN++;
+                m.mBackup = m.obs.mass();
+              } else {
+                m.mBackup = Math.max(SLC.MCART, fit.M - m.mOffset / Math.max(m.mOffN, 1));
+              }
+            }
+            if (m.identifies && fit.M > 3 && fit.M < 80
+                && Math.abs(fit.B) < 80 && Math.abs(fit.Fc) < 60) {
+              // The identified inertia includes part of the sloshing mass, so it reads high (stage 4
+              // measured 76.7 kg per metre of fill against the truth's 60.0). The bias is removed by
+              // a ONE-TIME commissioning calibration against the gauge, then FROZEN — recalibrating
+              // every move would just make this the gauge-scheduled machine with extra steps, and
+              // the whole point is that after commissioning it needs no level gauge at all.
+              if (m.pCal < 5) { m.mOffset += fit.M - m.obs.mass(); m.mOffN++; m.pCal++; }
+              const off = m.mOffN ? m.mOffset / m.mOffN : 0;
+              const mCal = clamp(fit.M - off, SLC.MCART, 80);
+              const a = m.pN < 3 ? 1.0 : 0.35;        // snap to the first usable fit, then smooth
+              m.pM += a * (mCal - m.pM);
+              m.pB += a * (fit.B - m.pB);
+              m.pFc += a * (fit.Fc - m.pFc);
+              m.pN++;
             }
           }
         }
@@ -4427,8 +4452,10 @@
       slMoves++;
       if (!slProbe) {
         slHist.ctrl.push(slCtrl.waveRms); slHist.conv.push(slConv.waveRms);
-        slHist.hyb.push(slHyb.waveRms); slHist.exp.push(slExp.waveRms);
-        if (slHist.conv.length > 90) { slHist.ctrl.shift(); slHist.conv.shift(); slHist.hyb.shift(); slHist.exp.shift(); }
+        slHist.hyb.push(slHyb.waveRms); slHist.par.push(slPar.waveRms); slHist.exp.push(slExp.waveRms);
+        if (slHist.conv.length > 90) {
+          slHist.ctrl.shift(); slHist.conv.shift(); slHist.hyb.shift(); slHist.par.shift(); slHist.exp.shift();
+        }
       }
       if (slProbe) { slRunDiagnosis(); slDwell = Math.round(40 / SLC.dt); }   // let the tank calm down
       slStartMove();
@@ -4569,7 +4596,8 @@
       c.lineTo(tx + tankW, ty + tankH); c.closePath();
       c.fillStyle = m.isExp ? 'rgba(56,189,248,0.55)'
         : (m.noShape ? 'rgba(248,113,113,0.30)'
-          : (m.isHybrid ? 'rgba(167,139,250,0.35)' : 'rgba(100,116,139,0.5)')); c.fill();
+          : (m.isHybrid ? 'rgba(167,139,250,0.35)'
+            : (m.identifies ? 'rgba(52,211,153,0.32)' : 'rgba(100,116,139,0.5)'))); c.fill();
       c.restore();
       // tank walls + freeboard line
       c.strokeStyle = color; c.lineWidth = 2;
@@ -4600,11 +4628,12 @@
       const c = slCtx;
       c.clearRect(0, 0, slW, slH);
       c.fillStyle = '#060a14'; c.fillRect(0, 0, slW, slH);
-      const laneH = (slH - 15) / 4;
+      const laneH = (slH - 18) / 5;
       slDrawLane(slCtrl, 2, laneH, '#f87171', 'control · no anti-slosh');
-      slDrawLane(slConv, laneH + 6, laneH, '#7c8aa0', 'conventional');
-      slDrawLane(slHyb, 2 * laneH + 10, laneH, '#a78bfa', 'hybrid · conventional + learned trim');
-      slDrawLane(slExp, 3 * laneH + 14, laneH, '#f59e0b', 'experimental');
+      slDrawLane(slConv, laneH + 5, laneH, '#7c8aa0', 'conventional');
+      slDrawLane(slHyb, 2 * laneH + 9, laneH, '#a78bfa', 'hybrid · + learned trim');
+      slDrawLane(slPar, 3 * laneH + 13, laneH, '#34d399', 'parametric · learned constants');
+      slDrawLane(slExp, 4 * laneH + 17, laneH, '#f59e0b', 'experimental');
       if (slProbe || slDwell > 0) {
         c.fillStyle = '#f87171'; c.font = 'bold 11px -apple-system,sans-serif'; c.textAlign = 'right';
         c.fillText(slDwell > 0 ? 'settling after the probe…' : 'UNSHAPED PROBE — health check', slW - 12, 13);
@@ -4642,9 +4671,13 @@
         // the conventional one uses the mass identified once at the nominal fill. Same three smooth
         // terms otherwise — a 43-term learned map tracks position slightly better and leaves ~2x
         // MORE wave, because roughness near the slosh resonance is what the shaper cannot cancel.
-        let mm = m.mHat;
+        let mm = m.mHat, bb = SLC.BV, fc = SLC.FC;
         if (m.isExp) mm = slGaugeDead ? (m.mBackup || m.mHat) : m.obs.mass();
-        let ff = mm * ra + SLC.BV * rv + SLC.FC * Math.tanh(rv / 0.002);
+        // PARAMETRIC: the conventional STRUCTURE, unchanged — three smooth terms and the same
+        // shaper family. Only its constants are identified online instead of frozen at a nominal
+        // fill, and each falls back to the textbook value until a usable fit exists.
+        if (m.identifies && m.pN >= 2) { mm = m.pM; bb = m.pB; fc = m.pFc; }
+        let ff = mm * ra + bb * rv + fc * Math.tanh(rv / 0.002);
         if (m.hy) {
           // the conventional feedforward above is untouched; this is added ON TOP of it.
           m.hy.push([ra, rv, m.ax.x, m.ax.gauge()]);
@@ -4708,7 +4741,8 @@
       const mk = (y, name, color) => ({ x: xs, y: y.map((v) => (v > 1e-4 ? v : null)), type: 'scatter',
         mode: 'lines', name, line: { color, width: 2 } });
       const data = [mk(slHist.ctrl, 'no anti-slosh', '#f87171'), mk(slHist.conv, 'conventional', '#7c8aa0'),
-        mk(slHist.hyb, 'hybrid (+ learned trim)', '#a78bfa'), mk(slHist.exp, 'experimental', '#f59e0b')];
+        mk(slHist.hyb, 'hybrid (+ trim)', '#a78bfa'), mk(slHist.par, 'parametric', '#34d399'),
+        mk(slHist.exp, 'experimental', '#f59e0b')];
       if (!slPlotInited) { Plotly.newPlot('sl-plot', data, layout, { displayModeBar: false, responsive: true }); slPlotInited = true; }
       else Plotly.react('sl-plot', data, layout, { displayModeBar: false, responsive: true });
     }
@@ -4717,24 +4751,27 @@
       const set = (id, txt, cls) => { const el = document.getElementById(id); el.textContent = txt; if (cls !== undefined) el.className = cls; };
       set('sl-n', String(slMoves) + (slPaused ? '  (paused)' : ''));
       const tri = (f) => slCtrl[f].toFixed(3) + ' none / ' + slConv[f].toFixed(3) + ' conv / '
-        + slHyb[f].toFixed(3) + ' hybrid / ' + slExp[f].toFixed(3) + ' experimental';
+        + slHyb[f].toFixed(3) + ' hybrid / ' + slPar[f].toFixed(3) + ' param / '
+        + slExp[f].toFixed(3) + ' experimental';
       set('sl-err', tri('errRms') + ' mm');
       set('sl-wave', tri('waveRms') + ' mm', 'amber');
       const cw = slConv.cumWn ? Math.sqrt(slConv.cumW / slConv.cumWn) : 0;
       const ew = slExp.cumWn ? Math.sqrt(slExp.cumW / slExp.cumWn) : 0;
-      const rn = slRms(slCtrl.recent), rc = slRms(slConv.recent), rh = slRms(slHyb.recent), re = slRms(slExp.recent);
+      const rn = slRms(slCtrl.recent), rc = slRms(slConv.recent), rh = slRms(slHyb.recent),
+        rp = slRms(slPar.recent), re = slRms(slExp.recent);
       if (ew > 1e-6 && slConv.cumWn >= 2) {
         const rr = re > 1e-9 ? rc / re : 0, rz = re > 1e-9 ? rn / re : 0;
         const rhy = rh > 1e-9 ? rc / rh : 0;
         set('sl-adv', 'experimental ' + (rr >= 1 ? slFmtX(rr) + ' better' : slFmtX(1 / rr) + ' WORSE')
           + ' than conventional, ' + slFmtX(rz) + ' better than none · hybrid '
           + (rhy >= 1 ? slFmtX(rhy) + ' better' : slFmtX(1 / rhy) + ' WORSE') + ' than conventional'
+          + ', parametric ' + (rp > 1e-9 ? slFmtX(rc / rp) : 'n/a') + ' better'
           + '   (recent ' + rn.toFixed(3) + ' / ' + rc.toFixed(3) + ' / ' + rh.toFixed(3) + ' / '
-          + re.toFixed(3) + ' mm)', rr >= 1 ? 'good' : 'warn');
+          + rp.toFixed(3) + ' / ' + re.toFixed(3) + ' mm)', rr >= 1 ? 'good' : 'warn');
       } else set('sl-adv', '—', '');
       const lead = slSpillLead.length ? (slSpillLead.reduce((a, b) => a + b, 0) / slSpillLead.length).toFixed(0) + ' ms mean lead over ' + slSpillLead.length : 'none yet';
       set('sl-spill', slForeAlarm !== null ? 'CREST PREDICTED OVER THE RIM' : 'clear   (' + lead + ')', slForeAlarm !== null ? 'warn' : '');
-      set('sl-spilln', slCtrl.spills + ' none / ' + slConv.spills + ' conv / ' + slHyb.spills + ' hybrid / ' + slExp.spills + ' experimental');
+      set('sl-spilln', slCtrl.spills + ' none / ' + slConv.spills + ' conv / ' + slHyb.spills + ' hybrid / ' + slPar.spills + ' param / ' + slExp.spills + ' experimental');
       set('sl-diag', slDiag, slDiagCls);
       // the baseline a machine actually alarms on today: a following-error threshold. The position
       // loop ABSORBS these faults into control effort, so the thing keeping the machine running is
@@ -4783,7 +4820,7 @@
         + 'first mode has a node at the tank centre, so a gauge at 0.50 is blind to it.) Also available: the '
         + 'motor force and the encoder, and - for the health check only - a load cell under the tank. '
         + 'The two machines receive the SAME move sequence, the same fill and the same injected faults.');
-      L.push('MODELS. Four machines, same plant, same command, same fill, same injected faults.\n'
+      L.push('MODELS. Five machines, same plant, same command, same fill, same injected faults.\n'
         + 'CONTROL (no anti-slosh): the same PD loop and the same textbook feedforward, driving the RAW '
         + 'trapezoidal move with NO input shaping at all - the machine before anyone did anything about '
         + 'the liquid. It is the reference for what anti-slosh is worth in the first place, and the only '
@@ -4793,6 +4830,14 @@
         + 'shipped controller cannot be recertified. It uses only signals the machine already has. HOW '
         + 'that trim is produced is withheld with the rest of the experimental method; what it does is '
         + 'reported in full below.\n'
+        + 'PARAMETRIC: the conventional STRUCTURE exactly - the same three smooth feedforward terms and '
+        + 'the same shaper family, nothing added and nothing replaced - but its CONSTANTS (the moving '
+        + 'mass, the viscous and Coulomb friction coefficients, and the resonance the shaper is tuned '
+        + 'to) are identified online from the machine\'s own force, motion and gauge instead of being '
+        + 'frozen at a nominal fill. Each falls back to its textbook value until a usable estimate '
+        + 'exists, and the inertia term\'s known bias is removed by a ONE-TIME commissioning '
+        + 'calibration that is then frozen. HOW the constants are identified is withheld with the rest '
+        + 'of the experimental method; the structure they sit in is the fully specified one below.\n'
         + 'CONVENTIONAL (fully specified, the baseline): a 3-impulse ZVD input shaper tuned ONCE at '
         + 'the nominal fill ' + SLC.NOM.toFixed(2) + ' m with assumed damping ' + SLC.ZNOM.toFixed(3)
         + ', driving a PD loop (Kp ' + SLC.KP + ', Kd ' + SLC.KD + ', force limit ' + SLC.FMAX + ' N) with a '
@@ -4839,6 +4884,7 @@
           + '  Residual wave, last ' + slConv.recent.length + ' scored moves: no anti-slosh '
           + slRms(slCtrl.recent).toFixed(3) + ' mm, conventional ' + slRms(slConv.recent).toFixed(3)
           + ' mm, hybrid ' + slRms(slHyb.recent).toFixed(3)
+          + ' mm, parametric ' + slRms(slPar.recent).toFixed(3)
           + ' mm, experimental ' + slRms(slExp.recent).toFixed(3) + ' mm - the experimental machine is '
           + (slRms(slExp.recent) > 1e-9 ? slFmtX(slRms(slConv.recent) / slRms(slExp.recent)) + (slRms(slConv.recent) >= slRms(slExp.recent) ? ' better' : ' worse') + ' than conventional and '
             + slFmtX(slRms(slCtrl.recent) / slRms(slExp.recent)) + ' better than no anti-slosh' : 'n/a') + '.\n'
@@ -4859,7 +4905,12 @@
           + '  with the shaper MISTUNED it removes almost none of it, because a mistuned shaper is a\n'
           + '  failure of TIMING and an additive force correction cannot re-time an impulse. It improves\n'
           + '  the following error in both cases regardless - which is the same warning this study keeps\n'
-          + '  producing: tracking better and sloshing less are not the same objective.\n'
+          + '  producing: tracking better and sloshing less are not the same objective.\n'          + '  The PARAMETRIC machine keeps the conventional structure and identifies its constants:\n'
+          + '  measured M ' + slPar.pM.toFixed(1) + ' kg, B ' + slPar.pB.toFixed(1) + ', Fc '
+          + slPar.pFc.toFixed(1) + ' N, resonance ' + slPar.wHat.toFixed(2) + ' rad/s against a true '
+          + slPar.ax.w.toFixed(2) + '. It is the only machine here that adapts FRICTION, which is why\n'
+          + '  a lubrication fault - where the Coulomb term rises and every fixed-constant machine is\n'
+          + '  suddenly carrying a wrong number - is where it separates from the rest.\n'
           + '  Spills over the rim: ' + slCtrl.spills + ' with no anti-slosh, ' + slConv.spills + ' conventional, ' + slExp.spills + ' experimental.\n'
           + '  Resonance: the experimental machine is tuned to ' + slExp.wHat.toFixed(3) + ' rad/s against a true '
           + slExp.ax.w.toFixed(3) + '; the fixed shaper is stuck at ' + slConv.wHat.toFixed(3) + '.\n'
@@ -4884,12 +4935,13 @@
         slFaults = {};
       }
       slCtrl = slMakeMachine(false, true); slConv = slMakeMachine(false);
-      slHyb = slMakeMachine(false, false, true); slExp = slMakeMachine(true);
-      slAll = [slCtrl, slConv, slHyb, slExp];
+      slHyb = slMakeMachine(false, false, true); slPar = slMakeMachine(false, false, false, true);
+      slExp = slMakeMachine(true);
+      slAll = [slCtrl, slConv, slHyb, slPar, slExp];
       slDir = -1; slMoves = 0; slPaused = false; slGaugeDead = false; slProbe = false; slAcc = 0;
       slProbePending = false; slDwell = 0;
       slBase = null; slBaseErr = 0; slProdErr = 0; slLastPanel = null; slLastDeltas = null; slDiag = 'commissioning — run a health check'; slDiagCls = '';
-      slHist = { ctrl: [], conv: [], hyb: [], exp: [] };
+      slHist = { ctrl: [], conv: [], hyb: [], par: [], exp: [] };
       slFore = slMakeForecaster(); slForeK = 0; slSpillLead = []; slSpillWarn = null; slForeAlarm = null;
       document.getElementById('sl-gauge').textContent = 'Kill gauge 💀';
       document.getElementById('sl-pause').textContent = 'Pause ⏸';
@@ -4957,19 +5009,21 @@
 
     window.__slDbg = () => ({
       moves: slMoves, fill: slFill, faults: Object.keys(slFaults),
-      ctrlWave: slCtrl.waveRms, convWave: slConv.waveRms, hybWave: slHyb.waveRms, expWave: slExp.waveRms,
-      recentCtrl: slRms(slCtrl.recent), recentHyb: slRms(slHyb.recent),
-      hybErr: slHyb.errRms, hybTrim: slHyb.hyTrim,
+      ctrlWave: slCtrl.waveRms, convWave: slConv.waveRms, hybWave: slHyb.waveRms,
+      parWave: slPar.waveRms, expWave: slExp.waveRms,
+      recentCtrl: slRms(slCtrl.recent), recentHyb: slRms(slHyb.recent), recentPar: slRms(slPar.recent),
+      hybErr: slHyb.errRms, hybTrim: slHyb.hyTrim, parErr: slPar.errRms,
+      parP: { M: slPar.pM, B: slPar.pB, Fc: slPar.pFc, n: slPar.pN, w: slPar.wHat },
       convCum: slConv.cumWn ? Math.sqrt(slConv.cumW / slConv.cumWn) : 0,
       expCum: slExp.cumWn ? Math.sqrt(slExp.cumW / slExp.cumWn) : 0,
       convErr: slConv.errRms, expErr: slExp.errRms,
       wHat: slExp.wHat, wTrue: slExp.ax.w, wFixed: slConv.wHat,
       diag: slDiag, base: !!slBase, gaugeDead: slGaugeDead, probe: slProbe, probePending: slProbePending, dwell: slDwell,
       scored: slConv.cumWn, prodErr: slProdErr, baseErr: slBaseErr, recentConv: slRms(slConv.recent), recentExp: slRms(slExp.recent),
-      spills: [slCtrl.spills, slConv.spills, slHyb.spills, slExp.spills], leads: slSpillLead.length,
+      spills: [slCtrl.spills, slConv.spills, slHyb.spills, slPar.spills, slExp.spills], leads: slSpillLead.length,
       hTrue: slExp.ax.h, hObs: slExp.obs.h, paused: slPaused,
       deltas: slLastDeltas });
-    window.__slHist = () => ({ ctrl: slHist.ctrl.slice(), conv: slHist.conv.slice(), hyb: slHist.hyb.slice(), exp: slHist.exp.slice() });
+    window.__slHist = () => ({ ctrl: slHist.ctrl.slice(), conv: slHist.conv.slice(), hyb: slHist.hyb.slice(), par: slHist.par.slice(), exp: slHist.exp.slice() });
     window.__slSet = (o) => {                       // test hook: drive the controls headlessly
       if (o.fill !== undefined) { slFill = o.fill; document.getElementById('sl-fill').value = Math.round(o.fill * 1000); document.getElementById('sl-fillv').textContent = o.fill.toFixed(3) + ' m'; }
       if (o.faults !== undefined) { slFaults = {}; for (const f of o.faults) slFaults[f] = 1.0; }
