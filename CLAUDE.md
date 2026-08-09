@@ -1062,6 +1062,42 @@ the shipped commit carries the correct version.
    was captured FROM the probe move, inflating it and making the conventional
    alarm too lenient — i.e. flattering the very baseline this tab exists to
    beat; it now comes from a production-move EMA.
+   THE HYBRID TRIM'S WAVE IMPROVES TO A MINIMUM AND THEN DEGRADES ~2x, and the
+   cause is RLS COVARIANCE WINDUP, not the plant and not the identified
+   constants. The trim runs `lam 0.999` with a `maxCovTrace 1e7` guard; over
+   the ~700 samples of a move that is 0.999^-700 ~ 2.0x growth of trace(P) per
+   move whenever the regressor is poorly exciting — and a WELL-CONTROLLED move
+   is exactly a poorly-exciting regressor, the same tension the health-check
+   probe exists for. Measured per move on the super hybrid at fill 0.12:
+   trace(P) doubles every move, 1.7e3 -> 1.0e7, hitting the cap at move 13;
+   the wave's minimum is at move 14 (0.045 mm); the trim's weight norm blows
+   up 56 -> 13800; and it then settles at 0.091, about 2x its own best. THE
+   CONTROL IS IN THE SAME TABLE: the parametric machine carries no trim and
+   shows no trend at all over those moves (0.084/0.118 alternating, flat), so
+   the degradation belongs to the trim. The guard fires, but only after the
+   run has already sailed past the optimum.
+   THE TWO-MOVE SAWTOOTH IS SEPARATE AND BENIGN: `slDir = -slDir`, the axis
+   alternates direction every move and friction and cogging are
+   direction-dependent, which is visible in the identified constants
+   themselves (B alternates 10.50/10.58, Fc 5.91/5.88). That is the fit
+   honestly tracking two conditions, not instability.
+   NOT FIXED, AND THE NEAR-MISS IS THE POINT. Removing the forgetting
+   (`lam 1.0`) is worth 3.3x at fill 0.12 — settled wave 0.0912 -> 0.0275,
+   trim norm 13788 -> 249, trace(P) 1e7 -> 5e2 — and directional forgetting
+   ties it (0.0289). Under a mid-session lubrication fault `lam 1.0` also
+   recovers BETTER than directional (0.0208 vs 0.0367), against the
+   expectation that infinite memory could not adapt: the fault changes
+   FRICTION, which the identified constants already track, while the trim's
+   job (cogging, the Stribeck shape, the frozen calibration offset) does not
+   change, so there is nothing to forget. BUT AT FILL 0.05 IT REVERSES —
+   `lam 1.0` settles at 0.1641 against the shipped 0.0665, i.e. 2.5x WORSE.
+   There the shaper is mistuned by a third and the parametric machine only
+   reaches 0.233, so the problem is harder and the wound-up trim's larger
+   weights are doing useful work. It is a bias/variance trade, not a fix, and
+   shipping the one-condition 3.3x win would have quietly cost 2.5x at the
+   other fill. Any real change here needs the fill-and-fault sweep the Lorenz
+   ridge got. `__slDbg().trim` exposes each trim's |theta|, trace(P) and
+   output so the diagnosis can be re-run in one command.
    An **Experiment summary** completes the set (all four tabs have one): same
    6-section, 1 Hz, Copy-button, BLACK-BOX contract — the plant equations, the
    conventional baseline's every gain, the protocol and both grading rules are
