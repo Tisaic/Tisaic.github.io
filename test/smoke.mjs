@@ -425,7 +425,25 @@ check('ngrc: anti-slosh summary renders all six sections',
     m3.modes.length === 2 && Math.abs(m3.modes[1].w / m3.modes[0].w - wRatio) < 0.02
     && Math.abs(m3.modes[1].wt - 0.111) < 0.01,
     JSON.stringify({ modes: m3.modes, fill: hFill, expectedRatio: +wRatio.toFixed(3) }));
-  await demo.evaluate(() => window.__slSet({ mode3: false }));
+  // THE TWO-MODE PLANT MUST NOW BE WINNABLE. Before the probe-only retune the estimate
+  // oscillated 9.3 <-> 14.2 every move and the experimental machine lost to the fixed
+  // shaper; with it, the estimate holds and the adaptive machines beat conventional by ~7x
+  // off the design fill. Pinned because the failure was silent - nothing else in the suite
+  // exercises the second mode at all.
+  await demo.evaluate(() => window.__slSet({ mode3: true, fill: 0.05 }));
+  const m3n = (await demo.evaluate(() => window.__slDbg())).moves;
+  await demo.waitForFunction((n) => window.__slHist().sup.length >= n + 18, m3n, { timeout: 240000 });
+  const two = await demo.evaluate(() => ({ h: window.__slHist(), s: window.__slDbg() }));
+  const tail = (a) => a.slice(-8).reduce((x, y) => x + y, 0) / 8;
+  const cv = tail(two.h.conv), ex = tail(two.h.exp), sp = tail(two.h.sup);
+  check('ngrc: with two slosh modes the adaptive machines still beat the fixed shaper',
+    ex < cv * 0.35 && sp < cv * 0.35,
+    JSON.stringify({ conv: +cv.toFixed(3), exp: +ex.toFixed(3), sup: +sp.toFixed(3) }));
+  // and the resonance estimate must STAY PUT rather than walking onto mode 3
+  check('ngrc: the two-mode resonance estimate does not run away',
+    Math.abs(two.s.wHat - two.s.wTrue) / two.s.wTrue < 0.15,
+    JSON.stringify({ wHat: +two.s.wHat.toFixed(2), wTrue: +two.s.wTrue.toFixed(2) }));
+  await demo.evaluate(() => window.__slSet({ mode3: false, fill: 0.05 }));
   await demo.waitForTimeout(400);
 }
 await demo.evaluate(() => window.scrollTo(0, 0));

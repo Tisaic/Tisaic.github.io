@@ -1205,12 +1205,44 @@ the shipped commit carries the correct version.
    (rms > 0.004) blocks it - a well-shaped move leaves nothing to measure. So
    the "0.0% error" at the nominal fill is not an achievement, it is wHat never
    moving off its initial value, which happens to be right there.
-   THE REAL FIX, not yet built: retune only from the UNSHAPED probe, and use an
-   AR fit rather than a zero-crossing count - not because it estimates one
-   frequency better, but because it returns BOTH poles with amplitudes and can
-   therefore say "this residual is mode 3, do not retune from it", which a
-   crossing counter cannot express at all. The 0.6 EMA gain is separately far
-   too aggressive for a signal with intermittent outliers.
+   THE FIX, BUILT (v110), and it is three things, none of which is "a better
+   frequency estimator":
+   (1) BOTH shaped machines get a MULTI-MODE shaper - one ZVD per resonance,
+   convolved. The conventional one gets it frozen at the nominal fill, the
+   experimental one from its own estimates. Giving the experimental machine that
+   structure and denying it to the baseline would make the win come from the
+   shaper's SHAPE rather than from reading the frequencies off the gauge, which
+   is the only claim this tab makes. The extra delay is real (about one period of
+   each cancelled mode) and is not hidden.
+   (2) The resonances come from an AR(4) fitted by the library's own RLS, roots
+   by Durand-Kerner, DECIMATED to ~11 samples per period (without that the
+   regressors are collinear and it returns a spurious pole near Nyquist). Each
+   pole is ATTRIBUTED to mode 1 or mode 3 by proximity and updates only that
+   estimate - so a mode-3 reading can never drag the mode-1 estimate, which is
+   what the limit cycle was.
+   (3) The retune happens ONLY on the unshaped probe, and a fill change of more
+   than 12 mm automatically queues one. This is the tab's own lesson applied:
+   success at cancelling a resonance removes the evidence of it, so the machine
+   has to ask for an unshaped move to see mode 1 at all. All three are scoped to
+   the two-mode plant; with one mode the shipped per-move retune is untouched and
+   every documented number is byte-identical.
+   MEASURED with two modes (residual wave, mm RMS, moves 16-24):
+     fill 0.12 (the design point)  none 8.65 · conv 0.506 · hyb 0.477 ·
+                                   param 0.565 · SUPER 0.498 · exp 0.549
+     fill 0.05                     none 28.96 · conv 2.762 · hyb 2.664 ·
+                                   param 0.361 · SUPER 0.260 · exp 0.390
+   The experimental machine goes from 1.586 to 0.549 at the design fill (2.9x)
+   and beats the fixed shaper 7.1x off it; the super hybrid 10.6x. The estimate
+   now holds at 9.35 against a true 9.35 instead of oscillating 9.3 <-> 14.2.
+   HONEST LIMIT AT THE DESIGN POINT: with two modes the experimental machine
+   TIES the conventional one at fill 0.12 (0.549 vs 0.506) rather than beating it
+   as it does with one mode (0.167 vs 0.305). That is not a defect. At the
+   nominal fill both machines now carry the SAME two-mode shaper at the same
+   frequencies, so the only difference left is the feedforward mass - which the
+   conventional machine has exactly right by construction there, and which the
+   experimental machine has to estimate. Estimation can only lose at the point
+   the frozen design was tuned for. The whole claim of the tab is what happens
+   away from that point, and there it is 7x.
    NOTE ON THE AR MACHINERY, since it took three attempts: a two-mode wave is an
    AR(4) process and the roots of z^4 - a1 z^3 - ... give both modes, but at
    dt 0.005 there are 134 samples per period of mode 1, the regressors are
