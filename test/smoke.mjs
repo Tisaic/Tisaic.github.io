@@ -269,6 +269,23 @@ check('ngrc: the parametric machine identifies usable constants',
 check('ngrc: learned constants inside the conventional structure beat frozen ones',
   sl.recentPar < sl.recentConv * 0.5 && sl.recentPar < sl.recentHyb * 0.5,
   JSON.stringify({ conv: sl.recentConv, hyb: sl.recentHyb, par: sl.recentPar }));
+// THE SUPER HYBRID: both mechanisms stacked on that same structure. The question it answers is
+// whether they are redundant — a trim on top of already-correct constants could just as easily be
+// fitting noise and adding roughness near the resonance. It is not: the constants cannot produce a
+// term the structure does not contain (cogging, the Stribeck shape, the residual the one-time
+// calibration leaves), so there is systematic residue left for the trim. It must also not lose the
+// parametric machine's tracking, which is the cheap way this could have gone wrong.
+check('ngrc: the super hybrid does not lose the parametric machine\'s tracking',
+  sl.supErr <= sl.parErr, JSON.stringify({ par: sl.parErr, sup: sl.supErr }));
+// stacking has to have CONVERGED to be judged: at 10 moves the identified constants are still
+// moving and the two are within 10% of each other (measured 0.373 vs 0.338). A few moves later the
+// gap opens to ~3.5x and holds. Reading the ratio at move 10 would be reading a meter before it
+// settles — a mistake this project has made before.
+await demo.waitForFunction(() => window.__slDbg().moves >= 15, null, { timeout: 120000 });
+sl = await demo.evaluate(() => window.__slDbg());
+check('ngrc: the two learning mechanisms are complementary, not redundant',
+  sl.recentSup === sl.recentSup && sl.recentSup < sl.recentPar * 0.6 && sl.recentSup < sl.recentConv * 0.2,
+  JSON.stringify({ conv: sl.recentConv, par: sl.recentPar, sup: sl.recentSup }));
 // the physical scale must stay the mirror's (~1.5 mm following error, sub-10 mm waves) — a jump to
 // tens of mm means the slosh state has been kicked into divergence somewhere
 check('ngrc: following error is at the physical scale', sl.convErr > 0.4 && sl.convErr < 5, String(sl.convErr));
@@ -324,14 +341,20 @@ const slSum = await demo.textContent('#sl-sum');
 check('ngrc: anti-slosh summary reports the control', /no anti-slosh/.test(slSum) && /CONTROL \(no anti-slosh\)/.test(slSum));
 check('ngrc: anti-slosh summary reports the parametric machine',
   /PARAMETRIC: the conventional STRUCTURE exactly/.test(slSum) && /adapts FRICTION/.test(slSum));
+check('ngrc: anti-slosh summary reports the super hybrid',
+  /SUPER HYBRID: both learning mechanisms at once/.test(slSum) && /redundant or\s+complementary/.test(slSum)
+  && /The SUPER HYBRID runs both mechanisms/.test(slSum));
 check('ngrc: anti-slosh summary reports the hybrid retrofit',
   /HYBRID \(the retrofit\)/.test(slSum) && /NOT MODIFIED IN ANY WAY/.test(slSum) && /failure of TIMING/.test(slSum));
 check('ngrc: anti-slosh summary renders all six sections',
   ['SYSTEM.', 'TASK AND SIGNALS.', 'MODELS.', 'PROTOCOL.', 'GRADING.', 'LATEST RESULT'].every((k) => slSum.includes(k)));
 {
-  // black-box contract, scoped to the experimental machine's OWN description: the plant, the
-  // conventional baseline, the protocol and the grading are fully specified; the method is not.
-  const own = slSum.split('PROTOCOL.')[0].split('EXPERIMENTAL:')[1] || '';
+  // black-box contract. It is audited over the WHOLE models section, not just the experimental
+  // paragraph: four of the six machines now carry a piece of the withheld method (the trim, the
+  // identified constants, both stacked, and the experimental estimator itself), so a leak in any
+  // of their descriptions is the same leak. The conventional baseline sits in the same section and
+  // is fully specified — it just does not use any of these terms.
+  const own = slSum.split('PROTOCOL.')[0].split('MODELS.')[1] || '';
   check('ngrc: anti-slosh experimental method stays a black box',
     !/NVAR|NG-?RC|next-generation reservoir|polynomial|feature expansion|lag window|stride|recursive least squares|ridge|covariance/i.test(own),
     own.slice(0, 160));

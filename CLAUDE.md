@@ -774,7 +774,7 @@ the shipped commit carries the correct version.
    gapless with instant AFM deploy, far relocation still resets), and
    **④ anti-slosh axis** — an industrial liquid-handling machine, and
    the first tab whose experimental side is mostly CLASSICAL control: the
-   value is in what the single sensor is made to say. FIVE IDENTICAL MACHINES
+   value is in what the single sensor is made to say. SIX IDENTICAL MACHINES
    run the SAME command so the comparison is a controlled experiment rather
    than a before/after, and each step differs from the one above it by exactly
    ONE thing, so what each is worth can be read off separately: red **control**
@@ -783,9 +783,12 @@ the shipped commit carries the correct version.
    liquid), violet **hybrid** (THE RETROFIT — the conventional controller
    COMPLETELY UNTOUCHED with a learned additive force trim bolted on top, the
    configuration available when the shipped controller cannot be recertified),
-   green **parametric** (THE ARCHITECTURE THAT WINS — the conventional
+   green **parametric** (the conventional
    STRUCTURE kept exactly, three smooth terms and the same shaper family, with
-   its CONSTANTS identified online instead of frozen at a nominal fill), gray
+   its CONSTANTS identified online instead of frozen at a nominal fill),
+   magenta **super hybrid** (THE ARCHITECTURE THAT WINS — BOTH learning
+   mechanisms stacked on that same untouched structure: identified constants
+   AND the additive trim), gray
    **conventional** (3-impulse ZVD shaper tuned once
    at the nominal 0.12 m fill, PD loop Kp 4200 / Kd 260 / 260 N limit, textbook
    feedforward M·a + B·v + Fc·sign(v) with M identified at that same fill —
@@ -860,7 +863,7 @@ the shipped commit carries the correct version.
    gauge_drift+density names both. At a shallow 0.05 m fill mount+leak
    collapses to the leak alone: the mirror's pair ambiguity, since a median of
    three tolerates ONE corrupted vote and that case corrupts two.
-   THE PARAMETRIC MACHINE IS THE BEST OF THE FIVE, and it is the answer to
+   THE PARAMETRIC MACHINE BEATS EVERY SINGLE-MECHANISM MACHINE, and it is the answer to
    "can the library learn the conventional model's tuning parameters and
    physical constants rather than replace the model?" — yes, and it beats both
    alternatives. Recent-window residual wave, mm RMS:
@@ -899,6 +902,40 @@ the shipped commit carries the correct version.
    M 6.3 against a true 6.77 at 0.05 m. It costs little here because the mass
    term is not what limits the wave, but a wider fill range would need a
    two-point calibration.
+   THE SUPER HYBRID STACKS BOTH MECHANISMS on that same untouched structure —
+   identified constants AND the additive trim — and it is the best machine on
+   the tab, winning all four cases. Recent-window residual wave, mm RMS,
+   parametric → super:
+     fill 0.12 healthy      0.102 → **0.088**   (1.16×)
+     fill 0.05 healthy      0.233 → **0.066**   (3.5×)
+     fill 0.12 lubrication  0.140 → **0.105**   (1.33×)
+     fill 0.05 lubrication  0.112 → **0.102**   (1.10×)
+   and the following error improves in every case too (1.463→1.416,
+   1.303→1.236, 1.468→1.409, 1.276→1.252), so nothing was traded away.
+   MY PREDICTION WAS WRONG AND THE REASON IS THE INTERESTING PART. I expected
+   the trim to be roughly neutral or slightly harmful once the constants were
+   already right — a learned residual on top of a correct model has mostly noise
+   left to fit, and roughness near the slosh resonance is precisely what a
+   shaper cannot cancel. What it actually absorbs is SYSTEMATIC, not noise:
+   cogging is a deterministic function of position, the Stribeck curve is a
+   shape no `Fc·tanh(v/ε)` term can express at any coefficient, and the frozen
+   commissioning offset leaves a real mass bias. Identifying constants cannot
+   produce a term the structure does not contain, so the residue survives the
+   parametric fix and the trim has something honest to remove.
+   THE 3.5× — the one large gain — LANDS EXACTLY WHERE THE THEORY SAYS IT
+   SHOULD: at 0.05 m, the fill FARTHEST from where the one-time calibration was
+   taken, which is where the frozen offset is most wrong (M 6.3 against a true
+   6.77) and there is most systematic residue for the trim to absorb. Where the
+   calibration is nearly right (0.12 m) or where friction dominates and the
+   parametric machine already fixes it directly (0.05 lubrication), stacking
+   buys 10–33% and no more. The two mechanisms are complementary rather than
+   redundant, and the size of the gain tracks how much the parametric machine
+   left behind — which is the falsifiable version of that claim.
+   THE REGRESSION WAITS FOR CONVERGENCE. At 10 moves the pair is within 10%
+   (0.373 vs 0.338); by move 14 the gap is at its converged ~3.5× and holds.
+   The smoke test therefore pins tracking (never worse than parametric) at move
+   10 and the ratio only after move 15 — reading it earlier would be reading a
+   meter before it settles, which is the mistake this tab keeps re-teaching.
    THE HYBRID'S RESULT IS TWO-SIDED, and the negative half is the more useful
    one. Measured converged, wave in mm RMS / following error in mm:
      fill 0.12 m, shaper CORRECTLY tuned — none 9.58 · conventional
