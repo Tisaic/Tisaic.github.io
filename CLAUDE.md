@@ -425,6 +425,48 @@ the shipped commit carries the correct version.
    decades it made them monotonically WORSE, so they do not use it; a linear
    filter has no mechanism for a regime switch short of an
    interacting-multiple-model design. The summary states that asymmetry.
+   PLS IS THE BASELINE THIS TAB WAS MISSING, and it is the one that decides
+   whether any of this is a product. A Kalman filter needs a physical model,
+   which a real soft sensor (composition, moisture, wear) does not have; what
+   the process industries actually deploy is **PLS regression on the measured
+   signals** — a LINEAR latent-variable fit, trained offline on historical data
+   and recalibrated by hand when it drifts. Both of its documented failure modes
+   are exactly this library's two claims, so it is the right thing to be
+   measured against.
+   It is given the SAME lagged signal window the learner sees (5 signals × 4
+   lags), so the ONLY difference is the model class. TWO variants: **frozen**
+   after a 3000-sample training window (the incumbent as actually deployed) and
+   **adaptive** (cross-products accumulated with forgetting, refitted every 100
+   samples — the stronger, rarer recursive-PLS variant).
+   IMPLEMENTED AS TRUNCATED CONJUGATE GRADIENT, which for a single response IS
+   PLS: the A-component solution is the least-squares solution restricted to the
+   order-A Krylov subspace (Phatak & de Hoog), so A steps of CG on the normal
+   equations gives exactly the NIPALS answer. Verified against a direct NIPALS
+   implementation: agreement to 2e-16 relative at A ≤ 3 and 2e-10 at A = 6. This
+   form needs only accumulated cross-products and no matrix factorisation, so it
+   runs online.
+   THE COMPONENT COUNT WAS SWEPT so this is not a strawman — measured at 6000
+   adapt samples: A = 3 → 0.168, A = 6 → 0.031, A = 12 → 0.026, A = 20 → 0.022
+   nRMSE. More components is monotonically better here, i.e. the latent
+   truncation only loses information, because PLS's advantage lives in the
+   p ≫ n regime (many correlated sensors, few samples) and this is not that. At
+   full rank it IS ordinary least squares on the lag window — the strongest
+   linear model available on these signals — and that is what it ships as.
+   MEASURED (nRMSE against the true hidden load, same instances, same decay):
+     adapt samples   NGRC     PLS frozen   PLS adaptive   engineering KF
+        1548        0.0091       —            0.0329         0.0308
+        3526        0.0063     0.2438         0.0196         0.0313
+        6006        0.0068     0.0250         0.0222         0.0440
+        9028        0.0144     0.0825         0.0362         0.0824
+       13018       0.0092     0.0494         0.0153         0.0181
+   The learner is **1.7–3.6× better than the fully-tuned ADAPTIVE linear model**
+   and 3.7–5.7× better than the frozen one. The 0.2438 immediately after the
+   freeze is the incumbent's whole problem in one number: a model fitted on
+   history meeting an operating regime the history did not contain. That gap
+   between frozen and adaptive is the drift argument, measured rather than
+   asserted, and it is worth as much commercially as the nonlinearity argument —
+   recalibration is the documented reason industrial soft sensors get abandoned.
+
    ARCHITECTURE, MEASURED AND REJECTED for the 1 s forecast: a TWO-STAGE
    design (`Continuous` + `directHorizons` forecasting the whole measured
    lag window at horizons 82/88/94/100, then pushing that predicted window

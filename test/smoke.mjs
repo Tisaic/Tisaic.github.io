@@ -173,6 +173,25 @@ check('ngrc: soft-sensor estimate error is finite', Number.isFinite(parseFloat(a
     kd2.eN < kd2.eK && kd2.eN < kd2.eKm && kd2.eN < kd2.eA,
     `n=${kd2.adaptN}: ${kd2.eN} vs ${kd2.eK}/${kd2.eKm}/${kd2.eA}`);
   check('ngrc: Kalman + algebra rows rendered', /^0\./.test(await demo.textContent('#ss-kf')) && /^0\./.test(await demo.textContent('#ss-kfm')) && /^0\./.test(await demo.textContent('#ss-alg')));
+  // PLS IS THE REAL INCUMBENT for soft sensing. A Kalman filter needs a physical model, which
+  // a composition or wear sensor does not have; PLS regression on the measured signals is what
+  // process plants actually deploy, so it is the baseline that decides whether this is a
+  // product. It gets the SAME lagged window as the learner and its component count was chosen
+  // by sweep (full rank; 3 and 6 both measured worse), so it is not a strawman. FROZEN is the
+  // incumbent as deployed; ADAPTIVE is the stronger recursive variant that removes drift.
+  // the frozen model is fitted at 3000 adapt samples and the block above only waits for
+  // 2500, so wait for the fit rather than assume it — a first version asserted at 2500 and
+  // read null for a model that simply had not been built yet.
+  await demo.waitForFunction(() => window.__ssDbg2().ePlsF != null, null, { timeout: 90000 });
+  const kd3 = await demo.evaluate(() => window.__ssDbg2());
+  check('ngrc: both PLS baselines are fitted and finite',
+    Number.isFinite(kd3.ePlsA) && Number.isFinite(kd3.ePlsF) && kd3.ePlsA > 0 && kd3.ePlsF > 0,
+    JSON.stringify({ frozen: kd3.ePlsF, adaptive: kd3.ePlsA }));
+  // measured 1.7-3.6x across training ages; pinned loosely because the ratio moves with what
+  // the operator is doing at the moment of reading, and the claim is the direction
+  check('ngrc: the learner beats a fully-tuned linear (PLS) soft sensor',
+    kd3.eN < kd3.ePlsA * 0.8 && kd3.eN < kd3.ePlsF * 0.8,
+    JSON.stringify({ ngrc: kd3.eN, plsAdaptive: kd3.ePlsA, plsFrozen: kd3.ePlsF }));
 }
 // the forecast is gated on the readout being warm, and says so until then
 check('ngrc: 1 s preview reports its warm-up', /^(warming \d+\/\d+|—)$/.test((await demo.textContent('#ss-prev')).trim()) || Number.isFinite(parseFloat(await demo.textContent('#ss-prev'))), await demo.textContent('#ss-prev'));

@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:110,built:"2026-08-09T19:47:30Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:111,built:"2026-08-09T20:54:30Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -189,6 +189,8 @@
       <dt title="handed the exact LINEAR terms — masses, stiffness, damping. On a linear plant this would be optimal and exact; here it cannot represent stiction, backlash, the cubic spring or cogging.">Kalman, exact linear model</dt><dd id="ss-kf" style="color:#34d399">—</dd>
       <dt title="the model an engineer actually has: masses and spring stiffness off the datasheet, friction and damping NOT modelled at all. Noise settings tuned by sweep.">Kalman, engineering model</dt><dd id="ss-kfm">—</dd>
       <dt title="x₂ ≈ x₁ − f/k straight from the load cell — no model, no learning. It would nearly solve the task on a linear spring; the hardening spring and backlash are what break it.">Algebraic x₁ − f/k</dt><dd id="ss-alg">—</dd>
+      <dt title="PLS (partial least squares) on the SAME lagged signal window the learner sees — a LINEAR latent-variable fit at full rank, which is where a sweep put it (3 and 6 components both measured worse). This is what the process industries actually deploy for soft sensing, and unlike a Kalman filter it needs no physical model. FROZEN after a 3000-sample training window, which is how a deployed PLS model lives until someone recalibrates it.">PLS, frozen (the incumbent)</dt><dd id="ss-plsf">—</dd>
+      <dt title="the same PLS, but never frozen — cross-products accumulated with forgetting and refitted continuously. The stronger, rarer recursive-PLS variant: it removes the drift problem but stays linear.">PLS, adaptive</dt><dd id="ss-plsa">—</dd>
       <dt title="a bank of first-order lag filters, best member auto-selected against truth — the naive DIY reference, kept for scale">Tuned lag filter</dt><dd id="ss-naive">—</dd>
       <dt title="NGRC vs the engineering-model Kalman — the like-for-like comparison, since neither was given the damping">NGRC vs engineering Kalman</dt><dd id="ss-adv" class="good">—</dd>
       <dt title="direct 1 s-ahead readout on the sensor's own conditioned lag window — scored out-of-sample when the future arrives">Preview +1 s (NGRC)</dt><dd id="ss-prev" style="color:#a78bfa">—</dd>
@@ -1437,6 +1439,8 @@
     let x1, v1, x2, v2, ssT, ss, ssSamples, ssEN, ssEC, ssET, ssKick, ssTouchX, ssTouched;
     let ssFilt, ssFiltErr, ssTouchF, ssU, ssV1f1, ssV1f2, ssUf1, ssUf2, ssFsf1, ssFsf2;
     let ssKF, ssKFm, ssEK, ssEKm, ssEKP, ssKFPrev, ssKFmPrev, ssKFPend, ssEAlg;
+    let ssPlsF = null, ssPlsA = null, ssPlsFitN = 0, ssEPlsF = 0, ssEPlsA = 0;
+    let ssPlsFEst = null, ssPlsAEst = null;
     const ssNL = { n: 0, lash: 0, stick: 0, stop: 0 };
     // CUMULATIVE per-regime error accumulators, for measurement only. The
     // displayed rows are EWMAs, which are the right thing for a live meter but
@@ -1513,6 +1517,89 @@
     // shouldn't peek at). Recent-error meters reset at each mode switch so
     // the numbers score the CURRENT mode only.
     const SS_LAG = 4, SS_STRIDE = 6;                  // sensor embedding (see makeSS)
+
+    // ---- PLS: the baseline this comparison was actually missing ----------------
+    // Kalman filters need a physical model, which a real soft sensor does not have. What the
+    // process industries actually deploy is PLS (partial least squares) regression on the
+    // measured signals - a LINEAR latent-variable fit, trained offline on historical data and
+    // recalibrated by hand when it drifts. That is the incumbent, and it is the honest thing
+    // to be measured against.
+    // For a single response, PLS with A components is exactly A steps of conjugate gradient on
+    // the normal equations (Phatak & de Hoog) - the PLS solution is the least-squares solution
+    // restricted to the order-A Krylov subspace. So the fit below IS PLS, obtained in a form
+    // that works from accumulated cross-products and needs no matrix factorisation.
+    // Raw sums are accumulated and centred at fit time, which is exact; centring online while
+    // the mean is still moving is not.
+    // COMPONENTS CHOSEN BY SWEEP, so this is not a strawman: measured at 6000 adapt samples,
+    // A = 3 -> 0.168, A = 6 -> 0.031, A = 12 -> 0.026, A = 20 -> 0.022 nRMSE. More components
+    // is monotonically better here, i.e. the latent truncation only loses information - PLS's
+    // advantage is in the p >> n regime (many correlated sensors, few samples) and this is not
+    // that. At full rank it IS ordinary least squares on the lag window, which is the strongest
+    // linear model available on these signals, and that is exactly what it should be measured as.
+    const SS_PLS_A = 20;                             // = full rank on a 20-term window
+    const SS_PLS_TRAIN = 3000;                       // the frozen model's training window
+    function plsMake(dim) {
+      return { dim, n: 0, sy: 0, syy: 0,
+        sx: new Float64Array(dim), sxy: new Float64Array(dim),
+        sxx: new Float64Array(dim * dim), b: null, b0: 0 };
+    }
+    function plsObserve(p, x, y, lam) {
+      if (lam && lam < 1) {                          // exponential forgetting = adaptive PLS
+        p.n *= lam; p.sy *= lam; p.syy *= lam;
+        for (let i = 0; i < p.dim; i++) { p.sx[i] *= lam; p.sxy[i] *= lam; }
+        for (let i = 0; i < p.dim * p.dim; i++) p.sxx[i] *= lam;
+      }
+      p.n += 1; p.sy += y; p.syy += y * y;
+      for (let i = 0; i < p.dim; i++) {
+        p.sx[i] += x[i]; p.sxy[i] += x[i] * y;
+        const row = i * p.dim;
+        for (let j = 0; j < p.dim; j++) p.sxx[row + j] += x[i] * x[j];
+      }
+    }
+    function plsFit(p, A) {
+      const d = p.dim;
+      if (p.n < d + 20) return false;
+      const mx = new Float64Array(d);
+      for (let i = 0; i < d; i++) mx[i] = p.sx[i] / p.n;
+      const my = p.sy / p.n;
+      const S = new Float64Array(d * d), s0 = new Float64Array(d);
+      for (let i = 0; i < d; i++) {
+        s0[i] = p.sxy[i] - p.n * mx[i] * my;
+        for (let j = 0; j < d; j++) S[i * d + j] = p.sxx[i * d + j] - p.n * mx[i] * mx[j];
+      }
+      // A steps of conjugate gradient on S b = s0, from b = 0  ==  PLS with A components
+      const b = new Float64Array(d), r = Float64Array.from(s0), q = Float64Array.from(s0);
+      const Sq = new Float64Array(d);
+      let rr = 0;
+      for (let i = 0; i < d; i++) rr += r[i] * r[i];
+      for (let a = 0; a < A && rr > 1e-24; a++) {
+        for (let i = 0; i < d; i++) {
+          let acc = 0; const row = i * d;
+          for (let j = 0; j < d; j++) acc += S[row + j] * q[j];
+          Sq[i] = acc;
+        }
+        let qSq = 0;
+        for (let i = 0; i < d; i++) qSq += q[i] * Sq[i];
+        if (!(qSq > 1e-24)) break;
+        const alpha = rr / qSq;
+        for (let i = 0; i < d; i++) { b[i] += alpha * q[i]; r[i] -= alpha * Sq[i]; }
+        let rr2 = 0;
+        for (let i = 0; i < d; i++) rr2 += r[i] * r[i];
+        const beta = rr2 / rr; rr = rr2;
+        for (let i = 0; i < d; i++) q[i] = r[i] + beta * q[i];
+      }
+      if (!b.every(Number.isFinite)) return false;
+      let b0 = my;
+      for (let i = 0; i < d; i++) b0 -= b[i] * mx[i];
+      p.b = b; p.b0 = b0;
+      return true;
+    }
+    function plsPredict(p, x) {
+      if (!p.b) return null;
+      let y = p.b0;
+      for (let i = 0; i < p.dim; i++) y += p.b[i] * x[i];
+      return y;
+    }
     // FIFTH SIGNAL: the MANUAL-MODE bit. A real machine knows whether it is
     // running a program or being jogged by hand, and that bit costs nothing to
     // route. Given it, the model learns a distinct — and appropriately humble —
@@ -1628,6 +1715,13 @@
       ssFiltErr = ALPHAS.map(() => 0);
       ssPrevPend = []; ssPrevTr = 0; ssEP = 0; ssEPer = 0; ssPrevNow = null; ssPrevMat = null;
       ssLocked = false; ssAdaptN = 0; ssFiltBest = 0;
+      // PLS on the SAME lagged signal window the learner sees, so the only difference is the
+      // model class: a linear latent-variable fit against a nonlinear expansion.
+      // FROZEN is the incumbent as actually deployed - fitted once on a training window and
+      // then left alone until someone recalibrates it. ADAPTIVE keeps accumulating with
+      // forgetting, which is the stronger (and rarer) recursive-PLS variant.
+      ssPlsF = plsMake(SS_SIG * SS_LAG); ssPlsA = plsMake(SS_SIG * SS_LAG);
+      ssPlsFitN = 0; ssEPlsF = 0; ssEPlsA = 0; ssPlsFEst = null; ssPlsAEst = null;
       ssKF = kfMake(PM, KF_EXACT_Q, KF_EXACT_RF);         // handed the exact plant
       // the engineering model: masses + stiffness known, friction/damping not modelled
       ssKFm = kfMake({ ...PM, b1: 0, b2: 0, c: 0 }, KF_ENG_Q, KF_ENG_RF);
@@ -1762,6 +1856,20 @@
           return (y === y) ? Math.min(ss.clampHi[j], Math.max(ss.clampLo[j], y)) : 0;
         };
         est = read(0);
+        // ---- PLS baselines, on the SAME lagged window, scored the same way ----
+        const rawv = ss._raw().m;
+        const trainPls = !ssLocked;
+        if (trainPls) {
+          // the frozen model gets a fixed training window and is then left alone, which is
+          // how a deployed PLS soft sensor actually lives; the adaptive one keeps learning
+          plsObserve(ssPlsA, rawv, x2, 0.9995);
+          if (ssPlsFitN < SS_PLS_TRAIN) { plsObserve(ssPlsF, rawv, x2, 1.0); ssPlsFitN++; }
+          if (ssPlsFitN === SS_PLS_TRAIN) { plsFit(ssPlsF, SS_PLS_A); ssPlsFitN++; }
+          if (ssAdaptN % 100 === 0) plsFit(ssPlsA, SS_PLS_A);
+        }
+        const clampL = (y) => (y === y ? Math.min(2.05, Math.max(-2.05, y)) : null);
+        ssPlsFEst = clampL(plsPredict(ssPlsF, rawv));
+        ssPlsAEst = clampL(plsPredict(ssPlsA, rawv));
         ssPrevNow = ssPrevTr > SS_PREV_GATE ? read(1) : null;
         if (!ssLocked) {                         // target 0 trains on the present
           rls(ss.theta[0], ss.P[0], f, x2, ss.lam, ss.maxCovTrace);
@@ -1791,6 +1899,10 @@
         ssEK = SS_DECAY * ssEK + (1 - SS_DECAY) * eK * eK;
         ssEKm = SS_DECAY * ssEKm + (1 - SS_DECAY) * eKm * eKm;
         ssEAlg = SS_DECAY * ssEAlg + (1 - SS_DECAY) * eA * eA;
+        // the PLS baselines are metered on the SAME instances and with the SAME
+        // decay as every other row, so the numbers are directly comparable
+        if (ssPlsFEst != null) ssEPlsF = SS_DECAY * ssEPlsF + (1 - SS_DECAY) * (ssPlsFEst - x2) ** 2;
+        if (ssPlsAEst != null) ssEPlsA = SS_DECAY * ssEPlsA + (1 - SS_DECAY) * (ssPlsAEst - x2) ** 2;
         ssET = SS_DECAY * ssET + (1 - SS_DECAY) * (x2 * x2 + 1e-6);
         const C = (ssTouchX != null) ? ssCum.man : ssCum.auto;
         C.n++; C.d += x2 * x2 + 1e-6;
@@ -1997,6 +2109,8 @@
       gate: SS_PREV_GATE, warm: ssPrevTr > SS_PREV_GATE,
       eP: ssET > 0 && ssEP > 0 ? Math.sqrt(ssEP / ssET) : null, ePer: ssET > 0 && ssEPer > 0 ? Math.sqrt(ssEPer / ssET) : null,
       eN: ssET > 0 ? Math.sqrt(ssEN / ssET) : null, eK: ssET > 0 ? Math.sqrt(ssEK / ssET) : null,
+      ePlsF: (ssPlsF && ssPlsF.b && ssET > 0) ? Math.sqrt(ssEPlsF / ssET) : null,
+      ePlsA: (ssPlsA && ssPlsA.b && ssET > 0) ? Math.sqrt(ssEPlsA / ssET) : null,
       eKm: ssET > 0 ? Math.sqrt(ssEKm / ssET) : null, eA: ssET > 0 ? Math.sqrt(ssEAlg / ssET) : null,
       sensorFeats: ss.nf, sensorLag: SS_LAG, sensorStride: SS_STRIDE, adaptN: ssAdaptN,
       cum: ['auto', 'man'].reduce((o, m) => { const c = ssCum[m]; o[m] = c && c.n ? {
@@ -2052,6 +2166,9 @@
       document.getElementById('ss-kf').textContent = ssET > 0 ? Math.sqrt(ssEK / ssET).toFixed(4) : '—';
       document.getElementById('ss-kfm').textContent = ssET > 0 ? Math.sqrt(ssEKm / ssET).toFixed(4) : '—';
       document.getElementById('ss-alg').textContent = ssET > 0 ? Math.sqrt(ssEAlg / ssET).toFixed(4) : '—';
+      const plsTxt = (e, fitted) => (fitted && ssET > 0 ? Math.sqrt(e / ssET).toFixed(4) : 'fitting…');
+      document.getElementById('ss-plsf').textContent = plsTxt(ssEPlsF, ssPlsF && ssPlsF.b);
+      document.getElementById('ss-plsa').textContent = plsTxt(ssEPlsA, ssPlsA && ssPlsA.b);
       // headline comparison is against the engineering-model Kalman — neither
       // it nor the learner was given the friction and damping
       const advRow = document.getElementById('ss-adv');
