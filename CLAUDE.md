@@ -1178,17 +1178,46 @@ the shipped commit carries the correct version.
    (param 0.101 -> 1.309, super 0.082 -> 1.168, experimental 0.167 -> 1.586),
    leaving the experimental machine WORSE than the fixed shaper it exists to
    beat. Diagnosed rather than assumed: the experimental machine's resonance
-   estimate goes from **9.345 (0.0% error) to 14.265 (+52.6%)**, and the
-   parametric machine's to 12.519 (+34%). 14.265 lies BETWEEN w1 = 9.345 and
-   w3 = 17.546 - `slOmegaFromWave` is a zero-crossing period estimator, it is
-   counting crossings contributed by both modes, and it returns a blend that
-   exists nowhere in the plant. The machines then retune to a resonance that is
-   not there. THAT IS AN INSTRUMENT DEFECT, NOT A LIMIT OF THE METHOD, so
-   shipping it as the default would make the tab lie in the opposite direction
-   and would invalidate every documented number on the strength of a bug. The
-   honest fix is a frequency estimator robust to more than one mode (band-pass
-   around the expected first mode, or fit the dominant one) - not done yet, and
-   the checkbox is there so the failure can be seen.
+   estimate goes from 9.345 to a value that OSCILLATES 9.3 <-> 14.2 every move
+   and never settles. The v108 entry blamed the zero-crossing estimator and
+   proposed a better one; THAT DIAGNOSIS WAS WRONG and the correction is worth
+   more than the original claim.
+   WHAT IT ACTUALLY IS: a closed-loop limit cycle driven by observability, not
+   an estimator defect. Captured at the retune instant over 12 consecutive
+   moves, the reported w is 14.85 / 9.13 / 9.29 / 13.37 / 9.45 / 8.91 / 9.08 /
+   17.29 / 9.38 / 9.11 / 9.15 / 17.41 - mostly right, intermittently landing on
+   mode 3. The loop: wHat correct -> the shaper cancels mode 1 well -> THE
+   RESIDUAL IS THEN ALMOST PURE MODE 3 -> the next estimate reads ~17.5 ->
+   `wHat += 0.6*(w - wHat)` drags it 60% of the way -> the shaper is mistuned
+   for mode 1 -> mode 1 returns large -> the next estimate reads ~9.1 -> repeat.
+   SUCCESS AT CANCELLING THE RESONANCE REMOVES THE EVIDENCE OF IT. This tab
+   already documents that tension - it is why the health-check probe must be
+   UNSHAPED - but the per-move retune ignores it.
+   THE EVIDENCE THAT SETTLES IT: an AR(4) fitted by the library's own RLS to the
+   same tails, roots taken via Durand-Kerner, INDEPENDENTLY reports ~17.6 on
+   exactly the moves where the zero-crossing counter reports ~17.3. Two
+   unrelated estimators agreeing means the signal genuinely IS mode 3 on those
+   moves. A better frequency estimator therefore cannot help: when mode 1 is
+   well cancelled there is no mode-1 content left to estimate from. On an
+   UNSHAPED probe both estimators recover mode 1 to -0.1% even with two modes.
+   ALSO MEASURED, and it undercuts the 1-mode result too: with one mode the
+   retune fires ONCE in a whole run and returns null, because the gate
+   (rms > 0.004) blocks it - a well-shaped move leaves nothing to measure. So
+   the "0.0% error" at the nominal fill is not an achievement, it is wHat never
+   moving off its initial value, which happens to be right there.
+   THE REAL FIX, not yet built: retune only from the UNSHAPED probe, and use an
+   AR fit rather than a zero-crossing count - not because it estimates one
+   frequency better, but because it returns BOTH poles with amplitudes and can
+   therefore say "this residual is mode 3, do not retune from it", which a
+   crossing counter cannot express at all. The 0.6 EMA gain is separately far
+   too aggressive for a signal with intermittent outliers.
+   NOTE ON THE AR MACHINERY, since it took three attempts: a two-mode wave is an
+   AR(4) process and the roots of z^4 - a1 z^3 - ... give both modes, but at
+   dt 0.005 there are 134 samples per period of mode 1, the regressors are
+   almost collinear, and the fit is hopeless - it returns a single spurious pole
+   near the Nyquist edge. DECIMATING to ~10-12 samples per period fixes it
+   (recovering 9.344 and 17.624 against a truth of 9.345 and 17.546). The root
+   finder was verified separately on a quartic built from known poles.
    The S-curve partially rescues it (experimental 1.586 -> 0.624 with two modes)
    because jerk limiting attenuates the high-frequency content that fools the
    estimator - which is corroborating evidence for the diagnosis.
