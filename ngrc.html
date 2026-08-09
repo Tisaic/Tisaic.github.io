@@ -8,7 +8,7 @@
   <title>NGRC Playground</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:107,built:"2026-08-09T17:54:35Z"}; // __NGRC_STAMP__</script>
+  <script>window.__BUILD = {version:108,built:"2026-08-09T18:40:03Z"}; // __NGRC_STAMP__</script>
   <script src="console-boot.js"></script>
   <!-- Self-hosted Plotly (basic bundle) for the charts. -->
   <script src="vendor/plotly-basic.min.js"></script>
@@ -341,9 +341,22 @@
         <input id="sl-fill" type="range" min="30" max="270" step="1" value="120" />
         <span id="sl-fillv">0.120 m</span>
       </div>
-      <div class="slider">Speed
+      <div class="slider" title="how fast the SIMULATION runs — a viewing control, it changes nothing about the machine or the results">Sim rate
         <input id="sl-speed" type="range" min="0.25" max="3" step="0.25" value="1.5" />
         <span id="sl-speedv">1.50×</span>
+      </div>
+      <div class="slider" title="how fast the MACHINE moves: scales the commanded top speed and acceleration together. Takes effect at the next move, never mid-move. Faster moves excite more slosh — this is the cycle-time knob the whole tab is about">Move speed
+        <input id="sl-mspd" type="range" min="0.5" max="3" step="0.1" value="1" />
+        <span id="sl-mspdv">1.0× (0.55 m/s, 2.2 m/s²)</span>
+      </div>
+      <div class="slider" title="the commanded acceleration profile. Trapezoidal steps the acceleration on and off; the S-curve limits JERK, which excites the liquid less but takes longer">Profile
+        <select id="sl-prof">
+          <option value="trap" selected>trapezoidal</option>
+          <option value="scurve">S-curve (jerk-limited)</option>
+        </select>
+      </div>
+      <div class="slider" title="the second excited slosh mode (n=3): physically derived, 1.9x faster than the first and ~11% of the wall elevation. OFF by default and this is deliberate — with it on, the resonance estimator (a zero-crossing period) is fooled by the two frequencies and reports 14.3 rad/s where the plant has 9.3 and 17.5, so the adaptive machines retune to a resonance that does not exist and land worse than the fixed shaper. That is an instrument defect, not a limit of the method, so it is not the default. Turn it on to see it.">
+        <label><input id="sl-m3" type="checkbox" /> 2nd slosh mode</label>
       </div>
     </div>
     <dl class="stat">
@@ -4184,6 +4197,17 @@
     // fraction of the liquid that participates in the first mode: shallow tanks slosh almost
     // entirely, deep ones carry a large quiescent bottom mass that rides rigidly with the carriage
     const slFrac = (h) => Math.min(0.92, (8.0 / Math.PI ** 3) * (SLC.L / h) * Math.tanh(Math.PI * h / SLC.L));
+    // HIGHER SLOSH MODES. A horizontally excited rectangular tank only excites the ODD
+    // antisymmetric modes, and the standard equivalent-mechanical model (Housner /
+    // Abramson) gives each one exactly: w_n = sqrt(g (n pi/L) tanh(n pi h/L)) and a mass
+    // fraction (8/(n^3 pi^3))(L/h) tanh(n pi h/L). Nothing here is fitted. Mode 3 at the
+    // nominal fill is 1.9x faster than mode 1 and carries ~11% of the wall elevation;
+    // mode 5 is 4% and is not worth its cost, so the plant carries modes 1 and 3.
+    // THIS IS WHAT MAKES THE SHAPER'S LIMIT HONEST: a ZVD tuned to mode 1 does nothing
+    // about mode 3, exactly as on a real machine.
+    const SL_MODES = [1, 3];
+    const slOmegaN = (n, h) => Math.sqrt(SLC.G * (n * Math.PI / SLC.L) * Math.tanh(n * Math.PI * h / SLC.L));
+    const slFracN = (n, h) => Math.min(0.92, (8.0 / (n ** 3 * Math.PI ** 3)) * (SLC.L / h) * Math.tanh(n * Math.PI * h / SLC.L));
     let slGaussSpare = null;
     function slGauss() {                                  // Box–Muller, for the load cell's noise
       if (slGaussSpare !== null) { const s = slGaussSpare; slGaussSpare = null; return s; }
@@ -4198,18 +4222,38 @@
     // sloshing mass and the resonance both move with fill, so the axis inertia and the load's
     // frequency change together as the tank drains.
     class SlAxis {
-      constructor(h) { this.faults = {}; this.rho = SLC.RHO; this.hCmd = h; this.setFill(h); this.x = this.v = this.th = this.om = 0; this.broke = 0; }
+      constructor(h) {
+        this.faults = {}; this.rho = SLC.RHO; this.hCmd = h;
+        this.th = SL_MODES.map(() => 0); this.om = SL_MODES.map(() => 0);
+        this.setFill(h); this.x = this.v = 0; this.broke = 0;
+      }
       setFill(h) {
         this.h = h;
-        const mliq = this.rho * SLC.L * SLC.TW * h;
-        this.ms = mliq * slFrac(Math.max(h, 0.005));
-        this.mrigid = SLC.MCART + (mliq - this.ms);
+        const hs = Math.max(h, 0.005);
+        const mliq = this.rho * SLC.L * SLC.TW * hs;
+        const mount = 1 - 0.28 * (this.faults.mount || 0);
         // a loosened mount / changed liquid moves the RESONANCE without moving the mass — that
         // independence is exactly what makes it separable from a fill change
-        this.w = slOmega(Math.max(h, 0.005)) * (1 - 0.28 * (this.faults.mount || 0));
-        this.z = slZeta(Math.max(h, 0.005));
-        this.leq = SLC.G / (this.w * this.w);
-        this.cd = 2 * this.z * this.w * this.ms * this.leq * this.leq;
+        this.mode = (slMode3 ? SL_MODES : [SL_MODES[0]]).map((n) => {
+          const ms = mliq * slFracN(n, hs);
+          const w = slOmegaN(n, hs) * mount;
+          const z = slZeta(hs);
+          const leq = SLC.G / (w * w);
+          return { n, ms, w, z, leq, cd: 2 * z * w * ms * leq * leq };
+        });
+        const tot = this.mode.reduce((a, m) => a + m.ms, 0);
+        this.mrigid = SLC.MCART + (mliq - tot);
+        // the wall-elevation weight of each mode, relative to mode 1. From matching each
+        // mode's liquid centre of mass to its pendulum bob:
+        //   eta_n(x) = A_n cos(n pi x / L),  int_0^L cos(n pi x/L)(x - L/2) dx = -2L^2/(n^2 pi^2)
+        //   => A_n proportional to m_n * l_n * n^2.
+        // Mode 1 keeps the shipped 0.5*L*tan(th) scale exactly, so the existing numbers stay
+        // comparable and only the ADDED modes change anything.
+        const ref = this.mode[0].ms * this.mode[0].leq;
+        for (const m of this.mode) m.wt = ref > 0 ? (m.ms * m.leq * m.n * m.n) / ref : 0;
+        // the first mode still names the axis's resonance for everything that reads it
+        this.ms = this.mode[0].ms; this.w = this.mode[0].w;
+        this.z = this.mode[0].z; this.leq = this.mode[0].leq; this.cd = this.mode[0].cd;
         this.freeboard = Math.max(0.01, SLC.WALL - h);
       }
       applyFill(hCmd, faults) {
@@ -4226,16 +4270,34 @@
       step(force) {
         const hs = SLC.dt / 4;
         for (let i = 0; i < 4; i++) {
-          const c = Math.cos(this.th), s = Math.sin(this.th);
-          const ms = this.ms, l = this.leq;
-          const a11 = this.mrigid + ms, a12 = ms * l * c, a21 = a12, a22 = ms * l * l;
-          const b1 = force - this.friction(this.v) + this.cogging(this.x) + ms * l * this.om * this.om * s;
-          const b2 = -ms * SLC.G * l * s - this.cd * this.om;
-          const det = a11 * a22 - a12 * a21;
-          if (Math.abs(det) < 1e-12) return;
-          const xdd = (b1 * a22 - a12 * b2) / det, thdd = (a11 * b2 - b1 * a21) / det;
+          // Several pendulums on one carriage. Substituting each mode's angular equation
+          //   thdd_n = -(g/l_n) sin th_n - cd_n om_n/(m_n l_n^2) - cos(th_n) xdd / l_n
+          // into the carriage equation removes the matrix solve entirely and leaves a
+          // scalar for xdd. For a single mode this is algebraically identical to the 2x2
+          // determinant solve it replaces (checked term by term), so mode 1 is untouched.
+          let num = force - this.friction(this.v) + this.cogging(this.x);
+          let den = this.mrigid;
+          const cs = [], sn = [];
+          for (let k = 0; k < this.mode.length; k++) {
+            const md = this.mode[k];
+            const c = Math.cos(this.th[k]), sg = Math.sin(this.th[k]);
+            cs.push(c); sn.push(sg);
+            den += md.ms;
+            num += md.ms * md.leq * this.om[k] * this.om[k] * sg
+                 + md.ms * SLC.G * c * sg
+                 + c * md.cd * this.om[k] / md.leq;
+            den -= md.ms * c * c;
+          }
+          if (Math.abs(den) < 1e-12) return;
+          const xdd = num / den;
+          for (let k = 0; k < this.mode.length; k++) {
+            const md = this.mode[k];
+            const thdd = -(SLC.G / md.leq) * sn[k]
+                       - md.cd * this.om[k] / (md.ms * md.leq * md.leq)
+                       - cs[k] * xdd / md.leq;
+            this.om[k] += thdd * hs; this.th[k] += this.om[k] * hs;
+          }
           this.v += xdd * hs; this.x += this.v * hs;
-          this.om += thdd * hs; this.th += this.om * hs;
         }
         // wave breaking: past the freeboard the crest spills over the rim and sheds energy. A hard
         // unmodelable nonlinearity, and the physical reason slosh limits cycle time.
@@ -4243,8 +4305,10 @@
         if (Math.abs(e) > this.freeboard) {
           this.broke++;
           const over = Math.abs(e) - this.freeboard;
-          this.th *= (1 - 0.35 * Math.min(1, over / this.freeboard));
-          this.om *= 0.55;
+          for (let k = 0; k < this.mode.length; k++) {
+            this.th[k] *= (1 - 0.35 * Math.min(1, over / this.freeboard));
+            this.om[k] *= 0.55;
+          }
         }
       }
       // Surface elevation at the tank's +x wall. The equivalent pendulum LAGS under
@@ -4257,7 +4321,13 @@
       // activate on and is not a relabelling. Measured: it moved the super hybrid
       // at fill 0.05 from 0.066 to 0.181 mm. The drawing negates at the point of
       // drawing instead.
-      wallElev() { return 0.5 * SLC.L * Math.tan(clamp(this.th, -1.2, 1.2)); }
+      wallElev() {                                  // elevation at the +x wall, summed over modes
+        let e = 0;
+        for (let k = 0; k < this.mode.length; k++) {
+          e += this.mode[k].wt * Math.tan(clamp(this.th[k], -1.2, 1.2));
+        }
+        return 0.5 * SLC.L * e;
+      }
       // THE ONLY INSTRUMENT: one downward gauge at ONE spot. It reads mean depth plus the local
       // wave height and cannot separate them from a single sample. Mounted OFF-CENTRE on purpose —
       // the first antisymmetric mode has a NODE at the tank centre, so a gauge at xr=0.5 is blind
@@ -4294,14 +4364,27 @@
     // ---- motion command: trapezoid, optionally convolved with a ZVD shaper (3 impulses, robust
     // to about +-20% frequency error — which is far less than the 1.8x the fill range moves it).
     function slTrapezoid() {
-      let ta = SLC.VMAX / SLC.AMAX, tc;
-      const da = SLC.AMAX * ta * ta;
-      if (da > SLC.DIST) { ta = Math.sqrt(SLC.DIST / SLC.AMAX); tc = 0; } else tc = (SLC.DIST - da) / SLC.VMAX;
+      const vmax = SLC.VMAX * slMoveSpd, amax = SLC.AMAX * slMoveSpd;
+      let ta = vmax / amax, tc;
+      const da = amax * ta * ta;
+      if (da > SLC.DIST) { ta = Math.sqrt(SLC.DIST / amax); tc = 0; } else tc = (SLC.DIST - da) / vmax;
       const na = Math.round(ta / SLC.dt), nc = Math.round(tc / SLC.dt);
       const out = [];
-      for (let i = 0; i < na; i++) out.push(SLC.AMAX);
+      for (let i = 0; i < na; i++) out.push(amax);
       for (let i = 0; i < nc; i++) out.push(0);
-      for (let i = 0; i < na; i++) out.push(-SLC.AMAX);
+      for (let i = 0; i < na; i++) out.push(-amax);
+      return out;
+    }
+    // S-CURVE by convolving the trapezoid's ACCELERATION with a normalised boxcar. A boxcar of
+    // length T ramps the acceleration linearly over T instead of stepping it, which is exactly a
+    // jerk limit of amax/T. Convolution with a normalised kernel leaves the integral of a (final
+    // velocity, still zero) and the integral of v (the 0.40 m stroke) unchanged, so the move goes
+    // exactly as far — it just takes T longer and stops yanking the liquid. Same mechanism the ZVD
+    // shaper already uses, which is why it composes with it cleanly.
+    function slSCurve(cmd) {
+      const nj = Math.max(2, Math.round(0.08 / SLC.dt));      // 80 ms jerk ramp
+      const out = new Array(cmd.length + nj - 1).fill(0);
+      for (let i = 0; i < cmd.length; i++) for (let j = 0; j < nj; j++) out[i + j] += cmd[i] / nj;
       return out;
     }
     function slZvd(w, z) {
@@ -4313,6 +4396,7 @@
     }
     function slBuildRef(w, settle) {
       let cmd = slTrapezoid();
+      if (slProfile === 'scurve') cmd = slSCurve(cmd);
       if (w) {
         const taps = slZvd(w, SLC.ZNOM);
         const out = new Array(cmd.length + taps[taps.length - 1][0] + 1).fill(0);
@@ -4375,6 +4459,10 @@
     const SL_FAULTS = ['lubrication', 'gauge_drift', 'mount', 'leak', 'density'];
     let slCtrl = null, slConv = null, slHyb = null, slPar = null, slSup = null, slExp = null, slAll = [], slDir = 1, slK = 0, slMoves = 0, slPaused = false;
     let slFill = 0.120, slFaults = {}, slGaugeDead = false, slProbe = false, slProbePending = false, slDwell = 0, slAcc = 0;
+    // MOVE speed (not sim speed) and the commanded profile. Both are read when a reference
+    // is BUILT, i.e. at a move boundary — rebuilding a reference mid-move is what caused the
+    // v100 slosh divergence, and the same discipline applies here.
+    let slMoveSpd = 1.0, slProfile = 'trap', slMode3 = false;
     let slBase = null, slDiag = 'commissioning…', slDiagCls = '', slBaseErr = 0, slProdErr = 0;
     let slLastPanel = null, slLastDeltas = null;
     let slHist = { ctrl: [], conv: [], hyb: [], par: [], sup: [], exp: [] }, slPlotInited = false, slSumTick = 0;
@@ -4694,7 +4782,7 @@
         m.ax.step(u);
       }
       slDwell--;
-      if (slAll.every((m) => Math.abs(m.ax.wallElev()) < 0.001 && Math.abs(m.ax.om) < 0.01)) slDwell = 0;
+      if (slAll.every((m) => Math.abs(m.ax.wallElev()) < 0.001 && m.ax.om.every((o) => Math.abs(o) < 0.01))) slDwell = 0;
       if (slDwell <= 0) slStartMove();
     }
 
@@ -5006,6 +5094,8 @@
       slHist = { ctrl: [], conv: [], hyb: [], par: [], sup: [], exp: [] };
       slFore = slMakeForecaster(); slForeK = 0; slSpillLead = []; slSpillWarn = null; slForeAlarm = null;
       document.getElementById('sl-gauge').textContent = 'Kill gauge 💀';
+      document.getElementById('sl-mspdv').textContent = slMoveSpd.toFixed(1) + '× ('
+        + (SLC.VMAX * slMoveSpd).toFixed(2) + ' m/s, ' + (SLC.AMAX * slMoveSpd).toFixed(1) + ' m/s²)';
       document.getElementById('sl-pause').textContent = 'Pause ⏸';
       slStartMove();
     }
@@ -5037,6 +5127,20 @@
     });
     document.getElementById('sl-speed').addEventListener('input', (e) => {
       document.getElementById('sl-speedv').textContent = (+e.target.value).toFixed(2) + '×';
+    });
+    // MOVE speed. Only the label updates here; slTrapezoid() reads slMoveSpd when the next
+    // reference is built, so a drag mid-move cannot restart the reference under the carriage.
+    document.getElementById('sl-mspd').addEventListener('input', (e) => {
+      slMoveSpd = +e.target.value;
+      document.getElementById('sl-mspdv').textContent = slMoveSpd.toFixed(1) + '× ('
+        + (SLC.VMAX * slMoveSpd).toFixed(2) + ' m/s, ' + (SLC.AMAX * slMoveSpd).toFixed(1) + ' m/s²)';
+    });
+    document.getElementById('sl-prof').addEventListener('change', (e) => { slProfile = e.target.value; });
+    // the 2nd slosh mode changes the PLANT, so it needs a reset: leaving the machines' learned
+    // state in place across a plant change would score them on a machine they never trained on.
+    document.getElementById('sl-m3').addEventListener('change', (e) => {
+      slMode3 = !!e.target.checked;
+      slReset(true);
     });
     document.getElementById('sl-copy').addEventListener('click', async (e) => {
       const txt = document.getElementById('sl-sum').textContent;
@@ -5097,11 +5201,17 @@
       scored: slConv.cumWn, prodErr: slProdErr, baseErr: slBaseErr, recentConv: slRms(slConv.recent), recentExp: slRms(slExp.recent),
       spills: [slCtrl.spills, slConv.spills, slHyb.spills, slPar.spills, slSup.spills, slExp.spills], leads: slSpillLead.length,
       hTrue: slExp.ax.h, hObs: slExp.obs.h, paused: slPaused,
+      moveSpd: slMoveSpd, profile: slProfile, mode3: slMode3,
+      modes: slExp.ax.mode.map((m) => ({ n: m.n, w: +m.w.toFixed(3), ms: +m.ms.toFixed(3), wt: +m.wt.toFixed(4) })),
+      moveLen: slExp.ref ? slExp.ref.nmove : 0,
       deltas: slLastDeltas });
     window.__slHist = () => ({ ctrl: slHist.ctrl.slice(), conv: slHist.conv.slice(), hyb: slHist.hyb.slice(), par: slHist.par.slice(), sup: slHist.sup.slice(), exp: slHist.exp.slice() });
     window.__slSet = (o) => {                       // test hook: drive the controls headlessly
       if (o.fill !== undefined) { slFill = o.fill; document.getElementById('sl-fill').value = Math.round(o.fill * 1000); document.getElementById('sl-fillv').textContent = o.fill.toFixed(3) + ' m'; }
       if (o.faults !== undefined) { slFaults = {}; for (const f of o.faults) slFaults[f] = 1.0; }
+      if (o.moveSpd !== undefined) { slMoveSpd = o.moveSpd; const el = document.getElementById('sl-mspd'); el.value = o.moveSpd; el.dispatchEvent(new Event('input', { bubbles: true })); }
+      if (o.profile !== undefined) { slProfile = o.profile; document.getElementById('sl-prof').value = o.profile; }
+      if (o.mode3 !== undefined) { slMode3 = !!o.mode3; document.getElementById('sl-m3').checked = !!o.mode3; slReset(true); }
       if (o.probe) slProbePending = true;
       if (o.gaugeDead !== undefined) { slGaugeDead = o.gaugeDead; document.getElementById('sl-gauge').textContent = slGaugeDead ? 'Revive gauge ✚' : 'Kill gauge 💀'; }
     };

@@ -382,6 +382,52 @@ check('ngrc: anti-slosh summary renders all six sections',
   check('ngrc: anti-slosh baseline is fully specified',
     /ZVD input shaper/.test(slSum) && /Kp 4200/.test(slSum) && /M\*a_ref \+ B\*v_ref/.test(slSum));
 }
+// MOVE SPEED, PROFILE and the SECOND SLOSH MODE (v108). Placed at the END of the
+// tab-4 section on purpose: toggling the second mode changes the PLANT and therefore
+// calls slReset, and an earlier placement reset the machines underneath the fault
+// tests that follow — the parametric machine's friction estimate had not reconverged
+// and its check failed. Same mistake, same fix, as the tab-1 ridge check.
+// MOVE SPEED, PROFILE and the SECOND SLOSH MODE (v108). The move-speed slider is the
+// cycle-time knob the tab exists to justify, and it must scale the commanded motion
+// without touching the sim rate; the S-curve must preserve the stroke while taking
+// longer; and the second mode must be OFF by default, because with it on the
+// resonance estimator is fooled (14.3 rad/s reported against a plant with 9.3 and
+// 17.5) and the adaptive machines lose to the fixed shaper for a reason that is an
+// instrument defect rather than a property of the method.
+{
+  const base = await demo.evaluate(() => window.__slDbg());
+  check('ngrc: the second slosh mode is off by default',
+    base.mode3 === false && base.modes.length === 1 && base.moveSpd === 1 && base.profile === 'trap',
+    JSON.stringify({ mode3: base.mode3, modes: base.modes.length, spd: base.moveSpd, prof: base.profile }));
+  const trapLen = base.moveLen;
+  await demo.evaluate(() => window.__slSet({ profile: 'scurve' }));
+  await demo.waitForFunction((n) => window.__slDbg().moves > n + 1, base.moves, { timeout: 60000 });
+  const sc = await demo.evaluate(() => window.__slDbg());
+  check('ngrc: the S-curve lengthens the move (jerk limit) without changing the stroke',
+    sc.moveLen > trapLen, JSON.stringify({ trap: trapLen, scurve: sc.moveLen }));
+  await demo.evaluate(() => window.__slSet({ profile: 'trap', moveSpd: 2.0 }));
+  await demo.waitForFunction((n) => window.__slDbg().moves > n + 1, sc.moves, { timeout: 60000 });
+  const fast = await demo.evaluate(() => window.__slDbg());
+  check('ngrc: a faster move speed shortens the commanded move',
+    fast.moveLen < trapLen && fast.moveSpd === 2, JSON.stringify({ x1: trapLen, x2: fast.moveLen }));
+  // the second mode's parameters are DERIVED, not fitted - if a later edit invents them
+  // this catches it (w3/w1 = 1.88 and the wall weight 0.111 at the nominal fill)
+  await demo.evaluate(() => window.__slSet({ moveSpd: 1.0, mode3: true }));
+  await demo.waitForTimeout(600);
+  const m3 = await demo.evaluate(() => window.__slDbg());
+  // assert the CLOSED FORM, not a number: w3/w1 = sqrt(3*tanh(3*pi*h/L)/tanh(pi*h/L)),
+  // which is fill-dependent (1.878 at 0.12 m, 2.393 at the 0.05 m this suite runs at) —
+  // an earlier version of this check hardcoded the 0.12 m value and failed here for that
+  // reason alone. The wall weight tends to exactly 1/n^2 = 0.111 in deep water.
+  const hFill = m3.hTrue, LT = 0.30;
+  const wRatio = Math.sqrt(3 * Math.tanh(3 * Math.PI * hFill / LT) / Math.tanh(Math.PI * hFill / LT));
+  check('ngrc: the second slosh mode matches the derived modal physics',
+    m3.modes.length === 2 && Math.abs(m3.modes[1].w / m3.modes[0].w - wRatio) < 0.02
+    && Math.abs(m3.modes[1].wt - 0.111) < 0.01,
+    JSON.stringify({ modes: m3.modes, fill: hFill, expectedRatio: +wRatio.toFixed(3) }));
+  await demo.evaluate(() => window.__slSet({ mode3: false }));
+  await demo.waitForTimeout(400);
+}
 await demo.evaluate(() => window.scrollTo(0, 0));
 await demo.waitForTimeout(300);
 await demo.screenshot({ path: join(SHOTS, '08-antislosh.png') });
