@@ -7,6 +7,22 @@ cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
 PORT="${PORT:-8137}"
 
+# TWO TIERS. The full suite drives several thousand solver steps through a
+# software GPU and a few minutes of anti-slosh control simulation, which is the
+# right thing before a push and the wrong thing on every edit.
+#   ./test/run.sh          quick  — everything cheap, plus the analytic physics
+#   ./test/run.sh --full   full   — adds the long-horizon browser scenarios
+SUITE="quick"
+for arg in "$@"; do
+  case "$arg" in
+    --full) SUITE="full" ;;
+    --quick) SUITE="quick" ;;
+    *) echo "usage: $0 [--quick|--full]" >&2; exit 2 ;;
+  esac
+done
+export SUITE
+echo "Suite level: ${SUITE}"
+
 # Ensure playwright-core (installed under test/, never shipped to the page).
 if ! node -e "require.resolve('playwright-core',{paths:['${ROOT}/test']})" >/dev/null 2>&1; then
   echo "Installing playwright-core (dev-only)…"
@@ -37,6 +53,9 @@ if [ -d lib/lattsim ]; then
   node test/lattsim/d3q19.test.mjs
   node test/lattsim/engine.test.mjs
   node test/lattsim/conservation.test.mjs
+  # Poiseuille is the check that the solver solves the right equations, so it
+  # runs at both tiers -- but the tau sweep and the resolution study behind it
+  # are full-tier.
   node test/lattsim/poiseuille.test.mjs
 fi
 

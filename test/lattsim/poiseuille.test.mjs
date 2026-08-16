@@ -29,6 +29,10 @@ function check(name, cond, detail) {
   console.log(`  ${ok ? '✓' : '✗'} ${name}${(!ok && detail !== undefined) ? '  → ' + detail : ''}`);
   if (!ok) failed++;
 }
+// The main case (does the solver reproduce the exact parabola?) always runs.
+// The tau sweep that measures the BGK wall slip and the resolution-convergence
+// study are full-tier: together they are most of this file's runtime.
+const FULL = process.env.SUITE === 'full';
 console.log('\nlattsim: Poiseuille flow vs the analytic profile');
 
 /**
@@ -135,7 +139,7 @@ const H = NZ - 2, ZC = (NZ - 1) / 2;
 // the second relaxation rate to hold Lambda = 3/16 at any viscosity. Until that
 // ships, THIS is the accuracy envelope, and it is asserted so nobody discovers
 // it by accident at tau = 3.
-{
+if (FULL) {
   const TAU_MAGIC = 0.5 + Math.sqrt(3 / 16);
   const rows = [];
   for (const tau of [0.6, 0.8, TAU_MAGIC, 1.0, 1.5, 2.5]) {
@@ -162,7 +166,7 @@ const H = NZ - 2, ZC = (NZ - 1) / 2;
 // ------------------------------------------------ resolution scaling
 // Refining the lattice must not make the answer worse, and for a second-order
 // scheme the error should fall roughly as the square of the resolution.
-{
+if (FULL) {
   const rows = [];
   for (const nz of [9, 15, 25]) {
     const h = nz - 2, zc = (nz - 1) / 2;
@@ -197,5 +201,6 @@ const H = NZ - 2, ZC = (NZ - 1) / 2;
   a.destroy(); b.destroy();
 }
 
+if (!FULL) console.log('  (quick tier: the tau sweep and the resolution study are --full only)');
 console.log(failed ? `\n  ${failed} check(s) failed\n` : '  all checks passed\n');
 process.exit(failed ? 1 : 0);

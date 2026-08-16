@@ -14,6 +14,12 @@ import { LBMFluidOperator } from '../../lib/lattsim/operators/lbm.js';
 import { PhysicsOperator } from '../../lib/lattsim/operator.js';
 import { Q } from '../../lib/lattsim/d3q19.js';
 
+// Long-horizon scenario blocks (the lid-driven cavity, the three-scene sweep and
+// the residual convergence run) drive tens of thousands of JavaScript solver
+// steps and dominate the suite's wall clock. They are FULL-tier; the cheap
+// scaffolding and the stir impulse always run.
+const FULL = process.env.SUITE === 'full';
+
 let failed = 0;
 function check(name, cond, detail) {
   const ok = !!cond;
@@ -177,7 +183,7 @@ check('tau <= 1/2 is refused when the operator is constructed',
 }
 
 // ------------------------------------------------ the moving wall is a WALL
-{
+if (FULL) {
   // Reported from a real device: the lid-driven cavity showed a "marginal"
   // stability verdict in a CLOSED box, which cannot have a large density spread.
   // Cause: MOVING cells were modelled as driven FLUID cells, so the lid acted as
@@ -244,7 +250,7 @@ check('tau <= 1/2 is refused when the operator is constructed',
 }
 
 // ------------------------------------------- every scene shows its physics
-{
+if (FULL) {
   // Reported from a real device: two of the three scenes "did nothing visible".
   // They were all correct -- the DEFAULT SLICE was wrong. Poiseuille varies only
   // across z, so the plane normal to z has exactly zero spread and renders as a
@@ -284,5 +290,146 @@ check('tau <= 1/2 is refused when the operator is constructed',
   }
 }
 
+// --------------------------------------------- the stir impulse is physics
+{
+  // The interaction has to be a real body force, not a paint tool: momentum goes
+  // into the momentum field and is then transported by the same operator as
+  // everything else. So it must add momentum, conserve mass, and stop when the
+  // impulse expires.
+  const { LBMFluidOperator: LBM } = await import('../../lib/lattsim/operators/lbm.js');
+  const { TOPOLOGY: T } = await import('../../lib/lattsim/lattice.js');
+  const P3 = [T.PERIODIC, T.PERIODIC, T.PERIODIC];
+  const sim = new Simulation({ lattice: { size: [16, 16, 16], spacing: 1e-3, topology: P3 } });
+  const op = new LBM({ tau: 0.8 });
+  sim.addPhysics(op);
+  await sim.build({ backend: 'cpu', precision: 'f64' });
+
+  const d0 = await sim.diagnostics();
+  check('a fresh periodic box is at rest', d0.uMax < 1e-12, String(d0.uMax));
+
+  const F = 1e-4, STEPS = 20, R = 3;
+  op.stir({ centre: [8, 8, 8], radius: R, force: [F, 0, 0], steps: STEPS });
+  sim.advance(STEPS);
+  const d1 = await sim.diagnostics();
+  check('stirring puts momentum into the fluid', d1.momentum[0] > 0 && d1.uMax > 1e-6,
+    `px ${d1.momentum[0].toExponential(3)} uMax ${d1.uMax.toExponential(3)}`);
+  check('stirring conserves mass', Math.abs(d1.mass - d0.mass) / d0.mass < 1e-12,
+    Math.abs(d1.mass - d0.mass).toExponential(3));
+  // Only cells inside the sphere are forced, so the momentum added is F per step
+  // per forced cell -- an order-of-magnitude check that it is localised rather
+  // than applied everywhere.
+  const forced = (() => {
+    let n = 0;
+    sim.lattice.forEachCell((x, y, z) => {
+      const dx = x - 8, dy = y - 8, dz = z - 8;
+      if (dx * dx + dy * dy + dz * dz <= R * R) n++;
+    });
+    return n;
+  })();
+  const expected = F * STEPS * forced;
+  // NOTE the half step. The macroscopic field is written from the state gathered
+  // at the START of a step, plus Guo's half-force correction, so a reading taken
+  // immediately after N steps shows (N - 1/2) applications. That is bookkeeping,
+  // not a leak -- so the total is checked once the impulse has fully expired.
+  sim.advance(40);
+  const d2 = await sim.diagnostics();
+  check('the impulse is LOCAL, not global (momentum matches the forced volume)',
+    Math.abs(d2.momentum[0] - expected) / expected < 0.01,
+    `${d2.momentum[0].toExponential(4)} vs ${expected.toExponential(4)} over ${forced} of ${sim.lattice.cellCount} cells`);
+  check('the mid-run reading is exactly one half step behind',
+    Math.abs(d1.momentum[0] - (STEPS - 0.5) * F * forced) / expected < 0.01,
+    `${d1.momentum[0].toExponential(4)} vs ${((STEPS - 0.5) * F * forced).toExponential(4)}`);
+
+  // ...and it expires: momentum must stop growing once the impulse is spent.
+  sim.advance(60);
+  const d3 = await sim.diagnostics();
+  check('the impulse expires rather than becoming a permanent source',
+    Math.abs(d3.momentum[0] - d2.momentum[0]) / d2.momentum[0] < 1e-9,
+    `${d2.momentum[0].toExponential(6)} -> ${d3.momentum[0].toExponential(6)}`);
+  sim.destroy();
+}
+
+// ------------------------------------------------- the residual diagnostic
+{
+  // Cheap in quick, thorough in full: the claim is that the residual FALLS, and
+  // a shorter run still shows that.
+  const ROUNDS = FULL ? 12 : 4;
+  // "Has it settled?" is otherwise unanswerable from the picture: a converged run
+  // and a slowly drifting one look identical. The residual is |du|/|u| between
+  // consecutive readings, and it must fall as a driven flow reaches steady state.
+  const { channelFlow } = await import('../../lib/lattsim/scenes.js');
+  const sim = channelFlow({ resolution: 16, tau: 0.6, inletVelocity: 0.05 });
+  await sim.build({ backend: 'cpu' });
+  await sim.diagnostics();                    // prime the previous-field copy
+  sim.advance(300);
+  const early = await sim.diagnostics();
+  for (let k = 0; k < ROUNDS; k++) { sim.advance(300); await sim.diagnostics(); }
+  sim.advance(300);
+  const late = await sim.diagnostics();
+  check('the residual is reported', typeof late.residual === 'number', String(late.residual));
+  check('a driven flow settles: the residual falls by >10x', late.residual < early.residual / 10,
+    `${early.residual.toExponential(2)} -> ${late.residual.toExponential(2)}`);
+  check('a settled run says so in the verdict', /steady/.test(late.stable.why) || late.residual < 1e-3,
+    JSON.stringify({ why: late.stable.why, residual: late.residual }));
+  sim.destroy();
+}
+
+// ------------------------------ the residual is a RATE, not a per-reading delta
+//
+// The backends report |du|/|u| between successive READINGS, which grows with
+// however many steps happened in between. Left unnormalised, a convergence
+// number would change when the steps-per-frame slider moved -- a VIEWING control
+// altering a physics diagnostic. Simulation divides by the elapsed steps, so two
+// observers watching the same run at different cadences must agree.
+{
+  const { channelFlow } = await import('../../lib/lattsim/scenes.js');
+  const make = async () => {
+    const s = channelFlow({ resolution: 16, tau: 0.6, inletVelocity: 0.05 });
+    await s.build({ backend: 'cpu' });
+    return s;
+  };
+  const a = await make(), b = await make();
+  a.advance(400); await a.diagnostics();
+  b.advance(400); await b.diagnostics();
+  // Same 200 steps of the same deterministic run, read once vs read in 10 chunks.
+  a.advance(200);
+  const coarse = await a.diagnostics();
+  let fine = null;
+  for (let k = 0; k < 10; k++) { b.advance(20); fine = await b.diagnostics(); }
+  const ratio = coarse.residual / fine.residual;
+  check('the residual is per step, so the reading cadence barely moves it',
+    ratio > 0.2 && ratio < 5,
+    `1x200 ${coarse.residual.toExponential(2)} vs 10x20 ${fine.residual.toExponential(2)} (${ratio.toFixed(2)}x)`);
+
+  // No previous reading is NOT the same as no change. A fresh run must report
+  // undefined rather than a number, or the first frame after a rebuild shows a
+  // meaningless ~1 -- and a second call with no steps in between must not report
+  // zero, which would read as "perfectly steady".
+  const c = await make();
+  const first = await c.diagnostics();
+  check('the first reading has no residual to report', first.residual === undefined,
+    String(first.residual));
+  c.advance(50); await c.diagnostics();
+  const nostep = await c.diagnostics();
+  check('a reading with no steps since the last one reports nothing, not zero',
+    nostep.residual === undefined, String(nostep.residual));
+  a.destroy(); b.destroy(); c.destroy();
+}
+
+// ----------------------------- a fully converged run must still read as steady
+//
+// Poiseuille converges hard enough that the f32 velocity delta underflows to
+// EXACTLY zero. An earlier `residual > 0` guard -- there to exclude the
+// no-previous-reading case, which is now `undefined` -- made the most converged
+// run on the tab report "not steady".
+{
+  const sim = new Simulation({ lattice: { size: [4, 4, 4], spacing: 1e-3 } });
+  check('a residual of exactly zero is steady, not unreported',
+    sim.assess({ finite: true, rhoMin: 1, rhoMax: 1, uMax: 0.01, residual: 0 }).why === 'steady');
+  check('an unreported residual is not called steady',
+    sim.assess({ finite: true, rhoMin: 1, rhoMax: 1, uMax: 0.01 }).why === '');
+}
+
+if (!FULL) console.log('  (quick tier: cavity, scene sweep and the long residual run are --full only)');
 console.log(failed ? `\n  ${failed} check(s) failed\n` : '  all checks passed\n');
 process.exit(failed ? 1 : 0);

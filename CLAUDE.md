@@ -186,6 +186,96 @@ the shipped commit carries the correct version.
    (requesting one per build, and dropping the previous adapter, can tear the
    instance down), and an unpainted canvas defaults to WHITE, which against this
    page reads as broken rather than empty.
+   **THREE MORE FROM THE DEVICE (v114), and the second one was NOT a defect.**
+   (i) **Reset put the controls back**, so switching to the 3D view and pressing
+   Reset dropped you into 2D again. It now resets the SIMULATION only: the view,
+   the field selector, the slice axis and the slice position survive Reset, a
+   resolution change and a τ change, and a scene's declared view defaults are
+   applied only when the SCENE ITSELF changes. Smoke pins both halves — the
+   settings stay AND the step counter really did restart, because "preserve
+   everything" is the failure mode on the other side of this fix.
+   (ii) **"The obstacle sim does not settle into a homogeneous steady state" —
+   IT DOES, and the report was unanswerable rather than wrong.** A converged flow
+   and one still slowly drifting look IDENTICAL on screen, so there was no
+   instrument to answer it with. `diagnostics()` now reports a **residual** —
+   ‖Δu‖/‖u‖ **PER STEP** — and the verdict says `ok — steady` below 1e-3, computed
+   ON-DEVICE in the same reduction pass as the mass and momentum sums (stride 12
+   with a `macPrev` binding), so a convergence check costs no extra readback.
+   Per-step residual vs step at resolution 16: channel 1.3e-2 → 1.8e-3 → 5.0e-4 →
+   1.1e-8 (steps 200/580/1000/4840), Poiseuille and the cavity converging faster
+   still — five decades, so the 1e-3 line has room on both sides.
+   THE PER-STEP NORMALISATION IS NOT COSMETIC: the backends can only report the
+   change between successive READINGS, which grows with however many steps
+   happened in between, so an unnormalised residual CHANGES WHEN THE
+   STEPS-PER-FRAME SLIDER MOVES — a viewing control altering a physics number,
+   which is exactly the class of defect this project keeps finding. A regression
+   reads the same 200 steps once and in ten chunks and requires agreement.
+   TWO NEIGHBOURING STATES ARE KEPT APART: no previous reading (or no steps since
+   the last one) reports `undefined`, NOT zero, because zero renders as
+   "perfectly steady" when it means "not measured" — while a residual of EXACTLY
+   zero genuinely IS steady, since Poiseuille converges hard enough that the f32
+   velocity delta underflows to precisely 0. An earlier `residual > 0` guard,
+   there to exclude the no-reading case, therefore made the most converged scene
+   on the tab report NOT steady. The general lesson is this project's oldest one:
+   the answer to "is it settled?" is a number, and if the number does not exist
+   the picture cannot supply it — but the number also has to be independent of
+   the observer, or it is measuring the observer.
+   (iii) **There was no way to test dynamics** — every scene was driven only by
+   its own boundary conditions, so a stability claim rested on flows that never
+   got hit. **Dragging on the 2D slice now stirs the fluid**: a spherical body
+   force through the SAME Guo forcing term a global body force uses, expiring
+   after a few dozen steps. Regressions pin what that MEANS rather than that it
+   does something — momentum goes in, **mass does not change**, the momentum
+   matches the FORCED VOLUME (it is local, not a global force applied everywhere),
+   and the impulse EXPIRES instead of becoming a permanent source. Two things had
+   to be corrected in the measurement rather than the code: the impulse must count
+   down AFTER being applied (decrementing first silently loses the first step,
+   measured as 19/20 of the expected momentum), and the macroscopic field is
+   written MID-STEP, so a reading after N steps shows N−½ applications — the test
+   was wrong about that, not the operator.
+   THE FIRST IMPULSE WAS ARMED PERFECTLY AND WAS STILL INVISIBLE, which is the
+   part worth keeping. At 2e-4 over a radius-2 sphere it touched 33 cells out of
+   27648 — **0.02% of the domain's momentum against a 0.8% natural fluctuation**.
+   Every assertion about it passed; a user dragging on the page would have seen
+   nothing. It is now sized against the flow it must disturb (Δu spans 2.4e-3 to
+   0.096 across the slider, the top comparable to the 0.06 inlet speed, which is
+   as hard as it can push before nearing the 0.3 stability limit) with the radius
+   taken from the smallest lattice dimension so the blob stays a visible fraction
+   of the slice at every resolution.
+   AND THE FALSE FAILURE IT CAUSED IS THE LESSON: the browser check asserted that
+   stirring raised the RESIDUAL — but the residual is normalised over every fluid
+   cell, so **a global metric cannot see a local poke**, and it reported "the stir
+   does nothing" when the stir was fine and the instrument was wrong. The check
+   now compares the velocity change INSIDE the impulse sphere against everywhere
+   else, which is also the only part the browser can uniquely verify (a screen
+   coordinate on a letterboxed canvas → a slice plane → a lattice cell): measured
+   36× at the default strength and 50× at maximum, against the ~1× a mis-mapped
+   coordinate would give. This is the same mistake as the earlier one in the
+   opposite direction — there the number was right and the reading was wrong;
+   here the reading was right and the number could not resolve it.
+   **A FOURTH DEFECT, FOUND IN A SCREENSHOT AND INVISIBLE TO EVERY ERROR
+   ASSERTION IN THE SUITE.** The visual review showed a red error badge on the
+   LattSim page. Reproduced deterministically: **Reset while the run loop is
+   going** destroys the readback staging buffer with a `mapAsync` STILL IN
+   FLIGHT, which rejects with "Buffer was destroyed before mapping was resolved"
+   — and nobody is awaiting it any more, so it lands as an **UNHANDLED
+   REJECTION**. `destroy()` now waits for any in-flight reduce or snapshot to
+   settle; suppressing the rejection instead would make a real teardown bug look
+   identical to a benign race. THE REASON IT HID GENERALISES BEYOND THIS PAGE:
+   **neither Playwright's `pageerror` nor a console listener reports unhandled
+   rejections**, so "zero uncaught page errors" was passing while the live page
+   showed an error badge. The regression now reads the page's OWN error buffer
+   after exactly that sequence — the same instrument the phone shows the owner.
+   **THE SUITE IS NOW TWO TIERS**, because a 12-minute suite gets run less often
+   than it should be and that is a verification problem, not a convenience one.
+   `./test/run.sh` runs QUICK (**1m35**) and `--full` runs everything, passed down
+   as `SUITE`. The split came from measured section timings, not a guess —
+   `engine.test.mjs` alone was 127 s — and the rule is that anything pinning a
+   CONTRACT runs every time (indexing, units, write discipline, conservation, the
+   analytic parabola, the scene view planes, the stir impulse) while the τ sweep,
+   the resolution-convergence study and the long parity runs are `--full`. Run
+   `--full` before pushing anything that touches the solver, the collision
+   operator or the boundaries.
    **DELIBERATELY NOT BUILT YET:** heat, diffusion, elasticity, electromagnetics,
    multiphysics coupling and adaptive resolution are architecture rather than
    code. Operators declare the fields they read and write and the solver rejects

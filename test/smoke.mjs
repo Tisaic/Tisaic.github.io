@@ -27,7 +27,22 @@ function findChrome() {
   throw new Error('No Chromium found. Set CHROME_BIN to a Chrome/Chromium binary.');
 }
 
+// Two tiers, set by test/run.sh. QUICK covers every cheap assertion plus the
+// analytic physics; FULL adds the long-horizon scenarios -- the two-mode
+// anti-slosh convergence and the LattSim scene sweep, resolution ladder and
+// stir/settle checks -- which between them drive several thousand solver steps
+// through a software GPU and a few minutes of control simulation.
+const FULL = process.env.SUITE === 'full';
+
 let failed = 0;
+// Section timing, so "the suite is slow" can be answered with a number instead
+// of a guess. Printed at the end.
+const timings = [];
+let _t0 = Date.now(), _section = 'startup';
+function section(name) {
+  timings.push([_section, Date.now() - _t0]);
+  _section = name; _t0 = Date.now();
+}
 function check(name, cond, detail) {
   const ok = !!cond;
   console.log(`  ${ok ? '✓' : '✗'} ${name}${(!ok && detail) ? '  → ' + detail : ''}`);
@@ -59,6 +74,7 @@ page.on('pageerror', e => pageErrors.push(String(e)));
 
 console.log(`\nSmoke test → ${BASE}\n`);
 
+section('index page');
 // ---- load ----
 await page.goto(BASE, { waitUntil: 'networkidle' });
 await page.waitForTimeout(600);
@@ -105,6 +121,7 @@ await page.screenshot({ path: join(SHOTS, '03-docs.png') });
 
 // ---- NGRC playground (ngrc.html): three.js + Plotly + the ported library ----
 const demoBase = BASE.replace(/index\.html$/, '') + 'ngrc.html';
+section('ngrc load');
 const demo = await ctx.newPage();
 const demoErrors = [];
 demo.on('pageerror', e => demoErrors.push(String(e)));
@@ -156,6 +173,7 @@ await demo.click('.tab[data-tab="pendulum"]');
 await demo.waitForTimeout(3800);
 check('ngrc: soft-sensor warms up', (await demo.textContent('#ss-warm')) === 'yes');
 check('ngrc: soft-sensor estimate error is finite', Number.isFinite(parseFloat(await demo.textContent('#ss-rmse'))));
+if (FULL) {
 // the baselines must be real, and the plant must stay nonlinear
 {
   const kd = await demo.evaluate(() => window.__ssDbg2());
@@ -218,6 +236,7 @@ const fcx = fbox.x + fbox.width / 2, fcy = fbox.y + fbox.height / 2, fr = Math.m
 await demo.mouse.move(fcx + fr, fcy); await demo.mouse.down();
 for (let i = 0; i < 350; i++) { const a = i * 0.1; await demo.mouse.move(fcx + fr * Math.cos(a), fcy + fr * Math.sin(a)); await demo.waitForTimeout(8); }
 await demo.mouse.up();
+// (still inside the FULL block: this check needs the drag performed above)
 check('ngrc: finger-trace learns from a drag (samples > 0)', (parseInt(await demo.textContent('#fg-n')) || 0) > 0);
 // the experiment summary must render, keep the experimental model a black box,
 // and fully specify the three baselines
@@ -271,8 +290,11 @@ check('ngrc: multi-stroke autopilot is path-locked replay', /path-locked replay/
 await demo.waitForTimeout(2500);
 await demo.screenshot({ path: join(SHOTS, '07-multistroke.png') });
 await demo.click('#fg-auto');
+}   // end FULL-only soft-sensor + finger-trace scenarios
 
+section('ngrc tab3 finger');
 // ---- tab 4: anti-slosh axis ----
+if (FULL) {
 await demo.click('.tab[data-tab="slosh"]');
 await demo.waitForTimeout(400);
 await demo.evaluate(() => { const s = document.getElementById('sl-speed'); s.value = 3; s.dispatchEvent(new Event('input', { bubbles: true })); });
@@ -488,6 +510,8 @@ check('ngrc: playground has no errors overall', demoErrors.length === 0, demoErr
 // reference no longer exists" the moment LattSim tries to read anything back.
 await demo.close();
 
+}   // end FULL-only anti-slosh scenarios
+section('ngrc tab4 antislosh');
 const latt = await ctx.newPage();
 const lattErrors = [];
 latt.on('pageerror', e => lattErrors.push(String(e)));
@@ -593,6 +617,8 @@ if (hasGPU && ls0.backend === 'webgpu') {
 check('lattsim: the GPU driver reported no uncaptured errors', (ls0.gpuErrors || []).length === 0,
   JSON.stringify(ls0.gpuErrors));
 
+section('lattsim core');
+if (FULL) {
 // ---- every scene must show something. Reported from a real device: two of the
 // three "did nothing visible". They were all correct; the DEFAULT SLICE PLANE was
 // wrong for them -- Poiseuille varies only across z, so the plane normal to z has
@@ -675,6 +701,138 @@ if (hasGPU && ls0.backend === 'webgpu') {
     volShader.errors.length === 0 && !volShader.scoped, JSON.stringify(volShader));
 }
 
+// ---- Reset must reset the SIMULATION, not the controls. Reported from a real
+// device: pressing it put the view back to 2D and moved the slice.
+{
+  // Drop back to the smallest lattice first: the resolution check above left the
+  // sim at the largest one the device allows, and the stir check below steps
+  // several thousand times on a software GPU.
+  await latt.evaluate(() => {
+    const r = document.getElementById('res'); r.value = '0';
+    r.dispatchEvent(new Event('change'));
+  });
+  await latt.waitForFunction(() => !window.__lsDbg().building, null, { timeout: 120000 });
+  await latt.selectOption('#scene', 'channel');
+  await latt.waitForFunction(() => !window.__lsDbg().building, null, { timeout: 60000 });
+  await latt.selectOption('#axis', '1');
+  await latt.evaluate(() => {
+    const s = document.getElementById('slicep'); s.value = '0.25';
+    s.dispatchEvent(new Event('input'));
+  });
+  const before = await latt.evaluate(() => ({
+    axis: document.getElementById('axis').value,
+    pos: document.getElementById('slicep').value,
+    view: document.getElementById('view').value,
+  }));
+  await latt.click('#reset');
+  await latt.waitForFunction(() => !window.__lsDbg().building, null, { timeout: 60000 });
+  const after = await latt.evaluate(() => ({
+    axis: document.getElementById('axis').value,
+    pos: document.getElementById('slicep').value,
+    view: document.getElementById('view').value,
+    step: window.__lsDbg().step,
+  }));
+  check('lattsim: Reset keeps the view settings', after.axis === before.axis
+    && after.pos === before.pos && after.view === before.view,
+    JSON.stringify({ before, after }));
+  check('lattsim: Reset does restart the simulation', after.step === 0, String(after.step));
+
+  // RESET WHILE RUNNING, which is what a person actually does. A readback is
+  // asynchronous, so tearing the backend down mid-run used to destroy a staging
+  // buffer with a mapAsync in flight and reject it with nobody listening.
+  //
+  // That is an UNHANDLED REJECTION, and it is why this check reads the page's
+  // OWN error buffer rather than trusting the two listeners above: neither
+  // Playwright's `pageerror` nor the console listener reports unhandled
+  // rejections, so every existing error assertion passed while the live page
+  // showed a red error badge on every Reset. It was found in a screenshot.
+  await latt.evaluate(() => { window.__dbg.clear && window.__dbg.clear(); });
+  await latt.click('#run');
+  await latt.waitForTimeout(1200);
+  await latt.click('#reset');
+  await latt.waitForFunction(() => !window.__lsDbg().building, null, { timeout: 60000 });
+  await latt.waitForTimeout(1200);
+  const pageErrs = await latt.evaluate(() =>
+    window.__dbg.buffer().filter((e) => e.type === 'error').map((e) => String(e.text).slice(0, 200)));
+  check('lattsim: resetting while running raises no error, unhandled rejections included',
+    pageErrs.length === 0, pageErrs.join(' | '));
+  if (await latt.evaluate(() => window.__lsDbg().running)) await latt.click('#run');   // leave it paused
+}
+
+// ---- stirring is a physics input, and the residual shows the flow settle again
+{
+  // EVERY RESIDUAL HERE IS READ OVER THE SAME NUMBER OF STEPS. The residual is
+  // per step, so the gaps no longer have to match for the number to mean the
+  // same thing -- but a 20-step window straddling a 24-step impulse averages
+  // very differently from an 800-step one, so matching them keeps the three
+  // readings comparable as measurements rather than just as units. The first
+  // version of this check compared a 600-step gap against a 10-step gap and
+  // "failed" because of the observation window, not the physics.
+  const GAP = 20;
+  const readAfter = async (steps) => {
+    await latt.evaluate((n) => window.__lsStep(n), steps);
+    await latt.evaluate(() => window.__lsDiag());          // anchor the reading
+    await latt.evaluate((n) => window.__lsStep(n), GAP);
+    return latt.evaluate(() => window.__lsDiag());
+  };
+
+  const calm = await readAfter(2400);
+  check('lattsim: the driven channel settles on its own', calm.stable.why === 'steady',
+    `residual/step ${calm.residual.toExponential(2)} — ${calm.stable.state} ${calm.stable.why}`);
+
+  // THE LOCAL CHECK IS THE ONE THAT MATTERS HERE. The node suite already proves
+  // the operator injects momentum, conserves mass and expires. What only the
+  // browser can prove is the chain this page adds: a screen coordinate on a
+  // letterboxed canvas -> a slice plane -> a lattice cell. So compare the
+  // velocity change INSIDE the impulse sphere against everywhere else.
+  //
+  // A global metric cannot do this job. The first version asserted the residual
+  // rose, and a correctly-armed impulse moved it by less than the flow's own
+  // fluctuation -- 33 cells out of 27648 is 0.02% of the momentum. That read as
+  // "the stir does nothing" when the stir was fine and the instrument was wrong.
+  const probe = await latt.evaluate(async () => {
+    const s = document.getElementById('stir'); s.value = s.max; s.dispatchEvent(new Event('input'));
+    const sim = window.__lsSim(), L = sim.lattice, N = L.cellCount;
+    const before = await sim.backend.snapshot('macro');
+    const r = document.getElementById('stage').getBoundingClientRect();
+    window.__lsStir(r.left + r.width * 0.4, r.top + r.height * 0.5, 40, 0);
+    const im = JSON.parse(JSON.stringify(sim.operators[0].params.impulse));
+    window.__lsStep(20);
+    const after = await sim.backend.snapshot('macro');
+    const sp = (m, i) => Math.hypot(m[N + i], m[2 * N + i], m[3 * N + i]);
+    let din = 0, nin = 0, dout = 0, nout = 0;
+    for (let z = 0; z < L.nz; z++) for (let y = 0; y < L.ny; y++) for (let x = 0; x < L.nx; x++) {
+      const i = L.index(x, y, z);
+      const d = Math.hypot(x - im.centre[0], y - im.centre[1], z - im.centre[2]);
+      const dv = Math.abs(sp(after, i) - sp(before, i));
+      if (d <= im.radius) { din += dv; nin++; } else { dout += dv; nout++; }
+    }
+    return { im, size: [L.nx, L.ny, L.nz], inside: din / Math.max(1, nin), outside: dout / Math.max(1, nout), nin };
+  });
+  check('lattsim: a drag arms an impulse at an interior cell, in the drag direction',
+    probe.im.force[0] > 0 && probe.im.radius >= 4 && probe.im.steps > 0
+    && probe.im.centre.every((v, k) => v > 0 && v < probe.size[k] - 1),
+    JSON.stringify({ impulse: probe.im, lattice: probe.size }));
+  // Measured 36x at the default strength and 50x at the maximum; 10x is a floor
+  // well clear of both, and far above the ~1x a mis-mapped coordinate would give.
+  check('lattsim: the momentum lands under the finger, not spread over the domain',
+    probe.inside > probe.outside * 10,
+    `mean d|u| inside ${probe.inside.toExponential(2)} vs outside ${probe.outside.toExponential(2)} `
+    + `(${(probe.inside / probe.outside).toFixed(0)}x over ${probe.nin} cells)`);
+
+  const poked = await latt.evaluate(() => window.__lsDiag());
+  check('lattsim: stirring shows up in the global residual too', poked.residual > calm.residual * 5,
+    `residual/step ${calm.residual.toExponential(2)} -> ${poked.residual.toExponential(2)}`);
+
+  const settled = await readAfter(2400);
+  check('lattsim: the flow settles again after being stirred',
+    settled.residual < poked.residual / 10 && settled.stable.state !== 'diverged',
+    `${poked.residual.toExponential(2)} -> ${settled.residual.toExponential(2)} (${settled.stable.state})`);
+}
+
+}   // end FULL-only LattSim scenarios
+
+section('lattsim scenarios');
 const stats = await latt.textContent('#s-lattice');
 check('lattsim: the lattice is described in the UI', /cells/.test(stats || ''), stats);
 check('lattsim: field memory is reported', /(KiB|MiB)/.test(await latt.textContent('#s-mem')),
@@ -696,5 +854,8 @@ check('lattsim: nothing logged to console.error', lattConsole.length === 0, latt
 
 await browser.close();
 
+section('end');
+console.log('\nSection timings (s):');
+for (const [n, ms] of timings.filter((t) => t[1] > 400)) console.log(`  ${String(Math.round(ms / 1000)).padStart(5)}  ${n}`);
 console.log(`\n${failed === 0 ? 'PASS' : 'FAIL'} — ${failed} check(s) failed. Screenshots in test/screenshots/\n`);
 process.exit(failed === 0 ? 0 : 1);

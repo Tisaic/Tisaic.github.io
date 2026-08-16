@@ -8,7 +8,7 @@
   <title>LattSim — Lattice Physics Engine</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:113,built:"2026-08-16T17:13:31Z"}; // __LATTSIM_STAMP__</script>
+  <script>window.__BUILD = {version:114,built:"2026-08-16T20:41:44Z"}; // __LATTSIM_STAMP__</script>
   <script src="console-boot.js"></script>
 
   <style>
@@ -99,6 +99,16 @@
       <select id="scene" aria-label="Scene"></select>
     </div>
     <div class="controls">
+      <label class="slider">Stir strength <input type="range" id="stir" min="0.2" max="8" step="0.2" value="2" />
+        <span class="v" id="stir-v">2.0×</span></label>
+    </div>
+    <p class="lead" style="margin-top:4px"><b>Drag on the 2D slice to stir the fluid.</b> That applies a
+      real body force in a sphere of lattice cells for a few dozen steps — momentum goes into the momentum
+      field and is then transported by the same operator as everything else. Watch the
+      <b>residual</b> row: it is how far the velocity field moves <i>per step</i>, so you can watch a run
+      settle back to steady after you poke it rather than guessing from the picture. Per step, so it means
+      the same thing whatever you set steps-per-frame to.</p>
+    <div class="controls">
       <select id="view" aria-label="View"></select>
       <select id="mode" aria-label="Field"></select>
       <select id="axis" aria-label="Slice axis">
@@ -131,6 +141,7 @@
       <dt>|momentum|</dt><dd id="s-mom">—</dd>
       <dt>density range</dt><dd id="s-rho">—</dd>
       <dt>max |u| (lattice)</dt><dd id="s-umax">—</dd>
+      <dt>residual |Δu|/|u| per step</dt><dd id="s-res">—</dd>
       <dt>stability</dt><dd id="s-stable">—</dd>
       <dt>Reynolds</dt><dd id="s-re">—</dd>
     </dl>
@@ -286,7 +297,10 @@
       for (const [v, l] of opts) {
         const o = document.createElement('option'); o.value = v; o.textContent = l; $('view').appendChild(o);
       }
-      state.view = opts[0][0];
+      // KEEP the user's choice across rebuilds. Reset means "reset the
+      // simulation", not "put the controls back". Only fall back when the
+      // current choice is no longer offered (no GPU).
+      if (!opts.some(([v]) => v === state.view)) state.view = opts[0][0];
       $('view').value = state.view;
     }
 
@@ -338,14 +352,20 @@
         state.camera.attach($('stage'), () => { if (!state.running) drawOnce(); });
         state.cameraAttached = true;
       }
-      // Each scene knows which plane shows its physics. Poiseuille varies only
-      // across z, so the default slice normal to z is a single flat colour and
-      // the simulation looks broken while being exactly right.
-      const v = (sim.meta && sim.meta.view) || {};
-      if (v.sliceAxis !== undefined) $('axis').value = String(v.sliceAxis);
-      if (v.slicePosition !== undefined) {
-        $('slicep').value = String(v.slicePosition);
-        $('slicep-v').textContent = Math.round(v.slicePosition * 100) + '%';
+      // Each scene knows which plane shows its physics (Poiseuille varies only
+      // across z, so the default slice normal to z is one flat colour while being
+      // exactly right). Applied only when the SCENE CHANGES -- a Reset, a
+      // resolution change or a tau change must not move the controls the user
+      // just set.
+      const sceneChanged = state.lastScene !== $('scene').value;
+      state.lastScene = $('scene').value;
+      if (sceneChanged) {
+        const v = (sim.meta && sim.meta.view) || {};
+        if (v.sliceAxis !== undefined) $('axis').value = String(v.sliceAxis);
+        if (v.slicePosition !== undefined) {
+          $('slicep').value = String(v.slicePosition);
+          $('slicep-v').textContent = Math.round(v.slicePosition * 100) + '%';
+        }
       }
       $('s-re').textContent = sim.meta && sim.meta.reynolds ? sim.meta.reynolds.toFixed(0) : '—';
       state.lastStep = 0; state.lastT = performance.now();
@@ -414,6 +434,9 @@
       $('s-mom').textContent = Math.hypot(...d.momentum).toExponential(3);
       $('s-rho').textContent = `${d.rhoMin.toFixed(5)} … ${d.rhoMax.toFixed(5)}`;
       $('s-umax').textContent = d.uMax.toFixed(5);
+      $('s-res').innerHTML = d.residual === undefined ? '—'
+        : `<span class="${d.residual < 1e-3 ? 'good' : ''}">${d.residual.toExponential(2)}</span>`
+          + (d.residual < 1e-3 ? ' — steady' : '');
       const cls = { ok: 'good', marginal: 'warn', unstable: 'warn', diverged: 'bad' }[d.stable.state];
       $('s-stable').innerHTML = `<span class="${cls}">${d.stable.state}</span>` + (d.stable.why ? ` — ${d.stable.why}` : '');
       if (d.stable.state === 'diverged') stop();
@@ -439,6 +462,95 @@
 
     function start() { if (state.running) return; state.running = true; $('run').textContent = 'Pause ⏸'; state.lastT = performance.now(); state.raf = requestAnimationFrame(tick); }
     function stop() { state.running = false; $('run').textContent = 'Run ▶'; if (state.raf) cancelAnimationFrame(state.raf); state.raf = 0; }
+
+    // ---------------------------------------------------------------- stir
+    // Map a pointer position on the slice canvas to a lattice cell and apply a
+    // momentum impulse there. This is a physics input, not a paint tool: the
+    // force enters the same Guo forcing term a body force uses.
+    const STIR_STEPS = 24;
+    function stirAt(clientX, clientY, dragX, dragY) {
+      if (!state.sim || state.view !== 'slice') return;
+      const cv = $('cv');
+      const r = cv.getBoundingClientRect();
+      // object-fit: contain -- work out the letterboxed drawing rectangle.
+      const sx = r.width / cv.width, sy = r.height / cv.height;
+      const sc = Math.min(sx, sy);
+      const dw = cv.width * sc, dh = cv.height * sc;
+      const ox = r.left + (r.width - dw) / 2, oy = r.top + (r.height - dh) / 2;
+      const px = (clientX - ox) / sc, py = (clientY - oy) / sc;
+      if (px < 0 || py < 0 || px >= cv.width || py >= cv.height) return;
+
+      const L = state.sim.lattice;
+      const axis = state.slice.axis;
+      const a = Math.floor(px);
+      const b = Math.floor(cv.height - 1 - py);          // the renderer flips vertically
+      const k = Math.round(state.slice.position * (L.size[axis] - 1));
+      const c = [0, 0, 0];
+      if (axis === 0) { c[0] = k; c[1] = a; c[2] = b; }
+      else if (axis === 1) { c[0] = a; c[1] = k; c[2] = b; }
+      else { c[0] = a; c[1] = b; c[2] = k; }
+
+      // Direction: the drag, mapped into the two in-plane axes. A tap with no
+      // drag pushes along the plane's first axis.
+      const [a1, a2] = axis === 0 ? [1, 2] : axis === 1 ? [0, 2] : [0, 1];
+      const mag = Math.hypot(dragX, dragY) || 1;
+      const f = [0, 0, 0];
+      // SIZED AGAINST THE FLOW IT HAS TO DISTURB, not picked. The impulse runs
+      // for STIR_STEPS, so it changes the local velocity by about
+      // force * STIR_STEPS / rho. The first version used 2e-4 over a radius-2
+      // sphere: 33 cells out of 27648, worth 0.02% of the domain's momentum
+      // against a 0.8% natural fluctuation -- armed correctly, and completely
+      // invisible. At 5e-4 the slider spans dU 2.4e-3 to 0.096, i.e. from
+      // "barely" to "comparable to the 0.06 inlet speed", which is as hard as it
+      // can push before the lattice velocity approaches the 0.3 stability limit.
+      const strength = +$('stir').value * 5e-4;
+      f[a1] = strength * (dragX / mag);
+      f[a2] = strength * (-dragY / mag);
+
+      const op = state.sim.operators[0];
+      if (op && op.stir) {
+        // Radius from the SMALLEST lattice dimension, so the blob is a visible
+        // fraction of the slice at every resolution rather than a few cells.
+        const r = Math.max(4, Math.round(Math.min(L.nx, L.ny, L.nz) * 0.15));
+        op.stir({ centre: c, radius: r, force: f, steps: STIR_STEPS });
+        if (state.sim.backend.kind === 'webgpu') {
+          const kern = state.sim.solver.kernels[0].kernel;
+          if (kern.uploadParams) kern.uploadParams();
+        }
+      }
+    }
+
+    (() => {
+      const stage = $('stage');
+      let last = null, dragged = false;
+      const pt = (e) => (e.touches && e.touches[0]) || e;
+      const down = (e) => { const p = pt(e); last = [p.clientX, p.clientY]; dragged = false; };
+      const move = (e) => {
+        if (!last) return;
+        const p = pt(e);
+        stirAt(p.clientX, p.clientY, p.clientX - last[0], p.clientY - last[1]);
+        last = [p.clientX, p.clientY];
+        dragged = true;
+        if (e.cancelable) e.preventDefault();
+      };
+      // A TAP is a stir too -- push along the plane's first axis, since there is
+      // no drag to take a direction from. A DRAG must not get one as well: its
+      // last move already applied the impulse the user aimed, and adding a fixed
+      // sideways push at release would contradict it.
+      const up = () => {
+        if (last && !dragged) stirAt(last[0], last[1], 1, 0);
+        last = null; dragged = false;
+      };
+      stage.addEventListener('touchstart', down, { passive: true });
+      stage.addEventListener('touchmove', move, { passive: false });
+      stage.addEventListener('touchend', up, { passive: true });
+      stage.addEventListener('mousedown', down);
+      window.addEventListener('mousemove', (e) => { if (last) move(e); });
+      window.addEventListener('mouseup', up);
+    })();
+
+    $('stir').addEventListener('input', () => { $('stir-v').textContent = (+$('stir').value).toFixed(1) + '×'; });
+    window.__lsStir = (cx, cy, dx, dy) => stirAt(cx, cy, dx, dy);
 
     $('run').addEventListener('click', () => (state.running ? stop() : start()));
     $('reset').addEventListener('click', () => build());
@@ -504,6 +616,7 @@
     window.__lsDiag = async () => (state.sim ? state.sim.diagnostics() : null);
     window.__lsStep = (n) => { if (state.sim) state.sim.advance(n); };
     window.__lsDraw = () => drawOnce();
+    window.__lsSim = () => state.sim;
     window.__lsUnits = UnitSystem;
 
     probeLimits()

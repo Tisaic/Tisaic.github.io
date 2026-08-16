@@ -111,6 +111,17 @@ browser this was developed against.
 The Verify tab runs the same protocol in the browser against whichever backend
 is live, which is the only way the WGSL kernel gets exercised on real hardware.
 
+**Two tiers.** `./test/run.sh` runs the *quick* tier by default and
+`./test/run.sh --full` runs everything; the level is passed down as `SUITE`. The
+split was made from measured section timings rather than guessed: the τ sweep,
+the resolution-convergence study and the long GPU/CPU parity runs are most of the
+runtime and none of them can regress from an ordinary edit, so they are `--full`.
+Everything that pins a *contract* — indexing, units, write discipline,
+conservation, the analytic parabola, the scene view planes, the stir impulse —
+runs every time. Quick is **~1m35** against 12+ minutes before. Run `--full`
+before pushing anything that touches the solver, the collision operator or the
+boundaries.
+
 ## Known limits, measured
 
 **The collision operator is BGK/SRT**, and with a single relaxation time the
@@ -175,6 +186,106 @@ involved. So `VolumeRenderer.render()` returns `false` rather than throwing and
 the page falls back to the slice view, a visualisation being unable to take a
 simulation with it; the suite compiles the volume shader (where a WGSL mistake
 would live) and leaves the picture to a real device.
+
+## Poking it, and knowing when it has settled
+
+**A steady state is a claim, and it needs an instrument.** "The obstacle scene
+does not settle" is not answerable from a picture: a converged flow and one still
+slowly drifting look identical. `diagnostics()` therefore reports a **residual** —
+‖Δu‖ over ‖u‖ **per step** — and `assess()` promotes a run to `ok — steady` below
+1e-3. It is computed **on-device** in the same reduction pass as the mass and
+momentum sums (`REDUCE_STRIDE = 12` with a `macPrev` binding), so it costs no
+extra readback; the CPU reference keeps its own previous copy.
+
+**Per step, and that is not cosmetic.** The backends can only report the change
+between successive *readings*, which grows with however many steps happened in
+between — so an unnormalised residual would change when the steps-per-frame
+slider moved, i.e. a *viewing* control would alter a convergence number while the
+physics did not. `Simulation.diagnostics()` divides by the elapsed steps, and a
+regression reads the same 200 steps of the same run once and in ten chunks and
+requires the two to agree.
+
+Two neighbouring states that are easy to conflate, and are kept apart: a reading
+with **no previous reading** (or no steps since the last one) reports `undefined`,
+not zero, because zero would render as "perfectly steady" when it means "not
+measured". And a residual of **exactly zero** *is* steady — Poiseuille converges
+hard enough that the f32 velocity delta underflows to precisely 0, and an earlier
+`residual > 0` guard made the most converged scene on the tab report *not*
+steady.
+
+The threshold is measured rather than picked. Per-step residual against step
+count, CPU reference at resolution 16:
+
+| step | channel + obstacle | Poiseuille | cavity |
+|---|---|---|---|
+| 200 | 1.3e-2 | 2.1e-3 | 1.2e-3 |
+| 580 | 1.8e-3 | 7.1e-5 | 7.7e-5 |
+| 1000 | 5.0e-4 | 2.1e-6 | 7.2e-7 |
+| 2860 | 3.6e-7 | 0 | 4.3e-8 |
+| 4840 | 1.1e-8 | 0 | 4.0e-8 |
+
+Five decades over a few thousand steps, so 1e-3 separates "still developing" from
+"converged" with room on both sides. **The channel does settle** — the report that
+it did not was unanswerable rather than wrong.
+
+**Stirring is a physics input, not a paint tool.** `LBMFluidOperator.stir({
+centre, radius, force, steps })` arms a spherical body force that enters the same
+Guo forcing term a global body force uses, and expires after `steps`. The regressions
+pin what that means rather than that it does something: momentum goes in, **mass
+does not change**, the momentum is confined to the forced volume (it is local, not
+a global force applied everywhere), and the impulse **stops** rather than becoming a
+permanent source.
+
+One measured subtlety, kept because it bit once: the macroscopic field is written
+mid-step, so a reading taken after N steps shows **N − ½** applications, not N.
+The off-by-a-half is in the observation, not in the operator — the test was
+corrected, not the code. The impulse counts down *after* being used, so the first
+armed step is applied.
+
+**The impulse is sized against the flow it has to disturb.** It runs for 24
+steps, so it changes the local velocity by roughly `force × 24 / ρ`. The first
+version used 2e-4 over a radius-2 sphere: 33 cells out of 27 648, worth **0.02%
+of the domain's momentum against a 0.8% natural fluctuation** — armed perfectly
+correctly, and completely invisible. It now spans Δu 2.4e-3 to 0.096 across the
+slider, the top of that being comparable to the 0.06 inlet speed, which is about
+as hard as it can push before the lattice velocity approaches the 0.3 stability
+limit. The radius comes from the smallest lattice dimension so the blob stays a
+visible fraction of the slice at every resolution.
+
+**A global metric cannot detect a local poke, and that cost a false failure.**
+The browser check first asserted that stirring raised the residual — but the
+residual is normalised over every fluid cell, so a correct impulse moved it by
+less than the flow's own fluctuation and the test reported "the stir does
+nothing" when the stir was fine and the *instrument* was wrong. The check now
+compares the velocity change **inside** the impulse sphere against everywhere
+else, which is also the only part of this the browser can uniquely verify: a
+screen coordinate on a letterboxed canvas → a slice plane → a lattice cell.
+Measured **36×** inside-vs-outside at the default strength and **50×** at the
+maximum, against the ~1× a mis-mapped coordinate would give. With the impulse
+resized the residual does now register it too (2.0e-4 → 3.3e-3 per step, falling
+back to 8.6e-7 once it settles).
+
+**Never destroy a buffer that is being mapped.** A readback is asynchronous, so
+pressing Reset while the run loop is going tore down the staging buffer with a
+`mapAsync` in flight. It rejects with *"Buffer was destroyed before mapping was
+resolved"* — and nobody is awaiting it any more, so it lands as an **unhandled
+rejection**: a red error badge on the page on every Reset while running,
+reproducible every time. `destroy()` now waits for any in-flight reduce or
+snapshot to settle rather than swallowing the error, because a suppressed
+rejection would make a real teardown bug look identical to a benign race.
+
+It was invisible to the suite, and the reason generalises: **neither
+Playwright's `pageerror` nor a console listener reports unhandled rejections**,
+so every error assertion passed while the live page showed an error badge. It was
+found by looking at a screenshot. The regression now reads the page's *own* error
+buffer after exactly that sequence.
+
+**Reset resets the simulation, not the controls.** 2D/3D, the field selector, the
+slice axis and the slice position survive a Reset, a resolution change and a τ
+change. A scene's declared view defaults are applied only when the *scene itself*
+changes, and the view selector falls back only when the current choice is no
+longer offered (no GPU). Smoke checks pin both halves — that the settings stay and
+that the step counter really did restart.
 
 ## Sizing
 
