@@ -8,7 +8,7 @@
   <title>LattSim — Lattice Physics Engine</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:115,built:"2026-08-16T20:56:38Z"}; // __LATTSIM_STAMP__</script>
+  <script>window.__BUILD = {version:116,built:"2026-08-16T21:24:07Z"}; // __LATTSIM_STAMP__</script>
   <script src="console-boot.js"></script>
 
   <style>
@@ -305,7 +305,12 @@
     }
 
     async function build() {
-      if (state.building) return;
+      // A REBUILD ASKED FOR WHILE ONE IS RUNNING IS QUEUED, NOT DROPPED. On a
+      // phone a rebuild takes seconds, and silently ignoring the tap is exactly
+      // what "Reset doesn't work sometimes" looks like from the outside. One
+      // pending slot is enough: the controls are read at the START of a build,
+      // so a single trailing rebuild picks up whatever they say by then.
+      if (state.building) { state.buildQueued = true; return; }
       state.building = true;
       try { await buildInner(); } catch (e) {
         // A failed build must never leave the page without a simulation. Say what
@@ -315,11 +320,15 @@
         $('backend-badge').className = 'badge bad';
         $('s-backend').textContent = 'build failed: ' + (e && e.message ? e.message : e);
       } finally { state.building = false; }
+      if (state.buildQueued) { state.buildQueued = false; await build(); }
     }
 
     async function buildInner() {
       stop();
-      if (state.sim) { try { state.sim.destroy(); } catch (e) { console.warn(e); } }
+      // AWAITED, because teardown can be deferred past an in-flight readback and
+      // the replacement lattice is about to be allocated. Both resident at once
+      // is the difference between fitting and failing to build on a phone.
+      if (state.sim) { try { await state.sim.destroy(); } catch (e) { console.warn(e); } state.sim = null; }
       if (state.volume) { try { state.volume.destroy(); } catch (e) { /* gone with the device */ } state.volume = null; }
 
       const res = clampResolution();
@@ -370,6 +379,25 @@
       $('s-re').textContent = sim.meta && sim.meta.reynolds ? sim.meta.reynolds.toFixed(0) : '—';
       state.lastStep = 0; state.lastT = performance.now();
       applyView();
+      // THE VOLUME RENDERER IS BOUND TO A SIMULATION, so a rebuild destroys it --
+      // and it therefore has to be REBUILT HERE. It used to be created only by
+      // the view selector's change handler, so pressing Reset (or moving
+      // resolution, tau or inlet speed) while in 3D left state.volume null and
+      // drawOnce() returned early: a dead 3D view, no error, no way back except
+      // toggling the view selector.
+      //
+      // It was invisible until v114 for an unfortunate reason: before that,
+      // every build reset the view to the 2D slice, so the 3D view was never
+      // live across a rebuild. Preserving the view is the right behaviour and it
+      // is what exposed this.
+      if (state.view === 'volume' && gpu) {
+        try {
+          await ensureVolume();
+        } catch (e) {
+          console.warn('volume renderer unavailable after rebuild:', e);
+          state.view = 'slice'; $('view').value = 'slice'; applyView();
+        }
+      }
       await drawOnce();
       await refreshStats();
     }
@@ -611,6 +639,11 @@
       running: state.running,
       building: state.building,
       view: state.view,
+      // Whether a renderer actually exists for the CURRENT view. A 3D view with
+      // no volume renderer draws nothing and says nothing, which is what a
+      // rebuild used to leave behind.
+      rendererReady: state.view === 'volume' ? !!state.volume : true,
+      queued: !!state.buildQueued,
       slice: state.slice.lastStats,
     });
     window.__lsDiag = async () => (state.sim ? state.sim.diagnostics() : null);

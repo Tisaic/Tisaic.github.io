@@ -266,6 +266,33 @@ the shipped commit carries the correct version.
    rejections**, so "zero uncaught page errors" was passing while the live page
    showed an error badge. The regression now reads the page's OWN error buffer
    after exactly that sequence — the same instrument the phone shows the owner.
+   **THREE MORE FROM THE DEVICE (v116) — "3d is broken, reset is not working
+   consistently" — AND THE FIRST WAS CAUSED BY THE v114 FIX ABOVE.**
+   (i) **A RENDERER IS BOUND TO A SIMULATION, so a rebuild has to rebuild it
+   too.** The volume renderer was destroyed by every rebuild and recreated ONLY
+   by the view selector's change handler, so pressing Reset in 3D left it null
+   and `drawOnce()` returned early — a dead view, NO error, no way back except
+   toggling the selector. It could not show before v114, because every build then
+   reset the view to the 2D slice, so the 3D view was never live across a
+   rebuild. Preserving the view is correct and it is what exposed a lifecycle
+   that had never been exercised. Measured before/after with the page's own debug
+   hook: after Reset in 3D, `{view:'volume', ready:false}` → `{ready:true}`.
+   THE CAUTION GENERALISES: a fix that makes state survive an operation makes
+   every not-rebuilt dependency of that state reachable for the first time.
+   (ii) **A rebuild asked for DURING a rebuild was DROPPED** — `build()` returned
+   early while one was in flight, and on a phone a rebuild takes seconds, so the
+   tap simply vanished. That is precisely what "Reset doesn't work consistently"
+   looks like from outside. It is now queued (one pending slot; the controls are
+   read at the start of a build, so one trailing rebuild suffices).
+   (iii) **Teardown had to become awaitable.** v114's deferred `destroy()` (which
+   fixed the unhandled rejection) returns before the buffers are freed, so the
+   page was allocating the replacement lattice while the old one was still
+   resident — at high resolution on a phone, the difference between fitting and
+   failing to build. `destroy()` now returns a promise and the page awaits it.
+   THE 3D PICTURE IS STILL VERIFIED ONLY ON A REAL DEVICE; what the suite pins is
+   the LIFECYCLE, which is where the defect was — and that check runs LAST on a
+   THROWAWAY PAGE, because entering the 3D view under a software adapter destroys
+   the WebGPU instance and would poison every check after it.
    **THE SUITE IS NOW TWO TIERS**, because a 12-minute suite gets run less often
    than it should be and that is a verification problem, not a convenience one.
    `./test/run.sh` runs QUICK (**1m35**) and `--full` runs everything, passed down

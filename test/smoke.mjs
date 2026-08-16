@@ -778,6 +778,26 @@ if (hasGPU && ls0.backend === 'webgpu') {
     JSON.stringify({ before, after }));
   check('lattsim: Reset does restart the simulation', after.step === 0, String(after.step));
 
+  // A REBUILD ASKED FOR MID-REBUILD MUST NOT BE SWALLOWED. build() used to
+  // return early while one was in flight, so on a phone -- where a rebuild takes
+  // seconds -- a Reset tap simply vanished. That is what "Reset doesn't work
+  // consistently" looks like from the outside.
+  const queued = await latt.evaluate(async () => {
+    const before = window.__lsDbg().step;
+    window.__lsStep(50);
+    document.getElementById('reset').click();
+    document.getElementById('reset').click();   // second tap lands mid-rebuild
+    const sawQueue = window.__lsDbg().queued || window.__lsDbg().building;
+    return { before, sawQueue };
+  });
+  await latt.waitForFunction(() => !window.__lsDbg().building && !window.__lsDbg().queued,
+    null, { timeout: 120000 });
+  const afterQueue = await latt.evaluate(() => window.__lsDbg());
+  check('lattsim: a Reset pressed during a rebuild is queued, not dropped',
+    queued.sawQueue && afterQueue.step === 0 && afterQueue.cells > 0,
+    JSON.stringify({ queued, step: afterQueue.step, cells: afterQueue.cells }));
+
+
   // RESET WHILE RUNNING, which is what a person actually does. A readback is
   // asynchronous, so tearing the backend down mid-run used to destroy a staging
   // buffer with a mapAsync in flight and reject it with nobody listening.
@@ -892,6 +912,51 @@ await latt.screenshot({ path: join(SHOTS, '10-lattsim-arch.png') });
 
 check('lattsim: no errors overall', lattErrors.length === 0, lattErrors.join(' | '));
 check('lattsim: nothing logged to console.error', lattConsole.length === 0, lattConsole.join(' | '));
+
+// ---- THE 3D VIEW MUST SURVIVE A REBUILD.
+//
+// The volume renderer is bound to a simulation, so a rebuild destroys it -- and
+// it was only ever recreated by the view selector's change handler. Pressing
+// Reset in 3D therefore left it null and drawOnce() returned early: a dead view,
+// no error, no way back except toggling the selector. Invisible before v114
+// only because every build used to reset the view to the 2D slice.
+//
+// RUN LAST AND ON ITS OWN PAGE, DELIBERATELY. Entering this view here calls
+// getCurrentTexture() on a software adapter, which does not merely fail -- it
+// destroys the WebGPU instance, and every compute call after it fails too. That
+// is why the rest of the suite never switches to it. Isolating it to a
+// throwaway page at the very end keeps the blast radius to itself.
+//
+// The PICTURE is still unverifiable here and is checked on a real device. What
+// IS checked is the LIFECYCLE, which is where the bug actually was: after a
+// rebuild the page must either hold a live renderer or have fallen back to the
+// slice -- never sit in 3D with nothing to draw with.
+if (FULL) {
+  const v3d = await ctx.newPage();
+  try {
+    await v3d.goto(BASE.replace(/index\.html$/, '') + 'lattsim.html', { waitUntil: 'networkidle' });
+    await v3d.waitForFunction(() => window.__lsDbg && !window.__lsDbg().building && window.__lsDbg().cells > 0,
+      null, { timeout: 120000 });
+    const has3D = await v3d.evaluate(() =>
+      [...document.getElementById('view').options].some((o) => o.value === 'volume'));
+    if (has3D) {
+      await v3d.selectOption('#view', 'volume');
+      await v3d.waitForTimeout(800);
+      await v3d.click('#reset');
+      await v3d.waitForFunction(() => !window.__lsDbg().building, null, { timeout: 120000 });
+      await v3d.waitForTimeout(600);
+      const st = await v3d.evaluate(() => window.__lsDbg());
+      check('lattsim: after a rebuild the 3D view has a renderer or has fallen back to the slice',
+        st.view !== 'volume' || st.rendererReady,
+        JSON.stringify({ view: st.view, rendererReady: st.rendererReady }));
+    } else {
+      console.log('  (3D view not offered here — nothing to check)');
+    }
+  } catch (e) {
+    check('lattsim: the 3D lifecycle check ran', false, String(e).slice(0, 200));
+  }
+  await v3d.close().catch(() => {});
+}
 
 await browser.close();
 

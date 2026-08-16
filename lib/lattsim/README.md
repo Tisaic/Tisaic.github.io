@@ -280,6 +280,30 @@ so every error assertion passed while the live page showed an error badge. It wa
 found by looking at a screenshot. The regression now reads the page's *own* error
 buffer after exactly that sequence.
 
+**A renderer is bound to a simulation, so a rebuild has to rebuild it too.** The
+volume renderer was destroyed by every rebuild and recreated only by the view
+selector's change handler, so pressing Reset in 3D left it null and `drawOnce()`
+returned early: a dead view, no error, no way back short of toggling the
+selector. `buildInner()` now recreates it when the current view needs it, falling
+back to the slice if that fails.
+
+This one is a caution about fixing things: it was **created by preserving the
+view across Reset**. Before that, every build forced the view back to the 2D
+slice, so the 3D view was never live across a rebuild and the missing
+re-creation could not show. Preserving the view is right; it simply exposed a
+lifecycle that had never been exercised.
+
+**A rebuild requested during a rebuild is queued, not dropped.** `build()`
+returned early while one was in flight. On a phone a rebuild takes seconds, so a
+Reset tap in that window silently vanished — which is exactly what "Reset doesn't
+work consistently" looks like from the outside. One pending slot is enough, since
+the controls are read at the start of a build.
+
+**Teardown is awaitable.** `destroy()` can defer past an in-flight readback, so
+callers about to allocate a replacement simulation must await it — otherwise the
+old lattice and the new one are resident at once, which at high resolution on a
+phone is the difference between fitting and failing to build.
+
 **Reset resets the simulation, not the controls.** 2D/3D, the field selector, the
 slice axis and the slice position survive a Reset, a resolution change and a τ
 change. A scene's declared view defaults are applied only when the *scene itself*
