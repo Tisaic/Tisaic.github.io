@@ -11,7 +11,7 @@
   <title>Android Chrome Test Page</title>
 
   <!-- Debug console bootstrap (shared with ngrc.html); version stamp below. -->
-  <script>window.__BUILD = {version:111,built:"2026-08-09T20:54:30Z"}; // __STAMP__</script>
+  <script>window.__BUILD = {version:112,built:"2026-08-16T15:49:59Z"}; // __STAMP__</script>
   <script src="console-boot.js"></script>
 
   <!-- Self-hosted markdown renderer (marked v12) for the doc viewers. -->
@@ -56,6 +56,8 @@
     #doc-all { bottom: 68px; }
     #ngrc-launch { bottom: 122px; text-decoration: none; }
     #ngrc-launch svg { color: #a5b4fc; }
+    #lattsim-launch { bottom: 176px; text-decoration: none; }
+    #lattsim-launch svg { color: #7dd3fc; }
 
     /* ---- doc viewer overlay ---- */
     #doc-view { position: fixed; inset: 0; z-index: 2147483647; background: #0b1220;
@@ -110,6 +112,11 @@
   <a class="doc-launch" id="ngrc-launch" href="ngrc.html" aria-label="NGRC playground">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
     <span class="lbl">NGRC</span>
+  </a>
+
+  <a class="doc-launch" id="lattsim-launch" href="lattsim.html" aria-label="LattSim lattice physics engine">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg>
+    <span class="lbl">LATT</span>
   </a>
 
   <footer>Tisaic.github.io · built for in-browser test workflows</footer>

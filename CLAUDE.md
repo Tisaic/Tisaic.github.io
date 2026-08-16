@@ -46,6 +46,8 @@ the shipped commit carries the correct version.
 | `index.html` | The main app: header, debug console, doc viewers, NGRC launcher. |
 | `console-boot.js` | The debug-console bootstrap, **shared** by `index.html` and `ngrc.html` (loaded first in `<head>`). |
 | `ngrc.html` | NGRC playground: 4-tab interactive demo (Lorenz forecaster, soft-sensor, finger-trace, anti-slosh axis) using `lib/ngrc`. |
+| `lattsim.html` | LattSim: GPU lattice-field physics engine (Simulate / Verify / Architecture) using `lib/lattsim`. Self-contained — shares nothing with NGRC. |
+| `lib/lattsim/` | The lattice field engine: lattice, fields, materials, operators, solver, WebGPU + CPU backends, renderers (see `lib/lattsim/README.md`). |
 | `lib/ngrc/` | The ported NGRC library (see `lib/ngrc/README.md`). |
 | `version.json` | Server-side build manifest for stale-page detection. |
 | `docs-manifest.json` | Generated list of every `.md` file, for the Docs viewer. |
@@ -54,7 +56,8 @@ the shipped commit carries the correct version.
 | `vendor/three.module.js` | Self-hosted three.js (r160) for the 3D demos. |
 | `vendor/plotly-basic.min.js` | Self-hosted Plotly (basic bundle) for the demo charts. |
 | `test/run.sh` | Dev-only: NGRC unit tests + serves the repo + runs the smoke test in a mobile Chromium. |
-| `test/smoke.mjs` | Playwright checks + screenshots for the console, doc viewer, and NGRC demo. |
+| `test/smoke.mjs` | Playwright checks + screenshots for the console, doc viewer, NGRC demo, and LattSim. |
+| `test/lattsim/` | Node tests for the lattice engine: stencil isotropy, indexing/units, conservation (f32 + f64), Poiseuille vs the analytic parabola. |
 | `CLAUDE.md` | This file. |
 
 ## Features on the page
@@ -81,7 +84,76 @@ the shipped commit carries the correct version.
    and files are split into two groups: **◆ CLAUDE context** (any `CLAUDE.md`,
    shown with an indigo tag) and **Docs** (everything else). Opens `CLAUDE.md`
    by default so the current state is one tap away.
-4. **NGRC playground** (bottom-right `NGRC` launcher → `ngrc.html`) — a 4-tab
+4. **LattSim** (bottom-right `LATT` launcher → `lattsim.html`) — a
+   **GPU lattice-field physics engine**, architecturally independent of NGRC
+   (own directory, own tests, no shared code or vendored libraries). The lattice
+   is the PHYSICAL REPRESENTATION, not a visualisation of something else: there
+   are no particles, and a moving mass is a pattern in the density and momentum
+   fields transported between neighbouring cells. Phase 1 ships a **D3Q19
+   lattice Boltzmann fluid** as the first physics operator on a general
+   Simulation → Lattice / Fields / Materials / PhysicsOperators / Boundaries /
+   Solver / Backends architecture. Indexing is `x + Nx·(y + Ny·z)` in JS, WGSL,
+   boundaries and rendering; fields are structure-of-arrays so adjacent GPU
+   threads touch adjacent memory. Three tabs: **Simulate** (channel + obstacle,
+   Poiseuille, lid-driven cavity; 2D slice on any backend, WebGPU raymarched
+   volume where available; resolution / τ / inlet speed / steps-per-frame /
+   slice controls; live mass, momentum, density range, max|u|, MLUPS and a
+   named STABILITY VERDICT), **Verify** (the analytic checks run in-browser
+   against whichever backend is live), and **Architecture**.
+   **TWO BACKENDS, AND THE SECOND ONE IS NOT A FALLBACK BOLTED ON.** Per-cell
+   physics runs in WGSL compute shaders. But a solver that only executes on
+   hardware the test environment lacks ships unverified, and this repo's headless
+   Chromium reaches WebGPU only behind `--enable-unsafe-webgpu`, only on a secure
+   origin, and only as a SwiftShader software adapter — and not at all in plain
+   Node. So a **CPU reference** implements the same equations from the same
+   constants (`d3q19.js` is the single source of truth; the WGSL is GENERATED
+   from it, so a shader cannot carry its own copy of 1/36). It runs the analytic
+   checks in Node on every test run, is what the page uses where WebGPU is
+   absent, and where a GPU exists the two are **compared cell by cell**.
+   **THAT PARITY CHECK EARNED ITS PLACE ON ITS FIRST RUN**: the production kernel
+   was emitting zeros because `macro` is a RESERVED WORD in WGSL, every shader
+   failed to compile, and WebGPU reports that asynchronously WITHOUT THROWING —
+   an invalid module yields an invalid pipeline, dispatches are dropped, and the
+   simulation runs at full speed producing nothing. Nothing else would have
+   caught it: no page error, no exception, and `uncapturederror` did not fire in
+   that browser. The engine now compiles every shader up front and refuses to
+   build on an error, and runs one dispatch of each kernel inside an explicit
+   error scope. Two further silent defects came out the same way — a uniform
+   buffer sized 48 bytes where WGSL's vec3 alignment needs 64 (invalid bind
+   group, dropped command buffer, zeros again), and a canvas asked for both a
+   `2d` and a `webgpu` context, where the second silently returns null.
+   **VERIFIED, NOT ASSERTED.** `test/lattsim/` checks the stencil's isotropy
+   conditions (Σw = 1, Σwc = 0, Σwc⊗c = cs²I), indexing round-trips, the unit
+   system, the solver's write-discipline rules, conservation, and Poiseuille
+   flow against its closed form. Conservation is run at **both f32 and f64**
+   deliberately: the f32 residual (~1e-8) is either arithmetic or a leak and the
+   number alone cannot say which, so the f64 run is the instrument that
+   separates them — it collapses seven decades, and a regression asserts that
+   ratio. Poiseuille shows clean second-order convergence (L2 9.3e-3 → 2.7e-3 →
+   8.6e-4 over nz 9 → 15 → 25) and the halfway-bounce-back wall position is
+   asserted to fit BETTER than the two plausible wrong ones (H = Nz−2, not Nz−1).
+   **THE BGK WALL-SLIP LIMIT IS MEASURED, NOT HIDDEN.** With one relaxation time
+   the effective wall position drifts with τ, exact only at Λ = (τ−½)² = 3/16,
+   i.e. **τ = ½ + √(3/16) ≈ 0.933** — where the measured L2 error against the
+   analytic profile is **8.7e-9, machine exact**, a strong confirmation that the
+   boundary scheme behaves exactly as theory predicts. Away from it: 4.2e-3 at
+   τ = 0.8, 3.5e-2 at τ = 1.5, 1.6e-1 at τ = 2.5. That is why
+   `LBMFluidOperator` takes a `collision` parameter instead of hard-coding BGK.
+   Also pinned: **f32 loses forcing increments around 1e-7** (below the
+   resolution of the populations they are added to), and the **open boundaries
+   are first order** — the first outlet copied populations, imposed nothing on
+   the pressure, and drained the channel to ρ = 0.32 while the velocity field
+   still looked like flow and the run was not diverging. Only the density-range
+   diagnostic showed it, which is the whole argument for reporting diagnostics
+   instead of smoothing pictures.
+   **DELIBERATELY NOT BUILT YET:** heat, diffusion, elasticity, electromagnetics,
+   multiphysics coupling and adaptive resolution are architecture rather than
+   code. Operators declare the fields they read and write and the solver rejects
+   two writing the same field in one stage, so coupling must be stated rather
+   than implied by call order; the lattice owns its spacing and indexing rather
+   than assuming unit cells, which is what keeps refinement possible.
+
+5. **NGRC playground** (bottom-right `NGRC` launcher → `ngrc.html`) — a 4-tab
    interactive showcase of `lib/ngrc`, each tab framed as **NGRC vs a common
    alternative** so the value is visible: **① Chaotic systems** (three.js
    attractor; 1-finger orbit, 2-finger pinch-zoom **and pan**; a SYSTEM

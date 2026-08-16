@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0b1220" />
+  <link rel="icon" href="data:," />
+  <title>LattSim — Lattice Physics Engine</title>
+
+  <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
+  <script>window.__BUILD = {version:112,built:"2026-08-16T15:49:59Z"}; // __LATTSIM_STAMP__</script>
+  <script src="console-boot.js"></script>
+
+  <style>
+    :root { --bg:#0b1220; --panel:#111827; --card:#1e293b; --line:#334155; --text:#e2e8f0;
+            --muted:#94a3b8; --accent:#0ea5e9; --accent2:#22c55e; --warn:#f59e0b; --bad:#f87171; }
+    * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+    html, body { margin:0; padding:0; background:var(--bg); color:var(--text);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; overflow-x:hidden; }
+    header { padding:12px 14px 6px; text-align:center; }
+    header h1 { font-size:1.15rem; margin:0; }
+    header a { color:var(--muted); font-size:.8rem; text-decoration:none; }
+    #tabs { display:flex; gap:6px; padding:8px 10px; position:sticky; top:0; background:var(--bg); z-index:5; }
+    .tab { flex:1; padding:10px 6px; border:1px solid var(--line); border-radius:10px; background:var(--card);
+      color:var(--muted); font-size:.85rem; font-weight:600; text-align:center; cursor:pointer; }
+    .tab.on { background:var(--accent); color:#04202e; border-color:var(--accent); }
+    .panel { display:none; padding:0 12px 40px; }
+    .panel.on { display:block; }
+    .stage { width:100%; height:44vh; border-radius:14px; overflow:hidden; background:#060a14;
+      border:1px solid var(--line); touch-action:none; position:relative; display:flex;
+      align-items:center; justify-content:center; }
+    .stage canvas { display:block; width:100%; height:100%; object-fit:contain;
+      image-rendering:pixelated; }
+    .stage canvas.fill { width:100%; height:100%; image-rendering:auto; }
+    .stage canvas[hidden] { display:none; }
+    .badge { position:absolute; left:10px; top:10px; font-size:.7rem; padding:4px 8px; border-radius:6px;
+      background:rgba(15,23,42,.85); border:1px solid var(--line); color:var(--muted); }
+    .controls { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; align-items:center; }
+    button { font-size:.95rem; padding:11px 14px; border:none; border-radius:10px; background:var(--accent);
+      color:#04202e; font-weight:600; cursor:pointer; touch-action:manipulation; flex:1; min-width:104px; }
+    button.sec { background:#334155; color:#fff; font-weight:500; }
+    button:disabled { opacity:.45; }
+    select { font-size:.9rem; padding:11px 10px; border:1px solid var(--line); border-radius:10px;
+      background:#334155; color:#fff; flex:1; min-width:110px; -webkit-appearance:none; appearance:none;
+      text-align:center; }
+    .slider { flex:1 1 100%; display:flex; align-items:center; gap:10px; font-size:.82rem; color:var(--muted); }
+    .slider input[type=range] { flex:1; }
+    .slider .v { min-width:74px; text-align:right; font-variant-numeric:tabular-nums; color:var(--text); }
+    .stat { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-size:.82rem; margin-top:12px;
+      background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px; }
+    .stat dt { color:var(--muted); } .stat dd { margin:0; font-variant-numeric:tabular-nums; }
+    .good { color:var(--accent2); } .warn { color:var(--warn); } .bad { color:var(--bad); }
+    .lead { color:var(--muted); font-size:.85rem; line-height:1.5; margin:10px 0 4px; }
+    .lead b { color:var(--text); }
+    .note { margin-top:12px; background:var(--panel); border:1px solid var(--line); border-radius:10px;
+      padding:12px; font-size:.78rem; line-height:1.55; color:#cbd5e1; }
+    .note h3 { margin:0 0 6px; font-size:.85rem; color:var(--text); }
+    pre.out { font-size:.72rem; line-height:1.5; color:#cbd5e1; white-space:pre-wrap; user-select:text;
+      -webkit-user-select:text; max-height:300px; overflow-y:auto; margin:0; }
+    /* Fixed-layout diagrams must scroll, not reflow: wrapping an ASCII tree
+       destroys the only thing it communicates. */
+    pre.tree { white-space:pre; overflow-x:auto; max-height:none; font-size:.68rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>LattSim — Lattice Physics Engine</h1>
+    <a href="index.html">&larr; back to test page</a>
+  </header>
+
+  <div id="tabs">
+    <div class="tab on" data-tab="sim">① Simulate</div>
+    <div class="tab" data-tab="verify">② Verify</div>
+    <div class="tab" data-tab="about">③ Architecture</div>
+  </div>
+
+  <!-- ============================== Tab 1: simulate ============================== -->
+  <section class="panel on" id="p-sim">
+    <p class="lead">A <b>3D lattice field engine</b>: physical quantities live as distributed fields on a
+      spatial lattice, and every update is local — read this cell, read its neighbours, apply a physics
+      operator, write the next state. The first operator is a <b>D3Q19 lattice Boltzmann fluid</b>, which
+      is where the density and velocity you see come from; they are <i>moments of the distribution</i>,
+      not independently stored variables.</p>
+
+    <div class="stage" id="stage">
+      <!-- Two canvases: a canvas can only ever hold ONE context type, and the
+           slice renderer needs 2d while the volume renderer needs webgpu.
+           Sharing one element silently returned null from getContext('webgpu'). -->
+      <canvas id="cv"></canvas>
+      <canvas id="cvgl" class="fill" hidden></canvas>
+      <span class="badge" id="backend-badge">starting…</span>
+    </div>
+
+    <div class="controls">
+      <button id="run">Run ▶</button>
+      <button id="reset" class="sec">Reset</button>
+      <select id="scene" aria-label="Scene"></select>
+    </div>
+    <div class="controls">
+      <select id="view" aria-label="View"></select>
+      <select id="mode" aria-label="Field"></select>
+      <select id="axis" aria-label="Slice axis">
+        <option value="2">slice ⟂ z</option>
+        <option value="1">slice ⟂ y</option>
+        <option value="0">slice ⟂ x</option>
+      </select>
+    </div>
+    <div class="controls">
+      <label class="slider">Resolution <input type="range" id="res" min="0" max="4" step="1" value="1" />
+        <span class="v" id="res-v">48³</span></label>
+      <label class="slider">Viscosity (τ) <input type="range" id="tau" min="0.51" max="1.4" step="0.005" value="0.55" />
+        <span class="v" id="tau-v">0.550</span></label>
+      <label class="slider">Inlet speed <input type="range" id="uin" min="0.005" max="0.12" step="0.005" value="0.06" />
+        <span class="v" id="uin-v">0.060</span></label>
+      <label class="slider">Steps / frame <input type="range" id="spf" min="1" max="40" step="1" value="6" />
+        <span class="v" id="spf-v">6</span></label>
+      <label class="slider">Slice position <input type="range" id="slicep" min="0" max="1" step="0.02" value="0.5" />
+        <span class="v" id="slicep-v">50%</span></label>
+    </div>
+
+    <dl class="stat">
+      <dt>backend</dt><dd id="s-backend">—</dd>
+      <dt>lattice</dt><dd id="s-lattice">—</dd>
+      <dt>field memory</dt><dd id="s-mem">—</dd>
+      <dt>steps</dt><dd id="s-step">0</dd>
+      <dt>rate</dt><dd id="s-rate">—</dd>
+      <dt>MLUPS</dt><dd id="s-mlups">—</dd>
+      <dt>mass</dt><dd id="s-mass">—</dd>
+      <dt>|momentum|</dt><dd id="s-mom">—</dd>
+      <dt>density range</dt><dd id="s-rho">—</dd>
+      <dt>max |u| (lattice)</dt><dd id="s-umax">—</dd>
+      <dt>stability</dt><dd id="s-stable">—</dd>
+      <dt>Reynolds</dt><dd id="s-re">—</dd>
+    </dl>
+
+    <div class="note">
+      <h3>Reading the numbers</h3>
+      Everything above is in <b>lattice units</b>, which is where LBM's stability conditions are stated:
+      the relaxation time τ must stay above ½ (it <i>is</i> the viscosity — ν = (τ−½)/3), and the lattice
+      velocity must stay well under the lattice speed of sound (0.577). Push the inlet speed up or τ down
+      and the stability row will tell you before the picture does. <b>Nothing here is smoothed to hide
+      numerical trouble</b> — a diverging run is reported as diverged.
+    </div>
+  </section>
+
+  <!-- ============================== Tab 2: verify ============================== -->
+  <section class="panel" id="p-verify">
+    <p class="lead">A simulation that produces an attractive picture has demonstrated nothing. These are
+      the checks that decide whether the solver is <b>solving the right equations</b> — run here, in the
+      browser, on whichever backend is live, against answers that were known before the code was written.</p>
+
+    <div class="controls">
+      <button id="verify-run">Run verification ▶</button>
+      <button id="verify-copy" class="sec">Copy</button>
+    </div>
+    <div class="note"><pre class="out" id="verify-out">Not run yet.
+
+  1. CONSERVATION — a periodic box with no forcing. Streaming is a permutation and
+     BGK collision preserves the first two moments, so mass and momentum must hold
+     to round-off.
+
+  2. POISEUILLE — force-driven flow between plates has an exact parabolic solution.
+     A wrong viscosity, a wrong forcing prefactor or a misplaced wall all show up
+     here and nowhere else.
+
+  3. OBSTACLE FLOW — no closed form, so the check is that it stays bounded, keeps
+     mass, and actually separates around the body.
+
+  4. RESOLUTION SCALING — cells, steps/s and memory at each size.</pre></div>
+  </section>
+
+  <!-- ============================== Tab 3: about ============================== -->
+  <section class="panel" id="p-about">
+    <p class="lead">The lattice is the <b>physical representation</b>, not a visualisation of something
+      else. There are no particles: a moving mass is a pattern in the density and momentum fields, and it
+      moves because those quantities are transported between neighbouring cells.</p>
+    <div class="note">
+      <h3>Architecture</h3>
+      <pre class="out tree">Simulation
+  ├── Lattice          dimensions, spacing, origin, indexing, topology
+  ├── Fields           scalar / vector / tensor / distribution / material
+  ├── Materials        per-cell classification (fluid, solid, inlet, outlet, moving)
+  ├── PhysicsOperators declare the fields they read and write
+  ├── Boundaries       regions applied in order over the lattice
+  ├── Solver           ordering, ping-pong discipline, diagnostics
+  └── Backends         WebGPU compute (production) · CPU reference (verification)</pre>
+      <p style="margin:10px 0 0">Indexing is <code>index = x + Nx·(y + Ny·z)</code> everywhere — JS, WGSL,
+      boundaries, rendering. Fields are structure-of-arrays, so a component is contiguous across cells and
+      adjacent GPU threads touch adjacent memory.</p>
+    </div>
+    <div class="note">
+      <h3>Why there are two backends</h3>
+      Per-cell physics belongs on the GPU and that is where it runs. But a solver that only executes on
+      hardware the test environment lacks is a solver that ships unverified. This project's headless
+      Chromium reaches WebGPU only behind an explicit flag, only on a secure origin, and only as a
+      <i>software</i> adapter — good enough to prove a kernel correct, useless for throughput. So there is
+      a <b>CPU reference</b> implementing the same equations from the same constants. It checks
+      conservation and the Poiseuille profile against their analytic answers in plain Node on every test
+      run; it is the fallback wherever WebGPU is absent; and where a GPU does exist, the two are run on the
+      same scene and <b>compared cell by cell</b>. That parity check is not ceremony — it is what caught
+      the production kernel emitting zeros, because <code>macro</code> is a reserved word in WGSL, every
+      shader failed to compile, and WebGPU reports that asynchronously without throwing. The constants live
+      in one module and the WGSL is <i>generated</i> from them, so a shader cannot quietly carry its own
+      copy of 1/36.
+    </div>
+    <div class="note">
+      <h3>What is deliberately not here yet</h3>
+      Heat, diffusion, elasticity, electromagnetics and multiphysics coupling are <b>architecture, not
+      code</b>: an operator declares the fields it reads and writes, and the solver refuses two operators
+      that write the same field in one stage, so coupling has to be stated rather than implied by call
+      order. Adaptive resolution is not implemented either — but the lattice owns its own spacing and
+      indexing rather than assuming unit cells, which is what keeps it possible.
+      <br><br>
+      The collision operator is BGK/SRT. Its known limitation is measured on the Verify tab: with a single
+      relaxation time the effective wall position of bounce-back drifts with τ, exact only near
+      τ = ½ + √(3/16) ≈ 0.933. That is what a TRT or MRT collision fixes, and it is why the operator takes a
+      <code>collision</code> parameter instead of hard-coding one.
+    </div>
+  </section>
+
+  <script type="module">
+    import { SCENES } from './lib/lattsim/scenes.js';
+    import { formatBytes } from './lib/lattsim/fields.js';
+    import { SliceRenderer, SLICE_MODE } from './lib/lattsim/render/slice2d.js';
+    import { OrbitCamera } from './lib/lattsim/render/camera.js';
+    import { UnitSystem } from './lib/lattsim/units.js';
+
+    const $ = (id) => document.getElementById(id);
+    const RES = [24, 32, 48, 64, 96];
+
+    // ---------------------------------------------------------------- tabs
+    document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach((x) => x.classList.toggle('on', x === t));
+      document.querySelectorAll('.panel').forEach((p) => p.classList.toggle('on', p.id === 'p-' + t.dataset.tab));
+    }));
+
+    for (const [k, v] of Object.entries(SCENES)) {
+      const o = document.createElement('option'); o.value = k; o.textContent = v.label; $('scene').appendChild(o);
+    }
+    for (const [v, l] of [['speed', 'speed |u|'], ['density', 'density'], ['direction', 'direction'], ['material', 'materials']]) {
+      const o = document.createElement('option'); o.value = v; o.textContent = l; $('mode').appendChild(o);
+    }
+
+    const state = {
+      sim: null, slice: new SliceRenderer($('cv')), volume: null, camera: new OrbitCamera(),
+      running: false, raf: 0, lastT: 0, lastStep: 0, rate: 0, view: 'slice', busy: false,
+    };
+
+    function viewOptions(hasGPU) {
+      $('view').innerHTML = '';
+      const opts = hasGPU ? [['slice', '2D slice'], ['volume', '3D volume']] : [['slice', '2D slice']];
+      for (const [v, l] of opts) {
+        const o = document.createElement('option'); o.value = v; o.textContent = l; $('view').appendChild(o);
+      }
+      state.view = opts[0][0];
+      $('view').value = state.view;
+    }
+
+    async function build() {
+      stop();
+      if (state.sim) { try { state.sim.destroy(); } catch (e) { console.warn(e); } }
+      if (state.volume) { try { state.volume.destroy(); } catch (e) { /* gone with the device */ } state.volume = null; }
+
+      const res = RES[+$('res').value];
+      const scene = SCENES[$('scene').value];
+      const sim = scene.make({
+        resolution: res,
+        tau: +$('tau').value,
+        inletVelocity: +$('uin').value,
+        lidVelocity: +$('uin').value,
+      });
+      const mem = sim.memoryEstimate();
+      $('s-mem').textContent = `${formatBytes(mem.bytes)} over ${mem.items.length} field(s)`;
+      $('s-lattice').textContent = sim.lattice.describe();
+
+      await sim.build({ backend: 'auto' });
+      state.sim = sim;
+
+      const gpu = sim.backend.kind === 'webgpu';
+      $('s-backend').textContent = sim.backend.label + (sim.backendFallbackReason ? ` — ${sim.backendFallbackReason}` : '');
+      $('backend-badge').textContent = gpu ? sim.backend.label : 'CPU reference — WebGPU unavailable';
+      $('backend-badge').className = 'badge ' + (gpu ? 'good' : 'warn');
+      viewOptions(gpu);
+
+      // The volume renderer is created LAZILY, on the first switch to that
+      // view. Configuring a WebGPU canvas context costs a swap chain, and doing
+      // it for a hidden canvas nobody has asked to see is both wasteful and — on
+      // the software adapter this was tested against — a way to lose the device.
+      state.volumeReady = false;
+      if (gpu && !state.cameraAttached) {
+        state.camera.attach($('stage'), () => { if (!state.running) drawOnce(); });
+        state.cameraAttached = true;
+      }
+      $('s-re').textContent = sim.meta && sim.meta.reynolds ? sim.meta.reynolds.toFixed(0) : '—';
+      state.lastStep = 0; state.lastT = performance.now();
+      applyView();
+      await drawOnce();
+      await refreshStats();
+    }
+
+    async function ensureVolume() {
+      if (state.volume || !state.sim || state.sim.backend.kind !== 'webgpu') return state.volume;
+      const { VolumeRenderer } = await import('./lib/lattsim/render/volume3d.js');
+      state.volume = new VolumeRenderer($('cvgl'), state.sim);
+      return state.volume;
+    }
+
+    function applyView() {
+      const gpu = state.sim && state.sim.backend.kind === 'webgpu';
+      const vol = !!(state.view === 'volume' && gpu);
+      $('cvgl').hidden = !vol;
+      $('cv').hidden = vol;
+      $('axis').disabled = vol;
+      $('slicep').disabled = vol;
+    }
+
+    async function drawOnce() {
+      if (!state.sim) return;
+      if (state.view === 'volume' && state.sim.backend.kind === 'webgpu') {
+        if (!state.volume) await ensureVolume();
+        if (!state.volume) return;
+        const r = $('stage').getBoundingClientRect();
+        const [W, H] = state.volume.resize(r.width, r.height);
+        state.volume.scale = Math.max(1e-4, +$('uin').value * 1.4);
+        state.volume.mode = $('mode').value === 'density' ? 1 : 0;
+        state.volume.render(state.camera.invViewProj(W / H), state.camera.eye());
+      } else {
+        state.slice.mode = SLICE_MODE[$('mode').value.toUpperCase()] || SLICE_MODE.SPEED;
+        state.slice.axis = +$('axis').value;
+        state.slice.position = +$('slicep').value;
+        await state.slice.draw(state.sim, performance.now());
+      }
+    }
+
+    async function refreshStats() {
+      if (!state.sim) return;
+      const d = await state.sim.diagnostics();
+      $('s-step').textContent = d.step.toLocaleString();
+      $('s-mass').textContent = d.mass.toExponential(6);
+      $('s-mom').textContent = Math.hypot(...d.momentum).toExponential(3);
+      $('s-rho').textContent = `${d.rhoMin.toFixed(5)} … ${d.rhoMax.toFixed(5)}`;
+      $('s-umax').textContent = d.uMax.toFixed(5);
+      const cls = { ok: 'good', marginal: 'warn', unstable: 'warn', diverged: 'bad' }[d.stable.state];
+      $('s-stable').innerHTML = `<span class="${cls}">${d.stable.state}</span>` + (d.stable.why ? ` — ${d.stable.why}` : '');
+      if (d.stable.state === 'diverged') stop();
+    }
+
+    function tick(now) {
+      state.raf = requestAnimationFrame(tick);
+      if (!state.sim || state.busy) return;
+      state.busy = true;
+      const spf = +$('spf').value;
+      state.sim.advance(spf);
+      const dt = now - state.lastT;
+      if (dt > 500) {
+        const steps = state.sim.step - state.lastStep;
+        state.rate = steps * 1000 / dt;
+        state.lastStep = state.sim.step; state.lastT = now;
+        $('s-rate').textContent = state.rate.toFixed(0) + ' steps/s';
+        $('s-mlups').textContent = (state.rate * state.sim.lattice.cellCount / 1e6).toFixed(1);
+        refreshStats().catch((e) => console.error(e));
+      }
+      Promise.resolve(drawOnce()).catch((e) => console.error(e)).finally(() => { state.busy = false; });
+    }
+
+    function start() { if (state.running) return; state.running = true; $('run').textContent = 'Pause ⏸'; state.lastT = performance.now(); state.raf = requestAnimationFrame(tick); }
+    function stop() { state.running = false; $('run').textContent = 'Run ▶'; if (state.raf) cancelAnimationFrame(state.raf); state.raf = 0; }
+
+    $('run').addEventListener('click', () => (state.running ? stop() : start()));
+    $('reset').addEventListener('click', () => build().catch((e) => console.error(e)));
+    $('scene').addEventListener('change', () => build().catch((e) => console.error(e)));
+    $('res').addEventListener('input', () => { $('res-v').textContent = RES[+$('res').value] + '³'; });
+    $('res').addEventListener('change', () => build().catch((e) => console.error(e)));
+    $('view').addEventListener('change', async () => {
+      state.view = $('view').value;
+      if (state.view === 'volume') await ensureVolume();
+      applyView(); drawOnce();
+    });
+    $('mode').addEventListener('change', () => drawOnce());
+    $('axis').addEventListener('change', () => drawOnce());
+    $('slicep').addEventListener('input', () => { $('slicep-v').textContent = Math.round(+$('slicep').value * 100) + '%'; drawOnce(); });
+    $('spf').addEventListener('input', () => { $('spf-v').textContent = $('spf').value; });
+    $('tau').addEventListener('input', () => { $('tau-v').textContent = (+$('tau').value).toFixed(3); });
+    $('tau').addEventListener('change', () => build().catch((e) => console.error(e)));
+    $('uin').addEventListener('input', () => { $('uin-v').textContent = (+$('uin').value).toFixed(3); });
+    $('uin').addEventListener('change', () => build().catch((e) => console.error(e)));
+
+    // ------------------------------------------------------------ verification
+    $('verify-run').addEventListener('click', async () => {
+      const btn = $('verify-run'); btn.disabled = true; btn.textContent = 'Running…';
+      const wasRunning = state.running; stop();
+      const out = [];
+      const log = (s) => { out.push(s); $('verify-out').textContent = out.join('\n'); };
+      try {
+        const { runVerification } = await import('./lib/lattsim/verify.js');
+        await runVerification(log, state.sim ? state.sim.backend.kind : 'cpu');
+      } catch (e) {
+        log('FAILED: ' + (e && e.message ? e.message : e));
+        console.error(e);
+      }
+      btn.disabled = false; btn.textContent = 'Run verification ▶';
+      if (wasRunning) start();
+    });
+    $('verify-copy').addEventListener('click', () => {
+      const t = $('verify-out').textContent;
+      if (navigator.clipboard) navigator.clipboard.writeText(t).catch(() => {});
+    });
+
+    // Expose state for the smoke test, mirroring the ngrc page's __lzDbg convention.
+    window.__lsDbg = () => ({
+      backend: state.sim ? state.sim.backend.kind : null,
+      gpuErrors: state.sim && state.sim.backend.errors ? state.sim.backend.errors : [],
+      label: state.sim ? state.sim.backend.label : null,
+      fallback: state.sim ? state.sim.backendFallbackReason : null,
+      step: state.sim ? state.sim.step : 0,
+      cells: state.sim ? state.sim.lattice.cellCount : 0,
+      census: state.sim ? state.sim.cellCensus() : null,
+      bytes: state.sim ? state.sim.memoryEstimate().bytes : 0,
+      running: state.running,
+      view: state.view,
+      slice: state.slice.lastStats,
+    });
+    window.__lsDiag = async () => (state.sim ? state.sim.diagnostics() : null);
+    window.__lsStep = (n) => { if (state.sim) state.sim.advance(n); };
+    window.__lsDraw = () => drawOnce();
+    window.__lsUnits = UnitSystem;
+
+    $('res-v').textContent = RES[+$('res').value] + '³';
+    build().then(() => console.log('lattsim ready ✓')).catch((e) => console.error(e));
+  </script>
+</body>
+</html>

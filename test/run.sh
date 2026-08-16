@@ -29,6 +29,17 @@ if [ -d lib/ngrc ]; then
   node test/ngrc/axiscomp.test.mjs
 fi
 
+# LattSim engine + physics verification. Pure Node, against the CPU reference:
+# there is no WebGPU here at all, and even in the browser below it exists only
+# behind a flag and only as a software adapter. The production WGSL kernel is
+# checked in the smoke test, cell by cell against this same reference.
+if [ -d lib/lattsim ]; then
+  node test/lattsim/d3q19.test.mjs
+  node test/lattsim/engine.test.mjs
+  node test/lattsim/conservation.test.mjs
+  node test/lattsim/poiseuille.test.mjs
+fi
+
 # Serve the repo and always clean up the server on exit.
 python3 -m http.server "${PORT}" >/dev/null 2>&1 &
 SRV=$!

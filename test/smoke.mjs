@@ -37,8 +37,14 @@ function check(name, cond, detail) {
 mkdirSync(SHOTS, { recursive: true });
 const browser = await chromium.launch({
   executablePath: findChrome(),
-  // SwiftShader so the WebGL (three.js) NGRC demo renders headless
-  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
+  // SwiftShader so the WebGL (three.js) NGRC demo renders headless.
+  // --enable-unsafe-webgpu additionally exposes a SwiftShader WebGPU adapter,
+  // which is what lets the LattSim tab exercise its PRODUCTION WGSL backend here
+  // rather than only its CPU reference. Without it navigator.gpu exists on a
+  // secure origin but requestAdapter() returns null. It is software and slow --
+  // fine for correctness, useless for throughput.
+  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
+         '--ignore-gpu-blocklist', '--enable-unsafe-webgpu'],
 });
 const ctx = await browser.newContext({
   viewport: { width: 412, height: 915 },
@@ -470,6 +476,141 @@ await demo.waitForTimeout(300);
 await demo.screenshot({ path: join(SHOTS, '08-antislosh.png') });
 
 check('ngrc: playground has no errors overall', demoErrors.length === 0, demoErrors.join(' | '));
+
+// ============================================================================
+// LATTSIM — the lattice physics engine. Its numerics are verified in Node
+// (test/lattsim/*.test.mjs) against analytic answers; what is checked HERE is
+// that the page builds a real simulation, degrades honestly when WebGPU is
+// absent (which it is in this Chromium), and draws actual field data.
+// ============================================================================
+// Close the NGRC page first. Chromium's software WebGPU drops the device
+// instance for backgrounded pages, which surfaces as "a valid external Instance
+// reference no longer exists" the moment LattSim tries to read anything back.
+await demo.close();
+
+const latt = await ctx.newPage();
+const lattErrors = [];
+latt.on('pageerror', e => lattErrors.push(String(e)));
+// Also capture console.error. The page catches its own async failures and logs
+// them rather than letting them reach pageerror, so without this a broken render
+// path would show up only as a red badge in a screenshot nobody read.
+const lattConsole = [];
+latt.on('console', m => { if (m.type() === 'error') lattConsole.push(m.text()); });
+await latt.goto(BASE + 'lattsim.html', { waitUntil: 'networkidle' });
+await latt.waitForFunction(() => window.__lsDbg && window.__lsDbg().backend !== null, null, { timeout: 60000 });
+
+check('lattsim.html loads with no errors', lattErrors.length === 0, lattErrors.join(' | '));
+
+const ls0 = await latt.evaluate(() => window.__lsDbg());
+check('lattsim: a simulation is built', ls0.cells > 0, JSON.stringify(ls0.cells));
+check('lattsim: geometry is classified (fluid + solid + inlet + outlet)',
+  ls0.census && ls0.census.FLUID > 0 && ls0.census.SOLID > 0 && ls0.census.INLET > 0 && ls0.census.OUTLET > 0,
+  JSON.stringify(ls0.census));
+// This Chromium has no navigator.gpu at all, so the honest outcome is the CPU
+// reference plus a stated reason -- not a blank canvas and not a pretence.
+const hasGPU = await latt.evaluate(() => !!navigator.gpu);
+check('lattsim: backend selection matches what the browser actually offers',
+  hasGPU ? ls0.backend === 'webgpu' : ls0.backend === 'cpu', `${ls0.backend} (navigator.gpu=${hasGPU})`);
+if (!hasGPU) {
+  check('lattsim: the WebGPU fallback states its reason', !!ls0.fallback, String(ls0.fallback));
+  check('lattsim: the badge says so', /CPU reference/.test(await latt.textContent('#backend-badge')),
+    await latt.textContent('#backend-badge'));
+}
+
+// Physics must actually advance and stay finite.
+await latt.evaluate(() => window.__lsStep(200));
+const diag = await latt.evaluate(() => window.__lsDiag());
+check('lattsim: stepping advances the solver', diag.step >= 200, String(diag.step));
+check('lattsim: the field is finite and stable', diag.finite && diag.stable.state !== 'diverged',
+  JSON.stringify(diag.stable));
+// The density range is the diagnostic that caught the first outlet
+// implementation: it copied its neighbour's populations, imposed nothing on the
+// pressure, and drained the channel to rho = 0.32 while the velocity field still
+// looked like flow and the run was not diverging.
+//
+// The band is +/-20% rather than +/-2% because the outlet is FIRST ORDER and
+// mildly reflective, so an impulsive start rings an acoustic wave between the
+// two open faces which decays slowly: measured +/-17% at step 200, +/-13% at
+// 600, +/-5% by 2200. That is a documented property of this boundary, not
+// instability -- and 0.8 still catches the 0.32 drain by a factor of three.
+check('lattsim: density stays physical (the outlet anchors the pressure)',
+  diag.rhoMin > 0.8 && diag.rhoMax < 1.25, `${diag.rhoMin} … ${diag.rhoMax}`);
+check('lattsim: the inlet drives a flow', diag.uMax > 1e-3, String(diag.uMax));
+
+// The slice renderer must draw real field data, not an empty canvas.
+await latt.evaluate(() => window.__lsDraw());
+await latt.waitForTimeout(200);
+const px = await latt.evaluate(() => {
+  const c = document.getElementById('cv');
+  const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+  const seen = new Set();
+  for (let i = 0; i < d.length; i += 4) seen.add((d[i] << 16) | (d[i + 1] << 8) | d[i + 2]);
+  return { w: c.width, h: c.height, colors: seen.size };
+});
+check('lattsim: the slice canvas is the lattice cross-section', px.w > 8 && px.h > 8, JSON.stringify(px));
+check('lattsim: the slice shows a field, not one flat colour', px.colors > 8, String(px.colors));
+
+// ---- THE PARITY CHECK, the reason both backends exist.
+// The Node tests verify the CPU reference against analytic answers. This
+// verifies that the production WGSL kernel computes the SAME THING. Two
+// implementations of one set of equations drift the moment nobody compares
+// them, and the drift looks like a plausible flow rather than an error.
+if (hasGPU && ls0.backend === 'webgpu') {
+  const parity = await latt.evaluate(async () => {
+    const [{ channelFlow }] = await Promise.all([import('./lib/lattsim/scenes.js')]);
+    const mk = () => channelFlow({ resolution: 16, tau: 0.6, inletVelocity: 0.05 });
+    const g = mk(); await g.build({ backend: 'webgpu' });
+    const c = mk(); await c.build({ backend: 'cpu' });
+    g.advance(60); c.advance(60);
+    const [mg, mc] = [await g.backend.snapshot('macro'), await c.backend.snapshot('macro')];
+    const N = g.lattice.cellCount;
+    let worstU = 0, worstR = 0, peak = 0;
+    for (let i = 0; i < N; i++) {
+      if (g.flags[i] === 1) continue;
+      worstR = Math.max(worstR, Math.abs(mg[i] - mc[i]));
+      for (let k = 1; k < 4; k++) {
+        worstU = Math.max(worstU, Math.abs(mg[k * N + i] - mc[k * N + i]));
+        peak = Math.max(peak, Math.abs(mc[k * N + i]));
+      }
+    }
+    const out = { worstU, worstR, peak, cells: N,
+      gpu: (await g.diagnostics()).mass, cpu: (await c.diagnostics()).mass };
+    g.destroy(); c.destroy();
+    return out;
+  });
+  // Both run f32 and both are chaotic-free at this size, so agreement should be
+  // at the level of float accumulation order, not of physics.
+  check('lattsim: the WGSL kernel and the CPU reference agree on velocity',
+    parity.worstU < 1e-4 * Math.max(parity.peak, 1e-6) + 1e-6,
+    `worst |du| ${parity.worstU.toExponential(2)} against peak ${parity.peak.toExponential(2)}`);
+  check('lattsim: the two backends agree on density',
+    parity.worstR < 1e-5, parity.worstR.toExponential(2));
+  check('lattsim: the two backends agree on total mass',
+    Math.abs(parity.gpu - parity.cpu) / parity.cpu < 1e-5,
+    `${parity.gpu} vs ${parity.cpu}`);
+}
+
+check('lattsim: the GPU driver reported no uncaptured errors', (ls0.gpuErrors || []).length === 0,
+  JSON.stringify(ls0.gpuErrors));
+
+const stats = await latt.textContent('#s-lattice');
+check('lattsim: the lattice is described in the UI', /cells/.test(stats || ''), stats);
+check('lattsim: field memory is reported', /(KiB|MiB)/.test(await latt.textContent('#s-mem')),
+  await latt.textContent('#s-mem'));
+
+await latt.evaluate(() => window.scrollTo(0, 0));
+await latt.waitForTimeout(200);
+await latt.screenshot({ path: join(SHOTS, '09-lattsim.png') });
+
+// The Architecture tab is where the engine states what it is and is not.
+await latt.click('.tab[data-tab="about"]');
+await latt.waitForTimeout(200);
+check('lattsim: architecture tab explains the two backends',
+  /CPU reference/.test(await latt.textContent('#p-about')));
+await latt.screenshot({ path: join(SHOTS, '10-lattsim-arch.png') });
+
+check('lattsim: no errors overall', lattErrors.length === 0, lattErrors.join(' | '));
+check('lattsim: nothing logged to console.error', lattConsole.length === 0, lattConsole.join(' | '));
 
 await browser.close();
 
