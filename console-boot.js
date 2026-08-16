@@ -194,7 +194,25 @@
     // ---- UI ----------------------------------------------------------
     function css() {
       return "" +
-      "#dbg-launch{position:fixed;right:14px;bottom:14px;z-index:2147483646;width:46px;height:46px;border-radius:12px;" +
+      // THE HOST PAGE'S CSS LEAKS IN, and this panel is injected into it, so
+      // every control here must state its own geometry rather than inherit one.
+      //
+      // ngrc.html and lattsim.html both carry a global `button { flex:1;
+      // min-width:110px }` for their own touch controls. The rules below are
+      // more specific and so won the properties they name -- but they did not
+      // name min-width, so the four header buttons were each forced to 110px,
+      // 440px of them on a 412px phone. #dbg-head does not wrap, so `Close ✕`
+      // (the last child) was pushed off-screen: opening the console on those two
+      // pages left no way to shut it short of reloading. index.html has no such
+      // rule, which is exactly why it never showed there.
+      //
+      // min-width also beats width, so the same rule inflated the 46px launcher
+      // into a slab. Hence the explicit resets, plus flex-wrap on the header as
+      // a belt-and-braces measure: if some future host style widens these
+      // anyway, the close button drops to a second row instead of vanishing.
+      "#dbg-panel button,#dbg-panel input,#dbg-panel textarea{min-width:0;max-width:none;margin:0}" +
+      "#dbg-launch{position:fixed;right:14px;bottom:14px;z-index:2147483646;width:46px;height:46px;" +
+        "min-width:0;max-width:none;flex:0 0 auto;border-radius:12px;" +
         "background:#1e293b;color:#cbd5e1;border:1px solid #334155;box-shadow:0 4px 14px rgba(0,0,0,.4);display:flex;" +
         "align-items:center;justify-content:center;cursor:pointer;padding:0}" +
       "#dbg-launch:active{background:#273449}#dbg-launch svg{width:22px;height:22px;display:block}" +
@@ -206,9 +224,10 @@
         "color:#e2e8f0;font-family:ui-monospace,Menlo,Consolas,monospace;display:none;flex-direction:column;" +
         "border-top:2px solid #4f46e5;box-shadow:0 -6px 24px rgba(0,0,0,.5)}" +
       "#dbg-panel.open{display:flex}" +
-      "#dbg-head{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#111827;flex:0 0 auto}" +
+      "#dbg-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 10px;background:#111827;flex:0 0 auto}" +
       "#dbg-head .t{font-weight:700;font-size:13px}#dbg-head .sp{flex:1}" +
-      "#dbg-head button{background:#334155;color:#fff;border:none;border-radius:8px;padding:8px 10px;font-size:13px;cursor:pointer;width:auto;flex:0 0 auto}" +
+      "#dbg-head button{background:#334155;color:#fff;border:none;border-radius:8px;padding:8px 10px;font-size:13px;" +
+        "cursor:pointer;width:auto;min-width:0;flex:0 0 auto}" +
       "#dbg-build{padding:6px 10px;background:#0b1220;color:#94a3b8;font-size:11px;border-bottom:1px solid #1e293b;flex:0 0 auto;white-space:nowrap;overflow-x:auto}" +
       "#dbg-build.ok{color:#4ade80}#dbg-build.stale{color:#fca5a5;background:rgba(239,68,68,.12)}#dbg-build.checking{color:#94a3b8}" +
       "#dbg-stale{position:fixed;top:0;left:0;right:0;z-index:2147483647;display:none;background:#b91c1c;color:#fff;" +

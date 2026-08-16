@@ -1522,3 +1522,21 @@ Run it, then commit, so the shipped commit and its version number match.
   origin so the page works offline and isn't at the mercy of blocked hosts.
 - Vanilla JS, no build tooling beyond the shell script.
 - Keep the console bootstrap first and dependency-free.
+- **The console bootstrap injects its UI into the HOST page, so it must state its
+  own geometry rather than inherit one.** `ngrc.html` and `lattsim.html` both
+  carry a global `button { flex:1; min-width:110px }` for their touch controls.
+  `console-boot.js`'s `#dbg-head button` rules are more specific and won every
+  property they NAMED — but they never named `min-width`, so the four header
+  buttons were forced to 110px each, 440px of them on a 412px phone, and
+  `Close ✕` (the last child of a non-wrapping flex row) was pushed off the right
+  edge: **measured at 435–545px against a 412px viewport on ngrc, 417–521 on
+  lattsim, and the click times out.** Opening the console on either page left no
+  way to shut it without reloading. The same rule beat `width:46px` on the
+  launcher and inflated it to a 110px slab. `index.html` has no global `button`
+  rule, which is exactly why the one page the suite checked was the one page
+  that worked. Fixed with explicit resets (`min-width:0`, `max-width:none`,
+  `flex:0 0 auto`) plus `flex-wrap` on the header, so a future host style can at
+  worst wrap the button to a second row instead of hiding it. A regression now
+  asserts the invariant **per page** — and asserts GEOMETRY, not presence: the
+  button existed and reported as "visible" the whole time, it simply was not on
+  the screen.

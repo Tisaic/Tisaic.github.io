@@ -49,6 +49,44 @@ function check(name, cond, detail) {
   if (!ok) failed++;
 }
 
+/**
+ * THE CONSOLE MUST BE CLOSEABLE ON EVERY PAGE THAT EMBEDS IT, and this has to be
+ * asserted per page rather than once, because the failure came from the HOST
+ * page's stylesheet rather than from the console.
+ *
+ * ngrc.html and lattsim.html both style their own touch controls with a global
+ * `button { flex:1; min-width:110px }`. console-boot's rules are more specific
+ * and won every property they named -- but they did not name min-width, so the
+ * four header buttons were forced to 110px each, 440px of them on a 412px phone,
+ * and `Close ✕` was pushed off the right edge. Opening the console on those
+ * pages left no way to shut it without reloading. index.html has no such rule,
+ * so the one page the suite did check was the one page that worked.
+ *
+ * Asserting geometry, not presence: the button existed and was "visible" the
+ * whole time. It was simply not on the screen.
+ */
+async function checkConsoleUsable(pg, label) {
+  if (!(await pg.isVisible('#dbg-list'))) {
+    await pg.click('#dbg-launch');
+    await pg.waitForTimeout(250);
+  }
+  const geom = await pg.evaluate(() => {
+    const c = document.getElementById('dbg-close').getBoundingClientRect();
+    const l = document.getElementById('dbg-launch').getBoundingClientRect();
+    return {
+      left: Math.round(c.left), right: Math.round(c.right), width: Math.round(c.width),
+      vw: window.innerWidth, launch: [Math.round(l.width), Math.round(l.height)],
+    };
+  });
+  check(`${label}: the console Close button is on screen`,
+    geom.left >= 0 && geom.right <= geom.vw + 1 && geom.width > 0, JSON.stringify(geom));
+  check(`${label}: the console launcher keeps its own 46px size`,
+    Math.abs(geom.launch[0] - 46) <= 2 && Math.abs(geom.launch[1] - 46) <= 2, JSON.stringify(geom));
+  await pg.click('#dbg-close');
+  await pg.waitForTimeout(200);
+  check(`${label}: clicking Close actually closes the console`, !(await pg.isVisible('#dbg-list')));
+}
+
 mkdirSync(SHOTS, { recursive: true });
 const browser = await chromium.launch({
   executablePath: findChrome(),
@@ -105,7 +143,7 @@ const evalOk = await page.evaluate(() => window.__dbg.buffer().some(e => e.text.
 check('eval box evaluates JS (1 + 2 → 3)', evalOk);
 
 // ---- docs viewer ----
-await page.click('#dbg-close');
+await checkConsoleUsable(page, 'index');
 check('docs launcher present', await page.$('#doc-all') !== null);
 await page.click('#doc-all');
 await page.waitForTimeout(700);
@@ -131,6 +169,7 @@ await demo.waitForTimeout(2500);
 check('ngrc.html loads with no errors', demoErrors.length === 0, demoErrors.join(' | '));
 const three = await demo.evaluate(() => !!(window.THREE || document.querySelector('#lz-stage canvas')));
 check('ngrc: WebGL/three canvas present', three);
+await checkConsoleUsable(demo, 'ngrc');
 const nSamp = parseInt(await demo.textContent('#lz-n')) || 0;
 check('ngrc: Lorenz model runs (samples > 0)', nSamp > 0, String(nSamp));
 check('ngrc: model warms up', (await demo.textContent('#lz-warm')) === 'yes');
@@ -616,6 +655,8 @@ if (hasGPU && ls0.backend === 'webgpu') {
 
 check('lattsim: the GPU driver reported no uncaptured errors', (ls0.gpuErrors || []).length === 0,
   JSON.stringify(ls0.gpuErrors));
+
+await checkConsoleUsable(latt, 'lattsim');
 
 section('lattsim core');
 if (FULL) {
