@@ -176,5 +176,113 @@ check('tau <= 1/2 is refused when the operator is constructed',
   sim.destroy();
 }
 
+// ------------------------------------------------ the moving wall is a WALL
+{
+  // Reported from a real device: the lid-driven cavity showed a "marginal"
+  // stability verdict in a CLOSED box, which cannot have a large density spread.
+  // Cause: MOVING cells were modelled as driven FLUID cells, so the lid acted as
+  // a mass source as well as a momentum source. A moving wall is a wall: halfway
+  // bounce-back with a momentum correction, injecting momentum and no mass.
+  const { lidCavity } = await import('../../lib/lattsim/scenes.js');
+  const sim = lidCavity({ resolution: 20, tau: 0.6, lidVelocity: 0.05 });
+  await sim.build({ backend: 'cpu', precision: 'f64' });
+  const d0 = await sim.diagnostics();
+  sim.advance(1500);
+  const d1 = await sim.diagnostics();
+
+  check('a lid-driven cavity conserves mass exactly (no inlet, no outlet)',
+    Math.abs(d1.mass - d0.mass) / d0.mass < 1e-12, Math.abs(d1.mass - d0.mass).toExponential(3));
+  // The density extreme lives in the two cells at the lid corners, where a
+  // moving wall meets a stationary one and the pressure is formally singular.
+  // That is real physics and it does not decay: measured steady at 6.6% overall
+  // but 1.5% one cell in from every wall and 0.47% three cells in, against the
+  // ~0.3% this flow's dynamic pressure accounts for. So the INTERIOR is what
+  // says whether the lid is behaving, and the interior is what is asserted.
+  //
+  // NOTE, because it is the more useful half: restricting the lid to the
+  // interior of the top face (so no cell is both a stationary and a moving wall)
+  // is the geometrically correct thing and is what ships -- but it did NOT
+  // reduce this number, it raised it slightly, 5.1% -> 6.6%. The corner overlap
+  // was never the cause.
+  const interiorSpread = (() => {
+    const NN = sim.lattice.cellCount;
+    const mm = sim.backend.read('macro');
+    let lo = Infinity, hi = -Infinity;
+    sim.lattice.forEachCell((x, y, z, i) => {
+      const L2 = sim.lattice;
+      // Four cells clear of every wall: that is where the corner singularity's
+      // influence has died away (measured 6.6% at the wall, 1.5% two cells in,
+      // 0.47% four cells in) and the bulk dynamic pressure is what is left.
+      if (x < 4 || y < 4 || z < 4 || x > L2.nx - 5 || y > L2.ny - 5 || z > L2.nz - 5) return;
+      if (sim.flags[i] === 1 || sim.flags[i] === 4) return;
+      lo = Math.min(lo, mm[i]); hi = Math.max(hi, mm[i]);
+    });
+    void NN;
+    return hi - lo;
+  })();
+  check('the lid is not a mass source (interior density spread < 1%)',
+    interiorSpread < 0.01, interiorSpread.toExponential(3));
+  check('the density extreme is confined to the walls, not the bulk',
+    (d1.rhoMax - d1.rhoMin) > 3 * interiorSpread,
+    `overall ${(d1.rhoMax - d1.rhoMin).toExponential(2)} vs interior ${interiorSpread.toExponential(2)}`);
+  check('a closed box driven by a lid is stable, not marginal',
+    d1.stable.state === 'ok', JSON.stringify(d1.stable));
+  check('the lid actually drives the fluid', d1.uMax > 0.005, String(d1.uMax));
+  check('no fluid moves faster than the lid that drives it', d1.uMax <= 0.05 * 1.05, String(d1.uMax));
+
+  // The signature of a cavity is RECIRCULATION: fluid under the lid runs with
+  // it, fluid near the floor runs back the other way.
+  const N = sim.lattice.cellCount;
+  const mac = await sim.backend.snapshot('macro');
+  const at = (x, y, z) => mac[N + sim.lattice.index(x, y, z)];
+  const mid = 10;
+  const top = at(mid, mid, sim.lattice.nz - 3);
+  const bottom = at(mid, mid, 2);
+  check('the cavity recirculates (flow reverses between lid and floor)',
+    top > 0 && bottom < 0, `top ${top.toExponential(2)} bottom ${bottom.toExponential(2)}`);
+  sim.destroy();
+}
+
+// ------------------------------------------- every scene shows its physics
+{
+  // Reported from a real device: two of the three scenes "did nothing visible".
+  // They were all correct -- the DEFAULT SLICE was wrong. Poiseuille varies only
+  // across z, so the plane normal to z has exactly zero spread and renders as a
+  // single flat colour. Each scene now declares the plane that shows its physics,
+  // and this asserts that the declared plane actually varies.
+  const { SCENES } = await import('../../lib/lattsim/scenes.js');
+  for (const [key, entry] of Object.entries(SCENES)) {
+    const sim = entry.make({ resolution: 20, tau: 0.6 });
+    await sim.build({ backend: 'cpu' });
+    sim.advance(1200);
+    const view = (sim.meta && sim.meta.view) || {};
+    check(`${key}: declares a preferred slice plane`, view.sliceAxis !== undefined, JSON.stringify(view));
+
+    const N = sim.lattice.cellCount, L = sim.lattice;
+    const mac = await sim.backend.snapshot('macro');
+    const spreadOn = (axis) => {
+      const k = L.size[axis] >> 1;
+      let lo = Infinity, hi = -Infinity;
+      const [a1, a2] = [(axis + 1) % 3, (axis + 2) % 3];
+      for (let a = 0; a < L.size[a1]; a++) {
+        for (let b = 0; b < L.size[a2]; b++) {
+          const c = [0, 0, 0]; c[axis] = k; c[a1] = a; c[a2] = b;
+          const i = L.index(c[0], c[1], c[2]);
+          if (sim.flags[i] === 1 || sim.flags[i] === 4) continue;
+          const sp = Math.hypot(mac[N + i], mac[2 * N + i], mac[3 * N + i]);
+          if (sp < lo) lo = sp;
+          if (sp > hi) hi = sp;
+        }
+      }
+      return hi - lo;
+    };
+    const chosen = spreadOn(view.sliceAxis);
+    check(`${key}: the declared slice plane shows structure`, chosen > 1e-4,
+      `spread ${chosen.toExponential(2)} on axis ${view.sliceAxis} `
+      + `(all axes: ${[0, 1, 2].map((a) => spreadOn(a).toExponential(1)).join(', ')})`);
+    sim.destroy();
+  }
+}
+
 console.log(failed ? `\n  ${failed} check(s) failed\n` : '  all checks passed\n');
 process.exit(failed ? 1 : 0);

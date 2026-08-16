@@ -146,6 +146,46 @@ the shipped commit carries the correct version.
    still looked like flow and the run was not diverging. Only the density-range
    diagnostic showed it, which is the whole argument for reporting diagnostics
    instead of smoothing pictures.
+   **FOUR DEFECTS FOUND ON A REAL DEVICE (v113), none of which the suite could
+   see, because all four were about what the user is looking at rather than what
+   the solver computes.** (i) **Above 64³ the page died.** The channel at 96³
+   wants a 128.3 MiB storage binding against a 128 MiB default limit, so the GPU
+   backend refused, the fallback CPU backend refused too (1.77M cells against its
+   131k cap), and `build()` rejected leaving no simulation at all. The page now
+   asks the device for its limit and clamps the resolution ladder to what fits,
+   and a failed build keeps whatever was running and states the reason. (ii)
+   **Two of the three scenes "did nothing visible" — and both were correct.** The
+   DEFAULT SLICE PLANE was wrong for them: Poiseuille varies only across z, so
+   the plane normal to z has EXACTLY ZERO spread and renders as one flat colour
+   (measured). Each scene now declares the plane that shows its physics and a
+   regression asserts that plane actually varies. A correct simulation displayed
+   on the wrong plane is indistinguishable from a broken one. (iii) **The 3D view
+   was a grey box.** A closed domain is wrapped in no-slip walls, so EVERY ray hit
+   solid before reaching any fluid. Solid is now transparent until a ray has
+   entered the fluid and opaque after — the shell disappears, interior obstacles
+   stay solid — and the box carries the lattice's real aspect ratio instead of
+   being squeezed into a cube. (iv) **The moving wall was not a wall.** `MOVING`
+   was modelled as a driven FLUID cell, so the cavity's lid was a mass source as
+   well as a momentum source and a closed box reported a "marginal" verdict it
+   cannot physically have. It is now halfway bounce-back with a momentum
+   correction. What is LEFT after that fix is real: a steady 6.6% density extreme
+   in the two cells at the lid corners, where a moving wall meets a stationary one
+   and the pressure is formally singular — 1.5% two cells in, 0.47% four cells in,
+   against the ~0.3% the dynamic pressure accounts for. Restricting the lid to the
+   interior of the top face is geometrically correct and ships, but it did NOT
+   reduce that number, it raised it 5.1% → 6.6%; the corner overlap was never the
+   cause, and the regression now pins the INTERIOR rather than a global number.
+   **AND ONE THING CI STILL CANNOT CHECK:** in a headless browser with a software
+   adapter there is no real surface, and `getCurrentTexture()` does not merely
+   fail — it DESTROYS THE WEBGPU INSTANCE, after which every compute call fails
+   too (isolated to fifteen lines of plain WebGPU with none of this engine
+   involved). So the volume render is unverifiable here; `render()` returns false
+   instead of throwing so a visualisation can never take a simulation with it, the
+   suite compiles the volume shader instead, and the picture is verified on a real
+   device. Also fixed here: the page shared ONE adapter and device across rebuilds
+   (requesting one per build, and dropping the previous adapter, can tear the
+   instance down), and an unpainted canvas defaults to WHITE, which against this
+   page reads as broken rather than empty.
    **DELIBERATELY NOT BUILT YET:** heat, diffusion, elasticity, electromagnetics,
    multiphysics coupling and adaptive resolution are architecture rather than
    code. Operators declare the fields they read and write and the solver rejects

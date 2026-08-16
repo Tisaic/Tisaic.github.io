@@ -8,7 +8,7 @@
   <title>LattSim — Lattice Physics Engine</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:112,built:"2026-08-16T15:49:59Z"}; // __LATTSIM_STAMP__</script>
+  <script>window.__BUILD = {version:113,built:"2026-08-16T17:13:31Z"}; // __LATTSIM_STAMP__</script>
   <script src="console-boot.js"></script>
 
   <style>
@@ -29,8 +29,10 @@
     .stage { width:100%; height:44vh; border-radius:14px; overflow:hidden; background:#060a14;
       border:1px solid var(--line); touch-action:none; position:relative; display:flex;
       align-items:center; justify-content:center; }
+    /* An unpainted canvas defaults to WHITE, which against this page reads as a
+       broken render rather than an empty one. */
     .stage canvas { display:block; width:100%; height:100%; object-fit:contain;
-      image-rendering:pixelated; }
+      image-rendering:pixelated; background:#060a14; }
     .stage canvas.fill { width:100%; height:100%; image-rendering:auto; }
     .stage canvas[hidden] { display:none; }
     .badge { position:absolute; left:10px; top:10px; font-size:.7rem; padding:4px 8px; border-radius:6px;
@@ -219,7 +221,7 @@
   </section>
 
   <script type="module">
-    import { SCENES } from './lib/lattsim/scenes.js';
+    import { SCENES, largestResolutionThatFits } from './lib/lattsim/scenes.js';
     import { formatBytes } from './lib/lattsim/fields.js';
     import { SliceRenderer, SLICE_MODE } from './lib/lattsim/render/slice2d.js';
     import { OrbitCamera } from './lib/lattsim/render/camera.js';
@@ -244,7 +246,39 @@
     const state = {
       sim: null, slice: new SliceRenderer($('cv')), volume: null, camera: new OrbitCamera(),
       running: false, raf: 0, lastT: 0, lastStep: 0, rate: 0, view: 'slice', busy: false,
+      maxBinding: Infinity, building: false,
     };
+
+    /**
+     * Ask the adapter how big a storage binding it will actually give us, and
+     * clamp the resolution slider to what fits. A D3Q19 lattice is 19 floats per
+     * cell doubled for ping-pong: the channel at 96 wants a 128.3 MiB binding
+     * against a 128 MiB default limit. Discovering that by failing to build is
+     * how the page ended up with no simulation at all.
+     */
+    async function probeLimits() {
+      if (!navigator.gpu) { state.maxBinding = Infinity; return; }
+      try {
+        // Goes through the backend's SHARED device rather than requesting an
+        // adapter and dropping it -- releasing the only adapter can take the
+        // whole WebGPU instance with it, after which every later call fails with
+        // "a valid external Instance reference no longer exists".
+        const { WebGPUBackend } = await import('./lib/lattsim/backends/webgpu.js');
+        const lim = await WebGPUBackend.limits();
+        state.maxBinding = lim.maxStorageBufferBindingSize;
+      } catch { state.maxBinding = Infinity; }
+    }
+
+    function clampResolution() {
+      const key = $('scene').value || 'channel';
+      const fits = largestResolutionThatFits(key, state.maxBinding, RES);
+      const maxIdx = Math.max(0, RES.indexOf(fits));
+      $('res').max = String(maxIdx);
+      if (+$('res').value > maxIdx) $('res').value = String(maxIdx);
+      $('res-v').textContent = RES[+$('res').value] + '³'
+        + (maxIdx < RES.length - 1 ? ` (max ${RES[maxIdx]}³ here)` : '');
+      return RES[+$('res').value];
+    }
 
     function viewOptions(hasGPU) {
       $('view').innerHTML = '';
@@ -257,11 +291,24 @@
     }
 
     async function build() {
+      if (state.building) return;
+      state.building = true;
+      try { await buildInner(); } catch (e) {
+        // A failed build must never leave the page without a simulation. Say what
+        // went wrong where the user is looking, and keep whatever was running.
+        console.warn('lattsim build failed:', e);
+        $('backend-badge').textContent = 'build failed — ' + (e && e.message ? e.message : e);
+        $('backend-badge').className = 'badge bad';
+        $('s-backend').textContent = 'build failed: ' + (e && e.message ? e.message : e);
+      } finally { state.building = false; }
+    }
+
+    async function buildInner() {
       stop();
       if (state.sim) { try { state.sim.destroy(); } catch (e) { console.warn(e); } }
       if (state.volume) { try { state.volume.destroy(); } catch (e) { /* gone with the device */ } state.volume = null; }
 
-      const res = RES[+$('res').value];
+      const res = clampResolution();
       const scene = SCENES[$('scene').value];
       const sim = scene.make({
         resolution: res,
@@ -291,6 +338,15 @@
         state.camera.attach($('stage'), () => { if (!state.running) drawOnce(); });
         state.cameraAttached = true;
       }
+      // Each scene knows which plane shows its physics. Poiseuille varies only
+      // across z, so the default slice normal to z is a single flat colour and
+      // the simulation looks broken while being exactly right.
+      const v = (sim.meta && sim.meta.view) || {};
+      if (v.sliceAxis !== undefined) $('axis').value = String(v.sliceAxis);
+      if (v.slicePosition !== undefined) {
+        $('slicep').value = String(v.slicePosition);
+        $('slicep-v').textContent = Math.round(v.slicePosition * 100) + '%';
+      }
       $('s-re').textContent = sim.meta && sim.meta.reynolds ? sim.meta.reynolds.toFixed(0) : '—';
       state.lastStep = 0; state.lastT = performance.now();
       applyView();
@@ -300,8 +356,19 @@
 
     async function ensureVolume() {
       if (state.volume || !state.sim || state.sim.backend.kind !== 'webgpu') return state.volume;
+      // THE CANVAS MUST BE VISIBLE AND SIZED FIRST. Configuring a WebGPU context
+      // on a display:none canvas at its default 300x150 does not merely render
+      // nothing -- on the software adapter it took the whole WebGPU instance
+      // down, and every later call failed with "a valid external Instance
+      // reference no longer exists". So: unhide, size, then configure.
+      const cv = $('cvgl');
+      cv.hidden = false;
+      const r = $('stage').getBoundingClientRect();
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      cv.width = Math.max(64, Math.floor((r.width || 320) * dpr));
+      cv.height = Math.max(64, Math.floor((r.height || 240) * dpr));
       const { VolumeRenderer } = await import('./lib/lattsim/render/volume3d.js');
-      state.volume = new VolumeRenderer($('cvgl'), state.sim);
+      state.volume = new VolumeRenderer(cv, state.sim);
       return state.volume;
     }
 
@@ -317,13 +384,20 @@
     async function drawOnce() {
       if (!state.sim) return;
       if (state.view === 'volume' && state.sim.backend.kind === 'webgpu') {
-        if (!state.volume) await ensureVolume();
-        if (!state.volume) return;
+        if (!state.volume) return;       // created by the view switch, not here
         const r = $('stage').getBoundingClientRect();
         const [W, H] = state.volume.resize(r.width, r.height);
         state.volume.scale = Math.max(1e-4, +$('uin').value * 1.4);
         state.volume.mode = $('mode').value === 'density' ? 1 : 0;
-        state.volume.render(state.camera.invViewProj(W / H), state.camera.eye());
+        const ok = state.volume.render(state.camera.invViewProj(W / H), state.camera.eye());
+        if (!ok) {
+          // A renderer must never be able to take the simulation with it.
+          console.warn('volume render unavailable:', state.volume.failed || 'device lost');
+          state.view = 'slice'; $('view').value = 'slice'; applyView();
+          $('backend-badge').textContent = '3D view unavailable here — showing slice';
+          $('backend-badge').className = 'badge warn';
+          await state.slice.draw(state.sim, performance.now());
+        }
       } else {
         state.slice.mode = SLICE_MODE[$('mode').value.toUpperCase()] || SLICE_MODE.SPEED;
         state.slice.axis = +$('axis').value;
@@ -367,23 +441,29 @@
     function stop() { state.running = false; $('run').textContent = 'Run ▶'; if (state.raf) cancelAnimationFrame(state.raf); state.raf = 0; }
 
     $('run').addEventListener('click', () => (state.running ? stop() : start()));
-    $('reset').addEventListener('click', () => build().catch((e) => console.error(e)));
-    $('scene').addEventListener('change', () => build().catch((e) => console.error(e)));
-    $('res').addEventListener('input', () => { $('res-v').textContent = RES[+$('res').value] + '³'; });
-    $('res').addEventListener('change', () => build().catch((e) => console.error(e)));
+    $('reset').addEventListener('click', () => build());
+    $('scene').addEventListener('change', () => { clampResolution(); build(); });
+    $('res').addEventListener('input', clampResolution);
+    $('res').addEventListener('change', () => build());
     $('view').addEventListener('change', async () => {
       state.view = $('view').value;
-      if (state.view === 'volume') await ensureVolume();
-      applyView(); drawOnce();
+      applyView();                       // unhide the target canvas first
+      if (state.view === 'volume') {
+        try { await ensureVolume(); } catch (e) {
+          console.warn('volume renderer unavailable:', e);
+          state.view = 'slice'; $('view').value = 'slice'; applyView();
+        }
+      }
+      drawOnce();
     });
     $('mode').addEventListener('change', () => drawOnce());
     $('axis').addEventListener('change', () => drawOnce());
     $('slicep').addEventListener('input', () => { $('slicep-v').textContent = Math.round(+$('slicep').value * 100) + '%'; drawOnce(); });
     $('spf').addEventListener('input', () => { $('spf-v').textContent = $('spf').value; });
     $('tau').addEventListener('input', () => { $('tau-v').textContent = (+$('tau').value).toFixed(3); });
-    $('tau').addEventListener('change', () => build().catch((e) => console.error(e)));
+    $('tau').addEventListener('change', () => build());
     $('uin').addEventListener('input', () => { $('uin-v').textContent = (+$('uin').value).toFixed(3); });
-    $('uin').addEventListener('change', () => build().catch((e) => console.error(e)));
+    $('uin').addEventListener('change', () => build());
 
     // ------------------------------------------------------------ verification
     $('verify-run').addEventListener('click', async () => {
@@ -417,6 +497,7 @@
       census: state.sim ? state.sim.cellCensus() : null,
       bytes: state.sim ? state.sim.memoryEstimate().bytes : 0,
       running: state.running,
+      building: state.building,
       view: state.view,
       slice: state.slice.lastStats,
     });
@@ -425,8 +506,9 @@
     window.__lsDraw = () => drawOnce();
     window.__lsUnits = UnitSystem;
 
-    $('res-v').textContent = RES[+$('res').value] + '³';
-    build().then(() => console.log('lattsim ready ✓')).catch((e) => console.error(e));
+    probeLimits()
+      .then(() => { clampResolution(); return build(); })
+      .then(() => console.log(state.sim ? 'lattsim ready ✓' : 'lattsim failed to build'));
   </script>
 </body>
 </html>

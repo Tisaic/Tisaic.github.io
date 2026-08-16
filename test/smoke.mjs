@@ -593,6 +593,88 @@ if (hasGPU && ls0.backend === 'webgpu') {
 check('lattsim: the GPU driver reported no uncaptured errors', (ls0.gpuErrors || []).length === 0,
   JSON.stringify(ls0.gpuErrors));
 
+// ---- every scene must show something. Reported from a real device: two of the
+// three "did nothing visible". They were all correct; the DEFAULT SLICE PLANE was
+// wrong for them -- Poiseuille varies only across z, so the plane normal to z has
+// exactly zero spread and renders as one flat colour. Each scene now declares the
+// plane that shows its physics; this checks the page applies it and that pixels
+// actually vary.
+for (const [key, label] of [['poiseuille', 'Poiseuille'], ['cavity', 'cavity'], ['channel', 'channel']]) {
+  await latt.selectOption('#scene', key);
+  await latt.waitForFunction(() => window.__lsDbg().backend !== null && !window.__lsDbg().building,
+    null, { timeout: 60000 });
+  await latt.evaluate(() => window.__lsStep(1500));
+  await latt.evaluate(() => window.__lsDraw());
+  await latt.waitForTimeout(250);
+  const shot = await latt.evaluate(() => {
+    const c = document.getElementById('cv');
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    const seen = new Set();
+    for (let i = 0; i < d.length; i += 4) seen.add((d[i] << 16) | (d[i + 1] << 8) | d[i + 2]);
+    return { colors: seen.size, axis: document.getElementById('axis').value };
+  });
+  check(`lattsim: the ${label} scene renders a varying field on its default slice`,
+    shot.colors > 12, `${shot.colors} distinct colours on slice axis ${shot.axis}`);
+  await latt.locator('#stage').screenshot({ path: join(SHOTS, `11-lattsim-${key}.png`) });
+}
+await latt.selectOption('#scene', 'channel');
+await latt.waitForFunction(() => !window.__lsDbg().building, null, { timeout: 60000 });
+
+// ---- the resolution ladder must be clamped to what the device can allocate
+// rather than attempted and left broken. The channel at 96 wants a 128.3 MiB
+// storage binding against a 128 MiB default limit; before this it failed, fell
+// through to a CPU backend far over its own cap, and left the page with no
+// simulation at all.
+const resInfo = await latt.evaluate(() => ({
+  max: +document.getElementById('res').max,
+  built: window.__lsDbg().cells > 0,
+}));
+check('lattsim: the resolution slider is clamped to what the device can allocate',
+  resInfo.max >= 0 && resInfo.max <= 4 && resInfo.built, JSON.stringify(resInfo));
+await latt.evaluate((m) => {
+  const r = document.getElementById('res'); r.value = String(m);
+  r.dispatchEvent(new Event('change'));
+}, resInfo.max);
+await latt.waitForFunction(() => !window.__lsDbg().building, null, { timeout: 180000 });
+const atMax = await latt.evaluate(() => window.__lsDbg());
+check('lattsim: the largest offered resolution actually builds',
+  atMax.cells > 0 && atMax.backend !== null, JSON.stringify({ cells: atMax.cells, backend: atMax.backend }));
+
+// ---- the raymarched volume view.
+//
+// IT CANNOT BE RENDERED HERE, and the reason is worth recording. In this
+// headless Chromium with a software adapter there is no real surface, and
+// getCurrentTexture() does not merely fail -- it destroys the WebGPU instance,
+// after which every COMPUTE call fails too. Isolated to fifteen lines of plain
+// WebGPU with none of this engine involved. So the suite does NOT switch to that
+// view: doing so takes the simulation down with it and proves nothing.
+//
+// What IS checkable without a surface is that the volume shader compiles, which
+// is where a WGSL mistake would live -- and this project has already shipped one
+// of those (`macro`, a reserved word) that produced silence rather than an error.
+// The picture itself is verified on a real device.
+if (hasGPU && ls0.backend === 'webgpu') {
+  const volShader = await latt.evaluate(async () => {
+    const [{ VolumeRenderer }, { Lattice }, { acquireDevice }] = await Promise.all([
+      import('./lib/lattsim/render/volume3d.js'),
+      import('./lib/lattsim/lattice.js'),
+      import('./lib/lattsim/backends/webgpu.js'),
+    ]);
+    const { device } = await acquireDevice();
+    const code = VolumeRenderer.shaderSource(new Lattice({ size: [16, 8, 8], spacing: 1e-3 }));
+    device.pushErrorScope('validation');
+    const mod = device.createShaderModule({ code });
+    const info = await mod.getCompilationInfo();
+    const scoped = await device.popErrorScope();
+    return {
+      errors: info.messages.filter((m) => m.type === 'error').map((m) => `${m.lineNum}:${m.linePos} ${m.message}`),
+      scoped: scoped ? scoped.message : null,
+    };
+  });
+  check('lattsim: the volume shader compiles',
+    volShader.errors.length === 0 && !volShader.scoped, JSON.stringify(volShader));
+}
+
 const stats = await latt.textContent('#s-lattice');
 check('lattsim: the lattice is described in the UI', /cells/.test(stats || ''), stats);
 check('lattsim: field memory is reported', /(KiB|MiB)/.test(await latt.textContent('#s-mem')),

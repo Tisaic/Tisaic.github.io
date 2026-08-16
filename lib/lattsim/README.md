@@ -136,6 +136,58 @@ reflective: an impulsive start rings an acoustic wave between the open faces
 that decays slowly — measured ±17% in density at step 200, ±13% at 600, ±5% by
 2200. A characteristic (non-reflecting) outlet is the fix; this is not one.
 
+**A moving wall is a WALL.** `CELL.MOVING` is halfway bounce-back with a
+momentum correction (`f_q = f_qbar + 2 w_q rho_w (c_q . u_wall)/cs^2`), so it
+injects momentum and no mass. Modelling it as a driven *fluid* cell — which is
+what shipped first — also made the lid a mass source, and the lid-driven cavity
+reported a "marginal" stability verdict in a closed box that cannot have one.
+
+**The cavity's density extreme is real physics.** It sits in the two cells at the
+lid corners, where a moving wall meets a stationary one and the pressure is
+formally singular: measured a steady 6.6% overall, 1.5% two cells in, 0.47% four
+cells in, against the ~0.3% this flow's dynamic pressure accounts for. It does
+not decay with time. Restricting the lid to the interior of the top face (so no
+cell is both stationary and moving) is the geometrically correct thing and is
+what ships — but it did **not** reduce that number, it raised it slightly, 5.1% →
+6.6%. The corner overlap was never the cause.
+
+## Displaying it
+
+**A correct simulation on the wrong plane looks broken.** Poiseuille flow varies
+only across z, so a slice normal to z has *exactly zero* spread and renders as one
+flat colour. Two of the three scenes appeared to "do nothing" for precisely this
+reason. Each scene now declares the plane that shows its physics in
+`meta.view.sliceAxis`, and a regression asserts the declared plane actually
+varies.
+
+**A closed domain is wrapped in walls, so every ray hits solid first.** The volume
+renderer treats solid as transparent until a ray has entered the fluid, and
+opaque after: the enclosing shell disappears, interior obstacles stay solid.
+Rendering it opaquely — the first version — produced a featureless grey box. The
+box also carries the lattice's own aspect ratio; mapping every lattice into a
+cube renders a 2:1:1 channel as a cube.
+
+**The volume render cannot be verified in CI.** In a headless browser with a
+software adapter there is no real surface, and `getCurrentTexture()` does not
+merely fail — it destroys the WebGPU instance, after which every *compute* call
+fails too. Isolated to fifteen lines of plain WebGPU with none of this engine
+involved. So `VolumeRenderer.render()` returns `false` rather than throwing and
+the page falls back to the slice view, a visualisation being unable to take a
+simulation with it; the suite compiles the volume shader (where a WGSL mistake
+would live) and leaves the picture to a real device.
+
+## Sizing
+
+There is **one adapter and one device for the page**, shared across rebuilds.
+Requesting a device per build is wasteful, and dropping the previous adapter can
+tear the WebGPU instance down underneath the new one.
+
+A D3Q19 lattice is 19 floats per cell, doubled for ping-pong. The channel at 96³
+wants a **128.3 MiB** storage binding against a 128 MiB default limit — so the
+page asks the device for its limit first and clamps the resolution ladder to what
+fits, rather than discovering it by failing. And a failed build never leaves the
+page without a simulation: it keeps what was running and says what went wrong.
+
 ## Not implemented, deliberately
 
 Heat, diffusion, elasticity, electromagnetics and multiphysics coupling are
