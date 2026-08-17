@@ -1281,6 +1281,26 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
       $('ss-ridge-v').textContent = Math.pow(10, +$('ss-ridge').value).toPrecision(2);
     }
     ssLabels();
+    // The soft sensor's own internals, so a bad score can be diagnosed rather than
+    // guessed at: the frozen input scales, the target's frozen mean and spread, the
+    // saturation count, and what the two points are actually reading.
+    window.__lsSSdbg = () => {
+      if (!ss.model) return null;
+      const m = ss.model, b = m.bank, ser = m.series;
+      const ys = ser.map((p) => p.truth).filter(Number.isFinite);
+      const mean = ys.reduce((a, c) => a + c, 0) / (ys.length || 1);
+      const sd = Math.sqrt(ys.reduce((a, c) => a + (c - mean) ** 2, 0) / (ys.length || 1));
+      const es = ser.map((p) => p.estimate).filter(Number.isFinite);
+      return { fmean: [...b.fmean], fstd: [...b.fstd], clamped: b.clamped,
+        recalibrations: m.recalibrations, settled: m._settled,
+        targetMean: m._tMean, targetStd: m._tStd, targetFrozen: m._tFrozen,
+        liveTargetMean: mean, liveTargetStd: sd,
+        estRange: es.length ? [Math.min(...es), Math.max(...es)] : null,
+        truthRange: ys.length ? [Math.min(...ys), Math.max(...ys)] : null,
+        thetaNorm: b.heads.map((h) => Math.sqrt(h.theta.m.reduce((a, c) => a + c * c, 0))),
+        pTrace: b.heads.map((h) => {
+          let t = 0; for (let i = 0; i < b.nf; i++) t += h.P.m[i * b.nf + i]; return t; }) };
+    };
     window.__lsSS = { place: (c) => ssPlace(c), build: (w) => ssBuild(w),
       sample: () => ssSample(), draw: () => ssDraw(true),
       train: () => { ss.model && ss.model.train(); ssStatus(); },
