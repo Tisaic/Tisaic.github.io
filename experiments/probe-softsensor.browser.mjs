@@ -153,23 +153,74 @@ if (MODE === 'run') {
     const sim = scene(a.res, a.tau, 0.08);
     await sim.build({ backend: 'webgpu' });
     const L = sim.lattice, m = sim.meta;
-    // THE PROBE IS WHERE YOU COULD ACTUALLY PUT ONE: hard against the wall,
-    // two diameters downstream. In a real duct the wall is the only surface you
-    // can instrument, and a wall sensor is blind to the wake by construction --
-    // it sees only what the wake's pressure field imprints on it.
-    const probeCell = L.index(Math.min(L.nx - 2, m.cx + 2 * m.d), 1, L.nz >> 1);
+    const x2 = Math.min(L.nx - 2, m.cx + 2 * m.d);
+    // WHERE THE PROBE GOES IS THE EXPERIMENT, so it is a variable rather than a
+    // choice buried in the code.
+    //   wall  hard against the no-slip wall, two diameters downstream. In a real
+    //         duct the wall is the only surface you can instrument, and a wall
+    //         sensor is blind to the wake by construction -- it sees only what
+    //         the wake's pressure field imprints on it. This is the real task.
+    //   wake  in the wake itself. The CONTROL: a probe that sees the oscillation
+    //         directly must do better, and the gap between the two is how much
+    //         information the wall actually carries.
+    //   near  one diameter off the centreline: neither, and a check that the
+    //         answer moves smoothly between them rather than being a knife edge.
+    const probeCell = a.probe === 'wake' ? L.index(x2, m.cy, L.nz >> 1)
+      : a.probe === 'near' ? L.index(x2, m.cy - m.d, L.nz >> 1)
+        : L.index(x2, 1, L.nz >> 1);
     // THE TARGET IS WHERE YOU COULD NOT: mid-wake, five diameters downstream.
     const hiddenCell = L.index(Math.min(L.nx - 2, m.cx + 5 * m.d), m.cy, L.nz >> 1);
     sim.advance(a.spin);
+    // The wake's own numbers, alongside the model's, so the scores can never be
+    // read without the thing they were scored against.
+    const shed = await X.exp.unsteadiness(sim, hiddenCell, { every: a.every, samples: 200 });
     const res0 = await X.exp.run(sim, { probeCell, hiddenCell,
       cfg: { every: a.every, warmup: a.warmup, train: a.train, score: a.score,
         horizon: a.horizon },
       log: (s) => console.log(s) });
     const d = await sim.diagnostics();
-    return { meta: m, cells: L.cellCount, backend: sim.backend.kind,
-      cells_used: { probeCell, hiddenCell }, result: res0,
+    return { meta: m, cells: L.cellCount, backend: sim.backend.kind, probe: a.probe,
+      cells_used: { probeCell, hiddenCell }, shed, result: res0,
       final: { uMax: d.uMax, rho: [d.rhoMin, d.rhoMax], limited: d.limited } };
-  }, { res, tau, spin: 4000, every: 20, warmup: 250, train: 1200, score: 1200, horizon: 10 });
+  }, { res, tau, probe: arg('probe', 'wall'), spin: 4000, every: 20,
+    warmup: 250, train: 1200, score: 1200,
+    // HALF A SHEDDING PERIOD. Measured at res 48: 29 zero crossings over 8000
+    // steps is a period near 550 steps, so 14 samples of 20 steps lands at the
+    // antiphase point -- exactly where persistence is worst, which is the
+    // strongest test a forecast can be given.
+    horizon: Number(arg('horizon', 14)) });
+  console.log(JSON.stringify(out, null, 2));
+}
+
+
+// ------------------------------------------------------------------ io
+// How much of the clock is the READBACK rather than the physics? A probe is
+// 16 bytes, but it is 16 bytes behind a queue flush and a mapAsync round trip,
+// and on a software adapter that is not obviously cheap. Measured before any
+// effort is spent making it cheaper.
+if (MODE === 'io') {
+  const out = await call(async (scene, X, a) => {
+    const sim = scene(a.res, 0.516, 0.08);
+    await sim.build({ backend: 'webgpu' });
+    sim.advance(50);
+    await sim.diagnostics();
+    const c0 = sim.lattice.index(60, 12, 1), c1 = sim.lattice.index(100, 25, 1);
+    let t = performance.now();
+    sim.advance(a.steps);
+    await sim.diagnostics();
+    const stepMs = (performance.now() - t) / a.steps;
+    t = performance.now();
+    for (let i = 0; i < a.reads; i++) await sim.backend.probe('macro', c0);
+    const oneMs = (performance.now() - t) / a.reads;
+    t = performance.now();
+    for (let i = 0; i < a.reads; i++) {
+      await sim.backend.probe('macro', c0); await sim.backend.probe('macro', c1);
+    }
+    const twoMs = (performance.now() - t) / a.reads;
+    return { stepMs, oneProbeMs: oneMs, twoProbesMs: twoMs,
+      perSampleMs: a.every * stepMs + twoMs,
+      readbackShare: twoMs / (a.every * stepMs + twoMs) };
+  }, { res: Number(arg('res', 48)), steps: 400, reads: 200, every: 20 });
   console.log(JSON.stringify(out, null, 2));
 }
 
