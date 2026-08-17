@@ -40,7 +40,7 @@ console.log('\nlattsim: Poiseuille flow vs the analytic profile');
  * faces. The exact solution is one-dimensional, so the transverse extent can be
  * tiny -- which is what makes this cheap enough to run on every invocation.
  */
-async function channel({ nz, tau, force, precision = 'f64' }) {
+async function channel({ nz, tau, force, precision = 'f64', collision = 'trt', smagorinsky = 0 }) {
   const sim = new Simulation({
     lattice: {
       size: [4, 4, nz], spacing: 1e-3,
@@ -48,7 +48,7 @@ async function channel({ nz, tau, force, precision = 'f64' }) {
     },
   });
   sim.addRegion(region.wall(CELL.SOLID, 2, -1)).addRegion(region.wall(CELL.SOLID, 2, +1));
-  sim.addPhysics(new LBMFluidOperator({ tau, force: [force, 0, 0] }));
+  sim.addPhysics(new LBMFluidOperator({ tau, force: [force, 0, 0], collision, smagorinsky }));
   await sim.build({ backend: 'cpu', precision });
   return sim;
 }
@@ -141,50 +141,144 @@ const H = NZ - 2, ZC = (NZ - 1) / 2;
 // it by accident at tau = 3.
 if (FULL) {
   const TAU_MAGIC = 0.5 + Math.sqrt(3 / 16);
-  const rows = [];
-  for (const tau of [0.6, 0.8, TAU_MAGIC, 1.0, 1.5, 2.5]) {
-    const nu = UnitSystem.latticeViscosityFromTau(tau);
-    const force = 0.02 * 8 * nu / (H * H);          // hold the peak velocity fixed
-    const sim = await channel({ nz: NZ, tau, force });
-    await toSteady(sim);
-    const err = l2(await profile(sim), H, ZC, force, nu);
-    rows.push({ tau, nu, err });
-    sim.destroy();
+  const TAUS = [0.6, 0.8, TAU_MAGIC, 1.0, 1.5, 2.5];
+  const sweep = async (collision) => {
+    const rows = [];
+    for (const tau of TAUS) {
+      const nu = UnitSystem.latticeViscosityFromTau(tau);
+      const force = 0.02 * 8 * nu / (H * H);          // hold the peak velocity fixed
+      const sim = await channel({ nz: NZ, tau, force, collision });
+      await toSteady(sim);
+      rows.push({ tau, nu, err: l2(await profile(sim), H, ZC, force, nu) });
+      sim.destroy();
+    }
+    return rows;
+  };
+  const bgk = await sweep('bgk'), trt = await sweep('trt');
+  console.log('    tau      nu       BGK L2      TRT L2');
+  for (let i = 0; i < TAUS.length; i++) {
+    console.log(`    ${bgk[i].tau.toFixed(3)}  ${bgk[i].nu.toFixed(4)}  `
+      + `${bgk[i].err.toExponential(3)}  ${trt[i].err.toExponential(3)}`);
   }
-  for (const r of rows) {
-    console.log(`    tau=${r.tau.toFixed(3)} (nu=${r.nu.toFixed(4)}): L2 ${r.err.toExponential(3)}`);
-  }
-  const at = (t) => rows.find((r) => Math.abs(r.tau - t) < 1e-9).err;
-  check('accurate to 1% in the usable band tau in [0.6, 1.0]',
-    [0.6, 0.8, 1.0].every((t) => at(t) < 0.01), [0.6, 0.8, 1.0].map((t) => at(t).toExponential(2)).join(', '));
-  check('the error minimum sits at the predicted tau = 1/2 + sqrt(3/16) ~ 0.933',
-    at(TAU_MAGIC) === Math.min(...rows.map((r) => r.err)), rows.map((r) => r.err.toExponential(2)).join(', '));
-  check('BGK bounce-back degrades at large tau (>2% at tau=1.5, worse at 2.5)',
-    at(1.5) > 0.02 && at(2.5) > at(1.5), `${at(1.5).toExponential(2)} then ${at(2.5).toExponential(2)}`);
+  const at = (rows, t) => rows.find((r) => Math.abs(r.tau - t) < 1e-9).err;
+
+  // BGK: the documented limit. One relaxation time makes the effective wall
+  // position drift with tau, exact ONLY where Lambda = (tau-1/2)^2 = 3/16.
+  check('BGK: the error minimum sits at the predicted tau = 1/2 + sqrt(3/16) ~ 0.933',
+    at(bgk, TAU_MAGIC) === Math.min(...bgk.map((r) => r.err)),
+    bgk.map((r) => r.err.toExponential(2)).join(', '));
+  check('BGK: bounce-back degrades at large tau (>2% at tau=1.5, worse at 2.5)',
+    at(bgk, 1.5) > 0.02 && at(bgk, 2.5) > at(bgk, 1.5),
+    `${at(bgk, 1.5).toExponential(2)} then ${at(bgk, 2.5).toExponential(2)}`);
+
+  // TRT: the fix. omega- holds Lambda = 3/16 at EVERY viscosity, so the wall
+  // stops moving and the profile is exact everywhere rather than at one tau.
+  check('TRT: the wall position is exact at every tau, not just the magic one',
+    trt.every((r) => r.err < 1e-6), trt.map((r) => r.err.toExponential(2)).join(', '));
+  check('TRT: no longer degrades at large tau -- it improves',
+    at(trt, 2.5) < at(trt, 0.6), `${at(trt, 0.6).toExponential(2)} -> ${at(trt, 2.5).toExponential(2)}`);
+  // The headline: where BGK is worst, TRT is ten orders of magnitude better.
+  check('TRT beats BGK by >1e6 at tau = 2.5', at(bgk, 2.5) / at(trt, 2.5) > 1e6,
+    `${at(bgk, 2.5).toExponential(2)} vs ${at(trt, 2.5).toExponential(2)} `
+    + `(${(at(bgk, 2.5) / at(trt, 2.5)).toExponential(1)}x)`);
+  check('at the magic tau the two agree, because there TRT reduces to BGK',
+    Math.abs(at(bgk, TAU_MAGIC) - at(trt, TAU_MAGIC)) / at(bgk, TAU_MAGIC) < 1e-6,
+    `${at(bgk, TAU_MAGIC).toExponential(3)} vs ${at(trt, TAU_MAGIC).toExponential(3)}`);
 }
 
 // ------------------------------------------------ resolution scaling
-// Refining the lattice must not make the answer worse, and for a second-order
-// scheme the error should fall roughly as the square of the resolution.
+//
+// MEASURED UNDER BGK, DELIBERATELY. A convergence study measures how fast the
+// DISCRETISATION error shrinks -- and TRT at Lambda = 3/16 reproduces this
+// profile to machine precision at every resolution, so under TRT the number
+// left over is the steady-state iteration tolerance, not discretisation error.
+// (It even runs "backwards": 1.7e-12 at nz 9 against 9.4e-8 at nz 25, because
+// the bigger lattice converges more slowly against a fixed tolerance.) You
+// cannot measure a scheme's order of accuracy on a case it solves exactly, so
+// the order is measured on the scheme that has an error to measure.
 if (FULL) {
   const rows = [];
   for (const nz of [9, 15, 25]) {
     const h = nz - 2, zc = (nz - 1) / 2;
     const force = 0.02 * 8 * NU / (h * h);          // fixed peak velocity
     const t0 = Date.now();
-    const sim = await channel({ nz, tau: TAU, force });
+    const sim = await channel({ nz, tau: TAU, force, collision: 'bgk' });
     const conv = await toSteady(sim);
     const err = l2(await profile(sim), h, zc, force, NU);
     rows.push({ nz, cells: sim.lattice.cellCount, err, steps: conv.steps, ms: Date.now() - t0 });
     sim.destroy();
   }
   for (const r of rows) {
-    console.log(`    nz=${r.nz} (${r.cells} cells, ${r.steps} steps): L2 ${r.err.toExponential(3)} in ${r.ms} ms`);
+    console.log(`    BGK nz=${r.nz} (${r.cells} cells, ${r.steps} steps): L2 ${r.err.toExponential(3)} in ${r.ms} ms`);
   }
-  check('every resolution matches within 2%', rows.every((r) => r.err < 0.02),
+  check('BGK: every resolution matches within 2%', rows.every((r) => r.err < 0.02),
     rows.map((r) => r.err.toExponential(2)).join(', '));
   const order = Math.log(rows[0].err / rows[2].err) / Math.log((rows[2].nz - 2) / (rows[0].nz - 2));
-  check('convergence is at least first order, consistent with second', order > 1.5, `observed order ${order.toFixed(2)}`);
+  check('BGK: convergence is at least first order, consistent with second', order > 1.5,
+    `observed order ${order.toFixed(2)}`);
+
+  // And the TRT claim on the same ladder: not "converging", but ALREADY EXACT.
+  const trtErr = [];
+  for (const nz of [9, 15, 25]) {
+    const h = nz - 2, zc = (nz - 1) / 2;
+    const force = 0.02 * 8 * NU / (h * h);
+    const sim = await channel({ nz, tau: TAU, force, collision: 'trt' });
+    await toSteady(sim);
+    trtErr.push(l2(await profile(sim), h, zc, force, NU));
+    sim.destroy();
+  }
+  console.log(`    TRT nz=9/15/25: ${trtErr.map((e) => e.toExponential(2)).join(', ')}`);
+  check('TRT is at machine precision at every resolution, not converging towards it',
+    trtErr.every((e) => e < 1e-6), trtErr.map((e) => e.toExponential(2)).join(', '));
+}
+
+// ------------------- the sub-grid model must not touch a laminar flow
+//
+// THE MODEL IS NOT FREE, AND THIS MEASURES THE BILL.
+//
+// The claim this check was written to defend was "the sub-grid model cannot
+// touch the analytic cases, because |S| vanishes in laminar flow". THAT CLAIM
+// IS FALSE and the check caught it. Poiseuille flow has a perfectly real strain
+// rate -- it is a parabola, so du/dz is nonzero everywhere but the centreline --
+// and plain Smagorinsky responds to the TOTAL strain, not to the unresolved
+// part of it. It fires here, and it degrades the one case with a closed-form
+// answer from machine-exact to ~7e-4.
+//
+// It is not a bug. Predicted from theory at these settings:
+//   du/dz|peak = 4 u_max / H = 6.2e-3,  nu_t = (Cs)^2 |S| = 1.6e-4,
+//   nu_t / nu_0 = 9.6e-4
+// against a MEASURED profile shift of 8.8e-4 -- agreement to 10%, so the
+// implementation matches the model and the model is behaving as documented.
+// Over-dissipation in laminar and near-wall shear is Smagorinsky's textbook
+// flaw; fixing it needs a model that can separate resolved shear from
+// unresolved (WALE, or shear-improved Smagorinsky), and WALE in particular
+// needs the antisymmetric velocity gradient, which Pi_neq does not carry.
+//
+// So: the model ships OFF by default, the analytic verification runs without
+// it, and this check pins the cost at its measured size so a change that made
+// the model an order of magnitude more dissipative could not pass quietly.
+{
+  const cs = 0.16;
+  const plain = await channel({ nz: NZ, tau: TAU, force: F });
+  const model = await channel({ nz: NZ, tau: TAU, force: F, smagorinsky: cs });
+  await toSteady(plain); await toSteady(model);
+  const pa = await profile(plain), pb = await profile(model);
+  const errPlain = l2(pa, H, ZC, F, NU), errModel = l2(pb, H, ZC, F, NU);
+  let worst = 0;
+  for (let i = 0; i < pa.length; i++) worst = Math.max(worst, Math.abs(pa[i].u - pb[i].u) / pa[i].u);
+  console.log(`    Cs=${cs}: analytic L2 ${errPlain.toExponential(3)} -> ${errModel.toExponential(3)}, `
+    + `worst per-node shift ${worst.toExponential(3)}`);
+  check('the sub-grid model is OFF by default (the analytic cases are unmodelled)',
+    errPlain < 1e-6, errPlain.toExponential(3));
+  check('with the model on, laminar over-dissipation stays under 0.2%', worst < 2e-3,
+    worst.toExponential(3));
+  // And it must match the eddy viscosity the model actually prescribes, so a
+  // wrong prefactor cannot hide inside a loose tolerance.
+  const predicted = (cs * cs) * (4 * Math.max(...pa.map((q) => q.u)) / H) / NU;
+  check('the laminar shift matches the predicted nu_t / nu_0 within 2x',
+    worst > 0.5 * predicted && worst < 2 * predicted,
+    `measured ${worst.toExponential(2)} vs predicted ${predicted.toExponential(2)}`);
+  plain.destroy(); model.destroy();
 }
 
 // ------------------------------------------------ f32 parity

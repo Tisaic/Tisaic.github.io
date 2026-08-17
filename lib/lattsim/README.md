@@ -122,6 +122,94 @@ runs every time. Quick is **~1m35** against 12+ minutes before. Run `--full`
 before pushing anything that touches the solver, the collision operator or the
 boundaries.
 
+## Turbulence: two mechanisms, and which one actually does the work
+
+Asked to handle higher Reynolds number **without capping the sliders**, on the
+grounds that real physics manages it. Two things were built. The measurement
+then overturned the reasoning behind one of them, which is the more useful half
+of this entry.
+
+The two causes are genuinely different:
+
+**The scheme is needlessly unstable.** BGK relaxes every moment at the same
+rate; as omega -> 2 the non-hydrodynamic "ghost" moments become under-damped and
+grow. That is a defect of the collision operator, not of the fluid.
+
+**The flow has structure smaller than a cell.** Real physics dissipates at the
+Kolmogorov scale. At Re_cell 48 on this lattice that scale is far below dx, and
+no scheme resolves what is not represented. Here you resolve it or you model it.
+
+### TRT — and what it is actually worth
+
+Split each population into parts even and odd under `q -> opposite(q)` and relax
+them at two rates. omega+ sets the viscosity; omega- is free, and
+
+    Lambda = (1/omega+ - 1/2)(1/omega- - 1/2)
+
+**Lambda = 3/16 makes halfway bounce-back exact at every viscosity.** This is the
+headline result, measured against the analytic Poiseuille profile:
+
+| tau | BGK L2 | TRT L2 | |
+|---|---|---|---|
+| 0.600 | 7.67e-3 | 1.79e-7 | |
+| 0.800 | 4.21e-3 | 2.50e-8 | |
+| 0.933 | 8.67e-9 | 8.67e-9 | identical — TRT reduces to BGK at the magic tau |
+| 1.000 | 2.70e-3 | 3.36e-9 | |
+| 1.500 | 3.51e-2 | 4.77e-11 | |
+| 2.500 | 1.65e-1 | 8.99e-12 | **10 orders of magnitude** |
+
+The τ-dependent wall slip documented below as a known limit is *gone*. That the
+two agree exactly at tau = 0.933 is the correctness check: there Lambda = 3/16 is
+what BGK already had, so the operators must coincide, and they do to 1e-6
+relative.
+
+**But TRT does NOT raise the stability ceiling, and at Lambda = 3/16 it LOWERS
+it.** One knob serves two objectives that invert at low viscosity: accuracy wants
+Lambda = 3/16, stability wants Lambda small (omega- near 2). Holding 3/16 drives
+omega- to **0.10 at tau 0.52** and 0.026 at tau 0.505 — the ghost modes are
+barely relaxed at all. So omega- is a **policy**: `magic` for exact walls,
+`stability` to pin it near 2 when the flow matters more than the wall.
+
+### The sub-grid model is what removes the ceiling
+
+tau becomes a field: `tau_eff = ½(tau + sqrt(tau² + 18 Cs² |Pi| / rho))`, with
+the strain rate read straight out of the non-equilibrium stress — already in
+registers, no finite differences, no neighbour access.
+
+Cell Reynolds number at which each configuration was still finite after 3000
+steps (cylinder in a channel, u 0.08):
+
+| Re_cell | BGK | TRT magic | TRT stability | TRT + LES |
+|---|---|---|---|---|
+| 12 | ok | **died** | ok | ok |
+| 16 | ok | died | ok | ok |
+| 24 | died | died | died | **ok** |
+| 48 | died | died | died | **ok** |
+| 96 | died | died | died | **ok** |
+| 160 | died | died | died | **ok** |
+
+**At least 13x past where BGK dies, and it did not fail anywhere in the tested
+range.** TRT's contribution is accuracy; the model's contribution is stability.
+Those are not the roles they were proposed for.
+
+### What the model costs, measured
+
+It is not free and it does not ship on by default. Plain Smagorinsky responds to
+the TOTAL strain rate, not to the unresolved part, so it fires in laminar flow
+too — the analytic Poiseuille profile degrades from 3.4e-9 to 6.9e-4 with it on.
+
+That is the model behaving as documented rather than a bug: predicted
+`nu_t/nu_0 = 9.6e-4` against a measured profile shift of `8.8e-4`, agreement to
+10%. Over-dissipation in laminar and near-wall shear is Smagorinsky's textbook
+flaw. Fixing it needs a model that separates resolved shear from unresolved —
+WALE, or shear-improved Smagorinsky — and WALE needs the antisymmetric velocity
+gradient, which `Pi_neq` does not carry. Not built.
+
+So the analytic verification runs unmodelled, the page states which mode is
+holding a run together, and a regression pins the laminar cost at its measured
+size so a change that made the model an order of magnitude more dissipative
+could not pass quietly.
+
 ## Stability: what the sliders can do to it
 
 **Reported from a device:** viscosity slider to the far left, everything else

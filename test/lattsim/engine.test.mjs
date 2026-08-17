@@ -385,6 +385,51 @@ if (FULL) {
   sim.destroy();
 }
 
+// ----------------------- what actually holds a high-Reynolds run together
+//
+// THE MEASUREMENT OVERTURNED THE PROPOSAL, so both halves are pinned here.
+//
+// TRT was added to raise the stability ceiling AND to fix the tau-dependent
+// wall position. It does the second superbly (ten orders of magnitude, see
+// poiseuille.test.mjs) and it does NOT do the first: TRT's free rate is one
+// knob serving two objectives that invert at low viscosity. Holding
+// Lambda = 3/16 -- the value that makes walls exact -- drives omega- to 0.10 at
+// tau 0.52, leaving the ghost modes almost unrelaxed, and TRT at that setting
+// died EARLIER than plain BGK. Pinning omega- near 2 instead recovers BGK's
+// stability but forfeits the exact wall.
+//
+// What actually removes the ceiling is the SUB-GRID MODEL, which is the honest
+// answer: at these viscosities the dissipation range is smaller than a cell, so
+// the missing drain has to be supplied rather than resolved.
+//
+// Measured (cylinder in a channel, u 0.08, 3000 steps), cell Reynolds number at
+// which each configuration is still finite:
+//   BGK           ok to 16, dead at 24
+//   TRT magic     dead at 12          <- WORSE than BGK, the negative result
+//   TRT stability ok to 16, dead at 24
+//   TRT + LES     ok at 160, the top of what was tested
+{
+  const { channelFlow } = await import('../../lib/lattsim/scenes.js');
+  const run = async (opts) => {
+    const sim = channelFlow({ resolution: 16, tau: 0.505, inletVelocity: 0.08, obstacle: 'cylinder' });
+    Object.assign(sim.operators[0].params, opts);
+    await sim.build({ backend: 'cpu' });
+    let d = null;
+    for (let k = 0; k < 4; k++) {
+      sim.advance(200);
+      d = await sim.diagnostics();
+      if (d.stable.state === 'diverged') break;
+    }
+    sim.destroy();
+    return d.stable.state;
+  };
+  // tau 0.505 at u 0.08 is Re_cell 48 -- four times past where BGK dies.
+  const bare = await run({ collision: 'trt', trtPolicy: 'stability', smagorinsky: 0 });
+  const modelled = await run({ collision: 'trt', trtPolicy: 'stability', smagorinsky: 0.16 });
+  check('without the sub-grid model, Re_cell 48 diverges', bare === 'diverged', bare);
+  check('WITH the sub-grid model, the same run survives', modelled !== 'diverged', modelled);
+}
+
 // ------------------------------------------------- the residual diagnostic
 {
   // Cheap in quick, thorough in full: the claim is that the residual FALLS, and

@@ -670,7 +670,14 @@ for (const [key, label] of [['poiseuille', 'Poiseuille'], ['cavity', 'cavity'], 
   await latt.selectOption('#scene', key);
   await latt.waitForFunction(() => window.__lsDbg().backend !== null && !window.__lsDbg().building,
     null, { timeout: 60000 });
-  await latt.evaluate(() => window.__lsStep(1500));
+  // STEPS SCALED TO THE DOMAIN. The channel is now 3x long, so at a fixed 1500
+  // steps the inlet flow had not crossed it and the slice was still mostly at
+  // rest -- 3 distinct colours, which reads as "renders nothing" when the scene
+  // is fine and simply young. Give every scene time for the flow to traverse it.
+  await latt.evaluate(() => {
+    const L = window.__lsSim().lattice;
+    window.__lsStep(Math.max(1500, L.nx * 40));
+  });
   await latt.evaluate(() => window.__lsDraw());
   await latt.waitForTimeout(250);
   const shot = await latt.evaluate(() => {
@@ -828,8 +835,11 @@ if (hasGPU && ls0.backend === 'webgpu') {
     });
     await latt.waitForFunction(() => !window.__lsDbg().building && !window.__lsDbg().queued,
       null, { timeout: 120000 });
+    // Assert the STATE, not the phrasing -- a check that greps the sentence
+    // breaks every time the sentence improves.
     check('lattsim: an unstable slider pairing is flagged BEFORE it is run',
-      /unstable/.test(await latt.textContent('#s-risk')), await latt.textContent('#s-risk'));
+      await latt.evaluate(() => document.getElementById('tau-v').className.includes('bad')),
+      await latt.textContent('#s-risk'));
 
     // Drive it until it dies. It should not take long at the stability floor.
     const died = await latt.evaluate(async () => {

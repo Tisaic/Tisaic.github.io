@@ -369,6 +369,46 @@ the shipped commit carries the correct version.
    FOLD on a phone, so from outside the page simply broke, and Run re-diverged on
    the next frame and froze again. The badge over the stage now carries the
    verdict, the step, and the remedy, and Run refuses until Reset.
+   **TURBULENCE WITHOUT CAPPING THE SLIDERS (v119) — TWO MECHANISMS BUILT, AND
+   THE MEASUREMENT OVERTURNED THE REASONING FOR ONE OF THEM.** Asked to handle
+   higher Reynolds number properly rather than by limiting the controls. Two
+   distinct causes: the SCHEME is needlessly unstable (BGK relaxes every moment
+   at one rate, so as ω→2 the non-hydrodynamic "ghost" moments go under-damped),
+   and the FLOW has structure smaller than a cell (real physics dissipates at the
+   Kolmogorov scale; at Re_cell 48 that is far below dx, so it must be resolved
+   or modelled).
+   **TRT** splits each population into parts even/odd under q→opposite(q) and
+   relaxes them at two rates, with Λ = (1/ω⁺−½)(1/ω⁻−½). **Λ = 3/16 makes
+   halfway bounce-back exact at EVERY viscosity** — measured against the analytic
+   Poiseuille profile, BGK→TRT: τ 0.6 7.67e-3→1.79e-7, τ 1.0 2.70e-3→3.36e-9,
+   τ 1.5 3.51e-2→4.77e-11, **τ 2.5 1.65e-1→8.99e-12, ten orders of magnitude**.
+   The τ-dependent wall slip this file documented as a known limit is GONE. At
+   τ 0.933 the two agree to 1e-6 relative, which is the correctness check: there
+   Λ=3/16 is what BGK already had, so they must coincide.
+   **BUT TRT DOES NOT RAISE THE STABILITY CEILING, AND AT Λ=3/16 IT LOWERS IT.**
+   One knob serves two objectives that INVERT at low viscosity: accuracy wants
+   Λ=3/16, stability wants Λ small (ω⁻ near 2). Holding 3/16 drives ω⁻ to **0.10
+   at τ 0.52**, leaving the ghost modes barely relaxed — and TRT then died
+   EARLIER than plain BGK. So ω⁻ is a POLICY: `magic` for exact walls,
+   `stability` to pin it near 2.
+   **THE SUB-GRID MODEL IS WHAT REMOVES THE CEILING.** τ becomes a field,
+   τ_eff = ½(τ + √(τ² + 18Cs²|Π|/ρ)), with the strain rate read straight out of
+   the non-equilibrium stress — already in registers, no finite differences, no
+   neighbour access. Cell Reynolds number still finite after 3000 steps:
+   BGK ok to 16 / dead at 24; TRT-magic dead at 12; TRT-stability ok to 16 /
+   dead at 24; **TRT+LES ok at 24, 48, 96 and 160 — at least 13× past BGK and it
+   did not fail anywhere tested.** TRT buys accuracy, the model buys stability;
+   neither is the role it was proposed for.
+   **THE MODEL IS NOT FREE AND SHIPS OFF BY DEFAULT.** Plain Smagorinsky responds
+   to the TOTAL strain, not the unresolved part, so it fires in laminar flow: the
+   analytic Poiseuille profile degrades 3.4e-9 → 6.9e-4 with it on. That is the
+   model behaving as documented, not a bug — predicted ν_t/ν_0 = 9.6e-4 against a
+   measured shift of 8.8e-4, agreement to 10%. Over-dissipation in laminar and
+   near-wall shear is Smagorinsky's textbook flaw; separating resolved from
+   unresolved shear needs WALE or shear-improved Smagorinsky, and WALE needs the
+   ANTISYMMETRIC velocity gradient, which Π_neq does not carry. Not built. So the
+   analytic verification runs unmodelled, the page names which mode is holding a
+   run together, and a regression pins the laminar cost at its measured size.
    **DELIBERATELY NOT BUILT YET:** heat, diffusion, elasticity, electromagnetics,
    multiphysics coupling and adaptive resolution are architecture rather than
    code. Operators declare the fields they read and write and the solver rejects

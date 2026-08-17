@@ -8,7 +8,7 @@
   <title>LattSim — Lattice Physics Engine</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:118,built:"2026-08-17T01:33:05Z"}; // __LATTSIM_STAMP__</script>
+  <script>window.__BUILD = {version:119,built:"2026-08-17T02:59:10Z"}; // __LATTSIM_STAMP__</script>
   <script src="console-boot.js"></script>
 
   <style>
@@ -97,6 +97,11 @@
       <button id="run">Run ▶</button>
       <button id="reset" class="sec">Reset</button>
       <select id="scene" aria-label="Scene"></select>
+      <select id="physics" aria-label="Collision model">
+        <option value="trt">TRT · exact walls</option>
+        <option value="les">TRT + LES · turbulent</option>
+        <option value="bgk">BGK · reference</option>
+      </select>
       <select id="obstacle" aria-label="Obstacle">
         <option value="cylinder">cylinder</option>
         <option value="sphere">sphere</option>
@@ -125,7 +130,7 @@
     <div class="controls">
       <label class="slider">Resolution <input type="range" id="res" min="0" max="4" step="1" value="2" />
         <span class="v" id="res-v">48³</span></label>
-      <label class="slider">Viscosity (τ) <input type="range" id="tau" min="0.51" max="1.4" step="0.005" value="0.52" />
+      <label class="slider">Viscosity (τ) <input type="range" id="tau" min="0.5015" max="1.4" step="0.0005" value="0.52" />
         <span class="v" id="tau-v">0.520</span></label>
       <label class="slider">Inlet speed <input type="range" id="uin" min="0.005" max="0.14" step="0.005" value="0.08" />
         <span class="v" id="uin-v">0.080</span></label>
@@ -346,6 +351,7 @@
         inletVelocity: +$('uin').value,
         lidVelocity: +$('uin').value,
         obstacle: $('obstacle').value,
+        ...PHYSICS[$('physics').value],
       });
       const mem = sim.memoryEstimate();
       $('s-mem').textContent = `${formatBytes(mem.bytes)} over ${mem.items.length} field(s)`;
@@ -645,6 +651,7 @@
     $('reset').addEventListener('click', () => build());
     $('scene').addEventListener('change', () => { clampResolution(); syncObstacle(); build(); });
     $('obstacle').addEventListener('change', () => build());
+    $('physics').addEventListener('change', () => { stabilityHint(); build(); });
     // The obstacle only means anything in the channel scene.
     function syncObstacle() { $('obstacle').disabled = $('scene').value !== 'channel'; }
     $('res').addEventListener('input', clampResolution);
@@ -680,6 +687,18 @@
     //   Re_cell 12  (tau .520)  survives, marginal
     // A separate run at a coarser lattice survived Re_cell 20 for 9000 steps, so
     // the boundary is near 20 and resolution-dependent. Warn at 12, condemn at 20.
+    // MEASURED CEILINGS, cell Reynolds number at which each configuration was
+    // still finite after 3000 steps (cylinder in a channel, u 0.08):
+    //   bgk  ok to 16, dead at 24
+    //   trt  ok to 16, dead at 24   (and at Lambda=3/16, dead at 12 -- worse
+    //        than BGK, which is why the turbulent mode pins omega- instead)
+    //   les  ok at 160, the top of what was tested
+    const PHYSICS = {
+      trt: { collision: 'trt', trtPolicy: 'magic', smagorinsky: 0 },
+      les: { collision: 'trt', trtPolicy: 'stability', smagorinsky: 0.16 },
+      bgk: { collision: 'bgk', smagorinsky: 0 },
+    };
+    const CEILING = { trt: 20, les: 400, bgk: 20 };
     const RISK_MARGINAL = 12, RISK_DIVERGE = 20;
     function stabilityHint() {
       const tau = +$('tau').value, u = +$('uin').value;
@@ -687,12 +706,15 @@
       // The flow accelerates past the obstacle, so the local lattice velocity is
       // well above the inlet value. This ratio is what the measured floor tracks.
       const risk = u / nu;
-      const cls = risk > RISK_DIVERGE ? 'bad' : risk > RISK_MARGINAL ? 'warn' : '';
+      const mode = $('physics').value;
+      const diverge = CEILING[mode], marginal = mode === 'les' ? 200 : RISK_MARGINAL;
+      const cls = risk > diverge ? 'bad' : risk > marginal ? 'warn' : '';
       for (const id of ['tau-v', 'uin-v']) $(id).className = 'v ' + cls;
-      $('s-risk').innerHTML = cls === 'bad'
-        ? '<span class="bad">unstable</span> — this τ and inlet speed diverge; raise τ or slow the flow'
-        : cls === 'warn' ? '<span class="warn">marginal</span> — near the stability limit'
-        : '<span class="good">within the stable range</span>';
+      $('s-risk').innerHTML = `Re<sub>cell</sub> ${risk.toFixed(0)} — ` + (cls === 'bad'
+        ? `<span class="bad">past this model's measured ceiling (~${diverge})</span>`
+          + (mode === 'les' ? '' : ' — switch to <b>TRT + LES</b>, or raise τ')
+        : cls === 'warn' ? '<span class="warn">marginal</span>'
+        : '<span class="good">within the measured stable range</span>');
     }
     $('tau').addEventListener('input', () => { $('tau-v').textContent = (+$('tau').value).toFixed(3); stabilityHint(); });
     $('tau').addEventListener('change', () => build());
