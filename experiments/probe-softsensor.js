@@ -309,6 +309,17 @@ export async function run(sim, { probeCell, hiddenCell = null, cfg = {}, log = (
   const truthRing = [];              // |u| history for persistence
   const hiddenRing = [];
   let gainNum = 0, gainDen = 0;      // online scaling for the reconstruction
+  // PERIOD-PERSISTENCE: "it will do what it did one shedding period ago".
+  // THE BASELINE THIS REGIME ACTUALLY DESERVES. A wake at this Reynolds number
+  // is a LIMIT CYCLE, so the entire flow is one number -- the phase -- and a
+  // model that recovers it will look spectacular against persistence while doing
+  // nothing a lookup table could not. Predicting y(t) = y(t - P) needs no model
+  // at all, and it is available to a forecast head too, since P exceeds the
+  // horizon: at issue time t-H the sample at t-P has already happened.
+  // If the expanded model cannot beat THIS, it has learned periodicity, not the
+  // flow, and the honest conclusion is about the testbed rather than the method.
+  const periodScore = heads.map(() => new Score());
+  let period = 0;
 
   const total = C.warmup + C.train + C.score;
   let sampled = 0, scoring = 0;
@@ -334,6 +345,10 @@ export async function run(sim, { probeCell, hiddenCell = null, cfg = {}, log = (
     const grade = trainedEnough && scoring < C.score;
     if (grade) scoring++;
 
+    // Estimate the period ONCE, from the training window only -- measuring it on
+    // the scored window would let the baseline peek at its own answer.
+    if (grade && !period && hiddenRing.length > 200) period = dominantPeriod(hiddenRing);
+
     for (let h = 0; h < heads.length; h++) {
       const d = heads[h].delay;
       // The truth for this head, arriving now, against features from `d` ago.
@@ -358,6 +373,11 @@ export async function run(sim, { probeCell, hiddenCell = null, cfg = {}, log = (
         const prev = ring[ring.length - 1 - d];
         if (prev !== undefined) base[h].add(y, prev);
       }
+      if (period > 0) {
+        const ring = heads[h].name.startsWith('hidden') ? hiddenRing : truthRing;
+        const ago = ring[ring.length - 1 - period];
+        if (ago !== undefined) periodScore[h].add(y, ago);
+      }
     }
     if (sampled % 500 === 0) {
       log(`  ${sampled}/${total} samples · step ${sim.step} · trained ${models.ngrc.heads[0].trained}`);
@@ -372,6 +392,8 @@ export async function run(sim, { probeCell, hiddenCell = null, cfg = {}, log = (
     scores: Object.fromEntries(names.map((m) => [m, scores[m].map((s) => ({
       nrmse: s.nrmse, rmse: s.rmse, std: s.std, n: s.n }))])),
     baseline: base.map((s) => ({ nrmse: s.nrmse, rmse: s.rmse, std: s.std, n: s.n })),
+    period,
+    periodBaseline: periodScore.map((s) => ({ nrmse: s.nrmse, rmse: s.rmse, n: s.n })),
   };
 }
 
@@ -409,4 +431,43 @@ export async function unsteadiness(sim, cell, { every = 20, samples = 400 } = {}
   // amplitude alone cannot do -- a sub-critical wake oscillates at very nearly the
   // right frequency all the way down to zero.
   return { mean, std, rel: std / (Math.abs(mean) + 1e-12), late: late / (first + 1e-30), crossings };
+}
+
+/**
+ * Dominant period of a signal, in samples, by autocorrelation first peak.
+ *
+ * Mean-removed, and the search starts past the autocorrelation's initial descent
+ * so it cannot lock onto lag 0. Used only to give the period-persistence baseline
+ * its lag; it is measured on the TRAINING window so the baseline never sees the
+ * data it is graded on.
+ */
+export function dominantPeriod(series, { min = 3, max = 300 } = {}) {
+  const n = series.length;
+  const mean = series.reduce((a, b) => a + b, 0) / n;
+  const x = series.map((v) => v - mean);
+  const hi = Math.min(max, (n >> 1) - 1);
+  const r = new Array(hi + 1).fill(0);
+  for (let lag = 0; lag <= hi; lag++) {
+    let s = 0;
+    for (let i = lag; i < n; i++) s += x[i] * x[i - lag];
+    r[lag] = s / (n - lag);
+  }
+  // SKIP THE MAIN LOBE FIRST. Taking the first local maximum instead locks onto
+  // whatever ripple a harmonic puts on the descent -- measured: a synthetic
+  // period-31 signal with a second harmonic returned 4. The autocorrelation of a
+  // periodic signal goes NEGATIVE about a quarter period in, and the first true
+  // peak after that crossing is the period; a half-period harmonic peak lands
+  // where the fundamental is negative, so it cannot win there.
+  let lag = min;
+  while (lag <= hi && r[lag] > 0) lag++;
+  // THE FIRST PEAK AFTER THE CROSSING, not the largest. A periodic signal's
+  // autocorrelation has a peak at EVERY multiple of the period, and the
+  // finite-sample estimate divides by (n - lag), so the far peaks are noisier and
+  // routinely larger -- measured: a global argmax returned 68 for a period-17
+  // signal and 272 for a period-8 one. Walking to the first local maximum
+  // returns the fundamental.
+  for (; lag + 1 <= hi; lag++) {
+    if (r[lag] > r[lag - 1] && r[lag] >= r[lag + 1] && r[lag] > 0.1 * r[0]) return lag;
+  }
+  return 0;
 }
