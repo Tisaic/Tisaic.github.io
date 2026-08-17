@@ -1151,7 +1151,16 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
           : st.mode === 'training' ? `training · ${st.trained} pairs`
             : st.mode === 'estimating' ? `ESTIMATING (locked) · learned from ${st.trained} pairs`
               : `idle · ${st.trained} pairs learned`;
-      $('ss-mode').textContent = mode;
+      // A recalibration means the first window was taken across a transient -- on a
+      // lattice starting from rest that is the normal case, not an error -- and a
+      // saturating input means it STILL is. Both are stated, because a silently
+      // rescaled model that scores badly is indistinguishable from a method that
+      // does not work.
+      const note = st.recalibrations
+        ? ` · re-calibrated ${st.recalibrations}× (the first window spanned a transient)` : '';
+      const sat = st.clamped > 0 && !st.calibrating
+        ? ` · <span class="warn">inputs saturating</span>` : '';
+      $('ss-mode').innerHTML = mode + note + sat;
       $('ss-window').textContent = `${m.inputsLabel} → ${m.targetLabel} · ${st.signals}×${m.cfg.lag} lags`
         + ` spanning ${(st.depth - 1) * ss.every} steps · ${st.features} features`
         + (ss.misses ? ` · ${ss.misses} cadence misses` : '');
@@ -1182,9 +1191,14 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
     function ssDraw(force) {
       if (typeof Plotly === 'undefined' || !$('ss-chart').classList.contains('on')) return;
       const m = ss.model;
-      const n = m ? m.series.length : 0;
-      if (!force && n === ss.plotted) return;
-      ss.plotted = n;
+      // WATCH THE LAST STEP, NOT THE LENGTH. The series is a ring, so once it is
+      // full its length stops changing -- and a length-based guard then short
+      // circuits every redraw and the chart silently freezes with stale data still
+      // on screen, which is worse than a blank one because it looks live. Found in
+      // a run whose last drawn point was step 8000 while the solver was at 11680.
+      const at = m && m.series.length ? m.series[m.series.length - 1].step : -1;
+      if (!force && at === ss.plotted) return;
+      ss.plotted = at;
       const ser = m ? m.series : [];
       const x = ser.map((p) => p.step);
       const layout = { margin: { l: 44, r: 10, t: 6, b: 18 },

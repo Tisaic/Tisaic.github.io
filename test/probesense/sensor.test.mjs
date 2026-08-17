@@ -73,12 +73,16 @@ function drive(ss, nSamples, step0 = 0) {
     horizon: 8, lag: 4, stride: 3, warmup: 200, every: EVERY });
   drive(ss, 30);
   check('idle mode learns nothing', ss.trained === 0 && ss.mode === 'idle');
-  // Calibration accumulates whenever samples flow, INCLUDING while idle -- the
-  // statistics describe the flow, not the training window, and gathering them
-  // early is free. So the gate is tested by driving fewer samples than it needs.
+  // Calibration accumulates whenever samples flow, including while idle.
   check('calibration accumulates while idle', ss.status().calibrationLeft < 200,
     ss.status().calibrationLeft);
+  // BUT `train()` RE-ANCHORS THE WINDOW, and that is deliberate: on a lattice
+  // starting from rest, statistics gathered from the moment a probe was placed
+  // describe a developing transient. Pressing "start training" is the operator
+  // saying "this is the flow I mean", so the window starts there.
   ss.train();
+  check('starting training re-anchors the calibration window',
+    ss.status().calibrationLeft === 200, ss.status().calibrationLeft);
   drive(ss, 40);
   // The calibration window is a GATE, not a suggestion: no readout may train
   // while the standardisation statistics are still moving.
@@ -86,9 +90,9 @@ function drive(ss, nSamples, step0 = 0) {
     ss.trained === 0 && ss.status().calibrating,
     `trained ${ss.trained}, left ${ss.status().calibrationLeft}`);
   drive(ss, 400);
-  // 470 samples driven, 200 spent calibrating and `depth` more filling the lag
-  // window, so the count is arithmetic rather than a round number to clear.
-  const expect = 470 - 200 - ss.status().depth;
+  // 470 samples driven, 30 of them before training was asked for and 200 spent on
+  // the window that request re-anchored. Arithmetic, not a round number to clear.
+  const expect = 470 - 30 - 200;
   check('training proceeds once calibrated', Math.abs(ss.trained - expect) <= 2,
     `${ss.trained}, expected about ${expect}`);
   const at = ss.trained;
@@ -227,6 +231,58 @@ function drive(ss, nSamples, step0 = 0) {
   check('the expansion beats lean linear on a rectified target',
     rich.status().estimate.nrmse < lean.status().estimate.nrmse,
     `${rich.status().estimate.nrmse.toExponential(2)} vs ${lean.status().estimate.nrmse.toExponential(2)}`);
+}
+
+// ------------------------------------------------------------------ calibration
+// THE DEFECT THIS SECTION EXISTS FOR. A lattice starts from rest and a no-slip
+// wall cell barely moves, so a calibration window taken early describes a
+// transient: the frozen standard deviation lands far below the flow's eventual
+// variation, every later sample is divided by it, and the quadratic terms square
+// the result. Measured on the page at nRMSE 1419 against baselines near 2, and
+// reproduced here across four decades of calibration-window amplitude.
+{
+  const quietThen = (quietAmp, wakeAt) => (i) => {
+    const a = i < wakeAt ? quietAmp : 2e-3;
+    return [1 + a * 1e-3 * Math.sin(i / 7), a * Math.sin(i / 11), a * Math.cos(i / 13), 0];
+  };
+  const hidden = (i) => [1, 0.05 * Math.sin(i / 11 - 1.1), 0.01 * Math.cos(i / 13), 0];
+  const run = (quietAmp) => {
+    const ss = new FieldSoftSensor({ inputs: ['ux', 'uy', 'rho'], target: 'speed',
+      horizon: 14, lag: 4, stride: 6, warmup: 228, every: EVERY });
+    ss.train();
+    const sen = quietThen(quietAmp, 260);
+    for (let i = 0; i < 2200; i++) ss.sample(i * EVERY, sen(i), hidden(i));
+    return ss.status();
+  };
+  const bad = [1e-9, 1e-7, 1e-6, 1e-5, 1e-4].map(run);
+  check('an unrepresentative calibration window is detected and redone',
+    bad.every((st) => st.recalibrations >= 1), bad.map((st) => st.recalibrations).join(','));
+  // Without this the same configurations measured 1.0 to 1.6e7. The point of the
+  // check is the ORDER OF MAGNITUDE, not a tuned threshold.
+  check('and the model then works instead of exploding',
+    bad.every((st) => st.estimate.nrmse < 0.5),
+    bad.map((st) => st.estimate.nrmse.toExponential(1)).join(' '));
+  check('recalibration leaves the inputs no longer saturating',
+    bad.every((st) => st.clamped === 0), bad.map((st) => st.clamped).join(','));
+
+  // AND IT MUST NOT FIRE WHEN THE WINDOW WAS FINE. A guard that always triggers
+  // is not a guard, it is a delay -- and it would silently discard a good window.
+  const good = [1e-3, 2e-3].map(run);
+  check('a representative window is left alone',
+    good.every((st) => st.recalibrations === 0 && st.clamped === 0),
+    good.map((st) => `${st.recalibrations}/${st.clamped}`).join(' '));
+
+  // The attempts are bounded, so a flow that never settles cannot loop forever.
+  const never = new FieldSoftSensor({ inputs: ['ux'], target: 'ux', horizon: 6,
+    lag: 3, stride: 3, warmup: 120, every: EVERY });
+  never.train();
+  for (let i = 0; i < 6000; i++) {
+    // Amplitude growing without bound: every window is unrepresentative of the next.
+    const a = Math.exp(i / 300);
+    never.sample(i * EVERY, [1, a * Math.sin(i / 9), 0, 0], [1, a * Math.sin(i / 9 - 1), 0, 0]);
+  }
+  check('recalibration attempts are bounded', never.status().recalibrations <= 3,
+    never.status().recalibrations);
 }
 
 console.log(failed ? `\n${failed} check(s) failed\n` : '\nall checks passed\n');
