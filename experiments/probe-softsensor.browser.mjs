@@ -310,4 +310,50 @@ if (MODE === 'hot') {
   console.log(JSON.stringify(out, null, 2));
 }
 
+// ------------------------------------------------------------------ csweep
+// CAN THIS ENGINE PRODUCE AN APERIODIC FLOW AT ALL at reachable settings?
+//
+// Raising both sliders to their stops does NOT do it: at Re_cell 280 the settled
+// wake is still a limit cycle (autocorrelation at one period 0.984). Two reasons,
+// and they compound. The lattice carries d = 6 cells across the obstacle, so the
+// small scales that would make a wake chaotic cannot exist on it; and the
+// Smagorinsky model exists precisely to DISSIPATE what cannot be resolved, so it
+// damps the fluctuations that would take the flow to chaos. The effective
+// Reynolds number of the RESOLVED field is far below the nominal one.
+//
+// That is a real tension rather than a defect: the mechanism that guarantees the
+// run cannot crash is the same mechanism that keeps it smooth. This sweep
+// measures the trade by weakening the model, with the limiter as the backstop --
+// and clamping is acceptable here, per the owner's call.
+if (MODE === 'csweep') {
+  const out = await call(async (scene, X, a) => {
+    const rows = [];
+    for (const cs of a.csValues) {
+      const sim = X.scenes.channelFlow({ resolution: a.res, tau: a.tau,
+        inletVelocity: a.u, obstacle: 'cylinder',
+        collision: 'trt', trtPolicy: 'stability', smagorinsky: cs });
+      await sim.build({ backend: 'webgpu' });
+      const L = sim.lattice, d = sim.meta.obstacleCells;
+      const cx = Math.round(a.res * 0.9), cy = (a.res >> 1) + 1;
+      const wake = L.index(Math.min(L.nx - 2, cx + 5 * d), cy, L.nz >> 1);
+      sim.advance(a.spin);
+      const rec = await X.exp.record(sim, wake, { every: a.every, samples: a.samples });
+      const dg = await sim.diagnostics();
+      const ch = X.exp.characterise(rec.speed, { horizon: a.horizon });
+      rows.push({ cs, limited: dg.limited, limitedPct: 100 * dg.limited / L.cellCount,
+        uMax: dg.uMax, rho: [dg.rhoMin, dg.rhoMax],
+        finite: Number.isFinite(dg.uMax), d, cells: L.cellCount,
+        acAtPeriod: ch.acAtPeriod, period: ch.period, std: ch.std, late: ch.late,
+        persistNrmse: ch.persistNrmse, periodNrmse: ch.periodNrmse });
+      console.log('done Cs=' + cs + '  ac@period=' + (ch.acAtPeriod || 0).toFixed(4)
+        + '  limited=' + dg.limited);
+      await sim.backend.destroy();
+    }
+    return rows;
+  }, { res: Number(arg('res', 32)), tau: Number(arg('tau', 0.5015)),
+    u: Number(arg('u', 0.14)), spin: 14000, every: 20, samples: 300, horizon: 14,
+    csValues: [0.16, 0.08, 0.0] });
+  console.log(JSON.stringify(out, null, 2));
+}
+
 await browser.close();
