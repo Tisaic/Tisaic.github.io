@@ -810,6 +810,73 @@ if (hasGPU && ls0.backend === 'webgpu') {
     JSON.stringify({ queued, step: afterQueue.step, cells: afterQueue.cells }));
 
 
+  // A DIVERGED RUN MUST SAY SO WHERE THE USER IS LOOKING, AND MUST NOT PRETEND
+  // IT CAN CONTINUE.
+  //
+  // Reported from a device: tau at the slider floor with everything else default
+  // ran a few seconds, then "broke" -- a frozen picture with a front sweeping
+  // across it, and Run doing one step and freezing again. That is genuine
+  // numerical divergence (velocity overflows, rho crosses zero, u = m/rho goes
+  // non-finite, and STREAMING then carries the NaN one cell per step to every
+  // neighbour), and halting is right. What was wrong is that it halted with the
+  // reason in a stats row below the fold, so from the outside it just broke.
+  {
+    await latt.evaluate(() => {
+      const t = document.getElementById('tau'); t.value = t.min; t.dispatchEvent(new Event('input'));
+      const u = document.getElementById('uin'); u.value = u.max; u.dispatchEvent(new Event('input'));
+      u.dispatchEvent(new Event('change'));
+    });
+    await latt.waitForFunction(() => !window.__lsDbg().building && !window.__lsDbg().queued,
+      null, { timeout: 120000 });
+    check('lattsim: an unstable slider pairing is flagged BEFORE it is run',
+      /unstable/.test(await latt.textContent('#s-risk')), await latt.textContent('#s-risk'));
+
+    // Drive it until it dies. It should not take long at the stability floor.
+    const died = await latt.evaluate(async () => {
+      const sim = window.__lsSim();
+      for (let k = 0; k < 30; k++) {
+        sim.advance(200);
+        const d = await sim.diagnostics();
+        if (d.stable.state === 'diverged') return { step: d.step, why: d.stable.why };
+      }
+      return null;
+    });
+    if (died) {
+      await latt.evaluate(() => window.__lsRefresh());
+      const ui = await latt.evaluate(() => ({
+        badge: document.getElementById('backend-badge').textContent,
+        badgeBad: /bad/.test(document.getElementById('backend-badge').className),
+        runDisabled: document.getElementById('run').disabled,
+        runText: document.getElementById('run').textContent,
+      }));
+      check('lattsim: divergence is announced on the stage, not only in a stats row',
+        ui.badgeBad && /DIVERGED/.test(ui.badge), JSON.stringify(ui));
+      check('lattsim: Run refuses to resume a diverged run', ui.runDisabled && /Reset/.test(ui.runText),
+        JSON.stringify(ui));
+      // ...and Reset must clear the latch, or the page is stuck for good.
+      await latt.click('#reset');
+      await latt.waitForFunction(() => !window.__lsDbg().building && !window.__lsDbg().queued,
+        null, { timeout: 120000 });
+      const after = await latt.evaluate(() => ({
+        runDisabled: document.getElementById('run').disabled,
+        step: window.__lsDbg().step,
+      }));
+      check('lattsim: Reset clears the divergence and re-enables Run',
+        !after.runDisabled && after.step === 0, JSON.stringify(after));
+    } else {
+      check('lattsim: the stability floor actually diverges (so the check has teeth)', false,
+        'ran 6000 steps at the slider floor without diverging');
+    }
+    // Back to something sane for whatever follows.
+    await latt.evaluate(() => {
+      const t = document.getElementById('tau'); t.value = '0.6'; t.dispatchEvent(new Event('input'));
+      const u = document.getElementById('uin'); u.value = '0.04'; u.dispatchEvent(new Event('input'));
+      u.dispatchEvent(new Event('change'));
+    });
+    await latt.waitForFunction(() => !window.__lsDbg().building && !window.__lsDbg().queued,
+      null, { timeout: 120000 });
+  }
+
   // RESET WHILE RUNNING, which is what a person actually does. A readback is
   // asynchronous, so tearing the backend down mid-run used to destroy a staging
   // buffer with a mapAsync in flight and reject it with nobody listening.

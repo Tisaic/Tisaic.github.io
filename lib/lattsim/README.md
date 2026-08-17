@@ -122,6 +122,49 @@ runs every time. Quick is **~1m35** against 12+ minutes before. Run `--full`
 before pushing anything that touches the solver, the collision operator or the
 boundaries.
 
+## Stability: what the sliders can do to it
+
+**Reported from a device:** viscosity slider to the far left, everything else
+default, "runs a few seconds and then breaks" — a frozen picture with a front
+sweeping across the lattice, Run doing one step and freezing again, only Reset
+clearing it. The observation that it *starts at one cell and spreads* is the
+diagnosis: the velocity overflows, ρ crosses zero, `u = momentum/ρ` goes
+non-finite, and **streaming then carries the NaN one cell per step to every
+neighbour**. The black region is the NaN zone — a NaN speed makes the slice's
+auto-scale NaN, so the colour map returns black.
+
+The controlling parameter is the **cell Reynolds number**, `Re_cell = u / ν` —
+advection over diffusion across a single cell. Both sliders move it, which is
+why neither is safe to read on its own. Measured at the default geometry
+(u = 0.08, cylinder, 3000 steps):
+
+| τ | Re_cell | outcome |
+|---|---|---|
+| 0.505 | 48 | uMax reached **1.0e4** (the stable limit is 0.3), non-finite by step 400 |
+| 0.510 | 24 | non-finite by step 1400 |
+| 0.515 | 16 | survives, marginal |
+| 0.520 | 12 | survives, marginal |
+
+A coarser lattice survived Re_cell 20 for 9000 steps, so the boundary is near 20
+and depends on resolution. The page warns at 12 and condemns at 20.
+
+Three things follow, and the third is the actual defect:
+
+**The τ floor is 0.51, not 0.505.** A slider position that dies at the default
+speed within seconds is a trap, and that one was added for shedding headroom
+without checking what it did at the shipped inlet speed.
+
+**The pairing is flagged before it is run.** τ and speed are only dangerous
+*together* — the floor is fine at a slow inlet and fatal at a fast one — so both
+readouts go amber then red, and a row states the verdict.
+
+**Halting on divergence was right; halting SILENTLY was not.** Continuing would
+render noise as though it were fluid, which is the one thing this engine refuses
+to do. But the reason appeared only in a stats row below the fold on a phone, so
+from the outside the page simply broke. The badge over the stage now carries the
+verdict, the step it happened at and the remedy, and Run refuses until Reset
+instead of re-diverging on the next frame.
+
 ## Known limits, measured
 
 **The collision operator is BGK/SRT**, and with a single relaxation time the

@@ -342,6 +342,33 @@ the shipped commit carries the correct version.
    before the first reading when the fluid is still at rest. A regression pins
    that every scene declares one AND that it matches the achieved peak within a
    factor — a reference that is merely PRESENT would not have caught this.
+   **THE SLIDER FLOOR WAS A TRAP, AND THE FAILURE WAS SILENT (v118).** Reported
+   from the device: viscosity to the far left, everything else default, "runs a
+   few seconds and then breaks" — frozen picture, a front sweeping across the
+   lattice, Run doing one step and freezing again, only Reset clearing it. The
+   owner's own observation — **it starts at one cell and spreads** — IS the
+   diagnosis: velocity overflows, ρ crosses zero, `u = momentum/ρ` goes
+   non-finite, and STREAMING then carries the NaN one cell per step to every
+   neighbour. The black region is the NaN zone (a NaN speed makes the slice's
+   auto-scale NaN, so the colour map returns black).
+   THE CONTROLLING PARAMETER IS THE **CELL REYNOLDS NUMBER**, Re_cell = u/ν —
+   advection over diffusion ACROSS ONE CELL — and BOTH sliders move it, which is
+   why neither is safe to judge alone. Measured at the default geometry (u 0.08,
+   cylinder, 3000 steps): τ .505 → Re_cell 48, uMax reached **1.0e4** against a
+   0.3 stable limit and went non-finite by step 400; τ .510 → 24, non-finite by
+   1400; τ .515 → 16, survives; τ .520 → 12, survives. A coarser lattice survived
+   Re_cell 20 for 9000 steps, so the boundary is near 20 and resolution-dependent.
+   THREE FIXES, and the third is the real defect. (i) The τ floor goes back to
+   0.51 — a slider position that dies at the SHIPPED inlet speed within seconds
+   is a trap, and v117 added it for shedding headroom without checking what it
+   did at the default u. (ii) The pairing is flagged BEFORE it runs: both
+   readouts go amber at Re_cell 12 and red at 20, because τ and speed are only
+   dangerous together. (iii) **Halting on divergence was right; halting SILENTLY
+   was not.** Continuing would render noise as though it were fluid, which this
+   engine refuses to do — but the reason appeared only in a stats row BELOW THE
+   FOLD on a phone, so from outside the page simply broke, and Run re-diverged on
+   the next frame and froze again. The badge over the stage now carries the
+   verdict, the step, and the remedy, and Run refuses until Reset.
    **DELIBERATELY NOT BUILT YET:** heat, diffusion, elasticity, electromagnetics,
    multiphysics coupling and adaptive resolution are architecture rather than
    code. Operators declare the fields they read and write and the solver rejects

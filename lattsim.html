@@ -8,7 +8,7 @@
   <title>LattSim — Lattice Physics Engine</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:117,built:"2026-08-17T00:02:37Z"}; // __LATTSIM_STAMP__</script>
+  <script>window.__BUILD = {version:118,built:"2026-08-17T01:33:05Z"}; // __LATTSIM_STAMP__</script>
   <script src="console-boot.js"></script>
 
   <style>
@@ -125,7 +125,7 @@
     <div class="controls">
       <label class="slider">Resolution <input type="range" id="res" min="0" max="4" step="1" value="2" />
         <span class="v" id="res-v">48³</span></label>
-      <label class="slider">Viscosity (τ) <input type="range" id="tau" min="0.505" max="1.4" step="0.005" value="0.52" />
+      <label class="slider">Viscosity (τ) <input type="range" id="tau" min="0.51" max="1.4" step="0.005" value="0.52" />
         <span class="v" id="tau-v">0.520</span></label>
       <label class="slider">Inlet speed <input type="range" id="uin" min="0.005" max="0.14" step="0.005" value="0.08" />
         <span class="v" id="uin-v">0.080</span></label>
@@ -148,6 +148,7 @@
       <dt>max |u| (lattice)</dt><dd id="s-umax">—</dd>
       <dt>residual |Δu|/|u| per step</dt><dd id="s-res">—</dd>
       <dt>stability</dt><dd id="s-stable">—</dd>
+      <dt>τ / speed pairing</dt><dd id="s-risk">—</dd>
       <dt>Reynolds</dt><dd id="s-re">—</dd>
     </dl>
 
@@ -336,6 +337,7 @@
       if (state.sim) { try { await state.sim.destroy(); } catch (e) { console.warn(e); } state.sim = null; }
       if (state.volume) { try { state.volume.destroy(); } catch (e) { /* gone with the device */ } state.volume = null; }
 
+      clearDiverged();
       const res = clampResolution();
       const scene = SCENES[$('scene').value];
       const sim = scene.make({
@@ -491,7 +493,42 @@
           + (d.residual < 1e-3 ? ' — steady' : '');
       const cls = { ok: 'good', marginal: 'warn', unstable: 'warn', diverged: 'bad' }[d.stable.state];
       $('s-stable').innerHTML = `<span class="${cls}">${d.stable.state}</span>` + (d.stable.why ? ` — ${d.stable.why}` : '');
-      if (d.stable.state === 'diverged') stop();
+      if (d.stable.state === 'diverged') diverged(d);
+    }
+
+    /**
+     * A DIVERGED RUN HAS TO SAY SO WHERE THE USER IS LOOKING.
+     *
+     * Halting on divergence is correct -- continuing would render noise as
+     * though it were fluid, which is the one thing this engine refuses to do.
+     * But it used to halt with the reason in a stats row BELOW THE FOLD on a
+     * phone, leaving a frozen picture and no explanation, and Run simply
+     * re-diverged on the next frame and froze again. Reported from a device as
+     * "it runs a few seconds and then breaks".
+     *
+     * So: the badge over the stage carries the verdict and the remedy, and Run
+     * refuses until Reset rather than pretending it can continue.
+     */
+    function diverged(d) {
+      stop();
+      state.diverged = true;
+      const why = d.stable.why || 'the solution left the stable range';
+      $('backend-badge').textContent = `DIVERGED at step ${d.step.toLocaleString()} — ${why}`;
+      $('backend-badge').className = 'badge bad';
+      $('run').disabled = true;
+      $('run').textContent = 'Diverged — press Reset';
+      // The remedy, in the terms the sliders use. Raising tau is the reliable
+      // one: it raises the viscosity, which is what fell too low to hold the
+      // flow together.
+      $('s-backend').innerHTML = `<span class="bad">diverged</span> — ${why}. `
+        + 'Raise viscosity (τ) or lower the inlet speed, then Reset.';
+    }
+
+    /** Clear a divergence latch. Called by every rebuild. */
+    function clearDiverged() {
+      state.diverged = false;
+      $('run').disabled = false;
+      $('run').textContent = 'Run ▶';
     }
 
     function tick(now) {
@@ -627,9 +664,39 @@
     $('axis').addEventListener('change', () => drawOnce());
     $('slicep').addEventListener('input', () => { $('slicep-v').textContent = Math.round(+$('slicep').value * 100) + '%'; drawOnce(); });
     $('spf').addEventListener('input', () => { $('spf-v').textContent = $('spf').value; });
-    $('tau').addEventListener('input', () => { $('tau-v').textContent = (+$('tau').value).toFixed(3); });
+    // SAY IT BEFORE IT HAPPENS, not after. tau and inlet speed together decide
+    // whether the scheme is stable at all, and the combination that dies is not
+    // obvious from either slider alone -- tau at the floor is perfectly fine at
+    // a low speed and fatal at a high one. The readouts go amber when the pair
+    // is in the marginal band and red when it is past the measured floor, so a
+    // divergence is a warning ignored rather than a surprise.
+    // THE CELL REYNOLDS NUMBER is what decides stability here, not tau alone:
+    // Re_cell = u / nu, the advection-to-diffusion ratio ACROSS ONE CELL. Both
+    // sliders move it, which is why neither is safe to judge on its own.
+    // Measured at the default geometry (u 0.08, cylinder, res 1), 3000 steps:
+    //   Re_cell 48  (tau .505)  uMax hit 1.0e4 and went non-finite by step 400
+    //   Re_cell 24  (tau .510)  non-finite by step 1400
+    //   Re_cell 16  (tau .515)  survives, marginal
+    //   Re_cell 12  (tau .520)  survives, marginal
+    // A separate run at a coarser lattice survived Re_cell 20 for 9000 steps, so
+    // the boundary is near 20 and resolution-dependent. Warn at 12, condemn at 20.
+    const RISK_MARGINAL = 12, RISK_DIVERGE = 20;
+    function stabilityHint() {
+      const tau = +$('tau').value, u = +$('uin').value;
+      const nu = (tau - 0.5) / 3;
+      // The flow accelerates past the obstacle, so the local lattice velocity is
+      // well above the inlet value. This ratio is what the measured floor tracks.
+      const risk = u / nu;
+      const cls = risk > RISK_DIVERGE ? 'bad' : risk > RISK_MARGINAL ? 'warn' : '';
+      for (const id of ['tau-v', 'uin-v']) $(id).className = 'v ' + cls;
+      $('s-risk').innerHTML = cls === 'bad'
+        ? '<span class="bad">unstable</span> — this τ and inlet speed diverge; raise τ or slow the flow'
+        : cls === 'warn' ? '<span class="warn">marginal</span> — near the stability limit'
+        : '<span class="good">within the stable range</span>';
+    }
+    $('tau').addEventListener('input', () => { $('tau-v').textContent = (+$('tau').value).toFixed(3); stabilityHint(); });
     $('tau').addEventListener('change', () => build());
-    $('uin').addEventListener('input', () => { $('uin-v').textContent = (+$('uin').value).toFixed(3); });
+    $('uin').addEventListener('input', () => { $('uin-v').textContent = (+$('uin').value).toFixed(3); stabilityHint(); });
     $('uin').addEventListener('change', () => build());
 
     // ------------------------------------------------------------ verification
@@ -676,10 +743,12 @@
     window.__lsDiag = async () => (state.sim ? state.sim.diagnostics() : null);
     window.__lsStep = (n) => { if (state.sim) state.sim.advance(n); };
     window.__lsDraw = () => drawOnce();
+    window.__lsRefresh = () => refreshStats();   // drives the divergence UI
     window.__lsSim = () => state.sim;
     window.__lsUnits = UnitSystem;
 
     syncObstacle();
+    stabilityHint();
     probeLimits()
       .then(() => { clampResolution(); return build(); })
       .then(() => console.log(state.sim ? 'lattsim ready ✓' : 'lattsim failed to build'));
