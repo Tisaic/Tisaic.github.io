@@ -1165,6 +1165,17 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
         + ` spanning ${(st.depth - 1) * ss.every} steps · ${st.features} features`
         + (ss.misses ? ` · ${ss.misses} cadence misses` : '');
       const e = st.estimate, pr = st.predict;
+      // A STEADY TARGET IS NOT A BAD SCORE, IT IS NO QUESTION. Say so instead of
+      // printing a ratio computed by dividing noise by noise -- which is what an
+      // nRMSE becomes when the truth does not vary.
+      if (st.steadyTarget) {
+        const why = `<span class="warn">target is steady</span> — it varies by `
+          + `${(st.targetActivity * 100).toExponential(1)}% of its value, so there is `
+          + `nothing to sense. Use a shedding wake, an oscillating lid, or stir the flow.`;
+        $('ss-est').innerHTML = why;
+        $('ss-pred').innerHTML = why;
+        return;
+      }
       $('ss-est').innerHTML = e.n > 20
         ? `<b>${fmtN(e.nrmse)}</b> vs ${fmtN(e.baseline)} scaled sensor — `
           + (e.ratio >= 1 ? `<span class="ok">${e.ratio.toFixed(1)}× better</span>`
