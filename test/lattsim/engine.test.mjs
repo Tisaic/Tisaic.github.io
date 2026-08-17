@@ -421,13 +421,24 @@ if (FULL) {
       if (d.stable.state === 'diverged') break;
     }
     sim.destroy();
-    return d.stable.state;
+    return { state: d.stable.state, limited: d.limited };
   };
-  // tau 0.505 at u 0.08 is Re_cell 48 -- four times past where BGK dies.
+  // tau 0.505 at u 0.08 is Re_cell 48 -- four times past where BGK died.
+  //
+  // NOTHING DIVERGES ANY MORE, so the question is no longer whether a run
+  // survives but HOW MUCH RESCUING it needs to. The limiter guarantees the run
+  // continues; the sub-grid model is what makes the continuing run an actual
+  // solution rather than a clamped one. That is the honest way to state the
+  // model's value now, and it is a stronger claim than "it did not crash".
   const bare = await run({ collision: 'trt', trtPolicy: 'stability', smagorinsky: 0 });
   const modelled = await run({ collision: 'trt', trtPolicy: 'stability', smagorinsky: 0.16 });
-  check('without the sub-grid model, Re_cell 48 diverges', bare === 'diverged', bare);
-  check('WITH the sub-grid model, the same run survives', modelled !== 'diverged', modelled);
+  check('neither configuration diverges, because the limiter will not let them',
+    bare.state !== 'diverged' && modelled.state !== 'diverged', `${bare.state} / ${modelled.state}`);
+  check('but WITHOUT the sub-grid model the limiter has to hold cells up',
+    bare.limited > 0, String(bare.limited));
+  check('WITH it, far fewer cells need holding (the run is solved, not rescued)',
+    modelled.limited < bare.limited / 4,
+    `${bare.limited} cells held without the model, ${modelled.limited} with it`);
 }
 
 // ------------------------------------------- the lid can be made to oscillate
@@ -515,6 +526,64 @@ if (FULL) {
   check('a sphere keeps its cubic domain, a cylinder does not',
     sph.lattice.nz === sph.lattice.ny && cyl.lattice.nz < cyl.lattice.ny,
     `sphere ${sph.lattice.nz}/${sph.lattice.ny}, cylinder ${cyl.lattice.nz}/${cyl.lattice.ny}`);
+}
+
+// ------------------------------------------- the limiter: it cannot crash
+//
+// THE REQUIREMENT IS ABSOLUTE -- no divergence failures, at any setting -- so
+// this tests the guarantee rather than a range of settings. Three parts:
+//
+//  1. it stays out of the way when nothing is wrong (or it is silently changing
+//     the physics of every healthy run, which is worse than crashing);
+//  2. a configuration that was MEASURED to diverge now survives, and SAYS it is
+//     being held up rather than reporting a clean bill of health;
+//  3. a NaN injected directly into the populations cannot spread.
+//
+// The third is the one that matters. The failure watched on a device was a NaN
+// travelling one cell per step until the lattice was gone; putting one there by
+// hand is the only way to test that it truly cannot happen rather than merely
+// that it did not happen this time.
+{
+  const { channelFlow, poiseuille } = await import('../../lib/lattsim/scenes.js');
+
+  // 1. Out of the way when healthy.
+  const calm = poiseuille({ resolution: 15, tau: 1.0 });
+  await calm.build({ backend: 'cpu' });
+  calm.advance(1200);
+  const dc = await calm.diagnostics();
+  check('the limiter does not engage in a healthy run', dc.limited === 0, String(dc.limited));
+  check('a healthy run is not reported as limited', dc.stable.state !== 'limited', dc.stable.state);
+  calm.destroy();
+
+  // 2. A configuration measured to diverge (Re_cell 48) now survives, and says so.
+  const hard = channelFlow({ resolution: 16, tau: 0.505, inletVelocity: 0.08, obstacle: 'cylinder' });
+  Object.assign(hard.operators[0].params, { collision: 'trt', trtPolicy: 'stability', smagorinsky: 0 });
+  await hard.build({ backend: 'cpu' });
+  let dh = null;
+  for (let k = 0; k < 6; k++) { hard.advance(200); dh = await hard.diagnostics(); }
+  check('a configuration that used to diverge now survives', dh.stable.state !== 'diverged',
+    `${dh.stable.state} — ${dh.stable.why}`);
+  check('and it reports that it is being held up, not that all is well',
+    dh.limited > 0 && /limit/.test(dh.stable.why), JSON.stringify({ limited: dh.limited, why: dh.stable.why }));
+  hard.destroy();
+
+  // 3. A NaN put there by hand must not survive one step, let alone spread.
+  const poison = poiseuille({ resolution: 15, tau: 1.0 });
+  await poison.build({ backend: 'cpu' });
+  poison.advance(200);
+  const f = poison.backend.read('f');
+  const N = poison.lattice.cellCount;
+  const victim = poison.lattice.index(4, 4, 7);
+  for (let q = 0; q < 19; q++) f[q * N + victim] = NaN;
+  poison.advance(1);
+  const d1 = await poison.diagnostics();
+  check('a NaN injected into the populations is gone after one step', d1.finite, JSON.stringify({
+    finite: d1.finite, uMax: d1.uMax, rhoMin: d1.rhoMin }));
+  poison.advance(200);
+  const d2 = await poison.diagnostics();
+  check('and it did not spread: the field is still finite 200 steps later', d2.finite,
+    JSON.stringify({ finite: d2.finite, uMax: d2.uMax }));
+  poison.destroy();
 }
 
 // ------------------------------------------------- the residual diagnostic

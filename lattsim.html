@@ -8,7 +8,7 @@
   <title>LattSim — Lattice Physics Engine</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:121,built:"2026-08-17T04:23:52Z"}; // __LATTSIM_STAMP__</script>
+  <script>window.__BUILD = {version:122,built:"2026-08-17T05:47:51Z"}; // __LATTSIM_STAMP__</script>
   <script src="console-boot.js"></script>
 
   <style>
@@ -97,11 +97,6 @@
       <button id="run">Run ▶</button>
       <button id="reset" class="sec">Reset</button>
       <select id="scene" aria-label="Scene"></select>
-      <select id="physics" aria-label="Collision model">
-        <option value="les">TRT + LES · turbulent</option>
-        <option value="trt">TRT · exact walls</option>
-        <option value="bgk">BGK · reference</option>
-      </select>
       <select id="obstacle" aria-label="Obstacle">
         <option value="cylinder">cylinder</option>
         <option value="sphere">sphere</option>
@@ -158,6 +153,7 @@
       <dt>residual |Δu|/|u| per step</dt><dd id="s-res">—</dd>
       <dt>stability</dt><dd id="s-stable">—</dd>
       <dt>τ / speed pairing</dt><dd id="s-risk">—</dd>
+      <dt>limiter</dt><dd id="s-lim">—</dd>
       <dt>Reynolds</dt><dd id="s-re">—</dd>
     </dl>
 
@@ -362,7 +358,7 @@
         // in their head; the operator wants cycles per step.
         lidFrequency: +$('lidfreq').value / 1000,
         obstacle: $('obstacle').value,
-        ...PHYSICS[$('physics').value],
+        ...PHYSICS,
       });
       const mem = sim.memoryEstimate();
       $('s-mem').textContent = `${formatBytes(mem.bytes)} over ${mem.items.length} field(s)`;
@@ -423,17 +419,17 @@
         scene: $('scene').value, obstacle: sim.meta.obstacle,
         backend: sim.backend.kind, cells: sim.lattice.cellCount,
         size: [sim.lattice.nx, sim.lattice.ny, sim.lattice.nz],
-        model: $('physics').value, collision: op.collision, trtPolicy: op.trtPolicy,
+        collision: op.collision, trtPolicy: op.trtPolicy,
         Cs: op.smagorinsky, tau: op.tau, nu,
         omegaPlus: 1 / op.tau,
         omegaMinus: op.collision === 'trt' ? omegaMinusFor(op.tau, op.trtPolicy) : 1 / op.tau,
         u: uRef, ReCell: uRef / nu, Re: sim.meta.reynolds,
-        ceiling: CEILING[$('physics').value],
+        ceiling: CEILING,
       };
       console.log('lattsim build ▸ ' + JSON.stringify(state.runInfo));
       if (state.runInfo.ReCell > state.runInfo.ceiling) {
         console.warn(`lattsim: Re_cell ${state.runInfo.ReCell.toFixed(1)} is past the measured `
-          + `ceiling (~${state.runInfo.ceiling}) for model "${state.runInfo.model}" — expect divergence`);
+          + `ceiling (~${state.runInfo.ceiling}) — the limiter will hold cells up`);
       }
       applyView();
       // THE VOLUME RENDERER IS BOUND TO A SIMULATION, so a rebuild destroys it --
@@ -532,7 +528,10 @@
       $('s-res').innerHTML = d.residual === undefined ? '—'
         : `<span class="${d.residual < 1e-3 ? 'good' : ''}">${d.residual.toExponential(2)}</span>`
           + (d.residual < 1e-3 ? ' — steady' : '');
-      const cls = { ok: 'good', marginal: 'warn', unstable: 'warn', diverged: 'bad' }[d.stable.state];
+      $('s-lim').innerHTML = d.limited > 0
+        ? `<span class="warn">${d.limited} cell(s) held</span> — rescued, not solved`
+        : '<span class="good">not engaged</span>';
+      const cls = { ok: 'good', marginal: 'warn', unstable: 'warn', limited: 'warn', diverged: 'bad' }[d.stable.state];
       $('s-stable').innerHTML = `<span class="${cls}">${d.stable.state}</span>` + (d.stable.why ? ` — ${d.stable.why}` : '');
       if (d.stable.state === 'diverged') diverged(d);
     }
@@ -739,7 +738,6 @@
     $('reset').addEventListener('click', () => build());
     $('scene').addEventListener('change', () => { clampResolution(); syncObstacle(); build(); });
     $('obstacle').addEventListener('change', () => build());
-    $('physics').addEventListener('change', () => { stabilityHint(); build(); });
     $('lidamp').addEventListener('input', () => { $('lidamp-v').textContent = (+$('lidamp').value).toFixed(3); });
     $('lidamp').addEventListener('change', () => build());
     // THE RANGE COMES FROM THE STOKES LAYER, not from what looked like a tidy
@@ -799,37 +797,32 @@
     //   Re_cell 12  (tau .520)  survives, marginal
     // A separate run at a coarser lattice survived Re_cell 20 for 9000 steps, so
     // the boundary is near 20 and resolution-dependent. Warn at 12, condemn at 20.
-    // MEASURED CEILINGS, cell Reynolds number at which each configuration was
-    // still finite after 3000 steps (cylinder in a channel, u 0.08):
-    //   bgk  ok to 16, dead at 24
-    //   trt  ok to 16, dead at 24   (and at Lambda=3/16, dead at 12 -- worse
-    //        than BGK, which is why the turbulent mode pins omega- instead)
-    //   les  ok at 160, the top of what was tested
-    const PHYSICS = {
-      trt: { collision: 'trt', trtPolicy: 'magic', smagorinsky: 0 },
-      les: { collision: 'trt', trtPolicy: 'stability', smagorinsky: 0.16 },
-      bgk: { collision: 'bgk', smagorinsky: 0 },
-    };
-    // MEASURED, and the earlier table got 'trt' wrong by copying BGK's number:
-    // TRT at Lambda = 3/16 died at Re_cell 12, so the page called the SHIPPED
-    // DEFAULT "within the measured stable range" while it was diverging.
-    //   bgk  ok 16, dead 24     trt(magic) dead 12     les ok to 160 (top tested)
-    const CEILING = { trt: 10, les: 200, bgk: 20 };
-    const MARGINAL = { trt: 6, les: 100, bgk: 12 };
+    // ONE CONFIGURATION, and it is the one measured to survive.
+    //
+    // The alternatives (plain BGK, TRT at Lambda = 3/16) still exist in the
+    // LIBRARY, because the analytic verification needs them to MEASURE what TRT
+    // is worth -- the ten-orders-of-magnitude wall result is a BGK-vs-TRT
+    // comparison and cannot be made without both. What they are no longer is a
+    // choice offered here: one of them shipped as the page default and diverged
+    // at the shipped sliders, which is the failure this removes.
+    const PHYSICS = { collision: 'trt', trtPolicy: 'stability', smagorinsky: 0.16 };
+    // Not a divergence threshold any more -- the limiter means there is no such
+    // thing. This is where the answer starts being HELD UP rather than solved.
+    const CEILING = 200, MARGINAL = 100;
     function stabilityHint() {
       const tau = +$('tau').value, u = +$('uin').value;
       const nu = (tau - 0.5) / 3;
       // The flow accelerates past the obstacle, so the local lattice velocity is
       // well above the inlet value. This ratio is what the measured floor tracks.
       const risk = u / nu;
-      const mode = $('physics').value;
-      const diverge = CEILING[mode], marginal = MARGINAL[mode];
-      const cls = risk > diverge ? 'bad' : risk > marginal ? 'warn' : '';
+      const cls = risk > CEILING ? 'bad' : risk > MARGINAL ? 'warn' : '';
       for (const id of ['tau-v', 'uin-v']) $(id).className = 'v ' + cls;
+      // The run cannot crash, so this is no longer a divergence warning -- it is
+      // a warning about ACCURACY. Past the ceiling the limiter starts holding
+      // cells up, and those cells stop solving the equations they were given.
       $('s-risk').innerHTML = `Re<sub>cell</sub> ${risk.toFixed(0)} — ` + (cls === 'bad'
-        ? `<span class="bad">past this model's measured ceiling (~${diverge})</span>`
-          + (mode === 'les' ? '' : ' — switch to <b>TRT + LES</b>, or raise τ')
-        : cls === 'warn' ? '<span class="warn">marginal</span>'
+        ? '<span class="bad">the limiter will hold cells up; the answer is being rescued, not solved</span>'
+        : cls === 'warn' ? '<span class="warn">marginal — expect some limiting</span>'
         : '<span class="good">within the measured stable range</span>');
     }
     $('tau').addEventListener('input', () => { $('tau-v').textContent = (+$('tau').value).toFixed(3); stabilityHint(); lidHint(); });

@@ -666,7 +666,16 @@ await checkConsoleUsable(latt, 'lattsim');
 {
   const info = await latt.evaluate(() => window.__lsInfo());
   check('lattsim: the build logs its parameters to the page console',
-    info && typeof info.ReCell === 'number' && info.model, JSON.stringify(info));
+    info && typeof info.ReCell === 'number' && info.collision && info.trtPolicy
+    && typeof info.Cs === 'number' && typeof info.omegaMinus === 'number', JSON.stringify(info));
+  // ONE configuration ships. The alternatives stay in the library for the
+  // analytic comparisons; offering them here is what put a diverging default
+  // in front of the user.
+  check('lattsim: the page ships the measured-stable configuration only',
+    info.collision === 'trt' && info.trtPolicy === 'stability' && info.Cs > 0,
+    JSON.stringify({ collision: info.collision, policy: info.trtPolicy, Cs: info.Cs }));
+  check('lattsim: there is no collision-model selector to get wrong',
+    await latt.evaluate(() => document.getElementById('physics') === null));
   check('lattsim: the default Re_cell is inside the default model\'s measured ceiling',
     info.ReCell < info.ceiling, `Re_cell ${info.ReCell.toFixed(1)} vs ceiling ${info.ceiling}`);
   const live = await latt.evaluate(async () => {

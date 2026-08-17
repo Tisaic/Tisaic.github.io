@@ -291,6 +291,70 @@ decays (measured 2.4 → −0.44 → −0.93 … → 0.05). So neither the sign 
 presence of sign changes separates driven from steady. What does is that the
 transient settles and the drive does not — compared after 3000 steps, not during.
 
+## The limiter: the run cannot crash
+
+Asked for one configuration and no divergence failures, at any setting, even at
+the cost of some accuracy. The chain that produced the crash was measured and
+watched on a device:
+
+    velocity overflows -> rho crosses zero -> u = momentum/rho goes non-finite
+      -> STREAMING carries the NaN one cell per step to every neighbour
+
+Every link is now broken, in the collide kernel, in both backends:
+
+* **density is clamped** away from zero and from absurd highs, so the division
+  cannot blow up;
+* **velocity is clamped**, so a runaway cannot feed itself a wilder equilibrium
+  each step;
+* **any population that still comes out non-finite is replaced** by the
+  equilibrium at the sanitised moments — so a NaN is caught in the cell where it
+  appears and can never be handed to a neighbour.
+
+The comparisons are written as `!(x > lo)` rather than `x < lo`, because the
+first is true for a NaN and the second is not.
+
+**The bounds are chosen so a healthy run never touches them.** The scheme is
+already unstable above lattice velocity 0.3 and this clamps at 0.35; a working
+density stays within a few percent of 1 and this clamps at 0.5 and 2.0. That the
+analytic cases are unaffected is asserted, not assumed — a limiter that fired
+during normal operation would be silently changing physics rather than rescuing
+it.
+
+Every configuration that previously died now survives, 3000 steps, u = 0.08:
+
+| Re_cell | τ | BGK | TRT magic | TRT stability | **TRT + LES (shipped)** |
+|---|---|---|---|---|---|
+| 12 | 0.520 | ok 0.280 | ok **0.350** | ok 0.278 | ok 0.300 |
+| 24 | 0.510 | ok **0.350** | ok **0.350** | ok **0.350** | ok 0.286 |
+| 48 | 0.505 | ok **0.350** | ok **0.350** | ok **0.350** | ok 0.277 |
+| 160 | 0.5015 | ok **0.350** | ok **0.350** | ok **0.350** | ok 0.281 |
+| 480 | 0.5005 | ok **0.350** | ok **0.350** | ok **0.350** | ok 0.281 |
+| 4800 | 0.5000 | ok **0.350** | ok **0.350** | ok **0.350** | ok 0.282 |
+
+Every one of those rows below Re_cell 24 used to be a divergence. Read the
+numbers rather than the "ok": **0.350 is the clamp**, so those runs are being
+*held up*. The shipped configuration sits at 0.277–0.300, below the clamp — it
+is solving the flow, not being rescued from it. That difference is the entire
+value of the sub-grid model now that nothing can crash.
+
+**And it says so.** The reduction counts cells sitting at the clamp,
+`diagnostics()` returns `limited`, and the verdict becomes `limited — N cell(s)
+held at the velocity limit`, reported *before* the stability verdicts because
+"it looks stable" is the wrong conclusion to draw from a rescued run. A
+simulation that quietly substitutes invented values for real ones is worse than
+one that stops.
+
+A NaN injected directly into the populations by hand is gone after one step and
+has not spread 200 steps later. That is the test that makes this a guarantee
+rather than an observation.
+
+**One configuration ships**: TRT with ω⁻ pinned for stability, plus the sub-grid
+model. BGK and TRT-at-Λ=3/16 remain in the *library* because the analytic
+verification needs them to measure what TRT is worth — the ten-decade wall result
+is a BGK-vs-TRT comparison — but they are no longer a choice on the page. One of
+them shipped as the default and diverged at the shipped sliders, which is the
+failure this removes.
+
 ## Stability: what the sliders can do to it
 
 **Reported from a device:** viscosity slider to the far left, everything else

@@ -458,6 +458,40 @@ the shipped commit carries the correct version.
    decays (2.4 → −0.44 → −0.93 … → 0.05). So neither the sign nor the presence of
    sign changes separates driven from steady; what does is that the transient
    settles and the drive does not, compared after 3000 steps rather than during.
+   **THE RUN CANNOT CRASH (v122).** Asked for one configuration and no divergence
+   failures at any setting, accepting some loss of perfection. The chain that
+   produced the crash — velocity overflows → ρ crosses zero → u = momentum/ρ goes
+   non-finite → STREAMING carries the NaN one cell per step — is now broken at
+   every link inside the collide kernel of both backends: density clamped away
+   from zero, velocity clamped, and **any population that still comes out
+   non-finite REPLACED by the equilibrium at the sanitised moments**, so a NaN is
+   caught in the cell where it appears and can never reach a neighbour. The
+   comparisons are written `!(x > lo)` rather than `x < lo` because the first is
+   true for a NaN and the second is not.
+   THE BOUNDS NEVER FIRE IN A HEALTHY RUN — the scheme is already unstable above
+   lattice velocity 0.3 and this clamps at 0.35; density clamps at 0.5 and 2.0
+   against a working range within a few percent of 1 — and that the analytic
+   cases are untouched is ASSERTED, since a limiter firing in normal operation
+   would be silently changing physics rather than rescuing it.
+   MEASURED, 3000 steps at u 0.08, every configuration that previously died:
+   Re_cell 12/24/48/160/480/**4800** (τ down to 0.5000) all survive. But READ THE
+   NUMBERS RATHER THAN THE "ok": BGK, TRT-magic and TRT-stability all sit at
+   **uMax 0.350, which IS the clamp** — they are being held up. The shipped
+   TRT+LES sits at 0.277–0.300, BELOW the clamp: it is solving the flow rather
+   than being rescued from it, and that gap is the entire value of the sub-grid
+   model now that nothing can crash.
+   **AND IT SAYS SO.** The reduction counts clamped cells (stride 12 → 13),
+   `diagnostics()` returns `limited`, and the verdict becomes `limited — N
+   cell(s) held at the velocity limit`, reported BEFORE the stability verdicts,
+   because "it looks stable" is the wrong conclusion to draw from a rescued run.
+   A NaN injected by hand into the populations is gone after one step and has not
+   spread 200 steps later — the test that makes this a guarantee rather than an
+   observation.
+   **ONE CONFIGURATION SHIPS** (TRT with ω⁻ pinned for stability + the sub-grid
+   model); BGK and TRT-at-Λ=3/16 stay in the LIBRARY because the analytic
+   verification needs both to measure the ten-decade wall result, but they are no
+   longer a choice on the page — one of them shipped as the default and diverged
+   at the shipped sliders.
    **DELIBERATELY NOT BUILT YET:** heat, diffusion, elasticity, electromagnetics,
    multiphysics coupling and adaptive resolution are architecture rather than
    code. Operators declare the fields they read and write and the solver rejects
