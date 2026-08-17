@@ -667,6 +667,13 @@ if (hasGPU && ls0.backend === 'webgpu') {
 check('lattsim: the GPU driver reported no uncaptured errors', (ls0.gpuErrors || []).length === 0,
   JSON.stringify(ls0.gpuErrors));
 
+// THE CONSOLE BUFFER IS PERSISTED TO localStorage AND IS PER ORIGIN, not per
+// page -- deliberately, so a white-screen crash survives a reload. The side
+// effect is that this page inherits the `console.error('smoke error')` this very
+// suite injects on index.html to test console capture, which is what put a red
+// error badge on the LattSim screenshot and sent me looking for a bug that was
+// not there. Clear it here so the end-of-section check is about THIS page.
+await latt.evaluate(() => window.__dbg.clear());
 await checkConsoleUsable(latt, 'lattsim');
 
 // ---- THE SHIPPED DEFAULTS MUST SURVIVE. This shipped broken once: the default
@@ -1040,6 +1047,58 @@ await latt.evaluate(() => window.scrollTo(0, 0));
 await latt.waitForTimeout(200);
 await latt.screenshot({ path: join(SHOTS, '09-lattsim.png') });
 
+// ---- THE PROBE MUST READ THE CELL IT POINTS AT.
+//
+// This is the same class of check as the stir: a screen coordinate on a
+// letterboxed canvas -> a slice plane -> a lattice cell, and a mistake anywhere
+// in that chain gives a plausible-looking trace of the WRONG cell. So the probe
+// is placed by screen coordinate and its reading is compared against a direct
+// read of the field at the cell it claims to be at.
+{
+  const probe = await latt.evaluate(async () => {
+    const r = document.getElementById('stage').getBoundingClientRect();
+    const hit = window.__lsProbe.at(r.left + r.width * 0.55, r.top + r.height * 0.5);
+    if (!hit) return { error: 'the mapping returned nothing inside the stage' };
+    window.__lsProbe.place(hit.coords);
+    const st = window.__lsProbe.state();
+    // What the field actually holds at that cell, read independently.
+    const sim = window.__lsSim(), N = sim.lattice.cellCount;
+    const mac = await sim.backend.snapshot('macro');
+    const i = sim.lattice.index(...hit.coords);
+    return { coords: hit.coords, cell: st.cell, expectCell: i,
+      direct: { rho: mac[i], speed: Math.hypot(mac[N + i], mac[2 * N + i], mac[3 * N + i]) } };
+  });
+  check('lattsim: a screen point maps to the cell the probe reports',
+    !probe.error && probe.cell === probe.expectCell, JSON.stringify(probe));
+
+  // Now let it sample, and require the trace to match the field.
+  // The probe records from the render loop, which is paused here, so drive it
+  // explicitly rather than waiting for frames that are not coming.
+  await latt.evaluate(async () => {
+    for (let k = 0; k < 5; k++) { window.__lsStep(40); await window.__lsProbe.sample(); }
+  });
+  const agree = await latt.evaluate(async () => {
+    const st = window.__lsProbe.state();
+    const sim = window.__lsSim(), N = sim.lattice.cellCount;
+    const mac = await sim.backend.snapshot('macro');
+    const i = st.cell;
+    return { probe: st.last, direct: { rho: mac[i],
+      speed: Math.hypot(mac[N + i], mac[2 * N + i], mac[3 * N + i]) }, samples: st.samples };
+  });
+  const dRho = Math.abs(agree.probe.rho - agree.direct.rho);
+  check('lattsim: the probe trace matches a direct read of that cell', dRho < 1e-3,
+    JSON.stringify(agree));
+  // Assert the TRACES, not just that a plot exists. Plotly puts js-plotly-plot
+  // on the container itself rather than a child, and an empty plot has an svg
+  // too -- so "there is a chart" would pass while the chart showed nothing.
+  const chart = await latt.evaluate(() => ({
+    isPlot: document.getElementById('probe-chart').classList.contains('js-plotly-plot'),
+    traces: document.querySelectorAll('#probe-chart .scatterlayer .trace').length,
+  }));
+  check('lattsim: the probe chart is drawn with its traces',
+    chart.isPlot && chart.traces >= 4, JSON.stringify(chart));
+}
+
 // The Architecture tab is where the engine states what it is and is not.
 await latt.click('.tab[data-tab="about"]');
 await latt.waitForTimeout(200);
@@ -1047,6 +1106,15 @@ check('lattsim: architecture tab explains the two backends',
   /CPU reference/.test(await latt.textContent('#p-about')));
 await latt.screenshot({ path: join(SHOTS, '10-lattsim-arch.png') });
 
+// THE PAGE'S OWN ERROR BUFFER, in both tiers. Neither Playwright's `pageerror`
+// nor the console listener reports unhandled rejections, so the two checks below
+// can pass while the live page shows a red error badge -- which is exactly what
+// happened once already, and was only noticed in a screenshot. This reads the
+// same instrument the phone shows the owner.
+const ownErrors = await latt.evaluate(() =>
+  window.__dbg.buffer().filter((e) => e.type === 'error').map((e) => String(e.text).slice(0, 300)));
+check('lattsim: the page reports no errors of its own (badge clear)',
+  ownErrors.length === 0, ownErrors.join(' | '));
 check('lattsim: no errors overall', lattErrors.length === 0, lattErrors.join(' | '));
 check('lattsim: nothing logged to console.error', lattConsole.length === 0, lattConsole.join(' | '));
 

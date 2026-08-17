@@ -8,8 +8,9 @@
   <title>LattSim — Lattice Physics Engine</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:123,built:"2026-08-17T14:37:31Z"}; // __LATTSIM_STAMP__</script>
+  <script>window.__BUILD = {version:124,built:"2026-08-17T16:36:45Z"}; // __LATTSIM_STAMP__</script>
   <script src="console-boot.js"></script>
+  <script src="vendor/plotly-basic.min.js"></script>
 
   <style>
     :root { --bg:#0b1220; --panel:#111827; --card:#1e293b; --line:#334155; --text:#e2e8f0;
@@ -35,6 +36,19 @@
       image-rendering:pixelated; background:#060a14; }
     .stage canvas.fill { width:100%; height:100%; image-rendering:auto; }
     .stage canvas[hidden] { display:none; }
+    /* The probe marker is an OVERLAY, not something drawn into the slice canvas.
+       The canvas is the size of the lattice (tens of pixels) and is scaled up, so
+       a crosshair drawn into it would be one lattice cell wide and unreadable. */
+    #probe-mark { position:absolute; width:18px; height:18px; margin:-9px 0 0 -9px; pointer-events:none;
+      border:2px solid #f472b6; border-radius:50%; box-shadow:0 0 0 1px rgba(0,0,0,.6); display:none; }
+    #probe-mark::before, #probe-mark::after { content:''; position:absolute; background:#f472b6; }
+    #probe-mark::before { left:7px; top:-6px; width:2px; height:6px; }
+    #probe-mark::after { left:7px; bottom:-6px; width:2px; height:6px; }
+    /* An empty chart is a third of a phone screen of meaningless axes, which
+       reads as broken rather than as "nothing to show yet". Collapsed until a
+       probe exists. */
+    #probe-chart { width:100%; height:150px; margin-top:8px; display:none; }
+    #probe-chart.on { display:block; }
     .badge { position:absolute; left:10px; top:10px; font-size:.7rem; padding:4px 8px; border-radius:6px;
       background:rgba(15,23,42,.85); border:1px solid var(--line); color:var(--muted); }
     .controls { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; align-items:center; }
@@ -91,7 +105,21 @@
       <canvas id="cv"></canvas>
       <canvas id="cvgl" class="fill" hidden></canvas>
       <span class="badge" id="backend-badge">starting…</span>
+      <span id="probe-mark"></span>
     </div>
+
+    <!-- Probe time series, directly below the stage so the trace and the picture
+         it came from are read together. -->
+    <div id="probe-chart"></div>
+    <div class="controls">
+      <button id="probe-arm" class="sec">Place probe ⊕</button>
+      <button id="probe-clear" class="sec">Clear probe</button>
+    </div>
+    <p class="lead" id="probe-note" style="margin-top:4px">A <b>probe</b> samples one lattice cell over
+      time. Tap <b>Place probe</b> then tap the 2D slice; the cell is fixed in 3D as well, since the slice
+      plane and position are what choose it. The chart reads that cell every frame — speed, the two
+      in-plane velocity components, and density — which is how an oscillation is told from a steady flow:
+      a vortex street shows as a periodic transverse velocity, and a settled flow as flat lines.</p>
 
     <div class="controls">
       <button id="run">Run ▶</button>
@@ -154,6 +182,7 @@
       <dt>stability</dt><dd id="s-stable">—</dd>
       <dt>τ / speed pairing</dt><dd id="s-risk">—</dd>
       <dt>limiter</dt><dd id="s-lim">—</dd>
+      <dt>probe</dt><dd id="s-probe">no probe placed</dd>
       <dt>Reynolds</dt><dd id="s-re">—</dd>
     </dl>
 
@@ -432,6 +461,14 @@
           + `ceiling (~${state.runInfo.ceiling}) — the limiter will hold cells up`);
       }
       applyView();
+      // A PROBE OUTLIVES A REBUILD only if its cell still exists. Same scene at
+      // the same resolution keeps it; a resolution change would silently move it
+      // to a different physical place, so it is dropped and said so.
+      if (probe.coords) {
+        const L = sim.lattice;
+        if (probe.coords.every((v, k) => v < L.size[k])) probePlace(probe.coords);
+        else probeClear();
+      }
       // THE VOLUME RENDERER IS BOUND TO A SIMULATION, so a rebuild destroys it --
       // and it therefore has to be REBUILT HERE. It used to be created only by
       // the view selector's change handler, so pressing Reset (or moving
@@ -640,6 +677,7 @@
         refreshStats().catch((e) => console.error(e));
       }
       Promise.resolve(drawOnce()).catch((e) => console.error(e)).finally(() => { state.busy = false; });
+      probeSample().then(() => probeDraw());
     }
 
     function start() { if (state.running) return; state.running = true; $('run').textContent = 'Pause ⏸'; state.lastT = performance.now(); state.raf = requestAnimationFrame(tick); }
@@ -650,18 +688,29 @@
     // momentum impulse there. This is a physics input, not a paint tool: the
     // force enters the same Guo forcing term a body force uses.
     const STIR_STEPS = 24;
-    function stirAt(clientX, clientY, dragX, dragY) {
-      if (!state.sim || state.view !== 'slice') return;
+    /**
+     * Screen point -> lattice cell, shared by the stir and the probe.
+     *
+     * Factored out because it is the one piece of geometry the browser can get
+     * wrong in a way nothing else notices: the canvas is the size of the LATTICE
+     * (tens of pixels) drawn with object-fit: contain, so there is a letterbox
+     * to undo, a scale to divide by, and a vertical flip, and a mistake in any
+     * of them lands the interaction in the wrong cell while still looking
+     * plausible. Returns null outside the drawn area.
+     */
+    function cellAtScreen(clientX, clientY) {
+      if (!state.sim) return null;
       const cv = $('cv');
       const r = cv.getBoundingClientRect();
-      // object-fit: contain -- work out the letterboxed drawing rectangle.
-      const sx = r.width / cv.width, sy = r.height / cv.height;
-      const sc = Math.min(sx, sy);
+      const sc = Math.min(r.width / cv.width, r.height / cv.height);
+      // A HIDDEN CANVAS HAS NO SIZE, and 0/0 is NaN, not zero -- so without this
+      // the mapping returns NaN coordinates that sail through every bounds check
+      // and index the field at NaN. Refuse instead.
+      if (!(sc > 0)) return null;
       const dw = cv.width * sc, dh = cv.height * sc;
       const ox = r.left + (r.width - dw) / 2, oy = r.top + (r.height - dh) / 2;
       const px = (clientX - ox) / sc, py = (clientY - oy) / sc;
-      if (px < 0 || py < 0 || px >= cv.width || py >= cv.height) return;
-
+      if (px < 0 || py < 0 || px >= cv.width || py >= cv.height) return null;
       const L = state.sim.lattice;
       const axis = state.slice.axis;
       const a = Math.floor(px);
@@ -671,10 +720,32 @@
       if (axis === 0) { c[0] = k; c[1] = a; c[2] = b; }
       else if (axis === 1) { c[0] = a; c[1] = k; c[2] = b; }
       else { c[0] = a; c[1] = b; c[2] = k; }
+      return { coords: c, axis, inPlane: axis === 0 ? [1, 2] : axis === 1 ? [0, 2] : [0, 1] };
+    }
+
+    /** The inverse: lattice cell -> a point on the stage, for the marker. */
+    function screenAtCell(coords) {
+      const cv = $('cv'), stage = $('stage');
+      const sr = stage.getBoundingClientRect(), r = cv.getBoundingClientRect();
+      const sc = Math.min(r.width / cv.width, r.height / cv.height);
+      const ox = (r.left - sr.left) + (r.width - cv.width * sc) / 2;
+      const oy = (r.top - sr.top) + (r.height - cv.height * sc) / 2;
+      const [a1, a2] = state.slice.axis === 0 ? [1, 2] : state.slice.axis === 1 ? [0, 2] : [0, 1];
+      const a = coords[a1], b = coords[a2];
+      return { x: ox + (a + 0.5) * sc, y: oy + (cv.height - 0.5 - b) * sc };
+    }
+
+    function stirAt(clientX, clientY, dragX, dragY) {
+      if (!state.sim || state.view !== 'slice') return;
+      const hit = cellAtScreen(clientX, clientY);
+      if (!hit) return;
+      const L = state.sim.lattice;
+      const axis = hit.axis;
+      const c = hit.coords;
 
       // Direction: the drag, mapped into the two in-plane axes. A tap with no
       // drag pushes along the plane's first axis.
-      const [a1, a2] = axis === 0 ? [1, 2] : axis === 1 ? [0, 2] : [0, 1];
+      const [a1, a2] = hit.inPlane;
       const mag = Math.hypot(dragX, dragY) || 1;
       const f = [0, 0, 0];
       // SIZED AGAINST THE FLOW IT HAS TO DISTURB, not picked. The impulse runs
@@ -702,13 +773,132 @@
       }
     }
 
+    // ------------------------------------------------------------------ probe
+    //
+    // One lattice cell, sampled over time. The chart under the stage is what
+    // turns "does this oscillate?" from a question about a picture into a
+    // question about a trace: a vortex street is a periodic transverse velocity,
+    // a settled flow is flat lines, and the two look far more alike on screen
+    // than they do here.
+    // Named so the probe row can say when a probe has landed in a wall, which is
+    // otherwise indistinguishable from a probe reading a dead-still fluid cell.
+    const CELL_NAME = { 0: 'fluid', 1: 'solid', 2: 'inlet', 3: 'outlet', 4: 'moving wall' };
+    const PROBE_WIN = 600;                     // samples drawn
+    const probe = { coords: null, cell: -1, armed: false, busy: false,
+      t: [], speed: [], ua: [], ub: [], rho: [], plotted: 0, drawn: false };
+
+    function probeClear() {
+      probe.coords = null; probe.cell = -1;
+      probe.t.length = 0; probe.speed.length = 0; probe.ua.length = 0;
+      probe.ub.length = 0; probe.rho.length = 0;
+      $('probe-mark').style.display = 'none';
+      $('probe-chart').classList.remove('on');
+      probeStatus();
+    }
+
+    function probePlace(coords) {
+      const L = state.sim.lattice;
+      probe.coords = coords.slice();
+      probe.cell = L.index(coords[0], coords[1], coords[2]);
+      probe.t.length = 0; probe.speed.length = 0; probe.ua.length = 0;
+      probe.ub.length = 0; probe.rho.length = 0;
+      $('probe-chart').classList.add('on');
+      probeMark();
+      probeDraw(true);
+      probeStatus();
+    }
+
+    function probeMark() {
+      const el = $('probe-mark');
+      if (!probe.coords || state.view !== 'slice') { el.style.display = 'none'; return; }
+      const p = screenAtCell(probe.coords);
+      el.style.left = p.x + 'px'; el.style.top = p.y + 'px'; el.style.display = 'block';
+    }
+
+    function probeStatus() {
+      const b = $('probe-arm');
+      b.textContent = probe.armed ? 'Tap the slice…' : 'Place probe ⊕';
+      b.className = probe.armed ? '' : 'sec';
+      const cell = probe.coords ? `probe at (${probe.coords.join(', ')})` : 'no probe placed';
+      const type = probe.cell >= 0 && state.sim ? CELL_NAME[state.sim.flags[probe.cell]] || '' : '';
+      $('s-probe').textContent = cell + (type ? ` · ${type}` : '');
+    }
+
+    /** Sample the probe. One 16-byte readback, so it is affordable every frame. */
+    async function probeSample() {
+      if (probe.cell < 0 || !state.sim || probe.busy) return;
+      probe.busy = true;
+      try {
+        const v = await state.sim.backend.probe('macro', probe.cell);
+        const [a1, a2] = state.slice.axis === 0 ? [1, 2] : state.slice.axis === 1 ? [0, 2] : [0, 1];
+        // THE X AXIS IS SOLVER STEPS, NOT SAMPLES. The probe records once per
+        // frame, so a "samples" axis would silently rescale itself whenever the
+        // steps-per-frame slider moved -- the same defect the residual had, where
+        // a viewing control changed a physical reading. Recording the step makes
+        // the time axis mean the same thing at any frame rate or slider setting.
+        probe.t.push(state.sim.step);
+        probe.rho.push(v[0]);
+        probe.speed.push(Math.hypot(v[1], v[2], v[3]));
+        probe.ua.push(v[1 + a1]);
+        probe.ub.push(v[1 + a2]);
+        // Trim in chunks rather than shifting every sample: an unbounded array
+        // that is only ever drawn from its tail is a slow leak, and this page has
+        // shipped one of those before.
+        if (probe.speed.length > PROBE_WIN * 3) {
+          for (const a of [probe.t, probe.rho, probe.speed, probe.ua, probe.ub]) {
+            a.splice(0, a.length - PROBE_WIN);
+          }
+        }
+      } catch (e) { /* a rebuild mid-sample; the next frame re-reads */ }
+      probe.busy = false;
+    }
+
+    function probeDraw(force) {
+      if (typeof Plotly === 'undefined') return;
+      const n = probe.speed.length;
+      if (!force && n === probe.plotted) return;
+      probe.plotted = n;
+      const names = state.slice.axis === 0 ? ['u_y', 'u_z'] : state.slice.axis === 1 ? ['u_x', 'u_z'] : ['u_x', 'u_y'];
+      const layout = { margin: { l: 40, r: 34, t: 6, b: 18 },
+        paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+        font: { color: '#94a3b8', size: 10 }, showlegend: true,
+        legend: { orientation: 'h', y: 1.22 },
+        xaxis: { showgrid: false, title: { text: 'steps', standoff: 2 } },
+        yaxis: { gridcolor: '#1e293b', zerolinecolor: '#334155', title: { text: 'u', standoff: 2 } },
+        yaxis2: { overlaying: 'y', side: 'right', showgrid: false, title: { text: 'ρ', standoff: 2 } } };
+      const x = probe.t.slice(-PROBE_WIN);
+      const data = [
+        { x, y: probe.speed.slice(-PROBE_WIN), name: '|u|', line: { color: '#0ea5e9', width: 2 }, mode: 'lines' },
+        { x, y: probe.ua.slice(-PROBE_WIN), name: names[0], line: { color: '#22c55e', width: 1.3 }, mode: 'lines' },
+        { x, y: probe.ub.slice(-PROBE_WIN), name: names[1], line: { color: '#f472b6', width: 1.3 }, mode: 'lines' },
+        { x, y: probe.rho.slice(-PROBE_WIN), name: 'ρ', line: { color: '#94a3b8', width: 1, dash: 'dot' },
+          mode: 'lines', yaxis: 'y2' },
+      ];
+      if (!probe.drawn) {
+        Plotly.newPlot('probe-chart', data, layout, { displayModeBar: false, responsive: true });
+        probe.drawn = true;
+        // The container was display:none until the probe was placed, so Plotly
+        // sized it against nothing. One relayout after it is visible fixes that.
+        requestAnimationFrame(() => { try { Plotly.Plots.resize('probe-chart'); } catch (e) { /* not yet laid out */ } });
+      }
+      else Plotly.react('probe-chart', data, layout, { displayModeBar: false, responsive: true });
+    }
+
+    $('probe-arm').addEventListener('click', () => { probe.armed = !probe.armed; probeStatus(); });
+    $('probe-clear').addEventListener('click', () => { probe.armed = false; probeClear(); });
+    window.__lsProbe = { place: (c) => probePlace(c), at: cellAtScreen,
+      sample: async () => { await probeSample(); probeDraw(); }, state: () => ({
+      coords: probe.coords, cell: probe.cell, samples: probe.speed.length,
+      last: probe.speed.length ? { speed: probe.speed[probe.speed.length - 1],
+        rho: probe.rho[probe.rho.length - 1] } : null }) };
+
     (() => {
       const stage = $('stage');
       let last = null, dragged = false;
       const pt = (e) => (e.touches && e.touches[0]) || e;
       const down = (e) => { const p = pt(e); last = [p.clientX, p.clientY]; dragged = false; };
       const move = (e) => {
-        if (!last) return;
+        if (!last || probe.armed) return;
         const p = pt(e);
         stirAt(p.clientX, p.clientY, p.clientX - last[0], p.clientY - last[1]);
         last = [p.clientX, p.clientY];
@@ -720,7 +910,17 @@
       // last move already applied the impulse the user aimed, and adding a fixed
       // sideways push at release would contradict it.
       const up = () => {
-        if (last && !dragged) stirAt(last[0], last[1], 1, 0);
+        if (last && !dragged) {
+          // ARMED, so the tap places the probe rather than stirring. Two
+          // different intentions on the same gesture need an explicit mode --
+          // guessing from the gesture would make one of them unreachable.
+          if (probe.armed && state.view === 'slice') {
+            const hit = cellAtScreen(last[0], last[1]);
+            if (hit) { probePlace(hit.coords); probe.armed = false; probeStatus(); }
+          } else {
+            stirAt(last[0], last[1], 1, 0);
+          }
+        }
         last = null; dragged = false;
       };
       stage.addEventListener('touchstart', down, { passive: true });
@@ -776,10 +976,13 @@
         }
       }
       drawOnce();
+      probeMark();
     });
     $('mode').addEventListener('change', () => drawOnce());
-    $('axis').addEventListener('change', () => drawOnce());
-    $('slicep').addEventListener('input', () => { $('slicep-v').textContent = Math.round(+$('slicep').value * 100) + '%'; drawOnce(); });
+    $('axis').addEventListener('change', () => { drawOnce(); probeMark(); probeDraw(true); });
+    $('slicep').addEventListener('input', () => {
+      $('slicep-v').textContent = Math.round(+$('slicep').value * 100) + '%'; drawOnce(); probeMark();
+    });
     $('spf').addEventListener('input', () => { $('spf-v').textContent = $('spf').value; });
     // SAY IT BEFORE IT HAPPENS, not after. tau and inlet speed together decide
     // whether the scheme is stable at all, and the combination that dies is not
@@ -892,6 +1095,8 @@
     syncObstacle();
     stabilityHint();
     lidHint();
+    probeStatus();
+    window.addEventListener('resize', () => probeMark());
     probeLimits()
       .then(() => { clampResolution(); return build(); })
       .then(() => console.log(state.sim ? 'lattsim ready ✓' : 'lattsim failed to build'));

@@ -518,6 +518,33 @@ the shipped commit carries the correct version.
    every LattSim edit, and ngrc's warm-up timers are both most of its clock and
    flaky under load, so a LattSim edit was being judged by checks unrelated to it.
    They still run on `--full`.
+   **A PROBE, AND A CHART UNDER THE STAGE (v124).** One lattice cell sampled over
+   time: `Place probe` then tap the slice, and the cell is fixed in 3D too since
+   the slice plane and position choose it. A TIME SERIES ANSWERS WHAT A PICTURE
+   CANNOT — a vortex street and a settled flow look far more alike on a colour map
+   than on a trace (shedding is a periodic transverse velocity, settled is flat
+   lines). Traces: |u|, both in-plane velocity components, and density on its own
+   axis. ONE CELL, NOT THE FIELD: `backend.probe()` is a 16-byte readback (four
+   4-byte copies, since the field is structure-of-arrays), against the 21 MB a
+   full macro snapshot would cost every frame at 1.3M cells.
+   THE X AXIS IS SOLVER STEPS, NOT SAMPLES — the probe records once per frame, so
+   a sample-numbered axis would rescale itself when steps-per-frame moved, which
+   is the residual's old defect over again.
+   THREE THINGS FIXED RATHER THAN ASSUMED: (i) **a hidden canvas has no size, and
+   0/0 is NaN, not zero** — the screen-to-cell mapping returned NaN coordinates
+   that passed every bounds check and indexed the field at NaN; it now refuses a
+   zero-sized canvas, found because the regression ran while the Architecture tab
+   was showing. (ii) **An empty chart reads as broken**, so it is collapsed until
+   a probe exists — and Plotly must be told to resize once the container is
+   visible, having sized itself against a `display:none` div. (iii) **THE CONSOLE
+   BUFFER IS PER ORIGIN, NOT PER PAGE** — persisted to localStorage so a
+   white-screen crash survives a reload, which means this page inherits errors
+   from any other page on the origin. That is why a red error badge appeared on a
+   LattSim screenshot: it was the SUITE'S OWN `console.error('smoke error')`,
+   injected on index.html to test console capture. The suite now clears the
+   buffer when it opens the page, and asserts the page's own error buffer is
+   empty at the end — in BOTH tiers, since neither `pageerror` nor the console
+   listener sees unhandled rejections.
    **DELIBERATELY NOT BUILT YET:** heat, diffusion, elasticity, electromagnetics,
    multiphysics coupling and adaptive resolution are architecture rather than
    code. Operators declare the fields they read and write and the solver rejects

@@ -567,6 +567,47 @@ can sit there looking steady for a very long time. Real cylinders are not
 perfectly centred either. The page also reports the threshold next to the live
 Reynolds number, so "why is nothing happening" is answerable from the screen.
 
+## The probe
+
+One lattice cell, sampled over time, charted directly under the stage. `Place
+probe` then tap the slice; the cell is fixed in 3D as well, because the slice
+plane and position are what choose it.
+
+**A time series answers what a picture cannot.** A vortex street and a settled
+flow look far more alike on a colour map than they do on a trace: shedding is a
+periodic transverse velocity, settled is flat lines. The chart shows |u|, the two
+in-plane velocity components and density (on its own right-hand axis).
+
+**One cell, not the whole field.** `backend.probe(field, cell)` is a 16-byte
+readback: the field is structure-of-arrays, so a cell's four components live at
+four offsets and four 4-byte copies is the whole cost. Sampling a full macro
+snapshot every frame at 1.3M cells would be 21 MB per sample, which is exactly
+the transfer this architecture exists to avoid.
+
+**The x axis is solver steps, not samples.** The probe records once per frame, so
+a sample-numbered axis would silently rescale itself whenever steps-per-frame
+moved — the same defect the residual had, where a viewing control changed a
+physical reading.
+
+Three things that had to be fixed rather than assumed:
+
+**A hidden canvas has no size, and 0/0 is NaN rather than zero.** The
+screen-to-cell mapping returned NaN coordinates that passed every bounds check
+and indexed the field at NaN. It now refuses a zero-sized canvas. Found because
+the regression ran while the Architecture tab was showing.
+
+**An empty chart reads as broken**, not as "nothing yet" — 150px of meaningless
+axes on a phone. The chart is collapsed until a probe exists, and Plotly is
+told to resize once the container is actually visible, since it sized itself
+against a `display:none` div otherwise.
+
+**The console buffer is per ORIGIN, not per page.** It is persisted to
+localStorage so a white-screen crash survives a reload, which means this page
+inherits errors logged by any other page on the origin. That is why a red error
+badge appeared on a LattSim screenshot: it was the smoke test's own
+`console.error('smoke error')`, injected on index.html to test console capture.
+Worth knowing before chasing one.
+
 ## Poking it, and knowing when it has settled
 
 **A steady state is a claim, and it needs an instrument.** "The obstacle scene
