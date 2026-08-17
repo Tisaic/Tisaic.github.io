@@ -305,7 +305,7 @@ if (MODE === 'hot') {
         uMax: dg.uMax, rho: [dg.rhoMin, dg.rhoMax] },
       result: res0 };
   }, { res: Number(arg('res', 32)), tau: Number(arg('tau', 0.5015)),
-    u: Number(arg('u', 0.14)), spin: 3000, every: 20,
+    u: Number(arg('u', 0.14)), spin: Number(arg('spin', 3000)), every: 20,
     warmup: 250, train: 1200, score: 1200, horizon: Number(arg('horizon', 14)) });
   console.log(JSON.stringify(out, null, 2));
 }
