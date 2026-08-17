@@ -158,7 +158,16 @@ check('file list groups CLAUDE context + Docs',
 await page.screenshot({ path: join(SHOTS, '03-docs.png') });
 
 // ---- NGRC playground (ngrc.html): three.js + Plotly + the ported library ----
+// THE WHOLE NGRC PAGE IS FULL-TIER.
+//
+// The quick tier exists to be run on every edit, and what is being edited is
+// LattSim. Loading ngrc.html costs most of quick's wall clock, and its
+// soft-sensor and finger-trace checks wait on warm-up timers that get flaky
+// under load -- so a LattSim edit was being reported on by checks that have
+// nothing to do with it and can fail for reasons that are not the edit's fault.
+// They still run on --full, where they belong.
 const demoBase = BASE.replace(/index\.html$/, '') + 'ngrc.html';
+if (FULL) {
 section('ngrc load');
 const demo = await ctx.newPage();
 const demoErrors = [];
@@ -548,9 +557,11 @@ check('ngrc: playground has no errors overall', demoErrors.length === 0, demoErr
 // instance for backgrounded pages, which surfaces as "a valid external Instance
 // reference no longer exists" the moment LattSim tries to read anything back.
 await demo.close();
+}   // end FULL-only ngrc page
 
 }   // end FULL-only anti-slosh scenarios
 section('ngrc tab4 antislosh');
+section('lattsim page');
 const latt = await ctx.newPage();
 const lattErrors = [];
 latt.on('pageerror', e => lattErrors.push(String(e)));
@@ -680,15 +691,18 @@ await checkConsoleUsable(latt, 'lattsim');
     info.ReCell < info.ceiling, `Re_cell ${info.ReCell.toFixed(1)} vs ceiling ${info.ceiling}`);
   const live = await latt.evaluate(async () => {
     const sim = window.__lsSim();
-    for (let k = 0; k < 8; k++) {
-      sim.advance(250);
+    for (let k = 0; k < 4; k++) {
+      sim.advance(200);
       const d = await sim.diagnostics();
       if (d.stable.state === 'diverged') return { ok: false, step: d.step, why: d.stable.why };
     }
     const d = await sim.diagnostics();
     return { ok: true, step: d.step, uMax: d.uMax };
   });
-  check('lattsim: the shipped defaults run 2000 steps without diverging', live.ok,
+  // 800 steps: the default that shipped broken diverged by step 300, so this is
+  // well past the point that catches it, and TRT+LES on a software GPU is
+  // expensive enough that the step count is most of the quick tier's clock.
+  check('lattsim: the shipped defaults run 800 steps without diverging', live.ok,
     JSON.stringify(live));
 }
 

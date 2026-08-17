@@ -492,6 +492,32 @@ the shipped commit carries the correct version.
    verification needs both to measure the ten-decade wall result, but they are no
    longer a choice on the page — one of them shipped as the default and diverged
    at the shipped sliders.
+   **THE STARTUP FRONT AND THE REFLECTING OUTLET (v123).** Reported from the
+   device: the leading edge crosses the channel, hits the outlet, reflects, and
+   the run takes a long time to settle. TWO causes. (i) The interior started AT
+   REST, so the inlet had to fill the channel — a front with nothing to do with
+   the flow being studied; the channel now begins with the whole fluid at the
+   inlet velocity, so there is no front. (ii) The outlet PINNED density to ρ0
+   every step, which anchors the pressure perfectly and reflects perfectly. It is
+   now pulled only weakly toward rest, and `outletAnchor` was MEASURED at both
+   ends (res 16, cylinder, u 0.08, 1800 steps — worst transient density spread /
+   settling step / final band): rest+1.0 0.381/700/0.968–1.172; uniform+1.0
+   0.277/700; uniform+0.5 0.272/500; **uniform+0.2 0.252/500/0.987–1.194
+   (shipped)**; uniform+0.02 0.265/500/**1.270–1.535 DRIFTED**. A third off the
+   transient and a third off the settling time. THE WEAK END IS A REAL FAILURE:
+   at 0.02 the channel pressurised to a mean density near 1.4, the same class of
+   failure as the original drain to 0.32 in the other direction, which is why the
+   parameter is measured at both ends rather than simply made small.
+   **AND WGSL vec3 PACKING BIT FOR THE THIRD TIME.** A `vec3<f32>` is size 12
+   align 16, so an `f32` after one lands at offset **108**, in the vec3's trailing
+   four bytes, NOT at the next 16-byte boundary. Guessing 112 shifted
+   `outletAnchor` and `initVel` a slot each; the CPU/GPU parity check reported it
+   as a 130% velocity and 13% mass disagreement and nothing else would have. The
+   offsets are now written out beside the struct, computed rather than guessed.
+   **THE QUICK TIER NO LONGER LOADS ngrc.html** — the tier exists to be run on
+   every LattSim edit, and ngrc's warm-up timers are both most of its clock and
+   flaky under load, so a LattSim edit was being judged by checks unrelated to it.
+   They still run on `--full`.
    **DELIBERATELY NOT BUILT YET:** heat, diffusion, elasticity, electromagnetics,
    multiphysics coupling and adaptive resolution are architecture rather than
    code. Operators declare the fields they read and write and the solver rejects

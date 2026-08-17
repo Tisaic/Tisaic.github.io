@@ -355,6 +355,45 @@ is a BGK-vs-TRT comparison — but they are no longer a choice on the page. One 
 them shipped as the default and diverged at the shipped sliders, which is the
 failure this removes.
 
+## The startup transient, and the outlet that caused it
+
+Reported from a device: the leading edge of the flow crosses the channel, hits
+the outlet and reflects, and the run takes a long time to settle. Two separate
+causes, and the fix for each is small.
+
+**The interior started at rest**, so the inlet had to fill the channel. That
+front has nothing to do with the flow being studied. The channel now begins with
+the whole fluid at the inlet velocity, so there is no front to cross.
+
+**The outlet pinned density to rho0 every step**, which anchors the pressure
+perfectly and reflects perfectly: a wave arriving at the exit meets a hard wall.
+It is now pulled only weakly toward rest — `outletAnchor`, measured rather than
+picked (res 16, cylinder, u 0.08, 1800 steps):
+
+| configuration | worst transient spread | settles at | final density band |
+|---|---|---|---|
+| rest + anchor 1.0 (as shipped) | 0.381 | 700 | 0.968–1.172 |
+| uniform + 1.0 | 0.277 | 700 | 0.969–1.171 |
+| uniform + 0.5 | 0.272 | 500 | 0.973–1.177 |
+| **uniform + 0.2 (shipped)** | **0.252** | **500** | 0.987–1.194 |
+| uniform + 0.02 | 0.265 | 500 | **1.270–1.535** ← drifted |
+
+A third off the transient and a third off the settling time, with the density
+band where the hard anchor had it.
+
+**0.02 is past the point where the anchor still does its job**: the channel
+pressurised to a mean density near 1.4. That is the same class of failure as the
+original drain to 0.32, in the other direction, and it is why this parameter is
+measured at both ends rather than simply made small.
+
+**AND THE WGSL PACKING BIT AGAIN, FOR THE THIRD TIME.** A `vec3<f32>` is size 12
+with align 16, so an `f32` placed after one lands in the vec3's trailing four
+bytes — at offset **108**, not at the next 16-byte boundary. Guessing 112 shifted
+`outletAnchor` and `initVel` by a slot each. The CPU/GPU parity check caught it
+immediately as a 130% velocity disagreement and a 13% mass disagreement; nothing
+else would have. The offsets are now written out in a comment beside the struct,
+computed rather than guessed.
+
 ## Stability: what the sliders can do to it
 
 **Reported from a device:** viscosity slider to the far left, everything else
