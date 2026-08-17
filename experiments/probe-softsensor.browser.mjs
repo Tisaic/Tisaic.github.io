@@ -96,7 +96,8 @@ async function call(fn, args) {
       import(new URL('./lib/lattsim/materials.js', here).href),
       import(new URL('./experiments/probe-softsensor.js', here).href),
     ]);
-    const X = { exp, region: mat.region, CELL: mat.CELL };
+    const scenes = await import(new URL('./lib/lattsim/scenes.js', here).href);
+    const X = { exp, scenes, region: mat.region, CELL: mat.CELL };
     const makeScene = new Function('Sim', 'LBM', 'TOP', 'region', 'CELL',
       `return (${sceneSrc});`)(Simulation, LBMFluidOperator, TOPOLOGY, mat.region, mat.CELL);
     const body = new Function(`return (${bodySrc});`)();
@@ -221,6 +222,51 @@ if (MODE === 'io') {
       perSampleMs: a.every * stepMs + twoMs,
       readbackShare: twoMs / (a.every * stepMs + twoMs) };
   }, { res: Number(arg('res', 48)), steps: 400, reads: 200, every: 20 });
+  console.log(JSON.stringify(out, null, 2));
+}
+
+// ------------------------------------------------------------------ chaos
+// THE SHIPPED SCENE AT THE SHIPPED SLIDER EXTREMES, because the question is
+// about what the page does, not about a domain invented for the experiment.
+// Viscosity to the far left (tau 0.5015) and inlet speed to the far right
+// (0.14) is Re_cell 280 -- past the LES model's measured ceiling of 200 -- so
+// the limiter is expected to be holding it, and how much is reported rather
+// than glossed. A flow held up by a clamp is a different object from a flow
+// that is solved, and a soft-sensor score on one is not a score on the other.
+if (MODE === 'chaos') {
+  const out = await call(async (scene, X, a) => {
+    const PHYS = { collision: 'trt', trtPolicy: 'stability', smagorinsky: 0.16 };
+    const rows = [];
+    for (const c of a.configs) {
+      const sim = X.scenes.channelFlow({ resolution: a.res, tau: c.tau,
+        inletVelocity: c.u, obstacle: 'cylinder', ...PHYS });
+      await sim.build({ backend: 'webgpu' });
+      const L = sim.lattice, m = sim.meta, d = m.obstacleCells;
+      const cx = Math.round(a.res * 0.9), cy = (a.res >> 1) + 1;
+      const wake = L.index(Math.min(L.nx - 2, cx + 5 * d), cy, L.nz >> 1);
+      const wall = L.index(Math.min(L.nx - 2, cx + 2 * d), 1, L.nz >> 1);
+      sim.advance(a.spin);
+      const rec = await X.exp.record(sim, wake, { every: a.every, samples: a.samples });
+      const recW = await X.exp.record(sim, wall, { every: a.every, samples: 100 });
+      const dg = await sim.diagnostics();
+      rows.push({ tau: c.tau, u: c.u, Re: m.reynolds, reCell: c.u / ((c.tau - 0.5) / 3),
+        d, cells: L.cellCount, size: [L.nx, L.ny, L.nz],
+        limited: dg.limited, limitedPct: 100 * dg.limited / L.cellCount,
+        uMax: dg.uMax, rho: [dg.rhoMin, dg.rhoMax],
+        wakeSpeed: X.exp.characterise(rec.speed, { horizon: a.horizon }),
+        wakeTransverse: X.exp.characterise(rec.transverse, { horizon: a.horizon }),
+        wallSpeedStd: X.exp.characterise(recW.speed, { horizon: a.horizon }).std });
+      console.log('done tau=' + c.tau + ' u=' + c.u);
+      await sim.backend.destroy();
+    }
+    return rows;
+  }, { res: Number(arg('res', 32)), spin: 2500, every: 20, samples: 400, horizon: 14,
+    configs: [
+      { tau: 0.52, u: 0.08 },       // the shipped default
+      { tau: 0.516, u: 0.14 },      // speed to the right only
+      { tau: 0.506, u: 0.14 },      // and viscosity most of the way left
+      { tau: 0.5015, u: 0.14 },     // both sliders at the stop -- the ask
+    ] });
   console.log(JSON.stringify(out, null, 2));
 }
 

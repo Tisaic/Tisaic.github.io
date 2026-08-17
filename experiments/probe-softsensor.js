@@ -490,3 +490,66 @@ export function dominantPeriod(series, { min = 3, max = 300, refine = false } = 
   }
   return 0;
 }
+
+/**
+ * Characterise a recorded signal: is it a limit cycle, or is it aperiodic?
+ *
+ * THIS IS THE MEASUREMENT THAT DECIDES WHAT ANY SOFT-SENSOR SCORE MEANS. On a
+ * limit cycle the flow has one degree of freedom, a lookup table is a strong
+ * rival, and a good score says the model recovered a phase. On an aperiodic flow
+ * the table has nothing to look up, and whatever advantage survives is the real
+ * result. The two regimes cannot be told apart by looking at the picture, and the
+ * numbers below are the instrument.
+ *
+ * `acAtPeriod` is the sharpest of them: the autocorrelation at one period,
+ * normalised. A perfect limit cycle sits at 1.0 -- the signal repeats exactly.
+ * Chaos decorrelates, so it falls, and how far it falls after ONE cycle is how
+ * much of the future is not written in the past.
+ *
+ * The two nRMSE figures are model-free baselines computed on the same series, so
+ * they can be compared directly against a model's score on the same target.
+ */
+export function characterise(series, { horizon = 14 } = {}) {
+  const n = series.length;
+  const mean = series.reduce((a, b) => a + b, 0) / n;
+  const x = series.map((v) => v - mean);
+  const r0 = x.reduce((a, b) => a + b * b, 0) / n;
+  const std = Math.sqrt(r0);
+  const period = dominantPeriod(series);
+  const periodF = dominantPeriod(series, { refine: true }) || period;
+  let acAtPeriod = NaN;
+  if (period > 0) {
+    let s = 0;
+    for (let i = period; i < n; i++) s += x[i] * x[i - period];
+    acAtPeriod = (s / (n - period)) / r0;
+  }
+  const persist = new Score(), periodic = new Score();
+  for (let i = 0; i < n; i++) {
+    if (i - horizon >= 0) persist.add(series[i], series[i - horizon]);
+    if (periodF > 0) {
+      const k = i - periodF, k0 = Math.floor(k), f = k - k0;
+      if (k0 >= 0 && k0 + 1 < n) periodic.add(series[i], series[k0] * (1 - f) + series[k0 + 1] * f);
+    }
+  }
+  // First and second half amplitudes: a decaying oscillation and a sustained one
+  // are the same amplitude at one instant and completely different flows.
+  const half = (a) => {
+    const m = a.reduce((p, q) => p + q, 0) / a.length;
+    return Math.sqrt(a.reduce((p, q) => p + (q - m) ** 2, 0) / a.length);
+  };
+  return { mean, std, period, periodF, acAtPeriod,
+    persistNrmse: persist.nrmse, periodNrmse: periodic.nrmse,
+    late: half(series.slice(n >> 1)) / (half(series.slice(0, n >> 1)) + 1e-30) };
+}
+
+/** Record |u| and the transverse velocity at one cell over time. */
+export async function record(sim, cell, { every = 20, samples = 600 } = {}) {
+  const speedSeries = [], transverse = [];
+  for (let i = 0; i < samples; i++) {
+    sim.advance(every);
+    const v = await sim.backend.probe('macro', cell);
+    speedSeries.push(Math.hypot(v[1], v[2], v[3]));
+    transverse.push(v[2]);
+  }
+  return { speed: speedSeries, transverse };
+}
