@@ -211,6 +211,7 @@ export const DEFAULTS = Object.freeze({
   score: 2000,
   initVariance: 10.0,
   prior: { lin: 100.0, quad: 1.0, rand: 1.0 },
+  ridges: [1, 10, 100, 1000],    // the lean rival's ridge, swept -- see buildModels
   nh: 24, nf: 24, seed: 12345,   // ReLU / Fourier widths of the universal map
 });
 
@@ -251,14 +252,25 @@ export function buildModels(nSignals, heads, cfg) {
   const base = nSignals * lag;
   const fmap = universalMap(base, cfg.nh, cfg.nf, cfg.seed);
   const common = { nSignals, warmup: cfg.warmup, heads };
-  return {
+  const models = {
     ngrc: new SoftSensorBank({ ...common, lag, stride, fmap,
       prior: fmap.prior(cfg.prior) }),
-    linear: new SoftSensorBank({ ...common, lag, stride, fmap: null,
-      initVariance: cfg.initVariance }),
-    instant: new SoftSensorBank({ ...common, lag: 1, stride: 1, fmap: null,
-      initVariance: cfg.initVariance }),
   };
+  // THE RIDGE IS A CONFOUND UNTIL IT IS SWEPT. The expanded map carries a
+  // STRUCTURED prior (100 on the linear terms, 1 on the quadratic and random
+  // ones) while a lean model gets one scalar, so "ngrc beats linear" would
+  // otherwise be reporting a difference in regularisation as a difference in
+  // representation. This project has already paid for that mistake once, on the
+  // double pendulum, where a ridge chosen on Lorenz cost the rival most of its
+  // run. Sweeping it costs nothing here: the solver is 375 ms per sample and an
+  // extra readout is a few microseconds.
+  for (const iv of cfg.ridges) {
+    models[`linear@${iv}`] = new SoftSensorBank({ ...common, lag, stride, fmap: null,
+      initVariance: iv });
+  }
+  models.instant = new SoftSensorBank({ ...common, lag: 1, stride: 1, fmap: null,
+    initVariance: cfg.initVariance });
+  return models;
 }
 
 /**
@@ -355,7 +367,7 @@ export async function run(sim, { probeCell, hiddenCell = null, cfg = {}, log = (
 
   return {
     cfg: C, heads: heads.map((h) => h.name), models: names,
-    features: { ngrc: models.ngrc.nf, linear: models.linear.nf, instant: models.instant.nf },
+    features: Object.fromEntries(names.map((m) => [m, models[m].nf])),
     samples: sampled, steps: sim.step - startStep,
     scores: Object.fromEntries(names.map((m) => [m, scores[m].map((s) => ({
       nrmse: s.nrmse, rmse: s.rmse, std: s.std, n: s.n }))])),
