@@ -270,4 +270,44 @@ if (MODE === 'chaos') {
   console.log(JSON.stringify(out, null, 2));
 }
 
+// ------------------------------------------------------------------ hot
+// THE SHIPPED SCENE AT THE SLIDER EXTREMES, scored regardless of clamping.
+//
+// The limiter matters for whether this flow is FAITHFUL TURBULENCE; it does not
+// matter for whether one cell's history predicts another's. The target is the
+// simulation's own field, so the soft-sensor question is well posed against
+// whatever the solver produced -- clamped, modelled or resolved. What the clamp
+// changes is what the ANSWER means, which is why the run reports how much of the
+// target sat on the clamp and what the target series looked like.
+if (MODE === 'hot') {
+  const out = await call(async (scene, X, a) => {
+    const PHYS = { collision: 'trt', trtPolicy: 'stability', smagorinsky: 0.16 };
+    const sim = X.scenes.channelFlow({ resolution: a.res, tau: a.tau,
+      inletVelocity: a.u, obstacle: 'cylinder', ...PHYS });
+    await sim.build({ backend: 'webgpu' });
+    const L = sim.lattice, m = sim.meta, d = m.obstacleCells;
+    const cx = Math.round(a.res * 0.9), cy = (a.res >> 1) + 1;
+    const probeCell = L.index(Math.min(L.nx - 2, cx + 2 * d), 1, L.nz >> 1);
+    const hiddenCell = L.index(Math.min(L.nx - 2, cx + 5 * d), cy, L.nz >> 1);
+    sim.advance(a.spin);
+    const dg0 = await sim.diagnostics();
+    const res0 = await X.exp.run(sim, { probeCell, hiddenCell,
+      cfg: { every: a.every, warmup: a.warmup, train: a.train, score: a.score,
+        horizon: a.horizon },
+      log: (s) => console.log(s) });
+    const dg = await sim.diagnostics();
+    return { tau: a.tau, u: a.u, res: a.res, d, size: [L.nx, L.ny, L.nz],
+      cells: L.cellCount, Re: m.reynolds, reCell: a.u / ((a.tau - 0.5) / 3),
+      cells_used: { probeCell, hiddenCell },
+      atSpinEnd: { limited: dg0.limited, limitedPct: 100 * dg0.limited / L.cellCount,
+        uMax: dg0.uMax, rho: [dg0.rhoMin, dg0.rhoMax] },
+      atEnd: { limited: dg.limited, limitedPct: 100 * dg.limited / L.cellCount,
+        uMax: dg.uMax, rho: [dg.rhoMin, dg.rhoMax] },
+      result: res0 };
+  }, { res: Number(arg('res', 32)), tau: Number(arg('tau', 0.5015)),
+    u: Number(arg('u', 0.14)), spin: 3000, every: 20,
+    warmup: 250, train: 1200, score: 1200, horizon: Number(arg('horizon', 14)) });
+  console.log(JSON.stringify(out, null, 2));
+}
+
 await browser.close();

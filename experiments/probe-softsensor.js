@@ -404,6 +404,13 @@ export async function run(sim, { probeCell, hiddenCell = null, cfg = {}, log = (
       nrmse: s.nrmse, rmse: s.rmse, std: s.std, n: s.n }))])),
     baseline: base.map((s) => ({ nrmse: s.nrmse, rmse: s.rmse, std: s.std, n: s.n })),
     period, periodF,
+    // WHAT THE TARGET ACTUALLY WAS. A score is meaningless without it: if the
+    // limiter is holding cells at the velocity clamp, part of the target is a
+    // CONSTANT, which shrinks the standard deviation every nRMSE here is divided
+    // by and flatters every model at once. Reported rather than assumed absent.
+    target: hiddenRing.length ? characterise(hiddenRing, { horizon: C.horizon }) : null,
+    targetAtClamp: hiddenRing.length
+      ? hiddenRing.filter((v) => v > 0.34).length / hiddenRing.length : 0,
     periodBaseline: periodScore.map((s) => ({ nrmse: s.nrmse, rmse: s.rmse, n: s.n })),
   };
 }
