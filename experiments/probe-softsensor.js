@@ -319,7 +319,7 @@ export async function run(sim, { probeCell, hiddenCell = null, cfg = {}, log = (
   // If the expanded model cannot beat THIS, it has learned periodicity, not the
   // flow, and the honest conclusion is about the testbed rather than the method.
   const periodScore = heads.map(() => new Score());
-  let period = 0;
+  let period = 0, periodF = 0;
 
   const total = C.warmup + C.train + C.score;
   let sampled = 0, scoring = 0;
@@ -347,7 +347,10 @@ export async function run(sim, { probeCell, hiddenCell = null, cfg = {}, log = (
 
     // Estimate the period ONCE, from the training window only -- measuring it on
     // the scored window would let the baseline peek at its own answer.
-    if (grade && !period && hiddenRing.length > 200) period = dominantPeriod(hiddenRing);
+    if (grade && !period && hiddenRing.length > 200) {
+      period = dominantPeriod(hiddenRing);
+      periodF = dominantPeriod(hiddenRing, { refine: true }) || period;
+    }
 
     for (let h = 0; h < heads.length; h++) {
       const d = heads[h].delay;
@@ -374,9 +377,17 @@ export async function run(sim, { probeCell, hiddenCell = null, cfg = {}, log = (
         if (prev !== undefined) base[h].add(y, prev);
       }
       if (period > 0) {
+        // FRACTIONAL LOOKUP. An integer period is a phase error of up to half a
+        // sample, and on a steep signal that alone would account for most of this
+        // baseline's error -- so beating an integer lookup could just mean "the
+        // model interpolates and the table cannot", which is a far weaker claim
+        // than modelling the flow. Interpolating removes that excuse.
         const ring = heads[h].name.startsWith('hidden') ? hiddenRing : truthRing;
-        const ago = ring[ring.length - 1 - period];
-        if (ago !== undefined) periodScore[h].add(y, ago);
+        const k = ring.length - 1 - periodF;
+        const k0 = Math.floor(k), f = k - k0;
+        if (k0 >= 0 && k0 + 1 < ring.length) {
+          periodScore[h].add(y, ring[k0] * (1 - f) + ring[k0 + 1] * f);
+        }
       }
     }
     if (sampled % 500 === 0) {
@@ -392,7 +403,7 @@ export async function run(sim, { probeCell, hiddenCell = null, cfg = {}, log = (
     scores: Object.fromEntries(names.map((m) => [m, scores[m].map((s) => ({
       nrmse: s.nrmse, rmse: s.rmse, std: s.std, n: s.n }))])),
     baseline: base.map((s) => ({ nrmse: s.nrmse, rmse: s.rmse, std: s.std, n: s.n })),
-    period,
+    period, periodF,
     periodBaseline: periodScore.map((s) => ({ nrmse: s.nrmse, rmse: s.rmse, n: s.n })),
   };
 }
@@ -441,7 +452,7 @@ export async function unsteadiness(sim, cell, { every = 20, samples = 400 } = {}
  * its lag; it is measured on the TRAINING window so the baseline never sees the
  * data it is graded on.
  */
-export function dominantPeriod(series, { min = 3, max = 300 } = {}) {
+export function dominantPeriod(series, { min = 3, max = 300, refine = false } = {}) {
   const n = series.length;
   const mean = series.reduce((a, b) => a + b, 0) / n;
   const x = series.map((v) => v - mean);
@@ -467,7 +478,15 @@ export function dominantPeriod(series, { min = 3, max = 300 } = {}) {
   // signal and 272 for a period-8 one. Walking to the first local maximum
   // returns the fundamental.
   for (; lag + 1 <= hi; lag++) {
-    if (r[lag] > r[lag - 1] && r[lag] >= r[lag + 1] && r[lag] > 0.1 * r[0]) return lag;
+    if (r[lag] > r[lag - 1] && r[lag] >= r[lag + 1] && r[lag] > 0.1 * r[0]) {
+      if (!refine) return lag;
+      // Parabolic interpolation through the peak and its two neighbours: the true
+      // period is rarely an exact number of samples, and the vertex of the fitted
+      // parabola recovers the fraction.
+      const a = r[lag - 1], b = r[lag], c = r[lag + 1];
+      const den = a - 2 * b + c;
+      return den !== 0 ? lag + 0.5 * (a - c) / den : lag;
+    }
   }
   return 0;
 }
