@@ -1176,6 +1176,12 @@ await latt.screenshot({ path: join(SHOTS, '09-lattsim.png') });
   // correct forecast lies on the truth, and drawn where it was ISSUED it would
   // appear shifted by the whole lead and a perfect forecast would look wrong.
   const lead = await latt.evaluate(() => {
+    // FORCE A REDRAW FIRST. The chart is drawn once per frame, so reading a chart
+    // value and a model value together races the renderer: measured a 15-step gap,
+    // exactly three samples at this cadence, which looks like a broken forecast
+    // stamp and is really just a chart three samples behind. Comparing a rendered
+    // value against a live one always needs the render to be current.
+    window.__lsSS.draw();
     const st = window.__lsSS.state();
     const el = document.getElementById('ss-chart');
     const truth = el.data.find((t) => t.name === 'truth');

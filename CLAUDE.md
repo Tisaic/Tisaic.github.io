@@ -49,6 +49,7 @@ the shipped commit carries the correct version.
 | `lattsim.html` | LattSim: GPU lattice-field physics engine (Simulate / Verify / Architecture) using `lib/lattsim`. Self-contained — shares nothing with NGRC. |
 | `lib/lattsim/` | The lattice field engine: lattice, fields, materials, operators, solver, WebGPU + CPU backends, renderers (see `lib/lattsim/README.md`). |
 | `lib/ngrc/` | The ported NGRC library (see `lib/ngrc/README.md`). |
+| `lib/probesense/` | The COMPOSITION layer: soft-sensing a field from one point in it. Depends on `lib/ngrc` for the model and on nothing for the physics — it is fed numbers. |
 | `version.json` | Server-side build manifest for stale-page detection. |
 | `docs-manifest.json` | Generated list of every `.md` file, for the Docs viewer. |
 | `stamp-version.sh` | Pre-commit build step: stamps version + regenerates the docs manifest. |
@@ -552,7 +553,82 @@ the shipped commit carries the correct version.
    than implied by call order; the lattice owns its spacing and indexing rather
    than assuming unit cells, which is what keeps refinement possible.
 
-5. **NGRC playground** (bottom-right `NGRC` launcher → `ngrc.html`) — a 4-tab
+5. **Soft sensor on the lattice** (in the LattSim page, under the probe chart) —
+   TWO POINTS ON ONE LATTICE: the probe is the **sensor**, the point you could
+   actually instrument, and a second marker is the **target**, the point you could
+   not. The model sees only the sensor's recent history; the target's true value
+   is used to train and to grade, which is the position a real soft sensor is in
+   during commissioning and never again after it. Two readouts share one feature
+   expansion and differ only in the delay at which features are paired with truth:
+   an ESTIMATE of the target now, and a PREDICTION of it one lead ahead.
+   Selectable input quantities (|u|, u_x, u_y, u_z, ρ) and a separately selectable
+   target quantity, a lifecycle rather than a switch (idle → calibrating →
+   training → estimating/locked), and sliders for the lead, the sample interval,
+   the lags, the lag spacing and the ridge.
+   **MEASURED, driven lid-cavity at 24³ with the lid oscillating** (sensor against
+   a side wall, target in the middle of the box, 700 trained pairs, nRMSE ÷ the
+   truth's own standard deviation so 1.0 = no better than the mean):
+   estimate **0.050 against 2.47** for a scaled sensor reading — **49×** — with
+   the estimate tracking the full range (truth 0.00271–0.01083, estimate
+   0.00288–0.01082); the 280-step forecast **0.396 against 1.53** for persistence,
+   3.9×. Dropping the nonlinear expansion costs 1.47× on the estimate (0.0739) and
+   1.28× on the forecast, so the basis is doing real work rather than decoration.
+   **THE FRAME LOOP SPLITS ITS STEP BUDGET AT SAMPLE BOUNDARIES.** The probe chart
+   can be sampled once per frame; a MODEL cannot, because its lag window is counted
+   in SAMPLES — a cadence set by the steps-per-frame slider would make a viewing
+   control change the physics the model sees, and the window would span a different
+   amount of time at every slider position. Both cells are also read with nothing
+   advancing between them: a GPU probe awaits a `mapAsync`, and a loop free to step
+   during that await would pair a sensor reading with a target from a LATER state.
+   Zero missed boundaries over 568 samples is a regression.
+   **THE CHART IS TIME-NORMALISED, WHICH IS THE POINT OF IT.** A forecast drawn
+   where it was ISSUED appears shifted by exactly the lead, so a perfect one looks
+   wrong and a lagging one looks right. Each prediction carries the step it is
+   ABOUT and is drawn there, lying on the truth precisely when it came true, with
+   a dotted segment for the part that has not happened yet.
+   **THREE DEFECTS, AND THE THIRD IS THE ONE THAT GENERALISES.**
+   (i) **ρ AS A TARGET WAS UNLEARNABLE** — 1.69 nRMSE, worse than predicting its
+   own mean and 5× worse than persistence, while velocity targets on the identical
+   stream scored 1.6e-2. Density is a ~1% fluctuation riding a level of 1.0, and
+   the prior regularises the bias weight and the modulation weights alike, so the
+   modulation was ridged a hundred times harder than the offset it sits on.
+   Centring and scaling the target on the same frozen window as the inputs took it
+   to 2.94e-2 and its forecast from 0.2× to 32× persistence — and THE VELOCITY
+   TARGETS DID NOT MOVE (2.87e-2 → 2.88e-2), which is the signature worth checking:
+   a fix that improves everything has usually changed the measurement instead.
+   (ii) **THE CALIBRATION WINDOW SPANNED THE STARTUP TRANSIENT.** A lattice begins
+   at rest and a no-slip WALL CELL barely moves, so the frozen standard deviation
+   landed far below the flow's eventual variation; every later sample was divided
+   by it and the quadratic terms squared the result. Measured across four decades
+   of calibration variance: 1e-7 → nRMSE **1.58e7**, against 0.18 when the window
+   was representative. Three layers now — a RELATIVE floor (a channel varying less
+   than a thousandth of the busiest carries nothing at this scale, so it is left
+   unscaled rather than amplified; the old absolute 1e-18 floor rescued only the
+   fully dead channel and everything between was the trap), a CLAMP at ten
+   deviations as the guarantee, and AUTOMATIC RECALIBRATION as the fix, since
+   saturating inputs are unambiguous evidence the window was unrepresentative.
+   Bounded to three attempts, and asserted NOT to fire on a good window — a guard
+   that always triggers is a delay, not a guard. `train()` also re-anchors the
+   window, so pressing Start training means "this is the flow I mean".
+   (iii) **A STEADY TARGET IS NOT A BAD SCORE, IT IS NO QUESTION**, and BOTH of the
+   first page tests asked a question with no answer, in opposite directions. A
+   flow still developing gives a target that DRIFTS monotonically, so there is no
+   stationary relation to learn; a settled flow gives a target that is CONSTANT —
+   measured on the shipped channel after it converged (residual 2.67e-5): the truth
+   spanned 0.0821 to 0.0821, a variation of 1e-7 on a value of 0.082, and every
+   nRMSE there is noise divided by noise. The page now reports `steadyTarget` with
+   the measured activity and names the remedy instead of printing a ratio. THIS IS
+   THE SAME QUESTION THE PHYSICS SIDE ASKS OF A WAKE BEFORE SCORING A FORECAST ON
+   IT, and it was asked there and then not asked here — the third repetition in one
+   session of "a measurement taken across a transient describes the transient".
+   **`__lsSSdbg()`** reports the frozen input scales, the target's frozen mean and
+   spread against its live ones, the saturation and recalibration counts, the
+   weight norms, the covariance traces and the ranges of truth against estimate.
+   It is permanent for the same reason `__lsDump()` is: a soft sensor that scores
+   badly has at least four distinct explanations and NONE of them can be told apart
+   from the score.
+
+6. **NGRC playground** (bottom-right `NGRC` launcher → `ngrc.html`) — a 4-tab
    interactive showcase of `lib/ngrc`, each tab framed as **NGRC vs a common
    alternative** so the value is visible: **① Chaotic systems** (three.js
    attractor; 1-finger orbit, 2-finger pinch-zoom **and pan**; a SYSTEM

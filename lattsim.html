@@ -8,7 +8,7 @@
   <title>LattSim — Lattice Physics Engine</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:134,built:"2026-08-17T21:30:18Z"}; // __LATTSIM_STAMP__</script>
+  <script>window.__BUILD = {version:139,built:"2026-08-17T23:39:10Z"}; // __LATTSIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -133,8 +133,9 @@
       <button id="probe-arm" class="sec">Place sensor ⊕</button>
       <button id="probe-clear" class="sec">Clear sensor</button>
     </div>
-    <p class="lead" id="probe-note" style="margin-top:4px">A <b>probe</b> samples one lattice cell over
-      time. Tap <b>Place probe</b> then tap the 2D slice; the cell is fixed in 3D as well, since the slice
+    <p class="lead" id="probe-note" style="margin-top:4px">A <b>sensor</b> samples one lattice cell over
+      time — and it is also the measured point the soft sensor below reads from. Tap
+      <b>Place sensor</b> then tap the 2D slice; the cell is fixed in 3D as well, since the slice
       plane and position are what choose it. The chart reads that cell every frame — speed, the two
       in-plane velocity components, and density — which is how an oscillation is told from a steady flow:
       a vortex street shows as a periodic transverse velocity, and a settled flow as flat lines.</p>
@@ -143,7 +144,7 @@
          could not. Placed under the probe chart so the sensor's raw trace and the
          inference drawn from it are read together. -->
     <div class="controls">
-      <button id="ss-target-arm" class="sec">Place soft-sensor target ◎</button>
+      <button id="ss-target-arm" class="sec">Place target ◎</button>
       <button id="ss-clear" class="sec">Clear target</button>
     </div>
     <div id="ss-panel">
@@ -941,7 +942,7 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
 
     function probeStatus() {
       const b = $('probe-arm');
-      b.textContent = probe.armed ? 'Tap the slice…' : 'Place probe ⊕';
+      b.textContent = probe.armed ? 'Tap the slice…' : 'Place sensor ⊕';
       b.className = probe.armed ? '' : 'sec';
       const cell = probe.coords ? `probe at (${probe.coords.join(', ')})` : 'no probe placed';
       const type = probe.cell >= 0 && state.sim ? CELL_NAME[state.sim.flags[probe.cell]] || '' : '';
@@ -983,11 +984,11 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
       if (!force && n === probe.plotted) return;
       probe.plotted = n;
       const names = state.slice.axis === 0 ? ['u_y', 'u_z'] : state.slice.axis === 1 ? ['u_x', 'u_z'] : ['u_x', 'u_y'];
-      const layout = { margin: { l: 40, r: 34, t: 6, b: 18 },
+      const layout = { margin: { l: 40, r: 34, t: 6, b: 34 },
         paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
         font: { color: '#94a3b8', size: 10 }, showlegend: true,
         legend: { orientation: 'h', y: 1.22 },
-        xaxis: { showgrid: false, title: { text: 'steps', standoff: 2 } },
+        xaxis: { showgrid: false, title: { text: 'steps', standoff: 6 } },
         yaxis: { gridcolor: '#1e293b', zerolinecolor: '#334155', title: { text: 'u', standoff: 2 } },
         yaxis2: { overlaying: 'y', side: 'right', showgrid: false, title: { text: 'ρ', standoff: 2 } } };
       const x = probe.t.slice(-PROBE_WIN);
@@ -1128,7 +1129,7 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
     }
 
     function ssStatus() {
-      $('ss-target-arm').textContent = ss.armed ? 'Tap the slice…' : 'Place soft-sensor target ◎';
+      $('ss-target-arm').textContent = ss.armed ? 'Tap the slice…' : 'Place target ◎';
       $('ss-target-arm').className = ss.armed ? '' : 'sec';
       const m = ss.model;
       if (!m) {
@@ -1212,11 +1213,14 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
       ss.plotted = at;
       const ser = m ? m.series : [];
       const x = ser.map((p) => p.step);
-      const layout = { margin: { l: 44, r: 10, t: 6, b: 18 },
+      // Bottom margin fits the tick labels AND the axis title. At 18 the title
+      // was drawn on top of the ticks -- legible in a wide screenshot, unreadable
+      // on a phone, which is the only place this page is used.
+      const layout = { margin: { l: 44, r: 10, t: 6, b: 34 },
         paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
         font: { color: '#94a3b8', size: 10 }, showlegend: true,
         legend: { orientation: 'h', y: 1.18 },
-        xaxis: { showgrid: false, title: { text: 'solver step', standoff: 2 } },
+        xaxis: { showgrid: false, title: { text: 'solver step', standoff: 6 } },
         yaxis: { gridcolor: '#1e293b', zerolinecolor: '#334155',
           title: { text: m ? m.targetLabel + ' at target' : 'target', standoff: 2 } } };
       const data = [
