@@ -210,6 +210,40 @@ holding a run together, and a regression pins the laminar cost at its measured
 size so a change that made the model an order of magnitude more dissipative
 could not pass quietly.
 
+### The default has to be a configuration that was measured to survive
+
+Shipped broken once, and the failure is instructive because the data to prevent
+it already existed. TRT went in as the default the same day the table above
+recorded **TRT at Lambda = 3/16 dying at Re_cell 12** — and the shipped defaults
+(tau 0.52, u 0.08) are Re_cell 12 exactly. Pressing Run diverged by step 300.
+
+The page even said it was fine: the risk row read *"Re_cell 12 — within the
+measured stable range"*, because the ceiling table had been filled in with BGK's
+number for the TRT entry. A measurement is only worth what the thing that reads
+it is worth.
+
+Now: **TRT + LES is the default** (measured stable to Re_cell 160), the ceilings
+are the measured ones per model (`bgk` 20, `trt` 10, `les` 200), and a regression
+loads the page, reads its own reported `Re_cell` and ceiling, and runs 2000 steps
+requiring it to still be alive.
+
+### Logging, so a phone report can be a paste rather than a description
+
+Every build logs one line to the page's own debug console (the `>_` launcher)
+with the whole configuration: scene, obstacle, backend, cell count, model,
+collision, TRT policy, Cs, tau, nu, omega+, omega-, u, Re, Re_cell and the
+ceiling for that model. If Re_cell is past the ceiling it also logs a warning
+BEFORE the run, naming the expected outcome.
+
+On divergence it logs a post-mortem: the same configuration plus the step, the
+verdict, uMax, the density range, the lowest-index bad cell and its
+neighbourhood along x, and **how much of the lattice is already non-finite**.
+That last number is what makes the rest readable — a NaN spreads one cell per
+step, so the "first bad cell" is the origin only while `fractionLost` is small,
+and the report says so rather than inviting the wrong conclusion.
+
+`__lsDump()` in the console's eval box prints the same thing on demand.
+
 ## Stability: what the sliders can do to it
 
 **Reported from a device:** viscosity slider to the far left, everything else

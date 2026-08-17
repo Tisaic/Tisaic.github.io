@@ -658,6 +658,31 @@ check('lattsim: the GPU driver reported no uncaptured errors', (ls0.gpuErrors ||
 
 await checkConsoleUsable(latt, 'lattsim');
 
+// ---- THE SHIPPED DEFAULTS MUST SURVIVE. This shipped broken once: the default
+// collision model was one that had ALREADY BEEN MEASURED dying at the default
+// cell Reynolds number, and the page's own risk row called it "within the
+// measured stable range" because the ceiling table had copied BGK's number for
+// it. Load the page, run it, and require it to still be alive.
+{
+  const info = await latt.evaluate(() => window.__lsInfo());
+  check('lattsim: the build logs its parameters to the page console',
+    info && typeof info.ReCell === 'number' && info.model, JSON.stringify(info));
+  check('lattsim: the default Re_cell is inside the default model\'s measured ceiling',
+    info.ReCell < info.ceiling, `Re_cell ${info.ReCell.toFixed(1)} vs ceiling ${info.ceiling}`);
+  const live = await latt.evaluate(async () => {
+    const sim = window.__lsSim();
+    for (let k = 0; k < 8; k++) {
+      sim.advance(250);
+      const d = await sim.diagnostics();
+      if (d.stable.state === 'diverged') return { ok: false, step: d.step, why: d.stable.why };
+    }
+    const d = await sim.diagnostics();
+    return { ok: true, step: d.step, uMax: d.uMax };
+  });
+  check('lattsim: the shipped defaults run 2000 steps without diverging', live.ok,
+    JSON.stringify(live));
+}
+
 section('lattsim core');
 if (FULL) {
 // ---- every scene must show something. Reported from a real device: two of the

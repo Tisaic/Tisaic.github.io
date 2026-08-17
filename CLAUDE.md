@@ -409,6 +409,28 @@ the shipped commit carries the correct version.
    ANTISYMMETRIC velocity gradient, which Π_neq does not carry. Not built. So the
    analytic verification runs unmodelled, the page names which mode is holding a
    run together, and a regression pins the laminar cost at its measured size.
+   **THE DEFAULT WAS A CONFIGURATION ALREADY MEASURED TO DIE (v120).** v119 made
+   TRT the default on the same day its own table recorded **TRT at Λ=3/16 dying
+   at Re_cell 12** — and the shipped defaults (τ 0.52, u 0.08) are Re_cell 12
+   exactly. Loading the page and pressing Run diverged by step 300, reproduced
+   first try. Worse, the risk row said "Re_cell 12 — within the measured stable
+   range", because the CEILING table had been filled in with BGK's number for the
+   TRT entry: a measurement is only worth what the thing reading it is worth.
+   Fixed by defaulting to **TRT + LES** (measured stable to Re_cell 160), by
+   correcting the per-model ceilings to the measured values (bgk 20, trt 10,
+   les 200), and by a regression that loads the page, reads its OWN reported
+   Re_cell against its OWN ceiling, and runs 2000 steps requiring it to live.
+   **AND THE PAGE NOW LOGS ENOUGH TO DIAGNOSE ITSELF**, which is what the owner
+   asked for. Every build writes one line to the page's debug console with the
+   entire configuration (scene, backend, cells, model, collision, policy, Cs, τ,
+   ν, ω⁺, ω⁻, u, Re, Re_cell, ceiling), and warns BEFORE running if Re_cell is
+   past the ceiling. On divergence it writes a post-mortem: step, verdict, uMax,
+   density range, the lowest-index bad cell with its neighbourhood, and **what
+   fraction of the lattice is already non-finite** — that last number being what
+   makes the rest readable, since a NaN spreads one cell per step and the "first
+   bad cell" is the origin only while the damage is small. The field is NAMED
+   `lowestIndexBadCell` rather than `firstBadCell` for exactly that reason.
+   `__lsDump()` prints the same on demand from the console's eval box.
    **DELIBERATELY NOT BUILT YET:** heat, diffusion, elasticity, electromagnetics,
    multiphysics coupling and adaptive resolution are architecture rather than
    code. Operators declare the fields they read and write and the solver rejects

@@ -8,7 +8,7 @@
   <title>LattSim — Lattice Physics Engine</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:119,built:"2026-08-17T02:59:10Z"}; // __LATTSIM_STAMP__</script>
+  <script>window.__BUILD = {version:120,built:"2026-08-17T03:56:33Z"}; // __LATTSIM_STAMP__</script>
   <script src="console-boot.js"></script>
 
   <style>
@@ -98,8 +98,8 @@
       <button id="reset" class="sec">Reset</button>
       <select id="scene" aria-label="Scene"></select>
       <select id="physics" aria-label="Collision model">
-        <option value="trt">TRT · exact walls</option>
         <option value="les">TRT + LES · turbulent</option>
+        <option value="trt">TRT · exact walls</option>
         <option value="bgk">BGK · reference</option>
       </select>
       <select id="obstacle" aria-label="Obstacle">
@@ -248,6 +248,7 @@
     import { SliceRenderer, SLICE_MODE } from './lib/lattsim/render/slice2d.js';
     import { OrbitCamera } from './lib/lattsim/render/camera.js';
     import { UnitSystem } from './lib/lattsim/units.js';
+    import { omegaMinusFor } from './lib/lattsim/operators/lbm.js';
 
     const $ = (id) => document.getElementById(id);
     const RES = [24, 32, 48, 64, 96];
@@ -400,6 +401,29 @@
             + `${sim.meta.obstacle || ''} shedding threshold (~${crit})</span>` : '');
       } else $('s-re').textContent = '—';
       state.lastStep = 0; state.lastT = performance.now(); state.uMax = 0;
+
+      // EVERY RUN STATES WHAT IT IS. This lands in the page's own debug console
+      // (the >_ launcher), so a report from a phone can be a copy-paste of the
+      // actual parameters instead of a description of them.
+      const op = sim.operators[0].params;
+      const nu = (op.tau - 0.5) / 3;
+      const uRef = sim.meta.referenceSpeed || +$('uin').value;
+      state.runInfo = {
+        scene: $('scene').value, obstacle: sim.meta.obstacle,
+        backend: sim.backend.kind, cells: sim.lattice.cellCount,
+        size: [sim.lattice.nx, sim.lattice.ny, sim.lattice.nz],
+        model: $('physics').value, collision: op.collision, trtPolicy: op.trtPolicy,
+        Cs: op.smagorinsky, tau: op.tau, nu,
+        omegaPlus: 1 / op.tau,
+        omegaMinus: op.collision === 'trt' ? omegaMinusFor(op.tau, op.trtPolicy) : 1 / op.tau,
+        u: uRef, ReCell: uRef / nu, Re: sim.meta.reynolds,
+        ceiling: CEILING[$('physics').value],
+      };
+      console.log('lattsim build ▸ ' + JSON.stringify(state.runInfo));
+      if (state.runInfo.ReCell > state.runInfo.ceiling) {
+        console.warn(`lattsim: Re_cell ${state.runInfo.ReCell.toFixed(1)} is past the measured `
+          + `ceiling (~${state.runInfo.ceiling}) for model "${state.runInfo.model}" — expect divergence`);
+      }
       applyView();
       // THE VOLUME RENDERER IS BOUND TO A SIMULATION, so a rebuild destroys it --
       // and it therefore has to be REBUILT HERE. It used to be created only by
@@ -515,8 +539,61 @@
      * So: the badge over the stage carries the verdict and the remedy, and Run
      * refuses until Reset rather than pretending it can continue.
      */
+    /**
+     * WHERE DID IT GO BAD, not just that it did.
+     *
+     * A NaN spreads one cell per step by streaming, so by the time anyone looks
+     * the whole lattice is poisoned and the picture says nothing about the
+     * origin. This runs ONCE, at the moment of divergence, and reports the first
+     * offending cell, what kind of cell it is, and its neighbourhood -- which is
+     * what separates "the flow was too fast" from "a boundary is wrong".
+     */
+    async function postMortem(d) {
+      try {
+        const sim = state.sim, L = sim.lattice, N = L.cellCount;
+        const mac = await sim.backend.snapshot('macro');
+        let first = -1;
+        for (let i = 0; i < N; i++) {
+          const r = mac[i], ux = mac[N + i], uy = mac[2 * N + i], uz = mac[3 * N + i];
+          if (!Number.isFinite(r) || !Number.isFinite(ux) || !Number.isFinite(uy)
+            || !Number.isFinite(uz) || r <= 0) { first = i; break; }
+        }
+        const report = { ...state.runInfo, step: d.step, why: d.stable.why,
+          uMax: d.uMax, rhoMin: d.rhoMin, rhoMax: d.rhoMax };
+        if (first >= 0) {
+          const c = L.coords(first);
+          // NAMED HONESTLY: this is the lowest-INDEX bad cell, which is the
+          // origin only if the damage is still small. A NaN spreads one cell per
+          // step, so once fractionLost is appreciable the origin is already
+          // overwritten and this field says nothing about where it began --
+          // which is exactly why fractionLost is reported next to it.
+          report.lowestIndexBadCell = { index: first, xyz: c, type: sim.flags[first] };
+          // Its immediate neighbourhood along x, so a boundary origin is obvious.
+          const near = [];
+          for (let dx = -2; dx <= 2; dx++) {
+            const x = c[0] + dx;
+            if (x < 0 || x >= L.nx) continue;
+            const j = L.index(x, c[1], c[2]);
+            const fmt = (v) => (Number.isFinite(v) ? +v.toPrecision(4) : String(v));
+            near.push({ dx, type: sim.flags[j], rho: fmt(mac[j]), ux: fmt(mac[N + j]) });
+          }
+          report.neighbourhood = near;
+          // How many cells are already gone: 1 means it has only just started.
+          let bad = 0;
+          for (let i = 0; i < N; i++) if (!Number.isFinite(mac[N + i])) bad++;
+          report.nonFiniteCells = bad;
+          report.fractionLost = +(bad / N).toPrecision(3);
+          report.originRecoverable = report.fractionLost < 0.01;
+        }
+        console.error('lattsim DIVERGED ▸ ' + JSON.stringify(report));
+      } catch (e) {
+        console.error('lattsim diverged; post-mortem failed: ' + (e && e.message ? e.message : e));
+      }
+    }
+
     function diverged(d) {
       stop();
+      if (!state.diverged) postMortem(d);      // once, on the transition
       state.diverged = true;
       const why = d.stable.why || 'the solution left the stable range';
       $('backend-badge').textContent = `DIVERGED at step ${d.step.toLocaleString()} — ${why}`;
@@ -698,8 +775,12 @@
       les: { collision: 'trt', trtPolicy: 'stability', smagorinsky: 0.16 },
       bgk: { collision: 'bgk', smagorinsky: 0 },
     };
-    const CEILING = { trt: 20, les: 400, bgk: 20 };
-    const RISK_MARGINAL = 12, RISK_DIVERGE = 20;
+    // MEASURED, and the earlier table got 'trt' wrong by copying BGK's number:
+    // TRT at Lambda = 3/16 died at Re_cell 12, so the page called the SHIPPED
+    // DEFAULT "within the measured stable range" while it was diverging.
+    //   bgk  ok 16, dead 24     trt(magic) dead 12     les ok to 160 (top tested)
+    const CEILING = { trt: 10, les: 200, bgk: 20 };
+    const MARGINAL = { trt: 6, les: 100, bgk: 12 };
     function stabilityHint() {
       const tau = +$('tau').value, u = +$('uin').value;
       const nu = (tau - 0.5) / 3;
@@ -707,7 +788,7 @@
       // well above the inlet value. This ratio is what the measured floor tracks.
       const risk = u / nu;
       const mode = $('physics').value;
-      const diverge = CEILING[mode], marginal = mode === 'les' ? 200 : RISK_MARGINAL;
+      const diverge = CEILING[mode], marginal = MARGINAL[mode];
       const cls = risk > diverge ? 'bad' : risk > marginal ? 'warn' : '';
       for (const id of ['tau-v', 'uin-v']) $(id).className = 'v ' + cls;
       $('s-risk').innerHTML = `Re<sub>cell</sub> ${risk.toFixed(0)} — ` + (cls === 'bad'
@@ -766,6 +847,17 @@
     window.__lsStep = (n) => { if (state.sim) state.sim.advance(n); };
     window.__lsDraw = () => drawOnce();
     window.__lsRefresh = () => refreshStats();   // drives the divergence UI
+    window.__lsInfo = () => state.runInfo;
+    // Typed into the page's own eval box, this prints everything needed to
+    // diagnose a run from a phone: __lsDump()
+    window.__lsDump = async () => {
+      const d = state.sim ? await state.sim.diagnostics() : null;
+      const out = { build: window.__BUILD, run: state.runInfo,
+        diag: d && { step: d.step, uMax: d.uMax, rhoMin: d.rhoMin, rhoMax: d.rhoMax,
+          residual: d.residual, stable: d.stable } };
+      console.log('lattsim dump ▸ ' + JSON.stringify(out));
+      return out;
+    };
     window.__lsSim = () => state.sim;
     window.__lsUnits = UnitSystem;
 
