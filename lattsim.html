@@ -8,7 +8,7 @@
   <title>LattSim — Lattice Physics Engine</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:120,built:"2026-08-17T03:56:33Z"}; // __LATTSIM_STAMP__</script>
+  <script>window.__BUILD = {version:121,built:"2026-08-17T04:23:52Z"}; // __LATTSIM_STAMP__</script>
   <script src="console-boot.js"></script>
 
   <style>
@@ -128,12 +128,16 @@
       </select>
     </div>
     <div class="controls">
-      <label class="slider">Resolution <input type="range" id="res" min="0" max="4" step="1" value="2" />
+      <label class="slider">Resolution <input type="range" id="res" min="0" max="5" step="1" value="2" />
         <span class="v" id="res-v">48³</span></label>
       <label class="slider">Viscosity (τ) <input type="range" id="tau" min="0.5015" max="1.4" step="0.0005" value="0.52" />
         <span class="v" id="tau-v">0.520</span></label>
       <label class="slider">Inlet speed <input type="range" id="uin" min="0.005" max="0.14" step="0.005" value="0.08" />
         <span class="v" id="uin-v">0.080</span></label>
+      <label class="slider">Lid amplitude <input type="range" id="lidamp" min="0.005" max="0.14" step="0.005" value="0.05" />
+        <span class="v" id="lidamp-v">0.050</span></label>
+      <label class="slider">Lid frequency <input type="range" id="lidfreq" min="0" max="2" step="0.05" value="0" />
+        <span class="v" id="lidfreq-v">steady</span></label>
       <label class="slider">Steps / frame <input type="range" id="spf" min="1" max="40" step="1" value="6" />
         <span class="v" id="spf-v">6</span></label>
       <label class="slider">Slice position <input type="range" id="slicep" min="0" max="1" step="0.02" value="0.5" />
@@ -251,7 +255,10 @@
     import { omegaMinusFor } from './lib/lattsim/operators/lbm.js';
 
     const $ = (id) => document.getElementById(id);
-    const RES = [24, 32, 48, 64, 96];
+    // The cylinder's halved span brought 96 within reach (96 MiB against a
+    // 128 MiB limit); 128 is there for devices that allow a larger binding and
+    // is clamped away on those that do not.
+    const RES = [24, 32, 48, 64, 96, 128];
 
     // ---------------------------------------------------------------- tabs
     document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => {
@@ -350,13 +357,17 @@
         resolution: res,
         tau: +$('tau').value,
         inletVelocity: +$('uin').value,
-        lidVelocity: +$('uin').value,
+        lidVelocity: +$('lidamp').value,
+        // Slider is CYCLES PER 1000 STEPS, which is a period a person can hold
+        // in their head; the operator wants cycles per step.
+        lidFrequency: +$('lidfreq').value / 1000,
         obstacle: $('obstacle').value,
         ...PHYSICS[$('physics').value],
       });
       const mem = sim.memoryEstimate();
       $('s-mem').textContent = `${formatBytes(mem.bytes)} over ${mem.items.length} field(s)`;
-      $('s-lattice').textContent = sim.lattice.describe();
+      $('s-lattice').textContent = sim.lattice.describe()
+        + (sim.meta && sim.meta.obstacleCells ? ` · ${sim.meta.obstacleCells} cells across the obstacle` : '');
 
       await sim.build({ backend: 'auto' });
       state.sim = sim;
@@ -729,8 +740,32 @@
     $('scene').addEventListener('change', () => { clampResolution(); syncObstacle(); build(); });
     $('obstacle').addEventListener('change', () => build());
     $('physics').addEventListener('change', () => { stabilityHint(); build(); });
+    $('lidamp').addEventListener('input', () => { $('lidamp-v').textContent = (+$('lidamp').value).toFixed(3); });
+    $('lidamp').addEventListener('change', () => build());
+    // THE RANGE COMES FROM THE STOKES LAYER, not from what looked like a tidy
+    // slider. An oscillating wall drags a layer of depth sqrt(2 nu / omega); at
+    // 20 cycles per 1000 steps that depth is 0.73 CELLS, i.e. below the lattice
+    // and not resolved at all. Over 0 to 2 cycles per 1000 steps it spans
+    // roughly 15 down to 2 cells, which the lattice can actually represent.
+    // The readout shows the depth, because that is the number that says whether
+    // the interior will notice the lid.
+    function lidHint() {
+      const f = +$('lidfreq').value;
+      if (f === 0) { $('lidfreq-v').textContent = 'steady'; return; }
+      const nu = (+$('tau').value - 0.5) / 3;
+      const depth = Math.sqrt(2 * nu / (2 * Math.PI * f / 1000));
+      $('lidfreq-v').className = 'v ' + (depth < 2 ? 'warn' : '');
+      $('lidfreq-v').textContent = `${Math.round(1000 / f)} st · δ${depth.toFixed(1)}`;
+    }
+    $('lidfreq').addEventListener('input', lidHint);
+    $('lidfreq').addEventListener('change', () => build());
     // The obstacle only means anything in the channel scene.
-    function syncObstacle() { $('obstacle').disabled = $('scene').value !== 'channel'; }
+    function syncObstacle() {
+      $('obstacle').disabled = $('scene').value !== 'channel';
+      const cavity = $('scene').value === 'cavity';
+      $('lidamp').disabled = !cavity;
+      $('lidfreq').disabled = !cavity;
+    }
     $('res').addEventListener('input', clampResolution);
     $('res').addEventListener('change', () => build());
     $('view').addEventListener('change', async () => {
@@ -797,7 +832,7 @@
         : cls === 'warn' ? '<span class="warn">marginal</span>'
         : '<span class="good">within the measured stable range</span>');
     }
-    $('tau').addEventListener('input', () => { $('tau-v').textContent = (+$('tau').value).toFixed(3); stabilityHint(); });
+    $('tau').addEventListener('input', () => { $('tau-v').textContent = (+$('tau').value).toFixed(3); stabilityHint(); lidHint(); });
     $('tau').addEventListener('change', () => build());
     $('uin').addEventListener('input', () => { $('uin-v').textContent = (+$('uin').value).toFixed(3); stabilityHint(); });
     $('uin').addEventListener('change', () => build());
@@ -863,6 +898,7 @@
 
     syncObstacle();
     stabilityHint();
+    lidHint();
     probeLimits()
       .then(() => { clampResolution(); return build(); })
       .then(() => console.log(state.sim ? 'lattsim ready ✓' : 'lattsim failed to build'));

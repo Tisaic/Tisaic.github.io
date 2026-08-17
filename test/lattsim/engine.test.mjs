@@ -430,6 +430,93 @@ if (FULL) {
   check('WITH the sub-grid model, the same run survives', modelled !== 'diverged', modelled);
 }
 
+// ------------------------------------------- the lid can be made to oscillate
+//
+// An OSCILLATING lid is a different flow from a steady one: instead of a single
+// recirculation it drags a Stokes layer of depth sqrt(2 nu / omega) that
+// reverses every half period. What has to be true is that the drive really
+// alternates, that it is still a WALL (no mass enters), and that a steady lid
+// is completely unaffected -- the oscillation must not leak into the default.
+{
+  const { lidCavity } = await import('../../lib/lattsim/scenes.js');
+  // tau 1.0 so the impulsive-start transient decays in ~H^2/nu ~ 1500 steps,
+  // and F = 2/1000 (a 500-step period) so the Stokes depth is ~5 cells -- fast
+  // enough to sample cheaply, slow enough for the lattice to resolve.
+  const F = 2 / 1000;
+  // f64, so "mass changed" means a leak rather than the ~1e-8 f32 arithmetic
+  // residual that conservation.test.mjs measures and attributes.
+  const trace = async (freq) => {
+    const s2 = lidCavity({ resolution: 16, tau: 1.0, lidVelocity: 0.06, lidFrequency: freq });
+    await s2.build({ backend: 'cpu', precision: 'f64' });
+    const m0 = (await s2.diagnostics()).mass;
+    s2.advance(3000);                              // let the start transient go
+    const px = [];
+    for (let k = 0; k < 8; k++) { s2.advance(62); px.push((await s2.diagnostics()).momentum[0]); }
+    const m1 = (await s2.diagnostics()).mass;
+    s2.destroy();
+    return { px, drift: Math.abs(m1 - m0) / m0 };
+  };
+  const osc = await trace(F), steady = await trace(0);
+  check('an oscillating lid drives momentum in BOTH directions',
+    Math.max(...osc.px) > 0 && Math.min(...osc.px) < 0,
+    osc.px.map((v) => v.toExponential(1)).join(' '));
+  check('an oscillating lid is still a wall (mass is conserved)', osc.drift < 1e-12,
+    osc.drift.toExponential(2));
+  // A STEADY lid SETTLES; an oscillating one does not. Neither the sign nor the
+  // presence of sign changes discriminates: a closed box's return flow occupies
+  // far more volume than the thin layer the lid drags, so the integral sits
+  // either side of zero, and an impulsively started lid launches a transient
+  // that sloshes back and forth on its own (measured 2.4 -> -0.44 -> -0.93 ...
+  // decaying to 0.05). What separates them is that the transient DECAYS and the
+  // driven oscillation does not.
+  const rms = (a) => Math.sqrt(a.reduce((x, y) => x + y * y, 0) / a.length);
+  const lateOsc = rms(osc.px), lateSteady = rms(steady.px);
+  check('once settled, a steady lid holds still while an oscillating one keeps going',
+    lateOsc > 3 * lateSteady,
+    `late |px| oscillating ${lateOsc.toExponential(2)} vs steady ${lateSteady.toExponential(2)}`);
+
+  // And the drive itself, which is what the two sliders actually set: the wall
+  // velocity must trace a sine of the requested period, exactly.
+  const { LBMFluidOperator } = await import('../../lib/lattsim/operators/lbm.js');
+  const op = new LBMFluidOperator({ tau: 0.6, inletVelocity: [0.06, 0, 0], wallFrequency: 1 / 8 });
+  const wall = [];
+  for (let k = 0; k < 8; k++) { wall.push(op.wallVelocity()[0]); op.tickImpulse(); }
+  check('the wall velocity traces the requested period',
+    Math.abs(wall[0]) < 1e-12 && wall[2] > 0.059 && wall[6] < -0.059,
+    wall.map((v) => v.toFixed(3)).join(' '));
+  check('zero frequency leaves the wall steady',
+    new LBMFluidOperator({ tau: 0.6, inletVelocity: [0.06, 0, 0] }).wallVelocity()[0] === 0.06);
+  const noFreq = lidCavity({ resolution: 16, tau: 1.0, lidVelocity: 0.06 });
+  check('the scene reports the Stokes depth only when it oscillates',
+    noFreq.meta.stokesDepth === null
+    && lidCavity({ resolution: 16, tau: 1.0, lidFrequency: F }).meta.stokesDepth > 0,
+    String(noFreq.meta.stokesDepth));
+}
+
+// ------------------------- resolution has to buy cells across the obstacle
+//
+// "Increase the resolution" is only meaningful if the cells land where the
+// physics is. The channel at [3n, n, n] needed a 192 MiB binding at n = 96 --
+// over what most devices allow -- so the top of the ladder was unreachable and
+// raising the slider did nothing. The span is a free parameter for a cylinder
+// (it spans z, so the flow is nominally 2D), and halving it is what makes the
+// resolution reachable.
+{
+  const { channelFlow } = await import('../../lib/lattsim/scenes.js');
+  const big = channelFlow({ resolution: 96, obstacle: 'cylinder' });
+  const bytes = Math.max(...big.fields.list().map((f) => f.byteLength(big.lattice.cellCount)));
+  check('the cylinder at resolution 96 fits a 128 MiB storage binding',
+    bytes < 134217728, `${(bytes / 1048576).toFixed(0)} MiB`);
+  check('resolution 96 puts 20 cells across the cylinder', big.meta.obstacleCells === 20,
+    String(big.meta.obstacleCells));
+  // A sphere is finite in z, so it must NOT get a squeezed span.
+  const sph = channelFlow({ resolution: 48, obstacle: 'sphere' });
+  const cyl = channelFlow({ resolution: 48, obstacle: 'cylinder' });
+  check('a sphere keeps its cubic domain, a cylinder does not',
+    sph.lattice.nz === sph.lattice.ny && cyl.lattice.nz < cyl.lattice.ny,
+    `sphere ${sph.lattice.nz}/${sph.lattice.ny}, cylinder ${cyl.lattice.nz}/${cyl.lattice.ny}`);
+}
+
 // ------------------------------------------------- the residual diagnostic
 {
   // Cheap in quick, thorough in full: the claim is that the residual FALLS, and

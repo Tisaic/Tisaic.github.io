@@ -244,6 +244,53 @@ and the report says so rather than inviting the wrong conclusion.
 
 `__lsDump()` in the console's eval box prints the same thing on demand.
 
+## Resolution, and where the cells were going
+
+"Increase the resolution on the obstruction model" turned out to be blocked
+rather than merely unset. At `[3n, n, n]` the channel needs a **192 MiB** storage
+binding at n = 96, over the 128 MiB most devices allow, so the top of the ladder
+was clamped away and moving the slider did nothing.
+
+**The span is not the same kind of number as the cross-section.** A cylinder
+spans z, so the flow is nominally two-dimensional and z is a free numerical
+parameter — cells spent there resolve nothing about the wake. Halving it:
+
+| n | cylinder | binding | cells across obstacle |
+|---|---|---|---|
+| 48 | 0.17M | 12 MiB | 10 |
+| 64 | 0.39M | 29 MiB | 12 |
+| 96 | 1.33M | **96 MiB — now fits** | **20** |
+
+A **sphere** is finite in z, so a squeezed span would confine it; it keeps the
+cubic domain and is clamped as before. The lattice row now reports *cells across
+the obstacle*, which is the number "resolution" actually buys.
+
+## The lid can be made to oscillate
+
+`lidFrequency` (cycles per step) scales the moving-wall velocity by
+`sin(2π f n)`. Zero is the classic steady lid; anything else drags a **Stokes
+layer** of depth `sqrt(2 ν / ω)` that reverses every half period, and whether
+that depth reaches the middle of the box is the entire character of the flow.
+
+**The slider range came from that depth, not from what looked tidy.** The first
+range went to 20 cycles per 1000 steps, where the layer is **0.73 cells** — below
+the lattice, so not resolved at all. Over 0–2 cycles per 1000 steps it spans
+about 15 down to 2 cells, and the readout shows the depth so an oscillating run
+can be read rather than guessed at.
+
+The wall velocity is a **separate parameter from the inlet velocity**, which
+until now they shared: an oscillating lid must not oscillate an inlet, and they
+were the same number only because a steady wall and a steady inlet happen to
+coincide.
+
+Two things the regression had to learn, both of which looked like bugs first:
+the sign of total x-momentum is **not** positive under a steady lid (a closed
+box's return flow occupies far more volume than the thin layer the lid drags),
+and an impulsively started lid **oscillates on its own** while its transient
+decays (measured 2.4 → −0.44 → −0.93 … → 0.05). So neither the sign nor the
+presence of sign changes separates driven from steady. What does is that the
+transient settles and the drive does not — compared after 3000 steps, not during.
+
 ## Stability: what the sliders can do to it
 
 **Reported from a device:** viscosity slider to the far left, everything else

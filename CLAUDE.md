@@ -431,6 +431,33 @@ the shipped commit carries the correct version.
    bad cell" is the origin only while the damage is small. The field is NAMED
    `lowestIndexBadCell` rather than `firstBadCell` for exactly that reason.
    `__lsDump()` prints the same on demand from the console's eval box.
+   **RESOLUTION WAS BLOCKED, NOT UNSET (v121).** Asked for more resolution on the
+   obstruction model. At `[3n, n, n]` the channel wants a **192 MiB** storage
+   binding at n = 96, over the 128 MiB most devices allow, so the top of the
+   ladder was clamped away and moving the slider did nothing. THE SPAN IS NOT THE
+   SAME KIND OF NUMBER AS THE CROSS-SECTION: a cylinder spans z, so the flow is
+   nominally 2D and z is a free numerical parameter — cells spent there resolve
+   nothing about the wake. Halving it brings n = 96 to **96 MiB** and **20 cells
+   across the obstacle** against 10 before. A SPHERE is finite in z and keeps its
+   cubic domain. The lattice row now reports cells-across-obstacle, which is the
+   number "resolution" actually buys.
+   **THE LID CAN BE DRIVEN (v121).** `lidFrequency` scales the moving-wall
+   velocity by sin(2π f n): zero is the classic steady lid, anything else drags a
+   **Stokes layer** of depth √(2ν/ω) reversing every half period, and whether
+   that depth reaches the middle of the box is the whole character of the flow.
+   THE SLIDER RANGE CAME FROM THAT DEPTH rather than from what looked tidy — the
+   first range reached 20 cycles/1000 steps, where the layer is **0.73 CELLS**,
+   below the lattice and not resolved at all; 0–2 spans ~15 down to 2 cells and
+   the readout shows the depth. The wall velocity is now a SEPARATE parameter
+   from the inlet velocity, which they had shared only because a steady wall and
+   a steady inlet happen to be the same number.
+   TWO THINGS THE REGRESSION HAD TO LEARN, both of which looked like bugs first:
+   the sign of total x-momentum is NOT positive under a steady lid (a closed
+   box's return flow occupies far more volume than the thin layer the lid drags),
+   and an impulsively started lid OSCILLATES ON ITS OWN while its transient
+   decays (2.4 → −0.44 → −0.93 … → 0.05). So neither the sign nor the presence of
+   sign changes separates driven from steady; what does is that the transient
+   settles and the drive does not, compared after 3000 steps rather than during.
    **DELIBERATELY NOT BUILT YET:** heat, diffusion, elasticity, electromagnetics,
    multiphysics coupling and adaptive resolution are architecture rather than
    code. Operators declare the fields they read and write and the solver rejects
