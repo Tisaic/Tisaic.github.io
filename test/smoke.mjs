@@ -1097,6 +1097,118 @@ await latt.screenshot({ path: join(SHOTS, '09-lattsim.png') });
   }));
   check('lattsim: the probe chart is drawn with its traces',
     chart.isPlot && chart.traces >= 4, JSON.stringify(chart));
+
+  // ---------------------------------------------------------- soft sensor
+  // TWO POINTS, ONE MODEL: the probe is the sensor, and a second cell is the
+  // target the model never measures. What is checked here is what only the
+  // browser can check -- the wiring, the cadence and the chart's alignment.
+  // The model itself is verified against a synthetic field in
+  // test/probesense/sensor.test.mjs, where the right answer is known.
+  // CONFIGURED FOR THE CLOCK, DELIBERATELY AND VISIBLY. Training 250 pairs at the
+  // page's default resolution is ~9600 solver steps, which is eighteen minutes on
+  // this software adapter -- and a check that slow does not get run, which is a
+  // verification problem rather than an inconvenience. The smallest lattice, the
+  // shortest lag window and the tightest sample interval reach the same 250 pairs
+  // in ~2000 steps. None of it weakens what is being checked: the wiring, the
+  // cadence and the alignment do not depend on how big the lattice is, and the
+  // MODEL's accuracy is verified against a synthetic field in Node instead.
+  await latt.selectOption('#scene', 'channel');
+  await latt.evaluate(() => {
+    const set = (id, v) => {
+      const el = document.getElementById(id);
+      el.value = String(v);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    set('res', 0); set('spf', 20);
+    set('ss-lag', 2); set('ss-stride', 2); set('ss-every', 5); set('ss-lead', 6);
+  });
+  await latt.waitForFunction(() => window.__lsSim() && window.__lsSim().lattice.nx <= 80,
+    null, { timeout: 180000 });
+  const placed = await latt.evaluate(() => {
+    const L = window.__lsSim().lattice;
+    window.__lsProbe.place([Math.round(L.nx * 0.55), 1, L.nz >> 1]);
+    window.__lsSS.place([Math.round(L.nx * 0.75), L.ny >> 1, L.nz >> 1]);
+    return window.__lsSS.state();
+  });
+  check('lattsim: placing a target builds a soft sensor over both cells',
+    placed && placed.cell >= 0 && placed.features > 0 && placed.depth > 1,
+    JSON.stringify(placed && { cell: placed.cell, features: placed.features,
+      depth: placed.depth, mode: placed.mode }));
+  check('lattsim: the soft-sensor panel and chart become visible',
+    await latt.evaluate(() => document.getElementById('ss-panel').classList.contains('on')
+      && document.getElementById('ss-chart').classList.contains('on')));
+  // THE LOCK IS GATED. Freezing an untrained readout deploys noise, and a user
+  // who did that would read it as the method failing rather than as their own
+  // mistake -- so the button refuses until there is something to lock.
+  check('lattsim: estimation mode is refused until the model has trained',
+    await latt.evaluate(() => document.getElementById('ss-lock').disabled));
+
+  // Drive the real frame loop: the cadence logic lives there, so stepping the
+  // solver by hand would test everything except the thing that could be wrong.
+  await latt.evaluate(() => { window.__lsSS.train(); });
+  await latt.click('#run');
+  await latt.waitForFunction(() => {
+    const st = window.__lsSS.state();
+    return st && st.trained > 250;
+  }, null, { timeout: 240000 });
+  await latt.click('#run');
+  const ran = await latt.evaluate(() => window.__lsSS.state());
+
+  // THE CADENCE IS EXACT, and this is the check that earns the split-step loop.
+  // A model's lag window is counted in samples, so if the sample interval drifted
+  // with the steps-per-frame slider the window would span a different amount of
+  // time at every slider position -- a viewing control changing what the model
+  // learns. The loop stops the solver exactly on each boundary; misses count any
+  // time it could not.
+  check('lattsim: the soft sensor samples on exact solver-step boundaries',
+    ran.misses === 0, `${ran.misses} missed boundaries over ${ran.samples} samples`);
+  check('lattsim: training accumulated pairs from the live loop',
+    ran.trained > 250 && ran.estimate.n > 250,
+    JSON.stringify({ trained: ran.trained, graded: ran.estimate.n }));
+  // The prediction can only be graded once its target has ARRIVED, so a non-zero
+  // count here is evidence the horizon pairing actually matured rather than being
+  // scored against the present.
+  check('lattsim: the prediction was graded against arrived targets',
+    ran.predict.n > 100, JSON.stringify({ n: ran.predict.n, nrmse: ran.predict.nrmse }));
+  // The forecast is stamped exactly one lead ahead of the last sample. This is the
+  // property the chart's alignment rests on: drawn at the step it is ABOUT, a
+  // correct forecast lies on the truth, and drawn where it was ISSUED it would
+  // appear shifted by the whole lead and a perfect forecast would look wrong.
+  const lead = await latt.evaluate(() => {
+    const st = window.__lsSS.state();
+    const el = document.getElementById('ss-chart');
+    const truth = el.data.find((t) => t.name === 'truth');
+    const early = el.data.find((t) => t.name === 'predicted earlier');
+    return { live: st.live, every: st.every, leadSamples: +document.getElementById('ss-lead').value,
+      lastTruth: truth.x[truth.x.length - 1],
+      earlyLast: early.x[early.x.length - 1], earlyN: early.x.length,
+      traces: el.data.length, isPlot: el.classList.contains('js-plotly-plot') };
+  });
+  check('lattsim: the live forecast is stamped one lead ahead of the last sample',
+    lead.live && lead.live.step === lead.lastTruth + lead.leadSamples * lead.every,
+    JSON.stringify(lead));
+  check('lattsim: the matured prediction is drawn at the step it is about, not when issued',
+    lead.earlyN > 100 && lead.earlyLast <= lead.lastTruth
+    && lead.earlyLast > lead.lastTruth - 3 * lead.every, JSON.stringify(lead));
+  check('lattsim: the soft-sensor chart carries every series',
+    lead.isPlot && lead.traces >= 4, JSON.stringify(lead));
+
+  // A trained model beating a scaled reading of its own sensor is the whole claim.
+  // Asserted loosely -- the flow depends on the scene and the settings -- but a
+  // ratio below 1 would mean the model is worse than a calibration constant.
+  check('lattsim: the soft sensor beats a scaled sensor reading',
+    ran.estimate.ratio > 1.2,
+    `${ran.estimate.nrmse} vs ${ran.estimate.baseline} (x${ran.estimate.ratio})`);
+
+  const lockedMode = await latt.evaluate(() => {
+    const before = window.__lsSS.state().trained;
+    window.__lsSS.lock();
+    return { mode: window.__lsSS.state().mode, before };
+  });
+  check('lattsim: locking switches to estimation mode', lockedMode.mode === 'estimating',
+    JSON.stringify(lockedMode));
+  await latt.screenshot({ path: join(SHOTS, '11-lattsim-softsensor.png') });
 }
 
 // The Architecture tab is where the engine states what it is and is not.

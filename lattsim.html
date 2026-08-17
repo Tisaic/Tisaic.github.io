@@ -49,6 +49,23 @@
        probe exists. */
     #probe-chart { width:100%; height:150px; margin-top:8px; display:none; }
     #probe-chart.on { display:block; }
+    /* The soft-sensor target: a ring, deliberately a different SHAPE as well as a
+       different colour from the sensor's crosshair. The two points do opposite
+       jobs -- one is measured, one is inferred -- and telling them apart cannot
+       depend on colour alone on a phone in sunlight. */
+    #target-mark { position:absolute; width:20px; height:20px; margin:-10px 0 0 -10px;
+      pointer-events:none; display:none; border:2px solid #a78bfa; border-radius:50%;
+      box-shadow:0 0 0 1px #0f172a, 0 0 6px rgba(167,139,250,.7); }
+    #target-mark::after { content:''; position:absolute; left:7px; top:7px; width:2px; height:2px;
+      background:#a78bfa; }
+    #ss-chart { width:100%; height:190px; margin-top:8px; display:none; }
+    #ss-chart.on { display:block; }
+    #ss-panel { display:none; }
+    #ss-panel.on { display:block; }
+    .qbox { display:flex; flex-wrap:wrap; gap:4px 10px; align-items:center;
+      font:12px/1.5 ui-monospace,monospace; color:#94a3b8; }
+    .qbox label { display:inline-flex; align-items:center; gap:3px; min-width:0; }
+    .qbox input[type=checkbox] { width:16px; height:16px; min-width:0; flex:0 0 auto; }
     .badge { position:absolute; left:10px; top:10px; font-size:.7rem; padding:4px 8px; border-radius:6px;
       background:rgba(15,23,42,.85); border:1px solid var(--line); color:var(--muted); }
     .controls { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; align-items:center; }
@@ -106,20 +123,76 @@
       <canvas id="cvgl" class="fill" hidden></canvas>
       <span class="badge" id="backend-badge">starting…</span>
       <span id="probe-mark"></span>
+      <span id="target-mark"></span>
     </div>
 
     <!-- Probe time series, directly below the stage so the trace and the picture
          it came from are read together. -->
     <div id="probe-chart"></div>
     <div class="controls">
-      <button id="probe-arm" class="sec">Place probe ⊕</button>
-      <button id="probe-clear" class="sec">Clear probe</button>
+      <button id="probe-arm" class="sec">Place sensor ⊕</button>
+      <button id="probe-clear" class="sec">Clear sensor</button>
     </div>
     <p class="lead" id="probe-note" style="margin-top:4px">A <b>probe</b> samples one lattice cell over
       time. Tap <b>Place probe</b> then tap the 2D slice; the cell is fixed in 3D as well, since the slice
       plane and position are what choose it. The chart reads that cell every frame — speed, the two
       in-plane velocity components, and density — which is how an oscillation is told from a steady flow:
       a vortex street shows as a periodic transverse velocity, and a settled flow as flat lines.</p>
+
+    <!-- SOFT SENSOR. Two points on one lattice: one you could instrument, one you
+         could not. Placed under the probe chart so the sensor's raw trace and the
+         inference drawn from it are read together. -->
+    <div class="controls">
+      <button id="ss-target-arm" class="sec">Place soft-sensor target ◎</button>
+      <button id="ss-clear" class="sec">Clear target</button>
+    </div>
+    <div id="ss-panel">
+      <div id="ss-chart"></div>
+      <div class="controls">
+        <button id="ss-train" class="sec">Start training ▶</button>
+        <button id="ss-lock" class="sec">Switch to estimation 🔒</button>
+        <button id="ss-reset" class="sec">Reset model</button>
+      </div>
+      <div class="controls">
+        <div class="qbox" id="ss-inputs">measured at the sensor:</div>
+      </div>
+      <div class="controls">
+        <label class="slider">Soft-sensed quantity
+          <select id="ss-target-q" aria-label="Soft-sensed quantity"></select></label>
+        <label class="slider">Features
+          <select id="ss-features" aria-label="Feature map">
+            <option value="1">nonlinear expansion</option>
+            <option value="0">linear only</option>
+          </select></label>
+      </div>
+      <div class="controls">
+        <label class="slider">Prediction lead <input type="range" id="ss-lead" min="1" max="60" step="1" value="14" />
+          <span class="v" id="ss-lead-v">280 steps</span></label>
+        <label class="slider">Sample every <input type="range" id="ss-every" min="5" max="80" step="5" value="20" />
+          <span class="v" id="ss-every-v">20 steps</span></label>
+        <label class="slider">Lags <input type="range" id="ss-lag" min="1" max="8" step="1" value="4" />
+          <span class="v" id="ss-lag-v">4</span></label>
+        <label class="slider">Lag spacing <input type="range" id="ss-stride" min="1" max="12" step="1" value="6" />
+          <span class="v" id="ss-stride-v">6</span></label>
+        <label class="slider">Ridge <input type="range" id="ss-ridge" min="-1" max="4" step="0.25" value="2" />
+          <span class="v" id="ss-ridge-v">100</span></label>
+      </div>
+      <dl class="stat">
+        <dt>mode</dt><dd id="ss-mode">—</dd>
+        <dt>window</dt><dd id="ss-window">—</dd>
+        <dt>estimate (now)</dt><dd id="ss-est">—</dd>
+        <dt>prediction (lead)</dt><dd id="ss-pred">—</dd>
+      </dl>
+      <p class="lead" style="margin-top:4px">The <b>sensor</b> is the probe: the point you could actually
+        instrument. The <b>target</b> is the point you could not — the soft sensor estimates it from the
+        sensor's recent history alone, and the target's true value is used only to train and to grade.
+        <b>Switch to estimation</b> freezes the model so you can see whether what it learned holds when it
+        stops being told the answer. Every score is <b>out of sample</b>: each value is graded before the
+        pair it came from is trained on, and the prediction is graded only once its target has actually
+        arrived. Both are reported as error ÷ the truth's own standard deviation, so <b>1.0 means no better
+        than predicting the average</b>. The violet trace is drawn at the step it is <i>about</i>, not the
+        step it was made, so it lies on top of the truth exactly when it came true.</p>
+    </div>
 
     <div class="controls">
       <button id="run">Run ▶</button>
@@ -273,6 +346,7 @@
 
   <script type="module">
     import { SCENES, largestResolutionThatFits } from './lib/lattsim/scenes.js';
+import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
     import { formatBytes } from './lib/lattsim/fields.js';
     import { SliceRenderer, SLICE_MODE } from './lib/lattsim/render/slice2d.js';
     import { OrbitCamera } from './lib/lattsim/render/camera.js';
@@ -469,6 +543,16 @@
         if (probe.coords.every((v, k) => v < L.size[k])) probePlace(probe.coords);
         else probeClear();
       }
+      // The soft-sensor target follows the same rule. And even when both cells
+      // survive, the STREAM does not: the flow on the far side of a rebuild is a
+      // different flow, so the lag window would straddle two of them. Rebuilding
+      // the model is the honest response -- what it learned was about the run that
+      // just ended.
+      if (ss.coords) {
+        const L = sim.lattice;
+        if (ss.coords.every((v, k) => v < L.size[k])) ssPlace(ss.coords);
+        else ssClear();
+      }
       // THE VOLUME RENDERER IS BOUND TO A SIMULATION, so a rebuild destroys it --
       // and it therefore has to be REBUILT HERE. It used to be created only by
       // the view selector's change handler, so pressing Reset (or moving
@@ -661,12 +745,43 @@
       $('run').textContent = 'Run ▶';
     }
 
-    function tick(now) {
-      state.raf = requestAnimationFrame(tick);
-      if (!state.sim || state.busy) return;
-      state.busy = true;
+    /**
+     * Advance `budget` steps, stopping EXACTLY on the soft sensor's sample
+     * boundaries and reading both cells at each one.
+     *
+     * The probe chart can afford to be sampled once per frame; a MODEL cannot. Its
+     * lag window is counted in samples, so a cadence set by the frame rate or by
+     * the steps-per-frame slider would make a viewing control change the physics
+     * the model sees -- and a lag window would span a different amount of time at
+     * every slider position. Splitting the frame's step budget at the boundaries
+     * costs nothing and removes the whole class of defect. It is the same lesson
+     * the residual and the probe's own time axis each taught once already.
+     */
+    async function advanceSampled(budget) {
+      let guard = 128;
+      while (budget > 0 && guard-- > 0) {
+        const gap = ss.nextStep - state.sim.step;
+        if (gap > 0) {
+          const to = Math.min(budget, gap);
+          state.sim.advance(to);
+          budget -= to;
+        }
+        if (state.sim.step >= ss.nextStep) {
+          // Overshoot is possible only if the boundary moved under us (a rebuild);
+          // count it rather than hide it, because a silently irregular cadence is
+          // exactly what this function exists to prevent.
+          if (state.sim.step > ss.nextStep) ss.misses++;
+          await ssSample();
+          ss.nextStep = state.sim.step + ss.every;
+        }
+      }
+      if (budget > 0) state.sim.advance(budget);
+    }
+
+    async function frameWork(now) {
       const spf = +$('spf').value;
-      state.sim.advance(spf);
+      if (ss.model && ss.every > 0) await advanceSampled(spf);
+      else state.sim.advance(spf);
       const dt = now - state.lastT;
       if (dt > 500) {
         const steps = state.sim.step - state.lastStep;
@@ -674,10 +789,19 @@
         state.lastStep = state.sim.step; state.lastT = now;
         $('s-rate').textContent = state.rate.toFixed(0) + ' steps/s';
         $('s-mlups').textContent = (state.rate * state.sim.lattice.cellCount / 1e6).toFixed(1);
-        refreshStats().catch((e) => console.error(e));
+        await refreshStats();
+        ssStatus();
       }
-      Promise.resolve(drawOnce()).catch((e) => console.error(e)).finally(() => { state.busy = false; });
-      probeSample().then(() => probeDraw());
+      await drawOnce();
+      await probeSample(); probeDraw();
+      ssDraw();
+    }
+
+    function tick(now) {
+      state.raf = requestAnimationFrame(tick);
+      if (!state.sim || state.busy) return;
+      state.busy = true;
+      frameWork(now).catch((e) => console.error(e)).finally(() => { state.busy = false; });
     }
 
     function start() { if (state.running) return; state.running = true; $('run').textContent = 'Pause ⏸'; state.lastT = performance.now(); state.raf = requestAnimationFrame(tick); }
@@ -885,12 +1009,272 @@
     }
 
     $('probe-arm').addEventListener('click', () => { probe.armed = !probe.armed; probeStatus(); });
-    $('probe-clear').addEventListener('click', () => { probe.armed = false; probeClear(); });
+    $('probe-clear').addEventListener('click', () => { probe.armed = false; probeClear(); ssBuild('sensor cleared'); });
     window.__lsProbe = { place: (c) => probePlace(c), at: cellAtScreen,
       sample: async () => { await probeSample(); probeDraw(); }, state: () => ({
       coords: probe.coords, cell: probe.cell, samples: probe.speed.length,
       last: probe.speed.length ? { speed: probe.speed[probe.speed.length - 1],
         rho: probe.rho[probe.rho.length - 1] } : null }) };
+
+    // ------------------------------------------------------------ soft sensor
+    //
+    // TWO POINTS ON ONE LATTICE. The probe is the sensor -- the point you could
+    // actually instrument -- and the target is the point you could not. The model
+    // sees only the sensor's recent history; the target's true value is used to
+    // train and to grade, which is exactly the position a real soft sensor is in
+    // during commissioning and never again after it.
+    //
+    // The engine and the model library share nothing; `lib/probesense` is the
+    // composition, and it is fed numbers rather than lattices. All this section
+    // does is read two cells at one instant and hand the readings over.
+    const ss = {
+      model: null, cell: -1, coords: null, armed: false,
+      every: 20, nextStep: 0, busy: false, drawn: false, plotted: -1, misses: 0,
+    };
+
+    function ssQuantities() { return QUANTITIES; }
+
+    /** Which quantities the sensor reports into the model. */
+    function ssInputs() {
+      return [...$('ss-inputs').querySelectorAll('input:checked')].map((el) => el.value);
+    }
+
+    /**
+     * (Re)build the model. Called whenever anything it was CONSTRUCTED with
+     * changes -- the signal set, the target, the lead, the cadence, the window,
+     * the ridge, the basis, either cell, or the simulation itself.
+     *
+     * A rebuild necessarily discards what was learned, because every one of those
+     * choices changes what the learned weights MEAN. Silently keeping them would
+     * be the worst of the options: a model whose features no longer match its
+     * coefficients still produces numbers.
+     */
+    function ssBuild(why) {
+      const inputs = ssInputs();
+      if (probe.cell < 0 || ss.cell < 0 || !inputs.length || !state.sim) {
+        ss.model = null; ssStatus(); ssDraw(true); return;
+      }
+      const every = +$('ss-every').value;
+      const lead = +$('ss-lead').value;
+      ss.every = every;
+      ss.nextStep = state.sim.step + every;
+      ss.misses = 0;
+      ss.model = new FieldSoftSensor({
+        inputs, target: $('ss-target-q').value,
+        horizon: lead, every,
+        lag: +$('ss-lag').value, stride: +$('ss-stride').value,
+        expand: $('ss-features').value === '1',
+        ridge: Math.pow(10, +$('ss-ridge').value),
+        // The calibration window scales with the lag depth: standardising against
+        // statistics gathered over less than a few window-lengths is the same
+        // mistake as not standardising at all.
+        warmup: Math.max(150, 12 * ((+$('ss-lag').value - 1) * (+$('ss-stride').value) + 1)),
+      });
+      if (why) console.log('soft sensor ▸ ' + JSON.stringify({ why, inputs,
+        target: $('ss-target-q').value, leadSamples: lead, leadSteps: lead * every,
+        every, lag: +$('ss-lag').value, stride: +$('ss-stride').value,
+        features: ss.model.status().features, ridge: Math.pow(10, +$('ss-ridge').value),
+        sensor: probe.coords, targetCell: ss.coords }));
+      ssStatus(); ssDraw(true);
+    }
+
+    function ssPlace(coords) {
+      const L = state.sim.lattice;
+      ss.coords = coords.slice();
+      ss.cell = L.index(coords[0], coords[1], coords[2]);
+      $('ss-panel').classList.add('on');
+      $('ss-chart').classList.add('on');
+      ssBuild('target placed');
+      ssMark();
+      requestAnimationFrame(() => { try { Plotly.Plots.resize('ss-chart'); } catch (e) { /* unlaid */ } });
+    }
+
+    function ssClear() {
+      ss.coords = null; ss.cell = -1; ss.model = null; ss.armed = false;
+      $('target-mark').style.display = 'none';
+      $('ss-panel').classList.remove('on');
+      $('ss-chart').classList.remove('on');
+      ssStatus();
+    }
+
+    function ssMark() {
+      const el = $('target-mark');
+      if (!ss.coords || state.view !== 'slice') { el.style.display = 'none'; return; }
+      const p = screenAtCell(ss.coords);
+      el.style.left = p.x + 'px'; el.style.top = p.y + 'px'; el.style.display = 'block';
+    }
+
+    /**
+     * One sample. Both cells are read HERE, with nothing advancing in between --
+     * the caller owns the stepping. On the GPU backend a probe awaits a mapAsync,
+     * so if the run loop were free to step during that await the target would come
+     * from a LATER state than the sensor, and the model would be trained on a
+     * pairing that never existed. That is why the frame advances in pieces.
+     */
+    async function ssSample() {
+      if (!ss.model || ss.busy || probe.cell < 0 || ss.cell < 0) return;
+      ss.busy = true;
+      try {
+        const a = await state.sim.backend.probe('macro', probe.cell);
+        const b = await state.sim.backend.probe('macro', ss.cell);
+        ss.model.sample(state.sim.step, a, b);
+      } catch (e) { /* a rebuild mid-sample; the next boundary re-reads */ }
+      ss.busy = false;
+    }
+
+    function fmtN(x, digits = 3) {
+      if (x === undefined || x === null || !Number.isFinite(x)) return '—';
+      return x < 0.001 ? x.toExponential(1) : x.toFixed(digits);
+    }
+
+    function ssStatus() {
+      $('ss-target-arm').textContent = ss.armed ? 'Tap the slice…' : 'Place soft-sensor target ◎';
+      $('ss-target-arm').className = ss.armed ? '' : 'sec';
+      const m = ss.model;
+      if (!m) {
+        const need = probe.cell < 0 ? 'place a sensor (the probe) and a target'
+          : ss.cell < 0 ? 'place a target' : 'select at least one measured quantity';
+        $('ss-mode').textContent = need;
+        for (const id of ['ss-window', 'ss-est', 'ss-pred']) $(id).textContent = '—';
+        $('ss-train').textContent = 'Start training ▶';
+        $('ss-lock').disabled = true;
+        return;
+      }
+      const st = m.status();
+      $('ss-train').textContent = st.mode === 'training' ? 'Pause training ⏸' : 'Start training ▶';
+      $('ss-lock').textContent = st.mode === 'estimating' ? 'Resume training ▶' : 'Switch to estimation 🔒';
+      // The lock is only offered once there is something to lock. Freezing an
+      // untrained readout would deploy noise and look like a failure of the method.
+      $('ss-lock').disabled = st.trained < 200 && st.mode !== 'estimating';
+      const mode = st.washout > 0 ? `re-entry washout ${st.washout}`
+        : st.calibrating ? `calibrating — ${st.calibrationLeft} samples to go`
+          : st.mode === 'training' ? `training · ${st.trained} pairs`
+            : st.mode === 'estimating' ? `ESTIMATING (locked) · learned from ${st.trained} pairs`
+              : `idle · ${st.trained} pairs learned`;
+      $('ss-mode').textContent = mode;
+      $('ss-window').textContent = `${m.inputsLabel} → ${m.targetLabel} · ${st.signals}×${m.cfg.lag} lags`
+        + ` spanning ${(st.depth - 1) * ss.every} steps · ${st.features} features`
+        + (ss.misses ? ` · ${ss.misses} cadence misses` : '');
+      const e = st.estimate, pr = st.predict;
+      $('ss-est').innerHTML = e.n > 20
+        ? `<b>${fmtN(e.nrmse)}</b> vs ${fmtN(e.baseline)} scaled sensor — `
+          + (e.ratio >= 1 ? `<span class="ok">${e.ratio.toFixed(1)}× better</span>`
+            : `<span class="warn">${(1 / e.ratio).toFixed(1)}× worse</span>`)
+        : 'warming…';
+      $('ss-pred').innerHTML = pr.n > 20
+        ? `<b>${fmtN(pr.nrmse)}</b> vs ${fmtN(pr.baseline)} persistence — `
+          + (pr.ratio >= 1 ? `<span class="ok">${pr.ratio.toFixed(1)}× better</span>`
+            : `<span class="warn">${(1 / pr.ratio).toFixed(1)}× worse</span>`)
+          + ` · ${pr.n} graded`
+        : 'warming…';
+    }
+
+    /**
+     * The chart, and the one thing that makes it readable: EVERY SERIES IS DRAWN
+     * AGAINST THE SOLVER STEP IT IS ABOUT.
+     *
+     * A forecast plotted where it was ISSUED is unreadable -- it appears shifted
+     * from the truth by exactly the lead, so a perfect forecast looks wrong and a
+     * lagging one looks right. Plotted at its target step, the violet trace lies
+     * on top of the green truth precisely when it came true, and the dashed
+     * segment to the right of the last truth is the part that has not happened yet.
+     */
+    function ssDraw(force) {
+      if (typeof Plotly === 'undefined' || !$('ss-chart').classList.contains('on')) return;
+      const m = ss.model;
+      const n = m ? m.series.length : 0;
+      if (!force && n === ss.plotted) return;
+      ss.plotted = n;
+      const ser = m ? m.series : [];
+      const x = ser.map((p) => p.step);
+      const layout = { margin: { l: 44, r: 10, t: 6, b: 18 },
+        paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+        font: { color: '#94a3b8', size: 10 }, showlegend: true,
+        legend: { orientation: 'h', y: 1.18 },
+        xaxis: { showgrid: false, title: { text: 'solver step', standoff: 2 } },
+        yaxis: { gridcolor: '#1e293b', zerolinecolor: '#334155',
+          title: { text: m ? m.targetLabel + ' at target' : 'target', standoff: 2 } } };
+      const data = [
+        { x, y: ser.map((p) => p.truth), name: 'truth', mode: 'lines',
+          line: { color: '#22c55e', width: 2 } },
+        { x, y: ser.map((p) => p.estimate), name: 'soft sensor', mode: 'lines',
+          line: { color: '#fbbf24', width: 1.6 }, connectgaps: false },
+        { x: m ? m.matured.map((p) => p.step) : [], y: m ? m.matured.map((p) => p.value) : [],
+          name: 'predicted earlier', mode: 'lines', line: { color: '#a78bfa', width: 1.4 } },
+      ];
+      // The unmatured forecast: from the last truth to where the prediction says
+      // the target will be. Dashed, because nothing has confirmed it yet.
+      if (m && m.live && ser.length) {
+        const lastP = ser[ser.length - 1];
+        data.push({ x: [lastP.step, m.live.step], y: [lastP.truth, m.live.value],
+          name: 'forecast', mode: 'lines+markers', line: { color: '#a78bfa', width: 1.4, dash: 'dot' },
+          marker: { size: 5, color: '#a78bfa' } });
+      }
+      if (!ss.drawn) {
+        Plotly.newPlot('ss-chart', data, layout, { displayModeBar: false, responsive: true });
+        ss.drawn = true;
+        requestAnimationFrame(() => { try { Plotly.Plots.resize('ss-chart'); } catch (e) { /* unlaid */ } });
+      } else Plotly.react('ss-chart', data, layout, { displayModeBar: false, responsive: true });
+    }
+
+    // Populate the selectors from the library's own quantity table, so a quantity
+    // added there appears here without being named twice.
+    (() => {
+      const box = $('ss-inputs'), sel = $('ss-target-q');
+      const dflt = ['ux', 'uy', 'rho'];
+      for (const [key, q] of Object.entries(QUANTITIES)) {
+        const lab = document.createElement('label');
+        const cb = document.createElement('input');
+        cb.type = 'checkbox'; cb.value = key; cb.checked = dflt.includes(key);
+        cb.addEventListener('change', () => ssBuild('inputs changed'));
+        lab.appendChild(cb); lab.appendChild(document.createTextNode(q.label));
+        box.appendChild(lab);
+        const opt = document.createElement('option');
+        opt.value = key; opt.textContent = q.label;
+        sel.appendChild(opt);
+      }
+      sel.value = 'speed';
+    })();
+
+    $('ss-target-arm').addEventListener('click', () => {
+      ss.armed = !ss.armed; if (ss.armed) probe.armed = false;
+      ssStatus(); probeStatus();
+    });
+    $('ss-clear').addEventListener('click', ssClear);
+    $('ss-train').addEventListener('click', () => {
+      if (!ss.model) return;
+      if (ss.model.mode === 'training') ss.model.pause(); else ss.model.train();
+      ssStatus();
+    });
+    $('ss-lock').addEventListener('click', () => {
+      if (!ss.model) return;
+      if (ss.model.mode === 'estimating') ss.model.train(); else ss.model.lock();
+      ssStatus();
+    });
+    $('ss-reset').addEventListener('click', () => ssBuild('model reset'));
+    $('ss-target-q').addEventListener('change', () => ssBuild('target quantity changed'));
+    $('ss-features').addEventListener('change', () => ssBuild('basis changed'));
+    for (const id of ['ss-lead', 'ss-every', 'ss-lag', 'ss-stride', 'ss-ridge']) {
+      $(id).addEventListener('input', ssLabels);
+      $(id).addEventListener('change', () => ssBuild(id + ' changed'));
+    }
+    function ssLabels() {
+      const every = +$('ss-every').value, lead = +$('ss-lead').value;
+      $('ss-lead-v').textContent = (lead * every) + ' steps';
+      $('ss-every-v').textContent = every + ' steps';
+      $('ss-lag-v').textContent = $('ss-lag').value;
+      $('ss-stride-v').textContent = $('ss-stride').value;
+      $('ss-ridge-v').textContent = Math.pow(10, +$('ss-ridge').value).toPrecision(2);
+    }
+    ssLabels();
+    window.__lsSS = { place: (c) => ssPlace(c), build: (w) => ssBuild(w),
+      sample: () => ssSample(), draw: () => ssDraw(true),
+      train: () => { ss.model && ss.model.train(); ssStatus(); },
+      lock: () => { ss.model && ss.model.lock(); ssStatus(); },
+      state: () => (ss.model ? { ...ss.model.status(), cell: ss.cell, coords: ss.coords,
+        sensor: probe.coords, series: ss.model.series.length,
+        matured: ss.model.matured.length, live: ss.model.live,
+        misses: ss.misses, every: ss.every } : null) };
 
     (() => {
       const stage = $('stage');
@@ -898,7 +1282,7 @@
       const pt = (e) => (e.touches && e.touches[0]) || e;
       const down = (e) => { const p = pt(e); last = [p.clientX, p.clientY]; dragged = false; };
       const move = (e) => {
-        if (!last || probe.armed) return;
+        if (!last || probe.armed || ss.armed) return;
         const p = pt(e);
         stirAt(p.clientX, p.clientY, p.clientX - last[0], p.clientY - last[1]);
         last = [p.clientX, p.clientY];
@@ -916,7 +1300,15 @@
           // guessing from the gesture would make one of them unreachable.
           if (probe.armed && state.view === 'slice') {
             const hit = cellAtScreen(last[0], last[1]);
-            if (hit) { probePlace(hit.coords); probe.armed = false; probeStatus(); }
+            if (hit) {
+              probePlace(hit.coords); probe.armed = false; probeStatus();
+              // The sensor moved, so anything learned from its old position is
+              // about a different signal. Rebuild rather than carry it over.
+              if (ss.model) ssBuild('sensor moved');
+            }
+          } else if (ss.armed && state.view === 'slice') {
+            const hit = cellAtScreen(last[0], last[1]);
+            if (hit) { ssPlace(hit.coords); ss.armed = false; ssStatus(); }
           } else {
             stirAt(last[0], last[1], 1, 0);
           }
@@ -976,12 +1368,12 @@
         }
       }
       drawOnce();
-      probeMark();
+      probeMark(); ssMark();
     });
     $('mode').addEventListener('change', () => drawOnce());
-    $('axis').addEventListener('change', () => { drawOnce(); probeMark(); probeDraw(true); });
+    $('axis').addEventListener('change', () => { drawOnce(); probeMark(); ssMark(); probeDraw(true); });
     $('slicep').addEventListener('input', () => {
-      $('slicep-v').textContent = Math.round(+$('slicep').value * 100) + '%'; drawOnce(); probeMark();
+      $('slicep-v').textContent = Math.round(+$('slicep').value * 100) + '%'; drawOnce(); probeMark(); ssMark();
     });
     $('spf').addEventListener('input', () => { $('spf-v').textContent = $('spf').value; });
     // SAY IT BEFORE IT HAPPENS, not after. tau and inlet speed together decide
@@ -1096,7 +1488,7 @@
     stabilityHint();
     lidHint();
     probeStatus();
-    window.addEventListener('resize', () => probeMark());
+    window.addEventListener('resize', () => { probeMark(); ssMark(); });
     probeLimits()
       .then(() => { clampResolution(); return build(); })
       .then(() => console.log(state.sim ? 'lattsim ready ✓' : 'lattsim failed to build'));
