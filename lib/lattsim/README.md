@@ -187,6 +187,71 @@ the page falls back to the slice view, a visualisation being unable to take a
 simulation with it; the suite compiles the volume shader (where a WGSL mistake
 would live) and leaves the picture to a real device.
 
+## Vortex shedding, and why the first version could never do it
+
+The channel scene shipped with a **sphere** at Re ~ 58 and was asked why it did
+not shed. It should not have: the threshold depends on the SHAPE, and a sphere's
+is nearly six times a cylinder's.
+
+| obstacle | wake goes unsteady at | why |
+|---|---|---|
+| circular cylinder | Re ~ 47 | the classic Hopf bifurcation to a von Karman street |
+| sphere | Re ~ 270 | steady axisymmetric to ~210, steady-but-asymmetric to ~270, only then hairpin shedding |
+
+Measured in-browser, transverse wake velocity sampled five diameters downstream,
+second half of a 9000-step run:
+
+| obstacle | Re | wake fluctuation | trend | Strouhal |
+|---|---|---|---|---|
+| cylinder | 48 | 0.02% of U | decaying, 0.04x | — |
+| cylinder | 72 | 1.5% of U | decaying, 0.49x | 0.219 |
+| cylinder | 120 | **25% of U** | sustained, 1.17x | **0.303** |
+| sphere | 48 | 0.00% of U | decaying, 0.09x | — |
+| sphere | 216 | — | **diverged** | — |
+
+Three things follow, and the last one is the real constraint.
+
+**The cylinder is the shape to watch.** It sheds, the fluctuation is a quarter of
+the free-stream speed, and St ~ 0.30 against a free-stream textbook 0.2 — raised
+by the confinement, as it should be at this blockage.
+
+**The threshold here is between Re 72 and 120, not 47.** Both sub-critical rows
+oscillate at roughly the right Strouhal number (0.219 at Re 72) while DECAYING —
+that is a damped oscillation at the natural frequency, which is exactly what a
+sub-critical wake does. Confinement raises the critical Reynolds number above
+the free-stream 47, so the shipped default is set to Re 120 rather than to
+something just past the textbook figure.
+
+**Right at the textbook threshold it correctly does NOT shed.** Re 48 decays by
+25x over the run. A scene that oscillated at every Reynolds number would be
+showing numerical noise, not physics — the decay ratio is what separates the two,
+and it is why the measurement reports late/early rather than an amplitude.
+
+**The sphere cannot reach its own threshold at low resolution.** Getting Re to
+270 by lowering tau and raising u runs out of stability first — Re 216 diverged
+outright. Reaching it needs the diameter to grow instead, i.e. the top of the
+resolution ladder. LBM couples accuracy, stability and Reynolds number through
+the same two knobs, and this is what that coupling costs.
+
+So the scene now: obstacle is **selectable**, blockage is down from 33% to ~20%
+(confinement raises the threshold and distorts the street), the channel is **3x
+long** rather than 2x so the wake has somewhere to go before a first-order
+outlet reflects it, and the obstacle sits **one cell off the centreline**.
+
+The **resolution slider now sweeps through the threshold on its own**: at the
+default tau and inlet speed the ladder runs Re 72 / 72 / 120 / 144 / 240, because
+a bigger lattice means a bigger obstacle diameter at fixed blockage. That is the
+stable way to raise Reynolds number in LBM — the other two knobs, lower tau and
+higher u, both walk toward the stability limit, which is what killed the sphere
+at Re 216.
+
+That last one matters more than it looks. A perfectly symmetric obstacle in a
+symmetric channel is an unstable EQUILIBRIUM above the critical Reynolds number:
+the instability has nothing to grow from except round-off, so a supercritical run
+can sit there looking steady for a very long time. Real cylinders are not
+perfectly centred either. The page also reports the threshold next to the live
+Reynolds number, so "why is nothing happening" is answerable from the screen.
+
 ## Poking it, and knowing when it has settled
 
 **A steady state is a claim, and it needs an instrument.** "The obstacle scene

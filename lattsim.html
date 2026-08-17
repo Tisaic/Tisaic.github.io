@@ -8,7 +8,7 @@
   <title>LattSim — Lattice Physics Engine</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:116,built:"2026-08-16T21:24:07Z"}; // __LATTSIM_STAMP__</script>
+  <script>window.__BUILD = {version:117,built:"2026-08-17T00:02:37Z"}; // __LATTSIM_STAMP__</script>
   <script src="console-boot.js"></script>
 
   <style>
@@ -97,6 +97,11 @@
       <button id="run">Run ▶</button>
       <button id="reset" class="sec">Reset</button>
       <select id="scene" aria-label="Scene"></select>
+      <select id="obstacle" aria-label="Obstacle">
+        <option value="cylinder">cylinder</option>
+        <option value="sphere">sphere</option>
+        <option value="plate">flat plate</option>
+      </select>
     </div>
     <div class="controls">
       <label class="slider">Stir strength <input type="range" id="stir" min="0.2" max="8" step="0.2" value="2" />
@@ -118,12 +123,12 @@
       </select>
     </div>
     <div class="controls">
-      <label class="slider">Resolution <input type="range" id="res" min="0" max="4" step="1" value="1" />
+      <label class="slider">Resolution <input type="range" id="res" min="0" max="4" step="1" value="2" />
         <span class="v" id="res-v">48³</span></label>
-      <label class="slider">Viscosity (τ) <input type="range" id="tau" min="0.51" max="1.4" step="0.005" value="0.55" />
-        <span class="v" id="tau-v">0.550</span></label>
-      <label class="slider">Inlet speed <input type="range" id="uin" min="0.005" max="0.12" step="0.005" value="0.06" />
-        <span class="v" id="uin-v">0.060</span></label>
+      <label class="slider">Viscosity (τ) <input type="range" id="tau" min="0.505" max="1.4" step="0.005" value="0.52" />
+        <span class="v" id="tau-v">0.520</span></label>
+      <label class="slider">Inlet speed <input type="range" id="uin" min="0.005" max="0.14" step="0.005" value="0.08" />
+        <span class="v" id="uin-v">0.080</span></label>
       <label class="slider">Steps / frame <input type="range" id="spf" min="1" max="40" step="1" value="6" />
         <span class="v" id="spf-v">6</span></label>
       <label class="slider">Slice position <input type="range" id="slicep" min="0" max="1" step="0.02" value="0.5" />
@@ -338,6 +343,7 @@
         tau: +$('tau').value,
         inletVelocity: +$('uin').value,
         lidVelocity: +$('uin').value,
+        obstacle: $('obstacle').value,
       });
       const mem = sim.memoryEstimate();
       $('s-mem').textContent = `${formatBytes(mem.bytes)} over ${mem.items.length} field(s)`;
@@ -376,8 +382,16 @@
           $('slicep-v').textContent = Math.round(v.slicePosition * 100) + '%';
         }
       }
-      $('s-re').textContent = sim.meta && sim.meta.reynolds ? sim.meta.reynolds.toFixed(0) : '—';
-      state.lastStep = 0; state.lastT = performance.now();
+      // Re ALONE DOES NOT ANSWER "should this shed?" -- the threshold depends on
+      // the shape, and a sphere's is nearly 6x a cylinder's. Stating both turns
+      // "why is nothing happening?" into a number the user can act on.
+      if (sim.meta && sim.meta.reynolds) {
+        const Re = sim.meta.reynolds, crit = sim.meta.sheddingRe;
+        $('s-re').innerHTML = Re.toFixed(0) + (crit
+          ? ` — <span class="${Re > crit ? 'good' : ''}">${Re > crit ? 'above' : 'below'} the `
+            + `${sim.meta.obstacle || ''} shedding threshold (~${crit})</span>` : '');
+      } else $('s-re').textContent = '—';
+      state.lastStep = 0; state.lastT = performance.now(); state.uMax = 0;
       applyView();
       // THE VOLUME RENDERER IS BOUND TO A SIMULATION, so a rebuild destroys it --
       // and it therefore has to be REBUILT HERE. It used to be created only by
@@ -435,7 +449,16 @@
         if (!state.volume) return;       // created by the view switch, not here
         const r = $('stage').getBoundingClientRect();
         const [W, H] = state.volume.resize(r.width, r.height);
-        state.volume.scale = Math.max(1e-4, +$('uin').value * 1.4);
+        // SCALE FROM THE DATA, exactly as the 2D slice does. Taking it from the
+        // inlet-speed slider assumed every scene is driven by that slider --
+        // Poiseuille is driven by a BODY FORCE and ignores it entirely, so its
+        // 0.02 peak was normalised against 0.084 and, since the shader's opacity
+        // is nv^2, rendered at 1/17th of its proper strength: a black box.
+        // uMax comes free from the diagnostics reduction; the scene's declared
+        // reference speed covers the moment before the first reading, when the
+        // fluid is still at rest and uMax is 0.
+        const ref = (state.sim.meta && state.sim.meta.referenceSpeed) || +$('uin').value;
+        state.volume.scale = Math.max(1e-4, (state.uMax > 1e-6 ? state.uMax : ref) * 1.05);
         state.volume.mode = $('mode').value === 'density' ? 1 : 0;
         const ok = state.volume.render(state.camera.invViewProj(W / H), state.camera.eye());
         if (!ok) {
@@ -462,6 +485,7 @@
       $('s-mom').textContent = Math.hypot(...d.momentum).toExponential(3);
       $('s-rho').textContent = `${d.rhoMin.toFixed(5)} … ${d.rhoMax.toFixed(5)}`;
       $('s-umax').textContent = d.uMax.toFixed(5);
+      state.uMax = d.uMax;              // the 3D view's colour scale
       $('s-res').innerHTML = d.residual === undefined ? '—'
         : `<span class="${d.residual < 1e-3 ? 'good' : ''}">${d.residual.toExponential(2)}</span>`
           + (d.residual < 1e-3 ? ' — steady' : '');
@@ -582,7 +606,10 @@
 
     $('run').addEventListener('click', () => (state.running ? stop() : start()));
     $('reset').addEventListener('click', () => build());
-    $('scene').addEventListener('change', () => { clampResolution(); build(); });
+    $('scene').addEventListener('change', () => { clampResolution(); syncObstacle(); build(); });
+    $('obstacle').addEventListener('change', () => build());
+    // The obstacle only means anything in the channel scene.
+    function syncObstacle() { $('obstacle').disabled = $('scene').value !== 'channel'; }
     $('res').addEventListener('input', clampResolution);
     $('res').addEventListener('change', () => build());
     $('view').addEventListener('change', async () => {
@@ -652,6 +679,7 @@
     window.__lsSim = () => state.sim;
     window.__lsUnits = UnitSystem;
 
+    syncObstacle();
     probeLimits()
       .then(() => { clampResolution(); return build(); })
       .then(() => console.log(state.sim ? 'lattsim ready ✓' : 'lattsim failed to build'));

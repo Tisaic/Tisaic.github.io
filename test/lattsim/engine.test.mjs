@@ -264,6 +264,42 @@ if (FULL) {
     const view = (sim.meta && sim.meta.view) || {};
     check(`${key}: declares a preferred slice plane`, view.sliceAxis !== undefined, JSON.stringify(view));
 
+    // A DECLARED REFERENCE SPEED, and one that matches the flow. The 2D slice
+    // auto-scales from the data it reads back; the volume renderer never reads
+    // anything back, so it needs a number up front. Taking that number from the
+    // inlet-speed slider assumed every scene is driven by it -- Poiseuille is
+    // force-driven and ignores it, so its 0.02 peak was normalised against
+    // 0.084, and the shader's opacity is nv^2, so it rendered at 1/17th
+    // strength: a black box. A reference that is merely PRESENT is not enough;
+    // it has to be the right order of magnitude, which is what this pins.
+    // Shedding thresholds are per SHAPE, and the gap is the whole reason the
+    // shipped sphere at Re ~58 never shed: a cylinder goes unsteady at Re ~47,
+    // a sphere not until ~270. Pinned so a later edit cannot quietly make the
+    // page claim a scene should shed when it cannot.
+    if (key === 'channel') {
+      const { channelFlow } = await import('../../lib/lattsim/scenes.js');
+      const cyl = channelFlow({ resolution: 20, obstacle: 'cylinder' });
+      const sph = channelFlow({ resolution: 20, obstacle: 'sphere' });
+      check('channel: a sphere is far harder to shed than a cylinder',
+        sph.meta.sheddingRe > 4 * cyl.meta.sheddingRe,
+        `cylinder ${cyl.meta.sheddingRe} vs sphere ${sph.meta.sheddingRe}`);
+      // The obstacle must sit OFF the centreline, or a supercritical run has
+      // nothing but round-off to grow its instability from and can look steady
+      // indefinitely.
+      check('channel: the obstacle is offset from the centreline (so shedding can start)',
+        cyl.meta.obstacleOffset !== 0, String(cyl.meta.obstacleOffset));
+      // And the wake needs room before a first-order outlet reflects it.
+      check('channel: the domain is long enough for a wake',
+        cyl.lattice.nx >= 3 * cyl.lattice.ny, `${cyl.lattice.nx} x ${cyl.lattice.ny}`);
+    }
+
+    const dref = await sim.diagnostics();
+    const ref = sim.meta && sim.meta.referenceSpeed;
+    check(`${key}: declares a reference speed`, typeof ref === 'number' && ref > 0, String(ref));
+    check(`${key}: the reference speed matches the flow it has to colour`,
+      dref.uMax > 0.2 * ref && dref.uMax < 6 * ref,
+      `uMax ${dref.uMax.toExponential(2)} vs reference ${Number(ref).toExponential(2)}`);
+
     const N = sim.lattice.cellCount, L = sim.lattice;
     const mac = await sim.backend.snapshot('macro');
     const spreadOn = (axis) => {

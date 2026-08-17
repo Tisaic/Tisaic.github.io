@@ -755,6 +755,18 @@ if (hasGPU && ls0.backend === 'webgpu') {
   await latt.waitForFunction(() => !window.__lsDbg().building, null, { timeout: 120000 });
   await latt.selectOption('#scene', 'channel');
   await latt.waitForFunction(() => !window.__lsDbg().building, null, { timeout: 60000 });
+  // FORCE A LAMINAR REGIME FOR THE SETTLE TEST. The shipped defaults now sit at
+  // Re ~120, ABOVE this geometry's shedding threshold -- so the channel is
+  // supposed to oscillate forever and "the residual falls to steady" is the
+  // wrong expectation for it. Asking a shedding flow to converge would be
+  // testing that the physics is absent. tau 0.6 / u 0.04 puts Re near 7.
+  await latt.evaluate(() => {
+    const t = document.getElementById('tau'); t.value = '0.6'; t.dispatchEvent(new Event('input'));
+    const u = document.getElementById('uin'); u.value = '0.04'; u.dispatchEvent(new Event('input'));
+    u.dispatchEvent(new Event('change'));
+  });
+  await latt.waitForFunction(() => !window.__lsDbg().building && !window.__lsDbg().queued,
+    null, { timeout: 120000 });
   await latt.selectOption('#axis', '1');
   await latt.evaluate(() => {
     const s = document.getElementById('slicep'); s.value = '0.25';

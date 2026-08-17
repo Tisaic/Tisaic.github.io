@@ -303,6 +303,45 @@ the shipped commit carries the correct version.
    the resolution-convergence study and the long parity runs are `--full`. Run
    `--full` before pushing anything that touches the solver, the collision
    operator or the boundaries.
+   **VORTEX SHEDDING: THE SCENE COULD NEVER HAVE DONE IT (v117).** Asked why the
+   channel did not shed. It should not have — the threshold depends on the SHAPE,
+   and the shipped obstacle was a SPHERE at Re ~58. A circular cylinder goes
+   unsteady at Re ~47 (the classic Hopf bifurcation); a sphere stays steady and
+   axisymmetric to ~210, steady-but-asymmetric to ~270, and only then sheds
+   hairpin vortices — nearly 6× the cylinder's threshold.
+   MEASURED IN-BROWSER (transverse wake velocity 5 diameters downstream, second
+   half of a 9000-step run): cylinder Re 48 → 0.02% of U, DECAYING 0.04×;
+   Re 72 → 1.5%, still decaying 0.49×, but oscillating at **St 0.219** (textbook
+   0.2); Re 120 → **25% of U, sustained, St 0.303** — a real von Kármán street.
+   Sphere Re 48 → 0.00%, steady; sphere Re 216 → **DIVERGED**.
+   THAT LAST ROW IS THE CONSTRAINT: the sphere CANNOT REACH ITS OWN THRESHOLD at
+   low resolution, because getting Re to 270 by lowering τ and raising u runs out
+   of stability first. Reynolds number has to come from DIAMETER instead, i.e.
+   the resolution ladder — which at the default τ and u now runs Re 72/72/120/
+   144/240, so the resolution slider sweeps through the threshold by itself.
+   THE SUB-CRITICAL ROWS OSCILLATE AT THE RIGHT FREQUENCY WHILE DECAYING, which
+   is what a damped wake does and is why the measurement reports late/early
+   rather than an amplitude — an amplitude alone cannot tell a decaying
+   oscillation from a sustained one, and this scene has both.
+   The confined threshold is between Re 72 and 120, ABOVE the free-stream 47,
+   because blockage raises it. So: obstacle is now SELECTABLE (cylinder default),
+   blockage cut 33% → ~20%, the channel is 3× long rather than 2× (a first-order
+   outlet reflects a truncated wake), and the obstacle sits ONE CELL OFF THE
+   CENTRELINE — a perfectly symmetric obstacle is an unstable EQUILIBRIUM above
+   critical, with nothing but round-off to grow from, so a supercritical run can
+   look steady indefinitely. The page reports the threshold next to the live Re.
+   **THE 3D VIEW WAS SCALED BY THE WRONG NUMBER (v117).** Reported as "the
+   poiseuille 3d is not rendering anything". The 2D slice AUTO-SCALES from the
+   data it reads back; the volume renderer never reads anything back, so the page
+   handed it the INLET-SPEED SLIDER. Poiseuille is force-driven and ignores that
+   slider entirely — its 0.02 peak was normalised against 0.084, and since the
+   shader's opacity is **nv²**, it rendered at **1/17th** strength: a black box.
+   Channel and cavity looked fine only because the slider IS their driving speed.
+   Fixed by scaling from `uMax`, which the diagnostics reduction already computes
+   on-device for free, with a scene-declared `referenceSpeed` covering the moment
+   before the first reading when the fluid is still at rest. A regression pins
+   that every scene declares one AND that it matches the achieved peak within a
+   factor — a reference that is merely PRESENT would not have caught this.
    **DELIBERATELY NOT BUILT YET:** heat, diffusion, elasticity, electromagnetics,
    multiphysics coupling and adaptive resolution are architecture rather than
    code. Operators declare the fields they read and write and the solver rejects
