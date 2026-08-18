@@ -8,7 +8,7 @@
   <title>LattSim — Lattice Physics Engine</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:139,built:"2026-08-17T23:39:10Z"}; // __LATTSIM_STAMP__</script>
+  <script>window.__BUILD = {version:140,built:"2026-08-18T00:49:33Z"}; // __LATTSIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -227,9 +227,9 @@
     <div class="controls">
       <label class="slider">Resolution <input type="range" id="res" min="0" max="5" step="1" value="2" />
         <span class="v" id="res-v">48³</span></label>
-      <label class="slider">Viscosity (τ) <input type="range" id="tau" min="0.5015" max="1.4" step="0.0005" value="0.52" />
+      <label class="slider">Viscosity (τ) <input type="range" id="tau" min="0.5001" max="2.5" step="0.0005" value="0.52" />
         <span class="v" id="tau-v">0.520</span></label>
-      <label class="slider">Inlet speed <input type="range" id="uin" min="0.005" max="0.14" step="0.005" value="0.08" />
+      <label class="slider">Inlet speed <input type="range" id="uin" min="0.005" max="0.35" step="0.005" value="0.08" />
         <span class="v" id="uin-v">0.080</span></label>
       <label class="slider">Lid amplitude <input type="range" id="lidamp" min="0.005" max="0.14" step="0.005" value="0.05" />
         <span class="v" id="lidamp-v">0.050</span></label>
@@ -255,6 +255,7 @@
       <dt>residual |Δu|/|u| per step</dt><dd id="s-res">—</dd>
       <dt>stability</dt><dd id="s-stable">—</dd>
       <dt>τ / speed pairing</dt><dd id="s-risk">—</dd>
+      <dt>ν and Mach number</dt><dd id="s-mach">—</dd>
       <dt>limiter</dt><dd id="s-lim">—</dd>
       <dt>probe</dt><dd id="s-probe">no probe placed</dd>
       <dt>Reynolds</dt><dd id="s-re">—</dd>
@@ -606,6 +607,21 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
 
     async function drawOnce() {
       if (!state.sim) return;
+      // A REBUILD CAN LAND MID-FRAME. The backend this frame started drawing may
+      // already be destroyed by the time it reads -- two slider changes in quick
+      // succession queue two rebuilds, and dragging the widened viscosity and
+      // speed sliders does exactly that. A stale read is a benign race, so it is
+      // skipped; anything else is a real fault and still surfaces.
+      try {
+        return await drawOnceInner();
+      } catch (e) {
+        if (e && e.stale) return;         // the run being drawn was replaced
+        throw e;
+      }
+    }
+
+    async function drawOnceInner() {
+      if (!state.sim) return;
       if (state.view === 'volume' && state.sim.backend.kind === 'webgpu') {
         if (!state.volume) return;       // created by the view switch, not here
         const r = $('stage').getBoundingClientRect();
@@ -650,8 +666,12 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
       $('s-res').innerHTML = d.residual === undefined ? '—'
         : `<span class="${d.residual < 1e-3 ? 'good' : ''}">${d.residual.toExponential(2)}</span>`
           + (d.residual < 1e-3 ? ' — steady' : '');
+      const limPct = 100 * d.limited / state.sim.lattice.cellCount;
       $('s-lim').innerHTML = d.limited > 0
-        ? `<span class="warn">${d.limited} cell(s) held</span> — rescued, not solved`
+        ? `<span class="${limPct > 1 ? 'bad' : 'warn'}">${d.limited} cell(s) held`
+          + ` (${limPct < 0.01 ? '<0.01' : limPct.toFixed(2)}% of the lattice)</span>`
+          + (limPct > 1 ? ' — this is a rescued simulation, not a solved one'
+            : ' — rescued, not solved')
         : '<span class="good">not engaged</span>';
       const cls = { ok: 'good', marginal: 'warn', unstable: 'warn', limited: 'warn', diverged: 'bad' }[d.stable.state];
       $('s-stable').innerHTML = `<span class="${cls}">${d.stable.state}</span>` + (d.stable.why ? ` — ${d.stable.why}` : '');
@@ -802,7 +822,14 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
       state.raf = requestAnimationFrame(tick);
       if (!state.sim || state.busy) return;
       state.busy = true;
-      frameWork(now).catch((e) => console.error(e)).finally(() => { state.busy = false; });
+      // ONE CHOKE POINT FOR THE REBUILD RACE. A frame touches the backend from
+      // four places -- the stats reduction, the renderer, the probe and the soft
+      // sensor -- and a rebuild landing mid-frame invalidates all of them at once.
+      // Guarding them one at a time means the next one added is unguarded; the
+      // frame either completed against the run it started on or it did not.
+      frameWork(now)
+        .catch((e) => { if (!(e && e.stale)) console.error(e); })
+        .finally(() => { state.busy = false; });
     }
 
     function start() { if (state.running) return; state.running = true; $('run').textContent = 'Pause ⏸'; state.lastT = performance.now(); state.raf = requestAnimationFrame(tick); }
@@ -1461,13 +1488,40 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
       const risk = u / nu;
       const cls = risk > CEILING ? 'bad' : risk > MARGINAL ? 'warn' : '';
       for (const id of ['tau-v', 'uin-v']) $(id).className = 'v ' + cls;
+      // MACH NUMBER, because the ranges now reach where it MATTERS and it is a
+      // different failure from the cell Reynolds number. Lattice Boltzmann solves
+      // the incompressible equations only in the limit of small Ma, and its
+      // compressibility error grows as Ma^2 -- so at the top of the speed slider
+      // the density swings are not instability, they are the method being used
+      // outside its own approximation. Both numbers are shown because a run can
+      // be ruined by either one alone, and they do not move together: raising the
+      // speed raises both, while lowering the viscosity raises only Re_cell.
+      const mach = u * Math.sqrt(3);
+      const mcls = mach > 0.3 ? 'bad' : mach > 0.15 ? 'warn' : 'good';
+      $('s-mach').innerHTML = `ν ${nu.toExponential(2)} · Ma ${mach.toFixed(3)} — `
+        + (mach > 0.3
+          ? `<span class="bad">compressibility error ~${(mach * mach * 100).toFixed(0)}%; `
+            + 'the density field is doing work the incompressible equations do not have</span>'
+          : mach > 0.15
+            ? `<span class="warn">Ma² is ${(mach * mach * 100).toFixed(1)}% — visible density swings</span>`
+            : '<span class="good">effectively incompressible</span>');
       // The run cannot crash, so this is no longer a divergence warning -- it is
       // a warning about ACCURACY. Past the ceiling the limiter starts holding
       // cells up, and those cells stop solving the equations they were given.
-      $('s-risk').innerHTML = `Re<sub>cell</sub> ${risk.toFixed(0)} — ` + (cls === 'bad'
-        ? '<span class="bad">the limiter will hold cells up; the answer is being rescued, not solved</span>'
-        : cls === 'warn' ? '<span class="warn">marginal — expect some limiting</span>'
-        : '<span class="good">within the measured stable range</span>');
+      // Past ~10x the ceiling the description "some limiting" stops being useful:
+      // measured at Cs 0, nearly half the lattice was held at the clamp. The
+      // wording escalates so the far end of the slider does not read the same as
+      // the edge of the tested range.
+      const far = risk > 10 * CEILING;
+      $('s-risk').innerHTML = `Re<sub>cell</sub> ${risk < 1 ? risk.toFixed(3) : risk.toFixed(0)} — `
+        + (far
+          ? '<span class="bad">far past the measured range — expect a large fraction of the '
+            + 'lattice held at the clamp; read the limiter row, not the picture</span>'
+          : cls === 'bad'
+            ? '<span class="bad">the limiter will hold cells up; the answer is being rescued, not solved</span>'
+            : cls === 'warn' ? '<span class="warn">marginal — expect some limiting</span>'
+              : risk < 1 ? '<span class="good">viscous (Stokes) — diffusion dominates advection</span>'
+                : '<span class="good">within the measured stable range</span>');
     }
     $('tau').addEventListener('input', () => { $('tau-v').textContent = (+$('tau').value).toFixed(3); stabilityHint(); lidHint(); });
     $('tau').addEventListener('change', () => build());

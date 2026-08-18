@@ -553,6 +553,41 @@ the shipped commit carries the correct version.
    than implied by call order; the lattice owns its spacing and indexing rather
    than assuming unit cells, which is what keeps refinement possible.
 
+   **THE SLIDER RANGES REACH PAST WHAT THE SOLVER CAN SOLVE, ON PURPOSE (v140).**
+   τ now runs 0.5001–2.5 (ν 3.3e-5 to 0.667, four decades) and the inlet speed
+   0.005–0.35, which is the velocity clamp itself. Measured at res 24 after 2000
+   steps, every corner FINITE with no page errors:
+     τ 0.52   u 0.08   Re_cell    12 · Ma 0.139 · 0 held      · ρ 0.991–1.104
+     τ 0.5001 u 0.35   Re_cell 10500 · Ma 0.606 · 9.77% held  · ρ 1.140–2.000
+     τ 0.5001 u 0.005  Re_cell   150 · Ma 0.009 · 0 held      · ρ 0.996–1.002
+     τ 2.5    u 0.35   Re_cell   0.5 · Ma 0.606 · 1.39% held  · ρ 0.971–2.000
+     τ 2.5    u 0.005  Re_cell 0.008 · Ma 0.009 · 0 held      · ρ 0.998–1.131
+   Re_cell 10500 is **52× past** the range the sub-grid model was measured over and
+   the limiter still holds: a NaN is caught in the cell where it appears, so it
+   never streams to a neighbour.
+   **MACH IS A SEPARATE FAILURE FROM Re_cell, AND THE τ 2.5 ROW PROVES IT.** LBM
+   solves the incompressible equations only as Ma → 0 and its error grows as Ma²,
+   so at u 0.35 (Ma 0.606, Ma² = 37%) the density clamp is reached at BOTH ends of
+   the viscosity range — including τ 2.5, where the flow is deeply viscous, Re_cell
+   is 0.5 and every Reynolds criterion calls it safe. A page reporting Re_cell
+   alone would have called that corner fine while ρ sat pinned at its clamp. Also
+   note ρ**min** = 1.140 at the worst corner: the ENTIRE lattice is 14% above rest,
+   because at Ma 0.6 the inlet rams fluid in faster than the outlet passes it.
+   **AND THE NEW CHECKS IMMEDIATELY CAUGHT A REAL DEFECT.** `read()` did
+   `this.buffers.get(name).a` and `destroy()` clears that map, so two slider changes
+   in quick succession — which is what dragging these sliders now does — let a frame
+   already in flight read a destroyed backend: `Cannot read properties of undefined
+   (reading 'a')`, a red badge, and nothing to say a benign race caused it. The
+   backend now throws a NAMED error carrying `stale`, and the frame is guarded at
+   ONE choke point rather than per caller: a frame touches the backend from four
+   places (the stats reduction, the renderer, the probe, the soft sensor) and a
+   rebuild invalidates all of them at once, so guarding them individually only
+   guarantees the next one added is unguarded. My first attempt guarded `drawOnce`
+   and the throw came from `refreshStats` — the suite caught that too.
+   THE INSTRUMENT THAT FOUND IT WAS THE ERROR BUFFER, NOT A FUNCTIONAL CHECK. Every
+   physics assertion passed; the simulation was correct throughout. Same instrument,
+   and the same reason, as the unhandled `mapAsync` rejection in v114.
+
 5. **Soft sensor on the lattice** (in the LattSim page, under the probe chart) —
    TWO POINTS ON ONE LATTICE: the probe is the **sensor**, the point you could
    actually instrument, and a second marker is the **target**, the point you could

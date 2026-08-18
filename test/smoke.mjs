@@ -1207,6 +1207,60 @@ await latt.screenshot({ path: join(SHOTS, '09-lattsim.png') });
     ran.estimate.ratio > 1.2,
     `${ran.estimate.nrmse} vs ${ran.estimate.baseline} (x${ran.estimate.ratio})`);
 
+  // ------------------------------------------------------- the slider stops
+  // THE RANGES REACH PAST WHAT THE SOLVER CAN SOLVE, ON PURPOSE, so the guarantee
+  // that matters is that it stays FINITE and says what it is doing. Re_cell 10500
+  // is 52x past the range the sub-grid model was measured over; the limiter catches
+  // a NaN in the cell where it appears and replaces it with the equilibrium at
+  // sanitised moments, so it can never stream to a neighbour. Asserted rather than
+  // assumed, because "clamps" and "goes non-finite and freezes" are the two
+  // outcomes this whole mechanism exists to separate.
+  await latt.evaluate(() => {
+    const set = (id, v) => {
+      const el = document.getElementById(id);
+      el.value = String(v);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    set('tau', 0.5001); set('uin', 0.35);
+  });
+  // A SIMULATION OBJECT EXISTS BEFORE IT IS BUILT, so "not null" is not the
+  // condition to wait on -- `advance()` throws "call build() first" until the
+  // solver is attached, and two slider changes queue two rebuilds so there is a
+  // window where neither holds. Wait for the SOLVER, and wrap the whole probe:
+  // a check that THROWS takes every later check in the run with it, which is
+  // strictly worse than one that fails. The first two versions of this crashed
+  // the suite and hid everything downstream both times.
+  const stops = await latt.evaluate(async () => {
+    try {
+      const ready = () => { const sim = window.__lsSim(); return !!(sim && sim.solver); };
+      for (let i = 0; i < 240 && !ready(); i++) await new Promise((r) => setTimeout(r, 250));
+      if (!ready()) return { error: 'no built simulation after 60s' };
+      window.__lsStep(1200);
+      const d = await window.__lsDiag();
+      if (!d) return { error: 'no diagnostics' };
+      return { uMax: d.uMax, rho: [d.rhoMin, d.rhoMax], limited: d.limited,
+        cells: window.__lsSim().lattice.cellCount, state: d.stable.state,
+        risk: document.getElementById('s-risk').textContent,
+        mach: document.getElementById('s-mach').textContent };
+    } catch (e) { return { error: String((e && e.message) || e) }; }
+  });
+  check('lattsim: the extreme corner of the sliders stays finite',
+    stops && !stops.error && Number.isFinite(stops.uMax) && Number.isFinite(stops.rho[0])
+    && Number.isFinite(stops.rho[1]), JSON.stringify(stops));
+  // It MUST be limited there -- if nothing clamped, either the corner is no longer
+  // extreme or the limiter stopped working, and both need to be noticed.
+  check('lattsim: and reports that it is being held up rather than solved',
+    stops && stops.limited > 0 && stops.state === 'limited',
+    stops ? `${stops.limited} of ${stops.cells} cells, verdict ${stops.state}` : 'no diagnostics');
+  // Mach and Re_cell are INDEPENDENT failures, and the readout has to name both.
+  // Measured: at tau 2.5 the flow is viscous (Re_cell 0.5, safe by the Reynolds
+  // criterion) and still clamps, purely from compressibility.
+  check('lattsim: the risk rows name both the Reynolds and the Mach failure',
+    stops && /far past the measured range/.test(stops.risk)
+    && /compressibility error/.test(stops.mach),
+    stops ? stops.risk + ' | ' + stops.mach : 'no diagnostics');
+
   const lockedMode = await latt.evaluate(() => {
     const before = window.__lsSS.state().trained;
     window.__lsSS.lock();
