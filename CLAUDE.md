@@ -656,6 +656,35 @@ the shipped commit carries the correct version.
    THE SAME QUESTION THE PHYSICS SIDE ASKS OF A WAKE BEFORE SCORING A FORECAST ON
    IT, and it was asked there and then not asked here — the third repetition in one
    session of "a measurement taken across a transient describes the transient".
+   **THE RIDGE SLIDER IS THE RECIPROCAL OF A RIDGE, AND WAS LABELLED AS ONE.**
+   Recursive least squares started from P0 = v·I reaches the ridge-regression
+   solution with penalty λ = 1/v, so a LARGER slider value is a LOOSER fit — and
+   "Ridge 100" read as heavy shrinkage while meaning almost none. Measured on the
+   driven cavity, all seven values fed ONE stream so the only difference between
+   rows is the parameter (estimate nRMSE · amplitude ratio, 139-feature basis):
+     0.01 → 0.502 · 0.806    1 → 0.135 · 0.954    100 → 0.053 · 0.981
+     0.1  → 0.259 · 0.896   10 → 0.075 · 0.969   1000 → 0.046 · 0.990
+                                              10000 → 0.044 · 0.996
+   Monotone over four decades, worth **11×**, and the 13-feature basis has the
+   identical shape (0.604 → 0.051). THE AMPLITUDE RATIO IS THE MECHANISM: at the
+   tight end the estimate tracks the SHAPE but covers only 80% of the truth's
+   range, because shrinkage pulls the readout toward the target's mean. That is
+   invisible in an nRMSE, which cannot separate a flattened estimate from a noisy
+   one.
+   WHY THERE IS NO OVERFITTING PENALTY AT THE LOOSE END, which is the part that
+   overturned the expectation: **a simulation is noiseless**. Regularisation exists
+   to stop a fit chasing observation noise, and there is none here, so at a 10:1
+   sample-to-feature margin the bias it prevents is pure cost. Every row was still
+   improving at 1400 samples AND the loose ridges were also better at 500, so there
+   is no early/late crossover — the "tight converges faster" intuition is about
+   noisy plants. On a noisy or short record the trade reverses, which is the regime
+   a real soft sensor lives in.
+   THE DEFAULT STAYS AT 100 despite 1000 measuring better here, because that is one
+   scene, one target and no noise — and this project already has the scar: the
+   double pendulum needed a ridge 1000× tighter than the value measured optimal on
+   Lorenz, since a conservative system does not self-correct and a dissipative one
+   forgives. The label now shows both numbers (`100 · λ 0.01`) so the direction is
+   visible where it is used rather than remembered.
    **`__lsSSdbg()`** reports the frozen input scales, the target's frozen mean and
    spread against its live ones, the saturation and recalibration counts, the
    weight norms, the covariance traces and the ranges of truth against estimate.
