@@ -328,5 +328,45 @@ function drive(ss, nSamples, step0 = 0) {
 }
 
 
+// ------------------------------------------------------------------ 2 sensors
+// A SECOND HARD SENSOR is a second point you can actually instrument, and its
+// readings JOIN the input vector rather than replacing anything. The test that
+// matters is not that two is never worse than one -- with lags, one sinusoidal
+// sensor already spans every phase, so on a single-frequency target two ties one.
+// It is that when the target genuinely depends on a signal the first sensor cannot
+// see, the second supplies it.
+{
+  const EVERY2 = 20;
+  const wA = 2 * Math.PI / 300, wB = 2 * Math.PI / 137;   // incommensurate
+  const sA = (s) => [1, 0.08 * Math.sin(wA * s), 0, 0];
+  const sB = (s) => [1, 0.06 * Math.sin(wB * s + 0.9), 0, 0];
+  const tgt2 = (s) => [1, 0.05 * Math.sin(wA * s - 0.6) + 0.04 * Math.sin(wB * s + 0.5), 0, 0];
+  const mk = (nS) => {
+    const ss = new FieldSoftSensor({ inputs: ['ux'], target: 'ux', horizon: 8,
+      lag: 4, stride: 6, warmup: 200, every: EVERY2, sensors: nS });
+    ss.train();
+    for (let i = 0; i < 3000; i++) {
+      const s = i * EVERY2;
+      ss.sample(s, nS === 1 ? sA(s) : [sA(s), sB(s)], tgt2(s));
+    }
+    return ss.status();
+  };
+  const one = mk(1), two = mk(2);
+  check('a second sensor scales the feature count',
+    two.features > one.features, `${one.features} -> ${two.features}`);
+  check('one sensor cannot reconstruct a target needing an unseen signal',
+    one.estimate.nrmse > 0.3, one.estimate.nrmse);
+  check('a second, independent sensor supplies it',
+    two.estimate.nrmse < 0.05 && one.estimate.nrmse / two.estimate.nrmse > 5,
+    `${one.estimate.nrmse.toFixed(3)} -> ${two.estimate.nrmse.toFixed(3)}`);
+
+  // Backward compatibility: a single read (not wrapped in an array) still works.
+  const solo = new FieldSoftSensor({ inputs: ['ux', 'uy'], target: 'ux', horizon: 6,
+    lag: 3, stride: 4, warmup: 150, every: EVERY2 });
+  solo.train();
+  for (let i = 0; i < 600; i++) { const s = i * EVERY2; solo.sample(s, sA(s), tgt2(s)); }
+  check('a single sensor read still works unwrapped', solo.samples > 500, solo.samples);
+}
+
 console.log(failed ? `\n${failed} check(s) failed\n` : '\nall checks passed\n');
 process.exit(failed ? 1 : 0);

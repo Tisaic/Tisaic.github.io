@@ -717,6 +717,20 @@ the shipped commit carries the correct version.
    into a 1% band (0.3617–0.3650), so the conclusion holds from both directions.
    `trace(P)` and `|θ|` are permanent in `status()` for the same reason `__lsDump()`
    is: the score could not have told these explanations apart.
+   **A SECOND HARD SENSOR joins the input vector rather than replacing anything.**
+   "Add 2nd sensor ◈" places a second point you could instrument (a cyan diamond,
+   distinct in shape from sensor 1's pink crosshair and the target's violet ring);
+   its readings extend the model's inputs, so two points × the selected quantities
+   × the lags. The test that matters is not that two never loses to one -- with
+   lags, one sinusoidal sensor already spans every phase, so on a single-frequency
+   target two ties one -- but that when the target depends on a signal the first
+   sensor cannot see, the second supplies it: measured on a synthetic field whose
+   target needs an incommensurate second frequency, one sensor is stuck at nRMSE
+   0.63 (it literally cannot see that frequency) and two reach 0.013, **50×
+   better**. On the page the feature count went 139 → 373 when the second sensor
+   was added (the quadratic cross-terms between the two points are most of the
+   jump), both cells plus the target are read at ONE instant with zero cadence
+   misses, and a single unwrapped read still works so nothing regressed.
    **`__lsSSdbg()`** reports the frozen input scales, the target's frozen mean and
    spread against its live ones, the saturation and recalibration counts, the
    weight norms, the covariance traces and the ranges of truth against estimate.

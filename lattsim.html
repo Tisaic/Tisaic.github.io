@@ -8,7 +8,7 @@
   <title>LattSim — Lattice Physics Engine</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:144,built:"2026-08-18T18:10:35Z"}; // __LATTSIM_STAMP__</script>
+  <script>window.__BUILD = {version:145,built:"2026-08-18T18:57:12Z"}; // __LATTSIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -58,6 +58,11 @@
       box-shadow:0 0 0 1px #0f172a, 0 0 6px rgba(167,139,250,.7); }
     #target-mark::after { content:''; position:absolute; left:7px; top:7px; width:2px; height:2px;
       background:#a78bfa; }
+    /* The second hard sensor: a cyan diamond, distinct in shape from the pink
+       crosshair (sensor 1) and the violet ring (soft-sensor target). */
+    #sensor2-mark { position:absolute; width:16px; height:16px; margin:-8px 0 0 -8px;
+      pointer-events:none; display:none; background:#22d3ee; opacity:.9;
+      transform:rotate(45deg); box-shadow:0 0 0 1px #0f172a, 0 0 6px rgba(34,211,238,.7); }
     #ss-chart { width:100%; height:190px; margin-top:8px; display:none; }
     #ss-chart.on { display:block; }
     #ss-panel { display:none; }
@@ -123,6 +128,7 @@
       <canvas id="cvgl" class="fill" hidden></canvas>
       <span class="badge" id="backend-badge">starting…</span>
       <span id="probe-mark"></span>
+      <span id="sensor2-mark"></span>
       <span id="target-mark"></span>
     </div>
 
@@ -151,7 +157,8 @@
          inference drawn from it are read together. -->
     <div class="controls">
       <button id="ss-target-arm" class="sec">Place target ◎</button>
-      <button id="ss-clear" class="sec">Clear target</button>
+      <button id="ss-sensor2-arm" class="sec">Add 2nd sensor ◈</button>
+      <button id="ss-clear" class="sec">Clear</button>
     </div>
     <div id="ss-panel">
       <div id="ss-chart"></div>
@@ -591,6 +598,14 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
       // just ended.
       if (ss.coords) {
         const L = sim.lattice;
+        // The 2nd sensor's cell has to be recomputed too; ssBuild reads ss.s2.cell,
+        // so restore it BEFORE ssPlace triggers the build. Drop it if it no longer
+        // fits the new lattice rather than indexing out of range.
+        if (ss.s2.coords && !ss.s2.coords.every((v, k) => v < L.size[k])) {
+          ss.s2 = { cell: -1, coords: null, armed: false };
+        } else if (ss.s2.coords) {
+          ss.s2.cell = L.index(ss.s2.coords[0], ss.s2.coords[1], ss.s2.coords[2]);
+        }
         if (ss.coords.every((v, k) => v < L.size[k])) ssPlace(ss.coords);
         else ssClear();
       }
@@ -1140,6 +1155,9 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
     // does is read two cells at one instant and hand the readings over.
     const ss = {
       model: null, cell: -1, coords: null, armed: false, win: 600,
+      // A SECOND HARD SENSOR: another point you could instrument, whose readings
+      // join the input vector. Its own placement mode and marker.
+      s2: { cell: -1, coords: null, armed: false },
       hidden: new Set(),           // traces the user hid; re-applied every draw
       every: 20, nextStep: 0, busy: false, drawn: false, plotted: -1, misses: 0,
     };
@@ -1183,6 +1201,8 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
         warmup: Math.max(150, 12 * ((+$('ss-lag').value - 1) * (+$('ss-stride').value) + 1)),
         // Retain enough history for the widest chart window; the display slices it.
         keep: 3000,
+        // A second hard sensor, if placed, doubles the input vector.
+        sensors: ss.s2.cell >= 0 ? 2 : 1,
       });
       if (why) console.log('soft sensor ▸ ' + JSON.stringify({ why, inputs,
         target: $('ss-target-q').value, leadSamples: lead, leadSteps: lead * every,
@@ -1205,17 +1225,32 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
 
     function ssClear() {
       ss.coords = null; ss.cell = -1; ss.model = null; ss.armed = false;
+      ss.s2 = { cell: -1, coords: null, armed: false };
       $('target-mark').style.display = 'none';
+      $('sensor2-mark').style.display = 'none';
       $('ss-panel').classList.remove('on');
       $('ss-chart').classList.remove('on');
       ssStatus();
     }
 
+    /** Place the second hard sensor and rebuild the model with it. */
+    function ssPlace2(coords) {
+      const L = state.sim.lattice;
+      ss.s2.coords = coords.slice();
+      ss.s2.cell = L.index(coords[0], coords[1], coords[2]);
+      ssBuild('2nd sensor placed');
+      ssMark();
+    }
+
     function ssMark() {
       const el = $('target-mark');
-      if (!ss.coords || state.view !== 'slice') { el.style.display = 'none'; return; }
-      const p = screenAtCell(ss.coords);
-      el.style.left = p.x + 'px'; el.style.top = p.y + 'px'; el.style.display = 'block';
+      if (!ss.coords || state.view !== 'slice') { el.style.display = 'none'; }
+      else { const p = screenAtCell(ss.coords);
+        el.style.left = p.x + 'px'; el.style.top = p.y + 'px'; el.style.display = 'block'; }
+      const el2 = $('sensor2-mark');
+      if (ss.s2.coords == null || state.view !== 'slice') { el2.style.display = 'none'; }
+      else { const p2 = screenAtCell(ss.s2.coords);
+        el2.style.left = p2.x + 'px'; el2.style.top = p2.y + 'px'; el2.style.display = 'block'; }
     }
 
     /**
@@ -1229,9 +1264,17 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
       if (!ss.model || ss.busy || probe.cell < 0 || ss.cell < 0) return;
       ss.busy = true;
       try {
+        // Read EVERY point at the same instant -- nothing advances between these,
+        // so sensor 1, sensor 2 and the target all come from one lattice state.
         const a = await state.sim.backend.probe('macro', probe.cell);
-        const b = await state.sim.backend.probe('macro', ss.cell);
-        ss.model.sample(state.sim.step, a, b);
+        if (ss.s2.cell >= 0) {
+          const a2 = await state.sim.backend.probe('macro', ss.s2.cell);
+          const b = await state.sim.backend.probe('macro', ss.cell);
+          ss.model.sample(state.sim.step, [a, a2], b);
+        } else {
+          const b = await state.sim.backend.probe('macro', ss.cell);
+          ss.model.sample(state.sim.step, a, b);
+        }
       } catch (e) { /* a rebuild mid-sample; the next boundary re-reads */ }
       ss.busy = false;
     }
@@ -1244,6 +1287,9 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
     function ssStatus() {
       $('ss-target-arm').textContent = ss.armed ? 'Tap the slice…' : 'Place target ◎';
       $('ss-target-arm').className = ss.armed ? '' : 'sec';
+      $('ss-sensor2-arm').textContent = ss.s2.armed ? 'Tap the slice…'
+        : ss.s2.cell >= 0 ? '2nd sensor ✓ (tap to move)' : 'Add 2nd sensor ◈';
+      $('ss-sensor2-arm').className = ss.s2.armed ? '' : 'sec';
       const m = ss.model;
       if (!m) {
         const need = probe.cell < 0 ? 'place a sensor (the probe) and a target'
@@ -1396,7 +1442,11 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
     })();
 
     $('ss-target-arm').addEventListener('click', () => {
-      ss.armed = !ss.armed; if (ss.armed) probe.armed = false;
+      ss.armed = !ss.armed; if (ss.armed) { probe.armed = false; ss.s2.armed = false; }
+      ssStatus(); probeStatus();
+    });
+    $('ss-sensor2-arm').addEventListener('click', () => {
+      ss.s2.armed = !ss.s2.armed; if (ss.s2.armed) { probe.armed = false; ss.armed = false; }
       ssStatus(); probeStatus();
     });
     $('ss-clear').addEventListener('click', ssClear);
@@ -1449,12 +1499,12 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
         pTrace: b.heads.map((h) => {
           let t = 0; for (let i = 0; i < b.nf; i++) t += h.P.m[i * b.nf + i]; return t; }) };
     };
-    window.__lsSS = { place: (c) => ssPlace(c), build: (w) => ssBuild(w),
+    window.__lsSS = { place: (c) => ssPlace(c), place2: (c) => ssPlace2(c), build: (w) => ssBuild(w),
       sample: () => ssSample(), draw: () => ssDraw(true),
       train: () => { ss.model && ss.model.train(); ssStatus(); },
       lock: () => { ss.model && ss.model.lock(); ssStatus(); },
       state: () => (ss.model ? { ...ss.model.status(), cell: ss.cell, coords: ss.coords,
-        sensor: probe.coords, series: ss.model.series.length,
+        sensor: probe.coords, sensor2: ss.s2.coords, series: ss.model.series.length,
         matured: ss.model.matured.length, live: ss.model.live,
         misses: ss.misses, every: ss.every } : null) };
 
@@ -1464,7 +1514,7 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
       const pt = (e) => (e.touches && e.touches[0]) || e;
       const down = (e) => { const p = pt(e); last = [p.clientX, p.clientY]; dragged = false; };
       const move = (e) => {
-        if (!last || probe.armed || ss.armed) return;
+        if (!last || probe.armed || ss.armed || ss.s2.armed) return;
         const p = pt(e);
         stirAt(p.clientX, p.clientY, p.clientX - last[0], p.clientY - last[1]);
         last = [p.clientX, p.clientY];
@@ -1491,6 +1541,9 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
           } else if (ss.armed && state.view === 'slice') {
             const hit = cellAtScreen(last[0], last[1]);
             if (hit) { ssPlace(hit.coords); ss.armed = false; ssStatus(); }
+          } else if (ss.s2.armed && state.view === 'slice') {
+            const hit = cellAtScreen(last[0], last[1]);
+            if (hit) { ssPlace2(hit.coords); ss.s2.armed = false; ssStatus(); }
           } else {
             stirAt(last[0], last[1], 1, 0);
           }
