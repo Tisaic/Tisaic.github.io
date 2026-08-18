@@ -8,7 +8,7 @@
   <title>LattSim — Lattice Physics Engine</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:143,built:"2026-08-18T17:21:59Z"}; // __LATTSIM_STAMP__</script>
+  <script>window.__BUILD = {version:144,built:"2026-08-18T18:10:35Z"}; // __LATTSIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -132,6 +132,12 @@
     <div class="controls">
       <button id="probe-arm" class="sec">Place sensor ⊕</button>
       <button id="probe-clear" class="sec">Clear sensor</button>
+      <select id="probe-win" aria-label="Probe chart window">
+        <option value="300">300 pts</option>
+        <option value="600" selected>600 pts</option>
+        <option value="1200">1200 pts</option>
+        <option value="3000">3000 pts</option>
+      </select>
     </div>
     <p class="lead" id="probe-note" style="margin-top:4px">A <b>sensor</b> samples one lattice cell over
       time — and it is also the measured point the soft sensor below reads from. Tap
@@ -153,6 +159,12 @@
         <button id="ss-train" class="sec">Start training ▶</button>
         <button id="ss-lock" class="sec">Switch to estimation 🔒</button>
         <button id="ss-reset" class="sec">Reset model</button>
+        <select id="ss-win" aria-label="Soft-sensor chart window">
+          <option value="300">300 pts</option>
+          <option value="600" selected>600 pts</option>
+          <option value="1200">1200 pts</option>
+          <option value="3000">3000 pts</option>
+        </select>
       </div>
       <div class="controls">
         <div class="qbox" id="ss-inputs">measured at the sensor:</div>
@@ -982,8 +994,15 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
     // Named so the probe row can say when a probe has landed in a wall, which is
     // otherwise indistinguishable from a probe reading a dead-still fluid cell.
     const CELL_NAME = { 0: 'fluid', 1: 'solid', 2: 'inlet', 3: 'outlet', 4: 'moving wall' };
-    const PROBE_WIN = 600;                     // samples drawn
-    const probe = { coords: null, cell: -1, armed: false, busy: false,
+    const PROBE_MAX = 3000;                    // samples retained (the widest window)
+
+    const probe = { coords: null, cell: -1, armed: false, busy: false, win: 600,
+      // Which traces the user has hidden, BY INDEX so it survives an axis change
+      // (the two component names change, their slots do not). Tracked here and
+      // re-applied every draw, rather than trusting Plotly to remember a legend
+      // click across a react -- which it does only for UI-driven edits and which
+      // this project would rather own than depend on.
+      hidden: new Set(),
       t: [], speed: [], ua: [], ub: [], rho: [], plotted: 0, drawn: false };
 
     function probeClear() {
@@ -1043,9 +1062,9 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
         // Trim in chunks rather than shifting every sample: an unbounded array
         // that is only ever drawn from its tail is a slow leak, and this page has
         // shipped one of those before.
-        if (probe.speed.length > PROBE_WIN * 3) {
+        if (probe.speed.length > PROBE_MAX + 200) {
           for (const a of [probe.t, probe.rho, probe.speed, probe.ua, probe.ub]) {
-            a.splice(0, a.length - PROBE_WIN);
+            a.splice(0, a.length - PROBE_MAX);
           }
         }
       } catch (e) { /* a rebuild mid-sample; the next frame re-reads */ }
@@ -1062,27 +1081,44 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
         paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
         font: { color: '#94a3b8', size: 10 }, showlegend: true,
         legend: { orientation: 'h', y: 1.22 },
+        // uirevision KEEPS THE USER'S INTERACTIONS across a data update. Without it
+        // every frame's Plotly.react re-applies a fresh layout and DISCARDS the
+        // legend on/off toggles and the manual x-axis zoom -- so a signal hidden by
+        // a legend click reappears on the next sample, and a zoomed time range snaps
+        // back. A constant revision id tells Plotly the interaction state carries
+        // over; only the data changed.
+        uirevision: 'probe',
         xaxis: { showgrid: false, title: { text: 'steps', standoff: 6 } },
         yaxis: { gridcolor: '#1e293b', zerolinecolor: '#334155', title: { text: 'u', standoff: 2 } },
         yaxis2: { overlaying: 'y', side: 'right', showgrid: false, title: { text: 'ρ', standoff: 2 } } };
-      const x = probe.t.slice(-PROBE_WIN);
+      const w = probe.win;
+      const x = probe.t.slice(-w);
       const data = [
-        { x, y: probe.speed.slice(-PROBE_WIN), name: '|u|', line: { color: '#0ea5e9', width: 2 }, mode: 'lines' },
-        { x, y: probe.ua.slice(-PROBE_WIN), name: names[0], line: { color: '#22c55e', width: 1.3 }, mode: 'lines' },
-        { x, y: probe.ub.slice(-PROBE_WIN), name: names[1], line: { color: '#f472b6', width: 1.3 }, mode: 'lines' },
-        { x, y: probe.rho.slice(-PROBE_WIN), name: 'ρ', line: { color: '#94a3b8', width: 1, dash: 'dot' },
+        { x, y: probe.speed.slice(-w), name: '|u|', line: { color: '#0ea5e9', width: 2 }, mode: 'lines' },
+        { x, y: probe.ua.slice(-w), name: names[0], line: { color: '#22c55e', width: 1.3 }, mode: 'lines' },
+        { x, y: probe.ub.slice(-w), name: names[1], line: { color: '#f472b6', width: 1.3 }, mode: 'lines' },
+        { x, y: probe.rho.slice(-w), name: 'ρ', line: { color: '#94a3b8', width: 1, dash: 'dot' },
           mode: 'lines', yaxis: 'y2' },
       ];
+      data.forEach((t, i) => { t.visible = probe.hidden.has(i) ? 'legendonly' : true; });
       if (!probe.drawn) {
         Plotly.newPlot('probe-chart', data, layout, { displayModeBar: false, responsive: true });
         probe.drawn = true;
-        // The container was display:none until the probe was placed, so Plotly
-        // sized it against nothing. One relayout after it is visible fixes that.
+        // Own the legend toggle: record which trace was clicked and redraw from our
+        // own state, so it persists across the next data update. Returning false
+        // stops Plotly also toggling it (which would double-apply and cancel out).
+        $('probe-chart').on('plotly_legendclick', (ev) => {
+          const i = ev.curveNumber;
+          if (probe.hidden.has(i)) probe.hidden.delete(i); else probe.hidden.add(i);
+          probeDraw(true);
+          return false;
+        });
         requestAnimationFrame(() => { try { Plotly.Plots.resize('probe-chart'); } catch (e) { /* not yet laid out */ } });
       }
       else Plotly.react('probe-chart', data, layout, { displayModeBar: false, responsive: true });
     }
 
+    $('probe-win').addEventListener('change', () => { probe.win = +$('probe-win').value; probeDraw(true); });
     $('probe-arm').addEventListener('click', () => { probe.armed = !probe.armed; probeStatus(); });
     $('probe-clear').addEventListener('click', () => { probe.armed = false; probeClear(); ssBuild('sensor cleared'); });
     window.__lsProbe = { place: (c) => probePlace(c), at: cellAtScreen,
@@ -1103,7 +1139,8 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
     // composition, and it is fed numbers rather than lattices. All this section
     // does is read two cells at one instant and hand the readings over.
     const ss = {
-      model: null, cell: -1, coords: null, armed: false,
+      model: null, cell: -1, coords: null, armed: false, win: 600,
+      hidden: new Set(),           // traces the user hid; re-applied every draw
       every: 20, nextStep: 0, busy: false, drawn: false, plotted: -1, misses: 0,
     };
 
@@ -1144,6 +1181,8 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
         // statistics gathered over less than a few window-lengths is the same
         // mistake as not standardising at all.
         warmup: Math.max(150, 12 * ((+$('ss-lag').value - 1) * (+$('ss-stride').value) + 1)),
+        // Retain enough history for the widest chart window; the display slices it.
+        keep: 3000,
       });
       if (why) console.log('soft sensor ▸ ' + JSON.stringify({ why, inputs,
         target: $('ss-target-q').value, leadSamples: lead, leadSteps: lead * every,
@@ -1294,15 +1333,25 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
         paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
         font: { color: '#94a3b8', size: 10 }, showlegend: true,
         legend: { orientation: 'h', y: 1.18 },
+        // See the probe chart: a constant uirevision keeps legend on/off toggles and
+        // the manual time-range zoom from being wiped by every per-frame react.
+        uirevision: 'ss',
         xaxis: { showgrid: false, title: { text: 'solver step', standoff: 6 } },
         yaxis: { gridcolor: '#1e293b', zerolinecolor: '#334155',
           title: { text: m ? m.targetLabel + ' at target' : 'target', standoff: 2 } } };
+      // Show only the selected window of the retained history. The model keeps a
+      // generous buffer; the chart shows the last `ss.win` samples of it.
+      const w = ss.win;
+      const sv = ser.slice(-w);
+      const xw = sv.map((p) => p.step);
+      const minStep = sv.length ? sv[0].step : -Infinity;
+      const mat = m ? m.matured.filter((p) => p.step >= minStep) : [];
       const data = [
-        { x, y: ser.map((p) => p.truth), name: 'truth', mode: 'lines',
+        { x: xw, y: sv.map((p) => p.truth), name: 'truth', mode: 'lines',
           line: { color: '#22c55e', width: 2 } },
-        { x, y: ser.map((p) => p.estimate), name: 'soft sensor', mode: 'lines',
+        { x: xw, y: sv.map((p) => p.estimate), name: 'soft sensor', mode: 'lines',
           line: { color: '#fbbf24', width: 1.6 }, connectgaps: false },
-        { x: m ? m.matured.map((p) => p.step) : [], y: m ? m.matured.map((p) => p.value) : [],
+        { x: mat.map((p) => p.step), y: mat.map((p) => p.value),
           name: 'predicted earlier', mode: 'lines', line: { color: '#a78bfa', width: 1.4 } },
       ];
       // The unmatured forecast: from the last truth to where the prediction says
@@ -1313,9 +1362,16 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
           name: 'forecast', mode: 'lines+markers', line: { color: '#a78bfa', width: 1.4, dash: 'dot' },
           marker: { size: 5, color: '#a78bfa' } });
       }
+      data.forEach((t, i) => { t.visible = ss.hidden.has(i) ? 'legendonly' : true; });
       if (!ss.drawn) {
         Plotly.newPlot('ss-chart', data, layout, { displayModeBar: false, responsive: true });
         ss.drawn = true;
+        $('ss-chart').on('plotly_legendclick', (ev) => {
+          const i = ev.curveNumber;
+          if (ss.hidden.has(i)) ss.hidden.delete(i); else ss.hidden.add(i);
+          ssDraw(true);
+          return false;
+        });
         requestAnimationFrame(() => { try { Plotly.Plots.resize('ss-chart'); } catch (e) { /* unlaid */ } });
       } else Plotly.react('ss-chart', data, layout, { displayModeBar: false, responsive: true });
     }
@@ -1355,6 +1411,9 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
       ssStatus();
     });
     $('ss-reset').addEventListener('click', () => ssBuild('model reset'));
+    // WINDOW IS DISPLAY-ONLY: it slices the retained series, so it must NOT rebuild
+    // the model (that would discard what it learned). Just redraw.
+    $('ss-win').addEventListener('change', () => { ss.win = +$('ss-win').value; ssDraw(true); });
     $('ss-target-q').addEventListener('change', () => ssBuild('target quantity changed'));
     $('ss-features').addEventListener('change', () => ssBuild('basis changed'));
     for (const id of ['ss-lead', 'ss-every', 'ss-lag', 'ss-stride', 'ss-ridge']) {
