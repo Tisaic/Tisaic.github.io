@@ -281,9 +281,52 @@ function drive(ss, nSamples, step0 = 0) {
     const a = Math.exp(i / 300);
     never.sample(i * EVERY, [1, a * Math.sin(i / 9), 0, 0], [1, a * Math.sin(i / 9 - 1), 0, 0]);
   }
-  check('recalibration attempts are bounded', never.status().recalibrations <= 3,
+  // Bounded, but the bound is now 6 rather than 3: the check is a ROLLING window
+  // instead of a one-shot latch, so it must be able to answer a regime change that
+  // arrives long after training started, not only an unrepresentative startup.
+  check('recalibration attempts are bounded', never.status().recalibrations <= 6,
     never.status().recalibrations);
 }
+
+// ------------------------------------------------------------------ drift
+// A REGIME CHANGE LONG AFTER TRAINING STARTED. The first version of the
+// recalibration guard latched itself off as soon as the inputs stopped saturating,
+// so it could answer an unrepresentative STARTUP and nothing else. Measured on the
+// lattice with the lid frequency changed from 0.5 to 1.2 under a trained model:
+// a third of all input slots pinned at the clamp and the estimate at nRMSE 5.1 --
+// five times worse than a scaled sensor reading -- IDENTICALLY for every
+// forgetting factor, because the frozen standardisation was what had gone wrong
+// and no forgetting factor touches it.
+{
+  const cfg = { inputs: ['ux', 'uy'], target: 'ux', horizon: 6, lag: 3, stride: 4,
+    warmup: 120, every: EVERY };
+  const ss = new FieldSoftSensor(cfg);
+  ss.train();
+  // A first regime, learned properly.
+  for (let i = 0; i < 900; i++) {
+    const s = i * EVERY;
+    ss.sample(s, [1, 0.02 * Math.sin(W * s), 0.01 * Math.cos(W * s), 0],
+      [1, 0.05 * Math.sin(W * s - 1.1), 0, 0]);
+  }
+  const settledFirst = ss.status();
+  check('the first regime is learned', settledFirst.estimate.nrmse < 0.3,
+    settledFirst.estimate.nrmse);
+  const recalsBefore = ss.recalibrations;
+
+  // THE PLANT CHANGES: twenty times the amplitude, which puts every standardised
+  // input far outside the window the scaling was frozen on.
+  for (let i = 900; i < 2600; i++) {
+    const s = i * EVERY;
+    ss.sample(s, [1, 0.4 * Math.sin(W * s), 0.2 * Math.cos(W * s), 0],
+      [1, 1.0 * Math.sin(W * s - 1.1), 0, 0]);
+  }
+  const after = ss.status();
+  check('a regime change after settling triggers a re-calibration',
+    ss.recalibrations > recalsBefore, `${recalsBefore} → ${ss.recalibrations}`);
+  check('and the sensor recovers on the new regime', after.estimate.nrmse < 0.3,
+    after.estimate.nrmse);
+}
+
 
 console.log(failed ? `\n${failed} check(s) failed\n` : '\nall checks passed\n');
 process.exit(failed ? 1 : 0);

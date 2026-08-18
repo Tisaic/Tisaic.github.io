@@ -685,6 +685,38 @@ the shipped commit carries the correct version.
    Lorenz, since a conservative system does not self-correct and a dissipative one
    forgives. The label now shows both numbers (`100 · λ 0.01`) so the direction is
    visible where it is used rather than remembered.
+   **DIRECTIONAL FORGETTING: MEASURED, AND IT IS THE WRONG MECHANISM HERE — BUT
+   ASKING COST A REAL DEFECT ITS HIDING PLACE.** With λ < 1 the covariance is
+   inflated in every direction each step while only the EXCITED directions get new
+   information, so a poorly exciting stream winds up without bound — and a settled
+   wake or a driven cavity is a LIMIT CYCLE, i.e. exactly that condition. Six
+   configurations fed ONE stream, driven cavity, then the lid frequency changed
+   0.5 → 1.2 UNDER the trained models with nothing rebuilt:
+     steady          λ1.0 0.0675 · λ.999 dir 0.0675 · λ.999 0.0670 · λ.995 0.0651
+     after the change λ1.0 5.088  · λ.999 dir 5.206  · λ.999 5.243  · λ.995 6.091
+   THE WINDUP IS REAL AND DIRECTIONAL FORGETTING PREVENTS IT — plain λ 0.995 drove
+   trace(P) to **5.3e5** and was 20% worse, while directional held it at 3.0e2. But
+   it BUYS NOTHING: identical to λ = 1 on a steady stream to four decimals, and
+   2.3% WORSE through the change. Four independent measurements across this project
+   now agree, so it stays in the library, default off, and off the page.
+   **BECAUSE THE WEIGHTS WERE NEVER WHAT WAS WRONG.** All six failed IDENTICALLY at
+   nRMSE ~5 — five times worse than a scaled sensor reading — and the diagnostic
+   that said why was **3560 saturated input slots**, the same in every row, since
+   saturation depends on the frozen scaling and not on the weights. The thinner
+   Stokes layer moved the sensor's amplitude outside the window the standardisation
+   was frozen on, and no forgetting factor touches a frozen scale.
+   THE DEFECT: `_recalibrateIfUnrepresentative` LATCHED ITSELF OFF the first time
+   saturation dropped, so it could answer an unrepresentative STARTUP and nothing
+   else — while drift is the failure a deployed soft sensor actually meets. Made a
+   ROLLING window (2% saturation over a window, bound 6), the same regime change
+   measures **5.088 → 0.363, a 14× recovery**, from 5× worse than the baseline to
+   1.7× better, with saturation back to zero. The steady numbers are BYTE-IDENTICAL
+   before and after, which is the signature that mattered: a fix that also moved
+   the steady case would have changed the measurement rather than repaired a fault.
+   And once re-calibration handles the scaling the six forgetting variants collapse
+   into a 1% band (0.3617–0.3650), so the conclusion holds from both directions.
+   `trace(P)` and `|θ|` are permanent in `status()` for the same reason `__lsDump()`
+   is: the score could not have told these explanations apart.
    **`__lsSSdbg()`** reports the frozen input scales, the target's frozen mean and
    spread against its live ones, the saturation and recalibration counts, the
    weight norms, the covariance traces and the ranges of truth against estimate.
