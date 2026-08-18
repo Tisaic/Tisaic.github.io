@@ -29,6 +29,15 @@ if ! node -e "require.resolve('playwright-core',{paths:['${ROOT}/test']})" >/dev
   (cd test && npm install --no-audit --no-fund --silent)
 fi
 
+# PARSE EVERY SHIPPED MODULE AS A MODULE, first and fast. `node --check` parses a
+# .js file as a CommonJS script and PASSES on a duplicate `const` in one scope --
+# verified on a four-line reproduction -- so it let an unparseable webgpu.js
+# through. The page then reported "CPU reference backend is capped at 131072
+# cells", three layers from the cause, because an import failure is also what a
+# browser without WebGPU looks like and is caught on purpose.
+node --experimental-vm-modules test/parse.mjs 2>&1 | grep -v 'ExperimentalWarning\|--trace-warnings'
+test "${PIPESTATUS[0]}" -eq 0 || { echo "module parse failed"; exit 1; }
+
 # NGRC library unit tests (pure Node, golden-vector parity — no server needed).
 if [ -d lib/ngrc ]; then
   node test/ngrc/primitives.test.mjs

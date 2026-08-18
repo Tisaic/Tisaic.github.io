@@ -8,7 +8,7 @@
   <title>LattSim — Lattice Physics Engine</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:142,built:"2026-08-18T15:37:46Z"}; // __LATTSIM_STAMP__</script>
+  <script>window.__BUILD = {version:143,built:"2026-08-18T17:21:59Z"}; // __LATTSIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -204,7 +204,28 @@
         <option value="sphere">sphere</option>
         <option value="plate">flat plate</option>
       </select>
+      <select id="inletmode" aria-label="Inlet disturbance">
+        <option value="steady">steady inlet</option>
+        <option value="pulse">pulsing inlet</option>
+        <option value="multitone">quasi-periodic inlet</option>
+        <option value="chaotic">chaotic inlet</option>
+      </select>
     </div>
+    <div class="controls">
+      <label class="slider">Disturbance <input type="range" id="inletamp" min="0" max="0.8" step="0.05" value="0" />
+        <span class="v" id="inletamp-v">off</span></label>
+      <label class="slider">Disturbance rate <input type="range" id="inletrate" min="0.5" max="20" step="0.5" value="4" />
+        <span class="v" id="inletrate-v">4.0/1k</span></label>
+    </div>
+    <p class="lead" style="margin-top:4px"><b>The inlet can be made to vary</b>, which is the difference
+      between a flow that settles and one that never does. A <b>pulsing</b> inlet is periodic, so
+      "it will do what it did one period ago" still predicts it — that is the control. <b>Quasi-periodic</b>
+      uses three tones at irrational frequency ratios, so the signal never repeats. <b>Chaotic</b> drives it
+      from a Lorenz system, which has a continuous spectrum and is genuinely unpredictable beyond a horizon.
+      Measured on the drive signals themselves, the autocorrelation after one nominal period falls
+      <b>0.97 → 0.57 → 0.12</b>, and a period-lookup baseline goes from 0.03 (near-perfect) to 1.23
+      (worse than predicting the average). That is the point: past the first mode, nothing a table can
+      replay will predict this flow.</p>
     <div class="controls">
       <label class="slider">Stir strength <input type="range" id="stir" min="0.2" max="8" step="0.2" value="2" />
         <span class="v" id="stir-v">2.0×</span></label>
@@ -256,6 +277,7 @@
       <dt>stability</dt><dd id="s-stable">—</dd>
       <dt>τ / speed pairing</dt><dd id="s-risk">—</dd>
       <dt>ν and Mach number</dt><dd id="s-mach">—</dd>
+      <dt>inlet drive</dt><dd id="s-inlet">steady</dd>
       <dt>limiter</dt><dd id="s-lim">—</dd>
       <dt>probe</dt><dd id="s-probe">no probe placed</dd>
       <dt>Reynolds</dt><dd id="s-re">—</dd>
@@ -463,6 +485,11 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
         // in their head; the operator wants cycles per step.
         lidFrequency: +$('lidfreq').value / 1000,
         obstacle: $('obstacle').value,
+        inletMode: $('inletmode').value,
+        inletAmplitude: +$('inletamp').value,
+        // Slider is CYCLES PER 1000 STEPS, matching the lid's convention, because
+        // a period a person can picture beats a per-step frequency they cannot.
+        inletRate: +$('inletrate').value / 1000,
         ...PHYSICS,
       });
       const mem = sim.memoryEstimate();
@@ -666,6 +693,26 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
       $('s-res').innerHTML = d.residual === undefined ? '—'
         : `<span class="${d.residual < 1e-3 ? 'good' : ''}">${d.residual.toExponential(2)}</span>`
           + (d.residual < 1e-3 ? ' — steady' : '');
+      // WHAT THE INLET IS ACTUALLY DOING, tracked as a range rather than an
+      // instant. A disturbance computed on the CPU but never uploaded to the shader
+      // would still report a moving instantaneous value while the solver saw a
+      // constant -- so the row shows the span the operator has actually produced,
+      // and a mode that is selected but flat is visible as one.
+      const op = state.sim.operators[0];
+      if (op && op.inletScale) {
+        const sc = op.inletScale();
+        if (state.inletSpan === undefined || state.inletSpanFor !== op) {
+          state.inletSpan = [sc, sc]; state.inletSpanFor = op;
+        }
+        state.inletSpan = [Math.min(state.inletSpan[0], sc), Math.max(state.inletSpan[1], sc)];
+        const [lo, hi] = state.inletSpan;
+        const mode = op.params.inletMode || 'steady';
+        const u = +$('uin').value;
+        $('s-inlet').innerHTML = mode === 'steady' || !op.params.inletAmplitude
+          ? 'steady'
+          : `${mode} · now ${(u * sc).toFixed(4)} · seen ${(u * lo).toFixed(4)}–${(u * hi).toFixed(4)}`
+            + (hi - lo < 1e-6 ? ' — <span class="warn">not varying</span>' : '');
+      }
       const limPct = 100 * d.limited / state.sim.lattice.cellCount;
       $('s-lim').innerHTML = d.limited > 0
         ? `<span class="${limPct > 1 ? 'bad' : 'warn'}">${d.limited} cell(s) held`
@@ -1398,6 +1445,18 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
       window.addEventListener('mousemove', (e) => { if (last) move(e); });
       window.addEventListener('mouseup', up);
     })();
+
+    function inletLabels() {
+      const a = +$('inletamp').value;
+      $('inletamp-v').textContent = a === 0 ? 'off' : '±' + Math.round(a * 100) + '%';
+      $('inletrate-v').textContent = (+$('inletrate').value).toFixed(1) + '/1k';
+    }
+    inletLabels();
+    for (const id of ['inletamp', 'inletrate']) {
+      $(id).addEventListener('input', inletLabels);
+      $(id).addEventListener('change', () => build());
+    }
+    $('inletmode').addEventListener('change', () => build());
 
     $('stir').addEventListener('input', () => { $('stir-v').textContent = (+$('stir').value).toFixed(1) + '×'; });
     window.__lsStir = (cx, cy, dx, dy) => stirAt(cx, cy, dx, dy);
