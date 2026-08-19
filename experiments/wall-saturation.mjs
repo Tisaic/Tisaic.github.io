@@ -7,6 +7,31 @@
  * cumulative count N = 1,2,4,6,8,10,12,16 -- one simulation, identical flow. The
  * target is the interior wake column 5 diameters downstream. Linear basis only, so
  * features scale linearly (nf = 3*N*4 + 1) and stay well below the sample count.
+ *
+ * MEASURED (res 24 channel, cylinder, chaotic inlet 0.6, TRAIN 1500 / SCORE 900):
+ *   N= 1  nRMSE 0.488  (76% var)
+ *   N= 2  nRMSE 0.452  (80%)   d 0.035
+ *   N= 4  nRMSE 0.365  (87%)   d 0.087
+ *   N= 6  nRMSE 0.264  (93%)   d 0.101   <- knee
+ *   N= 8  nRMSE 0.244  (94%)   d 0.019
+ *   N=10  nRMSE 0.244  (94%)   d 0.000   <- clamping duplicate, see below
+ *   N=12  nRMSE 0.231  (95%)   d 0.013
+ *   N=16  nRMSE 0.216  (95%)   d 0.015
+ *
+ * THE KNEE IS AT N=~6: three streamwise stations x both walls capture 93% of the
+ * interior wake variance. The 7th sensor onward buys only ~2 more points (93 -> 95%).
+ * The residual floor at nRMSE ~0.22 is the fine turbulent structure surface sensors
+ * fundamentally cannot see -- the observability limit, sensors ~ energetic modes.
+ * So added wall sensors stop gaining once their count reaches the wake's effective
+ * coherent-mode count; more sensors then reconstruct incoherent fine structure they
+ * cannot resolve, and the curve flattens.
+ *
+ * THE EXACT-ZERO STEP AT N=10 IS A POOL ARTIFACT, AND IT VALIDATES THE READOUT: two
+ * stations (cx+8d and cx+10d) both clamp to the outlet edge x=nx-2=70, so the pool
+ * holds 7 distinct x-stations (14 taps), not 8 (16). N=10's two added taps are
+ * bit-identical to N=6's, and the shared-P reconstructor moved nRMSE by <1e-4 on
+ * them -- a redundant sensor buys nothing, exactly as a correct linear fit must.
+ * Read the plateau against DISTINCT sensors: ~6 is the knee, ~14 is the pool ceiling.
  */
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
