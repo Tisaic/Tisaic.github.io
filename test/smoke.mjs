@@ -700,8 +700,21 @@ if (hasGPU && ls0.backend === 'webgpu') {
       peak = Math.max(peak, Math.abs(cc[i]));
       sg += cg[i]; sc += cc[i];
     }
+    // probeMany must return exactly what a full snapshot holds at those cells, on
+    // both backends -- the batched readback the field-reconstruction demo depends
+    // on. Test the 1-component (conc) and 4-component (macro) paths.
+    const cells = [];
+    for (let i = 0; i < N; i += Math.max(1, Math.floor(N / 40))) if (g.flags[i] !== 1) cells.push(i);
+    const [pmG, pmC] = [await g.backend.probeMany('conc', cells), await c.backend.probeMany('conc', cells)];
+    const mg = await g.backend.snapshot('macro');
+    const pmMac = await g.backend.probeMany('macro', cells);
+    let pmWorst = 0, pmMacWorst = 0;
+    for (let j = 0; j < cells.length; j++) {
+      pmWorst = Math.max(pmWorst, Math.abs(pmG[j][0] - cg[cells[j]]), Math.abs(pmC[j][0] - cc[cells[j]]));
+      for (let kk = 0; kk < 4; kk++) pmMacWorst = Math.max(pmMacWorst, Math.abs(pmMac[j][kk] - mg[kk * N + cells[j]]));
+    }
     await g.destroy(); await c.destroy();
-    return { worst, peak, sg, sc };
+    return { worst, peak, sg, sc, pmWorst, pmMacWorst, nCells: cells.length };
   });
   check('lattsim: the WGSL scalar kernel and the CPU reference agree on concentration',
     sparity.worst < 1e-4 * Math.max(sparity.peak, 1e-6) + 1e-6,
@@ -711,6 +724,9 @@ if (hasGPU && ls0.backend === 'webgpu') {
     `${sparity.sg.toFixed(4)} vs ${sparity.sc.toFixed(4)}`);
   check('lattsim: the injected scalar spread through the channel',
     sparity.peak > 0.5 && sparity.sg > 1, `peak ${sparity.peak.toFixed(3)}, total ${sparity.sg.toFixed(2)}`);
+  check('lattsim: probeMany matches the full snapshot on both backends (scalar + macro)',
+    sparity.pmWorst < 1e-6 && sparity.pmMacWorst < 1e-6,
+    `conc ${sparity.pmWorst.toExponential(2)}, macro ${sparity.pmMacWorst.toExponential(2)} over ${sparity.nCells} cells`);
 }
 
 check('lattsim: the GPU driver reported no uncaptured errors', (ls0.gpuErrors || []).length === 0,
