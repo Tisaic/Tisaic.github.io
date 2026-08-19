@@ -546,12 +546,38 @@ the shipped commit carries the correct version.
    buffer when it opens the page, and asserts the page's own error buffer is
    empty at the end — in BOTH tiers, since neither `pageerror` nor the console
    listener sees unhandled rejections.
-   **DELIBERATELY NOT BUILT YET:** heat, diffusion, elasticity, electromagnetics,
-   multiphysics coupling and adaptive resolution are architecture rather than
-   code. Operators declare the fields they read and write and the solver rejects
-   two writing the same field in one stage, so coupling must be stated rather
-   than implied by call order; the lattice owns its spacing and indexing rather
-   than assuming unit cells, which is what keeps refinement possible.
+   **PASSIVE SCALAR TRANSPORT — the "no core change" claim, now measured.** The
+   architecture note below long promised that adding a field needs no core change;
+   `operators/scalar.js` proves it, touching ZERO of the solver, operator base,
+   fields or simulation façade. It is a SECOND D3Q19 distribution `g` advected by
+   the fluid's velocity (read-only, so the coupling is one-way and the solver runs
+   the fluid then the scalar on the declared reads/writes alone), with the
+   first-order equilibrium `g_eq = w_q C (1 + c.u/cs^2)`; `tau_g` sets the
+   diffusivity `D = cs^2(tau_g-½)` the way `tau` sets viscosity. VERIFIED against
+   closed forms (`test/lattsim/scalar.test.mjs`): diffusivity to 2%, advection
+   centroid speed to 1%, total-scalar conservation arithmetic (f64 improves it
+   >1e3x); the WGSL kernel is compiled up front and compared cell-by-cell against
+   the CPU reference in the smoke test. A `dye` scene injects a needle upstream of
+   a cylinder and `concentration` is a render mode.
+   **FIELD RECONSTRUCTION — the payoff.** On the dye scene, a ring of wall sensors
+   reads velocity and pressure ONLY (never the dye) and one shared-covariance
+   `FieldReconstructor` (one covariance, one readout per cell) rebuilds the whole
+   concentration slice from them — the industrial soft sensor, inferring a
+   composition you cannot instrument from cheap boundary signals. Memoryless (lag
+   1: a spatial map at one instant, so no cadence coupling), the readback batched
+   through `backend.probeMany`. MEASURED (`test/lattsim/reconstruct.test.mjs`): a
+   laminar dye channel reconstructs from 12 wall sensors at nRMSE ~0.08 over 647
+   cells; the sensor-placement study and the turbulent-wake numbers are in
+   `experiments/` (a wake column sits at ~0.26, saturating at ~6 co-located
+   sensors; a downstream "flow historian" probe fails because advected turbulence
+   decorrelates within a diameter or two).
+   **STILL DELIBERATELY NOT BUILT:** heat as a COUPLED field (buoyancy feeding
+   back), elasticity, electromagnetics, multiphysics coupling and adaptive
+   resolution are architecture rather than code. Operators declare the fields they
+   read and write and the solver rejects two writing the same field in one stage,
+   so coupling must be stated rather than implied by call order; the lattice owns
+   its spacing and indexing rather than assuming unit cells, which is what keeps
+   refinement possible.
 
    **THE SLIDER RANGES REACH PAST WHAT THE SOLVER CAN SOLVE, ON PURPOSE (v140).**
    τ now runs 0.5001–2.5 (ν 3.3e-5 to 0.667, four decades) and the inlet speed

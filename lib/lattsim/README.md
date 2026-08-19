@@ -44,6 +44,7 @@ step, because acquiring a GPU device is.
 | `materials.js` | Per-cell classification and the region builders. |
 | `operator.js` | The `PhysicsOperator` contract and the backend kernel registry. |
 | `operators/lbm.js` | The D3Q19 fluid operator. |
+| `operators/scalar.js` | The passive-scalar advection-diffusion operator (a second D3Q19 distribution, advected by the fluid). |
 | `solver.js` | Operator ordering, the write-discipline rules, `verify()`. |
 | `simulation.js` | The public façade. |
 | `scenes.js` | Ready-made scene definitions. |
@@ -744,13 +745,54 @@ page asks the device for its limit first and clamps the resolution ladder to wha
 fits, rather than discovering it by failing. And a failed build never leaves the
 page without a simulation: it keeps what was running and says what went wrong.
 
+## Passive scalar transport, and what it proves about the architecture
+
+The claim above — "adding heat means registering a scalar field and an operator,
+with no core change" — is now measured rather than asserted. `operators/scalar.js`
+is a passive scalar advected and diffused by the flow, and it needed **zero**
+changes to `solver.js`, `operator.js`, `fields.js` or `simulation.js`: a new
+operator `type`, two new fields, a kernel in each backend, and the WGSL.
+
+It is a **second D3Q19 distribution** `g` on the same stencil as the fluid, with
+the first-order equilibrium `g_eq = w_q C (1 + c.u/cs^2)`; relaxing it at rate
+`1/tau_g` and streaming recovers advection-diffusion with `D = cs^2 (tau_g - ½)`,
+so `tau_g` sets the diffusivity exactly the way `tau` sets viscosity. The velocity
+comes from the fluid's `macro` field, bound **read-only**, so the coupling is
+one-way and the solver runs the fluid first, then the scalar, on the strength of
+the declared reads/writes alone. Concentration `C = sum g_q` is a cache, like the
+fluid's rho and u.
+
+**Verified against closed forms** (`test/lattsim/scalar.test.mjs`, CPU reference):
+the measured diffusivity matches `cs^2 (tau_g - ½)` to 2%, a blob's centroid moves
+at the flow speed to 1%, and the total scalar is conserved arithmetically (the f64
+run improves the residual >1e3x, the same instrument the fluid uses). The WGSL
+scalar kernel is compiled up front and **compared cell by cell against the CPU
+reference** in the smoke test, on concentration and total scalar.
+
+**The dye plume, and reconstructing it from the walls.** The `dye` scene injects a
+scalar needle upstream of a cylinder; `concentration` is a render mode. On top of
+it, the page's field-reconstruction demo places a ring of wall sensors that read
+velocity and pressure ONLY — never the dye — and one shared-covariance
+`FieldReconstructor` (one covariance, one readout per cell) rebuilds the whole
+concentration slice from them. It is the industrial soft sensor: infer the
+composition you cannot instrument from cheap boundary signals. Measured
+(`test/lattsim/reconstruct.test.mjs`): a laminar dye channel reconstructs from 12
+wall sensors at nRMSE ~0.08 over 647 cells; the turbulent-wake numbers, and the
+sensor-placement study behind the layout, are in `experiments/`.
+
+The batched readback that makes it affordable is `backend.probeMany(field, cells)`
+— one staging buffer, one map, one component-array per cell — because a per-cell
+probe would serialise a hundred sensors through the single probe buffer every
+frame.
+
 ## Not implemented, deliberately
 
-Heat, diffusion, elasticity, electromagnetics and multiphysics coupling are
-**architecture, not code**. An operator declares the fields it reads and writes;
-the solver uses that to order operators and to reject conflicting writes, so
-coupling is stated rather than implied by call order. Adding heat means
-registering a scalar field and an operator, with no core change.
+Heat as a *coupled* field (buoyancy feeding back into the flow), elasticity,
+electromagnetics and multiphysics coupling are still **architecture, not code** —
+though passive scalar transport above is the proof the architecture holds: an
+operator declares the fields it reads and writes, the solver uses that to order
+operators and reject conflicting writes, so coupling is stated rather than implied
+by call order.
 
 Adaptive resolution is not implemented either — but the lattice owns its spacing,
 origin and indexing rather than assuming unit cells, which is what keeps it
