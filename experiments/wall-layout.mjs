@@ -17,6 +17,40 @@
  *   straddle    {-3, 0,+3}    x both walls   -- bracketing the target
  *   spread      {-4,-1,+3}    x both walls   -- wide baseline
  *   one-wall    {-4,-2,-1,0,+1,+3} x one wall -- can only instrument one wall
+ *
+ * MEASURED (res 24, cylinder, chaotic 0.6, target x=46, 6 taps, nf=73, 900 scored):
+ *   straddle    nRMSE 0.280  (92% var)   {-3,0,+3} both walls
+ *   one-wall    nRMSE 0.297  (91%)       6 stations, ONE wall
+ *   at-slice    nRMSE 0.311  (90%)       {-1,0,+1} both walls
+ *   spread      nRMSE 0.447  (80%)       {-4,-1,+3} both walls
+ *   downstream  nRMSE 0.537  (71%)       {+1,+2,+3} both walls
+ *   upstream    nRMSE 0.672  (55%)       {-4,-3,-2} both walls
+ *
+ * CO-LOCATION WINS, THE LAG WINDOW DOES NOT RESCUE UPSTREAM. The top three layouts
+ * all keep a tap AT the target's x; the two worst abandon it, and UPSTREAM is worst
+ * by far. This overturns the leading-indicator hypothesis: the convective lag window
+ * spans ~2.8 diameters, so an upstream tap's future-arriving signal IS inside the
+ * window -- but near the cylinder (x=22-34) the wall carries the cylinder's own shear
+ * boundary layer, not a clean advected copy of what will reach the target, and
+ * turbulent diffusion decorrelates it over that distance faster than the lag can
+ * exploit. Mutual information with the interior target falls off with streamwise
+ * distance faster than time-delay embedding recovers it.
+ *
+ * DOWNSTREAM BEATS UPSTREAM (0.537 vs 0.672): a wake is an advected structure, so a
+ * tap that already saw it pass retains more of its memory than one sitting where it
+ * has not formed yet.
+ *
+ * STRADDLE BEATS AT-SLICE (0.280 vs 0.311): a modest baseline AROUND the target adds
+ * the shedding phase -- the +3d tap lags the -3d tap by the convection time -- which a
+ * tight ±1d cluster of near-redundant taps cannot supply. But a baseline that ABANDONS
+ * the target x (pure spread, 0.447) throws that co-location away and loses. The rule is
+ * bracket the slice, do not desert it.
+ *
+ * ONE WALL IS NEARLY AS GOOD AS TWO (0.297 vs 0.280), and beats the two-wall at-slice.
+ * Spending the same 6-tap budget on streamwise stations along ONE wall recovers the
+ * shedding phase (it is a traveling wave; one wall samples its full phase), so the
+ * top/bottom antisymmetry is not required. Industrially decisive: instrumenting one
+ * wall, which is often all you can do, costs almost nothing here.
  */
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
