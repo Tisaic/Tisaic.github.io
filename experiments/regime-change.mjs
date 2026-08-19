@@ -29,6 +29,51 @@
  * regime with training-era input scaling, and only the weights can respond. That is
  * the honest configuration of a recursive soft sensor, and it is why the inputs may
  * saturate rather than merely shift.
+ *
+ * MEASURED (res 24 dye channel, 12 wall sensors, 1559 cells, u 0.06 -> 0.12):
+ *   baseline    frozen 0.0076 · adaptive 0.0076 · forgetting 0.0058
+ *   +600 steps  frozen 92.94  · adaptive 5.08   · forgetting 5.21
+ *   +1200       frozen 87.13  · adaptive 0.0400 · forgetting 0.0315
+ *   +1800       frozen 91.62  · adaptive 0.0110 · forgetting 0.0062
+ *   +3600       frozen 91.62  · adaptive 0.0031 · forgetting 0.0012
+ *   saturation  0.00% before the switch -> 67.77% after, ALL THREE ARMS
+ *
+ * THE CONTROL HELD: frozen and adaptive score identically at baseline (0.0076), so
+ * everything after the switch is adaptation and nothing else.
+ *
+ * FROZEN DOES NOT DEGRADE, IT BREAKS -- and stays broken. nRMSE 92 is an output
+ * about 92x the field's own spread; a blind readout that is merely useless would
+ * score 1.0. So the ratio at the end (~30000x) is the ratio of a BROKEN number to a
+ * working one and is not worth quoting as the value of adaptation.
+ *
+ * AND THE SATURATION MEASUREMENT OVERTURNED THE FIRST EXPLANATION, which is the
+ * useful part. "The frozen model fails because its inputs saturate" is WRONG: the
+ * adaptive arms meet the SAME 67.77% saturation on the SAME stream and recover to
+ * 0.003. Two thirds of the inputs being pinned at the clamp is survivable, because a
+ * clipped vector is still a deterministic function of the state and a re-fitted map
+ * accommodates the distortion. What is not survivable is a FIXED map fed values ten
+ * times larger than any it was fitted on: the error scales with the weights, so the
+ * failure is unbounded rather than graceful. The information is still there; the
+ * CALIBRATION is what expired.
+ *
+ * ADAPTATION IS NOT INSTANT EITHER. Both adaptive arms spike to ~5.0 immediately
+ * after the change -- five times worse than predicting the mean -- and need ~1200
+ * steps to come back. Any regime change buys a blind window; adaptation shortens it,
+ * it does not remove it.
+ *
+ * FORGETTING WINS EVERYWHERE, not only after the change: 0.0058 vs 0.0076 at
+ * baseline and 0.0012 vs 0.0031 at the end. The prediction that lam = 1.0 would
+ * recover more slowly held (0.0110 vs 0.0062 at +1800), but the reason is not only
+ * memory of the old regime -- lam 0.999 also tracks the flow's own slow evolution
+ * within a regime, which is why it leads before the switch as well.
+ *
+ * WHAT THIS SAYS TO BUILD: a blind soft sensor must know when its inputs have left
+ * the window it was calibrated on, and say so, instead of emitting a confident wrong
+ * number. The bank already counts exactly that signal (`clamped`), and the page's
+ * blind mode now surfaces it. Automatic recalibration is the other half and exists
+ * in FieldSoftSensor (`_recalibrateIfUnrepresentative`) but is NOT wired into
+ * FieldReconstructor -- the obvious next step, and deliberately not done here so the
+ * failure above stays measured rather than papered over.
  */
 import { channelFlow } from '../lib/lattsim/scenes.js';
 import { FieldReconstructor } from '../lib/probesense/sensor.js';

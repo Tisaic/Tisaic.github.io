@@ -8,7 +8,7 @@
   <title>LattSim — Lattice Physics Engine</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:175,built:"2026-08-19T16:39:37Z"}; // __LATTSIM_STAMP__</script>
+  <script>window.__BUILD = {version:178,built:"2026-08-19T17:29:01Z"}; // __LATTSIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -1131,8 +1131,23 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
         ? `BLIND (sensors only, ${state.sim ? state.sim.step - recon.blindSince : 0} steps)`
         : `training (${recon.trained})`;
       const mean = recon.scoreN ? recon.scoreSum / recon.scoreN : recon.nrmse;
+      // A FROZEN MODEL WHOSE INPUTS HAVE LEFT THEIR CALIBRATION WINDOW IS NOT
+      // SLIGHTLY WRONG, IT IS UNBOUNDEDLY WRONG -- measured: doubling the inlet
+      // saturated 68% of the input slots and took the blind score from 0.008 to 92,
+      // where a merely useless readout would score 1.0. The weights are fitted for
+      // in-range inputs, so feeding them values ten times larger scales the error by
+      // the weights. It is the CALIBRATION that expires, not the information: models
+      // that kept training met the same 68% saturation and recovered to 0.003. So the
+      // readout says when it is extrapolating instead of quietly reporting a number.
+      let warn = '';
+      if (recon.locked && recon.satAt && recon.model) {
+        const b = recon.model.bank;
+        const dp = b.nPushed - recon.satAt.pushed;
+        const rate = (b.clamped - recon.satAt.clamped) / Math.max(1, dp * b.base);
+        if (rate > 0.02) warn = ` · ⚠ ${(100 * rate).toFixed(0)}% of inputs are past the calibrated range — extrapolating`;
+      }
       el.textContent = `${mode} · nRMSE ${recon.nrmse.toFixed(3)} (mean ${mean.toFixed(3)}) · `
-        + `${recon.sensors.length} sensors → ${recon.target.length} cells`;
+        + `${recon.sensors.length} sensors → ${recon.target.length} cells${warn}`;
     }
 
     /**
@@ -1202,6 +1217,10 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
       if (!recon.model || !recon.enabled) return;
       recon.locked = !recon.locked;
       recon.blindSince = state.sim ? state.sim.step : 0;
+      // Remember the saturation counters at the switch, so the blind readout can
+      // report whether its inputs have since left the window it was calibrated on.
+      const b = recon.model.bank;
+      recon.satAt = { clamped: b.clamped, pushed: b.nPushed };
       reconResetScore();
       $('recon-lock').textContent = recon.locked ? 'Resume training ▶' : 'Go blind 🔒';
       $('backend-badge').textContent = recon.locked
