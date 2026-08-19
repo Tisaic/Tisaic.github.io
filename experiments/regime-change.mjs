@@ -99,6 +99,8 @@ for (let i = 0; i < BASE; i++) { const r = step(); for (const k in base) base[k]
 
 // ---- THE SWITCH: lock the frozen arm, then move the operating point
 for (const a of arms) if (a.lock) a.locked = true;
+const clampAtSwitch = arms.map((a) => a.model.bank.clamped);
+const pushesAtSwitch = arms.map((a) => a.model.bank.nPushed);
 sim.operators[0].params.inletVelocity = [U_B, 0, 0];
 
 const win = [];                                     // windowed scores after the change
@@ -119,6 +121,20 @@ console.log(`\nAfter the inlet doubles to ${U_B} (solver steps since the switch)
 console.log('  steps   frozen   adaptive   forgetting');
 for (const r of win) {
   console.log(`  ${String(r.steps).padStart(5)}   ${r.frozen.toFixed(4)}   ${r.adaptive.toFixed(4)}     ${r.forgetting.toFixed(4)}`);
+}
+// WHY the frozen arm fails the way it does. The inputs are standardised on the
+// training window and clamped at +/-10 sigma; if the new regime pushes them past
+// that, they pin at the clamp and stop carrying information, and frozen weights
+// then map a saturated vector to a large constant error. That is a different
+// failure from merely stale weights, and it is the one the fix would target.
+console.log('\nInput saturation (share of input slots hitting the +/-10 sigma clamp):');
+for (let i = 0; i < arms.length; i++) {
+  const a = arms[i];
+  const dPush = a.model.bank.nPushed - pushesAtSwitch[i];
+  const dClamp = a.model.bank.clamped - clampAtSwitch[i];
+  const before = clampAtSwitch[i] / Math.max(1, pushesAtSwitch[i] * a.model.bank.base);
+  const after = dClamp / Math.max(1, dPush * a.model.bank.base);
+  console.log(`  ${a.name.padEnd(11)} before ${(100 * before).toFixed(2)}%   after ${(100 * after).toFixed(2)}%`);
 }
 const last = win[win.length - 1];
 console.log(`\nadaptation is worth ${(last.frozen / Math.max(last.adaptive, 1e-9)).toFixed(2)}x `
