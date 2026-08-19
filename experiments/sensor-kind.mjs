@@ -20,6 +20,42 @@
  * Feature counts differ by kind (single-quantity taps share one nf; vel/vel+P are
  * larger), reported per cell so a win from more signal is not confused with a win from
  * better signal. nRMSE = rms(error)/std(truth); 1.0 = no better than the target's mean.
+ *
+ * MEASURED (res 24, cylinder, chaotic 0.6, +/-2d straddle both walls, 900 scored):
+ *   kind          |u|     ux      uy     rho    nf
+ *   P (rho)       0.520   0.519   0.612  0.334   25
+ *   shear (ux)    0.500   0.499   0.609  0.516   25
+ *   normal (uy)   0.940   0.940   0.746  0.897   25
+ *   vel (u)       0.312   0.312   0.385  0.361   73
+ *   vel+P         0.260   0.259   0.314  0.267   97
+ *
+ * YES, THE INSTRUMENT DEPENDS ON THE TARGET -- read the single-quantity taps, which
+ * share nf=25 so the comparison is signal-for-signal. A PRESSURE tap reconstructs
+ * interior PRESSURE best (rho 0.334) and is mediocre at velocity (0.52); a SHEAR tap
+ * (near-wall ux) reconstructs interior VELOCITY best (ux 0.499, |u| 0.500) and is
+ * mediocre at pressure (0.52). The off-diagonal penalty is real and asymmetric:
+ * pressure beats shear at rho by 35% (0.334 vs 0.516), shear beats pressure at
+ * velocity by a nose. Match the instrument to the quantity you actually want.
+ *
+ * A WALL-NORMAL VELOCITY TAP IS THE WEAKEST INSTRUMENT EVERYWHERE (0.75-0.94), and it
+ * is a boundary condition, not bad luck: uy ~ 0 at a no-slip wall by construction, so
+ * the near-wall normal velocity is starved of signal. It is the worst even for
+ * reconstructing interior uy. Do not spend a sole sensor on wall-normal velocity.
+ *
+ * THE TRANSVERSE SHEDDING VELOCITY (uy) IS THE LEAST WALL-OBSERVABLE TARGET for every
+ * instrument -- each row's uy column is its worst or near-worst (0.612/0.609/0.746/
+ * 0.385/0.314). The von Karman transverse motion leaves the faintest wall signature;
+ * it is the hardest interior quantity to soft-sense from the boundary.
+ *
+ * PRESSURE AND VELOCITY ARE COMPLEMENTARY, WHICH IS WHY vel+P WINS EVERY TARGET.
+ * Adding pressure to a full velocity probe buys ~17% (vel 0.31 -> vel+P 0.26) even on
+ * velocity targets, because a wall pressure tap has near-instantaneous global reach
+ * (the flow is nearly incompressible) that a local velocity probe lacks -- the two are
+ * non-redundant. A single pressure tap already reaches rho 0.334, nearly as well as a
+ * full velocity probe reaches velocity (0.312) at a third of the features, so pressure
+ * is the efficient choice when the target is pressure. Rule: measure velocity AND
+ * pressure if you can; if limited to one instrument, match it to the target quantity,
+ * and never rely on wall-normal velocity alone.
  */
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
