@@ -8,7 +8,7 @@
   <title>LattSim — Lattice Physics Engine</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:173,built:"2026-08-19T12:54:55Z"}; // __LATTSIM_STAMP__</script>
+  <script>window.__BUILD = {version:174,built:"2026-08-19T13:33:26Z"}; // __LATTSIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -36,6 +36,12 @@
       image-rendering:pixelated; background:#060a14; }
     .stage canvas.fill { width:100%; height:100%; image-rendering:auto; }
     .stage canvas[hidden] { display:none; }
+    /* The comparison pane sits directly under the stage so the same x runs down
+       the page: the two pictures are read as a column, not hunted for. */
+    .stage.compare { height:30vh; margin-top:8px; }
+    .stage.compare[hidden] { display:none; }
+    .badge.lbl { left:auto; right:8px; background:rgba(6,10,20,.72); color:var(--dim);
+      border-color:var(--line); }
     /* The probe marker is an OVERLAY, not something drawn into the slice canvas.
        The canvas is the size of the lattice (tens of pixels) and is scaled up, so
        a crosshair drawn into it would be one lattice cell wide and unreadable. */
@@ -127,9 +133,20 @@
       <canvas id="cv"></canvas>
       <canvas id="cvgl" class="fill" hidden></canvas>
       <span class="badge" id="backend-badge">starting…</span>
+      <span class="badge lbl" id="truth-badge" hidden>true dye</span>
       <span id="probe-mark"></span>
       <span id="sensor2-mark"></span>
       <span id="target-mark"></span>
+    </div>
+
+    <!-- THE COMPARISON PANE. A second canvas rather than two halves of the first,
+         because the probe's screen-to-cell mapping is built on #cv's geometry and
+         resizing it would silently move every marker and every tap. Both panes are
+         drawn on the TRUTH's colour range (see forceScale), so the reconstruction's
+         error shows as real over- and under-shoot instead of being normalised away. -->
+    <div class="stage compare" id="stage-recon" hidden>
+      <canvas id="cv-recon"></canvas>
+      <span class="badge lbl" id="recon-badge">reconstructed from wall sensors</span>
     </div>
 
     <!-- Probe time series, directly below the stage so the trace and the picture
@@ -303,7 +320,12 @@
       the channel walls — never the dye — and one shared-reservoir NGRC readout per cell reconstructs the
       whole concentration slice from them. Turn it on to replace the true plume with what the sensors infer;
       the number is the field nRMSE (1.0 = no better than the mean). It is the industrial soft sensor: read
-      cheap upstream signals, infer the composition you cannot instrument.</p>
+      cheap upstream signals, infer the composition you cannot instrument.
+      Turn it on and a second pane appears: the <b>true dye above, the reconstruction below</b>, on the
+      <b>same colour range</b> — two independently auto-scaled pictures cannot be compared, so the
+      reconstruction is normalised against the truth and its error shows as real over- and under-shoot.
+      The <span style="color:#ff3cdc">magenta marks</span> are the sensors: everything the model is
+      allowed to see. The number is the field nRMSE (1.0 = no better than the mean).</p>
     <div class="controls">
       <button id="recon-btn" class="sec">Reconstruct field ▶</button>
       <label class="slider">Wall sensors <input type="range" id="recon-n" min="4" max="24" step="2" value="12" />
@@ -448,6 +470,9 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
 
     const state = {
       sim: null, slice: new SliceRenderer($('cv')), volume: null, camera: new OrbitCamera(),
+      // The comparison pane's own renderer. Separate canvas, separate throttle;
+      // it draws the reconstruction while the main stage keeps the truth.
+      sliceRecon: new SliceRenderer($('cv-recon')),
       running: false, raf: 0, lastT: 0, lastStep: 0, rate: 0, view: 'slice', busy: false,
       maxBinding: Infinity, building: false,
     };
@@ -657,6 +682,8 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
       if (!sim.meta || !sim.meta.hasScalar) {
         recon.enabled = false; recon.model = null;
         state.slice.showRecon = false; state.slice.reconField = null;
+        state.slice.markers = [];
+        $('stage-recon').hidden = true; $('truth-badge').hidden = true;
         if ($('recon-btn')) $('recon-btn').textContent = 'Reconstruct field ▶';
       } else if (recon.enabled) {
         reconRebuild();
@@ -758,6 +785,7 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
         state.slice.axis = +$('axis').value;
         state.slice.position = +$('slicep').value;
         await state.slice.draw(state.sim, performance.now());
+        await drawCompare();
       }
     }
 
@@ -1009,6 +1037,7 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
       recon.model = new FieldReconstructor({ nSignals: 3 * recon.sensors.length, nLocations: target.length,
         lag: 1, stride: 1, warmup: 120, expand: false, ridge: 100 });
       state.slice.reconField = recon.field;
+      if (recon.enabled) state.slice.markers = recon.sensors;
     }
 
     async function reconSample() {
@@ -1034,6 +1063,34 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
         se += (est[j] - truth[j]) ** 2; sd += (truth[j] - mean) ** 2;
       }
       recon.nrmse = Math.sqrt(se / Math.max(sd, 1e-30));
+    }
+
+    /**
+     * The comparison pane: truth above, reconstruction below, the same plane and
+     * the SAME COLOUR RANGE.
+     *
+     * The shared range is the point. Two pictures auto-scaled independently cannot
+     * be compared -- each would fill its own contrast range and a reconstruction
+     * that is uniformly half-strength would look identical to a perfect one. Both
+     * panes are therefore normalised against the TRUTH's range, so the
+     * reconstruction's error appears as real over- and under-shoot.
+     */
+    async function drawCompare() {
+      const on = recon.enabled && state.sim && state.sim.meta && state.sim.meta.hasScalar
+        && state.view === 'slice';
+      $('stage-recon').hidden = !on;
+      $('truth-badge').hidden = !on;
+      if (!on) return;
+      const r = state.sliceRecon;
+      r.mode = SLICE_MODE.CONCENTRATION;
+      r.axis = state.slice.axis;
+      r.position = state.slice.position;
+      r.showRecon = true;
+      r.reconField = recon.field;
+      r.markers = recon.sensors;
+      const st = state.slice.lastStats;
+      r.forceScale = (st && st.concLo != null) ? { lo: st.concLo, hi: st.concHi } : null;
+      await r.draw(state.sim, performance.now());
     }
 
     function reconStatus() {
@@ -1087,10 +1144,16 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
         ensureSliceForConcentration('field reconstruction');
         $('mode').value = 'concentration';
         state.slice.mode = SLICE_MODE.CONCENTRATION;
-        state.slice.showRecon = true;
-        $('recon-btn').textContent = 'Show truth ⏹';
+        // The main stage keeps the TRUTH; the reconstruction gets its own pane, so
+        // the two can be read against each other rather than remembered.
+        state.slice.showRecon = false;
+        state.slice.markers = recon.sensors;
+        $('recon-btn').textContent = 'Stop reconstruction ⏹';
       } else {
         state.slice.showRecon = false;
+        state.slice.markers = [];
+        $('stage-recon').hidden = true;
+        $('truth-badge').hidden = true;
         $('recon-btn').textContent = 'Reconstruct field ▶';
       }
       if (!state.running) drawOnce();
@@ -1994,6 +2057,7 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
     };
     window.__lsSim = () => state.sim;
     window.__lsSlice = () => state.slice;   // the slice renderer, for its lastStats (e.g. the scalar range)
+    window.__lsSliceRecon = () => state.sliceRecon;   // the comparison pane, for its imposed shared scale
     window.__lsUnits = UnitSystem;
 
     syncObstacle();
