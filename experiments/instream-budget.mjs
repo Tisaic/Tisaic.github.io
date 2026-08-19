@@ -15,6 +15,40 @@
  *
  * CAVEAT (as in instream.mjs): the probe is a non-intrusive point readback, so this is
  * the INFORMATION available at those points, not the intrusion cost a real probe pays.
+ *
+ * MEASURED (res 24, cylinder, chaotic 0.6, near-wake target x=34, |u|, 900 scored):
+ *   instream-rake    nRMSE 0.188  (96% var)   transverse rake at the target station
+ *   instream-shear   nRMSE 0.248  (94%)       straddle geometry, lifted into shear layers
+ *   wall-6           nRMSE 0.266  (93%)       the wall straddle baseline
+ *   instream-line    nRMSE 0.357  (87%)       centreline, streamwise only
+ *
+ * AT EQUAL BUDGET, IN-STREAM WINS -- SO THE EARLIER "WALLS WIN" WAS THE BUDGET GAP.
+ * The same straddle geometry lifted off the walls into the shear layers beats the wall
+ * array (0.248 vs 0.266), because no-slip damps the signal at the wall and the wake's
+ * energy lives in the shear layers. But the margin is small, ~7%: the boundary carries
+ * the coherent wake signature nearly as well as the interior does.
+ *
+ * THE BIG LEVER IS NOT IN-FLOW-VS-WALL, IT IS MATCHING THE ARRAY GEOMETRY TO THE TARGET
+ * GEOMETRY. The transverse RAKE at the target station wins outright (0.188, 96%), beating
+ * every straddle. The target is a transverse COLUMN, and a transverse rake at the same x
+ * is spatially aligned with it -- maximal transverse coverage, zero streamwise
+ * displacement. The straddle spent two of its three stations at +/-2d away in x, spread
+ * the transverse target does not need; the rake spends all six spanning the column. So
+ * transverse alignment > in-flow bonus > streamwise spread, and the centreline LINE
+ * (streamwise only, along the quiet velocity-deficit centreline) is worst even at 6
+ * sensors -- streamwise spread alone cannot reconstruct a transverse target. This is the
+ * same co-location lesson as before, refined: co-locate AND align the array's shape to
+ * the target's shape.
+ *
+ * THE HONEST ENGINEERING TRADE: the arrangement that wins on INFORMATION is the one that
+ * would disturb the flow MOST -- a transverse rake spanning the channel two diameters
+ * behind the cylinder is a physical obstruction right across the wake it is measuring.
+ * So the interior's ~30% reconstruction edge over the wall array (0.188 vs 0.266) is
+ * bought with the worst intrusion, while the wall array gives up that 30% to touch
+ * nothing. That is the real choice in-stream sensing poses, now quantified: richer,
+ * better-aligned information in the flow, against a non-intrusive boundary array that is
+ * only modestly behind. For a distributed interior target you want the flow; for a
+ * hands-off installation the walls cost only ~30%.
  */
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
