@@ -41,13 +41,14 @@ import { channelFlow } from '../lib/lattsim/scenes.js';
 import { FieldReconstructor } from '../lib/probesense/sensor.js';
 
 const PHYS = { collision: 'trt', trtPolicy: 'stability', smagorinsky: 0.16 };
-const RES = 24, EVERY = 2;
+const RES = 16, EVERY = 2;
 const HOME = 0.06;                                  // where the single-point arm trains
-const LEVELS = [0.04, 0.056, 0.072, 0.088, 0.104, 0.12];   // the commissioning envelope
-const TESTS = [0.06, 0.05, 0.09, 0.11, 0.16];       // last one is OUTSIDE the envelope
-const PER_VISIT = 50, PASSES = 2;                   // 6 x 50 x 2 = 600 training samples
+const LEVELS = [0.04, 0.06, 0.08, 0.10, 0.12];       // the commissioning envelope
+const TESTS = [0.06, 0.05, 0.11, 0.16];             // last one is OUTSIDE the envelope
+const PER_VISIT = 60, PASSES = 2;                   // 5 x 60 x 2 = 600 training samples
 const WARMUP = 300;                                 // one full pass, so the window spans it
-const SCORE_N = 100, SETTLE = 400;
+const SETTLE_CAP = 2500, STEADY = 1e-3;             // see settle()
+const SCORE_N = 100;
 
 const sim = channelFlow({ resolution: RES, obstacle: 'cylinder', inletVelocity: HOME,
   dye: true, ...PHYS });
@@ -80,6 +81,30 @@ const arms = [
 
 let u = HOME;
 const setU = (v) => { u = v; sim.operators[0].setParams({ inletVelocity: [v, 0, 0] }); };
+
+/**
+ * ADVANCE UNTIL THE FLOW HAS ACTUALLY ARRIVED, measured rather than assumed.
+ *
+ * The first version of this experiment used a fixed 400 steps between operating
+ * points. One domain transit at the slowest speed is 48/0.04 = 1200 steps, so every
+ * score was taken mid-flush: all four arms were tested on a transient none of them
+ * had trained on, they clustered indistinguishably at ~0.7 nRMSE, and the arm tested
+ * AT ITS OWN TRAINING POINT scored 0.71 against the 0.008 the same configuration
+ * reaches elsewhere. The ranking was noise. This project has now made that mistake
+ * often enough to have a name for it: a measurement taken across a transient
+ * describes the transient.
+ *
+ * The residual is per-step, so the threshold means the same thing at every speed.
+ */
+async function settle(cap = SETTLE_CAP) {
+  let steps = 0;
+  while (steps < cap) {
+    sim.advance(100); steps += 100;
+    const d = await sim.diagnostics();
+    if (d.residual != null && d.residual < STEADY) break;
+  }
+  return steps;
+}
 
 function readSignals() {
   const mac = sim.backend.read('macro');
@@ -126,7 +151,7 @@ function sample(phase, score) {
 let seed = 12345;
 const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
 
-sim.advance(600);                                         // develop the plume
+await settle();                                           // develop the plume
 for (let i = 0; i < PER_VISIT * PASSES * LEVELS.length; i++) sample(1, false);   // phase 1: A
 
 const visits = [];
@@ -135,13 +160,20 @@ for (let p = 0; p < PASSES; p++) {
   for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
   visits.push(...order);
 }
-for (const v of visits) { setU(v); for (let i = 0; i < PER_VISIT; i++) sample(2, false); }   // phase 2
+// PHASE 2: dwell at each level until it has SETTLED, then record. Commissioning is
+// supposed to cover operating POINTS; sampling immediately after each setpoint
+// change would cover the transitions between them instead.
+const dwell = [];
+for (const v of visits) {
+  setU(v); dwell.push(await settle());
+  for (let i = 0; i < PER_VISIT; i++) sample(2, false);
+}
 
 // ---- phase 3: everything frozen, scored on the same stream at held-out points
 const rows = [];
 for (const v of TESTS) {
   setU(v);
-  sim.advance(SETTLE);
+  const settled = await settle();
   const acc = {};
   for (const a of arms) acc[a.name] = [];
   for (let i = 0; i < SCORE_N; i++) {
@@ -150,7 +182,7 @@ for (const v of TESTS) {
   }
   const d = await sim.diagnostics();
   rows.push({ u: v, inside: v >= Math.min(...LEVELS) && v <= Math.max(...LEVELS),
-    limited: d.limited, uMax: d.uMax,
+    limited: d.limited, uMax: d.uMax, settled, residual: d.residual,
     score: Object.fromEntries(arms.map((a) => [a.name, meanOf(acc[a.name])])) });
 }
 
@@ -168,4 +200,19 @@ for (const r of rows) {
 const inside = rows.filter((r) => r.inside);
 console.log('\nMean over the INSIDE points:');
 for (const a of arms) console.log(`  ${a.name.padEnd(12)} ${meanOf(inside.map((r) => r.score[a.name])).toFixed(4)}`);
+console.log('\nsettling steps per test point: ' + rows.map((r) => `${r.u}:${r.settled}`).join('  '));
+console.log('dwell steps in the sweep: ' + dwell.join(' '));
+
+// THE CONTROL. The single-point arm is scored AT THE POINT IT TRAINED ON, where it
+// has no excuse: if that is not sharply better than predicting the mean, the
+// protocol is broken and no ranking below it means anything. Stated as a gate rather
+// than left for a reader to notice, because the first run of this experiment
+// produced a confident four-way ranking that was entirely an artefact.
+const home = rows.find((r) => Math.abs(r.u - HOME) < 1e-9);
+const ctrl = home ? home.score['A single-pt'] : NaN;
+console.log(`\nCONTROL  single-point arm at its own training point (u ${HOME}): nRMSE ${ctrl.toFixed(4)}`);
+console.log(ctrl < 0.2
+  ? '  -> VALID: the protocol reproduces a working reconstruction, so the comparison stands.'
+  : '  -> INVALID: it cannot even fit where it trained. Do not read the ranking above;'
+    + ' the flow is not settled or the pipeline is broken.');
 sim.destroy();
