@@ -69,6 +69,9 @@ if [ -d lib/lattsim ]; then
   # The equation of state, checked against the analytic sound speed of an acoustic
   # wave -- the same class of closed-form check as Poiseuille for shear viscosity.
   node test/lattsim/eos.test.mjs
+  # The passive scalar's diffusivity, advection speed and conservation against
+  # their closed forms -- a contract, so both tiers.
+  node test/lattsim/scalar.test.mjs
 fi
 
 # Serve the repo and always clean up the server on exit.
