@@ -9,7 +9,7 @@
 // DIFFERENT waveform of the same phase. That is the soft-sensor situation in
 // miniature -- the information is there, but not as a scale factor -- and it is
 // what makes the no-model baselines genuinely bad rather than straw men.
-import { FieldSoftSensor, QUANTITIES, Score } from '../../lib/probesense/sensor.js';
+import { FieldSoftSensor, FieldReconstructor, QUANTITIES, Score } from '../../lib/probesense/sensor.js';
 
 let failed = 0;
 function check(name, cond, detail) {
@@ -367,6 +367,56 @@ function drive(ss, nSamples, step0 = 0) {
   for (let i = 0; i < 600; i++) { const s = i * EVERY2; solo.sample(s, sA(s), tgt2(s)); }
   check('a single sensor read still works unwrapped', solo.samples > 500, solo.samples);
 }
+
+// ---------------------------------------------------------- field reconstruction
+// ONE reservoir, MANY readouts. The feature expansion is shared and the RLS
+// covariance is shared, so N locations cost O(nf^2) once plus N*O(nf), not
+// N*O(nf^2). The claim that makes this legitimate is EXACTNESS: sharing the
+// covariance must give byte-identical results to N independent readouts, because
+// the gain depends only on the feature vector and the prior, never on a target.
+{
+  const W2 = 2 * Math.PI / 300;
+  const sensor = (s) => [0.08 * Math.sin(W2 * s), 0.06 * Math.cos(W2 * s)];
+  const K = 8;
+  const targets = Array.from({ length: K }, (_, k) => (s) =>
+    0.05 * Math.sin(W2 * s - 0.3 * k) + 0.02 * Math.sin(2 * W2 * s + 0.1 * k) + 0.1 * k);
+  const cfg = { nSignals: 2, lag: 4, stride: 6, warmup: 200, ridge: 100 };
+
+  const many = new FieldReconstructor({ ...cfg, nLocations: K });
+  const singles = Array.from({ length: K }, () => new FieldReconstructor({ ...cfg, nLocations: 1 }));
+  let maxDiff = 0, graded = 0;
+  const scores = Array.from({ length: K }, () => new Score());
+  // Score only the converged tail: online RLS with target normalisation takes a
+  // few thousand samples to settle (early 0.35 -> late 0.03 measured), the same
+  // warm-up the rest of this file keeps re-learning.
+  for (let i = 0; i < 5000; i++) {
+    const s = i * EVERY, sig = sensor(s), ts = targets.map((f) => f(s));
+    many.push(sig); const mE = many.observe(ts);
+    const sE = singles.map((r, k) => { r.push(sig); return r.observe([ts[k]]); });
+    if (mE && sE[0]) {
+      for (let k = 0; k < K; k++) {
+        maxDiff = Math.max(maxDiff, Math.abs(mE[k] - sE[k][0]));
+        if (i > 4000) scores[k].add(ts[k], mE[k]);
+      }
+      graded++;
+    }
+  }
+  check('a shared-covariance reconstructor equals N independent readouts exactly',
+    maxDiff === 0, maxDiff.toExponential(2));
+  check('and it reconstructs every location once converged', graded > 4000
+    && scores.every((sc) => sc.nrmse < 0.06),
+    scores.map((sc) => sc.nrmse.toFixed(3)).join(','));
+
+  // The feature expansion is computed ONCE per sample regardless of location count.
+  let calls = 0;
+  const big = new FieldReconstructor({ ...cfg, nLocations: 500 });
+  const orig = big._fmap.expand;
+  big._fmap.expand = (z) => { calls++; return orig(z); };
+  for (let i = 0; i < 400; i++) { big.push(sensor(i * EVERY)); big.observe(new Array(500).fill(0.01)); }
+  check('the reservoir is expanded once per sample, not once per location',
+    calls <= 400, `${calls} expansions for 500 locations over 400 samples`);
+}
+
 
 console.log(failed ? `\n${failed} check(s) failed\n` : '\nall checks passed\n');
 process.exit(failed ? 1 : 0);
