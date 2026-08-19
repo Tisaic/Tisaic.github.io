@@ -81,10 +81,12 @@ const out = await pg.evaluate(async () => {
   const TRAIN = 1200, SCORE = 800;
   for (let i = 0; i < TRAIN + SCORE; i++) {
     sim.advance(10);
+    // Read every cell SEQUENTIALLY. The backend has one shared probe buffer, so
+    // concurrent probes (Promise.all) collide on its mapAsync -- read one at a time.
     const va = await sim.backend.probe('macro', A);
     const vb = await sim.backend.probe('macro', B);
-    const tUp = await Promise.all(sliceUp.map((c) => sim.backend.probe('macro', c))).then((a) => a.map(spd));
-    const tDn = await Promise.all(sliceDn.map((c) => sim.backend.probe('macro', c))).then((a) => a.map(spd));
+    const tUp = []; for (const c of sliceUp) tUp.push(spd(await sim.backend.probe('macro', c)));
+    const tDn = []; for (const c of sliceDn) tDn.push(spd(await sim.backend.probe('macro', c)));
     rAup.push(sig(va)); const eAup = rAup.observe(tUp);
     rAdn.push(sig(va)); const eAdn = rAdn.observe(tDn);
     rBdn.push(sig(vb)); const eBdn = rBdn.observe(tDn);
