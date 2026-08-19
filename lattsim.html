@@ -8,7 +8,7 @@
   <title>LattSim — Lattice Physics Engine</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:178,built:"2026-08-19T17:29:01Z"}; // __LATTSIM_STAMP__</script>
+  <script>window.__BUILD = {version:179,built:"2026-08-19T17:56:54Z"}; // __LATTSIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -624,12 +624,7 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
       // Re ALONE DOES NOT ANSWER "should this shed?" -- the threshold depends on
       // the shape, and a sphere's is nearly 6x a cylinder's. Stating both turns
       // "why is nothing happening?" into a number the user can act on.
-      if (sim.meta && sim.meta.reynolds) {
-        const Re = sim.meta.reynolds, crit = sim.meta.sheddingRe;
-        $('s-re').innerHTML = Re.toFixed(0) + (crit
-          ? ` — <span class="${Re > crit ? 'good' : ''}">${Re > crit ? 'above' : 'below'} the `
-            + `${sim.meta.obstacle || ''} shedding threshold (~${crit})</span>` : '');
-      } else $('s-re').textContent = '—';
+      refreshReRow();
       state.lastStep = 0; state.lastT = performance.now(); state.uMax = 0;
 
       // EVERY RUN STATES WHAT IT IS. This lands in the page's own debug console
@@ -1897,9 +1892,9 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
       const cs = +$('csound').value;
       $('csound-v').textContent = $('csound').disabled ? '—' : cs.toFixed(2);
     }
-    $('eos').addEventListener('change', () => { eosLabels(); build(); });
+    $('eos').addEventListener('change', () => { eosLabels(); applyLiveParams(); });
     $('csound').addEventListener('input', eosLabels);
-    $('csound').addEventListener('change', () => build());
+    $('csound').addEventListener('change', () => applyLiveParams());
     eosLabels();
 
     function inletLabels() {
@@ -1910,9 +1905,9 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
     inletLabels();
     for (const id of ['inletamp', 'inletrate']) {
       $(id).addEventListener('input', inletLabels);
-      $(id).addEventListener('change', () => build());
+      $(id).addEventListener('change', () => applyLiveParams());
     }
-    $('inletmode').addEventListener('change', () => build());
+    $('inletmode').addEventListener('change', () => applyLiveParams());
 
     $('stir').addEventListener('input', () => { $('stir-v').textContent = (+$('stir').value).toFixed(1) + '×'; });
     window.__lsStir = (cx, cy, dx, dy) => stirAt(cx, cy, dx, dy);
@@ -1930,7 +1925,7 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
     $('scene').addEventListener('change', () => { clampResolution(); syncObstacle(); build(); });
     $('obstacle').addEventListener('change', () => build());
     $('lidamp').addEventListener('input', () => { $('lidamp-v').textContent = (+$('lidamp').value).toFixed(3); });
-    $('lidamp').addEventListener('change', () => build());
+    $('lidamp').addEventListener('change', () => applyLiveParams());
     // THE RANGE COMES FROM THE STOKES LAYER, not from what looked like a tidy
     // slider. An oscillating wall drags a layer of depth sqrt(2 nu / omega); at
     // 20 cycles per 1000 steps that depth is 0.73 CELLS, i.e. below the lattice
@@ -1947,8 +1942,79 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
       $('lidfreq-v').textContent = `${Math.round(1000 / f)} st · δ${depth.toFixed(1)}`;
     }
     $('lidfreq').addEventListener('input', lidHint);
-    $('lidfreq').addEventListener('change', () => build());
+    $('lidfreq').addEventListener('change', () => applyLiveParams());
     // The obstacle only means anything in the channel scene.
+    // Re ALONE DOES NOT ANSWER "should this shed?" -- the threshold depends on the
+    // shape, and a sphere's is nearly 6x a cylinder's. Stating both turns "why is
+    // nothing happening?" into a number the user can act on. Refreshed from meta so
+    // a LIVE parameter change updates it rather than leaving a stale number on screen.
+    function refreshReRow() {
+      const sim = state.sim;
+      if (sim && sim.meta && sim.meta.reynolds) {
+        const Re = sim.meta.reynolds, crit = sim.meta.sheddingRe;
+        $('s-re').innerHTML = Re.toFixed(0) + (crit
+          ? ` — <span class="${Re > crit ? 'good' : ''}">${Re > crit ? 'above' : 'below'} the `
+            + `${sim.meta.obstacle || ''} shedding threshold (~${crit})</span>` : '');
+      } else $('s-re').textContent = '—';
+    }
+
+    /**
+     * THE FLOW PARAMETERS ARE LIVE. Changing viscosity, speed, the disturbance or
+     * the equation of state is a parameter change, not a new simulation -- so it no
+     * longer rebuilds.
+     *
+     * That distinction is the whole point rather than a convenience. A rebuild
+     * restarts the flow AND rebuilds the soft-sensor model, so a trained
+     * reconstruction could never be shown a regime change: the moment you moved the
+     * slider, the thing you were testing was gone. Watching a locked model meet an
+     * operating point it was not calibrated on is the experiment this page exists to
+     * make possible, and it needs the plant to keep running underneath it.
+     *
+     * Only geometry still rebuilds -- resolution, scene and obstacle change the
+     * lattice or the cell classification, which is an allocation, not a parameter.
+     */
+    function applyLiveParams() {
+      const sim = state.sim;
+      if (!sim || !sim.operators || !sim.operators.length) return;
+      const fluid = sim.operators[0];
+      const isCavity = $('scene').value === 'cavity';
+      const u = isCavity ? +$('lidamp').value : +$('uin').value;
+      const tau = +$('tau').value;
+      const mode = $('eos').value;
+      const eos = (mode === 'stiff' || mode === 'soft') ? 'linear'
+        : mode === 'nonideal' ? 'quadratic' : 'ideal';
+      // Every equation-of-state field is set explicitly. eosArgs() returns only the
+      // keys its mode needs, which is right for construction and wrong here: leaving
+      // soundSpeed behind when switching back to ideal would keep a stale sound speed
+      // in the uniform.
+      fluid.setParams({
+        tau,
+        inletVelocity: [u, 0, 0],
+        wallFrequency: +$('lidfreq').value / 1000,
+        inletMode: $('inletmode').value,
+        inletAmplitude: +$('inletamp').value,
+        inletRate: +$('inletrate').value / 1000,
+        eos,
+        soundSpeed: eos === 'linear' ? +$('csound').value : null,
+        eosParam: eos === 'quadratic' ? 0.2 : 0,
+      });
+      // DERIVED NUMBERS GO STALE SILENTLY. meta carries the Reynolds number and the
+      // speed the volume renderer scales its colours by, both computed when the scene
+      // was built; leaving them behind would report the old flow while solving the new.
+      if (sim.meta) {
+        const nu = (tau - 0.5) / 3;
+        if (sim.meta.obstacleRadius) sim.meta.reynolds = (u * 2 * sim.meta.obstacleRadius) / nu;
+        sim.meta.referenceSpeed = isCavity ? u * 0.5 : u;
+        if (state.runInfo) {
+          Object.assign(state.runInfo, { tau, nu, u, ReCell: u / nu, Re: sim.meta.reynolds,
+            omegaPlus: 1 / tau, omegaMinus: omegaMinusFor(tau, PHYSICS.trtPolicy) });
+        }
+      }
+      refreshReRow();
+      stabilityHint();
+      if (!state.running) { refreshStats(); drawOnce(); }
+    }
+
     function syncObstacle() {
       $('obstacle').disabled = $('scene').value !== 'channel';
       const cavity = $('scene').value === 'cavity';
@@ -2067,9 +2133,9 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
                 : '<span class="good">within the measured stable range</span>');
     }
     $('tau').addEventListener('input', () => { $('tau-v').textContent = (+$('tau').value).toFixed(3); stabilityHint(); lidHint(); });
-    $('tau').addEventListener('change', () => build());
+    $('tau').addEventListener('change', () => applyLiveParams());
     $('uin').addEventListener('input', () => { $('uin-v').textContent = (+$('uin').value).toFixed(3); stabilityHint(); });
-    $('uin').addEventListener('change', () => build());
+    $('uin').addEventListener('change', () => applyLiveParams());
 
     // ------------------------------------------------------------ verification
     $('verify-run').addEventListener('click', async () => {

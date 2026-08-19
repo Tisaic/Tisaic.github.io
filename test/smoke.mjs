@@ -729,6 +729,52 @@ if (hasGPU && ls0.backend === 'webgpu') {
     `conc ${sparity.pmWorst.toExponential(2)}, macro ${sparity.pmMacWorst.toExponential(2)} over ${sparity.nCells} cells`);
 }
 
+// THE FLOW PARAMETERS ARE LIVE, and that is a contract rather than a nicety: a
+// rebuild restarts the flow AND the soft-sensor model, so a trained reconstruction
+// could never be shown a regime change if moving a slider rebuilt. Geometry
+// (resolution, scene, obstacle) still rebuilds; viscosity and speed must not.
+{
+  const live = await latt.evaluate(async () => {
+    const s0 = window.__lsSim().step;
+    window.__lsStep(40);
+    const before = window.__lsSim().step;
+    const tau0 = window.__lsSim().operators[0].params.tau;
+    const el = document.getElementById('tau');
+    const slider0 = el.value;
+    const set = (v) => {
+      el.value = String(v);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    set(Math.min(2.5, tau0 + 0.4));
+    await new Promise((r) => setTimeout(r, 250));
+    window.__lsStep(40);
+    const out = { s0, before, after: window.__lsSim().step, building: window.__lsDbg().building,
+      tau0, tauNow: window.__lsSim().operators[0].params.tau,
+      dirtyCleared: window.__lsSim().operators[0].paramsDirty !== true };
+    // PUT IT BACK. Now that a slider changes the RUNNING simulation, a test that
+    // moves one and walks away has changed the flow for every check after it --
+    // which is exactly what happened: leaving tau raised made a later scene so
+    // viscous that the soft sensor's target barely moved, and its nRMSE became
+    // noise divided by noise. A live control makes test hygiene load-bearing.
+    set(slider0);
+    await new Promise((r) => setTimeout(r, 250));
+    out.restored = window.__lsSim().operators[0].params.tau;
+    return out;
+  });
+  check('lattsim: changing viscosity does not rebuild (the flow keeps running)',
+    live.after > live.before && live.before >= live.s0 && !live.building, JSON.stringify(live));
+  check('lattsim: the live change reached the operator',
+    Math.abs(live.tauNow - live.tau0) > 0.3, `${live.tau0} -> ${live.tauNow}`);
+  // On the GPU the uniform is only rewritten when something marks it dirty; if the
+  // flag were never cleared the page would be re-uploading every step forever, and
+  // if it were never set the shader would keep solving the old viscosity.
+  check('lattsim: the dirty flag was consumed by the kernel', live.dirtyCleared,
+    String(live.dirtyCleared));
+  check('lattsim: the live check restored the viscosity it borrowed',
+    Math.abs(live.restored - live.tau0) < 1e-9, `${live.tau0} vs ${live.restored}`);
+}
+
 check('lattsim: the GPU driver reported no uncaptured errors', (ls0.gpuErrors || []).length === 0,
   JSON.stringify(ls0.gpuErrors));
 
@@ -1288,11 +1334,20 @@ await latt.screenshot({ path: join(SHOTS, '09-lattsim.png') });
       el.dispatchEvent(new Event('change', { bubbles: true }));
     };
     set('tau', 0.5001); set('uin', 0.35);
+    // AND REBUILD, because the sliders no longer do. This check is about the
+    // limiter at the extreme corner, and it needs the flow to START there: the
+    // rebuild re-initialises the whole domain at the extreme inlet speed, which is
+    // what drives cells onto the clamp within the step budget below. Once the
+    // parameters became live the same slider moves left the flow evolving from a
+    // mild settled state instead, and 1200 steps reported ZERO limited cells -- the
+    // check failing not because the limiter broke but because the corner was never
+    // actually entered.
+    document.getElementById('reset').click();
   });
   // A SIMULATION OBJECT EXISTS BEFORE IT IS BUILT, so "not null" is not the
   // condition to wait on -- `advance()` throws "call build() first" until the
-  // solver is attached, and two slider changes queue two rebuilds so there is a
-  // window where neither holds. Wait for the SOLVER, and wrap the whole probe:
+  // solver is attached, and a rebuild leaves a window where neither holds. Wait for
+  // the SOLVER, and wrap the whole probe:
   // a check that THROWS takes every later check in the run with it, which is
   // strictly worse than one that fails. The first two versions of this crashed
   // the suite and hid everything downstream both times.
