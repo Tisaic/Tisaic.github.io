@@ -1245,6 +1245,49 @@ await latt.screenshot({ path: join(SHOTS, '09-lattsim.png') });
         mach: document.getElementById('s-mach').textContent };
     } catch (e) { return { error: String((e && e.message) || e) }; }
   });
+  // ----------------------------------------------------- equation of state
+  // THE EOS PRESSURE FORCE ON THE WGSL BACKEND, verified the way the CPU
+  // reference is: a stiffer fluid propagates sound FASTER. Seed a standing
+  // acoustic wave, measure its period at an antinode, and check the sound speed
+  // shifts from the lattice cs (0.577) to the EOS value (0.80). This is the ONLY
+  // check that exercises the force on the GPU -- a uniform-density flow has zero
+  // pressure gradient, so it would pass trivially whether the force worked or not.
+  const eosSound = await latt.evaluate(async () => {
+    const { Simulation } = await import(new URL('./lib/lattsim/simulation.js', location.href).href);
+    const { LBMFluidOperator } = await import(new URL('./lib/lattsim/operators/lbm.js', location.href).href);
+    const { TOPOLOGY } = await import(new URL('./lib/lattsim/lattice.js', location.href).href);
+    const { feq } = await import(new URL('./lib/lattsim/d3q19.js', location.href).href);
+    async function c(eos, soundSpeed) {
+      const Nx = 64, Ny = 4, Nz = 4, eps = 1e-3, N = Nx * Ny * Nz;
+      const sim = new Simulation({ lattice: { size: [Nx, Ny, Nz], spacing: 1e-3,
+        topology: [TOPOLOGY.PERIODIC, TOPOLOGY.PERIODIC, TOPOLOGY.PERIODIC] } });
+      sim.addPhysics(new LBMFluidOperator({ tau: 0.6, collision: 'bgk', eos, soundSpeed }));
+      await sim.build({ backend: 'webgpu' });
+      if (sim.backend.kind !== 'webgpu') return null;   // no GPU here -> skip, not fail
+      const buf = new Float32Array(19 * N);
+      for (let x = 0; x < Nx; x++) for (let y = 0; y < Ny; y++) for (let z = 0; z < Nz; z++) {
+        const i = x + Nx * (y + Ny * z), rho = 1 + eps * Math.cos(2 * Math.PI * x / Nx);
+        for (let q = 0; q < 19; q++) buf[q * N + i] = feq(q, rho, 0, 0, 0);
+      }
+      sim.backend.device.queue.writeBuffer(sim.backend.read('f'), 0, buf);
+      const probe = 0 + Nx * (2 + Ny * 2), series = [];
+      for (let t = 0; t < 400; t++) { const v = await sim.backend.probe('macro', probe); series.push(v[0] - 1); sim.advance(1); }
+      await sim.backend.destroy();
+      const cr = [];
+      for (let t = 1; t < series.length; t++) if ((series[t - 1] >= 0) !== (series[t] >= 0)) cr.push(t - 1 + series[t - 1] / (series[t - 1] - series[t]));
+      return cr.length >= 2 ? Nx / (2 * (cr[1] - cr[0])) : NaN;
+    }
+    return { ideal: await c('ideal', null), stiff: await c('linear', 0.80) };
+  });
+  if (eosSound && eosSound.ideal != null) {
+    check('lattsim: the ideal EOS propagates sound at the lattice cs on the GPU',
+      Math.abs(eosSound.ideal - Math.sqrt(1 / 3)) / Math.sqrt(1 / 3) < 0.03, eosSound.ideal);
+    check('lattsim: a stiffer EOS raises the GPU sound speed to its set value',
+      Math.abs(eosSound.stiff - 0.80) / 0.80 < 0.03, eosSound.stiff);
+  } else {
+    check('lattsim: EOS sound-speed check skipped (no GPU here)', true);
+  }
+
   check('lattsim: the extreme corner of the sliders stays finite',
     stops && !stops.error && Number.isFinite(stops.uMax) && Number.isFinite(stops.rho[0])
     && Number.isFinite(stops.rho[1]), JSON.stringify(stops));

@@ -66,6 +66,9 @@ if [ -d lib/lattsim ]; then
   # runs at both tiers -- but the tau sweep and the resolution study behind it
   # are full-tier.
   node test/lattsim/poiseuille.test.mjs
+  # The equation of state, checked against the analytic sound speed of an acoustic
+  # wave -- the same class of closed-form check as Poiseuille for shear viscosity.
+  node test/lattsim/eos.test.mjs
 fi
 
 # Serve the repo and always clean up the server on exit.

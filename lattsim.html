@@ -8,7 +8,7 @@
   <title>LattSim — Lattice Physics Engine</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:146,built:"2026-08-18T23:43:10Z"}; // __LATTSIM_STAMP__</script>
+  <script>window.__BUILD = {version:147,built:"2026-08-19T00:06:04Z"}; // __LATTSIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -236,6 +236,24 @@
       <label class="slider">Disturbance rate <input type="range" id="inletrate" min="0.5" max="20" step="0.5" value="4" />
         <span class="v" id="inletrate-v">4.0/1k</span></label>
     </div>
+    <div class="controls">
+      <select id="eos" aria-label="Equation of state">
+        <option value="ideal">ideal gas (p = ρcs²)</option>
+        <option value="stiff">stiffer fluid</option>
+        <option value="soft">softer fluid</option>
+        <option value="nonideal">non-ideal (density-stiffening)</option>
+      </select>
+      <label class="slider">Sound speed <input type="range" id="csound" min="0.2" max="1.2" step="0.02" value="0.75" />
+        <span class="v" id="csound-v">0.75</span></label>
+    </div>
+    <p class="lead" style="margin-top:4px"><b>Compressibility — a tunable equation of state.</b> Standard LBM
+      fixes the pressure at p = ρcs² with the lattice sound speed cs = 0.577, so a fast flow drives large
+      density swings (the Ma² error that clamps at high speed). This adds a pressure force so the effective
+      sound speed is a knob: a <b>stiffer</b> fluid is a lower Mach number at the same velocity, which is how
+      you push the flow faster before compressibility bites. <b>Non-ideal</b> makes the stiffness rise with
+      density — the foundation a multiphase model builds on. Verified against the analytic sound speed of a
+      pressure wave (a stiffer fluid propagates sound faster, measured to &lt;0.1%). D3Q19 isothermal LBM
+      cannot do true shocks or supersonic flow — that needs a thermal scheme.</p>
     <p class="lead" style="margin-top:4px"><b>The inlet can be made to vary</b>, which is the difference
       between a flow that settles and one that never does. A <b>pulsing</b> inlet is periodic, so
       "it will do what it did one period ago" still predicts it — that is the control. <b>Quasi-periodic</b>
@@ -509,6 +527,7 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
         // Slider is CYCLES PER 1000 STEPS, matching the lid's convention, because
         // a period a person can picture beats a per-step frequency they cannot.
         inletRate: +$('inletrate').value / 1000,
+        ...eosArgs(),
         ...PHYSICS,
       });
       const mem = sim.memoryEstimate();
@@ -1558,6 +1577,27 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
       window.addEventListener('mouseup', up);
     })();
 
+    // Map the friendly EOS selector to operator params. A stiffer/softer fluid is
+    // the linear EOS at a chosen sound speed; non-ideal is the quadratic EOS.
+    function eosArgs() {
+      const mode = $('eos').value;
+      const cs = +$('csound').value;
+      if (mode === 'stiff' || mode === 'soft') return { eos: 'linear', soundSpeed: cs };
+      if (mode === 'nonideal') return { eos: 'quadratic', eosParam: 0.2 };
+      return { eos: 'ideal' };
+    }
+    function eosLabels() {
+      const mode = $('eos').value;
+      // The sound-speed slider only applies to the linear (stiff/soft) modes.
+      $('csound').disabled = !(mode === 'stiff' || mode === 'soft');
+      const cs = +$('csound').value;
+      $('csound-v').textContent = $('csound').disabled ? '—' : cs.toFixed(2);
+    }
+    $('eos').addEventListener('change', () => { eosLabels(); build(); });
+    $('csound').addEventListener('input', eosLabels);
+    $('csound').addEventListener('change', () => build());
+    eosLabels();
+
     function inletLabels() {
       const a = +$('inletamp').value;
       $('inletamp-v').textContent = a === 0 ? 'off' : '±' + Math.round(a * 100) + '%';
@@ -1667,7 +1707,11 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
       // outside its own approximation. Both numbers are shown because a run can
       // be ruined by either one alone, and they do not move together: raising the
       // speed raises both, while lowering the viscosity raises only Re_cell.
-      const mach = u * Math.sqrt(3);
+      // Effective Mach uses the EOS sound speed when one is set, so the readout
+      // tracks the knob the user is turning rather than the fixed lattice cs.
+      const ea = eosArgs();
+      const cEff = ea.eos === 'linear' ? ea.soundSpeed : Math.sqrt(1 / 3);
+      const mach = u / cEff;
       const mcls = mach > 0.3 ? 'bad' : mach > 0.15 ? 'warn' : 'good';
       $('s-mach').innerHTML = `ν ${nu.toExponential(2)} · Ma ${mach.toFixed(3)} — `
         + (mach > 0.3
