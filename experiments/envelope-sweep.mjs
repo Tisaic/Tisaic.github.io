@@ -41,13 +41,13 @@ import { channelFlow } from '../lib/lattsim/scenes.js';
 import { FieldReconstructor } from '../lib/probesense/sensor.js';
 
 const PHYS = { collision: 'trt', trtPolicy: 'stability', smagorinsky: 0.16 };
-const RES = 24, EVERY = 4;
+const RES = 24, EVERY = 2;
 const HOME = 0.06;                                  // where the single-point arm trains
 const LEVELS = [0.04, 0.056, 0.072, 0.088, 0.104, 0.12];   // the commissioning envelope
 const TESTS = [0.06, 0.05, 0.09, 0.11, 0.16];       // last one is OUTSIDE the envelope
-const PER_VISIT = 80, PASSES = 3;                   // 6 x 80 x 3 = 1440 training samples
-const WARMUP = 480;                                 // one full pass, so the window spans it
-const SCORE_N = 150, SETTLE = 600;
+const PER_VISIT = 50, PASSES = 2;                   // 6 x 50 x 2 = 600 training samples
+const WARMUP = 300;                                 // one full pass, so the window spans it
+const SCORE_N = 100, SETTLE = 400;
 
 const sim = channelFlow({ resolution: RES, obstacle: 'cylinder', inletVelocity: HOME,
   dye: true, ...PHYS });
@@ -60,7 +60,11 @@ for (const yw of [1, L.ny - 2]) for (let s = 0; s < 6; s++) {
   const i = L.index(x, yw, zc); if (sim.flags[i] !== 1) sensors.push(i);
 }
 const target = [];
-for (let y = 0; y < L.ny; y++) for (let x = 0; x < L.nx; x++) {
+// Every second cell in each direction. Reconstructing 400 points of the plane is
+// the same problem as reconstructing 1559 of them -- the map is per-location and
+// they share one covariance -- at a quarter of the per-sample cost, which is what
+// keeps this run inside a sane wall clock on the CPU reference.
+for (let y = 0; y < L.ny; y += 2) for (let x = 0; x < L.nx; x += 2) {
   const i = L.index(x, y, zc); if (sim.flags[i] !== 1) target.push(i);
 }
 
@@ -122,7 +126,7 @@ function sample(phase, score) {
 let seed = 12345;
 const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
 
-sim.advance(800);                                         // develop the plume
+sim.advance(600);                                         // develop the plume
 for (let i = 0; i < PER_VISIT * PASSES * LEVELS.length; i++) sample(1, false);   // phase 1: A
 
 const visits = [];
