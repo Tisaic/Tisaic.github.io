@@ -14,6 +14,35 @@
  * A more turbulent wake has more fine structure that surface sensors cannot see, so
  * the absolute nRMSE floor should RISE; the interesting result is whether the
  * ORDERING changes.
+ *
+ * MEASURED (res 24, cylinder, tau 0.51, inlet 0.12, chaotic 0.6, target x=46):
+ *   at-slice    nRMSE 0.488  (76% var)
+ *   straddle    nRMSE 0.500  (75%)
+ *   one-wall    nRMSE 0.502  (75%)
+ *   spread      nRMSE 0.631  (60%)
+ *   downstream  nRMSE 0.650  (58%)
+ *   upstream    nRMSE 0.721  (48%)
+ * Flow was energetic but real: limited 0 (no cell clamped), uMax 0.302, density
+ * 0.96-1.29. uMax just tips the 0.3 "unstable" LABEL, but nothing diverged or was
+ * limited, and all six layouts saw the identical flow, so the comparison stands.
+ *
+ * THE FLOOR RISES, THE ORDER HOLDS. Against the baseline Re (~72) the best layout
+ * went 0.280 -> 0.488 (92% -> 76% variance): a more turbulent wake carries more fine
+ * structure the walls cannot see, exactly the observability limit, and it costs every
+ * layout. But the RANKING barely moves -- the co-located cluster (at-slice, straddle,
+ * one-wall) still wins, spread/downstream/upstream still lose, and upstream is still
+ * dead last. Co-location dominates at both Reynolds numbers; the lag window rescues
+ * upstream at neither.
+ *
+ * THE ONE CHANGE IS AT THE TOP, AND IT IS THE PREDICTED ONE: at-slice (0.488) now
+ * edges straddle (0.500), reversing the baseline (straddle 0.280 < at-slice 0.311).
+ * A more turbulent wake decorrelates faster in space, so the straddle's +/-3d brackets
+ * are less coherent with the target and its convective-phase advantage erodes -- tight
+ * co-location becomes relatively more valuable. The top three are within a 3% band
+ * (0.488-0.502), so read it as: at higher Re the bracket stops helping and the rule
+ * collapses to "put the sensors ON the slice." one-wall still nearly ties two walls
+ * (0.502 vs 0.488), so the single-wall result is robust to Reynolds number -- the
+ * industrially important conclusion survives the harder flow.
  */
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';

@@ -17,6 +17,25 @@
  *   +/-3d          {-3, 0, +3}   both walls
  *   +/-4d          {-4, 0, +4}   both walls   -- -4d sits at the cylinder, +4d at outlet
  *   dn-bias        { 0,+2, +4}   both walls   -- biased downstream, where info is richer
+ *
+ * MEASURED (res 24, cylinder, chaotic 0.6, target x=46, 6 taps, nf=73, 900 scored):
+ *   tight +/-1d  nRMSE 0.311  (90% var)
+ *   +/-2d        nRMSE 0.277  (92%)   <- symmetric optimum
+ *   +/-3d        nRMSE 0.280  (92%)
+ *   +/-4d        nRMSE 0.286  (92%)
+ *   dn-bias      nRMSE 0.273  (93%)   <- best overall
+ *
+ * A GENTLE BOWL WITH A DOWNSTREAM-BIASED OPTIMUM. Only the tight +/-1d cluster is
+ * clearly bad (three near-redundant taps carry no convective phase). From +/-2d out
+ * the curve is a shallow plateau that turns over: +/-2d is the symmetric best and it
+ * degrades as the bracket widens toward the cylinder (+/-4d puts the upstream tap in
+ * the cylinder boundary layer). The whole plateau spans only ~5% (0.273-0.286), so
+ * the practical rule is loose: any 2-4 diameter bracket is fine, tight is the only
+ * mistake. The one real structure is the ASYMMETRY -- the downstream-biased {0,+2,+4}
+ * edges every symmetric straddle, because a wake is advected and the downstream side
+ * carries more of it (the same reason downstream beat upstream in wall-layout.mjs).
+ * So: bracket the slice by ~2 diameters, and if you must choose a side, choose
+ * downstream.
  */
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
