@@ -47,13 +47,26 @@ const nrmseOf = (est, truth) => {
 
 flush(2);
 let last = null;
-for (let i = 0; i < TRAIN; i++) { sim.advance(EVERY); const { sig, truth } = read(); model.push(sig); last = nrmseOf(model.observe(truth), truth); }
+for (let i = 0; i < TRAIN; i++) {
+  sim.advance(EVERY);
+  const { sig, truth } = read();
+  model.push(sig);
+  // null until the calibration window closes -- there is no feature column yet.
+  const est = model.observe(truth);
+  if (est) last = nrmseOf(est, truth);
+}
 const trained = last;
 
 flush(1);                                   // and now with nothing being fitted
 const blind = [];
-for (let i = 0; i < SCORE; i++) { sim.advance(EVERY); const { sig, truth } = read(); model.push(sig); blind.push(nrmseOf(model.estimate(), truth)); }
-const mean = blind.reduce((a, b) => a + b, 0) / blind.length;
+for (let i = 0; i < SCORE; i++) {
+  sim.advance(EVERY);
+  const { sig, truth } = read();
+  model.push(sig);
+  const est = model.estimate();
+  if (est) blind.push(nrmseOf(est, truth));
+}
+const mean = blind.length ? blind.reduce((a, b) => a + b, 0) / blind.length : NaN;
 
 const d = await sim.diagnostics();
 const conc = sim.backend.read('conc');
@@ -63,7 +76,8 @@ const tstd = Math.sqrt(tv.reduce((a, b) => a + (b - tmean) ** 2, 0) / tv.length)
 console.log(JSON.stringify({ res: RES, cells: N, size: [L.nx, L.ny, L.nz], sensors: sensors.length,
   target: target.length, transit: transit(), obstacleCells: sim.meta.obstacleCells,
   blockage: +(sim.meta.obstacleCells / L.ny).toFixed(2),
-  trainedLast: +trained.toFixed(4), blindMean: +mean.toFixed(4),
+  trainedLast: trained == null ? null : +trained.toFixed(4),
+  blindMean: Number.isFinite(mean) ? +mean.toFixed(4) : null, blindSamples: blind.length,
   targetSpread: +tstd.toExponential(2), targetMean: +tmean.toFixed(4),
   limited: d.limited, residual: d.residual }, null, 1));
 console.log(mean < 0.2
