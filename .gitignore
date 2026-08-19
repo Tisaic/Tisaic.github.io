@@ -2,3 +2,5 @@
 test/node_modules/
 test/screenshots/
 test/package-lock.json
+# Throwaway analysis/capture scripts (dev tooling, not shipped).
+scratchpad/

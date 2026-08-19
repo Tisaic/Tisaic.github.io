@@ -664,6 +664,55 @@ if (hasGPU && ls0.backend === 'webgpu') {
     `${parity.gpu} vs ${parity.cpu}`);
 }
 
+// ---- THE SCALAR PARITY CHECK. Same argument as the fluid parity above, for the
+// passive scalar: the Node tests verify the CPU reference against the analytic
+// diffusivity and advection speed; this verifies the WGSL scalar kernel computes
+// the SAME concentration field, cell by cell, on a channel with a dye injector.
+if (hasGPU && ls0.backend === 'webgpu') {
+  const sparity = await latt.evaluate(async () => {
+    const [{ Simulation }, { LBMFluidOperator }, { ScalarTransportOperator }, { region, CELL }] =
+      await Promise.all([
+        import('./lib/lattsim/simulation.js'),
+        import('./lib/lattsim/operators/lbm.js'),
+        import('./lib/lattsim/operators/scalar.js'),
+        import('./lib/lattsim/materials.js'),
+      ]);
+    const mk = () => {
+      const sim = new Simulation({ lattice: { size: [24, 12, 12], spacing: 1e-3 } });
+      sim.addRegion(region.wall(CELL.SOLID, 1, -1)).addRegion(region.wall(CELL.SOLID, 1, +1));
+      sim.addRegion(region.wall(CELL.SOLID, 2, -1)).addRegion(region.wall(CELL.SOLID, 2, +1));
+      sim.addRegion(region.wall(CELL.INLET, 0, -1));
+      sim.addRegion(region.wall(CELL.OUTLET, 0, +1));
+      sim.addPhysics(new LBMFluidOperator({ tau: 0.6, inletVelocity: [0.05, 0, 0], initialVelocity: [0.05, 0, 0] }));
+      // a dye needle a few cells in, injecting continuously
+      sim.addPhysics(new ScalarTransportOperator({ tau: 0.6, source: { centre: [6, 6, 6], radius: 2, value: 1 } }));
+      return sim;
+    };
+    const g = mk(); await g.build({ backend: 'webgpu' });
+    const c = mk(); await c.build({ backend: 'cpu' });
+    g.advance(60); c.advance(60);
+    const [cg, cc] = [await g.backend.snapshot('conc'), await c.backend.snapshot('conc')];
+    const N = g.lattice.cellCount;
+    let worst = 0, peak = 0, sg = 0, sc = 0;
+    for (let i = 0; i < N; i++) {
+      if (g.flags[i] === 1) continue;                 // skip solid (CELL.SOLID)
+      worst = Math.max(worst, Math.abs(cg[i] - cc[i]));
+      peak = Math.max(peak, Math.abs(cc[i]));
+      sg += cg[i]; sc += cc[i];
+    }
+    await g.destroy(); await c.destroy();
+    return { worst, peak, sg, sc };
+  });
+  check('lattsim: the WGSL scalar kernel and the CPU reference agree on concentration',
+    sparity.worst < 1e-4 * Math.max(sparity.peak, 1e-6) + 1e-6,
+    `worst |dC| ${sparity.worst.toExponential(2)} against peak ${sparity.peak.toExponential(2)}`);
+  check('lattsim: the two backends agree on total scalar',
+    Math.abs(sparity.sg - sparity.sc) / Math.max(sparity.sc, 1e-9) < 1e-4,
+    `${sparity.sg.toFixed(4)} vs ${sparity.sc.toFixed(4)}`);
+  check('lattsim: the injected scalar spread through the channel',
+    sparity.peak > 0.5 && sparity.sg > 1, `peak ${sparity.peak.toFixed(3)}, total ${sparity.sg.toFixed(2)}`);
+}
+
 check('lattsim: the GPU driver reported no uncaptured errors', (ls0.gpuErrors || []).length === 0,
   JSON.stringify(ls0.gpuErrors));
 

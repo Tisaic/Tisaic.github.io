@@ -8,7 +8,7 @@
   <title>LattSim — Lattice Physics Engine</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:148,built:"2026-08-19T01:32:04Z"}; // __LATTSIM_STAMP__</script>
+  <script>window.__BUILD = {version:168,built:"2026-08-19T05:56:17Z"}; // __LATTSIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -429,7 +429,8 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
     for (const [k, v] of Object.entries(SCENES)) {
       const o = document.createElement('option'); o.value = k; o.textContent = v.label; $('scene').appendChild(o);
     }
-    for (const [v, l] of [['speed', 'speed |u|'], ['density', 'density'], ['direction', 'direction'], ['material', 'materials']]) {
+    for (const [v, l] of [['speed', 'speed |u|'], ['density', 'density'], ['direction', 'direction'],
+      ['concentration', 'concentration'], ['material', 'materials']]) {
       const o = document.createElement('option'); o.value = v; o.textContent = l; $('mode').appendChild(o);
     }
 
@@ -567,6 +568,10 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
           $('slicep').value = String(v.slicePosition);
           $('slicep-v').textContent = Math.round(v.slicePosition * 100) + '%';
         }
+        // A dye scene defaults to showing the scalar so the plume is visible on
+        // arrival; leaving such a scene defaults the field back to speed.
+        if (sim.meta && sim.meta.hasScalar) $('mode').value = 'concentration';
+        else if ($('mode').value === 'concentration') $('mode').value = 'speed';
       }
       // Re ALONE DOES NOT ANSWER "should this shed?" -- the threshold depends on
       // the shape, and a sphere's is nearly 6x a cylinder's. Stating both turns
@@ -1800,6 +1805,7 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
       return out;
     };
     window.__lsSim = () => state.sim;
+    window.__lsSlice = () => state.slice;   // the slice renderer, for its lastStats (e.g. the scalar range)
     window.__lsUnits = UnitSystem;
 
     syncObstacle();
