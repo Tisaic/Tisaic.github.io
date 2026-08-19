@@ -17,6 +17,19 @@
  *   B -> DN   LOCAL: a sensor that owns the far slice
  * If B->DN << A->DN, the array beats the single distant sensor and the
  * decomposition is justified.
+ *
+ * MEASURED (res 24, cylinder, chaotic inlet, 800 scored samples, flow clean --
+ * 0 clamped, rho 0.96-1.10), per-location |u| nRMSE averaged across the slice:
+ *   A -> UP  0.474   local, upstream
+ *   A -> DN  0.787   DISTANT: upstream sensor reaching the far slice
+ *   B -> DN  0.526   LOCAL: a sensor that owns the far slice
+ * Locality helps and is CONSISTENT: a local sensor lands near 0.5 wherever it
+ * sits, a distant one at 0.79. In explained variance that is 75% vs 38%, ~2x.
+ * So the decomposition's premise holds -- each slice wants its own nearby sensor.
+ * BUT even the local reconstruction is only moderate: one wall sensor captures a
+ * few modes, a turbulent slice has more (and a wall sensor is local in x, not y).
+ * The practical array for turbulent flow needs SEVERAL sensors per slice, roughly
+ * the mode count -- the sparse-sensing result, measured rather than asserted.
  */
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
