@@ -43,11 +43,11 @@ import { FieldReconstructor } from '../lib/probesense/sensor.js';
 const PHYS = { collision: 'trt', trtPolicy: 'stability', smagorinsky: 0.16 };
 const RES = 16, EVERY = 2;
 const HOME = 0.06;                                  // where the single-point arm trains
-const LEVELS = [0.04, 0.06, 0.08, 0.10, 0.12];       // the commissioning envelope
-const TESTS = [0.06, 0.05, 0.11, 0.16];             // last one is OUTSIDE the envelope
-const PER_VISIT = 60, PASSES = 2;                   // 5 x 60 x 2 = 600 training samples
+const LEVELS = [0.05, 0.07, 0.09, 0.11];             // the commissioning envelope
+const TESTS = [0.06, 0.10, 0.16];                    // 0.06/0.10 held out INSIDE; 0.16 outside
+const PER_VISIT = 75, PASSES = 2;                   // 4 x 75 x 2 = 600 training samples
 const WARMUP = 300;                                 // one full pass, so the window spans it
-const SETTLE_CAP = 2500, STEADY = 1e-3;             // see settle()
+const TRANSITS = 2;                                 // see settle()
 const SCORE_N = 100;
 
 const sim = channelFlow({ resolution: RES, obstacle: 'cylinder', inletVelocity: HOME,
@@ -83,26 +83,25 @@ let u = HOME;
 const setU = (v) => { u = v; sim.operators[0].setParams({ inletVelocity: [v, 0, 0] }); };
 
 /**
- * ADVANCE UNTIL THE FLOW HAS ACTUALLY ARRIVED, measured rather than assumed.
+ * FLUSH THE DOMAIN, counted in TRANSITS rather than judged by a threshold.
  *
- * The first version of this experiment used a fixed 400 steps between operating
- * points. One domain transit at the slowest speed is 48/0.04 = 1200 steps, so every
- * score was taken mid-flush: all four arms were tested on a transient none of them
- * had trained on, they clustered indistinguishably at ~0.7 nRMSE, and the arm tested
- * AT ITS OWN TRAINING POINT scored 0.71 against the 0.008 the same configuration
- * reaches elsewhere. The ranking was noise. This project has now made that mistake
- * often enough to have a name for it: a measurement taken across a transient
- * describes the transient.
+ * Two runs of this experiment were thrown away for settling too little, and the
+ * second is the instructive one: it used the residual, which sounded principled and
+ * was not. The residual is PER STEP, so a slow transient spreads its change across a
+ * whole domain crossing and sits BELOW the 1e-3 convergence threshold while the flow
+ * is still far from arrived -- it exited after 100 steps against a transit of 800.
+ * Measuring the wrong quantity is not better than guessing; it is worse, because it
+ * looks like rigour.
  *
- * The residual is per-step, so the threshold means the same thing at every speed.
+ * A transit is nx/u, the time for the inlet condition to reach the outlet. Two of
+ * them is a physical statement about this geometry, needs no tuning, and is verified
+ * by experiments/recon-gate.mjs: settled this way, a frozen single-point model scores
+ * 0.079 at the point it trained on, against the 0.71 and 7.38 the unsettled runs
+ * produced for the same thing.
  */
-async function settle(cap = SETTLE_CAP) {
-  let steps = 0;
-  while (steps < cap) {
-    sim.advance(100); steps += 100;
-    const d = await sim.diagnostics();
-    if (d.residual != null && d.residual < STEADY) break;
-  }
+function settle() {
+  const steps = TRANSITS * Math.ceil(L.nx / u);
+  sim.advance(steps);
   return steps;
 }
 
@@ -151,7 +150,7 @@ function sample(phase, score) {
 let seed = 12345;
 const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
 
-await settle();                                           // develop the plume
+settle();                                                 // develop the plume
 for (let i = 0; i < PER_VISIT * PASSES * LEVELS.length; i++) sample(1, false);   // phase 1: A
 
 const visits = [];
@@ -165,7 +164,7 @@ for (let p = 0; p < PASSES; p++) {
 // change would cover the transitions between them instead.
 const dwell = [];
 for (const v of visits) {
-  setU(v); dwell.push(await settle());
+  setU(v); dwell.push(settle());
   for (let i = 0; i < PER_VISIT; i++) sample(2, false);
 }
 
@@ -173,7 +172,7 @@ for (const v of visits) {
 const rows = [];
 for (const v of TESTS) {
   setU(v);
-  const settled = await settle();
+  const settled = settle();
   const acc = {};
   for (const a of arms) acc[a.name] = [];
   for (let i = 0; i < SCORE_N; i++) {
