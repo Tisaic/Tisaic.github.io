@@ -8,7 +8,7 @@
   <title>LattSim — Lattice Physics Engine</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:174,built:"2026-08-19T13:33:26Z"}; // __LATTSIM_STAMP__</script>
+  <script>window.__BUILD = {version:175,built:"2026-08-19T16:39:37Z"}; // __LATTSIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -325,9 +325,15 @@
       <b>same colour range</b> — two independently auto-scaled pictures cannot be compared, so the
       reconstruction is normalised against the truth and its error shows as real over- and under-shoot.
       The <span style="color:#ff3cdc">magenta marks</span> are the sensors: everything the model is
-      allowed to see. The number is the field nRMSE (1.0 = no better than the mean).</p>
+      allowed to see. The number is the field nRMSE (1.0 = no better than the mean).
+      <b>Two modes, and the difference is the whole claim.</b> While it says <i>training</i> the model is
+      re-fitted on the true field every sample — the commissioning position, where the answer is always
+      available. <b>Go blind 🔒</b> freezes the weights and runs the readout from the wall sensors alone;
+      the truth is then read only to <i>grade</i>. A soft sensor that is continuously handed the answer
+      cannot demonstrate it could work without one, so the blind score is the one that means something.</p>
     <div class="controls">
       <button id="recon-btn" class="sec">Reconstruct field ▶</button>
+      <button id="recon-lock" class="sec" disabled>Go blind 🔒</button>
       <label class="slider">Wall sensors <input type="range" id="recon-n" min="4" max="24" step="2" value="12" />
         <span class="v" id="recon-n-v">12</span></label>
       <span class="stat" id="recon-stat">dye scene only</span>
@@ -999,8 +1005,16 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
     // sensors -> field at one instant, so nothing couples its cadence to the
     // steps-per-frame slider, and the reconstruction rides on top of the sim rather
     // than competing with it -- the point of the shared-P trick.
-    const recon = { enabled: false, model: null, sensors: [], target: [], plane: null,
-      field: null, nrmse: null, trained: 0, n: 12 };
+    // `locked` is the difference between a demonstration and a claim. While it is
+    // false the model re-fits on the true field every sample -- the commissioning
+    // position, where the answer is always available. Locked, the weights freeze and
+    // the readout runs from the SENSORS ALONE; the truth is still read, but only to
+    // grade. The score restarts at every switch so it judges the current mode rather
+    // than averaging the two together.
+    const recon = { enabled: false, locked: false, model: null, sensors: [], target: [], plane: null,
+      field: null, nrmse: null, trained: 0, n: 12, scoreSum: 0, scoreN: 0, blindSince: 0 };
+
+    function reconResetScore() { recon.scoreSum = 0; recon.scoreN = 0; }
 
     function reconWallSensors(sim, n, axis, k) {
       const L = sim.lattice, [Wp, Hp] = state.slice.planeSize(L);
@@ -1020,7 +1034,11 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
 
     function reconRebuild() {
       const sim = state.sim;
+      // A REBUILT MODEL HAS NEW (empty) WEIGHTS, so it must never inherit "blind":
+      // that would show a randomly-initialised readout labelled as a working sensor.
       recon.model = null; recon.field = null; recon.nrmse = null; recon.trained = 0;
+      recon.locked = false; reconResetScore();
+      if ($('recon-lock')) $('recon-lock').textContent = 'Go blind 🔒';
       state.slice.reconField = null;
       if (!sim || !sim.meta || !sim.meta.hasScalar) return;
       const L = sim.lattice, N = L.cellCount, axis = state.slice.axis;
@@ -1053,9 +1071,12 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
       const conc = await sim.backend.snapshot('conc');
       const truth = recon.target.map((i) => conc[i]);
       recon.model.push(sig);
-      const est = recon.model.observe(truth);
+      // LOCKED: estimate from the sensors alone and never touch the weights. The
+      // truth below is read for the SCORE only -- grading a frozen model against
+      // reality is not the same as training on it.
+      const est = recon.locked ? recon.model.estimate() : recon.model.observe(truth);
       if (!est) return;
-      recon.trained++;
+      if (!recon.locked) recon.trained++;
       let mean = 0; for (let j = 0; j < truth.length; j++) mean += truth[j]; mean /= truth.length;
       let se = 0, sd = 0;
       for (let j = 0; j < truth.length; j++) {
@@ -1063,6 +1084,7 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
         se += (est[j] - truth[j]) ** 2; sd += (truth[j] - mean) ** 2;
       }
       recon.nrmse = Math.sqrt(se / Math.max(sd, 1e-30));
+      if (Number.isFinite(recon.nrmse)) { recon.scoreSum += recon.nrmse; recon.scoreN++; }
     }
 
     /**
@@ -1096,11 +1118,20 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
     function reconStatus() {
       const el = $('recon-stat'); if (!el) return;
       const sim = state.sim;
+      // Going blind before the model has trained would measure the warmup, not the
+      // sensors, so the control stays disabled until it is genuinely fitted.
+      const lockBtn = $('recon-lock');
+      if (lockBtn) lockBtn.disabled = !(recon.locked || (recon.enabled && recon.model && recon.trained > 150));
       if (!sim || !sim.meta || !sim.meta.hasScalar) { el.textContent = 'select the Dye plume scene'; return; }
       if (!recon.enabled) { el.textContent = `${recon.n} sensors ready`; return; }
       if (recon.nrmse == null) { el.textContent = `warming (${recon.trained})…`; return; }
-      const pct = Math.max(0, 100 * (1 - Math.min(1, recon.nrmse * recon.nrmse)));
-      el.textContent = `nRMSE ${recon.nrmse.toFixed(3)} · ${pct.toFixed(0)}% of the field · `
+      // The MODE is stated first, because the same nRMSE means two different things:
+      // still-training is a model being handed the answer, blind is a model without it.
+      const mode = recon.locked
+        ? `BLIND (sensors only, ${state.sim ? state.sim.step - recon.blindSince : 0} steps)`
+        : `training (${recon.trained})`;
+      const mean = recon.scoreN ? recon.scoreSum / recon.scoreN : recon.nrmse;
+      el.textContent = `${mode} · nRMSE ${recon.nrmse.toFixed(3)} (mean ${mean.toFixed(3)}) · `
         + `${recon.sensors.length} sensors → ${recon.target.length} cells`;
     }
 
@@ -1152,6 +1183,8 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
       } else {
         state.slice.showRecon = false;
         state.slice.markers = [];
+        recon.locked = false; reconResetScore();
+        $('recon-lock').textContent = 'Go blind 🔒';
         $('stage-recon').hidden = true;
         $('truth-badge').hidden = true;
         $('recon-btn').textContent = 'Reconstruct field ▶';
@@ -1159,7 +1192,26 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
       if (!state.running) drawOnce();
       reconStatus();
     }
-    window.__lsRecon = () => recon;   // debug hook: sensors, target size, live nRMSE
+    /**
+     * Take the answer away. The weights freeze and the readout runs from the wall
+     * sensors alone -- which is the only state in which the reconstruction is
+     * making a claim rather than being corrected. Unlocking resumes training.
+     * The score restarts either way, so it always describes the mode you are in.
+     */
+    function reconLockToggle() {
+      if (!recon.model || !recon.enabled) return;
+      recon.locked = !recon.locked;
+      recon.blindSince = state.sim ? state.sim.step : 0;
+      reconResetScore();
+      $('recon-lock').textContent = recon.locked ? 'Resume training ▶' : 'Go blind 🔒';
+      $('backend-badge').textContent = recon.locked
+        ? 'blind: estimating from wall sensors alone'
+        : 'training: the model is being shown the true field';
+      $('backend-badge').className = 'badge' + (recon.locked ? ' good' : '');
+      reconStatus();
+    }
+
+    window.__lsRecon = () => recon;   // debug hook: sensors, target size, live nRMSE, lock state
 
     // ---------------------------------------------------------------- stir
     // Map a pointer position on the slice canvas to a lattice cell and apply a
@@ -1849,6 +1901,7 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
     $('run').addEventListener('click', () => (state.running ? stop() : start()));
     $('reset').addEventListener('click', () => build());
     $('recon-btn').addEventListener('click', reconToggle);
+    $('recon-lock').addEventListener('click', reconLockToggle);
     $('recon-n').addEventListener('input', () => { $('recon-n-v').textContent = $('recon-n').value; });
     $('recon-n').addEventListener('change', () => {
       recon.n = +$('recon-n').value;
