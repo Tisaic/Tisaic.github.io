@@ -14,6 +14,24 @@
  * Wall pool (all no-slip wall cells, y = 1 bottom / ny-2 top, at increasing x):
  *   near/far x, both walls -- realistic tap positions.
  * Target: an interior column across the channel, 5 diameters downstream (the wake).
+ *
+ * MEASURED (res 24, chaotic inlet, 800 scored samples, flow clean), interior wake
+ * nRMSE and % variance explained, with the feature count CONTROLLED (linear basis):
+ *   nonlinear N1  0.523  73%   (reference: rich basis, one sensor)
+ *   linear   N1   0.481  77%
+ *   linear   N2   0.447  80%
+ *   linear   N4   0.338  89%
+ *   linear   N6   0.296  91%
+ * THREE findings. (1) MORE WALL SENSORS HELP MONOTONICALLY -- 77% -> 91% from 1 to
+ * 6 taps -- so they carry INDEPENDENT information about the interior, not redundant
+ * surface pressure, and the sliced array pays off. (2) The curve is STILL CLIMBING
+ * at N6: the wake's mode count exceeds 6 sensors x 4 lags, and a deployment sizes
+ * itself by adding taps until variance-explained flattens. (3) LINEAR BEATS THE
+ * NONLINEAR EXPANSION on this turbulent target (0.48 vs 0.52 at N1), the opposite
+ * of the clean periodic cases: the turbulent residual is noise, so the rich basis
+ * fits noise. Use the rich basis for coherent flow, the lean one for turbulence.
+ * The first uncontrolled run showed N1 0.52 -> N6 0.71 (worse) -- pure overfitting
+ * from the base^2 feature growth, which this controlled run isolates and reverses.
  */
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
