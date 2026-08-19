@@ -1434,6 +1434,31 @@ if (FULL) {
       check('lattsim: after a rebuild the 3D view has a renderer or has fallen back to the slice',
         st.view !== 'volume' || st.rendererReady,
         JSON.stringify({ view: st.view, rendererReady: st.rendererReady }));
+
+      // A SCALAR FIELD HAS NO 3D VIEW, and picking one while in 3D used to leave
+      // the volume rendering the FLOW: the dye scene built correctly and the
+      // reconstruction ran correctly, and the screen showed neither -- which from
+      // outside is "the control does nothing". Reported exactly that way. The page
+      // must now move itself to the slice and SAY WHY rather than switch silently.
+      await v3d.selectOption('#view', 'volume').catch(() => {});
+      await v3d.waitForTimeout(400);
+      const wasVolume = await v3d.evaluate(() => window.__lsDbg().view === 'volume');
+      if (wasVolume) {
+        await v3d.selectOption('#scene', 'dye');
+        await v3d.waitForFunction(() => !window.__lsDbg().building, null, { timeout: 180000 });
+        await v3d.waitForTimeout(400);
+        const sc = await v3d.evaluate(() => ({
+          view: window.__lsDbg().view,
+          mode: document.getElementById('mode').value,
+          badge: document.getElementById('backend-badge').textContent,
+          hasScalar: window.__lsSim() && window.__lsSim().meta.hasScalar,
+        }));
+        check('lattsim: a scalar scene picked in 3D moves to the slice, and says why',
+          sc.hasScalar && sc.view === 'slice' && sc.mode === 'concentration' && /3D/.test(sc.badge),
+          JSON.stringify(sc));
+      } else {
+        console.log('  (could not re-enter the 3D view — scalar-view check skipped)');
+      }
     } else {
       console.log('  (3D view not offered here — nothing to check)');
     }

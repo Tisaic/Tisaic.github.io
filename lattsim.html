@@ -581,9 +581,14 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
           $('slicep-v').textContent = Math.round(v.slicePosition * 100) + '%';
         }
         // A dye scene defaults to showing the scalar so the plume is visible on
-        // arrival; leaving such a scene defaults the field back to speed.
-        if (sim.meta && sim.meta.hasScalar) $('mode').value = 'concentration';
-        else if ($('mode').value === 'concentration') $('mode').value = 'speed';
+        // arrival; leaving such a scene defaults the field back to speed. A scene
+        // change is exactly when view defaults are legitimately applied (a Reset or
+        // a resolution change must NOT move the view -- v114), so this is where the
+        // 3D view is corrected for a field it cannot draw.
+        if (sim.meta && sim.meta.hasScalar) {
+          $('mode').value = 'concentration';
+          ensureSliceForConcentration('concentration');
+        } else if ($('mode').value === 'concentration') $('mode').value = 'speed';
       }
       // Re ALONE DOES NOT ANSWER "should this shed?" -- the threshold depends on
       // the shape, and a sphere's is nearly 6x a cylinder's. Stating both turns
@@ -1042,12 +1047,44 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
         + `${recon.sensors.length} sensors → ${recon.target.length} cells`;
     }
 
+    /**
+     * A SCALAR FIELD IS A SLICE PRODUCT, and the 3D view cannot show one.
+     *
+     * The volume renderer maps every field but density to speed -- it has no
+     * concentration path at all -- and the 3D view PERSISTS across rebuilds (v114).
+     * So selecting the dye scene, or turning on reconstruction, while in 3D left the
+     * volume rendering the FLOW: the scene rebuilt correctly, the reconstruction ran
+     * correctly, and the screen showed neither. Both read from outside as "the
+     * control does nothing", which is this page's oldest lesson in a new place --
+     * a correct simulation on the wrong view is indistinguishable from a broken one.
+     *
+     * It switches to the slice AND SAYS WHY, because switching silently would just
+     * move the confusion rather than remove it.
+     */
+    function ensureSliceForConcentration(why) {
+      if (state.view !== 'volume') return false;
+      state.view = 'slice';
+      $('view').value = 'slice';
+      applyView();
+      $('backend-badge').textContent = `2D slice — ${why} has no 3D view`;
+      $('backend-badge').className = 'badge warn';
+      return true;
+    }
+
     function reconToggle() {
       const sim = state.sim;
-      if (!sim || !sim.meta || !sim.meta.hasScalar) { reconStatus(); return; }
+      if (!sim || !sim.meta || !sim.meta.hasScalar) {
+        // Correct behaviour, but it was silent: the only feedback was a small status
+        // line, so clicking here on a scene with no scalar looked like a dead button.
+        $('backend-badge').textContent = 'Field reconstruction needs the Dye plume scene';
+        $('backend-badge').className = 'badge warn';
+        reconStatus();
+        return;
+      }
       recon.enabled = !recon.enabled;
       if (recon.enabled) {
         if (!recon.model) reconRebuild();
+        ensureSliceForConcentration('field reconstruction');
         $('mode').value = 'concentration';
         state.slice.mode = SLICE_MODE.CONCENTRATION;
         state.slice.showRecon = true;
@@ -1787,6 +1824,18 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
     $('res').addEventListener('change', () => build());
     $('view').addEventListener('change', async () => {
       state.view = $('view').value;
+      // THE OTHER DIRECTION of the same trap, and the asymmetry is deliberate:
+      // here the user explicitly asked for the 3D view, so the VIEW is honoured and
+      // the field -- which the volume renderer cannot draw -- is what changes. The
+      // reconstruction overlay is a slice product, so it stands down too.
+      if (state.view === 'volume' && $('mode').value === 'concentration') {
+        $('mode').value = 'speed';
+        if (recon.enabled) { recon.enabled = false; $('recon-btn').textContent = 'Reconstruct field ▶'; }
+        state.slice.showRecon = false;
+        $('backend-badge').textContent = '3D view — showing speed; concentration is 2D only';
+        $('backend-badge').className = 'badge warn';
+        reconStatus();
+      }
       applyView();                       // unhide the target canvas first
       if (state.view === 'volume') {
         try { await ensureVolume(); } catch (e) {
@@ -1797,7 +1846,11 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
       drawOnce();
       probeMark(); ssMark();
     });
-    $('mode').addEventListener('change', () => drawOnce());
+    $('mode').addEventListener('change', () => {
+      // Picking the scalar field by hand is the third way into the 3D-view trap.
+      if ($('mode').value === 'concentration') ensureSliceForConcentration('concentration');
+      drawOnce();
+    });
     $('axis').addEventListener('change', () => { drawOnce(); probeMark(); ssMark(); probeDraw(true); });
     $('slicep').addEventListener('input', () => {
       $('slicep-v').textContent = Math.round(+$('slicep').value * 100) + '%'; drawOnce(); probeMark(); ssMark();
