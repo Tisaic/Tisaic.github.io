@@ -59,16 +59,22 @@ const out = await pg.evaluate(async () => {
   const K = ys.length;
 
   // Configurations by which pool indices each uses (realistic incremental taps):
+  // Each config: which pool indices, and whether to expand. The universal map's
+  // quadratic terms scale as base^2, so with a fixed training budget more sensors
+  // OVERFIT unless the basis is held down -- linear features scale linearly with
+  // sensors, isolating the sensor INFORMATION from the feature EXPLOSION.
   const configs = {
-    'N1 (1 wall, at target x)': [4],                 // one bottom-wall tap at the wake x
-    'N2 (both walls, target x)': [4, 5],
-    'N4 (+ obstacle-x pair)': [2, 3, 4, 5],
-    'N6 (+ upstream pair)': [0, 1, 2, 3, 4, 5],
+    'nonlinear N1 (reference)': { idx: [4], expand: true },
+    'linear N1':  { idx: [4], expand: false },
+    'linear N2':  { idx: [4, 5], expand: false },
+    'linear N4':  { idx: [2, 3, 4, 5], expand: false },
+    'linear N6':  { idx: [0, 1, 2, 3, 4, 5], expand: false },
   };
   const cfg = { lag: 4, stride: 6, warmup: 200, ridge: 100 };
   const recon = {};
-  for (const [name, idx] of Object.entries(configs)) {
-    recon[name] = { idx, r: new FieldReconstructor({ ...cfg, nSignals: 3 * idx.length, nLocations: K }) };
+  for (const [name, c] of Object.entries(configs)) {
+    recon[name] = { idx: c.idx,
+      r: new FieldReconstructor({ ...cfg, nSignals: 3 * c.idx.length, nLocations: K, expand: c.expand }) };
   }
 
   sim.advance(1500);
