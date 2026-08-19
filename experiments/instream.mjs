@@ -24,6 +24,47 @@
  * flow. A real in-stream probe does (that is its whole engineering cost). This measures
  * whether the INFORMATION is available at that point, not the intrusion penalty -- which
  * is the right question for "does it make sense", with the intrusion a separate cost.
+ *
+ * MEASURED (res 24, cylinder, chaotic 0.6, near-wake target x=34, |u|, 900 scored):
+ *   wall-6           nRMSE 0.266  (93% var)   6 sensors, nf 97
+ *   instream up      nRMSE 0.934  (13%)       1  -- upstream of cylinder, blind (control)
+ *   instream at      nRMSE 0.642  (59%)       1  -- on the wake centreline at the target
+ *   instream +2d     nRMSE 0.917  (16%)       1  -- 2 diameters downstream
+ *   instream +4d     nRMSE 0.936  (12%)       1
+ *   instream +5d     nRMSE 0.887  (21%)       1
+ *   instream +2,+4d  nRMSE 0.906  (18%)       2  -- downstream rake
+ *   instream at+2d   nRMSE 0.511  (74%)       2  -- one on target, one 2d downstream
+ *
+ * THE FLOW-HISTORIAN IDEA FAILS: A DOWNSTREAM PROBE IS NEARLY BLIND. Every purely
+ * downstream single probe (+2d/+4d/+5d) sits at 0.89-0.94, ~12-21% variance -- barely
+ * better than predicting the mean, and no better than the UPSTREAM control (0.934). The
+ * wake does NOT carry a reconstructable record of the near-wake column to a point a few
+ * diameters downstream. The bet was that advection makes a downstream probe a historian;
+ * it does not, because the target is a transverse COLUMN whose top/bottom vortex
+ * structure a single centreline point cannot resolve, and turbulent mixing decorrelates
+ * what little a point does carry within a diameter or two. The curve is flat and noisy
+ * downstream (+5d ~ +2d), i.e. no graceful decay -- it is already at the floor by +2d.
+ *
+ * IN-STREAM MUST BE CO-LOCATED, EXACTLY LIKE THE WALL SENSORS. The best single in-stream
+ * spot is AT the target (0.642), and two probes win only when one is ON the target:
+ * at+2d 0.511 vs the both-downstream +2,+4d rake 0.906. Displacing sensors downstream
+ * destroys them whether they are on the wall or in the flow -- the same lesson as
+ * wall-layout.mjs, now confirmed in the interior.
+ *
+ * EVEN AT THE TARGET, ONE IN-STREAM POINT LOSES TO A WALL ARRAY (0.642 vs 0.266) -- but
+ * that is a 1-vs-6 budget gap, NOT proof that walls beat the interior. The honest claim
+ * is narrower and it is the one the data supports: a couple of in-stream points do not
+ * replace a spatially distributed wall array when the TARGET is spatially distributed,
+ * because reconstructing a column needs sensors spread across it, and a wall array has
+ * that spread while two centreline points do not. The centreline is also a quiet spot
+ * (velocity-deficit wake, antisymmetric shedding), so a lone centreline probe sees less
+ * of the transverse oscillation than the shear-layer walls do. An equal-budget test
+ * (6 in-stream vs 6 wall) and a LOCAL single-point target are the fair next steps.
+ *
+ * VERDICT ON THE QUESTION: in-stream sensing makes sense industrially and scientifically
+ * for a target you can place the probe ON (a local point, a duct centreline flow rate) --
+ * but "after the flow matters", i.e. DOWNSTREAM, it does not reconstruct the upstream
+ * field, because advected turbulent structure decorrelates too fast to be a record.
  */
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
