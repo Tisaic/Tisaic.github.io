@@ -8,7 +8,7 @@
   <title>LattSim — Lattice Physics Engine</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:168,built:"2026-08-19T05:56:17Z"}; // __LATTSIM_STAMP__</script>
+  <script>window.__BUILD = {version:170,built:"2026-08-19T11:41:42Z"}; // __LATTSIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -298,6 +298,18 @@
       <label class="slider">Slice position <input type="range" id="slicep" min="0" max="1" step="0.02" value="0.5" />
         <span class="v" id="slicep-v">50%</span></label>
     </div>
+    <p class="note">
+      <b>Field reconstruction (dye scene).</b> A ring of wall sensors reads only velocity and pressure at
+      the channel walls — never the dye — and one shared-reservoir NGRC readout per cell reconstructs the
+      whole concentration slice from them. Turn it on to replace the true plume with what the sensors infer;
+      the number is the field nRMSE (1.0 = no better than the mean). It is the industrial soft sensor: read
+      cheap upstream signals, infer the composition you cannot instrument.</p>
+    <div class="controls">
+      <button id="recon-btn" class="sec">Reconstruct field ▶</button>
+      <label class="slider">Wall sensors <input type="range" id="recon-n" min="4" max="24" step="2" value="12" />
+        <span class="v" id="recon-n-v">12</span></label>
+      <span class="stat" id="recon-stat">dye scene only</span>
+    </div>
 
     <dl class="stat">
       <dt>backend</dt><dd id="s-backend">—</dd>
@@ -407,7 +419,7 @@
 
   <script type="module">
     import { SCENES, largestResolutionThatFits } from './lib/lattsim/scenes.js';
-import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
+import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesense/sensor.js';
     import { formatBytes } from './lib/lattsim/fields.js';
     import { SliceRenderer, SLICE_MODE } from './lib/lattsim/render/slice2d.js';
     import { OrbitCamera } from './lib/lattsim/render/camera.js';
@@ -633,6 +645,18 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
         if (ss.coords.every((v, k) => v < L.size[k])) ssPlace(ss.coords);
         else ssClear();
       }
+      // FIELD RECONSTRUCTION follows the same rule: the flow on the far side of a
+      // rebuild is a different flow, and the target plane may not exist on the new
+      // lattice. A dye scene rebuilds the model; any other scene turns it off, so
+      // the concentration mode does not linger on a scene with no scalar.
+      if (!sim.meta || !sim.meta.hasScalar) {
+        recon.enabled = false; recon.model = null;
+        state.slice.showRecon = false; state.slice.reconField = null;
+        if ($('recon-btn')) $('recon-btn').textContent = 'Reconstruct field ▶';
+      } else if (recon.enabled) {
+        reconRebuild();
+      }
+      reconStatus();
       // THE VOLUME RENDERER IS BOUND TO A SIMULATION, so a rebuild destroys it --
       // and it therefore has to be REBUILT HERE. It used to be created only by
       // the view selector's change handler, so pressing Reset (or moving
@@ -910,7 +934,9 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
         $('s-mlups').textContent = (state.rate * state.sim.lattice.cellCount / 1e6).toFixed(1);
         await refreshStats();
         ssStatus();
+        reconStatus();
       }
+      if (recon.enabled) await reconSample();   // fill reconField BEFORE drawOnce renders it
       await drawOnce();
       await probeSample(); probeDraw();
       ssDraw();
@@ -932,6 +958,108 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
 
     function start() { if (state.running) return; state.running = true; $('run').textContent = 'Pause ⏸'; state.lastT = performance.now(); state.raf = requestAnimationFrame(tick); }
     function stop() { state.running = false; $('run').textContent = 'Run ▶'; if (state.raf) cancelAnimationFrame(state.raf); state.raf = 0; }
+
+    // ---------------------------------------------------------------- field reconstruction
+    // A ring of wall sensors reads velocity and pressure ONLY -- never the dye --
+    // and one shared-reservoir NGRC (one covariance, one readout per cell) rebuilds
+    // the whole concentration slice from them. Memoryless (lag 1): the map is
+    // sensors -> field at one instant, so nothing couples its cadence to the
+    // steps-per-frame slider, and the reconstruction rides on top of the sim rather
+    // than competing with it -- the point of the shared-P trick.
+    const recon = { enabled: false, model: null, sensors: [], target: [], plane: null,
+      field: null, nrmse: null, trained: 0, n: 12 };
+
+    function reconWallSensors(sim, n, axis, k) {
+      const L = sim.lattice, [Wp, Hp] = state.slice.planeSize(L);
+      const rows = [1, Hp - 2];                    // the two no-slip walls bounding the plane
+      const per = Math.max(1, Math.round(n / 2));
+      const cells = [];
+      for (const row of rows) {
+        for (let s = 0; s < per; s++) {
+          const frac = per > 1 ? s / (per - 1) : 0.5;
+          const a = Math.min(Wp - 1, Math.max(0, Math.round(Wp * (0.08 + 0.87 * frac))));
+          const i = state.slice.cellAt(L, a, row, k);
+          if (sim.flags[i] !== 1) cells.push(i);   // must be a fluid cell at the wall
+        }
+      }
+      return cells;
+    }
+
+    function reconRebuild() {
+      const sim = state.sim;
+      recon.model = null; recon.field = null; recon.nrmse = null; recon.trained = 0;
+      state.slice.reconField = null;
+      if (!sim || !sim.meta || !sim.meta.hasScalar) return;
+      const L = sim.lattice, N = L.cellCount, axis = state.slice.axis;
+      const k = Math.min(L.size[axis] - 1, Math.max(0, Math.round(state.slice.position * (L.size[axis] - 1))));
+      const [Wp, Hp] = state.slice.planeSize(L);
+      const target = [];
+      for (let b = 0; b < Hp; b++) for (let a = 0; a < Wp; a++) {
+        const i = state.slice.cellAt(L, a, b, k); if (sim.flags[i] !== 1) target.push(i);
+      }
+      recon.target = target;
+      recon.plane = { axis, k };
+      recon.sensors = reconWallSensors(sim, recon.n, axis, k);
+      recon.field = new Float32Array(N);
+      recon.model = new FieldReconstructor({ nSignals: 3 * recon.sensors.length, nLocations: target.length,
+        lag: 1, stride: 1, warmup: 120, expand: false, ridge: 100 });
+      state.slice.reconField = recon.field;
+    }
+
+    async function reconSample() {
+      const sim = state.sim;
+      if (!recon.model || !sim || !sim.meta.hasScalar) return;
+      const axis = state.slice.axis;
+      const k = Math.min(sim.lattice.size[axis] - 1,
+        Math.max(0, Math.round(state.slice.position * (sim.lattice.size[axis] - 1))));
+      if (!recon.plane || recon.plane.axis !== axis || recon.plane.k !== k) reconRebuild();
+      const sVals = await sim.backend.probeMany('macro', recon.sensors);
+      const sig = [];
+      for (const v of sVals) { sig.push(v[1], v[2], v[0]); }   // ux, uy, rho -- never the dye
+      const conc = await sim.backend.snapshot('conc');
+      const truth = recon.target.map((i) => conc[i]);
+      recon.model.push(sig);
+      const est = recon.model.observe(truth);
+      if (!est) return;
+      recon.trained++;
+      let mean = 0; for (let j = 0; j < truth.length; j++) mean += truth[j]; mean /= truth.length;
+      let se = 0, sd = 0;
+      for (let j = 0; j < truth.length; j++) {
+        recon.field[recon.target[j]] = est[j];
+        se += (est[j] - truth[j]) ** 2; sd += (truth[j] - mean) ** 2;
+      }
+      recon.nrmse = Math.sqrt(se / Math.max(sd, 1e-30));
+    }
+
+    function reconStatus() {
+      const el = $('recon-stat'); if (!el) return;
+      const sim = state.sim;
+      if (!sim || !sim.meta || !sim.meta.hasScalar) { el.textContent = 'select the Dye plume scene'; return; }
+      if (!recon.enabled) { el.textContent = `${recon.n} sensors ready`; return; }
+      if (recon.nrmse == null) { el.textContent = `warming (${recon.trained})…`; return; }
+      const pct = Math.max(0, 100 * (1 - Math.min(1, recon.nrmse * recon.nrmse)));
+      el.textContent = `nRMSE ${recon.nrmse.toFixed(3)} · ${pct.toFixed(0)}% of the field · `
+        + `${recon.sensors.length} sensors → ${recon.target.length} cells`;
+    }
+
+    function reconToggle() {
+      const sim = state.sim;
+      if (!sim || !sim.meta || !sim.meta.hasScalar) { reconStatus(); return; }
+      recon.enabled = !recon.enabled;
+      if (recon.enabled) {
+        if (!recon.model) reconRebuild();
+        $('mode').value = 'concentration';
+        state.slice.mode = SLICE_MODE.CONCENTRATION;
+        state.slice.showRecon = true;
+        $('recon-btn').textContent = 'Show truth ⏹';
+      } else {
+        state.slice.showRecon = false;
+        $('recon-btn').textContent = 'Reconstruct field ▶';
+      }
+      if (!state.running) drawOnce();
+      reconStatus();
+    }
+    window.__lsRecon = () => recon;   // debug hook: sensors, target size, live nRMSE
 
     // ---------------------------------------------------------------- stir
     // Map a pointer position on the slice canvas to a lattice cell and apply a
@@ -1620,6 +1748,13 @@ import { FieldSoftSensor, QUANTITIES } from './lib/probesense/sensor.js';
 
     $('run').addEventListener('click', () => (state.running ? stop() : start()));
     $('reset').addEventListener('click', () => build());
+    $('recon-btn').addEventListener('click', reconToggle);
+    $('recon-n').addEventListener('input', () => { $('recon-n-v').textContent = $('recon-n').value; });
+    $('recon-n').addEventListener('change', () => {
+      recon.n = +$('recon-n').value;
+      if (recon.model) reconRebuild();
+      reconStatus();
+    });
     $('scene').addEventListener('change', () => { clampResolution(); syncObstacle(); build(); });
     $('obstacle').addEventListener('change', () => build());
     $('lidamp').addEventListener('input', () => { $('lidamp-v').textContent = (+$('lidamp').value).toFixed(3); });

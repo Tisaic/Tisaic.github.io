@@ -72,6 +72,12 @@ if [ -d lib/lattsim ]; then
   # The passive scalar's diffusivity, advection speed and conservation against
   # their closed forms -- a contract, so both tiers.
   node test/lattsim/scalar.test.mjs
+  # End-to-end field reconstruction (wall sensors -> concentration slice). It
+  # drives ~1200 CPU-reference steps, so it is full-tier; the pipeline's cheaper
+  # pieces (probeMany parity, the FieldReconstructor unit test) run every time.
+  if [ "${SUITE}" = "full" ]; then
+    node test/lattsim/reconstruct.test.mjs
+  fi
 fi
 
 # Serve the repo and always clean up the server on exit.
