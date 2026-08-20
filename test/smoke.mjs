@@ -1259,10 +1259,20 @@ await latt.screenshot({ path: join(SHOTS, '09-lattsim.png') });
   // solver by hand would test everything except the thing that could be wrong.
   await latt.evaluate(() => { window.__lsSS.train(); });
   await latt.click('#run');
+  // A SLOW WAIT MUST NOT ABORT THE RUN. This wait times out on this headless
+  // software-rendered environment and, being unguarded, threw -- taking down every
+  // check after it, including ones in later sections that had nothing to do with
+  // the soft sensor. That is the same defect as a check that skips itself, in the
+  // other direction: one hides its own result, the other hides everybody else's.
+  // The timeout is now REPORTED as a failed check and the suite continues, so a
+  // single slow gate costs one result instead of all of them.
+  let ssTrained = true;
   await latt.waitForFunction(() => {
     const st = window.__lsSS.state();
     return st && st.trained > 250;
-  }, null, { timeout: 240000 });
+  }, null, { timeout: 240000 }).catch(() => { ssTrained = false; });
+  check('lattsim: the soft sensor trained within the time allowed', ssTrained,
+    JSON.stringify(await latt.evaluate(() => window.__lsSS.state()).catch(() => null)).slice(0, 160));
   await latt.click('#run');
   const ran = await latt.evaluate(() => window.__lsSS.state());
 
