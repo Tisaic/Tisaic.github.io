@@ -153,6 +153,19 @@ const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff
 settle();                                                 // develop the plume
 for (let i = 0; i < PER_VISIT * PASSES * LEVELS.length; i++) sample(1, false);   // phase 1: A
 
+// CHECKPOINT, to localise a failure rather than argue about it. Score the
+// single-point arm RIGHT AFTER its own training, before any sweep has happened. If
+// it is good here and bad later, the excursion is the cause; if it is bad already,
+// the training phase is. The previous run left that ambiguous and cost a re-run.
+{
+  settle();
+  const acc = [];
+  for (let i = 0; i < SCORE_N; i++) { const r = sample(0, true); if (r['A single-pt'] != null) acc.push(r['A single-pt']); }
+  const b = arms[0].model.bank;
+  console.log(`CHECKPOINT  A immediately after training (u ${HOME}): nRMSE ${meanOf(acc).toFixed(4)}`
+    + `  [input saturation ${(100 * b.clamped / Math.max(1, b.nPushed * b.base)).toFixed(2)}%]`);
+}
+
 const visits = [];
 for (let p = 0; p < PASSES; p++) {
   const order = LEVELS.slice();
@@ -199,6 +212,11 @@ for (const r of rows) {
 const inside = rows.filter((r) => r.inside);
 console.log('\nMean over the INSIDE points:');
 for (const a of arms) console.log(`  ${a.name.padEnd(12)} ${meanOf(inside.map((r) => r.score[a.name])).toFixed(4)}`);
+console.log('\ninput saturation at the end (share of slots at the +/-10 sigma clamp):');
+for (const a of arms) {
+  const b = a.model.bank;
+  console.log(`  ${a.name.padEnd(12)} ${(100 * b.clamped / Math.max(1, b.nPushed * b.base)).toFixed(2)}%`);
+}
 console.log('\nsettling steps per test point: ' + rows.map((r) => `${r.u}:${r.settled}`).join('  '));
 console.log('dwell steps in the sweep: ' + dwell.join(' '));
 
