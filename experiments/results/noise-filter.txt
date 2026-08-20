@@ -1,35 +1,73 @@
 # noise-filter
-# commit 22481d2   2026-08-20T04:11:32Z
+# commit 702b9d5   2026-08-20T04:12:51Z
 
-{"inlet":"multitone 0.3","taps":8,"channels":24,"locations":161,"eta":0.1,"staticMap":0.02781,"training":"on the noisy, filtered stream"}
+{"inlet":"multitone 0.3","taps":12,"channels":36,"locations":161,"eta":0.1,"staticMap":0.02781,"training":"on the noisy, filtered stream"}
 
--- linear, nf 25
+================ commissioned-clean ================
+
+-- linear, nf 37
 filter          clean      indep     common      drift   worst/clean
-none         5.992e-4   9.481e-4   6.148e-4   5.992e-4   1.6x
-lp 8         5.940e-4   8.930e-4   6.087e-4   5.940e-4   1.5x
-lp 32        7.440e-4   9.207e-4   7.589e-4   7.440e-4   1.2x
-cmr          5.327e-4   9.561e-4   5.327e-4   5.327e-4   1.8x
-cmr+lp32     7.026e-4   9.387e-4   7.026e-4   7.026e-4   1.3x
-  trade vs unfiltered:
-    lp 8       clean costs 0.99x, worst-noise improves 1.06x
-    lp 32      clean costs 1.24x, worst-noise improves 1.03x
-    cmr        clean costs 0.89x, worst-noise improves 0.99x
-    cmr+lp32   clean costs 1.17x, worst-noise improves 1.01x
+none         3.936e-4   4.152e-3   1.496e-3   2.637e-3   10.5x
+lp 8         3.828e-4   1.584e-3   6.661e-4   2.580e-3   6.7x
+lp 32        5.919e-4   1.257e-3   8.395e-4   5.352e-3   9.0x
+lp 128       2.199e-3   4.317e-3   5.643e-3   1.266e-1   57.6x
+cmr          3.474e-4   1.018e-2   3.474e-4   3.474e-4   29.3x
+cmr+lp32     5.477e-4   4.372e-3   5.477e-4   5.477e-4   8.0x
+  trade vs unfiltered  (clean cost -> worst-noise gain):
+    lp 8       costs 0.97x clean, buys 1.61x on the worst mode
+    lp 32      costs 1.50x clean, buys 0.78x on the worst mode
+    lp 128     costs 5.59x clean, buys 0.03x on the worst mode
+    cmr        costs 0.88x clean, buys 0.41x on the worst mode
+    cmr+lp32   costs 1.39x clean, buys 0.95x on the worst mode
 
--- EXPANDED (universal map), nf 373
+-- EXPANDED (universal map), nf 751
 filter          clean      indep     common      drift   worst/clean
-none         2.397e-4   2.045e-4   2.178e-4   2.397e-4   1.0x
-lp 8         2.378e-4   2.041e-4   2.160e-4   2.378e-4   1.0x
-lp 32        2.467e-4   2.010e-4   2.252e-4   2.467e-4   1.0x
-cmr          2.576e-4   2.103e-4   2.576e-4   2.576e-4   1.0x
-cmr+lp32     2.637e-4   2.290e-4   2.637e-4   2.637e-4   1.0x
-  trade vs unfiltered:
-    lp 8       clean costs 0.99x, worst-noise improves 1.01x
-    lp 32      clean costs 1.03x, worst-noise improves 0.97x
-    cmr        clean costs 1.07x, worst-noise improves 0.93x
-    cmr+lp32   clean costs 1.10x, worst-noise improves 0.91x
+none         2.628e-4   6.870e-4   1.519e-3   2.686e-3   10.2x
+lp 8         2.591e-4   3.396e-4   6.517e-4   2.661e-3   10.3x
+lp 32        2.673e-4   3.340e-4   4.151e-4   2.658e-3   9.9x
+lp 128       1.500e-3   2.647e-3   3.180e-3   7.962e-2   53.1x
+cmr          2.778e-4   1.976e-3   2.778e-4   2.778e-4   7.1x
+cmr+lp32     2.747e-4   5.654e-4   2.747e-4   2.747e-4   2.1x
+  trade vs unfiltered  (clean cost -> worst-noise gain):
+    lp 8       costs 0.99x clean, buys 1.01x on the worst mode
+    lp 32      costs 1.02x clean, buys 1.01x on the worst mode
+    lp 128     costs 5.71x clean, buys 0.03x on the worst mode
+    cmr        costs 1.06x clean, buys 1.36x on the worst mode
+    cmr+lp32   costs 1.05x clean, buys 4.75x on the worst mode
+
+================ noise-throughout ================
+
+-- linear, nf 37
+filter          clean      indep     common      drift   worst/clean
+none         3.936e-4   5.037e-4   3.935e-4   3.936e-4   1.3x
+lp 8         3.828e-4   5.384e-4   3.849e-4   3.828e-4   1.4x
+lp 32        5.919e-4   8.337e-4   6.044e-4   5.919e-4   1.4x
+lp 128       2.199e-3   6.457e-3   2.395e-3   2.199e-3   2.9x
+cmr          3.474e-4   5.047e-4   3.474e-4   3.474e-4   1.5x
+cmr+lp32     5.477e-4   8.497e-4   5.477e-4   5.477e-4   1.6x
+  trade vs unfiltered  (clean cost -> worst-noise gain):
+    lp 8       costs 0.97x clean, buys 0.94x on the worst mode
+    lp 32      costs 1.50x clean, buys 0.60x on the worst mode
+    lp 128     costs 5.59x clean, buys 0.08x on the worst mode
+    cmr        costs 0.88x clean, buys 1.00x on the worst mode
+    cmr+lp32   costs 1.39x clean, buys 0.59x on the worst mode
+
+-- EXPANDED (universal map), nf 751
+filter          clean      indep     common      drift   worst/clean
+none         2.628e-4   2.283e-4   2.424e-4   2.628e-4   1.0x
+lp 8         2.591e-4   2.213e-4   2.305e-4   2.591e-4   1.0x
+lp 32        2.673e-4   2.055e-4   2.411e-4   2.673e-4   1.0x
+lp 128       1.500e-3   2.879e-3   2.034e-3   1.500e-3   1.9x
+cmr          2.778e-4   2.296e-4   2.778e-4   2.778e-4   1.0x
+cmr+lp32     2.747e-4   2.115e-4   2.747e-4   2.747e-4   1.0x
+  trade vs unfiltered  (clean cost -> worst-noise gain):
+    lp 8       costs 0.99x clean, buys 1.01x on the worst mode
+    lp 32      costs 1.02x clean, buys 0.98x on the worst mode
+    lp 128     costs 5.71x clean, buys 0.09x on the worst mode
+    cmr        costs 1.06x clean, buys 0.95x on the worst mode
+    cmr+lp32   costs 1.05x clean, buys 0.96x on the worst mode
 
 static map (do nothing) = 2.781e-2 -- any row above
 that number is not soft-sensing, whatever its filter.
 
-# exit 0 after 17s
+# exit 0 after 109s
