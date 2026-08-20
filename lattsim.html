@@ -1228,11 +1228,20 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
       const btn = $('recon-tune');
       const nSig = 3 * recon.sensors.length;
       const press = recon.sensors.map((_, i) => 3 * i + 2);
-      const K = recon.target.length;
+      // SUBSAMPLE THE LOCATIONS FOR THE SWEEP. Selecting a filter is a RANKING, and
+      // a ranking does not need every cell -- but the sweep is ~100 model fits, and
+      // at a full slice (thousands of readouts) that is minutes of a phone's main
+      // thread to answer a question a couple of hundred cells settles. The fitted
+      // model that ships still uses every cell; only the chooser is thinned.
+      const stride = Math.max(1, Math.ceil(recon.target.length / 200));
+      const pick = [];
+      for (let i = 0; i < recon.target.length; i += stride) pick.push(i);
+      const K = pick.length;
+      const truths = recon.rec.truths.map((t) => pick.map((i) => t[i]));
       try {
         const res = await selectConditioning({
           rows: recon.rec.rows,
-          truths: recon.rec.truths,
+          truths,
           groups: [press],
           build: (cfg) => ({
             conditioner: new InputConditioner({ nSignals: nSig, groups: [press], warmup: 100, ...cfg }),

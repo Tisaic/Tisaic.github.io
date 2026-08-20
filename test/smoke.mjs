@@ -1545,10 +1545,14 @@ if (FULL) {
     await rp.click('#recon-btn');
     await rp.click('#run');
     // Long enough to train past the warmup and accumulate a commissioning record.
+    // WAIT ON THE ACTUAL PRECONDITION, not a proxy for it. A first version waited
+    // for `trained > 260` and the sweep check silently SKIPPED, because the
+    // commissioning record needs 400 samples and 260 trained ones is only ~380 --
+    // a check that skips itself reports PASS while verifying nothing.
     await rp.waitForFunction(() => {
       const r = window.__lsRecon && window.__lsRecon();
-      return r && r.trained > 260;
-    }, null, { timeout: 240000 }).catch(() => {});
+      return r && r.recorded >= 420;
+    }, null, { timeout: 300000 }).catch(() => {});
     const st = await rp.evaluate(() => ({
       r: window.__lsRecon ? window.__lsRecon() : null,
       text: document.getElementById('recon-stat').textContent,
@@ -1589,7 +1593,10 @@ if (FULL) {
       check('lattsim: selecting a filter refits the model instead of reusing old weights',
         refit != null && refit < 260, String(refit));
     } else {
-      console.log('  (no commissioning record yet — sweep check skipped)');
+      // NOT a silent skip: the sweep is the feature under test, so failing to reach
+      // its precondition is a failure of this check rather than an absence of one.
+      check('lattsim: the commissioning record reached the sweep threshold', false,
+        `recorded ${st.r ? st.r.recorded : 'n/a'}, button disabled`);
     }
     const errs = await rp.evaluate(() => (window.__dbg && window.__dbg.counts ? window.__dbg.counts().errors : 0));
     check('lattsim: the reconstruction panel logged no errors of its own', errs === 0, String(errs));
