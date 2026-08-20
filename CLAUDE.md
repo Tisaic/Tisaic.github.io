@@ -667,6 +667,58 @@ the shipped commit carries the correct version.
    nothing left to lose. The memoryless readout starts 2.2x worse and degrades
    gracefully. Anyone quoting the clean lag result as the method's number is
    quoting a laboratory measurement.
+   **INPUT CONDITIONING BUYS THE NONLINEAR BASIS BACK, AND IT IS CHEAP (v142).**
+   Asked whether filtering could trade a little accuracy for stability so the
+   expanded map is usable under noise. Two filters, attacking different halves --
+   a causal boxcar LOW PASS over the last `lp` samples (the flow signal here is
+   slow; the inlet is driven at 0.004 cycles/step and the wall-to-interior
+   coupling peaks at a 300-sample lag, so broadband noise averages out and the
+   signal does not) and COMMON-MODE REJECTION, subtracting the cross-channel mean
+   of the pressure taps in units of each channel's calibrated spread, which is
+   what differential measurement does in hardware.
+   SIX PREDICTIONS WERE STATED BEFORE THE RUN AND ALL SIX HELD, which is worth as
+   much as the numbers because it means the filters do what they are named for.
+   Measured, expanded map (nf 751), 12 taps, eta 0.1, commissioned-clean protocol,
+   field nRMSE (clean floor 2.63e-4, static-map control 2.78e-2):
+     filter      clean      indep     common      drift   worst/clean
+     none      2.63e-4    6.87e-4    1.52e-3    2.69e-3      10.2x
+     lp 8      2.59e-4    3.40e-4    6.52e-4    2.66e-3      10.3x
+     lp 32     2.67e-4    3.34e-4    4.15e-4    2.66e-3       9.9x
+     lp 128    1.50e-3    2.65e-3    3.18e-3    7.96e-2      53.1x
+     cmr       2.78e-4    1.98e-3    2.78e-4    2.78e-4       7.1x
+     cmr+lp32  2.75e-4    5.65e-4    2.75e-4    2.75e-4       2.1x
+   **THE SHIPPING ANSWER IS cmr+lp32: a 5% cost on clean data turns a 10.2x
+   worst-case noise degradation into 2.1x**, i.e. 4.75x more stable, and its worst
+   mode (5.65e-4) is 7.3x better than the UNFILTERED LINEAR readout's worst
+   (4.15e-3). Conditioning helps the nonlinear basis MORE than the linear one --
+   on the linear readout lp8 buys 1.61x and everything else measures worse -- so
+   the inversion is complete: the basis that noise was supposed to rule out is the
+   one that responds best to cleaning the inputs.
+   THE LOW PASS OBEYS ITS OWN ARITHMETIC. Removing the clean floor in quadrature,
+   the noise-induced error falls 6.35e-4 -> 2.20e-4 at lp 8, a factor **2.9
+   against a predicted sqrt(8) = 2.83**. At lp 32 it reaches only 3.2 rather than
+   5.7, and by lp 128 the filter is eating the signal (5.7x clean cost, and the
+   drift row explodes to 8e-2): there is a real optimum and it is nearer 8-32
+   samples than 128.
+   **DRIFT IS IMMUNE TO A TEMPORAL FILTER AND CMR REMOVES IT EXACTLY.** A constant
+   offset is DC, so the low-pass rows are byte-flat across it (2.686e-3 ->
+   2.661e-3 -> 2.658e-3) while common-mode rejection returns both the common and
+   drift columns to the clean value to three figures. The one cost is that CMR
+   makes INDEPENDENT noise worse (6.87e-4 -> 1.98e-3), because subtracting the
+   cross-channel mean of uncorrelated noise injects a shared component into every
+   channel -- which is exactly why the two filters are needed together rather than
+   either alone.
+   **AND THE BIGGEST LEVER IS NOT A FILTER AT ALL: CALIBRATE WITH THE NOISE
+   PRESENT.** A first version of this trained only on the noisy stream and the
+   DRIFT column came out EXACTLY equal to the clean column. That is not a bug --
+   the standardisation freezes its own mean from the calibration data, so an offset
+   that was there while calibrating is subtracted out and costs nothing. Under the
+   noise-throughout protocol the unfiltered expanded map degrades **1.0x** across
+   every mode, against 10.2x when the same noise arrives after commissioning. So
+   the deployable recipe is: commission with the instrument's real noise in the
+   record, recalibrate periodically, and let cmr+lp32 cover what develops in
+   between. Drift is only harmful when it arrives after the calibration window,
+   which is precisely the failure the drift literature describes.
    **STILL DELIBERATELY NOT BUILT:** heat as a COUPLED field (buoyancy feeding
    back), elasticity, electromagnetics, multiphysics coupling and adaptive
    resolution are architecture rather than code. Operators declare the fields they

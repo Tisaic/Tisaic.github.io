@@ -35,12 +35,22 @@
 //      adds group delay, the rejection spends a degree of freedom
 // A row that violates 3 or 4 means the filter is not doing what it is named for.
 //
-// TRAINING IS ON THE NOISY, FILTERED STREAM, unlike the earlier noise runs which
-// trained clean and only perturbed at inference. That was the drift-after-
-// commissioning case; this is the permanent-instrument-noise case, and it is the
-// one where conditioning matters most, because noise in the REGRESSORS also
-// biases the fit toward zero and a filter reduces that bias as well as the
-// variance.
+// TWO PROTOCOLS, BECAUSE THEY ARE DIFFERENT DEPLOYMENT STORIES AND COLLAPSING
+// THEM HIDES THE ANSWER. A first version of this trained on the noisy stream only,
+// and the DRIFT column came out EXACTLY equal to the clean column -- not a bug:
+// the model's standardisation freezes its own mean from the calibration data, so
+// a constant offset that was present while calibrating is subtracted out exactly
+// and costs nothing. Drift is only harmful when it arrives AFTER commissioning.
+//
+//   commissioned-clean  train on clean data, meet noise at inference. This is
+//                       sensor DRIFT and post-calibration degradation.
+//   noise-throughout    train and infer on the same noisy stream. This is
+//                       permanent instrument noise, and it is also where input
+//                       noise biases the FIT toward zero (errors-in-variables),
+//                       which a filter reduces along with the variance.
+//
+// The conditioning is applied identically in training and inference in both, since
+// a filter that is only switched on at deployment is a train/test mismatch.
 import { dyeStream, fieldNrmse, rng } from './dye-stream.mjs';
 import { FieldReconstructor } from '../lib/probesense/sensor.js';
 
@@ -48,7 +58,7 @@ const SAMPLES = 1600, WARMUP = 200, TRAIN_END = 1200;
 const MODE = process.env.INLET || 'multitone';
 const AMP = +(process.env.AMP || 0.3);
 const ETA = +(process.env.ETA || 0.1);
-const TAPS = +(process.env.TAPS || 8);
+const TAPS = +(process.env.TAPS || 12);
 
 const S = await dyeStream({ samples: SAMPLES, perWall: 12, inletMode: MODE, inletAmplitude: AMP });
 const K = S.target.length;
@@ -141,13 +151,14 @@ function condition(rows, { lp = 1, cmr = false }) {
   return out;
 }
 
-function run(rows, expand) {
+/** `trainRows` is what the model is fitted on; `testRows` is what it meets. */
+function run(trainRows, testRows, expand) {
   const m = new FieldReconstructor({ nSignals: P, nLocations: K, lag: 1, stride: 1,
     warmup: WARMUP, expand, ridge: 100, lam: 1.0 });
-  for (let t = 0; t < TRAIN_END; t++) { m.push(rows[t]); m.observe(S.truth[t]); }
+  for (let t = 0; t < TRAIN_END; t++) { m.push(trainRows[t]); m.observe(S.truth[t]); }
   let score = 0, cnt = 0;
   for (let t = TRAIN_END; t < SAMPLES; t++) {
-    m.push(rows[t]);
+    m.push(testRows[t]);
     const est = m.estimate();
     if (est) { score += fieldNrmse(est, S.truth[t]); cnt++; }
   }
@@ -158,6 +169,7 @@ const FILTERS = [
   { tag: 'none', lp: 1, cmr: false },
   { tag: 'lp 8', lp: 8, cmr: false },
   { tag: 'lp 32', lp: 32, cmr: false },
+  { tag: 'lp 128', lp: 128, cmr: false },
   { tag: 'cmr', lp: 1, cmr: true },
   { tag: 'cmr+lp32', lp: 32, cmr: true },
 ];
@@ -167,38 +179,41 @@ console.log(JSON.stringify({ inlet: `${MODE} ${AMP}`, taps: TAPS, channels: P,
   locations: K, eta: ETA, staticMap: +staticScore.toExponential(3),
   training: 'on the noisy, filtered stream' }));
 
-for (const expand of [false, true]) {
-  const label = expand ? 'EXPANDED (universal map)' : 'linear';
-  const results = {};
-  const clean = {};
-  for (const flt of FILTERS) {
-    clean[flt.tag] = run(condition(noisyRows(0, 'indep'), flt), expand).score;
-    for (const mode of MODES) {
-      results[`${flt.tag}|${mode}`] = run(condition(noisyRows(ETA, mode), flt), expand).score;
+for (const protocol of ['commissioned-clean', 'noise-throughout']) {
+  console.log(`\n================ ${protocol} ================`);
+  for (const expand of [false, true]) {
+    const label = expand ? 'EXPANDED (universal map)' : 'linear';
+    let nf = 0;
+    const clean = {}, results = {};
+    for (const flt of FILTERS) {
+      const cleanRows = condition(noisyRows(0, 'indep'), flt);
+      const r0 = run(cleanRows, cleanRows, expand);
+      clean[flt.tag] = r0.score; nf = r0.nf;
+      for (const mode of MODES) {
+        const noisy = condition(noisyRows(ETA, mode), flt);
+        const trainRows = protocol === 'noise-throughout' ? noisy : cleanRows;
+        results[`${flt.tag}|${mode}`] = run(trainRows, noisy, expand).score;
+      }
     }
-  }
-  const nf = run(condition(noisyRows(0, 'indep'), FILTERS[0]), expand).nf;
-  console.log(`\n-- ${label}, nf ${nf}`);
-  console.log(`${'filter'.padEnd(10)}${'clean'.padStart(11)}${'indep'.padStart(11)}` +
-    `${'common'.padStart(11)}${'drift'.padStart(11)}   worst/clean`);
-  for (const flt of FILTERS) {
-    const c = clean[flt.tag];
-    const worst = Math.max(...MODES.map((m) => results[`${flt.tag}|${m}`]));
-    console.log(`${flt.tag.padEnd(10)}${c.toExponential(3).padStart(11)}` +
-      MODES.map((m) => results[`${flt.tag}|${m}`].toExponential(3).padStart(11)).join('') +
-      `   ${(worst / c).toFixed(1)}x`);
-  }
-  // The trade, stated as the user framed it: what does the filter cost on clean
-  // data, and what does it buy on the worst noise mode?
-  const base = FILTERS[0];
-  const bc = clean[base.tag];
-  const bw = Math.max(...MODES.map((m) => results[`${base.tag}|${m}`]));
-  console.log('  trade vs unfiltered:');
-  for (const flt of FILTERS.slice(1)) {
-    const c = clean[flt.tag];
-    const w = Math.max(...MODES.map((m) => results[`${flt.tag}|${m}`]));
-    console.log(`    ${flt.tag.padEnd(10)} clean costs ${(c / bc).toFixed(2)}x, ` +
-      `worst-noise improves ${(bw / w).toFixed(2)}x`);
+    console.log(`\n-- ${label}, nf ${nf}`);
+    console.log(`${'filter'.padEnd(10)}${'clean'.padStart(11)}${'indep'.padStart(11)}` +
+      `${'common'.padStart(11)}${'drift'.padStart(11)}   worst/clean`);
+    for (const flt of FILTERS) {
+      const c = clean[flt.tag];
+      const worst = Math.max(...MODES.map((m) => results[`${flt.tag}|${m}`]));
+      console.log(`${flt.tag.padEnd(10)}${c.toExponential(3).padStart(11)}` +
+        MODES.map((m) => results[`${flt.tag}|${m}`].toExponential(3).padStart(11)).join('') +
+        `   ${(worst / c).toFixed(1)}x`);
+    }
+    const bc = clean[FILTERS[0].tag];
+    const bw = Math.max(...MODES.map((m) => results[`${FILTERS[0].tag}|${m}`]));
+    console.log('  trade vs unfiltered  (clean cost -> worst-noise gain):');
+    for (const flt of FILTERS.slice(1)) {
+      const c = clean[flt.tag];
+      const w = Math.max(...MODES.map((m) => results[`${flt.tag}|${m}`]));
+      console.log(`    ${flt.tag.padEnd(10)} costs ${(c / bc).toFixed(2)}x clean, ` +
+        `buys ${(bw / w).toFixed(2)}x on the worst mode`);
+    }
   }
 }
 console.log(`\nstatic map (do nothing) = ${staticScore.toExponential(3)} -- any row above`);
