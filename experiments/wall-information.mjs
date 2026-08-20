@@ -34,13 +34,34 @@ const S = await dyeStream({ samples: SAMPLES, perWall: 12, inletMode: MODE, inle
 const K = S.target.length, T = SAMPLES;
 const transitSamples = Math.round(S.transit / 2);
 
-/** Standardise in place; returns null for a dead channel. */
+/**
+ * Pearson correlation between `a` lagged by L and `b`, computed ON THE OVERLAP
+ * WINDOW ONLY.
+ *
+ * THE FIRST VERSION OF THIS STANDARDISED EACH SERIES OVER ITS FULL LENGTH and
+ * then summed products over the truncated window t in [L, T). That is not a
+ * correlation: the window has its own mean and spread, and on an oscillatory
+ * signal the mismatch inflates the result without bound. It reported a maximum
+ * of 1.002, and a correlation cannot exceed 1 -- which is the only reason the
+ * error was visible at all. Everything else it said looked plausible.
+ */
+function corrAt(a, b, L, T) {
+  let ma = 0, mb = 0, n = 0;
+  for (let t = L; t < T; t++) { n++; ma += (a[t - L] - ma) / n; mb += (b[t] - mb) / n; }
+  let saa = 0, sbb = 0, sab = 0;
+  for (let t = L; t < T; t++) {
+    const da = a[t - L] - ma, db = b[t] - mb;
+    saa += da * da; sbb += db * db; sab += da * db;
+  }
+  const d = Math.sqrt(saa * sbb);
+  return d > 1e-300 ? sab / d : 0;
+}
+
+/** Live-channel filter only; no standardisation, since `corrAt` does its own. */
 function z(series) {
   let mu = 0, m2 = 0, n = 0;
   for (const v of series) { n++; const d = v - mu; mu += d / n; m2 += d * (v - mu); }
-  const sd = Math.sqrt(m2 / n);
-  if (!(sd > 1e-30)) return null;
-  return series.map((v) => (v - mu) / sd);
+  return Math.sqrt(m2 / n) > 1e-30 ? series : null;
 }
 
 // One channel per tap for each quantity, so the sweep stays affordable and every
@@ -65,9 +86,7 @@ for (const { k, s: ts } of targetZ) {
   let bc = 0, bl = 0, bch = -1;
   for (const { ch, s: ss } of sensorZ) {
     for (let L = 0; L <= LAG_MAX; L += LAG_STEP) {
-      let acc = 0, n = 0;
-      for (let t = L; t < T; t++) { acc += ss[t - L] * ts[t]; n++; }
-      const c = Math.abs(acc / n);
+      const c = Math.abs(corrAt(ss, ts, L, T));
       if (c > bc) { bc = c; bl = L; bch = ch; }
     }
   }

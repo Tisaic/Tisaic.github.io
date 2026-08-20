@@ -81,9 +81,9 @@ function tapChannels(n2) {
   return ch;
 }
 
-function trainClean(chans, expand) {
-  const m = new FieldReconstructor({ nSignals: chans.length, nLocations: K, lag: 1,
-    stride: 1, warmup: WARMUP, expand, ridge: 100, lam: 1.0 });
+function trainClean(chans, expand, lag = 1, stride = 1) {
+  const m = new FieldReconstructor({ nSignals: chans.length, nLocations: K, lag,
+    stride, warmup: WARMUP, expand, ridge: 100, lam: 1.0 });
   for (let t = 0; t < TRAIN_END; t++) {
     m.push(chans.map((c) => S.sig[t][c]));
     m.observe(S.truth[t]);
@@ -117,22 +117,27 @@ function replay(model, chans, eta, mode, seed = 7) {
   return out.reduce((a, b) => a + b, 0) / Math.max(1, out.length);
 }
 
+// LAGGED ARMS, because the memoryless one is now known to be the wrong
+// configuration rather than the shipped one: the wall-to-interior coupling peaks
+// at a lag of 300 samples (measured, model-free) and a readout that cannot reach
+// it is answering a different question.
 const arms = [
-  { tag: 'linear  12 taps', chans: tapChannels(12), expand: false },
-  { tag: 'EXPANDED 12 taps', chans: tapChannels(12), expand: true },
-  { tag: 'linear  24 taps', chans: tapChannels(24), expand: false },
+  { tag: 'linear 12 lag1', chans: tapChannels(12), expand: false, lag: 1, stride: 1 },
+  { tag: 'linear 12 lag4x100', chans: tapChannels(12), expand: false, lag: 4, stride: 100 },
+  { tag: 'EXPAND 12 lag1', chans: tapChannels(12), expand: true, lag: 1, stride: 1 },
+  { tag: 'linear 24 lag4x100', chans: tapChannels(24), expand: false, lag: 4, stride: 100 },
 ];
-console.log(`\n${'arm'.padEnd(18)}${'nf'.padStart(5)}  eta:` +
+console.log(`\n${'arm'.padEnd(20)}${'nf'.padStart(5)}  eta:` +
   ETAS.map((e) => String(e).padStart(9)).join(''));
 const table = [];
 for (const arm of arms) {
-  const model = trainClean(arm.chans, arm.expand);
+  const model = trainClean(arm.chans, arm.expand, arm.lag, arm.stride);
   const row = { arm: arm.tag, nf: model.nf };
   for (const mode of ['indep', 'common', 'drift']) {
     row[mode] = ETAS.map((eta) => replay(model, arm.chans, eta, mode));
   }
   table.push(row);
-  console.log(`${arm.tag.padEnd(18)}${String(model.nf).padStart(5)}`);
+  console.log(`${arm.tag.padEnd(20)}${String(model.nf).padStart(5)}`);
   for (const mode of ['indep', 'common', 'drift']) {
     console.log(`  ${mode.padEnd(21)}` + row[mode].map((v) => f(v).toFixed(4).padStart(9)).join(''));
   }
