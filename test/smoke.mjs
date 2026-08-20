@@ -1549,10 +1549,19 @@ if (FULL) {
     // for `trained > 260` and the sweep check silently SKIPPED, because the
     // commissioning record needs 400 samples and 260 trained ones is only ~380 --
     // a check that skips itself reports PASS while verifying nothing.
-    await rp.waitForFunction(() => {
+    //
+    // AND THE SWEEP IS FULL-TIER, because reaching that record is genuinely slow:
+    // the panel samples once per frame and every sample costs a full concentration
+    // readback, MEASURED at 0.74 samples/s here, so 420 samples is ~10 minutes. The
+    // quick tier therefore verifies the READOUT -- which is the part that was
+    // shipping a misleading number -- and asserts the sweep is correctly GATED;
+    // the full tier waits and drives it end to end. Commissioning taking minutes
+    // on a real plant is not a defect to engineer around, it is what it is.
+    const want = FULL ? 420 : 120;
+    await rp.waitForFunction((n) => {
       const r = window.__lsRecon && window.__lsRecon();
-      return r && r.recorded >= 420;
-    }, null, { timeout: 300000 }).catch(() => {});
+      return r && r.recorded >= n;
+    }, want, { timeout: FULL ? 900000 : 240000 }).catch(() => {});
     const st = await rp.evaluate(() => ({
       r: window.__lsRecon ? window.__lsRecon() : null,
       text: document.getElementById('recon-stat').textContent,
@@ -1570,7 +1579,13 @@ if (FULL) {
       /STEADY/.test(st.text) || /vs doing nothing/.test(st.text), st.text.slice(0, 220));
 
     // The commissioning sweep: it must run, pick something, and refit.
-    if (!st.tuneDisabled) {
+    if (!FULL) {
+      // A REAL ASSERTION, not an absence of one: the control must be gated on
+      // having a record rather than offering a sweep it cannot run.
+      check('lattsim: the sweep is gated until a commissioning record exists',
+        st.tuneDisabled === (st.r.recorded < 400),
+        JSON.stringify({ recorded: st.r.recorded, disabled: st.tuneDisabled }));
+    } else if (!st.tuneDisabled) {
       await rp.click('#recon-tune');
       await rp.waitForFunction(() => {
         const b = document.getElementById('recon-tune');
