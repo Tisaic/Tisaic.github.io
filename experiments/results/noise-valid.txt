@@ -1,37 +1,44 @@
 # noise-valid
-# commit 08c3eeb   2026-08-20T03:35:04Z
+# commit dbf0e11   2026-08-20T03:42:18Z
 
 {"inlet":"multitone 0.3","size":[48,16,16],"taps":24,"locations":161,"samples":1600}
 
 CONTROLS: static map 2.781e-2, field activity (temporal/spatial) 2.29e-2
 
-arm                  nf  eta:        0     0.01     0.03      0.1      0.3
-linear  12 taps      37
-  indep                   0.1816   0.1810   0.1908   0.3233   0.8553
-  common                  0.1816   0.1825   0.1891   0.2402   0.5330
-  drift                   0.1816   0.1559   0.1229   0.1440   0.7587
-EXPANDED 12 taps    751
-  indep                   0.1243   0.1277   0.1491   0.2745   0.7340
-  common                  0.1243   0.1289   0.1587   0.3126   0.8717
-  drift                   0.1243   0.1321   0.1835   0.4935   1.5785
-linear  24 taps      73
-  indep                   0.1827   0.1902   0.2240   0.4610   1.2647
-  common                  0.1827   0.1834   0.1877   0.2185   0.4139
-  drift                   0.1827   0.1642   0.1383   0.1072   0.5308
+arm                    nf  eta:        0     0.01     0.03      0.1      0.3
+linear 12 lag1         37
+  indep                   0.0004   0.0006   0.0013   0.0041   0.0122
+  common                  0.0004   0.0004   0.0006   0.0015   0.0044
+  drift                   0.0004   0.0005   0.0009   0.0026   0.0078
+linear 12 lag4x100    145
+  indep                   0.0002   0.0253   0.0254   0.0256   0.0263
+  common                  0.0253   0.0253   0.0254   0.0258   0.0272
+  drift                   0.0255   0.0253   0.0255   0.0259   0.0275
+EXPAND 12 lag1        751
+  indep                   0.0003   0.0003   0.0003   0.0007   0.0019
+  common                  0.0003   0.0003   0.0006   0.0016   0.0045
+  drift                   0.0003   0.0004   0.0008   0.0027   0.0080
+linear 24 lag4x100    289
+  indep                   0.0002   0.0243   0.0243   0.0244   0.0248
+  common                  0.0243   0.0243   0.0244   0.0248   0.0261
+  drift                   0.0245   0.0244   0.0245   0.0250   0.0267
 
 VERDICTS (static map = 2.781e-2)
-  linear  12 taps: clean 0.1816 = 0.2x better than doing nothing  <-- WORSE THAN DOING NOTHING
-  EXPANDED 12 taps: clean 0.1243 = 0.2x better than doing nothing  <-- WORSE THAN DOING NOTHING
-  linear  24 taps: clean 0.1827 = 0.2x better than doing nothing  <-- WORSE THAN DOING NOTHING
+  linear 12 lag1: clean 0.0004 = 70.7x better than doing nothing
+  linear 12 lag4x100: clean 0.0002 = 157.3x better than doing nothing
+  EXPAND 12 lag1: clean 0.0003 = 105.8x better than doing nothing
+  linear 24 lag4x100: clean 0.0002 = 175.9x better than doing nothing
 
   correlated vs independent, at equal per-channel size:
-    linear  12 taps   eta 0.03: common 0.82x drift -6.42x  eta 0.1: common 0.41x drift -0.27x  eta 0.3: common 0.52x drift 0.86x
-    EXPANDED 12 taps  eta 0.03: common 1.39x drift 2.39x  eta 0.1: common 1.25x drift 2.46x  eta 0.3: common 1.23x drift 2.38x
-    linear  24 taps   eta 0.03: common 0.12x drift -1.07x  eta 0.1: common 0.13x drift -0.27x  eta 0.3: common 0.21x drift 0.32x
+    linear 12 lag1    eta 0.03: common 0.26x drift 0.54x  eta 0.1: common 0.31x drift 0.61x  eta 0.3: common 0.34x drift 0.63x
+    linear 12 lag4x100eta 0.03: common 1x drift 1x  eta 0.1: common 1.01x drift 1.01x  eta 0.3: common 1.03x drift 1.05x
+    EXPAND 12 lag1    eta 0.03: common 3.88x drift 7.42x  eta 0.1: common 2.96x drift 5.52x  eta 0.3: common 2.59x drift 4.68x
+    linear 24 lag4x100eta 0.03: common 1x drift 1.01x  eta 0.1: common 1.02x drift 1.02x  eta 0.3: common 1.05x drift 1.08x
 
   what independent noise costs each basis, relative to its own clean score:
-    linear  12 taps   eta 0.03: +5%   eta 0.1: +78%   eta 0.3: +371%
-    EXPANDED 12 taps  eta 0.03: +20%   eta 0.1: +121%   eta 0.3: +490%
-    linear  24 taps   eta 0.03: +23%   eta 0.1: +152%   eta 0.3: +592%
+    linear 12 lag1    eta 0.03: +228%   eta 0.1: +939%   eta 0.3: +3002%
+    linear 12 lag4x100eta 0.03: +14248%   eta 0.1: +14376%   eta 0.3: +14784%
+    EXPAND 12 lag1    eta 0.03: +29%   eta 0.1: +167%   eta 0.3: +629%
+    linear 24 lag4x100eta 0.03: +15300%   eta 0.1: +15367%   eta 0.3: +15580%
 
-# exit 0 after 5s
+# exit 0 after 6s
