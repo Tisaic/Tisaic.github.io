@@ -1337,7 +1337,17 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
       reconStatus();
     }
 
-    window.__lsRecon = () => recon;   // debug hook: sensors, target size, live nRMSE, lock state
+    // Debug hook: a LEAN SUMMARY, not the object. `recon` now holds the model, the
+    // reconstructed field and a 900-sample commissioning record, and a hook that
+    // hands all of that to a test harness serialises megabytes per call.
+    window.__lsRecon = () => ({
+      enabled: recon.enabled, locked: recon.locked, trained: recon.trained,
+      sensors: recon.sensors.length, cells: recon.target.length,
+      nrmse: recon.nrmse, cfg: { ...recon.cfg }, filter: recon.cond ? recon.cond.describe() : 'none',
+      tuned: recon.tuned ? { best: recon.tuned.best, measuredNoise: recon.tuned.measuredNoise } : null,
+      recorded: recon.rec.rows.length,
+      grade: recon.grade ? { ...recon.grade } : null,
+    });
 
     // ---------------------------------------------------------------- stir
     // Map a pointer position on the slice canvas to a lattice cell and apply a

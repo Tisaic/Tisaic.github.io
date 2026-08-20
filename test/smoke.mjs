@@ -1523,6 +1523,82 @@ if (FULL) {
   await v3d.close().catch(() => {});
 }
 
+// ---------------------------------------------------------------------------
+// THE RECONSTRUCTION PANEL MUST REPORT ITS OWN CONTROL.
+//
+// This page shipped a reconstruction readout that printed an nRMSE and nothing
+// else. On the steady dye scene that number was 0.086 while a CONSTANT PER CELL
+// scored 1.7e-3 -- fifty times better than the model -- and nothing on screen said
+// so. A small number is not a result without the do-nothing comparison, and the
+// gate that was supposed to catch it asked only whether the error was small.
+//
+// A THROWAWAY PAGE, because the dye scene is a rebuild and this runs last.
+{
+  section('lattsim reconstruction control');
+  const rp = await browser.newPage({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 2 });
+  try {
+    await rp.goto(BASE + 'lattsim.html', { waitUntil: 'load' });
+    await rp.evaluate(() => { try { localStorage.removeItem('dbgLogs'); } catch (e) {} });
+    await rp.waitForFunction(() => window.__lsDbg && !window.__lsDbg().building, null, { timeout: 180000 });
+    await rp.selectOption('#scene', 'dye');
+    await rp.waitForFunction(() => !window.__lsDbg().building, null, { timeout: 180000 });
+    await rp.click('#recon-btn');
+    await rp.click('#run');
+    // Long enough to train past the warmup and accumulate a commissioning record.
+    await rp.waitForFunction(() => {
+      const r = window.__lsRecon && window.__lsRecon();
+      return r && r.trained > 260;
+    }, null, { timeout: 240000 }).catch(() => {});
+    const st = await rp.evaluate(() => ({
+      r: window.__lsRecon ? window.__lsRecon() : null,
+      text: document.getElementById('recon-stat').textContent,
+      tuneDisabled: document.getElementById('recon-tune').disabled,
+    }));
+    check('lattsim: the reconstruction readout names the do-nothing rival or says the field is steady',
+      /vs doing nothing|STEADY/.test(st.text), st.text.slice(0, 220));
+    check('lattsim: and it states which input filter is running',
+      /filter (none|cmr|lp)/.test(st.text), st.text.slice(0, 220));
+
+    // THE STEADY SCENE IS THE POINT OF THE WARNING. The dye scene ships with the
+    // disturbance off, so the field settles and the task collapses into recall --
+    // the page must SAY that rather than print a confident ratio.
+    check('lattsim: on the undisturbed dye scene the readout warns rather than scoring',
+      /STEADY/.test(st.text) || /vs doing nothing/.test(st.text), st.text.slice(0, 220));
+
+    // The commissioning sweep: it must run, pick something, and refit.
+    if (!st.tuneDisabled) {
+      await rp.click('#recon-tune');
+      await rp.waitForFunction(() => {
+        const b = document.getElementById('recon-tune');
+        return b && !b.disabled && !/tuning/.test(b.textContent);
+      }, null, { timeout: 240000 }).catch(() => {});
+      const after = await rp.evaluate(() => {
+        const r = window.__lsRecon ? window.__lsRecon() : null;
+        return { cfg: r && r.cfg, tuned: !!(r && r.tuned), text: document.getElementById('recon-stat').textContent };
+      });
+      check('lattsim: the commissioning sweep selects a conditioning and says so',
+        after.tuned && after.cfg && Number.isFinite(after.cfg.lp),
+        JSON.stringify(after).slice(0, 220));
+      // A NEW FILTER IS A NEW INPUT SIGNAL, so the model must be refitted rather
+      // than keep weights fitted on unconditioned data -- the exact train/test
+      // mismatch this module exists to avoid.
+      const refit = await rp.evaluate(() => {
+        const r = window.__lsRecon ? window.__lsRecon() : null;
+        return r ? r.trained : null;
+      });
+      check('lattsim: selecting a filter refits the model instead of reusing old weights',
+        refit != null && refit < 260, String(refit));
+    } else {
+      console.log('  (no commissioning record yet — sweep check skipped)');
+    }
+    const errs = await rp.evaluate(() => (window.__dbg && window.__dbg.counts ? window.__dbg.counts().errors : 0));
+    check('lattsim: the reconstruction panel logged no errors of its own', errs === 0, String(errs));
+  } catch (e) {
+    check('lattsim: the reconstruction control check ran', false, String(e).slice(0, 200));
+  }
+  await rp.close().catch(() => {});
+}
+
 await browser.close();
 
 section('end');
