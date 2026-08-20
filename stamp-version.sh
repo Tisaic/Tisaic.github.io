@@ -7,7 +7,32 @@ set -euo pipefail
 
 BUILT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 # This commit's number = current commit count + 1 (this script runs pre-commit).
+# THE COMMIT COUNT IS ONLY A BUILD NUMBER IF THE HISTORY IS ALL THERE.
+#
+# This repo is cloned SHALLOW into the remote sandbox, and `rev-list --count` then
+# counts what was fetched rather than what exists: it returned 77 against a real
+# 213, and stamping that REGRESSED version.json from 179 to 77 before this guard
+# existed. That breaks the one thing the number is for -- the page compares its own
+# build to the server's and offers a cache-busting reload when the server is NEWER,
+# so a number that goes backwards means a genuinely stale page is never told.
+#
+# Nothing failed when it happened. The stamp succeeded, the commit looked right,
+# and the staleness banner would simply have stopped working.
+if [ -f .git/shallow ] || [ "$(git rev-parse --is-shallow-repository 2>/dev/null)" = "true" ]; then
+  echo "stamp-version: shallow clone -- run 'git fetch --unshallow' first," >&2
+  echo "               or the build number will go BACKWARDS." >&2
+  exit 1
+fi
 NUM="$(( $(git rev-list --count HEAD) + 1 ))"
+# And a check against the number actually shipped, since a shallow clone is only
+# one way to lose history (a graft, a filtered clone, a rewritten branch). The
+# version must never go backwards, whatever the cause.
+PREV="$(sed -n 's/.*"version":[[:space:]]*\([0-9]\+\).*/\1/p' version.json 2>/dev/null | head -1)"
+if [ -n "$PREV" ] && [ "$NUM" -le "$PREV" ]; then
+  echo "stamp-version: refusing to stamp v$NUM over v$PREV -- the build number" >&2
+  echo "               must increase or stale-page detection silently stops working." >&2
+  exit 1
+fi
 
 # Replace the marked line in index.html (marker survives so it's re-stampable).
 sed -i "s|.*// __STAMP__.*|  <script>window.__BUILD = {version:${NUM},built:\"${BUILT}\"}; // __STAMP__</script>|" index.html
