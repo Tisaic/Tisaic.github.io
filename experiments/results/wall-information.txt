@@ -1,0 +1,24 @@
+# wall-information
+# commit e60951e   2026-08-20T03:38:29Z
+
+{"inlet":"multitone 0.3","channelsTested":36,"liveLocations":149,"ofTotal":161,"transitSamples":400,"lagsTested":"0..600 step 10"}
+
+BEST |correlation| between any wall channel (at any lag) and each location:
+{
+ "min": 0.445,
+ "q25": 0.95,
+ "median": 0.974,
+ "q75": 0.985,
+ "max": 1.002,
+ "aboveHalf": 0.993,
+ "aboveEightTenths": 0.933
+}
+
+most common peak lags (samples, transit = 400): 10:27  310:19  0:18  330:13  20:13  300:11
+peak lag among the 148 well-correlated locations: median 300
+
+THE SIGNAL IS THERE. A linear readout on these channels should work, so the
+failure to beat a constant belongs to the estimator or its training, not to
+the sensing.
+
+# exit 0 after 1s
