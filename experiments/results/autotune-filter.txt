@@ -1,0 +1,30 @@
+# autotune-filter
+# commit 1dd5cdf   2026-08-20T04:36:19Z
+
+{"inlet":"multitone 0.3","taps":12,"channels":36,"locations":161,"basis":"expanded","injectedEta":0.1,"commissioning":"[0,1200) fit [0,900) validate [900,1200)","test":"[1200,1600)"}
+
+================ clean commissioning ================
+  measured noise (pressure median, as a fraction of channel spread): 2.70e-3   [injected 0]
+  naive validation picks   lp1        (validation 3.080e-4)
+  worst-case selection     lp1        (worst      3.125e-4)
+
+  choice              filter        test clean  test worst
+  naive validation    lp1             2.628e-4    2.686e-3
+  worst-case select   lp1             2.628e-4    2.686e-3
+  fixed none          lp1             2.628e-4    2.686e-3
+  fixed cmr+lp32      cmr+lp32        2.747e-4    5.654e-4
+  ORACLE (test-set)   cmr+lp32        2.747e-4    5.654e-4
+
+================ noisy commissioning ================
+  measured noise (pressure median, as a fraction of channel spread): 1.01e-1   [injected 0.1]
+  naive validation picks   lp16       (validation 3.199e-4)
+  worst-case selection     cmr+lp1    (worst      3.325e-4)
+
+  choice              filter        test clean  test worst
+  naive validation    lp16            1.954e-4    8.996e-4
+  worst-case select   cmr+lp1         2.259e-4    2.296e-4
+  fixed none          lp1             2.234e-4    2.731e-4
+  fixed cmr+lp32      cmr+lp32        1.779e-4    2.115e-4
+  ORACLE (test-set)   cmr+lp32        1.779e-4    2.115e-4
+
+# exit 0 after 501s
