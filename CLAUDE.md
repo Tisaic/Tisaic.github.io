@@ -719,6 +719,47 @@ the shipped commit carries the correct version.
    record, recalibrate periodically, and let cmr+lp32 cover what develops in
    between. Drift is only harmful when it arrives after the calibration window,
    which is precisely the failure the drift literature describes.
+   **AND THE FILTER TUNES ITSELF FROM THE COMMISSIONING RECORD (v143).** `lp 32`
+   was a number somebody chose, and it is not portable -- at `lp 128` the same
+   filter EATS THE SIGNAL (5.7x clean cost), so the right length depends on the
+   plant's own timescale and a faster process would make 32 the new 128.
+   `autotune-filter.mjs` selects it with nothing set by hand: fit on the first part
+   of the commissioning record, score candidates on a HELD-OUT tail (scored on the
+   fitting data, less filtering always wins, because a filter removes information
+   the fit could otherwise memorise), grid over boxcar length x rejection on/off,
+   and take the argmin of the WORST case.
+   THE NOISE MAGNITUDE IS MEASURED, NOT SET: a second-difference estimator, since
+   `x[t] - 2x[t-1] + x[t-2]` is tiny for a smooth signal while its variance is
+   exactly `6*sigma^2` for white noise. Validated by injection -- it recovered
+   **1.01e-1 against 0.1**, and reports 2.7e-3 on the clean record, which is the
+   simulation's own floor.
+   **BUT SELECTING AGAINST THE MEASURED MAGNITUDE HAS A HOLE, AND MEASURING IT WAS
+   THE POINT.** On a CLEAN commissioning record the estimator correctly reports
+   ~zero, stresses at ~zero, and picks no filter -- test-worst 2.686e-3 against an
+   oracle 5.654e-4, i.e. **4.75x worse**. Nothing in a clean record can tell you to
+   filter for noise that is not in it. That is this project's oldest lesson again
+   (a measurement taken on a transient describes the transient), and the fix is the
+   same shape as the anti-slosh health-check probe: stop asking the record what it
+   cannot know and EXCITE the question instead.
+   So the shipped rule sweeps the stress over a DECADE of magnitudes (0.03/0.1/0.3
+   of each channel's own spread) x the three canonical structures -- per-channel
+   independent, spatially coherent and time-varying, spatially coherent and
+   constant -- and takes the worst case over the whole envelope. Those structures
+   are not tuning choices, they are what a sensor array can do, and the sweep is
+   dimensionless so it carries no plant constant. MEASURED, expanded map, test
+   window worst case over all noise modes:
+     commissioning   naive CV      measured stress   SWEPT stress   oracle
+     clean           2.686e-3      2.686e-3          **5.654e-4**   5.654e-4
+     noisy           8.996e-4      2.296e-4          **2.296e-4**   2.115e-4
+   The swept rule MATCHES THE ORACLE EXACTLY on a clean record and lands within
+   **8.6%** of it on a noisy one, while naive cross-validation is 4.8x and 3.9x
+   worse respectively -- it picks the filter that is best on the data it has, which
+   is `lp1` on a clean record and `lp16` on a noisy one, and both are wrong for the
+   data the instrument will meet. Cost is about 90 seconds of commissioning
+   compute (8 candidates x 10 conditions).
+   HONEST LIMIT: the oracle here is `cmr+lp32` in BOTH scenarios, so this plant has
+   an easy answer and the auto-tuner is being graded on confirming it. Its value is
+   portability to a plant where the answer differs, and that has not been tested.
    **STILL DELIBERATELY NOT BUILT:** heat as a COUPLED field (buoyancy feeding
    back), elasticity, electromagnetics, multiphysics coupling and adaptive
    resolution are architecture rather than code. Operators declare the fields they

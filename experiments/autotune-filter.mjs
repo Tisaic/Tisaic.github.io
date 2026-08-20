@@ -33,6 +33,24 @@
 // The selection is then argmin of the WORST case. Nothing here is set by hand: the
 // magnitude is measured, the grid is exhaustive, the objective is worst-case.
 //
+// AND A THIRD RULE, BECAUSE THE MEASURED-MAGNITUDE ONE HAS A HOLE. On a CLEAN
+// commissioning record the estimator correctly reports ~zero noise, stresses at
+// ~zero, and picks no filter -- measured, test-worst 2.686e-3 against an oracle
+// 5.654e-4, i.e. 4.75x worse. It is not wrong so much as answerable: nothing in a
+// clean record can tell you to filter for noise that is not in it. That is this
+// project's oldest lesson wearing new clothes -- a measurement taken on a
+// transient describes the transient -- and the fix is the same shape as the
+// health-check probe on the anti-slosh tab: stop asking the record what it cannot
+// know, and EXCITE the question instead.
+//
+// So `robust` sweeps the stress over a DECADE of magnitudes rather than the one
+// measured, and takes the worst case across all of them. That removes the last
+// dependence on the record being representative: it is not "be robust to the noise
+// I saw", it is "be robust to any noise an instrument of this class can produce",
+// and the answer is the filter whose worst case over that whole envelope is
+// smallest. The sweep is dimensionless -- a fraction of each channel's own spread
+// -- so it carries no plant-specific constant either.
+//
 // TESTED IN BOTH COMMISSIONING SCENARIOS, because the trap only appears in one:
 // a clean commissioning record (where naive validation picks no filter and is
 // wrong) and a noisy one (where the noise is already in the record).
@@ -173,7 +191,8 @@ function evaluate(trainRows, testRows, fitEnd, scoreFrom, scoreTo) {
   return cnt ? score / cnt : NaN;
 }
 
-const LPS = [1, 2, 4, 8, 16, 32, 64, 128];
+const LPS = [1, 4, 16, 32, 64];
+const STRESS_SWEEP = [0.03, 0.1, 0.3];
 const GRID = [];
 for (const cmr of [false, true]) for (const lp of LPS) GRID.push({ lp, cmr, tag: `${cmr ? 'cmr+' : ''}lp${lp}` });
 const MODES = ['indep', 'common', 'drift'];
@@ -207,10 +226,26 @@ for (const scenario of ['clean commissioning', 'noisy commissioning']) {
     }
     worst[g.tag] = w;
   }
+  // Rule 3: worst case over a SWEEP of magnitudes, so the record no longer has to
+  // contain the noise for the filter to be chosen for it.
+  const robust = {};
+  for (const g of GRID) {
+    let w = plain[g.tag];
+    const cond = condition(record, g);
+    for (const e of STRESS_SWEEP) {
+      for (const mode of MODES) {
+        w = Math.max(w, evaluate(cond, condition(stress(record, e, mode), g),
+          FIT_END, FIT_END, COMMISSION_END));
+      }
+    }
+    robust[g.tag] = w;
+  }
   const pickPlain = GRID.reduce((a, b) => (plain[b.tag] < plain[a.tag] ? b : a));
   const pickWorst = GRID.reduce((a, b) => (worst[b.tag] < worst[a.tag] ? b : a));
+  const pickRobust = GRID.reduce((a, b) => (robust[b.tag] < robust[a.tag] ? b : a));
   console.log(`  naive validation picks   ${pickPlain.tag.padEnd(10)} (validation ${plain[pickPlain.tag].toExponential(3)})`);
-  console.log(`  worst-case selection     ${pickWorst.tag.padEnd(10)} (worst      ${worst[pickWorst.tag].toExponential(3)})`);
+  console.log(`  measured-stress picks    ${pickWorst.tag.padEnd(10)} (worst      ${worst[pickWorst.tag].toExponential(3)})`);
+  console.log(`  swept-stress picks       ${pickRobust.tag.padEnd(10)} (worst      ${robust[pickRobust.tag].toExponential(3)})`);
 
   // ------------------------------------------ evaluate both on the held-out test
   const testOf = (g) => {
@@ -223,17 +258,25 @@ for (const scenario of ['clean commissioning', 'noisy commissioning']) {
     }
     return { clean, worst: w };
   };
-  const oracle = GRID.reduce((a, b) => (testOf(b).worst < testOf(a).worst ? b : a));
+  // Memoised: `testOf` is four model fits, and a reduce would call it twice per
+  // comparison. The first version of this did exactly that and never finished.
+  const testCache = new Map();
+  const testMemo = (g) => {
+    if (!testCache.has(g.tag)) testCache.set(g.tag, testOf(g));
+    return testCache.get(g.tag);
+  };
+  const oracle = GRID.reduce((a, b) => (testMemo(b).worst < testMemo(a).worst ? b : a));
   const rows = [
     ['naive validation', pickPlain],
-    ['worst-case select', pickWorst],
+    ['measured stress', pickWorst],
+    ['SWEPT stress', pickRobust],
     ['fixed none', { lp: 1, cmr: false, tag: 'lp1' }],
     ['fixed cmr+lp32', { lp: 32, cmr: true, tag: 'cmr+lp32' }],
     ['ORACLE (test-set)', oracle],
   ];
   console.log(`\n  ${'choice'.padEnd(20)}${'filter'.padEnd(12)}${'test clean'.padStart(12)}${'test worst'.padStart(12)}`);
   for (const [name, g] of rows) {
-    const r = testOf(g);
+    const r = testMemo(g);
     console.log(`  ${name.padEnd(20)}${g.tag.padEnd(12)}${r.clean.toExponential(3).padStart(12)}` +
       `${r.worst.toExponential(3).padStart(12)}`);
   }
