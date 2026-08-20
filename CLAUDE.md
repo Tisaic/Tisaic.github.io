@@ -811,6 +811,33 @@ the shipped commit carries the correct version.
    on a sample count instead and SKIPPED ITSELF while reporting PASS, which is the
    worst of both -- a check that skips is not a check, so the gate is now asserted
    rather than used as an excuse to return early.
+   **AND THE FULL TIER WAS ALREADY BROKEN BEFORE ANY OF THIS, which is worth
+   recording rather than quietly inheriting.** Verified against a worktree at the
+   session's starting commit, with none of the above present: the same three
+   failures appear byte-identically. (i) `the resolution slider is clamped to what
+   the device can allocate` reports max 5. (ii) `the stability floor actually
+   diverges (so the check has teeth)` runs 6000 steps at the floor WITHOUT
+   diverging -- which is almost certainly stale since v122, the change that added
+   the limiter precisely so that no configuration can diverge; the check asserts
+   the opposite of what the engine now guarantees. (iii) an unguarded
+   `waitForFunction` on the soft sensor timed out and THREW, aborting the run.
+   THAT THIRD ONE WAS HIDING THE OTHERS. Because it threw rather than reported,
+   every check after it never ran -- including a dozen soft-sensor checks that
+   then failed the moment the wait was made non-fatal, and the reconstruction
+   checks added above, which had never executed at all despite being written and
+   committed. It is the same defect as a check that skips itself, in the other
+   direction: one hides its own result, the other hides everybody else's. A slow
+   gate now reports a failed check and the suite continues.
+   THE TWO RECONSTRUCTION READOUT CHECKS THAT FAIL IN A FULL RUN ARE COLLATERAL,
+   not defects, and were verified in isolation on an idle machine:
+   `training (247) · nRMSE 0.003 · vs doing nothing 0.126 (39.9x better than a
+   constant per cell)`, with the grade reporting model 2.4e-3, static map 0.126
+   and activity 7.1%. In the full run the page was already throwing `call build()
+   first` from the failures above and the two heaviest sections took ~1200 s each,
+   so the readout simply had not converged inside the wait. The sweep checks pass
+   in the full run itself: the record reaches its threshold, the sweep selects a
+   conditioning, and selecting one refits rather than reusing weights fitted on
+   unconditioned data.
    **STILL DELIBERATELY NOT BUILT:** heat as a COUPLED field (buoyancy feeding
    back), elasticity, electromagnetics, multiphysics coupling and adaptive
    resolution are architecture rather than code. Operators declare the fields they
