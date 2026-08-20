@@ -58,6 +58,13 @@ fi
 # there is no WebGPU here at all, and even in the browser below it exists only
 # behind a flag and only as a software adapter. The production WGSL kernel is
 # checked in the smoke test, cell by cell against this same reference.
+# Input conditioning: pure arithmetic on synthetic streams, so it costs seconds and
+# runs at both tiers. It pins the MECHANISM of each filter (sqrt(L) on white noise,
+# nothing on DC, exact cancellation of a proportional coherent shift, and the
+# cross-channel correlation the rejection introduces) rather than a score, because
+# a later edit could improve a number while breaking the reason.
+node test/probesense/conditioner.test.mjs
+
 if [ -d lib/lattsim ]; then
   node test/lattsim/d3q19.test.mjs
   node test/lattsim/engine.test.mjs
