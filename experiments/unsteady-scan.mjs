@@ -26,13 +26,19 @@
 import { dyeStream } from './dye-stream.mjs';
 
 const SAMPLES = +(process.env.SAMPLES || 500);
-const CASES = (process.env.CASES || '16:0.06,16:0.12,16:0.20,24:0.12').split(',')
-  .map((s) => { const [res, u] = s.split(':'); return { res: +res, u: +u }; });
+// res:u:mode:amplitude. The disturbance is the point -- see `dye-stream.mjs`
+// for why a steady flow makes this task vanish rather than merely get easy.
+const CASES = (process.env.CASES
+  || '16:0.06:steady:0,16:0.06:multitone:0.3,16:0.06:chaotic:0.3,16:0.06:chaotic:0.6').split(',')
+  .map((s) => {
+    const [res, u, inletMode = 'steady', amp = '0'] = s.split(':');
+    return { res: +res, u: +u, inletMode, inletAmplitude: +amp };
+  });
 
 console.log(`scan, ${SAMPLES} samples each\n`);
-console.log('res     u     cells   transit  spatial   temporal  temp/spat  staticMap  drift/temp');
-for (const { res, u } of CASES) {
-  const S = await dyeStream({ res, u, samples: SAMPLES, perWall: 6 });
+console.log('res     u  inlet             cells  transit  spatial   temporal  temp/spat  staticMap  drift/temp');
+for (const { res, u, inletMode, inletAmplitude } of CASES) {
+  const S = await dyeStream({ res, u, samples: SAMPLES, perWall: 6, inletMode, inletAmplitude });
   const K = S.target.length, T = S.sig.length;
   const mu = new Float64Array(K), m2 = new Float64Array(K);
   for (let t = 0; t < T; t++) {
@@ -58,8 +64,9 @@ for (const { res, u } of CASES) {
   let drift = 0;
   for (let k = 0; k < K; k++) drift += (meanOf(half, T, k) - meanOf(0, half, k)) ** 2;
   drift = Math.sqrt(drift / K);
-  console.log(`${String(res).padStart(3)}  ${String(u).padStart(5)}` +
-    `${String(S.cells).padStart(9)}${String(S.transit).padStart(9)}` +
+  console.log(`${String(res).padStart(3)}  ${String(u).padStart(5)}  ` +
+    `${(inletMode + (inletAmplitude ? ' ' + inletAmplitude : '')).padEnd(16)}` +
+    `${String(S.cells).padStart(6)}${String(S.transit).padStart(9)}` +
     `${spatial.toExponential(2).padStart(10)}${meanTemp.toExponential(2).padStart(11)}` +
     `${(meanTemp / spatial).toExponential(2).padStart(11)}` +
     `${staticScore.toExponential(2).padStart(11)}${(drift / meanTemp).toFixed(2).padStart(12)}`);

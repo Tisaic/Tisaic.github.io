@@ -31,9 +31,19 @@ const CACHE = process.env.DYE_CACHE || '.dye-cache';
  * @param {number} [o.flush] transits to settle before recording
  */
 export async function dyeStream(opts = {}) {
-  const { res = 16, u = 0.06, every = 2, samples = 1600, perWall = 6, flush = 2 } = opts;
-  const key = `${res}_${u}_${every}_${samples}_${perWall}_${flush}_${JSON.stringify(PHYS)}`
-    .replace(/[^\w.-]/g, '');
+  // THE INLET DISTURBANCE IS NOT A FLOURISH, IT IS WHAT MAKES THE TASK EXIST.
+  // The scalar is one-way coupled -- the dye is advected by the flow and never
+  // acts on it -- so a wall tap can only learn about the plume THROUGH the
+  // velocity field. If the flow is steady the plume is a fixed function of it,
+  // a constant per location reconstructs the field exactly, and the sensors are
+  // not merely unhelpful but unnecessary. Measured: on a steady stream a static
+  // map scored 1.7e-3 while the reconstructor scored 0.086. Driving the inlet is
+  // what gives the wall something to see and the interior something to do.
+  const { res = 16, u = 0.06, every = 2, samples = 1600, perWall = 6, flush = 2,
+    inletMode = 'steady', inletAmplitude = 0, inletRate = 0.004 } = opts;
+  const key = `${res}_${u}_${every}_${samples}_${perWall}_${flush}`
+    + `_${inletMode}_${inletAmplitude}_${inletRate}_${JSON.stringify(PHYS)}`
+      .replace(/[^\w.-]/g, '');
   const path = `${CACHE}/${key}.json`;
   if (existsSync(path)) {
     const raw = JSON.parse(readFileSync(path, 'utf8'));
@@ -43,7 +53,7 @@ export async function dyeStream(opts = {}) {
       mean: Float64Array.from(raw.mean), std: Float64Array.from(raw.std) };
   }
   const sim = channelFlow({ resolution: res, obstacle: 'cylinder', inletVelocity: u,
-    dye: true, ...PHYS });
+    dye: true, inletMode, inletAmplitude, inletRate, ...PHYS });
   await sim.build({ backend: 'cpu' });
   const L = sim.lattice, zc = L.nz >> 1, N = L.cellCount;
   // TRANSITS, not a residual threshold: a slow transient sits below the
@@ -98,6 +108,7 @@ export async function dyeStream(opts = {}) {
   for (let i = 0; i < P; i++) std[i] = Math.sqrt(std[i]);
 
   const out = { sig, truth, mean, std, P, rhoSlots, sensors, target, perWall,
+    inletMode, inletAmplitude, inletRate,
     size: [L.nx, L.ny, L.nz], cells: N, transit, limited: diag.limited,
     residual: diag.residual };
   mkdirSync(CACHE, { recursive: true });
