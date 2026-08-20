@@ -143,11 +143,15 @@ const after = (fn) => (t, i) => (t >= SETTLE - 200 ? fn(t, i) : 0);
 // ABSOLUTE kind, so on an array of unlike channels the rejection is a strong
 // attenuator rather than a cancellation.
 {
+  // Computed here rather than read off a pass-through conditioner: a conditioner
+  // that filters nothing does not calibrate at all (it must not cost a warmup), so
+  // borrowing its `std` would silently hand back ones and turn this check into a
+  // duplicate of the absolute-offset one below.
   const spread = [];
-  {
-    const c = new InputConditioner({ nSignals: NS, groups: GROUP, warmup: WARM });
-    for (let t = 0; t < WARM; t++) c.push(Array.from({ length: NS }, (_, i) => signal(t, i)));
-    for (let i = 0; i < NS; i++) spread.push(c.std[i]);
+  for (let i = 0; i < NS; i++) {
+    let mu = 0, m2 = 0, n = 0;
+    for (let t = 0; t < WARM; t++) { n++; const d = signal(t, i) - mu; mu += d / n; m2 += d * (signal(t, i) - mu); }
+    spread.push(Math.sqrt(m2 / WARM));
   }
   const rel = after((t, i) => 0.3 * spread[i]);
   const plainRel = noiseThrough({ lp: 1 }, rel);
