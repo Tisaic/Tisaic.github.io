@@ -760,6 +760,57 @@ the shipped commit carries the correct version.
    HONEST LIMIT: the oracle here is `cmr+lp32` in BOTH scenarios, so this plant has
    an easy answer and the auto-tuner is being graded on confirming it. Its value is
    portability to a plant where the answer differs, and that has not been tested.
+   **AND IT IS ON THE PAGE NOW (v144), which the previous three entries were not.**
+   Everything above was measured in `experiments/` and shipped nothing: the page
+   kept printing an nRMSE with no control beside it. Three pieces landed.
+   (i) `FieldReconstructor` accumulates the DO-NOTHING RIVAL itself -- each
+   location's running time average -- and `grade()` returns the model's error, the
+   static map's, their ratio and the field ACTIVITY. It belongs in the estimator
+   rather than the caller because a reconstruction reported without it is not a
+   result, and that is exactly how 0.086 shipped against a constant scoring 1.7e-3.
+   The readout now says `vs doing nothing 0.028 (3.1x better than a constant per
+   cell)`, and below 1% activity it stops printing a ratio at all and says the
+   field is steady and to raise the Disturbance slider.
+   (ii) `lib/probesense/conditioner.js` carries `InputConditioner` (rejection +
+   boxcar, causal, calibrating, emitting NOTHING while it calibrates so the model
+   never sees raw samples followed by filtered ones -- and costing no warmup at all
+   when configured to filter nothing).
+   (iii) **Auto-tune filter** runs the swept-stress sweep on a bounded 900-sample
+   commissioning record and REFITS, because a new filter is a new input signal and
+   keeping weights fitted on unconditioned data is the train/test mismatch the
+   module exists to prevent. The sweep is thinned to ~200 locations: choosing a
+   filter is a RANKING and does not need every cell, while the shipped model still
+   uses all of them.
+   **TWO OF THE SIX PREDICTIONS WERE RIGHT ABOUT THE OUTCOME AND WRONG ABOUT THE
+   MECHANISM, and writing them as tests is what exposed it.** Rejection is exact
+   only for a shift PROPORTIONAL to each channel's calibrated spread; a shared
+   temperature coefficient makes an ABSOLUTE shift, which it strongly attenuates
+   but cannot cancel unless the channels are alike. And it does NOT make
+   independent noise larger -- subtracting the cross-channel mean of P uncorrelated
+   channels leaves variance sigma^2 (1 - 1/P), very slightly SMALLER. What it does
+   is CORRELATE the residual at **-1/(P-1)**, measured and asserted, and correlated
+   inputs are what an expanded basis handles badly. The reconstruction cost
+   measured earlier (6.87e-4 -> 1.98e-3) is real; this is why.
+   THE TEST HAD TO BE FIXED TWICE BEFORE IT COULD BE BELIEVED, and both faults made
+   correct code look broken. Scoring the conditioned signal against the clean one
+   at the same instant charges the filter for its GROUP DELAY -- a causal boxcar of
+   16 lags by 7.5 samples, a larger error here than the noise it removes, so `lp64`
+   measured WORSE than `lp8` at rejecting a constant. Every check now differences
+   the conditioned NOISY stream against the conditioned CLEAN one, so the signal
+   effect cancels. And drift injected from t=0 tests nothing, because the
+   conditioner's own frozen mean absorbs it exactly -- it has to arrive AFTER
+   calibration, which is the same distinction the earlier commissioned-clean vs
+   noise-throughout protocols drew.
+   **THE SMOKE CHECK IS TIERED ON A MEASURED RATE, NOT A GUESS.** The panel samples
+   once per frame and each sample costs a full concentration readback over the
+   whole slice -- 6547 cells, **0.75 samples/s measured** -- and the model
+   calibrates inputs over 120 samples and targets over 120 more, so the readout has
+   NO CONTENT for ~320 s and the sweep needs ~9 minutes of record. The quick tier
+   proves the pipeline is sampling and the sweep is correctly gated; the full tier
+   waits for the content and drives the sweep end to end. An earlier version waited
+   on a sample count instead and SKIPPED ITSELF while reporting PASS, which is the
+   worst of both -- a check that skips is not a check, so the gate is now asserted
+   rather than used as an excuse to return early.
    **STILL DELIBERATELY NOT BUILT:** heat as a COUPLED field (buoyancy feeding
    back), elasticity, electromagnetics, multiphysics coupling and adaptive
    resolution are architecture rather than code. Operators declare the fields they
