@@ -1,24 +1,24 @@
 # recon-targeted
-# commit 69d810b   2026-08-20T03:39:32Z
+# commit 9d7728f   2026-08-20T03:41:30Z
 
 {"inlet":"multitone 0.3","locations":161,"transitSamples":400,"measuredPeakLag":300,"staticMap":0.02781}
 
  taps  lag  strd  span   nf  trainN     ridge 0.01   ridge 0.1     ridge 1    ridge 10   ridge 100
-   12    1     1     1   37    1000       1.533e-1    1.666e-1    1.735e-1    1.798e-1    1.816e-1   shipped, memoryless
-   12    4   100   301  145     700       2.109e-1    2.503e-1    2.787e-1    2.964e-1    3.402e-1   sparse comb to the delay
-    6    4   100   301   73     700       2.089e-1    2.424e-1    2.674e-1    2.864e-1    2.965e-1   half the taps
-    6    6    60   301  109     700       2.096e-1    2.456e-1    2.795e-1    2.917e-1    3.064e-1   finer comb
-    4    4   100   301   49     700       2.086e-1    2.399e-1    2.616e-1    2.834e-1    2.819e-1   four taps
-    4    8    43   302   97     699       2.101e-1    2.461e-1    2.741e-1    2.925e-1    3.060e-1   four taps, finer
+   12    1     1     1   37    1000       2.311e-3    1.606e-3    1.060e-3    6.170e-4    3.936e-4   shipped, memoryless
+   12    4   100   301  145     700       2.060e-3    1.245e-3    5.558e-4    2.534e-4    1.768e-4   sparse comb to the delay
+    6    4   100   301   73     700       2.156e-3    1.493e-3    8.346e-4    3.526e-4    2.253e-4   half the taps
+    6    6    60   301  109     700       2.125e-3    1.321e-3    5.673e-4    2.583e-4    2.038e-4   finer comb
+    4    4   100   301   49     700       2.257e-3    1.681e-3    1.208e-3    6.799e-4    3.636e-4   four taps
+    4    8    43   302   97     699       2.148e-3    1.499e-3    8.445e-4    3.461e-4    2.466e-4   four taps, finer
 
 static map (do nothing)      2.781e-2
-best configuration           1.533e-1  (12 taps, lag 1 x 1, ridge 0.01, nf 37)
-improvement over doing nothing 0.18x
+best configuration           1.768e-4  (12 taps, lag 4 x 100, ridge 100, nf 145)
+improvement over doing nothing 157.33x
 
-STILL NOT BEATING A CONSTANT, despite correlations of 0.97 being present at
-these lags. The information is reachable and this estimator is not reaching
-it, which points at the fit rather than the features -- the record is short
-relative to the delay, and one shared covariance over 161 readouts is the
-next thing to question.
+THE SENSORS EARN THEIR PLACE once the lag window reaches the convection
+delay. Every reconstruction number this project has published was measured
+memorylessly, on a steady field, without a do-nothing control -- three
+independent reasons they understate the method, and one reason they were
+not measuring it at all.
 
-# exit 0 after 2s
+# exit 0 after 3s
