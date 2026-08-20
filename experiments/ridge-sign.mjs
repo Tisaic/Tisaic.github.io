@@ -63,10 +63,22 @@ function design(eta, mode, seed = 7) {
   const g = rng(seed);
   const rows = [];
   for (let t = 0; t < SAMPLES; t++) rows.push(noisy(t, eta, mode, g));
-  const mean = new Float64Array(P), sd = new Float64Array(P);
-  for (let t = 0; t < WARMUP; t++) for (let i = 0; i < P; i++) mean[i] += rows[t][i] / WARMUP;
-  for (let t = 0; t < WARMUP; t++) for (let i = 0; i < P; i++) sd[i] += (rows[t][i] - mean[i]) ** 2 / WARMUP;
-  for (let i = 0; i < P; i++) sd[i] = Math.sqrt(sd[i]);
+  // Welford, in the SAME ORDER the bank does it, so parity is bit-exact rather
+  // than merely close. The first version of this used a two-pass formula and
+  // disagreed with the shipped bank by 3e-4 -- which turned out to be the LIBRARY
+  // losing digits to `E[x^2] - mean^2` on a density channel, not this file. That
+  // defect is fixed; this now has to track it exactly or the check is toothless.
+  const mean = new Float64Array(P), m2 = new Float64Array(P), sd = new Float64Array(P);
+  let cnt = 0;
+  for (let t = 0; t < WARMUP; t++) {
+    cnt++;
+    for (let i = 0; i < P; i++) {
+      const d = rows[t][i] - mean[i];
+      mean[i] += d / cnt;
+      m2[i] += d * (rows[t][i] - mean[i]);
+    }
+  }
+  for (let i = 0; i < P; i++) sd[i] = Math.sqrt(Math.max(0, m2[i] / cnt));
   const sdMax = Math.max(...sd), floor = sdMax > 0 ? 1e-3 * sdMax : 0;
   const fstd = new Float64Array(P);
   for (let i = 0; i < P; i++) fstd[i] = sd[i] > floor && sd[i] > 1e-30 ? sd[i] : (sdMax || 1);
@@ -159,10 +171,12 @@ for (const mode of ['indep', 'common']) {
       scores.push({ lam, nrmse: n ? acc / n : null });
     }
     const ok = scores.filter((s) => s.nrmse != null && Number.isFinite(s.nrmse));
-    const best = ok.reduce((a, b) => (b.nrmse < a.nrmse ? b : a), ok[0]);
+    const pickMin = (xs) => (xs.length ? xs.reduce((a, b) => (b.nrmse < a.nrmse ? b : a)) : null);
+    const best = pickMin(ok);
     const atShipped = scores.find((s) => s.lam === SHIPPED);
-    const bestPos = ok.filter((s) => s.lam >= 0).reduce((a, b) => (b.nrmse < a.nrmse ? b : a), null);
-    const bestNeg = ok.filter((s) => s.lam < 0).reduce((a, b) => (!a || b.nrmse < a.nrmse ? b : a), null);
+    const bestPos = pickMin(ok.filter((s) => s.lam >= 0));
+    const bestNeg = pickMin(ok.filter((s) => s.lam < 0));
+    if (!best) { console.log(`   eta ${eta}: every lam singular or non-finite`); continue; }
     console.log(`   eta ${String(eta).padEnd(5)} predicted lam* ${(-eta * eta).toExponential(1)}` +
       `  smallest eigenvalue of A ${spec[nf - 1].toExponential(2)}`);
     console.log('     lam    ' + LAMS.map((l) => (l === SHIPPED ? 'shipped' : String(l)).padStart(9)).join(''));
