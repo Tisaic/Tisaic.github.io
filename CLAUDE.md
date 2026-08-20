@@ -565,12 +565,108 @@ the shipped commit carries the correct version.
    concentration slice from them — the industrial soft sensor, inferring a
    composition you cannot instrument from cheap boundary signals. Memoryless (lag
    1: a spatial map at one instant, so no cadence coupling), the readback batched
-   through `backend.probeMany`. MEASURED (`test/lattsim/reconstruct.test.mjs`): a
-   laminar dye channel reconstructs from 12 wall sensors at nRMSE ~0.08 over 647
-   cells; the sensor-placement study and the turbulent-wake numbers are in
-   `experiments/` (a wake column sits at ~0.26, saturating at ~6 co-located
-   sensors; a downstream "flow historian" probe fails because advected turbulence
-   decorrelates within a diameter or two).
+   through `backend.probeMany`.
+   **EVERY RECONSTRUCTION NUMBER THIS FILE USED TO CARRY WAS MEANINGLESS, AND THE
+   MISSING PIECE WAS A CONTROL RATHER THAN A METHOD (v141).** The old entry read
+   "a laminar dye channel reconstructs from 12 wall sensors at nRMSE ~0.08 over
+   647 cells", and `recon-gate.mjs` passed that configuration at 0.079 by asking
+   "is the error small". The question it needed was **"is it better than doing
+   nothing"**, and the answer was no by a factor of fifty: a STATIC MAP -- each
+   location's own time average, no sensor read at all -- scores **1.7e-3** on that
+   stream. The wake and placement numbers (~0.26, saturating at ~6 sensors) are
+   from the same era and are on the same footing.
+   THE CAUSE IS THAT THE SCALAR IS **ONE-WAY COUPLED**. Dye is advected by the
+   flow and never acts on it, so a wall tap learns about the plume only THROUGH
+   the velocity field -- and on a STEADY flow the plume is a fixed function of
+   that flow, so a constant per location is the right answer and the sensors are
+   not merely unhelpful but unnecessary. Measured on the shipped stream: the
+   field's temporal variation is **0.109% of its spatial structure**, and
+   `drift/temporal = 2.15`, so what little movement exists is a settling transient
+   rather than a fluctuation. Raising the inlet velocity made it WORSE (temp/spat
+   1.50e-3 at u 0.06 against **6.37e-6** at u 0.12) for two reasons worth keeping:
+   a faster inlet shortens the transit, so a fixed sample count observes MORE
+   transits and lands more settled; and the Smagorinsky model that makes this
+   solver unconditionally stable adds eddy viscosity, which damps the wake
+   instability being chased. The fix is `inletMode` -- the operator already
+   carried steady/pulse/multitone/chaotic drive and `channelFlow` already
+   forwarded it. Multitone at amplitude 0.3 gives activity 2.3% and
+   drift/temporal **0.23**, i.e. genuine stationary fluctuation.
+   **AND ON THAT STREAM THE ESTIMATOR WAS STILL SIX TIMES WORSE THAN A CONSTANT,
+   WHICH EXPOSED A REAL BUG.** `FieldReconstructor.observe()` accumulated the
+   per-location target statistics over the calibration window while ALREADY
+   UPDATING THE WEIGHTS -- and before the freeze `_tMean` is 0 and `_tStd` is 1,
+   so the first `warmup` samples trained on the RAW concentration instead of the
+   normalised target. At `lam = 1.0` there is no forgetting, so those wrong-scale
+   equations are not corrected later, they are carried forever.
+   **THIS IS THE LORENZ WASHOUT BUG IN A SECOND PLACE** -- that tab's single
+   largest fix was feeding its calibration window predict-only for exactly this
+   reason, and `SoftSensorBank.push` already gates the INPUT side on it; the
+   target side did not. Fixed by returning a predict-only estimate until the
+   target scale exists. MEASURED, driven dye channel, field nRMSE against a
+   static-map control of 2.781e-2:
+     memoryless, ridge 100         1.816e-1 -> **3.936e-4**   (460x)
+     lag 4 x stride 100, ridge 100 3.402e-1 -> **1.768e-4**   (157x better than
+                                                               doing nothing)
+     24 taps, lag 4 x stride 100              **1.581e-4**   (176x)
+   THE DAMAGE SCALED WITH THE POISONED FRACTION, which is why it hid: a deeper lag
+   window delays the freeze, leaves fewer clean samples, and scored WORSE the more
+   memory it was given -- the exact opposite of what the physics says, and the
+   reason "memory does not help" looked like a result about convection when it was
+   a result about a bug. Two other conclusions inverted with it: the prior sweep
+   read "tighter is monotonically better" (it was shrinking the weights to zero,
+   and zero weights ARE the static map), and it now reads looser-is-better again,
+   matching the noiseless-simulation finding elsewhere in this file.
+   **THE INFORMATION WAS ALWAYS THERE, AND A MODEL-FREE INSTRUMENT SAID SO.**
+   `wall-information.mjs` fits nothing: it takes the plain Pearson correlation
+   between each wall channel's history and each interior location, maximised over
+   lag. Median best correlation **0.978**, minimum 0.862, **100% of locations
+   above 0.8** -- and the peak sits at a median lag of **300 samples against a
+   transit of 400**, i.e. the convection delay, which is precisely what a
+   memoryless map cannot use. THAT INSTRUMENT ALSO HAD TO BE FIXED FIRST: the
+   first version standardised each series over its full length and then summed
+   products over the truncated overlap window, which is not a correlation and
+   reported a maximum of **1.002**. A correlation cannot exceed 1, and that was
+   the only reason the error was visible -- everything else it said looked
+   plausible.
+   **NOISE, RE-ASKED ON A WORKING ESTIMATOR, AND THE ANSWER SPLITS BY BASIS.** The
+   instrumentation review argued that a temperature coefficient shared across
+   every pressure channel moves them TOGETHER, and that an inverse solver
+   reconstructs a coherent shift as a genuine low-order field mode -- so
+   common-mode is the real limit and independent per-channel noise is the
+   flattering assumption. Measured on the driven stream, noise applied to the
+   pressure channels only, every mode delivering the SAME per-channel standard
+   deviation so the arms differ in correlation and nothing else (eta = fraction of
+   each channel's own spread; static map 2.781e-2):
+     linear 12 taps, memoryless (nf 37)      eta 0.03 / 0.1 / 0.3
+       independent   1.3e-3 / 4.1e-3 / 1.22e-2
+       common        6e-4   / 1.5e-3 / 4.4e-3      ratio 0.26 / 0.31 / 0.34
+     EXPANDED 12 taps, memoryless (nf 751)
+       independent   3e-4   / 7e-4   / 1.9e-3
+       common        6e-4   / 1.6e-3 / 4.5e-3      ratio 3.88 / 2.96 / 2.59
+       drift         8e-4   / 2.7e-3 / 8.0e-3      ratio 7.42 / 5.52 / 4.68
+   **SO THE CLAIM IS TRUE FOR THE NONLINEAR EXPANSION AND FALSE FOR THE LINEAR
+   READOUT** -- correlated noise is 3-4x LESS damaging than independent noise on a
+   linear map, and up to 7.4x MORE damaging on the expanded one. That is the
+   predicted mechanism confirmed by measurement: x = x0 + n gives
+   x^2 = x0^2 + 2*x0*n + n^2, so white independent sensor noise leaves the
+   expansion signal-proportional, biased by the noise variance, and correlated
+   ACROSS FEATURES whatever it went in as. A scalar isotropic prior over such a
+   basis is the wrong regularizer, and the failure is invisible in an independent-
+   noise sweep because that is the one case where it does not bite.
+   **THE EXPANSION IS NOT SIMPLY WORSE, AND THAT IS THE USEFUL PART.** It is about
+   8x MORE robust to independent noise than the linear readout (+29% against
+   +228% at eta 0.03) and never actually LOSES in absolute terms -- at eta 0.3 the
+   two tie under common-mode (4.5e-3 vs 4.4e-3) and the expansion still wins under
+   independent noise (1.9e-3 vs 1.22e-2). What correlated noise destroys is its
+   ADVANTAGE, not its standing.
+   **AND THE CONFIGURATION THAT BEST EXPLOITS THE PHYSICS IS THE LEAST
+   DEPLOYABLE.** The lagged readout that reaches the convection delay is the best
+   on clean data by a wide margin (1.768e-4, 157x doing nothing) and is destroyed
+   by ONE PERCENT sensor noise: 2e-4 -> 2.53e-2, which is the static-map floor,
+   and it then stays flat across two further decades of noise because there is
+   nothing left to lose. The memoryless readout starts 2.2x worse and degrades
+   gracefully. Anyone quoting the clean lag result as the method's number is
+   quoting a laboratory measurement.
    **STILL DELIBERATELY NOT BUILT:** heat as a COUPLED field (buoyancy feeding
    back), elasticity, electromagnetics, multiphysics coupling and adaptive
    resolution are architecture rather than code. Operators declare the fields they
