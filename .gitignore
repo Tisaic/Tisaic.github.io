@@ -4,3 +4,6 @@ test/screenshots/
 test/package-lock.json
 # Throwaway analysis/capture scripts (dev tooling, not shipped).
 scratchpad/
+
+# scratch: cached simulation records for the offline experiments
+.dye-cache/
