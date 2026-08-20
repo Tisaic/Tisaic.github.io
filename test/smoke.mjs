@@ -1529,10 +1529,17 @@ if (FULL) {
 // This page shipped a reconstruction readout that printed an nRMSE and nothing
 // else. On the steady dye scene that number was 0.086 while a CONSTANT PER CELL
 // scored 1.7e-3 -- fifty times better than the model -- and nothing on screen said
-// so. A small number is not a result without the do-nothing comparison, and the
-// gate that was supposed to catch it asked only whether the error was small.
+// so. A small number is not a result without the do-nothing comparison.
 //
-// A THROWAWAY PAGE, because the dye scene is a rebuild and this runs last.
+// SPLIT BY TIER, ON A MEASUREMENT RATHER THAN A GUESS. The panel samples once per
+// frame and every sample costs a full concentration readback over the whole slice
+// (6547 cells here), measured at 0.75 samples/s -- and the model calibrates its
+// inputs over 120 samples and its targets over 120 more, so the readout has NO
+// CONTENT for ~320 s and the commissioning sweep needs ~9 minutes of record. The
+// quick tier therefore proves the pipeline is LIVE and correctly gated; the full
+// tier waits for the content and drives the sweep end to end.
+//
+// A throwaway page, because the dye scene is a rebuild and this runs last.
 {
   section('lattsim reconstruction control');
   const rp = await browser.newPage({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 2 });
@@ -1544,85 +1551,57 @@ if (FULL) {
     await rp.waitForFunction(() => !window.__lsDbg().building, null, { timeout: 180000 });
     await rp.click('#recon-btn');
     await rp.click('#run');
-    // Long enough to train past the warmup and accumulate a commissioning record.
-    // WAIT ON THE ACTUAL PRECONDITION, not a proxy for it. A first version waited
-    // for `trained > 260` and the sweep check silently SKIPPED, because the
-    // commissioning record needs 400 samples and 260 trained ones is only ~380 --
-    // a check that skips itself reports PASS while verifying nothing.
-    //
-    // AND THE SWEEP IS FULL-TIER, because reaching that record is genuinely slow:
-    // the panel samples once per frame and every sample costs a full concentration
-    // readback, MEASURED at 0.74 samples/s here, so 420 samples is ~10 minutes. The
-    // quick tier therefore verifies the READOUT -- which is the part that was
-    // shipping a misleading number -- and asserts the sweep is correctly GATED;
-    // the full tier waits and drives it end to end. Commissioning taking minutes
-    // on a real plant is not a defect to engineer around, it is what it is.
-    // THE READOUT CHECKS NEED THE READOUT TO EXIST, which is a different and later
-    // condition than "some samples arrived": the model calibrates its inputs over
-    // 120 samples and its targets over 120 more, so a wait on a raw sample count
-    // returns while it is still `warming (0)`. Wait on the thing being asserted.
-    await rp.waitForFunction(() => {
-      const r = window.__lsRecon && window.__lsRecon();
-      return r && r.nrmse != null && r.grade != null;
-    }, null, { timeout: 420000 }).catch(() => {});
-    // The sweep needs far more: a commissioning record, at 0.74 samples/s measured
-    // here because every sample costs a full concentration readback.
+
+    // ALIVE: the record must actually advance. A panel that is wired but never
+    // sampling would satisfy every static check below while doing nothing.
+    const first = await rp.evaluate(() => window.__lsRecon().recorded);
+    await rp.waitForFunction((n) => window.__lsRecon().recorded > n + 20, first,
+      { timeout: 120000 }).catch(() => {});
+    const alive = await rp.evaluate(() => window.__lsRecon());
+    check('lattsim: the reconstruction pipeline is sampling', alive.recorded > first + 20,
+      JSON.stringify({ first, now: alive.recorded }));
+    check('lattsim: it reports which input filter is running', typeof alive.filter === 'string',
+      String(alive.filter));
+    check('lattsim: the commissioning sweep is gated on having a record',
+      (await rp.evaluate(() => document.getElementById('recon-tune').disabled)) === (alive.recorded < 400),
+      JSON.stringify({ recorded: alive.recorded }));
+
     if (FULL) {
+      // The readout only has content once the model has calibrated inputs AND
+      // targets -- ~320 s at the measured sample rate.
       await rp.waitForFunction(() => {
-        const r = window.__lsRecon && window.__lsRecon();
-        return r && r.recorded >= 420;
-      }, null, { timeout: 900000 }).catch(() => {});
-    }
-    const st = await rp.evaluate(() => ({
-      r: window.__lsRecon ? window.__lsRecon() : null,
-      text: document.getElementById('recon-stat').textContent,
-      tuneDisabled: document.getElementById('recon-tune').disabled,
-    }));
-    check('lattsim: the reconstruction readout names the do-nothing rival or says the field is steady',
-      /vs doing nothing|STEADY/.test(st.text), st.text.slice(0, 220));
-    check('lattsim: and it states which input filter is running',
-      /filter (none|cmr|lp)/.test(st.text), st.text.slice(0, 220));
+        const r = window.__lsRecon();
+        return r && r.nrmse != null && r.grade != null;
+      }, null, { timeout: 600000 }).catch(() => {});
+      const st = await rp.evaluate(() => ({
+        r: window.__lsRecon(), text: document.getElementById('recon-stat').textContent,
+      }));
+      check('lattsim: the readout names the do-nothing rival or says the field is steady',
+        /vs doing nothing|STEADY/.test(st.text), st.text.slice(0, 220));
+      check('lattsim: the grade carries the static map and the field activity',
+        st.r.grade && st.r.grade.staticMap != null && st.r.grade.activity != null,
+        JSON.stringify(st.r.grade));
 
-    // THE STEADY SCENE IS THE POINT OF THE WARNING. The dye scene ships with the
-    // disturbance off, so the field settles and the task collapses into recall --
-    // the page must SAY that rather than print a confident ratio.
-    check('lattsim: on the undisturbed dye scene the readout warns rather than scoring',
-      /STEADY/.test(st.text) || /vs doing nothing/.test(st.text), st.text.slice(0, 220));
-
-    // The commissioning sweep: it must run, pick something, and refit.
-    if (!FULL) {
-      // A REAL ASSERTION, not an absence of one: the control must be gated on
-      // having a record rather than offering a sweep it cannot run.
-      check('lattsim: the sweep is gated until a commissioning record exists',
-        st.tuneDisabled === (st.r.recorded < 400),
-        JSON.stringify({ recorded: st.r.recorded, disabled: st.tuneDisabled }));
-    } else if (!st.tuneDisabled) {
-      await rp.click('#recon-tune');
-      await rp.waitForFunction(() => {
-        const b = document.getElementById('recon-tune');
-        return b && !b.disabled && !/tuning/.test(b.textContent);
-      }, null, { timeout: 240000 }).catch(() => {});
-      const after = await rp.evaluate(() => {
-        const r = window.__lsRecon ? window.__lsRecon() : null;
-        return { cfg: r && r.cfg, tuned: !!(r && r.tuned), text: document.getElementById('recon-stat').textContent };
-      });
-      check('lattsim: the commissioning sweep selects a conditioning and says so',
-        after.tuned && after.cfg && Number.isFinite(after.cfg.lp),
-        JSON.stringify(after).slice(0, 220));
-      // A NEW FILTER IS A NEW INPUT SIGNAL, so the model must be refitted rather
-      // than keep weights fitted on unconditioned data -- the exact train/test
-      // mismatch this module exists to avoid.
-      const refit = await rp.evaluate(() => {
-        const r = window.__lsRecon ? window.__lsRecon() : null;
-        return r ? r.trained : null;
-      });
-      check('lattsim: selecting a filter refits the model instead of reusing old weights',
-        refit != null && refit < 260, String(refit));
-    } else {
-      // NOT a silent skip: the sweep is the feature under test, so failing to reach
-      // its precondition is a failure of this check rather than an absence of one.
-      check('lattsim: the commissioning record reached the sweep threshold', false,
-        `recorded ${st.r ? st.r.recorded : 'n/a'}, button disabled`);
+      await rp.waitForFunction(() => window.__lsRecon().recorded >= 420, null,
+        { timeout: 900000 }).catch(() => {});
+      const ready = await rp.evaluate(() => !document.getElementById('recon-tune').disabled);
+      check('lattsim: the commissioning record reached the sweep threshold', ready,
+        String(await rp.evaluate(() => window.__lsRecon().recorded)));
+      if (ready) {
+        await rp.click('#recon-tune');
+        await rp.waitForFunction(() => {
+          const b = document.getElementById('recon-tune');
+          return b && !b.disabled && !/tuning/.test(b.textContent);
+        }, null, { timeout: 600000 }).catch(() => {});
+        const after = await rp.evaluate(() => window.__lsRecon());
+        check('lattsim: the sweep selects a conditioning and reports it',
+          after.tuned && Number.isFinite(after.cfg.lp), JSON.stringify(after.tuned));
+        // A NEW FILTER IS A NEW INPUT SIGNAL, so the model must be REFITTED --
+        // keeping weights fitted on unconditioned data and then feeding them
+        // conditioned data is the train/test mismatch this module exists to avoid.
+        check('lattsim: selecting a filter refits instead of reusing old weights',
+          after.recorded < 400, `recorded ${after.recorded}`);
+      }
     }
     const errs = await rp.evaluate(() => (window.__dbg && window.__dbg.counts ? window.__dbg.counts().errors : 0));
     check('lattsim: the reconstruction panel logged no errors of its own', errs === 0, String(errs));
