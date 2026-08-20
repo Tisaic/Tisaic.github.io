@@ -1557,11 +1557,22 @@ if (FULL) {
     // shipping a misleading number -- and asserts the sweep is correctly GATED;
     // the full tier waits and drives it end to end. Commissioning taking minutes
     // on a real plant is not a defect to engineer around, it is what it is.
-    const want = FULL ? 420 : 120;
-    await rp.waitForFunction((n) => {
+    // THE READOUT CHECKS NEED THE READOUT TO EXIST, which is a different and later
+    // condition than "some samples arrived": the model calibrates its inputs over
+    // 120 samples and its targets over 120 more, so a wait on a raw sample count
+    // returns while it is still `warming (0)`. Wait on the thing being asserted.
+    await rp.waitForFunction(() => {
       const r = window.__lsRecon && window.__lsRecon();
-      return r && r.recorded >= n;
-    }, want, { timeout: FULL ? 900000 : 240000 }).catch(() => {});
+      return r && r.nrmse != null && r.grade != null;
+    }, null, { timeout: 420000 }).catch(() => {});
+    // The sweep needs far more: a commissioning record, at 0.74 samples/s measured
+    // here because every sample costs a full concentration readback.
+    if (FULL) {
+      await rp.waitForFunction(() => {
+        const r = window.__lsRecon && window.__lsRecon();
+        return r && r.recorded >= 420;
+      }, null, { timeout: 900000 }).catch(() => {});
+    }
     const st = await rp.evaluate(() => ({
       r: window.__lsRecon ? window.__lsRecon() : null,
       text: document.getElementById('recon-stat').textContent,
