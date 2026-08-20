@@ -1,0 +1,37 @@
+# noise-valid
+# commit 08c3eeb   2026-08-20T03:35:04Z
+
+{"inlet":"multitone 0.3","size":[48,16,16],"taps":24,"locations":161,"samples":1600}
+
+CONTROLS: static map 2.781e-2, field activity (temporal/spatial) 2.29e-2
+
+arm                  nf  eta:        0     0.01     0.03      0.1      0.3
+linear  12 taps      37
+  indep                   0.1816   0.1810   0.1908   0.3233   0.8553
+  common                  0.1816   0.1825   0.1891   0.2402   0.5330
+  drift                   0.1816   0.1559   0.1229   0.1440   0.7587
+EXPANDED 12 taps    751
+  indep                   0.1243   0.1277   0.1491   0.2745   0.7340
+  common                  0.1243   0.1289   0.1587   0.3126   0.8717
+  drift                   0.1243   0.1321   0.1835   0.4935   1.5785
+linear  24 taps      73
+  indep                   0.1827   0.1902   0.2240   0.4610   1.2647
+  common                  0.1827   0.1834   0.1877   0.2185   0.4139
+  drift                   0.1827   0.1642   0.1383   0.1072   0.5308
+
+VERDICTS (static map = 2.781e-2)
+  linear  12 taps: clean 0.1816 = 0.2x better than doing nothing  <-- WORSE THAN DOING NOTHING
+  EXPANDED 12 taps: clean 0.1243 = 0.2x better than doing nothing  <-- WORSE THAN DOING NOTHING
+  linear  24 taps: clean 0.1827 = 0.2x better than doing nothing  <-- WORSE THAN DOING NOTHING
+
+  correlated vs independent, at equal per-channel size:
+    linear  12 taps   eta 0.03: common 0.82x drift -6.42x  eta 0.1: common 0.41x drift -0.27x  eta 0.3: common 0.52x drift 0.86x
+    EXPANDED 12 taps  eta 0.03: common 1.39x drift 2.39x  eta 0.1: common 1.25x drift 2.46x  eta 0.3: common 1.23x drift 2.38x
+    linear  24 taps   eta 0.03: common 0.12x drift -1.07x  eta 0.1: common 0.13x drift -0.27x  eta 0.3: common 0.21x drift 0.32x
+
+  what independent noise costs each basis, relative to its own clean score:
+    linear  12 taps   eta 0.03: +5%   eta 0.1: +78%   eta 0.3: +371%
+    EXPANDED 12 taps  eta 0.03: +20%   eta 0.1: +121%   eta 0.3: +490%
+    linear  24 taps   eta 0.03: +23%   eta 0.1: +152%   eta 0.3: +592%
+
+# exit 0 after 5s
