@@ -1,3 +1,8 @@
 # ridge-sign
 # commit 5f81088   2026-08-20T02:39:47Z
 
+{"size":[48,16,16],"channels":36,"locations":161,"samples":1600}
+design-matrix parity vs the shipped bank: max |diff| 3.06e-4 over 50 columns
+PARITY FAILED -- not measuring the shipped estimator
+
+# exit 1 after 425s
