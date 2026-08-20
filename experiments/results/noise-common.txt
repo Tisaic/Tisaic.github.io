@@ -1,3 +1,45 @@
 # noise-common
 # commit 1389b5b   2026-08-20T02:38:08Z
 
+{"size":[48,16,16],"taps":24,"locations":161,"pressureStdMin":5.31e-7,"pressureStdMax":0.00000301,"pressureStdRatio":5.67}
+
+LADDER, linear basis, eta 0.1. Gains analytic; nRMSE replayed.
+  taps  4  clean 0.1054  | gain abs  1.287 rel  1.558 rms  0.924  ratio abs  1.39 rel  1.69
+           indep 0.1191  common-rel 0.1486  common-abs 0.1373  drift+ 0.2340  drift- 0.0794
+  taps  6  clean 0.1020  | gain abs  1.633 rel  1.648 rms  0.879  ratio abs  1.86 rel  1.87
+           indep 0.1148  common-rel 0.1663  common-abs 0.1663  drift+ 0.3073  drift- 0.1330
+  taps  8  clean 0.1034  | gain abs  1.272 rel  0.898 rms  1.157  ratio abs   1.1 rel  0.78
+           indep 0.1359  common-rel 0.1340  common-abs 0.1574  drift+ 0.2888  drift- 0.1098
+  taps 12  clean 0.0896  | gain abs  1.428 rel  1.211 rms  0.969  ratio abs  1.47 rel  1.25
+           indep 0.1308  common-rel 0.1609  common-abs 0.1813  drift+ 0.3478  drift- 0.1920
+  taps 16  clean 0.0883  | gain abs  1.397 rel  1.385 rms  0.768  ratio abs  1.82 rel  1.81
+           indep 0.1300  common-rel 0.1991  common-abs 0.2012  drift+ 0.3747  drift- 0.2397
+  taps 24  clean 0.0781  | gain abs  0.711 rel  0.576 rms  0.724  ratio abs  0.98 rel  0.79
+           indep 0.1339  common-rel 0.1227  common-abs 0.1393  drift+ 0.2514  drift- 0.1317
+
+VERDICTS
+  clean score must fall with the tap count; if it does not, the ladder is
+  measuring something other than the count:
+    4:0.1054  6:0.1020  8:0.1034  12:0.0896  16:0.0883  24:0.0781
+
+  correlated-vs-independent DAMAGE ratio (>1 = correlated noise is worse,
+  which is the claim under test). Predicted from the analytic gain, then
+  measured by replay -- agreement means the cheap instrument is valid:
+    taps  4  predicted  1.39 (abs) /  1.69 (rel)   measured 2.33 (abs) / 3.15 (rel)
+    taps  6  predicted  1.86 (abs) /  1.87 (rel)   measured 5.02 (abs) / 5.02 (rel)
+    taps  8  predicted   1.1 (abs) /  0.78 (rel)   measured 1.66 (abs) / 0.94 (rel)
+    taps 12  predicted  1.47 (abs) /  1.25 (rel)   measured 2.23 (abs) / 1.73 (rel)
+    taps 16  predicted  1.82 (abs) /  1.81 (rel)   measured 2.71 (abs) / 2.66 (rel)
+    taps 24  predicted  0.98 (abs) /  0.79 (rel)   measured 1.1 (abs) / 0.8 (rel)
+
+  DRIFT IS SIGNED. A sign-dependent result means the offset is being
+  reconstructed as a coherent field mode rather than averaged away --
+  which is the aliasing mechanism, whatever the size of it:
+    taps  4  clean 0.1054  drift+ 0.2340 (122.0%)  drift- 0.0794 (-24.7%)
+    taps  6  clean 0.1020  drift+ 0.3073 (201.3%)  drift- 0.1330 (30.4%)
+    taps  8  clean 0.1034  drift+ 0.2888 (179.3%)  drift- 0.1098 (6.2%)
+    taps 12  clean 0.0896  drift+ 0.3478 (288.2%)  drift- 0.1920 (114.3%)
+    taps 16  clean 0.0883  drift+ 0.3747 (324.3%)  drift- 0.2397 (171.5%)
+    taps 24  clean 0.0781  drift+ 0.2514 (221.9%)  drift- 0.1317 (68.6%)
+
+# exit 0 after 425s
