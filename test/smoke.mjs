@@ -1720,8 +1720,13 @@ const chartEnd = await fx.evaluate(() => {
   return d && d[0] && d[0].x.length ? d[0].x[d[0].x.length - 1] : -1;
 });
 const kNow = (await fx.evaluate(() => window.__flxDbg())).k;
+// THE TOLERANCE HAS TO EXCEED SIX FRAMES OF STEPPING, because the chart refreshes
+// on every sixth frame by design: at the slider's maximum that is 1200 solver
+// steps of legitimate lag. The first version used 600 and passed by luck -- it is
+// checking for a chart FROZEN at its first points, which is a gap of tens of
+// thousands, not for it being a frame behind.
 check('flexisim: the error chart tracks the run rather than freezing on its first points',
-  chartEnd > kNow - 600, `chart ends at ${chartEnd}, run is at ${kNow}`);
+  chartEnd > kNow - 2000, `chart ends at ${chartEnd}, run is at ${kNow}`);
 
 // THE SOFT SENSOR, END TO END: calibrate, train against the tracker, LOCK, and
 // score what the machine would produce afterwards. The physics is pinned in Node;
@@ -1758,6 +1763,43 @@ const painted = await fx.evaluate(() => {
 });
 check('flexisim: the stage is painted', painted.ok, JSON.stringify(painted));
 await fx.screenshot({ path: join(SHOTS, '05-flexisim.png') });
+
+// ---- THE CHAIN TAB: a second, independent plant, and the coupling made visible.
+//
+// The physics is pinned in test/flexisim/arm2r.test.mjs against closed forms and
+// conservation laws. What this checks is that the tab wires it up -- that the
+// second lattice pair builds, that the chain steps, that the canvas is painted,
+// and that the claim the tab is ABOUT survives being driven through the page: with
+// the elbow commanded to hold, its inertial load is mostly the SHOULDER'S doing.
+await fx.click('.tab[data-tab="chain"]');
+await fx.waitForFunction(() => window.__flxChainDbg() && window.__flxChainDbg().cells > 0,
+  null, { timeout: 60000 });
+await fx.evaluate(() => { document.getElementById('s-spf2').value = '160'; });
+const ck0 = (await fx.evaluate(() => window.__flxChainDbg())).k;
+await fx.click('#run2');
+await fx.waitForFunction((t) => window.__flxChainDbg().k > t, ck0 + 9000, { timeout: 120000 });
+await fx.click('#run2');
+const cd = await fx.evaluate(() => window.__flxChainDbg());
+console.log(`  flexisim/chain: M11 straight ${cd.Mstraight.toPrecision(4)} folded `
+  + `${cd.Mfolded.toPrecision(4)} (${(cd.Mstraight / cd.Mfolded).toFixed(2)}x); elbow load rms `
+  + `M21a1 ${cd.rms.c21.toExponential(2)} vs M22a2 ${cd.rms.c22.toExponential(2)}; `
+  + `tool error ${cd.tip.total.toExponential(2)} over reach ${cd.reach.toFixed(1)}`);
+check('flexisim/chain: the shoulder inertia changes by more than 2x across the elbow range',
+  cd.Mstraight / cd.Mfolded > 2, `${(cd.Mstraight / cd.Mfolded).toFixed(3)}x`);
+check('flexisim/chain: with the elbow commanded to HOLD, its inertial load is mostly the shoulder\'s',
+  cd.rms.c21 > 3 * cd.rms.c22, `${cd.rms.c21.toExponential(3)} vs ${cd.rms.c22.toExponential(3)}`);
+check('flexisim/chain: and the elbow gearbox really carries a torque it was never commanded',
+  Math.abs(cd.windup[1]) > 1e-5 && cd.rms.t2 > 0, JSON.stringify(cd.windup));
+const painted2 = await fx.evaluate(() => {
+  const c = document.getElementById('cv2');
+  if (!c.width || !c.height) return { ok: false, why: 'zero-sized' };
+  const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+  let lit = 0;
+  for (let i = 0; i < d.length; i += 4 * 37) if (d[i] > 60 || d[i + 1] > 60) lit++;
+  return { ok: lit > 20, lit };
+});
+check('flexisim/chain: the stage is painted', painted2.ok, JSON.stringify(painted2));
+await fx.screenshot({ path: join(SHOTS, '06-flexisim-chain.png') });
 
 // The in-browser Verify tab runs the same closed forms against the same modules.
 await fx.click('.tab[data-tab="verify"]');

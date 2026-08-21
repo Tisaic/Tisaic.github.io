@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:207,built:"2026-08-21T14:30:35Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:208,built:"2026-08-21T14:52:54Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -35,8 +35,8 @@
     .badge { position:absolute; left:10px; top:10px; font-size:.7rem; padding:4px 8px; border-radius:6px;
       background:rgba(15,23,42,.85); border:1px solid var(--line); color:var(--muted); }
     .badge.r { left:auto; right:10px; }
-    #err-chart, #ss-chart { width:100%; height:170px; margin-top:8px; display:none; }
-    #err-chart.on, #ss-chart.on { display:block; }
+    #err-chart, #ss-chart, #chain-chart { width:100%; height:170px; margin-top:8px; display:none; }
+    #err-chart.on, #ss-chart.on, #chain-chart.on { display:block; }
     code { background:var(--card); padding:.1em .35em; border-radius:5px;
       font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.92em; }
     .controls { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; align-items:center; }
@@ -75,8 +75,9 @@
 
   <div id="tabs">
     <div class="tab on" data-tab="move">① Move</div>
-    <div class="tab" data-tab="verify">② Verify</div>
-    <div class="tab" data-tab="about">③ Architecture</div>
+    <div class="tab" data-tab="chain">② Chain</div>
+    <div class="tab" data-tab="verify">③ Verify</div>
+    <div class="tab" data-tab="about">④ Architecture</div>
   </div>
 
   <!-- ================================ Tab 1: move ================================ -->
@@ -167,7 +168,70 @@
     </div>
   </section>
 
-  <!-- =============================== Tab 2: verify =============================== -->
+  <!-- ================================ Tab 2: chain =============================== -->
+  <section class="panel" id="p-chain">
+    <p class="lead">Two joints, two lattice links, <b>one coupled solve</b>. A chain is not two
+      single-joint arms next to each other: the inertia the shoulder must accelerate depends on the
+      <b>elbow angle</b>, and accelerating either joint loads the other through the mass matrix's
+      off-diagonal. Command the shoulder alone and watch the elbow's gearbox wind up anyway — the
+      encoder on joint 2 sees none of it.</p>
+
+    <div class="stage" id="stage2">
+      <canvas id="cv2"></canvas>
+      <span class="badge" id="state2-badge">building…</span>
+      <span class="badge r" id="err2-badge">—</span>
+    </div>
+    <div id="chain-chart"></div>
+
+    <div class="controls">
+      <button id="run2">Run move ▶</button>
+      <button id="reset2" class="sec">Reset</button>
+      <select id="mode2" aria-label="What moves">
+        <option value="shoulder" selected>shoulder only</option>
+        <option value="both">both joints</option>
+      </select>
+    </div>
+    <div class="controls">
+      <div class="slider"><span>Elbow pose</span>
+        <input type="range" id="s-elbow" min="0" max="8" step="1" value="3" />
+        <span class="v" id="v-elbow">0.60 rad</span></div>
+      <div class="slider"><span>Gearbox K</span>
+        <input type="range" id="s-k2" min="0" max="6" step="1" value="4" />
+        <span class="v" id="v-k2">16.0</span></div>
+      <div class="slider"><span>Steps/frame</span>
+        <input type="range" id="s-spf2" min="10" max="160" step="10" value="40" />
+        <span class="v" id="v-spf2">40</span></div>
+      <div class="slider"><span>Deflection ×</span>
+        <input type="range" id="s-mag2" min="1" max="60" step="1" value="10" />
+        <span class="v" id="v-mag2">10×</span></div>
+    </div>
+
+    <dl class="stat" id="stats2"></dl>
+
+    <div class="note">
+      <h3>The chart is the claim</h3>
+      The elbow is commanded to <b>hold still</b> in "shoulder only" mode, and its gearbox transmits a
+      torque anyway. The solid trace is what it carries; the two dotted ones split its inertial load
+      into <code>M₂₁·α₁</code> — what the <i>shoulder's</i> acceleration puts on it — and
+      <code>M₂₂·α₂</code>, its own. The first dominates. The constant offset between the solid trace and
+      the dotted pair is gravity holding the forearm up, which the controller's model already knows;
+      what it does not know is the coupling, and that is the part that moves the tool.
+      <br /><br />Plotting the <i>sum</i> against the solid trace would prove nothing —
+      <code>M₂₁α₁ + M₂₂α₂ ≡ τ₂ + G₂ − C₂</code> is the equation of motion itself. Splitting it is what
+      says something.
+    </div>
+    <div class="note">
+      <h3>Fold the elbow and the shoulder changes machine</h3>
+      <code>M₁₁</code> carries <code>2·m₂·L₁·c₂·cos q₂</code>, so the inertia the shoulder must
+      accelerate changes by about a factor of two across the elbow's range. A controller tuned at one
+      pose is mistuned at another — which is why the servo here is <b>computed torque</b>, evaluating
+      the arm's own rigid model at the commanded pose rather than carrying fixed per-joint gains. What
+      it deliberately does not model is the gearbox compliance or either link's flexibility: that is the
+      whole subject of this tab.
+    </div>
+  </section>
+
+  <!-- =============================== Tab 3: verify =============================== -->
   <section class="panel" id="p-verify">
     <p class="lead">The same closed forms the Node suite checks, run <b>in this browser</b> against the
       same modules. Joint terms are algebra and are instant; the cantilever needs a lattice to settle.</p>
@@ -230,6 +294,8 @@ import {
 } from './lib/flexisim/link.js';
 import { PlanarComp } from './lib/flexisim/compliance.js';
 import { TipSensor, nrmse } from './lib/flexisim/tipsensor.js';
+import { FlexArm2R } from './lib/flexisim/arm2r.js';
+import { ChainServo } from './lib/flexisim/compensator.js';
 import {
   AngleProfile, PositionServo, TipCompensator, tipTrackingError, zvdShaper, ringFit,
 } from './lib/flexisim/compensator.js';
@@ -250,6 +316,14 @@ for (const t of document.querySelectorAll('.tab')) {
     // Plotly sizes itself against the container it was created in, and a hidden
     // one has no size -- the chart has to be told once the panel is visible.
     if (t.dataset.tab === 'move' && chartOn) Plotly.Plots.resize($('err-chart'));
+    if (t.dataset.tab === 'move' && ssChartOn) Plotly.Plots.resize($('ss-chart'));
+    if (t.dataset.tab === 'chain') {
+      if (chChartOn) Plotly.Plots.resize($('chain-chart'));
+      // A HIDDEN CANVAS HAS NO SIZE, and 0/0 is NaN rather than zero -- FlowSim's
+      // probe found that the hard way. The chain stage is built while this panel is
+      // display:none, so it is drawn once the panel is actually visible.
+      requestAnimationFrame(draw2);
+    }
   });
 }
 
@@ -560,12 +634,17 @@ function draw() {
     const c = Math.cos(th), s = Math.sin(th);
     return [px + (c * bx - s * by) * scale, py - (s * bx + c * by) * scale];
   };
+  // THE CLAMPED ROOT IS NOT DRAWN. Those cells are real material -- they are the
+  // joint's output flange -- but they sit at negative body x, i.e. INSIDE the
+  // joint, so drawing them puts a stub sticking out of the back of the shoulder.
   const line = (th, dy, col, width, dash) => {
     g.save(); g.strokeStyle = col; g.lineWidth = width;
     g.setLineDash(dash || []); g.beginPath();
     for (let i = 0; i < dy.x.length; i++) {
-      const [X, Y] = world(th, dy.x[i] - arm.link.meta.pivot[0], dy.dy[i] * mag);
-      if (i === 0) g.moveTo(X, Y); else g.lineTo(X, Y);
+      const bx = dy.x[i] - arm.link.meta.pivot[0];
+      if (bx < 0) continue;
+      const [X, Y] = world(th, bx, dy.dy[i] * mag);
+      g.lineTo(X, Y);
     }
     g.stroke(); g.restore();
   };
@@ -684,6 +763,19 @@ function chart() {
 let frames = 0;
 function frame() {
   requestAnimationFrame(frame);
+  // THE CHAIN IS A SEPARATE PLANT and only steps while its own tab is showing:
+  // two lattices are 1.6x the Move tab's cost, and a hidden simulation burning the
+  // frame budget is the page competing with itself.
+  const onChain = document.querySelector('.tab[data-tab="chain"]').classList.contains('on');
+  if (arm2 && !busy2 && run2 && onChain) {
+    try { step2(+$('s-spf2').value); }
+    catch (e) { run2 = false; $('state2-badge').textContent = 'halted: ' + e.message;
+      $('state2-badge').className = 'badge bad'; console.error(e); }
+  }
+  if (onChain) {
+    draw2();
+    if (frames % 6 === 0) { stats2(); chainChart(); }
+  }
   if (!A || busy) return;
   if (running) {
     const n = +$('s-spf').value;
@@ -745,6 +837,263 @@ ladder('s-k', 'v-k', K_LADDER, (v) => v.toFixed(1));
 ladder('s-e', 'v-e', E_LADDER, (v) => v.toFixed(2));
 $('s-spf').addEventListener('input', () => { $('v-spf').textContent = $('s-spf').value; });
 $('s-mag').addEventListener('input', () => { $('v-mag').textContent = $('s-mag').value + '×'; });
+
+// =============================================================== THE CHAIN
+//
+// A SECOND, INDEPENDENT PLANT on its own tab: two joints, two lattice links, one
+// coupled solve. It shares nothing with the Move tab's single-joint arm except the
+// modules, which is deliberate -- the two are different claims and mixing their
+// state would make a control on one silently change the other.
+const K2_LADDER = [1, 2, 4, 8, 16, 20, 32];
+const ELBOW_LADDER = [0, 0.2, 0.4, 0.6, 0.9, 1.2, 1.6, 2.2, Math.PI];
+// A STIFFER CHAIN THAN THE MOVE TAB'S ARM, for the same reason brick 10 stiffened
+// that one: at E 0.1 and K 8 the tool ran 6% of the reach off target, which is a
+// demonstration plant rather than a machine anyone would compensate -- and at any
+// readable exaggeration it walked off the stage.
+const CH = { LEN1: 14, LEN2: 10, E: 0.15 };
+let arm2 = null, servo2 = null, prof2 = null, run2 = false, k2 = 0, busy2 = false;
+let chChartOn = false;
+const chHist = { t: [], t2: [], c21: [], c22: [], tip: [] };
+
+async function build2() {
+  if (arm2) { await arm2.l1.destroy(); await arm2.l2.destroy(); arm2 = null; }
+  const K = K2_LADDER[+$('s-k2').value];
+  const mk = async (length) => buildLink({ length, section: H, clamp: CLAMP, E: CH.E,
+    nu: NU, rho: RHO, damping: DAMPING });
+  const link1 = await mk(CH.LEN1), link2 = await mk(CH.LEN2);
+  const j = (mp) => new Joint({ ratio: RATIO, motorInertia: mp.inertiaAboutPivot / 1e4,
+    loadInertia: mp.inertiaAboutPivot, stiffness: K,
+    damping: 2 * Math.sqrt(K * mp.inertiaAboutPivot / 2) });
+  arm2 = new FlexArm2R({ joint1: j(massProperties(link1)), link1,
+    joint2: j(massProperties(link2)), link2, gravityWorld: [0, -G, 0], dt: 1 });
+  arm2.setPose(0, ELBOW_LADDER[+$('s-elbow').value]);
+  arm2.K = K;
+  servo2 = new ChainServo({ arm: arm2, bandwidth: 2e-3 });
+  prof2 = new AngleProfile({ span: 0.30, accelSteps: 300, cruiseSteps: 400, dwellSteps: 900 });
+  k2 = 0;
+  for (const a of Object.values(chHist)) a.length = 0;
+  console.log(`[flexisim] ${arm2.describe()}`);
+  $('state2-badge').textContent = 'ready — press Run move';
+  $('state2-badge').className = 'badge';
+  draw2(); stats2();
+}
+
+/** The two reference points at step k, one per joint. */
+function refs2() {
+  const hold = ELBOW_LADDER[+$('s-elbow').value];
+  const a = prof2.at(k2);
+  if ($('mode2').value === 'both') {
+    // The elbow runs the SAME profile a quarter period out of phase, so the
+    // configuration changes while the shoulder is mid-move rather than between
+    // moves -- which is when the inertia change actually costs a controller
+    // something.
+    const b = prof2.at(k2 + Math.round(prof2.period / 4));
+    return [a, { theta: hold + b.theta - prof2.span / 2, omega: b.omega, alpha: b.alpha }];
+  }
+  return [a, { theta: hold, omega: 0, alpha: 0 }];
+}
+
+function step2(n) {
+  for (let i = 0; i < n; i++) {
+    const r = refs2();
+    const [t1, t2] = servo2.torques(r);
+    arm2.step(t1, t2, 1);
+    k2++;
+    if (k2 % CHART_EVERY === 0) {
+      const M = arm2.massMatrix();
+      chHist.t.push(k2);
+      chHist.t2.push(arm2.j2.transmitted());
+      // THE DECOMPOSITION IS THE POINT, and it is not a tautology: the equation
+      // gives M21*a1 + M22*a2 == tau2 + G2 - C2 identically, so plotting the SUM
+      // against tau2 would prove nothing. Plotting the two terms SEPARATELY shows
+      // which of them the elbow's load actually is -- and with the elbow commanded
+      // to hold, it is almost entirely the shoulder's.
+      chHist.c21.push(M[1][0] * arm2.alpha[0]);
+      chHist.c22.push(M[1][1] * arm2.alpha[1]);
+      chHist.tip.push(arm2.tipError().total);
+      if (chHist.t.length > 1200) for (const a of Object.values(chHist)) a.splice(0, 400);
+    }
+  }
+}
+
+function draw2() {
+  const cv = $('cv2'), st = $('stage2');
+  const w = st.clientWidth, h = st.clientHeight;
+  if (!(w > 0 && h > 0)) return;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+  }
+  const g = cv.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.fillStyle = '#060a14'; g.fillRect(0, 0, w, h);
+  if (!arm2) return;
+  const reach = arm2.L1 + arm2.L2;
+  const px = 26, py = h * 0.5;
+  const scale = Math.min((w - 60) / reach, (h - 50) / (reach * 0.9));
+  const mag = +$('s-mag2').value;
+  const [p1, p2] = arm2.profiles();
+  const r = refs2();
+
+  // ONE CHAIN DRAWN AS A CHAIN, and that means link 2 hangs off link 1's DRAWN
+  // tip -- position AND slope -- rather than off the rigid elbow. The deflections
+  // are exaggerated, so a forearm attached at the un-exaggerated elbow floats away
+  // from the upper arm and the picture reads as a broken linkage rather than as a
+  // bent one. Exaggerate the chain, not one link of it.
+  //
+  // THE SLOPE IS THE PART THAT IS EASY TO FORGET. A bent upper arm does not merely
+  // move the elbow, it TILTS everything downstream of it, and at the tool that
+  // tilt is levered by the whole forearm. It is the same term tipError() reports
+  // separately rather than folding in with a lever arm it does not have.
+  const drawChain = (q1, q2, d1, d2, col, width, dash) => {
+    g.save(); g.strokeStyle = col; g.lineWidth = width; g.setLineDash(dash || []);
+    const c1 = Math.cos(q1), s1 = Math.sin(q1);
+    const piv1 = arm2.l1.meta.pivot[0], piv2 = arm2.l2.meta.pivot[0];
+    g.beginPath();
+    for (let i = 0; i < d1.x.length; i++) {
+      const bx = d1.x[i] - piv1, by = d1.dy[i] * mag;
+      if (bx < 0) continue;            // the clamped flange lives inside the joint
+      g.lineTo(px + (c1 * bx - s1 * by) * scale, py - (s1 * bx + c1 * by) * scale);
+    }
+    g.stroke();
+    const n = d1.x.length;
+    const tbx = d1.x[n - 1] - piv1, tby = d1.dy[n - 1] * mag;
+    const ex = c1 * tbx - s1 * tby, ey = s1 * tbx + c1 * tby;
+    const slope = Math.atan2((d1.dy[n - 1] - d1.dy[n - 2]) * mag, d1.x[n - 1] - d1.x[n - 2]);
+    const phi = q1 + slope + q2;
+    const c2 = Math.cos(phi), s2 = Math.sin(phi);
+    g.beginPath();
+    let tipX = 0, tipY = 0;
+    for (let i = 0; i < d2.x.length; i++) {
+      const bx = d2.x[i] - piv2, by = d2.dy[i] * mag;
+      if (bx < 0) continue;
+      tipX = ex + c2 * bx - s2 * by; tipY = ey + s2 * bx + c2 * by;
+      g.lineTo(px + tipX * scale, py - tipY * scale);
+    }
+    g.stroke(); g.restore();
+    return [tipX, tipY, ex, ey];
+  };
+  const flat1 = { x: p1.x, dy: p1.x.map(() => 0) };
+  const flat2 = { x: p2.x, dy: p2.x.map(() => 0) };
+  drawChain(r[0].theta, r[1].theta, flat1, flat2, '#64748b', 2, [6, 5]);
+  const e = arm2.encoders();
+  drawChain(e[0].angle, e[1].angle, flat1, flat2, '#475569', 4);
+  const [tx, ty, elx, ely] = drawChain(arm2.q[0], arm2.q[1], p1, p2, '#f59e0b', 5);
+  const tip = [tx, ty];
+  // The elbow, so the joint the coupling acts at is visible as a joint.
+  g.fillStyle = '#fbbf24'; g.globalAlpha = 0.55;
+  g.beginPath(); g.arc(px + elx * scale, py - ely * scale, 4, 0, 7); g.fill();
+  g.globalAlpha = 1;
+  g.fillStyle = '#94a3b8'; g.beginPath(); g.arc(px, py, 6, 0, 7); g.fill();
+  g.fillStyle = '#fbbf24'; g.beginPath();
+  g.arc(px + tip[0] * scale, py - tip[1] * scale, 6, 0, 7); g.fill();
+  g.font = '11px ui-monospace,monospace'; g.fillStyle = '#64748b';
+  g.textAlign = 'right'; g.fillText(`deflection ×${mag}`, w - 10, h - 12);
+  g.textAlign = 'left';
+  g.fillStyle = '#f59e0b'; g.fillText('truth', 10, h - 42);
+  g.fillStyle = '#94a3b8'; g.fillText('encoders', 10, h - 27);
+  g.fillText('commanded', 10, h - 12);
+}
+
+function stats2() {
+  const rows = [];
+  if (arm2) {
+    const M = arm2.massMatrix(), Ms = arm2.massMatrix(0), Mf = arm2.massMatrix(Math.PI);
+    const pred = M[1][0] * arm2.alpha[0];
+    const t2 = arm2.j2.transmitted();
+    const te = arm2.tipError();
+    rows.push(['plant', `K ${arm2.K} · E ${CH.E} · L1 ${arm2.L1} + L2 ${arm2.L2} · `
+      + `${arm2.l1.lattice.cellCount + arm2.l2.lattice.cellCount} cells`]);
+    rows.push(['step', String(k2)]);
+    rows.push(['pose (shoulder, elbow)', `${arm2.q[0].toFixed(4)}, ${arm2.q[1].toFixed(4)} rad`]);
+    rows.push(['shoulder inertia M₁₁', `${M[0][0].toPrecision(5)}   `
+      + `<span class="warn">straight ${Ms[0][0].toPrecision(4)} · folded ${Mf[0][0].toPrecision(4)} `
+      + `(${(Ms[0][0] / Mf[0][0]).toFixed(2)}× across the range)</span>`]);
+    rows.push(['coupling M₂₁·α₁ onto the elbow', `${fmt(pred, 3)}`]);
+    rows.push(['what the elbow gearbox carries', `${fmt(t2, 3)}`]);
+    rows.push(['wind-up (shoulder / elbow)',
+      `${fmt(arm2.j1.windup(), 3)} / ${fmt(arm2.j2.windup(), 3)} rad`]);
+    rows.push(['tool error: shoulder tilt', `${fmt(te.tilt1, 3)}   `
+      + `<span class="warn">levered by the whole reach ${arm2.toolRadius().toFixed(2)}</span>`]);
+    rows.push(['…elbow tilt / link 1 bend / link 2 bend',
+      `${fmt(te.tilt2, 3)} / ${fmt(te.bend1, 3)} / ${fmt(te.bend2, 3)}`]);
+    rows.push(['…total', `${fmt(te.total, 3)}`]);
+  }
+  $('stats2').innerHTML = rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('');
+  if (arm2) {
+    $('err2-badge').textContent = `tool ${arm2.tipError().total.toExponential(2)}`;
+  }
+}
+
+function chainChart() {
+  if (chHist.t.length < 6) return;
+  const T = chHist.t.slice();
+  const traces = [
+    { x: T, y: chHist.t2.slice(), name: 'elbow gearbox torque',
+      line: { color: '#f59e0b', width: 2 } },
+    { x: T, y: chHist.c21.slice(), name: 'M₂₁·α₁ (the shoulder)',
+      line: { color: '#22d3ee', width: 1.5, dash: 'dot' } },
+    { x: T, y: chHist.c22.slice(), name: 'M₂₂·α₂ (its own)',
+      line: { color: '#a78bfa', width: 1.5, dash: 'dot' } },
+  ];
+  if (!chChartOn) {
+    Plotly.newPlot('chain-chart', traces, {
+      margin: { l: 52, r: 10, t: 6, b: 26 }, paper_bgcolor: '#0b1220', plot_bgcolor: '#060a14',
+      font: { color: '#94a3b8', size: 9 }, showlegend: true,
+      legend: { orientation: 'h', y: 1.18, font: { size: 9 } },
+      xaxis: { gridcolor: '#1e293b', title: { text: 'solver steps', font: { size: 9 } } },
+      yaxis: { gridcolor: '#1e293b' },
+    }, { displayModeBar: false, responsive: true });
+    $('chain-chart').classList.add('on');
+    chChartOn = true;
+    return;
+  }
+  Plotly.react('chain-chart', traces, $('chain-chart').layout,
+    { displayModeBar: false, responsive: true });
+}
+
+$('run2').addEventListener('click', () => {
+  if (!arm2 || busy2) return;
+  run2 = !run2;
+  $('run2').textContent = run2 ? 'Pause ⏸' : 'Run move ▶';
+  $('state2-badge').textContent = run2 ? 'running' : 'paused';
+  $('state2-badge').className = 'badge' + (run2 ? ' good' : '');
+});
+$('reset2').addEventListener('click', async () => {
+  run2 = false; $('run2').textContent = 'Run move ▶';
+  busy2 = true; await build2(); busy2 = false;
+});
+$('mode2').addEventListener('change', () => {
+  for (const a of Object.values(chHist)) a.length = 0;
+});
+const ladder2 = (id, vid, arr, fmtv) => {
+  const f = () => { $(vid).textContent = fmtv(arr[+$(id).value]); };
+  $(id).addEventListener('input', f);
+  $(id).addEventListener('change', async () => {
+    busy2 = true; run2 = false; $('run2').textContent = 'Run move ▶';
+    await build2(); busy2 = false;
+  });
+  f();
+};
+ladder2('s-k2', 'v-k2', K2_LADDER, (v) => v.toFixed(1));
+ladder2('s-elbow', 'v-elbow', ELBOW_LADDER, (v) => `${v.toFixed(2)} rad`);
+$('s-spf2').addEventListener('input', () => { $('v-spf2').textContent = $('s-spf2').value; });
+$('s-mag2').addEventListener('input', () => { $('v-mag2').textContent = $('s-mag2').value + '×'; });
+
+window.__flxChainDbg = () => (arm2 ? {
+  k: k2, running: run2, K: arm2.K, q: arm2.q.slice(), alpha: arm2.alpha.slice(),
+  M: arm2.massMatrix(), Mstraight: arm2.massMatrix(0)[0][0], Mfolded: arm2.massMatrix(Math.PI)[0][0],
+  windup: [arm2.j1.windup(), arm2.j2.windup()],
+  elbowTorque: arm2.j2.transmitted(),
+  coupling: arm2.massMatrix()[1][0] * arm2.alpha[0],
+  own: arm2.massMatrix()[1][1] * arm2.alpha[1],
+  rms: (() => {
+    const r = (a) => Math.sqrt(a.reduce((s2, x) => s2 + x * x, 0) / Math.max(1, a.length));
+    return { c21: r(chHist.c21), c22: r(chHist.c22), t2: r(chHist.t2), n: chHist.t.length };
+  })(),
+  tip: arm2.tipError(), reach: arm2.toolRadius(), mode: $('mode2').value,
+  cells: arm2.l1.lattice.cellCount + arm2.l2.lattice.cellCount,
+} : null);
 
 // --------------------------------------------------------------- verify
 $('verify-run').addEventListener('click', async () => {
@@ -811,6 +1160,9 @@ window.__flxDbg = () => ({
 busy = true;
 await build();
 busy = false;
+busy2 = true;
+await build2();
+busy2 = false;
 requestAnimationFrame(frame);
 console.log('flexisim ready ✓');
 </script>

@@ -143,7 +143,7 @@ one.
 | `test/run.sh` | Dev-only: NGRC unit tests + serves the repo + runs the smoke test in a mobile Chromium. |
 | `test/smoke.mjs` | Playwright checks + screenshots for the console, doc viewer, NGRC demo, and FlowSim. |
 | `test/lattsim/` | Node tests for the lattice engine: stencil isotropy, indexing/units, conservation (f32 + f64), Poiseuille vs the analytic parabola. |
-| `flexisim.html` | FlexiSim: the compliant serial chain (Move / Verify / Architecture) using `lib/flexisim` on `lib/lattsim`. Commission the arm in the browser, then watch compensation and input shaping move two different numbers. |
+| `flexisim.html` | FlexiSim: compliant serial chains (Move / Chain / Verify / Architecture) using `lib/flexisim` on `lib/lattsim`. Commission the arm in the browser, watch compensation and input shaping move two different numbers, then watch the elbow's gearbox load up because the shoulder accelerated. |
 | `lib/flexisim/` | The COMPOSITION layer for compliant serial chains: lumped joints (`joint.js`), a lattice link in its own body frame (`link.js`), the hybrid arm (`arm.js`), the tip-error soft sensor (`tipsensor.js`), the structured compliance identification (`compliance.js`) and the active compensator (`compensator.js`). Depends on `lib/lattsim` for the link and `lib/ngrc` for the models. |
 | `test/flexisim/` | Node tests for the hybrid plant: the joint against its closed forms, the joint-vs-link split, the soft sensor, compliance identification, and the compensation 2×2. No browser, no adapter, seconds. |
 | `CLAUDE.md` | This file. |
@@ -2677,8 +2677,44 @@ one.
    folding link 1's bending in with a lever arm it does not have — that term needs
    the SLOPE at link 1's tip, not its deflection.
 
-   NOT YET BUILT: the WGSL kernel; the 2R arm on the PAGE (it is library-and-Node
-   only so far) and its soft sensor; a third joint; and `ServoFF`, the drive-side
+   **BRICK 15 — THE CHAIN ON THE PAGE**, its own tab and its own plant, sharing
+   nothing with the Move tab's single-joint arm except the modules. `ChainServo`
+   joins `lib/flexisim/compensator.js`: **computed torque**, evaluating the arm's
+   own rigid model AT THE COMMANDED POSE — per-joint PD is not enough on a chain,
+   because the shoulder's inertia depends on the elbow by a factor of two and each
+   joint's acceleration loads the other. The N·J_m term is in it because at ratio
+   100 the motor accelerating ITSELF is comparable to the whole link. What it
+   deliberately does not model is the gearbox compliance or either link's
+   flexibility — that is the subject of the tab.
+   **THE CHART IS THE CLAIM, AND IT IS NOT A TAUTOLOGY.** With the elbow commanded
+   to HOLD, its gearbox carries a torque anyway; the chart splits that inertial load
+   into **M₂₁·α₁ (the shoulder's doing) and M₂₂·α₂ (its own)**, measured in-browser
+   at rms **1.15e-2 against 8.2e-4 — 14×**. Plotting the SUM against the transmitted
+   torque would prove nothing, since M₂₁α₁ + M₂₂α₂ ≡ τ₂ + G₂ − C₂ IS the equation of
+   motion; splitting it is what says something.
+   **A CHAIN HAS TO BE DRAWN AS A CHAIN.** Link 2 hangs off link 1's DRAWN tip —
+   position AND slope — not off the rigid elbow: the deflections are exaggerated, so
+   a forearm attached at the un-exaggerated elbow floats away from the upper arm and
+   the picture reads as a broken linkage rather than a bent one. The SLOPE is the
+   part that is easy to forget — a bent upper arm does not merely move the elbow, it
+   TILTS everything downstream, levered by the whole forearm.
+   Three cosmetic corrections that were really honesty corrections: the CLAMPED root
+   cells are no longer drawn (they are the joint's output flange and sit at negative
+   body x, i.e. inside the joint, so drawing them puts a stub out of the back of the
+   shoulder); the default plant was stiffened to E 0.15 / K 16 because at E 0.1 / K 8
+   the tool ran **6% of the reach** off target and walked off the stage at any
+   readable exaggeration (it is now 0.2%); and the chain only steps while its own tab
+   is showing, since two lattices are 1.6× the Move tab's cost and a hidden
+   simulation burning the frame budget is the page competing with itself.
+   AND ONE SMOKE CHECK WAS TOO TIGHT AND HAD BEEN PASSING BY LUCK: the error chart's
+   lag tolerance was 600 steps when the chart refreshes every sixth frame, which at
+   the slider's maximum is 1200 steps of legitimate lag. It is looking for a chart
+   FROZEN at its first points — a gap of tens of thousands — not for one a frame
+   behind.
+
+   NOT YET BUILT: the WGSL kernel; a soft sensor on the CHAIN (the Move tab has one,
+   and a two-joint version is the interesting case — the coupling is exactly what a
+   per-joint estimator cannot see); a third joint; and `ServoFF`, the drive-side
    feedforward, still unused.
 
    The second regime on the same lattice engine: a 2–3 joint arm whose TOOL TIP
