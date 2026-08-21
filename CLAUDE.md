@@ -143,6 +143,8 @@ one.
 | `test/run.sh` | Dev-only: NGRC unit tests + serves the repo + runs the smoke test in a mobile Chromium. |
 | `test/smoke.mjs` | Playwright checks + screenshots for the console, doc viewer, NGRC demo, and FlowSim. |
 | `test/lattsim/` | Node tests for the lattice engine: stencil isotropy, indexing/units, conservation (f32 + f64), Poiseuille vs the analytic parabola. |
+| `lib/flexisim/` | The COMPOSITION layer for compliant serial chains: lumped joints (`joint.js`), a lattice link in its own body frame (`link.js`), the hybrid arm (`arm.js`), the tip-error soft sensor (`tipsensor.js`), the structured compliance identification (`compliance.js`) and the active compensator (`compensator.js`). Depends on `lib/lattsim` for the link and `lib/ngrc` for the models. |
+| `test/flexisim/` | Node tests for the hybrid plant: the joint against its closed forms, the joint-vs-link split, the soft sensor, compliance identification, and the compensation 2×2. No browser, no adapter, seconds. |
 | `CLAUDE.md` | This file. |
 
 ## Features on the page
@@ -2259,7 +2261,239 @@ one.
    strain measure to get wrong. The rotation lives entirely in the transform
    between frames — per-link frames make the co-rotational terms unnecessary rather
    than solving them.
-   NOT YET BUILT: the lumped joints and gearbox; the WGSL kernel; the page.
+   **BRICK 5 — THE LUMPED JOINT, WHERE 70–90% OF THE TIP ERROR LIVES.**
+   `lib/flexisim/joint.js` — gearbox, motor, backlash, Stribeck friction, progressive
+   stiffness. No lattice at all, so it verifies in milliseconds. VERIFYING THE JOINT
+   ALONE IS THE POINT: the claim this tab makes is about how tip error SPLITS
+   between joints and links, and a split is only measurable if each side is known to
+   be right on its own — otherwise a discrepancy has two homes and no way to choose.
+   Closed forms, all passing: reflected inertia N²J_m + J_l (at N = 100 a 1e-4 rotor
+   presents 1.0 at the output against the link's own 0.5, so dropping the N² is
+   wrong by 3× — asserted, so the check visibly has teeth); the gearbox resonance
+   ω_n = √(K(1/J_l + 1/N²J_m)) to 0.2% by zero crossings (the load-only formula is
+   22% low, which is what makes it discriminate); static wind-up τ/K — **AND THE
+   ENCODER REPORTS NONE OF IT**, which is the tab's whole premise as a number;
+   backlash zero-torque over exactly 2b of encoder travel; progressive stiffness.
+   **STICTION IS A STATE, NOT A LARGE FRICTION COEFFICIENT**, and treating it as the
+   latter is a convincing bug rather than an obvious one. The Stribeck curve is
+   exactly zero at ω = 0, so a motor at rest under a sub-breakaway torque always
+   takes off; next step it is moving, full stiction applies, it is pushed back to
+   rest, and it takes off again. Measured before the fix: a 0.5 N·m command against
+   a 0.9 N·m breakaway walked the motor **2.4e-2 rad in one second**, a clean limit
+   cycle at a frequency set by dt. It reads exactly like creep and it is a
+   discretisation artefact.
+
+   **BRICK 6 — THE HYBRID ARM, AND THE 70–90% CLAIM MEASURED RATHER THAN INHERITED.**
+   `lib/flexisim/arm.js`. THE TWO CONTRIBUTIONS SEPARATE EXACTLY, which is what makes
+   this a measurement: the gearbox winds up by τ_g/K and TILTS the link rigidly
+   (δ = τ_g/K · L) while the link sags under that same weight as a cantilever
+   (ρgAL⁴/8EI). E → ∞ leaves the first, K → ∞ the second, and both limits are
+   asserted against their closed forms so neither term is trusted on the strength of
+   the other. Measured: self-weight sag **5.3842e-1 against 5.4276e-1 (−0.80%)**;
+   the split **K 9.9e-2 → 90.0% joint, 2.23e-1 → 80.0%, 3.82e-1 → 70.0%, 8.91e-1 →
+   50.0%**. THE SELF-WEIGHT SAG IS A DIFFERENT CLOSED FORM FROM THE TIP-LOADED ONE
+   and that is why it is checked: a uniformly distributed load gives L⁴/8EI, not
+   L³/3EI, and the same weight at the tip deflects 8/3 as far — a body force wrongly
+   lumped at the end passes brick 3 and fails this.
+   THE STIFFNESSES ARE CHOSEN FROM THE MEASUREMENT, and the first attempt would have
+   "confirmed" the literature by measuring a regime nobody operates in: a
+   plausible-looking 3e-4…1e-2 sweep put every row above 98% joint share. The check
+   asserts BOTH halves — the share falls monotonically as the gearbox stiffens AND a
+   realistic gearbox lands in the 70–90% band — rather than the single-sided "the
+   joint dominates", which any soft enough joint satisfies. **AND THE LINK TERM IS
+   ASSERTED NOT TO BE NEGLIGIBLE**, which is the half that justifies the lattice at
+   all: at a thousandth a beam element would do; at percent level, where-the-load-
+   sits and section shape matter.
+   **THE MASS PROPERTIES COME OUT OF THE LATTICE ITSELF** rather than being stated —
+   the gravitational torque a link puts on its joint and the inertia it presents are
+   integrals over the SAME distribution the elastic solver steps, and stating them
+   independently would let a lightening hole drift out of agreement silently, both
+   halves self-consistent and only their relationship wrong.
+
+   **BRICK 7a — THE FIRST BENDING MODE, i.e. THE FIRST CHECK THAT IS NOT A SETTLED
+   STATE.** Static and dynamic closed forms pin DIFFERENT combinations of the
+   constants: a tip deflection goes as 1/E and does not involve ρ at all, while the
+   ringing frequency goes as √(E/ρ). Together they pin E and ρ independently and
+   neither alone can. Measured at L/H 3.92: period 2817.7 steps, ω **2.2299e-3
+   against Euler–Bernoulli 2.4655e-3, 9.56% LOW**.
+   THE SIGN OF THE DEFICIT IS THE INFORMATIVE PART: a lattice beam rings LOW, never
+   high, because shear deformation and rotary inertia both soften a stubby beam. A
+   frequency ABOVE it would mean the model is stiffer or lighter than the material
+   it was given — a different class of fault. AND THE DEFICIT SHRINKS WITH
+   SLENDERNESS (9.56% at L/H 3.9 against 5.95% at 5.9), which is what separates the
+   Timoshenko correction from a wrong mass or a wrong stiffness: a scale error in
+   either is CONSTANT in aspect ratio.
+   AND THE ARM TEST WAS FOUR IDENTICAL SOLVES DRESSED UP AS A PARAMETER STUDY — the
+   sag does not depend on K at all and the wind-up is exactly τ_g/K, so the
+   K-dependence is ANALYTIC and one solve serves every row. **50 s → 10 s, every
+   number identical.**
+
+   **BRICK 7b — A COMMANDED MOVE, AND THE TIP ERROR THE ENCODER CANNOT SEE.** Every
+   stage has a closed form: α = τN/(N²J_m + J_link) (**0.000%**), windup =
+   J_link·α/K (**0.00%**), tilt = windup·L, bend the link's own ringing. J_link is
+   INTEGRATED FROM THE LATTICE, so the first check is really asking whether the mass
+   the rigid dynamics use is the mass the elastic solver steps — they could disagree
+   silently with no symptom but an acceleration nobody cross-checked. Measured after
+   4000 steps: the encoder reads 4.4483 while the link is at 4.4388 and **the
+   difference is EXACTLY the wind-up, to 1e-9 relative**.
+   **THE COUPLING IS ONE-WAY, AND THE REASON IS MEASURED RATHER THAN ASSUMED.**
+   Feeding the link's reaction back explicitly, with the one-step lag any staggered
+   co-simulation has, went unstable at ~1200 steps in EVERY configuration tried —
+   lattice damping 0, 1e-4, 3e-4 and 1e-3 alike — so it is a gain-driven instability
+   of the lag and damping cannot buy it. The first formulation made it worse by
+   DIFFERENCING the link's angular momentum, a high-pass filter on a field with
+   grid-scale content; the clamp reaction now in the elastic kernel is local and
+   exact and needs no derivative. `couplingResidual()` reports what is neglected, so
+   the approximation is a number rather than a hope.
+   Also: THE JOINT HAS ITS OWN STABILITY LIMIT and it is not the lattice's
+   (semi-implicit Euler on a two-mass oscillator needs ω_n·dt < 2; the first attempt
+   ran at 1e4 and gave NaN with no clue which half produced it), and THE CLAMP
+   REACTION HAS TO BE REQUESTED BEFORE `build()` — asking after sets the flag,
+   leaves the accumulator null, and reports zero for every reaction, silently.
+
+   **BRICK 8 — THE TIP-ERROR SOFT SENSOR, AND PATH DEPENDENCE MEASURED AT LAST.**
+   `lib/flexisim/tipsensor.js`, motor-side signals only, scored against the
+   physics-based estimate a good engineer builds (τ/K times the arm, with the torque
+   inferred from the encoder's own acceleration). EVERY NUMBER IS LOCKED — training
+   stops, the tracker goes away, and a check asserts training is REFUSED after the
+   lock rather than merely stopped. Measured, 500 locked samples, 544 features:
+   learner **0.5370**, compliance model 1.1967, "the tip is where the encoder says"
+   **1.0000**. That last scoring exactly 1.0 is not a coincidence — it IS the mean,
+   because the tip error oscillates about zero, so the controller's own picture of
+   where the tool is carries no information about the error at all.
+   PATH DEPENDENCE IS THE CLAIM THIS PLANT WAS BUILT TO MAKE. This project has used
+   lag windows everywhere and always found them merely HELPFUL; here the physics
+   says in advance they must be NECESSARY, because backlash makes the same motor
+   position correspond to different link positions depending on which way you
+   arrived. Measured with a dead band at 50% of the peak wind-up: memoryless
+   0.6691 → 0.8593 (**+28.4%**), windowed 0.5370 → 0.5909 (+10.0%). And memory earns
+   its place WITHOUT backlash too, for a different reason — the link rings and a
+   phase cannot be read from one instant (0.6691 → 0.5370).
+   THREE THINGS THE MEASUREMENT CORRECTED. (i) **The target was unlearnable at
+   realistic damping**: at 2e-4/step the tip error is a free vibration whose phase
+   lies outside any affordable window, and EVERY estimator — learner, baseline and
+   the naive view — scored near 1.0. (ii) **The baseline was a straw man for a units
+   reason**: the encoder acceleration was differenced between SAMPLES and handed to
+   a formula expecting rad/step², wrong by exactly `sampleEvery`. The learner would
+   never have noticed — it standardises its inputs and a constant scale vanishes
+   into the weights — but the baseline does not, so it read ten times the true
+   wind-up and scored nRMSE 19. (iii) **Backlash at 3e-4 was 0.05% of a 0.67 rad
+   wind-up**, so the first version of the claim measured a dead band that was not
+   there.
+   FULL TIER carries a stiffness sweep with a result I did not expect: the physics
+   baseline gets WORSE as the gearbox softens. A soft gearbox is also a SLOW one — at
+   K = 0.05 its resonance period is ~2950 steps against a 1700-step move — so the
+   wind-up never reaches the quasi-static value the static formula assumes. It fails
+   precisely when the joint dominates, which is when compensation matters most.
+
+   **THE NGRC AUDIT: FOUR BLOCKS BUILT FOR THIS DOMAIN AND USED BY NONE OF IT** —
+   `RobotComp`/`CompCommissioner` (per-joint compliance learned by exact RLS from
+   measured TCP deflection, with the command PRE-DISTORTED by −dq), `ServoFF`,
+   `AxisComp` (position-domain pitch + BACKLASH compensation from static laser
+   dwells in both directions), `Continuous`/`directHorizons`. Two of their ideas were
+   cheap to test and both changed what shipped.
+   (1) **AxisComp's DIRECTION BIT** against the lag window I reached for instead:
+   memoryless 0.6691 → 0.8593 under backlash (+28.4%), memoryless + BIT 0.7392 →
+   0.7252 (**−1.9%**), windowed + bit 0.5319 → 0.6938 (+30.4%). THE BIT IMMUNISES A
+   MEMORYLESS MODEL COMPLETELY and makes a WINDOWED one worse, and the reason
+   generalises: **a latched signal is nearly constant across a window**, so its lags
+   are almost collinear and add 207 features carrying information the first one
+   already had. Ships off; available for the memoryless case where it is the whole
+   answer.
+   (2) **DIRECTIONAL FORGETTING**, now plumbed through `SoftSensor` (opt-in, default
+   false, every golden vector byte-identical): λ 1.0 → 0.5909 with trace(P) 1.56e3;
+   λ 0.999 plain → **0.5375** with trace(P) 4.14e3; λ 0.999 directional → 0.5906
+   with trace(P) 1.57e3. Four earlier measurements in this project found it NEUTRAL;
+   here it is neutral against λ = 1 but PLAIN forgetting scored 9% BETTER than both
+   while winding up. So it gives up the accuracy plain forgetting bought in exchange
+   for a bounded covariance — a trade, not a free guarantee.
+
+   **BRICK 9 — THE STRUCTURED RIVAL, AND WHY COMPLIANCE IS ONLY IDENTIFIABLE AT
+   REST.** `lib/flexisim/compliance.js` learns ONE number with a physical meaning
+   inside a model mechanics fixes — δ = J diag(c) Jᵀ W, which for a planar
+   single-joint arm is δ = L c τ, linear in c and recoverable by exact RLS.
+   THE POINT IS NOT THE IN-DISTRIBUTION SCORE. A constant EXTRAPOLATES and a fitted
+   map does not, and a constant CAN BE CHECKED AGAINST THE TRUTH — a black-box
+   readout offers no number to be right or wrong about except its output. Identified
+   from three static poses it predicts a FOURTH never shown, whose gravity torque is
+   2.8× smaller, to within 2e-3: stiff link **c 3.4590 against a closed-form
+   3.4594**, nominal **6.3369 against 6.3376**.
+   WHAT THE CONSTANT IS AND WHAT IT IS NOT: c_eff = 6.338 against the gearbox's own
+   1/K = 2.500, because the link's sag is 154% of the wind-up tilt. That is a
+   property of the INSTRUMENT — a tracker at the tip measures wind-up and bending
+   SUMMED, and no fit to a sum can separate its parts. Splitting them needs a
+   link-side encoder, which is a commissioning fact rather than a modelling
+   shortcut; and for compensation the effective constant is the right one anyway.
+   **COMPLIANCE IS ONLY IDENTIFIABLE AT REST**, and `CompCommissioner`'s design says
+   so by taking pose TOUCHES rather than a trace — which I ignored, and the
+   measurement corrected me. Fitting the same model to a MOVING trace recovers
+   **c = 0.833 against a true 2.500**: neither the stiffness nor the effective
+   compliance. The gearbox transmits K·d + C·ḋ and this drive is damped near
+   critical, so **C = 132.6 dwarfs K = 0.4** — during a move the DAMPER carries most
+   of the torque and a static-compliance fit to dynamic data measures a blend of a
+   stiffness and a damping, which is neither of them.
+   **THE PRIOR HAS TO BE WEAK RELATIVE TO THE REGRESSOR'S SCALE**, not weak in the
+   abstract, and this cost an hour looking at a fit that seemed broken. The regressor
+   is L·τ ≈ 0.06 in lattice units, so one sample carries r = P0·x². At RobotComp's
+   default P0 = 1e-6 that is 4e-9 and the posterior does not move AT ALL; at P0 = 1
+   it is 0.004 and five poses recovered c = 0.0399 against a true 2.5 — which reads
+   exactly like a broken regression and is a prior never given a chance to update.
+   At 1e6 the same five poses identify it to the digit.
+   And the per-pose spread is ~1e-4 rather than machine precision because δ = L c τ
+   is purely TRANSVERSE while the body-frame gravity has an AXIAL component that
+   stretches the link without bending it — named rather than tolerated.
+
+   **BRICK 10 — ACTIVE COMPENSATION, AND A 2×2 THAT IS ORTHOGONAL TO FOUR DIGITS.**
+   `lib/flexisim/compensator.js`: `AngleProfile` (a closed-form trapezoid, optionally
+   convolved with an input shaper), `PositionServo` (a PD loop on the ENCODER with
+   rigid-body feedforward), `TipCompensator` (RobotComp's `feedforward()` finally
+   driven, with its magnitude and slew limits), `ringFit`, `zv`/`zvdShaper`. Bricks 8
+   and 9 both ESTIMATED the tip error and neither moved anything; this pre-distorts
+   the commanded angle so the tip lands where the program asked, using ONLY what a
+   controller has after the tracker is packed away — the commanded trajectory, the
+   rigid mass properties, the encoder, and one identified constant. The model is
+   evaluated at the COMMAND, never at anything measured, which is what makes it a
+   production correction rather than a demonstration.
+   Measured over a full out-and-back at res 16, K 4.0, E 0.2 (arm 15.5 cells,
+   gravity sag 0.48% of the arm):
+     plain         bias 7.366e-2   oscillation 1.944e-1   rms 2.079e-1
+     compensated   bias 2.695e-4   oscillation 2.072e-1   rms 2.072e-1
+     shaped        bias 7.375e-2   oscillation 7.599e-2   rms 1.059e-1
+     both          bias 1.731e-4   oscillation 7.675e-2   rms 7.675e-2
+   TWO ERRORS, TWO MECHANISMS, ONE FIX EACH. Compensation removes the bias **273×**
+   and moves the oscillation by 6%; shaping cuts the oscillation 2.56× and leaves the
+   bias unchanged **to 0.1%** — which it must, since a shaper is a convolution with
+   unit-sum impulses and cannot change where a move ENDS. Alone they are worth 1.00×
+   and 1.96× on the rms; together **2.71×**.
+   **THE DECOMPOSITION IS THE FINDING, AND GETTING IT WRONG HID THE RESULT TWICE.**
+   As one RMS over the move, compensation reads "1.1×" and looks like a
+   disappointment. Scored over a settled dwell window instead, the answer depends on
+   HOW LONG THE DWELL IS: at 600 steps the vibration has not decayed and compensation
+   reads 0.99×; at 1100 it has, and **the same runs read 4.35×**. Neither number is
+   about compensation. The mean and standard deviation of one error record separate
+   the two mechanisms with no window to choose.
+   **THE SIGN IS FIXED BY THE PLANT, NOT CHOSEN**, and it is asserted because a
+   correction applied backwards does not degrade — it applies the error a second
+   time: measured **2.00×** the uncompensated bias, exactly.
+   **THE SHAPER'S FREQUENCY IS MEASURED ON THE MACHINE.** Euler–Bernoulli says
+   7.09e-3 rad/step for this link; the machine says 6.22e-3, 14% high — the same
+   Timoshenko correction brick 7a pinned. A 2.5% frequency error in a ZV shaper cost
+   a factor of four in the residual, which is why commissioning excites a decay
+   DELIBERATELY (an uncontrolled move, for the same reason the anti-slosh health
+   check needs one) and why the shipped shaper is the robust ZVD.
+   **THE HONEST LIMIT:** c was identified under GRAVITY, a uniform body force, and
+   applied to an INERTIAL load growing with radius. Sag per unit joint torque is
+   0.95939 against 1.02332 — the inertial load deflects **1.0666×** more, against a
+   thin-beam prediction of (11/40)/(1/4) = 1.10 that shear and root rotation dilute.
+   It does not show in the bias only because a full out-and-back averages the
+   commanded acceleration to zero; a one-way move would see it directly.
+   Also pinned: RobotComp's magnitude limit degrades the correction rather than
+   breaking it (clamped to a tenth of what it wants, bias 4.8e-2 against 7.4e-2
+   uncompensated and 2.7e-4 unclamped).
+
+   NOT YET BUILT: the WGSL kernel; the page; a second and third joint; `ServoFF` (the
+   drive-side feedforward, still unused) and `Continuous`/`directHorizons` (the
+   forecast a compensator with transport delay actually consumes).
 
    The second regime on the same lattice engine: a 2–3 joint arm whose TOOL TIP
    is measured by a laser tracker during dynamic moves (ground truth), while the
