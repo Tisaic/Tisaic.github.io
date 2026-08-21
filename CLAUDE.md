@@ -39,6 +39,42 @@ must be:
 If any step fails, fix it first — do not push. Run `stamp-version.sh` last so
 the shipped commit carries the correct version.
 
+### THE SOFTWARE ADAPTER IS THE LAST RESORT, NOT THE DEFAULT
+
+CI has no GPU. `--enable-unsafe-webgpu` gives headless Chromium a **SwiftShader
+adapter**, which is the CPU pretending to be a GPU: it is two to three orders of
+magnitude slower than real hardware, it is most of this suite's wall clock, and
+it is not the thing the page runs on in front of a user. **Verify a claim by the
+cheapest route that can actually falsify it, and reach for the software adapter
+only for what nothing else can reach.** In descending order of preference:
+
+1. **Plain Node against the CPU reference** (`test/lattsim/*.test.mjs`). Physics,
+   numerics, conservation, closed forms, operator write-discipline, unit systems,
+   model accuracy. No browser, no adapter, seconds not minutes, and f64 is
+   available — which the GPU path can never offer. **This is where a physics
+   claim belongs.** `d3q19.js` is the single source of truth and the WGSL is
+   GENERATED from it, so a constant verified here is verified for both backends.
+2. **The browser on the CPU backend.** Wiring, UI state, lifecycle, cadence,
+   screen→cell mapping, chart alignment, the page's own error buffer. None of
+   that depends on which backend is underneath, and forcing the CPU backend
+   removes the adapter's cost from checks that were never about the GPU.
+3. **The software adapter, for the three things only it can reach:** that every
+   WGSL kernel COMPILES (a reserved word shipped silence once already), the
+   cell-by-cell CPU/GPU PARITY check, and WebGPU resource/limit behaviour
+   (binding sizes, `vec3` packing offsets, device lifecycle across rebuilds).
+   Keep these narrow and step-count-bounded.
+4. **A real device.** Anything involving a surface — the raymarched volume view,
+   real timing, real memory limits. `getCurrentTexture()` on the software adapter
+   does not merely fail, it DESTROYS the WebGPU instance, so a check that needs a
+   surface cannot be written here at all.
+
+Two rules follow. **A check that is too slow to run is a verification problem,
+not an inconvenience** — if a browser check needs thousands of steps, shrink the
+lattice and the windows until it fits, and say in the comment why that does not
+weaken it (the wiring does not depend on lattice size). And **when a check moves
+down this list, say what the lower tier can no longer see**, so a gap is stated
+rather than assumed away.
+
 ## Key files
 
 | File | Purpose |
@@ -46,8 +82,8 @@ the shipped commit carries the correct version.
 | `index.html` | The main app: header, debug console, doc viewers, NGRC launcher. |
 | `console-boot.js` | The debug-console bootstrap, **shared** by `index.html` and `ngrc.html` (loaded first in `<head>`). |
 | `ngrc.html` | NGRC playground: 4-tab interactive demo (Lorenz forecaster, soft-sensor, finger-trace, anti-slosh axis) using `lib/ngrc`. |
-| `lattsim.html` | LattSim: GPU lattice-field physics engine (Simulate / Verify / Architecture) using `lib/lattsim`. Self-contained — shares nothing with NGRC. |
-| `lib/lattsim/` | The lattice field engine: lattice, fields, materials, operators, solver, WebGPU + CPU backends, renderers (see `lib/lattsim/README.md`). |
+| `flowsim.html` | FlowSim: GPU lattice-field physics engine (Simulate / Verify / Architecture) using `lib/lattsim`. Self-contained — shares nothing with NGRC. |
+| `lib/lattsim/` | The lattice field engine: lattice, fields, materials, operators, solver, WebGPU + CPU backends, renderers (see `lib/lattsim/README.md`). **The directory keeps the `lattsim` name deliberately** — it is the general lattice engine, not the fluid page. `flowsim.html` is one PAGE built on it (the D3Q19 fluid + passive scalar operators); a second regime would be another operator and another page on the same engine. |
 | `lib/ngrc/` | The ported NGRC library (see `lib/ngrc/README.md`). |
 | `lib/probesense/` | The COMPOSITION layer: soft-sensing a field from one point in it. Depends on `lib/ngrc` for the model and on nothing for the physics — it is fed numbers. |
 | `version.json` | Server-side build manifest for stale-page detection. |
@@ -57,7 +93,7 @@ the shipped commit carries the correct version.
 | `vendor/three.module.js` | Self-hosted three.js (r160) for the 3D demos. |
 | `vendor/plotly-basic.min.js` | Self-hosted Plotly (basic bundle) for the demo charts. |
 | `test/run.sh` | Dev-only: NGRC unit tests + serves the repo + runs the smoke test in a mobile Chromium. |
-| `test/smoke.mjs` | Playwright checks + screenshots for the console, doc viewer, NGRC demo, and LattSim. |
+| `test/smoke.mjs` | Playwright checks + screenshots for the console, doc viewer, NGRC demo, and FlowSim. |
 | `test/lattsim/` | Node tests for the lattice engine: stencil isotropy, indexing/units, conservation (f32 + f64), Poiseuille vs the analytic parabola. |
 | `CLAUDE.md` | This file. |
 
@@ -85,7 +121,7 @@ the shipped commit carries the correct version.
    and files are split into two groups: **◆ CLAUDE context** (any `CLAUDE.md`,
    shown with an indigo tag) and **Docs** (everything else). Opens `CLAUDE.md`
    by default so the current state is one tap away.
-4. **LattSim** (bottom-right `LATT` launcher → `lattsim.html`) — a
+4. **FlowSim** (bottom-right `FLOW` launcher → `flowsim.html`) — a
    **GPU lattice-field physics engine**, architecturally independent of NGRC
    (own directory, own tests, no shared code or vendored libraries). The lattice
    is the PHYSICAL REPRESENTATION, not a visualisation of something else: there
@@ -256,7 +292,7 @@ the shipped commit carries the correct version.
    here the reading was right and the number could not resolve it.
    **A FOURTH DEFECT, FOUND IN A SCREENSHOT AND INVISIBLE TO EVERY ERROR
    ASSERTION IN THE SUITE.** The visual review showed a red error badge on the
-   LattSim page. Reproduced deterministically: **Reset while the run loop is
+   FlowSim page. Reproduced deterministically: **Reset while the run loop is
    going** destroys the readback staging buffer with a `mapAsync` STILL IN
    FLIGHT, which rejects with "Buffer was destroyed before mapping was resolved"
    — and nobody is awaiting it any more, so it lands as an **UNHANDLED
@@ -431,7 +467,7 @@ the shipped commit carries the correct version.
    makes the rest readable, since a NaN spreads one cell per step and the "first
    bad cell" is the origin only while the damage is small. The field is NAMED
    `lowestIndexBadCell` rather than `firstBadCell` for exactly that reason.
-   `__lsDump()` prints the same on demand from the console's eval box.
+   `__fsDump()` prints the same on demand from the console's eval box.
    **RESOLUTION WAS BLOCKED, NOT UNSET (v121).** Asked for more resolution on the
    obstruction model. At `[3n, n, n]` the channel wants a **192 MiB** storage
    binding at n = 96, over the 128 MiB most devices allow, so the top of the
@@ -516,8 +552,8 @@ the shipped commit carries the correct version.
    as a 130% velocity and 13% mass disagreement and nothing else would have. The
    offsets are now written out beside the struct, computed rather than guessed.
    **THE QUICK TIER NO LONGER LOADS ngrc.html** — the tier exists to be run on
-   every LattSim edit, and ngrc's warm-up timers are both most of its clock and
-   flaky under load, so a LattSim edit was being judged by checks unrelated to it.
+   every FlowSim edit, and ngrc's warm-up timers are both most of its clock and
+   flaky under load, so a FlowSim edit was being judged by checks unrelated to it.
    They still run on `--full`.
    **A PROBE, AND A CHART UNDER THE STAGE (v124).** One lattice cell sampled over
    time: `Place probe` then tap the slice, and the cell is fixed in 3D too since
@@ -541,7 +577,7 @@ the shipped commit carries the correct version.
    BUFFER IS PER ORIGIN, NOT PER PAGE** — persisted to localStorage so a
    white-screen crash survives a reload, which means this page inherits errors
    from any other page on the origin. That is why a red error badge appeared on a
-   LattSim screenshot: it was the SUITE'S OWN `console.error('smoke error')`,
+   FlowSim screenshot: it was the SUITE'S OWN `console.error('smoke error')`,
    injected on index.html to test console capture. The suite now clears the
    buffer when it opens the page, and asserts the page's own error buffer is
    empty at the end — in BOTH tiers, since neither `pageerror` nor the console
@@ -614,7 +650,7 @@ the shipped commit carries the correct version.
    physics assertion passed; the simulation was correct throughout. Same instrument,
    and the same reason, as the unhandled `mapAsync` rejection in v114.
 
-5. **Soft sensor on the lattice** (in the LattSim page, under the probe chart) —
+5. **Soft sensor on the lattice** (in the FlowSim page, under the probe chart) —
    TWO POINTS ON ONE LATTICE: the probe is the **sensor**, the point you could
    actually instrument, and a second marker is the **target**, the point you could
    not. The model sees only the sensor's recent history; the target's true value
@@ -741,7 +777,7 @@ the shipped commit carries the correct version.
    the steady case would have changed the measurement rather than repaired a fault.
    And once re-calibration handles the scaling the six forgetting variants collapse
    into a 1% band (0.3617–0.3650), so the conclusion holds from both directions.
-   `trace(P)` and `|θ|` are permanent in `status()` for the same reason `__lsDump()`
+   `trace(P)` and `|θ|` are permanent in `status()` for the same reason `__fsDump()`
    is: the score could not have told these explanations apart.
    **A SECOND HARD SENSOR joins the input vector rather than replacing anything.**
    "Add 2nd sensor ◈" places a second point you could instrument (a cyan diamond,
@@ -757,10 +793,10 @@ the shipped commit carries the correct version.
    was added (the quadratic cross-terms between the two points are most of the
    jump), both cells plus the target are read at ONE instant with zero cadence
    misses, and a single unwrapped read still works so nothing regressed.
-   **`__lsSSdbg()`** reports the frozen input scales, the target's frozen mean and
+   **`__fsSSdbg()`** reports the frozen input scales, the target's frozen mean and
    spread against its live ones, the saturation and recalibration counts, the
    weight norms, the covariance traces and the ranges of truth against estimate.
-   It is permanent for the same reason `__lsDump()` is: a soft sensor that scores
+   It is permanent for the same reason `__fsDump()` is: a soft sensor that scores
    badly has at least four distinct explanations and NONE of them can be told apart
    from the score.
 
@@ -2004,14 +2040,14 @@ Run it, then commit, so the shipped commit and its version number match.
 - Vanilla JS, no build tooling beyond the shell script.
 - Keep the console bootstrap first and dependency-free.
 - **The console bootstrap injects its UI into the HOST page, so it must state its
-  own geometry rather than inherit one.** `ngrc.html` and `lattsim.html` both
+  own geometry rather than inherit one.** `ngrc.html` and `flowsim.html` both
   carry a global `button { flex:1; min-width:110px }` for their touch controls.
   `console-boot.js`'s `#dbg-head button` rules are more specific and won every
   property they NAMED — but they never named `min-width`, so the four header
   buttons were forced to 110px each, 440px of them on a 412px phone, and
   `Close ✕` (the last child of a non-wrapping flex row) was pushed off the right
   edge: **measured at 435–545px against a 412px viewport on ngrc, 417–521 on
-  lattsim, and the click times out.** Opening the console on either page left no
+  flowsim, and the click times out.** Opening the console on either page left no
   way to shut it without reloading. The same rule beat `width:46px` on the
   launcher and inflated it to a 110px slab. `index.html` has no global `button`
   rule, which is exactly why the one page the suite checked was the one page

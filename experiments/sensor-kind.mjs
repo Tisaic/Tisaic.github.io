@@ -74,9 +74,9 @@ const browser = await chromium.launch({ executablePath: findChrome(),
 const pg = await browser.newPage();
 pg.setDefaultTimeout(0);
 pg.on('pageerror', (e) => console.log('PAGEERR:', e.message));
-await pg.goto((process.env.BASE_URL || 'http://127.0.0.1:8137/') + 'lattsim.html',
+await pg.goto((process.env.BASE_URL || 'http://127.0.0.1:8137/') + 'flowsim.html',
   { waitUntil: 'domcontentloaded' });
-await pg.waitForFunction(() => window.__lsSim && window.__lsSim() && window.__lsSim().solver,
+await pg.waitForFunction(() => window.__fsSim && window.__fsSim() && window.__fsSim().solver,
   null, { timeout: 120000 });
 
 const out = await pg.evaluate(async () => {

@@ -58,7 +58,7 @@ for (const dir of ['lib', 'experiments']) {
 
 // The pages' inline scripts, which are `type="module"` and carry most of the app.
 const SCRIPT = /<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g;
-for (const page of ['index.html', 'lattsim.html', 'ngrc.html']) {
+for (const page of ['index.html', 'flowsim.html', 'ngrc.html']) {
   const html = readFileSync(join(ROOT, page), 'utf8');
   let m, i = 0;
   while ((m = SCRIPT.exec(html))) {

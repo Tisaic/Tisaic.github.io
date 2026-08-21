@@ -48,7 +48,7 @@ const page = await browser.newPage();
 page.setDefaultTimeout(0);
 page.on('console', (m) => { if (m.type() !== 'debug') console.log('   ·', m.text()); });
 page.on('pageerror', (e) => console.log('   ! pageerror', e.message));
-await page.goto(BASE + 'lattsim.html', { waitUntil: 'domcontentloaded' });
+await page.goto(BASE + 'flowsim.html', { waitUntil: 'domcontentloaded' });
 
 /**
  * The scene: a nominally TWO-DIMENSIONAL cylinder wake.

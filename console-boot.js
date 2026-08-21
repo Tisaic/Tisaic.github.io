@@ -197,7 +197,7 @@
       // THE HOST PAGE'S CSS LEAKS IN, and this panel is injected into it, so
       // every control here must state its own geometry rather than inherit one.
       //
-      // ngrc.html and lattsim.html both carry a global `button { flex:1;
+      // ngrc.html and flowsim.html both carry a global `button { flex:1;
       // min-width:110px }` for their own touch controls. The rules below are
       // more specific and so won the properties they name -- but they did not
       // name min-width, so the four header buttons were each forced to 110px,

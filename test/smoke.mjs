@@ -29,7 +29,7 @@ function findChrome() {
 
 // Two tiers, set by test/run.sh. QUICK covers every cheap assertion plus the
 // analytic physics; FULL adds the long-horizon scenarios -- the two-mode
-// anti-slosh convergence and the LattSim scene sweep, resolution ladder and
+// anti-slosh convergence and the FlowSim scene sweep, resolution ladder and
 // stir/settle checks -- which between them drive several thousand solver steps
 // through a software GPU and a few minutes of control simulation.
 const FULL = process.env.SUITE === 'full';
@@ -54,7 +54,7 @@ function check(name, cond, detail) {
  * asserted per page rather than once, because the failure came from the HOST
  * page's stylesheet rather than from the console.
  *
- * ngrc.html and lattsim.html both style their own touch controls with a global
+ * ngrc.html and flowsim.html both style their own touch controls with a global
  * `button { flex:1; min-width:110px }`. console-boot's rules are more specific
  * and won every property they named -- but they did not name min-width, so the
  * four header buttons were forced to 110px each, 440px of them on a 412px phone,
@@ -92,7 +92,7 @@ const browser = await chromium.launch({
   executablePath: findChrome(),
   // SwiftShader so the WebGL (three.js) NGRC demo renders headless.
   // --enable-unsafe-webgpu additionally exposes a SwiftShader WebGPU adapter,
-  // which is what lets the LattSim tab exercise its PRODUCTION WGSL backend here
+  // which is what lets the FlowSim tab exercise its PRODUCTION WGSL backend here
   // rather than only its CPU reference. Without it navigator.gpu exists on a
   // secure origin but requestAdapter() returns null. It is software and slow --
   // fine for correctness, useless for throughput.
@@ -161,9 +161,9 @@ await page.screenshot({ path: join(SHOTS, '03-docs.png') });
 // THE WHOLE NGRC PAGE IS FULL-TIER.
 //
 // The quick tier exists to be run on every edit, and what is being edited is
-// LattSim. Loading ngrc.html costs most of quick's wall clock, and its
+// FlowSim. Loading ngrc.html costs most of quick's wall clock, and its
 // soft-sensor and finger-trace checks wait on warm-up timers that get flaky
-// under load -- so a LattSim edit was being reported on by checks that have
+// under load -- so a FlowSim edit was being reported on by checks that have
 // nothing to do with it and can fail for reasons that are not the edit's fault.
 // They still run on --full, where they belong.
 const demoBase = BASE.replace(/index\.html$/, '') + 'ngrc.html';
@@ -548,54 +548,54 @@ await demo.screenshot({ path: join(SHOTS, '08-antislosh.png') });
 check('ngrc: playground has no errors overall', demoErrors.length === 0, demoErrors.join(' | '));
 
 // ============================================================================
-// LATTSIM — the lattice physics engine. Its numerics are verified in Node
+// FLOWSIM — the lattice physics engine. Its numerics are verified in Node
 // (test/lattsim/*.test.mjs) against analytic answers; what is checked HERE is
 // that the page builds a real simulation, degrades honestly when WebGPU is
 // absent (which it is in this Chromium), and draws actual field data.
 // ============================================================================
 // Close the NGRC page first. Chromium's software WebGPU drops the device
 // instance for backgrounded pages, which surfaces as "a valid external Instance
-// reference no longer exists" the moment LattSim tries to read anything back.
+// reference no longer exists" the moment FlowSim tries to read anything back.
 await demo.close();
 }   // end FULL-only ngrc page
 
 }   // end FULL-only anti-slosh scenarios
 section('ngrc tab4 antislosh');
-section('lattsim page');
-const latt = await ctx.newPage();
-const lattErrors = [];
-latt.on('pageerror', e => lattErrors.push(String(e)));
+section('flowsim page');
+const flow = await ctx.newPage();
+const flowErrors = [];
+flow.on('pageerror', e => flowErrors.push(String(e)));
 // Also capture console.error. The page catches its own async failures and logs
 // them rather than letting them reach pageerror, so without this a broken render
 // path would show up only as a red badge in a screenshot nobody read.
-const lattConsole = [];
-latt.on('console', m => { if (m.type() === 'error') lattConsole.push(m.text()); });
-await latt.goto(BASE + 'lattsim.html', { waitUntil: 'networkidle' });
-await latt.waitForFunction(() => window.__lsDbg && window.__lsDbg().backend !== null, null, { timeout: 60000 });
+const flowConsole = [];
+flow.on('console', m => { if (m.type() === 'error') flowConsole.push(m.text()); });
+await flow.goto(BASE + 'flowsim.html', { waitUntil: 'networkidle' });
+await flow.waitForFunction(() => window.__fsDbg && window.__fsDbg().backend !== null, null, { timeout: 60000 });
 
-check('lattsim.html loads with no errors', lattErrors.length === 0, lattErrors.join(' | '));
+check('flowsim.html loads with no errors', flowErrors.length === 0, flowErrors.join(' | '));
 
-const ls0 = await latt.evaluate(() => window.__lsDbg());
-check('lattsim: a simulation is built', ls0.cells > 0, JSON.stringify(ls0.cells));
-check('lattsim: geometry is classified (fluid + solid + inlet + outlet)',
-  ls0.census && ls0.census.FLUID > 0 && ls0.census.SOLID > 0 && ls0.census.INLET > 0 && ls0.census.OUTLET > 0,
-  JSON.stringify(ls0.census));
+const fs0 = await flow.evaluate(() => window.__fsDbg());
+check('flowsim: a simulation is built', fs0.cells > 0, JSON.stringify(fs0.cells));
+check('flowsim: geometry is classified (fluid + solid + inlet + outlet)',
+  fs0.census && fs0.census.FLUID > 0 && fs0.census.SOLID > 0 && fs0.census.INLET > 0 && fs0.census.OUTLET > 0,
+  JSON.stringify(fs0.census));
 // This Chromium has no navigator.gpu at all, so the honest outcome is the CPU
 // reference plus a stated reason -- not a blank canvas and not a pretence.
-const hasGPU = await latt.evaluate(() => !!navigator.gpu);
-check('lattsim: backend selection matches what the browser actually offers',
-  hasGPU ? ls0.backend === 'webgpu' : ls0.backend === 'cpu', `${ls0.backend} (navigator.gpu=${hasGPU})`);
+const hasGPU = await flow.evaluate(() => !!navigator.gpu);
+check('flowsim: backend selection matches what the browser actually offers',
+  hasGPU ? fs0.backend === 'webgpu' : fs0.backend === 'cpu', `${fs0.backend} (navigator.gpu=${hasGPU})`);
 if (!hasGPU) {
-  check('lattsim: the WebGPU fallback states its reason', !!ls0.fallback, String(ls0.fallback));
-  check('lattsim: the badge says so', /CPU reference/.test(await latt.textContent('#backend-badge')),
-    await latt.textContent('#backend-badge'));
+  check('flowsim: the WebGPU fallback states its reason', !!fs0.fallback, String(fs0.fallback));
+  check('flowsim: the badge says so', /CPU reference/.test(await flow.textContent('#backend-badge')),
+    await flow.textContent('#backend-badge'));
 }
 
 // Physics must actually advance and stay finite.
-await latt.evaluate(() => window.__lsStep(200));
-const diag = await latt.evaluate(() => window.__lsDiag());
-check('lattsim: stepping advances the solver', diag.step >= 200, String(diag.step));
-check('lattsim: the field is finite and stable', diag.finite && diag.stable.state !== 'diverged',
+await flow.evaluate(() => window.__fsStep(200));
+const diag = await flow.evaluate(() => window.__fsDiag());
+check('flowsim: stepping advances the solver', diag.step >= 200, String(diag.step));
+check('flowsim: the field is finite and stable', diag.finite && diag.stable.state !== 'diverged',
   JSON.stringify(diag.stable));
 // The density range is the diagnostic that caught the first outlet
 // implementation: it copied its neighbour's populations, imposed nothing on the
@@ -607,30 +607,30 @@ check('lattsim: the field is finite and stable', diag.finite && diag.stable.stat
 // two open faces which decays slowly: measured +/-17% at step 200, +/-13% at
 // 600, +/-5% by 2200. That is a documented property of this boundary, not
 // instability -- and 0.8 still catches the 0.32 drain by a factor of three.
-check('lattsim: density stays physical (the outlet anchors the pressure)',
+check('flowsim: density stays physical (the outlet anchors the pressure)',
   diag.rhoMin > 0.8 && diag.rhoMax < 1.25, `${diag.rhoMin} … ${diag.rhoMax}`);
-check('lattsim: the inlet drives a flow', diag.uMax > 1e-3, String(diag.uMax));
+check('flowsim: the inlet drives a flow', diag.uMax > 1e-3, String(diag.uMax));
 
 // The slice renderer must draw real field data, not an empty canvas.
-await latt.evaluate(() => window.__lsDraw());
-await latt.waitForTimeout(200);
-const px = await latt.evaluate(() => {
+await flow.evaluate(() => window.__fsDraw());
+await flow.waitForTimeout(200);
+const px = await flow.evaluate(() => {
   const c = document.getElementById('cv');
   const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
   const seen = new Set();
   for (let i = 0; i < d.length; i += 4) seen.add((d[i] << 16) | (d[i + 1] << 8) | d[i + 2]);
   return { w: c.width, h: c.height, colors: seen.size };
 });
-check('lattsim: the slice canvas is the lattice cross-section', px.w > 8 && px.h > 8, JSON.stringify(px));
-check('lattsim: the slice shows a field, not one flat colour', px.colors > 8, String(px.colors));
+check('flowsim: the slice canvas is the lattice cross-section', px.w > 8 && px.h > 8, JSON.stringify(px));
+check('flowsim: the slice shows a field, not one flat colour', px.colors > 8, String(px.colors));
 
 // ---- THE PARITY CHECK, the reason both backends exist.
 // The Node tests verify the CPU reference against analytic answers. This
 // verifies that the production WGSL kernel computes the SAME THING. Two
 // implementations of one set of equations drift the moment nobody compares
 // them, and the drift looks like a plausible flow rather than an error.
-if (hasGPU && ls0.backend === 'webgpu') {
-  const parity = await latt.evaluate(async () => {
+if (hasGPU && fs0.backend === 'webgpu') {
+  const parity = await flow.evaluate(async () => {
     const [{ channelFlow }] = await Promise.all([import('./lib/lattsim/scenes.js')]);
     const mk = () => channelFlow({ resolution: 16, tau: 0.6, inletVelocity: 0.05 });
     const g = mk(); await g.build({ backend: 'webgpu' });
@@ -654,12 +654,12 @@ if (hasGPU && ls0.backend === 'webgpu') {
   });
   // Both run f32 and both are chaotic-free at this size, so agreement should be
   // at the level of float accumulation order, not of physics.
-  check('lattsim: the WGSL kernel and the CPU reference agree on velocity',
+  check('flowsim: the WGSL kernel and the CPU reference agree on velocity',
     parity.worstU < 1e-4 * Math.max(parity.peak, 1e-6) + 1e-6,
     `worst |du| ${parity.worstU.toExponential(2)} against peak ${parity.peak.toExponential(2)}`);
-  check('lattsim: the two backends agree on density',
+  check('flowsim: the two backends agree on density',
     parity.worstR < 1e-5, parity.worstR.toExponential(2));
-  check('lattsim: the two backends agree on total mass',
+  check('flowsim: the two backends agree on total mass',
     Math.abs(parity.gpu - parity.cpu) / parity.cpu < 1e-5,
     `${parity.gpu} vs ${parity.cpu}`);
 }
@@ -668,8 +668,8 @@ if (hasGPU && ls0.backend === 'webgpu') {
 // passive scalar: the Node tests verify the CPU reference against the analytic
 // diffusivity and advection speed; this verifies the WGSL scalar kernel computes
 // the SAME concentration field, cell by cell, on a channel with a dye injector.
-if (hasGPU && ls0.backend === 'webgpu') {
-  const sparity = await latt.evaluate(async () => {
+if (hasGPU && fs0.backend === 'webgpu') {
+  const sparity = await flow.evaluate(async () => {
     const [{ Simulation }, { LBMFluidOperator }, { ScalarTransportOperator }, { region, CELL }] =
       await Promise.all([
         import('./lib/lattsim/simulation.js'),
@@ -716,15 +716,15 @@ if (hasGPU && ls0.backend === 'webgpu') {
     await g.destroy(); await c.destroy();
     return { worst, peak, sg, sc, pmWorst, pmMacWorst, nCells: cells.length };
   });
-  check('lattsim: the WGSL scalar kernel and the CPU reference agree on concentration',
+  check('flowsim: the WGSL scalar kernel and the CPU reference agree on concentration',
     sparity.worst < 1e-4 * Math.max(sparity.peak, 1e-6) + 1e-6,
     `worst |dC| ${sparity.worst.toExponential(2)} against peak ${sparity.peak.toExponential(2)}`);
-  check('lattsim: the two backends agree on total scalar',
+  check('flowsim: the two backends agree on total scalar',
     Math.abs(sparity.sg - sparity.sc) / Math.max(sparity.sc, 1e-9) < 1e-4,
     `${sparity.sg.toFixed(4)} vs ${sparity.sc.toFixed(4)}`);
-  check('lattsim: the injected scalar spread through the channel',
+  check('flowsim: the injected scalar spread through the channel',
     sparity.peak > 0.5 && sparity.sg > 1, `peak ${sparity.peak.toFixed(3)}, total ${sparity.sg.toFixed(2)}`);
-  check('lattsim: probeMany matches the full snapshot on both backends (scalar + macro)',
+  check('flowsim: probeMany matches the full snapshot on both backends (scalar + macro)',
     sparity.pmWorst < 1e-6 && sparity.pmMacWorst < 1e-6,
     `conc ${sparity.pmWorst.toExponential(2)}, macro ${sparity.pmMacWorst.toExponential(2)} over ${sparity.nCells} cells`);
 }
@@ -734,11 +734,11 @@ if (hasGPU && ls0.backend === 'webgpu') {
 // could never be shown a regime change if moving a slider rebuilt. Geometry
 // (resolution, scene, obstacle) still rebuilds; viscosity and speed must not.
 {
-  const live = await latt.evaluate(async () => {
-    const s0 = window.__lsSim().step;
-    window.__lsStep(40);
-    const before = window.__lsSim().step;
-    const tau0 = window.__lsSim().operators[0].params.tau;
+  const live = await flow.evaluate(async () => {
+    const s0 = window.__fsSim().step;
+    window.__fsStep(40);
+    const before = window.__fsSim().step;
+    const tau0 = window.__fsSim().operators[0].params.tau;
     const el = document.getElementById('tau');
     const slider0 = el.value;
     const set = (v) => {
@@ -748,10 +748,10 @@ if (hasGPU && ls0.backend === 'webgpu') {
     };
     set(Math.min(2.5, tau0 + 0.4));
     await new Promise((r) => setTimeout(r, 250));
-    window.__lsStep(40);
-    const out = { s0, before, after: window.__lsSim().step, building: window.__lsDbg().building,
-      tau0, tauNow: window.__lsSim().operators[0].params.tau,
-      dirtyCleared: window.__lsSim().operators[0].paramsDirty !== true };
+    window.__fsStep(40);
+    const out = { s0, before, after: window.__fsSim().step, building: window.__fsDbg().building,
+      tau0, tauNow: window.__fsSim().operators[0].params.tau,
+      dirtyCleared: window.__fsSim().operators[0].paramsDirty !== true };
     // PUT IT BACK. Now that a slider changes the RUNNING simulation, a test that
     // moves one and walks away has changed the flow for every check after it --
     // which is exactly what happened: leaving tau raised made a later scene so
@@ -759,33 +759,33 @@ if (hasGPU && ls0.backend === 'webgpu') {
     // noise divided by noise. A live control makes test hygiene load-bearing.
     set(slider0);
     await new Promise((r) => setTimeout(r, 250));
-    out.restored = window.__lsSim().operators[0].params.tau;
+    out.restored = window.__fsSim().operators[0].params.tau;
     return out;
   });
-  check('lattsim: changing viscosity does not rebuild (the flow keeps running)',
+  check('flowsim: changing viscosity does not rebuild (the flow keeps running)',
     live.after > live.before && live.before >= live.s0 && !live.building, JSON.stringify(live));
-  check('lattsim: the live change reached the operator',
+  check('flowsim: the live change reached the operator',
     Math.abs(live.tauNow - live.tau0) > 0.3, `${live.tau0} -> ${live.tauNow}`);
   // On the GPU the uniform is only rewritten when something marks it dirty; if the
   // flag were never cleared the page would be re-uploading every step forever, and
   // if it were never set the shader would keep solving the old viscosity.
-  check('lattsim: the dirty flag was consumed by the kernel', live.dirtyCleared,
+  check('flowsim: the dirty flag was consumed by the kernel', live.dirtyCleared,
     String(live.dirtyCleared));
-  check('lattsim: the live check restored the viscosity it borrowed',
+  check('flowsim: the live check restored the viscosity it borrowed',
     Math.abs(live.restored - live.tau0) < 1e-9, `${live.tau0} vs ${live.restored}`);
 }
 
-check('lattsim: the GPU driver reported no uncaptured errors', (ls0.gpuErrors || []).length === 0,
-  JSON.stringify(ls0.gpuErrors));
+check('flowsim: the GPU driver reported no uncaptured errors', (fs0.gpuErrors || []).length === 0,
+  JSON.stringify(fs0.gpuErrors));
 
 // THE CONSOLE BUFFER IS PERSISTED TO localStorage AND IS PER ORIGIN, not per
 // page -- deliberately, so a white-screen crash survives a reload. The side
 // effect is that this page inherits the `console.error('smoke error')` this very
 // suite injects on index.html to test console capture, which is what put a red
-// error badge on the LattSim screenshot and sent me looking for a bug that was
+// error badge on the FlowSim screenshot and sent me looking for a bug that was
 // not there. Clear it here so the end-of-section check is about THIS page.
-await latt.evaluate(() => window.__dbg.clear());
-await checkConsoleUsable(latt, 'lattsim');
+await flow.evaluate(() => window.__dbg.clear());
+await checkConsoleUsable(flow, 'flowsim');
 
 // ---- THE SHIPPED DEFAULTS MUST SURVIVE. This shipped broken once: the default
 // collision model was one that had ALREADY BEEN MEASURED dying at the default
@@ -793,22 +793,22 @@ await checkConsoleUsable(latt, 'lattsim');
 // measured stable range" because the ceiling table had copied BGK's number for
 // it. Load the page, run it, and require it to still be alive.
 {
-  const info = await latt.evaluate(() => window.__lsInfo());
-  check('lattsim: the build logs its parameters to the page console',
+  const info = await flow.evaluate(() => window.__fsInfo());
+  check('flowsim: the build logs its parameters to the page console',
     info && typeof info.ReCell === 'number' && info.collision && info.trtPolicy
     && typeof info.Cs === 'number' && typeof info.omegaMinus === 'number', JSON.stringify(info));
   // ONE configuration ships. The alternatives stay in the library for the
   // analytic comparisons; offering them here is what put a diverging default
   // in front of the user.
-  check('lattsim: the page ships the measured-stable configuration only',
+  check('flowsim: the page ships the measured-stable configuration only',
     info.collision === 'trt' && info.trtPolicy === 'stability' && info.Cs > 0,
     JSON.stringify({ collision: info.collision, policy: info.trtPolicy, Cs: info.Cs }));
-  check('lattsim: there is no collision-model selector to get wrong',
-    await latt.evaluate(() => document.getElementById('physics') === null));
-  check('lattsim: the default Re_cell is inside the default model\'s measured ceiling',
+  check('flowsim: there is no collision-model selector to get wrong',
+    await flow.evaluate(() => document.getElementById('physics') === null));
+  check('flowsim: the default Re_cell is inside the default model\'s measured ceiling',
     info.ReCell < info.ceiling, `Re_cell ${info.ReCell.toFixed(1)} vs ceiling ${info.ceiling}`);
-  const live = await latt.evaluate(async () => {
-    const sim = window.__lsSim();
+  const live = await flow.evaluate(async () => {
+    const sim = window.__fsSim();
     for (let k = 0; k < 4; k++) {
       sim.advance(200);
       const d = await sim.diagnostics();
@@ -820,11 +820,11 @@ await checkConsoleUsable(latt, 'lattsim');
   // 800 steps: the default that shipped broken diverged by step 300, so this is
   // well past the point that catches it, and TRT+LES on a software GPU is
   // expensive enough that the step count is most of the quick tier's clock.
-  check('lattsim: the shipped defaults run 800 steps without diverging', live.ok,
+  check('flowsim: the shipped defaults run 800 steps without diverging', live.ok,
     JSON.stringify(live));
 }
 
-section('lattsim core');
+section('flowsim core');
 if (FULL) {
 // ---- every scene must show something. Reported from a real device: two of the
 // three "did nothing visible". They were all correct; the DEFAULT SLICE PLANE was
@@ -833,51 +833,51 @@ if (FULL) {
 // plane that shows its physics; this checks the page applies it and that pixels
 // actually vary.
 for (const [key, label] of [['poiseuille', 'Poiseuille'], ['cavity', 'cavity'], ['channel', 'channel']]) {
-  await latt.selectOption('#scene', key);
-  await latt.waitForFunction(() => window.__lsDbg().backend !== null && !window.__lsDbg().building,
+  await flow.selectOption('#scene', key);
+  await flow.waitForFunction(() => window.__fsDbg().backend !== null && !window.__fsDbg().building,
     null, { timeout: 60000 });
   // STEPS SCALED TO THE DOMAIN. The channel is now 3x long, so at a fixed 1500
   // steps the inlet flow had not crossed it and the slice was still mostly at
   // rest -- 3 distinct colours, which reads as "renders nothing" when the scene
   // is fine and simply young. Give every scene time for the flow to traverse it.
-  await latt.evaluate(() => {
-    const L = window.__lsSim().lattice;
-    window.__lsStep(Math.max(1500, L.nx * 40));
+  await flow.evaluate(() => {
+    const L = window.__fsSim().lattice;
+    window.__fsStep(Math.max(1500, L.nx * 40));
   });
-  await latt.evaluate(() => window.__lsDraw());
-  await latt.waitForTimeout(250);
-  const shot = await latt.evaluate(() => {
+  await flow.evaluate(() => window.__fsDraw());
+  await flow.waitForTimeout(250);
+  const shot = await flow.evaluate(() => {
     const c = document.getElementById('cv');
     const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
     const seen = new Set();
     for (let i = 0; i < d.length; i += 4) seen.add((d[i] << 16) | (d[i + 1] << 8) | d[i + 2]);
     return { colors: seen.size, axis: document.getElementById('axis').value };
   });
-  check(`lattsim: the ${label} scene renders a varying field on its default slice`,
+  check(`flowsim: the ${label} scene renders a varying field on its default slice`,
     shot.colors > 12, `${shot.colors} distinct colours on slice axis ${shot.axis}`);
-  await latt.locator('#stage').screenshot({ path: join(SHOTS, `11-lattsim-${key}.png`) });
+  await flow.locator('#stage').screenshot({ path: join(SHOTS, `11-flowsim-${key}.png`) });
 }
-await latt.selectOption('#scene', 'channel');
-await latt.waitForFunction(() => !window.__lsDbg().building, null, { timeout: 60000 });
+await flow.selectOption('#scene', 'channel');
+await flow.waitForFunction(() => !window.__fsDbg().building, null, { timeout: 60000 });
 
 // ---- the resolution ladder must be clamped to what the device can allocate
 // rather than attempted and left broken. The channel at 96 wants a 128.3 MiB
 // storage binding against a 128 MiB default limit; before this it failed, fell
 // through to a CPU backend far over its own cap, and left the page with no
 // simulation at all.
-const resInfo = await latt.evaluate(() => ({
+const resInfo = await flow.evaluate(() => ({
   max: +document.getElementById('res').max,
-  built: window.__lsDbg().cells > 0,
+  built: window.__fsDbg().cells > 0,
 }));
-check('lattsim: the resolution slider is clamped to what the device can allocate',
+check('flowsim: the resolution slider is clamped to what the device can allocate',
   resInfo.max >= 0 && resInfo.max <= 4 && resInfo.built, JSON.stringify(resInfo));
-await latt.evaluate((m) => {
+await flow.evaluate((m) => {
   const r = document.getElementById('res'); r.value = String(m);
   r.dispatchEvent(new Event('change'));
 }, resInfo.max);
-await latt.waitForFunction(() => !window.__lsDbg().building, null, { timeout: 180000 });
-const atMax = await latt.evaluate(() => window.__lsDbg());
-check('lattsim: the largest offered resolution actually builds',
+await flow.waitForFunction(() => !window.__fsDbg().building, null, { timeout: 180000 });
+const atMax = await flow.evaluate(() => window.__fsDbg());
+check('flowsim: the largest offered resolution actually builds',
   atMax.cells > 0 && atMax.backend !== null, JSON.stringify({ cells: atMax.cells, backend: atMax.backend }));
 
 // ---- the raymarched volume view.
@@ -893,8 +893,8 @@ check('lattsim: the largest offered resolution actually builds',
 // is where a WGSL mistake would live -- and this project has already shipped one
 // of those (`macro`, a reserved word) that produced silence rather than an error.
 // The picture itself is verified on a real device.
-if (hasGPU && ls0.backend === 'webgpu') {
-  const volShader = await latt.evaluate(async () => {
+if (hasGPU && fs0.backend === 'webgpu') {
+  const volShader = await flow.evaluate(async () => {
     const [{ VolumeRenderer }, { Lattice }, { acquireDevice }] = await Promise.all([
       import('./lib/lattsim/render/volume3d.js'),
       import('./lib/lattsim/lattice.js'),
@@ -911,7 +911,7 @@ if (hasGPU && ls0.backend === 'webgpu') {
       scoped: scoped ? scoped.message : null,
     };
   });
-  check('lattsim: the volume shader compiles',
+  check('flowsim: the volume shader compiles',
     volShader.errors.length === 0 && !volShader.scoped, JSON.stringify(volShader));
 }
 
@@ -921,64 +921,64 @@ if (hasGPU && ls0.backend === 'webgpu') {
   // Drop back to the smallest lattice first: the resolution check above left the
   // sim at the largest one the device allows, and the stir check below steps
   // several thousand times on a software GPU.
-  await latt.evaluate(() => {
+  await flow.evaluate(() => {
     const r = document.getElementById('res'); r.value = '0';
     r.dispatchEvent(new Event('change'));
   });
-  await latt.waitForFunction(() => !window.__lsDbg().building, null, { timeout: 120000 });
-  await latt.selectOption('#scene', 'channel');
-  await latt.waitForFunction(() => !window.__lsDbg().building, null, { timeout: 60000 });
+  await flow.waitForFunction(() => !window.__fsDbg().building, null, { timeout: 120000 });
+  await flow.selectOption('#scene', 'channel');
+  await flow.waitForFunction(() => !window.__fsDbg().building, null, { timeout: 60000 });
   // FORCE A LAMINAR REGIME FOR THE SETTLE TEST. The shipped defaults now sit at
   // Re ~120, ABOVE this geometry's shedding threshold -- so the channel is
   // supposed to oscillate forever and "the residual falls to steady" is the
   // wrong expectation for it. Asking a shedding flow to converge would be
   // testing that the physics is absent. tau 0.6 / u 0.04 puts Re near 7.
-  await latt.evaluate(() => {
+  await flow.evaluate(() => {
     const t = document.getElementById('tau'); t.value = '0.6'; t.dispatchEvent(new Event('input'));
     const u = document.getElementById('uin'); u.value = '0.04'; u.dispatchEvent(new Event('input'));
     u.dispatchEvent(new Event('change'));
   });
-  await latt.waitForFunction(() => !window.__lsDbg().building && !window.__lsDbg().queued,
+  await flow.waitForFunction(() => !window.__fsDbg().building && !window.__fsDbg().queued,
     null, { timeout: 120000 });
-  await latt.selectOption('#axis', '1');
-  await latt.evaluate(() => {
+  await flow.selectOption('#axis', '1');
+  await flow.evaluate(() => {
     const s = document.getElementById('slicep'); s.value = '0.25';
     s.dispatchEvent(new Event('input'));
   });
-  const before = await latt.evaluate(() => ({
+  const before = await flow.evaluate(() => ({
     axis: document.getElementById('axis').value,
     pos: document.getElementById('slicep').value,
     view: document.getElementById('view').value,
   }));
-  await latt.click('#reset');
-  await latt.waitForFunction(() => !window.__lsDbg().building, null, { timeout: 60000 });
-  const after = await latt.evaluate(() => ({
+  await flow.click('#reset');
+  await flow.waitForFunction(() => !window.__fsDbg().building, null, { timeout: 60000 });
+  const after = await flow.evaluate(() => ({
     axis: document.getElementById('axis').value,
     pos: document.getElementById('slicep').value,
     view: document.getElementById('view').value,
-    step: window.__lsDbg().step,
+    step: window.__fsDbg().step,
   }));
-  check('lattsim: Reset keeps the view settings', after.axis === before.axis
+  check('flowsim: Reset keeps the view settings', after.axis === before.axis
     && after.pos === before.pos && after.view === before.view,
     JSON.stringify({ before, after }));
-  check('lattsim: Reset does restart the simulation', after.step === 0, String(after.step));
+  check('flowsim: Reset does restart the simulation', after.step === 0, String(after.step));
 
   // A REBUILD ASKED FOR MID-REBUILD MUST NOT BE SWALLOWED. build() used to
   // return early while one was in flight, so on a phone -- where a rebuild takes
   // seconds -- a Reset tap simply vanished. That is what "Reset doesn't work
   // consistently" looks like from the outside.
-  const queued = await latt.evaluate(async () => {
-    const before = window.__lsDbg().step;
-    window.__lsStep(50);
+  const queued = await flow.evaluate(async () => {
+    const before = window.__fsDbg().step;
+    window.__fsStep(50);
     document.getElementById('reset').click();
     document.getElementById('reset').click();   // second tap lands mid-rebuild
-    const sawQueue = window.__lsDbg().queued || window.__lsDbg().building;
+    const sawQueue = window.__fsDbg().queued || window.__fsDbg().building;
     return { before, sawQueue };
   });
-  await latt.waitForFunction(() => !window.__lsDbg().building && !window.__lsDbg().queued,
+  await flow.waitForFunction(() => !window.__fsDbg().building && !window.__fsDbg().queued,
     null, { timeout: 120000 });
-  const afterQueue = await latt.evaluate(() => window.__lsDbg());
-  check('lattsim: a Reset pressed during a rebuild is queued, not dropped',
+  const afterQueue = await flow.evaluate(() => window.__fsDbg());
+  check('flowsim: a Reset pressed during a rebuild is queued, not dropped',
     queued.sawQueue && afterQueue.step === 0 && afterQueue.cells > 0,
     JSON.stringify({ queued, step: afterQueue.step, cells: afterQueue.cells }));
 
@@ -994,22 +994,22 @@ if (hasGPU && ls0.backend === 'webgpu') {
   // neighbour), and halting is right. What was wrong is that it halted with the
   // reason in a stats row below the fold, so from the outside it just broke.
   {
-    await latt.evaluate(() => {
+    await flow.evaluate(() => {
       const t = document.getElementById('tau'); t.value = t.min; t.dispatchEvent(new Event('input'));
       const u = document.getElementById('uin'); u.value = u.max; u.dispatchEvent(new Event('input'));
       u.dispatchEvent(new Event('change'));
     });
-    await latt.waitForFunction(() => !window.__lsDbg().building && !window.__lsDbg().queued,
+    await flow.waitForFunction(() => !window.__fsDbg().building && !window.__fsDbg().queued,
       null, { timeout: 120000 });
     // Assert the STATE, not the phrasing -- a check that greps the sentence
     // breaks every time the sentence improves.
-    check('lattsim: an unstable slider pairing is flagged BEFORE it is run',
-      await latt.evaluate(() => document.getElementById('tau-v').className.includes('bad')),
-      await latt.textContent('#s-risk'));
+    check('flowsim: an unstable slider pairing is flagged BEFORE it is run',
+      await flow.evaluate(() => document.getElementById('tau-v').className.includes('bad')),
+      await flow.textContent('#s-risk'));
 
     // Drive it until it dies. It should not take long at the stability floor.
-    const died = await latt.evaluate(async () => {
-      const sim = window.__lsSim();
+    const died = await flow.evaluate(async () => {
+      const sim = window.__fsSim();
       for (let k = 0; k < 30; k++) {
         sim.advance(200);
         const d = await sim.diagnostics();
@@ -1018,38 +1018,38 @@ if (hasGPU && ls0.backend === 'webgpu') {
       return null;
     });
     if (died) {
-      await latt.evaluate(() => window.__lsRefresh());
-      const ui = await latt.evaluate(() => ({
+      await flow.evaluate(() => window.__fsRefresh());
+      const ui = await flow.evaluate(() => ({
         badge: document.getElementById('backend-badge').textContent,
         badgeBad: /bad/.test(document.getElementById('backend-badge').className),
         runDisabled: document.getElementById('run').disabled,
         runText: document.getElementById('run').textContent,
       }));
-      check('lattsim: divergence is announced on the stage, not only in a stats row',
+      check('flowsim: divergence is announced on the stage, not only in a stats row',
         ui.badgeBad && /DIVERGED/.test(ui.badge), JSON.stringify(ui));
-      check('lattsim: Run refuses to resume a diverged run', ui.runDisabled && /Reset/.test(ui.runText),
+      check('flowsim: Run refuses to resume a diverged run', ui.runDisabled && /Reset/.test(ui.runText),
         JSON.stringify(ui));
       // ...and Reset must clear the latch, or the page is stuck for good.
-      await latt.click('#reset');
-      await latt.waitForFunction(() => !window.__lsDbg().building && !window.__lsDbg().queued,
+      await flow.click('#reset');
+      await flow.waitForFunction(() => !window.__fsDbg().building && !window.__fsDbg().queued,
         null, { timeout: 120000 });
-      const after = await latt.evaluate(() => ({
+      const after = await flow.evaluate(() => ({
         runDisabled: document.getElementById('run').disabled,
-        step: window.__lsDbg().step,
+        step: window.__fsDbg().step,
       }));
-      check('lattsim: Reset clears the divergence and re-enables Run',
+      check('flowsim: Reset clears the divergence and re-enables Run',
         !after.runDisabled && after.step === 0, JSON.stringify(after));
     } else {
-      check('lattsim: the stability floor actually diverges (so the check has teeth)', false,
+      check('flowsim: the stability floor actually diverges (so the check has teeth)', false,
         'ran 6000 steps at the slider floor without diverging');
     }
     // Back to something sane for whatever follows.
-    await latt.evaluate(() => {
+    await flow.evaluate(() => {
       const t = document.getElementById('tau'); t.value = '0.6'; t.dispatchEvent(new Event('input'));
       const u = document.getElementById('uin'); u.value = '0.04'; u.dispatchEvent(new Event('input'));
       u.dispatchEvent(new Event('change'));
     });
-    await latt.waitForFunction(() => !window.__lsDbg().building && !window.__lsDbg().queued,
+    await flow.waitForFunction(() => !window.__fsDbg().building && !window.__fsDbg().queued,
       null, { timeout: 120000 });
   }
 
@@ -1062,17 +1062,17 @@ if (hasGPU && ls0.backend === 'webgpu') {
   // Playwright's `pageerror` nor the console listener reports unhandled
   // rejections, so every existing error assertion passed while the live page
   // showed a red error badge on every Reset. It was found in a screenshot.
-  await latt.evaluate(() => { window.__dbg.clear && window.__dbg.clear(); });
-  await latt.click('#run');
-  await latt.waitForTimeout(1200);
-  await latt.click('#reset');
-  await latt.waitForFunction(() => !window.__lsDbg().building, null, { timeout: 60000 });
-  await latt.waitForTimeout(1200);
-  const pageErrs = await latt.evaluate(() =>
+  await flow.evaluate(() => { window.__dbg.clear && window.__dbg.clear(); });
+  await flow.click('#run');
+  await flow.waitForTimeout(1200);
+  await flow.click('#reset');
+  await flow.waitForFunction(() => !window.__fsDbg().building, null, { timeout: 60000 });
+  await flow.waitForTimeout(1200);
+  const pageErrs = await flow.evaluate(() =>
     window.__dbg.buffer().filter((e) => e.type === 'error').map((e) => String(e.text).slice(0, 200)));
-  check('lattsim: resetting while running raises no error, unhandled rejections included',
+  check('flowsim: resetting while running raises no error, unhandled rejections included',
     pageErrs.length === 0, pageErrs.join(' | '));
-  if (await latt.evaluate(() => window.__lsDbg().running)) await latt.click('#run');   // leave it paused
+  if (await flow.evaluate(() => window.__fsDbg().running)) await flow.click('#run');   // leave it paused
 }
 
 // ---- stirring is a physics input, and the residual shows the flow settle again
@@ -1086,14 +1086,14 @@ if (hasGPU && ls0.backend === 'webgpu') {
   // "failed" because of the observation window, not the physics.
   const GAP = 20;
   const readAfter = async (steps) => {
-    await latt.evaluate((n) => window.__lsStep(n), steps);
-    await latt.evaluate(() => window.__lsDiag());          // anchor the reading
-    await latt.evaluate((n) => window.__lsStep(n), GAP);
-    return latt.evaluate(() => window.__lsDiag());
+    await flow.evaluate((n) => window.__fsStep(n), steps);
+    await flow.evaluate(() => window.__fsDiag());          // anchor the reading
+    await flow.evaluate((n) => window.__fsStep(n), GAP);
+    return flow.evaluate(() => window.__fsDiag());
   };
 
   const calm = await readAfter(2400);
-  check('lattsim: the driven channel settles on its own', calm.stable.why === 'steady',
+  check('flowsim: the driven channel settles on its own', calm.stable.why === 'steady',
     `residual/step ${calm.residual.toExponential(2)} — ${calm.stable.state} ${calm.stable.why}`);
 
   // THE LOCAL CHECK IS THE ONE THAT MATTERS HERE. The node suite already proves
@@ -1106,14 +1106,14 @@ if (hasGPU && ls0.backend === 'webgpu') {
   // rose, and a correctly-armed impulse moved it by less than the flow's own
   // fluctuation -- 33 cells out of 27648 is 0.02% of the momentum. That read as
   // "the stir does nothing" when the stir was fine and the instrument was wrong.
-  const probe = await latt.evaluate(async () => {
+  const probe = await flow.evaluate(async () => {
     const s = document.getElementById('stir'); s.value = s.max; s.dispatchEvent(new Event('input'));
-    const sim = window.__lsSim(), L = sim.lattice, N = L.cellCount;
+    const sim = window.__fsSim(), L = sim.lattice, N = L.cellCount;
     const before = await sim.backend.snapshot('macro');
     const r = document.getElementById('stage').getBoundingClientRect();
-    window.__lsStir(r.left + r.width * 0.4, r.top + r.height * 0.5, 40, 0);
+    window.__fsStir(r.left + r.width * 0.4, r.top + r.height * 0.5, 40, 0);
     const im = JSON.parse(JSON.stringify(sim.operators[0].params.impulse));
-    window.__lsStep(20);
+    window.__fsStep(20);
     const after = await sim.backend.snapshot('macro');
     const sp = (m, i) => Math.hypot(m[N + i], m[2 * N + i], m[3 * N + i]);
     let din = 0, nin = 0, dout = 0, nout = 0;
@@ -1125,38 +1125,38 @@ if (hasGPU && ls0.backend === 'webgpu') {
     }
     return { im, size: [L.nx, L.ny, L.nz], inside: din / Math.max(1, nin), outside: dout / Math.max(1, nout), nin };
   });
-  check('lattsim: a drag arms an impulse at an interior cell, in the drag direction',
+  check('flowsim: a drag arms an impulse at an interior cell, in the drag direction',
     probe.im.force[0] > 0 && probe.im.radius >= 4 && probe.im.steps > 0
     && probe.im.centre.every((v, k) => v > 0 && v < probe.size[k] - 1),
     JSON.stringify({ impulse: probe.im, lattice: probe.size }));
   // Measured 36x at the default strength and 50x at the maximum; 10x is a floor
   // well clear of both, and far above the ~1x a mis-mapped coordinate would give.
-  check('lattsim: the momentum lands under the finger, not spread over the domain',
+  check('flowsim: the momentum lands under the finger, not spread over the domain',
     probe.inside > probe.outside * 10,
     `mean d|u| inside ${probe.inside.toExponential(2)} vs outside ${probe.outside.toExponential(2)} `
     + `(${(probe.inside / probe.outside).toFixed(0)}x over ${probe.nin} cells)`);
 
-  const poked = await latt.evaluate(() => window.__lsDiag());
-  check('lattsim: stirring shows up in the global residual too', poked.residual > calm.residual * 5,
+  const poked = await flow.evaluate(() => window.__fsDiag());
+  check('flowsim: stirring shows up in the global residual too', poked.residual > calm.residual * 5,
     `residual/step ${calm.residual.toExponential(2)} -> ${poked.residual.toExponential(2)}`);
 
   const settled = await readAfter(2400);
-  check('lattsim: the flow settles again after being stirred',
+  check('flowsim: the flow settles again after being stirred',
     settled.residual < poked.residual / 10 && settled.stable.state !== 'diverged',
     `${poked.residual.toExponential(2)} -> ${settled.residual.toExponential(2)} (${settled.stable.state})`);
 }
 
-}   // end FULL-only LattSim scenarios
+}   // end FULL-only FlowSim scenarios
 
-section('lattsim scenarios');
-const stats = await latt.textContent('#s-lattice');
-check('lattsim: the lattice is described in the UI', /cells/.test(stats || ''), stats);
-check('lattsim: field memory is reported', /(KiB|MiB)/.test(await latt.textContent('#s-mem')),
-  await latt.textContent('#s-mem'));
+section('flowsim scenarios');
+const stats = await flow.textContent('#s-lattice');
+check('flowsim: the lattice is described in the UI', /cells/.test(stats || ''), stats);
+check('flowsim: field memory is reported', /(KiB|MiB)/.test(await flow.textContent('#s-mem')),
+  await flow.textContent('#s-mem'));
 
-await latt.evaluate(() => window.scrollTo(0, 0));
-await latt.waitForTimeout(200);
-await latt.screenshot({ path: join(SHOTS, '09-lattsim.png') });
+await flow.evaluate(() => window.scrollTo(0, 0));
+await flow.waitForTimeout(200);
+await flow.screenshot({ path: join(SHOTS, '09-flowsim.png') });
 
 // ---- THE PROBE MUST READ THE CELL IT POINTS AT.
 //
@@ -1166,47 +1166,47 @@ await latt.screenshot({ path: join(SHOTS, '09-lattsim.png') });
 // is placed by screen coordinate and its reading is compared against a direct
 // read of the field at the cell it claims to be at.
 {
-  const probe = await latt.evaluate(async () => {
+  const probe = await flow.evaluate(async () => {
     const r = document.getElementById('stage').getBoundingClientRect();
-    const hit = window.__lsProbe.at(r.left + r.width * 0.55, r.top + r.height * 0.5);
+    const hit = window.__fsProbe.at(r.left + r.width * 0.55, r.top + r.height * 0.5);
     if (!hit) return { error: 'the mapping returned nothing inside the stage' };
-    window.__lsProbe.place(hit.coords);
-    const st = window.__lsProbe.state();
+    window.__fsProbe.place(hit.coords);
+    const st = window.__fsProbe.state();
     // What the field actually holds at that cell, read independently.
-    const sim = window.__lsSim(), N = sim.lattice.cellCount;
+    const sim = window.__fsSim(), N = sim.lattice.cellCount;
     const mac = await sim.backend.snapshot('macro');
     const i = sim.lattice.index(...hit.coords);
     return { coords: hit.coords, cell: st.cell, expectCell: i,
       direct: { rho: mac[i], speed: Math.hypot(mac[N + i], mac[2 * N + i], mac[3 * N + i]) } };
   });
-  check('lattsim: a screen point maps to the cell the probe reports',
+  check('flowsim: a screen point maps to the cell the probe reports',
     !probe.error && probe.cell === probe.expectCell, JSON.stringify(probe));
 
   // Now let it sample, and require the trace to match the field.
   // The probe records from the render loop, which is paused here, so drive it
   // explicitly rather than waiting for frames that are not coming.
-  await latt.evaluate(async () => {
-    for (let k = 0; k < 5; k++) { window.__lsStep(40); await window.__lsProbe.sample(); }
+  await flow.evaluate(async () => {
+    for (let k = 0; k < 5; k++) { window.__fsStep(40); await window.__fsProbe.sample(); }
   });
-  const agree = await latt.evaluate(async () => {
-    const st = window.__lsProbe.state();
-    const sim = window.__lsSim(), N = sim.lattice.cellCount;
+  const agree = await flow.evaluate(async () => {
+    const st = window.__fsProbe.state();
+    const sim = window.__fsSim(), N = sim.lattice.cellCount;
     const mac = await sim.backend.snapshot('macro');
     const i = st.cell;
     return { probe: st.last, direct: { rho: mac[i],
       speed: Math.hypot(mac[N + i], mac[2 * N + i], mac[3 * N + i]) }, samples: st.samples };
   });
   const dRho = Math.abs(agree.probe.rho - agree.direct.rho);
-  check('lattsim: the probe trace matches a direct read of that cell', dRho < 1e-3,
+  check('flowsim: the probe trace matches a direct read of that cell', dRho < 1e-3,
     JSON.stringify(agree));
   // Assert the TRACES, not just that a plot exists. Plotly puts js-plotly-plot
   // on the container itself rather than a child, and an empty plot has an svg
   // too -- so "there is a chart" would pass while the chart showed nothing.
-  const chart = await latt.evaluate(() => ({
+  const chart = await flow.evaluate(() => ({
     isPlot: document.getElementById('probe-chart').classList.contains('js-plotly-plot'),
     traces: document.querySelectorAll('#probe-chart .scatterlayer .trace').length,
   }));
-  check('lattsim: the probe chart is drawn with its traces',
+  check('flowsim: the probe chart is drawn with its traces',
     chart.isPlot && chart.traces >= 4, JSON.stringify(chart));
 
   // ---------------------------------------------------------- soft sensor
@@ -1223,8 +1223,8 @@ await latt.screenshot({ path: join(SHOTS, '09-lattsim.png') });
   // in ~2000 steps. None of it weakens what is being checked: the wiring, the
   // cadence and the alignment do not depend on how big the lattice is, and the
   // MODEL's accuracy is verified against a synthetic field in Node instead.
-  await latt.selectOption('#scene', 'channel');
-  await latt.evaluate(() => {
+  await flow.selectOption('#scene', 'channel');
+  await flow.evaluate(() => {
     const set = (id, v) => {
       const el = document.getElementById(id);
       el.value = String(v);
@@ -1234,37 +1234,37 @@ await latt.screenshot({ path: join(SHOTS, '09-lattsim.png') });
     set('res', 0); set('spf', 20);
     set('ss-lag', 2); set('ss-stride', 2); set('ss-every', 5); set('ss-lead', 6);
   });
-  await latt.waitForFunction(() => window.__lsSim() && window.__lsSim().lattice.nx <= 80,
+  await flow.waitForFunction(() => window.__fsSim() && window.__fsSim().lattice.nx <= 80,
     null, { timeout: 180000 });
-  const placed = await latt.evaluate(() => {
-    const L = window.__lsSim().lattice;
-    window.__lsProbe.place([Math.round(L.nx * 0.55), 1, L.nz >> 1]);
-    window.__lsSS.place([Math.round(L.nx * 0.75), L.ny >> 1, L.nz >> 1]);
-    return window.__lsSS.state();
+  const placed = await flow.evaluate(() => {
+    const L = window.__fsSim().lattice;
+    window.__fsProbe.place([Math.round(L.nx * 0.55), 1, L.nz >> 1]);
+    window.__fsSS.place([Math.round(L.nx * 0.75), L.ny >> 1, L.nz >> 1]);
+    return window.__fsSS.state();
   });
-  check('lattsim: placing a target builds a soft sensor over both cells',
+  check('flowsim: placing a target builds a soft sensor over both cells',
     placed && placed.cell >= 0 && placed.features > 0 && placed.depth > 1,
     JSON.stringify(placed && { cell: placed.cell, features: placed.features,
       depth: placed.depth, mode: placed.mode }));
-  check('lattsim: the soft-sensor panel and chart become visible',
-    await latt.evaluate(() => document.getElementById('ss-panel').classList.contains('on')
+  check('flowsim: the soft-sensor panel and chart become visible',
+    await flow.evaluate(() => document.getElementById('ss-panel').classList.contains('on')
       && document.getElementById('ss-chart').classList.contains('on')));
   // THE LOCK IS GATED. Freezing an untrained readout deploys noise, and a user
   // who did that would read it as the method failing rather than as their own
   // mistake -- so the button refuses until there is something to lock.
-  check('lattsim: estimation mode is refused until the model has trained',
-    await latt.evaluate(() => document.getElementById('ss-lock').disabled));
+  check('flowsim: estimation mode is refused until the model has trained',
+    await flow.evaluate(() => document.getElementById('ss-lock').disabled));
 
   // Drive the real frame loop: the cadence logic lives there, so stepping the
   // solver by hand would test everything except the thing that could be wrong.
-  await latt.evaluate(() => { window.__lsSS.train(); });
-  await latt.click('#run');
-  await latt.waitForFunction(() => {
-    const st = window.__lsSS.state();
+  await flow.evaluate(() => { window.__fsSS.train(); });
+  await flow.click('#run');
+  await flow.waitForFunction(() => {
+    const st = window.__fsSS.state();
     return st && st.trained > 250;
   }, null, { timeout: 240000 });
-  await latt.click('#run');
-  const ran = await latt.evaluate(() => window.__lsSS.state());
+  await flow.click('#run');
+  const ran = await flow.evaluate(() => window.__fsSS.state());
 
   // THE CADENCE IS EXACT, and this is the check that earns the split-step loop.
   // A model's lag window is counted in samples, so if the sample interval drifted
@@ -1272,28 +1272,28 @@ await latt.screenshot({ path: join(SHOTS, '09-lattsim.png') });
   // time at every slider position -- a viewing control changing what the model
   // learns. The loop stops the solver exactly on each boundary; misses count any
   // time it could not.
-  check('lattsim: the soft sensor samples on exact solver-step boundaries',
+  check('flowsim: the soft sensor samples on exact solver-step boundaries',
     ran.misses === 0, `${ran.misses} missed boundaries over ${ran.samples} samples`);
-  check('lattsim: training accumulated pairs from the live loop',
+  check('flowsim: training accumulated pairs from the live loop',
     ran.trained > 250 && ran.estimate.n > 250,
     JSON.stringify({ trained: ran.trained, graded: ran.estimate.n }));
   // The prediction can only be graded once its target has ARRIVED, so a non-zero
   // count here is evidence the horizon pairing actually matured rather than being
   // scored against the present.
-  check('lattsim: the prediction was graded against arrived targets',
+  check('flowsim: the prediction was graded against arrived targets',
     ran.predict.n > 100, JSON.stringify({ n: ran.predict.n, nrmse: ran.predict.nrmse }));
   // The forecast is stamped exactly one lead ahead of the last sample. This is the
   // property the chart's alignment rests on: drawn at the step it is ABOUT, a
   // correct forecast lies on the truth, and drawn where it was ISSUED it would
   // appear shifted by the whole lead and a perfect forecast would look wrong.
-  const lead = await latt.evaluate(() => {
+  const lead = await flow.evaluate(() => {
     // FORCE A REDRAW FIRST. The chart is drawn once per frame, so reading a chart
     // value and a model value together races the renderer: measured a 15-step gap,
     // exactly three samples at this cadence, which looks like a broken forecast
     // stamp and is really just a chart three samples behind. Comparing a rendered
     // value against a live one always needs the render to be current.
-    window.__lsSS.draw();
-    const st = window.__lsSS.state();
+    window.__fsSS.draw();
+    const st = window.__fsSS.state();
     const el = document.getElementById('ss-chart');
     const truth = el.data.find((t) => t.name === 'truth');
     const early = el.data.find((t) => t.name === 'predicted earlier');
@@ -1302,19 +1302,19 @@ await latt.screenshot({ path: join(SHOTS, '09-lattsim.png') });
       earlyLast: early.x[early.x.length - 1], earlyN: early.x.length,
       traces: el.data.length, isPlot: el.classList.contains('js-plotly-plot') };
   });
-  check('lattsim: the live forecast is stamped one lead ahead of the last sample',
+  check('flowsim: the live forecast is stamped one lead ahead of the last sample',
     lead.live && lead.live.step === lead.lastTruth + lead.leadSamples * lead.every,
     JSON.stringify(lead));
-  check('lattsim: the matured prediction is drawn at the step it is about, not when issued',
+  check('flowsim: the matured prediction is drawn at the step it is about, not when issued',
     lead.earlyN > 100 && lead.earlyLast <= lead.lastTruth
     && lead.earlyLast > lead.lastTruth - 3 * lead.every, JSON.stringify(lead));
-  check('lattsim: the soft-sensor chart carries every series',
+  check('flowsim: the soft-sensor chart carries every series',
     lead.isPlot && lead.traces >= 4, JSON.stringify(lead));
 
   // A trained model beating a scaled reading of its own sensor is the whole claim.
   // Asserted loosely -- the flow depends on the scene and the settings -- but a
   // ratio below 1 would mean the model is worse than a calibration constant.
-  check('lattsim: the soft sensor beats a scaled sensor reading',
+  check('flowsim: the soft sensor beats a scaled sensor reading',
     ran.estimate.ratio > 1.2,
     `${ran.estimate.nrmse} vs ${ran.estimate.baseline} (x${ran.estimate.ratio})`);
 
@@ -1326,7 +1326,7 @@ await latt.screenshot({ path: join(SHOTS, '09-lattsim.png') });
   // sanitised moments, so it can never stream to a neighbour. Asserted rather than
   // assumed, because "clamps" and "goes non-finite and freezes" are the two
   // outcomes this whole mechanism exists to separate.
-  await latt.evaluate(() => {
+  await flow.evaluate(() => {
     const set = (id, v) => {
       const el = document.getElementById(id);
       el.value = String(v);
@@ -1351,16 +1351,16 @@ await latt.screenshot({ path: join(SHOTS, '09-lattsim.png') });
   // a check that THROWS takes every later check in the run with it, which is
   // strictly worse than one that fails. The first two versions of this crashed
   // the suite and hid everything downstream both times.
-  const stops = await latt.evaluate(async () => {
+  const stops = await flow.evaluate(async () => {
     try {
-      const ready = () => { const sim = window.__lsSim(); return !!(sim && sim.solver); };
+      const ready = () => { const sim = window.__fsSim(); return !!(sim && sim.solver); };
       for (let i = 0; i < 240 && !ready(); i++) await new Promise((r) => setTimeout(r, 250));
       if (!ready()) return { error: 'no built simulation after 60s' };
-      window.__lsStep(1200);
-      const d = await window.__lsDiag();
+      window.__fsStep(1200);
+      const d = await window.__fsDiag();
       if (!d) return { error: 'no diagnostics' };
       return { uMax: d.uMax, rho: [d.rhoMin, d.rhoMax], limited: d.limited,
-        cells: window.__lsSim().lattice.cellCount, state: d.stable.state,
+        cells: window.__fsSim().lattice.cellCount, state: d.stable.state,
         risk: document.getElementById('s-risk').textContent,
         mach: document.getElementById('s-mach').textContent };
     } catch (e) { return { error: String((e && e.message) || e) }; }
@@ -1372,7 +1372,7 @@ await latt.screenshot({ path: join(SHOTS, '09-lattsim.png') });
   // shifts from the lattice cs (0.577) to the EOS value (0.80). This is the ONLY
   // check that exercises the force on the GPU -- a uniform-density flow has zero
   // pressure gradient, so it would pass trivially whether the force worked or not.
-  const eosSound = await latt.evaluate(async () => {
+  const eosSound = await flow.evaluate(async () => {
     const { Simulation } = await import(new URL('./lib/lattsim/simulation.js', location.href).href);
     const { LBMFluidOperator } = await import(new URL('./lib/lattsim/operators/lbm.js', location.href).href);
     const { TOPOLOGY } = await import(new URL('./lib/lattsim/lattice.js', location.href).href);
@@ -1400,58 +1400,58 @@ await latt.screenshot({ path: join(SHOTS, '09-lattsim.png') });
     return { ideal: await c('ideal', null), stiff: await c('linear', 0.80) };
   });
   if (eosSound && eosSound.ideal != null) {
-    check('lattsim: the ideal EOS propagates sound at the lattice cs on the GPU',
+    check('flowsim: the ideal EOS propagates sound at the lattice cs on the GPU',
       Math.abs(eosSound.ideal - Math.sqrt(1 / 3)) / Math.sqrt(1 / 3) < 0.03, eosSound.ideal);
-    check('lattsim: a stiffer EOS raises the GPU sound speed to its set value',
+    check('flowsim: a stiffer EOS raises the GPU sound speed to its set value',
       Math.abs(eosSound.stiff - 0.80) / 0.80 < 0.03, eosSound.stiff);
   } else {
-    check('lattsim: EOS sound-speed check skipped (no GPU here)', true);
+    check('flowsim: EOS sound-speed check skipped (no GPU here)', true);
   }
 
-  check('lattsim: the extreme corner of the sliders stays finite',
+  check('flowsim: the extreme corner of the sliders stays finite',
     stops && !stops.error && Number.isFinite(stops.uMax) && Number.isFinite(stops.rho[0])
     && Number.isFinite(stops.rho[1]), JSON.stringify(stops));
   // It MUST be limited there -- if nothing clamped, either the corner is no longer
   // extreme or the limiter stopped working, and both need to be noticed.
-  check('lattsim: and reports that it is being held up rather than solved',
+  check('flowsim: and reports that it is being held up rather than solved',
     stops && stops.limited > 0 && stops.state === 'limited',
     stops ? `${stops.limited} of ${stops.cells} cells, verdict ${stops.state}` : 'no diagnostics');
   // Mach and Re_cell are INDEPENDENT failures, and the readout has to name both.
   // Measured: at tau 2.5 the flow is viscous (Re_cell 0.5, safe by the Reynolds
   // criterion) and still clamps, purely from compressibility.
-  check('lattsim: the risk rows name both the Reynolds and the Mach failure',
+  check('flowsim: the risk rows name both the Reynolds and the Mach failure',
     stops && /far past the measured range/.test(stops.risk)
     && /compressibility error/.test(stops.mach),
     stops ? stops.risk + ' | ' + stops.mach : 'no diagnostics');
 
-  const lockedMode = await latt.evaluate(() => {
-    const before = window.__lsSS.state().trained;
-    window.__lsSS.lock();
-    return { mode: window.__lsSS.state().mode, before };
+  const lockedMode = await flow.evaluate(() => {
+    const before = window.__fsSS.state().trained;
+    window.__fsSS.lock();
+    return { mode: window.__fsSS.state().mode, before };
   });
-  check('lattsim: locking switches to estimation mode', lockedMode.mode === 'estimating',
+  check('flowsim: locking switches to estimation mode', lockedMode.mode === 'estimating',
     JSON.stringify(lockedMode));
-  await latt.screenshot({ path: join(SHOTS, '11-lattsim-softsensor.png') });
+  await flow.screenshot({ path: join(SHOTS, '11-flowsim-softsensor.png') });
 }
 
 // The Architecture tab is where the engine states what it is and is not.
-await latt.click('.tab[data-tab="about"]');
-await latt.waitForTimeout(200);
-check('lattsim: architecture tab explains the two backends',
-  /CPU reference/.test(await latt.textContent('#p-about')));
-await latt.screenshot({ path: join(SHOTS, '10-lattsim-arch.png') });
+await flow.click('.tab[data-tab="about"]');
+await flow.waitForTimeout(200);
+check('flowsim: architecture tab explains the two backends',
+  /CPU reference/.test(await flow.textContent('#p-about')));
+await flow.screenshot({ path: join(SHOTS, '10-flowsim-arch.png') });
 
 // THE PAGE'S OWN ERROR BUFFER, in both tiers. Neither Playwright's `pageerror`
 // nor the console listener reports unhandled rejections, so the two checks below
 // can pass while the live page shows a red error badge -- which is exactly what
 // happened once already, and was only noticed in a screenshot. This reads the
 // same instrument the phone shows the owner.
-const ownErrors = await latt.evaluate(() =>
+const ownErrors = await flow.evaluate(() =>
   window.__dbg.buffer().filter((e) => e.type === 'error').map((e) => String(e.text).slice(0, 300)));
-check('lattsim: the page reports no errors of its own (badge clear)',
+check('flowsim: the page reports no errors of its own (badge clear)',
   ownErrors.length === 0, ownErrors.join(' | '));
-check('lattsim: no errors overall', lattErrors.length === 0, lattErrors.join(' | '));
-check('lattsim: nothing logged to console.error', lattConsole.length === 0, lattConsole.join(' | '));
+check('flowsim: no errors overall', flowErrors.length === 0, flowErrors.join(' | '));
+check('flowsim: nothing logged to console.error', flowConsole.length === 0, flowConsole.join(' | '));
 
 // ---- THE 3D VIEW MUST SURVIVE A REBUILD.
 //
@@ -1474,8 +1474,8 @@ check('lattsim: nothing logged to console.error', lattConsole.length === 0, latt
 if (FULL) {
   const v3d = await ctx.newPage();
   try {
-    await v3d.goto(BASE.replace(/index\.html$/, '') + 'lattsim.html', { waitUntil: 'networkidle' });
-    await v3d.waitForFunction(() => window.__lsDbg && !window.__lsDbg().building && window.__lsDbg().cells > 0,
+    await v3d.goto(BASE.replace(/index\.html$/, '') + 'flowsim.html', { waitUntil: 'networkidle' });
+    await v3d.waitForFunction(() => window.__fsDbg && !window.__fsDbg().building && window.__fsDbg().cells > 0,
       null, { timeout: 120000 });
     const has3D = await v3d.evaluate(() =>
       [...document.getElementById('view').options].some((o) => o.value === 'volume'));
@@ -1483,10 +1483,10 @@ if (FULL) {
       await v3d.selectOption('#view', 'volume');
       await v3d.waitForTimeout(800);
       await v3d.click('#reset');
-      await v3d.waitForFunction(() => !window.__lsDbg().building, null, { timeout: 120000 });
+      await v3d.waitForFunction(() => !window.__fsDbg().building, null, { timeout: 120000 });
       await v3d.waitForTimeout(600);
-      const st = await v3d.evaluate(() => window.__lsDbg());
-      check('lattsim: after a rebuild the 3D view has a renderer or has fallen back to the slice',
+      const st = await v3d.evaluate(() => window.__fsDbg());
+      check('flowsim: after a rebuild the 3D view has a renderer or has fallen back to the slice',
         st.view !== 'volume' || st.rendererReady,
         JSON.stringify({ view: st.view, rendererReady: st.rendererReady }));
 
@@ -1497,18 +1497,18 @@ if (FULL) {
       // must now move itself to the slice and SAY WHY rather than switch silently.
       await v3d.selectOption('#view', 'volume').catch(() => {});
       await v3d.waitForTimeout(400);
-      const wasVolume = await v3d.evaluate(() => window.__lsDbg().view === 'volume');
+      const wasVolume = await v3d.evaluate(() => window.__fsDbg().view === 'volume');
       if (wasVolume) {
         await v3d.selectOption('#scene', 'dye');
-        await v3d.waitForFunction(() => !window.__lsDbg().building, null, { timeout: 180000 });
+        await v3d.waitForFunction(() => !window.__fsDbg().building, null, { timeout: 180000 });
         await v3d.waitForTimeout(400);
         const sc = await v3d.evaluate(() => ({
-          view: window.__lsDbg().view,
+          view: window.__fsDbg().view,
           mode: document.getElementById('mode').value,
           badge: document.getElementById('backend-badge').textContent,
-          hasScalar: window.__lsSim() && window.__lsSim().meta.hasScalar,
+          hasScalar: window.__fsSim() && window.__fsSim().meta.hasScalar,
         }));
-        check('lattsim: a scalar scene picked in 3D moves to the slice, and says why',
+        check('flowsim: a scalar scene picked in 3D moves to the slice, and says why',
           sc.hasScalar && sc.view === 'slice' && sc.mode === 'concentration' && /3D/.test(sc.badge),
           JSON.stringify(sc));
       } else {
@@ -1518,7 +1518,7 @@ if (FULL) {
       console.log('  (3D view not offered here — nothing to check)');
     }
   } catch (e) {
-    check('lattsim: the 3D lifecycle check ran', false, String(e).slice(0, 200));
+    check('flowsim: the 3D lifecycle check ran', false, String(e).slice(0, 200));
   }
   await v3d.close().catch(() => {});
 }

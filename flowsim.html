@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="theme-color" content="#0b1220" />
   <link rel="icon" href="data:," />
-  <title>LattSim — Lattice Physics Engine</title>
+  <title>FlowSim — Lattice Physics Engine</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:179,built:"2026-08-19T17:56:54Z"}; // __LATTSIM_STAMP__</script>
+  <script>window.__BUILD = {version:187,built:"2026-08-21T01:53:25Z"}; // __FLOWSIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -108,7 +108,7 @@
 </head>
 <body>
   <header>
-    <h1>LattSim — Lattice Physics Engine</h1>
+    <h1>FlowSim — Lattice Physics Engine</h1>
     <a href="index.html">&larr; back to test page</a>
   </header>
 
@@ -538,7 +538,7 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
       try { await buildInner(); } catch (e) {
         // A failed build must never leave the page without a simulation. Say what
         // went wrong where the user is looking, and keep whatever was running.
-        console.warn('lattsim build failed:', e);
+        console.warn('flowsim build failed:', e);
         $('backend-badge').textContent = 'build failed — ' + (e && e.message ? e.message : e);
         $('backend-badge').className = 'badge bad';
         $('s-backend').textContent = 'build failed: ' + (e && e.message ? e.message : e);
@@ -644,9 +644,9 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
         u: uRef, ReCell: uRef / nu, Re: sim.meta.reynolds,
         ceiling: CEILING,
       };
-      console.log('lattsim build ▸ ' + JSON.stringify(state.runInfo));
+      console.log('flowsim build ▸ ' + JSON.stringify(state.runInfo));
       if (state.runInfo.ReCell > state.runInfo.ceiling) {
-        console.warn(`lattsim: Re_cell ${state.runInfo.ReCell.toFixed(1)} is past the measured `
+        console.warn(`flowsim: Re_cell ${state.runInfo.ReCell.toFixed(1)} is past the measured `
           + `ceiling (~${state.runInfo.ceiling}) — the limiter will hold cells up`);
       }
       applyView();
@@ -893,9 +893,9 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
           report.fractionLost = +(bad / N).toPrecision(3);
           report.originRecoverable = report.fractionLost < 0.01;
         }
-        console.error('lattsim DIVERGED ▸ ' + JSON.stringify(report));
+        console.error('flowsim DIVERGED ▸ ' + JSON.stringify(report));
       } catch (e) {
-        console.error('lattsim diverged; post-mortem failed: ' + (e && e.message ? e.message : e));
+        console.error('flowsim diverged; post-mortem failed: ' + (e && e.message ? e.message : e));
       }
     }
 
@@ -1225,7 +1225,7 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
       reconStatus();
     }
 
-    window.__lsRecon = () => recon;   // debug hook: sensors, target size, live nRMSE, lock state
+    window.__fsRecon = () => recon;   // debug hook: sensors, target size, live nRMSE, lock state
 
     // ---------------------------------------------------------------- stir
     // Map a pointer position on the slice canvas to a lattice cell and apply a
@@ -1454,7 +1454,7 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
     $('probe-win').addEventListener('change', () => { probe.win = +$('probe-win').value; probeDraw(true); });
     $('probe-arm').addEventListener('click', () => { probe.armed = !probe.armed; probeStatus(); });
     $('probe-clear').addEventListener('click', () => { probe.armed = false; probeClear(); ssBuild('sensor cleared'); });
-    window.__lsProbe = { place: (c) => probePlace(c), at: cellAtScreen,
+    window.__fsProbe = { place: (c) => probePlace(c), at: cellAtScreen,
       sample: async () => { await probeSample(); probeDraw(); }, state: () => ({
       coords: probe.coords, cell: probe.cell, samples: probe.speed.length,
       last: probe.speed.length ? { speed: probe.speed[probe.speed.length - 1],
@@ -1800,7 +1800,7 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
     // The soft sensor's own internals, so a bad score can be diagnosed rather than
     // guessed at: the frozen input scales, the target's frozen mean and spread, the
     // saturation count, and what the two points are actually reading.
-    window.__lsSSdbg = () => {
+    window.__fsSSdbg = () => {
       if (!ss.model) return null;
       const m = ss.model, b = m.bank, ser = m.series;
       const ys = ser.map((p) => p.truth).filter(Number.isFinite);
@@ -1817,7 +1817,7 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
         pTrace: b.heads.map((h) => {
           let t = 0; for (let i = 0; i < b.nf; i++) t += h.P.m[i * b.nf + i]; return t; }) };
     };
-    window.__lsSS = { place: (c) => ssPlace(c), place2: (c) => ssPlace2(c), build: (w) => ssBuild(w),
+    window.__fsSS = { place: (c) => ssPlace(c), place2: (c) => ssPlace2(c), build: (w) => ssBuild(w),
       sample: () => ssSample(), draw: () => ssDraw(true),
       train: () => { ss.model && ss.model.train(); ssStatus(); },
       lock: () => { ss.model && ss.model.lock(); ssStatus(); },
@@ -1910,7 +1910,7 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
     $('inletmode').addEventListener('change', () => applyLiveParams());
 
     $('stir').addEventListener('input', () => { $('stir-v').textContent = (+$('stir').value).toFixed(1) + '×'; });
-    window.__lsStir = (cx, cy, dx, dy) => stirAt(cx, cy, dx, dy);
+    window.__fsStir = (cx, cy, dx, dy) => stirAt(cx, cy, dx, dy);
 
     $('run').addEventListener('click', () => (state.running ? stop() : start()));
     $('reset').addEventListener('click', () => build());
@@ -2159,7 +2159,7 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
     });
 
     // Expose state for the smoke test, mirroring the ngrc page's __lzDbg convention.
-    window.__lsDbg = () => ({
+    window.__fsDbg = () => ({
       backend: state.sim ? state.sim.backend.kind : null,
       gpuErrors: state.sim && state.sim.backend.errors ? state.sim.backend.errors : [],
       label: state.sim ? state.sim.backend.label : null,
@@ -2178,25 +2178,25 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
       queued: !!state.buildQueued,
       slice: state.slice.lastStats,
     });
-    window.__lsDiag = async () => (state.sim ? state.sim.diagnostics() : null);
-    window.__lsStep = (n) => { if (state.sim) state.sim.advance(n); };
-    window.__lsDraw = () => drawOnce();
-    window.__lsRefresh = () => refreshStats();   // drives the divergence UI
-    window.__lsInfo = () => state.runInfo;
+    window.__fsDiag = async () => (state.sim ? state.sim.diagnostics() : null);
+    window.__fsStep = (n) => { if (state.sim) state.sim.advance(n); };
+    window.__fsDraw = () => drawOnce();
+    window.__fsRefresh = () => refreshStats();   // drives the divergence UI
+    window.__fsInfo = () => state.runInfo;
     // Typed into the page's own eval box, this prints everything needed to
-    // diagnose a run from a phone: __lsDump()
-    window.__lsDump = async () => {
+    // diagnose a run from a phone: __fsDump()
+    window.__fsDump = async () => {
       const d = state.sim ? await state.sim.diagnostics() : null;
       const out = { build: window.__BUILD, run: state.runInfo,
         diag: d && { step: d.step, uMax: d.uMax, rhoMin: d.rhoMin, rhoMax: d.rhoMax,
           residual: d.residual, stable: d.stable } };
-      console.log('lattsim dump ▸ ' + JSON.stringify(out));
+      console.log('flowsim dump ▸ ' + JSON.stringify(out));
       return out;
     };
-    window.__lsSim = () => state.sim;
-    window.__lsSlice = () => state.slice;   // the slice renderer, for its lastStats (e.g. the scalar range)
-    window.__lsSliceRecon = () => state.sliceRecon;   // the comparison pane, for its imposed shared scale
-    window.__lsUnits = UnitSystem;
+    window.__fsSim = () => state.sim;
+    window.__fsSlice = () => state.slice;   // the slice renderer, for its lastStats (e.g. the scalar range)
+    window.__fsSliceRecon = () => state.sliceRecon;   // the comparison pane, for its imposed shared scale
+    window.__fsUnits = UnitSystem;
 
     syncObstacle();
     stabilityHint();
@@ -2205,7 +2205,7 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
     window.addEventListener('resize', () => { probeMark(); ssMark(); });
     probeLimits()
       .then(() => { clampResolution(); return build(); })
-      .then(() => console.log(state.sim ? 'lattsim ready ✓' : 'lattsim failed to build'));
+      .then(() => console.log(state.sim ? 'flowsim ready ✓' : 'flowsim failed to build'));
   </script>
 </body>
 </html>

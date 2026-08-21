@@ -605,7 +605,7 @@ against a `display:none` div otherwise.
 **The console buffer is per ORIGIN, not per page.** It is persisted to
 localStorage so a white-screen crash survives a reload, which means this page
 inherits errors logged by any other page on the origin. That is why a red error
-badge appeared on a LattSim screenshot: it was the smoke test's own
+badge appeared on a FlowSim screenshot: it was the smoke test's own
 `console.error('smoke error')`, injected on index.html to test console capture.
 Worth knowing before chasing one.
 
