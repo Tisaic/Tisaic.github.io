@@ -857,6 +857,26 @@ if (FULL) {
 // exactly zero spread and renders as one flat colour. Each scene now declares the
 // plane that shows its physics; this checks the page applies it and that pixels
 // actually vary.
+// DROP TO A SMALL LATTICE FIRST. This loop is about the SLICE PLANE and nothing
+// else, but it steps max(1500, nx*40) -- and the rebuild checks above leave the
+// resolution wherever they last set it. At the top rung the channel is 3x long, so
+// that is ~11.5k steps on a ~1.3M-cell lattice through a software adapter: measured
+// at OVER TWENTY MINUTES for one scene, and it never finished. The plane a scene
+// declares does not depend on how many cells it has, so the check is identical on a
+// small lattice and the whole loop then costs seconds.
+//
+// RUNG 1 AND NOT RUNG 0, and the difference is the check's own discriminator. It
+// counts DISTINCT COLOURS, so it is bounded by how many cells the slice has: at the
+// bottom rung Poiseuille renders exactly 12 against a threshold of >12 and fails,
+// while the failure it exists to catch -- the wrong plane -- renders ONE. Lowering
+// the threshold to fit rung 0 would be weakening the check to make a speed fix
+// pass; one rung up keeps the original threshold and is still seconds.
+await flow.evaluate(() => {
+  const r = document.getElementById('res'); r.value = '1';
+  r.dispatchEvent(new Event('change'));
+});
+await flow.waitForFunction(() => !window.__fsDbg().building && !window.__fsDbg().queued,
+  null, { timeout: 120000 });
 for (const [key, label] of [['poiseuille', 'Poiseuille'], ['cavity', 'cavity'], ['channel', 'channel']]) {
   await flow.selectOption('#scene', key);
   await flow.waitForFunction(() => window.__fsDbg().backend !== null && !window.__fsDbg().building,
