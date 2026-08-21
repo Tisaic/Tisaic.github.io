@@ -1790,10 +1790,10 @@ check('flexisim: the identified compliance exceeds the gearbox alone, as a tip m
     !back.mode.analytic && !back.mode.overdamped, JSON.stringify(back.mode));
 }
 
-// Run a move with compensation OFF, then ON, and require the BIAS to collapse.
-// This is the page's headline and it is the one thing the wiring could silently
-// get wrong -- the physics is pinned in Node, but nothing there proves the
-// checkbox reaches the compensator.
+// Run a move in each CORRECTION MODE and require the BIAS to collapse. This is the
+// page's headline and it is the one thing the wiring could silently get wrong --
+// the physics is pinned in Node, but nothing there proves the selector reaches the
+// compensator, or that the closed loop's gate is real.
 const runFor = async (steps) => {
   const k0 = (await fx.evaluate(() => window.__flxDbg())).k;
   await fx.evaluate(() => { if (!window.__flxDbg().running) document.getElementById('run').click(); });
@@ -1802,16 +1802,27 @@ const runFor = async (steps) => {
 };
 await runFor(8000);
 const plain = (await fx.evaluate(() => window.__flxDbg())).win;
-await fx.evaluate(() => { document.getElementById('comp-on').click(); });
+await fx.selectOption('#ctl-mode', 'ff');
 await runFor(8000);
 const compd = (await fx.evaluate(() => window.__flxDbg())).win;
 console.log(`  flexisim: bias ${plain.bias.toExponential(3)} -> ${compd.bias.toExponential(3)}, `
   + `oscillation ${plain.sd.toExponential(3)} -> ${compd.sd.toExponential(3)}`);
-check('flexisim: the compensation checkbox actually collapses the bias',
+check('flexisim: mode ② (open loop + prediction) actually collapses the bias',
   Math.abs(compd.bias) < 0.1 * Math.abs(plain.bias),
   `${plain.bias} -> ${compd.bias}`);
 check('flexisim: and it leaves the oscillation alone, which is the other mechanism',
   Math.abs(compd.sd / plain.sd - 1) < 0.35, `${plain.sd} -> ${compd.sd}`);
+
+// THE CLOSED LOOP IS REFUSED WHILE THE SENSOR IS STILL BEING TOLD THE ANSWER, and
+// that gate is asserted BEFORE the lock rather than assumed. A selector that
+// silently ran the loop on a model the tracker is still correcting would be
+// closing the loop on a commissioning instrument the machine will not have -- and
+// nothing in the picture would show it.
+await fx.selectOption('#ctl-mode', 'closed');
+const gated = (await fx.evaluate(() => window.__flxDbg())).ctl;
+check('flexisim: mode ③ is REFUSED until the soft sensor is locked, and says which mode is live',
+  gated.want === 'closed' && gated.active === 'open', JSON.stringify(gated));
+await fx.selectOption('#ctl-mode', 'open');
 
 // THE CHART MUST TRACK THE RUN. Plotly.react compares data by REFERENCE, so a
 // chart handed the same arrays mutated in place silently freezes on its first
@@ -1837,6 +1848,13 @@ check('flexisim: the error chart tracks the run rather than freezing on its firs
 // contract -- the lag window is counted in SAMPLES, and a frame loop free to step
 // a partial interval would pair a reading with a plant state between boundaries.
 await fx.click('#ss-train');
+// THE COMMISSIONING DITHER IS LOAD-BEARING, not a guard: without it mode ③ is
+// positive feedback and runs to its clamp (measured, the estimate reaches 26x the
+// truth at a held pre-distortion of 0.05 rad). Asserting it is actually applied is
+// therefore asserting the thing that makes the closed loop converge at all.
+const dith = (await fx.evaluate(() => window.__flxDbg())).ctl;
+check('flexisim: training dithers the correction, so the model sees the loop it will be inside',
+  dith.dithering && dith.dither > 1e-4, JSON.stringify(dith));
 await runFor(14000);
 await fx.click('#ss-lock');
 await runFor(4000);
@@ -1852,6 +1870,76 @@ check('flexisim: and the LOCKED estimate beats the controller\'s own view of the
 check('flexisim: the forecast beats persistence on the readout\'s own estimate',
   sd.scores.forecast < sd.scores.persist,
   `${sd.scores.forecast} vs ${sd.scores.persist}`);
+
+// ---- MODE ③: NOW THAT THE SENSOR IS LOCKED, THE LOOP MAY CLOSE. The gate is the
+// same one asserted above, from the other side -- and what is checked here is that
+// the loop, which is given no model at all, removes the bias anyway. It is a lag at
+// two bending periods, so it is given several moves to converge before being read;
+// reading it earlier would be reading a meter before it settles.
+await fx.selectOption('#ctl-mode', 'closed');
+await runFor(12000); await runFor(12000);
+const cl = await fx.evaluate(() => window.__flxDbg());
+console.log(`  flexisim: closed loop active=${cl.ctl.active} offset `
+  + `${(cl.ctl.closedOff * 1e3).toFixed(3)} mrad — bias ${plain.bias.toExponential(3)} -> `
+  + `${cl.win.bias.toExponential(3)}, oscillation ${plain.sd.toExponential(3)} -> `
+  + `${cl.win.sd.toExponential(3)}`);
+check('flexisim: once LOCKED, mode ③ really engages',
+  cl.ctl.active === 'closed' && Math.abs(cl.ctl.closedOff) > 1e-5, JSON.stringify(cl.ctl));
+check('flexisim: and the closed loop cuts the bias with no model at all',
+  Math.abs(cl.win.bias) < 0.35 * Math.abs(plain.bias),
+  `${plain.bias} -> ${cl.win.bias}`);
+check('flexisim: it leaves the oscillation alone too — it cannot chase what it sits on',
+  Math.abs(cl.win.sd / plain.sd - 1) < 0.35, `${plain.sd} -> ${cl.win.sd}`);
+
+// ---- COMPARE fills the table by itself, which is the control the whole feature is
+// for. It is asserted on the TABLE rather than on a badge: a sequencer that ran and
+// recorded nothing would leave every message looking right.
+await fx.selectOption('#ctl-mode', 'open');
+await fx.click('#compare');
+await fx.evaluate(() => { if (!window.__flxDbg().running) document.getElementById('run').click(); });
+await fx.waitForFunction(() => {
+  const b = window.__flxDbg().board;
+  return Object.keys(b).length >= 3 || !window.__flxDbg().ctl.comparing;
+}, null, { timeout: 600000 });
+await fx.evaluate(() => { if (window.__flxDbg().running) document.getElementById('run').click(); });
+const cmpB = await fx.evaluate(() => window.__flxDbg().board);
+const cmpRows = await fx.evaluate(() =>
+  document.getElementById('board').querySelectorAll('tr').length);
+console.log(`  flexisim: compare filled ${Object.keys(cmpB).join(', ')} — bias `
+  + Object.entries(cmpB).map(([m, v]) => `${m} ${v.bias.toExponential(2)}`).join(' / '));
+check('flexisim: Compare runs every mode by itself and fills the table',
+  Object.keys(cmpB).length === 3 && cmpRows === 4, `${JSON.stringify(Object.keys(cmpB))} `
+  + `${cmpRows} rows`);
+check('flexisim: and the table it produced ranks the corrections below the open loop',
+  Math.abs(cmpB.ff.bias) < Math.abs(cmpB.open.bias)
+  && Math.abs(cmpB.closed.bias) < Math.abs(cmpB.open.bias),
+  JSON.stringify(cmpB));
+
+// ---- THE SINUSOID. A second profile is a second reference generator, and the one
+// thing it can silently get wrong is the move BOUNDARY the whole page is timed on
+// -- the window, the scoreboard and the staged motion all key off prof.period.
+await fx.selectOption('#s-profile', 'sine');
+await fx.evaluate(() => { document.getElementById('s-freq').value = '4';
+  document.getElementById('s-freq').dispatchEvent(new Event('input')); });
+await runFor(6000);
+const sine = await fx.evaluate(() => window.__flxDbg());
+check('flexisim: the sinusoid profile takes, with the period the frequency slider asked for',
+  sine.motion.profile === 'sine' && sine.motion.period === 2000, JSON.stringify(sine.motion));
+// AND THE OTHER PROFILE'S CONTROLS ARE ACTUALLY GONE. `hidden` is only a UA
+// display:none and .controls sets display:flex, which beats it -- so the first
+// version showed the trapezoid's sliders and the sinusoid's at the same time with
+// no error and nothing blank. Asserting VISIBILITY rather than the attribute is the
+// only thing that catches it, the same lesson as the console button that reported
+// "visible" while sitting off the right edge of the screen.
+const groups = await fx.evaluate(() => ({
+  trap: document.getElementById('trap-ctl').getBoundingClientRect().height,
+  sine: document.getElementById('sine-ctl').getBoundingClientRect().height,
+}));
+check('flexisim: and only ONE profile\'s sliders are on screen at a time',
+  groups.trap === 0 && groups.sine > 0, JSON.stringify(groups));
+check('flexisim: and the arm actually follows it rather than sitting at the home pose',
+  sine.win && sine.win.sd > 0, JSON.stringify(sine.win));
+await fx.selectOption('#s-profile', 'trap');
 
 // The canvas must actually be painted. An unpainted canvas is not an error and
 // not blank -- it is WHITE, which against this page reads as broken.
@@ -1932,6 +2020,56 @@ check('flexisim/chain: the whole-arm sensor beats the controller\'s own view of 
 check('flexisim/chain: and beats the elbow-only model at the SAME feature count',
   cs.scores.whole < 0.9 * cs.scores.elbow,
   `${cs.scores.whole} vs ${cs.scores.elbow}`);
+
+// ---- THE SAME THREE CORRECTIONS ON THE CHAIN, applied at the shoulder. The rigid
+// model here is a genuine rival rather than a formality -- it is given M(q), both
+// stiffnesses and both lever arms -- so what is asserted is only that the wiring
+// reaches the servo and that each correction moves the tool toward the PROGRAM's
+// setpoint rather than the encoders'.
+const runChain = async (steps) => {
+  const k0 = (await fx.evaluate(() => window.__flxChainDbg())).k;
+  await fx.evaluate(() => { if (!window.__flxChainDbg().running) document.getElementById('run2').click(); });
+  await fx.waitForFunction((t) => window.__flxChainDbg().k > t, k0 + steps, { timeout: 240000 });
+  await fx.evaluate(() => { if (window.__flxChainDbg().running) document.getElementById('run2').click(); });
+};
+// THE WINDOW IS THREE MOVE PERIODS (~11400 steps) because the chain's reference is
+// deliberately non-repeating, so each mode needs that much AFTER the switch clears
+// the window -- and the closed loop, a lag at two move periods, needs several more.
+await runChain(14000);
+const c2open = (await fx.evaluate(() => window.__flxChainDbg())).win;
+await fx.selectOption('#ctl2-mode', 'ff');
+await runChain(14000);
+const c2ff = (await fx.evaluate(() => window.__flxChainDbg())).win;
+await fx.selectOption('#ctl2-mode', 'closed');
+await runChain(20000); await runChain(20000);
+const c2cl = await fx.evaluate(() => window.__flxChainDbg());
+console.log(`  flexisim/chain: tool bias vs the program — open ${c2open.bias.toExponential(3)} / `
+  + `model ${c2ff.bias.toExponential(3)} / closed ${c2cl.win.bias.toExponential(3)} `
+  + `(pre-distortion ${(c2cl.ctl.closedOff * 1e3).toFixed(2)} mrad)`);
+// WHAT IS ASSERTED HERE IS THE WIRING AND THE STABILITY, NOT THE SIZE OF THE WIN,
+// and the reason is measured rather than conceded. In this regime -- both joints
+// moving, the amplitude modulated at the golden ratio so the sensor cannot score by
+// cycle position -- the tool's bias against the program is about 5e-2, while the
+// whole-arm sensor's own nRMSE of ~0.10 against a tool error whose spread is ~0.46
+// leaves a residual of the SAME 4e-2. A loop can only null what its instrument can
+// resolve, so it removes about a tenth of it and the three modes land within the
+// 3-period measurement spread (0.042, measured in Node) of each other.
+// THAT IS NOT TRUE ON THE MOVE TAB and the difference is instructive: there the
+// reference repeats exactly, the model learns the periodic pattern, its residual is
+// zero-MEAN even though its rms is comparable, and the same loop takes the bias
+// -7.4e-2 -> 2.8e-3. A non-repeating reference is what a real machine has, and this
+// is what it costs. The Node harness measures the ceiling by feeding the loop the
+// TRUTH: -8.9e-2 open -> -6.3e-2 with the rigid model -> -2.1e-3 closed.
+check('flexisim/chain: every correction mode reaches the shoulder as a real pre-distortion',
+  c2cl.ctl.active === 'closed' && Math.abs(c2cl.ctl.closedOff) > 1e-6,
+  JSON.stringify(c2cl.ctl));
+check('flexisim/chain: and the loop SETTLES rather than running to its clamp',
+  Math.abs(c2cl.ctl.closedOff) < 0.02, `${c2cl.ctl.closedOff}`);
+check('flexisim/chain: no correction makes the tool dramatically worse',
+  Math.abs(c2ff.bias) < 2 * Math.abs(c2open.bias)
+  && Math.abs(c2cl.win.bias) < 2 * Math.abs(c2open.bias),
+  `${c2open.bias} -> ff ${c2ff.bias} / closed ${c2cl.win.bias}`);
+await fx.selectOption('#ctl2-mode', 'open');
 
 const painted2 = await fx.evaluate(() => {
   const c = document.getElementById('cv2');

@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:214,built:"2026-08-21T18:39:24Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:215,built:"2026-08-21T19:48:59Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -41,10 +41,19 @@
     code { background:var(--card); padding:.1em .35em; border-radius:5px;
       font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.92em; }
     .controls { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; align-items:center; }
+    /* `hidden` IS ONLY A UA `display:none`, AND ANY CLASS RULE THAT SETS `display`
+       BEATS IT. `.controls` sets display:flex, so hiding one of the two profile's
+       slider groups did nothing and the page showed the trapezoid's controls and the
+       sinusoid's at the same time -- no error, nothing blank, just the wrong picture.
+       It is the console-button min-width bug in a different property. */
+    [hidden] { display:none !important; }
     button { font-size:.95rem; padding:11px 14px; border:none; border-radius:10px; background:var(--accent);
       color:#2b1a02; font-weight:600; cursor:pointer; touch-action:manipulation; flex:1; min-width:104px; }
     button.sec { background:#334155; color:#fff; font-weight:500; }
     button:disabled { opacity:.45; }
+    select { font-size:.9rem; padding:10px 12px; border-radius:10px; background:var(--card);
+      color:var(--text); border:1px solid var(--line); flex:1 1 100%; min-width:0; }
+    select:disabled { opacity:.45; }
     .qbox { display:flex; flex-wrap:wrap; gap:6px 14px; align-items:center; margin-top:10px;
       font:12px/1.5 ui-monospace,monospace; color:var(--muted); }
     .qbox label { display:inline-flex; align-items:center; gap:5px; }
@@ -106,8 +115,26 @@
       <button id="reset" class="sec">Reset</button>
     </div>
     <p class="hint" id="lifecycle-hint">The tracker is only here once: <b>commission</b> first, then run.</p>
+
+    <!-- THREE MODES, ONE SELECTOR, because they are ALTERNATIVES rather than options
+         that stack. Each differs from the one above it by exactly what it is allowed
+         to know: nothing, an identified model evaluated at the COMMAND, or a live
+         estimate of the tip from motor signals. A pair of checkboxes would let
+         "prediction" and "closed loop" be on together and there is no such machine. -->
+    <h4 class="grp">Correction <span>— the comparison this tab exists for</span></h4>
+    <div class="controls">
+      <select id="ctl-mode" aria-label="Correction mode" disabled>
+        <option value="open">① open loop — no correction at all</option>
+        <option value="ff">② open loop + prediction — the identified model</option>
+        <option value="closed">③ closed loop — on the soft sensor's estimate</option>
+      </select>
+      <button id="compare" class="sec" disabled>Compare ▶</button>
+      <button id="board-clear" class="sec" disabled>Clear table</button>
+    </div>
+    <p class="hint" id="ctl-hint">Commission first — every correction here is built out of
+      what commissioning identifies.</p>
+    <table class="v" id="board" hidden></table>
     <div class="qbox">
-      <label><input type="checkbox" id="comp-on" disabled /> compensation</label>
       <label><input type="checkbox" id="shape-on" disabled /> input shaping</label>
       <label><input type="checkbox" id="flip-sign" disabled /> invert the correction</label>
     </div>
@@ -120,13 +147,34 @@
          the view sliders change nothing about the physics at all. Eight sliders in
          one undifferentiated stack hid all of that. -->
     <h4 class="grp">Motion <span>— live, no rebuild</span></h4>
+    <!-- TWO PROFILES BECAUSE THEY ASK DIFFERENT QUESTIONS. A point-to-point move is
+         what a machine does, and it excites the plant with a broadband transient
+         whose content depends on the ramp. A sinusoid excites it at ONE frequency
+         you choose, so sweeping the frequency past the bending mode is how the
+         plant's response — and the compensator's — is actually characterised. -->
     <div class="controls">
+      <select id="s-profile" aria-label="Move profile">
+        <option value="trap">point-to-point — trapezoid</option>
+        <option value="sine">continuous — sinusoid</option>
+      </select>
+    </div>
+    <div class="controls" id="trap-ctl">
       <div class="slider"><span>Move span</span>
         <input type="range" id="s-span" min="0" max="5" step="1" value="2" />
         <span class="v" id="v-span">0.144 rad</span></div>
       <div class="slider"><span>Move speed</span>
         <input type="range" id="s-speed" min="0" max="4" step="1" value="2" />
         <span class="v" id="v-speed">1.0×</span></div>
+    </div>
+    <div class="controls" id="sine-ctl" hidden>
+      <div class="slider"><span>Amplitude</span>
+        <input type="range" id="s-amp" min="0" max="5" step="1" value="2" />
+        <span class="v" id="v-amp">0.10 rad</span></div>
+      <div class="slider"><span>Frequency</span>
+        <input type="range" id="s-freq" min="0" max="6" step="1" value="3" />
+        <span class="v" id="v-freq">3200 steps</span></div>
+    </div>
+    <div class="controls">
       <div class="slider"><span>Home pose</span>
         <input type="range" id="s-home" min="0" max="6" step="1" value="0" />
         <span class="v" id="v-home">0.00 rad</span></div>
@@ -193,13 +241,30 @@
     </div>
 
     <div class="note">
+      <h3>Three corrections, and what each is allowed to know</h3>
+      <b>① Open loop</b> commands the trajectory and nothing else: the tool lands wherever the wind-up
+      and the sag put it, and the encoder reports none of it. <b>② Open loop + prediction</b> pre-distorts
+      the command by the deflection the <i>identified compliance</i> predicts for it — evaluated at the
+      command, never at anything measured, so it needs no sensor at run time and is only as right as the
+      constant behind it. <b>③ Closed loop</b> throws the model away and drives the <i>estimated</i> tip
+      onto the setpoint using the soft sensor alone; it is a lag with a time constant of two bending
+      periods, so it converges over several moves rather than acting on the next step.
       <h3>Two errors, two mechanisms, one fix each</h3>
-      Compensation pre-distorts the commanded angle by the deflection its identified compliance predicts,
-      so it removes the <b>bias</b> and does nothing to the ringing. Input shaping convolves the reference
-      with impulses summing to one, so it cancels the <b>oscillation</b> and — since it cannot change
-      where a move ends — leaves the bias untouched. Turn each on alone and watch one number move and the
-      other stand still. <b>Invert the correction</b> is there because a compensator applied backwards
-      does not merely fail: it applies the error a second time, and the bias doubles.
+      Every correction here removes the <b>bias</b> and does nothing to the ringing. Input shaping
+      convolves the reference with impulses summing to one, so it cancels the <b>oscillation</b> and —
+      since it cannot change where a move ends — leaves the bias untouched. That is why the table scores
+      them separately: as a single rms, compensation reads as a disappointment.
+      <b>Invert the correction</b> is there because a compensator applied backwards does not merely
+      fail: it applies the error a second time, and the bias doubles.
+      <h3>Why commissioning deliberately wobbles the arm</h3>
+      While the sensor is <b>training</b>, a small dither is added to the commanded angle — the
+      pre-distortion mode ③ will later apply, excited on purpose. Without it the model has only ever
+      seen the machine <i>uncorrected</i>, so the first thing the closed loop does is move the encoder
+      somewhere the model has never been, and a 544-feature fit asked about an operating point it never
+      saw answers confidently and wrong — measured, the estimate reaches <b>26×</b> the truth and the
+      loop runs away in positive feedback. With the dither it is flat across the range the loop occupies
+      and the loop converges. It costs about <b>8%</b> of the locked open-loop accuracy, which is the
+      price of a loop that converges rather than diverges.
     </div>
   </section>
 
@@ -226,10 +291,46 @@
         <option value="both">both joints</option>
       </select>
     </div>
+
+    <!-- THE SAME THREE MODES AS THE MOVE TAB, applied at the SHOULDER, because a
+         tool offset is corrected most cheaply by the joint with the longest lever
+         on it -- and on this arm the shoulder is levered by the whole reach while
+         the elbow is levered only by the forearm. -->
+    <h4 class="grp">Correction <span>— applied at the shoulder, levered by the whole reach</span></h4>
     <div class="controls">
+      <select id="ctl2-mode" aria-label="Correction mode">
+        <option value="open">① open loop — no correction at all</option>
+        <option value="ff">② open loop + prediction — the rigid compliance model</option>
+        <option value="closed">③ closed loop — on the whole-arm estimate</option>
+      </select>
+      <button id="compare2" class="sec">Compare ▶</button>
+      <button id="board2-clear" class="sec">Clear table</button>
+    </div>
+    <p class="hint" id="ctl2-hint">The rigid model is given M(q), the Coriolis terms, gravity, both
+      stiffnesses and both lever arms. The closed loop is given nothing but the estimate, and only
+      once it is locked. <b>Expect less here than on the Move tab</b>: this reference deliberately
+      does not repeat, so the sensor's residual is not zero-mean, and a loop can only null what its
+      instrument can resolve — measured, the tool's bias and the sensor's own residual are both
+      about 5e-2.</p>
+    <table class="v" id="board2" hidden></table>
+
+    <h4 class="grp">Motion <span>— live, applied at a move boundary</span></h4>
+    <div class="controls">
+      <div class="slider"><span>Move span</span>
+        <input type="range" id="s-span2" min="0" max="5" step="1" value="3" />
+        <span class="v" id="v-span2">0.288 rad</span></div>
+      <div class="slider"><span>Move speed</span>
+        <input type="range" id="s-speed2" min="0" max="4" step="1" value="2" />
+        <span class="v" id="v-speed2">1.0×</span></div>
       <div class="slider"><span>Elbow pose</span>
         <input type="range" id="s-elbow" min="0" max="8" step="1" value="3" />
         <span class="v" id="v-elbow">0.60 rad</span></div>
+    </div>
+    <p class="hint" id="motion2-pending" hidden><b>queued</b> — a reference is only rebuilt at a
+      move boundary; rebuilding one mid-move is a position step into the servo's gain.</p>
+
+    <h4 class="grp">Plant &amp; view</h4>
+    <div class="controls">
       <div class="slider"><span>Gearbox K</span>
         <input type="range" id="s-k2" min="0" max="6" step="1" value="4" />
         <span class="v" id="v-k2">16.0</span></div>
@@ -370,7 +471,7 @@ import { FlexArm2R } from './lib/flexisim/arm2r.js';
 import { ChainServo } from './lib/flexisim/compensator.js';
 import { ChainSensor } from './lib/flexisim/chainsensor.js';
 import {
-  AngleProfile, PositionServo, TipCompensator, tipTrackingError, zvdShaper, ringFit,
+  AngleProfile, SineProfile, PositionServo, TipCompensator, tipTrackingError, zvdShaper, ringFit,
 } from './lib/flexisim/compensator.js';
 
 const $ = (id) => document.getElementById(id);
@@ -384,6 +485,14 @@ const SPEED_LADDER = [{ a: 600, c: 800, label: '0.25x' }, { a: 450, c: 600, labe
   { a: 300, c: 400, label: '1.0x' }, { a: 200, c: 260, label: '2.2x' },
   { a: 140, c: 180, label: '4.6x' }];
 const HOME_LADDER = [0, 0.2, 0.4, 0.6, 0.9, 1.2, 1.5];
+// THE SINUSOID'S RANGE IS SET BY THE PLANT, not by what looks tidy. The servo's own
+// bandwidth is 2e-3 rad/step (period ~3100) and the link's bending mode runs 900 to
+// 2800 steps across the E ladder, so the useful band is periods of a few hundred to
+// ~12000: the top of it is quasi-static, the middle walks straight through the
+// bending mode, and the bottom is past what the servo can follow at all. Sweeping
+// across a resonance is the whole reason a sinusoid is on the tab.
+const AMP_LADDER = [0.02, 0.05, 0.10, 0.20, 0.35, 0.50];
+const PERIOD_LADDER = [12000, 8000, 5000, 3200, 2000, 1300, 800];
 const E_LADDER = [0.02, 0.04, 0.06, 0.10, 0.15, 0.20];
 const H = 4, LEN = 16, CLAMP = 3, NU = 0.3, RHO = 1, G = 2e-6;
 const RATIO = 100, SERVO_BW = 0.002, DAMPING = 3e-3;
@@ -466,8 +575,11 @@ async function build() {
   $('ss-train').disabled = true; $('ss-lock').disabled = true;
   $('ss-train').textContent = 'Start training ▶';
   hist.t.length = 0; hist.e.length = 0; hist.ref.length = 0; win = [];
-  $('comp-on').disabled = true; $('shape-on').disabled = true; $('flip-sign').disabled = true;
-  $('comp-on').checked = false; $('shape-on').checked = false; $('flip-sign').checked = false;
+  $('ctl-mode').disabled = true; $('ctl-mode').value = 'open';
+  $('compare').disabled = true; $('board-clear').disabled = true;
+  $('shape-on').disabled = true; $('flip-sign').disabled = true;
+  $('shape-on').checked = false; $('flip-sign').checked = false;
+  closedOff = 0; stopCompare(); board = {}; renderBoard();
   $('run').disabled = true;
   rebuildProfile();
   console.log(`[flexisim] built K=${K} E=${E} cells=${link.lattice.cellCount} `
@@ -483,7 +595,7 @@ async function build() {
 // and drove the plant to divergence. Same discipline here: the sliders stage a
 // change and the frame loop applies it at the top of the next move (or immediately
 // when nothing is running, since then there is no move to interrupt).
-let motionActive = { span: 2, speed: 2, home: 0 };
+let motionActive = { profile: 'trap', span: 2, speed: 2, amp: 2, per: 3, home: 0 };
 let motionPending = null;
 
 function homeAngle() { return motionActive.home; }
@@ -502,20 +614,269 @@ function currentRef() {
 }
 
 function rebuildProfile() {
-  const shaped = $('shape-on').checked && mode;
-  const sp = SPEED_LADDER[motionActive.speed];
-  // THE DWELL MUST OUTLAST THE SHAPER'S OWN DELAY (one damped period of the mode it
-  // cancels) or a shaped move never reaches its endpoint before the next one starts.
-  // With the mode measured that delay is known, so the dwell is sized from it
-  // instead of from a number that happened to be long enough at one stiffness.
-  const need = mode ? Math.round(1.3 * mode.period) : 1100;
-  prof = new AngleProfile({ span: SPAN_LADDER[motionActive.span],
-    accelSteps: sp.a, cruiseSteps: sp.c, dwellSteps: Math.max(600, need),
-    shaper: shaped ? zvdShaper(mode.omega, mode.zeta) : null });
+  const shaped = $('shape-on').checked && mode && !mode.overdamped;
+  const shaper = shaped ? zvdShaper(mode.omega, mode.zeta) : null;
+  if (motionActive.profile === 'sine') {
+    prof = new SineProfile({ amplitude: AMP_LADDER[motionActive.amp],
+      frequency: 1 / PERIOD_LADDER[motionActive.per], shaper });
+  } else {
+    const sp = SPEED_LADDER[motionActive.speed];
+    // THE DWELL MUST OUTLAST THE SHAPER'S OWN DELAY (one damped period of the mode it
+    // cancels) or a shaped move never reaches its endpoint before the next one starts.
+    // With the mode measured that delay is known, so the dwell is sized from it
+    // instead of from a number that happened to be long enough at one stiffness.
+    const need = mode ? Math.round(1.3 * mode.period) : 1100;
+    prof = new AngleProfile({ span: SPAN_LADDER[motionActive.span],
+      accelSteps: sp.a, cruiseSteps: sp.c, dwellSteps: Math.max(600, need), shaper });
+  }
   if (pc && A) {
     comp = new TipCompensator({ comp: pc, inertia: A.mp.inertiaAboutPivot,
       gravityTorque: A.tauG, sign: $('flip-sign').checked ? +1 : -1 });
   }
+}
+
+// ------------------------------------------------- the three corrections
+//
+// ONE FUNCTION RETURNS THE PRE-DISTORTION, whatever the mode, so the stepping loop,
+// the picture and the stats can never disagree about what was actually commanded --
+// three copies of "the correction" is how a drawn arm ends up compared against a
+// setpoint nothing tracked.
+//
+// THE SIGN IS FIXED BY THE PLANT AND IS THE SAME FOR BOTH CORRECTIONS. The tip sits
+// at L*theta_encoder + e, where e is tipError().total. Landing it on L*theta_ref
+// therefore needs theta_encoder = theta_ref - e/L, i.e. an offset of -e/L. The
+// identified model predicts e as L*c*tau and TipCompensator already returns
+// -c*tau; the closed loop measures e instead. Same law, different source, which is
+// exactly what the comparison is about.
+let closedOff = 0;               // the outer loop's current pre-distortion, rad
+
+function ctlMode() {
+  const v = $('ctl-mode').value;
+  // The closed loop is only offered against a LOCKED sensor. While it is training
+  // it is being told the truth by the tracker, and closing a loop on that is
+  // closing it on the tracker -- a commissioning instrument the machine will not
+  // have. The option disables itself rather than quietly using a model still
+  // being corrected.
+  if (v === 'closed' && !(ss && ss.mode === 'estimating')) return 'open';
+  if (v !== 'open' && !comp) return 'open';
+  return v;
+}
+
+/**
+ * The outer loop's bandwidth, derived from the measured bending mode rather than
+ * picked: a time constant of two bending periods, so the loop cannot chase the
+ * ringing it is sitting on top of. Expressed per SAMPLE, since that is the only
+ * clock the estimate arrives on.
+ */
+function closedGain() {
+  const per = mode && !mode.overdamped ? mode.period : 2000;
+  return Math.min(0.25, SAMPLE_EVERY / (2 * per));
+}
+
+/**
+ * One outer-loop update, at a soft-sensor sample.
+ *
+ * THE FEEDBACK SIGNAL IS THE ESTIMATED TOOL AGAINST THE PROGRAM, not the estimate
+ * on its own, and the difference is the FOLLOWING ERROR -- which the controller
+ * knows exactly and the sensor cannot see. Driving the estimate alone to zero
+ * leaves the tool wherever the servo's own lag put it; the loop's whole promise is
+ * that the tool reaches the setpoint, so the setpoint has to be in the signal. It
+ * costs nothing here, where the servo tracks to a fraction of the sag, and it is
+ * the entire error on the chain tab, where the following error dominates.
+ */
+function closedUpdate(est) {
+  if (est === null || !A) return;
+  const ref = currentRef();
+  const L = A.arm.Larm;
+  const tool = est + L * (A.arm.encoder().angle - ref.theta);
+  const sgn = $('flip-sign').checked ? -1 : +1;
+  closedOff -= sgn * closedGain() * tool / L;
+  // A pre-distortion larger than the move itself is a runaway, not a correction.
+  const lim = 0.05;
+  closedOff = Math.max(-lim, Math.min(lim, closedOff));
+}
+
+// ------------------------------------------- THE COMMISSIONING DITHER
+//
+// A SOFT SENSOR USED INSIDE A LOOP MUST BE COMMISSIONED WITH THE LOOP'S OWN
+// ACTUATION EXCITED, OR IT IS EXTRAPOLATING THE MOMENT THE LOOP ACTS -- and the
+// first version of mode ③ did not, and DIVERGED. The mechanism is exact: the
+// correction shifts the encoder angle, the encoder angle is a model INPUT, and a
+// 544-feature universal map asked about an operating point it never saw during
+// training answers with confidence and is wrong. Held at a FIXED pre-distortion
+// with the truth measured alongside (Node, `scratch-closed.mjs`), trained without
+// the dither:
+//     off 0.000  estimate 1.00x the truth      off 0.010  5.09x
+//     off 0.002  1.60x                         off 0.020  6.27x
+//     off 0.005  2.67x                         off 0.050  26.1x
+// The TRUTH is flat across every row -- a pre-distortion moves the encoder and the
+// link together, so the tip error relative to the encoder does not care. Only the
+// estimate moves, and it moves in the direction that demands MORE correction, so
+// the loop is positive feedback: measured, off ran to the 0.05 clamp and the tool
+// ended up 0.58 out instead of 0.074.
+//
+// So commissioning DELIBERATELY dithers the pre-distortion, at the size the loop
+// will actually use -- the tracker-measured tip error over the arm, which is the
+// correction the machine needs by definition. Same result, retrained:
+//     off 0.000  1.01x    0.005  0.98x    0.020  0.67x    0.050  0.18x
+// i.e. flat over the range the loop occupies and degrading GRACEFULLY outside it
+// rather than exploding. The closed loop then converges: pre-distortion settles at
+// 7.4e-3 and the tool's bias against the program goes -7.7e-2 -> -2.9e-3, a 26x
+// reduction with no model at all.
+//
+// IT IS NOT FREE, and the cost is stated rather than buried: the locked open-loop
+// estimate goes nRMSE 0.383 -> 0.400 at a dither of 0.004 and 0.413 at 0.008, so
+// about 8% of accuracy is spent buying a loop that converges instead of diverging.
+// This is the anti-slosh tab's health-check probe in a different costume: success
+// at correcting an error removes the evidence of it, so the machine has to be
+// driven somewhere it would not otherwise go in order to learn what it needs.
+let ditherAmp = 0;
+
+function ditherNow() {
+  if (!ssTraining || !ditherAmp || !prof) return 0;
+  // INCOMMENSURATE WITH THE MOVE, so no two moves present the same pose offset --
+  // the same reason the chain's amplitude is modulated by the golden ratio.
+  const T = Math.max(1, Math.round(prof.period * 1.6180339887));
+  return ditherAmp * Math.sin(2 * Math.PI * k / T);
+}
+
+/** The pre-distortion to ADD to the commanded angle, in the active mode. */
+function offsetNow(ref) {
+  const m = ctlMode();
+  const d = ditherNow();
+  if (m === 'ff') return comp.offset(ref) + d;
+  if (m === 'closed') return closedOff + d;
+  return d;
+}
+
+// ------------------------------------------------------- the scoreboard
+//
+// BIAS AND OSCILLATION ARE SCORED SEPARATELY BECAUSE THEY HAVE DIFFERENT FIXES, and
+// collapsing them into one rms hides both: compensation removes the bias and moves
+// the oscillation by a few percent, so as a single number it reads as a
+// disappointment. Scored over exactly one move period, so no window has to be
+// chosen -- a dwell-window score depends entirely on how long the dwell is, which
+// is a property of the window and not of the correction.
+const MODE_LABEL = { open: '① open loop', ff: '② + prediction', closed: '③ closed loop' };
+let board = {};
+
+function boardKey() { return `${$('shape-on').checked ? 'shaped' : 'unshaped'}`; }
+
+function recordBoard() {
+  const w = winStats();
+  if (!w || !w.full) return;
+  board[ctlMode()] = { bias: w.bias, sd: w.sd, rms: w.rms, key: boardKey(), k };
+  renderBoard();
+}
+
+function renderBoard() {
+  const keys = ['open', 'ff', 'closed'].filter((m) => board[m]);
+  const el = $('board');
+  if (!keys.length) { el.hidden = true; el.innerHTML = ''; return; }
+  el.hidden = false;
+  const base = board.open;
+  const f = (x) => Number.isFinite(x) ? x.toExponential(2) : '—';
+  const rows = keys.map((m) => {
+    const b = board[m];
+    const bg = base && m !== 'open' && base.bias !== 0
+      ? `<span class="${Math.abs(b.bias) < Math.abs(base.bias) ? 'good' : 'bad'}">`
+        + `${(Math.abs(base.bias) / Math.abs(b.bias)).toFixed(1)}×</span>` : '—';
+    const og = base && m !== 'open' && base.sd !== 0
+      ? `<span class="${b.sd < base.sd ? 'good' : ''}">`
+        + `${(base.sd / b.sd).toFixed(2)}×</span>` : '—';
+    return `<tr><td>${MODE_LABEL[m]}${b.key === 'shaped' ? ' + shaping' : ''}</td>`
+      + `<td>${f(b.bias)}</td><td>${bg}</td><td>${f(b.sd)}</td><td>${og}</td>`
+      + `<td>${f(b.rms)}</td></tr>`;
+  }).join('');
+  el.innerHTML = '<tr><th>mode</th><th>bias</th><th>vs ①</th><th>oscillation</th>'
+    + '<th>vs ①</th><th>rms</th></tr>' + rows;
+}
+
+// ------------------------------------------------------------ Compare
+//
+// EACH MODE IS MEASURED OVER A WHOLE MOVE AND ONLY AFTER IT HAS SETTLED, which is
+// not the same number of moves for each: an open-loop correction takes effect on
+// the very next command, while the closed loop is a lag with a time constant of two
+// bending periods and needs several moves to converge. Reading it earlier would be
+// reading a meter before it settles -- the mistake the anti-slosh tab kept
+// re-teaching.
+let cmp = null;
+
+function settleMoves(m) { return m === 'closed' ? 5 : 1; }
+
+function setCtlMode(m) {
+  $('ctl-mode').value = m;
+  win = [];
+  closedOff = 0;
+  rebuildProfile();
+  stats();
+}
+
+function startCompare() {
+  const seq = ['open', 'ff'];
+  if (ss && ss.mode === 'estimating') seq.push('closed');
+  board = {}; renderBoard();
+  cmp = { seq, i: 0, wait: settleMoves(seq[0]) };
+  setCtlMode(seq[0]);
+  $('compare').textContent = 'Stop compare ■';
+  if (!running && phase === 'ready') { running = true; $('run').textContent = 'Pause ⏸'; }
+  setBadge(`comparing — ${seq.length} modes`, 'warn');
+}
+
+function stopCompare(msg, cls) {
+  cmp = null;
+  $('compare').textContent = 'Compare ▶';
+  if (msg) setBadge(msg, cls);
+}
+
+/** What the correction selector can and cannot do right now, and why. */
+function ctlHint() {
+  const el = $('ctl-hint');
+  const want = $('ctl-mode').value;
+  if (cmp) {
+    el.innerHTML = `<b>Comparing</b> — ${MODE_LABEL[cmp.seq[cmp.i]]}`
+      + (cmp.wait > 0 ? `, settling (${cmp.wait} more move${cmp.wait > 1 ? 's' : ''})`
+        : ', measuring this move')
+      + `. ${cmp.i + 1} of ${cmp.seq.length}.`;
+    return;
+  }
+  if (want === 'closed' && !(ss && ss.mode === 'estimating')) {
+    el.innerHTML = '<b>The closed loop needs a locked sensor.</b> While it is training it is being '
+      + 'told the answer by the tracker, and closing a loop on that is closing it on an instrument '
+      + 'the machine will not have. Train it below, then lock — running open loop until then.';
+    return;
+  }
+  if (want === 'closed') {
+    el.innerHTML = 'The loop drives the <b>estimated</b> tip onto the setpoint, using no model at '
+      + 'all — a first-order lag at two bending periods, so it cannot chase the ringing it sits on. '
+      + 'It removes the bias without the identified constant, and is slower to act than ② is. It '
+      + 'works only because commissioning <b>dithered</b> the correction: a model that never saw one '
+      + 'extrapolates the instant the loop acts, and this loop diverged before that was fixed.';
+    return;
+  }
+  if (want === 'ff') {
+    el.innerHTML = 'The identified compliance, evaluated at the <b>command</b> — never at anything '
+      + 'measured, which is what makes it a production correction rather than a demonstration. It '
+      + 'acts on the very next step, and it is only as right as the constant behind it.';
+    return;
+  }
+  el.innerHTML = 'No correction: the tool goes where the wind-up and the sag put it. This is the '
+    + 'row everything else is measured against — press <b>Compare</b> to fill the table.';
+}
+
+/** Called at every move boundary. Advances the comparison, and records passively. */
+function moveBoundary() {
+  if (!cmp) { recordBoard(); return; }
+  if (cmp.wait > 0) { cmp.wait--; win = []; return; }
+  recordBoard();
+  cmp.i++;
+  if (cmp.i >= cmp.seq.length) {
+    stopCompare('compare done — the table below is the answer', 'good');
+    return;
+  }
+  setCtlMode(cmp.seq[cmp.i]);
+  cmp.wait = settleMoves(cmp.seq[cmp.i]);
+  setBadge(`comparing — ${MODE_LABEL[cmp.seq[cmp.i]]}`, 'warn');
 }
 
 // ------------------------------------------------------- commissioning
@@ -644,7 +1005,8 @@ function finishCommission() {
   comm = null; phase = 'ready'; running = false; k = 0;
   $('commission').textContent = 'Commission ▶';
   $('commission').disabled = false; $('run').disabled = false;
-  $('comp-on').disabled = false; $('flip-sign').disabled = false;
+  $('ctl-mode').disabled = false; $('flip-sign').disabled = false;
+  $('compare').disabled = false; $('board-clear').disabled = false;
   // A SHAPER FOR A MODE THAT DOES NOT RING IS PURE DELAY. Offering the control
   // would be offering a cost with no benefit, so it is disabled and says why.
   $('shape-on').disabled = !!mode.overdamped;
@@ -661,9 +1023,10 @@ function finishCommission() {
 function moveStep(n) {
   const { arm, servo } = A;
   for (let i = 0; i < n; i++) {
+    if ((k % prof.period) === 0 && k > 0) moveBoundary();
     if (motionPending && (k % prof.period) === 0) applyMotion();
     const ref = currentRef();
-    const off = ($('comp-on').checked && comp) ? comp.offset(ref) : 0;
+    const off = offsetNow(ref);
     const tau = servo.torque({ ...ref, theta: ref.theta + off }, arm.encoder());
     arm.step(tau, 1);
     const e = tipTrackingError(arm, ref.theta);
@@ -690,6 +1053,11 @@ let ssTraining = false;
 function ssTick(arm, tauCmd) {
   if (!ss) return;
   const est = ss.observe(arm, tauCmd, 1);
+  // THE OUTER LOOP RUNS ON THE MODEL'S OWN CLOCK, not the frame's. Its lag window is
+  // counted in samples, so an update once per frame would make the loop's bandwidth
+  // a function of the steps-per-frame slider -- a viewing control setting a control
+  // gain, which is the defect this project keeps finding in new places.
+  if ($('ctl-mode').value === 'closed' && ss.mode === 'estimating') closedUpdate(est);
   // The lifecycle: calibrating -> training -> estimating/locked. Training only
   // happens while the operator has asked for it, which is what makes "locked" a
   // decision rather than a timeout.
@@ -822,7 +1190,7 @@ function draw() {
   const scale = Math.min((w - 60) / L, (h - 40) / (L * 0.9));
   const mag = +$('s-mag').value;
   const ref = currentRef();
-  const off = ($('comp-on').checked && comp) ? comp.offset(ref) : 0;
+  const off = offsetNow(ref);
 
   // BODY -> WORLD IS A ROTATION BY +theta, AND SCREEN Y POINTS DOWN. Both have to
   // be right and the first version got the deflection term wrong in a way the
@@ -925,9 +1293,23 @@ function stats() {
             + 'carried no usable oscillation</span>' : ''))]);
     }
     if (prof) {
-      const sp = SPEED_LADDER[motionActive.speed];
-      rows.push(['move', `${prof.span.toFixed(3)} rad about ${homeAngle().toFixed(2)} · `
-        + `${sp.label} (${sp.a} accel + ${sp.c} cruise steps) · dwell ${prof.D}`]);
+      rows.push(['move', motionActive.profile === 'sine'
+        ? `${prof.describe()} about ${homeAngle().toFixed(2)} rad`
+        : (() => { const sp = SPEED_LADDER[motionActive.speed];
+          return `${prof.span.toFixed(3)} rad about ${homeAngle().toFixed(2)} · `
+            + `${sp.label} (${sp.a} accel + ${sp.c} cruise steps) · dwell ${prof.D}`; })()]);
+      const m = ctlMode();
+      const want = $('ctl-mode').value;
+      rows.push(['correction', `<span class="${m === 'open' ? '' : 'good'}">${MODE_LABEL[m]}`
+        + `</span>${m !== want ? ` <span class="warn">(${MODE_LABEL[want]} is not available `
+          + 'yet)</span>' : ''}`
+        + `${$('flip-sign').checked ? ' <span class="bad">INVERTED</span>' : ''}`]);
+      rows.push(['pre-distortion now', `${(offsetNow(ref) * 1e3).toFixed(3)} mrad`
+        + (m === 'closed' ? `   <span class="warn">outer loop τ ≈ `
+          + `${Math.round(SAMPLE_EVERY / closedGain())} steps</span>` : '')
+        + (ssTraining && ditherAmp ? `   <span class="warn">including a ±`
+          + `${(ditherAmp * 1e3).toFixed(2)} mrad commissioning DITHER, so the model sees `
+          + 'the correction it will later be inside</span>' : '')]);
     }
     rows.push(['gearbox resonance', `${joint.naturalFrequency().toExponential(3)} rad/step · `
       + `period ${(2 * Math.PI / joint.naturalFrequency()).toFixed(0)}`]);
@@ -940,8 +1322,9 @@ function stats() {
     hint.innerHTML = 'The tracker is on the machine: three <b>pose touches</b>, then a '
       + 'deliberately excited <b>decay</b> to measure the bending mode. Cancel is safe.';
   } else if (phase === 'ready') {
-    hint.innerHTML = 'Commissioned. <b>Compensation</b> removes the bias, <b>shaping</b> removes '
+    hint.innerHTML = 'Commissioned. Every <b>correction</b> removes the bias, <b>shaping</b> removes '
       + 'the oscillation — turn each on alone and watch one number move and the other stand still.';
+    ctlHint();
   } else {
     hint.innerHTML = 'The tracker is only here once: <b>commission</b> first, then run. '
       + 'Changing the plant throws the commissioning away, because a different machine has a '
@@ -1037,6 +1420,23 @@ $('ss-train').addEventListener('click', () => {
   if (!ss || ss.mode === 'estimating') return;
   ssTraining = !ssTraining;
   ssScoreFrom = ssRec.length;
+  // THE DITHER IS SIZED BY THE TRACKER, which is what a tracker is FOR: the
+  // correction the machine will need is the tip error over the arm, by definition,
+  // so exciting one and a half times that covers the range the loop will occupy
+  // with margin. Reading it off the truth is legitimate here and nowhere else --
+  // this is the one moment the instrument is on the machine.
+  if (ssTraining && A) {
+    // SIZED FROM THE BIAS OVER A WHOLE MOVE, not from an instantaneous read: the tip
+    // error rings, so one sample can land anywhere including near a zero crossing,
+    // and the number the loop will actually have to apply is the BIAS. Bounded at
+    // both ends, since a dither of nothing is no dither at all.
+    const w0 = winStats();
+    const e0 = w0 && w0.full ? Math.abs(w0.bias) : Math.abs(A.arm.tipError().total);
+    ditherAmp = Math.min(0.02, Math.max(1e-3, 1.5 * e0 / A.arm.Larm));
+    console.log(`[flexisim] commissioning dither ${ditherAmp.toExponential(3)} rad, `
+      + `period ${Math.round(prof.period * 1.618)} steps — the loop's own actuation, `
+      + 'excited so the model is not extrapolating the moment mode ③ acts');
+  }
   $('ss-train').textContent = ssTraining ? 'Pause training ⏸' : 'Start training ▶';
 });
 $('ss-lock').addEventListener('click', () => {
@@ -1051,9 +1451,28 @@ $('ss-lock').addEventListener('click', () => {
     console.log(`[flexisim] soft sensor LOCKED after ${ss.trained} pairs`);
   }
 });
-for (const id of ['comp-on', 'shape-on', 'flip-sign']) {
-  $(id).addEventListener('change', () => { rebuildProfile(); win = []; stats(); });
+for (const id of ['shape-on', 'flip-sign']) {
+  // A SHAPING CHANGE INVALIDATES THE TABLE. The rows would then be a mix of shaped
+  // and unshaped moves under one heading, and the "vs open loop" column would be
+  // comparing two different experiments -- which is exactly the scoring bug the
+  // anti-slosh tab found when each machine got a different settle window.
+  $(id).addEventListener('change', () => {
+    rebuildProfile(); win = []; closedOff = 0;
+    board = {}; renderBoard(); stopCompare(); stats();
+  });
 }
+$('ctl-mode').addEventListener('change', () => {
+  stopCompare();
+  setCtlMode($('ctl-mode').value);
+});
+$('compare').addEventListener('click', () => {
+  if (phase !== 'ready') return;
+  if (cmp) { stopCompare('compare stopped'); return; }
+  startCompare();
+});
+$('board-clear').addEventListener('click', () => {
+  stopCompare(); board = {}; renderBoard();
+});
 const ladder = (id, vid, arr, fmtv) => {
   const f = () => { $(vid).textContent = fmtv(arr[+$(id).value]); };
   $(id).addEventListener('input', f);
@@ -1069,6 +1488,11 @@ function applyMotion() {
   motionPending = null;
   rebuildProfile();
   win = [];
+  // A DIFFERENT MOVE IS A DIFFERENT EXPERIMENT. Leaving rows measured under the old
+  // one in the table would make the "vs open loop" column compare two runs that
+  // never shared a reference.
+  board = {}; renderBoard(); stopCompare();
+  closedOff = 0;
   $('motion-pending').hidden = true;
 }
 
@@ -1077,13 +1501,22 @@ function applyMotion() {
 // is the point -- a constant identified at one pose is supposed to work at another,
 // and that is only demonstrable if the pose can be changed without re-commissioning.
 const stageMotion = () => {
-  const next = { span: +$('s-span').value, speed: +$('s-speed').value,
+  const next = { profile: $('s-profile').value, span: +$('s-span').value,
+    speed: +$('s-speed').value, amp: +$('s-amp').value, per: +$('s-freq').value,
     home: HOME_LADDER[+$('s-home').value] };
+  $('trap-ctl').hidden = next.profile !== 'trap';
+  $('sine-ctl').hidden = next.profile !== 'sine';
   $('v-span').textContent = `${SPAN_LADDER[next.span].toFixed(3)} rad`;
   $('v-speed').textContent = SPEED_LADDER[next.speed].label;
+  $('v-amp').textContent = `${AMP_LADDER[next.amp].toFixed(2)} rad`;
+  // THE PERIOD IS SHOWN AGAINST THE BENDING MODE, not on its own. A number of steps
+  // says nothing about whether the drive is below the resonance, on it, or past it,
+  // and that ratio is the only thing the frequency slider is for.
+  const per = PERIOD_LADDER[next.per];
+  $('v-freq').textContent = mode && !mode.overdamped
+    ? `${per} st · ${(mode.period / per).toFixed(2)}× mode` : `${per} steps`;
   $('v-home').textContent = `${next.home.toFixed(2)} rad`;
-  const same = next.span === motionActive.span && next.speed === motionActive.speed
-    && next.home === motionActive.home;
+  const same = Object.keys(next).every((kk) => next[kk] === motionActive[kk]);
   if (same) { motionPending = null; $('motion-pending').hidden = true; stats(); return; }
   motionPending = next;
   // Nothing is running, so there is no move to interrupt: apply it now rather than
@@ -1092,7 +1525,10 @@ const stageMotion = () => {
   else $('motion-pending').hidden = false;
   stats();
 };
-for (const id of ['s-span', 's-speed', 's-home']) $(id).addEventListener('input', stageMotion);
+for (const id of ['s-span', 's-speed', 's-amp', 's-freq', 's-home']) {
+  $(id).addEventListener('input', stageMotion);
+}
+$('s-profile').addEventListener('change', stageMotion);
 stageMotion();
 $('s-spf').addEventListener('input', () => { $('v-spf').textContent = $('s-spf').value; });
 $('s-mag').addEventListener('input', () => { $('v-mag').textContent = $('s-mag').value + '×'; });
@@ -1113,6 +1549,30 @@ const CH = { LEN1: 14, LEN2: 10, E: 0.15 };
 let arm2 = null, servo2 = null, prof2 = null, run2 = false, k2 = 0, busy2 = false;
 let chChartOn = false;
 const chHist = { t: [], t2: [], c21: [], c22: [], tip: [] };
+// The chain's own motion state, staged and applied at a move boundary for the same
+// reason the Move tab's is: rebuilding a reference mid-move is a position-demand
+// step into the servo's proportional gain.
+let motion2 = { span: 3, speed: 2 }, motion2Pending = null;
+let closedOff2 = 0, cmp2 = null, board2 = {};
+// THE CHAIN'S SCORING WINDOW IS THREE MOVE PERIODS, and the Move tab's is one,
+// because the two references are not the same KIND of signal. The Move tab repeats
+// exactly, so one period is the whole experiment. The chain's is amplitude-
+// modulated at the golden ratio with the elbow a quarter period out of phase --
+// deliberately non-repeating, so the sensor cannot score by learning where in the
+// cycle it is -- and a mean over one period therefore reports where in the BEAT the
+// window happened to fall. Measured, six consecutive identical open-loop blocks:
+//   1 period   -0.121 / +0.048 / -0.212 / +0.002 / -0.053 / -0.185   spread 0.26
+//   3 periods  -0.088 / -0.098 / -0.090 / -0.071 / -0.056 / -0.056   spread 0.042
+// 6x tighter, against corrections worth about 0.03 -- so at one period the table
+// would have been reporting the beat and calling it the correction.
+const WIN2_MOVES = 3;
+let win2 = [];                // recent tool errors, WIN2_MOVES move periods
+
+function rebuildProfile2() {
+  const sp = SPEED_LADDER[motion2.speed];
+  prof2 = new AngleProfile({ span: SPAN_LADDER[motion2.span], accelSteps: sp.a,
+    cruiseSteps: sp.c, dwellSteps: 900 });
+}
 
 async function build2() {
   if (arm2) { await arm2.l1.destroy(); await arm2.l2.destroy(); arm2 = null; }
@@ -1128,8 +1588,10 @@ async function build2() {
   arm2.setPose(0, ELBOW_LADDER[+$('s-elbow').value]);
   arm2.K = K;
   servo2 = new ChainServo({ arm: arm2, bandwidth: 2e-3 });
-  prof2 = new AngleProfile({ span: 0.30, accelSteps: 300, cruiseSteps: 400, dwellSteps: 900 });
+  rebuildProfile2();
   k2 = 0;
+  closedOff2 = 0; win2 = []; board2 = {}; stopCompare2(); renderBoard2();
+  $('ctl2-mode').value = 'open';
   for (const a of Object.values(chHist)) a.length = 0;
   csInit();
   console.log(`[flexisim] ${arm2.describe()}`);
@@ -1143,14 +1605,40 @@ async function build2() {
 // score beautifully by learning WHERE IN THE CYCLE it is, and then the test set is
 // the same cycle it trained on. Measured offline, 0.0142 off against 0.0454 on.
 const GOLD = 0.6180339887;
-const amp2 = () => 1 + 0.25 * Math.sin(2 * Math.PI * GOLD * k2 / prof2.period);
+const MOD = 0.25;
+const modW = () => 2 * Math.PI * GOLD / prof2.period;
+const amp2 = () => 1 + MOD * Math.sin(modW() * k2);
 
-/** The two reference points at step k, one per joint. */
+/**
+ * The two reference points at step k, one per joint.
+ *
+ * THE MODULATION'S DERIVATIVES HAVE TO BE THE DERIVATIVES OF THE MODULATED
+ * POSITION, and the first version's were not: it scaled theta, omega and alpha by
+ * the same m, when d/dk (m*theta) = m*theta' + m'*theta. The computed-torque
+ * feedforward was therefore being handed a velocity that is not the derivative of
+ * the position it is tracking, and the servo made up the difference with a
+ * following error that swings with the modulation's PHASE.
+ *
+ * IT WAS INVISIBLE UNTIL SOMETHING TRIED TO MEASURE A BIAS. Six consecutive
+ * identical 9000-step blocks with NO correction at all measured the tool's bias
+ * against the program at -0.186 / +0.243 / -0.672 / -0.121 / -0.816 / -0.172 --
+ * a spread of 1.06 against corrections worth about 0.09, so the scoreboard was
+ * reporting the modulation's phase and calling it the correction. With the
+ * derivatives made consistent the same six blocks read -0.059 / -0.089 / -0.093 /
+ * -0.075 / -0.076 / -0.046, a spread of 0.047 (22x tighter) sitting right next to
+ * the -0.073 the UNMODULATED reference gives. The modulation was never the
+ * problem; an inconsistent derivative was.
+ */
 function refs2() {
   const hold = ELBOW_LADDER[+$('s-elbow').value];
   const m = amp2();
+  const w = modW();
+  const md = MOD * w * Math.cos(w * k2);
+  const mdd = -MOD * w * w * Math.sin(w * k2);
   const a0 = prof2.at(k2);
-  const a = { theta: a0.theta * m, omega: a0.omega * m, alpha: a0.alpha * m };
+  const a = { theta: a0.theta * m,
+    omega: a0.omega * m + md * a0.theta,
+    alpha: a0.alpha * m + 2 * md * a0.omega + mdd * a0.theta };
   if ($('mode2').value === 'both') {
     // The elbow runs the SAME profile a quarter period out of phase, so the
     // configuration changes while the shoulder is mid-move rather than between
@@ -1163,12 +1651,88 @@ function refs2() {
   return [a, { theta: hold, omega: 0, alpha: 0 }];
 }
 
+// ---------------------------------------------- the chain's three corrections
+//
+// APPLIED AT THE SHOULDER, and the lever arm is the whole reach rather than the
+// forearm: rotating joint 1 by dq moves the tool by R*dq where R is the tool
+// radius, so correcting a tool offset e costs only e/R there against e/L2 at the
+// elbow. The tool radius folds with the elbow, so the correction is divided by the
+// radius the arm actually has right now, not by a constant.
+function ctl2Mode() {
+  const v = $('ctl2-mode').value;
+  if (v === 'closed' && !(csWhole && csWhole.mode === 'estimating')) return 'open';
+  return v;
+}
+
+/**
+ * Slower than the Move tab's, and derived from the MOVE rather than from a mode:
+ * what this loop corrects is a bias over a whole move, so a time constant shorter
+ * than the move makes it chase the move itself. Measured at tau = 1200 steps
+ * against a 3800-step move the pre-distortion oscillated between 2e-3 and 3.7e-2
+ * with the tool's bias swinging with it; at two move periods it settles.
+ */
+function closedGain2() { return prof2 ? SAMPLE_EVERY / (2 * prof2.period) : 1e-3; }
+
+/**
+ * The tool's offset from where the PROGRAM asked for it, not from the encoders.
+ *
+ * Pass `est` to get the ESTIMATE of the same quantity: the encoder-relative part is
+ * what a soft sensor produces and the rest is the following error, which the
+ * controller knows exactly.
+ */
+function toolTrackingError(r, est = null) {
+  const e = arm2.encoders();
+  const enc = est === null ? arm2.tipError().total : est;
+  return enc + arm2.toolRadius() * (e[0].angle - r[0].theta)
+    + arm2.L2 * (e[1].angle - r[1].theta);
+}
+
+// The Move tab's commissioning dither, for the same reason and sized the same way.
+let ditherAmp2 = 0;
+
+function dither2Now() {
+  if (!csTraining || !ditherAmp2 || !prof2) return 0;
+  const T = Math.max(1, Math.round(prof2.period * 1.6180339887));
+  return ditherAmp2 * Math.sin(2 * Math.PI * k2 / T);
+}
+
+function off2Now(r) {
+  const m = ctl2Mode();
+  const d = dither2Now();
+  if (m === 'closed') return closedOff2 + d;
+  if (m === 'ff') {
+    // THE MODEL IS EVALUATED AT THE COMMAND. It is given M(q), the Coriolis terms,
+    // gravity, both stiffnesses and both lever arms -- everything a good engineer
+    // has off the CAD and the datasheet -- and it is RIGID: it carries the gearbox
+    // wind-up and knows nothing about either link's own bending, which is the term
+    // the lattice is here for and the reason this rival is beatable.
+    return -servo2.toolOffset(r) / arm2.toolRadius() + d;
+  }
+  return d;
+}
+
 function step2(n) {
   for (let i = 0; i < n; i++) {
+    if ((k2 % prof2.period) === 0 && k2 > 0) {
+      moveBoundary2();
+      if (motion2Pending) {
+        motion2 = motion2Pending; motion2Pending = null;
+        rebuildProfile2(); win2 = []; board2 = {}; renderBoard2(); stopCompare2();
+        $('motion2-pending').hidden = true;
+      }
+    }
     const r = refs2();
-    const tau = servo2.torques(r);
+    const off = off2Now(r);
+    const tau = servo2.torques([{ ...r[0], theta: r[0].theta + off }, r[1]]);
     arm2.step(tau[0], tau[1], 1);
     k2++;
+    // Scored against the COMMAND, which is the question: did the tool reach the
+    // setpoint the PROGRAM asked for, not the one the correction asked for. The
+    // conversion is the same identity the Move tab pins -- tipError() is relative to
+    // the encoders, and the two references differ by exactly the following error,
+    // which the controller knows -- with one term per joint at its own lever arm.
+    win2.push(toolTrackingError(r));
+    if (win2.length > WIN2_MOVES * prof2.period) win2.shift();
     if (k2 % SAMPLE_EVERY === 0) csTick(tau);
     if (k2 % CHART_EVERY === 0) {
       const M = arm2.massMatrix();
@@ -1216,6 +1780,13 @@ function csTick(tau) {
     return;
   }
   const truth = arm2.tipError().total;
+  if ($('ctl2-mode').value === 'closed' && csWhole.mode === 'estimating') {
+    // The estimated TOOL against the program, following error included -- see
+    // closedUpdate() on the Move tab. Here that term is most of the error.
+    const tool = toolTrackingError(refs2(), a);
+    closedOff2 -= closedGain2() * tool / arm2.toolRadius();
+    closedOff2 = Math.max(-0.05, Math.min(0.05, closedOff2));
+  }
   if (csTraining) { csWhole.train(truth); csElbow.train(truth); }
   csRec.push({ k: k2, truth, whole: a, elbow: b });
   if (csRec.length > 2500) { csRec.splice(0, 800); csScoreFrom = Math.max(0, csScoreFrom - 800); }
@@ -1292,6 +1863,12 @@ $('cs-train').addEventListener('click', () => {
   if (!csWhole || csWhole.mode === 'estimating') return;
   csTraining = !csTraining;
   csScoreFrom = csRec.length;
+  if (csTraining && arm2) {
+    const w0 = win2Stats();
+    const e0 = w0 && w0.full ? Math.abs(w0.bias) : Math.abs(arm2.tipError().total);
+    ditherAmp2 = Math.min(0.02, Math.max(1e-3, 1.5 * e0 / arm2.toolRadius()));
+    console.log(`[flexisim] chain commissioning dither ${ditherAmp2.toExponential(3)} rad`);
+  }
   $('cs-train').textContent = csTraining ? 'Pause training ⏸' : 'Start training ▶';
 });
 $('cs-lock').addEventListener('click', () => {
@@ -1304,6 +1881,64 @@ $('cs-lock').addEventListener('click', () => {
   csScoreFrom = csRec.length;
   console.log(`[flexisim] chain sensors LOCKED after ${csWhole.trained} pairs`);
 });
+
+// ------------------------------------------------- the chain's scoreboard
+function win2Stats() {
+  if (!win2.length || !prof2) return null;
+  let m = 0; for (const x of win2) m += x; m /= win2.length;
+  let v = 0; for (const x of win2) v += (x - m) * (x - m); v = Math.sqrt(v / win2.length);
+  return { bias: m, sd: v, rms: Math.sqrt(m * m + v * v), n: win2.length,
+    full: win2.length >= WIN2_MOVES * prof2.period };
+}
+
+function renderBoard2() {
+  const keys = ['open', 'ff', 'closed'].filter((m) => board2[m]);
+  const el = $('board2');
+  if (!keys.length) { el.hidden = true; el.innerHTML = ''; return; }
+  el.hidden = false;
+  const base = board2.open;
+  const f = (x) => (Number.isFinite(x) ? x.toExponential(2) : '—');
+  const g = (m, x, bx) => (base && m !== 'open' && bx !== 0
+    ? `<span class="${Math.abs(x) < Math.abs(bx) ? 'good' : 'bad'}">`
+      + `${(Math.abs(bx) / Math.abs(x)).toFixed(1)}×</span>` : '—');
+  el.innerHTML = '<tr><th>mode</th><th>bias</th><th>vs ①</th><th>oscillation</th>'
+    + '<th>vs ①</th><th>rms</th></tr>'
+    + keys.map((m) => {
+      const b = board2[m];
+      return `<tr><td>${MODE_LABEL[m]}</td><td>${f(b.bias)}</td>`
+        + `<td>${g(m, b.bias, base && base.bias)}</td><td>${f(b.sd)}</td>`
+        + `<td>${g(m, b.sd, base && base.sd)}</td><td>${f(b.rms)}</td></tr>`;
+    }).join('');
+}
+
+function recordBoard2() {
+  const w = win2Stats();
+  if (!w || !w.full) return;
+  board2[ctl2Mode()] = { bias: w.bias, sd: w.sd, rms: w.rms, k: k2 };
+  renderBoard2();
+}
+
+function setCtl2Mode(m) {
+  $('ctl2-mode').value = m; win2 = []; closedOff2 = 0; stats2();
+}
+
+function stopCompare2(msg) {
+  cmp2 = null;
+  $('compare2').textContent = 'Compare ▶';
+  if (msg) { $('state2-badge').textContent = msg; $('state2-badge').className = 'badge good'; }
+}
+
+function moveBoundary2() {
+  if (!cmp2) { recordBoard2(); return; }
+  if (cmp2.wait > 0) { cmp2.wait--; win2 = []; return; }
+  recordBoard2();
+  cmp2.i++;
+  if (cmp2.i >= cmp2.seq.length) { stopCompare2('compare done — see the table'); return; }
+  setCtl2Mode(cmp2.seq[cmp2.i]);
+  // Counted in MOVE boundaries, and the window is WIN2_MOVES of them, so settling
+  // costs that many before a reading is even full.
+  cmp2.wait = cmp2.seq[cmp2.i] === 'closed' ? 3 * WIN2_MOVES : WIN2_MOVES;
+}
 
 function draw2() {
   const cv = $('cv2'), st = $('stage2');
@@ -1407,6 +2042,19 @@ function stats2() {
     rows.push(['…elbow tilt / link 1 bend / link 2 bend',
       `${fmt(te.tilt2, 3)} / ${fmt(te.bend1, 3)} / ${fmt(te.bend2, 3)}`]);
     rows.push(['…total', `${fmt(te.total, 3)}`]);
+    const m = ctl2Mode(), want = $('ctl2-mode').value;
+    const r = refs2();
+    rows.push(['correction', `<span class="${m === 'open' ? '' : 'good'}">${MODE_LABEL[m]}</span>`
+      + (m !== want ? ' <span class="warn">(the closed loop needs a LOCKED sensor — '
+        + 'training on the tracker and then closing a loop on it is closing the loop on the '
+        + 'tracker)</span>' : '')]);
+    rows.push(['pre-distortion at the shoulder', `${(off2Now(r) * 1e3).toFixed(3)} mrad `
+      + `(tool radius ${arm2.toolRadius().toFixed(2)})`]);
+    const w2 = win2Stats();
+    if (w2) {
+      rows.push(['tool vs the PROGRAM, last move', `bias ${fmt(w2.bias, 3)} · `
+        + `oscillation ${fmt(w2.sd, 3)}${w2.full ? '' : ' <span class="warn">(partial)</span>'}`]);
+    }
   }
   $('stats2').innerHTML = rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('');
   if (arm2) {
@@ -1454,6 +2102,7 @@ $('reset2').addEventListener('click', async () => {
 });
 $('mode2').addEventListener('change', () => {
   for (const a of Object.values(chHist)) a.length = 0;
+  win2 = []; board2 = {}; renderBoard2(); stopCompare2(); closedOff2 = 0;
   // A DIFFERENT REGIME IS A DIFFERENT COMMISSIONING. The standardisation is frozen
   // on the stream it was calibrated against, so carrying a model trained with the
   // elbow held into a run where the elbow moves is exactly the drift failure
@@ -1471,6 +2120,43 @@ const ladder2 = (id, vid, arr, fmtv) => {
 };
 ladder2('s-k2', 'v-k2', K2_LADDER, (v) => v.toFixed(1));
 ladder2('s-elbow', 'v-elbow', ELBOW_LADDER, (v) => `${v.toFixed(2)} rad`);
+
+$('ctl2-mode').addEventListener('change', () => {
+  stopCompare2(); setCtl2Mode($('ctl2-mode').value);
+});
+$('compare2').addEventListener('click', () => {
+  if (!arm2) return;
+  if (cmp2) { stopCompare2('compare stopped'); return; }
+  const seq = ['open', 'ff'];
+  if (csWhole && csWhole.mode === 'estimating') seq.push('closed');
+  board2 = {}; renderBoard2();
+  cmp2 = { seq, i: 0, wait: WIN2_MOVES };
+  setCtl2Mode('open');
+  $('compare2').textContent = 'Stop compare ■';
+  if (!run2) { run2 = true; $('run2').textContent = 'Pause ⏸'; }
+  $('state2-badge').textContent = `comparing — ${seq.length} modes`;
+  $('state2-badge').className = 'badge warn';
+});
+$('board2-clear').addEventListener('click', () => {
+  stopCompare2(); board2 = {}; renderBoard2();
+});
+
+const stage2Motion = () => {
+  const next = { span: +$('s-span2').value, speed: +$('s-speed2').value };
+  $('v-span2').textContent = `${SPAN_LADDER[next.span].toFixed(3)} rad`;
+  $('v-speed2').textContent = SPEED_LADDER[next.speed].label;
+  if (next.span === motion2.span && next.speed === motion2.speed) {
+    motion2Pending = null; $('motion2-pending').hidden = true; return;
+  }
+  motion2Pending = next;
+  if (!run2) {
+    motion2 = next; motion2Pending = null; rebuildProfile2();
+    win2 = []; board2 = {}; renderBoard2(); stopCompare2();
+    $('motion2-pending').hidden = true;
+  } else $('motion2-pending').hidden = false;
+};
+for (const id of ['s-span2', 's-speed2']) $(id).addEventListener('input', stage2Motion);
+stage2Motion();
 $('s-spf2').addEventListener('input', () => { $('v-spf2').textContent = $('s-spf2').value; });
 $('s-mag2').addEventListener('input', () => { $('v-mag2').textContent = $('s-mag2').value + '×'; });
 
@@ -1486,6 +2172,11 @@ window.__flxChainDbg = () => (arm2 ? {
     return { c21: r(chHist.c21), c22: r(chHist.c22), t2: r(chHist.t2), n: chHist.t.length };
   })(),
   tip: arm2.tipError(), reach: arm2.toolRadius(), mode: $('mode2').value,
+  ctl: { want: $('ctl2-mode').value, active: ctl2Mode(), closedOff: closedOff2,
+    dither: ditherAmp2, dithering: csTraining && !!ditherAmp2,
+    comparing: cmp2 ? { ...cmp2 } : null },
+  board: board2, win: win2Stats(), motion: { ...motion2, pending: motion2Pending,
+    period: prof2 && prof2.period },
   cells: arm2.l1.lattice.cellCount + arm2.l2.lattice.cellCount,
   sensor: csWhole ? { ...csWhole.status(), training: csTraining, samples: csRec.length,
     scores: csScores() } : null,
@@ -1548,9 +2239,12 @@ $('verify-run').addEventListener('click', async () => {
 window.__flxDbg = () => ({
   phase, running, k, K: A && A.K, E: A && A.E, cells: A && A.link.lattice.cellCount,
   compliance: pc && pc.compliance, mode, win: winStats(),
-  motion: { ...motionActive, pending: motionPending },
+  motion: { ...motionActive, pending: motionPending, period: prof && prof.period },
   decayWant: A ? decayStepsFor(A.E) : null,
-  comp: $('comp-on').checked, shaped: $('shape-on').checked, flipped: $('flip-sign').checked,
+  ctl: { want: $('ctl-mode').value, active: ctlMode(), closedOff, gain: closedGain(),
+    dither: ditherAmp, dithering: ssTraining && !!ditherAmp,
+    comparing: cmp ? { ...cmp } : null },
+  board, shaped: $('shape-on').checked, flipped: $('flip-sign').checked,
   ss: ss ? { ...ss.status(), training: ssTraining, samples: ssRec.length,
     scores: ssScores() } : null,
 });

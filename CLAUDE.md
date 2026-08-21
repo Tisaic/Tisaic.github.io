@@ -2871,6 +2871,156 @@ one.
    between the 6k and 17k rows. Until a page needs that resolution, a WGSL port
    would be a slower path verified only under a software adapter.
 
+
+   **BRICK 20 — THREE CORRECTIONS ON ONE CONTROL, AND THE CLOSED LOOP DIVERGED THE
+   FIRST TIME BECAUSE OF WHAT IT DID TO ITS OWN SENSOR.** The Move and Chain tabs
+   each get a three-way selector rather than a checkbox, because the modes are
+   ALTERNATIVES and there is no machine that is both: **① open loop** (no correction
+   at all), **② open loop + prediction** (the identified compliance, evaluated at the
+   COMMAND, which is what makes it a production correction rather than a
+   demonstration), **③ closed loop** (the servo setpoint driven so the ESTIMATED tool
+   reaches the program's setpoint, using the soft sensor and no model at all). A
+   scoreboard scores each over exactly one move period, and **Compare ▶** runs the
+   whole sequence by itself — settling each mode before reading it, and settling ③
+   for five moves rather than one, because it is a lag and reading it earlier would
+   be reading a meter before it settles.
+   **THE SIGN AND THE LAW ARE THE SAME FOR ALL THREE, WHICH IS THE POINT.** The tool
+   sits at L·θ_encoder + e, so landing it on L·θ_ref needs θ_encoder = θ_ref − e/L.
+   ② predicts e as L·c·τ; ③ measures it. Same law, different source.
+   **THE FEEDBACK SIGNAL IS THE ESTIMATED TOOL AGAINST THE PROGRAM, not the estimate
+   alone** — the difference is the FOLLOWING ERROR, which the controller knows
+   exactly and the sensor cannot see. It costs nothing on the Move tab, where the
+   servo tracks to a fraction of the sag, and it is MOST OF THE ERROR on the chain.
+   **AND THEN MODE ③ DIVERGED, FOR A REASON THAT GENERALISES TO EVERY SOFT SENSOR
+   PUT INSIDE A LOOP.** The correction shifts the encoder angle; the encoder angle is
+   a model INPUT; and a 544-feature universal map asked about an operating point it
+   never saw during training answers confidently and wrong. Held at a FIXED
+   pre-distortion with the truth measured alongside, trained without a dither:
+     off 0.000  estimate 1.00× the truth      off 0.010  5.09×
+     off 0.002  1.60×                         off 0.020  6.27×
+     off 0.005  2.67×                         off 0.050  26.1×
+   **THE TRUTH IS FLAT ACROSS EVERY ROW** — a pre-distortion moves the encoder and
+   the link together, so the tip error relative to the encoder does not care — and
+   the estimate moves in the direction that demands MORE correction. That is
+   positive feedback: measured, the correction ran to its 0.05 clamp and the tool
+   ended up 0.58 out instead of 0.074, i.e. **eight times worse than doing nothing**.
+   **THE FIX IS A COMMISSIONING DITHER, and it is this project's oldest lesson in a
+   new costume.** Training now deliberately dithers the pre-distortion — at 1.5× the
+   tracker-measured tip error over the arm, which is the correction the machine needs
+   BY DEFINITION — on a period incommensurate with the move. Retrained:
+     off 0.000  1.01×    0.005  0.98×    0.020  0.67×    0.050  0.18×
+   Flat over the range the loop occupies and degrading GRACEFULLY outside it rather
+   than exploding. The loop then converges: the pre-distortion settles at 7.4e-3 and
+   the tool's bias against the program goes **−7.7e-2 → −2.9e-3, a 26× reduction with
+   no model at all**.
+   **IT IS NOT FREE AND THE PRICE IS STATED**: in the controlled Node comparison —
+   one script, one variable — the locked open-loop estimate goes nRMSE 0.383 → 0.400
+   at a dither of 0.004 and 0.413 at 0.008, so about 8% of accuracy buys a loop that
+   converges instead of diverging. IN THE BROWSER THE SPREAD SWALLOWS IT: three runs
+   measured 0.3384 (no dither), 0.3870 and 0.3346 (with), i.e. run-to-run variation
+   as large as the effect, which is why the price is quoted from the controlled
+   comparison and not from the page. This is the anti-slosh
+   tab's health-check probe exactly: **success at correcting an error removes the
+   evidence of it**, so the machine has to be driven somewhere it would not otherwise
+   go in order to learn what it needs. There it was an unshaped probe move; here it
+   is a wobble on the correction.
+   **THE CHAIN'S RIVAL HAD TO BE MADE A REAL ONE.** The first version drove the
+   shoulder from `ChainSensor.rigidEstimate`, which carries the INERTIAL term alone —
+   and an inertial term is ZERO-MEAN over an out-and-back move, so it cannot touch a
+   bias no matter how right it is. Measured, it made the chain's tool bias WORSE.
+   `ChainServo` now exposes `jointTorques()` (the load-side M(q)a + C − G it already
+   computed for its own feedforward, split out so a compensator cannot end up with a
+   second copy of the same model) and `toolOffset()`, each joint's wind-up levered by
+   the distance from THAT joint to the tool. Gravity is what makes a compliance model
+   able to correct anything in steady state.
+   **AND THE MOVE PROFILE IS NOW A CHOICE**, because a point-to-point move and a
+   sinusoid ask different questions: the trapezoid excites the plant with a broadband
+   transient whose content depends on the ramp, while a sinusoid excites it at ONE
+   frequency, so sweeping past the bending mode is how a compensator's response is
+   actually characterised. `SineProfile` is closed-form for the same reason
+   `AngleProfile` is — the reference is what every error is measured against, so it
+   must not share the plant's own integration error. **THE FREQUENCY SLIDER'S RANGE
+   COMES FROM THE PLANT**: the servo's bandwidth is 2e-3 rad/step (period ~3100) and
+   the bending mode runs 900–2800 steps across the E ladder, so periods of 800 to
+   12000 span quasi-static, through the resonance, to past what the servo can follow
+   — and the readout prints the period AS A MULTIPLE OF THE BENDING PERIOD, since a
+   number of steps says nothing about which side of the resonance you are on.
+   **AND THE PROFILE SELECTOR SHOWED BOTH PROFILES' SLIDERS AT ONCE, found in a
+   screenshot and by nothing else.** `hidden` is only a UA `display:none`, and ANY
+   class rule that sets `display` beats it — `.controls` sets `display:flex`, so
+   hiding one group did nothing. No error, nothing blank, just the wrong picture, and
+   the attribute was set exactly as intended the whole time. It is the console
+   button's `min-width` bug in a different property, and the regression asserts
+   VISIBILITY (a measured height of zero) rather than the attribute, for the same
+   reason that one had to assert geometry rather than presence.
+   **AND THE CHAIN'S SCOREBOARD WAS MEASURING THE WRONG THING ENTIRELY, which the
+   corrections only exposed.** The chain's reference is amplitude-modulated at the
+   golden ratio so the tool sensor cannot score by learning where in the cycle it is
+   — but `refs2()` scaled theta, omega and alpha by the SAME factor m, when
+   d/dk (m·theta) = m·theta' + m'·theta. The computed-torque feedforward was
+   therefore being handed a velocity that is not the derivative of the position it
+   tracks, and the servo made up the difference with a following error that swings
+   with the modulation's PHASE. Six consecutive identical 9000-step blocks with NO
+   correction at all measured the tool's bias against the program at
+     −0.186 / +0.243 / −0.672 / −0.121 / −0.816 / −0.172
+   — a spread of **1.06 against corrections worth about 0.09**, so the scoreboard was
+   reporting the modulation's phase and calling it the correction, and it duly
+   reported that the model made things worse. With the derivatives made consistent
+   the same six blocks read −0.059 / −0.089 / −0.093 / −0.075 / −0.076 / −0.046, a
+   spread of **0.047 (22× tighter)** sitting right beside the −0.073 an UNMODULATED
+   reference gives. The modulation was never the problem; an inconsistent derivative
+   was — and it had been shipping since brick 15, silently costing following error,
+   because nothing until now tried to measure a bias.
+   MEASURED ON THE CHAIN once that was fixed (Node, the loop fed the truth so the
+   ceiling is separated from the sensor's own error): bias **−8.9e-2 open → −6.3e-2
+   with the rigid model (1.4×) → −2.1e-3 closed (43×)**. THE MODEL HELPS ONLY A
+   LITTLE, AND THAT IS THE RESULT rather than a weak check: it carries the gearbox
+   wind-up and has no term at all for either link's own BENDING, which on this chain
+   is most of the tool error. It is a real rival — given M(q), the Coriolis terms,
+   gravity, both stiffnesses and both lever arms — and the loop beats it by better
+   than an order of magnitude.
+   **AND THE CHAIN'S NUMBERS ARE NOISIER THAN THE MOVE TAB'S BY A LOT, which decided
+   what the browser is allowed to assert.** In the shipped regime — both joints
+   moving, the amplitude modulated at the golden ratio so the sensor cannot score by
+   cycle position — the tool's bias against the program is about **5e-2 to 1e-1**,
+   while the whole-arm sensor's nRMSE of ~0.10 against a tool error whose spread is
+   ~0.46 leaves a residual of **the same 4e-2**. A LOOP CAN ONLY NULL WHAT ITS
+   INSTRUMENT CAN RESOLVE. Three separate readings of the same three modes:
+     browser run A   open −5.1e-2 · model −6.8e-2 · closed −4.5e-2
+     browser run B   open −7.2e-2 · model −4.9e-2 (1.5×) · closed −2.4e-2 (2.9×)
+     the page's own board, run B   open −1.08e-1 · model −2.6e-2 (4.1×) ·
+                                   closed −1.8e-2 (6.0×)
+   The corrections DO work — the two later readings agree on the ranking and on the
+   direction — but run A puts the model on the wrong side of the open loop, so the
+   effect and the measurement's own noise are the same size. The browser is therefore
+   asked to pin the WIRING and the STABILITY (every mode reaches the shoulder as a
+   real pre-distortion; the loop settles rather than running to its clamp; nothing
+   makes the tool dramatically worse) and the CEILING is measured in Node, where the
+   loop can be fed the truth and the comparison controlled — which is the tier rule
+   this file already states.
+   **THE MOVE TAB IS CRISP BY COMPARISON AND THE DIFFERENCE IS THE REFERENCE.** There
+   the move repeats exactly, the model learns the periodic pattern, its residual is
+   zero-MEAN even though its rms is comparable, and the same loop takes the bias
+   **−7.4e-2 → 2.8e-3** reproducibly across every run. A non-repeating reference is
+   what a real machine has, and this is what it costs: the estimate's rms is not the
+   number that matters to a loop, its BIAS is, and nothing about an nRMSE tells the
+   two apart.
+   **AND THE CHAIN NEEDED TWO NUMBERS DERIVED RATHER THAN CARRIED OVER FROM THE MOVE
+   TAB, both of which the first version simply reused.** (i) THE SCORING WINDOW: the
+   Move tab's reference repeats exactly, so one move period is the whole experiment;
+   the chain's is amplitude-modulated at the golden ratio with the elbow a quarter
+   period out of phase, deliberately non-repeating, so a mean over one period reports
+   where in the BEAT the window fell. Six consecutive identical open-loop blocks —
+     1 period   −0.121 / +0.048 / −0.212 / +0.002 / −0.053 / −0.185   spread 0.26
+     3 periods  −0.088 / −0.098 / −0.090 / −0.071 / −0.056 / −0.056   spread 0.042
+   6× tighter against corrections worth about 0.03. (ii) THE LOOP GAIN: a bias over a
+   whole move cannot be corrected by a loop faster than the move. At the Move tab's
+   time constant of ~1200 steps against a 3800-step move the pre-distortion swung
+   between 2e-3 and 3.7e-2 and took the tool's bias with it; derived from the move
+   period instead it settles. Both are the same mistake in different clothes — a
+   constant that was right for one plant carried to another without re-deriving it,
+   which is the double pendulum's ridge all over again.
+
    NOT YET BUILT: the WGSL elastic kernel (see the measurement above); general
    block-sparse bricks for a CLOSED structure — a gantry or a machine frame, where
    members are not separable into per-link frames and the swept box is genuinely
