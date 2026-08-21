@@ -1790,6 +1790,46 @@ check('flexisim/chain: with the elbow commanded to HOLD, its inertial load is mo
   cd.rms.c21 > 3 * cd.rms.c22, `${cd.rms.c21.toExponential(3)} vs ${cd.rms.c22.toExponential(3)}`);
 check('flexisim/chain: and the elbow gearbox really carries a torque it was never commanded',
   Math.abs(cd.windup[1]) > 1e-5 && cd.rms.t2 > 0, JSON.stringify(cd.windup));
+// THE CHAIN'S TOOL SENSOR, TWO MODELS ON ONE STREAM. The physics and the offline
+// numbers are pinned in test/flexisim/chainsensor.test.mjs; what the browser can
+// uniquely break is the wiring -- that both models are fed at the same sample
+// boundaries from the same plant, and that the comparison the tab displays is the
+// one the library measured.
+// THE COMPARISON IS RUN WITH BOTH JOINTS MOVING, which is the regime the claim is
+// about and the one the library measures. With the elbow commanded to hold the
+// result REVERSES (whole arm 0.562 against elbow-only 0.494) and both models are
+// five to eight times worse; that is recorded in test/flexisim/chainsensor.test.mjs
+// and stated on the page rather than hidden, but it is not what this asserts.
+//
+// CHANGING THE REGIME RESTARTS THE SENSORS, because a frozen standardisation
+// belongs to the stream it was calibrated on -- so the run has to go again before
+// the training button is live. Clicking it while still disabled is what the first
+// version did, and it waited thirty seconds for a button that could not enable
+// with the loop paused.
+await fx.selectOption('#mode2', 'both');
+await fx.click('#run2');
+await fx.waitForFunction(() => !document.getElementById('cs-train').disabled,
+  null, { timeout: 120000 });
+await fx.click('#cs-train');
+const ck1 = (await fx.evaluate(() => window.__flxChainDbg())).k;
+await fx.waitForFunction((t) => window.__flxChainDbg().k > t, ck1 + 9000, { timeout: 240000 });
+await fx.click('#cs-lock');
+const ck2 = (await fx.evaluate(() => window.__flxChainDbg())).k;
+await fx.waitForFunction((t) => window.__flxChainDbg().k > t, ck2 + 4000, { timeout: 240000 });
+await fx.click('#run2');
+const cs = (await fx.evaluate(() => window.__flxChainDbg())).sensor;
+console.log(`  flexisim/chain: tool sensor ${cs.mode} after ${cs.trained} pairs — whole arm `
+  + `${cs.scores.whole.toFixed(4)}, elbow only ${cs.scores.elbow.toFixed(4)} `
+  + `(${(cs.scores.elbow / cs.scores.whole).toFixed(2)}x), naive ${cs.scores.naive.toFixed(4)}`);
+check('flexisim/chain: both tool sensors reach a locked, frozen readout',
+  cs.mode === 'estimating' && cs.frozen && cs.trained > 500, JSON.stringify(cs).slice(0, 160));
+check('flexisim/chain: the whole-arm sensor beats the controller\'s own view of the tool',
+  cs.scores.whole < 0.5 * cs.scores.naive,
+  `${cs.scores.whole} vs ${cs.scores.naive}`);
+check('flexisim/chain: and beats the elbow-only model at the SAME feature count',
+  cs.scores.whole < 0.9 * cs.scores.elbow,
+  `${cs.scores.whole} vs ${cs.scores.elbow}`);
+
 const painted2 = await fx.evaluate(() => {
   const c = document.getElementById('cv2');
   if (!c.width || !c.height) return { ok: false, why: 'zero-sized' };

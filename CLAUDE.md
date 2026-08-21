@@ -2755,9 +2755,37 @@ one.
    and it is the check the single-joint sensor never needed because its plant was
    never this over-parameterised.
 
-   NOT YET BUILT: the WGSL kernel; the chain's soft sensor on the PAGE (the Chain
-   tab shows the coupling but does not yet estimate the tool from it); a third
-   joint; and `ServoFF`, the drive-side feedforward, still unused.
+   **BRICK 17 — THE TOOL SENSOR ON THE PAGE, TWO MODELS ON ONE STREAM.** Under the
+   coupling chart: a whole-arm readout and an elbow-only one trained SIDE BY SIDE on
+   the same samples at the same 544-feature capacity, so the comparison is
+   like-for-like at every instant rather than two runs apart. Measured in-browser
+   after 1152 pairs with both joints moving: **whole arm 0.0873, elbow only 0.1914
+   (2.19×), naive 1.0240** — the library's 0.0689 / 0.1771 reproduced through the
+   page's own sampling.
+   **AND THE ANSWER REVERSES BY REGIME, WHICH IS NOW MEASURED AND STATED RATHER
+   THAN AVOIDED.** With the elbow commanded to HOLD — the configuration that makes
+   the coupling clearest — the whole-arm model LOSES: **0.562 against 0.494**, and
+   both models are five to eight times worse than with both joints moving, so that
+   regime is harder for everyone rather than for one architecture. **I DO NOT HAVE
+   A CLEAN MECHANISM, AND THE OBVIOUS ONE DIED ON MEASUREMENT**: matching feature
+   count forces different TIME SPANS (3 lags at stride 2 reach back 4 samples
+   against the single-axis model's 10), so the natural guess is the window — but
+   giving the whole-arm model stride 5, which matches the span exactly at the same
+   feature count, makes it **worse still, 0.793**. Two wrong hypotheses, both
+   falsified, and the finding recorded as regime dependence without a story
+   attached.
+   CHANGING THE REGIME RESTARTS THE SENSORS, because a frozen standardisation
+   belongs to the stream it was calibrated on — carrying a model trained with the
+   elbow held into a run where the elbow moves is exactly the drift failure
+   FlowSim's soft sensor documents. It also means the training button cannot enable
+   while the loop is paused, which the first smoke check learned by waiting thirty
+   seconds for a button that could not light.
+   THE COMMAND'S AMPLITUDE IS MODULATED ON THE PAGE TOO, for the reason brick 16
+   gives: an exactly periodic stream lets a 544-feature model score by recognising
+   where in the cycle it is.
+
+   NOT YET BUILT: the WGSL kernel; a third joint; and `ServoFF`, the drive-side
+   feedforward, still unused.
 
    The second regime on the same lattice engine: a 2–3 joint arm whose TOOL TIP
    is measured by a laser tracker during dynamic moves (ground truth), while the

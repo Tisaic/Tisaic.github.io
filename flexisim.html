@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:209,built:"2026-08-21T15:05:08Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:210,built:"2026-08-21T16:15:41Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -35,8 +35,9 @@
     .badge { position:absolute; left:10px; top:10px; font-size:.7rem; padding:4px 8px; border-radius:6px;
       background:rgba(15,23,42,.85); border:1px solid var(--line); color:var(--muted); }
     .badge.r { left:auto; right:10px; }
-    #err-chart, #ss-chart, #chain-chart { width:100%; height:170px; margin-top:8px; display:none; }
-    #err-chart.on, #ss-chart.on, #chain-chart.on { display:block; }
+    #err-chart, #ss-chart, #chain-chart, #cs-chart { width:100%; height:170px;
+      margin-top:8px; display:none; }
+    #err-chart.on, #ss-chart.on, #chain-chart.on, #cs-chart.on { display:block; }
     code { background:var(--card); padding:.1em .35em; border-radius:5px;
       font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.92em; }
     .controls { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; align-items:center; }
@@ -208,6 +209,43 @@
 
     <dl class="stat" id="stats2"></dl>
 
+    <!-- TWO MODELS ON ONE STREAM. Trained side by side rather than in separate runs,
+         so the comparison is like-for-like at every instant -- the same discipline
+         the NGRC tabs use for their head-to-heads. -->
+    <h3 style="margin:22px 0 0;font-size:.95rem">Tool sensor — per-joint or whole-arm?</h3>
+    <p class="lead">A chain forces a choice a single joint does not: does each axis estimate from
+      <b>its own signals</b> (what a distributed drive naturally supports, and what every servo
+      vendor's compensation package looks like) or does <b>one model read every axis</b>? Both are
+      trained here on the same stream, at the <b>same 544-feature capacity</b> — the whole-arm model
+      gets 3 lags of 10 signals, the elbow-only one 6 lags of 5, so the only difference is which
+      signals, and the single-axis model gets the longer window.</p>
+    <div class="controls">
+      <button id="cs-train" class="sec" disabled>Start training ▶</button>
+      <button id="cs-lock" class="sec" disabled>Lock 🔒</button>
+    </div>
+    <div id="cs-chart"></div>
+    <dl class="stat" id="cs-stats"></dl>
+    <div class="note">
+      <h3>And which one wins depends on the regime — measured, not asserted</h3>
+      Measured offline at 1200 training pairs — with <b>both joints moving</b> the whole-arm model
+      wins, nRMSE <b>0.069</b> against <b>0.177</b>. With the elbow commanded to <b>hold</b> it
+      <i>loses</i>: 0.562 against 0.494 — and both models are five to eight times worse there, so that
+      regime is harder for everyone, not just for one architecture. I do not have a clean mechanism
+      for the reversal, and the obvious one does not survive measurement: matching the two models'
+      <i>time span</i> as well as their feature count (3 lags at stride 5 against 6 at stride 2) makes
+      the whole-arm model worse still, 0.793. Switch the selector above and watch it happen. This page
+      trains fewer pairs than the offline runs, so its live numbers sit higher than both rows.
+    </div>
+    <div class="note">
+      <h3>Why the command wanders</h3>
+      The move's amplitude is modulated at an <b>incommensurate</b> rate, so no two cycles are alike.
+      A 544-feature model fitted to an exactly periodic stream can score beautifully by learning
+      <i>where in the cycle it is</i> — and then the test set is the same cycle it trained on and the
+      number means nothing. Measured offline: 0.0142 with the modulation off, 0.0454 with it on, and
+      a window taken further out still — states even less like the training ones — reads 0.0355,
+      <i>lower</i> rather than higher. That is what says it generalises rather than recalls.
+    </div>
+
     <div class="note">
       <h3>The chart is the claim</h3>
       The elbow is commanded to <b>hold still</b> in "shoulder only" mode, and its gearbox transmits a
@@ -296,6 +334,7 @@ import { PlanarComp } from './lib/flexisim/compliance.js';
 import { TipSensor, nrmse } from './lib/flexisim/tipsensor.js';
 import { FlexArm2R } from './lib/flexisim/arm2r.js';
 import { ChainServo } from './lib/flexisim/compensator.js';
+import { ChainSensor } from './lib/flexisim/chainsensor.js';
 import {
   AngleProfile, PositionServo, TipCompensator, tipTrackingError, zvdShaper, ringFit,
 } from './lib/flexisim/compensator.js';
@@ -319,6 +358,7 @@ for (const t of document.querySelectorAll('.tab')) {
     if (t.dataset.tab === 'move' && ssChartOn) Plotly.Plots.resize($('ss-chart'));
     if (t.dataset.tab === 'chain') {
       if (chChartOn) Plotly.Plots.resize($('chain-chart'));
+      if (csChartOn) Plotly.Plots.resize($('cs-chart'));
       // A HIDDEN CANVAS HAS NO SIZE, and 0/0 is NaN rather than zero -- FlowSim's
       // probe found that the hard way. The chain stage is built while this panel is
       // display:none, so it is drawn once the panel is actually visible.
@@ -774,7 +814,7 @@ function frame() {
   }
   if (onChain) {
     draw2();
-    if (frames % 6 === 0) { stats2(); chainChart(); }
+    if (frames % 6 === 0) { stats2(); chainChart(); csStats(); csChart(); }
   }
   if (!A || busy) return;
   if (running) {
@@ -872,23 +912,34 @@ async function build2() {
   prof2 = new AngleProfile({ span: 0.30, accelSteps: 300, cruiseSteps: 400, dwellSteps: 900 });
   k2 = 0;
   for (const a of Object.values(chHist)) a.length = 0;
+  csInit();
   console.log(`[flexisim] ${arm2.describe()}`);
   $('state2-badge').textContent = 'ready — press Run move';
   $('state2-badge').className = 'badge';
   draw2(); stats2();
 }
 
+// THE AMPLITUDE IS MODULATED AT AN INCOMMENSURATE RATE, so no two cycles are alike.
+// It is not decoration: a 544-feature model fitted to an exactly periodic stream can
+// score beautifully by learning WHERE IN THE CYCLE it is, and then the test set is
+// the same cycle it trained on. Measured offline, 0.0142 off against 0.0454 on.
+const GOLD = 0.6180339887;
+const amp2 = () => 1 + 0.25 * Math.sin(2 * Math.PI * GOLD * k2 / prof2.period);
+
 /** The two reference points at step k, one per joint. */
 function refs2() {
   const hold = ELBOW_LADDER[+$('s-elbow').value];
-  const a = prof2.at(k2);
+  const m = amp2();
+  const a0 = prof2.at(k2);
+  const a = { theta: a0.theta * m, omega: a0.omega * m, alpha: a0.alpha * m };
   if ($('mode2').value === 'both') {
     // The elbow runs the SAME profile a quarter period out of phase, so the
     // configuration changes while the shoulder is mid-move rather than between
     // moves -- which is when the inertia change actually costs a controller
     // something.
     const b = prof2.at(k2 + Math.round(prof2.period / 4));
-    return [a, { theta: hold + b.theta - prof2.span / 2, omega: b.omega, alpha: b.alpha }];
+    return [a, { theta: hold + (b.theta - prof2.span / 2) * m, omega: b.omega * m,
+      alpha: b.alpha * m }];
   }
   return [a, { theta: hold, omega: 0, alpha: 0 }];
 }
@@ -896,9 +947,10 @@ function refs2() {
 function step2(n) {
   for (let i = 0; i < n; i++) {
     const r = refs2();
-    const [t1, t2] = servo2.torques(r);
-    arm2.step(t1, t2, 1);
+    const tau = servo2.torques(r);
+    arm2.step(tau[0], tau[1], 1);
     k2++;
+    if (k2 % SAMPLE_EVERY === 0) csTick(tau);
     if (k2 % CHART_EVERY === 0) {
       const M = arm2.massMatrix();
       chHist.t.push(k2);
@@ -915,6 +967,124 @@ function step2(n) {
     }
   }
 }
+
+// ------------------------------------------------- the chain's tool sensor
+//
+// TWO MODELS ON ONE STREAM, at MATCHED CAPACITY. The whole-arm model reads 10
+// signals over 3 lags and the elbow-only one reads 5 over 6 -- the same
+// 30-dimensional base and the same 544-feature basis, so the only difference is
+// WHICH SIGNALS, and the single-axis model gets the longer window, which if
+// anything favours it. Training them side by side rather than in separate runs is
+// what makes the comparison like-for-like at every instant.
+let csWhole = null, csElbow = null, csTraining = false, csChartOn = false;
+const csRec = [];
+let csScoreFrom = 0;
+
+function csInit() {
+  csWhole = new ChainSensor({ joints: [0, 1], sampleEvery: SAMPLE_EVERY, lag: 3, warmup: 200 });
+  csElbow = new ChainSensor({ joints: [1], sampleEvery: SAMPLE_EVERY, lag: 6, warmup: 200 });
+  csRec.length = 0; csScoreFrom = 0; csTraining = false;
+  $('cs-train').disabled = true; $('cs-lock').disabled = true;
+  $('cs-train').textContent = 'Start training ▶';
+}
+
+function csTick(tau) {
+  if (!csWhole) return;
+  const a = csWhole.observe(arm2, tau, 1);
+  const b = csElbow.observe(arm2, tau, 1);
+  if (a === null || b === null) {
+    if (csWhole.ss.frozen && csElbow.ss.frozen) $('cs-train').disabled = false;
+    return;
+  }
+  const truth = arm2.tipError().total;
+  if (csTraining) { csWhole.train(truth); csElbow.train(truth); }
+  csRec.push({ k: k2, truth, whole: a, elbow: b });
+  if (csRec.length > 2500) { csRec.splice(0, 800); csScoreFrom = Math.max(0, csScoreFrom - 800); }
+  $('cs-lock').disabled = csWhole.mode !== 'training' || csWhole.trained < 400;
+}
+
+/** Scores over the most recent window, and only since the last mode change. */
+function csScores() {
+  const from = Math.max(csScoreFrom, csRec.length - SS_WIN);
+  const n = csRec.length - from;
+  if (n < 60) return null;
+  const truth = [], w = [], e = [];
+  for (let i = from; i < csRec.length; i++) {
+    truth.push(csRec[i].truth); w.push(csRec[i].whole); e.push(csRec[i].elbow);
+  }
+  return { n, whole: nrmse(w, truth), elbow: nrmse(e, truth),
+    naive: nrmse(truth.map(() => 0), truth) };
+}
+
+function csStats() {
+  const rows = [];
+  if (csWhole) {
+    const st = csWhole.status();
+    const label = st.mode === 'calibrating' ? 'calibrating the standardisation'
+      : (st.mode === 'training' ? (csTraining ? `training — ${st.trained} pairs`
+        : `paused — ${st.trained} pairs trained`) : `LOCKED after ${st.trained} pairs`);
+    rows.push(['mode', `<span class="${st.mode === 'estimating' ? 'good' : ''}">${label}</span>`]);
+    rows.push(['capacity', `${st.features} features each · whole arm ${st.signals} signals × 3 lags `
+      + `· elbow only ${csElbow.status().signals} × 6 lags`]);
+  }
+  const sc = csScores();
+  if (sc) {
+    const f = (x) => x.toFixed(4);
+    rows.push(['whole arm (both axes)', `<span class="good">${f(sc.whole)}</span>`]);
+    rows.push(['elbow only (its own signals)', `${f(sc.elbow)}   `
+      + `<span class="warn">${(sc.elbow / sc.whole).toFixed(2)}× the whole-arm error</span>`]);
+    rows.push(['"the tool is where the encoders say"', f(sc.naive)]);
+    rows.push(['scored over', `${sc.n} samples since the last mode change`]);
+  } else if (csWhole && csWhole.mode !== 'calibrating') {
+    rows.push(['scores', 'collecting samples…']);
+  }
+  $('cs-stats').innerHTML = rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('');
+}
+
+function csChart() {
+  if (csRec.length < 40) return;
+  const from = Math.max(0, csRec.length - SS_WIN);
+  const T = [], TR = [], W = [], EL = [];
+  for (let i = from; i < csRec.length; i++) {
+    T.push(csRec[i].k); TR.push(csRec[i].truth); W.push(csRec[i].whole); EL.push(csRec[i].elbow);
+  }
+  const traces = [
+    { x: T, y: TR, name: 'truth (tracker)', line: { color: '#e2e8f0', width: 2 } },
+    { x: T, y: W, name: 'whole arm', line: { color: '#22d3ee', width: 1.5 } },
+    { x: T, y: EL, name: 'elbow only', line: { color: '#f472b6', width: 1.5, dash: 'dot' } },
+  ];
+  if (!csChartOn) {
+    Plotly.newPlot('cs-chart', traces, {
+      margin: { l: 46, r: 10, t: 6, b: 26 }, paper_bgcolor: '#0b1220', plot_bgcolor: '#060a14',
+      font: { color: '#94a3b8', size: 9 }, showlegend: true,
+      legend: { orientation: 'h', y: 1.18, font: { size: 9 } },
+      xaxis: { gridcolor: '#1e293b', title: { text: 'solver steps', font: { size: 9 } } },
+      yaxis: { gridcolor: '#1e293b' },
+    }, { displayModeBar: false, responsive: true });
+    $('cs-chart').classList.add('on');
+    csChartOn = true;
+    return;
+  }
+  Plotly.react('cs-chart', traces, $('cs-chart').layout,
+    { displayModeBar: false, responsive: true });
+}
+
+$('cs-train').addEventListener('click', () => {
+  if (!csWhole || csWhole.mode === 'estimating') return;
+  csTraining = !csTraining;
+  csScoreFrom = csRec.length;
+  $('cs-train').textContent = csTraining ? 'Pause training ⏸' : 'Start training ▶';
+});
+$('cs-lock').addEventListener('click', () => {
+  if (!csWhole || csWhole.mode !== 'training') return;
+  csWhole.lock(); csElbow.lock(); csTraining = false;
+  $('cs-train').textContent = 'Start training ▶'; $('cs-train').disabled = true;
+  $('cs-lock').disabled = true;
+  // THE METER RESTARTS AT THE LOCK: a score spanning it is a blend of the model
+  // that was still being told the answer and the one that is not.
+  csScoreFrom = csRec.length;
+  console.log(`[flexisim] chain sensors LOCKED after ${csWhole.trained} pairs`);
+});
 
 function draw2() {
   const cv = $('cv2'), st = $('stage2');
@@ -1065,6 +1235,11 @@ $('reset2').addEventListener('click', async () => {
 });
 $('mode2').addEventListener('change', () => {
   for (const a of Object.values(chHist)) a.length = 0;
+  // A DIFFERENT REGIME IS A DIFFERENT COMMISSIONING. The standardisation is frozen
+  // on the stream it was calibrated against, so carrying a model trained with the
+  // elbow held into a run where the elbow moves is exactly the drift failure
+  // FlowSim's soft sensor documents. The sensors restart.
+  csInit();
 });
 const ladder2 = (id, vid, arr, fmtv) => {
   const f = () => { $(vid).textContent = fmtv(arr[+$(id).value]); };
@@ -1093,6 +1268,8 @@ window.__flxChainDbg = () => (arm2 ? {
   })(),
   tip: arm2.tipError(), reach: arm2.toolRadius(), mode: $('mode2').value,
   cells: arm2.l1.lattice.cellCount + arm2.l2.lattice.cellCount,
+  sensor: csWhole ? { ...csWhole.status(), training: csTraining, samples: csRec.length,
+    scores: csScores() } : null,
 } : null);
 
 // --------------------------------------------------------------- verify
