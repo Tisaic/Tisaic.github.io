@@ -143,6 +143,7 @@ one.
 | `test/run.sh` | Dev-only: NGRC unit tests + serves the repo + runs the smoke test in a mobile Chromium. |
 | `test/smoke.mjs` | Playwright checks + screenshots for the console, doc viewer, NGRC demo, and FlowSim. |
 | `test/lattsim/` | Node tests for the lattice engine: stencil isotropy, indexing/units, conservation (f32 + f64), Poiseuille vs the analytic parabola. |
+| `flexisim.html` | FlexiSim: the compliant serial chain (Move / Verify / Architecture) using `lib/flexisim` on `lib/lattsim`. Commission the arm in the browser, then watch compensation and input shaping move two different numbers. |
 | `lib/flexisim/` | The COMPOSITION layer for compliant serial chains: lumped joints (`joint.js`), a lattice link in its own body frame (`link.js`), the hybrid arm (`arm.js`), the tip-error soft sensor (`tipsensor.js`), the structured compliance identification (`compliance.js`) and the active compensator (`compensator.js`). Depends on `lib/lattsim` for the link and `lib/ngrc` for the models. |
 | `test/flexisim/` | Node tests for the hybrid plant: the joint against its closed forms, the joint-vs-link split, the soft sensor, compliance identification, and the compensation 2×2. No browser, no adapter, seconds. |
 | `CLAUDE.md` | This file. |
@@ -2491,9 +2492,76 @@ one.
    breaking it (clamped to a tenth of what it wants, bias 4.8e-2 against 7.4e-2
    uncompensated and 2.7e-4 unclamped).
 
-   NOT YET BUILT: the WGSL kernel; the page; a second and third joint; `ServoFF` (the
-   drive-side feedforward, still unused) and `Continuous`/`directHorizons` (the
-   forecast a compensator with transport delay actually consumes).
+   **BRICK 11 — THE FORECAST, AND PREDICTING AHEAD IS EASIER THAN PREDICTING NOW.**
+   `SoftSensor` gains `opts.leads` — a ring of past FEATURE vectors, so target j is
+   trained by pairing the expansion from `leads[j]` samples ago with the truth that
+   has just arrived. It is `Continuous`'s `directHorizons` mechanism, which
+   `SoftSensor` had no equivalent of and which FlowSim's page therefore hand-rolled.
+   Opt-in, default all-zero, every golden vector byte-identical; the expansion is
+   computed ONCE and shared, so a forecast costs one extra RLS update and no extra
+   features. Measured, locked, lead 30 samples = 300 solver steps: forecast
+   **0.1920**, persistence-of-estimate 1.1826 (what a machine could run),
+   persistence-of-TRUTH 1.0093 (an ORACLE — it needs the tracker back).
+   **THE FORECAST SCORES BETTER THAN THE PRESENT-TIME ESTIMATE** (0.1920 against
+   0.5370), which looks impossible and is not: correlation with the truth is 0.9960
+   at lag +30 against 0.9499 at lag −1. The cause is a TRANSPORT DELAY. The gearbox
+   resonance has a ~1040-step period, so the tip lags the motor by about a quarter
+   of it — ~260 steps, 26 samples — while the readout's window is lag 6 × stride 2 ×
+   sampleEvery 10 = 100 steps. The tip error NOW is a response to excitation that
+   has ALREADY LEFT the window; the tip error 300 steps ahead is a response to
+   excitation sitting at the freshest end of it. Predicting forward is not
+   extrapolation here, it is reading the signal at the delay the plant already has —
+   and a real compensator sits on the other side of that same delay.
+   THE HORIZON SWEEP IS THE FALSIFIABLE FORM OF THAT, and it holds: skill must have
+   a MINIMUM near the delay and get worse on BOTH sides.
+     lead   5 (  50 steps)  forecast 0.4514  persist-truth 0.1884
+     lead  15 ( 150 steps)  forecast 0.3900  persist-truth 0.5418
+     lead  30 ( 300 steps)  forecast **0.1920**  persist-truth 1.0093
+     lead  60 ( 600 steps)  forecast 0.6155  persist-truth 1.7705
+   Persistence degrades MONOTONICALLY and the learner does not, which is the
+   difference between a model and an assumption. And the ALIGNMENT is checked, not
+   just the score: a forecast trained at lead L must correlate best at exactly L,
+   since an off-by-one in the ring is an error no score would reveal.
+
+   **BRICK 12 — THE PAGE.** `flexisim.html`, three tabs. **Move** builds the hybrid
+   arm, runs COMMISSIONING inside the frame loop (three pose holds, then a
+   deliberately excited decay for the bending mode) so the workflow is watched
+   rather than hidden in a blocking call, and then drives the repeating move with
+   compensation, input shaping and an INVERT toggle. The picture draws three lines:
+   what the program asked, what the ENCODER believes, and the truth — the link at
+   its real angle, bent by its own load, with the deflection exaggerated by a
+   labelled slider because it is well under a percent of the arm. **Verify** runs
+   the closed forms in this browser against the same modules. **Architecture** is
+   the design note.
+   TWO DISPLAY DEFECTS, BOTH OF THE CLASS THIS PROJECT KEEPS MEETING — no error,
+   nothing blank, just the wrong picture. (i) **THE LINK BENT TOWARD THE SKY.**
+   Body→world is a rotation by +θ and screen Y points DOWN; the first version
+   rotated by −θ and then flipped Y, which leaves a STRAIGHT arm looking correct
+   (the two negations cancel when the deflection is zero) while drawing every sag
+   upward. It is the anti-slosh tab's wave-on-the-wrong-wall bug in a different
+   frame, and it is fixed at the point of drawing. (ii) **THE CHART FROZE ON ITS
+   FIRST FIFTEEN POINTS.** `Plotly.react` compares data BY REFERENCE, so the live
+   arrays mutated in place are a no-op: the page showed a run that had stopped after
+   350 steps while the simulation was sixteen thousand steps in. A smoke check now
+   asserts the last plotted step is near the run's own step counter.
+   AND THE CHART IS SAMPLED IN SOLVER STEPS, not once per frame, because a
+   per-frame trace rescales itself whenever the steps-per-frame slider moves — a
+   viewing control changing the shape of a physics plot, which is FlowSim's
+   residual defect over again.
+   THE SMOKE TEST DOES NOT RE-MEASURE THE PHYSICS, which is already pinned in plain
+   Node where f64 is available. It checks what only a browser can break: that the
+   modules load as modules over HTTP, that commissioning reaches `ready`, that the
+   canvas is painted, that the in-browser closed forms pass, and that the
+   COMPENSATION CHECKBOX actually collapses the bias (−7.365e-2 → 2.811e-4, the
+   same numbers Node measures) while leaving the oscillation alone.
+   ONE CHECK FAILED FIRST AND THE PAGE WAS RIGHT: the in-browser self-weight sag
+   used the material span 16 instead of the ARM LENGTH 15.5 and read 10% low. The
+   boundary sits where the scheme puts it, not where the loop bounds are — the same
+   lesson as Poiseuille's H = Nz−2.
+
+   NOT YET BUILT: the WGSL kernel; a second and third joint; the soft sensor and its
+   forecast on the PAGE (they are library-and-Node only so far); and `ServoFF`, the
+   drive-side feedforward, still unused.
 
    The second regime on the same lattice engine: a 2–3 joint arm whose TOOL TIP
    is measured by a laser tracker during dynamic moves (ground truth), while the

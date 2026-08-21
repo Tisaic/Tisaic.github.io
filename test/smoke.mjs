@@ -50,9 +50,10 @@ const FULL = process.env.SUITE === 'full';
 // as it always did. AREAS set-but-EMPTY means nothing changed and neither page
 // needs driving -- which is a different statement, and `||` would have collapsed
 // the two into "run everything" exactly when there was least reason to.
-const AREAS = (process.env.AREAS === undefined ? 'ngrc,flowsim' : process.env.AREAS)
+const AREAS = (process.env.AREAS === undefined ? 'ngrc,flowsim,flexisim' : process.env.AREAS)
   .split(',').map((s) => s.trim()).filter(Boolean);
-const AREA = { ngrc: AREAS.includes('ngrc'), flowsim: AREAS.includes('flowsim') };
+const AREA = { ngrc: AREAS.includes('ngrc'), flowsim: AREAS.includes('flowsim'),
+  flexisim: AREAS.includes('flexisim') };
 
 let failed = 0;
 // Section timing, so "the suite is slow" can be answered with a number instead
@@ -1642,6 +1643,116 @@ if (FULL) {
 }
 
 }   // end AREA-gated flowsim page
+
+// ---- FlexiSim (flexisim.html): the hybrid arm, commissioned in the browser ----
+//
+// EVERY PHYSICS CLAIM ON THIS PAGE IS ALREADY PINNED IN PLAIN NODE, in
+// test/flexisim/, where f64 is available and a run costs seconds. What only a
+// browser can check is the WIRING: that the modules load as modules over HTTP,
+// that the commissioning lifecycle actually reaches `ready`, that the canvas is
+// painted, and that the controls change what they claim to. So this section drives
+// the lifecycle and reads the page's own debug hook -- it does not re-measure the
+// physics.
+if (AREA.flexisim) {
+section('flexisim page');
+const fx = await ctx.newPage();
+const fxErrors = [];
+fx.on('pageerror', (e) => fxErrors.push(String(e)));
+await fx.goto(BASE.replace(/index\.html$/, '') + 'flexisim.html', { waitUntil: 'load' });
+// THE CONSOLE BUFFER IS PER ORIGIN, NOT PER PAGE -- it is persisted to
+// localStorage so a white-screen crash survives a reload, which means this page
+// inherits errors from every other page in this run. Cleared on entry so the
+// buffer check at the end is about THIS page.
+await fx.evaluate(() => window.__dbg && window.__dbg.clear && window.__dbg.clear());
+await fx.waitForFunction(() => window.__flxDbg && window.__flxDbg().cells > 0, null, { timeout: 60000 });
+check('flexisim.html loads and builds the hybrid arm', fxErrors.length === 0, fxErrors.join(' | '));
+const fx0 = await fx.evaluate(() => window.__flxDbg());
+check('flexisim: the lattice link is built', fx0.cells > 0 && fx0.phase === 'idle',
+  JSON.stringify(fx0));
+await checkConsoleUsable(fx, 'flexisim');
+
+// COMMISSIONING IS THE LIFECYCLE, and it is the thing a browser can break that
+// Node cannot: it runs inside the frame loop across many frames rather than in one
+// blocking call, so a stalled or mis-sequenced phase shows up here and nowhere
+// else. 27600 solver steps at the slider's maximum.
+await fx.evaluate(() => { document.getElementById('s-spf').value = '200'; });
+await fx.click('#commission');
+await fx.waitForFunction(() => window.__flxDbg().phase === 'ready', null, { timeout: 120000 });
+const fxc = await fx.evaluate(() => window.__flxDbg());
+check('flexisim: commissioning identifies a compliance and a bending mode',
+  fxc.compliance > 0 && fxc.mode && fxc.mode.omega > 0, JSON.stringify(fxc).slice(0, 200));
+// The identified constant has a MEANING, so it can be checked rather than merely
+// reported: a tracker at the tip sees wind-up AND bending, so the effective
+// compliance must exceed the gearbox's own 1/K.
+check('flexisim: the identified compliance exceeds the gearbox alone, as a tip measurement must',
+  fxc.compliance > 1 / fxc.K, `${fxc.compliance} vs ${1 / fxc.K}`);
+
+// Run a move with compensation OFF, then ON, and require the BIAS to collapse.
+// This is the page's headline and it is the one thing the wiring could silently
+// get wrong -- the physics is pinned in Node, but nothing there proves the
+// checkbox reaches the compensator.
+const runFor = async (steps) => {
+  const k0 = (await fx.evaluate(() => window.__flxDbg())).k;
+  await fx.evaluate(() => { if (!window.__flxDbg().running) document.getElementById('run').click(); });
+  await fx.waitForFunction((t) => window.__flxDbg().k > t, k0 + steps, { timeout: 120000 });
+  await fx.evaluate(() => { if (window.__flxDbg().running) document.getElementById('run').click(); });
+};
+await runFor(8000);
+const plain = (await fx.evaluate(() => window.__flxDbg())).win;
+await fx.evaluate(() => { document.getElementById('comp-on').click(); });
+await runFor(8000);
+const compd = (await fx.evaluate(() => window.__flxDbg())).win;
+console.log(`  flexisim: bias ${plain.bias.toExponential(3)} -> ${compd.bias.toExponential(3)}, `
+  + `oscillation ${plain.sd.toExponential(3)} -> ${compd.sd.toExponential(3)}`);
+check('flexisim: the compensation checkbox actually collapses the bias',
+  Math.abs(compd.bias) < 0.1 * Math.abs(plain.bias),
+  `${plain.bias} -> ${compd.bias}`);
+check('flexisim: and it leaves the oscillation alone, which is the other mechanism',
+  Math.abs(compd.sd / plain.sd - 1) < 0.35, `${plain.sd} -> ${compd.sd}`);
+
+// THE CHART MUST TRACK THE RUN. Plotly.react compares data by REFERENCE, so a
+// chart handed the same arrays mutated in place silently freezes on its first
+// points -- no error, nothing blank, just the wrong picture. Asserting that the
+// last plotted step is near the simulation's own step counter is the only thing
+// that catches it.
+const chartEnd = await fx.evaluate(() => {
+  const d = document.getElementById('err-chart').data;
+  return d && d[0] && d[0].x.length ? d[0].x[d[0].x.length - 1] : -1;
+});
+const kNow = (await fx.evaluate(() => window.__flxDbg())).k;
+check('flexisim: the error chart tracks the run rather than freezing on its first points',
+  chartEnd > kNow - 600, `chart ends at ${chartEnd}, run is at ${kNow}`);
+
+// The canvas must actually be painted. An unpainted canvas is not an error and
+// not blank -- it is WHITE, which against this page reads as broken.
+const painted = await fx.evaluate(() => {
+  const c = document.getElementById('cv');
+  if (!c.width || !c.height) return { ok: false, why: 'zero-sized' };
+  const g = c.getContext('2d');
+  const d = g.getImageData(0, 0, c.width, c.height).data;
+  let lit = 0;
+  for (let i = 0; i < d.length; i += 4 * 37) if (d[i] > 60 || d[i + 1] > 60) lit++;
+  return { ok: lit > 20, lit };
+});
+check('flexisim: the stage is painted', painted.ok, JSON.stringify(painted));
+await fx.screenshot({ path: join(SHOTS, '05-flexisim.png') });
+
+// The in-browser Verify tab runs the same closed forms against the same modules.
+await fx.click('.tab[data-tab="verify"]');
+await fx.click('#verify-run');
+await fx.waitForSelector('#verify-out table', { timeout: 60000 });
+const vres = await fx.$$eval('#verify-out tbody tr, #verify-out table tr',
+  (rs) => rs.slice(1).map((r) => r.cells[0].textContent.trim()[0]));
+check('flexisim: every in-browser closed-form check passes',
+  vres.length > 4 && vres.every((c) => c === '\u2713'), vres.join(''));
+
+// The page's OWN error buffer, which is the instrument that has caught what
+// pageerror cannot: neither it nor a console listener sees an unhandled rejection.
+const fxBuf = await fx.evaluate(() => window.__dbg.buffer().filter((e) => e.type === 'error'));
+check('flexisim: the page reports no errors of its own', fxBuf.length === 0,
+  JSON.stringify(fxBuf).slice(0, 300));
+await fx.close();
+}   // end AREA-gated flexisim page
 
 // OUTSIDE the gate: it was inside on the first attempt, which meant that
 // skipping FlowSim left the browser open and the process hanging rather than

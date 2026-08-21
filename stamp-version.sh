@@ -12,6 +12,7 @@ NUM="$(( $(git rev-list --count HEAD) + 1 ))"
 # Replace the marked line in index.html (marker survives so it's re-stampable).
 sed -i "s|.*// __STAMP__.*|  <script>window.__BUILD = {version:${NUM},built:\"${BUILT}\"}; // __STAMP__</script>|" index.html
 sed -i "s|.*// __NGRC_STAMP__.*|  <script>window.__BUILD = {version:${NUM},built:\"${BUILT}\"}; // __NGRC_STAMP__</script>|" ngrc.html
+sed -i "s|.*// __FLEXISIM_STAMP__.*|  <script>window.__BUILD = {version:${NUM},built:\"${BUILT}\"}; // __FLEXISIM_STAMP__</script>|" flexisim.html
 sed -i "s|.*// __FLOWSIM_STAMP__.*|  <script>window.__BUILD = {version:${NUM},built:\"${BUILT}\"}; // __FLOWSIM_STAMP__</script>|" flowsim.html
 
 # Write the server-side manifest the page fetches to detect staleness.

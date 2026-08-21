@@ -182,14 +182,10 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
   fi
 fi
 
-# NO BROWSER WHEN NO PAGE IS UNDER TEST. FlexiSim has no page yet, so on a
-# flexisim-only run the server, the mobile-emulated Chromium and the index-page
-# checks are eight seconds spent proving something the edit could not have
-# touched. Skipping them is what takes the build loop from 10 s to under 2 --
-# which is the difference between a check that gets run on every edit and one
-# that does not. Delete this branch the moment flexisim.html exists.
+# NO BROWSER WHEN NO PAGE IS UNDER TEST. Every area now has a page, so this only
+# fires when the change touched nothing a page owns (docs, the version stamp).
 case ",${AREAS}," in
-  *,ngrc,*|*,flowsim,*) ;;
+  *,ngrc,*|*,flowsim,*|*,flexisim,*) ;;
   *) echo; echo "(no page in scope — skipping the browser)"; echo; exit 0 ;;
 esac
 

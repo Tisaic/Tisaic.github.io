@@ -11,7 +11,7 @@
   <title>Android Chrome Test Page</title>
 
   <!-- Debug console bootstrap (shared with ngrc.html); version stamp below. -->
-  <script>window.__BUILD = {version:203,built:"2026-08-21T13:35:31Z"}; // __STAMP__</script>
+  <script>window.__BUILD = {version:204,built:"2026-08-21T13:54:06Z"}; // __STAMP__</script>
   <script src="console-boot.js"></script>
 
   <!-- Self-hosted markdown renderer (marked v12) for the doc viewers. -->
@@ -58,6 +58,8 @@
     #ngrc-launch svg { color: #a5b4fc; }
     #flowsim-launch { bottom: 176px; text-decoration: none; }
     #flowsim-launch svg { color: #7dd3fc; }
+    #flexisim-launch { bottom: 230px; text-decoration: none; }
+    #flexisim-launch svg { color: #fbbf24; }
 
     /* ---- doc viewer overlay ---- */
     #doc-view { position: fixed; inset: 0; z-index: 2147483647; background: #0b1220;
@@ -117,6 +119,11 @@
   <a class="doc-launch" id="flowsim-launch" href="flowsim.html" aria-label="FlowSim lattice physics engine">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg>
     <span class="lbl">FLOW</span>
+  </a>
+
+  <a class="doc-launch" id="flexisim-launch" href="flexisim.html" aria-label="FlexiSim compliant serial chains">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V8a4 4 0 0 1 4-4h4"></path><path d="M12 4l7 5"></path><circle cx="4" cy="20" r="2"></circle><circle cx="12" cy="4" r="2"></circle><circle cx="19.5" cy="9.5" r="1.5"></circle></svg>
+    <span class="lbl">FLEX</span>
   </a>
 
   <footer>Tisaic.github.io · built for in-browser test workflows</footer>

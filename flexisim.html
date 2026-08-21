@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0b1220" />
+  <link rel="icon" href="data:," />
+  <title>FlexiSim — Compliant Serial Chains</title>
+
+  <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
+  <script>window.__BUILD = {version:204,built:"2026-08-21T13:54:06Z"}; // __FLEXISIM_STAMP__</script>
+  <script src="console-boot.js"></script>
+  <script src="vendor/plotly-basic.min.js"></script>
+
+  <style>
+    :root { --bg:#0b1220; --panel:#111827; --card:#1e293b; --line:#334155; --text:#e2e8f0;
+            --muted:#94a3b8; --accent:#f59e0b; --accent2:#22c55e; --warn:#f59e0b; --bad:#f87171; }
+    * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+    html, body { margin:0; padding:0; background:var(--bg); color:var(--text);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; overflow-x:hidden; }
+    header { padding:12px 14px 6px; text-align:center; }
+    header h1 { font-size:1.15rem; margin:0; }
+    header a { color:var(--muted); font-size:.8rem; text-decoration:none; }
+    #tabs { display:flex; gap:6px; padding:8px 10px; position:sticky; top:0; background:var(--bg); z-index:5; }
+    .tab { flex:1; padding:10px 6px; border:1px solid var(--line); border-radius:10px; background:var(--card);
+      color:var(--muted); font-size:.85rem; font-weight:600; text-align:center; cursor:pointer; }
+    .tab.on { background:var(--accent); color:#2b1a02; border-color:var(--accent); }
+    .panel { display:none; padding:0 12px 40px; }
+    .panel.on { display:block; }
+    .stage { width:100%; height:40vh; border-radius:14px; overflow:hidden; background:#060a14;
+      border:1px solid var(--line); position:relative; }
+    /* An unpainted canvas defaults to WHITE, which against this page reads as a
+       broken render rather than an empty one. */
+    .stage canvas { display:block; width:100%; height:100%; background:#060a14; }
+    .badge { position:absolute; left:10px; top:10px; font-size:.7rem; padding:4px 8px; border-radius:6px;
+      background:rgba(15,23,42,.85); border:1px solid var(--line); color:var(--muted); }
+    .badge.r { left:auto; right:10px; }
+    #err-chart { width:100%; height:170px; margin-top:8px; display:none; }
+    #err-chart.on { display:block; }
+    .controls { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; align-items:center; }
+    button { font-size:.95rem; padding:11px 14px; border:none; border-radius:10px; background:var(--accent);
+      color:#2b1a02; font-weight:600; cursor:pointer; touch-action:manipulation; flex:1; min-width:104px; }
+    button.sec { background:#334155; color:#fff; font-weight:500; }
+    button:disabled { opacity:.45; }
+    .qbox { display:flex; flex-wrap:wrap; gap:6px 14px; align-items:center; margin-top:10px;
+      font:12px/1.5 ui-monospace,monospace; color:var(--muted); }
+    .qbox label { display:inline-flex; align-items:center; gap:5px; }
+    .qbox input[type=checkbox] { width:17px; height:17px; }
+    .slider { flex:1 1 100%; display:flex; align-items:center; gap:10px; font-size:.82rem; color:var(--muted); }
+    .slider input[type=range] { flex:1; }
+    .slider .v { min-width:96px; text-align:right; font-variant-numeric:tabular-nums; color:var(--text); }
+    .stat { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-size:.82rem; margin-top:12px;
+      background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px; }
+    .stat dt { color:var(--muted); } .stat dd { margin:0; font-variant-numeric:tabular-nums; }
+    .good { color:var(--accent2); } .warn { color:var(--warn); } .bad { color:var(--bad); }
+    .lead { color:var(--muted); font-size:.85rem; line-height:1.5; margin:10px 0 4px; }
+    .lead b { color:var(--text); }
+    .note { margin-top:12px; background:var(--panel); border:1px solid var(--line); border-radius:10px;
+      padding:12px; font-size:.78rem; line-height:1.55; color:#cbd5e1; }
+    .note h3 { margin:0 0 6px; font-size:.85rem; color:var(--text); }
+    table.v { width:100%; border-collapse:collapse; font-size:.74rem; margin-top:10px; }
+    table.v th, table.v td { border:1px solid var(--line); padding:6px 7px; text-align:left;
+      font-variant-numeric:tabular-nums; }
+    table.v th { background:var(--card); color:var(--muted); font-weight:600; }
+    pre.tree { white-space:pre; overflow-x:auto; font-size:.68rem; line-height:1.5; color:#cbd5e1; margin:0; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>FlexiSim — Compliant Serial Chains</h1>
+    <a href="index.html">&larr; back to test page</a>
+  </header>
+
+  <div id="tabs">
+    <div class="tab on" data-tab="move">① Move</div>
+    <div class="tab" data-tab="verify">② Verify</div>
+    <div class="tab" data-tab="about">③ Architecture</div>
+  </div>
+
+  <!-- ================================ Tab 1: move ================================ -->
+  <section class="panel on" id="p-move">
+    <p class="lead">A <b>hybrid plant</b>: the gearbox is a <b>lumped</b> nonlinear element and the link is
+      a <b>lattice</b> of elastic material, stepped together. The encoder sits on the motor side of the
+      gear teeth, so it is structurally blind to wind-up and to the link's own bending — which is why a
+      robot's <i>accuracy</i> and its <i>repeatability</i> are different numbers.</p>
+
+    <div class="stage" id="stage">
+      <canvas id="cv"></canvas>
+      <span class="badge" id="state-badge">building…</span>
+      <span class="badge r" id="err-badge">—</span>
+    </div>
+    <div id="err-chart"></div>
+
+    <div class="controls">
+      <button id="commission">Commission ▶</button>
+      <button id="run" class="sec" disabled>Run move ▶</button>
+      <button id="reset" class="sec">Reset</button>
+    </div>
+    <div class="qbox">
+      <label><input type="checkbox" id="comp-on" disabled /> compensation</label>
+      <label><input type="checkbox" id="shape-on" disabled /> input shaping</label>
+      <label><input type="checkbox" id="flip-sign" disabled /> invert the correction</label>
+    </div>
+
+    <div class="controls">
+      <div class="slider"><span>Gearbox K</span>
+        <input type="range" id="s-k" min="0" max="6" step="1" value="4" />
+        <span class="v" id="v-k">4.0</span></div>
+      <div class="slider"><span>Link E</span>
+        <input type="range" id="s-e" min="0" max="5" step="1" value="5" />
+        <span class="v" id="v-e">0.20</span></div>
+      <div class="slider"><span>Steps/frame</span>
+        <input type="range" id="s-spf" min="10" max="200" step="10" value="60" />
+        <span class="v" id="v-spf">60</span></div>
+      <div class="slider"><span>Deflection ×</span>
+        <input type="range" id="s-mag" min="1" max="120" step="1" value="30" />
+        <span class="v" id="v-mag">30×</span></div>
+    </div>
+
+    <dl class="stat" id="stats"></dl>
+
+    <div class="note">
+      <h3>What the picture shows</h3>
+      The dashed line is where the program <b>asked</b> the tool to be. The pale line is where the
+      <b>encoder</b> says it is — the controller's own picture, and it is wrong by the wind-up. The solid
+      amber curve is the <b>truth</b>: the link at its real angle, bent by its own load. Deflections are
+      drawn <b>exaggerated</b> by the slider above (they are well under a percent of the arm), and the
+      exaggeration factor is printed on the stage so the picture can never be read as scale.
+    </div>
+    <div class="note">
+      <h3>Two errors, two mechanisms, one fix each</h3>
+      Compensation pre-distorts the commanded angle by the deflection its identified compliance predicts,
+      so it removes the <b>bias</b> and does nothing to the ringing. Input shaping convolves the reference
+      with impulses summing to one, so it cancels the <b>oscillation</b> and — since it cannot change
+      where a move ends — leaves the bias untouched. Turn each on alone and watch one number move and the
+      other stand still. <b>Invert the correction</b> is there because a compensator applied backwards
+      does not merely fail: it applies the error a second time, and the bias doubles.
+    </div>
+  </section>
+
+  <!-- =============================== Tab 2: verify =============================== -->
+  <section class="panel" id="p-verify">
+    <p class="lead">The same closed forms the Node suite checks, run <b>in this browser</b> against the
+      same modules. Joint terms are algebra and are instant; the cantilever needs a lattice to settle.</p>
+    <div class="controls"><button id="verify-run">Run checks ▶</button></div>
+    <div id="verify-out"></div>
+  </section>
+
+  <!-- ============================ Tab 3: architecture ============================ -->
+  <section class="panel" id="p-about">
+    <div class="note">
+      <h3>Why hybrid</h3>
+      Joint compliance — gearbox torsional stiffness, bearing compliance, harmonic-drive lost motion — is
+      commonly cited at 70–90% of an industrial arm's tip deflection, and it is inherently
+      <b>zero-dimensional</b>: a torque in, an angle out. Resolving it on a voxel lattice would be
+      resolving the wrong term at great cost. So joints are <b>lumped</b> and links are the
+      <b>lattice</b>, which is what buys real mode shapes, stiffness that depends on where the load sits,
+      and sections a beam element cannot express. The split is measured rather than inherited: at this
+      page's defaults the link carries most of it, because the gearbox here is stiff.
+    </div>
+    <div class="note">
+      <h3>One lattice per link, not one sparse lattice</h3>
+      Three links of 0.6/0.5/0.3 m at 8 mm cells are ~22k cells of material inside a ~2.3M-cell swept
+      bounding box — a fill fraction near 1%, and ~240 MiB against ~2.3 MiB, which is past the 128 MiB
+      storage-binding limit most devices allow. Each link is a rigid-body transform of its own geometry,
+      so each gets its own <b>small dense lattice in its own body frame</b> with the joint rotation
+      carried as a transform. That also removes the need for a co-rotational formulation: a link rotating
+      rigidly is <i>stationary</i> in its own frame, so there is no large rotation inside any lattice.
+      The price is that the body frame is <b>non-inertial</b>, so centrifugal, Coriolis and Euler forces
+      are not optional — they are local per-cell body forces, structurally identical to gravity.
+    </div>
+    <div class="note">
+      <h3>Modules</h3>
+      <pre class="tree">lib/lattsim/          the lattice field engine (shared with FlowSim)
+  operators/elastic.js  velocity-stress leapfrog on a staggered grid (Virieux)
+  operators/frame.js    gravity + the non-inertial frame's fictitious forces
+lib/flexisim/         the composition layer
+  joint.js              gearbox, motor, backlash, Stribeck friction
+  link.js               a lattice link in its own body frame + mass properties
+  arm.js                the hybrid plant, joint x link
+  tipsensor.js          tip error inferred from motor signals (+ a forecast)
+  compliance.js         the structured rival: identify 1/K, not the error
+  compensator.js        the servo, the shaper, and the pre-distortion
+lib/ngrc/             the learning primitives (SoftSensor, RobotComp, ...)</pre>
+    </div>
+    <div class="note">
+      <h3>Verified, not asserted</h3>
+      P and S wave speeds to 0.04% with second-order convergence; a solid at rest stays exactly at rest;
+      uniaxial stress with free lateral faces recovers E and ν to machine precision; the cantilever
+      against Timoshenko with second-order convergence; gravity's linear σ(x) to 8e-9 % and a rotating
+      bar's quadratic σ(r) to 0.04%; the gearbox resonance to 0.2%; and the encoder reading the link
+      angle plus exactly the wind-up, to 1e-9 relative.
+    </div>
+  </section>
+
+<script type="module">
+import { Joint } from './lib/flexisim/joint.js';
+import { FlexArm } from './lib/flexisim/arm.js';
+import {
+  buildLink, massProperties, deflectionProfile, armLength, peakSpeed, tipDeflection,
+} from './lib/flexisim/link.js';
+import { PlanarComp } from './lib/flexisim/compliance.js';
+import {
+  AngleProfile, PositionServo, TipCompensator, tipTrackingError, zvdShaper, ringFit,
+} from './lib/flexisim/compensator.js';
+
+const $ = (id) => document.getElementById(id);
+const K_LADDER = [0.5, 1, 2, 3, 4, 8, 16];
+const E_LADDER = [0.02, 0.04, 0.06, 0.10, 0.15, 0.20];
+const H = 4, LEN = 16, CLAMP = 3, NU = 0.3, RHO = 1, G = 2e-6;
+const RATIO = 100, SERVO_BW = 0.002, DAMPING = 3e-3;
+
+// ---------------------------------------------------------------- tabs
+for (const t of document.querySelectorAll('.tab')) {
+  t.addEventListener('click', () => {
+    for (const o of document.querySelectorAll('.tab')) o.classList.toggle('on', o === t);
+    for (const p of document.querySelectorAll('.panel')) {
+      p.classList.toggle('on', p.id === 'p-' + t.dataset.tab);
+    }
+    // Plotly sizes itself against the container it was created in, and a hidden
+    // one has no size -- the chart has to be told once the panel is visible.
+    if (t.dataset.tab === 'move' && chartOn) Plotly.Plots.resize($('err-chart'));
+  });
+}
+
+// ---------------------------------------------------------------- state
+let A = null;                 // { arm, servo, tauG, mp, link, joint }
+let pc = null, mode = null;   // identified compliance, measured bending mode
+let prof = null, comp = null;
+let running = false, phase = 'idle', k = 0, busy = false;
+let chartOn = false;
+const CHART_EVERY = 25;          // solver steps between chart points, ~40 per bending period
+const hist = { t: [], e: [], ref: [] };
+let win = [];                 // recent tip errors, one move period
+
+function setBadge(s, cls) {
+  const b = $('state-badge');
+  b.textContent = s;
+  b.className = 'badge' + (cls ? ' ' + cls : '');
+}
+
+async function build() {
+  if (A) { await A.link.destroy(); A = null; }
+  const K = K_LADDER[+$('s-k').value], E = E_LADDER[+$('s-e').value];
+  const link = await buildLink({ length: LEN, section: H, clamp: CLAMP, E, nu: NU, rho: RHO,
+    gravity: [0, -G, 0], damping: DAMPING });
+  const mp = massProperties(link);
+  const joint = new Joint({ ratio: RATIO, motorInertia: mp.inertiaAboutPivot / 1e4,
+    loadInertia: mp.inertiaAboutPivot, stiffness: K,
+    damping: 2 * Math.sqrt(K * mp.inertiaAboutPivot / 2) });
+  const arm = new FlexArm({ joint, link, gravityWorld: [0, -G, 0], dt: 1 });
+  // The rigid model a controller legitimately has: mass and centroid off the CAD,
+  // so the gravity torque is a closed form of the pose and needs no lattice.
+  const tauG = (th) => mp.centroid * mp.mass * (-G) * Math.cos(th);
+  const Jr = joint.reflectedInertia();
+  const servo = new PositionServo({ kp: SERVO_BW * SERVO_BW * Jr / RATIO,
+    kd: 2 * SERVO_BW * Jr / RATIO, inertia: Jr, ratio: RATIO, gravityTorque: tauG });
+  A = { arm, servo, tauG, mp, link, joint, K, E };
+  pc = null; mode = null; comp = null; k = 0;
+  hist.t.length = 0; hist.e.length = 0; hist.ref.length = 0; win = [];
+  $('comp-on').disabled = true; $('shape-on').disabled = true; $('flip-sign').disabled = true;
+  $('comp-on').checked = false; $('shape-on').checked = false; $('flip-sign').checked = false;
+  $('run').disabled = true;
+  rebuildProfile();
+  console.log(`[flexisim] built K=${K} E=${E} cells=${link.lattice.cellCount} `
+    + `arm=${arm.Larm} J=${mp.inertiaAboutPivot.toPrecision(4)} w_n=${joint.naturalFrequency().toPrecision(4)}`);
+  setBadge('idle — commission first');
+  draw(); stats();
+}
+
+function rebuildProfile() {
+  const shaped = $('shape-on').checked && mode;
+  prof = new AngleProfile({ span: 0.144, accelSteps: 300, cruiseSteps: 400, dwellSteps: 1100,
+    shaper: shaped ? zvdShaper(mode.omega, mode.zeta) : null });
+  if (pc && A) {
+    comp = new TipCompensator({ comp: pc, inertia: A.mp.inertiaAboutPivot,
+      gravityTorque: A.tauG, sign: $('flip-sign').checked ? +1 : -1 });
+  }
+}
+
+// ------------------------------------------------------- commissioning
+// The laser tracker is on the machine exactly once. Everything identified here is
+// everything the rest of the session has. It runs INSIDE the frame loop rather
+// than in one blocking call so the arm can be watched moving between poses --
+// which is what commissioning actually looks like.
+const POSES = [0.8, 0.4, 0];
+let comm = null;
+
+function startCommission() {
+  comm = { i: 0, left: 8000, touches: [], decay: null, base: 0 };
+  phase = 'commission'; running = true;
+  $('commission').disabled = true; $('run').disabled = true;
+  setBadge('commissioning — holding pose 1/3', 'warn');
+}
+
+function commissionStep(n) {
+  const { arm, servo } = A;
+  if (comm.decay) {
+    for (let i = 0; i < n; i++) {
+      arm.step(servo.torque({ theta: 0, omega: 0, alpha: 0 }, arm.encoder())
+        + (comm.kick > 0 ? 3e-4 : 0), 1);
+      if (comm.kick > 0) { comm.kick--; continue; }
+      comm.decay.push(tipDeflection(A.link) - comm.base);
+    }
+    setBadge(`commissioning — measuring the bending mode (${comm.decay.length}/3600)`, 'warn');
+    if (comm.decay.length >= 3600) {
+      mode = ringFit(comm.decay);
+      finishCommission();
+    }
+    return;
+  }
+  const th = POSES[comm.i];
+  for (let i = 0; i < n && comm.left > 0; i++, comm.left--) {
+    arm.step(servo.torque({ theta: th, omega: 0, alpha: 0 }, arm.encoder()), 1);
+  }
+  setBadge(`commissioning — holding pose ${comm.i + 1}/3 (${8000 - comm.left}/8000)`, 'warn');
+  if (comm.left > 0) return;
+  comm.touches.push({ th, tau: A.tauG(A.arm.joint.thL), err: tipTrackingError(arm, th),
+    v: peakSpeed(A.link) });
+  comm.i++;
+  if (comm.i < POSES.length) { comm.left = 8000; return; }
+  // ENDING AT THE HOME POSE IS NOT AN AESTHETIC CHOICE: the decay fit needs the
+  // arm already settled at zero, and re-settling costs as much as a pose does.
+  comm.base = tipDeflection(A.link);
+  comm.decay = []; comm.kick = 40;
+}
+
+function finishCommission() {
+  pc = new PlanarComp(A.arm.Larm);
+  for (const t of comm.touches) pc.calibrate(t.tau, t.err);
+  const per = comm.touches.map((t) => t.err / (A.arm.Larm * t.tau));
+  console.log(`[flexisim] identified c=${pc.compliance.toFixed(5)} (1/K=${(1 / A.K).toFixed(4)}) `
+    + `per-pose ${per.map((c) => c.toFixed(5)).join(' ')} | mode w=${mode.omega.toExponential(3)} `
+    + `zeta=${mode.zeta.toFixed(3)} period=${mode.period.toFixed(0)}`);
+  comm = null; phase = 'ready'; running = false; k = 0;
+  $('commission').disabled = false; $('run').disabled = false;
+  $('comp-on').disabled = false; $('shape-on').disabled = false; $('flip-sign').disabled = false;
+  rebuildProfile();
+  setBadge('commissioned — press Run move', 'good');
+  stats();
+}
+
+// ------------------------------------------------------------- the move
+function moveStep(n) {
+  const { arm, servo } = A;
+  for (let i = 0; i < n; i++) {
+    const ref = prof.at(k);
+    const off = ($('comp-on').checked && comp) ? comp.offset(ref) : 0;
+    arm.step(servo.torque({ ...ref, theta: ref.theta + off }, arm.encoder()), 1);
+    const e = tipTrackingError(arm, ref.theta);
+    win.push(e);
+    if (win.length > prof.period) win.shift();
+    k++;
+    // THE CHART IS SAMPLED IN SOLVER STEPS, NOT ONCE PER FRAME. A per-frame trace
+    // rescales itself whenever the steps-per-frame slider moves -- a viewing
+    // control changing the shape of a physics plot -- and at 200 steps/frame it
+    // draws five points per bending period, which reads as a different waveform.
+    if (k % CHART_EVERY === 0) {
+      hist.t.push(k); hist.e.push(e); hist.ref.push(ref.theta);
+      if (hist.t.length > 1200) {
+        hist.t.splice(0, 400); hist.e.splice(0, 400); hist.ref.splice(0, 400);
+      }
+    }
+  }
+}
+
+function winStats() {
+  if (!win.length) return null;
+  let m = 0; for (const x of win) m += x; m /= win.length;
+  let s = 0; for (const x of win) s += (x - m) * (x - m); s = Math.sqrt(s / win.length);
+  return { bias: m, sd: s, rms: Math.sqrt(m * m + s * s), n: win.length,
+    full: win.length >= prof.period };
+}
+
+// ---------------------------------------------------------------- draw
+function draw() {
+  const cv = $('cv'), st = $('stage');
+  const w = st.clientWidth, h = st.clientHeight;
+  if (!(w > 0 && h > 0)) return;                 // a hidden panel has no size
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+  }
+  const g = cv.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+  g.fillStyle = '#060a14'; g.fillRect(0, 0, w, h);
+  if (!A) return;
+  const { arm, link } = A;
+  const L = arm.Larm;
+  // THE PIVOT SITS MID-HEIGHT because the move swings the arm UP through +0.144
+  // rad while gravity sags it DOWN, and at the exaggerations this slider offers
+  // both need room. At 0.72 the sag ran off the bottom of the stage.
+  const px = 24, py = h * 0.52;
+  const scale = Math.min((w - 60) / L, (h - 40) / (L * 0.9));
+  const mag = +$('s-mag').value;
+  const ref = prof ? prof.at(k) : { theta: 0 };
+  const off = ($('comp-on').checked && comp) ? comp.offset(ref) : 0;
+
+  // BODY -> WORLD IS A ROTATION BY +theta, AND SCREEN Y POINTS DOWN. Both have to
+  // be right and the first version got the deflection term wrong in a way the
+  // ANGLE hid: rotating by -theta and then flipping Y leaves a straight arm
+  // looking correct (the two negations cancel for by = 0) while drawing every SAG
+  // upward. A link hanging under gravity was drawn bending toward the sky. This is
+  // the anti-slosh tab's wave-on-the-wrong-wall bug in a different frame, and it
+  // is fixed at the point of drawing, where it is.
+  const world = (th, bx, by) => {
+    const c = Math.cos(th), s = Math.sin(th);
+    return [px + (c * bx - s * by) * scale, py - (s * bx + c * by) * scale];
+  };
+  const line = (th, dy, col, width, dash) => {
+    g.save(); g.strokeStyle = col; g.lineWidth = width;
+    g.setLineDash(dash || []); g.beginPath();
+    for (let i = 0; i < dy.x.length; i++) {
+      const [X, Y] = world(th, dy.x[i] - arm.link.meta.pivot[0], dy.dy[i] * mag);
+      if (i === 0) g.moveTo(X, Y); else g.lineTo(X, Y);
+    }
+    g.stroke(); g.restore();
+  };
+  const straight = (th) => ({ x: [arm.link.meta.pivot[0], arm.link.meta.pivot[0] + L], dy: [0, 0] });
+
+  // the commanded pose, the encoder's belief, then the truth on top
+  line(ref.theta, straight(), '#64748b', 2, [6, 5]);
+  line(arm.encoder().angle, straight(), '#475569', 4);
+  const prof2 = deflectionProfile(link);
+  line(arm.joint.thL, prof2, '#f59e0b', 5);
+
+  // the pivot and the two tips
+  g.fillStyle = '#94a3b8'; g.beginPath(); g.arc(px, py, 6, 0, 7); g.fill();
+  const tip = (th, dyv, col, r) => {
+    const [X, Y] = world(th, L, dyv * mag);
+    g.fillStyle = col; g.beginPath(); g.arc(X, Y, r, 0, 7); g.fill();
+  };
+  tip(ref.theta, 0, '#64748b', 4);
+  tip(arm.joint.thL, prof2.dy[prof2.dy.length - 1], '#fbbf24', 6);
+
+  // The legend lives top-left, under the badge: at the bottom right it was
+  // overlapped by the tip marker exactly when the deflection was largest, which
+  // is the moment the picture most needs to be readable.
+  g.font = '11px ui-monospace,monospace';
+  const key = (y, col, txt) => {
+    g.strokeStyle = col; g.lineWidth = 3; g.beginPath();
+    g.moveTo(10, y - 4); g.lineTo(28, y - 4); g.stroke();
+    g.fillStyle = col === '#f59e0b' ? '#f59e0b' : '#94a3b8'; g.fillText(txt, 34, y);
+  };
+  key(h - 46, '#f59e0b', 'truth');
+  // SHORT LABELS: the long form ("encoder (what the controller believes)") ran
+  // straight into the right-hand column on a 412px phone. The explanation belongs
+  // in the note below the stage, where there is room for it.
+  key(h - 31, '#475569', 'encoder');
+  key(h - 16, '#64748b', 'commanded');
+  g.fillStyle = '#64748b'; g.textAlign = 'right';
+  g.fillText(`deflection ×${mag}`, w - 10, h - 16);
+  if (off !== 0) {
+    g.fillStyle = '#a78bfa';
+    g.fillText(`pre-distortion ${(off * 1e3).toFixed(2)} mrad`, w - 10, h - 31);
+  }
+  g.textAlign = 'left';
+}
+
+// --------------------------------------------------------------- stats
+function fmt(x, d = 4) { return Number.isFinite(x) ? x.toExponential(d) : '—'; }
+function stats() {
+  const rows = [];
+  if (A) {
+    const { arm, joint, mp } = A;
+    const ref = prof ? prof.at(k) : { theta: 0 };
+    rows.push(['plant', `K ${A.K} · E ${A.E} · ${A.link.lattice.cellCount} cells · arm ${arm.Larm}`]);
+    rows.push(['step', String(k)]);
+    rows.push(['commanded / encoder / link', `${ref.theta.toFixed(5)} / `
+      + `${arm.encoder().angle.toFixed(5)} / ${joint.thL.toFixed(5)} rad`]);
+    rows.push(['wind-up (invisible to the encoder)', `${fmt(joint.windup(), 3)} rad`]);
+    rows.push(['tip error now', `${fmt(tipTrackingError(arm, ref.theta), 3)}`]);
+    const w = winStats();
+    if (w) {
+      rows.push(['bias over the last move', `<span class="${w.full ? '' : 'warn'}">${fmt(w.bias, 3)}`
+        + `${w.full ? '' : ' (partial window)'}</span>`]);
+      rows.push(['oscillation over the last move', fmt(w.sd, 3)]);
+      rows.push(['rms', fmt(w.rms, 3)]);
+    }
+    if (pc) {
+      rows.push(['identified compliance c', `${pc.compliance.toFixed(5)} `
+        + `(gearbox alone 1/K = ${(1 / A.K).toFixed(4)}, so the link is `
+        + `${(100 * (1 - (1 / A.K) / pc.compliance)).toFixed(0)}% of it)`]);
+    }
+    if (mode) {
+      rows.push(['first bending mode', `${mode.omega.toExponential(3)} rad/step · `
+        + `period ${mode.period.toFixed(0)} · ζ ${mode.zeta.toFixed(3)}`]);
+    }
+    rows.push(['gearbox resonance', `${joint.naturalFrequency().toExponential(3)} rad/step · `
+      + `period ${(2 * Math.PI / joint.naturalFrequency()).toFixed(0)}`]);
+    rows.push(['link mass / inertia about the pivot',
+      `${mp.mass} / ${mp.inertiaAboutPivot.toPrecision(5)}`]);
+  }
+  $('stats').innerHTML = rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('');
+  const w = winStats();
+  $('err-badge').textContent = w ? `bias ${w.bias.toExponential(2)} · osc ${w.sd.toExponential(2)}` : '—';
+}
+
+// --------------------------------------------------------------- chart
+function chart() {
+  if (!hist.t.length) return;
+  // COPIES, NOT THE LIVE ARRAYS. Plotly.react compares by REFERENCE, so handing it
+  // the same arrays mutated in place is a no-op: the chart froze on its first
+  // fifteen points and looked like a run that had stopped after 350 steps while
+  // the simulation was sixteen thousand steps in. Nothing errors, nothing is
+  // blank -- it just quietly shows the wrong thing, which is the failure mode this
+  // project keeps meeting on the display side.
+  const T = hist.t.slice(), Ey = hist.e.slice(), R = hist.ref.slice();
+  const traces = () => [
+    { x: T, y: Ey, name: 'tip error', line: { color: '#f59e0b', width: 2 } },
+    { x: T, y: R, name: 'commanded angle', yaxis: 'y2',
+      line: { color: '#64748b', width: 1, dash: 'dot' } },
+  ];
+  if (!chartOn) {
+    Plotly.newPlot('err-chart', traces(), {
+      margin: { l: 46, r: 40, t: 6, b: 26 }, paper_bgcolor: '#0b1220', plot_bgcolor: '#060a14',
+      font: { color: '#94a3b8', size: 9 }, showlegend: false,
+      xaxis: { gridcolor: '#1e293b', title: { text: 'solver steps', font: { size: 9 } } },
+      yaxis: { gridcolor: '#1e293b' },
+      yaxis2: { overlaying: 'y', side: 'right', showgrid: false },
+    }, { displayModeBar: false, responsive: true });
+    $('err-chart').classList.add('on');
+    chartOn = true;
+    return;
+  }
+  Plotly.react('err-chart', traces(), $('err-chart').layout,
+    { displayModeBar: false, responsive: true });
+}
+
+// ---------------------------------------------------------------- loop
+let frames = 0;
+function frame() {
+  requestAnimationFrame(frame);
+  if (!A || busy) return;
+  if (running) {
+    const n = +$('s-spf').value;
+    try {
+      if (phase === 'commission') commissionStep(n); else moveStep(n);
+    } catch (e) {
+      running = false; setBadge('halted: ' + e.message, 'bad'); console.error(e);
+      return;
+    }
+  }
+  draw();
+  if (++frames % 6 === 0) { stats(); if (phase !== 'commission') chart(); }
+}
+
+// -------------------------------------------------------------- wiring
+$('commission').addEventListener('click', () => { if (A && !busy) startCommission(); });
+$('run').addEventListener('click', () => {
+  if (phase === 'idle' || phase === 'commission') return;
+  running = !running;
+  $('run').textContent = running ? 'Pause ⏸' : 'Run move ▶';
+  setBadge(running ? 'running' : 'paused', running ? 'good' : '');
+});
+$('reset').addEventListener('click', async () => {
+  running = false; phase = 'idle'; $('run').textContent = 'Run move ▶';
+  busy = true; await build(); busy = false;
+});
+for (const id of ['comp-on', 'shape-on', 'flip-sign']) {
+  $(id).addEventListener('change', () => { rebuildProfile(); win = []; stats(); });
+}
+const ladder = (id, vid, arr, fmtv) => {
+  const f = () => { $(vid).textContent = fmtv(arr[+$(id).value]); };
+  $(id).addEventListener('input', f);
+  $(id).addEventListener('change', async () => { busy = true; running = false; phase = 'idle';
+    $('run').textContent = 'Run move ▶'; await build(); busy = false; });
+  f();
+};
+ladder('s-k', 'v-k', K_LADDER, (v) => v.toFixed(1));
+ladder('s-e', 'v-e', E_LADDER, (v) => v.toFixed(2));
+$('s-spf').addEventListener('input', () => { $('v-spf').textContent = $('s-spf').value; });
+$('s-mag').addEventListener('input', () => { $('v-mag').textContent = $('s-mag').value + '×'; });
+
+// --------------------------------------------------------------- verify
+$('verify-run').addEventListener('click', async () => {
+  const out = $('verify-out');
+  out.innerHTML = '<p class="lead">running…</p>';
+  const rows = [];
+  const row = (name, got, want, tol) => {
+    const rel = want === 0 ? Math.abs(got) : Math.abs(got / want - 1);
+    rows.push([name, got, want, rel, rel <= tol]);
+  };
+  // Joint terms: algebra, no lattice, instant.
+  const j = new Joint({ ratio: 100, motorInertia: 1e-4, loadInertia: 0.5, stiffness: 40,
+    backlash: 2e-3 });
+  row('reflected inertia N²J_m + J_l', j.reflectedInertia(), 100 * 100 * 1e-4 + 0.5, 1e-12);
+  row('gearbox resonance √(K(1/J_l + 1/N²J_m))', j.naturalFrequency(),
+    Math.sqrt(40 * (1 / 0.5 + 1 / 1.0)), 1e-12);
+  j.reset(); j.thM = 100 * 0.05;
+  row('static wind-up θ_m/N − θ_l', j.windup(), 0.05, 1e-12);
+  row('and the encoder reports none of it', j.encoder().angle - j.truth().angle, 0.05, 1e-12);
+  j.reset(); j.thM = 100 * 1e-3;
+  row('backlash: no torque inside the dead band', j.transmitted(), 0, 1e-12);
+  // The cantilever needs a lattice. Small and cheap: one settle.
+  const link = await buildLink({ length: 16, section: 4, clamp: 3, E: 0.2, nu: 0.3, rho: 1,
+    gravity: [0, -2e-6, 0], damping: 8e-3 });
+  link.advance(9000);
+  const mp = massProperties(link), Larm = armLength(link);
+  const sag = tipDeflection(link);
+  // Self-weight cantilever: wL⁴/8EI plus the Timoshenko shear term wL²/2κGA.
+  // L IS THE ARM LENGTH -- pivot to tip, 15.5 -- and NOT the material span, for
+  // the same reason Poiseuille's channel height is Nz−2 and not Nz−1: the
+  // boundary sits where the scheme puts it, not where the loop bounds are. Using
+  // 16 here reads 10% low and looks like a physics failure.
+  const Ee = 0.2, nu = 0.3, Hs = 4, Ls = Larm;
+  const I = Hs ** 4 / 12, Aa = Hs * Hs, Gm = Ee / (2 * (1 + nu)), kap = 5 / 6;
+  const w = RHO * 2e-6 * Aa;
+  row('self-weight sag wL⁴/8EI + wL²/2κGA', Math.abs(sag),
+    w * Ls ** 4 / (8 * Ee * I) + w * Ls * Ls / (2 * kap * Gm * Aa), 0.05);
+  row('the lattice settled', peakSpeed(link), 0, 1e-10);
+  await link.destroy();
+  if (pc) {
+    row('identified compliance vs the gearbox alone (link adds to it)',
+      pc.compliance > 1 / A.K ? 1 : 0, 1, 1e-12);
+  }
+  out.innerHTML = '<table class="v"><tr><th>check</th><th>measured</th><th>closed form</th>'
+    + '<th>rel</th></tr>' + rows.map(([n, g2, wv, rel, ok]) =>
+      `<tr><td>${ok ? '✓' : '✗'} ${n}</td><td>${fmt(g2, 5)}</td><td>${fmt(wv, 5)}</td>`
+      + `<td class="${ok ? 'good' : 'bad'}">${rel.toExponential(1)}</td></tr>`).join('')
+    + '</table>';
+  console.log(`[flexisim] verify: ${rows.filter((r) => r[4]).length}/${rows.length} passed`);
+  void mp;
+});
+
+// ------------------------------------------------------------ debug hook
+// Permanent, for the same reason __fsDump() is on FlowSim: a page that misbehaves
+// has several distinct explanations and the picture cannot tell them apart.
+window.__flxDbg = () => ({
+  phase, running, k, K: A && A.K, E: A && A.E, cells: A && A.link.lattice.cellCount,
+  compliance: pc && pc.compliance, mode, win: winStats(),
+  comp: $('comp-on').checked, shaped: $('shape-on').checked, flipped: $('flip-sign').checked,
+});
+
+busy = true;
+await build();
+busy = false;
+requestAnimationFrame(frame);
+console.log('flexisim ready ✓');
+</script>
+</body>
+</html>
