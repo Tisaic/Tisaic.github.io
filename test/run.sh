@@ -14,13 +14,19 @@ PORT="${PORT:-8137}"
 #   ./test/run.sh --full   full   — adds the long-horizon browser scenarios
 SUITE="quick"
 AREAS=""
+# WHILE FLEXISIM IS BEING BUILT, IT IS THE ONLY THING WORTH RUNNING. FlowSim and
+# NGRC are finished features; re-testing them on every elastic-operator edit buys
+# nothing and costs minutes, so the default focus is flexisim and the others are
+# opt-in. Clear it (FOCUS= ./test/run.sh) or pass --all to go back to deriving
+# areas from git, which is what this should return to once the tab has shipped.
+FOCUS="${FOCUS-flexisim}"
 for arg in "$@"; do
   case "$arg" in
     --full) SUITE="full" ;;
     --quick) SUITE="quick" ;;
-    --all) AREAS="ngrc,flowsim" ;;
-    --only=*) AREAS="${arg#--only=}" ;;
-    *) echo "usage: $0 [--quick|--full] [--all|--only=ngrc,flowsim]" >&2; exit 2 ;;
+    --all) AREAS="ngrc,flowsim,flexisim"; FOCUS="" ;;
+    --only=*) AREAS="${arg#--only=}"; FOCUS="" ;;
+    *) echo "usage: $0 [--quick|--full] [--all|--only=ngrc,flowsim,flexisim]" >&2; exit 2 ;;
   esac
 done
 export SUITE
@@ -39,7 +45,9 @@ export SUITE
 # Anything the map does not recognise (docs, CLAUDE.md, the version stamp) selects
 # NOTHING, which leaves the module parse and the index page -- the checks that are
 # cheap enough to be worth running unconditionally.
-if [ -z "${AREAS}" ]; then
+if [ -n "${FOCUS}" ]; then
+  AREAS="${FOCUS}"
+elif [ -z "${AREAS}" ]; then
   BASE="$(git merge-base HEAD origin/main 2>/dev/null || true)"
   CHANGED="$(
     { git diff --name-only HEAD 2>/dev/null
@@ -48,7 +56,7 @@ if [ -z "${AREAS}" ]; then
       [ -n "${BASE}" ] && git diff --name-only "${BASE}" HEAD 2>/dev/null
     } | sort -u
   )"
-  want_ngrc=0; want_flow=0
+  want_ngrc=0; want_flow=0; want_flex=0
   while IFS= read -r f; do
     [ -z "$f" ] && continue
     case "$f" in
@@ -59,7 +67,13 @@ if [ -z "${AREAS}" ]; then
       lib/probesense/*|test/probesense/*)
         want_ngrc=1; want_flow=1 ;;
       lib/ngrc/*|test/ngrc/*|ngrc.html)   want_ngrc=1 ;;
-      lib/lattsim/*|test/lattsim/*|flowsim.html) want_flow=1 ;;
+      # FlexiSim's own files, listed BEFORE the general lattsim rule so they do
+      # not drag the whole FlowSim suite in. The elastic operator has no page yet
+      # and shares no kernel with the fluid.
+      lib/lattsim/operators/elastic.js|test/lattsim/elastic*|flexisim.html)
+        want_flex=1 ;;
+      # The shared engine -- lattice, fields, solver, backends -- is under both.
+      lib/lattsim/*|test/lattsim/*|flowsim.html) want_flow=1; want_flex=1 ;;
     esac
   done <<EOF
 ${CHANGED}
@@ -70,6 +84,7 @@ EOF
   # exactly like "the suite failed".
   if [ "$want_ngrc" = 1 ]; then AREAS="ngrc"; fi
   if [ "$want_flow" = 1 ]; then AREAS="${AREAS:+${AREAS},}flowsim"; fi
+  if [ "$want_flex" = 1 ]; then AREAS="${AREAS:+${AREAS},}flexisim"; fi
 fi
 export AREAS
 echo "Suite level: ${SUITE}   areas: ${AREAS:-none changed (parse + index only)}"
@@ -126,11 +141,6 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flowsim,*) true ;; *) false ;; e
   # The passive scalar's diffusivity, advection speed and conservation against
   # their closed forms -- a contract, so both tiers.
   node test/lattsim/scalar.test.mjs
-  # Linear elastodynamics (FlexiSim's operator) against the P and S wave speeds,
-  # plus the second-order convergence that separates a dispersion error from a
-  # wrong stencil. A contract, and it is seconds in plain Node -- which is where
-  # a physics claim belongs.
-  node test/lattsim/elastic.test.mjs
   # End-to-end field reconstruction (wall sensors -> concentration slice). It
   # drives ~1200 CPU-reference steps, so it is full-tier; the pipeline's cheaper
   # pieces (probeMany parity, the FieldReconstructor unit test) run every time.
@@ -138,6 +148,24 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flowsim,*) true ;; *) false ;; e
     node test/lattsim/reconstruct.test.mjs
   fi
 fi
+
+# FLEXISIM: linear elastodynamics against its closed forms. Plain Node, CPU
+# reference, no browser and no adapter -- tier 1 of the verification rule, and it
+# runs in well under a second, which is what makes it usable on every edit.
+if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; esac; then
+  node test/lattsim/elastic.test.mjs
+fi
+
+# NO BROWSER WHEN NO PAGE IS UNDER TEST. FlexiSim has no page yet, so on a
+# flexisim-only run the server, the mobile-emulated Chromium and the index-page
+# checks are eight seconds spent proving something the edit could not have
+# touched. Skipping them is what takes the build loop from 10 s to under 2 --
+# which is the difference between a check that gets run on every edit and one
+# that does not. Delete this branch the moment flexisim.html exists.
+case ",${AREAS}," in
+  *,ngrc,*|*,flowsim,*) ;;
+  *) echo; echo "(no page in scope — skipping the browser)"; echo; exit 0 ;;
+esac
 
 # Serve the repo and always clean up the server on exit.
 python3 -m http.server "${PORT}" >/dev/null 2>&1 &
