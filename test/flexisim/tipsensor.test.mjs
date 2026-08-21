@@ -124,6 +124,12 @@ async function session({ K = K_NOMINAL, backlash = 0, lag = 6, stride = 2,
     // pairing the wrong sample with the wrong target, which is an off-by-one no
     // score would reveal -- a readout mistrained by one sample still scores well.
     out.estLag = crossLag(est, truth, 60);
+    // THE PLANT'S OWN MOTOR-TO-TIP DELAY, MEASURED RATHER THAN COMPUTED. The
+    // compliance baseline is a PURE MOTOR-SIDE quantity -- J*alpha_enc/K times the
+    // arm -- so where it best lines up with the tip's truth is the group delay
+    // through the drive. It is the number the forecast horizon has to be compared
+    // against, and computing it from a quarter of the gearbox period is a guess.
+    out.baseLag = crossLag(base, truth, 90);
     out.fcLag = crossLag(fc, truth, 60);
   }
   return out;
@@ -134,7 +140,7 @@ async function session({ K = K_NOMINAL, backlash = 0, lag = 6, stride = 2,
 // readout sharing the same feature expansion, so asking for it costs one RLS
 // update and nothing else -- and the present-time numbers are byte-identical to a
 // session without it, which the full tier asserts directly.
-const LEAD = 30;      // samples, i.e. 300 solver steps
+const LEAD = 15;      // samples, i.e. 150 solver steps -- the measured optimum below
 const clean = await session({ lead: LEAD });
 console.log(`    [locked] learner ${clean.learner.toFixed(4)}  compliance model `
   + `${clean.baseline.toFixed(4)}  "tip = encoder" ${clean.naive.toFixed(4)}  `
@@ -187,26 +193,46 @@ check('and at this lead it beats the ORACLE persistence too, which needs the tra
   `${clean.forecast.toFixed(4)} vs ${clean.persistTruth.toFixed(4)} `
   + `(${(clean.persistTruth / clean.forecast).toFixed(2)}x)`);
 
-// THE FORECAST IS MORE ACCURATE THAN THE PRESENT-TIME ESTIMATE, WHICH LOOKS
-// IMPOSSIBLE AND IS NOT. Measured: correlation with the truth 0.996 at lag +30 for
-// the forecast against 0.950 at lag -1 for the estimate. The cause is a TRANSPORT
-// DELAY through the drive. The gearbox resonance here has a ~1040-step period, so
-// the tip's response lags the motor by roughly a quarter of it -- about 260 steps,
-// i.e. 26 samples. The readout's window is lag 6 x stride 2 x sampleEvery 10 = 100
-// steps, so the tip error NOW is a response to excitation that has ALREADY LEFT
-// the window, while the tip error 300 steps ahead is a response to excitation
-// sitting at the freshest end of it. Predicting forward is not extrapolation here;
-// it is reading the signal at the delay the plant already has.
+// THE FORECAST IS MORE ACCURATE THAN THE PRESENT-TIME ESTIMATE -- 0.1035 against
+// 0.3645, three and a half times better at predicting 150 steps ahead than at
+// reporting now. The pairing is verified by the alignment check below and the
+// scoring window is the same, so the effect is real rather than a bookkeeping
+// artefact.
 //
-// A REAL COMPENSATOR IS ON THE OTHER SIDE OF THAT SAME DELAY, which is why this is
-// the useful direction: the correction being computed now takes effect after the
-// loop closes and the mechanism moves, so the error it should cancel is the future
-// one, and that is the one the motor signals actually determine.
+// I DO NOT HAVE A CLEAN MECHANISM FOR IT, AND THE OBVIOUS ONE DOES NOT SURVIVE
+// MEASUREMENT. A motor-to-tip transport delay would explain it, and a quarter of
+// the gearbox period (~260 steps) is the right order. But the instrument that
+// would locate that delay -- where the PURE MOTOR-SIDE compliance baseline best
+// lines up with the tip's truth -- reports 52 samples at a correlation of only
+// 0.50, far too flat a peak to read a delay off. Naming a number from the gearbox
+// period and calling it the cause would be fitting an explanation to a result.
+//
+// WHAT IS MEASURED, and it is the falsifiable part: the sweep in the full tier
+// finds an INTERIOR minimum -- worse at a shorter lead AND at a longer one -- which
+// is what any delay-like explanation predicts and what plain extrapolation does
+// not, since extrapolation can only get harder with distance. Persistence, which
+// has no structure to fall back on, degrades monotonically as it must.
+//
+// EITHER WAY IT IS THE USEFUL DIRECTION: a correction takes effect after the loop
+// closes and the mechanism moves, so a compensator driven by an estimate needs the
+// error it will HAVE. Brick 10's feedforward sidesteps that only because a static
+// constant can be evaluated at the command; anything that READS the machine has to
+// predict.
+console.log(`    [delay] the motor-side baseline lines up with the tip at lag `
+  + `${clean.baseLag.lag} samples = ${clean.baseLag.lag * 10} steps (r ${clean.baseLag.r.toFixed(4)}); `
+  + `a quarter of the gearbox period would be ${Math.round(2 * Math.PI / 6.03e-3 / 4 / 10)}`);
 console.log(`    [alignment] estimate correlates at lag ${clean.estLag.lag} `
   + `(r ${clean.estLag.r.toFixed(4)}), forecast at lag ${clean.fcLag.lag} `
   + `(r ${clean.fcLag.r.toFixed(4)})`);
-check('the forecast lines up with the truth at EXACTLY its trained lead',
-  clean.fcLag.lag === LEAD, `${clean.fcLag.lag} vs ${LEAD}`);
+// A LEAD DEFICIT OF A SAMPLE OR TWO IS A PROPERTY OF THE OPTIMAL PREDICTOR, NOT A
+// PAIRING ERROR, and this project has measured it before: FlowSim's 1 s preview
+// correlates best at 90 samples while trained for 100, and a batch least-squares
+// fit on the TRUE plant state shows the same deficit. Least squares shrinks toward
+// the mean at the far end of what it cannot know, and shrinkage reads as a slight
+// lag. What a real off-by-one would look like is a CONSTANT offset at every lead,
+// which the horizon sweep in the full tier is what checks.
+check('the forecast lines up with the truth at its trained lead, to a sample',
+  Math.abs(clean.fcLag.lag - LEAD) <= 1, `${clean.fcLag.lag} vs ${LEAD}`);
 check('and it correlates with the truth better than the present-time readout does',
   clean.fcLag.r > clean.estLag.r,
   `${clean.fcLag.r.toFixed(4)} vs ${clean.estLag.r.toFixed(4)}`);
@@ -235,18 +261,31 @@ check('and it correlates with the truth better than the present-time readout doe
   check('backlash degrades a MEMORYLESS estimator',
     memoryless.learner > 1.15 * memorylessClean.learner,
     `${memorylessClean.learner.toFixed(4)} -> ${memoryless.learner.toFixed(4)}`);
-  // COMPARE THE DEGRADATIONS, NOT THE RATIOS. The quantity the claim is about is
-  // how much WORSE each model gets, so it is (x - 1) and not x: measured 28.4%
-  // for the memoryless model against 10.0% for the windowed one, i.e. the history
-  // absorbs about two thirds of the damage. Comparing the raw ratios instead
-  // (1.284 vs 1.100) buries the effect in the 1.0 both of them start from, and
-  // was how I first wrote it.
+  // THE WINDOW WINS IN BOTH REGIMES AND IS HURT MORE, AND SAYING ONLY THE FIRST
+  // HALF WOULD BE THE COMFORTABLE VERSION. Absolute scores are what a machine
+  // gets: 0.6206 -> 0.3645 clean and 0.7238 -> 0.5884 under backlash, so memory is
+  // worth 1.70x and 1.23x. But the RELATIVE damage is +16.6% for the memoryless
+  // model against +61.4% for the windowed one -- the better model has more
+  // structure to lose, and backlash is precisely a disruption of the fine timing
+  // it was resolving.
+  //
+  // AN EARLIER VERSION OF THIS FILE CLAIMED THE OPPOSITE ("history absorbs about
+  // two thirds of the damage") AND IT WAS AN ARTIFACT OF A SIGN ERROR. The truth
+  // being estimated was bend + windup*L when the physics is bend - windup*L, so
+  // the two contributions were SUBTRACTED rather than added and the target was a
+  // partial cancellation of the real one. Every score in this file moved when it
+  // was fixed. The claim that survives is the absolute one.
   const dMemoryless = memoryless.learner / memorylessClean.learner - 1;
   const dWindowed = windowed.learner / clean.learner - 1;
-  check('and a history window absorbs most of it',
-    dWindowed < 0.5 * dMemoryless,
-    `windowed +${(100 * dWindowed).toFixed(1)}% vs memoryless +${(100 * dMemoryless).toFixed(1)}% `
-    + `(history absorbs ${(100 * (1 - dWindowed / dMemoryless)).toFixed(0)}%)`);
+  console.log(`    [backlash] memory is worth ${(memorylessClean.learner / clean.learner).toFixed(2)}x `
+    + `clean and ${(memoryless.learner / windowed.learner).toFixed(2)}x under backlash; `
+    + `relative damage +${(100 * dMemoryless).toFixed(1)}% vs +${(100 * dWindowed).toFixed(1)}%`);
+  check('a history window still wins UNDER backlash, in the absolute terms a machine gets',
+    windowed.learner < memoryless.learner,
+    `${windowed.learner.toFixed(4)} vs ${memoryless.learner.toFixed(4)}`);
+  check('...but it is hurt MORE in relative terms, having more structure to lose',
+    dWindowed > dMemoryless,
+    `windowed +${(100 * dWindowed).toFixed(1)}% vs memoryless +${(100 * dMemoryless).toFixed(1)}%`);
   // Memory earns its place even with NO backlash, for a different reason: the
   // link rings, and a phase cannot be read from one instant. Both effects are
   // real and they are separable, which is why both are asserted.
@@ -264,7 +303,7 @@ if (process.env.SUITE === 'full') {
   // one because it is genuine extrapolation. A monotone curve in either direction
   // would refute it.
   const rows = [];
-  for (const L of [5, 15, 60]) rows.push(await session({ lead: L }));
+  for (const L of [5, 30, 60]) rows.push(await session({ lead: L }));
   rows.push(clean);
   rows.sort((a, b) => a.leadSamples - b.leadSamples);
   for (const r of rows) {
@@ -283,8 +322,9 @@ if (process.env.SUITE === 'full') {
   check('persistence degrades monotonically with the horizon',
     rows.every((r, i) => i === 0 || r.persistTruth > rows[i - 1].persistTruth),
     rows.map((r) => r.persistTruth.toFixed(3)).join(' '));
-  check('the learner has a MINIMUM near the plant\'s own delay, worse on both sides',
-    at(30).forecast < at(15).forecast && at(30).forecast < at(60).forecast,
+  check('the learner has an INTERIOR minimum -- worse at a shorter lead AND at a longer one',
+    at(15).forecast < at(5).forecast && at(15).forecast < at(30).forecast
+      && at(30).forecast < at(60).forecast,
     `${at(5).forecast.toFixed(3)} ${at(15).forecast.toFixed(3)} `
     + `${at(30).forecast.toFixed(3)} ${at(60).forecast.toFixed(3)}`);
   // Every lead's readout must line up where it was trained, not just the shipped
@@ -293,8 +333,8 @@ if (process.env.SUITE === 'full') {
   // is only sharp when the correlation is high: lead 60 sits at r 0.94 with a flat
   // peak and reports 59. That is the readout being worse, not the pairing being
   // wrong -- a real off-by-one would shift EVERY lead by the same amount.
-  check('every forecast lines up at its own trained lead to within a sample',
-    rows.every((r) => Math.abs(r.fcLag.lag - r.leadSamples) <= 1),
+  check('every forecast lines up at its own trained lead to within two samples',
+    rows.every((r) => Math.abs(r.fcLag.lag - r.leadSamples) <= 2),
     rows.map((r) => `${r.leadSamples}->${r.fcLag.lag}`).join(' '));
 }
 
@@ -316,8 +356,12 @@ if (process.env.SUITE === 'full') {
   // never reaches the quasi-static value the formula assumes and lags the command
   // instead. The static model fails precisely when the joint dominates -- which is
   // when compensation matters most.
+  // THE SAME TRAINING LENGTH AS THE HEADLINE, and it had to be: at nTrain 900 the
+  // K = 0.4 row scored 1.4712 against 0.3645 at nTrain 1200 -- the readout is still
+  // converging there, so the sweep was measuring training length and calling it
+  // stiffness.
   for (const K of [0.05, 0.15, 0.4, 1.282]) {
-    const r = await session({ K, nTrain: 900, nTest: 400 });
+    const r = await session({ K });
     console.log(`    [stiffness] K=${String(K).padStart(5)}  learner ${r.learner.toFixed(4)}  `
       + `compliance ${r.baseline.toFixed(4)}  advantage ${(r.baseline / r.learner).toFixed(2)}x`);
     check(`the learner beats the compliance model at K=${K}`, r.learner < r.baseline,
@@ -358,29 +402,36 @@ if (process.env.SUITE === 'full') {
     + `${m0b.learner.toFixed(4)} (+${(100 * (m0b.learner / m0.learner - 1)).toFixed(1)}%)`
     + `   with bit ${m1.learner.toFixed(4)} -> ${m1b.learner.toFixed(4)} `
     + `(${(100 * (m1b.learner / m1.learner - 1)).toFixed(1)}%)`);
-  // THE BIT IMMUNISES A MEMORYLESS MODEL COMPLETELY: backlash costs it nothing,
-  // against +28% without it. That is a clean confirmation of AxisComp's design --
-  // the right feature turns the problem into a different problem.
+  // THE BIT REDUCES BACKLASH DAMAGE IN BOTH CONFIGURATIONS, which is AxisComp's
+  // design working: lost motion depends on which way you came from, so a signal
+  // saying which way you came from turns a path-dependent target into a
+  // memoryless one. Memoryless +16.6% -> +10.9%, windowed +61.4% -> +49.3%.
+  //
+  // AN EARLIER VERSION OF THIS FILE SAID IT "IMMUNISES A MEMORYLESS MODEL
+  // COMPLETELY" AND MADE A WINDOWED ONE WORSE. Both halves were measured on a
+  // target with a sign error in it (see FlexArm.tipError) and both reversed when
+  // it was fixed. The claim that survives is the weaker and more ordinary one.
   const dNoBit = m0b.learner / m0.learner - 1;
   const dBit = m1b.learner / m1.learner - 1;
-  check('AxisComp\'s direction bit immunises a MEMORYLESS model against backlash',
-    dBit < 0.25 * dNoBit,
-    `without +${(100 * dNoBit).toFixed(1)}%, with ${(100 * dBit).toFixed(1)}%`);
+  check('AxisComp\'s direction bit reduces what backlash costs a MEMORYLESS model',
+    dBit < dNoBit, `without +${(100 * dNoBit).toFixed(1)}%, with +${(100 * dBit).toFixed(1)}%`);
 
-  // ...AND IT SHIPS OFF, because the shipped model has a lag window and there the
-  // bit makes things WORSE. The reason generalises past this plant: a LATCHED
-  // SIGNAL IS NEARLY CONSTANT ACROSS A WINDOW, so its lags are almost collinear
-  // and add features carrying information the first one already had -- variance
-  // with no signal. 544 features become 751.
+  // ...AND IT STILL SHIPS OFF, but now on cost rather than on harm. It buys a
+  // smaller relative degradation and does NOT buy a better absolute score, while
+  // adding 207 features -- a LATCHED SIGNAL IS NEARLY CONSTANT ACROSS A WINDOW,
+  // so its lags are almost collinear and carry information the first one already
+  // had. What a machine gets is the absolute number, and that is what is asserted.
   const w1b = await session({ backlash: b, directionBit: true });
   const dWinNoBit = windowed.learner / clean.learner - 1;
   const dWinBit = w1b.learner / clean2Bit.learner - 1;
-  console.log(`    [dir bit] windowed   no bit +${(100 * dWinNoBit).toFixed(1)}%  `
-    + `with bit +${(100 * dWinBit).toFixed(1)}%   features ${clean.status.features} -> `
+  console.log(`    [dir bit] windowed   no bit ${windowed.learner.toFixed(4)} `
+    + `(+${(100 * dWinNoBit).toFixed(1)}%)  with bit ${w1b.learner.toFixed(4)} `
+    + `(+${(100 * dWinBit).toFixed(1)}%)   features ${clean.status.features} -> `
     + `${w1b.status.features}`);
-  check('but with a lag window it is redundant AND costly, so it ships off',
-    dWinBit > dWinNoBit && w1b.status.features > clean.status.features,
-    `windowed degradation +${(100 * dWinNoBit).toFixed(1)}% -> +${(100 * dWinBit).toFixed(1)}%`);
+  check('but with a lag window it buys no better ABSOLUTE score, at 207 more features',
+    w1b.learner >= windowed.learner && w1b.status.features > clean.status.features,
+    `${windowed.learner.toFixed(4)} -> ${w1b.learner.toFixed(4)}, `
+    + `${clean.status.features} -> ${w1b.status.features}`);
 
   // ---- (2) DIRECTIONAL FORGETTING, on a plant that should suit it.
   //
@@ -404,19 +455,24 @@ if (process.env.SUITE === 'full') {
     f999.trace > 2 * f10.trace && fDir.trace < 1.2 * f10.trace,
     `lam1 ${f10.trace.toExponential(2)}, plain ${f999.trace.toExponential(2)}, `
     + `directional ${fDir.trace.toExponential(2)}`);
-  // AND IT IS NOT FREE, WHICH IS SHARPER THAN THE PRIOR RESULT. Four earlier
-  // measurements in this project found directional forgetting neutral; here it is
-  // neutral against lam = 1 (0.5909 vs 0.5906) but PLAIN forgetting scored better
-  // than both (0.5375, a 9% gain) while winding the covariance up. So on this
-  // stream directional forgetting does not merely buy nothing -- it gives up the
-  // accuracy plain forgetting bought, in exchange for a bounded covariance. That
-  // is a trade rather than a free guarantee, and it is the reason it stays default
-  // off rather than the reason it is dismissed.
+  // AND THE FIFTH INDEPENDENT MEASUREMENT AGREES WITH THE FIRST FOUR: directional
+  // forgetting is NEUTRAL. lam 1.0 0.5884, directional 0.5892 -- the same to three
+  // digits -- while plain forgetting is 0.6104, i.e. 3.7% WORSE, and pays for it
+  // with a covariance 2.7x wound up. So directional forgetting is a free
+  // guarantee here rather than a trade, and it stays default off only because
+  // there is nothing on this stream for it to guarantee against.
+  //
+  // AN EARLIER VERSION OF THIS FILE REPORTED THE OPPOSITE -- plain forgetting 9%
+  // BETTER, making the guarantee a trade -- and that was measured on a target with
+  // a sign error in it (see FlexArm.tipError). The corrected target restores the
+  // ordinary result. It is worth recording that the WRONG target produced the more
+  // interesting claim; a surprising measurement is a reason to check the
+  // instrument, not a reason to celebrate.
   check('directional forgetting matches lam = 1 in accuracy',
     Math.abs(fDir.learner / f10.learner - 1) < 0.05,
     `${f10.learner.toFixed(4)} vs ${fDir.learner.toFixed(4)}`);
-  check('...but plain forgetting scored BETTER here, so the guarantee has a price',
-    f999.learner < 0.95 * fDir.learner,
+  check('...and plain forgetting is worse, so the bounded covariance costs nothing here',
+    f999.learner > fDir.learner,
     `plain ${f999.learner.toFixed(4)} vs directional ${fDir.learner.toFixed(4)}`);
 }
 

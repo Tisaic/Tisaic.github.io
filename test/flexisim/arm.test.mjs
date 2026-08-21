@@ -26,6 +26,7 @@ import {
   buildLink, massProperties, gravityTorque, tipDeflection, peakSpeed, armLength,
 } from '../../lib/flexisim/link.js';
 import { lameFrom } from '../../lib/lattsim/operators/elastic.js';
+import { tipTrackingError } from '../../lib/flexisim/compensator.js';
 
 let failed = 0;
 function check(name, cond, detail) {
@@ -344,6 +345,27 @@ async function ringFrequency({ E, len, settle, ringSteps }) {
   check('and the tip error is a real fraction of the move, not round-off',
     Math.abs(e.total) > 1e-3 && Math.abs(e.bend) > 0,
     `tilt ${e.tilt.toExponential(3)}, bend ${e.bend.toExponential(3)}`);
+  // THE SIGN OF THE TILT, PINNED BY AN IDENTITY RATHER THAN BY INSPECTION.
+  // theta_link = theta_encoder - windup, so wind-up puts the tip BEHIND where the
+  // encoder says it is: tilt = -windup*L. The identity that catches a flipped sign
+  // is that the REFERENCE-relative error and the ENCODER-relative one differ by
+  // exactly the following error, which the controller knows:
+  //     tipTrackingError(arm, ref) === tipError().total + L*(encoder - ref)
+  // With the sign the other way this fails by 2*windup*L -- and it failed silently
+  // for four bricks, because the physics baseline in tipsensor.js was built on the
+  // same wrong formula and the learner simply fitted whatever it was shown. Two
+  // wrongs that agree are indistinguishable from two rights until something
+  // outside the pair is compared.
+  for (const ref of [0, 0.3, -1.2]) {
+    const lhs = tipTrackingError(arm, ref);
+    const rhs = e.total + arm.Larm * (joint.encoder().angle - ref);
+    check(`tip error against the reference and against the encoder differ by the following error (ref ${ref})`,
+      Math.abs(lhs - rhs) < 1e-9 * Math.max(1, Math.abs(lhs)),
+      `${lhs.toExponential(6)} vs ${rhs.toExponential(6)}`);
+  }
+  check('and the tilt is MINUS the wind-up times the arm',
+    Math.abs(e.tilt + joint.windup() * arm.Larm) < 1e-12 * Math.abs(e.tilt),
+    `${e.tilt.toExponential(6)} vs ${(-joint.windup() * arm.Larm).toExponential(6)}`);
   // The link RINGS during the move -- the same acceleration that winds the
   // gearbox up also excites the bending mode -- so the bend term is dynamic and
   // is not simply the static sag. Asserting it is nonzero and time-varying is the

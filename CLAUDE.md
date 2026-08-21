@@ -2352,62 +2352,86 @@ one.
    REACTION HAS TO BE REQUESTED BEFORE `build()` — asking after sets the flag,
    leaves the accumulator null, and reports zero for every reaction, silently.
 
-   **BRICK 8 — THE TIP-ERROR SOFT SENSOR, AND PATH DEPENDENCE MEASURED AT LAST.**
-   `lib/flexisim/tipsensor.js`, motor-side signals only, scored against the
-   physics-based estimate a good engineer builds (τ/K times the arm, with the torque
-   inferred from the encoder's own acceleration). EVERY NUMBER IS LOCKED — training
-   stops, the tracker goes away, and a check asserts training is REFUSED after the
-   lock rather than merely stopped. Measured, 500 locked samples, 544 features:
-   learner **0.5370**, compliance model 1.1967, "the tip is where the encoder says"
-   **1.0000**. That last scoring exactly 1.0 is not a coincidence — it IS the mean,
-   because the tip error oscillates about zero, so the controller's own picture of
-   where the tool is carries no information about the error at all.
-   PATH DEPENDENCE IS THE CLAIM THIS PLANT WAS BUILT TO MAKE. This project has used
-   lag windows everywhere and always found them merely HELPFUL; here the physics
-   says in advance they must be NECESSARY, because backlash makes the same motor
-   position correspond to different link positions depending on which way you
-   arrived. Measured with a dead band at 50% of the peak wind-up: memoryless
-   0.6691 → 0.8593 (**+28.4%**), windowed 0.5370 → 0.5909 (+10.0%). And memory earns
-   its place WITHOUT backlash too, for a different reason — the link rings and a
-   phase cannot be read from one instant (0.6691 → 0.5370).
-   THREE THINGS THE MEASUREMENT CORRECTED. (i) **The target was unlearnable at
-   realistic damping**: at 2e-4/step the tip error is a free vibration whose phase
-   lies outside any affordable window, and EVERY estimator — learner, baseline and
-   the naive view — scored near 1.0. (ii) **The baseline was a straw man for a units
-   reason**: the encoder acceleration was differenced between SAMPLES and handed to
-   a formula expecting rad/step², wrong by exactly `sampleEvery`. The learner would
-   never have noticed — it standardises its inputs and a constant scale vanishes
-   into the weights — but the baseline does not, so it read ten times the true
-   wind-up and scored nRMSE 19. (iii) **Backlash at 3e-4 was 0.05% of a 0.67 rad
-   wind-up**, so the first version of the claim measured a dead band that was not
-   there.
-   FULL TIER carries a stiffness sweep with a result I did not expect: the physics
-   baseline gets WORSE as the gearbox softens. A soft gearbox is also a SLOW one — at
-   K = 0.05 its resonance period is ~2950 steps against a 1700-step move — so the
-   wind-up never reaches the quasi-static value the static formula assumes. It fails
+   **BRICK 8 — THE TIP-ERROR SOFT SENSOR, AND A SIGN ERROR THAT SURVIVED FOUR
+   BRICKS.** `lib/flexisim/tipsensor.js`, motor-side signals only, scored against
+   the physics-based estimate a good engineer builds (τ/K times the arm, with the
+   torque inferred from the encoder's own acceleration). EVERY NUMBER IS LOCKED —
+   training stops, the tracker goes away, and a check asserts training is REFUSED
+   after the lock rather than merely stopped. Measured, 500 locked samples, 544
+   features: learner **0.3645**, compliance model 1.4223, "the tip is where the
+   encoder says" **1.0012**. That last scoring ≈ 1.0 is not a coincidence — it IS
+   the mean, so the controller's own picture of where the tool is carries almost no
+   information about the error.
+   **THE TRUTH THESE WERE FIRST MEASURED AGAINST HAD ITS SIGN WRONG, AND FIXING IT
+   MOVED EVERY CONCLUSION IN THIS SECTION.** θ_link = θ_encoder − windup, so wind-up
+   puts the tip BEHIND where the encoder says it is: the tilt is −windup·L, and
+   under gravity that is the SAME direction as the sag, so the two ADD. `tipError()`
+   had a `+`, which SUBTRACTED them. Nothing showed it, because the physics baseline
+   in the same file was built on the same wrong formula and the learner simply
+   fitted whatever it was shown — **two wrongs that agree are indistinguishable from
+   two rights until something outside the pair is compared.** What compared them was
+   brick 10's `tipTrackingError`, measured against the COMMAND rather than the
+   encoder, and the identity that now pins it forever:
+       tipTrackingError(arm, ref) === tipError().total + L·(encoder − ref)
+   i.e. the two references differ by exactly the following error, which the
+   controller knows. Under the old sign it failed by 2·windup·L. Asserted at three
+   reference angles.
+   PATH DEPENDENCE — the claim this plant was built to make, and the corrected
+   version is weaker and more ordinary. Backlash makes the same motor position
+   correspond to different link positions depending on which way you arrived, so a
+   memoryless model is provably insufficient. Measured with a dead band at 50% of
+   the peak wind-up: memoryless 0.6206 → 0.7238 (**+16.6%**), windowed 0.3645 →
+   0.5884 (**+61.4%**). **The window wins in both regimes in the ABSOLUTE terms a
+   machine gets** — 1.70× clean and 1.23× under backlash — **and is hurt MORE in
+   relative terms**, because the better model had more fine timing to lose and
+   backlash is precisely a disruption of it. The earlier entry claimed "history
+   absorbs about two thirds of the damage"; that was the sign error, and it is
+   false. Memory still earns its place with NO backlash for a separate reason: the
+   link rings and a phase cannot be read from one instant (0.6206 → 0.3645).
+   TWO OTHER THINGS THE MEASUREMENT CORRECTED, both still true. (i) **The target was
+   unlearnable at realistic damping**: at 2e-4/step the tip error is a free
+   vibration whose phase lies outside any affordable window, and EVERY estimator
+   scored near 1.0. (ii) **The baseline was a straw man for a units reason**: the
+   encoder acceleration was differenced between SAMPLES and handed to a formula
+   expecting rad/step², wrong by exactly `sampleEvery`. The learner would not have
+   noticed — it standardises its inputs and a constant scale vanishes into the
+   weights — but the baseline does not.
+   FULL TIER carries a stiffness sweep, and the advantage over the physics baseline
+   falls monotonically as the gearbox stiffens: **7.65× at K 0.05, 4.06× at 0.15,
+   3.90× at 0.4, 2.28× at 1.282**. A soft gearbox is also a SLOW one — at K = 0.05
+   the resonance period is ~2950 steps against a 1700-step move — so the wind-up
+   never reaches the quasi-static value the static formula assumes. It fails
    precisely when the joint dominates, which is when compensation matters most.
-
+   (The sweep had to be re-run at the headline's training length: at nTrain 900 the
+   K = 0.4 row scored 1.4712 against 0.3645 at 1200, so it was measuring training
+   length and calling it stiffness.)
    **THE NGRC AUDIT: FOUR BLOCKS BUILT FOR THIS DOMAIN AND USED BY NONE OF IT** —
    `RobotComp`/`CompCommissioner` (per-joint compliance learned by exact RLS from
    measured TCP deflection, with the command PRE-DISTORTED by −dq), `ServoFF`,
    `AxisComp` (position-domain pitch + BACKLASH compensation from static laser
    dwells in both directions), `Continuous`/`directHorizons`. Two of their ideas were
-   cheap to test and both changed what shipped.
-   (1) **AxisComp's DIRECTION BIT** against the lag window I reached for instead:
-   memoryless 0.6691 → 0.8593 under backlash (+28.4%), memoryless + BIT 0.7392 →
-   0.7252 (**−1.9%**), windowed + bit 0.5319 → 0.6938 (+30.4%). THE BIT IMMUNISES A
-   MEMORYLESS MODEL COMPLETELY and makes a WINDOWED one worse, and the reason
-   generalises: **a latched signal is nearly constant across a window**, so its lags
-   are almost collinear and add 207 features carrying information the first one
-   already had. Ships off; available for the memoryless case where it is the whole
-   answer.
+   cheap to test. **Both were first measured against the sign-wrong target above and
+   both reversed when it was fixed**, which is why the numbers here are the
+   corrected ones and the earlier, more interesting versions are not.
+   (1) **AxisComp's DIRECTION BIT.** Memoryless 0.6206 → 0.7238 under backlash
+   (+16.6%) without it, 0.6322 → 0.7009 (**+10.9%**) with it; windowed +61.4% →
+   +49.3%. So the bit REDUCES what backlash costs, in both configurations, which is
+   AxisComp's design working. It still ships OFF — but on COST rather than on harm:
+   with a lag window it buys no better absolute score (0.5884 → 0.7093) while adding
+   207 features, because **a latched signal is nearly constant across a window**, so
+   its lags are almost collinear and carry information the first one already had.
+   The earlier entry said it "immunises a memoryless model completely" and made a
+   windowed one worse; both halves were the sign error.
    (2) **DIRECTIONAL FORGETTING**, now plumbed through `SoftSensor` (opt-in, default
-   false, every golden vector byte-identical): λ 1.0 → 0.5909 with trace(P) 1.56e3;
-   λ 0.999 plain → **0.5375** with trace(P) 4.14e3; λ 0.999 directional → 0.5906
-   with trace(P) 1.57e3. Four earlier measurements in this project found it NEUTRAL;
-   here it is neutral against λ = 1 but PLAIN forgetting scored 9% BETTER than both
-   while winding up. So it gives up the accuracy plain forgetting bought in exchange
-   for a bounded covariance — a trade, not a free guarantee.
+   false, every golden vector byte-identical): λ 1.0 → 0.5884 with trace(P) 1.56e3;
+   λ 0.999 plain → 0.6104 with trace(P) 4.14e3; λ 0.999 directional → **0.5892**
+   with trace(P) 1.57e3. **The fifth independent measurement in this project agrees
+   with the first four: it is NEUTRAL.** Plain forgetting is 3.7% worse AND winds the
+   covariance up 2.7×; directional holds it at the λ = 1 value for nothing. The
+   earlier entry had plain forgetting 9% BETTER, making the guarantee a trade — the
+   sign error again. **The WRONG target produced the more interesting claim, twice
+   in one section, which is the lesson: a surprising measurement is a reason to
+   check the instrument, not a reason to celebrate.**
 
    **BRICK 9 — THE STRUCTURED RIVAL, AND WHY COMPLIANCE IS ONLY IDENTIFIABLE AT
    REST.** `lib/flexisim/compliance.js` learns ONE number with a physical meaning
@@ -2499,29 +2523,47 @@ one.
    `SoftSensor` had no equivalent of and which FlowSim's page therefore hand-rolled.
    Opt-in, default all-zero, every golden vector byte-identical; the expansion is
    computed ONCE and shared, so a forecast costs one extra RLS update and no extra
-   features. Measured, locked, lead 30 samples = 300 solver steps: forecast
-   **0.1920**, persistence-of-estimate 1.1826 (what a machine could run),
-   persistence-of-TRUTH 1.0093 (an ORACLE — it needs the tracker back).
-   **THE FORECAST SCORES BETTER THAN THE PRESENT-TIME ESTIMATE** (0.1920 against
-   0.5370), which looks impossible and is not: correlation with the truth is 0.9960
-   at lag +30 against 0.9499 at lag −1. The cause is a TRANSPORT DELAY. The gearbox
-   resonance has a ~1040-step period, so the tip lags the motor by about a quarter
-   of it — ~260 steps, 26 samples — while the readout's window is lag 6 × stride 2 ×
-   sampleEvery 10 = 100 steps. The tip error NOW is a response to excitation that
-   has ALREADY LEFT the window; the tip error 300 steps ahead is a response to
-   excitation sitting at the freshest end of it. Predicting forward is not
-   extrapolation here, it is reading the signal at the delay the plant already has —
-   and a real compensator sits on the other side of that same delay.
-   THE HORIZON SWEEP IS THE FALSIFIABLE FORM OF THAT, and it holds: skill must have
-   a MINIMUM near the delay and get worse on BOTH sides.
-     lead   5 (  50 steps)  forecast 0.4514  persist-truth 0.1884
-     lead  15 ( 150 steps)  forecast 0.3900  persist-truth 0.5418
-     lead  30 ( 300 steps)  forecast **0.1920**  persist-truth 1.0093
-     lead  60 ( 600 steps)  forecast 0.6155  persist-truth 1.7705
-   Persistence degrades MONOTONICALLY and the learner does not, which is the
-   difference between a model and an assumption. And the ALIGNMENT is checked, not
-   just the score: a forecast trained at lead L must correlate best at exactly L,
-   since an off-by-one in the ring is an error no score would reveal.
+   features. It also gains `observe()` — the same reading WITHOUT stepping — so a
+   caller running its own control law (the page) can drive the plant and still meet
+   the cadence contract `sample()` enforces internally.
+   Measured, locked, lead 15 samples = 150 solver steps: forecast **0.1035**,
+   persistence-of-estimate 0.6581 (what a machine could run), persistence-of-TRUTH
+   0.5417 (an ORACLE — it needs the tracker back).
+   **THE FORECAST IS 3.5× MORE ACCURATE THAN THE PRESENT-TIME ESTIMATE** (0.1035
+   against 0.3645). The pairing is verified by an alignment check and the scoring
+   window is the same, so the effect is real rather than a bookkeeping artefact.
+   **I DO NOT HAVE A CLEAN MECHANISM FOR IT, AND THE OBVIOUS ONE DOES NOT SURVIVE
+   MEASUREMENT.** A motor-to-tip transport delay would explain it and a quarter of
+   the gearbox period (~260 steps) is the right order — but the instrument that
+   would locate that delay, where the PURE MOTOR-SIDE baseline best lines up with
+   the tip's truth, reports 52 samples at a correlation of only 0.50: far too flat a
+   peak to read a delay off. Naming a number from the gearbox period and calling it
+   the cause would be fitting an explanation to a result, so it is stated as
+   unexplained.
+   WHAT IS MEASURED IS THE FALSIFIABLE PART — an INTERIOR minimum, which any
+   delay-like explanation predicts and which plain extrapolation cannot produce,
+   since extrapolation only gets harder with distance:
+     lead   5 (  50 steps)  forecast 0.2911  persist-truth 0.1846
+     lead  15 ( 150 steps)  forecast **0.1035**  persist-truth 0.5417
+     lead  30 ( 300 steps)  forecast 0.4064  persist-truth 1.0394
+     lead  60 ( 600 steps)  forecast 0.6576  persist-truth 1.8179
+   Persistence degrades MONOTONICALLY, which is the difference between a model and
+   an assumption. The learner beats production persistence at every lead and beats
+   the ORACLE from lead 15 on.
+   AND THE ALIGNMENT IS CHECKED, not just the score: a forecast trained at lead L
+   must correlate best near L, since an off-by-one in the ring is an error no score
+   would reveal. Measured 5→5, 15→14, 30→28, 60→60 — a **LEAD DEFICIT** of a sample
+   or two rather than a pairing error, which this project has measured before
+   (FlowSim's 1 s preview correlates best at 90 samples while trained for 100, and
+   so does a batch fit on the TRUE plant state: least squares shrinks toward the
+   mean at the far end of what it cannot know, and shrinkage reads as a slight lag).
+   A real off-by-one would be a CONSTANT offset at every lead, which is what the
+   sweep checks.
+   EITHER WAY IT IS THE USEFUL DIRECTION: a correction takes effect after the loop
+   closes and the mechanism moves, so a compensator driven by an ESTIMATE needs the
+   error it will HAVE. Brick 10's feedforward sidesteps that only because a static
+   constant can be evaluated at the command; anything that READS the machine has to
+   predict.
 
    **BRICK 12 — THE PAGE.** `flexisim.html`, three tabs. **Move** builds the hybrid
    arm, runs COMMISSIONING inside the frame loop (three pose holds, then a
