@@ -44,7 +44,8 @@ const K_NOMINAL = 0.4;
  * a compensator operates in.
  */
 async function session({ K = K_NOMINAL, backlash = 0, lag = 6, stride = 2,
-                         damping = 3e-3, nTrain = 1200, nTest = 500 }) {
+                         damping = 3e-3, nTrain = 1200, nTest = 500,
+                         directionBit = false, directional = false, lam = 1.0 }) {
   const link = await buildLink({ length: LEN, section: H, clamp: CLAMP,
     E, nu, rho, gravity: [0, 0, 0], damping });
   const mp = massProperties(link);
@@ -56,7 +57,8 @@ async function session({ K = K_NOMINAL, backlash = 0, lag = 6, stride = 2,
   const arm = new FlexArm({ joint, link, gravityWorld: [0, -2e-6, 0], dt: 1 });
   const profile = new MoveProfile({ accelSteps: 200, cruiseSteps: 300,
     dwellSteps: 150, torque: 2e-3 });
-  const ts = new TipSensor({ sampleEvery: 10, lag, stride, warmup: 200 });
+  const ts = new TipSensor({ sampleEvery: 10, lag, stride, warmup: 200,
+    directionBit, directional, lam });
 
   const est = [], truth = [], base = [];
   let peakWindup = 0, trainedAfterLock = 0;
@@ -73,11 +75,17 @@ async function session({ K = K_NOMINAL, backlash = 0, lag = 6, stride = 2,
       inertia: mp.inertiaAboutPivot, stiffness: K, arm: arm.Larm }));
   }
   const status = ts.status();
+  // trace(P) is permanent in the report for the same reason __fsSSdbg() is: a
+  // model that scores badly has several distinct explanations and the score
+  // cannot tell them apart. Covariance wind-up is one of them.
+  const P = ts.ss.P[0];
+  let trace = 0;
+  for (let i = 0; i < P.rows; i++) trace += P.m[i * P.rows + i];
   await link.destroy();
   return {
     learner: nrmse(est, truth), baseline: nrmse(base, truth),
     naive: nrmse(truth.map(() => 0), truth),
-    peakWindup, status, trainedAfterLock, n: est.length,
+    peakWindup, status, trainedAfterLock, n: est.length, trace,
   };
 }
 
@@ -116,6 +124,7 @@ check('and it beats the physics-based compliance model too',
   const memoryless = await session({ lag: 1, stride: 1, backlash: b });
   const windowed = await session({ lag: 6, stride: 2, backlash: b });
   const memorylessClean = await session({ lag: 1, stride: 1 });
+  globalThis.__windowed = windowed;
   console.log(`    [backlash] dead band ${b.toExponential(2)} rad = 50% of the peak `
     + `wind-up ${clean.peakWindup.toExponential(2)}`);
   console.log(`    [backlash] memoryless ${memorylessClean.learner.toFixed(4)} -> `
@@ -160,6 +169,101 @@ if (process.env.SUITE === 'full') {
     check(`the learner beats the compliance model at K=${K}`, r.learner < r.baseline,
       `${r.learner.toFixed(4)} vs ${r.baseline.toFixed(4)}`);
   }
+}
+
+// ================= THE LIBRARY ALREADY KNEW TWO THINGS I HAD NOT USED
+//
+// FULL TIER: these are documented MEASUREMENTS rather than contracts, and they
+// are seven extra sessions -- 35 s of a 49 s file. The claims the shipped
+// configuration depends on are above and run every time.
+//
+// An audit of lib/ngrc turned up four blocks built for exactly this domain and
+// used by none of the above: RobotComp (per-joint compliance c_j = 1/K_j learned
+// by exact RLS, with command pre-distortion -- the ACTIVE COMPENSATION side),
+// ServoFF (self-commissioning drive feedforward with term pruning), AxisComp
+// (position-domain pitch + BACKLASH compensation) and Continuous/directHorizons
+// (forecasting a lead ahead, which is what a compensator consumes). Two of their
+// ideas are cheap to test here and both are worth the measurement.
+if (process.env.SUITE === 'full') {
+  const b = 0.5 * clean.peakWindup;
+  const windowed = globalThis.__windowed;
+  const clean2Bit = await session({ directionBit: true });
+
+  // ---- (1) AxisComp's DIRECTION BIT against my lag window.
+  //
+  // AxisComp fits err = pitch(pos,T) + (B/2)*dir with `dir` as an EXPLICIT
+  // feature, calibrated from static laser dwells taken in both directions. Lost
+  // motion is a function of which way you came from, so a signal saying which way
+  // you came from turns a path-dependent target into a memoryless one -- where a
+  // lag window has to infer the same thing from the shape of history.
+  const m0 = await session({ lag: 1, stride: 1 });
+  const m0b = await session({ lag: 1, stride: 1, backlash: b });
+  const m1 = await session({ lag: 1, stride: 1, directionBit: true });
+  const m1b = await session({ lag: 1, stride: 1, directionBit: true, backlash: b });
+  console.log(`    [dir bit] memoryless  no bit ${m0.learner.toFixed(4)} -> `
+    + `${m0b.learner.toFixed(4)} (+${(100 * (m0b.learner / m0.learner - 1)).toFixed(1)}%)`
+    + `   with bit ${m1.learner.toFixed(4)} -> ${m1b.learner.toFixed(4)} `
+    + `(${(100 * (m1b.learner / m1.learner - 1)).toFixed(1)}%)`);
+  // THE BIT IMMUNISES A MEMORYLESS MODEL COMPLETELY: backlash costs it nothing,
+  // against +28% without it. That is a clean confirmation of AxisComp's design --
+  // the right feature turns the problem into a different problem.
+  const dNoBit = m0b.learner / m0.learner - 1;
+  const dBit = m1b.learner / m1.learner - 1;
+  check('AxisComp\'s direction bit immunises a MEMORYLESS model against backlash',
+    dBit < 0.25 * dNoBit,
+    `without +${(100 * dNoBit).toFixed(1)}%, with ${(100 * dBit).toFixed(1)}%`);
+
+  // ...AND IT SHIPS OFF, because the shipped model has a lag window and there the
+  // bit makes things WORSE. The reason generalises past this plant: a LATCHED
+  // SIGNAL IS NEARLY CONSTANT ACROSS A WINDOW, so its lags are almost collinear
+  // and add features carrying information the first one already had -- variance
+  // with no signal. 544 features become 751.
+  const w1b = await session({ backlash: b, directionBit: true });
+  const dWinNoBit = windowed.learner / clean.learner - 1;
+  const dWinBit = w1b.learner / clean2Bit.learner - 1;
+  console.log(`    [dir bit] windowed   no bit +${(100 * dWinNoBit).toFixed(1)}%  `
+    + `with bit +${(100 * dWinBit).toFixed(1)}%   features ${clean.status.features} -> `
+    + `${w1b.status.features}`);
+  check('but with a lag window it is redundant AND costly, so it ships off',
+    dWinBit > dWinNoBit && w1b.status.features > clean.status.features,
+    `windowed degradation +${(100 * dWinNoBit).toFixed(1)}% -> +${(100 * dWinBit).toFixed(1)}%`);
+
+  // ---- (2) DIRECTIONAL FORGETTING, on a plant that should suit it.
+  //
+  // With lam < 1 the covariance is inflated in EVERY direction each step while
+  // only the excited ones get new information, so a poorly exciting stream winds
+  // up without bound. A repeating move profile IS that condition -- a limit
+  // cycle. Directional forgetting forgets only along the excited direction.
+  //
+  // The `rls` primitive has always supported it; SoftSensor simply never passed
+  // it through, so the flag is now plumbed (opt-in, default false, every golden
+  // vector byte-identical).
+  const f10 = await session({ backlash: b });
+  const f999 = await session({ backlash: b, lam: 0.999 });
+  const fDir = await session({ backlash: b, lam: 0.999, directional: true });
+  console.log(`    [forgetting] lam 1.0 ${f10.learner.toFixed(4)} tr ${f10.trace.toExponential(2)}`
+    + `   lam .999 plain ${f999.learner.toFixed(4)} tr ${f999.trace.toExponential(2)}`
+    + `   lam .999 directional ${fDir.learner.toFixed(4)} tr ${fDir.trace.toExponential(2)}`);
+  // IT DOES EXACTLY WHAT IT IS FOR: plain forgetting winds the covariance up 2.7x
+  // on this stream and directional forgetting holds it at the lam = 1 value.
+  check('directional forgetting prevents the covariance wind-up plain forgetting causes',
+    f999.trace > 2 * f10.trace && fDir.trace < 1.2 * f10.trace,
+    `lam1 ${f10.trace.toExponential(2)}, plain ${f999.trace.toExponential(2)}, `
+    + `directional ${fDir.trace.toExponential(2)}`);
+  // AND IT IS NOT FREE, WHICH IS SHARPER THAN THE PRIOR RESULT. Four earlier
+  // measurements in this project found directional forgetting neutral; here it is
+  // neutral against lam = 1 (0.5909 vs 0.5906) but PLAIN forgetting scored better
+  // than both (0.5375, a 9% gain) while winding the covariance up. So on this
+  // stream directional forgetting does not merely buy nothing -- it gives up the
+  // accuracy plain forgetting bought, in exchange for a bounded covariance. That
+  // is a trade rather than a free guarantee, and it is the reason it stays default
+  // off rather than the reason it is dismissed.
+  check('directional forgetting matches lam = 1 in accuracy',
+    Math.abs(fDir.learner / f10.learner - 1) < 0.05,
+    `${f10.learner.toFixed(4)} vs ${fDir.learner.toFixed(4)}`);
+  check('...but plain forgetting scored BETTER here, so the guarantee has a price',
+    f999.learner < 0.95 * fDir.learner,
+    `plain ${f999.learner.toFixed(4)} vs directional ${fDir.learner.toFixed(4)}`);
 }
 
 console.log(failed ? `\n${failed} tip-sensor check(s) failed\n` : '\ntipsensor: all checks passed\n');
