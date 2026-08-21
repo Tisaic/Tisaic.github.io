@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:221,built:"2026-08-21T22:10:07Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:222,built:"2026-08-21T23:38:07Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -549,6 +549,9 @@ let win = [];                 // recent tip errors, one move period
 // is a viewing control. The frame loop below splits its budget at these
 // boundaries rather than sampling once per frame.
 const SAMPLE_EVERY = 10, SS_LEAD = 15, SS_WIN = 400;
+// The window must span the link's ring, not a tenth of it: (SS_LAG-1)*SS_STRIDE*
+// SAMPLE_EVERY = 990 steps against a bending period of 1011. See build().
+const SS_LAG = 12, SS_STRIDE = 9;
 let ss = null, ssChartOn = false, ssLastEst = null;
 let lastGeom = null;              // what draw() last put on screen, for the suite
 const ssRec = [];             // {k, truth, est, fc} one per sample
@@ -586,8 +589,42 @@ async function build() {
   $('commission').disabled = false;
   $('run').textContent = 'Run move ▶';
   pc = null; mode = null; comp = null; k = 0;
-  ss = new TipSensor({ sampleEvery: SAMPLE_EVERY, lag: 6, stride: 2, warmup: 200,
-    lead: SS_LEAD });
+  // THE WINDOW HAS TO REACH ACROSS THE RING, and the first version reached 10% of
+  // the way. At lag 6 x stride 2 the model saw (6-1)*2*10 = 100 solver steps against
+  // a bending period of 1011, so a free vibration's phase was simply outside what it
+  // could see -- and during a DWELL, where every measured signal is flat because the
+  // machine is parked, the estimate held a constant while the truth kept moving.
+  // Reported from the device as a flat blue line, and the page's own headline nRMSE
+  // averaged it away: 0.3071 overall against 0.5710 over the parked stretch alone.
+  //
+  // MEASURED, all on the same plant and stream, nRMSE overall / parked / how much of
+  // the truth's motion the estimate carries while parked / roughness against the
+  // truth's own / cost:
+  //   narrow 6x2 universal (shipped)  0.3071  0.5710   52%   145x   4258us
+  //   narrow 6x2 linear               0.5305  0.9143   22%   221x   3145us
+  //     + motor reaction              0.3663  0.8135   46%    29x   3089us
+  //     + commanded too               0.2826  0.3968   67%    58x   3077us
+  //   WIDE 12x9 linear                0.0809  0.1300   99%    15x   3092us
+  //     + reaction + commanded        0.0068  0.0106  100%   2.6x   3111us
+  //   WIDE 12x9 universal             0.0045  0.0096  100%   2.6x  29401us
+  // So the window is the dominant term, the two extra signals are worth a further
+  // 12x on top of it, and the 544-feature universal map is 9.5x the cost for 1.5x
+  // the accuracy once the signals are right. LINEAR SHIPS, and it is CHEAPER than
+  // what it replaces as well as 45x more accurate.
+  //
+  // THE SPIKES GO WITH IT. Roughness falls 145x -> 2.6x of the truth's own without
+  // any filter, because the cause was alpha_enc -- a first difference of speed, i.e.
+  // a high-pass -- being the only dynamic input the model had. Filtering the output
+  // would have treated the symptom.
+  ss = new TipSensor({ sampleEvery: SAMPLE_EVERY, lag: SS_LAG, stride: SS_STRIDE,
+    warmup: 200, lead: SS_LEAD, features: 'linear', reaction: true,
+    // The COMMAND is known exactly and costs nothing to route. It is flat during a
+    // dwell like everything else, so it only pays once the window is wide enough to
+    // say WHEN the move ended -- which is why it is worth 1.2x on the narrow window
+    // and 12x on the wide one.
+    extra: () => { const r = prof ? prof.at(k) : { theta: 0, alpha: 0 };
+      return [r.theta, r.alpha * 1e6]; },
+    nExtra: 2 });
   ssRec.length = 0; ssScoreFrom = 0; ssTraining = false;
   $('ss-train').disabled = true; $('ss-lock').disabled = true;
   $('ss-train').textContent = 'Start training ▶';
@@ -1165,8 +1202,14 @@ function ssStats() {
       : (st.mode === 'training' ? (ssTraining ? `training — ${st.trained} pairs`
         : `paused — ${st.trained} pairs trained`) : `LOCKED after ${st.trained} pairs`);
     rows.push(['mode', `<span class="${st.mode === 'estimating' ? 'good' : ''}">${label}</span>`]);
-    rows.push(['features', `${st.features} (universal map on ${SAMPLE_EVERY}-step samples, `
-      + `6 lags x stride 2)`]);
+    rows.push(['features', `${st.features} on ${SAMPLE_EVERY}-step samples, `
+      + `${SS_LAG} lags x stride ${SS_STRIDE}`]);
+    rows.push(['window reach', `${(SS_LAG - 1) * SS_STRIDE * SAMPLE_EVERY} steps`
+      + (mode && !mode.overdamped
+        ? `   <span class="${(SS_LAG - 1) * SS_STRIDE * SAMPLE_EVERY > 0.7 * mode.period
+          ? 'good' : 'bad'}">vs a ${mode.period.toFixed(0)}-step ring — a window shorter `
+          + 'than the ring cannot carry a free vibration\'s phase, and the estimate goes '
+          + 'FLAT wherever the machine is parked</span>' : '')]);
   }
   const sc = ssScores();
   if (sc) {

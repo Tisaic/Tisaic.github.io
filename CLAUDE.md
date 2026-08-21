@@ -2645,6 +2645,63 @@ one.
    command-relative one the stage draws, so the two traces on one screen cannot be
    confused for the same quantity.
 
+   **THE SOFT SENSOR'S ESTIMATE WENT FLAT WHERE THE TRUTH WAS STILL MOVING (v222),
+   AND THE WINDOW WAS A TENTH OF THE RING.** Reported from the device with a
+   screenshot: the cyan estimate holds a constant through a whole section while the
+   white truth wanders, and the trace carries high-frequency spikes. The owner's two
+   proposals — route the COMMAND, and route the ACTUAL motor torque, "muted because
+   of the reflection through the gearbox but it will be there" — are both right, and
+   the second is the sharper one.
+   **THE CAUSE IS THAT EVERY SIGNAL IS MEASURED AND THE MACHINE IS PARKED.** During
+   a dwell the encoder speed is zero, the acceleration is zero, the pose is fixed and
+   the commanded torque is just the static gravity term, while the tip is still
+   ringing — and a flat input must give a flat output whatever the model. On top of
+   that the window reached back **(6−1)×2×10 = 100 solver steps against a 1011-step
+   bending period**, i.e. 10% of one cycle, so a free vibration's phase was outside
+   what the model could see even in principle.
+   **AND THE PAGE'S OWN HEADLINE AVERAGED IT AWAY**: 0.3071 overall against **0.5710
+   over the parked stretch alone**, with the estimate carrying only 52% of the
+   truth's motion there. Scoring the dwell separately is what turned a screenshot
+   into a number.
+   MEASURED, one plant and one stream — nRMSE overall / parked / share of the truth's
+   motion while parked / roughness as the estimate's 2nd difference over the truth's
+   own / cost per sample including the plant:
+     narrow 6×2 universal (shipped)  0.3071  0.5710   52%   145×   4258 µs
+     narrow 6×2 linear               0.5305  0.9143   22%   221×   3145 µs
+       + motor reaction              0.3663  0.8135   46%    29×   3089 µs
+       + commanded as well           0.2826  0.3968   67%    58×   3077 µs
+     WIDE 12×9 linear                0.0809  0.1300   99%    15×   3092 µs
+       + reaction + commanded        **0.0068  0.0106  100%   2.6×   3111 µs**
+     WIDE 12×9 universal             0.0045  0.0096  100%   2.6×  29401 µs
+   **THE REACTION DOES EXACTLY WHAT WAS PREDICTED OF IT**: it doubles the estimate's
+   motion during a dwell (22% → 46%) because it is the one measured quantity that
+   survives being parked — the link's ringing pushes back through the gear teeth, and
+   a real drive's current loop must supply it, so measured current carries it while
+   the demand does not.
+   **AND THE MUTING COSTS NOTHING, WHICH IS THE USEFUL SURPRISE.** Scoring the
+   un-muted shaft torque instead gives **0.3663 — identical to four figures** —
+   because the model standardises its inputs and a constant 1/N vanishes into the
+   weights. No torque transducer is needed; the reflected signal is as good.
+   **THE SPIKES WERE A SYMPTOM AND ARE GONE WITHOUT A FILTER.** Roughness falls
+   **145× → 2.6×** of the truth's own, because the cause was `alpha_enc` — a first
+   difference of speed, i.e. a high-pass — being the only DYNAMIC input the model
+   had. Adding a smooth one displaced it. An auto-tuned output filter was the obvious
+   answer and would have treated the symptom.
+   **LINEAR SHIPS, AND IT IS CHEAPER THAN WHAT IT REPLACES.** Once the window and the
+   signals are right the 544-feature universal map is 9.5× the cost for 1.5× the
+   accuracy. Shipped: lag 12 × stride 9 (990 steps against a 1011-step ring), linear
+   features, plus the reaction and the commanded pair. In the browser the page's own
+   locked readout goes **estimate 0.3055 → 0.0513 and forecast 0.2401 → 0.0614**.
+   The stats now report the WINDOW REACH against the measured ring and turn red when
+   it is short, which is the diagnostic that would have made this visible without a
+   screenshot.
+   STILL OPEN, found on the way and not yet fixed: changing the Move span or speed
+   while the sensor is LOCKED leaves it running on a standardisation frozen for a
+   different trajectory, and it scores ~30 — worse than predicting the mean.
+   `applyMotion()` clears the board and the window and never touches the sensor.
+   FlowSim's soft sensor has rolling recalibration for exactly this; TipSensor has
+   none.
+
    **BRICK 14 — THE SECOND JOINT, i.e. THE FIRST THING HERE THAT IS ACTUALLY A
    CHAIN.** `lib/flexisim/arm2r.js`: two lumped joints, two lattice links, ONE
    COUPLED SOLVE. Three terms appear that a single joint cannot show and that a
