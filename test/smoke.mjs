@@ -34,6 +34,26 @@ function findChrome() {
 // through a software GPU and a few minutes of control simulation.
 const FULL = process.env.SUITE === 'full';
 
+// WHICH PAGES ARE WORTH TESTING IS DECIDED BY WHAT CHANGED, and test/run.sh works
+// that out from git and passes it down here. A FlowSim edit should not be judged
+// by the NGRC tab's warm-up timers, and an NGRC edit should not spend four
+// minutes driving a software GPU -- both of those are checks that cannot fail for
+// a reason the edit is responsible for, so running them is cost without
+// information.
+//
+// The mapping is deliberately GENEROUS in one direction: anything shared
+// (console-boot.js, the smoke test itself, run.sh, vendor) selects EVERY area,
+// because a change there can break any page. Under-testing a shared file is the
+// expensive mistake; over-testing one is a few minutes.
+//
+// AREAS UNSET means everything, so running `node test/smoke.mjs` by hand behaves
+// as it always did. AREAS set-but-EMPTY means nothing changed and neither page
+// needs driving -- which is a different statement, and `||` would have collapsed
+// the two into "run everything" exactly when there was least reason to.
+const AREAS = (process.env.AREAS === undefined ? 'ngrc,flowsim' : process.env.AREAS)
+  .split(',').map((s) => s.trim()).filter(Boolean);
+const AREA = { ngrc: AREAS.includes('ngrc'), flowsim: AREAS.includes('flowsim') };
+
 let failed = 0;
 // Section timing, so "the suite is slow" can be answered with a number instead
 // of a guess. Printed at the end.
@@ -167,7 +187,7 @@ await page.screenshot({ path: join(SHOTS, '03-docs.png') });
 // nothing to do with it and can fail for reasons that are not the edit's fault.
 // They still run on --full, where they belong.
 const demoBase = BASE.replace(/index\.html$/, '') + 'ngrc.html';
-if (FULL) {
+if (FULL && AREA.ngrc) {
 section('ngrc load');
 const demo = await ctx.newPage();
 const demoErrors = [];
@@ -561,6 +581,10 @@ await demo.close();
 
 }   // end FULL-only anti-slosh scenarios
 section('ngrc tab4 antislosh');
+// EVERY FLOWSIM CHECK, GATED AS ONE BLOCK. Nothing after section('end') refers
+// to `flow`, so the whole page can be skipped without leaving a dangling
+// reference -- which is what makes this a gate rather than a rewrite.
+if (AREA.flowsim) {
 section('flowsim page');
 const flow = await ctx.newPage();
 const flowErrors = [];
@@ -865,12 +889,47 @@ await flow.waitForFunction(() => !window.__fsDbg().building, null, { timeout: 60
 // storage binding against a 128 MiB default limit; before this it failed, fell
 // through to a CPU backend far over its own cap, and left the page with no
 // simulation at all.
-const resInfo = await flow.evaluate(() => ({
-  max: +document.getElementById('res').max,
-  built: window.__fsDbg().cells > 0,
-}));
+//
+// THE ASSERTION IS THE INVARIANT, NOT A NUMBER. This check used to require
+// `max <= 4`, which encoded the memory situation of one scene at one moment: the
+// channel was [3n, n, n] and its top rung wanted 192 MiB. v121 halved the span
+// (a cylinder is nominally 2D, so cells spent along it resolve nothing about the
+// wake), the top rung came down to 96 MiB, it legitimately fits, and the check
+// began failing while the page was doing exactly the right thing. A hard-coded
+// ceiling is also wrong in the other direction -- on a device with a SMALLER
+// limit than this software adapter, `max <= 4` would pass while the clamp was
+// broken. So the property is asserted against the device's own reported limit:
+// every offered rung must fit, and the first rung above the offer must not.
+const resInfo = await flow.evaluate(async () => {
+  const { SCENES } = await import('./lib/lattsim/scenes.js');
+  const d = window.__fsDbg();
+  const max = +document.getElementById('res').max;
+  // The same criterion largestResolutionThatFits() applies, stated directly:
+  // the LARGEST single field's binding against the device's limit. Calling the
+  // helper with a one-element ladder cannot answer this -- it seeds `best` with
+  // ladder[0] and returns it whether or not it fits, so it would report every
+  // rung as fitting and the check would have no teeth at all.
+  const bytesAt = (n) => {
+    const sim = SCENES[d.scene].make({ resolution: n });
+    return Math.max(...sim.fields.list().map((f) => f.byteLength(sim.lattice.cellCount)));
+  };
+  const fitsAt = (n) => bytesAt(n) <= d.maxBinding;
+  return {
+    max, built: d.cells > 0, ladder: d.ladder, scene: d.scene,
+    maxBinding: Number.isFinite(d.maxBinding) ? d.maxBinding : 'unlimited',
+    topOffered: d.ladder[max],
+    topFits: fitsAt(d.ladder[max]),
+    topBytes: bytesAt(d.ladder[max]),
+    // undefined past the end of the ladder, which is the "nothing was clamped
+    // away because nothing needed to be" case and is not a failure.
+    nextRung: d.ladder[max + 1],
+    nextFits: d.ladder[max + 1] === undefined ? false : fitsAt(d.ladder[max + 1]),
+  };
+});
 check('flowsim: the resolution slider is clamped to what the device can allocate',
-  resInfo.max >= 0 && resInfo.max <= 4 && resInfo.built, JSON.stringify(resInfo));
+  resInfo.built && resInfo.max >= 0 && resInfo.max < resInfo.ladder.length
+  && resInfo.topFits && !resInfo.nextFits,
+  JSON.stringify(resInfo));
 await flow.evaluate((m) => {
   const r = document.getElementById('res'); r.value = String(m);
   r.dispatchEvent(new Event('change'));
@@ -1007,42 +1066,73 @@ if (hasGPU && fs0.backend === 'webgpu') {
       await flow.evaluate(() => document.getElementById('tau-v').className.includes('bad')),
       await flow.textContent('#s-risk'));
 
-    // Drive it until it dies. It should not take long at the stability floor.
-    const died = await flow.evaluate(async () => {
+    // THE SLIDERS CAN NO LONGER REACH A DIVERGED RUN, AND THAT IS THE POINT OF
+    // v122. This block used to drive 6000 steps at the floor waiting for the
+    // death above, and it stopped being able to find one: the collide kernel now
+    // clamps density and velocity and replaces any population that still comes
+    // out non-finite with the equilibrium at the sanitised moments, so a NaN is
+    // caught in the cell where it appears and never streams to a neighbour. The
+    // corner this drives -- tau 0.5001 with u 0.35 -- is EXACTLY the one v140
+    // measured as finite (Re_cell 10500, 9.77% of cells held, rho 1.140-2.000).
+    // So the check was asserting the opposite of two deliberate shipped
+    // behaviours, and the six thousand software-adapter steps it spent doing it
+    // were the most expensive checks on the page.
+    //
+    // What survives the change is the UI, which is what could actually rot, so
+    // the diverged VERDICT is injected instead of chased. The page's own
+    // refreshStats() -> diverged() path then runs for real against it.
+    const held = await flow.evaluate(async () => {
       const sim = window.__fsSim();
-      for (let k = 0; k < 30; k++) {
-        sim.advance(200);
-        const d = await sim.diagnostics();
-        if (d.stable.state === 'diverged') return { step: d.step, why: d.stable.why };
-      }
-      return null;
+      sim.advance(400);
+      const d = await sim.diagnostics();
+      return { state: d.stable.state, finite: d.finite, limited: d.limited, uMax: d.uMax };
     });
-    if (died) {
-      await flow.evaluate(() => window.__fsRefresh());
-      const ui = await flow.evaluate(() => ({
-        badge: document.getElementById('backend-badge').textContent,
-        badgeBad: /bad/.test(document.getElementById('backend-badge').className),
-        runDisabled: document.getElementById('run').disabled,
-        runText: document.getElementById('run').textContent,
-      }));
-      check('flowsim: divergence is announced on the stage, not only in a stats row',
-        ui.badgeBad && /DIVERGED/.test(ui.badge), JSON.stringify(ui));
-      check('flowsim: Run refuses to resume a diverged run', ui.runDisabled && /Reset/.test(ui.runText),
-        JSON.stringify(ui));
-      // ...and Reset must clear the latch, or the page is stuck for good.
-      await flow.click('#reset');
-      await flow.waitForFunction(() => !window.__fsDbg().building && !window.__fsDbg().queued,
-        null, { timeout: 120000 });
-      const after = await flow.evaluate(() => ({
-        runDisabled: document.getElementById('run').disabled,
-        step: window.__fsDbg().step,
-      }));
-      check('flowsim: Reset clears the divergence and re-enables Run',
-        !after.runDisabled && after.step === 0, JSON.stringify(after));
-    } else {
-      check('flowsim: the stability floor actually diverges (so the check has teeth)', false,
-        'ran 6000 steps at the slider floor without diverging');
-    }
+    check('flowsim: the slider floor is held up rather than allowed to diverge',
+      held.finite && held.state !== 'diverged', JSON.stringify(held));
+
+    // The diverged UI, driven by a diverged diagnostic rather than by a diverged
+    // solver. assess() is untouched -- the stub only supplies the non-finite
+    // field it is asked to judge -- so what is exercised below is the real
+    // verdict path and the real handler.
+    await flow.evaluate(() => {
+      const sim = window.__fsSim();
+      window.__fsRealDiag = sim.diagnostics.bind(sim);
+      sim.diagnostics = async () => {
+        const d = await window.__fsRealDiag();
+        return { ...d, finite: false, stable: sim.assess({ ...d, finite: false }) };
+      };
+    });
+    await flow.evaluate(() => window.__fsRefresh());
+    const ui = await flow.evaluate(() => ({
+      badge: document.getElementById('backend-badge').textContent,
+      badgeBad: /bad/.test(document.getElementById('backend-badge').className),
+      runDisabled: document.getElementById('run').disabled,
+      runText: document.getElementById('run').textContent,
+    }));
+    check('flowsim: divergence is announced on the stage, not only in a stats row',
+      ui.badgeBad && /DIVERGED/.test(ui.badge), JSON.stringify(ui));
+    check('flowsim: Run refuses to resume a diverged run', ui.runDisabled && /Reset/.test(ui.runText),
+      JSON.stringify(ui));
+    // ...and Reset must clear the latch, or the page is stuck for good. The
+    // rebuild discards the stubbed simulation with it, so nothing is restored.
+    await flow.click('#reset');
+    await flow.waitForFunction(() => !window.__fsDbg().building && !window.__fsDbg().queued,
+      null, { timeout: 120000 });
+    const after = await flow.evaluate(() => ({
+      runDisabled: document.getElementById('run').disabled,
+      step: window.__fsDbg().step,
+      // The precise question is "is this the prototype's method again?" -- not
+      // "is it the saved one?", which a surviving stub would also answer no to.
+      stubbed: window.__fsSim().diagnostics
+        !== Object.getPrototypeOf(window.__fsSim()).diagnostics,
+    }));
+    check('flowsim: Reset clears the divergence and re-enables Run',
+      !after.runDisabled && after.step === 0, JSON.stringify(after));
+    // A stub that outlived the rebuild would poison every check after this one,
+    // and it would do it silently -- the page would report a diverged run for
+    // the rest of the suite.
+    check('flowsim: the injected verdict did not survive the rebuild', !after.stubbed,
+      JSON.stringify(after));
     // Back to something sane for whatever follows.
     await flow.evaluate(() => {
       const t = document.getElementById('tau'); t.value = '0.6'; t.dispatchEvent(new Event('input'));
@@ -1258,12 +1348,40 @@ await flow.screenshot({ path: join(SHOTS, '09-flowsim.png') });
   // Drive the real frame loop: the cadence logic lives there, so stepping the
   // solver by hand would test everything except the thing that could be wrong.
   await flow.evaluate(() => { window.__fsSS.train(); });
-  await flow.click('#run');
-  await flow.waitForFunction(() => {
-    const st = window.__fsSS.state();
-    return st && st.trained > 250;
-  }, null, { timeout: 240000 });
-  await flow.click('#run');
+  // #run IS A TOGGLE, NOT "START". A blind click starts the loop only if it
+  // happened to be stopped, and stops it if it was not -- after which nothing
+  // trains and the wait below sits there for its full four minutes before taking
+  // the whole run down with it. The quick tier reaches this with the loop
+  // stopped and the full tier does not, which is exactly the shape of bug that
+  // passes in one tier and hangs in the other. Ask the page what state it is in.
+  const setRunning = async (want) => {
+    await flow.evaluate((w) => {
+      if (!!window.__fsDbg().running !== w) document.getElementById('run').click();
+    }, want);
+  };
+  await setRunning(true);
+  // AND A TIMEOUT HERE MUST BE A FAILED CHECK, NOT AN UNCAUGHT EXCEPTION. As
+  // written it threw, which killed the process and discarded every check after
+  // it -- including the page's own error buffer, the last thing in the suite.
+  // A reported failure that carries the state is strictly more useful than a
+  // stack trace that says only "240000ms exceeded".
+  let trainedOk = true;
+  try {
+    await flow.waitForFunction(() => {
+      const st = window.__fsSS.state();
+      return st && st.trained > 250;
+    }, null, { timeout: 240000 });
+  } catch {
+    trainedOk = false;
+    const why = await flow.evaluate(() => ({
+      ss: window.__fsSS.state(), running: window.__fsDbg().running,
+      step: window.__fsDbg().step, cells: window.__fsDbg().cells,
+    })).catch((e) => ({ evalFailed: String(e).slice(0, 120) }));
+    check('flowsim: the soft sensor trains from the live frame loop', false,
+      JSON.stringify(why).slice(0, 400));
+  }
+  if (trainedOk) check('flowsim: the soft sensor trains from the live frame loop', true);
+  await setRunning(false);
   const ran = await flow.evaluate(() => window.__fsSS.state());
 
   // THE CADENCE IS EXACT, and this is the check that earns the split-step loop.
@@ -1523,6 +1641,12 @@ if (FULL) {
   await v3d.close().catch(() => {});
 }
 
+}   // end AREA-gated flowsim page
+
+// OUTSIDE the gate: it was inside on the first attempt, which meant that
+// skipping FlowSim left the browser open and the process hanging rather than
+// failing -- the worst available outcome for a change whose whole purpose is to
+// make the suite finish sooner.
 await browser.close();
 
 section('end');

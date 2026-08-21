@@ -75,6 +75,54 @@ weaken it (the wiring does not depend on lattice size). And **when a check moves
 down this list, say what the lower tier can no longer see**, so a gap is stated
 rather than assumed away.
 
+### THE QUICK TIER WAS 8 MINUTES AND CLAIMED 1m35. MEASURED, THEN CUT.
+
+The tier split was made once on measured timings and then never re-measured, so
+it drifted: `engine.test.mjs` is recorded above at 127 s and had reached **196 s**,
+and the quick tier as a whole was over 8 minutes. **FIVE CHECKS WERE 187 OF THOSE
+196 SECONDS**, so this was five decisions, not a slow suite.
+
+Every reduction was MEASURED against the assertion's own margin rather than
+guessed, and the pattern that made them free is that **resolution was a cost knob
+and not a physics one in every case**. Re_cell = u/ν depends on τ and the inlet
+speed, not on how many cells the channel has; a residual normalisation is a
+property of the arithmetic; a cadence-independence claim has no length scale in
+it at all. Quick tier now runs res 12 and full keeps res 16:
+
+  the sub-grid model check    46.2 s → 23.8 s   margin 21× against a required 4×
+  the residual falls          40.6 s → 10.4 s   fall 3895× against a required 10×
+  the cadence-independence    27.8 s →  9.5 s   same claim, no length scale
+  the oscillating lid         46.1 s → 10.1 s   see below
+  the survives-Re_cell-48     26.5 s →  9.5 s   800 steps, past the measured
+                                                step-400 death it must outlive
+
+**engine.test.mjs: 196 s → 72 s, all 72 checks still passing; the quick tier
+373 s.** Two of these deserve their own note.
+
+**THE LID CASE GOT BETTER, NOT JUST CHEAPER.** The 3000-step transient wait was
+sized for H = 16, and the impulsive start decays as H²/ν — so the wait is a
+function of the box, and shrinking the box shortens it for free. Measured on the
+steady-lid momentum spread, which is what "settled" means here: res 16 / 3000 →
+7.7e-14 at 46.1 s; res 16 / 1600 → 1.4e-9, i.e. **NOT settled**; res 12 / 1600 →
+5.1e-14 at 10.1 s. Cutting the steps alone would have been the weakening. Cutting
+both is not — the smaller box is better settled than the original was.
+
+**AND ONE FLOOR IS MEASURED RATHER THAN CHOSEN.** The residual block is cheaper
+still at res 10 (5.4 s, fall 8603×) but the third check in that block asserts the
+verdict says `steady`, and at res 10 the lattice velocity reaches 0.182 so the
+verdict reports THAT instead — the check would be asserting something the run no
+longer says. 12 is the floor because 10 was tried.
+
+WHAT THE QUICK TIER CAN NO LONGER SEE, stated rather than assumed away: at res 16
+the sub-grid-modelled run needs NO rescuing at all (0 cells held, verdict
+`marginal`) against 3816 held bare, which is the stronger form of that claim. At
+res 12 it is 82 against 1742. Full tier keeps the stronger one.
+
+STILL OUTSTANDING: the browser sections are now **257 s of the 373**, all of it on
+the software adapter, and most of those checks are wiring — which the tier list
+above says belongs on the CPU backend. That is the next cut and it is the larger
+one.
+
 ## Key files
 
 | File | Purpose |
@@ -608,12 +656,52 @@ rather than assumed away.
    sensors; a downstream "flow historian" probe fails because advected turbulence
    decorrelates within a diameter or two).
    **STILL DELIBERATELY NOT BUILT:** heat as a COUPLED field (buoyancy feeding
-   back), elasticity, electromagnetics, multiphysics coupling and adaptive
-   resolution are architecture rather than code. Operators declare the fields they
-   read and write and the solver rejects two writing the same field in one stage,
-   so coupling must be stated rather than implied by call order; the lattice owns
+   back), electromagnetics, multiphysics coupling and adaptive resolution are
+   architecture rather than code. Operators declare the fields they read and
+   write and the solver rejects two writing the same field in one stage, so
+   coupling must be stated rather than implied by call order; the lattice owns
    its spacing and indexing rather than assuming unit cells, which is what keeps
-   refinement possible.
+   refinement possible. **Elasticity is no longer on that list** — it is the next
+   regime; see FlexiSim below.
+
+   **THE DIVERGED-RUN CHECK WAS ASSERTING THE OPPOSITE OF TWO SHIPPED BEHAVIOURS.**
+   The full tier's `the stability floor actually diverges (so the check has teeth)`
+   drove 6000 steps at τ 0.5001 with u 0.35 waiting for a death — the EXACT corner
+   the v140 table above records as finite (Re_cell 10500, 9.77% held, ρ 1.140–2.000),
+   because v122 made the run unable to crash. It could never pass again, and the
+   soft-sensor timeout that followed it was downstream: with no death the branch
+   that clicked Reset was skipped, so the page carried on from a 6000-step clamped
+   run at Ma 0.6 instead of a fresh build, and the next `waitForFunction` timed out
+   240 s later. **ONE STALE CHECK PRESENTED AS TWO FAILURES, THE SECOND OF THEM
+   IN AN UNRELATED FEATURE** — which is the argument for a failing check being
+   fixed rather than tolerated, since a red suite hides the next real failure.
+   THE UI IS WHAT COULD ACTUALLY ROT, so the diverged VERDICT is now injected
+   rather than chased: `diagnostics()` is stubbed to report a non-finite field
+   and `assess()` is left untouched to judge it, so the real verdict path and the
+   real handler run. A companion check asserts the stub did NOT survive the
+   rebuild — one that did would report a diverged run for the rest of the suite,
+   silently. It also returns six thousand software-adapter steps, which were the
+   most expensive checks on the page and were buying a false assertion.
+   **A SECOND STALE CHECK CAME OUT OF THE SAME RUN, AND IT HAD GONE STALE FOR THE
+   OPPOSITE REASON — THE PAGE GOT BETTER.** `the resolution slider is clamped to
+   what the device can allocate` asserted `max <= 4`, a number that encoded one
+   scene's memory situation at one moment: the channel was `[3n, n, n]` and its
+   top rung wanted 192 MiB. v121 halved the span, the top rung came down to
+   96 MiB, it legitimately fits, the page correctly offered it — and the check
+   failed. A HARD-CODED CEILING IS ALSO WRONG IN THE OTHER DIRECTION: on a device
+   with a SMALLER limit than this software adapter, `max <= 4` would have passed
+   while the clamp was broken, which is the failure it exists to catch. It now
+   asserts the PROPERTY against the device's own reported limit — every offered
+   rung fits, and the first rung above the offer does not — with `maxBinding`,
+   the ladder and the scene added to `__fsDbg()`, since a whole class of defect
+   here has been "the device would not give us a binding that big" (v113) and
+   none of it is diagnosable without the limit itself. The first attempt at the
+   fix was WRONG in a way worth recording: it asked
+   `largestResolutionThatFits(scene, limit, [n]) === n`, which is vacuously true
+   — that helper seeds `best` with `ladder[0]` and returns it whether or not it
+   fits, so every rung reported as fitting and the check had no teeth. The
+   criterion is now stated directly (the largest single field's binding against
+   the limit), which is what the helper itself applies.
 
    **THE SLIDER RANGES REACH PAST WHAT THE SOLVER CAN SOLVE, ON PURPOSE (v140).**
    τ now runs 0.5001–2.5 (ν 3.3e-5 to 0.667, four decades) and the inlet speed
@@ -2020,6 +2108,163 @@ rather than assumed away.
    fully specified and reproducible, while HOW the experimental estimates and
    the forecast are constructed is withheld and stated as withheld. A
    leak-audit regression greps the rendered text.
+
+7. **FlexiSim** — compliant serial chains. DESIGN SETTLED; BRICK 1 BUILT.
+   **BRICK 1 IS THE ELASTIC OPERATOR, AND IT IS VERIFIED.**
+   `lib/lattsim/operators/elastic.js` + a CPU reference kernel, checked in plain
+   Node by `test/lattsim/elastic.test.mjs` — no browser, no adapter, seconds, and
+   f64 available, which is the verification rule applied rather than quoted.
+   **IT IS THE FIRST OPERATOR THAT IS NOT A LATTICE-BOLTZMANN DISTRIBUTION**, which
+   is the point: `scalar.js` proved "adding a field needs no core change" with a
+   second D3Q19 distribution — the easy case, same stencil, same streaming, same
+   shape. This one registers a VECTOR velocity and a symmetric 6-component TENSOR
+   stress, advances them by a scheme with no populations in it, and still touches
+   ZERO of the solver, the operator base, the field registry or the simulation
+   façade. `FIELD_KIND.TENSOR` had been declared and unused since the beginning.
+   **THE SCHEME IS VELOCITY–STRESS LEAPFROG ON A STAGGERED GRID (Virieux), AND THE
+   STAGGERING IS NOT DECORATION:** a COLLOCATED central difference of this system
+   decouples the odd and even lattice points — the classic checkerboard — and
+   produces a field that looks like a solution and satisfies nothing. The half-cell
+   offsets live in the MEANING of each slot, never in the indexing, so
+   `x + Nx(y + Ny z)` is untouched.
+   MEASURED (lattice units, f64, one wavelength over 64 cells, 40 steps):
+     P wave  0.374038 against the analytic 0.374166  (**−0.034%**)
+     S wave  0.199923 against the analytic 0.200000  (**−0.038%**)
+     c_p/c_s 1.87091  against 1.87083
+     amplitude 0.50000000 → 0.49999962 (P) and → 0.49999904 (S)
+   **THE RATIO IS THE PART A SCALE ERROR CANNOT FAKE** — one global factor wrong
+   moves both speeds together and the ratio not at all, while confusing λ with μ
+   moves the ratio. And the amplitude is the conservation check: an undamped linear
+   solid is conservative, so a free plane wave that decays means the scheme is
+   dissipating energy nobody asked it to.
+   **THE ABSOLUTE ERROR COULD BE A COINCIDENCE; THE CONVERGENCE RATE CANNOT.**
+   Refining at a fixed phase advance: **5.303e-3 → 1.354e-3 → 3.419e-4, ratios
+   3.917 and 3.959** — clean second order. A first-order mistake (one difference
+   taken one-sided rather than as a centred pair) reads ~2, and a wrong stencil
+   reads no clean rate at all. What is left at 64 cells per wavelength is
+   NUMERICAL DISPERSION, a property of the stencil rather than an error in it, and
+   the convergence study is the instrument that tells those two apart.
+   **THE FIRST RUN FAILED, AND THE TEST WAS WRONG RATHER THAN THE KERNEL.** Both
+   speeds came back as exactly 1.6 with the amplitude collapsing 0.5 → 0.06 —
+   identical for P and S, which no physics produces. Seeding VELOCITY ALONE with
+   zero stress is not a travelling wave: it is an equal superposition of a
+   left-going and a right-going one, i.e. a STANDING wave, whose phase does not
+   advance at all while its amplitude oscillates. That is precisely the measured
+   signature, and it says nothing whatever about the operator. A one-way wave needs
+   the impedance relation **σ = −ρcv**, plus the half-step TIME offset the leapfrog
+   builds in (`step()` advances v first, so v starts half a step behind σ). The
+   time offset cancels out of the speed — a constant phase offset subtracts away
+   between the two readings — so it is there for the AMPLITUDE check, where a
+   residual backward wave would show up as a beat.
+   **BOTH FIELDS ARE SINGLE-BUFFERED, WHICH LOOKS LIKE A VIOLATION OF THE SOLVER'S
+   SECOND RULE AND IS NOT.** That rule exists because reading and writing one
+   buffer leaves a cell's neighbours half-updated, which on a GPU is a race with no
+   error message. A staggered leapfrog does not have that shape: the velocity pass
+   reads only STRESS and writes only VELOCITY at its own cell, and the stress pass
+   reads only VELOCITY and writes only STRESS. No cell ever reads a field being
+   written in the same dispatch, so in-place is race-free by construction and the
+   two dispatches supply the ordering. It halves ~104 B/cell to ~52 — and for this
+   tab the memory IS the argument.
+   Also pinned: a solid at rest stays EXACTLY at rest over 50 steps (any asymmetry
+   between the forward and backward differences stirs a field out of nothing, and
+   it would be invisible in a wave test where something is already moving); the
+   CFL gate refuses c_p ≥ 1/√3 at BUILD time rather than at step 30; and stating
+   both (E, ν) and (λ, μ) is refused, since a mismatched pair is a physics error
+   that would surface as a wave speed nobody expected.
+   NOT YET BUILT, and each is its own brick with its own closed form: free surfaces
+   and clamped boundaries (this brick is verified PERIODIC, where no boundary
+   condition can contaminate the answer) and the cantilever FL³/3EI; gravity and
+   the non-inertial body forces; the co-rotational treatment of large rotation; the
+   lumped joints and gearbox; the WGSL kernel; the page. **The out-of-range edge in
+   the CPU kernel is a zero-gradient PLACEHOLDER, not a free surface and not a
+   clamp** — stated in the code so it is not mistaken for a boundary condition.
+
+   The second regime on the same lattice engine: a 2–3 joint arm whose TOOL TIP
+   is measured by a laser tracker during dynamic moves (ground truth), while the
+   model reads only MOTOR-SIDE signals — torque, position, following error.
+   **THE UNOBSERVABILITY IS PHYSICAL, NOT CONSTRUCTED:** the encoder sits on the
+   motor side of the gearbox, reading θ_motor/N, and is structurally blind to
+   everything downstream of the gear teeth — lost motion, joint wind-up, link
+   bending. Position and following error both look perfect while the tip is a
+   millimetre out. That is why robot accuracy and repeatability are different
+   numbers, and it is a far better version of the argument FlowSim's soft sensor
+   makes on a dye field.
+   **THE PLANT IS HYBRID, AND SAYING SO IS THE HONEST PART.** Joint compliance —
+   gearbox torsional stiffness, bearing compliance, harmonic-drive lost motion —
+   is commonly cited at 70–90% of tip deflection on an industrial arm, so a
+   beautifully resolved voxel link would be resolving the SMALL term. Joints are
+   therefore LUMPED nonlinear elements (progressive stiffness, backlash, Stribeck
+   friction, ratio N, motor inertia — the same shapes the NGRC soft-sensor plant
+   already carries) and LINKS are the lattice, which is what buys the distributed
+   behaviour a beam element cannot give: real mode shapes, stiffness that depends
+   on where the load sits, lightening holes, non-prismatic castings, inter-link
+   coupling. The split is to be MEASURED (each term's contribution to tip
+   deflection) and the link resolution chosen from that measurement.
+   **A SERIAL CHAIN DOES NOT NEED A SPARSE LATTICE, IT NEEDS ONE LATTICE PER LINK.**
+   Estimated at dx 8 mm (~10 cells through an 80 mm section), three links of
+   0.6/0.5/0.3 m: the links are ~22k cells but their swept bounding box is ~2.3M,
+   a fill fraction near 1%. At ~104 B/cell (3 velocity + 6 stress, f32,
+   double-buffered) that is **~240 MiB dense against ~2.3 MiB** — dense is not
+   merely wasteful, it is past the 128 MiB storage-binding limit that has already
+   bitten this project twice, so `build()` would refuse. Each link is a rigid-body
+   transform of its own geometry, so each gets its own SMALL DENSE lattice in its
+   own body frame with the joint rotation carried as a transform: ~100× the memory
+   win with none of an index list's indirection, and the coalescing that
+   structure-of-arrays exists for is preserved exactly. General block-sparse bricks
+   (allocate only the 8³ bricks containing material) remain the right answer for a
+   CLOSED structure — a gantry, a machine frame — where members are not separable.
+   Not built.
+   **THE PRICE OF THE BODY FRAMES IS THAT THE DYNAMICS GET SUBTLE.** Large rotation
+   with small strain needs a CO-ROTATIONAL formulation or a link that merely swings
+   develops spurious stress; and a body frame on a moving link is NON-INERTIAL, so
+   the fictitious forces — centrifugal, Coriolis, Euler, and the frame's own linear
+   acceleration — must be added or the dynamics are quietly wrong. They are local
+   per-cell body forces, structurally identical to gravity, so they are cheap; what
+   they are not is optional, and a missing term yields a plausible wrong answer
+   rather than an error.
+   **INERTIA AND GRAVITY ARE BOTH REQUIRED, FOR DIFFERENT REASONS.** Gravity is the
+   dominant static load and is what makes compliance POSE-DEPENDENT — joint wind-up
+   τ_g(pose)/K_θ varies across the workspace, and without it the arm is perfect
+   everywhere. Inertia is the whole reason the test is a DYNAMIC move: acceleration
+   → joint torque → wind-up → tip error, the link's own modes rung by the same
+   acceleration, reflected motor inertia N²J_m (which dominates link inertia at
+   high ratio), and Coriolis coupling so a fast joint-1 move loads joint 2. That
+   coupling is precisely what a per-joint model cannot see and a learner reading
+   every motor signal can. Gravity is a body force ρg in the momentum update —
+   structurally the Guo forcing term the LBM operator already carries — and the
+   gravitational torque on each joint comes out of the lattice's OWN mass
+   distribution rather than being a separate parameter, so it stays consistent by
+   construction.
+   **PLANNED VERIFICATION, ALL CLOSED FORM:** cantilever tip deflection FL³/3EI per
+   link in its body frame at second-order convergence; the clamped–free first
+   bending frequency (1.875)²√(EI/ρAL⁴); **rigid-body rotation ⇒ IDENTICALLY ZERO
+   stress**, at machine precision, which is what guards the co-rotational
+   formulation; **a link spinning at constant ω ⇒ exactly the rotating-bar stress
+   σ(r) = ½ρω²(L²−r²)**, which is what guards the fictitious forces — between them
+   those two pin the whole non-inertial machinery; links made rigid (E→∞) ⇒ tip
+   deflection exactly τ/K_θ × lever arm, which SEPARATES the joint contribution
+   from the link contribution so the 70–90% claim above is measured rather than
+   inherited; reflected inertia N²J_m against the analytic two-mass-with-gearbox
+   free response; and hysteresis loop area = energy dissipated per cycle.
+   **PLASTIC DEFORMATION IS DEFERRED TO ITS OWN APPLICATION** and costs this tab
+   nothing, because the property it was wanted for arrives anyway: a harmonic drive
+   has a documented HYSTERESIS loop, so the same torque gives different wind-up
+   depending on which way you came from. Path dependence therefore lives in the
+   gearbox, where it has to be modelled regardless — and it carries the same
+   falsifiable claim yield was going to carry, that a MEMORYLESS estimator is
+   provably insufficient and a lag window recovers it. Gearbox scope is stiffness +
+   friction + backlash first, with hysteresis added DELIBERATELY as its own step so
+   it is measured on its own rather than arriving mixed in with three other
+   nonlinearities.
+   **THE LASER TRACKER IS A COMMISSIONING INSTRUMENT, NOT A PRODUCTION ONE**, which
+   is exactly the lifecycle FlowSim's soft sensor already implements — train
+   against truth, lock, run without it. So `idle → calibrating → training →
+   estimating/locked`, the frozen standardisation, the rolling recalibration and
+   the `__fsSSdbg()`-style diagnostics transplant rather than get rebuilt. Starts
+   PLANAR (2–3 joints in a plane) with the operator kept 3D-capable: planar makes
+   both the verification and the picture far easier and loses almost nothing about
+   compliance.
+
 
 ## Versioning
 

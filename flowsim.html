@@ -8,7 +8,7 @@
   <title>FlowSim — Lattice Physics Engine</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:187,built:"2026-08-21T01:53:25Z"}; // __FLOWSIM_STAMP__</script>
+  <script>window.__BUILD = {version:188,built:"2026-08-21T05:00:47Z"}; // __FLOWSIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -2177,6 +2177,17 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
       rendererReady: state.view === 'volume' ? !!state.volume : true,
       queued: !!state.buildQueued,
       slice: state.slice.lastStats,
+      // THE NUMBER THE RESOLUTION LADDER IS CLAMPED AGAINST. A whole class of
+      // defect on this page has been "the device would not give us a binding
+      // that big" (v113: the page died above 64 because the channel wanted
+      // 128.3 MiB against a 128 MiB limit), and none of it is diagnosable
+      // without the limit itself. It also lets a regression assert that the
+      // clamp is TIGHT against the real device rather than against a number
+      // hard-coded when the geometry was different -- which is exactly how the
+      // old `max <= 4` assertion went stale when v121 halved the channel span.
+      maxBinding: state.maxBinding,
+      ladder: RES.slice(),
+      scene: $('scene').value,
     });
     window.__fsDiag = async () => (state.sim ? state.sim.diagnostics() : null);
     window.__fsStep = (n) => { if (state.sim) state.sim.advance(n); };

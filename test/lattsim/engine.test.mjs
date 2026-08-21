@@ -410,8 +410,18 @@ if (FULL) {
 //   TRT + LES     ok at 160, the top of what was tested
 {
   const { channelFlow } = await import('../../lib/lattsim/scenes.js');
+  // RESOLUTION IS A COST KNOB HERE AND NOT A PHYSICS ONE: the claim is about the
+  // collision model and the limiter, and Re_cell = u/nu depends on tau and the
+  // inlet speed alone -- not on how many cells the channel has. Measured, 800
+  // steps of each configuration: res 16 costs 46.2 s and res 12 costs 23.8 s.
+  // WHAT THE QUICK TIER CANNOT SEE, stated rather than assumed away: at res 16
+  // the MODELLED run needs no rescuing at all (0 cells held, verdict "marginal")
+  // against 3816 held bare, which is the stronger form of the claim. At res 12
+  // it is 82 against 1742 -- still 21x, against the 4x the check requires, but
+  // "much less rescuing" rather than "none". Full tier keeps the stronger one.
+  const RES = FULL ? 16 : 12;
   const run = async (opts) => {
-    const sim = channelFlow({ resolution: 16, tau: 0.505, inletVelocity: 0.08, obstacle: 'cylinder' });
+    const sim = channelFlow({ resolution: RES, tau: 0.505, inletVelocity: 0.08, obstacle: 'cylinder' });
     Object.assign(sim.operators[0].params, opts);
     await sim.build({ backend: 'cpu' });
     let d = null;
@@ -454,13 +464,23 @@ if (FULL) {
   // and F = 2/1000 (a 500-step period) so the Stokes depth is ~5 cells -- fast
   // enough to sample cheaply, slow enough for the lattice to resolve.
   const F = 2 / 1000;
+  // THE TRANSIENT WAIT SCALES WITH THE BOX, WHICH IS WHY SHRINKING IT IS FREE.
+  // The impulsive start decays in ~H^2/nu, so a smaller cavity settles sooner --
+  // the 3000 steps below were sized for H = 16. Measured (steady-lid momentum
+  // spread after the wait, which is what "settled" means here): res 16 / 3000
+  // gives 7.7e-14 at 46.1 s, res 16 / 1600 gives 1.4e-9 (NOT settled), and
+  // res 12 / 1600 gives 5.1e-14 at 10.1 s -- better settled than the original,
+  // at a fifth of the cost, because H fell with it. Cutting the steps alone
+  // would have been the weakening; cutting both is not.
+  const LID_RES = FULL ? 16 : 12;
+  const WARM = FULL ? 3000 : 1600;
   // f64, so "mass changed" means a leak rather than the ~1e-8 f32 arithmetic
   // residual that conservation.test.mjs measures and attributes.
   const trace = async (freq) => {
-    const s2 = lidCavity({ resolution: 16, tau: 1.0, lidVelocity: 0.06, lidFrequency: freq });
+    const s2 = lidCavity({ resolution: LID_RES, tau: 1.0, lidVelocity: 0.06, lidFrequency: freq });
     await s2.build({ backend: 'cpu', precision: 'f64' });
     const m0 = (await s2.diagnostics()).mass;
-    s2.advance(3000);                              // let the start transient go
+    s2.advance(WARM);                              // let the start transient go
     const px = [];
     for (let k = 0; k < 8; k++) { s2.advance(62); px.push((await s2.diagnostics()).momentum[0]); }
     const m1 = (await s2.diagnostics()).mass;
@@ -556,11 +576,19 @@ if (FULL) {
   calm.destroy();
 
   // 2. A configuration measured to diverge (Re_cell 48) now survives, and says so.
-  const hard = channelFlow({ resolution: 16, tau: 0.505, inletVelocity: 0.08, obstacle: 'cylinder' });
+  //
+  // THE STEP COUNT IS SET BY WHEN THIS CONFIGURATION USED TO DIE, WHICH IS A
+  // MEASURED NUMBER AND NOT A ROUND ONE: at tau 0.505 the run went non-finite by
+  // step 400 (the v118 table). 800 steps is comfortably past that, so surviving
+  // them is the claim; 1200 was never buying anything the first 800 had not
+  // already shown. Re_cell = u/nu does not depend on the lattice size either, so
+  // the quick tier runs the same physics on a smaller box.
+  const hard = channelFlow({ resolution: FULL ? 16 : 12, tau: 0.505,
+    inletVelocity: 0.08, obstacle: 'cylinder' });
   Object.assign(hard.operators[0].params, { collision: 'trt', trtPolicy: 'stability', smagorinsky: 0 });
   await hard.build({ backend: 'cpu' });
   let dh = null;
-  for (let k = 0; k < 6; k++) { hard.advance(200); dh = await hard.diagnostics(); }
+  for (let k = 0; k < (FULL ? 6 : 4); k++) { hard.advance(200); dh = await hard.diagnostics(); }
   check('a configuration that used to diverge now survives', dh.stable.state !== 'diverged',
     `${dh.stable.state} — ${dh.stable.why}`);
   check('and it reports that it is being held up, not that all is well',
@@ -589,13 +617,22 @@ if (FULL) {
 // ------------------------------------------------- the residual diagnostic
 {
   // Cheap in quick, thorough in full: the claim is that the residual FALLS, and
-  // a shorter run still shows that.
-  const ROUNDS = FULL ? 12 : 4;
+  // a shorter run still shows that. Measured, early -> late residual and the
+  // fall against the 10x the check requires:
+  //   res 16, 4 rounds   1.63e-3 -> 7.85e-7   2082x   40.6 s
+  //   res 12, 2 rounds   1.75e-3 -> 4.49e-7   3895x   10.4 s
+  //   res 10, 2 rounds   1.86e-3 -> 2.16e-7   8603x    5.4 s  <- but the verdict
+  // stops saying "steady": at res 10 the lattice velocity reaches 0.182 and the
+  // stability verdict reports THAT instead, so the third check in this block
+  // would be asserting something the run no longer says. 12 is the floor, and it
+  // is a measured floor rather than a chosen one.
+  const ROUNDS = FULL ? 12 : 2;
+  const RES = FULL ? 16 : 12;
   // "Has it settled?" is otherwise unanswerable from the picture: a converged run
   // and a slowly drifting one look identical. The residual is |du|/|u| between
   // consecutive readings, and it must fall as a driven flow reaches steady state.
   const { channelFlow } = await import('../../lib/lattsim/scenes.js');
-  const sim = channelFlow({ resolution: 16, tau: 0.6, inletVelocity: 0.05 });
+  const sim = channelFlow({ resolution: RES, tau: 0.6, inletVelocity: 0.05 });
   await sim.build({ backend: 'cpu' });
   await sim.diagnostics();                    // prime the previous-field copy
   sim.advance(300);
@@ -620,8 +657,12 @@ if (FULL) {
 // observers watching the same run at different cadences must agree.
 {
   const { channelFlow } = await import('../../lib/lattsim/scenes.js');
+  // The claim here is a NORMALISATION property -- that dividing by the elapsed
+  // steps makes two observers at different cadences agree -- and it has nothing
+  // to do with how many cells there are. The smaller box runs the same
+  // deterministic flow and asks the same question at a third of the cost.
   const make = async () => {
-    const s = channelFlow({ resolution: 16, tau: 0.6, inletVelocity: 0.05 });
+    const s = channelFlow({ resolution: FULL ? 16 : 12, tau: 0.6, inletVelocity: 0.05 });
     await s.build({ backend: 'cpu' });
     return s;
   };
