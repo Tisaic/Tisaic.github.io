@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:217,built:"2026-08-21T20:41:35Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:218,built:"2026-08-21T21:25:06Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -875,7 +875,9 @@ function ctlHint() {
   if (want === 'ff') {
     el.innerHTML = 'The identified compliance, evaluated at the <b>command</b> — never at anything '
       + 'measured, which is what makes it a production correction rather than a demonstration. It '
-      + 'acts on the very next step, and it is only as right as the constant behind it.';
+      + 'acts on the very next step, and it is only as right as the constant behind it. '
+      + '<b>Expect the rms to barely move</b>: it removes the bias 246× and the ringing is 94% of '
+      + 'the error at these settings. Add <b>input shaping</b> for that half.';
     return;
   }
   el.innerHTML = 'No correction: the tool goes where the wind-up and the sag put it. This is the '
@@ -1335,7 +1337,21 @@ function stats() {
       rows.push(['bias over the last move', `<span class="${w.full ? '' : 'warn'}">${fmt(w.bias, 3)}`
         + `${w.full ? '' : ' (partial window)'}</span>`]);
       rows.push(['oscillation over the last move', fmt(w.sd, 3)]);
-      rows.push(['rms', fmt(w.rms, 3)]);
+      // WHICH HALF THE ERROR IS IN, because that decides which control can touch it
+      // and the answer is not what a first look at this tab suggests. A correction
+      // removes the BIAS and can do nothing about the ringing -- so while the
+      // oscillation is 94% of the error, turning compensation on is measured at
+      // 246x on the bias and 1.00x on the rms, which reads as "underwhelming" and
+      // is the decomposition working exactly as it must.
+      const share = w.rms > 0 ? (w.sd * w.sd) / (w.rms * w.rms) : 0;
+      const osc = share > 0.5;
+      rows.push(['rms', `${fmt(w.rms, 3)}   <span class="${osc ? 'warn' : 'good'}">`
+        + `${(100 * share).toFixed(0)}% of it is OSCILLATION</span>`]);
+      rows.push(['…so the rms is limited by', osc
+        ? '<span class="warn">the link ringing — no correction can reduce this, because a '
+          + 'quasi-static model cannot cancel a resonance. <b>Input shaping</b> is the control '
+          + 'that does (measured 3.3×), and a gentler <b>Move speed</b> is the other (3.7×).</span>'
+        : '<span class="good">the bias — which is what the correction removes</span>']);
     }
     if (pc) {
       rows.push(['identified compliance c', `${pc.compliance.toFixed(5)} `

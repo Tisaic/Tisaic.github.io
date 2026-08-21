@@ -2955,6 +2955,41 @@ one.
    second copy of the same model) and `toolOffset()`, each joint's wind-up levered by
    the distance from THAT joint to the tool. Gravity is what makes a compliance model
    able to correct anything in steady state.
+   **"THE COMPENSATED MOVES ARE UNDERWHELMING" — REPORTED FROM THE DEVICE, AND THE
+   NUMBERS AGREE WITH THE COMPLAINT WHILE THE MECHANISM EXONERATES THE CORRECTION.**
+   At the shipped move the ringing is **94% of the error**, so a correction that
+   removes the bias 246× moves the rms by **1.00×**. That is not a defect and it is
+   not a disappointment either — it is the decomposition this tab was built to show,
+   read at the one setting where the half it fixes is the small half.
+   MEASURED, one plant, one identified constant, rms of the tool against the program
+   over a whole move plus the settled dwell alone:
+     open loop                        bias −7.36e-2 · osc 1.92e-1 · rms 2.06e-1 · settled 1.27e-1
+     + prediction                     bias  2.99e-4 · osc 2.05e-1 · rms 2.05e-1 · settled 1.30e-1
+     + prediction + ZVD               bias  1.52e-4 · osc 6.14e-2 · rms 6.14e-2 · settled 3.24e-2
+     + prediction, 2× gentler move    bias  1.50e-4 · osc 5.60e-2 · rms 5.60e-2 · settled 4.37e-2
+     + prediction + ZVD + 2× gentler  bias  1.20e-4 · osc 2.68e-2 · rms 2.68e-2 · settled 1.18e-2
+   **SHAPING IS WORTH 3.3× ON THE RMS AND A GENTLER MOVE 3.7×; TOGETHER WITH THE
+   CORRECTION, 7.7× ON THE RMS AND 11× ON THE SETTLED ERROR.** The correction is
+   necessary for all of it — the bias survives every shaper, since a unit-sum
+   convolution cannot move where a move ENDS — but it is never sufficient.
+   **WHY NO COMPENSATOR CAN DO THE OTHER HALF, stated as physics rather than as an
+   excuse:** `TipCompensator` already carries the inertial term, but it is
+   QUASI-STATIC — it assumes the deflection follows the commanded torque instantly.
+   A resonance does not; it is excited by the acceleration steps and rings at its
+   own period afterwards. Cancelling that needs the EXCITATION changed, which is
+   what a shaper does and what a gentler ramp does.
+   **AND A HYPOTHESIS WAS FALSIFIED ON THE WAY**, which is why it is recorded: the
+   obvious guess was that shaping only the link's bending mode leaves the GEARBOX
+   resonance (1.91e-2 rad/step, period 329, against the link's 6.2e-3 and period
+   1011) untouched. Convolving a second ZVD for it buys **8% on the moving rms and
+   makes the settled case WORSE** (3.24e-2 → 3.57e-2) — its extra delay costs more
+   than the mode it cancels is worth. The gearbox is not the limit here; the link
+   is. The anti-slosh tab's multi-mode shaper was the right answer to its plant and
+   is the wrong one to this.
+   The page now says all of this where it is needed: the stats report what FRACTION
+   of the error is oscillation and name the control that addresses the dominant
+   half, and mode ②'s hint states up front that the rms will barely move.
+
    **AND THE MOVE PROFILE IS NOW A CHOICE**, because a point-to-point move and a
    sinusoid ask different questions: the trapezoid excites the plant with a broadband
    transient whose content depends on the ramp, while a sinusoid excites it at ONE

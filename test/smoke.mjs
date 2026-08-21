@@ -1862,6 +1862,26 @@ check('flexisim: mode ② (open loop + prediction) actually collapses the bias',
 check('flexisim: and it leaves the oscillation alone, which is the other mechanism',
   Math.abs(compd.sd / plain.sd - 1) < 0.35, `${plain.sd} -> ${compd.sd}`);
 
+// THE PAGE MUST NAME WHAT LIMITS THE RMS. "The correction is worth 1.00x on the
+// rms" is the reading that got reported as underwhelming, and it is CORRECT -- the
+// ringing is 94% of the error and no quasi-static model can cancel a resonance. A
+// page that shows the ratio without saying why invites the same conclusion again.
+//
+// READ IT HERE, where a full window exists. The first version of this check sat
+// after the mode-3 gate probe, and every selector change clears the window -- so
+// winStats() was legitimately null, the whole block was skipped, and the check
+// reported the page broken when it was reading a meter with nothing in it. That is
+// the same mistake as averaging across the mode change, two checks earlier.
+const limitRow = await fx.evaluate(() => {
+  const dl = document.getElementById('stats');
+  const dts = [...dl.querySelectorAll('dt')].map((d) => d.textContent);
+  const i = dts.findIndex((t) => /limited by/.test(t));
+  return i < 0 ? null : dl.querySelectorAll('dd')[i].textContent;
+});
+console.log(`  flexisim: rms limited by — ${String(limitRow).slice(0, 60)}…`);
+check('flexisim: the stats name which mechanism limits the rms, not just its value',
+  limitRow !== null && /ringing|bias/.test(limitRow), String(limitRow).slice(0, 120));
+
 // THE CLOSED LOOP IS REFUSED WHILE THE SENSOR IS STILL BEING TOLD THE ANSWER, and
 // that gate is asserted BEFORE the lock rather than assumed. A selector that
 // silently ran the loop on a model the tracker is still correcting would be
