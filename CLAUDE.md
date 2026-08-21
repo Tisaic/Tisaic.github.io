@@ -3032,6 +3032,40 @@ one.
    THE CHAIN TAB'S CORRECTION IS STILL ZERO-LEAD; the same fix applies there and has
    not been measured on it.
 
+   **THE LEARNED DYNAMIC FEEDFORWARD: MEASURED, GENERALISING, AND NOT YET BUILT.**
+   The design the gap above calls for, prototyped in Node end to end. Commissioning
+   converges a per-phase correction against the tracker by iterative refinement, and
+   a REGRESSION on the commanded kinematics is then fitted to that profile — twelve
+   taps of (θ, ω, α) spanning −300 to +1500 steps, which covers the servo's 500-step
+   response and more than one 1011-step bending period. Afterwards it runs on the
+   COMMAND alone, so the tracker goes away exactly as it does for every other block
+   on this tab.
+   **FITTED TO ONE TRAJECTORY IT MEMORISES THE TRAJECTORY**, and that failure is the
+   more useful half of the result. On the move it was trained on it reproduces the
+   iterative ceiling almost exactly — **5.83×**, against a fit residual of 1.0% — and
+   on moves it has not seen it is a catastrophe:
+     double the span   0.24×      2.2× faster   1.17×      half span, gentler  0.05×
+   i.e. up to **twenty times WORSE than doing nothing**. This is brick 16's finding
+   in a new place: a model fitted to a single periodic stream can score beautifully
+   by learning WHERE IN THE CYCLE it is, and the commissioning PROTOCOL matters more
+   than the model class does.
+   **TRAINED ACROSS THREE MOVES IT LEARNS THE DYNAMICS INSTEAD** (spans 0.072 /
+   0.144 / 0.288 at three ramp rates, features standardised because the taps carry
+   θ ~ 1e-1 against α ~ 1e-6 and an unnormalised ridge is a different penalty on
+   each). Against the compensator WITH its lead:
+     TRAINED   span .144 1.0×    1.600e-1 → 5.148e-2   3.11×
+     HELD OUT  span .216 1.4×    3.472e-1 → 9.756e-2   **3.56×**
+     HELD OUT  span .100 0.7×    6.461e-2 → 3.539e-2   1.83×
+     HELD OUT  span .360 2.2×    8.492e-1 → 2.439e-1   **3.48×**
+   **THE HELD-OUT MOVES SCORE AS WELL AS THE TRAINED ONE**, which is the signature
+   that separates a learned map from a memorised one — and the trained move FELL from
+   5.83× to 3.11× in the process, which is the honest price of a model that has to
+   serve many trajectories instead of one.
+   WHAT REMAINS BEFORE IT CAN SHIP is cost, not doubt: three iterative convergences
+   is ~320k solver steps of commissioning, against the ~24k the pose touches and the
+   decay take today, so the routine needs a step budget of its own rather than the
+   viewing slider's. The measurement above is what says it is worth paying.
+
    **AND THE MOVE PROFILE IS NOW A CHOICE**, because a point-to-point move and a
    sinusoid ask different questions: the trapezoid excites the plant with a broadband
    transient whose content depends on the ramp, while a sinusoid excites it at ONE
