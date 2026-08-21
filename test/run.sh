@@ -169,6 +169,10 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # against the tracker and then LOCKED, against the physics-based compliance
     # model a good engineer would build.
     node test/flexisim/tipsensor.test.mjs
+    # The STRUCTURED rival: identify the compliance itself (a physical constant)
+    # rather than the error, from static pose touches the way CompCommissioner
+    # expects. Full tier -- six settles.
+    if [ "${SUITE}" = "full" ]; then node test/flexisim/compliance.test.mjs; fi
   fi
 fi
 
