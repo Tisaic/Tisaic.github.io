@@ -38,6 +38,11 @@ const H = 6, LEN = 24, CLAMP = 3, nu = 0.3, rho = 1;
 const g = 2e-6;                       // body-frame gravity, along -y
 const GRAV = [0, -g, 0];
 
+// ONE SETTLE, REUSED. Every check below at the nominal stiffness asks about the
+// same physical state, so it is solved once. What changes between the rows is the
+// gearbox stiffness, and that enters analytically.
+const NOMINAL_E = 0.05;
+
 // ------------------------------------------- the mass properties are the lattice's
 {
   const sim = await buildLink({ length: LEN, section: H, clamp: CLAMP,
@@ -67,20 +72,30 @@ const GRAV = [0, -g, 0];
  * same number after its transient and is what brick 7 needs; for a static split
  * it would only add a second convergence to wait for.
  */
-async function armSag({ E, K, steps = 12000, damping = 0.005 }) {
+async function settledLink({ E, steps = 12000, damping = 0.005 }) {
   const sim = await buildLink({ length: LEN, section: H, clamp: CLAMP,
     E, nu, rho, gravity: GRAV, damping });
   sim.advance(steps);
-  const sag = tipDeflection(sim);
-  const vmax = peakSpeed(sim);
-  const tauG = gravityTorque(sim, GRAV);
-  const Larm = armLength(sim);
-  const mp = massProperties(sim);
+  const out = { sag: tipDeflection(sim), vmax: peakSpeed(sim),
+    tauG: gravityTorque(sim, GRAV), Larm: armLength(sim), mp: massProperties(sim) };
   await sim.destroy();
-  const windup = tauG / K;                 // load-side radians, signed
-  return { sag, vmax, tauG, Larm, windup, tilt: windup * Larm, mp,
-           total: sag + windup * Larm };
+  return out;
 }
+
+/**
+ * The joint's contribution for a given gearbox stiffness. IT IS ANALYTIC, which
+ * is why the stiffness sweep below runs ONE simulation rather than four: the
+ * link's sag under its own weight does not depend on K at all, and the joint's
+ * wind-up is exactly tau_g/K. Re-settling the same lattice for each row would be
+ * four identical solves dressed up as a parameter study -- and it was, until the
+ * loop time made it obvious.
+ */
+const withJoint = (r, K) => ({
+  ...r, windup: r.tauG / K, tilt: (r.tauG / K) * r.Larm,
+  total: r.sag + (r.tauG / K) * r.Larm,
+});
+
+const NOMINAL = await settledLink({ E: NOMINAL_E, steps: 12000 });
 
 // ------------------------------------------------- the link limit: K -> infinity
 {
@@ -90,7 +105,7 @@ async function armSag({ E, K, steps = 12000, damping = 0.005 }) {
   // separately matters because the body force is applied to EVERY cell here, not
   // to one layer, so it exercises the whole force path rather than its end.
   const E = 0.05;
-  const r = await armSag({ E, K: Infinity, steps: 12000 });
+  const r = withJoint(NOMINAL, Infinity);
   check('the self-weight link settles', r.vmax < 1e-6 * Math.abs(r.sag),
     `${r.vmax.toExponential(2)} against a sag ${r.sag.toExponential(4)}`);
   const I = H ** 4 / 12, A = H * H;
@@ -127,7 +142,7 @@ async function armSag({ E, K, steps = 12000, damping = 0.005 }) {
   // limit -- four times the nominal stiffness and still integrable.
   const E = 0.2;
   const K = 4.7e-2;
-  const r = await armSag({ E, K, steps: 12000 });
+  const r = withJoint(await settledLink({ E, steps: 12000 }), K);
   console.log(`    [joint limit] link sag ${Math.abs(r.sag).toExponential(3)} is `
     + `${(100 * Math.abs(r.sag / r.tilt)).toFixed(2)}% of the joint tilt ${Math.abs(r.tilt).toExponential(3)}`);
   check('with a stiff link the tip motion is the joint wind-up, tilted',
@@ -142,7 +157,6 @@ async function armSag({ E, K, steps = 12000, damping = 0.005 }) {
   // Realistic-ish: the joint chosen so its wind-up dominates, which is the regime
   // every published breakdown describes. What is reported is the FRACTION, because
   // that is the number the design decision turns on.
-  const E = 0.05;
   const rows = [];
   // THE STIFFNESSES ARE CHOSEN FROM THE MEASUREMENT, not from a plausible-looking
   // decade sweep. The link's own sag here is 5.384e-1 and the gravity torque is
@@ -151,7 +165,7 @@ async function armSag({ E, K, steps = 12000, damping = 0.005 }) {
   // every row above 98% and would have "confirmed" the literature by measuring a
   // regime nobody operates in.
   for (const K of [9.9e-2, 2.23e-1, 3.82e-1, 8.91e-1]) {
-    const r = await armSag({ E, K, steps: 12000 });
+    const r = withJoint(NOMINAL, K);
     rows.push({ K, joint: Math.abs(r.tilt), link: Math.abs(r.sag),
       frac: Math.abs(r.tilt) / (Math.abs(r.tilt) + Math.abs(r.sag)) });
   }
@@ -186,11 +200,89 @@ async function armSag({ E, K, steps = 12000, damping = 0.005 }) {
   // somewhere else entirely.
   const j = new Joint({ ratio: 100, motorInertia: 1e-4, loadInertia: 0.5,
     stiffness: 2.23e-1, damping: 1e-4 });
-  const r = await armSag({ E: 0.05, K: 2.23e-1, steps: 6000 });
+  const r = withJoint(NOMINAL, 2.23e-1);
   check('the encoder reads zero while the tip is not where it is commanded',
     j.encoder().angle === 0 && Math.abs(r.total) > 1e-3,
     `encoder 0, tip ${r.total.toExponential(3)} (joint ${r.tilt.toExponential(3)} `
     + `+ link ${r.sag.toExponential(3)})`);
+}
+
+// ================================= THE FIRST BENDING MODE, WHICH IS A DYNAMIC CHECK
+//
+// EVERY CHECK ABOVE IS A SETTLED STATE, so nothing so far has tested the
+// mass/stiffness balance IN TIME. That matters because the static and dynamic
+// closed forms pin DIFFERENT combinations of the material constants: a tip
+// deflection goes as 1/E and does not involve rho at all, while the ringing
+// frequency goes as sqrt(E/rho). Together they pin E and rho independently, and
+// neither one alone can.
+//
+// Clamped-free first bending: w1 = (1.875)^2 sqrt(EI / rho A L^4).
+//
+// METHOD: settle under gravity, then REMOVE gravity and the damping and let it
+// ring. The static shape is very nearly the first mode, so the ring is nearly
+// pure and the period can be read off zero crossings -- a period being a far
+// sharper thing to compare than an amplitude.
+//
+// THE DAMPING HAS TO GO OR THERE IS NOTHING TO MEASURE. The settling damping is
+// 0.02 per step against a period of ~2800 steps, which is overdamped by a factor
+// of fifty: the first attempt recorded ZERO crossings and looked like a beam that
+// did not ring at all.
+async function ringFrequency({ E, len, settle, ringSteps }) {
+  const sim = await buildLink({ length: len, section: H, clamp: CLAMP,
+    E, nu, rho, gravity: GRAV, damping: 0.02 });
+  sim.advance(settle);
+  sim.operators[0].setParams({ gravity: [0, 0, 0] });   // frame op: release the load
+  sim.operators[1].setParams({ damping: 0 });           // elastic op: let it ring
+  sim.backend.write('vel').fill(0);                     // start from the static shape
+  const cross = [];
+  let prev = tipDeflection(sim);
+  for (let k = 0; k < ringSteps; k++) {
+    sim.advance(1);
+    const d = tipDeflection(sim);
+    if ((prev >= 0) !== (d >= 0)) cross.push(k - prev / (d - prev));
+    prev = d;
+  }
+  const Larm = armLength(sim);
+  await sim.destroy();
+  const period = cross.length >= 3
+    ? 2 * (cross[cross.length - 1] - cross[0]) / (cross.length - 1) : NaN;
+  const I = H ** 4 / 12, A = H * H;
+  const euler = 1.875 ** 2 * Math.sqrt((E * I) / (rho * A * Larm ** 4));
+  const w = (2 * Math.PI) / period;
+  return { w, euler, ratio: w / euler, crossings: cross.length, Larm, period };
+}
+
+{
+  const a = await ringFrequency({ E: NOMINAL_E, len: LEN, settle: 5000, ringSteps: 7000 });
+  console.log(`    [mode 1] L/H ${(a.Larm / H).toFixed(2)}  period ${a.period.toFixed(1)} steps  `
+    + `w ${a.w.toExponential(4)} vs Euler-Bernoulli ${a.euler.toExponential(4)}  `
+    + `(${(100 * (a.ratio - 1)).toFixed(2)}%)  over ${a.crossings} crossings`);
+  check('the link rings, and does so at a measurable period',
+    a.crossings >= 4 && Number.isFinite(a.period), `${a.crossings} crossings`);
+  check('the first bending mode is within 12% of (1.875)^2 sqrt(EI/rho A L^4)',
+    Math.abs(a.ratio - 1) < 0.12, `${(100 * (a.ratio - 1)).toFixed(2)}%`);
+  // THE SIGN OF THE DEFICIT IS THE INFORMATIVE PART. A lattice beam rings LOW,
+  // never high, because shear deformation and rotary inertia -- neither of which
+  // Euler-Bernoulli carries -- both soften a stubby beam. A frequency ABOVE the
+  // Euler-Bernoulli value would mean the model is stiffer or lighter than the
+  // material it was given, which is a different class of fault entirely.
+  check('and it rings LOW, which is what shear and rotary inertia do', a.ratio < 1,
+    a.ratio.toFixed(4));
+
+  if (process.env.SUITE === 'full') {
+    // AND THE DEFICIT SHRINKS WITH SLENDERNESS, which is what separates the shear
+    // correction from a wrong mass or a wrong stiffness. A scale error in either
+    // would be CONSTANT in aspect ratio; the Timoshenko terms go as (H/L)^2 and
+    // must fade as the beam gets slender. Measured: 9.6% at L/H 3.9 against 5.9%
+    // at L/H 5.9.
+    const b = await ringFrequency({ E: NOMINAL_E, len: 36, settle: 8000, ringSteps: 16000 });
+    console.log(`    [mode 1] L/H ${(b.Larm / H).toFixed(2)}  deficit `
+      + `${(100 * (1 - b.ratio)).toFixed(2)}% against ${(100 * (1 - a.ratio)).toFixed(2)}% at `
+      + `L/H ${(a.Larm / H).toFixed(2)}`);
+    check('the frequency deficit shrinks as the beam gets slender (so it is shear, not scale)',
+      (1 - b.ratio) < 0.75 * (1 - a.ratio),
+      `${(100 * (1 - a.ratio)).toFixed(2)}% -> ${(100 * (1 - b.ratio)).toFixed(2)}%`);
+  }
 }
 
 console.log(failed ? `\n${failed} arm check(s) failed\n` : '\narm: all checks passed\n');
