@@ -70,7 +70,8 @@ elif [ -z "${AREAS}" ]; then
       # FlexiSim's own files, listed BEFORE the general lattsim rule so they do
       # not drag the whole FlowSim suite in. The elastic operator has no page yet
       # and shares no kernel with the fluid.
-      lib/lattsim/operators/elastic.js|test/lattsim/elastic*|flexisim.html)
+      lib/lattsim/operators/elastic.js|lib/lattsim/operators/frame.js|test/lattsim/elastic*|\
+lib/flexisim/*|test/flexisim/*|flexisim.html)
         want_flex=1 ;;
       # The shared engine -- lattice, fields, solver, backends -- is under both.
       lib/lattsim/*|test/lattsim/*|flowsim.html) want_flow=1; want_flex=1 ;;
@@ -154,6 +155,11 @@ fi
 # runs in well under a second, which is what makes it usable on every edit.
 if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; esac; then
   node test/lattsim/elastic.test.mjs
+  # The lumped joint -- gearbox, motor, backlash, friction -- against its own
+  # closed forms. No lattice at all, so it verifies in milliseconds. Verifying
+  # each side of the hybrid plant ALONE is what makes the eventual joint-vs-link
+  # split measurable rather than a discrepancy with two possible homes.
+  if [ -d lib/flexisim ]; then node test/flexisim/joint.test.mjs; fi
 fi
 
 # NO BROWSER WHEN NO PAGE IS UNDER TEST. FlexiSim has no page yet, so on a
