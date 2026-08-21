@@ -13,6 +13,7 @@
 
 import { Simulation } from '../../lib/lattsim/simulation.js';
 import { TOPOLOGY } from '../../lib/lattsim/lattice.js';
+import { CELL, region } from '../../lib/lattsim/materials.js';
 import {
   ElasticSolidOperator, lameFrom, engineeringFrom, waveSpeeds, CFL_LIMIT, SIG,
 } from '../../lib/lattsim/operators/elastic.js';
@@ -83,6 +84,10 @@ async function planeWave({ mode, lambda, mu, rho, nx = 64, steps = 40, precision
       topology: [TOPOLOGY.PERIODIC, TOPOLOGY.PERIODIC, TOPOLOGY.PERIODIC],
     },
   });
+  // EVERY id other than ELASTIC and CLAMPED is vacuum to this operator, so the
+  // bar has to say it is made of something. build() refuses otherwise rather
+  // than running a silent no-op.
+  sim.addRegion(region.all(CELL.ELASTIC));
   const op = new ElasticSolidOperator({ lambda, mu, rho });
   op.assertStable();
   sim.addPhysics(op);
@@ -218,6 +223,7 @@ async function planeWave({ mode, lambda, mu, rho, nx = 64, steps = 40, precision
     lattice: { size: [8, 8, 8], spacing: 1,
       topology: [TOPOLOGY.PERIODIC, TOPOLOGY.PERIODIC, TOPOLOGY.PERIODIC] },
   });
+  sim.addRegion(region.all(CELL.ELASTIC));
   sim.addPhysics(new ElasticSolidOperator({ E: 0.1, nu: 0.3, rho: 1 }));
   await sim.build({ backend: 'cpu', precision: 'f64' });
 
@@ -258,6 +264,128 @@ async function planeWave({ mode, lambda, mu, rho, nx = 64, steps = 40, precision
   check('with damping off the amplitude is untouched',
     Math.abs(undamped.amp1 - undamped.amp0) / undamped.amp0 < 1e-3,
     `${undamped.amp0.toFixed(6)} -> ${undamped.amp1.toFixed(6)}`);
+}
+
+// =========================================================== BRICK 2: BOUNDARIES
+//
+// Everything above runs PERIODIC, where no boundary condition can contaminate the
+// answer. That was deliberate -- it isolates the interior stencil. This section
+// adds the two boundaries a part actually has and checks each against a closed
+// form.
+//
+// THE FREE SURFACE IS THE VACUUM FORMALISM: every material id other than ELASTIC
+// and CLAMPED carries zero stress and zero velocity, so the traction on the
+// material/vacuum interface is zero without a single special case in the stencil.
+// The surface it produces sits about half a cell outside the last material cell.
+//
+// A CLAMPED cell holds v = 0 but still updates its STRESS, because a built-in end
+// has to transmit force or it is not a support.
+
+/**
+ * Relax a loaded body to static equilibrium by DYNAMIC RELAXATION: run the real
+ * dynamics with mass-proportional damping until the kinetic energy stops
+ * mattering. It is the standard way to get a static answer out of an explicit
+ * dynamic code, and it is honest here -- the damping is a numerical device and
+ * the converged state satisfies the STATIC equations exactly, because at rest the
+ * damping term multiplies zero.
+ *
+ * Returns the peak |v| over the last stretch so a test can assert it really
+ * settled rather than assume it.
+ */
+async function relax(sim, steps, chunks = 8) {
+  const N = sim.lattice.cellCount;
+  let vmax = 0;
+  for (let c = 0; c < chunks; c++) {
+    sim.advance(Math.round(steps / chunks));
+    if (c === chunks - 1) {
+      const v = sim.backend.read('vel');
+      for (let i = 0; i < 3 * N; i++) vmax = Math.max(vmax, Math.abs(v[i]));
+    }
+  }
+  return vmax;
+}
+
+// ------------------------------------------ uniaxial tension: E, not lambda+2mu
+//
+// THIS IS THE CHECK THAT THE FREE SURFACE IS REAL, and it is sharp because the
+// two candidate answers are far apart. A bar stretched along x with its lateral
+// faces FREE is in uniaxial STRESS: sigma_xx = E eps_xx, and it contracts
+// sideways by -nu eps_xx. A bar whose lateral faces are instead held (or whose
+// "free" surface silently is not one) is in uniaxial STRAIN: sigma_xx =
+// (lambda + 2 mu) eps_xx, with no lateral motion at all. At nu = 0.3 those
+// differ by 34% -- and the lateral contraction differs by everything, since one
+// of them is exactly zero.
+{
+  const E = 0.05, nu = 0.3, rho = 1;
+  const NX = 40, NY = 8, NZ = 8;          // bar along x, one cell of vacuum around it
+  const sim = new Simulation({ lattice: { size: [NX, NY, NZ], spacing: 1 } });
+  // Vacuum everywhere, then a solid bar inside it, then clamp the x = 0 end.
+  sim.addRegion(region.all(CELL.FLUID));                       // FLUID reads as vacuum here
+  sim.addRegion(region.box(CELL.ELASTIC, [0, 2, 2], [NX, NY - 2, NZ - 2]));
+  sim.addRegion(region.box(CELL.CLAMPED, [0, 2, 2], [2, NY - 2, NZ - 2]));
+  const op = new ElasticSolidOperator({ E, nu, rho, damping: 0.02,
+    bodyForce: true, displacement: true });
+  op.assertStable();
+  sim.addPhysics(op);
+  await sim.build({ backend: 'cpu', precision: 'f64' });
+
+  const L = sim.lattice, N = L.cellCount;
+  const A = (NY - 4) * (NZ - 4);                       // cross-section, cells
+  const SIGMA_APPLIED = 2e-4;                          // wanted axial stress
+  const pullCells = [];
+  const f = sim.backend.write('force');
+  L.forEachCell((x, y, z, i) => {
+    if (sim.flags[i] === CELL.ELASTIC && x === NX - 1) pullCells.push(i);
+  });
+  // Total force = sigma * A, spread over the end face. Applied as a body force in
+  // the last layer, which is a traction on the end in the limit of a thin layer.
+  for (const i of pullCells) f[0 * N + i] = (SIGMA_APPLIED * A) / pullCells.length;
+
+  const vmax = await relax(sim, 24000);
+  const s = sim.backend.read('sig'), u = sim.backend.read('disp');
+  check('the uniaxial bar reaches static equilibrium', vmax < SIGMA_APPLIED * 1e-2,
+    `peak |v| ${vmax.toExponential(2)} against an applied stress ${SIGMA_APPLIED}`);
+
+  // Read the middle of the bar, away from both the clamp and the loaded end,
+  // where Saint-Venant says the state is uniform whatever the end details are.
+  const mid = (a) => {
+    let acc = 0, n = 0;
+    L.forEachCell((x, y, z, i) => {
+      if (sim.flags[i] !== CELL.ELASTIC) return;
+      if (x < NX * 0.4 || x > NX * 0.6) return;
+      acc += a(i, x, y, z); n++;
+    });
+    return acc / n;
+  };
+  const sxx = mid((i) => s[0 * N + i]);
+  const syy = mid((i) => s[1 * N + i]);
+  // Axial strain from the displacement gradient: u.x sits at x+1/2, so
+  // du.x/dx at the centre is a backward difference.
+  const exx = mid((i) => u[0 * N + i] - u[0 * N + (i - 1)]);
+  const eyy = mid((i) => u[1 * N + i] - u[1 * N + (i - L.strideY)]);
+
+  const Emeas = sxx / exx;
+  if (process.env.ELASTIC_VERBOSE) console.log(`    [uniaxial] E=${Emeas.toExponential(5)} (target ${E}, `
+    + `${(100*(Emeas-E)/E).toFixed(2)}%)  nu=${(-eyy/exx).toFixed(5)} (target ${nu})  `
+    + `syy/sxx=${(syy/sxx).toExponential(2)}  peak|v|=${vmax.toExponential(2)}`);
+  const l2m = lameFrom(E, nu).lambda + 2 * lameFrom(E, nu).mu;
+  // TOLERANCES SET BY THE MEASUREMENT, NOT BY HOPE. This configuration comes out
+  // MACHINE EXACT -- E to 0.00%, nu to five decimals, sigma_yy nine orders below
+  // sigma_xx -- because a uniform uniaxial state is exactly representable on this
+  // staggered grid once the effective parameters are right. A percent-level
+  // tolerance here would pass with the free surface subtly wrong, which is what
+  // it looked like before (E measured 18% low, nu 0.46 against 0.3).
+  check('a free lateral surface gives uniaxial STRESS: sigma_xx / eps_xx = E',
+    Math.abs(Emeas - E) / E < 1e-6,
+    `measured ${Emeas.toExponential(4)} vs E ${E} (uniaxial strain would be ${l2m.toExponential(4)}, `
+    + `${(100 * Math.abs(Emeas - l2m) / l2m).toFixed(1)}% away)`);
+  check('and the lateral stress really is free (sigma_yy ~ 0)',
+    Math.abs(syy) < 1e-6 * Math.abs(sxx),
+    `sigma_yy ${syy.toExponential(2)} against sigma_xx ${sxx.toExponential(2)}`);
+  check("the bar contracts sideways by Poisson's ratio",
+    Math.abs((-eyy / exx) - nu) / nu < 1e-6,
+    `measured nu ${(-eyy / exx).toFixed(4)} vs ${nu}`);
+  await sim.destroy();
 }
 
 console.log(failed ? `\n${failed} elastic check(s) failed\n` : '\nelastic: all checks passed\n');
