@@ -28,6 +28,22 @@ function check(name, cond, detail) {
 }
 console.log('\nflexisim: the tip-error soft sensor');
 
+/** Shift of `b` against `a` maximising Pearson correlation, and that correlation. */
+function crossLag(a, b, maxShift) {
+  let best = -2, bs = 0;
+  for (let sft = -maxShift; sft <= maxShift; sft++) {
+    let n = 0, sa = 0, sb = 0, saa = 0, sbb = 0, sab = 0;
+    for (let i = 0; i < a.length; i++) {
+      const j = i + sft;
+      if (j < 0 || j >= b.length) continue;
+      sa += a[i]; sb += b[j]; saa += a[i] * a[i]; sbb += b[j] * b[j]; sab += a[i] * b[j]; n++;
+    }
+    const r = (n * sab - sa * sb) / Math.sqrt((n * saa - sa * sa) * (n * sbb - sb * sb));
+    if (r > best) { best = r; bs = sft; }
+  }
+  return { lag: bs, r: best };
+}
+
 const H = 4, LEN = 16, CLAMP = 3, E = 0.05, nu = 0.3, rho = 1;
 const K_NOMINAL = 0.4;
 
@@ -45,7 +61,8 @@ const K_NOMINAL = 0.4;
  */
 async function session({ K = K_NOMINAL, backlash = 0, lag = 6, stride = 2,
                          damping = 3e-3, nTrain = 1200, nTest = 500,
-                         directionBit = false, directional = false, lam = 1.0 }) {
+                         directionBit = false, directional = false, lam = 1.0,
+                         lead = 0 }) {
   const link = await buildLink({ length: LEN, section: H, clamp: CLAMP,
     E, nu, rho, gravity: [0, 0, 0], damping });
   const mp = massProperties(link);
@@ -58,9 +75,9 @@ async function session({ K = K_NOMINAL, backlash = 0, lag = 6, stride = 2,
   const profile = new MoveProfile({ accelSteps: 200, cruiseSteps: 300,
     dwellSteps: 150, torque: 2e-3 });
   const ts = new TipSensor({ sampleEvery: 10, lag, stride, warmup: 200,
-    directionBit, directional, lam });
+    directionBit, directional, lam, lead });
 
-  const est = [], truth = [], base = [];
+  const est = [], truth = [], base = [], fc = [];
   let peakWindup = 0, trainedAfterLock = 0;
   for (let i = 0; i < nTrain + nTest; i++) {
     const y = ts.sample(arm, profile);
@@ -70,7 +87,7 @@ async function session({ K = K_NOMINAL, backlash = 0, lag = 6, stride = 2,
     if (i < nTrain) { ts.train(e.total); continue; }
     if (ts.mode === 'training') ts.lock();
     if (ts.train(e.total)) trainedAfterLock++;      // must be refused
-    est.push(y); truth.push(e.total);
+    est.push(y); truth.push(e.total); if (lead > 0) fc.push(ts.forecast);
     base.push(TipSensor.complianceEstimate({ alphaEnc: ts.lastSignals[2],
       inertia: mp.inertiaAboutPivot, stiffness: K, arm: arm.Larm }));
   }
@@ -82,15 +99,43 @@ async function session({ K = K_NOMINAL, backlash = 0, lag = 6, stride = 2,
   let trace = 0;
   for (let i = 0; i < P.rows; i++) trace += P.m[i * P.rows + i];
   await link.destroy();
-  return {
+  const out = {
     learner: nrmse(est, truth), baseline: nrmse(base, truth),
     naive: nrmse(truth.map(() => 0), truth),
     peakWindup, status, trainedAfterLock, n: est.length, trace,
   };
+  if (lead > 0) {
+    // A FORECAST IS SCORED AT THE SAMPLE IT IS ABOUT, not the one it was issued
+    // at. Drawing or scoring it where it was issued shifts it by exactly the lead,
+    // which makes a perfect forecast look wrong and a lagging one look right --
+    // FlowSim's probe chart documents the same trap on the display side.
+    const pred = fc.slice(0, fc.length - lead);
+    const want = truth.slice(lead);
+    out.forecast = nrmse(pred, want);
+    // TWO BASELINES, and only one of them is available in production. Persistence
+    // on the TRUTH needs the tracker that has just been packed away, so it is an
+    // oracle; persistence on the readout's own present ESTIMATE is what a machine
+    // could actually do. Beating the oracle is the strong claim.
+    out.persistTruth = nrmse(truth.slice(0, truth.length - lead), want);
+    out.persistEst = nrmse(est.slice(0, est.length - lead), want);
+    out.leadSamples = lead;
+    // WHERE EACH READOUT BEST LINES UP WITH THE TRUTH. A forecast trained at lead L
+    // must correlate best at EXACTLY L: any other answer means the feature ring is
+    // pairing the wrong sample with the wrong target, which is an off-by-one no
+    // score would reveal -- a readout mistrained by one sample still scores well.
+    out.estLag = crossLag(est, truth, 60);
+    out.fcLag = crossLag(fc, truth, 60);
+  }
+  return out;
 }
 
 // ------------------------------------------------ the learner beats the physics
-const clean = await session({});
+// ONE SESSION SERVES BOTH TASKS. The forecast below is a second target of the same
+// readout sharing the same feature expansion, so asking for it costs one RLS
+// update and nothing else -- and the present-time numbers are byte-identical to a
+// session without it, which the full tier asserts directly.
+const LEAD = 30;      // samples, i.e. 300 solver steps
+const clean = await session({ lead: LEAD });
 console.log(`    [locked] learner ${clean.learner.toFixed(4)}  compliance model `
   + `${clean.baseline.toFixed(4)}  "tip = encoder" ${clean.naive.toFixed(4)}  `
   + `(${clean.n} locked samples, ${clean.status.features} features)`);
@@ -109,6 +154,62 @@ check('and it beats the physics-based compliance model too',
   clean.learner < clean.baseline,
   `${clean.learner.toFixed(4)} vs ${clean.baseline.toFixed(4)} `
   + `(${(clean.baseline / clean.learner).toFixed(2)}x)`);
+
+// ============================================ THE FORECAST, WHICH IS WHAT A
+// COMPENSATOR ACTUALLY CONSUMES.
+//
+// A correction takes effect after a transport delay -- the current loop closes,
+// the drive responds, the mechanism moves -- so a compensator driven by an
+// ESTIMATE needs the error it will HAVE, not the error it has. Brick 10's
+// feedforward sidesteps this by evaluating a static model at the command, which is
+// only possible because the model is a constant; anything that READS the machine
+// has to predict.
+//
+// It is a SECOND TARGET OF THE SAME READOUT rather than a second model: the
+// universal expansion is the expensive half and it is computed once. `SoftSensor`
+// gained the pairing (opts.leads) for this -- `Continuous`'s directHorizons
+// mechanism, which the audit named as unused and which FlowSim's page hand-rolled.
+//
+// TWO BASELINES AND ONLY ONE OF THEM IS AVAILABLE. Persistence on the readout's own
+// ESTIMATE is what a machine could actually do. Persistence on the TRUTH needs the
+// tracker that has just been packed away, so it is an ORACLE -- and at a short lead
+// it is a very good one, because the tip error barely moves in 50 steps. The
+// question is not whether the learner beats it everywhere; it is where.
+console.log(`    [forecast +${LEAD} samples = ${LEAD * 10} steps] learner `
+  + `${clean.forecast.toFixed(4)}   persistence-of-estimate ${clean.persistEst.toFixed(4)}   `
+  + `persistence-of-TRUTH ${clean.persistTruth.toFixed(4)} (an oracle)`);
+check('the forecast beats the persistence baseline a machine could actually run',
+  clean.forecast < clean.persistEst,
+  `${clean.forecast.toFixed(4)} vs ${clean.persistEst.toFixed(4)} `
+  + `(${(clean.persistEst / clean.forecast).toFixed(2)}x)`);
+check('and at this lead it beats the ORACLE persistence too, which needs the tracker',
+  clean.forecast < clean.persistTruth,
+  `${clean.forecast.toFixed(4)} vs ${clean.persistTruth.toFixed(4)} `
+  + `(${(clean.persistTruth / clean.forecast).toFixed(2)}x)`);
+
+// THE FORECAST IS MORE ACCURATE THAN THE PRESENT-TIME ESTIMATE, WHICH LOOKS
+// IMPOSSIBLE AND IS NOT. Measured: correlation with the truth 0.996 at lag +30 for
+// the forecast against 0.950 at lag -1 for the estimate. The cause is a TRANSPORT
+// DELAY through the drive. The gearbox resonance here has a ~1040-step period, so
+// the tip's response lags the motor by roughly a quarter of it -- about 260 steps,
+// i.e. 26 samples. The readout's window is lag 6 x stride 2 x sampleEvery 10 = 100
+// steps, so the tip error NOW is a response to excitation that has ALREADY LEFT
+// the window, while the tip error 300 steps ahead is a response to excitation
+// sitting at the freshest end of it. Predicting forward is not extrapolation here;
+// it is reading the signal at the delay the plant already has.
+//
+// A REAL COMPENSATOR IS ON THE OTHER SIDE OF THAT SAME DELAY, which is why this is
+// the useful direction: the correction being computed now takes effect after the
+// loop closes and the mechanism moves, so the error it should cancel is the future
+// one, and that is the one the motor signals actually determine.
+console.log(`    [alignment] estimate correlates at lag ${clean.estLag.lag} `
+  + `(r ${clean.estLag.r.toFixed(4)}), forecast at lag ${clean.fcLag.lag} `
+  + `(r ${clean.fcLag.r.toFixed(4)})`);
+check('the forecast lines up with the truth at EXACTLY its trained lead',
+  clean.fcLag.lag === LEAD, `${clean.fcLag.lag} vs ${LEAD}`);
+check('and it correlates with the truth better than the present-time readout does',
+  clean.fcLag.r > clean.estLag.r,
+  `${clean.fcLag.r.toFixed(4)} vs ${clean.estLag.r.toFixed(4)}`);
 
 // ============================ PATH DEPENDENCE: THE CLAIM THAT NEEDED A PLANT
 //
@@ -152,6 +253,59 @@ check('and it beats the physics-based compliance model too',
   check('memory helps even without backlash, because a ringing phase needs history',
     clean.learner < 0.9 * memorylessClean.learner,
     `${memorylessClean.learner.toFixed(4)} -> ${clean.learner.toFixed(4)}`);
+}
+
+if (process.env.SUITE === 'full') {
+  // THE HORIZON SWEEP, WHICH IS THE FALSIFIABLE FORM OF THE TRANSPORT-DELAY
+  // EXPLANATION ABOVE. If the forecast is easier than the estimate because the tip
+  // lags the motor by about a quarter of the gearbox period (~26 samples), then
+  // skill must have a MINIMUM near that lead and get worse on BOTH sides -- worse
+  // at a shorter lead because the response has not arrived yet, worse at a longer
+  // one because it is genuine extrapolation. A monotone curve in either direction
+  // would refute it.
+  const rows = [];
+  for (const L of [5, 15, 60]) rows.push(await session({ lead: L }));
+  rows.push(clean);
+  rows.sort((a, b) => a.leadSamples - b.leadSamples);
+  for (const r of rows) {
+    console.log(`    [horizon] lead ${String(r.leadSamples).padStart(3)} `
+      + `(${String(r.leadSamples * 10).padStart(4)} steps)  forecast ${r.forecast.toFixed(4)}  `
+      + `persist-truth ${r.persistTruth.toFixed(4)}  persist-est ${r.persistEst.toFixed(4)}  `
+      + `lag ${r.fcLag.lag} r ${r.fcLag.r.toFixed(4)}`);
+  }
+  const at = (L) => rows.find((r) => r.leadSamples === L);
+  check('the forecast beats the production persistence baseline at EVERY lead',
+    rows.every((r) => r.forecast < r.persistEst),
+    rows.map((r) => `${r.leadSamples}:${r.forecast.toFixed(3)}/${r.persistEst.toFixed(3)}`).join(' '));
+  // PERSISTENCE DEGRADES MONOTONICALLY AND THE LEARNER DOES NOT, which is the
+  // difference between a model and an assumption: "it stays where it is" gets
+  // steadily worse the further ahead you ask, with no structure to fall back on.
+  check('persistence degrades monotonically with the horizon',
+    rows.every((r, i) => i === 0 || r.persistTruth > rows[i - 1].persistTruth),
+    rows.map((r) => r.persistTruth.toFixed(3)).join(' '));
+  check('the learner has a MINIMUM near the plant\'s own delay, worse on both sides',
+    at(30).forecast < at(15).forecast && at(30).forecast < at(60).forecast,
+    `${at(5).forecast.toFixed(3)} ${at(15).forecast.toFixed(3)} `
+    + `${at(30).forecast.toFixed(3)} ${at(60).forecast.toFixed(3)}`);
+  // Every lead's readout must line up where it was trained, not just the shipped
+  // one -- an off-by-one in the ring would be lead-dependent. TOLERANCE OF ONE
+  // SAMPLE HERE AND NOT ON THE SHIPPED LEAD, because the argmax of a correlation
+  // is only sharp when the correlation is high: lead 60 sits at r 0.94 with a flat
+  // peak and reports 59. That is the readout being worse, not the pairing being
+  // wrong -- a real off-by-one would shift EVERY lead by the same amount.
+  check('every forecast lines up at its own trained lead to within a sample',
+    rows.every((r) => Math.abs(r.fcLag.lag - r.leadSamples) <= 1),
+    rows.map((r) => `${r.leadSamples}->${r.fcLag.lag}`).join(' '));
+}
+
+if (process.env.SUITE === 'full') {
+  // ADDING A FORECAST MUST NOT MOVE THE PRESENT-TIME READOUT. Both targets share
+  // one feature expansion and one frozen standardisation; if the estimate moved,
+  // the shared block would be leaking one target's equations into the other's.
+  const noLead = await session({});
+  check('adding a forecast leaves the present-time estimate byte-identical',
+    noLead.learner === clean.learner && noLead.baseline === clean.baseline,
+    `${noLead.learner} vs ${clean.learner}`);
 }
 
 if (process.env.SUITE === 'full') {
