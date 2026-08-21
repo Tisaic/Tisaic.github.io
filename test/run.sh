@@ -173,6 +173,12 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # rather than the error, from static pose touches the way CompCommissioner
     # expects. Full tier -- six settles.
     if [ "${SUITE}" = "full" ]; then node test/flexisim/compliance.test.mjs; fi
+    # ACTIVE COMPENSATION: the identified constant pre-distorting a commanded move,
+    # and the 2x2 that separates the deflection from the vibration. It runs at BOTH
+    # tiers despite costing ~13 s, because it is the only check that exercises the
+    # loop end to end -- commission, identify, lock, correct -- and a sign error in
+    # the correction DOUBLES the tip error rather than degrading it.
+    node test/flexisim/compensator.test.mjs
   fi
 fi
 
