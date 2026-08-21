@@ -1862,6 +1862,17 @@ check('flexisim: mode ② (open loop + prediction) actually collapses the bias',
 check('flexisim: and it leaves the oscillation alone, which is the other mechanism',
   Math.abs(compd.sd / plain.sd - 1) < 0.35, `${plain.sd} -> ${compd.sd}`);
 
+// THE FEEDFORWARD LOOKS AHEAD, and this is asserted as an IDENTITY rather than as a
+// number: the correction actually applied must be the model evaluated at the FUTURE
+// reference, not at the present one. A lead that is merely configured and not used
+// would report a horizon in the stats and change nothing, which is precisely the
+// defect this replaced -- it fed prof.at(k) for the whole life of the tab.
+const lead = (await fx.evaluate(() => window.__flxDbg())).ctl;
+check('flexisim: the feedforward is evaluated AHEAD of the move, not on it',
+  lead.ffLead > 100 && Number.isFinite(lead.ffAtLead)
+  && Math.abs(lead.ffAtLead - lead.ffAtNow) > 1e-9,
+  JSON.stringify(lead).slice(0, 160));
+
 // THE PAGE MUST NAME WHAT LIMITS THE RMS. "The correction is worth 1.00x on the
 // rms" is the reading that got reported as underwhelming, and it is CORRECT -- the
 // ringing is 94% of the error and no quasi-static model can cancel a resonance. A

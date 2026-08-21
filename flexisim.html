@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:218,built:"2026-08-21T21:25:06Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:219,built:"2026-08-21T21:53:04Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -758,11 +758,43 @@ function ditherNow() {
   return ditherAmp * Math.sin(2 * Math.PI * k / T);
 }
 
+// THE FEEDFORWARD IS EVALUATED AHEAD OF THE MOVE, NOT ON IT, and the first version
+// was not -- it fed the compensator prof.at(k), the pose and acceleration commanded
+// at THIS instant, so the pre-distortion for a deflection was applied at the moment
+// the deflection was already happening. The plant cannot respond that fast: the
+// servo's time constant is 1/SERVO_BW = 500 steps, the gearbox rings at 329 and the
+// link at 1011, so a zero-lead correction lands about a half period late on the
+// very mode that dominates the error.
+//
+// THE HORIZON IS THE SERVO'S OWN TIME CONSTANT, derived rather than picked, and TWO
+// INDEPENDENT EXPERIMENTS PUT THE OPTIMUM THERE. Sweeping the lead on this model:
+//   lead    0    200    350    500    650    800   1000   1300
+//   rms  2.05e-1 1.76 1.60 1.60 1.73 1.89 2.05 2.09 (e-1)   -> 1.28x at 350-550
+// and iteratively refining a per-phase profile, which bounds what ANY feedforward
+// can do, peaks at the same place: 1.0x at lead 260, 2.8x at 400, 6.7x at 550,
+// 3.7x at 700, 1.4x at 850. An INTERIOR optimum is the part that matters -- pure
+// extrapolation would be monotone, so this is a phase result and not a "more is
+// better" one. A controller can always supply it: it planned the trajectory.
+//
+// NOTE THIS CONTRADICTS THE ANTI-SLOSH TAB, WHICH MEASURED PREVIEW IN THE
+// FEEDFORWARD AS NEGATIVE. There the shaper already handled the timing and preview
+// only re-shifted an excitation that was being cancelled by exact convolution; here
+// nothing else is correcting the phase at all. Same free signal, opposite sign in
+// two roles, which is what that entry said to expect.
+const FF_LEAD = Math.round(1 / SERVO_BW);
+
+/** The commanded reference `lead` steps from now, home pose included. */
+function futureRef(lead) {
+  if (!prof) return currentRef();
+  const r = prof.at(k + lead);
+  return { theta: r.theta + homeAngle(), omega: r.omega, alpha: r.alpha };
+}
+
 /** The pre-distortion to ADD to the commanded angle, in the active mode. */
 function offsetNow(ref) {
   const m = ctlMode();
   const d = ditherNow();
-  if (m === 'ff') return comp.offset(ref) + d;
+  if (m === 'ff') return comp.offset(futureRef(FF_LEAD)) + d;
   if (m === 'closed') return closedOff + d;
   return d;
 }
@@ -1379,6 +1411,11 @@ function stats() {
         + `</span>${m !== want ? ` <span class="warn">(${MODE_LABEL[want]} is not available `
           + 'yet)</span>' : ''}`
         + `${$('flip-sign').checked ? ' <span class="bad">INVERTED</span>' : ''}`]);
+      if (m === 'ff') {
+        rows.push(['feedforward horizon', `${FF_LEAD} steps ahead of the move `
+          + '<span class="warn">(the servo\'s own time constant — evaluated ON the move '
+          + 'instead, the correction lands after the plant has already responded)</span>']);
+      }
       rows.push(['pre-distortion now', `${(offsetNow(ref) * 1e3).toFixed(3)} mrad`
         + (m === 'closed' ? `   <span class="warn">outer loop τ ≈ `
           + `${Math.round(SAMPLE_EVERY / closedGain())} steps</span>` : '')
@@ -2339,6 +2376,11 @@ window.__flxDbg = () => ({
   motion: { ...motionActive, pending: motionPending, period: prof && prof.period },
   decayWant: A ? decayStepsFor(A.E) : null,
   ctl: { want: $('ctl-mode').value, active: ctlMode(), closedOff, gain: closedGain(),
+    ffLead: FF_LEAD,
+    // The identity the regression pins: the applied correction is the model
+    // evaluated at the FUTURE reference, not at the present one.
+    ffAtLead: comp ? comp.offset(futureRef(FF_LEAD)) : null,
+    ffAtNow: comp ? comp.offset(currentRef()) : null,
     dither: ditherAmp, dithering: ssTraining && !!ditherAmp,
     comparing: cmp ? { ...cmp } : null },
   board, shaped: $('shape-on').checked, flipped: $('flip-sign').checked,

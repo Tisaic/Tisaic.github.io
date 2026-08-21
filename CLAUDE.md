@@ -2990,6 +2990,48 @@ one.
    of the error is oscillation and name the control that addresses the dominant
    half, and mode ②'s hint states up front that the rms will barely move.
 
+   **THE FEEDFORWARD WAS NEVER LOOKING AHEAD, AND IT SHOULD HAVE BEEN FROM THE
+   START.** Raised from the device — "the feed forward needs to use an adequately far
+   ahead estimation, just want to make sure we are using it that way and not on the
+   current estimation" — and it was not: `offsetNow` fed `TipCompensator` the pose
+   and acceleration commanded at THIS step, so the pre-distortion for a deflection
+   was applied at the instant the deflection was already happening. The plant cannot
+   answer that fast: the servo's time constant is 1/SERVO_BW = 500 steps, the gearbox
+   rings at 329 and the link at 1011, so a zero-lead correction lands about a half
+   period late on the mode that dominates the error.
+   **TWO INDEPENDENT SWEEPS PUT THE OPTIMUM AT THE SERVO'S OWN TIME CONSTANT**, which
+   is why `FF_LEAD = round(1/SERVO_BW)` is derived rather than picked. Sweeping the
+   lead on the shipped model (rms of the tool against the program):
+     lead    0     200    350    500    550    650    800   1000   1300
+     rms  2.05e-1 1.76 1.60 1.60 1.63 1.73 1.89 2.05 2.09  (e-1) → **1.28× at 350–550**
+   and iteratively refining a per-phase correction profile — which bounds what ANY
+   feedforward can achieve, whatever generates it — peaks in the same place:
+     lead   260    400    550    700    850
+     best  1.0×   2.8×   6.7×   3.7×   1.4×
+   **THE INTERIOR OPTIMUM IS THE PART THAT MATTERS.** Pure extrapolation is monotone,
+   so a peak at 550 with worse on both sides is a PHASE result and not a
+   "more-preview-is-better" one. Measured in the browser afterwards, the oscillation
+   goes 2.04e-1 → 1.62e-1, i.e. 1.26× against the 1.28× Node predicted.
+   **IT CONTRADICTS THE ANTI-SLOSH TAB, AND BOTH ARE RIGHT.** There, preview in the
+   feedforward measured NEGATIVE (residual wave 0.188 → 0.477 mm, monotone, no
+   interior optimum) because the shaper was already cancelling by exact timing and
+   preview only re-shifted an excitation that was being handled. Here nothing is
+   correcting the phase at all. Same free signal, opposite sign in two roles — which
+   is exactly what that entry said to expect, and this is the first time the other
+   sign has been measured.
+   **AND THE LEAD RECOVERS ONLY 1.28× OF THE 6.7%, WHICH LOCATES THE REAL LIMIT.**
+   The gap is the model's FORM, not its timing: a quasi-static scalar δ = L·c·τ
+   evaluated at any single future instant cannot reproduce what the converged profile
+   does, because the required pre-distortion is not a function of one instant's
+   torque — it is a FILTER over the command across the resonance period, of which a
+   shaper and a scalar gain are both special cases. That is the case for a LEARNED
+   dynamic feedforward (a lag/lead window over the commanded kinematics, fitted by
+   the library's own RLS against the tracker during commissioning and then locked),
+   and it is measured rather than asserted: the ceiling is 6.7× and still falling at
+   the 28th iteration. NOT YET BUILT.
+   THE CHAIN TAB'S CORRECTION IS STILL ZERO-LEAD; the same fix applies there and has
+   not been measured on it.
+
    **AND THE MOVE PROFILE IS NOW A CHOICE**, because a point-to-point move and a
    sinusoid ask different questions: the trapezoid excites the plant with a broadband
    transient whose content depends on the ramp, while a sinusoid excites it at ONE
