@@ -21,6 +21,7 @@
 // being trusted on the strength of the other.
 
 import { Joint } from '../../lib/flexisim/joint.js';
+import { FlexArm } from '../../lib/flexisim/arm.js';
 import {
   buildLink, massProperties, gravityTorque, tipDeflection, peakSpeed, armLength,
 } from '../../lib/flexisim/link.js';
@@ -283,6 +284,96 @@ async function ringFrequency({ E, len, settle, ringSteps }) {
       (1 - b.ratio) < 0.75 * (1 - a.ratio),
       `${(100 * (1 - a.ratio)).toFixed(2)}% -> ${(100 * (1 - b.ratio)).toFixed(2)}%`);
   }
+}
+
+// ============================ THE DYNAMIC COUPLING: A COMMANDED MOVE, AND ITS ERROR
+//
+// Everything above is static. THIS is the thing the tab exists to show: a
+// commanded move produces a tip error the controller cannot see, because the
+// encoder is on the motor side of the gearbox and the wind-up is downstream of
+// the gear teeth.
+//
+// The mechanism has a closed form at every stage, which is what makes it a
+// measurement rather than a demo:
+//   1. a motor torque accelerates the whole arm at tau*N / (N^2 J_m + J_link),
+//      with J_link INTEGRATED FROM THE LATTICE rather than stated
+//   2. delivering that acceleration needs J_link*alpha through the gearbox, so
+//      the gearbox winds up by J_link*alpha/K
+//   3. that wind-up tilts the link rigidly by (J_link*alpha/K)*L at the tip
+//   4. and the link's own bending rides on top, rung by the same acceleration
+{
+  const K = 9.7, C = 1863, N = 100, Jm = 19.4, tau = 2e-3, dt = 1, steps = 4000;
+  const link = await buildLink({ length: LEN, section: H, clamp: CLAMP,
+    E: NOMINAL_E, nu, rho, damping: 2e-4 });
+  const mp = massProperties(link);
+  const joint = new Joint({ ratio: N, motorInertia: Jm,
+    loadInertia: mp.inertiaAboutPivot, stiffness: K, damping: C });
+  // No gravity here: the point is the INERTIAL wind-up of a commanded move, and
+  // gravity would add a pose-dependent term on top of the thing being measured.
+  const arm = new FlexArm({ joint, link, gravityWorld: [0, 0, 0], dt });
+  for (let k = 0; k < steps; k++) arm.step(tau, dt);
+
+  const alphaTh = (tau * N) / joint.reflectedInertia();
+  const alphaMeas = joint.wL / (steps * dt);
+  const windTh = (mp.inertiaAboutPivot * alphaTh) / K;
+  const e = arm.tipError();
+  console.log(`    [dynamic] alpha ${alphaMeas.toExponential(4)} vs ${alphaTh.toExponential(4)} `
+    + `(${(100 * (alphaMeas / alphaTh - 1)).toFixed(3)}%)  windup ${joint.windup().toExponential(4)} `
+    + `vs ${windTh.toExponential(4)} (${(100 * (joint.windup() / windTh - 1)).toFixed(2)}%)`);
+  console.log(`    [dynamic] tip: tilt ${e.tilt.toExponential(3)} + bend ${e.bend.toExponential(3)} `
+    + `= ${e.total.toExponential(3)}   encoder ${joint.encoder().angle.toExponential(4)} `
+    + `vs true link angle ${joint.thL.toExponential(4)}`);
+
+  // THE LATTICE'S OWN INERTIA DRIVES THE JOINT, and it does so exactly. This is
+  // the check that the mass integrated off the material distribution is the same
+  // mass the rigid-body dynamics use -- the two could disagree silently, and the
+  // only symptom would be an acceleration nobody cross-checked.
+  check('a commanded torque accelerates the arm at tau*N / (N^2 J_m + J_link)',
+    Math.abs(alphaMeas / alphaTh - 1) < 1e-3,
+    `${(100 * (alphaMeas / alphaTh - 1)).toFixed(4)}%`);
+  check('and delivering that acceleration winds the gearbox up by J*alpha/K',
+    Math.abs(joint.windup() / windTh - 1) < 2e-3,
+    `${joint.windup().toExponential(5)} vs ${windTh.toExponential(5)}`);
+  // THE PREMISE, ON THE MOVING PLANT. The encoder tracks the commanded motion to
+  // within its own wind-up; the TIP is somewhere else entirely, and nothing the
+  // controller reads says so.
+  const blind = Math.abs(joint.encoder().angle - joint.thL);
+  check('the encoder leads the true link angle by exactly the wind-up it cannot see',
+    Math.abs(blind - Math.abs(joint.windup())) < 1e-9 * Math.abs(joint.windup()),
+    `${blind.toExponential(4)} vs windup ${Math.abs(joint.windup()).toExponential(4)}`);
+  check('and the tip error is a real fraction of the move, not round-off',
+    Math.abs(e.total) > 1e-3 && Math.abs(e.bend) > 0,
+    `tilt ${e.tilt.toExponential(3)}, bend ${e.bend.toExponential(3)}`);
+  // The link RINGS during the move -- the same acceleration that winds the
+  // gearbox up also excites the bending mode -- so the bend term is dynamic and
+  // is not simply the static sag. Asserting it is nonzero and time-varying is the
+  // honest form of that claim; asserting a value would be reading one phase of an
+  // oscillation.
+  const bendA = arm.tipError().bend;
+  for (let k = 0; k < 300; k++) arm.step(tau, dt);
+  check('the link rings during the move rather than sitting at a static offset',
+    Math.abs(arm.tipError().bend - bendA) > 1e-6 * Math.abs(bendA || 1),
+    `${bendA.toExponential(4)} -> ${arm.tipError().bend.toExponential(4)}`);
+  await link.destroy();
+}
+
+// ------------------------------------ the joint has its OWN stability limit
+{
+  // A gearbox resonance can be orders of magnitude above the link's first bending
+  // mode, and semi-implicit Euler on a two-mass oscillator is stable only for
+  // w_n*dt < 2. Coupling the two without checking gives NaN in a few hundred
+  // steps and no clue which half produced it -- which is exactly what the first
+  // attempt at this section did, at w_n*dt = 1e4.
+  const link = await buildLink({ length: LEN, section: H, clamp: CLAMP,
+    E: NOMINAL_E, nu, rho, damping: 0 });
+  const mp = massProperties(link);
+  const wild = new Joint({ ratio: 100, motorInertia: 1e-6,
+    loadInertia: mp.inertiaAboutPivot, stiffness: 1e6 });
+  check('an unintegrable gearbox is refused at build time, not discovered as NaN',
+    (() => { try { new FlexArm({ joint: wild, link, gravityWorld: [0, 0, 0], dt: 1 });
+                   return false; } catch { return true; } })(),
+    `w_n*dt = ${(wild.naturalFrequency() * 1).toPrecision(4)}`);
+  await link.destroy();
 }
 
 console.log(failed ? `\n${failed} arm check(s) failed\n` : '\narm: all checks passed\n');
