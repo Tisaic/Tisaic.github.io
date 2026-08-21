@@ -165,6 +165,10 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # joint-vs-link split of tip error MEASURED rather than inherited from the
     # literature. It is the number the link resolution is chosen from.
     node test/flexisim/arm.test.mjs
+    # The payoff: tip error inferred from motor-side signals alone, trained
+    # against the tracker and then LOCKED, against the physics-based compliance
+    # model a good engineer would build.
+    node test/flexisim/tipsensor.test.mjs
   fi
 fi
 
