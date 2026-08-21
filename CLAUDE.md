@@ -167,6 +167,28 @@ one.
    `cache: no-store`; if the server build is newer than the loaded page, a
    red top banner offers a cache-busting reload. Beats the Pages/CDN/browser
    cache lag.
+   **AND IT WAS ONLY HALF A FIX, WHICH REACHED THE OWNER'S PHONE AS A DEAD PAGE.**
+   The banner busts the DOCUMENT's URL with `?v=`, but these pages are ES modules
+   and `import './lib/.../x.js'` carries no query — so a browser will pair a
+   brand-new HTML with a CACHED module from an earlier build. Reported as
+   `The requested module './lib/flexisim/compensator.js' does not provide an export
+   named 'SineProfile'` against a `compensator.js` that exports it on line 109 of the
+   very commit that was live.
+   **THE VERSION LINE SAID "✓ latest" THROUGHOUT, AND IT WAS TELLING THE TRUTH** —
+   about the document, which was current. That is what made the failure invisible:
+   the instrument was measuring the one thing that was fine. Two fixes, and the
+   second is the one that generalises. (i) `reloadFresh()` now re-fetches every
+   script in a generated `modules.json` with `{cache:"reload"}`, which bypasses the
+   cache AND writes the fresh copy back, before reloading — the manifest is emitted
+   by `stamp-version.sh` so it cannot drift from what ships, and a regression checks
+   it against the pages' OWN import statements rather than merely for existence.
+   (ii) An uncaught error matching the browser's wording for a module mismatch now
+   raises the banner ITSELF, so the recovery is offered when the version check
+   cannot see the problem. The banner has to survive being raised before the console
+   UI is mounted (this bootstrap runs first in `<head>` precisely so it catches
+   load-time errors, and painting into an unmounted `els` would throw inside the
+   error handler and lose the report), and `checkVersion()`'s "latest" branch must
+   not paint over it — which is the branch that runs in exactly this failure.
 3. **Docs viewer** (bottom-right `DOCS` launcher) — renders every `.md` in
    the repo with self-hosted marked. A directory selector filters by folder,
    and files are split into two groups: **◆ CLAUDE context** (any `CLAUDE.md`,

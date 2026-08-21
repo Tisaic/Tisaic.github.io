@@ -38,5 +38,29 @@ EOF
   printf ']}\n'
 } > docs-manifest.json
 
+# THE MODULE MANIFEST, and it exists because a stale-page banner that busts only
+# the document is a half fix. The pages are ESM: `import './lib/.../x.js'` carries
+# no version query, so a browser will pair a freshly fetched HTML with a CACHED
+# module from an earlier build -- and the version check then reads "latest",
+# truthfully, about the HTML, while the page is dead. console-boot.js re-fetches
+# this list with {cache:"reload"} before reloading, which is the only way to reach
+# the whole graph without stamping a query onto every import in the repo (which
+# would churn every file's diff on every commit and bury the real changes).
+MODS="$(find lib console-boot.js -type f -name '*.js' \
+  -not -path '*/node_modules/*' | sed 's|^\./||' | sort)"
+{
+  printf '{"version":%s,"built":"%s","modules":[' "${NUM}" "${BUILT}"
+  first=1
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    if [ "${first}" -eq 1 ]; then first=0; else printf ','; fi
+    printf '"%s"' "$f"
+  done <<EOF
+${MODS}
+EOF
+  printf ']}\n'
+} > modules.json
+
 echo "Stamped v${NUM} @ ${BUILT}"
+echo "Module manifest: $(printf '%s\n' "${MODS}" | grep -c . ) script(s)"
 echo "Docs manifest: $(printf '%s\n' "${FILES}" | grep -c . ) markdown file(s)"

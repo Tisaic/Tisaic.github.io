@@ -163,6 +163,55 @@ await page.waitForTimeout(200);
 const evalOk = await page.evaluate(() => window.__dbg.buffer().some(e => e.text.trim() === '3'));
 check('eval box evaluates JS (1 + 2 → 3)', evalOk);
 
+// ---- STALE MODULE DETECTION. This reached the owner's phone: the stale banner
+// busts the HTML's own URL with ?v=, but `import './lib/.../x.js'` carries no
+// query, so a brand-new page pairs with a CACHED module from an earlier build.
+// The version line then reads "✓ latest" -- truthfully, about the document --
+// while the page is dead, and the only symptom is a SyntaxError naming an export
+// that is right there in the repo.
+//
+// THE MANIFEST IS CHECKED AGAINST THE PAGE'S OWN IMPORTS, not merely for
+// existence: a list that has gone stale relative to what ships would refresh the
+// wrong files and fail in exactly the same way, silently.
+const mods = await page.evaluate(async () => {
+  const r = await fetch('modules.json', { cache: 'no-store' });
+  return r.ok ? r.json() : null;
+});
+check('modules.json ships and lists the module graph',
+  mods && Array.isArray(mods.modules) && mods.modules.length > 20, JSON.stringify(mods).slice(0, 120));
+const missing = await page.evaluate(async (listed) => {
+  const set = new Set(listed);
+  const out = [];
+  for (const pg of ['flexisim.html', 'flowsim.html', 'ngrc.html']) {
+    const txt = await (await fetch(pg, { cache: 'no-store' })).text();
+    for (const m of txt.matchAll(/from\s+'(\.\/(?:lib)\/[^']+\.js)'/g)) {
+      const rel = m[1].replace(/^\.\//, '');
+      if (!set.has(rel)) out.push(`${pg} -> ${rel}`);
+    }
+  }
+  return out;
+}, mods ? mods.modules : []);
+check('and every module the pages import is in it', missing.length === 0, missing.join(', '));
+
+// The DETECTOR itself, driven through the real handler rather than described: the
+// browser's own wording for this mismatch, dispatched as an uncaught error.
+await page.evaluate(() => {
+  window.dispatchEvent(new ErrorEvent('error', {
+    message: "The requested module './lib/flexisim/compensator.js' does not provide an export named 'SineProfile'",
+    filename: 'https://example.invalid/flexisim.html', lineno: 474, colno: 17,
+  }));
+});
+await page.waitForTimeout(200);
+const staleUi = await page.evaluate(() => ({
+  banner: (document.getElementById('dbg-stale') || {}).style
+    ? document.getElementById('dbg-stale').style.display : 'none',
+  text: (document.getElementById('dbg-stale') || {}).textContent || '',
+  build: (document.getElementById('dbg-build') || {}).textContent || '',
+}));
+check('a stale MODULE raises the banner, where "latest" alone would have hidden it',
+  staleUi.banner === 'block' && /cached script/i.test(staleUi.text)
+  && /STALE MODULE/.test(staleUi.build), JSON.stringify(staleUi));
+
 // ---- docs viewer ----
 await checkConsoleUsable(page, 'index');
 check('docs launcher present', await page.$('#doc-all') !== null);
