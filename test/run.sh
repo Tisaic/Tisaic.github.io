@@ -199,6 +199,13 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # loop end to end -- commission, identify, lock, correct -- and a sign error in
     # the correction DOUBLES the tip error rather than degrading it.
     node test/flexisim/compensator.test.mjs
+    # THE LEARNED DYNAMIC FEEDFORWARD, and it is FULL TIER because it drives ~400k
+    # solver steps: five iterative convergences plus the held-out scoring. What it
+    # pins that nothing else can is the pair of failures either side of the working
+    # configuration -- refining with NO lead diverges, and fitting to ONE trajectory
+    # produces something 25x WORSE than no correction on a move it never saw. Both
+    # are the shapes a later simplification would reach for.
+    if [ "${SUITE}" = "full" ]; then node test/flexisim/learnedff.test.mjs; fi
   fi
 fi
 
