@@ -159,7 +159,13 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
   # closed forms. No lattice at all, so it verifies in milliseconds. Verifying
   # each side of the hybrid plant ALONE is what makes the eventual joint-vs-link
   # split measurable rather than a discrepancy with two possible homes.
-  if [ -d lib/flexisim ]; then node test/flexisim/joint.test.mjs; fi
+  if [ -d lib/flexisim ]; then
+    node test/flexisim/joint.test.mjs
+    # The hybrid plant: a lumped joint carrying a lattice link, and the
+    # joint-vs-link split of tip error MEASURED rather than inherited from the
+    # literature. It is the number the link resolution is chosen from.
+    node test/flexisim/arm.test.mjs
+  fi
 fi
 
 # NO BROWSER WHEN NO PAGE IS UNDER TEST. FlexiSim has no page yet, so on a
