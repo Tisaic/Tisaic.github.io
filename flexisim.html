@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:213,built:"2026-08-21T18:09:13Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:214,built:"2026-08-21T18:39:24Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -57,6 +57,11 @@
     .stat dt { color:var(--muted); } .stat dd { margin:0; font-variant-numeric:tabular-nums; }
     .good { color:var(--accent2); } .warn { color:var(--warn); } .bad { color:var(--bad); }
     .lead { color:var(--muted); font-size:.85rem; line-height:1.5; margin:10px 0 4px; }
+    .hint { color:var(--muted); font-size:.76rem; margin:6px 0 0; }
+    .hint b { color:var(--text); }
+    h4.grp { margin:16px 0 -4px; font-size:.78rem; color:var(--text); font-weight:700;
+      letter-spacing:.3px; border-top:1px solid var(--line); padding-top:10px; }
+    h4.grp span { font-weight:400; color:var(--muted); letter-spacing:0; }
     .lead b { color:var(--text); }
     .note { margin-top:12px; background:var(--panel); border:1px solid var(--line); border-radius:10px;
       padding:12px; font-size:.78rem; line-height:1.55; color:#cbd5e1; }
@@ -100,12 +105,37 @@
       <button id="run" class="sec" disabled>Run move ▶</button>
       <button id="reset" class="sec">Reset</button>
     </div>
+    <p class="hint" id="lifecycle-hint">The tracker is only here once: <b>commission</b> first, then run.</p>
     <div class="qbox">
       <label><input type="checkbox" id="comp-on" disabled /> compensation</label>
       <label><input type="checkbox" id="shape-on" disabled /> input shaping</label>
       <label><input type="checkbox" id="flip-sign" disabled /> invert the correction</label>
     </div>
 
+    <!-- CONTROLS ARE GROUPED BY WHAT THEY COST. The plant sliders rebuild the
+         lattice and throw the commissioning away, because a different machine has a
+         different compliance and a different bending mode -- carrying the old
+         constants over would be the one thing this tab exists to warn about. The
+         motion sliders only rebuild the reference, so they are live mid-run. And
+         the view sliders change nothing about the physics at all. Eight sliders in
+         one undifferentiated stack hid all of that. -->
+    <h4 class="grp">Motion <span>— live, no rebuild</span></h4>
+    <div class="controls">
+      <div class="slider"><span>Move span</span>
+        <input type="range" id="s-span" min="0" max="5" step="1" value="2" />
+        <span class="v" id="v-span">0.144 rad</span></div>
+      <div class="slider"><span>Move speed</span>
+        <input type="range" id="s-speed" min="0" max="4" step="1" value="2" />
+        <span class="v" id="v-speed">1.0×</span></div>
+      <div class="slider"><span>Home pose</span>
+        <input type="range" id="s-home" min="0" max="6" step="1" value="0" />
+        <span class="v" id="v-home">0.00 rad</span></div>
+    </div>
+
+    <p class="hint" id="motion-pending" hidden><b>queued</b> — a reference is only rebuilt at a
+      move boundary; rebuilding one mid-move is a position step into the servo's gain.</p>
+
+    <h4 class="grp">Plant <span>— rebuilds, and re-commissioning is required</span></h4>
     <div class="controls">
       <div class="slider"><span>Gearbox K</span>
         <input type="range" id="s-k" min="0" max="6" step="1" value="4" />
@@ -113,6 +143,10 @@
       <div class="slider"><span>Link E</span>
         <input type="range" id="s-e" min="0" max="5" step="1" value="5" />
         <span class="v" id="v-e">0.20</span></div>
+    </div>
+
+    <h4 class="grp">View <span>— changes nothing the solver does</span></h4>
+    <div class="controls">
       <div class="slider"><span>Steps/frame</span>
         <input type="range" id="s-spf" min="10" max="200" step="10" value="60" />
         <span class="v" id="v-spf">60</span></div>
@@ -341,6 +375,15 @@ import {
 
 const $ = (id) => document.getElementById(id);
 const K_LADDER = [0.5, 1, 2, 3, 4, 8, 16];
+const SPAN_LADDER = [0.036, 0.072, 0.144, 0.288, 0.5, 0.8];
+// SPEED IS THE ACCELERATION RAMP, not a playback rate: fewer accel steps means the
+// same distance covered harder, which is what raises the joint torque and with it
+// the wind-up. A viewing control that changed the physics is the mistake this
+// project keeps finding, so the two are kept visibly apart.
+const SPEED_LADDER = [{ a: 600, c: 800, label: '0.25x' }, { a: 450, c: 600, label: '0.5x' },
+  { a: 300, c: 400, label: '1.0x' }, { a: 200, c: 260, label: '2.2x' },
+  { a: 140, c: 180, label: '4.6x' }];
+const HOME_LADDER = [0, 0.2, 0.4, 0.6, 0.9, 1.2, 1.5];
 const E_LADDER = [0.02, 0.04, 0.06, 0.10, 0.15, 0.20];
 const H = 4, LEN = 16, CLAMP = 3, NU = 0.3, RHO = 1, G = 2e-6;
 const RATIO = 100, SERVO_BW = 0.002, DAMPING = 3e-3;
@@ -408,6 +451,14 @@ async function build() {
   const servo = new PositionServo({ kp: SERVO_BW * SERVO_BW * Jr / RATIO,
     kd: 2 * SERVO_BW * Jr / RATIO, inertia: Jr, ratio: RATIO, gravityTorque: tauG });
   A = { arm, servo, tauG, mp, link, joint, K, E };
+  // A REBUILD CANCELS ANY COMMISSIONING IN FLIGHT. Without this, changing a plant
+  // slider (or pressing Reset) part-way through left `comm` pointing at a sequence
+  // for an arm that no longer exists AND left the Commission button disabled with
+  // nothing able to re-enable it -- a dead end that needed a page reload.
+  comm = null; phase = 'idle';
+  $('commission').textContent = 'Commission ▶';
+  $('commission').disabled = false;
+  $('run').textContent = 'Run move ▶';
   pc = null; mode = null; comp = null; k = 0;
   ss = new TipSensor({ sampleEvery: SAMPLE_EVERY, lag: 6, stride: 2, warmup: 200,
     lead: SS_LEAD });
@@ -425,9 +476,41 @@ async function build() {
   draw(); stats();
 }
 
+// THE MOTION IS READ AT A MOVE BOUNDARY, NEVER MID-MOVE. Rebuilding a reference
+// while the axis is part-way through one is a position-demand STEP into the servo's
+// proportional gain -- the anti-slosh tab's v100 divergence bug, where a health
+// check restarted the reference from the station while the carriage was elsewhere
+// and drove the plant to divergence. Same discipline here: the sliders stage a
+// change and the frame loop applies it at the top of the next move (or immediately
+// when nothing is running, since then there is no move to interrupt).
+let motionActive = { span: 2, speed: 2, home: 0 };
+let motionPending = null;
+
+function homeAngle() { return motionActive.home; }
+
+/**
+ * The commanded reference right now, home pose included.
+ *
+ * ONE DEFINITION, read by the stepping loop, the picture and the stats alike.
+ * Three copies of "where the program is asking for" is how a drawn arm ends up
+ * being compared against a reference nothing is actually tracking.
+ */
+function currentRef() {
+  if (!prof) return { theta: homeAngle(), omega: 0, alpha: 0 };
+  const r = prof.at(k);
+  return { theta: r.theta + homeAngle(), omega: r.omega, alpha: r.alpha };
+}
+
 function rebuildProfile() {
   const shaped = $('shape-on').checked && mode;
-  prof = new AngleProfile({ span: 0.144, accelSteps: 300, cruiseSteps: 400, dwellSteps: 1100,
+  const sp = SPEED_LADDER[motionActive.speed];
+  // THE DWELL MUST OUTLAST THE SHAPER'S OWN DELAY (one damped period of the mode it
+  // cancels) or a shaped move never reaches its endpoint before the next one starts.
+  // With the mode measured that delay is known, so the dwell is sized from it
+  // instead of from a number that happened to be long enough at one stiffness.
+  const need = mode ? Math.round(1.3 * mode.period) : 1100;
+  prof = new AngleProfile({ span: SPAN_LADDER[motionActive.span],
+    accelSteps: sp.a, cruiseSteps: sp.c, dwellSteps: Math.max(600, need),
     shaper: shaped ? zvdShaper(mode.omega, mode.zeta) : null });
   if (pc && A) {
     comp = new TipCompensator({ comp: pc, inertia: A.mp.inertiaAboutPivot,
@@ -441,13 +524,49 @@ function rebuildProfile() {
 // than in one blocking call so the arm can be watched moving between poses --
 // which is what commissioning actually looks like.
 const POSES = [0.8, 0.4, 0];
+const HOLD_STEPS = 8000;
 let comm = null;
 
+/**
+ * How long a decay record has to be to have a mode in it.
+ *
+ * A FIXED LENGTH WAS A BUG, AND IT REACHED A REAL DEVICE. ringFit needs four zero
+ * crossings, and the bending period goes as 1/sqrt(E) -- so at the two softest link
+ * settings a fixed 3600-step record held only 1.3 and 1.8 periods, produced 2 and 3
+ * crossings, and the fit returned null. finishCommission() then read .omega off it
+ * and threw. Measured across the E ladder at K 4: periods 2801 / 1981 / 1617 / 1253
+ * / 1023 / 886 steps and crossings 2 / 3 / 4 / 5 / 6 / 7 -- exactly the two that
+ * failed. The record is now sized from the mode it is measuring.
+ *
+ * Euler-Bernoulli UNDERSTATES the period here (brick 10 measured the real mode 14%
+ * low in frequency, so the period is ~1.16x longer), and the estimate is only used
+ * to decide how long to record, so it carries a deliberate margin.
+ */
+function decayStepsFor(E) {
+  const I = H ** 4 / 12, A2 = H * H;
+  const wEB = 3.516 * Math.sqrt(E * I / (RHO * A2 * LEN ** 4));
+  return Math.round(7 * (2 * Math.PI / wEB) * 1.2);
+}
+
 function startCommission() {
-  comm = { i: 0, left: 8000, touches: [], decay: null, base: 0 };
+  comm = { i: 0, left: HOLD_STEPS, touches: [], decay: null, base: 0,
+    want: decayStepsFor(A.E) };
   phase = 'commission'; running = true;
-  $('commission').disabled = true; $('run').disabled = true;
+  $('commission').textContent = 'Cancel ✕';
+  $('run').disabled = true;
   setBadge('commissioning — holding pose 1/3', 'warn');
+}
+
+/** Abandon a commissioning run and leave the page usable, not half-configured. */
+function cancelCommission(why) {
+  comm = null; phase = pc && mode ? 'ready' : 'idle'; running = false;
+  $('commission').textContent = 'Commission ▶';
+  $('commission').disabled = false;
+  $('run').disabled = phase !== 'ready';
+  $('run').textContent = 'Run move ▶';
+  setBadge(why || (phase === 'ready' ? 'commissioned — press Run move' : 'idle — commission first'),
+    phase === 'ready' ? 'good' : '');
+  stats();
 }
 
 function commissionStep(n) {
@@ -459,23 +578,21 @@ function commissionStep(n) {
       if (comm.kick > 0) { comm.kick--; continue; }
       comm.decay.push(tipDeflection(A.link) - comm.base);
     }
-    setBadge(`commissioning — measuring the bending mode (${comm.decay.length}/3600)`, 'warn');
-    if (comm.decay.length >= 3600) {
-      mode = ringFit(comm.decay);
-      finishCommission();
-    }
+    setBadge(`commissioning — measuring the bending mode (${comm.decay.length}/${comm.want})`, 'warn');
+    if (comm.decay.length >= comm.want) finishCommission();
     return;
   }
   const th = POSES[comm.i];
   for (let i = 0; i < n && comm.left > 0; i++, comm.left--) {
     arm.step(servo.torque({ theta: th, omega: 0, alpha: 0 }, arm.encoder()), 1);
   }
-  setBadge(`commissioning — holding pose ${comm.i + 1}/3 (${8000 - comm.left}/8000)`, 'warn');
+  setBadge(`commissioning — holding pose ${comm.i + 1}/3 `
+    + `(${HOLD_STEPS - comm.left}/${HOLD_STEPS})`, 'warn');
   if (comm.left > 0) return;
   comm.touches.push({ th, tau: A.tauG(A.arm.joint.thL), err: tipTrackingError(arm, th),
     v: peakSpeed(A.link) });
   comm.i++;
-  if (comm.i < POSES.length) { comm.left = 8000; return; }
+  if (comm.i < POSES.length) { comm.left = HOLD_STEPS; return; }
   // ENDING AT THE HOME POSE IS NOT AN AESTHETIC CHOICE: the decay fit needs the
   // arm already settled at zero, and re-settling costs as much as a pose does.
   comm.base = tipDeflection(A.link);
@@ -483,17 +600,60 @@ function commissionStep(n) {
 }
 
 function finishCommission() {
+  // A TEST SEAM, and the same one FlowSim uses for its diverged-run handler: the
+  // branch below is the difference between a message and a crash, so it has to be
+  // reachable on demand. Stubbing the FIT rather than the handler leaves the real
+  // fallback path and the real UI to be judged.
+  const fit = window.__flxFailFit ? null : ringFit(comm.decay);
+  // A FAILED FIT IS REPORTED, NEVER DEREFERENCED. Sizing the record from the mode
+  // should make this unreachable, but a guard that only holds while an estimate is
+  // right is not a guard -- and the crash this replaces reached a real device.
+  if (!fit) {
+    // NOT EVERY LINK RINGS, AND AT THE SOFT END OF THIS SLIDER NONE OF THEM DOES.
+    // The structural damping is a fixed rate per step, so the DAMPING RATIO is
+    // damping/(2w) and rises as the link softens: measured across the E ladder,
+    // ringFit reports zeta 0.24 / 0.28 / 0.33 / 0.44 at E 0.20 / 0.15 / 0.10 / 0.06
+    // -- exactly damping/(2w) each time -- and at E 0.04 and 0.02 that is 0.54 and
+    // 0.76, where the decay is over before two cycles have happened. The fit is not
+    // failing to see a mode; there is no mode to see, and a longer record cannot
+    // create one. So the fallback is not a guess: w comes from Euler-Bernoulli with
+    // the measured Timoshenko correction (brick 10 pinned the real mode 14% below
+    // it) and zeta comes from the damping the page itself set.
+    const I = H ** 4 / 12;
+    const wEB = 3.516 * Math.sqrt(A.E * I / (RHO * H * H * LEN ** 4));
+    const w = wEB / 1.14;
+    const zeta = DAMPING / (2 * w);
+    mode = { omega: w, zeta: Math.min(zeta, 0.99), period: 2 * Math.PI / w,
+      analytic: true, overdamped: zeta > 0.5 };
+    console.warn(`[flexisim] the decay carried no usable oscillation in ${comm.decay.length} `
+      + `steps: at E ${A.E} the damping ratio is ${zeta.toFixed(2)}, so the bending mode `
+      + `${mode.overdamped ? 'does not ring' : 'barely rings'}. Falling back to the analytic `
+      + `estimate w=${w.toExponential(3)}`
+      + (mode.overdamped ? '; input shaping is disabled because there is nothing to cancel.'
+        : '.'));
+  } else {
+    mode = fit;
+  }
   pc = new PlanarComp(A.arm.Larm);
   for (const t of comm.touches) pc.calibrate(t.tau, t.err);
   const per = comm.touches.map((t) => t.err / (A.arm.Larm * t.tau));
   console.log(`[flexisim] identified c=${pc.compliance.toFixed(5)} (1/K=${(1 / A.K).toFixed(4)}) `
     + `per-pose ${per.map((c) => c.toFixed(5)).join(' ')} | mode w=${mode.omega.toExponential(3)} `
-    + `zeta=${mode.zeta.toFixed(3)} period=${mode.period.toFixed(0)}`);
+    + `zeta=${mode.zeta.toFixed(3)} period=${mode.period.toFixed(0)}`
+    + (mode.analytic ? ' (ANALYTIC fallback, not measured)' : ''));
   comm = null; phase = 'ready'; running = false; k = 0;
+  $('commission').textContent = 'Commission ▶';
   $('commission').disabled = false; $('run').disabled = false;
-  $('comp-on').disabled = false; $('shape-on').disabled = false; $('flip-sign').disabled = false;
+  $('comp-on').disabled = false; $('flip-sign').disabled = false;
+  // A SHAPER FOR A MODE THAT DOES NOT RING IS PURE DELAY. Offering the control
+  // would be offering a cost with no benefit, so it is disabled and says why.
+  $('shape-on').disabled = !!mode.overdamped;
+  if (mode.overdamped) $('shape-on').checked = false;
   rebuildProfile();
-  setBadge('commissioned — press Run move', 'good');
+  setBadge(mode.overdamped
+    ? `commissioned — this link is OVER-DAMPED (ζ ${mode.zeta.toFixed(2)}), nothing to shape`
+    : (mode.analytic ? 'commissioned (bending mode ESTIMATED, not measured)'
+      : 'commissioned — press Run move'), mode.analytic ? 'warn' : 'good');
   stats();
 }
 
@@ -501,7 +661,8 @@ function finishCommission() {
 function moveStep(n) {
   const { arm, servo } = A;
   for (let i = 0; i < n; i++) {
-    const ref = prof.at(k);
+    if (motionPending && (k % prof.period) === 0) applyMotion();
+    const ref = currentRef();
     const off = ($('comp-on').checked && comp) ? comp.offset(ref) : 0;
     const tau = servo.torque({ ...ref, theta: ref.theta + off }, arm.encoder());
     arm.step(tau, 1);
@@ -660,7 +821,7 @@ function draw() {
   const px = 24, py = h * 0.52;
   const scale = Math.min((w - 60) / L, (h - 40) / (L * 0.9));
   const mag = +$('s-mag').value;
-  const ref = prof ? prof.at(k) : { theta: 0 };
+  const ref = currentRef();
   const off = ($('comp-on').checked && comp) ? comp.offset(ref) : 0;
 
   // BODY -> WORLD IS A ROTATION BY +theta, AND SCREEN Y POINTS DOWN. Both have to
@@ -735,7 +896,7 @@ function stats() {
   const rows = [];
   if (A) {
     const { arm, joint, mp } = A;
-    const ref = prof ? prof.at(k) : { theta: 0 };
+    const ref = currentRef();
     rows.push(['plant', `K ${A.K} · E ${A.E} · ${A.link.lattice.cellCount} cells · arm ${arm.Larm}`]);
     rows.push(['step', String(k)]);
     rows.push(['commanded / encoder / link', `${ref.theta.toFixed(5)} / `
@@ -756,7 +917,17 @@ function stats() {
     }
     if (mode) {
       rows.push(['first bending mode', `${mode.omega.toExponential(3)} rad/step · `
-        + `period ${mode.period.toFixed(0)} · ζ ${mode.zeta.toFixed(3)}`]);
+        + `period ${mode.period.toFixed(0)} · ζ ${mode.zeta.toFixed(3)}`
+        + (mode.overdamped
+          ? `   <span class="warn">OVER-DAMPED at ζ ${mode.zeta.toFixed(2)} — it does not `
+            + 'ring, so there is no mode to measure and none to cancel</span>'
+          : (mode.analytic ? '   <span class="bad">ESTIMATED, not measured — the decay '
+            + 'carried no usable oscillation</span>' : ''))]);
+    }
+    if (prof) {
+      const sp = SPEED_LADDER[motionActive.speed];
+      rows.push(['move', `${prof.span.toFixed(3)} rad about ${homeAngle().toFixed(2)} · `
+        + `${sp.label} (${sp.a} accel + ${sp.c} cruise steps) · dwell ${prof.D}`]);
     }
     rows.push(['gearbox resonance', `${joint.naturalFrequency().toExponential(3)} rad/step · `
       + `period ${(2 * Math.PI / joint.naturalFrequency()).toFixed(0)}`]);
@@ -764,6 +935,18 @@ function stats() {
       `${mp.mass} / ${mp.inertiaAboutPivot.toPrecision(5)}`]);
   }
   $('stats').innerHTML = rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('');
+  const hint = $('lifecycle-hint');
+  if (phase === 'commission') {
+    hint.innerHTML = 'The tracker is on the machine: three <b>pose touches</b>, then a '
+      + 'deliberately excited <b>decay</b> to measure the bending mode. Cancel is safe.';
+  } else if (phase === 'ready') {
+    hint.innerHTML = 'Commissioned. <b>Compensation</b> removes the bias, <b>shaping</b> removes '
+      + 'the oscillation — turn each on alone and watch one number move and the other stand still.';
+  } else {
+    hint.innerHTML = 'The tracker is only here once: <b>commission</b> first, then run. '
+      + 'Changing the plant throws the commissioning away, because a different machine has a '
+      + 'different compliance.';
+  }
   const w = winStats();
   $('err-badge').textContent = w ? `bias ${w.bias.toExponential(2)} · osc ${w.sd.toExponential(2)}` : '—';
 }
@@ -834,9 +1017,14 @@ function frame() {
 }
 
 // -------------------------------------------------------------- wiring
-$('commission').addEventListener('click', () => { if (A && !busy) startCommission(); });
+$('commission').addEventListener('click', () => {
+  if (!A || busy) return;
+  if (phase === 'commission') cancelCommission('commissioning cancelled');
+  else startCommission();
+});
 $('run').addEventListener('click', () => {
   if (phase === 'idle' || phase === 'commission') return;
+  if (!pc || !mode) return;
   running = !running;
   $('run').textContent = running ? 'Pause ⏸' : 'Run move ▶';
   setBadge(running ? 'running' : 'paused', running ? 'good' : '');
@@ -875,6 +1063,37 @@ const ladder = (id, vid, arr, fmtv) => {
 };
 ladder('s-k', 'v-k', K_LADDER, (v) => v.toFixed(1));
 ladder('s-e', 'v-e', E_LADDER, (v) => v.toFixed(2));
+function applyMotion() {
+  if (!motionPending) return;
+  motionActive = motionPending;
+  motionPending = null;
+  rebuildProfile();
+  win = [];
+  $('motion-pending').hidden = true;
+}
+
+// MOTION SLIDERS REBUILD THE REFERENCE AND NOTHING ELSE, so they are live mid-run:
+// the lattice, the identified compliance and the measured mode all survive, which
+// is the point -- a constant identified at one pose is supposed to work at another,
+// and that is only demonstrable if the pose can be changed without re-commissioning.
+const stageMotion = () => {
+  const next = { span: +$('s-span').value, speed: +$('s-speed').value,
+    home: HOME_LADDER[+$('s-home').value] };
+  $('v-span').textContent = `${SPAN_LADDER[next.span].toFixed(3)} rad`;
+  $('v-speed').textContent = SPEED_LADDER[next.speed].label;
+  $('v-home').textContent = `${next.home.toFixed(2)} rad`;
+  const same = next.span === motionActive.span && next.speed === motionActive.speed
+    && next.home === motionActive.home;
+  if (same) { motionPending = null; $('motion-pending').hidden = true; stats(); return; }
+  motionPending = next;
+  // Nothing is running, so there is no move to interrupt: apply it now rather than
+  // making the user press Run to see a control take effect.
+  if (!running || phase !== 'ready') applyMotion();
+  else $('motion-pending').hidden = false;
+  stats();
+};
+for (const id of ['s-span', 's-speed', 's-home']) $(id).addEventListener('input', stageMotion);
+stageMotion();
 $('s-spf').addEventListener('input', () => { $('v-spf').textContent = $('s-spf').value; });
 $('s-mag').addEventListener('input', () => { $('v-mag').textContent = $('s-mag').value + '×'; });
 
@@ -1329,6 +1548,8 @@ $('verify-run').addEventListener('click', async () => {
 window.__flxDbg = () => ({
   phase, running, k, K: A && A.K, E: A && A.E, cells: A && A.link.lattice.cellCount,
   compliance: pc && pc.compliance, mode, win: winStats(),
+  motion: { ...motionActive, pending: motionPending },
+  decayWant: A ? decayStepsFor(A.E) : null,
   comp: $('comp-on').checked, shaped: $('shape-on').checked, flipped: $('flip-sign').checked,
   ss: ss ? { ...ss.status(), training: ssTraining, samples: ssRec.length,
     scores: ssScores() } : null,

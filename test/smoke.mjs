@@ -1707,6 +1707,89 @@ check('flexisim: commissioning identifies a compliance and a bending mode',
 check('flexisim: the identified compliance exceeds the gearbox alone, as a tip measurement must',
   fxc.compliance > 1 / fxc.K, `${fxc.compliance} vs ${1 / fxc.K}`);
 
+// ---- THE SOFTEST LINK, WHICH IS WHERE COMMISSIONING CRASHED ON A REAL DEVICE.
+//
+// ringFit needs four zero crossings and the bending period goes as 1/sqrt(E), so a
+// FIXED decay record held only 1.3 periods at the softest rung, the fit returned
+// null, and finishCommission() read .omega off it and threw:
+//     TypeError: Cannot read properties of null (reading 'omega')
+// The record is now sized from the mode it is measuring. This drives that exact rung
+// end to end and requires a MEASURED mode, not the analytic fallback -- an assertion
+// that only checked "no crash" would pass on the fallback and never notice the
+// record had gone back to being too short.
+{
+  const setE = async (v) => {
+    await fx.evaluate((val) => {
+      const e = document.getElementById('s-e'); e.value = val;
+      e.dispatchEvent(new Event('change'));
+    }, v);
+    await fx.waitForFunction(() => window.__flxDbg() && window.__flxDbg().phase === 'idle'
+      && window.__flxDbg().cells > 0, null, { timeout: 60000 });
+  };
+  const commission = async () => {
+    await fx.click('#commission');
+    await fx.waitForFunction(() => window.__flxDbg().phase === 'ready', null, { timeout: 300000 });
+    return fx.evaluate(() => window.__flxDbg());
+  };
+
+  await setE('0');
+  const soft0 = await fx.evaluate(() => window.__flxDbg());
+  const soft = await commission();
+  console.log(`  flexisim: softest link E ${soft0.E}, decay record ${soft0.decayWant} steps `
+    + `-> mode ${soft.mode.omega.toExponential(3)} (period ${soft.mode.period.toFixed(0)}), `
+    + `analytic ${!!soft.mode.analytic}`);
+  check('flexisim: the softest link commissions without crashing',
+    soft.phase === 'ready' && soft.compliance > 0, JSON.stringify(soft).slice(0, 160));
+  // NOT "MEASURED" -- THE SOFTEST LINK GENUINELY DOES NOT RING, and demanding a
+  // measurement the physics does not provide would be the wrong assertion. The
+  // structural damping is a fixed rate per step, so zeta = damping/(2w) rises as the
+  // link softens: 0.24 at E 0.20 up to 0.76 at E 0.02, where the decay is over before
+  // two cycles. What is required is that the page says so and disables a shaper that
+  // would be pure delay -- and that the fallback zeta is the one the damping implies
+  // rather than a number someone picked.
+  const zetaWant = 3e-3 / (2 * soft.mode.omega);
+  check('flexisim: the softest link is reported OVER-DAMPED rather than mis-measured',
+    soft.mode.analytic === true && soft.mode.overdamped === true
+    && Math.abs(soft.mode.zeta / zetaWant - 1) < 1e-9,
+    JSON.stringify(soft.mode));
+  const shapeDisabled = await fx.evaluate(() => document.getElementById('shape-on').disabled);
+  check('flexisim: and input shaping is disabled, because there is no mode to cancel',
+    shapeDisabled === true, String(shapeDisabled));
+
+  // A REBUILD MUST LEAVE THE PAGE USABLE. Changing a plant slider used to leave the
+  // Commission button disabled with nothing able to re-enable it -- a dead end that
+  // needed a page reload -- and, mid-commissioning, `comm` pointing at an arm that
+  // no longer existed.
+  await setE('5');
+  const rebuilt = await fx.evaluate(() => ({
+    dbg: window.__flxDbg(),
+    disabled: document.getElementById('commission').disabled,
+    label: document.getElementById('commission').textContent.trim(),
+  }));
+  check('flexisim: a plant rebuild leaves commissioning available again',
+    !rebuilt.disabled && /Commission/.test(rebuilt.label) && rebuilt.dbg.mode === null,
+    JSON.stringify(rebuilt).slice(0, 160));
+
+  // AND THE FALLBACK ITSELF IS EXERCISED, because a guard nothing ever runs is a
+  // guard nobody knows works. The FIT is stubbed out and the real handler judges
+  // it -- the same seam FlowSim uses for its diverged-run path.
+  await fx.evaluate(() => { window.__flxFailFit = true; });
+  const fb = await commission();
+  await fx.evaluate(() => { delete window.__flxFailFit; });
+  const fbBadge = await fx.textContent('#state-badge');
+  check('flexisim: a failed decay fit falls back and SAYS so, rather than throwing',
+    fb.phase === 'ready' && fb.mode && fb.mode.analytic === true && fb.mode.omega > 0,
+    JSON.stringify(fb.mode));
+  check('flexisim: and the badge names it as estimated rather than measured',
+    /ESTIMATED/.test(fbBadge), fbBadge);
+
+  // Leave a properly measured commissioning behind for everything below.
+  await setE('5');
+  const back = await commission();
+  check('flexisim: and re-commissioning a link that DOES ring recovers a measured mode',
+    !back.mode.analytic && !back.mode.overdamped, JSON.stringify(back.mode));
+}
+
 // Run a move with compensation OFF, then ON, and require the BIAS to collapse.
 // This is the page's headline and it is the one thing the wiring could silently
 // get wrong -- the physics is pinned in Node, but nothing there proves the
