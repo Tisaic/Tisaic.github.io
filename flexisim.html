@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:205,built:"2026-08-21T14:10:31Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:206,built:"2026-08-21T14:16:27Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -35,8 +35,10 @@
     .badge { position:absolute; left:10px; top:10px; font-size:.7rem; padding:4px 8px; border-radius:6px;
       background:rgba(15,23,42,.85); border:1px solid var(--line); color:var(--muted); }
     .badge.r { left:auto; right:10px; }
-    #err-chart { width:100%; height:170px; margin-top:8px; display:none; }
-    #err-chart.on { display:block; }
+    #err-chart, #ss-chart { width:100%; height:170px; margin-top:8px; display:none; }
+    #err-chart.on, #ss-chart.on { display:block; }
+    code { background:var(--card); padding:.1em .35em; border-radius:5px;
+      font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.92em; }
     .controls { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; align-items:center; }
     button { font-size:.95rem; padding:11px 14px; border:none; border-radius:10px; background:var(--accent);
       color:#2b1a02; font-weight:600; cursor:pointer; touch-action:manipulation; flex:1; min-width:104px; }
@@ -127,6 +129,33 @@
       drawn <b>exaggerated</b> by the slider above (they are well under a percent of the arm), and the
       exaggeration factor is printed on the stage so the picture can never be read as scale.
     </div>
+    <!-- SOFT SENSOR. The tracker is a commissioning instrument; this is what the
+         machine runs on afterwards. Placed under the tip-error chart so the thing
+         being inferred and the inference are read together. -->
+    <h3 style="margin:22px 0 0;font-size:.95rem">Soft sensor — the tip from motor signals alone</h3>
+    <p class="lead">The encoder cannot see the tip. This learns the tip error from signals a real
+      controller already has — commanded torque, encoder speed and acceleration, and the pose as
+      sin/cos — while the tracker is still on the machine, and then <b>locks</b>. Everything scored
+      below is what the machine would produce for the rest of its life; a model still adapting is
+      being told the answer.</p>
+    <div class="controls">
+      <button id="ss-train" class="sec" disabled>Start training ▶</button>
+      <button id="ss-lock" class="sec" disabled>Lock 🔒</button>
+    </div>
+    <div id="ss-chart"></div>
+    <dl class="stat" id="ss-stats"></dl>
+    <div class="note">
+      <h3>What it estimates, and against what</h3>
+      The target is the tip's offset from <b>where the encoder says it is</b> — the part of the error
+      the controller is structurally blind to. It differs from the error against the <i>commanded</i>
+      angle (the amber trace above) by exactly the following error, which the controller does know:
+      <code>tipError = trackingError − L·(encoder − commanded)</code>. Scores are nRMSE against the
+      truth's own spread, so <b>1.0 is no better than predicting the mean</b> — which is precisely what
+      "the tip is where the encoder says" scores, because the error averages to nearly zero while
+      never being zero. The <b>forecast</b> is a second target of the same readout, 150 steps ahead:
+      what a compensator needs, since a correction takes effect after the loop closes.
+    </div>
+
     <div class="note">
       <h3>Two errors, two mechanisms, one fix each</h3>
       Compensation pre-distorts the commanded angle by the deflection its identified compliance predicts,
@@ -200,6 +229,7 @@ import {
   buildLink, massProperties, deflectionProfile, armLength, peakSpeed, tipDeflection,
 } from './lib/flexisim/link.js';
 import { PlanarComp } from './lib/flexisim/compliance.js';
+import { TipSensor, nrmse } from './lib/flexisim/tipsensor.js';
 import {
   AngleProfile, PositionServo, TipCompensator, tipTrackingError, zvdShaper, ringFit,
 } from './lib/flexisim/compensator.js';
@@ -232,6 +262,14 @@ let chartOn = false;
 const CHART_EVERY = 25;          // solver steps between chart points, ~40 per bending period
 const hist = { t: [], e: [], ref: [] };
 let win = [];                 // recent tip errors, one move period
+// ---- soft sensor. SAMPLE_EVERY is the model's clock: its lag window is counted
+// in SAMPLES, so the interval must not be the same knob as steps-per-frame, which
+// is a viewing control. The frame loop below splits its budget at these
+// boundaries rather than sampling once per frame.
+const SAMPLE_EVERY = 10, SS_LEAD = 15, SS_WIN = 400;
+let ss = null, ssChartOn = false;
+const ssRec = [];             // {k, truth, est, fc} one per sample
+let ssScoreFrom = 0;
 
 function setBadge(s, cls) {
   const b = $('state-badge');
@@ -257,6 +295,11 @@ async function build() {
     kd: 2 * SERVO_BW * Jr / RATIO, inertia: Jr, ratio: RATIO, gravityTorque: tauG });
   A = { arm, servo, tauG, mp, link, joint, K, E };
   pc = null; mode = null; comp = null; k = 0;
+  ss = new TipSensor({ sampleEvery: SAMPLE_EVERY, lag: 6, stride: 2, warmup: 200,
+    lead: SS_LEAD });
+  ssRec.length = 0; ssScoreFrom = 0; ssTraining = false;
+  $('ss-train').disabled = true; $('ss-lock').disabled = true;
+  $('ss-train').textContent = 'Start training ▶';
   hist.t.length = 0; hist.e.length = 0; hist.ref.length = 0; win = [];
   $('comp-on').disabled = true; $('shape-on').disabled = true; $('flip-sign').disabled = true;
   $('comp-on').checked = false; $('shape-on').checked = false; $('flip-sign').checked = false;
@@ -346,7 +389,8 @@ function moveStep(n) {
   for (let i = 0; i < n; i++) {
     const ref = prof.at(k);
     const off = ($('comp-on').checked && comp) ? comp.offset(ref) : 0;
-    arm.step(servo.torque({ ...ref, theta: ref.theta + off }, arm.encoder()), 1);
+    const tau = servo.torque({ ...ref, theta: ref.theta + off }, arm.encoder());
+    arm.step(tau, 1);
     const e = tipTrackingError(arm, ref.theta);
     win.push(e);
     if (win.length > prof.period) win.shift();
@@ -355,6 +399,7 @@ function moveStep(n) {
     // rescales itself whenever the steps-per-frame slider moves -- a viewing
     // control changing the shape of a physics plot -- and at 200 steps/frame it
     // draws five points per bending period, which reads as a different waveform.
+    if (k % SAMPLE_EVERY === 0) ssTick(arm, tau);
     if (k % CHART_EVERY === 0) {
       hist.t.push(k); hist.e.push(e); hist.ref.push(ref.theta);
       if (hist.t.length > 1200) {
@@ -362,6 +407,113 @@ function moveStep(n) {
       }
     }
   }
+}
+
+// ------------------------------------------------------- soft sensor
+let ssTraining = false;
+
+function ssTick(arm, tauCmd) {
+  if (!ss) return;
+  const est = ss.observe(arm, tauCmd, 1);
+  // The lifecycle: calibrating -> training -> estimating/locked. Training only
+  // happens while the operator has asked for it, which is what makes "locked" a
+  // decision rather than a timeout.
+  if (est === null) {
+    if (ss.ss.frozen && $('ss-train').disabled) $('ss-train').disabled = false;
+    return;
+  }
+  const truth = arm.tipError().total;
+  if (ssTraining) ss.train(truth);
+  ssRec.push({ k, truth, est, fc: ss.forecast });
+  if (ssRec.length > 3000) { ssRec.splice(0, 1000); ssScoreFrom = Math.max(0, ssScoreFrom - 1000); }
+  if (!$('ss-train').disabled === false) $('ss-train').disabled = false;
+  $('ss-lock').disabled = ss.mode !== 'training' || ss.trained < 400;
+}
+
+/**
+ * Scores over the most recent window, and only over samples taken SINCE the last
+ * mode change -- a meter that spans a lock reports a blend of the model that was
+ * still being told the answer and the one that is not.
+ *
+ * THE FORECAST IS SCORED AT THE SAMPLE IT IS ABOUT, not the one it was issued at.
+ * Pairing it where it was issued shifts it by exactly the lead, which makes a
+ * perfect forecast look wrong and a lagging one look right.
+ */
+function ssScores() {
+  const from = Math.max(ssScoreFrom, ssRec.length - SS_WIN);
+  const n = ssRec.length - from;
+  if (n < 60) return null;
+  const truth = [], est = [], fc = [], want = [], persist = [];
+  for (let i = from; i < ssRec.length; i++) { truth.push(ssRec[i].truth); est.push(ssRec[i].est); }
+  for (let i = from; i + SS_LEAD < ssRec.length; i++) {
+    fc.push(ssRec[i].fc); persist.push(ssRec[i].est); want.push(ssRec[i + SS_LEAD].truth);
+  }
+  const out = { n, estimate: nrmse(est, truth), naive: nrmse(truth.map(() => 0), truth) };
+  if (want.length > 30) {
+    out.forecast = nrmse(fc, want);
+    out.persist = nrmse(persist, want);
+  }
+  return out;
+}
+
+function ssStats() {
+  const rows = [];
+  if (ss) {
+    const st = ss.status();
+    const label = st.mode === 'calibrating'
+      ? `calibrating the standardisation (${ssRec.length ? 'ready' : 'waiting for the run'})`
+      : (st.mode === 'training' ? (ssTraining ? `training — ${st.trained} pairs`
+        : `paused — ${st.trained} pairs trained`) : `LOCKED after ${st.trained} pairs`);
+    rows.push(['mode', `<span class="${st.mode === 'estimating' ? 'good' : ''}">${label}</span>`]);
+    rows.push(['features', `${st.features} (universal map on ${SAMPLE_EVERY}-step samples, `
+      + `6 lags x stride 2)`]);
+  }
+  const sc = ssScores();
+  if (sc) {
+    const f = (x) => (Number.isFinite(x) ? x.toFixed(4) : '—');
+    rows.push(['estimate nRMSE', `${f(sc.estimate)}   <span class="${sc.estimate < sc.naive ? 'good' : 'bad'}">`
+      + `vs "the tip is where the encoder says" ${f(sc.naive)}</span>`]);
+    if (sc.forecast !== undefined) {
+      rows.push([`forecast +${SS_LEAD * SAMPLE_EVERY} steps`,
+        `${f(sc.forecast)}   <span class="${sc.forecast < sc.persist ? 'good' : 'bad'}">`
+        + `vs persistence ${f(sc.persist)}</span>`]);
+    }
+    rows.push(['scored over', `${sc.n} samples since the last mode change`]);
+  } else if (ss && ss.mode !== 'calibrating') {
+    rows.push(['scores', 'collecting samples…']);
+  }
+  $('ss-stats').innerHTML = rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('');
+}
+
+function ssChart() {
+  if (ssRec.length < 40) return;
+  const from = Math.max(0, ssRec.length - SS_WIN);
+  const T = [], TR = [], ES = [], FT = [], FC = [];
+  for (let i = from; i < ssRec.length; i++) {
+    T.push(ssRec[i].k); TR.push(ssRec[i].truth); ES.push(ssRec[i].est);
+    // Drawn where it is ABOUT, not where it was issued.
+    FT.push(ssRec[i].k + SS_LEAD * SAMPLE_EVERY); FC.push(ssRec[i].fc);
+  }
+  const traces = [
+    { x: T, y: TR, name: 'truth (tracker)', line: { color: '#e2e8f0', width: 2 } },
+    { x: T, y: ES, name: 'estimate', line: { color: '#22d3ee', width: 1.5 } },
+    { x: FT, y: FC, name: `forecast +${SS_LEAD * SAMPLE_EVERY}`,
+      line: { color: '#a78bfa', width: 1.5, dash: 'dot' } },
+  ];
+  if (!ssChartOn) {
+    Plotly.newPlot('ss-chart', traces, {
+      margin: { l: 46, r: 10, t: 6, b: 26 }, paper_bgcolor: '#0b1220', plot_bgcolor: '#060a14',
+      font: { color: '#94a3b8', size: 9 }, showlegend: true,
+      legend: { orientation: 'h', y: 1.16, font: { size: 9 } },
+      xaxis: { gridcolor: '#1e293b', title: { text: 'solver steps', font: { size: 9 } } },
+      yaxis: { gridcolor: '#1e293b' },
+    }, { displayModeBar: false, responsive: true });
+    $('ss-chart').classList.add('on');
+    ssChartOn = true;
+    return;
+  }
+  Plotly.react('ss-chart', traces, $('ss-chart').layout,
+    { displayModeBar: false, responsive: true });
 }
 
 function winStats() {
@@ -543,7 +695,10 @@ function frame() {
     }
   }
   draw();
-  if (++frames % 6 === 0) { stats(); if (phase !== 'commission') chart(); }
+  if (++frames % 6 === 0) {
+    stats(); ssStats();
+    if (phase !== 'commission') { chart(); ssChart(); }
+  }
 }
 
 // -------------------------------------------------------------- wiring
@@ -557,6 +712,24 @@ $('run').addEventListener('click', () => {
 $('reset').addEventListener('click', async () => {
   running = false; phase = 'idle'; $('run').textContent = 'Run move ▶';
   busy = true; await build(); busy = false;
+});
+$('ss-train').addEventListener('click', () => {
+  if (!ss || ss.mode === 'estimating') return;
+  ssTraining = !ssTraining;
+  ssScoreFrom = ssRec.length;
+  $('ss-train').textContent = ssTraining ? 'Pause training ⏸' : 'Start training ▶';
+});
+$('ss-lock').addEventListener('click', () => {
+  if (!ss) return;
+  if (ss.mode === 'training') {
+    ss.lock(); ssTraining = false;
+    $('ss-train').textContent = 'Start training ▶'; $('ss-train').disabled = true;
+    $('ss-lock').disabled = true;
+    // THE METER RESTARTS AT THE LOCK. A score spanning it is a blend of the model
+    // that was still being told the answer and the one that is not.
+    ssScoreFrom = ssRec.length;
+    console.log(`[flexisim] soft sensor LOCKED after ${ss.trained} pairs`);
+  }
 });
 for (const id of ['comp-on', 'shape-on', 'flip-sign']) {
   $(id).addEventListener('change', () => { rebuildProfile(); win = []; stats(); });
@@ -631,6 +804,8 @@ window.__flxDbg = () => ({
   phase, running, k, K: A && A.K, E: A && A.E, cells: A && A.link.lattice.cellCount,
   compliance: pc && pc.compliance, mode, win: winStats(),
   comp: $('comp-on').checked, shaped: $('shape-on').checked, flipped: $('flip-sign').checked,
+  ss: ss ? { ...ss.status(), training: ssTraining, samples: ssRec.length,
+    scores: ssScores() } : null,
 });
 
 busy = true;

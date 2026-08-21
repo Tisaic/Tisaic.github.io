@@ -1723,6 +1723,28 @@ const kNow = (await fx.evaluate(() => window.__flxDbg())).k;
 check('flexisim: the error chart tracks the run rather than freezing on its first points',
   chartEnd > kNow - 600, `chart ends at ${chartEnd}, run is at ${kNow}`);
 
+// THE SOFT SENSOR, END TO END: calibrate, train against the tracker, LOCK, and
+// score what the machine would produce afterwards. The physics is pinned in Node;
+// what this checks is that the page's own sampling meets the model's cadence
+// contract -- the lag window is counted in SAMPLES, and a frame loop free to step
+// a partial interval would pair a reading with a plant state between boundaries.
+await fx.click('#ss-train');
+await runFor(14000);
+await fx.click('#ss-lock');
+await runFor(4000);
+const sd = (await fx.evaluate(() => window.__flxDbg())).ss;
+console.log(`  flexisim: soft sensor ${sd.mode} after ${sd.trained} pairs — estimate `
+  + `${sd.scores.estimate.toFixed(4)} vs naive ${sd.scores.naive.toFixed(4)}, forecast `
+  + `${(sd.scores.forecast || NaN).toFixed(4)} vs persistence ${(sd.scores.persist || NaN).toFixed(4)}`);
+check('flexisim: the soft sensor reaches a locked, frozen readout',
+  sd.mode === 'estimating' && sd.frozen && sd.trained > 800, JSON.stringify(sd).slice(0, 160));
+check('flexisim: and the LOCKED estimate beats the controller\'s own view of the tip',
+  sd.scores.estimate < 0.7 * sd.scores.naive,
+  `${sd.scores.estimate} vs ${sd.scores.naive}`);
+check('flexisim: the forecast beats persistence on the readout\'s own estimate',
+  sd.scores.forecast < sd.scores.persist,
+  `${sd.scores.forecast} vs ${sd.scores.persist}`);
+
 // The canvas must actually be painted. An unpainted canvas is not an error and
 // not blank -- it is WHITE, which against this page reads as broken.
 const painted = await fx.evaluate(() => {

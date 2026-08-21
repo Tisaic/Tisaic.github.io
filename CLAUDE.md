@@ -2601,8 +2601,29 @@ one.
    boundary sits where the scheme puts it, not where the loop bounds are — the same
    lesson as Poiseuille's H = Nz−2.
 
-   NOT YET BUILT: the WGSL kernel; a second and third joint; the soft sensor and its
-   forecast on the PAGE (they are library-and-Node only so far); and `ServoFF`, the
+   **BRICK 13 — THE SOFT SENSOR ON THE PAGE.** Under the tip-error chart: the
+   lifecycle as buttons (calibrating → **Start training ▶** → **Lock 🔒** →
+   estimating), a chart of truth against the estimate and the +150-step forecast,
+   and the scores. MEASURED IN THE BROWSER, locked after 1440 pairs on the same
+   servo-driven arm: **estimate 0.2600 against 1.0641** for "the tip is where the
+   encoder says" (4.1×), **forecast 0.1932 against 0.7238** for persistence (3.7×)
+   — the Node numbers, reproduced through the page's own sampling.
+   THE FORECAST IS DRAWN WHERE IT IS ABOUT, not where it was ISSUED: drawing it at
+   the moment of issue shifts it by exactly the lead, which makes a perfect forecast
+   look wrong and a lagging one look right (FlowSim's probe chart documents the same
+   trap). And THE METER RESTARTS AT THE LOCK, because a score spanning it is a blend
+   of the model that was still being told the answer and the one that is not.
+   THE PAGE HAD TO MEET THE MODEL'S CADENCE CONTRACT, which is what
+   `TipSensor.observe()` exists for: the lag window is counted in SAMPLES, so the
+   frame loop splits its step budget at sample boundaries rather than reading once
+   per frame — a frame loop free to step a partial interval pairs a reading with a
+   plant state between boundaries, and steps-per-frame is a VIEWING control.
+   The target is the ENCODER-relative error — the part the controller is
+   structurally blind to — and the page states the identity that converts it to the
+   command-relative one the stage draws, so the two traces on one screen cannot be
+   confused for the same quantity.
+
+   NOT YET BUILT: the WGSL kernel; a second and third joint; and `ServoFF`, the
    drive-side feedforward, still unused.
 
    The second regime on the same lattice engine: a 2–3 joint arm whose TOOL TIP
