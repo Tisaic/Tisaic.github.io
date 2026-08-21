@@ -165,6 +165,12 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # joint-vs-link split of tip error MEASURED rather than inherited from the
     # literature. It is the number the link resolution is chosen from.
     node test/flexisim/arm.test.mjs
+    # THE CHAIN: two joints, two lattice links, one coupled solve. Rigid-core
+    # conservation laws (energy, and the momentum conjugate to the cyclic shoulder
+    # angle) plus the closed forms for the mass matrix, the gravity torques and the
+    # elbow's own acceleration. Two seconds -- the conservation checks never touch a
+    # lattice, which is the whole reason stepRigid() is separable.
+    node test/flexisim/arm2r.test.mjs
     # The payoff: tip error inferred from motor-side signals alone, trained
     # against the tracker and then LOCKED, against the physics-based compliance
     # model a good engineer would build.

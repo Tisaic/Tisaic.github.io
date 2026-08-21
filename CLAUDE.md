@@ -2623,8 +2623,63 @@ one.
    command-relative one the stage draws, so the two traces on one screen cannot be
    confused for the same quantity.
 
-   NOT YET BUILT: the WGSL kernel; a second and third joint; and `ServoFF`, the
-   drive-side feedforward, still unused.
+   **BRICK 14 — THE SECOND JOINT, i.e. THE FIRST THING HERE THAT IS ACTUALLY A
+   CHAIN.** `lib/flexisim/arm2r.js`: two lumped joints, two lattice links, ONE
+   COUPLED SOLVE. Three terms appear that a single joint cannot show and that a
+   per-joint model has no way to represent.
+   **THE INERTIA IS THE CONFIGURATION.** M11 carries 2 m₂L₁c₂cos q₂, measured
+   **77780 straight against 38468 folded — 2.02×** — so a controller tuned at one
+   pose is mistuned at another. Every constant is INTEGRATED FROM THE LATTICES, the
+   same discipline as brick 6 and for the same reason.
+   **THE JOINTS ARE COUPLED THROUGH M**, so accelerating the shoulder puts M₂₁α₁ on
+   the elbow whether or not the elbow was asked to do anything — the term the tab's
+   premise is about, and the encoder on joint 2 sees none of it.
+   **THE SECOND BODY FRAME'S ORIGIN ACCELERATES AS WELL AS ROTATING.** The elbow is
+   being swung around by joint 1, so link 2's frame carries the elbow's LINEAR
+   acceleration — tangential L₁α₁ and centripetal L₁ω₁², two parts with different
+   signatures, so a test that only accelerates from rest sees one and a test that
+   only spins at constant rate sees the other.
+   **THE CLOSED FORM THAT PINS IT IS THE OFFSET ROTATING BAR.** Spun at constant ω
+   with the elbow straight, link 2's σ_xx must be ½ρω²((L₁+L)² − R²), the profile
+   about the SHOULDER rather than about its own root. Measured: **0.60% against the
+   offset profile and 212.9% against the un-offset one** — and with the elbow term
+   DROPPED it lands on the other one instead (69.4% / 4.2%), which is what makes the
+   omission a plausible wrong answer rather than a visible failure.
+   THE HALF-CELL BIT AGAIN, and it cost 11%: the free surface is the OUTER FACE of
+   the last material cell, half a cell beyond the last cell CENTRE that
+   `armLength()` reports. Using `armLength` as the free radius fits to 11.15% and
+   reads like a missing physics term rather than an off-by-half. Same lesson as
+   gravity's ρg(NX−x) and Poiseuille's H = Nz−2.
+   **WHERE THERE IS NO CLOSED FORM THE CHECK IS A CONSERVATION LAW, WHICH IS
+   BETTER** — it is not anything the solver computes. With no gravity and no joint
+   torques the arm is closed and conservative, so the ENERGY is constant and so is
+   **the momentum conjugate to q₁** (Noether: with no gravity the shoulder angle is
+   a CYCLIC coordinate — the Lagrangian depends on the elbow angle and not on where
+   the arm is pointing). Measured over 20000 free steps: energy drift 2.1e-4,
+   momentum drift 1.6e-4, with the shoulder sweeping 3.2 rad. **AND IT HAS TEETH**:
+   the Coriolis terms are exactly what make that momentum conserved, so stepping
+   without them drifts **2.3e-2 in a tenth of the run** — asserted, because a
+   conservation law that would pass with the physics removed is not a check.
+   THE FREE ARM'S ELBOW OSCILLATES RATHER THAN SPINNING, which is the physics and
+   not a stuck integrator: with the energy and p₁ both fixed the elbow moves in an
+   effective one-degree-of-freedom potential and is generally trapped in it. The
+   shoulder is the coordinate that sweeps, so that is what the non-triviality check
+   reads — the first version read the elbow, saw 0.02 rad, and would have called a
+   correct run stuck.
+   `Joint.stepMotor()` splits out because the LOAD side can no longer be integrated
+   inside each joint — M couples them — while the motor half genuinely is per-joint,
+   sitting upstream of the gear teeth and seeing only the reaction τ/N. `step()` is
+   unchanged as the single-DOF composition of the two halves.
+   AND THE SHOULDER'S WIND-UP IS LEVERED BY THE WHOLE REACH, not by link 2: a
+   milliradian at the shoulder costs (L₁+L₂)/L₂ times what a milliradian at the
+   elbow does, and the reach itself folds with the elbow (23.0 straight, 4.0
+   folded). `tipError()` reports the four contributions separately rather than
+   folding link 1's bending in with a lever arm it does not have — that term needs
+   the SLOPE at link 1's tip, not its deflection.
+
+   NOT YET BUILT: the WGSL kernel; the 2R arm on the PAGE (it is library-and-Node
+   only so far) and its soft sensor; a third joint; and `ServoFF`, the drive-side
+   feedforward, still unused.
 
    The second regime on the same lattice engine: a 2–3 joint arm whose TOOL TIP
    is measured by a laser tracker during dynamic moves (ground truth), while the
