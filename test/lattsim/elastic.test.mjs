@@ -17,6 +17,7 @@ import { CELL, region } from '../../lib/lattsim/materials.js';
 import {
   ElasticSolidOperator, lameFrom, engineeringFrom, waveSpeeds, CFL_LIMIT, SIG,
 } from '../../lib/lattsim/operators/elastic.js';
+import { NonInertialFrameOperator } from '../../lib/lattsim/operators/frame.js';
 
 let failed = 0;
 function check(name, cond, detail) {
@@ -422,9 +423,24 @@ async function cantilever({ H, aspect = 4, CL = 3, steps, damping, precision = '
   await sim.build({ backend: 'cpu', precision });
 
   const L = sim.lattice, N = L.cellCount, f = sim.backend.write('force');
-  const tip = [];
-  L.forEachCell((x, y, z, i) => { if (sim.flags[i] === CELL.ELASTIC && x === NX - 1) tip.push(i); });
-  for (const i of tip) f[1 * N + i] = F / tip.length;          // transverse load, +y
+  // THE LOAD IS APPLIED TO FULL-VOLUME, SYMMETRIC NODES, and that is not
+  // fussiness. f.y drives the v.y node at (x, y+1/2, z), whose control volume is
+  // half from cell y and half from cell y+1. Loading the whole tip layer
+  // y = 2..2+H-1 puts force on the node at the top surface, which has HALF the
+  // volume and therefore delivers half the force -- while its mirror node at the
+  // bottom surface is owned by a VACUUM cell and gets none at all. Measured: 8.3%
+  // of the intended load silently missing, and its centroid 0.27 cells off the
+  // section centre, which is a torsion nobody asked for. Loading y = 2..2+H-2
+  // uses only nodes that straddle two material cells, and their centroid is the
+  // section centre exactly.
+  const tip = [], loaded = [];
+  L.forEachCell((x, y, z, i) => {
+    if (sim.flags[i] !== CELL.ELASTIC) return;
+    if (x !== NX - 1) return;
+    tip.push(i);
+    if (y < 2 + H - 1) loaded.push(i);
+  });
+  for (const i of loaded) f[1 * N + i] = F / loaded.length;    // transverse load, +y
   sim.advance(steps);
 
   const u = sim.backend.read('disp'), v = sim.backend.read('vel');
@@ -457,6 +473,7 @@ async function cantilever({ H, aspect = 4, CL = 3, steps, damping, precision = '
   check('the cantilever reaches static equilibrium', c.vmax < 1e-6 * Math.abs(c.delta),
     `peak |v| ${c.vmax.toExponential(2)} against a deflection ${c.delta.toExponential(4)}`);
   const err = c.delta / c.theory - 1;
+  if (process.env.ELASTIC_VERBOSE) console.log(`    [cantilever] delta ${c.delta.toExponential(4)} theory ${c.theory.toExponential(4)} err ${(100*err).toFixed(3)}% |v| ${c.vmax.toExponential(1)}`);
   check('a tip-loaded cantilever matches FL^3/3EI + the shear term',
     Math.abs(err) < 0.03,
     `delta ${c.delta.toExponential(4)} vs ${c.theory.toExponential(4)} (${(100 * err).toFixed(2)}%), `
@@ -497,6 +514,225 @@ if (process.env.SUITE === 'full') {
     errs[0] / errs[1] > (6 / 4) ** 2 && errs[1] / errs[2] > (8 / 6) ** 2,
     `errors ${errs.map((e) => (100 * e).toFixed(3) + '%').join(' -> ')}, ratios `
     + `${(errs[0] / errs[1]).toFixed(2)}, ${(errs[1] / errs[2]).toFixed(2)}`);
+}
+
+// ========================= BRICK 4: GRAVITY AND THE NON-INERTIAL FRAME
+//
+// Per-link body frames are what make a serial arm fit in memory (~2.3 MiB against
+// ~240 MiB dense), and the price is that those frames are NOT inertial. The
+// fictitious forces are cheap -- local per-cell body forces, structurally
+// identical to gravity -- but a missing one produces a plausible wrong answer
+// rather than an error, so each gets its own closed form here.
+//
+// A BAR ALONG x, CLAMPED AT x = 0. Both closed forms below are statements about
+// sigma_xx(x) in that bar, which makes them directly comparable: one is linear in
+// x and the other quadratic, so a term applied with the wrong r, the wrong sign
+// or the wrong power cannot satisfy both.
+async function loadedBar({ frame, LEN = 24, H = 4, CL = 2, steps = 9000, damping = 0.005 }) {
+  const E = 0.05, nu = 0.3, rho = 1;
+  const NX = CL + LEN, NY = H + 4, NZ = H + 4;
+  const sim = new Simulation({ lattice: { size: [NX, NY, NZ], spacing: 1 } });
+  sim.addRegion(region.all(CELL.FLUID));
+  sim.addRegion(region.box(CELL.ELASTIC, [0, 2, 2], [NX, 2 + H, 2 + H]));
+  sim.addRegion(region.box(CELL.CLAMPED, [0, 2, 2], [CL, 2 + H, 2 + H]));
+  // ORDER MATTERS AND IS DECLARED: the frame WRITES the force field, the elastic
+  // operator READS it. Nothing else writes it, so the solver's write-discipline
+  // check accepts the pair and the coupling is stated rather than implied by the
+  // order they happen to run in.
+  sim.addPhysics(new NonInertialFrameOperator({ ...frame, rho }));
+  sim.addPhysics(new ElasticSolidOperator({ E, nu, rho, damping,
+    bodyForce: true, displacement: true }));
+  await sim.build({ backend: 'cpu', precision: 'f64' });
+  sim.advance(steps);
+
+  const L = sim.lattice, N = L.cellCount;
+  const s = sim.backend.read('sig'), v = sim.backend.read('vel');
+  // sigma_xx averaged over the section at each x, so the profile is a function of
+  // x alone and a single off-axis cell cannot carry the result.
+  const profile = [];
+  for (let x = 0; x < NX; x++) {
+    let acc = 0, n = 0;
+    for (let y = 2; y < 2 + H; y++) for (let z = 2; z < 2 + H; z++) {
+      const i = L.index(x, y, z);
+      if (sim.flags[i] !== CELL.ELASTIC && sim.flags[i] !== CELL.CLAMPED) continue;
+      acc += s[0 * N + i]; n++;
+    }
+    profile.push(n ? acc / n : 0);
+  }
+  let vmax = 0; for (let i = 0; i < 3 * N; i++) vmax = Math.max(vmax, Math.abs(v[i]));
+  await sim.destroy();
+  return { profile, vmax, NX, LEN, CL, H, rho };
+}
+
+// The free end sits at the outer face of the last material cell; the clamp plane
+// at the last held node. Both were pinned by the cantilever above.
+const barGeom = (r) => ({ tipX: r.NX - 0.5, rootX: r.CL - 0.5 });
+
+// --------------------------------------------------------- gravity: a hanging bar
+{
+  // A bar held at one end under a uniform body force carries the weight of
+  // everything beyond it: sigma_xx(x) = rho g (x_tip - x). Linear, and the slope
+  // is rho*g exactly -- so a gravity applied at the wrong magnitude shows up in
+  // the slope and one applied to the wrong cells shows up as curvature.
+  const g = 2e-6;
+  const r = await loadedBar({ frame: { gravity: [g, 0, 0] } });
+  const { tipX, rootX } = barGeom(r);
+  check('the hanging bar settles', r.vmax < 1e-9, r.vmax.toExponential(2));
+  let worst = 0, at = 0;
+  const scale = r.rho * g * (tipX - rootX);
+  for (let x = r.CL + 1; x < r.NX - 1; x++) {
+    const want = r.rho * g * (tipX - x);
+    const e = Math.abs(r.profile[x] - want) / scale;
+    if (e > worst) { worst = e; at = x; }
+  }
+  check('gravity: sigma_xx(x) = rho g (L - x), the weight hanging below',
+    worst < 1e-6, `worst ${(100 * worst).toFixed(4)}% of the root stress, at x=${at}`);
+  // ...AND THE HALF CELL IS PINNED, the same way Poiseuille's H = Nz-2 is. The
+  // free surface is the OUTER FACE of the last material cell, NX - 1/2. Placing
+  // it at the last cell's centre or half a cell inside gives 2.13% and 4.35%
+  // against this one's exact zero, so the interpretation is asserted rather than
+  // assumed -- a half cell is exactly the size of error this scheme produces when
+  // a body force is booked to the wrong volume.
+  const altWorst = [r.NX - 1, r.NX - 1.5].map((tip) => {
+    let w = 0;
+    const sc = r.rho * g * (tip - rootX);
+    for (let x = r.CL + 1; x < r.NX - 1; x++) {
+      w = Math.max(w, Math.abs(r.profile[x] - r.rho * g * (tip - x)) / sc);
+    }
+    return w;
+  });
+  if (process.env.ELASTIC_VERBOSE) console.log(`    [gravity] worst ${(100*worst).toExponential(2)}%, alternatives ${altWorst.map(w=>(100*w).toFixed(2)+'%').join(', ')}`);
+  check('and the free surface really is the outer face, not the last cell centre',
+    altWorst.every((w) => w > 0.01),
+    `alternatives ${altWorst.map((w) => (100 * w).toFixed(2) + '%').join(', ')}`);
+}
+
+// ------------------------------------------- the equivalence principle, exactly
+{
+  // A FRAME ACCELERATING AT -g IS INDISTINGUISHABLE FROM GRAVITY g, and here that
+  // is not an approximation: both enter the same expression as `gravity -
+  // originAccel`, so the two runs must agree BIT FOR BIT. It is a cheap check and
+  // it is the one that catches a sign error in originAccel, which is otherwise
+  // invisible -- a wrong sign there still produces a smooth, plausible stress
+  // profile, just of the wrong body.
+  const g = 2e-6;
+  const a = await loadedBar({ frame: { gravity: [g, 0, 0] }, steps: 1200 });
+  const b = await loadedBar({ frame: { originAccel: [-g, 0, 0] }, steps: 1200 });
+  let same = true;
+  for (let x = 0; x < a.profile.length; x++) if (a.profile[x] !== b.profile[x]) same = false;
+  check('a frame accelerating at -g is bit-for-bit identical to gravity g', same,
+    `root stress ${a.profile[a.CL + 1].toExponential(6)} vs ${b.profile[b.CL + 1].toExponential(6)}`);
+}
+
+// ------------------------------------------ centrifugal: the spinning bar, exactly
+{
+  // THE CHECK THAT GUARDS THE FICTITIOUS FORCES. A bar spinning about its clamped
+  // end at constant Omega is in equilibrium under the centrifugal body force
+  // rho*w^2*r, and integrating that from the free end inward gives
+  //
+  //     sigma_xx(r) = 1/2 rho w^2 (L^2 - r^2)
+  //
+  // QUADRATIC, where gravity's profile is LINEAR. That is what makes this a real
+  // test of the centrifugal term rather than of "some outward force": a term
+  // built with a constant instead of r, or with r measured from the lattice
+  // origin instead of the pivot, still produces a monotone stress profile that
+  // looks entirely reasonable and fits neither closed form.
+  //
+  // Coriolis is OFF here, and that is not a dodge: at equilibrium v = 0, so the
+  // Coriolis force is identically zero and including it changes nothing. Turning
+  // it off makes the attribution exact -- whatever is measured is centrifugal.
+  const w = 1e-3;
+  // A CENTRIFUGAL LOAD BUILDS SLOWER THAN A GRAVITY ONE at the same root stress,
+  // because it is concentrated toward the tip where the beam is softest, so it
+  // gets its own step count rather than inheriting the default.
+  const r = await loadedBar({ frame: { omega: [0, 0, w], pivot: [1.5, 0, 0], coriolis: false },
+    steps: 45000 });
+  const { tipX, rootX } = barGeom(r);
+  check('the spinning bar settles', r.vmax < 1e-10, r.vmax.toExponential(2));
+  // r is measured from the PIVOT, which is the clamp plane.
+  const Lb = tipX - rootX;
+  const scale = 0.5 * r.rho * w * w * Lb * Lb;
+  let worst = 0, at = 0;
+  for (let x = r.CL + 1; x < r.NX - 1; x++) {
+    const rr = x - rootX;
+    const want = 0.5 * r.rho * w * w * (Lb * Lb - rr * rr);
+    const e = Math.abs(r.profile[x] - want) / scale;
+    if (e > worst) { worst = e; at = x; }
+  }
+  if (process.env.ELASTIC_VERBOSE) console.log(`    [centrifugal] worst ${(100*worst).toFixed(3)}% at x=${at}`);
+  // 0.2% and not 3%: the measurement is 0.043%, and a loose tolerance here would
+  // pass with the r in the centrifugal term measured from the wrong origin.
+  check('centrifugal: sigma_xx(r) = 1/2 rho w^2 (L^2 - r^2), quadratic and not linear',
+    worst < 0.002, `worst ${(100 * worst).toFixed(2)}% of the root stress, at x=${at}`);
+  // ...and it really is the quadratic. Fitting the best LINEAR profile to the
+  // same data must be visibly worse, or the check above would pass on a term of
+  // the wrong shape that happened to have the right endpoint values.
+  let linWorst = 0;
+  for (let x = r.CL + 1; x < r.NX - 1; x++) {
+    const rr = x - rootX;
+    const lin = scale * (1 - rr / Lb);          // same endpoints, wrong shape
+    linWorst = Math.max(linWorst, Math.abs(r.profile[x] - lin) / scale);
+  }
+  if (process.env.ELASTIC_VERBOSE) console.log(`    [centrifugal] linear-fit worst ${(100*linWorst).toFixed(2)}%`);
+  check('and a linear profile through the same endpoints fits far worse',
+    linWorst > 8 * Math.max(worst, 1e-6),
+    `quadratic ${(100 * worst).toFixed(2)}% vs linear ${(100 * linWorst).toFixed(2)}%`);
+}
+
+// ------------------------------------------------- Coriolis does no work, exactly
+{
+  // Coriolis is the one term with no static closed form, because it vanishes at
+  // equilibrium -- which is exactly why it needs a different kind of check. It is
+  // -2 Omega x v, so it is perpendicular to v by construction and its power
+  // f . v must be identically zero, at every cell, at every instant, for any
+  // velocity field whatsoever. That is an algebraic identity rather than a
+  // physical result, so the tolerance is round-off and nothing else.
+  const w = 2e-3;
+  const sim = new Simulation({ lattice: { size: [12, 8, 8], spacing: 1 } });
+  sim.addRegion(region.all(CELL.ELASTIC));
+  const frame = new NonInertialFrameOperator({ omega: [w * 0.3, -w, w * 0.7], pivot: [6, 4, 4],
+    coriolis: true, rho: 1 });
+  sim.addPhysics(frame);
+  sim.addPhysics(new ElasticSolidOperator({ E: 0.05, nu: 0.3, rho: 1,
+    bodyForce: true, displacement: true }));
+  await sim.build({ backend: 'cpu', precision: 'f64' });
+
+  // A deliberately messy velocity field, so "perpendicular" is not being tested
+  // on a special case.
+  const L = sim.lattice, N = L.cellCount, v = sim.backend.write('vel');
+  L.forEachCell((x, y, z, i) => {
+    v[0 * N + i] = 1e-3 * Math.sin(0.7 * x + 1.1 * y);
+    v[1 * N + i] = 1e-3 * Math.cos(0.3 * y - 0.9 * z);
+    v[2 * N + i] = 1e-3 * Math.sin(1.3 * z + 0.5 * x);
+  });
+  // THE FORCE IS WRITTEN FROM THE VELOCITY AT THE START OF THE STEP, and the
+  // elastic pass then overwrites that velocity -- so dotting the force against
+  // `v` after advancing compares the Coriolis force with a DIFFERENT velocity
+  // than the one that produced it. Measured that way it reported |f.v|/(|f||v|)
+  // = 0.236 and looked like a broken cross product. Keep the velocity it used.
+  const v0 = Float64Array.from(v);
+  sim.advance(1);
+  const f = sim.backend.read('force');
+  // Isolate Coriolis by subtracting the position-only part the operator can
+  // report for itself -- comparing against the operator's own expression rather
+  // than a re-derivation, which would only be testing the algebra twice.
+  let worst = 0, mag = 0;
+  L.forEachCell((x, y, z, i) => {
+    const base = [frame.specificForceAt([x + 0.5 - 6, y - 4, z - 4])[0],
+                  frame.specificForceAt([x - 6, y + 0.5 - 4, z - 4])[1],
+                  frame.specificForceAt([x - 6, y - 4, z + 0.5 - 4])[2]];
+    const c = [f[0 * N + i] - base[0], f[1 * N + i] - base[1], f[2 * N + i] - base[2]];
+    const vv = [v0[0 * N + i], v0[1 * N + i], v0[2 * N + i]];
+    const power = c[0] * vv[0] + c[1] * vv[1] + c[2] * vv[2];
+    const norm = Math.hypot(...c) * Math.hypot(...vv);
+    if (norm > 0) worst = Math.max(worst, Math.abs(power) / norm);
+    mag = Math.max(mag, Math.hypot(...c));
+  });
+  check('Coriolis is present at all (it is not silently zero)', mag > 1e-9, mag.toExponential(2));
+  if (process.env.ELASTIC_VERBOSE) console.log(`    [coriolis] worst |f.v|/(|f||v|) = ${worst.toExponential(2)}, |f_cor| ${mag.toExponential(2)}`);
+  check('Coriolis does no work: f . v is zero to round-off at every cell',
+    worst < 1e-12, `worst |f.v| / (|f||v|) = ${worst.toExponential(2)}`);
+  await sim.destroy();
 }
 
 console.log(failed ? `\n${failed} elastic check(s) failed\n` : '\nelastic: all checks passed\n');
