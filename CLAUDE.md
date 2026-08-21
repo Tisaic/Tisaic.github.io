@@ -144,7 +144,7 @@ one.
 | `test/smoke.mjs` | Playwright checks + screenshots for the console, doc viewer, NGRC demo, and FlowSim. |
 | `test/lattsim/` | Node tests for the lattice engine: stencil isotropy, indexing/units, conservation (f32 + f64), Poiseuille vs the analytic parabola. |
 | `flexisim.html` | FlexiSim: compliant serial chains (Move / Chain / Verify / Architecture) using `lib/flexisim` on `lib/lattsim`. Commission the arm in the browser, watch compensation and input shaping move two different numbers, then watch the elbow's gearbox load up because the shoulder accelerated. |
-| `lib/flexisim/` | The COMPOSITION layer for compliant serial chains: lumped joints (`joint.js`), a lattice link in its own body frame (`link.js`), the hybrid arm (`arm.js`), the tip-error soft sensor (`tipsensor.js`), the structured compliance identification (`compliance.js`) and the active compensator (`compensator.js`). Depends on `lib/lattsim` for the link and `lib/ngrc` for the models. |
+| `lib/flexisim/` | The COMPOSITION layer for compliant serial chains: lumped joints (`joint.js`), a lattice link in its own body frame (`link.js`), the hybrid arm (`arm.js`), the coupled two-link chain (`arm2r.js`), the tip-error soft sensor (`tipsensor.js`) and its chain version (`chainsensor.js`), the structured compliance identification (`compliance.js`) and the active compensator (`compensator.js`). Depends on `lib/lattsim` for the link and `lib/ngrc` for the models. |
 | `test/flexisim/` | Node tests for the hybrid plant: the joint against its closed forms, the joint-vs-link split, the soft sensor, compliance identification, and the compensation 2×2. No browser, no adapter, seconds. |
 | `CLAUDE.md` | This file. |
 
@@ -2712,10 +2712,52 @@ one.
    FROZEN at its first points — a gap of tens of thousands — not for one a frame
    behind.
 
-   NOT YET BUILT: the WGSL kernel; a soft sensor on the CHAIN (the Move tab has one,
-   and a two-joint version is the interesting case — the coupling is exactly what a
-   per-joint estimator cannot see); a third joint; and `ServoFF`, the drive-side
-   feedforward, still unused.
+   **BRICK 16 — THE TOOL SENSOR ON A CHAIN, AND THE ARCHITECTURE QUESTION A CHAIN
+   MAKES ASKABLE.** `lib/flexisim/chainsensor.js`. The single-joint sensor had one
+   possible set of inputs; a chain forces the choice a real controller faces —
+   **PER-JOINT** (each axis estimates from its own signals: what a distributed drive
+   naturally supports, and what every servo vendor's compensation package looks
+   like) or **WHOLE-ARM** (one model reads every axis, which needs the signals
+   gathered in one place and is a real cost on a real machine).
+   MEASURED, locked, 496 samples: whole-arm learner **0.0689** against a RIGID
+   two-joint compliance model that is given M(q), both stiffnesses and both lever
+   arms (**0.9396**, 13.6×) and against "the tool is where the encoders say"
+   (1.0380). The forecast 150 steps ahead scores 0.1707 against 0.8555 for
+   persistence.
+   **THE COMPARISON IS ONLY WORTH ANYTHING AT MATCHED CAPACITY**, and getting that
+   right is most of the work: the whole-arm model reads 10 signals and a single-axis
+   one reads 5, so at equal lag counts it would have three times the features and
+   part of any gap would be model SIZE rather than information. Six lags for the
+   single-axis models against three for the whole-arm one puts all of them at the
+   same 30-dimensional base and the same 544-feature basis — and hands the
+   single-axis models a window TWICE AS LONG, which if anything favours them.
+     whole arm      **0.0689**
+     shoulder only    0.1373   (2.0×)
+     elbow only       0.1771   (2.6×)
+   **IF YOU CAN ONLY INSTRUMENT ONE AXIS, INSTRUMENT THE SHOULDER** — it is levered
+   by the whole reach AND it drives the coupling that loads the elbow, so its
+   signals carry more about the tool than the elbow's own do. That is the opposite
+   of the intuition that the joint nearest the tool matters most.
+   **AND NEITHER SINGLE-AXIS MODEL IS BLIND, WHICH IS THE HONEST HALF.** "The elbow
+   cannot see the shoulder's acceleration by construction" is the tidier claim and
+   it is WRONG: the coupling back-drives the elbow's encoder and the elbow's servo
+   fights it, so it leaves an indirect trace in the elbow's own signals through two
+   layers of loop dynamics. Both single-axis models beat the naive view comfortably.
+   They are handicapped, not blind.
+   **THE GOLDEN RATIO IS NOT DECORATION.** The move profile is exactly periodic, and
+   a 544-feature model fitted to a periodic stream can score beautifully by learning
+   WHERE IN THE CYCLE it is — at which point the test set is the same cycle it
+   trained on and the number means nothing. The command's amplitude is modulated at
+   an INCOMMENSURATE rate so every cycle is a state the model has not seen. Measured:
+   modulation off **0.0142**, on **0.0454** at the same settings — and a window taken
+   FURTHER out still, on states even less like the training ones, reads **0.0355**,
+   LOWER rather than higher. That is what says it generalises rather than recalls,
+   and it is the check the single-joint sensor never needed because its plant was
+   never this over-parameterised.
+
+   NOT YET BUILT: the WGSL kernel; the chain's soft sensor on the PAGE (the Chain
+   tab shows the coupling but does not yet estimate the tool from it); a third
+   joint; and `ServoFF`, the drive-side feedforward, still unused.
 
    The second regime on the same lattice engine: a 2–3 joint arm whose TOOL TIP
    is measured by a laser tracker during dynamic moves (ground truth), while the

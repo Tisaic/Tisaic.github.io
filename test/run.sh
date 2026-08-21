@@ -175,6 +175,11 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # against the tracker and then LOCKED, against the physics-based compliance
     # model a good engineer would build.
     node test/flexisim/tipsensor.test.mjs
+    # THE ARCHITECTURE QUESTION A CHAIN MAKES ASKABLE: per-joint signals against
+    # whole-arm ones, at MATCHED model capacity so the gap is information and not
+    # feature count. 5 s quick (the whole-arm readout alone), 20 s full (the
+    # three-way comparison and the forecast).
+    node test/flexisim/chainsensor.test.mjs
     # The STRUCTURED rival: identify the compliance itself (a physical constant)
     # rather than the error, from static pose touches the way CompCommissioner
     # expects. Full tier -- six settles.
