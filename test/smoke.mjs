@@ -1891,6 +1891,60 @@ const kNow = (await fx.evaluate(() => window.__flxDbg())).k;
 check('flexisim: the error chart tracks the run rather than freezing on its first points',
   chartEnd > kNow - 2000, `chart ends at ${chartEnd}, run is at ${kNow}`);
 
+// FIVE SERIES, AND THE ONE THAT PROVES THE CLAIM IS THE PAIR: with the model
+// correction on, the MOTOR is deliberately off target and the TOOL is on it. The
+// chart is asserted on its DATA rather than on its existence -- a chart with the
+// right legend and the wrong arrays looks perfect.
+// READ THE TAIL, NOT THE WHOLE TRACE. The chart deliberately spans the mode change
+// -- seeing the switch is the point of it -- so a mean over everything drawn is a
+// blend of open loop and corrected, which is this project's oldest measurement
+// mistake. The first version of this check averaged the lot and reported the tool
+// at -3.8e-2, almost exactly half the uncorrected -7.4e-2, i.e. it was measuring
+// the window rather than the correction. 200 points is 5000 solver steps, past one
+// move period of 4304.
+const ch = await fx.evaluate(() => {
+  const d = document.getElementById('err-chart').data;
+  const by = {}; for (const t of d) by[t.name] = t.y;
+  const tail = (a) => (a || []).slice(-200);
+  const mean = (a) => { const v = tail(a).filter((x) => Number.isFinite(x)); return v.length
+    ? v.reduce((s2, x) => s2 + x, 0) / v.length : NaN; };
+  return { names: d.map((t) => t.name), n: (by['true arm'] || []).length,
+    cmd: mean(by['commanded motor']), enc: mean(by['actual motor']),
+    tru: mean(by['true arm']), est: mean(by['estimated arm']) };
+});
+console.log(`  flexisim: chart means — commanded motor ${ch.cmd.toExponential(2)}, actual motor `
+  + `${ch.enc.toExponential(2)}, true arm ${ch.tru.toExponential(2)}`);
+check('flexisim: the chart carries all five positions',
+  ['desired', 'commanded motor', 'actual motor', 'estimated arm', 'true arm']
+    .every((n) => ch.names.includes(n)) && ch.n > 50, ch.names.join(','));
+// Mode (2) is live here, so this is the proof the tab exists to make.
+check('flexisim: with the correction on, the MOTOR is off target and the TOOL is on it',
+  Math.abs(ch.cmd) > 1e-3 && Math.abs(ch.enc) > 3 * Math.abs(ch.tru),
+  `commanded ${ch.cmd}, motor ${ch.enc}, tool ${ch.tru}`);
+
+// AND THE PICTURE MUST NOT CONTRADICT THE NUMBERS. The defect this replaced drew
+// the wind-up at 1x and the bending at the slider's magnification, which put the
+// true tool on the wrong side of the encoder for 3.2% of every move. Sampling the
+// drawn geometry against tipError() is the only thing that catches it -- every
+// physics assertion passed while the picture was wrong.
+const geom = await fx.evaluate(async () => {
+  const rs = [];
+  for (let i = 0; i < 90; i++) {
+    const g = window.__flxGeom();
+    if (g && Number.isFinite(g.ratio) && Math.abs(g.trueToolVsMotor) > 1e-3) {
+      rs.push(g.ratio / g.mag);   // 1.0 iff the WHOLE error carries one magnification
+    }
+    await new Promise((r) => requestAnimationFrame(r));
+  }
+  rs.sort((a, b) => a - b);
+  return { n: rs.length, lo: rs[0], hi: rs[rs.length - 1] };
+});
+console.log(`  flexisim: drawn/true tool error over ${geom.n} frames — `
+  + `${geom.lo.toFixed(4)} to ${geom.hi.toFixed(4)} of the magnification (want 1.0)`);
+check('flexisim: the picture magnifies the WHOLE tool error, wind-up and bending alike',
+  geom.n > 20 && geom.lo > 0.95 && geom.hi < 1.05,
+  `${geom.n} frames, ${geom.lo} to ${geom.hi}`);
+
 // THE SOFT SENSOR, END TO END: calibrate, train against the tracker, LOCK, and
 // score what the machine would produce afterwards. The physics is pinned in Node;
 // what this checks is that the page's own sampling meets the model's cadence

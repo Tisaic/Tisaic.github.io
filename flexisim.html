@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:216,built:"2026-08-21T20:04:10Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:217,built:"2026-08-21T20:41:35Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -206,12 +206,23 @@
     <dl class="stat" id="stats"></dl>
 
     <div class="note">
-      <h3>What the picture shows</h3>
-      The dashed line is where the program <b>asked</b> the tool to be. The pale line is where the
-      <b>encoder</b> says it is — the controller's own picture, and it is wrong by the wind-up. The solid
-      amber curve is the <b>truth</b>: the link at its real angle, bent by its own load. Deflections are
-      drawn <b>exaggerated</b> by the slider above (they are well under a percent of the arm), and the
-      exaggeration factor is printed on the stage so the picture can never be read as scale.
+      <h3>What the picture shows — five positions of one arm</h3>
+      <b>desired</b> (grey dashed) is where the program asked the tool to be, and it is the reference
+      everything else is drawn against. <b>commanded motor</b> (violet) is desired plus the
+      pre-distortion — with no correction the two coincide, and with one the violet line deliberately
+      leaves the target. <b>actual motor</b> (pale) is the encoder: the controller's entire picture of
+      the machine, and it is blind to everything past the gear teeth. <b>true arm</b> (amber) is the
+      link at its real angle, bent by its own load. <b>estimated tip</b> (cyan ring) is what the soft
+      sensor thinks, once it has one.
+      <p style="margin:8px 0 0"><b>Every deviation is drawn at the same magnification.</b> That sounds
+      obvious and the first version did not do it: it magnified the link's bending by the slider and
+      drew the gearbox wind-up at 1×, so the two halves of one error were on two scales and the bending
+      outvoted the wind-up by exactly the magnification. Measured over one move, that put the true tool
+      on the <i>wrong side of the encoder</i> for 3.2% of it — reported from a phone as an arm flexing
+      in a way that is not possible. The plant was right throughout: the tip flexes further <b>down</b>
+      as an upward move accelerates (bend −0.121 → −0.269 over the first 300 steps), which is what
+      inertia must do. Deviations are drawn as transverse offsets rather than as rotations, because a
+      magnified rotation would change the arm's length on screen — a second lie.</p>
     </div>
     <!-- SOFT SENSOR. The tracker is a commissioning instrument; this is what the
          machine runs on afterwards. Placed under the tip-error chart so the thing
@@ -526,14 +537,20 @@ let prof = null, comp = null;
 let running = false, phase = 'idle', k = 0, busy = false;
 let chartOn = false;
 const CHART_EVERY = 25;          // solver steps between chart points, ~40 per bending period
-const hist = { t: [], e: [], ref: [] };
+// FIVE SERIES, ALL AS A DEVIATION FROM THE DESIRED TOOL POSITION, because the move
+// is 2.23 units of tool travel and the errors are 0.07 of it -- plotted as absolute
+// positions the five lines are one line. Subtracting the desired makes it the zero
+// line and turns the chart into the claim itself: the MOTOR is deliberately off
+// target and the TOOL is on it.
+const hist = { t: [], ref: [], cmd: [], enc: [], est: [], tru: [] };
 let win = [];                 // recent tip errors, one move period
 // ---- soft sensor. SAMPLE_EVERY is the model's clock: its lag window is counted
 // in SAMPLES, so the interval must not be the same knob as steps-per-frame, which
 // is a viewing control. The frame loop below splits its budget at these
 // boundaries rather than sampling once per frame.
 const SAMPLE_EVERY = 10, SS_LEAD = 15, SS_WIN = 400;
-let ss = null, ssChartOn = false;
+let ss = null, ssChartOn = false, ssLastEst = null;
+let lastGeom = null;              // what draw() last put on screen, for the suite
 const ssRec = [];             // {k, truth, est, fc} one per sample
 let ssScoreFrom = 0;
 
@@ -574,7 +591,8 @@ async function build() {
   ssRec.length = 0; ssScoreFrom = 0; ssTraining = false;
   $('ss-train').disabled = true; $('ss-lock').disabled = true;
   $('ss-train').textContent = 'Start training ▶';
-  hist.t.length = 0; hist.e.length = 0; hist.ref.length = 0; win = [];
+  for (const a of Object.values(hist)) a.length = 0;
+  ssLastEst = null; win = [];
   $('ctl-mode').disabled = true; $('ctl-mode').value = 'open';
   $('compare').disabled = true; $('board-clear').disabled = true;
   $('shape-on').disabled = true; $('flip-sign').disabled = true;
@@ -1039,10 +1057,14 @@ function moveStep(n) {
     // draws five points per bending period, which reads as a different waveform.
     if (k % SAMPLE_EVERY === 0) ssTick(arm, tau);
     if (k % CHART_EVERY === 0) {
-      hist.t.push(k); hist.e.push(e); hist.ref.push(ref.theta);
-      if (hist.t.length > 1200) {
-        hist.t.splice(0, 400); hist.e.splice(0, 400); hist.ref.splice(0, 400);
-      }
+      const L = arm.Larm, dEnc = L * (arm.encoder().angle - ref.theta);
+      hist.t.push(k);
+      hist.ref.push(ref.theta);
+      hist.cmd.push(L * off);                 // where the motor was ASKED to go
+      hist.enc.push(dEnc);                    // where the motor actually is
+      hist.est.push(ssLastEst === null ? null : dEnc + ssLastEst);
+      hist.tru.push(e);                       // == dEnc + tipError().total
+      if (hist.t.length > 1200) for (const a of Object.values(hist)) a.splice(0, 400);
     }
   }
 }
@@ -1053,6 +1075,7 @@ let ssTraining = false;
 function ssTick(arm, tauCmd) {
   if (!ss) return;
   const est = ss.observe(arm, tauCmd, 1);
+  ssLastEst = est;
   // THE OUTER LOOP RUNS ON THE MODEL'S OWN CLOCK, not the frame's. Its lag window is
   // counted in samples, so an update once per frame would make the loop's bandwidth
   // a function of the steps-per-frame slider -- a viewing control setting a control
@@ -1191,6 +1214,7 @@ function draw() {
   const mag = +$('s-mag').value;
   const ref = currentRef();
   const off = offsetNow(ref);
+  const enc = arm.encoder().angle;
 
   // BODY -> WORLD IS A ROTATION BY +theta, AND SCREEN Y POINTS DOWN. Both have to
   // be right and the first version got the deflection term wrong in a way the
@@ -1199,58 +1223,93 @@ function draw() {
   // upward. A link hanging under gravity was drawn bending toward the sky. This is
   // the anti-slosh tab's wave-on-the-wrong-wall bug in a different frame, and it
   // is fixed at the point of drawing, where it is.
-  const world = (th, bx, by) => {
-    const c = Math.cos(th), s = Math.sin(th);
-    return [px + (c * bx - s * by) * scale, py - (s * bx + c * by) * scale];
+  const world = (bx, by) => {
+    const c = Math.cos(ref.theta), s2 = Math.sin(ref.theta);
+    return [px + (c * bx - s2 * by) * scale, py - (s2 * bx + c * by) * scale];
   };
-  // THE CLAMPED ROOT IS NOT DRAWN. Those cells are real material -- they are the
-  // joint's output flange -- but they sit at negative body x, i.e. INSIDE the
-  // joint, so drawing them puts a stub sticking out of the back of the shoulder.
-  const line = (th, dy, col, width, dash) => {
+
+  // EVERY LINE IS DRAWN AS A DEVIATION FROM THE DESIRED POSE, IN ONE FRAME, AT ONE
+  // MAGNIFICATION -- and the first version was not, which produced a picture that
+  // was physically impossible and was reported as such from the device.
+  //
+  // It drew the truth ROTATED by the true link angle with only its BENDING
+  // multiplied by the slider. So the tool's error was split across two scales: the
+  // wind-up tilt at 1x and the bending at 30x. The bending then outvotes the tilt
+  // by exactly the magnification, and whenever the ringing takes the bend positive
+  // the drawn arm jumps ABOVE the encoder while the real tool is still below it.
+  // MEASURED over one move at the shipped settings: 137 of 4304 steps -- 3.2% --
+  // had the true tool below the encoder and the drawing above it, worst case a
+  // true -1.8e-4 drawn as +4.4e-1. The plant was right the whole time; the tip
+  // flexes further DOWN as an upward move accelerates, exactly as it must (bend
+  // -0.121 -> -0.269, tilt -0.015 -> -0.072 over the first 300 steps).
+  //
+  // Deviations are drawn as SMALL-ANGLE transverse offsets rather than as rotations
+  // because a magnified rotation would change the arm's LENGTH on screen, which is
+  // a second lie. At these angles (~5e-3 rad) tan is the angle to 1e-8.
+  const line = (dyAt, col, width, dash) => {
     g.save(); g.strokeStyle = col; g.lineWidth = width;
     g.setLineDash(dash || []); g.beginPath();
-    for (let i = 0; i < dy.x.length; i++) {
-      const bx = dy.x[i] - arm.link.meta.pivot[0];
-      if (bx < 0) continue;
-      const [X, Y] = world(th, bx, dy.dy[i] * mag);
+    for (let i = 0; i <= 24; i++) {
+      const bx = (i / 24) * L;
+      const [X, Y] = world(bx, mag * dyAt(bx, i / 24));
       g.lineTo(X, Y);
     }
     g.stroke(); g.restore();
   };
-  const straight = (th) => ({ x: [arm.link.meta.pivot[0], arm.link.meta.pivot[0] + L], dy: [0, 0] });
 
-  // the commanded pose, the encoder's belief, then the truth on top
-  line(ref.theta, straight(), '#64748b', 2, [6, 5]);
-  line(arm.encoder().angle, straight(), '#475569', 4);
-  const prof2 = deflectionProfile(link);
-  line(arm.joint.thL, prof2, '#f59e0b', 5);
+  // The link's own bending, sampled along the arm and indexed by fraction so every
+  // line above walks the same abscissa.
+  const bp = deflectionProfile(link);
+  const piv = arm.link.meta.pivot[0];
+  const bendAt = (f) => {
+    const want = piv + f * L;
+    let lo = 0;
+    while (lo < bp.x.length - 2 && bp.x[lo + 1] < want) lo++;
+    const span = bp.x[lo + 1] - bp.x[lo];
+    const t = span > 0 ? (want - bp.x[lo]) / span : 0;
+    return bp.dy[lo] + t * (bp.dy[lo + 1] - bp.dy[lo]);
+  };
 
-  // the pivot and the two tips
+  line(() => 0, '#64748b', 2, [6, 5]);                              // desired
+  line((bx) => off * bx, '#a78bfa', 2, [3, 3]);                     // commanded motor
+  line((bx) => (enc - ref.theta) * bx, '#475569', 4);               // actual motor
+  line((bx, f) => (arm.joint.thL - ref.theta) * bx + bendAt(f), '#f59e0b', 5);  // truth
+
+  // the pivot and the tips
   g.fillStyle = '#94a3b8'; g.beginPath(); g.arc(px, py, 6, 0, 7); g.fill();
-  const tip = (th, dyv, col, r) => {
-    const [X, Y] = world(th, L, dyv * mag);
-    g.fillStyle = col; g.beginPath(); g.arc(X, Y, r, 0, 7); g.fill();
+  const dot = (dy, col, r, hollow) => {
+    const [X, Y] = world(L, mag * dy);
+    g.beginPath(); g.arc(X, Y, r, 0, 7);
+    if (hollow) { g.strokeStyle = col; g.lineWidth = 2; g.stroke(); }
+    else { g.fillStyle = col; g.fill(); }
   };
-  tip(ref.theta, 0, '#64748b', 4);
-  tip(arm.joint.thL, prof2.dy[prof2.dy.length - 1], '#fbbf24', 6);
+  dot(0, '#64748b', 4);
+  const toolDev = (arm.joint.thL - ref.theta) * L + bendAt(1);
+  const motorDev = (enc - ref.theta) * L;
+  dot(toolDev, '#fbbf24', 6);
+  // WHAT WAS ACTUALLY PUT ON SCREEN, for the regression to compare against what
+  // the physics says. Every functional check passed while the picture was wrong,
+  // so the only instrument that can catch a drawing defect is the drawing itself.
+  lastGeom = { mag, drawnToolVsMotor: mag * (toolDev - motorDev),
+    trueToolVsMotor: arm.tipError().total };
+  // THE ESTIMATE IS A TIP MARKER, NOT A LINE, because that is all the sensor
+  // produces -- one number about the tool. Drawing it as a bent arm would be
+  // inventing a shape the model never estimated.
+  if (ssLastEst !== null) dot((enc - ref.theta) * L + ssLastEst, '#22d3ee', 7, true);
 
-  // The legend lives top-left, under the badge: at the bottom right it was
-  // overlapped by the tip marker exactly when the deflection was largest, which
-  // is the moment the picture most needs to be readable.
   g.font = '11px ui-monospace,monospace';
-  const key = (y, col, txt) => {
-    g.strokeStyle = col; g.lineWidth = 3; g.beginPath();
-    g.moveTo(10, y - 4); g.lineTo(28, y - 4); g.stroke();
-    g.fillStyle = col === '#f59e0b' ? '#f59e0b' : '#94a3b8'; g.fillText(txt, 34, y);
+  const key = (y, col, txt, dash) => {
+    g.save(); g.strokeStyle = col; g.lineWidth = 3; g.setLineDash(dash || []);
+    g.beginPath(); g.moveTo(10, y - 4); g.lineTo(28, y - 4); g.stroke(); g.restore();
+    g.fillStyle = col; g.fillText(txt, 34, y);
   };
-  key(h - 46, '#f59e0b', 'truth');
-  // SHORT LABELS: the long form ("encoder (what the controller believes)") ran
-  // straight into the right-hand column on a 412px phone. The explanation belongs
-  // in the note below the stage, where there is room for it.
-  key(h - 31, '#475569', 'encoder');
-  key(h - 16, '#64748b', 'commanded');
+  key(h - 76, '#f59e0b', 'true arm');
+  if (ssLastEst !== null) key(h - 61, '#22d3ee', 'estimated tip');
+  key(h - 46, '#475569', 'actual motor');
+  key(h - 31, '#a78bfa', 'commanded motor', [3, 3]);
+  key(h - 16, '#64748b', 'desired', [6, 5]);
   g.fillStyle = '#64748b'; g.textAlign = 'right';
-  g.fillText(`deflection ×${mag}`, w - 10, h - 16);
+  g.fillText(`deviations ×${mag}`, w - 10, h - 16);
   if (off !== 0) {
     g.fillStyle = '#a78bfa';
     g.fillText(`pre-distortion ${(off * 1e3).toFixed(2)} mrad`, w - 10, h - 31);
@@ -1343,18 +1402,32 @@ function chart() {
   // the simulation was sixteen thousand steps in. Nothing errors, nothing is
   // blank -- it just quietly shows the wrong thing, which is the failure mode this
   // project keeps meeting on the display side.
-  const T = hist.t.slice(), Ey = hist.e.slice(), R = hist.ref.slice();
+  const T = hist.t.slice();
+  // THE DESIRED IS THE ZERO LINE, which is what makes this chart an argument rather
+  // than five wiggles: with compensation on, the MOTOR trace sits off zero by the
+  // pre-distortion and the TRUE ARM sits on zero. That is the whole claim, drawn.
   const traces = () => [
-    { x: T, y: Ey, name: 'tip error', line: { color: '#f59e0b', width: 2 } },
-    { x: T, y: R, name: 'commanded angle', yaxis: 'y2',
-      line: { color: '#64748b', width: 1, dash: 'dot' } },
+    { x: [T[0], T[T.length - 1]], y: [0, 0], name: 'desired',
+      line: { color: '#64748b', width: 1, dash: 'dash' }, hoverinfo: 'skip' },
+    { x: T, y: hist.cmd.slice(), name: 'commanded motor',
+      line: { color: '#a78bfa', width: 1.5, dash: 'dot' } },
+    { x: T, y: hist.enc.slice(), name: 'actual motor',
+      line: { color: '#94a3b8', width: 1.5 } },
+    { x: T, y: hist.est.slice(), name: 'estimated arm',
+      line: { color: '#22d3ee', width: 1.5 }, connectgaps: false },
+    { x: T, y: hist.tru.slice(), name: 'true arm',
+      line: { color: '#f59e0b', width: 2.5 } },
+    { x: T, y: hist.ref.slice(), name: 'move', yaxis: 'y2',
+      line: { color: '#334155', width: 1, dash: 'dot' }, hoverinfo: 'skip' },
   ];
   if (!chartOn) {
     Plotly.newPlot('err-chart', traces(), {
       margin: { l: 46, r: 40, t: 6, b: 26 }, paper_bgcolor: '#0b1220', plot_bgcolor: '#060a14',
-      font: { color: '#94a3b8', size: 9 }, showlegend: false,
+      font: { color: '#94a3b8', size: 9 }, showlegend: true,
+      legend: { orientation: 'h', y: 1.22, font: { size: 9 } },
       xaxis: { gridcolor: '#1e293b', title: { text: 'solver steps', font: { size: 9 } } },
-      yaxis: { gridcolor: '#1e293b' },
+      yaxis: { gridcolor: '#1e293b', zeroline: true, zerolinecolor: '#475569',
+        title: { text: 'tool vs desired', font: { size: 9 } } },
       yaxis2: { overlaying: 'y', side: 'right', showgrid: false },
     }, { displayModeBar: false, responsive: true });
     $('err-chart').classList.add('on');
@@ -2236,6 +2309,14 @@ $('verify-run').addEventListener('click', async () => {
 // ------------------------------------------------------------ debug hook
 // Permanent, for the same reason __fsDump() is on FlowSim: a page that misbehaves
 // has several distinct explanations and the picture cannot tell them apart.
+// THE DRAWN GEOMETRY, exposed so a check can hold the picture to the numbers.
+// The identity it pins is that the WHOLE tool error is magnified by one factor:
+// the defect it replaced magnified the link's bending and left the gearbox wind-up
+// at 1x, so this ratio came out at anything between 1 and the magnification.
+window.__flxGeom = () => (lastGeom ? { ...lastGeom,
+  ratio: lastGeom.trueToolVsMotor !== 0
+    ? lastGeom.drawnToolVsMotor / lastGeom.trueToolVsMotor : null } : null);
+
 window.__flxDbg = () => ({
   phase, running, k, K: A && A.K, E: A && A.E, cells: A && A.link.lattice.cellCount,
   compliance: pc && pc.compliance, mode, win: winStats(),
