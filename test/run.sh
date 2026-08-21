@@ -180,6 +180,10 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # feature count. 5 s quick (the whole-arm readout alone), 20 s full (the
     # three-way comparison and the forecast).
     node test/flexisim/chainsensor.test.mjs
+    # THE DRIVE-SIDE FEEDFORWARD, self-commissioned. Full tier: it is a documented
+    # measurement about a library block rather than a contract of the shipped page,
+    # which uses the hand-built model, and it drives ~100k solver steps.
+    if [ "${SUITE}" = "full" ]; then node test/flexisim/servoff.test.mjs; fi
     # The STRUCTURED rival: identify the compliance itself (a physical constant)
     # rather than the error, from static pose touches the way CompCommissioner
     # expects. Full tier -- six settles.

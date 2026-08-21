@@ -2784,8 +2784,45 @@ one.
    gives: an exactly periodic stream lets a 544-feature model score by recognising
    where in the cycle it is.
 
-   NOT YET BUILT: the WGSL kernel; a third joint; and `ServoFF`, the drive-side
-   feedforward, still unused.
+   **BRICK 18 — THE DRIVE-SIDE FEEDFORWARD, AND THE ONE TERM NOBODY HAS THE NUMBER
+   FOR.** The servo carries the textbook feedforward (J_refl·α + τ_load)/N: exactly
+   right about inertia and gravity, because both come off the CAD, and silent about
+   FRICTION, because nobody has that number on a real machine. That is the same
+   asymmetry the anti-slosh tab's "engineering" Kalman filter is built on.
+   `ServoFF` — the last unused block the audit named — watches the closed loop while
+   the hand model drives and learns the TOTAL APPLIED torque, which is the
+   self-commissioning premise: the PD loop is already generating whatever the hand
+   model omits, so the learner does not have to be told what is missing.
+   **THE CLAIM IS TWO-SIDED AND BOTH SIDES ARE ASSERTED.** Following error, rms, over
+   one move after handing the feedforward over with the PD loop unchanged:
+     with Stribeck friction   hand **7.336e-3** → learned **2.725e-3**   (2.69×)
+     with NO friction         hand **6.630e-4** → learned **8.564e-4**   (0.77×)
+   The learner wins only where the hand model is WRONG, and costs 30% where it is
+   exact — a fit to an exact model can only add variance. A brick that measured the
+   first row alone would be claiming that learning beats knowing. And the missing
+   term's price is the third number: the same feedforward and the same gains go
+   6.63e-4 → 7.34e-3, **11×**, when friction is added.
+   The terms it leans on are `coulomb`, `viscous`, `grav_s`, `grav_c`, `inertia` —
+   naming them is what separates "it fitted something" from "it fitted the missing
+   physics".
+   **AND ITS TERM PRUNING IS MEASURED AND REJECTED HERE.** Two things went wrong,
+   and the first is this project's oldest lesson: `pruneFloor` is an ABSOLUTE
+   threshold on |θ|, and in lattice units where the torques are ~1e-4 it prunes
+   EVERY term — the same class of error as `RobotComp`'s prior being weak in the
+   abstract rather than weak relative to the regressor. With the floor removed the
+   fractional threshold keeps 7 of 39 and the feedforward is still **14× worse**,
+   because the basis is deliberately REDUNDANT: the lag terms duplicate the
+   instantaneous ones on a smooth reference, RLS splits the weight across
+   near-collinear terms in large near-cancelling pairs, and pruning by magnitude
+   removes one side of a cancellation. Ships with every term live.
+   ALSO MEASURED: a snappier move (200/300/700 instead of 300/400/1100) raises the
+   inertial torque and shrinks friction's share of it, and the same plant then shows
+   1.4× instead of 2.7×. That is a different question rather than a weaker answer —
+   what a missing friction term costs depends on how hard the move pushes.
+   Full tier: ~100k solver steps, and it is a measurement about a library block
+   rather than a contract of the shipped page, which uses the hand-built model.
+
+   NOT YET BUILT: the WGSL kernel; a third joint.
 
    The second regime on the same lattice engine: a 2–3 joint arm whose TOOL TIP
    is measured by a laser tracker during dynamic moves (ground truth), while the
