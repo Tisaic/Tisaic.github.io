@@ -2109,7 +2109,7 @@ one.
    the forecast are constructed is withheld and stated as withheld. A
    leak-audit regression greps the rendered text.
 
-7. **FlexiSim** — compliant serial chains. DESIGN SETTLED; BRICK 1 BUILT.
+7. **FlexiSim** — compliant serial chains. DESIGN SETTLED; BRICKS 1–4 BUILT.
    **BRICK 1 IS THE ELASTIC OPERATOR, AND IT IS VERIFIED.**
    `lib/lattsim/operators/elastic.js` + a CPU reference kernel, checked in plain
    Node by `test/lattsim/elastic.test.mjs` — no browser, no adapter, seconds, and
@@ -2171,13 +2171,95 @@ one.
    CFL gate refuses c_p ≥ 1/√3 at BUILD time rather than at step 30; and stating
    both (E, ν) and (λ, μ) is refused, since a mismatched pair is a physics error
    that would surface as a wave speed nobody expected.
-   NOT YET BUILT, and each is its own brick with its own closed form: free surfaces
-   and clamped boundaries (this brick is verified PERIODIC, where no boundary
-   condition can contaminate the answer) and the cantilever FL³/3EI; gravity and
-   the non-inertial body forces; the co-rotational treatment of large rotation; the
-   lumped joints and gearbox; the WGSL kernel; the page. **The out-of-range edge in
-   the CPU kernel is a zero-gradient PLACEHOLDER, not a free surface and not a
-   clamp** — stated in the code so it is not mistaken for a boundary condition.
+   **BRICK 2 — BOUNDARIES, AND THEY ARE EXACT.** `CELL.ELASTIC` and `CELL.CLAMPED`,
+   added rather than overloaded; every other id is VACUUM to this operator, which
+   is what makes "outside the part" traction-free with no special case in the
+   stencil — and why an elastic run with no ELASTIC cells is now REFUSED at build
+   time rather than producing a lattice of exact zeros at full speed (the same
+   failure shape as the WGSL reserved word that once shipped silence).
+   THE UNIAXIAL CHECK IS THE ONE THAT CANNOT BE FOOLED: a bar with FREE lateral
+   faces is in uniaxial STRESS, σ_xx = E ε_xx with lateral contraction −ν ε_xx; one
+   whose "free" surface silently is not one is in uniaxial STRAIN, σ_xx =
+   (λ+2μ) ε_xx with NO lateral motion at all. At ν 0.3 those differ by 34%, and the
+   contraction differs by everything since one is exactly zero. **Measured:
+   E = 5.00000e-2 against 0.05 (0.00%), ν = 0.30000, σ_yy/σ_xx = 1.4e-9, settled to
+   peak |v| 2.0e-19.** Machine exact, so the tolerances are 1e-6 and not a percent
+   — a loose one here passes with the surface subtly wrong, which is what the first
+   three attempts looked like.
+   THREE DEFECTS, EACH LOOKING LIKE THE PHYSICS WAS NEARLY RIGHT. (i) Zeroing the
+   stress in vacuum is only HALF the vacuum formalism: a velocity node straddling
+   material and vacuum carries half the mass, so the same traction must accelerate
+   it twice as hard, and a shear node straddling four cells takes the HARMONIC mean
+   of μ — zero the moment any is vacuum, and that zero IS the traction-free shear
+   condition. Without the pair: E 18% low, ν 0.46 against 0.3. (ii) A VELOCITY NODE
+   IS SHARED BETWEEN TWO CELLS, so skipping vacuum cells wholesale left the +x face
+   free and the −x face silently CLAMPED; the pass is now per component and a node
+   is live if EITHER cell it straddles is material. (iii) Out of range on a bounded
+   axis zeroed the whole DIFFERENCE — a zero-gradient edge, not a free surface — so
+   a loaded end felt the traction with nothing pulling back. The symptom was
+   unmistakable once measured: uniform σ_xx growing linearly with time, velocity
+   linear in x and UNCHANGING over 6000 steps, terminal speed exactly f/(ρ·damping)
+   — the bar creeping like a viscous fluid because the load was balanced by damping
+   alone.
+   **BRICK 3 — THE CANTILEVER, AND THE STUDY THAT SAYS WHICH ERROR IT IS.**
+   FL³/3EI tests BENDING, which nothing before it did. Timoshenko rather than
+   Euler–Bernoulli, since at L/H = 4 the shear term is ~5% of the total — against
+   bending alone the same measurement is out by nearly 8%, and a check pins that so
+   nobody simplifies it away. **Measured at H = 6: δ 1.7247e-2 against 1.6837e-2,
+   +2.436%.** AND THAT RESIDUAL IS THE LATTICE'S, NOT BEAM THEORY'S: at fixed H it
+   is 2.46 / 2.53 / 2.59 % at L/H 3.9 / 5.9 / 7.9, i.e. FLAT in aspect ratio, where
+   beam theory's own finite-thickness error would shrink. It shrinks with
+   RESOLUTION instead — **6.751 → 2.460 → 0.926 → 0.180 % at H = 4, 6, 8, 10**, every
+   ratio beating the second-order prediction (2.74 vs 2.25, 2.66 vs 1.78, 5.16 vs
+   1.56). Faster than second order over one sweep is more likely two error terms of
+   opposite sign cancelling than a higher-order scheme, so the check asserts AT
+   LEAST second order rather than claiming an order it cannot support.
+   DAMPING SCALES WITH THE BEAM (ω ~ 1/L² for the first bending mode), and getting
+   it wrong makes an over-damped run indistinguishable from a converged one by the
+   deflection alone — measured at LEN 40 with the LEN 24 value, the tip reached 46%
+   of its final deflection and looked entirely like a physics result. Every run
+   asserts it settled. AND "SETTLED" IS RELATIVE: the first gate was |v| < 1e-12,
+   read off a 20000-step run, and it rejected |v| = 1.65e-10 while the DEFLECTION
+   agreed to seven figures — failing a converged answer for moving too fast
+   relative to nothing in particular.
+   **BRICK 4 — GRAVITY AND THE NON-INERTIAL FRAME**, `operators/frame.js`, which
+   WRITES the shared body-force field while the elastic operator READS it, so the
+   coupling is declared rather than implied by call order. Measured:
+     gravity      σ_xx(x) = ρg(L−x)              **7.7e-9 %**  (machine exact)
+     centrifugal  σ_xx(r) = ½ρω²(L²−r²)          **0.043 %**
+     Coriolis     f·v / (|f||v|)                 **1.1e-14**   (an identity)
+   GRAVITY IS LINEAR IN x AND CENTRIFUGAL IS QUADRATIC IN r, which is what makes
+   the pair a real test rather than two ways of saying "some outward force": a term
+   built with a constant instead of r, or with r from the lattice origin instead of
+   the pivot, still gives a monotone believable profile and fits neither. A LINEAR
+   profile through the same endpoints measures **25.00%** against the quadratic's
+   0.043% — a factor of 580. Coriolis has no static closed form (it vanishes at
+   equilibrium), so it is checked as the identity it is: −2Ω×v is perpendicular to
+   v by construction, so f·v must be zero for ANY velocity field. And a frame
+   accelerating at −g is asserted **bit for bit** identical to gravity g, which is
+   the only thing that catches a sign error in `originAccel`.
+   **THE BODY FORCE IS DIVIDED BY THE PLAIN DENSITY, NOT THE EFFECTIVE ONE**, and
+   that asymmetry against the traction term is the physics: a body force is per
+   unit VOLUME, so a half-material node carries half the force AND half the mass
+   and they cancel — gravity accelerates material at g however much of the node is
+   material. The symptom of getting it wrong was subtle: the hanging bar came out
+   EXACTLY ρg(NX−x), perfectly linear, exactly the right slope, and exactly HALF A
+   CELL off the closed form — which is precisely the extra force the one surface
+   node was getting. That half cell is now pinned the way Poiseuille's H = Nz−2 is:
+   the free surface is the OUTER FACE of the last material cell, and the two
+   plausible alternatives measure 2.13% and 4.35% against this one's zero.
+   THE SAME FIX EXPOSED A LOAD-BOOKKEEPING ERROR IN THE CANTILEVER: loading the
+   whole tip layer puts force on the top surface node, which has half the volume
+   and delivers half the force, while its mirror at the bottom surface is owned by
+   a VACUUM cell and gets none — 8.3% of the load silently missing and its centroid
+   0.27 cells off the section centre, a torsion nobody asked for.
+   **NO CO-ROTATIONAL FORMULATION, AND THE REASON IS WRITTEN DOWN** rather than
+   left as an apparent omission: a link rotating rigidly is STATIONARY in its own
+   body frame, so there is no large rotation inside any lattice and no rotated
+   strain measure to get wrong. The rotation lives entirely in the transform
+   between frames — per-link frames make the co-rotational terms unnecessary rather
+   than solving them.
+   NOT YET BUILT: the lumped joints and gearbox; the WGSL kernel; the page.
 
    The second regime on the same lattice engine: a 2–3 joint arm whose TOOL TIP
    is measured by a laser tracker during dynamic moves (ground truth), while the
