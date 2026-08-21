@@ -175,6 +175,11 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # against the tracker and then LOCKED, against the physics-based compliance
     # model a good engineer would build.
     node test/flexisim/tipsensor.test.mjs
+    # THE GENERAL N-LINK CHAIN by recursive Newton-Euler, verified by REPRODUCING
+    # the hand-derived 2R to machine precision -- two independent routes to the same
+    # matrix, which is what lets a third link be trusted without a third derivation.
+    # Three seconds: the conservation checks never touch a lattice.
+    node test/flexisim/armnr.test.mjs
     # THE ARCHITECTURE QUESTION A CHAIN MAKES ASKABLE: per-joint signals against
     # whole-arm ones, at MATCHED model capacity so the gap is information and not
     # feature count. 5 s quick (the whole-arm readout alone), 20 s full (the

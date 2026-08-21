@@ -2822,7 +2822,59 @@ one.
    Full tier: ~100k solver steps, and it is a measurement about a library block
    rather than a contract of the shipped page, which uses the hand-built model.
 
-   NOT YET BUILT: the WGSL kernel; a third joint.
+   **BRICK 19 — THE N-LINK CHAIN, AND THE TWO-LINK CASE AS ITS TEST.**
+   `lib/flexisim/armnr.js` does the same physics by RECURSIVE NEWTON-EULER — one
+   O(N) pass for the bias torques C q̇ + G, N more for the columns of M(q) — so
+   nothing is differentiated by hand and adding a joint is a list entry rather than
+   a derivation. Gravity enters by accelerating the base at −g, which is the same
+   equivalence brick 4 asserted bit-for-bit on the lattice.
+   **THE HAND-DERIVED 2R IS WHAT VERIFIES IT.** That one was checked against closed
+   forms and conservation laws before this existed, so the general solve is required
+   to REPRODUCE it at N = 2 over twelve poses and rates: **M to 2.8e-15, gravity to
+   1.4e-16, Coriolis to 1.1e-15, and the frame parameters EXACTLY**. Two independent
+   routes to the same matrix is a far stronger statement than either alone, and it
+   is what lets a third link be trusted without a third derivation.
+   THREE LINKS, and the numbers are wider than two: the base inertia varies
+   **4.43×** across the workspace (1.79e5 straight, 4.04e4 with the elbow folded)
+   against the 2R's 2.02×, because the base now has two links to fold back over it.
+   Free-arm conservation over 20000 steps: energy 4.9e-4, the momentum conjugate to
+   the cyclic base angle 3.9e-4, with the base sweeping 2.8 rad — and removing the
+   bias torques drifts **4.4e-2 in a tenth of the run**, so the law has teeth.
+   **THE THIRD LINK IS WHAT A TWO-LINK DERIVATION CANNOT EXERCISE**: its body frame
+   is carried by TWO joints, so its origin's acceleration accumulates through both.
+   Spun straight, its σ_xx fits the rotating-bar profile about the BASE to **1.95%**
+   and the un-offset one to **529%**; with the origin acceleration dropped it lands
+   on the other (84% / 3.0%). And each joint's wind-up is levered by the distance
+   from THAT joint to the tool — 29.5 / 16.0 / 6.5 here — which is why the joints do
+   not contribute equally and why `tipError()` reports them separately.
+   Three seconds at both tiers: the conservation checks never touch a lattice.
+
+   **THE WGSL ELASTIC KERNEL IS DELIBERATELY NOT BUILT, AND THE REASON IS MEASURED
+   RATHER THAN ASSERTED.** The whole point of per-link body-frame lattices is that
+   each link is SMALL and dense, and a small dense lattice is exactly where a GPU
+   dispatch is not worth its overhead. CPU reference throughput, f32, measured:
+     10×4²    832 cells   0.202 ms/step   4.1 Mcell/s
+     16×4²   1216 cells   0.295 ms/step   4.1 Mcell/s
+     24×6²   2700 cells   0.779 ms/step   3.5 Mcell/s
+     40×8²   6192 cells   1.995 ms/step   3.1 Mcell/s
+     64×12² 17152 cells   6.421 ms/step   2.7 Mcell/s
+     96×16² 39600 cells  16.471 ms/step   2.4 Mcell/s
+   The shipped links are the second row. A step needs THREE dispatches (the frame
+   force, the velocity pass, the stress pass) at roughly 20–100 µs of encode-and-
+   submit each, against 295 µs of CPU work — so a GPU backend would be at best
+   break-even and probably slower at the geometry the page actually runs.
+   WHAT WOULD CHANGE THE ANSWER, stated so the decision is falsifiable rather than
+   permanent: the design note's own sizing for a real arm is ~22k cells per link at
+   dx 8 mm, which is the 64×12² row — 6.4 ms/step on the CPU and three links of it,
+   where a GPU would pay several-fold. So the kernel is worth building for a
+   REAL-RESOLUTION arm and is not worth building for this one, and the crossover is
+   between the 6k and 17k rows. Until a page needs that resolution, a WGSL port
+   would be a slower path verified only under a software adapter.
+
+   NOT YET BUILT: the WGSL elastic kernel (see the measurement above); general
+   block-sparse bricks for a CLOSED structure — a gantry or a machine frame, where
+   members are not separable into per-link frames and the swept box is genuinely
+   the geometry.
 
    The second regime on the same lattice engine: a 2–3 joint arm whose TOOL TIP
    is measured by a laser tracker during dynamic moves (ground truth), while the
