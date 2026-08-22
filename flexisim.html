@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:230,built:"2026-08-22T17:10:59Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:231,built:"2026-08-22T18:15:11Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -523,29 +523,34 @@
       hundred times smaller</em> and no ringing at all, and this arm. Measured — <b>0.98× / 2.19×
       / 1.15×</b>, with the gains identified rather than given, spanning 200× and both signs. If a
       plant constant had leaked in, exactly one of them would work.<br>
-      <b>THE ASSUMPTION IS LINEARITY OF THE PLANT PATH.</b> The impulse response, its inverse and
-      the correction are LTI. The disturbance map is <em>not</em> — it uses the library's universal
-      basis (bias + linear + cross-quadratics + ReLU + Fourier), because backlash, stiction and a
-      hardening spring make the disturbance a nonlinear function of the command. Measured, linear
-      window against universal map: the correction is unchanged (1.17× vs 1.15×, inside the run
-      spread) while the identification improves a lot — the ringing comes back at 960 steps rather
-      than 400. <b>What limits the arm is the linear inverse, not the disturbance model</b>, and
-      the design's own prediction says so before the plant is touched.
+      <b>THE ASSUMPTION IS LINEARITY OF THE PLANT PATH</b> — and it was tested rather than
+      assumed. Running the identical trajectory twice, once with a multi-level probe and once
+      without, and <b>differencing</b>, removes the disturbance exactly and leaves the probe's
+      response alone. On this arm that response departs from <b>exact linear scaling by 0.04%</b>
+      over a 4× amplitude range, and an LTI model explains <b>99.03%</b> of it. Hammerstein
+      (poly-3, and a deadzone basis), LPV scheduled on commanded velocity, and a backlash
+      direction bit were all fitted to the same record and all scored <em>worse</em> out of sample
+      (0.88–0.98× against LTI) — exactly as they do on a control plant that is linear by
+      construction. <b>The nonlinear-identification question has a clean negative answer here.</b>
+      A binary PRBS could not have asked it at all: it visits two amplitudes, so any static
+      nonlinearity agreeing at ±a fits identically.
     </div>
 
     <div class="note">
       <h3>The price of knowing nothing</h3>
       Tab ① reaches about <b>4.6×</b> on this plant with the CAD in hand (open loop 1.03e-1 →
-      learned filter 2.27e-2). This reaches <b>1.07×</b> here and 1.15× in the Node harness, with
-      none of it. <b>That gap is the honest cost of knowing nothing, and it is not evenly split.</b>
-      The <b>soft sensor</b> half is already model-free on both tabs and scores the same on each
-      (nRMSE ~0.06 from five unlabelled signals). The <b>control</b> half pays for everything: tab
-      ① is handed a compliance model whose structure is correct and converges its filter over
-      twelve repetitions of a trajectory it is <em>allowed to assume repeats</em>, while this
-      identifies an LTI inverse from one probe and deploys it one-shot on a plant with backlash
-      and stiction in it. The design's own held-out prediction (1.06×) matches what it then
-      achieved (1.07×), so the module is not wrong about itself — it is correctly reporting that a
-      linear inverse is most of what is available to it here.
+      learned filter 2.27e-2). This reaches <b>3.85×</b> in the Node harness with none of it — so
+      the price of knowing nothing about this plant is roughly <b>20%</b>, not the factor of four
+      it first appeared to be.<br>
+      <b>THAT FIRST NUMBER WAS A UNITS BUG, NOT A LIMIT</b>, and it is worth knowing how it hid.
+      The disturbance map's taps were sized in identification-grid samples and then used as solver
+      steps, so its window spanned 70 steps instead of 2800 — a fiftieth of the move it was meant
+      to explain. Every symptom pointed elsewhere: it explained 50% of the disturbance, so the
+      design honestly predicted 1.4× and honestly achieved 1.07×, the identification was excellent,
+      and the prediction matched the outcome. Nothing looked broken; it looked like the cost of
+      ignorance. What found it was asking a different question — a crude <b>96-bin phase-indexed
+      average explained 100%</b> of the same disturbance, which proves it was perfectly
+      predictable and therefore that the map was failing rather than the problem being hard.
     </div>
   </section>
 

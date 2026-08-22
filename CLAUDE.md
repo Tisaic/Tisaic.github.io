@@ -3557,8 +3557,65 @@ one.
    an LTI inverse from one probe and deploys it one-shot. The page's predicted 1.06× against
    its achieved 1.07× is the part that matters: it is not wrong about itself.
 
-   NOT YET BUILT: a nonlinear plant inverse (Hammerstein/Wiener or iterative), which is
-   what the 4× above is; the WGSL elastic kernel (see the measurement above); general
+   **BRICK 27 — THE NONLINEAR IDENTIFICATION QUESTION, ANSWERED NEGATIVELY, AND THE BUG IT
+   UNCOVERED.** Asked to investigate the nonlinear generalisation of linear transfer-
+   function identification — Hammerstein/Wiener if that is it, otherwise the best candidate
+   for automated nonlinear model identification. The answer for this plant is that it needs
+   none of them, and finding that out found the real defect.
+   **THE PROBE HAD TO CHANGE BEFORE THE QUESTION COULD BE ASKED.** A binary PRBS visits
+   exactly TWO amplitudes, so a static input nonlinearity is UNIDENTIFIABLE from it — any f
+   agreeing at ±a fits the record identically. Whatever the answer, a multi-level sequence
+   is a precondition.
+   **AND THE FIRST EXPERIMENT HAD NO RESOLUTION**, which the numbers said before any
+   conclusion was drawn: fitting each candidate jointly with the disturbance and comparing
+   held-out residuals gave the SAME value to four digits at 3% and at 12% probe amplitude,
+   which is impossible if the probe is what is being measured. The residual was dominated
+   by the disturbance model's error. Running the identical trajectory TWICE, once with the
+   probe and once without, and DIFFERENCING removes the disturbance exactly — the plant is
+   deterministic, so whatever the trajectory does happens in both runs.
+   MEASURED THAT WAY, on the real arm: the probe response departs from **exact linear
+   scaling by 0.04%** over a 4× amplitude range (0.00% on a control plant that is linear by
+   construction), and an LTI model explains **99.03%** of it. Every nonlinear structure is
+   WORSE out of sample:
+     LTI                          resid 3.500e-3   explains 99.03%   1.000×
+     Hammerstein poly-3           3.949e-3         98.77%            0.886×
+     Hammerstein deadzone basis   3.739e-3         98.90%            0.936×
+     LPV on commanded velocity    3.727e-3         98.90%            0.939×
+     LPV on direction (backlash)  3.573e-3         98.99%            0.980×
+     both                         3.994e-3         98.74%            0.876×
+   — the same pattern the linear control plant shows, which is what says the comparison has
+   teeth rather than just counting parameters. **Hammerstein, Wiener and LPV all buy
+   nothing here.** (Wiener was not fitted: it is not linear in the parameters, so it needs
+   iteration, and there was nothing left for it to explain. Volterra is linear in the
+   parameters but has no clean FIR inverse, which is the whole requirement. A neural NARX
+   is not one-shot invertible.)
+   **SO WHERE WAS THE 4×? IN A UNITS BUG OF MINE, AND EVERY SYMPTOM POINTED ELSEWHERE.**
+   The disturbance map explained only 49–50% of the disturbance out of sample, which caps
+   ANY inverse at 1.4× — and the module honestly predicted 1.4× and honestly achieved 1.07×,
+   with an excellent identification and a prediction that matched the outcome. Nothing
+   looked broken. It looked exactly like the price of knowing nothing, and the previous
+   entry said so.
+   WHAT FOUND IT WAS ASKING A DIFFERENT QUESTION: a crude **96-bin phase-indexed average
+   explained 100.0%** of the same disturbance. That proves the disturbance is perfectly
+   predictable, so the map was FAILING rather than the problem being hard. The map's taps
+   were sized in identification-GRID samples and then used as solver STEPS — `features()`
+   adds them straight to k — so its window spanned **70 steps instead of 2800**, a fiftieth
+   of the move it was meant to explain. With the taps in steps the same map explains
+   **100.0%** too.
+   **PLANT C: 1.15× → 3.85×.** Against tab ①'s 4.6× with the full CAD, the price of knowing
+   nothing about this plant is about **20%**, not the factor of four previously recorded.
+   Plants A and B are unchanged (0.98× and 2.19×) — their disturbances are simple functions
+   of the command, so the narrow window was already enough, which is why two of the three
+   plants could not have revealed it either.
+   THE GENERAL LESSON IS THE OLD ONE IN A NEW COSTUME: **a wrong unit is not a modelling
+   limit**, and a module that is honest about its own performance will report a wrong unit
+   as a limit with complete confidence. What separated them was a second, cruder instrument
+   that did not share the mistake. Also worth keeping: the soft sensor's nRMSE went 0.058 →
+   0.180 across this fix, which is the NORMALISATION artefact and not a regression — the
+   absolute estimate error improved 1.20e-2 → 9.7e-3 while the truth it is divided by got
+   four times smaller.
+
+   NOT YET BUILT: the WGSL elastic kernel (see the measurement above); general
    block-sparse bricks for a CLOSED structure — a gantry or a machine frame, where
    members are not separable into per-link frames and the swept box is genuinely
    the geometry.
