@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:223,built:"2026-08-22T00:04:21Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:224,built:"2026-08-22T00:20:57Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -35,9 +35,9 @@
     .badge { position:absolute; left:10px; top:10px; font-size:.7rem; padding:4px 8px; border-radius:6px;
       background:rgba(15,23,42,.85); border:1px solid var(--line); color:var(--muted); }
     .badge.r { left:auto; right:10px; }
-    #err-chart, #ss-chart, #chain-chart, #cs-chart { width:100%; height:170px;
+    #err-chart, #ss-chart, #chain-chart, #cs-chart, #chain-pos { width:100%; height:170px;
       margin-top:8px; display:none; }
-    #err-chart.on, #ss-chart.on, #chain-chart.on, #cs-chart.on { display:block; }
+    #err-chart.on, #ss-chart.on, #chain-chart.on, #cs-chart.on, #chain-pos.on { display:block; }
     code { background:var(--card); padding:.1em .35em; border-radius:5px;
       font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.92em; }
     .controls { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; align-items:center; }
@@ -299,11 +299,18 @@
       <span class="badge" id="state2-badge">building…</span>
       <span class="badge r" id="err2-badge">—</span>
     </div>
+    <div id="chain-pos"></div>
     <div id="chain-chart"></div>
 
     <div class="controls">
-      <button id="run2">Run move ▶</button>
-      <button id="reset2" class="sec">Reset</button>
+      <button id="auto2">Auto-tune ▶</button>
+      <button id="reset2" class="sec">Reset all</button>
+    </div>
+    <p class="hint">The same one-button sequence as the Move tab: <b>shape the command → train
+      both tool sensors → lock → score every correction → keep the best</b>. The chain has no
+      pose-touch commissioning, so it starts at the training step.</p>
+    <div class="controls">
+      <button id="run2" class="sec">Run move ▶</button>
       <select id="mode2" aria-label="What moves">
         <option value="shoulder" selected>shoulder only</option>
         <option value="both">both joints</option>
@@ -527,6 +534,7 @@ for (const t of document.querySelectorAll('.tab')) {
     if (t.dataset.tab === 'move' && chartOn) Plotly.Plots.resize($('err-chart'));
     if (t.dataset.tab === 'move' && ssChartOn) Plotly.Plots.resize($('ss-chart'));
     if (t.dataset.tab === 'chain') {
+      if (chPosOn) Plotly.Plots.resize($('chain-pos'));
       if (chChartOn) Plotly.Plots.resize($('chain-chart'));
       if (csChartOn) Plotly.Plots.resize($('cs-chart'));
       // A HIDDEN CANVAS HAS NO SIZE, and 0/0 is NaN rather than zero -- FlowSim's
@@ -1571,8 +1579,10 @@ function frame() {
       $('state2-badge').className = 'badge bad'; console.error(e); }
   }
   if (onChain) {
+    if (auto2) auto2Tick();
     draw2();
-    if (frames % 6 === 0) { stats2(); chainChart(); csStats(); csChart(); }
+    syncChain();
+    if (frames % 6 === 0) { stats2(); chainPosChart(); chainChart(); csStats(); csChart(); }
   }
   if (!A || busy) return;
   // THE SEQUENCE ADVANCES BEFORE THE STEPPING, so a step that has just finished
@@ -1916,7 +1926,12 @@ const ELBOW_LADDER = [0, 0.2, 0.4, 0.6, 0.9, 1.2, 1.6, 2.2, Math.PI];
 const CH = { LEN1: 14, LEN2: 10, E: 0.15 };
 let arm2 = null, servo2 = null, prof2 = null, run2 = false, k2 = 0, busy2 = false;
 let chChartOn = false;
-const chHist = { t: [], t2: [], c21: [], c22: [], tip: [] };
+const chHist = { t: [], t2: [], c21: [], c22: [], tip: [],
+  // THE SAME FIVE POSITIONS THE MOVE TAB PLOTS, as a deviation from the desired
+  // tool position: the move is far larger than the errors, so as absolute
+  // positions the five are one line. The desired becomes the zero line and the
+  // chart becomes the claim -- the motors deliberately off target, the tool on it.
+  cmd: [], enc: [], est: [], tru: [] };
 // The chain's own motion state, staged and applied at a move boundary for the same
 // reason the Move tab's is: rebuilding a reference mid-move is a position-demand
 // step into the servo's proportional gain.
@@ -2114,6 +2129,12 @@ function step2(n) {
       chHist.c21.push(M[1][0] * arm2.alpha[0]);
       chHist.c22.push(M[1][1] * arm2.alpha[1]);
       chHist.tip.push(arm2.tipError().total);
+      const R = arm2.toolRadius(), e2 = arm2.encoders();
+      const dEnc = R * (e2[0].angle - r[0].theta) + arm2.L2 * (e2[1].angle - r[1].theta);
+      chHist.cmd.push(R * off);
+      chHist.enc.push(dEnc);
+      chHist.est.push(csLastEst === null ? null : dEnc + csLastEst);
+      chHist.tru.push(toolTrackingError(r));
       if (chHist.t.length > 1200) for (const a of Object.values(chHist)) a.splice(0, 400);
     }
   }
@@ -2128,6 +2149,7 @@ function step2(n) {
 // anything favours it. Training them side by side rather than in separate runs is
 // what makes the comparison like-for-like at every instant.
 let csWhole = null, csElbow = null, csTraining = false, csChartOn = false;
+let csLastEst = null, lastGeom2 = null, chPosOn = false;
 const csRec = [];
 let csScoreFrom = 0;
 
@@ -2135,14 +2157,19 @@ function csInit() {
   csWhole = new ChainSensor({ joints: [0, 1], sampleEvery: SAMPLE_EVERY, lag: 3, warmup: 200 });
   csElbow = new ChainSensor({ joints: [1], sampleEvery: SAMPLE_EVERY, lag: 6, warmup: 200 });
   csRec.length = 0; csScoreFrom = 0; csTraining = false;
-  $('cs-train').disabled = true; $('cs-lock').disabled = true;
-  $('cs-train').textContent = 'Start training ▶';
+  csLastEst = null;
+  // A closed loop on a sensor that no longer exists must not keep its last
+  // pre-distortion, and mode 3 is unavailable again until the new one locks.
+  closedOff2 = 0;
+  if ($('ctl2-mode').value === 'closed') $('ctl2-mode').value = 'open';
+  syncChain();
 }
 
 function csTick(tau) {
   if (!csWhole) return;
   const a = csWhole.observe(arm2, tau, 1);
   const b = csElbow.observe(arm2, tau, 1);
+  csLastEst = a;
   if (a === null || b === null) {
     if (csWhole.ss.frozen && csElbow.ss.frozen) $('cs-train').disabled = false;
     return;
@@ -2227,28 +2254,125 @@ function csChart() {
     { displayModeBar: false, responsive: true });
 }
 
-$('cs-train').addEventListener('click', () => {
+// ---- the chain's one-button sequence, and its single state authority.
+// It has no pose-touch commissioning -- the chain's rigid model comes from the
+// lattices themselves -- so it starts at training and is otherwise the Move tab's.
+let auto2 = null;
+const AUTO2_STEPS = ['train both tool sensors', 'lock them', 'compare', 'select the best'];
+
+function startAuto2() {
+  if (!arm2 || busy2) return;
+  auto2 = { step: 0, note: '', trainTarget: 1000 };
+  run2 = true;
+  $('state2-badge').textContent = 'auto-tune: working through every step';
+  $('state2-badge').className = 'badge warn';
+  syncChain();
+}
+
+function stopAuto2(msg) {
+  auto2 = null;
+  if (msg) { $('state2-badge').textContent = msg; $('state2-badge').className = 'badge good'; }
+  syncChain();
+}
+
+function auto2Tick() {
+  if (!auto2) return;
+  const st = AUTO2_STEPS[auto2.step];
+  const done = () => { auto2.step++; auto2.note = ''; };
+  if (st === 'train both tool sensors') {
+    if (!csWhole) { stopAuto2('auto-tune: no sensor'); return; }
+    if (csWhole.mode === 'estimating') { done(); return; }
+    if (csWhole.mode === 'training' && !csTraining) beginTraining2();
+    auto2.note = csWhole.mode === 'calibrating' ? 'calibrating'
+      : `${csWhole.trained}/${auto2.trainTarget} pairs`;
+    if (csWhole.trained >= auto2.trainTarget) done();
+  } else if (st === 'lock them') {
+    if (csWhole.mode === 'training') lockSensors2();
+    done();
+  } else if (st === 'compare') {
+    if (!cmp2 && !auto2.started) { auto2.started = true; startCompare2(); }
+    else if (!cmp2) done();
+    auto2.note = cmp2 ? MODE_LABEL[cmp2.seq[cmp2.i]] : '';
+  } else if (st === 'select the best') {
+    // The winner is READ OFF THE TABLE rather than assumed.
+    const keys = ['open', 'ff', 'closed'].filter((m) => board2[m]);
+    if (!keys.length) { stopAuto2('auto-tune: nothing scored'); return; }
+    let best = keys[0];
+    for (const m of keys) if (board2[m].rms < board2[best].rms) best = m;
+    setCtl2Mode(best);
+    stopAuto2(`auto-tune done — ${MODE_LABEL[best]}, rms ${board2[best].rms.toExponential(2)}`);
+    console.log(`[flexisim] chain auto-tune selected ${best}: `
+      + keys.map((m) => `${m} ${board2[m].rms.toExponential(2)}`).join(' / '));
+    return;
+  }
+  if (auto2 && auto2.step >= AUTO2_STEPS.length) stopAuto2('auto-tune done');
+}
+
+function beginTraining2() {
   if (!csWhole || csWhole.mode === 'estimating') return;
-  csTraining = !csTraining;
+  csTraining = true;
   csScoreFrom = csRec.length;
-  if (csTraining && arm2) {
+  if (arm2) {
     const w0 = win2Stats();
     const e0 = w0 && w0.full ? Math.abs(w0.bias) : Math.abs(arm2.tipError().total);
     ditherAmp2 = Math.min(0.02, Math.max(1e-3, 1.5 * e0 / arm2.toolRadius()));
     console.log(`[flexisim] chain commissioning dither ${ditherAmp2.toExponential(3)} rad`);
   }
-  $('cs-train').textContent = csTraining ? 'Pause training ⏸' : 'Start training ▶';
-});
-$('cs-lock').addEventListener('click', () => {
+  syncChain();
+}
+
+function lockSensors2() {
   if (!csWhole || csWhole.mode !== 'training') return;
   csWhole.lock(); csElbow.lock(); csTraining = false;
-  $('cs-train').textContent = 'Start training ▶'; $('cs-train').disabled = true;
-  $('cs-lock').disabled = true;
   // THE METER RESTARTS AT THE LOCK: a score spanning it is a blend of the model
   // that was still being told the answer and the one that is not.
   csScoreFrom = csRec.length;
   console.log(`[flexisim] chain sensors LOCKED after ${csWhole.trained} pairs`);
+  syncChain();
+}
+
+function startCompare2() {
+  const seq = ['open', 'ff'];
+  if (csWhole && csWhole.mode === 'estimating') seq.push('closed');
+  board2 = {}; renderBoard2();
+  cmp2 = { seq, i: 0, wait: WIN2_MOVES };
+  setCtl2Mode('open');
+  run2 = true;
+  syncChain();
+}
+
+/** Every chain control, derived in one place. See syncMove() for why. */
+function syncChain() {
+  const ready = !!arm2 && !busy2;
+  const inAuto = !!auto2;
+  const canTrain = ready && csWhole && csWhole.mode === 'training' && csWhole.ss.frozen;
+  const set = (id, disabled, text) => {
+    const el = $(id);
+    if (!el) return;
+    if (el.disabled !== disabled) el.disabled = disabled;
+    if (text !== undefined && el.textContent !== text) el.textContent = text;
+  };
+  set('auto2', !ready, auto2 ? 'Stop ■' : 'Auto-tune ▶');
+  set('run2', !ready || inAuto, run2 ? 'Pause ⏸' : 'Run move ▶');
+  set('reset2', busy2);
+  set('ctl2-mode', !ready || inAuto || !!cmp2);
+  set('compare2', !ready || inAuto, cmp2 ? 'Stop compare ■' : 'Compare ▶');
+  set('board2-clear', !ready || inAuto);
+  set('mode2', !ready || inAuto);
+  set('cs-train', !canTrain || inAuto,
+    csTraining ? 'Pause training ⏸' : 'Start training ▶');
+  set('cs-lock', !canTrain || inAuto || csWhole.trained < 400);
+}
+
+$('auto2').addEventListener('click', () => {
+  if (auto2) { stopAuto2('auto-tune stopped'); return; }
+  startAuto2();
 });
+
+$('cs-train').addEventListener('click', () => {
+  if (csTraining) { csTraining = false; syncChain(); } else beginTraining2();
+});
+$('cs-lock').addEventListener('click', lockSensors2);
 
 // ------------------------------------------------- the chain's scoreboard
 function win2Stats() {
@@ -2287,13 +2411,13 @@ function recordBoard2() {
 }
 
 function setCtl2Mode(m) {
-  $('ctl2-mode').value = m; win2 = []; closedOff2 = 0; stats2();
+  $('ctl2-mode').value = m; win2 = []; closedOff2 = 0; stats2(); syncChain();
 }
 
 function stopCompare2(msg) {
   cmp2 = null;
-  $('compare2').textContent = 'Compare ▶';
   if (msg) { $('state2-badge').textContent = msg; $('state2-badge').className = 'badge good'; }
+  syncChain();
 }
 
 function moveBoundary2() {
@@ -2326,65 +2450,115 @@ function draw2() {
   const mag = +$('s-mag2').value;
   const [p1, p2] = arm2.profiles();
   const r = refs2();
+  const enc = arm2.encoders();
+  const off = off2Now(r);
+  const piv1 = arm2.l1.meta.pivot[0], piv2 = arm2.l2.meta.pivot[0];
 
-  // ONE CHAIN DRAWN AS A CHAIN, and that means link 2 hangs off link 1's DRAWN
-  // tip -- position AND slope -- rather than off the rigid elbow. The deflections
-  // are exaggerated, so a forearm attached at the un-exaggerated elbow floats away
-  // from the upper arm and the picture reads as a broken linkage rather than as a
-  // bent one. Exaggerate the chain, not one link of it.
+  // EVERY LINE IS A DEVIATION FROM THE COMMANDED POSE, AT ONE MAGNIFICATION -- the
+  // same correction the Move tab needed and for the same reason. Drawing the truth
+  // ROTATED by its real joint angles while multiplying only the BENDING by the
+  // slider splits one error across two scales, and the bending then outvotes the
+  // wind-up by exactly the magnification: measured on the Move tab, that put the
+  // tool on the wrong side of the encoder for 3.2% of every move and was reported
+  // from the device as motion that is not physically possible.
   //
-  // THE SLOPE IS THE PART THAT IS EASY TO FORGET. A bent upper arm does not merely
-  // move the elbow, it TILTS everything downstream of it, and at the tool that
-  // tilt is levered by the whole forearm. It is the same term tipError() reports
-  // separately rather than folding in with a lever arm it does not have.
-  const drawChain = (q1, q2, d1, d2, col, width, dash) => {
+  // Deviations are transverse offsets rather than rotations, because a magnified
+  // rotation would change each link's LENGTH on screen -- a second lie.
+  const q1c = r[0].theta, q2c = r[1].theta;
+  const c1 = Math.cos(q1c), s1 = Math.sin(q1c);
+  const c2 = Math.cos(q1c + q2c), s2 = Math.sin(q1c + q2c);
+  const at = (prof, bx, piv) => {                 // bending, interpolated along x
+    const want = piv + bx;
+    let lo = 0;
+    while (lo < prof.x.length - 2 && prof.x[lo + 1] < want) lo++;
+    const span = prof.x[lo + 1] - prof.x[lo];
+    const t = span > 0 ? (want - prof.x[lo]) / span : 0;
+    return prof.dy[lo] + t * (prof.dy[lo + 1] - prof.dy[lo]);
+  };
+  const tipSlope = (prof, piv) => {
+    const n = prof.x.length;
+    return (prof.dy[n - 1] - prof.dy[n - 2]) / (prof.x[n - 1] - prof.x[n - 2]);
+  };
+
+  /**
+   * One chain, given each joint's angular DEVIATION from the command and whether
+   * the links are bent. Returns the tool and elbow points so the markers land on
+   * the same geometry the line was drawn from.
+   */
+  const chain = (d1, d2, bent, col, width, dash) => {
     g.save(); g.strokeStyle = col; g.lineWidth = width; g.setLineDash(dash || []);
-    const c1 = Math.cos(q1), s1 = Math.sin(q1);
-    const piv1 = arm2.l1.meta.pivot[0], piv2 = arm2.l2.meta.pivot[0];
+    const b1 = bent ? (bx) => at(p1, bx, piv1) : () => 0;
+    const b2 = bent ? (bx) => at(p2, bx, piv2) : () => 0;
     g.beginPath();
-    for (let i = 0; i < d1.x.length; i++) {
-      const bx = d1.x[i] - piv1, by = d1.dy[i] * mag;
-      if (bx < 0) continue;            // the clamped flange lives inside the joint
+    for (let i = 0; i <= 20; i++) {
+      const bx = (i / 20) * arm2.L1, by = mag * (d1 * bx + b1(bx));
       g.lineTo(px + (c1 * bx - s1 * by) * scale, py - (s1 * bx + c1 * by) * scale);
     }
     g.stroke();
-    const n = d1.x.length;
-    const tbx = d1.x[n - 1] - piv1, tby = d1.dy[n - 1] * mag;
-    const ex = c1 * tbx - s1 * tby, ey = s1 * tbx + c1 * tby;
-    const slope = Math.atan2((d1.dy[n - 1] - d1.dy[n - 2]) * mag, d1.x[n - 1] - d1.x[n - 2]);
-    const phi = q1 + slope + q2;
-    const c2 = Math.cos(phi), s2 = Math.sin(phi);
+    const eby = mag * (d1 * arm2.L1 + b1(arm2.L1));
+    const ex = c1 * arm2.L1 - s1 * eby, ey = s1 * arm2.L1 + c1 * eby;
+    // LINK 2's ORIENTATION DEVIATION IS NOT JUST ITS OWN JOINT'S. A bent upper arm
+    // TILTS everything downstream, so the forearm carries link 1's angular
+    // deviation plus link 1's tip SLOPE plus joint 2's own -- the term tipError()
+    // reports separately rather than folding in with a lever arm it does not have.
+    const dd2 = d1 + (bent ? tipSlope(p1, piv1) : 0) + d2;
     g.beginPath();
-    let tipX = 0, tipY = 0;
-    for (let i = 0; i < d2.x.length; i++) {
-      const bx = d2.x[i] - piv2, by = d2.dy[i] * mag;
-      if (bx < 0) continue;
-      tipX = ex + c2 * bx - s2 * by; tipY = ey + s2 * bx + c2 * by;
-      g.lineTo(px + tipX * scale, py - tipY * scale);
+    let tx = 0, ty = 0;
+    for (let i = 0; i <= 20; i++) {
+      const bx = (i / 20) * arm2.L2, by = mag * (dd2 * bx + b2(bx));
+      tx = ex + c2 * bx - s2 * by; ty = ey + s2 * bx + c2 * by;
+      g.lineTo(px + tx * scale, py - ty * scale);
     }
     g.stroke(); g.restore();
-    return [tipX, tipY, ex, ey];
+    return [tx, ty, ex, ey];
   };
-  const flat1 = { x: p1.x, dy: p1.x.map(() => 0) };
-  const flat2 = { x: p2.x, dy: p2.x.map(() => 0) };
-  drawChain(r[0].theta, r[1].theta, flat1, flat2, '#64748b', 2, [6, 5]);
-  const e = arm2.encoders();
-  drawChain(e[0].angle, e[1].angle, flat1, flat2, '#475569', 4);
-  const [tx, ty, elx, ely] = drawChain(arm2.q[0], arm2.q[1], p1, p2, '#f59e0b', 5);
-  const tip = [tx, ty];
-  // The elbow, so the joint the coupling acts at is visible as a joint.
+
+  chain(0, 0, false, '#64748b', 2, [6, 5]);                       // desired
+  chain(off, 0, false, '#a78bfa', 2, [3, 3]);                     // commanded motor
+  const [, , , ] = chain(enc[0].angle - q1c, enc[1].angle - q2c, false, '#475569', 4);
+  const [tx, ty, elx, ely] = chain(arm2.q[0] - q1c, arm2.q[1] - q2c, true, '#f59e0b', 5);
+
   g.fillStyle = '#fbbf24'; g.globalAlpha = 0.55;
   g.beginPath(); g.arc(px + elx * scale, py - ely * scale, 4, 0, 7); g.fill();
   g.globalAlpha = 1;
   g.fillStyle = '#94a3b8'; g.beginPath(); g.arc(px, py, 6, 0, 7); g.fill();
   g.fillStyle = '#fbbf24'; g.beginPath();
-  g.arc(px + tip[0] * scale, py - tip[1] * scale, 6, 0, 7); g.fill();
-  g.font = '11px ui-monospace,monospace'; g.fillStyle = '#64748b';
-  g.textAlign = 'right'; g.fillText(`deflection ×${mag}`, w - 10, h - 12);
+  g.arc(px + tx * scale, py - ty * scale, 6, 0, 7); g.fill();
+  // THE ESTIMATE IS A TIP MARKER, NOT A BENT CHAIN, because one number about the
+  // tool is all the sensor produces.
+  if (csLastEst !== null) {
+    const [ex2, ey2] = (() => {
+      const d1 = enc[0].angle - q1c, d2 = enc[1].angle - q2c;
+      const eby = mag * d1 * arm2.L1;
+      const bx1 = arm2.L1;
+      const px1 = c1 * bx1 - s1 * eby, py1 = s1 * bx1 + c1 * eby;
+      const by = mag * ((d1 + d2) * arm2.L2 + csLastEst);
+      return [px1 + c2 * arm2.L2 - s2 * by, py1 + s2 * arm2.L2 + c2 * by];
+    })();
+    g.strokeStyle = '#22d3ee'; g.lineWidth = 2;
+    g.beginPath(); g.arc(px + ex2 * scale, py - ey2 * scale, 7, 0, 7); g.stroke();
+  }
+  lastGeom2 = { mag, drawnToolVsMotor: mag * arm2.tipError().total,
+    trueToolVsMotor: arm2.tipError().total };
+
+  g.font = '11px ui-monospace,monospace';
+  const key = (y, col, txt, dash) => {
+    g.save(); g.strokeStyle = col; g.lineWidth = 3; g.setLineDash(dash || []);
+    g.beginPath(); g.moveTo(10, y - 4); g.lineTo(28, y - 4); g.stroke(); g.restore();
+    g.fillStyle = col; g.fillText(txt, 34, y);
+  };
+  key(h - 72, '#f59e0b', 'true arm');
+  if (csLastEst !== null) key(h - 58, '#22d3ee', 'estimated tool');
+  key(h - 44, '#475569', 'actual motors');
+  key(h - 30, '#a78bfa', 'commanded motors', [3, 3]);
+  key(h - 16, '#64748b', 'desired', [6, 5]);
+  g.fillStyle = '#64748b'; g.textAlign = 'right';
+  g.fillText(`deviations ×${mag}`, w - 10, h - 16);
+  if (off !== 0) {
+    g.fillStyle = '#a78bfa';
+    g.fillText(`pre-distortion ${(off * 1e3).toFixed(2)} mrad`, w - 10, h - 30);
+  }
   g.textAlign = 'left';
-  g.fillStyle = '#f59e0b'; g.fillText('truth', 10, h - 42);
-  g.fillStyle = '#94a3b8'; g.fillText('encoders', 10, h - 27);
-  g.fillText('commanded', 10, h - 12);
 }
 
 function stats2() {
@@ -2430,6 +2604,39 @@ function stats2() {
   }
 }
 
+/** The five positions, deviation from the desired tool point. */
+function chainPosChart() {
+  if (chHist.t.length < 6) return;
+  const T = chHist.t.slice();
+  const traces = [
+    { x: [T[0], T[T.length - 1]], y: [0, 0], name: 'desired',
+      line: { color: '#64748b', width: 1, dash: 'dash' }, hoverinfo: 'skip' },
+    { x: T, y: chHist.cmd.slice(), name: 'commanded motors',
+      line: { color: '#a78bfa', width: 1.5, dash: 'dot' } },
+    { x: T, y: chHist.enc.slice(), name: 'actual motors',
+      line: { color: '#94a3b8', width: 1.5 } },
+    { x: T, y: chHist.est.slice(), name: 'estimated tool',
+      line: { color: '#22d3ee', width: 1.5 }, connectgaps: false },
+    { x: T, y: chHist.tru.slice(), name: 'true tool',
+      line: { color: '#f59e0b', width: 2.5 } },
+  ];
+  if (!chPosOn) {
+    Plotly.newPlot('chain-pos', traces, {
+      margin: { l: 46, r: 10, t: 6, b: 26 }, paper_bgcolor: '#0b1220', plot_bgcolor: '#060a14',
+      font: { color: '#94a3b8', size: 9 }, showlegend: true,
+      legend: { orientation: 'h', y: 1.22, font: { size: 9 } },
+      xaxis: { gridcolor: '#1e293b', title: { text: 'solver steps', font: { size: 9 } } },
+      yaxis: { gridcolor: '#1e293b', zeroline: true, zerolinecolor: '#475569',
+        title: { text: 'tool vs desired', font: { size: 9 } } },
+    }, { displayModeBar: false, responsive: true });
+    $('chain-pos').classList.add('on');
+    chPosOn = true;
+    return;
+  }
+  Plotly.react('chain-pos', traces, $('chain-pos').layout,
+    { displayModeBar: false, responsive: true });
+}
+
 function chainChart() {
   if (chHist.t.length < 6) return;
   const T = chHist.t.slice();
@@ -2458,17 +2665,22 @@ function chainChart() {
 }
 
 $('run2').addEventListener('click', () => {
-  if (!arm2 || busy2) return;
+  if (!arm2 || busy2 || auto2) return;
   run2 = !run2;
-  $('run2').textContent = run2 ? 'Pause ⏸' : 'Run move ▶';
   $('state2-badge').textContent = run2 ? 'running' : 'paused';
   $('state2-badge').className = 'badge' + (run2 ? ' good' : '');
+  syncChain();
 });
+// Stop the sequence FIRST: otherwise the next frame's auto2Tick() restarts a step
+// against a plant being torn down.
 $('reset2').addEventListener('click', async () => {
-  run2 = false; $('run2').textContent = 'Run move ▶';
+  stopAuto2();
+  run2 = false;
   busy2 = true; await build2(); busy2 = false;
+  syncChain();
 });
 $('mode2').addEventListener('change', () => {
+  stopAuto2();
   for (const a of Object.values(chHist)) a.length = 0;
   win2 = []; board2 = {}; renderBoard2(); stopCompare2(); closedOff2 = 0;
   // A DIFFERENT REGIME IS A DIFFERENT COMMISSIONING. The standardisation is frozen
@@ -2481,8 +2693,9 @@ const ladder2 = (id, vid, arr, fmtv) => {
   const f = () => { $(vid).textContent = fmtv(arr[+$(id).value]); };
   $(id).addEventListener('input', f);
   $(id).addEventListener('change', async () => {
-    busy2 = true; run2 = false; $('run2').textContent = 'Run move ▶';
-    await build2(); busy2 = false;
+    stopAuto2();
+    busy2 = true; run2 = false;
+    await build2(); busy2 = false; syncChain();
   });
   f();
 };
@@ -2493,16 +2706,10 @@ $('ctl2-mode').addEventListener('change', () => {
   stopCompare2(); setCtl2Mode($('ctl2-mode').value);
 });
 $('compare2').addEventListener('click', () => {
-  if (!arm2) return;
+  if (!arm2 || auto2) return;
   if (cmp2) { stopCompare2('compare stopped'); return; }
-  const seq = ['open', 'ff'];
-  if (csWhole && csWhole.mode === 'estimating') seq.push('closed');
-  board2 = {}; renderBoard2();
-  cmp2 = { seq, i: 0, wait: WIN2_MOVES };
-  setCtl2Mode('open');
-  $('compare2').textContent = 'Stop compare ■';
-  if (!run2) { run2 = true; $('run2').textContent = 'Pause ⏸'; }
-  $('state2-badge').textContent = `comparing — ${seq.length} modes`;
+  startCompare2();
+  $('state2-badge').textContent = 'comparing';
   $('state2-badge').className = 'badge warn';
 });
 $('board2-clear').addEventListener('click', () => {
@@ -2543,6 +2750,10 @@ window.__flxChainDbg = () => (arm2 ? {
   ctl: { want: $('ctl2-mode').value, active: ctl2Mode(), closedOff: closedOff2,
     dither: ditherAmp2, dithering: csTraining && !!ditherAmp2,
     comparing: cmp2 ? { ...cmp2 } : null },
+  auto: auto2 ? { ...auto2, of: AUTO2_STEPS.length, what: AUTO2_STEPS[auto2.step] } : null,
+  geom: lastGeom2 ? { ...lastGeom2,
+    ratio: lastGeom2.trueToolVsMotor !== 0
+      ? lastGeom2.drawnToolVsMotor / lastGeom2.trueToolVsMotor : null } : null,
   board: board2, win: win2Stats(), motion: { ...motion2, pending: motion2Pending,
     period: prof2 && prof2.period },
   cells: arm2.l1.lattice.cellCount + arm2.l2.lattice.cellCount,
@@ -2617,6 +2828,9 @@ window.__flxDbg = () => ({
   compliance: pc && pc.compliance, mode, win: winStats(),
   motion: { ...motionActive, pending: motionPending, period: prof && prof.period },
   decayWant: A ? decayStepsFor(A.E) : null,
+  auto: auto ? { ...auto, of: AUTO_STEPS.length, what: AUTO_STEPS[auto.step] } : null,
+  ui: ['auto', 'commission', 'run', 'ctl-mode', 'compare', 'shape-on', 'ss-train', 'ss-lock']
+    .reduce((o, id) => { o[id] = $(id).disabled; return o; }, {}),
   ctl: { want: $('ctl-mode').value, active: ctlMode(), closedOff, gain: closedGain(),
     ffLead: FF_LEAD,
     // The identity the regression pins: the applied correction is the model
@@ -2637,6 +2851,7 @@ syncMove();
 busy2 = true;
 await build2();
 busy2 = false;
+syncChain();
 requestAnimationFrame(frame);
 console.log('flexisim ready ✓');
 </script>

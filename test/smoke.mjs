@@ -2049,6 +2049,36 @@ check('flexisim: and the table it produced ranks the corrections below the open 
   && Math.abs(cmpB.closed.bias) < Math.abs(cmpB.open.bias),
   JSON.stringify(cmpB));
 
+// ---- AUTO-TUNE, and the STATE LOCKING it is supposed to enforce. A one-button
+// sequence that leaves the manual controls live is worse than no button: two things
+// then drive the same lifecycle and the loser is whichever the user taps. The
+// controls being disabled WHILE it runs is therefore half the feature, and it is
+// asserted here rather than assumed -- this is the part that was reported broken.
+await fx.evaluate(() => { document.getElementById('auto').click(); });
+await fx.waitForTimeout(200);
+const inAuto = await fx.evaluate(() => window.__flxDbg());
+check('flexisim: Auto-tune starts a sequence and reports which step it is on',
+  inAuto.auto && typeof inAuto.auto.what === 'string', JSON.stringify(inAuto.auto));
+check('flexisim: …and LOCKS the manual controls while it owns the machine',
+  ['commission', 'run', 'ctl-mode', 'compare', 'ss-train'].every((id) => inAuto.ui[id]),
+  JSON.stringify(inAuto.ui));
+await fx.waitForFunction(() => !window.__flxDbg().auto, null, { timeout: 300000 });
+const afterAuto = await fx.evaluate(() => window.__flxDbg());
+console.log(`  flexisim: auto-tune selected ${afterAuto.ctl.want}, board `
+  + Object.entries(afterAuto.board).map(([m, v]) => `${m} ${v.rms.toExponential(2)}`).join(' / '));
+check('flexisim: Auto-tune finishes and leaves a correction selected',
+  ['open', 'ff', 'closed'].includes(afterAuto.ctl.want)
+  && Object.keys(afterAuto.board).length >= 2, JSON.stringify(afterAuto.ctl.want));
+// IT PICKS BY MEASURING. The selected mode must be the lowest rms ON ITS OWN TABLE
+// -- a sequence that scored everything and then chose a favourite would look
+// identical from outside.
+const rows = afterAuto.board;
+check('flexisim: …the one its own table scored best, not a favourite',
+  Object.keys(rows).every((m) => rows[m].rms >= rows[afterAuto.ctl.want].rms),
+  Object.entries(rows).map(([m, v]) => `${m} ${v.rms.toExponential(2)}`).join(', '));
+check('flexisim: and the manual controls come back afterwards',
+  !afterAuto.ui.commission && !afterAuto.ui['ctl-mode'], JSON.stringify(afterAuto.ui));
+
 // ---- THE SINUSOID. A second profile is a second reference generator, and the one
 // thing it can silently get wrong is the move BOUNDARY the whole page is timed on
 // -- the window, the scoreboard and the staged motion all key off prof.period.
