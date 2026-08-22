@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:228,built:"2026-08-22T04:34:49Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:229,built:"2026-08-22T15:32:32Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -178,6 +178,11 @@
       <div class="slider"><span>Jerk limit</span>
         <input type="range" id="s-jerk" min="0" max="6" step="1" value="3" />
         <span class="v" id="v-jerk">120 steps</span></div>
+    </div>
+    <div class="controls">
+      <div class="slider"><span>Drive rating</span>
+        <input type="range" id="s-drive" min="0" max="8" step="1" value="6" />
+        <span class="v" id="v-drive">32× hold</span></div>
     </div>
     <div class="controls" id="sine-ctl" hidden>
       <div class="slider"><span>Amplitude</span>
@@ -363,6 +368,9 @@
       <div class="slider"><span>Jerk limit</span>
         <input type="range" id="s-jerk2" min="0" max="6" step="1" value="3" />
         <span class="v" id="v-jerk2">120 steps</span></div>
+      <div class="slider"><span>Drive rating</span>
+        <input type="range" id="s-drive2" min="0" max="8" step="1" value="6" />
+        <span class="v" id="v-drive2">32× hold</span></div>
       <div class="slider"><span>Elbow pose</span>
         <input type="range" id="s-elbow" min="0" max="8" step="1" value="3" />
         <span class="v" id="v-elbow">0.60 rad</span></div>
@@ -531,7 +539,7 @@ import { ChainServo } from './lib/flexisim/compensator.js';
 import { ChainSensor } from './lib/flexisim/chainsensor.js';
 import {
   AngleProfile, SineProfile, PositionServo, TipCompensator, tipTrackingError, zvdShaper, ringFit,
-  boxcarShaper, convolveShapers,
+  boxcarShaper, convolveShapers, driveEnvelope,
   LearnedFeedforward, ilcRefine,
 } from './lib/flexisim/compensator.js';
 
@@ -649,9 +657,16 @@ async function build() {
   // so the gravity torque is a closed form of the pose and needs no lattice.
   const tauG = (th) => mp.centroid * mp.mass * (-G) * Math.cos(th);
   const Jr = joint.reflectedInertia();
+  // THE RATING IS QUOTED AGAINST THE HOLD TORQUE, which is a property of the plant and
+  // therefore has to be computed from it rather than written down: change the link and
+  // the same "32x gravity" is a different number of newton-metres, which is what makes
+  // the multiple meaningful across the E and K sliders.
+  const hold = Math.abs(tauG(0)) / RATIO;
+  const lim = driveLimits(hold);
   const servo = new PositionServo({ kp: SERVO_BW * SERVO_BW * Jr / RATIO,
-    kd: 2 * SERVO_BW * Jr / RATIO, inertia: Jr, ratio: RATIO, gravityTorque: tauG });
-  A = { arm, servo, tauG, mp, link, joint, K, E };
+    kd: 2 * SERVO_BW * Jr / RATIO, inertia: Jr, ratio: RATIO, gravityTorque: tauG,
+    ...lim });
+  A = { arm, servo, tauG, mp, link, joint, K, E, hold };
   // A REBUILD CANCELS ANY COMMISSIONING IN FLIGHT. Without this, changing a plant
   // slider (or pressing Reset) part-way through left `comm` pointing at a sequence
   // for an arm that no longer exists AND left the Commission button disabled with
@@ -754,6 +769,35 @@ function currentRef() {
 // large fraction of the 300-step acceleration and is really making the move gentler,
 // which is what the Move speed slider is for; keeping the two apart is this page's rule.
 const JERK_LADDER = [0, 30, 60, 120, 200, 300, 450];
+
+// THE DRIVE HAS A RATING NOW, because it did not and that is not a machine. Reported
+// from the device: "the actual motor position has to be speed, accel and torque limited
+// to match a real world scenario. Real motors can't react like it can now." All three
+// come from ONE curve -- see driveEnvelope() -- so there are no separate clamps to
+// disagree with each other, and the rating is quoted the way a servo is actually sized:
+// as a multiple of the torque needed to HOLD THE ARM LEVEL against gravity.
+//
+// MEASURED at the shipped move, which demands 3.7x that hold torque at its peak
+// (rating -> % of steps saturated / bias / rms):
+//    ideal   0.0% / 1.43e-4 / 5.078e-2      16x   0.1% / 1.43e-4 / 5.078e-2
+//      8x    1.1% / 1.43e-4 / 5.078e-2       6x   1.9% / 1.43e-4 / 5.078e-2
+//      4x    3.3% / 1.44e-4 / 5.078e-2       3x  12.2% / -4.27e-2 / 6.846e-2
+//      2x   28.6% / -2.36e-1 / 2.803e-1
+// and at the most aggressive corner of the two ladders (span 0.8 at 4.6x, which demands
+// 78x): ideal 8.515e-1 rms, 78x 4.5% saturated and 8.252e-1, 32x 15.8% and 1.744e+0,
+// 16x 26.4% and 3.646e+0.
+// 32x IS SHIPPED, which is a real machine's sizing: the duty it is built for never
+// notices it (0.1% of steps, score unchanged to four figures), and asking for several
+// times that duty makes it lag, exactly as a real one does. A rating tight enough to
+// bite on the DEFAULT move would be a machine that cannot do its own default move.
+const DRIVE_LADDER = [2, 3, 4, 6, 8, 16, 32, 64, 0];    // x gravity-hold torque; 0 = ideal
+const NO_LOAD_SPEED = 0.2;   // rad/step at the MOTOR, N times the output's
+
+function driveLimits(holdTorque) {
+  const mult = DRIVE_LADDER[+$('s-drive').value];
+  return mult > 0 ? { tauMax: mult * holdTorque, speedMax: NO_LOAD_SPEED }
+    : { tauMax: 0, speedMax: 0 };
+}
 
 function jerkShaper(width) { return width > 0 ? boxcarShaper(width) : null; }
 
@@ -1573,11 +1617,20 @@ function ssChart() {
     { displayModeBar: false, responsive: true });
 }
 
+/**
+ * THE EXCURSION AS WELL AS THE SPREAD, because the picture needs a bound and not a
+ * standard deviation: what a reader has to see at 30x magnification is how far the tool
+ * actually swept, so the shake reads as motion inside a known envelope rather than as
+ * noise. Same window as the bias and the oscillation, so the picture and the stats
+ * cannot disagree.
+ */
 function winStats() {
   if (!win.length) return null;
   let m = 0; for (const x of win) m += x; m /= win.length;
   let s = 0; for (const x of win) s += (x - m) * (x - m); s = Math.sqrt(s / win.length);
-  return { bias: m, sd: s, rms: Math.sqrt(m * m + s * s), n: win.length,
+  let lo = Infinity, hi = -Infinity;
+  for (const x of win) { if (x < lo) lo = x; if (x > hi) hi = x; }
+  return { bias: m, sd: s, rms: Math.sqrt(m * m + s * s), n: win.length, lo, hi,
     full: win.length >= prof.period };
 }
 
@@ -1677,12 +1730,40 @@ function draw() {
   dot(0, '#64748b', 4);
   const toolDev = (arm.joint.thL - ref.theta) * L + bendAt(1);
   const motorDev = (enc - ref.theta) * L;
+
+  // WHAT THE MAGNIFICATION IS DOING TO THE READER, and why this is here. At x30 a real
+  // 2.5e-2 tool error on a 15.5 arm is drawn as 5% of the arm, and it genuinely swings
+  // at periods of 430 to 1600 steps -- 7 to 27 frames -- so the arm visibly shakes.
+  // Reported from the device as the slider making it "look worse than it is", and the
+  // measurement agrees it looks worse while disagreeing that it IS worse: the drawn tool
+  // moves 26% of its own range every frame, and 99.9% of the tip error's power is at
+  // periods LONGER than two frames, so this is real motion rather than aliasing.
+  // The answer is therefore not to hide the motion but to BOUND it: an excursion bar
+  // over the same window the bias and oscillation are computed on, with a tick at the
+  // sustained value. The line still shows where the tool is NOW; the bar says how far it
+  // sweeps and the tick says where it actually sits.
+  const wS = winStats();
+  if (wS && wS.n > 8) {
+    const [, Ylo] = world(L, mag * wS.lo);
+    const [Xb, Yhi] = world(L, mag * wS.hi);
+    g.save();
+    g.strokeStyle = 'rgba(251,191,36,0.30)'; g.lineWidth = 9; g.lineCap = 'butt';
+    g.beginPath(); g.moveTo(Xb, Ylo); g.lineTo(Xb, Yhi); g.stroke();
+    const [, Ym] = world(L, mag * wS.bias);
+    g.strokeStyle = '#fde68a'; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(Xb - 9, Ym); g.lineTo(Xb + 9, Ym); g.stroke();
+    g.restore();
+  }
   dot(toolDev, '#fbbf24', 6);
   // WHAT WAS ACTUALLY PUT ON SCREEN, for the regression to compare against what
   // the physics says. Every functional check passed while the picture was wrong,
   // so the only instrument that can catch a drawing defect is the drawing itself.
   lastGeom = { mag, drawnToolVsMotor: mag * (toolDev - motorDev),
-    trueToolVsMotor: arm.tipError().total };
+    trueToolVsMotor: arm.tipError().total,
+    // WHAT THE BAND CLAIMS, so a regression can check the PICTURE rather than the
+    // physics: the instantaneous tool must lie inside the sweep the band draws, or the
+    // band is telling the reader something the arm is contradicting on screen.
+    toolDev, band: wS && wS.n > 8 ? { lo: wS.lo, hi: wS.hi, mean: wS.bias } : null };
   // THE ESTIMATE IS A TIP MARKER, NOT A LINE, because that is all the sensor
   // produces -- one number about the tool. Drawing it as a bent arm would be
   // inventing a shape the model never estimated.
@@ -1700,7 +1781,16 @@ function draw() {
   key(h - 31, '#a78bfa', 'commanded motor', [3, 3]);
   key(h - 16, '#64748b', 'desired', [6, 5]);
   g.fillStyle = '#64748b'; g.textAlign = 'right';
-  g.fillText(`deviations ×${mag}`, w - 10, h - 16);
+  // THE MAGNIFICATION IS STATED IN REAL TERMS, not just as a number. "x30" says nothing
+  // about whether the arm is wildly out or beautifully accurate; the fraction of the arm
+  // does, and it is the number a machinist would ask for.
+  g.fillText(`deviations ×${mag}`
+    + (wS ? ` · tool error ${(100 * Math.abs(wS.rms) / L).toFixed(3)}% of the arm` : ''),
+    w - 10, h - 16);
+  if (wS && wS.n > 8) {
+    g.fillStyle = '#fbbf24';
+    g.fillText(`band = sweep over the last move, tick = where it settles`, w - 10, h - 46);
+  }
   if (off !== 0) {
     g.fillStyle = '#a78bfa';
     g.fillText(`pre-distortion ${(off * 1e3).toFixed(2)} mrad`, w - 10, h - 31);
@@ -1743,6 +1833,22 @@ function stats() {
           + 'fitted across the whole ring (3.5×), <b>input shaping</b> (3.3×), and a gentler '
           + '<b>Move speed</b> (3.7×). Auto-tune builds ④ for you.</span>'
         : '<span class="good">the bias — which is what the correction removes</span>']);
+    }
+    // WHAT THE DRIVE WAS ASKED FOR AND WHETHER IT COULD DELIVER IT. A machine whose
+    // motor is unlimited tracks anything, which is the one thing a real one cannot do.
+    const dl = A.servo.limitStats();
+    if (dl.steps > 0) {
+      const mult = dl.tauMax > 0 ? dl.tauMax / A.hold : 0;
+      const demand = dl.peakDemand / A.hold;
+      rows.push(['drive', dl.tauMax > 0
+        ? `rated ${mult.toFixed(0)}× the hold torque · peak demand `
+          + `<span class="${demand > mult ? 'bad' : 'good'}">${demand.toFixed(1)}×</span> · `
+          + `<span class="${dl.fraction > 0.05 ? 'bad' : ''}">`
+          + `${(100 * dl.fraction).toFixed(1)}% of steps SATURATED</span>`
+          + (dl.fraction > 0.05 ? '   <span class="warn">— the drive cannot deliver this '
+            + 'move. A real one lags instead of tracking; raise the rating, or ask for a '
+            + 'gentler move.</span>' : '')
+        : '<span class="warn">IDEAL — no torque or speed limit, which is not a machine</span>']);
     }
     // SMOOTHNESS OF THE CONTROL ITSELF, because a correction that lands the tool on
     // target by shaking the motor is not the same machine as one that gets there
@@ -2330,6 +2436,22 @@ for (const id of ['s-span', 's-speed', 's-jerk', 's-amp', 's-freq', 's-home']) {
 }
 $('s-profile').addEventListener('change', stageMotion);
 stageMotion();
+// THE RATING IS A PROPERTY OF THE DRIVE, NOT OF THE REFERENCE, so unlike the motion
+// sliders it does not have to wait for a move boundary -- nothing is being rebuilt and
+// there is no position-demand step. It does invalidate the saturation history, and it
+// invalidates a LOCKED sensor and a fitted filter for the usual reason: both were
+// commissioned on a machine that could deliver what this one may not.
+$('s-drive').addEventListener('input', () => {
+  const mult = DRIVE_LADDER[+$('s-drive').value];
+  $('v-drive').textContent = mult ? `${mult}× hold` : 'ideal (no limit)';
+  if (!A) return;
+  Object.assign(A.servo, driveLimits(A.hold));
+  A.servo.resetLimitStats();
+  win = []; board = {}; renderBoard(); stopCompare();
+  if (ff) { ff = null; if ($('ctl-mode').value === 'learned') $('ctl-mode').value = 'open'; }
+  if (ss && ss.mode === 'estimating') resetSensor();
+  stats(); syncMove();
+});
 $('s-spf').addEventListener('input', () => { $('v-spf').textContent = $('s-spf').value; });
 $('s-mag').addEventListener('input', () => { $('v-mag').textContent = $('s-mag').value + '×'; });
 
@@ -2347,6 +2469,12 @@ const ELBOW_LADDER = [0, 0.2, 0.4, 0.6, 0.9, 1.2, 1.6, 2.2, Math.PI];
 // readable exaggeration it walked off the stage.
 const CH = { LEN1: 14, LEN2: 10, E: 0.15 };
 let arm2 = null, servo2 = null, prof2 = null, run2 = false, k2 = 0, busy2 = false;
+let hold2 = 0;
+function driveLimits2(holdTorque) {
+  const mult = DRIVE_LADDER[+$('s-drive2').value];
+  return mult > 0 ? { tauMax: mult * holdTorque, speedMax: NO_LOAD_SPEED }
+    : { tauMax: 0, speedMax: 0 };
+}
 let chChartOn = false;
 const chHist = { t: [], t2: [], c21: [], c22: [], tip: [],
   // THE SAME FIVE POSITIONS THE MOVE TAB PLOTS, as a deviation from the desired
@@ -2477,7 +2605,10 @@ async function build2() {
     joint2: j(massProperties(link2)), link2, gravityWorld: [0, -G, 0], dt: 1 });
   arm2.setPose(0, ELBOW_LADDER[+$('s-elbow').value]);
   arm2.K = K;
-  servo2 = new ChainServo({ arm: arm2, bandwidth: 2e-3 });
+  // The chain's hold torque is the SHOULDER's, straight out, which is the worst pose --
+  // the same reference the Move tab uses and the same reason.
+  hold2 = Math.abs(arm2.gravityTorque([0, 0])[0]) / RATIO;
+  servo2 = new ChainServo({ arm: arm2, bandwidth: 2e-3, ...driveLimits2(hold2) });
   // A FILTER IS FITTED TO ONE PLANT, and so is a shaper. K changes the resonance
   // being inverted and the elbow pose changes the lever arm the correction was
   // divided by, so carrying either across a rebuild applies yesterday's inverse to
@@ -3223,7 +3354,9 @@ function win2Stats() {
   if (!win2.length || !prof2) return null;
   let m = 0; for (const x of win2) m += x; m /= win2.length;
   let v = 0; for (const x of win2) v += (x - m) * (x - m); v = Math.sqrt(v / win2.length);
-  return { bias: m, sd: v, rms: Math.sqrt(m * m + v * v), n: win2.length,
+  let lo = Infinity, hi = -Infinity;
+  for (const x of win2) { if (x < lo) lo = x; if (x > hi) hi = x; }
+  return { bias: m, sd: v, rms: Math.sqrt(m * m + v * v), n: win2.length, lo, hi,
     full: win2.length >= WIN2_MOVES * prof2.period };
 }
 
@@ -3409,8 +3542,36 @@ function draw2() {
     g.strokeStyle = '#22d3ee'; g.lineWidth = 2;
     g.beginPath(); g.arc(px + ex2 * scale, py - ey2 * scale, 7, 0, 7); g.stroke();
   }
+  // THE SAME EXCURSION BAR AS THE MOVE TAB'S, for the same measured reason: at 30x a
+  // small real oscillation reads as a violent shake, so the picture bounds it and marks
+  // where the tool actually settles. Transverse to the FOREARM, which is the direction
+  // the tool's error is drawn in.
+  const w2S = win2Stats();
+  if (w2S && w2S.n > 8) {
+    const barAt = (dev) => {
+      const d1 = arm2.q[0] - q1c;
+      const eby = mag * d1 * arm2.L1;
+      const px1 = c1 * arm2.L1 - s1 * eby, py1 = s1 * arm2.L1 + c1 * eby;
+      const by = mag * dev;
+      return [px + (px1 + c2 * arm2.L2 - s2 * by) * scale,
+        py - (py1 + s2 * arm2.L2 + c2 * by) * scale];
+    };
+    const [Xa, Ya] = barAt(w2S.lo / arm2.L2);
+    const [Xb, Yb] = barAt(w2S.hi / arm2.L2);
+    const [Xm, Ym] = barAt(w2S.bias / arm2.L2);
+    g.save();
+    g.strokeStyle = 'rgba(251,191,36,0.30)'; g.lineWidth = 9; g.lineCap = 'butt';
+    g.beginPath(); g.moveTo(Xa, Ya); g.lineTo(Xb, Yb); g.stroke();
+    g.strokeStyle = '#fde68a'; g.lineWidth = 2;
+    const nx = -(Yb - Ya), ny = Xb - Xa;
+    const nl = Math.hypot(nx, ny) || 1;
+    g.beginPath(); g.moveTo(Xm - 9 * nx / nl, Ym - 9 * ny / nl);
+    g.lineTo(Xm + 9 * nx / nl, Ym + 9 * ny / nl); g.stroke();
+    g.restore();
+  }
   lastGeom2 = { mag, drawnToolVsMotor: mag * arm2.tipError().total,
-    trueToolVsMotor: arm2.tipError().total };
+    trueToolVsMotor: arm2.tipError().total,
+    band: w2S && w2S.n > 8 ? { lo: w2S.lo, hi: w2S.hi, mean: w2S.bias } : null };
 
   g.font = '11px ui-monospace,monospace';
   const key = (y, col, txt, dash) => {
@@ -3424,7 +3585,13 @@ function draw2() {
   key(h - 30, '#a78bfa', 'commanded motors', [3, 3]);
   key(h - 16, '#64748b', 'desired', [6, 5]);
   g.fillStyle = '#64748b'; g.textAlign = 'right';
-  g.fillText(`deviations ×${mag}`, w - 10, h - 16);
+  g.fillText(`deviations ×${mag}`
+    + (w2S ? ` · tool error ${(100 * w2S.rms / arm2.toolRadius()).toFixed(3)}% of the reach`
+      : ''), w - 10, h - 16);
+  if (w2S && w2S.n > 8) {
+    g.fillStyle = '#fbbf24';
+    g.fillText('band = sweep over the last moves, tick = where it settles', w - 10, h - 44);
+  }
   if (off !== 0) {
     g.fillStyle = '#a78bfa';
     g.fillText(`pre-distortion ${(off * 1e3).toFixed(2)} mrad`, w - 10, h - 30);
@@ -3466,6 +3633,18 @@ function stats2() {
       + (m !== want ? ` <span class="warn">(${why})</span>` : '')]);
     rows.push(['pre-distortion at the shoulder', `${(off2Now(r) * 1e3).toFixed(3)} mrad `
       + `(tool radius ${arm2.toolRadius().toFixed(2)})`]);
+    const dl = servo2.limitStats();
+    if (dl[0].steps > 0) {
+      const mult = dl[0].tauMax > 0 ? dl[0].tauMax / hold2 : 0;
+      rows.push(['drive', dl[0].tauMax > 0
+        ? `rated ${mult.toFixed(0)}× the hold torque · peak demand shoulder `
+          + `${(dl[0].peakDemand / hold2).toFixed(1)}× / elbow `
+          + `${(dl[1].peakDemand / hold2).toFixed(1)}× · saturated `
+          + `<span class="${Math.max(dl[0].fraction, dl[1].fraction) > 0.05 ? 'bad' : ''}">`
+          + `${(100 * dl[0].fraction).toFixed(1)}% / ${(100 * dl[1].fraction).toFixed(1)}%`
+          + '</span>'
+        : '<span class="warn">IDEAL — no torque or speed limit, which is not a machine</span>']);
+    }
     const cr = m !== 'open' && control2Roughness();
     if (cr && cr.sd > 0) {
       const q = cr.rough / cr.sd;
@@ -3663,6 +3842,17 @@ function applied2() {
 }
 for (const id of ['s-span2', 's-speed2', 's-jerk2']) $(id).addEventListener('input', stage2Motion);
 stage2Motion();
+$('s-drive2').addEventListener('input', () => {
+  const mult = DRIVE_LADDER[+$('s-drive2').value];
+  $('v-drive2').textContent = mult ? `${mult}× hold` : 'ideal (no limit)';
+  if (!servo2) return;
+  Object.assign(servo2, driveLimits2(hold2));
+  servo2.resetLimitStats();
+  win2 = []; board2 = {}; renderBoard2(); stopCompare2();
+  if (ff2) { ff2 = null; if ($('ctl2-mode').value === 'learned') $('ctl2-mode').value = 'open'; }
+  if (csWhole && csWhole.mode === 'estimating') csInit();
+  stats2(); syncChain();
+});
 $('s-spf2').addEventListener('input', () => { $('v-spf2').textContent = $('s-spf2').value; });
 $('s-mag2').addEventListener('input', () => { $('v-mag2').textContent = $('s-mag2').value + '×'; });
 
@@ -3686,6 +3876,7 @@ window.__flxChainDbg = () => (arm2 ? {
   ssUnder: csUnder,
   commissioning: comm2 ? { phase: comm2.phase, left: comm2.left } : null,
   bend: bend2, shaped: !!shaper2(),
+  drive: servo2 ? { stats: servo2.limitStats(), hold: hold2 } : null,
   ff: ff2 ? ff2.status() : null,
   geom: lastGeom2 ? { ...lastGeom2,
     ratio: lastGeom2.trueToolVsMotor !== 0
@@ -3820,6 +4011,7 @@ window.__flxDbg = () => ({
   ui: ['auto', 'commission', 'run', 'ctl-mode', 'compare', 'shape-on', 'ss-train', 'ss-lock']
     .reduce((o, id) => { o[id] = $(id).disabled; return o; }, {}),
   learned: ff ? ff.status() : null,
+  drive: A ? { ...A.servo.limitStats(), hold: A.hold } : null,
   learning: learn ? { move: learn.pi, iter: learn.iter } : null,
   ctl: { want: $('ctl-mode').value, active: ctlMode(), closedOff, gain: closedGain(),
     ffLead: FF_LEAD,

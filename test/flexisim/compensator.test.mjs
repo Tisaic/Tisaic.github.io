@@ -30,7 +30,7 @@ import {
 import { PlanarComp } from '../../lib/flexisim/compliance.js';
 import {
   AngleProfile, PositionServo, TipCompensator, tipTrackingError, zvShaper, zvdShaper, ringFit,
-  boxcarShaper, convolveShapers,
+  boxcarShaper, convolveShapers, driveEnvelope,
 } from '../../lib/flexisim/compensator.js';
 
 const FULL = process.env.SUITE === 'full';
@@ -335,6 +335,55 @@ console.log('\n  the jerk limit');
   }
   check('the tabulated profile IS the impulse sum, not an approximation of it',
     worst < 1e-15, `${worst.toExponential(2)}`);
+}
+
+// ------------------------------------------------- the drive's limits
+//
+// ONE CURVE GIVES ALL THREE LIMITS a real motor has, so what has to hold is that the
+// curve behaves like a drive rather than like three clamps that happen to be nearby.
+console.log('\n  the drive envelope');
+{
+  const T = 1e-3, W = 0.2;
+  check('an unrated drive is ideal, which is what the page shipped with',
+    driveEnvelope(5, 0, 0, W) === 5 && driveEnvelope(-5, 0, 0, W) === -5);
+  check('at standstill the ceiling is the peak torque, both directions',
+    driveEnvelope(9 * T, 0, T, W) === T && driveEnvelope(-9 * T, 0, T, W) === -T);
+  check('below the ceiling nothing is touched',
+    driveEnvelope(0.4 * T, 0, T, W) === 0.4 * T);
+  // THE FADE IS THE SPEED LIMIT: at the no-load speed there is no torque left, so the
+  // motor cannot be driven past it however hard it is asked.
+  check('the ceiling falls linearly with speed',
+    Math.abs(driveEnvelope(9 * T, 0.5 * W, T, W) - 0.5 * T) < 1e-15,
+    `${driveEnvelope(9 * T, 0.5 * W, T, W)}`);
+  check('…and reaches exactly zero at the no-load speed',
+    driveEnvelope(9 * T, W, T, W) === 0);
+  check('…and does not go NEGATIVE past it, which would be a motor driving itself back',
+    driveEnvelope(9 * T, 3 * W, T, W) === 0);
+  // AND BRAKING IS NOT LIMITED THE SAME WAY. Back-EMF opposes the supply only when the
+  // motor is already turning the way it is being pushed; a drive that could not stop a
+  // fast motor would be the opposite of a limit, and it is the mistake this asserts
+  // against rather than a subtlety.
+  check('braking a fast motor keeps the FULL ceiling',
+    driveEnvelope(-9 * T, 0.9 * W, T, W) === -T,
+    `${driveEnvelope(-9 * T, 0.9 * W, T, W)}`);
+
+  // THE ACCELERATION LIMIT IS NOT A SEPARATE PARAMETER, it is the torque limit seen
+  // through the reflected inertia -- which is why there is no third clamp.
+  const Jr = 4.39e4, N = 100;
+  const servo = new PositionServo({ kp: 0, kd: 0, inertia: Jr, ratio: N, tauMax: T,
+    speedMax: 0 });
+  const enc = { angle: 0, speed: 0 };
+  const huge = servo.torque({ theta: 0, omega: 0, alpha: 1 }, enc);
+  check('a colossal commanded acceleration comes back at the torque ceiling',
+    Math.abs(huge - T) < 1e-18, `${huge}`);
+  check('…so alpha_max is tau_max * N / J_reflected and needs no clamp of its own',
+    Math.abs(huge * N / Jr - T * N / Jr) < 1e-18);
+  const st = servo.limitStats();
+  check('the drive counts what it could not deliver, so the page can say so',
+    st.steps === 1 && st.saturated === 1 && Math.abs(st.peakDemand - Jr / N) < 1e-9,
+    JSON.stringify(st));
+  servo.resetLimitStats();
+  check('…and the counters reset with the machine', servo.limitStats().steps === 0);
 }
 
 await COMM.link.destroy();

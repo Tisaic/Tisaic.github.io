@@ -2158,6 +2158,51 @@ check('flexisim: …the dwell grows to cover its delay, so the move still finish
   jOn.period >= jOff.period + 120, `${jOff.period} -> ${jOn.period}`);
 await fx.evaluate(() => { if (!window.__flxDbg().running) document.getElementById('run').click(); });
 
+// ---- A REAL DRIVE HAS A RATING, and until now this one did not. Reported from the
+// device: "the actual motor position has to be speed, accel and torque limited to match
+// a real world scenario. Real motors can't react like it can now." All three limits come
+// from ONE torque-speed envelope -- see driveEnvelope() -- so what is checked here is
+// that the rating reaches the plant and BITES when the move asks for more than it.
+const driveAt = async (v, steps) => {
+  await fx.evaluate((val) => {
+    const sl = document.getElementById('s-drive');
+    sl.value = String(val); sl.dispatchEvent(new Event('input', { bubbles: true }));
+  }, v);
+  const k0 = (await fx.evaluate(() => window.__flxDbg())).k;
+  await fx.waitForFunction((t) => window.__flxDbg().k > t, k0 + steps, { timeout: 300000 });
+  return fx.evaluate(() => window.__flxDbg());
+};
+const dHi = await driveAt(6, 14000);     // 32x the hold torque: what the machine ships with
+const dLo = await driveAt(0, 14000);     // 2x: a drive far too small for this move
+console.log(`  flexisim: drive — rated 32x hold, saturated `
+  + `${(100 * dHi.drive.fraction).toFixed(1)}%, rms ${dHi.win.rms.toExponential(3)}; `
+  + `rated 2x, saturated ${(100 * dLo.drive.fraction).toFixed(1)}%, `
+  + `rms ${dLo.win.rms.toExponential(3)}`);
+check('flexisim: the drive has a torque rating and reports what it was asked for',
+  dHi.drive && dHi.drive.tauMax > 0 && dHi.drive.peakDemand > 0,
+  JSON.stringify(dHi.drive));
+check('flexisim: …the shipped rating carries the shipped move without saturating',
+  dHi.drive.fraction < 0.02, `${dHi.drive.fraction}`);
+check('flexisim: …and a drive too small for the move SATURATES and lags, as a real one does',
+  dLo.drive.fraction > 0.1 && dLo.win.rms > 3 * dHi.win.rms,
+  `${dLo.drive.fraction} saturated, rms ${dLo.win.rms} vs ${dHi.win.rms}`);
+await driveAt(6, 6000);
+
+// ---- AND THE PICTURE BOUNDS THE MAGNIFIED SHAKE instead of just amplifying it. At x30
+// a real 2.5e-2 tool error is drawn as 5% of the arm and it genuinely swings every few
+// frames, which reads as noise; the stage now draws the sweep over the same window the
+// stats use, with a tick where the tool settles. What is checked is that the band is
+// telling the truth -- the arm on screen must be inside the band drawn around it.
+const bandG = await fx.evaluate(() => window.__flxGeom());
+check('flexisim: the stage draws the excursion the tool actually sweeps',
+  bandG.band && bandG.band.hi > bandG.band.lo, JSON.stringify(bandG.band));
+check('flexisim: …and the arm drawn NOW is inside the band drawn around it',
+  bandG.toolDev >= bandG.band.lo - 1e-9 && bandG.toolDev <= bandG.band.hi + 1e-9,
+  `${bandG.toolDev} vs ${JSON.stringify(bandG.band)}`);
+check('flexisim: …with the settled value between the two, which is what the tick marks',
+  bandG.band.mean > bandG.band.lo && bandG.band.mean < bandG.band.hi,
+  JSON.stringify(bandG.band));
+
 check('flexisim: and the manual controls come back afterwards',
   !afterAuto.ui.commission && !afterAuto.ui['ctl-mode'], JSON.stringify(afterAuto.ui));
 
@@ -2430,6 +2475,28 @@ if (FULL) {
   check('flexisim/chain: …without shrinking it', j2On.sd > 0.75 * j2Off.sd,
     `${j2On.sd} vs ${j2Off.sd}`);
   await fx.selectOption('#ctl2-mode', 'open');
+
+  // THE JERK CHECK ABOVE PAUSED THE RUN, so the scoring window is empty and the band
+  // has nothing to draw. Resume and let it refill before asking the picture anything --
+  // asserting on a window that was deliberately cleared is asserting on the test.
+  await fx.evaluate(() => {
+    if (!window.__flxChainDbg().running) document.getElementById('run2').click();
+  });
+  const kb = (await fx.evaluate(() => window.__flxChainDbg())).k;
+  await fx.waitForFunction((t) => window.__flxChainDbg().k > t, kb + 16000, { timeout: 300000 });
+  const g2 = await fx.evaluate(() => window.__flxChainDbg());
+  console.log(`  flexisim/chain: drive rated ${(g2.drive.stats[0].tauMax / g2.drive.hold)
+    .toFixed(0)}x hold, saturated ${(100 * g2.drive.stats[0].fraction).toFixed(1)}% / `
+    + `${(100 * g2.drive.stats[1].fraction).toFixed(1)}%`);
+  check('flexisim/chain: both joints have a rated drive that reports its demand',
+    g2.drive.stats[0].tauMax > 0 && g2.drive.stats[0].peakDemand > 0
+    && g2.drive.stats[1].peakDemand > 0, JSON.stringify(g2.drive.stats));
+  check('flexisim/chain: …and it carries the shipped move without saturating',
+    g2.drive.stats[0].fraction < 0.02 && g2.drive.stats[1].fraction < 0.02,
+    `${g2.drive.stats[0].fraction} / ${g2.drive.stats[1].fraction}`);
+  check('flexisim/chain: the stage bounds the magnified shake with the swept band',
+    g2.geom && g2.geom.band && g2.geom.band.hi > g2.geom.band.lo,
+    JSON.stringify(g2.geom && g2.geom.band));
 
   check('flexisim/chain: …and gives the manual controls back afterwards',
     await fx.$eval('#ctl2-mode', (e) => !e.disabled), 'ctl2-mode still disabled');

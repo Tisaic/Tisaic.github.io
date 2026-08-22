@@ -3426,6 +3426,58 @@ one.
    shaper and jerk limit the deployed move does, for the same reason the sensor is
    commissioned under the correction that will run.
 
+   **BRICK 25 — THE DRIVE GETS A RATING, AND THE PICTURE GETS A BOUND.** Reported from
+   the device: "the actual motor position has to be speed, accel and torque limited to
+   match a real world scenario. Real motors can't react like it can now" and "the
+   deflection view slider makes this look worse than it is — it amplifies the error but
+   also the noise."
+   **THE TWO ARE SEPARATE, AND MEASURING SAID SO BEFORE ANY CODE CHANGED.** The tip
+   error's spectrum has peaks at 1638 / 910 / 546 / 431 steps and **0.1% of its power
+   below a 120-step period** — so at 60 steps per frame the picture is NOT aliasing
+   physics, and the drawn tool jumping 26% of its own range every frame is real motion.
+   The slider makes it look worse; it does not make it be worse.
+   **ONE CURVE GIVES ALL THREE MOTOR LIMITS.** `driveEnvelope()` is the classic
+   torque-speed characteristic — peak torque at standstill falling linearly to zero at the
+   no-load speed — which yields the TORQUE limit directly, the ACCELERATION limit for free
+   (α_max = τ_avail·N/J_reflected) and the SPEED limit as the point where nothing is left
+   to overcome the load. Three limits from one curve rather than three clamps that could
+   disagree. Braking keeps the full ceiling, because back-EMF opposes the supply only when
+   the motor already turns the way it is pushed, and a drive that could not STOP a fast
+   motor is the opposite of a limit — asserted, since that is the plausible wrong version.
+   **THE RATING IS QUOTED AS A MULTIPLE OF THE HOLD TORQUE**, which is how a servo is
+   actually sized, and computed from the plant so the same "32×" means different
+   newton-metres as the E and K sliders move. Measured at the shipped move, which demands
+   3.7× the hold torque (rating → % of steps saturated / bias / rms):
+     ideal  0.0% / 1.43e-4 / 5.078e-2      16×  0.1% / 1.43e-4 / 5.078e-2
+       8×   1.1% / 1.43e-4 / 5.078e-2       6×  1.9% / 1.43e-4 / 5.078e-2
+       4×   3.3% / 1.44e-4 / 5.078e-2       3× 12.2% / −4.27e-2 / 6.846e-2
+       2×  28.6% / −2.36e-1 / 2.803e-1
+   and at the most aggressive corner of the two ladders (span 0.8 at 4.6×, demanding 78×):
+   ideal 8.515e-1 rms, 78× → 4.5% saturated and 8.252e-1, 32× → 15.8% and 1.744e+0,
+   16× → 26.4% and 3.646e+0.
+   **32× SHIPS**, which is a real machine's sizing: the duty it is built for never notices
+   (0.1% of steps, score unchanged to four figures) and several times that duty makes it
+   lag, exactly as a real one does. In the browser, the shipped move saturates 0.0% at 32×
+   and 65.5% at 2×, where the rms goes 5.07e-2 → 7.40e-1. A rating tight enough to bite on
+   the DEFAULT move would be a machine that cannot do its own default move.
+   AND THE HONEST HALF: **at the shipped settings the limit changes nothing**, because the
+   shipped move is well inside the drive. It is a fidelity fix and a control that can be
+   made to bite, not a cure for the picture.
+   **I SIZED THE NO-LOAD SPEED FROM THE OUTPUT SPEED AND APPLIED IT TO THE MOTOR**, the
+   factor of N that `driveEnvelope`'s own comment warns about. The drive then saturated
+   60% of the time on the SHIPPED move and the rms went to 2.0 — a "limit" that made the
+   machine unusable, which read as the mechanism being wrong when the mechanism was right
+   and the number was a hundred times too small. Third time this project has recorded that
+   the instrument was wrong before the model was.
+   **THE PICTURE'S FIX IS A BOUND, NOT A FILTER.** Hiding the motion would be hiding
+   physics, so the stage now draws the SWEEP over the same window the bias and oscillation
+   are computed on — a translucent band at the tool with a tick where it settles — and
+   states the magnification in real terms ("×30 · tool error 0.164% of the arm") rather
+   than as a bare number. The line still shows where the tool is NOW; the band says how far
+   it goes and the tick says where it sits. A regression asserts the arm drawn now lies
+   INSIDE the band drawn around it, which is the only way to catch a picture that is
+   lying about its own claim.
+
    NOT YET BUILT: the WGSL elastic kernel (see the measurement above); general
    block-sparse bricks for a CLOSED structure — a gantry or a machine frame, where
    members are not separable into per-link frames and the swept box is genuinely
