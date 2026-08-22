@@ -30,6 +30,7 @@ import {
 import { PlanarComp } from '../../lib/flexisim/compliance.js';
 import {
   AngleProfile, PositionServo, TipCompensator, tipTrackingError, zvShaper, zvdShaper, ringFit,
+  boxcarShaper, convolveShapers,
 } from '../../lib/flexisim/compensator.js';
 
 const FULL = process.env.SUITE === 'full';
@@ -263,6 +264,77 @@ if (FULL) {
     cI / cG > 1.03 && cI / cG < 1.15, `${(cI / cG).toFixed(4)}`);
   check('both static cases settled', G.v < 1e-12 && I.v < 1e-12,
     `${G.v.toExponential(1)} ${I.v.toExponential(1)}`);
+}
+
+// ------------------------------------------------- the jerk limit
+//
+// A BOXCAR IS A JERK LIMIT, and what has to hold is that it costs delay and NOTHING
+// else: a unit-sum convolution cannot change where a move ends, which is the same
+// property an input shaper relies on and the reason the two compose. No plant needed --
+// this is arithmetic about the reference.
+console.log('\n  the jerk limit');
+{
+  const W = 120;
+  const box = boxcarShaper(W);
+  const sum = (l) => l.reduce((a, [amp]) => a + amp, 0);
+  check('a boxcar is unit-sum, so the move still goes exactly as far',
+    Math.abs(sum(box) - 1) < 1e-12, `${sum(box)}`);
+  check('…with one impulse per step, which is what makes the acceleration CONTINUOUS',
+    box.length === W && box.every(([, d], i) => d === i), `${box.length}`);
+  const zvd = zvdShaper(6.4e-3, 0.23);
+  const both = convolveShapers(zvd, box);
+  check('convolving with a shaper preserves unit sum', Math.abs(sum(both) - 1) < 1e-12,
+    `${sum(both)}`);
+  check('…and the delays add rather than multiply',
+    Math.max(...both.map((i) => i[1]))
+      === Math.max(...zvd.map((i) => i[1])) + Math.max(...box.map((i) => i[1])),
+    `${Math.max(...both.map((i) => i[1]))}`);
+  check('convolveShapers(null, x) is x, so an unshaped page composes cleanly',
+    convolveShapers(null, box) === box && convolveShapers(box, null) === box);
+
+  const bare = new AngleProfile({ span: 0.144, accelSteps: 300, cruiseSteps: 400,
+    dwellSteps: 1276 });
+  const jerked = new AngleProfile({ span: 0.144, accelSteps: 300, cruiseSteps: 400,
+    dwellSteps: 1276 + W, shaper: box });
+  // THE END POINT IS THE THING A CONVOLUTION MUST NOT MOVE. Compare the peak commanded
+  // angle rather than one sample, since the jerk limit shifts WHEN it is reached.
+  const peak = (p) => { let m = -Infinity;
+    for (let n = 0; n < p.period; n++) m = Math.max(m, p.at(n).theta); return m; };
+  check('the jerk-limited move reaches exactly the same span',
+    Math.abs(peak(jerked) - peak(bare)) < 1e-9 * Math.max(1, peak(bare)),
+    `${peak(jerked)} vs ${peak(bare)}`);
+
+  // AND THE ACCELERATION IS CONTINUOUS, which is the whole point: the compensator's
+  // output is proportional to it, so a step there is a step in the control signal.
+  const jump = (p) => { let m = 0;
+    for (let n = 0; n < p.period; n++) m = Math.max(m, Math.abs(p.at(n + 1).alpha - p.at(n).alpha));
+    return m; };
+  const jb = jump(bare), jj = jump(jerked);
+  console.log(`    [jerk] biggest one-step acceleration jump: bare ${jb.toExponential(3)}, `
+    + `limited ${jj.toExponential(3)} → ${(jb / jj).toFixed(0)}x smaller`);
+  check('the jerk limit turns the acceleration STEP into a ramp', jj < jb / 50,
+    `${jj} vs ${jb}`);
+  check('…and the ramp is exactly amax/W, which is what a jerk limit means',
+    Math.abs(jj - jb / W) < 1e-3 * jb / W, `${jj} vs ${jb / W}`);
+
+  // A WIDE IMPULSE LIST IS TABULATED, and the table has to BE the sum rather than
+  // approximate it -- a silent divergence here would be a reference the error is
+  // measured against quietly differing from the one the plant was commanded with.
+  const small = new AngleProfile({ span: 0.144, accelSteps: 300, cruiseSteps: 400,
+    dwellSteps: 1276 + W, shaper: box.slice() });
+  small._tab = null;
+  let worst = 0;
+  for (let n = 0; n < jerked.period; n += 7) {
+    const a = jerked.at(n);
+    let th = 0, om = 0, al = 0;
+    for (const [amp, d] of box) {
+      const r = small.raw(n - d); th += amp * r.theta; om += amp * r.omega; al += amp * r.alpha;
+    }
+    worst = Math.max(worst, Math.abs(a.theta - th), Math.abs(a.omega - om),
+      Math.abs(a.alpha - al));
+  }
+  check('the tabulated profile IS the impulse sum, not an approximation of it',
+    worst < 1e-15, `${worst.toExponential(2)}`);
 }
 
 await COMM.link.destroy();

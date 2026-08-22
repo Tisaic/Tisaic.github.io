@@ -2123,6 +2123,41 @@ check('flexisim: …and the winner it kept is the one the settled machine measur
   post.board[post.ctl.active]
   && Math.abs(post.board[post.ctl.active].rms - post.win.rms) < 0.5 * post.win.rms,
   `${JSON.stringify(post.board[post.ctl.active])} vs live ${post.win.rms}`);
+// ---- THE CONTROL SIGNAL IS A DELIVERABLE, and its smoothness is now an objective.
+// Reported from the device as "high frequency jitter in the controls" and measured:
+// the quasi-static model is proportional to commanded ACCELERATION, a trapezoid's
+// acceleration is piecewise CONSTANT, so the pre-distortion STEPPED at every corner of
+// the profile and the input shaper tripled the number of corners. Content 500x faster
+// than the servo's own time constant, so nothing could follow it -- a torque spike into
+// the PD loop and nothing else. A jerk limit is a boxcar convolved into the same
+// impulse list the shaper uses, and it costs delay and nothing else.
+// PAUSED FIRST, because a motion slider is STAGED and applied at a move boundary --
+// changing a reference mid-move is a position-demand step into the servo's gain. With
+// the loop stopped there is no move to interrupt and it applies at once.
+await fx.evaluate(() => { if (window.__flxDbg().running) document.getElementById('run').click(); });
+const offAt = (jerk) => fx.evaluate(async (j) => {
+  const sl = document.getElementById('s-jerk');
+  sl.value = String(j);
+  sl.dispatchEvent(new Event('input', { bubbles: true }));
+  await new Promise((r) => setTimeout(r, 400));
+  const s = window.__flxOffSeries(100000);
+  const m = s.off.reduce((a, c) => a + c, 0) / s.off.length;
+  const sd = Math.sqrt(s.off.reduce((a, c) => a + (c - m) ** 2, 0) / s.off.length);
+  return { period: s.period, rough: s.rough, sd, ratio: s.rough / sd };
+}, jerk);
+await fx.selectOption('#ctl-mode', 'ff');
+const jOff = await offAt(0), jOn = await offAt(3);
+console.log(`  flexisim: control roughness — jerk off ${jOff.ratio.toExponential(2)}, `
+  + `jerk 120 ${jOn.ratio.toExponential(2)} (${(jOff.ratio / jOn.ratio).toFixed(0)}x smoother), `
+  + `period ${jOff.period} -> ${jOn.period}`);
+check('flexisim: the jerk limit makes the control signal dramatically smoother',
+  jOn.ratio < jOff.ratio / 20, `${jOn.ratio} vs ${jOff.ratio}`);
+check('flexisim: …and it does NOT shrink the correction, which would be cheating',
+  jOn.sd > 0.75 * jOff.sd, `${jOn.sd} vs ${jOff.sd}`);
+check('flexisim: …the dwell grows to cover its delay, so the move still finishes',
+  jOn.period >= jOff.period + 120, `${jOff.period} -> ${jOn.period}`);
+await fx.evaluate(() => { if (!window.__flxDbg().running) document.getElementById('run').click(); });
+
 check('flexisim: and the manual controls come back afterwards',
   !afterAuto.ui.commission && !afterAuto.ui['ctl-mode'], JSON.stringify(afterAuto.ui));
 
@@ -2228,9 +2263,27 @@ check('flexisim/chain: both tool sensors reach a locked, frozen readout',
 check('flexisim/chain: the whole-arm sensor beats the controller\'s own view of the tool',
   cs.scores.whole < 0.5 * cs.scores.naive,
   `${cs.scores.whole} vs ${cs.scores.naive}`);
-check('flexisim/chain: and beats the elbow-only model at the SAME feature count',
-  cs.scores.whole < 0.9 * cs.scores.elbow,
-  `${cs.scores.whole} vs ${cs.scores.elbow}`);
+// AND WHICH ARCHITECTURE WINS DEPENDS ON THE COMMAND'S SPECTRUM, which is a second
+// regime dependence and it arrived as a broken assertion. Measured in Node, one script,
+// one variable, both models on the same stream at matched capacity, nRMSE and the
+// ABSOLUTE error behind it:
+//   jerk off   whole 0.0814 / elbow 0.1911  (2.35x)   absolute 4.09e-2 / 9.60e-2
+//   jerk 120   whole 0.1798 / elbow 0.1821  (1.01x)   absolute 8.54e-2 / 8.63e-2
+// The truth's own spread barely moves (5.03e-1 -> 4.75e-1), so this is not a
+// normalisation artefact: the WHOLE-ARM model's absolute error doubles while the
+// elbow-only one slightly improves. Its advantage lived in the shoulder's sharp
+// acceleration steps -- the coupling term M21*alpha1 is the one thing the elbow cannot
+// see directly, and an unlimited trapezoid makes it a distinctive high-frequency
+// signal. Smooth the command and that channel carries much less.
+// SO AT THE SHIPPED JERK LIMIT THERE IS NO ROBUST WINNER, and the browser says so more
+// loudly than Node does -- 1.67x the other way on this run against Node's 1.01x tie,
+// i.e. the effect and the run-to-run spread are the same size. What is asserted is
+// therefore what survives that spread: BOTH architectures carry real information about
+// a tool neither can see. Asserting a direction here would be asserting noise, and the
+// direction is measured in Node, at a setting where it is not noise.
+check('flexisim/chain: and the elbow-only model at matched capacity also beats naive',
+  cs.scores.elbow < 0.5 * cs.scores.naive,
+  `${cs.scores.elbow} vs ${cs.scores.naive}`);
 
 // ---- THE SAME THREE CORRECTIONS ON THE CHAIN, applied at the shoulder. The rigid
 // model here is a genuine rival rather than a formality -- it is given M(q), both
@@ -2354,6 +2407,30 @@ if (FULL) {
   check('flexisim/chain: …so the readout the user is left with is actually good',
     p2.sensor.scores.whole < 0.35 * p2.sensor.scores.naive,
     `${p2.sensor.scores.whole} vs naive ${p2.sensor.scores.naive}`);
+  const off2At = (jerk) => fx.evaluate(async (j) => {
+    const sl = document.getElementById('s-jerk2');
+    sl.value = String(j);
+    sl.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 400));
+    const s = window.__flxOffSeries2(100000);
+    const m = s.off.reduce((a, c) => a + c, 0) / s.off.length;
+    const sd = Math.sqrt(s.off.reduce((a, c) => a + (c - m) ** 2, 0) / s.off.length);
+    return { period: s.period, rough: s.rough, sd, ratio: s.rough / sd };
+  }, jerk);
+  await fx.selectOption('#ctl2-mode', 'ff');
+  await fx.evaluate(() => {
+    if (window.__flxChainDbg().running) document.getElementById('run2').click();
+  });
+  const j2Off = await off2At(0), j2On = await off2At(3);
+  console.log(`  flexisim/chain: control roughness — jerk off ${j2Off.ratio.toExponential(2)}, `
+    + `jerk 120 ${j2On.ratio.toExponential(2)} `
+    + `(${(j2Off.ratio / j2On.ratio).toFixed(0)}x smoother)`);
+  check('flexisim/chain: the jerk limit makes the shoulder correction smoother too',
+    j2On.ratio < j2Off.ratio / 20, `${j2On.ratio} vs ${j2Off.ratio}`);
+  check('flexisim/chain: …without shrinking it', j2On.sd > 0.75 * j2Off.sd,
+    `${j2On.sd} vs ${j2Off.sd}`);
+  await fx.selectOption('#ctl2-mode', 'open');
+
   check('flexisim/chain: …and gives the manual controls back afterwards',
     await fx.$eval('#ctl2-mode', (e) => !e.disabled), 'ctl2-mode still disabled');
 }

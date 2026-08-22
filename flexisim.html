@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:227,built:"2026-08-22T03:37:07Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:228,built:"2026-08-22T04:34:49Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -175,6 +175,9 @@
       <div class="slider"><span>Move speed</span>
         <input type="range" id="s-speed" min="0" max="6" step="1" value="4" />
         <span class="v" id="v-speed">1.0×</span></div>
+      <div class="slider"><span>Jerk limit</span>
+        <input type="range" id="s-jerk" min="0" max="6" step="1" value="3" />
+        <span class="v" id="v-jerk">120 steps</span></div>
     </div>
     <div class="controls" id="sine-ctl" hidden>
       <div class="slider"><span>Amplitude</span>
@@ -357,6 +360,9 @@
       <div class="slider"><span>Move speed</span>
         <input type="range" id="s-speed2" min="0" max="6" step="1" value="4" />
         <span class="v" id="v-speed2">1.0×</span></div>
+      <div class="slider"><span>Jerk limit</span>
+        <input type="range" id="s-jerk2" min="0" max="6" step="1" value="3" />
+        <span class="v" id="v-jerk2">120 steps</span></div>
       <div class="slider"><span>Elbow pose</span>
         <input type="range" id="s-elbow" min="0" max="8" step="1" value="3" />
         <span class="v" id="v-elbow">0.60 rad</span></div>
@@ -400,7 +406,21 @@
     <div id="cs-chart"></div>
     <dl class="stat" id="cs-stats"></dl>
     <div class="note">
-      <h3>And which one wins depends on the regime — measured, not asserted</h3>
+      <h3>And which one wins depends on the regime — and on the command — measured, not asserted</h3>
+      <b>The <em>Jerk limit</em> slider changes the answer, which was not expected.</b> Measured in
+      Node, one script, one variable, both models on the same stream at matched capacity — nRMSE,
+      and the absolute error behind it: with the jerk limit <b>off</b>, whole arm 0.0814 against
+      elbow-only 0.1911 (2.35×, absolute 4.09e-2 / 9.60e-2); at the shipped <b>120</b>,
+      0.1798 against 0.1821 — <b>a tie</b> (absolute 8.54e-2 / 8.63e-2). The truth's own spread
+      barely moves (5.03e-1 → 4.75e-1), so this is not a normalisation artefact: the whole-arm
+      model's absolute error <em>doubles</em> while the elbow-only one slightly improves. Its
+      advantage lived in the shoulder's sharp acceleration steps — the coupling term M₂₁·α₁ is the
+      one thing the elbow cannot see directly, and an unlimited trapezoid makes it a distinctive
+      high-frequency signal. Smooth the command and that channel carries much less. Widening the
+      whole-arm window does not recover it (0.2314 at stride 5). It is a real cost of a smoother
+      machine, and it is stated rather than tuned away.</div>
+    <div class="note">
+      <h3>And which one wins depends on the regime too</h3>
       Measured offline at 1200 training pairs — with <b>both joints moving</b> the whole-arm model
       wins, nRMSE <b>0.069</b> against <b>0.177</b>. With the elbow commanded to <b>hold</b> it
       <i>loses</i>: 0.562 against 0.494 — and both models are five to eight times worse there, so that
@@ -511,6 +531,7 @@ import { ChainServo } from './lib/flexisim/compensator.js';
 import { ChainSensor } from './lib/flexisim/chainsensor.js';
 import {
   AngleProfile, SineProfile, PositionServo, TipCompensator, tipTrackingError, zvdShaper, ringFit,
+  boxcarShaper, convolveShapers,
   LearnedFeedforward, ilcRefine,
 } from './lib/flexisim/compensator.js';
 
@@ -687,7 +708,7 @@ async function build() {
 // and drove the plant to divergence. Same discipline here: the sliders stage a
 // change and the frame loop applies it at the top of the next move (or immediately
 // when nothing is running, since then there is no move to interrupt).
-let motionActive = { profile: 'trap', span: 2, speed: 4, amp: 2, per: 3, home: 0 };
+let motionActive = { profile: 'trap', span: 2, speed: 4, jerk: 3, amp: 2, per: 3, home: 0 };
 let motionPending = null;
 
 function homeAngle() { return motionActive.home; }
@@ -705,9 +726,41 @@ function currentRef() {
   return { theta: r.theta + homeAngle(), omega: r.omega, alpha: r.alpha };
 }
 
+// THE CONTROL SIGNAL IS A DELIVERABLE, and this is the control that makes it smooth.
+// The quasi-static compensator's output is proportional to the commanded ACCELERATION,
+// and a trapezoid's acceleration is piecewise CONSTANT -- so the pre-distortion STEPS
+// instantaneously at every corner of the profile, and the input shaper triples the
+// number of corners. Reported from the device as "high frequency jitter in the
+// controls", and measured on the shipped page: the commanded motor's second difference
+// was 0.297 of its own spread against 0.014 for the motor that actually moves and 0.002
+// for the reference. That content is 500x faster than the servo's own time constant, so
+// nothing can follow it and it is a torque spike into the PD loop and nothing else.
+//
+// A JERK LIMIT IS FREE HERE, WHICH IS RARE ENOUGH TO STATE. Measured in Node, mode (2),
+// jerk width in steps -> bias / oscillation / control 2nd-difference relative to the
+// control's own spread:
+//     0    1.47e-4 / 5.31e-2 / 1.29e-1
+//    30    1.47e-4 / 5.30e-2 / 4.41e-3     30x smoother
+//    60    1.47e-4 / 5.28e-2 / 2.26e-3
+//   120    1.47e-4 / 5.20e-2 / 1.19e-3    108x smoother  (shipped)
+//   200    1.47e-4 / 5.02e-2 / 7.70e-4
+//   300    1.46e-4 / 4.74e-2 / 7.17e-4
+//   450    1.45e-4 / 4.30e-2 / 4.50e-4    287x smoother
+// THE BIAS DOES NOT MOVE, which it cannot: a boxcar is a unit-sum convolution and
+// cannot change where a move ENDS. The oscillation IMPROVES monotonically, because a
+// gentler acceleration excites the bending mode less. And the move period is unchanged,
+// because the dwell already absorbs the shaper's delay -- so the cycle time is the same.
+// 120 is shipped rather than 450 because past a couple of hundred steps the boxcar is a
+// large fraction of the 300-step acceleration and is really making the move gentler,
+// which is what the Move speed slider is for; keeping the two apart is this page's rule.
+const JERK_LADDER = [0, 30, 60, 120, 200, 300, 450];
+
+function jerkShaper(width) { return width > 0 ? boxcarShaper(width) : null; }
+
 function rebuildProfile() {
   const shaped = $('shape-on').checked && mode && !mode.overdamped;
-  const shaper = shaped ? zvdShaper(mode.omega, mode.zeta) : null;
+  const shaper = convolveShapers(shaped ? zvdShaper(mode.omega, mode.zeta) : null,
+    jerkShaper(JERK_LADDER[motionActive.jerk]));
   if (motionActive.profile === 'sine') {
     prof = new SineProfile({ amplitude: AMP_LADDER[motionActive.amp],
       frequency: 1 / PERIOD_LADDER[motionActive.per], shaper });
@@ -717,7 +770,12 @@ function rebuildProfile() {
     // cancels) or a shaped move never reaches its endpoint before the next one starts.
     // With the mode measured that delay is known, so the dwell is sized from it
     // instead of from a number that happened to be long enough at one stiffness.
-    const need = mode ? Math.round(1.3 * mode.period) : 1100;
+    // AND IT MUST COVER THE JERK LIMIT'S DELAY TOO, which the first version did not:
+    // the total command delay is the shaper's plus the boxcar's, so at a wide jerk limit
+    // the move ran past the start of the next one. Measured: at width 450 the move needs
+    // 1000 + 982 + 450 = 2432 steps against a half period of 2276.
+    const need = (mode ? Math.round(1.3 * mode.period) : 1100)
+      + JERK_LADDER[motionActive.jerk];
     prof = new AngleProfile({ span: SPAN_LADDER[motionActive.span],
       accelSteps: sp.a, cruiseSteps: sp.c, dwellSteps: Math.max(600, need), shaper });
   }
@@ -791,8 +849,15 @@ const learnProfiles = () => [
   { span: SPAN_LADDER[2], a: 300, c: 400 },
   { span: SPAN_LADDER[4], a: 200, c: 260 },
   { span: SPAN_LADDER[1], a: 450, c: 600 },
+// AND THEY CARRY THE SAME SHAPER AND JERK LIMIT the deployed move does, because the
+// filter is a map from the COMMANDED trajectory to a correction: fitting it on a bare
+// trapezoid and deploying it on a shaped, jerk-limited one asks it about a command it
+// never saw. Same rule as commissioning the soft sensor under the correction that will
+// run -- and the same failure if it is broken.
 ].map((o) => new AngleProfile({ span: o.span, accelSteps: o.a, cruiseSteps: o.c,
-  dwellSteps: Math.max(600, mode ? Math.round(1.3 * mode.period) : 1100) }));
+  dwellSteps: Math.max(600, mode ? Math.round(1.3 * mode.period) : 1100),
+  shaper: convolveShapers($('shape-on').checked && mode && !mode.overdamped
+    ? zvdShaper(mode.omega, mode.zeta) : null, jerkShaper(JERK_LADDER[motionActive.jerk])) }));
 
 function startLearn() {
   if (!A || !comp) return;
@@ -993,16 +1058,26 @@ function futureRef(lead) {
   return { theta: r.theta + homeAngle(), omega: r.omega, alpha: r.alpha };
 }
 
-/** The pre-distortion to ADD to the commanded angle, in the active mode. */
-function offsetNow(ref) {
+/**
+ * The pre-distortion to ADD to the commanded angle, in the active mode, AT step kk.
+ *
+ * Parameterised by the step rather than reading the live one so the control signal can
+ * be sampled over a whole period without stepping the plant -- see __flxOffSeries().
+ */
+function offsetAt(kk) {
   const m = ctlMode();
   const d = ditherNow();
-  if (m === 'ff') return comp.offset(futureRef(FF_LEAD)) + d;
+  const lead = prof ? prof.at(kk + FF_LEAD) : null;
+  const r = lead ? { theta: lead.theta + homeAngle(), omega: lead.omega, alpha: lead.alpha }
+    : currentRef();
+  if (m === 'ff') return comp.offset(r) + d;
   // THE FILTER IS A RESIDUAL ON TOP OF THE MODEL, which is how it was fitted.
-  if (m === 'learned') return comp.offset(futureRef(FF_LEAD)) + ff.predict(prof, k) + d;
+  if (m === 'learned') return comp.offset(r) + ff.predict(prof, kk) + d;
   if (m === 'closed') return closedOff + d;
   return d;
 }
+
+function offsetNow() { return offsetAt(k); }
 
 // ------------------------------------------------------- the scoreboard
 //
@@ -1341,7 +1416,7 @@ function moveStep(n) {
     if ((k % prof.period) === 0 && k > 0) moveBoundary();
     if (motionPending && (k % prof.period) === 0) applyMotion();
     const ref = currentRef();
-    const off = offsetNow(ref);
+    const off = offsetNow();
     const tau = servo.torque({ ...ref, theta: ref.theta + off }, arm.encoder());
     arm.step(tau, 1);
     const e = tipTrackingError(arm, ref.theta);
@@ -1529,7 +1604,7 @@ function draw() {
   const scale = Math.min((w - 60) / L, (h - 40) / (L * 0.9));
   const mag = +$('s-mag').value;
   const ref = currentRef();
-  const off = offsetNow(ref);
+  const off = offsetNow();
   const enc = arm.encoder().angle;
 
   // BODY -> WORLD IS A ROTATION BY +theta, AND SCREEN Y POINTS DOWN. Both have to
@@ -1669,6 +1744,19 @@ function stats() {
           + '<b>Move speed</b> (3.7×). Auto-tune builds ④ for you.</span>'
         : '<span class="good">the bias — which is what the correction removes</span>']);
     }
+    // SMOOTHNESS OF THE CONTROL ITSELF, because a correction that lands the tool on
+    // target by shaking the motor is not the same machine as one that gets there
+    // quietly -- and until this row existed nothing on the page could tell them apart.
+    const cr = ctlMode() !== 'open' && controlRoughness();
+    if (cr && cr.sd > 0) {
+      const q = cr.rough / cr.sd;
+      rows.push(['control smoothness', `pre-distortion spread ${(cr.sd * 1e3).toFixed(2)} mrad, `
+        + `second difference <span class="${q < 5e-3 ? 'good' : 'bad'}">`
+        + `${q.toExponential(2)}</span> of it per step`
+        + (q < 5e-3 ? '' : '   <span class="warn">— raise the <b>Jerk limit</b>: the '
+          + 'quasi-static model is proportional to commanded ACCELERATION, so an unlimited '
+          + 'trapezoid makes it STEP at every corner of the profile</span>')]);
+    }
     if (pc) {
       rows.push(['identified compliance c', `${pc.compliance.toFixed(5)} `
         + `(gearbox alone 1/K = ${(1 / A.K).toFixed(4)}, so the link is `
@@ -1700,7 +1788,7 @@ function stats() {
           + '<span class="warn">(the servo\'s own time constant — evaluated ON the move '
           + 'instead, the correction lands after the plant has already responded)</span>']);
       }
-      rows.push(['pre-distortion now', `${(offsetNow(ref) * 1e3).toFixed(3)} mrad`
+      rows.push(['pre-distortion now', `${(offsetNow() * 1e3).toFixed(3)} mrad`
         + (m === 'closed' ? `   <span class="warn">outer loop τ ≈ `
           + `${Math.round(SAMPLE_EVERY / closedGain())} steps</span>` : '')
         + (ssTraining && ditherAmp ? `   <span class="warn">including a ±`
@@ -2186,6 +2274,16 @@ function applyMotion() {
   // nothing on the page says it has gone wrong. A commissioned model belongs to the
   // machine AND to the trajectory it was commissioned on, so the tracker has to
   // come back.
+  // …AND SO IS THE LEARNED FILTER, for the same reason and one step earlier: it is a
+  // map from the COMMANDED trajectory to a correction, so a different trajectory is a
+  // different map. Dropping it silently would leave mode 4 selected and returning a
+  // correction fitted for a move that is no longer being run.
+  if (ff) {
+    ff = null;
+    if ($('ctl-mode').value === 'learned') $('ctl-mode').value = 'open';
+    console.warn('[flexisim] the move changed: the learned filter was fitted against the '
+      + 'old trajectory, so it is discarded rather than applied to a different one');
+  }
   if (ss && ss.mode === 'estimating') {
     console.warn('[flexisim] the move changed under a LOCKED sensor: its frozen '
       + 'standardisation belongs to the old trajectory, so it is recommissioned rather '
@@ -2202,12 +2300,14 @@ function applyMotion() {
 // and that is only demonstrable if the pose can be changed without re-commissioning.
 const stageMotion = () => {
   const next = { profile: $('s-profile').value, span: +$('s-span').value,
-    speed: +$('s-speed').value, amp: +$('s-amp').value, per: +$('s-freq').value,
+    speed: +$('s-speed').value, jerk: +$('s-jerk').value,
+    amp: +$('s-amp').value, per: +$('s-freq').value,
     home: HOME_LADDER[+$('s-home').value] };
   $('trap-ctl').hidden = next.profile !== 'trap';
   $('sine-ctl').hidden = next.profile !== 'sine';
   $('v-span').textContent = `${SPAN_LADDER[next.span].toFixed(3)} rad`;
   $('v-speed').textContent = SPEED_LADDER[next.speed].label;
+  $('v-jerk').textContent = JERK_LADDER[next.jerk] ? `${JERK_LADDER[next.jerk]} steps` : 'off';
   $('v-amp').textContent = `${AMP_LADDER[next.amp].toFixed(2)} rad`;
   // THE PERIOD IS SHOWN AGAINST THE BENDING MODE, not on its own. A number of steps
   // says nothing about whether the drive is below the resonance, on it, or past it,
@@ -2225,7 +2325,7 @@ const stageMotion = () => {
   else $('motion-pending').hidden = false;
   stats();
 };
-for (const id of ['s-span', 's-speed', 's-amp', 's-freq', 's-home']) {
+for (const id of ['s-span', 's-speed', 's-jerk', 's-amp', 's-freq', 's-home']) {
   $(id).addEventListener('input', stageMotion);
 }
 $('s-profile').addEventListener('change', stageMotion);
@@ -2257,7 +2357,7 @@ const chHist = { t: [], t2: [], c21: [], c22: [], tip: [],
 // The chain's own motion state, staged and applied at a move boundary for the same
 // reason the Move tab's is: rebuilding a reference mid-move is a position-demand
 // step into the servo's proportional gain.
-let motion2 = { span: 3, speed: 4 }, motion2Pending = null;
+let motion2 = { span: 3, speed: 4, jerk: 3 }, motion2Pending = null;
 let closedOff2 = 0, cmp2 = null, board2 = {};
 // The chain's learned dynamic filter, and the state machine that fits one. Both are
 // the Move tab's, with the chain's two differences: the reference the filter is
@@ -2295,9 +2395,12 @@ function rebuildProfile2() {
   const sp = SPEED_LADDER[motion2.speed];
   // THE DWELL MUST OUTLAST THE SHAPER'S OWN DELAY (one damped period of the mode it
   // cancels) or a shaped move never reaches its endpoint before the next begins.
-  const need = bend2 ? Math.round(1.3 * bend2.period) : 900;
+  // …and the same jerk limit as the Move tab, for the same measured reason, with the
+  // dwell covering BOTH delays.
+  const shaper = convolveShapers(shaper2(), jerkShaper(JERK_LADDER[motion2.jerk]));
+  const need = (bend2 ? Math.round(1.3 * bend2.period) : 900) + JERK_LADDER[motion2.jerk];
   prof2 = new AngleProfile({ span: SPAN_LADDER[motion2.span], accelSteps: sp.a,
-    cruiseSteps: sp.c, dwellSteps: Math.max(900, need), shaper: shaper2() });
+    cruiseSteps: sp.c, dwellSteps: Math.max(900, need), shaper });
 }
 
 // ------------------------------------------- the chain's commissioning decay
@@ -2539,6 +2642,42 @@ function model2Off(k) {
   return -servo2.toolOffset(refs2At(k + FF_LEAD)) / arm2.toolRadius();
 }
 
+/** The chain's pre-distortion AT step kk -- see offsetAt() on the Move tab. */
+function off2At(kk) {
+  const m = ctl2Mode();
+  const d = dither2Now();
+  if (m === 'closed') return closedOff2 + d;
+  if (m === 'ff') return model2Off(kk) + d;
+  if (m === 'learned') return model2Off(kk) + ff2.predict(shoulderView, kk) + d;
+  return d;
+}
+
+/** The pre-distortion over one move period, and its roughness. See __flxOffSeries(). */
+window.__flxOffSeries2 = (n = 2000) => {
+  if (!prof2 || !arm2) return null;
+  const P = prof2.period;
+  const step = Math.max(1, Math.round(P / n));
+  const k0 = k2 - (k2 % P);
+  const out = [];
+  for (let i = 0; i < P; i += step) out.push(off2At(k0 + i));
+  return { period: P, step, off: out, ...roughness(out, step) };
+};
+
+let rough2Cache = null, rough2Key = '';
+function control2Roughness() {
+  const key = `${ctl2Mode()}|${prof2 && prof2.period}|${motion2.jerk}|`
+    + `${ff2 ? ff2.status().rows : 0}|${!!shaper2()}`;
+  if (key !== rough2Key) {
+    rough2Key = key;
+    const q = window.__flxOffSeries2(100000);
+    rough2Cache = q && q.off.length > 8
+      ? { ...q, sd: (() => { const m = q.off.reduce((a, c) => a + c, 0) / q.off.length;
+        return Math.sqrt(q.off.reduce((a, c) => a + (c - m) ** 2, 0) / q.off.length); })() }
+      : null;
+  }
+  return rough2Cache;
+}
+
 function off2Now(r) {
   const m = ctl2Mode();
   const d = dither2Now();
@@ -2600,7 +2739,8 @@ const learn2Profiles = () => [
   { span: SPAN_LADDER[4], a: 200, c: 260 },
   { span: SPAN_LADDER[1], a: 450, c: 600 },
 ].map((o) => new AngleProfile({ span: o.span, accelSteps: o.a, cruiseSteps: o.c,
-  dwellSteps: prof2 ? prof2.D : 900, shaper: shaper2() }));
+  dwellSteps: prof2 ? prof2.D : 900,
+  shaper: convolveShapers(shaper2(), jerkShaper(JERK_LADDER[motion2.jerk])) }));
 
 function startLearn2() {
   if (!arm2 || !servo2) return;
@@ -2695,8 +2835,7 @@ function step2(n) {
       moveBoundary2();
       if (motion2Pending) {
         motion2 = motion2Pending; motion2Pending = null;
-        rebuildProfile2(); win2 = []; board2 = {}; renderBoard2(); stopCompare2();
-        $('motion2-pending').hidden = true;
+        applied2();
       }
     }
     const r = refs2();
@@ -3327,6 +3466,14 @@ function stats2() {
       + (m !== want ? ` <span class="warn">(${why})</span>` : '')]);
     rows.push(['pre-distortion at the shoulder', `${(off2Now(r) * 1e3).toFixed(3)} mrad `
       + `(tool radius ${arm2.toolRadius().toFixed(2)})`]);
+    const cr = m !== 'open' && control2Roughness();
+    if (cr && cr.sd > 0) {
+      const q = cr.rough / cr.sd;
+      rows.push(['control smoothness', `spread ${(cr.sd * 1e3).toFixed(2)} mrad, second `
+        + `difference <span class="${q < 5e-3 ? 'good' : 'bad'}">${q.toExponential(2)}</span> `
+        + 'of it per step'
+        + (q < 5e-3 ? '' : '   <span class="warn">— raise the <b>Jerk limit</b></span>')]);
+    }
     const w2 = win2Stats();
     if (w2) {
       rows.push(['tool vs the PROGRAM, last move', `bias ${fmt(w2.bias, 3)} · `
@@ -3482,20 +3629,39 @@ $('board2-clear').addEventListener('click', () => {
 });
 
 const stage2Motion = () => {
-  const next = { span: +$('s-span2').value, speed: +$('s-speed2').value };
+  const next = { span: +$('s-span2').value, speed: +$('s-speed2').value,
+    jerk: +$('s-jerk2').value };
   $('v-span2').textContent = `${SPAN_LADDER[next.span].toFixed(3)} rad`;
   $('v-speed2').textContent = SPEED_LADDER[next.speed].label;
-  if (next.span === motion2.span && next.speed === motion2.speed) {
+  $('v-jerk2').textContent = JERK_LADDER[next.jerk] ? `${JERK_LADDER[next.jerk]} steps` : 'off';
+  if (Object.keys(next).every((kk) => next[kk] === motion2[kk])) {
     motion2Pending = null; $('motion2-pending').hidden = true; return;
   }
   motion2Pending = next;
-  if (!run2) {
-    motion2 = next; motion2Pending = null; rebuildProfile2();
-    win2 = []; board2 = {}; renderBoard2(); stopCompare2();
-    $('motion2-pending').hidden = true;
-  } else $('motion2-pending').hidden = false;
+  if (!run2) { motion2 = next; motion2Pending = null; applied2(); }
+  else $('motion2-pending').hidden = false;
 };
-for (const id of ['s-span2', 's-speed2']) $(id).addEventListener('input', stage2Motion);
+
+/** A different move is a different experiment -- see applyMotion() on the Move tab. */
+function applied2() {
+  rebuildProfile2();
+  win2 = []; board2 = {}; renderBoard2(); stopCompare2();
+  closedOff2 = 0;
+  if (ff2) {
+    ff2 = null;
+    if ($('ctl2-mode').value === 'learned') $('ctl2-mode').value = 'open';
+    console.warn('[flexisim] the chain move changed: the learned filter was fitted against '
+      + 'the old trajectory, so it is discarded');
+  }
+  if (csWhole && csWhole.mode === 'estimating') {
+    console.warn('[flexisim] the chain move changed under LOCKED tool sensors: their frozen '
+      + 'standardisation belongs to the old trajectory, so they are recommissioned');
+    csInit();
+  }
+  $('motion2-pending').hidden = true;
+  syncChain();
+}
+for (const id of ['s-span2', 's-speed2', 's-jerk2']) $(id).addEventListener('input', stage2Motion);
 stage2Motion();
 $('s-spf2').addEventListener('input', () => { $('v-spf2').textContent = $('s-spf2').value; });
 $('s-mag2').addEventListener('input', () => { $('v-mag2').textContent = $('s-mag2').value + '×'; });
@@ -3592,6 +3758,58 @@ $('verify-run').addEventListener('click', async () => {
 window.__flxGeom = () => (lastGeom ? { ...lastGeom,
   ratio: lastGeom.trueToolVsMotor !== 0
     ? lastGeom.drawnToolVsMotor / lastGeom.trueToolVsMotor : null } : null);
+
+/**
+ * THE PRE-DISTORTION OVER ONE MOVE PERIOD, and its roughness.
+ *
+ * THE CONTROL SIGNAL IS A DELIVERABLE, not a by-product: a correction that lands the
+ * tool on target by shaking the motor is not the same machine as one that gets there
+ * smoothly, and until this existed nothing on the page could tell them apart. Sampled
+ * from the SAME functions the run loop calls, so it is what the servo is actually
+ * being handed rather than a model of it.
+ */
+window.__flxOffSeries = (n = 2000) => {
+  if (!prof || !A) return null;
+  const P = prof.period;
+  const step = Math.max(1, Math.round(P / n));
+  const k0 = k - (k % P);
+  const out = [];
+  for (let i = 0; i < P; i += step) out.push(offsetAt(k0 + i));
+  return { period: P, step, off: out, ...roughness(out, step) };
+};
+
+/**
+ * rms of the second difference per step, and the same for the reference it corrects.
+ * THE RATIO IS THE NUMBER THAT MEANS ANYTHING: a big move has big curvature, so a raw
+ * second difference says more about the move than about the correction.
+ */
+// Cached on everything that can change the control signal, because computing it means
+// evaluating the correction over a whole move period and stats() runs ten times a second.
+let roughCache = null, roughKey = '';
+
+/** The control's smoothness, as the stats row reports it. */
+function controlRoughness() {
+  const key = `${ctlMode()}|${prof && prof.period}|${motionActive.jerk}|`
+    + `${ff ? ff.status().rows : 0}|${$('shape-on').checked}`;
+  if (key !== roughKey) {
+    roughKey = key;
+    const s = window.__flxOffSeries(100000);
+    roughCache = s && s.off.length > 8
+      ? { ...s, sd: (() => { const m = s.off.reduce((a, c) => a + c, 0) / s.off.length;
+        return Math.sqrt(s.off.reduce((a, c) => a + (c - m) ** 2, 0) / s.off.length); })() }
+      : null;
+  }
+  return roughCache;
+}
+
+function roughness(a, step) {
+  let v = 0, m = 0;
+  for (let i = 1; i < a.length - 1; i++) {
+    const d2 = (a[i + 1] - 2 * a[i] + a[i - 1]) / (step * step);
+    v += d2 * d2; m++;
+  }
+  return { rough: m ? Math.sqrt(v / m) : 0, n: m };
+};
 
 window.__flxDbg = () => ({
   phase, running, k, K: A && A.K, E: A && A.E, cells: A && A.link.lattice.cellCount,

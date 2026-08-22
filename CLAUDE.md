@@ -3356,6 +3356,76 @@ one.
    Chain, same treatment, measured: open 2.25e-1 / ② 2.20e-1 / ④ **1.59e-1** / ③
    2.21e-1, sensors commissioned under ④, whole-arm 0.1605 against naive 1.0240.
 
+   **BRICK 24 — THE JITTER WAS IN THE COMMAND, AND A JERK LIMIT IS FREE.** Reported
+   from the device: "the average of the auto-tune is centered but there is a high
+   frequency jitter in the controls. It needs to be as smooth as possible and keep the
+   average error tight."
+   **MEASURED FIRST, AND THE FIRST MEASUREMENT ELIMINATED THE OBVIOUS SUSPECT.** Sampling
+   the pre-distortion over a whole move period: mode ② roughness 6.95e-4 rad/step² and
+   mode ④ 7.03e-4 — IDENTICAL, so the learned filter is not what is rough. Reading the
+   traces straight off the Plotly div, second difference relative to each trace's own
+   spread: **commanded motor 0.297, actual motor 0.014, the reference itself 0.002.** The
+   command was ~20× rougher than anything the machine could follow.
+   **THE CAUSE IS THE MODEL'S OWN FORM.** `TipCompensator` is quasi-static, δ = L·c·τ, and
+   τ carries J·α — so the correction is proportional to the COMMANDED ACCELERATION, and a
+   trapezoid's acceleration is piecewise CONSTANT. The pre-distortion therefore STEPS
+   instantaneously at every corner of the profile, and the ZVD triples the number of
+   corners. That content is 500× faster than the servo's own time constant: nothing can
+   follow it, so it is a torque spike into the PD loop and nothing else.
+   **A JERK LIMIT IS A BOXCAR, WHICH IS THE SAME OBJECT AS AN INPUT SHAPER.** Convolving
+   the acceleration with a normalised boxcar of width W ramps it linearly over W, i.e.
+   limits the jerk to a_max/W — the anti-slosh tab's S-curve, expressed in the impulse-list
+   form `AngleProfile` already takes, so the two COMPOSE by convolution and unit-sum is
+   preserved. `boxcarShaper` and `convolveShapers` join the library; a wide list is
+   TABULATED over one period rather than summed per call (a jerk limit is hundreds of
+   impulses inside the solver's inner loop), and a check asserts the table IS the sum to
+   1e-15 rather than approximating it.
+   MEASURED IN NODE, mode ②, width → bias / oscillation / control second difference
+   relative to the control's own spread / move period:
+     0     1.47e-4 / 5.31e-2 / 1.29e-1 / 4552
+     30    1.47e-4 / 5.27e-2 / 4.41e-3 / 4612        30× smoother
+     120   1.47e-4 / 5.08e-2 / 1.19e-3 / 4792       108× smoother  (shipped)
+     300   1.37e-4 / 4.49e-2 / 7.17e-4 / 5152
+     450   1.33e-4 / 3.98e-2 / 4.51e-4 / 5452       287× smoother
+   **THE BIAS DOES NOT MOVE, WHICH IT CANNOT**: a boxcar is a unit-sum convolution, so it
+   cannot change where a move ENDS — the same property the shaper relies on. And the
+   OSCILLATION improves monotonically, because a gentler acceleration excites the bending
+   mode less. Smoother AND tighter, which is rare enough to state.
+   THE PRICE IS CYCLE TIME, and only because a bug had to be fixed to charge it: the dwell
+   was sized for the SHAPER's delay alone, so a wide jerk limit ran the move past the start
+   of the next one (at 450 the move needs 1000 + 982 + 450 = 2432 steps against a half
+   period of 2276). Sized for both, the period grows with W — 5% at the shipped 120.
+   120 rather than 450 because past a couple of hundred steps the boxcar is a large
+   fraction of the 300-step acceleration and is really making the move gentler, which is
+   what the Move speed slider is for; keeping the two apart is this page's rule.
+   IN THE BROWSER, both tabs, one button: **control roughness 109× lower on the Move tab
+   and 107× on the chain**, with every score improving — Move board open 1.05e-1 → 1.03e-1,
+   ② 5.30e-2 → 5.07e-2, ④ **2.49e-2 → 2.27e-2**; chain ④ **1.59e-1 → 1.17e-1 (1.36×)**. The
+   learned filter's weight norm fell 1.14 → 0.24, because the fit is far better conditioned
+   once its features are smooth.
+   **AND IT COST THE CHAIN'S ARCHITECTURE CLAIM, WHICH IS THE FINDING RATHER THAN A
+   CAVEAT.** Measured in Node, one script, one variable, both tool sensors on the same
+   stream at matched capacity — nRMSE and the absolute error behind it:
+     jerk off   whole 0.0814 / elbow 0.1911  (2.35×)   absolute 4.09e-2 / 9.60e-2
+     jerk 120   whole 0.1798 / elbow 0.1821  (1.01×)   absolute 8.54e-2 / 8.63e-2
+   The truth's own spread barely moves (5.03e-1 → 4.75e-1), so this is not a normalisation
+   artefact: the WHOLE-ARM model's absolute error DOUBLES while the elbow-only one slightly
+   improves. Its advantage lived in the shoulder's sharp acceleration steps — M₂₁·α₁ is the
+   one thing the elbow cannot see directly, and an unlimited trapezoid makes it a
+   distinctive high-frequency signal. Smooth the command and that channel carries much
+   less; widening the whole-arm window does not recover it (0.2314 at stride 5).
+   THE BROWSER SAYS IT MORE LOUDLY THAN NODE DOES — 1.67× the other way on one run against
+   Node's 1.01× tie — so the effect and the run-to-run spread are the same size, and the
+   smoke test asserts only what survives that: both architectures beat the naive view
+   comfortably. Asserting a direction there would be asserting noise. **A smoother machine
+   is a less observable one**, which is this project's oldest tension (an unshaped probe is
+   needed to see a resonance) arriving in the soft sensor rather than in the controller.
+   ALSO FIXED HERE, both tabs: a change of move now discards the LEARNED FILTER as well as
+   recommissioning the sensor — it is a map from the commanded trajectory to a correction,
+   so a different trajectory is a different map — and the learning profiles carry the SAME
+   shaper and jerk limit the deployed move does, for the same reason the sensor is
+   commissioned under the correction that will run.
+
    NOT YET BUILT: the WGSL elastic kernel (see the measurement above); general
    block-sparse bricks for a CLOSED structure — a gantry or a machine frame, where
    members are not separable into per-link frames and the swept box is genuinely
