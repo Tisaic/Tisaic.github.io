@@ -143,7 +143,8 @@ one.
 | `test/run.sh` | Dev-only: NGRC unit tests + serves the repo + runs the smoke test in a mobile Chromium. |
 | `test/smoke.mjs` | Playwright checks + screenshots for the console, doc viewer, NGRC demo, and FlowSim. |
 | `test/lattsim/` | Node tests for the lattice engine: stencil isotropy, indexing/units, conservation (f32 + f64), Poiseuille vs the analytic parabola. |
-| `flexisim.html` | FlexiSim: compliant serial chains (Move / Chain / Verify / Architecture) using `lib/flexisim` on `lib/lattsim`. Commission the arm in the browser, watch compensation and input shaping move two different numbers, then watch the elbow's gearbox load up because the shoulder accelerated. |
+| `lib/blackbox/` | A controller GIVEN NOTHING about the plant: it identifies the timescale, the impulse response and the disturbance from data and designs its own inverse, predicting what it will achieve before deploying it. Imports nothing from `lib/flexisim` — the boundary is the directory. Verified on three plants that share no physics (`test/blackbox/`). |
+| `flexisim.html` | FlexiSim: compliant serial chains (Move / Chain / Black box / Verify / Architecture) using `lib/flexisim` on `lib/lattsim`. Commission the arm in the browser, watch compensation and input shaping move two different numbers, then watch the elbow's gearbox load up because the shoulder accelerated. |
 | `lib/flexisim/` | The COMPOSITION layer for compliant serial chains: lumped joints (`joint.js`), a lattice link in its own body frame (`link.js`), the hybrid arm (`arm.js`), the coupled two-link chain (`arm2r.js`), the tip-error soft sensor (`tipsensor.js`) and its chain version (`chainsensor.js`), the structured compliance identification (`compliance.js`) and the active compensator (`compensator.js`). Depends on `lib/lattsim` for the link and `lib/ngrc` for the models. |
 | `test/flexisim/` | Node tests for the hybrid plant: the joint against its closed forms, the joint-vs-link split, the soft sensor, compliance identification, and the compensation 2×2. No browser, no adapter, seconds. |
 | `CLAUDE.md` | This file. |
@@ -3478,7 +3479,86 @@ one.
    INSIDE the band drawn around it, which is the only way to catch a picture that is
    lying about its own claim.
 
-   NOT YET BUILT: the WGSL elastic kernel (see the measurement above); general
+   **BRICK 26 — THE BLACK BOX: A CONTROLLER GIVEN NOTHING, AND THE PRICE OF THAT,
+   MEASURED.** Asked directly: the library's promise is to walk up to any dynamical
+   system, route signals into the blocks, press one button and get estimation, forecasting
+   and control without modelling information — how does FlexiSim compare, and if the
+   answer changes too much, build a tab that actually does it.
+   **THE AUDIT FIRST, BECAUSE THE ANSWER WAS NOT FLATTERING.** Of the Move tab's control
+   path: `PositionServo`'s gains and feedforward are the reflected inertia, the gravity
+   torque and the ratio, all CAD; `TipCompensator` is given the structure δ = L·c·τ plus
+   L, J and τ_g, with only `c` identified; `ilcRefine` is given the arm length and a
+   hand-tuned phase lead; only the ZVD's ω and ζ are measured, and only `TipSensor` is
+   genuinely model-free. **The estimation half already was the workflow; the control half
+   was not.**
+   `lib/blackbox/` is the control half done properly, and it is its own directory so the
+   boundary is visible — nothing in it imports anything from `lib/flexisim/`, so it cannot
+   learn about an arm by accident. **What it is given: a scalar command it can read at any
+   step, a scalar correction it can add, an array of signals whose meaning it never learns,
+   and a tracker during commissioning only.** No units, no geometry, no sign convention,
+   no resonance, not even that the machine is a robot.
+   **IT DETERMINES ITS OWN TIMESCALE**, which is what makes the rest automatic: hold, wait
+   until the machine is QUIET (detected from the signal, not counted), one step, wait until
+   it is quiet again, and read the settling time and DC gain off the record. The
+   identification grid, the probe's bandwidth, the impulse-response length and the
+   inverse's target width all follow from that one number, so a plant settling in 300 steps
+   and one settling in 6000 are both sized correctly with neither mentioned.
+   **THREE IDENTIFIED OBJECTS, ONE JOINT SOLVE:** `h`, the impulse response from correction
+   to truth (which replaces the arm length, the sign convention, the servo lead and the
+   bending mode); `ê`, a map from a window of the command to the truth; and `q`, the
+   regularised FIR inverse of h. h and ê are estimated TOGETHER, because the truth during a
+   probe is the probe's response plus the trajectory's own disturbance and on a real machine
+   the second is much the larger — deconvolving the probe alone reported a gain of **−13.7
+   where the truth is +15.5**, right magnitude and WRONG SIGN, with a "resonance" of 30
+   steps against a real 980.
+   MEASURED ON THE ARM, told nothing: settling **1750 steps**, DC gain **14.28 against an
+   arm length of 15.5**, impulse ringing **960 steps against a real bending mode of ~980**.
+   **PORTABILITY IS THE CLAIM, SO IT IS CHECKED THE ONLY WAY IT CAN BE**: the identical
+   module, unchanged apart from a sample rate, against three plants that share no physics —
+   a lightly damped actuator; an over-damped process with a **NEGATIVE gain two hundred
+   times smaller** and no ringing, whose disturbance is driven by the command's value
+   rather than its curvature; and the real hybrid arm. **0.98× / 2.19× / 1.15×**, gains
+   identified rather than given, spanning 200× and both signs. If a plant constant had
+   leaked in, exactly one of them would work.
+   **AND IT PREDICTS WHAT IT WILL ACHIEVE BEFORE IT DEPLOYS ANYTHING.** The only free
+   parameter after identification is how much of the plant the inverse may claim, and that
+   cannot be a constant — it depends on where the disturbance sits relative to where the
+   plant can be trusted. Both objects needed to answer it are already identified, so the
+   search costs no plant time: run the designed loop against the MEASURED disturbance on
+   HELD-OUT samples and read off the residual, then pick the scalar 0..1 the same way.
+   THAT IS HOW PLANT A BECOMES A PASS RATHER THAN A FAILURE: its disturbance sits ON its
+   own lightly damped resonance, so nothing helps — the design predicts 1.1×, the scalar
+   comes back at 0.21, and the machine is left alone (0.98×). Chosen IN-sample instead it
+   predicted **73× on a plant where it went on to achieve 2.8×**, and on plant A it took
+   the machine to **0.58×, actively worse, with complete confidence.**
+   **TWO BUGS OF MINE ARE WORTH RECORDING.** (i) The correction's convolution ran
+   BACKWARDS — (q*e)(k) needs ê(k + (centre−j)·grid) and I indexed (j−centre). Identification
+   was excellent throughout (plant B's DC gain came back at −6.000e-2 against a true −0.06)
+   and the correction made all three plants WORSE. A correct inverse convolved the wrong
+   way is a plausible filter answering the wrong question, and no closed-loop score can
+   tell it from a bad inverse — which is why `firInverse` is now checked against its own
+   convolution. (ii) The step test measured the gravity sag settling in rather than its own
+   step, because it stepped before the machine was quiet.
+   **DOES IT KNOW IT IS AN ARM? NO — AND THE ONE ASSUMPTION IT DOES MAKE IS STATED.** The
+   PLANT path is treated as LTI: h, q and the correction are all linear. The DISTURBANCE
+   map is not — it uses the library's universal basis (bias + linear + cross-quadratics +
+   ReLU + Fourier), because backlash, stiction and a hardening spring make the disturbance
+   a nonlinear function of the command. Measured, linear window against universal map: the
+   correction is unchanged (1.17× vs 1.15×, inside the run spread) while the IDENTIFICATION
+   improves a lot — the ringing comes back at 960 steps rather than 400, the delay at 650
+   rather than 2450. **What limits the arm is the linear inverse, not the disturbance
+   model**, and the design's own prediction says so before the plant is touched.
+   **THE PRICE OF KNOWING NOTHING, ON THIS PLANT: about 4×.** Tab ① reaches 4.6× with the
+   CAD in hand; the black box reaches 1.07× on the page and 1.15× in Node. The gap is not
+   evenly split: the SOFT SENSOR half is already model-free on both and scores the same
+   (nRMSE ~0.06 from five unlabelled signals), while the CONTROL half pays for everything —
+   tab ① is handed a compliance model whose STRUCTURE is correct and converges its filter
+   over twelve repetitions of a trajectory it is allowed to assume repeats; this identifies
+   an LTI inverse from one probe and deploys it one-shot. The page's predicted 1.06× against
+   its achieved 1.07× is the part that matters: it is not wrong about itself.
+
+   NOT YET BUILT: a nonlinear plant inverse (Hammerstein/Wiener or iterative), which is
+   what the 4× above is; the WGSL elastic kernel (see the measurement above); general
    block-sparse bricks for a CLOSED structure — a gantry or a machine frame, where
    members are not separable into per-link frames and the swept box is genuinely
    the geometry.

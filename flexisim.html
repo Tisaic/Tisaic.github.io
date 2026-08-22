@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:229,built:"2026-08-22T15:32:32Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:230,built:"2026-08-22T17:10:59Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -91,8 +91,9 @@
   <div id="tabs">
     <div class="tab on" data-tab="move">① Move</div>
     <div class="tab" data-tab="chain">② Chain</div>
-    <div class="tab" data-tab="verify">③ Verify</div>
-    <div class="tab" data-tab="about">④ Architecture</div>
+    <div class="tab" data-tab="black">③ Black box</div>
+    <div class="tab" data-tab="verify">④ Verify</div>
+    <div class="tab" data-tab="about">⑤ Architecture</div>
   </div>
 
   <!-- ================================ Tab 1: move ================================ -->
@@ -472,6 +473,82 @@
   </section>
 
   <!-- =============================== Tab 3: verify =============================== -->
+  <!-- ============================ Tab 3: black box ============================== -->
+  <section class="panel" id="p-black">
+    <p class="lead">The same arm as tab ①, and a controller that is <b>told nothing about it</b>.
+      No arm length, no inertia, no gravity torque, no gear ratio, no gearbox stiffness, no
+      bending mode — all of which tab ① is handed off the CAD. This one gets a scalar command it
+      can read at any step, a scalar correction it can add, five signals whose meaning it never
+      learns, and a tracker <b>during commissioning only</b>. Everything else it measures.</p>
+
+    <div class="stage" id="stage3">
+      <canvas id="cv3"></canvas>
+      <span class="badge" id="state3-badge">building…</span>
+      <span class="badge r" id="err3-badge">—</span>
+    </div>
+    <div id="bb-chart"></div>
+
+    <div class="controls">
+      <button id="bb-go">Commission ▶</button>
+      <button id="bb-reset" class="sec">Reset all</button>
+    </div>
+    <p class="hint" id="bb-hint">One button, and every number in it comes from the machine:
+      <b>wait until it is quiet → one step to measure the timescale and the DC gain → a
+      pseudo-random probe to identify the impulse response and the disturbance together → design
+      the inverse against HELD-OUT data → correct → train the soft sensor → lock</b>. It also
+      <b>predicts what it will achieve before it deploys anything</b>, and backs off if the answer
+      is that it cannot help.</p>
+
+    <dl class="stat" id="bb-stats"></dl>
+
+    <div class="note">
+      <h3>What it is given, and what it works out</h3>
+      <b>Given:</b> <code>ref(k)</code> — one number, readable at any step, because a controller
+      planned the trajectory; one scalar correction to add to it; five signals per sample; and the
+      tracker while commissioning. <b>Nothing else</b> — not the units, not the geometry, not the
+      sign convention, not even that the machine is a robot.<br>
+      <b>Worked out:</b> the settling time (from a step, with "quiet" detected rather than
+      counted), the DC gain <em>and its sign</em> — which on this arm comes back at about 14
+      against a real arm length of 15.5 it was never told — the impulse response and its delay,
+      the bending mode from that response's own ringing (~960 steps against a real ~980), a
+      nonlinear map from the command window to the disturbance, and the regularised inverse that
+      cancels it.
+    </div>
+
+    <div class="note">
+      <h3>Is it treating this as an arm, or as any system? — measured, on three</h3>
+      <b>As any system, with one stated assumption.</b> The identical module, unchanged apart from
+      a sample rate, is driven in <code>test/blackbox/</code> against three plants that share no
+      physics: a lightly damped actuator, an <em>over-damped process with a NEGATIVE gain two
+      hundred times smaller</em> and no ringing at all, and this arm. Measured — <b>0.98× / 2.19×
+      / 1.15×</b>, with the gains identified rather than given, spanning 200× and both signs. If a
+      plant constant had leaked in, exactly one of them would work.<br>
+      <b>THE ASSUMPTION IS LINEARITY OF THE PLANT PATH.</b> The impulse response, its inverse and
+      the correction are LTI. The disturbance map is <em>not</em> — it uses the library's universal
+      basis (bias + linear + cross-quadratics + ReLU + Fourier), because backlash, stiction and a
+      hardening spring make the disturbance a nonlinear function of the command. Measured, linear
+      window against universal map: the correction is unchanged (1.17× vs 1.15×, inside the run
+      spread) while the identification improves a lot — the ringing comes back at 960 steps rather
+      than 400. <b>What limits the arm is the linear inverse, not the disturbance model</b>, and
+      the design's own prediction says so before the plant is touched.
+    </div>
+
+    <div class="note">
+      <h3>The price of knowing nothing</h3>
+      Tab ① reaches about <b>4.6×</b> on this plant with the CAD in hand (open loop 1.03e-1 →
+      learned filter 2.27e-2). This reaches <b>1.07×</b> here and 1.15× in the Node harness, with
+      none of it. <b>That gap is the honest cost of knowing nothing, and it is not evenly split.</b>
+      The <b>soft sensor</b> half is already model-free on both tabs and scores the same on each
+      (nRMSE ~0.06 from five unlabelled signals). The <b>control</b> half pays for everything: tab
+      ① is handed a compliance model whose structure is correct and converges its filter over
+      twelve repetitions of a trajectory it is <em>allowed to assume repeats</em>, while this
+      identifies an LTI inverse from one probe and deploys it one-shot on a plant with backlash
+      and stiction in it. The design's own held-out prediction (1.06×) matches what it then
+      achieved (1.07×), so the module is not wrong about itself — it is correctly reporting that a
+      linear inverse is most of what is available to it here.
+    </div>
+  </section>
+
   <section class="panel" id="p-verify">
     <p class="lead">The same closed forms the Node suite checks, run <b>in this browser</b> against the
       same modules. Joint terms are algebra and are instant; the cantilever needs a lattice to settle.</p>
@@ -537,6 +614,10 @@ import { TipSensor, nrmse } from './lib/flexisim/tipsensor.js';
 import { FlexArm2R } from './lib/flexisim/arm2r.js';
 import { ChainServo } from './lib/flexisim/compensator.js';
 import { ChainSensor } from './lib/flexisim/chainsensor.js';
+// THE BLACK BOX IS ITS OWN DIRECTORY, which is the boundary made visible: nothing under
+// lib/blackbox/ imports anything from lib/flexisim/, so it cannot learn about an arm even
+// by accident.
+import { BlackBox } from './lib/blackbox/blackbox.js';
 import {
   AngleProfile, SineProfile, PositionServo, TipCompensator, tipTrackingError, zvdShaper, ringFit,
   boxcarShaper, convolveShapers, driveEnvelope,
@@ -583,6 +664,7 @@ for (const t of document.querySelectorAll('.tab')) {
     // one has no size -- the chart has to be told once the panel is visible.
     if (t.dataset.tab === 'move' && chartOn) Plotly.Plots.resize($('err-chart'));
     if (t.dataset.tab === 'move' && ssChartOn) Plotly.Plots.resize($('ss-chart'));
+    if (t.dataset.tab === 'black' && bbChartOn) Plotly.Plots.resize($('bb-chart'));
     if (t.dataset.tab === 'chain') {
       if (chPosOn) Plotly.Plots.resize($('chain-pos'));
       if (chChartOn) Plotly.Plots.resize($('chain-chart'));
@@ -1984,6 +2066,18 @@ function frame() {
   // THE CHAIN IS A SEPARATE PLANT and only steps while its own tab is showing:
   // two lattices are 1.6x the Move tab's cost, and a hidden simulation burning the
   // frame budget is the page competing with itself.
+  const onBlack = document.querySelector('.tab[data-tab="black"]').classList.contains('on');
+  if (onBlack && bbArm && !bbBusy && bbRun) {
+    try { stepBB(+$('s-spf').value); }
+    catch (e) {
+      bbRun = false; $('state3-badge').textContent = 'halted: ' + e.message;
+      $('state3-badge').className = 'badge bad'; console.error(e);
+    }
+  }
+  if (onBlack) {
+    drawBB(); syncBB();
+    if (frames % 6 === 0) { bbStats(); bbChart(); }
+  }
   const onChain = document.querySelector('.tab[data-tab="chain"]').classList.contains('on');
   if (onChain && comm2 && !busy2) {
     try { comm2Step(LEARN_BUDGET); }
@@ -3856,6 +3950,300 @@ $('s-drive2').addEventListener('input', () => {
 $('s-spf2').addEventListener('input', () => { $('v-spf2').textContent = $('s-spf2').value; });
 $('s-mag2').addEventListener('input', () => { $('v-mag2').textContent = $('s-mag2').value + '×'; });
 
+// =============================================================== THE BLACK BOX
+//
+// A THIRD, INDEPENDENT PLANT, identical to the Move tab's arm and driven by a controller
+// that is told nothing about it. Its own arm rather than a mode on tab (1), because the
+// comparison only means something if neither run can touch the other's state -- and
+// because the black box has to be able to hold the machine STILL for its step test, which
+// is not something tab (1)'s loop does.
+let bbArm = null, bbServo = null, bbProf = null, bb = null, bbRun = false, bbK = 0;
+let bbBusy = false, bbChartOn = false, bbHold = false;
+const bbHist = { t: [], truth: [], est: [], u: [] };
+let bbBase = null, bbScore = null;
+
+async function buildBB() {
+  if (bbArm) { await bbArm.link.destroy(); bbArm = null; }
+  const link = await buildLink({ length: LEN, section: H, clamp: CLAMP, E: E_LADDER[5],
+    nu: NU, rho: RHO, damping: DAMPING });
+  const mp = massProperties(link);
+  const K = K_LADDER[4];
+  const joint = new Joint({ ratio: RATIO, motorInertia: mp.inertiaAboutPivot / 1e4,
+    loadInertia: mp.inertiaAboutPivot, stiffness: K,
+    damping: 2 * Math.sqrt(K * mp.inertiaAboutPivot / 2) });
+  const arm = new FlexArm({ joint, link, gravityWorld: [0, -G, 0], dt: 1 });
+  // THE SERVO IS THE MACHINE, NOT THE CONTROLLER. A black-box compensator sits on top of
+  // whatever loop the drive already closes -- on a real machine you are usually not
+  // allowed to touch it -- so the gains and the rigid feedforward here are part of the
+  // plant being identified rather than knowledge the module has.
+  const tauG = (th) => mp.centroid * mp.mass * (-G) * Math.cos(th);
+  const Jr = joint.reflectedInertia();
+  const hold = Math.abs(tauG(0)) / RATIO;
+  bbServo = new PositionServo({ kp: SERVO_BW * SERVO_BW * Jr / RATIO,
+    kd: 2 * SERVO_BW * Jr / RATIO, inertia: Jr, ratio: RATIO, gravityTorque: tauG,
+    tauMax: 32 * hold, speedMax: NO_LOAD_SPEED });
+  bbArm = { arm, link, mp, tauG, Larm: arm.Larm };
+  // THE SAME COMMAND THE MOVE TAB RUNS, jerk-limited, so the two tabs are comparable.
+  bbProf = new AngleProfile({ span: SPAN_LADDER[2], accelSteps: 300, cruiseSteps: 400,
+    dwellSteps: 1400, shaper: boxcarShaper(120) });
+  // IT RUNS UNCOMMISSIONED FROM THE START, which is not cosmetic: the "before" number has
+  // to be the machine with NO correction, and the first version collected it during the
+  // probe -- where the PRBS is being deliberately injected, so the baseline carried the
+  // probe's own disturbance and the improvement was understated.
+  bbK = 0; bb = null; bbBase = null; bbScore = null; bbRun = true; bbHold = false;
+  for (const a of Object.values(bbHist)) a.length = 0;
+  $('state3-badge').textContent = 'running uncommissioned — press Commission';
+  $('state3-badge').className = 'badge';
+  bbStats(); drawBB();
+}
+
+const BB_S = 10;
+function startBB() {
+  if (!bbArm) return;
+  bb = new BlackBox({
+    // THE ONLY THINGS IT IS GIVEN. A scalar command readable at any step, a sample rate,
+    // and a probe amplitude sized from the command's own swing -- not from the plant.
+    ref: (k) => bbProf.at(k).theta,
+    sampleEvery: BB_S,
+    probeAmp: BlackBox.autoAmplitude(SPAN_LADDER[2], 0.03),
+    probeSamples: 1400, taps: 70, invTaps: 45,
+    nSignals: 5, ssLag: 12, ssStride: 9, lead: 15,
+  });
+  bbHold = true; bbRun = true;
+  // The baseline collected while it was running uncommissioned is KEPT -- it is the
+  // number the correction has to beat.
+  bbScore = null;
+  for (const a of Object.values(bbHist)) a.length = 0;
+  $('state3-badge').className = 'badge warn';
+  syncBB();
+}
+
+function stepBB(n) {
+  const { arm } = bbArm;
+  for (let i = 0; i < n; i++) {
+    // THE HOST HOLDS THE MACHINE STILL while the module is in its step phase. That is the
+    // only cooperation it asks for, and every machine can hold still.
+    const atRest = bb && bb.phase === 'step';
+    const r = atRest ? { theta: 0, omega: 0, alpha: 0 } : bbProf.at(bbK);
+    const u = bb ? bb.offset() : 0;
+    const tau = bbServo.torque({ theta: r.theta + u, omega: r.omega, alpha: r.alpha },
+      arm.encoder());
+    arm.step(tau, 1);
+    const e = tipTrackingError(arm, r.theta);
+    if (bbK % BB_S === 0 && !bb) {
+      // uncommissioned: this is the baseline, and nothing is being injected
+      (bbBase ||= []).push(e);
+      if (bbBase.length > 1200) bbBase.shift();
+      bbHist.t.push(bbK); bbHist.truth.push(e); bbHist.est.push(null); bbHist.u.push(0);
+      if (bbHist.t.length > 900) for (const a of Object.values(bbHist)) a.splice(0, 300);
+    }
+    if (bbK % BB_S === 0 && bb) {
+      const enc = arm.encoder();
+      // FIVE SIGNALS AND NO LABELS. The module never learns which is which.
+      bb.sample(bbK, bb.phase === 'locked' ? null : e,
+        [enc.angle, enc.speed, tau, r.theta, arm.joint.transmitted() / RATIO]);
+      // ONLY THE CORRECTED STRETCH IS SCORED HERE. The probe's own injection is not the
+      // machine, so nothing during it counts either way -- the baseline was taken before
+      // commissioning began.
+      if (!atRest && bb.ready) {
+        (bbScore ||= []).push(e);
+        if (bbScore.length > 1200) bbScore.shift();
+      }
+      bbHist.t.push(bbK); bbHist.truth.push(e);
+      bbHist.est.push(bb.est == null ? null : bb.est); bbHist.u.push(u * bbArm.Larm);
+      if (bbHist.t.length > 900) for (const a of Object.values(bbHist)) a.splice(0, 300);
+    }
+    bbK++;
+  }
+}
+
+const bbRms = (a) => (a && a.length > 50
+  ? Math.sqrt(a.reduce((s, x) => s + x * x, 0) / a.length) : null);
+
+function bbStats() {
+  const rows = [];
+  if (bbArm) {
+    rows.push(['plant', `the SAME arm as tab ① · K ${K_LADDER[4]} · E ${E_LADDER[5]} · `
+      + `arm ${bbArm.Larm} <span class="warn">(none of which it is told)</span>`]);
+    rows.push(['step', String(bbK)]);
+  }
+  if (bb) {
+    const st = bb.status();
+    rows.push(['phase', `<span class="${st.phase === 'locked' ? 'good' : 'warn'}">`
+      + `${st.phase}</span> — ${st.note}`]);
+    if (st.settleSteps) {
+      rows.push(['measured: settling time', `${st.settleSteps} steps `
+        + `<span class="warn">(identification grid sized from it: ${st.grid} steps)</span>`]);
+      rows.push(['measured: DC gain', `${st.dc.toPrecision(4)}   `
+        + `<span class="${Math.abs(st.dc / bbArm.Larm - 1) < 0.35 ? 'good' : 'bad'}">`
+        + `the arm length is ${bbArm.Larm}, which it was never given</span>`]);
+    }
+    if (st.model) {
+      rows.push(['measured: impulse response', `gain ${st.model.gain.toPrecision(4)} · `
+        + `delay ${st.model.delay * st.grid} steps · ringing `
+        + (st.model.period
+          ? `${(st.model.period * st.grid).toFixed(0)} steps `
+            + '<span class="good">— the bending mode, from the response itself</span>'
+          : '<span class="warn">none detected</span>')]);
+    }
+    if (st.design) {
+      rows.push(['designed inverse', `low-pass width ${st.design.width} · scalar `
+        + `${st.design.alpha.toFixed(3)} · <b>predicted `
+        + `${st.design.predicted.toFixed(2)}×</b>   <span class="warn">chosen on HELD-OUT `
+        + 'samples, and the scalar goes to zero if it cannot help</span>']);
+    }
+    if (st.map) rows.push(['disturbance map', `${st.map.features} features from the `
+      + 'command window alone (universal basis: bias + linear + cross-quadratics + ReLU '
+      + `+ Fourier), ${st.map.rows} rows`]);
+    const b = bbRms(bbBase), a = bbRms(bbScore);
+    if (b) {
+      rows.push(['tool error, no correction', b.toExponential(3)]);
+      if (a) {
+        rows.push(['tool error, corrected', `${a.toExponential(3)}   `
+          + `<span class="${b / a > 1.05 ? 'good' : 'warn'}"><b>${(b / a).toFixed(2)}×</b>`
+          + `${st.design ? ` against ${st.design.predicted.toFixed(2)}× predicted` : ''}`
+          + '</span>']);
+      }
+    }
+    if (bb.ss && bb.ss.frozen && bb.trained > 200) {
+      rows.push(['soft sensor', `${bb.trained} pairs · estimate and a +`
+        + `${15 * BB_S}-step forecast from the same five unlabelled signals`]);
+    }
+  }
+  $('bb-stats').innerHTML = rows.map(([a, b2]) => `<dt>${a}</dt><dd>${b2}</dd>`).join('');
+  if (bbArm) {
+    $('err3-badge').textContent = `tool ${bbArm.arm.tipError().total.toExponential(2)}`;
+  }
+}
+
+function drawBB() {
+  const cv = $('cv3'), st = $('stage3');
+  const w = st.clientWidth, h = st.clientHeight;
+  if (!(w > 0 && h > 0)) return;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+  }
+  const g = cv.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.fillStyle = '#060a14'; g.fillRect(0, 0, w, h);
+  if (!bbArm) return;
+  const { arm, link } = bbArm;
+  const L = arm.Larm;
+  const px = 24, py = h * 0.52;
+  const scale = Math.min((w - 60) / L, (h - 40) / (L * 0.9));
+  const mag = +$('s-mag').value;
+  const r = (bb && bb.phase === 'step') ? { theta: 0 } : bbProf.at(bbK);
+  const world = (bx, by) => {
+    const c = Math.cos(r.theta), s2 = Math.sin(r.theta);
+    return [px + (c * bx - s2 * by) * scale, py - (s2 * bx + c * by) * scale];
+  };
+  const line = (dyAt, col, width, dash) => {
+    g.save(); g.strokeStyle = col; g.lineWidth = width;
+    g.setLineDash(dash || []); g.beginPath();
+    for (let i = 0; i <= 24; i++) {
+      const bx = (i / 24) * L;
+      const [X, Y] = world(bx, mag * dyAt(bx, i / 24));
+      g.lineTo(X, Y);
+    }
+    g.stroke(); g.restore();
+  };
+  const bp = deflectionProfile(link);
+  const piv = link.meta.pivot[0];
+  const bendAt = (f) => {
+    const want = piv + f * L;
+    let lo = 0;
+    while (lo < bp.x.length - 2 && bp.x[lo + 1] < want) lo++;
+    const span = bp.x[lo + 1] - bp.x[lo];
+    const t = span > 0 ? (want - bp.x[lo]) / span : 0;
+    return bp.dy[lo] + t * (bp.dy[lo + 1] - bp.dy[lo]);
+  };
+  const enc = arm.encoder().angle;
+  const off = bb ? bb.offset() : 0;
+  line(() => 0, '#64748b', 2, [6, 5]);
+  line((bx) => off * bx, '#a78bfa', 2, [3, 3]);
+  line((bx) => (enc - r.theta) * bx, '#475569', 4);
+  line((bx, f) => (arm.joint.thL - r.theta) * bx + bendAt(f), '#f59e0b', 5);
+  g.fillStyle = '#94a3b8'; g.beginPath(); g.arc(px, py, 6, 0, 7); g.fill();
+  const toolDev = (arm.joint.thL - r.theta) * L + bendAt(1);
+  const [TX, TY] = world(L, mag * toolDev);
+  g.fillStyle = '#fbbf24'; g.beginPath(); g.arc(TX, TY, 6, 0, 7); g.fill();
+  if (bb && bb.est != null) {
+    const [EX, EY] = world(L, mag * ((enc - r.theta) * L + bb.est));
+    g.strokeStyle = '#22d3ee'; g.lineWidth = 2;
+    g.beginPath(); g.arc(EX, EY, 7, 0, 7); g.stroke();
+  }
+  g.font = '11px ui-monospace,monospace';
+  g.fillStyle = '#64748b'; g.textAlign = 'right';
+  g.fillText(`deviations ×${mag}`, w - 10, h - 16);
+  if (bb && bb.phase === 'step') {
+    g.fillStyle = '#f59e0b';
+    g.fillText('holding still — measuring the timescale', w - 10, h - 32);
+  }
+  g.textAlign = 'left';
+}
+
+function bbChart() {
+  if (bbHist.t.length < 10) return;
+  const T = bbHist.t.slice();
+  const traces = [
+    { x: T, y: bbHist.truth.slice(), name: 'tool vs the program',
+      line: { color: '#f59e0b', width: 2 } },
+    { x: T, y: bbHist.est.slice(), name: 'estimate (5 unlabelled signals)',
+      line: { color: '#22d3ee', width: 1.5 }, connectgaps: false },
+    { x: T, y: bbHist.u.slice(), name: 'the correction, at the tool',
+      line: { color: '#a78bfa', width: 1.5, dash: 'dot' }, yaxis: 'y2' },
+  ];
+  if (!bbChartOn) {
+    Plotly.newPlot('bb-chart', traces, {
+      margin: { l: 48, r: 44, t: 6, b: 26 }, paper_bgcolor: '#0b1220',
+      plot_bgcolor: '#060a14', font: { color: '#94a3b8', size: 9 }, showlegend: true,
+      legend: { orientation: 'h', y: 1.22, font: { size: 9 } },
+      xaxis: { gridcolor: '#1e293b', title: { text: 'solver steps', font: { size: 9 } } },
+      yaxis: { gridcolor: '#1e293b' },
+      yaxis2: { overlaying: 'y', side: 'right', showgrid: false },
+    }, { displayModeBar: false, responsive: true });
+    $('bb-chart').classList.add('on');
+    bbChartOn = true;
+    return;
+  }
+  Plotly.react('bb-chart', traces, $('bb-chart').layout,
+    { displayModeBar: false, responsive: true });
+}
+
+function syncBB() {
+  const ready = !!bbArm && !bbBusy;
+  const running = bb && bb.phase !== 'locked';
+  const set = (id, disabled, text) => {
+    const el = $(id);
+    if (!el) return;
+    if (el.disabled !== disabled) el.disabled = disabled;
+    if (text !== undefined && el.textContent !== text) el.textContent = text;
+  };
+  set('bb-go', !ready || !!running, bb ? 'Commissioned' : 'Commission ▶');
+  set('bb-reset', bbBusy);
+  if (bb && bb.phase === 'locked' && $('state3-badge').className !== 'badge good') {
+    $('state3-badge').className = 'badge good';
+  }
+  if (bb) $('state3-badge').textContent = bb.note;
+}
+
+$('bb-go').addEventListener('click', startBB);
+$('bb-reset').addEventListener('click', async () => {
+  if (bbBusy) return;
+  bbBusy = true; syncBB();
+  await buildBB();
+  bbBusy = false; syncBB();
+});
+
+window.__flxBBDbg = () => (bbArm ? {
+  k: bbK, running: bbRun, Larm: bbArm.Larm,
+  ...(bb ? bb.status() : { phase: 'idle' }),
+  base: bbRms(bbBase), scored: bbRms(bbScore),
+  ratio: bbRms(bbBase) && bbRms(bbScore) ? bbRms(bbBase) / bbRms(bbScore) : null,
+  cells: bbArm.link.lattice.cellCount,
+} : null);
+
 window.__flxChainDbg = () => (arm2 ? {
   k: k2, running: run2, K: arm2.K, q: arm2.q.slice(), alpha: arm2.alpha.slice(),
   M: arm2.massMatrix(), Mstraight: arm2.massMatrix(0)[0][0], Mfolded: arm2.massMatrix(Math.PI)[0][0],
@@ -4033,6 +4421,7 @@ syncMove();
 busy2 = true;
 await build2();
 busy2 = false;
+buildBB();
 syncChain();
 requestAnimationFrame(frame);
 console.log('flexisim ready ✓');

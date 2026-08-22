@@ -71,7 +71,7 @@ elif [ -z "${AREAS}" ]; then
       # not drag the whole FlowSim suite in. The elastic operator has no page yet
       # and shares no kernel with the fluid.
       lib/lattsim/operators/elastic.js|lib/lattsim/operators/frame.js|test/lattsim/elastic*|\
-lib/flexisim/*|test/flexisim/*|flexisim.html)
+lib/flexisim/*|test/flexisim/*|flexisim.html|lib/blackbox/*|test/blackbox/*)
         want_flex=1 ;;
       # The shared engine -- lattice, fields, solver, backends -- is under both.
       lib/lattsim/*|test/lattsim/*|flowsim.html) want_flow=1; want_flex=1 ;;
@@ -185,6 +185,13 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # feature count. 5 s quick (the whole-arm readout alone), 20 s full (the
     # three-way comparison and the forecast).
     node test/flexisim/chainsensor.test.mjs
+    # THE MODULE THAT IS GIVEN NOTHING, on three plants that share no physics: a
+    # lightly damped actuator, an over-damped process with a NEGATIVE gain two hundred
+    # times smaller, and the real hybrid arm. One module, one set of options apart from a
+    # sample rate. If any plant constant had leaked in, exactly one of them would work --
+    # which is the only way a portability claim can be checked. Full tier: it drives
+    # ~200k solver steps of the real arm.
+    if [ "${SUITE}" = "full" ]; then node test/blackbox/blackbox.test.mjs; fi
     # THE DRIVE-SIDE FEEDFORWARD, self-commissioned. Full tier: it is a documented
     # measurement about a library block rather than a contract of the shipped page,
     # which uses the hand-built model, and it drives ~100k solver steps.

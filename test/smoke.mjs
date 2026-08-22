@@ -2513,6 +2513,56 @@ const painted2 = await fx.evaluate(() => {
 check('flexisim/chain: the stage is painted', painted2.ok, JSON.stringify(painted2));
 await fx.screenshot({ path: join(SHOTS, '06-flexisim-chain.png') });
 
+// ---- THE BLACK BOX: the same arm, and a controller told nothing about it. Full tier
+// only -- it holds the machine still, runs a step test, drives a 1400-sample probe and
+// then a scored stretch, which is a few hundred thousand solver steps.
+if (FULL) {
+  await fx.click('.tab[data-tab="black"]');
+  await fx.waitForFunction(() => window.__flxBBDbg && window.__flxBBDbg(),
+    null, { timeout: 180000 });
+  await fx.waitForFunction(() => window.__flxBBDbg().base != null, null, { timeout: 300000 });
+  const bk0 = (await fx.evaluate(() => window.__flxBBDbg())).k;
+  await fx.waitForFunction((t) => window.__flxBBDbg().k > t, bk0 + 30000, { timeout: 300000 });
+  await fx.click('#bb-go');
+  await fx.waitForFunction(() => window.__flxBBDbg().phase === 'correct',
+    null, { timeout: 900000 });
+  const bk1 = (await fx.evaluate(() => window.__flxBBDbg())).k;
+  await fx.waitForFunction((t) => window.__flxBBDbg().k > t, bk1 + 60000, { timeout: 600000 });
+  const bbd = await fx.evaluate(() => window.__flxBBDbg());
+  console.log(`  flexisim/blackbox: measured settling ${bbd.settleSteps} steps, DC gain `
+    + `${bbd.dc.toFixed(2)} against an arm length of ${bbd.Larm} it was never told; `
+    + `predicted ${bbd.design.predicted.toFixed(2)}x, achieved ${bbd.ratio.toFixed(2)}x`);
+  // WHAT IS ASSERTED IS THAT IT IDENTIFIED THE PLANT AND KNEW WHAT IT COULD DO -- not a
+  // size of win. The win here is small and the module says so in advance, which is the
+  // property worth pinning: a controller that is confident about a plant it cannot help
+  // is the failure mode, and it is the one this whole tab is a check on.
+  check('flexisim/blackbox: it measures the plant\'s own timescale from a step',
+    bbd.settleSteps > 200 && bbd.settleSteps < 40000, `${bbd.settleSteps}`);
+  check('flexisim/blackbox: …and recovers the ARM LENGTH it was never given',
+    Math.abs(bbd.dc / bbd.Larm - 1) < 0.35, `${bbd.dc} vs ${bbd.Larm}`);
+  check('flexisim/blackbox: …and an impulse response agreeing with it in sign and size',
+    bbd.model && bbd.model.gain * bbd.dc > 0
+    && Math.abs(bbd.model.gain / bbd.dc - 1) < 0.7, JSON.stringify(bbd.model));
+  check('flexisim/blackbox: …then designs an inverse and predicts what it will achieve',
+    bbd.design && bbd.design.predicted > 0.9 && bbd.design.alpha >= 0
+    && bbd.design.alpha <= 1, JSON.stringify(bbd.design));
+  check('flexisim/blackbox: …and what it achieves matches what it predicted',
+    Math.abs(Math.log(bbd.ratio / bbd.design.predicted)) < Math.log(2),
+    `predicted ${bbd.design.predicted}, achieved ${bbd.ratio}`);
+  check('flexisim/blackbox: …without making the machine worse', bbd.ratio > 0.95,
+    `${bbd.ratio}`);
+  const paint3 = await fx.evaluate(() => {
+    const c = document.getElementById('cv3');
+    if (!c.width || !c.height) return { ok: false };
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    let lit = 0;
+    for (let i = 0; i < d.length; i += 4 * 37) if (d[i] > 60 || d[i + 1] > 60) lit++;
+    return { ok: lit > 20, lit };
+  });
+  check('flexisim/blackbox: the stage is painted', paint3.ok, JSON.stringify(paint3));
+  await fx.screenshot({ path: join(SHOTS, '07-flexisim-blackbox.png') });
+}
+
 // The in-browser Verify tab runs the same closed forms against the same modules.
 await fx.click('.tab[data-tab="verify"]');
 await fx.click('#verify-run');
