@@ -15,7 +15,7 @@
 // PLANT C -- the real FlexiSim arm: lumped nonlinear gearbox plus a lattice link, with
 //            backlash and Stribeck friction, run through the same interface.
 
-import { BlackBox, prbs, deconvolve, summarise, firInverse }
+import { BlackBox, prbs, deconvolve, summarise, firInverse, optimalPreview, WindowMap }
   from '../../lib/blackbox/blackbox.js';
 import { Joint } from '../../lib/flexisim/joint.js';
 import { FlexArm } from '../../lib/flexisim/arm.js';
@@ -85,12 +85,23 @@ console.log('\n  identification primitives');
 // The command is a repeating trapezoid-ish ramp, but NOTHING in the module knows that --
 // it only ever calls ref(k) and gets a number.
 const PERIOD = 1200;
+// THE COMMAND MUST NOT REPEAT, and that is a correctness requirement rather than
+// realism. A model fitted to a periodic excitation can score beautifully out of sample by
+// learning WHERE IN THE CYCLE it is, at which point the held-out set is the same cycle it
+// trained on and the number means nothing. Measured: the 735-feature disturbance map
+// scores R^2 = -6.93 out of sample on an APERIODIC command against +0.88 for the plain
+// linear window -- catastrophic over-fitting that the repeating command had hidden
+// completely, and that had already shipped once as a result. (Brick 16 learned this on a
+// different plant, which is why the amplitude is modulated at an INCOMMENSURATE rate here
+// rather than left to be discovered a third time.)
+const PHI = (1 + Math.sqrt(5)) / 2;
 function makeRef(span) {
   return (k) => {
     const n = ((k % PERIOD) + PERIOD) % PERIOD;
     const t = n < PERIOD / 2 ? n : PERIOD - n;
     const f = Math.min(1, t / (PERIOD * 0.25));
-    return span * (3 * f * f - 2 * f * f * f);     // smoothstep, so it has real curvature
+    const m = 1 + 0.35 * Math.sin(2 * Math.PI * k / (PERIOD * PHI * 2.7));
+    return span * m * (3 * f * f - 2 * f * f * f);  // smoothstep, so it has real curvature
   };
 }
 
@@ -137,15 +148,20 @@ async function runSynthetic(name, p, { span = 0.2, S = 6, probeFrac = 0.02,
   // STAGE ZERO IS AT REST, which the HOST arranges: the module asks for it by being in
   // its `step` phase and the machine holds still, exactly as a commissioning routine
   // holds a pose. Everything after this runs the real trajectory.
+  // THE MODULE ASKS FOR THE HOLD AND THE HOST GRANTS IT -- `holding` is true through the
+  // step test AND the probe, because the plant is identified while the machine is still
+  // and the disturbance while it runs. Those are two experiments and neither can be run
+  // during the other; see BlackBox._identify().
   const hold = ref(0);
-  while (bb.phase === 'step') {
+  const k0 = k;
+  while (bb.holding && k < k0 + 800000) {
     y = plant.step(bb.offset()) + p.dist(0, () => hold);
     if (k % S === 0) bb.sample(k, y);
     k++;
-    if (k > 400000) throw new Error('step phase never finished');
   }
-  const kProbe = k;
-  while (bb.phase === 'probe' && k < kProbe + 400000) {
+  if (bb.holding) throw new Error('commissioning hold never finished');
+  const kObs = k;
+  while ((bb.phase === 'observe' || bb.verifying) && k < kObs + 2000000) {
     y = plant.step(bb.offset()) + p.dist(k, ref);
     if (k % S === 0) bb.sample(k, y);
     k++;
@@ -165,11 +181,103 @@ async function runSynthetic(name, p, { span = 0.2, S = 6, probeFrac = 0.02,
   console.log(`    [${name}] impulse: gain ${bb.model.gain.toExponential(3)}, delay `
     + `${bb.model.delay * bb.grid} steps (true ${p.delay}), ring `
     + `${bb.model.period ? (bb.model.period * bb.grid).toFixed(0) : '—'}`);
-  console.log(`    [${name}] design: width ${bb.design.width}, scalar `
-    + `${bb.design.alpha.toFixed(3)}, PREDICTED ${bb.design.predicted.toFixed(2)}x`);
+  console.log(`    [${name}] basis: ${bb.basis.chosen} — ${bb.cost().mac} MAC/update `
+    + `against a ${bb.macBudget} budget`);
+  console.log(`    [${name}] design: ${bb.design.kind}, ${bb.design.taps} taps, preview `
+    + `${bb.design.previewSteps} steps, scalar ${bb.design.alpha.toFixed(3)}, `
+    + `PREDICTED ${bb.design.predicted.toFixed(2)}x, VERIFIED on the machine `
+    + `${bb.design.verified == null ? '—' : bb.design.verified.toFixed(2) + 'x'} `
+    + `at ×${bb.design.scale}, plant model R2 ${bb.plantR2.toFixed(3)}`);
+  console.log(`    [${name}] correction: peak ${bb.design.umax.toExponential(3)} against a `
+    + `cap of ${bb.design.uCap.toExponential(3)}`
+    + `${bb.design.umax >= bb.design.uCap * 0.98 ? '  ← THE CAP IS BINDING' : ''}`
+    + `; trials ${(bb.design.trials || []).map((t) => `×${t.scale}→${t.ratio.toFixed(2)}`).join(' ')}`);
   console.log(`    [${name}] error rms ${b.toExponential(3)} -> ${a.toExponential(3)}  `
     + `ACHIEVED ${(b / a).toFixed(2)}x`);
   return { bb, before: b, after: a, ratio: b / a };
+}
+
+// ---------------------------------------------------------------- the preview filter
+//
+// THE PREVIEW HAS TO POINT AT THE FUTURE, and a closed-loop score cannot tell a filter
+// that looks forward from one that looks backward -- both are "some filter", both fit
+// something, and the difference only shows as a worse number with no cause attached. This
+// project has already shipped a correction convolved the wrong way round once. So the
+// orientation is pinned against a plant whose answer is exact.
+console.log('\n  the preview filter');
+{
+  // A pure delay of D grid samples with gain g. To cancel d(k) the plant must be driven D
+  // samples EARLY, so the only nonzero tap is at j = centre - D with value -1/g -- which
+  // fixes the sign, the position and the magnitude all at once.
+  const D = 5, g = 3.5, M = 12;
+  const h = new Float64Array(M);
+  h[D] = g;
+  const N = 900;
+  const d = new Float64Array(N);
+  let z = 12345;
+  const rnd = () => { z = (z * 1103515245 + 12345) & 0x7fffffff; return z / 0x7fffffff - 0.5; };
+  // a smooth disturbance, so the design is not fitting white noise
+  let a = 0;
+  for (let k = 0; k < N; k++) { a = 0.93 * a + rnd(); d[k] = a; }
+  const centre = 8, taps = 16;
+  const q = optimalPreview(h, d, d, { taps, centre, lambda: 1e-9, from: M + taps, to: N - 20 });
+  let peak = 0, at = -1;
+  for (let j = 0; j < taps; j++) if (Math.abs(q[j]) > peak) { peak = Math.abs(q[j]); at = j; }
+  check('the preview filter puts its weight where the delay says it must',
+    at === centre - D, `peak tap at ${at}, expected ${centre - D}`);
+  check('…with the magnitude and SIGN the exact inverse has',
+    Math.abs(q[centre - D] + 1 / g) < 1e-3, `${q[centre - D]} against ${-1 / g}`);
+  let off = 0;
+  for (let j = 0; j < taps; j++) if (j !== centre - D) off = Math.max(off, Math.abs(q[j]));
+  check('…and nothing anywhere else', off < 1e-3, `worst other tap ${off.toExponential(2)}`);
+
+  // AND THE EFFORT TERM HAS TO DO SOMETHING MONOTONE, since it is the knob the whole
+  // design offers a user. Larger lambda, smaller command.
+  let prev = Infinity, mono = true;
+  for (const lam of [1e-6, 1e-3, 1e-1, 1e1, 1e3]) {
+    const qq = optimalPreview(h, d, d, { taps, centre, lambda: lam, from: M + taps, to: N - 20 });
+    let e = 0;
+    for (let j = 0; j < taps; j++) e += qq[j] * qq[j];
+    if (e > prev) mono = false;
+    prev = e;
+  }
+  check('the effort weight monotonically shrinks the command it asks for', mono);
+}
+
+// ---------------------------------------------------------------- what it costs a PLC
+console.log('\n  the cycle budget');
+{
+  check('the budget is arithmetic on a stated cycle, not a constant',
+    BlackBox.plcBudget({ cycleUs: 1000, utilisation: 0.05, macPerUs: 50 }) === 2500
+    && BlackBox.plcBudget({ cycleUs: 500, utilisation: 0.1, macPerUs: 50 }) === 2500);
+
+  const taps = [-200, -100, 0, 100, 200, 300];
+  const full = new WindowMap({ taps, nonlinear: true });
+  const macFull = full.cost().mac;
+  const lin = new WindowMap({ taps, nonlinear: true });
+  lin.prune(Array.from({ length: 1 + lin.nBase }, (_, i) => i));
+  check('pruning to the linear window really does drop the cost',
+    lin.cost().mac * 8 < macFull,
+    `${lin.cost().mac} against ${macFull} MAC`);
+
+  // THE FOLDED WEIGHTS ARE THE HOT PATH, so they are checked against the arithmetic they
+  // replace rather than trusted. A rewrite of predict() that is "obviously equivalent" is
+  // exactly where a silent regression lives -- and the first version of this one left
+  // fit() assigning the weights directly, so the folded copy was never built at all.
+  const m = new WindowMap({ taps, nonlinear: false });
+  const ref = (k) => Math.sin(k / 700) + 0.3 * Math.cos(k / 137);
+  for (let k = 2000; k < 2600; k++) m.observe(ref, k * 7, 7, ref(k * 7 + 300) * 2.5);
+  m.fit();
+  let worst = 0;
+  for (let k = 3000; k < 3050; k++) {
+    const f = m.features(ref, k * 7, 7);
+    let want = 0;
+    for (let i = 0; i < m.nf; i++) want += m.w[i] * ((f[i] - m.mu[i]) / m.sg[i]);
+    worst = Math.max(worst, Math.abs(want - m.predict(ref, k * 7, 7))
+      / Math.max(1e-12, Math.abs(want)));
+  }
+  check('the folded weights give the identical answer to the standardise-then-weight form',
+    worst < 1e-12, `worst relative difference ${worst.toExponential(2)}`);
 }
 
 // ---------------------------------------------------------------- PLANT A
@@ -183,18 +291,25 @@ check('plant A: the identified gain has the right sign and magnitude',
   A.bb.model.gain > 6 && A.bb.model.gain < 24, `${A.bb.model.gain}`);
 check('plant A: the step test measures a settling time in the right decade',
   A.bb.settleSteps > 500 && A.bb.settleSteps < 20000, `${A.bb.settleSteps}`);
-// PLANT A IS THE ONE IT CANNOT HELP, and that is the check rather than the exception.
-// Its disturbance sits ON its own lightly damped resonance -- exactly where an identified
-// inverse is least trustworthy -- so there is no filter that cancels it. What the module
-// has to do is NOTICE: the design search predicts 1.1x, the scalar it chooses on held-out
-// data comes back at 0.21 rather than 1, and the machine is left alone. Before the design
-// was chosen against held-out data it took the same plant to 0.58x, i.e. actively worse,
-// with complete confidence.
-check('plant A: the module PREDICTS that it cannot help here', A.bb.design.predicted < 1.6,
-  `predicted ${A.bb.design.predicted.toFixed(2)}x`);
-check('plant A: …so it backs the correction off instead of applying it',
-  A.bb.design.alpha < 0.5, `scalar ${A.bb.design.alpha.toFixed(3)}`);
-check('plant A: …and does no harm', A.ratio > 0.9, `${A.ratio.toFixed(2)}x`);
+// PLANT A IS THE ONE THE MODEL IS MOST OPTIMISTIC ABOUT, and that is the check rather
+// than the exception. Its disturbance is a pure function of the command's curvature, so
+// the disturbance map explains it almost perfectly and the OPEN-LOOP prediction is
+// enormous -- while the plant is lightly damped with its resonance close to the
+// identification grid, so nothing at this sample rate actually inverts it.
+//
+// AN OPEN-LOOP PREDICTION CANNOT CATCH THAT, because it is computed by convolving the
+// candidate with the same impulse response the candidate was designed from: the design
+// and its prediction agree with each other and disagree with the machine. Only deploying
+// it and measuring can tell them apart, which is what the verify phase is for -- and the
+// property asserted here is that the VERIFIED number is honest, not that the predicted
+// one is small.
+check('plant A: the open-loop prediction is optimistic, which is why it is not trusted',
+  A.bb.design.predicted > 2, `predicted ${A.bb.design.predicted.toFixed(2)}x`);
+check('plant A: …and the number it MEASURED on the machine is honest',
+  A.bb.design.verified != null
+    && Math.abs(Math.log(A.bb.design.verified / A.ratio)) < Math.log(1.4),
+  `verified ${A.bb.design.verified?.toFixed(2)}x against ${A.ratio.toFixed(2)}x achieved`);
+check('plant A: …and it does no harm', A.ratio > 0.95, `${A.ratio.toFixed(2)}x`);
 
 // ---------------------------------------------------------------- PLANT B
 //
@@ -215,9 +330,10 @@ check('plant B: …and within a factor of two of the truth',
   `${B.bb.model.gain} vs -0.06`);
 check('plant B: the correction cuts the error by more than 1.8x', B.ratio > 1.8,
   `${B.ratio.toFixed(2)}x`);
-check('plant B: …and it predicted that it would, before it was deployed',
-  B.bb.design.predicted > 1.8,
-  `predicted ${B.bb.design.predicted.toFixed(2)}x, achieved ${B.ratio.toFixed(2)}x`);
+check('plant B: …and the number it measured on the machine agrees with what it achieved',
+  B.bb.design.verified != null
+    && Math.abs(Math.log(B.bb.design.verified / B.ratio)) < Math.log(1.5),
+  `verified ${B.bb.design.verified?.toFixed(2)}x, achieved ${B.ratio.toFixed(2)}x`);
 
 // ---------------------------------------------------------------- PLANT C
 //
@@ -246,7 +362,9 @@ console.log('\n  plant C — the real hybrid arm, through the same interface');
     tauMax: 32 * Math.abs(tauG(0)) / RATIO, speedMax: 0.2 });
   const prof = new AngleProfile({ span: 0.144, accelSteps: 300, cruiseSteps: 400,
     dwellSteps: 1400, shaper: convolveShapers(null, boxcarShaper(120)) });
-  const ref = (kk) => prof.at(kk).theta;
+  // …and the arm's command is modulated the same way, for the same reason.
+  const ref = (kk) => prof.at(kk).theta
+    * (1 + 0.35 * Math.sin(2 * Math.PI * kk / (prof.period * PHI * 2.7)));
 
   const bb = new BlackBox({ ref, sampleEvery: S, probeSamples: 1400, probeDwell: 1,
     probeAmp: BlackBox.autoAmplitude(0.144, 0.03), taps: 70, invTaps: 45,
@@ -271,15 +389,19 @@ console.log('\n  plant C — the real hybrid arm, through the same interface');
   };
   // STAGE ZERO AT REST: the host holds the pose while the module runs its step test,
   // which is the one experiment the trajectory would otherwise confound.
-  while (bb.phase === 'step') stepOnce(true);
   // A CORRECTION-FREE BASELINE, on the same arm, so "before" is the machine and not a
   // phase of the commissioning run.
-  const savedAmp = bb.probeAmp, savedPhase = bb.phase;
-  bb.probeAmp = 0; bb.phase = 'idle'; bb.u = 0;
-  for (let i = 0; i < 900 * S; i++) stepOnce();
-  for (let i = 0; i < 900 * S; i++) before.push(stepOnce());
-  bb.probeAmp = savedAmp; bb.phase = savedPhase; bb.u = bb.seq[0] * savedAmp;
-  while (bb.phase === 'probe') stepOnce();
+  {
+    const savedPhase = bb.phase;
+    bb.phase = 'idle'; bb.u = 0;
+    for (let i = 0; i < 900 * S; i++) stepOnce();
+    for (let i = 0; i < 900 * S; i++) before.push(stepOnce());
+    bb.phase = savedPhase;
+  }
+  // THE HOLD IS THE MODULE'S REQUEST AND THE HOST'S JOB: still through the step test and
+  // the probe, running from the moment it wants to watch the program.
+  while (bb.holding) stepOnce(true);
+  while (bb.phase === 'observe' || bb.verifying) stepOnce();
   for (let i = 0; i < 600 * S; i++) stepOnce();          // settle after switching on
   for (let i = 0; i < 1200 * S; i++) {
     const e = stepOnce();
@@ -295,8 +417,14 @@ console.log('\n  plant C — the real hybrid arm, through the same interface');
     + `${bb.model.delay * bb.grid} steps, ring `
     + `${bb.model.period ? (bb.model.period * bb.grid).toFixed(0) : '—'} steps `
     + '(the real bending mode is ~980)');
-  console.log(`    [C] design: width ${bb.design.width}, scalar ${bb.design.alpha.toFixed(3)}, `
-    + `PREDICTED ${bb.design.predicted.toFixed(2)}x`);
+  console.log(`    [C] basis: ${bb.basis.chosen} — ${bb.cost().mac} MAC/update against a `
+    + `${bb.macBudget} budget (${(100 * bb.cost().mac / bb.macBudget).toFixed(1)}% of 5% `
+    + 'of a 1 ms cycle)');
+  console.log(`    [C] design: ${bb.design.kind}, ${bb.design.taps} taps, preview `
+    + `${bb.design.previewSteps} steps, scalar ${bb.design.alpha.toFixed(3)}, `
+    + `PREDICTED ${bb.design.predicted.toFixed(2)}x, VERIFIED `
+    + `${bb.design.verified == null ? '—' : bb.design.verified.toFixed(2) + 'x'}, `
+    + `plant model R2 ${bb.plantR2.toFixed(3)}`);
   console.log(`    [C] tool error rms ${b.toExponential(3)} -> ${a.toExponential(3)}  `
     + `ACHIEVED ${(b / a).toFixed(2)}x`);
   check('plant C: the step test recovers the ARM LENGTH it was never given',

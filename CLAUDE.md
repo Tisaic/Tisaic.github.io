@@ -3636,6 +3636,130 @@ one.
    errors, every functional check passed, and the numbers were all correct — what was
    wrong was that nothing would hold still to be read.
 
+   **BRICK 28 — IT HAS TO RUN ON A PLC, AND THE MOVE DOES NOT REPEAT. FIVE THINGS BROKE,
+   AND THE ONE I WAS SUREST OF WAS THE ONE THAT WAS WRONG.** Asked to use the identified
+   model PREDICTIVELY — pre-actuate, track during the move, spend less control effort —
+   and then, mid-work, to make the whole thing fit a **B&R APC4100 at 5% of a 1 ms cycle**
+   while **assuming the motion does not repeat**. Final numbers, one module, three plants
+   that share no physics: **A 1.22× · B 2.86× · C 3.92×**, against 1.15× / ~1.8× / 2.8×
+   before, at **979–1208 multiply-accumulates per update out of a 2500 budget — 39–48% of
+   5% of a 1 ms cycle**. Almost none of that came from better optimisation.
+
+   **THE PERIODIC SOLVER WAS BUILT, MEASURED AT 6.9×, AND DELETED.** Solving the whole
+   trajectory at once as a circulant system is exact for all time and costs nothing at run
+   time — and it is worth nothing the moment the program stops repeating. Worse, a period
+   detector run on a repeating TEST command would have selected it and shipped a table
+   that is wrong in production. It is replaced by an **optimal preview FIR** answering the
+   same objective, min ‖Hu+d‖² + λ‖Du‖², with the taps applied to the command's look-ahead
+   instead of to a phase index: no period anywhere in it, `taps` multiply-accumulates per
+   sample, and free to pre-actuate because taps before the centre multiply the FUTURE.
+   THE ORIENTATION IS PINNED AGAINST A PLANT WHOSE ANSWER IS EXACT — a pure delay of D
+   grid samples and gain g must produce exactly one nonzero tap, at j = centre − D with
+   value −1/g — because this project has already shipped a correction convolved the wrong
+   way round once, and no closed-loop score can tell a filter that looks forward from one
+   that looks backward.
+
+   **THE REPEATING COMMAND WAS HIDING CATASTROPHIC OVER-FITTING, AND IT HAD ALREADY
+   SHIPPED.** The disturbance map is 735 features fitted on ~900 rows. On the repeating
+   command it scored beautifully out of sample — because every held-out sample of a
+   repeating command is a near-replica of a training one. On an APERIODIC command the same
+   map scores **R² = −6.93** out of sample against the plain linear window's **+0.88**.
+   Brick 16 learned this on a different plant and had a golden-ratio modulation built for
+   it; it had to be learned again here, so the test commands and the page's own demo are
+   now modulated at an incommensurate rate rather than left to be discovered a third time.
+   The basis is now CHOSEN, on held-out data, under the cycle budget: rank the full
+   universal map's features by the weight the fit gave them, refit on the top K, keep the
+   cheapest candidate within 5% of the best. The plain linear window is a point in that
+   same search (keeping indices [0..nBase] IS the linear window), not a separate path.
+
+   **THE JOINT IDENTIFICATION WAS WRONG AND ONLY A CLOSED-LOOP MEASUREMENT COULD SHOW IT.**
+   Brick 26 identified the plant and the disturbance in ONE solve while the machine ran its
+   program, and the argument was good: the PRBS is uncorrelated with the command, so the
+   blocks are nearly orthogonal, it removes a phase, and it fixed a real failure. Its
+   impulse response has the RIGHT DC GAIN — 14.8 against the step test's 14.3, which is the
+   cross-check that was passing — and the WRONG SHAPE: delay 30 grid samples against 11.
+   The instrument that separates them is to run the same command twice, bare and corrected,
+   because the DIFFERENCE of the two error records IS the plant's response to the
+   correction. Against that, the joint fit explains the response at **gain 0.10, correlation
+   0.33**; a probe taken while the machine was HELD explains it at **0.57 and 0.75**.
+   The consequence was a design that could not know it was wrong: the scorer convolves each
+   candidate with the same h it was designed from, so the design and its prediction agree
+   with each other and disagree with the machine — **PREDICTED 1.81×, ACHIEVED 1.13×**.
+   Split into "identify the plant while HELD, the disturbance while RUNNING" the same
+   search **predicts 2.39× and achieves 2.84×**, and a prediction that is EXCEEDED is the
+   signature worth trusting, since nothing in the design can flatter a number the machine
+   goes on to beat. The failure the joint fit existed to prevent cannot occur here: it came
+   from the trajectory's disturbance dominating the record, and a held machine has no
+   trajectory. The price is that commissioning holds the machine for the probe as well as
+   the step test, which is what a commissioning routine does.
+
+   **CENTRE BOTH RECORDS OR NEITHER — MY OWN LINE, AND IT COST A THIRD OF THE GAIN.**
+   Removing the mean from the OUTPUT alone tells the fit that a constant input produces no
+   output, which is false for any plant with a DC gain, and it biases the recovered
+   response down by exactly the probe's DC content. Against a synthetic whose answer is
+   known: true 16.286, centre-the-output-only **10.927 (33% low)**, centre both 16.282,
+   centre neither 16.286. It surfaced as all three plants under-recovering their gain by
+   the same 0.61–0.70 factor while every other number looked right — **a common factor
+   across plants that share no physics is a property of the code, not of any plant**, and
+   that is what made it findable at all.
+
+   **DEPLOY IT AND MEASURE IT, BECAUSE A PREDICTION COMPUTED FROM THE MODEL CANNOT CHECK
+   THE MODEL.** A `verify` phase now applies the correction and scores it against the map's
+   own prediction of what the error would have been — window-matched, needing no second
+   baseline run, and biased AGAINST accepting since the map understates the disturbance by
+   its fit error. On plant A that reads **9.68× predicted against 1.05× measured** and it
+   is not even a wrong model there (R² 1.000) — the plant is lightly damped with its
+   resonance near the identification grid and nothing at that sample rate inverts it.
+   THE SEARCH GOES BOTH WAYS, and the upward half is not symmetry for its own sake: on the
+   over-damped plant the design predicted 1.19× and the machine returned **1.57×**, so a
+   rule that could only back off would have left that on the table. It tries ×1, ×2, ×0.5,
+   keeps the measured best, and deploys NOTHING if none of them beats doing nothing.
+
+   **THE KNEE BAND HAS TO BE ON THE IMPROVEMENT, NOT ON THE RESIDUAL.** "Within 5% of the
+   best residual, take the cheapest" is scale-wrong: where the best feasible design only
+   improves the residual by 2%, a 5% band on the RESIDUAL reaches past doing nothing, so
+   the zero filter falls inside it and wins on effort, being free. Measured: under a tight
+   cap the search returned the zero filter and reported 1.00× — not because nothing was
+   feasible, but because the rule could not tell "cheap and nearly as good" from "cheap and
+   useless".
+
+   **AND THE THING I WAS SUREST OF WAS WRONG.** The best design wants a peak correction of
+   **twice the command's own swing**, which reads as a linear model being extrapolated far
+   outside anything the probe visited, so a cap was added and a robustness argument was
+   ready for it: a high-gain inversion has no margin. Commissioned on the nominal arm and
+   run on arms with a 25% softer gearbox, a 25% softer link, and both:
+     cap 0.25 (24% of the swing)   1.20× · 1.21× · 1.25× · 1.26×
+     cap 0.50 (50%)                1.42× · 1.43× · 1.53× · 1.53×
+     cap 1.00 (98%)                1.62× · 1.62× · 1.66× · 1.65×
+     cap 2.00 (166%)               2.70× · 2.74× · 2.73× · 2.68×
+   **FLAT ACROSS THE DRIFT AT EVERY SIZE**, with the drive's own saturation counter reading
+   **0.0% of steps at every one of them**. The cap stays — this drive was sized with 32×
+   the gravity hold torque and a real axis is not, and a limit is what lets the module
+   refuse to demand the impossible rather than discover it — but the DEFAULT is generous
+   because the measurement says so, not because bigger scored better. What generalises past
+   this plant is not the number but the verify phase.
+
+   **WHAT THIS IS, IN THE NAMES THE THEORY USES**, since the question was asked directly.
+   For a general nonlinear plant, HAMILTON–JACOBI–BELLMAN is a PDE over the whole state
+   space and is not going anywhere near a 1 ms task; for the model this module can actually
+   identify — linear, quadratic cost — HJB collapses to the Riccati equation, and
+   min ‖Hu+d‖² + λ‖Du‖² solved offline over a preview window IS that solution written in
+   lifted form. So the preview filter is not an alternative to HJB, it is HJB's answer
+   precomputed, which is why the run time is a dot product. PONTRYAGIN gives the same
+   answer unconstrained, and says something DIFFERENT only under hard limits, where the
+   optimum is not the clipped linear law — the honest name for what ships here is a
+   penalty-method approximation of that (λ raised until the cap is met), and the exact
+   version is a QP, PLC-able as explicit MPC. The LAGRANGIAN/energy framing is where the
+   original intuition lives: "move away first to build an inertial wave" is **stable
+   inversion of a non-minimum-phase plant**, whose bounded inverse is non-causal with a
+   pre-actuation transient — the filter's future taps, learned rather than derived.
+   Energy-shaping proper (passivity-based, IDA-PBC) needs a Hamiltonian structure, which is
+   exactly the prior knowledge this module is not allowed.
+   **BUT THE ORDERING IS THE POINT: 1.13× → 2.84× CAME ENTIRELY FROM FIXING THE
+   IDENTIFICATION, WITH THE OPTIMISER UNCHANGED.** A better optimality principle on a wrong
+   model buys nothing, and every one of the five defects above was a modelling or
+   measurement defect rather than a control-theoretic one.
+
    NOT YET BUILT: the WGSL elastic kernel (see the measurement above); general
    block-sparse bricks for a CLOSED structure — a gantry or a machine frame, where
    members are not separable into per-link frames and the swept box is genuinely

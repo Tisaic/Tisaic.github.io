@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:232,built:"2026-08-22T19:16:33Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:233,built:"2026-08-22T21:23:18Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -3997,7 +3997,14 @@ async function buildBB() {
     kd: 2 * SERVO_BW * Jr / RATIO, inertia: Jr, ratio: RATIO, gravityTorque: tauG,
     tauMax: 32 * hold, speedMax: NO_LOAD_SPEED });
   bbArm = { arm, link, mp, tauG, Larm: arm.Larm };
-  // THE SAME COMMAND THE MOVE TAB RUNS, jerk-limited, so the two tabs are comparable.
+  // THE SAME COMMAND THE MOVE TAB RUNS, jerk-limited, so the two tabs are comparable --
+  // except that its AMPLITUDE IS MODULATED AT AN INCOMMENSURATE RATE, so the program
+  // never repeats. That is a correctness requirement rather than realism: a model fitted
+  // to a repeating command can score perfectly out of sample by learning where in the
+  // cycle it is, and this module's disturbance map did exactly that. Measured on an
+  // aperiodic command the 735-feature basis scores R² = −6.93 out of sample against the
+  // plain linear window's +0.88 — catastrophic over-fitting the repeating command had
+  // hidden completely.
   bbProf = new AngleProfile({ span: SPAN_LADDER[2], accelSteps: 300, cruiseSteps: 400,
     dwellSteps: 1400, shaper: boxcarShaper(120) });
   // IT RUNS UNCOMMISSIONED FROM THE START, which is not cosmetic: the "before" number has
@@ -4012,12 +4019,26 @@ async function buildBB() {
 }
 
 const BB_S = 10;
+const BB_PHI = (1 + Math.sqrt(5)) / 2;
+/** The command, modulated so it never repeats -- see buildBB(). */
+const bbRef = (k) => bbProf.at(k).theta
+  * (1 + 0.35 * Math.sin(2 * Math.PI * k / (bbProf.period * BB_PHI * 2.7)));
+/**
+ * …and the reference point the servo is driven from, with velocity and acceleration taken
+ * as differences of the SAME modulated command rather than from the unmodulated profile.
+ * Feeding the loop a feedforward that belongs to a different trajectory is a disturbance
+ * nobody asked for, and it would be charged to the plant.
+ */
+const bbProfAt = (k) => ({ theta: bbRef(k),
+  omega: (bbRef(k + 1) - bbRef(k - 1)) / 2,
+  alpha: bbRef(k + 1) - 2 * bbRef(k) + bbRef(k - 1) });
+
 function startBB() {
   if (!bbArm) return;
   bb = new BlackBox({
     // THE ONLY THINGS IT IS GIVEN. A scalar command readable at any step, a sample rate,
     // and a probe amplitude sized from the command's own swing -- not from the plant.
-    ref: (k) => bbProf.at(k).theta,
+    ref: bbRef,
     sampleEvery: BB_S,
     probeAmp: BlackBox.autoAmplitude(SPAN_LADDER[2], 0.03),
     probeSamples: 1400, taps: 70, invTaps: 45,
@@ -4035,10 +4056,13 @@ function startBB() {
 function stepBB(n) {
   const { arm } = bbArm;
   for (let i = 0; i < n; i++) {
-    // THE HOST HOLDS THE MACHINE STILL while the module is in its step phase. That is the
-    // only cooperation it asks for, and every machine can hold still.
-    const atRest = bb && bb.phase === 'step';
-    const r = atRest ? { theta: 0, omega: 0, alpha: 0 } : bbProf.at(bbK);
+    // THE HOST HOLDS THE MACHINE STILL WHILE THE MODULE ASKS IT TO. That is the only
+    // cooperation it wants, and every machine can hold still. The hold covers the step
+    // test AND the probe, because the plant is identified while the machine is stationary
+    // and the disturbance while it runs its program -- two experiments, neither of which
+    // can be run during the other.
+    const atRest = bb && bb.holding;
+    const r = atRest ? { theta: 0, omega: 0, alpha: 0 } : bbProfAt(bbK);
     const u = bb ? bb.offset() : 0;
     const tau = bbServo.torque({ theta: r.theta + u, omega: r.omega, alpha: r.alpha },
       arm.encoder());
@@ -4101,14 +4125,48 @@ function bbStats() {
           : '<span class="warn">none detected</span>')]);
     }
     if (st.design) {
-      rows.push(['designed inverse', `low-pass width ${st.design.width} · scalar `
-        + `${st.design.alpha.toFixed(3)} · <b>predicted `
+      rows.push(['designed feedforward', `<b>${st.design.kind}</b> · ${st.design.taps} taps`
+        + (st.design.lambda != null ? ` · effort weight λ ${st.design.lambda}` : '')
+        + ` · scalar ${st.design.alpha.toFixed(3)} · <b>predicted `
         + `${st.design.predicted.toFixed(2)}×</b>   <span class="warn">chosen on HELD-OUT `
         + 'samples, and the scalar goes to zero if it cannot help</span>']);
+      // THE PREVIEW IS THE POINT OF THE DESIGN, so it is stated in the units a motion
+      // controller thinks in: how far ahead of NOW the look-ahead buffer has to reach.
+      rows.push(['look-ahead it uses', `${st.design.previewSteps} steps of the command's `
+        + 'FUTURE   <span class="warn">which is what lets it move the machine before the '
+        + 'reference does, rather than only trimming after the fact</span>']);
+      rows.push(['correction size', `peak ${st.design.umax.toExponential(3)} against a cap `
+        + `of ${st.design.uCap.toExponential(3)} `
+        + '<span class="warn">(sized from the command\'s own swing, not from the plant; '
+        + 'measured flat under ±25% plant drift, which is why it is generous)</span>']);
+    }
+    if (st.design && st.design.frontier && st.design.frontier.length > 1) {
+      // THE TRADE IS REPORTED, NOT DECIDED. Tracking against control effort has no knee
+      // here — measured across four decades of the effort weight it rises monotonically
+      // and the drive never saturates — so picking a point on it is a preference rather
+      // than a result, and the honest thing is to show what the other choices cost.
+      const f = st.design.frontier;
+      rows.push(['tracking vs control effort',
+        f.map((c) => `<span class="warn">${c.predicted.toFixed(2)}×</span> for `
+          + `|u| ${c.umax.toExponential(1)}`).join(' · ')
+        + '   <span class="warn">— the Pareto set the search already scored; the one '
+        + 'deployed is the cheapest within 5% of the best</span>']);
+    }
+    if (st.cost) {
+      const c = st.cost;
+      rows.push(['runs on a PLC', `<b>${c.mac} multiply-accumulates</b> per update `
+        + `(${c.features}-feature map + ${c.taps}-tap filter), against a budget of `
+        + `${c.budget} — <span class="${c.fits ? 'good' : 'bad'}">`
+        + `${(100 * c.mac / c.budget).toFixed(1)}% of 5% of a 1 ms cycle</span>   `
+        + `<span class="warn">one update every ${c.cyclesPerUpdate} cycles, so `
+        + `${c.slicedMacPerCycle.toFixed(1)} MAC/cycle if spread</span>`]);
     }
     if (st.map) rows.push(['disturbance map', `${st.map.features} features from the `
-      + 'command window alone (universal basis: bias + linear + cross-quadratics + ReLU '
-      + `+ Fourier), ${st.map.rows} rows`]);
+      + 'command window alone'
+      + (bb.basis ? ` — <b>${bb.basis.chosen}</b>, chosen on held-out data under the `
+        + 'cycle budget from a universal basis of bias + linear + cross-quadratics + '
+        + 'ReLU + Fourier' : '')
+      + `, ${st.map.rows} rows`]);
     const b = bbRms(bbBase), a = bbRms(bbScore);
     if (b) {
       rows.push(['tool error, no correction', b.toExponential(3)]);
@@ -4147,7 +4205,7 @@ function drawBB() {
   const px = 24, py = h * 0.52;
   const scale = Math.min((w - 60) / L, (h - 40) / (L * 0.9));
   const mag = +$('s-mag').value;
-  const r = (bb && bb.phase === 'step') ? { theta: 0 } : bbProf.at(bbK);
+  const r = (bb && bb.holding) ? { theta: 0 } : { theta: bbRef(bbK) };
   const world = (bx, by) => {
     const c = Math.cos(r.theta), s2 = Math.sin(r.theta);
     return [px + (c * bx - s2 * by) * scale, py - (s2 * bx + c * by) * scale];
@@ -4190,9 +4248,13 @@ function drawBB() {
   g.font = '11px ui-monospace,monospace';
   g.fillStyle = '#64748b'; g.textAlign = 'right';
   g.fillText(`deviations ×${mag}`, w - 10, h - 16);
-  if (bb && bb.phase === 'step') {
+  if (bb && bb.holding) {
     g.fillStyle = '#f59e0b';
-    g.fillText('holding still — measuring the timescale', w - 10, h - 32);
+    g.fillText(bb.phase === 'step' ? 'holding still — measuring the timescale'
+      : 'holding still — probing the plant', w - 10, h - 32);
+  } else if (bb && bb.verifying) {
+    g.fillStyle = '#f59e0b';
+    g.fillText('measuring its own correction on the machine', w - 10, h - 32);
   }
   g.textAlign = 'left';
 }
