@@ -2067,8 +2067,23 @@ const afterAuto = await fx.evaluate(() => window.__flxDbg());
 console.log(`  flexisim: auto-tune selected ${afterAuto.ctl.want}, board `
   + Object.entries(afterAuto.board).map(([m, v]) => `${m} ${v.rms.toExponential(2)}`).join(' / '));
 check('flexisim: Auto-tune finishes and leaves a correction selected',
-  ['open', 'ff', 'closed'].includes(afterAuto.ctl.want)
+  ['open', 'ff', 'closed', 'learned'].includes(afterAuto.ctl.want)
   && Object.keys(afterAuto.board).length >= 2, JSON.stringify(afterAuto.ctl.want));
+// ---- MODE 4 IS THE ONE THAT CAN TOUCH THE OSCILLATION, so it is asserted on that
+// rather than on merely existing: a filter over the commanded trajectory that did
+// not beat the quasi-static model would be an expensive way to reproduce it.
+const lf = afterAuto.learned;
+check('flexisim: the learned filter gets fitted and reports its size',
+  lf && lf.ready && lf.features > 30 && lf.rows > 500, JSON.stringify(lf));
+const bd = afterAuto.board;
+if (bd.learned && bd.ff) {
+  console.log(`  flexisim: learned ${bd.learned.rms.toExponential(2)} vs model `
+    + `${bd.ff.rms.toExponential(2)} vs open ${bd.open.rms.toExponential(2)}`);
+  check('flexisim: …and beats the quasi-static model it sits on top of',
+    bd.learned.rms < bd.ff.rms, `learned ${bd.learned.rms} vs ff ${bd.ff.rms}`);
+  check('flexisim: …by reducing the OSCILLATION, which nothing else here can',
+    bd.learned.sd < 0.8 * bd.ff.sd, `learned sd ${bd.learned.sd} vs ff sd ${bd.ff.sd}`);
+}
 // IT PICKS BY MEASURING. The selected mode must be the lowest rms ON ITS OWN TABLE
 // -- a sequence that scored everything and then chose a favourite would look
 // identical from outside.

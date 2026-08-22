@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:224,built:"2026-08-22T00:20:57Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:225,built:"2026-08-22T01:05:59Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -134,6 +134,7 @@
         <option value="open">① open loop — no correction at all</option>
         <option value="ff">② open loop + prediction — the identified model</option>
         <option value="closed">③ closed loop — on the soft sensor's estimate</option>
+        <option value="learned">④ learned filter — the only one that touches the ringing</option>
       </select>
       <button id="compare" class="sec" disabled>Compare ▶</button>
       <button id="board-clear" class="sec" disabled>Clear table</button>
@@ -170,7 +171,7 @@
         <input type="range" id="s-span" min="0" max="5" step="1" value="2" />
         <span class="v" id="v-span">0.144 rad</span></div>
       <div class="slider"><span>Move speed</span>
-        <input type="range" id="s-speed" min="0" max="4" step="1" value="2" />
+        <input type="range" id="s-speed" min="0" max="6" step="1" value="4" />
         <span class="v" id="v-speed">1.0×</span></div>
     </div>
     <div class="controls" id="sine-ctl" hidden>
@@ -345,7 +346,7 @@
         <input type="range" id="s-span2" min="0" max="5" step="1" value="3" />
         <span class="v" id="v-span2">0.288 rad</span></div>
       <div class="slider"><span>Move speed</span>
-        <input type="range" id="s-speed2" min="0" max="4" step="1" value="2" />
+        <input type="range" id="s-speed2" min="0" max="6" step="1" value="4" />
         <span class="v" id="v-speed2">1.0×</span></div>
       <div class="slider"><span>Elbow pose</span>
         <input type="range" id="s-elbow" min="0" max="8" step="1" value="3" />
@@ -497,6 +498,7 @@ import { ChainServo } from './lib/flexisim/compensator.js';
 import { ChainSensor } from './lib/flexisim/chainsensor.js';
 import {
   AngleProfile, SineProfile, PositionServo, TipCompensator, tipTrackingError, zvdShaper, ringFit,
+  LearnedFeedforward, ilcRefine,
 } from './lib/flexisim/compensator.js';
 
 const $ = (id) => document.getElementById(id);
@@ -506,7 +508,13 @@ const SPAN_LADDER = [0.036, 0.072, 0.144, 0.288, 0.5, 0.8];
 // same distance covered harder, which is what raises the joint torque and with it
 // the wind-up. A viewing control that changed the physics is the mistake this
 // project keeps finding, so the two are kept visibly apart.
-const SPEED_LADDER = [{ a: 600, c: 800, label: '0.25x' }, { a: 450, c: 600, label: '0.5x' },
+// THE LADDER RAN OUT BEFORE THE PLANT DID. Reported from the device: the chain
+// cannot be made slow enough for decent accuracy because the slider is bottomed
+// out. Two slower rungs added below the old floor -- a gentler ramp is worth 3.7x
+// on the rms and it was simply unreachable. The labels stay relative to the 1.0x
+// reference so the existing numbers in this file still mean what they say.
+const SPEED_LADDER = [{ a: 1600, c: 2100, label: '0.06x' }, { a: 1000, c: 1350, label: '0.12x' },
+  { a: 600, c: 800, label: '0.25x' }, { a: 450, c: 600, label: '0.5x' },
   { a: 300, c: 400, label: '1.0x' }, { a: 200, c: 260, label: '2.2x' },
   { a: 140, c: 180, label: '4.6x' }];
 const HOME_LADDER = [0, 0.2, 0.4, 0.6, 0.9, 1.2, 1.5];
@@ -600,6 +608,9 @@ async function build() {
   // for an arm that no longer exists AND left the Commission button disabled with
   // nothing able to re-enable it -- a dead end that needed a page reload.
   comm = null; phase = 'idle';
+  // A FILTER IS FITTED TO ONE PLANT. K and E change the resonance it is inverting,
+  // so carrying it across a rebuild would apply yesterday's inverse to today's arm.
+  ff = null; learn = null;
   pc = null; mode = null; comp = null; k = 0;
   // THE WINDOW HAS TO REACH ACROSS THE RING, and the first version reached 10% of
   // the way. At lag 6 x stride 2 the model saw (6-1)*2*10 = 100 solver steps against
@@ -648,7 +659,7 @@ async function build() {
 // and drove the plant to divergence. Same discipline here: the sliders stage a
 // change and the frame loop applies it at the top of the next move (or immediately
 // when nothing is running, since then there is no move to interrupt).
-let motionActive = { profile: 'trap', span: 2, speed: 2, amp: 2, per: 3, home: 0 };
+let motionActive = { profile: 'trap', span: 2, speed: 4, amp: 2, per: 3, home: 0 };
 let motionPending = null;
 
 function homeAngle() { return motionActive.home; }
@@ -713,6 +724,108 @@ function resetSensor() {
   if ($('ctl-mode').value === 'closed') $('ctl-mode').value = 'open';
 }
 
+// ============ MODE 4: THE LEARNED DYNAMIC FEEDFORWARD ============
+//
+// THE PAGE USED TO SAY A RESONANCE COULD NOT BE CORRECTED. That was true of the
+// model it had: TipCompensator maps ONE instant's commanded torque to one
+// deflection, and a quasi-static map cannot cancel something that answers its
+// excitation a resonance period later. It is NOT true of every feedforward, and
+// saying so left the oscillation -- which is most of the error -- looking like a
+// law of nature rather than a missing feature.
+//
+// WHAT CAN CANCEL IT IS A FILTER OVER THE COMMANDED TRAJECTORY. An input shaper is
+// a two-tap version of one and a scalar gain is a zero-tap version; this is the
+// general case, twelve taps of (theta, omega, alpha) spanning -300 to +1500 steps,
+// which covers the servo's 500-step response and more than one bending period. It
+// is fitted while the tracker is on the machine and then runs on the COMMAND
+// alone, which is the same commission-then-lock lifecycle every other block here
+// uses -- the library's idiom, not classical control bolted on.
+//
+// THE TARGET COMES FROM ITERATIVE REFINEMENT, because the correction that nulls the
+// error is not directly observable. The move repeats, so a per-phase profile can be
+// converged against the tracker and the regression fitted to THAT. Measured in
+// Node (test/flexisim/learnedff.test.mjs): refinement beats the scalar by 3.5x, and
+// the fitted map carries it to moves it never saw.
+//
+// AND IT IS TRAINED ON THREE MOVES, NOT ONE. Fitted to a single trajectory it
+// reaches the ceiling on that trajectory and scores 0.04x -- 25x WORSE than no
+// correction -- on any other, because it learns the trajectory rather than the
+// dynamics. Both failures are pinned in the Node test.
+let ff = null;                    // the fitted filter, or null
+let learn = null;                 // the commissioning state machine
+
+const LEARN_ITERS = 12;
+const LEARN_BUDGET = 4000;        // solver steps per frame WHILE LEARNING
+// Three spans and three ramp rates. The generalisation is the whole point, so the
+// training set has to contain more than one of each.
+const learnProfiles = () => [
+  { span: SPAN_LADDER[2], a: 300, c: 400 },
+  { span: SPAN_LADDER[4], a: 200, c: 260 },
+  { span: SPAN_LADDER[1], a: 450, c: 600 },
+].map((o) => new AngleProfile({ span: o.span, accelSteps: o.a, cruiseSteps: o.c,
+  dwellSteps: Math.max(600, mode ? Math.round(1.3 * mode.period) : 1100) }));
+
+function startLearn() {
+  if (!A || !comp) return;
+  const profs = learnProfiles();
+  learn = { profs, pi: 0, iter: -3, k: 0, u: new Float64Array(profs[0].period),
+    e: new Float64Array(profs[0].period), ff: new LearnedFeedforward(), note: '' };
+  syncMove();
+}
+
+/**
+ * One period of the learning plant, stepped with the profile being trained.
+ *
+ * IT USES THE SAME SERVO AND THE SAME MODEL TERM the deployed correction will,
+ * because the filter is fitted as the RESIDUAL on top of them -- fit it against a
+ * bare plant and it would be learning to reproduce the model as well, then be
+ * applied where the model already is.
+ */
+function learnStep(budget) {
+  if (!learn || !A) return;
+  const { arm, servo } = A;
+  const p = learn.profs[learn.pi];
+  let left = budget;
+  while (left > 0 && learn) {
+    const n = learn.k % p.period;
+    const off = comp.offset(p.at(learn.k + FF_LEAD))
+      + (learn.iter >= 0 ? learn.u[n] : 0);
+    const r = p.at(learn.k);
+    arm.step(servo.torque({ ...r, theta: r.theta + off }, arm.encoder()), 1);
+    if (learn.iter >= 0) learn.e[n] = tipTrackingError(arm, r.theta);
+    learn.k++; left--;
+    if (learn.k % p.period !== 0) continue;
+    // --- a period just finished
+    if (learn.iter < 0) { learn.iter++; continue; }      // settling passes
+    learn.u = ilcRefine(learn.u, learn.e,
+      { gain: 0.5, lead: 550, armLength: arm.Larm, smooth: 40 });
+    learn.iter++;
+    learn.note = `move ${learn.pi + 1}/${learn.profs.length}, pass ${learn.iter}/${LEARN_ITERS}`;
+    if (learn.iter < LEARN_ITERS) continue;
+    // --- this move is converged: harvest it and go to the next
+    for (let m = 0; m < p.period; m += 3) learn.ff.observe(p, m, learn.u[m]);
+    learn.pi++;
+    if (learn.pi < learn.profs.length) {
+      const q = learn.profs[learn.pi];
+      learn.iter = -3; learn.k = 0;
+      learn.u = new Float64Array(q.period); learn.e = new Float64Array(q.period);
+      continue;
+    }
+    try {
+      learn.ff.fit();
+      ff = learn.ff;
+      console.log(`[flexisim] learned filter fitted: ${JSON.stringify(ff.status())}`);
+    } catch (err) {
+      console.error('[flexisim] learned filter fit failed: ' + err.message);
+      ff = null;
+    }
+    learn = null;
+    win = []; board = {}; renderBoard();
+    syncMove();
+    return;
+  }
+}
+
 // ------------------------------------------------- the three corrections
 //
 // ONE FUNCTION RETURNS THE PRE-DISTORTION, whatever the mode, so the stepping loop,
@@ -736,6 +849,7 @@ function ctlMode() {
   // have. The option disables itself rather than quietly using a model still
   // being corrected.
   if (v === 'closed' && !(ss && ss.mode === 'estimating')) return 'open';
+  if (v === 'learned' && !(ff && ff.ready)) return 'open';
   if (v !== 'open' && !comp) return 'open';
   return v;
 }
@@ -855,6 +969,8 @@ function offsetNow(ref) {
   const m = ctlMode();
   const d = ditherNow();
   if (m === 'ff') return comp.offset(futureRef(FF_LEAD)) + d;
+  // THE FILTER IS A RESIDUAL ON TOP OF THE MODEL, which is how it was fitted.
+  if (m === 'learned') return comp.offset(futureRef(FF_LEAD)) + ff.predict(prof, k) + d;
   if (m === 'closed') return closedOff + d;
   return d;
 }
@@ -867,7 +983,8 @@ function offsetNow(ref) {
 // disappointment. Scored over exactly one move period, so no window has to be
 // chosen -- a dwell-window score depends entirely on how long the dwell is, which
 // is a property of the window and not of the correction.
-const MODE_LABEL = { open: '① open loop', ff: '② + prediction', closed: '③ closed loop' };
+const MODE_LABEL = { open: '① open loop', ff: '② + prediction', closed: '③ closed loop',
+  learned: '④ learned filter' };
 let board = {};
 
 function boardKey() { return `${$('shape-on').checked ? 'shaped' : 'unshaped'}`; }
@@ -880,7 +997,7 @@ function recordBoard() {
 }
 
 function renderBoard() {
-  const keys = ['open', 'ff', 'closed'].filter((m) => board[m]);
+  const keys = ['open', 'ff', 'closed', 'learned'].filter((m) => board[m]);
   const el = $('board');
   if (!keys.length) { el.hidden = true; el.innerHTML = ''; return; }
   el.hidden = false;
@@ -914,6 +1031,9 @@ let cmp = null;
 
 function settleMoves(m) { return m === 'closed' ? 5 : 1; }
 
+/** The learning stage owns the plant while it runs, so nothing else may step it. */
+function learning() { return !!learn; }
+
 function setCtlMode(m) {
   $('ctl-mode').value = m;
   win = [];
@@ -924,6 +1044,7 @@ function setCtlMode(m) {
 
 function startCompare() {
   const seq = ['open', 'ff'];
+  if (ff && ff.ready) seq.push('learned');
   if (ss && ss.mode === 'estimating') seq.push('closed');
   board = {}; renderBoard();
   cmp = { seq, i: 0, wait: settleMoves(seq[0]) };
@@ -962,6 +1083,16 @@ function ctlHint() {
       + 'It removes the bias without the identified constant, and is slower to act than ② is. It '
       + 'works only because commissioning <b>dithered</b> the correction: a model that never saw one '
       + 'extrapolates the instant the loop acts, and this loop diverged before that was fixed.';
+    return;
+  }
+  if (want === 'learned') {
+    el.innerHTML = ff && ff.ready
+      ? 'A <b>filter over the commanded trajectory</b> — twelve taps spanning the ring, fitted '
+        + 'against the tracker and then run on the command alone. An input shaper is a two-tap '
+        + 'version of this and ② is a zero-tap one; this is the general case, and the only '
+        + 'correction here that can touch the OSCILLATION.'
+      : '<b>Not built yet.</b> It has to be fitted against the tracker first — press '
+        + '<b>Auto-tune</b>, which converges it as one of its steps. Running open loop meanwhile.';
     return;
   }
   if (want === 'ff') {
@@ -1449,9 +1580,11 @@ function stats() {
       rows.push(['rms', `${fmt(w.rms, 3)}   <span class="${osc ? 'warn' : 'good'}">`
         + `${(100 * share).toFixed(0)}% of it is OSCILLATION</span>`]);
       rows.push(['…so the rms is limited by', osc
-        ? '<span class="warn">the link ringing — no correction can reduce this, because a '
-          + 'quasi-static model cannot cancel a resonance. <b>Input shaping</b> is the control '
-          + 'that does (measured 3.3×), and a gentler <b>Move speed</b> is the other (3.7×).</span>'
+        ? '<span class="warn">the link ringing. A <b>quasi-static</b> model (② and ③) cannot '
+          + 'cancel a resonance — it maps one instant to one deflection, and a resonance '
+          + 'answers a period later. Three controls can: <b>④ the learned filter</b>, which is '
+          + 'fitted across the whole ring (3.5×), <b>input shaping</b> (3.3×), and a gentler '
+          + '<b>Move speed</b> (3.7×). Auto-tune builds ④ for you.</span>'
         : '<span class="good">the bias — which is what the correction removes</span>']);
     }
     if (pc) {
@@ -1502,6 +1635,9 @@ function stats() {
   if (phase === 'commission') {
     hint.innerHTML = 'The tracker is on the machine: three <b>pose touches</b>, then a '
       + 'deliberately excited <b>decay</b> to measure the bending mode. Cancel is safe.';
+  } else if (learn) {
+    hint.innerHTML = '<b>Learning the dynamic filter</b> — converging a correction against the '
+      + `tracker on three different moves, then fitting one filter to all of them. ${learn.note}`;
   } else if (auto) {
     hint.innerHTML = `<b>Auto-tune ${auto.step + 1}/${AUTO_STEPS.length}</b> — `
       + `${AUTO_STEPS[auto.step]}${auto.note ? ': ' + auto.note : ''}. `
@@ -1588,6 +1724,13 @@ function frame() {
   // THE SEQUENCE ADVANCES BEFORE THE STEPPING, so a step that has just finished
   // hands over on the same frame rather than leaving the plant idling for one.
   if (auto) autoTick();
+  if (learn) {
+    try { learnStep(LEARN_BUDGET); }
+    catch (e) { learn = null; setBadge('learning halted: ' + e.message, 'bad'); console.error(e); }
+    draw(); syncMove();
+    if (++frames % 6 === 0) stats();
+    return;
+  }
   if (running) {
     const n = +$('s-spf').value;
     try {
@@ -1630,12 +1773,18 @@ function frame() {
 let auto = null;
 
 const AUTO_STEPS = [
-  'commission', 'shaping', 'train the soft sensor', 'lock it', 'compare', 'select the best',
+  'commission', 'shaping', 'learn the dynamic filter', 'train the soft sensor', 'lock it',
+  'compare', 'select the best',
 ];
 
 function startAuto() {
   if (!A || busy) return;
-  auto = { step: 0, note: '', trainTarget: 1200 };
+  // TRAINED LONGER BEFORE LOCKING. Reported from the device that the sensors lock
+  // too early, and the scores agree -- the readout is still improving at 1200
+  // pairs, and a model that locks while it is still learning is locked at a worse
+  // place forever, which is the one decision on this tab that cannot be revisited
+  // without the tracker coming back.
+  auto = { step: 0, note: '', trainTarget: 4000 };
   running = true;
   setBadge('auto-tune: working through every step', 'warn');
   syncMove();
@@ -1674,6 +1823,15 @@ function autoTick() {
     $('ctl-mode').value = 'ff';
     setCtlMode('ff');
     done();
+  } else if (st === 'learn the dynamic filter') {
+    // THE ONLY CORRECTION THAT CAN TOUCH THE OSCILLATION, which is most of the
+    // error. It runs on its own step budget because nothing needs watching while a
+    // per-phase profile converges, and at the viewing slider's rate it would take
+    // minutes instead of seconds.
+    if (ff && ff.ready) { done(); return; }
+    if (!learn) startLearn();
+    auto.note = learn ? learn.note || 'converging the correction against the tracker' : '';
+    if (!learn) done();
   } else if (st === 'train the soft sensor') {
     if (!ss) { stopAuto('auto-tune: no sensor', 'bad'); return; }
     if (ss.mode === 'estimating') { done(); return; }
@@ -1691,7 +1849,7 @@ function autoTick() {
     auto.note = cmp ? `scoring ${MODE_LABEL[cmp.seq[cmp.i]]}` : '';
   } else if (st === 'select the best') {
     // THE WINNER IS READ OFF THE TABLE, not chosen here.
-    const keys = ['open', 'ff', 'closed'].filter((m) => board[m]);
+    const keys = ['open', 'ff', 'closed', 'learned'].filter((m) => board[m]);
     if (!keys.length) { stopAuto('auto-tune: nothing scored', 'bad'); return; }
     let best = keys[0];
     for (const m of keys) if (board[m].rms < board[best].rms) best = m;
@@ -1935,7 +2093,7 @@ const chHist = { t: [], t2: [], c21: [], c22: [], tip: [],
 // The chain's own motion state, staged and applied at a move boundary for the same
 // reason the Move tab's is: rebuilding a reference mid-move is a position-demand
 // step into the servo's proportional gain.
-let motion2 = { span: 3, speed: 2 }, motion2Pending = null;
+let motion2 = { span: 3, speed: 4 }, motion2Pending = null;
 let closedOff2 = 0, cmp2 = null, board2 = {};
 // THE CHAIN'S SCORING WINDOW IS THREE MOVE PERIODS, and the Move tab's is one,
 // because the two references are not the same KIND of signal. The Move tab repeats
@@ -2831,6 +2989,8 @@ window.__flxDbg = () => ({
   auto: auto ? { ...auto, of: AUTO_STEPS.length, what: AUTO_STEPS[auto.step] } : null,
   ui: ['auto', 'commission', 'run', 'ctl-mode', 'compare', 'shape-on', 'ss-train', 'ss-lock']
     .reduce((o, id) => { o[id] = $(id).disabled; return o; }, {}),
+  learned: ff ? ff.status() : null,
+  learning: learn ? { move: learn.pi, iter: learn.iter } : null,
   ctl: { want: $('ctl-mode').value, active: ctlMode(), closedOff, gain: closedGain(),
     ffLead: FF_LEAD,
     // The identity the regression pins: the applied correction is the model
