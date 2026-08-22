@@ -3293,6 +3293,69 @@ one.
    only because the reference had to be refactored to be readable at an arbitrary
    step for the filter's window.
 
+   **BRICK 23 — ONE BUTTON, AND THE SENSOR IT LEFT BEHIND WAS WORSE THAN PREDICTING
+   THE MEAN.** Reported from the device with a screenshot: "all I did was launch the
+   app and hit the autotune. This performance is pretty bad." The panel read estimate
+   nRMSE **1.2247** against 1.4904 for "the tip is where the encoder says", and the
+   forecast 1.1936 against 1.5752 for persistence — a soft sensor carrying almost no
+   information. Reproduced first try, to the digit.
+   **THE MACHINE WAS FINE AND THE INSTRUMENT WAS NOT**, which is this project's oldest
+   pattern arriving in a new place: the same run's tool error was 2.489e-2 rms with ④
+   correctly selected, i.e. the correction was working exactly as measured. What was
+   broken was the readout of it.
+   **THE CAUSE IS THE SEQUENCE'S ORDER.** Auto-tune trained the soft sensor under ②,
+   then scored every correction, then selected ④. The correction PRE-DISTORTS the
+   setpoint, the ENCODER follows the pre-distorted setpoint, and the encoder is a model
+   INPUT — and the target is the tip error measured against that same encoder. So
+   changing the correction changes both the input distribution and the target. Measured
+   on ONE locked model, one plant, one stream, scored under each correction in turn:
+     trained under ②   **0.0320**
+     ① open loop         0.3779
+     ③ closed loop       0.3152
+     ④ learned filter    **1.2253**   — worse than predicting the mean
+   **A 38× SPREAD WITH THE WEIGHTS FROZEN.** This is the diverging-closed-loop finding
+   again — there the correction was the loop's own and a commissioning dither answered
+   it — except that here the operating point is moved by the SEQUENCE itself, so no
+   amount of dither sized for ③ could have covered it.
+   THE FIX IS THE ORDER: ①, ② and ④ need no sensor (it is a readout there), so they are
+   scored FIRST and the winner chosen; the sensor is then commissioned in that
+   configuration; and ③ — the one correction that IS the sensor — is scored afterwards
+   against the incumbent. One button, from launch, now measures **estimate 0.0307
+   against naive 1.5263 (50×) and forecast 0.0333 against persistence 0.5989 (18×)**,
+   with the machine's own rms unchanged at 2.489e-2. A 40× improvement in the readout
+   and nothing changed about the plant.
+   **AND FIXING THE ORDER EXPOSED THREE MORE, EACH INVISIBLE ON ITS OWN.**
+   (i) **THE COMMISSIONING DITHER WAS BEING SCORED AS PRODUCTION.** The dither
+   deliberately wobbles the correction so the model sees the operating points the loop
+   will occupy, which makes the machine measurably worse while it runs — and the
+   passive board recorder was writing that in as the correction's score. Measured: the
+   learned row went **2.49e-2 → 1.24e-1** during training, and auto-tune then read its
+   own table and picked the runner-up. It is the anti-slosh tab's rule exactly — a
+   health-check probe is the one move never scored as production — and it had to be
+   applied here too.
+   (ii) **THE DITHER WAS SIZED FROM THE CHANGEOVER TRANSIENT.** It is sized from the
+   error the machine has under the chosen correction, but the window had just been
+   cleared by the mode change, so it read **1.39e-1 on a machine whose settled error is
+   2.49e-2** and asked for a dither five times larger than it needed. Waiting for a
+   full window took the dither 1.35e-2 → 2.4e-3 rad and the estimate 0.0352 → 0.0301.
+   Read the meter after it settles: the third place on this tab that rule has applied.
+   ALSO CORRECTED: the dither is sized from the window's RMS rather than its BIAS,
+   because a working correction removes the bias — so sizing from the bias sizes the
+   dither from the thing that has just been fixed and gives ~0.
+   (iii) **`startCompare2` HARD-CODED `setCtl2Mode('open')`** instead of the sequence's
+   first mode. It was written when the sequence always began with the open loop, and it
+   went wrong the moment a partial compare did not: the chain's closed-loop pass ran all
+   thirteen of its move boundaries in OPEN loop, overwrote the open row with a
+   near-identical number, and left the table with no closed row — which reads as "the
+   closed loop was never scored" rather than as a fault.
+   **AND THE TEST GAP IS THE POINT.** Every sensor assertion in the suite ran BEFORE
+   auto-tune, so it measured 0.050 while a user pressing the one button and looking at
+   the same panel saw 1.22. The suite now scores the sensor AFTER auto-tune on both
+   tabs and asserts it was commissioned in the configuration that was selected — the
+   check whose absence is the whole reason this shipped.
+   Chain, same treatment, measured: open 2.25e-1 / ② 2.20e-1 / ④ **1.59e-1** / ③
+   2.21e-1, sensors commissioned under ④, whole-arm 0.1605 against naive 1.0240.
+
    NOT YET BUILT: the WGSL elastic kernel (see the measurement above); general
    block-sparse bricks for a CLOSED structure — a gantry or a machine frame, where
    members are not separable into per-link frames and the swept box is genuinely

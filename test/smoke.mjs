@@ -2091,6 +2091,38 @@ const rows = afterAuto.board;
 check('flexisim: …the one its own table scored best, not a favourite',
   Object.keys(rows).every((m) => rows[m].rms >= rows[afterAuto.ctl.want].rms),
   Object.entries(rows).map(([m, v]) => `${m} ${v.rms.toExponential(2)}`).join(', '));
+// THE CHECK THAT WAS MISSING, AND ITS ABSENCE IS WHAT LET THIS SHIP. Every sensor
+// assertion above runs BEFORE auto-tune, under whatever correction happened to be
+// live then -- so the suite measured 0.050 while a user who pressed the one button
+// and looked at the same panel saw 1.22, worse than predicting the mean. The
+// correction pre-distorts the setpoint, the ENCODER follows it, and the encoder is a
+// model INPUT, so a sensor commissioned under one correction is being asked about a
+// different machine under another. Measured on ONE locked model across the four:
+// 0.032 (its own) / 0.378 / 0.315 / 1.225. The sequence now chooses the correction
+// FIRST and commissions the sensor in it, and this is what pins that.
+const kPost = (await fx.evaluate(() => window.__flxDbg())).k;
+await fx.waitForFunction((t) => window.__flxDbg().k > t, kPost + 20000, { timeout: 300000 });
+const post = await fx.evaluate(() => window.__flxDbg());
+console.log(`  flexisim: after auto-tune — running ${post.ctl.active}, sensor commissioned `
+  + `under ${post.ss.under}, estimate ${post.ss.scores.estimate.toFixed(4)} vs naive `
+  + `${post.ss.scores.naive.toFixed(4)}, forecast ${post.ss.scores.forecast.toFixed(4)} vs `
+  + `persistence ${post.ss.scores.persist.toFixed(4)}`);
+check('flexisim: the sensor is commissioned in the configuration auto-tune chose',
+  post.ss.under === post.ctl.active, `${post.ss.under} vs ${post.ctl.active}`);
+check('flexisim: …so the readout the user is left looking at is actually good',
+  post.ss.scores.estimate < 0.25 * post.ss.scores.naive,
+  `${post.ss.scores.estimate} vs naive ${post.ss.scores.naive}`);
+check('flexisim: …and so is its forecast',
+  post.ss.scores.forecast < 0.5 * post.ss.scores.persist,
+  `${post.ss.scores.forecast} vs persistence ${post.ss.scores.persist}`);
+// AND THE TABLE MUST NOT CARRY THE DITHERED MACHINE. The commissioning dither makes
+// the machine deliberately worse while it runs, and the passive recorder was writing
+// that in as the correction's score -- the learned row went 2.49e-2 -> 1.24e-1 and
+// auto-tune then read its own table and picked the runner-up.
+check('flexisim: …and the winner it kept is the one the settled machine measures',
+  post.board[post.ctl.active]
+  && Math.abs(post.board[post.ctl.active].rms - post.win.rms) < 0.5 * post.win.rms,
+  `${JSON.stringify(post.board[post.ctl.active])} vs live ${post.win.rms}`);
 check('flexisim: and the manual controls come back afterwards',
   !afterAuto.ui.commission && !afterAuto.ui['ctl-mode'], JSON.stringify(afterAuto.ui));
 
@@ -2311,6 +2343,17 @@ if (FULL) {
     a2.ctl.want === ['open', 'ff', 'learned', 'closed'].filter((m) => b2[m])
       .reduce((x, m) => (b2[m].rms < b2[x].rms ? m : x), 'open'),
     `${a2.ctl.want}`);
+  const kP2 = (await fx.evaluate(() => window.__flxChainDbg())).k;
+  await fx.waitForFunction((t) => window.__flxChainDbg().k > t, kP2 + 20000, { timeout: 300000 });
+  const p2 = await fx.evaluate(() => window.__flxChainDbg());
+  console.log(`  flexisim/chain: after auto-tune — running ${p2.ctl.active}, sensors under `
+    + `${p2.ssUnder}, whole arm ${p2.sensor.scores.whole.toFixed(4)} vs naive `
+    + `${p2.sensor.scores.naive.toFixed(4)}`);
+  check('flexisim/chain: …commissions the tool sensors in the configuration it chose',
+    p2.ssUnder === p2.ctl.active, `${p2.ssUnder} vs ${p2.ctl.active}`);
+  check('flexisim/chain: …so the readout the user is left with is actually good',
+    p2.sensor.scores.whole < 0.35 * p2.sensor.scores.naive,
+    `${p2.sensor.scores.whole} vs naive ${p2.sensor.scores.naive}`);
   check('flexisim/chain: …and gives the manual controls back afterwards',
     await fx.$eval('#ctl2-mode', (e) => !e.disabled), 'ctl2-mode still disabled');
 }

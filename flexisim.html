@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:226,built:"2026-08-22T02:36:35Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:227,built:"2026-08-22T03:37:07Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -114,9 +114,11 @@
       <button id="reset" class="sec">Reset all</button>
     </div>
     <p class="hint">One button for the whole sequence: <b>commission → shape → learn the dynamic
-      filter → train the sensor → lock → score every correction → keep the best</b>. The order is
-      not guessable from the controls and getting it wrong does not error, it just quietly produces
-      a worse machine. Everything below stays available for driving it by hand.</p>
+      filter → score the corrections → pick the best → commission the sensor IN THAT
+      CONFIGURATION → lock → score the closed loop</b>. The order is not guessable from the
+      controls and getting it wrong does not error, it just quietly produces a worse machine —
+      training the sensor before the correction is chosen leaves it reading a machine it never
+      saw, measured at <b>40× worse</b>. Everything below stays available for driving by hand.</p>
     <div class="controls">
       <button id="commission" class="sec">Commission ▶</button>
       <button id="run" class="sec" disabled>Run move ▶</button>
@@ -308,12 +310,12 @@
       <button id="reset2" class="sec">Reset all</button>
     </div>
     <p class="hint">One button, the same sequence as the Move tab: <b>measure the bending mode →
-      shape the command → learn the dynamic filter → train both tool sensors → lock → score every
-      correction → keep the best</b>. It has no pose-touch commissioning — the chain's rigid model
-      comes from the lattices themselves — but it does need an <b>unshaped</b> kick to see the mode
-      at all, because cancelling a resonance removes the evidence of it. The learning step then
-      drives three repeatable moves of its own, so the picture will not look like the programmed
-      move while it runs.</p>
+      shape the command → learn the dynamic filter → score the corrections → pick the best →
+      commission both tool sensors IN THAT CONFIGURATION → lock → score the closed loop</b>. It has
+      no pose-touch commissioning — the chain's rigid model comes from the lattices themselves —
+      but it does need an <b>unshaped</b> kick to see the mode at all, because cancelling a
+      resonance removes the evidence of it. The learning step then drives three repeatable moves of
+      its own, so the picture will not look like the programmed move while it runs.</p>
     <div class="controls">
       <button id="run2" class="sec">Run move ▶</button>
       <select id="mode2" aria-label="What moves">
@@ -590,6 +592,21 @@ let ss = null, ssChartOn = false, ssLastEst = null;
 let lastGeom = null;              // what draw() last put on screen, for the suite
 const ssRec = [];             // {k, truth, est, fc} one per sample
 let ssScoreFrom = 0;
+// WHICH CORRECTION THE SENSOR WAS COMMISSIONED UNDER, and it is not bookkeeping.
+// The correction pre-distorts the setpoint, the ENCODER follows the pre-distorted
+// setpoint, and the encoder is a model INPUT -- so changing the correction changes
+// the input distribution AND the target (the tip error is measured against that same
+// encoder). Measured on ONE locked model, same plant, same stream, scored under each
+// correction in turn:
+//     trained under (2)   estimate 0.0320
+//     (1) open loop                0.3779
+//     (3) closed loop              0.3152
+//     (4) learned filter           1.2253   -- worse than predicting the mean
+// A 38x spread with the weights frozen. This is the diverging-closed-loop finding
+// again, in a place nobody looked: there the correction was the loop's own and the
+// dither answered it; here it is the SEQUENCE that moves the operating point, by
+// training under one mode and then selecting another.
+let ssUnder = null;
 
 function setBadge(s, cls) {
   const b = $('state-badge');
@@ -728,6 +745,7 @@ function resetSensor() {
       return [r.theta, r.alpha * 1e6]; },
     nExtra: 2 });
   ssRec.length = 0; ssScoreFrom = 0; ssTraining = false;
+  ssUnder = null;
   ssLastEst = null; ditherAmp = 0;
   // A closed loop driven by a sensor that no longer exists must not keep its last
   // pre-distortion, and mode (3) is not available again until the new one locks.
@@ -1003,6 +1021,14 @@ function boardKey() { return `${$('shape-on').checked ? 'shaped' : 'unshaped'}`;
 function recordBoard() {
   const w = winStats();
   if (!w || !w.full) return;
+  // A COMMISSIONING DITHER IS NOT PRODUCTION. It deliberately wobbles the correction
+  // so the sensor sees the operating points the loop will occupy, which makes the
+  // machine measurably WORSE while it runs -- and the passive recorder was writing
+  // that into the table as though it were the correction's score. Measured: the
+  // learned filter's row went 2.49e-2 -> 1.24e-1 during training, and auto-tune then
+  // read its own table and picked the runner-up. Exactly the anti-slosh tab's rule
+  // that a health-check probe is the one move never scored as production.
+  if (ssTraining && ditherAmp) return;
   board[ctlMode()] = { bias: w.bias, sd: w.sd, rms: w.rms, key: boardKey(), k };
   renderBoard();
 }
@@ -1049,15 +1075,47 @@ function setCtlMode(m) {
   $('ctl-mode').value = m;
   win = [];
   closedOff = 0;
+  // THE SENSOR'S SCORE METER RESTARTS TOO, for the same reason it restarts at the
+  // lock: a mean spanning a correction change is a blend of two different machines,
+  // and the numbers above show they are as different as a working model and a broken
+  // one. The MODEL is left alone -- discarding a commissioned sensor because someone
+  // pressed a selector would throw away the tracker's whole visit -- so the stats say
+  // which correction it was commissioned under and warn when the live one differs.
+  ssScoreFrom = ssRec.length;
   rebuildProfile();
   stats();
 }
 
-function startCompare() {
-  const seq = ['open', 'ff'];
-  if (ff && ff.ready) seq.push('learned');
-  if (ss && ss.mode === 'estimating') seq.push('closed');
-  board = {}; renderBoard();
+/** The lowest-rms row of the table, or null if nothing has been scored. */
+function bestScored() {
+  const keys = ['open', 'ff', 'closed', 'learned'].filter((m) => board[m]);
+  if (!keys.length) return null;
+  return keys.reduce((b, m) => (board[m].rms < board[b].rms ? m : b), keys[0]);
+}
+
+/**
+ * @param {{modes?: string[], reset?: boolean}} [opts]
+ *
+ * A PARTIAL COMPARE ADDS TO THE TABLE RATHER THAN REPLACING IT, because auto-tune's
+ * comparison happens in two halves: the corrections that need no sensor are scored
+ * first so a winner can be chosen, the sensor is commissioned in that winner, and
+ * only then can the closed loop -- which IS the sensor -- be scored at all. Clearing
+ * the board for the second half would throw away the rows it is judged against.
+ */
+function startCompare(opts = {}) {
+  const { modes = null, reset = true } = opts;
+  let seq;
+  if (modes) {
+    seq = modes.filter((m) => (m !== 'closed' || (ss && ss.mode === 'estimating'))
+      && (m !== 'learned' || (ff && ff.ready)));
+  } else {
+    seq = ['open', 'ff'];
+    if (ff && ff.ready) seq.push('learned');
+    if (ss && ss.mode === 'estimating') seq.push('closed');
+  }
+  if (!seq.length) return;
+  if (reset) board = {};
+  renderBoard();
   cmp = { seq, i: 0, wait: settleMoves(seq[0]) };
   setCtlMode(seq[0]);
   $('compare').textContent = 'Stop compare ■';
@@ -1378,6 +1436,19 @@ function ssStats() {
           ? 'good' : 'bad'}">vs a ${mode.period.toFixed(0)}-step ring — a window shorter `
           + 'than the ring cannot carry a free vibration\'s phase, and the estimate goes '
           + 'FLAT wherever the machine is parked</span>' : '')]);
+    // WHICH MACHINE IT WAS COMMISSIONED ON, and a warning when that is not the machine
+    // it is now reading. Silence here is what let a locked model go from 0.032 to
+    // 1.225 with nothing on the page saying anything had changed.
+    if (ssUnder) {
+      const live = ctlMode();
+      rows.push(['commissioned under', `${MODE_LABEL[ssUnder]}`
+        + (live === ssUnder ? '   <span class="good">— which is what is running</span>'
+          : `   <span class="bad">but ${MODE_LABEL[live]} is running now. The correction `
+            + 'pre-distorts the setpoint, the ENCODER follows it, and the encoder is a model '
+            + 'INPUT — so this readout is being asked about a machine it never saw. Measured, '
+            + 'one frozen model across the four corrections: 0.032 / 0.378 / 0.315 / 1.225. '
+            + 'Re-run Auto-tune, or Reset the sensor and retrain here.</span>')]);
+    }
   }
   const sc = ssScores();
   if (sc) {
@@ -1389,7 +1460,7 @@ function ssStats() {
         `${f(sc.forecast)}   <span class="${sc.forecast < sc.persist ? 'good' : 'bad'}">`
         + `vs persistence ${f(sc.persist)}</span>`]);
     }
-    rows.push(['scored over', `${sc.n} samples since the last mode change`]);
+    rows.push(['scored over', `${sc.n} samples since the last lock or correction change`]);
   } else if (ss && ss.mode !== 'calibrating') {
     rows.push(['scores', 'collecting samples…']);
   }
@@ -1652,8 +1723,8 @@ function stats() {
   } else if (auto) {
     hint.innerHTML = `<b>Auto-tune ${auto.step + 1}/${AUTO_STEPS.length}</b> — `
       + `${AUTO_STEPS[auto.step]}${auto.note ? ': ' + auto.note : ''}. `
-      + 'It commissions, shapes, fits the dynamic filter, trains and locks the sensor, '
-      + 'then scores every correction and keeps the one that measured best.';
+      + 'It commissions, shapes, fits the dynamic filter, scores every correction and keeps '
+      + 'the best — and only THEN commissions the soft sensor, in that configuration.';
   } else if (phase === 'ready') {
     hint.innerHTML = 'Commissioned. Every <b>correction</b> removes the bias, <b>shaping</b> removes '
       + 'the oscillation — turn each on alone and watch one number move and the other stand still.';
@@ -1797,9 +1868,24 @@ function frame() {
 // uses the model. Every number it acts on is one the page displays.
 let auto = null;
 
+// THE SENSOR IS COMMISSIONED LAST, IN THE CONFIGURATION THE MACHINE WILL RUN IN, and
+// getting that order wrong is what a device report caught: the sequence trained the
+// sensor under (2), then scored every mode, then selected (4) -- and the locked model
+// went from 0.032 to 1.225, i.e. from excellent to worse than predicting the mean,
+// without a single weight changing. It is the same lesson the closed loop taught and
+// the same one the FlowSim soft sensor's rolling recalibration exists for: a frozen
+// standardisation belongs to the stream it was calibrated on.
+//
+// (1), (2) and (4) do not need a sensor at all -- it is a readout there -- so they can
+// be scored first and the winner chosen before the tracker is asked for anything. (3)
+// is the exception, because it IS driven by the sensor, so it can only be scored after
+// one exists; it is therefore scored against the incumbent afterwards, with the sensor
+// commissioned one mode over, which is exactly the case the commissioning dither is
+// for. On both plants measured here (3) loses to (4) anyway.
 const AUTO_STEPS = [
-  'commission', 'shaping', 'learn the dynamic filter', 'train the soft sensor', 'lock it',
-  'compare', 'select the best',
+  'commission', 'shaping', 'learn the dynamic filter', 'compare the model corrections',
+  'pick the best of them', 'train the soft sensor', 'lock it', 'score the closed loop',
+  'select the best',
 ];
 
 function startAuto() {
@@ -1857,34 +1943,76 @@ function autoTick() {
     if (!learn) startLearn();
     auto.note = learn ? learn.note || 'converging the correction against the tracker' : '';
     if (!learn) done();
+  } else if (st === 'compare the model corrections') {
+    // THE CLOSED LOOP IS DELIBERATELY NOT IN THIS HALF even when a sensor happens to
+    // be locked already: it would be scored on one commissioned under some earlier
+    // correction, which is the failure this whole reordering is about.
+    if (!cmp && !auto.compareStarted) {
+      auto.compareStarted = true; startCompare({ modes: ['open', 'ff', 'learned'] });
+    } else if (!cmp) done();
+    auto.note = cmp ? `scoring ${MODE_LABEL[cmp.seq[cmp.i]]}` : '';
+  } else if (st === 'pick the best of them') {
+    // THE WINNER IS READ OFF THE TABLE, not chosen here.
+    const best = bestScored();
+    if (!best) { stopAuto('auto-tune: nothing scored', 'bad'); return; }
+    setCtlMode(best);
+    done();
   } else if (st === 'train the soft sensor') {
     if (!ss) { stopAuto('auto-tune: no sensor', 'bad'); return; }
+    // A SENSOR COMMISSIONED UNDER A DIFFERENT CORRECTION IS NOT A SENSOR HERE, and
+    // accepting one is the same defect in a second costume: a user who trains by hand
+    // and then presses Auto-tune would be left with a locked model reading a machine
+    // it never saw. Discarding manual work is worth saying out loud, so it is logged.
+    if (ss.mode === 'estimating' && ssUnder !== ctlMode()) {
+      console.warn(`[flexisim] discarding a soft sensor commissioned under ${ssUnder}: `
+        + `the chosen correction is ${ctlMode()}, and the correction pre-distorts the `
+        + 'setpoint the encoder follows, which is a model input');
+      resetSensor();
+    }
     if (ss.mode === 'estimating') { done(); return; }
-    if (ss.mode === 'training' && !ssTraining) beginTraining();
+    // SETTLE FIRST. The dither is sized from the error the machine actually has under
+    // the chosen correction, and the window was just cleared by the mode change, so
+    // starting immediately sizes it from the changeover transient -- measured, that
+    // read 1.39e-1 on a machine whose settled error is 2.49e-2 and asked for a dither
+    // five times larger than it needed. Read the meter after it settles: this tab's
+    // oldest lesson, and the third place it has applied.
+    const w0 = winStats();
+    if (ss.mode === 'training' && !ssTraining) {
+      if (!(w0 && w0.full)) {
+        auto.note = 'settling into the chosen correction before sizing the dither';
+        return;
+      }
+      beginTraining();
+    }
     auto.note = ss.mode === 'calibrating'
-      ? 'calibrating the standardisation'
-      : `training against the tracker — ${ss.trained}/${auto.trainTarget} pairs`;
+      ? `calibrating the standardisation under ${MODE_LABEL[ctlMode()]}`
+      : `training against the tracker under ${MODE_LABEL[ctlMode()]} — `
+        + `${ss.trained}/${auto.trainTarget} pairs`;
     if (ss.trained >= auto.trainTarget) done();
   } else if (st === 'lock it') {
     if (ss.mode === 'training') lockSensor();
     done();
-  } else if (st === 'compare') {
-    if (!cmp && !auto.compareStarted) { auto.compareStarted = true; startCompare(); }
+  } else if (st === 'score the closed loop') {
+    // THE ONE CORRECTION THAT NEEDS THE SENSOR, so it could not be in the first
+    // comparison. It is scored on its own and only replaces the incumbent if it
+    // measures better -- which on this plant it does not.
+    if (!(ss && ss.mode === 'estimating')) { done(); return; }
+    if (!cmp && !auto.closedStarted) {
+      auto.closedStarted = true; startCompare({ modes: ['closed'], reset: false });
+    }
     else if (!cmp) done();
-    auto.note = cmp ? `scoring ${MODE_LABEL[cmp.seq[cmp.i]]}` : '';
+    auto.note = cmp ? `scoring ${MODE_LABEL.closed}` : '';
   } else if (st === 'select the best') {
-    // THE WINNER IS READ OFF THE TABLE, not chosen here.
-    const keys = ['open', 'ff', 'closed', 'learned'].filter((m) => board[m]);
-    if (!keys.length) { stopAuto('auto-tune: nothing scored', 'bad'); return; }
-    let best = keys[0];
-    for (const m of keys) if (board[m].rms < board[best].rms) best = m;
-    $('ctl-mode').value = best;
+    const best = bestScored();
+    if (!best) { stopAuto('auto-tune: nothing scored', 'bad'); return; }
     setCtlMode(best);
     const r = board[best];
+    const keys = ['open', 'ff', 'closed', 'learned'].filter((m) => board[m]);
     stopAuto(`auto-tune done — ${MODE_LABEL[best]}${$('shape-on').checked ? ' + shaping' : ''}`
       + `, rms ${r.rms.toExponential(2)}`, 'good');
     console.log(`[flexisim] auto-tune selected ${best}: `
-      + keys.map((m) => `${m} ${board[m].rms.toExponential(2)}`).join(' / '));
+      + keys.map((m) => `${m} ${board[m].rms.toExponential(2)}`).join(' / ')
+      + ` | sensor commissioned under ${ssUnder}`);
     return;
   }
   if (auto && auto.step >= AUTO_STEPS.length) stopAuto('auto-tune done', 'good');
@@ -1896,6 +2024,7 @@ function beginTraining() {
   if (!ss || ss.mode === 'estimating') return;
   ssTraining = true;
   ssScoreFrom = ssRec.length;
+  ssUnder = ctlMode();
   // THE DITHER IS SIZED BY THE TRACKER, which is what a tracker is FOR: the
   // correction the machine will need is the tip error over the arm, by definition,
   // so exciting one and a half times that covers the range the loop will occupy
@@ -1903,11 +2032,21 @@ function beginTraining() {
   // this is the one moment the instrument is on the machine. Sized from the BIAS
   // over a whole move rather than an instantaneous read, since the tip rings and
   // one sample can land anywhere including near a zero crossing.
+  // AND IT IS THE RMS OF THE WINDOW, NOT ITS BIAS, for a reason that only appeared
+  // once the sensor was commissioned AFTER a correction was chosen: a working
+  // correction removes the bias, so sizing from the bias sizes the dither from the
+  // thing that has just been fixed and gives ~0. Reading the instantaneous tip error
+  // instead is worse still -- the tip rings, so one sample can land anywhere, and it
+  // handed back 1.35e-2 rad (the 0.02 clamp) on a machine whose whole error was
+  // 2.5e-2. The rms over whatever window exists is stable, never zero, and is the
+  // size of the error the model must be shown the loop moving across.
   if (A) {
     const w0 = winStats();
-    const e0 = w0 && w0.full ? Math.abs(w0.bias) : Math.abs(A.arm.tipError().total);
+    const e0 = w0 && w0.n > 200 ? Math.hypot(w0.bias, w0.sd)
+      : Math.abs(A.arm.tipError().total);
     ditherAmp = Math.min(0.02, Math.max(1e-3, 1.5 * e0 / A.arm.Larm));
-    console.log(`[flexisim] commissioning dither ${ditherAmp.toExponential(3)} rad`);
+    console.log(`[flexisim] commissioning dither ${ditherAmp.toExponential(3)} rad `
+      + `(from tool rms ${e0.toExponential(3)} under ${ssUnder})`);
   }
   syncMove();
 }
@@ -2606,6 +2745,7 @@ function step2(n) {
 // what makes the comparison like-for-like at every instant.
 let csWhole = null, csElbow = null, csTraining = false, csChartOn = false;
 let csLastEst = null, lastGeom2 = null, chPosOn = false;
+let csUnder = null;      // the correction the tool sensors were commissioned under
 const csRec = [];
 let csScoreFrom = 0;
 
@@ -2613,7 +2753,7 @@ function csInit() {
   csWhole = new ChainSensor({ joints: [0, 1], sampleEvery: SAMPLE_EVERY, lag: 3, warmup: 200 });
   csElbow = new ChainSensor({ joints: [1], sampleEvery: SAMPLE_EVERY, lag: 6, warmup: 200 });
   csRec.length = 0; csScoreFrom = 0; csTraining = false;
-  csLastEst = null;
+  csLastEst = null; csUnder = null;
   // A closed loop on a sensor that no longer exists must not keep its last
   // pre-distortion, and mode 3 is unavailable again until the new one locks.
   closedOff2 = 0;
@@ -2667,6 +2807,14 @@ function csStats() {
     rows.push(['mode', `<span class="${st.mode === 'estimating' ? 'good' : ''}">${label}</span>`]);
     rows.push(['capacity', `${st.features} features each · whole arm ${st.signals} signals × 3 lags `
       + `· elbow only ${csElbow.status().signals} × 6 lags`]);
+    if (csUnder) {
+      const live = ctl2Mode();
+      rows.push(['commissioned under', `${MODE_LABEL[csUnder]}`
+        + (live === csUnder ? '   <span class="good">— which is what is running</span>'
+          : `   <span class="bad">but ${MODE_LABEL[live]} is running now — the correction `
+            + 'moves the encoders these models read, so this readout is being asked about a '
+            + 'machine it never saw. Re-run Auto-tune.</span>')]);
+    }
   }
   const sc = csScores();
   if (sc) {
@@ -2675,7 +2823,7 @@ function csStats() {
     rows.push(['elbow only (its own signals)', `${f(sc.elbow)}   `
       + `<span class="warn">${(sc.elbow / sc.whole).toFixed(2)}× the whole-arm error</span>`]);
     rows.push(['"the tool is where the encoders say"', f(sc.naive)]);
-    rows.push(['scored over', `${sc.n} samples since the last mode change`]);
+    rows.push(['scored over', `${sc.n} samples since the last lock or correction change`]);
   } else if (csWhole && csWhole.mode !== 'calibrating') {
     rows.push(['scores', 'collecting samples…']);
   }
@@ -2714,9 +2862,13 @@ function csChart() {
 // It has no pose-touch commissioning -- the chain's rigid model comes from the
 // lattices themselves -- so it starts at training and is otherwise the Move tab's.
 let auto2 = null;
+// THE SENSORS ARE COMMISSIONED LAST, IN THE CONFIGURATION THAT WILL RUN. See the
+// Move tab's AUTO_STEPS for the measurement that forced this order -- the same
+// sequence there took a locked model from 0.032 to 1.225 by training it under one
+// correction and then selecting another.
 const AUTO2_STEPS = ['measure the bending mode', 'shape the command',
-  'learn the dynamic filter', 'train both tool sensors', 'lock them',
-  'compare', 'select the best'];
+  'learn the dynamic filter', 'compare the model corrections', 'pick the best of them',
+  'train both tool sensors', 'lock them', 'score the closed loop', 'select the best'];
 
 function startAuto2() {
   if (!arm2 || busy2) return;
@@ -2760,30 +2912,53 @@ function auto2Tick() {
     if (!learn2) startLearn2();
     auto2.note = learn2 ? learn2.note || 'converging the correction against the tracker' : '';
     if (!learn2) done();
+  } else if (st === 'compare the model corrections') {
+    if (!cmp2 && !auto2.started) {
+      auto2.started = true; startCompare2({ modes: ['open', 'ff', 'learned'] });
+    } else if (!cmp2) done();
+    auto2.note = cmp2 ? MODE_LABEL[cmp2.seq[cmp2.i]] : '';
+  } else if (st === 'pick the best of them') {
+    const best = bestScored2();
+    if (!best) { stopAuto2('auto-tune: nothing scored'); return; }
+    setCtl2Mode(best);
+    done();
   } else if (st === 'train both tool sensors') {
     if (!csWhole) { stopAuto2('auto-tune: no sensor'); return; }
+    if (csWhole.mode === 'estimating' && csUnder !== ctl2Mode()) {
+      console.warn(`[flexisim] discarding tool sensors commissioned under ${csUnder}: `
+        + `the chosen correction is ${ctl2Mode()}`);
+      csInit();
+    }
     if (csWhole.mode === 'estimating') { done(); return; }
-    if (csWhole.mode === 'training' && !csTraining) beginTraining2();
+    if (csWhole.mode === 'training' && !csTraining) {
+      // Settle first, so the dither is sized from the chosen correction's own error
+      // rather than from the changeover transient. See the Move tab's autoTick().
+      const w0 = win2Stats();
+      if (!(w0 && w0.full)) { auto2.note = 'settling into the chosen correction'; return; }
+      beginTraining2();
+    }
     auto2.note = csWhole.mode === 'calibrating' ? 'calibrating'
-      : `${csWhole.trained}/${auto2.trainTarget} pairs`;
+      : `${csWhole.trained}/${auto2.trainTarget} pairs under ${MODE_LABEL[ctl2Mode()]}`;
     if (csWhole.trained >= auto2.trainTarget) done();
   } else if (st === 'lock them') {
     if (csWhole.mode === 'training') lockSensors2();
     done();
-  } else if (st === 'compare') {
-    if (!cmp2 && !auto2.started) { auto2.started = true; startCompare2(); }
+  } else if (st === 'score the closed loop') {
+    if (!(csWhole && csWhole.mode === 'estimating')) { done(); return; }
+    if (!cmp2 && !auto2.closedStarted) {
+      auto2.closedStarted = true; startCompare2({ modes: ['closed'], reset: false });
+    }
     else if (!cmp2) done();
-    auto2.note = cmp2 ? MODE_LABEL[cmp2.seq[cmp2.i]] : '';
+    auto2.note = cmp2 ? MODE_LABEL.closed : '';
   } else if (st === 'select the best') {
-    // The winner is READ OFF THE TABLE rather than assumed.
-    const keys = ['open', 'ff', 'learned', 'closed'].filter((m) => board2[m]);
-    if (!keys.length) { stopAuto2('auto-tune: nothing scored'); return; }
-    let best = keys[0];
-    for (const m of keys) if (board2[m].rms < board2[best].rms) best = m;
+    const best = bestScored2();
+    if (!best) { stopAuto2('auto-tune: nothing scored'); return; }
     setCtl2Mode(best);
+    const keys = ['open', 'ff', 'learned', 'closed'].filter((m) => board2[m]);
     stopAuto2(`auto-tune done — ${MODE_LABEL[best]}, rms ${board2[best].rms.toExponential(2)}`);
     console.log(`[flexisim] chain auto-tune selected ${best}: `
-      + keys.map((m) => `${m} ${board2[m].rms.toExponential(2)}`).join(' / '));
+      + keys.map((m) => `${m} ${board2[m].rms.toExponential(2)}`).join(' / ')
+      + ` | sensors commissioned under ${csUnder}`);
     return;
   }
   if (auto2 && auto2.step >= AUTO2_STEPS.length) stopAuto2('auto-tune done');
@@ -2793,9 +2968,11 @@ function beginTraining2() {
   if (!csWhole || csWhole.mode === 'estimating') return;
   csTraining = true;
   csScoreFrom = csRec.length;
+  csUnder = ctl2Mode();
   if (arm2) {
     const w0 = win2Stats();
-    const e0 = w0 && w0.full ? Math.abs(w0.bias) : Math.abs(arm2.tipError().total);
+    const e0 = w0 && w0.n > 200 ? Math.hypot(w0.bias, w0.sd)   // see beginTraining()
+      : Math.abs(arm2.tipError().total);
     ditherAmp2 = Math.min(0.02, Math.max(1e-3, 1.5 * e0 / arm2.toolRadius()));
     console.log(`[flexisim] chain commissioning dither ${ditherAmp2.toExponential(3)} rad`);
   }
@@ -2812,13 +2989,35 @@ function lockSensors2() {
   syncChain();
 }
 
-function startCompare2() {
-  const seq = ['open', 'ff'];
-  if (ff2 && ff2.ready) seq.push('learned');
-  if (csWhole && csWhole.mode === 'estimating') seq.push('closed');
-  board2 = {}; renderBoard2();
+/** The lowest-rms row of the chain's table, or null. */
+function bestScored2() {
+  const keys = ['open', 'ff', 'learned', 'closed'].filter((m) => board2[m]);
+  if (!keys.length) return null;
+  return keys.reduce((b, m) => (board2[m].rms < board2[b].rms ? m : b), keys[0]);
+}
+
+/** See startCompare() for why a partial compare must not clear the table. */
+function startCompare2(opts = {}) {
+  const { modes = null, reset = true } = opts;
+  let seq;
+  if (modes) {
+    seq = modes.filter((m) => (m !== 'closed' || (csWhole && csWhole.mode === 'estimating'))
+      && (m !== 'learned' || (ff2 && ff2.ready)));
+  } else {
+    seq = ['open', 'ff'];
+    if (ff2 && ff2.ready) seq.push('learned');
+    if (csWhole && csWhole.mode === 'estimating') seq.push('closed');
+  }
+  if (!seq.length) return;
+  if (reset) board2 = {};
+  renderBoard2();
   cmp2 = { seq, i: 0, wait: settle2Moves(seq[0]) };
-  setCtl2Mode('open');
+  // seq[0], NOT a hard-coded 'open'. It was hard-coded because the sequence always
+  // began with the open loop, and it went wrong the moment a partial compare did not:
+  // the closed-loop pass ran the whole 13 move boundaries in OPEN loop, overwrote the
+  // open row with a near-identical number, and left the table with no closed row at
+  // all -- which reads as "the closed loop was never scored" rather than as a fault.
+  setCtl2Mode(seq[0]);
   run2 = true;
   syncChain();
 }
@@ -2912,12 +3111,16 @@ function renderBoard2() {
 function recordBoard2() {
   const w = win2Stats();
   if (!w || !w.full) return;
+  if (csTraining && ditherAmp2) return;      // see recordBoard()
   board2[ctl2Mode()] = { bias: w.bias, sd: w.sd, rms: w.rms, k: k2 };
   renderBoard2();
 }
 
 function setCtl2Mode(m) {
-  $('ctl2-mode').value = m; win2 = []; closedOff2 = 0; stats2(); syncChain();
+  // csScoreFrom too: a mean spanning a correction change is a blend of two machines.
+  $('ctl2-mode').value = m; win2 = []; closedOff2 = 0;
+  csScoreFrom = csRec.length;
+  stats2(); syncChain();
 }
 
 function stopCompare2(msg) {
@@ -3314,6 +3517,7 @@ window.__flxChainDbg = () => (arm2 ? {
     comparing: cmp2 ? { ...cmp2 } : null },
   auto: auto2 ? { ...auto2, of: AUTO2_STEPS.length, what: AUTO2_STEPS[auto2.step] } : null,
   learning: learn2 ? { move: learn2.pi, iter: learn2.iter, note: learn2.note } : null,
+  ssUnder: csUnder,
   commissioning: comm2 ? { phase: comm2.phase, left: comm2.left } : null,
   bend: bend2, shaped: !!shaper2(),
   ff: ff2 ? ff2.status() : null,
@@ -3408,7 +3612,7 @@ window.__flxDbg = () => ({
     dither: ditherAmp, dithering: ssTraining && !!ditherAmp,
     comparing: cmp ? { ...cmp } : null },
   board, shaped: $('shape-on').checked, flipped: $('flip-sign').checked,
-  ss: ss ? { ...ss.status(), training: ssTraining, samples: ssRec.length,
+  ss: ss ? { ...ss.status(), training: ssTraining, samples: ssRec.length, under: ssUnder,
     scores: ssScores() } : null,
 });
 
