@@ -3211,6 +3211,88 @@ one.
    constant that was right for one plant carried to another without re-deriving it,
    which is the double pendulum's ridge all over again.
 
+   **BRICK 22 — THE CHAIN GETS THE RINGING UNDER CONTROL: A MEASURED SHAPER AND THE
+   LEARNED FILTER, AND THE PARAMETERS ARE THE CHAIN'S RATHER THAN THE MOVE TAB'S.**
+   Reported from the device: "both auto-tuned results are pretty bad unless really
+   slow and the chain can't even be slow enough because the slider is bottomed out …
+   there is a note about resonance not being able to be captured. This has to be
+   addressed and the oscillation must become controllable." Four things were wrong
+   and only one of them was the note.
+   (i) **THE COMPARE TABLE ON THE CHAIN HAD NEVER RECORDED A SINGLE ROW**, and every
+   surface said otherwise: each mode ran, the sequence advanced, the badge said
+   "compare done", and auto-tune then reported "nothing scored". The settling loop
+   was copied from the Move tab, where the scoring window is ONE move period, so
+   clearing the window at every boundary it waits out is harmless. The chain's window
+   is THREE periods (its reference beats at the golden ratio, so one period reports
+   where in the beat the reading fell), one period after the last clear left it a
+   third full, `win2Stats().full` was false, and `recordBoard2()` returned without
+   writing. The settling and the READING are now separate counts. Same class as the
+   two constants above: right for one plant, carried to another.
+   (ii) **THE CHAIN RINGS AND NOTHING ON THE TAB COULD TOUCH IT.** It now measures its
+   own mode from a deliberately UNSHAPED kick — the anti-slosh tab's argument, that
+   success at cancelling a resonance removes the evidence of it — and shapes with a
+   ZVD. Measured: **period 860 steps, ζ 0.251, 9 peaks**, and a periodogram of the
+   same decay says ONE mode: its only other peak is at 455, exactly half, i.e. the
+   second harmonic. So a single ZVD is right here and the anti-slosh tab's convolved
+   pair is not. A failed fit disables shaping rather than shaping at a guess — the
+   Move tab has an analytic fallback because it has ONE link and a closed form; a
+   two-link chain's tool mode is not that.
+   (iii) **MODE ④, THE LEARNED FILTER, on the chain.** Its reference deliberately does
+   not repeat and iterative refinement needs repetition, so the refinement runs with
+   the modulation OFF and the fitted filter is deployed with it ON. THAT IS NOT A
+   WORKAROUND, IT IS THE GENERALISATION TEST — and it is nearly free, measured: the
+   same filter scores 1.94× on an unmodulated move of the deployed span and 1.84× on
+   the modulated one, so the non-repeating reference costs 5%.
+   (iv) **AND THE SENSORS WERE BEING LOCKED TOO EARLY**, exactly as reported: 1000
+   pairs is about three move periods of a reference whose amplitude beats at the
+   golden ratio, so most of the amplitudes it will be asked about had not happened.
+   4000 now, the Move tab's number.
+   MEASURED IN THE BROWSER through the page's own auto-tune (residual tool error vs
+   the PROGRAM, rms, three move periods):
+     no shaping, no correction     3.98e-1     (the machine before any of this)
+     shaping only                  2.37e-1     1.68x
+     + ② the rigid model           2.32e-1     1.02x on top — it removes a bias
+     + ③ the closed loop           2.41e-1     1.00x on top — same, and it is a bias
+     + ④ the learned filter        1.71e-1     **1.36x on top, 2.33x overall**
+   The bias column is the other half and it separates the mechanisms cleanly: ④ takes
+   the bias −7.16e-2 → −5.05e-3 (**14.2×**) AND the oscillation 2.26e-1 → 1.71e-1
+   (1.3×), while ② manages 1.2× on the bias and **1.0× on the oscillation**, which is
+   the quasi-static limit stated as a number rather than as a caveat.
+   **THE REFINEMENT'S GAIN HAD TO BE MEASURED ON THE CHAIN, AND THE SHAPER HALVES THE
+   STABILITY MARGIN.** Swept in Node against the chain plant, residual rms on the
+   hardest of the three training moves (span 0.5, 16–18 passes):
+     UNSHAPED  lead 0 / 200 / 350 / 550 / 800 / 1100 → DIVERGES / 1.63 / 0.98 / 0.79 /
+               1.53 / 2.18 — an INTERIOR optimum, so the lead is a real phase
+               alignment and not a fudge factor
+               gain 0.5 → 0.314   1.0 → 0.314   1.5 → 0.308   4.0 → DIVERGES
+     SHAPED    gain 0.3 → 0.291   0.6 → **0.276**   1.0 → 0.290   1.5 → **DIVERGES**
+   THAT ARRIVED AS A FAILURE, WHICH IS THE PART WORTH KEEPING. Gain 1.5 was measured
+   on the unshaped plant; with shaping on, two of the three moves turned around after
+   pass 5 and climbed, and the filter fitted in good faith to a correction the
+   refinement had already ruined then scored **WORSE than doing nothing** (2.53e-1
+   against 2.45e-1). The cause is structural: the shaper delays the COMMAND but the
+   correction is added to the reference after it, so the phase between the correction
+   and the error it answers is not the one the lead was tuned against. 0.6 is stable
+   in BOTH configurations, which is what matters when shaping is a control the user
+   can toggle. And the refinement now **harvests its best pass rather than its last**
+   and stops after three passes without gain — a guard that costs nothing when the
+   gain is right, and the difference between a fit that is merely imperfect and one
+   that is confidently wrong.
+   **THE CEILING IS MEASURED TOO, so what is left is stated rather than implied.** A
+   repeatable shoulder pre-distortion converged as far as it will go leaves 1.55e-1
+   of 3.77e-1 at the shipped span — 2.43×, and the deployed filter reaches 1.71e-1,
+   so the FIT costs about 10% and the rest is the refinement's own limit. Neither
+   more capacity nor a better fit can pass it. The floor is also strongly
+   superlinear in span (5.6e-3 at 0.072, 7.8e-2 at 0.144, 3.1e-1 at 0.5), which is
+   why the three training moves BRACKET the shipped default instead of sitting on
+   one side of it.
+   **AND THE ELBOW'S MODULATION HAD THE SHOULDER'S OLD DERIVATIVE BUG.** The
+   inconsistent-derivative fix recorded above was applied to the shoulder and left
+   the elbow scaling θ, ω and α by the same m, so the elbow's commanded velocity was
+   not the derivative of its commanded position. One joint over, same defect, found
+   only because the reference had to be refactored to be readable at an arbitrary
+   step for the filter's window.
+
    NOT YET BUILT: the WGSL elastic kernel (see the measurement above); general
    block-sparse bricks for a CLOSED structure — a gantry or a machine frame, where
    members are not separable into per-link frames and the swept box is genuinely

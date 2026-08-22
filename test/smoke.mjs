@@ -2250,6 +2250,71 @@ check('flexisim/chain: no correction makes the tool dramatically worse',
   `${c2open.bias} -> ff ${c2ff.bias} / closed ${c2cl.win.bias}`);
 await fx.selectOption('#ctl2-mode', 'open');
 
+// ---- THE TABLE HAS TO ACTUALLY FILL, which for a long time it did not. The chain's
+// settling loop was copied from the Move tab, where the scoring window is ONE move
+// period, so clearing the window at every boundary it waits out is harmless. Here it
+// is THREE periods, one period after the last clear left it a third full,
+// `win2Stats().full` was false, and every row was silently dropped -- while every
+// mode still ran and the badge still said "compare done". The passive path above has
+// driven ~48000 steps by now, so a full window must have produced at least one row.
+const c2board = (await fx.evaluate(() => window.__flxChainDbg())).board;
+check('flexisim/chain: a full scoring window really produces a table row',
+  Object.keys(c2board).length > 0, JSON.stringify(c2board).slice(0, 200));
+
+// ---- MODE 4 ON THE CHAIN. The cheap half runs every time: the option is there and
+// it REFUSES to engage without a fitted filter, which is the same discipline mode 3
+// applies to an unlocked sensor. The expensive half -- commissioning, refining three
+// moves, and scoring the lot -- is the full tier, because it is ~175 s of solver.
+const c2modes = await fx.$$eval('#ctl2-mode option', (o) => o.map((x) => x.value));
+check('flexisim/chain: the learned filter is offered as a fourth correction',
+  c2modes.join(',') === 'open,ff,closed,learned', c2modes.join(','));
+await fx.selectOption('#ctl2-mode', 'learned');
+const c2gate = await fx.evaluate(() => window.__flxChainDbg());
+check('flexisim/chain: …and is REFUSED until one has been fitted',
+  c2gate.ctl.want === 'learned' && c2gate.ctl.active === 'open' && !c2gate.ff,
+  JSON.stringify(c2gate.ctl));
+check('flexisim/chain: input shaping is refused until the bending mode is measured',
+  await fx.$eval('#shape2-on', (e) => e.disabled) && !c2gate.bend, 'shape2-on');
+await fx.selectOption('#ctl2-mode', 'open');
+
+if (FULL) {
+  // THE WHOLE SEQUENCE, driven by the one button, and what is asserted is that each
+  // stage produced the thing it exists to produce and that the winner was READ OFF
+  // THE TABLE rather than assumed.
+  await fx.click('#auto2');
+  await fx.waitForFunction(() => !window.__flxChainDbg().auto, null, { timeout: 900000 });
+  const a2 = await fx.evaluate(() => window.__flxChainDbg());
+  const b2 = a2.board;
+  console.log(`  flexisim/chain: auto-tune selected ${a2.ctl.want}, mode period `
+    + `${a2.bend ? a2.bend.period.toFixed(0) : '—'}, board `
+    + ['open', 'ff', 'learned', 'closed'].filter((m) => b2[m])
+      .map((m) => `${m} ${b2[m].rms.toExponential(2)}`).join(' / '));
+  check('flexisim/chain: auto-tune measures the bending mode from an unshaped kick',
+    a2.bend && a2.bend.period > 200 && a2.bend.period < 4000 && a2.bend.peaks >= 4,
+    JSON.stringify(a2.bend));
+  check('flexisim/chain: …and turns the shaper on once it has one',
+    a2.shaped === true, `shaped ${a2.shaped}`);
+  check('flexisim/chain: …fits the learned filter and reports its size',
+    a2.ff && a2.ff.ready && a2.ff.rows > 1000, JSON.stringify(a2.ff));
+  check('flexisim/chain: …scores every mode, so the table is not empty',
+    ['open', 'ff', 'learned', 'closed'].every((m) => b2[m]), JSON.stringify(Object.keys(b2)));
+  // THE CLAIM, and it is about the OSCILLATION rather than the bias: the quasi-static
+  // model and the closed loop both remove a bias and neither can touch a resonance,
+  // so the learned filter is the only thing on this tab that moves this number.
+  check('flexisim/chain: …and the learned filter beats the quasi-static model it sits on',
+    b2.learned.rms < 0.9 * b2.ff.rms,
+    `learned ${b2.learned.rms} vs model ${b2.ff.rms} vs open ${b2.open.rms}`);
+  check('flexisim/chain: …by reducing the OSCILLATION, which nothing else here can',
+    b2.learned.sd < 0.9 * b2.ff.sd && b2.learned.sd < 0.9 * b2.closed.sd,
+    `learned ${b2.learned.sd} / model ${b2.ff.sd} / closed ${b2.closed.sd}`);
+  check('flexisim/chain: …and selects the mode its own table scored best',
+    a2.ctl.want === ['open', 'ff', 'learned', 'closed'].filter((m) => b2[m])
+      .reduce((x, m) => (b2[m].rms < b2[x].rms ? m : x), 'open'),
+    `${a2.ctl.want}`);
+  check('flexisim/chain: …and gives the manual controls back afterwards',
+    await fx.$eval('#ctl2-mode', (e) => !e.disabled), 'ctl2-mode still disabled');
+}
+
 const painted2 = await fx.evaluate(() => {
   const c = document.getElementById('cv2');
   if (!c.width || !c.height) return { ok: false, why: 'zero-sized' };

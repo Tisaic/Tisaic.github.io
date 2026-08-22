@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:225,built:"2026-08-22T01:05:59Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:226,built:"2026-08-22T02:36:35Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -113,10 +113,10 @@
       <button id="auto">Auto-tune ▶</button>
       <button id="reset" class="sec">Reset all</button>
     </div>
-    <p class="hint">One button for the whole sequence: <b>commission → shape → train the sensor →
-      lock → score every correction → keep the best</b>. The order is not guessable from the
-      controls and getting it wrong does not error, it just quietly produces a worse machine.
-      Everything below stays available for driving it by hand.</p>
+    <p class="hint">One button for the whole sequence: <b>commission → shape → learn the dynamic
+      filter → train the sensor → lock → score every correction → keep the best</b>. The order is
+      not guessable from the controls and getting it wrong does not error, it just quietly produces
+      a worse machine. Everything below stays available for driving it by hand.</p>
     <div class="controls">
       <button id="commission" class="sec">Commission ▶</button>
       <button id="run" class="sec" disabled>Run move ▶</button>
@@ -307,9 +307,13 @@
       <button id="auto2">Auto-tune ▶</button>
       <button id="reset2" class="sec">Reset all</button>
     </div>
-    <p class="hint">The same one-button sequence as the Move tab: <b>shape the command → train
-      both tool sensors → lock → score every correction → keep the best</b>. The chain has no
-      pose-touch commissioning, so it starts at the training step.</p>
+    <p class="hint">One button, the same sequence as the Move tab: <b>measure the bending mode →
+      shape the command → learn the dynamic filter → train both tool sensors → lock → score every
+      correction → keep the best</b>. It has no pose-touch commissioning — the chain's rigid model
+      comes from the lattices themselves — but it does need an <b>unshaped</b> kick to see the mode
+      at all, because cancelling a resonance removes the evidence of it. The learning step then
+      drives three repeatable moves of its own, so the picture will not look like the programmed
+      move while it runs.</p>
     <div class="controls">
       <button id="run2" class="sec">Run move ▶</button>
       <select id="mode2" aria-label="What moves">
@@ -328,16 +332,19 @@
         <option value="open">① open loop — no correction at all</option>
         <option value="ff">② open loop + prediction — the rigid compliance model</option>
         <option value="closed">③ closed loop — on the whole-arm estimate</option>
+        <option value="learned">④ learned filter — fitted over the whole ring</option>
       </select>
       <button id="compare2" class="sec">Compare ▶</button>
       <button id="board2-clear" class="sec">Clear table</button>
     </div>
     <p class="hint" id="ctl2-hint">The rigid model is given M(q), the Coriolis terms, gravity, both
-      stiffnesses and both lever arms. The closed loop is given nothing but the estimate, and only
-      once it is locked. <b>Expect less here than on the Move tab</b>: this reference deliberately
-      does not repeat, so the sensor's residual is not zero-mean, and a loop can only null what its
-      instrument can resolve — measured, the tool's bias and the sensor's own residual are both
-      about 5e-2.</p>
+      stiffnesses and both lever arms, and it is evaluated one servo time constant AHEAD. The closed
+      loop is given nothing but the estimate, and only once it is locked. ①–③ are all
+      <b>quasi-static</b> — one instant of the command in, one deflection out — so none of them can
+      cancel a resonance, which is most of what is left. ④ is fitted over a <b>window</b> of the
+      command and can: it is converged against the tracker on three repeatable moves and then
+      deployed on this deliberately non-repeating one, which is its generalisation test rather than
+      a convenience.</p>
     <table class="v" id="board2" hidden></table>
 
     <h4 class="grp">Motion <span>— live, applied at a move boundary</span></h4>
@@ -351,6 +358,10 @@
       <div class="slider"><span>Elbow pose</span>
         <input type="range" id="s-elbow" min="0" max="8" step="1" value="3" />
         <span class="v" id="v-elbow">0.60 rad</span></div>
+    </div>
+    <div class="controls">
+      <label><input type="checkbox" id="shape2-on" disabled /> input shaping (ZVD on the
+        measured bending mode)</label>
     </div>
     <p class="hint" id="motion2-pending" hidden><b>queued</b> — a reference is only rebuilt at a
       move boundary; rebuilding one mid-move is a position step into the servo's gain.</p>
@@ -1641,8 +1652,8 @@ function stats() {
   } else if (auto) {
     hint.innerHTML = `<b>Auto-tune ${auto.step + 1}/${AUTO_STEPS.length}</b> — `
       + `${AUTO_STEPS[auto.step]}${auto.note ? ': ' + auto.note : ''}. `
-      + 'It commissions, shapes, trains and locks the sensor, then scores every '
-      + 'correction and keeps the one that measured best.';
+      + 'It commissions, shapes, fits the dynamic filter, trains and locks the sensor, '
+      + 'then scores every correction and keeps the one that measured best.';
   } else if (phase === 'ready') {
     hint.innerHTML = 'Commissioned. Every <b>correction</b> removes the bias, <b>shaping</b> removes '
       + 'the oscillation — turn each on alone and watch one number move and the other stand still.';
@@ -1709,7 +1720,21 @@ function frame() {
   // two lattices are 1.6x the Move tab's cost, and a hidden simulation burning the
   // frame budget is the page competing with itself.
   const onChain = document.querySelector('.tab[data-tab="chain"]').classList.contains('on');
-  if (arm2 && !busy2 && run2 && onChain) {
+  if (onChain && comm2 && !busy2) {
+    try { comm2Step(LEARN_BUDGET); }
+    catch (e) {
+      comm2 = null; $('state2-badge').textContent = 'commissioning halted: ' + e.message;
+      $('state2-badge').className = 'badge bad'; console.error(e);
+    }
+  } else if (onChain && learn2 && !busy2) {
+    // LEARNING OWNS THE PLANT while it runs, on its own step budget rather than the
+    // viewing slider's: it is a commissioning routine, not a move being watched.
+    try { learn2Step(LEARN_BUDGET); }
+    catch (e) {
+      learn2 = null; $('state2-badge').textContent = 'learning halted: ' + e.message;
+      $('state2-badge').className = 'badge bad'; console.error(e);
+    }
+  } else if (arm2 && !busy2 && run2 && onChain) {
     try { step2(+$('s-spf2').value); }
     catch (e) { run2 = false; $('state2-badge').textContent = 'halted: ' + e.message;
       $('state2-badge').className = 'badge bad'; console.error(e); }
@@ -2095,6 +2120,18 @@ const chHist = { t: [], t2: [], c21: [], c22: [], tip: [],
 // step into the servo's proportional gain.
 let motion2 = { span: 3, speed: 4 }, motion2Pending = null;
 let closedOff2 = 0, cmp2 = null, board2 = {};
+// The chain's learned dynamic filter, and the state machine that fits one. Both are
+// the Move tab's, with the chain's two differences: the reference the filter is
+// deployed on is amplitude-modulated and therefore NOT periodic, so the refinement
+// runs with the modulation OFF and the fit is deployed with it ON -- and the lever
+// arm the error is divided by folds with the elbow, so it is read from the arm.
+let ff2 = null, learn2 = null;
+// THE CHAIN RINGS TOO, and until now nothing on this tab could touch it. Measured on
+// the shipped plant by exciting a decay at the tool and fitting it: ONE mode, period
+// 910 steps, zeta 0.226 -- the periodogram's only other peak is at 455, which is its
+// second harmonic and not a second mode, so a single ZVD is the right shaper rather
+// than the anti-slosh tab's convolved pair.
+let bend2 = null, comm2 = null;
 // THE CHAIN'S SCORING WINDOW IS THREE MOVE PERIODS, and the Move tab's is one,
 // because the two references are not the same KIND of signal. The Move tab repeats
 // exactly, so one period is the whole experiment. The chain's is amplitude-
@@ -2109,10 +2146,80 @@ let closedOff2 = 0, cmp2 = null, board2 = {};
 const WIN2_MOVES = 3;
 let win2 = [];                // recent tool errors, WIN2_MOVES move periods
 
+/** The shaper the chain's commands carry, or null. */
+function shaper2() {
+  if (!bend2 || !$('shape2-on').checked || bend2.overdamped) return null;
+  return zvdShaper(bend2.omega, bend2.zeta);
+}
+
 function rebuildProfile2() {
   const sp = SPEED_LADDER[motion2.speed];
+  // THE DWELL MUST OUTLAST THE SHAPER'S OWN DELAY (one damped period of the mode it
+  // cancels) or a shaped move never reaches its endpoint before the next begins.
+  const need = bend2 ? Math.round(1.3 * bend2.period) : 900;
   prof2 = new AngleProfile({ span: SPAN_LADDER[motion2.span], accelSteps: sp.a,
-    cruiseSteps: sp.c, dwellSteps: 900 });
+    cruiseSteps: sp.c, dwellSteps: Math.max(900, need), shaper: shaper2() });
+}
+
+// ------------------------------------------- the chain's commissioning decay
+//
+// A DELIBERATELY UNSHAPED KICK, for the reason the anti-slosh tab's health check
+// exists: success at cancelling a resonance removes the evidence of it, so the mode
+// can only be measured on a move that does not cancel it. It runs INSIDE the frame
+// loop rather than in one blocking call, so the ring can be watched.
+const C2_SETTLE = 4000, C2_KICK = 300, C2_DECAY = 9000;
+
+function startComm2() {
+  if (!arm2) return;
+  comm2 = { phase: 'settle', left: C2_SETTLE, decay: [], base: 0 };
+  syncChain();
+}
+
+function comm2Step(budget) {
+  if (!comm2 || !arm2) return;
+  const hold = [{ theta: 0, omega: 0, alpha: 0 },
+    { theta: ELBOW_LADDER[+$('s-elbow').value], omega: 0, alpha: 0 }];
+  const kick = [{ theta: 0.04, omega: 0, alpha: 0 }, hold[1]];
+  for (let i = 0; i < budget && comm2; i++) {
+    const r = comm2.phase === 'kick' ? kick : hold;
+    const t = servo2.torques(r);
+    arm2.step(t[0], t[1], 1);
+    if (comm2.phase === 'decay') comm2.decay.push(arm2.tipError().total - comm2.base);
+    if (--comm2.left > 0) continue;
+    if (comm2.phase === 'settle') {
+      comm2.base = arm2.tipError().total;
+      comm2.phase = 'kick'; comm2.left = C2_KICK;
+    } else if (comm2.phase === 'kick') {
+      comm2.phase = 'decay'; comm2.left = C2_DECAY;
+    } else {
+      finishComm2();
+      return;
+    }
+  }
+}
+
+function finishComm2() {
+  const fit = window.__flxFailFit2 ? null : ringFit(comm2.decay);
+  if (!fit) {
+    // A FAILED FIT IS REPORTED, NEVER DEREFERENCED -- and it disables shaping rather
+    // than shaping at a guess, because a shaper for a mode that is not there is pure
+    // delay. The Move tab has an analytic fallback because it has ONE link and one
+    // closed form; a two-link chain's tool mode is not that, so there is nothing
+    // honest to fall back to.
+    bend2 = null;
+    console.warn(`[flexisim] the chain's decay carried no usable oscillation in `
+      + `${comm2.decay.length} steps — input shaping stays off.`);
+  } else {
+    bend2 = { ...fit, overdamped: fit.zeta > 0.5 };
+    console.log(`[flexisim] chain bending mode: omega ${fit.omega.toExponential(3)} `
+      + `period ${fit.period.toFixed(0)} zeta ${fit.zeta.toFixed(3)} (${fit.peaks} peaks)`);
+  }
+  comm2 = null;
+  // A shaper changes the command the filter was fitted against, so the filter goes.
+  ff2 = null;
+  rebuildProfile2();
+  k2 = 0; win2 = []; board2 = {}; renderBoard2();
+  syncChain();
 }
 
 async function build2() {
@@ -2129,6 +2236,14 @@ async function build2() {
   arm2.setPose(0, ELBOW_LADDER[+$('s-elbow').value]);
   arm2.K = K;
   servo2 = new ChainServo({ arm: arm2, bandwidth: 2e-3 });
+  // A FILTER IS FITTED TO ONE PLANT, and so is a shaper. K changes the resonance
+  // being inverted and the elbow pose changes the lever arm the correction was
+  // divided by, so carrying either across a rebuild applies yesterday's inverse to
+  // today's arm. CLEARED BEFORE THE PROFILE IS BUILT, because rebuildProfile2()
+  // reads both -- clearing them after would leave the new profile carrying the old
+  // shaper for exactly as long as nobody rebuilt it again.
+  ff2 = null; learn2 = null; bend2 = null; comm2 = null;
+  $('shape2-on').checked = false;
   rebuildProfile2();
   k2 = 0;
   closedOff2 = 0; win2 = []; board2 = {}; stopCompare2(); renderBoard2();
@@ -2148,7 +2263,37 @@ async function build2() {
 const GOLD = 0.6180339887;
 const MOD = 0.25;
 const modW = () => 2 * Math.PI * GOLD / prof2.period;
-const amp2 = () => 1 + MOD * Math.sin(modW() * k2);
+
+/**
+ * The UNMODULATED reference at step k of a given profile -- what refs2At() reduces
+ * to at MOD = 0, and exactly periodic in the profile's period even with the elbow
+ * moving (it runs the same profile a quarter period out of phase, which is still
+ * periodic). THAT PERIODICITY IS WHY IT EXISTS: iterative refinement converges an
+ * error signal against ITSELF one period later, so it needs a reference that repeats
+ * -- and the deployed one deliberately does not.
+ */
+function baseRefs2(profile, k) {
+  const hold = ELBOW_LADDER[+$('s-elbow').value];
+  const a = profile.at(k);
+  if ($('mode2').value === 'both') {
+    const b = profile.at(k + Math.round(profile.period / 4));
+    return [a, { theta: hold + (b.theta - profile.span / 2), omega: b.omega, alpha: b.alpha }];
+  }
+  return [a, { theta: hold, omega: 0, alpha: 0 }];
+}
+
+/**
+ * Scale a reference point's MOTION by m(k) while leaving its resting POSE alone,
+ * carrying the product rule properly: d/dk (offset + m*x) = m*x' + m'*x, and one
+ * more term again for the acceleration. The offset is not part of the move, so it
+ * is not scaled -- the elbow's hold pose must not shrink when the modulation dips.
+ */
+function modulate(base, offset, m, md, mdd) {
+  const x = base.theta - offset;
+  return { theta: offset + x * m,
+    omega: base.omega * m + md * x,
+    alpha: base.alpha * m + 2 * md * base.omega + mdd * x };
+}
 
 /**
  * The two reference points at step k, one per joint.
@@ -2170,27 +2315,32 @@ const amp2 = () => 1 + MOD * Math.sin(modW() * k2);
  * the -0.073 the UNMODULATED reference gives. The modulation was never the
  * problem; an inconsistent derivative was.
  */
-function refs2() {
+function refs2At(k) {
   const hold = ELBOW_LADDER[+$('s-elbow').value];
-  const m = amp2();
   const w = modW();
-  const md = MOD * w * Math.cos(w * k2);
-  const mdd = -MOD * w * w * Math.sin(w * k2);
-  const a0 = prof2.at(k2);
-  const a = { theta: a0.theta * m,
-    omega: a0.omega * m + md * a0.theta,
-    alpha: a0.alpha * m + 2 * md * a0.omega + mdd * a0.theta };
-  if ($('mode2').value === 'both') {
-    // The elbow runs the SAME profile a quarter period out of phase, so the
-    // configuration changes while the shoulder is mid-move rather than between
-    // moves -- which is when the inertia change actually costs a controller
-    // something.
-    const b = prof2.at(k2 + Math.round(prof2.period / 4));
-    return [a, { theta: hold + (b.theta - prof2.span / 2) * m, omega: b.omega * m,
-      alpha: b.alpha * m }];
-  }
-  return [a, { theta: hold, omega: 0, alpha: 0 }];
+  const m = 1 + MOD * Math.sin(w * k);
+  const md = MOD * w * Math.cos(w * k);
+  const mdd = -MOD * w * w * Math.sin(w * k);
+  // AND THE ELBOW GETS THE SAME TREATMENT, which it did not before: the fix
+  // described above was applied to the shoulder and left the elbow scaling theta,
+  // omega and alpha by the same m -- the identical inconsistency, one joint over.
+  // The elbow runs the SAME profile a quarter period out of phase, so the
+  // configuration changes while the shoulder is mid-move rather than between moves,
+  // which is when the inertia change actually costs a controller something.
+  const [a0, b0] = baseRefs2(prof2, k);
+  return [modulate(a0, 0, m, md, mdd), modulate(b0, hold, m, md, mdd)];
 }
+
+function refs2() { return refs2At(k2); }
+
+/**
+ * A PROFILE-SHAPED VIEW of the shoulder's live reference, so the learned filter can
+ * read a window of it through exactly the interface it read one through while being
+ * fitted. The filter is fitted on UNMODULATED moves and deployed on this, which is
+ * the generalisation test rather than a convenience: the modulation is incommensurate
+ * with the move, so no window it meets here occurred in training.
+ */
+const shoulderView = { at: (k) => refs2At(k)[0] };
 
 // ---------------------------------------------- the chain's three corrections
 //
@@ -2202,6 +2352,7 @@ function refs2() {
 function ctl2Mode() {
   const v = $('ctl2-mode').value;
   if (v === 'closed' && !(csWhole && csWhole.mode === 'estimating')) return 'open';
+  if (v === 'learned' && !(ff2 && ff2.ready)) return 'open';
   return v;
 }
 
@@ -2237,19 +2388,166 @@ function dither2Now() {
   return ditherAmp2 * Math.sin(2 * Math.PI * k2 / T);
 }
 
+/**
+ * The rigid model's term, evaluated FF_LEAD steps AHEAD of now.
+ *
+ * THE CORRECTION IS A POSITION DEMAND INTO A SERVO, so it arrives at the tool one
+ * servo time constant later; evaluating the model at the present reference asks for
+ * the deflection the arm had rather than the one it is about to have. FF_LEAD is
+ * 1/bandwidth, the same number and the same argument as the Move tab's.
+ */
+function model2Off(k) {
+  return -servo2.toolOffset(refs2At(k + FF_LEAD)) / arm2.toolRadius();
+}
+
 function off2Now(r) {
   const m = ctl2Mode();
   const d = dither2Now();
   if (m === 'closed') return closedOff2 + d;
-  if (m === 'ff') {
-    // THE MODEL IS EVALUATED AT THE COMMAND. It is given M(q), the Coriolis terms,
-    // gravity, both stiffnesses and both lever arms -- everything a good engineer
-    // has off the CAD and the datasheet -- and it is RIGID: it carries the gearbox
-    // wind-up and knows nothing about either link's own bending, which is the term
-    // the lattice is here for and the reason this rival is beatable.
-    return -servo2.toolOffset(r) / arm2.toolRadius() + d;
-  }
+  // THE MODEL IS EVALUATED AT THE COMMAND. It is given M(q), the Coriolis terms,
+  // gravity, both stiffnesses and both lever arms -- everything a good engineer has
+  // off the CAD and the datasheet -- and it is RIGID: it carries the gearbox wind-up
+  // and knows nothing about either link's own bending, which is the term the lattice
+  // is here for and the reason this rival is beatable.
+  if (m === 'ff') return model2Off(k2) + d;
+  // AND THE LEARNED FILTER SITS ON TOP OF THAT MODEL rather than replacing it,
+  // because that is how it was fitted: the refinement below converges the RESIDUAL
+  // the model leaves, so deploying it without the model would be applying a
+  // correction for an error the model was still removing.
+  if (m === 'learned') return model2Off(k2) + ff2.predict(shoulderView, k2) + d;
   return d;
+}
+
+// ------------------------------------------------- the chain's learned filter
+//
+// SAME MECHANISM AS THE MOVE TAB'S, and it is here for the same reason: the rigid
+// model is QUASI-STATIC -- it maps one instant of the command to one deflection --
+// and a resonance answers a period later, so no amount of getting that model right
+// touches the ringing. What can touch it is a filter over a WINDOW of the command,
+// and the only honest way to get one is to converge a correction against the tracker
+// on moves you can repeat and then fit a map from the command window to it.
+//
+// THE CHAIN'S REFERENCE DOES NOT REPEAT, ON PURPOSE (the golden-ratio amplitude
+// modulation, so a 544-feature sensor cannot score by learning where in the cycle it
+// is). Iterative refinement needs repetition, so learning runs on the UNMODULATED
+// reference and the fitted filter is then deployed on the modulated one. That is not
+// a workaround, it is the generalisation test: the filter never sees, during
+// fitting, any window it will meet in service.
+// THE REFINEMENT'S OWN PARAMETERS ARE THE CHAIN'S, MEASURED ON THE CHAIN. Inheriting
+// the Move tab's cost about half the result: at gain 0.5 all three training moves
+// were still falling monotonically at pass 12, so the sequence was stopping
+// mid-convergence rather than at a floor. Swept in Node against the chain plant --
+// residual rms on the hardest of the three moves (span 0.5), 16-18 passes:
+//   UNSHAPED  lead    0 / 200 / 350 / 550 / 800 / 1100  ->  DIVERGES / 1.63 / 0.98 /
+//                     0.79 / 1.53 / 2.18   -- an INTERIOR optimum, so the lead is a
+//                     real phase alignment rather than a fudge factor
+//             gain  0.5 -> 0.314   1.0 -> 0.314   1.5 -> 0.308   4.0 -> DIVERGES
+//   SHAPED    gain  0.3 -> 0.291   0.6 -> 0.276   1.0 -> 0.290   1.5 -> DIVERGES
+//
+// THE SHAPER HALVES THE STABILITY MARGIN, which is the finding and it arrived as a
+// failure: gain 1.5 was measured on the UNSHAPED plant, and with shaping on the same
+// gain turned two of the three moves around after pass 5 and climbed. The learned
+// filter then scored WORSE than doing nothing (2.53e-1 against 2.45e-1) -- fitted, in
+// good faith, to a correction the refinement had already ruined. The cause is
+// structural: the shaper delays the COMMAND but the correction is added to the
+// reference after it, so the phase between u and the error it answers is not the one
+// the lead was tuned against. 0.6 is stable in BOTH configurations, which is what
+// matters when the shaping checkbox is a control the user can toggle.
+const LEARN2_ITERS = 16, RISE_STOP = 3;
+const LEARN2_ILC = { gain: 0.6, lead: 500, smooth: 40 };
+
+const learn2Profiles = () => [
+  { span: SPAN_LADDER[2], a: 300, c: 400 },
+  { span: SPAN_LADDER[4], a: 200, c: 260 },
+  { span: SPAN_LADDER[1], a: 450, c: 600 },
+].map((o) => new AngleProfile({ span: o.span, accelSteps: o.a, cruiseSteps: o.c,
+  dwellSteps: prof2 ? prof2.D : 900, shaper: shaper2() }));
+
+function startLearn2() {
+  if (!arm2 || !servo2) return;
+  const profs = learn2Profiles();
+  learn2 = { profs, pi: 0, iter: -3, k: 0, u: new Float64Array(profs[0].period),
+    e: new Float64Array(profs[0].period), ff: new LearnedFeedforward(), note: '', hist: [],
+    best: null, bestE: Infinity, rise: 0 };
+  syncChain();
+}
+
+/**
+ * One period of the learning plant, driven by the profile being refined.
+ *
+ * IT USES THE SAME SERVO AND THE SAME MODEL TERM the deployed correction will,
+ * because the filter is fitted as the RESIDUAL on top of them.
+ */
+function learn2Step(budget) {
+  if (!learn2 || !arm2) return;
+  const p = learn2.profs[learn2.pi];
+  const R = arm2.toolRadius();
+  let left = budget;
+  while (left > 0 && learn2) {
+    const n = learn2.k % p.period;
+    const r = baseRefs2(p, learn2.k);
+    const off = -servo2.toolOffset(baseRefs2(p, learn2.k + FF_LEAD)) / R
+      + (learn2.iter >= 0 ? learn2.u[n] : 0);
+    const tau = servo2.torques([{ ...r[0], theta: r[0].theta + off }, r[1]]);
+    arm2.step(tau[0], tau[1], 1);
+    if (learn2.iter >= 0) learn2.e[n] = toolTrackingError(r);
+    learn2.k++; left--;
+    if (learn2.k % p.period !== 0) continue;
+    // --- a period just finished
+    if (learn2.iter < 0) { learn2.iter++; continue; }    // settling passes
+    // THE BEST PASS IS HARVESTED, NOT THE LAST, and the refinement stops when it has
+    // stopped improving. A tuned gain is only tuned for the plant it was tuned on --
+    // the shaping toggle, the K slider and the elbow pose all move the loop it sits
+    // in -- so a guard that costs nothing when the gain is right is worth having:
+    // without it a diverging refinement is harvested at its WORST pass and the fit
+    // is then confidently wrong. Bounded by RISE_STOP consecutive worse passes so a
+    // single noisy pass does not end a converging run.
+    let v = 0;
+    for (const x of learn2.e) v += x * x;
+    v = Math.sqrt(v / learn2.e.length);
+    learn2.hist.push(v);
+    if (v < learn2.bestE) { learn2.bestE = v; learn2.best = learn2.u.slice(); learn2.rise = 0; }
+    else learn2.rise++;
+    learn2.u = ilcRefine(learn2.u, learn2.e, { ...LEARN2_ILC, armLength: R });
+    learn2.iter++;
+    learn2.note = `move ${learn2.pi + 1}/${learn2.profs.length}, `
+      + `pass ${learn2.iter}/${LEARN2_ITERS}`;
+    if (learn2.iter < LEARN2_ITERS && learn2.rise < RISE_STOP) continue;
+    // --- converged on this move: harvest it and go to the next.
+    // THE CONVERGED RESIDUAL IS THE CEILING and it is logged, because the deployed
+    // number and this one answer different questions: if they agree, the filter is
+    // doing everything the refinement could and the limit is the plant; if the
+    // deployed one is worse, the gap is what generalising to an unseen reference
+    // costs, and that is where more training moves would help.
+    console.log(`[flexisim] chain move ${learn2.pi + 1} passes: `
+      + learn2.hist.map((x) => x.toExponential(2)).join(' ')
+      + `  → kept ${learn2.bestE.toExponential(3)}`
+      + (learn2.rise >= RISE_STOP ? ` (stopped: ${RISE_STOP} passes without gain)` : ''));
+    const uBest = learn2.best || learn2.u;
+    for (let m = 0; m < p.period; m += 3) learn2.ff.observe(p, m, uBest[m]);
+    learn2.pi++;
+    if (learn2.pi < learn2.profs.length) {
+      const q = learn2.profs[learn2.pi];
+      learn2.iter = -3; learn2.k = 0; learn2.hist = [];
+      learn2.best = null; learn2.bestE = Infinity; learn2.rise = 0;
+      learn2.u = new Float64Array(q.period); learn2.e = new Float64Array(q.period);
+      continue;
+    }
+    try {
+      learn2.ff.fit();
+      ff2 = learn2.ff;
+      console.log(`[flexisim] chain learned filter fitted: ${JSON.stringify(ff2.status())}`);
+    } catch (err) {
+      console.error('[flexisim] chain learned filter fit failed: ' + err.message);
+      ff2 = null;
+    }
+    learn2 = null;
+    // The plant has been driven all over the place by three different moves; the
+    // scoreboard and the window it was built from no longer describe anything.
+    k2 = 0; win2 = []; board2 = {}; renderBoard2();
+    syncChain();
+    return;
+  }
 }
 
 function step2(n) {
@@ -2416,11 +2714,17 @@ function csChart() {
 // It has no pose-touch commissioning -- the chain's rigid model comes from the
 // lattices themselves -- so it starts at training and is otherwise the Move tab's.
 let auto2 = null;
-const AUTO2_STEPS = ['train both tool sensors', 'lock them', 'compare', 'select the best'];
+const AUTO2_STEPS = ['measure the bending mode', 'shape the command',
+  'learn the dynamic filter', 'train both tool sensors', 'lock them',
+  'compare', 'select the best'];
 
 function startAuto2() {
   if (!arm2 || busy2) return;
-  auto2 = { step: 0, note: '', trainTarget: 1000 };
+  // 4000 PAIRS, NOT 1000. Reported from the device that the sensors were being locked
+  // too early, and they were: at 1000 pairs the whole-arm model has seen about three
+  // move periods of a reference whose amplitude beats at the golden ratio, so it has
+  // not seen most of the amplitudes it will be asked about.
+  auto2 = { step: 0, note: '', trainTarget: 4000 };
   run2 = true;
   $('state2-badge').textContent = 'auto-tune: working through every step';
   $('state2-badge').className = 'badge warn';
@@ -2437,7 +2741,26 @@ function auto2Tick() {
   if (!auto2) return;
   const st = AUTO2_STEPS[auto2.step];
   const done = () => { auto2.step++; auto2.note = ''; };
-  if (st === 'train both tool sensors') {
+  if (st === 'measure the bending mode') {
+    if (bend2) { done(); return; }
+    if (!comm2) startComm2();
+    auto2.note = comm2 ? comm2.phase : '';
+    if (!comm2) done();
+  } else if (st === 'shape the command') {
+    // A SHAPER IS A CONVOLUTION WITH UNIT-SUM IMPULSES, so it cannot change where a
+    // move ends -- it removes the oscillation and leaves the bias exactly alone,
+    // which is why it composes with a correction rather than competing with one.
+    if (bend2 && !bend2.overdamped && !$('shape2-on').checked) {
+      $('shape2-on').checked = true;
+      rebuildProfile2(); ff2 = null; k2 = 0; win2 = []; board2 = {}; renderBoard2();
+    }
+    done();
+  } else if (st === 'learn the dynamic filter') {
+    if (ff2 && ff2.ready) { done(); return; }
+    if (!learn2) startLearn2();
+    auto2.note = learn2 ? learn2.note || 'converging the correction against the tracker' : '';
+    if (!learn2) done();
+  } else if (st === 'train both tool sensors') {
     if (!csWhole) { stopAuto2('auto-tune: no sensor'); return; }
     if (csWhole.mode === 'estimating') { done(); return; }
     if (csWhole.mode === 'training' && !csTraining) beginTraining2();
@@ -2453,7 +2776,7 @@ function auto2Tick() {
     auto2.note = cmp2 ? MODE_LABEL[cmp2.seq[cmp2.i]] : '';
   } else if (st === 'select the best') {
     // The winner is READ OFF THE TABLE rather than assumed.
-    const keys = ['open', 'ff', 'closed'].filter((m) => board2[m]);
+    const keys = ['open', 'ff', 'learned', 'closed'].filter((m) => board2[m]);
     if (!keys.length) { stopAuto2('auto-tune: nothing scored'); return; }
     let best = keys[0];
     for (const m of keys) if (board2[m].rms < board2[best].rms) best = m;
@@ -2491,9 +2814,10 @@ function lockSensors2() {
 
 function startCompare2() {
   const seq = ['open', 'ff'];
+  if (ff2 && ff2.ready) seq.push('learned');
   if (csWhole && csWhole.mode === 'estimating') seq.push('closed');
   board2 = {}; renderBoard2();
-  cmp2 = { seq, i: 0, wait: WIN2_MOVES };
+  cmp2 = { seq, i: 0, wait: settle2Moves(seq[0]) };
   setCtl2Mode('open');
   run2 = true;
   syncChain();
@@ -2501,8 +2825,8 @@ function startCompare2() {
 
 /** Every chain control, derived in one place. See syncMove() for why. */
 function syncChain() {
-  const ready = !!arm2 && !busy2;
-  const inAuto = !!auto2;
+  const ready = !!arm2 && !busy2 && !learn2 && !comm2;
+  const inAuto = !!auto2 || !!learn2 || !!comm2;
   const canTrain = ready && csWhole && csWhole.mode === 'training' && csWhole.ss.frozen;
   const set = (id, disabled, text) => {
     const el = $(id);
@@ -2520,7 +2844,31 @@ function syncChain() {
   set('cs-train', !canTrain || inAuto,
     csTraining ? 'Pause training ⏸' : 'Start training ▶');
   set('cs-lock', !canTrain || inAuto || csWhole.trained < 400);
+  set('shape2-on', !ready || inAuto || !bend2 || bend2.overdamped);
+  const b = $('state2-badge');
+  if (comm2) {
+    b.textContent = `measuring the bending mode — ${comm2.phase}`;
+    b.className = 'badge warn';
+  } else if (learn2) {
+    b.textContent = `learning the dynamic filter — ${learn2.note || 'settling'}`;
+    b.className = 'badge warn';
+  }
 }
+
+$('shape2-on').addEventListener('change', () => {
+  // The shaper changes the command the filter was fitted against, so the filter goes
+  // with it rather than being applied to a trajectory it never saw.
+  // A MODE WHOSE MACHINERY JUST WENT AWAY MUST NOT STAY SELECTED HERE, but that is a
+  // reason to clear it AT THE EVENT rather than every frame: syncChain() runs on the
+  // frame loop, so doing it there made the selector unselectable rather than refused
+  // -- mode 3's pattern is to keep the selection, run open loop, and say why, and the
+  // suite caught the difference between the two immediately.
+  ff2 = null;
+  if ($('ctl2-mode').value === 'learned') $('ctl2-mode').value = 'open';
+  rebuildProfile2();
+  k2 = 0; win2 = []; board2 = {}; renderBoard2(); stopCompare2();
+  stats2(); syncChain();
+});
 
 $('auto2').addEventListener('click', () => {
   if (auto2) { stopAuto2('auto-tune stopped'); return; }
@@ -2542,7 +2890,7 @@ function win2Stats() {
 }
 
 function renderBoard2() {
-  const keys = ['open', 'ff', 'closed'].filter((m) => board2[m]);
+  const keys = ['open', 'ff', 'learned', 'closed'].filter((m) => board2[m]);
   const el = $('board2');
   if (!keys.length) { el.hidden = true; el.innerHTML = ''; return; }
   el.hidden = false;
@@ -2578,16 +2926,39 @@ function stopCompare2(msg) {
   syncChain();
 }
 
+/**
+ * How many move boundaries a mode gets before its reading is taken: the settling,
+ * plus the WIN2_MOVES periods the window itself is.
+ *
+ * THE CHAIN'S COMPARE HAD BEEN RECORDING NOTHING AT ALL, and the cause is exactly
+ * this second term. Copied from the Move tab, the settling loop cleared the window
+ * at EVERY boundary it waited out -- which is right there, where the window is ONE
+ * move period, so the single period after the last clear fills it. Here the window
+ * is THREE periods (the reference is amplitude-modulated at the golden ratio, so one
+ * period reports where in the beat the reading fell), so one period after the clear
+ * left it a third full, `win2Stats().full` was false, and `recordBoard2()` returned
+ * without writing a row. The table stayed empty, auto-tune reported "nothing scored"
+ * -- and the reason it took a measurement to find is that every mode still RAN, the
+ * sequence still advanced, and the badge still said compare done.
+ */
+function settle2Moves(m) {
+  return (m === 'closed' ? 3 * WIN2_MOVES : WIN2_MOVES) + WIN2_MOVES;
+}
+
 function moveBoundary2() {
   if (!cmp2) { recordBoard2(); return; }
-  if (cmp2.wait > 0) { cmp2.wait--; win2 = []; return; }
+  if (cmp2.wait > 0) {
+    cmp2.wait--;
+    // The last WIN2_MOVES boundaries are the READING; everything before them is the
+    // mode settling, so the window is emptied once, at the changeover between them.
+    if (cmp2.wait === WIN2_MOVES) win2 = [];
+    return;
+  }
   recordBoard2();
   cmp2.i++;
   if (cmp2.i >= cmp2.seq.length) { stopCompare2('compare done — see the table'); return; }
   setCtl2Mode(cmp2.seq[cmp2.i]);
-  // Counted in MOVE boundaries, and the window is WIN2_MOVES of them, so settling
-  // costs that many before a reading is even full.
-  cmp2.wait = cmp2.seq[cmp2.i] === 'closed' ? 3 * WIN2_MOVES : WIN2_MOVES;
+  cmp2.wait = settle2Moves(cmp2.seq[cmp2.i]);
 }
 
 function draw2() {
@@ -2744,16 +3115,49 @@ function stats2() {
     rows.push(['…total', `${fmt(te.total, 3)}`]);
     const m = ctl2Mode(), want = $('ctl2-mode').value;
     const r = refs2();
+    const why = want === 'closed'
+      ? 'the closed loop needs a LOCKED sensor — training on the tracker and then closing a '
+        + 'loop on it is closing the loop on the tracker'
+      : 'the learned filter has not been fitted yet — press Auto-tune. It is also discarded '
+        + 'whenever the shaping or the plant changes under it, because it inverts one plant';
     rows.push(['correction', `<span class="${m === 'open' ? '' : 'good'}">${MODE_LABEL[m]}</span>`
-      + (m !== want ? ' <span class="warn">(the closed loop needs a LOCKED sensor — '
-        + 'training on the tracker and then closing a loop on it is closing the loop on the '
-        + 'tracker)</span>' : '')]);
+      + (m !== want ? ` <span class="warn">(${why})</span>` : '')]);
     rows.push(['pre-distortion at the shoulder', `${(off2Now(r) * 1e3).toFixed(3)} mrad `
       + `(tool radius ${arm2.toolRadius().toFixed(2)})`]);
     const w2 = win2Stats();
     if (w2) {
       rows.push(['tool vs the PROGRAM, last move', `bias ${fmt(w2.bias, 3)} · `
         + `oscillation ${fmt(w2.sd, 3)}${w2.full ? '' : ' <span class="warn">(partial)</span>'}`]);
+      // WHICH HALF THE ERROR IS IN, because that decides which control can touch it.
+      // The same decomposition the Move tab reports, and the same conclusion: a
+      // correction removes the BIAS and a quasi-static one can do nothing about the
+      // ringing, so an rms that is mostly oscillation reads as "the correction did
+      // nothing" when the correction did exactly what it can.
+      const share = w2.rms > 0 ? (w2.sd * w2.sd) / (w2.rms * w2.rms) : 0;
+      const osc = share > 0.5;
+      rows.push(['rms', `${fmt(w2.rms, 3)}   <span class="${osc ? 'warn' : 'good'}">`
+        + `${(100 * share).toFixed(0)}% of it is OSCILLATION</span>`]);
+      rows.push(['…so the rms is limited by', osc
+        ? '<span class="warn">the links ringing. A <b>quasi-static</b> model (② and ③) cannot '
+          + 'cancel a resonance — it maps one instant of the command to one deflection, and a '
+          + 'resonance answers a period later. Two controls can: <b>④ the learned filter</b>, '
+          + 'fitted across a WINDOW of the command so it can invert a ring, and a gentler '
+          + '<b>Move speed</b>, which excites less of one. Auto-tune fits ④ for you.</span>'
+        : '<span class="good">the bias — which is what the correction removes</span>']);
+    }
+    if (bend2) {
+      rows.push(['tool bending mode (measured)', `${bend2.omega.toExponential(3)} rad/step · `
+        + `period ${bend2.period.toFixed(0)} · ζ ${bend2.zeta.toFixed(3)}   `
+        + (shaper2() ? '<span class="good">ZVD shaping ON</span>'
+          : '<span class="warn">shaping off</span>')]);
+    }
+    if (ff2 && ff2.ready) {
+      const st = ff2.status();
+      rows.push(['learned filter', `<span class="good">fitted</span> — ${st.features} features `
+        + `over ${st.taps} taps of the commanded window, from ${st.rows} converged samples`]);
+    } else if (learn2) {
+      rows.push(['learned filter', `<span class="warn">converging — ${learn2.note
+        || 'settling'}</span>`]);
     }
   }
   $('stats2').innerHTML = rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('');
@@ -2909,6 +3313,10 @@ window.__flxChainDbg = () => (arm2 ? {
     dither: ditherAmp2, dithering: csTraining && !!ditherAmp2,
     comparing: cmp2 ? { ...cmp2 } : null },
   auto: auto2 ? { ...auto2, of: AUTO2_STEPS.length, what: AUTO2_STEPS[auto2.step] } : null,
+  learning: learn2 ? { move: learn2.pi, iter: learn2.iter, note: learn2.note } : null,
+  commissioning: comm2 ? { phase: comm2.phase, left: comm2.left } : null,
+  bend: bend2, shaped: !!shaper2(),
+  ff: ff2 ? ff2.status() : null,
   geom: lastGeom2 ? { ...lastGeom2,
     ratio: lastGeom2.trueToolVsMotor !== 0
       ? lastGeom2.drawnToolVsMotor / lastGeom2.trueToolVsMotor : null } : null,
