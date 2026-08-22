@@ -2563,6 +2563,29 @@ if (FULL) {
   await fx.screenshot({ path: join(SHOTS, '07-flexisim-blackbox.png') });
 }
 
+// ---- EVERY PLOTLY CONTAINER NEEDS ITS HEIGHT FROM CSS, and one that does not STROBES.
+// Reported from the device as the Black box tab freaking out; measured, every element on
+// that tab moved ~8 times a second. With no CSS height the container's height comes from
+// its CONTENT, which Plotly is creating, so Plotly renders at its own default, the
+// container grows to match, `responsive:true` sees a resize and re-renders, and the two
+// chase each other. The tab's logic was fine and its stylesheet was one selector short.
+// This reads the ids straight out of the page's own Plotly.newPlot calls, so a chart
+// added to any tab in future is covered without anyone remembering to list it here.
+const plotIds = await fx.evaluate(async () => {
+  const src = await (await fetch(location.pathname, { cache: 'no-store' })).text();
+  return [...src.matchAll(/Plotly\.newPlot\(\s*'([^']+)'/g)].map((m) => m[1]);
+});
+const plotSized = await fx.evaluate((ids) => ids.map((id) => {
+  const el = document.getElementById(id);
+  if (!el) return { id, ok: false, why: 'missing' };
+  const h = getComputedStyle(el).height;
+  return { id, ok: /^\d/.test(h) && parseFloat(h) > 20, h };
+}), plotIds);
+console.log(`  flexisim: chart containers — ${plotSized.map((x) => `${x.id} ${x.h}`).join(', ')}`);
+check('flexisim: every Plotly container gets its height from CSS, so none can strobe',
+  plotIds.length >= 5 && plotSized.every((x) => x.ok),
+  JSON.stringify(plotSized.filter((x) => !x.ok)));
+
 // The in-browser Verify tab runs the same closed forms against the same modules.
 await fx.click('.tab[data-tab="verify"]');
 await fx.click('#verify-run');

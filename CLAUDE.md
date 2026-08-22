@@ -3615,6 +3615,27 @@ one.
    absolute estimate error improved 1.20e-2 → 9.7e-3 while the truth it is divided by got
    four times smaller.
 
+   **THE BLACK BOX TAB STROBED, AND THE TAB'S LOGIC WAS FINE.** Reported from the device
+   as the UI "strobing and switching state and generally freaking out". Measured by
+   sampling every watched element's bounding box once per animation frame: **every element
+   on the tab moved 30–39 times in four seconds**, i.e. about eight times a second, in
+   every phase including idle.
+   THE CAUSE WAS ONE MISSING CSS SELECTOR. `#bb-chart` was not in the rule that gives every
+   other Plotly container `height:170px`, so its height came from its CONTENT — which
+   Plotly is creating. Plotly rendered at its own default, the container grew to match,
+   `responsive:true` saw a resize and re-rendered, and the two chased each other. Adding
+   the id to the existing rule took the geometry churn to **0**.
+   AND THE BADGE WAS UNREADABLE FOR A SECOND REASON: its text carries a per-sample counter
+   and it was written every frame, so it changed on **234 of 235 consecutive frames**. It
+   is now written on the stats cadence — the button states still sync every frame, because
+   those must be right the instant something is tapped, while a label that lags an eighth
+   of a second does not.
+   **THE REGRESSION READS THE IDS OUT OF THE PAGE'S OWN `Plotly.newPlot` CALLS** rather
+   than listing them, so the next chart added to any tab is covered without anyone
+   remembering. This is a whole class of defect the suite could not see: the page had no
+   errors, every functional check passed, and the numbers were all correct — what was
+   wrong was that nothing would hold still to be read.
+
    NOT YET BUILT: the WGSL elastic kernel (see the measurement above); general
    block-sparse bricks for a CLOSED structure — a gantry or a machine frame, where
    members are not separable into per-link frames and the swept box is genuinely

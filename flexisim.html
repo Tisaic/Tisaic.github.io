@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:231,built:"2026-08-22T18:15:11Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:232,built:"2026-08-22T19:16:33Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -35,9 +35,18 @@
     .badge { position:absolute; left:10px; top:10px; font-size:.7rem; padding:4px 8px; border-radius:6px;
       background:rgba(15,23,42,.85); border:1px solid var(--line); color:var(--muted); }
     .badge.r { left:auto; right:10px; }
-    #err-chart, #ss-chart, #chain-chart, #cs-chart, #chain-pos { width:100%; height:170px;
-      margin-top:8px; display:none; }
-    #err-chart.on, #ss-chart.on, #chain-chart.on, #cs-chart.on, #chain-pos.on { display:block; }
+    /* EVERY PLOTLY CONTAINER NEEDS ITS HEIGHT FROM CSS, and a new one that is not in this
+       list STROBES. Reported from the device as the Black box tab freaking out, and
+       measured: every element on the tab moved ~8 times a second. With no CSS height the
+       container's height comes from its CONTENT -- which Plotly is creating -- so Plotly
+       renders at its own default, the container grows to match, `responsive:true` sees a
+       resize and re-renders, and the two chase each other. The fix is one selector, but
+       the failure looks like a bug in the tab's logic rather than in its stylesheet,
+       which is why it is worth naming here. */
+    #err-chart, #ss-chart, #chain-chart, #cs-chart, #chain-pos, #bb-chart { width:100%;
+      height:170px; margin-top:8px; display:none; }
+    #err-chart.on, #ss-chart.on, #chain-chart.on, #cs-chart.on, #chain-pos.on,
+    #bb-chart.on { display:block; }
     code { background:var(--card); padding:.1em .35em; border-radius:5px;
       font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.92em; }
     .controls { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; align-items:center; }
@@ -2081,7 +2090,7 @@ function frame() {
   }
   if (onBlack) {
     drawBB(); syncBB();
-    if (frames % 6 === 0) { bbStats(); bbChart(); }
+    if (frames % 6 === 0) { bbStats(); bbChart(); bbBadge(); }
   }
   const onChain = document.querySelector('.tab[data-tab="chain"]').classList.contains('on');
   if (onChain && comm2 && !busy2) {
@@ -4230,7 +4239,19 @@ function syncBB() {
   if (bb && bb.phase === 'locked' && $('state3-badge').className !== 'badge good') {
     $('state3-badge').className = 'badge good';
   }
-  if (bb) $('state3-badge').textContent = bb.note;
+}
+
+/**
+ * THE BADGE IS WRITTEN ON THE STATS CADENCE, NOT EVERY FRAME. Its text carries a
+ * per-sample counter, and the probe advances more than one sample per frame -- measured,
+ * it changed on 234 of 235 consecutive frames, which is a number nobody can read. The
+ * button states still sync every frame, because those have to be right the instant
+ * something is tapped; a label that lags an eighth of a second does not.
+ */
+function bbBadge() {
+  if (bb && $('state3-badge').textContent !== bb.note) {
+    $('state3-badge').textContent = bb.note;
+  }
 }
 
 $('bb-go').addEventListener('click', startBB);
