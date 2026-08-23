@@ -193,25 +193,23 @@ check('and at this lead it beats the ORACLE persistence too, which needs the tra
   `${clean.forecast.toFixed(4)} vs ${clean.persistTruth.toFixed(4)} `
   + `(${(clean.persistTruth / clean.forecast).toFixed(2)}x)`);
 
-// THE FORECAST IS MORE ACCURATE THAN THE PRESENT-TIME ESTIMATE -- 0.1035 against
-// 0.3645, three and a half times better at predicting 150 steps ahead than at
-// reporting now. The pairing is verified by the alignment check below and the
-// scoring window is the same, so the effect is real rather than a bookkeeping
-// artefact.
-//
-// I DO NOT HAVE A CLEAN MECHANISM FOR IT, AND THE OBVIOUS ONE DOES NOT SURVIVE
-// MEASUREMENT. A motor-to-tip transport delay would explain it, and a quarter of
-// the gearbox period (~260 steps) is the right order. But the instrument that
-// would locate that delay -- where the PURE MOTOR-SIDE compliance baseline best
-// lines up with the tip's truth -- reports 52 samples at a correlation of only
-// 0.50, far too flat a peak to read a delay off. Naming a number from the gearbox
-// period and calling it the cause would be fitting an explanation to a result.
-//
-// WHAT IS MEASURED, and it is the falsifiable part: the sweep in the full tier
-// finds an INTERIOR minimum -- worse at a shorter lead AND at a longer one -- which
-// is what any delay-like explanation predicts and what plain extrapolation does
-// not, since extrapolation can only get harder with distance. Persistence, which
-// has no structure to fall back on, degrades monotonically as it must.
+// THE FORECAST IS MORE ACCURATE THAN THE PRESENT-TIME ESTIMATE HERE -- 0.1035
+// against 0.3645 -- AND THE MECHANISM, FOUND LATER, IS THE PROTOCOL RATHER THAN
+// THE SENSOR (brick 39; the owner's own read -- "the estimation error is not a
+// lead" -- is what prompted the measurement). This session drives the arm OPEN
+// LOOP in torque, and the symmetric profile walks the pose -3.3 rad across the
+// training window through stiction asymmetry, so pose and time are confounded in
+// the training data and the truth carries a slow drift. The frozen ESTIMATE
+// inherits a growing bias -- measured -0.007 std early in training rising to
+// -0.47 std by the end of the locked window -- while the forecast's weight vector
+// happens to cancel the drift direction. NO TIME SHIFT REMOVES ANY OF IT: the
+// best pure shift of the estimate against the truth is exactly 0 samples, in this
+// protocol and in every other one measured. Under a POSITION SERVO -- the regime
+// the page runs and a production machine lives in -- with the move amplitude
+// modulated at the golden ratio so no two cycles repeat (brick 16's recall rule),
+// the estimate reads 0.046, the forecast 0.040: a 1.1x gap and a flat bias. The
+// full tier pins that below. The open-loop numbers in this section stay as the
+// record of what an unregulated pose distribution does to a frozen readout.
 //
 // EITHER WAY IT IS THE USEFUL DIRECTION: a correction takes effect after the loop
 // closes and the mechanism moves, so a compensator driven by an estimate needs the
@@ -236,6 +234,73 @@ check('the forecast lines up with the truth at its trained lead, to a sample',
 check('and it correlates with the truth better than the present-time readout does',
   clean.fcLag.r > clean.estLag.r,
   `${clean.fcLag.r.toFixed(4)} vs ${clean.estLag.r.toFixed(4)}`);
+
+// ==================== CLOSED LOOP: THE ESTIMATION ERROR IS NOT A LEAD (brick 39)
+//
+// The 3.5x forecast-over-estimate gap above is a property of the OPEN-LOOP torque
+// protocol (the pose walks, the frozen readout drifts), not of the sensor. This
+// pins the corrected claim on the regime a machine actually runs: a position
+// servo, with the move amplitude modulated at the golden ratio so no two cycles
+// repeat and the score is generalisation rather than recall (brick 16's rule).
+// Three things must hold: no time shift improves the estimate (the error is not a
+// lead), the bias stays flat (no drift), and estimate and forecast agree to 1.5x
+// (the "predicting ahead is easier" gap does not exist here).
+if (process.env.SUITE === 'full') {
+  const { AngleProfile, PositionServo } = await import('../../lib/flexisim/compensator.js');
+  const link = await buildLink({ length: LEN, section: H, clamp: CLAMP, E, nu, rho,
+    gravity: [0, 0, 0], damping: 3e-3 });
+  const mp = massProperties(link);
+  const joint = new Joint({ ratio: 100, motorInertia: mp.inertiaAboutPivot / 1e4,
+    loadInertia: mp.inertiaAboutPivot, stiffness: K_NOMINAL,
+    damping: 2 * Math.sqrt(K_NOMINAL * (mp.inertiaAboutPivot / 2)), backlash: 0 });
+  const arm = new FlexArm({ joint, link, gravityWorld: [0, -2e-6, 0], dt: 1 });
+  const prof = new AngleProfile({ span: 0.6, accelSteps: 200, cruiseSteps: 300, dwellSteps: 150 });
+  const servo = new PositionServo({ kp: 3e-2, kd: 6e-2, inertia: mp.inertiaAboutPivot, ratio: 100 });
+  const ts = new TipSensor({ sampleEvery: 10, lag: 6, stride: 2, warmup: 200, lead: LEAD });
+  const W = 2 * Math.PI / (prof.period * 1.6180339887);
+  const refAt = (k) => {
+    const r = prof.at(k);
+    const m = 1 + 0.35 * Math.sin(W * k), md = 0.35 * W * Math.cos(W * k),
+      mdd = -0.35 * W * W * Math.sin(W * k);
+    return { theta: m * r.theta, omega: m * r.omega + md * r.theta,
+      alpha: m * r.alpha + 2 * md * r.omega + mdd * r.theta };
+  };
+  const est = [], truth = [], fc = [];
+  let k = 0, tau = 0, seen = 0;
+  for (let s = 0; s < 1700; s++) {
+    for (let i = 0; i < 10; i++) { tau = servo.torque(refAt(k), arm.encoder()); arm.step(tau, 1); k++; }
+    const y = ts.observe(arm, tau);
+    const e = arm.tipError();
+    if (y === null) continue;
+    if (seen++ < 1000) { ts.train(e.total); continue; }
+    if (ts.mode === 'training') ts.lock();
+    est.push(y); truth.push(e.total); fc.push(ts.forecast);
+  }
+  await link.destroy();
+  const cl = { est: nrmse(est, truth) };
+  let bestS = 0, bestV = Infinity;
+  for (let s = -40; s <= 40; s++) {
+    const p = [], w = [];
+    for (let i = 0; i < est.length; i++) {
+      const j = i + s;
+      if (j < 0 || j >= truth.length) continue;
+      p.push(est[i]); w.push(truth[j]);
+    }
+    const v = nrmse(p, w);
+    if (v < bestV) { bestV = v; bestS = s; }
+  }
+  cl.fc = nrmse(fc.slice(0, fc.length - LEAD), truth.slice(LEAD));
+  console.log(`    [closed loop] estimate ${cl.est.toFixed(4)}  forecast ${cl.fc.toFixed(4)}  `
+    + `best shift ${bestS} (${bestV.toFixed(4)})  [open loop was ${clean.learner.toFixed(4)} / `
+    + `${clean.forecast.toFixed(4)}]`);
+  check('under a servo, no time shift improves the estimate — the error is not a lead',
+    Math.abs(bestS) <= 1, `best shift ${bestS}`);
+  check('…and the estimate is an order better than the open-loop protocol\'s',
+    cl.est < 0.15, cl.est.toFixed(4));
+  check('…and the forecast advantage is gone: the two agree within 1.5x',
+    cl.fc < 1.5 * cl.est && cl.est < 1.5 * cl.fc,
+    `${cl.est.toFixed(4)} vs ${cl.fc.toFixed(4)}`);
+}
 
 // ============================ PATH DEPENDENCE: THE CLAIM THAT NEEDED A PLANT
 //

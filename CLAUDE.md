@@ -411,7 +411,12 @@ that matches it** — the point-to-point tabs measure a different question.
   commissioned once from noise by one button, deploys only if its own verify round
   measured an improvement on the machine, then cuts programs it has never seen (6.2× on
   the rectangle — BELOW ILC's fourteen-lap converged figure, first part, fewer reversals,
-  36% less copper — 7.0× on the circle). **Sweep feedrate**
+  36% less copper — 7.0× on the circle). The pilot does not even need the KINEMATICS:
+  fed only held tracker points during commissioning it fits the direct inverse
+  (x,y)→commands itself (1.2e-4 rad holdout from 180 points), and holding real path
+  points that learned map beats the analytic ik() 23–44× statically — the analytic
+  kinematics commands the drawing, the learned map commands the machine, droop and
+  wind-up included (brick 40; `test/pilot/ikfree.test.mjs`). **Sweep feedrate**
   runs the whole ladder and tabulates the trade. The arm is drawn at TRUE geometry; the error trail
   is the exaggerated object, pushed out along the path normal only.
 - **④ Black box** — `lib/blackbox/`, a controller GIVEN NOTHING: a scalar command it can

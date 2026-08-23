@@ -2989,3 +2989,116 @@ one-shot decision, not by ability. The one-shot line on this machine: rectangle
 2.178e-2, BELOW ILC@15's 2.53e-2; circle 5.05e-3 at the oracle floor against a 9.3e-4
 target that one deployed lap would meet. Stated, with the price of crossing it measured:
 one lap.
+
+## Brick 39 — the estimation error was never a lead, and the 3.5× was the protocol
+
+The owner looked at the soft sensor and said the estimation error is not a lead. That
+is the opposite of the flavour brick 11 left — a forecast 3.5× better than the
+present-time estimate, an interior minimum over lead, a "lead deficit", a mechanism
+declared unexplained — so it was measured rather than argued with. The owner is right,
+and the measurement dismantles brick 11's headline.
+
+### No shift helps, anywhere
+
+Sweep a pure time shift of the locked estimate against the truth, ±40 samples, on the
+open-loop session brick 11 was measured on: **the best shift is exactly 0** (0.3645;
+±10 samples reads 0.52, ±20 reads 0.79). Not a lead, not a lag — the error has no
+alignment structure at all. The same sweep under every other protocol below also
+returns 0.
+
+### What it actually was: an affine sweep found a growing bias
+
+A gain-and-offset fit takes the estimate from 0.3645 to **0.1920** — half the error was
+a constant-ish bias, and tracked by decile it is not constant but GROWING: −0.007 std
+of the truth early in training, −0.15 in the first half of the locked window, **−0.47**
+by the end, while the forecast's bias holds at −0.05 throughout. A frozen readout
+drifting away from a plant that is going somewhere.
+
+### Where the drift comes from: the test protocol, not the sensor
+
+The brick-8/11 session drives the arm OPEN LOOP in torque. The move profile is
+symmetric, but stiction asymmetry walks the pose **−3.3 rad across the training
+window** — pose and time perfectly confounded in the training data — and the truth
+carries a slow component the frozen weights mis-extrapolate once the walk stops.
+Under a POSITION SERVO — the regime the page runs and any production machine lives in —
+the pose distribution is stationary and the story inverts:
+
+  servo, periodic move          estimate **0.0033**  forecast 0.0034   (recall regime)
+  servo, golden-ratio modulated estimate **0.0459**  forecast 0.0402   (generalisation)
+
+The modulated row is the honest one (brick 16's rule: an exactly periodic stream lets a
+big basis score by remembering where in the cycle it is). Estimate and forecast agree
+to **1.1×**; the bias deciles wobble around zero; the best shift is 0. "Predicting
+ahead is easier than predicting now" was never a property of the sensor — it was a
+property of an unregulated pose distribution meeting a frozen linear readout. The
+full tier now pins all three corrected claims (shift 0, estimate < 0.15, agreement
+within 1.5×) on the servo-driven modulated stream.
+
+The lesson is brick 8's, third time through: a surprising measurement is a reason to
+check the instrument — and the "instrument" here was the whole test protocol. The
+open-loop numbers stay in the record as what they are: a measurement of what pose
+drift does to a frozen readout, mislabelled as a measurement of forecasting.
+
+## Brick 40 — the kinematics were never given, and the learned inverse beats the drawing
+
+The owner asked for a test where the system is not given the kinematics — no link
+lengths, no ik(), no Jacobian — to see whether it can solve the inverse as part of the
+learning. It can, and the strong half of the result was not that it matches the
+analytic kinematics but that it is an order better statically, because the two are not
+answers to the same question: the analytic ik() commands the DRAWING — rigid geometry —
+while the learned map was trained on where the tool of the real machine actually
+settles, gravity droop, gearbox wind-up and backlash mean included. Robot
+calibration's classic result, produced by route–limit–run with zero geometric
+knowledge.
+
+### The commissioning
+
+Visit held points inside the engineer's command box (quintic eases at the routed
+limits, settle, read the tracker), record (tool x,y → channel commands), and fit the
+DIRECT INVERSE with an agnostic polynomial ridge basis. 180 points cost 204 seconds of
+machine time. The degree ladder, holdout every fourth pair:
+
+  degree 4 → 2.5e-3 rad    degree 6 → 4.8e-4 rad    degree 8 → **1.17e-4 rad**
+
+healthy to the end (train 6.1e-5 against holdout 1.2e-4 at degree 8 — basis-limited,
+not memorising). 90 points carry degree 7 to 2-4e-4 rad, which is what the committed
+full-tier check uses.
+
+### Measured on the machine, holding twelve real path points each
+
+  circle   analytic ik 4.51e-2 (max 6.4e-2)   learned **1.02e-3** (max 2.7e-3)   44x
+  rounded  analytic ik 4.64e-2 (max 6.9e-2)   learned **2.04e-3** (max 6.3e-3)   23x
+
+The 4.5e-2 the analytic kinematics leaves is the machine's static droop and wind-up —
+error the drawing cannot know. At production feed, open-loop laps are
+dynamics-dominated and the static win is buried (circle 7.10e-2 → 6.42e-2, rounded a
+tie), which is the expected shape: geometry decides where you settle, dynamics decide
+how you move.
+
+### The full chain, with the pilot on top and no kinematics anywhere
+
+The pilot's commissioning truth was re-routed through the learned map itself —
+`inv(tracker) − command`, the deviation in command coordinates — so the entire chain
+from Cartesian program to motor command contains no analytic kinematics at all:
+geometry from the tracker, dynamics from the pilot's noise excitation, routing from
+the same fitted map.
+
+  circle   6.42e-2 → **1.69e-2** (3.8x)   [analytic + pilot: 1.02e-2]
+  rounded  1.33e-1 → **2.37e-2** (5.6x)   [analytic + pilot: 2.18e-2]
+
+Within 9% of the analytic-kinematics system on the rectangle; the circle carries a
+0.7e-2 penalty from the noisier truth channel (verify 1.46x against the analytic
+routing's 2x+), which is the honest cost of not knowing the geometry, stated rather
+than hidden.
+
+### The defect on the way, and it is a lesson about degree
+
+The first composed run was REFUSED — verify 1.01x, the pilot's own gate holding. The
+truth routing used the degree-8 geometry fit, evaluated at the MOVING tool during
+excitation; a high-degree polynomial leaves the training hull violently, the truth
+channel spiked, and every fit downstream was poisoned. The fix is a division of
+labour: the geometry keeps degree 8 (evaluated only on the program, deep inside the
+hull) and the ROUTING gets its own degree-5 fit with inputs clamped to the hull —
+truth peak 0.055 rad, zero spikes, verify 1.46x, deploys. A map used as an instrument
+has different requirements from the same map used as an answer: the instrument must
+above all fail gently.
