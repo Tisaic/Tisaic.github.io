@@ -2925,3 +2925,67 @@ What would move the circle without iteration, in order of plausibility: directio
 forecast features (the AxisComp direction-bit lesson — a linear readout cannot represent
 a sign discontinuity, and sgn(v) features can carry backlash), or a smaller backlash. On
 a machine with tighter gears than 2e-4 rad of lost motion, the burst shrinks with it.
+
+## Brick 38 — nine nulls, and the burst that was never a burst
+
+Brick 37 closed with a mechanism and a prediction: the circle's residual was "one
+localised burst per lap, the size of the backlash lost-motion", and direction-aware
+features were the plausible lever. This brick overturns both. It is the record of
+exhausting the one-shot levers, and the levers are now exhausted — every candidate below
+was MEASURED, on the oracle (the machinery fed a perfect recording of the repeatable
+error, so nothing here is confounded by forecast quality).
+
+### The burst re-attributed (rule 14, twice in one turn)
+
+Profile the FREE error around the lap in 24 bins: it peaks at 1.2–1.8e-2 in exactly the
+bins where the residual "burst" sits, against 4.6e-4 on the quiet stretches. The residual
+is not a localised event on a clean floor — it is the free error's own shape at a uniform
+~8–12%, everywhere. The burst was where the free error is big, nothing more. The
+backlash-lost-motion size match in brick 37 was a coincidence that a localisation profile
+of the free error would have caught immediately; brick 37 profiled the RESIDUAL and
+never the free error beside it. Rule 6's own instrument, pointed at the wrong trace.
+
+The second rule-14 catch: a twin fit (identical scribble with and without dither,
+difference = H·u exactly) read the moving-regime response DC as 0.91–0.93 against the
+held probe's ~1.0 — suspiciously equal to the uniform shortfall. Sweeping the MODEL's h
+gain over 0.85–1.0 on the oracle settled it: monotone worse as the gain drops, on both
+shapes (circle 5.05e-3 at 1.00 → 1.18e-2 at 0.85). Unity is correct; the twin's DC was
+the instrument — regression bias on a finite record — not the plant.
+
+### The nulls, each with its number
+
+| # | lever | verdict |
+|---|---|---|
+| 1 | pose-scheduled h (DC varies 0.4% over the box) | null |
+| 2 | dwell / time-warped excitation | null on the square, negative elsewhere |
+| 3 | decision grid 8 → 2 | null |
+| 4 | QP iterations 60 → 300 | worse (brick 37) |
+| 5 | probe DC tail — a real 3% creep found by a 12–16k hold | null deployed |
+| 6 | twin moving-regime h substituted for the probe's | worse |
+| 7 | direction features tanh(Δcmd/v₀), four leads | never better, burst rmse worse |
+| 8 | full-support h tail in the past-u bookkeeping | null (5.05e-3 → 5.50e-3) |
+| 9 | model h gain 0.85–1.0 | monotone worse; unity correct |
+
+Also killed on the way: the dead-zone theory (twin fit split near/away from command
+reversals — response DC 0.915 vs 0.918 and 0.872 vs 0.877; identical, no authority
+collapse at reversals).
+
+### What is left, and why it is a boundary and not a defect
+
+The ledger, circle at feed 4e-3: open 7.1e-2 → live pilot 1.02e-2 (7.0×) → oracle with a
+PERFECT free-error recording 5.05e-3 (14×) → target 9.3e-4. The machinery is exact
+(2.7e-6 in pure sim), h is correct at unity, and every parameterisation of a better
+response model — scheduled, moving-regime, longer-tailed, gain-trimmed, sign-featured —
+measured null. What remains is uniform, proportional to the free error, and therefore
+not IN the response model at all: **applying the correction changes the state path, and
+the state-dependent disturbance the recording was made against moves with it, by about a
+tenth of itself.** e_free(corrected trajectory) ≠ e_free(free trajectory), and no
+measurement taken without deploying can know the first one.
+
+The measurement that would change the answer (rule 59): one lap cut UNDER the
+correction, folded back in — the iterated oracle reads 8.2e-4 in a single pass, at the
+fifteen-lap learner's level. That is ILC's information channel, excluded here by the
+one-shot decision, not by ability. The one-shot line on this machine: rectangle
+2.178e-2, BELOW ILC@15's 2.53e-2; circle 5.05e-3 at the oracle floor against a 9.3e-4
+target that one deployed lap would meet. Stated, with the price of crossing it measured:
+one lap.
