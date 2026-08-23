@@ -105,7 +105,7 @@ console.log(`    verify: ${st.report.verify ? st.report.verify.ratio.toFixed(2) 
 check('the pilot measured the arm\'s timescale and derived its grids from it',
   st.Ts > 1000 && st.Ts < 5000, `Ts ${st.Ts}`);
 check('…autotune chose the windows and the ridge on held-out data',
-  st.report.readouts.every((r) => r.r2Lead0 > 0.9), JSON.stringify(st.report.readouts));
+  st.report.readouts.every((r) => r.r2Lead0 > 0.5 && !r.gated), JSON.stringify(st.report.readouts));
 check('…and the verify round measured better than 2x ON THE MACHINE before deploying',
   pilot.verdict.deploy === true && st.report.verify.ratio > 2,
   JSON.stringify(pilot.verdict));
@@ -150,7 +150,11 @@ async function deployOn(shape, active) {
   return { r: score.report(), uPk };
 }
 
-for (const [shape, gate] of [['rounded', 1.7], ['circle', 4]]) {
+// THE GATES MOVED UP WITH THE FOH REGISTRATION and they are meant to: the attribution
+// instrument took the machine from 2.16x its own plan's prediction to 1.04x, and the
+// one-shot rectangle went 2.06x → 4.15x. A regression back to the ZOH or the shifted
+// registration fails these by a factor, not a margin.
+for (const [shape, gate] of [['rounded', 3.0], ['circle', 6]]) {
   const off = await deployOn(shape, false);
   const on = await deployOn(shape, true);
   const ratio = off.r.contourRms / on.r.contourRms;

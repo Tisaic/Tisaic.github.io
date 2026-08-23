@@ -46,7 +46,7 @@ const LIMS = [{ lo: -0.9, hi: 0.1, vMax: 5e-4, aMax: 2e-6, jMax: 5e-8 },
   // A workspace that rejects part of the box: the span SHRINKS and the predicate holds
   // on every sample — the trajectory is never allowed to visit what the machine cannot.
   const ws = (q) => q[0] > -0.75 && q[1] < 2.45;
-  const e = buildExcitation({ channels: LIMS, steps: 8000, start: [-0.2, 2.0],
+  const e = buildExcitation({ channels: LIMS, steps: 30000, start: [-0.2, 2.0],
     workspace: ws, seed: 3 });
   let ok = true;
   for (let k = 0; k < e.total; k++) if (!ws([e.pos[0][k], e.pos[1][k]])) ok = false;
@@ -54,10 +54,39 @@ const LIMS = [{ lo: -0.9, hi: 0.1, vMax: 5e-4, aMax: 2e-6, jMax: 5e-8 },
     ok && e.meta.shrink < 1, `shrink ${e.meta.shrink.toFixed(3)}`);
   let threw = false;
   try {
-    buildExcitation({ channels: LIMS, steps: 2000, start: [-0.2, 2.0],
+    buildExcitation({ channels: LIMS, steps: 30000, start: [-0.2, 2.0],
       workspace: () => false, seed: 3 });
   } catch (err) { threw = /workspace/.test(err.message); }
   check('…and a workspace that rejects everything refuses with a reason, not a loop', threw);
+}
+
+{
+  // LIMITS THE DURATION CANNOT SATISFY ARE A REFUSAL, NOT A DEGRADED RESULT. At jerk
+  // 5e-8 the velocity limit alone takes ~4500 steps to reach, so an 8000-step scribble
+  // across a 1-radian box does not exist — and the first version of this builder
+  // "succeeded" anyway, by escalating its corner period to 2.4e16 until the trajectory
+  // went FLAT: a flat line passes every rate limit while exciting nothing. Coverage is
+  // now part of the acceptance, and the impossible case says what to change.
+  // dwell: true, because that is where the pathology lived — the warp's renormalisation
+  // amplifies every derivative, the corner period escalates without bound, and at this
+  // duration nothing satisfiable remains. With the warp off the same duration is
+  // legitimately feasible, and it builds (checked below rather than assumed).
+  let threw = false;
+  try {
+    buildExcitation({ channels: LIMS, steps: 8000, start: [-0.2, 2.0], seed: 3, dwell: true });
+  } catch (err) { threw = /cannot traverse|approach alone|rate limit/.test(err.message); }
+  check('a duration these limits cannot fill refuses with the remedy, instead of '
+    + 'returning a flat line that excites nothing', threw);
+  // The unwarped case at 8000 steps refuses too, and legitimately: the approach ramp
+  // alone, at the 20% of vMax the blend reserves, needs ~14.6k steps for this reach —
+  // asserted rather than assumed, because the first version of this check claimed it
+  // would build and the builder correctly disagreed. (That 30000 steps DOES build at
+  // full span is what the first block of this file pins.)
+  let threw8 = false;
+  try {
+    buildExcitation({ channels: LIMS, steps: 8000, start: [-0.2, 2.0], seed: 3 });
+  } catch (err) { threw8 = /excitation/.test(err.message); }
+  check('…and the unwarped case refuses too — the approach alone cannot fit', threw8);
 }
 
 {

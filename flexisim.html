@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:241,built:"2026-08-23T20:01:08Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:242,built:"2026-08-23T20:56:06Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -584,15 +584,20 @@
       controller on the machine against doing nothing, interleaved; <b>deploy</b> only if that
       measured an improvement. Runtime is a warm-started box-QP over a ladder of forecast
       readouts — fixed iteration count, PLC-shaped.
-      <br /><br />Measured here, one commissioning (~110k steps, about a minute of machine
+      <br /><br />Measured here, one commissioning (~128k steps, about a minute of machine
       time), then programs it has <i>never seen</i>: rounded rect contour
-      <b>1.34e-1 → 5.6e-2 (2.4×)</b>, circle <b>7.1e-2 → 7.8e-3 (9.1×)</b> — both on <b>less</b>
-      copper loss than the open loop. Against ④: the learner needs 12+ laps of <i>the same
-      part</i> to reach 2.6e-2 on the rectangle and transfers only partially to the next part;
-      the pilot needs no laps of anything, and a cutting load that makes ④ two to six times
-      <i>worse</i> leaves the pilot still (mildly) helping. The multisine-vs-noise finding,
-      the seam jerk, the probe-vs-regression split and every other number are in
-      <code>docs/history/flexisim.md</code>.
+      <b>1.34e-1 → 3.2e-2 (4.2×)</b>, circle <b>7.1e-2 → 8.7e-3 (8.1×)</b> — both on <b>less</b>
+      copper loss than the open loop, and the rectangle within 28% of what ④ needs
+      <b>fourteen laps of that exact part</b> to reach, at half ④'s torque reversals. The jump
+      from the first shipped 2.1× came from an <b>attribution instrument</b>: the QP's own
+      predicted residual against what the machine delivered read 2.16×, which said the plan
+      was being executed wrongly rather than forecast wrongly — two timing-registration
+      defects later (the response is now taken against the interpolation's own triangular
+      basis, correctly registered) it reads <b>1.04×</b>, and the machine does what the plan
+      says. A cutting load that makes ④ two to six times <i>worse</i> leaves the pilot still
+      helping. The square stays at ~1.7×: its corners pin the correction at the engineer's
+      own cap and are where a generic forecast is weakest — an authority limit, stated, not a
+      mystery. Every number is in <code>docs/history/flexisim.md</code>.
     </div>
     <div class="note">
       <h3>What the picture is, exactly</h3>

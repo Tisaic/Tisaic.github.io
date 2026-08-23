@@ -2769,3 +2769,91 @@ one frame later is a race: measured, a "full lap" read **131 steps** of the next
 smoke check now takes its snapshot INSIDE the wait predicate — the JSON it asserts is the
 JSON that satisfied the wait — and the browser and Node instruments agree: full lap 6887
 steps, contour 6.9e-2, τ² 2.99e-4 against the open loop's 5.93e-4.
+
+---
+
+## Brick 36 — hardening the Pilot, and the attribution instrument that found 2× hiding in plain sight
+
+The question that drove this brick came from outside: *ILC eventually draws the shape
+nearly perfectly — that proves the machine is capable of that accuracy without ILC, so how
+do we get there?* The reasoning is exactly right: ILC converging to 2.53e-2 is an
+existence proof that a correction sequence within the actuators' reach achieves it. The
+pilot's 6.5e-2 was therefore model error somewhere, and the job was to find WHERE.
+
+### Two hypotheses measured dead before the real one was found
+
+**Pose scheduling: null.** The stated caveat — "the probe response is taken at one pose" —
+was the obvious suspect on an arm whose inertia varies 2× with the elbow. Probed at five
+poses across the commissioning box: DC 0.942–0.946 (**0.4%**), t50 within ±20 steps, shape
+max deviation ≤ 2%. The u→e response is servo-and-gearbox dominated and the pose variation
+is simply not there to schedule against. Cross-coupling peaks at 2.8% at the extended pose
+(5× the centre's figure, still small). Not built, and now the caveat carries a number.
+
+**Dwell coverage: null where it mattered, negative elsewhere.** Programs brake to near
+rest at corners; the scribble never stops; hypothesis — that regime gap explains the
+square's 1.6×. A time-warp (the scribble's own feedrate profile: smooth rate dips to a 2%
+floor, position coverage preserved) was built and measured: square 1.64× → 1.69×
+(nothing), rounded rect 2.10× → 1.79×, circle 7.10× → 4.87×. Crawling 60% of the time
+starves the fits of information about the dynamics that matter at speed and buys nothing
+at the corners. Default off; the option stays with the measurement in its comment, because
+a heavier-stiction plant may answer differently.
+
+The detour paid anyway: it caught the excitation builder RETURNING A FLAT LINE when limits
+and duration were incompatible — the corner period escalated to 2.4e16, the trajectory
+went flat, and a flat line passes every rate limit while exciting nothing. Coverage is now
+part of the acceptance, refusals name the dominant cause across attempts (a single
+attempt's tune failure had been masking "the workspace rejects everything"), and an
+infeasible excitation is a REFUSAL with a remedy, not a crash. It also caught the held-out
+TAIL metric collapsing on a warped record (R² 0.37 beside a 15× verify — the tail landed
+on a quiet stretch and R² is against the tail's own variance; rule 19). Validation is now
+two blocks spread through the record, weights refit on everything.
+
+### The attribution instrument, and what it found
+
+One new number: at every control tick, record what the QP's own model PREDICTS the lead-0
+residual will be, and compare with what the machine delivers. On the rounded rectangle:
+predicted **2.8e-3**, delivered **6.1e-3** — ratio **2.16**. The forecast (held-out R²
+0.99) could account for almost none of that. So the plan was right and its EXECUTION was
+mismodelled — and the predicted residual, 2.8e-3, was already ILC-class. The whole gap to
+ILC was in how the plan mapped onto the machine.
+
+Two timing-registration defects, found in order:
+
+1. **The QP's T used zero-order-hold grid differences of the step response, but the
+   runtime applies u LINEARLY INTERPOLATED between ticks** — each decision reaches the
+   plant as a triangle spanning two grid intervals, not a held step. Planning against a
+   command the runtime never sends carries a built-in half-grid timing bias. T now uses
+   the response to the interpolation's own triangular basis, computed numerically from the
+   probe's per-sample response. Attribution 2.16 → 1.80; rounded 2.06× → 2.44×.
+2. **The triangle was registered one grid early** — crediting every decision with a full
+   grid of delivery it had not made. A decision made NOW starts rising NOW: its effect at
+   lag m grids is the response at m·g, and h[0] is exactly zero because a correction that
+   has not risen has not arrived. Attribution 1.80 → **1.04**; rounded 2.44× → **4.15×**.
+
+### Where it stands
+
+| | contour | ∫τ² | torque rev |
+|---|---|---|---|
+| open loop | 1.343e-1 | 5.93e-4 | 12 |
+| pilot, first part ever | **3.23e-2 (4.15×)** | **4.00e-4** | **16** |
+| ILC, lap 14 of that part | 2.53e-2 (5.3×) | 3.92e-4 | 34 |
+
+The machine now executes the pilot's plan to 4%; the one-shot controller sits within 28%
+of the fourteen-lap learner, on less copper and half the reversals, and the circle reads
+**8.1×**. What remains on the rectangle is the forecast floor itself (the predicted
+residual), and on the square (still ~1.65×, λ-insensitive, attribution 2–3.5) the
+diagnosis is different and stated: the corners PIN u AT THE ENGINEER'S OWN CAP and are
+exactly where a generic forecast is weakest — an authority limit with two named levers
+(raise uMax, or corner-shaped features), not a hidden defect.
+
+### The rest of the hardening
+
+A quantised encoder and a dirty tracker still commission, verify honestly and deploy
+(23.7× on the noisy synthetic — while running at 1.6× the commissioned velocity, which the
+new ENVELOPE REPORT correctly flagged 1465 times: the first version of that check asserted
+zero and the instrument was right, the test's assumption was wrong). Deployment outside
+the envelope is measured graceful (1.63× at feed 1e-2 against 2.1× inside, at the time),
+so the report informs rather than interlocks. A channel whose forecast fails held-out
+validation is disarmed rather than deployed on hope, refusals are ordered by cause (a
+probe that saw nothing is a routing problem; every downstream symptom follows from it),
+and an infeasible excitation inside the pilot is a verdict, not an exception.
