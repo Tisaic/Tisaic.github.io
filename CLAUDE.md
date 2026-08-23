@@ -3760,6 +3760,162 @@ one.
    model buys nothing, and every one of the five defects above was a modelling or
    measurement defect rather than a control-theoretic one.
 
+   **BRICK 29 — THE CONSTRAINED OPTIMUM, AND THE ROUND THAT DECIDES HAD TO MOVE ONTO THE
+   MACHINE.** Brick 28 closed by naming the constrained design as the open step, on the
+   grounds that Pontryagin says the optimum under an active limit is not the clipped or
+   detuned unconstrained one. It is built (`lib/blackbox/qp.js`), it is worth what the
+   theory says where the limit binds, it is worth LESS THAN NOTHING where it does not —
+   and finding that out cost the module its offline decision rule. Final, three plants
+   that share no physics: **A 1.17× · B 3.59× · C 4.30×**, against 1.22 / 2.86 / 3.92
+   before.
+
+   **WHAT IT IS.** A box-constrained QP over a receding horizon of the command's own
+   look-ahead, `min ‖d + Tu‖² + λ‖Du‖²` s.t. `|u_i| ≤ U`, solved by accelerated projected
+   gradient with a FIXED iteration count. Fixed, because an interior-point or active-set
+   solver has data-dependent run time and a cyclic task can only be given a number known
+   before it runs. The projection is a clamp, so there is no factorisation, no active-set
+   bookkeeping and no matrix inverse anywhere in it.
+   **AND IT COSTS ONE MAP PREDICTION PER UPDATE, exactly like the filter it competes
+   with** — the horizon of predicted disturbance is a ring with one new entry at the far
+   end, not `horizon` fresh evaluations. Getting that wrong would multiply the map's cost
+   by the horizon and put the whole thing outside any cycle budget.
+
+   **THE SOLVER IS CHECKED AGAINST THE PROBLEM, NOT AGAINST A CLOSED-LOOP SCORE**, because
+   a subtly wrong solver produces a plausible command and no score can attribute the
+   shortfall. The adjoint identity `⟨Tx,y⟩ = ⟨x,Tᵀy⟩` holds to 1e-12 (this project shipped
+   a convolution the wrong way round once already); with the box wide open it reaches the
+   exact unconstrained solution; at a binding box it satisfies KKT to **2.6e-16** with 17
+   of 24 variables ON the bound; it never leaves the box; and against a constant
+   disturbance it settles on the exact DC inverse.
+   **THE CLAIM THE OBJECT EXISTS FOR, IN ONE NUMBER: the constrained optimum beats the
+   clipped unconstrained one by 1.26× in objective.** If it did not, this file could be a
+   clamp on the filter's output and none of the rest would be needed.
+
+   **MEASURED ON THE ARM**, improvement against no correction — the detuned filter (one
+   gain, effort weight raised until its peak meets the limit), the loose filter hard
+   CLIPPED at the same limit, and the constrained solve:
+     limit 0.10 of the command's swing   1.09× · 1.07× · **1.21×**
+     limit 0.25                          1.18× · 1.19× · **1.50×**
+     limit 0.50                          1.41× · 1.43× · **1.95×**
+     limit 1.00                          1.74× · 1.91× · **2.56×**
+     limit 2.00                          2.74× · **2.95×** · 2.81×
+   The constrained one's peak sits exactly ON the limit in every row with 0% of samples
+   over it, which is the half a filter cannot promise at all — a filter meets a peak limit
+   by being detuned EVERYWHERE, and does not actually guarantee it on a stretch of command
+   it was not designed against.
+   **AND THE LAST ROW REVERSES, WHICH IS THE HONEST HALF.** At a limit that does not bind
+   there is nothing to be constrained about, and the fixed iteration count makes the solve
+   approximate where the filter is exact, so it loses by ~5%. It is not a better design,
+   it is a design for a different situation.
+
+   **THE WARM START MAKES IT NEARLY FREE, AND THAT IS THE MEASUREMENT THAT MAKES IT
+   DEPLOYABLE.** Between updates the horizon shifts by exactly one sample, so the previous
+   solution shifted along is already very nearly right. At limit 0.25:
+     1 iteration   1.443×    2896 MAC/update      58 MAC/cycle spread
+     2             1.467×    5072               101
+     4             1.484×    9424               188
+     8             1.495×   18128               363
+    12             1.500×   26832               537
+   **ONE ITERATION REACHES 96% OF WHAT TWELVE DO.** So the iteration count is a CANDIDATE
+   rather than a ceiling to be filled: the budget says what is affordable and the search
+   says what is worth buying, and the module takes the cheapest within 5% of the best.
+   Spending the rest of the budget to chase the last 4% would be eighteen times the
+   arithmetic for it.
+   SLICING IS ALLOWED AND THE PRICE IS STATED: the answer is for a moment a whole horizon
+   of look-ahead away, so the work can be spread across the interval between updates
+   rather than landing in one cycle — at the cost of ONE more grid sample of preview,
+   since it must be finished before the update it belongs to rather than during it.
+   `sliceBudget: false` forbids it.
+
+   **THE DRIVE RATING IS THE CORRECTION LIMIT, AND THE HOST ALREADY HAS IT.** The
+   correction is added to a setpoint and the loop turns that into effort, so on a position
+   loop the limit is `tauMax/kp` — both nameplate numbers, not plant knowledge being
+   slipped in. Measured on the arm: the shipped 32×-hold drive can follow a setpoint
+   offset of **5.0× the whole command swing**, which is why nothing ever saturated and why
+   the limit never bound; a realistically rated 3–6× drive lands at **0.47–0.94** of the
+   swing, squarely in the range where the constrained design was worth 1.38–1.47×.
+
+   **AND THEN THE OFFLINE ROUND PICKED THE WRONG ONE — IN BOTH DIRECTIONS, WHICH IS THE
+   FINDING.** Every candidate is scored by convolving it with the identified plant, and
+   that plant is LINEAR, so the score cannot see the ACTUATOR saturating and cannot see
+   what a hard limit is worth either.
+   OVER-RATED IT on a 3×-rated drive, where the constrained solve won the offline round
+   and then measured **1.65× against the filter's 1.81×, with the drive limited on 29.5%
+   of steps against 19.9%** — it pushes right up to its limit, which looks free in a
+   linear score and is not.
+   AND UNDER-RATED IT ON THE ARM, where the constrained design's own open-loop prediction
+   is **2.33× against the filter's 2.80×** — the offline round ranks it SECOND — and the
+   machine then measures it at **4.24×, achieving 4.30×**. Same on the over-damped plant:
+   predicted 1.34×, measured 3.62×.
+   A criterion that is wrong in one direction can be corrected with a margin. One that is
+   wrong in both cannot, and no amount of held-out data fixes it, because the held-out
+   data is scored through the same linear model.
+   **SO THE VERIFY PHASE STOPPED BEING A CHECK ON ONE DESIGN AND BECAME THE ROUND THAT
+   DECIDES.** It already had the machinery — it was running a scale ladder on the machine
+   — and the generalisation is to put the runner-up FAMILY on the ladder too: filter ×1,
+   ×2, ×0.5, then constrained ×1, ×0.5, each measured over its own window, and the best
+   MEASURED one deployed. On the 3× drive it now picks the filter and returns the filter's
+   1.81× and 19.9%; on plants B and C it picks the constrained solve and beats the filter
+   by 1.26× and 1.10× respectively.
+   MEASURED ACROSS THE DRIVE LADDER afterwards, forcing the filter against letting the
+   machine choose — achieved / peak as a fraction of the limit / % of steps the drive was
+   limited on:
+     3× rated   filter only 1.81× · 0.89 · 19.9%    it chose 1.81× · 0.89 · 19.9%
+     6×         filter only 1.78× · 0.78 · 16.2%    it chose 1.78× · 0.78 · 16.2%
+     32×        filter only 2.95× · 0.41 ·  0.0%    it chose 2.95× · 0.41 ·  0.0%
+   Identical in every row: where the constrained solve is the wrong answer the machine
+   says so and it is not deployed, at no cost.
+   AND ONE THING THAT TABLE EXPOSES AND THIS DOES NOT FIX: at 6× the filter reaches only
+   0.78 of its limit and the drive is STILL limited on 16% of steps, because `tauMax/kp`
+   is the offset a drive can hold STATICALLY and the trajectory is already using part of
+   the actuator. The correction's real share is what is LEFT after the move, which the
+   host could compute from its own feedforward and does not. Not built, and named rather
+   than approximated.
+   A CONSTRAINED DESIGN IS MADE GENTLER BY LOWERING ITS LIMIT, NOT BY SCALING ITS OUTPUT:
+   multiplying the answer of a solve by a half gives a command that is no longer the
+   optimum of anything and throws away the one property it was bought for.
+   **THIS IS THE THIRD TIME IN TWO BRICKS THAT A NUMBER COMPUTED FROM THE MODEL HAS BEEN
+   WRONG ABOUT THE MODEL** — the joint fit's impulse response, the design's own predicted
+   ratio, and now the ranking between two families. Each time the fix was the same shape:
+   put the question to the machine.
+
+   **AND THE PICTURE WENT WRONG THE MOMENT THE CORRECTION GOT BIG, which nothing in the
+   suite could see.** The stage magnifies deviations ×30 because the elastic deflection is
+   well under a percent of the arm — and the CORRECTION is not a deviation, it is a
+   deliberate commanded angle that the constrained design drives all the way to its limit,
+   up to 20% of the move. Through a ×30 magnifier that is an arm bent through several
+   radians, drawn off the canvas entirely. No error, nothing blank, every functional check
+   green, and the numbers all correct: the drawing was lying about a machine that was
+   working.
+   AND THE FIRST FIX WAS WRONG IN THE OTHER DIRECTION, which is the part worth keeping.
+   Re-basing the tool on the ENCODER magnifies the wind-up — and the correction works by
+   winding the gearbox up DELIBERATELY, so that gap is large by design and the arm went
+   off the bottom of the stage instead of the side. WHICH FRAME EACH LINE IS DRAWN IN IS
+   THE WHOLE STORY: the command and the encoder are meant to be somewhere else and are
+   drawn at TRUE scale; the tool is the thing that lands on the program anyway and its
+   miss is under a percent of the arm, so it is magnified against the PROGRAM. The
+   regression now asserts the tool is drawn INSIDE the stage rather than that the stage is
+   painted — a check on presence cannot see a defect in geometry, which this project
+   learned on the console's Close button and had to learn again here.
+
+   **AND A FLAKY CHECK ON A DIFFERENT TAB TURNED OUT TO BE A REAL DEFECT.** The chain's
+   `auto-tune measures the bending mode from an unshaped kick` failed on one run and
+   passed on the next with the SAME code: period 834 with 9 usable half-cycles one time,
+   858 with 3 the other. The fit was right both times — what varied was how much decay it
+   had to fit. The chain's commissioning settled for a FIXED 4000 steps before kicking, so
+   it began from wherever the arm happened to be when the button was pressed, and the
+   decay carried whatever residual motion was already there on top of the kick's own. It
+   now waits until the arm is QUIET, detected from the signal with a bounded fallback,
+   which is the discipline the black box's own step test has had from the start. A check
+   that fails intermittently for a reason unrelated to what it checks is worth more as a
+   bug report than as a red line, and this project's rule is that it gets fixed rather
+   than tolerated, because a red suite hides the next real failure.
+
+   WHAT SHIPS WHERE: plant A keeps the filter (its limit never binds and its plant cannot
+   be inverted at that sample rate anyway); plant B and the arm take the constrained solve.
+   The arm's deployed controller is 6592 MAC/update — **132 MAC/cycle spread over the 50
+   cycles between updates, 5.3% of the 2500-MAC budget**, which is 5% of a 1 ms cycle.
+
    NOT YET BUILT: the WGSL elastic kernel (see the measurement above); general
    block-sparse bricks for a CLOSED structure — a gantry or a machine frame, where
    members are not separable into per-link frames and the swept box is genuinely

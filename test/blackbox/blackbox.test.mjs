@@ -17,6 +17,7 @@
 
 import { BlackBox, prbs, deconvolve, summarise, firInverse, optimalPreview, WindowMap }
   from '../../lib/blackbox/blackbox.js';
+import { boxQP, PreviewMPC } from '../../lib/blackbox/qp.js';
 import { Joint } from '../../lib/flexisim/joint.js';
 import { FlexArm } from '../../lib/flexisim/arm.js';
 import { buildLink, massProperties } from '../../lib/flexisim/link.js';
@@ -244,6 +245,181 @@ console.log('\n  the preview filter');
   check('the effort weight monotonically shrinks the command it asks for', mono);
 }
 
+// ---------------------------------------------------------------- the constrained solve
+//
+// A SOLVER HAS TO BE CHECKED AGAINST THE PROBLEM IT CLAIMS TO SOLVE, not against a
+// closed-loop score, because a solver that is subtly wrong produces a plausible command
+// and no score can attribute the shortfall. Four things are pinned here: the adjoint (the
+// direction mistake this project has already shipped once, in a different file), the
+// unconstrained limit, the KKT conditions at the bound, and the one claim the whole
+// object exists for -- that the constrained optimum is NOT the clipped unconstrained one.
+console.log('\n  the constrained solve');
+{
+  const solveLin = (A, b) => {
+    const n = b.length;
+    const Mx = A.map((r, i) => Float64Array.from([...r, b[i]]));
+    for (let c = 0; c < n; c++) {
+      let p = c;
+      for (let r = c + 1; r < n; r++) if (Math.abs(Mx[r][c]) > Math.abs(Mx[p][c])) p = r;
+      [Mx[c], Mx[p]] = [Mx[p], Mx[c]];
+      const d = Mx[c][c] || 1e-300;
+      for (let j = c; j <= n; j++) Mx[c][j] /= d;
+      for (let r = 0; r < n; r++) {
+        if (r === c || Mx[r][c] === 0) continue;
+        const g = Mx[r][c];
+        for (let j = c; j <= n; j++) Mx[r][j] -= g * Mx[c][j];
+      }
+    }
+    return Mx.map((r) => r[n]);
+  };
+  let z = 7;
+  const rnd = () => { z = (z * 1103515245 + 12345) & 0x7fffffff; return z / 0x7fffffff - 0.5; };
+  const Mh = 10, N = 24, lambda = 0.05;
+  const h = new Float64Array(Mh);
+  for (let i = 0; i < Mh; i++) h[i] = i < 2 ? 0 : Math.exp(-(i - 2) / 3) * (1 + 0.2 * rnd());
+  const f0 = new Float64Array(N);
+  let a = 0;
+  for (let i = 0; i < N; i++) { a = 0.8 * a + rnd(); f0[i] = a; }
+
+  // THE ADJOINT. <T x, y> must equal <x, T^T y> for every x and y, and it is an identity
+  // rather than an approximation, so the tolerance is machine precision.
+  {
+    const x = Float64Array.from({ length: N }, () => rnd());
+    const y = Float64Array.from({ length: N }, () => rnd());
+    let l = 0, r = 0;
+    for (let i = 0; i < N; i++) {
+      let s = 0;
+      for (let m = 0; m < Mh; m++) if (i - m >= 0) s += h[m] * x[i - m];
+      l += s * y[i];
+    }
+    for (let i = 0; i < N; i++) {
+      let s = 0;
+      for (let m = 0; m < Mh && i + m < N; m++) s += h[m] * y[i + m];
+      r += x[i] * s;
+    }
+    check('the adjoint really is the adjoint', Math.abs(l - r) < 1e-12 * (Math.abs(l) + 1),
+      `${l} vs ${r}`);
+  }
+
+  // The exact unconstrained answer, from a direct solve of the normal equations.
+  const A = Array.from({ length: N }, () => new Float64Array(N));
+  const b = new Float64Array(N);
+  for (let i = 0; i < N; i++) {
+    for (let j = 0; j < N; j++) {
+      let s = 0;
+      for (let r = 0; r < N; r++) {
+        const a1 = r - i, a2 = r - j;
+        if (a1 >= 0 && a1 < Mh && a2 >= 0 && a2 < Mh) s += h[a1] * h[a2];
+      }
+      A[i][j] = 2 * s;
+    }
+    let s2 = 0;
+    for (let r = 0; r < N; r++) { const a1 = r - i; if (a1 >= 0 && a1 < Mh) s2 += h[a1] * f0[r]; }
+    b[i] = -2 * s2;
+    A[i][i] += 2 * lambda * (i < N - 1 ? 2 : 1);
+    if (i > 0) A[i][i - 1] -= 2 * lambda;
+    if (i < N - 1) A[i][i + 1] -= 2 * lambda;
+  }
+  const exact = solveLin(A, b);
+  const obj = (u) => {
+    let s = 0;
+    for (let i = 0; i < N; i++) {
+      let v = f0[i];
+      for (let m = 0; m < Mh; m++) if (i - m >= 0) v += h[m] * u[i - m];
+      s += v * v;
+    }
+    for (let i = 0; i < N; i++) { const p = i > 0 ? u[i - 1] : 0; s += lambda * (u[i] - p) ** 2; }
+    return s;
+  };
+  {
+    const u = new Float64Array(N);
+    boxQP(h, f0, u, { U: 1e9, lambda, uPrev: 0, iters: 2000 });
+    let d = 0, n = 0;
+    for (let i = 0; i < N; i++) { d += (u[i] - exact[i]) ** 2; n += exact[i] ** 2; }
+    check('with the box wide open it reaches the exact unconstrained answer',
+      Math.sqrt(d / n) < 1e-3, `relative ${Math.sqrt(d / n).toExponential(2)}`);
+  }
+
+  // …and at a bound that BINDS, the KKT conditions hold: every free variable has zero
+  // gradient and every clamped one has its gradient pointing out of the box.
+  const U = Math.max(...exact.map(Math.abs)) / 3;
+  const u = new Float64Array(N);
+  boxQP(h, f0, u, { U, lambda, uPrev: 0, iters: 4000 });
+  const r = new Float64Array(N), g = new Float64Array(N);
+  for (let i = 0; i < N; i++) {
+    let v = f0[i];
+    for (let m = 0; m < Mh; m++) if (i - m >= 0) v += h[m] * u[i - m];
+    r[i] = v;
+  }
+  let nAt = 0, worst = 0;
+  for (let i = 0; i < N; i++) {
+    let s = 0;
+    for (let m = 0; m < Mh && i + m < N; m++) s += h[m] * r[i + m];
+    const back = i > 0 ? u[i - 1] : 0, fwd = i < N - 1 ? u[i + 1] : u[i];
+    g[i] = 2 * s + 2 * lambda * ((u[i] - back) - (fwd - u[i]));
+    if (Math.abs(Math.abs(u[i]) - U) < 1e-9) {
+      nAt++;
+      if (-Math.sign(u[i]) * g[i] < -1e-8) worst = Math.max(worst, Math.abs(g[i]));
+    } else worst = Math.max(worst, Math.abs(g[i]));
+  }
+  check('the constrained solution satisfies KKT, with variables actually AT the bound',
+    nAt > N / 3 && worst < 1e-6, `${nAt}/${N} at the bound, worst violation ${worst.toExponential(2)}`);
+  check('…and never leaves the box it was given',
+    u.every((v) => Math.abs(v) <= U * (1 + 1e-9)));
+
+  // THE CLAIM THE WHOLE OBJECT EXISTS FOR. Pontryagin says the constrained optimum is not
+  // the unconstrained one with the limit applied afterwards; if it were, this file could
+  // be a clamp on the filter's output and none of the rest would be needed.
+  const clipped = Float64Array.from(exact, (v) => Math.max(-U, Math.min(U, v)));
+  check('…and it BEATS the clipped unconstrained answer, which is the whole point',
+    obj(u) < obj(clipped) * 0.98,
+    `constrained ${obj(u).toFixed(6)} against clipped ${obj(clipped).toFixed(6)} `
+    + `(${(obj(clipped) / obj(u)).toFixed(3)}x)`);
+
+  // THE WARM START IS WHAT MAKES THE ITERATION COUNT AFFORDABLE, so it is measured rather
+  // than assumed: from the previous solution shifted along by one, a single iteration has
+  // to get most of the way, or the fixed-count budget below is not honest.
+  {
+    const shifted = new Float64Array(N);
+    for (let i = 0; i < N - 1; i++) shifted[i] = u[i + 1];
+    shifted[N - 1] = u[N - 1];
+    const cold = new Float64Array(N), warm = Float64Array.from(shifted);
+    const f1 = new Float64Array(N);
+    for (let i = 0; i < N; i++) f1[i] = i < N - 1 ? f0[i + 1] : f0[N - 1];
+    boxQP(h, f1, cold, { U, lambda, uPrev: u[0], iters: 1 });
+    boxQP(h, f1, warm, { U, lambda, uPrev: u[0], iters: 1 });
+    const ref40 = new Float64Array(N);
+    boxQP(h, f1, ref40, { U, lambda, uPrev: u[0], iters: 4000 });
+    const gap = (v) => (obj(v) - obj(ref40)) / Math.abs(obj(ref40));
+    // MEASURED at 2.9x here on a deliberately fast-moving disturbance, and far better on
+    // the real arm's smooth one, where ONE warm-started iteration reaches 96% of what
+    // twelve do. The bar is set below the measurement rather than at it.
+    check('one warm-started iteration beats a cold-started one',
+      gap(warm) < gap(cold) / 2,
+      `warm ${gap(warm).toExponential(2)} against cold ${gap(cold).toExponential(2)} `
+      + `(${(gap(cold) / gap(warm)).toFixed(1)}x)`);
+    check('…and lands within a few percent of the fully converged answer',
+      gap(warm) < 0.03, `${(100 * gap(warm)).toFixed(2)}% above converged`);
+  }
+
+  // AND THE CONTROLLER MUST ACCOUNT FOR ITS OWN PAST. A receding-horizon solver that
+  // ignores the tail of the corrections it has already applied re-corrects for its own
+  // output every update, which looks like an oscillation nobody commanded.
+  {
+    const mpc = new PreviewMPC(h, { horizon: N, U: 1e9, lambda, iters: 200 });
+    const d = new Float64Array(N);
+    for (let i = 0; i < N; i++) d[i] = 1;          // a step disturbance
+    for (let i = 0; i < 60; i++) mpc.step(d);
+    // Against a CONSTANT disturbance the settled correction must cancel it in steady
+    // state: h summed times u equals minus the disturbance.
+    let gain = 0;
+    for (const v of h) gain += v;
+    check('against a constant disturbance it settles on the exact DC inverse',
+      Math.abs(mpc.uPrev * gain + 1) < 5e-2,
+      `u ${mpc.uPrev.toFixed(5)} x gain ${gain.toFixed(4)} = ${(mpc.uPrev * gain).toFixed(5)}`);
+  }
+}
+
 // ---------------------------------------------------------------- what it costs a PLC
 console.log('\n  the cycle budget');
 {
@@ -417,9 +593,14 @@ console.log('\n  plant C — the real hybrid arm, through the same interface');
     + `${bb.model.delay * bb.grid} steps, ring `
     + `${bb.model.period ? (bb.model.period * bb.grid).toFixed(0) : '—'} steps `
     + '(the real bending mode is ~980)');
-  console.log(`    [C] basis: ${bb.basis.chosen} — ${bb.cost().mac} MAC/update against a `
-    + `${bb.macBudget} budget (${(100 * bb.cost().mac / bb.macBudget).toFixed(1)}% of 5% `
-    + 'of a 1 ms cycle)');
+  {
+    const c = bb.cost();
+    console.log(`    [C] basis: ${bb.basis.chosen} — ${c.mac} MAC/update as a `
+      + `${c.kind}; ${c.slicedMacPerCycle.toFixed(0)} MAC/cycle spread over the `
+      + `${c.cyclesPerUpdate} cycles between updates, against a ${bb.macBudget} budget `
+      + `(${(100 * c.slicedMacPerCycle / bb.macBudget).toFixed(1)}% of 5% of a 1 ms cycle`
+      + `${c.fitsInOneCycle ? ', and it also fits in one' : ', and needs the spread'})`);
+  }
   console.log(`    [C] design: ${bb.design.kind}, ${bb.design.taps} taps, preview `
     + `${bb.design.previewSteps} steps, scalar ${bb.design.alpha.toFixed(3)}, `
     + `PREDICTED ${bb.design.predicted.toFixed(2)}x, VERIFIED `

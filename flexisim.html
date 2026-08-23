@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:233,built:"2026-08-22T21:23:18Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:234,built:"2026-08-23T00:29:59Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -1786,6 +1786,10 @@ function draw() {
   // Deviations are drawn as SMALL-ANGLE transverse offsets rather than as rotations
   // because a magnified rotation would change the arm's LENGTH on screen, which is
   // a second lie. At these angles (~5e-3 rad) tan is the angle to 1e-8.
+  // ON THIS TAB THE CORRECTION IS THE SAME ORDER AS THE DEFLECTION -- the compensator's
+  // pre-distortion is a few milliradians against a tip error of about the same -- so both
+  // are magnified together and the picture stays readable. That is NOT true on the black
+  // box tab, where a constrained design commands up to a fifth of the move; see drawBB().
   const line = (dyAt, col, width, dash) => {
     g.save(); g.strokeStyle = col; g.lineWidth = width;
     g.setLineDash(dash || []); g.beginPath();
@@ -2645,11 +2649,12 @@ function rebuildProfile2() {
 // exists: success at cancelling a resonance removes the evidence of it, so the mode
 // can only be measured on a move that does not cancel it. It runs INSIDE the frame
 // loop rather than in one blocking call, so the ring can be watched.
-const C2_SETTLE = 4000, C2_KICK = 300, C2_DECAY = 9000;
+const C2_SETTLE = 12000, C2_KICK = 300, C2_DECAY = 9000;  // settle is a BOUND, not a count
 
 function startComm2() {
   if (!arm2) return;
-  comm2 = { phase: 'settle', left: C2_SETTLE, decay: [], base: 0 };
+  comm2 = { phase: 'settle', left: C2_SETTLE, decay: [], base: 0,
+    prev: null, quiet: 0, span: 0 };
   syncChain();
 }
 
@@ -2663,11 +2668,33 @@ function comm2Step(budget) {
     const t = servo2.torques(r);
     arm2.step(t[0], t[1], 1);
     if (comm2.phase === 'decay') comm2.decay.push(arm2.tipError().total - comm2.base);
-    if (--comm2.left > 0) continue;
+    // KICK IT WHEN IT IS QUIET, NOT AFTER A FIXED COUNT -- and this had to be measured
+    // into shape rather than assumed. A fixed settle begins from wherever the arm
+    // happened to be when the button was pressed, so the decay superimposes the kick's
+    // own response on whatever residual motion was already there, and the fit is a
+    // different fit every run: two identical runs measured a period of 834 and 858 steps
+    // with 9 usable half-cycles and 3. The FIT was right both times -- the number of
+    // crossings it had to work with was not, and a check on it failed intermittently for
+    // a reason that had nothing to do with what it was checking. Quiet is a property of
+    // the SIGNAL, which is how the black box's step test already decides the same thing.
     if (comm2.phase === 'settle') {
-      comm2.base = arm2.tipError().total;
+      const y = arm2.tipError().total;
+      if (comm2.prev != null) {
+        comm2.span = Math.max(comm2.span, Math.abs(y - comm2.base0));
+        const d = Math.abs(y - comm2.prev);
+        if (d < 2e-4 * Math.max(comm2.span, 1e-30)) comm2.quiet++; else comm2.quiet = 0;
+      } else comm2.base0 = y;
+      comm2.prev = y;
+      // …with a bound, so a plant that never goes quiet still commissions rather than
+      // hanging: at that point the fit reports what it can and shaping stays off if it
+      // cannot.
+      if (comm2.quiet < 200 && --comm2.left > 0) continue;
+      comm2.base = y;
       comm2.phase = 'kick'; comm2.left = C2_KICK;
-    } else if (comm2.phase === 'kick') {
+      continue;
+    }
+    if (--comm2.left > 0) continue;
+    if (comm2.phase === 'kick') {
       comm2.phase = 'decay'; comm2.left = C2_DECAY;
     } else {
       finishComm2();
@@ -3972,6 +3999,8 @@ $('s-mag2').addEventListener('input', () => { $('v-mag2').textContent = $('s-mag
 // because the black box has to be able to hold the machine STILL for its step test, which
 // is not something tab (1)'s loop does.
 let bbArm = null, bbServo = null, bbProf = null, bb = null, bbRun = false, bbK = 0;
+let bbLimit = 0;
+let bbDrawn = null;
 let bbBusy = false, bbChartOn = false, bbHold = false;
 const bbHist = { t: [], truth: [], est: [], u: [] };
 let bbBase = null, bbScore = null;
@@ -3993,9 +4022,19 @@ async function buildBB() {
   const tauG = (th) => mp.centroid * mp.mass * (-G) * Math.cos(th);
   const Jr = joint.reflectedInertia();
   const hold = Math.abs(tauG(0)) / RATIO;
-  bbServo = new PositionServo({ kp: SERVO_BW * SERVO_BW * Jr / RATIO,
+  // THE DRIVE'S RATING IS ALSO THE CORRECTION LIMIT, and the black box is told the limit
+  // rather than the rating: the correction is added to a SETPOINT and the loop turns that
+  // into torque, so what a drive rated at R times the hold torque can follow is an offset
+  // of tauMax/kp. Both are nameplate numbers the controller already holds -- this is the
+  // same category as the look-ahead buffer, not plant knowledge being slipped in. At the
+  // 32x shipped here that offset is FIVE TIMES the whole command swing, which is why
+  // nothing on this tab has ever saturated; a realistically rated 3-6x drive lands at
+  // half to one swing, which is where a constrained design starts to be worth its cost.
+  const kpBB = SERVO_BW * SERVO_BW * Jr / RATIO;
+  bbServo = new PositionServo({ kp: kpBB,
     kd: 2 * SERVO_BW * Jr / RATIO, inertia: Jr, ratio: RATIO, gravityTorque: tauG,
     tauMax: 32 * hold, speedMax: NO_LOAD_SPEED });
+  bbLimit = 32 * hold / kpBB;
   bbArm = { arm, link, mp, tauG, Larm: arm.Larm };
   // THE SAME COMMAND THE MOVE TAB RUNS, jerk-limited, so the two tabs are comparable --
   // except that its AMPLITUDE IS MODULATED AT AN INCOMMENSURATE RATE, so the program
@@ -4043,6 +4082,7 @@ function startBB() {
     probeAmp: BlackBox.autoAmplitude(SPAN_LADDER[2], 0.03),
     probeSamples: 1400, taps: 70, invTaps: 45,
     nSignals: 5, ssLag: 12, ssStride: 9, lead: 15,
+    correctionLimit: bbLimit,
   });
   bbHold = true; bbRun = true;
   // The baseline collected while it was running uncommissioned is KEPT -- it is the
@@ -4126,6 +4166,8 @@ function bbStats() {
     }
     if (st.design) {
       rows.push(['designed feedforward', `<b>${st.design.kind}</b> · ${st.design.taps} taps`
+        + (st.design.horizon ? ` · horizon ${st.design.horizon} · ${st.design.iters} solver `
+          + 'iteration(s) per update' : '')
         + (st.design.lambda != null ? ` · effort weight λ ${st.design.lambda}` : '')
         + ` · scalar ${st.design.alpha.toFixed(3)} · <b>predicted `
         + `${st.design.predicted.toFixed(2)}×</b>   <span class="warn">chosen on HELD-OUT `
@@ -4155,11 +4197,16 @@ function bbStats() {
     if (st.cost) {
       const c = st.cost;
       rows.push(['runs on a PLC', `<b>${c.mac} multiply-accumulates</b> per update `
-        + `(${c.features}-feature map + ${c.taps}-tap filter), against a budget of `
-        + `${c.budget} — <span class="${c.fits ? 'good' : 'bad'}">`
-        + `${(100 * c.mac / c.budget).toFixed(1)}% of 5% of a 1 ms cycle</span>   `
-        + `<span class="warn">one update every ${c.cyclesPerUpdate} cycles, so `
-        + `${c.slicedMacPerCycle.toFixed(1)} MAC/cycle if spread</span>`]);
+        + `(${c.features}-feature map + a ${c.kind}`
+        + (c.iters ? `, ${c.iters} iteration(s)` : '') + '), one update every '
+        + `${c.cyclesPerUpdate} cycles — <span class="${c.fits ? 'good' : 'bad'}">`
+        + `${c.slicedMacPerCycle.toFixed(0)} MAC/cycle spread, `
+        + `${(100 * c.slicedMacPerCycle / c.budget).toFixed(1)}% of 5% of a 1 ms cycle`
+        + '</span>   '
+        + (c.fitsInOneCycle
+          ? '<span class="good">and it fits in a single cycle with no scheduling</span>'
+          : '<span class="warn">it needs the spread; the look-ahead is what makes that '
+            + 'legitimate, at the price of one more grid sample of preview</span>')]);
     }
     if (st.map) rows.push(['disturbance map', `${st.map.features} features from the `
       + 'command window alone'
@@ -4210,16 +4257,26 @@ function drawBB() {
     const c = Math.cos(r.theta), s2 = Math.sin(r.theta);
     return [px + (c * bx - s2 * by) * scale, py - (s2 * bx + c * by) * scale];
   };
-  const line = (dyAt, col, width, dash) => {
+  // THE EXAGGERATION IS FOR THE DEFLECTION, NOT FOR THE COMMAND, and separating the two
+  // is not cosmetic here. The elastic deviation is well under a percent of the arm and
+  // has to be magnified to be seen at all; the CORRECTION is a deliberate, commanded
+  // angle that the constrained design drives all the way to its limit -- up to 20% of the
+  // move. Running that through a ×30 magnifier draws an arm bent through several radians
+  // and throws the whole picture off the stage, which is what it did: no error, nothing
+  // blank, just a drawing that was lying about a machine that was working. Each line now
+  // carries its REAL angle at true scale and only the residual -- wind-up plus bending --
+  // is magnified.
+  const line = (baseAt, devAt, col, width, dash) => {
     g.save(); g.strokeStyle = col; g.lineWidth = width;
     g.setLineDash(dash || []); g.beginPath();
     for (let i = 0; i <= 24; i++) {
-      const bx = (i / 24) * L;
-      const [X, Y] = world(bx, mag * dyAt(bx, i / 24));
+      const bx = (i / 24) * L, f = i / 24;
+      const [X, Y] = world(bx, baseAt(bx, f) + mag * devAt(bx, f));
       g.lineTo(X, Y);
     }
     g.stroke(); g.restore();
   };
+  const zero = () => 0;
   const bp = deflectionProfile(link);
   const piv = link.meta.pivot[0];
   const bendAt = (f) => {
@@ -4232,22 +4289,37 @@ function drawBB() {
   };
   const enc = arm.encoder().angle;
   const off = bb ? bb.offset() : 0;
-  line(() => 0, '#64748b', 2, [6, 5]);
-  line((bx) => off * bx, '#a78bfa', 2, [3, 3]);
-  line((bx) => (enc - r.theta) * bx, '#475569', 4);
-  line((bx, f) => (arm.joint.thL - r.theta) * bx + bendAt(f), '#f59e0b', 5);
+  // WHICH FRAME EACH LINE IS DRAWN IN IS THE WHOLE STORY, and the two halves are not the
+  // same kind of quantity. The COMMAND and the ENCODER are deliberately somewhere else --
+  // the correction works by winding the gearbox up on purpose, so the gap between them
+  // and the program is large, real, and drawn at TRUE scale. The TOOL is the thing that
+  // is supposed to land on the program anyway, and its miss is under a percent of the
+  // arm, so it is drawn as a magnified deviation FROM THE PROGRAM. Basing the tool on the
+  // encoder instead magnifies the wind-up the correction is deliberately creating, which
+  // draws the arm off the bottom of the stage and inverts the point of the picture.
+  line(zero, zero, '#64748b', 2, [6, 5]);                       // the program
+  line((bx) => off * bx, zero, '#a78bfa', 2, [3, 3]);           // what it commands
+  line((bx) => (enc - r.theta) * bx, zero, '#475569', 4);       // where the encoder is
+  line(zero,                                                    // where the TOOL is
+    (bx, f) => (arm.joint.thL - r.theta) * bx + bendAt(f), '#f59e0b', 5);
   g.fillStyle = '#94a3b8'; g.beginPath(); g.arc(px, py, 6, 0, 7); g.fill();
-  const toolDev = (arm.joint.thL - r.theta) * L + bendAt(1);
-  const [TX, TY] = world(L, mag * toolDev);
+  const [TX, TY] = world(L, mag * ((arm.joint.thL - r.theta) * L + bendAt(1)));
   g.fillStyle = '#fbbf24'; g.beginPath(); g.arc(TX, TY, 6, 0, 7); g.fill();
+  // WHERE THE TOOL WAS ACTUALLY DRAWN, so a regression can assert the picture stays on
+  // the stage. "The stage is painted" passed the whole time the arm was being drawn
+  // several radians off it -- a check on presence cannot see a check on geometry, which
+  // is the same lesson the console Close button taught this project.
+  bbDrawn = { x: TX, y: TY, w, h };
   if (bb && bb.est != null) {
+    // …and the estimate is the tool's error as the model sees it, so it belongs in the
+    // tool's frame: the encoder's own offset plus what the model adds to it.
     const [EX, EY] = world(L, mag * ((enc - r.theta) * L + bb.est));
     g.strokeStyle = '#22d3ee'; g.lineWidth = 2;
     g.beginPath(); g.arc(EX, EY, 7, 0, 7); g.stroke();
   }
   g.font = '11px ui-monospace,monospace';
   g.fillStyle = '#64748b'; g.textAlign = 'right';
-  g.fillText(`deviations ×${mag}`, w - 10, h - 16);
+  g.fillText(`elastic deviation ×${mag} · command at true scale`, w - 10, h - 16);
   if (bb && bb.holding) {
     g.fillStyle = '#f59e0b';
     g.fillText(bb.phase === 'step' ? 'holding still — measuring the timescale'
@@ -4327,7 +4399,7 @@ $('bb-reset').addEventListener('click', async () => {
 window.__flxBBDbg = () => (bbArm ? {
   k: bbK, running: bbRun, Larm: bbArm.Larm,
   ...(bb ? bb.status() : { phase: 'idle' }),
-  base: bbRms(bbBase), scored: bbRms(bbScore),
+  base: bbRms(bbBase), scored: bbRms(bbScore), drawn: bbDrawn,
   ratio: bbRms(bbBase) && bbRms(bbScore) ? bbRms(bbBase) / bbRms(bbScore) : null,
   cells: bbArm.link.lattice.cellCount,
 } : null);

@@ -2536,9 +2536,11 @@ if (FULL) {
     + `${bbd.dc.toFixed(2)} against an arm length of ${bbd.Larm} it was never told; `
     + `predicted ${bbd.design.predicted.toFixed(2)}x, MEASURED `
     + `${bbd.design.verified == null ? '—' : bbd.design.verified.toFixed(2) + 'x'}, achieved `
-    + `${bbd.ratio.toFixed(2)}x, at ${bbd.cost.mac} MAC/update `
-    + `(${(100 * bbd.cost.mac / bbd.cost.budget).toFixed(0)}% of the budget), basis `
-    + `${bbd.basis && bbd.basis.chosen}`);
+    + `${bbd.ratio.toFixed(2)}x, as a ${bbd.cost.kind} costing ${bbd.cost.mac} MAC/update `
+    + `= ${bbd.cost.slicedMacPerCycle.toFixed(0)} MAC/cycle over the `
+    + `${bbd.cost.cyclesPerUpdate} cycles between updates `
+    + `(${(100 * bbd.cost.slicedMacPerCycle / bbd.cost.budget).toFixed(1)}% of 5% of a 1 ms `
+    + `cycle), basis ${bbd.basis && bbd.basis.chosen}`);
   // WHAT IS ASSERTED IS THAT IT IDENTIFIED THE PLANT AND KNEW WHAT IT COULD DO -- not a
   // size of win. The win here is small and the module says so in advance, which is the
   // property worth pinning: a controller that is confident about a plant it cannot help
@@ -2569,6 +2571,14 @@ if (FULL) {
     `${bbd.cost && bbd.cost.mac} MAC against ${bbd.cost && bbd.cost.budget}`);
   check('flexisim/blackbox: …without making the machine worse', bbd.ratio > 0.95,
     `${bbd.ratio}`);
+  // THE PICTURE HAS TO STAY ON THE STAGE, which "it is painted" cannot see. Once the
+  // correction became a large deliberate quantity, running it through the deflection
+  // magnifier drew the arm several radians off the canvas — no error, nothing blank, and
+  // every functional check still green.
+  check('flexisim/blackbox: …and the tool is drawn ON the stage, not off it',
+    bbd.drawn && bbd.drawn.x >= 0 && bbd.drawn.x <= bbd.drawn.w
+    && bbd.drawn.y >= 0 && bbd.drawn.y <= bbd.drawn.h,
+    JSON.stringify(bbd.drawn));
   const paint3 = await fx.evaluate(() => {
     const c = document.getElementById('cv3');
     if (!c.width || !c.height) return { ok: false };
