@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:237,built:"2026-08-23T05:54:12Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:238,built:"2026-08-23T07:16:07Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -123,12 +123,12 @@
       <button id="auto">Auto-tune ▶</button>
       <button id="reset" class="sec">Reset all</button>
     </div>
-    <p class="hint">One button for the whole sequence: <b>commission → shape → learn the dynamic
-      filter → score the corrections → pick the best → commission the sensor IN THAT
-      CONFIGURATION → lock → score the closed loop</b>. The order is not guessable from the
-      controls and getting it wrong does not error, it just quietly produces a worse machine —
-      training the sensor before the correction is chosen leaves it reading a machine it never
-      saw, measured at <b>40× worse</b>. Everything below stays available for driving by hand.</p>
+    <p class="hint">One button for the whole sequence: <b id="auto-order">…</b>. The order is not
+      guessable from the controls and getting it wrong does not error, it just quietly produces a
+      worse machine — training the sensor before the correction is chosen leaves it reading a
+      machine it never saw, measured at <b>40× worse</b>, and locking it before the last step
+      freezes it under a correction that was not the one selected. Everything below stays
+      available for driving by hand.</p>
     <div class="controls">
       <button id="commission" class="sec">Commission ▶</button>
       <button id="run" class="sec" disabled>Run move ▶</button>
@@ -267,6 +267,7 @@
     <div class="controls">
       <button id="ss-train" class="sec" disabled>Start training ▶</button>
       <button id="ss-lock" class="sec" disabled>Lock 🔒</button>
+      <button id="ss-reset" class="sec">Reset sensor ↺</button>
     </div>
     <div id="ss-chart"></div>
     <dl class="stat" id="ss-stats"></dl>
@@ -302,7 +303,7 @@
       While the sensor is <b>training</b>, a small dither is added to the commanded angle — the
       pre-distortion mode ③ will later apply, excited on purpose. Without it the model has only ever
       seen the machine <i>uncorrected</i>, so the first thing the closed loop does is move the encoder
-      somewhere the model has never been, and a 544-feature fit asked about an operating point it never
+      somewhere the model has never been, and a fit asked about an operating point it never
       saw answers confidently and wrong — measured, the estimate reaches <b>26×</b> the truth and the
       loop runs away in positive feedback. With the dither it is flat across the range the loop occupies
       and the loop converges. It costs about <b>8%</b> of the locked open-loop accuracy, which is the
@@ -330,9 +331,7 @@
       <button id="auto2">Auto-tune ▶</button>
       <button id="reset2" class="sec">Reset all</button>
     </div>
-    <p class="hint">One button, the same sequence as the Move tab: <b>measure the bending mode →
-      shape the command → learn the dynamic filter → score the corrections → pick the best →
-      commission both tool sensors IN THAT CONFIGURATION → lock → score the closed loop</b>. It has
+    <p class="hint">One button, the same sequence as the Move tab: <b id="auto2-order">…</b>. It has
       no pose-touch commissioning — the chain's rigid model comes from the lattices themselves —
       but it does need an <b>unshaped</b> kick to see the mode at all, because cancelling a
       resonance removes the evidence of it. The learning step then drives three repeatable moves of
@@ -347,9 +346,9 @@
 
     <!-- THE SAME THREE MODES AS THE MOVE TAB, applied at the SHOULDER, because a
          tool offset is corrected most cheaply by the joint with the longest lever
-         on it -- and on this arm the shoulder is levered by the whole reach while
+         on it -- and on this arm the shoulder is levered by most of the reach while
          the elbow is levered only by the forearm. -->
-    <h4 class="grp">Correction <span>— applied at the shoulder, levered by the whole reach</span></h4>
+    <h4 class="grp">Correction <span>— applied at the shoulder, levered by the reach's projection</span></h4>
     <div class="controls">
       <select id="ctl2-mode" aria-label="Correction mode">
         <option value="open">① open loop — no correction at all</option>
@@ -420,9 +419,10 @@
     <p class="lead">A chain forces a choice a single joint does not: does each axis estimate from
       <b>its own signals</b> (what a distributed drive naturally supports, and what every servo
       vendor's compensation package looks like) or does <b>one model read every axis</b>? Both are
-      trained here on the same stream, at the <b>same 544-feature capacity</b> — the whole-arm model
-      gets 3 lags of 10 signals, the elbow-only one 6 lags of 5, so the only difference is which
-      signals, and the single-axis model gets the longer window.</p>
+      trained here on the same stream, at <b>matched capacity</b> — the whole-arm model reads twice
+      the signals and gets half the lags at twice the spacing, so both have the same base dimension
+      AND the same window reach, and the only difference is which signals. The live counts are in
+      the panel below rather than restated here.</p>
     <div class="controls">
       <button id="cs-train" class="sec" disabled>Start training ▶</button>
       <button id="cs-lock" class="sec" disabled>Lock 🔒</button>
@@ -457,7 +457,7 @@
     <div class="note">
       <h3>Why the command wanders</h3>
       The move's amplitude is modulated at an <b>incommensurate</b> rate, so no two cycles are alike.
-      A 544-feature model fitted to an exactly periodic stream can score beautifully by learning
+      A model with hundreds of features fitted to an exactly periodic stream can score beautifully by learning
       <i>where in the cycle it is</i> — and then the test set is the same cycle it trained on and the
       number means nothing. Measured offline: 0.0142 with the modulation off, 0.0454 with it on, and
       a window taken further out still — states even less like the training ones — reads 0.0355,
@@ -1034,6 +1034,11 @@ let ff = null;                    // the fitted filter, or null
 let learn = null;                 // the commissioning state machine
 
 const LEARN_ITERS = 12;
+// HOW MANY PASSES WITHOUT GAIN END A REFINEMENT. Shared by both tabs, because it is a
+// property of iterative refinement rather than of either plant — and because a constant
+// one tab declares and the other reaches across the file for is the shape of the next
+// divergence between them.
+const RISE_STOP = 3;
 const LEARN_BUDGET = 4000;        // solver steps per frame WHILE LEARNING
 // Three spans and three ramp rates. The generalisation is the whole point, so the
 // training set has to contain more than one of each.
@@ -1047,7 +1052,19 @@ const learnProfiles = () => [
 // never saw. Same rule as commissioning the soft sensor under the correction that will
 // run -- and the same failure if it is broken.
 ].map((o) => new AngleProfile({ span: o.span, accelSteps: o.a, cruiseSteps: o.c,
-  dwellSteps: Math.max(600, mode ? Math.round(1.3 * mode.period) : 1100),
+  // THE SAME DWELL THE DEPLOYED PROFILE USES, not a shorter one. This was built from the
+  // mode alone while rebuildProfile() adds the jerk limit's delay AND the settle — so at
+  // a wide jerk limit the training move was still being commanded when its own period
+  // wrapped, and `ilcRefine` indexes the correction by `k % period`, storing it at a
+  // phase the error was never measured at. The deployed path was fixed for exactly this
+  // ("at width 450 the move needs 1000 + 982 + 450 = 2432 steps against a half period of
+  // 2276"); the training path was not, and the chain's equivalent reads `prof2.D`.
+  // …and the fallback matters, because a SINE profile has no dwell at all (`D` is 0) and
+  // the learning profiles are trapezoids whatever the deployed one is.
+  dwellSteps: (prof && prof.D > 0) ? prof.D
+    : Math.max(600, (mode ? Math.round(1.3 * mode.period) : 1100)
+      + JERK_LADDER[motionActive.jerk]
+      + Math.round(SETTLE_LADDER[motionActive.settle] * (mode ? mode.period : 1100))),
   shaper: convolveShapers($('shape-on').checked && mode && !mode.overdamped
     ? zvdShaper(mode.omega, mode.zeta) : null, jerkShaper(JERK_LADDER[motionActive.jerk])) }));
 
@@ -1055,7 +1072,8 @@ function startLearn() {
   if (!A || !comp) return;
   const profs = learnProfiles();
   learn = { profs, pi: 0, iter: -3, k: 0, u: new Float64Array(profs[0].period),
-    e: new Float64Array(profs[0].period), ff: new LearnedFeedforward(), note: '' };
+    e: new Float64Array(profs[0].period), ff: new LearnedFeedforward(), note: '',
+    hist: [], best: null, bestE: Infinity, rise: 0 };
   syncMove();
 }
 
@@ -1074,26 +1092,50 @@ function learnStep(budget) {
   let left = budget;
   while (left > 0 && learn) {
     const n = learn.k % p.period;
-    const off = comp.offset(p.at(learn.k + FF_LEAD))
+    // AT THE POSE IT WILL BE DEPLOYED AT. `homeAngle()` is applied by currentRef,
+    // futureRef and offsetAt and was applied by none of this — so the filter was fitted
+    // at pose 0 and run wherever the Home slider points. The model term it sits on top of
+    // is `tauG(theta) - Jl*alpha` with tauG proportional to cos(theta), so at Home 1.5
+    // rad the gravity it was fitted against is 7% of the gravity it meets. It also left
+    // the plant a whole `home` radians away from the next commanded step.
+    const home = homeAngle();
+    const at = (kk) => { const q = p.at(kk); return { ...q, theta: q.theta + home }; };
+    const off = comp.offset(at(learn.k + FF_LEAD))
       + (learn.iter >= 0 ? learn.u[n] : 0);
-    const r = p.at(learn.k);
+    const r = at(learn.k);
     arm.step(servo.torque({ ...r, theta: r.theta + off }, arm.encoder()), 1);
     if (learn.iter >= 0) learn.e[n] = tipTrackingError(arm, r.theta);
     learn.k++; left--;
     if (learn.k % p.period !== 0) continue;
     // --- a period just finished
     if (learn.iter < 0) { learn.iter++; continue; }      // settling passes
+    // THE BEST PASS, NOT THE LAST, and stop when it stops improving. The chain measured
+    // why and the Move tab never got the guard: the SHAPER HALVES THE REFINEMENT'S
+    // STABILITY MARGIN, because the shaper delays the command while the correction is
+    // added to the reference after it, so the phase the lead was tuned against is not the
+    // phase it meets. At a gain tuned unshaped, two of three moves turned around after
+    // pass 5 and climbed, and the filter — fitted in good faith to a correction the
+    // refinement had already ruined — scored WORSE than doing nothing. Auto-tune turns
+    // shaping on one step before this runs, so this tab sits in exactly that
+    // configuration. The guard costs nothing when the gain is right.
+    let v = 0;
+    for (const x of learn.e) v += x * x;
+    v = Math.sqrt(v / learn.e.length);
+    learn.hist.push(v);
+    if (v < learn.bestE) { learn.bestE = v; learn.best = learn.u.slice(); learn.rise = 0; }
+    else learn.rise++;
     learn.u = ilcRefine(learn.u, learn.e,
       { gain: 0.5, lead: 550, armLength: arm.Larm, smooth: 40 });
     learn.iter++;
     learn.note = `move ${learn.pi + 1}/${learn.profs.length}, pass ${learn.iter}/${LEARN_ITERS}`;
-    if (learn.iter < LEARN_ITERS) continue;
-    // --- this move is converged: harvest it and go to the next
-    for (let m = 0; m < p.period; m += 3) learn.ff.observe(p, m, learn.u[m]);
+    if (learn.iter < LEARN_ITERS && learn.rise < RISE_STOP) continue;
+    // --- this move is converged: harvest THE BEST PASS and go to the next
+    const harvest = learn.best || learn.u;
+    for (let m = 0; m < p.period; m += 3) learn.ff.observe(p, m, harvest[m]);
     learn.pi++;
     if (learn.pi < learn.profs.length) {
       const q = learn.profs[learn.pi];
-      learn.iter = -3; learn.k = 0;
+      learn.iter = -3; learn.k = 0; learn.best = null; learn.bestE = Infinity; learn.rise = 0;
       learn.u = new Float64Array(q.period); learn.e = new Float64Array(q.period);
       continue;
     }
@@ -1322,9 +1364,16 @@ function recordBoard() {
   // …AND WHAT THE CORRECTION COSTS, alongside what it buys. A row that carries only
   // tracking cannot express "and the motor was quiet doing it", so the selection that
   // reads this table could not either -- see bestScored().
+  // NULL IS "NOT MEASURED" AND ZERO IS "PERFECTLY SMOOTH", and conflating them was a
+  // defect that shipped. The open loop is never measured (there is no correction to
+  // measure) and mode ③'s correction is a CONSTANT over a move period, so its sampled
+  // spread is zero and its ratio is undefined — both used to be written as 0, which is
+  // the minimum, so either of them won the smoothness tie-break in bestScored() without
+  // ever having been measured. This is FlowSim's residual rule ("zero renders as
+  // perfectly steady when it means not measured") broken in a second place.
   const cr = ctlMode() !== 'open' ? controlRoughness() : null;
   board[ctlMode()] = { bias: w.bias, sd: w.sd, rms: w.rms, key: boardKey(), k,
-    rough: cr && cr.sd > 0 ? cr.rough / cr.sd : 0 };
+    rough: cr && cr.sd > 0 ? cr.rough / cr.sd : null };
   renderBoard();
 }
 
@@ -1345,7 +1394,7 @@ function renderBoard() {
         + `${(base.sd / b.sd).toFixed(2)}×</span>` : '—';
     return `<tr><td>${MODE_LABEL[m]}${b.key === 'shaped' ? ' + shaping' : ''}</td>`
       + `<td>${f(b.bias)}</td><td>${bg}</td><td>${f(b.sd)}</td><td>${og}</td>`
-      + `<td>${f(b.rms)}</td><td>${b.rough ? f(b.rough) : '—'}</td></tr>`;
+      + `<td>${f(b.rms)}</td><td>${b.rough == null ? '—' : f(b.rough)}</td></tr>`;
   }).join('');
   el.innerHTML = '<tr><th>mode</th><th>bias</th><th>vs ①</th><th>oscillation</th>'
     + '<th>vs ①</th><th>rms</th><th>control d²</th></tr>' + rows;
@@ -1400,8 +1449,11 @@ function bestScored() {
   if (!keys.length) return null;
   const lo = Math.min(...keys.map((m) => board[m].rms));
   const band = keys.filter((m) => board[m].rms <= lo * 1.05);
-  return band.reduce((b, m) =>
-    ((board[m].rough || 0) < (board[b].rough || 0) ? m : b), band[0]);
+  // …AND A ROW WHOSE SMOOTHNESS WAS NEVER MEASURED CANNOT WIN ON IT. An unmeasured row
+  // sorts last on this criterion and is chosen only if it is the sole member of the band,
+  // in which case it won on tracking alone, which is the honest outcome.
+  const rq = (m) => (board[m].rough == null ? Infinity : board[m].rough);
+  return band.reduce((b, m) => (rq(m) < rq(b) ? m : b), band[0]);
 }
 
 /**
@@ -1759,7 +1811,7 @@ function ssStats() {
             + 'pre-distorts the setpoint, the ENCODER follows it, and the encoder is a model '
             + 'INPUT — so this readout is being asked about a machine it never saw. Measured, '
             + 'one frozen model across the four corrections: 0.032 / 0.378 / 0.315 / 1.225. '
-            + 'Re-run Auto-tune, or Reset the sensor and retrain here.</span>')]);
+            + 'Re-run Auto-tune, or press <b>Reset sensor ↺</b> and retrain here.</span>')]);
     }
   }
   const sc = ssScores();
@@ -1795,6 +1847,14 @@ function ssChart() {
       line: { color: '#a78bfa', width: 1.5, dash: 'dot' } },
   ];
   if (!ssChartOn) {
+    // MADE VISIBLE BEFORE IT IS DRAWN, not after. Plotly sizes against the
+    // container it is given, and a `display:none` container has no width — so it
+    // fell back to the 700px default inside a 388px box and, with
+    // `body{overflow-x:hidden}`, the right 45% of every chart was invisible and
+    // unreachable. It only corrected itself if the user happened to leave the tab
+    // and come back, which fires the resize. Measured on a 412px viewport:
+    // clientWidth 388, scrollWidth 700. flowsim.html has always done it this way.
+    $('ss-chart').classList.add('on');
     Plotly.newPlot('ss-chart', traces, {
       margin: { l: 46, r: 10, t: 6, b: 26 }, paper_bgcolor: '#0b1220', plot_bgcolor: '#060a14',
       font: { color: '#94a3b8', size: 9 }, showlegend: true,
@@ -1802,7 +1862,6 @@ function ssChart() {
       xaxis: { gridcolor: '#1e293b', title: { text: 'solver steps', font: { size: 9 } } },
       yaxis: { gridcolor: '#1e293b' },
     }, { displayModeBar: false, responsive: true });
-    $('ss-chart').classList.add('on');
     ssChartOn = true;
     return;
   }
@@ -2157,6 +2216,14 @@ function chart() {
       line: { color: '#334155', width: 1, dash: 'dot' }, hoverinfo: 'skip' },
   ];
   if (!chartOn) {
+    // MADE VISIBLE BEFORE IT IS DRAWN, not after. Plotly sizes against the
+    // container it is given, and a `display:none` container has no width — so it
+    // fell back to the 700px default inside a 388px box and, with
+    // `body{overflow-x:hidden}`, the right 45% of every chart was invisible and
+    // unreachable. It only corrected itself if the user happened to leave the tab
+    // and come back, which fires the resize. Measured on a 412px viewport:
+    // clientWidth 388, scrollWidth 700. flowsim.html has always done it this way.
+    $('err-chart').classList.add('on');
     Plotly.newPlot('err-chart', traces(), {
       margin: { l: 46, r: 40, t: 6, b: 26 }, paper_bgcolor: '#0b1220', plot_bgcolor: '#060a14',
       font: { color: '#94a3b8', size: 9 }, showlegend: true,
@@ -2166,7 +2233,6 @@ function chart() {
         title: { text: 'tool vs desired', font: { size: 9 } } },
       yaxis2: { overlaying: 'y', side: 'right', showgrid: false },
     }, { displayModeBar: false, responsive: true });
-    $('err-chart').classList.add('on');
     chartOn = true;
     return;
   }
@@ -2178,6 +2244,12 @@ function chart() {
 let frames = 0;
 function frame() {
   requestAnimationFrame(frame);
+  // THE THROTTLE HAS TO ADVANCE FOR EVERY TAB, and it used to advance only inside the
+  // Move tab's branch — past `if (!A || busy) return`. So a Move tab that is mid-rebuild,
+  // or one whose build threw, freezes `frames` at a multiple of six and every other tab's
+  // charts re-render on EVERY frame: the strobing failure this page already recorded for
+  // #bb-chart, reachable from a state that has nothing to do with the tab that strobes.
+  frames++;
   // THE CHAIN IS A SEPARATE PLANT and only steps while its own tab is showing:
   // two lattices are 1.6x the Move tab's cost, and a hidden simulation burning the
   // frame budget is the page competing with itself.
@@ -2227,7 +2299,7 @@ function frame() {
     try { learnStep(LEARN_BUDGET); }
     catch (e) { learn = null; setBadge('learning halted: ' + e.message, 'bad'); console.error(e); }
     draw(); syncMove();
-    if (++frames % 6 === 0) stats();
+    if (frames % 6 === 0) stats();
     return;
   }
   if (running) {
@@ -2250,7 +2322,7 @@ function frame() {
   // it directly for immediate feedback; this makes a missed one harmless instead of
   // a dead button.
   syncMove();
-  if (++frames % 6 === 0) {
+  if (frames % 6 === 0) {
     stats(); ssStats();
     if (phase !== 'commission') { chart(); ssChart(); }
   }
@@ -2316,7 +2388,14 @@ function startAuto() {
 }
 
 function stopAuto(msg, cls) {
+  // …AND IT UNWINDS WHAT THE SEQUENCE TURNED ON. Stopping during the training step used
+  // to leave `ssTraining` set and a commissioning DITHER running permanently — the
+  // machine measurably worse, and `recordBoard()` refusing to write any row while it is,
+  // so the board freezes too and nothing on the page says why.
   auto = null;
+  if (ssTraining) ssTraining = false;
+  ditherAmp = 0;
+  stopCompare();
   if (msg) setBadge(msg, cls);
   syncMove();
 }
@@ -2332,10 +2411,20 @@ function stopAuto(msg, cls) {
 function autoTick() {
   if (!auto) return;
   const st = AUTO_STEPS[auto.step];
-  const done = () => { auto.step++; auto.note = ''; };
+  const done = () => { auto.step++; auto.note = ''; auto.started = false; };
+  // A SUB-TASK IS STARTED ONCE — see auto2Tick()'s `once()` for the failure this
+  // prevents. Every step of the shape "if the result exists move on, else start the
+  // sub-task" restarts it for ever when the sub-task fails and clears its own handle.
+  const once = (running, start, what) => {
+    if (running) return true;
+    if (auto.started) { stopAuto(`auto-tune: ${what}`, 'bad'); return false; }
+    auto.started = true; start();
+    return true;
+  };
   if (st === 'commission') {
     if (phase === 'ready') { done(); return; }
-    if (phase !== 'commission') startCommission();
+    if (!once(phase === 'commission', startCommission,
+      'commissioning did not complete')) return;
     auto.note = 'measuring the compliance and the bending mode';
   } else if (st === 'shaping') {
     // Shaping is the control that moves the OSCILLATION, which is most of the
@@ -2354,15 +2443,15 @@ function autoTick() {
     // per-phase profile converges, and at the viewing slider's rate it would take
     // minutes instead of seconds.
     if (ff && ff.ready) { done(); return; }
-    if (!learn) startLearn();
+    if (!once(learn, startLearn, 'the dynamic filter did not converge — running '
+      + 'without it')) return;
     auto.note = learn ? learn.note || 'converging the correction against the tracker' : '';
-    if (!learn) done();
   } else if (st === 'compare the model corrections') {
     // THE CLOSED LOOP IS DELIBERATELY NOT IN THIS HALF even when a sensor happens to
     // be locked already: it would be scored on one commissioned under some earlier
     // correction, which is the failure this whole reordering is about.
-    if (!cmp && !auto.compareStarted) {
-      auto.compareStarted = true; startCompare({ modes: ['open', 'ff', 'learned'] });
+    if (!cmp && !auto.started) {
+      auto.started = true; startCompare({ modes: ['open', 'ff', 'learned'] });
     } else if (!cmp) done();
     auto.note = cmp ? `scoring ${MODE_LABEL[cmp.seq[cmp.i]]}` : '';
   } else if (st === 'pick the best of them') {
@@ -2415,8 +2504,8 @@ function autoTick() {
     // gives up nothing, because the lock is permanent and this is not.
     if (!ssReady()) { done(); return; }
     if (ssTraining) { pauseTraining(); ditherAmp = 0; return; }
-    if (!cmp && !auto.closedStarted) {
-      auto.closedStarted = true; startCompare({ modes: ['closed'], reset: false });
+    if (!cmp && !auto.started) {
+      auto.started = true; startCompare({ modes: ['closed'], reset: false });
     }
     else if (!cmp) done();
     auto.note = cmp ? `scoring ${MODE_LABEL.closed}` : '';
@@ -2545,6 +2634,9 @@ function syncMove() {
   set('ss-train', !canTrain || inAuto,
     ssTraining ? 'Pause training ⏸' : 'Start training ▶');
   set('ss-lock', !canTrain || inAuto || ss.trained < 400);
+  // …and Reset is available whenever there is a sensor at all, including a locked one —
+  // undoing the lock is the whole reason it exists.
+  set('ss-reset', !ss || inAuto || busy);
 }
 
 $('auto').addEventListener('click', () => {
@@ -2572,11 +2664,28 @@ $('run').addEventListener('click', () => {
 $('reset').addEventListener('click', async () => {
   stopAuto();
   running = false; phase = 'idle';
-  busy = true; await build(); busy = false;
-  syncMove();
+  // A REBUILD THAT THROWS MUST NOT LEAVE THE TAB DEAD. build() throws BY DESIGN —
+  // assertStable() on the joint and the lattice, and Solver.verify() — and without a
+  // finally the flag stays set forever: the tab never steps, never draws, every control
+  // stays disabled, and the rejection lands as an UNHANDLED REJECTION, which this page
+  // has already documented as invisible to both `pageerror` and the console listener.
+  busy = true;
+  try { await build(); } finally { busy = false; syncMove(); }
 });
 $('ss-train').addEventListener('click', () => {
   if (ssTraining) pauseTraining(); else beginTraining();
+});
+// THE LOCK WAS THE ONLY IRREVERSIBLE CONTROL ON THE TAB, and the stats row told the user
+// to press a button that did not exist to undo it. `resetSensor()` was reachable only as
+// a side effect of rebuilding the plant, changing the move, changing the drive rating, or
+// re-running auto-tune — so recovering from a lock meant throwing away the commissioning
+// too. It is the tracker coming back, which the page can offer because the tracker is
+// simulated; on a real machine it is a visit.
+$('ss-reset').addEventListener('click', () => {
+  if (busy || auto) return;
+  resetSensor();
+  setBadge('soft sensor reset — the tracker is back', 'warn');
+  stats(); syncMove();
 });
 $('ss-lock').addEventListener('click', lockSensor);
 for (const id of ['shape-on', 'flip-sign']) {
@@ -2607,8 +2716,10 @@ const ladder = (id, vid, arr, fmtv) => {
   // A PLANT SLIDER THROWS THE COMMISSIONING AWAY, so it must also stop a sequence
   // that is part-way through one -- otherwise autoTick() carries on against an arm
   // that no longer exists.
-  $(id).addEventListener('change', async () => { stopAuto(); busy = true; running = false; phase = 'idle';
-    await build(); busy = false; syncMove(); });
+  $(id).addEventListener('change', async () => {
+    stopAuto(); busy = true; running = false; phase = 'idle';
+    try { await build(); } finally { busy = false; syncMove(); }   // see $('reset')
+  });
   f();
 };
 ladder('s-k', 'v-k', K_LADDER, (v) => v.toFixed(1));
@@ -3033,8 +3144,13 @@ function closedGain2() { return prof2 ? SAMPLE_EVERY / (2 * prof2.period) : 1e-3
 function toolTrackingError(r, est = null) {
   const e = arm2.encoders();
   const enc = est === null ? arm2.tipError().total : est;
-  return enc + arm2.toolRadius() * (e[0].angle - r[0].theta)
-    + arm2.L2 * (e[1].angle - r[1].theta);
+  // THE SAME LEVER `tipError()` USES, from the arm rather than restated here — a
+  // following error at a joint moves the tool exactly as that joint's wind-up does, so
+  // the two halves of this sum must be projected the same way or they are not the same
+  // quantity. This used `toolRadius()` for joint 1, which is the shoulder-to-tool
+  // DISTANCE and not its projection onto the direction the error is measured in.
+  const lev = arm2.toolLever();
+  return enc + lev[0] * (e[0].angle - r[0].theta) + lev[1] * (e[1].angle - r[1].theta);
 }
 
 // The Move tab's commissioning dither, for the same reason and sized the same way.
@@ -3056,7 +3172,11 @@ function dither2Now() {
  * 1/bandwidth, the same number and the same argument as the Move tab's.
  */
 function model2Off(k) {
-  return -servo2.toolOffset(refs2At(k + FF_LEAD)) / arm2.toolRadius();
+  // THE LEVER, NOT THE RADIUS — see FlexArm2R.toolLever(). Converting a tool-frame
+  // length into a shoulder angle is the same conversion the wind-up makes in the other
+  // direction, so it has to use the same number; the distance is up to a third larger
+  // and has the opposite sign at a folded elbow.
+  return -servo2.toolOffset(refs2At(k + FF_LEAD)) / arm2.toolLever()[0];
 }
 
 /** The chain's pre-distortion AT step kk -- see offsetAt() on the Move tab. */
@@ -3148,7 +3268,7 @@ function off2Now(r) {
 // reference after it, so the phase between u and the error it answers is not the one
 // the lead was tuned against. 0.6 is stable in BOTH configurations, which is what
 // matters when the shaping checkbox is a control the user can toggle.
-const LEARN2_ITERS = 16, RISE_STOP = 3;
+const LEARN2_ITERS = 16;
 const LEARN2_ILC = { gain: 0.6, lead: 500, smooth: 40 };
 
 const learn2Profiles = () => [
@@ -3177,7 +3297,7 @@ function startLearn2() {
 function learn2Step(budget) {
   if (!learn2 || !arm2) return;
   const p = learn2.profs[learn2.pi];
-  const R = arm2.toolRadius();
+  const R = arm2.toolLever()[0];      // the projection, not the distance
   let left = budget;
   while (left > 0 && learn2) {
     const n = learn2.k % p.period;
@@ -3280,8 +3400,8 @@ function step2(n) {
       chHist.c21.push(M[1][0] * arm2.alpha[0]);
       chHist.c22.push(M[1][1] * arm2.alpha[1]);
       chHist.tip.push(arm2.tipError().total);
-      const R = arm2.toolRadius(), e2 = arm2.encoders();
-      const dEnc = R * (e2[0].angle - r[0].theta) + arm2.L2 * (e2[1].angle - r[1].theta);
+      const lev = arm2.toolLever(), R = lev[0], e2 = arm2.encoders();
+      const dEnc = R * (e2[0].angle - r[0].theta) + lev[1] * (e2[1].angle - r[1].theta);
       chHist.cmd.push(R * off);
       chHist.enc.push(dEnc);
       chHist.est.push(csLastEst === null ? null : dEnc + csLastEst);
@@ -3338,7 +3458,7 @@ function csTick(tau) {
     // The estimated TOOL against the program, following error included -- see
     // closedUpdate() on the Move tab. Here that term is most of the error.
     const tool = toolTrackingError(refs2(), a);
-    closedOff2 -= closedGain2() * tool / arm2.toolRadius();
+    closedOff2 -= closedGain2() * tool / arm2.toolLever()[0];
     closedOff2 = Math.max(-0.05, Math.min(0.05, closedOff2));
   }
   if (csTraining) { csWhole.train(truth); csElbow.train(truth); }
@@ -3368,8 +3488,21 @@ function csStats() {
       : (st.mode === 'training' ? (csTraining ? `training — ${st.trained} pairs`
         : `paused — ${st.trained} pairs trained`) : `LOCKED after ${st.trained} pairs`);
     rows.push(['mode', `<span class="${st.mode === 'estimating' ? 'good' : ''}">${label}</span>`]);
-    rows.push(['capacity', `${st.features} features each · whole arm ${st.signals} signals × 3 lags `
-      + `· elbow only ${csElbow.status().signals} × 6 lags`]);
+    // READ FROM THE MODELS, NOT RESTATED. These counts were hard-coded and described the
+    // pre-fix configuration — a window reaching 4.6% of the chain's ring, which the
+    // library documents as scoring worse than predicting the mean.
+    const se = csElbow.status();
+    rows.push(['capacity', `${st.features} features each · whole arm ${st.signals} signals `
+      + `× ${st.lag} lags · elbow only ${se.signals} × ${se.lag}`]);
+    // THE WINDOW AGAINST THE RING, which is the diagnostic that would have made the
+    // defect visible without a device report — the same row the Move tab carries.
+    if (bend2 && st.reach) {
+      const r = st.reach / bend2.period;
+      rows.push(['window reach', `<span class="${r > 0.8 ? 'good' : 'bad'}">`
+        + `${st.reach} steps</span> against a ${bend2.period.toFixed(0)}-step ring `
+        + `(${r.toFixed(2)}×)` + (r > 0.8 ? '' : '   <span class="warn">— too short to '
+          + 'carry the phase of a free vibration</span>')]);
+    }
     if (csUnder) {
       const live = ctl2Mode();
       rows.push(['commissioned under', `${MODE_LABEL[csUnder]}`
@@ -3406,6 +3539,14 @@ function csChart() {
     { x: T, y: EL, name: 'elbow only', line: { color: '#f472b6', width: 1.5, dash: 'dot' } },
   ];
   if (!csChartOn) {
+    // MADE VISIBLE BEFORE IT IS DRAWN, not after. Plotly sizes against the
+    // container it is given, and a `display:none` container has no width — so it
+    // fell back to the 700px default inside a 388px box and, with
+    // `body{overflow-x:hidden}`, the right 45% of every chart was invisible and
+    // unreachable. It only corrected itself if the user happened to leave the tab
+    // and come back, which fires the resize. Measured on a 412px viewport:
+    // clientWidth 388, scrollWidth 700. flowsim.html has always done it this way.
+    $('cs-chart').classList.add('on');
     Plotly.newPlot('cs-chart', traces, {
       margin: { l: 46, r: 10, t: 6, b: 26 }, paper_bgcolor: '#0b1220', plot_bgcolor: '#060a14',
       font: { color: '#94a3b8', size: 9 }, showlegend: true,
@@ -3413,7 +3554,6 @@ function csChart() {
       xaxis: { gridcolor: '#1e293b', title: { text: 'solver steps', font: { size: 9 } } },
       yaxis: { gridcolor: '#1e293b' },
     }, { displayModeBar: false, responsive: true });
-    $('cs-chart').classList.add('on');
     csChartOn = true;
     return;
   }
@@ -3437,6 +3577,14 @@ const AUTO2_STEPS = ['measure the bending mode', 'shape the command',
   'train both tool sensors', 'score the closed loop', 'select the best',
   'top up the sensors', 'lock them'];
 
+// THE HINTS ARE WRITTEN FROM THE SEQUENCES, NOT RESTATED BESIDE THEM. Both used to spell
+// the order out in prose, and both spelled out the order from BEFORE the lock was moved to
+// the end — the exact ordering that was fixed because it produced a sensor 40x worse. A
+// page that describes its own behaviour in a second place will eventually describe the
+// behaviour it used to have.
+$('auto-order').textContent = AUTO_STEPS.join(' → ');
+$('auto2-order').textContent = AUTO2_STEPS.join(' → ');
+
 function startAuto2() {
   if (!arm2 || busy2) return;
   // 4000 PAIRS, NOT 1000. Reported from the device that the sensors were being locked
@@ -3451,19 +3599,46 @@ function startAuto2() {
   syncChain();
 }
 
-function stopAuto2(msg) {
+function stopAuto2(msg, cls = 'good') {
+  // …AND IT UNWINDS WHAT THE SEQUENCE TURNED ON. Stopping during the training step used
+  // to leave `csTraining` set and a commissioning DITHER running permanently — the
+  // machine measurably worse, and `recordBoard2()` refusing to write any row while it is,
+  // so the board freezes too. A stop has to put the machine back.
   auto2 = null;
-  if (msg) { $('state2-badge').textContent = msg; $('state2-badge').className = 'badge good'; }
+  if (csTraining) csTraining = false;
+  ditherAmp2 = 0;
+  stopCompare2();
+  if (msg) { $('state2-badge').textContent = msg; $('state2-badge').className = 'badge ' + cls; }
   syncChain();
 }
 
 function auto2Tick() {
   if (!auto2) return;
   const st = AUTO2_STEPS[auto2.step];
-  const done = () => { auto2.step++; auto2.note = ''; };
+  const done = () => { auto2.step++; auto2.note = ''; auto2.started = false; };
+  // A SUB-TASK IS STARTED ONCE, OR THE SEQUENCE CANNOT FAIL — IT CAN ONLY LOOP.
+  //
+  // Every step here has the shape "if the result exists, move on; if the sub-task is not
+  // running, start it". When the sub-task FAILS it clears both its own handle and its
+  // result, so the next tick sees neither and starts it again — for ever. On the chain
+  // that is reachable and unguarded: `finishComm2()` nulls `bend2` AND `comm2` when
+  // `ringFit` fails, deliberately, because this tab has no analytic fallback to use
+  // instead. The arm is then settled, kicked and re-fitted indefinitely, the badge cycles
+  // through the phases, Run stays disabled, and the only way out is Stop. The learned
+  // filter has the identical shape on both tabs.
+  //
+  // `started` is the whole fix: a second attempt at a sub-task that has already run and
+  // produced nothing is a FAILURE, and is reported as one.
+  const once = (running, start, what) => {
+    if (running) return true;
+    if (auto2.started) { stopAuto2(`auto-tune: ${what}`, 'bad'); return false; }
+    auto2.started = true; start();
+    return true;
+  };
   if (st === 'measure the bending mode') {
     if (bend2) { done(); return; }
-    if (!comm2) startComm2();
+    if (!once(comm2, startComm2, 'could not measure the bending mode — no usable ring in '
+      + 'the decay, so shaping stays off')) return;
     auto2.note = comm2 ? comm2.phase : '';
     if (!comm2) done();
   } else if (st === 'shape the command') {
@@ -3477,9 +3652,9 @@ function auto2Tick() {
     done();
   } else if (st === 'learn the dynamic filter') {
     if (ff2 && ff2.ready) { done(); return; }
-    if (!learn2) startLearn2();
+    if (!once(learn2, startLearn2, 'the dynamic filter did not converge — running '
+      + 'without it')) return;
     auto2.note = learn2 ? learn2.note || 'converging the correction against the tracker' : '';
-    if (!learn2) done();
   } else if (st === 'compare the model corrections') {
     if (!cmp2 && !auto2.started) {
       auto2.started = true; startCompare2({ modes: ['open', 'ff', 'learned'] });
@@ -3514,8 +3689,8 @@ function auto2Tick() {
     // scored with adaptation paused.
     if (!cs2Ready()) { done(); return; }
     if (csTraining) { csTraining = false; ditherAmp2 = 0; syncChain(); return; }
-    if (!cmp2 && !auto2.closedStarted) {
-      auto2.closedStarted = true; startCompare2({ modes: ['closed'], reset: false });
+    if (!cmp2 && !auto2.started) {
+      auto2.started = true; startCompare2({ modes: ['closed'], reset: false });
     }
     else if (!cmp2) done();
     auto2.note = cmp2 ? MODE_LABEL.closed : '';
@@ -3560,7 +3735,7 @@ function beginTraining2() {
     const w0 = win2Stats();
     const e0 = w0 && w0.n > 200 ? Math.hypot(w0.bias, w0.sd)   // see beginTraining()
       : Math.abs(arm2.tipError().total);
-    ditherAmp2 = Math.min(0.02, Math.max(1e-3, 1.5 * e0 / arm2.toolRadius()));
+    ditherAmp2 = Math.min(0.02, Math.max(1e-3, 1.5 * e0 / Math.abs(arm2.toolLever()[0])));
     console.log(`[flexisim] chain commissioning dither ${ditherAmp2.toExponential(3)} rad`);
   }
   syncChain();
@@ -3585,8 +3760,8 @@ function bestScored2() {
   if (!keys.length) return null;
   const lo = Math.min(...keys.map((m) => board2[m].rms));
   const band = keys.filter((m) => board2[m].rms <= lo * 1.05);
-  return band.reduce((b, m) =>
-    ((board2[m].rough || 0) < (board2[b].rough || 0) ? m : b), band[0]);
+  const rq = (m) => (board2[m].rough == null ? Infinity : board2[m].rough);
+  return band.reduce((b, m) => (rq(m) < rq(b) ? m : b), band[0]);
 }
 
 /** See startCompare() for why a partial compare must not clear the table. */
@@ -3700,7 +3875,7 @@ function renderBoard2() {
       return `<tr><td>${MODE_LABEL[m]}</td><td>${f(b.bias)}</td>`
         + `<td>${g(m, b.bias, base && base.bias)}</td><td>${f(b.sd)}</td>`
         + `<td>${g(m, b.sd, base && base.sd)}</td><td>${f(b.rms)}</td>`
-        + `<td>${b.rough ? f(b.rough) : '—'}</td></tr>`;
+        + `<td>${b.rough == null ? '—' : f(b.rough)}</td></tr>`;
     }).join('');
 }
 
@@ -3711,7 +3886,7 @@ function recordBoard2() {
   // See recordBoard(): the row carries what the correction COSTS as well as what it buys.
   const cr = ctl2Mode() !== 'open' ? control2Roughness() : null;
   board2[ctl2Mode()] = { bias: w.bias, sd: w.sd, rms: w.rms, k: k2,
-    rough: cr && cr.sd > 0 ? cr.rough / cr.sd : 0 };
+    rough: cr && cr.sd > 0 ? cr.rough / cr.sd : null };
   renderBoard2();
 }
 
@@ -3806,9 +3981,22 @@ function draw2() {
     const t = span > 0 ? (want - prof.x[lo]) / span : 0;
     return prof.dy[lo] + t * (prof.dy[lo + 1] - prof.dy[lo]);
   };
-  const tipSlope = (prof, piv) => {
-    const n = prof.x.length;
-    return (prof.dy[n - 1] - prof.dy[n - 2]) / (prof.x[n - 1] - prof.x[n - 2]);
+  // THE SAME SLOPE `tipError()` USES, fitted the same way. A two-point difference on a
+  // section-averaged profile is multiplied by the forearm and then by the magnification
+  // — about 95x at the shipped setting — so its noise is amplified by the same factor
+  // while the link rings. A least squares over the last few cells costs nothing and is
+  // what `link.js`'s `tipSlope()` does, so the picture and the number agree by
+  // construction rather than by coincidence.
+  const tipSlope = (prof) => {
+    const n = prof.x.length, m = Math.min(5, n);
+    if (m < 2) return 0;
+    let sx = 0, sy = 0, sxx = 0, sxy = 0;
+    for (let i = n - m; i < n; i++) {
+      sx += prof.x[i]; sy += prof.dy[i]; sxx += prof.x[i] * prof.x[i];
+      sxy += prof.x[i] * prof.dy[i];
+    }
+    const den = m * sxx - sx * sx;
+    return den === 0 ? 0 : (m * sxy - sx * sy) / den;
   };
 
   /**
@@ -3832,7 +4020,7 @@ function draw2() {
     // TILTS everything downstream, so the forearm carries link 1's angular
     // deviation plus link 1's tip SLOPE plus joint 2's own -- the term tipError()
     // reports separately rather than folding in with a lever arm it does not have.
-    const dd2 = d1 + (bent ? tipSlope(p1, piv1) : 0) + d2;
+    const dd2 = d1 + (bent ? tipSlope(p1) : 0) + d2;
     g.beginPath();
     let tx = 0, ty = 0;
     for (let i = 0; i <= 20; i++) {
@@ -3846,7 +4034,7 @@ function draw2() {
 
   chain(0, 0, false, '#64748b', 2, [6, 5]);                       // desired
   chain(off, 0, false, '#a78bfa', 2, [3, 3]);                     // commanded motor
-  const [, , , ] = chain(enc[0].angle - q1c, enc[1].angle - q2c, false, '#475569', 4);
+  const [encTx, encTy] = chain(enc[0].angle - q1c, enc[1].angle - q2c, false, '#475569', 4);
   const [tx, ty, elx, ely] = chain(arm2.q[0] - q1c, arm2.q[1] - q2c, true, '#f59e0b', 5);
 
   g.fillStyle = '#fbbf24'; g.globalAlpha = 0.55;
@@ -3875,17 +4063,23 @@ function draw2() {
   // the tool's error is drawn in.
   const w2S = win2Stats();
   if (w2S && w2S.n > 8) {
+    // TWO THINGS WERE WRONG WITH THIS BAR AND BOTH MADE IT SAY LESS THAN THE TRUTH.
+    // (i) `win2` holds `toolTrackingError`, a LENGTH — every other reader treats it as
+    // one (the stats row divides it by the reach and calls the result a percentage) —
+    // and this divided it by L2 before using it as a transverse offset, drawing the
+    // sweep 9.5x too short: a 2.4% stub where the honest bound is 23% of the reach.
+    // (ii) It was anchored on link 1's LIVE angular deviation, but the quantity it
+    // bounds is the deviation from the PROGRAM, so its base has to be the program's own
+    // tool point. Anchoring it on the machine made the band move with the thing it is
+    // supposed to be measuring.
     const barAt = (dev) => {
-      const d1 = arm2.q[0] - q1c;
-      const eby = mag * d1 * arm2.L1;
-      const px1 = c1 * arm2.L1 - s1 * eby, py1 = s1 * arm2.L1 + c1 * eby;
       const by = mag * dev;
-      return [px + (px1 + c2 * arm2.L2 - s2 * by) * scale,
-        py - (py1 + s2 * arm2.L2 + c2 * by) * scale];
+      return [px + (c1 * arm2.L1 + c2 * arm2.L2 - s2 * by) * scale,
+        py - (s1 * arm2.L1 + s2 * arm2.L2 + c2 * by) * scale];
     };
-    const [Xa, Ya] = barAt(w2S.lo / arm2.L2);
-    const [Xb, Yb] = barAt(w2S.hi / arm2.L2);
-    const [Xm, Ym] = barAt(w2S.bias / arm2.L2);
+    const [Xa, Ya] = barAt(w2S.lo);
+    const [Xb, Yb] = barAt(w2S.hi);
+    const [Xm, Ym] = barAt(w2S.bias);
     g.save();
     g.strokeStyle = 'rgba(251,191,36,0.30)'; g.lineWidth = 9; g.lineCap = 'butt';
     g.beginPath(); g.moveTo(Xa, Ya); g.lineTo(Xb, Yb); g.stroke();
@@ -3896,8 +4090,22 @@ function draw2() {
     g.lineTo(Xm + 9 * nx / nl, Ym + 9 * ny / nl); g.stroke();
     g.restore();
   }
-  lastGeom2 = { mag, drawnToolVsMotor: mag * arm2.tipError().total,
+  // MEASURED OFF THE DRAWING, NOT RESTATED FROM THE MODEL. This used to be
+  // `drawnToolVsMotor: mag * tipError().total` against `trueToolVsMotor:
+  // tipError().total`, so the ratio was identically `mag` and the check that caught the
+  // original two-scale defect on the Move tab could never fail here. It is the reason a
+  // 1.44x disagreement between the picture and the number survived: the instrument was
+  // comparing a quantity with itself.
+  //
+  // The drawn tool and the drawn ENCODER chain are both returned by chain(), so the
+  // separation between them in the canvas is the drawn error — divide by `mag * scale`
+  // and it must be the model's own number.
+  const drawnSep = Math.hypot(tx - encTx, ty - encTy);
+  const drawnSign = ((tx - encTx) * -s2 + (ty - encTy) * c2) >= 0 ? 1 : -1;
+  lastGeom2 = { mag,
+    drawnToolVsMotor: drawnSign * drawnSep / mag,
     trueToolVsMotor: arm2.tipError().total,
+    axial: arm2.tipError().axial,
     band: w2S && w2S.n > 8 ? { lo: w2S.lo, hi: w2S.hi, mean: w2S.bias } : null };
 
   g.font = '11px ui-monospace,monospace';
@@ -3944,11 +4152,24 @@ function stats2() {
     rows.push(['what the elbow gearbox carries', `${fmt(t2, 3)}`]);
     rows.push(['wind-up (shoulder / elbow)',
       `${fmt(arm2.j1.windup(), 3)} / ${fmt(arm2.j2.windup(), 3)} rad`]);
+    // THE LEVER IS A PROJECTION, and the distinction is not pedantic: it is L1 cos q2 + L2,
+    // which at this pose is smaller than the shoulder-to-tool DISTANCE and past a right
+    // angle has the opposite sign. Both are shown, because the gap between them is exactly
+    // the error this row used to carry.
+    const lv = arm2.toolLever();
     rows.push(['tool error: shoulder tilt', `${fmt(te.tilt1, 3)}   `
-      + `<span class="warn">levered by the whole reach ${arm2.toolRadius().toFixed(2)}</span>`]);
-    rows.push(['…elbow tilt / link 1 bend / link 2 bend',
-      `${fmt(te.tilt2, 3)} / ${fmt(te.bend1, 3)} / ${fmt(te.bend2, 3)}`]);
-    rows.push(['…total', `${fmt(te.total, 3)}`]);
+      + `<span class="warn">levered by ${lv[0].toFixed(2)}, the projection of the `
+      + `${arm2.toolRadius().toFixed(2)} reach onto the forearm's transverse</span>`]);
+    rows.push(['…elbow tilt / link 1 slope / link 1 bend / link 2 bend',
+      `${fmt(te.tilt2, 3)} / ${fmt(te.slope1, 3)} / ${fmt(te.bend1, 3)} / `
+      + `${fmt(te.bend2, 3)}`]);
+    // LINK 1's TIP SLOPE ROTATES THE WHOLE FOREARM and is usually the biggest term of the
+    // five — it was missing from this sum entirely until it was measured at 2.9x the two
+    // wind-ups combined.
+    rows.push(['…total', `${fmt(te.total, 3)}`
+      + (Math.abs(te.axial) > 0.05 * Math.abs(te.total)
+        ? `   <span class="warn">and ${fmt(te.axial, 2)} ALONG the forearm, which a `
+          + 'transverse scalar cannot carry</span>' : '')]);
     const m = ctl2Mode(), want = $('ctl2-mode').value;
     const r = refs2();
     const why = want === 'closed'
@@ -4039,6 +4260,14 @@ function chainPosChart() {
       line: { color: '#f59e0b', width: 2.5 } },
   ];
   if (!chPosOn) {
+    // MADE VISIBLE BEFORE IT IS DRAWN, not after. Plotly sizes against the
+    // container it is given, and a `display:none` container has no width — so it
+    // fell back to the 700px default inside a 388px box and, with
+    // `body{overflow-x:hidden}`, the right 45% of every chart was invisible and
+    // unreachable. It only corrected itself if the user happened to leave the tab
+    // and come back, which fires the resize. Measured on a 412px viewport:
+    // clientWidth 388, scrollWidth 700. flowsim.html has always done it this way.
+    $('chain-pos').classList.add('on');
     Plotly.newPlot('chain-pos', traces, {
       margin: { l: 46, r: 10, t: 6, b: 26 }, paper_bgcolor: '#0b1220', plot_bgcolor: '#060a14',
       font: { color: '#94a3b8', size: 9 }, showlegend: true,
@@ -4047,7 +4276,6 @@ function chainPosChart() {
       yaxis: { gridcolor: '#1e293b', zeroline: true, zerolinecolor: '#475569',
         title: { text: 'tool vs desired', font: { size: 9 } } },
     }, { displayModeBar: false, responsive: true });
-    $('chain-pos').classList.add('on');
     chPosOn = true;
     return;
   }
@@ -4067,6 +4295,14 @@ function chainChart() {
       line: { color: '#a78bfa', width: 1.5, dash: 'dot' } },
   ];
   if (!chChartOn) {
+    // MADE VISIBLE BEFORE IT IS DRAWN, not after. Plotly sizes against the
+    // container it is given, and a `display:none` container has no width — so it
+    // fell back to the 700px default inside a 388px box and, with
+    // `body{overflow-x:hidden}`, the right 45% of every chart was invisible and
+    // unreachable. It only corrected itself if the user happened to leave the tab
+    // and come back, which fires the resize. Measured on a 412px viewport:
+    // clientWidth 388, scrollWidth 700. flowsim.html has always done it this way.
+    $('chain-chart').classList.add('on');
     Plotly.newPlot('chain-chart', traces, {
       margin: { l: 52, r: 10, t: 6, b: 26 }, paper_bgcolor: '#0b1220', plot_bgcolor: '#060a14',
       font: { color: '#94a3b8', size: 9 }, showlegend: true,
@@ -4074,7 +4310,6 @@ function chainChart() {
       xaxis: { gridcolor: '#1e293b', title: { text: 'solver steps', font: { size: 9 } } },
       yaxis: { gridcolor: '#1e293b' },
     }, { displayModeBar: false, responsive: true });
-    $('chain-chart').classList.add('on');
     chChartOn = true;
     return;
   }
@@ -4094,8 +4329,8 @@ $('run2').addEventListener('click', () => {
 $('reset2').addEventListener('click', async () => {
   stopAuto2();
   run2 = false;
-  busy2 = true; await build2(); busy2 = false;
-  syncChain();
+  busy2 = true;
+  try { await build2(); } finally { busy2 = false; syncChain(); }   // see $('reset')
 });
 $('mode2').addEventListener('change', () => {
   stopAuto2();
@@ -4113,7 +4348,7 @@ const ladder2 = (id, vid, arr, fmtv) => {
   $(id).addEventListener('change', async () => {
     stopAuto2();
     busy2 = true; run2 = false;
-    await build2(); busy2 = false; syncChain();
+    try { await build2(); } finally { busy2 = false; syncChain(); }   // see $('reset')
   });
   f();
 };
@@ -4717,6 +4952,14 @@ function bbChart() {
       line: { color: '#a78bfa', width: 1.5, dash: 'dot' }, yaxis: 'y2' },
   ];
   if (!bbChartOn) {
+    // MADE VISIBLE BEFORE IT IS DRAWN, not after. Plotly sizes against the
+    // container it is given, and a `display:none` container has no width — so it
+    // fell back to the 700px default inside a 388px box and, with
+    // `body{overflow-x:hidden}`, the right 45% of every chart was invisible and
+    // unreachable. It only corrected itself if the user happened to leave the tab
+    // and come back, which fires the resize. Measured on a 412px viewport:
+    // clientWidth 388, scrollWidth 700. flowsim.html has always done it this way.
+    $('bb-chart').classList.add('on');
     Plotly.newPlot('bb-chart', traces, {
       margin: { l: 48, r: 44, t: 6, b: 26 }, paper_bgcolor: '#0b1220',
       plot_bgcolor: '#060a14', font: { color: '#94a3b8', size: 9 }, showlegend: true,
@@ -4725,7 +4968,6 @@ function bbChart() {
       yaxis: { gridcolor: '#1e293b' },
       yaxis2: { overlaying: 'y', side: 'right', showgrid: false },
     }, { displayModeBar: false, responsive: true });
-    $('bb-chart').classList.add('on');
     bbChartOn = true;
     return;
   }
@@ -4784,15 +5026,13 @@ for (const id of ['s-jerk3', 's-settle3']) {
   $(id).addEventListener('change', async () => {
     if (bbBusy) return;
     bbBusy = true; syncBB();
-    await buildBB();
-    bbBusy = false; syncBB();
+    try { await buildBB(); } finally { bbBusy = false; syncBB(); }   // see $('reset')
   });
 }
 $('bb-reset').addEventListener('click', async () => {
   if (bbBusy) return;
   bbBusy = true; syncBB();
-  await buildBB();
-  bbBusy = false; syncBB();
+  try { await buildBB(); } finally { bbBusy = false; syncBB(); }   // see $('reset')
 });
 
 window.__flxBBDbg = () => (bbArm ? {
@@ -4823,6 +5063,7 @@ window.__flxChainDbg = () => (arm2 ? {
     dither: ditherAmp2, dithering: csTraining && !!ditherAmp2,
     comparing: cmp2 ? { ...cmp2 } : null },
   auto: auto2 ? { ...auto2, of: AUTO2_STEPS.length, what: AUTO2_STEPS[auto2.step] } : null,
+  csTraining,
   learning: learn2 ? { move: learn2.pi, iter: learn2.iter, note: learn2.note } : null,
   ssUnder: csUnder,
   commissioning: comm2 ? { phase: comm2.phase, left: comm2.left } : null,

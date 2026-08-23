@@ -234,14 +234,67 @@ console.log(`    ${arm.describe()}`);
   const reach = arm.toolRadius();
   console.log(`    [levers] reach ${reach.toFixed(2)}; tilts `
     + `${e.tilt.map((t) => t.toExponential(3)).join(' / ')}`);
+  // STRAIGHT, the projection and the distance coincide, so this is the one pose where
+  // the old |r| form was right — which is why it is checked here AND at a folded pose
+  // below, where the two differ and the old form was wrong.
   check('each joint\'s wind-up is levered by the distance from THAT joint to the tool',
     Math.abs(e.tilt[0] / e.tilt[2] - reach / arm.L[2]) < 1e-9
       && Math.abs(e.tilt[1] / e.tilt[2] - (arm.L[1] + arm.L[2]) / arm.L[2]) < 1e-9,
     e.tilt.join(' '));
-  check('and the tool error is the sum of every tilt and every bend',
+  check('and the tool error is the sum of every tilt, every slope and every bend',
     Math.abs(e.total - (e.tilt.reduce((a, b) => a + b, 0)
-      + e.bend.reduce((a, b) => a + b, 0))) < 1e-15 * Math.abs(e.total),
+      + e.slope.reduce((a, b) => a + b, 0)
+      + e.bend.reduce((a, b) => a + b, 0))) < 1e-12 * Math.abs(e.total),
     `${e.total}`);
+}
+
+// ------------------------------------------------------- the lever is a PROJECTION
+//
+// THE ERROR IS MEASURED TRANSVERSE TO THE LAST LINK, so every term has to be projected
+// onto that direction — and for a long time three of them were not: the wind-up used the
+// joint-to-tool DISTANCE rather than its projection, every bending term was added
+// unprojected, and each link's tip SLOPE, which rotates everything downstream of it, was
+// omitted entirely while a comment claimed it was reported separately.
+//
+// STRAIGHT THE TWO AGREE, WHICH IS WHY IT SURVIVED. Folded they do not, and at a fold
+// past a right angle the projection goes NEGATIVE while a distance cannot.
+{
+  const a = arm;
+  for (const pose of [[0, 0, 0], [0, 0.6, 0.4], [0, Math.PI / 2, 0], [0, 2.6, 0.4]]) {
+    a.setPose(pose);
+    for (let i = 0; i < 3; i++) a.joints[i].thM = a.joints[i].N * 1e-3;
+    const t = a.tipError();
+    // Rebuild lever(0) independently, from the geometry rather than from the method.
+    let ph = 0, x = 0, y = 0;
+    for (let k = 0; k < 3; k++) { ph += pose[k]; x += a.L[k] * Math.cos(ph);
+      y += a.L[k] * Math.sin(ph); }
+    const ux = -Math.sin(ph), uy = Math.cos(ph);
+    const want = -1e-3 * (-y * ux + x * uy);
+    console.log(`    [projection] pose ${pose.map((v) => v.toFixed(2)).join(',')}  `
+      + `lever ${(-y * ux + x * uy).toFixed(3)} against a distance of `
+      + `${a.toolRadius().toFixed(3)}   tilt[0] ${t.tilt[0].toExponential(3)}`);
+    check(`the base wind-up is levered by the PROJECTION at pose ${pose[1].toFixed(1)}`,
+      Math.abs(t.tilt[0] - want) < 1e-12 * Math.max(Math.abs(want), 1e-12),
+      `${t.tilt[0]} vs ${want}`);
+  }
+  // …AND SOMEWHERE IN THE WORKSPACE THAT PROJECTION IS NEGATIVE, WHERE A DISTANCE CANNOT
+  // BE — which is the half no tolerance on a magnitude would ever have caught. Folding
+  // the WRIST back past a right angle points the last link at the base, so the tool sits
+  // behind it and a base wind-up moves the tool the other way.
+  const folded = [0, 0, Math.PI];
+  a.setPose(folded);
+  for (let i = 0; i < 3; i++) a.joints[i].thM = a.joints[i].N * 1e-3;
+  let ph = 0, x = 0, y = 0;
+  for (let k = 0; k < 3; k++) { ph += folded[k]; x += a.L[k] * Math.cos(ph);
+    y += a.L[k] * Math.sin(ph); }
+  const lev = -y * -Math.sin(ph) + x * Math.cos(ph);
+  const tf = a.tipError();
+  console.log(`    [projection] wrist folded: lever ${lev.toFixed(3)} against a distance `
+    + `of ${a.toolRadius().toFixed(3)}   tilt[0] ${tf.tilt[0].toExponential(3)}`);
+  check('…and somewhere in the workspace that projection is NEGATIVE, where a distance '
+    + 'cannot be', lev < 0 && a.toolRadius() > 0 && tf.tilt[0] > 0,
+    `lever ${lev.toFixed(3)}, radius ${a.toolRadius().toFixed(3)}, `
+    + `tilt ${tf.tilt[0].toExponential(3)}`);
 }
 
 for (const l of links) await l.destroy();

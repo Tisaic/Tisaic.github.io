@@ -426,6 +426,50 @@ console.log('\n  the constrained solve');
 // was a staircase. Checked on the sequence rather than through a plant, because the
 // property is exact: it must pass through the designed samples and be straight between
 // them, and neither of those is a statistical claim.
+// ---------------------------------------------------------------------------------
+// THE QUIET DETECTOR, in BOTH directions -- it has to terminate on a noisy machine and
+// it must NOT terminate on one that is still moving. Checking only the first is what let
+// a rate test replace a travel test; checking only the second is what let a scale that
+// was never seeded pass on a noiseless simulation.
+console.log('\n  the quiet detector');
+{
+  const settle = (noise) => {
+    let seed = 12345;
+    const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      return seed / 0x7fffffff - 0.5; };
+    const bb = new BlackBox({ ref: () => 0, sampleEvery: 10, probeSamples: 200 });
+    let k = 0;
+    // A first-order settle toward a NON-ZERO rest value, which is the ordinary case (an
+    // arm holding its gravity sag) and the one a scale seeded from zero cannot see.
+    while (bb.phase === 'step' && bb.sub === 'quiet' && k < 400000) {
+      bb.sample(k, 15.5 * (1 - Math.exp(-k / 3000)) + noise * 15.5 * rnd());
+      k += 10;
+    }
+    return { k, left: Math.exp(-k / 3000), timedOut: !!bb.quietTimedOut };
+  };
+  const rows = [0, 1e-9, 1e-6, 1e-3].map((n) => ({ n, ...settle(n) }));
+  for (const r of rows) {
+    console.log(`    [quiet] noise ${String(r.n).padEnd(6)} → ${String(r.k).padStart(6)} `
+      + `steps, ${(100 * r.left).toFixed(2)}% of the travel still to come`
+      + (r.timedOut ? '  TIMED OUT' : ''));
+  }
+  check('it detects quiet on a noisy machine rather than timing out',
+    rows.every((r) => !r.timedOut),
+    rows.map((r) => `${r.n}:${r.timedOut ? 'timeout' : 'ok'}`).join(' '));
+  // …AND THE SAME ANSWER ACROSS SIX DECADES OF NOISE, which is what says the scale is
+  // seeded from the signal rather than from an absolute number.
+  const ks = rows.map((r) => r.k);
+  check('…and the answer barely moves across six decades of it',
+    Math.max(...ks) / Math.min(...ks) < 1.5,
+    `${Math.min(...ks)} to ${Math.max(...ks)} steps`);
+  // THE OTHER HALF: a machine 40% from its rest value is NOT quiet, however slowly it is
+  // approaching it. A per-sample rate test says it is -- measured, it declared quiet at
+  // step 3350 with 33% of the travel remaining -- which is why this is a travel test.
+  check('…and it does NOT call a still-settling machine quiet',
+    rows.every((r) => r.left < 0.05),
+    rows.map((r) => `${(100 * r.left).toFixed(1)}%`).join(' '));
+}
+
 console.log('\n  the reconstruction between grid samples');
 {
   const grid = 50;
@@ -573,8 +617,24 @@ console.log('\n  plant C — the real hybrid arm, through the same interface');
   const prof = new AngleProfile({ span: 0.144, accelSteps: 300, cruiseSteps: 400,
     dwellSteps: 1400, shaper: convolveShapers(null, boxcarShaper(120)) });
   // …and the arm's command is modulated the same way, for the same reason.
+  //
+  // THE MACHINE HAS TO RUN THE COMMAND THE MODULE IS TOLD ABOUT, and for a long time it
+  // did not: `ref` was modulated and `stepOnce` drove the servo from the UNMODULATED
+  // `prof.at(k)` and scored against it. So the executed command repeated exactly every
+  // 4800 steps and the protection this modulation exists for -- a map with hundreds of
+  // features scoring by learning WHERE IN THE CYCLE it is -- was not active on the one
+  // plant that has a real disturbance. Measured: telling the module a command that is
+  // wrong by ±35% costs it 0.7% (6.13x -> 5.93x); making the EXECUTED command genuinely
+  // non-repeating costs 28% (5.93x -> 4.41x). That asymmetry is the finding — the map was
+  // recovering PHASE, not the command, exactly as brick 26's 96-bin phase average said.
   const ref = (kk) => prof.at(kk).theta
     * (1 + 0.35 * Math.sin(2 * Math.PI * kk / (prof.period * PHI * 2.7)));
+  // The derivatives are of the MODULATED signal, not the profile's own scaled by the
+  // modulation -- d/dk(m·theta) = m·theta' + m'·theta, and the chain tab shipped that
+  // inconsistency for two bricks and paid for it in following error.
+  const profAt = (kk) => ({ theta: ref(kk),
+    omega: (ref(kk + 1) - ref(kk - 1)) / 2,
+    alpha: ref(kk + 1) - 2 * ref(kk) + ref(kk - 1) });
 
   const bb = new BlackBox({ ref, sampleEvery: S, probeSamples: 1400, probeDwell: 1,
     probeAmp: BlackBox.autoAmplitude(0.144, 0.03), taps: 70, invTaps: 45,
@@ -588,7 +648,7 @@ console.log('\n  plant C — the real hybrid arm, through the same interface');
   const cmdLog = { on: false, ref: [], cmd: [], tau: [] };
   let k = 0;
   const stepOnce = (atRest = false) => {
-    const r = atRest ? { theta: 0, omega: 0, alpha: 0 } : prof.at(k);
+    const r = atRest ? { theta: 0, omega: 0, alpha: 0 } : profAt(k);
     const u = bb.offset(k);
     if (cmdLog.on && !atRest) {
       cmdLog.ref.push(r.theta); cmdLog.cmd.push(r.theta + u); cmdLog.tau.push(0);
@@ -666,10 +726,19 @@ console.log('\n  plant C — the real hybrid arm, through the same interface');
     b / a > 2, `${(b / a).toFixed(2)}x`);
   // THE NUMBER THAT HAS TO AGREE IS THE MEASURED ONE, not the design's own -- the same
   // convention plants A and B already use, and plant C had to be moved onto it.
+  // AND THE TOLERANCE IS TIGHTER NOW THAT THE ROUND MEASURES ITS OWN INSTRUMENT. The
+  // verify ratio is the machine's error against the MAP'S prediction of what it would
+  // have been, so it inherited the map's bias exactly — measured at 37% on an aperiodic
+  // command and 0% on a periodic one, i.e. the bias appears precisely where the map
+  // generalises worse. A zero rung measures that bias directly and every other rung is
+  // divided by it: verified 5.78x / achieved 4.43x became 5.04x / 5.19x.
   check('plant C: …and the number it measured on the machine agrees with what it achieved',
     bb.design.verified != null
-      && Math.abs(Math.log(bb.design.verified / (b / a))) < Math.log(1.6),
+      && Math.abs(Math.log(bb.design.verified / (b / a))) < Math.log(1.25),
     `verified ${bb.design.verified?.toFixed(2)}x, achieved ${(b / a).toFixed(2)}x`);
+  check('plant C: …and the verify round measured the map\'s own bias to divide it out',
+    bb.design.mapBias != null && bb.design.mapBias > 0.5 && bb.design.mapBias < 2.5,
+    `${bb.design.mapBias}`);
   // …AND THE OPEN-LOOP PREDICTION IS NOW CONSERVATIVE BY CONSTRUCTION, which is a
   // consequence of the reconstruction rather than a slack tolerance. `h` is identified
   // from a probe that is HELD for a whole grid interval, and the correction is deployed

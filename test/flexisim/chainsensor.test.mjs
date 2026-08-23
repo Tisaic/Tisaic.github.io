@@ -177,13 +177,30 @@ if (FULL) {
     whole.learner < 0.7 * shoulder.learner,
     `${whole.learner.toFixed(4)} vs ${shoulder.learner.toFixed(4)} `
     + `(${(shoulder.learner / whole.learner).toFixed(2)}x)`);
-  // AND IF YOU CAN ONLY INSTRUMENT ONE AXIS, INSTRUMENT THE SHOULDER. It is levered
-  // by the whole reach AND it drives the coupling that loads the elbow, so its
-  // signals carry more about the tool than the elbow's own do. That is a deployment
-  // conclusion, and it is the opposite of the intuition that the joint nearest the
-  // tool matters most.
-  check('the shoulder alone beats the elbow alone -- it is levered by the whole reach',
-    shoulder.learner < elbow.learner,
+  // WHICH SINGLE AXIS TO INSTRUMENT IS A TIE, AND THE OLD ANSWER WAS AN ARTEFACT.
+  //
+  // This block used to assert that the SHOULDER wins -- levered by the whole reach and
+  // driving the coupling that loads the elbow -- and measured 0.0250 against 0.0334. That
+  // was scored against a `tipError()` that was wrong by a factor of 1.44 and MISSING ITS
+  // LARGEST TERM: link 1's tip SLOPE, levered by the whole forearm, which alone is 2.9x
+  // the sum of both gearbox wind-ups. Against the corrected target the two measure 0.0323
+  // and 0.0307 -- a tie, and if anything the other way round.
+  //
+  // THE MECHANISM IS THE MISSING TERM ITSELF. Once the target includes link 1's bending
+  // SLOPE it is dominated by a deformation loaded by the whole downstream mass, and both
+  // joints see that: the shoulder through its own torque, the elbow through the reaction
+  // its servo is fighting. So neither axis has the monopoly the old ordering implied.
+  //
+  // WHAT SURVIVES IS THE CLAIM THE TAB EXISTS FOR: reading both axes beats reading
+  // either, by 1.9x, and that is asserted above. A 5% gap between the two single-axis
+  // models is within the run-to-run spread this pair has always shown, so asserting a
+  // direction here would be asserting noise -- the mistake this file has now made twice
+  // about these same two numbers.
+  console.log(`    [single axis] shoulder ${shoulder.learner.toFixed(4)} against elbow `
+    + `${elbow.learner.toFixed(4)} — `
+    + `${Math.abs(shoulder.learner / elbow.learner - 1) < 0.25 ? 'a tie' : 'a real gap'}`);
+  check('neither single axis has a monopoly on the tool, which the corrected target shows',
+    Math.abs(Math.log(shoulder.learner / elbow.learner)) < Math.log(1.4),
     `${shoulder.learner.toFixed(4)} vs ${elbow.learner.toFixed(4)}`);
   // BOTH SINGLE-AXIS MODELS STILL BEAT THE NAIVE VIEW, and that is the honest half:
   // the coupling leaves an INDIRECT trace in each axis's own signals -- it

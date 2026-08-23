@@ -2319,6 +2319,35 @@ const cs = (await fx.evaluate(() => window.__flxChainDbg())).sensor;
 console.log(`  flexisim/chain: tool sensor ${cs.mode} after ${cs.trained} pairs — whole arm `
   + `${cs.scores.whole.toFixed(4)}, elbow only ${cs.scores.elbow.toFixed(4)} `
   + `(${(cs.scores.elbow / cs.scores.whole).toFixed(2)}x), naive ${cs.scores.naive.toFixed(4)}`);
+// THE PICTURE AND THE NUMBER ARE TWO VIEWS OF ONE QUANTITY AND MUST AGREE, which is the
+// check that had no teeth here: `lastGeom2` used to report `mag * tipError().total`
+// against `tipError().total`, so its ratio was identically `mag` whatever the drawing
+// did. That is why a 1.44x disagreement between them survived — `tipError()` was missing
+// link 1's tip-slope term entirely and projecting two others onto the wrong direction,
+// while the drawing composed the chain correctly. It is measured off the canvas now.
+{
+  const gm = await fx.evaluate(() => window.__flxChainDbg().geom);
+  console.log(`  flexisim/chain: drawn tool vs the model — ${gm && gm.ratio !== null
+    ? gm.ratio.toFixed(4) : '—'} of the magnification (want 1.0), axial `
+    + `${gm ? gm.axial.toExponential(2) : '—'}`);
+  check('flexisim/chain: the picture draws the same tool error the model reports',
+    gm && gm.ratio !== null && Math.abs(gm.ratio - 1) < 0.06,
+    JSON.stringify(gm && { ratio: gm.ratio, drawn: gm.drawnToolVsMotor,
+      true: gm.trueToolVsMotor }));
+  // …AND THE SWEEP BAND CONTAINS THE TOOL IT IS DRAWN AROUND. The band was rendered 9.5x
+  // too short — win2 holds a LENGTH and it was being divided by L2 before use — so the
+  // marker sat well outside the bound the picture claimed for it.
+  const inBand = await fx.evaluate(() => {
+    const d = window.__flxChainDbg();
+    if (!d.geom || !d.geom.band || !d.win) return null;
+    const b = d.geom.band, e = d.win.rms;
+    return { lo: b.lo, hi: b.hi, span: b.hi - b.lo, rms: e };
+  });
+  check('flexisim/chain: …and the sweep band spans the error it bounds',
+    inBand && inBand.span > 0.5 * inBand.rms,
+    JSON.stringify(inBand));
+}
+
 check('flexisim/chain: both tool sensors reach a locked, frozen readout',
   cs.mode === 'estimating' && cs.frozen && cs.trained > 500, JSON.stringify(cs).slice(0, 160));
 check('flexisim/chain: the whole-arm sensor beats the controller\'s own view of the tool',
@@ -2422,6 +2451,37 @@ check('flexisim/chain: …and is REFUSED until one has been fitted',
 check('flexisim/chain: input shaping is refused until the bending mode is measured',
   await fx.$eval('#shape2-on', (e) => e.disabled) && !c2gate.bend, 'shape2-on');
 await fx.selectOption('#ctl2-mode', 'open');
+
+// A SEQUENCE THAT CANNOT FAIL CAN ONLY LOOP, and until now nothing tested that. The
+// chain deliberately has NO analytic fallback for its bending mode -- there is nothing
+// honest to fall back to on a two-link tool mode -- so `finishComm2()` clears both the
+// result and its own handle when `ringFit` fails. Every step here has the shape "if the
+// result exists move on, else start the sub-task", so the next tick started it again:
+// the arm settled, kicked and re-fitted for ever, the badge cycled through the phases,
+// Run stayed disabled, and Stop was the only way out. The seam to force it
+// (`__flxFailFit2`) has existed the whole time and was never used by a check.
+{
+  await fx.evaluate(() => { window.__flxFailFit2 = true; });
+  await fx.click('#auto2');
+  const ended = await fx.waitForFunction(() => !window.__flxChainDbg().auto,
+    null, { timeout: 240000 }).then(() => true).catch(() => false);
+  await fx.evaluate(() => { delete window.__flxFailFit2; });
+  const badge = await fx.textContent('#state2-badge');
+  console.log(`  flexisim/chain: with the ring fit forced to fail — ${ended ? 'stopped' : 'STILL RUNNING'}, badge "${badge}"`);
+  check('flexisim/chain: a sub-task that cannot succeed STOPS the sequence rather than '
+    + 'restarting it for ever', ended, `badge "${badge}"`);
+  check('flexisim/chain: …and says which step could not be done',
+    /bending mode/i.test(badge || ''), `badge "${badge}"`);
+  // …AND IT LEAVES THE MACHINE WHERE IT FOUND IT: a stop during training used to leave
+  // the commissioning dither running for ever, with the board frozen because no row may
+  // be written while the sensor adapts.
+  const after = await fx.evaluate(() => window.__flxChainDbg());
+  check('flexisim/chain: …and unwinds the training it had turned on',
+    !after.csTraining, `csTraining ${after.csTraining}`);
+  await fx.click('#reset2');
+  await fx.waitForFunction(() => window.__flxChainDbg() && !window.__flxChainDbg().auto
+    && window.__flxChainDbg().k === 0, null, { timeout: 240000 });
+}
 
 if (FULL) {
   // THE WHOLE SEQUENCE, driven by the one button, and what is asserted is that each
@@ -2614,7 +2674,8 @@ if (FULL) {
   // both halves. The rule is the same knee the rest of the module uses: among the trials
   // within 5% of the best MEASURED tracking, the smoothest.
   if (bbd.design && bbd.design.trials && bbd.design.trials.length) {
-    const tr = bbd.design.trials;
+    // The zero rung is the instrument, not a candidate — see BlackBox._verify().
+    const tr = bbd.design.trials.filter((x) => !x.zero);
     const bestR = Math.max(...tr.map((x) => x.ratio));
     const bandMin = Math.min(...tr.filter((x) => x.ratio >= 0.95 * bestR).map((x) => x.curv));
     const dep = tr.find((x) => x.kind === (bbd.design.kind === 'constrained' ? 'mpc' : 'fir')
@@ -2747,6 +2808,39 @@ console.log(`  flexisim: chart containers — ${plotSized.map((x) => `${x.id} ${
 check('flexisim: every Plotly container gets its height from CSS, so none can strobe',
   plotIds.length >= 5 && plotSized.every((x) => x.ok),
   JSON.stringify(plotSized.filter((x) => !x.ok)));
+
+// …AND THE WIDTH, WHICH IS THE SAME DEFECT IN THE OTHER AXIS AND WAS WORSE. Plotly sizes
+// against the container it is handed, and a `display:none` container has no width — so
+// every chart on this page was created at Plotly's 700px default inside a 388px box, and
+// with `body{overflow-x:hidden}` the right 45% of it was invisible AND unreachable. It
+// corrected itself only if the user left the tab and came back, which fires the resize,
+// so a check that visited each tab once and looked would have seen it and a check that
+// navigated twice would not. Asserted as GEOMETRY — a chart wider than its own box —
+// rather than as "a chart exists", which is the rule this page keeps re-learning.
+const plotWide = [];
+for (const [tab, ids] of [['move', ['err-chart', 'ss-chart']],
+  ['chain', ['chain-pos', 'chain-chart', 'cs-chart']], ['black', ['bb-chart']]]) {
+  await fx.click(`.tab[data-tab="${tab}"]`);
+  await fx.waitForTimeout(400);
+  plotWide.push(...await fx.evaluate((xs) => xs.map((id) => {
+    const el = document.getElementById(id);
+    if (!el || !el.classList.contains('on')) return { id, ok: true, why: 'not drawn yet' };
+    const svg = el.querySelector('.main-svg');
+    return { id, ok: el.scrollWidth <= el.clientWidth + 2
+      && (!svg || svg.clientWidth <= el.clientWidth + 2),
+      w: el.clientWidth, sw: el.scrollWidth, svg: svg ? svg.clientWidth : null };
+  }), ids));
+}
+console.log('  flexisim: chart widths — '
+  + plotWide.map((x) => `${x.id} ${x.w}/${x.sw}${x.svg ? `/svg ${x.svg}` : ''}`).join(', '));
+check('flexisim: …and its width, so no chart is drawn wider than the box it sits in',
+  plotWide.every((x) => x.ok), JSON.stringify(plotWide.filter((x) => !x.ok)));
+// AND THE PAGE ITSELF MUST NOT OVERFLOW, which is the symptom a user actually meets.
+const overflow = await fx.evaluate(() => ({
+  doc: document.documentElement.scrollWidth, win: window.innerWidth }));
+check('flexisim: …and the page does not scroll sideways on a phone',
+  overflow.doc <= overflow.win + 2, JSON.stringify(overflow));
+await fx.click('.tab[data-tab="move"]');
 
 // The in-browser Verify tab runs the same closed forms against the same modules.
 await fx.click('.tab[data-tab="verify"]');
