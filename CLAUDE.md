@@ -409,9 +409,9 @@ that matches it** — the point-to-point tabs measure a different question.
   a correction table indexed by arc length on the part, updated between laps with a lead
   of one position-loop time constant and a zero-phase filter, ⑤ THE PILOT (`lib/pilot/`) —
   commissioned once from noise by one button, deploys only if its own verify round
-  measured an improvement on the machine, then cuts programs it has never seen (4.2× on
-  the rectangle — within 28% of ILC's fourteen-lap converged figure, first part, half the
-  reversals — 8.1× on the circle, on LESS copper than the open loop). **Sweep feedrate**
+  measured an improvement on the machine, then cuts programs it has never seen (6.2× on
+  the rectangle — BELOW ILC's fourteen-lap converged figure, first part, fewer reversals,
+  36% less copper — 7.0× on the circle). **Sweep feedrate**
   runs the whole ladder and tabulates the trade. The arm is drawn at TRUE geometry; the error trail
   is the exaggerated object, pushed out along the path normal only.
 - **④ Black box** — `lib/blackbox/`, a controller GIVEN NOTHING: a scalar command it can

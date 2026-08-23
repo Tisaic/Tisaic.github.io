@@ -150,11 +150,13 @@ async function deployOn(shape, active) {
   return { r: score.report(), uPk };
 }
 
-// THE GATES MOVED UP WITH THE FOH REGISTRATION and they are meant to: the attribution
-// instrument took the machine from 2.16x its own plan's prediction to 1.04x, and the
-// one-shot rectangle went 2.06x → 4.15x. A regression back to the ZOH or the shifted
-// registration fails these by a factor, not a margin.
-for (const [shape, gate] of [['rounded', 3.0], ['circle', 6]]) {
+// THE GATES MOVED UP WITH EACH REGISTRATION FIX AND THEY ARE MEANT TO: the attribution
+// instrument took the machine from 2.16x its own plan's prediction to 1.04x (FOH basis,
+// then its registration), and the 1.5x-Ts horizon plus the plant-scaled effort weight
+// took the rectangle to 6.16x — BELOW the fourteen-lap learner's converged figure, one
+// shot, on 36% less copper. A regression in any of those mechanisms fails these gates by
+// a factor, not a margin.
+for (const [shape, gate] of [['rounded', 5.0], ['circle', 6]]) {
   const off = await deployOn(shape, false);
   const on = await deployOn(shape, true);
   const ratio = off.r.contourRms / on.r.contourRms;

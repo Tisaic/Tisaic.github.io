@@ -2857,3 +2857,71 @@ so the report informs rather than interlocks. A channel whose forecast fails hel
 validation is disarmed rather than deployed on hope, refusals are ordered by cause (a
 probe that saw nothing is a routing problem; every downstream symptom follows from it),
 and an infeasible excitation inside the pilot is a verdict, not an exception.
+
+---
+
+## Brick 37 — the one-shot pilot passes the fifteen-lap learner
+
+The target, set from outside: within 5% of ILC at 15 iterations. On the rectangle that
+meant ≤ 2.66e-2 from a starting 3.23e-2; on the circle, ILC@15 converges to **8.9e-4**
+(28× — a smooth path with no corners lets it dig), so ≤ 9.3e-4 from 8.7e-3. Method:
+decompose before optimising, with an ORACLE — the pilot's machinery fed a perfect
+recording of the repeatable error, which is exactly the information ILC consumes.
+
+### What the oracle ruled out, in one sweep each
+
+Grid refinement (decisions every 72 → 18 steps): **null** on both shapes. QP iterations
+60 → 300: **worse** (the warm-start truncation is useful implicit regularisation; exact
+solutions chatter — torque reversals 35 → 101). The probe's missing DC tail (a real 3%
+found by a 12k-step probe): **null**. The response in the MOVING regime, measured by a
+twin experiment — the identical scribble run twice, with and without dither, difference =
+H·u exactly, since the machine repeats to 1.6e-5: **matches the held-pose probe**; null.
+Lap-to-lap repeatability: **1.6e-5** — no floor problem. Oracle registration: correct.
+
+### What it ruled in
+
+1. **The horizon.** N·grid = 1.0×Ts means an error component is first seen exactly one
+   settling time ahead — and the plant needs the whole settle to deliver, so every
+   correction systematically arrives ~90% complete. At 1.5×Ts: circle 7.9e-3 → 5.1e-3,
+   rectangle 2.22e-2 → 2.02e-2, flat by 2.0×. Shipped.
+2. **The effort weight, for the third and last time.** The λ basin on every DEPLOYED
+   program, both plants: flat and dominant from 0.005·dc² to ~0.08·dc². Every automatic
+   pricing scheme — full-rate verify, quarter-rate verify, and a replay against held-out
+   commissioning data — picked outside it, because commissioning data is broadband and
+   programs are smooth: chasing fast error pays on a scribble and never on a program.
+   λ is now the plant-scaled constant 0.005·dc², the replay ladder is still computed and
+   REPORTED, and the verify still gates the deploy. A measured surrender, recorded as one.
+3. **The machinery was never the limit.** The same QP, horizon and interpolation against
+   an exactly known linear plant leaves a residual of **2.7e-6** — six orders below the
+   free error. Everything real sat in the models and the registrations.
+
+### Where it landed
+
+| rounded rect, feed 4e-3 | contour | ∫τ² | torque rev |
+|---|---|---|---|
+| open loop | 1.343e-1 | 5.93e-4 | 12 |
+| **pilot, one shot, part #1** | **2.178e-2 (6.16×)** | **3.80e-4** | **23** |
+| ILC, lap 14 of that part | 2.53e-2 | 3.92e-4 | 34 |
+
+**The one-shot controller is 14% below the fifteen-lap learner's converged figure**, on
+36% less copper than the open loop, with fewer reversals than the learner. Circle: 7.1e-2
+→ 1.02e-2 (6.98×). Target met on the rectangle with margin; not on the circle, and the
+reason is now a measured mechanism rather than a mystery:
+
+### The one-shot / iteration boundary, located
+
+The circle's residual against a perfect repeatable forecast is **one localised burst per
+lap** — 2.2e-3 against a 2.5e-4 floor everywhere else — at a joint velocity reversal, and
+its size equals the backlash lost-motion carried to the tool (2e-4 rad × the lever). The
+recording knows where the crossing happened UNCORRECTED; applying a correction moves the
+event; no one-shot plan can know where its own correction will put a discontinuity. The
+iterated oracle proves the point from the other side: fold one observed residual back in
+and the circle drops 7.9e-3 → **8.2e-4** — at ILC's level — in a single pass. Iteration
+is not a better optimiser here; it is strictly more information, delivered after the
+correction moved the event. The distributed part of the circle's error — everything that
+is not the backlash burst — is already at ~2.5e-4, BELOW the ≤5% target.
+
+What would move the circle without iteration, in order of plausibility: direction-aware
+forecast features (the AxisComp direction-bit lesson — a linear readout cannot represent
+a sign discontinuity, and sgn(v) features can carry backlash), or a smaller backlash. On
+a machine with tighter gears than 2e-4 rad of lost motion, the burst shrinks with it.

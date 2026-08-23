@@ -2798,10 +2798,11 @@ if (FULL) {
   await fx.click('#runP');
   console.log(`  flexisim/path: pilot lap — contour ${lapPilot.contourRms.toExponential(3)}, `
     + `tau2 ${lapPilot.tau2.toExponential(3)} against the open loop's 1.34e-1 / 5.93e-4`);
-  // Node pins 4.15x at this feed since the FOH registration; the browser gate leaves
-  // margin for lap phase but a regression to either mis-registered response fails it.
+  // Node pins 6.16x (2.18e-2) at this feed — below ILC's converged figure, one shot; the
+  // browser gate leaves margin for lap phase but a regression in the FOH registration,
+  // the horizon or the effort weight fails it.
   check('flexisim/path: …and the deployed pilot cuts the contour on a program it never saw',
-    lapPilot.contourRms < 6.0e-2, lapPilot.contourRms.toExponential(3));
+    lapPilot.contourRms < 3.5e-2, lapPilot.contourRms.toExponential(3));
   await fx.screenshot({ path: join(SHOTS, '10-flexisim-path-pilot.png') });
 }
 
