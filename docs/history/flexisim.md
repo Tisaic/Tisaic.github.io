@@ -2684,3 +2684,88 @@ is the head-to-head the Path tab should show, and it is the reason to build a cu
 control at the same time as the controller — without one there is no regime in which the
 inverse readout earns its keep, and the honest answer would be to use the model with
 preview instead.
+
+---
+
+## Brick 35 — the Pilot: route, limit, run, deploy
+
+Brick 34 ended with each correction owning a regime and a readout that added nothing
+because the commissioning hid it. This brick is the flagship the page was heading at:
+`lib/pilot/` — a controller commissioned by ONE BUTTON, told nothing about the plant,
+purely NGRC in its algorithms. The engineer routes signals (measured in, corrections out,
+a tracker during commissioning only, the command's look-ahead at runtime) and states
+limits (position box, velocity, acceleration, jerk per channel; a correction cap; torque
+guards; a workspace predicate). Everything else — the excitation, the sample grid, the
+window reach, the ridge, the horizon, the effort weight, and the decision to deploy at
+all — is measured from the machine.
+
+### The one measurement that unlocked it
+
+Brick 34's readout added 0% on top of the structured model — trained on a part program.
+The scribble idea (excite the space, not the path) failed first in its obvious form and
+the failure is dimensional: **a sum of n sinusoids spans a 2n-dimensional subspace in any
+lag window**, so a window regression fitted to a six-tone scribble is rank-deficient —
+exact inside the subspace, ridge-arbitrary outside it, and every deployment trajectory is
+outside it. Measured: RMSE 1.38e-2 on a held-out program against 1.39e-3 for a model
+trained on another program — ten times worse than the thing it was meant to replace, and
+worse than predicting zero. **Three-pole filtered noise excites every direction**: same
+features, same test, R² −5.2 → +0.97.
+
+Then the second unlock: **handed the future of the command, the scribble-trained readout
+holds R² 0.99 flat to 500 steps of lead** on programs never seen — the same feature set
+that scored −98 when trained on a program. The memorisation channel was never the
+features; it was the commissioning trajectory. On a scribble, cmd(k) does not determine
+cmd(k+250), so the future window is used as physics or not at all.
+
+### The closed loop, and the defect ladder on the way
+
+| version | rounded rect | what was wrong |
+|---|---|---|
+| v1: h from the regression | 1.16×, saturated, 105 torque reversals | the u-taps spanned 1200 steps of a 2400-step response — the QP inverted a TRUNCATED h, over-corrected, and fought its own tail. Root cause: the encoders see the dither too, so a joint fit splits the response between u-taps and measured features (0.55/0.07 of a true 0.93) |
+| v2: h from a probe, readouts h-consistent | 1.64× | the probe measures the whole response (0.9% DC agreement between the running fit and the held step — two routes, no shared arithmetic); every lead's target has the probe-h convolution subtracted, so the predictor the QP inverts is consistent across the horizon by construction |
+| v3: the Pilot, everything auto | **2.10×, copper BELOW the open loop** | autotune beat the hand-picked windows (stride 13/ridge 1e-5 over my 22/1e-8 — the elbow's held-out R² went 0.90 → 0.95) |
+
+### What the Pilot measures on itself, and the three instrument lessons inside it
+
+- **The excitation's limits are verified on the commanded sequence, not on the
+  construction.** Two defects said why: a cosine ease's endpoint acceleration step is a
+  jerk violation no interior sample shows (the peak sat at 17× the limit and every sample
+  of it lived at the seam — the C² quintic fixed it), and the full-length regeneration
+  renormalises past the short series' tuned peaks.
+- **A guard trip derates the dither too.** The first derate path shrank the trajectory's
+  rates and left the dither's own velocity spikes — which were what was tripping the
+  guard — untouched: three retries changed nothing and the pilot refused a healthy
+  machine.
+- **The effort weight must be priced where the machine will live.** Deployed on a real
+  program, λ is DOMINATED: 7.8e-2 beat 0 on contour (6.24e-2 vs 6.75e-2), copper
+  (4.75e-4 vs 7.25e-4, below the open loop's 5.93e-4) and torque reversals (16 vs 60).
+  Yet the verify round at full excitation rates chose λ = 0 by more than its 5% band, and
+  at half rates still did — a fast scribble's free error is broadband, so chasing it fast
+  pays there and never on a program. At QUARTER rates the verify's own preference finally
+  matches the machine's and picks λ 1.95e-2 by the smoothest-within-5% rule.
+
+### The numbers that ship
+
+One commissioning (~128k steps, about a minute of machine time), then programs never
+seen: **rounded rect 1.343e-1 → 6.4e-2 (2.1×), circle 7.1e-2 → 9.9e-3 (7.1×)** — both on
+LESS copper than the open loop, u never past the engineer's cap. Verified 5.95× on the
+machine before deploying. Against the alternatives: ILC needs 12+ laps of THE part to
+reach 2.6e-2 on the rectangle and transfers only partially; the identified compliance is
+1.03× at this feed; and under the cutting load that makes ILC 2–6× WORSE the pilot still
+helps (1.10× — bounded by what any controller can do against a disturbance whose
+correlation time is comparable to the plant's own delivery time).
+
+And the same module, unchanged, on a plant sharing no physics with the arm (a mass behind
+a compliant coupling on a fast servo): commissioned in 50k steps, verified 18×, deployed
+**23×** on a program of incommensurate sines it never saw. A truth signal routed to noise
+is REFUSED with the reason; a guard trip derates once and the commissioning still lands.
+
+### And one more read race, same shape as the last one
+
+The first browser read of the deployed pilot's lap said contour 8.7e-2 and τ² 6.0e-5 — a
+copper number a factor of eight from Node's, for one quantity. The lap score RESETS at
+every lap boundary, and a wait that resolves at 95% of a lap followed by a separate read
+one frame later is a race: measured, a "full lap" read **131 steps** of the next one. The
+smoke check now takes its snapshot INSIDE the wait predicate — the JSON it asserts is the
+JSON that satisfied the wait — and the browser and Node instruments agree: full lap 6887
+steps, contour 6.9e-2, τ² 2.99e-4 against the open loop's 5.93e-4.

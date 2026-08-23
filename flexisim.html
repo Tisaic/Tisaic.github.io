@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:240,built:"2026-08-23T18:47:40Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:241,built:"2026-08-23T20:01:08Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -514,6 +514,7 @@
     <div class="controls">
       <button id="runP">Run ▶</button>
       <button id="commP" class="sec">Commission ▶</button>
+      <button id="pilotP-btn" class="sec">Commission ⑤ Pilot ▶</button>
       <button id="sweepP" class="sec">Sweep feedrate ▶</button>
       <button id="resetP" class="sec">Reset</button>
     </div>
@@ -535,6 +536,7 @@
         <option value="model">② wind-up model — τ/K, which the controller knows</option>
         <option value="ident">③ identified compliance — one lap, then locked</option>
         <option value="ilc">④ iterative learning — the part is the same every lap</option>
+        <option value="pilot">⑤ pilot — commissioned once, from noise, for any program</option>
       </select>
     </div>
     <div class="controls">
@@ -569,6 +571,29 @@
     <p class="hint" id="boardP-cap" hidden></p>
     <div style="overflow-x:auto"><table class="v" id="boardP" hidden></table></div>
 
+    <div class="note">
+      <h3>⑤ is the flagship: route, limit, run, deploy</h3>
+      The pilot (<code>lib/pilot/</code>) is told <b>nothing about this machine</b> — not that
+      it is an arm, not its lengths, not its gearboxes. The engineering is four verbs:
+      <b>route</b> six measured signals in, two corrections out, a tracker during
+      commissioning only, and the program's look-ahead at runtime; <b>limit</b> each channel's
+      position box, velocity, acceleration and jerk, a correction cap, torque guards and a
+      workspace predicate; <b>run</b> — it settles, probes each channel's response, builds a
+      filtered-noise excitation verified against every limit on the commanded sequence
+      itself, auto-tunes its windows and ridge on held-out data, and then puts the finished
+      controller on the machine against doing nothing, interleaved; <b>deploy</b> only if that
+      measured an improvement. Runtime is a warm-started box-QP over a ladder of forecast
+      readouts — fixed iteration count, PLC-shaped.
+      <br /><br />Measured here, one commissioning (~110k steps, about a minute of machine
+      time), then programs it has <i>never seen</i>: rounded rect contour
+      <b>1.34e-1 → 5.6e-2 (2.4×)</b>, circle <b>7.1e-2 → 7.8e-3 (9.1×)</b> — both on <b>less</b>
+      copper loss than the open loop. Against ④: the learner needs 12+ laps of <i>the same
+      part</i> to reach 2.6e-2 on the rectangle and transfers only partially to the next part;
+      the pilot needs no laps of anything, and a cutting load that makes ④ two to six times
+      <i>worse</i> leaves the pilot still (mildly) helping. The multisine-vs-noise finding,
+      the seam jerk, the probe-vs-regression split and every other number are in
+      <code>docs/history/flexisim.md</code>.
+    </div>
     <div class="note">
       <h3>What the picture is, exactly</h3>
       The arm is drawn at its <b>true</b> geometry with no exaggeration anywhere — at this
@@ -865,6 +890,7 @@ import { ChainSensor } from './lib/flexisim/chainsensor.js';
 import { roundedRect, sharpRect, circle as circlePath } from './lib/flexisim/toolpath.js';
 import { ContourScore, decompose } from './lib/flexisim/contour.js';
 import { PathILC } from './lib/flexisim/pathilc.js';
+import { Pilot } from './lib/pilot/pilot.js';
 // THE BLACK BOX IS ITS OWN DIRECTORY, which is the boundary made visible: nothing under
 // lib/blackbox/ imports anything from lib/flexisim/, so it cannot learn about an arm even
 // by accident.
@@ -2519,11 +2545,12 @@ function frame() {
   const onPath = document.querySelector('.tab[data-tab="path"]').classList.contains('on');
   if (onPath && armP && !busyP) {
     try {
-      if (sweepP) sweepStepP(LEARN_BUDGET);
+      if (pilotComm) pilotStepP(LEARN_BUDGET);
+      else if (sweepP) sweepStepP(LEARN_BUDGET);
       else if (commissionP) commissionStepP(LEARN_BUDGET);
       else if (runP) stepP(+$('s-spfP').value);
     } catch (e) {
-      runP = false; sweepP = null; commissionP = null;
+      runP = false; sweepP = null; commissionP = null; pilotComm = false;
       setPathBadge('halted: ' + e.message, 'bad'); console.error(e);
     }
   }
@@ -5409,6 +5436,7 @@ const PATH_MODE_LABEL = {
   model: 'wind-up model τ/K',
   ident: 'identified compliance (locked)',
   ilc: 'iterative learning over laps',
+  pilot: 'the pilot — commissioned from noise',
 };
 // THE ILC's THREE NUMBERS, EVERY ONE OF THEM MEASURED RATHER THAN CHOSEN — see
 // lib/flexisim/pathilc.js, which carries the sweeps. The lead is the position loop's own
@@ -5439,6 +5467,7 @@ let progPending = false;        // a feedrate change waiting for a lap boundary
 let scoreP = null, lapScoreP = null, cP = null, cFrom = null;
 let commissionP = null, sweepP = null, sweepRows = null;
 let ilcP = null, ilcHist = [];
+let pilotP = null, pilotComm = false, pilotSamp = 0;
 let viewP = { x0: -1, x1: 1, y0: -1, y1: 1 };
 // The commanded joint travel over one lap, which is the scale any pre-distortion has to be
 // read against: a correction that is a few percent of the move is a correction, and one
@@ -5520,6 +5549,9 @@ async function buildP() {
   // today's arm -- the same rule the Chain tab's filter and shaper follow.
   cP = null; cFrom = null; commissionP = null; sweepP = null; sweepRows = null;
   ilcP = null; ilcHist = [];
+  // A PILOT BELONGS TO ONE PLANT: it identified this machine's response and timescale,
+  // and carrying it across a K change deploys yesterday's inverse on today's arm.
+  pilotP = null; pilotComm = false;
   $('ctlP').value = 'open';
   await homeP();
   console.log(`[flexisim] path: ${armP.describe()} | ${profP.length.toFixed(2)} long, `
@@ -5579,10 +5611,29 @@ function makeILC(keep) {
   ilcP = next;
 }
 
+// The pilot's look-ahead into the program, cached per sample and invalidated when the
+// program changes — the cache belongs to one profile, not to the tab.
+let pilotLook = { path: null, map: new Map() };
+function pilotRefAt(i) {
+  if (pilotLook.path !== profP) pilotLook = { path: profP, map: new Map() };
+  let r = pilotLook.map.get(i);
+  if (!r) {
+    const c = profP.at(i * pilotP.sample);
+    r = armP.ik(c.x, c.y, true);
+    pilotLook.map.set(i, r);
+    if (pilotLook.map.size > 9000) pilotLook.map.clear();
+  }
+  return r;
+}
+
 /** The pre-distortion, in joint angles, for the correction that is selected. */
 function predistortP(refs, cmd) {
   const m = pathMode();
   if (m === 'open') return [0, 0];
+  if (m === 'pilot') {
+    const base = Math.floor(kP / pilotP.sample);
+    return pilotP.act((off) => pilotRefAt(base + off));
+  }
   if (m === 'ilc') {
     const o = ilcP.offset(cmd.s);
     return [clampDq(o[0], ILC_CLAMP), clampDq(o[1], ILC_CLAMP)];
@@ -5621,6 +5672,10 @@ function pathMode() {
   const want = $('ctlP').value;
   if (want === 'ident' && !cP) return 'open';
   if (want === 'ilc' && !ilcP) return 'open';
+  // A PILOT THAT HAS NOT VOUCHED FOR ITSELF IS NOT IN CHARGE: selecting ⑤ before the
+  // verify round has measured an improvement quietly runs open — the same refusal shape
+  // as ③ before commissioning and the closed loop before the lock.
+  if (want === 'pilot' && !(pilotP && pilotP.verdict && pilotP.verdict.deploy)) return 'open';
   return want;
 }
 
@@ -5640,6 +5695,13 @@ function stepPathOnce(collect) {
     { ...refs[1], theta: q2 + dq[1] }]);
   armP.step(tau[0], tau[1], 1);
   kP++;
+  // A DEPLOYED PILOT IS FED EVERY STEP whatever correction is selected, so its rings are
+  // warm the moment ⑤ is chosen rather than a window-reach later.
+  if (pilotP && pilotP.phase === 'done' && pilotP.verdict && pilotP.verdict.deploy) {
+    const enc = armP.encoders();
+    pilotP.observe([enc[0].angle, enc[1].angle, enc[0].speed * 1e3, enc[1].speed * 1e3,
+      tau[0] * 1e3, tau[1] * 1e3], null);
+  }
   const tool = armP.toolXY();
   const dec = decompose(profP, tool, cmd);
   const sc = [scoreP, lapScoreP];
@@ -5861,6 +5923,85 @@ function sweepStepP(budget) {
   }
 }
 
+// ------------------------------------------------------------- the pilot (⑤)
+//
+// ROUTE, LIMIT, RUN, DEPLOY. Everything the pilot is given is listed right here — six
+// measured signals, two correction channels, a tracker during commissioning, the
+// program's look-ahead at runtime, and the limits — and nothing else on this page leaks
+// in. lib/pilot imports no plant knowledge; this block is the "route and limit" step an
+// engineer would do on a real machine, and it is deliberately shorter than any of the
+// hand-built corrections above it.
+function startPilotP() {
+  if (!armP || busyP || commissionP || sweepP || pilotComm) return;
+  runP = false;
+  const centre = armP.ik(PG.centre[0], PG.centre[1], true);
+  const c0 = profP.at(kP);
+  pilotP = new Pilot({
+    nMeasured: 6,
+    channels: [0, 1].map((j) => ({ lo: centre[j] - 0.55, hi: centre[j] + 0.55,
+      vMax: 8e-4, aMax: 4e-6, jMax: 2e-7 })),
+    uMax: 0.15,
+    start: armP.ik(c0.x, c0.y, true),
+    guards: [{ index: 4, max: 1.2 * PG.drive * holdP * 1e3 },
+      { index: 5, max: 1.2 * PG.drive * holdP * 1e3 }],
+    workspace: (q) => {
+      const r = Math.hypot(armP.L1 * Math.cos(q[0]) + armP.L2 * Math.cos(q[0] + q[1]),
+        armP.L1 * Math.sin(q[0]) + armP.L2 * Math.sin(q[0] + q[1]));
+      return r > Math.abs(armP.L1 - armP.L2) + 0.5 && r < armP.L1 + armP.L2 - 0.5;
+    },
+    seed: 1,
+  });
+  pilotComm = true;
+  setPathBadge('pilot: settling', 'warn');
+  syncPath();
+}
+
+function pilotStepP(budget) {
+  if (pilotP.phase === 'fit') {
+    // One fit per frame: each is a ridge solve over the whole record, and sixty of them
+    // in one frame is a ten-second freeze.
+    const frac = pilotP.work();
+    setPathBadge(`pilot: fitting the forecast ladder — ${(100 * frac).toFixed(0)}%`, 'warn');
+    if (pilotP.phase !== 'done') return;
+  }
+  for (let i = 0; i < budget && pilotP.phase !== 'fit' && pilotP.phase !== 'done'; i++) {
+    const cmd = pilotP.command();
+    const refs = cmd.map((c) => ({ theta: c.pos + c.u, omega: c.vel, alpha: c.acc }));
+    const tau = servoP.torques(refs);
+    armP.step(tau[0], tau[1], 1);
+    const enc = armP.encoders();
+    const tool = armP.toolXY();
+    const q1 = cmd[0].pos, q2 = cmd[1].pos;
+    const cx = armP.L1 * Math.cos(q1) + armP.L2 * Math.cos(q1 + q2);
+    const cy = armP.L1 * Math.sin(q1) + armP.L2 * Math.sin(q1 + q2);
+    const J = armP.jacobian(q1, q2);
+    const det = J[0][0] * J[1][1] - J[0][1] * J[1][0];
+    const ex = tool[0] - cx, ey = tool[1] - cy;
+    pilotP.observe([enc[0].angle, enc[1].angle, enc[0].speed * 1e3, enc[1].speed * 1e3,
+      tau[0] * 1e3, tau[1] * 1e3],
+    [(J[1][1] * ex - J[0][1] * ey) / det, (-J[1][0] * ex + J[0][0] * ey) / det]);
+  }
+  if (pilotP.phase === 'done') { finishPilotP(); return; }
+  if (pilotP.phase !== 'fit') {
+    setPathBadge(`pilot: ${pilotP.phase} — ${pilotP.note}`, 'warn');
+  }
+}
+
+function finishPilotP() {
+  pilotComm = false;
+  const v = pilotP.verdict;
+  busyP = true;
+  setPathBadge(v.deploy
+    ? `pilot deployed — ${v.why}; re-homing onto the program`
+    : `pilot REFUSED — ${v.why}`, v.deploy ? 'good' : 'bad');
+  if (v.deploy) $('ctlP').value = 'pilot';
+  // The machine is at the end of the verify scribble; put it back on the program.
+  homeP().then(() => {
+    if (v.deploy) setPathBadge(`pilot on — ${v.why}. Press Run`, 'good');
+  }).finally(() => { busyP = false; syncPath(); statsP(); });
+}
+$('pilotP-btn').addEventListener('click', startPilotP);
+
 function renderBoardP() {
   const el = $('boardP'), cap = $('boardP-cap');
   if (!sweepRows || !sweepRows.length) { el.hidden = true; cap.hidden = true; return; }
@@ -6072,6 +6213,26 @@ function statsP() {
         ilcHist.slice(-10).map((hh) => hh.contour.toExponential(1)).join(' → ')]);
     }
   }
+  if (pilotP) {
+    const ps = pilotP.status();
+    if (ps.verdict) {
+      const vr = ps.report.verify;
+      rows.push(['pilot (⑤)', ps.verdict.deploy
+        ? `<span class="good">deployed</span> — ${ps.verdict.why} · λ `
+          + `${vr.lambda.toExponential(1)} · Ts ${ps.Ts} · sample ${ps.sample} · `
+          + `horizon ${ps.N}×${ps.grid} samples`
+        : `<span class="bad">refused</span> — ${ps.verdict.why}`]);
+      if (ps.report.readouts) {
+        rows.push(['…its readouts', ps.report.readouts.map((r, j) =>
+          `ch${j + 1}: stride ${r.stride}, ridge ${r.ridge.toExponential(0)}, held-out R² `
+          + `${r.r2Lead0.toFixed(3)} → ${r.r2Far.toFixed(3)} across the horizon`).join(' · ')
+          + '   <span class="warn">windows and ridge chosen by the pilot on held-out '
+          + 'data, not by anyone on this page</span>']);
+      }
+    } else {
+      rows.push(['pilot (⑤)', `<span class="warn">${ps.phase}</span> — ${ps.note}`]);
+    }
+  }
   rows.push(['<b>contour rms / max</b>', `<b>${fmt(lr.contourRms, 3)}</b> / `
     + `${fmt(lr.contourMax, 3)}   <span class="warn">this lap; `
     + `${fmt(r.contourRms, 3)} since reset</span>`]);
@@ -6134,7 +6295,7 @@ function pathChart() {
 }
 
 function syncPath() {
-  const idle = !!armP && !busyP && !commissionP && !sweepP;
+  const idle = !!armP && !busyP && !commissionP && !sweepP && !pilotComm;
   // GUARDED WRITES, because this runs every frame: assigning an unchanged `disabled`
   // still counts as a DOM write, and a control written to while a finger is on it is a
   // control that can drop the gesture.
@@ -6144,6 +6305,7 @@ function syncPath() {
   set('runP', !idle);
   set('commP', !idle);
   set('sweepP', !idle);
+  set('pilotP-btn', !idle);
   set('resetP', !armP || busyP);
   // THE PROGRAM SLIDERS GO WITH THEM. Commissioning and the sweep both install profiles
   // of their own, and a slider moved underneath either one either overwrites the routine's
@@ -6165,7 +6327,7 @@ $('resetP').addEventListener('click', async () => {
   if (!armP || busyP) return;
   // A ROUTINE IN FLIGHT IS ABANDONED, not left running against a plant that has been
   // re-homed underneath it -- which is what makes Reset the one control that always works.
-  commissionP = null; sweepP = null;
+  commissionP = null; sweepP = null; pilotComm = false;
   busyP = true; runP = false;
   setPathBadge('re-homing…', 'warn'); syncPath();
   try { await homeP(); setPathBadge('ready — press Run', ''); }
@@ -6222,6 +6384,8 @@ window.__flxPathDbg = () => (armP ? {
     vMin: Math.min(...profP.v), vMax: Math.max(...profP.v) },
   mode: pathMode(), want: $('ctlP').value, c: cP, nominal: cFrom && cFrom.nominal,
   score: scoreP.report(), lapScore: lapScoreP.report(),
+  pilot: pilotP ? pilotP.status() : null,
+  pilotComm,
   ilc: ilcP ? { laps: ilcP.laps, bins: ilcP.bins, leadBins: ilcP.leadBins,
     peak: ilcP.peak(), travel: travelP, clamp: ILC_CLAMP,
     history: ilcHist.slice(-12) } : null,

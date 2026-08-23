@@ -71,7 +71,7 @@ elif [ -z "${AREAS}" ]; then
       # not drag the whole FlowSim suite in. The elastic operator has no page yet
       # and shares no kernel with the fluid.
       lib/lattsim/operators/elastic.js|lib/lattsim/operators/frame.js|test/lattsim/elastic*|\
-lib/flexisim/*|test/flexisim/*|flexisim.html|lib/blackbox/*|test/blackbox/*)
+lib/flexisim/*|test/flexisim/*|flexisim.html|lib/blackbox/*|test/blackbox/*|lib/pilot/*|test/pilot/*)
         want_flex=1 ;;
       # The shared engine -- lattice, fields, solver, backends -- is under both.
       lib/lattsim/*|test/lattsim/*|flowsim.html) want_flow=1; want_flex=1 ;;
@@ -229,6 +229,15 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     node test/flexisim/toolpath.test.mjs
     node test/flexisim/pathilc.test.mjs
     node test/flexisim/contour.test.mjs
+    # THE PILOT — route, limit, run, deploy. The excitation builder and the whole
+    # pipeline on a plant that shares no physics with the arm are quick (the plant is
+    # three scalar states); the arm end-to-end — commissioning ~110k lattice steps and
+    # four scored contour runs — is full tier, and it is the test that pins the flagship
+    # claim: commissioned once from noise, better on programs it has never seen, on less
+    # energy, or refused.
+    node test/pilot/excite.test.mjs
+    node test/pilot/pilot.test.mjs
+    if [ "${SUITE}" = "full" ]; then node test/pilot/arm.test.mjs; fi
   fi
 fi
 

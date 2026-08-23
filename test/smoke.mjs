@@ -2644,6 +2644,11 @@ await fx.waitForFunction(() => window.__flxPathDbg && window.__flxPathDbg(),
   const dw = await fx.evaluate(() => window.__flxPathDbg());
   check('flexisim/path: an identified correction that does not exist is not applied',
     dw.want === 'ident' && dw.mode === 'open' && dw.c === null, JSON.stringify([dw.want, dw.mode]));
+  // The pilot has the same refusal shape: ⑤ selected with no verdict behind it runs open.
+  await fx.selectOption('#ctlP', 'pilot');
+  const dp = await fx.evaluate(() => window.__flxPathDbg());
+  check('flexisim/path: …and so is a pilot that has not vouched for itself',
+    dp.mode === 'open' && dp.pilot === null, JSON.stringify([dp.want, dp.mode]));
   await fx.selectOption('#ctlP', 'open');
 }
 await fx.evaluate(() => { document.getElementById('s-spfP').value = '300'; });
@@ -2754,6 +2759,50 @@ if (FULL) {
     h.length >= 8 && h[h.length - 1] < 0.6 * h[0],
     `${h[0].toExponential(2)} → ${h[h.length - 1].toExponential(2)}`);
   await fx.screenshot({ path: join(SHOTS, '09-flexisim-path-learned.png') });
+
+  // ---- THE PILOT, END TO END IN THE BROWSER. The physics and every performance number
+  // are pinned in test/pilot/; what only the page can break is the wiring — that the
+  // commissioning owns the machine and hands it back, that the verdict lands in the
+  // selector, and that the deployed correction actually reaches the servo. Back at feed
+  // 4e-3 first: the pilot's excitation covered velocities for that envelope, and running
+  // it at 1e-2 would be deploying outside what it was commissioned across.
+  await fx.evaluate(() => {
+    const el = document.getElementById('s-feedP');
+    el.value = '2';
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await fx.click('#pilotP-btn');
+  await fx.waitForFunction(() => {
+    const d = window.__flxPathDbg();
+    return d && d.pilot && d.pilot.verdict && !d.busy;
+  }, null, { timeout: 900000 });
+  const dv = await fx.evaluate(() => window.__flxPathDbg());
+  console.log(`  flexisim/path: pilot ${dv.pilot.verdict.deploy ? 'deployed' : 'refused'} — `
+    + `${dv.pilot.verdict.why}; Ts ${dv.pilot.Ts}, sample ${dv.pilot.sample}`);
+  check('flexisim/path: the pilot commissions in the browser and the machine vouches for it',
+    dv.pilot.verdict.deploy === true, JSON.stringify(dv.pilot.verdict));
+  check('flexisim/path: …and deploying lands in the selector, not just in a report',
+    dv.want === 'pilot' && dv.mode === 'pilot', JSON.stringify([dv.want, dv.mode]));
+  await fx.click('#runP');
+  // THE SNAPSHOT IS TAKEN INSIDE THE WAIT, because the lap score RESETS at every lap
+  // boundary: a wait that resolves at 95% of a lap and a separate read a frame later is
+  // a race, and it lost — measured, a "full lap" read 131 steps of the next one, whose
+  // partial rms then failed a gate the machine was actually beating. The predicate
+  // returns the JSON it matched, so what is asserted is exactly what satisfied the wait.
+  const lapHandle = await fx.waitForFunction(() => {
+    const d = window.__flxPathDbg();
+    return (d.lap >= 2 && d.lapScore.steps > 0.9 * d.path.lapSteps)
+      ? JSON.stringify(d.lapScore) : false;
+  }, null, { timeout: 900000 });
+  const lapPilot = JSON.parse(await lapHandle.jsonValue());
+  await fx.click('#runP');
+  console.log(`  flexisim/path: pilot lap — contour ${lapPilot.contourRms.toExponential(3)}, `
+    + `tau2 ${lapPilot.tau2.toExponential(3)} against the open loop's 1.34e-1 / 5.93e-4`);
+  // Node pins 2.10x at this feed; the browser gate leaves margin for lap phase but still
+  // refuses anything that lost the mechanism.
+  check('flexisim/path: …and the deployed pilot cuts the contour on a program it never saw',
+    lapPilot.contourRms < 1.0e-1, lapPilot.contourRms.toExponential(3));
+  await fx.screenshot({ path: join(SHOTS, '10-flexisim-path-pilot.png') });
 }
 
 // ---- THE BLACK BOX: the same arm, and a controller told nothing about it. Full tier

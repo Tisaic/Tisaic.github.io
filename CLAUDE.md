@@ -407,8 +407,11 @@ that matches it** — the point-to-point tabs measure a different question.
   tab whose metrics can see it. Four corrections: ① none, ② the wind-up model τ/K, ③ a
   per-joint compliance identified on ONE SLOW LAP and then locked, ④ ITERATIVE LEARNING —
   a correction table indexed by arc length on the part, updated between laps with a lead
-  of one position-loop time constant and a zero-phase filter. **Sweep feedrate** runs the
-  whole ladder and tabulates the trade. The arm is drawn at TRUE geometry; the error trail
+  of one position-loop time constant and a zero-phase filter, ⑤ THE PILOT (`lib/pilot/`) —
+  commissioned once from noise by one button, deploys only if its own verify round
+  measured an improvement on the machine, then cuts programs it has never seen (2.1× on
+  the rectangle, 7× on the circle, on LESS copper than the open loop). **Sweep feedrate**
+  runs the whole ladder and tabulates the trade. The arm is drawn at TRUE geometry; the error trail
   is the exaggerated object, pushed out along the path normal only.
 - **④ Black box** — `lib/blackbox/`, a controller GIVEN NOTHING: a scalar command it can
   read, a scalar correction it can add, unlabelled signals, and a tracker during
