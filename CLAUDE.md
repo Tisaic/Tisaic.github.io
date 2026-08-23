@@ -416,7 +416,13 @@ that matches it** — the point-to-point tabs measure a different question.
   (x,y)→commands itself (1.2e-4 rad holdout from 180 points), and holding real path
   points that learned map beats the analytic ik() 23–44× statically — the analytic
   kinematics commands the drawing, the learned map commands the machine, droop and
-  wind-up included (brick 40; `test/pilot/ikfree.test.mjs`). **Sweep feedrate**
+  wind-up included (brick 40; `test/pilot/ikfree.test.mjs`). That system ships as
+  ⑥ FULLY LEARNED (Commission ⑥: gather held points → fit the inverse → pilot on top,
+  refs from the learned map, same refusal shape as ⑤) and ⑦ FULLY LEARNED + ILC (a
+  separate PathILC on the learned chain, tool error mapped through the learned routing):
+  measured circle 5.9e-2 → 1.14e-3 by lap 14 (within 28% of the analytic ILC@15) and
+  rectangle → 1.27e-2, twice BELOW the analytic ILC's converged 2.53e-2 (brick 41).
+  **Sweep feedrate**
   runs the whole ladder and tabulates the trade. The arm is drawn at TRUE geometry; the error trail
   is the exaggerated object, pushed out along the path normal only.
 - **④ Black box** — `lib/blackbox/`, a controller GIVEN NOTHING: a scalar command it can

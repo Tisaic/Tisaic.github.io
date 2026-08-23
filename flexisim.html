@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:245,built:"2026-08-23T23:36:07Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:246,built:"2026-08-23T23:57:43Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -515,12 +515,16 @@
       <button id="runP">Run ▶</button>
       <button id="commP" class="sec">Commission ▶</button>
       <button id="pilotP-btn" class="sec">Commission ⑤ Pilot ▶</button>
+      <button id="ik6P-btn" class="sec">Commission ⑥ Fully learned ▶</button>
       <button id="sweepP" class="sec">Sweep feedrate ▶</button>
       <button id="resetP" class="sec">Reset</button>
     </div>
     <p class="hint" id="hintP"><b>Commission</b> traces one lap with the tracker watching and
       fits <b>one compliance constant per joint</b> to the tool's own deviation, then puts the
-      tracker away — the same lifecycle as every other learner here. <b>Sweep</b> runs the same
+      tracker away — the same lifecycle as every other learner here. <b>Commission ⑥</b> goes
+      further: it is never told the arm's lengths at all — it visits held points inside the
+      command box while the tracker teaches it the geometry, fits the inverse map itself, then
+      runs the pilot's noise commissioning on top of it. <b>Sweep</b> runs the same
       path at every feedrate and tabulates what each one costs, because accuracy and energy do
       not have their optimum at the same speed.</p>
 
@@ -537,6 +541,8 @@
         <option value="ident">③ identified compliance — one lap, then locked</option>
         <option value="ilc">④ iterative learning — the part is the same every lap</option>
         <option value="pilot">⑤ pilot — commissioned once, from noise, for any program</option>
+        <option value="ikfree">⑥ fully learned — geometry from the tracker, dynamics from noise</option>
+        <option value="ikfree_ilc">⑦ fully learned + iterative learning on top</option>
       </select>
     </div>
     <div class="controls">
@@ -607,6 +613,19 @@
       cutting load that makes ④ two to six times <i>worse</i> leaves the pilot still
       helping; the square's corners pin the correction at the engineer's own cap — an
       authority limit. Every number is in <code>docs/history/flexisim.md</code>.
+      <br /><br /><b>⑥ removes the last thing the pilot was given: the kinematics.</b>
+      Commissioning visits held points inside the command box while the tracker teaches the
+      geometry; the fitted inverse (180 points → <b>1.2e-4 rad</b> holdout in Node) then turns
+      Cartesian programs into channel commands itself, and the pilot commissions on top with
+      its truth routed through that same map. Holding real path points the learned map beats
+      the analytic ik() <b>23–44×</b> — the drawing does not know the droop or the wind-up;
+      the machine does. The full chain lands within 9% of the analytic system on the
+      rectangle (2.37e-2 vs 2.18e-2). <b>⑦ adds iteration on top</b>, mapping the lap's
+      error through the learned routing too: measured in Node, circle 5.9e-2 → <b>1.1e-3</b>
+      by lap 14 — within 28% of what the analytic-kinematics ILC reaches — and rectangle
+      6.97e-2 → <b>1.27e-2</b>, twice <i>below</i> that ILC's converged 2.53e-2. A system
+      that learned its own geometry, its own dynamics, and then let the part teach it the
+      rest.
     </div>
     <div class="note">
       <h3>What the picture is, exactly</h3>
@@ -2560,11 +2579,12 @@ function frame() {
   if (onPath && armP && !busyP) {
     try {
       if (pilotComm) pilotStepP(LEARN_BUDGET);
+      else if (ik6Comm) ik6StepP(LEARN_BUDGET);
       else if (sweepP) sweepStepP(LEARN_BUDGET);
       else if (commissionP) commissionStepP(LEARN_BUDGET);
       else if (runP) stepP(+$('s-spfP').value);
     } catch (e) {
-      runP = false; sweepP = null; commissionP = null; pilotComm = false;
+      runP = false; sweepP = null; commissionP = null; pilotComm = false; ik6Comm = null;
       setPathBadge('halted: ' + e.message, 'bad'); console.error(e);
     }
   }
@@ -5451,6 +5471,8 @@ const PATH_MODE_LABEL = {
   ident: 'identified compliance (locked)',
   ilc: 'iterative learning over laps',
   pilot: 'the pilot — commissioned from noise',
+  ikfree: 'fully learned — geometry from the tracker, dynamics from noise',
+  ikfree_ilc: 'fully learned + iterative learning on top',
 };
 // THE ILC's THREE NUMBERS, EVERY ONE OF THEM MEASURED RATHER THAN CHOSEN — see
 // lib/flexisim/pathilc.js, which carries the sweeps. The lead is the position loop's own
@@ -5482,6 +5504,13 @@ let scoreP = null, lapScoreP = null, cP = null, cFrom = null;
 let commissionP = null, sweepP = null, sweepRows = null;
 let ilcP = null, ilcHist = [];
 let pilotP = null, pilotComm = false, pilotSamp = 0;
+// THE FULLY LEARNED SYSTEM (⑥): geometry fitted from tracker holds, its own pilot for
+// the dynamics, and the truth routing through the learned map — no analytic kinematics
+// between the program and the motors. ⑦ stacks an ILC table on top of it.
+let ik6 = null;                 // { predict, route, holdout, nPts, pilot } once commissioned
+let ik6Comm = null;             // the commissioning state machine while it runs
+let ilc6P = null, ilc6Hist = [];   // ⑦'s table — separate from ④'s, which corrects a
+                                   // different plant (the analytic refs, not the learned ones)
 let viewP = { x0: -1, x1: 1, y0: -1, y1: 1 };
 // The commanded joint travel over one lap, which is the scale any pre-distortion has to be
 // read against: a correction that is a few percent of the move is a correction, and one
@@ -5566,6 +5595,9 @@ async function buildP() {
   // A PILOT BELONGS TO ONE PLANT: it identified this machine's response and timescale,
   // and carrying it across a K change deploys yesterday's inverse on today's arm.
   pilotP = null; pilotComm = false;
+  // SO DOES THE LEARNED GEOMETRY: the static map is mostly droop and wind-up, and both
+  // are K. A K change makes yesterday's inverse a map of a different machine.
+  ik6 = null; ik6Comm = null; ilc6P = null; ilc6Hist = [];
   $('ctlP').value = 'open';
   await homeP();
   console.log(`[flexisim] path: ${armP.describe()} | ${profP.length.toFixed(2)} long, `
@@ -5598,6 +5630,7 @@ async function homeP() {
   residP = { enc: 0, follow: 0, n: 0 };
   $('pendP').hidden = true;
   makeILC(true);
+  makeILC6(true);
   fitViewP();
   drawP();
 }
@@ -5625,6 +5658,51 @@ function makeILC(keep) {
   ilcP = next;
 }
 
+/** ⑦'s table, managed exactly as ④'s is: kept across a feedrate change, remade with the
+ *  program. It corrects the residual of the LEARNED chain, so it is a different object
+ *  from ④'s table even on the same part. */
+function makeILC6(keep) {
+  const bins = ILC.bins;
+  const next = new PathILC({ length: profP.length, joints: 2, bins, gain: ILC.gain,
+    smooth: ILC.smooth,
+    leadBins: Math.round(ILC.leadSteps * bins / profP.lap) });
+  if (keep && ilc6P && ilc6P.bins === bins && Math.abs(ilc6P.length - profP.length) < 1e-9) {
+    next.u = ilc6P.u; next.laps = ilc6P.laps;
+  } else {
+    ilc6Hist = [];
+  }
+  ilc6P = next;
+}
+
+// ⑥'s references along the program, from the LEARNED inverse — cached per solver step
+// the way the pilot's look-ahead is, and belonging to one profile. Three entries per
+// step (k−1, k, k+1) serve the finite-difference rates.
+let ik6Look = { path: null, map: new Map() };
+function ik6RefAt(k) {
+  if (ik6Look.path !== profP) ik6Look = { path: profP, map: new Map() };
+  let r = ik6Look.map.get(k);
+  if (!r) {
+    const c = profP.at(k);
+    r = ik6.predict(c.x, c.y);
+    ik6Look.map.set(k, r);
+    if (ik6Look.map.size > 30000) ik6Look.map.clear();
+  }
+  return r;
+}
+// The ⑥ pilot's look-ahead, in samples — the learned twin of pilotRefAt().
+let ik6SampLook = { path: null, map: new Map() };
+function ik6RefSamp(i) {
+  if (ik6SampLook.path !== profP) ik6SampLook = { path: profP, map: new Map() };
+  let r = ik6SampLook.map.get(i);
+  if (!r) {
+    const c = profP.at(i * ik6.pilot.sample);
+    r = ik6.predict(c.x, c.y);
+    ik6SampLook.map.set(i, r);
+    if (ik6SampLook.map.size > 9000) ik6SampLook.map.clear();
+  }
+  return r;
+}
+
 // The pilot's look-ahead into the program, cached per sample and invalidated when the
 // program changes — the cache belongs to one profile, not to the tab.
 let pilotLook = { path: null, map: new Map() };
@@ -5647,6 +5725,15 @@ function predistortP(refs, cmd) {
   if (m === 'pilot') {
     const base = Math.floor(kP / pilotP.sample);
     return pilotP.act((off) => pilotRefAt(base + off));
+  }
+  if (m === 'ikfree' || m === 'ikfree_ilc') {
+    const base = Math.floor(kP / ik6.pilot.sample);
+    const u = ik6.pilot.act((off) => ik6RefSamp(base + off));
+    if (m === 'ikfree_ilc' && ilc6P) {
+      const o = ilc6P.offset(cmd.s);
+      return [u[0] + clampDq(o[0], ILC_CLAMP), u[1] + clampDq(o[1], ILC_CLAMP)];
+    }
+    return u;
   }
   if (m === 'ilc') {
     const o = ilcP.offset(cmd.s);
@@ -5677,6 +5764,7 @@ function installProgram(next) {
   kP = profP.timeAt(s0);
   lapP = Math.floor(kP / profP.lap);
   makeILC(true);
+  makeILC6(true);
   fitViewP();
   $('pendP').hidden = true;
 }
@@ -5690,6 +5778,10 @@ function pathMode() {
   // verify round has measured an improvement quietly runs open — the same refusal shape
   // as ③ before commissioning and the closed loop before the lock.
   if (want === 'pilot' && !(pilotP && pilotP.verdict && pilotP.verdict.deploy)) return 'open';
+  // ⑥ and ⑦ need the whole learned system — the geometry fitted AND its pilot vouched
+  // for. The same refusal shape again: selected but not commissioned quietly runs open.
+  if ((want === 'ikfree' || want === 'ikfree_ilc')
+    && !(ik6 && ik6.pilot && ik6.pilot.verdict && ik6.pilot.verdict.deploy)) return 'open';
   return want;
 }
 
@@ -5700,10 +5792,24 @@ function pathMode() {
  */
 function stepPathOnce(collect) {
   const cmd = profP.at(kP);
-  const [q1, q2] = armP.ik(cmd.x, cmd.y, true);
-  const rt = armP.ikRates(q1, q2, cmd.vx, cmd.vy, cmd.ax, cmd.ay);
-  const refs = [{ theta: q1, omega: rt.dq[0], alpha: rt.ddq[0] },
-    { theta: q2, omega: rt.dq[1], alpha: rt.ddq[1] }];
+  const m0 = pathMode();
+  const learned = m0 === 'ikfree' || m0 === 'ikfree_ilc';
+  let q1, q2, refs;
+  if (learned) {
+    // THE REFERENCES THEMSELVES COME FROM THE LEARNED MAP — this is the whole point of
+    // ⑥, not a pre-distortion on top of the kinematics. Rates by central difference of
+    // the learned refs along the program, which is all a controller that has never seen
+    // ik() can do — and all it needs, since the map is smooth.
+    const q = ik6RefAt(kP), qm = ik6RefAt(Math.max(0, kP - 1)), qp = ik6RefAt(kP + 1);
+    q1 = q[0]; q2 = q[1];
+    refs = [0, 1].map((j) => ({ theta: q[j], omega: (qp[j] - qm[j]) / 2,
+      alpha: qp[j] - 2 * q[j] + qm[j] }));
+  } else {
+    [q1, q2] = armP.ik(cmd.x, cmd.y, true);
+    const rt = armP.ikRates(q1, q2, cmd.vx, cmd.vy, cmd.ax, cmd.ay);
+    refs = [{ theta: q1, omega: rt.dq[0], alpha: rt.ddq[0] },
+      { theta: q2, omega: rt.dq[1], alpha: rt.ddq[1] }];
+  }
   const dq = predistortP(refs, cmd);
   const tau = servoP.torques([{ ...refs[0], theta: q1 + dq[0] },
     { ...refs[1], theta: q2 + dq[1] }]);
@@ -5714,6 +5820,11 @@ function stepPathOnce(collect) {
   if (pilotP && pilotP.phase === 'done' && pilotP.verdict && pilotP.verdict.deploy) {
     const enc = armP.encoders();
     pilotP.observe([enc[0].angle, enc[1].angle, enc[0].speed * 1e3, enc[1].speed * 1e3,
+      tau[0] * 1e3, tau[1] * 1e3], null);
+  }
+  if (ik6 && ik6.pilot && ik6.pilot.phase === 'done' && ik6.pilot.verdict.deploy) {
+    const enc = armP.encoders();
+    ik6.pilot.observe([enc[0].angle, enc[1].angle, enc[0].speed * 1e3, enc[1].speed * 1e3,
       tau[0] * 1e3, tau[1] * 1e3], null);
   }
   const tool = armP.toolXY();
@@ -5741,6 +5852,13 @@ function stepPathOnce(collect) {
         (-J[1][0] * ex + J[0][0] * ey) / det]);
     }
   }
+  // ⑦'s learner maps the tool's deviation to joint units through the LEARNED routing —
+  // route(tool) − route(command) — so the fully learned stack stays free of the analytic
+  // Jacobian the ④ block above needs.
+  if (ilc6Learning()) {
+    const qT = ik6.route(tool[0], tool[1]), qC = ik6.route(cmd.x, cmd.y);
+    ilc6P.observe(cmd.s, [qT[0] - qC[0], qT[1] - qC[1]]);
+  }
   if (collect) {
     // e = J diag(c) tau_g, linear in c: one 2-vector column per joint per sample, and
     // both the x and the y row of every sample go into the same 2x2 normal equations.
@@ -5762,6 +5880,9 @@ function stepPathOnce(collect) {
 /** Learning happens on a normal run only — a sweep and a commissioning lap freeze it. */
 function ilcLearning() {
   return !!ilcP && pathMode() === 'ilc' && !sweepP && !commissionP;
+}
+function ilc6Learning() {
+  return !!ilc6P && pathMode() === 'ikfree_ilc' && !sweepP && !commissionP;
 }
 
 function stepP(n) {
@@ -5810,6 +5931,14 @@ function onLapBoundaryP() {
       ilcHist.push({ lap: st.laps, contour: before.contourRms, tau2: before.tau2,
         trev: before.torqueReversals, peak: ilcP.peak() });
       if (ilcHist.length > 40) ilcHist.shift();
+    }
+  }
+  if (ilc6Learning()) {
+    const before = lapScoreP.report();
+    const st = ilc6P.endLap();
+    if (before.steps > 0.9 * profP.lap) {
+      ilc6Hist.push({ lap: st.laps, contour: before.contourRms });
+      if (ilc6Hist.length > 40) ilc6Hist.shift();
     }
   }
   lapScoreP = newScore();
@@ -6015,6 +6144,198 @@ function finishPilotP() {
   }).finally(() => { busyP = false; syncPath(); statsP(); });
 }
 $('pilotP-btn').addEventListener('click', startPilotP);
+
+// ------------------------------------------------- the fully learned system (⑥/⑦)
+//
+// EVERYTHING ⑤ IS GIVEN, MINUS THE KINEMATICS. The commissioning has two stages the
+// operator watches: GATHER visits held points inside the engineer's command box (quintic
+// eases, settle, read the tracker) and fits the direct inverse (x,y) → commands; then
+// the PILOT runs its normal noise commissioning with the truth routed through that
+// learned map — inv(tracker) − command — so nothing between the Cartesian program and
+// the motors knows the arm's lengths. Numbers off this machine in Node: 90 points reach
+// 2–4e-4 rad holdout and beat the analytic ik() 14.6× holding real path points
+// (test/pilot/ikfree.test.mjs); the composed chain measures brick 40's table.
+//
+// THE ROUTING FIT IS DELIBERATELY NOT THE GEOMETRY FIT: degree 5 with inputs clamped to
+// the training hull, against degree 7 for the references. A map used as an instrument
+// has different requirements from the same map used as an answer — the degree-7 fit
+// evaluated at the moving tool during excitation leaves the hull violently, and in Node
+// that poisoned every fit downstream (verify 1.01×, REFUSED; the split fixes it).
+const IK6_PTS = 90, IK6_DEG = 7, IK6_ROUTE_DEG = 5;
+
+function ik6Features(x, y, D) {
+  const u = (x - PG.centre[0]) / 5, v = (y - PG.centre[1]) / 5;
+  const out = [];
+  for (let i = 0; i <= D; i++) for (let j = 0; j <= D - i; j++) out.push(u ** i * v ** j);
+  return out;
+}
+function ik6Solve(X, Y, ridge) {
+  const n = X[0].length, no = Y[0].length;
+  const A = Array.from({ length: n }, () => new Float64Array(n));
+  const b = Array.from({ length: no }, () => new Float64Array(n));
+  for (let r = 0; r < X.length; r++) {
+    const xr = X[r];
+    for (let i = 0; i < n; i++) {
+      for (let j = i; j < n; j++) A[i][j] += xr[i] * xr[j];
+      for (let o = 0; o < no; o++) b[o][i] += xr[i] * Y[r][o];
+    }
+  }
+  for (let i = 0; i < n; i++) { A[i][i] += ridge; for (let j = 0; j < i; j++) A[i][j] = A[j][i]; }
+  const L = Array.from({ length: n }, () => new Float64Array(n));
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j <= i; j++) {
+      let s = A[i][j];
+      for (let k = 0; k < j; k++) s -= L[i][k] * L[j][k];
+      if (i === j) L[i][i] = Math.sqrt(Math.max(s, 1e-300));
+      else L[i][j] = s / L[j][j];
+    }
+  }
+  const W = [];
+  for (let o = 0; o < no; o++) {
+    const z = new Float64Array(n), w = new Float64Array(n);
+    for (let i = 0; i < n; i++) { let s = b[o][i]; for (let k = 0; k < i; k++) s -= L[i][k] * z[k]; z[i] = s / L[i][i]; }
+    for (let i = n - 1; i >= 0; i--) { let s = z[i]; for (let k = i + 1; k < n; k++) s -= L[k][i] * w[k]; w[i] = s / L[i][i]; }
+    W.push(w);
+  }
+  return W;
+}
+function ik6FitMap(pairs, D, ridge = 1e-9) {
+  const trn = pairs.filter((_, i) => i % 4 !== 3), val = pairs.filter((_, i) => i % 4 === 3);
+  const W = ik6Solve(trn.map((p) => ik6Features(p.x, p.y, D)), trn.map((p) => p.q), ridge);
+  const predict = (x, y) => {
+    const f = ik6Features(x, y, D);
+    return W.map((w) => { let s = 0; for (let i = 0; i < f.length; i++) s += w[i] * f[i]; return s; });
+  };
+  let s2 = 0, n = 0;
+  for (const p of val) {
+    const q = predict(p.x, p.y);
+    s2 += (q[0] - p.q[0]) ** 2 + (q[1] - p.q[1]) ** 2; n += 2;
+  }
+  return { predict, holdout: Math.sqrt(s2 / Math.max(1, n)) };
+}
+
+const quintic6 = (t) => t * t * t * (10 + t * (-15 + 6 * t));
+
+function startIk6P() {
+  if (!armP || busyP || commissionP || sweepP || pilotComm || ik6Comm) return;
+  runP = false;
+  // The command box is the ENGINEER's limit — the same ±0.55 rad ⑤ routes. Its centre
+  // comes from parking the machine, which is a jog, not a kinematic computation.
+  const centre = armP.ik(PG.centre[0], PG.centre[1], true);
+  const box = [0, 1].map((j) => ({ lo: centre[j] - 0.55, hi: centre[j] + 0.55 }));
+  let seed = 7 >>> 0;
+  const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+  const enc = armP.encoders();
+  ik6Comm = { stage: 'gather', box, rnd, pairs: [], i: 0,
+    from: [enc[0].angle, enc[1].angle],
+    to: box.map((b) => b.lo + (b.hi - b.lo) * rnd()),
+    k: 0, T: 2500, settle: 2200, avg: 400, ax: 0, ay: 0 };
+  setPathBadge('⑥ gather: visiting held points with the tracker watching', 'warn');
+  syncPath();
+}
+
+function ik6StepP(budget) {
+  const C = ik6Comm;
+  if (C.stage === 'gather') {
+    const total = C.T + C.settle;
+    for (let i = 0; i < budget; i++) {
+      let refs;
+      if (C.k < C.T) {
+        const t = C.k / C.T, s = quintic6(t);
+        const sd = (t * t * (30 + t * (-60 + 30 * t))) / C.T;
+        const sdd = (t * (60 + t * (-180 + 120 * t))) / (C.T * C.T);
+        refs = [0, 1].map((j) => ({ theta: C.from[j] + (C.to[j] - C.from[j]) * s,
+          omega: (C.to[j] - C.from[j]) * sd, alpha: (C.to[j] - C.from[j]) * sdd }));
+      } else {
+        refs = [0, 1].map((j) => ({ theta: C.to[j], omega: 0, alpha: 0 }));
+      }
+      const tau = servoP.torques(refs);
+      armP.step(tau[0], tau[1], 1);
+      if (C.k >= total - C.avg) { const p = armP.toolXY(); C.ax += p[0]; C.ay += p[1]; }
+      C.k++;
+      if (C.k >= total) {
+        C.pairs.push({ x: C.ax / C.avg, y: C.ay / C.avg, q: C.to.slice() });
+        C.ax = 0; C.ay = 0; C.k = 0; C.i++;
+        C.from = C.to;
+        C.to = C.box.map((b) => b.lo + (b.hi - b.lo) * C.rnd());
+        if (C.i >= IK6_PTS) { ik6StartPilot(); return; }
+      }
+    }
+    setPathBadge(`⑥ gather: held point ${C.i + 1}/${IK6_PTS} — the tracker teaches the geometry`, 'warn');
+    return;
+  }
+  // ---- stage 'pilot'
+  const P = C.pilot;
+  if (P.phase === 'fit') {
+    const frac = P.work();
+    setPathBadge(`⑥ pilot: fitting the forecast ladder — ${(100 * frac).toFixed(0)}%`, 'warn');
+    if (P.phase !== 'done') return;
+  }
+  for (let i = 0; i < budget && P.phase !== 'fit' && P.phase !== 'done'; i++) {
+    const cmd = P.command();
+    const refs = cmd.map((c) => ({ theta: c.pos + c.u, omega: c.vel, alpha: c.acc }));
+    const tau = servoP.torques(refs);
+    armP.step(tau[0], tau[1], 1);
+    const enc = armP.encoders();
+    const tool = armP.toolXY();
+    const qT = C.route(tool[0], tool[1]);
+    P.observe([enc[0].angle, enc[1].angle, enc[0].speed * 1e3, enc[1].speed * 1e3,
+      tau[0] * 1e3, tau[1] * 1e3],
+    [qT[0] - cmd[0].pos, qT[1] - cmd[1].pos]);
+  }
+  if (P.phase === 'done') { finishIk6P(); return; }
+  if (P.phase !== 'fit') setPathBadge(`⑥ pilot: ${P.phase} — ${P.note}`, 'warn');
+}
+
+function ik6StartPilot() {
+  const C = ik6Comm;
+  const geo = ik6FitMap(C.pairs, IK6_DEG);
+  const routeFit = ik6FitMap(C.pairs, IK6_ROUTE_DEG);
+  const bb = { xlo: Math.min(...C.pairs.map((p) => p.x)), xhi: Math.max(...C.pairs.map((p) => p.x)),
+    ylo: Math.min(...C.pairs.map((p) => p.y)), yhi: Math.max(...C.pairs.map((p) => p.y)) };
+  C.predict = geo.predict;
+  C.holdout = geo.holdout;
+  C.route = (x, y) => routeFit.predict(Math.min(Math.max(x, bb.xlo), bb.xhi),
+    Math.min(Math.max(y, bb.ylo), bb.yhi));
+  // The machine is at the last held point; the pilot starts from exactly there. The
+  // channel box is centred by the LEARNED map — the analytic centre appears nowhere in
+  // what the running system consumes.
+  const centreQ = C.predict(PG.centre[0], PG.centre[1]);
+  C.pilot = new Pilot({
+    nMeasured: 6,
+    channels: [0, 1].map((j) => ({ lo: centreQ[j] - 0.55, hi: centreQ[j] + 0.55,
+      vMax: 8e-4, aMax: 4e-6, jMax: 2e-7 })),
+    uMax: 0.15,
+    start: C.from.slice(),
+    guards: [{ index: 4, max: 1.2 * PG.drive * holdP * 1e3 },
+      { index: 5, max: 1.2 * PG.drive * holdP * 1e3 }],
+    workspace: () => true,          // the command box is the limit; no FK to consult
+    seed: 1,
+  });
+  C.stage = 'pilot';
+  setPathBadge(`⑥ geometry learned — holdout ${C.holdout.toExponential(1)} rad from `
+    + `${C.pairs.length} points; commissioning the pilot on it`, 'warn');
+}
+
+function finishIk6P() {
+  const C = ik6Comm;
+  ik6Comm = null;
+  const v = C.pilot.verdict;
+  busyP = true;
+  if (v.deploy) {
+    ik6 = { predict: C.predict, route: C.route, holdout: C.holdout,
+      nPts: C.pairs.length, pilot: C.pilot };
+    $('ctlP').value = 'ikfree';
+    setPathBadge(`⑥ deployed — ${v.why}; re-homing onto the program`, 'good');
+  } else {
+    setPathBadge(`⑥ REFUSED — ${v.why}`, 'bad');
+  }
+  homeP().then(() => {
+    if (v.deploy) setPathBadge(`⑥ on — geometry holdout ${ik6.holdout.toExponential(1)} rad, `
+      + `${v.why}. Press Run; select ⑦ to let iteration fold on top`, 'good');
+  }).finally(() => { busyP = false; syncPath(); statsP(); });
+}
+$('ik6P-btn').addEventListener('click', startIk6P);
 
 function renderBoardP() {
   const el = $('boardP'), cap = $('boardP-cap');
@@ -6247,6 +6568,22 @@ function statsP() {
       rows.push(['pilot (⑤)', `<span class="warn">${ps.phase}</span> — ${ps.note}`]);
     }
   }
+  if (ik6) {
+    const ps = ik6.pilot.status();
+    rows.push(['fully learned (⑥)', `<span class="good">deployed</span> — geometry from `
+      + `${ik6.nPts} tracker holds, holdout ${ik6.holdout.toExponential(1)} rad · `
+      + `${ps.verdict.why} · <span class="warn">no analytic kinematics anywhere between `
+      + 'the program and the motors</span>']);
+  } else if (ik6Comm) {
+    rows.push(['fully learned (⑥)', `<span class="warn">commissioning — `
+      + `${ik6Comm.stage === 'gather' ? `held point ${ik6Comm.i + 1}/${IK6_PTS}`
+        : `pilot ${ik6Comm.pilot.phase}`}</span>`]);
+  }
+  if (ilc6P && ilc6P.laps > 0) {
+    rows.push(['…⑦ iteration on top', `${ilc6P.laps} lap${ilc6P.laps === 1 ? '' : 's'} folded in`
+      + (ilc6Hist.length > 1 ? ' · contour ' + ilc6Hist.slice(-8).map((hh) =>
+        hh.contour.toExponential(1)).join(' → ') : '')]);
+  }
   rows.push(['<b>contour rms / max</b>', `<b>${fmt(lr.contourRms, 3)}</b> / `
     + `${fmt(lr.contourMax, 3)}   <span class="warn">this lap; `
     + `${fmt(r.contourRms, 3)} since reset</span>`]);
@@ -6309,7 +6646,7 @@ function pathChart() {
 }
 
 function syncPath() {
-  const idle = !!armP && !busyP && !commissionP && !sweepP && !pilotComm;
+  const idle = !!armP && !busyP && !commissionP && !sweepP && !pilotComm && !ik6Comm;
   // GUARDED WRITES, because this runs every frame: assigning an unchanged `disabled`
   // still counts as a DOM write, and a control written to while a finger is on it is a
   // control that can drop the gesture.
@@ -6320,6 +6657,7 @@ function syncPath() {
   set('commP', !idle);
   set('sweepP', !idle);
   set('pilotP-btn', !idle);
+  set('ik6P-btn', !idle);
   set('resetP', !armP || busyP);
   // THE PROGRAM SLIDERS GO WITH THEM. Commissioning and the sweep both install profiles
   // of their own, and a slider moved underneath either one either overwrites the routine's
@@ -6341,7 +6679,7 @@ $('resetP').addEventListener('click', async () => {
   if (!armP || busyP) return;
   // A ROUTINE IN FLIGHT IS ABANDONED, not left running against a plant that has been
   // re-homed underneath it -- which is what makes Reset the one control that always works.
-  commissionP = null; sweepP = null; pilotComm = false;
+  commissionP = null; sweepP = null; pilotComm = false; ik6Comm = null;
   busyP = true; runP = false;
   setPathBadge('re-homing…', 'warn'); syncPath();
   try { await homeP(); setPathBadge('ready — press Run', ''); }
@@ -6378,6 +6716,7 @@ $('s-kP').addEventListener('input', async () => {
 for (const id of ['s-spfP', 's-magP']) $(id).addEventListener('input', syncPathLabels);
 $('ctlP').addEventListener('change', () => {
   if ($('ctlP').value === 'ilc' && !ilcP && profP) makeILC(true);
+  if ($('ctlP').value === 'ikfree_ilc' && !ilc6P && profP) makeILC6(true);
   syncPath(); statsP();
 });
 
@@ -6400,6 +6739,11 @@ window.__flxPathDbg = () => (armP ? {
   score: scoreP.report(), lapScore: lapScoreP.report(),
   pilot: pilotP ? pilotP.status() : null,
   pilotComm,
+  ik6: ik6 ? { holdout: ik6.holdout, nPts: ik6.nPts, pilot: ik6.pilot.status() } : null,
+  ik6Comm: ik6Comm ? { stage: ik6Comm.stage, i: ik6Comm.i,
+    pilotPhase: ik6Comm.pilot ? ik6Comm.pilot.phase : null } : null,
+  ilc6: ilc6P ? { laps: ilc6P.laps, peak: ilc6P.peak(),
+    history: ilc6Hist.slice(-12) } : null,
   ilc: ilcP ? { laps: ilcP.laps, bins: ilcP.bins, leadBins: ilcP.leadBins,
     peak: ilcP.peak(), travel: travelP, clamp: ILC_CLAMP,
     history: ilcHist.slice(-12) } : null,

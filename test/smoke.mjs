@@ -2649,6 +2649,18 @@ await fx.waitForFunction(() => window.__flxPathDbg && window.__flxPathDbg(),
   const dp = await fx.evaluate(() => window.__flxPathDbg());
   check('flexisim/path: …and so is a pilot that has not vouched for itself',
     dp.mode === 'open' && dp.pilot === null, JSON.stringify([dp.want, dp.mode]));
+  // And the fully learned system, both flavours: ⑥/⑦ selected before the geometry is
+  // learned and the pilot has vouched must quietly run open, not act on a map that does
+  // not exist.
+  await fx.selectOption('#ctlP', 'ikfree');
+  const d6 = await fx.evaluate(() => window.__flxPathDbg());
+  check('flexisim/path: …and so is a fully learned system that has not been commissioned',
+    d6.want === 'ikfree' && d6.mode === 'open' && d6.ik6 === null,
+    JSON.stringify([d6.want, d6.mode]));
+  await fx.selectOption('#ctlP', 'ikfree_ilc');
+  const d7 = await fx.evaluate(() => window.__flxPathDbg());
+  check('flexisim/path: …and ⑦ inherits exactly the same refusal',
+    d7.want === 'ikfree_ilc' && d7.mode === 'open', JSON.stringify([d7.want, d7.mode]));
   await fx.selectOption('#ctlP', 'open');
 }
 await fx.evaluate(() => { document.getElementById('s-spfP').value = '300'; });

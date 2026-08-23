@@ -3102,3 +3102,37 @@ hull) and the ROUTING gets its own degree-5 fit with inputs clamped to the hull 
 truth peak 0.055 rad, zero spikes, verify 1.46x, deploys. A map used as an instrument
 has different requirements from the same map used as an answer: the instrument must
 above all fail gently.
+
+## Brick 41 — modes ⑥ and ⑦: the fully learned system goes on the page
+
+Brick 40's experiment becomes the Path tab's modes ⑥ and ⑦. **Commission ⑥** runs the
+whole thing watched, in two stages: GATHER (90 held points inside the command box,
+quintic eases at the routed limits, the tracker teaching the geometry; degree-7 inverse
+fitted with a holdout report) and then the pilot's noise commissioning with its truth
+routed through the learned map. The refusal shape is inherited exactly: ⑥ or ⑦ selected
+before the geometry is learned AND the pilot has vouched quietly runs open, the same as
+③ before commissioning and ⑤ before its verify.
+
+**⑦ stacks a PathILC table on the learned chain**, with the lap's tool error mapped to
+joint units through the learned routing — route(tool) − route(command) — so the ④ block's
+analytic Jacobian appears nowhere in it. The table is a separate object from ④'s (it
+corrects a different plant: the learned refs, not the analytic ones), managed the same
+way — kept across a feedrate change, remade with the program, folded at lap boundaries.
+
+Measured in Node (test/pilot/ikfree.test.mjs pins the composed chain):
+
+  circle   lap 1 5.90e-2 → lap 14 **1.14e-3**   analytic-kinematics ILC@15: 8.9e-4
+  rounded  lap 1 6.97e-2 → lap 14 **1.27e-2**   analytic-kinematics ILC@15: 2.53e-2
+
+The circle lands within 28% of what the fifteen-lap learner reaches WITH the kinematics;
+the rectangle lands 2× BELOW it. Iteration absorbs both the learned map's static
+residual and the state-dependent disturbance that brick 38 located as the one-shot
+boundary — so the fully learned stack, given laps, crosses the line the one-shot pilot
+measured and stated.
+
+One wiring rule mattered on the page: in modes ⑥/⑦ the REFERENCES THEMSELVES come from
+the learned map (central-differenced for rates), not a pre-distortion on top of ik() —
+that is the difference between demonstrating a learned system and decorating an analytic
+one. And the routing/geometry split from brick 40 ships as constants (degree 7 for the
+answer, degree 5 hull-clamped for the instrument) with the measured failure documented
+beside them.
