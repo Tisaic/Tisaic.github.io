@@ -2270,3 +2270,310 @@ friction at 9% of hold torque the module correctly measures 0.91× and ships not
 means the 4.4× is a linear-plant result. There is also no feedback anywhere in the control
 path: the locked soft sensor's estimate drives nothing, so any disturbance not a function
 of the command window is invisible and, after the lock, undetectable.
+
+---
+
+## Brick 33 — CONTOURING, and every point-to-point metric on the project stops applying
+
+Asked, plainly: *the arms will be used in CNC pathing; the current step-move testing should
+never be relevant; keep to path as accurately as possible at all times, and minimise motor
+energy and direction change.* That is not a longer version of the existing question, it is
+a different one, and almost every control and metric on the page answers the wrong half of
+it.
+
+**AN INPUT SHAPER IS THE MOVE TAB'S BEST CONTROL AND IS A DEFECT HERE.** It works by
+delaying the command; at the end of a move a delay costs nothing, and along a path a delay
+is a contour error everywhere. Same for the settle dwell, which is the Chain tab's most
+valuable control and is meaningless on a machine that never settles. And a tracking rms
+sums two things that are not comparable failures:
+
+- **contour error** — normal to the path. The part is the wrong shape and no amount of
+  time fixes it.
+- **lag** — along the path. The tool is on the right curve, just late. The part is
+  correct; the cycle is slower.
+
+`lib/flexisim/contour.js` measures them separately and deliberately does not penalise the
+second. It also reports energy as TWO numbers, `∫τ²` (copper loss, what heats the motor)
+and `∫|τω|` (mechanical work, what the wall pays for), because a move can be cheap in one
+and dear in the other — and the measurement below shows they disagree about the answer.
+
+### The reversal counter measured arithmetic before it measured anything physical
+
+A direction change costs something because the gear teeth change faces and stiction
+re-breaks. Counting SIGN CHANGES of joint velocity counts neither: a joint dwelling near
+zero crosses it on rounding alone — measured, **994 against one physical reversal**. A
+speed deadband relative to a running peak is worse, because the peak is meaningless until
+it has been seen, so a run that dwells before it moves is counted against a threshold near
+zero (970 against 1). It is now a zigzag filter on integrated TRAVEL with the threshold
+set to the joint's own lost motion.
+
+### Three wrong feedrate profiles, all of which looked right
+
+`lib/flexisim/toolpath.js` is arc-length parameterised with the standard corner rule and a
+look-ahead. Getting the acceleration limit right took three attempts:
+
+1. Estimating the available tangential acceleration from the SOURCE speed lets a step into
+   an arc spend the whole budget tangentially and then arrive needing it all
+   centripetally — measured, exactly **√2 over the limit**, while every scalar check
+   passed (the speed was exactly √(ar) and the ramp exactly a).
+2. Estimating it from the LARGER of the two speeds collapses instead: where the ceiling
+   already sits at √(ar) the centripetal term is the whole budget, so the backward pass
+   propagates the end-of-path zero along the arc — the profile **stopped 1.9 units short
+   of the end of its own path**.
+3. The constraint has a closed form. `v_i² ≤ v_j² + 2·ds·√(a² − (v_i²κ)²)` squares to one
+   quadratic in `v_i²`; its larger root is the answer and it collapses to the ordinary
+   pass at κ = 0.
+
+Also: **the sampling resolution has to come from the FEEDRATE, not the path length.** At
+one sample per unit of arc the corner arcs got two samples each, so the curvature ceiling
+was evaluated almost nowhere and the arcs ran at 1.6× the centripetal limit. And the
+reported tangential acceleration was a finite difference times the speed at the END of the
+interval, which is exactly 2a wherever the speed doubles across one sample — i.e. the
+first interval of every path that starts from rest.
+
+### A closed path is not an open path with the ends joined
+
+Three separate defects, each of which puts a self-inflicted transient into a program that
+should be perfectly smooth: a **zero-length closing segment** (a degenerate line has no
+tangent, so the corner rule reads the seam as a right-angle turn and stops the machine);
+**unwrapped forward/backward passes** (v[0] and v[N] disagree, so the feedrate steps once
+per lap); and **wrapping the clock by the CEILING of the lap time** rather than by the real
+number, which inserts a fraction of a step of dwell at the seam.
+
+### THE DOMINANT ERROR IS NOT WHAT THE POINT-TO-POINT TABS MEASURE
+
+Split at feed 4e-3 on the shipped arm: the tool is **0.16 from where the encoders say** and
+only **0.0055 from where the servo was commanded**. The following error — the thing a servo
+tuner chases — is a thirtieth of the problem. Everything else is wind-up and bending, which
+no encoder reports.
+
+And the static sag at rest is 0.021 while the running deviation is 0.69 at feed 1e-2: it is
+**97% dynamic**, which is what kills the obvious correction.
+
+### The identified compliance is worth 5.4× and then nothing, and it does not degrade gracefully
+
+`e = J diag(c) τ_g` is linear in c and fits by exact least squares from one lap with the
+tracker. Contour rms, identified against none:
+
+| feed | none | identified | |
+|---|---|---|---|
+| 1e-3 | 3.03e-2 | 5.61e-3 | **5.4×** |
+| 2e-3 | 3.98e-2 | 2.25e-2 | 1.8× |
+| 4e-3 | 1.34e-1 | 1.30e-1 | 1.03× |
+| 1e-2 | 5.61e-1 | 5.96e-1 | *worse* |
+
+A compliance constant answers a QUASI-STATIC question, and above the structure's modes the
+error is a ringing response with a phase of its own. No constant times the present torque
+has a phase.
+
+**AND THE IDENTIFYING LAP HAS TO BE SLOW, which cost a browser run to find.** Fitted at the
+shipped feedrate the elbow's constant came back **+1.81 where the physics requires a
+negative number**, and the correction then applied the error a second time: contour 1.34e-1
+→ 2.65e-1. This project had already measured the mechanism on a single joint (brick 9: a
+static fit to a moving trace recovered 0.833 against a true 2.500, because the gearbox's
+DAMPER carries most of the torque during a move) and I ignored it. Commissioning now runs at
+the bottom of the ladder whatever the machine is set to, and reproduces to four figures in
+Node and in the browser: **c = −0.4582 / −1.405**.
+
+**THOSE CONSTANTS OVERTURN THE TAB'S OWN PREMISE FOR THIS ARM.** They are **7.3×** and
+**22.5×** the gearbox's own 1/K, so here the LINKS are the dominant compliance, not the
+gearbox — the opposite of the 70–90% split brick 6 measured at its own stiffnesses. The
+split is a property of the machine, not a law.
+
+### What works is memory of the lap
+
+A closed toolpath is exactly periodic, so the error at a point ON THE PART is repeatable.
+`lib/flexisim/pathilc.js` keeps a per-joint correction table **indexed by arc length** —
+not by step, because a step index needs the lap to be a whole number of steps or the phase
+drifts without bound, and because arc length makes the table a property of the part.
+
+One scored lap each, feed 4e-3, same plant, same program:
+
+| correction | contour rms | max | lag | ∫τ² | work | torque rev |
+|---|---|---|---|---|---|---|
+| none | 1.342e-1 | 4.16e-1 | 7.54e-2 | 5.93e-4 | 3.12e-2 | 12 |
+| wind-up τ/K | 1.327e-1 | 4.05e-1 | 7.45e-2 | 5.98e-4 | 3.14e-2 | 10 |
+| identified | 1.303e-1 | 3.41e-1 | 8.44e-2 | 6.27e-4 | 3.21e-2 | 20 |
+| **learned, 14 laps** | **2.567e-2** | 6.96e-2 | 2.34e-2 | **3.92e-4** | **2.80e-2** | 34 |
+
+**5.2× on the shape and 34% less copper loss at the same time**, which was not the expected
+trade: less ringing is less torque as well as less error, and the lag falls 3.2× as a side
+effect nobody asked for. The cost lands exactly on the third objective — **2.8× the torque
+direction changes** — while VELOCITY reversals do not move at all (8 either way), because
+those are the corners of the part and no correction removes them.
+
+Convergence, lap by lap: 1.33e-1 → 9.4e-2 → 6.8e-2 → 5.2e-2 → 4.2e-2 → 3.5e-2 → 3.1e-2 →
+2.9e-2 → 2.7e-2 → 2.6e-2 → 2.55e-2 → 2.53e-2, then flat.
+
+**EVERY ONE OF THE LEARNER'S THREE NUMBERS WAS MEASURED AND TWO OF THEM HAVE FAILURES ON
+BOTH SIDES.** The lead, in steps, against contour rms after eight laps: 0 → 0.182
+(diverging) · 300 → 0.0854 · **500 → 0.0578** · 700 → 0.0834 · 900 → 0.153 · 1200 → 0.183.
+The optimum is 500, which is **1/bandwidth of the position loop** — the loop's own time
+constant, not a number that had to be searched for. The zero-phase filter's half-width, in
+bins: 60 → 8.6e-2 · 30 → 4.6e-2 · **12 → 2.58e-2** · 6 → 2.56e-2 then drifting up · 3 and 0
+→ drifting. Too much filtering leaves error the correction is not allowed to touch; too
+little lets it chase content the plant does not reproduce and the tables creep.
+
+The library test drives a plant whose delay can be written down (a pure delay plus a
+first-order lag) precisely so the lead can be swept across it and BOTH failures asserted —
+a convergence check that only ran at the shipped lead would pass with the mechanism
+removed.
+
+### The two energy numbers disagree, which is the argument for reporting both
+
+Uncorrected, straight off the page's own Sweep button:
+
+| feed | lap steps | contour rms | ∫τ² | work | torque rev |
+|---|---|---|---|---|---|
+| 1.6e-2 | 2893 | 7.19e-1 | 6.62e-3 | 2.58e-1 | 22 |
+| 1.0e-2 | 3268 | 5.61e-1 | 5.39e-3 | 1.60e-1 | 22 |
+| 6.0e-3 | 4904 | 3.50e-1 | 1.95e-3 | 6.19e-2 | 16 |
+| 4.0e-3 | 7356 | 1.34e-1 | 5.93e-4 | 3.12e-2 | 12 |
+| 2.0e-3 | 14712 | 3.97e-2 | **1.258e-4** | 1.42e-2 | 12 |
+| 1.0e-3 | 29425 | 3.03e-2 | 1.365e-4 | **1.18e-2** | 4 |
+
+Copper loss has an **interior minimum at 2e-3** — fast costs acceleration, slow costs
+holding the arm up for longer — while mechanical work falls monotonically and says go as
+slow as you can. Contour error keeps improving but **flattens**: halving the feed from 4e-3
+buys 3.4×, halving it again buys 1.31×, because what is left down there is the arm sagging
+under its own weight and winding up against gravity, and neither cares how fast you go.
+
+### The picture, and what is exaggerated
+
+Every other stage on this page magnifies the deflection because a point-to-point move has
+nothing else to show. Here the SHAPE is the subject, so the arm is drawn at TRUE geometry
+(each link's own deflected centre line, through exactly the transform `toolXY()` uses) and
+the deviation is drawn as its own object: each recorded sample placed at the nearest point
+of the program and pushed out along that point's NORMAL by a stated factor. The trail is
+therefore a picture of the contour error alone, and the lag — which is not a defect —
+deliberately does not appear in it. The scale is uniform in x and y, because a circle drawn
+with two scales is an ellipse and the whole point of a ball-bar test is that a departure
+from a circle is the machine.
+
+Three drawing defects, all of the class this project keeps meeting — no error, nothing
+blank, just the wrong picture. **The view frame was fitted to the program alone**, and this
+arm's elbow hangs well below the workpiece, so the forearm arrived from off screen. **The
+content was pinned to an edge** rather than centred, and a uniform scale means one axis has
+slack, so the picture sat in the bottom of the stage. And **the error index wraps**: a tool
+behind the command at the start of a lap has its nearest point at the far end of a closed
+path, so the series jumps from ~L back to ~0 and joining those two samples drew a chord
+straight across the picture and a horizontal line across the chart. A break is inserted
+instead of a join.
+
+### A feedrate change is a change of speed, not a teleport
+
+Installing a new profile and restarting its clock at zero sends the command back to the
+start of the part while the tool is somewhere else — a position step into the servo's gain,
+which is this project's oldest self-inflicted transient under a new name. `timeAt(s)`
+inverts the profile so the new one starts at the arc length the old one had reached, which
+is what a feedrate override actually does. It is also what lets the learned table survive
+one: the table is indexed by position on the part, and only the LEAD — which is a time —
+has to be re-converted. Measured: a table converged at 4e-3 still leaves 1.79e-1 at 6e-3
+against 3.10e-1 with no table, so it partially transfers and then goes on learning.
+
+### Backlash is on for this tab and nowhere else
+
+A point-to-point move crosses a dead band once and settles; a contour crosses it wherever a
+joint reverses, and the step it leaves in the surface is the quadrant glitch every machine
+tool builder knows. Turning it off would leave the direction-change count measuring
+something with no cost attached to it.
+
+### And the Chain tab's picture-vs-number check was comparing two different quantities
+
+Found while running the suite for this brick, and it is the same shape as everything else
+in it. `lastGeom2` measured the drawn tool against the drawn encoder chain as a `hypot` —
+the full separation in the canvas — and compared it against `tipError().total`, which is a
+scalar TRANSVERSE to link 2 and by construction carries no axial term. Measured on one run:
+drawn 0.7760 against a true 0.7203, a 7.7% disagreement against a 6% tolerance — and
+`sqrt(0.7203² + 0.2910²) = 0.7766`, i.e. **the whole discrepancy was the axial term**. Since
+the axial displacement moves with the pose and the smoke test samples at whatever instant
+the run stops, the check drifted in and out of its own tolerance run to run (1.0334 one
+run, 1.0774 the next) with nothing changing. Projecting onto the transverse direction makes
+them the same quantity, and the tolerance comes down from 6% to 1% — a tolerance wide
+enough to absorb an axial term is wide enough to absorb a real drawing defect, which is
+what the check exists to catch.
+
+### And the convergence check reported a converging learner as a diverging one
+
+The full-tier smoke check read `1.77e-1 → 5.33e-1 → 5.28e-1 → 4.93e-1 → 4.63e-1 → 4.61e-1`
+and failed. The learner was fine: at that feedrate Node measures **5.87e-1 → 1.07e-1 over
+16 laps**, still falling at lap 8. Two things were wrong with the reading. The check
+arrived from the commissioning restore **a third of the way into a lap**, so its first
+history entry scored a third of a lap (1.77e-1) and every full lap after it looked like a
+regression against it — a partial lap is now folded into the tables (a bin nobody visited
+is left alone, so the update is still valid) but is no longer *reported* as a lap. And it
+waited for six laps when the claim needs eight; the plateau it thought it saw was the
+middle of a convergence.
+
+### The learner's ceiling was a guard meant for something else
+
+With the reporting fixed the browser still plateaued: `5.87e-1 → 5.32 → 5.25 → 4.94 → 4.64
+→ 4.60 → 4.61 → 4.60`, against Node's `5.87e-1 → … → 1.07e-1` on the same plant and the
+same program. The cause was a **single shared clamp**. The quasi-static corrections predict
+a wind-up of a few milliradians, so a 0.05 rad bound on the pre-distortion is fifty times
+anything physical and only ever catches a fit that has gone wrong — measured not to bind at
+all up to feed 4e-3 (identical scores with the bound ten times looser). The LEARNED table is
+a different object: it is measured rather than predicted and it has to invert the position
+loop's own lag as well as the compliance, so at the top of the ladder it legitimately
+reaches **0.45 rad**. Applying the same 0.05 to it was not a guard, it was the ceiling.
+
+Reproduced in Node by adding the clamp to the harness, which is what makes it a diagnosis
+rather than a guess — contour rms after ten laps at feed 1e-2: **clamp 0.05 → 4.61e-1**
+(the browser's trace to three figures), **0.25 → 1.72e-1**, **none → 1.29e-1**. And the
+large table is not waste: at that feedrate the converged learner reads contour 1.07e-1
+against 5.60e-1, ∫τ² **3.08e-3 against 5.38e-3**, work 1.34e-1 against 1.60e-1, and even
+velocity reversals 6 against 8. Every objective the tab measures improves at once.
+
+The learner's guard is now its own and is a runaway catcher (1 rad). What keeps a large
+correction honest is not a limit but a reading: the panel reports the peak **against the
+joint's own commanded travel over the lap** (0.82 and 0.91 rad here), and says so when it
+passes a quarter of it — because a correction that is half the move is a fact about the
+feedrate being near the limit of what the loop can follow, not about the learner.
+
+### And a check I added earlier in the same session had been taking the suite down
+
+The full tier ended with a ten-minute `waitForFunction` timeout, in the black box's
+friction gate — and it had done the same on the previous full run, which I had recorded as
+green because the failure came after the last check printed. Changing the friction slider
+REBUILDS the plant and throws the commissioning away, which is what the two checks
+immediately above it assert; the check then waited for a design from a module sitting idle
+because nobody had pressed Go. It now presses Go. A red suite hides the next real failure,
+which in this case was three sections further down.
+
+### The friction note was wrong by a factor of a hundred, and so was the check beside it
+
+With the check finally running (see above), it failed: the module identified the plant
+perfectly well under the friction the slider was set to. The page's note claimed *"Coulomb
+friction at 2% of the motor-side hold torque returns a DC gain of −0.08 against a true
+15.5 and a probe fit explaining 0.3% of held-out data."* Re-measured across the ladder:
+
+| friction (% of motor-side hold) | R² | step-test DC | outcome |
+|---|---|---|---|
+| 2% | 0.998 | 12.9 | identifies, designs, deploys |
+| 5% | 0.997 | 14.9 | identifies, designs, deploys |
+| **20%** | **0.0025** | **−4.26** (probe implies −0.03) | **REFUSES** |
+
+The original measurement was taken while the ladder was a fraction of the **load-side**
+hold torque; it was later corrected to motor-side — a factor of the gear ratio, 100 — and
+neither the note nor the check was re-measured. So the page carried a false claim and the
+check asserted it, and the only reason nobody noticed is that the check had been timing out
+before it could disagree.
+
+**And the ladder now stops at 20%**, which is a measured floor rather than a round number:
+at 50% and above the joint barely breaks away, the commissioning never reaches a design or
+a refusal (ten minutes, no message), and the tab is stuck. A slider position that hangs the
+page is a trap — the same conclusion FlowSim reached about its viscosity floor.
+
+### And the gate's first real firing crashed the panel
+
+With the friction level corrected the gate finally fired in a suite run — and the black
+box's stats panel threw `Cannot read properties of undefined (reading 'toExponential')`.
+A refusal is not a design with zeros in it: there is no filter, no preview and no
+correction size, so `umax` is simply absent, and three rows read it unconditionally. The
+panel had never been rendered in the one state the gate exists to produce.
+
+**The instrument that caught it was the page's own error buffer**, not `pageerror` and not
+the console listener — the third time in this project that buffer has been the only thing
+that saw a defect (the `mapAsync` rejection in FlowSim v114, the stale-backend read in
+v140, this). Every functional check in the section passed while it was throwing. The panel
+now names the refusal and why, which is what it should have said all along.

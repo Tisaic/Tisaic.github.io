@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:238,built:"2026-08-23T07:16:07Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:239,built:"2026-08-23T17:46:24Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -43,10 +43,11 @@
        resize and re-renders, and the two chase each other. The fix is one selector, but
        the failure looks like a bug in the tab's logic rather than in its stylesheet,
        which is why it is worth naming here. */
-    #err-chart, #ss-chart, #chain-chart, #cs-chart, #chain-pos, #bb-chart { width:100%;
+    #err-chart, #ss-chart, #chain-chart, #cs-chart, #chain-pos, #bb-chart,
+    #path-chart { width:100%;
       height:170px; margin-top:8px; display:none; }
     #err-chart.on, #ss-chart.on, #chain-chart.on, #cs-chart.on, #chain-pos.on,
-    #bb-chart.on { display:block; }
+    #bb-chart.on, #path-chart.on { display:block; }
     code { background:var(--card); padding:.1em .35em; border-radius:5px;
       font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.92em; }
     .controls { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; align-items:center; }
@@ -100,9 +101,10 @@
   <div id="tabs">
     <div class="tab on" data-tab="move">① Move</div>
     <div class="tab" data-tab="chain">② Chain</div>
-    <div class="tab" data-tab="black">③ Black box</div>
-    <div class="tab" data-tab="verify">④ Verify</div>
-    <div class="tab" data-tab="about">⑤ Architecture</div>
+    <div class="tab" data-tab="path">③ Path</div>
+    <div class="tab" data-tab="black">④ Black box</div>
+    <div class="tab" data-tab="verify">⑤ Verify</div>
+    <div class="tab" data-tab="about">⑥ Architecture</div>
   </div>
 
   <!-- ================================ Tab 1: move ================================ -->
@@ -487,6 +489,175 @@
     </div>
   </section>
 
+
+  <!-- ================================ Tab 3: path ================================ -->
+  <section class="panel" id="p-path">
+    <p class="lead"><b>This is the tab that matches the end application.</b> The other tabs run
+      point-to-point moves and score where the tool <i>ends up</i>; a contouring machine never
+      ends up anywhere — it is always mid-path, and what it is judged on is the <b>shape it
+      leaves behind</b>. The two questions have different answers, so they get different
+      metrics and different controls.</p>
+    <p class="lead">The deviation from the program splits in two and only one half is a defect.
+      <b>Contour error</b> is the component <b>normal</b> to the path: the part is the wrong
+      shape and no amount of time fixes it. <b>Lag</b> is the component <b>along</b> it: the tool
+      is on the right curve, just late, so the part is right and the cycle is slower. Summing
+      them into one tracking number — which every point-to-point metric on this project does —
+      makes a machine that lags uniformly look as bad as one that cuts the wrong shape.</p>
+
+    <div class="stage" id="stageP">
+      <canvas id="cvP"></canvas>
+      <span class="badge" id="stateP-badge">building…</span>
+      <span class="badge r" id="errP-badge">—</span>
+    </div>
+    <div id="path-chart"></div>
+
+    <div class="controls">
+      <button id="runP">Run ▶</button>
+      <button id="commP" class="sec">Commission ▶</button>
+      <button id="sweepP" class="sec">Sweep feedrate ▶</button>
+      <button id="resetP" class="sec">Reset</button>
+    </div>
+    <p class="hint" id="hintP"><b>Commission</b> traces one lap with the tracker watching and
+      fits <b>one compliance constant per joint</b> to the tool's own deviation, then puts the
+      tracker away — the same lifecycle as every other learner here. <b>Sweep</b> runs the same
+      path at every feedrate and tabulates what each one costs, because accuracy and energy do
+      not have their optimum at the same speed.</p>
+
+    <h4 class="grp">Program <span>— rebuilt at a lap boundary</span></h4>
+    <div class="controls">
+      <select id="shapeP" aria-label="Toolpath">
+        <option value="circle">circle — the ball-bar test</option>
+        <option value="rounded" selected>rounded rectangle — straights and arcs</option>
+        <option value="sharp">square — four real corners</option>
+      </select>
+      <select id="ctlP" aria-label="Correction">
+        <option value="open">① none — command the kinematics and nothing else</option>
+        <option value="model">② wind-up model — τ/K, which the controller knows</option>
+        <option value="ident">③ identified compliance — one lap, then locked</option>
+        <option value="ilc">④ iterative learning — the part is the same every lap</option>
+      </select>
+    </div>
+    <div class="controls">
+      <div class="slider"><span>Feedrate</span>
+        <input type="range" id="s-feedP" min="0" max="5" step="1" value="2" />
+        <span class="v" id="v-feedP">4.0e-3</span></div>
+      <div class="slider"><span>Accel limit</span>
+        <input type="range" id="s-accP" min="0" max="4" step="1" value="2" />
+        <span class="v" id="v-accP">4.0e-5</span></div>
+      <div class="slider"><span>Corner tol</span>
+        <input type="range" id="s-cornP" min="0" max="4" step="1" value="2" />
+        <span class="v" id="v-cornP">40 steps</span></div>
+    </div>
+    <p class="hint" id="pendP" hidden><b>queued</b> — the program is only rebuilt at a lap
+      boundary, for the same reason the other tabs rebuild a reference only between moves: a
+      feedrate change mid-lap is a velocity step into the servo's gain.</p>
+
+    <h4 class="grp">Plant &amp; view</h4>
+    <div class="controls">
+      <div class="slider"><span>Gearbox K</span>
+        <input type="range" id="s-kP" min="0" max="6" step="1" value="4" />
+        <span class="v" id="v-kP">16.0</span></div>
+      <div class="slider"><span>Steps/frame</span>
+        <input type="range" id="s-spfP" min="20" max="300" step="20" value="60" />
+        <span class="v" id="v-spfP">60</span></div>
+      <div class="slider"><span>Error ×</span>
+        <input type="range" id="s-magP" min="0" max="7" step="1" value="3" />
+        <span class="v" id="v-magP">10×</span></div>
+    </div>
+
+    <dl class="stat" id="statsP"></dl>
+    <p class="hint" id="boardP-cap" hidden></p>
+    <div style="overflow-x:auto"><table class="v" id="boardP" hidden></table></div>
+
+    <div class="note">
+      <h3>What the picture is, exactly</h3>
+      The arm is drawn at its <b>true</b> geometry with no exaggeration anywhere — at this
+      stiffness the links bend by well under a percent of their length, so a straight-looking
+      arm is the honest picture. The <b>error trail</b> is the exaggerated one, and it is
+      exaggerated in one direction only: each recorded tool sample is drawn at the nearest point
+      of the commanded path, pushed out along that point's <b>normal</b> by the magnification
+      times the contour error. So the trail is a picture of the contour error alone, wrapped
+      around the shape that produced it, and the lag — which is not a defect — deliberately does
+      not appear in it.
+    </div>
+    <div class="note">
+      <h3>Slowing down runs out, and the sweep is where you watch it run out</h3>
+      Contour rms with no correction, straight off the <b>Sweep</b> button, uncorrected:
+      <b>7.19e-1</b> at feed 1.6e-2, 5.61e-1, 3.50e-1, <b>1.34e-1</b> at 4e-3,
+      <b>3.97e-2</b> at 2e-3, <b>3.03e-2</b> at 1e-3. Halving the feedrate from 4e-3 buys
+      <b>3.4×</b>; halving it again buys only <b>1.31×</b>. It flattens because what is
+      left down there is the arm sagging under its own weight and winding up its gearboxes
+      against gravity, and neither of those cares how fast you go. That is the argument for
+      correcting the error rather than creeping around the part.
+    </div>
+    <div class="note">
+      <h3>The two energy numbers disagree about the answer, which is why both are shown</h3>
+      Over the same sweep, <b>copper loss ∫τ²</b> reads 6.62e-3 · 5.39e-3 · 1.95e-3 ·
+      5.93e-4 · <b>1.258e-4</b> · 1.365e-4 from fast to slow — an <b>interior minimum at
+      feed 2e-3</b>, because going fast costs acceleration and going slow costs holding the
+      arm up for longer. <b>Mechanical work ∫|τω|</b> over the same rows falls monotonically
+      (2.58e-1 → 1.18e-2) and says go as slow as you can. A page reporting one of them would
+      be choosing which cost to care about without saying so. Torque direction changes agree
+      with the work: 22 at the top of the ladder against 4 at the bottom.
+    </div>
+    <div class="note">
+      <h3>A static compliance correction stops working, and it does not degrade gracefully</h3>
+      A compliance constant answers <i>how far does this torque push the tool off</i>, which
+      is a <b>quasi-static</b> question — right only while the command's own frequency
+      content sits below the structure's modes. Measured with the identified constants
+      against none: <b>5.4×</b> at feed 1e-3, <b>1.8×</b> at 2e-3, <b>1.03×</b> at 4e-3, and
+      slightly <i>worse</i> at 1e-2. Above the modes the error is a ringing response with a
+      phase of its own, and no constant times the present torque has a phase.
+      <br /><br />Two things about the constants themselves. They come out at <b>7.3×</b> and
+      <b>22.5×</b> the gearbox's own 1/K, so on this arm the gearbox is <i>not</i> the
+      dominant compliance — the links are, which is the opposite of the 70–90% split the
+      Move tab measures at its own stiffnesses. And the identifying lap deliberately runs at
+      the <b>bottom</b> of the feedrate ladder: fitted at the shipped feedrate instead, the
+      elbow's constant came out with the <b>wrong sign</b> and the correction then doubled
+      the contour error. This project has measured that before on a single joint — during a
+      move the gearbox's damper carries most of the torque, so a static fit to dynamic data
+      lands on a blend of a stiffness and a damping, which is neither.
+    </div>
+    <div class="note">
+      <h3>What does work is memory of the lap — and it is cheaper, not dearer</h3>
+      A closed toolpath is exactly periodic, so the error at a given point <i>on the part</i>
+      is repeatable, and a correction indexed by <b>where on the part</b> it applies can be
+      improved from what the last lap left there. One scored lap each, same plant, same
+      program, feed 4e-3:
+      <div style="overflow-x:auto"><table class="v" style="margin-top:8px">
+        <tr><th>correction</th><th>contour rms</th><th>max</th><th>lag</th><th>∫τ²</th>
+          <th>work</th><th>torque rev</th></tr>
+        <tr><td>none</td><td>1.342e-1</td><td>4.16e-1</td><td>7.54e-2</td><td>5.93e-4</td>
+          <td>3.12e-2</td><td>12</td></tr>
+        <tr><td>wind-up τ/K</td><td>1.327e-1</td><td>4.05e-1</td><td>7.45e-2</td>
+          <td>5.98e-4</td><td>3.14e-2</td><td>10</td></tr>
+        <tr><td>identified</td><td>1.303e-1</td><td>3.41e-1</td><td>8.44e-2</td>
+          <td>6.27e-4</td><td>3.21e-2</td><td>20</td></tr>
+        <tr><td>learned, 14 laps</td><td class="good">2.567e-2</td><td>6.96e-2</td>
+          <td>2.34e-2</td><td class="good">3.92e-4</td><td class="good">2.80e-2</td>
+          <td>34</td></tr>
+      </table></div>
+      <b>5.2× on the shape and 34% less copper loss at the same time</b>, which was not the
+      expected trade — less ringing is less torque as well as less error, and the lag comes
+      down 3.2× as a side effect nobody asked for. It converges by about lap 12 (1.33e-1 →
+      9.4e-2 → 6.8e-2 → 5.2e-2 → 4.2e-2 → 3.5e-2 → 3.1e-2 → 2.9e-2 → 2.7e-2 → 2.6e-2 →
+      2.55e-2 → 2.53e-2, then flat) and the cost is paid in the third column: <b>2.8× the
+      torque direction changes</b>, because a correction that cancels a resonance is a
+      busier command than one that does not. <b>Velocity</b> reversals do not move at all
+      (8 either way) — those are the corners of the part, and no correction removes them.
+    </div>
+    <div class="note">
+      <h3>Direction changes are counted as travel, not as sign changes</h3>
+      Each velocity reversal drags a joint back through its own lost motion and re-breaks
+      stiction — the textbook cause of the quadrant glitch that shows up as a step at every axis
+      crossing of a circular interpolation, and the most recognisable defect in CNC contouring.
+      Counting <i>sign changes</i> of joint velocity measures arithmetic instead: a joint
+      dwelling near zero crosses it on rounding alone, measured at <b>994</b> against one
+      physical reversal. A reversal is counted only once the joint has actually retraced more
+      than its backlash, which is when the gear teeth have changed faces.
+    </div>
+  </section>
+
   <!-- =============================== Tab 3: verify =============================== -->
   <!-- ============================ Tab 3: black box ============================== -->
   <section class="panel" id="p-black">
@@ -510,7 +681,29 @@
       <div class="slider"><span>Settle</span>
         <input type="range" id="s-settle3" min="0" max="5" step="1" value="1" />
         <span class="v" id="v-settle3">1.0 ring</span></div>
+      <div class="slider"><span>Joint friction</span>
+        <input type="range" id="s-fric3" min="0" max="3" step="1" value="0" />
+        <span class="v" id="v-fric3">none</span></div>
     </div>
+    <p class="hint"><b>Friction is where this method's premise stops holding, and the slider
+      is here so that is visible rather than assumed.</b> The whole architecture rests on the
+      PLANT PATH being linear enough to invert while the DISTURBANCE is not — and every number
+      on this tab was measured on a joint with friction switched off, which is the one
+      configuration where that premise cannot fail. <b>Where it fails is measured, and it is
+      further up than this note used to claim.</b> At Coulomb friction of <b>2%</b> and
+      <b>5%</b> of the motor-side hold torque the identification is untroubled — R² 0.998 and
+      0.997, DC gain 12.9 and 14.9 against a true 15.5 — and the module designs and deploys as
+      usual. At <b>20%</b> it collapses: the step test returns a DC gain of <b>−4.26</b>, the
+      probe implies <b>−0.03</b>, and the fit explains <b>0.25%</b> of held-out data. A PRBS
+      reverses sign every grid interval and re-breaks stiction each time, which the step test —
+      crossing zero velocity once — never sees, so the two disagree and the module REFUSES
+      rather than designing against it. Before the gate existed it deployed a correction and
+      made the machine <b>0.81×</b>, reported as 1.33× better.
+      <br /><br />The earlier version of this note said 2% and it was wrong by a factor of a
+      hundred: it was measured while the ladder was a fraction of the <i>load-side</i> hold
+      torque, and the note survived the correction to motor-side. A stale number in a note is
+      the same defect as a stale number in a check, and the check next to it had gone stale in
+      exactly the same way.</p>
     <p class="hint">The jerk limit is a boxcar convolved into the command's acceleration, so it
       is the same object as an input shaper and composes with one. It changes what the machine is
       ASKED to do, which is a different question from what the controller does about it — so
@@ -632,7 +825,21 @@ lib/flexisim/         the composition layer
   tipsensor.js          tip error inferred from motor signals (+ a forecast)
   compliance.js         the structured rival: identify 1/K, not the error
   compensator.js        the servo, the shaper, and the pre-distortion
+  toolpath.js           a planar program and its look-ahead feedrate profile
+  contour.js            contour vs lag, both energies, direction changes
+  pathilc.js            learning a correction indexed by position on the part
 lib/ngrc/             the learning primitives (SoftSensor, RobotComp, ...)</pre>
+    </div>
+    <div class="note">
+      <h3>Point-to-point and contouring are different machines</h3>
+      Tabs ① and ② ask where the tool <b>ends up</b>: bias, oscillation, settling time, and the
+      controls that serve those are input shaping and a settle dwell. Tab ③ asks what
+      <b>shape</b> the tool leaves, and there the same two controls are a defect and a
+      no-op respectively — a shaper works by delaying the command, which costs nothing at
+      the end of a move and is a contour error everywhere along one, and a machine that
+      never settles has no settled window to dwell for. The end application is contouring,
+      so ③ is the tab that matches it; ① and ② remain the cheapest place to see the plant
+      itself, which is why they are still here.
     </div>
     <div class="note">
       <h3>Verified, not asserted</h3>
@@ -655,6 +862,9 @@ import { TipSensor, nrmse } from './lib/flexisim/tipsensor.js';
 import { FlexArm2R } from './lib/flexisim/arm2r.js';
 import { ChainServo } from './lib/flexisim/compensator.js';
 import { ChainSensor } from './lib/flexisim/chainsensor.js';
+import { roundedRect, sharpRect, circle as circlePath } from './lib/flexisim/toolpath.js';
+import { ContourScore, decompose } from './lib/flexisim/contour.js';
+import { PathILC } from './lib/flexisim/pathilc.js';
 // THE BLACK BOX IS ITS OWN DIRECTORY, which is the boundary made visible: nothing under
 // lib/blackbox/ imports anything from lib/flexisim/, so it cannot learn about an arm even
 // by accident.
@@ -706,6 +916,21 @@ for (const t of document.querySelectorAll('.tab')) {
     if (t.dataset.tab === 'move' && chartOn) Plotly.Plots.resize($('err-chart'));
     if (t.dataset.tab === 'move' && ssChartOn) Plotly.Plots.resize($('ss-chart'));
     if (t.dataset.tab === 'black' && bbChartOn) Plotly.Plots.resize($('bb-chart'));
+    if (t.dataset.tab === 'path') {
+      if (pChartOn) Plotly.Plots.resize($('path-chart'));
+      // BUILT ON FIRST VISIT rather than at startup. This plant is a third pair of
+      // lattices and its home has to settle under gravity before anything it measures
+      // means anything, which is a couple of seconds nobody who never opens this tab
+      // should pay for.
+      if (!armP && !busyP) {
+        busyP = true;
+        setPathBadge('building…', 'warn');
+        buildP().then(() => { setPathBadge('ready — press Run', ''); })
+          .catch((e) => { setPathBadge('build failed: ' + e.message, 'bad'); console.error(e); })
+          .finally(() => { busyP = false; syncPath(); });
+      }
+      requestAnimationFrame(drawP);
+    }
     if (t.dataset.tab === 'chain') {
       if (chPosOn) Plotly.Plots.resize($('chain-pos'));
       if (chChartOn) Plotly.Plots.resize($('chain-chart'));
@@ -2290,6 +2515,21 @@ function frame() {
     draw2();
     syncChain();
     if (frames % 6 === 0) { stats2(); chainPosChart(); chainChart(); csStats(); csChart(); }
+  }
+  const onPath = document.querySelector('.tab[data-tab="path"]').classList.contains('on');
+  if (onPath && armP && !busyP) {
+    try {
+      if (sweepP) sweepStepP(LEARN_BUDGET);
+      else if (commissionP) commissionStepP(LEARN_BUDGET);
+      else if (runP) stepP(+$('s-spfP').value);
+    } catch (e) {
+      runP = false; sweepP = null; commissionP = null;
+      setPathBadge('halted: ' + e.message, 'bad'); console.error(e);
+    }
+  }
+  if (onPath) {
+    drawP(); syncPath();
+    if (frames % 6 === 0) { statsP(); pathChart(); }
   }
   if (!A || busy) return;
   // THE SEQUENCE ADVANCES BEFORE THE STEPPING, so a step that has just finished
@@ -4100,10 +4340,19 @@ function draw2() {
   // The drawn tool and the drawn ENCODER chain are both returned by chain(), so the
   // separation between them in the canvas is the drawn error — divide by `mag * scale`
   // and it must be the model's own number.
-  const drawnSep = Math.hypot(tx - encTx, ty - encTy);
-  const drawnSign = ((tx - encTx) * -s2 + (ty - encTy) * c2) >= 0 ? 1 : -1;
+  //
+  // AND IT IS THE TRANSVERSE COMPONENT, NOT THE SEPARATION'S MAGNITUDE. `tipError().total`
+  // is a scalar transverse to link 2; the drawn tool can also be displaced ALONG the
+  // forearm, and a `hypot` folds that axial term in and then compares it against a number
+  // that by construction does not carry it. Measured on one run: drawn 0.7760 against a
+  // true 0.7203, a 7.7% disagreement that is exactly sqrt(0.7203^2 + 0.2910^2) = 0.7766 --
+  // the whole discrepancy WAS the axial term, and it moved with the pose, so the check
+  // drifted in and out of its own tolerance run to run. Projecting makes the two the same
+  // quantity, which is what the check claims to be testing.
+  const dTx = tx - encTx, dTy = ty - encTy;
   lastGeom2 = { mag,
-    drawnToolVsMotor: drawnSign * drawnSep / mag,
+    drawnToolVsMotor: (dTx * -s2 + dTy * c2) / mag,
+    drawnAxial: (dTx * c2 + dTy * s2) / mag,
     trueToolVsMotor: arm2.tipError().total,
     axial: arm2.tipError().axial,
     band: w2S && w2S.n > 8 ? { lo: w2S.lo, hi: w2S.hi, mean: w2S.bias } : null };
@@ -4466,6 +4715,14 @@ const BB_JERK = [0, 30, 60, 120, 240, 450, 900, 1800];
 // 1011, zeta 0.236). It is host knowledge — the number a motion program's dwell would be
 // sized from — and the module is never told either of them.
 const BB_RING = 1011;
+// Coulomb friction as a fraction of the MOTOR-side hold torque; stiction is 1.6x it.
+// THE LADDER STOPS AT 20% AND THAT IS A MEASURED FLOOR, NOT A ROUND NUMBER. 20% is where
+// the identification collapses and the module refuses, which is the whole point of the
+// slider; past it -- 50% and up -- the machine barely breaks away at all and the
+// COMMISSIONING never finishes, so the tab sits with no message and no way forward.
+// Measured: at 50% the sequence had not reached a design or a refusal after ten minutes.
+// A slider position that hangs the page is a trap, so it is not offered.
+const BB_FRIC = [0, 0.02, 0.05, 0.2];
 const BB_ZETA = 0.236;
 // Pairs of the DEPLOYED correction the sensor gets before the tracker is taken away.
 const BB_TRAIN = 4000;
@@ -4490,9 +4747,16 @@ async function buildBB() {
     nu: NU, rho: RHO, damping: DAMPING });
   const mp = massProperties(link);
   const K = K_LADDER[4];
+  // FRICTION IS MOTOR-SIDE, so the ladder is a fraction of the motor-side hold torque
+  // (hold/N) and not of the load-side one — a factor of a hundred, which would turn 2%
+  // into 200%. See the note under the slider for what it does to the identification.
+  const fr = BB_FRIC[+$('s-fric3').value];
+  const holdM = Math.abs(mp.centroid * mp.mass * (-G)) / RATIO;
   const joint = new Joint({ ratio: RATIO, motorInertia: mp.inertiaAboutPivot / 1e4,
     loadInertia: mp.inertiaAboutPivot, stiffness: K,
-    damping: 2 * Math.sqrt(K * mp.inertiaAboutPivot / 2) });
+    damping: 2 * Math.sqrt(K * mp.inertiaAboutPivot / 2),
+    ...(fr ? { friction: { tauC: fr * holdM, tauS: 1.6 * fr * holdM,
+      vs: 2e-5, viscous: 0 } } : {}) });
   const arm = new FlexArm({ joint, link, gravityWorld: [0, -G, 0], dt: 1 });
   // THE SERVO IS THE MACHINE, NOT THE CONTROLLER. A black-box compensator sits on top of
   // whatever loop the drive already closes -- on a real machine you are usually not
@@ -4736,7 +5000,19 @@ function bbStats() {
             + '<span class="good">— the bending mode, from the response itself</span>'
           : '<span class="warn">none detected</span>')]);
     }
-    if (st.design) {
+    // A REFUSAL IS NOT A DESIGN WITH ZERO IN IT, and the panel has to say so rather than
+    // read every field a design has. When the module refuses there is no filter, no
+    // preview and no correction size -- `umax` is simply absent -- and the three rows
+    // below threw `Cannot read properties of undefined` on the FIRST run in which the
+    // gate actually fired, which is the run the gate exists for. The error never reached
+    // `pageerror`; it was the page's OWN error buffer that reported it, for the third
+    // time in this project.
+    if (st.design && st.design.refused) {
+      rows.push(['designed feedforward', '<span class="bad">REFUSED</span> — '
+        + `${st.design.why}   <span class="warn">so nothing is applied: a plant this `
+        + 'module cannot identify is one it cannot invert, and a correction designed '
+        + 'against a model that explains nothing makes the machine worse</span>']);
+    } else if (st.design) {
       rows.push(['designed feedforward', `<b>${st.design.kind}</b> · ${st.design.taps} taps`
         + (st.design.horizon ? ` · horizon ${st.design.horizon} · ${st.design.iters} solver `
           + 'iteration(s) per update' : '')
@@ -4779,6 +5055,14 @@ function bbStats() {
           ? '<span class="good">and it fits in a single cycle with no scheduling</span>'
           : '<span class="warn">it needs the spread; the look-ahead is what makes that '
             + 'legitimate, at the price of one more grid sample of preview</span>')]);
+    }
+    // A REFUSAL IS THE HEADLINE, NOT A FOOTNOTE. When the identification fails, every
+    // other row below is describing a model that does not exist.
+    if (st.design && st.design.refused) {
+      rows.push(['identification', '<span class="bad">REFUSED</span> — ' + st.design.why]);
+      rows.push(['what that means', 'no correction is applied at all. "I could not model '
+        + 'this machine" is an answer; before this gate existed the module designed '
+        + 'against a failed fit anyway and made the arm <b>0.81×</b>, reporting 1.33×.']);
     }
     if (st.map) rows.push(['disturbance map', `${st.map.features} features from the `
       + 'command window alone'
@@ -5022,7 +5306,11 @@ bbSettleLabel();
 // A LONGER DWELL IS A DIFFERENT COMMAND, so it throws the commissioning away for exactly
 // the reason the jerk limit does: the disturbance map is a fit from the command window to
 // what the machine does, and this changes the window.
-for (const id of ['s-jerk3', 's-settle3']) {
+$('s-fric3').addEventListener('input', () => {
+  const f = BB_FRIC[+$('s-fric3').value];
+  $('v-fric3').textContent = f ? `${(100 * f).toFixed(1)}% of hold` : 'none';
+});
+for (const id of ['s-jerk3', 's-settle3', 's-fric3']) {
   $(id).addEventListener('change', async () => {
     if (bbBusy) return;
     bbBusy = true; syncBB();
@@ -5078,6 +5366,875 @@ window.__flxChainDbg = () => (arm2 ? {
   cells: arm2.l1.lattice.cellCount + arm2.l2.lattice.cellCount,
   sensor: csWhole ? { ...csWhole.status(), training: csTraining, samples: csRec.length,
     lockedAt: csLockedAt, scores: csScores() } : null,
+} : null);
+
+// ================================== TAB 3: PATH ==================================
+//
+// CONTOURING, WHICH IS THE JOB THE ARM IS ACTUALLY FOR. Every other tab on this page
+// runs a point-to-point move and scores where the tool ENDS UP -- bias, oscillation,
+// settling time. A contouring machine never ends up anywhere: it is always mid-path,
+// and what it is judged on is the shape it leaves behind. That is not a longer version
+// of the same question, it is a different one, and it has different answers:
+//
+//   * An input shaper delays the command. At the end of a move that costs nothing and
+//     it is the single best thing on the Move tab. Along a path it is a contour error
+//     everywhere, so it is not offered here.
+//   * A settling dwell is the Chain tab's most valuable control and is meaningless here.
+//   * A tracking rms sums contour error and lag, and only the first is a defect.
+//
+// THE THREE THINGS THIS TAB MEASURES are the three a contouring machine is bought on:
+// how close to the path it stays AT ALL TIMES, how much energy the motors spend, and
+// how often they change direction. They do not share an optimum, which is why all
+// three are reported rather than one.
+const PATH_FEED = [0.001, 0.002, 0.004, 0.006, 0.010, 0.016];
+const PATH_ACC = [1e-5, 2e-5, 4e-5, 8e-5, 1.6e-4];
+const PATH_CORN = [10, 20, 40, 80, 160];
+// The same links as the Chain tab and the same material, so the two tabs are the same
+// machine asked two different questions. The path sits in the middle of the annulus the
+// arm can reach: well inside the straight-arm singularity and well outside the folded
+// one, because a Jacobian inverse is what turns a Cartesian program into joint motion
+// and it is meaningless at either end.
+const PG = { LEN1: 14, LEN2: 10, E: 0.15, centre: [12, 0], drive: 32 };
+// COMMISSIONING RUNS SLOW, AND THAT IS THE POINT RATHER THAN A CONVENIENCE. A compliance
+// constant is a QUASI-STATIC quantity, and this project has already measured what fitting
+// one to a moving trace gets you: on a single joint it recovered 0.833 against a true
+// 2.500, because during a move the gearbox's DAMPER carries most of the torque and a
+// static fit to dynamic data lands on a blend of a stiffness and a damping. Here it is
+// worse than a blend -- fitted at the shipped feedrate the elbow's constant comes out
+// with the WRONG SIGN and the correction then doubles the contour error. The identifying
+// lap therefore runs at the bottom of the ladder whatever the machine is set to.
+const COMMISSION_FEED = PATH_FEED[0];
+const PATH_MODE_LABEL = {
+  open: 'none — the kinematics and nothing else',
+  model: 'wind-up model τ/K',
+  ident: 'identified compliance (locked)',
+  ilc: 'iterative learning over laps',
+};
+// THE ILC's THREE NUMBERS, EVERY ONE OF THEM MEASURED RATHER THAN CHOSEN — see
+// lib/flexisim/pathilc.js, which carries the sweeps. The lead is the position loop's own
+// time constant (1/bandwidth) and is not a fitted parameter.
+const ILC = { bins: 1500, gain: 1.0, smooth: 12, leadSteps: 1 / 2e-3 };
+// TWO GUARDS, BECAUSE THEY GUARD AGAINST DIFFERENT THINGS. The static corrections predict
+// a wind-up of a few milliradians, so 0.05 rad is fifty times anything physical and only
+// ever catches a fit that has gone wrong -- MEASURED not to bind at feeds up to 4e-3
+// (identical scores with the bound ten times looser). The LEARNED table is a different
+// object: it is measured rather than predicted, and it has to invert the loop's own lag as
+// well as the compliance, so at the top of the feedrate ladder it legitimately reaches
+// 0.45 rad. Holding it to 0.05 was not a guard, it was the ceiling -- the learner PLATEAUED
+// at 4.6e-1 instead of converging to 1.1e-1, and the plateau reproduced exactly in Node
+// with the same bound applied. Its guard is a runaway catcher and nothing else; what keeps
+// a large correction honest is that the panel reports it against the joint's own travel.
+const DQ_CLAMP = 0.05;          // rad, on the quasi-static corrections
+const ILC_CLAMP = 1.0;          // rad, on the learned table
+const BACKLASH = 1e-4;          // half the lost motion, load side
+// A LADDER RATHER THAN A LINEAR SLIDER, because the useful magnification spans two
+// decades: a converged run leaves 2e-2 on a part 8 across and needs ~100x to be visible
+// at all, while the first uncorrected lap leaves 5e-1 and anything past ~10x draws a
+// line clean across the stage.
+const MAG_LADDER = [1, 2, 5, 10, 20, 50, 100, 200];
+
+let armP = null, servoP = null, profP = null, holdP = null;
+let kP = 0, lapP = 0, runP = false, busyP = false;
+let progPending = false;        // a feedrate change waiting for a lap boundary
+let scoreP = null, lapScoreP = null, cP = null, cFrom = null;
+let commissionP = null, sweepP = null, sweepRows = null;
+let ilcP = null, ilcHist = [];
+let viewP = { x0: -1, x1: 1, y0: -1, y1: 1 };
+// The commanded joint travel over one lap, which is the scale any pre-distortion has to be
+// read against: a correction that is a few percent of the move is a correction, and one
+// that is half of it is the machine being driven past what the loop can follow.
+let travelP = [1, 1];
+
+/**
+ * The drawing frame for the loaded program: the shoulder, the whole path, and every
+ * elbow the arm passes through while tracing it.
+ */
+function fitViewP() {
+  let x0 = 0, x1 = 0, y0 = 0, y1 = 0;
+  const see = (x, y) => {
+    x0 = Math.min(x0, x); x1 = Math.max(x1, x);
+    y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+  };
+  const lo = [Infinity, Infinity], hi = [-Infinity, -Infinity];
+  for (let i = 0; i <= 120; i++) {
+    const p = profP.point((i / 120) * profP.length);
+    see(p[0], p[1]);
+    try {
+      const q = armP.ik(p[0], p[1], true);
+      see(armP.L1 * Math.cos(q[0]), armP.L1 * Math.sin(q[0]));
+      for (let j = 0; j < 2; j++) {
+        lo[j] = Math.min(lo[j], q[j]); hi[j] = Math.max(hi[j], q[j]);
+      }
+    } catch { /* a point the arm cannot reach cannot constrain the view */ }
+  }
+  travelP = [0, 1].map((j) => (Number.isFinite(hi[j] - lo[j]) ? hi[j] - lo[j] : 1) || 1);
+  const pad = 0.06 * Math.max(x1 - x0, y1 - y0, 1e-6);
+  viewP = { x0: x0 - pad, x1: x1 + pad, y0: y0 - pad, y1: y1 + pad };
+}
+let trailP = [], pHist = null, pChartOn = false, lastGeomP = null;
+let residP = { enc: 0, follow: 0, n: 0 };
+
+function pathFeed() { return PATH_FEED[+$('s-feedP').value]; }
+function pathAccel() { return PATH_ACC[+$('s-accP').value]; }
+function pathCorner() { return PATH_CORN[+$('s-cornP').value]; }
+
+/** The part program the sliders describe. Geometry from the selector, speed from the rest. */
+function makePath(feed = pathFeed()) {
+  const o = { feed, accel: pathAccel(), cornerDt: pathCorner(), centre: PG.centre };
+  const shape = $('shapeP').value;
+  if (shape === 'circle') return circlePath({ ...o, r: 4 });
+  if (shape === 'sharp') return sharpRect({ ...o, w: 8, h: 8 });
+  return roundedRect({ ...o, w: 8, h: 8, r: 1.5, closed: true });
+}
+
+function newScore() {
+  // THE REVERSAL THRESHOLD IS THE JOINT'S OWN LOST MOTION, which is the physical event
+  // being counted -- the gear teeth changing faces -- referred to the MOTOR, which is
+  // where the speed being integrated is measured: 2b at the output is 2bN there. Passing
+  // zero would return the arithmetic count, which on a dwelling joint is thousands.
+  return new ContourScore({ joints: 2, reversalTravel: 2 * BACKLASH * RATIO });
+}
+
+async function buildP() {
+  if (armP) { await armP.l1.destroy(); await armP.l2.destroy(); armP = null; }
+  const K = K2_LADDER[+$('s-kP').value];
+  const mk = (length) => buildLink({ length, section: H, clamp: CLAMP, E: PG.E,
+    nu: NU, rho: RHO, damping: DAMPING });
+  const link1 = await mk(PG.LEN1), link2 = await mk(PG.LEN2);
+  // BACKLASH IS ON HERE AND NOWHERE ELSE ON THE PAGE, because this is the only tab whose
+  // metrics can see it: a point-to-point move crosses a dead band once and settles, while
+  // a contour crosses it wherever a joint reverses, and the step it leaves in the surface
+  // is the quadrant glitch every machine tool builder knows. Turning it off would leave
+  // the direction-change count measuring something with no cost attached to it.
+  const j = (mp) => new Joint({ ratio: RATIO, motorInertia: mp.inertiaAboutPivot / 1e4,
+    loadInertia: mp.inertiaAboutPivot, stiffness: K, backlash: BACKLASH,
+    damping: 2 * Math.sqrt(K * mp.inertiaAboutPivot / 2) });
+  armP = new FlexArm2R({ joint1: j(massProperties(link1)), link1,
+    joint2: j(massProperties(link2)), link2, gravityWorld: [0, -G, 0], dt: 1 });
+  armP.K = K;
+  holdP = Math.abs(armP.gravityTorque([0, 0])[0]) / RATIO;
+  servoP = new ChainServo({ arm: armP, bandwidth: 2e-3,
+    tauMax: PG.drive * holdP, speedMax: NO_LOAD_SPEED });
+  // A COMPLIANCE CONSTANT BELONGS TO ONE PLANT. K is the thing it is mostly measuring,
+  // so carrying an identification across a K change applies yesterday's inverse to
+  // today's arm -- the same rule the Chain tab's filter and shaper follow.
+  cP = null; cFrom = null; commissionP = null; sweepP = null; sweepRows = null;
+  ilcP = null; ilcHist = [];
+  $('ctlP').value = 'open';
+  await homeP();
+  console.log(`[flexisim] path: ${armP.describe()} | ${profP.length.toFixed(2)} long, `
+    + `lap ${profP.lap.toFixed(0)} steps at feed ${pathFeed().toExponential(2)}`);
+}
+
+/**
+ * Put the arm ON the start of the program and let it sag.
+ *
+ * A LATTICE STARTS UNDEFORMED AND GRAVITY IS A LOAD IT HAS TO RESPOND TO, so the first
+ * few thousand steps of any run are the arm settling under its own weight -- a transient
+ * that has nothing to do with contouring and that would dominate the first lap's score.
+ * The servo holds the start pose while it happens, which is what a machine does between
+ * pressing cycle start and the first block.
+ */
+async function homeP() {
+  profP = makePath();
+  const c0 = profP.at(0);
+  const [q1, q2] = armP.ik(c0.x, c0.y, true);
+  armP.setPose(q1, q2);
+  const refs = [{ theta: q1, omega: 0, alpha: 0 }, { theta: q2, omega: 0, alpha: 0 }];
+  for (let i = 0; i < 4000; i++) {
+    const tau = servoP.torques(refs);
+    armP.step(tau[0], tau[1], 1);
+  }
+  servoP.resetLimitStats();
+  kP = 0; lapP = 0; progPending = false;
+  scoreP = newScore(); lapScoreP = newScore();
+  trailP = []; pHist = { s: [], c: [], v: [] };
+  residP = { enc: 0, follow: 0, n: 0 };
+  $('pendP').hidden = true;
+  makeILC(true);
+  fitViewP();
+  drawP();
+}
+
+/**
+ * The learning table, made to fit the program that is loaded.
+ *
+ * THE LEAD IS A TIME AND THE TABLE IS INDEXED BY DISTANCE, so the conversion has to be
+ * redone whenever the feedrate moves — and that, rather than the geometry, is what ties a
+ * converged table to the speed it was learned at. Measured: a table converged at feed
+ * 4e-3 still leaves 1.79e-1 at 6e-3 against 3.10e-1 with no table at all, so it
+ * PARTIALLY transfers (it is a property of the part) and then goes on learning from
+ * there. It is therefore kept across a feedrate change rather than thrown away.
+ */
+function makeILC(keep) {
+  const bins = ILC.bins;
+  const next = new PathILC({ length: profP.length, joints: 2, bins, gain: ILC.gain,
+    smooth: ILC.smooth,
+    leadBins: Math.round(ILC.leadSteps * bins / profP.lap) });
+  if (keep && ilcP && ilcP.bins === bins && Math.abs(ilcP.length - profP.length) < 1e-9) {
+    next.u = ilcP.u; next.laps = ilcP.laps;
+  } else {
+    ilcHist = [];
+  }
+  ilcP = next;
+}
+
+/** The pre-distortion, in joint angles, for the correction that is selected. */
+function predistortP(refs, cmd) {
+  const m = pathMode();
+  if (m === 'open') return [0, 0];
+  if (m === 'ilc') {
+    const o = ilcP.offset(cmd.s);
+    return [clampDq(o[0], ILC_CLAMP), clampDq(o[1], ILC_CLAMP)];
+  }
+  const tg = servoP.jointTorques(refs);
+  // ONE CODE PATH FOR BOTH CORRECTIONS, because they are the same model with the
+  // constant coming from two different places: the analytic one is c = -1/K exactly,
+  // so a fit that lands anywhere else is measuring something the gearbox is not.
+  const c = m === 'ident' && cP ? cP : [-1 / armP.K, -1 / armP.K];
+  return [clampDq(-c[0] * tg[0]), clampDq(-c[1] * tg[1])];
+}
+function clampDq(x, lim = DQ_CLAMP) {
+  return Number.isFinite(x) ? Math.max(-lim, Math.min(lim, x)) : 0;
+}
+
+/**
+ * Swap in a new profile over the same geometry, keeping the command where it is.
+ *
+ * The clock is set to the step at which the NEW profile is at the arc length the old one
+ * had reached, so a feedrate change is a change of speed and not a teleport. It is also
+ * what keeps the ILC table usable across one: the table is indexed by position on the
+ * part, and only the lead -- which is a TIME -- has to be re-converted.
+ */
+function installProgram(next) {
+  const s0 = profP ? profP.at(kP).s : 0;
+  profP = next;
+  kP = profP.timeAt(s0);
+  lapP = Math.floor(kP / profP.lap);
+  makeILC(true);
+  fitViewP();
+  $('pendP').hidden = true;
+}
+
+/** The correction actually in force, which is not always the one selected. */
+function pathMode() {
+  const want = $('ctlP').value;
+  if (want === 'ident' && !cP) return 'open';
+  if (want === 'ilc' && !ilcP) return 'open';
+  return want;
+}
+
+/**
+ * One solver step of contouring, and everything measured from it.
+ *
+ * @param {object} [collect] when commissioning, the normal equations to accumulate into
+ */
+function stepPathOnce(collect) {
+  const cmd = profP.at(kP);
+  const [q1, q2] = armP.ik(cmd.x, cmd.y, true);
+  const rt = armP.ikRates(q1, q2, cmd.vx, cmd.vy, cmd.ax, cmd.ay);
+  const refs = [{ theta: q1, omega: rt.dq[0], alpha: rt.ddq[0] },
+    { theta: q2, omega: rt.dq[1], alpha: rt.ddq[1] }];
+  const dq = predistortP(refs, cmd);
+  const tau = servoP.torques([{ ...refs[0], theta: q1 + dq[0] },
+    { ...refs[1], theta: q2 + dq[1] }]);
+  armP.step(tau[0], tau[1], 1);
+  kP++;
+  const tool = armP.toolXY();
+  const dec = decompose(profP, tool, cmd);
+  const sc = [scoreP, lapScoreP];
+  for (const s of sc) if (s) s.step(dec.contour, dec.lag, tau, [armP.j1.wM, armP.j2.wM]);
+  // WHERE THE DEVIATION COMES FROM, split into the half the controller can see and the
+  // half it cannot. The encoders' own picture of the tool is toolXY(true); the gap
+  // between that and the command is the FOLLOWING error, which a servo tuner can chase.
+  // The gap between it and the truth is wind-up and bending, which no encoder reports.
+  const believed = armP.toolXY(true);
+  residP.enc += (tool[0] - believed[0]) ** 2 + (tool[1] - believed[1]) ** 2;
+  residP.follow += (believed[0] - cmd.x) ** 2 + (believed[1] - cmd.y) ** 2;
+  residP.n++;
+  // THE LEARNER IS FED IN JOINT ANGLES, not in millimetres, because that is the unit the
+  // correction is applied in — and mapping the tool's deviation there is the one place
+  // the machine's own kinematics enter. J is evaluated at the COMMANDED pose, which is
+  // the only one a controller has.
+  if (ilcLearning()) {
+    const J = armP.jacobian(q1, q2);
+    const det = J[0][0] * J[1][1] - J[0][1] * J[1][0];
+    if (Math.abs(det) > 1e-12) {
+      const ex = tool[0] - cmd.x, ey = tool[1] - cmd.y;
+      ilcP.observe(cmd.s, [(J[1][1] * ex - J[0][1] * ey) / det,
+        (-J[1][0] * ex + J[0][0] * ey) / det]);
+    }
+  }
+  if (collect) {
+    // e = J diag(c) tau_g, linear in c: one 2-vector column per joint per sample, and
+    // both the x and the y row of every sample go into the same 2x2 normal equations.
+    const tg = servoP.jointTorques(refs);
+    const J = armP.jacobian(q1, q2);
+    const a1 = [J[0][0] * tg[0], J[1][0] * tg[0]];
+    const a2 = [J[0][1] * tg[1], J[1][1] * tg[1]];
+    const e = [tool[0] - cmd.x, tool[1] - cmd.y];
+    for (let r = 0; r < 2; r++) {
+      collect.A[0] += a1[r] * a1[r]; collect.A[1] += a1[r] * a2[r];
+      collect.A[3] += a2[r] * a2[r];
+      collect.b[0] += a1[r] * e[r]; collect.b[1] += a2[r] * e[r];
+    }
+    collect.n++;
+  }
+  return { cmd, dec, tool, tau };
+}
+
+/** Learning happens on a normal run only — a sweep and a commissioning lap freeze it. */
+function ilcLearning() {
+  return !!ilcP && pathMode() === 'ilc' && !sweepP && !commissionP;
+}
+
+function stepP(n) {
+  for (let i = 0; i < n; i++) {
+    const lapNow = Math.floor(kP / profP.lap);
+    if (lapNow !== lapP) { lapP = lapNow; onLapBoundaryP(); }
+    const { cmd, dec, tool } = stepPathOnce(null);
+    // BOTH THE TRAIL AND THE CHART ARE INDEXED BY WHERE ON THE PART THE ERROR HAPPENED,
+    // which is the tool's own nearest point and NOT the commanded one -- material is
+    // removed where the tool is. That index WRAPS, and it wraps early: a tool that is
+    // behind the command at the start of a lap has its nearest point at the far end of a
+    // closed path, so the series jumps from ~L back to ~0. Joining those two samples
+    // draws a chord straight across the picture and a horizontal line across the chart.
+    // A break is inserted instead of a join.
+    const back = trailP.length && dec.s < trailP[trailP.length - 1][3] - 0.1 * profP.length;
+    if (kP % 8 === 0 || back) {
+      if (back) trailP.push(null);
+      trailP.push([tool[0], tool[1], dec.contour, dec.s]);
+      if (trailP.length > 4000) trailP.splice(0, 1000);
+    }
+    if (kP % CHART_EVERY === 0) {
+      const n = pHist.s.length;
+      if (n && dec.s < pHist.s[n - 1] - 0.1 * profP.length) {
+        pHist.s.push(null); pHist.c.push(null); pHist.v.push(null);
+      }
+      pHist.s.push(dec.s); pHist.c.push(dec.contour); pHist.v.push(cmd.v);
+    }
+  }
+}
+
+/** Everything that happens once per lap: the program swap, and the per-lap score. */
+function onLapBoundaryP() {
+  // THE TABLE IS FOLDED IN BEFORE THE LAP'S SCORE IS THROWN AWAY, and the score recorded
+  // here is the one the lap just finished under — so the history reads as "what the
+  // machine did on lap n", not "what it did after n updates", which are off by one.
+  if (ilcLearning()) {
+    const before = lapScoreP.report();
+    const st = ilcP.endLap();
+    // A PARTIAL LAP IS FOLDED IN BUT NOT REPORTED. Selecting the learner mid-lap, or
+    // arriving from a program change, leaves a first "lap" that is a fraction of one --
+    // its bins are still worth learning from (endLap only touches what it saw) but its
+    // score is of a different length of run, and putting it at the head of a convergence
+    // history makes the next full lap look like a regression. Measured: 1.8e-1 for a
+    // third of a lap against 5.3e-1 for the whole one that followed.
+    if (before.steps > 0.9 * profP.lap) {
+      ilcHist.push({ lap: st.laps, contour: before.contourRms, tau2: before.tau2,
+        trev: before.torqueReversals, peak: ilcP.peak() });
+      if (ilcHist.length > 40) ilcHist.shift();
+    }
+  }
+  lapScoreP = newScore();
+  residP = { enc: 0, follow: 0, n: 0 };
+  pHist = { s: [], c: [], v: [] };
+  trailP = [];
+  if (progPending) {
+    progPending = false;
+    installProgram(makePath());
+    setPathBadge(`feed now ${pathFeed().toExponential(2)}`, '');
+  }
+}
+
+// ------------------------------------------------------- commissioning
+//
+// ONE LAP WITH THE TRACKER, THEN THE TRACKER GOES AWAY. The identified quantity is one
+// compliance constant per joint inside a model MECHANICS fixes -- e = J diag(c) tau_g --
+// rather than a free map from signals to error. That is the whole difference: a constant
+// EXTRAPOLATES to a pose the commissioning lap never visited, and it can be checked
+// against a number the controller already knows (-1/K), which a black-box readout cannot.
+function startCommissionP() {
+  if (!armP || busyP || sweepP) return;
+  const wanted = $('ctlP').value;
+  $('ctlP').value = 'open';           // identify the UNCORRECTED plant
+  const restore = profP;
+  installProgram(makePath(COMMISSION_FEED));
+  // ONE SETTLING LAP BEFORE THE FITTED ONE. The machine arrives at the commissioning
+  // feedrate from wherever it was, and the transient that follows is a dynamic response
+  // -- exactly the thing a static fit must not be shown.
+  commissionP = { settle: Math.ceil(profP.lap * 0.15), left: Math.ceil(profP.lap),
+    A: [0, 0, 0, 0], b: [0, 0], n: 0, wanted, restore };
+  runP = false;
+  setPathBadge(`commissioning at feed ${COMMISSION_FEED.toExponential(1)} — one slow lap `
+    + 'with the tracker watching', 'warn');
+  syncPath();
+}
+
+function commissionStepP(budget) {
+  for (let i = 0; i < budget; i++) {
+    if (commissionP.settle > 0) { stepPathOnce(null); commissionP.settle--; continue; }
+    if (commissionP.left <= 0) break;
+    stepPathOnce(commissionP);
+    commissionP.left--;
+  }
+  if (commissionP.settle > 0 || commissionP.left > 0) return;
+  const { A, b, n, restore } = commissionP;
+  installProgram(restore);
+  // A RIDGE THAT IS WEAK RELATIVE TO THE REGRESSOR'S OWN SCALE, which is the trap this
+  // project has already paid for once: a prior chosen in the abstract either does not
+  // move at all or swamps the data, and which one it does depends on units nobody looked
+  // at. The scale here is the diagonal of the accumulated normal matrix itself.
+  const ridge = 1e-9 * Math.max(A[0], A[3], 1e-300);
+  const a11 = A[0] + ridge, a22 = A[3] + ridge, a12 = A[1];
+  const det = a11 * a22 - a12 * a12;
+  commissionP = null;
+  if (!(Math.abs(det) > 0) || n < 50) {
+    $('ctlP').value = wanted;
+    setPathBadge('commissioning failed — the lap excited nothing to fit', 'bad');
+    syncPath();
+    return;
+  }
+  const c = [(a22 * b[0] - a12 * b[1]) / det, (a11 * b[1] - a12 * b[0]) / det];
+  if (!c.every(Number.isFinite)) {
+    $('ctlP').value = wanted;
+    setPathBadge('commissioning failed — the fit did not resolve', 'bad');
+    syncPath();
+    return;
+  }
+  cP = c; cFrom = { n, nominal: -1 / armP.K };
+  $('ctlP').value = 'ident';
+  setPathBadge('commissioned — tracker off, running on the constants', 'good');
+  syncPath();
+}
+
+// ------------------------------------------------------------ the sweep
+//
+// THE SAME PATH AT EVERY FEEDRATE, because the trade between accuracy, energy and wear
+// is the thing a process engineer actually chooses, and it cannot be read off one run.
+// Each rung gets a WARM-UP LAP before the scored one: installing a new feedrate steps the
+// commanded velocity at the seam, and scoring the lap that contains that step measures
+// the step.
+function startSweepP() {
+  if (!armP || busyP || commissionP) return;
+  runP = false;
+  sweepP = { i: 0, phase: 'warm', left: 0, rows: [] };
+  installSweepRung();
+  setPathBadge('sweeping the feedrate ladder', 'warn');
+  syncPath();
+}
+
+function installSweepRung() {
+  installProgram(makePath(PATH_FEED[sweepP.i]));
+  sweepP.phase = 'warm';
+  // A SHORT WARM-UP IS ENOUGH BECAUSE THE COMMAND NO LONGER JUMPS. Installing the rung
+  // preserves the arc position, so all that has to settle is the speed change -- a
+  // couple of position-loop time constants, not a whole lap. On the slow rungs a full
+  // warm-up lap was thirty seconds of nothing.
+  sweepP.left = Math.min(Math.ceil(profP.lap), 3000);
+  lapScoreP = newScore();
+}
+
+function sweepStepP(budget) {
+  for (let i = 0; i < budget && sweepP; i++) {
+    if (sweepP.left <= 0) {
+      if (sweepP.phase === 'warm') {
+        sweepP.phase = 'score';
+        sweepP.left = Math.ceil(profP.lap);
+        lapScoreP = newScore();
+      } else {
+        const r = lapScoreP.report();
+        sweepP.rows.push({ feed: PATH_FEED[sweepP.i], lap: profP.lap, mode: pathMode(), ...r });
+        sweepP.i++;
+        if (sweepP.i >= PATH_FEED.length) {
+          sweepRows = sweepP.rows; sweepP = null;
+          renderBoardP();
+          setPathBadge('sweep done — the table is below the stats', 'good');
+          syncPath();
+          return;
+        }
+        installSweepRung();
+      }
+    }
+    stepPathOnce(null);
+    sweepP.left--;
+  }
+}
+
+function renderBoardP() {
+  const el = $('boardP'), cap = $('boardP-cap');
+  if (!sweepRows || !sweepRows.length) { el.hidden = true; cap.hidden = true; return; }
+  // WHICH CORRECTION THE SWEEP RAN UNDER IS PART OF THE RESULT, not context. The same
+  // ladder reads 5.9e-1 → 5.7e-3 corrected and 5.6e-1 → 3.0e-2 not, and a table that
+  // does not say which one it is cannot be compared with anything.
+  cap.hidden = false;
+  cap.innerHTML = `Run under correction <b>${PATH_MODE_LABEL[sweepRows[0].mode]}</b>, `
+    + 'one scored lap per rung after a short settle. Best in each column is green.';
+  const best = (key, lower = true) => sweepRows.reduce((a, r) =>
+    (lower ? r[key] < a : r[key] > a) ? r[key] : a, sweepRows[0][key]);
+  const bc = best('contourRms'), bt = best('tau2'), bw = best('work');
+  const cell = (v, b) => `<td class="${v === b ? 'good' : ''}">${fmt(v, 3)}</td>`;
+  el.hidden = false;
+  el.innerHTML = '<tr><th>feed</th><th>lap</th><th>contour rms</th><th>contour max</th>'
+    + '<th>lag rms</th><th>∫τ²</th><th>work</th><th>reversals</th></tr>'
+    + sweepRows.map((r) => `<tr><td>${r.feed.toExponential(1)}</td><td>${Math.round(r.lap)}</td>`
+      + cell(r.contourRms, bc) + `<td>${fmt(r.contourMax, 3)}</td>`
+      + `<td>${fmt(r.lagRms, 3)}</td>` + cell(r.tau2, bt) + cell(r.work, bw)
+      + `<td>${r.reversals}</td></tr>`).join('');
+}
+
+// ------------------------------------------------------------------ view
+function setPathBadge(s, cls) {
+  $('stateP-badge').textContent = s;
+  $('stateP-badge').className = 'badge' + (cls ? ' ' + cls : '');
+}
+
+/**
+ * THE ARM IS DRAWN AT ITS TRUE GEOMETRY AND THE ERROR TRAIL IS NOT, and the two are kept
+ * visibly apart rather than blended. Every other stage on this page magnifies the
+ * deflection because a point-to-point move has nothing else to show; here the SHAPE is
+ * the subject, so the shape is drawn honestly and the deviation from it is drawn as its
+ * own object, pushed out along the path's normal by a stated factor.
+ *
+ * The scale is UNIFORM in x and y. It has to be: a circle drawn with two scales is an
+ * ellipse, and the whole point of a ball-bar test is that a departure from a circle is
+ * the machine.
+ */
+function drawP() {
+  const cv = $('cvP'), st = $('stageP');
+  const w = st.clientWidth, h = st.clientHeight;
+  if (!(w > 0 && h > 0)) return;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+  }
+  const g = cv.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.fillStyle = '#060a14'; g.fillRect(0, 0, w, h);
+  if (!armP || !profP) return;
+
+  // THE VIEW HAS TO CONTAIN THE MACHINE, NOT JUST THE PART, and on a serial arm those
+  // are different regions: this elbow hangs well below the workpiece, so a frame fitted
+  // to the program alone drew the forearm arriving from off screen. The bound is taken
+  // over the whole program's IK once, when the program is installed, rather than per
+  // frame -- a box that follows the arm is a box that never stops moving.
+  const { x0, x1, y0, y1 } = viewP;
+  const scale = Math.min((w - 20) / (x1 - x0), (h - 20) / (y1 - y0));
+  // CENTRED IN BOTH AXES. A uniform scale means one axis has slack, and pinning the
+  // content to an edge puts all of it on one side -- which is what pushed the picture
+  // into the bottom of the stage.
+  const ox = w / 2 - 0.5 * (x0 + x1) * scale, oy = h / 2 + 0.5 * (y0 + y1) * scale;
+  const X = (x) => ox + x * scale, Y = (y) => oy - y * scale;
+
+  // The program.
+  g.strokeStyle = '#475569'; g.lineWidth = 1.5; g.setLineDash([5, 4]);
+  g.beginPath();
+  for (let i = 0; i <= 240; i++) {
+    const p = profP.point((i / 240) * profP.length);
+    if (i === 0) g.moveTo(X(p[0]), Y(p[1])); else g.lineTo(X(p[0]), Y(p[1]));
+  }
+  if (profP.closed) g.closePath();
+  g.stroke(); g.setLineDash([]);
+
+  // The error trail, exaggerated along the path normal and nowhere else.
+  const mag = MAG_LADDER[+$('s-magP').value];
+  if (trailP.length > 1) {
+    g.strokeStyle = '#f59e0b'; g.lineWidth = 2;
+    g.beginPath();
+    let pen = false;
+    for (let i = 0; i < trailP.length; i++) {
+      if (!trailP[i]) { pen = false; continue; }
+      const [, , d, u] = trailP[i];
+      const p = profP.point(u), t = profP.tangent(u);
+      const px = p[0] - t[1] * d * mag, py = p[1] + t[0] * d * mag;
+      if (!pen) { g.moveTo(X(px), Y(py)); pen = true; } else g.lineTo(X(px), Y(py));
+    }
+    g.stroke();
+  }
+
+  // The arm, TRUE: each link's own deflected centre line in its own body frame, mapped
+  // through exactly the transform toolXY() uses, so the picture and the tool reading
+  // cannot disagree. At this stiffness the bow is well under a pixel, which is the
+  // honest appearance of a stiff arm and not a simplification.
+  const [p1, p2] = armP.profiles();
+  const piv1 = armP.l1.meta.pivot[0], piv2 = armP.l2.meta.pivot[0];
+  const bendAt = (prof, bx, piv) => {
+    const want = piv + bx;
+    let lo = 0;
+    while (lo < prof.x.length - 2 && prof.x[lo + 1] < want) lo++;
+    const span = prof.x[lo + 1] - prof.x[lo];
+    const t = span > 0 ? (want - prof.x[lo]) / span : 0;
+    return prof.dy[lo] + t * (prof.dy[lo + 1] - prof.dy[lo]);
+  };
+  const q1 = armP.q[0], q2 = armP.q[1];
+  const s1 = tipSlopeOf(p1);
+  const c1 = Math.cos(q1), sn1 = Math.sin(q1);
+  const a2 = q1 + s1 + q2, c2 = Math.cos(a2), sn2 = Math.sin(a2);
+  const ex = c1 * armP.L1 - sn1 * bendAt(p1, armP.L1, piv1);
+  const ey = sn1 * armP.L1 + c1 * bendAt(p1, armP.L1, piv1);
+  g.strokeStyle = '#94a3b8'; g.lineWidth = 4; g.beginPath();
+  for (let i = 0; i <= 20; i++) {
+    const bx = (i / 20) * armP.L1, by = bendAt(p1, bx, piv1);
+    g.lineTo(X(c1 * bx - sn1 * by), Y(sn1 * bx + c1 * by));
+  }
+  g.stroke();
+  g.beginPath();
+  let dtx = ex, dty = ey;
+  for (let i = 0; i <= 20; i++) {
+    const bx = (i / 20) * armP.L2, by = bendAt(p2, bx, piv2);
+    dtx = ex + c2 * bx - sn2 * by; dty = ey + sn2 * bx + c2 * by;
+    g.lineTo(X(dtx), Y(dty));
+  }
+  g.stroke();
+  // THE PICTURE AND THE NUMBER ARE TWO VIEWS OF ONE QUANTITY, so the end of the drawn
+  // forearm has to BE the tool position every metric on this tab is computed from --
+  // measured off the drawing rather than restated from the model, which is the mistake
+  // that let a 1.44x disagreement survive on the Chain tab. Nothing here is magnified, so
+  // this is an identity and its tolerance is machine precision rather than a percentage.
+  lastGeomP = { drawn: [dtx, dty], truth: armP.toolXY(), elbow: [ex, ey] };
+  g.fillStyle = '#64748b';
+  g.beginPath(); g.arc(X(0), Y(0), 6, 0, 7); g.fill();
+  g.beginPath(); g.arc(X(ex), Y(ey), 4, 0, 7); g.fill();
+
+  // The tool, and where the program says it should be right now. The GAP between them
+  // is the lag, drawn at true size -- it is not a defect and it is not exaggerated.
+  const tool = armP.toolXY();
+  const cmd = profP.at(kP);
+  g.strokeStyle = '#22d3ee'; g.lineWidth = 1.5;
+  g.beginPath(); g.arc(X(cmd.x), Y(cmd.y), 5, 0, 7); g.stroke();
+  g.fillStyle = '#fbbf24';
+  g.beginPath(); g.arc(X(tool[0]), Y(tool[1]), 4.5, 0, 7); g.fill();
+
+  // ALONG THE BOTTOM, because the two badges own the top corners and a legend that
+  // overlaps one of them is a legend nobody can read.
+  g.font = '10px ui-monospace, monospace';
+  g.fillStyle = '#64748b';
+  g.fillText(`program (dashed) · tool ● · commanded ○ · contour error ×${mag}`, 12, h - 8);
+}
+
+/** The same least squares over the last few cells that link.js and tipError() use. */
+function tipSlopeOf(prof) {
+  const n = prof.x.length, m = Math.min(5, n);
+  if (m < 2) return 0;
+  let sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (let i = n - m; i < n; i++) {
+    sx += prof.x[i]; sy += prof.dy[i]; sxx += prof.x[i] * prof.x[i];
+    sxy += prof.x[i] * prof.dy[i];
+  }
+  const den = m * sxx - sx * sx;
+  return den === 0 ? 0 : (m * sxy - sx * sy) / den;
+}
+
+function statsP() {
+  if (!armP || !profP) return;
+  const rows = [];
+  const r = scoreP.report(), lr = lapScoreP.report();
+  rows.push(['plant', `K ${armP.K} · E ${PG.E} · L1 ${armP.L1} + L2 ${armP.L2} · `
+    + `${armP.l1.lattice.cellCount + armP.l2.lattice.cellCount} cells · drive `
+    + `${PG.drive}× hold`]);
+  rows.push(['program', `${$('shapeP').options[$('shapeP').selectedIndex].text} · `
+    + `${profP.length.toFixed(2)} long · lap ${profP.lap.toFixed(0)} steps · `
+    + `feed ${pathFeed().toExponential(2)} · accel ${pathAccel().toExponential(1)}`]);
+  rows.push(['step / lap', `${kP} · ${lapP}`]);
+  const m = pathMode(), want = $('ctlP').value;
+  rows.push(['correction', `<span class="${m === 'open' ? '' : 'good'}">`
+    + `${PATH_MODE_LABEL[m]}</span>`
+    + (m !== want ? ' <span class="warn">(nothing identified yet — press Commission)</span>' : '')]);
+  if (cP) {
+    // THE IDENTIFIED CONSTANT AGAINST A NUMBER THE CONTROLLER ALREADY KNOWS. -1/K is what
+    // the GEARBOX alone would give; anything beyond it is the link bending and the loop's
+    // own softness, neither of which is in the gearbox datasheet. A black-box readout
+    // offers no number to be right or wrong about.
+    const nom = cFrom.nominal;
+    rows.push(['identified compliance c₁ / c₂', `${fmt(cP[0], 3)} / ${fmt(cP[1], 3)}   `
+      + `<span class="warn">against −1/K = ${fmt(nom, 3)} for the gearbox alone — `
+      + `${(cP[0] / nom).toFixed(2)}× / ${(cP[1] / nom).toFixed(2)}×, and the surplus is `
+      + 'the links plus the loop</span>']);
+  }
+  if (ilcP) {
+    const pk = ilcP.peak();
+    const frac = [0, 1].map((j) => pk[j] / travelP[j]);
+    const big = Math.max(frac[0], frac[1]) > 0.25;
+    rows.push(['iterative learning', `${ilcP.laps} lap${ilcP.laps === 1 ? '' : 's'} folded in `
+      + `· lead ${ILC.leadSteps} steps = ${ilcP.leadBins} bins · gain ${ILC.gain} · smooth `
+      + `${ILC.smooth} bins`]);
+    // THE CORRECTION AGAINST THE MOVE IT CORRECTS, because the raw number means nothing on
+    // its own. A few percent of the joint's own travel is a compensator; half of it says
+    // the machine is being asked to contour at the edge of what its loop can follow, and
+    // that is a fact about the feedrate rather than about the learner.
+    rows.push(['…peak correction', `${fmt(pk[0], 2)} / ${fmt(pk[1], 2)} rad — `
+      + `<span class="${big ? 'warn' : ''}">${(100 * frac[0]).toFixed(0)}% / `
+      + `${(100 * frac[1]).toFixed(0)}% of the joint's own travel over the lap</span>`
+      + (big ? ' <span class="warn">— that is a large pre-distortion, and it means the '
+        + 'feedrate is near the limit of what the position loop can follow</span>' : '')]);
+    if (ilcHist.length > 1) {
+      rows.push(['…contour rms, lap by lap',
+        ilcHist.slice(-10).map((hh) => hh.contour.toExponential(1)).join(' → ')]);
+    }
+  }
+  rows.push(['<b>contour rms / max</b>', `<b>${fmt(lr.contourRms, 3)}</b> / `
+    + `${fmt(lr.contourMax, 3)}   <span class="warn">this lap; `
+    + `${fmt(r.contourRms, 3)} since reset</span>`]);
+  rows.push(['lag rms / max', `${fmt(lr.lagRms, 3)} / ${fmt(lr.lagMax, 3)}   `
+    + '<span class="warn">measured, and deliberately not penalised — the tool is on the '
+    + 'right curve, just late</span>']);
+  if (residP.n > 8) {
+    const en = Math.sqrt(residP.enc / residP.n), fo = Math.sqrt(residP.follow / residP.n);
+    rows.push(['…of which unobservable / following', `${fmt(en, 3)} / ${fmt(fo, 3)}   `
+      + '<span class="warn">the first is wind-up and bending, which no encoder reports; '
+      + 'the second is the loop, which a servo tuner can chase</span>']);
+  }
+  rows.push(['motor energy ∫τ² / work', `${fmt(lr.tau2, 3)} / ${fmt(lr.work, 3)}   `
+    + '<span class="warn">copper loss and mechanical work are different costs and a '
+    + 'move can be cheap in one and dear in the other</span>']);
+  rows.push(['direction changes (velocity / torque)',
+    `${lr.reversals} / ${lr.torqueReversals}   `
+    + `<span class="warn">a velocity reversal is counted once the joint has retraced its `
+    + `own ${fmt(2 * BACKLASH, 1)} rad of lost motion, which is the gear teeth changing `
+    + 'faces — not every sign change, which on a joint near zero is thousands</span>']);
+  rows.push(['command jerk rms (per joint)',
+    lr.joints.map((jj) => fmt(jj.jerk, 2)).join(' / ')]);
+  const dl = servoP.limitStats();
+  if (dl[0].steps > 0 && (dl[0].saturated || dl[1].saturated)) {
+    rows.push(['drive saturated', `<span class="bad">${(100 * dl[0].fraction).toFixed(1)}% / `
+      + `${(100 * dl[1].fraction).toFixed(1)}% of steps — the energy numbers are of a `
+      + 'machine that could not deliver what was asked</span>']);
+  }
+  $('statsP').innerHTML = rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('');
+  $('errP-badge').textContent = `contour ${lr.contourRms.toExponential(2)}`;
+  $('errP-badge').className = 'badge r';
+}
+
+function pathChart() {
+  if (!pHist || pHist.s.length < 6) return;
+  const traces = [
+    { x: pHist.s.slice(), y: pHist.c.slice(), name: 'contour error',
+      line: { color: '#f59e0b', width: 2 }, connectgaps: false },
+    { x: pHist.s.slice(), y: pHist.v.slice(), name: 'commanded feed', yaxis: 'y2',
+      line: { color: '#22d3ee', width: 1.5, dash: 'dot' }, connectgaps: false },
+  ];
+  if (!pChartOn) {
+    $('path-chart').classList.add('on');
+    Plotly.newPlot('path-chart', traces, {
+      margin: { l: 50, r: 44, t: 6, b: 26 }, paper_bgcolor: '#0b1220',
+      plot_bgcolor: '#060a14', font: { color: '#94a3b8', size: 9 }, showlegend: true,
+      legend: { orientation: 'h', y: 1.22, font: { size: 9 } },
+      xaxis: { gridcolor: '#1e293b',
+        title: { text: 'arc length along the program', font: { size: 9 } } },
+      yaxis: { gridcolor: '#1e293b', zeroline: true, zerolinecolor: '#475569',
+        title: { text: 'contour error', font: { size: 9 } } },
+      yaxis2: { overlaying: 'y', side: 'right', showgrid: false, rangemode: 'tozero',
+        title: { text: 'feed', font: { size: 9 } } },
+    }, { displayModeBar: false, responsive: true });
+    pChartOn = true;
+    return;
+  }
+  Plotly.react('path-chart', traces, $('path-chart').layout,
+    { displayModeBar: false, responsive: true });
+}
+
+function syncPath() {
+  const idle = !!armP && !busyP && !commissionP && !sweepP;
+  // GUARDED WRITES, because this runs every frame: assigning an unchanged `disabled`
+  // still counts as a DOM write, and a control written to while a finger is on it is a
+  // control that can drop the gesture.
+  const set = (id, v) => { const el = $(id); if (el.disabled !== v) el.disabled = v; };
+  const label = runP ? 'Pause ⏸' : 'Run ▶';
+  if ($('runP').textContent !== label) $('runP').textContent = label;
+  set('runP', !idle);
+  set('commP', !idle);
+  set('sweepP', !idle);
+  set('resetP', !armP || busyP);
+  // THE PROGRAM SLIDERS GO WITH THEM. Commissioning and the sweep both install profiles
+  // of their own, and a slider moved underneath either one either overwrites the routine's
+  // program (the identifying lap silently stops being slow) or changes the acceleration
+  // between two rungs that are supposed to differ only in feedrate.
+  for (const id of ['ctlP', 'shapeP', 's-feedP', 's-accP', 's-cornP', 's-kP']) set(id, !idle);
+}
+
+// ---------------------------------------------------------------- wiring
+$('runP').addEventListener('click', () => {
+  if (!armP || busyP || commissionP || sweepP) return;
+  runP = !runP;
+  setPathBadge(runP ? 'contouring' : 'paused', runP ? 'good' : '');
+  syncPath();
+});
+$('commP').addEventListener('click', startCommissionP);
+$('sweepP').addEventListener('click', startSweepP);
+$('resetP').addEventListener('click', async () => {
+  if (!armP || busyP) return;
+  // A ROUTINE IN FLIGHT IS ABANDONED, not left running against a plant that has been
+  // re-homed underneath it -- which is what makes Reset the one control that always works.
+  commissionP = null; sweepP = null;
+  busyP = true; runP = false;
+  setPathBadge('re-homing…', 'warn'); syncPath();
+  try { await homeP(); setPathBadge('ready — press Run', ''); }
+  finally { busyP = false; syncPath(); }
+});
+// THE SHAPE IS A NEW PART PROGRAM and the arm has to be put on the start of it, so it
+// re-homes rather than being queued: teleporting the tool mid-lap is not a thing a
+// machine does. Feed, acceleration and cornering are the SAME program run differently,
+// so those are queued to the lap boundary the way every other tab queues a reference.
+$('shapeP').addEventListener('change', async () => {
+  if (!armP || busyP) return;
+  busyP = true; runP = false;
+  setPathBadge('new program — re-homing…', 'warn'); syncPath();
+  try { await homeP(); setPathBadge('ready — press Run', ''); }
+  finally { busyP = false; syncPath(); }
+});
+for (const id of ['s-feedP', 's-accP', 's-cornP']) {
+  $(id).addEventListener('input', () => {
+    syncPathLabels();
+    if (!armP) return;
+    if (runP) { progPending = true; $('pendP').hidden = false; }
+    else { progPending = false; installProgram(makePath()); onLapBoundaryP(); }
+  });
+}
+$('s-kP').addEventListener('input', async () => {
+  syncPathLabels();
+  if (busyP) return;
+  busyP = true; runP = false;
+  setPathBadge('rebuilding…', 'warn'); syncPath();
+  try { await buildP(); setPathBadge('ready — press Run', ''); }
+  catch (e) { setPathBadge('build failed: ' + e.message, 'bad'); console.error(e); }
+  finally { busyP = false; syncPath(); }
+});
+for (const id of ['s-spfP', 's-magP']) $(id).addEventListener('input', syncPathLabels);
+$('ctlP').addEventListener('change', () => {
+  if ($('ctlP').value === 'ilc' && !ilcP && profP) makeILC(true);
+  syncPath(); statsP();
+});
+
+function syncPathLabels() {
+  $('v-feedP').textContent = pathFeed().toExponential(1);
+  $('v-accP').textContent = pathAccel().toExponential(1);
+  $('v-cornP').textContent = `${pathCorner()} steps`;
+  $('v-kP').textContent = K2_LADDER[+$('s-kP').value].toFixed(1);
+  $('v-spfP').textContent = $('s-spfP').value;
+  $('v-magP').textContent = `${MAG_LADDER[+$('s-magP').value]}×`;
+}
+
+window.__flxPathDbg = () => (armP ? {
+  k: kP, lap: lapP, running: runP, busy: busyP,
+  shape: $('shapeP').value, feed: pathFeed(), accel: pathAccel(), corner: pathCorner(),
+  pending: progPending,
+  path: { length: profP.length, lapSteps: profP.lap, closed: profP.closed,
+    vMin: Math.min(...profP.v), vMax: Math.max(...profP.v) },
+  mode: pathMode(), want: $('ctlP').value, c: cP, nominal: cFrom && cFrom.nominal,
+  score: scoreP.report(), lapScore: lapScoreP.report(),
+  ilc: ilcP ? { laps: ilcP.laps, bins: ilcP.bins, leadBins: ilcP.leadBins,
+    peak: ilcP.peak(), travel: travelP, clamp: ILC_CLAMP,
+    history: ilcHist.slice(-12) } : null,
+  resid: residP.n ? { enc: Math.sqrt(residP.enc / residP.n),
+    follow: Math.sqrt(residP.follow / residP.n) } : null,
+  commissioning: commissionP ? { left: commissionP.left, n: commissionP.n } : null,
+  sweep: sweepP ? { i: sweepP.i, phase: sweepP.phase, left: sweepP.left } : null,
+  board: sweepRows,
+  tool: armP.toolXY(), cmd: profP.at(kP),
+  geom: lastGeomP ? { ...lastGeomP,
+    gap: Math.hypot(lastGeomP.drawn[0] - lastGeomP.truth[0],
+      lastGeomP.drawn[1] - lastGeomP.truth[1]) } : null,
+  cells: armP.l1.lattice.cellCount + armP.l2.lattice.cellCount,
 } : null);
 
 // --------------------------------------------------------------- verify
@@ -5227,6 +6384,8 @@ await build2();
 busy2 = false;
 buildBB();
 syncChain();
+syncPathLabels();
+syncPath();
 requestAnimationFrame(frame);
 console.log('flexisim ready ✓');
 </script>

@@ -259,12 +259,12 @@ measurement behind each is in `docs/history/` — the pointer in brackets.
 | `console-boot.js` | The debug-console bootstrap, shared by every page, loaded first in `<head>`. |
 | `flowsim.html` | FlowSim: the GPU lattice-field engine's page (Simulate / Verify / Architecture). |
 | `ngrc.html` | NGRC playground: four interactive tabs on `lib/ngrc`. |
-| `flexisim.html` | FlexiSim: compliant serial chains (Move / Chain / Black box / Verify / Architecture). |
+| `flexisim.html` | FlexiSim: compliant serial chains (Move / Chain / Path / Black box / Verify / Architecture). |
 | `lib/lattsim/` | The lattice engine — lattice, fields, materials, operators, solver, backends, renderers. See its README. |
 | `lib/lattsim/operators/` | `lbm.js` (D3Q19 fluid), `scalar.js` (passive scalar), `elastic.js` (velocity–stress leapfrog), `frame.js` (gravity and the non-inertial frame). |
 | `lib/ngrc/` | The ported NGRC library. See its README. |
 | `lib/probesense/` | Soft-sensing a field from one point in it. |
-| `lib/flexisim/` | `joint.js`, `link.js`, `arm.js`, `arm2r.js`, `armnr.js`, `tipsensor.js`, `chainsensor.js`, `compliance.js`, `compensator.js`. |
+| `lib/flexisim/` | `joint.js`, `link.js`, `arm.js`, `arm2r.js`, `armnr.js`, `tipsensor.js`, `chainsensor.js`, `compliance.js`, `compensator.js`, and the contouring three — `toolpath.js`, `contour.js`, `pathilc.js`. |
 | `lib/blackbox/` | `blackbox.js` (identify → design → verify → correct) and `qp.js` (the box-constrained preview solve). Imports nothing from `lib/flexisim/`. |
 | `version.json` | Server-side build manifest for stale-page detection. |
 | `modules.json` | Generated list of every script, so `reloadFresh()` can bust the ES-module cache. |
@@ -274,7 +274,7 @@ measurement behind each is in `docs/history/` — the pointer in brackets.
 | `test/run.sh` | The suite. See "What `./test/run.sh` actually runs" above. |
 | `test/smoke.mjs` | Playwright checks and screenshots for every page. |
 | `test/lattsim/` | Node tests for the engine: stencil, indexing, units, conservation, Poiseuille, EOS, scalar, elastic, reconstruction. |
-| `test/flexisim/` | Node tests for the hybrid plant: joint, arm, 2R, N-R, sensors, compliance, compensation, ServoFF, the learned filter. |
+| `test/flexisim/` | Node tests for the hybrid plant: joint, arm, 2R, N-R, sensors, compliance, compensation, ServoFF, the learned filter, and contouring (`toolpath`, `pathilc`, `contour`). |
 | `test/blackbox/` | Node tests for the plant-agnostic controller, on three plants that share no physics. |
 | `docs/history/` | The measurement record — see the last section. |
 | `CLAUDE.md` | This file. |
@@ -377,7 +377,8 @@ Four tabs, each framed as NGRC against a common alternative.
 Compliant serial chains. Joints are LUMPED nonlinear elements (gearbox stiffness,
 backlash, Stribeck friction, ratio, motor inertia); LINKS are lattice elastic solids, one
 small dense lattice per link in its own body frame. Every mass property is INTEGRATED
-FROM THE LATTICE. Five tabs.
+FROM THE LATTICE. Six tabs. **The end application is CNC contouring, so ③ Path is the tab
+that matches it** — the point-to-point tabs measure a different question.
 
 - **① Move** — a single-joint hybrid arm. Commissioning runs inside the frame loop (pose
   holds, then a deliberately excited decay). Four correction modes: ① open loop, ② the
@@ -396,7 +397,20 @@ FROM THE LATTICE. Five tabs.
   amplitude-modulated at the golden ratio; the scoring window is three move periods and
   the loop gain is derived from the move period. Two tool sensors — whole-arm and
   elbow-only — trained side by side at matched capacity and matched window reach.
-- **③ Black box** — `lib/blackbox/`, a controller GIVEN NOTHING: a scalar command it can
+- **③ Path** — CONTOURING, which is what the end application is: a 2R arm tracing a
+  closed toolpath (circle, rounded rectangle or square) at a look-ahead feedrate profile
+  with the corner rule and the acceleration ELLIPSE. The deviation is split into CONTOUR
+  error (normal — the part is the wrong shape) and LAG (along — the part is right and the
+  cycle is slower), and only the first is a defect; energy is reported as BOTH copper loss
+  ∫τ² and mechanical work ∫|τω|, and direction changes are counted as TRAVEL past the
+  joint's own lost motion. Backlash is on here and nowhere else, because this is the only
+  tab whose metrics can see it. Four corrections: ① none, ② the wind-up model τ/K, ③ a
+  per-joint compliance identified on ONE SLOW LAP and then locked, ④ ITERATIVE LEARNING —
+  a correction table indexed by arc length on the part, updated between laps with a lead
+  of one position-loop time constant and a zero-phase filter. **Sweep feedrate** runs the
+  whole ladder and tabulates the trade. The arm is drawn at TRUE geometry; the error trail
+  is the exaggerated object, pushed out along the path normal only.
+- **④ Black box** — `lib/blackbox/`, a controller GIVEN NOTHING: a scalar command it can
   read, a scalar correction it can add, unlabelled signals, and a tracker during
   COMMISSIONING ONLY. It determines its own timescale from a quiet-detected step test;
   identifies the plant from a probe taken while HELD and the disturbance while RUNNING;
@@ -405,8 +419,8 @@ FROM THE LATTICE. Five tabs.
   the others can be divided by it — and deploys the best MEASURED one, or nothing.
   Corrections are linearly interpolated between grid samples, never held. It locks its own
   soft sensor at the end.
-- **④ Verify** — the closed forms run in this browser against the same modules.
-- **⑤ Architecture** — the design note.
+- **⑤ Verify** — the closed forms run in this browser against the same modules.
+- **⑥ Architecture** — the design note.
 
 ### Libraries
 
@@ -415,7 +429,7 @@ FROM THE LATTICE. Five tabs.
 | `lib/lattsim/` | The general lattice engine — lattice, fields, materials, operators (`lbm`, `scalar`, `elastic`, `frame`), solver, WebGPU + CPU backends, renderers. Named `lattsim` deliberately: it is not the fluid page. |
 | `lib/ngrc/` | The TC_NGRC port, with golden-vector parity tests. |
 | `lib/probesense/` | Soft-sensing a field from one point in it. Fed numbers; knows no physics. |
-| `lib/flexisim/` | `joint`, `link`, `arm`, `arm2r`, `armnr` (recursive Newton–Euler), `tipsensor`, `chainsensor`, `compliance`, `compensator`. |
+| `lib/flexisim/` | `joint`, `link`, `arm`, `arm2r`, `armnr` (recursive Newton–Euler), `tipsensor`, `chainsensor`, `compliance`, `compensator`, plus contouring: `toolpath` (geometry + feedrate profile), `contour` (the metrics), `pathilc` (learning over laps). |
 | `lib/blackbox/` | A controller given nothing about the plant, plus `qp.js`. Imports nothing from `lib/flexisim/` — the boundary is the directory. Verified on three plants sharing no physics. |
 
 ## Versioning

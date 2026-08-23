@@ -1723,7 +1723,7 @@ if (FULL) {
 // the lifecycle and reads the page's own debug hook -- it does not re-measure the
 // physics.
 if (AREA.flexisim) {
-section('flexisim page');
+section('flexisim move');
 const fx = await ctx.newPage();
 const fxErrors = [];
 fx.on('pageerror', (e) => fxErrors.push(String(e)));
@@ -2269,6 +2269,11 @@ await fx.screenshot({ path: join(SHOTS, '05-flexisim.png') });
 // second lattice pair builds, that the chain steps, that the canvas is painted,
 // and that the claim the tab is ABOUT survives being driven through the page: with
 // the elbow commanded to hold, its inertial load is mostly the SHOULDER'S doing.
+// A SECTION PER TAB, because 'flexisim page' was 291 s reported as ONE line and the
+// measure-then-cut method that took engine.test.mjs from 196 s to 72 s cannot be applied
+// to a number that is not attributable. This costs nothing and is the precondition for
+// every tier decision after it.
+section('flexisim chain');
 await fx.click('.tab[data-tab="chain"]');
 await fx.waitForFunction(() => window.__flxChainDbg() && window.__flxChainDbg().cells > 0,
   null, { timeout: 60000 });
@@ -2330,10 +2335,16 @@ console.log(`  flexisim/chain: tool sensor ${cs.mode} after ${cs.trained} pairs 
   console.log(`  flexisim/chain: drawn tool vs the model — ${gm && gm.ratio !== null
     ? gm.ratio.toFixed(4) : '—'} of the magnification (want 1.0), axial `
     + `${gm ? gm.axial.toExponential(2) : '—'}`);
+  // TIGHT, BECAUSE THE TWO ARE NOW THE SAME QUANTITY. The drawn separation used to be a
+  // `hypot`, which folds in the AXIAL displacement that `tipError().total` -- a transverse
+  // scalar -- does not carry, so the check drifted in and out of a 6% tolerance with the
+  // pose: measured drawn 0.7760 against true 0.7203, and sqrt(0.7203^2 + axial 0.2910^2)
+  // is 0.7766. A tolerance wide enough to absorb that is a tolerance wide enough to absorb
+  // a real drawing defect, which is what this check exists to catch.
   check('flexisim/chain: the picture draws the same tool error the model reports',
-    gm && gm.ratio !== null && Math.abs(gm.ratio - 1) < 0.06,
+    gm && gm.ratio !== null && Math.abs(gm.ratio - 1) < 0.01,
     JSON.stringify(gm && { ratio: gm.ratio, drawn: gm.drawnToolVsMotor,
-      true: gm.trueToolVsMotor }));
+      true: gm.trueToolVsMotor, axial: gm.drawnAxial }));
   // …AND THE SWEEP BAND CONTAINS THE TOOL IT IS DRAWN AROUND. The band was rendered 9.5x
   // too short — win2 holds a LENGTH and it was being divided by L2 before use — so the
   // marker sat well outside the bound the picture claimed for it.
@@ -2596,10 +2607,160 @@ const painted2 = await fx.evaluate(() => {
 check('flexisim/chain: the stage is painted', painted2.ok, JSON.stringify(painted2));
 await fx.screenshot({ path: join(SHOTS, '06-flexisim-chain.png') });
 
+// ---- THE PATH TAB: contouring, which is what the end application is. The physics and
+// every headline number are pinned in plain Node (test/flexisim/{toolpath,pathilc,
+// contour}.test.mjs) where f64 is available and a lap costs seconds. What only a browser
+// can break is the WIRING -- that the plant homes onto the program, that the view frame
+// contains the machine and not just the part, that a feedrate change is a change of speed
+// rather than a teleport, and that a correction nobody has identified yet is not silently
+// applied.
+section('flexisim path');
+await fx.click('.tab[data-tab="path"]');
+await fx.waitForFunction(() => window.__flxPathDbg && window.__flxPathDbg(),
+  null, { timeout: 180000 });
+{
+  const d0 = await fx.evaluate(() => window.__flxPathDbg());
+  const home = Math.hypot(d0.tool[0] - d0.cmd.x, d0.tool[1] - d0.cmd.y);
+  console.log(`  flexisim/path: ${d0.shape}, ${d0.path.length.toFixed(2)} long, lap `
+    + `${Math.round(d0.path.lapSteps)} steps, ${d0.cells} cells; homed ${home.toExponential(2)} `
+    + 'from the start of the program');
+  // A LATTICE STARTS UNDEFORMED, so the first thing a run would otherwise measure is the
+  // arm settling under its own weight. The home has to leave it ON the program and at
+  // rest -- the residual here is the static sag and nothing else.
+  check('flexisim/path: the arm homes onto the start of the program',
+    home < 0.05, home.toExponential(3));
+  // THE PROGRAM IS CLOSED, so its command never stops -- a lap time that came out as an
+  // integer number of steps would mean the wrap was rounded, which puts a fraction of a
+  // step of dwell at the seam once per lap.
+  // A CLOSED PROGRAM NEVER STOPS. An open one ramps to rest at both ends, so a zero
+  // anywhere in the feedrate table would mean the seam is being treated as an end -- which
+  // is what an accidental zero-length closing segment does, since a degenerate line has no
+  // tangent and the corner rule reads it as a right-angle turn.
+  check('flexisim/path: …and it is a closed loop the machine never stops on',
+    d0.path.closed && d0.path.vMin > 0, JSON.stringify(d0.path));
+  // A correction with nothing identified behind it must NOT be applied. The selector is
+  // allowed to say `ident`; the machine is not allowed to act on it.
+  await fx.selectOption('#ctlP', 'ident');
+  const dw = await fx.evaluate(() => window.__flxPathDbg());
+  check('flexisim/path: an identified correction that does not exist is not applied',
+    dw.want === 'ident' && dw.mode === 'open' && dw.c === null, JSON.stringify([dw.want, dw.mode]));
+  await fx.selectOption('#ctlP', 'open');
+}
+await fx.evaluate(() => { document.getElementById('s-spfP').value = '300'; });
+const pk0 = (await fx.evaluate(() => window.__flxPathDbg())).k;
+await fx.click('#runP');
+await fx.waitForFunction((t) => window.__flxPathDbg().k > t, pk0 + 2500, { timeout: 180000 });
+{
+  const d = await fx.evaluate(() => window.__flxPathDbg());
+  console.log(`  flexisim/path: after ${Math.round(d.k)} steps — contour `
+    + `${d.lapScore.contourRms.toExponential(2)}, lag ${d.lapScore.lagRms.toExponential(2)}, `
+    + `unobservable ${d.resid.enc.toExponential(2)} vs following `
+    + `${d.resid.follow.toExponential(2)}`);
+  check('flexisim/path: the contour/lag split is live and both are finite',
+    Number.isFinite(d.lapScore.contourRms) && Number.isFinite(d.lapScore.lagRms)
+    && d.lapScore.contourRms > 0, JSON.stringify(d.lapScore).slice(0, 160));
+  // A PROGRAM CHANGE MID-LAP IS QUEUED, for the same reason every other tab rebuilds a
+  // reference only between moves.
+  const bump = () => fx.evaluate(() => {
+    const el = document.getElementById('s-feedP');
+    el.value = String(+el.value + 1);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await bump();
+  const q = await fx.evaluate(() => ({ d: window.__flxPathDbg(),
+    hint: !document.getElementById('pendP').hidden }));
+  check('flexisim/path: a feedrate change mid-lap is queued rather than applied',
+    q.d.pending && q.hint && Math.abs(q.d.path.lapSteps - d.path.lapSteps) < 1e-9,
+    JSON.stringify([q.d.pending, q.hint]));
+  // …AND WHEN IT IS APPLIED IT IS A CHANGE OF SPEED, NOT A TELEPORT. Restarting the new
+  // profile's clock at zero would send the command back to the start of the part while
+  // the tool is somewhere else -- a position step into the servo's gain, which is this
+  // project's oldest self-inflicted transient. The arc length must survive the swap.
+  await fx.click('#runP');                       // pause: the swap then happens at once
+  const before = await fx.evaluate(() => window.__flxPathDbg().cmd.s);
+  await bump();
+  const after = await fx.evaluate(() => window.__flxPathDbg());
+  console.log(`  flexisim/path: feedrate ${d.feed.toExponential(1)} → `
+    + `${after.feed.toExponential(1)}, lap ${Math.round(d.path.lapSteps)} → `
+    + `${Math.round(after.path.lapSteps)}; arc ${before.toFixed(3)} → `
+    + `${after.cmd.s.toFixed(3)} of ${after.path.length.toFixed(2)}`);
+  check('flexisim/path: applying it changes the speed and keeps the place on the part',
+    after.path.lapSteps < d.path.lapSteps
+    && Math.abs(after.cmd.s - before) < 0.02 * after.path.length,
+    `${before.toFixed(4)} → ${after.cmd.s.toFixed(4)}`);
+}
+// THE VIEW HAS TO CONTAIN THE MACHINE. A frame fitted to the program alone drew the
+// forearm arriving from off screen, because this arm's elbow hangs well below the
+// workpiece -- and nothing about that is an error, so nothing but geometry catches it.
+{
+  const box = await fx.evaluate(() => {
+    const d = window.__flxPathDbg();
+    const cv = document.getElementById('cvP');
+    const g = cv.getContext('2d');
+    const px = cv.width, py = cv.height;
+    const img = g.getImageData(0, 0, px, py).data;
+    let lit = 0;
+    for (let i = 0; i < img.length; i += 4) if (img[i] + img[i + 1] + img[i + 2] > 90) lit++;
+    return { lit, of: px * py / 4, tool: d.tool };
+  });
+  check('flexisim/path: the stage is painted', box.lit > 0.002 * box.of, JSON.stringify(box));
+  // AND THE DRAWN ARM IS THE ARM THE NUMBERS ARE ABOUT. Nothing on this stage is
+  // magnified, so the end of the drawn forearm must BE `toolXY()` to machine precision --
+  // an identity, not a tolerance. The Chain tab's version of this check went years with
+  // no teeth because it restated the model instead of reading the drawing.
+  const gp = await fx.evaluate(() => window.__flxPathDbg().geom);
+  console.log(`  flexisim/path: drawn tool vs the model — gap ${gp.gap.toExponential(2)} `
+    + `on a ${Math.hypot(gp.truth[0], gp.truth[1]).toFixed(2)} reach`);
+  check('flexisim/path: the drawn tool IS the tool every metric is computed from',
+    gp && gp.gap < 1e-9, JSON.stringify(gp));
+}
+await fx.screenshot({ path: join(SHOTS, '08-flexisim-path.png') });
+// FULL TIER: the two things that need laps. Commissioning drives a whole slow lap
+// (~30k solver steps) and the learner needs several laps to show it converging, which is
+// the claim rather than that it runs.
+if (FULL) {
+  await fx.click('#commP');
+  await fx.waitForFunction(() => window.__flxPathDbg().c, null, { timeout: 600000 });
+  const dc = await fx.evaluate(() => window.__flxPathDbg());
+  console.log(`  flexisim/path: identified c ${dc.c.map((x) => x.toExponential(3)).join(' / ')} `
+    + `against −1/K = ${dc.nominal.toExponential(3)}`);
+  // THE SIGN IS FIXED BY THE PHYSICS and the MAGNITUDE has to exceed the gearbox's own,
+  // because the links add to it. A fit that came back with the opposite sign would apply
+  // the error a second time -- which is exactly what a same-feedrate identification did.
+  check('flexisim/path: the identified compliance has the gearbox\'s sign and exceeds it',
+    dc.c.every((x) => x < 0) && dc.c.every((x) => Math.abs(x) > Math.abs(dc.nominal)),
+    JSON.stringify(dc.c));
+  check('flexisim/path: …and selecting it is then honoured', dc.mode === 'ident', dc.mode);
+  // RE-HOMED FIRST, so the learning curve starts at a full lap from a settled machine.
+  // The first run of this check inherited a third of a lap from the commissioning
+  // restore, read 1.8e-1 for it, and then compared the next FULL lap's 5.3e-1 against
+  // that -- reporting a converging learner as a diverging one.
+  await fx.click('#resetP');
+  await fx.waitForFunction(() => window.__flxPathDbg() && !window.__flxPathDbg().busy
+    && window.__flxPathDbg().k === 0, null, { timeout: 240000 });
+  await fx.selectOption('#ctlP', 'ilc');
+  await fx.click('#runP');
+  await fx.waitForFunction(() => window.__flxPathDbg().ilc.history.length >= 8,
+    null, { timeout: 900000 });
+  await fx.click('#runP');
+  const di = await fx.evaluate(() => window.__flxPathDbg());
+  const h = di.ilc.history.map((x) => x.contour);
+  console.log('  flexisim/path: learning, lap by lap — '
+    + h.map((x) => x.toExponential(2)).join(' → '));
+  // MEASURED IN NODE AT THIS FEEDRATE, 16 laps: 5.87e-1 → 1.07e-1, i.e. 5.5x, and it is
+  // still falling at lap 8 (1.52e-1, 3.9x). The gate is well inside that and still far
+  // outside anything a plateau would reach.
+  check('flexisim/path: the learner drives the contour error down lap on lap',
+    h.length >= 8 && h[h.length - 1] < 0.6 * h[0],
+    `${h[0].toExponential(2)} → ${h[h.length - 1].toExponential(2)}`);
+  await fx.screenshot({ path: join(SHOTS, '09-flexisim-path-learned.png') });
+}
+
 // ---- THE BLACK BOX: the same arm, and a controller told nothing about it. Full tier
 // only -- it holds the machine still, runs a step test, drives a 1400-sample probe and
 // then a scored stretch, which is a few hundred thousand solver steps.
 if (FULL) {
+  section('flexisim black box');
   await fx.click('.tab[data-tab="black"]');
   await fx.waitForFunction(() => window.__flxBBDbg && window.__flxBBDbg(),
     null, { timeout: 180000 });
@@ -2754,6 +2915,69 @@ if (FULL) {
   check('flexisim/blackbox: …and throws the commissioning away, because the map was of the '
     + 'old one', afterJerk.phase === 'idle' && afterJerk.design == null,
     `${afterJerk.phase}`);
+  // FRICTION IS WHERE THE PREMISE STOPS HOLDING, and the page has to say so rather than
+  // hiding it. Every number on this tab is measured on a joint with friction off — the one
+  // configuration where "the plant path is LTI" cannot fail. What is asserted is that the
+  // module REFUSES rather than designing against it: before the gate it deployed a
+  // correction and made the machine 0.81x, reported as 1.33x.
+  //
+  // THE LEVEL IS 20% OF THE MOTOR-SIDE HOLD TORQUE AND THAT NUMBER WAS WRONG BY A HUNDRED.
+  // It was measured while the ladder was a fraction of the LOAD-side hold torque and never
+  // re-measured after the ladder was corrected, so this check sat at 2% — where the module
+  // identifies the plant perfectly well (R2 0.998, dc 12.9 against a true 15.5) and
+  // correctly designs a correction. Re-measured across the ladder: 2% and 5% both identify
+  // and deploy; 20% gives R2 0.0025, a step-test DC of -4.26 against a probe-implied
+  // -0.03, and the refusal this check is about.
+  await fx.evaluate(() => {
+    const el = document.getElementById('s-fric3');
+    el.value = '3';
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  // AND THE SEQUENCE HAS TO BE STARTED AGAIN, which is what this check missed: changing
+  // any of these sliders REBUILDS the plant and throws the commissioning away -- that is
+  // the behaviour the two checks above assert -- so the module is sitting idle and no
+  // amount of waiting produces a design. It waited the full ten minutes and took the
+  // suite down with it, twice, after the checks it was hiding had already passed.
+  await fx.waitForSelector('#bb-go:not([disabled])', { timeout: 120000 });
+  await fx.click('#bb-go');
+  await fx.waitForFunction(() => {
+    const d = window.__flxBBDbg();
+    return d && (d.design || d.identOk === false || d.phase === 'correct'
+      || d.phase === 'locked');
+  }, null, { timeout: 600000 });
+  const fric = await fx.evaluate(() => window.__flxBBDbg());
+  console.log(`  flexisim/blackbox: with joint friction — R2 ${fric.plantR2?.toFixed(4)}, `
+    + `dc ${fric.dc?.toPrecision(3)}, gain ${fric.model?.gain?.toPrecision(3)}, `
+    + `${fric.design?.refused ? 'REFUSED: ' + fric.design.why : 'kind ' + fric.design?.kind}`);
+  check('flexisim/blackbox: friction makes the plant unidentifiable, and it says so '
+    + 'instead of designing against it',
+    fric.design && fric.design.refused === true && fric.design.kind === 'none',
+    JSON.stringify({ r2: fric.plantR2, identOk: fric.identOk,
+      kind: fric.design && fric.design.kind }));
+  check('flexisim/blackbox: …and applies no correction while refusing',
+    Math.abs(fric.u || 0) === 0, `u ${fric.u}`);
+  // AND THE PANEL RENDERS THE REFUSAL, which it did not: a refusal has no filter, no
+  // preview and no correction size, and three rows read those fields unconditionally, so
+  // the first run in which the gate actually fired threw inside bbStats. Every functional
+  // check here passed while it was throwing -- only the page's own error buffer saw it.
+  // WAITED FOR, NOT READ ON THE SPOT: the panel re-renders every sixth frame, so a bare
+  // read a few milliseconds after the refusal lands is a race that fails about as often
+  // as it passes.
+  const refusedRow = await fx.waitForFunction(() =>
+    (document.getElementById('bb-stats').textContent || '').includes('REFUSED'),
+  null, { timeout: 20000 }).then(() => true, () => false);
+  check('flexisim/blackbox: …and the panel says so instead of throwing on the missing fields',
+    refusedRow, 'no REFUSED row in #bb-stats');
+  await fx.evaluate(() => {
+    const el = document.getElementById('s-fric3');
+    el.value = '0';
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await fx.waitForFunction(() => window.__flxBBDbg() && window.__flxBBDbg().phase === 'idle',
+    null, { timeout: 120000 });
+
   // THE SETTLE IS THE SAME KIND OF CONTROL AND HAS TO BEHAVE THE SAME WAY: it lengthens
   // the dwell, which is a different command, so the commissioning goes with it.
   const beforeSettle = { period: afterJerk.period, settle: afterJerk.settle };
@@ -2819,7 +3043,8 @@ check('flexisim: every Plotly container gets its height from CSS, so none can st
 // rather than as "a chart exists", which is the rule this page keeps re-learning.
 const plotWide = [];
 for (const [tab, ids] of [['move', ['err-chart', 'ss-chart']],
-  ['chain', ['chain-pos', 'chain-chart', 'cs-chart']], ['black', ['bb-chart']]]) {
+  ['chain', ['chain-pos', 'chain-chart', 'cs-chart']], ['path', ['path-chart']],
+  ['black', ['bb-chart']]]) {
   await fx.click(`.tab[data-tab="${tab}"]`);
   await fx.waitForTimeout(400);
   plotWide.push(...await fx.evaluate((xs) => xs.map((id) => {
@@ -2843,6 +3068,7 @@ check('flexisim: …and the page does not scroll sideways on a phone',
 await fx.click('.tab[data-tab="move"]');
 
 // The in-browser Verify tab runs the same closed forms against the same modules.
+section('flexisim verify');
 await fx.click('.tab[data-tab="verify"]');
 await fx.click('#verify-run');
 await fx.waitForSelector('#verify-out table', { timeout: 60000 });

@@ -8,7 +8,7 @@ experiments driven from a phone.
 | [`index.html`](index.html) | The hub — debug console, docs viewer, launchers. |
 | [`flowsim.html`](flowsim.html) | **FlowSim** — a GPU lattice-field physics engine. D3Q19 fluid, passive scalar, elastic solid; WebGPU and a CPU reference verified against each other cell by cell. |
 | [`ngrc.html`](ngrc.html) | **NGRC playground** — four tabs, each pitting a next-generation reservoir model against a common alternative: chaotic forecasting, a soft sensor, a finger trace, an anti-slosh axis. |
-| [`flexisim.html`](flexisim.html) | **FlexiSim** — compliant serial chains. Lumped nonlinear joints plus lattice links, a soft sensor for the tool error, and a controller given nothing about the plant. |
+| [`flexisim.html`](flexisim.html) | **FlexiSim** — compliant serial chains. Lumped nonlinear joints plus lattice links, a soft sensor for the tool error, a CNC **contouring** tab that learns a correction over repeated laps, and a controller given nothing about the plant. |
 
 Everything is self-hosted: no CDNs, no build step beyond one shell script.
 

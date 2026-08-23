@@ -15,7 +15,8 @@
 // PLANT C -- the real FlexiSim arm: lumped nonlinear gearbox plus a lattice link, with
 //            backlash and Stribeck friction, run through the same interface.
 
-import { BlackBox, prbs, deconvolve, summarise, firInverse, optimalPreview, WindowMap }
+import { BlackBox, prbs, deconvolve, summarise, firInverse, optimalPreview, WindowMap,
+  identGate }
   from '../../lib/blackbox/blackbox.js';
 import { boxQP, PreviewMPC } from '../../lib/blackbox/qp.js';
 import { Joint } from '../../lib/flexisim/joint.js';
@@ -431,6 +432,78 @@ console.log('\n  the constrained solve');
 // it must NOT terminate on one that is still moving. Checking only the first is what let
 // a rate test replace a travel test; checking only the second is what let a scale that
 // was never seeded pass on a noiseless simulation.
+// ---------------------------------------------------------------------------------
+// A MODULE THAT CANNOT IDENTIFY A PLANT HAS TO SAY SO.
+//
+// `plantR2` and the step-vs-probe gain cross-check were both computed and both gated on
+// nothing — and a comment in the module had been promising the second one for months
+// ("a disagreement in SIGN or by more than a factor of a few means one of them was
+// confounded, and the run says so"). No code did that. Measured on a joint with Stribeck
+// friction: the step test returned dc = -0.08 against a true 15.5, the probe fit returned
+// R2 = 0.003, and the module designed anyway, deployed a filter and made the machine
+// WORSE — 0.81x at the heaviest friction, reported as 1.33x. The verify round could not
+// save it either: with a meaningless map the ratio it measures is meaningless in the same
+// direction.
+//
+// Checked here on a SYNTHETIC plant whose identification is broken deliberately, so the
+// gate is tested rather than the friction: the response is fed back scrambled, which is
+// exactly what an unidentifiable plant looks like from inside.
+console.log('\n  refusing to design on an identification that failed');
+{
+  // THE GATE IS A DECISION, so it is tested as one — a table of the states it has to
+  // separate, including the exact numbers a friction-dominated joint produced when it
+  // went unnoticed. Driving a whole synthetic run to reach each state would test the
+  // synthetic, and an unidentifiable plant is by construction hard to steer.
+  const cases = [
+    ['a clean identification', 15.5, 15.4, 0.99, true],
+    ['the two gains disagree in SIGN', 15.5, -15.4, 0.99, false],
+    ['…or by more than a factor of three', 15.5, 1.2, 0.99, false],
+    ['the friction case, measured', -0.0843, 1.22e-7, 0.003, false],
+    ['the heavier friction case, measured', 4.55e-7, -1.45e-8, -7.29, false],
+    ['the model explains none of the held-out probe', 15.5, 15.4, 0.09, false],
+    ['both gains are zero, so neither can check the other', 0, 0, 0.9, false],
+    ['a non-finite number anywhere', NaN, 1, 1, false],
+  ];
+  let wrong = 0;
+  for (const [name, dc, gain, r2, want] of cases) {
+    const g = identGate(dc, gain, r2);
+    if (g.ok !== want) { wrong++; console.log(`    [gate] WRONG on ${name}`); }
+    if (!g.ok) console.log(`    [gate] ${name} → ${g.why}`);
+  }
+  check('the identification gate separates every state it has to', wrong === 0,
+    `${wrong} of ${cases.length} wrong`);
+  // …AND A REFUSAL DEPLOYS NOTHING, which is the half that matters on a machine: a
+  // refusal that leaves a correction running is not a refusal. Forced through the real
+  // path by making the probe's own record unusable.
+  const ref = makeRef(0.2), S = 6;
+  const plant = synthetic({ wn: 0.02, zeta: 0.8, gain: 12, delay: 30 });
+  const bb = new BlackBox({ ref, sampleEvery: S, probeSamples: 900, stepSamples: 700,
+    probeAmp: BlackBox.autoAmplitude(0.2, 0.02), taps: 60, invTaps: 40, nSignals: 0 });
+  let k = 0, seed = 3;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    return seed / 0x7fffffff - 0.5; };
+  const hold = ref(0);
+  const dist = (kk, r) => 900 * (r(kk + 1) - 2 * r(kk) + r(kk - 1));
+  for (let i = 0; i < 3000000 && bb.phase !== 'correct'; i++) {
+    const held = bb.holding;
+    const y = plant.step(bb.offset(k)) + (held ? dist(0, () => hold) : dist(k, ref));
+    // The PROBE's own record is scrambled and nothing else is, so the step test still
+    // returns a good dc and the probe fit cannot — which is the disagreement the first
+    // gate exists to catch, arrived at through the real code path.
+    if (k % S === 0) bb.sample(k, bb.phase === 'probe' ? y * (1 + 6 * rnd()) : y);
+    k++;
+  }
+  console.log(`    [gate] through the real path: phase ${bb.phase}, dc `
+    + `${bb.dc == null ? '—' : bb.dc.toPrecision(3)}, gain `
+    + `${bb.model ? bb.model.gain.toPrecision(3) : '—'} → `
+    + `${bb.design && bb.design.refused ? 'REFUSED' : (bb.design || {}).kind}`);
+  check('…and a refused identification deploys no correction at all',
+    !!bb.design && bb.design.refused === true && bb.design.kind === 'none'
+      && [0, 1, 500, 5000].every((i) => bb.offset(i) === 0),
+    JSON.stringify({ phase: bb.phase, kind: bb.design && bb.design.kind,
+      refused: !!(bb.design && bb.design.refused) }));
+}
+
 console.log('\n  the quiet detector');
 {
   const settle = (noise) => {
@@ -497,6 +570,59 @@ console.log('\n  the reconstruction between grid samples');
   // the same pair a zero-order hold has a second difference the size of the step itself.
   check('…and a zero-order hold of the same pair would NOT pass that',
     Math.abs(0.5 - 2 * 0.2 + 0.2) > 0.29, 'a step of 0.3 lands entirely on one sample');
+}
+
+// ---------------------------------------------------------------------------------
+// THE COUNT AGAINST THE CLOCK. `cost()` returns a COUNT, because a count is the only
+// form of this number that survives being moved to another processor — but a count is
+// only a proxy for the shipped implementation if the two are within a factor of each
+// other, and here they were not. Measured: the reference expansion boxes a typed array
+// into a plain one and back on every prediction, and walks the triangular layout to
+// decode each quadratic index, so the real cost ran 8.7x to 42x the count. The 10x
+// derate in `plcBudget` exists to cover the PROCESSOR; it was silently being asked to
+// cover an implementation gap as well, and the two compound.
+//
+// This does not assert a speed — a shared runner's clock is not a specification. It
+// asserts the RATIO stays within the derate, so the budget figure the page quotes keeps
+// meaning something, and it prints both numbers either way.
+console.log('\n  the count against the clock');
+{
+  const taps = [-6, -3, 0, 3, 6, 9];
+  // A TABLE, BECAUSE THAT IS WHAT A LOOK-AHEAD BUFFER IS. `ref` is the HOST's function
+  // and the module cannot know what it costs — measured with a two-sine `ref` the reads
+  // alone are 36 transcendentals and swamp everything, which says something about the
+  // caller and nothing about the map. A motion controller's look-ahead is an array.
+  const tbl = new Float64Array(40000);
+  for (let i = 0; i < tbl.length; i++) tbl[i] = Math.sin(i / 97) + 0.3 * Math.sin(i / 31);
+  const ref = (k) => tbl[((k % 40000) + 40000) % 40000];
+  for (const nonlinear of [null, { nh: 16, nf: 16, seed: 11 }]) {
+    const map = new WindowMap({ taps, nonlinear });
+    for (let k = 200; k < 900; k++) map.observe(ref, k, 5, ref(k) * 0.1);
+    // Weights are irrelevant to the cost; any consistent set exercises the same path.
+    const nf = map.nf;
+    map.setWeights(new Float64Array(nf).fill(1e-3), new Float64Array(nf),
+      new Float64Array(nf).fill(1));
+    const c = map.cost();
+    for (let k = 0; k < 2000; k++) map.predict(ref, k, 5);        // warm
+    const t0 = process.hrtime.bigint();
+    const N = 20000;
+    for (let k = 0; k < N; k++) map.predict(ref, k, 5);
+    const ns = Number(process.hrtime.bigint() - t0) / N;
+    // 700 MAC/us is a measured f64 dot-product rate on an ordinary core; the ratio is
+    // what the count is being judged on, not the absolute time.
+    const implied = ns * 0.7;
+    console.log(`    [cost] ${String(c.features).padStart(4)} features: counted `
+      + `${String(c.mac).padStart(5)} MAC, measured ${(ns / 1000).toFixed(3)} us `
+      + `(~${implied.toFixed(0)} MAC-equivalents) — ${(implied / c.mac).toFixed(1)}x`);
+    // 6x, not the 10x derate. `plcBudget` derates by 10 to cover the PROCESSOR; it must
+    // not ALSO be silently covering an implementation gap, and once the prediction
+    // stopped allocating a fresh vector per call the two sit at 1.2x and 1.7x on an idle
+    // machine. The headroom above that is for a shared runner's clock — this is a bound
+    // on the gap, not a benchmark, and a benchmark is not what a suite should assert.
+    check(`the counted cost of a ${c.features}-feature map is within 6x of the clock`,
+      implied / c.mac < 6,
+      `counted ${c.mac}, measured ~${implied.toFixed(0)} MAC-equivalents`);
+  }
 }
 
 console.log('\n  the cycle budget');

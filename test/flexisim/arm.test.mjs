@@ -23,7 +23,8 @@
 import { Joint } from '../../lib/flexisim/joint.js';
 import { FlexArm } from '../../lib/flexisim/arm.js';
 import {
-  buildLink, massProperties, gravityTorque, tipDeflection, peakSpeed, armLength,
+  buildLink, massProperties, gravityTorque, tipDeflection, tipSlope, peakSpeed,
+  armLength, MARGIN,
 } from '../../lib/flexisim/link.js';
 import { lameFrom } from '../../lib/lattsim/operators/elastic.js';
 import { tipTrackingError } from '../../lib/flexisim/compensator.js';
@@ -396,6 +397,46 @@ async function ringFrequency({ E, len, settle, ringSteps }) {
                    return false; } catch { return true; } })(),
     `w_n*dt = ${(wild.naturalFrequency() * 1).toPrecision(4)}`);
   await link.destroy();
+}
+
+// ---------------------------------------------------------------- the vacuum margin
+//
+// AN EXACTNESS CLAIM, ASSERTED AS ONE. Every neighbour access in the elastic kernel is
+// +/-1 on each axis, so one vacuum layer is all a traction-free surface can use and the
+// second was being stepped and read by nothing. That is only true if the ANSWER is
+// IDENTICAL — a margin that moved the fourth figure would mean the surface condition
+// depends on how much empty space surrounds it, which would be a defect in the boundary
+// rather than a saving. So this compares digit for digit, not within a tolerance.
+{
+  const rows = [];
+  for (const margin of [2, 1]) {
+    globalThis.__linkMargin = margin;
+    const { buildLink: bl } = await import(`../../lib/flexisim/link.js?margin=${margin}`);
+    const link = await bl({ length: 16, section: 4, clamp: 3, E: 0.2, nu: 0.3, rho: 1,
+      damping: 3e-3, gravity: [0, -2e-6, 0] });
+    const mp = massProperties(link);
+    const t0 = Date.now();
+    link.advance(2000);
+    rows.push({ margin, cells: link.lattice.cellCount, us: 1000 * (Date.now() - t0) / 2000,
+      tip: tipDeflection(link), slope: tipSlope(link),
+      mass: mp.mass, I: mp.inertiaAboutPivot });
+    await link.destroy();
+  }
+  delete globalThis.__linkMargin;
+  for (const r of rows) {
+    console.log(`    [margin ${r.margin}] ${r.cells} cells, ${r.us.toFixed(1)} us/step, `
+      + `tip ${r.tip.toPrecision(14)}, slope ${r.slope.toPrecision(12)}`);
+  }
+  const [two, one] = rows;
+  check('one vacuum layer gives BIT-IDENTICAL statics to two',
+    one.tip === two.tip && one.slope === two.slope && one.mass === two.mass
+      && one.I === two.I,
+    `tip ${one.tip} vs ${two.tip}, slope ${one.slope} vs ${two.slope}`);
+  console.log(`    [margin] ${(two.us / one.us).toFixed(2)}x faster at `
+    + `${one.cells} cells against ${two.cells}`);
+  check('…and it is the shipped one, at a real saving',
+    one.cells < 0.7 * two.cells && MARGIN === 1,
+    `${one.cells} vs ${two.cells} cells, MARGIN = ${MARGIN}`);
 }
 
 console.log(failed ? `\n${failed} arm check(s) failed\n` : '\narm: all checks passed\n');

@@ -213,6 +213,22 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # produces something 25x WORSE than no correction on a move it never saw. Both
     # are the shapes a later simplification would reach for.
     if [ "${SUITE}" = "full" ]; then node test/flexisim/learnedff.test.mjs; fi
+    # THE CONTOURING SIDE, which is what the end application is. Three files and none
+    # of them measures a point-to-point move.
+    #   toolpath  the geometry and the feedrate profile: arc length, the corner rule,
+    #             and the acceleration ELLIPSE (spending the whole budget tangentially
+    #             into an arc that then needs it all centripetally is sqrt(2) over the
+    #             limit while every scalar check passes). No plant, milliseconds.
+    #   pathilc   iterative learning against a plant whose delay is known, so the
+    #             update's LEAD can be swept across it: no lead winds up, too much lead
+    #             winds up harder, and the optimum is interior. No plant, milliseconds.
+    #   contour   the two of them on the real arm -- the IK round trip, the
+    #             contour/lag split, and the pair of findings the Path tab is built on
+    #             (contour error FLOORS as the feedrate falls, and motor energy has an
+    #             interior minimum, so the two do not optimise together).
+    node test/flexisim/toolpath.test.mjs
+    node test/flexisim/pathilc.test.mjs
+    node test/flexisim/contour.test.mjs
   fi
 fi
 
