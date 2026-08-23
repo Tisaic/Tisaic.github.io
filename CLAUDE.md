@@ -3997,6 +3997,73 @@ one.
    measured that where the limit does not bind the constrained solve is the worse of the
    two. Nobody told it to switch; it is the verify round ranking them on the machine.
 
+   **BRICK 31 — THE LOCK IS THE LAST STEP NOW, ON ALL THREE TABS, AND ON ONE OF THEM IT
+   DID NOT EXIST.** Reported from the device after testing all three: the auto-tunes could
+   leave the soft sensor training until everything else is finished and lock it last. They
+   could, and doing it exposed something worse on the black box.
+
+   **THE OLD ORDER LOCKED IN THE MIDDLE.** Both the Move and Chain sequences ran
+   `… pick the best → train the sensor → LOCK → score the closed loop → select the best`,
+   so the sensor sat idle through the last two steps — time it could have been learning —
+   and the lock, the one decision on those tabs that cannot be revisited without the
+   tracker coming back, happened before the sequence had finished deciding anything. Worse:
+   when the selection landed on the closed loop, the sensor had been locked under a
+   DIFFERENT correction, which is exactly brick 23's defect surviving in the one case that
+   reordering was supposed to fix.
+
+   **WHAT BLOCKED THE OBVIOUS FIX WAS A GOOD REASON, AND IT NEEDED SPLITTING RATHER THAN
+   OVERRULING.** The closed loop was gated on the sensor being LOCKED, and the stated
+   reason is sound: an RLS fit handed the truth every sample tracks it far better than the
+   frozen weights that actually ship, so a score taken while it adapts flatters the loop.
+   But that reason is about the SCORE, and it was being enforced at the CONTROL gate —
+   which is what forced the lock to happen early. The two are now separated: whether the
+   loop may RUN on a model is a question about the model's quality (`ssReady()`: enough
+   pairs), and whether a NUMBER may be written down is a question about whether the tracker
+   is correcting it at that moment (`recordBoard()` refuses to record any row while the
+   sensor is adapting — the stronger form of the dither rule it already had).
+   With that split the sequence can HOLD the sensor — pause adaptation, which is reversible
+   — score the closed loop honestly against frozen weights, choose a winner, and only then
+   train again.
+
+   **THE NEW ORDER**, both tabs: `… pick the best → train the sensor (with the dither) →
+   score the closed loop (held) → select the best → TOP UP under whatever won, no dither →
+   lock`. The top-up has no dither because the deployed correction is the operating point
+   now, so the machine is already showing the model where it lives.
+   MEASURED END TO END on the Move tab: the sensor locks at step `lock it` after **6001
+   pairs against 4000 before**, under the correction that was actually selected, and the
+   board is byte-identical to the old order (open 1.03e-1 / ff 5.07e-2 / learned 2.27e-2 /
+   closed 8.15e-2) — so the reordering bought the sensor half as much training again and
+   changed none of the machine's own scores, which is the signature that it moved when the
+   lock happens and nothing else.
+
+   **AND A VISUALISATION BUG OF MINE MADE THE SAME TAB'S SENSOR LOOK USELESS.** Reported
+   from the device: the black box's estimate looks really bad on the 2D stage, "there is no
+   way that is how bad it is." There was not — the model scores nRMSE ~0.06 and the ring
+   was being drawn EIGHT ARM-LENGTHS from the tool.
+   THE CAUSE IS A FRAME I ASSUMED INSTEAD OF CHECKING. This module's truth is
+   `tipTrackingError(arm, ref)` — the tool against the PROGRAM — so `bb.est` already IS the
+   deviation the tool marker shows, and the two should be drawn from one expression. I
+   carried over the Move tab's convention, where `TipSensor`'s target genuinely is measured
+   against the ENCODER, and added the encoder's own offset on top; the constrained
+   correction then drives that offset to a fifth of the move, magnified ×30.
+   **THE CHART HAD IT RIGHT THE WHOLE TIME**, plotting the same two numbers on top of each
+   other — and two views of one quantity cannot disagree, which is what says the stage was
+   the wrong one rather than the model. The regression now measures the SEPARATION between
+   the two drawn markers as a fraction of the drawn arm: 0.4% after the fix, and it is a
+   statement about the picture that no functional check can make.
+
+   **AND THE BLACK BOX NEVER LOCKED AT ALL, WHICH CONTRADICTED ITS OWN FIRST PARAGRAPH.**
+   That tab's whole premise is stated at the top of it: a tracker **during commissioning
+   only**. The page passed the truth in on every sample and never called `lock()`, so the
+   sensor trained for as long as the page was left open and the estimate on screen was
+   being corrected by an instrument the machine would not have. It now trains through every
+   phase the module needs — the probe, the observation, the verify round — and a further
+   4000 pairs of the DEPLOYED correction, and then locks. That last count is taken FROM THE
+   MOMENT the correction starts running, which had to be measured into shape: a plain total
+   is already at 26000 pairs by the time commissioning ends, so it was met the instant
+   `correct` was reached and the last phase bought nothing. That is the same rule as the
+   other two tabs and it is the tab's own claim, finally true.
+
    NOT YET BUILT: the WGSL elastic kernel (see the measurement above); general
    block-sparse bricks for a CLOSED structure — a gantry or a machine frame, where
    members are not separable into per-link frames and the swept box is genuinely

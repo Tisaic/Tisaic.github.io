@@ -2109,6 +2109,22 @@ console.log(`  flexisim: after auto-tune — running ${post.ctl.active}, sensor 
   + `persistence ${post.ss.scores.persist.toFixed(4)}`);
 check('flexisim: the sensor is commissioned in the configuration auto-tune chose',
   post.ss.under === post.ctl.active, `${post.ss.under} vs ${post.ctl.active}`);
+// AND THE LOCK IS THE LAST THING THE SEQUENCE DOES. Reported from the device: the sensor
+// was locked in the middle and then sat idle through the closed-loop scoring and the
+// selection, which is time it could have been learning — and worse, when the selection
+// landed on the closed loop the sensor had been locked under a DIFFERENT correction,
+// which is the one case brick 23's reordering was supposed to fix and did not. The closed
+// loop is now scored against a sensor that is HELD rather than locked, the sensor then
+// trains again under whatever won, and only then does it lock.
+console.log(`  flexisim: sensor locked at step "${post.ss.lockedAt.step}" after `
+  + `${post.ss.lockedAt.trained} pairs, under ${post.ss.lockedAt.under}`);
+check('flexisim: …and the LOCK is the last step of the sequence, not one in the middle',
+  post.ss.lockedAt && post.ss.lockedAt.step === 'lock it', JSON.stringify(post.ss.lockedAt));
+check('flexisim: …so the sensor keeps learning past the training target and tops up',
+  post.ss.lockedAt.already || post.ss.lockedAt.trained > 5000,
+  `${post.ss.lockedAt.trained} pairs`);
+check('flexisim: …and it is locked, so the tracker really has gone away',
+  post.ss.mode === 'estimating' && post.ss.frozen, post.ss.mode);
 check('flexisim: …so the readout the user is left looking at is actually good',
   post.ss.scores.estimate < 0.25 * post.ss.scores.naive,
   `${post.ss.scores.estimate} vs naive ${post.ss.scores.naive}`);
@@ -2444,6 +2460,13 @@ if (FULL) {
   const kP2 = (await fx.evaluate(() => window.__flxChainDbg())).k;
   await fx.waitForFunction((t) => window.__flxChainDbg().k > t, kP2 + 20000, { timeout: 300000 });
   const p2 = await fx.evaluate(() => window.__flxChainDbg());
+  console.log(`  flexisim/chain: sensors locked at step "${p2.sensor.lockedAt.step}" after `
+    + `${p2.sensor.lockedAt.trained} pairs, under ${p2.sensor.lockedAt.under}`);
+  check('flexisim/chain: the LOCK is the last step of the sequence, not one in the middle',
+    p2.sensor.lockedAt && p2.sensor.lockedAt.step === 'lock them', JSON.stringify(p2.sensor.lockedAt));
+  check('flexisim/chain: …so the sensors keep learning past the target and top up',
+    p2.sensor.lockedAt.already || p2.sensor.lockedAt.trained > 5000,
+    `${p2.sensor.lockedAt.trained} pairs`);
   console.log(`  flexisim/chain: after auto-tune — running ${p2.ctl.active}, sensors under `
     + `${p2.ssUnder}, whole arm ${p2.sensor.scores.whole.toFixed(4)} vs naive `
     + `${p2.sensor.scores.naive.toFixed(4)}`);
@@ -2579,6 +2602,16 @@ if (FULL) {
     bbd.drawn && bbd.drawn.x >= 0 && bbd.drawn.x <= bbd.drawn.w
     && bbd.drawn.y >= 0 && bbd.drawn.y <= bbd.drawn.h,
     JSON.stringify(bbd.drawn));
+  // …AND THE ESTIMATE IS DRAWN ON THE TOOL, which is the picture's whole claim about the
+  // soft sensor and is a statement about GEOMETRY that no functional check can make.
+  // Reported from the device as the estimate looking "really bad": the ring carried the
+  // encoder's own offset, which this tab's correction deliberately drives to a fifth of
+  // the move, so a model scoring nRMSE ~0.06 was drawn eight arm-lengths from the tool.
+  // The CHART had the same two numbers on top of each other the whole time — two views of
+  // one quantity cannot disagree, and that is what said the stage was the wrong one.
+  check('flexisim/blackbox: …and the estimate is drawn ON the tool, as its score says',
+    bbd.drawnEst && bbd.drawnEst.sep < 0.15,
+    `${bbd.drawnEst && bbd.drawnEst.sep} of an arm length apart`);
   // THE CORRECTION'S SHARE OF THE DRIVE IS WHAT IS LEFT AFTER THE MOVE, AT 80% OF IT. The
   // whole rating is a number the drive cannot deliver while it is also running the
   // trajectory, and this page measured that before it fixed it: at a 6x rating the
@@ -2600,6 +2633,13 @@ if (FULL) {
       return new BlackBox({ ref: () => 0, sampleEvery: 1, correctionLimit: 0 })
         .correctionLimit === 0;
     }));
+
+  // THE SCREENSHOT IS TAKEN HERE, WHILE THE TAB IS STILL COMMISSIONED. The jerk-limit
+  // check below deliberately rebuilds the page, and a shot taken after it shows an
+  // uncommissioned tab a few hundred steps old — no correction, no estimate, nothing the
+  // visual review exists to look at. The artefact has to show the state the checks were
+  // about.
+  await fx.screenshot({ path: join(SHOTS, '07-flexisim-blackbox.png') });
 
   // THE JERK LIMIT IS A DIFFERENT COMMAND, so it throws the commissioning away. A map
   // fitted from a command window to what the machine does is a map of a command that no
@@ -2632,7 +2672,6 @@ if (FULL) {
     return { ok: lit > 20, lit };
   });
   check('flexisim/blackbox: the stage is painted', paint3.ok, JSON.stringify(paint3));
-  await fx.screenshot({ path: join(SHOTS, '07-flexisim-blackbox.png') });
 }
 
 // ---- EVERY PLOTLY CONTAINER NEEDS ITS HEIGHT FROM CSS, and one that does not STROBES.

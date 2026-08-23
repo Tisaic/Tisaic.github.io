@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:235,built:"2026-08-23T01:52:13Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:236,built:"2026-08-23T03:43:58Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -1087,6 +1087,25 @@ function learnStep(budget) {
 // exactly what the comparison is about.
 let closedOff = 0;               // the outer loop's current pre-distortion, rad
 
+/**
+ * IS THE ESTIMATE WORTH CLOSING A LOOP ON? Only one question: has the model seen enough of
+ * the machine to mean anything.
+ *
+ * IT USED TO ASK A SECOND ONE — is the sensor LOCKED — and that conflated two separate
+ * concerns. Whether the loop may RUN on a model is about the model's quality; whether a
+ * SCORE taken while it runs is honest is about whether the tracker is correcting it at the
+ * time. Enforcing the second at the control gate means the loop cannot be run at all while
+ * the sensor learns, which is precisely the thing that forced the lock to happen early. So
+ * the honesty is enforced where it belongs, at the one place a number is written down:
+ * `recordBoard()` refuses to record ANY row while the sensor is adapting.
+ */
+const SS_MIN_PAIRS = 400;          // "minimally ready", the same bar the manual gate uses
+const SS_TOPUP = 2000;             // further pairs under the correction finally chosen
+function ssReady() {
+  return !!ss && (ss.mode === 'estimating'
+    || (ss.mode === 'training' && ss.trained >= SS_MIN_PAIRS));
+}
+
 function ctlMode() {
   const v = $('ctl-mode').value;
   // The closed loop is only offered against a LOCKED sensor. While it is training
@@ -1094,7 +1113,7 @@ function ctlMode() {
   // closing it on the tracker -- a commissioning instrument the machine will not
   // have. The option disables itself rather than quietly using a model still
   // being corrected.
-  if (v === 'closed' && !(ss && ss.mode === 'estimating')) return 'open';
+  if (v === 'closed' && !ssReady()) return 'open';
   if (v === 'learned' && !(ff && ff.ready)) return 'open';
   if (v !== 'open' && !comp) return 'open';
   return v;
@@ -1169,6 +1188,7 @@ function closedUpdate(est) {
 // at correcting an error removes the evidence of it, so the machine has to be
 // driven somewhere it would not otherwise go in order to learn what it needs.
 let ditherAmp = 0;
+let ssLockedAt = null;
 
 function ditherNow() {
   if (!ssTraining || !ditherAmp || !prof) return 0;
@@ -1255,7 +1275,10 @@ function recordBoard() {
   // learned filter's row went 2.49e-2 -> 1.24e-1 during training, and auto-tune then
   // read its own table and picked the runner-up. Exactly the anti-slosh tab's rule
   // that a health-check probe is the one move never scored as production.
-  if (ssTraining && ditherAmp) return;
+  // …AND THE STRONGER FORM OF THE SAME RULE: no row is written while the sensor is
+  // ADAPTING AT ALL, dither or not. A row taken from a machine whose sensor is being
+  // handed the truth every sample is a row about the tracker.
+  if (ssTraining) return;
   board[ctlMode()] = { bias: w.bias, sd: w.sd, rms: w.rms, key: boardKey(), k };
   renderBoard();
 }
@@ -1333,12 +1356,12 @@ function startCompare(opts = {}) {
   const { modes = null, reset = true } = opts;
   let seq;
   if (modes) {
-    seq = modes.filter((m) => (m !== 'closed' || (ss && ss.mode === 'estimating'))
+    seq = modes.filter((m) => (m !== 'closed' || ssReady())
       && (m !== 'learned' || (ff && ff.ready)));
   } else {
     seq = ['open', 'ff'];
     if (ff && ff.ready) seq.push('learned');
-    if (ss && ss.mode === 'estimating') seq.push('closed');
+    if (ssReady()) seq.push('closed');
   }
   if (!seq.length) return;
   if (reset) board = {};
@@ -1367,10 +1390,11 @@ function ctlHint() {
       + `. ${cmp.i + 1} of ${cmp.seq.length}.`;
     return;
   }
-  if (want === 'closed' && !(ss && ss.mode === 'estimating')) {
-    el.innerHTML = '<b>The closed loop needs a locked sensor.</b> While it is training it is being '
-      + 'told the answer by the tracker, and closing a loop on that is closing it on an instrument '
-      + 'the machine will not have. Train it below, then lock — running open loop until then.';
+  if (want === 'closed' && !ssReady()) {
+    el.innerHTML = `<b>The closed loop needs a sensor with at least ${SS_MIN_PAIRS} trained `
+      + 'pairs</b>, because it drives the machine from the estimate. While the tracker is still '
+      + 'correcting the model every sample no SCORE is recorded — a row taken then would be a '
+      + 'row about the tracker — so train it below, then pause or lock to measure it.';
     return;
   }
   if (want === 'closed') {
@@ -1604,7 +1628,7 @@ function ssTick(arm, tauCmd) {
   // counted in samples, so an update once per frame would make the loop's bandwidth
   // a function of the steps-per-frame slider -- a viewing control setting a control
   // gain, which is the defect this project keeps finding in new places.
-  if ($('ctl-mode').value === 'closed' && ss.mode === 'estimating') closedUpdate(est);
+  if ($('ctl-mode').value === 'closed' && ssReady()) closedUpdate(est);
   // The lifecycle: calibrating -> training -> estimating/locked. Training only
   // happens while the operator has asked for it, which is what makes "locked" a
   // decision rather than a timeout.
@@ -2200,10 +2224,20 @@ let auto = null;
 // one exists; it is therefore scored against the incumbent afterwards, with the sensor
 // commissioned one mode over, which is exactly the case the commissioning dither is
 // for. On both plants measured here (3) loses to (4) anyway.
+// THE LOCK IS THE LAST THING THAT HAPPENS, and it is the one decision on this tab that
+// cannot be revisited without the tracker coming back. Everything the sequence can do
+// while the sensor is still learning, it now does: the closed loop is scored against a
+// sensor that is merely HELD -- adaptation paused, so the score is of a model that is not
+// being told the answer -- and only after the winner is chosen does the sensor train again
+// under THAT correction and then lock. The old order locked immediately after training and
+// left the sensor idle through the closed-loop scoring and the selection, which is time it
+// could have been learning; worse, when the selection landed on the closed loop the sensor
+// had been locked under a DIFFERENT correction, which is brick 23's defect surviving in
+// the one case the reordering was supposed to fix.
 const AUTO_STEPS = [
   'commission', 'shaping', 'learn the dynamic filter', 'compare the model corrections',
-  'pick the best of them', 'train the soft sensor', 'lock it', 'score the closed loop',
-  'select the best',
+  'pick the best of them', 'train the soft sensor', 'score the closed loop',
+  'select the best', 'top up the sensor', 'lock it',
 ];
 
 function startAuto() {
@@ -2214,6 +2248,7 @@ function startAuto() {
   // place forever, which is the one decision on this tab that cannot be revisited
   // without the tracker coming back.
   auto = { step: 0, note: '', trainTarget: 4000 };
+  ssLockedAt = null;      // a previous run's record must not be read as this one's
   running = true;
   setBadge('auto-tune: working through every step', 'warn');
   syncMove();
@@ -2307,33 +2342,61 @@ function autoTick() {
       : `training against the tracker under ${MODE_LABEL[ctlMode()]} — `
         + `${ss.trained}/${auto.trainTarget} pairs`;
     if (ss.trained >= auto.trainTarget) done();
-  } else if (st === 'lock it') {
-    if (ss.mode === 'training') lockSensor();
-    done();
   } else if (st === 'score the closed loop') {
     // THE ONE CORRECTION THAT NEEDS THE SENSOR, so it could not be in the first
     // comparison. It is scored on its own and only replaces the incumbent if it
     // measures better -- which on this plant it does not.
-    if (!(ss && ss.mode === 'estimating')) { done(); return; }
+    //
+    // HELD, NOT LOCKED. The score has to be of a model that is NOT being told the
+    // answer -- an RLS fit handed the truth every sample tracks it far better than the
+    // frozen weights that would actually ship, so scoring an adapting sensor flatters
+    // the loop that runs on it. Pausing adaptation gives exactly that guarantee and
+    // gives up nothing, because the lock is permanent and this is not.
+    if (!ssReady()) { done(); return; }
+    if (ssTraining) { pauseTraining(); ditherAmp = 0; return; }
     if (!cmp && !auto.closedStarted) {
       auto.closedStarted = true; startCompare({ modes: ['closed'], reset: false });
     }
     else if (!cmp) done();
     auto.note = cmp ? `scoring ${MODE_LABEL.closed}` : '';
+  } else if (st === 'top up the sensor') {
+    // …AND THE LAST TRAINING THE SENSOR GETS IS UNDER THE CORRECTION THAT WAS ACTUALLY
+    // CHOSEN. If the selection landed somewhere else than the mode training began under,
+    // this is not a bonus, it is the requirement: the correction pre-distorts the
+    // setpoint the encoder follows, and the encoder is a model input. NO DITHER here --
+    // the deployed correction is the operating point now, so the machine is already
+    // showing the model where it lives, and a dither would only make production worse.
+    if (!ss || ss.mode === 'estimating') { done(); return; }
+    if (ss.trained >= auto.trainTarget + SS_TOPUP) { done(); return; }
+    if (!ssTraining) { ssTraining = true; ditherAmp = 0; ssUnder = ctlMode(); syncMove(); }
+    auto.note = `topping the sensor up under ${MODE_LABEL[ctlMode()]} — `
+      + `${ss.trained}/${auto.trainTarget + SS_TOPUP} pairs`;
+  } else if (st === 'lock it') {
+    if (ss && ss.mode === 'training') lockSensor();
+    else if (ss && ss.mode === 'estimating' && !ssLockedAt) {
+      // Already locked under this very correction, so the sequence trained nothing and
+      // there is nothing to lock -- but the sequence still ENDED here, which is what the
+      // record is about.
+      ssLockedAt = { trained: ss.trained, under: ssUnder, step: 'lock it', already: true };
+    }
+    done();
   } else if (st === 'select the best') {
     const best = bestScored();
     if (!best) { stopAuto('auto-tune: nothing scored', 'bad'); return; }
     setCtlMode(best);
+    done();
+    return;
+  }
+  if (auto && auto.step >= AUTO_STEPS.length) {
+    const best = ctlMode();
     const r = board[best];
     const keys = ['open', 'ff', 'closed', 'learned'].filter((m) => board[m]);
     stopAuto(`auto-tune done — ${MODE_LABEL[best]}${$('shape-on').checked ? ' + shaping' : ''}`
-      + `, rms ${r.rms.toExponential(2)}`, 'good');
+      + (r ? `, rms ${r.rms.toExponential(2)}` : ''), 'good');
     console.log(`[flexisim] auto-tune selected ${best}: `
       + keys.map((m) => `${m} ${board[m].rms.toExponential(2)}`).join(' / ')
-      + ` | sensor commissioned under ${ssUnder}`);
-    return;
+      + ` | sensor locked under ${ssUnder} after ${ss ? ss.trained : 0} pairs`);
   }
-  if (auto && auto.step >= AUTO_STEPS.length) stopAuto('auto-tune done', 'good');
 }
 
 // ---- training and locking, factored out so Auto and the buttons share ONE path.
@@ -2375,6 +2438,10 @@ function lockSensor() {
   if (!ss || ss.mode !== 'training') return;
   ss.lock();
   ssTraining = false;
+  // WHEN, AND AFTER HOW MUCH, so a regression can pin that this really is the last thing
+  // the sequence does rather than something it does in the middle and then carries on past.
+  ssLockedAt = { trained: ss.trained, under: ssUnder,
+    step: auto ? AUTO_STEPS[auto.step] : 'by hand' };
   // THE METER RESTARTS AT THE LOCK. A score spanning it is a blend of the model
   // that was still being told the answer and the one that is not.
   ssScoreFrom = ssRec.length;
@@ -2869,9 +2936,15 @@ const shoulderView = { at: (k) => refs2At(k)[0] };
 // radius, so correcting a tool offset e costs only e/R there against e/L2 at the
 // elbow. The tool radius folds with the elbow, so the correction is divided by the
 // radius the arm actually has right now, not by a constant.
+/** The chain's ssReady(): enough pairs to close a loop on. See the Move tab's. */
+function cs2Ready() {
+  return !!csWhole && (csWhole.mode === 'estimating'
+    || (csWhole.mode === 'training' && csWhole.trained >= SS_MIN_PAIRS));
+}
+
 function ctl2Mode() {
   const v = $('ctl2-mode').value;
-  if (v === 'closed' && !(csWhole && csWhole.mode === 'estimating')) return 'open';
+  if (v === 'closed' && !cs2Ready()) return 'open';
   if (v === 'learned' && !(ff2 && ff2.ready)) return 'open';
   return v;
 }
@@ -2901,6 +2974,7 @@ function toolTrackingError(r, est = null) {
 
 // The Move tab's commissioning dither, for the same reason and sized the same way.
 let ditherAmp2 = 0;
+let csLockedAt = null;
 
 function dither2Now() {
   if (!csTraining || !ditherAmp2 || !prof2) return 0;
@@ -3188,7 +3262,7 @@ function csTick(tau) {
     return;
   }
   const truth = arm2.tipError().total;
-  if ($('ctl2-mode').value === 'closed' && csWhole.mode === 'estimating') {
+  if ($('ctl2-mode').value === 'closed' && cs2Ready()) {
     // The estimated TOOL against the program, following error included -- see
     // closedUpdate() on the Move tab. Here that term is most of the error.
     const tool = toolTrackingError(refs2(), a);
@@ -3283,9 +3357,13 @@ let auto2 = null;
 // Move tab's AUTO_STEPS for the measurement that forced this order -- the same
 // sequence there took a locked model from 0.032 to 1.225 by training it under one
 // correction and then selecting another.
+// THE LOCK IS THE LAST THING THAT HAPPENS, for the reasons the Move tab's AUTO_STEPS
+// gives: the closed loop is scored against sensors that are HELD rather than locked, and
+// the last training they get is under the correction that was actually chosen.
 const AUTO2_STEPS = ['measure the bending mode', 'shape the command',
   'learn the dynamic filter', 'compare the model corrections', 'pick the best of them',
-  'train both tool sensors', 'lock them', 'score the closed loop', 'select the best'];
+  'train both tool sensors', 'score the closed loop', 'select the best',
+  'top up the sensors', 'lock them'];
 
 function startAuto2() {
   if (!arm2 || busy2) return;
@@ -3294,6 +3372,7 @@ function startAuto2() {
   // move periods of a reference whose amplitude beats at the golden ratio, so it has
   // not seen most of the amplitudes it will be asked about.
   auto2 = { step: 0, note: '', trainTarget: 4000 };
+  csLockedAt = null;
   run2 = true;
   $('state2-badge').textContent = 'auto-tune: working through every step';
   $('state2-badge').className = 'badge warn';
@@ -3357,11 +3436,12 @@ function auto2Tick() {
     auto2.note = csWhole.mode === 'calibrating' ? 'calibrating'
       : `${csWhole.trained}/${auto2.trainTarget} pairs under ${MODE_LABEL[ctl2Mode()]}`;
     if (csWhole.trained >= auto2.trainTarget) done();
-  } else if (st === 'lock them') {
-    if (csWhole.mode === 'training') lockSensors2();
-    done();
   } else if (st === 'score the closed loop') {
-    if (!(csWhole && csWhole.mode === 'estimating')) { done(); return; }
+    // HELD, NOT LOCKED — see the Move tab's autoTick(). A model handed the truth every
+    // sample tracks it better than the frozen weights that ship, so the loop must be
+    // scored with adaptation paused.
+    if (!cs2Ready()) { done(); return; }
+    if (csTraining) { csTraining = false; ditherAmp2 = 0; syncChain(); return; }
     if (!cmp2 && !auto2.closedStarted) {
       auto2.closedStarted = true; startCompare2({ modes: ['closed'], reset: false });
     }
@@ -3371,14 +3451,32 @@ function auto2Tick() {
     const best = bestScored2();
     if (!best) { stopAuto2('auto-tune: nothing scored'); return; }
     setCtl2Mode(best);
+    done();
+  } else if (st === 'top up the sensors') {
+    // The last training they get is under the correction that was actually chosen, with
+    // NO dither: the deployed correction is the operating point now.
+    if (!csWhole || csWhole.mode === 'estimating') { done(); return; }
+    if (csWhole.trained >= auto2.trainTarget + SS_TOPUP) { done(); return; }
+    if (!csTraining) { csTraining = true; ditherAmp2 = 0; csUnder = ctl2Mode(); syncChain(); }
+    auto2.note = `topping up under ${MODE_LABEL[ctl2Mode()]} — `
+      + `${csWhole.trained}/${auto2.trainTarget + SS_TOPUP} pairs`;
+  } else if (st === 'lock them') {
+    if (csWhole && csWhole.mode === 'training') lockSensors2();
+    else if (csWhole && csWhole.mode === 'estimating' && !csLockedAt) {
+      csLockedAt = { trained: csWhole.trained, under: csUnder, step: 'lock them',
+        already: true };
+    }
+    done();
+  }
+  if (auto2 && auto2.step >= AUTO2_STEPS.length) {
+    const best = ctl2Mode();
     const keys = ['open', 'ff', 'learned', 'closed'].filter((m) => board2[m]);
-    stopAuto2(`auto-tune done — ${MODE_LABEL[best]}, rms ${board2[best].rms.toExponential(2)}`);
+    stopAuto2(`auto-tune done — ${MODE_LABEL[best]}`
+      + (board2[best] ? `, rms ${board2[best].rms.toExponential(2)}` : ''));
     console.log(`[flexisim] chain auto-tune selected ${best}: `
       + keys.map((m) => `${m} ${board2[m].rms.toExponential(2)}`).join(' / ')
-      + ` | sensors commissioned under ${csUnder}`);
-    return;
+      + ` | sensors locked under ${csUnder} after ${csWhole ? csWhole.trained : 0} pairs`);
   }
-  if (auto2 && auto2.step >= AUTO2_STEPS.length) stopAuto2('auto-tune done');
 }
 
 function beginTraining2() {
@@ -3399,6 +3497,9 @@ function beginTraining2() {
 function lockSensors2() {
   if (!csWhole || csWhole.mode !== 'training') return;
   csWhole.lock(); csElbow.lock(); csTraining = false;
+  // WHEN, AND AFTER HOW MUCH — see lockSensor() on the Move tab.
+  csLockedAt = { trained: csWhole.trained, under: csUnder,
+    step: auto2 ? AUTO2_STEPS[auto2.step] : 'by hand' };
   // THE METER RESTARTS AT THE LOCK: a score spanning it is a blend of the model
   // that was still being told the answer and the one that is not.
   csScoreFrom = csRec.length;
@@ -3418,12 +3519,12 @@ function startCompare2(opts = {}) {
   const { modes = null, reset = true } = opts;
   let seq;
   if (modes) {
-    seq = modes.filter((m) => (m !== 'closed' || (csWhole && csWhole.mode === 'estimating'))
+    seq = modes.filter((m) => (m !== 'closed' || cs2Ready())
       && (m !== 'learned' || (ff2 && ff2.ready)));
   } else {
     seq = ['open', 'ff'];
     if (ff2 && ff2.ready) seq.push('learned');
-    if (csWhole && csWhole.mode === 'estimating') seq.push('closed');
+    if (cs2Ready()) seq.push('closed');
   }
   if (!seq.length) return;
   if (reset) board2 = {};
@@ -3530,7 +3631,7 @@ function renderBoard2() {
 function recordBoard2() {
   const w = win2Stats();
   if (!w || !w.full) return;
-  if (csTraining && ditherAmp2) return;      // see recordBoard()
+  if (csTraining) return;                    // see recordBoard(): never while adapting
   board2[ctl2Mode()] = { bias: w.bias, sd: w.sd, rms: w.rms, k: k2 };
   renderBoard2();
 }
@@ -4011,8 +4112,8 @@ $('s-mag2').addEventListener('input', () => { $('v-mag2').textContent = $('s-mag
 // because the black box has to be able to hold the machine STILL for its step test, which
 // is not something tab (1)'s loop does.
 let bbArm = null, bbServo = null, bbProf = null, bb = null, bbRun = false, bbK = 0;
-let bbLimit = 0, bbHeadroom = null;
-let bbDrawn = null;
+let bbLimit = 0, bbHeadroom = null, bbLockAt = null;
+let bbDrawn = null, bbDrawnEst = null;
 let bbBusy = false, bbChartOn = false, bbHold = false;
 const bbHist = { t: [], truth: [], est: [], u: [] };
 let bbBase = null, bbScore = null;
@@ -4020,6 +4121,8 @@ let bbBase = null, bbScore = null;
 // 0 is a bare trapezoid; 1800 is a move whose acceleration ramps over six times its own
 // acceleration phase, i.e. barely a trapezoid at all any more.
 const BB_JERK = [0, 30, 60, 120, 240, 450, 900, 1800];
+// Pairs of the DEPLOYED correction the sensor gets before the tracker is taken away.
+const BB_TRAIN = 4000;
 const BB_PHI = (1 + Math.sqrt(5)) / 2;
 
 /** The command, modulated so it never repeats -- see buildBB(). */
@@ -4122,6 +4225,7 @@ async function buildBB() {
   // probe -- where the PRBS is being deliberately injected, so the baseline carried the
   // probe's own disturbance and the improvement was understated.
   bbK = 0; bb = null; bbBase = null; bbScore = null; bbRun = true; bbHold = false;
+  bbLockAt = null;
   for (const a of Object.values(bbHist)) a.length = 0;
   $('state3-badge').textContent = 'running uncommissioned — press Commission';
   $('state3-badge').className = 'badge';
@@ -4184,6 +4288,27 @@ function stepBB(n) {
       if (!atRest && bb.ready) {
         (bbScore ||= []).push(e);
         if (bbScore.length > 1200) bbScore.shift();
+      }
+      // …AND THE TRACKER GOES AWAY WHEN COMMISSIONING IS OVER, which this tab claims in
+      // its own first paragraph and did not do: the sensor trained for as long as the page
+      // was left open, so the estimate on screen was being corrected by an instrument the
+      // machine would not have. It trains through every phase the module needs — the
+      // probe, the observation, the verify round, and a further BB_TRAIN pairs of the
+      // deployed correction so the last thing it learns is the machine as it will run —
+      // and then it LOCKS, which is the last step of commissioning and is irreversible.
+      if (bb.phase === 'correct') {
+        // COUNTED FROM WHEN THE DEPLOYED CORRECTION STARTS RUNNING, not from the
+        // beginning: the sensor has already trained through the probe, the observation
+        // and the verify round by the time commissioning ends, so a plain total is met
+        // the instant `correct` is reached and the last phase buys nothing. What the
+        // other two tabs call a top-up is this: a stretch under the machine as it will
+        // actually run, and only then is the tracker taken away.
+        if (bbLockAt == null) bbLockAt = bb.trained + BB_TRAIN;
+        if (bb.trained >= bbLockAt) {
+          bb.lock();
+          console.log(`[flexisim] black box soft sensor LOCKED after ${bb.trained} pairs, `
+            + `${BB_TRAIN} of them under the deployed correction`);
+        }
       }
       bbHist.t.push(bbK); bbHist.truth.push(e);
       bbHist.est.push(bb.est == null ? null : bb.est); bbHist.u.push(u * bbArm.Larm);
@@ -4389,12 +4514,31 @@ function drawBB() {
   // is the same lesson the console Close button taught this project.
   bbDrawn = { x: TX, y: TY, w, h };
   if (bb && bb.est != null) {
-    // …and the estimate is the tool's error as the model sees it, so it belongs in the
-    // tool's frame: the encoder's own offset plus what the model adds to it.
-    const [EX, EY] = world(L, mag * ((enc - r.theta) * L + bb.est));
+    // THE ESTIMATE IS OF THE SAME QUANTITY THE TOOL MARKER SHOWS, so it is drawn in
+    // exactly the same place with no offset of any kind: this module's truth is
+    // `tipTrackingError(arm, r.theta)` -- the tool against the PROGRAM -- so `bb.est`
+    // already IS the drawn deviation, and the two markers coincide when the model is
+    // right. They must be computed from one expression for that reason.
+    //
+    // A PREVIOUS VERSION ADDED THE ENCODER'S OWN OFFSET HERE, carried over from the Move
+    // tab where the sensor's target really is measured against the encoder. On this tab
+    // it is not, and the correction deliberately drives the encoder a long way from the
+    // program -- up to a fifth of the move -- so the ring was thrown right off the tool,
+    // making a soft sensor that scores nRMSE ~0.06 look useless. THE CHART HAD IT RIGHT
+    // THE WHOLE TIME, plotting the same two numbers on top of each other, which is what
+    // says the stage was wrong rather than the model: two views of one quantity cannot
+    // disagree.
+    const [EX, EY] = world(L, mag * bb.est);
     g.strokeStyle = '#22d3ee'; g.lineWidth = 2;
     g.beginPath(); g.arc(EX, EY, 7, 0, 7); g.stroke();
-  }
+    // HOW FAR APART THE TWO MARKERS ARE DRAWN, as a fraction of the drawn arm — the one
+    // number a regression can use to catch this class of defect, because it is a
+    // statement about the PICTURE rather than about the model. A sensor scoring ~0.06
+    // must put its ring on the tool; the version this replaces put it eight arm-lengths
+    // away and every functional check stayed green.
+    bbDrawnEst = { x: EX, y: EY,
+      sep: Math.hypot(EX - TX, EY - TY) / Math.max(1e-9, L * scale) };
+  } else bbDrawnEst = null;
   g.font = '11px ui-monospace,monospace';
   g.fillStyle = '#64748b'; g.textAlign = 'right';
   g.fillText(`elastic deviation ×${mag} · command at true scale`, w - 10, h - 16);
@@ -4492,7 +4636,7 @@ $('bb-reset').addEventListener('click', async () => {
 window.__flxBBDbg = () => (bbArm ? {
   k: bbK, running: bbRun, Larm: bbArm.Larm,
   ...(bb ? bb.status() : { phase: 'idle' }),
-  base: bbRms(bbBase), scored: bbRms(bbScore), drawn: bbDrawn,
+  base: bbRms(bbBase), scored: bbRms(bbScore), drawn: bbDrawn, drawnEst: bbDrawnEst,
   headroom: bbHeadroom, jerk: BB_JERK[+$('s-jerk3').value], period: bbProf.period,
   ratio: bbRms(bbBase) && bbRms(bbScore) ? bbRms(bbBase) / bbRms(bbScore) : null,
   cells: bbArm.link.lattice.cellCount,
@@ -4527,7 +4671,7 @@ window.__flxChainDbg = () => (arm2 ? {
     period: prof2 && prof2.period },
   cells: arm2.l1.lattice.cellCount + arm2.l2.lattice.cellCount,
   sensor: csWhole ? { ...csWhole.status(), training: csTraining, samples: csRec.length,
-    scores: csScores() } : null,
+    lockedAt: csLockedAt, scores: csScores() } : null,
 } : null);
 
 // --------------------------------------------------------------- verify
@@ -4665,7 +4809,7 @@ window.__flxDbg = () => ({
     comparing: cmp ? { ...cmp } : null },
   board, shaped: $('shape-on').checked, flipped: $('flip-sign').checked,
   ss: ss ? { ...ss.status(), training: ssTraining, samples: ssRec.length, under: ssUnder,
-    scores: ssScores() } : null,
+    lockedAt: ssLockedAt, scores: ssScores() } : null,
 });
 
 busy = true;
