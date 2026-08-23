@@ -2579,6 +2579,50 @@ if (FULL) {
     bbd.drawn && bbd.drawn.x >= 0 && bbd.drawn.x <= bbd.drawn.w
     && bbd.drawn.y >= 0 && bbd.drawn.y <= bbd.drawn.h,
     JSON.stringify(bbd.drawn));
+  // THE CORRECTION'S SHARE OF THE DRIVE IS WHAT IS LEFT AFTER THE MOVE, AT 80% OF IT. The
+  // whole rating is a number the drive cannot deliver while it is also running the
+  // trajectory, and this page measured that before it fixed it: at a 6x rating the
+  // correction reached 0.78 of the limit it had been handed and the drive was still
+  // limited on 16% of steps.
+  check('flexisim/blackbox: the correction is limited to 80% of what the drive has SPARE',
+    bbd.headroom && bbd.headroom.peak > 0 && bbd.headroom.spare > 0
+    && bbd.headroom.spare === bbd.headroom.tauMax - bbd.headroom.peak
+    && Math.abs(bbd.headroom.offset
+      / (0.8 * bbd.headroom.spare / bbd.headroom.kp) - 1) < 1e-12
+    && bbd.headroom.offset < bbd.headroom.whole,
+    JSON.stringify(bbd.headroom));
+  // …AND ZERO MEANS ZERO. The sentinel for "no limit supplied" used to be 0, which is also
+  // the honest answer when the trajectory is already using the whole actuator — so a host
+  // that meant "nothing left" was read as meaning "unlimited", the exact opposite.
+  check('flexisim/blackbox: …and a supplied limit of zero is a LIMIT, not an absence',
+    await fx.evaluate(async () => {
+      const { BlackBox } = await import('/lib/blackbox/blackbox.js');
+      return new BlackBox({ ref: () => 0, sampleEvery: 1, correctionLimit: 0 })
+        .correctionLimit === 0;
+    }));
+
+  // THE JERK LIMIT IS A DIFFERENT COMMAND, so it throws the commissioning away. A map
+  // fitted from a command window to what the machine does is a map of a command that no
+  // longer exists.
+  const beforeJerk = { period: bbd.period, jerk: bbd.jerk };
+  await fx.evaluate(() => {
+    const el = document.getElementById('s-jerk3');
+    el.value = String(+el.value === 7 ? 0 : 7);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await fx.waitForFunction(() => window.__flxBBDbg() && window.__flxBBDbg().phase === 'idle',
+    null, { timeout: 120000 });
+  const afterJerk = await fx.evaluate(() => window.__flxBBDbg());
+  console.log(`  flexisim/blackbox: jerk ${beforeJerk.jerk} → ${afterJerk.jerk} steps, move `
+    + `period ${beforeJerk.period} → ${afterJerk.period}, correction limit `
+    + `${bbd.headroom.offset.toExponential(3)} → ${afterJerk.headroom.offset.toExponential(3)}`);
+  check('flexisim/blackbox: the jerk limit really changes the command it is given',
+    afterJerk.jerk !== beforeJerk.jerk && afterJerk.period !== beforeJerk.period,
+    `${JSON.stringify(beforeJerk)} → ${JSON.stringify({ period: afterJerk.period, jerk: afterJerk.jerk })}`);
+  check('flexisim/blackbox: …and throws the commissioning away, because the map was of the '
+    + 'old one', afterJerk.phase === 'idle' && afterJerk.design == null,
+    `${afterJerk.phase}`);
   const paint3 = await fx.evaluate(() => {
     const c = document.getElementById('cv3');
     if (!c.width || !c.height) return { ok: false };

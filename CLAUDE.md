@@ -3916,6 +3916,87 @@ one.
    The arm's deployed controller is 6592 MAC/update — **132 MAC/cycle spread over the 50
    cycles between updates, 5.3% of the 2500-MAC budget**, which is 5% of a 1 ms cycle.
 
+   **BRICK 30 — THE CORRECTION GETS 80% OF WHAT IS LEFT, AND THE JERK LIMIT IS A CONTROL
+   BECAUSE THE TWO MECHANISMS TRADE.** Asked for the limits to be 80% of the motor's actual
+   limit, and for a jerk-limit filter so the difference between a bare trapezoid and
+   properly jerk-limited motion can be seen.
+
+   **80% OF WHAT IS LEFT, NOT 80% OF THE DRIVE**, and that closes the item brick 29 left
+   open. `tauMax/kp` is the setpoint offset a drive could follow if it had nothing else to
+   do, and it never has nothing else to do — the trajectory's own feedforward is already
+   spending part of the actuator. Handing the black box the whole rating over-states its
+   share, which this page had already measured rather than argued: at a 6× rating the
+   correction reached only 0.78 of the limit it was given and the drive was STILL limited
+   on 16% of steps. The host now computes the peak feedforward over one period of the
+   command it is about to hand over, and the correction gets **80% of the residual**. At
+   the shipped settings the move asks for 34% of the drive, so the correction is capped at
+   0.8 × 66% of it — and both bounds still apply, the sanity cap on the command's own swing
+   and this one, with the smaller winning. It is the HOST's arithmetic, not the module's:
+   the black box is handed a number and never learns where it came from.
+
+   **THE JERK LIMIT IS A BOXCAR CONVOLVED INTO THE ACCELERATION**, i.e. the same object as
+   an input shaper, so it composes with one — and changing it THROWS THE COMMISSIONING
+   AWAY, because the disturbance map is a fit from the command window to what the machine
+   does and a different jerk limit is a different command. The ladder runs 0 (a bare
+   trapezoid) to 1800 steps, six times the acceleration phase.
+
+   **AND SWEEPING IT SHOWS TWO MECHANISMS PULLING IN OPPOSITE DIRECTIONS, WITH THE BEST
+   TOTAL IN THE MIDDLE.** Measured, drive 32×, the same aperiodic command, the controller
+   never told the jerk limit exists — what the move asks of the drive / error with no
+   correction / error corrected / the controller's own factor / which design the machine
+   picked:
+     jerk    0    34%   2.155e-1 → 5.123e-2   4.21×   constrained
+     jerk   60    34%   2.147e-1 → 5.082e-2   4.22×   constrained
+     jerk  120    34%   2.122e-1 → 4.972e-2   4.27×   constrained
+     jerk  240    34%   2.047e-1 → 3.830e-2   5.34×   constrained
+     jerk  450    24%   1.690e-1 → 2.439e-2   6.93×   constrained
+     jerk  900    13%   1.077e-1 → 1.417e-2   **7.60×**  residual
+     jerk 1800     8%   8.092e-2 → 4.557e-2   1.78×   residual
+   THE PROFILE AND THE CONTROLLER BOTH IMPROVE, UP TO A POINT. From 0 to 900 the bare error
+   halves (the profile is doing it) AND the controller's factor rises from 4.21× to 7.60×
+   (the residual is more predictable), so the corrected error falls **3.6×** — the two are
+   complementary rather than competing, which was not obvious in advance.
+   **AND AT 1800 IT REVERSES.** The bare error is the lowest on the table, 8.09e-2, and the
+   controller manages only 1.78× of it, so the CORRECTED error is three times worse than at
+   900. Past that point the profile has removed the very transient the controller was
+   predicting, and what is left is friction and backlash at the reversals, which no map
+   from the command window can see. The best total is at 900, in the middle, which is the
+   whole reason this is a slider rather than a constant.
+   **AND ON AN UNDERSIZED DRIVE THE JERK LIMIT IS WORTH MORE THAN ANY CONTROLLER HERE.**
+   The same ladder at a 4× rating — what the move asks of the drive / the correction's
+   limit / bare / corrected / factor / how often the drive was limited:
+     jerk    0   **272%**  none   5.597e-1 → 2.479e-1  2.26×  **31.1%**
+     jerk  120     271%    none   4.984e-1 → 2.296e-1  2.17×    29.9%
+     jerk  450     188%    none   3.219e-1 → 1.433e-1  2.25×    18.6%
+     jerk 1800    **67%**  2.4e-2 8.092e-2 → 4.557e-2  1.78×   **0.0%**
+   The move goes from demanding nearly THREE TIMES the drive to two thirds of it, the
+   saturation from a third of all steps to none, and the bare error falls **6.9×** — which
+   is what jerk limiting is for on a real machine, and it dwarfs everything the controller
+   does. Note the drive rating is quoted in multiples of the gravity HOLD torque, and this
+   move is inertia-dominated, so "4× hold" is nowhere near enough for a bare trapezoid.
+
+   **AND THAT TABLE REVERSED A DECISION I HAD ALREADY MADE.** With the peak demand above
+   the rating the residual headroom is negative, so the 80% rule returns zero, and I had
+   the module refuse: nothing left to correct with, said out loud. The first three rows
+   above were measured with a bug that ignored the zero — and they show the correction
+   was worth **2.26×** anyway, on a loop saturating 31% of the time. THE PEAK IS A WORST
+   CASE: the drive has headroom most of the time, and when the worst case has already gone
+   negative the bound carries no information rather than carrying the value zero. Refusing
+   on it would have been exactly the open-loop reasoning brick 29 showed to be unreliable
+   — and the instrument that disagreed was the verify round, the one thing here that can
+   see a saturating actuator at all. So where the headroom is negative the drive-derived
+   limit is WITHDRAWN, the sanity cap governs, and the machine decides.
+   The library keeps the stricter fix regardless: **zero is a limit, not an absence.** The
+   sentinel for "no limit supplied" was 0, which is also the honest answer when the
+   trajectory uses the whole actuator, so a host that meant "nothing left" was being read
+   as meaning "unlimited" — the exact opposite. It is `null` now, and a supplied 0 means 0.
+
+   **AND THE DESIGN THE MACHINE CHOOSES CHANGES ALONG THE WAY, unforced.** Up to 450 it
+   picks the constrained solve; from 900 it goes back to the plain filter — because a
+   smoother command needs a smaller correction, so the limit stops binding, and brick 29
+   measured that where the limit does not bind the constrained solve is the worse of the
+   two. Nobody told it to switch; it is the verify round ranking them on the machine.
+
    NOT YET BUILT: the WGSL elastic kernel (see the measurement above); general
    block-sparse bricks for a CLOSED structure — a gantry or a machine frame, where
    members are not separable into per-link frames and the swept box is genuinely

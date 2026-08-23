@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:234,built:"2026-08-23T00:29:59Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:235,built:"2026-08-23T01:52:13Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -497,6 +497,18 @@
     </div>
     <div id="bb-chart"></div>
 
+    <div class="controls">
+      <div class="slider"><span>Jerk limit</span>
+        <input type="range" id="s-jerk3" min="0" max="7" step="1" value="3" />
+        <span class="v" id="v-jerk3">120 steps</span></div>
+    </div>
+    <p class="hint">The jerk limit is a boxcar convolved into the command's acceleration, so it
+      is the same object as an input shaper and composes with one. It changes what the machine is
+      ASKED to do, which is a different question from what the controller does about it — so
+      changing it throws the commissioning away and the module identifies the new command from
+      scratch. Off is a bare trapezoid: acceleration steps, and the correction has to answer a
+      transient that arrives all at once. At the far end the move is so smooth that most of what
+      the correction was for has already been removed by the profile.</p>
     <div class="controls">
       <button id="bb-go">Commission ▶</button>
       <button id="bb-reset" class="sec">Reset all</button>
@@ -3999,11 +4011,29 @@ $('s-mag2').addEventListener('input', () => { $('v-mag2').textContent = $('s-mag
 // because the black box has to be able to hold the machine STILL for its step test, which
 // is not something tab (1)'s loop does.
 let bbArm = null, bbServo = null, bbProf = null, bb = null, bbRun = false, bbK = 0;
-let bbLimit = 0;
+let bbLimit = 0, bbHeadroom = null;
 let bbDrawn = null;
 let bbBusy = false, bbChartOn = false, bbHold = false;
 const bbHist = { t: [], truth: [], est: [], u: [] };
 let bbBase = null, bbScore = null;
+
+// 0 is a bare trapezoid; 1800 is a move whose acceleration ramps over six times its own
+// acceleration phase, i.e. barely a trapezoid at all any more.
+const BB_JERK = [0, 30, 60, 120, 240, 450, 900, 1800];
+const BB_PHI = (1 + Math.sqrt(5)) / 2;
+
+/** The command, modulated so it never repeats -- see buildBB(). */
+const bbRef = (k) => bbProf.at(k).theta
+  * (1 + 0.35 * Math.sin(2 * Math.PI * k / (bbProf.period * BB_PHI * 2.7)));
+/**
+ * …and the reference point the servo is driven from, with velocity and acceleration taken
+ * as differences of the SAME modulated command rather than from the unmodulated profile.
+ * Feeding the loop a feedforward that belongs to a different trajectory is a disturbance
+ * nobody asked for, and it would be charged to the plant.
+ */
+const bbProfAt = (k) => ({ theta: bbRef(k),
+  omega: (bbRef(k + 1) - bbRef(k - 1)) / 2,
+  alpha: bbRef(k + 1) - 2 * bbRef(k) + bbRef(k - 1) });
 
 async function buildBB() {
   if (bbArm) { await bbArm.link.destroy(); bbArm = null; }
@@ -4034,7 +4064,15 @@ async function buildBB() {
   bbServo = new PositionServo({ kp: kpBB,
     kd: 2 * SERVO_BW * Jr / RATIO, inertia: Jr, ratio: RATIO, gravityTorque: tauG,
     tauMax: 32 * hold, speedMax: NO_LOAD_SPEED });
-  bbLimit = 32 * hold / kpBB;
+  // WHAT IS LEFT AFTER THE MOVE, AT 80% OF IT — not the whole drive.
+  //
+  // `tauMax/kp` is the setpoint offset the drive could follow if it had nothing else to do,
+  // and it never has nothing else to do: the trajectory's own feedforward is already using
+  // part of the actuator. Handing the black box the whole rating over-states its share, and
+  // this page measured that rather than reasoning about it — at a 6x rating the correction
+  // reached only 0.78 of the limit it had been given and the drive was STILL limited on 16%
+  // of steps. The correction's share is the RESIDUAL, and it is then taken at 80% so the
+  // last fifth of the machine stays for the loop rather than being spent on the feedforward.
   bbArm = { arm, link, mp, tauG, Larm: arm.Larm };
   // THE SAME COMMAND THE MOVE TAB RUNS, jerk-limited, so the two tabs are comparable --
   // except that its AMPLITUDE IS MODULATED AT AN INCOMMENSURATE RATE, so the program
@@ -4044,8 +4082,41 @@ async function buildBB() {
   // aperiodic command the 735-feature basis scores R² = −6.93 out of sample against the
   // plain linear window's +0.88 — catastrophic over-fitting the repeating command had
   // hidden completely.
+  // THE JERK LIMIT REACHES FURTHER THAN THE MOVE TAB'S because this tab exists to show what
+  // the CONTROLLER is worth, and the top of the ladder is the honest control on that: a move
+  // smooth enough that most of what the correction was for is already gone.
+  const jw = BB_JERK[+$('s-jerk3').value];
   bbProf = new AngleProfile({ span: SPAN_LADDER[2], accelSteps: 300, cruiseSteps: 400,
-    dwellSteps: 1400, shaper: boxcarShaper(120) });
+    // THE DWELL HAS TO COVER THE JERK LIMIT'S OWN DELAY, or a wide one runs the move past
+    // the start of the next — the same arithmetic the Move tab records: a boxcar of width
+    // W delays the command by W, and the dwell is what absorbs it.
+    dwellSteps: 1400 + jw, shaper: jw ? boxcarShaper(jw) : null });
+  // …and the headroom is computed from THIS profile, so it must come after it.
+  {
+    const tauMax = 32 * hold;
+    // The feedforward the loop will already be spending, at its worst over one period of
+    // the command the module is about to be handed. This is the host's own model, not the
+    // module's: the black box is told a NUMBER and never learns where it came from.
+    let peak = 0;
+    for (let k = 0; k < bbProf.period; k += 5) {
+      const r = bbProfAt(k);
+      peak = Math.max(peak, Math.abs((Jr * r.alpha - tauG(r.theta)) / RATIO));
+    }
+    const spare = tauMax - peak;
+    // WHERE THERE IS HEADROOM, THE CORRECTION GETS 80% OF IT. Where the move ALREADY asks
+    // for more than the drive can give, the peak-based number says "none" — and refusing
+    // on that basis would be exactly the open-loop reasoning brick 29 showed to be
+    // unreliable. Measured on a 4x-rated drive whose move demands 272% of it: the
+    // correction still improved the tool 2.26x, on a loop saturating 31% of the time.
+    // The peak is a WORST CASE and the drive has headroom most of the time; when the
+    // worst case has already gone negative the bound simply carries no information, so
+    // the drive-derived limit is withdrawn, the sanity cap on the command's own swing
+    // governs, and the verify round decides on the machine — which is the one instrument
+    // here that can see a saturating actuator at all.
+    bbLimit = spare > 0 ? 0.8 * spare / kpBB : null;
+    bbHeadroom = { tauMax, peak, spare, margin: 0.8, kp: kpBB, offset: bbLimit,
+      whole: tauMax / kpBB };
+  }
   // IT RUNS UNCOMMISSIONED FROM THE START, which is not cosmetic: the "before" number has
   // to be the machine with NO correction, and the first version collected it during the
   // probe -- where the PRBS is being deliberately injected, so the baseline carried the
@@ -4058,19 +4129,6 @@ async function buildBB() {
 }
 
 const BB_S = 10;
-const BB_PHI = (1 + Math.sqrt(5)) / 2;
-/** The command, modulated so it never repeats -- see buildBB(). */
-const bbRef = (k) => bbProf.at(k).theta
-  * (1 + 0.35 * Math.sin(2 * Math.PI * k / (bbProf.period * BB_PHI * 2.7)));
-/**
- * …and the reference point the servo is driven from, with velocity and acceleration taken
- * as differences of the SAME modulated command rather than from the unmodulated profile.
- * Feeding the loop a feedforward that belongs to a different trajectory is a disturbance
- * nobody asked for, and it would be charged to the plant.
- */
-const bbProfAt = (k) => ({ theta: bbRef(k),
-  omega: (bbRef(k + 1) - bbRef(k - 1)) / 2,
-  alpha: bbRef(k + 1) - 2 * bbRef(k) + bbRef(k - 1) });
 
 function startBB() {
   if (!bbArm) return;
@@ -4144,6 +4202,26 @@ function bbStats() {
     rows.push(['plant', `the SAME arm as tab ① · K ${K_LADDER[4]} · E ${E_LADDER[5]} · `
       + `arm ${bbArm.Larm} <span class="warn">(none of which it is told)</span>`]);
     rows.push(['step', String(bbK)]);
+  }
+  if (bbHeadroom) {
+    const hr = bbHeadroom;
+    rows.push(['what the drive has spare', `the move already asks for `
+      + `${(100 * hr.peak / hr.tauMax).toFixed(0)}% of the drive, leaving `
+      + `${(100 * hr.spare / hr.tauMax).toFixed(0)}% — so the correction is limited to `
+      + (hr.offset == null ? '<b>whatever the command\'s own swing allows</b>'
+        : `<b>${hr.offset.toExponential(3)} rad</b>, which is 80% of what is left`)
+      + `   <span class="warn">against ${hr.whole.toExponential(3)} if it were handed the `
+      + 'whole rating, a number the drive cannot actually deliver while it is also '
+      + 'running the move</span>']);
+    if (hr.spare <= 0) {
+      rows.push(['…except there is none', '<span class="bad">the move ALONE asks for more '
+        + 'than the drive can give</span>, so the peak-based bound carries no information '
+        + 'and is withdrawn — the correction is limited by the command\'s own swing '
+        + 'instead and the machine decides whether it helps.   <span class="warn">The real '
+        + 'remedy is the jerk limit: measured on a 4× drive, widening it took the move\'s '
+        + 'demand from 272% of the drive to 67% and the saturation from 31% of steps to '
+        + 'zero, which is worth far more than any controller on this page.</span>']);
+    }
   }
   if (bb) {
     const st = bb.status();
@@ -4389,6 +4467,21 @@ function bbBadge() {
 }
 
 $('bb-go').addEventListener('click', startBB);
+// CHANGING THE COMMAND THROWS THE COMMISSIONING AWAY, and that is not caution, it is what
+// the module is. The disturbance map is a fit from the COMMAND WINDOW to what the machine
+// does; a different jerk limit is a different command, so the map is a map of something
+// that no longer exists. Every other tab on this page learned the same thing about its own
+// learned filter.
+$('s-jerk3').addEventListener('input', () => {
+  $('v-jerk3').textContent = BB_JERK[+$('s-jerk3').value]
+    ? `${BB_JERK[+$('s-jerk3').value]} steps` : 'off';
+});
+$('s-jerk3').addEventListener('change', async () => {
+  if (bbBusy) return;
+  bbBusy = true; syncBB();
+  await buildBB();
+  bbBusy = false; syncBB();
+});
 $('bb-reset').addEventListener('click', async () => {
   if (bbBusy) return;
   bbBusy = true; syncBB();
@@ -4400,6 +4493,7 @@ window.__flxBBDbg = () => (bbArm ? {
   k: bbK, running: bbRun, Larm: bbArm.Larm,
   ...(bb ? bb.status() : { phase: 'idle' }),
   base: bbRms(bbBase), scored: bbRms(bbScore), drawn: bbDrawn,
+  headroom: bbHeadroom, jerk: BB_JERK[+$('s-jerk3').value], period: bbProf.period,
   ratio: bbRms(bbBase) && bbRms(bbScore) ? bbRms(bbBase) / bbRms(bbScore) : null,
   cells: bbArm.link.lattice.cellCount,
 } : null);
