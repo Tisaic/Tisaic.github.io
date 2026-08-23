@@ -279,6 +279,70 @@ console.log(`    ${arm.describe()}`);
     `${e.tilt1.toExponential(4)} vs ${e.tilt2.toExponential(4)}`);
 }
 
+// ================================ AN EXTERNAL LOAD, AND WHICH SIDE IT ACTS ON
+//
+// A cutting force is not a motor disturbance and the difference is the whole reason the
+// argument on this page exists. A torque injected at the MOTOR reaches the link only
+// THROUGH the gearbox, so at zero wind-up it delivers nothing at all; a torque past the
+// gear teeth is a generalised force on the link coordinates and acts at once. The encoder
+// is structurally blind to the second, which is why a position loop rejects the first and
+// cannot reject the second.
+//
+// PINNED ON ONE STEP FROM REST, where the answer is exact and needs no settling: with
+// gravity and velocity zero the rigid core gives alpha = M^-1 [T, 0] for a load-side T,
+// and exactly ZERO for a motor-side one. Both halves are asserted, because a load term
+// wired to the wrong side would still "do something" and pass a one-sided check.
+{
+  const T = 1e-3;
+  const M = (() => { arm.setPose(0.3, 0.6); return arm.massMatrix(); })();
+  const det = M[0][0] * M[1][1] - M[0][1] * M[1][0];
+  const want = [M[1][1] * T / det, -M[1][0] * T / det];
+
+  const fresh = () => {
+    arm.setPose(0.3, 0.6);
+    arm.j1.reset(0.3 * arm.j1.N, 0.3);
+    arm.j2.reset(0.6 * arm.j2.N, 0.6);
+    arm.w = [0, 0]; arm.j1.wL = 0; arm.j2.wL = 0;
+  };
+
+  fresh(); arm.step(0, 0, 1, [T, 0]);
+  const aLoad = arm.alpha.slice();
+  const encLoad = arm.j1.encoder().angle;
+  fresh(); arm.step(T, 0, 1, null);
+  const aMotor = arm.alpha.slice();
+  fresh(); arm.step(0, 0, 1, null);
+  const aFree = arm.alpha.slice(), encFree = arm.j1.encoder().angle;
+
+  console.log(`    [load side] one step from rest — alpha load-side `
+    + `${aLoad[0].toExponential(3)} / ${aLoad[1].toExponential(3)}, closed form `
+    + `${want[0].toExponential(3)} / ${want[1].toExponential(3)}, motor-side `
+    + `${aMotor[0].toExponential(3)}`);
+  check('a load-side torque is a generalised force on the LINK: alpha = M^-1 [T, 0]',
+    Math.abs(aLoad[0] - aFree[0] - want[0]) < 1e-12 * Math.abs(want[0] || 1)
+      + 1e-18 && Math.abs(aLoad[1] - aFree[1] - want[1]) < 1e-18,
+    `${(aLoad[0] - aFree[0]).toExponential(6)} vs ${want[0].toExponential(6)}`);
+  // …AND THE SAME TORQUE AT THE MOTOR DELIVERS NOTHING ON THAT STEP, because a gearbox at
+  // zero wind-up transmits zero. That is the whole difference between the two, and it is
+  // the reason a load-side disturbance is the one a soft sensor exists for.
+  check('…while the same torque at the MOTOR reaches the link through the gearbox, so on '
+    + 'the first step it delivers nothing',
+    Math.abs(aMotor[0] - aFree[0]) < 1e-18,
+    `${(aMotor[0] - aFree[0]).toExponential(3)}`);
+  // AND THE ENCODER IS BLIND TO IT: the motor was commanded nothing and moved nothing, so
+  // the one signal a controller has reports the load as absent.
+  check('…and the encoder reports the load-side torque as absent',
+    Math.abs(encLoad - encFree) < 1e-15, `${(encLoad - encFree).toExponential(3)}`);
+  // REMOVING THE TERM MUST BE MEASURABLE, and a null load must not be a quiet change of
+  // behaviour: the default path has to be bit-for-bit what it was before the parameter
+  // existed.
+  fresh(); for (let i = 0; i < 200; i++) arm.step(1e-5, 0, 1, null);
+  const a = [arm.q[0], arm.q[1], arm.j1.windup()];
+  fresh(); for (let i = 0; i < 200; i++) arm.step(1e-5, 0, 1, [0, 0]);
+  check('a zero load is bit-for-bit the same as no load',
+    a[0] === arm.q[0] && a[1] === arm.q[1] && a[2] === arm.j1.windup(),
+    JSON.stringify([a, [arm.q[0], arm.q[1], arm.j1.windup()]]));
+}
+
 await arm.l1.destroy(); await arm.l2.destroy();
 console.log(failed ? `\n2R: ${failed} check(s) FAILED\n` : '\n2R: all checks passed\n');
 process.exit(failed ? 1 : 0);

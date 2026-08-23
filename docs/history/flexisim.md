@@ -2577,3 +2577,110 @@ the console listener — the third time in this project that buffer has been the
 that saw a defect (the `mapAsync` rejection in FlowSim v114, the stale-backend read in
 v140, this). Every functional check in the section passed while it was throwing. The panel
 now names the refusal and why, which is what it should have said all along.
+
+---
+
+## Brick 34 — inverting the readout for control, and the regime where it is worth anything
+
+The idea: stop bolting compensators around the soft sensor and use it AS the controller —
+forecast the error at a ladder of horizons and invert each one into the correction that
+would null it. Structurally it is standard and the machinery is already here. Make the
+prediction
+
+    yhat(k+L) = A(measured history at k) + sum_m h(m) u(k+L-m)
+
+nonlinear in the state and **affine in the control**, and the plan is a box-constrained QP
+over the horizon — `SoftSensor.opts.leads` gives the ladder, `lib/blackbox/qp.js` solves it.
+Every number below is measured on a recording, so the whole exploration cost minutes rather
+than a build.
+
+**TWO INSTRUMENT CHECKS FIRST.** The `u → error` response identified from a *dithered
+running* record matches a *directly measured held* step test to **0.9% at DC** (0.7074
+against 0.7012) — two routes sharing no arithmetic. And the cross-axis term is **0.5%** of
+the direct one, so treating it as two SISO loops is measured rather than assumed.
+
+### In-sample R² is worthless here, and the command channel is a memorisation channel
+
+Trained on one part program and tested on ANOTHER — the only honest test for a controller
+that must work on a part it has never cut. Every variant scores ~0.99 in sample and they
+differ by a hundredfold out of it:
+
+| features | in-sample | rect→circle | circle→rect | rect→circle @250 steps |
+|---|---|---|---|---|
+| raw command window | 0.996 | 0.236 | **−1.91** | **−3.04** |
+| structured (rigid-model tau_g) | 0.968 | 0.968 | 0.549 | **0.917** |
+| measured readout | 0.997 | 0.961 | 0.517 | 0.732 |
+| measured + command | 1.000 | 0.512 | 0.115 | **−8.76** (and −98.8 at 500) |
+
+**A raw window of the command is worse than predicting the mean on a program it has not
+seen**, and adding it to a measured model makes that model catastrophically worse. It is a
+fingerprint of *where in the program you are*, which is exactly what does not transfer.
+That is a direct finding about `lib/blackbox/`, whose disturbance map is a `WindowMap` over
+the command: on the black box tab's single repeating move it can never show, and on a CNC
+program it would be ruinous. A STRUCTURED command feature — the rigid model's commanded
+gearbox torque — transfers instead, and barely degrades with lead (0.968 → 0.917 at 250
+steps), which is what a plant that takes 660 steps to deliver half a correction needs.
+
+### And on this machine the readout adds nothing the model has not already got
+
+Fit the structured model, then ask how much of ITS residual the measured readout explains
+on a held-out program:
+
+| | lead 0 | 250 steps | 500 steps |
+|---|---|---|---|
+| rect→circle | **0%** | **0%** | 0% |
+| circle→rect | **0%** | **0%** | 0% |
+| rect→square | 8% | 15% | 0% |
+
+Nothing. And the mechanism is mechanical rather than statistical: **on a well-following
+servo the motor-side measurements are very nearly a function of the command** (the
+following error is a thirtieth of the total error here), so there is no independent
+information in them to forecast with. The soft sensor's value on this plant is as a
+READOUT — what is the tool doing now, when nothing measures it — not as a forecaster.
+
+### The ceiling, for completeness
+
+A receding-horizon solve on a recording, with a PERFECT forecast: ~**6×** on joint tracking
+error at ≥1200 steps of preview, **3.7×** at 300 steps, and **worse than nothing** below
+about 100 — the plant cannot deliver a correction faster than that. The first version of
+this sweep was non-monotonic in preview (11.3× at 300 steps against 6.6× at 2400), which is
+impossible for an optimal controller and was the tell: at 40 iterations the QP is
+under-solved and therefore accidentally less greedy, and a short-horizon MPC that solves its
+horizon exactly dumps the cost just outside it. At 800 iterations the curve is monotone.
+
+### Where it DOES earn its place: a load the command does not determine
+
+Two instrument failures had to be cleared to find this out, and both are the same lesson.
+
+1. **A disturbance a thousand times too small.** The band-limited noise was scaled by the
+   filter's input gain and not renormalised, so it came out with a standard deviation of
+   0.08 instead of 1. It moved the tool error by **1.00× in every configuration** — which
+   is not a small effect, it is no effect at all, and "exactly 1.00" is what should have
+   been read as a broken instrument rather than a null result.
+2. **A motor-side disturbance is rejected by the position loop.** That is what a position
+   loop is for: the encoder sees it. Measured, a slow torque disturbance at **140% of the
+   operating torque** moved the tool error by **11%**. To matter, a disturbance has to act
+   past the gear teeth, where the encoder is structurally blind — so `FlexArm2R.step()` now
+   takes an optional load-side torque, pinned by a one-step closed form (`alpha = M^-1
+   [T,0]` for a load-side torque, and exactly ZERO for a motor-side one, because a gearbox
+   at zero wind-up transmits nothing).
+
+With a load-side cutting torque at 1.5× the commanded tau_g, everything inverts:
+
+| | no load | cutting load |
+|---|---|---|
+| structured model | R² 0.968 | R² **−0.538** — worse than useless |
+| readout, on what the model leaves | **0%** | **88–92%**, and still **91% at 500 steps of lead** |
+| ILC over laps | 1.25e-1 → 2.62e-2 (**5.2×**) | 1.87e-1 → **1.10e+0** — 2–6× WORSE, never converges |
+
+ILC does not merely stop helping under a disturbance that does not repeat: it learns a
+correction for something that will not be there next lap and applies it as noise.
+
+**So each method owns a regime and none of them covers both.** A model of the command wins
+when the error is the command's own doing; iterative learning wins when the part repeats;
+the inverse readout is the only one of the three that can act on a load nobody commanded,
+and it is the only one whose advantage survives out to half the loop's time constant. That
+is the head-to-head the Path tab should show, and it is the reason to build a cutting-load
+control at the same time as the controller — without one there is no regime in which the
+inverse readout earns its keep, and the honest answer would be to use the model with
+preview instead.
