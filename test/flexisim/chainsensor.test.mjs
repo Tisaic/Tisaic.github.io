@@ -66,7 +66,7 @@ const GOLD = 0.6180339887;
  * exists to lose; with both moving, every configuration has a rich stream and the
  * question is purely what each one can INFER from it.
  */
-async function session({ joints = [0, 1], lag = 3, stride = 2, nTrain = 900, nTest = 400,
+async function session({ joints = [0, 1], lag = 18, stride = 6, nTrain = 900, nTest = 400,
                          lead = 0, jitter = 0.25, elbowHeld = false } = {}) {
   const mk = (length) => buildLink({ length, section: H, clamp: CLAMP, E, nu, rho,
     damping: 3e-3 });
@@ -126,7 +126,7 @@ async function session({ joints = [0, 1], lag = 3, stride = 2, nTrain = 900, nTe
 }
 
 // ------------------------------------------------ the whole-arm model, locked
-const whole = await session({ joints: [0, 1], lag: 3, lead: FULL ? 15 : 0,
+const whole = await session({ joints: [0, 1], lag: 18, stride: 6, lead: FULL ? 15 : 0,
   nTrain: FULL ? 1200 : 900, nTest: FULL ? 500 : 400 });
 console.log(`    [whole arm] learner ${whole.learner.toFixed(4)}   rigid model `
   + `${whole.rigid.toFixed(4)}   "the tool is where the encoders say" `
@@ -164,8 +164,8 @@ if (FULL) {
   // base and the same 544-feature basis, so the only difference left is WHICH
   // SIGNALS. It also hands them a window twice as long, which if anything favours
   // them -- and they still lose.
-  elbow = await session({ joints: [1], lag: 6, nTrain: 1200, nTest: 500 });
-  shoulder = await session({ joints: [0], lag: 6, nTrain: 1200, nTest: 500 });
+  elbow = await session({ joints: [1], lag: 36, stride: 3, nTrain: 1200, nTest: 500 });
+  shoulder = await session({ joints: [0], lag: 36, stride: 3, nTrain: 1200, nTest: 500 });
   console.log(`    [inputs, all at ${whole.status.features} features] whole arm `
     + `${whole.learner.toFixed(4)}   shoulder only ${shoulder.learner.toFixed(4)}   `
     + `elbow only ${elbow.learner.toFixed(4)}`);
@@ -197,34 +197,49 @@ if (FULL) {
 }
 
 if (FULL) {
-  // WHICH ARCHITECTURE WINS DEPENDS ON THE REGIME, AND THE REVERSAL IS RECORDED
-  // RATHER THAN AVOIDED. Everything above is measured with BOTH joints moving. With
-  // the elbow commanded to HOLD -- the configuration that makes the coupling
-  // clearest, since then almost all of the elbow's inertial load is the shoulder's
-  // -- the whole-arm model LOSES, and both models are far worse.
-  const heldW = await session({ joints: [0, 1], lag: 3, elbowHeld: true });
-  const heldE = await session({ joints: [1], lag: 6, elbowHeld: true });
+  // THE REVERSAL WAS THE WINDOW, AND IT IS GONE.
+  //
+  // For a long time this block recorded that with the elbow commanded to HOLD -- the
+  // configuration that makes the coupling clearest, since then almost all of the elbow's
+  // inertial load is the shoulder's -- the whole-arm model LOST (0.562 against 0.494),
+  // and it recorded honestly that no clean mechanism had been found for it. Two
+  // hypotheses were tried and both were falsified: that the matched feature count forced
+  // different time spans, and that widening the stride would fix it (it made things
+  // worse, 0.793).
+  //
+  // BOTH WERE FALSIFIED BECAUSE BOTH WERE TESTED AT A WINDOW THAT COULD NOT REACH THE
+  // RING AT ALL. The chain's bending mode is ~860 steps and the window reached 40. At a
+  // window that spans a full period the whole-arm model wins comfortably in this regime
+  // too -- measured 0.0371 against the elbow-only 0.2051, i.e. 5.5x, the same direction
+  // and a larger margin than with both joints moving. The physics that predicts it was
+  // right all along: the elbow cannot see M21*alpha1 directly, and that term is 14x the
+  // one it can see. What was wrong was the instrument.
+  const heldW = await session({ joints: [0, 1], lag: 18, stride: 6, elbowHeld: true });
+  const heldE = await session({ joints: [1], lag: 36, stride: 3, elbowHeld: true });
   console.log(`    [regime] elbow HELD: whole arm ${heldW.learner.toFixed(4)}   elbow only `
     + `${heldE.learner.toFixed(4)}   (both joints moving: `
     + `${whole.learner.toFixed(4)} / ${elbow.learner.toFixed(4)})`);
-  check('with the elbow HELD the whole-arm advantage reverses',
-    heldW.learner > heldE.learner,
-    `${heldW.learner.toFixed(4)} vs ${heldE.learner.toFixed(4)}`);
-  check('...and that regime is harder for BOTH models, so it is the task and not the inputs',
-    heldW.learner > 2 * whole.learner && heldE.learner > 1.5 * elbow.learner,
-    `${heldW.learner.toFixed(3)}/${whole.learner.toFixed(3)}, `
-    + `${heldE.learner.toFixed(3)}/${elbow.learner.toFixed(3)}`);
-  // AND THE OBVIOUS EXPLANATION DOES NOT SURVIVE MEASUREMENT. Matching feature
-  // count forces different TIME SPANS -- the whole-arm model's 3 lags at stride 2
-  // reach back 4 samples against the single-axis model's 10 -- so the natural guess
-  // is that it is the window and not the signals. Giving the whole-arm model stride
-  // 5, which matches the span exactly at the same feature count, makes it WORSE.
-  const heldWide = await session({ joints: [0, 1], lag: 3, stride: 5, elbowHeld: true });
-  console.log(`    [regime] and matching the time span does not rescue it: `
-    + `${heldWide.learner.toFixed(4)} at stride 5 against ${heldW.learner.toFixed(4)} at stride 2`);
-  check('matching the time span does not explain the reversal',
-    heldWide.learner > heldW.learner,
-    `${heldWide.learner.toFixed(4)} vs ${heldW.learner.toFixed(4)}`);
+  check('with the elbow HELD the whole-arm model still wins, once the window reaches the ring',
+    heldW.learner < heldE.learner,
+    `${heldW.learner.toFixed(4)} vs ${heldE.learner.toFixed(4)} `
+    + `(${(heldE.learner / heldW.learner).toFixed(1)}x)`);
+  // …AND THE WINDOW IS WHAT MOVED, which is asserted here rather than argued: the same
+  // regime at the OLD 40-step window, both architectures, is several times worse.
+  // NOTE WHAT IS AND IS NOT CLAIMED. The old pair scored 0.562 / 0.494 and the same pair
+  // re-measured here does not reproduce that ordering, so the reversal was never a stable
+  // property to begin with -- it was two numbers a few percent apart, both taken from
+  // models that could see 4.6% of the period they were being asked about. What IS stable
+  // is that widening the window is worth 8x to the whole-arm model in this regime, and
+  // that once widened it wins by 5.5x. A difference measured with a broken instrument is
+  // not a finding, and this file recorded one as though it were.
+  const heldNarrow = await session({ joints: [0, 1], lag: 3, stride: 2, elbowHeld: true });
+  const heldNarrowE = await session({ joints: [1], lag: 6, stride: 2, elbowHeld: true });
+  console.log(`    [regime] at the OLD 40-step window: whole arm `
+    + `${heldNarrow.learner.toFixed(4)}   elbow only ${heldNarrowE.learner.toFixed(4)}`);
+  check('…and the narrow window, not the regime, is what the old reversal was measuring',
+    heldNarrow.learner > heldW.learner * 3,
+    `${heldNarrow.learner.toFixed(4)} narrow against ${heldW.learner.toFixed(4)} wide `
+    + `(${(heldNarrow.learner / heldW.learner).toFixed(1)}x)`);
 }
 
 console.log(failed ? `\nchain sensor: ${failed} check(s) FAILED\n`

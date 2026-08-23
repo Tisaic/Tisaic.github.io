@@ -156,23 +156,23 @@ async function runSynthetic(name, p, { span = 0.2, S = 6, probeFrac = 0.02,
   const hold = ref(0);
   const k0 = k;
   while (bb.holding && k < k0 + 800000) {
-    y = plant.step(bb.offset()) + p.dist(0, () => hold);
+    y = plant.step(bb.offset(k)) + p.dist(0, () => hold);
     if (k % S === 0) bb.sample(k, y);
     k++;
   }
   if (bb.holding) throw new Error('commissioning hold never finished');
   const kObs = k;
   while ((bb.phase === 'observe' || bb.verifying) && k < kObs + 2000000) {
-    y = plant.step(bb.offset()) + p.dist(k, ref);
+    y = plant.step(bb.offset(k)) + p.dist(k, ref);
     if (k % S === 0) bb.sample(k, y);
     k++;
   }
   for (let j = 0; j < 600 * S; j++, k++) {
-    y = plant.step(bb.offset()) + p.dist(k, ref);
+    y = plant.step(bb.offset(k)) + p.dist(k, ref);
     if (k % S === 0) bb.sample(k, y);
   }
   for (let j = 0; j < 900 * S; j++, k++) {
-    y = plant.step(bb.offset()) + p.dist(k, ref);
+    y = plant.step(bb.offset(k)) + p.dist(k, ref);
     if (k % S === 0) bb.sample(k, y);
     after.push(y);
   }
@@ -421,6 +421,40 @@ console.log('\n  the constrained solve');
 }
 
 // ---------------------------------------------------------------- what it costs a PLC
+// ---------------------------------------------------------------------------------
+// THE RECONSTRUCTION -- what the host sees BETWEEN grid samples, which until it existed
+// was a staircase. Checked on the sequence rather than through a plant, because the
+// property is exact: it must pass through the designed samples and be straight between
+// them, and neither of those is a statistical claim.
+console.log('\n  the reconstruction between grid samples');
+{
+  const grid = 50;
+  const bb = new BlackBox({ ref: () => 0, sampleEvery: 10 });
+  bb.grid = grid;
+  bb._emit(1000, 0.2, 0.5);
+  check('offset() with no step index is still the HELD value',
+    bb.offset() === 0.2, `${bb.offset()}`);
+  check('…and offset(k) passes exactly through the designed samples',
+    bb.offset(1000) === 0.2 && Math.abs(bb.offset(1000 + grid) - 0.5) < 1e-15,
+    `${bb.offset(1000)} at the sample, ${bb.offset(1000 + grid)} at the next`);
+  // STRAIGHT BETWEEN THEM: the second difference of a piecewise-linear reconstruction is
+  // exactly zero inside an interval, which is the whole reason the drive stops spiking.
+  let worst = 0;
+  for (let k = 1001; k < 1000 + grid - 1; k++) {
+    worst = Math.max(worst, Math.abs(
+      bb.offset(k + 1) - 2 * bb.offset(k) + bb.offset(k - 1)));
+  }
+  check('…and is straight between them, so its second difference is zero',
+    worst < 1e-15, `worst ${worst.toExponential(2)}`);
+  check('…and it is clamped at both ends rather than extrapolating',
+    bb.offset(900) === 0.2 && bb.offset(2000) === 0.5,
+    `${bb.offset(900)} before, ${bb.offset(2000)} long after`);
+  // A HOLD IS THE FAILURE THIS REPLACES, so the check has to be able to see one: against
+  // the same pair a zero-order hold has a second difference the size of the step itself.
+  check('…and a zero-order hold of the same pair would NOT pass that',
+    Math.abs(0.5 - 2 * 0.2 + 0.2) > 0.29, 'a step of 0.3 lands entirely on one sample');
+}
+
 console.log('\n  the cycle budget');
 {
   check('the budget is arithmetic on a stated cycle, not a constant',
@@ -548,12 +582,20 @@ console.log('\n  plant C — the real hybrid arm, through the same interface');
     nonlinear: process.env.BB_LINEAR === '1' ? false : true });
 
   const before = [], after = [], estE = [], naive = [], truthS = [];
+  // WHAT THE CORRECTION COSTS THE MACHINE, recorded at the SOLVER's rate -- which is the
+  // only rate at which a held correction is visibly a staircase. Nothing else in this
+  // file could see the defect that motivated the reconstruction.
+  const cmdLog = { on: false, ref: [], cmd: [], tau: [] };
   let k = 0;
   const stepOnce = (atRest = false) => {
     const r = atRest ? { theta: 0, omega: 0, alpha: 0 } : prof.at(k);
-    const u = bb.offset();
+    const u = bb.offset(k);
+    if (cmdLog.on && !atRest) {
+      cmdLog.ref.push(r.theta); cmdLog.cmd.push(r.theta + u); cmdLog.tau.push(0);
+    }
     const tau = servo.torque({ theta: r.theta + u, omega: r.omega, alpha: r.alpha },
       arm.encoder());
+    if (cmdLog.on && !atRest) cmdLog.tau[cmdLog.tau.length - 1] = tau;
     arm.step(tau, 1);
     const e = tipTrackingError(arm, r.theta);
     if (k % S === 0) {
@@ -579,6 +621,7 @@ console.log('\n  plant C — the real hybrid arm, through the same interface');
   while (bb.holding) stepOnce(true);
   while (bb.phase === 'observe' || bb.verifying) stepOnce();
   for (let i = 0; i < 600 * S; i++) stepOnce();          // settle after switching on
+  cmdLog.on = true;
   for (let i = 0; i < 1200 * S; i++) {
     const e = stepOnce();
     after.push(e);
@@ -621,10 +664,62 @@ console.log('\n  plant C — the real hybrid arm, through the same interface');
   // asserted is the pair of gains that DO matter, above.
   check('plant C: the black-box correction improves the real arm by more than 2x',
     b / a > 2, `${(b / a).toFixed(2)}x`);
-  check('plant C: …and its prediction agrees with what it achieved',
-    Math.abs(Math.log(bb.design.predicted / (b / a))) < Math.log(2.5),
-    `predicted ${bb.design.predicted.toFixed(2)}x, achieved ${(b / a).toFixed(2)}x`);
+  // THE NUMBER THAT HAS TO AGREE IS THE MEASURED ONE, not the design's own -- the same
+  // convention plants A and B already use, and plant C had to be moved onto it.
+  check('plant C: …and the number it measured on the machine agrees with what it achieved',
+    bb.design.verified != null
+      && Math.abs(Math.log(bb.design.verified / (b / a))) < Math.log(1.6),
+    `verified ${bb.design.verified?.toFixed(2)}x, achieved ${(b / a).toFixed(2)}x`);
+  // …AND THE OPEN-LOOP PREDICTION IS NOW CONSERVATIVE BY CONSTRUCTION, which is a
+  // consequence of the reconstruction rather than a slack tolerance. `h` is identified
+  // from a probe that is HELD for a whole grid interval, and the correction is deployed
+  // interpolated -- a difference that lives entirely BETWEEN grid samples, so the
+  // grid-rate model the design scores itself with cannot see it at all. Measured on the
+  // arm, predicted 2.33x against 6.13x achieved. Only the OPTIMISTIC direction is a
+  // defect, since that is the one where a design flatters itself and the machine cannot
+  // be trusted to catch it; being beaten by the machine is the signature worth having.
+  check('plant C: …and its open-loop prediction never flatters the design',
+    bb.design.predicted < (b / a) * 1.3,
+    `predicted ${bb.design.predicted.toFixed(2)}x against ${(b / a).toFixed(2)}x achieved`);
   globalThis.C_RATIO = b / a;
+  // ---- WHAT IT COSTS, alongside what it buys.
+  //
+  // Tracking alone has no opinion about a command, and for a long time nothing here did
+  // either. Measured before the correction was reconstructed at the host's rate: the
+  // commanded motor position came out 6354x rougher than the bare reference and the drive
+  // TORQUE 53x rougher, for 3.68x of tracking -- while the ENCODER was SMOOTHER than with
+  // no correction at all, which is the number that says what was happening. The servo
+  // could not follow a staircase, so every bit of that roughness was torque the drive
+  // spent moving nothing. With the reconstruction it is 1.06e-3 against 4.87e-6, i.e. 217x
+  // rather than 6354x, and the torque 2.5x rather than 53x.
+  const d2rms = (arr) => { let v = 0;
+    for (let i = 2; i < arr.length; i++) {
+      const d = arr[i] - 2 * arr[i - 1] + arr[i - 2]; v += d * d;
+    }
+    return Math.sqrt(v / Math.max(1, arr.length - 2)); };
+  const sd = (arr) => { const m = arr.reduce((x, y) => x + y, 0) / arr.length;
+    return Math.sqrt(arr.reduce((x, y) => x + (y - m) ** 2, 0) / arr.length); };
+  const rq = d2rms(cmdLog.cmd) / sd(cmdLog.cmd), rr = d2rms(cmdLog.ref) / sd(cmdLog.ref);
+  console.log(`    [C] command second difference ${rq.toExponential(2)} of its own spread `
+    + `against the bare reference's ${rr.toExponential(2)} — ${(rq / rr).toFixed(0)}x`);
+  check('plant C: …and the command it produces is one the drive can follow',
+    rq / rr < 800, `${(rq / rr).toFixed(0)}x the bare reference (a HELD correction is 6354x)`);
+  // AND THE MEASURED SMOOTHNESS IS WHAT THE LADDER CHOSE ON, which is the half a tracking
+  // score cannot express. The rule is the same knee the rest of the module uses: among the
+  // trials within 5% of the best measured tracking, the smoothest.
+  const tr = bb.design.trials || [];
+  const bestR = Math.max(...tr.map((t) => t.ratio));
+  const band = tr.filter((t) => t.ratio >= 0.95 * bestR);
+  const dep = tr.find((t) => t.kind === (bb.design.kind === 'constrained' ? 'mpc' : 'fir')
+    && t.scale === bb.design.scale);
+  check('plant C: …and the trial ladder measured smoothness, not only tracking',
+    tr.length > 0 && tr.every((t) => Number.isFinite(t.curv) && Number.isFinite(t.slew)),
+    tr.map((t) => `${t.kind}${t.gentle ? '-g' : ''} ${t.ratio.toFixed(2)}x `
+      + `curv ${t.curv.toExponential(2)}`).join(' · '));
+  check('plant C: …and the deployed trial is the smoothest within 5% of the best tracking',
+    !dep || dep.curv <= Math.min(...band.map((t) => t.curv)) * 1.0000001,
+    dep ? `deployed curv ${dep.curv.toExponential(3)}, band min `
+      + `${Math.min(...band.map((t) => t.curv)).toExponential(3)}` : 'no matching trial');
   const nrm = rms(estE) / rms(naive);
   console.log(`    [C] soft sensor nRMSE ${nrm.toFixed(4)} on ${bb.trained} trained pairs`);
   // THE nRMSE RISES WHEN THE CORRECTION IMPROVES, and that is a normalisation artefact

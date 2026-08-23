@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:236,built:"2026-08-23T03:43:58Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:237,built:"2026-08-23T05:54:12Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -188,6 +188,9 @@
       <div class="slider"><span>Jerk limit</span>
         <input type="range" id="s-jerk" min="0" max="6" step="1" value="3" />
         <span class="v" id="v-jerk">120 steps</span></div>
+      <div class="slider"><span>Settle</span>
+        <input type="range" id="s-settle" min="0" max="5" step="1" value="1" />
+        <span class="v" id="v-settle">1.0 ring</span></div>
     </div>
     <div class="controls">
       <div class="slider"><span>Drive rating</span>
@@ -378,6 +381,9 @@
       <div class="slider"><span>Jerk limit</span>
         <input type="range" id="s-jerk2" min="0" max="6" step="1" value="3" />
         <span class="v" id="v-jerk2">120 steps</span></div>
+      <div class="slider"><span>Settle</span>
+        <input type="range" id="s-settle2" min="0" max="5" step="1" value="1" />
+        <span class="v" id="v-settle2">1.0 ring</span></div>
       <div class="slider"><span>Drive rating</span>
         <input type="range" id="s-drive2" min="0" max="8" step="1" value="6" />
         <span class="v" id="v-drive2">32× hold</span></div>
@@ -501,6 +507,9 @@
       <div class="slider"><span>Jerk limit</span>
         <input type="range" id="s-jerk3" min="0" max="7" step="1" value="3" />
         <span class="v" id="v-jerk3">120 steps</span></div>
+      <div class="slider"><span>Settle</span>
+        <input type="range" id="s-settle3" min="0" max="5" step="1" value="1" />
+        <span class="v" id="v-settle3">1.0 ring</span></div>
     </div>
     <p class="hint">The jerk limit is a boxcar convolved into the command's acceleration, so it
       is the same object as an input shaper and composes with one. It changes what the machine is
@@ -508,7 +517,13 @@
       changing it throws the commissioning away and the module identifies the new command from
       scratch. Off is a bare trapezoid: acceleration steps, and the correction has to answer a
       transient that arrives all at once. At the far end the move is so smooth that most of what
-      the correction was for has already been removed by the profile.</p>
+      the correction was for has already been removed by the profile.
+      <b>Settle</b> is the dwell added on top of what the command's own delays need, in periods
+      of the link's ring: it is the time the MACHINE gets to stop moving before the next move
+      starts, where the jerk limit changes how the move is commanded. It is the host's number —
+      a motion program's dwell, sized from the CAD bending period — and the module is told
+      neither it nor the period; a longer dwell is simply a different command, so it throws the
+      commissioning away too.</p>
     <div class="controls">
       <button id="bb-go">Commission ▶</button>
       <button id="bb-reset" class="sec">Reset all</button>
@@ -831,7 +846,8 @@ async function build() {
 // and drove the plant to divergence. Same discipline here: the sliders stage a
 // change and the frame loop applies it at the top of the next move (or immediately
 // when nothing is running, since then there is no move to interrupt).
-let motionActive = { profile: 'trap', span: 2, speed: 4, jerk: 3, amp: 2, per: 3, home: 0 };
+let motionActive = { profile: 'trap', span: 2, speed: 4, jerk: 3, amp: 2, per: 3, home: 0,
+  settle: 1 };
 let motionPending = null;
 
 function homeAngle() { return motionActive.home; }
@@ -877,6 +893,23 @@ function currentRef() {
 // large fraction of the 300-step acceleration and is really making the move gentler,
 // which is what the Move speed slider is for; keeping the two apart is this page's rule.
 const JERK_LADDER = [0, 30, 60, 120, 200, 300, 450];
+// SETTLING TIME BETWEEN MOVES, IN PERIODS OF THE MACHINE'S OWN RING rather than in steps,
+// because that is the timescale the ringing decays on and it moves with the plant: at the
+// stiffness ladder's ends the Move tab's bending period spans 900 to 2800 steps, so a
+// dwell quoted in steps means something different at each. The dwell already covers the
+// SHAPER's and the JERK LIMIT's delays, which is the minimum that stops one move running
+// into the next; this is added ON TOP, and is what lets the machine actually come to rest.
+// At damping ratio z the amplitude falls by exp(-2*pi*z/sqrt(1-z^2)) per period, so the
+// readout states the decay rather than the count -- "2 ring" is a number and "to 4% of the
+// crest" is the thing being asked for.
+const SETTLE_LADDER = [0, 1, 2, 3, 5, 8];
+const settleDecay = (z, n) => (z > 0 && z < 1
+  ? Math.exp(-2 * Math.PI * z * n / Math.sqrt(1 - z * z)) : null);
+function settleLabel(n, z) {
+  const d = settleDecay(z, n);
+  return n === 0 ? 'none'
+    : `${n} ring${d != null ? ` · to ${(100 * d).toPrecision(2)}%` : ''}`;
+}
 
 // THE DRIVE HAS A RATING NOW, because it did not and that is not a machine. Reported
 // from the device: "the actual motor position has to be speed, accel and torque limited
@@ -926,10 +959,17 @@ function rebuildProfile() {
     // the total command delay is the shaper's plus the boxcar's, so at a wide jerk limit
     // the move ran past the start of the next one. Measured: at width 450 the move needs
     // 1000 + 982 + 450 = 2432 steps against a half period of 2276.
+    // …AND THE SETTLE IS A SEPARATE QUESTION FROM THE DELAY, which is why it is added
+    // rather than folded in. The delay terms are what a move NEEDS to finish being
+    // commanded; the settle is what the MACHINE needs to stop moving afterwards, and only
+    // the second is a choice.
     const need = (mode ? Math.round(1.3 * mode.period) : 1100)
       + JERK_LADDER[motionActive.jerk];
+    const settle = Math.round(SETTLE_LADDER[motionActive.settle]
+      * (mode ? mode.period : 1100));
     prof = new AngleProfile({ span: SPAN_LADDER[motionActive.span],
-      accelSteps: sp.a, cruiseSteps: sp.c, dwellSteps: Math.max(600, need), shaper });
+      accelSteps: sp.a, cruiseSteps: sp.c,
+      dwellSteps: Math.max(600, need) + settle, shaper });
   }
   if (pc && A) {
     comp = new TipCompensator({ comp: pc, inertia: A.mp.inertiaAboutPivot,
@@ -1279,7 +1319,12 @@ function recordBoard() {
   // ADAPTING AT ALL, dither or not. A row taken from a machine whose sensor is being
   // handed the truth every sample is a row about the tracker.
   if (ssTraining) return;
-  board[ctlMode()] = { bias: w.bias, sd: w.sd, rms: w.rms, key: boardKey(), k };
+  // …AND WHAT THE CORRECTION COSTS, alongside what it buys. A row that carries only
+  // tracking cannot express "and the motor was quiet doing it", so the selection that
+  // reads this table could not either -- see bestScored().
+  const cr = ctlMode() !== 'open' ? controlRoughness() : null;
+  board[ctlMode()] = { bias: w.bias, sd: w.sd, rms: w.rms, key: boardKey(), k,
+    rough: cr && cr.sd > 0 ? cr.rough / cr.sd : 0 };
   renderBoard();
 }
 
@@ -1300,10 +1345,10 @@ function renderBoard() {
         + `${(base.sd / b.sd).toFixed(2)}×</span>` : '—';
     return `<tr><td>${MODE_LABEL[m]}${b.key === 'shaped' ? ' + shaping' : ''}</td>`
       + `<td>${f(b.bias)}</td><td>${bg}</td><td>${f(b.sd)}</td><td>${og}</td>`
-      + `<td>${f(b.rms)}</td></tr>`;
+      + `<td>${f(b.rms)}</td><td>${b.rough ? f(b.rough) : '—'}</td></tr>`;
   }).join('');
   el.innerHTML = '<tr><th>mode</th><th>bias</th><th>vs ①</th><th>oscillation</th>'
-    + '<th>vs ①</th><th>rms</th></tr>' + rows;
+    + '<th>vs ①</th><th>rms</th><th>control d²</th></tr>' + rows;
 }
 
 // ------------------------------------------------------------ Compare
@@ -1336,11 +1381,27 @@ function setCtlMode(m) {
   stats();
 }
 
-/** The lowest-rms row of the table, or null if nothing has been scored. */
+/**
+ * THE BEST ROW OF THE TABLE, ON BOTH HALVES OF THE QUESTION.
+ *
+ * Among the modes within 5% of the lowest rms, the one whose CONTROL SIGNAL is smoothest.
+ * A tool that lands on target because the motor is being shaken is not the same machine
+ * as one that gets there quietly, and a selection reading only the rms column cannot tell
+ * them apart -- which is how the black box tab came to deploy a correction that made the
+ * commanded motor position 6354x rougher than the bare reference for 3.68x of tracking.
+ *
+ * IT IS A KNEE RATHER THAN A WEIGHTING, deliberately: summing two incommensurable
+ * quantities is a preference dressed as a result, while "as accurate as the best, and the
+ * gentlest of those" is a statement anyone can check. 5% is the same band the black box's
+ * own searches use.
+ */
 function bestScored() {
   const keys = ['open', 'ff', 'closed', 'learned'].filter((m) => board[m]);
   if (!keys.length) return null;
-  return keys.reduce((b, m) => (board[m].rms < board[b].rms ? m : b), keys[0]);
+  const lo = Math.min(...keys.map((m) => board[m].rms));
+  const band = keys.filter((m) => board[m].rms <= lo * 1.05);
+  return band.reduce((b, m) =>
+    ((board[m].rough || 0) < (board[b].rough || 0) ? m : b), band[0]);
 }
 
 /**
@@ -2599,12 +2660,15 @@ const stageMotion = () => {
   const next = { profile: $('s-profile').value, span: +$('s-span').value,
     speed: +$('s-speed').value, jerk: +$('s-jerk').value,
     amp: +$('s-amp').value, per: +$('s-freq').value,
+    settle: +$('s-settle').value,
     home: HOME_LADDER[+$('s-home').value] };
   $('trap-ctl').hidden = next.profile !== 'trap';
   $('sine-ctl').hidden = next.profile !== 'sine';
   $('v-span').textContent = `${SPAN_LADDER[next.span].toFixed(3)} rad`;
   $('v-speed').textContent = SPEED_LADDER[next.speed].label;
   $('v-jerk').textContent = JERK_LADDER[next.jerk] ? `${JERK_LADDER[next.jerk]} steps` : 'off';
+  $('v-settle').textContent = settleLabel(SETTLE_LADDER[next.settle],
+    mode && !mode.overdamped ? mode.zeta : null);
   $('v-amp').textContent = `${AMP_LADDER[next.amp].toFixed(2)} rad`;
   // THE PERIOD IS SHOWN AGAINST THE BENDING MODE, not on its own. A number of steps
   // says nothing about whether the drive is below the resonance, on it, or past it,
@@ -2622,7 +2686,7 @@ const stageMotion = () => {
   else $('motion-pending').hidden = false;
   stats();
 };
-for (const id of ['s-span', 's-speed', 's-jerk', 's-amp', 's-freq', 's-home']) {
+for (const id of ['s-span', 's-speed', 's-jerk', 's-settle', 's-amp', 's-freq', 's-home']) {
   $(id).addEventListener('input', stageMotion);
 }
 $('s-profile').addEventListener('change', stageMotion);
@@ -2676,7 +2740,7 @@ const chHist = { t: [], t2: [], c21: [], c22: [], tip: [],
 // The chain's own motion state, staged and applied at a move boundary for the same
 // reason the Move tab's is: rebuilding a reference mid-move is a position-demand
 // step into the servo's proportional gain.
-let motion2 = { span: 3, speed: 4, jerk: 3 }, motion2Pending = null;
+let motion2 = { span: 3, speed: 4, jerk: 3, settle: 1 }, motion2Pending = null;
 let closedOff2 = 0, cmp2 = null, board2 = {};
 // The chain's learned dynamic filter, and the state machine that fits one. Both are
 // the Move tab's, with the chain's two differences: the reference the filter is
@@ -2718,8 +2782,9 @@ function rebuildProfile2() {
   // dwell covering BOTH delays.
   const shaper = convolveShapers(shaper2(), jerkShaper(JERK_LADDER[motion2.jerk]));
   const need = (bend2 ? Math.round(1.3 * bend2.period) : 900) + JERK_LADDER[motion2.jerk];
+  const settle = Math.round(SETTLE_LADDER[motion2.settle] * (bend2 ? bend2.period : 900));
   prof2 = new AngleProfile({ span: SPAN_LADDER[motion2.span], accelSteps: sp.a,
-    cruiseSteps: sp.c, dwellSteps: Math.max(900, need), shaper });
+    cruiseSteps: sp.c, dwellSteps: Math.max(900, need) + settle, shaper });
 }
 
 // ------------------------------------------- the chain's commissioning decay
@@ -3241,8 +3306,15 @@ const csRec = [];
 let csScoreFrom = 0;
 
 function csInit() {
-  csWhole = new ChainSensor({ joints: [0, 1], sampleEvery: SAMPLE_EVERY, lag: 3, warmup: 200 });
-  csElbow = new ChainSensor({ joints: [1], sampleEvery: SAMPLE_EVERY, lag: 6, warmup: 200 });
+  // MATCHED CAPACITY: the whole-arm model reads twice the signals, so it gets half the
+  // lags at twice the spacing — the same base dimension and the same window REACH, which
+  // is what makes the comparison about information rather than about model size. The reach
+  // is ~1020 steps against the chain's ~860-step ring; see ChainSensor's constructor for
+  // the measurement that set it.
+  csWhole = new ChainSensor({ joints: [0, 1], sampleEvery: SAMPLE_EVERY,
+    lag: 18, stride: 6, warmup: 200 });
+  csElbow = new ChainSensor({ joints: [1], sampleEvery: SAMPLE_EVERY,
+    lag: 36, stride: 3, warmup: 200 });
   csRec.length = 0; csScoreFrom = 0; csTraining = false;
   csLastEst = null; csUnder = null;
   // A closed loop on a sensor that no longer exists must not keep its last
@@ -3507,11 +3579,14 @@ function lockSensors2() {
   syncChain();
 }
 
-/** The lowest-rms row of the chain's table, or null. */
+/** See bestScored(): among the rows within 5% of the lowest rms, the gentlest control. */
 function bestScored2() {
   const keys = ['open', 'ff', 'learned', 'closed'].filter((m) => board2[m]);
   if (!keys.length) return null;
-  return keys.reduce((b, m) => (board2[m].rms < board2[b].rms ? m : b), keys[0]);
+  const lo = Math.min(...keys.map((m) => board2[m].rms));
+  const band = keys.filter((m) => board2[m].rms <= lo * 1.05);
+  return band.reduce((b, m) =>
+    ((board2[m].rough || 0) < (board2[b].rough || 0) ? m : b), band[0]);
 }
 
 /** See startCompare() for why a partial compare must not clear the table. */
@@ -3619,12 +3694,13 @@ function renderBoard2() {
     ? `<span class="${Math.abs(x) < Math.abs(bx) ? 'good' : 'bad'}">`
       + `${(Math.abs(bx) / Math.abs(x)).toFixed(1)}×</span>` : '—');
   el.innerHTML = '<tr><th>mode</th><th>bias</th><th>vs ①</th><th>oscillation</th>'
-    + '<th>vs ①</th><th>rms</th></tr>'
+    + '<th>vs ①</th><th>rms</th><th>control d²</th></tr>'
     + keys.map((m) => {
       const b = board2[m];
       return `<tr><td>${MODE_LABEL[m]}</td><td>${f(b.bias)}</td>`
         + `<td>${g(m, b.bias, base && base.bias)}</td><td>${f(b.sd)}</td>`
-        + `<td>${g(m, b.sd, base && base.sd)}</td><td>${f(b.rms)}</td></tr>`;
+        + `<td>${g(m, b.sd, base && base.sd)}</td><td>${f(b.rms)}</td>`
+        + `<td>${b.rough ? f(b.rough) : '—'}</td></tr>`;
     }).join('');
 }
 
@@ -3632,7 +3708,10 @@ function recordBoard2() {
   const w = win2Stats();
   if (!w || !w.full) return;
   if (csTraining) return;                    // see recordBoard(): never while adapting
-  board2[ctl2Mode()] = { bias: w.bias, sd: w.sd, rms: w.rms, k: k2 };
+  // See recordBoard(): the row carries what the correction COSTS as well as what it buys.
+  const cr = ctl2Mode() !== 'open' ? control2Roughness() : null;
+  board2[ctl2Mode()] = { bias: w.bias, sd: w.sd, rms: w.rms, k: k2,
+    rough: cr && cr.sd > 0 ? cr.rough / cr.sd : 0 };
   renderBoard2();
 }
 
@@ -4057,10 +4136,12 @@ $('board2-clear').addEventListener('click', () => {
 
 const stage2Motion = () => {
   const next = { span: +$('s-span2').value, speed: +$('s-speed2').value,
-    jerk: +$('s-jerk2').value };
+    jerk: +$('s-jerk2').value, settle: +$('s-settle2').value };
   $('v-span2').textContent = `${SPAN_LADDER[next.span].toFixed(3)} rad`;
   $('v-speed2').textContent = SPEED_LADDER[next.speed].label;
   $('v-jerk2').textContent = JERK_LADDER[next.jerk] ? `${JERK_LADDER[next.jerk]} steps` : 'off';
+  $('v-settle2').textContent = settleLabel(SETTLE_LADDER[next.settle],
+    bend2 ? bend2.zeta : null);
   if (Object.keys(next).every((kk) => next[kk] === motion2[kk])) {
     motion2Pending = null; $('motion2-pending').hidden = true; return;
   }
@@ -4088,7 +4169,9 @@ function applied2() {
   $('motion2-pending').hidden = true;
   syncChain();
 }
-for (const id of ['s-span2', 's-speed2', 's-jerk2']) $(id).addEventListener('input', stage2Motion);
+for (const id of ['s-span2', 's-speed2', 's-jerk2', 's-settle2']) {
+  $(id).addEventListener('input', stage2Motion);
+}
 stage2Motion();
 $('s-drive2').addEventListener('input', () => {
   const mult = DRIVE_LADDER[+$('s-drive2').value];
@@ -4117,10 +4200,38 @@ let bbDrawn = null, bbDrawnEst = null;
 let bbBusy = false, bbChartOn = false, bbHold = false;
 const bbHist = { t: [], truth: [], est: [], u: [] };
 let bbBase = null, bbScore = null;
+// WHAT THE CORRECTION COSTS THE MACHINE, measured on the machine, at the SOLVER's rate —
+// which is the only rate at which a staircase is visible at all. Three rolling second
+// differences: the reference the program asked for, the setpoint the servo was actually
+// handed, and the torque the drive had to produce. The reference is the yardstick, since
+// a big move has big curvature and a raw second difference says more about the move.
+const BB_SMOOTH_N = 6000;
+const bbSmooth = { ref: [], cmd: [], tau: [] };
+// …and the UNCORRECTED machine's own roughness is measured on the same run rather than
+// written down: it moves with the jerk limit, the settle, the span and the drive rating,
+// so a constant here would be a number that was true once.
+let bbSmoothBase = null;
+const bbRough = (a) => {
+  if (!a || a.length < 8) return null;
+  let m = 0; for (const v of a) m += v; m /= a.length;
+  let sd = 0, d2 = 0;
+  for (let i = 0; i < a.length; i++) sd += (a[i] - m) * (a[i] - m);
+  for (let i = 2; i < a.length; i++) {
+    const d = a[i] - 2 * a[i - 1] + a[i - 2]; d2 += d * d;
+  }
+  sd = Math.sqrt(sd / a.length);
+  return sd > 0 ? Math.sqrt(d2 / (a.length - 2)) / sd : null;
+};
 
 // 0 is a bare trapezoid; 1800 is a move whose acceleration ramps over six times its own
 // acceleration phase, i.e. barely a trapezoid at all any more.
 const BB_JERK = [0, 30, 60, 120, 240, 450, 900, 1800];
+// The link's bending period and damping ratio at this tab's shipped E and K, MEASURED by
+// the Move tab's own commissioning decay on the identical plant (6.215e-3 rad/step, period
+// 1011, zeta 0.236). It is host knowledge — the number a motion program's dwell would be
+// sized from — and the module is never told either of them.
+const BB_RING = 1011;
+const BB_ZETA = 0.236;
 // Pairs of the DEPLOYED correction the sensor gets before the tracker is taken away.
 const BB_TRAIN = 4000;
 const BB_PHI = (1 + Math.sqrt(5)) / 2;
@@ -4189,11 +4300,18 @@ async function buildBB() {
   // the CONTROLLER is worth, and the top of the ladder is the honest control on that: a move
   // smooth enough that most of what the correction was for is already gone.
   const jw = BB_JERK[+$('s-jerk3').value];
+  // …and the settle, in periods of the link's ring. THIS IS THE HOST'S NUMBER AND NOT THE
+  // MODULE'S: the command is built by whoever owns the machine, from the CAD bending
+  // period, exactly as a real motion program's dwell is. The black box is handed the
+  // finished command and still has to identify everything about it — and it does, since a
+  // longer dwell is simply a different command, which is why changing this throws the
+  // commissioning away in the same way the jerk limit does.
+  const sw = Math.round(SETTLE_LADDER[+$('s-settle3').value] * BB_RING);
   bbProf = new AngleProfile({ span: SPAN_LADDER[2], accelSteps: 300, cruiseSteps: 400,
     // THE DWELL HAS TO COVER THE JERK LIMIT'S OWN DELAY, or a wide one runs the move past
     // the start of the next — the same arithmetic the Move tab records: a boxcar of width
     // W delays the command by W, and the dwell is what absorbs it.
-    dwellSteps: 1400 + jw, shaper: jw ? boxcarShaper(jw) : null });
+    dwellSteps: 1400 + jw + sw, shaper: jw ? boxcarShaper(jw) : null });
   // …and the headroom is computed from THIS profile, so it must come after it.
   {
     const tauMax = 32 * hold;
@@ -4225,6 +4343,8 @@ async function buildBB() {
   // probe -- where the PRBS is being deliberately injected, so the baseline carried the
   // probe's own disturbance and the improvement was understated.
   bbK = 0; bb = null; bbBase = null; bbScore = null; bbRun = true; bbHold = false;
+  bbSmoothBase = null;
+  for (const a of Object.values(bbSmooth)) a.length = 0;
   bbLockAt = null;
   for (const a of Object.values(bbHist)) a.length = 0;
   $('state3-badge').textContent = 'running uncommissioned — press Commission';
@@ -4250,6 +4370,7 @@ function startBB() {
   // The baseline collected while it was running uncommissioned is KEPT -- it is the
   // number the correction has to beat.
   bbScore = null;
+  for (const a of Object.values(bbSmooth)) a.length = 0;
   for (const a of Object.values(bbHist)) a.length = 0;
   $('state3-badge').className = 'badge warn';
   syncBB();
@@ -4265,11 +4386,24 @@ function stepBB(n) {
     // can be run during the other.
     const atRest = bb && bb.holding;
     const r = atRest ? { theta: 0, omega: 0, alpha: 0 } : bbProfAt(bbK);
-    const u = bb ? bb.offset() : 0;
-    const tau = bbServo.torque({ theta: r.theta + u, omega: r.omega, alpha: r.alpha },
+    // …AT THE SOLVER'S OWN RATE, not the module's. The correction is designed on a grid
+    // of 50 solver steps, and reading it without the step index gets the HELD value —
+    // a staircase the drive can only answer with torque spikes.
+    const u = bb ? bb.offset(bbK) : 0;
+    const cmd = r.theta + u;
+    const tau = bbServo.torque({ theta: cmd, omega: r.omega, alpha: r.alpha },
       arm.encoder());
     arm.step(tau, 1);
     const e = tipTrackingError(arm, r.theta);
+    if (!atRest) {
+      bbSmooth.ref.push(r.theta); bbSmooth.cmd.push(cmd); bbSmooth.tau.push(tau);
+      if (bbSmooth.ref.length > BB_SMOOTH_N) {
+        for (const a of Object.values(bbSmooth)) a.splice(0, 1500);
+      }
+      if (!bb && bbSmooth.ref.length >= BB_SMOOTH_N) {
+        bbSmoothBase = { ref: bbRough(bbSmooth.ref), tau: bbRough(bbSmooth.tau) };
+      }
+    }
     if (bbK % BB_S === 0 && !bb) {
       // uncommissioned: this is the baseline, and nothing is being injected
       (bbBase ||= []).push(e);
@@ -4426,6 +4560,24 @@ function bbStats() {
           + `${st.design ? ` against ${st.design.predicted.toFixed(2)}× predicted` : ''}`
           + '</span>']);
       }
+    }
+    // SMOOTHNESS OF THE COMMAND, alongside what it buys. Tracking alone has no opinion
+    // about a command, and this tab had no row that did — measured before the correction
+    // was reconstructed at the solver's rate, the deployed design made the commanded
+    // motor position 6354× rougher than the bare reference and the drive torque 53×
+    // rougher, for 3.68× of tracking, while the ENCODER came out SMOOTHER than with no
+    // correction at all. That last number is the whole point: the servo could not follow
+    // any of it, so every bit of that roughness was torque the drive spent moving nothing.
+    const rq = bbRough(bbSmooth.cmd), rr = bbRough(bbSmooth.ref), rt = bbRough(bbSmooth.tau);
+    if (rq && rr) {
+      const q = rq / rr;
+      rows.push(['command smoothness', `second difference <span class="`
+        + `${q < 500 ? 'good' : 'bad'}">${q.toFixed(0)}×</span> the bare reference's`
+        + (rt && bbSmoothBase && bbSmoothBase.tau
+          ? `, torque ${(rt / bbSmoothBase.tau).toFixed(1)}× the uncorrected machine's`
+          : '')
+        + (q < 500 ? '' : '   <span class="warn">— a setpoint the loop cannot follow is '
+          + 'torque the drive spends moving nothing</span>')]);
     }
     if (bb.ss && bb.ss.frozen && bb.trained > 200) {
       rows.push(['soft sensor', `${bb.trained} pairs · estimate and a +`
@@ -4620,12 +4772,22 @@ $('s-jerk3').addEventListener('input', () => {
   $('v-jerk3').textContent = BB_JERK[+$('s-jerk3').value]
     ? `${BB_JERK[+$('s-jerk3').value]} steps` : 'off';
 });
-$('s-jerk3').addEventListener('change', async () => {
-  if (bbBusy) return;
-  bbBusy = true; syncBB();
-  await buildBB();
-  bbBusy = false; syncBB();
-});
+const bbSettleLabel = () => {
+  $('v-settle3').textContent = settleLabel(SETTLE_LADDER[+$('s-settle3').value], BB_ZETA);
+};
+$('s-settle3').addEventListener('input', bbSettleLabel);
+bbSettleLabel();
+// A LONGER DWELL IS A DIFFERENT COMMAND, so it throws the commissioning away for exactly
+// the reason the jerk limit does: the disturbance map is a fit from the command window to
+// what the machine does, and this changes the window.
+for (const id of ['s-jerk3', 's-settle3']) {
+  $(id).addEventListener('change', async () => {
+    if (bbBusy) return;
+    bbBusy = true; syncBB();
+    await buildBB();
+    bbBusy = false; syncBB();
+  });
+}
 $('bb-reset').addEventListener('click', async () => {
   if (bbBusy) return;
   bbBusy = true; syncBB();
@@ -4638,6 +4800,9 @@ window.__flxBBDbg = () => (bbArm ? {
   ...(bb ? bb.status() : { phase: 'idle' }),
   base: bbRms(bbBase), scored: bbRms(bbScore), drawn: bbDrawn, drawnEst: bbDrawnEst,
   headroom: bbHeadroom, jerk: BB_JERK[+$('s-jerk3').value], period: bbProf.period,
+  settle: SETTLE_LADDER[+$('s-settle3').value],
+  smooth: { cmd: bbRough(bbSmooth.cmd), ref: bbRough(bbSmooth.ref),
+    tau: bbRough(bbSmooth.tau), base: bbSmoothBase },
   ratio: bbRms(bbBase) && bbRms(bbScore) ? bbRms(bbBase) / bbRms(bbScore) : null,
   cells: bbArm.link.lattice.cellCount,
 } : null);

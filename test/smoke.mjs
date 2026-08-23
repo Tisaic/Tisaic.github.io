@@ -2594,6 +2594,36 @@ if (FULL) {
     `${bbd.cost && bbd.cost.mac} MAC against ${bbd.cost && bbd.cost.budget}`);
   check('flexisim/blackbox: …without making the machine worse', bbd.ratio > 0.95,
     `${bbd.ratio}`);
+  // AND WHAT THE CORRECTION COSTS THE MACHINE, which no tracking number can express.
+  // Before the correction was reconstructed at the solver's rate it was designed on a
+  // grid of 50 steps and HELD between updates, so the commanded motor position came out
+  // 6354x rougher than the bare reference and the drive torque 53x rougher — for 3.68x of
+  // tracking, with the ENCODER coming out SMOOTHER than with no correction at all,
+  // because the servo could not follow a staircase and the drive was spending all of it
+  // moving nothing. Every functional check passed throughout.
+  if (bbd.smooth && bbd.smooth.cmd && bbd.smooth.ref) {
+    const q = bbd.smooth.cmd / bbd.smooth.ref;
+    const t = bbd.smooth.base && bbd.smooth.base.tau
+      ? bbd.smooth.tau / bbd.smooth.base.tau : null;
+    console.log(`  flexisim/blackbox: command second difference ${q.toFixed(0)}x the bare `
+      + `reference's${t != null ? `, torque ${t.toFixed(1)}x the uncorrected machine's` : ''}`);
+    check('flexisim/blackbox: …and the command it hands the drive is one the drive can '
+      + 'follow', q < 800, `${q.toFixed(0)}x the bare reference (a HELD correction is 6354x)`);
+  }
+  // …AND THE LADDER MEASURED IT, which is what lets the choice between designs be made on
+  // both halves. The rule is the same knee the rest of the module uses: among the trials
+  // within 5% of the best MEASURED tracking, the smoothest.
+  if (bbd.design && bbd.design.trials && bbd.design.trials.length) {
+    const tr = bbd.design.trials;
+    const bestR = Math.max(...tr.map((x) => x.ratio));
+    const bandMin = Math.min(...tr.filter((x) => x.ratio >= 0.95 * bestR).map((x) => x.curv));
+    const dep = tr.find((x) => x.kind === (bbd.design.kind === 'constrained' ? 'mpc' : 'fir')
+      && x.scale === bbd.design.scale);
+    check('flexisim/blackbox: …and the trial ladder scored smoothness alongside tracking',
+      tr.every((x) => Number.isFinite(x.curv)) && (!dep || dep.curv <= bandMin * 1.0000001),
+      tr.map((x) => `${x.kind}${x.gentle ? '-g' : ''} ${x.ratio.toFixed(2)}x `
+        + `curv ${x.curv.toExponential(2)}`).join(' · '));
+  }
   // THE PICTURE HAS TO STAY ON THE STAGE, which "it is painted" cannot see. Once the
   // correction became a large deliberate quantity, running it through the deflection
   // magnifier drew the arm several radians off the canvas — no error, nothing blank, and
@@ -2663,6 +2693,27 @@ if (FULL) {
   check('flexisim/blackbox: …and throws the commissioning away, because the map was of the '
     + 'old one', afterJerk.phase === 'idle' && afterJerk.design == null,
     `${afterJerk.phase}`);
+  // THE SETTLE IS THE SAME KIND OF CONTROL AND HAS TO BEHAVE THE SAME WAY: it lengthens
+  // the dwell, which is a different command, so the commissioning goes with it.
+  const beforeSettle = { period: afterJerk.period, settle: afterJerk.settle };
+  await fx.evaluate(() => {
+    const el = document.getElementById('s-settle3');
+    el.value = String(+el.value === 5 ? 0 : 5);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await fx.waitForFunction(() => window.__flxBBDbg() && window.__flxBBDbg().phase === 'idle',
+    null, { timeout: 120000 });
+  const afterSettle = await fx.evaluate(() => window.__flxBBDbg());
+  console.log(`  flexisim/blackbox: settle ${beforeSettle.settle} → ${afterSettle.settle} `
+    + `ring, move period ${beforeSettle.period} → ${afterSettle.period}`);
+  check('flexisim/blackbox: the settle really lengthens the dwell between moves',
+    afterSettle.settle !== beforeSettle.settle
+    && afterSettle.period !== beforeSettle.period
+    && (afterSettle.settle > beforeSettle.settle) === (afterSettle.period > beforeSettle.period),
+    `settle ${beforeSettle.settle} → ${afterSettle.settle}, period `
+    + `${beforeSettle.period} → ${afterSettle.period}`);
+
   const paint3 = await fx.evaluate(() => {
     const c = document.getElementById('cv3');
     if (!c.width || !c.height) return { ok: false };

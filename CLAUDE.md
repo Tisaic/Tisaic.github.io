@@ -4064,6 +4064,128 @@ one.
    `correct` was reached and the last phase bought nothing. That is the same rule as the
    other two tabs and it is the tab's own claim, finally true.
 
+   **BRICK 32 — THE CORRECTION WAS A STAIRCASE, AND EVERY SCORE ON THE PAGE WAS BLIND TO
+   IT.** Reported from the device: measure performance on accuracy tip-to-target AND on
+   minimum, smooth motor effort, because "the black box solution is jerky and looks bad but
+   maybe scores well currently." It did score well and it was jerky, and the two facts had
+   the same cause.
+   **MEASURED BEFORE ANYTHING CHANGED** — second difference of each signal over its own
+   spread, at the SOLVER's rate, on the shipped arm:
+     no correction   tracking 1.722e-1 · cmd 4.87e-6 · enc 4.66e-6 · torque 7.52e-4
+     corrected       tracking 4.678e-2 · cmd 3.09e-2 · enc 3.87e-6 · torque 3.99e-2
+   The commanded motor position was **6354× rougher than the bare reference** and the drive
+   torque **53× rougher**, for 3.68× of tracking. **AND THE ENCODER CAME OUT SMOOTHER THAN
+   WITH NO CORRECTION AT ALL**, which is the number that says what was happening: the servo
+   could not follow any of it, so every bit of that roughness was torque the drive spent
+   moving nothing.
+   **THE CAUSE IS THE HOLD, AND IT IS FREE TO FIX.** The correction is designed on a grid of
+   50 solver steps and was HELD between updates, so a zero-order hold put a discontinuity
+   into the setpoint 20 times a move. Linear interpolation is the right reconstruction and
+   costs NO LAG — it passes exactly through the designed samples, and a zero-order hold is
+   the one carrying the half-sample lag. It needs the NEXT value at the start of each
+   interval and both designs already have it: the receding-horizon solve plans the whole
+   horizon and applies one element (`PreviewMPC.next()`), and the preview filter is simply
+   evaluated one grid sample ahead — the same single dot product it already ran.
+     cmd 3.09e-2 → 1.06e-3 (**28×**) · torque 3.99e-2 → 1.89e-3 (**21×**)
+     and the TRACKING IMPROVED, 3.68× → 5.23×
+   **A SMOOTHER RECONSTRUCTION WAS TRIED AND IS WORSE.** t → t²(3−2t) passes through the
+   same samples with zero slope at each, so it looked like the next step; measured, it made
+   BOTH numbers worse (cmd 1.06e-3 → 1.13e-3, torque 1.89e-3 → 1.99e-3) at identical
+   tracking, because zero slope at every knot is the stair's dwell coming back in a smooth
+   costume. The straight line between samples is the reconstruction of a band-limited
+   signal and nothing gentler than it is closer.
+   **ACROSS THE THREE PLANTS THAT SHARE NO PHYSICS: A 1.17× → 1.75× · B 3.59× → 7.71× ·
+   C 4.30× → 6.13×.** Plant A is the one where "nothing helps" because its disturbance sits
+   on its own lightly damped resonance — and a staircase 20 times a move was exciting
+   exactly that, so removing it is worth 50% there.
+   **THE OPEN-LOOP PREDICTION IS NOW CONSERVATIVE BY CONSTRUCTION, and a check had to move
+   because of it.** `h` is identified from a probe HELD for a whole grid interval and the
+   correction is deployed interpolated — a difference that lives entirely BETWEEN grid
+   samples, so the grid-rate model the design scores itself with cannot see it at all.
+   Predicted 2.33× against 6.13× achieved. The two-sided check on plant C is now the
+   MEASURED number against the achieved one (the convention plants A and B already used),
+   plus a ONE-SIDED assertion that the prediction never flatters the design — optimism is
+   the direction that is a defect, since that is where a design and its own prediction
+   agree with each other and disagree with the machine.
+   **AND THE SELECTION NOW ASKS BOTH HALVES OF THE QUESTION, ON ALL THREE TABS.** Tracking
+   alone has no opinion about a command, so the verify ladder was free to return the
+   twitchiest design on it. Each trial now measures the SLEW and the CURVATURE of its own
+   correction on the machine, normalised by the command's swing, and the rule is the same
+   KNEE the rest of the module uses: **among the trials within 5% of the best MEASURED
+   tracking, the smoothest.** The Move and Chain boards get a `control d²` column and
+   `bestScored()` applies the identical band. A weighted sum of two incommensurable
+   quantities is a preference dressed as a result; "as accurate as the best, and the
+   gentlest of those" is a statement anyone can check.
+   **THE EFFORT WEIGHT SPANNED THREE DECADES AND MOVED NOTHING**, which is what the
+   frontier report exposed. `boxQP` minimises ‖Hu+d‖² + λ‖Du‖² with λ RAW, and sum(h²) is
+   7.28 here, so the shipped ladder 1e-1 / 1e-2 / 1e-3 returned residuals identical to four
+   figures and efforts identical to three — three copies of one design, and nothing
+   downstream could tell. Normalising by sum(h²) makes λ = 1 mean "a unit of command
+   movement is worth a unit of tracking error" and the ladder bites on any plant.
+   **AND SCALING IT EXPOSED A SECOND DEFECT UNDERNEATH.** Every λ at one (horizon, iters)
+   costs exactly the same MAC, so "cheapest within the band" is a tie across the whole
+   ladder and a plain reduce kept whichever the loop reached first. Once λ could bite, that
+   accident selected a candidate **1.5% worse offline and 36% worse ON THE MACHINE (6.98×
+   against 4.48×)**. Fixed by breaking the MAC tie on residual.
+   **THE GENTLE END OF THE BAND GOES TO THE MACHINE RATHER THAN BEING CHOSEN OFFLINE**, and
+   the first attempt at choosing it offline is why. Taking the gentlest candidate within the
+   same 5% band cost 17% of measured tracking and bought 2% of measured roughness — because
+   the offline scorer's `effort` is the FIRST difference of u, and once the correction is a
+   ramp rather than a stair what the drive feels is its CURVATURE. So `mpc-gentle` is now
+   its own rung on the verify ladder, and it is a DIFFERENT rung from `×0.5`: that one
+   lowers the LIMIT, making the correction smaller, and this one raises the effort weight,
+   making it SMOOTHER. Measured on the arm the machine declines it — 5.98× against 6.99× for
+   8% less curvature, outside the band — which is the honest answer and not a wasted rung.
+   **SETTLING TIME IS A CONTROL NOW, ON ALL THREE TABS, AND IT IS QUOTED IN RINGS.** The
+   dwell already covered the shaper's and the jerk limit's delays, which is the minimum that
+   stops one move running into the next; `Settle` is added on top and is what lets the
+   MACHINE come to rest. In periods of the measured mode rather than in steps, because the
+   Move tab's bending period spans 900 to 2800 across the stiffness ladder and a dwell in
+   steps means something different at each — and the readout states the DECAY rather than
+   the count (at the measured ζ 0.236, one ring is "to 22%"), since that is the thing being
+   asked for. On the black box tab it is the HOST's number, sized from the CAD bending
+   period, and the module is told neither it nor the period; a longer dwell is simply a
+   different command, so it throws the commissioning away exactly as the jerk limit does.
+
+   **AND THE SETTLE CONTROL IMMEDIATELY FOUND A REAL DEFECT IN THE CHAIN'S TOOL SENSOR —
+   v222's FIX, NEVER APPLIED HERE.** With a real dwell the whole-arm model scored nRMSE
+   **0.6438 against a naive 1.0415**, i.e. barely better than assuming the tool is where the
+   encoders say. The chain's bending mode is ~860 steps and the shipped window reached
+   3 lags × stride 2 × 10 = **40 steps of it, 4.6% of one cycle**, so the phase of a free
+   vibration was outside what the model could see even in principle. It scored well only
+   because every move ran into the next and there was never a stretch of ringing with no
+   input; a settling dwell created 34% of samples with both joints parked, and it collapsed.
+   MEASURED, one plant, one stream per row — whole-arm nRMSE, and the parked stretch alone:
+     reach   features            dwell 1911            dwell 900
+      40 st  universal 544   1.2367 (parked 2.33)   0.1418
+      40 st  linear     31   0.3859 (parked 0.43)   0.1193
+     900 st  linear     61   0.1445 (parked 0.17)   0.0464
+     880 st  linear    121   0.1131 (parked 0.15)   0.0335
+    1020 st  linear    181   **0.0532 (parked 0.07)**  **0.0234**
+   **WORSE THAN PREDICTING THE MEAN before, 23× better with the window right** — and LINEAR
+   beats the 544-feature universal map at every window and at a third of the cost, which is
+   v222's finding reproduced: once the model can see the phase it does not need a rich basis
+   to guess it. On the page the locked whole-arm readout goes **0.0689 → 0.0234**.
+   THE OBVIOUS FIX WAS THE WRONG ONE, AGAIN. The Move tab's v222 entry credits the motor
+   REACTION torque — the one measured quantity that survives being parked — so that was
+   built first and measured: it made the whole-arm model **WORSE (1.2367 → 1.6973)** while
+   the window was still short, and helped the elbow-only one only slightly. It ships opt-in
+   and off. A signal cannot substitute for a window that cannot reach the period.
+
+   **AND IT RESOLVED A MYSTERY BRICK 17 HAD RECORDED AS UNEXPLAINED.** That entry reported
+   that with the elbow commanded to HOLD the whole-arm model LOSES (0.562 against 0.494),
+   said plainly that it had no clean mechanism, and recorded two falsified hypotheses. Both
+   were tested at a window that reached 4.6% of the ring. At a window that spans a full
+   period the whole-arm model wins that regime too — **0.0371 against 0.2051, 5.5×, a
+   LARGER margin than with both joints moving** — which is what the physics predicted from
+   the start: the elbow cannot see M₂₁·α₁ directly and that term is 14× the one it can.
+   **AND THE REVERSAL WAS NEVER A STABLE PROPERTY.** Re-measuring the old pair does not
+   reproduce its ordering either. It was two numbers a few percent apart taken from models
+   that could see almost none of the period they were being asked about — a difference
+   measured with a broken instrument, recorded as a finding. What IS stable is that the
+   window is worth 8× to the whole-arm model there. The headline numbers move with it:
+   whole arm **0.0689 → 0.0146**, forecast **0.1707 → 0.0700** against persistence 0.84.
+
    NOT YET BUILT: the WGSL elastic kernel (see the measurement above); general
    block-sparse bricks for a CLOSED structure — a gantry or a machine frame, where
    members are not separable into per-link frames and the swept box is genuinely
