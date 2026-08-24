@@ -3265,3 +3265,35 @@ catastrophically at far leads (held-out R² to −22). The same shape as FlowSim
 poly-2-online null: a basis the data cannot support is variance, and this plant's
 response to its channels is linear enough that the right lag window carries it. The
 nulls table gains a ninth row; the nonlinearity stays where it was measured to belong.
+
+## Brick 45 — the correction cap was a ceiling, and saturation was feeding the limit cycle
+
+Reported: ⑥ performs poorly at the softest sliders. Attributed before optimising, and
+the attribution overturned the plan. At K 0.25 / E 0.03, contour rms over three laps:
+
+  open loop (analytic ik)        6.2e-1 → 1.20 → 1.20
+  learned geometry refs alone    5.4e-1 → 1.11 → 1.11
+  ⑥ full (geometry + pilot)      4.2e-1 → 6.4e-1 → 6.2e-1
+
+**THE LEARNED GEOMETRY BUYS 8% HERE**, against the 14–44× it measured statically
+(brick 40) — because at this corner the error is DYNAMIC, and a map fitted at held
+poses does not contain it. And **every mode DEGRADES lap over lap** rather than
+settling, which is the tell that mattered.
+
+The cause is authority: `uMax` was a fixed 0.15 rad while wind-up goes as 1/K, so at
+64× softer the engineer's cap had quietly become a ceiling — the correction sat at the
+cap for **26.5% of the lap**, and a saturated correction cannot damp the backlash limit
+cycle it is fighting. Released, it wants 0.457 rad, the error settles at **3.2e-1** and
+the ladder goes FLAT (3.1e-1 / 3.3e-1 / 3.2e-1). The degradation WAS the saturation.
+The cap now scales with the plant, anchored so the stiff machine is bit-for-bit
+unchanged (K 16 → 0.15) and bounded at 1.0 rad; guards, workspace and the verify gate
+are untouched, so a larger cap widens what the pilot may ASK for and changes nothing
+about what it must prove.
+**THE PILOT'S OWN VERIFY COULD NOT SEE THIS**, which is the generalisable part:
+commissioning excites a smaller envelope than a production feed, so a cap that binds
+on the program need not bind on the scribble the verify round scores.
+
+ALSO DIAGNOSED, NOT YET FIXED: `Ts` is the FIRST crossing of 90% of DC — rise time, not
+settle time. On an underdamped plant it undershoots: measured 2012 against a true
+2%-settle of 3266 (1.6×), so the horizon is 1.6× short at this corner.
+LEDGER: 1.20 → 0.32 is 3.8× of a 20–100× ask. One blocker, not the blocker.

@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:249,built:"2026-08-24T01:41:57Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:250,built:"2026-08-24T02:18:10Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -6253,7 +6253,7 @@ function startPilotP() {
     nMeasured: 6,
     channels: [0, 1].map((j) => ({ lo: centre[j] - 0.55, hi: centre[j] + 0.55,
       vMax: 8e-4, aMax: 4e-6, jMax: 2e-7 })),
-    uMax: 0.15,
+    uMax: pilotUMax(),
     start: armP.ik(c0.x, c0.y, true),
     guards: [{ index: 4, max: 1.2 * PG.drive * holdP * 1e3 },
       { index: 5, max: 1.2 * PG.drive * holdP * 1e3 }],
@@ -6331,6 +6331,21 @@ $('pilotP-btn').addEventListener('click', startPilotP);
 // has different requirements from the same map used as an answer — the degree-7 fit
 // evaluated at the moving tool during excitation leaves the hull violently, and in Node
 // that poisoned every fit downstream (verify 1.01×, REFUSED; the split fixes it).
+/**
+ * THE CORRECTION CAP HAS TO SCALE WITH THE MACHINE (brick 45), because wind-up goes as
+ * 1/K and a fixed cap silently becomes a ceiling. Measured at K 0.25 / E 0.03: the
+ * shipped 0.15 rad was hit at the cap for 26.5% of the lap, the run DEGRADED lap over
+ * lap (4.2e-1 → 6.4e-1 → 6.2e-1) because a saturated correction cannot damp the
+ * backlash limit cycle it is fighting, and the pilot's own verify could not see it —
+ * commissioning excites a smaller envelope than a production feed. Released, the
+ * correction wants 0.457 rad, the error settles at 3.2e-1 and the ladder goes FLAT.
+ * Anchored so the shipped stiff machine is bit-for-bit unchanged (K 16 → 0.15), and
+ * bounded at 1.0 rad, which is still inside the ±0.55 command box's own travel scale.
+ * The guards, the workspace predicate and the verify gate all still apply, so a larger
+ * cap widens what the pilot MAY ask for and changes nothing about what it must prove.
+ */
+function pilotUMax() { return Math.min(1.0, 0.15 * (16 / armP.K)); }
+
 const IK6_PTS = 90, IK6_DEG = 7, IK6_ROUTE_DEG = 5;
 // ADAPTIVE SETTLE for the gather (brick 44): hold each point until the tracker is
 // measurably QUIET — span of the last WIN readings under TOL — then average the last
@@ -6537,7 +6552,7 @@ function ik6StartPilot() {
     nMeasured: 6,
     channels: [0, 1].map((j) => ({ lo: centreQ[j] - 0.55, hi: centreQ[j] + 0.55,
       vMax: 8e-4, aMax: 4e-6, jMax: 2e-7 })),
-    uMax: 0.15,
+    uMax: pilotUMax(),
     start: C.from.slice(),
     guards: [{ index: 4, max: 1.2 * PG.drive * holdP * 1e3 },
       { index: 5, max: 1.2 * PG.drive * holdP * 1e3 }],
