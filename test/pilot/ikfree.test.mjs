@@ -41,13 +41,13 @@ if (process.env.SUITE !== 'full') {
 const H = 4, CLAMP = 3, NU = 0.3, RHO = 1, G = 2e-6, RATIO = 100, DAMPING = 3e-3;
 const PG = { LEN1: 14, LEN2: 10, E: 0.15, centre: [12, 0], drive: 32 };
 
-async function makeArm() {
-  const mk = (length) => buildLink({ length, section: H, clamp: CLAMP, E: PG.E,
+async function makeArm(K = 16, EE = PG.E) {
+  const mk = (length) => buildLink({ length, section: H, clamp: CLAMP, E: EE,
     nu: NU, rho: RHO, damping: DAMPING });
   const l1 = await mk(PG.LEN1), l2 = await mk(PG.LEN2);
   const j = (mp) => new Joint({ ratio: RATIO, motorInertia: mp.inertiaAboutPivot / 1e4,
-    loadInertia: mp.inertiaAboutPivot, stiffness: 16, backlash: 1e-4,
-    damping: 2 * Math.sqrt(16 * mp.inertiaAboutPivot / 2) });
+    loadInertia: mp.inertiaAboutPivot, stiffness: K, backlash: 1e-4,
+    damping: 2 * Math.sqrt(K * mp.inertiaAboutPivot / 2) });
   const arm = new FlexArm2R({ joint1: j(massProperties(l1)), link1: l1,
     joint2: j(massProperties(l2)), link2: l2, gravityWorld: [0, -G, 0], dt: 1 });
   const hold = Math.abs(arm.gravityTorque([0, 0])[0]) / RATIO;
@@ -57,10 +57,18 @@ async function makeArm() {
 
 const quintic = (t) => t * t * t * (10 + t * (-15 + 6 * t));
 
-/** Ease both channels to `to`, hold, return the tracker averaged over the last steps. */
-function visit(arm, servo, from, to, { T = 2500, settle = 2200, avg = 400 } = {}) {
-  let sx = 0, sy = 0;
-  for (let k = 0; k < T + settle; k++) {
+/**
+ * Ease both channels to `to`, then hold until the tracker is measurably QUIET — the
+ * span of the last WIN readings under TOL — and return the average of the last AVG.
+ * The fixed settle this replaced was tuned on a stiff machine and read ring, not
+ * geometry, at the soft corner (brick 44): ring-at-read 7e-2, map holdout 2.2e-2 rad.
+ * Adaptive, the soft corner reads 1e-2 / 7.5e-4 — and a stiff machine settles FASTER.
+ */
+const S_TOL = 2e-3, S_WIN = 400, S_AVG = 800, S_CAP = 30000;
+function visit(arm, servo, from, to, { T = 2500 } = {}) {
+  const bx = new Float64Array(S_AVG), by = new Float64Array(S_AVG);
+  let n = 0;
+  for (let k = 0; k < T + S_CAP; k++) {
     let refs;
     if (k < T) {
       const t = k / T, s = quintic(t);
@@ -73,9 +81,24 @@ function visit(arm, servo, from, to, { T = 2500, settle = 2200, avg = 400 } = {}
     }
     const tau = servo.torques(refs);
     arm.step(tau[0], tau[1], 1);
-    if (k >= T + settle - avg) { const p = arm.toolXY(); sx += p[0]; sy += p[1]; }
+    if (k >= T) {
+      const p = arm.toolXY();
+      bx[n % S_AVG] = p[0]; by[n % S_AVG] = p[1]; n++;
+      if (n >= S_AVG && n % 50 === 0) {
+        let lo0 = Infinity, hi0 = -Infinity, lo1 = Infinity, hi1 = -Infinity;
+        for (let w = n - S_WIN; w < n; w++) {
+          const x = bx[w % S_AVG], y = by[w % S_AVG];
+          if (x < lo0) lo0 = x; if (x > hi0) hi0 = x;
+          if (y < lo1) lo1 = y; if (y > hi1) hi1 = y;
+        }
+        if (Math.hypot(hi0 - lo0, hi1 - lo1) < S_TOL) break;
+      }
+    }
   }
-  return [sx / avg, sy / avg];
+  let sx = 0, sy = 0;
+  const m = Math.min(n, S_AVG);
+  for (let w = n - m; w < n; w++) { sx += bx[w % S_AVG]; sy += by[w % S_AVG]; }
+  return [sx / m, sy / m];
 }
 
 // ------------------------------------------------------------ gather held points
@@ -86,7 +109,7 @@ let seed = 7 >>> 0;
 const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32);
 let cur = box.map((b) => (b.lo + b.hi) / 2);
 arm.setPose(cur[0], cur[1]);
-visit(arm, servo, cur, cur, { T: 10, settle: 3000, avg: 200 });
+visit(arm, servo, cur, cur, { T: 10 });
 const pairs = [];
 const N_PTS = 90;
 for (let i = 0; i < N_PTS; i++) {
@@ -199,13 +222,42 @@ check('…and beats the analytic kinematics at least 5x, because it learned the 
 // tool during excitation it leaves the hull violently, the truth channel spikes, and
 // the pilot's own verify gate REFUSES the result (1.01x in Node at degree 8). An
 // instrument must fail gently; an answer must be accurate; they are different fits.
+// THE AFFINE OBSERVER (brick 44): truth = G(cmd) · (tool − fwd(cmd)). The previous
+// instrument — the clamped degree-5 map evaluated at the MOVING tool — refused the
+// pilot at the softest sliders (verify 0.48×) with only 3.7% of steps outside the
+// hull: the defect was CURVATURE, not extrapolation. A nonlinear map of the fast
+// variable has a gain that changes along the trajectory, breaking the LTI assumption
+// the QP's response model rests on. Here both learned halves are evaluated at the
+// COMMAND (in-domain by construction) and the tool enters linearly. Measured at
+// K 0.25 / E 0.03: r² 0.75/0.59 → 0.99/0.85, verify 0.48× → 5.02×.
 const routeW = solveRidge(trn.map((p) => features(p.x, p.y, 5)), trn.map((p) => p.q), 1e-9);
-const bb = { xlo: Math.min(...pairs.map((p) => p.x)), xhi: Math.max(...pairs.map((p) => p.x)),
-  ylo: Math.min(...pairs.map((p) => p.y)), yhi: Math.max(...pairs.map((p) => p.y)) };
-const route = (x, y) => {
-  const f = features(Math.min(Math.max(x, bb.xlo), bb.xhi),
-    Math.min(Math.max(y, bb.ylo), bb.yhi), 5);
-  return routeW.map((w) => { let s2 = 0; for (let i = 0; i < f.length; i++) s2 += w[i] * f[i]; return s2; });
+const qcB = [(Math.min(...pairs.map((p) => p.q[0])) + Math.max(...pairs.map((p) => p.q[0]))) / 2,
+  (Math.min(...pairs.map((p) => p.q[1])) + Math.max(...pairs.map((p) => p.q[1]))) / 2];
+const qFeat = (q) => {
+  const u = (q[0] - qcB[0]) / 0.55, v = (q[1] - qcB[1]) / 0.55;
+  const out = [];
+  for (let i = 0; i <= 5; i++) for (let j = 0; j <= 5 - i; j++) out.push(u ** i * v ** j);
+  return out;
+};
+const fwdW = solveRidge(trn.map((p) => qFeat(p.q)), trn.map((p) => [p.x, p.y]), 1e-9);
+const fwd = (q) => {
+  const f = qFeat(q);
+  return fwdW.map((w) => { let s2 = 0; for (let i = 0; i < f.length; i++) s2 += w[i] * f[i]; return s2; });
+};
+const gradAt = (x, y) => {
+  const u = (x - PG.centre[0]) / 5, v = (y - PG.centre[1]) / 5;
+  const fx = [], fy = [];
+  for (let i = 0; i <= 5; i++) {
+    for (let j = 0; j <= 5 - i; j++) {
+      fx.push(i === 0 ? 0 : (i * u ** (i - 1) * v ** j) / 5);
+      fy.push(j === 0 ? 0 : (u ** i * j * v ** (j - 1)) / 5);
+    }
+  }
+  return routeW.map((w) => {
+    let gx = 0, gy = 0;
+    for (let i = 0; i < w.length; i++) { gx += w[i] * fx[i]; gy += w[i] * fy[i]; }
+    return [gx, gy];
+  });
 };
 
 const { arm: a6, servo: s6 } = await makeArm();
@@ -231,9 +283,12 @@ while (pilot.phase !== 'done') {
   a6.step(tau[0], tau[1], 1);
   const enc = a6.encoders();
   const tool = a6.toolXY();
-  const qT = route(tool[0], tool[1]);
+  const t0 = fwd([cmd[0].pos, cmd[1].pos]);
+  const Gm = gradAt(t0[0], t0[1]);
+  const dx6 = tool[0] - t0[0], dy6 = tool[1] - t0[1];
   pilot.observe([enc[0].angle, enc[1].angle, enc[0].speed * 1e3, enc[1].speed * 1e3,
-    tau[0] * 1e3, tau[1] * 1e3], [qT[0] - cmd[0].pos, qT[1] - cmd[1].pos]);
+    tau[0] * 1e3, tau[1] * 1e3],
+  [Gm[0][0] * dx6 + Gm[0][1] * dy6, Gm[1][0] * dx6 + Gm[1][1] * dy6]);
 }
 console.log(`    ⑥ pilot on the learned routing: ${pilot.verdict.deploy ? 'deploys' : 'refused'}`
   + (pilot.status().report.verify ? `, verify ${pilot.status().report.verify.ratio.toFixed(2)}x` : ''));
@@ -274,8 +329,9 @@ if (pilot.verdict.deploy) {
       const tool = a7.toolXY();
       const dec = decompose(path, tool, cmd);
       score.step(dec.contour, dec.lag, tau, [a7.j1.wM, a7.j2.wM]);
-      const qT = route(tool[0], tool[1]), qC = route(cmd.x, cmd.y);
-      ilc.observe(cmd.s, [qT[0] - qC[0], qT[1] - qC[1]]);
+      const Gm = gradAt(cmd.x, cmd.y);
+      const dxl = tool[0] - cmd.x, dyl = tool[1] - cmd.y;
+      ilc.observe(cmd.s, [Gm[0][0] * dxl + Gm[0][1] * dyl, Gm[1][0] * dxl + Gm[1][1] * dyl]);
     }
     ilc.endLap();
     ladder.push(score.report().contourRms);
@@ -289,6 +345,89 @@ if (pilot.verdict.deploy) {
   check('⑦ — iteration on the fully learned chain — converges on the circle',
     tail < 8e-3 && tail < ladder[0] / 4,
     `tail ${tail.toExponential(2)} vs lap 1 ${ladder[0].toExponential(2)}`);
+}
+
+// ============= THE SOFTEST SLIDERS (K 0.25, E 0.03): ⑥ MUST STILL COMMISSION
+//
+// The owner's report, pinned: at the softest gearbox and the softest links the fully
+// learned system refused. Two defects, both fixed and both required (brick 44): the
+// FIXED gather settle read ring instead of geometry (adaptive quiet-detection fixes
+// the map, holdout 2.2e-2 → 7.5e-4 rad), and the map-at-the-moving-tool truth routing
+// broke the observer's LTI-ness (the affine observer fixes the pilot, verify 0.48× →
+// 5.02×). A trimmed 45-point gather keeps this affordable; the gate is the deploy
+// itself plus a real verify margin.
+{
+  const { arm: aS, servo: sS } = await makeArm(0.25, 0.03);
+  const centreS = aS.ik(12, 0, true);
+  const boxS = [0, 1].map((jj) => ({ lo: centreS[jj] - 0.55, hi: centreS[jj] + 0.55 }));
+  let seedS = 7 >>> 0;
+  const rndS = () => ((seedS = (seedS * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+  let curS = boxS.map((b) => (b.lo + b.hi) / 2);
+  aS.setPose(curS[0], curS[1]);
+  visit(aS, sS, curS, curS, { T: 10 });
+  const pairsS = [];
+  for (let i = 0; i < 45; i++) {
+    const to = boxS.map((b) => b.lo + (b.hi - b.lo) * rndS());
+    const xy = visit(aS, sS, curS, to);
+    pairsS.push({ x: xy[0], y: xy[1], q: to.slice() });
+    curS = to;
+  }
+  const trnS = pairsS.filter((_, i) => i % 4 !== 3);
+  const invW = solveRidge(trnS.map((p) => features(p.x, p.y, 5)), trnS.map((p) => p.q), 1e-9);
+  const qcS = [(boxS[0].lo + boxS[0].hi) / 2, (boxS[1].lo + boxS[1].hi) / 2];
+  const qFeatS = (q) => {
+    const u = (q[0] - qcS[0]) / 0.55, v = (q[1] - qcS[1]) / 0.55;
+    const out = [];
+    for (let i = 0; i <= 5; i++) for (let jj = 0; jj <= 5 - i; jj++) out.push(u ** i * v ** jj);
+    return out;
+  };
+  const fwdWS = solveRidge(trnS.map((p) => qFeatS(p.q)), trnS.map((p) => [p.x, p.y]), 1e-9);
+  const fwdS = (q) => {
+    const f = qFeatS(q);
+    return fwdWS.map((w) => { let s2 = 0; for (let i = 0; i < f.length; i++) s2 += w[i] * f[i]; return s2; });
+  };
+  const gradS = (x, y) => {
+    const u = (x - PG.centre[0]) / 5, v = (y - PG.centre[1]) / 5;
+    const fx = [], fy = [];
+    for (let i = 0; i <= 5; i++) {
+      for (let jj = 0; jj <= 5 - i; jj++) {
+        fx.push(i === 0 ? 0 : (i * u ** (i - 1) * v ** jj) / 5);
+        fy.push(jj === 0 ? 0 : (u ** i * jj * v ** (jj - 1)) / 5);
+      }
+    }
+    return invW.map((w) => {
+      let gx = 0, gy = 0;
+      for (let i = 0; i < w.length; i++) { gx += w[i] * fx[i]; gy += w[i] * fy[i]; }
+      return [gx, gy];
+    });
+  };
+  const pilotS = new Pilot({ nMeasured: 6,
+    channels: [0, 1].map((jj) => ({ lo: centreS[jj] - 0.55, hi: centreS[jj] + 0.55,
+      vMax: 8e-4, aMax: 4e-6, jMax: 2e-7 })),
+    uMax: 0.15, start: curS.slice(), guards: [{ index: 4, max: 6 }, { index: 5, max: 6 }],
+    workspace: () => true, seed: 1 });
+  while (pilotS.phase !== 'done') {
+    if (pilotS.phase === 'fit') { pilotS.work(); continue; }
+    const cmd = pilotS.command();
+    const refs = cmd.map((c) => ({ theta: c.pos + c.u, omega: c.vel, alpha: c.acc }));
+    const tau = sS.torques(refs);
+    aS.step(tau[0], tau[1], 1);
+    const enc = aS.encoders();
+    const tool = aS.toolXY();
+    const t0 = fwdS([cmd[0].pos, cmd[1].pos]);
+    const Gm = gradS(t0[0], t0[1]);
+    const dx = tool[0] - t0[0], dy = tool[1] - t0[1];
+    pilotS.observe([enc[0].angle, enc[1].angle, enc[0].speed * 1e3, enc[1].speed * 1e3,
+      tau[0] * 1e3, tau[1] * 1e3],
+    [Gm[0][0] * dx + Gm[0][1] * dy, Gm[1][0] * dx + Gm[1][1] * dy]);
+  }
+  await aS.l1.destroy(); await aS.l2.destroy();
+  const vS = pilotS.status().report.verify;
+  console.log(`    softest corner (K 0.25, E 0.03): ${pilotS.verdict.deploy ? 'deploys' : 'REFUSED'}`
+    + (vS ? `, verify ${vS.ratio.toFixed(2)}x` : ''));
+  check('at the softest sliders the fully learned system still commissions and deploys',
+    pilotS.verdict.deploy === true && vS && vS.ratio > 1.5,
+    JSON.stringify(pilotS.verdict));
 }
 
 console.log(failed ? `\npilot/ikfree: ${failed} check(s) FAILED\n` : '\npilot/ikfree: all checks passed\n');

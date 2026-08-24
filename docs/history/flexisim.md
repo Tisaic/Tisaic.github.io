@@ -3200,3 +3200,68 @@ c_p = 0.544 at E 0.22 against the 0.577 limit, and E 0.3 would be refused at bui
 Either slider rebuilds the plant and clears every learner on the tab, because a
 compliance constant, a pilot, a learned geometry and three ILC tables all belong to
 exactly one machine.
+
+## Brick 44 — the softest corner: two observer lessons, an ILC safeguard, and a basis null
+
+Three reports in one session, all at the new compliance sliders' bottom end, all
+measured to ground.
+
+### ⑥ refused at K 0.25 / E 0.03, and it took two fixes because the first exposed the second
+
+Localised immediately: at the same corner ⑤ with analytic routing deploys (verify
+2.80×) while ⑥ refuses (0.98×) — the failure is in the learned pieces. **Defect one:
+the fixed 2200-step gather settle was tuned on a stiff machine.** At the soft corner
+the tool was still ringing 7.4e-2 (max 0.32) when "settled" readings were taken, and
+the inverse fitted ring, not geometry: holdout 2.2e-2 rad, 100× the stiff figure. The
+fix is the settle every other instrument here already uses — hold until the tracker is
+measurably QUIET (span of the last 400 readings under 2e-3, capped) — and it reads
+7.5e-4 rad at the soft corner while making a stiff gather FASTER.
+
+**And the good map made the verify WORSE — 0.98× → 0.48× — which is what exposed the
+real defect.** The clamp was the suspect and the instrument cleared it (rule 14): only
+3.7% of steps left the hull, and the learned truth correlated 0.87 with the analytic
+truth. The cause was CURVATURE: the routing evaluated a degree-5 polynomial at the
+MOVING TOOL, and a nonlinear map of the fast variable has a gain that changes along
+the trajectory — which breaks the LTI assumption the QP's response model rests on.
+Invisible at stiff (the tool never leaves the settled manifold's neighbourhood), fatal
+at soft. The fix is the **affine observer**: truth = G(cmd) · (tool − fwd(cmd)), the
+forward map and the inverse gradient both learned from the same pairs and both
+evaluated at the COMMAND — in the training domain by construction — so the tool enters
+linearly. Measured at the corner: r² 0.75/0.59 → **0.99/0.85** (identical to the
+analytic observer) and verify 0.48× → **5.02×** — deploying with more margin than ⑤'s
+own 2.80× there. An instrument must not merely fail gently; used inside a linear
+control loop it must BE affine in the fast variable.
+
+### The ILC divergence is the gearbox, and the safeguard's endpoint is exactly open loop
+
+"ILC makes control much worse over time with the more flexible link" — measured, the
+axis is the GEARBOX: soft links alone converge over 30 laps (K 16 / E 0.03: 2.8e-1 →
+3.2e-2), but a soft gearbox adds a slow, lightly damped lag the fixed 500-step lead
+does not cover, and the table pumps: K 1 / E 0.03 climbs to 1.07 and keeps going;
+K 0.25 / E 0.03 reaches **5.25** with the arm flailing. Every learning table on the
+tab now carries a **monotone safeguard**: snapshot the table that PRODUCED the best
+lap (the first ordering snapshotted post-fold and latched on a never-validated table —
+measured, then fixed), and when a lap regresses past 1.6× that best, halve the gain,
+restore the snapshot, and hold a **settling dwell** until the tool is quiet — the
+anti-slosh tab's lesson, needed here because a bad lap KICKS the machine into a
+backlash limit cycle that persists under open-loop driving (measured: continuous open
+loop at the soft corners runs 6.37e-1 / 1.21 lap after lap, against 4.0e-1 / 6.1e-1
+for a first lap from rest — the machine itself sustains the ring). After three
+backoffs the table FREEZES, empty unless its best lap clearly beat its first, and the
+panel says so. The endpoint was verified against the continuous open loop and matches
+it to the third digit: never worse than switching iteration off, invisible on any
+converging ladder (zero backoffs at every healthy corner), honest refusal where the
+lead cannot serve the plant.
+
+### And the basis question: the pilot's forecast is linear, measured to stay so
+
+Asked whether the new modes carry NGRC's full nonlinear form. The learned GEOMETRY
+does — a degree-7 polynomial map is precisely the polynomial-basis idea, applied to
+the variable that is actually nonlinear. The pilot's FORECAST is linear lag taps, and
+the quadratic expansion was measured rather than assumed: NGRC monomials on a reduced
+tap window (121 → 374 features), same records, the pilot's own block-split holdout,
+three ridges, both stiffness corners. It loses everywhere — mildly at lead 0,
+catastrophically at far leads (held-out R² to −22). The same shape as FlowSim's
+poly-2-online null: a basis the data cannot support is variance, and this plant's
+response to its channels is linear enough that the right lag window carries it. The
+nulls table gains a ninth row; the nonlinearity stays where it was measured to belong.

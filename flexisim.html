@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:248,built:"2026-08-24T00:35:25Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:249,built:"2026-08-24T01:41:57Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -5647,7 +5647,7 @@ async function homeP() {
     armP.step(tau[0], tau[1], 1);
   }
   servoP.resetLimitStats();
-  kP = 0; lapP = 0; progPending = false;
+  kP = 0; lapP = 0; progPending = false; dwellP = null;
   scoreP = newScore(); lapScoreP = newScore();
   trailP = []; pHist = { s: [], c: [], v: [] };
   residP = { enc: 0, follow: 0, n: 0 };
@@ -5675,11 +5675,103 @@ function makeILC(keep) {
     smooth: ILC.smooth,
     leadBins: Math.round(ILC.leadSteps * bins / profP.lap) });
   if (keep && ilcP && ilcP.bins === bins && Math.abs(ilcP.length - profP.length) < 1e-9) {
-    next.u = ilcP.u; next.laps = ilcP.laps;
+    next.u = ilcP.u; next.laps = ilcP.laps; carryGuard(next, ilcP);
   } else {
     ilcHist = [];
   }
   ilcP = next;
+}
+
+/**
+ * THE MONOTONE SAFEGUARD (brick 44), shared by every learning table on the tab.
+ *
+ * The classic per-lap fold is only stable while the fixed lead covers the plant's
+ * phase: soften the GEARBOX and a slow, lightly damped lag appears that it does not
+ * cover, and the table pumps the resonance — measured at K 0.25 / E 0.03 the ④ ladder
+ * runs 6.1e-1 → 5.25 and climbs, the arm visibly flailing. The remedy a commissioning
+ * engineer would apply: keep the best table seen, and when a lap regresses well past
+ * that best, RESTORE it and halve the learning gain. Converging runs never trigger it
+ * (the threshold sits above the lap-2 transient every healthy ladder shows); a plant
+ * the lead cannot serve anneals its gain down until it stops making things worse.
+ * @returns {boolean} whether a backoff fired
+ */
+function ilcGuard(table, score) {
+  if (!(score >= 0) || table._frozen) return false;
+  if (table._first === undefined) table._first = score;
+  if (table._best === undefined || score < table._best) {
+    table._best = score;
+    table._bestU = table.u.map((a) => a.slice());   // PRE-fold: the table that PRODUCED this lap
+    return false;
+  }
+  if (table.laps >= 2 && score > 1.6 * table._best) {
+    table.gain = Math.max(0.05, table.gain / 2);
+    table._backoffs = (table._backoffs || 0) + 1;
+    // THREE STRIKES AND THE TABLE FREEZES, because the measurement says annealing cannot
+    // save it: at K 0.25 a fold at gain 0.05 still DOUBLED the lap — the lead is wrong
+    // for this plant's phase and every fold pumps, only slower. Frozen EMPTY unless the
+    // best-with-table lap clearly beat the first lap (it almost never did where this
+    // fires), which is exactly "never worse than switching iteration off".
+    if (table._backoffs >= 3) {
+      table._frozen = true;
+      if (table._best > 0.9 * table._first) {
+        table._bestU = table.u.map((a) => new Float64Array(a.length));
+      }
+    }
+    return true;
+  }
+  return false;
+}
+/**
+ * THE SETTLING DWELL after a backoff — the anti-slosh tab's lesson applied here: a lap
+ * that regressed hard has usually KICKED the machine (at the soft corners it enters a
+ * backlash limit cycle that persists under open-loop driving), and restoring the table
+ * does not un-ring the plant. The axis holds the current program point until the tool
+ * is measurably quiet, exactly as a machine does after a fault, then resumes. Scoring,
+ * learning and the trail all pause with it; the program clock does not advance.
+ */
+let dwellP = null;
+function startDwellP() {
+  dwellP = { bufX: new Float64Array(IK6_AVG), bufY: new Float64Array(IK6_AVG), n: 0, k: 0 };
+}
+function dwellStepP(budget) {
+  const D = dwellP;
+  const m = pathMode();
+  const learned = m === 'ikfree' || m === 'ikfree_ilc';
+  const cmd = profP.at(kP);
+  const q = learned ? ik6RefAt(kP) : armP.ik(cmd.x, cmd.y, true);
+  const refs = [{ theta: q[0], omega: 0, alpha: 0 }, { theta: q[1], omega: 0, alpha: 0 }];
+  for (let i = 0; i < budget; i++) {
+    const tau = servoP.torques(refs);
+    armP.step(tau[0], tau[1], 1);
+    const p = armP.toolXY();
+    D.bufX[D.n % IK6_AVG] = p[0]; D.bufY[D.n % IK6_AVG] = p[1]; D.n++; D.k++;
+    if (D.n >= IK6_AVG && D.n % 50 === 0) {
+      let lo0 = Infinity, hi0 = -Infinity, lo1 = Infinity, hi1 = -Infinity;
+      for (let w = D.n - IK6_WIN; w < D.n; w++) {
+        const x = D.bufX[w % IK6_AVG], y = D.bufY[w % IK6_AVG];
+        if (x < lo0) lo0 = x; if (x > hi0) hi0 = x;
+        if (y < lo1) lo1 = y; if (y > hi1) hi1 = y;
+      }
+      if (Math.hypot(hi0 - lo0, hi1 - lo1) < IK6_TOL || D.k >= IK6_CAP) {
+        dwellP = null;
+        setPathBadge('settled — resuming', 'good');
+        return;
+      }
+    } else if (D.k >= IK6_CAP) { dwellP = null; return; }
+  }
+  setPathBadge(`iteration backed off — holding until the machine is quiet (${D.k} steps)`, 'warn');
+}
+
+/** Carry the guard's state (and the annealed gain) when a table survives a program change. */
+function carryGuard(next, prev) {
+  next.gain = prev.gain;
+  if (prev._best !== undefined) {
+    next._best = prev._best;
+    next._bestU = prev._bestU;
+    next._backoffs = prev._backoffs;
+    next._frozen = prev._frozen;
+    next._first = prev._first;
+  }
 }
 
 /** ⑤+④'s table: the residual of the pilot-corrected analytic chain. Managed exactly as
@@ -5690,7 +5782,7 @@ function makeILC5(keep) {
     smooth: ILC.smooth,
     leadBins: Math.round(ILC.leadSteps * bins / profP.lap) });
   if (keep && ilc5P && ilc5P.bins === bins && Math.abs(ilc5P.length - profP.length) < 1e-9) {
-    next.u = ilc5P.u; next.laps = ilc5P.laps;
+    next.u = ilc5P.u; next.laps = ilc5P.laps; carryGuard(next, ilc5P);
   } else {
     ilc5Hist = [];
   }
@@ -5706,7 +5798,7 @@ function makeILC6(keep) {
     smooth: ILC.smooth,
     leadBins: Math.round(ILC.leadSteps * bins / profP.lap) });
   if (keep && ilc6P && ilc6P.bins === bins && Math.abs(ilc6P.length - profP.length) < 1e-9) {
-    next.u = ilc6P.u; next.laps = ilc6P.laps;
+    next.u = ilc6P.u; next.laps = ilc6P.laps; carryGuard(next, ilc6P);
   } else {
     ilc6Hist = [];
   }
@@ -5910,12 +6002,14 @@ function stepPathOnce(collect) {
       else ilc5P.observe(cmd.s, dq);
     }
   }
-  // ⑦'s learner maps the tool's deviation to joint units through the LEARNED routing —
-  // route(tool) − route(command) — so the fully learned stack stays free of the analytic
-  // Jacobian the ④ block above needs.
+  // ⑦'s learner maps the tool's deviation to joint units through the learned map's
+  // GRADIENT at the program point — affine in the tool, the same observer discipline as
+  // the pilot's truth (brick 44) — so the fully learned stack stays free of the
+  // analytic Jacobian the ④ block above needs.
   if (ilc6Learning()) {
-    const qT = ik6.route(tool[0], tool[1]), qC = ik6.route(cmd.x, cmd.y);
-    ilc6P.observe(cmd.s, [qT[0] - qC[0], qT[1] - qC[1]]);
+    const Gm = ik6.gradAt(cmd.x, cmd.y);
+    const dx = tool[0] - cmd.x, dy = tool[1] - cmd.y;
+    ilc6P.observe(cmd.s, [Gm[0][0] * dx + Gm[0][1] * dy, Gm[1][0] * dx + Gm[1][1] * dy]);
   }
   if (collect) {
     // e = J diag(c) tau_g, linear in c: one 2-vector column per joint per sample, and
@@ -5937,16 +6031,17 @@ function stepPathOnce(collect) {
 
 /** Learning happens on a normal run only — a sweep and a commissioning lap freeze it. */
 function ilcLearning() {
-  return !!ilcP && pathMode() === 'ilc' && !sweepP && !commissionP;
+  return !!ilcP && !ilcP._frozen && pathMode() === 'ilc' && !sweepP && !commissionP;
 }
 function ilc5Learning() {
-  return !!ilc5P && pathMode() === 'pilot_ilc' && !sweepP && !commissionP;
+  return !!ilc5P && !ilc5P._frozen && pathMode() === 'pilot_ilc' && !sweepP && !commissionP;
 }
 function ilc6Learning() {
-  return !!ilc6P && pathMode() === 'ikfree_ilc' && !sweepP && !commissionP;
+  return !!ilc6P && !ilc6P._frozen && pathMode() === 'ikfree_ilc' && !sweepP && !commissionP;
 }
 
 function stepP(n) {
+  if (dwellP) { dwellStepP(n); return; }
   for (let i = 0; i < n; i++) {
     const lapNow = Math.floor(kP / profP.lap);
     if (lapNow !== lapP) { lapP = lapNow; onLapBoundaryP(); }
@@ -5981,7 +6076,9 @@ function onLapBoundaryP() {
   // machine did on lap n", not "what it did after n updates", which are off by one.
   if (ilcLearning()) {
     const before = lapScoreP.report();
+    const undo = before.steps > 0.9 * profP.lap ? ilcGuard(ilcP, before.contourRms) : false;
     const st = ilcP.endLap();
+    if (undo) { ilcP.u = ilcP._bestU.map((a) => a.slice()); startDwellP(); }
     // A PARTIAL LAP IS FOLDED IN BUT NOT REPORTED. Selecting the learner mid-lap, or
     // arriving from a program change, leaves a first "lap" that is a fraction of one --
     // its bins are still worth learning from (endLap only touches what it saw) but its
@@ -5996,7 +6093,9 @@ function onLapBoundaryP() {
   }
   if (ilc5Learning()) {
     const before = lapScoreP.report();
+    const undo = before.steps > 0.9 * profP.lap ? ilcGuard(ilc5P, before.contourRms) : false;
     const st = ilc5P.endLap();
+    if (undo) { ilc5P.u = ilc5P._bestU.map((a) => a.slice()); startDwellP(); }
     if (before.steps > 0.9 * profP.lap) {
       ilc5Hist.push({ lap: st.laps, contour: before.contourRms });
       if (ilc5Hist.length > 40) ilc5Hist.shift();
@@ -6004,7 +6103,9 @@ function onLapBoundaryP() {
   }
   if (ilc6Learning()) {
     const before = lapScoreP.report();
+    const undo = before.steps > 0.9 * profP.lap ? ilcGuard(ilc6P, before.contourRms) : false;
     const st = ilc6P.endLap();
+    if (undo) { ilc6P.u = ilc6P._bestU.map((a) => a.slice()); startDwellP(); }
     if (before.steps > 0.9 * profP.lap) {
       ilc6Hist.push({ lap: st.laps, contour: before.contourRms });
       if (ilc6Hist.length > 40) ilc6Hist.shift();
@@ -6231,6 +6332,14 @@ $('pilotP-btn').addEventListener('click', startPilotP);
 // evaluated at the moving tool during excitation leaves the hull violently, and in Node
 // that poisoned every fit downstream (verify 1.01×, REFUSED; the split fixes it).
 const IK6_PTS = 90, IK6_DEG = 7, IK6_ROUTE_DEG = 5;
+// ADAPTIVE SETTLE for the gather (brick 44): hold each point until the tracker is
+// measurably QUIET — span of the last WIN readings under TOL — then average the last
+// AVG. The fixed 2200-step settle was tuned on a stiff machine; at the softest sliders
+// the tool was still ringing 7e-2 when "settled" readings were taken, the map fit to
+// ring garbage (holdout 2.2e-2 rad), and ⑥ was refused for it. Measured with this:
+// ring-at-read 1e-2, holdout 7.5e-4, and a STIFF machine settles FASTER than the old
+// fixed wait. The cap is a best-effort fallback, not a target.
+const IK6_TOL = 2e-3, IK6_WIN = 400, IK6_AVG = 800, IK6_CAP = 30000;
 
 function ik6Features(x, y, D) {
   const u = (x - PG.centre[0]) / 5, v = (y - PG.centre[1]) / 5;
@@ -6280,7 +6389,7 @@ function ik6FitMap(pairs, D, ridge = 1e-9) {
     const q = predict(p.x, p.y);
     s2 += (q[0] - p.q[0]) ** 2 + (q[1] - p.q[1]) ** 2; n += 2;
   }
-  return { predict, holdout: Math.sqrt(s2 / Math.max(1, n)) };
+  return { predict, holdout: Math.sqrt(s2 / Math.max(1, n)), W, D };
 }
 
 const quintic6 = (t) => t * t * t * (10 + t * (-15 + 6 * t));
@@ -6298,7 +6407,8 @@ function startIk6P() {
   ik6Comm = { stage: 'gather', box, rnd, pairs: [], i: 0,
     from: [enc[0].angle, enc[1].angle],
     to: box.map((b) => b.lo + (b.hi - b.lo) * rnd()),
-    k: 0, T: 2500, settle: 2200, avg: 400, ax: 0, ay: 0 };
+    k: 0, T: 2500, n: 0,
+    bufX: new Float64Array(IK6_AVG), bufY: new Float64Array(IK6_AVG) };
   setPathBadge('⑥ gather: visiting held points with the tracker watching', 'warn');
   syncPath();
 }
@@ -6306,7 +6416,6 @@ function startIk6P() {
 function ik6StepP(budget) {
   const C = ik6Comm;
   if (C.stage === 'gather') {
-    const total = C.T + C.settle;
     for (let i = 0; i < budget; i++) {
       let refs;
       if (C.k < C.T) {
@@ -6320,17 +6429,34 @@ function ik6StepP(budget) {
       }
       const tau = servoP.torques(refs);
       armP.step(tau[0], tau[1], 1);
-      if (C.k >= total - C.avg) { const p = armP.toolXY(); C.ax += p[0]; C.ay += p[1]; }
+      let done = false;
+      if (C.k >= C.T) {
+        const p = armP.toolXY();
+        C.bufX[C.n % IK6_AVG] = p[0]; C.bufY[C.n % IK6_AVG] = p[1]; C.n++;
+        if (C.n >= IK6_AVG && C.n % 50 === 0) {
+          let lo0 = Infinity, hi0 = -Infinity, lo1 = Infinity, hi1 = -Infinity;
+          for (let w = C.n - IK6_WIN; w < C.n; w++) {
+            const x = C.bufX[w % IK6_AVG], y = C.bufY[w % IK6_AVG];
+            if (x < lo0) lo0 = x; if (x > hi0) hi0 = x;
+            if (y < lo1) lo1 = y; if (y > hi1) hi1 = y;
+          }
+          if (Math.hypot(hi0 - lo0, hi1 - lo1) < IK6_TOL) done = true;
+        }
+        if (C.k - C.T >= IK6_CAP) done = true;
+      }
       C.k++;
-      if (C.k >= total) {
-        C.pairs.push({ x: C.ax / C.avg, y: C.ay / C.avg, q: C.to.slice() });
-        C.ax = 0; C.ay = 0; C.k = 0; C.i++;
+      if (done) {
+        let sx = 0, sy = 0;
+        const m = Math.min(C.n, IK6_AVG);
+        for (let w = C.n - m; w < C.n; w++) { sx += C.bufX[w % IK6_AVG]; sy += C.bufY[w % IK6_AVG]; }
+        C.pairs.push({ x: sx / m, y: sy / m, q: C.to.slice() });
+        C.k = 0; C.n = 0; C.i++;
         C.from = C.to;
         C.to = C.box.map((b) => b.lo + (b.hi - b.lo) * C.rnd());
         if (C.i >= IK6_PTS) { ik6StartPilot(); return; }
       }
     }
-    setPathBadge(`⑥ gather: held point ${C.i + 1}/${IK6_PTS} — the tracker teaches the geometry`, 'warn');
+    setPathBadge(`⑥ gather: held point ${C.i + 1}/${IK6_PTS} — settling until the tracker is quiet`, 'warn');
     return;
   }
   // ---- stage 'pilot'
@@ -6347,10 +6473,12 @@ function ik6StepP(budget) {
     armP.step(tau[0], tau[1], 1);
     const enc = armP.encoders();
     const tool = armP.toolXY();
-    const qT = C.route(tool[0], tool[1]);
+    const t0 = C.fwd([cmd[0].pos, cmd[1].pos]);
+    const Gm = C.gradAt(t0[0], t0[1]);
+    const dx = tool[0] - t0[0], dy = tool[1] - t0[1];
     P.observe([enc[0].angle, enc[1].angle, enc[0].speed * 1e3, enc[1].speed * 1e3,
       tau[0] * 1e3, tau[1] * 1e3],
-    [qT[0] - cmd[0].pos, qT[1] - cmd[1].pos]);
+    [Gm[0][0] * dx + Gm[0][1] * dy, Gm[1][0] * dx + Gm[1][1] * dy]);
   }
   if (P.phase === 'done') { finishIk6P(); return; }
   if (P.phase !== 'fit') setPathBadge(`⑥ pilot: ${P.phase} — ${P.note}`, 'warn');
@@ -6359,13 +6487,48 @@ function ik6StepP(budget) {
 function ik6StartPilot() {
   const C = ik6Comm;
   const geo = ik6FitMap(C.pairs, IK6_DEG);
-  const routeFit = ik6FitMap(C.pairs, IK6_ROUTE_DEG);
-  const bb = { xlo: Math.min(...C.pairs.map((p) => p.x)), xhi: Math.max(...C.pairs.map((p) => p.x)),
-    ylo: Math.min(...C.pairs.map((p) => p.y)), yhi: Math.max(...C.pairs.map((p) => p.y)) };
+  const inv5 = ik6FitMap(C.pairs, IK6_ROUTE_DEG);
   C.predict = geo.predict;
   C.holdout = geo.holdout;
-  C.route = (x, y) => routeFit.predict(Math.min(Math.max(x, bb.xlo), bb.xhi),
-    Math.min(Math.max(y, bb.ylo), bb.yhi));
+  // THE AFFINE OBSERVER (brick 44): truth = G(cmd) · (tool − fwd(cmd)). The clamped
+  // degree-5 map evaluated AT THE MOVING TOOL was the previous instrument, and at the
+  // softest sliders it refused the pilot (verify 0.48×) with only 3.7% of steps outside
+  // the hull — the defect was not extrapolation but CURVATURE: a nonlinear map of the
+  // fast variable has a gain that changes along the trajectory, which breaks the LTI
+  // assumption the QP's response model rests on. Both halves of this observer — the
+  // forward map and the inverse gradient — are evaluated at the COMMAND, which lives in
+  // the training domain by construction, and the tool enters LINEARLY. Measured at
+  // K 0.25 / E 0.03: r² 0.75/0.59 → 0.99/0.85 and verify 0.48× → 5.02×.
+  const qc = C.box.map((b) => (b.lo + b.hi) / 2);
+  const qFeat = (q) => {
+    const u = (q[0] - qc[0]) / 0.55, v = (q[1] - qc[1]) / 0.55;
+    const out = [];
+    for (let i = 0; i <= IK6_ROUTE_DEG; i++) {
+      for (let j = 0; j <= IK6_ROUTE_DEG - i; j++) out.push(u ** i * v ** j);
+    }
+    return out;
+  };
+  const trn = C.pairs.filter((_, i) => i % 4 !== 3);
+  const fwdW = ik6Solve(trn.map((p) => qFeat(p.q)), trn.map((p) => [p.x, p.y]), 1e-9);
+  C.fwd = (q) => {
+    const f = qFeat(q);
+    return fwdW.map((w) => { let s = 0; for (let i = 0; i < f.length; i++) s += w[i] * f[i]; return s; });
+  };
+  C.gradAt = (x, y) => {
+    const u = (x - PG.centre[0]) / 5, v = (y - PG.centre[1]) / 5;
+    const fx = [], fy = [];
+    for (let i = 0; i <= IK6_ROUTE_DEG; i++) {
+      for (let j = 0; j <= IK6_ROUTE_DEG - i; j++) {
+        fx.push(i === 0 ? 0 : (i * u ** (i - 1) * v ** j) / 5);
+        fy.push(j === 0 ? 0 : (u ** i * j * v ** (j - 1)) / 5);
+      }
+    }
+    return inv5.W.map((w) => {
+      let gx = 0, gy = 0;
+      for (let i = 0; i < w.length; i++) { gx += w[i] * fx[i]; gy += w[i] * fy[i]; }
+      return [gx, gy];
+    });
+  };
   // The machine is at the last held point; the pilot starts from exactly there. The
   // channel box is centred by the LEARNED map — the analytic centre appears nowhere in
   // what the running system consumes.
@@ -6392,7 +6555,7 @@ function finishIk6P() {
   const v = C.pilot.verdict;
   busyP = true;
   if (v.deploy) {
-    ik6 = { predict: C.predict, route: C.route, holdout: C.holdout,
+    ik6 = { predict: C.predict, fwd: C.fwd, gradAt: C.gradAt, holdout: C.holdout,
       nPts: C.pairs.length, pilot: C.pilot };
     $('ctlP').value = 'ikfree';
     setPathBadge(`⑥ deployed — ${v.why}; re-homing onto the program`, 'good');
@@ -6601,8 +6764,13 @@ function statsP() {
     const frac = [0, 1].map((j) => pk[j] / travelP[j]);
     const big = Math.max(frac[0], frac[1]) > 0.25;
     rows.push(['iterative learning', `${ilcP.laps} lap${ilcP.laps === 1 ? '' : 's'} folded in `
-      + `· lead ${ILC.leadSteps} steps = ${ilcP.leadBins} bins · gain ${ILC.gain} · smooth `
-      + `${ILC.smooth} bins`]);
+      + `· lead ${ILC.leadSteps} steps = ${ilcP.leadBins} bins · gain ${ilcP.gain} · smooth `
+      + `${ILC.smooth} bins`
+      + (ilcP._frozen ? ' · <span class="bad">FROZEN after 3 backoffs — this lead cannot serve '
+        + 'this plant, and the table is held where it measured best (empty if iteration never '
+        + 'beat the open loop)</span>'
+        : ilcP._backoffs ? ` · <span class="warn">${ilcP._backoffs} backoff${ilcP._backoffs === 1 ? '' : 's'} — a lap `
+        + 'regressed past the best table, which was restored and the gain halved</span>' : '')]);
     // THE CORRECTION AGAINST THE MOVE IT CORRECTS, because the raw number means nothing on
     // its own. A few percent of the joint's own travel is a compensator; half of it says
     // the machine is being asked to contour at the edge of what its loop can follow, and
@@ -6639,6 +6807,8 @@ function statsP() {
   }
   if (ilc5P && ilc5P.laps > 0) {
     rows.push(['…⑤+④ iteration on top', `${ilc5P.laps} lap${ilc5P.laps === 1 ? '' : 's'} folded in`
+      + (ilc5P._frozen ? ' · <span class="bad">FROZEN after 3 backoffs</span>'
+        : ilc5P._backoffs ? ` · <span class="warn">gain annealed to ${ilc5P.gain} after ${ilc5P._backoffs} backoff${ilc5P._backoffs === 1 ? '' : 's'}</span>` : '')
       + (ilc5Hist.length > 1 ? ' · contour ' + ilc5Hist.slice(-8).map((hh) =>
         hh.contour.toExponential(1)).join(' → ') : '')]);
   }
@@ -6655,6 +6825,8 @@ function statsP() {
   }
   if (ilc6P && ilc6P.laps > 0) {
     rows.push(['…⑦ iteration on top', `${ilc6P.laps} lap${ilc6P.laps === 1 ? '' : 's'} folded in`
+      + (ilc6P._frozen ? ' · <span class="bad">FROZEN after 3 backoffs</span>'
+        : ilc6P._backoffs ? ` · <span class="warn">gain annealed to ${ilc6P.gain} after ${ilc6P._backoffs} backoff${ilc6P._backoffs === 1 ? '' : 's'}</span>` : '')
       + (ilc6Hist.length > 1 ? ' · contour ' + ilc6Hist.slice(-8).map((hh) =>
         hh.contour.toExponential(1)).join(' → ') : '')]);
   }
@@ -6827,11 +6999,14 @@ window.__flxPathDbg = () => (armP ? {
   ik6Comm: ik6Comm ? { stage: ik6Comm.stage, i: ik6Comm.i,
     pilotPhase: ik6Comm.pilot ? ik6Comm.pilot.phase : null } : null,
   ilc5: ilc5P ? { laps: ilc5P.laps, peak: ilc5P.peak(),
+    gain: ilc5P.gain, backoffs: ilc5P._backoffs || 0, frozen: !!ilc5P._frozen,
     history: ilc5Hist.slice(-12) } : null,
   ilc6: ilc6P ? { laps: ilc6P.laps, peak: ilc6P.peak(),
+    gain: ilc6P.gain, backoffs: ilc6P._backoffs || 0, frozen: !!ilc6P._frozen,
     history: ilc6Hist.slice(-12) } : null,
   ilc: ilcP ? { laps: ilcP.laps, bins: ilcP.bins, leadBins: ilcP.leadBins,
     peak: ilcP.peak(), travel: travelP, clamp: ILC_CLAMP,
+    gain: ilcP.gain, backoffs: ilcP._backoffs || 0, frozen: !!ilcP._frozen,
     history: ilcHist.slice(-12) } : null,
   resid: residP.n ? { enc: Math.sqrt(residP.enc / residP.n),
     follow: Math.sqrt(residP.follow / residP.n) } : null,

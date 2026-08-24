@@ -424,7 +424,17 @@ that matches it** — the point-to-point tabs measure a different question.
   rectangle → 1.27e-2, twice BELOW the analytic ILC's converged 2.53e-2 (brick 41).
   ⑤+④ stacks the same table on the ANALYTIC pilot (circle 1.03e-3, rectangle 1.30e-2
   by lap 14) — and beside ⑦ that is the finding: iteration erases the difference
-  between knowing the kinematics and having learned them (brick 42).
+  between knowing the kinematics and having learned them (brick 42). At the softest
+  compliance sliders two more lessons shipped (brick 44): ⑥'s gather settles until the
+  tracker is QUIET rather than for a fixed count, its truth routing is an AFFINE
+  observer — G(cmd)·(tool − fwd(cmd)), both learned halves evaluated at the command,
+  because a nonlinear map of the fast variable breaks the LTI-ness the QP needs
+  (verify 0.48× → 5.02× at K 0.25/E 0.03) — and every ILC table carries a MONOTONE
+  SAFEGUARD (backoff, settling dwell, freeze after 3) whose measured endpoint is
+  exactly the continuous open loop: a soft gearbox's table pumped to 5.25 unguarded.
+  The pilot's forecast basis stays LINEAR by measurement: the NGRC quadratic
+  expansion loses held-out at every lead on this plant (to R² −22); the nonlinearity
+  lives in the degree-7 geometry map.
   **Sweep feedrate**
   runs the whole ladder and tabulates the trade. The arm is drawn at TRUE geometry; the error trail
   is the exaggerated object, pushed out along the path normal only.
