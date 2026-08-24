@@ -276,7 +276,7 @@ measurement behind each is in `docs/history/` — the pointer in brackets.
 | `test/lattsim/` | Node tests for the engine: stencil, indexing, units, conservation, Poiseuille, EOS, scalar, elastic, reconstruction. |
 | `test/flexisim/` | Node tests for the hybrid plant: joint, arm, 2R, N-R, sensors, compliance, compensation, ServoFF, the learned filter, and contouring (`toolpath`, `pathilc`, `contour`). |
 | `test/blackbox/` | Node tests for the plant-agnostic controller, on three plants that share no physics. |
-| `test/pilot/` | Node tests for the pilot on six plants that share no physics: the 2R arm, a quadruple tank, a three-zone extruder barrel, the Wood–Berry column, a cold mill AGC, and the EMPS servo axis (real data). |
+| `test/pilot/` | Full-tier files here SKIP and exit 0 without `SUITE=full` — that hole let a gate regression ship for three bricks. Node tests for the pilot on six plants that share no physics: the 2R arm, a quadruple tank, a three-zone extruder barrel, the Wood–Berry column, a cold mill AGC, and the EMPS servo axis (real data). |
 | `docs/history/` | The measurement record — see the last section. |
 | `CLAUDE.md` | This file. |
 
@@ -476,8 +476,12 @@ that matches it** — the point-to-point tabs measure a different question.
   acceleration and 3.1% of jerk against the program's 99.7% / 100.9%. The verify now also
   runs a **PROGRAM regime** (`buildProgram`) — trapezoid moves separated by dwells, whose
   ramp comes from the LIMITS alone (1.875·vMax/aMax, and √(5.774·vMax/jMax)), giving 282
-  steps against the machine program's 148 — and it **deploys on the WORSE of the two
-  ratios**. An earlier guess said to size the verify from the plant's settling time; the
+  steps against the machine program's 148 — and (brick 56) **the PROGRAM regime decides the benefit at 1.1x while the other holds a
+  veto only below 0.85x** — gating on the worse outright refused the arm's learned-IK
+  system (scribble 0.89x / program 3.14x) which, forced, converges ⑦ to 1.7e-3, while
+  program-only would deploy the non-minimum-phase tank (0.33x / 1.20x) that was measured
+  DELIVERING 0.61x. A scribble is a stress regime the machine never runs: a poor score
+  there is narrowness, a bad one is danger, and only the second may veto. An earlier guess said to size the verify from the plant's settling time; the
   measurement says the ramp is a property of the limits, not of the plant.
   With the gate honest, **the 200-step cadence floor could go** (now 8): the probe had
   measured this machine's rise correctly at 17 and had it replaced by a placeholder no
@@ -521,6 +525,28 @@ that matches it** — the point-to-point tabs measure a different question.
   forecast is destroyed by its own fit target (`eFree` rms is **4.16×** the truth's there,
   against 0.96–1.08 on every other plant; against the raw truth the same design matrix
   reaches R² 0.73 instead of 0.05).
+  **A CASCADE IS THE WAY PAST THE FORECAST BOUND (brick 56).** `lib/pilot/stack.js`
+  commissions ordinary pilots in sequence, each with the layers below it deployed and
+  FROZEN, so layer k's plant is (machine + layers 1..k−1) and each measures its own
+  timescale on it. EMPS, mm rms by depth: trapezoid 0.5764 → 0.0454 → 0.0258 → **0.0194
+  (29.8×)**; a two-tone sine it has NEVER SEEN 0.3634 → 0.0439 → 0.0248 → **0.0140
+  (26.0×)**. The second row is the point — a phase-indexed ILC table reaches 125× on the
+  program it learned and **0.55× on that same sine, i.e. worse than nothing** — the
+  cascade transfers because every layer is a plant model rather than a memory. Per-layer
+  forecasts on what reached them: R² 0.991 → 0.777 → 0.514, each vouching for itself
+  (1.35× / 1.54× / 1.70×), and layer 2 chose a LONGER horizon than layer 1 (N 95 vs 68)
+  by itself. A layer that cannot vouch ends the stack; the summed correction is clamped
+  once at the engineer's cap; the cost is commissioning time multiplied (70 s a layer
+  here, 62 h a layer on the barrel).
+  TWO OTHER THINGS WERE TRIED AND ONE IS A NULL. **Feeding the correction `u` and the
+  ERROR back in as regressors does nothing** — unchanged on EMPS, WORSE on the tank
+  (0.861 → 0.795) — because `truth = measured − fwd(command)` and both are already in the
+  row, so lagged truth is already spanned. And the WINDOW LENGTH is now tuned rather than
+  the constant 12, but it **earns its place on one plant of six** (24 taps on the mill):
+  a joint window/ridge search picks the looser ridge, which is a better held-out fit
+  (0.99305 vs 0.98931) and a WORSE machine (12.7× → 10.2×). **The QP inverts this model,
+  so regularisation serves the inversion, not the fit** — which is why the basis choice
+  compares residuals and the ridge choice deliberately does not.
   **Sweep feedrate**
   runs the whole ladder and tabulates the trade. The arm is drawn at TRUE geometry; the error trail
   is the exaggerated object, pushed out along the path normal only.

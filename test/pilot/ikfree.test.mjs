@@ -425,9 +425,27 @@ if (pilot.verdict.deploy) {
   const vS = pilotS.status().report.verify;
   console.log(`    softest corner (K 0.25, E 0.03): ${pilotS.verdict.deploy ? 'deploys' : 'REFUSED'}`
     + (vS ? `, verify ${vS.ratio.toFixed(2)}x` : ''));
-  check('at the softest sliders the fully learned system still commissions and deploys',
-    pilotS.verdict.deploy === true && vS && vS.ratio > 1.5,
-    JSON.stringify(pilotS.verdict));
+  // THE SOFTEST CORNER IS NOW REFUSED, AND THIS RECORDS IT RATHER THAN ASSERTING IT AWAY
+  // (brick 56). Brick 44 got this corner deploying at 5.02x under a single-regime gate.
+  // With two regimes the PROGRAM reads 1.28x and the SCRIBBLE reads 0.25x, and the harm
+  // veto refuses: a correction measured four times worse than nothing away from its
+  // program is not deployed on the strength of what it is worth on one.
+  //
+  // WHETHER THAT IS RIGHT HERE IS NOT MEASURED, and this check says so rather than
+  // guessing. Two explanations fit the numbers and they need different fixes. Either the
+  // correction really is that narrow at this compliance — which is what the veto exists
+  // for, and the non-minimum-phase tank is the case where exactly this shape (0.33x
+  // scribble against a 1.20x program) was measured DELIVERING 0.61x, real harm — or the
+  // scribble is not a valid measurement here at all, because ⑥'s truth is routed through
+  // a LEARNED map with a limited validity hull and a broad scribble leaves it, in which
+  // case the 0.25x is scoring extrapolated truth rather than the controller. Nothing in
+  // this file distinguishes them: the soft-corner section commissions and never scores a
+  // program, so there is no delivered number to appeal to.
+  check('at the softest sliders the gate refuses, and says which regime refused it',
+    pilotS.verdict.deploy === false && vS && vS.regimes
+    && vS.regimes.some((r) => r.name === 'scribble' && r.ratio < 0.85)
+    && vS.regimes.some((r) => r.name === 'program' && r.ratio > 1.1),
+    JSON.stringify(vS && vS.regimes));
 }
 
 console.log(failed ? `\npilot/ikfree: ${failed} check(s) FAILED\n` : '\npilot/ikfree: all checks passed\n');

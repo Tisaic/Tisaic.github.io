@@ -4083,3 +4083,126 @@ diverge to 60–95 mm, a hundred times worse than doing nothing, and the width i
 guess. The pilot already measures everything that choice needs — the probe's impulse
 response is the loop gain against frequency — so the learning gain and the filter cutoff
 can be COMPUTED. Not built yet; it is the next brick.
+
+## Brick 56 — feed the error back (no), tune the window (barely), cascade the pilot (yes)
+
+Three ideas explored, two nulls and one that works.
+
+### Feeding the control output and the error back in as inputs — measured, and it does nothing
+
+The forecast row carries measured lags and command taps. It does not carry the applied
+correction `u`, nor the error signal itself. Both were added as regressor blocks and
+scored held-out at the mid and far leads:
+
+| plant | base | +truth | +u | +both |
+|---|---|---|---|---|
+| EMPS servo | 0.9965 / 0.9956 | 0.9965 / 0.9956 | 0.9966 / 0.9956 | 0.9966 / 0.9956 |
+| quadruple tank | 0.9743 / 0.8609 | 0.9685 / 0.7951 | 0.9733 / 0.7836 | 0.9676 / 0.7866 |
+| cold mill | 0.0236 / 0.0277 | 0.0492 / 0.0508 | 0.0236 / 0.0277 | 0.0492 / 0.0508 |
+
+**Nothing on EMPS, WORSE on the tank, and on the mill it doubles a baseline that was
+broken for another reason.** The cause is structural: on every plant here
+`truth = measured − fwd(command)`, and both are already in the row, so lagged truth is
+ALREADY SPANNED — it adds collinearity, not information. Feeding it back would only pay
+where the forward model is unavailable to the pilot, which is none of these. And it would
+cost something real: `truth(k)` as an input makes the LEAD-0 readout degenerate, and
+lead 0 is the number the gate uses to disarm a channel. Not built.
+
+### The h-consistent target is now checked against the thing it cleans up
+
+`eFree` subtracts the probe response convolved with the dither — right when the probe
+response is right. The cold mill's probe reports Ts 0, dc 1.07 and a **−1.27
+inverse-response undershoot**, all artefacts of a 200 ms gauge delay, so the subtraction
+adds four times more than it removes: eFree's rms is **4.16×** the truth's. Every other
+plant is 0.96–1.08, so a guard at 1.25 fires on one of six.
+
+Measured on the mill: forecast held-out R² **0.062 (gated, disarmed) → 0.8807 (live)**.
+It still refuses (0.54×), and the reason is now visible and different: **Ts 9, N 14 — a
+fourteen-step horizon on a plant with a two-hundred-step measurement delay.** The probe
+reads transport delay as inverse response rather than as dead time, so the horizon never
+covers it. That is the mill's next defect and it is a different one.
+
+### The window length is tuned now, and it earns its place once in six
+
+`_mLag()`/`_fLag()` were the constant 12 from the first version and the tune never
+searched them. An offline sweep said 40 taps beat 12 at every lead on EMPS — residual
+variance 0.498 of the twelve's at lead 0 — worth about 1.4×.
+
+**It did not survive contact with the inversion.** A joint window/ridge search picks the
+LOOSER ridge, and on EMPS that is a better held-out fit (0.99305 against 0.98931) and a
+**worse machine: 12.7× down to 10.2×**. Rule 42 — take the largest ridge within 5% of the
+best — exists for a reason this measurement made concrete: **the QP INVERTS this model,
+and a loosely-fitted one has larger weights whose inversion amplifies. Regularisation here
+serves the inversion, not the fit.** So the basis choice compares residuals (brick 54) and
+the ridge choice does not, and the two are now deliberately different rules.
+
+With rule 42 restored the window stage changes nothing on EMPS, the tank, the barrel or
+the column — and picks **24 taps on the cold mill**, the one plant where a longer window
+was the original hypothesis. It was right all along and invisible only because that
+plant's fit target was broken.
+
+### A cascade of pilots — `lib/pilot/stack.js`
+
+A pilot delivers its forecast bound and nothing better, so the way past it is a second
+model of what the first one missed. `Stack` commissions ordinary pilots in sequence, each
+with the layers below it deployed and FROZEN — so layer k's plant is (machine + layers
+1..k−1), a fixed system, and each layer measures its own timescale on it.
+
+| depth | trained trapezoid | **unseen sine** |
+|---|---|---|
+| 0 | 0.5764 | 0.3634 |
+| 1 | 0.0454 | 0.0439 |
+| 2 | 0.0258 | 0.0248 |
+| 3 | **0.0194 (29.8×)** | **0.0140 (26.0×)** |
+
+**THE SECOND COLUMN IS THE POINT.** A phase-indexed ILC table reaches 125× on the program
+it learned and measures **0.55× on that same sine — it makes the machine worse.** The
+cascade improves the unseen program by as much as the trained one, because every layer is
+a plant model rather than a memory.
+
+Per-layer forecasts on what reached them: **R² 0.991 → 0.777 → 0.514**, each vouching for
+itself on the machine (verify 1.35× / 1.54× / 1.70×). And the timescale separation is not
+engineered — layer 2 measured its own response on (machine + layer 1) and chose a LONGER
+horizon than layer 1, N 95 against 68, because what layer 1 leaves is slower than what
+layer 1 was built for.
+
+A layer that cannot vouch for itself ends the stack: the next one would be commissioned
+against exactly the residual this one just failed on. The summed correction is clamped
+ONCE at the engineer's own cap and the binding is counted rather than hidden (zero over
+the scored runs). **The cost is commissioning time, multiplied** — 70 s a layer on this
+axis, 62 hours a layer on the extruder barrel — so depth is the engineer's decision, made
+on what each layer's own gate reports.
+
+### The two-regime gate had to change, and a verification hole let it ship broken
+
+Brick 53 gated on the WORSE of the two regimes. That refused the 2R arm's LEARNED-
+KINEMATICS system (⑥): scribble 0.89× against program 3.14×. Forced, ⑥ deploys and ⑦'s
+circle ladder converges to **1.7e-3** — a real capability lost to the gate.
+
+But program-only is not the fix either. On the non-minimum-phase tank the split is
+scribble 0.33× / program 1.20× — the same shape — and deploying there was measured at
+**0.61× on the recipe: actual harm.**
+
+So the two regimes answer different questions. A PROGRAM is what the machine runs, so its
+ratio is the BENEFIT. A scribble is a broad stress regime the machine never runs, so a
+poor score there is narrowness rather than danger — but a BAD one is danger, and that is
+all it may veto on. **The representative regime decides the benefit at the unchanged 1.1×
+bar; every other regime holds a veto only below 0.85×.** The two measured cases sit at
+0.89 and 0.33, either side of it, so the floor is not delicately placed.
+
+**AND IT SHIPPED BROKEN FOR THREE BRICKS BECAUSE THE VERIFICATION HAD A HOLE.** A
+full-tier test file run directly — `node test/pilot/ikfree.test.mjs` — SKIPS and exits 0
+unless `SUITE=full` is set. Every post-brick check that ran those files bare therefore
+passed vacuously, and the last genuine full-tier run was before brick 53. The failure was
+found only when a real `--full` run finally happened here. Checking a full-tier file means
+`SUITE=full node …`, and an exit code of 0 from one without it means nothing ran.
+
+**One thing this did NOT resolve.** At the softest compliance corner (K 0.25, E 0.03) ⑥
+is now refused: program 1.28×, scribble 0.25×. Two explanations fit and they need
+different fixes — either the correction really is that narrow there, which is what the
+veto exists for, or the scribble is not a valid measurement at all because ⑥'s truth is
+routed through a LEARNED map with a limited validity hull that a broad scribble leaves,
+in which case the 0.25× scores extrapolated truth rather than the controller. The
+soft-corner section commissions and never scores a program, so there is no delivered
+number to appeal to. The check records the refusal and both candidate explanations rather
+than asserting either.
