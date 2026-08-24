@@ -276,6 +276,7 @@ measurement behind each is in `docs/history/` — the pointer in brackets.
 | `test/lattsim/` | Node tests for the engine: stencil, indexing, units, conservation, Poiseuille, EOS, scalar, elastic, reconstruction. |
 | `test/flexisim/` | Node tests for the hybrid plant: joint, arm, 2R, N-R, sensors, compliance, compensation, ServoFF, the learned filter, and contouring (`toolpath`, `pathilc`, `contour`). |
 | `test/blackbox/` | Node tests for the plant-agnostic controller, on three plants that share no physics. |
+| `test/pilot/` | Node tests for the pilot on six plants that share no physics: the 2R arm, a quadruple tank, a three-zone extruder barrel, the Wood–Berry column, a cold mill AGC, and the EMPS servo axis (real data). |
 | `docs/history/` | The measurement record — see the last section. |
 | `CLAUDE.md` | This file. |
 
@@ -435,6 +436,32 @@ that matches it** — the point-to-point tabs measure a different question.
   The pilot's forecast basis stays LINEAR by measurement: the NGRC quadratic
   expansion loses held-out at every lead on this plant (to R² −22); the nonlinearity
   lives in the degree-7 geometry map.
+  **WHERE THE PILOT STANDS ACROSS SIX PLANTS THAT SHARE NO PHYSICS**, which is the only
+  honest way to state an agnosticism claim: the 2R arm 5.96× / 6.91×; a quadruple tank
+  1.47×, with its non-minimum-phase configuration correctly REFUSED; a three-zone
+  extruder barrel refused (0.94×); the Wood–Berry column LOST (72.08 against the
+  published BLT's 51.95); a cold mill AGC refused (0.42×); and the **EMPS servo axis**
+  — a real machine, real data, `test/pilot/emps.test.mjs` — 4.8×, which is FOURTH OF SIX
+  controllers on that page. The rig is validated twice against the hardware (our IDIM-LS
+  recovers the published M/Fv/Fc/OF to 0.8%; the closed loop reproduces the recorded
+  encoder to 1.6 µm rms and the recorded tracking error to 0.03%), and on it a velocity
+  feedforward is worth 15.2×, a hand-tuned ILC 119× and an inverse-dynamics feedforward
+  at the published parameters 275×. **The reason is the plant, not a defect** — that
+  machine has a four-parameter closed form and its authors published it, which is the
+  anti-slosh tab's rule from the other side: learn the parameters with no closed form,
+  compute the ones that have one.
+  TWO DEFECTS CAME OUT OF IT AND NEITHER IS FIXED, because they are one piece of work.
+  (i) `_deriveCadence` floors the measured rise at 200 steps; a 1 kHz servo is the first
+  plant fast enough to trip it (measured rise 17), and the floor costs 3.2× (4.79×
+  against 15.55× at the measured rise). (ii) THE VERIFY GATE RANKS THOSE CONFIGURATIONS
+  BACKWARDS — as the cadence improves, delivered benefit rises 4.79 → 15.55× while the
+  gate's estimate falls 28.68 → 1.04× — so lowering the floor alone would take the
+  machine from 4.79× to REFUSED. And on the same axis with its own feedforward on, the
+  gate said 2.03× for a deployment that measured **0.23×, i.e. 4.3× worse**: the first
+  time the harm has been measured on the machine rather than inferred. The gate scores a
+  filtered-noise scribble whose timescale comes from the position box and the declared
+  rate limits rather than from the plant; it has to score a regime the machine will
+  actually run, and gate on the WORST of several.
   **Sweep feedrate**
   runs the whole ladder and tabulates the trade. The arm is drawn at TRUE geometry; the error trail
   is the exaggerated object, pushed out along the path normal only.
@@ -459,6 +486,7 @@ that matches it** — the point-to-point tabs measure a different question.
 | `lib/probesense/` | Soft-sensing a field from one point in it. Fed numbers; knows no physics. |
 | `lib/flexisim/` | `joint`, `link`, `arm`, `arm2r`, `armnr` (recursive Newton–Euler), `tipsensor`, `chainsensor`, `compliance`, `compensator`, plus contouring: `toolpath` (geometry + feedrate profile), `contour` (the metrics), `pathilc` (learning over laps). |
 | `lib/blackbox/` | A controller given nothing about the plant, plus `qp.js`. Imports nothing from `lib/flexisim/` — the boundary is the directory. Verified on three plants sharing no physics. |
+| `lib/pilot/` | Route–limit–run–deploy: settle → probe → excite → fit → verify → deploy-or-refuse, on a receding-horizon box-constrained QP. Imports only `../blackbox/qp.js`. |
 
 ## Versioning
 

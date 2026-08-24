@@ -3637,3 +3637,150 @@ three identical runs), so it is a hypothesis and is labelled one.
 penalty the classical gaugemeter pays on this plant. Three plants in a row — the
 non-minimum-phase tanks, the barrel, and now the mill — the gate has correctly said no
 from measurements alone, on failure modes nobody described to it.
+
+## Brick 52 — a real machine, real measurements, and the pilot comes fourth of six
+
+Every plant the pilot had met was written here or transcribed from a paper's transfer
+function. This one is hardware: the **EMPS** (Electro-Mechanical Positioning System), a
+prismatic joint of the kind that drives a robot axis or a machine-tool slide — DC motor,
+low-friction ball screw, incremental encoder — published as a nonlinear system-ID
+benchmark by A. Janot, M. Gautier and M. Brunot, *Data Set and Reference Models of EMPS*,
+2019 Workshop on Nonlinear System Identification Benchmarks, Eindhoven. `DATA_EMPS.mat`
+(sha256 `6cf6814a…07facf7e`, 626039 bytes) holds 24841 samples at 1 kHz of the reference,
+the encoder and the controller output, plus the machine's own constants. It is not
+vendored — third-party data an order of magnitude larger than this repository's source —
+so `test/pilot/emps.test.mjs` carries everything measured out of it instead.
+
+### The rig is validated against the machine twice before it is used for anything
+
+**Our IDIM-LS recovers the published parameters.** Butterworth `filtfilt` at 100 Hz,
+central differences twice, least squares of `gtau·vir` on `[q̈, q̇, sign q̇, 1]`:
+
+| | M | Fv | Fc | OF |
+|---|---|---|---|---|
+| measured here | 95.0856 | 205.117 | 20.228 | −3.181 |
+| published | 95.1089 | 203.503 | 20.394 | −3.165 |
+
+0.02% / 0.8% / 0.8% / 0.5%. The benchmark also ships an "asymmetric friction" script;
+it fits Fc⁺ = 17.047 and Fc⁻ = −23.409 instead of Fc and an offset, whose half-sum and
+half-difference are exactly Fc and OF and whose residual is identical to six figures. It
+is a **reparameterisation, not a refinement**.
+
+**The closed loop reproduces the recorded motion.** Driven by the recorded reference the
+rig tracks the recorded encoder to **1.6 µm rms / 11 µm peak over 25 s**, and its
+tracking error is 0.5812 mm rms / 0.8517 peak against the machine's recorded
+0.5814 / 0.8522 — **0.03%**.
+
+### What the record says before any controller is proposed
+
+- The shipped cascade leaves **0.5814 mm rms, 0.8522 mm peak**.
+- The reference is **exactly periodic at 6240 samples** (residual 1.7e-16 m) — four laps
+  of a three-speed trapezoid, i.e. a production program, not an identification sweep.
+- The error is **99.95% repeatable**: lap to lap it differs by 0.3 µm rms out of 581.
+  That is the premise of every learning controller in the file, measured on hardware
+  rather than assumed, and it puts the ceiling for a command pre-distortion near 1900×.
+- **One millisecond of latency is worth 0.125 mm of it.** The loop compares the encoder
+  against the PREVIOUS tick's reference; simulating that one-sample shift moves the peak
+  0.7272 → 0.8518 mm and the rms 0.4926 → 0.5812, onto the recorded numbers exactly.
+  Without it the rig is 15% optimistic.
+
+**The control law was not published with the data and was recovered from it.** Three
+candidate cascades scored against the recorded `vir`: two are hopeless (7.4 V and 22.5 V
+rms residual against a 1.54 V signal) and one is exact —
+`vir = kv·(kp·(qg − qm) − dqm)` with `dqm` a backward difference of a 2-tap average —
+**0.0037 V, 0.24% of the signal**.
+
+**The friction is the machine's own.** `gtau·vir − M·q̈` binned by velocity over the whole
+record IS the friction curve, and it is what the plant uses. It is not the four-parameter
+shape: near zero velocity the model over-predicts by up to 5 N and at the extremes by 4 N.
+Binning the leftover by POSITION found nothing (±0.6 N, no trend), so friction here is a
+function of velocity and the plant is written that way.
+
+### Where the pilot stands: fourth of six
+
+Tracking error over the program, mm rms:
+
+| controller | rms | ×shipped | what it needs |
+|---|---|---|---|
+| as shipped, cascade P/P | 0.5764 | 1.0 | nothing |
+| **the pilot** | **0.1204** | **4.8** | **nothing** |
+| + velocity feedforward | 0.0380 | 15.2 | nothing (a drive feature) |
+| ILC, Q width 21, best of 12 laps | 0.0049 | 119 | a Q filter, tuned by hand |
+| + inverse-dynamics feedforward | 0.0021 | 275 | M, Fv, Fc, OF identified |
+| the machine's own repeatability | 0.0003 | 1900 | — (the floor) |
+
+**The reason is the plant, not a defect.** This machine HAS a closed form, it has four
+parameters, and its authors published them. The anti-slosh tab reached the same
+conclusion from the other side — learn the parameters that have no closed form, COMPUTE
+the ones that do — and EMPS is the cleanest test of it: the lattice arm the pilot wins on
+has distributed flexibility, a pose-dependent inertia and no closed form for its tip
+error; here a first-year textbook model beats every learner in the file. **A prediction
+was stated before this was built** — friction-dominated tracking would be the pilot's
+wheelhouse, because friction error is a function of commanded velocity — **and it was
+wrong for exactly that reason**: so is the feedforward's model, and the feedforward's is
+right to a couple of newtons.
+
+**The one thing the pilot has that the winner does not** is that the ILC's Q filter is a
+design, not a detail. Six widths at learning gain 0.7, best / after-40-laps in mm rms:
+w1 0.0177/63.8, w5 0.0167/94.6, w11 0.0134/70.7, **w21 0.0047/0.0049**, w41 0.0103/0.0103,
+w81 0.0253/0.0253 — **three of six diverge**, and the wrong choice leaves the machine a
+hundred times worse than doing nothing with nothing in the loop to say which you have.
+That is the failure the pilot's commission-and-refuse contract exists to remove, which
+makes the next two findings the serious ones.
+
+### Defect 1 — the cadence has a 200-step floor, and a 1 kHz servo is the first plant fast enough to trip it
+
+The probe measures this machine correctly: `h.Ts` 17 steps, `h.Tset` 45, dc 1.0000,
+overshoot 1.199 — matching a direct step test on the rig (rise 15, peak 1.199 at step 26).
+Then `_deriveCadence` does `Math.max(...hs.map(h => h.Ts), 200)` and the measured 17
+becomes 200: Ts 222, grid 7 steps, fit stride 12, for a loop that settles in 45. Arm,
+tanks, barrel, column and mill are all slower than 200 steps, so the floor had never
+bound and had never been questioned.
+
+Measured by lowering the floor and forcing the deployment:
+
+| floor | Ts | grid | N | verify | delivered |
+|---|---|---|---|---|---|
+| 200 | 222 | 7 | 48 | 28.68× | 4.79× ← as shipped |
+| 100 | 111 | 4 | 42 | 1.45× | 6.95× |
+| 50 | 56 | 2 | 42 | 1.23× | 12.24× |
+| 40 | 44 | 1 | 68 | 1.04× | 15.38× |
+| 30 | 33 | 1 | 68 | 1.04× | 15.55× |
+| 20 | 22 | 1 | 68 | 1.05× | 13.96× |
+| 8 | 19 | 1 | 68 | 1.05× | 12.70× ← the measured rise |
+
+The floor costs **3.2×**, and the pilot's honest place in the table is 15.5× — level with
+the velocity feedforward — rather than 4.8×. **It is not fixed, because at every floor
+that helps the gate refuses**: lowering the floor alone takes this machine from 4.79× to
+1.00×. The two are one piece of work.
+
+### Defect 2 — the gate ranks these backwards, and on a well-tuned drive it certifies harm
+
+Read the last two columns above together: as the cadence gets finer the delivered benefit
+rises 4.79 → 15.55× while the gate's estimate falls 28.68 → 1.04×. The ORDERING is
+inverted, so the gate certifies 28.68× for the configuration that delivers 4.79 and
+refuses the one that delivers 15.55.
+
+And with the drive's own feedforward switched on — commissioned and deployed on that same
+machine, so nothing is stale:
+
+| drive | baseline | with the pilot | the gate said |
+|---|---|---|---|
+| no FF | 0.5764 | 0.1204 (4.8×) | 28.68× |
+| velocity FF | 0.0380 | 0.0345 (1.1×) | 3.74× |
+| + ID FF | 0.0021 | **0.0090 (0.23×)** | 2.03× |
+
+The last row is the one that matters: the gate is the pilot's entire safety contract, and
+it approved a correction that degraded a working machine **4.3×**. The tanks showed this
+gap at 3.8× and it was written up as optimism; the Wood–Berry column showed it at
+thirtyfold; this is the first time the HARM has been measured on the machine.
+
+**The cause is the recorded one, now with a mechanism.** The verify round scores a
+filtered-noise scribble drawn from the excitation's own distribution at quarter rate
+limits, so its timescale comes from the POSITION BOX and the declared rate limits and has
+nothing to do with the plant. On this machine that makes it slow and smooth: a long
+horizon tracks it well and a short one cannot see the end of it. The gate is measuring
+horizon reach against an arbitrary timescale, not benefit on a program. The fix is to
+score a regime the machine will actually run — steps, ramps and dwells at the plant's own
+measured timescale — and to gate on the WORST of the regimes rather than on one. It is
+the outstanding work on this pilot and it now blocks two improvements, not one.
