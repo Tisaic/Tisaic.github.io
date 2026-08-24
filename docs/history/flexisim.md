@@ -3136,3 +3136,36 @@ that is the difference between demonstrating a learned system and decorating an 
 one. And the routing/geometry split from brick 40 ships as constants (degree 7 for the
 answer, degree 5 hull-clamped for the instrument) with the measured failure documented
 beside them.
+
+## Brick 42 — ⑤+④: iteration on the pilot, and it erases the knowing/learning gap
+
+The owner asked for ILC on mode ⑤ as well. The stacking mirrors ⑦ exactly, on the
+analytic chain: the pilot's one-shot correction plus a PathILC table folding per lap,
+tool error mapped through the analytic Jacobian as mode ④ maps it. A third distinct
+table — ④'s corrects the bare kinematics, ⑦'s corrects the learned chain, ⑤+④'s
+corrects what the pilot leaves behind — with the same lifecycle (kept across a feedrate
+change, remade with the program) and the same refusal gate as ⑤.
+
+Measured, 14 laps at feed 4e-3 (pinned in test/pilot/arm.test.mjs at 12 laps):
+
+  circle   7.08e-2 (cold rings) → **1.03e-3**   ⑤ alone 1.02e-2 · ④ alone @15 8.9e-4
+  rounded  6.19e-2             → **1.30e-2**   ⑤ alone 2.18e-2 · ④ alone @15 2.53e-2
+
+This is brick 38's boundary crossed from the analytic side: the pilot delivers the
+one-shot bulk and the table folds in the part of the disturbance only a deployed lap
+can see. The circle converges into the analytic ILC's own territory; the rectangle
+lands twice below what ④ alone ever reaches, because the pilot's correction is
+information ILC does not have to relearn.
+
+**AND THE COMPARISON WITH ⑦ IS THE FINDING.** Same laps, same tables, one chain given
+the kinematics and one that learned them from 90 tracker holds:
+
+           ⑤+④ (analytic)    ⑦ (fully learned)
+  circle     1.03e-3            1.14e-3
+  rounded    1.30e-2            1.27e-2
+
+Iteration erases the difference between knowing the kinematics and having learned
+them — the two stacks converge to the same numbers, within lap-to-lap noise, from
+static-accuracy starting points that differ by an order of magnitude. The geometry a
+drawing supplies and the geometry a tracker teaches are interchangeable once the part
+is allowed to speak.

@@ -2649,6 +2649,10 @@ await fx.waitForFunction(() => window.__flxPathDbg && window.__flxPathDbg(),
   const dp = await fx.evaluate(() => window.__flxPathDbg());
   check('flexisim/path: …and so is a pilot that has not vouched for itself',
     dp.mode === 'open' && dp.pilot === null, JSON.stringify([dp.want, dp.mode]));
+  await fx.selectOption('#ctlP', 'pilot_ilc');
+  const dpi = await fx.evaluate(() => window.__flxPathDbg());
+  check('flexisim/path: …and ⑤+④ needs that same vouched pilot before its table acts',
+    dpi.want === 'pilot_ilc' && dpi.mode === 'open', JSON.stringify([dpi.want, dpi.mode]));
   // And the fully learned system, both flavours: ⑥/⑦ selected before the geometry is
   // learned and the pilot has vouched must quietly run open, not act on a map that does
   // not exist.

@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:246,built:"2026-08-23T23:57:43Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:247,built:"2026-08-24T00:17:42Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -541,6 +541,7 @@
         <option value="ident">③ identified compliance — one lap, then locked</option>
         <option value="ilc">④ iterative learning — the part is the same every lap</option>
         <option value="pilot">⑤ pilot — commissioned once, from noise, for any program</option>
+        <option value="pilot_ilc">⑤+④ pilot + iterative learning on top</option>
         <option value="ikfree">⑥ fully learned — geometry from the tracker, dynamics from noise</option>
         <option value="ikfree_ilc">⑦ fully learned + iterative learning on top</option>
       </select>
@@ -625,7 +626,12 @@
       by lap 14 — within 28% of what the analytic-kinematics ILC reaches — and rectangle
       6.97e-2 → <b>1.27e-2</b>, twice <i>below</i> that ILC's converged 2.53e-2. A system
       that learned its own geometry, its own dynamics, and then let the part teach it the
-      rest.
+      rest. <b>⑤+④ is the same stacking on the analytic chain</b> — the pilot does the
+      one-shot bulk and the table folds in what only a deployed lap can see (the boundary
+      brick 38 measured): circle to <b>1.03e-3</b> and rectangle to <b>1.30e-2</b> by lap
+      14. Set the two stacks side by side and the finding is that iteration <i>erases the
+      difference between knowing the kinematics and having learned them</i>: 1.03e-3 vs
+      1.14e-3, 1.30e-2 vs 1.27e-2.
     </div>
     <div class="note">
       <h3>What the picture is, exactly</h3>
@@ -5471,6 +5477,7 @@ const PATH_MODE_LABEL = {
   ident: 'identified compliance (locked)',
   ilc: 'iterative learning over laps',
   pilot: 'the pilot — commissioned from noise',
+  pilot_ilc: 'the pilot + iterative learning on top',
   ikfree: 'fully learned — geometry from the tracker, dynamics from noise',
   ikfree_ilc: 'fully learned + iterative learning on top',
 };
@@ -5511,6 +5518,8 @@ let ik6 = null;                 // { predict, route, holdout, nPts, pilot } once
 let ik6Comm = null;             // the commissioning state machine while it runs
 let ilc6P = null, ilc6Hist = [];   // ⑦'s table — separate from ④'s, which corrects a
                                    // different plant (the analytic refs, not the learned ones)
+let ilc5P = null, ilc5Hist = [];   // ⑤+④'s table — the residual of the PILOT-corrected
+                                   // analytic chain, a third distinct plant
 let viewP = { x0: -1, x1: 1, y0: -1, y1: 1 };
 // The commanded joint travel over one lap, which is the scale any pre-distortion has to be
 // read against: a correction that is a few percent of the move is a correction, and one
@@ -5594,7 +5603,7 @@ async function buildP() {
   ilcP = null; ilcHist = [];
   // A PILOT BELONGS TO ONE PLANT: it identified this machine's response and timescale,
   // and carrying it across a K change deploys yesterday's inverse on today's arm.
-  pilotP = null; pilotComm = false;
+  pilotP = null; pilotComm = false; ilc5P = null; ilc5Hist = [];
   // SO DOES THE LEARNED GEOMETRY: the static map is mostly droop and wind-up, and both
   // are K. A K change makes yesterday's inverse a map of a different machine.
   ik6 = null; ik6Comm = null; ilc6P = null; ilc6Hist = [];
@@ -5630,6 +5639,7 @@ async function homeP() {
   residP = { enc: 0, follow: 0, n: 0 };
   $('pendP').hidden = true;
   makeILC(true);
+  makeILC5(true);
   makeILC6(true);
   fitViewP();
   drawP();
@@ -5656,6 +5666,21 @@ function makeILC(keep) {
     ilcHist = [];
   }
   ilcP = next;
+}
+
+/** ⑤+④'s table: the residual of the pilot-corrected analytic chain. Managed exactly as
+ *  ④'s is — kept across a feedrate change, remade with the program. */
+function makeILC5(keep) {
+  const bins = ILC.bins;
+  const next = new PathILC({ length: profP.length, joints: 2, bins, gain: ILC.gain,
+    smooth: ILC.smooth,
+    leadBins: Math.round(ILC.leadSteps * bins / profP.lap) });
+  if (keep && ilc5P && ilc5P.bins === bins && Math.abs(ilc5P.length - profP.length) < 1e-9) {
+    next.u = ilc5P.u; next.laps = ilc5P.laps;
+  } else {
+    ilc5Hist = [];
+  }
+  ilc5P = next;
 }
 
 /** ⑦'s table, managed exactly as ④'s is: kept across a feedrate change, remade with the
@@ -5722,9 +5747,14 @@ function pilotRefAt(i) {
 function predistortP(refs, cmd) {
   const m = pathMode();
   if (m === 'open') return [0, 0];
-  if (m === 'pilot') {
+  if (m === 'pilot' || m === 'pilot_ilc') {
     const base = Math.floor(kP / pilotP.sample);
-    return pilotP.act((off) => pilotRefAt(base + off));
+    const u = pilotP.act((off) => pilotRefAt(base + off));
+    if (m === 'pilot_ilc' && ilc5P) {
+      const o = ilc5P.offset(cmd.s);
+      return [u[0] + clampDq(o[0], ILC_CLAMP), u[1] + clampDq(o[1], ILC_CLAMP)];
+    }
+    return u;
   }
   if (m === 'ikfree' || m === 'ikfree_ilc') {
     const base = Math.floor(kP / ik6.pilot.sample);
@@ -5764,6 +5794,7 @@ function installProgram(next) {
   kP = profP.timeAt(s0);
   lapP = Math.floor(kP / profP.lap);
   makeILC(true);
+  makeILC5(true);
   makeILC6(true);
   fitViewP();
   $('pendP').hidden = true;
@@ -5777,7 +5808,8 @@ function pathMode() {
   // A PILOT THAT HAS NOT VOUCHED FOR ITSELF IS NOT IN CHARGE: selecting ⑤ before the
   // verify round has measured an improvement quietly runs open — the same refusal shape
   // as ③ before commissioning and the closed loop before the lock.
-  if (want === 'pilot' && !(pilotP && pilotP.verdict && pilotP.verdict.deploy)) return 'open';
+  if ((want === 'pilot' || want === 'pilot_ilc')
+    && !(pilotP && pilotP.verdict && pilotP.verdict.deploy)) return 'open';
   // ⑥ and ⑦ need the whole learned system — the geometry fitted AND its pilot vouched
   // for. The same refusal shape again: selected but not commissioned quietly runs open.
   if ((want === 'ikfree' || want === 'ikfree_ilc')
@@ -5843,13 +5875,18 @@ function stepPathOnce(collect) {
   // correction is applied in — and mapping the tool's deviation there is the one place
   // the machine's own kinematics enter. J is evaluated at the COMMANDED pose, which is
   // the only one a controller has.
-  if (ilcLearning()) {
+  // ④ and ⑤+④ share the mapping (the analytic chain's Jacobian at the commanded pose)
+  // and differ only in which table learns: ④'s corrects the bare kinematics, ⑤+④'s
+  // corrects what the PILOT leaves behind — different residuals, different tables.
+  if (ilcLearning() || ilc5Learning()) {
     const J = armP.jacobian(q1, q2);
     const det = J[0][0] * J[1][1] - J[0][1] * J[1][0];
     if (Math.abs(det) > 1e-12) {
       const ex = tool[0] - cmd.x, ey = tool[1] - cmd.y;
-      ilcP.observe(cmd.s, [(J[1][1] * ex - J[0][1] * ey) / det,
-        (-J[1][0] * ex + J[0][0] * ey) / det]);
+      const dq = [(J[1][1] * ex - J[0][1] * ey) / det,
+        (-J[1][0] * ex + J[0][0] * ey) / det];
+      if (ilcLearning()) ilcP.observe(cmd.s, dq);
+      else ilc5P.observe(cmd.s, dq);
     }
   }
   // ⑦'s learner maps the tool's deviation to joint units through the LEARNED routing —
@@ -5880,6 +5917,9 @@ function stepPathOnce(collect) {
 /** Learning happens on a normal run only — a sweep and a commissioning lap freeze it. */
 function ilcLearning() {
   return !!ilcP && pathMode() === 'ilc' && !sweepP && !commissionP;
+}
+function ilc5Learning() {
+  return !!ilc5P && pathMode() === 'pilot_ilc' && !sweepP && !commissionP;
 }
 function ilc6Learning() {
   return !!ilc6P && pathMode() === 'ikfree_ilc' && !sweepP && !commissionP;
@@ -5931,6 +5971,14 @@ function onLapBoundaryP() {
       ilcHist.push({ lap: st.laps, contour: before.contourRms, tau2: before.tau2,
         trev: before.torqueReversals, peak: ilcP.peak() });
       if (ilcHist.length > 40) ilcHist.shift();
+    }
+  }
+  if (ilc5Learning()) {
+    const before = lapScoreP.report();
+    const st = ilc5P.endLap();
+    if (before.steps > 0.9 * profP.lap) {
+      ilc5Hist.push({ lap: st.laps, contour: before.contourRms });
+      if (ilc5Hist.length > 40) ilc5Hist.shift();
     }
   }
   if (ilc6Learning()) {
@@ -6568,6 +6616,11 @@ function statsP() {
       rows.push(['pilot (⑤)', `<span class="warn">${ps.phase}</span> — ${ps.note}`]);
     }
   }
+  if (ilc5P && ilc5P.laps > 0) {
+    rows.push(['…⑤+④ iteration on top', `${ilc5P.laps} lap${ilc5P.laps === 1 ? '' : 's'} folded in`
+      + (ilc5Hist.length > 1 ? ' · contour ' + ilc5Hist.slice(-8).map((hh) =>
+        hh.contour.toExponential(1)).join(' → ') : '')]);
+  }
   if (ik6) {
     const ps = ik6.pilot.status();
     rows.push(['fully learned (⑥)', `<span class="good">deployed</span> — geometry from `
@@ -6716,6 +6769,7 @@ $('s-kP').addEventListener('input', async () => {
 for (const id of ['s-spfP', 's-magP']) $(id).addEventListener('input', syncPathLabels);
 $('ctlP').addEventListener('change', () => {
   if ($('ctlP').value === 'ilc' && !ilcP && profP) makeILC(true);
+  if ($('ctlP').value === 'pilot_ilc' && !ilc5P && profP) makeILC5(true);
   if ($('ctlP').value === 'ikfree_ilc' && !ilc6P && profP) makeILC6(true);
   syncPath(); statsP();
 });
@@ -6742,6 +6796,8 @@ window.__flxPathDbg = () => (armP ? {
   ik6: ik6 ? { holdout: ik6.holdout, nPts: ik6.nPts, pilot: ik6.pilot.status() } : null,
   ik6Comm: ik6Comm ? { stage: ik6Comm.stage, i: ik6Comm.i,
     pilotPhase: ik6Comm.pilot ? ik6Comm.pilot.phase : null } : null,
+  ilc5: ilc5P ? { laps: ilc5P.laps, peak: ilc5P.peak(),
+    history: ilc5Hist.slice(-12) } : null,
   ilc6: ilc6P ? { laps: ilc6P.laps, peak: ilc6P.peak(),
     history: ilc6Hist.slice(-12) } : null,
   ilc: ilcP ? { laps: ilcP.laps, bins: ilcP.bins, leadBins: ilcP.leadBins,

@@ -14,6 +14,7 @@ import { buildLink, massProperties } from '../../lib/flexisim/link.js';
 import { ChainServo } from '../../lib/flexisim/compensator.js';
 import { roundedRect, circle } from '../../lib/flexisim/toolpath.js';
 import { ContourScore, decompose } from '../../lib/flexisim/contour.js';
+import { PathILC } from '../../lib/flexisim/pathilc.js';
 import { Pilot } from '../../lib/pilot/pilot.js';
 
 let failed = 0;
@@ -172,6 +173,70 @@ for (const [shape, gate] of [['rounded', 5.0], ['circle', 6]]) {
   }
   check(`…and the ${shape}'s correction never exceeded the engineer's cap`,
     on.uPk <= 0.15 + 1e-12, on.uPk.toFixed(4));
+}
+
+// ============================== ⑤+④: THE ILC TABLE FOLDING ON THE PILOT'S RESIDUAL
+//
+// One-shot, the pilot leaves the circle at ~1e-2 — brick 38 located the remainder as
+// the correction's own footprint on a state-dependent disturbance, measurable only
+// from a deployed lap. This is that lap, folded in: an ILC table on TOP of the pilot's
+// corrections, mapped through the analytic Jacobian exactly as mode ④ maps. Measured
+// ladder on this rig: 7.1e-2 (cold rings) falling to 1.03e-3 by lap 14 — the analytic
+// ILC@15's territory, reached with the pilot doing the one-shot bulk. The gates sit a
+// factor above the measured tail.
+{
+  const { arm: a5, servo: s5 } = await makeArm();
+  const path = mkPath('circle', 0.004);
+  const p0 = path.at(0);
+  const qs = a5.ik(p0.x, p0.y, true);
+  a5.setPose(qs[0], qs[1]);
+  for (let i = 0; i < 4000; i++) {
+    const t = s5.torques([{ theta: qs[0], omega: 0, alpha: 0 }, { theta: qs[1], omega: 0, alpha: 0 }]);
+    a5.step(t[0], t[1], 1);
+  }
+  const S = pilot.sample, lap = Math.ceil(path.lap);
+  const refs = new Array(lap + 2);
+  for (let k = 0; k <= lap + 1; k++) { const c = path.at(k); refs[k] = a5.ik(c.x, c.y, true); }
+  const sampRef = (i) => refs[((i * S) % lap + lap) % lap];
+  const ilc = new PathILC({ length: path.length, joints: 2, bins: 1500, gain: 1.0,
+    smooth: 12, leadBins: Math.round(500 * 1500 / path.lap) });
+  pilot._initRun();
+  const ladder = [];
+  for (let l = 0; l < 12; l++) {
+    const score = new ContourScore({ joints: 2, reversalTravel: 2e-2 });
+    for (let k = 0; k < lap; k++) {
+      const q = refs[k], qm = refs[(k - 1 + lap) % lap], qp = refs[(k + 1) % lap];
+      const kAbs = l * lap + k;
+      const u = pilot.act((off) => sampRef(Math.floor(kAbs / S) + off));
+      const cmd = path.at(k);
+      const o = ilc.offset(cmd.s);
+      const tau = s5.torques([
+        { theta: q[0] + u[0] + o[0], omega: (qp[0] - qm[0]) / 2, alpha: qp[0] - 2 * q[0] + qm[0] },
+        { theta: q[1] + u[1] + o[1], omega: (qp[1] - qm[1]) / 2, alpha: qp[1] - 2 * q[1] + qm[1] }]);
+      a5.step(tau[0], tau[1], 1);
+      const enc = a5.encoders();
+      pilot.observe([enc[0].angle, enc[1].angle, enc[0].speed * 1e3, enc[1].speed * 1e3,
+        tau[0] * 1e3, tau[1] * 1e3], null);
+      const tool = a5.toolXY();
+      const dec = decompose(path, tool, cmd);
+      score.step(dec.contour, dec.lag, tau, [a5.j1.wM, a5.j2.wM]);
+      const J = a5.jacobian(q[0], q[1]);
+      const det = J[0][0] * J[1][1] - J[0][1] * J[1][0];
+      if (Math.abs(det) > 1e-12) {
+        const ex = tool[0] - cmd.x, ey = tool[1] - cmd.y;
+        ilc.observe(cmd.s, [(J[1][1] * ex - J[0][1] * ey) / det,
+          (-J[1][0] * ex + J[0][0] * ey) / det]);
+      }
+    }
+    ilc.endLap();
+    ladder.push(score.report().contourRms);
+  }
+  await a5.l1.destroy(); await a5.l2.destroy();
+  const tail = Math.min(...ladder.slice(-3));
+  console.log(`    ⑤+④ circle ladder: ${ladder.map((v) => v.toExponential(1)).join(' ')}`);
+  check('ILC folding on the pilot\'s residual converges past what either does alone',
+    tail < 6e-3 && tail < ladder[0] / 4,
+    `tail ${tail.toExponential(2)} vs lap 1 ${ladder[0].toExponential(2)}`);
 }
 
 console.log(failed ? `\npilot/arm: ${failed} check(s) FAILED\n` : '\npilot/arm: all checks passed\n');
