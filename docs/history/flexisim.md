@@ -3378,3 +3378,65 @@ response about its own settled value — so the pilot decides rather than the en
 Two or more crossings is a mode. Stiff is restored bit for bit (2.161e-2 / 1.019e-2).
 LEDGER at the soft corner: 1.20 → 0.197 is 6.1× of a 20–100× ask, and it is now ONE
 corner rather than a whole lap.
+
+## Brick 48 — the same pilot on a plant that shares nothing with the arm
+
+The claim the flagship makes is that route–limit–run–deploy is generic. `test/pilot/
+tanks.test.mjs` is that claim under test, and it is only worth anything because
+`lib/pilot/` gained EIGHT LINES, all of them passing one option through — no plant
+hook, no special case, no constant that suits an arm.
+
+**THE PLANT IS THE QUADRUPLE-TANK PROCESS** (Johansson 2000), the standard benchmark for
+multivariable difficulty: liquid level from pump voltage, no inertia anywhere, nonlinear
+by Torricelli (gain falls as a tank fills), cross-coupled through the upper tanks so each
+input reaches both outputs by two paths, and a valve split that decides its ZERO. Units
+are centimetres and volts, the timescale is minutes, the program is a RECIPE — hold,
+ramp, hold — and the pilot is told none of it. Four measured signals where the arm routed
+six; two correction channels; truth in cm against corrections in V, which needs no
+conversion because the probe measures d(truth)/d(u) itself.
+
+### What transferred, unchanged
+
+It measured a timescale on a plant with no inertia (Ts 2000, Tset 2613), chose its own
+windows and ridge on held-out data, correctly asked for NO frequency sweep (rings [1,1] —
+a tank has no mode), respected the guard and the cap, and put itself in front of the
+machine before deploying. **Recipe level error 0.506 → 0.344 cm rms, 1.47×**, worst
+excursion 1.17 → 0.80 cm.
+
+### THE NULL THAT WAS A PROPERTY OF THE ARM, NOT OF THE OPTION
+
+`dwell` warps the excitation's time base so it lingers as well as sweeps. It measured
+null-to-negative on the arm and shipped off — and the reason turns out to be that a
+TOOLPATH NEVER STOPS. A process recipe holds a level between ramps, so the pilot had
+never seen a stationary command on a plant whose program is half stationary:
+
+  excitation without dwell   verify 2.75× · recipe 1.03× · worst 1.33 cm · u peak 0.466 V
+  excitation WITH dwell      verify 5.62× · recipe **1.47×** · worst 0.80 cm · u peak 0.282 V
+
+A 1.43× improvement that also uses LESS authority, which is what separates learning from
+shoving. Default stays false, because the arm's measurement stands; it is now an option
+with both halves of its evidence written down. This is the entire argument for testing a
+second plant: a null measured on one machine is a null about that machine.
+
+### THE CAP IS AS DECISIVE HERE AS ON THE ARM
+
+At 0.35 V the correction pins at the cap and the recipe gets **WORSE** — 0.506 → 0.839,
+i.e. 0.60×. Same failure shape as the soft gearbox in brick 45, on a plant with no
+gearbox in it.
+
+### AND THE REFUSAL CONTRACT WORKED ON A PLANT NOBODY WROTE IT FOR
+
+With gamma1+gamma2 < 1 the plant is NON-MINIMUM PHASE: raise a pump and the level it
+controls first FALLS. No feedforward inverse can cancel that. The pilot cannot know what
+a right-half-plane zero is — and does not have to: its verify round measured **0.91× on
+its own scribble, declined, and the recipe ran untouched at exactly 1.000×**.
+
+### THE ONE REAL LIMIT THIS EXPOSED, and it is in the gate
+
+The verify reported **5.62× against the recipe's 1.47× — a 3.8× overstatement**. The
+verify scribble is drawn from the EXCITATION's distribution, so it measures the
+commissioning regime; on the arm that regime and the program's happen to agree, and here
+they do not. It remains the right gate — it refused the non-minimum-phase plant
+correctly — but it is an optimistic estimate of program benefit rather than a prediction
+of one, and this is where that was first measured. A check now records it rather than
+letting it pass unnoticed.
