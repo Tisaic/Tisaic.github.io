@@ -275,6 +275,24 @@ check('the readouts still generalise on a plant with real measurement noise',
 // linear. The Wood-Berry column, whose plant is linear transfer functions and nothing
 // else, declines it on both loops — that pair is what says the selector is reading the
 // physics rather than the sample count.
+// AND IT IS NOW SCORED AT ALL, WHICH IT NEVER WAS (brick 55). This plant declares a
+// dwelling program, and a DWELLING scribble cannot cross its 44 K box at the verify's
+// quarter rates — the tune loop failed 21 times — so `_startVerify` threw and the pilot
+// refused with a rate-limit message. It had done that since the plant was written: the
+// ledger recorded "refuses (0.94x)" and there was never a 0.94x, or any other number.
+// A regime that cannot be BUILT is not evidence about the controller. The verify now
+// scores whichever regimes built, and the barrel's PROGRAM regime builds at those same
+// limits without difficulty — so the refusal is finally a measurement (0.86x) rather
+// than a construction failure, on a plant whose forecasts held R2 0.69..0.92.
+check('the barrel is SCORED before it is refused, not refused for want of a regime',
+  st.report.verify && st.report.verify.ratio > 0
+  && (st.report.verifyRegimes || {}).built.includes('program'),
+  JSON.stringify(st.report.verifyRegimes));
+check('…and what could not be built is reported rather than swallowed',
+  typeof (st.report.verifyRegimes || {}).skipped === 'string'
+  && st.report.verifyRegimes.skipped.startsWith('scribble:'),
+  JSON.stringify((st.report.verifyRegimes || {}).skipped || null));
+
 check('the barrel accepts a nonlinear basis where its own physics is nonlinear',
   (st.report.readouts || []).some((r) => r.basis === 'linear+quadratic'),
   JSON.stringify((st.report.readouts || []).map((r) => r.basis)));

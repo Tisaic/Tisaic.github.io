@@ -452,7 +452,11 @@ that matches it** — the point-to-point tabs measure a different question.
   **WHERE THE PILOT STANDS ACROSS SIX PLANTS THAT SHARE NO PHYSICS**, which is the only
   honest way to state an agnosticism claim: the 2R arm 5.96× / 6.91×; a quadruple tank
   1.32×, with its non-minimum-phase configuration — and its non-dwelling model — correctly REFUSED; a three-zone
-  extruder barrel refused (0.94×); the Wood–Berry column LOST (72.08 against the
+  extruder barrel refused — at 0.86×, and brick 55 found it had NEVER BEEN SCORED
+  before that: it declares a dwelling program, a dwelling scribble cannot cross its
+  44 K box at the verify's quarter rates, so the verify threw and the refusal was a
+  construction failure wearing a rate-limit message. The verify now scores whichever
+  regimes BUILD and reports what it skipped; the Wood–Berry column LOST (72.08 against the
   published BLT's 51.95); a cold mill AGC refused (0.42×); and the **EMPS servo axis**
   — a real machine, real data, `test/pilot/emps.test.mjs` — 4.8×, which is FOURTH OF SIX
   controllers on that page. The rig is validated twice against the hardware (our IDIM-LS
@@ -501,6 +505,22 @@ that matches it** — the point-to-point tabs measure a different question.
   by a quarter on a controller worth twelve. Hypothesis, untested: both regimes run at
   QUARTER rates while the machine's program runs at its limits, and this pilot's benefit
   here is the velocity-lag term q̇/kp, which scales with speed.
+  **AND THE CEILING IS THE MODEL'S RESIDUAL, MEASURED (brick 55).** The scribble-fitted
+  forecast scores R² 0.9957 on PROGRAM data (0.9908 on the scribble it was fitted to,
+  0.9976 refitted on the program), so there is no distribution mismatch — and
+  √(1−0.9957) = 6.6% of the truth's rms is 0.038 mm against 0.045 mm delivered. **The
+  pilot is AT its forecast bound**; the QP, the cap and the horizon are not the
+  constraint. Reaching the ILC's 0.0046 mm needs R² 0.99994, sixty times less residual
+  variance, which a lag-window linear forecast will not reach. Folding a phase-indexed
+  residual on top of the deployed pilot measures **12.7× → 125×** — and converges to the
+  same floor as ILC alone, so the model buys LAP ZERO (0.049 against 0.576) and four laps
+  of head start, not a better endpoint. Model error here is ~40 µm and lap-to-lap
+  repeatability is 0.3 µm: a factor of 130 between predicting the error and REMEMBERING
+  it. Two avenues were closed on the way — identifying on a program instead of a scribble
+  is far worse (12.70× → 3.93×, since repeated trapezoids are collinear), and the mill's
+  forecast is destroyed by its own fit target (`eFree` rms is **4.16×** the truth's there,
+  against 0.96–1.08 on every other plant; against the raw truth the same design matrix
+  reaches R² 0.73 instead of 0.05).
   **Sweep feedrate**
   runs the whole ladder and tabulates the trade. The arm is drawn at TRUE geometry; the error trail
   is the exaggerated object, pushed out along the path normal only.

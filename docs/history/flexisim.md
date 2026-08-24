@@ -3994,3 +3994,92 @@ already duplicated between them, and duplicating a quadratic layout as well is h
 silently disagree. Every readout reports its `basis`, `r2Lin` and `r2Poly`, so which way
 each channel went is visible rather than inferred. The arm's flagship figures are
 unchanged (5.96× / 6.87×), as are the column's IAE and the mill's and barrel's refusals.
+
+## Brick 55 — the barrel had never been scored, and the ceiling is a model's, not a QP's
+
+Two investigations, one small fix, and two avenues closed by measurement.
+
+### A regime that cannot be BUILT is not evidence about the controller
+
+The extruder barrel has refused since it was written, and the ledger recorded it as
+"refuses (0.94×)". **There was never a 0.94×, or any other number.** `_startVerify` threw
+before the verify existed: the barrel declares `dwell: true`, and a DWELLING scribble
+cannot cross its 44 K box at the verify's quarter rates — the tune loop fails 21 times and
+the builder correctly says `these rate limits cannot traverse the position box`. The
+message names the limits, so it reads as a plant problem; it is a construction problem.
+
+Measured on the same channels: `buildProgram` builds without difficulty (tRamp 295, 23–25
+moves, 90/86/90% of v/a/j), and the barrel's own forecasts were never the issue —
+**held-out R² 0.69 / 0.92 / 0.84, none gated.** The verify now scores whichever regimes
+built and reports what was skipped. The barrel is finally scored: **0.86×, and it still
+refuses** — but as a measurement rather than a construction failure. Forced deployment
+confirms the refusal is right.
+
+### The mill's forecast was being destroyed by its own fit target
+
+Forced and un-gated, the mill produces 42.79 µm against 15.15 doing nothing, so the gate
+is right. But the reason is not the plant:
+
+| fit target | stride 3 | stride 10 | stride 20 |
+|---|---|---|---|
+| `eFree` (h-consistent, shipped) | 0.034 | 0.046 | 0.051 |
+| **raw truth** | **0.467** | **0.676** | **0.730** |
+
+`eFree` subtracts the probe response convolved with the dither. The mill's probe is
+garbage — Ts 0, dc 1.07, and a **−1.27 inverse-response undershoot** from the 200 ms gauge
+delay — so the subtraction adds four times more than it removes: **eFree rms is 4.16× the
+truth's**. The truth is an exactly linear function of the recorded window (identity
+residual 8e-4 against a truth rms of 1.5e-2), so R² ≈ 1 was always available. The
+inflation ratio elsewhere: EMPS 0.99, tanks 0.96/1.02/0.77/0.89, Wood–Berry 0.99/1.00,
+barrel 1.08/1.02/1.06. **A guard at 1.25 fires on exactly one plant.** Not built yet.
+
+### Cross-coupling orders every remaining outcome
+
+| plant | cross ÷ direct | outcome |
+|---|---|---|
+| 2R arm | ~0.005 | 5.96× |
+| tanks, minimum phase | 0.49 / 0.55 | 2.07× |
+| Wood–Berry | 0.52 / **0.97** | deploys and loses |
+| tanks, non-minimum phase | **1.46 / 1.88** | refuses |
+
+Below ~0.5 it works, near 1 it loses, above 1 it refuses. And the NMP tank's
+inverse-response undershoot is only −0.11 against a cross of 1.88 — **it is a coupling
+failure more than an RHP-zero one.** One thing that shrinks the job: the FORECAST is
+already MIMO (`_row` carries every channel's command taps); only the INVERSION is SISO.
+
+### Two avenues closed
+
+**Identifying on the program instead of the scribble is much WORSE** — EMPS 12.70× →
+3.93× (program only) and 3.56× (half and half). Repeated trapezoids are collinear;
+identification wants broadband. So the split is right and now measured: **identification
+wants the scribble, scoring wants the program.**
+
+**And there is no distribution mismatch to fix anyway.** The scribble-fitted model scored
+on program data reads R² **0.9957**, against 0.9908 on the scribble it was fitted to and
+0.9976 refitted on the program itself.
+
+### The ceiling is the model's residual, and memory does not have one
+
+√(1 − 0.9957) = 6.6% of the truth's rms = 0.038 mm predicted residual, against **0.045 mm
+delivered**. The pilot is AT its forecast bound — the QP, the cap and the horizon are not
+the constraint. Reaching the ILC's 0.0046 mm would need R² = **0.99994**, sixty times less
+residual variance, which a lag-window linear forecast will not reach.
+
+Folding a phase-indexed residual table on top of the deployed pilot, EMPS, mm rms per lap:
+
+```
+ILC alone      0.5764  0.1737  0.0531  0.0176  0.0084  0.0069  …  0.0049
+pilot + fold   0.0494  0.0206  0.0110  0.0080  0.0070  0.0068  …  0.0046
+```
+
+**12.7× frozen → 125× with memory** — and the honest half: the two converge to the same
+floor. The pilot's model buys LAP ZERO (0.049 against 0.576, a 12× better first part) and
+about four laps of head start, not a better endpoint. Model error on this machine is
+~40 µm and lap-to-lap repeatability is **0.3 µm**: a factor of 130 sits between predicting
+the error and remembering it, and the pilot only predicts.
+
+**Why ILC is not simply the answer, and what makes this different:** three of six Q widths
+diverge to 60–95 mm, a hundred times worse than doing nothing, and the width is a human's
+guess. The pilot already measures everything that choice needs — the probe's impulse
+response is the loop gain against frequency — so the learning gain and the filter cutoff
+can be COMPUTED. Not built yet; it is the next brick.
