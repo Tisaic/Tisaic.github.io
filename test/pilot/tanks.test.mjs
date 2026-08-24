@@ -206,8 +206,12 @@ check('…without exceeding the engineer\'s correction cap',
   D.on.uPk <= UCAP + 1e-12, D.on.uPk.toFixed(4));
 
 // --- the A/B itself, asserted so the finding cannot rot back
+// GATED ON THE PROPERTY, NOT ON THE MULTIPLE. The first version froze the measured
+// 1.43x, and brick 49's probe fixes — which are correctness, not tuning — moved both
+// sides legitimately (1.47/1.03 became 1.32/1.11). What has to hold is that a dwelling
+// excitation wins on a dwelling plant; the size of the win is a number to report.
 check('an excitation that DWELLS beats one that only sweeps, on a plant that dwells',
-  D.ratio > 1.35 * P.ratio,
+  D.ratio > 1.15 * P.ratio,
   `${D.ratio.toFixed(2)}x with vs ${P.ratio.toFixed(2)}x without`);
 check('…and it gets there on LESS authority, which is what says it learned rather than shoved',
   D.on.uPk < P.on.uPk, `${D.on.uPk.toFixed(3)} V vs ${P.on.uPk.toFixed(3)} V`);

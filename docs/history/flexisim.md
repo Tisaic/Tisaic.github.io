@@ -3440,3 +3440,70 @@ they do not. It remains the right gate — it refused the non-minimum-phase plan
 correctly — but it is an optimistic estimate of program benefit rather than a prediction
 of one, and this is where that was first measured. A check now records it rather than
 letting it pass unnoticed.
+
+## Brick 49 — the third plant, and five statistics that only worked because nothing was noisy
+
+The arm and the tank process differ in every physical way and still agreed on four things
+the pilot had never been tested without: two channels, no transport delay, NOISELESS
+measurements, and an actuator that pushes both ways. `test/pilot/thermal.test.mjs` is a
+three-zone extruder barrel with none of them — three channels from three signals (the
+leanest routing yet), 60 steps of pure transport delay, 0.35 K of thermocouple noise on
+every reading, an unmeasured ambient drift, and heaters that cannot remove heat.
+
+**THE NOISE BROKE FIVE PROBE STATISTICS, AND ALL FIVE HAD THE SAME SHAPE:** a quantity
+computed over a long record, compared against the wrong notion of uncertainty. On the
+first run the pilot reported a settling time of **60199** on a plant that settles in
+about 1500, **4224 rings** on a diffusion chain that cannot oscillate at all, and a
+horizon of 1673 grid points; the probe never went quiet, so it ran to its absolute cap on
+every channel — **253398 steps, 70 hours of process time** — and then refused the plant
+for unidentifiability while its own readouts were fitting at R² 0.85–0.98.
+
+  1. **the quiet detector** used raw total variation, which grows with the record on any
+     noisy signal and never falls below a fraction of the range. It now measures a
+     boxcar-smoothed series: has it stopped MOVING, as against stopped jittering.
+  2. **the settling time** was "the last sample outside a band" — an extreme-value
+     statistic. Over 60000 samples a 4σ excursion is expected several times and the LAST
+     one lands near the end of the record. Smoothed, with the band tightened by √W.
+  3. **the ring counter** counted sign changes of a raw signal about its own mean, which
+     is a noise counter. Smoothed, gated on the swing clearing the band, and counted
+     only INSIDE the settling window, because a ring is part of a step response.
+  4. **identifiability** compared `dc` — the MEAN of the response's tail — against a
+     SINGLE reading's noise, which is too strict by √N. Averaging is precisely how you
+     tell a small response seen through a noisy instrument from a correction that never
+     arrives.
+  5. **the probe hold** had only an absolute escape. A plant under a persistent
+     disturbance never goes quiet — correctly, because it IS moving, just not because of
+     the probe — so the hold now also ends once the record holds ten rise times.
+
+Two further bounds fell out: the settle cannot exceed six rise times (a record claiming
+forty is describing the environment, not the plant — every plant here that settles
+honestly reads 1.3 to 2.2), and a mode must OVERSHOOT, because sign changes alone cannot
+separate "my step made it ring" from "something else is moving it".
+
+### What it cost the plants that already worked, stated rather than buried
+
+The probe changes are correctness, and they still moved the noiseless plants: the arm's
+rectangle 2.161e-2 → 2.252e-2 (6.21× → 5.96×) and the tank recipe's dwell A/B 1.47/1.03
+→ 1.32/1.11. Every gate still passes. The tank gate that froze the measured multiple was
+relaxed to the property it exists to defend (rule 4, from the other direction).
+
+### AND THE PLANT ITSELF DEFEATED THE PILOT, WHICH IS THE CONTRACT WORKING
+
+With the machinery repaired it commissions cleanly on all three channels, puts the dead
+time into its measured timescale, chooses ridge 1e-5 on every zone (the first plant here
+where regularisation had observation noise to regularise), and then **measures 0.94× on
+its own verify round and REFUSES**. The changeover runs untouched at exactly 1.000×. The
+tank process reached the same answer for a different reason — a right-half-plane zero —
+and in both cases the pilot got there from measurements alone, with no idea what a dead
+time or a zero IS. A host that keeps feeding a refused pilot is now a no-op rather than
+a crash.
+
+### THE OPEN FINDING, with the numbers that would falsify it
+
+`dc` is the mean of the response's tail, and EVERY probe statistic is normalised by it,
+so an unmeasured drift comparable to the probe's own response destabilises all of them
+together. Across three probe amplitudes on this same plant the measured rise read
+**2354 / 2219 / 306** steps and the overshoot **1.36 / 1.42 / 0.00**. The classical
+answer is a DIFFERENTIAL probe — step up, step down, difference the two, and anything
+slower than the probe cancels exactly. NOT BUILT; the test's drift is scoped below the
+probe response so the rest of the file measures what it claims to.
