@@ -3576,3 +3576,64 @@ verify on a program-like regime and probably to gate on the WORST of several reg
 real machinery that has to be re-validated on all five plants, so it is recorded rather
 than patched blind. The benchmark test asserts the gap exists, so the day it is fixed,
 that check fails and says so.
+
+## Brick 51 — a cold mill, a prediction stated in advance, and the prediction was wrong
+
+The Wood–Berry column found the boundary. This was meant to be the other side of it: a
+single 4-high cold rolling stand, whose dominant disturbance — ROLL ECCENTRICITY, a
+periodic gap error at backup-roll rotation frequency — is exactly the repeatable,
+forecastable structure four plants had identified as the pilot's wheelhouse. The
+prediction was written into the file BEFORE the run: it should win here, and win largest
+against the baseline famous for failing.
+
+**IT DOES NOT. Its verify measures 0.42×, it declines, and the mill runs untouched.**
+
+### The benchmark itself is sound, and reproduces the industrially famous result
+
+  mill spring   h = S + F/M      plastic curve   F = Q(H−h)      M 500, Q 250 kN/mm
+
+The gaugemeter (BISRA) AGC infers the exit gauge as h_hat = S + F/M from signals
+available with no delay, and it is excellent against entry-gauge variation. Against
+eccentricity the algebra gives h_hat − h = **−e** exactly: the estimate moves OPPOSITE
+to the truth, so the gaugemeter sees the strip getting thin precisely when it is getting
+thick and closes the gap further. Measured over 40 s of rolling, 30 µm of eccentricity
+at 1.22 Hz, X-ray gauge 200 ms downstream (µm rms / worst):
+
+  no AGC (fixed gap)             15.15 / 29.97
+  gaugemeter (BISRA) AGC         **18.08** / 29.04     — WORSE than nothing, by 1.19×
+  monitor AGC (X-ray, delayed)   14.00 / 25.85         — honest but late, buys 8%
+  the pilot                      15.15 / 29.97         — refused, so untouched
+
+Both classical results are asserted, so the plant cannot quietly stop being a benchmark.
+
+### Four routings, three of them genuinely wrong, and none of them the answer
+
+Recorded because each is a mistake a real integrator would make. The X-ray gauge was
+compared against the target implied by the command NOW rather than the command 200 ms
+ago — strip tracking, which every mill does. The gauge was READ TWICE per sample, so the
+model and the truth it was asked to predict carried independent noise; the pilot
+reported exactly that ("nothing about the truth is predictable from these signals") and
+was right. And the routed slew limit sat BELOW the disturbance's own 4.6e-4 mm/step, so
+the excitation could not carry energy where the disturbance lives — brick 47's lesson,
+missed again in a new costume. Fixing all three moved the verify from 0.40× to 0.42×.
+
+### What this costs the claim, stated rather than absorbed
+
+The pilot's wheelhouse is narrower than four plants had suggested. Every win it has —
+the arm's droop and wind-up, the tank recipe, the chain — is a repeatable error that is
+a FUNCTION OF THE COMMAND, which the forecast reaches through the reference it is given.
+It has not been shown to win where the repeatable error is an EXOGENOUS RHYTHM the
+command does not explain, and roll eccentricity is exactly that: the roll turns whether
+or not the mill is asked to do anything.
+
+NOT RULED OUT, and left as the next attempt's starting point rather than a conclusion:
+the lag window is sized from the PLANT's settling time (~240 steps here) while the
+disturbance has a timescale of its own (410 steps), so the window may be too short to
+carry its phase. The experiment that would settle it — sweeping the disturbance period
+against the window — was attempted and did not run (a broken shell substitution left
+three identical runs), so it is a hypothesis and is labelled one.
+
+**AND THE REFUSAL IS WORTH SOMETHING ON ITS OWN.** Declining is what avoids the 1.19×
+penalty the classical gaugemeter pays on this plant. Three plants in a row — the
+non-minimum-phase tanks, the barrel, and now the mill — the gate has correctly said no
+from measurements alone, on failure modes nobody described to it.
