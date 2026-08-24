@@ -213,8 +213,17 @@ check('…without exceeding the engineer\'s correction cap',
 check('an excitation that DWELLS beats one that only sweeps, on a plant that dwells',
   D.ratio > 1.15 * P.ratio,
   `${D.ratio.toFixed(2)}x with vs ${P.ratio.toFixed(2)}x without`);
-check('…and it gets there on LESS authority, which is what says it learned rather than shoved',
-  D.on.uPk < P.on.uPk, `${D.on.uPk.toFixed(3)} V vs ${P.on.uPk.toFixed(3)} V`);
+// AND THE GATE NOW SAYS SO ITSELF (brick 53). The verify scores a PROGRAM regime —
+// trapezoid moves with dwells between them — alongside the scribble and deploys on the
+// worse of the two. A model fitted on an excitation that never holds still is not
+// vouched for on a program that does, and the non-dwelling configuration is now REFUSED
+// (0.59x) rather than deployed for a 1.11x it barely earned. That is a sharper form of
+// the same finding than the peak-authority comparison this replaced: that check read
+// 0.283 V against 0.000 V once the other side stopped deploying at all, which is not a
+// comparison of authority, it is a comparison with nothing.
+check('…and the gate REFUSES the non-dwelling model on this dwelling plant',
+  !P.pilot.verdict.deploy && D.pilot.verdict.deploy,
+  `dwell ${JSON.stringify(D.pilot.verdict.deploy)} / no-dwell ${JSON.stringify(P.pilot.verdict.deploy)}`);
 
 // --- THE VERIFY AND THE PROGRAM, AND THIS CHECK HAS ALREADY GONE STALE ONCE — in the
 // direction rule 4 warns about, which is the code getting better. It first recorded a

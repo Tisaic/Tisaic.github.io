@@ -61,8 +61,16 @@ function run(pilot, plant, { truthOverride = null, maxSteps = 400000 } = {}) {
   console.log(`    commissioned in ${steps} steps: Ts ${st.Ts}, sample ${st.sample}, `
     + `grid ${st.grid}, N ${st.N}; verify ${st.report.verify
       ? st.report.verify.ratio.toFixed(2) + 'x' : '—'}`);
+  // THE BOUND USED TO BE Ts > 100 AND IT ASSERTED NOTHING: the cadence floored the rise
+  // at 200, so no plant could fail it. With the floor at 8 (brick 53) this plant reports
+  // its own 50, and what is worth asserting is the DERIVATION — that every grid follows
+  // from the measured number by the stated rule — rather than a range the floor used to
+  // guarantee.
   check('the pilot measures the plant\'s own timescale and derives every grid from it',
-    st.Ts > 100 && st.Ts < 2000 && st.sample >= 1 && st.N >= 8, JSON.stringify(
+    st.Ts > 8 && st.Ts < 2000
+    && st.sample === Math.max(1, Math.round(st.Ts / 240))
+    && st.grid === Math.max(1, Math.round(st.Ts / st.sample / 30))
+    && st.N >= 8, JSON.stringify(
       { Ts: st.Ts, sample: st.sample, grid: st.grid, N: st.N }));
   check('…the verify round measured an improvement ON THE MACHINE and deployed',
     pilot.verdict && pilot.verdict.deploy === true && st.report.verify.ratio > 1.5,
@@ -134,8 +142,15 @@ function run(pilot, plant, { truthOverride = null, maxSteps = 400000 } = {}) {
   const st = pilot.status();
   console.log(`    guard: derates ${st.report.derates}, verdict `
     + `${pilot.verdict ? JSON.stringify(pilot.verdict.deploy) : '—'}`);
-  check('a guard trip derates the excitation AND the dither, once, instead of ignoring '
-    + 'the ceiling', st.report.derates === 1, `derates ${st.report.derates}`);
+  // IT USED TO TAKE EXACTLY ONE DERATE AND NOW IT TAKES TWO, because brick 53 removed
+  // the 200-step cadence floor: this plant's rise is 50, the dither's hold is 2*grid*
+  // sample and so it now switches 3.5x faster, and a faster dither jerks the servo
+  // harder — which is the very thing the dither derate exists for. Two is a retry, not a
+  // spiral; three is the refusal ceiling and is asserted separately below. What matters
+  // is that it derates rather than ignoring the guard, and that it still finishes.
+  check('a guard trip derates the excitation AND the dither, instead of ignoring '
+    + 'the ceiling', st.report.derates >= 1 && st.report.derates <= 2,
+    `derates ${st.report.derates}`);
   check('…and the derated commissioning still finishes and deploys',
     pilot.verdict && pilot.verdict.deploy === true, JSON.stringify(pilot.verdict));
 }

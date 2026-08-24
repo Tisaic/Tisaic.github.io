@@ -250,7 +250,7 @@ console.log(`    commissioned ${pilot.phase} — Ts ${st.Ts} Tset ${st.Tset} sam
   + `grid ${st.grid} N ${st.N}; verify ${st.report.verify ? st.report.verify.ratio.toFixed(2) + 'x' : '—'}`);
 console.log('    tracking error over the program, mm rms (x against the shipped machine):');
 console.log(`      as shipped, cascade P/P             ${shipped.rms.toFixed(4)}      1.0x   no plant knowledge`);
-console.log(`      the pilot                           ${pil.rms.toFixed(4)}      ${(shipped.rms / pil.rms).toFixed(1)}x   no plant knowledge`);
+console.log(`      the pilot                           ${pil.rms.toFixed(4)}     ${(shipped.rms / pil.rms).toFixed(1)}x   no plant knowledge`);
 console.log(`      + velocity feedforward              ${velFF.rms.toFixed(4)}     ${(shipped.rms / velFF.rms).toFixed(1)}x   no plant knowledge`);
 console.log(`      ILC, Q width 21, best of 12 laps    ${ilcQ.best.toFixed(4)}    ${(shipped.rms / ilcQ.best).toFixed(0)}x   a Q filter, tuned by hand`);
 console.log(`      + inverse-dynamics feedforward      ${idFF.rms.toFixed(4)}    ${(shipped.rms / idFF.rms).toFixed(0)}x   M, Fv, Fc, OF identified`);
@@ -281,8 +281,15 @@ check('the rig reproduces the recorded tracking error within 1%',
 }
 check('the pilot commissions and deploys with no plant model at all',
   pilot.verdict.deploy && st.report.readouts.length === 1, pilot.verdict.why);
-check('…and it improves the shipped machine by at least 3x',
-  shipped.rms / pil.rms > 3, `${(shipped.rms / pil.rms).toFixed(2)}x`);
+// 8x, NOT THE 3x THIS ASKED FOR BEFORE BRICK 53: the cadence floor that was costing
+// this machine a factor of three is gone and the delivered figure went 4.79x -> 12.70x
+// with no change to the controller itself, so the gate here has teeth again.
+check('…and it improves the shipped machine by at least 8x',
+  shipped.rms / pil.rms > 8, `${(shipped.rms / pil.rms).toFixed(2)}x`);
+// AND IT RUNS AT THE RISE THE PROBE ACTUALLY MEASURED, which is the fix itself: 17
+// steps, not the 200-step placeholder that used to replace it.
+check('…at a cadence derived from the rise the probe measured, not from a floor',
+  st.Ts < 60 && st.grid === 1, `Ts ${st.Ts} grid ${st.grid}`);
 check('…without ever exceeding the authority it was given',
   pil.uPk <= 1000 * UMAX + 1e-9, `${pil.uPk.toFixed(3)} mm against ${1000 * UMAX}`);
 // THE RIVAL WINS, AND ITS COST IS ASSERTED TOO — the Q filter is not a detail, it is the
@@ -299,9 +306,9 @@ process.exit(failed ? 1 : 0);
 
 // ============================================================================ FINDINGS
 //
-// WHERE THIS PILOT STANDS ON A REAL SERVO AXIS: FOURTH OF SIX. It is worth 4.8x with no
-// plant knowledge, which is real and free; it is beaten 3x by a velocity feedforward
-// that every drive on the market already has, 25x by a hand-tuned ILC, and 57x by an
+// WHERE THIS PILOT STANDS ON A REAL SERVO AXIS: FOURTH OF SIX. It is worth 12.7x with no
+// plant knowledge at all — within 20% of a velocity feedforward that every drive on the
+// market already has — and it is beaten 9x by a hand-tuned ILC and 22x by an
 // inverse-dynamics feedforward at the published parameters.
 //
 // AND THE REASON IS NOT A DEFECT, IT IS THE PLANT. This machine HAS a closed form, it
@@ -322,69 +329,75 @@ process.exit(failed ? 1 : 0);
 // above is the best of a swept design; the wrong choice leaves the machine a HUNDRED
 // TIMES worse than doing nothing, and nothing in the loop says which you have until the
 // laps run. That is the failure mode the pilot's commissioning-and-refusing exists to
-// remove — which makes the next two findings the serious ones.
+// remove — and this machine found two defects in exactly that machinery.
 //
 // ---------------------------------------------------------------------------------
-// DEFECT 1 — THE CADENCE HAS A 200-STEP FLOOR, AND A 1 kHz SERVO IS THE FIRST PLANT
-// FAST ENOUGH TO TRIP IT.
+// DEFECT 1 — THE CADENCE HAD A 200-STEP FLOOR, AND A 1 kHz SERVO WAS THE FIRST PLANT
+// FAST ENOUGH TO TRIP IT. FIXED.
 //
-// The probe measures this machine's rise correctly: h.Ts = 17 steps, h.Tset = 45, dc
-// 1.0000, overshoot 1.199 — all of which match a direct step test on the rig (rise 15,
-// peak 1.199 at step 26). Then `_deriveCadence` does
-//     const TsMax = Math.max(...this.hs.map((h) => h.Ts), 200);
-// and the measured 17 is replaced by 200. Ts becomes 222, the grid becomes 7 steps and
-// the fit stride 12, for a loop that settles in 45. Every previous plant here — arm,
-// tanks, barrel, column, mill — is slower than 200 steps, so the floor has never bound
-// before and has never been questioned.
+// The probe measured this machine correctly: h.Ts = 17 steps, h.Tset = 45, dc 1.0000,
+// overshoot 1.199 — matching a direct step test on the rig (rise 15, peak 1.199 at step
+// 26). Then `_deriveCadence` did `Math.max(...hs.map(h => h.Ts), 200)` and the measured
+// 17 became 200: Ts 222, grid 7 steps, fit stride 12, for a loop that settles in 45.
+// Arm, tanks, barrel, column and mill are all slower than 200 steps, so the floor had
+// never bound and had never been questioned. The floor is now 8 — enough for the grid
+// and stride arithmetic to mean something — and whether the measured rise means anything
+// is what `identifiable` answers, which the probe already reports.
 //
-// WHAT IT COSTS, measured by lowering the floor and forcing the deployment (the gate
-// refuses most of these — see DEFECT 2):
-//     floor   Ts   grid    N    verify    delivered on the program
-//       200  222      7   48    28.68x     4.79x     <-- as shipped
-//       100  111      4   42     1.45x     6.95x
-//        50   56      2   42     1.23x    12.24x
-//        40   44      1   68     1.04x    15.38x
-//        30   33      1   68     1.04x    15.55x
-//        20   22      1   68     1.05x    13.96x
-//         8   19      1   68     1.05x    12.70x     <-- the measured rise
-// So the floor costs 3.2x, and the pilot's honest place in the table above is 15.5x —
-// level with the velocity feedforward — rather than 4.8x.
+// Measured by varying the floor and forcing the deployment, gate before and after the
+// two-regime verify below:
 //
-// IT IS NOT FIXED HERE, AND THE REASON IS THE SECOND DEFECT: at every floor that
-// actually helps, the verify gate REFUSES. Lowering the floor on its own would take this
-// machine from 4.79x to 1.00x. The two are one piece of work, not two.
+//   floor   Ts   grid    N    gate was   gate now   delivered
+//     200  222      7   48     28.68x      7.98x      4.79x    <- what shipped before
+//     100  111      4   42      1.45x      2.00x      6.95x
+//      50   56      2   42      1.23x      1.64x     12.24x
+//      30   33      1   68      1.04x      1.35x     15.55x
+//      20   22      1   68      1.05x      1.36x     13.96x
+//       8   19      1   68      1.05x      1.37x     12.70x    <- the measured rise
+//
+// So the floor was costing 2.7x, and this file's table now reads 12.7x instead of 4.8x
+// with NO change to the controller. NOTE THE ROW THAT IS NOT THE SHIPPED ONE: a slightly
+// coarser cadence (Ts 33) delivers 15.55x, better than the measured rise's 12.70x. That
+// is left alone deliberately — picking 33 would be fitting a constant to one machine,
+// which is what the 200 was.
 //
 // ---------------------------------------------------------------------------------
-// DEFECT 2 — THE VERIFY GATE RANKS THESE CONFIGURATIONS EXACTLY BACKWARDS, AND ON A
-// WELL-TUNED DRIVE IT CERTIFIES A DEPLOYMENT THAT MAKES THE MACHINE WORSE.
+// DEFECT 2 — THE VERIFY GATE SCORED ONE REGIME AND IT WAS THE WRONG ONE. FIXED IN PART.
 //
-// Read the last two columns of that table together: as the cadence gets finer the
-// delivered benefit rises 4.79 → 15.55x while the gate's estimate falls 28.68 → 1.04x.
-// The gate is not merely optimistic — its ORDERING is inverted, so it certifies 28.68x
-// for the configuration that delivers 4.79 and refuses the one that delivers 15.55.
+// The gate now scores TWO regimes on the same interleaved on/off plan — the filtered-noise
+// scribble it always used, and a PROGRAM of trapezoid moves with dwells between them,
+// whose ramps come from the machine's own rate limits — and it deploys on the WORSE of
+// the two ratios. Measured on this axis, the scribble uses 78.5% of its velocity budget
+// but 9.2% of acceleration and 3.1% of jerk with a 7303-step corner; the program uses
+// 90% / 90% / 16% with 282-step ramps, against the machine program's own 148.
 //
-// And on the drive with its feedforward switched on, commissioned and deployed on that
-// same machine so nothing is stale:
-//     drive          baseline    with the pilot      the gate said
-//     no FF           0.5764        0.1204  (4.8x)      28.68x
-//     velocity FF     0.0380        0.0345  (1.1x)       3.74x
-//     + ID FF         0.0021        0.0090  (0.23x)      2.03x    <-- 4.3x WORSE, approved
+// THE THREE VERDICTS THAT MATTER ARE NOW RIGHT, and the middle one is the reason this
+// work happened at all. Commissioned and deployed on the drive with its own feedforward
+// switched on, so nothing is stale:
 //
-// The last row is the one that matters: the gate is the pilot's entire safety contract,
-// and here it approved a correction that degraded a working machine by a factor of four.
-// The tanks showed this gap at 3.8x and it was written up as optimism; the Wood–Berry
-// column showed it at thirtyfold and it was written up as the difference between
-// refusing and deploying something harmful; this is the first time the harm has been
-// MEASURED on the machine rather than inferred.
+//   drive          baseline    with the pilot     gate was      gate now
+//   no FF           0.5764        0.0454 (12.7x)    28.68x        1.35x  DEPLOYS
+//   velocity FF     0.0380        —                  3.74x        0.96x  REFUSES
+//   + ID FF         0.0021        —                  2.03x        0.05x  REFUSES
 //
-// THE CAUSE IS THE SAME ONE ALREADY RECORDED, now with a mechanism. The verify round
-// scores a filtered-noise scribble drawn from the excitation's own distribution at
-// quarter rate limits. Its timescale therefore comes from the POSITION BOX and the
-// declared rate limits — nothing to do with the plant — and on this machine that makes
-// it a slow, smooth signal that a long horizon tracks well and a short one cannot see
-// the end of. That is why the gate prefers the coarse cadence: it is measuring horizon
-// reach against an arbitrary timescale, not benefit on a program. The fix is to score a
-// regime the machine will actually run — steps, ramps and dwells at the plant's own
-// measured timescale — and to gate on the WORST of the regimes rather than on one. It
-// is the outstanding piece of work on this pilot and it is now the blocker for two
-// separate improvements, not one.
+// Before this change the gate approved a correction on the fully-tuned drive that
+// measured 0.23x — it made a working machine FOUR TIMES WORSE — and approved a 1.10x on
+// the velocity-feedforward drive that was not worth the authority it spent. Both are now
+// refused, the second emphatically.
+//
+// WHAT IS NOT FIXED, STATED PLAINLY. The gate's ORDERING is still inverted: read the
+// two right-hand columns of the floor table and the estimate still falls as the delivered
+// benefit rises. And on this machine the error has changed SIGN rather than gone away —
+// the gate now UNDERSTATES by 9x (1.35x against a delivered 12.70x) and clears its own
+// 1.1x deploy threshold by a quarter, on a controller worth twelve. Understating is the
+// safe direction, but a gate that nearly refuses a 12.7x controller is not a good gate.
+//
+// A HYPOTHESIS FOR THE UNDERSTATEMENT, LABELLED AS ONE BECAUSE IT COULD NOT BE TESTED
+// HERE: both regimes run at QUARTER rate limits (brick 43, chosen so the effort weight
+// is priced on a trajectory like the ones machines actually run), and this pilot's
+// benefit on this machine is dominated by the velocity-lag term q̇/kp, which scales with
+// speed while the friction term does not. At a quarter speed the predictable part of the
+// error is a smaller fraction of it, so the measured benefit should be smaller — and the
+// machine's real program runs at 100% of its limits, not 25%. Raising the verify's rates
+// to test this pushed the SCRIBBLE builder into a `cannot traverse the box` refusal on
+// this very axis, so the experiment is recorded as unrun rather than as evidence.

@@ -242,17 +242,29 @@ check('…and the correction never exceeded the engineer\'s cap',
 // almost nothing with the response to a scribble. The arm is simply the plant where
 // those two regimes happen to agree, which is why this went unnoticed for four bricks.
 //
-// NOT FIXED HERE. The repair is to score the verify on a program-like regime, and
-// probably to gate on the WORST of several regimes rather than one — a real change to
-// the machinery that has to be re-validated on all four plants. It is recorded with the
-// numbers that would falsify it rather than patched blind.
+// FIXED IN PART (brick 53). The verify now scores TWO regimes — the scribble and a
+// PROGRAM of trapezoid moves and dwells at the machine's own rate limits — and gates on
+// the WORSE ratio. On this plant the two disagree by a factor of 1.6 and the program is
+// the pessimistic one, so the gate fell 5.81x -> 2.10x and the overstatement 8x -> 2.9x
+// WITHOUT the benchmark IAE moving at all (72.08 before and after — the controller is
+// unchanged; only the estimate of it got honest). It still overstates, and this plant is
+// still the one where the pilot LOSES, so the gap is re-stated rather than closed.
 const overstate = st.report.verify.ratio / (blt.iae / run.iae);
 console.log(`    THE GATE OVERSTATES BY ${overstate.toFixed(0)}x: verify `
   + `${st.report.verify.ratio.toFixed(2)}x against a measured ${(blt.iae / run.iae).toFixed(2)}x `
   + `on the benchmark — it certified a controller that makes this plant worse`);
-check('the verify/benchmark gap is recorded, not silently tolerated',
-  overstate > 5, `${overstate.toFixed(1)}x — if this check fails the gate has been fixed, `
-  + 'which is the point; re-measure and re-state the ledger');
+// THE GATE IS PINNED IN BOTH DIRECTIONS. Below 1.5x the remaining overstatement is
+// gone and the ledger above needs re-stating; above 5x the two-regime gate has regressed
+// to what the scribble alone used to say. Neither bound is a target — both are there so
+// a change to the gate cannot pass silently.
+check('the verify/benchmark gap is smaller than it was and still recorded',
+  overstate > 1.5 && overstate < 5,
+  `${overstate.toFixed(1)}x against the 8x this plant measured before the two-regime `
+  + 'gate; if it fell below 1.5x the gate improved again — re-measure and re-state');
+// AND THE CONTROLLER ITSELF DID NOT MOVE, which is what says the gate was fixed rather
+// than the measurement changed: the same 72.08 IAE before and after brick 53.
+check('…and the benchmark IAE is unchanged by the gate work',
+  Math.abs(run.iae - 72.08) / 72.08 < 0.05, run.iae.toFixed(2));
 
 console.log(`    (three controllers scored in ${((Date.now() - t0) / 1000).toFixed(0)}s)`);
 console.log(failed ? `\npilot/woodberry: ${failed} check(s) FAILED\n` : '\npilot/woodberry: all checks passed\n');

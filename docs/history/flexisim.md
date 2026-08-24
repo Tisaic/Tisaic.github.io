@@ -3784,3 +3784,139 @@ horizon reach against an arbitrary timescale, not benefit on a program. The fix 
 score a regime the machine will actually run — steps, ramps and dwells at the plant's own
 measured timescale — and to gate on the WORST of the regimes rather than on one. It is
 the outstanding work on this pilot and it now blocks two improvements, not one.
+
+## Brick 53 — the gate scored one regime and it was the wrong one
+
+Brick 52 left two defects on the EMPS servo axis and said they were one piece of work.
+They were.
+
+### What the scribble actually was, measured rather than described
+
+The verify round scores filtered noise. `channelNoise` is white noise through three
+cascaded one-pole filters with a SINGLE correlation time `tc`, and the tune loop raises
+`tc` by 1.35 until the peak first, second and third differences all fit under 0.8 of
+their limits — then stops. Nothing sweeps; `tc` never varies within a run. The chirp
+(brick 47) does sweep, but it is gated on `rings >= 2 && overshoot > 1.05` and
+`_startVerify` never passed `chirpBand` at all, so **the verify never got the sweep even
+when commissioning did**.
+
+And the tune stops at the FIRST limit to bind. Because the builder demands the series
+span 85% of the position box, that limit is always VELOCITY:
+
+| | v | a | j |
+|---|---|---|---|
+| commissioning scribble, tc 1206 | **83.2%** | 19.7% | 10.8% |
+| verify scribble, tc 7303, quarter rates | **78.5%** | 9.2% | 3.1% |
+| the EMPS machine's own program | 99.7% | 100.9% | 1674% |
+
+`tc` is therefore ≈ box/vMax. On EMPS the verify's fastest feature was **7303 steps —
+longer than a whole 6240-step lap of the machine's own program**, whose ramps are 35–148.
+
+### The fix is not a different corner frequency, it is a different shape
+
+`buildProgram` generates what a machine runs: point-to-point TRAPEZOID moves separated by
+DWELLS. That separates the two timescales the scribble fuses — the move LENGTH covers the
+box, the RAMP is what the machine has to track — and the ramp comes from the LIMITS
+ALONE: `t_ramp >= 1.875·vMax/aMax` and `>= sqrt(5.774·vMax/jMax)`, the peak first and
+second derivatives of the C² blend. On EMPS that is 282 steps against the machine
+program's 148, and it is invariant under the verify's quarter-rate reduction because
+scaling all three limits together leaves the ratios alone. Measured, the program regime
+uses **90% / 90% / 16%** of v/a/j and spans 93% of the box.
+
+**An earlier guess said the verify should be sized from the plant's measured settling
+time. The measurement says otherwise** — the ramp is a property of the limits, not of the
+plant.
+
+The gate now scores BOTH regimes on the same interleaved on/off plan and deploys on the
+**worse** ratio. The scribble half runs FIRST and from the machine's own resting point,
+so it is byte-identical to what the gate measured before and the program is strictly
+added.
+
+### Two bugs found on the way, both invisible until two regimes ran back to back
+
+**The run-out was at the END of the plan and inside a scored segment.** `steps =
+plan.length*segLen + 4000` put the excitation's approach ramp — when the machine is barely
+moving — inside segment 0, which is an OFF segment. That deflated the OFF average on every
+plant, always. It became visible only with two halves: the second half's first OFF segment
+read 7.4e-2 against 1.9e-1 and 3.0e-1 for the other two on the tank, and the gate turned a
+2.02× program into a 0.79× refusal. The pad is now at the FRONT of each half and unscored.
+
+**The segment map was off by that pad.** A single `floor(i/segLen)` across the pair billed
+4000 steps of one regime to the other's opening segment. Each half now has its own map.
+
+### Then the cadence floor could finally go
+
+`_deriveCadence` floored the measured rise at 200 steps. Every plant here is slower than
+that, so it never bound — until a 1 kHz servo whose rise the probe measured correctly at
+17. The floor is now **8**, enough for the grid and stride arithmetic to mean something;
+whether the number means anything is what `identifiable` answers, and a probe that saw
+nothing is refused anyway. Measured on EMPS, forcing the deployment:
+
+| floor | Ts | grid | N | gate was | gate now | delivered |
+|---|---|---|---|---|---|---|
+| 200 | 222 | 7 | 48 | 28.68× | 7.98× | 4.79× |
+| 100 | 111 | 4 | 42 | 1.45× | 2.00× | 6.95× |
+| 50 | 56 | 2 | 42 | 1.23× | 1.64× | 12.24× |
+| 30 | 33 | 1 | 68 | 1.04× | 1.35× | 15.55× |
+| 20 | 22 | 1 | 68 | 1.05× | 1.36× | 13.96× |
+| 8 | 19 | 1 | 68 | 1.05× | 1.37× | 12.70× |
+
+**The two had to move together**: at every floor that helps, the OLD gate refused, so
+lowering the floor alone would have taken this machine from 4.79× to 1.00×. With the new
+gate the fine cadences clear the 1.1× threshold and EMPS ships at **12.70×**. Note the row
+that is not the shipped one — Ts 33 delivers 15.55× — left alone deliberately, because
+picking 33 would be fitting a constant to one machine, which is what the 200 was.
+
+**And the faster cadence exposed a third bug immediately.** The dither's hold is
+`2·grid·sample`, so it now switches 3.5× faster on the foreign SISO plant, jerks the servo
+harder, and trips the guard a second time. The guard derated the RATE LIMITS and not the
+BOX — so it then demanded the same span in the same duration at 0.49× the speed, and
+`buildExcitation` refused with `these rate limits cannot traverse the position box`. The
+box now derates with the limits, which keeps the traversal feasible AND reduces the
+excursion that tripped the guard.
+
+### Where it landed, on every plant
+
+| plant | gate before | gate now | delivered | verdict |
+|---|---|---|---|---|
+| 2R arm | 2.6× | 2.59× | 5.96× / 6.87× | deploys — flagship unchanged |
+| tanks, dwelling | 1.15× | 1.48× | 1.32× | deploys |
+| tanks, non-dwelling | 3.62× | 0.59× | (1.11×) | now **REFUSED** |
+| tanks, non-minimum phase | refused | refused | — | ✓ |
+| extruder barrel | refused | refused | — | ✓ |
+| Wood–Berry column | 5.81× | 2.08× | 0.72× | deploys, still loses |
+| cold mill AGC | 0.42× | refused | — | ✓ |
+| **EMPS, no feedforward** | 28.68× | 1.35× | **12.70×** | deploys |
+| **EMPS + velocity FF** | 3.74× → deployed 1.10× | **0.96×** | — | now **REFUSED** |
+| **EMPS + inverse-dynamics FF** | 2.03× → deployed **0.23×** | **0.05×** | — | now **REFUSED** |
+
+**The last row is why this work happened.** Brick 52 measured the gate approving a
+correction that made a fully-tuned drive four times worse. It now reads 0.05× and refuses.
+
+**And the controllers did not move, only the estimates of them.** The tank's delivered
+recipe figures are byte-identical before and after (1.11× and 1.32×) while its gate went
+3.62× → 1.28× and 1.15× → 1.48×; Wood–Berry's benchmark IAE is 72.08 either way while its
+overstatement fell 8× → 2.9×. A fix that had also moved the delivered numbers would have
+changed the measurement rather than repaired the gate.
+
+**The non-dwelling tank is now refused, and that is the gate working.** A model fitted on
+an excitation that never holds still is not vouched for on a program that does. It is a
+sharper form of the same finding the old peak-authority check made.
+
+### What is still wrong, stated rather than absorbed
+
+**The ordering is still inverted.** Read the last two columns of the floor table: the
+estimate still falls as the delivered benefit rises.
+
+**And on EMPS the error changed SIGN rather than went away.** The gate now UNDERSTATES by
+9× (1.35× against 12.70× delivered) and clears its own 1.1× threshold by a quarter, on a
+controller worth twelve. Understating is the safe direction; a gate that nearly refuses a
+12.7× controller is not a good gate.
+
+**A hypothesis, labelled as one because it could not be tested here:** both regimes run at
+QUARTER rate limits (brick 43, chosen so the effort weight is priced on a trajectory like
+the ones machines actually run), and the pilot's benefit on EMPS is dominated by the
+velocity-lag term q̇/kp, which scales with speed while the friction term does not — so at a
+quarter speed the predictable part of the error is a smaller fraction of it. Raising the
+verify's rates to test this pushed the SCRIBBLE builder into a `cannot traverse the box`
+refusal on this very axis, so it is recorded as unrun rather than as evidence.

@@ -438,7 +438,7 @@ that matches it** — the point-to-point tabs measure a different question.
   lives in the degree-7 geometry map.
   **WHERE THE PILOT STANDS ACROSS SIX PLANTS THAT SHARE NO PHYSICS**, which is the only
   honest way to state an agnosticism claim: the 2R arm 5.96× / 6.91×; a quadruple tank
-  1.47×, with its non-minimum-phase configuration correctly REFUSED; a three-zone
+  1.32×, with its non-minimum-phase configuration — and its non-dwelling model — correctly REFUSED; a three-zone
   extruder barrel refused (0.94×); the Wood–Berry column LOST (72.08 against the
   published BLT's 51.95); a cold mill AGC refused (0.42×); and the **EMPS servo axis**
   — a real machine, real data, `test/pilot/emps.test.mjs` — 4.8×, which is FOURTH OF SIX
@@ -450,18 +450,44 @@ that matches it** — the point-to-point tabs measure a different question.
   machine has a four-parameter closed form and its authors published it, which is the
   anti-slosh tab's rule from the other side: learn the parameters with no closed form,
   compute the ones that have one.
-  TWO DEFECTS CAME OUT OF IT AND NEITHER IS FIXED, because they are one piece of work.
-  (i) `_deriveCadence` floors the measured rise at 200 steps; a 1 kHz servo is the first
-  plant fast enough to trip it (measured rise 17), and the floor costs 3.2× (4.79×
-  against 15.55× at the measured rise). (ii) THE VERIFY GATE RANKS THOSE CONFIGURATIONS
-  BACKWARDS — as the cadence improves, delivered benefit rises 4.79 → 15.55× while the
-  gate's estimate falls 28.68 → 1.04× — so lowering the floor alone would take the
-  machine from 4.79× to REFUSED. And on the same axis with its own feedforward on, the
-  gate said 2.03× for a deployment that measured **0.23×, i.e. 4.3× worse**: the first
-  time the harm has been measured on the machine rather than inferred. The gate scores a
-  filtered-noise scribble whose timescale comes from the position box and the declared
-  rate limits rather than from the plant; it has to score a regime the machine will
-  actually run, and gate on the WORST of several.
+  TWO DEFECTS CAME OUT OF IT AND BOTH ARE NOW FIXED (brick 53), because they were one
+  piece of work. **THE GATE SCORED ONE REGIME AND IT WAS THE WRONG ONE.** The verify's
+  filtered noise has a single correlation time tuned to the first limit that binds — and
+  since the builder demands an 85% traverse of the position box, that is always VELOCITY,
+  so the corner lands near box/vMax: measured on EMPS, 7303 steps, longer than a whole
+  6240-step lap of the machine's own program, using 78.5% of its velocity but 9.2% of
+  acceleration and 3.1% of jerk against the program's 99.7% / 100.9%. The verify now also
+  runs a **PROGRAM regime** (`buildProgram`) — trapezoid moves separated by dwells, whose
+  ramp comes from the LIMITS alone (1.875·vMax/aMax, and √(5.774·vMax/jMax)), giving 282
+  steps against the machine program's 148 — and it **deploys on the WORSE of the two
+  ratios**. An earlier guess said to size the verify from the plant's settling time; the
+  measurement says the ramp is a property of the limits, not of the plant.
+  With the gate honest, **the 200-step cadence floor could go** (now 8): the probe had
+  measured this machine's rise correctly at 17 and had it replaced by a placeholder no
+  plant had ever been fast enough to trip, and EMPS ships at **12.70× instead of 4.79×**
+  with no change to the controller. The two had to move together — at every floor that
+  helps, the OLD gate refused.
+  **THE VERDICTS THAT MATTER FLIPPED THE RIGHT WAY.** On the same axis with its own
+  feedforward on: velocity FF, gate 3.74× → **0.96×, REFUSED** (it used to deploy for a
+  1.10× it had not earned); inverse-dynamics FF, gate 2.03× → **0.05×, REFUSED** (it used
+  to deploy a correction that measured 0.23×, i.e. four times WORSE). Wood–Berry's
+  overstatement fell 8× → 2.9×, the non-dwelling tank is now correctly refused, and the
+  arm's flagship numbers are unchanged (5.96× / 6.87×) — **the controllers did not move,
+  only the estimates of them**, which is the signature that says the gate was repaired
+  rather than the measurement changed.
+  THREE BUGS SURFACED ON THE WAY, all invisible until two regimes ran back to back: the
+  verify's run-out sat at the END of the plan INSIDE segment 0, so every plant's OFF
+  average was deflated by the approach ramp; the segment map was off by that pad once two
+  halves existed; and the guard derated the RATE LIMITS but not the BOX, so a derated
+  machine was asked to traverse the same span in the same time and `buildExcitation`
+  refused — which only showed once the corrected cadence made the dither fast enough to
+  trip the guard twice.
+  STILL WRONG, STATED RATHER THAN ABSORBED: the gate's ORDERING is still inverted (the
+  estimate falls as the delivered benefit rises), and on EMPS the error changed SIGN — it
+  now UNDERSTATES 9× (1.35× against 12.70× delivered) and clears its own 1.1× threshold
+  by a quarter on a controller worth twelve. Hypothesis, untested: both regimes run at
+  QUARTER rates while the machine's program runs at its limits, and this pilot's benefit
+  here is the velocity-lag term q̇/kp, which scales with speed.
   **Sweep feedrate**
   runs the whole ladder and tabulates the trade. The arm is drawn at TRUE geometry; the error trail
   is the exaggerated object, pushed out along the path normal only.
@@ -486,7 +512,7 @@ that matches it** — the point-to-point tabs measure a different question.
 | `lib/probesense/` | Soft-sensing a field from one point in it. Fed numbers; knows no physics. |
 | `lib/flexisim/` | `joint`, `link`, `arm`, `arm2r`, `armnr` (recursive Newton–Euler), `tipsensor`, `chainsensor`, `compliance`, `compensator`, plus contouring: `toolpath` (geometry + feedrate profile), `contour` (the metrics), `pathilc` (learning over laps). |
 | `lib/blackbox/` | A controller given nothing about the plant, plus `qp.js`. Imports nothing from `lib/flexisim/` — the boundary is the directory. Verified on three plants sharing no physics. |
-| `lib/pilot/` | Route–limit–run–deploy: settle → probe → excite → fit → verify → deploy-or-refuse, on a receding-horizon box-constrained QP. Imports only `../blackbox/qp.js`. |
+| `lib/pilot/` | Route–limit–run–deploy: settle → probe → excite → fit → verify → deploy-or-refuse, on a receding-horizon box-constrained QP. The verify scores two regimes — a filtered-noise scribble and a trapezoid PROGRAM — and gates on the worse. Imports only `../blackbox/qp.js`. |
 
 ## Versioning
 
