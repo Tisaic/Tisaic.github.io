@@ -198,7 +198,7 @@ check('…chooses its own windows and ridge on held-out data from these signals'
 check('…asks for NO frequency sweep, because a tank has no mode to ring',
   D.st.rings.every((r) => r < 2), JSON.stringify(D.st.rings));
 check('…and the machine vouched for the controller before it deployed',
-  D.pilot.verdict.deploy === true && D.st.report.verify.ratio > 2,
+  D.pilot.verdict.deploy === true && D.st.report.verify.ratio > 1,
   JSON.stringify(D.pilot.verdict));
 check('on a recipe it never saw, level error falls — cm of liquid, from volts of pump',
   D.ratio > 1.3, D.ratio.toFixed(2) + 'x');
@@ -216,17 +216,21 @@ check('an excitation that DWELLS beats one that only sweeps, on a plant that dwe
 check('…and it gets there on LESS authority, which is what says it learned rather than shoved',
   D.on.uPk < P.on.uPk, `${D.on.uPk.toFixed(3)} V vs ${P.on.uPk.toFixed(3)} V`);
 
-// --- THE VERIFY OVERSTATES, and that is a real limit of the gate rather than a nit.
-// The verify round scores a scribble drawn from the EXCITATION's own distribution. On
-// the arm that regime and the program's happen to agree; here they do not, and the gate
-// reports several times the benefit the recipe actually sees. It is still the right
-// gate — it correctly refuses a controller that helps nothing — but it is a lower bound
-// on nothing and an upper bound in practice, and this is where that was first measured.
-console.log(`    NOTE the verify round reported ${D.st.report.verify.ratio.toFixed(2)}x on its own `
-  + `scribble against ${D.ratio.toFixed(2)}x on the recipe — the commissioning regime is not `
-  + `the program regime, and on this plant they disagree by ${(D.st.report.verify.ratio / D.ratio).toFixed(1)}x`);
-check('the verify measured on the commissioning regime overstates the program benefit',
-  D.st.report.verify.ratio > D.ratio, 'recorded, not asserted away');
+// --- THE VERIFY AND THE PROGRAM, AND THIS CHECK HAS ALREADY GONE STALE ONCE — in the
+// direction rule 4 warns about, which is the code getting better. It first recorded a
+// 3.8x OVERSTATEMENT: the verify scored a filtered-noise scribble drawn from the
+// excitation's distribution while the recipe holds and ramps, and on this plant those
+// regimes disagree. Brick 50 made the verify dwell whenever the excitation was told to,
+// and the gap closed to within a factor — on this plant it now slightly UNDERSTATES,
+// which is the safe direction for a gate. The Wood–Berry column shows the same repair
+// is NOT sufficient there (8x, still certifying a controller that harms), so this is a
+// partial fix recorded as one.
+console.log(`    the verify reported ${D.st.report.verify.ratio.toFixed(2)}x against `
+  + `${D.ratio.toFixed(2)}x on the recipe — within a factor since the verify learned to `
+  + 'dwell, against 3.8x before it did');
+check('the verify now tracks the program benefit within a factor of two on this plant',
+  D.st.report.verify.ratio / D.ratio > 0.5 && D.st.report.verify.ratio / D.ratio < 2,
+  `${(D.st.report.verify.ratio / D.ratio).toFixed(2)}x`);
 
 // ========================================= NON-MINIMUM PHASE: the one that bites
 // gamma1 + gamma2 < 1 puts a zero in the right half plane: raise a pump and the level it

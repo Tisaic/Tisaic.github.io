@@ -3507,3 +3507,72 @@ together. Across three probe amplitudes on this same plant the measured rise rea
 answer is a DIFFERENTIAL probe — step up, step down, difference the two, and anything
 slower than the probe cancels exactly. NOT BUILT; the test's drift is scoped below the
 probe response so the rest of the file measures what it claims to.
+
+## Brick 50 — a published benchmark, and the gate that certified a controller which harms
+
+The first four plants were ours, so "6x better" was measured against a baseline we also
+wrote. `test/pilot/woodberry.test.mjs` is not: the **Wood–Berry binary distillation
+column** (Wood & Berry, 1973) is the standard 2×2 benchmark of the process-control
+literature, its model is quoted identically across decades of papers, and the
+decentralized PI everyone compares against — **Luyben's BLT tuning** — has published
+gains, `diag(0.375 + 0.0452/s, −0.075 − 0.00318/s)`.
+
+  G(s) = | 12.8 e^−s /(16.7s+1)   −18.9 e^−3s/(21s+1)   |
+         |  6.6 e^−7s/(10.9s+1)   −19.4 e^−3s/(14.4s+1) |
+
+Four dead times including **seven minutes on a cross path**, four different lags, and a
+published relative gain near 2 — every move on one loop lands on the other one late and
+out of proportion.
+
+### The rig is validated before anything is claimed from it
+
+Our BLT implementation on our stated scenario measures **IAE 51.95 against the published
+55.34** — within 6%. The plant, the baseline gains, the anti-windup and the IAE
+convention are therefore the ones the papers used, which is what makes every other
+number here mean something.
+
+### Where we stand, and it is behind
+
+  steady-state inversion only   43.90
+  Luyben BLT decentralized PI   51.95      [published: 55.34]
+  the pilot                     72.08      0.72× BLT
+  published bar                 28.9 vs BLT's 55.34 on its own scenario — **1.91×**
+
+**The pilot LOSES on this plant**, to the published baseline and to a plain model
+inverse, and no correction cap changes it: measured at 0.15 / 0.4 / 0.8 / 2.0 the IAE
+reads 91.4 / 72.1 / 70.4 / 76.5. Not saturation, not the cap. (A second honest finding
+falls out: on setpoint tracking with a perfect model, a plain steady-state inversion
+beats the classical robust tuning — BLT is deliberately detuned, which is precisely the
+gap MPC exists to close.)
+
+### THE SERIOUS PART IS THAT THE GATE CERTIFIED IT
+
+The verify round is the pilot's entire safety contract — it exists to refuse a
+controller the machine has not vouched for. On the runs measuring **0.72×** on the
+benchmark it reported **5.81×, 13.40×, 18.20×, 22.88×**. The tank process had already
+shown this gap at 3.8× and it was written up as an optimistic estimate; here it is
+eight- to thirty-fold and it is the difference between refusing and deploying something
+that makes the plant worse.
+
+**One partial repair shipped.** The verify built filtered noise even when the excitation
+had been told the program holds still — it now inherits `dwell`. On the tank process
+that closed the gap from a 3.8× OVERSTATEMENT to a slight understatement (verify 1.15×
+against a measured 1.32×), which is the safe direction for a gate. On Wood–Berry it is
+not sufficient: still 8×.
+
+**And one repair measured and REVERTED.** Doubling the verify segment when dwelling — to
+answer the builder's own "More time" refusal on the barrel — moved every plant the wrong
+way at once: the tank's agreement 0.87× → 2.89×, Wood–Berry 8× → 19×, and the barrel
+went from honestly refusing to deploying a controller that harmed it. A longer verify
+segment is a different measurement, not a better one.
+
+### The open finding, stated with what would falsify it
+
+The verify scores a scribble drawn from the EXCITATION's distribution; a program is
+steps and holds, and on a plant with four dead times the response to a step shares
+almost nothing with the response to a scribble. The arm is simply the plant where those
+two regimes agree, which is why this survived four bricks. The repair is to score the
+verify on a program-like regime and probably to gate on the WORST of several regimes —
+real machinery that has to be re-validated on all five plants, so it is recorded rather
+than patched blind. The benchmark test asserts the gap exists, so the day it is fixed,
+that check fails and says so.

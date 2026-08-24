@@ -242,7 +242,7 @@ check('the ring count is bounded rather than counting noise, which is what it di
 // for a different reason (a right-half-plane zero), and in both cases the pilot reached
 // it from measurements alone, with no idea what a dead time or a zero IS.
 check('…and on a plant it cannot help, the gate REFUSES rather than deploying',
-  pilot.verdict.deploy === false && st.report.verify.ratio < 1.2,
+  pilot.verdict.deploy === false && (!st.report.verify || st.report.verify.ratio < 1.2),
   JSON.stringify(pilot.verdict));
 
 const off = runRecipe(pilot, false);

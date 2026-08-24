@@ -239,6 +239,7 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     node test/pilot/pilot.test.mjs
     node test/pilot/tanks.test.mjs
     node test/pilot/thermal.test.mjs
+    node test/pilot/woodberry.test.mjs
     if [ "${SUITE}" = "full" ]; then node test/pilot/arm.test.mjs; fi
     if [ "${SUITE}" = "full" ]; then node test/pilot/ikfree.test.mjs; fi
   fi
