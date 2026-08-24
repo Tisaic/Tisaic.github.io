@@ -3169,3 +3169,34 @@ them — the two stacks converge to the same numbers, within lap-to-lap noise, f
 static-accuracy starting points that differ by an order of magnitude. The geometry a
 drawing supplies and the geometry a tracker teaches are interchangeable once the part
 is allowed to speak.
+
+## Brick 43 — the tracer that never came back, and two compliance sliders
+
+**"Sometimes the orange tracer goes away and doesn't come back."** Reported from the
+device, reproduced deterministically, and the mechanism is one line: a queued feedrate
+change re-enters the program through `timeAt(s0)`, which INTERPOLATES — so the resumed
+step counter is fractional (measured k = 390370.26), `kP++` keeps the fraction forever,
+and `kP % 8 === 0` is satisfied never again. Every modulo-gated sampler in the loop
+starved silently: the error trail plateaued at the ~2 points per lap the wrap-break
+path pushes (invisible), and the chart series stopped growing entirely. Nothing threw,
+nothing halted — the run was CORRECT throughout, which is why it read as a display
+ghost rather than a bug.
+
+The reproduction was cheap once the instrument existed: `__flxPathDbg` now reports the
+trail and chart fill counts, and the smoke test changes feedrate mid-session, resumes,
+and waits for the trail to refill — with the bug present it never does (trail 0, chart
+0, 90 s timeout); with `Math.round` on the re-entry clock it refills within a lap. A
+trail of two points per lap is indistinguishable from a missing one on screen, and only
+a count says which. Same family as FlowSim's "0/0 is NaN, not zero" and the frozen
+Plotly chart: the picture cannot report its own absence.
+
+**And the compliance controls the owner asked for**, both floors measured before they
+became rungs (v118's rule): the path tab gets its OWN gearbox ladder, extended 64×
+looser at the bottom — 0.25 to 32 against the old floor of 1 — and a new **Link E**
+slider, 0.03 to 0.22. Every corner traces a finite open-loop lap: K 0.25 leaves contour
+4.1e-1, E 0.03 leaves 2.8e-1, the combined softest corner 6.1e-1 — honestly floppy
+machines, not broken ones. The E ceiling is not taste but the lattice's CFL gate:
+c_p = 0.544 at E 0.22 against the 0.577 limit, and E 0.3 would be refused at build.
+Either slider rebuilds the plant and clears every learner on the tab, because a
+compliance constant, a pilot, a learned geometry and three ILC tables all belong to
+exactly one machine.

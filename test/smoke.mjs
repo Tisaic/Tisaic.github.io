@@ -2709,6 +2709,25 @@ await fx.waitForFunction((t) => window.__flxPathDbg().k > t, pk0 + 2500, { timeo
     after.path.lapSteps < d.path.lapSteps
     && Math.abs(after.cmd.s - before) < 0.02 * after.path.length,
     `${before.toFixed(4)} → ${after.cmd.s.toFixed(4)}`);
+  // …AND THE TRACER MUST SURVIVE THE SWAP. timeAt() interpolates, so the resumed clock
+  // is generically FRACTIONAL — and every sampler in the loop was gated on
+  // kP % N === 0, which a fractional counter satisfies never again. The orange trail
+  // and the chart quietly starved after the next lap-boundary clear, which from the
+  // phone reads exactly as "the tracer goes away and doesn't come back". The trail
+  // refills within a lap when healthy and plateaus at ~2 points per lap when not, so
+  // the wait below converges fast or times out — there is no flaky middle.
+  await fx.click('#runP');                       // resume on the new profile
+  let fed = true;
+  try {
+    await fx.waitForFunction(() => {
+      const t = window.__flxPathDbg();
+      return t.trail > 60 && t.chart > 3;
+    }, undefined, { timeout: 90000 });
+  } catch { fed = false; }
+  await fx.click('#runP');                       // pause again for the checks below
+  const tr = await fx.evaluate(() => window.__flxPathDbg());
+  check('flexisim/path: …and the error trail and chart are still being fed after it',
+    fed, JSON.stringify({ trail: tr.trail, chart: tr.chart, k: tr.k }));
 }
 // THE VIEW HAS TO CONTAIN THE MACHINE. A frame fitted to the program alone drew the
 // forearm arriving from off screen, because this arm's elbow hangs well below the

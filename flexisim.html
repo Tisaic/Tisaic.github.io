@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:247,built:"2026-08-24T00:17:42Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:248,built:"2026-08-24T00:35:25Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -564,8 +564,11 @@
     <h4 class="grp">Plant &amp; view</h4>
     <div class="controls">
       <div class="slider"><span>Gearbox K</span>
-        <input type="range" id="s-kP" min="0" max="6" step="1" value="4" />
+        <input type="range" id="s-kP" min="0" max="8" step="1" value="6" />
         <span class="v" id="v-kP">16.0</span></div>
+      <div class="slider"><span>Link E</span>
+        <input type="range" id="s-eP" min="0" max="4" step="1" value="3" />
+        <span class="v" id="v-eP">0.15</span></div>
       <div class="slider"><span>Steps/frame</span>
         <input type="range" id="s-spfP" min="20" max="300" step="20" value="60" />
         <span class="v" id="v-spfP">60</span></div>
@@ -5503,6 +5506,16 @@ const BACKLASH = 1e-4;          // half the lost motion, load side
 // at all, while the first uncorrected lap leaves 5e-1 and anything past ~10x draws a
 // line clean across the stage.
 const MAG_LADDER = [1, 2, 5, 10, 20, 50, 100, 200];
+// THE PATH TAB'S OWN COMPLIANCE LADDERS, measured before they became rungs (a slider
+// position that dies at the shipped defaults is a trap — FlowSim v118's lesson). Every
+// corner below traces a finite lap open loop: the softest gearbox (0.25, 64× looser
+// than the default) leaves contour 4.1e-1 and the softest links 2.8e-1 — honestly
+// floppy machines, not broken ones. The LINK ceiling is the lattice's CFL gate: at
+// E 0.22, c_p = 0.544 against the 0.577 limit; E 0.3 would be REFUSED at build.
+// A change of either rebuilds the plant and clears every learner, because a compliance
+// constant, a pilot, and a learned geometry all belong to ONE machine.
+const KP_LADDER = [0.25, 0.5, 1, 2, 4, 8, 16, 20, 32];
+const EP_LADDER = [0.03, 0.06, 0.10, 0.15, 0.22];
 
 let armP = null, servoP = null, profP = null, holdP = null;
 let kP = 0, lapP = 0, runP = false, busyP = false;
@@ -5578,8 +5591,9 @@ function newScore() {
 
 async function buildP() {
   if (armP) { await armP.l1.destroy(); await armP.l2.destroy(); armP = null; }
-  const K = K2_LADDER[+$('s-kP').value];
-  const mk = (length) => buildLink({ length, section: H, clamp: CLAMP, E: PG.E,
+  const K = KP_LADDER[+$('s-kP').value];
+  const E = EP_LADDER[+$('s-eP').value];
+  const mk = (length) => buildLink({ length, section: H, clamp: CLAMP, E,
     nu: NU, rho: RHO, damping: DAMPING });
   const link1 = await mk(PG.LEN1), link2 = await mk(PG.LEN2);
   // BACKLASH IS ON HERE AND NOWHERE ELSE ON THE PAGE, because this is the only tab whose
@@ -5592,7 +5606,7 @@ async function buildP() {
     damping: 2 * Math.sqrt(K * mp.inertiaAboutPivot / 2) });
   armP = new FlexArm2R({ joint1: j(massProperties(link1)), link1,
     joint2: j(massProperties(link2)), link2, gravityWorld: [0, -G, 0], dt: 1 });
-  armP.K = K;
+  armP.K = K; armP.E = E;
   holdP = Math.abs(armP.gravityTorque([0, 0])[0]) / RATIO;
   servoP = new ChainServo({ arm: armP, bandwidth: 2e-3,
     tauMax: PG.drive * holdP, speedMax: NO_LOAD_SPEED });
@@ -5791,7 +5805,14 @@ function clampDq(x, lim = DQ_CLAMP) {
 function installProgram(next) {
   const s0 = profP ? profP.at(kP).s : 0;
   profP = next;
-  kP = profP.timeAt(s0);
+  // ROUNDED, BECAUSE A STEP COUNTER IS AN INTEGER. timeAt() interpolates, and a
+  // fractional clock ticks kP++ forever without ever satisfying kP % N === 0 — which
+  // silently starved every modulo-gated sampler in the loop (the orange error trail
+  // and the chart both feed on kP % N), from the first feedrate change to the next
+  // reload. Reproduced deterministically: after one queued feed change the trail read
+  // 0 points with k = 390370.26. Half a step of arc position is far below anything
+  // the servo can express, so rounding costs nothing.
+  kP = Math.round(profP.timeAt(s0));
   lapP = Math.floor(kP / profP.lap);
   makeILC(true);
   makeILC5(true);
@@ -6553,7 +6574,7 @@ function statsP() {
   if (!armP || !profP) return;
   const rows = [];
   const r = scoreP.report(), lr = lapScoreP.report();
-  rows.push(['plant', `K ${armP.K} · E ${PG.E} · L1 ${armP.L1} + L2 ${armP.L2} · `
+  rows.push(['plant', `K ${armP.K} · E ${armP.E} · L1 ${armP.L1} + L2 ${armP.L2} · `
     + `${armP.l1.lattice.cellCount + armP.l2.lattice.cellCount} cells · drive `
     + `${PG.drive}× hold`]);
   rows.push(['program', `${$('shapeP').options[$('shapeP').selectedIndex].text} · `
@@ -6716,7 +6737,7 @@ function syncPath() {
   // of their own, and a slider moved underneath either one either overwrites the routine's
   // program (the identifying lap silently stops being slow) or changes the acceleration
   // between two rungs that are supposed to differ only in feedrate.
-  for (const id of ['ctlP', 'shapeP', 's-feedP', 's-accP', 's-cornP', 's-kP']) set(id, !idle);
+  for (const id of ['ctlP', 'shapeP', 's-feedP', 's-accP', 's-cornP', 's-kP', 's-eP']) set(id, !idle);
 }
 
 // ---------------------------------------------------------------- wiring
@@ -6757,15 +6778,19 @@ for (const id of ['s-feedP', 's-accP', 's-cornP']) {
     else { progPending = false; installProgram(makePath()); onLapBoundaryP(); }
   });
 }
-$('s-kP').addEventListener('input', async () => {
-  syncPathLabels();
-  if (busyP) return;
-  busyP = true; runP = false;
-  setPathBadge('rebuilding…', 'warn'); syncPath();
-  try { await buildP(); setPathBadge('ready — press Run', ''); }
-  catch (e) { setPathBadge('build failed: ' + e.message, 'bad'); console.error(e); }
-  finally { busyP = false; syncPath(); }
-});
+// K AND E BOTH REBUILD THE PLANT — a different gearbox or a different link is a
+// different machine, and every learner on the tab belongs to exactly one.
+for (const id of ['s-kP', 's-eP']) {
+  $(id).addEventListener('input', async () => {
+    syncPathLabels();
+    if (busyP) return;
+    busyP = true; runP = false;
+    setPathBadge('rebuilding…', 'warn'); syncPath();
+    try { await buildP(); setPathBadge('ready — press Run', ''); }
+    catch (e) { setPathBadge('build failed: ' + e.message, 'bad'); console.error(e); }
+    finally { busyP = false; syncPath(); }
+  });
+}
 for (const id of ['s-spfP', 's-magP']) $(id).addEventListener('input', syncPathLabels);
 $('ctlP').addEventListener('change', () => {
   if ($('ctlP').value === 'ilc' && !ilcP && profP) makeILC(true);
@@ -6778,7 +6803,8 @@ function syncPathLabels() {
   $('v-feedP').textContent = pathFeed().toExponential(1);
   $('v-accP').textContent = pathAccel().toExponential(1);
   $('v-cornP').textContent = `${pathCorner()} steps`;
-  $('v-kP').textContent = K2_LADDER[+$('s-kP').value].toFixed(1);
+  $('v-kP').textContent = KP_LADDER[+$('s-kP').value].toFixed(2);
+  $('v-eP').textContent = EP_LADDER[+$('s-eP').value].toFixed(2);
   $('v-spfP').textContent = $('s-spfP').value;
   $('v-magP').textContent = `${MAG_LADDER[+$('s-magP').value]}×`;
 }
@@ -6790,6 +6816,10 @@ window.__flxPathDbg = () => (armP ? {
   path: { length: profP.length, lapSteps: profP.lap, closed: profP.closed,
     vMin: Math.min(...profP.v), vMax: Math.max(...profP.v) },
   mode: pathMode(), want: $('ctlP').value, c: cP, nominal: cFrom && cFrom.nominal,
+  K: armP.K, E: armP.E,
+  // The two samplers' fill levels — the instrument that caught the fractional-clock
+  // starvation (a trail of 2 points per lap is invisible, and only a count says so).
+  trail: trailP.length, chart: pHist ? pHist.c.length : 0,
   score: scoreP.report(), lapScore: lapScoreP.report(),
   pilot: pilotP ? pilotP.status() : null,
   pilotComm,
