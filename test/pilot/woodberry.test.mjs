@@ -138,7 +138,7 @@ async function commission(seed = 1) {
   const c = makeColumn();
   for (let i = 0; i < 3000; i++) c.step([0, 0]);
   const pilot = new Pilot({
-    nMeasured: 2,                                  // the two compositions, nothing else
+    autoRefuse: true, nMeasured: 2,                                  // the two compositions, nothing else
     channels: [0, 1].map(() => ({ lo: UBOX.lo, hi: UBOX.hi,
       vMax: 6e-3, aMax: 6e-5, jMax: 6e-7 })),
     uMax: UMAX,

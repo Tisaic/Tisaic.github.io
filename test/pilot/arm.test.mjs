@@ -62,7 +62,7 @@ const startPath = mkPath('rounded', 0.004);
 homeArm(arm, servo, startPath);
 const centre = arm.ik(12, 0, true);
 const pilot = new Pilot({
-  nMeasured: 6,
+  autoRefuse: true, nMeasured: 6,
   channels: [0, 1].map((j) => ({ lo: centre[j] - 0.55, hi: centre[j] + 0.55,
     vMax: 8e-4, aMax: 4e-6, jMax: 2e-7 })),
   uMax: 0.15,

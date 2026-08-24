@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:261,built:"2026-08-24T21:47:54Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:262,built:"2026-08-24T22:28:56Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -6250,6 +6250,10 @@ function startPilotP() {
   const centre = armP.ik(PG.centre[0], PG.centre[1], true);
   const c0 = profP.at(kP);
   pilotP = new Pilot({
+    // THIS PAGE KEEPS THE GATE. The library's default is now to deploy and report
+    // (brick 57); ⑤/⑥ advertise that they deploy only on a verify the machine vouched
+    // for, so they ask for it explicitly.
+    autoRefuse: true,
     nMeasured: 6,
     channels: [0, 1].map((j) => ({ lo: centre[j] - 0.55, hi: centre[j] + 0.55,
       vMax: 8e-4, aMax: 4e-6, jMax: 2e-7 })),
@@ -6549,6 +6553,10 @@ function ik6StartPilot() {
   // what the running system consumes.
   const centreQ = C.predict(PG.centre[0], PG.centre[1]);
   C.pilot = new Pilot({
+    // THIS PAGE KEEPS THE GATE. The library's default is now to deploy and report
+    // (brick 57); ⑤/⑥ advertise that they deploy only on a verify the machine vouched
+    // for, so they ask for it explicitly.
+    autoRefuse: true,
     nMeasured: 6,
     channels: [0, 1].map((j) => ({ lo: centreQ[j] - 0.55, hi: centreQ[j] + 0.55,
       vMax: 8e-4, aMax: 4e-6, jMax: 2e-7 })),

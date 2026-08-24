@@ -54,7 +54,7 @@ function run(pilot, plant, { truthOverride = null, maxSteps = 400000 } = {}) {
 // ------------------------------------------------- the happy path, start to finish
 {
   const plant = makePlant();
-  const pilot = new Pilot({ nMeasured: 2, channels: [{ ...LIM }], uMax: 0.3,
+  const pilot = new Pilot({ autoRefuse: true, nMeasured: 2, channels: [{ ...LIM }], uMax: 0.3,
     start: [0], seed: 4, exciteSteps: 12000, verifySegLen: 2500 });
   const steps = run(pilot, plant);
   const st = pilot.status();
@@ -119,7 +119,7 @@ function run(pilot, plant, { truthOverride = null, maxSteps = 400000 } = {}) {
   const plant = makePlant();
   let s = 12345;
   const noise = () => { s = (s * 1664525 + 1013904223) >>> 0; return [(s / 2 ** 32 - 0.5) * 1e-3]; };
-  const pilot = new Pilot({ nMeasured: 2, channels: [{ ...LIM }], uMax: 0.3,
+  const pilot = new Pilot({ autoRefuse: true, nMeasured: 2, channels: [{ ...LIM }], uMax: 0.3,
     start: [0], seed: 4, exciteSteps: 12000, verifySegLen: 2500 });
   run(pilot, plant, { truthOverride: noise });
   check('a truth signal that never responds to the correction is REFUSED, with the reason',
@@ -132,7 +132,7 @@ function run(pilot, plant, { truthOverride = null, maxSteps = 400000 } = {}) {
 // ------------------------------------------------------ the guard: derate and retry
 {
   const plant = makePlant();
-  const pilot = new Pilot({ nMeasured: 2, channels: [{ ...LIM }], uMax: 0.3,
+  const pilot = new Pilot({ autoRefuse: true, nMeasured: 2, channels: [{ ...LIM }], uMax: 0.3,
     start: [0], seed: 4, exciteSteps: 12000, verifySegLen: 2500,
     // The threshold sits between the raw dither's velocity spike (~3.6) and one
     // derate's (~2.5), so exactly one derate must fix it — a threshold either side
@@ -181,7 +181,7 @@ function run(pilot, plant, { truthOverride = null, maxSteps = 400000 } = {}) {
     };
   };
   const plant = makeNoisy();
-  const pilot = new Pilot({ nMeasured: 2, channels: [{ ...LIM }], uMax: 0.3,
+  const pilot = new Pilot({ autoRefuse: true, nMeasured: 2, channels: [{ ...LIM }], uMax: 0.3,
     start: [0], seed: 4, exciteSteps: 12000, verifySegLen: 2500 });
   run(pilot, plant);
   const st = pilot.status();

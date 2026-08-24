@@ -102,12 +102,12 @@ function refAtStep(k) {
 const PROG = SEG * (RECIPE.length - 1);
 
 // ------------------------------------------------------------ route, limit, run
-async function commission(g, dwell, seed = 1) {
+async function commission(g, dwell, seed = 1, gate = true) {
   const p = makeTanks(g);
   const start = voltsFor(g, RECIPE[0][0], RECIPE[0][1]);
   for (let i = 0; i < 30000; i++) p.step(start[0], start[1]);
   const pilot = new Pilot({
-    nMeasured: 4,
+    autoRefuse: gate, nMeasured: 4,
     channels: [0, 1].map(() => ({ lo: 2.0, hi: 3.6,
       vMax: 4e-3, aMax: 2e-5, jMax: 2e-7 })),
     uMax: UCAP,
@@ -277,5 +277,22 @@ check('…and it does not claim the minimum-phase win, because the RHP zero forb
   ratioN < D.ratio, `${ratioN.toFixed(2)}x vs ${D.ratio.toFixed(2)}x`);
 
 console.log(`    (three commissionings and six scored recipes in ${((Date.now() - t0) / 1000).toFixed(0)}s)`);
+// THE GATE IS OPT-IN NOW, AND THIS IS WHAT THE DEFAULT DOES (brick 57). Every check
+// above passes `autoRefuse: true` because this file exists to pin the CONTRACT. A host
+// that does not ask for the gate gets the model deployed and the verify's verdict as a
+// REPORT — which on this plant means the non-minimum-phase configuration, measured
+// delivering 0.61x on the recipe, deploys. `report.wouldRefuse` carries the reason it
+// would have been refused, so a refusal that did not happen is still legible.
+{
+  const { pilot: pOff } = await commission(GNM, true, 3, false);
+  const wr = pOff.report.wouldRefuse;
+  console.log(`    non-minimum phase with the gate OFF: `
+    + `${pOff.verdict.deploy ? 'DEPLOYED' : 'refused'} — would have refused: ${wr ? 'yes' : 'no'}`);
+  check('with the gate off the model deploys anyway',
+    pOff.verdict.deploy === true, JSON.stringify(pOff.verdict));
+  check('…and the refusal it did not make is still reported',
+    typeof wr === 'string' && wr.length > 0, JSON.stringify(wr));
+}
+
 console.log(failed ? `\npilot/tanks: ${failed} check(s) FAILED\n` : '\npilot/tanks: all checks passed\n');
 process.exit(failed ? 1 : 0);

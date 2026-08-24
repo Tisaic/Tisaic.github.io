@@ -270,7 +270,7 @@ for (let i = 0; i < 4000; i++) {
 }
 s6.resetLimitStats();
 const centreQ = predict(PG.centre[0], PG.centre[1]);
-const pilot = new Pilot({ nMeasured: 6,
+const pilot = new Pilot({ autoRefuse: true, nMeasured: 6,
   channels: [0, 1].map((j) => ({ lo: centreQ[j] - 0.55, hi: centreQ[j] + 0.55,
     vMax: 8e-4, aMax: 4e-6, jMax: 2e-7 })),
   uMax: 0.15, start: q6, guards: [{ index: 4, max: 6 }, { index: 5, max: 6 }],
@@ -401,7 +401,7 @@ if (pilot.verdict.deploy) {
       return [gx, gy];
     });
   };
-  const pilotS = new Pilot({ nMeasured: 6,
+  const pilotS = new Pilot({ autoRefuse: true, nMeasured: 6,
     channels: [0, 1].map((jj) => ({ lo: centreS[jj] - 0.55, hi: centreS[jj] + 0.55,
       vMax: 8e-4, aMax: 4e-6, jMax: 2e-7 })),
     uMax: 0.15, start: curS.slice(), guards: [{ index: 4, max: 6 }, { index: 5, max: 6 }],

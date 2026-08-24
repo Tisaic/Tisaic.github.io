@@ -4206,3 +4206,26 @@ in which case the 0.25× scores extrapolated truth rather than the controller. T
 soft-corner section commissions and never scores a program, so there is no delivered
 number to appeal to. The check records the refusal and both candidate explanations rather
 than asserting either.
+
+## Brick 57 — the gate is opt-in, and off by default
+
+`autoRefuse` (default **false**). Everything the verify measures is still measured and
+reported — both regimes, both ratios, the harm veto's verdict — but by default it does not
+VETO: the model deploys and the numbers are the engineer's to read. `autoRefuse: true`
+restores the contract the pilot was built around.
+
+**What that costs is measured, not hypothetical.** With the gate off, the configurations
+this suite records as harmful deploy too: the non-minimum-phase tank delivered **0.61×**
+on its recipe and the Wood–Berry column **0.72×** against its published baseline.
+`report.wouldRefuse` carries the reason the gate would have given, so a refusal that did
+not happen is still legible, and the tank's test asserts exactly that pair — deployed
+anyway, and the refusal it did not make still reported.
+
+Two things still cannot deploy whatever the flag says, because they are arithmetic rather
+than policy: a commissioning with every channel's forecast disarmed has nothing to act
+with, and `act()` returns zero for a gated channel regardless.
+
+Every test in `test/pilot/` passes `autoRefuse: true`, because those files exist to pin
+the CONTRACT; `flexisim.html` passes it too, because ⑤ and ⑥ advertise that they deploy
+only on a verify the machine vouched for. The default is what a host gets when it does not
+ask.

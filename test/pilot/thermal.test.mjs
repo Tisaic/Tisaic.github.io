@@ -140,7 +140,7 @@ async function commission(seed = 1) {
   const start = powerFor(RECIPE[0]);
   for (let i = 0; i < 20000; i++) p.step(start);
   const pilot = new Pilot({
-    nMeasured: NZ,                      // three signals for three channels: the leanest yet
+    autoRefuse: true, nMeasured: NZ,                      // three signals for three channels: the leanest yet
     channels: [0, 1, 2].map(() => ({ lo: PBOX.lo, hi: PBOX.hi,
       vMax: 3e-2, aMax: 2e-4, jMax: 2e-6 })),
     uMax: UCAP,

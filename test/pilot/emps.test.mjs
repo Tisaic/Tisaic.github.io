@@ -131,7 +131,7 @@ const ilcRaw = ilc(1, 40);
 // ------------------------------------------------------- route, limit, run, deploy
 const UMAX = 2e-3;                       // 2 mm of authority against a 0.58 mm error
 const pilot = new Pilot({
-  nMeasured: 1,                          // the encoder, and nothing else
+  autoRefuse: true, nMeasured: 1,                          // the encoder, and nothing else
   channels: [{ lo: -0.02, hi: 0.27, vMax: 1.25e-4, aMax: 8.3e-7, jMax: 5e-8 }],
   uMax: UMAX,
   start: [PR.q[0]],

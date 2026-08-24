@@ -142,7 +142,7 @@ async function commission(seed = 1) {
   m.quiet = process.env.QUIET === '1';
   for (let i = 0; i < 4000; i++) m.step(S0);
   const pilot = new Pilot({
-    nMeasured: 3,                                        // force, gap, delayed gauge
+    autoRefuse: true, nMeasured: 3,                                        // force, gap, delayed gauge
     // THE RATE LIMITS SET THE IDENTIFICATION BANDWIDTH, and they have to cover the
     // DISTURBANCE, not just the program. Eccentricity of 30 µm at 1.22 Hz moves the gap
     // at up to A·2πf = 4.6e-4 mm/step; routed at 2e-4 the excitation could not contain

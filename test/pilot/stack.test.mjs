@@ -50,6 +50,7 @@ const SIN = { q: new Float64Array(P) };
 
 const t0 = Date.now();
 const st = new Stack({
+  autoRefuse: true,   // the stack's contract is what this file pins
   nMeasured: 1,
   channels: [{ lo: -0.02, hi: 0.27, vMax: 1.25e-4, aMax: 8.3e-7, jMax: 5e-8 }],
   uMax: 2e-3,
