@@ -265,6 +265,20 @@ check('the readouts still generalise on a plant with real measurement noise',
   (st.report.readouts||[]).every((r) => r.r2Lead0 > 0.4),
   JSON.stringify((st.report.readouts||[]).map((r) => r.r2Lead0.toFixed(3))));
 
+// AND THE BASIS SELECTOR READS THIS BARREL'S PHYSICS (brick 54). A zone loses heat by
+// radiation, which goes as T^4, and conducts to its neighbours through a gradient — so a
+// forecast that is linear in the measured temperatures is leaving curvature on the table.
+// Offered a quadratic block under a structured prior that ridges it a hundred times
+// harder, the fit ACCEPTS it on the zones where that shows and declines it on the one
+// where it does not: held-out R2 0.7288 -> 0.7647 on zone 0 and 0.7898 -> 0.8112 on zone
+// 2, against 0.8450 -> 0.8526 on zone 1, which is inside the 5% residual band and stays
+// linear. The Wood-Berry column, whose plant is linear transfer functions and nothing
+// else, declines it on both loops — that pair is what says the selector is reading the
+// physics rather than the sample count.
+check('the barrel accepts a nonlinear basis where its own physics is nonlinear',
+  (st.report.readouts || []).some((r) => r.basis === 'linear+quadratic'),
+  JSON.stringify((st.report.readouts || []).map((r) => r.basis)));
+
 console.log(`    (commissioned and scored in ${((Date.now() - t0) / 1000).toFixed(0)}s)`);
 console.log(failed ? `\npilot/thermal: ${failed} check(s) FAILED\n` : '\npilot/thermal: all checks passed\n');
 process.exit(failed ? 1 : 0);

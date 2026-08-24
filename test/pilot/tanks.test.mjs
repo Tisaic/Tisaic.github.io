@@ -210,20 +210,30 @@ check('…without exceeding the engineer\'s correction cap',
 // 1.43x, and brick 49's probe fixes — which are correctness, not tuning — moved both
 // sides legitimately (1.47/1.03 became 1.32/1.11). What has to hold is that a dwelling
 // excitation wins on a dwelling plant; the size of the win is a number to report.
-check('an excitation that DWELLS beats one that only sweeps, on a plant that dwells',
-  D.ratio > 1.15 * P.ratio,
-  `${D.ratio.toFixed(2)}x with vs ${P.ratio.toFixed(2)}x without`);
-// AND THE GATE NOW SAYS SO ITSELF (brick 53). The verify scores a PROGRAM regime —
-// trapezoid moves with dwells between them — alongside the scribble and deploys on the
-// worse of the two. A model fitted on an excitation that never holds still is not
-// vouched for on a program that does, and the non-dwelling configuration is now REFUSED
-// (0.59x) rather than deployed for a 1.11x it barely earned. That is a sharper form of
-// the same finding than the peak-authority comparison this replaced: that check read
-// 0.283 V against 0.000 V once the other side stopped deploying at all, which is not a
-// comparison of authority, it is a comparison with nothing.
-check('…and the gate REFUSES the non-dwelling model on this dwelling plant',
-  !P.pilot.verdict.deploy && D.pilot.verdict.deploy,
-  `dwell ${JSON.stringify(D.pilot.verdict.deploy)} / no-dwell ${JSON.stringify(P.pilot.verdict.deploy)}`);
+// THE DWELL ADVANTAGE WAS THE BASIS'S FAULT, AND IT REVERSED (brick 54). Brick 48
+// measured a dwelling excitation beating a sweeping one on this dwelling plant, and
+// brick 53's two-regime gate agreed by refusing the sweeping one. Both were reading a
+// LINEAR forecast basis: a quadruple tank's outflow goes as sqrt(h), and a sweeping
+// excitation visits the whole level range where that curvature lives while a dwelling one
+// spends its time near operating points where the plant looks linear. Give the fit a
+// nonlinear block to select and the sweeping excitation picks it (held-out R2 0.9661 ->
+// 0.9818 and 0.9354 -> 0.9686, i.e. the unexplained variance nearly halved) and its
+// delivered figure goes 1.11x -> 2.07x, while the dwelling one selects LINEAR (0.8397
+// against 0.7412) and stays at 1.32x.
+//
+// SO THE DWELL WAS COMPENSATING FOR A BASIS THAT COULD NOT REPRESENT THE PLANT, and the
+// honest statement of the finding is the reverse of the old one. What is asserted now is
+// the mechanism rather than the direction: the configuration whose fit needs curvature
+// SELECTS curvature, and it is the one that wins.
+check('the sweeping excitation selects the nonlinear basis on a plant with sqrt outflow',
+  P.pilot.readouts.every((r) => r.poly),
+  JSON.stringify(P.pilot.report.readouts.map((r) => r.basis)));
+check('…and the dwelling one does not need it, and does not pay for it',
+  D.pilot.readouts.every((r) => !r.poly),
+  JSON.stringify(D.pilot.report.readouts.map((r) => r.basis)));
+check('…and with the basis selected, the sweeping excitation is the better model',
+  P.ratio > 1.15 * D.ratio,
+  `${P.ratio.toFixed(2)}x sweeping vs ${D.ratio.toFixed(2)}x dwelling`);
 
 // --- THE VERIFY AND THE PROGRAM, AND THIS CHECK HAS ALREADY GONE STALE ONCE — in the
 // direction rule 4 warns about, which is the code getting better. It first recorded a

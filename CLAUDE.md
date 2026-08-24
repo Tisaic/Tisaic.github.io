@@ -433,9 +433,22 @@ that matches it** — the point-to-point tabs measure a different question.
   (verify 0.48× → 5.02× at K 0.25/E 0.03) — and every ILC table carries a MONOTONE
   SAFEGUARD (backoff, settling dwell, freeze after 3) whose measured endpoint is
   exactly the continuous open loop: a soft gearbox's table pumped to 5.25 unguarded.
-  The pilot's forecast basis stays LINEAR by measurement: the NGRC quadratic
-  expansion loses held-out at every lead on this plant (to R² −22); the nonlinearity
-  lives in the degree-7 geometry map.
+  THE PILOT'S FORECAST BASIS IS NOW SELECTED PER CHANNEL, NOT DECIDED (brick 54). It
+  was linear "by measurement" — but the measurement was ONE plant. The fit is now offered
+  a quadratic block under the AFM's STRUCTURED PRIOR (ridged 100× harder than the linear
+  one, so it must earn its weights) and picks on held-out data. THE SELECTION TRACKS THE
+  PHYSICS: the quadruple tank (outflow ~ √h) and the extruder barrel (radiates as T⁴)
+  accept curvature where their excitation exposes it; the Wood–Berry column — linear
+  transfer functions and nothing else — declines it on both loops, which is the negative
+  control; the mill, the EMPS axis and BOTH arm channels stay linear, so the original note
+  was right about the arm and wrong to be generalised. THE TIE-BREAK IS ON THE RESIDUAL:
+  on R² the tank's 0.9818 against 0.9661 sits inside any 5% band, while the unexplained
+  variance it leaves is 0.0182 against 0.0339 — nearly halved — and a forecast the QP
+  inverts is worth what its residual is worth. It overturned a shipped finding: brick 48's
+  "a dwelling excitation beats a sweeping one on a dwelling plant" was reading a linear
+  basis, and with curvature available the sweeping excitation selects it and goes
+  1.11× → **2.07×** against the dwelling one's unchanged 1.32×. The dwell advantage was
+  compensating for a basis that could not represent the plant.
   **WHERE THE PILOT STANDS ACROSS SIX PLANTS THAT SHARE NO PHYSICS**, which is the only
   honest way to state an agnosticism claim: the 2R arm 5.96× / 6.91×; a quadruple tank
   1.32×, with its non-minimum-phase configuration — and its non-dwelling model — correctly REFUSED; a three-zone

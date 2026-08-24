@@ -3920,3 +3920,77 @@ velocity-lag term q̇/kp, which scales with speed while the friction term does n
 quarter speed the predictable part of the error is a smaller fraction of it. Raising the
 verify's rates to test this pushed the SCRIBBLE builder into a `cannot traverse the box`
 refusal on this very axis, so it is recorded as unrun rather than as evidence.
+
+## Brick 54 — the nonlinear features are selected, not decided
+
+The pilot's header said its readouts are linear windows and that "a plant whose truth is
+strongly nonlinear in the signals would reopen it". That was written from ONE plant. The
+NGRC library has carried the machinery to settle it per plant since the AFM work — a
+UNIVERSAL MAP under a STRUCTURED PRIOR, where the nonlinear block is ridged far harder
+than the linear one so it has to earn its weights rather than merely be available — and
+none of the pilot used it.
+
+### Measured on six plants, best held-out R² of the linear basis against linear+quadratic
+
+The quadratic block is products of a REDUCED base — the most recent lag of each measured
+signal and the lead-0 command tap pair of each channel — under a prior that ridges it
+100× harder, the AFM's own {lin, quad} shape.
+
+| plant | channel | linear | +quadratic | |
+|---|---|---|---|---|
+| quadruple tank, sweeping excitation | 0 | 0.9661 | **0.9818** | quadratic |
+| quadruple tank, sweeping excitation | 1 | 0.9354 | **0.9686** | quadratic |
+| quadruple tank, dwelling excitation | 0 | **0.8397** | 0.7412 | linear |
+| quadruple tank, dwelling excitation | 1 | **0.8043** | 0.7875 | linear |
+| extruder barrel | 0 | 0.7288 | **0.7647** | quadratic |
+| extruder barrel | 1 | **0.8450** | 0.8526 | linear (inside the band) |
+| extruder barrel | 2 | 0.7898 | **0.8112** | quadratic |
+| Wood–Berry column | 0 | **0.9641** | 0.9396 | linear |
+| Wood–Berry column | 1 | **0.9487** | 0.9316 | linear |
+| cold mill AGC | 0 | **0.0680** | 0.0178 | linear |
+| EMPS servo axis | 0 | 0.9930 | 0.9933 | linear (a tie) |
+| 2R arm | 0 | **0.9969** | 0.9913 | linear |
+| 2R arm | 1 | 0.8330 | 0.8388 | linear (inside the band) |
+
+**THE SELECTION TRACKS THE PHYSICS.** Every plant with an algebraic nonlinearity in its
+state equations accepts curvature where its excitation exposes it — a quadruple tank
+whose outflow goes as √h, a barrel that radiates as T⁴ — and every plant defined by
+linear equations declines it. **Wood–Berry is the negative control**: it is transfer
+functions and nothing else, and the fit says so on both loops. The arm, which is where
+the original "linear by measurement" note came from, still chooses linear on both
+channels — the note was right about the arm and wrong to be generalised.
+
+### The tie-break is on the RESIDUAL, and that is what decides it
+
+Rule 42 takes the smoothest candidate within 5% of the best measured score. On R² that
+would discard the tank's quadratic block — 0.9818 against 0.9661 is inside any 5% band —
+while the UNEXPLAINED VARIANCE it leaves is 0.0182 against 0.0339, **nearly halved**. A
+forecast the QP inverts is worth what its residual is worth, so the basis is chosen on
+`1 − R²` with the same 5% band and the LINEAR basis winning inside it, because it is the
+cheaper one to evaluate every sample.
+
+### And it overturned a shipped finding
+
+Brick 48 measured a dwelling excitation beating a sweeping one on this dwelling plant, and
+brick 53's two-regime gate agreed by refusing the sweeping one. **Both were reading a
+linear basis.** A sweeping excitation visits the whole level range where √h curves, while
+a dwelling one spends its time near operating points where the plant looks linear — so
+the sweeping fit is the one that NEEDS curvature, and given it, the ranking reverses:
+
+| | basis selected | delivered on the recipe |
+|---|---|---|
+| sweeping excitation | linear+quadratic | 1.11× → **2.07×** |
+| dwelling excitation | linear | 1.32× (unchanged) |
+
+**The dwell advantage was compensating for a basis that could not represent the plant.**
+The tank's checks now assert the mechanism — that the configuration whose fit needs
+curvature selects curvature, and that it is the one that wins — rather than the direction.
+
+### What it cost, and what is kept honest
+
+The nonlinear block lives in ONE place (`polyTerms`), because the fit builds its design
+matrix in `_row` and the runtime rebuilds the same vector inline: the linear layout is
+already duplicated between them, and duplicating a quadratic layout as well is how the two
+silently disagree. Every readout reports its `basis`, `r2Lin` and `r2Poly`, so which way
+each channel went is visible rather than inferred. The arm's flagship figures are
+unchanged (5.96× / 6.87×), as are the column's IAE and the mill's and barrel's refusals.

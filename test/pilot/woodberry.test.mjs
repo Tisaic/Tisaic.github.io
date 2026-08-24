@@ -214,6 +214,15 @@ check('…and its measured timescale exceeds the longest dead time in the plant'
 // other number on this page mean something: our BLT implementation on our scenario lands
 // within a few percent of the published 55.34. The plant, the baseline gains, the
 // anti-windup and the IAE convention are therefore the ones the papers used.
+// THE NEGATIVE CONTROL FOR THE BASIS SELECTOR (brick 54). This plant is DEFINED by
+// linear transfer functions — there is no curvature in it anywhere — so a fit offered a
+// quadratic block and a structured prior must decline it. It does, on both loops. The
+// plants that accept it (a tank whose outflow goes as sqrt(h), a barrel that radiates as
+// T^4) are the ones whose state equations have curvature, which is what says the selector
+// is reading the physics rather than the sample count.
+check('a plant defined by linear transfer functions selects the LINEAR basis',
+  st.report.readouts.every((r) => r.basis === 'linear'),
+  JSON.stringify(st.report.readouts.map((r) => r.basis)));
 check('our BLT baseline reproduces the published IAE for this plant within 15%',
   Math.abs(blt.iae - 55.34) / 55.34 < 0.15,
   `${blt.iae.toFixed(2)} against the published 55.34`);
