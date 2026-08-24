@@ -3324,3 +3324,57 @@ Note for later: the stiff machine's gain in the wholesale version came from the 
 sample, not the longer horizon (with the split it is back to 2.161e-2). The sample rate
 is therefore its own lever, unmeasured.
 LEDGER at the soft corner: 1.20 → 0.246 is 4.9× of a 20–100× ask.
+
+## Brick 47 — the excitation could not spring-load the arm, so the plan could not preempt
+
+Watched on the device: drawing the rectangle counter-clockwise, the arm comes down with
+gravity, shoots past the corner nearest the base, spring-loads, and the next two sides
+fight the ring. The owner asked whether the tuning moves ever load the spring, and
+whether something control-side has to REWARD a preemptive move.
+
+Binned around the lap, the observation is exact — quiet arcs 0.07–0.12 against loud
+arcs 0.46–0.61, a **6–8× localisation**, with the loud stretch about one ring period
+(~2600–3400 steps on the shoulder) long. The elbow barely rings at all: one zero
+crossing.
+
+**THE PILOT NEEDS NO NEW REWARD TERM, AND THE MEASUREMENT SUPPORTS THAT.** The horizon
+already covers 1.4–1.9 ring periods, and an MPC minimising predicted error over a window
+that reaches past an event will leave the path early to avoid it — that IS the
+objective. What suppresses the preemptive move is uncertainty: least squares shrinks
+toward zero where it cannot predict, so a model that never saw the arm ring produces a
+TIMID optimal action. Ignorance, not the cost function.
+
+**AND THE OWNER'S HYPOTHESIS WAS RIGHT, WITH A NUMBER.** Commanded-acceleration band
+power at the shoulder's ring frequency: the part program carries **2.7× more than the
+excitation does**, while matching it in overall rms. Filtered noise under a jerk limit
+is broadband but SMOOTH, and smooth is what the tune loop rewards — so the energy sits
+below the mode that matters. A log **frequency sweep** now rides on the noise, its band
+taken from the pilot's own measured settling time.
+
+THREE THINGS HAD TO BE MEASURED INTO SHAPE, and each failed silently first.
+(i) The sweep's share was halved on every noise-tune failure — and this plant's jerk
+limit needs NINE tune iterations, so the share reached zero and the built series was
+BYTE-IDENTICAL to the old one. A sine's derivatives are closed form, so it is sized to
+fit its share before a sample exists and never needs tuning at all.
+(ii) Normalising the noise to a reduced span to make room FAILED THE COVERAGE CHECK —
+24 attempts refused with cause `limits`, span 0.75 of the box against a required 0.85.
+The composed series is re-normalised instead.
+(iii) **THE FIRST BAND WAS THREE OCTAVES AND IT BOUGHT NOTHING** — 2% more in-band
+energy, error profile unchanged. Amplitude is bounded by the rate limits at the FASTEST
+frequency swept and acceleration goes as Aω², so reaching to Tset/8 costs a factor of
+16 in what the sweep may be worth. One octave each way around Tset brackets the mode
+and buys the amplitude back.
+
+Measured, K 0.25 / E 0.03: contour **2.46e-1 → 1.97e-1**, verify **3.71× → 5.97×**, and
+the bias vanishes (−0.052 → +0.018). Per-arc, most of the lap collapses (bin 8 5×,
+bin 4 6×) — but the near-base corner itself goes 0.46 → 0.55 and is now the single
+dominant term, which is the owner's corner, isolated.
+
+**THE SWEEP IS NOT FREE AND SHIPS CONDITIONAL.** It takes a quarter of the rate budget
+the broadband noise would spend, and on a machine with no lightly damped mode that is a
+pure loss: measured on the stiff default, an unconditional sweep cost 7% (rounded
+2.161e-2 → 2.318e-2). The probe already says which machine it is — zero crossings of the
+response about its own settled value — so the pilot decides rather than the engineer.
+Two or more crossings is a mode. Stiff is restored bit for bit (2.161e-2 / 1.019e-2).
+LEDGER at the soft corner: 1.20 → 0.197 is 6.1× of a 20–100× ask, and it is now ONE
+corner rather than a whole lap.
