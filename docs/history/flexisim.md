@@ -3297,3 +3297,30 @@ ALSO DIAGNOSED, NOT YET FIXED: `Ts` is the FIRST crossing of 90% of DC — rise 
 settle time. On an underdamped plant it undershoots: measured 2012 against a true
 2%-settle of 3266 (1.6×), so the horizon is 1.6× short at this corner.
 LEDGER: 1.20 → 0.32 is 3.8× of a 20–100× ask. One blocker, not the blocker.
+
+## Brick 46 — one number was answering two questions
+
+Avenue 2 from the soft-corner ledger: `Ts` was the FIRST crossing of 90% of DC, which
+on an underdamped plant is the rise INTO the first overshoot — the machine is called
+settled while it is still ringing. Measured: stiff 1924 against a true 2%-settle of
+2695, softest gearbox 1476 against 3266 (2.2×). Since the horizon, the sample rate, the
+grid and the fit stride all derive from that one number, a short read shortens the plan
+exactly where the plant needs it longest.
+
+**REPLACING IT WHOLESALE IMPROVED THE STIFF MACHINE AND KILLED THE SOFT ONE** — rounded
+2.178e-2 → 2.058e-2 and circle 1.019e-2 → 9.466e-3, but at K 0.25 / E 0.03 the pilot's
+own verify fell 4.62× → **0.99× and REFUSED**. The settle is 1.6× the rise there, so
+the sample period coarsened 8 → 14 steps and the loop stopped seeing its own dynamics.
+Two different questions: the SETTLE says how far ahead a plan must reach; the RISE says
+how fast the loop has to be sampled. The horizon now uses the measured settling time
+(`Tset`) and every other cadence keeps the rise-based `Ts`.
+
+  soft corner (K 0.25 / E 0.03)   3.24e-1 → **2.46e-1**, deploys 3.71×, bias −0.12 →
+                                  −0.05, and the ladder now IMPROVES lap over lap
+                                  (3.18e-1 → 2.46e-1 → 2.46e-1) instead of holding
+  stiff default                   rounded 2.161e-2, circle 1.019e-2 — every gate passes
+
+Note for later: the stiff machine's gain in the wholesale version came from the COARSER
+sample, not the longer horizon (with the split it is back to 2.161e-2). The sample rate
+is therefore its own lever, unmeasured.
+LEDGER at the soft corner: 1.20 → 0.246 is 4.9× of a 20–100× ask.
