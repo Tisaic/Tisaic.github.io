@@ -1392,6 +1392,27 @@ await flow.screenshot({ path: join(SHOTS, '09-flowsim.png') });
       el.dispatchEvent(new Event('change', { bubbles: true }));
     };
     set('res', 0); set('spf', 20);
+    // AND PUT tau AND uin BACK, because the divergence block above drove them to the
+    // stability corner (tau at its floor, u at its max) and #reset rebuilds the sim
+    // WITHOUT restoring the sliders. This section is about the sensor's wiring, cadence
+    // and alignment; it inherited a deliberately unstable machine and ran it for the
+    // THOUSANDS of steps it takes to reach 250 training pairs.
+    //
+    // AND THE FAILURE WAS NOT THE SENSOR'S. The corner really does hold for the 400
+    // steps the block above measures — that check passes — and really does go non-finite
+    // over this section's horizon: `flowsim DIVERGED ▸ ... "step":400 ... "why":"non-
+    // finite values in the macroscopic field"`, after which the page cannot build and
+    // SIX sensor checks plus both error-buffer checks fail with nothing wrong in the
+    // code they name. A red suite hides the next real failure (rule 3), and this one hid
+    // eight.
+    //
+    // WHAT IS STILL NOT MEASURED, stated rather than papered over: the clamp's guarantee
+    // is bounded by a HORIZON nobody has measured. "The run cannot crash" is verified at
+    // 400 steps at this corner and is false at a few thousand. Finding where it turns is
+    // a deliberate experiment — a step sweep at the floor, reporting held-cell count and
+    // finiteness against step count — and it belongs in its own check, not here as a
+    // side effect of a sensor test inheriting someone else's sliders.
+    set('tau', 0.52); set('uin', 0.08);
     set('ss-lag', 2); set('ss-stride', 2); set('ss-every', 5); set('ss-lead', 6);
   });
   await flow.waitForFunction(() => window.__fsSim() && window.__fsSim().lattice.nx <= 80,
