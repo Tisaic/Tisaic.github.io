@@ -4458,14 +4458,58 @@ decomposition shows exactly that shape: the bias improves slightly (−0.177 →
 correction more than doubles. ⑤'s layer 2, with both channels alive at 0.440/0.571, has no
 such problem.
 
-**`Stack` now refuses to admit a layer that cannot forecast every channel of a
-multi-channel plant.** The layer's OWN verdict is left exactly as it recorded it — an
-instrument's reading is not the stack's to rewrite (rule 27) — and admission is a separate
-flag that everything downstream filters on, so the report says both what the layer
-concluded and why the stack declined it.
+**`Stack` now FLAGS a layer that cannot forecast every channel of a multi-channel plant**,
+and refuses it only if the engineer asks (`refusePartial`, default OFF — see the next
+section). The layer's OWN verdict is left exactly as it recorded it: an instrument's
+reading is not the stack's to rewrite (rule 27).
 
-**THIS IS ONE MEASUREMENT AND THE GUARD IS SCOPED TO WHERE THE EVIDENCE IS.** The same
-question exists for a SINGLE pilot — nothing stops layer 1 gating a channel and correcting
-the rest — and it is NOT answered here. What would settle it: a second plant with an
-unequally forecastable pair of channels, deployed with and without the gated channel's
-partner. Until that exists this is a layer-ADMISSION rule and nothing wider.
+### …and the mechanism written above is WRONG, which only turning the refusal OFF revealed
+
+The owner's instruction was blunt and correct: *"Stop refusing anything on this page. It is
+not production it is for r&d and you are preventing me from learning from the failures."*
+Disarming the forecast gate produced the measurement that refutes the paragraph above.
+
+| ⑥ depth 2, at the softest sliders | contour | | bias | osc | copper |
+|---|---|---|---|---|---|
+| layer refused — i.e. plain depth 1 | 0.3341 | **3.40×** | −0.1774 | 0.283 | 3.72e-4 |
+| layer deployed, elbow ACTING (gate off) | 0.3565 | 3.18× | −0.1040 | 0.3410 | 1.22e-3 |
+| layer deployed, elbow GATED to zero | 0.3867 | 2.93× | −0.1544 | 0.3545 | 1.15e-3 |
+
+**ARMING THE NEGATIVE-R² CHANNEL MAKES THE MACHINE BETTER, NOT WORSE** — 2.93× → 3.18×,
+with layer 2's own verify rising 1.85× → 2.20×. The gate was costing a quarter of a factor
+by declining to act. So the misaiming argument is real in DIRECTION: a partial correction
+on a coupled arm measures worse than a full one.
+
+**But the fully armed layer still LOSES to not stacking at all**, 3.18× against 3.40×.
+Partiality was therefore a second-order cost and NOT the cause of the harm. What the flag
+actually marks is a layer with nothing left to model; a channel that fails held-out
+validation is simply the cheapest available signal of that. The flag is a good predictor
+(it fires exactly where the layer is not worth stacking) attached to a wrong explanation,
+and it took disabling the refusal to tell those apart.
+
+⑤ depth 2 came back **byte-identical** at 12.21× with the gate off, because nothing on ⑤
+was ever gated — rule 21's signature, and the control that says the ⑥ change is real.
+
+### Nothing on the Path tab refuses any more
+
+Three separate refusals were live on that tab, each replacing a visible failure with the
+absence of one:
+
+1. **The deploy gate** (`autoRefuse`) — already off since brick 57, now passed explicitly
+   at the factory so it cannot drift back.
+2. **The forecast gate** — `gated = R²(lead 0) < 0.2` **silently zeroed a channel**.
+   Nothing thrown, nothing blank, that joint simply stopped correcting. This is the one
+   that was still biting, and the table above is what it was costing.
+3. **The stack admission rule** — added earlier in this same brick, and it would have
+   dropped the layer before anyone could watch it fail.
+
+All three are now MEASURED and REPORTED rather than enforced: `report.wouldRefuse`,
+`readouts[c].wouldGate`, and a `partial` note on the layer. The stats panel shows each,
+plus a new row giving held-out R² at lead 0 against the FAR lead per channel — which
+appears whenever a channel forecasts nothing at the end of a horizon the QP trusts
+uniformly, and is the current ceiling. Both new gates are library options defaulting to the
+old behaviour, so every plant under test keeps its contract; only this page turns them off.
+
+A refusal on the tab now means only that there is nothing to deploy — the excitation could
+not be built, or the guards tripped three times. Those are not judgements, they are a
+machine that cannot be driven, and the badge says so instead of "REFUSED".

@@ -562,11 +562,19 @@ that matches it** — the point-to-point tabs measure a different question.
   than layer 1's 1.70×. Its readouts say why: R² [0.848, **−0.117**] — the elbow forecast
   is negative at lead 0, so it is gated, and what deploys is a ONE-CHANNEL correction on a
   COUPLED arm, which is not a smaller correction but one in a direction the QP never chose.
-  The decomposition confirms the shape: bias improves (−0.177 → −0.154) while oscillation
-  rises (0.283 → 0.355). **A Stack now refuses to admit a layer that cannot forecast every
-  channel of a multi-channel plant**, keeping the layer's own verdict intact and recording
-  the admission separately (rule 27). One measurement; the same question for a SINGLE pilot
-  is stated and NOT answered.
+  **NOTHING ON THIS TAB REFUSES ANY MORE** — the owner's instruction, and it immediately
+  refuted the explanation above. Three refusals were live: the deploy gate, the FORECAST
+  gate (`R²(lead 0) < 0.2` SILENTLY zeroed a channel), and a stack admission rule. All
+  three are now measured and reported (`wouldRefuse`, `wouldGate`, a `partial` note) and
+  never enforced here; they stay library options at their old defaults, so every plant
+  under test keeps its contract. Arming ⑥'s negative-R² elbow makes the machine BETTER —
+  2.93× → **3.18×**, layer 2's own verify 1.85× → 2.20× — so the gate was costing a quarter
+  of a factor by declining to act. But the fully armed layer still LOSES to not stacking at
+  all (3.18× against depth 1's 3.40×): partiality was a second-order cost, not the cause.
+  What an unforecastable channel marks is a layer with nothing left to model. ⑤ depth 2 came
+  back BYTE-IDENTICAL at 12.21× with the gate off, which is the control (rule 21). A refusal
+  on this tab now means only "there is nothing to deploy" — the excitation would not build,
+  or the guards tripped three times.
   **THE CONTOUR ERROR IS NOW SPLIT INTO BIAS AND OSCILLATION** (`contourBias`,
   `contourOsc`), because rule 39 had no instrument behind it on the one tab that contours.
   It settled ⑥ against ⑤ in a single reading: both start with the same error (⑤ bias −0.626
