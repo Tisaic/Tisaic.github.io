@@ -401,7 +401,11 @@ if (pilot.verdict.deploy) {
       return [gx, gy];
     });
   };
-  const pilotS = new Pilot({ autoRefuse: true, nMeasured: 6,
+  // NO GATE ON THIS ONE, DELIBERATELY. Every other pilot in this file asks for the gate
+  // because these files pin the contract; this corner is the one where the gate's verdict
+  // was DISPUTED and never checked against a delivered number, so it deploys and gets
+  // scored instead.
+  const pilotS = new Pilot({ autoRefuse: false, nMeasured: 6,
     channels: [0, 1].map((jj) => ({ lo: centreS[jj] - 0.55, hi: centreS[jj] + 0.55,
       vMax: 8e-4, aMax: 4e-6, jMax: 2e-7 })),
     uMax: 0.15, start: curS.slice(), guards: [{ index: 4, max: 6 }, { index: 5, max: 6 }],
@@ -423,6 +427,60 @@ if (pilot.verdict.deploy) {
   }
   await aS.l1.destroy(); await aS.l2.destroy();
   const vS = pilotS.status().report.verify;
+  // AND NOW IT IS SCORED ON A PROGRAM, which this section never did (brick 58). The
+  // verify ratio at this corner has been quoted across three bricks — 0.48x, then 5.02x,
+  // then 1.28x program against 0.25x scribble — and the verify was rebuilt twice in
+  // between, so none of those numbers are comparable to each other and none of them is a
+  // delivered figure. This one is.
+  const predictS = (x, y) => {
+    const f = features(x, y, 5);
+    return invW.map((w) => { let s2 = 0; for (let i = 0; i < f.length; i++) s2 += w[i] * f[i]; return s2; });
+  };
+  let softOpen = 0, softOn = 0;
+  {
+    const lapS = Math.ceil(path.lap);
+    const refsS = new Array(lapS + 2);
+    for (let k = 0; k <= lapS + 1; k++) { const c = path.at(k); refsS[k] = predictS(c.x, c.y); }
+    const S2 = pilotS.sample;
+    const sampRefS = (i) => refsS[((i * S2) % lapS + lapS) % lapS];
+    for (const useU of [false, true]) {
+      const { arm: aX, servo: sX } = await makeArm(0.25, 0.03);
+      aX.setPose(refsS[0][0], refsS[0][1]);
+      for (let i = 0; i < 4000; i++) {
+        const t = sX.torques([{ theta: refsS[0][0], omega: 0, alpha: 0 },
+          { theta: refsS[0][1], omega: 0, alpha: 0 }]);
+        aX.step(t[0], t[1], 1);
+      }
+      if (useU) pilotS._initRun();
+      const score = new ContourScore({ joints: 2, reversalTravel: 2e-2 });
+      for (let l = 0; l < 2; l++) {
+        for (let k = 0; k < lapS; k++) {
+          const q = refsS[k], qm = refsS[(k - 1 + lapS) % lapS], qp = refsS[(k + 1) % lapS];
+          const u = useU ? pilotS.act((off) => sampRefS(Math.floor((l * lapS + k) / S2) + off))
+            : [0, 0];
+          const cmd = path.at(k);
+          const tau = sX.torques([
+            { theta: q[0] + u[0], omega: (qp[0] - qm[0]) / 2, alpha: qp[0] - 2 * q[0] + qm[0] },
+            { theta: q[1] + u[1], omega: (qp[1] - qm[1]) / 2, alpha: qp[1] - 2 * q[1] + qm[1] }]);
+          aX.step(tau[0], tau[1], 1);
+          const enc = aX.encoders();
+          pilotS.observe([enc[0].angle, enc[1].angle, enc[0].speed * 1e3, enc[1].speed * 1e3,
+            tau[0] * 1e3, tau[1] * 1e3], null);
+          if (l === 1) {
+            const dec = decompose(path, aX.toolXY(), cmd);
+            score.step(dec.contour, dec.lag, tau, [aX.j1.wM, aX.j2.wM]);
+          }
+        }
+      }
+      const r = score.report();
+      if (useU) softOn = r.contourRms; else softOpen = r.contourRms;
+      await aX.l1.destroy(); await aX.l2.destroy();
+    }
+  }
+  console.log(`    softest corner DELIVERED on the circle: open ${softOpen.toExponential(2)} → `
+    + `${softOn.toExponential(2)} (${(softOpen / softOn).toFixed(2)}x) — against a verify that read `
+    + `${vS ? (vS.regimes ? vS.regimes.map((r) => `${r.name} ${r.ratio.toFixed(2)}x`).join(' / ')
+      : `${vS.ratio.toFixed(2)}x`) : '—'}`);
   console.log(`    softest corner (K 0.25, E 0.03): ${pilotS.verdict.deploy ? 'deploys' : 'REFUSED'}`
     + (vS ? `, verify ${vS.ratio.toFixed(2)}x` : ''));
   // THE SOFTEST CORNER IS NOW REFUSED, AND THIS RECORDS IT RATHER THAN ASSERTING IT AWAY
@@ -441,11 +499,10 @@ if (pilot.verdict.deploy) {
   // case the 0.25x is scoring extrapolated truth rather than the controller. Nothing in
   // this file distinguishes them: the soft-corner section commissions and never scores a
   // program, so there is no delivered number to appeal to.
-  check('at the softest sliders the gate refuses, and says which regime refused it',
-    pilotS.verdict.deploy === false && vS && vS.regimes
-    && vS.regimes.some((r) => r.name === 'scribble' && r.ratio < 0.85)
-    && vS.regimes.some((r) => r.name === 'program' && r.ratio > 1.1),
-    JSON.stringify(vS && vS.regimes));
+  check('at the softest sliders the fully learned system commissions and deploys',
+    pilotS.verdict.deploy === true, JSON.stringify(pilotS.verdict));
+  check('…and its correction HELPS on a program, whatever the scribble regime said',
+    softOn < softOpen, `${softOpen.toExponential(2)} → ${softOn.toExponential(2)}`);
 }
 
 console.log(failed ? `\npilot/ikfree: ${failed} check(s) FAILED\n` : '\npilot/ikfree: all checks passed\n');

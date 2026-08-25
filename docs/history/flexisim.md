@@ -4229,3 +4229,44 @@ Every test in `test/pilot/` passes `autoRefuse: true`, because those files exist
 the CONTRACT; `flexisim.html` passes it too, because ⑤ and ⑥ advertise that they deploy
 only on a verify the machine vouched for. The default is what a host gets when it does not
 ask.
+
+## Brick 58 — a refused pilot looks exactly like a broken one
+
+The owner reported ⑥ "much worse than the last time I did this same combo" at minimum
+compliance sliders. It was not worse. Nothing about the controller had degraded.
+
+**Measured on the page at that combo (K 0.25, E 0.03), driving it headlessly:**
+
+| feedrate | open loop | ⑥ deployed | |
+|---|---|---|---|
+| 0.004 | 1.199 | **0.340** | 3.5× better |
+| 0.016 (max) | 3.996 | **1.516** | 2.6× better |
+
+And in the test, the softest corner over this whole session went the RIGHT way:
+pre-session library 1.18 → 0.948 (1.25×), current 1.18 → 0.426 (**2.78×**).
+
+**What changed is that the gate started refusing it.** The page's own commissioning
+reports `wouldRefuse: the scribble regime measured 0.46x`, and a refused pilot applies
+EXACTLY ZERO correction — so the arm runs open loop at 1.199 instead of 0.340. From
+outside, a controller that declines to act and a controller that has got worse are the
+same picture. That is the failure mode, and the page gave no visible sign it had declined.
+
+The window was brick 53 (the two-regime gate) to the gate-off commit; the opt-in gate
+(brick 57) already restores deployment there.
+
+**AND THE SOFT CORNER NOW HAS A DELIVERED NUMBER, which it never did.** Its verify ratio
+had been quoted across three bricks — 0.48×, then 5.02×, then 1.28× program against 0.25×
+scribble — with the verify rebuilt twice in between, so none of those were comparable to
+each other and none was a delivered figure. The section commissioned and destroyed its arm
+without ever running a program. It now scores one, and the number settles the dispute the
+ratios could not: **the correction helps 2.78× at a corner whose scribble regime called it
+four times worse than nothing.** That is also the clearest evidence yet that a scribble
+score is not a verdict about a machine that runs programs.
+
+**A verification note that cost real time here.** Three separate hypotheses were tested
+against this and all three were WRONG — the gate-off (the page helps either way), the
+correction authority (1.0 rad delivers 4.12× against 0.15's 2.78×, better not worse), and
+the brick-54 basis selector (linear-only scores 0.352 against the quadratic's 0.340). Each
+was plausible and each took a measurement to kill. The one that was right came from
+reproducing the owner's own combo on the actual page rather than reasoning about which
+library change could explain it.
