@@ -8,7 +8,7 @@
   <title>FlowSim — Lattice Physics Engine</title>
 
   <!-- Shared debug console (catches errors on this page too, for phone debugging). -->
-  <script>window.__BUILD = {version:283,built:"2026-08-25T15:46:48Z"}; // __FLOWSIM_STAMP__</script>
+  <script>window.__BUILD = {version:286,built:"2026-08-25T20:38:45Z"}; // __FLOWSIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -1446,7 +1446,12 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
           probeDraw(true);
           return false;
         });
-        requestAnimationFrame(() => { try { Plotly.Plots.resize('probe-chart'); } catch (e) { /* not yet laid out */ } });
+        // `Plotly.Plots.resize` REJECTS, it does not throw: on a hidden div it returns a
+        // promise rejected with "Resize must be passed a displayed plot div element", so
+        // the try/catch around it caught nothing and the rejection went UNHANDLED -- which
+        // is rule 7 exactly, and it sat in the page's error buffer failing "no errors
+        // overall" for as long as the buffer has been asserted. Catch the PROMISE.
+        requestAnimationFrame(() => { try { const pr = Plotly.Plots.resize('probe-chart'); if (pr && pr.catch) pr.catch(() => {}); } catch (e) { /* not yet laid out */ } });
       }
       else Plotly.react('probe-chart', data, layout, { displayModeBar: false, responsive: true });
     }
@@ -1538,7 +1543,7 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
       $('ss-chart').classList.add('on');
       ssBuild('target placed');
       ssMark();
-      requestAnimationFrame(() => { try { Plotly.Plots.resize('ss-chart'); } catch (e) { /* unlaid */ } });
+      requestAnimationFrame(() => { try { const pr = Plotly.Plots.resize('ss-chart'); if (pr && pr.catch) pr.catch(() => {}); } catch (e) { /* unlaid */ } });
     }
 
     function ssClear() {
@@ -1736,7 +1741,7 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
           ssDraw(true);
           return false;
         });
-        requestAnimationFrame(() => { try { Plotly.Plots.resize('ss-chart'); } catch (e) { /* unlaid */ } });
+        requestAnimationFrame(() => { try { const pr = Plotly.Plots.resize('ss-chart'); if (pr && pr.catch) pr.catch(() => {}); } catch (e) { /* unlaid */ } });
       } else Plotly.react('ss-chart', data, layout, { displayModeBar: false, responsive: true });
     }
 
@@ -2170,6 +2175,11 @@ import { FieldSoftSensor, QUANTITIES, FieldReconstructor } from './lib/probesens
       bytes: state.sim ? state.sim.memoryEstimate().bytes : 0,
       running: state.running,
       building: state.building,
+      // IS THE SOLVER ACTUALLY THERE? `building` goes false when the rebuild
+      // PROMISE settles, and `lattice` is swapped in before `build()` is awaited,
+      // so both can say "ready" while `advance()` still throws 'call build()
+      // first'. A waiter needs the object, not the intention.
+      built: !!(state.sim && state.sim.solver),
       view: state.view,
       // Whether a renderer actually exists for the CURRENT view. A 3D view with
       // no volume renderer draws nothing and says nothing, which is what a

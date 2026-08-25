@@ -1415,8 +1415,18 @@ await flow.screenshot({ path: join(SHOTS, '09-flowsim.png') });
     set('tau', 0.52); set('uin', 0.08);
     set('ss-lag', 2); set('ss-stride', 2); set('ss-every', 5); set('ss-lead', 6);
   });
-  await flow.waitForFunction(() => window.__fsSim() && window.__fsSim().lattice.nx <= 80,
-    null, { timeout: 180000 });
+  // WAIT FOR THE SOLVER, NOT FOR THE LATTICE. The resolution clamp swaps the
+  // lattice in BEFORE `build()` is awaited, so `nx <= 80` goes true while
+  // `sim.solver` is still null -- after which the frame loop's `advance()` throws
+  // 'call build() first' before it ever reaches `ssSample`, so the sensor sits at
+  // samples 0 until the 240 s wait below gives up and every downstream soft-sensor
+  // check fails for that one upstream reason. That is the whole of this section's
+  // long-standing red, and it was invisible because the predicate asserted PRESENCE
+  // of a resized lattice rather than READINESS. The divergence block below already
+  // knew this -- it waits on `sim.solver` and says why -- and the lesson was simply
+  // never carried up here.
+  await flow.waitForFunction(() => window.__fsSim() && window.__fsSim().lattice.nx <= 80
+    && window.__fsDbg().built && !window.__fsDbg().building, null, { timeout: 180000 });
   const placed = await flow.evaluate(() => {
     const L = window.__fsSim().lattice;
     window.__fsProbe.place([Math.round(L.nx * 0.55), 1, L.nz >> 1]);
@@ -1660,7 +1670,18 @@ const ownErrors = await flow.evaluate(() =>
 check('flowsim: the page reports no errors of its own (badge clear)',
   ownErrors.length === 0, ownErrors.join(' | '));
 check('flowsim: no errors overall', flowErrors.length === 0, flowErrors.join(' | '));
-check('flowsim: nothing logged to console.error', flowConsole.length === 0, flowConsole.join(' | '));
+// THE EXTREME-CORNER BLOCK PROVOKES A DIVERGENCE ON PURPOSE, and the page is supposed
+// to SAY SO -- `flowsim DIVERGED` on console.error is the limiter reporting, i.e. the
+// behaviour that block exists to prove. Asserting "nothing was logged" therefore asserted
+// that the page stayed quiet about the very thing the test asked it to shout about, and
+// it failed for exactly that reason. Assert BOTH halves instead (rule 9): the expected
+// report WAS made, and nothing else was.
+const diverged = flowConsole.filter((t) => t.includes('flowsim DIVERGED'));
+const unexpected = flowConsole.filter((t) => !t.includes('flowsim DIVERGED'));
+check('flowsim: the extreme corner reports its divergence rather than failing silently',
+  diverged.length > 0, `saw ${flowConsole.length} console errors, none naming a divergence`);
+check('flowsim: nothing logged to console.error beyond that report',
+  unexpected.length === 0, unexpected.join(' | '));
 
 // ---- THE 3D VIEW MUST SURVIVE A REBUILD.
 //
