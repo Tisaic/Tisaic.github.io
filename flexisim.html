@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:266,built:"2026-08-25T02:58:40Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:267,built:"2026-08-25T03:14:46Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -6312,9 +6312,12 @@ function finishPilotP() {
   pilotComm = false;
   const v = pilotP.verdict;
   busyP = true;
+  // A REFUSAL HERE IS NOW ONLY "THERE IS NOTHING TO DEPLOY" — the excitation could not be
+  // built, or the guards tripped three times. Every JUDGEMENT (the verify's verdict, a
+  // channel's forecast, a stack layer's coverage) deploys and is reported instead.
   setPathBadge(v.deploy
     ? `pilot deployed — ${v.why}; re-homing onto the program`
-    : `pilot REFUSED — ${v.why}`, v.deploy ? 'good' : 'bad');
+    : `pilot could not commission — ${v.why}`, v.deploy ? 'good' : 'bad');
   if (v.deploy) $('ctlP').value = 'pilot';
   // The machine is at the end of the verify scribble; put it back on the program.
   homeP().then(() => {
@@ -6363,7 +6366,16 @@ function pilotDepth() { return +$('s-depthP').value; }
  */
 function makePilot(o) {
   const depth = pilotDepth();
-  return depth > 1 ? new Stack({ ...o, depth }) : new Pilot(o);
+  // NOTHING ON THIS TAB REFUSES. This page is an R&D bench, not a machine tool, and every
+  // refusal in the pilot is a failure made invisible: the deploy gate applies no
+  // correction at all (which is indistinguishable from a broken controller — brick 58),
+  // the forecast gate silently zeroes ONE channel of a coupled pair (which deploys a
+  // correction aimed where the plan never pointed — brick 59), and the stack's admission
+  // rule would drop a layer before it could be watched. All three are still MEASURED and
+  // reported — `wouldRefuse`, `wouldGate`, and the layer's `partial` note — because the
+  // point is to SEE the failure, and a refusal shows you the absence of one instead.
+  const o2 = { ...o, autoRefuse: false, gateForecasts: false };
+  return depth > 1 ? new Stack({ ...o2, depth, refusePartial: false }) : new Pilot(o2);
 }
 
 const IK6_PTS = 90, IK6_DEG = 7, IK6_ROUTE_DEG = 5;
@@ -6595,7 +6607,7 @@ function finishIk6P() {
     $('ctlP').value = 'ikfree';
     setPathBadge(`⑥ deployed — ${v.why}; re-homing onto the program`, 'good');
   } else {
-    setPathBadge(`⑥ REFUSED — ${v.why}`, 'bad');
+    setPathBadge(`⑥ could not commission — ${v.why}`, 'bad');
   }
   homeP().then(() => {
     if (v.deploy) setPathBadge(`⑥ on — geometry holdout ${ik6.holdout.toExponential(1)} rad, `
@@ -6832,9 +6844,27 @@ function statsP() {
       if (ps.report.readouts) {
         rows.push(['…its readouts', ps.report.readouts.map((r, j) =>
           `ch${j + 1}: stride ${r.stride}, ridge ${r.ridge.toExponential(0)}, held-out R² `
-          + `${r.r2Lead0.toFixed(3)} → ${r.r2Far.toFixed(3)} across the horizon`).join(' · ')
+          + `${r.r2Lead0.toFixed(3)} → ${r.r2Far.toFixed(3)} across the horizon`
+          + (r.wouldGate ? ' <span class="bad">(would be GATED — acting anyway)</span>' : ''))
+          .join(' · ')
           + '   <span class="warn">windows and ridge chosen by the pilot on held-out '
           + 'data, not by anyone on this page</span>']);
+        // R² ACROSS THE HORIZON, NOT JUST AT LEAD 0. The pilot's only forecast gate reads
+        // LEAD 0, and a channel can be sound there and worthless at the far end — ⑥'s
+        // elbow reaches −0.035, worse than predicting the mean, over a 69-lead horizon
+        // the QP trusts uniformly. That is the current ceiling and it is worth staring at.
+        const far = ps.report.readouts.filter((r) => r.r2Far < 0.2);
+        if (far.length) {
+          rows.push(['…where the forecast runs out', ps.report.readouts.map((r, j) =>
+            `ch${j + 1} ${r.r2Lead0.toFixed(2)} → ${r.r2Far.toFixed(2)}`).join(' · ')
+            + '   <span class="bad">the QP trusts every lead of its horizon equally, and '
+            + 'at least one channel forecasts nothing at the far end</span>']);
+        }
+      }
+      if (ps.report.wouldRefuse) {
+        rows.push(['…what the gate WOULD have said',
+          `<span class="bad">${ps.report.wouldRefuse}</span>   <span class="warn">nothing `
+          + 'on this tab refuses — it is deployed so the failure can be watched</span>']);
       }
       // WHAT EACH LAYER WAS WORTH, SEPARATELY. A cascade that reported one number would
       // hide the case the depth control exists to expose: a second layer that measured
@@ -6844,7 +6874,9 @@ function statsP() {
           `L${L.layer}: ${L.deployed ? '<span class="good">deployed</span>' : '<span class="bad">refused</span>'}`
           + ` ${L.verify === null ? '—' : L.verify.toFixed(2) + 'x'}`
           + ` · Ts ${L.Ts} · N ${L.N}`
-          + (L.r2 ? ` · R² ${L.r2.map((x) => x.toFixed(3)).join('/')}` : '')).join(' → ')
+          + (L.r2 ? ` · R² ${L.r2.map((x) => x.toFixed(3)).join('/')}` : '')
+          + (L.partial ? ' <span class="bad">(partial — acting anyway)</span>' : ''))
+          .join(' → ')
           + (ps.report.clamped ? `   <span class="warn">summed correction hit the cap on `
             + `${ps.report.clamped} channel-steps</span>` : '')]);
       }
