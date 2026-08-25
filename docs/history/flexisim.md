@@ -4892,7 +4892,82 @@ BACKLASH — a larger probe crosses the dead band and the response looks faster.
 identified timescale is amplitude-dependent, which is a nonlinearity the linear model cannot
 carry and which no lever in this brick addressed.
 
-**SO THE CONCLUSION IS A MACHINE CONCLUSION, NOT A CONTROL ONE.** The plant needs ~2000
+### IT IS PRE-SHAPING, AND PREVIEW SOLVES CAUSALITY RATHER THAN BANDWIDTH
+
+The owner pushed back on the "plant-limited" reading: *"The command can be shaped
+predictively and knows the path ahead of time so it is possible to shape it correctly, we
+just need to determine how."* That is correct control theory — a slow plant is no barrier to
+tracking a KNOWN trajectory, you start early — and the pushback was right that the previous
+conclusion did not follow.
+
+So the chain was run down properly, and it ends somewhere better.
+
+**IT DOES PRE-SHAPE.** Cross-correlating the correction against the corner marker: `u`
+LEADS the corner by **2400 steps**, against a plant response time of 2009. That is exactly
+where a correct pre-shape launches. Every prerequisite is confirmed present, and this was
+the measurement that should have come first rather than twelfth:
+
+| | |
+|---|---|
+| horizon | 5056 steps = 2.5× the response time |
+| forecast AT THE LAUNCH LEAD (~1984 steps) | **R² 0.928 / 0.711** |
+| aim | exact to 1e-15 |
+| authority | not binding |
+| effort weight λ | correctly tuned — see below |
+| **pre-shape timing** | **leads by 2400 steps** |
+
+λ was checked because `λ‖Du‖²` prices the RATE of change of the correction, which is the
+whole content of a pre-shape, and because it had been priced on a scribble and validated on
+a ROUNDED path — never on a corner. Swept on the same commissioned model: 4.92e-3 (chosen)
+0.266, then 4.92e-4 → 0.820, 4.92e-5 → 0.795, 0 → 0.712. Lowering it drives `u` to the cap,
+triples the copper, doubles the reversals and quadruples the OSCILLATION while improving the
+bias. It is correctly tuned and is not suppressing anything useful.
+
+**AND THE PLANT IS NEARLY LTI, so there is no nonlinearity to schedule around.** Probe
+amplitude swept 30×:
+
+| probeAmp | Ts | ch1 dc | ch2 dc |
+|---|---|---|---|
+| 0.02 | 2048 | 0.731 | 0.986 |
+| 0.15 | 2009 | 0.906 | 0.992 |
+| 0.60 | 1999 | 0.850 | 0.9998 |
+
+`Ts` moves 2.5% and `dc` 12% / 1%. A gain-scheduled QP was designed and NOT built, because
+this said it could not close a 2.7× gap. (The earlier "amplitude-dependent Ts" claim — 2042
+/ 1654 / 1699 — came from the TORQUE channel at three different CAPS and was confounded.)
+
+**SO: PREVIEW SOLVES CAUSALITY, NOT BANDWIDTH.** Pre-shaping lets the correction start
+early. It does not let a low-pass plant produce a fast output. The corner's disturbance has
+content at 40 steps and the plant's bandwidth is ~2000; the controller cancels the
+low-frequency part — and demonstrably does — while the high-frequency part is uncancellable
+BY ANY CONTROLLER, at any horizon, with any model. That single statement fits every result:
+pre-shaping happens; authority is irrelevant because it is bandwidth not amplitude; lower λ
+is worse because acting fast excites what cannot be controlled; more time helps; the circle,
+whose command has no such content, is fine.
+
+**WHICH MAKES THE REMAINING LEVER THE COMMAND'S OWN SPECTRUM, AND IT IS MONOTONE OVER 16×:**
+
+| cornerDt | min commanded speed | corrected contour | lap |
+|---|---|---|---|
+| 10 | 2.8e-4 | **0.2289** | 8346 |
+| 20 | 5.7e-4 | 0.2516 | 8295 |
+| 40 (shipped) | 1.1e-3 | 0.2657 | 8206 |
+| 160 | 4.0e-3 (no slowdown at all) | 0.5115 | 8000 |
+
+**AND `cornerDt` IS THE CORNER'S VELOCITY ALLOWANCE, NOT ITS SEVERITY** — `v = a·cornerDt /
+(2 sin(φ/2))`, so LARGER means FASTER through the corner. This file called it "how hard the
+corner is excited" earlier in this brick, which is backwards, and the first test was run in
+the wrong direction because of it: 160 makes the corner sharper and cost 1.92×.
+
+The gain at the usable end is modest — default to floor is **1.16× for a 1.7% longer cycle**
+— and even a fully smoothed corner is 2.3× worse than the circle (0.229 against 0.0999),
+which is the irreducible cost of a corner on a plant this soft. But the direction is
+unambiguous and the mechanism is now identified rather than guessed at.
+
+**THE SHAPING THAT MATTERS IS IN THE PATH PLANNER, NOT IN THE CORRECTION.** The controller
+is already shaping optimally within its bandwidth.
+
+**AND THE EARLIER CONCLUSION IN THIS BRICK WAS TOO STRONG.** The plant needs ~2000
 steps to respond by ANY route and a corner is over in 40. Ten levers were measured — six
 information, one authority, input shaping, the torque channel, and the command-window
 resolution at three settings — and every one is null or worse. One thing moves the number:
