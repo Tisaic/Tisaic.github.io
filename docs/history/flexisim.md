@@ -4708,7 +4708,32 @@ they are tangled with. They displace informative weight rather than being discar
 collinear with what is already there".** That inverts the obvious intuition, and it is
 measured rather than argued.
 
-THE DEAD-BAND COORDINATE WAS THE BETTER OF THE TWO IDEAS AND STILL LOST. `AxisComp` models
+**AND THE OWNER'S OWN HYPOTHESIS FOUND A REAL BLINDNESS, WHICH THE FIRST FIX DID NOT
+CURE.** Watching a cascade-2 ⑤ on the sharp square at the loosest arm: the tool slows into
+a corner, accelerates out of it, falls behind, catches up, and rings along the following
+side. The proposal — feed the model acceleration, or feed torque forward.
+
+Torque feedforward TURNED OUT TO ALREADY EXIST and to be complete at the rigid level:
+`ChainServo.jointTorques` computes `M(q)·α + Coriolis − gravity` at the commanded pose and
+adds `N·Jm·α` for the rotor. What it assumes is a RIGID arm, so at K 0.25 the motor gets the
+right torque and the load still lags through the soft gearbox — which is the ringing.
+
+The acceleration half found something real. The row carries, per command channel per lag, a
+POSITION and a VELOCITY and nothing else — while the correction a compliant machine needs is
+the wind-up `τ/K` with `τ = M(q)·α`. **The model is asked for something proportional to an
+acceleration it is never shown**, and it cannot reconstruct one either: the command lags are
+STRIDED 280 solver steps apart while a corner's acceleration event lasts `cornerDt` = 40, so
+one lag spacing is seven times longer than the whole event.
+
+Supplying it at all twelve lags made things WORSE — sharp 4.21× → 2.89×, rounded 6.43× →
+4.64×, and the correction saturated the doubled cap at 2.000. That is 24 more deterministic
+functions of the command, i.e. exactly the category the noise control just showed to be
+expensive. The information genuinely missing is the FINE-GRAINED acceleration, which one lag
+supplies; twelve strided copies supply nothing the first did not. `cmdAccel` is therefore a
+LAG COUNT rather than a flag, and the one-lag measurement is what separates "the idea is
+wrong" from "it was added twelve times over".
+
+THE DEAD-BAND COORDINATE WAS THE BETTER OF THE TWO BACKLASH IDEAS AND STILL LOST. `AxisComp` models
 backlash as `(B/2)·dir` and that is right for what it does — STATIC laser dwells, where the
 machine settles and the error really is ±B/2 by approach direction. Contouring is not that
 regime: the joint TRAVERSES the dead band over time and no torque transmits during the
