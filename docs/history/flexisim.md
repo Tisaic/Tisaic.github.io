@@ -4733,6 +4733,72 @@ supplies; twelve strided copies supply nothing the first did not. `cmdAccel` is 
 LAG COUNT rather than a flag, and the one-lag measurement is what separates "the idea is
 wrong" from "it was added twelve times over".
 
+### THE SHARP SQUARE'S SIDE IS EXACTLY ONE SETTLING TIME LONG
+
+The owner's reading of the live page turned out to be right and to point somewhere none of
+the fixes above could reach. Measured on the CORRECTED run's own contour error — the signal
+on the screen — at the shipped feed:
+
+| | steps |
+|---|---|
+| the plant's measured settling time `Ts` | **2009** |
+| one side of the sharp square at feed 0.004 | **2052** |
+| ratio | **1.02** |
+
+Within one side, de-trended: **two zero crossings in 2052 steps** — not a ripple at all, ONE
+excursion. The tool deviates after the corner and comes back, once, and what reads as
+resonance across the square is that hump repeating at four corners.
+
+**HALVING THE FEED RESOLVES IT AND CONFIRMS THE MECHANISM.** At feed 0.002 a side is
+4010 steps and the same analysis gives **7 crossings, period 1188 steps, 3.4 cycles per
+side, DECAYING 8.30e-2 → 5.39e-2 across the side.** So the mode is real, it is ~1188 steps,
+and at the shipped feed a side holds only 1.7 cycles of it — it never settles before the
+next corner arrives.
+
+THE ASYMMETRY IS THE PROOF, and it needs the ABSOLUTE error rather than the ratio, because
+slowing down improves the open loop too and the ratio falls for everything:
+
+| contour, corrected | feed 0.004 | feed 0.002 | |
+|---|---|---|---|
+| sharp | 0.2657 | **0.1626** | 1.63× better |
+| circle | 0.0999 | 0.0939 | 1.06× better |
+
+The sharp square gains 1.63× from the extra settling time; the circle, which has no corner
+transient to settle, gains 6%. **The limit is not authority and not blindness — the pilot's
+horizon is 5056 steps, two and a half sides, so it SEES the corner coming. The plant needs
+~Ts to recover and the disturbance repeats every Ts.**
+
+AND "NOTHING RINGS" WAS WRONG, which is worth recording because the instrument was at
+fault twice over. A step in the joint reference with the loop closed returned "no usable
+decay" on BOTH the wind-up and the tip traces — the closed loop absorbs a reference step,
+so the kick never excited the mode the CORNER excites. The first attempt also fed `ringFit`
+a MAGNITUDE, which is non-negative, so de-meaning it yields crossings of the mean rather
+than of an oscillation. Right question, wrong instrument, twice.
+
+### INPUT SHAPING IS STRUCTURALLY INAPPLICABLE TO CONTOURING
+
+With the frequency finally measured from the phenomenon (ω 5.289e-3, ζ 0.041, ZVD impulses
+`[0.283,0] [0.498,594] [0.219,1189]`), shaping the joint reference measured:
+
+| | open | corrected | | AIM |
+|---|---|---|---|---|
+| sharp | 0.900 | 1.202 | **0.75×** | **2.589e-1** |
+| circle | 1.351 | 1.427 | 0.95× | **3.546e-1** |
+
+**THE AIM WENT FROM 1e-15 TO 0.26**, and that is the whole explanation. A ZVD blends the
+command at delays of 0, 594 and 1189 steps; on a CLOSED PATH that is a GEOMETRIC blend, not
+a time lag. At 58% of a side it averages points that are around a corner from each other and
+cuts the corners off. The shaped reference no longer traces the square.
+
+That is not an implementation defect, it is what input shaping DOES to a contour: it trades
+path fidelity for vibration, and path fidelity is exactly what contour error measures. It
+works on the Move tab because a point-to-point move has no path to distort — only an
+endpoint, which unit-sum impulses provably preserve. A contour is nothing but path.
+
+WHAT IS LEFT, and it is a timing relationship rather than a controller: the corner's
+excitation (`cornerDt`) against the side's traverse time against `Ts`. Those trade directly
+against cycle time and can now be computed rather than tuned.
+
 THE DEAD-BAND COORDINATE WAS THE BETTER OF THE TWO BACKLASH IDEAS AND STILL LOST. `AxisComp` models
 backlash as `(B/2)·dir` and that is right for what it does — STATIC laser dwells, where the
 machine settles and the error really is ±B/2 by approach direction. Contouring is not that
