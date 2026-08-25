@@ -1392,26 +1392,26 @@ await flow.screenshot({ path: join(SHOTS, '09-flowsim.png') });
       el.dispatchEvent(new Event('change', { bubbles: true }));
     };
     set('res', 0); set('spf', 20);
-    // AND PUT tau AND uin BACK, because the divergence block above drove them to the
-    // stability corner (tau at its floor, u at its max) and #reset rebuilds the sim
-    // WITHOUT restoring the sliders. This section is about the sensor's wiring, cadence
-    // and alignment; it inherited a deliberately unstable machine and ran it for the
-    // THOUSANDS of steps it takes to reach 250 training pairs.
+    // PUT tau AND uin BACK. The divergence block above drives them to the stability
+    // corner and #reset rebuilds the sim WITHOUT restoring the sliders, so this section
+    // — which is about the sensor's wiring, cadence and alignment, not about stability —
+    // inherited a deliberately unstable machine. That is worth not doing regardless.
     //
-    // AND THE FAILURE WAS NOT THE SENSOR'S. The corner really does hold for the 400
-    // steps the block above measures — that check passes — and really does go non-finite
-    // over this section's horizon: `flowsim DIVERGED ▸ ... "step":400 ... "why":"non-
-    // finite values in the macroscopic field"`, after which the page cannot build and
-    // SIX sensor checks plus both error-buffer checks fail with nothing wrong in the
-    // code they name. A red suite hides the next real failure (rule 3), and this one hid
-    // eight.
+    // BUT IT IS NOT WHAT IS FAILING HERE, and this comment says so because the commit
+    // that added it claimed otherwise and was WRONG. With the sliders restored the same
+    // ten checks fail identically. The sensor's own state says the divergence story
+    // cannot be right either: `samples: 0`, `targetActivity: 0`, `calibrationLeft: 150`
+    // — it never received a SINGLE sample, so it did not run on a bad machine, it did
+    // not run at all. The `flowsim DIVERGED` console.error that the end-of-run buffer
+    // checks catch is a SEPARATE event: every check in the divergence block passes, and
+    // so does "the extreme corner of the sliders stays finite" after it.
     //
-    // WHAT IS STILL NOT MEASURED, stated rather than papered over: the clamp's guarantee
-    // is bounded by a HORIZON nobody has measured. "The run cannot crash" is verified at
-    // 400 steps at this corner and is false at a few thousand. Finding where it turns is
-    // a deliberate experiment — a step sweep at the floor, reporting held-cell count and
-    // finiteness against step count — and it belongs in its own check, not here as a
-    // side effect of a sensor test inheriting someone else's sliders.
+    // SO THERE ARE TWO INDEPENDENT FAILURES HERE AND NEITHER IS DIAGNOSED. Three
+    // explanations have been offered and measured dead: a mid-run version stamp (the
+    // failures reproduce on an untouched tree), a regression from the pilot work (they
+    // reproduce identically on the commit before it), and this slider inheritance. They
+    // are PRE-EXISTING — verified at 4151d39 — and they have been hiding eight other
+    // checks for as long as they have been red (rule 3).
     set('tau', 0.52); set('uin', 0.08);
     set('ss-lag', 2); set('ss-stride', 2); set('ss-every', 5); set('ss-lead', 6);
   });
