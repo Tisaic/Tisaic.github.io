@@ -4857,6 +4857,50 @@ correction injected as TORQUE bypasses the position loop entirely and acts at th
 bandwidth rather than the loop's — the same model on a faster path. NOT BUILT, and it is the
 one lever these measurements leave standing.
 
+### THE TORQUE CHANNEL IS WORSE, AND THE PLANT IS THE SLOW ELEMENT
+
+The one lever the measurements left standing was routing the correction as a TORQUE rather
+than a position offset — the same model on a supposedly faster path. The pilot is
+channel-agnostic (it identifies whatever `u` is wired to), so this is a host change and not
+a library one. It is refuted on every count.
+
+| torque cap | sharp | circle | |
+|---|---|---|---|
+| 4.8e-4 | 1.14× | 1.26× | too little authority |
+| 4.8e-3 | 1.35× | 3.94× | the best of them |
+| 1.9e-2 | 1.00× | 1.00× | **guard tripped 3×, pilot refused** |
+| position channel | **4.25×** | **12.68×** | |
+
+**AND THE PREMISE WAS WRONG BEFORE THE NUMBERS WERE.** `Ts` on the torque channel measures
+**2042** against the position channel's **2009** — the servo loop is NOT the slow element,
+the gearbox compliance and inertia are, and no change of entry point alters that. Two
+further explanations offered along the way were also wrong and are recorded so they are not
+re-proposed: the position loop does NOT reject the torque (`dc` 1.9e2 and 2.4e3, both
+identifiable, R² 0.991 and 0.703), and the "zero correction" in the first run was a DISPLAY
+artefact of printing three decimals for a quantity capped at 4.8e-4.
+
+What the first run really showed was a cap sized 21× too small: authority is `uMax × dc`,
+and 4.8e-4 × 193 is 0.093 against the position channel's 2.0.
+
+TWO THINGS SPECIFIC TO THIS CHANNEL are worth keeping even though it lost. The two joints'
+DC gains differ by **12×** (193 against 2373), so ONE scalar `uMax` cannot size both — the
+position channel never faced that, because a radian of offset is a radian on either joint by
+construction; a torque channel would need a PER-CHANNEL cap, an API change rather than a
+tuning choice. And `Ts` came back **2042 / 1654 / 1699** as the probe amplitude rose: a
+linear plant's settling time does not depend on how hard it is probed, so that spread is the
+BACKLASH — a larger probe crosses the dead band and the response looks faster. The
+identified timescale is amplitude-dependent, which is a nonlinearity the linear model cannot
+carry and which no lever in this brick addressed.
+
+**SO THE CONCLUSION IS A MACHINE CONCLUSION, NOT A CONTROL ONE.** The plant needs ~2000
+steps to respond by ANY route and a corner is over in 40. Ten levers were measured — six
+information, one authority, input shaping, the torque channel, and the command-window
+resolution at three settings — and every one is null or worse. One thing moves the number:
+TIME. Halving the feed buys 1.63× on the sharp square and 6% on the circle, because only the
+sharp square has a corner transient to settle. Either give it more time, at a cycle-time cost
+that is now computable, or make the plant faster — `Ts` goes as sqrt(J/K), so it is the
+gearbox.
+
 THE DEAD-BAND COORDINATE WAS THE BETTER OF THE TWO BACKLASH IDEAS AND STILL LOST. `AxisComp` models
 backlash as `(B/2)·dir` and that is right for what it does — STATIC laser dwells, where the
 machine settles and the error really is ±B/2 by approach direction. Contouring is not that
