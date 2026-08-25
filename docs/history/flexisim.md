@@ -4455,12 +4455,66 @@ The mechanism ships opt-in and OFF (`leadTrust`), because it is correct and cost
 when unused, and because a later plant with a genuinely long effective horizon is where it
 would earn its place if anywhere does.
 
-**SO WHAT ⑥'s RESIDUAL BIAS ACTUALLY IS REMAINS OPEN.** It is −0.177 and it has now
-survived: a second cascade layer, arming its gated channel, and re-pricing its entire
-horizon. Three controller-side changes, no movement. Everything that moves it would have to
-be on the other side — what the correction is AIMED at — which is the truth routing, and
-that is where the next measurement belongs. The maps' round trip (5.1e-3) and the learned
-lever (gain 1.0072) are already excluded, so it is neither of the obvious two.
+### AIM AGAINST DELIVERY, and ⑥'s bias finally has an explanation
+
+⑥'s residual bias of −0.177 had survived a second cascade layer, arming its gated channel,
+and re-pricing its whole horizon — three controller-side changes, no movement — while the
+maps' round trip (5.1e-3) and the learned lever (gain 1.0072) excluded the obvious routing
+faults. What was missing was an instrument that separates the two.
+
+The pilot's truth is `tool − anchor(cmd)` and it drives that to zero, so the ANCHOR is where
+the loop is AIMED. Put the anchor through the SAME signed-normal decomposition as the tool
+and the two readings are directly comparable: the aim is the contour error a PERFECT pilot
+would still leave, and the rest is delivery.
+
+| | AIM bias | AIM rms | tool bias | tool rms | delivery gap |
+|---|---|---|---|---|---|
+| ⑤ | **−4.4e-18** | 1.4e-15 | −0.0134 | 0.1875 | 0.188 |
+| ⑥ learned anchor | 9.2e-5 | 0.0029 | −0.1774 | 0.3341 | 0.334 |
+| ⑦ rigid anchor | −0.252 | 0.594 | −0.3077 | 0.647 | 0.257 |
+
+⑤'s aim is exact to DOUBLE PRECISION, which is the control: `fk(cmd)` sits on the program
+by construction, so anything else would have meant a mis-projection rather than a machine
+fault. **⑥'s aim is 9.2e-5, nineteen hundred times smaller than the bias it leaves.
+ROUTING IS EXCLUDED. ⑥ aims at the program and does not get there.**
+
+### THE ANCHOR SWAP WAS CONFOUNDED, AND THE INSTRUMENT CAUGHT IT ONE RUN LATER
+
+⑦ is ⑥ with exactly one thing changed — the anchor, from the learned `fwd` to the rigid
+`fk` — to test whether ⑥'s deficit is DC STARVATION: `fwd` is fitted to SETTLED poses, so
+`tool − fwd(cmd)` has the static droop subtracted out and the model trains on a signal
+whose DC was removed by construction, while `tool − fk(cmd)` retains it.
+
+It VERIFIED at 2.61x program and 5.84x scribble — matching ⑤ and far past ⑥'s 1.70x/0.49x
+— and delivered **0.647, worse than ⑥ and three times worse than ⑤**. The aim says why:
+the anchor became `fk(predict(x,y))`, the RIGID position of a DROOP-COMPENSATED command,
+which is the program plus the droop. **A perfect ⑦ would land 0.252 off by construction,
+and the verify measured truth reduction against a mis-aimed truth and called it excellent.**
+One code change, two physical changes. The aim decomposition, built one run earlier to
+diagnose ⑥, immediately caught a flaw in the experiment designed to follow it.
+
+### WHAT SURVIVES, AND WHY THERE IS NO ⑥-PRESERVING FIX IN THIS DIRECTION
+
+The DELIVERY GAP is the one column the confound does not touch, and it moved the predicted
+way: **0.334 → 0.257, a 23% improvement**, from giving the truth its DC back. The DC story
+is supported.
+
+But it also shows the trade is not available. **THE DROOP HAS TO BE CARRIED EITHER BY THE
+REFERENCE OR BY THE CORRECTION, AND WHICHEVER CARRIES IT, THE OTHER IS DC-FREE.** ⑥ puts it
+in the reference, since `predict` is fitted to settled poses, so its pilot necessarily
+trains on a DC-free signal; make the anchor DC-rich and the aim moves by exactly the droop,
+because they are the same quantity appearing twice.
+
+That explains every measurement at once: ⑥'s OPEN loop is BETTER than ⑤'s (1.135 against
+1.205) because the static droop is pre-compensated; its CORRECTED loop is worse because what
+is left is the DYNAMIC droop delta and its pilot has weak DC authority over it; its aim is
+fine; and nothing on the controller side moved it.
+
+**A DROOP CARRIED BY THE CORRECTION IS RE-MEASURED AT SPEED EVERY STEP; A DROOP CARRIED BY
+THE REFERENCE IS FROZEN AT WHATEVER THE STATIC GATHER SAW.** That is why ⑤ wins, and it is a
+design property of ⑥ rather than a defect in it. Whether a gather taken AT FEED, or a
+reference that deliberately does NOT compensate droop, recovers it is the next experiment
+and is not measured.
 
 Note also that ⑥'s open loop is 1.135 against ⑤'s 1.205: the learned map pre-compensates
 about 6% of the static droop by itself before any pilot acts.

@@ -595,10 +595,25 @@ that matches it** — the point-to-point tabs measure a different question.
   the solver responded substantially and the machine did not care. **THE QP IS NOT THE
   BINDING CONSTRAINT:** a receding horizon only ever applies its FIRST move and re-solves,
   so the far leads shape it far less than the argument assumed. Ships opt-in and OFF
-  (`leadTrust`). ⑥'S RESIDUAL BIAS OF −0.177 HAS NOW SURVIVED THREE CONTROLLER-SIDE
-  CHANGES — a second cascade layer, arming its gated channel, and re-pricing its whole
-  horizon — so whatever sets it is on the other side, in what the correction is AIMED at.
-  The maps' round trip (5.1e-3) and the learned lever (gain 1.0072) are already excluded.
+  (`leadTrust`). **⑥'s RESIDUAL BIAS IS EXPLAINED, and it is a design property rather
+  than a defect.** The pilot's truth is `tool − anchor(cmd)`, so the ANCHOR is where the
+  loop is AIMED; put it through the same signed-normal decomposition as the tool and aim
+  separates from delivery. ⑤ aims exact to DOUBLE PRECISION (−4.4e-18, the control, since
+  `fk(cmd)` is on the program by construction); **⑥ aims at 9.2e-5, nineteen hundred times
+  smaller than the −0.177 it leaves — ROUTING IS EXCLUDED, it aims right and does not get
+  there.** Swapping ⑥'s anchor to the rigid `fk` (mode ⑦) VERIFIED 2.61×/5.84× — matching
+  ⑤ — and DELIVERED 0.647, worse than ⑥'s 0.334: the anchor became `fk(predict(x,y))`, the
+  rigid position of a droop-compensated command, so a perfect ⑦ lands 0.252 off and the
+  verify measured truth reduction against a mis-aimed truth. One code change, two physical
+  changes; the aim instrument caught the flaw in the experiment that followed it. What
+  survives is the DELIVERY GAP, the column the confound cannot touch: **0.334 → 0.257, a
+  23% gain from giving the truth its DC back.** THE DROOP MUST BE CARRIED BY THE REFERENCE
+  OR BY THE CORRECTION, AND WHICHEVER CARRIES IT THE OTHER IS DC-FREE — ⑥ puts it in the
+  reference (`predict` is fitted to SETTLED poses), so its pilot trains on a DC-free signal,
+  and making the anchor DC-rich moves the aim by exactly the droop because they are one
+  quantity appearing twice. Hence ⑥'s open loop is BETTER (1.135 vs 1.205) and its
+  corrected loop worse. **A droop carried by the CORRECTION is re-measured at speed every
+  step; one carried by the REFERENCE is frozen at whatever the static gather saw.**
   **Sweep feedrate**
   runs the whole ladder and tabulates the trade. The arm is drawn at TRUE geometry; the error trail
   is the exaggerated object, pushed out along the path normal only.
