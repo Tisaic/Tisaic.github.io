@@ -4619,9 +4619,12 @@ Commissioned ONCE and scored on three shapes, so the only difference is the prog
 The AIM is machine-zero on all three, so none of it is routing. Three things separate the
 sharp square, and the obvious one is the least important:
 
-- **THE CORRECTION SATURATES.** `uPk = 1.000` IS the cap, on this shape and neither other.
-  A saturated correction cannot deliver the plan it solved for, and what it leaves is a
-  BIAS — −0.128 against the rounded square's −0.013, ten times over.
+- **~~THE CORRECTION SATURATES.~~ WRONG, AND CORRECTED BELOW.** `uPk = 1.000` IS the cap,
+  on this shape and neither other — but `uPk` is a PEAK, one sample touching the ceiling,
+  not a duty. Released to a cap of 2.0 with the identification held fixed, the peak goes
+  to **1.043** and every delivered number is IDENTICAL to four significant figures. Brick
+  45 used the right instrument for exactly this question — "hit at the cap for 26.5% of
+  the lap" — and this used the wrong one. The cap was never the constraint.
 - **36 JOINT REVERSALS** against 10 and 4. Every one crosses a 2e-4 rad backlash dead band
   where no torque transmits, and a dead band is not a linear function of anything the
   pilot reads: the same encoder angle and the same torque look identical arriving from
@@ -4647,8 +4650,35 @@ tip sensor: a latched signal is nearly constant across a lag window, so its lags
 collinear and carry what the first one already had. Two signals × 12 lags of near-constant
 data dilute the fit. Reading the existing note would have cost nothing and saved the run.
 
-What is left untested: the CAP (the correction wants more than 1.0 rad on a ±0.55 box,
-which is itself worth understanding before raising it) and `cornerDt`.
+### THE CAP WAS NOT THE CONSTRAINT, AND RAISING IT EXPOSED A WORSE PROBLEM
+
+Doubling `uMax` measured WORSE on all three shapes — rounded 6.43× → 4.44×, circle
+12.68× → 6.67×, sharp 4.21× → 3.57× — and the commissioning moved with it: Ts 2009 → 2048,
+N 79 → 70. **That is the tell.** A runtime clamp has no business changing the identified
+settling time.
+
+`uMax` set THREE unrelated things: the QP's runtime clamp, the probe step (0.15×) and the
+excitation dither (0.1×). So raising the correction authority — an operating decision —
+silently re-identified the plant, and the experiment could not separate the two. Neither
+could the caller.
+
+`probeAmp` and `ditherAmp` are now separate options, defaulting to exactly the old
+expressions so every plant on record is unchanged, and the page pins them to what they
+were at the 1.0 ceiling. With identification held fixed and ONLY the clamp doubled:
+
+| | clamp 1.0 | clamp 2.0 |
+|---|---|---|
+| rounded | 0.1875 (6.43×) | **0.1875 (6.43×)** |
+| circle | 0.0999 (12.68×) | **0.0999 (12.68×)** |
+| sharp | 0.2683 (4.21×) | **0.2683 (4.21×)**, uPk 1.000 → 1.043 |
+
+**Identical to four significant figures on all three.** The entire degradation was the
+probe and the dither, and none of it was the cap. The doubled ceiling is harmless and
+buys nothing; what it cost, before the split, was a third of the rounded square's
+improvement and half the circle's.
+
+WHAT IS LEFT: the sharp square's deficit is the 36 backlash reversals, and `cornerDt` is
+untested.
 
 ### The commissioning budget, and the phase that is NOT the answer
 

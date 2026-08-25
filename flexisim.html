@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:275,built:"2026-08-25T14:35:10Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:276,built:"2026-08-25T14:49:28Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -6262,6 +6262,7 @@ function startPilotP() {
     channels: [0, 1].map((j) => ({ lo: centre[j] - 0.55, hi: centre[j] + 0.55,
       vMax: 8e-4, aMax: 4e-6, jMax: 2e-7 })),
     uMax: pilotUMax(),
+    probeAmp: 0.15 * pilotIdentAmp(), ditherAmp: 0.1 * pilotIdentAmp(),
     start: armP.ik(c0.x, c0.y, true),
     guards: [{ index: 4, max: 1.2 * PG.drive * holdP * 1e3 },
       { index: 5, max: 1.2 * PG.drive * holdP * 1e3 }],
@@ -6364,6 +6365,19 @@ $('pilotP-btn').addEventListener('click', startPilotP);
  * would have moved the stiff machine that the anchor above exists to hold still.
  */
 function pilotUMax() { return Math.min(2.0, 0.15 * (16 / armP.K)); }
+/**
+ * THE IDENTIFICATION AMPLITUDE IS PINNED TO WHAT IT WAS, and doubling the cap above is
+ * exactly why this has to exist. `uMax` used to set three things: the runtime clamp, the
+ * probe step (0.15x) and the excitation dither (0.1x) — so raising the correction
+ * authority, an operating decision, silently re-identified the plant.
+ *
+ * MEASURED, and it is the whole reason this is here: doubling `uMax` alone moved the
+ * identified settling time 2009 → 2048 and the horizon 79 → 70, and cost the rounded
+ * square 6.43x → 4.44x, the circle 12.68x → 6.67x and the sharp square 4.21x → 3.57x.
+ * With the identification PINNED and only the clamp doubled, all three are IDENTICAL to
+ * four significant figures. The degradation was never the cap.
+ */
+function pilotIdentAmp() { return Math.min(1.0, 0.15 * (16 / armP.K)); }
 function pilotDepth() { return +$('s-depthP').value; }
 /**
  * ONE PILOT, OR A CASCADE OF THEM. A Stack IS a Pilot as far as this page is concerned —
@@ -6593,6 +6607,7 @@ function ik6StartPilot() {
     channels: [0, 1].map((j) => ({ lo: centreQ[j] - 0.55, hi: centreQ[j] + 0.55,
       vMax: 8e-4, aMax: 4e-6, jMax: 2e-7 })),
     uMax: pilotUMax(),
+    probeAmp: 0.15 * pilotIdentAmp(), ditherAmp: 0.1 * pilotIdentAmp(),
     start: C.from.slice(),
     guards: [{ index: 4, max: 1.2 * PG.drive * holdP * 1e3 },
       { index: 5, max: 1.2 * PG.drive * holdP * 1e3 }],
