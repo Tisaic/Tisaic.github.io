@@ -4799,6 +4799,64 @@ WHAT IS LEFT, and it is a timing relationship rather than a controller: the corn
 excitation (`cornerDt`) against the side's traverse time against `Ts`. Those trade directly
 against cycle time and can now be computed rather than tuned.
 
+### THE CORRECTION IS ROUTED THROUGH A CHANNEL FIFTY TIMES SLOWER THAN THE DISTURBANCE
+
+The owner: *"The controller is not understanding how to shape and preshape the commands to
+get the desired contours with the link bend physics."* That reframing was right about where
+to look and it took eight experiments to find out what it actually implies.
+
+The COMMAND WINDOW genuinely cannot express a pre-shape. Its lags share the stride chosen
+for the MEASURED signals — 35 samples, 280 solver steps — while a corner lasts 40. And for a
+FLEXIBLE link this is not a detail: the tip-to-torque transfer has right-half-plane zeros,
+so tip tracking is a non-minimum-phase inversion that REQUIRES pre-shaping ahead of the
+move. So the basis was checked, three ways:
+
+| | sharp | circle |
+|---|---|---|
+| baseline (12 lags at stride 35) | **4.25×** | **12.68×** |
+| re-pointed: 12 lags at stride 12 | 2.75× | 5.52× |
+| re-pointed: 12 lags at stride 4 | 2.17× | 6.53× |
+| mixed: 12 coarse + 6 fine, RAW | 4.25× | 12.94× |
+| mixed: 12 coarse + 6 fine, SCALED | 4.24× | 12.79× |
+
+Re-pointing is monotonically WORSE, because the window's job is REACH — the plant settles in
+2009 steps and a stride-4 window spans 352. Adding fine lags alongside is FREE AND UNUSED:
+raw they were 63× smaller than the velocity term beside them and the ridge zeroed them
+(a ridge penalises coefficient magnitude, so a small-variance regressor is shrunk hardest);
+scaled as local velocities they are usable, non-collinear, and the fit still does not want
+them. They do not predict the truth any better.
+
+**BECAUSE PREDICTION WAS NEVER THE CONSTRAINT.** Every lever that could matter was measured
+and all but one is already at its limit or does nothing:
+
+| lever | result |
+|---|---|
+| more information — direction bit, dead-band coordinate, accel ×2, fine window ×2 | null or worse |
+| more authority — cap 1.0 → 2.0 → 4.0 with identification pinned | **identical to 4 s.f.** |
+| aiming | AIM error **1e-15**, exact |
+| forecast quality | held-out R² **0.97 / 0.79** |
+| **more TIME — half feed** | **1.63× sharp, 6% circle** |
+
+    the DISTURBANCE      a corner, over in                        40 steps
+    the ACTUATOR PATH    the correction enters the joint COMMAND,
+                         and the plant needs its settling time  2009 steps
+                                                          ratio       50x
+
+**The pilot sees the corner coming — its horizon is 5056 steps, two and a half sides — aims
+exactly at it, forecasts it well, and physically cannot deliver in time.** `u` is added to
+`theta`, and a joint command becomes tip motion only after the servo loop (bandwidth 2e-3,
+a ~500-step constant) and the gearbox compliance have had their say. That is why every
+information and authority lever measured null, and why the only thing that moved the number
+was giving the plant more time.
+
+**AND IT SAYS THE OWNER'S OTHER SUGGESTION — TORQUE FEEDFORWARD — WAS RIGHT, FOR A REASON
+NEITHER OF US STATED.** It is not that the feedforward is missing: `ChainServo.jointTorques`
+already computes `M(q)·α + Coriolis − gravity` at the commanded pose, plus `N·Jm·α` for the
+rotor, which is complete for a RIGID arm. It is that the CORRECTION CHANNEL is slow. A
+correction injected as TORQUE bypasses the position loop entirely and acts at the drive's
+bandwidth rather than the loop's — the same model on a faster path. NOT BUILT, and it is the
+one lever these measurements leave standing.
+
 THE DEAD-BAND COORDINATE WAS THE BETTER OF THE TWO BACKLASH IDEAS AND STILL LOST. `AxisComp` models
 backlash as `(B/2)·dir` and that is right for what it does — STATIC laser dwells, where the
 machine settles and the error really is ±B/2 by approach direction. Contouring is not that
