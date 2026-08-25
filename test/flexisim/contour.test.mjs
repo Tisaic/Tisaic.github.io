@@ -231,6 +231,46 @@ const arm = new FlexArm2R({ joint1: jt(massProperties(l1)), link1: l1,
     `${a.report().reversals} vs ${b.report().reversals}`);
 }
 
+// ------------------------------------------------- bias against oscillation (rule 39)
+{
+  // TWO STREAMS WITH THE SAME CONTOUR RMS AND OPPOSITE CAUSES. One part is cut uniformly
+  // 0.2 undersize; the other is the right size and rings +-0.2*sqrt(2) about it. A single
+  // rms calls them identical, and they need different fixes — an offset for the first, a
+  // faster or better-phased correction for the second. This is the check that the
+  // decomposition can tell them apart, and it asserts BOTH halves of both (rule 9):
+  // the offset part must read all bias and no oscillation, and the ringing part the
+  // reverse. It would pass with either accumulator removed only if the other were wrong
+  // too, because rms^2 = bias^2 + osc^2 is asserted as an identity on a third stream
+  // that has BOTH.
+  const N = 4000, A = 0.2;
+  const off = new ContourScore({ joints: 1, reversalTravel: 1 });
+  const ring = new ContourScore({ joints: 1, reversalTravel: 1 });
+  const both = new ContourScore({ joints: 1, reversalTravel: 1 });
+  for (let k = 0; k < N; k++) {
+    const osc = A * Math.SQRT2 * Math.sin((2 * Math.PI * 7 * k) / N);
+    off.step(-A, 0, [0], [0]);
+    ring.step(osc, 0, [0], [0]);
+    both.step(-A + osc, 0, [0], [0]);
+  }
+  const o = off.report(), r2 = ring.report(), b = both.report();
+  console.log(`    [bias/osc] offset part rms ${o.contourRms.toFixed(4)} = bias `
+    + `${o.contourBias.toFixed(4)} + osc ${o.contourOsc.toFixed(4)}; ringing part rms `
+    + `${r2.contourRms.toFixed(4)} = bias ${r2.contourBias.toFixed(4)} + osc `
+    + `${r2.contourOsc.toFixed(4)}`);
+  check('two streams a single contour rms cannot tell apart ARE the same rms',
+    Math.abs(o.contourRms - r2.contourRms) < 1e-3,
+    `${o.contourRms.toFixed(5)} vs ${r2.contourRms.toFixed(5)}`);
+  check('…the uniformly undersize part reads all bias and no oscillation',
+    Math.abs(o.contourBias + A) < 1e-9 && o.contourOsc < 1e-9,
+    `bias ${o.contourBias}, osc ${o.contourOsc}`);
+  check('…the right-size ringing part reads the reverse',
+    Math.abs(r2.contourBias) < 1e-3 && Math.abs(r2.contourOsc - A * Math.SQRT2 / Math.SQRT2) < 1e-3,
+    `bias ${r2.contourBias}, osc ${r2.contourOsc}`);
+  check('…and on a stream with both, rms² = bias² + osc² identically',
+    Math.abs(b.contourRms ** 2 - (b.contourBias ** 2 + b.contourOsc ** 2)) < 1e-12,
+    `${b.contourRms ** 2} vs ${b.contourBias ** 2 + b.contourOsc ** 2}`);
+}
+
 await l1.destroy(); await l2.destroy();
 console.log(failed ? `\ncontour: ${failed} check(s) FAILED\n` : '\ncontour: all checks passed\n');
 process.exit(failed ? 1 : 0);

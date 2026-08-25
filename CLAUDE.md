@@ -547,6 +547,39 @@ that matches it** — the point-to-point tabs measure a different question.
   (0.99305 vs 0.98931) and a WORSE machine (12.7× → 10.2×). **The QP inverts this model,
   so regularisation serves the inversion, not the fit** — which is why the basis choice
   compares residuals and the ridge choice deliberately does not.
+  **THE RESIDUAL CASCADE IS NOW REACHABLE — a Cascade depth slider (1–3) serving BOTH ⑤ and
+  ⑥ (brick 59).** It had been built and measured in brick 56 and connected to nothing a
+  person can click, which is the whole reason the page's numbers had not moved. Wiring it
+  found a defect only a cascade can have: each layer derives its own cadence from its own
+  measured Ts, but the host builds ONE look-ahead closure, so an upper layer's whole horizon
+  was registered at someone else's stride. Pinned, at the SOFTEST sliders and feed 0.004:
+  open 1.205 → depth 1 **0.1875 (6.43×)** → depth 2 **0.0987 (12.21×)**, layer 2 vouching
+  for itself at 2.07× with held-out R² 0.440/0.571 on what layer 1 left. Depth costs
+  commissioning time multiplied, and each layer reports separately so a layer that measured
+  nothing is visible rather than averaged away.
+  **AND IT DOES NOT RESCUE ⑥ — IT HARMS IT, which is the more useful half.** ⑥ depth 1
+  3.40× → depth 2 **2.93×** on 3.1× the copper, with layer 2 VERIFYING at 1.85×, better
+  than layer 1's 1.70×. Its readouts say why: R² [0.848, **−0.117**] — the elbow forecast
+  is negative at lead 0, so it is gated, and what deploys is a ONE-CHANNEL correction on a
+  COUPLED arm, which is not a smaller correction but one in a direction the QP never chose.
+  The decomposition confirms the shape: bias improves (−0.177 → −0.154) while oscillation
+  rises (0.283 → 0.355). **A Stack now refuses to admit a layer that cannot forecast every
+  channel of a multi-channel plant**, keeping the layer's own verdict intact and recording
+  the admission separately (rule 27). One measurement; the same question for a SINGLE pilot
+  is stated and NOT answered.
+  **THE CONTOUR ERROR IS NOW SPLIT INTO BIAS AND OSCILLATION** (`contourBias`,
+  `contourOsc`), because rule 39 had no instrument behind it on the one tab that contours.
+  It settled ⑥ against ⑤ in a single reading: both start with the same error (⑤ bias −0.626
+  / osc 1.030, ⑥ −0.666 / 0.918), and ⑤ removes **97.9%** of the bias where ⑥ removes
+  **73.4%** — ⑥ leaves THIRTEEN TIMES the bias, on a forecast as good as ⑤'s (R²
+  0.971/0.758 against 0.968/0.792). ⑥'s deficit is DC AUTHORITY, not dynamics; two other
+  explanations were measured and killed first (the maps' round trip disagrees by 5.1e-3
+  against a 0.33 contour, and the learned lever matches the true inverse Jacobian to a gain
+  ratio of 1.0072). **NOT BUILT, and the measurement that would decide it:** the QP trusts
+  every lead equally — the only forecast gate is `val[0] < 0.2`, which reads LEAD 0 ONLY —
+  while ⑥'s elbow forecast reaches r2Far **−0.035**, worse than predicting the mean, across
+  a 79-lead horizon. Weighting each lead by its own measured R² should pull ⑥'s residual
+  bias toward ⑤'s and leave the plants whose forecasts hold up BYTE-IDENTICAL (rule 21).
   **Sweep feedrate**
   runs the whole ladder and tabulates the trade. The arm is drawn at TRUE geometry; the error trail
   is the exaggerated object, pushed out along the path normal only.
@@ -571,6 +604,7 @@ that matches it** — the point-to-point tabs measure a different question.
 | `lib/probesense/` | Soft-sensing a field from one point in it. Fed numbers; knows no physics. |
 | `lib/flexisim/` | `joint`, `link`, `arm`, `arm2r`, `armnr` (recursive Newton–Euler), `tipsensor`, `chainsensor`, `compliance`, `compensator`, plus contouring: `toolpath` (geometry + feedrate profile), `contour` (the metrics), `pathilc` (learning over laps). |
 | `lib/blackbox/` | A controller given nothing about the plant, plus `qp.js`. Imports nothing from `lib/flexisim/` — the boundary is the directory. Verified on three plants sharing no physics. |
+| `lib/pilot/stack.js` | **A CASCADE OF PILOTS, wired to the page as ⑤/⑥'s Cascade depth slider (brick 59).** Layer k is an ordinary Pilot commissioned with layers 1..k−1 deployed and FROZEN, so each models what the one below it left; a layer that cannot vouch for itself ends the stack, and the summed correction is clamped ONCE at the engineer's cap. Every layer above the first is PINNED to the first's cadence — one host, one look-ahead closure, one meaning for `act(off)` — and chooses its own Ts, horizon, lags, ridge and basis on top of it. |
 | `lib/pilot/` | **The deploy gate is OPT-IN (`autoRefuse`, default false): the verify is measured and REPORTED but does not veto unless asked; `report.wouldRefuse` carries the reason it would have given.** Route–limit–run–deploy: settle → probe → excite → fit → verify → deploy-or-refuse, on a receding-horizon box-constrained QP. The verify scores two regimes — a filtered-noise scribble and a trapezoid PROGRAM — and gates on the worse. Imports only `../blackbox/qp.js`. |
 
 ## Versioning

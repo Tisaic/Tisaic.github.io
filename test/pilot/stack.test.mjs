@@ -131,6 +131,27 @@ check('depth buys accuracy on the program it was commissioned against',
 check('…AND on a program it has never seen, by at least as much',
   (sine[0].rms / sine[3].rms) > (trap[0].rms / trap[3].rms) * 0.8,
   `${(sine[0].rms / sine[3].rms).toFixed(1)}x unseen against ${(trap[0].rms / trap[3].rms).toFixed(1)}x trained`);
+// ONE CADENCE FOR THE WHOLE STACK. `act(off)` is indexed in samples, and the host builds
+// exactly one look-ahead closure; a layer that derived a different `sample` would ask for
+// `off` of ITS samples and be handed the command at `off` of the host's, registering its
+// whole horizon at the wrong time (rule 29). Measured on the 2R arm at the softest
+// sliders, where the layers DO disagree — Ts 2009 → sample 8 against Ts 2137 → sample 9 —
+// pinning took the depth-2 cascade from 7.23x to 10.30x with nothing else changed.
+//
+// ON THIS AXIS THE PIN IS INERT and this check says so rather than pretending otherwise:
+// every layer measures Ts around 18, and round(18/240) floors to 1 for all of them, so
+// the assertion below would pass with the pin removed. It is here as the CONTRACT — the
+// arm is where it bites, and the number above is what it bought there.
+const samples = st.layers.map((l) => l.sample);
+console.log(`    one cadence for the stack: samples ${samples.join(' / ')} from Ts `
+  + `${L.map((l) => l.Ts).join(' / ')}`
+  + (new Set(L.map((l) => l.Ts)).size > 1 && new Set(samples).size === 1
+    ? '  (layers measured different timescales and still share a cadence)'
+    : '  (this plant floors every layer to the same cadence anyway — inert here)'));
+check('every layer of the stack samples the machine at the FIRST layer\'s cadence',
+  samples.every((x) => x === samples[0]), samples.join('/'));
+check('…while still choosing its own horizon on top of it',
+  new Set(L.map((l) => l.N)).size > 1, JSON.stringify(L.map((l) => l.N)));
 check('…and the summed correction never exceeds the engineer\'s single cap',
   trap[3].uPk <= 2.0 + 1e-9 && sine[3].uPk <= 2.0 + 1e-9,
   `${trap[3].uPk.toFixed(3)} / ${sine[3].uPk.toFixed(3)} mm`);

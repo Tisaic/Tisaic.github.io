@@ -518,13 +518,20 @@
       <button id="ik6P-btn" class="sec">Commission ⑥ Fully learned ▶</button>
       <button id="sweepP" class="sec">Sweep feedrate ▶</button>
       <button id="resetP" class="sec">Reset</button>
+      <div class="slider"><span>Cascade depth</span>
+        <input type="range" id="s-depthP" min="1" max="3" step="1" value="1" />
+        <span class="v" id="v-depthP">1</span></div>
     </div>
     <p class="hint" id="hintP"><b>Commission</b> traces one lap with the tracker watching and
       fits <b>one compliance constant per joint</b> to the tool's own deviation, then puts the
       tracker away — the same lifecycle as every other learner here. <b>Commission ⑥</b> goes
       further: it is never told the arm's lengths at all — it visits held points inside the
       command box while the tracker teaches it the geometry, fits the inverse map itself, then
-      runs the pilot's noise commissioning on top of it. <b>Sweep</b> runs the same
+      runs the pilot's noise commissioning on top of it. <b>Cascade depth</b> applies to both:
+      at 2 or 3, a SECOND (and third) pilot is commissioned on the machine with the one below
+      it deployed and frozen, so each layer models what the previous one left rather than
+      repeating it — the cost is commissioning time multiplied, and each layer still has to
+      vouch for itself on the machine or the stack stops there. <b>Sweep</b> runs the same
       path at every feedrate and tabulates what each one costs, because accuracy and energy do
       not have their optimum at the same speed.</p>
 
@@ -933,6 +940,7 @@ import { roundedRect, sharpRect, circle as circlePath } from './lib/flexisim/too
 import { ContourScore, decompose } from './lib/flexisim/contour.js';
 import { PathILC } from './lib/flexisim/pathilc.js';
 import { Pilot } from './lib/pilot/pilot.js';
+import { Stack } from './lib/pilot/stack.js';
 // THE BLACK BOX IS ITS OWN DIRECTORY, which is the boundary made visible: nothing under
 // lib/blackbox/ imports anything from lib/flexisim/, so it cannot learn about an arm even
 // by accident.
@@ -6249,7 +6257,7 @@ function startPilotP() {
   runP = false;
   const centre = armP.ik(PG.centre[0], PG.centre[1], true);
   const c0 = profP.at(kP);
-  pilotP = new Pilot({
+  pilotP = makePilot({
     nMeasured: 6,
     channels: [0, 1].map((j) => ({ lo: centre[j] - 0.55, hi: centre[j] + 0.55,
       vMax: 8e-4, aMax: 4e-6, jMax: 2e-7 })),
@@ -6345,6 +6353,18 @@ $('pilotP-btn').addEventListener('click', startPilotP);
  * cap widens what the pilot MAY ask for and changes nothing about what it must prove.
  */
 function pilotUMax() { return Math.min(1.0, 0.15 * (16 / armP.K)); }
+function pilotDepth() { return +$('s-depthP').value; }
+/**
+ * ONE PILOT, OR A CASCADE OF THEM. A Stack IS a Pilot as far as this page is concerned —
+ * same phase/note/command/observe/act/status — so the depth control changes what is
+ * commissioned and nothing else in the loop. Depth 1 constructs the plain Pilot rather
+ * than a one-layer Stack, because the flagship numbers were measured on that object and
+ * a wrapper is a difference the measurement cannot see but a defect can hide behind.
+ */
+function makePilot(o) {
+  const depth = pilotDepth();
+  return depth > 1 ? new Stack({ ...o, depth }) : new Pilot(o);
+}
 
 const IK6_PTS = 90, IK6_DEG = 7, IK6_ROUTE_DEG = 5;
 // ADAPTIVE SETTLE for the gather (brick 44): hold each point until the tracker is
@@ -6548,7 +6568,7 @@ function ik6StartPilot() {
   // channel box is centred by the LEARNED map — the analytic centre appears nowhere in
   // what the running system consumes.
   const centreQ = C.predict(PG.centre[0], PG.centre[1]);
-  C.pilot = new Pilot({
+  C.pilot = makePilot({
     nMeasured: 6,
     channels: [0, 1].map((j) => ({ lo: centreQ[j] - 0.55, hi: centreQ[j] + 0.55,
       vMax: 8e-4, aMax: 4e-6, jMax: 2e-7 })),
@@ -6816,6 +6836,18 @@ function statsP() {
           + '   <span class="warn">windows and ridge chosen by the pilot on held-out '
           + 'data, not by anyone on this page</span>']);
       }
+      // WHAT EACH LAYER WAS WORTH, SEPARATELY. A cascade that reported one number would
+      // hide the case the depth control exists to expose: a second layer that measured
+      // nothing on top of the first, which is the signal to stop paying for it.
+      if (ps.report.layers && ps.report.layers.length) {
+        rows.push(['…layer by layer', ps.report.layers.map((L) =>
+          `L${L.layer}: ${L.deployed ? '<span class="good">deployed</span>' : '<span class="bad">refused</span>'}`
+          + ` ${L.verify === null ? '—' : L.verify.toFixed(2) + 'x'}`
+          + ` · Ts ${L.Ts} · N ${L.N}`
+          + (L.r2 ? ` · R² ${L.r2.map((x) => x.toFixed(3)).join('/')}` : '')).join(' → ')
+          + (ps.report.clamped ? `   <span class="warn">summed correction hit the cap on `
+            + `${ps.report.clamped} channel-steps</span>` : '')]);
+      }
     } else {
       rows.push(['pilot (⑤)', `<span class="warn">${ps.phase}</span> — ${ps.note}`]);
     }
@@ -6848,6 +6880,14 @@ function statsP() {
   rows.push(['<b>contour rms / max</b>', `<b>${fmt(lr.contourRms, 3)}</b> / `
     + `${fmt(lr.contourMax, 3)}   <span class="warn">this lap; `
     + `${fmt(r.contourRms, 3)} since reset</span>`]);
+  // BIAS AND OSCILLATION, SEPARATELY (rule 39). One rms cannot tell a part cut uniformly
+  // undersize from a part that rings about the right size, and the two need different
+  // fixes: an offset for the first, a faster or better-phased correction for the second.
+  // It is what separates ⑤ from ⑥ at the softest sliders — see docs/history/flexisim.md.
+  rows.push(['…of which bias / oscillation', `${fmt(lr.contourBias, 3)} / `
+    + `${fmt(lr.contourOsc, 3)}   <span class="warn">a signed mean and the spread about `
+    + 'it — a correction can null one and leave the other, and they have different '
+    + 'causes</span>']);
   rows.push(['lag rms / max', `${fmt(lr.lagRms, 3)} / ${fmt(lr.lagMax, 3)}   `
     + '<span class="warn">measured, and deliberately not penalised — the tool is on the '
     + 'right curve, just late</span>']);
@@ -6924,7 +6964,7 @@ function syncPath() {
   // of their own, and a slider moved underneath either one either overwrites the routine's
   // program (the identifying lap silently stops being slow) or changes the acceleration
   // between two rungs that are supposed to differ only in feedrate.
-  for (const id of ['ctlP', 'shapeP', 's-feedP', 's-accP', 's-cornP', 's-kP', 's-eP']) set(id, !idle);
+  for (const id of ['ctlP', 'shapeP', 's-feedP', 's-accP', 's-cornP', 's-kP', 's-eP', 's-depthP']) set(id, !idle);
 }
 
 // ---------------------------------------------------------------- wiring
@@ -6978,7 +7018,7 @@ for (const id of ['s-kP', 's-eP']) {
     finally { busyP = false; syncPath(); }
   });
 }
-for (const id of ['s-spfP', 's-magP']) $(id).addEventListener('input', syncPathLabels);
+for (const id of ['s-spfP', 's-magP', 's-depthP']) $(id).addEventListener('input', syncPathLabels);
 $('ctlP').addEventListener('change', () => {
   if ($('ctlP').value === 'ilc' && !ilcP && profP) makeILC(true);
   if ($('ctlP').value === 'pilot_ilc' && !ilc5P && profP) makeILC5(true);
@@ -6990,6 +7030,7 @@ function syncPathLabels() {
   $('v-feedP').textContent = pathFeed().toExponential(1);
   $('v-accP').textContent = pathAccel().toExponential(1);
   $('v-cornP').textContent = `${pathCorner()} steps`;
+  $('v-depthP').textContent = String(pilotDepth());
   $('v-kP').textContent = KP_LADDER[+$('s-kP').value].toFixed(2);
   $('v-eP').textContent = EP_LADDER[+$('s-eP').value].toFixed(2);
   $('v-spfP').textContent = $('s-spfP').value;

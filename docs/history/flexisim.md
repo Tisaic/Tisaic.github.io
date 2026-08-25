@@ -4270,3 +4270,202 @@ the brick-54 basis selector (linear-only scores 0.352 against the quadratic's 0.
 was plausible and each took a measurement to kill. The one that was right came from
 reproducing the owner's own combo on the actual page rather than reasoning about which
 library change could explain it.
+
+## Brick 59 — the cascade was never wired to anything, and it had a registration bug
+
+The owner asked, plainly: *"The residual cascades are active for mode 5 and 6?"*
+
+**No.** `lib/pilot/stack.js` had been built and measured on the EMPS axis in brick 56 —
+12.7× → 29.8× on the trained trapezoid, 8.3× → 26.0× on a program it had never seen — and
+then never connected to anything a person can click. `flexisim.html` constructed a plain
+single `Pilot` for both ⑤ and ⑥. Every number in brick 56 was real; none of it was
+reachable from the page. That is the whole of the answer to why the page's ⑤ and ⑥ had not
+improved: the improvement existed in a library and nowhere else.
+
+### Wiring it exposed a defect that a single pilot cannot have
+
+A **Cascade depth** slider (1–3) now feeds one `makePilot()` factory used by both ⑤ and ⑥.
+Depth 1 still constructs the plain `Pilot`, not a one-layer `Stack`, because the flagship
+numbers were measured on that object.
+
+Making `Stack` a genuine drop-in turned up three things, and the third is the one that
+mattered:
+
+1. **`verdict` must be null until the whole stack is done.** A host reads `verdict` as the
+   "is it finished" flag — that is what a `Pilot`'s means — so a partial stack whose first
+   layer had deployed answered `deploy: true` while layer 2 was still driving the machine
+   through its own excitation.
+2. **`work()` has to advance layers, not just `observe()`.** A fit that disarms every
+   forecast ends a layer without another `observe` ever arriving, and the stack would have
+   reported `done` after one layer.
+3. **EVERY LAYER WAS READING THE LOOK-AHEAD AT SOMEONE ELSE'S CADENCE.** `act(off)` is
+   indexed in samples and the host builds exactly ONE look-ahead closure. Each layer
+   derives its own `sample` from its own measured `Ts`, and on the 2R arm at the softest
+   sliders they disagree — layer 1 Ts 2009 → sample 8, layer 2 Ts 2137 → sample 9 — so
+   layer 2's whole 73-sample horizon was registered 73 solver steps short of where its
+   forecast was about. Rule 29, arriving through a door a single pilot does not have.
+
+**Measured at the owner's own combo (K 0.25, E 0.03, feed 0.004, rounded rectangle):**
+
+| | contour rms | | bias | oscillation |
+|---|---|---|---|---|
+| open loop | 1.205 | | −0.626 | 1.030 |
+| ⑤ depth 1 | 0.1875 | 6.43× | −0.0134 | 0.187 |
+| ⑤ depth 2, unregistered | 0.1669 | 7.23× | | |
+| ⑤ depth 2, closure re-indexed | 0.1170 | 10.30× | | |
+| ⑤ depth 2, cadence pinned | **0.0987** | **12.21×** | −0.0292 | 0.0943 |
+
+Layer 2 vouched for itself at 2.07× on top of layer 1's 2.59×, with held-out R² 0.440/0.571
+on what layer 1 left — real structure, independently verified, exactly the claim the
+cascade exists to make. What the second layer buys is almost entirely OSCILLATION: 0.187 →
+0.0943, a factor of two, while the bias it inherits from layer 1 does not improve (−0.0134
+→ −0.0292, and layer 1 had already taken 97.9% of it). That is the decomposition earning
+its place immediately — a single rms would have said "1.9× better" and left which
+mechanism moved as a guess.
+
+**Re-indexing the closure per layer was tried first and rejected — and it was both worse
+AND more dangerous, which is worth recording because the safe fix is usually the one that
+costs something.** Scaling `off` by the sample ratio recovers most of the loss (10.30×
+against the pinned 12.21×) but silently fails when the upper layer samples FASTER than the
+first: two adjacent layer-samples round onto one host index and the velocity regressor
+reads zero, with nothing thrown and nothing blank. Rule 51. Pinning every layer above the
+first to the first's cadence is correct by construction, and costs nothing that matters:
+Ts, Tset, the grid, the horizon N, the lag windows, the ridge and the basis are all still
+the layer's own, which is where the timescale separation actually lives (on EMPS layer 2
+still chooses N 95 against layer 1's 68 by itself).
+
+The stack test now pins the one-cadence contract, and says out loud that **on the EMPS axis
+the pin is inert** — every layer there floors to sample 1, so the assertion would pass with
+the pin removed. The arm is where it bites and the table above is what it bought.
+
+### Two instruments, three significant figures
+
+The owner sent three phone screenshots — no correction, ⑤, ⑥ — and they are what made the
+rest of this trustworthy. The page reads open 1.19e+0, ⑤ 1.93e-1, ⑥ 3.12e-1. A headless
+Node rig built independently of the page, from the same libraries, reads open 1.205,
+⑤ 0.1875, ⑥ 0.334. Rule 15: two routes that do not share the mistake.
+
+### Bias and oscillation are now separate numbers (rule 39)
+
+The screenshots showed something no ratio does. The no-correction error chart sits between
+−3 and 0 — almost pure **bias**. ⑤'s sits at ±0.4 centred on zero — the bias is gone and
+what is left is **oscillation**. `ContourScore` reported one rms and could not tell them
+apart, which means the CLAUDE.md rule that says to decompose the error had no instrument
+behind it on the tab where contouring is actually measured.
+
+It reports `contourBias` (the signed mean) and `contourOsc` (the spread about it) now, and
+the page shows both under the contour row. Measured on ⑤:
+
+    open   contour 1.205   =  bias -0.626   + osc 1.030
+    ⑤ on   contour 0.1875  =  bias -0.0134  + osc 0.187
+
+The pilot annihilates the bias — 47× — and cuts the oscillation 5.5×. The test pins the
+decomposition on two synthetic streams a single rms cannot tell apart: a part cut uniformly
+0.2 undersize and a part the right size ringing about it have the SAME contour rms, and
+must read all-bias-no-oscillation and the reverse. Both halves, rule 9.
+
+### ⑥ against ⑤: two hypotheses killed before anything was found
+
+⑥ delivers 3.40× where ⑤ delivers 6.43× at this corner. The pilot's forecast is NOT the
+difference — it is essentially the same on both routings:
+
+| | ⑤ | ⑥ |
+|---|---|---|
+| held-out R², ch1 / ch2 | 0.968 / 0.792 | 0.971 / 0.758 |
+| verify, program regime | 2.59× | 1.70× |
+| verify, scribble regime | 2.53× | 0.49× |
+| delivered on the rectangle | **6.43×** | **3.40×** |
+
+Equal models, unequal delivery — rule 16 says the difference is then not in the model, and
+two plausible suspects were measured and both are innocent:
+
+- **The maps' round trip.** ⑥ commands the machine from `predict` (degree 7) and its
+  observer believes `fwd` (degree 5); where they disagree the pilot nulls toward a point
+  the program never asked for, and that would be a static bias field. Measured over the
+  path: rms **5.1e-3**, max 1.2e-2, against a 0.33 contour it would have to explain. 1.5%.
+  Not it.
+- **The lever.** The observer scales the tool error by `gradAt`, the GRADIENT of a fitted
+  degree-5 inverse, and differentiating a ridge-fitted polynomial amplifies exactly the
+  wiggle the ridge left behind — a gain error there would be invisible to held-out R²,
+  because the fit is self-consistent with it. Measured against the arm's exact inverse
+  Jacobian: gain ratio **1.0072**, p05–p95 within 1.5%, worst relative matrix error 9.2%.
+  Not it either.
+
+### What the decomposition found in one reading
+
+    open ⑤   1.205  =  bias -0.626  + osc 1.030
+    open ⑥   1.135  =  bias -0.666  + osc 0.918
+    ⑤ on     0.1875 =  bias -0.0134 + osc 0.187     bias removed 97.9%
+    ⑥ on     0.3341 =  bias -0.1774 + osc 0.283     bias removed 73.4%
+
+**⑥ LEAVES THIRTEEN TIMES THE BIAS ⑤ LEAVES.** Its oscillation is 1.5× worse, which is a
+margin; its residual bias is 13× worse, which is a mechanism. ⑥'s problem is DC AUTHORITY,
+not dynamics — and that is a different search from the one two dead hypotheses above were
+conducting. Its correction peaks at 0.397 where ⑤'s peaks at 0.552, under the same 1.0 rad
+of available authority with zero clamping: it is not being stopped, it is not asking.
+
+### The signature that matches it, and what is NOT built
+
+The readouts carry a matching fingerprint. Held-out R² across the horizon, elbow channel:
+
+| | lead 0 | far lead |
+|---|---|---|
+| ⑤ | 0.792 | **0.150** |
+| ⑥ | 0.758 | **−0.035** |
+
+⑥'s elbow forecast is worse than predicting the mean at the far end of its own horizon, and
+⑤'s is nearly there. **The QP trusts every lead equally.** The only forecast-quality gate in
+the pilot is `readouts[c].gated = val[0] < 0.2` — it looks at LEAD 0 ONLY, so a channel
+whose forecast is sound at lead 0 and worthless at lead 30 is fully armed across all 79
+leads, and the plan is fitted to noise over most of its horizon. A cost minimised against
+noise on most of its terms, with an effort weight priced on the whole, resolves toward the
+smaller correction — which is exactly the under-drive and exactly the DC deficit measured.
+
+**THIS IS A HYPOTHESIS AND IT IS NOT YET MEASURED.** Two others in this same brick looked
+at least as good and both were killed by a measurement, so it is recorded here as the next
+lever rather than as a finding. What would settle it: weight each lead in the QP cost by
+its own measured validation R² (clamped at zero) instead of equally, and re-measure ⑤, ⑥
+and all six plants. If the hypothesis is right, ⑥'s residual bias falls toward ⑤'s and the
+plants whose forecasts hold up across the horizon come back UNCHANGED — rule 21, a fix that
+improves everything has usually changed the measurement.
+
+Note also that ⑥'s open loop is 1.135 against ⑤'s 1.205: the learned map pre-compensates
+about 6% of the static droop by itself before any pilot acts.
+
+### THE CASCADE DOES NOT RESCUE ⑥ — IT HARMS IT, AND ITS OWN VERIFY SAID OTHERWISE
+
+The obvious move, once depth 2 took ⑤ from 6.43× to 12.21×, was to point it at ⑥. It makes
+the machine worse:
+
+| ⑥ | contour | | bias | oscillation | copper | u peak |
+|---|---|---|---|---|---|---|
+| open | 1.135 | | −0.666 | 0.918 | 4.58e-4 | |
+| depth 1 | **0.3341** | **3.40×** | −0.1774 | 0.283 | 3.72e-4 | 0.397 |
+| depth 2 | 0.3867 | 2.93× | −0.1544 | 0.3545 | **1.15e-3** | 0.907 |
+
+Layer 2 **verified at 1.85× — BETTER than layer 1's 1.70×** — pulled its own scribble
+regime from 0.49× to 0.86×, chose a shorter horizon (N 50 against 69) on its own, and
+delivered a worse machine on **3.1× the copper**. A verify round that decides rather than
+checks is the pilot's central claim, and here it decided wrong.
+
+**The reason is in its readouts, and it is not a margin: R² [0.848, −0.117].** Layer 2's
+elbow forecast is NEGATIVE at lead 0 — worse than predicting the mean — so `gated` fires
+and that channel's correction is zeroed. What deploys is a **ONE-CHANNEL correction on a
+coupled 2R arm.** That is not a smaller correction; it is a correction in a direction the
+QP never chose, because the plan it priced assumed both channels were free to help. The
+decomposition shows exactly that shape: the bias improves slightly (−0.177 → −0.154, layer
+2 doing what it was built for) while the oscillation goes UP (0.283 → 0.3545) and the peak
+correction more than doubles. ⑤'s layer 2, with both channels alive at 0.440/0.571, has no
+such problem.
+
+**`Stack` now refuses to admit a layer that cannot forecast every channel of a
+multi-channel plant.** The layer's OWN verdict is left exactly as it recorded it — an
+instrument's reading is not the stack's to rewrite (rule 27) — and admission is a separate
+flag that everything downstream filters on, so the report says both what the layer
+concluded and why the stack declined it.
+
+**THIS IS ONE MEASUREMENT AND THE GUARD IS SCOPED TO WHERE THE EVIDENCE IS.** The same
+question exists for a SINGLE pilot — nothing stops layer 1 gating a channel and correcting
+the rest — and it is NOT answered here. What would settle it: a second plant with an
+unequally forecastable pair of channels, deployed with and without the gated channel's
+partner. Until that exists this is a layer-ADMISSION rule and nothing wider.
