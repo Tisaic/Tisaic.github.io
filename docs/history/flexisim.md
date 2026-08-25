@@ -4680,6 +4680,44 @@ improvement and half the circle's.
 WHAT IS LEFT: the sharp square's deficit is the 36 backlash reversals, and `cornerDt` is
 untested.
 
+### A USELESS SIGNAL IS FREE; A PARTLY-INFORMATIVE ONE IS EXPENSIVE
+
+Two attempts to route backlash information into the pilot, and both made the machine
+WORSE — on the rounded square as well as the sharp one, which is the tell: a signal about
+reversals should not touch a shape that barely reverses.
+
+| 8th and 9th signal | sharp | rounded |
+|---|---|---|
+| — (6 signals) | **4.21×** | **6.43×** |
+| direction bit, `sign(v_cmd)` | 3.71× | 5.56× |
+| dead-band coordinate | 3.13× | 4.60× |
+| **two channels of PURE NOISE** | **4.24×** | **6.47×** |
+
+**THE NOISE CONTROL IS THE WHOLE FINDING.** Two signals carrying NOTHING, at exactly the
+same feature cost — 2 signals × 12 lags = 24 extra regressors — are FREE, marginally better
+than baseline and inside run-to-run variation. So the feature count is not the cost, and
+the first explanation offered here ("24 extra regressors cost variance") was wrong.
+
+What separates them is COLLINEARITY. Noise is uncorrelated with everything, so the ridge
+shrinks it to nothing and it costs nothing. The direction bit and the dead-band coordinate
+are DETERMINISTIC FUNCTIONS OF THE COMMAND, so they are tangled with regressors that
+already carry real information, and the ridge cannot shrink them without shrinking what
+they are tangled with. They displace informative weight rather than being discarded.
+
+**So the question to ask of a new signal is not "does it carry information" but "is it
+collinear with what is already there".** That inverts the obvious intuition, and it is
+measured rather than argued.
+
+THE DEAD-BAND COORDINATE WAS THE BETTER OF THE TWO IDEAS AND STILL LOST. `AxisComp` models
+backlash as `(B/2)·dir` and that is right for what it does — STATIC laser dwells, where the
+machine settles and the error really is ±B/2 by approach direction. Contouring is not that
+regime: the joint TRAVERSES the dead band over time and no torque transmits during the
+traverse, so the state that matters is how far through it you are. Travel, not time, and the
+arithmetic says why — at full feed the traverse is ONE step and invisible, at the corner
+crawl 3.5, and at a true reversal the rate passes through zero and it is unbounded. The
+coordinate is the right physics and it is still collinear with the command, which is what
+sank it.
+
 ### The commissioning budget, and the phase that is NOT the answer
 
 Measured by step count, immune to what else is running:
