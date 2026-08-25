@@ -583,11 +583,22 @@ that matches it** — the point-to-point tabs measure a different question.
   0.971/0.758 against 0.968/0.792). ⑥'s deficit is DC AUTHORITY, not dynamics; two other
   explanations were measured and killed first (the maps' round trip disagrees by 5.1e-3
   against a 0.33 contour, and the learned lever matches the true inverse Jacobian to a gain
-  ratio of 1.0072). **NOT BUILT, and the measurement that would decide it:** the QP trusts
-  every lead equally — the only forecast gate is `val[0] < 0.2`, which reads LEAD 0 ONLY —
-  while ⑥'s elbow forecast reaches r2Far **−0.035**, worse than predicting the mean, across
-  a 79-lead horizon. Weighting each lead by its own measured R² should pull ⑥'s residual
-  bias toward ⑤'s and leave the plants whose forecasts hold up BYTE-IDENTICAL (rule 21).
+  ratio of 1.0072). **BUILT, MEASURED, AND DEAD — and the null is worth more than the fix
+  would have been.** The QP trusted every lead of its horizon equally while ⑥'s elbow
+  forecast reaches r2Far **−0.035**, worse than predicting the mean. `boxQP` now takes an
+  optional per-lead weight on the tracking residual (Lipschitz bound sees it; omitted, the
+  golden vectors are untouched) and the pilot derives them from held-out validation,
+  NORMALISED to mean 1 so the change moves where trust sits rather than doubling as an
+  effort increase. Measured on ONE commissioned model deployed twice: ⑤ 6.43× → 6.48×
+  (0.8%), ⑥ 3.40× → **3.40×, identical to four significant figures**. The weights are not
+  inert — ⑥'s far-lead weight is exactly 0.00 and `uPk` nearly DOUBLED, 0.397 → 0.736 — so
+  the solver responded substantially and the machine did not care. **THE QP IS NOT THE
+  BINDING CONSTRAINT:** a receding horizon only ever applies its FIRST move and re-solves,
+  so the far leads shape it far less than the argument assumed. Ships opt-in and OFF
+  (`leadTrust`). ⑥'S RESIDUAL BIAS OF −0.177 HAS NOW SURVIVED THREE CONTROLLER-SIDE
+  CHANGES — a second cascade layer, arming its gated channel, and re-pricing its whole
+  horizon — so whatever sets it is on the other side, in what the correction is AIMED at.
+  The maps' round trip (5.1e-3) and the learned lever (gain 1.0072) are already excluded.
   **Sweep feedrate**
   runs the whole ladder and tabulates the trade. The arm is drawn at TRUE geometry; the error trail
   is the exaggerated object, pushed out along the path normal only.

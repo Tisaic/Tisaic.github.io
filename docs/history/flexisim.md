@@ -4421,13 +4421,46 @@ leads, and the plan is fitted to noise over most of its horizon. A cost minimise
 noise on most of its terms, with an effort weight priced on the whole, resolves toward the
 smaller correction — which is exactly the under-drive and exactly the DC deficit measured.
 
-**THIS IS A HYPOTHESIS AND IT IS NOT YET MEASURED.** Two others in this same brick looked
-at least as good and both were killed by a measurement, so it is recorded here as the next
-lever rather than as a finding. What would settle it: weight each lead in the QP cost by
-its own measured validation R² (clamped at zero) instead of equally, and re-measure ⑤, ⑥
-and all six plants. If the hypothesis is right, ⑥'s residual bias falls toward ⑤'s and the
-plants whose forecasts hold up across the horizon come back UNCHANGED — rule 21, a fix that
-improves everything has usually changed the measurement.
+**IT WAS BUILT, MEASURED, AND IT IS DEAD.** `boxQP` gained an optional per-lead weight on
+the tracking residual — a weighted least squares, with the Lipschitz bound seeing the
+weights so the step size cannot overshoot — and the pilot derives them from each readout's
+own held-out validation, normalised to mean 1. The normalisation is the design: weighting
+by raw R² would shrink the tracking term against a fixed λ and double as an effort
+increase, so a gain could not be told from the correction merely getting smaller.
+
+Measured on ONE commissioned model deployed twice, so the only difference between the rows
+is the weighting:
+
+| | contour | | bias | oscillation | u peak |
+|---|---|---|---|---|---|
+| ⑤ open | 1.205 | | −0.626 | 1.030 | |
+| ⑤ flat weights | 0.1875 | 6.43× | −0.0134 | 0.1870 | 0.552 |
+| ⑤ per-lead trust | 0.1860 | 6.48× | −0.0111 | 0.1857 | 0.674 |
+| ⑥ open | 1.135 | | −0.666 | 0.918 | |
+| ⑥ flat weights | 0.3341 | 3.40× | −0.1774 | 0.2831 | 0.397 |
+| ⑥ per-lead trust | **0.3341** | **3.40×** | −0.1747 | 0.2848 | 0.736 |
+
+**0.8% ON ⑤ AND NOTHING WHATEVER ON ⑥** — identical to four significant figures. And the
+weights are not inert: ⑥'s far-lead weight is **exactly 0.00** (R² −0.035, clamped), so the
+QP was told to ignore an entire channel's far horizon, and `uPk` nearly DOUBLED, 0.397 →
+0.736. The solver responded substantially. The machine did not care.
+
+**THAT IS THE STRONGEST FORM OF A NULL, and it is worth more than the fix would have been:
+the QP is not the binding constraint.** A plan fitted to noise over most of its horizon
+turns out to cost almost nothing, because the receding horizon only ever applies its FIRST
+move and re-solves — the far leads shape that move far less than the argument assumed. The
+ceiling is not in how the plan is priced.
+
+The mechanism ships opt-in and OFF (`leadTrust`), because it is correct and costs nothing
+when unused, and because a later plant with a genuinely long effective horizon is where it
+would earn its place if anywhere does.
+
+**SO WHAT ⑥'s RESIDUAL BIAS ACTUALLY IS REMAINS OPEN.** It is −0.177 and it has now
+survived: a second cascade layer, arming its gated channel, and re-pricing its entire
+horizon. Three controller-side changes, no movement. Everything that moves it would have to
+be on the other side — what the correction is AIMED at — which is the truth routing, and
+that is where the next measurement belongs. The maps' round trip (5.1e-3) and the learned
+lever (gain 1.0072) are already excluded, so it is neither of the obvious two.
 
 Note also that ⑥'s open loop is 1.135 against ⑤'s 1.205: the learned map pre-compensates
 about 6% of the static droop by itself before any pilot acts.
