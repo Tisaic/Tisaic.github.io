@@ -4600,3 +4600,138 @@ old behaviour, so every plant under test keeps its contract; only this page turn
 A refusal on the tab now means only that there is nothing to deploy — the excitation could
 not be built, or the guards tripped three times. Those are not judgements, they are a
 machine that cannot be driven, and the badge says so instead of "REFUSED".
+
+## Brick 60 — the sharp corner, the commissioning budget, and the cyclic task
+
+Three questions from the owner, run down separately. Two of them killed a hypothesis of
+mine and the third found a defect in a documented knob.
+
+### The sharp square: it saturates, and it reverses
+
+Commissioned ONCE and scored on three shapes, so the only difference is the program:
+
+| shape | open | corrected | | bias | osc | reversals | u peak |
+|---|---|---|---|---|---|---|---|
+| circle | 1.267 | 0.0999 | **12.68×** | +0.009 | 0.100 | 4 | 0.589 |
+| rounded | 1.205 | 0.1875 | 6.43× | −0.013 | 0.187 | 10 | 0.552 |
+| sharp | 1.129 | 0.2683 | **4.21×** | **−0.128** | 0.236 | **36** | **1.000** |
+
+The AIM is machine-zero on all three, so none of it is routing. Three things separate the
+sharp square, and the obvious one is the least important:
+
+- **THE CORRECTION SATURATES.** `uPk = 1.000` IS the cap, on this shape and neither other.
+  A saturated correction cannot deliver the plan it solved for, and what it leaves is a
+  BIAS — −0.128 against the rounded square's −0.013, ten times over.
+- **36 JOINT REVERSALS** against 10 and 4. Every one crosses a 2e-4 rad backlash dead band
+  where no torque transmits, and a dead band is not a linear function of anything the
+  pilot reads: the same encoder angle and the same torque look identical arriving from
+  either side.
+- **The corner crawl is real and secondary.** At a 90° corner the planner's rule gives
+  `v = a·cornerDt / (2 sin(φ/2))` = 1.131e-3 against a commanded 4e-3 — measured, and
+  matching the closed form exactly. But it is 2.1% of the lap, while the rounded square's
+  r = 1.5 corners give `sqrt(a/k)` = 7.75e-3, ABOVE the feed, so they never slow at all.
+
+**THE DIRECTION BIT WAS THE PROPOSED FIX AND IT IS HARMFUL.** Two extra signals, the sign
+of each joint's commanded velocity — free to a real controller, and the mechanism
+`AxisComp` was built around. Measured:
+
+| | sharp | bias | reversals | uPk | rounded |
+|---|---|---|---|---|---|
+| 6 signals | **4.25×** | −0.126 | 36 | 1.000 | **6.43×** |
+| 8 signals | 3.71× | −0.192 | 28 | 0.898 | 5.56× |
+
+It did exactly what was predicted on the sub-metrics — reversals 36 → 28, saturation
+relieved 1.000 → 0.898 — and made the contour WORSE ON BOTH SHAPES, with the scribble
+regime falling 2.53× → 1.25×. **The reason was already written down in this file** for the
+tip sensor: a latched signal is nearly constant across a lag window, so its lags are almost
+collinear and carry what the first one already had. Two signals × 12 lags of near-constant
+data dilute the fit. Reading the existing note would have cost nothing and saved the run.
+
+What is left untested: the CAP (the correction wants more than 1.0 rad on a ±0.55 box,
+which is itself worth understanding before raising it) and `cornerDt`.
+
+### The commissioning budget, and the phase that is NOT the answer
+
+Measured by step count, immune to what else is running:
+
+| phase | steps | % |
+|---|---|---|
+| verify | 68,269 | **54.3%** |
+| excite | 36,161 | 28.8% |
+| probe | 15,600 | 12.4% |
+| settle | 5,699 | 4.5% |
+| | 125,729 | 105 s wall |
+
+and **182 ridge fits are 57 s of the 105 s WALL** — 158 of them one solve per lead.
+
+**THE EXCITATION LOOKED LIKE THE LEVER AND IS NOT.** The reasoning was that halving it
+"mostly costs the LONG leads" (its own comment) and the per-lead trust null had just shown
+the long leads barely affect delivery. Measured:
+
+| | steps | held-out R² | verify | DELIVERED |
+|---|---|---|---|---|
+| 36,161 | 125,729 | 0.968→0.843, 0.792→0.150 | 2.59× | **6.43×** |
+| 18,000 | 107,567 | 0.960→0.941, 0.874→0.997 | 0.84× | 5.07× |
+| 12,000 | 101,567 | 0.889→**0.999**, 0.975→0.979 | 0.15× | **0.15×** |
+
+**AT 12,000 THE HELD-OUT R² IS BETTER THAN THE DEFAULT AT EVERY LEAD AND THE MACHINE IS
+6.5× WORSE THAN DOING NOTHING** (7.817 against an open loop of 1.205). A short record makes
+the interleaved validation blocks correlated with the training blocks, so "held-out" stops
+being held out and the score becomes noise over noise. This is the project's oldest lesson
+at its sharpest: the fit improved MONOTONICALLY while the machine collapsed by a factor of
+fifty, and the only instrument that saw it was the verify round on the real machine.
+
+It also would not have paid: two thirds off the excitation is 19% off the total, because
+verify is 54% and does not shrink with it.
+
+**THE VERIFY SEGMENT IS THE LEVER, AND IT IS FREE ON THIS PLANT.** `segLen = max(3·Ts, 4000)`
+against the existing floor:
+
+| | steps | wall | verify | DELIVERED | bias |
+|---|---|---|---|---|---|
+| segLen 6027 | 125,729 | 105 s | 2.59× | 0.1875 (6.43×) | −1.330e-2 |
+| segLen 4000 | **81,459** | 89 s | 3.06× | **0.1875 (6.43×)** | −1.330e-2 |
+
+**−35% of commissioning for a byte-identical machine** — same contour, same bias to four
+figures, same R². The verify exists to pick λ and it picked the same λ from a third less
+machine time. TWO CAVEATS, neither buried: the verify's own RATIO moved 2.59 → 3.06, an 18%
+shift in the gate's reading that could flip a decision on a plant sitting near its
+threshold; and this is ONE plant, so the default does not move until the six-plant sweep
+agrees. The wall clock barely improved (105 → 89 s) because the fit ladder is most of it
+and neither knob touches it.
+
+### `exciteSteps` CRASHED, inside the knob the question was about
+
+Setting it to 12,000 — which is the DEFAULT FLOOR of `max(12000, 18·Ts)`, a value the API
+openly advertises — died on `X[0].length` of an empty array. The window-refine stage was
+asking for a 40-tap window at stride 35 (1,365 samples back) plus a 624-sample far lead,
+i.e. 1,989 samples, from a record holding 1,500. Zero rows, and a `TypeError` naming
+neither the window nor the record.
+
+So the shortening lever was UNTESTABLE, not merely untested; nobody could have measured a
+shorter excitation without hitting this. Infeasible candidates are now skipped and recorded
+in `report.windowSkipped`, the selection survives every candidate being skipped (the tune's
+default stands rather than the stage inventing one), and `solveRidge` refuses an empty
+design matrix with a named error.
+
+### The cyclic task: the time was right, the allocation was not
+
+| | |
+|---|---|
+| 815,280 MAC per two-channel control tick | measured against the analytic count |
+| 2.3% of one core at 1 kHz, 9.3% at 4 kHz | tick every `grid·sample` = 64 steps |
+
+**The TIME is PLC-shaped by construction and always was** — a fixed 60 iterations of
+projected gradient with no data-dependent branch, so the worst case IS the average. That is
+the whole reason the solver is not an interior-point method, and it holds.
+
+**The ALLOCATION was not.** `boxQP` built five `Float64Array(N)` per call — 3.2 kB per call,
+6.3 kB per tick, forever, handed to the collector at a moment it chooses rather than one the
+scheduler does. Now a static workspace keyed by N: 229 → 81 bytes of net heap growth per
+call, with all 55 blackbox checks including the QP golden vectors unchanged. Safe because
+JavaScript is single-threaded and every call completes before the next begins — a worker
+sharing the module or a re-entrant caller would need its own, and the comment says so.
+
+**STILL ALLOCATING, named rather than left to be found:** `_controlTick` builds two arrays
+per LEAD per channel, about 316 per tick, and the ring trim uses `Array.splice`, an O(n)
+copy at an unpredictable moment. Both are the same fix and neither is done.

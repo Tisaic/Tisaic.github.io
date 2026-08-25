@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:274,built:"2026-08-25T14:22:29Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:275,built:"2026-08-25T14:35:10Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -6350,12 +6350,20 @@ $('pilotP-btn').addEventListener('click', startPilotP);
  * backlash limit cycle it is fighting, and the pilot's own verify could not see it —
  * commissioning excites a smaller envelope than a production feed. Released, the
  * correction wants 0.457 rad, the error settles at 3.2e-1 and the ladder goes FLAT.
- * Anchored so the shipped stiff machine is bit-for-bit unchanged (K 16 → 0.15), and
- * bounded at 1.0 rad, which is still inside the ±0.55 command box's own travel scale.
+ * Anchored so the shipped stiff machine is bit-for-bit unchanged (K 16 → 0.15).
  * The guards, the workspace predicate and the verify gate all still apply, so a larger
  * cap widens what the pilot MAY ask for and changes nothing about what it must prove.
+ *
+ * THE CEILING IS 2.0 rad, DOUBLED FROM 1.0 (brick 60). At the softest sliders the
+ * K-scaling wants 9.6 rad, so the CEILING is what binds, and it was measured binding: on
+ * the SHARP square the correction sat at exactly 1.000 for its peak — the cap, to three
+ * decimals — while the rounded square peaked at 0.552 and the circle at 0.589. A
+ * saturated correction cannot deliver the plan the QP solved for, and what it leaves is a
+ * BIAS: −0.128 on the sharp square against −0.013 on the rounded one. Only the ceiling
+ * moves; the K-scaling already handled everything else, and doubling the coefficient too
+ * would have moved the stiff machine that the anchor above exists to hold still.
  */
-function pilotUMax() { return Math.min(1.0, 0.15 * (16 / armP.K)); }
+function pilotUMax() { return Math.min(2.0, 0.15 * (16 / armP.K)); }
 function pilotDepth() { return +$('s-depthP').value; }
 /**
  * ONE PILOT, OR A CASCADE OF THEM. A Stack IS a Pilot as far as this page is concerned —
