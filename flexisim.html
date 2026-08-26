@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:296,built:"2026-08-26T19:01:13Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:297,built:"2026-08-26T20:41:54Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -559,7 +559,12 @@
         <option value="pilot_ilc">⑤+④ pilot + iterative learning on top</option>
         <option value="ikfree">⑥ fully learned — geometry from the tracker, dynamics from noise</option>
         <option value="ikfree_ilc">⑦ fully learned + iterative learning on top</option>
+        <option value="stack">⑧ the stack — conventional machine + pilot, switchable live</option>
       </select>
+      <div class="controls" id="stackRow" style="display:none">
+        <label><input type="checkbox" id="stk-comp" checked /> identified compliance</label>
+        <label><input type="checkbox" id="stk-pilot" checked /> pilot</label>
+      </div>
     </div>
     <div class="controls">
       <div class="slider"><span>Feedrate</span>
@@ -5499,7 +5504,27 @@ const PATH_MODE_LABEL = {
   pilot_ilc: 'the pilot + iterative learning on top',
   ikfree: 'fully learned — geometry from the tracker, dynamics from noise',
   ikfree_ilc: 'fully learned + iterative learning on top',
+  stack: 'the stack — conventional machine + pilot',
 };
+/**
+ * ⑧'s label is GENERATED FROM THE TOGGLES rather than restated beside them (rule 30): the
+ * whole value of the mode is that a box can be flipped mid-run, so a fixed caption would
+ * describe the configuration it used to have. It also names the case where a box is ticked
+ * but the thing behind it was never commissioned, which otherwise reads as a stack that
+ * simply does not help.
+ */
+function stackLabel() {
+  const c = $('stk-comp').checked, p = $('stk-pilot').checked;
+  const haveC = !!cP, haveP = !!(pilotP && pilotP.verdict && pilotP.verdict.deploy);
+  const on = [];
+  if (c && haveC) on.push('identified compliance');
+  if (p && haveP) on.push('pilot');
+  const missing = [];
+  if (c && !haveC) missing.push('compliance not commissioned');
+  if (p && !haveP) missing.push('pilot has not vouched for itself');
+  const body = on.length ? on.join(' + ') : 'nothing switched on — this is ① open loop';
+  return `the stack: ${body}${missing.length ? ` (${missing.join('; ')})` : ''}`;
+}
 // THE ILC's THREE NUMBERS, EVERY ONE OF THEM MEASURED RATHER THAN CHOSEN — see
 // lib/flexisim/pathilc.js, which carries the sweeps. The lead is the position loop's own
 // time constant (1/bandwidth) and is not a fitted parameter.
@@ -5869,6 +5894,38 @@ function pilotRefAt(i) {
 function predistortP(refs, cmd) {
   const m = pathMode();
   if (m === 'open') return [0, 0];
+  // ⑧ THE STACK, and the reason it is its own mode rather than a note under ⑤: every
+  // other correction here is EXCLUSIVE -- ③ returns its compliance term, ⑤ returns the
+  // pilot's, and neither ever sees the other. So the page could not answer the question a
+  // plant asks, which is what a learner adds ON TOP of a properly commissioned machine
+  // rather than instead of one.
+  //
+  // MEASURED IN test/flexisim/reconcile.test.mjs, one plant, one path, one baseline:
+  //     conventional (computed torque + PD + identified compliance)   4.396e-1
+  //       + pilot                                                    7.715e-2   5.70x
+  // That 5.70x is over a machine that ALREADY has computed torque and identified
+  // compliance, and it is larger than the 4.22x the pilot scored against a bare loop --
+  // which is the number this project could quote before and could not transfer.
+  //
+  // THE TOGGLES ARE THE INSTRUMENT. One machine, one lap, flip a box: two separate runs
+  // never convince anyone, and a stale comparison between two commissioning sessions is
+  // how a difference that is really seed noise gets reported as a result.
+  if (m === 'stack') {
+    const useC = $('stk-comp').checked && !!cP;
+    const useP = $('stk-pilot').checked
+      && !!(pilotP && pilotP.verdict && pilotP.verdict.deploy);
+    let d0 = 0, d1 = 0;
+    if (useC) {
+      const tg = servoP.jointTorques(refs);
+      d0 += -cP[0] * tg[0]; d1 += -cP[1] * tg[1];
+    }
+    if (useP) {
+      const base = Math.floor(kP / pilotP.sample);
+      const u = pilotP.act((off) => pilotRefAt(base + off));
+      d0 += u[0]; d1 += u[1];
+    }
+    return [clampDq(d0), clampDq(d1)];
+  }
   if (m === 'pilot' || m === 'pilot_ilc') {
     const base = Math.floor(kP / pilotP.sample);
     const u = pilotP.act((off) => pilotRefAt(base + off));
@@ -5943,6 +6000,13 @@ function pathMode() {
   // for. The same refusal shape again: selected but not commissioned quietly runs open.
   if ((want === 'ikfree' || want === 'ikfree_ilc')
     && !(ik6 && ik6.pilot && ik6.pilot.verdict && ik6.pilot.verdict.deploy)) return 'open';
+  // ⑧ NEEDS BOTH HALVES COMMISSIONED, and refuses the same way everything else here does
+  // rather than half-deploying: with only one of them it IS one of them, so the honest
+  // answer is to run that one and say so in the badge, not to pretend to be a stack.
+  if (want === 'stack') {
+    const haveC = !!cP, haveP = !!(pilotP && pilotP.verdict && pilotP.verdict.deploy);
+    if (!haveC && !haveP) return 'open';
+  }
   return want;
 }
 
@@ -6834,7 +6898,7 @@ function statsP() {
   rows.push(['step / lap', `${kP} · ${lapP}`]);
   const m = pathMode(), want = $('ctlP').value;
   rows.push(['correction', `<span class="${m === 'open' ? '' : 'good'}">`
-    + `${PATH_MODE_LABEL[m]}</span>`
+    + `${m === 'stack' ? stackLabel() : PATH_MODE_LABEL[m]}</span>`
     + (m !== want ? ' <span class="warn">(nothing identified yet — press Commission)</span>' : '')]);
   if (cP) {
     // THE IDENTIFIED CONSTANT AGAINST A NUMBER THE CONTROLLER ALREADY KNOWS. -1/K is what
@@ -7038,6 +7102,17 @@ function syncPath() {
   // program (the identifying lap silently stops being slow) or changes the acceleration
   // between two rungs that are supposed to differ only in feedrate.
   for (const id of ['ctlP', 'shapeP', 's-feedP', 's-accP', 's-cornP', 's-kP', 's-eP', 's-depthP', 's-rateP']) set(id, !idle);
+  // ⑧'S TOGGLES ARE VISIBLE ONLY UNDER ⑧, and they stay LIVE while the machine runs --
+  // that is the whole instrument. Everything else on this row is disabled mid-run because
+  // moving it would change the program underneath a measurement; these change only which
+  // correction is applied to the next step, which is exactly what they are for.
+  const stk = $('ctlP').value === 'stack';
+  const row = $('stackRow');
+  if (row && (row.style.display === 'none') === stk) row.style.display = stk ? '' : 'none';
+  // A BOX THAT CANNOT DO ANYTHING SAYS SO. Ticking `pilot` before the pilot has vouched
+  // for itself would otherwise look like a stack that simply does not help.
+  set('stk-comp', !cP);
+  set('stk-pilot', !(pilotP && pilotP.verdict && pilotP.verdict.deploy));
 }
 
 // ---------------------------------------------------------------- wiring
@@ -7114,10 +7189,31 @@ function syncPathLabels() {
   $('v-magP').textContent = `${MAG_LADDER[+$('s-magP').value]}×`;
 }
 
+/**
+ * WHAT ⑧ WOULD APPLY RIGHT NOW, at the live reference. The suite needs to prove a toggle
+ * ACTS, and the contour number cannot show that -- a toggle wired to nothing and a
+ * correction that does not help produce the same score. `predistortP` is the single
+ * function the step loop asks, so asking it the same question is the honest probe.
+ */
+window.__flxStackProbe = () => {
+  if (!armP || !profP) return [0, 0];
+  const cmd = profP.at(kP);
+  const [q1, q2] = armP.ik(cmd.x, cmd.y, true);
+  const rt = armP.ikRates(q1, q2, cmd.vx, cmd.vy, cmd.ax, cmd.ay);
+  return predistortP([{ theta: q1, omega: rt.dq[0], alpha: rt.ddq[0] },
+    { theta: q2, omega: rt.dq[1], alpha: rt.ddq[1] }], cmd);
+};
+
 window.__flxPathDbg = () => (armP ? {
   k: kP, lap: lapP, running: runP, busy: busyP,
   shape: $('shapeP').value, feed: pathFeed(), accel: pathAccel(), corner: pathCorner(),
   rate: pilotRate(), depth: pilotDepth(),
+  // ⑧'s live state, because a toggle that silently did nothing is the failure mode this
+  // mode is most exposed to and the contour number alone cannot tell it from a correction
+  // that is applied and does not help.
+  stack: { mode: $('ctlP').value, comp: $('stk-comp').checked, pilot: $('stk-pilot').checked,
+    haveComp: !!cP,
+    havePilot: !!(pilotP && pilotP.verdict && pilotP.verdict.deploy) },
   pending: progPending,
   path: { length: profP.length, lapSteps: profP.lap, closed: profP.closed,
     vMin: Math.min(...profP.v), vMax: Math.max(...profP.v) },

@@ -2881,6 +2881,49 @@ if (FULL) {
   check('flexisim/path: …and the deployed pilot cuts the contour on a program it never saw',
     lapPilot.contourRms < 3.5e-2, lapPilot.contourRms.toExponential(3));
   await fx.screenshot({ path: join(SHOTS, '10-flexisim-path-pilot.png') });
+
+  // ---- MODE 8, THE STACK. What only the page can break here is the WIRING: that the
+  // toggles are live mid-run and that flipping one actually changes what is applied. The
+  // performance is pinned in test/flexisim/reconcile.test.mjs, in plain Node, where the
+  // pilot measures 5.70x over a conventional machine that already carries computed torque
+  // and identified compliance.
+  //
+  // THE FAILURE THIS GUARDS AGAINST IS A TOGGLE THAT DOES NOTHING, which the contour
+  // number cannot distinguish from a correction that is applied and does not help -- the
+  // same shape as the refused pilot that printed 1.00x with zero effort three times before
+  // anyone looked at uPk.
+  await fx.evaluate(() => {
+    const el = document.getElementById('ctlP');
+    el.value = 'stack';
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  const stk = await fx.evaluate(() => window.__flxPathDbg().stack);
+  check('flexisim/path: ⑧ knows both halves are commissioned',
+    stk.haveComp === true && stk.havePilot === true, JSON.stringify(stk));
+  check('flexisim/path: …and its toggles are exposed and both on by default',
+    stk.comp === true && stk.pilot === true, JSON.stringify(stk));
+  // FLIP THE PILOT OFF MID-RUN and read what the machine applies. `predistortP` is the one
+  // function that decides, so calling it directly at the live reference is the honest probe
+  // -- it is what the step loop calls.
+  const applied = await fx.evaluate(() => {
+    const dbg = window.__flxPathDbg();
+    const both = window.__flxStackProbe();
+    document.getElementById('stk-pilot').checked = false;
+    const compOnly = window.__flxStackProbe();
+    document.getElementById('stk-pilot').checked = true;
+    document.getElementById('stk-comp').checked = false;
+    const pilotOnly = window.__flxStackProbe();
+    document.getElementById('stk-comp').checked = true;
+    return { both, compOnly, pilotOnly, k: dbg.k };
+  });
+  const differs = (a, b) => Math.abs(a[0] - b[0]) > 1e-12 || Math.abs(a[1] - b[1]) > 1e-12;
+  check('flexisim/path: ⑧ turning the pilot off changes the applied correction',
+    differs(applied.both, applied.compOnly),
+    `both ${JSON.stringify(applied.both)} vs comp-only ${JSON.stringify(applied.compOnly)}`);
+  check('flexisim/path: …and turning the compliance off changes it too, so both toggles act',
+    differs(applied.both, applied.pilotOnly),
+    `both ${JSON.stringify(applied.both)} vs pilot-only ${JSON.stringify(applied.pilotOnly)}`);
+  await fx.screenshot({ path: join(SHOTS, '11-flexisim-path-stack.png') });
 }
 
 // ---- THE BLACK BOX: the same arm, and a controller told nothing about it. Full tier

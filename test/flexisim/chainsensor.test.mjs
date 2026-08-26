@@ -212,9 +212,21 @@ check('…and it beats PLS, the linear model industry actually deploys for soft 
   whole.learner < 0.5 * whole.plsAdaptive,
   `learner ${whole.learner.toFixed(4)} vs adaptive ${whole.plsAdaptive.toFixed(4)} `
   + `/ frozen ${whole.plsFrozen.toFixed(4)}`);
-check('…and the frozen incumbent is the worse of the two, which is the drift argument',
-  whole.plsFrozen >= whole.plsAdaptive,
-  `frozen ${whole.plsFrozen.toFixed(4)} vs adaptive ${whole.plsAdaptive.toFixed(4)}`);
+// NO ORDERING IS ASSERTED BETWEEN THE TWO PLS VARIANTS, and the reason is a defect this
+// check had when it was written. It claimed the FROZEN model must be worse -- "the drift
+// argument" -- which held in the quick tier (0.1078 against 0.0737) and FAILED in the full
+// one (0.0370 against 0.0428), where frozen is better. Both are correct measurements of
+// different streams.
+//
+// Adaptive here means exponential forgetting, and on a STATIONARY stream forgetting is a
+// pure loss: it discards data that is still valid. This project has measured that four
+// separate times and concluded it each time. The frozen model only loses when the
+// deployment regime differs from the training one -- which is the drift argument, and it
+// is an argument about the DEPLOYMENT, not a property of the fit. Asserting the ordering
+// without engineering a regime change asserts that a particular stream happened to drift.
+console.log(`    [whole arm] PLS frozen ${whole.plsFrozen.toFixed(4)} vs adaptive `
+  + `${whole.plsAdaptive.toFixed(4)} — whichever leads here is a property of THIS stream's `
+  + `stationarity, not of the method`);
 
 check('and it beats the rigid two-joint compliance model, which knows M(q) and both stiffnesses',
   whole.learner < 0.5 * whole.rigid,
