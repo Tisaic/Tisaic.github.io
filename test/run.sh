@@ -191,6 +191,10 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # off when switched off makes an A/B meaningless, and a NaN estimate reaching a servo
     # command is unrecoverable.
     node test/flexisim/residual.test.mjs
+    # THE HONEST HEAD-TO-HEAD: a properly commissioned CONVENTIONAL machine, and three
+    # learned layers switched over it one at a time. Full tier -- six commissioned runs
+    # per stiffness -- because what it pins is a comparison, not a contract.
+    if [ "${SUITE}" = "full" ]; then node test/flexisim/hybrid.test.mjs; fi
     # THE MODULE THAT IS GIVEN NOTHING, on three plants that share no physics: a
     # lightly damped actuator, an over-damped process with a NEGATIVE gain two hundred
     # times smaller, and the real hybrid arm. One module, one set of options apart from a
