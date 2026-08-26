@@ -92,7 +92,15 @@ function commissionComp(arm, servo) {
   return rc;
 }
 
-async function run({ K, E, T, P, F, nTrain = 900, laps = 3, govTol = 0.6 }) {
+/**
+ * `live` -- TRAIN WITH THE INJECTIONS ACTIVE instead of training, locking, and only then
+ * switching them on. The first version did the latter, which is this project's oldest
+ * failure in a new costume: a model fitted in one regime, deployed into another it then
+ * CHANGED itself. It separates two explanations that were tangled together -- a
+ * distribution mismatch, which training through the injection fixes, and a closed signal
+ * path carrying a 1020-step delayed estimate, which it cannot.
+ */
+async function run({ K, E, T, P, F, nTrain = 900, laps = 3, govTol = 0.6, live = false }) {
   const { arm, l1, l2 } = await machine({ K, E });
   const servo = new ChainServo({ arm, bandwidth: 2e-3 });
   const rc = commissionComp(arm, servo);
@@ -149,7 +157,10 @@ async function run({ K, E, T, P, F, nTrain = 900, laps = 3, govTol = 0.6 }) {
       const sp = Math.hypot(cmd.vx, cmd.vy) || 1;
       const nx = -cmd.vy / sp, ny = cmd.vx / sp;
       let dq = [0, 0], dtau = [0, 0];
-      if ((P || T) && trained >= nTrain) {
+      // With `live`, the correction acts from `warmN` onward while the model is STILL
+      // TRAINING, so every pair it learns from is a pair taken with the loop closed.
+      const warmN = live ? Math.round(0.35 * nTrain) : nTrain;
+      if ((P || T) && trained >= warmN) {
         const J = arm.jacobian(c1, c2);
         const det = J[0][0] * J[1][1] - J[0][1] * J[1][0];
         if (Math.abs(det) > 1e-12) {
@@ -181,8 +192,12 @@ async function run({ K, E, T, P, F, nTrain = 900, laps = 3, govTol = 0.6 }) {
       if ((step % SAMPLE) === 0) {
         const y = cs.observe(arm, tau, 1);
         if (y !== null) {
-          if (cs.trained < nTrain) { cs.train(d.contour); trained = cs.trained; }
-          else {
+          if (cs.trained < nTrain) {
+            cs.train(d.contour); trained = cs.trained;
+            // The estimate is needed DURING training in the live arrangement, because that
+            // is what the injection is driven from.
+            if (live) { est = y; fc = cs.forecast ?? y; }
+          } else {
             if (cs.mode === 'training') cs.lock();
             est = y; fc = cs.forecast ?? y;
             trained = cs.trained;
@@ -221,6 +236,8 @@ for (const c of CASES) {
   const rF = await run({ ...c, T: 0, P: 0, F: 1, govTol: gt });
   const rPF = await run({ ...c, T: 0, P: 1, F: 1, govTol: gt });
   const rTPF = await run({ ...c, T: 1, P: 1, F: 1, govTol: gt });
+  const rPlive = await run({ ...c, T: 0, P: 1, F: 0, govTol: gt, live: true });
+  const rTlive = await run({ ...c, T: 1, P: 0, F: 0, govTol: gt, live: true });
   const x = (r) => (base.contour / r.contour).toFixed(2);
   console.log(`  [${c.tag} K ${c.K} E ${c.E}]  conventional baseline contour `
     + `${base.contour.toExponential(3)}  (bias ${base.bias.toExponential(2)} osc `
@@ -234,6 +251,10 @@ for (const c of CASES) {
     + `time ${rPF.time.toFixed(3)}x`);
   console.log(`      + T P and F     ${rTPF.contour.toExponential(3)}  ${x(rTPF)}x   `
     + `time ${rTPF.time.toFixed(3)}x`);
+  console.log(`      + P trained LIVE (injection active while learning) `
+    + `${rPlive.contour.toExponential(3)}  ${x(rPlive)}x   estimate nRMSE `
+    + `${Number.isFinite(rPlive.estNrmse) ? rPlive.estNrmse.toFixed(3) : 'n/a'}`);
+  console.log(`      + T trained LIVE  ${rTlive.contour.toExponential(3)}  ${x(rTlive)}x`);
   if (c.tag.trim() === 'soft') {
     check('the conventional machine is a real baseline, not an open loop',
       base.contour > 0 && Number.isFinite(base.contour), `${base.contour}`);
@@ -266,6 +287,27 @@ for (const c of CASES) {
     check('…and not because the estimate is poor, which is what separates an architecture '
       + 'result from a sensor one',
       rP.estNrmse < 0.5, `estimate nRMSE ${rP.estNrmse.toFixed(3)}`);
+    // TRAINING WITH THE INJECTION ACTIVE IS THE RIGHT TOOLING AND IT IS NOT THE
+    // CONSTRAINT, which is the pair of facts that separates a fit problem from a loop one.
+    // The first arrangement trained the model, locked it, and THEN switched the injection
+    // on -- a model fitted in one regime and deployed into another it proceeded to change,
+    // which is this project's oldest failure. Fixing it works exactly as intended: the
+    // readout goes 0.322 -> 0.177, nearly twice as good.
+    //
+    // AND THE MACHINE DOES NOT MOVE, 0.81x -> 0.82x. If estimate quality had been what
+    // limited these layers, a 1.8x better estimate had to show up in the contour. It did
+    // not. That is the second time in this session that better information failed to buy a
+    // better machine -- the first was an ORACLE, the true load angle, which made a servo
+    // loop worse. The constraint is the loop: a reading carrying a 1020-step window's lag,
+    // applied at unity gain into a path that closes back on itself. No fit removes a delay.
+    check('training WITH the injection active makes the estimate markedly better',
+      rPlive.estNrmse < 0.75 * rP.estNrmse,
+      `${rP.estNrmse.toFixed(3)} → ${rPlive.estNrmse.toFixed(3)}`);
+    check('…and the machine is NOT better for it, so the limit is the loop and not the fit',
+      Math.abs(rPlive.contour / rP.contour - 1) < 0.1 && rPlive.contour > base.contour,
+      `${rP.contour.toExponential(3)} → ${rPlive.contour.toExponential(3)} against a `
+      + `baseline of ${base.contour.toExponential(3)}`);
+
     check('the predictive feedrate governor IS worth its place, acting on the forecast and '
       + 'on the planner rather than on the loop',
       rF.contour < base.contour, `${rF.contour.toExponential(3)} vs ${base.contour.toExponential(3)}`);
