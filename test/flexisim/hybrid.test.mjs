@@ -39,7 +39,7 @@ import { Joint } from '../../lib/flexisim/joint.js';
 import { FlexArm2R } from '../../lib/flexisim/arm2r.js';
 import { buildLink, massProperties } from '../../lib/flexisim/link.js';
 import { ChainServo } from '../../lib/flexisim/compensator.js';
-import { roundedRect } from '../../lib/flexisim/toolpath.js';
+import { roundedRect, sharpRect } from '../../lib/flexisim/toolpath.js';
 import { ContourScore, decompose } from '../../lib/flexisim/contour.js';
 import { ChainSensor } from '../../lib/flexisim/chainsensor.js';
 import { ResidualTrim } from '../../lib/flexisim/residual.js';
@@ -100,14 +100,25 @@ function commissionComp(arm, servo) {
  * distribution mismatch, which training through the injection fixes, and a closed signal
  * path carrying a 1020-step delayed estimate, which it cannot.
  */
-async function run({ K, E, T, P, F, nTrain = 900, laps = 3, govTol = 0.6, live = false }) {
+/**
+ * `commission` -- trajectories the sensor may LEARN from, and `deploy` -- the one it is
+ * SCORED on. Default: the same single path for both, which is what the first version of
+ * this file did throughout and which is the least realistic arrangement available. A model
+ * trained on exactly the trajectory it is then judged on is scored in-distribution, and
+ * the transfer test measures what that model is worth elsewhere: nRMSE above 1 on three of
+ * four unseen paths, i.e. worse than predicting the mean. Both facts were measured here and
+ * never put together.
+ */
+async function run({ K, E, T, P, F, nTrain = 900, laps = 3, govTol = 0.6, live = false,
+  commission = null, deploy = null }) {
   const { arm, l1, l2 } = await machine({ K, E });
   const servo = new ChainServo({ arm, bandwidth: 2e-3 });
   const rc = commissionComp(arm, servo);
 
   const feed = 4e-3;
-  const path = roundedRect({ w: 8, h: 8, r: 1.5, centre: [14, 1], feed,
-    accel: 4e-5, cornerDt: 40, closed: true });
+  const HOME = { w: 8, h: 8, r: 1.5, centre: [14, 1], feed, accel: 4e-5, cornerDt: 40,
+    closed: true };
+  const path = deploy ? deploy() : roundedRect(HOME);
   const lap = Math.ceil(path.lap);
   const [q10, q20] = arm.ik(path.at(0).x, path.at(0).y, true);
   arm.setPose(q10, q20);
@@ -138,8 +149,55 @@ async function run({ K, E, T, P, F, nTrain = 900, laps = 3, govTol = 0.6, live =
   const gov = new FeedGovernor({ tolerance: govTol, deadband: 0.45 * govTol, floor: 0.5,
     rateMax: 0.004 });
 
+  // COMMISSION OVER THE ENVELOPE FIRST, if one was given: drive each trajectory with the
+  // conventional machine and let the sensor learn, then LOCK before the deploy path is
+  // ever seen. The tracker is present here and nowhere after.
+  let preTrained = 0;
+  if (commission) {
+    for (const mk of commission) {
+      const cp = mk();
+      const clap = Math.ceil(cp.lap);
+      const [a0, b0] = arm.ik(cp.at(0).x, cp.at(0).y, true);
+      arm.setPose(a0, b0);
+      for (let i = 0; i < 3000; i++) {
+        const t = servo.torques([{ theta: a0, omega: 0, alpha: 0 },
+          { theta: b0, omega: 0, alpha: 0 }]);
+        arm.step(t[0], t[1], 1);
+      }
+      for (let l = 0; l < 2; l++) {
+        for (let k = 0; k < clap; k++) {
+          const cmd = cp.at(k);
+          const [c1, c2] = arm.ik(cmd.x, cmd.y, true);
+          const r = arm.ikRates(c1, c2, cmd.vx, cmd.vy, cmd.ax, cmd.ay);
+          const tgc = servo.jointTorques([{ theta: c1, omega: r.dq[0], alpha: r.ddq[0] },
+            { theta: c2, omega: r.dq[1], alpha: r.ddq[1] }]);
+          const ffc = rc.feedforward([[1, 0], [0, 1]], tgc, { enableToolff: false });
+          const t = servo.torques([
+            { theta: c1 + ffc.dq[0], omega: r.dq[0], alpha: r.ddq[0] },
+            { theta: c2 + ffc.dq[1], omega: r.dq[1], alpha: r.ddq[1] }]);
+          arm.step(t[0], t[1], 1);
+          if ((k % SAMPLE) !== 0) continue;
+          const y = cs.observe(arm, t, 1);
+          if (y === null) continue;
+          cs.train(decompose(cp, arm.toolXY(), cmd).contour);
+        }
+      }
+      await cp; // no-op; keeps the shape obvious
+    }
+    cs.lock();
+    preTrained = cs.status().trained;
+    // Re-settle onto the DEPLOY path, which the sensor has never seen.
+    const [a1, b1] = arm.ik(path.at(0).x, path.at(0).y, true);
+    arm.setPose(a1, b1);
+    for (let i = 0; i < 3000; i++) {
+      const t = servo.torques([{ theta: a1, omega: 0, alpha: 0 },
+        { theta: b1, omega: 0, alpha: 0 }]);
+      arm.step(t[0], t[1], 1);
+    }
+  }
+
   const score = new ContourScore({ joints: 2 });
-  let s = 0, tau = [0, 0], est = 0, fc = 0, trained = 0;
+  let s = 0, tau = [0, 0], est = 0, fc = 0, trained = commission ? nTrain : 0;
   const estE = [], estT = [];
   const scored = { n: 0 };
   for (let l = 0; l < laps; l++) {
@@ -192,7 +250,7 @@ async function run({ K, E, T, P, F, nTrain = 900, laps = 3, govTol = 0.6, live =
       if ((step % SAMPLE) === 0) {
         const y = cs.observe(arm, tau, 1);
         if (y !== null) {
-          if (cs.trained < nTrain) {
+          if (!commission && cs.trained < nTrain) {
             cs.train(d.contour); trained = cs.trained;
             // The estimate is needed DURING training in the live arrangement, because that
             // is what the injection is driven from.
@@ -219,7 +277,7 @@ async function run({ K, E, T, P, F, nTrain = 900, laps = 3, govTol = 0.6, live =
   for (let i = 0; i < estT.length; i++) { se += (estE[i] - estT[i]) ** 2; sv += (estT[i] - m) ** 2; }
   const estNrmse = sv > 0 ? Math.sqrt(se / sv) : NaN;
   return { contour: rep.contourRms, bias: rep.contourBias, osc: rep.contourOsc, estNrmse,
-    time: F ? gov.timeCost() : 1, peakT: trimT.peak, peakP: trimP.peak,
+    preTrained, time: F ? gov.timeCost() : 1, peakT: trimT.peak, peakP: trimP.peak,
     gov: gov.status() };
 }
 
@@ -314,6 +372,46 @@ for (const c of CASES) {
     check('the feedrate governor reports its cycle-time cost rather than hiding it',
       rF.time >= 1 && Number.isFinite(rF.time), `${rF.time}`);
   }
+}
+
+// ---- THE DEPLOYMENT-REALISTIC RUN, and the one everything above was missing.
+//
+// Every row above trains the sensor on exactly the trajectory it is then scored on. That
+// is in-distribution, and the transfer test measures what such a model is worth elsewhere:
+// nRMSE above 1 on three of four unseen paths. So the whole factorial was run in the most
+// favourable and least realistic arrangement available, and the honest question -- commission
+// over an ENVELOPE, lock, then deploy on a path never run -- was never asked.
+//
+// Here it is: five rounded rectangles spanning speed and size to learn from, then a SHARP
+// SQUARE to work on. Different geometry, corners it has never seen, tracker long gone.
+{
+  const feed = 4e-3, accel = 4e-5, C = [14, 1];
+  const HOME = { w: 8, h: 8, r: 1.5, centre: C, feed, accel, cornerDt: 40, closed: true };
+  const ENV = [
+    () => roundedRect({ ...HOME }),
+    () => roundedRect({ ...HOME, feed: 2.6e-3 }),
+    () => roundedRect({ ...HOME, feed: 5.2e-3 }),
+    () => roundedRect({ ...HOME, w: 11.5, h: 11.5, r: 2.2 }),
+    () => roundedRect({ ...HOME, w: 6, h: 6, r: 1.1 }),
+  ];
+  const UNSEEN = () => sharpRect({ w: 8, h: 8, centre: C, feed, accel, cornerDt: 40 });
+  const c = { K: 1, E: 0.06 };
+  const b = await run({ ...c, T: 0, P: 0, F: 0, commission: ENV, deploy: UNSEEN });
+  const gt = 1.4 * b.contour;
+  const p = await run({ ...c, T: 0, P: 1, F: 0, commission: ENV, deploy: UNSEEN, govTol: gt });
+  const f = await run({ ...c, T: 0, P: 0, F: 1, commission: ENV, deploy: UNSEEN, govTol: gt });
+  const xx = (r) => (b.contour / r.contour).toFixed(2);
+  console.log(`\n  [ENVELOPE-commissioned, deployed on a SHARP SQUARE it never ran]`);
+  console.log(`      conventional     ${b.contour.toExponential(3)}   (${b.preTrained} `
+    + `samples over 5 trajectories, then locked)`);
+  console.log(`      + P position     ${p.contour.toExponential(3)}  ${xx(p)}x   `
+    + `estimate nRMSE ${Number.isFinite(p.estNrmse) ? p.estNrmse.toFixed(3) : 'n/a'}`);
+  console.log(`      + F feedrate     ${f.contour.toExponential(3)}  ${xx(f)}x   `
+    + `time ${f.time.toFixed(3)}x`);
+  check('the sensor transfers to the unseen deploy path well enough to be worth reading',
+    p.estNrmse < 1.0, `estimate nRMSE ${p.estNrmse.toFixed(3)}`);
+  check('…and the feedrate governor still earns its place on a path nobody commissioned',
+    f.contour < b.contour, `${f.contour.toExponential(3)} vs ${b.contour.toExponential(3)}`);
 }
 
 console.log(failed ? `\nhybrid: ${failed} check(s) FAILED\n` : '\nhybrid: all checks passed\n');
