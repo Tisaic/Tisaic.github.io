@@ -195,6 +195,11 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # learned layers switched over it one at a time. Full tier -- six commissioned runs
     # per stiffness -- because what it pins is a comparison, not a contract.
     if [ "${SUITE}" = "full" ]; then node test/flexisim/hybrid.test.mjs; fi
+    # WHAT A LOCKED READOUT SAYS ABOUT A PATH IT HAS NEVER RUN -- the one claim here that
+    # the classical rivals cannot structurally reach, since an ILC table indexed by arc
+    # length on a path that no longer exists supplies nothing. Full tier: six commissioned
+    # trajectories plus five transfers.
+    if [ "${SUITE}" = "full" ]; then node test/flexisim/transfer.test.mjs; fi
     # THE MODULE THAT IS GIVEN NOTHING, on three plants that share no physics: a
     # lightly damped actuator, an over-damped process with a NEGATIVE gain two hundred
     # times smaller, and the real hybrid arm. One module, one set of options apart from a
