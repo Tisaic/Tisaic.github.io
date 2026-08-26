@@ -21,6 +21,15 @@ import { FlexArm2R } from '../../lib/flexisim/arm2r.js';
 import { buildLink, massProperties } from '../../lib/flexisim/link.js';
 import { AngleProfile, ChainServo } from '../../lib/flexisim/compensator.js';
 import { ChainSensor } from '../../lib/flexisim/chainsensor.js';
+import { plsMake, plsObserve, plsFit, plsPredict } from '../../lib/ngrc/pls.js';
+
+// COMPONENTS AT FULL RANK, which is what makes this a real baseline and not a strawman.
+// PLS's advantage lives in the p >> n regime (many correlated sensors, few samples); a lag
+// window is not that, and on the NGRC soft-sensor plant more components was monotonically
+// better right up to full rank. At full rank PLS IS ordinary least squares on the window --
+// the strongest linear model available on these signals, which is exactly what the learner
+// should have to beat.
+const PLS_A = 200;
 import { nrmse } from '../../lib/flexisim/tipsensor.js';
 
 const FULL = process.env.SUITE === 'full';
@@ -83,6 +92,26 @@ async function session({ joints = [0, 1], lag = 18, stride = 6, nTrain = 900, nT
   const cs = new ChainSensor({ joints, sampleEvery: SAMPLE, lag, stride, lead });
 
   const est = [], truth = [], rigid = [], fc = [], alpha = [];
+  // ---- PLS, THE INCUMBENT, on the SAME lagged window the learner's features are built
+  // from, so the only difference is the model class. It is fed from `cs.lastSignals`
+  // rather than by calling `signals()` again: that call updates the sensor's own previous
+  // speeds, so a second call per sample would corrupt the accelerations of the very model
+  // it is being compared against.
+  const sigRing = [];
+  const plsDim = joints.length * (5 + 0) * lag;
+  const plsF = plsMake(plsDim);          // FROZEN after the same training window
+  const plsA = plsMake(plsDim);          // ADAPTIVE: forgetting + periodic refit
+  const plsEstF = [], plsEstA = [];
+  let plsFitted = false;
+  const plsWindow = () => {
+    if (sigRing.length < (lag - 1) * stride + 1) return null;
+    const w = [];
+    for (let l = 0; l < lag; l++) {
+      const v = sigRing[sigRing.length - 1 - l * stride];
+      for (let i = 0; i < v.length; i++) w.push(v[i]);
+    }
+    return w.length === plsDim ? w : null;
+  };
   let k = 0, tau = [0, 0];
   for (let i = 0; i < nTrain + nTest + 200; i++) {
     for (let n = 0; n < SAMPLE; n++) {
@@ -100,11 +129,32 @@ async function session({ joints = [0, 1], lag = 18, stride = 6, nTrain = 900, nT
     }
     const y = cs.observe(arm, tau, 1);
     const e = arm.tipError();
+    if (cs.lastSignals) { sigRing.push(cs.lastSignals.slice());
+      if (sigRing.length > lag * stride + 4) sigRing.shift(); }
     if (y === null) continue;
-    if (cs.trained < nTrain) { cs.train(e.total); continue; }
+    if (cs.trained < nTrain) {
+      cs.train(e.total);
+      const w = plsWindow();
+      // Both PLS variants see exactly the pairs the learner trains on.
+      if (w) { plsObserve(plsF, w, e.total, 1); plsObserve(plsA, w, e.total, 0.999); }
+      continue;
+    }
     if (cs.mode === 'training') cs.lock();
+    if (!plsFitted) { plsFit(plsF, PLS_A); plsFit(plsA, PLS_A); plsFitted = true; }
     if (est.length >= nTest) break;
     est.push(y); truth.push(e.total);
+    {
+      const w = plsWindow();
+      // FROZEN never sees another sample -- the incumbent as deployed. ADAPTIVE keeps
+      // accumulating with forgetting and refits every 100 samples, which is the stronger
+      // and rarer recursive variant. Neither is given the truth after the lock in a way
+      // the learner is not: the learner is LOCKED, so adaptive PLS is if anything
+      // FLATTERED here, and that is the safe direction for a baseline.
+      plsEstF.push(w ? (plsPredict(plsF, w) ?? 0) : 0);
+      if (w) { plsObserve(plsA, w, e.total, 0.999);
+        if (est.length % 100 === 0) plsFit(plsA, PLS_A); }
+      plsEstA.push(w ? (plsPredict(plsA, w) ?? 0) : 0);
+    }
     if (lead > 0) fc.push(cs.forecast);
     // THE RIGID BASELINE GETS BOTH ENCODERS whatever the model is allowed to read.
     // It is the physics-based rival -- M(q), both stiffnesses, both lever arms --
@@ -116,7 +166,8 @@ async function session({ joints = [0, 1], lag = 18, stride = 6, nTrain = 900, nT
   }
   await link1.destroy(); await link2.destroy();
   const out = { learner: nrmse(est, truth), naive: nrmse(truth.map(() => 0), truth),
-    rigid: nrmse(rigid, truth), status: cs.status(), n: est.length };
+    rigid: nrmse(rigid, truth), plsFrozen: nrmse(plsEstF, truth),
+    plsAdaptive: nrmse(plsEstA, truth), status: cs.status(), n: est.length };
   if (lead > 0) {
     const want = truth.slice(lead);
     out.forecast = nrmse(fc.slice(0, fc.length - lead), want);
@@ -129,7 +180,8 @@ async function session({ joints = [0, 1], lag = 18, stride = 6, nTrain = 900, nT
 const whole = await session({ joints: [0, 1], lag: 18, stride: 6, lead: FULL ? 15 : 0,
   nTrain: FULL ? 1200 : 900, nTest: FULL ? 500 : 400 });
 console.log(`    [whole arm] learner ${whole.learner.toFixed(4)}   rigid model `
-  + `${whole.rigid.toFixed(4)}   "the tool is where the encoders say" `
+  + `${whole.rigid.toFixed(4)}   PLS frozen ${whole.plsFrozen.toFixed(4)}   PLS adaptive `
+  + `${whole.plsAdaptive.toFixed(4)}   "the tool is where the encoders say" `
   + `${whole.naive.toFixed(4)}   (${whole.n} locked samples, ${whole.status.features} features `
   + `from ${whole.status.signals} signals)`);
 check('the chain sensor reaches a locked, frozen readout',
@@ -141,6 +193,29 @@ check('the chain sensor reaches a locked, frozen readout',
 check('a locked whole-arm sensor beats the controller\'s own view of where the tool is',
   whole.learner < 0.2 * whole.naive,
   `${whole.learner.toFixed(4)} vs ${whole.naive.toFixed(4)}`);
+// ---- PLS IS THE INCUMBENT, and it is the baseline that makes this claim commercial.
+// A Kalman filter needs state equations nobody has for tool deflection; what industry
+// actually deploys for a soft sensor is PLS on the measured signals. It is given the SAME
+// lagged window the learner's features are built from and fitted at FULL RANK, where PLS
+// is ordinary least squares on that window -- the strongest linear model these signals
+// support. So the only difference between them is the model class, which is the whole
+// point: if the relationship were linear, the incumbent would win and this library would
+// have no case here.
+//
+// The FROZEN variant is the incumbent as actually deployed -- fitted once and left. The
+// ADAPTIVE one keeps accumulating with forgetting and refits every 100 samples, which is
+// the stronger and rarer recursive variant, and it is FLATTERED relative to the learner:
+// the learner is LOCKED and never sees truth again after commissioning, while adaptive PLS
+// keeps being told the answer. That asymmetry runs against the claim, which is the safe
+// direction for a baseline to be wrong in.
+check('…and it beats PLS, the linear model industry actually deploys for soft sensing',
+  whole.learner < 0.5 * whole.plsAdaptive,
+  `learner ${whole.learner.toFixed(4)} vs adaptive ${whole.plsAdaptive.toFixed(4)} `
+  + `/ frozen ${whole.plsFrozen.toFixed(4)}`);
+check('…and the frozen incumbent is the worse of the two, which is the drift argument',
+  whole.plsFrozen >= whole.plsAdaptive,
+  `frozen ${whole.plsFrozen.toFixed(4)} vs adaptive ${whole.plsAdaptive.toFixed(4)}`);
+
 check('and it beats the rigid two-joint compliance model, which knows M(q) and both stiffnesses',
   whole.learner < 0.5 * whole.rigid,
   `${whole.learner.toFixed(4)} vs ${whole.rigid.toFixed(4)} `
