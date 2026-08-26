@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:287,built:"2026-08-25T23:11:03Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:288,built:"2026-08-26T00:23:45Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -521,6 +521,9 @@
       <div class="slider"><span>Cascade depth</span>
         <input type="range" id="s-depthP" min="1" max="3" step="1" value="1" />
         <span class="v" id="v-depthP">1</span></div>
+      <div class="slider"><span>Control rate</span>
+        <input type="range" id="s-rateP" min="30" max="120" step="30" value="60" />
+        <span class="v" id="v-rateP">60</span></div>
     </div>
     <p class="hint" id="hintP"><b>Commission</b> traces one lap with the tracker watching and
       fits <b>one compliance constant per joint</b> to the tool's own deviation, then puts the
@@ -531,7 +534,12 @@
       at 2 or 3, a SECOND (and third) pilot is commissioned on the machine with the one below
       it deployed and frozen, so each layer models what the previous one left rather than
       repeating it — the cost is commissioning time multiplied, and each layer still has to
-      vouch for itself on the machine or the stack stops there. <b>Sweep</b> runs the same
+      vouch for itself on the machine or the stack stops there. <b>Control rate</b> is the
+      pilot's own clock, in decisions per settling time: at 30 the gap between decisions is
+      wider than the ~40 steps a corner's acceleration lasts, so the pilot cannot resolve the
+      event it most needs to pre-shape. The effort weight rescales itself with the rate, which
+      is why this is one slider and not two — moving the clock alone measures WORSE, and that
+      is how the gain stayed hidden. <b>Sweep</b> runs the same
       path at every feedrate and tabulates what each one costs, because accuracy and energy do
       not have their optimum at the same speed.</p>
 
@@ -6379,6 +6387,16 @@ function pilotUMax() { return Math.min(2.0, 0.15 * (16 / armP.K)); }
  */
 function pilotIdentAmp() { return Math.min(1.0, 0.15 * (16 / armP.K)); }
 function pilotDepth() { return +$('s-depthP').value; }
+// DECISIONS PER SETTLING TIME -- the pilot's own clock, and until this it was pinned at 30
+// by a QP-tractability constant that no control on this page could reach. A corner's
+// acceleration event lasts ~40 solver steps and at 30 the decision spacing is 64, so the
+// pilot could not resolve the event it most needs to pre-shape. Measured on the sharp
+// square at the softest sliders, against the matched 30/1x baseline: 4.62x -> 5.02x, the
+// rounded rectangle 6.44x -> 8.02x and the circle 12.93x -> 14.40x. The effort weight
+// rescales itself by (rate/30)^2 inside the pilot, so this is ONE knob and not a pair that
+// has to be moved together -- moving the clock alone is a measured LOSS (2.33x), which is
+// exactly how it stayed hidden. 120 overshoots: the win is a matched pair, not a direction.
+function pilotRate() { return +$('s-rateP').value; }
 /**
  * ONE PILOT, OR A CASCADE OF THEM. A Stack IS a Pilot as far as this page is concerned —
  * same phase/note/command/observe/act/status — so the depth control changes what is
@@ -6396,7 +6414,7 @@ function makePilot(o) {
   // rule would drop a layer before it could be watched. All three are still MEASURED and
   // reported — `wouldRefuse`, `wouldGate`, and the layer's `partial` note — because the
   // point is to SEE the failure, and a refusal shows you the absence of one instead.
-  const o2 = { ...o, autoRefuse: false, gateForecasts: false };
+  const o2 = { ...o, autoRefuse: false, gateForecasts: false, decisionsPerTs: pilotRate() };
   return depth > 1 ? new Stack({ ...o2, depth, refusePartial: false }) : new Pilot(o2);
 }
 
@@ -7019,7 +7037,7 @@ function syncPath() {
   // of their own, and a slider moved underneath either one either overwrites the routine's
   // program (the identifying lap silently stops being slow) or changes the acceleration
   // between two rungs that are supposed to differ only in feedrate.
-  for (const id of ['ctlP', 'shapeP', 's-feedP', 's-accP', 's-cornP', 's-kP', 's-eP', 's-depthP']) set(id, !idle);
+  for (const id of ['ctlP', 'shapeP', 's-feedP', 's-accP', 's-cornP', 's-kP', 's-eP', 's-depthP', 's-rateP']) set(id, !idle);
 }
 
 // ---------------------------------------------------------------- wiring
@@ -7073,7 +7091,7 @@ for (const id of ['s-kP', 's-eP']) {
     finally { busyP = false; syncPath(); }
   });
 }
-for (const id of ['s-spfP', 's-magP', 's-depthP']) $(id).addEventListener('input', syncPathLabels);
+for (const id of ['s-spfP', 's-magP', 's-depthP', 's-rateP']) $(id).addEventListener('input', syncPathLabels);
 $('ctlP').addEventListener('change', () => {
   if ($('ctlP').value === 'ilc' && !ilcP && profP) makeILC(true);
   if ($('ctlP').value === 'pilot_ilc' && !ilc5P && profP) makeILC5(true);
@@ -7086,6 +7104,10 @@ function syncPathLabels() {
   $('v-accP').textContent = pathAccel().toExponential(1);
   $('v-cornP').textContent = `${pathCorner()} steps`;
   $('v-depthP').textContent = String(pilotDepth());
+  // Generated from the knob, not restated beside it (rule 30): the label carries the
+  // decision spacing the rate actually buys, so a reader can compare it against the ~40
+  // steps a corner's acceleration lasts without doing arithmetic in their head.
+  $('v-rateP').textContent = `${pilotRate()}/Ts`;
   $('v-kP').textContent = KP_LADDER[+$('s-kP').value].toFixed(2);
   $('v-eP').textContent = EP_LADDER[+$('s-eP').value].toFixed(2);
   $('v-spfP').textContent = $('s-spfP').value;
@@ -7095,6 +7117,7 @@ function syncPathLabels() {
 window.__flxPathDbg = () => (armP ? {
   k: kP, lap: lapP, running: runP, busy: busyP,
   shape: $('shapeP').value, feed: pathFeed(), accel: pathAccel(), corner: pathCorner(),
+  rate: pilotRate(), depth: pilotDepth(),
   pending: progPending,
   path: { length: profP.length, lapSteps: profP.lap, closed: profP.closed,
     vMin: Math.min(...profP.v), vMax: Math.max(...profP.v) },
