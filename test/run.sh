@@ -185,6 +185,12 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # feature count. 5 s quick (the whole-arm readout alone), 20 s full (the
     # three-way comparison and the forecast).
     node test/flexisim/chainsensor.test.mjs
+    # THE TWO BLOCKS THAT BOLT A LEARNER ONTO A CONVENTIONAL CONTROLLER, as contracts
+    # rather than as physics -- no arm, no lattice, milliseconds. Both quick tier, because
+    # what they pin is the kind of thing that fails silently: a trim that is not EXACTLY
+    # off when switched off makes an A/B meaningless, and a NaN estimate reaching a servo
+    # command is unrecoverable.
+    node test/flexisim/residual.test.mjs
     # THE MODULE THAT IS GIVEN NOTHING, on three plants that share no physics: a
     # lightly damped actuator, an over-damped process with a NEGATIVE gain two hundred
     # times smaller, and the real hybrid arm. One module, one set of options apart from a
