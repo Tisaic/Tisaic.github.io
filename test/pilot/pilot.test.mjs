@@ -239,5 +239,53 @@ function run(pilot, plant, { truthOverride = null, maxSteps = 400000 } = {}) {
     `${pilot.status().report.outsideEnvelope}`);
 }
 
+// ---- THE CLOCK AND THE EFFORT WEIGHT ARE ONE KNOB, and this pins it in MILLISECONDS
+// rather than in a 900-second browser commissioning.
+//
+// `decisionsPerTs` sets the decision spacing; λ weights ||D u||^2 where D is a difference
+// between DECISION steps, so a finer clock must carry a proportionally larger λ or the
+// same physical smoothness costs four times less. Moving the clock ALONE is a measured
+// LOSS -- 2.33x against a 4.62x baseline on the arm's sharp square -- so a regression that
+// silently unpaired them would look like "the new setting is bad" rather than like a bug,
+// which is exactly how it would survive.
+//
+// This exists because the end-to-end version of it lives in the browser suite behind
+// `if (FULL)`, so `--only=flexisim` skipped it and exited 0 while reporting 398 passes --
+// and a change to pilot commissioning was called verified without that path ever running.
+// A check too slow to be run is a verification problem (rule 2): the CONTRACT here is the
+// pairing, and the pairing does not need a commissioning to observe.
+{
+  const mk = (dpt) => {
+    const p = new Pilot({ nMeasured: 1, channels: [{ lo: -1, hi: 1, vMax: 1e-3, aMax: 1e-5, jMax: 1e-7 }],
+      uMax: 1, start: [0], decisionsPerTs: dpt });
+    // Stand in for what the probe would have measured; the derivation below is what is
+    // under test, not the probe.
+    p.Ts = 2400; p.Tset = 3600; p.sample = 8;
+    p.hs = [{ dc: 0.7, hGrid: new Float64Array(4), hSample: new Float64Array(4) }];
+    p.grid = Math.max(1, Math.round(p.Ts / p.sample / p.decisionsPerTs));
+    p.N = Math.max(8, Math.ceil(1.5 * p.Tset / p.sample / p.grid));
+    // A record SHORTER than one horizon leaves the replay window empty, so the ladder
+    // scores nothing and the real return path is reached without a commissioning. What is
+    // under test is the pairing, not the ladder.
+    p.nc = 1; p.readouts = [{ gated: false }];
+    p._fit = { eFree: [new Float64Array(8)] };
+    return p;
+  };
+  const a = mk(30), b = mk(60);
+  check('a finer clock halves the decision spacing', b.grid * 2 === a.grid,
+    `grid ${a.grid} → ${b.grid}`);
+  check('…and the horizon grows to cover the same SETTLING TIME, not the same step count',
+    Math.abs(b.N / a.N - 2) < 0.05, `N ${a.N} → ${b.N}`);
+  const la = a._replayLambda(), lb = b._replayLambda();
+  check('…and λ rises with its SQUARE, so the physical smoothness penalty is unchanged',
+    Math.abs(lb / la - 4) < 1e-9, `λ ${la.toExponential(3)} → ${lb.toExponential(3)} (${(lb / la).toFixed(3)}x)`);
+  // Relative, not `===`: 0.005*(0.7*0.7) and 0.005*0.49 differ in the last bit, and a
+  // check that fails on that is pinning the arithmetic rather than the contract.
+  const want30 = 0.005 * (0.7 * 0.7);
+  check('…and the default clock leaves λ where every plant on record had it',
+    Math.abs(la / want30 - 1) < 1e-12,
+    `${la.toExponential(6)} vs ${want30.toExponential(6)}`);
+}
+
 console.log(failed ? `\npilot: ${failed} check(s) FAILED\n` : '\npilot: all checks passed\n');
 process.exit(failed ? 1 : 0);
