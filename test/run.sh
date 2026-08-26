@@ -200,6 +200,10 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # length on a path that no longer exists supplies nothing. Full tier: six commissioned
     # trajectories plus five transfers.
     if [ "${SUITE}" = "full" ]; then node test/flexisim/transfer.test.mjs; fi
+    # THE PILOT AND THE STACK ON ONE DENOMINATOR -- same plant, same path, same
+    # conventional baseline. It exists because they were quoted side by side for a whole
+    # session while sharing none of those three.
+    if [ "${SUITE}" = "full" ]; then node test/flexisim/reconcile.test.mjs; fi
     # THE MODULE THAT IS GIVEN NOTHING, on three plants that share no physics: a
     # lightly damped actuator, an over-damped process with a NEGATIVE gain two hundred
     # times smaller, and the real hybrid arm. One module, one set of options apart from a
