@@ -2923,6 +2923,51 @@ if (FULL) {
   check('flexisim/path: …and turning the compliance off changes it too, so both toggles act',
     differs(applied.both, applied.pilotOnly),
     `both ${JSON.stringify(applied.both)} vs pilot-only ${JSON.stringify(applied.pilotOnly)}`);
+  // ⑧'s HALVES MUST *EQUAL* THE MODES THEY CLAIM TO BE, not merely differ from each other.
+  // The checks above assert that each toggle CHANGES the applied correction, and every one
+  // of them passed while ⑧ was cutting the pilot's correction to 2.5% of its authority:
+  // the stack branch clamped its SUM with `DQ_CLAMP` (0.05 rad, which belongs to the
+  // quasi-static compliance term) while ⑤ returns the pilot's `u` unclamped against its own
+  // `uMax` of 2.0. Measured on the page, same pilot, same machine: ⑤ 3.90e-1 against ⑧'s
+  // pilot half 9.60e-1 — a factor of 2.5 thrown away, and invisible to a "does it differ"
+  // check. Rule 6: where two views show one quantity, assert they AGREE.
+  const halves = await fx.evaluate(() => {
+    const set = (c, p) => { document.getElementById('stk-comp').checked = c;
+      document.getElementById('stk-pilot').checked = p; };
+    const mode = (v) => { const e = document.getElementById('ctlP'); e.value = v;
+      e.dispatchEvent(new Event('change', { bubbles: true })); };
+    mode('stack'); set(true, false); const sComp = window.__flxStackProbe();
+    set(false, true); const sPilot = window.__flxStackProbe();
+    set(true, true); const sBoth = window.__flxStackProbe();
+    mode('ident'); const only3 = window.__flxStackProbe();
+    mode('pilot'); const only5 = window.__flxStackProbe();
+    mode('stack'); set(true, true);
+    return { sComp, sPilot, sBoth, only3, only5 };
+  });
+  // THE COMPLIANCE HALF IS A PURE FUNCTION OF THE POSE, so it is asserted to the last bit.
+  const exact = (a, b) => a.length === b.length
+    && a.every((v, i) => Math.abs(v - b[i]) <= 1e-12 + 1e-9 * Math.abs(b[i]));
+  // THE PILOT HALF IS NOT. `act()` runs a receding-horizon solve and ADVANCES its own
+  // state, so five probes in a row are five different internal ticks and the same
+  // configuration probed twice differs in the fourth digit -- measured at 0.25% and 0.8%
+  // on the two channels. Demanding bit-equality here asserts that `act()` is pure, which
+  // it is not, and the check failed for that reason before this comment existed.
+  //
+  // 5% IS NOT A ROUND NUMBER PICKED TO PASS. The defect this exists to catch cut the
+  // pilot's correction to a sixth (a 0.05 rad clamp against a peak of 0.31), so it clears
+  // the tolerance by two orders of magnitude, while the drift a stateful `act()` produces
+  // sits at 1/20th of it.
+  const rel = (a, b) => a.length === b.length && a.every((v, i) =>
+    Math.abs(v - b[i]) <= 1e-9 + 0.05 * Math.max(Math.abs(v), Math.abs(b[i])));
+  check('flexisim/path: ⑧\u2019s compliance half IS ③, to the last bit',
+    exact(halves.sComp, halves.only3), JSON.stringify(halves));
+  check('flexisim/path: …and ⑧\u2019s pilot half IS ⑤, so no clamp of ③\u2019s eats the pilot',
+    rel(halves.sPilot, halves.only5), JSON.stringify(halves));
+  // AND THE STACK IS THEIR SUM. A stack that is not the sum of its halves is applying
+  // something neither box describes, which is the state ⑧ was actually in.
+  check('flexisim/path: …and ⑧ with both on is their sum',
+    rel(halves.sBoth, [halves.only3[0] + halves.only5[0], halves.only3[1] + halves.only5[1]]),
+    JSON.stringify(halves));
   // ⑧ MUST DEMONSTRATE THE STACK, NOT JUST OFFER IT. Re-commission the pilot with
   // "commission OVER the compliance" set, so it learns the RESIDUAL left after the
   // conventional machine rather than the whole error. That is the configuration

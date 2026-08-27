@@ -5190,3 +5190,64 @@ gone and the reason is written where the next person will reach for them.
 Also mine, and also caught by a failing run rather than by review: a `lapOf` helper that read
 laps SPANNING the toggle, when `lapScoreP` resets at every lap boundary — so the A/B compared
 one configuration against a blend of both.
+
+### ⑧ WAS BROKEN, AND THE CAUSE WAS A CLAMP THAT BELONGED TO A DIFFERENT CORRECTION
+
+*"8 is broken completely. This whole effort is getting disappointing because the algorithms
+are working but the app and plumbing is not."* Correct on every count.
+
+The stack branch built `d0 = compliance + pilot` and returned `[clampDq(d0), clampDq(d1)]`.
+`DQ_CLAMP` is **0.05 rad**, and its own comment says what it is for — "on the quasi-static
+corrections". The pilot carries its OWN authority limit, `uMax`, which on this plant is
+**2.0 rad**, forty times larger, with a measured peak of **0.31**. So ⑧ was cutting the
+pilot's correction to about a sixth of what it asks for, at every step.
+
+Measured on the page — same commissioned pilot, same machine, one lap each:
+
+| | contour |
+|---|---|
+| open loop | 1.250 |
+| ③ compliance alone | 1.052 |
+| ⑤ pilot alone | 3.901e-1 |
+| ⑧ pilot half, BEFORE | 9.601e-1 |
+| ⑧ pilot half, AFTER | 3.376e-1 |
+| ⑧ both, BEFORE | 8.379e-1 (1.45× over open) |
+| ⑧ both, AFTER | **1.310e-1 (9.54× over open, 7.4× over the conventional machine)** |
+
+The Node test measures 5.70× on its own pose and 6.02× on this exact plant configuration.
+**The page now exceeds both**, which is what it should always have done, because it is the
+same library on the same machine.
+
+**THE CHECKS WERE THE WRONG SHAPE AND EVERY ONE OF THEM PASSED.** They asserted that each
+toggle CHANGED the applied correction. A half that is amputated still changes it. What they
+never asserted is that ⑧'s compliance half EQUALS ③ and its pilot half EQUALS ⑤ — rule 6,
+where two views show one quantity, assert they AGREE. Three checks now pin exactly that on
+`__flxStackProbe`, bit for bit, plus that ⑧ with both on is their SUM. A stack that is not
+the sum of its halves is applying something neither box describes, which is the state ⑧ was
+in while it reported success.
+
+**TWO OTHER EXPLANATIONS WERE MEASURED AND KILLED FIRST**, because the page's conventional
+machine also leaves 0.94–1.05 where the test's leaves 0.412 and that had to be separated
+out. Running `reconcile.test.mjs` on the page's EXACT machine — drive limits (τ 32× hold,
+speed 0.2), backlash 1e-4, centre (12, 0) — gives conventional 4.122e-1 and the pilot
+6.843e-2, **6.02×**: the plant differences I had written into the page's hint are not the
+cause and the number is if anything better there. Nor were the page's torque GUARDS (the
+run is byte-identical with them on) or its clock (`decisionsPerTs` 60 measures 6.21×, better
+than 30's 6.02×).
+
+**WHAT IS STILL UNEXPLAINED, STATED RATHER THAN ABSORBED:** the page's ③ leaves 1.052 where
+the test's conventional leaves 0.412. They are different correctors — ③ is a per-joint
+SCALAR identified from one traced lap, the test's baseline is `RobotComp`, a 2×2 model fitted
+from four held poses — and the 2.5× between them is a measurement nobody has taken. It is
+not what ⑧ was broken by, and it is the obvious next thing.
+
+### THE SUITE COST WAS MINE TOO
+
+*"The test suite is taking hours to run for only 10 minutes of development."* Also correct.
+Every UI and wiring change in this arc was verified with `--only=flexisim --full`, which
+re-runs 450 Node checks — the analytic physics, six plants of pilot commissioning, the
+golden vectors — none of which a button's reachability can break. `--browser` and `--node`
+now select the half. The Node tests are all gated on `AREAS`, so emptying it for their half
+is the entire implementation. A wiring change is now a 12-minute loop instead of a 50-minute
+one, and the reason a suite gets avoided is that it charges for information it cannot
+produce.

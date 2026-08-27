@@ -13,6 +13,8 @@ PORT="${PORT:-8137}"
 #   ./test/run.sh          quick  — everything cheap, plus the analytic physics
 #   ./test/run.sh --full   full   — adds the long-horizon browser scenarios
 SUITE="quick"
+# BOTH HALVES BY DEFAULT -- the flags below narrow it, and nothing narrows it silently.
+PHASE="both"
 AREAS=""
 # WHILE FLEXISIM IS BEING BUILT, IT IS THE ONLY THING WORTH RUNNING. FlowSim and
 # NGRC are finished features; re-testing them on every elastic-operator edit buys
@@ -24,9 +26,16 @@ for arg in "$@"; do
   case "$arg" in
     --full) SUITE="full" ;;
     --quick) SUITE="quick" ;;
+    # WHICH HALF, not just which tier. A wiring or layout change cannot break a
+    # golden-vector parity check or a Poiseuille profile, so re-running 450 Node
+    # checks to see whether a button is reachable is 40 minutes of cost that
+    # cannot produce information. That cost was being paid on every UI edit, and
+    # paying it is what made the suite something to avoid rather than to run.
+    --browser) PHASE="browser" ;;
+    --node) PHASE="node" ;;
     --all) AREAS="ngrc,flowsim,flexisim"; FOCUS="" ;;
     --only=*) AREAS="${arg#--only=}"; FOCUS="" ;;
-    *) echo "usage: $0 [--quick|--full] [--all|--only=ngrc,flowsim,flexisim]" >&2; exit 2 ;;
+    *) echo "usage: $0 [--quick|--full] [--node|--browser] [--all|--only=ngrc,flowsim,flexisim]" >&2; exit 2 ;;
   esac
 done
 export SUITE
@@ -88,7 +97,12 @@ EOF
   if [ "$want_flex" = 1 ]; then AREAS="${AREAS:+${AREAS},}flexisim"; fi
 fi
 export AREAS
-echo "Suite level: ${SUITE}   areas: ${AREAS:-none changed (parse + index only)}"
+# THE NODE TESTS ARE ALL GATED ON `AREAS`, so emptying it for their half is the whole
+# implementation -- and it is restored before the browser gate reads it, which is why
+# BROWSER_AREAS exists rather than a second variable threaded through thirty `case`s.
+BROWSER_AREAS="${AREAS}"
+if [ "${PHASE}" = "browser" ]; then AREAS=""; fi
+echo "Suite level: ${SUITE}   areas: ${BROWSER_AREAS:-none changed (parse + index only)}   phase: ${PHASE}"
 echo "  (--all forces both; --only=ngrc,flowsim selects explicitly)"
 
 # Ensure playwright-core (installed under test/, never shipped to the page).
@@ -265,6 +279,11 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     if [ "${SUITE}" = "full" ]; then node test/pilot/arm.test.mjs; fi
     if [ "${SUITE}" = "full" ]; then node test/pilot/ikfree.test.mjs; fi
   fi
+fi
+
+AREAS="${BROWSER_AREAS}"
+if [ "${PHASE}" = "node" ]; then
+  echo; echo "(--node — skipping the browser)"; echo; exit 0
 fi
 
 # NO BROWSER WHEN NO PAGE IS UNDER TEST. Every area now has a page, so this only

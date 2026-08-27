@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:298,built:"2026-08-27T02:17:16Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:299,built:"2026-08-27T04:07:07Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -575,19 +575,19 @@
         <p class="hint" id="stackHint">⑧ runs the conventional machine and the pilot
           together, switchable live. The pilot has to be commissioned <b>OVER</b> the
           compliance or it learns the compliance error too and ticking both boxes corrects
-          that part twice — which is why ⑧ measured worse than ⑤ alone until this.
-          <b>Set up the 5.70× machine</b> puts the page on the plant and the program
-          <code>test/flexisim/reconcile.test.mjs</code> measured that number on
-          (K&nbsp;1, E&nbsp;0.06, rounded rectangle, feed 4.0e-3, accel 4e-5, corner 40) and
-          ticks the box; then press <b>Commission</b> and <b>Commission ⑤ Pilot</b> in that
-          order. <b>Two things still differ from the Node measurement and are not tuned
-          away:</b> this tab's arm works about the centre (12,&nbsp;0) rather than
-          (14,&nbsp;1), and it carries <b>backlash</b>, which that test does not — so expect
-          the same order, not the same digits. At the page's own defaults (K&nbsp;16,
-          E&nbsp;0.15) there is nothing to see: the conventional machine alone already
-          leaves 5.7e-2 against the 4.4e-1 it leaves on the compliant plant, so the whole
-          error the stack exists to remove has already gone. The <b>square</b> is a
-          different program again — the 5.70× is not measured there.</p>
+          that part twice. <b>Set up the 5.70× machine</b> puts the page on the plant and
+          the program <code>test/flexisim/reconcile.test.mjs</code> measures on (K&nbsp;1,
+          E&nbsp;0.06, rounded rectangle, feed 4.0e-3, accel 4e-5, corner 40) and ticks the
+          box; then press <b>Commission</b> and <b>Commission ⑤ Pilot</b> in that order —
+          each of those puts the selector back on the mode it just commissioned, so
+          re-select ⑧ afterwards. <b>Measured here, on this page, one lap each:</b> open
+          loop 1.250, ③ compliance alone 1.052, ⑤ pilot alone 3.90e-1, and <b>⑧ with both
+          on 1.31e-1 — 7.4× over the conventional machine</b> and 9.5× over the open loop.
+          The Node test measures 5.70× on its own pose and 6.02× on this exact plant.
+          At the page's own defaults (K&nbsp;16, E&nbsp;0.15) there is nothing to see: the
+          conventional machine alone already leaves 5.7e-2, so the whole error the stack
+          exists to remove has already gone. The <b>square</b> is a different program again
+          — none of these numbers is measured there.</p>
       </div>
     </div>
     <div class="controls">
@@ -5977,14 +5977,25 @@ function predistortP(refs, cmd) {
       // exactly the kind this whole field exists to prevent.
       const c = pilotBase || cP;
       const tg = servoP.jointTorques(refs);
-      d0 += -c[0] * tg[0]; d1 += -c[1] * tg[1];
+      // CLAMPED HERE, TERM BY TERM, EXACTLY AS ③ CLAMPS IT. `DQ_CLAMP` is 0.05 rad and its
+      // own comment says what it is for: "on the quasi-static corrections". It is not an
+      // authority limit for the pilot, which carries its OWN `uMax` -- 2.0 rad on this
+      // plant, FORTY TIMES larger, with a measured peak of 0.31.
+      d0 += clampDq(-c[0] * tg[0]); d1 += clampDq(-c[1] * tg[1]);
     }
     if (useP) {
       const base = Math.floor(kP / pilotP.sample);
+      // UNCLAMPED, EXACTLY AS ⑤ RETURNS IT. Clamping the sum with `DQ_CLAMP` is what made
+      // ⑧ "broken completely": it cut the pilot's correction to 2.5% of its authority, so
+      // ⑧'s pilot half measured 9.60e-1 where ⑤ with the SAME pilot on the SAME machine
+      // measured 3.90e-1 -- a factor of 2.5 thrown away by a clamp that belongs to a
+      // different correction. The wiring checks never saw it because they asserted the
+      // toggles CHANGED the output and never that a half EQUALS the mode it claims to be
+      // (rule 6: where two views show one quantity, assert they AGREE).
       const u = pilotP.act((off) => pilotRefAt(base + off));
       d0 += u[0]; d1 += u[1];
     }
-    return [clampDq(d0), clampDq(d1)];
+    return [d0, d1];
   }
   if (m === 'pilot' || m === 'pilot_ilc') {
     const base = Math.floor(kP / pilotP.sample);

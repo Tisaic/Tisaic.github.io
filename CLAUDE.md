@@ -46,6 +46,12 @@ both, and long sweeps, convergence studies and parity runs are `--full` only. Ru
 before pushing anything that touches a solver, a collision operator, a boundary or a
 library default.
 
+**It has TWO AXES, tier and half.** `--browser` runs only the browser checks and `--node`
+only the Node ones; without either, both. A wiring or layout change cannot break a
+golden-vector parity check or a Poiseuille profile, and re-running 450 Node checks to see
+whether a button is reachable is 40 minutes that cannot produce information — which is
+exactly how a suite becomes something to avoid rather than to run.
+
 **It is FOCUSED by default.** `FOCUS` defaults to `flexisim`, so a plain run exercises the
 FlexiSim area and nothing else. `--all` runs every area; `--only=ngrc,flowsim` selects
 explicitly; `FOCUS= ./test/run.sh` clears the default. **Run `--all --full` before pushing
@@ -271,7 +277,7 @@ measurement behind each is in `docs/history/` — the pointer in brackets.
 | `docs-manifest.json` | Generated list of every `.md`, for the Docs viewer. |
 | `stamp-version.sh` | Pre-commit build step: stamps the version and regenerates both manifests. |
 | `vendor/` | Self-hosted marked, three.js and Plotly. No CDNs. |
-| `test/run.sh` | The suite. See "What `./test/run.sh` actually runs" above. |
+| `test/run.sh` | The suite. See "What `./test/run.sh` actually runs" above. `--browser` / `--node` select which HALF runs — a wiring change cannot break a golden vector, and charging it 450 Node checks is what makes a suite something to avoid. |
 | `test/smoke.mjs` | Playwright checks and screenshots for every page. |
 | `test/lattsim/` | Node tests for the engine: stencil, indexing, units, conservation, Poiseuille, EOS, scalar, elastic, reconstruction. |
 | `test/flexisim/` | Node tests for the hybrid plant: joint, arm, 2R, N-R, sensors, compliance, compensation, ServoFF, the learned filter, and contouring (`toolpath`, `pathilc`, `contour`). |
@@ -649,6 +655,28 @@ that matches it** — the point-to-point tabs measure a different question.
   two sliders and a checkbox and it is now **one button**, every value read off the test
   rather than chosen. TWO DIFFERENCES REMAIN, STATED RATHER THAN TUNED AWAY: this tab works
   about (12, 0) rather than (14, 1) and carries backlash, which the test does not.
+  **AND THEN ⑧ WAS BROKEN OUTRIGHT, BY A CLAMP THAT BELONGED TO A DIFFERENT CORRECTION.**
+  The stack branch returned `[clampDq(d0), clampDq(d1)]` over the SUM. `DQ_CLAMP` is 0.05 rad
+  and its own comment says it is "on the quasi-static corrections"; the pilot carries its own
+  `uMax`, 2.0 rad here — FORTY TIMES larger, measured peak 0.31 — so ⑧ ran the pilot at about
+  a sixth of its authority. Measured on the page, same pilot, same machine: ⑧'s pilot half
+  9.601e-1 against ⑤'s 3.901e-1, and ⑧ both **8.379e-1 → 1.310e-1**, i.e. 1.45× → **9.54×**
+  over the open loop and **7.4× over the conventional machine** — past the test's 5.70×/6.02×,
+  as it always should have been, since it is the same library on the same machine.
+  **EVERY WIRING CHECK PASSED THROUGHOUT**, because they asserted each toggle CHANGED the
+  applied correction and an amputated half still changes it. Three checks now pin that ⑧'s
+  compliance half IS ③ and its pilot half IS ⑤, bit for bit on `__flxStackProbe`, and that ⑧
+  is their SUM (rule 6). TWO OTHER EXPLANATIONS WERE KILLED FIRST: `reconcile.test.mjs` run on
+  the page's EXACT machine — drive limits, backlash, centre (12,0) — gives 6.02×, so the plant
+  differences were not it; nor the page's torque guards (byte-identical with them on) nor its
+  clock (DPT 60 measures 6.21× against 30's 6.02×). **STILL UNEXPLAINED AND STATED:** the
+  page's ③ leaves 1.052 where the test's conventional leaves 0.412 — a per-joint SCALAR from
+  one traced lap against `RobotComp`'s 2×2 from four held poses, and 2.5× between them that
+  nobody has measured.
+  **AND THE SUITE'S COST WAS MINE.** Every wiring change in this arc was verified with
+  `--only=flexisim --full`, re-running 450 Node checks that a button's reachability cannot
+  break. `--browser` and `--node` now select the half; the Node blocks are all gated on
+  `AREAS`, so emptying it for their half is the whole implementation. 50 minutes → 12.
   **AND I ASSERTED PERFORMANCE IN THE BROWSER AND IT FAILED** — ⑧ 6.603e-2 against
   compliance-only 5.671e-2 — for the stiff-default reason above and nothing to do with the
   stack. Performance belongs in plain Node where the plant is STATED; the browser's job is
