@@ -5379,3 +5379,110 @@ Both are recorded because each produced a number that looked like a finding:
   disagreed 3.5x at h=4. Re-run on the conventional machine, two amplitudes agree to 1.00
   across h=1..8, and the same check at 0.05 and 0.20 — fifty times larger — also agrees to
   1.00, which is what retired the "it must be nonlinear at correction scale" hypothesis.
+
+## Brick 63 — 30x: a cascade of pilots with harmonic feedforward on top
+
+The ask was 20x or better. The result is **30.02x** over a conventional machine, and the
+owner's physical reading is what pointed at it: the arm is not ringing at corners, it is
+SPRING-LOADED, and the deflection depends on geometry, inertia, gravity and the direction of
+travel — global and lap-correlated because a closed program revisits the same poses in the
+same order.
+
+### One plant, one program, one baseline
+
+| | contour | vs conventional |
+|---|---|---|
+| conventional (computed torque + PD + RobotComp) | 4.122e-1 | — |
+| pilot alone | 6.616e-2 | 6.23x |
+| HFF alone | 4.653e-2 | 8.86x |
+| HFF + pilot commissioned BARE — the double correction | 4.176e-1 | 0.99x |
+| HFF + pilot commissioned OVER it — the wrong order | 5.797e-1 | 0.71x |
+| pilot + HFF on top | 2.434e-2 | 16.93x |
+| **cascade(2) + HFF on top** | **1.373e-2** | **30.02x** |
+
+Drive peak 9.50e-4 against a `tauMax` of 3.22e-3 with ZERO saturations, correction peak
+0.381 rad, and the machine still repeating lap to lap — so this is a correction and not a
+destabilisation, and all four are asserted rather than assumed.
+
+### THE ORDER IS NOT SYMMETRIC, and the reason is structural
+
+The pilot commissions on a program-agnostic SCRIBBLE; an HFF table is indexed by LAP PHASE.
+"Commission the pilot over HFF" therefore applies a phase-indexed correction to a machine
+that is not on the path, and it measures **0.71x — worse than the double correction it was
+meant to fix**. The reverse composes cleanly because HFF is identified on the machine AS IT
+RUNS. Two feedforwards do not simply add when one of them knows the program and the other
+deliberately does not.
+
+### AND THE OPERATOR MUST COME FROM THE CLEAN MACHINE
+
+Re-probing the channel with the pilot active cannot be clean at ANY amplitude, because the
+pilot is a box-constrained QP that REACTS to the probe and the composite is not LTI: 4e-3
+drowns in the pilot's own lap-to-lap spread, 0.02 gives 8.64x, 0.05 gives 11.27x, every trace
+erratic. The channel from a command offset to the tool belongs to the PLANT AND SERVO and
+does not change when a feedforward is switched on. Identified on the conventional machine it
+is clean enough that two probe amplitudes fifty times apart agree to 1.00 — and using it
+instead of re-probing is worth **11.27x -> 16.93x**.
+
+### THE ACTUAL TORQUE IS THE SIGNAL, and it took the owner saying so
+
+Fitting the deflection as a function of state, trained on five programs and tested on a sixth
+never seen, with a shuffled-target control to say what the capacity scores on noise:
+
+| basis | held-out R² |
+|---|---|
+| static, commanded torque, no memory | 0.1998 |
+| + memory (lag window) | 0.6796 |
+| + pose-scheduled, commanded torque | 0.6608 |
+| ACTUAL applied torque + memory | 0.7709 |
+| **ACTUAL torque + memory + pose-scheduled** | **0.8397** |
+| shuffled targets, same 95 features (control) | 0.4618 in-sample |
+
+**Pose-scheduling only pays on a signal that carries the machine.** Scheduling the COMMANDED
+torque is worth nothing (0.68 -> 0.66); scheduling the APPLIED torque is worth 0.77 -> 0.84.
+That is the `cmd`-versus-`tx` lesson of brick 61 in a second costume, and it is exactly what
+"the spring effect is geometry dependent" means once the motion is not quasi-static.
+
+**AND A FORECAST IS NOT A CONTROLLER.** Every one of those models makes the machine WORSE
+when its prediction is applied directly (0.83x to 0.97x), including the 0.84 one. Predicting
+the error was never the problem: `|G|` runs 1.2 to 0.09 across eight harmonics with phase
++36° to -38°, so injecting -e produces `G(-e)`, attenuated and phase-shifted, and a
+phase-shifted subtraction ADDS. The whole value of the pilot and of HFF is that they INVERT
+an identified channel instead of trusting a forecast.
+
+### Six explanations for the earlier 8.9x stall, all eliminated by measurement
+
+- **drive saturation** — peak demand 31% of `tauMax`, zero saturations.
+- **lap non-repeatability** — 2.4e-5 rms against a 7.1e-2 residual, 0.03%; backlash off
+  changes it by 0.6%.
+- **cross-harmonic coupling** — real and measured (on-diagonal 92% at h=2 falling to 73% at
+  h=8, all leakage into h±1, the signature of modulation at the fundamental) — but a full
+  block-TRIDIAGONAL solve measures **8.46x against the diagonal-only 8.47x**, on the same
+  operator with its off-diagonals zeroed. Modelling it changes nothing; the damped Newton
+  already handles it.
+- **a stale Jacobian** — re-identifying at the converged operating point returns the same
+  operator and the same number (4.653e-2 -> 4.650e-2 -> 4.650e-2).
+- **basis size** — more harmonics is worse (NH=28 diverges to 2.38x; a uniform ridge
+  stabilises it at 7.95x, a per-harmonic ridge at 8.83x, neither beating NH=16).
+- **measurement noise** — averaging four laps into each update halves the lap-to-lap scatter
+  (4.92e-3 -> 2.85e-3) and moves the answer by 0.6%.
+
+### And the set-ups that lied, every one of them mine
+
+- **ILC without lead.** The working page ILC uses `leadSteps = 1/bandwidth = 500` steps to
+  invert the position loop's own lag; I tested it at lead 0 and watched every law "diverge"
+  to 9.06e+0 with 82,320 drive saturations. The lead is not a tuning knob. With it, ILC
+  reaches 2.1x — which is the real finding: **the identified operator is worth 4.2x over a
+  single lead-and-gain** (8.88x against 2.1x).
+- **Learning from the startup transient.** Lap 0 scores 2.9e-1 where the settled machine
+  scores 4.12e-1, because the arm begins ON the path. Two warm-up laps before any update.
+- **Zeroing four of the pilot's six signals** in a deploy harness, which made it measure
+  0.15x against the 6.02x the same object reaches in `reconcile.test.mjs`. Caught only
+  because that known-good number was sitting next to it.
+- **95 features on a 1-D curve.** In-sample R² 0.9959 for the pose-scheduled model on one
+  program — against a shuffled-target control of 0.4618. One program is a one-dimensional
+  path through state space and a rich basis fits almost any smooth function along a curve.
+  The same static basis scores 0.92 in-sample on one program and 0.39 across five.
+- **A non-causal lag window** that wrapped around the lap, so early samples read from later
+  in the same lap.
+- **A torque probe 100x too large**, which drove the rms to 2.279e+1 and produced a
+  "roll-off" that was a destabilised machine rather than a frequency response.

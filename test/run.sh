@@ -222,6 +222,10 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # pin that the world frame beats the rotating path-normal one by more than 2x, which is
     # the entire finding and is not something a browser check can see.
     if [ "${SUITE}" = "full" ]; then node test/flexisim/harmonic.test.mjs; fi
+    # THE COMPOSITE — a cascade of pilots with harmonic feedforward on top, 30x over a
+    # conventional machine. Full tier only: it commissions two pilot layers and drives ~90
+    # laps of the contouring plant.
+    if [ "${SUITE}" = "full" ]; then node test/flexisim/composite.test.mjs; fi
     # THE MODULE THAT IS GIVEN NOTHING, on three plants that share no physics: a
     # lightly damped actuator, an over-damped process with a NEGATIVE gain two hundred
     # times smaller, and the real hybrid arm. One module, one set of options apart from a

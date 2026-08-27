@@ -280,6 +280,8 @@ measurement behind each is in `docs/history/` — the pointer in brackets.
 | `test/run.sh` | The suite. See "What `./test/run.sh` actually runs" above. `--browser` / `--node` select which HALF runs — a wiring change cannot break a golden vector, and charging it 450 Node checks is what makes a suite something to avoid. |
 | `test/smoke.mjs` | Playwright checks and screenshots for every page. |
 | `test/lattsim/` | Node tests for the engine: stencil, indexing, units, conservation, Poiseuille, EOS, scalar, elastic, reconstruction. |
+| `test/flexisim/composite.test.mjs` | **The composite: cascade(2) + harmonic feedforward, 30.02× over a conventional machine.** Also pins the two failing orders and the clean-operator requirement. |
+| `test/flexisim/harmonic.test.mjs` | World-frame harmonic feedforward, and the path-normal frame that measures 0.99× on the same solve. |
 | `test/flexisim/` | Node tests for the hybrid plant: joint, arm, 2R, N-R, sensors, compliance, compensation, ServoFF, the learned filter, and contouring (`toolpath`, `pathilc`, `contour`). |
 | `test/blackbox/` | Node tests for the plant-agnostic controller, on three plants that share no physics. |
 | `test/pilot/` | Full-tier files here SKIP and exit 0 without `SUITE=full` — that hole let a gate regression ship for three bricks. Node tests for the pilot on six plants that share no physics: the 2R arm, a quadruple tank, a three-zone extruder barrel, the Wood–Berry column, a cold mill AGC, and the EMPS servo axis (real data). |
@@ -681,6 +683,38 @@ that matches it** — the point-to-point tabs measure a different question.
   compliance-only 5.671e-2 — for the stiff-default reason above and nothing to do with the
   stack. Performance belongs in plain Node where the plant is STATED; the browser's job is
   what only the browser can break, which is the wiring.
+  **THE COMPOSITE — A CASCADE OF PILOTS WITH HARMONIC FEEDFORWARD ON TOP, 30.02× (brick 63),
+  and the owner's physics is what found it.** The arm is not ringing at corners, it is
+  SPRING-LOADED: the deflection depends on geometry, inertia, gravity and direction of travel,
+  and it is lap-correlated only because a closed program revisits the same poses in the same
+  order. One plant, one program, one conventional baseline (4.122e-1): pilot alone 6.23×, HFF
+  alone 8.86×, pilot + HFF **16.93×**, **cascade(2) + HFF 1.373e-2 = 30.02×** — drive peak 30%
+  of `tauMax` with ZERO saturations, correction peak 0.381 rad, machine still repeating, all
+  four asserted. `test/flexisim/composite.test.mjs`.
+  **THE ORDER IS NOT SYMMETRIC.** The pilot commissions on a program-agnostic SCRIBBLE; an HFF
+  table is indexed by LAP PHASE. Commissioning the pilot OVER HFF applies a phase-indexed
+  correction to a machine that is not on the path and measures **0.71×, worse than the double
+  correction it was meant to fix**. Two feedforwards do not add when one knows the program and
+  the other deliberately does not. **AND THE OPERATOR MUST COME FROM THE CLEAN MACHINE:**
+  re-probing with the pilot active cannot be clean at any amplitude (it is a box-constrained QP
+  that REACTS to the probe), and using the conventional machine's operator instead is worth
+  11.27× → 16.93×.
+  **THE ACTUAL TORQUE IS THE SIGNAL.** Deflection fitted as a function of state, trained on
+  five programs and tested on a sixth never seen, held-out R²: static/commanded 0.20, +memory
+  0.68, +pose-scheduling on the COMMANDED torque 0.66 (nothing), ACTUAL applied torque +memory
+  0.77, **ACTUAL +memory +pose-scheduled 0.84** — against a shuffled-target control of 0.46
+  in-sample for the same 95 features. **Pose-scheduling only pays on a signal that carries the
+  machine**, which is brick 61's `cmd`-versus-`tx` lesson in a second costume. **AND A FORECAST
+  IS NOT A CONTROLLER:** every one of those models makes the machine WORSE applied directly
+  (0.83–0.97×), because |G| runs 1.2 → 0.09 with phase +36° → −38°, so a phase-shifted
+  subtraction ADDS. Inverting an identified channel is the whole value of both layers.
+  **SIX EXPLANATIONS FOR THE EARLIER 8.9× STALL, ALL KILLED BY MEASUREMENT:** drive saturation
+  (31% of `tauMax`), lap non-repeatability (0.03%), cross-harmonic coupling (real — 92%
+  on-diagonal at h=2 falling to 73% at h=8, all leakage into h±1 — but a block-TRIDIAGONAL
+  solve measures 8.46× against the diagonal's 8.47×), a stale Jacobian (re-identification
+  returns the same operator), basis size (more harmonics is worse), and noise (four-lap
+  averaging moves it 0.6%). **AND THE IDENTIFIED OPERATOR IS WORTH 4.2× OVER A LEAD-AND-GAIN:**
+  ILC with the correct 500-step lead reaches 2.1× where HFF reaches 8.88× on the same machine.
   **Sweep feedrate**
   runs the whole ladder and tabulates the trade. The arm is drawn at TRUE geometry; the error trail
   is the exaggerated object, pushed out along the path normal only.
