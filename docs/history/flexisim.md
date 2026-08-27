@@ -5251,3 +5251,131 @@ now select the half. The Node tests are all gated on `AREAS`, so emptying it for
 is the entire implementation. A wiring change is now a 12-minute loop instead of a 50-minute
 one, and the reason a suite gets avoided is that it charges for information it cannot
 produce.
+
+## Brick 62 — the next 10x: what the residual actually is, and six ideas measured against it
+
+The ask was another 10x on the stack. What came out is 1.47x over the best previous method
+and, more usefully, a measured account of exactly what is in the way.
+
+### The residual is not what any of us assumed
+
+| | |
+|---|---|
+| stack residual | **99.1% OSCILLATION** — bias is 0.9% of what is left |
+| its spectrum | **100% LAP-SYNCHRONOUS** — every one of the top 8 peaks an exact integer harmonic |
+| lap-to-lap repeatability | **2.4e-5 rms against a 7.1e-2 residual — 0.03%** |
+
+Nothing is resonating. The error is a deterministic path-locked waveform that repeats to
+three parts in ten thousand. **A lap-periodic correction therefore has ~3000x of headroom**,
+and this kills at a stroke every idea aimed at a resonance.
+
+### Four ideas built or measured, all dead, each for a stated reason
+
+1. **A NOTCH in the QP's effort penalty.** It exists in `boxQP`, is plumbed through `Pilot`,
+   and is used by nothing — the same "built and connected to nothing" shape as brick 59's
+   cascade. There is no free mode to notch.
+2. **A TORQUE-DOMAIN correction channel**, on the theory that a position-reference offset is
+   low-passed by the position loop while a torque lands at the plant input where the
+   disturbance lives. **Both channels are -6dB at harmonic 4**, and position is the stronger
+   of the two on 15 of the first 20 harmonics. With the loop closed both see the same
+   closed-loop dynamics to the tool; where a correction ENTERS does not widen it.
+3. **MODE-AWARE FEEDRATE SHAPING** — reparameterising time so the acceleration spectrum has a
+   null at the bending mode, which unlike a joint-space shaper is geometry-preserving.
+   Dodges a resonance that is not there.
+4. **RAISING THE SERVO BANDWIDTH.** The trap recorded in `compensator.js` replicates on this
+   program: the stack goes 6.843e-2 -> 1.293e-1 at 4e-3 and 1.105e-1 at 8e-3, while the
+   CONVENTIONAL machine improves (4.122e-1 -> 3.924e-1 -> 3.333e-1). Ts collapses 2110 -> 683
+   and the pilot is left modelling a different plant.
+
+### What works: harmonic feedforward, and THE FRAME IS THE WHOLE THING
+
+A lap-periodic error is exactly cancellable by a lap-periodic correction, so invert the plant
+at the program's own harmonics: identify the response from four probe laps, solve, apply. In
+the PATH-NORMAL frame that is worth **0.99x — nothing at all**. The normal direction and the
+Jacobian both rotate around the lap, so an injected harmonic comes back SMEARED across its
+neighbours and `G_hh` is only the diagonal of an operator with large off-diagonal terms.
+Inverting a diagonal that is not the operator cancels nothing.
+
+**World X and Y do not rotate.** Same plant, same solve, same harmonics:
+
+| | contour | vs conventional |
+|---|---|---|
+| conventional (computed torque + PD + RobotComp) | 4.122e-1 | — |
+| the pilot (the previous best) | 6.843e-2 | 6.02x |
+| path-normal harmonic feedforward | 4.159e-1 | 0.99x |
+| **world-frame harmonic feedforward** | **4.643e-2** | **8.88x** |
+
+Rule 47 in a new costume: every term of a projected quantity must be projected, and a frame
+that spins is not one you may invert one harmonic at a time.
+
+**IDENTIFY ONCE, THEN REFINE — AND DAMP IT.** The operator belongs to the machine and the
+program, so later passes reuse it: solve, measure what is left, solve again against the SAME
+matrices, add. That is a Newton step with a frozen Jacobian, one measurement lap per pass and
+NO re-identification, which is what separates it from iterative learning where every lap buys
+one update and nothing is ever modelled. **Undamped it diverges** — 2.92x, 2.84x, 1.71x,
+0.98x with peak|W| climbing 1.18 -> 2.80, the same unguarded-iteration failure this file
+already records for an ILC table pumped to 5.25. At a 0.6 step it is monotone and reaches
+8.88x for **4 identification laps plus 11 refinement laps**, against the pilot's ~130,000
+steps of commissioning.
+
+### Where it stops, and why — five more things tried
+
+8.88x is a genuine fixed point, not a tuning accident:
+
+- **Restarting the identification at the converged operating point changes nothing**
+  (4.653e-2 -> 4.650e-2 -> 4.650e-2 -> 4.650e-2). The Jacobian is not stale.
+- **More harmonics is WORSE**: NH=28 diverges to 2.38x, because those harmonics have
+  |G| ~ 0.008 and an exact inverse of a near-singular block asks for an enormous correction
+  in the one direction the channel cannot act.
+- **A ridge fixes the divergence but not the number**: NH=28 and NH=40 at 1e-2 are stable at
+  7.95x, still below NH=16's 8.88x, because a UNIFORM ridge suppresses the strong low
+  harmonics that carry the energy in order to tame the weak high ones.
+- **A per-harmonic ridge** (exact below NLOW, ridged above) — 8.83x. No better.
+- **JOINT-SPACE injection**, to remove the pose-dependent map between the harmonic and the
+  plant entirely: **6.43x**, worse, and at NH=40/64 it destabilises outright (lap-to-lap
+  difference 1.07e-1, i.e. the machine stops repeating).
+
+**AND THE MEASUREMENT THAT SAYS WHAT IS ACTUALLY BINDING: 94.3% of the residual lies INSIDE
+h<=16, the harmonics already being corrected.** Not above them. So neither the basis size nor
+the channel roll-off is the limit — the per-harmonic 2x2 solve is stalling where it already
+has full authority, which is the signature of the off-diagonal harmonic coupling introduced
+by `J^-1(pose)`. In joint space that number flips to 51.6% ABOVE h=16, confirming the coupling
+was real and merely moving it into the target instead.
+
+### Where the remaining 10x is, stated so it is falsifiable
+
+The error is 99.97% repeatable and 94% of what is left is in harmonics the machine can already
+move. Both point one way: the binding constraint is that the operator is identified and
+inverted **per harmonic**, when the true operator couples harmonics. Two routes, neither built:
+
+1. **Identify the full 4NH x 4NH operator** — 64 probe laps at NH=16, one-time per program.
+   Expensive, and it buys back a program-specific object, which is what made this method
+   attractive over ILC in the first place.
+2. **Drop the harmonic basis and correct at full arc-length resolution**, using the identified
+   frequency response only as the filter that supplies phase lead. That is plant-inverted
+   iterative learning — and the 0.03% repeatability measurement is precisely what makes it the
+   RIGHT tool here rather than a fallback: when an error repeats to three parts in ten
+   thousand, remembering it is not a cop-out, it is what the physics is telling you to do.
+   What this brick adds is that the remembering must be filtered through the WORLD-FRAME
+   operator, since the same measurements show a rotating frame destroys it.
+
+**AN ESTIMATE OF MINE WAS WRONG AND THE DATA OVERTURNED IT.** I computed a "7.3x ceiling" for
+harmonic cancellation from the fraction of the signal captured in 20 harmonics. The measured
+8.88x exceeds it, because cancelling the harmonics also moves the operating point and pulls
+down the broadband part the estimate assumed was untouchable. There is no proven wall below
+the repeatability floor.
+
+### And the instrument failed twice on the way
+
+Both are recorded because each produced a number that looked like a finding:
+
+- **The first torque-channel probe used an amplitude 100x too large** and drove the rms to
+  2.279e+1 against a 6.843e-2 baseline. The "roll-off" read off it was a destabilised machine,
+  not a frequency response — non-monotonic gains (2.845 at h=2) were the giveaway. The probe
+  amplitude is now CHOSEN by a ladder requiring the perturbation to stay under 10%, and the
+  valid rung turned out to be 1e-7.
+- **The first roll-off measurement had the PILOT ACTIVE during the probe lap**, so it
+  identified (plant + an adapting box-constrained controller). Two supposedly identical probes
+  disagreed 3.5x at h=4. Re-run on the conventional machine, two amplitudes agree to 1.00
+  across h=1..8, and the same check at 0.05 and 0.20 — fifty times larger — also agrees to
+  1.00, which is what retired the "it must be nonlinear at correction scale" hypothesis.

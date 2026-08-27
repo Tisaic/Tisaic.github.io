@@ -218,6 +218,10 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # conventional baseline. It exists because they were quoted side by side for a whole
     # session while sharing none of those three.
     if [ "${SUITE}" = "full" ]; then node test/flexisim/reconcile.test.mjs; fi
+    # HARMONIC FEEDFORWARD. Full tier only: it drives ~20 laps of the contouring plant to
+    # pin that the world frame beats the rotating path-normal one by more than 2x, which is
+    # the entire finding and is not something a browser check can see.
+    if [ "${SUITE}" = "full" ]; then node test/flexisim/harmonic.test.mjs; fi
     # THE MODULE THAT IS GIVEN NOTHING, on three plants that share no physics: a
     # lightly damped actuator, an over-damped process with a NEGATIVE gain two hundred
     # times smaller, and the real hybrid arm. One module, one set of options apart from a
