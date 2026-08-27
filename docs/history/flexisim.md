@@ -5071,3 +5071,122 @@ sharing the module or a re-entrant caller would need its own, and the comment sa
 **STILL ALLOCATING, named rather than left to be found:** `_controlTick` builds two arrays
 per LEAD per channel, about 316 per tick, and the ring trim uses `Array.splice`, an O(n)
 copy at an unpredictable moment. Both are the same fix and neither is done.
+
+## Brick 61 — the stack, and putting every measurement on one denominator
+
+Eight commits of this arc shipped without a history entry, so this covers all of them.
+
+### The question that started it
+
+*"How come estimation can be such a win but controlling a system based on that winning
+estimation is a fail?"* The split held up everywhere it was tested. Soft sensing wins by
+3–14× against the incumbent a plant actually deploys, on four unrelated plants. Control
+against a GOOD classical baseline ties or loses. The reason is not the learner: an estimate
+is graded against truth the instant it is made, while a correction has to travel a channel
+with its own bandwidth, its own sensor placement, and its own collocation — and this project
+had already measured six separate knobs (λ, bandwidth, sensor location, signal content, cap,
+clock) that all drive the bias to zero and explode the oscillation.
+
+### The denominators were never the same
+
+The pilot's headline 4.22× came from a scratch rig at K 0.25 / E 0.03 against a BARE
+position loop. The compliance work was measured at other stiffnesses against other baselines.
+Comparing them was comparing three machines.
+
+`test/flexisim/reconcile.test.mjs` puts all of it on one plant, one path, one baseline —
+computed torque **plus** `RobotComp`'s identified compliance, i.e. a conventional machine an
+engineer would actually ship:
+
+| | contour | vs conventional | u peak |
+|---|---|---|---|
+| conventional (computed torque + PD + RobotComp) | 4.396e-1 | — | — |
+| + pilot | **7.715e-2** | **5.70×** | 0.3186 |
+| + tipcomp | 4.388e-1 | 1.00× | 0.0568 |
+| + live trim | 5.446e-1 | 0.81× | 0.0500 |
+
+The 5.70× is **larger** than the 4.22× the pilot scored against a bare loop, which is the
+part that could not be quoted before. The two rows below it are the estimation/control split
+in one table: both corrections are driven by a LIVE error reading and neither helps.
+
+**`act()` RETURNS ZEROS WHEN `!verdict.deploy`**, so a pilot that REFUSED to commission and a
+pilot that commissioned and did not help print the identical headline 1.00×. Only `uPk`
+separates them, and it is in the table for that reason. Two runs in this arc were mis-read
+that way before the column was added — both from guards sized in MOTOR-side torque and
+applied to a LINK-side `transmitted()`, a factor of `RATIO` = 100.
+
+### Commissioning over one path does not transfer; commissioning over an envelope does
+
+`test/flexisim/transfer.test.mjs`. A pilot commissioned on a single trajectory and deployed
+on an unseen one measured **73× WORSE** at the worst point. Commissioned over an envelope of
+five trajectories it is **2.04×** worst-case. `ONE_PATH=1` reproduces the failure.
+
+A soft sensor is a calibrated instrument, and its calibration has to span the range it will
+be used over. This is the third independent time this project has reached that: FlowSim's
+frozen standardisation across a startup transient, the anti-slosh shaper tuned at one fill,
+and now this.
+
+### The clock, and the only genuine control win in the arc
+
+`decisionsPerTs` had been pinned at Ts/30 by a QP-tractability constant that was never
+re-measured. Doubling it to 60 is worth 4.62→5.19× on the sharp square, 6.43→8.02× on the
+rounded and 12.99→14.16× on the circle — but **only with λ scaled as (DPT/30)²**, because the
+QP's `D` is a difference between DECISION steps and halving their spacing quadruples the
+penalty it applies to the same physical rate.
+
+Measured on the arm only. The other five plants still default 30.
+
+### The torque channel, and a conclusion this file had to retract
+
+An earlier entry concluded that *exciting at the resonance costs 26%*. That was measured on
+the `cmd` torque channel, which is the commanded torque — it carries the reference and not
+the machine. On the TRANSMITTED torque the same chirp **halves** the oscillation. The
+conclusion was an artefact of an uninformative signal, and the owner's instinct — *"the
+actual torque signal should see the resonance"* — is what forced the re-measurement.
+`forceChirp` accepts a `[lo, hi]` band and its docstring carries both tables so the retracted
+one stays visible.
+
+### Mode ⑧ on the page, and three defects in it
+
+The stack, switchable live: identified compliance and pilot as two checkboxes on one machine
+and one lap, because two separate runs never convince anyone.
+
+**1. THE STACK CONTAINED NEITHER HALF.** The first version had zero occurrences of the pilot
+and mentioned `TipCompensator` only in comments. Caught by the owner — *"the current stack
+results do not add up to previous wins"* — and not by any check, because every check that
+existed asserted wiring that was genuinely there.
+
+**2. IT DOUBLE-CORRECTED.** The page commissioned the pilot on the BARE machine, so the
+pilot already contained the compliance term and ticking both boxes applied that part twice.
+Caught by the owner testing it: *"the mode 5 looks better than 8."* Fixed with an opt-in
+`stk-over` flag that commissions the pilot with the compliance already acting, so it learns
+only the RESIDUAL. **Opt-in and default off**, because they are two different machines and ⑤
+belongs to the bare one — making it unconditional regressed ⑤'s own gate to 3.9e-2 against a
+3.5e-2 bar, and the casualty was ⑤ rather than the idea.
+
+**3. THE PAGE COULD NOT REACH THE MACHINE THE NUMBER LIVES ON.** *"The point is to
+demonstrate the 5.7 this misses it."* The tab DEFAULTS to K 16 / E 0.15 — the stiff end of
+both ladders — where the conventional machine alone already leaves 5.7e-2 against the 4.4e-1
+it leaves at K 1 / E 0.06. **The entire error the stack exists to remove has already gone
+before ⑧ is switched on.** The owner was also testing on the SQUARE, and the 5.70× is
+measured on the rounded rectangle.
+
+Everything else already matched: feed 4e-3, accel 4e-5, corner 40 and the rounded rectangle
+are the page's own defaults and are byte-identical to `reconcile.test.mjs`. So the gap was
+exactly two sliders and one checkbox, and it is now one button — `Set up the 5.70× machine`
+— with every value read off the test rather than chosen.
+
+**TWO DIFFERENCES REMAIN AND ARE STATED RATHER THAN TUNED AWAY:** this tab works about the
+centre (12, 0) rather than (14, 1), and it carries backlash, which `reconcile.test.mjs` does
+not. Same order, not the same digits.
+
+### A tier violation I committed and then removed
+
+I asserted the stack's PERFORMANCE in `smoke.mjs` and it failed — ⑧ both 6.603e-2 against
+compliance-only 5.671e-2 — for a reason that had nothing to do with the stack: it was the
+stiff default above. **Performance belongs in plain Node where the plant is stated; the
+browser's job is what only the browser can break, which is the wiring.** The assertions are
+gone and the reason is written where the next person will reach for them.
+
+Also mine, and also caught by a failing run rather than by review: a `lapOf` helper that read
+laps SPANNING the toggle, when `lapScoreP` resets at every lap boundary — so the A/B compared
+one configuration against a blend of both.

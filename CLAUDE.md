@@ -614,6 +614,45 @@ that matches it** — the point-to-point tabs measure a different question.
   quantity appearing twice. Hence ⑥'s open loop is BETTER (1.135 vs 1.205) and its
   corrected loop worse. **A droop carried by the CORRECTION is re-measured at speed every
   step; one carried by the REFERENCE is frozen at whatever the static gather saw.**
+  **⑧ THE STACK — the conventional machine and the pilot together, switchable live
+  (brick 61), and the arc that finally put every number on ONE DENOMINATOR.**
+  `test/flexisim/reconcile.test.mjs` runs one plant, one path and one baseline that is a
+  machine an engineer would actually ship — computed torque + PD + `RobotComp`'s identified
+  compliance — and measures: conventional **4.396e-1**, + pilot **7.715e-2 (5.70×, uPk
+  0.3186)**, + tipcomp 4.388e-1 (1.00×), + live trim 5.446e-1 (0.81×). **5.70× is LARGER
+  than the 4.22× the pilot scored against a bare loop**, which is the number this project
+  could not quote before, and the two rows under it are the estimation/control split in one
+  table: both are driven by a LIVE error reading and neither helps. `uPk` is in the table
+  because **`act()` returns zeros when `!verdict.deploy`**, so a pilot that REFUSED and one
+  that deployed and did not help print an identical 1.00×.
+  **COMMISSION OVER AN ENVELOPE, NOT OVER A PATH:** one trajectory transfers at **73× worse**
+  at the worst point, five at **2.04×** (`transfer.test.mjs`, `ONE_PATH=1` reproduces it) —
+  the third independent time this project has reached "a calibration must span the range it
+  will be used over". And **the pilot's CLOCK was a QP constant nobody re-measured**:
+  `decisionsPerTs` 30 → 60 is worth 4.62→5.19× sharp, 6.43→8.02× rounded, 12.99→14.16×
+  circle, but **only with λ scaled as (DPT/30)²**, since the QP's `D` differences DECISION
+  steps. Measured on the arm only; the other five plants still default 30.
+  **THREE DEFECTS IN ⑧ AND THE OWNER FOUND ALL THREE.** (1) The first version contained
+  NEITHER half — zero occurrences of the pilot, `TipCompensator` in comments only — and every
+  check passed, because they asserted wiring that was genuinely there. (2) It DOUBLE-
+  CORRECTED: the page commissioned the pilot BARE, so it already held the compliance term and
+  ticking both boxes applied that part twice (*"the mode 5 looks better than 8"*). Fixed by
+  an opt-in `commission OVER` flag, **default off** — making it unconditional regressed ⑤'s
+  own gate to 3.9e-2 against a 3.5e-2 bar, and the casualty was ⑤, not the idea. (3) **THE
+  PAGE COULD NOT REACH THE MACHINE THE NUMBER LIVES ON** (*"the point is to demonstrate the
+  5.7 this misses it"*): the tab DEFAULTS to K 16 / E 0.15, the stiff end of both ladders,
+  where the conventional machine alone already leaves 5.7e-2 against the 4.4e-1 it leaves at
+  K 1 / E 0.06 — **the whole error the stack exists to remove has already gone before ⑧ is
+  switched on** — and the report was taken on the SQUARE, which is not the program the 5.70×
+  is measured on. Everything else already matched (feed 4e-3, accel 4e-5, corner 40 and the
+  rounded rectangle are the page's own defaults, byte-identical to the test), so the gap was
+  two sliders and a checkbox and it is now **one button**, every value read off the test
+  rather than chosen. TWO DIFFERENCES REMAIN, STATED RATHER THAN TUNED AWAY: this tab works
+  about (12, 0) rather than (14, 1) and carries backlash, which the test does not.
+  **AND I ASSERTED PERFORMANCE IN THE BROWSER AND IT FAILED** — ⑧ 6.603e-2 against
+  compliance-only 5.671e-2 — for the stiff-default reason above and nothing to do with the
+  stack. Performance belongs in plain Node where the plant is STATED; the browser's job is
+  what only the browser can break, which is the wiring.
   **Sweep feedrate**
   runs the whole ladder and tabulates the trade. The arm is drawn at TRUE geometry; the error trail
   is the exaggerated object, pushed out along the path normal only.

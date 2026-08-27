@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:297,built:"2026-08-26T20:41:54Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:298,built:"2026-08-27T02:17:16Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -77,6 +77,11 @@
     .good { color:var(--accent2); } .warn { color:var(--warn); } .bad { color:var(--bad); }
     .lead { color:var(--muted); font-size:.85rem; line-height:1.5; margin:10px 0 4px; }
     .hint { color:var(--muted); font-size:.76rem; margin:6px 0 0; }
+    /* A HINT INSIDE A `.controls` ROW IS A FLEX ITEM, so without a basis it shrinks to a
+       narrow column beside the checkboxes rather than taking a line of its own. Same shape
+       as the console header's min-width bug: nothing is missing, nothing errors, the
+       layout is simply wrong -- and only a screenshot says so. */
+    .controls > .hint { flex:1 0 100%; }
     .hint b { color:var(--text); }
     h4.grp { margin:16px 0 -4px; font-size:.78rem; color:var(--text); font-weight:700;
       letter-spacing:.3px; border-top:1px solid var(--line); padding-top:10px; }
@@ -564,6 +569,25 @@
       <div class="controls" id="stackRow" style="display:none">
         <label><input type="checkbox" id="stk-comp" checked /> identified compliance</label>
         <label><input type="checkbox" id="stk-pilot" checked /> pilot</label>
+        <label><input type="checkbox" id="stk-over" /> commission the pilot OVER the
+          compliance (set this before pressing Commission ⑤)</label>
+        <button id="stk-setup">Set up the 5.70× machine</button>
+        <p class="hint" id="stackHint">⑧ runs the conventional machine and the pilot
+          together, switchable live. The pilot has to be commissioned <b>OVER</b> the
+          compliance or it learns the compliance error too and ticking both boxes corrects
+          that part twice — which is why ⑧ measured worse than ⑤ alone until this.
+          <b>Set up the 5.70× machine</b> puts the page on the plant and the program
+          <code>test/flexisim/reconcile.test.mjs</code> measured that number on
+          (K&nbsp;1, E&nbsp;0.06, rounded rectangle, feed 4.0e-3, accel 4e-5, corner 40) and
+          ticks the box; then press <b>Commission</b> and <b>Commission ⑤ Pilot</b> in that
+          order. <b>Two things still differ from the Node measurement and are not tuned
+          away:</b> this tab's arm works about the centre (12,&nbsp;0) rather than
+          (14,&nbsp;1), and it carries <b>backlash</b>, which that test does not — so expect
+          the same order, not the same digits. At the page's own defaults (K&nbsp;16,
+          E&nbsp;0.15) there is nothing to see: the conventional machine alone already
+          leaves 5.7e-2 against the 4.4e-1 it leaves on the compliant plant, so the whole
+          error the stack exists to remove has already gone. The <b>square</b> is a
+          different program again — the 5.70× is not measured there.</p>
       </div>
     </div>
     <div class="controls">
@@ -5523,7 +5547,22 @@ function stackLabel() {
   if (c && !haveC) missing.push('compliance not commissioned');
   if (p && !haveP) missing.push('pilot has not vouched for itself');
   const body = on.length ? on.join(' + ') : 'nothing switched on — this is ① open loop';
-  return `the stack: ${body}${missing.length ? ` (${missing.join('; ')})` : ''}`;
+  // WHICH MACHINE THE PILOT LEARNED decides what the boxes MEAN, so the readout says it
+  // rather than leaving it to be remembered. Learned bare, the pilot already contains the
+  // compliance term and ticking both corrects that part twice; learned over the compliance,
+  // it holds only the residual and the two genuinely add.
+  let note = '';
+  if (haveP && on.length === 2) {
+    note = pilotBase
+      ? ' — <b>the stack</b>: the pilot learned the residual left after this compliance'
+      : ' — <b>double correction</b>: the pilot learned on the BARE machine and already '
+        + 'contains the compliance term. Untick one, or tick “commission OVER” and '
+        + 'commission the pilot again.';
+  } else if (haveP && pilotBase && !on.includes('identified compliance')) {
+    note = ' — <b>mismatch</b>: this pilot learned the residual OVER the compliance, so it '
+      + 'is being deployed onto a machine other than the one it was commissioned on';
+  }
+  return `the stack: ${body}${missing.length ? ` (${missing.join('; ')})` : ''}${note}`;
 }
 // THE ILC's THREE NUMBERS, EVERY ONE OF THEM MEASURED RATHER THAN CHOSEN — see
 // lib/flexisim/pathilc.js, which carries the sweeps. The lead is the position loop's own
@@ -5562,6 +5601,23 @@ let armP = null, servoP = null, profP = null, holdP = null;
 let kP = 0, lapP = 0, runP = false, busyP = false;
 let progPending = false;        // a feedrate change waiting for a lap boundary
 let scoreP = null, lapScoreP = null, cP = null, cFrom = null;
+/**
+ * THE COMPLIANCE THE PILOT WAS COMMISSIONED OVER, or null for the bare machine.
+ *
+ * A PILOT IS ONLY VALID ON THE MACHINE IT LEARNED. Commissioned bare it corrects the WHOLE
+ * error, compliance included, so adding the compliance term as well corrects that part
+ * twice -- which is exactly why ⑧ with both boxes ticked measured worse than ⑤ alone.
+ * Commissioned OVER the compliance it learns only the residual, and the two genuinely
+ * stack: test/flexisim/reconcile.test.mjs measures that configuration at 5.70x over a
+ * conventional machine carrying computed torque AND identified compliance.
+ *
+ * OPT-IN AND DEFAULT OFF, because the two are different machines and ⑤ belongs to the bare
+ * one. Commissioning over the compliance and then deploying WITHOUT it is the mismatch in
+ * the other direction, and it is measurable: it cost the pilot's own gate 3.9e-2 against a
+ * 3.5e-2 bar when it was made unconditional. So the flag chooses which machine is being
+ * commissioned, and the readout says which one you got.
+ */
+let pilotBase = null;
 let commissionP = null, sweepP = null, sweepRows = null;
 let ilcP = null, ilcHist = [];
 let pilotP = null, pilotComm = false, pilotSamp = 0;
@@ -5654,7 +5710,7 @@ async function buildP() {
   // A COMPLIANCE CONSTANT BELONGS TO ONE PLANT. K is the thing it is mostly measuring,
   // so carrying an identification across a K change applies yesterday's inverse to
   // today's arm -- the same rule the Chain tab's filter and shaper follow.
-  cP = null; cFrom = null; commissionP = null; sweepP = null; sweepRows = null;
+  cP = null; cFrom = null; pilotBase = null; commissionP = null; sweepP = null; sweepRows = null;
   ilcP = null; ilcHist = [];
   // A PILOT BELONGS TO ONE PLANT: it identified this machine's response and timescale,
   // and carrying it across a K change deploys yesterday's inverse on today's arm.
@@ -5916,8 +5972,12 @@ function predistortP(refs, cmd) {
       && !!(pilotP && pilotP.verdict && pilotP.verdict.deploy);
     let d0 = 0, d1 = 0;
     if (useC) {
+      // THE CONSTANT THE PILOT LEARNED OVER, when it learned over one: applying a
+      // re-identified `cP` beneath a pilot fitted against an older value is a mismatch of
+      // exactly the kind this whole field exists to prevent.
+      const c = pilotBase || cP;
       const tg = servoP.jointTorques(refs);
-      d0 += -cP[0] * tg[0]; d1 += -cP[1] * tg[1];
+      d0 += -c[0] * tg[0]; d1 += -c[1] * tg[1];
     }
     if (useP) {
       const base = Math.floor(kP / pilotP.sample);
@@ -6327,6 +6387,9 @@ function sweepStepP(budget) {
 function startPilotP() {
   if (!armP || busyP || commissionP || sweepP || pilotComm) return;
   runP = false;
+  // SNAPSHOT, NOT A REFERENCE: `cP` can be re-identified afterwards, and a pilot silently
+  // assuming a constant that has since moved is the same defect one level up.
+  pilotBase = ($('stk-over').checked && cP) ? cP.slice() : null;
   const centre = armP.ik(PG.centre[0], PG.centre[1], true);
   const c0 = profP.at(kP);
   pilotP = makePilot({
@@ -6360,7 +6423,15 @@ function pilotStepP(budget) {
   }
   for (let i = 0; i < budget && pilotP.phase !== 'fit' && pilotP.phase !== 'done'; i++) {
     const cmd = pilotP.command();
-    const refs = cmd.map((c) => ({ theta: c.pos + c.u, omega: c.vel, alpha: c.acc }));
+    // THE MACHINE AS IT SHIPS, when that is what was asked for: with the compliance already
+    // acting the pilot sees only the residual left after it, which is what makes the two
+    // additive instead of overlapping.
+    const bff = pilotBase
+      ? servoP.jointTorques(cmd.map((c) => ({ theta: c.pos, omega: c.vel, alpha: c.acc })))
+      : null;
+    const refs = cmd.map((c, j) => ({
+      theta: c.pos + c.u + (bff ? clampDq(-pilotBase[j] * bff[j]) : 0),
+      omega: c.vel, alpha: c.acc }));
     const tau = servoP.torques(refs);
     armP.step(tau[0], tau[1], 1);
     const enc = armP.encoders();
@@ -7155,18 +7226,55 @@ for (const id of ['s-feedP', 's-accP', 's-cornP']) {
 }
 // K AND E BOTH REBUILD THE PLANT — a different gearbox or a different link is a
 // different machine, and every learner on the tab belongs to exactly one.
-for (const id of ['s-kP', 's-eP']) {
-  $(id).addEventListener('input', async () => {
-    syncPathLabels();
-    if (busyP) return;
-    busyP = true; runP = false;
-    setPathBadge('rebuilding…', 'warn'); syncPath();
-    try { await buildP(); setPathBadge('ready — press Run', ''); }
-    catch (e) { setPathBadge('build failed: ' + e.message, 'bad'); console.error(e); }
-    finally { busyP = false; syncPath(); }
-  });
+async function rebuildPlantP() {
+  syncPathLabels();
+  if (busyP) return;
+  busyP = true; runP = false;
+  setPathBadge('rebuilding…', 'warn'); syncPath();
+  try { await buildP(); setPathBadge('ready — press Run', ''); }
+  catch (e) { setPathBadge('build failed: ' + e.message, 'bad'); console.error(e); }
+  finally { busyP = false; syncPath(); }
 }
+for (const id of ['s-kP', 's-eP']) $(id).addEventListener('input', rebuildPlantP);
 for (const id of ['s-spfP', 's-magP', 's-depthP', 's-rateP']) $(id).addEventListener('input', syncPathLabels);
+
+// ONE TAP TO THE MACHINE THE NUMBER WAS MEASURED ON. A page that CAN reach a result and
+// asks the reader to find it by moving two sliders has not demonstrated it: the defaults
+// here are the STIFF end of both ladders, where the conventional machine alone already
+// leaves 5.7e-2 and the stack has almost nothing left to remove. Every value below is read
+// off test/flexisim/reconcile.test.mjs rather than chosen, and the ones that are already
+// the page default are set anyway so a previous experiment cannot leak into the comparison.
+$('stk-setup').addEventListener('click', async () => {
+  if (busyP) return;
+  // A PENDING PROGRAM CHANGE BELONGS TO THE OLD ARM. Leaving one queued across the rebuild
+  // would apply it at the next lap boundary of a machine it was never chosen for.
+  runP = false; progPending = false; $('pendP').hidden = true;
+  $('s-feedP').value = '2';                 // FEED 4e-3
+  $('s-accP').value = '2';                  // accel 4e-5
+  $('s-cornP').value = '2';                 // cornerDt 40
+  $('shapeP').value = 'rounded';            // roundedRect w 8 h 8 r 1.5
+  // NEAREST RUNG, NOT indexOf: a ladder edited to 0.061 would make indexOf return -1, a
+  // range input clamps that to 0, and the page would quietly set up the WRONG machine while
+  // still claiming to be the 5.70x one. rung() cannot return -1.
+  const rung = (ladder, want) => ladder.reduce((best, v, i) =>
+    Math.abs(v - want) < Math.abs(ladder[best] - want) ? i : best, 0);
+  $('s-eP').value = String(rung(EP_LADDER, 0.06));
+  $('stk-over').checked = true;             // the pilot learns the RESIDUAL, not the whole error
+  $('stk-comp').checked = true;
+  $('stk-pilot').checked = true;
+  $('s-kP').value = String(rung(KP_LADDER, 1));
+  // ONE REBUILD, NOT FOUR. `buildP` re-reads every slider and calls `homeP`, which builds
+  // the program from them and settles the arm on its start -- so the speed and shape set
+  // above arrive through the same door the plant does, and no intermediate machine is ever
+  // built. Dispatching each slider's own handler would start a rebuild per slider, three of
+  // them on plants nobody asked for and the later ones racing the earlier ones' `await`.
+  await rebuildPlantP();
+  // `buildP` PUTS THE PAGE BACK ON ① -- a new machine has no commissioned correction, which
+  // is right, but it also HIDES this row. Restore ⑧ so the button lands where it was pressed.
+  $('ctlP').value = 'stack';
+  syncPath(); statsP();
+});
+
 $('ctlP').addEventListener('change', () => {
   if ($('ctlP').value === 'ilc' && !ilcP && profP) makeILC(true);
   if ($('ctlP').value === 'pilot_ilc' && !ilc5P && profP) makeILC5(true);
@@ -7212,7 +7320,10 @@ window.__flxPathDbg = () => (armP ? {
   // mode is most exposed to and the contour number alone cannot tell it from a correction
   // that is applied and does not help.
   stack: { mode: $('ctlP').value, comp: $('stk-comp').checked, pilot: $('stk-pilot').checked,
-    haveComp: !!cP,
+    haveComp: !!cP, over: $('stk-over').checked,
+    // WHAT THE PILOT LEARNED ON TOP OF -- null is the bare machine, and it is what decides
+    // whether ticking both boxes is the stack or a double correction.
+    pilotBase: pilotBase ? pilotBase.slice() : null,
     havePilot: !!(pilotP && pilotP.verdict && pilotP.verdict.deploy) },
   pending: progPending,
   path: { length: profP.length, lapSteps: profP.lap, closed: profP.closed,

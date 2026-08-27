@@ -2923,7 +2923,97 @@ if (FULL) {
   check('flexisim/path: …and turning the compliance off changes it too, so both toggles act',
     differs(applied.both, applied.pilotOnly),
     `both ${JSON.stringify(applied.both)} vs pilot-only ${JSON.stringify(applied.pilotOnly)}`);
+  // ⑧ MUST DEMONSTRATE THE STACK, NOT JUST OFFER IT. Re-commission the pilot with
+  // "commission OVER the compliance" set, so it learns the RESIDUAL left after the
+  // conventional machine rather than the whole error. That is the configuration
+  // test/flexisim/reconcile.test.mjs measures at 5.70x, and until this the page could not
+  // produce it: it commissioned bare, so ⑧ with both boxes ticked corrected the compliance
+  // term TWICE and measured worse than ⑤ alone.
+  await fx.evaluate(() => {
+    document.getElementById('stk-over').checked = true;
+    document.getElementById('stk-comp').checked = true;
+    document.getElementById('stk-pilot').checked = true;
+  });
+  await fx.click('#pilotP-btn');
+  await fx.waitForFunction(() => {
+    const d = window.__flxPathDbg();
+    return d && d.pilot && d.pilot.verdict && !d.busy;
+  }, null, { timeout: 900000 });
+  const over = await fx.evaluate(() => window.__flxPathDbg().stack);
+  check('flexisim/path: ⑧ commissions the pilot OVER the identified compliance when asked',
+    Array.isArray(over.pilotBase) && over.pilotBase.length === 2, JSON.stringify(over));
+  // AND THE STACK BEATS BOTH HALVES. Scored on a full lap each, same machine, same program
+  // -- the toggles are what make that a fair comparison rather than three commissioning
+  // sessions that differ in a dozen other ways.
+  // THE PERFORMANCE IS NOT ASSERTED HERE, and that is the tier rule this file exists
+  // under: what only the BROWSER can break is the wiring, and the numbers belong in plain
+  // Node where the plant is stated rather than read off a slider.
+  //
+  // I asserted it here anyway and it failed -- ⑧ both 6.603e-2 against compliance-only
+  // 5.671e-2 -- for a reason that had nothing to do with the stack. This page DEFAULTS to
+  // s-kP 6 and s-eP 3, i.e. K 16 and E 0.15, the STIFF end of both ladders, where there is
+  // almost no compliance error left to remove: the conventional machine alone already
+  // reaches 5.7e-2 against the 4.4e-1 that the same controller leaves at K 1 / E 0.06. The
+  // stiffness sweep in this project measured the same thing directly -- mode ③ worth 1.01x
+  // and the pilot 1.49x at the stiff end.
+  //
+  // So the 5.70x is real and it is pinned in test/flexisim/reconcile.test.mjs at K 1 /
+  // E 0.06. On the page it is visible only with both plant sliders moved toward the
+  // compliant end, which is what the hint under ⑧ now says.
   await fx.screenshot({ path: join(SHOTS, '11-flexisim-path-stack.png') });
+  // AND THE PAGE CAN REACH THAT MACHINE IN ONE TAP. The reason ⑧ "missed the 5.70x" was
+  // not only the double correction above: this page DEFAULTS to the STIFF end of both
+  // plant ladders (K 16 / E 0.15), where the conventional machine alone already leaves
+  // 5.7e-2 against the 4.4e-1 it leaves at K 1 / E 0.06 -- so the entire error the stack
+  // exists to remove has already gone before ⑧ is switched on. A page that CAN reach a
+  // result and asks the reader to find it by moving two sliders has not demonstrated it.
+  //
+  // THIS RUNS LAST IN THE SECTION ON PURPOSE: it changes the plant, and a plant rebuild
+  // clears every learner on the tab -- which is itself the contract asserted below.
+  // ⑧ HAS TO BE SELECTED FOR ITS ROW TO EXIST. Commissioning the pilot leaves the page on
+  // ⑤ -- correct, that is what was just commissioned -- and `stackRow` is display:none off
+  // ⑧, so the button is present in the DOM and NOT ON THE SCREEN. That is the console
+  // header's bug again: `click` reported "resolved to <button …>" and then timed out
+  // waiting for it to be visible.
+  await fx.evaluate(() => {
+    const el = document.getElementById('ctlP');
+    el.value = 'stack';
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await fx.click('#stk-setup');
+  await fx.waitForFunction(() => {
+    const d = window.__flxPathDbg();
+    return d && !d.busy && Math.abs(d.K - 1) < 1e-9;
+  }, null, { timeout: 120000 });
+  const set = await fx.evaluate(() => {
+    const d = window.__flxPathDbg();
+    return { K: d.K, E: d.E, shape: d.shape, feed: d.feed, accel: d.accel,
+      corner: d.corner, over: d.stack.over, mode: d.stack.mode,
+      haveComp: d.stack.haveComp,
+      havePilot: d.stack.havePilot, pilotBase: d.stack.pilotBase };
+  });
+  // EVERY VALUE IS READ OFF test/flexisim/reconcile.test.mjs, not chosen -- K 1, E 0.06,
+  // the rounded rectangle, feed 4e-3, accel 4e-5, corner 40. Asserting the SHAPE and the
+  // speeds too is what makes this more than a stiffness check: the 5.70x is not measured
+  // on the square, and the user's report that ⑧ looked worse than ⑤ was taken there.
+  check('flexisim/path: ⑧ one tap sets up the plant the 5.70x was measured on',
+    Math.abs(set.K - 1) < 1e-9 && Math.abs(set.E - 0.06) < 1e-9,
+    JSON.stringify(set));
+  check('flexisim/path: …and the program too — the rounded rectangle at 4e-3 / 4e-5 / 40',
+    set.shape === 'rounded' && Math.abs(set.feed - 4e-3) < 1e-12
+      && Math.abs(set.accel - 4e-5) < 1e-12 && set.corner === 40,
+    JSON.stringify(set));
+  // AND IT LANDS BACK ON ⑧. `buildP` puts the page on ① -- correct, a new machine has no
+  // commissioned correction -- but that also HIDES the row the button lives in, so a tap
+  // that set the machine up and then vanished its own controls would read as a dead button.
+  check('flexisim/path: …and it arms the OVER-commissioning the stack needs, still on ⑧',
+    set.over === true && set.mode === 'stack', JSON.stringify(set));
+  // A NEW PLANT IS A NEW MACHINE, and every learner on this tab belongs to exactly one.
+  // Leaving the previous arm's compliance and pilot in place would deploy yesterday's
+  // inverse on today's arm -- and it would do it silently, since both print a number.
+  check('flexisim/path: …and the rebuild cleared the previous machine\u2019s learners',
+    set.haveComp === false && set.havePilot === false && set.pilotBase === null,
+    JSON.stringify(set));
 }
 
 // ---- THE BLACK BOX: the same arm, and a controller told nothing about it. Full tier
