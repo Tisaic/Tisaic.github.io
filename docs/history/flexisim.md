@@ -5486,3 +5486,82 @@ an identified channel instead of trusting a forecast.
   in the same lap.
 - **A torque probe 100x too large**, which drove the rms to 2.279e+1 and produced a
   "roll-off" that was a destabilised machine rather than a frequency response.
+
+## Brick 64 — two more routes to a path-agnostic HFF, both closed by measurement
+
+The owner's charge was that the previous brick added a knob that rejects by design, treated
+one route as the only one, and rested on a harness that had already lied twice. All three
+are answered here by measurement rather than argument, and the substantive route — the one
+that was missed — is built and killed with a reason.
+
+### The charge about the knob: tested, and it is the opposite
+
+The scheduled block sits beyond `nBase` and is therefore ridged a hundred times harder than
+the linear one. Making that prior readable and sweeping it, on the arm:
+
+| rich-block penalty | scheduled, ch0 | scheduled, ch1 |
+|---|---|---|
+| 100 (shipped) | 0.97043 | 0.58680 |
+| 10 | 0.96215 | 0.48061 |
+| 1 (no prior at all) | 0.95066 | 0.43306 |
+
+**The prior was HELPING it.** Removing the handicap makes the block score worse held-out,
+because the prior was shrinking its many noisy columns and without it the block overfits
+harder. Against a linear 0.97642 / 0.69934 it loses on its merits at every penalty.
+
+### The route that was missed: distil the table into a state map
+
+The lap table works (8.86x) and does not transfer because it is indexed by LAP PHASE. Making
+the pilot's forecast richer was one attack. The other — never tried — inverts the problem:
+do not forecast the ERROR and then invert the channel, forecast the CORRECTION, fitted to a
+control signal ALREADY PROVEN ON THE MACHINE. The inversion happened during convergence and
+is baked into the target.
+
+**IT REPRODUCES THE TABLE EXACTLY, ONCE THE MAP CAN SEE THE FUTURE.** Given only the present
+command the map recovers 3.60x of the table's 8.86x; given a preview of the path ahead it
+reaches **8.87x against the table's 8.86x**, with a correction of matching size (uRms 1.91e-1
+against 1.94e-1, peak 0.417 against 0.390). The correction is a function of state AND the
+path's future — it was never phase-indexed in nature, only in representation, and it is
+ANTICIPATORY, which is why the present state alone cannot carry it.
+
+**AND IT DOES NOT TRANSFER, INCLUDING OVER AN ENVELOPE.** Fitted on one program it measures
+0.01x on a circle it has never seen. Fitted over FIVE converged programs — the fix that took
+the pilot's own commissioning from 73x worse to 2.04x — it is still 0.20x and 0.42x on two
+held-out programs, against shuffle controls of 0.38x and 0.50x.
+
+| | held-out R² |
+|---|---|
+| fitted on one program | 0.976 |
+| pooled over five | **0.636** |
+
+That collapse is the finding. The correction is **not a consistent function of (state,
+preview) across programs** — each program's correction is a different function of the same
+features. It is the same signature the static state model showed earlier in this arc (0.92
+in-sample on one program, 0.39 across five), and there is a structural reason: the harmonic
+solve is GLOBAL, every harmonic couples the whole lap, so the correction at a step depends on
+the entire program. A local feature map cannot represent a globally-coupled solution.
+
+**So the lap-indexed correction contains information that is not recoverable from the
+machine's state and the path's local future.** Two independent routes to path-agnosticism —
+a richer forecast inside the pilot, and a distilled state map outside it — are now closed,
+each with a measured reason rather than a shrug.
+
+### The harness was rebuilt so it could not lie, and it caught two failures immediately
+
+Three controls run alongside every number, because this session had already produced a
+plausible 1.001x from a path performing zero updates and a 0.15x from a deploy harness that
+zeroed four of six signals:
+
+- **SELF** — deploy the map on the program it was fitted on. It caught the first attempt
+  instantly: held-out R² 0.985 and **0.31x on its own program**, with the correction 100x
+  the size it was fitted on (uRms 12.0 against 1.94e-1, peak 40.9 against 0.390). The cause
+  is that the features included LAGGED APPLIED TORQUE, which already contains the table's own
+  correction, so at deploy the map's output feeds the torque which feeds the features — a
+  closed loop. Command-derived features only, and it behaves.
+- **SHUFFLE** — the same states with the targets shuffled. Below the fitted map everywhere.
+- **APPLIED** — the peak and rms of the correction actually applied, printed on every row,
+  because a map that deploys nothing and one that deploys something useless print the same
+  contour.
+
+Without SELF the first run would have reported transfer numbers from a map that was 100x
+out of scale on its own training program.
