@@ -216,12 +216,95 @@ check('…and it was refused, because the rung below it had already removed the 
 
 // THE FLOOR IS LOAD-BEARING, and both directions of it are asserted.
 const hffRung = rep.rungs.find((r) => r.name.startsWith('lap-periodic'));
+const hffObj = auto.built.hff;
 check('the harmonic rung really did score better than the one that shipped — so the refusal '
   + 'is the FLOOR talking and not a rung that failed',
   hffRung && hffRung.score < rep.best, hffRung ? hffRung.score.toExponential(3) : 'absent');
 check('…and every rung that landed below the instrument\'s floor says so in its own row',
   rep.rungs.filter((r) => r.score <= FLOOR).every((r) => /FLOOR/.test(r.note || '')),
   JSON.stringify(rep.rungs.map((r) => [r.score.toExponential(2), r.atFloor])));
+
+
+// ---------------------------------------------------------------------------------------
+// THE DEPLOY PATH OF EVERY RUNG, ASSERTED DIRECTLY — because the run above does not take it.
+//
+// On this axis the conventional rung wins and the other two are REFUSED, so `act()` summing a
+// deployed pilot or a deployed harmonic never executes in it. That is precisely the hole that
+// let mode ⑧ ship containing neither of its two halves while every check passed: the checks
+// asserted that a toggle CHANGED the output, and an amputated half still changes it. So arm
+// each rung on its own and assert `act()` returns EXACTLY that rung's own correction, then
+// arm them together and assert the result is exactly the sum (rule 6 — where two views show
+// one quantity, assert they AGREE, bit for bit).
+{
+  const A = new AutoStack({ channels: [{ lo: -0.02, hi: 0.27, vMax: 1.25e-4, aMax: 8.3e-7, jMax: 5e-8 }],
+    uMax: 1e9, periodic: P, basis: motionBasis([{ v: PR.v, a: PR.a }]) });
+  A.classic = auto.built.classic; A.hff = auto.built.hff;
+  // a stand-in pilot whose contribution is a known constant, so "the stack term is present"
+  // is checkable without commissioning another one
+  A.stack = { sample: 1, act: () => [0.125], observe: () => {}, layers: [] };
+  const ctx = { v: [PR.v[100]], a: [PR.a[100]], k: 100, look: () => [PR.q[100]] };
+
+  A.deployed = { classic: true, stack: 0, hff: false };
+  const only1 = A.act(ctx)[0];
+  A.deployed = { classic: false, stack: 1, hff: false };
+  const only2 = A.act(ctx)[0];
+  A.deployed = { classic: false, stack: 0, hff: true };
+  const only3 = hffObj ? A.act(ctx)[0] : 0;
+  A.deployed = { classic: true, stack: 1, hff: !!hffObj };
+  const all = A.act(ctx)[0];
+
+  check('the conventional rung, armed alone, puts its OWN correction on the output — not a '
+    + 'rung that is present in the wiring and contributing zero',
+    only1 !== 0 && only1 === auto.classic.live(ctx.v, ctx.a)[0],
+    `act ${only1} vs live ${auto.classic.live(ctx.v, ctx.a)[0]}`);
+  check('…the pilot rung likewise, through the look-ahead closure and not around it',
+    only2 === 0.125, `${only2}`);
+  check('…and the harmonic rung likewise, indexed by lap phase',
+    !hffObj || (only3 !== 0 && only3 === auto.built.hff.at(100)[0]),
+    hffObj ? `act ${only3} vs at(100) ${auto.built.hff.at(100)[0]}` : 'no harmonic rung built');
+  check('…and all three armed together is EXACTLY their sum, so no rung is silently dropped '
+    + 'or double-counted when they are combined',
+    Math.abs(all - (only1 + only2 + only3)) < 1e-15,
+    `${all} vs ${only1 + only2 + only3}`);
+
+  // THE CONVENTIONAL RUNG'S OWN CAP. On this axis its correction is a thousandth of the
+  // authority it is given, so the cap never binds and nothing here would notice it being
+  // removed — mutation-testing this suite, "the conventional rung ignores its authority"
+  // SURVIVED. Assert it directly, on coefficients large enough to demand more than the cap.
+  {
+    const bas = motionBasis([{ v: PR.v, a: PR.a }]);
+    const C = new ClassicFF({ basis: bas, channels: 1, uMax: 1e-4 });
+    for (let j = 0; j < C.nb; j++) C.W[0][j] = 1;      // deliberately far past the authority
+    C.touch();
+    let pk = 0;
+    for (let k = 0; k < P; k++) pk = Math.max(pk, Math.abs(C.at(k)[0]));
+    let pkLive = 0;
+    for (let k = 0; k < P; k++) pkLive = Math.max(pkLive, Math.abs(C.live([PR.v[k]], [PR.a[k]])[0]));
+    check('the conventional rung honours its OWN authority — asserted on coefficients that '
+      + 'demand far more than it, because on this axis the cap never binds by itself',
+      pk <= 1e-4 * (1 + 1e-9) && pk > 1e-4 * 0.99, `lap-indexed peak ${pk.toExponential(3)} against a 1.0e-4 cap`);
+    check('…and the live path is capped identically to the lap-indexed one, so a rung cannot '
+      + 'be bounded when replayed and unbounded when driven',
+      Math.abs(pk - pkLive) < 1e-12, `at() ${pk.toExponential(6)} vs live() ${pkLive.toExponential(6)}`);
+  }
+
+  // THE COMMON CAP MUST ANNOUNCE ITSELF. A cap belonging to one rung, wrapped around another
+  // that carries its own, ran a pilot at a sixth of its authority for an entire brick — and
+  // it was invisible because clamping changes the output and reports nothing.
+  const B = new AutoStack({ channels: A.channels, uMax: 1e-3, periodic: P, basis: A.basis });
+  B.stack = { sample: 1, act: () => [0.125], observe: () => {}, layers: [] };
+  B.beginRun();
+  B.deployed = { classic: false, stack: 1, hff: false };
+  const cut = B.act(ctx)[0];
+  const cl = B.clipping();
+  check('a rung demanding more than the COMMON cap is clipped — and the clipping is COUNTED, '
+    + 'so an amputated rung shows up as a number instead of as a disappointing score',
+    cut === 1e-3 && cl.frac === 1 && cl.over > 100,
+    `out ${cut}, frac ${cl.frac}, over ${cl.over.toFixed(1)}x`);
+  check('…and a rung that fits inside the cap reports NO clipping, so the counter is not '
+    + 'simply always on', (() => { B.beginRun(); B.uMax = 1; B.act(ctx); return B.clipping().frac === 0; })(),
+    'expected frac 0 with a cap the rung fits inside');
+}
 
 console.log(failed ? `\nautostack: ${failed} check(s) FAILED\n` : '\nautostack: all checks passed\n');
 process.exit(failed ? 1 : 0);

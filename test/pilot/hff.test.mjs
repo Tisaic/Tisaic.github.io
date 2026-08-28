@@ -131,5 +131,98 @@ check('given a third of the authority the correction actually needs, it still he
   rs.best < rs.base && rs.best > r.best,
   `${rs.best.toExponential(3)} (starved) vs ${r.best.toExponential(3)} (full)`);
 
+
+// ---------------------------------------------------------------------------------------
+// THE SHRINK, PINNED ON A PLANT THAT NEEDS IT — because this axis does not.
+//
+// The two shrink factors are INERT here (241.95x against 241.97x with them removed), which
+// is the control that says they select rather than merely attenuate. It also means this file
+// cannot see them: mutation-testing this suite, "make the confidence factor inert" and "make
+// the reach factor inert" both SURVIVED, on a library whose own header calls reach
+// load-bearing. The evidence for that was a measurement on the 2R arm in a scratch file,
+// which is not evidence a suite can keep.
+//
+// So here is the arm's defining property in twenty lines and a few milliseconds: a channel
+// whose gain DIES above a low harmonic, driving an actuator that SATURATES. Inverting a
+// harmonic where |G| ~ 1e-3 demands a thousand times the error in command; the saturation
+// then makes the applied correction something other than what was solved for, and the
+// refinement chases its own distortion. That is the mechanism, and it is the whole reason
+// the reach factor exists.
+{
+  // SAT is the PLANT's saturation; UMAX is the authority the engineer grants. Setting them
+  // equal conflates two different failures — the first version of this did, and the cap was
+  // scaling down the legitimate correction, which looks exactly like the shrink not working.
+  const N = 256, NH = 48, SAT = 0.6, UMAX = 3, NOISE = 2e-3;
+  const Gh = (h) => 1 / (1 + (h / 6) ** 4);           // dead by h~12, like the arm's channel
+  // A DETERMINISTIC but run-to-run VARYING disturbance: the same sequence every time this
+  // file runs, and a different draw on every lap within it — which is what makes the
+  // operator at a dead harmonic UNIDENTIFIABLE rather than merely small.
+  let seed = 20260828;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff - 0.5; };
+  const dft = (x) => { const re = [], im = [];
+    for (let h = 1; h <= NH; h++) { let a = 0, b = 0;
+      for (let k = 0; k < N; k++) { const w = 2 * Math.PI * h * k / N; a += x[k] * Math.cos(w); b += x[k] * Math.sin(w); }
+      re.push(2 * a / N); im.push(2 * b / N); } return { re, im }; };
+  // Energy INSIDE the channel's reach (removable) and a little far outside it (not
+  // removable, and there to tempt an unaffordable correction).
+  const E0 = { re: new Array(NH).fill(0), im: new Array(NH).fill(0) };
+  for (const [h, v] of [[1, 0.125], [2, 0.1], [3, 0.075], [4, 0.0625], [5, 0.05],
+    [20, 0.0125], [35, 0.01]]) {
+    E0.re[h - 1] = v; E0.im[h - 1] = v * 0.4;
+  }
+  const toy = (corr) => {
+    const u = new Float64Array(N);
+    for (let k = 0; k < N; k++) u[k] = Math.max(-SAT, Math.min(SAT, corr ? corr.at(k)[0] : 0));
+    const U = dft(u), e = new Float64Array(N);
+    for (let k = 0; k < N; k++) { let v = 0;
+      for (let h = 1; h <= NH; h++) { const w = 2 * Math.PI * h * k / N, g = Gh(h);
+        v += (E0.re[h - 1] + g * U.re[h - 1]) * Math.cos(w) + (E0.im[h - 1] + g * U.im[h - 1]) * Math.sin(w); }
+      e[k] = v + NOISE * rnd(); }
+    let ss = 0; for (let k = 0; k < N; k++) ss += e[k] * e[k];
+    return { score: Math.sqrt(ss / N), err: [e] };
+  };
+  const fit = async (opts) => {
+    seed = 20260828;                                  // same draw for every variant
+    const H = new HarmonicFF({ lap: N, channels: 1, nh: NH, uMax: UMAX, probeStyle: 'spread',
+      probeFracs: [0.25], passes: 10, ...opts });
+    return H.commission(async (c) => toy(c));
+  };
+  const withReach = await fit({});
+  const noReach = await fit({ reach: false });
+  const noConf = await fit({ shrink: false });
+  const neither = await fit({ reach: false, shrink: false });
+  console.log(`\n    a channel that dies at h~12, a saturating actuator, and measurement noise:`);
+  console.log(`      open loop                    ${withReach.base.toExponential(3)}`);
+  console.log(`      shrink as shipped            ${withReach.best.toExponential(3)}   ${(withReach.base / withReach.best).toFixed(2)}x`);
+  console.log(`      REACH removed                ${noReach.best.toExponential(3)}   ${(withReach.base / noReach.best).toFixed(2)}x`);
+  console.log(`      CONFIDENCE removed           ${noConf.best.toExponential(3)}   ${(withReach.base / noConf.best).toFixed(2)}x`);
+  console.log(`      both removed                 ${neither.best.toExponential(3)}   ${(withReach.base / neither.best).toFixed(2)}x`);
+
+  check('on a plant whose channel dies — the arm\'s defining property, which this axis does '
+    + 'not have — the shipped shrink converges at least 3x', withReach.best * 3 < withReach.base,
+    `${withReach.base.toExponential(3)} → ${withReach.best.toExponential(3)}`);
+  check('…and REMOVING THE REACH FACTOR costs most of that, so the factor this library calls '
+    + 'load-bearing has a check that would notice it being deleted',
+    noReach.best > withReach.best * 1.5,
+    `with ${withReach.best.toExponential(3)} vs without ${noReach.best.toExponential(3)}`);
+  check('…and removing the CONFIDENCE factor costs too, once the operator at a dead harmonic '
+    + 'is unidentifiable rather than merely small — both halves of the shrink earn their place',
+    noConf.best > withReach.best * 1.1,
+    `with ${withReach.best.toExponential(3)} vs without ${noConf.best.toExponential(3)}`);
+  // THE GUARD'S CONTRACT, ON THE VARIANT THAT WANTS TO DIVERGE. With reach removed the
+  // refinement demands corrections the plant cannot make and every pass is worse than the
+  // last; the guard's whole job is that this ends at the baseline rather than past it. Assert
+  // it on the variant that is actually trying to run away — asserting it on a healthy run is
+  // a check any implementation passes.
+  check('a refinement that cannot converge is stopped AT the machine it started from, never '
+    + 'driven past it — asserted on the variant that is actively trying to diverge',
+    noReach.best <= noReach.base * 1.0001 && neither.best <= neither.base * 1.0001,
+    `noReach ${noReach.best.toExponential(3)} vs base ${noReach.base.toExponential(3)}; `
+    + `neither ${neither.best.toExponential(3)} vs base ${neither.base.toExponential(3)}`);
+  check('…while on the real axis, where every harmonic HAS reach, the same factor is inert '
+    + 'to four figures — which is what makes it a selection and not an attenuation',
+    Math.abs(r.base / r.best - 242) < 3, `${(r.base / r.best).toFixed(2)}x`);
+}
+
 console.log(failed ? `\nhff: ${failed} check(s) FAILED\n` : '\nhff: all checks passed\n');
 process.exit(failed ? 1 : 0);
