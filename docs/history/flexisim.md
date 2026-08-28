@@ -5565,3 +5565,75 @@ zeroed four of six signals:
 
 Without SELF the first run would have reported transfer numbers from a map that was 100x
 out of scale on its own training program.
+
+## Brick 65 — a correction that transfers, and the selection rule that finds it
+
+1.32x and 2.00x on programs the machine has never run, fitted once over six programs and
+deployed on two with **no measurement and no solve on them at all** — zero laps. It is the
+first correction in this arc that transfers, and it is much weaker than the per-program table
+it was distilled from (1.3-2.0x against 3-8x). The honest framing is a free lap-zero
+correction, not a replacement for commissioning.
+
+### The answer to "global or local" is local plus the path's FUTURE, and not global
+
+Selected by deploying each candidate on a program held back from the fit:
+
+| mode | ridge | contour on the held-back program |
+|---|---|---|
+| local | 1 | 1.250x |
+| preview | 0.1 | 1.291x |
+| **preview** | **1** | **1.354x** |
+| preview | 10 | 1.214x |
+| global | 0.01 | 0.033x |
+| global | 0.1 | 0.117x |
+| global | 1 | 0.120x |
+| global | 10 | 0.280x |
+
+Global descriptors — the program's length, feedrate, curvature statistics and the pose box it
+spans, crossed with the local pose basis — are **catastrophic on the machine at every ridge**.
+The preview block wins at every ridge, and ridge 1 is an INTERIOR optimum rather than a
+ladder edge, which is why the ladder was extended past the first winner before believing it.
+
+### AND THE SELECTION RULE IS THE RESULT
+
+Scored on leave-one-program-out R² — the natural thing to do, and what this file did first —
+the winner is `global` at ridge 100, the **only candidate with a positive score** (+0.050).
+
+| candidate | LOPO R² | delivers |
+|---|---|---|
+| global, ridge 100 | **+0.050** | 1.17x / 1.07x — indistinguishable from a constant |
+| preview, ridge 1 | **−0.875** | **1.32x / 2.00x** |
+
+At ridge 100 the correction is regularised nearly to zero (uRms 5.95e-3, peak 0.009):
+predicting close to the mean scores well and controls nothing. **The candidate R² ranks LAST
+of the finalists is the one that works.** So the selection deploys each candidate on a
+held-back program and scores the contour the MACHINE turns in.
+
+That is brick 54's rule from the other side — the QP inverts this model, so regularisation
+serves the INVERSION and not the fit — and rule 16, a number computed from the model cannot
+check the model. Every fit earlier in this arc chose its ridge on held-out SAMPLES, which
+measures interpolation inside one program's manifold: exactly the quantity that scored 0.976
+and then deployed at 0.01x.
+
+### Three controls, because this arc has produced four confident wrong answers
+
+| control | what it would mean | measured |
+|---|---|---|
+| SHUFFLE — same states, targets shuffled | the harness rewards something other than the model | 0.77x / 0.85x — it hurts |
+| CONSTANT — the mean training correction, reading no feature | "any small smooth offset helps this machine" | 0.95x / 1.01x — it does nothing |
+| APPLIED — rms and peak of the correction actually applied | a map deploying nothing prints the same contour as one deploying rubbish | printed on every row |
+
+The constant rung is the one that matters most here. A 1.3x from a map whose output is 5.9e-3
+rms would be a result about the machine's tolerance for a small offset, not about the map;
+measured against a constant it is 1.07x, and the check that fires on it is what rejected the
+R²-selected model.
+
+### Where this leaves the space
+
+Four routes to a path-agnostic correction have now been tried. A richer forecast inside the
+pilot: declines at every penalty, and removing the 100x prior makes it decline harder. A state
+map on the present command: 3.60x of the table on its own program, 0.05x off it. The same map
+given the path's future: reproduces the table EXACTLY (8.87x against 8.86x) and still 0.01x
+off-program. The same again, fitted over an envelope and selected ON THE MACHINE: **transfers,
+at 1.32x and 2.00x.** What made the difference was not more features — global descriptors made
+it worse — but selecting for the thing that was wanted instead of for a residual.

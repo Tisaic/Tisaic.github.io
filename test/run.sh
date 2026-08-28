@@ -226,6 +226,9 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # conventional machine. Full tier only: it commissions two pilot layers and drives ~90
     # laps of the contouring plant.
     if [ "${SUITE}" = "full" ]; then node test/flexisim/composite.test.mjs; fi
+    # A PATH-AGNOSTIC CORRECTION and the selection rule that finds it. Full tier only: it
+    # converges a harmonic table on six programs and then deploys twelve candidate maps.
+    if [ "${SUITE}" = "full" ]; then node test/flexisim/pathmap.test.mjs; fi
     # THE MODULE THAT IS GIVEN NOTHING, on three plants that share no physics: a
     # lightly damped actuator, an over-damped process with a NEGATIVE gain two hundred
     # times smaller, and the real hybrid arm. One module, one set of options apart from a
