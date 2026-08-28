@@ -70,8 +70,21 @@ console.log('\nflexisim: the button, on the arm — against the strongest number
 // is the strongest arm result in this repository. This one asks whether the SELF-TUNING
 // ladder gets there with nothing set but the maxes, the authority and the floor. One
 // variable: who chooses the constants.
-const TARGET = 1.340e-2;          // composite.test.mjs, cascade(2) + HFF on top
-const CONV = 4.122e-1;            // the conventional machine both are measured against
+// EACH CONFIGURATION HAS ITS OWN REFERENCE, and the softest one is a different machine
+// rather than the same machine turned down. K 1 / E 0.06 is where composite.test.mjs's
+// hand-built stack lives; K 0.25 / E 0.03 is the Path tab's softest sliders, where the page's
+// own mode 5 at cascade depth 2 reaches 9.87e-2 from a bare 1.205 (brick 59). The bar on the
+// softest row is that ABSOLUTE number: this harness's conventional machine already carries
+// RobotComp's compliance, so its baseline is not the page's, and comparing gains rather than
+// residuals across two different baselines would be comparing two machines.
+const BARS = {
+  '1/0.06': { conv: 4.122e-1, target: 1.340e-2, src: "composite.test.mjs's hand-built cascade(2) + HFF" },
+  '0.25/0.03': { conv: 8.0716e-1, target: 9.87e-2, src: "the Path tab's mode 5 at cascade depth 2 (brick 59)" },
+};
+const BAR = BARS[`${K}/${E}`];
+if (!BAR) { console.log(`  no reference recorded for K ${K} E ${E} — nothing to measure against`); process.exit(2); }
+const TARGET = BAR.target;
+const CONV = BAR.conv;
 
 const path = roundedRect(PATH);
 const LAP = Math.ceil(path.lap);
@@ -259,11 +272,10 @@ const rep = await auto.commission({ run, drivePilot });
 console.log(`\n${auto.table()}`);
 console.log(`\n  shipped ${JSON.stringify(rep.deployed)}   ${rep.base.toExponential(4)} → `
   + `${rep.best.toExponential(4)}   ${rep.gain.toFixed(2)}x   ${((Date.now() - t0) / 1000).toFixed(0)}s`);
-console.log(`  composite.test.mjs, hand-built, same machine   ${TARGET.toExponential(4)}   `
-  + `${(CONV / TARGET).toFixed(2)}x`);
+console.log(`  ${BAR.src}   ${TARGET.toExponential(4)}   ${(CONV / TARGET).toFixed(2)}x`);
 
-check('THE HEADLINE: the self-tuning ladder matches or beats the hand-built stack on the same '
-  + 'machine and program — the strongest arm result this repository has',
+check(`THE HEADLINE: the self-tuning ladder matches or beats ${BAR.src} on the same machine `
+  + 'and program — the strongest result this repository has at these settings',
   rep.best <= TARGET, `${rep.best.toExponential(4)} against ${TARGET.toExponential(4)}`);
 check('…and it is not the common cap doing the work by accident: the cap was not binding when '
   + 'the shipped configuration was scored',
