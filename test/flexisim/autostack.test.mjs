@@ -179,7 +179,13 @@ async function drivePilot(st) {
     const cmd = st.command();
     const tgc = servo.jointTorques(cmd.map((c) => ({ theta: c.pos, omega: c.vel, alpha: c.acc })));
     const ff = rc.feedforward([[1, 0], [0, 1]], tgc, { enableToolff: false });
-    const refs = cmd.map((c, j) => ({ theta: c.pos + c.u + ff.dq[j], omega: c.vel, alpha: c.acc }));
+    // THE RUNGS BELOW THE PILOT ARE ARMED WHILE IT COMMISSIONS, because they will be armed
+    // when it deploys. The conventional rung reads the reference's own velocity and
+    // acceleration, which here are the pilot's commanded ones.
+    const below = auto.actBelow('stack', { v: [cmd[0].vel, cmd[1].vel],
+      a: [cmd[0].acc, cmd[1].acc], q: [cmd[0].pos, cmd[1].pos] });
+    const refs = cmd.map((c, j) => ({ theta: c.pos + c.u + ff.dq[j] + below[j],
+      omega: c.vel, alpha: c.acc }));
     const tau = servo.torques(refs);
     arm.step(tau[0], tau[1], 1);
     const en = arm.encoders(), tool = arm.toolXY();
