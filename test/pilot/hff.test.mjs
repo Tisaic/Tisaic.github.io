@@ -214,11 +214,25 @@ check('given a third of the authority the correction actually needs, it still he
   // last; the guard's whole job is that this ends at the baseline rather than past it. Assert
   // it on the variant that is actually trying to run away — asserting it on a healthy run is
   // a check any implementation passes.
-  check('a refinement that cannot converge is stopped AT the machine it started from, never '
-    + 'driven past it — asserted on the variant that is actively trying to diverge',
-    noReach.best <= noReach.base * 1.0001 && neither.best <= neither.base * 1.0001,
-    `noReach ${noReach.best.toExponential(3)} vs base ${noReach.base.toExponential(3)}; `
-    + `neither ${neither.best.toExponential(3)} vs base ${neither.base.toExponential(3)}`);
+  // THE GUARD'S CONTRACT IS "WHAT DEPLOYS IS THE BEST PASS, NOT THE LAST ONE" — and that is
+  // what has to be asserted. An earlier version of this check asserted the OUTCOME instead
+  // ("never worse than the baseline"), and mutation-testing walked straight through it: with
+  // the guard deleted the diverging variants still happened to land just under the baseline,
+  // so the check passed on a library that had no guard at all. An outcome that a broken
+  // implementation reaches by luck is not a check.
+  const runs = [['as shipped', withReach], ['reach off', noReach], ['confidence off', noConf],
+    ['both off', neither]];
+  const wobbly = runs.filter(([, x]) => x.hist.some((v, i) => i > 0 && v > x.hist[i - 1] * 1.001));
+  check('at least one variant\'s refinement actually goes BACKWARDS at some pass — otherwise '
+    + 'the guard check below is vacuous and would pass with no guard at all',
+    wobbly.length > 0, runs.map(([n, x]) => `${n}: ${x.hist.map((v) => v.toExponential(2)).join(' ')}`).join(' | '));
+  check('…and on every variant what DEPLOYS is the best pass rather than the last one, which '
+    + 'is the guard\'s whole contract',
+    runs.every(([, x]) => x.best <= Math.min(...x.hist) * 1.001),
+    runs.map(([n, x]) => `${n}: best ${x.best.toExponential(3)} vs min ${Math.min(...x.hist).toExponential(3)}`).join(' | '));
+  check('…and none of them is driven past the machine it started from',
+    runs.every(([, x]) => x.best <= x.base * 1.0001),
+    runs.map(([n, x]) => `${n}: ${x.best.toExponential(3)}/${x.base.toExponential(3)}`).join(' | '));
   check('…while on the real axis, where every harmonic HAS reach, the same factor is inert '
     + 'to four figures — which is what makes it a selection and not an attenuation',
     Math.abs(r.base / r.best - 242) < 3, `${(r.base / r.best).toFixed(2)}x`);
