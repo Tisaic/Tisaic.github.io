@@ -5637,3 +5637,57 @@ given the path's future: reproduces the table EXACTLY (8.87x against 8.86x) and 
 off-program. The same again, fitted over an envelope and selected ON THE MACHINE: **transfers,
 at 1.32x and 2.00x.** What made the difference was not more features — global descriptors made
 it worse — but selecting for the thing that was wanted instead of for a residual.
+
+## Brick 66 — the cascade with the map on top, and a correction to brick 63's headline
+
+The question was what the best FULLY AGNOSTIC, SELF-TUNING stack achieves. Answering it
+required running the one combination nobody had — the path map on top of the cascade — and
+that run also re-measured the composite across five programs instead of one, which corrected
+a number this file was stating flatly.
+
+### The path map does not add to the cascade
+
+| program (held out — never converged on, never fitted on) | open | cascade | + map | vs open | vs cascade | shuffle | constant |
+|---|---|---|---|---|---|---|---|
+| circle r4 f3e-3 | 1.283e-1 | 2.572e-2 | 2.233e-2 | 5.75x | **1.15x** | 0.99x | 1.02x |
+| sharp 8x8 f4e-3 | 4.346e-1 | 1.733e-1 | 1.703e-1 | 2.55x | **1.02x** | 1.01x | 1.01x |
+
+**1.15x and 1.02x**, and the square's is inside its own constant control. The selection is the
+tell: scored on the machine, the best of three ridges reached **0.993x on the held-back
+program** — no candidate beat the cascade there and it picked the least-bad.
+
+The reason is not mysterious. The map is distilled from tables correcting what the cascade
+LEAVES, and the cascade has already removed the predictable part while making the machine about
+20% less lap-repeatable (brick 63). There is less to learn and it is noisier. The same map is
+worth 1.32x and 2.00x over a CONVENTIONAL machine, so the map is not broken — it is redundant
+with the layer beneath it.
+
+### AND 30.02x IS ONE PROGRAM, NOT THE STACK'S NUMBER
+
+The cascade commissioned once from noise, a table converged per program:
+
+| program | open | cascade | + its own table |
+|---|---|---|---|
+| rounded 8x8 r1.5 f4e-3 | 4.122e-1 | 5.634e-2 (7.32x) | 2.026e-2 (**20.34x**) |
+| rounded 10x6 r2 f3e-3 | 2.350e-1 | 3.342e-2 (7.03x) | 1.174e-2 (**20.01x**) |
+| circle r3 f2e-3 | 8.361e-2 | 2.265e-2 (3.69x) | 1.706e-2 (4.90x) |
+| circle r5 f6e-3 ccw | 4.759e-1 | 4.350e-2 (**10.94x**) | 5.291e-2 (**9.00x — worse**) |
+| sharp 9x7 f4e-3 | 4.314e-1 | 1.737e-1 (2.48x) | 8.678e-2 (4.97x) |
+
+**4.9x to 20.3x, and on one program the table makes the machine worse than the cascade alone.**
+The cascade by itself ranges 2.48x to 10.94x. Brick 63's 30.02x is the best case on the program
+it was tuned on, and quoting it as the stack's figure overstates what the stack does. This run
+used 6 refinement passes without backtracking where brick 63 used 12 with, which widens the
+spread — but it does not explain a program going BACKWARDS, and that is the part that matters.
+
+### So the standing answer
+
+| stack | held-out range | agnostic | per-program cost |
+|---|---|---|---|
+| **cascade(2)** | **2.5x – 10.9x** | fully — six plants, self-tuning, gated | none |
+| + path map | 2.6x – 5.8x | mostly (one plant, needs kinematics and periodicity) | none |
+| + per-program table | 4.9x – 20.3x | no | ~25 laps each |
+
+The best fully agnostic self-tuning result is the cascade, and the map does not meaningfully
+improve on it. Every figure above is a RANGE across programs, which is the form these numbers
+should have been quoted in from the start.

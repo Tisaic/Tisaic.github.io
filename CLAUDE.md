@@ -280,7 +280,7 @@ measurement behind each is in `docs/history/` — the pointer in brackets.
 | `test/run.sh` | The suite. See "What `./test/run.sh` actually runs" above. `--browser` / `--node` select which HALF runs — a wiring change cannot break a golden vector, and charging it 450 Node checks is what makes a suite something to avoid. |
 | `test/smoke.mjs` | Playwright checks and screenshots for every page. |
 | `test/lattsim/` | Node tests for the engine: stencil, indexing, units, conservation, Poiseuille, EOS, scalar, elastic, reconstruction. |
-| `test/flexisim/composite.test.mjs` | **The composite: cascade(2) + harmonic feedforward, 30.02× over a conventional machine.** Also pins the two failing orders and the clean-operator requirement. |
+| `test/flexisim/composite.test.mjs` | **The composite: cascade(2) + harmonic feedforward, 30.02× over a conventional machine ON ONE PROGRAM — across five it is 4.9× to 20.3× and on one the table makes the machine WORSE (brick 66).** Also pins the two failing orders and the clean-operator requirement. |
 | `test/flexisim/harmonic.test.mjs` | World-frame harmonic feedforward, and the path-normal frame that measures 0.99× on the same solve. |
 | `test/flexisim/` | Node tests for the hybrid plant: joint, arm, 2R, N-R, sensors, compliance, compensation, ServoFF, the learned filter, and contouring (`toolpath`, `pathilc`, `contour`). |
 | `test/blackbox/` | Node tests for the plant-agnostic controller, on three plants that share no physics. |
@@ -715,7 +715,21 @@ that matches it** — the point-to-point tabs measure a different question.
   returns the same operator), basis size (more harmonics is worse), and noise (four-lap
   averaging moves it 0.6%). **AND THE IDENTIFIED OPERATOR IS WORTH 4.2× OVER A LEAD-AND-GAIN:**
   ILC with the correct 500-step lead reaches 2.1× where HFF reaches 8.88× on the same machine.
-  **Sweep feedrate**
+    **AND 30.02× IS ONE PROGRAM, NOT THE STACK'S NUMBER (brick 66).** Re-measured across five
+  programs with the cascade commissioned once from noise and a table converged per program:
+  rounded 8×8 **20.34×**, rounded 10×6 **20.01×**, circle r3 4.90×, circle r5 **9.00× — WORSE
+  than the cascade's own 10.94×** — and sharp 9×7 4.97×. The cascade alone is program-dependent
+  too (2.48× to 10.94×). So the honest headline for the composite is a RANGE, 4.9–20.3×, and
+  the single 30.02× is its best case on the program it was tuned on. (That run used 6
+  refinement passes without backtracking where the 30× used 12 with, which widens the spread
+  but does not explain a program going backwards.)
+  **AND THE PATH MAP DOES NOT ADD TO THE CASCADE.** On programs it has never seen it is worth
+  **1.15× and 1.02×** over the cascade — the second inside its own constant control (1.01×) —
+  and the machine-scored selection could not find a candidate that beat the cascade on its own
+  held-back program (best 0.993×). It is worth 1.32×/2.00× over a CONVENTIONAL machine and
+  essentially nothing over a cascade, because the cascade has already removed the predictable
+  part and leaves a machine ~20% less lap-repeatable to learn from.
+**Sweep feedrate**
   runs the whole ladder and tabulates the trade. The arm is drawn at TRUE geometry; the error trail
   is the exaggerated object, pushed out along the path normal only.
 - **④ Black box** — `lib/blackbox/`, a controller GIVEN NOTHING: a scalar command it can
