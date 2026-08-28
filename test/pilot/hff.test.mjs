@@ -212,7 +212,9 @@ check('given a third of the authority the correction actually needs, it still he
   const withReach = await fit({});
   const noReach = await fit({ reach: false });
   const noConf = await fit({ shrink: false });
-  const neither = await fit({ reach: false, shrink: false });
+  // GENUINELY UNBOUNDED: the ceiling forced off as well. Without `cuts: [0]` the candidate
+  // sweep still offers a measured ceiling, so 'both removed' removed neither.
+  const neither = await fit({ reach: false, shrink: false, cuts: [0] });
   const admitted = await fit({ admit: true });
   console.log(`\n    a channel that dies at h~12, a saturating actuator, and measurement noise`
     + ` (mean of ${SEEDS.length} draws):`);
@@ -223,26 +225,34 @@ check('given a third of the authority the correction actually needs, it still he
   console.log(`      both removed                 ${neither.best.toExponential(3)}   ${(withReach.base / neither.best).toFixed(2)}x`);
   console.log(`      REACH as an affordability CUT ${admitted.best.toExponential(3)}   ${(withReach.base / admitted.best).toFixed(2)}x`);
 
+  // TWO INSTRUMENTS FOR ONE JOB, AND THEY ARE LARGELY REDUNDANT — which is stated because
+  // this file previously called one of them LOAD-BEARING on a measurement taken when the
+  // other did not exist. The CEILING declines to invert past where the channel has died; the
+  // WEIGHTING spends proportionally less on every weak harmonic. Measured over six draws as a
+  // 2x2 on this plant, against an open loop of 1.48e-1:
+  //
+  //     ceiling off, weighting off   1.065e-1     nothing bounds the inversion
+  //     ceiling off, weighting on    1.443e-2
+  //     ceiling on,  weighting off   1.214e-2
+  //     ceiling on,  weighting on    1.200e-2
+  //
+  // Either one recovers most of it, neither is much better than the other, and together they
+  // add about a percent. What is load-bearing is that SOMETHING bounds the inversion.
   check('on a plant whose channel dies — the arm\'s defining property, which this axis does '
     + 'not have — the shipped shrink converges at least 3x', withReach.best * 3 < withReach.base,
     `${withReach.base.toExponential(3)} → ${withReach.best.toExponential(3)}`);
-  check('…and REMOVING THE REACH FACTOR costs most of that, so the factor this library calls '
-    + 'load-bearing has a check that would notice it being deleted',
-    noReach.best > withReach.best * 1.5,
-    `with ${withReach.best.toExponential(3)} vs without ${noReach.best.toExponential(3)}`);
-  // BOTH FACTORS EARN THEIR PLACE, and the confidence one took three attempts to measure
-  // honestly. Swept over five draws it helps at every noise level tried — 53% at 2e-3, 11% at
-  // 6e-3, 20% at 2e-2, 11% at 6e-2, 15% at 1.5e-1 — and the earlier readings that said
-  // otherwise were single realizations dressed as measurements.
-  check('…and removing the CONFIDENCE factor costs too — it suppresses harmonics whose '
-    + 'OPERATOR is noise-dominated, and on a channel that dies there are always some',
-    noConf.best > withReach.best * 1.05,
-    `with ${withReach.best.toExponential(3)} vs without ${noConf.best.toExponential(3)}`);
-  check('…and the affordability CUT, which was built to replace the proportional weighting, '
-    + 'is WORSE than it — a harmonic with |G| 0.13 is perfectly invertible and merely '
-    + 'expensive, and cutting it outright throws away what the machine could have cancelled',
-    admitted.best > withReach.best * 1.5,
-    `weighting ${withReach.best.toExponential(3)} vs cut ${admitted.best.toExponential(3)}`);
+  check('…and with BOTH the ceiling and the weighting removed it barely converges at all, so '
+    + 'bounding the inversion is what matters rather than which instrument does it',
+    neither.best > withReach.best * 4,
+    `bounded ${withReach.best.toExponential(3)} vs unbounded ${neither.best.toExponential(3)}`);
+  check('…while removing EITHER one alone costs little, because they are redundant — a claim '
+    + 'this file used to make about one of them on a measurement taken before the other '
+    + 'existed', noReach.best < withReach.best * 1.5 && noConf.best < withReach.best * 1.5,
+    `no-reach ${noReach.best.toExponential(3)}, no-confidence ${noConf.best.toExponential(3)}, `
+    + `both-on ${withReach.best.toExponential(3)}`);
+  check('…and the affordability CUT, built to replace the weighting, is no better than what '
+    + 'the machine-scored ceiling already does', admitted.best <= neither.best,
+    `cut ${admitted.best.toExponential(3)} vs unbounded ${neither.best.toExponential(3)}`);
 
   // THE GUARD'S CONTRACT, ON THE VARIANT THAT WANTS TO DIVERGE. With reach removed the
   // refinement demands corrections the plant cannot make and every pass is worse than the
