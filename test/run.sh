@@ -229,6 +229,14 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # A PATH-AGNOSTIC CORRECTION and the selection rule that finds it. Full tier only: it
     # converges a harmonic table on six programs and then deploys twelve candidate maps.
     if [ "${SUITE}" = "full" ]; then node test/flexisim/pathmap.test.mjs; fi
+    # THE BUTTON ON THE ARM, against the strongest number this repository has. Full tier
+    # ONLY, and it is the most expensive check here by a wide margin — ~24 minutes, because
+    # it commissions the pilot cascade TWICE (on and off the rung below it, which is worth
+    # 1.66x and cannot be recovered by re-scoring afterwards) and then identifies and
+    # refines a harmonic layer over ~46 laps. It is here rather than in the quick tier for
+    # exactly the reason rule 2 states: what makes a suite something to avoid is charging
+    # a wiring change for a physics measurement. Run it when a rung changes.
+    if [ "${SUITE}" = "full" ]; then node test/flexisim/autostack.test.mjs; fi
     # THE MODULE THAT IS GIVEN NOTHING, on three plants that share no physics: a
     # lightly damped actuator, an over-damped process with a NEGATIVE gain two hundred
     # times smaller, and the real hybrid arm. One module, one set of options apart from a
@@ -288,6 +296,12 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     node test/pilot/emps.test.mjs
     node test/pilot/hff.test.mjs
     node test/pilot/autostack.test.mjs
+    # THE BUTTON ON FOUR MORE PLANTS THAT SHARE NO PHYSICS — a tank whose outflow goes as
+    # sqrt(level), a column that is linear transfer functions with dead time, a mill whose
+    # gauge is read a metre downstream, a barrel radiating as T^4 through a delay. Rule 18
+    # from the other side: a ladder measured on one plant has measured one plant. It is
+    # ~4 minutes because three of the four correctly refuse and stop early.
+    if [ "${SUITE}" = "full" ]; then node test/pilot/plants.test.mjs; fi
     if [ "${SUITE}" = "full" ]; then node test/pilot/stack.test.mjs; fi
     if [ "${SUITE}" = "full" ]; then node test/pilot/arm.test.mjs; fi
     if [ "${SUITE}" = "full" ]; then node test/pilot/ikfree.test.mjs; fi
