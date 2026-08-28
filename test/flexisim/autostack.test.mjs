@@ -117,7 +117,8 @@ async function fresh() {
 }
 
 /** One scored run: the deployed rungs, plus `extra` when a rung is being probed. */
-async function run(extra, name, laps = 3) {
+const AVG = 4;                      // settled laps averaged into the error signal
+async function run(extra, name, laps = 2 + AVG) {
   const { arm, l1, l2, servo, rc } = await fresh();
   armRef = arm;
   auto.beginRun();
@@ -157,10 +158,14 @@ async function run(extra, name, laps = 3) {
         tau[0] * 1e3, tau[1] * 1e3]);
       const d = decompose(path, arm.toolXY(), cmd);
       le[k] = d.contour;
-      if (l === laps - 1) {
-        sc.step(d.contour, d.lag, tau, [arm.j1.wM, arm.j2.wM]);
+      if (l === laps - 1) sc.step(d.contour, d.lag, tau, [arm.j1.wM, arm.j2.wM]);
+      // AVERAGED OVER THE SETTLED LAPS, not read off the last one. A deployed pilot has a
+      // lap-to-lap spread of a few percent, and one lap of that is noise in the very spectrum
+      // the harmonic rung inverts — composite.test.mjs averages four for exactly this reason.
+      // Rule 12: read the meter after it settles, and read it more than once.
+      if (l >= laps - AVG) {
         const tp = arm.toolXY();
-        ex[k] = tp[0] - cmd.x; ey[k] = tp[1] - cmd.y;
+        ex[k] += (tp[0] - cmd.x) / AVG; ey[k] += (tp[1] - cmd.y) / AVG;
       }
     }
     lapE.push(le);
