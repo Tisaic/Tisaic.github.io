@@ -306,5 +306,88 @@ check('…and every rung that landed below the instrument\'s floor says so in it
     'expected frac 0 with a cap the rung fits inside');
 }
 
+
+// ---------------------------------------------------------------------------------------
+// THE OTHER VERDICT: a plant where the CONVENTIONAL rung cannot help and the harmonic one can.
+//
+// On the axis above the conventional rung wins, so `deployed.classic = true` is the only
+// outcome that run can produce — and mutation-testing proved the consequence: "deploy the
+// conventional rung whatever it measured" SURVIVED, because forcing a decision that was going
+// to be taken anyway changes nothing. The refusal was never exercised, and neither was the
+// harmonic rung's DEPLOY path through a real commission.
+//
+// So: a unity channel carrying a lap-periodic disturbance at harmonics 7 and 11, while the
+// reference's own velocity and acceleration live at harmonic 1. The disturbance is orthogonal
+// to everything the conventional basis can express, so no coefficients exist that help — and
+// it is exactly what a lap-indexed correction is for.
+{
+  // A RIG WITH A REAL FLOOR. The first draft had none — a noiseless unity channel, which the
+  // harmonic rung cancelled to 4.4e-17 and reported as 5.7e14x. That is the trap this file
+  // exists to warn about, reproduced by accident: a perfectly repeating plant has no floor of
+  // its own and will report any number you like. So the channel carries measurement noise and
+  // the floor is set to what that noise actually is.
+  const N = 512, NAMP = 2e-3, FLOOR2 = NAMP / Math.sqrt(3);
+  let nseed = 7654321;
+  const nrnd = () => { nseed = (nseed * 1103515245 + 12345) & 0x7fffffff; return NAMP * (nseed / 0x7fffffff - 0.5) * 2; };
+  const rv = new Float64Array(N), ra = new Float64Array(N), dist = new Float64Array(N);
+  for (let k = 0; k < N; k++) {
+    const w = 2 * Math.PI * k / N;
+    rv[k] = 0.4 * Math.sin(w); ra[k] = 0.4 * Math.cos(w);
+    // EVEN harmonics, deliberately. The first draft used 7 and 11 and the conventional rung
+    // deployed on it at 1.03x — because `sgn(v)` is a SQUARE WAVE, whose series is every ODD
+    // harmonic, so the basis could reach them after all. A square wave has no even content,
+    // so 8 and 12 are genuinely outside everything this basis spans.
+    dist[k] = 0.03 * Math.sin(8 * w + 0.4) + 0.02 * Math.cos(12 * w);
+  }
+  const auto2 = new AutoStack({
+    channels: [{ lo: -1, hi: 1, vMax: 1, aMax: 1, jMax: 1 }],
+    uMax: 0.5, periodic: N, floor: FLOOR2,
+    basis: motionBasis([{ v: rv, a: ra }]),
+  });
+  const run2 = async (corr, name) => {
+    auto2.beginRun();
+    const e = new Float64Array(N);
+    let ss = 0;
+    for (let k = 0; k < N; k++) {
+      let u = auto2.act({ v: [rv[k]], a: [ra[k]], k })[0];
+      if (corr) u += corr.at(k)[0];
+      e[k] = dist[k] + u + nrnd();             // unity channel, plus what the meter cannot see
+      ss += e[k] * e[k];
+    }
+    return { score: Math.sqrt(ss / N), err: [e] };
+  };
+  const rep2 = await auto2.commission({ run: run2 });
+  console.log(`\n    a disturbance no function of the reference's own state can express:`);
+  console.log(auto2.table());
+  console.log(`    shipped ${JSON.stringify(rep2.deployed)}   ${rep2.base.toExponential(3)} → `
+    + `${rep2.best.toExponential(3)}   ${(rep2.base / rep2.best).toFixed(1)}x`);
+
+  check('the conventional rung is REFUSED when the disturbance is orthogonal to everything '
+    + 'its basis can express — the refusal path, which the axis above never takes',
+    rep2.deployed.classic === false, JSON.stringify(rep2.deployed));
+  check('…and the harmonic rung DEPLOYS on the same plant, so its deploy path is exercised by '
+    + 'a real commission and not only by a hand-armed wiring check',
+    rep2.deployed.hff === true, JSON.stringify(rep2.deployed));
+  check('…and the machine gets better by a margin far larger than the floor, so the deployment '
+    + 'is a measurement and not the rig flattering itself',
+    rep2.base / rep2.best > 10, `${rep2.base.toExponential(3)} → ${rep2.best.toExponential(3)}`);
+  // THE FLOOR LABEL'S OTHER HALF. The axis above asserts that a rung landing BELOW the floor
+  // says so; this one lands just above it and must therefore NOT say so. A label that fires
+  // on everything carries no information, and one that never fires carries none either.
+  const hRow = rep2.rungs.find((r) => /lap-periodic/.test(r.name));
+  check('…leaving essentially the noise and nothing else, which is what removing a lap-periodic '
+    + 'disturbance from a lap-periodic plant should leave',
+    rep2.best < FLOOR2 * 1.5, `${rep2.best.toExponential(3)} against a ${FLOOR2.toExponential(3)} noise floor`);
+  check('…and because it landed just ABOVE that floor it is NOT labelled floor-limited, so the '
+    + 'label discriminates rather than decorating every row',
+    hRow && hRow.atFloor === false && !/FLOOR/.test(hRow.note || ''),
+    hRow ? `atFloor ${hRow.atFloor}, note ${hRow.note}` : 'no harmonic row');
+  check('…while the conventional rung\'s own row still REPORTS what it measured, so a refusal '
+    + 'is a number and not a silence',
+    rep2.rungs.some((r) => /conventional/.test(r.name) && typeof r.score === 'number'
+      && /NOT deployed/.test(r.note || '')),
+    JSON.stringify(rep2.rungs.map((r) => [r.name, r.score.toExponential(2), r.note])));
+}
+
 console.log(failed ? `\nautostack: ${failed} check(s) FAILED\n` : '\nautostack: all checks passed\n');
 process.exit(failed ? 1 : 0);
