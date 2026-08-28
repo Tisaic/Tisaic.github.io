@@ -102,7 +102,7 @@ const auto = new AutoStack({
   // map into it. Forcing one frame on all three cost the pilot 2.9x when it was tried.
   channels: [0, 1].map(() => ({ lo: -3, hi: 3, vMax: 8e-4, aMax: 4e-6, jMax: 2e-7 })),
   uMax: 3.0, periodic: LAP, maxDepth: 2,
-  basis: motionBasis([{ v: wv[0], a: wa[0] }, { v: wv[1], a: wa[1] }]),
+  basis: process.env.NOCLASSIC ? null : motionBasis([{ v: wv[0], a: wa[0] }, { v: wv[1], a: wa[1] }]),
   frames: { classic: { uMax: 1.5, map: worldToJoint }, hff: { uMax: 1.5, map: worldToJoint },
     stack: { uMax: Math.min(2.0, 0.15 * (16 / K)) } },      // composite.test.mjs's own figure
   pilot: {},                        // filled below, once the arm's own centre is known
