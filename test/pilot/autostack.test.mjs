@@ -267,6 +267,50 @@ check('…and every rung that landed below the instrument\'s floor says so in it
     Math.abs(all - (only1 + only2 + only3)) < 1e-15,
     `${all} vs ${only1 + only2 + only3}`);
 
+  // THE FRAME MAPS. On a multi-axis machine the rungs do not share a frame — the harmonic
+  // solve was measured to need WORLD (8.86x against a path-normal 0.99x) while the pilot was
+  // measured to work in JOINT, and forcing one frame on all three cost the pilot 2.9x. The
+  // map that fixed it had no check at all: it was verified by running a twelve-minute arm
+  // harness once, which is the same evidentiary status the reach factor had before this file
+  // grew a plant for it. A map that silently reverted to identity would be caught by nothing
+  // cheap. So assert it directly, on a rotation whose answer is known by hand.
+  {
+    const TH = 0.7, cth = Math.cos(TH), sth = Math.sin(TH);
+    const rot = (u) => [cth * u[0] - sth * u[1], sth * u[0] + cth * u[1]];
+    const F = new AutoStack({
+      channels: [{ lo: -1, hi: 1 }, { lo: -1, hi: 1 }], uMax: 1e9,
+      frames: { stack: { map: rot }, hff: { map: (u) => [2 * u[0], 3 * u[1]] } },
+    });
+    F.stack = { sample: 1, act: () => [0.3, -0.2], observe: () => {}, layers: [] };
+    F.hff = { at: () => [0.1, 0.4] };
+    const ctx = { look: () => [0], k: 0 };
+
+    F.deployed = { classic: false, stack: 1, hff: false };
+    const got = F.act(ctx), want = rot([0.3, -0.2]);
+    check('a rung declaring a frame is mapped OUT of it before summing — asserted against a '
+      + 'rotation computed by hand, so an identity map cannot pass',
+      Math.abs(got[0] - want[0]) < 1e-12 && Math.abs(got[1] - want[1]) < 1e-12,
+      `act ${got.map((v) => v.toFixed(6))} vs rotated ${want.map((v) => v.toFixed(6))}`);
+    check('…and the map is not the identity on this input, so the check above has teeth',
+      Math.abs(want[0] - 0.3) > 0.05, `rotated x ${want[0].toFixed(4)} against raw 0.3`);
+
+    F.deployed = { classic: false, stack: 1, hff: true };
+    const both = F.act(ctx);
+    check('…and each rung goes through ITS OWN map, not one map applied to the sum',
+      Math.abs(both[0] - (want[0] + 0.2)) < 1e-12 && Math.abs(both[1] - (want[1] + 1.2)) < 1e-12,
+      `${both.map((v) => v.toFixed(6))} vs ${[want[0] + 0.2, want[1] + 1.2].map((v) => v.toFixed(6))}`);
+
+    // actBelow is what a host drives the machine with while commissioning the rung above; if
+    // it skipped the map, the pilot would commission on a machine no one ever deploys.
+    F.deployed = { classic: false, stack: 1, hff: true };
+    const below = F.actBelow('hff', ctx);
+    check('…and actBelow maps too, so a rung commissions on the same machine it deploys onto',
+      Math.abs(below[0] - want[0]) < 1e-12 && Math.abs(below[1] - want[1]) < 1e-12,
+      `${below.map((v) => v.toFixed(6))} vs ${want.map((v) => v.toFixed(6))}`);
+    check('…and actBelow STOPS at the named rung — it is the machine beneath it, not including it',
+      Math.abs(below[0] - both[0]) > 0.1, `below ${below[0].toFixed(4)} vs all ${both[0].toFixed(4)}`);
+  }
+
   // THE CONVENTIONAL RUNG'S OWN CAP. On this axis its correction is a thousandth of the
   // authority it is given, so the cap never binds and nothing here would notice it being
   // removed — mutation-testing this suite, "the conventional rung ignores its authority"

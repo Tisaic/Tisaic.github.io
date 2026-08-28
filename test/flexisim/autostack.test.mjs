@@ -103,7 +103,8 @@ const auto = new AutoStack({
   channels: [0, 1].map(() => ({ lo: -3, hi: 3, vMax: 8e-4, aMax: 4e-6, jMax: 2e-7 })),
   uMax: 3.0, periodic: LAP, maxDepth: 2,
   basis: motionBasis([{ v: wv[0], a: wa[0] }, { v: wv[1], a: wa[1] }]),
-  frames: { classic: { uMax: 1.5, map: worldToJoint }, hff: { uMax: 1.5, map: worldToJoint } },
+  frames: { classic: { uMax: 1.5, map: worldToJoint }, hff: { uMax: 1.5, map: worldToJoint },
+    stack: { uMax: Math.min(2.0, 0.15 * (16 / K)) } },      // composite.test.mjs's own figure
   pilot: {},                        // filled below, once the arm's own centre is known
 });
 
@@ -180,10 +181,18 @@ async function drivePilot(st) {
     const tgc = servo.jointTorques(cmd.map((c) => ({ theta: c.pos, omega: c.vel, alpha: c.acc })));
     const ff = rc.feedforward([[1, 0], [0, 1]], tgc, { enableToolff: false });
     // THE RUNGS BELOW THE PILOT ARE ARMED WHILE IT COMMISSIONS, because they will be armed
-    // when it deploys. The conventional rung reads the reference's own velocity and
-    // acceleration, which here are the pilot's commanded ones.
-    const below = auto.actBelow('stack', { v: [cmd[0].vel, cmd[1].vel],
-      a: [cmd[0].acc, cmd[1].acc], q: [cmd[0].pos, cmd[1].pos] });
+    // when it deploys — and they are fed the rates in THEIR OWN FRAME. The conventional rung
+    // was fitted on the reference's WORLD velocity and acceleration; the pilot commands
+    // JOINTS, so its commanded rates have to be carried through the Jacobian first. Handing
+    // joint rates to a world-fitted basis and then mapping the answer back through J-inverse
+    // is two frame errors that do not cancel: it drove this rung from 2.88x to 0.96x.
+    const Jc = arm.jacobian(cmd[0].pos, cmd[1].pos);
+    const wvx = Jc[0][0] * cmd[0].vel + Jc[0][1] * cmd[1].vel;
+    const wvy = Jc[1][0] * cmd[0].vel + Jc[1][1] * cmd[1].vel;
+    const wax = Jc[0][0] * cmd[0].acc + Jc[0][1] * cmd[1].acc;
+    const way = Jc[1][0] * cmd[0].acc + Jc[1][1] * cmd[1].acc;
+    const below = auto.actBelow('stack', { v: [wvx, wvy], a: [wax, way],
+      q: [cmd[0].pos, cmd[1].pos] });
     const refs = cmd.map((c, j) => ({ theta: c.pos + c.u + ff.dq[j] + below[j],
       omega: c.vel, alpha: c.acc }));
     const tau = servo.torques(refs);
