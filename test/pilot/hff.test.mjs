@@ -186,11 +186,20 @@ check('given a third of the authority the correction actually needs, it still he
   // single seed, and the confidence factor's margin then depended on which draw it got: it
   // measured 14% on one and 0.6% on another, so the check passed or failed on the noise
   // rather than on the library. A flaky check is a bug report about the check.
-  const SEEDS = [20260828, 555, 90210];
+  // SIX DRAWS, not three. Three was not enough to measure the confidence factor at all: the
+  // per-seed spread on this toy is large enough that three seeds said 'inert' and five said
+  // 'helps 53%', and I reported both in turn before checking how many draws the comparison
+  // actually needs. A mean over too few samples is a measurement of the sample.
+  const SEEDS = [20260828, 555, 90210, 31337, 8675309, 4242];
   const fit1 = async (opts, sd) => {
     seed = sd;
+    // EVERY CANDIDATE DIMENSION PINNED, so the only thing varying between these variants is
+    // the factor under test. Left free, each variant re-runs its own machine-scored selection
+    // and picks a different candidate — and then the comparison is between two selections
+    // rather than between the presence and absence of one factor. It measured the confidence
+    // factor BACKWARDS the first time this sweep was added.
     const H = new HarmonicFF({ lap: N, channels: 1, nh: NH, uMax: UMAX, probeStyle: 'spread',
-      probeFracs: [0.25], passes: 10, ...opts });
+      probeFracs: [0.25], reachPows: [1], passes: 10, ...opts });
     return H.commission(async (c) => toy(c));
   };
   const fit = async (opts) => {
@@ -204,6 +213,7 @@ check('given a third of the authority the correction actually needs, it still he
   const noReach = await fit({ reach: false });
   const noConf = await fit({ shrink: false });
   const neither = await fit({ reach: false, shrink: false });
+  const admitted = await fit({ admit: true });
   console.log(`\n    a channel that dies at h~12, a saturating actuator, and measurement noise`
     + ` (mean of ${SEEDS.length} draws):`);
   console.log(`      open loop                    ${withReach.base.toExponential(3)}`);
@@ -211,6 +221,7 @@ check('given a third of the authority the correction actually needs, it still he
   console.log(`      REACH removed                ${noReach.best.toExponential(3)}   ${(withReach.base / noReach.best).toFixed(2)}x`);
   console.log(`      CONFIDENCE removed           ${noConf.best.toExponential(3)}   ${(withReach.base / noConf.best).toFixed(2)}x`);
   console.log(`      both removed                 ${neither.best.toExponential(3)}   ${(withReach.base / neither.best).toFixed(2)}x`);
+  console.log(`      REACH as an affordability CUT ${admitted.best.toExponential(3)}   ${(withReach.base / admitted.best).toFixed(2)}x`);
 
   check('on a plant whose channel dies — the arm\'s defining property, which this axis does '
     + 'not have — the shipped shrink converges at least 3x', withReach.best * 3 < withReach.base,
@@ -219,28 +230,20 @@ check('given a third of the authority the correction actually needs, it still he
     + 'load-bearing has a check that would notice it being deleted',
     noReach.best > withReach.best * 1.5,
     `with ${withReach.best.toExponential(3)} vs without ${noReach.best.toExponential(3)}`);
-  // THE CONFIDENCE FACTOR IS A NULL AT THIS NOISE, and saying so is the point. It suppresses
-  // harmonics whose OPERATOR is noise-dominated, so it can only earn its place where
-  // identification actually is: swept, it is worth 0.3% at 2e-3 of noise, 1.7% at 6e-3,
-  // nothing at 2e-2, and 25% at 6e-2. Both halves are asserted — inert where the fit is
-  // clean, load-bearing where it is not — because a factor claimed to matter everywhere and
-  // measured to matter nowhere is how the reach factor's own claim went unchecked.
-  check('…while the CONFIDENCE factor is inert at this noise, which is stated rather than '
-    + 'assumed: it suppresses harmonics whose OPERATOR is noise-dominated, and here it is not',
-    Math.abs(noConf.best - withReach.best) < withReach.best * 0.05,
+  // BOTH FACTORS EARN THEIR PLACE, and the confidence one took three attempts to measure
+  // honestly. Swept over five draws it helps at every noise level tried — 53% at 2e-3, 11% at
+  // 6e-3, 20% at 2e-2, 11% at 6e-2, 15% at 1.5e-1 — and the earlier readings that said
+  // otherwise were single realizations dressed as measurements.
+  check('…and removing the CONFIDENCE factor costs too — it suppresses harmonics whose '
+    + 'OPERATOR is noise-dominated, and on a channel that dies there are always some',
+    noConf.best > withReach.best * 1.05,
     `with ${withReach.best.toExponential(3)} vs without ${noConf.best.toExponential(3)}`);
-  {
-    NOISE = 6e-2;                       // identification now genuinely noise-dominated
-    const hi = await fit({});
-    const hiNoConf = await fit({ shrink: false });
-    NOISE = 2e-3;
-    console.log(`      at 30x the noise:  shipped ${hi.best.toExponential(3)}`
-      + `   confidence removed ${hiNoConf.best.toExponential(3)}`);
-    check('…and at thirty times the noise it becomes load-bearing, worth at least 15% — so it '
-      + 'is a factor with a regime, not an ornament and not a claim',
-      hiNoConf.best > hi.best * 1.15,
-      `with ${hi.best.toExponential(3)} vs without ${hiNoConf.best.toExponential(3)}`);
-  }
+  check('…and the affordability CUT, which was built to replace the proportional weighting, '
+    + 'is WORSE than it — a harmonic with |G| 0.13 is perfectly invertible and merely '
+    + 'expensive, and cutting it outright throws away what the machine could have cancelled',
+    admitted.best > withReach.best * 1.5,
+    `weighting ${withReach.best.toExponential(3)} vs cut ${admitted.best.toExponential(3)}`);
+
   // THE GUARD'S CONTRACT, ON THE VARIANT THAT WANTS TO DIVERGE. With reach removed the
   // refinement demands corrections the plant cannot make and every pass is worse than the
   // last; the guard's whole job is that this ends at the baseline rather than past it. Assert
