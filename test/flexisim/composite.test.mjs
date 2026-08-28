@@ -376,6 +376,16 @@ async function commissionPilotOver(useHff) {
   return pilot;
 }
 
+// DECLARED HERE BECAUSE `deploy` READS THEM AND `deploy` IS CALLED BEFORE THE POINT THESE
+// USED TO SIT AT. As `const`s further down the file they were in the temporal dead zone at
+// the first call, so this file threw `Cannot access 'LAPS0' before initialization` on its
+// first deploy and exited 1 — every time it was run, from the commit that added it. It went
+// unseen because it is full-tier and the flagship rows above it are reachable with ONLY_TOP.
+// A suite too slow to run is a verification problem: this is what that costs.
+const PAMP = +(process.env.PAMP || 0.05);   // the HFF probe, on top of a deployed pilot
+const AVG = +(process.env.AVG || 4);        // laps averaged into each update
+const LAPS0 = 2 + AVG;                      // settle, then AVG scored laps
+
 /** Deploy any combination of the two on one fresh machine. */
 async function deploy({ hff = false, pilot = null, table = null }) {
   const { arm, l1, l2, servo } = await machine();
@@ -488,9 +498,6 @@ for (const [name, cfg] of rows) {
 // 4% and the probe was 4e-3 -- so the probe here is 0.05, twelve times larger, which the
 // two-amplitude linearity check (0.05 vs 0.20 agreeing to 1.00) already showed is still in
 // the linear regime.
-const PAMP = +(process.env.PAMP || 0.05);
-const AVG = +(process.env.AVG || 4);        // laps averaged into each update
-const LAPS0 = 2 + AVG;                      // settle, then AVG scored laps
 {
   const p0r = await deploy({ pilot: pBare });
   const PX0 = project(p0r.tx), PY0 = project(p0r.ty);

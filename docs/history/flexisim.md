@@ -5691,3 +5691,305 @@ spread — but it does not explain a program going BACKWARDS, and that is the pa
 The best fully agnostic self-tuning result is the cascade, and the map does not meaningfully
 improve on it. Every figure above is a RANGE across programs, which is the form these numbers
 should have been quoted in from the start.
+
+## Brick 67 — the harmonic feedforward on a real machine, and three constants that were the plant
+
+Brick 63 put a harmonic feedforward on top of a cascade and reached 30x. Brick 66 corrected
+that headline: 30.02x was ONE program, and across five it is 4.9x–20.3x. What neither brick
+established is the question that decides whether any of it is a method or a fitting
+exercise — **does it work on a plant that is not this arm?** Every number HFF had ever
+produced came from one machine, one path, one set of hand-set constants. This brick points
+it at the EMPS axis: a real prismatic servo joint, real recorded data, a three-speed
+trapezoid program rather than a closed curve, and no physics in common with a compliant
+two-link arm. `test/pilot/hff.test.mjs`, on the rig `emps.test.mjs` validates against the
+hardware.
+
+**IT TRANSFERS, AND IT LANDS IN COMPANY THE PROJECT DID NOT EXPECT.** On that axis, same rig,
+same program, same scoring window as every other controller measured there:
+
+```
+as shipped, the machine's own cascade    0.5764 mm rms      1.0x
+the pilot, no plant knowledge            0.0454 mm         12.7x
+ILC, Q width 21, best of 12 laps         0.0049 mm        119x    a hand-tuned Q filter
+HARMONIC FEEDFORWARD                     0.0024 mm        242x    nothing tuned
+inverse-dynamics FF, published M/Fv/Fc/OF                 275x    the plant model
+the machine's own lap-to-lap repeatability                1900x   (the floor)
+```
+
+**A LEARNED CORRECTION WITH NO PLANT MODEL REACHES THE MODEL-BASED FEEDFORWARD'S NUMBER**,
+which overturns `emps.test.mjs`'s own headline — that file is called "a real servo axis, real
+data, and a conventional method that wins" and asserts the model-based feedforward beats
+everything learned. It still beats the pilot; it still beats ILC; it does not beat this.
+
+**AND THE INSTRUMENT CANNOT SEPARATE THE TOP TWO, WHICH IS THE HALF THAT MATTERS.** The rig
+reproduces the recorded machine to 1.6 µm rms. 0.0024 and 0.0021 mm are 0.2 µm apart, so
+"matches the model-based feedforward" is what it supports and "beats it" is not; against
+ILC the gap is 2.5 µm, larger than the fidelity but not by much, so the shipped assertion is
+that HFF is at least ILC's equal rather than twice as good. What the rig sees comfortably is
+the 100x, and that is what is pinned.
+
+### The three constants, each of which was the plant
+
+**① THE HARMONIC COUNT — worth 33x, and rule 31 in a new costume.** The arm's NH = 16 was
+written up as "not a tuning choice, it is where the channel stops being able to act", and
+that was exactly right ABOUT THE ARM: its |G| runs 0.90 at h1, 0.13 at h8, 0.010 at h16 and
+is dead past that. The servo axis's position loop reaches 160 rad/s against a lap
+fundamental of 1.007 rad/s, so |G| is FLAT to h≈128 and still 0.17 at h=320. Measured, on
+the axis, by count:
+
+```
+NH   24     32     48     64     96    128    160    192    256    320    416
+     11.8x  16.9x  27.9x  39.4x  70.6x 120.6x 162.5x 214.6x 238.6x 247.9x 249.7x
+```
+
+The arm's 16 gives **7.5x** where the plant's own reach gives **248x**. There is no count in
+the module any more.
+
+**② THE STEP.** 1.0 converges the axis on its first pass and DIVERGES the arm, whose frozen
+operator is a poor Newton model of a plant that is not linear in the correction. Rejecting
+the pass and stopping is honest and useless — measured 1.00x. A rejected pass now HALVES the
+step and retries from the last good weights: one lap per rejection, and a plant that takes
+the full step never pays. On the axis the endpoint is byte-identical with backtracking added,
+which is the control.
+
+**③ THE PROBE — and this one cannot be decided from the fit at all.** Two designs, BASIS (one
+input slot at a time, every harmonic in phase — spiky, most of the lap barely perturbed) and
+SPREAD (all slots at once, Schroeder-phased, crest factor ≈ √2), at two amplitudes. All four
+are commissioned briefly and SCORED ON THE MACHINE, because the fit ranks them BACKWARDS:
+
+```
+EMPS      fit residual   machine          arm       fit residual   machine
+spread 25%   0.029       2.395e-3  ← best  spread 25%   0.006       3.437e-1
+spread 10%   0.024       2.407e-3          spread 10%   0.008       1.099e-1  ← best
+basis  25%   0.007       2.421e-3          basis  25%   0.004       1.134e-1
+basis  10%   0.006  ←best 3.023e-3  ← worst basis  10%   0.005       1.132e-1
+```
+
+On the axis the best-fitting candidate is the worst controller and the worst-fitting one is
+the best. On the arm, dropping the probe from 25% to 10% of the error peak is worth **3.1x**
+on the delivered machine while its residual moves the WRONG WAY. This is rule 16 caught in
+the act on two plants at once — a number computed from the model cannot check the model — and
+it is the same reason the pilot has a verify round.
+
+### Four defects found on the way, all of which passed every check they had
+
+**THE PROBE'S CREST FACTOR WAS READ AS THE PLANT'S LIMIT.** Injecting every harmonic IN PHASE
+makes the probe's peak grow as NH rather than √NH. At NH = 320 that drove the axis out of its
+linear range, the identified operator's determinant fell 0.995 → 0.73, and the refinement
+collapsed to 1.00x — which looks exactly like "the plant cannot be corrected above 256
+harmonics". Schroeder-phased at the same energy it is 247.9x. **The instrument fails before
+the model does** (rule 17), and the failure wore a plant's clothes.
+
+**AN UNDERDETERMINED PROBE DESIGN RETURNED A PLAUSIBLE OPERATOR.** The first library version
+carried the arm's 3-probe habit into a 2-channel plant, where the operator has 4 unknowns per
+row: three probes cannot determine it. The solve's absolute `1e-300` pivot floor passed the
+rank-deficient normal matrix and returned a fitted answer, |G| came back as noise, the arm
+measured 1.00x — and nothing complained. Now the probe count is `2c+1` (the first count that
+leaves a residual at all) and the pivot floor is RELATIVE to the matrix scale, so a
+rank-deficient design is REFUSED rather than fabricated. That fix alone took the arm 1.00x →
+4.81x.
+
+**A FIXED PHASE OFFSET PER CHANNEL DOES NOT SEPARATE CHANNELS.** Offsetting channel 2 by a
+quarter turn from channel 1 is ONE ROTATION applied to every probe, so all the injection
+vectors lie in the same two-dimensional subspace however many you take. Channel c now
+advances c times as fast in the probe index.
+
+**MATCHED AMPLITUDE IS NOT MATCHED PROBE.** The two designs have different crest factors by
+construction, so equal per-harmonic amplitude puts the basis probe at √(nh/2) times the peak.
+Uncorrected, that clipped against the axis's authority cap and read as the BASIS DESIGN
+failing (1.03x); at matched peak the two land within 1% there, and the difference that
+survives is on the arm. An earlier version of this brick would have said "the in-phase probe
+destroys the servo axis". It does not — a clipped probe does.
+
+### What the shrink is, and the control that says it is selecting
+
+Two dimensionless factors on each harmonic's Newton step, both measured, neither set:
+CONFIDENCE `1/(1+rel²)` from the operator's own least-squares residual at that harmonic, and
+REACH `min(1,|G|)` — |G| < 1 means the channel spends more command there than it removes
+error, and correction and error are in the same units, so that is a comparison and not a
+threshold. **Reach is load-bearing and it is not an attenuation in disguise:** removed, the
+arm goes 4.81x → **1.05x**, because the near-zero-gain harmonics then demand corrections the
+machine cannot make; on the axis, where every harmonic has reach, it is inert to four
+figures (241.95x against 241.97x). An AUTHORITY BUDGET was built to replace it — allocate
+`uMax` greedily to the harmonics that buy the most error per unit of command — and it is
+WORSE on the arm (4.45x against 4.81x) and identical on the axis, because the allocation's
+composition churns between passes as the error spectrum moves. Built, measured, dead.
+
+### What it costs, which is laps and not performance
+
+Four candidates commissioned and one refined is **36 laps** on the axis and **57** on the arm,
+against the **14** the hand-tuned version needed. The first reading of that was wrong and is
+recorded here because the correction is the useful part: stopped at 20 refinement passes the
+module reaches **7.93x** on the arm against the tuned **8.86x**, and it was written up as
+"gives up 1.12x on the plant the constants were derived for". It was still descending
+monotonically when it was stopped. Run to 45 passes — 82 laps — it reaches **9.17x**, PAST the
+tuned result, and is descending still (4.52e-2 → 4.50e-2 on the last pass).
+
+So the trade is not accuracy for generality. **A machine that chooses its own step takes
+smaller ones, so the same endpoint costs more laps**, and the laps buy 32x on a plant nobody
+tuned it for. `test/flexisim/harmonic.test.mjs` keeps its hand-tuned constants anyway — it is
+the record of what a tuned HFF reaches on the arm in 14 laps, which is a different and useful
+claim, and it is 2m26s of suite time where the self-tuning route is 13 minutes.
+
+### And the file that carries the 30x has been exiting 1 since the commit that added it
+
+Running the FULL Node tier for this brick — which had not been done since `composite.test.mjs`
+was written — it threw on its first `deploy()`:
+
+```
+ReferenceError: Cannot access 'LAPS0' before initialization
+```
+
+`const PAMP`, `const AVG` and `const LAPS0` sat two hundred lines BELOW the function that
+reads them, and `deploy` is called above that point, so they were in the temporal dead zone.
+The file died at its first deploy, every time, from the commit that added it — and because
+`run.sh` is `set -euo pipefail`, **it took the whole rest of the suite with it**: the entire
+pilot block, six plants and the EMPS axis included, never ran in that invocation at all.
+
+It went unseen for the reason this project already has a rule about. The file is full tier and
+13 minutes long; the flagship rows are reachable with `ONLY_TOP=1`, which skips the three
+intermediate rows and reaches the headline; so every time it was checked it was checked the
+cheap way. **A check too slow to be run is a verification problem, not an inconvenience** —
+this is the second time that rule has been paid for and the first time it hid a hard crash
+rather than a wrong number.
+
+Declarations hoisted above `deploy`. The file now runs end to end, and the three rows that had
+NEVER executed are the ones that were only ever described:
+
+```
+pilot alone (bare)                                   5.811e-2    7.09x   uPk 0.283
+HFF + pilot(bare)  — the double correction           4.029e-1    1.02x   uPk 0.654
+HFF + pilot(OVER)  — commissioned on what HFF leaves 1.378e+1    0.03x   uPk 2.390
+PILOT + HFF-ON-TOP                                   1.340e-2   30.76x
+```
+
+They say what the file's narrative claimed they would, which is the only reassuring part: the
+double correction is worth nothing (1.02x) and commissioning the pilot on what HFF leaves is a
+catastrophe (0.03x, correction peak 2.39 against the working 0.38). **The headline is 30.76x
+on the full path against the 30.02x recorded from the `ONLY_TOP` path** — same machine, same
+program, and the difference is that the intermediate rows now run before it. Brick 66's
+correction stands unchanged: this is ONE program, and across five the composite is 4.9x–20.3x.
+
+### Not built, and the measurement that would change the answer
+
+The module still needs a lap length, so it cannot yet be pointed at a program that does not
+close. It has no deploy gate: it cannot make the machine worse than baseline (the guard
+returns the last good weights) but it will happily deploy a 1.02x. And the probe amplitude
+ladder is two rungs chosen a priori rather than a linearity test — re-probing at half
+amplitude and comparing the two operators against their own noise would make the choice a
+measurement rather than a search, and would say when the probe is too large instead of
+discovering it through a worse machine.
+
+## Brick 68 — one button, and the conventional layer wins
+
+The owner's correction to brick 67's write-up: *"This is way too many steps. Routing signals
+and setting maxes and hitting auto tune is the workflow. Setting a bit if it is periodic and
+giving the path is optional. Otherwise, build in a self tuning traditional controls into the
+stack. Ts can be auto identified. Selection of the best stack is internally possible."*
+
+All four are right, and the last three are the reason the first one was true: the six-phase
+procedure brick 67 ended with was a decision tree the OPERATOR had to walk, and every node in
+it is a measurement. `lib/pilot/autostack.js` is that tree moved inside.
+
+```js
+const auto = new AutoStack({ channels: [{lo, hi, vMax, aMax, jMax}], uMax, floor });
+const report = await auto.commission(host);
+```
+
+Told: the maxes, the authority, what the instrument can resolve, and optionally that the
+program repeats. Works out for itself: its timescale (the pilot always did), whether each
+rung is worth deploying, how deep to cascade, and which prefix of the ladder to ship.
+
+### The missing rung was the conventional one, and it is the best rung on the machine
+
+Everything in `lib/pilot/` learned a plant it was told nothing about. The one thing nobody had
+built was the thing a motion engineer writes by hand: a static feedforward in the reference's
+own state. `lib/pilot/classic.js` fits `[a, v, sign(v), 1]` **on the machine**, with the same
+probe → frozen-operator Newton → backtracking → monotone-guard machinery `hff.js` uses. Only
+the BASIS differs — harmonics of a lap there, the reference's state here — which is why the
+two compose. On the EMPS axis, against every controller ever measured on it:
+
+```
+as shipped                                        0.5764 mm     1.0x
+the pilot, no plant knowledge                     0.0454 mm    12.7x
+ILC, hand-tuned Q, best of 12 laps                0.0049 mm   119x
+harmonic feedforward (brick 67)                   0.0024 mm   242x
+inverse-dynamics FF at the PUBLISHED M/Fv/Fc/OF   0.0021 mm   275x
+FOUR COEFFICIENTS, 14 LAPS, NO MODEL              0.0014 mm   425x
+```
+
+**And the coefficient is checkable, which no learned model here has ever been.** The dominant
+one comes back at 0.797 mm on a basis normalised to peak reference velocity; this machine's
+position loop runs at kp = 160 s⁻¹ against a peak 0.1246 m/s, so its own velocity lag is
+0.778 mm. **It found the loop's lag term from data to 2.4%.** An independent route agreeing is
+worth more than a better score (rule 15).
+
+### It is a MODEL and not a memory, and the control is the same signal
+
+The coefficients multiply the reference's derivatives, so they are evaluated live on whatever
+the machine is asked to do next. On a two-tone sine the axis has never run:
+
+```
+open loop                                    0.4754 mm
+the same four coefficients, evaluated live   0.0028 mm   169.8x
+the identical signal replayed as a lap table 0.8987 mm     0.53x
+```
+
+The third row is the control and it is what makes the second row mean something: the SAME
+correction signal, indexed by sample instead of by the reference's state, makes the machine
+**worse than not correcting at all**. It independently reproduces the 0.55x this project
+measured in brick 56 for a phase-indexed ILC table on an unseen program, by a completely
+different route.
+
+### What the button decides, and it is not what this project would have predicted
+
+```
+as it arrived                    5.7640e-1
+conventional (self-tuned)        1.3568e-3   424.82x   14 laps    <- SHIPPED
++ pilot cascade, depth 1         3.4388e-3     0.39x   refused: worse
++ lap-periodic (harmonic)        1.3549e-4    25.38x   refused: below the floor
+```
+
+**Both refusals are right and they are right for different reasons.**
+
+The PILOT is refused because it has nothing left to model. This project had already measured
+that its entire benefit on this axis is the velocity-lag term q̇/kp — and that is exactly what
+the rung below just removed. A layer that arrives second gets what the first one left.
+
+The HARMONIC layer is refused because **the instrument cannot see the difference**. It reaches
+0.00014 mm; the rig reproduces the recorded hardware to 0.0016 mm and the machine repeats lap
+to lap to 0.0003 mm. A deterministic simulation of a perfectly repeating plant has no floor of
+its own, so the first version of this measured **4254x** and reported it. That is a property of
+the simulator. `AutoStack` now takes the instrument's floor and declines to credit anything
+below it — so it ships the rung that is measurable and TRANSFERS over the one that is neither.
+
+### Four defects, three of them in the harness, and the stack found all four
+
+1. **The floor rule REJECTED THE BEST RUNG.** Written the obvious way — a rung must improve
+   AND land above the floor — it threw out the conventional layer for landing at 1.357 µm
+   under a 1.6 µm floor and shipped the harmonic rung's 242x instead of 425x. Going under the
+   floor is the GOAL; all it costs is the ability to say by how much. Both sides are now
+   floored before comparison.
+2. **THE PILOT WAS ARMED AND CONTRIBUTING ZEROS**, and the table said "no better than the rung
+   below" about a layer that had never acted. It had no `_initRun()` and no `observe()` — the
+   dynamic rungs carry runtime state and are blind without the measurement stream. This is the
+   trap already on record here (`act()` returns zeros when a pilot refuses, so a refused rung
+   and a useless one print identically), arriving through a new door. `beginRun()` and
+   `observe()` are now part of the contract, and the test asserts the pilot's peak |u| was
+   non-zero AND unsaturated before believing "it did not help".
+3. **THE RUNG BELOW WAS EVALUATED ON THE WRONG TRAJECTORY.** During pilot commissioning the
+   host fed the conventional rung the PROGRAM's derivatives while the pilot was driving its
+   own excitation — so the machine was being disturbed by a correction for a trajectory it was
+   not on. The pilot modelled that and deployed straight into its clamp: 2.000 mm peak against
+   a 2.0 mm cap, machine 1500x worse. Rule 11, on the rung below instead of the model above.
+4. **A COSINE PROBE DESIGN AT m+1 PROBES ALIASES** — slot m is slot 1 reflected — and the
+   normal matrix comes back singular. One slot at a time plus one combined probe.
+
+### Not built, and the measurement that would change the answer
+
+`AutoStack` has been driven end to end on ONE plant. The conventional rung needs the
+reference's derivatives, so a machine that is handed only positions must difference them
+itself, and nothing here measures what that costs. The rung ORDER is fixed (conventional →
+pilot → harmonic) on brick 63's measurement that the reverse is 0.71x; only the first two of
+the three orderings have ever been measured. And the ladder is a prefix — it deploys rungs
+1..k and never tries a rung with a gap in it.

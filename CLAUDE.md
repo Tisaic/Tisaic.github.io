@@ -272,6 +272,9 @@ measurement behind each is in `docs/history/` — the pointer in brackets.
 | `lib/probesense/` | Soft-sensing a field from one point in it. |
 | `lib/flexisim/` | `joint.js`, `link.js`, `arm.js`, `arm2r.js`, `armnr.js`, `tipsensor.js`, `chainsensor.js`, `compliance.js`, `compensator.js`, and the contouring three — `toolpath.js`, `contour.js`, `pathilc.js`. |
 | `lib/blackbox/` | `blackbox.js` (identify → design → verify → correct) and `qp.js` (the box-constrained preview solve). Imports nothing from `lib/flexisim/`. |
+| `lib/pilot/hff.js` | Harmonic feedforward: a lap-periodic correction identified ON the machine. Carries no per-plant constant — count, step, probe design and probe amplitude are all measured. |
+| `lib/pilot/classic.js` | The CONVENTIONAL layer, self-tuned: a static feedforward in the reference's own state (`[a, v, sign v, 1]`), fitted on the machine. 425× on the EMPS axis in 14 laps, past the published inverse-dynamics feedforward. |
+| `lib/pilot/autostack.js` | **ONE BUTTON.** Route the signals, state the maxes, press it. Commissions the ladder, scores every rung on the machine, and ships the best prefix. |
 | `version.json` | Server-side build manifest for stale-page detection. |
 | `modules.json` | Generated list of every script, so `reloadFresh()` can bust the ES-module cache. |
 | `docs-manifest.json` | Generated list of every `.md`, for the Docs viewer. |
@@ -280,10 +283,12 @@ measurement behind each is in `docs/history/` — the pointer in brackets.
 | `test/run.sh` | The suite. See "What `./test/run.sh` actually runs" above. `--browser` / `--node` select which HALF runs — a wiring change cannot break a golden vector, and charging it 450 Node checks is what makes a suite something to avoid. |
 | `test/smoke.mjs` | Playwright checks and screenshots for every page. |
 | `test/lattsim/` | Node tests for the engine: stencil, indexing, units, conservation, Poiseuille, EOS, scalar, elastic, reconstruction. |
-| `test/flexisim/composite.test.mjs` | **The composite: cascade(2) + harmonic feedforward, 30.02× over a conventional machine ON ONE PROGRAM — across five it is 4.9× to 20.3× and on one the table makes the machine WORSE (brick 66).** Also pins the two failing orders and the clean-operator requirement. |
+| `test/flexisim/composite.test.mjs` | **The composite: cascade(2) + harmonic feedforward, 30.76× over a conventional machine ON ONE PROGRAM — across five it is 4.9× to 20.3× and on one the table makes the machine WORSE (brick 66).** Also pins the two failing orders and the clean-operator requirement. **It exited 1 on its first `deploy()` from the commit that added it until brick 67** — three `const`s below the function that read them — and `set -e` meant it took the whole pilot block down with it. It was never caught because it is 13 minutes long and its headline is reachable with `ONLY_TOP=1`. |
 | `test/flexisim/harmonic.test.mjs` | World-frame harmonic feedforward, and the path-normal frame that measures 0.99× on the same solve. |
 | `test/flexisim/` | Node tests for the hybrid plant: joint, arm, 2R, N-R, sensors, compliance, compensation, ServoFF, the learned filter, and contouring (`toolpath`, `pathilc`, `contour`). |
 | `test/blackbox/` | Node tests for the plant-agnostic controller, on three plants that share no physics. |
+| `test/pilot/hff.test.mjs` | `lib/pilot/hff.js` pointed at the EMPS axis, told only the lap length, the channel count and its authority — the agnosticism test. |
+| `test/pilot/autostack.test.mjs` | The button, end to end on the EMPS axis: the conventional rung ships at 425×, the pilot and the harmonic rung are both refused, and both refusals are asserted to be the right ones for the right reasons. |
 | `test/pilot/` | Full-tier files here SKIP and exit 0 without `SUITE=full` — that hole let a gate regression ship for three bricks. Node tests for the pilot on six plants that share no physics: the 2R arm, a quadruple tank, a three-zone extruder barrel, the Wood–Berry column, a cold mill AGC, and the EMPS servo axis (real data). |
 | `docs/history/` | The measurement record — see the last section. |
 | `CLAUDE.md` | This file. |
@@ -683,13 +688,13 @@ that matches it** — the point-to-point tabs measure a different question.
   compliance-only 5.671e-2 — for the stiff-default reason above and nothing to do with the
   stack. Performance belongs in plain Node where the plant is STATED; the browser's job is
   what only the browser can break, which is the wiring.
-  **THE COMPOSITE — A CASCADE OF PILOTS WITH HARMONIC FEEDFORWARD ON TOP, 30.02× (brick 63),
+  **THE COMPOSITE — A CASCADE OF PILOTS WITH HARMONIC FEEDFORWARD ON TOP, 30.76× (brick 63),
   and the owner's physics is what found it.** The arm is not ringing at corners, it is
   SPRING-LOADED: the deflection depends on geometry, inertia, gravity and direction of travel,
   and it is lap-correlated only because a closed program revisits the same poses in the same
   order. One plant, one program, one conventional baseline (4.122e-1): pilot alone 6.23×, HFF
-  alone 8.86×, pilot + HFF **16.93×**, **cascade(2) + HFF 1.373e-2 = 30.02×** — drive peak 30%
-  of `tauMax` with ZERO saturations, correction peak 0.381 rad, machine still repeating, all
+  alone 8.86×, pilot + HFF **16.93×**, **cascade(2) + HFF 1.340e-2 = 30.76×** — drive peak 30%
+  of `tauMax` with ZERO saturations, correction peak 0.382 rad, machine still repeating, all
   four asserted. `test/flexisim/composite.test.mjs`.
   **THE ORDER IS NOT SYMMETRIC.** The pilot commissions on a program-agnostic SCRIBBLE; an HFF
   table is indexed by LAP PHASE. Commissioning the pilot OVER HFF applies a phase-indexed
@@ -715,12 +720,12 @@ that matches it** — the point-to-point tabs measure a different question.
   returns the same operator), basis size (more harmonics is worse), and noise (four-lap
   averaging moves it 0.6%). **AND THE IDENTIFIED OPERATOR IS WORTH 4.2× OVER A LEAD-AND-GAIN:**
   ILC with the correct 500-step lead reaches 2.1× where HFF reaches 8.88× on the same machine.
-    **AND 30.02× IS ONE PROGRAM, NOT THE STACK'S NUMBER (brick 66).** Re-measured across five
+    **AND THAT IS ONE PROGRAM, NOT THE STACK'S NUMBER (brick 66).** Re-measured across five
   programs with the cascade commissioned once from noise and a table converged per program:
   rounded 8×8 **20.34×**, rounded 10×6 **20.01×**, circle r3 4.90×, circle r5 **9.00× — WORSE
   than the cascade's own 10.94×** — and sharp 9×7 4.97×. The cascade alone is program-dependent
   too (2.48× to 10.94×). So the honest headline for the composite is a RANGE, 4.9–20.3×, and
-  the single 30.02× is its best case on the program it was tuned on. (That run used 6
+  the single 30.76× is its best case on the program it was tuned on. (That run used 6
   refinement passes without backtracking where the 30× used 12 with, which widens the spread
   but does not explain a program going backwards.)
   **AND THE PATH MAP DOES NOT ADD TO THE CASCADE.** On programs it has never seen it is worth
@@ -729,7 +734,31 @@ that matches it** — the point-to-point tabs measure a different question.
   held-back program (best 0.993×). It is worth 1.32×/2.00× over a CONVENTIONAL machine and
   essentially nothing over a cascade, because the cascade has already removed the predictable
   part and leaves a machine ~20% less lap-repeatable to learn from.
-**Sweep feedrate**
+**AND THE HARMONIC FEEDFORWARD NOW HAS A SECOND PLANT UNDER IT, WHICH IS THE ONLY THING THAT
+  MAKES IT A METHOD (brick 67).** `lib/pilot/hff.js` — the same module, told nothing but the lap
+  length, the channel count and its authority — commissions itself on the **EMPS servo axis**, a
+  real machine with real data and no physics in common with this arm: **0.5764 → 0.0024 mm rms,
+  242x**, against that page's pilot at 12.7x and its HAND-TUNED ILC at 119x, landing ON the
+  inverse-dynamics feedforward at the published parameters (275x, 0.0021 mm) — **which overturns
+  `emps.test.mjs`'s own headline that the model-based method beats everything learned.** The rig
+  reproduces the hardware to 1.6 µm and the top two are 0.2 µm apart, so what is claimed is
+  "matches", not "beats". THE COST IS STATED: 36 laps on the axis and 57 on the arm against the
+  hand-tuned 14 — **and the cost is LAPS, not performance.** Stopped at 20 passes on the ARM it
+  reaches 7.93x against the tuned 8.86x and that was first written up as giving up 1.12x; it was
+  still descending. Run to 82 laps it reaches **9.17x, PAST the tuned result**, and is descending
+  still. A machine that chooses its own step takes smaller ones, so the same endpoint costs more
+  laps, and those laps buy 32x on a plant nobody tuned it for.
+  `test/flexisim/harmonic.test.mjs` keeps its tuned constants anyway: 14 laps and 2m26s of suite
+  time against 82 and 13 minutes. Four
+  defects came out of it, all of which had passed every check they had: an in-phase probe whose
+  peak grows as NH drove the axis nonlinear and the resulting collapse was read as the PLANT's
+  limit; a 3-probe design was silently UNDERDETERMINED on a 2-channel plant and the solve's
+  absolute pivot floor returned a fitted operator instead of refusing (1.00x, fixed to `2c+1`
+  probes and a RELATIVE floor, worth 1.00x → 4.81x); a fixed per-channel phase offset is one
+  rotation applied to every probe and does not separate channels at all; and comparing two probe
+  designs at matched per-harmonic AMPLITUDE rather than matched PEAK compared a probe against a
+  saturation.
+  **Sweep feedrate**
   runs the whole ladder and tabulates the trade. The arm is drawn at TRUE geometry; the error trail
   is the exaggerated object, pushed out along the path normal only.
 - **④ Black box** — `lib/blackbox/`, a controller GIVEN NOTHING: a scalar command it can
@@ -753,7 +782,10 @@ that matches it** — the point-to-point tabs measure a different question.
 | `lib/probesense/` | Soft-sensing a field from one point in it. Fed numbers; knows no physics. |
 | `lib/flexisim/` | `joint`, `link`, `arm`, `arm2r`, `armnr` (recursive Newton–Euler), `tipsensor`, `chainsensor`, `compliance`, `compensator`, plus contouring: `toolpath` (geometry + feedrate profile), `contour` (the metrics), `pathilc` (learning over laps). |
 | `lib/blackbox/` | A controller given nothing about the plant, plus `qp.js`. Imports nothing from `lib/flexisim/` — the boundary is the directory. Verified on three plants sharing no physics. |
+| `lib/pilot/hff.js` | **HARMONIC FEEDFORWARD, and the module that made the method plant-agnostic (brick 67).** A repeating program has a repeating error, so invert the machine at the lap's own harmonics: probe, solve, and take a damped Newton step against a FROZEN operator. It carries NO per-plant constant. The harmonic COUNT is gone (the arm's 16 is where THAT channel dies; the servo axis is flat to h≈128 and the same 16 costs 33x there); the STEP backtracks (1.0 converges the axis on pass one and diverges the arm); and the PROBE DESIGN AND AMPLITUDE are chosen by commissioning four candidates and SCORING THEM ON THE MACHINE, because the fit ranks them backwards — on the axis the best-fitting candidate is the worst controller, and on the arm a 25%→10% probe is worth 3.1x while its residual moves the wrong way. Each harmonic's step is shrunk by CONFIDENCE (its own fit residual) and REACH (min(1,\|G\|), load-bearing: removed, the arm goes 4.81x → 1.05x; on the axis inert to four figures). |
 | `lib/pilot/stack.js` | **A CASCADE OF PILOTS, wired to the page as ⑤/⑥'s Cascade depth slider (brick 59).** Layer k is an ordinary Pilot commissioned with layers 1..k−1 deployed and FROZEN, so each models what the one below it left; a layer that cannot vouch for itself ends the stack, and the summed correction is clamped ONCE at the engineer's cap. Every layer above the first is PINNED to the first's cadence — one host, one look-ahead closure, one meaning for `act(off)` — and chooses its own Ts, horizon, lags, ridge and basis on top of it. |
+| `lib/pilot/autostack.js` | **ONE BUTTON, and the answer it comes to is not the one this project would have predicted (brick 68).** Told the channels' maxes, the correction authority, what the instrument can RESOLVE, and optionally that the program repeats. Works out for itself: its timescale, whether each rung pays, how deep to cascade, and which prefix of the ladder to ship — every one by measuring on the machine. Order is conventional → pilot → harmonic and is not symmetric (the reverse measured 0.71×). On the EMPS axis it ships the CONVENTIONAL rung alone at 425× and refuses the other two: the pilot at 0.39× because the rung below already removed the velocity lag that is its whole benefit there, and the harmonic rung — which scored 25× better — because BOTH sides are below the rig's 1.6 µm fidelity and it declines to credit what its instrument cannot see. A first version without that floor reported **4254×**, which was the simulator. |
+| `lib/pilot/classic.js` | **THE CONVENTIONAL LAYER, SELF-TUNED — and the best single rung on a real machine.** `[a, v, sign v, 1]` fitted ON the machine with the same probe → frozen-operator Newton → backtracking → monotone-guard machinery `hff.js` uses; only the BASIS differs, which is why they compose. EMPS: 0.5764 → 0.0014 mm, **425× in 14 laps**, past the inverse-dynamics feedforward at the PUBLISHED M/Fv/Fc/OF (275×). **And the coefficient is checkable:** the dominant one is 0.797 mm against the position loop's own vPeak/kp = 0.778 mm — it found the loop's lag term from data to 2.4%. **It is a MODEL, not a memory:** on a two-tone sine the axis has never run it is worth 169.8× evaluated live, while the IDENTICAL signal replayed as a lap table is 0.53× — worse than nothing, independently reproducing brick 56's 0.55× for a phase-indexed ILC table by another route. |
 | `lib/pilot/` | **The deploy gate is OPT-IN (`autoRefuse`, default false): the verify is measured and REPORTED but does not veto unless asked; `report.wouldRefuse` carries the reason it would have given.** Route–limit–run–deploy: settle → probe → excite → fit → verify → deploy-or-refuse, on a receding-horizon box-constrained QP. The verify scores two regimes — a filtered-noise scribble and a trapezoid PROGRAM — and gates on the worse. Imports only `../blackbox/qp.js`. |
 
 ## Versioning
