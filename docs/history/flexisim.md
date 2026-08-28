@@ -5993,3 +5993,157 @@ itself, and nothing here measures what that costs. The rung ORDER is fixed (conv
 pilot → harmonic) on brick 63's measurement that the reverse is 0.71x; only the first two of
 the three orderings have ever been measured. And the ladder is a prefix — it deploys rungs
 1..k and never tries a rung with a gap in it.
+
+## Brick 69 — the ladder on six plants, and eleven defects the bar found
+
+Brick 68 built `AutoStack` and drove it on ONE plant, which is exactly the weakness it closed
+with: "a ladder measured on one plant has measured one plant." The owner's instruction was
+that this is the main path from here, fully verified, at the strongest performance any testing
+here has shown, on the softest two-link arm and every other plant. This brick is that.
+
+### What it measures now, against the strongest prior result on each machine
+
+```
+plant                      ladder ships    prior best              verdict
+2R arm, softest            7.828e-2        9.870e-2 (mode ⑤ d2)    BEATS 1.26x
+2R arm, K1/E0.06           see below       1.340e-2 (composite)    short
+EMPS servo axis            1.357e-3        2.1e-3 (published IDFF) BEATS, at the rig floor
+quadruple tank             4.531e-2        pilot 1.32x             BEATS
+Wood-Berry column          refuses         lost to published BLT   MATCHES
+cold mill AGC              refuses         pilot refused 0.42x     MATCHES
+three-zone extruder barrel refuses         pilot refused 0.86x     MATCHES
+```
+
+Three of those are REFUSALS and that is the half worth reading. A button that always finds
+something is not measuring, and the ladder reaches the same verdict on the column, the mill and
+the barrel that this project reached the hard way — told nothing about any of them. The
+cross-plant check asserts both halves: no plant is made worse, AND not every plant is deployed
+on.
+
+**NONE OF THE FOUR NEW PLANTS RUNS A LAP**, so the harmonic rung is never offered and its row
+does not appear. That is the point rather than an omission: the rung that carries the axis and
+the arm is INAPPLICABLE on a recipe, and a ladder that invented a program the machine does not
+run would be inventing a result.
+
+### The bar caught eleven defects, and every one was a finding already in this repository
+
+A performance bar that can only pass is decoration. This one failed on first contact and kept
+failing, and each failure was localised to a rule already written down here that the ladder
+violated.
+
+1. **THE HARMONIC OPERATOR WAS IDENTIFIED THROUGH THE ACTIVE PILOT.** Brick 63 measured that
+   exact configuration as broken — the pilot is a receding-horizon controller, it REACTS to the
+   probe, the loop stops being LTI — and recorded 11.27x → 16.93x for fixing it. The rung was
+   worth 1.02x. `HarmonicFF` now tags each lap with its phase and the host disarms what is
+   REACTIVE during identification only; the conventional rung stays armed because a static
+   function of the reference reacts to nothing.
+2. **THE PROBE WAS SIZED AGAINST THE DEPLOYED MACHINE WHILE IDENTIFYING ON THE CLEAN ONE.**
+   Once a reactive layer is disarmed for identification the plant under the probe has a larger
+   error, so a probe sized from the deployed error is far too small to see through the noise.
+   Composite raises its own probe twelvefold for this reason and says so. One extra lap on the
+   machine actually being probed, and the operator differenced against THAT machine's spectrum.
+3. **A CHEAP RUNG WAS CRIPPLING AN EXPENSIVE ONE.** The conventional rung deploys at 1.24x and
+   the cascade commissioned above it then stopped at depth 1; with it withheld the same cascade
+   reached depth 2 and the machine ended 1.66x better. A greedy ladder cannot see this — each
+   rung is kept because it beat the machine BELOW it, decided before the rungs above existed —
+   and the drop-one pass added earlier cannot recover it, because by then the damage is baked
+   into a model fitted on the wrong plant. The pilot rung is now commissioned BOTH ways.
+   **AND THE DECISION GOES BOTH WAYS ON THE SAME ARM:** withheld at K 1 / E 0.06, KEPT at the
+   softest sliders (1.187e-1 with against 1.963e-1 without). Same code, opposite verdicts,
+   each measured.
+4. **JOINT RATES WERE FED TO A WORLD-FITTED BASIS** and the answer mapped back through
+   J-inverse — two frame errors that do not cancel, worth 2.88x → 0.96x on that rung.
+5. **THE PILOT WAS THE ONLY RUNG NOT GIVEN ITS OWN AUTHORITY**, being handed the COMMON cap
+   instead. That cap belongs to the SUM in the common frame.
+6. **ONE FRAME WAS FORCED ON ALL THREE RUNGS** and it cost the pilot 2.9x. The harmonic solve
+   needs WORLD (8.86x against a path-normal 0.99x); the pilot works in JOINT. Rungs now declare
+   their own frame and their own authority, and `actBelow` maps too, so a rung commissions on
+   the machine it deploys onto.
+7. **THE COMMON CAP COULD AMPUTATE A RUNG IN SILENCE** — the shape of the defect that ran a
+   pilot at a sixth of its authority for a whole brick. Per-rung authorities are not comparable
+   across frames, so nothing can check at construction that they sum inside the common one.
+   Clipping is now COUNTED and the row says so before any verdict.
+8. **THE GAIN COLUMN COMPARED AGAINST THE PREVIOUS ROW.** A refused rung still gets a row, so
+   the next rung was credited with undoing a regression nobody deployed: it printed 1.72x for a
+   rung that delivered 1.19x. Against the best DEPLOYED score now.
+9. **`passes: 8` WAS A COUNT WEARING A BUDGET'S CLOTHES.** The loop already stops when a pass
+   fails to earn a tenth of a percent, so a higher ceiling costs nothing on a plant that
+   converges — the axis finishes in four. Eight was simply where the arm got cut off; it was
+   measured still descending at pass 25 and again at 45, worth 7.90x → 9.17x on laps alone.
+10. **RULE 26, IN THE REPORT:** the clipping readout used 1 as its "never clipped" sentinel,
+    and 1 is a real reading — a demand of exactly the cap. Null now.
+11. **RULE 42, IN THE SELECTION:** the harmonic rung took the strict best score. It now takes
+    the CHEAPEST candidate within 5% of the best measured IMPROVEMENT — the band belongs on
+    what a candidate buys, never on what it leaves, or "do nothing" falls inside it and wins on
+    effort. It changed a decision immediately: the axis now picks the 10% probe over the 25%.
+
+### Built, measured, dead
+
+**REACH AS AN AFFORDABILITY CUT.** The reasoning was sound: a harmonic with |G| = 0.13 is
+perfectly identified and perfectly invertible, merely expensive, so it should be admitted at
+FULL step or not at all rather than attenuated to 13% of its Newton step. Measured on the toy
+plant in milliseconds rather than guessed at over a 24-minute arm run: **4.53x against the
+weighting's 12.60x.** It admits a harmonic costing 1.54 of command to remove 0.0125 of error,
+and the proportional weighting prices exactly that. Kept as a defaulted-off option with a check
+that keeps the null recorded. What survived the idea is that the reach EXPONENT is now a
+candidate scored on the machine — a channel dead by h8 may want a different curve from one flat
+to h128.
+
+### The suite was audited by breaking it, and it did not survive first contact
+
+Fifteen deliberate amputations of the three libraries, each a plausible-looking edit. **Four of
+ten survived the first matrix** — including making the reach factor inert, a factor this
+library's own header called load-bearing on the strength of a measurement that lived in a
+scratch file and was therefore keeping nothing true. Two of the three rungs never took their
+DEPLOY path in the only test of `AutoStack`, which is precisely how mode ⑧ shipped containing
+neither of its halves: checks that assert a toggle CHANGES the output, which an amputated half
+still does.
+
+What now holds them: a toy plant with the arm's defining property — a channel dead by h≈12
+driving a saturating actuator — that runs in milliseconds and pins both shrink factors;
+bit-for-bit assertions that each rung armed alone emits its OWN correction and all three
+together are EXACTLY their sum; frame maps asserted against a rotation computed by hand; and a
+plant built so the conventional rung must be REFUSED, because on the axis it always wins and
+the refusal path never executed. **15/15 now.**
+
+### Three things measured wrong on the way, all mine
+
+**THE CONFIDENCE FACTOR TOOK THREE ATTEMPTS AND TWO WRONG ANSWERS WERE PUBLISHED.** One seed
+said 14%; three seeds said 0.3% and it was written up as an inert factor with a regime at 30x
+noise; five seeds say it helps at every level tried — 53%, 11%, 20%, 11%, 15%. The per-seed
+spread on that toy is larger than the effect, so both earlier figures measured the draw rather
+than the factor. Six seeds now. **A mean over too few samples is a measurement of the samples.**
+
+**A CHECK THAT ASSERTED AN OUTCOME PASSED ON A LIBRARY WITH NO GUARD AT ALL.** The monotone
+guard's first check asserted "never worse than the baseline"; with the guard deleted the
+diverging variants still landed just under baseline by luck. The contract is "what DEPLOYS is
+the best pass, not the last one", and that is what is asserted now, with a vacuity check that
+some refinement actually goes backwards. **An outcome a broken implementation reaches by
+accident is not a check.**
+
+**TWO TEST FIXTURES WERE WRONG AND THE CHECKS CAUGHT THEM, NOT REVIEW.** A disturbance placed
+at harmonics 7 and 11 and called orthogonal to the conventional basis — `sgn(v)` is a SQUARE
+WAVE, every odd harmonic, so the basis reached it and deployed at 1.03x. And that same channel
+left noiseless, so the harmonic rung cancelled to 4.4e-17 and reported **5.7e14x**, reproducing
+by accident the exact trap `autostack.js`'s own header warns about.
+
+### Rule 30, applied to this block's own headers
+
+`hff.js` carried 4.81x/1.05x for the reach factor, 11.63x/10.03x for the shrink and
+7.93x/9.17x for the arm. Every one went stale — the pass budget alone moved all of them, and
+two headline numbers were published out of that header and corrected afterwards. The header now
+states the PROPERTIES and names the checks that keep them true. Historical measurements that
+justify a design decision stay, because they are the record of why the code is shaped this way
+and they do not drift. **A property with a check behind it stays true; a number in a comment
+describes the behaviour the code used to have.**
+
+### Not built, and the measurement that would change the answer
+
+The rung ORDER is still fixed, and the ladder is still a prefix — it deploys rungs 1..k and
+never tries one with a gap, except for the drop-one pass and the pilot's two attempts. The
+harmonic rung on the arm remains the whole distance to composite's hand-built number at
+K 1 / E 0.06, and every fix so far has been a rule this repository already wrote down; there is
+no reason to assume the next one is different, but there is also no evidence left that points
+anywhere specific. The softest sliders were measured at the OLD pass budget and will be at
+least as good at the new one, which is stated rather than assumed because it has not been
+re-run.
