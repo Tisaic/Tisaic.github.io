@@ -152,7 +152,8 @@ check('given a third of the authority the correction actually needs, it still he
   // SAT is the PLANT's saturation; UMAX is the authority the engineer grants. Setting them
   // equal conflates two different failures — the first version of this did, and the cap was
   // scaling down the legitimate correction, which looks exactly like the shrink not working.
-  const N = 256, NH = 48, SAT = 0.6, UMAX = 3, NOISE = 2e-3;
+  const N = 256, NH = 48, SAT = 0.6, UMAX = 3;
+  let NOISE = 2e-3;   // raised below, to the regime the confidence factor exists for
   const Gh = (h) => 1 / (1 + (h / 6) ** 4);           // dead by h~12, like the arm's channel
   // A DETERMINISTIC but run-to-run VARYING disturbance: the same sequence every time this
   // file runs, and a different draw on every lap within it — which is what makes the
@@ -181,17 +182,30 @@ check('given a third of the authority the correction actually needs, it still he
     let ss = 0; for (let k = 0; k < N; k++) ss += e[k] * e[k];
     return { score: Math.sqrt(ss / N), err: [e] };
   };
-  const fit = async (opts) => {
-    seed = 20260828;                                  // same draw for every variant
+  // AVERAGED OVER SEVERAL NOISE DRAWS, not measured on one. The first version of this fixed a
+  // single seed, and the confidence factor's margin then depended on which draw it got: it
+  // measured 14% on one and 0.6% on another, so the check passed or failed on the noise
+  // rather than on the library. A flaky check is a bug report about the check.
+  const SEEDS = [20260828, 555, 90210];
+  const fit1 = async (opts, sd) => {
+    seed = sd;
     const H = new HarmonicFF({ lap: N, channels: 1, nh: NH, uMax: UMAX, probeStyle: 'spread',
       probeFracs: [0.25], passes: 10, ...opts });
     return H.commission(async (c) => toy(c));
+  };
+  const fit = async (opts) => {
+    const runs = [];
+    for (const sd of SEEDS) runs.push(await fit1(opts, sd));
+    const mean = (f) => runs.reduce((t, r) => t + f(r), 0) / runs.length;
+    return { base: mean((r) => r.base), best: mean((r) => r.best),
+      hist: runs[0].hist, runs };
   };
   const withReach = await fit({});
   const noReach = await fit({ reach: false });
   const noConf = await fit({ shrink: false });
   const neither = await fit({ reach: false, shrink: false });
-  console.log(`\n    a channel that dies at h~12, a saturating actuator, and measurement noise:`);
+  console.log(`\n    a channel that dies at h~12, a saturating actuator, and measurement noise`
+    + ` (mean of ${SEEDS.length} draws):`);
   console.log(`      open loop                    ${withReach.base.toExponential(3)}`);
   console.log(`      shrink as shipped            ${withReach.best.toExponential(3)}   ${(withReach.base / withReach.best).toFixed(2)}x`);
   console.log(`      REACH removed                ${noReach.best.toExponential(3)}   ${(withReach.base / noReach.best).toFixed(2)}x`);
@@ -205,10 +219,28 @@ check('given a third of the authority the correction actually needs, it still he
     + 'load-bearing has a check that would notice it being deleted',
     noReach.best > withReach.best * 1.5,
     `with ${withReach.best.toExponential(3)} vs without ${noReach.best.toExponential(3)}`);
-  check('…and removing the CONFIDENCE factor costs too, once the operator at a dead harmonic '
-    + 'is unidentifiable rather than merely small — both halves of the shrink earn their place',
-    noConf.best > withReach.best * 1.1,
+  // THE CONFIDENCE FACTOR IS A NULL AT THIS NOISE, and saying so is the point. It suppresses
+  // harmonics whose OPERATOR is noise-dominated, so it can only earn its place where
+  // identification actually is: swept, it is worth 0.3% at 2e-3 of noise, 1.7% at 6e-3,
+  // nothing at 2e-2, and 25% at 6e-2. Both halves are asserted — inert where the fit is
+  // clean, load-bearing where it is not — because a factor claimed to matter everywhere and
+  // measured to matter nowhere is how the reach factor's own claim went unchecked.
+  check('…while the CONFIDENCE factor is inert at this noise, which is stated rather than '
+    + 'assumed: it suppresses harmonics whose OPERATOR is noise-dominated, and here it is not',
+    Math.abs(noConf.best - withReach.best) < withReach.best * 0.05,
     `with ${withReach.best.toExponential(3)} vs without ${noConf.best.toExponential(3)}`);
+  {
+    NOISE = 6e-2;                       // identification now genuinely noise-dominated
+    const hi = await fit({});
+    const hiNoConf = await fit({ shrink: false });
+    NOISE = 2e-3;
+    console.log(`      at 30x the noise:  shipped ${hi.best.toExponential(3)}`
+      + `   confidence removed ${hiNoConf.best.toExponential(3)}`);
+    check('…and at thirty times the noise it becomes load-bearing, worth at least 15% — so it '
+      + 'is a factor with a regime, not an ornament and not a claim',
+      hiNoConf.best > hi.best * 1.15,
+      `with ${hi.best.toExponential(3)} vs without ${hiNoConf.best.toExponential(3)}`);
+  }
   // THE GUARD'S CONTRACT, ON THE VARIANT THAT WANTS TO DIVERGE. With reach removed the
   // refinement demands corrections the plant cannot make and every pass is worse than the
   // last; the guard's whole job is that this ends at the baseline rather than past it. Assert
@@ -222,16 +254,16 @@ check('given a third of the authority the correction actually needs, it still he
   // implementation reaches by luck is not a check.
   const runs = [['as shipped', withReach], ['reach off', noReach], ['confidence off', noConf],
     ['both off', neither]];
-  const wobbly = runs.filter(([, x]) => x.hist.some((v, i) => i > 0 && v > x.hist[i - 1] * 1.001));
+  const wobbly = runs.filter(([, x]) => x.runs.some((q) => q.hist.some((v, i) => i > 0 && v > q.hist[i - 1] * 1.001)));
   check('at least one variant\'s refinement actually goes BACKWARDS at some pass — otherwise '
     + 'the guard check below is vacuous and would pass with no guard at all',
     wobbly.length > 0, runs.map(([n, x]) => `${n}: ${x.hist.map((v) => v.toExponential(2)).join(' ')}`).join(' | '));
   check('…and on every variant what DEPLOYS is the best pass rather than the last one, which '
     + 'is the guard\'s whole contract',
-    runs.every(([, x]) => x.best <= Math.min(...x.hist) * 1.001),
-    runs.map(([n, x]) => `${n}: best ${x.best.toExponential(3)} vs min ${Math.min(...x.hist).toExponential(3)}`).join(' | '));
+    runs.every(([, x]) => x.runs.every((q) => q.best <= Math.min(...q.hist) * 1.001)),
+    runs.map(([n, x]) => `${n}: ` + x.runs.map((q) => `${q.best.toExponential(2)}/${Math.min(...q.hist).toExponential(2)}`).join(' ')).join(' | '));
   check('…and none of them is driven past the machine it started from',
-    runs.every(([, x]) => x.best <= x.base * 1.0001),
+    runs.every(([, x]) => x.runs.every((q) => q.best <= q.base * 1.0001)),
     runs.map(([n, x]) => `${n}: ${x.best.toExponential(3)}/${x.base.toExponential(3)}`).join(' | '));
   check('…while on the real axis, where every harmonic HAS reach, the same factor is inert '
     + 'to four figures — which is what makes it a selection and not an attenuation',
