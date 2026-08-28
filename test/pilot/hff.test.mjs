@@ -245,9 +245,16 @@ check('given a third of the authority the correction actually needs, it still he
     + 'bounding the inversion is what matters rather than which instrument does it',
     neither.best > withReach.best * 4,
     `bounded ${withReach.best.toExponential(3)} vs unbounded ${neither.best.toExponential(3)}`);
-  check('…while removing EITHER one alone costs little, because they are redundant — a claim '
-    + 'this file used to make about one of them on a measurement taken before the other '
-    + 'existed', noReach.best < withReach.best * 1.5 && noConf.best < withReach.best * 1.5,
+  // WHAT EACH FACTOR IS WORTH ALONE IS NOT ASSERTED, because it is not a stable quantity.
+  // It has flipped three times in this file's history as OTHER parts changed: the reach
+  // weighting was load-bearing before a measured ceiling existed and near-redundant after,
+  // and near-redundant again until the secant update made the unbounded case diverge. These
+  // are three instruments doing one job — bound the inversion — and their contributions are
+  // not independent, so 'X is worth N%' is a statement about a configuration and not about X.
+  // What IS stable across every configuration tried is asserted above and below: with none of
+  // them the machine barely converges, and with the shipped set it does.
+  check('…and each factor still EARNS its place in the shipped configuration, measured one at '
+    + 'a time against it', noReach.best > withReach.best * 1.02 && noConf.best > withReach.best * 1.02,
     `no-reach ${noReach.best.toExponential(3)}, no-confidence ${noConf.best.toExponential(3)}, `
     + `both-on ${withReach.best.toExponential(3)}`);
   check('…and the affordability CUT, built to replace the weighting, is no better than what '
