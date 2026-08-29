@@ -158,9 +158,13 @@ function ridge(A, y, lam) {
   return Array.from({ length: n }, (_, i) => M[i][n] / M[i][i]);
 }
 
-console.log(`\nis the moving operator BANDED?  [K ${K} E ${E}, NH ${NH}, ${NPROBE} probes, lap ${LAP}]\n`);
-console.log(`  fitting a DIAGONAL operator and a BANDED one (h coupled to h+-1) on the same`);
-console.log(`  probes, scoring both on probes neither has seen. No controller in the loop.\n`);
+console.log(`\ndoes the operator TRANSFER to a program it has never seen?`);
+console.log(`  [K ${K} E ${E}, NH ${NH}, ${NPROBE} probes each, lap ${LAP} on both]\n`);
+console.log(`  Both operators are fitted on the 8x8 program and scored on the 10x6 one —`);
+console.log(`  same perimeter to six decimals, so the same lap and the same harmonics, over`);
+console.log(`  an entirely different pose trajectory. The same probe phases are used on both,`);
+console.log(`  so the only thing that differs between the datasets is the machine's own`);
+console.log(`  behaviour. No controller in the loop.\n`);
 
 // Random multisine probes: each carries every harmonic at a random phase, so the input
 // spectrum is rich in all NH and the columns are not collinear.
