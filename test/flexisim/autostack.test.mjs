@@ -442,10 +442,17 @@ if (rep.hff && rep.hff.hist && rep.hff.hist.length) {
     console.log(`    harmonics damped per pass: ${h.damped.join(' ')}`
       + `   (of ${h.cut || 'nh'} in the band)`);
   }
-  const alive = (h.stepH || []).filter((x) => x > 0).length;
-  console.log(`    step ended at ${h.finalStep === undefined ? '?' : h.finalStep.toExponential(2)}`
-    + ` with ${alive} harmonic(s) still above the floor`
-    + `  — ${h.finalStep >= 1 ? 'BUDGET ran out with step to spare' : 'the step was spent'}`);
+  // WHAT THE STEP DID, said only where it means something. With one global step there is
+  // no per-harmonic survival to report, and printing a count from a field that was never
+  // populated is how '0 harmonics above the floor' appeared on a run where every harmonic
+  // was still moving.
+  const fs = h.finalStep;
+  console.log(`    step ended at ${fs === undefined ? 'not reported' : fs.toExponential(2)}`
+    + (h.perHarmonicStep && h.stepH
+      ? `, ${h.stepH.filter((x) => x >= fs).length} of ${h.stepH.length} harmonics still at it`
+      : '')
+    + (fs === undefined ? '' : `  — ${fs >= 1 ? 'the budget ran out with the step untouched'
+      : 'the step was halved ' + Math.round(Math.log2(1 / fs)) + 'x, so passes were being rejected'}`));
 }
 if (rep.unsettled && rep.unsettled.length) {
   console.log(`  NOT SETTLED when scored — the number is a point on a transient, not a `
