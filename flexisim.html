@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:433,built:"2026-08-29T22:55:53Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:435,built:"2026-08-29T23:26:05Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -585,6 +585,7 @@
           almost none of the error the ladder exists to remove is left. It is a MEASUREMENT
           and takes a long time; <b>Stop</b> ends it at the next frame and deploys nothing.</p>
         <div id="autoTable"></div>
+        <p class="hint" id="autoProg"></p>
         <p class="hint" id="autoNotes"></p>
       </div>
       <div class="controls" id="stackRow" style="display:none">
@@ -6575,6 +6576,39 @@ function autoYield() {
   return new Promise((r) => requestAnimationFrame(r));
 }
 
+/**
+ * WHERE THE LADDER IS, AT MOST A FEW SECONDS OLD.
+ *
+ * The table is driven by `onRung`, which fires on rung COMPLETION — and the lap-periodic
+ * rung is 18 of the ladder's 32 minutes in Node and longer here. So after the cascade's last
+ * row the page went silent for the majority of the whole run, which is indistinguishable
+ * from a hung tab. It was reported as one, correctly: there was no way to tell.
+ *
+ * This is fed from the host's yield point, so it cannot itself stall while the machine turns
+ * — if this line stops advancing, the run really has stopped. It reports ELAPSED time
+ * (which always moves), the rung being measured, the run index and the lap within it.
+ */
+let autoT0 = 0, autoLastProg = 0;
+const AUTO_WHAT = { classic: 'conventional rung', stack: 'pilot cascade',
+  hff: 'lap-periodic rung', pilot: 'pilot cascade', scoring: 'scoring' };
+function autoProgress(d) {
+  const now = performance.now();
+  // THROTTLED FOR THE DOM, NOT FOR THE SIGNAL. The yield fires every 1500 samples, which is
+  // far more often than a person can read; a second is frequent enough to prove liveness and
+  // rare enough that the reporting is not the cost.
+  if (now - autoLastProg < 1000) return;
+  autoLastProg = now;
+  const secs = Math.round((now - autoT0) / 1000);
+  const mm = Math.floor(secs / 60), ss = String(secs % 60).padStart(2, '0');
+  const what = AUTO_WHAT[d.what] || d.what;
+  const where = d.phase === 'build' ? 'building a fresh machine'
+    : d.phase === 'fit' ? 'fitting'
+      : d.lap ? `lap ${d.lap}/${d.laps}` + (d.LAP ? ` · ${Math.round(100 * d.k / d.LAP)}%` : '')
+        : d.phase;
+  $('autoProg').innerHTML = `<b>${mm}:${ss}</b> — measuring the <b>${what}</b>`
+    + ` · run ${d.run} · ${where}`;
+}
+
 function autoRowsHTML(rows) {
   const w = (r) => (r.deployed ? '' : ' style="opacity:.55"');
   return '<table class="tbl"><tr><th>rung</th><th>contour</th><th>gain</th><th></th></tr>'
@@ -6608,12 +6642,14 @@ async function startAutoP() {
   const centre = armP.ik(PG.centre[0], PG.centre[1], true);
   const LAP = Math.ceil(profP.lap);
   autoComm = true; autoRep = null; autoAbort = false; autoYields = 0;
+  autoT0 = performance.now(); autoLastProg = 0;
   // THE BUTTON HAS TO BECOME `Stop` NOW, not at whatever later frame happens to call
   // `syncPath`. Between the click and the first repaint the only control that can end this
   // run reads as the control that starts it.
   syncPath();
   $('autoRow').style.display = '';
   $('autoTable').innerHTML = '<p class="hint">commissioning…</p>';
+  $('autoProg').innerHTML = '<b>0:00</b> — starting';
   $('autoNotes').textContent = '';
   const rows = [];
   autoP = makeArmHost({
@@ -6655,6 +6691,7 @@ async function startAutoP() {
     // steps, and rarely enough that the yielding itself is not the cost.
     yieldEvery: 1500,
     onYield: autoYield,
+    onProgress: autoProgress,
     onRung: (r) => {
       rows.push(r);
       $('autoTable').innerHTML = autoRowsHTML(rows);
@@ -6682,6 +6719,8 @@ async function startAutoP() {
     return;
   }
   autoComm = false; autoAbort = false;
+  $('autoProg').innerHTML = `<b>done</b> in ${Math.round((performance.now() - autoT0) / 60000)}`
+    + ' min';
   // POINT THE FRAME MAPS AT THE ARM ON SCREEN. They were following the throwaway machines
   // the scored runs built, and deploying through a dead arm's Jacobian is a frame error
   // that produces plausible numbers rather than an exception.

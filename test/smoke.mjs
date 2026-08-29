@@ -3237,6 +3237,19 @@ if (FULL) {
     a1.comm === true && a1.have === true && a1.yields >= 2, JSON.stringify(a1));
   check('flexisim/path: …and the report panel opens while it runs, so the run is visible',
     a1.panel === true, JSON.stringify(a1));
+  // AND IT SAYS SO CONTINUOUSLY. The table is driven by rung COMPLETION and the lap-periodic
+  // rung is the majority of the whole run, so after the cascade's last row the page used to
+  // go silent for longer than everything before it put together -- reported from a phone as
+  // a stall, correctly, because nothing on screen could distinguish one. Asserting the line
+  // EXISTS would not catch that; a stalled reporter still has text. It must ADVANCE.
+  const prog0 = await fx.evaluate(() => document.getElementById('autoProg').textContent);
+  await fx.waitForFunction((was) => {
+    const t = document.getElementById('autoProg').textContent;
+    return t && t !== was;
+  }, prog0, { timeout: 120000 });
+  const prog1 = await fx.evaluate(() => document.getElementById('autoProg').textContent);
+  check('flexisim/path: ⑨ reports where it is, and the report ADVANCES while it runs',
+    !!prog0 && prog1 !== prog0, `${JSON.stringify(prog0)} -> ${JSON.stringify(prog1)}`);
   const stopLabel = await fx.evaluate(() => ({
     text: document.getElementById('autoP-btn').textContent,
     disabled: document.getElementById('autoP-btn').disabled }));
