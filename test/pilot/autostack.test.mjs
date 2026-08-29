@@ -489,6 +489,8 @@ check('…and every rung that landed below the instrument\'s floor says so in it
     need(rep, 'hff.laps', num, 'the lap cost the whole argument rests on');
     need(rep, 'hff.budget.total', num, 'the lap budget breakdown');
     need(rep, 'hff.operator.G', (v) => Array.isArray(v), 'the operator, for reuse elsewhere');
+    need(rep, 'hff.trustClipped', (v) => Number.isFinite(v), 'passes the trust region bounded');
+    need(rep, 'hff.withinNoise', (v) => v === null || Number.isFinite(v), 'passes inside one sigma of the best');
   }
   need(rep, 'rungs', arr, 'the table');
   for (const r of rep.rungs) {
