@@ -566,6 +566,27 @@ if (NOISEPROBE > 0) {
   console.log(`    ${r.map((v) => v.toExponential(3)).join(' ')}`);
   console.log(`    mean ${mu.toExponential(3)}   drift ${(slope * n).toExponential(2)} across the run`
     + `   scatter about it ${sd.toExponential(2)} (${(100 * sd / mu).toFixed(1)}%)`);
+  // IS THE DRIFT A TRANSIENT OR IS IT ONGOING? Split the run in half and compare: a machine
+  // still settling drifts in the first half and less in the second, and one that is simply
+  // wandering drifts as much in both. The answer decides whether the fix is a longer settle
+  // before measuring, or a wider window — and they are not interchangeable, because
+  // averaging cannot remove a drift that continues through the window.
+  if (n >= 8) {
+    const half = (arr) => {
+      const m = arr.length, mid = Math.floor(m / 2);
+      const fit = (a2) => {
+        const nn = a2.length, mu2 = a2.reduce((x, y) => x + y, 0) / nn;
+        let sxy2 = 0, sxx2 = 0;
+        for (let i = 0; i < nn; i++) { sxy2 += (i - (nn - 1) / 2) * (a2[i] - mu2); sxx2 += (i - (nn - 1) / 2) ** 2; }
+        return sxx2 > 0 ? (sxy2 / sxx2) * nn : 0;
+      };
+      return [fit(arr.slice(0, mid)), fit(arr.slice(mid))];
+    };
+    const [d1, d2] = half(r);
+    console.log(`    drift first half ${d1.toExponential(2)}, second half ${d2.toExponential(2)} — `
+      + (Math.abs(d2) < 0.4 * Math.abs(d1) ? 'SETTLING: a longer settle before measuring'
+        : 'ONGOING: a wider window will not remove it, the machine is still moving'));
+  }
   console.log(`    lag-1 autocorrelation ${ac1.toFixed(3)} — `
     + (ac1 > 0.5 ? 'STILL DRIFTING: a longer settle, not more averaging'
       : ac1 < -0.5 ? 'ALTERNATING: the pilot and the lap are beating, averaging an even number of laps'
