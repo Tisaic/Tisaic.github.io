@@ -177,21 +177,48 @@ async function run(extra, name, laps = 2 + AVG) {
         tau[0] * 1e3, tau[1] * 1e3]);
       const d = decompose(path, arm.toolXY(), cmd);
       le[k] = d.contour;
-      if (l === laps - 1) sc.step(d.contour, d.lag, tau, [arm.j1.wM, arm.j2.wM]);
+      // SCORED OVER THE SAME LAPS THE SIGNAL IS AVERAGED ON. Scoring one lap while
+      // fitting on four judges a rung on a different sample of the machine than the one it
+      // was handed, and a deployed pilot's lap-to-lap spread is a few percent — larger than
+      // several of the differences the ladder decides on. Rule 12, and rule 20: same window.
+      if (l >= laps - AVG) sc.step(d.contour, d.lag, tau, [arm.j1.wM, arm.j2.wM]);
       // AVERAGED OVER THE SETTLED LAPS, not read off the last one. A deployed pilot has a
       // lap-to-lap spread of a few percent, and one lap of that is noise in the very spectrum
       // the harmonic rung inverts — composite.test.mjs averages four for exactly this reason.
       // Rule 12: read the meter after it settles, and read it more than once.
+      // THE SIGNAL IS THE CONTOUR COMPONENT, CARRIED IN WORLD COORDINATES. The raw tool
+      // error is contour + lag, and the score is contourRms only — so a rung handed the raw
+      // error spends authority cancelling lag, which this project states is not a defect (the
+      // part is the right shape, the cycle is slower) and which the score cannot see it
+      // remove. This is NOT the path-normal FRAME that measured 0.99x: that expressed the
+      // CORRECTION as one scalar along a rotating axis. Here the correction stays a full
+      // two-vector in world; only which error it is asked to cancel changes.
       if (l >= laps - AVG) {
-        const tp = arm.toolXY();
-        ex[k] += (tp[0] - cmd.x) / AVG; ey[k] += (tp[1] - cmd.y) / AVG;
+        const sp = Math.hypot(cmd.vx, cmd.vy) || 1;
+        const nx = -cmd.vy / sp, ny = cmd.vx / sp;
+        ex[k] += d.contour * nx / AVG; ey[k] += d.contour * ny / AVG;
       }
     }
     lapE.push(le);
   }
   await l1.destroy(); await l2.destroy();
   const rep = sc.report();
-  return { score: rep.contourRms, err: [ex, ey], bias: rep.contourBias, osc: rep.contourOsc, lapE };
+  // THIS RUN'S OWN UNCERTAINTY, on the same quantity as the score. The score is the contour
+  // rms pooled over the last AVG laps, so its uncertainty is the standard error of the
+  // per-lap contour rms across those laps. The bare machine repeats to rounding; a machine
+  // with a pilot deployed does not, and the floor the ladder compares at has to be the
+  // second one. Measured per run rather than assumed from the first (rule 31).
+  const rl = [];
+  for (let l = laps - AVG; l < laps; l++) {
+    let s2 = 0;
+    for (let k = 0; k < LAP; k++) s2 += lapE[l][k] * lapE[l][k];
+    rl.push(Math.sqrt(s2 / LAP));
+  }
+  const mu = rl.reduce((x, y) => x + y, 0) / rl.length;
+  const va = rl.reduce((x, y) => x + (y - mu) * (y - mu), 0) / Math.max(1, rl.length - 1);
+  const spread = Math.sqrt(va / rl.length);
+  return { score: rep.contourRms, err: [ex, ey], bias: rep.contourBias, osc: rep.contourOsc,
+    lapE, spread };
 }
 
 /** Drive a Stack's phase machine in JOINT space, exactly as `composite.test.mjs` does. */
@@ -260,10 +287,12 @@ async function drivePilot(st) {
 }
 
 // ---- THE INSTRUMENT'S FLOOR, MEASURED. A deterministic rig has none of its own.
-const probe0 = await run(null, null, 4);
-let d2 = 0;
-for (let k = 0; k < LAP; k++) { const d = probe0.lapE[3][k] - probe0.lapE[2][k]; d2 += d * d; }
-auto.floor = Math.sqrt(d2 / LAP);
+// The SAME estimator every scored run reports for itself, on a full-length run so the two
+// settling laps are excluded — a floor taken across a startup transient describes the
+// transient (rule 13). It is a starting value: the ladder raises it to whatever the noisier
+// deployed configurations measure for themselves.
+const probe0 = await run(null, null);
+auto.floor = probe0.spread;
 console.log(`  [arm K ${K} E ${E}, rounded rect, feed ${PATH.feed}, lap ${LAP}]`);
 console.log(`  conventional machine ${probe0.score.toExponential(4)}`
   + `  bias ${probe0.bias.toExponential(2)}  osc ${probe0.osc.toExponential(2)}`
@@ -279,6 +308,12 @@ console.log(`\n${auto.table()}`);
 console.log(`\n  shipped ${JSON.stringify(rep.deployed)}   ${rep.base.toExponential(4)} → `
   + `${rep.best.toExponential(4)}   ${rep.gain.toFixed(2)}x   ${((Date.now() - t0) / 1000).toFixed(0)}s`);
 console.log(`  ${BAR.src}   ${TARGET.toExponential(4)}   ${(CONV / TARGET).toFixed(2)}x`);
+if (auto.floor > probe0.spread) {
+  console.log(`  the instrument's floor ROSE during commissioning, `
+    + `${probe0.spread.toExponential(2)} → ${auto.floor.toExponential(2)}, on `
+    + `'${rep.floorFrom}' — the deployed machine is noisier than the bare one, and the `
+    + `comparisons above were made at the coarser resolution`);
+}
 
 check(`THE HEADLINE: the self-tuning ladder matches or beats ${BAR.src} on the same machine `
   + 'and program — the strongest result this repository has at these settings',
