@@ -234,7 +234,7 @@ async function run(extra, name, laps = 2 + AVG) {
   const va = rl.reduce((x, y) => x + (y - mu) * (y - mu), 0) / Math.max(1, rl.length - 1);
   const spread = Math.sqrt(va / rl.length);
   return { score: rep.contourRms, err: [ex, ey], bias: rep.contourBias, osc: rep.contourOsc,
-    lapE, spread };
+    lag: rep.lagRms, lapE, spread };
 }
 
 /** Drive a Stack's phase machine in JOINT space, exactly as `composite.test.mjs` does. */
@@ -312,7 +312,18 @@ auto.floor = probe0.spread;
 console.log(`  [arm K ${K} E ${E}, rounded rect, feed ${PATH.feed}, lap ${LAP}]`);
 console.log(`  conventional machine ${probe0.score.toExponential(4)}`
   + `  bias ${probe0.bias.toExponential(2)}  osc ${probe0.osc.toExponential(2)}`
+  + `  lag ${probe0.lag.toExponential(2)}`
   + `   lap-to-lap floor ${auto.floor.toExponential(3)}`);
+// THE PROBE SCALE MOVED WITH THE SIGNAL. HarmonicFF sizes its probe as a FRACTION of the
+// peak of the error it is handed, and both fractions on its ladder are that same ratio —
+// so narrowing the signal from the raw tool error to the contour component alone scales
+// every probe candidate down by the contour:lag ratio, and the ladder cannot compensate by
+// choosing a larger one. Arguably the more correct scale, since the probe should be sized
+// to the error it intends to remove; recorded because if the harmonic rung collapses this
+// is the first thing to look at.
+console.log(`  the signal handed to the lap-periodic rung is the CONTOUR component: `
+  + `${(probe0.score / probe0.lag).toFixed(2)}x the lag rms, which is the factor every `
+  + `probe candidate's amplitude moved by`);
 check('the harness reproduces the conventional machine `composite.test.mjs` measures, so the '
   + 'comparison below is one variable — who chooses the constants — and not two machines',
   Math.abs(probe0.score - CONV) / CONV < 0.02,
