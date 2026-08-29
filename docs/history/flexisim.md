@@ -6745,3 +6745,55 @@ rather than trusted** — with `rep.stepH = fin.stepH` removed it fails with
 caught at its source instead of three bricks later. Three checks in this session have already
 been found passing while asserting nothing; a new one that has only ever passed is not
 evidence of anything.
+
+### Brick 76 — lap-sync on the full ladder: 22.42x, and the right denominator at last
+
+Lap-synced with the banded operator, the arm ships **1.8387e-2 — 22.42x**, past the
+composite's 20.34x re-measured figure for this exact program at comparable budget.
+
+| configuration | harmonic rung | ladder |
+|---|---|---|
+| diagonal, continuous indexing | 2.0770e-2 | 19.84x |
+| banded, continuous | 1.9907e-2 | 20.70x |
+| **banded + lap-synced** | **1.8387e-2** | **22.42x** |
+
+**AND THE CEILING IS NOW MEASURED ON THE MACHINE THE RUNG RUNS ON.** Every headroom figure
+in this arc divided by 4.23e-3, taken from the BARE machine's spectrum. On the
+cascade-deployed machine the rung actually corrects:
+
+| nh | bare machine | cascade-deployed |
+|---|---|---|
+| 16 | 4.23e-3 | **3.44e-3** |
+| 32 | 7.05e-4 | 5.50e-4 |
+| 64 | 1.36e-4 | 9.77e-5 |
+
+Slightly LOWER, not higher — so the half-integer content the beat would have put out of reach
+is not there once the machine is lap-synced, and the concern that part of the headroom was
+unreachable by construction is answered. The machine sits 5.3x above its own nh-16 ceiling.
+
+**THE INSTRUMENTS FIXED THIS AFTERNOON ARE NOW SAYING SOMETHING.** 'The machine repeats to
+3.27e-4 (1.7% of the score), and 4 of 15 passes land within one of those of the best — so the
+deployed table is one draw from a cluster.' And 'the step was halved 6x, so passes were being
+rejected' — where the same line read 'BUDGET ran out with step to spare' this morning, on
+runs that had been halving the step all along.
+
+The pass history also shows two excursions, 3.43e-2 at pass 7 and 4.27e-2 at pass 13 against
+a run otherwise in the 1.8-2.1e-2 band: the step occasionally being far too large, recovered
+by the guard. That is what six halvings were spent on.
+
+### Brick 76a — the drift is a transient, so the settle is too short
+
+Forty laps lap-synced: drift **4.98e-4 in the first half against 5.47e-5 in the second**, a
+ninefold fall. SETTLING, not ongoing — so a wider averaging window is the wrong fix and a
+longer settle is the right one. The lag-1 autocorrelation over forty laps is -0.120,
+confirming the sixteen-lap reading that lap-sync leaves independent scatter.
+
+The harness settles TWO laps and then averages four, and the first half of a forty-lap run is
+still drifting. Every scored run is therefore taken during a transient, and since the drift
+is upward, a short settle reads LOW — flattering, and unequally so between configurations
+that settle differently.
+
+Stated rather than acted on, because the cost is real: a commission takes about a hundred
+scored runs, so each extra settle lap costs a hundred laps. The bias over the four averaged
+laps is roughly 1e-4 against a sigma of 3.27e-4 — about a third of a standard deviation. Worth
+knowing, worth two more settle laps perhaps, not worth ten.
