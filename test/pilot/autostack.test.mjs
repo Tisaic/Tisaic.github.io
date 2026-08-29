@@ -428,10 +428,26 @@ check('…and every rung that landed below the instrument\'s floor says so in it
   // was informative failed because the machine got better. Rule 4: a failing check can be
   // stale in either direction.
   const atF = rep2.rungs.filter((r) => r.atFloor), above = rep2.rungs.filter((r) => !r.atFloor);
-  check('…and the floor label discriminates — some rows carry it and some do not, so it is '
-    + 'informative rather than decoration',
-    atF.length > 0 && above.length > 0,
-    JSON.stringify(rep2.rungs.map((r) => [r.name, r.score.toExponential(2), r.atFloor])));
+  // ---- AND THE VACUITY GUARD SPANS BOTH PLANTS, because the property it guards belongs to
+  // the LABEL, not to either machine.
+  //
+  // This has now failed in both directions on the same one-plant scope. First the rung
+  // improved onto the floor and left no row above it; then it landed 6% above a noise floor
+  // it had been marginally under, and left no row ON it. Neither time was the label broken
+  // — both times a check written to prove the label informative was hostage to which side
+  // of one plant's noise one rung happened to land, which is a coin toss at the resolution
+  // the floor exists to describe.
+  //
+  // The assertion with teeth is the next one: every labelled row really is at or below the
+  // floor and every unlabelled row really is above it. That is what could be wrong, it is
+  // checked per plant, and it passes. THIS check exists only so that one cannot pass
+  // vacuously — so it asks the question of every row the suite produced, on both plants,
+  // where a label that never appears or always appears is still caught immediately.
+  const allRows = [...rep.rungs, ...rep2.rungs];
+  check('…and the floor label discriminates across the suite — some rows carry it and some do '
+    + 'not, so the check above cannot pass vacuously',
+    allRows.some((r) => r.atFloor) && allRows.some((r) => !r.atFloor),
+    JSON.stringify(allRows.map((r) => [r.name, r.score.toExponential(2), r.atFloor])));
   check('…and every row that carries it really is at or below the floor, and every row that '
     + 'does not really is above — the label follows the measurement, not the other way round',
     atF.every((r) => r.score <= FLOOR2) && above.every((r) => r.score > FLOOR2),

@@ -240,3 +240,12 @@ console.log(`  column is the ratio: below 1 the scheduling earns its parameters,
 console.log(`  does not, and it is measured on HELD-OUT poses so a richer model cannot win`);
 console.log(`  by fitting harder. Neither number goes through the Newton loop, so neither`);
 console.log(`  can be rescued by an iteration that self-corrects.\n`);
+
+// The operators themselves, for `_gqmove.mjs` to compare against the one identified while
+// the machine is RUNNING. Written rather than recomputed: this survey is nine poses of five
+// probes each and there is no reason to pay for it twice.
+if (process.env.GQ_OUT) {
+  const { writeFileSync } = await import('node:fs');
+  writeFileSync(process.env.GQ_OUT, JSON.stringify({ NH, AMP, poses, Gs }));
+  console.log(`  operators written to ${process.env.GQ_OUT}\n`);
+}
