@@ -2803,10 +2803,19 @@ await fx.waitForFunction((t) => window.__flxPathDbg().k > t, pk0 + 2500, { timeo
 // runs in both. Leaving all of ⑨ behind the full gate is how a regression ships for weeks:
 // the file that skipped and exited 0 without SUITE=full hid a gate defect here for three
 // bricks, and a plain `./test/run.sh` is what most changes are actually verified with.
-const a0 = await fx.evaluate(() => window.__flxPathDbg().auto);
-check('flexisim/path: ⑨ starts with nothing commissioned and its panel hidden',
-  a0.comm === false && a0.have === false && a0.rows === 0 && a0.panel === false,
+const a0 = await fx.evaluate(() => {
+  const d = window.__flxPathDbg();
+  return { ...d.auto, want: d.want };
+});
+check('flexisim/path: ⑨ starts with nothing commissioned',
+  a0.comm === false && a0.have === false && a0.rows === 0 && a0.deployed === null,
   JSON.stringify(a0));
+// THE PANEL CARRIES THE ONLY DESCRIPTION OF WHAT ⑨ COSTS, so it is shown as soon as ⑨ is
+// SELECTED rather than only once it has run -- otherwise the explanation sits on the far
+// side of the decision it informs. Asserted as the biconditional it actually is, so a panel
+// stuck permanently open fails here just as a permanently hidden one does.
+check('flexisim/path: …and its panel is shown exactly when ⑨ is the selected mode',
+  a0.panel === (a0.want === 'auto'), JSON.stringify(a0));
 // A MODE THAT CANNOT ACT MUST NOT CLAIM TO. Selecting ⑨ before it has been commissioned
 // would otherwise reach `predistortP`, which dereferences the host on the first step -- an
 // uncaught error mid-run, which on this page means the machine stops and the badge keeps
@@ -3106,7 +3115,65 @@ if (FULL) {
   // the host has built a machine and handed back frames, then stop it. That covers the
   // imports, the host construction, `makePlantP`, the settle, the scored run's inner loop,
   // the yield path and the abort -- and it costs seconds rather than an hour.
+  // ⑨ IS ONE BUTTON, WHICH MEANS IT SETS UP ITS OWN MACHINE. Depending on ⑧'s setup button
+  // would make ⑨'s result contingent on trusting a control that was itself bolted on after
+  // ⑧ shipped broken -- and this tab's DEFAULT plant is the stiff end of both ladders, where
+  // almost none of the error the ladder exists to remove is left, so a ⑨ that does not
+  // rebuild returns a small number that demonstrates nothing.
+  //
+  // THE MACHINE IS DELIBERATELY PUT SOMEWHERE WRONG FIRST. The ⑧ block above already left
+  // it at K 1 / E 0.06, so asserting that ⑨ arrives there would pass with the setup call
+  // deleted -- the same toothless shape as reading a refusal from a mode that was never
+  // selected. Driving it to the stiff end and back is what gives the check teeth.
+  // ONE AT A TIME, NOT ONE EVALUATE. `shapeP`'s handler sets `busyP` for the duration of its
+  // re-home and `rebuildPlantP` bails on `busyP` -- so dispatching both in one go silently
+  // drops the K change and this check would wait 240s for a plant nobody rebuilt.
+  await fx.evaluate(() => {
+    for (const [id, v] of [['s-feedP', '0'], ['s-accP', '0'], ['s-cornP', '0']]) {
+      const el = document.getElementById(id);
+      el.value = v;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  });
+  await fx.evaluate(() => {
+    const sh = document.getElementById('shapeP');
+    sh.value = 'square';
+    sh.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await fx.waitForFunction(() => !window.__flxPathDbg().busy, null, { timeout: 240000 });
+  await fx.evaluate(() => {
+    const k = document.getElementById('s-kP');
+    k.value = k.max;
+    k.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await fx.waitForFunction(() => {
+    const d = window.__flxPathDbg();
+    return d && !d.busy && d.K > 8;
+  }, null, { timeout: 240000 });
+  const wrong = await fx.evaluate(() => {
+    const d = window.__flxPathDbg();
+    return { K: d.K, E: d.E, shape: d.shape, feed: d.feed, corner: d.corner };
+  });
+  check('flexisim/path: (the machine is first driven OFF the measured configuration, so the checks below have teeth)',
+    wrong.K > 8 && wrong.shape === 'square' && Math.abs(wrong.feed - 4e-3) > 1e-12,
+    JSON.stringify(wrong));
+
   await fx.click('#autoP-btn');
+  // ONE BUTTON: the plant it commissions on is the plant the 22.42x was measured on, and it
+  // got there by itself. Every value read off test/flexisim/autostack.test.mjs.
+  await fx.waitForFunction(() => Math.abs(window.__flxPathDbg().K - 1) < 1e-9, null,
+    { timeout: 240000 });
+  const setup9 = await fx.evaluate(() => {
+    const d = window.__flxPathDbg();
+    return { K: d.K, E: d.E, shape: d.shape, feed: d.feed, accel: d.accel, corner: d.corner };
+  });
+  check('flexisim/path: ⑨ sets up its own machine — K 1 / E 0.06, no other button pressed',
+    Math.abs(setup9.K - 1) < 1e-9 && Math.abs(setup9.E - 0.06) < 1e-9,
+    JSON.stringify(setup9));
+  check('flexisim/path: …and its own program — the rounded rectangle at 4e-3 / 4e-5 / 40',
+    setup9.shape === 'rounded' && Math.abs(setup9.feed - 4e-3) < 1e-12
+      && Math.abs(setup9.accel - 4e-5) < 1e-12 && setup9.corner === 40,
+    JSON.stringify(setup9));
   // THE LIVENESS SIGNAL IS THE YIELD COUNT, not the rung table. The first rung row is many
   // minutes away; a frame handed back proves the imports resolved, `makePlantP` built two
   // lattices, `RobotComp` calibrated over four poses, the settle ran and the scored run's

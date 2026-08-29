@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:423,built:"2026-08-29T21:35:23Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:425,built:"2026-08-29T21:51:11Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -521,7 +521,7 @@
       <button id="commP" class="sec">Commission ▶</button>
       <button id="pilotP-btn" class="sec">Commission ⑤ Pilot ▶</button>
       <button id="ik6P-btn" class="sec">Commission ⑥ Fully learned ▶</button>
-      <button id="autoP-btn" class="sec">Commission ⑨ The button ▶</button>
+      <button id="autoP-btn" class="sec">⑨ THE BUTTON — set up + commission ▶</button>
       <button id="sweepP" class="sec">Sweep feedrate ▶</button>
       <button id="resetP" class="sec">Reset</button>
       <div class="slider"><span>Cascade depth</span>
@@ -577,7 +577,13 @@
           CHOOSES among ①–⑧. It commissions the conventional rung, then the pilot cascade,
           then the lap-periodic rung, scores each one on this machine with everything below
           it deployed, and ships the best prefix. A rung that measures worse than the rung
-          beneath it is not deployed, and the row still says what it measured.</p>
+          beneath it is not deployed, and the row still says what it measured.
+          <b>It needs nothing set up first: pressing it REBUILDS the plant</b> at K 1 /
+          E 0.06 on the rounded rectangle at feed 4e-3 — the machine
+          <code>test/flexisim/autostack.test.mjs</code> measures 4.1216e-1 → 1.8387e-2
+          (22.42×) on — because this tab defaults to the stiff end of both ladders, where
+          almost none of the error the ladder exists to remove is left. It is a MEASUREMENT
+          and takes a long time; <b>Stop</b> ends it at the next frame and deploys nothing.</p>
         <div id="autoTable"></div>
         <p class="hint" id="autoNotes"></p>
       </div>
@@ -6581,6 +6587,22 @@ function autoRowsHTML(rows) {
 
 async function startAutoP() {
   if (autoComm || busyP) return;
+  // ⑨ SETS UP ITS OWN MACHINE. It is ONE BUTTON, and one button that only works after
+  // another mode's setup button is two buttons in a trench coat -- worse, it is two buttons
+  // with an ordering the operator has to know and the page never states. ⑧'s setup was
+  // bolted on after ⑧ shipped broken, and inheriting that dependency would make ⑨'s result
+  // depend on trusting it.
+  //
+  // AND WITHOUT THIS THE DEFAULT IS THE WRONG MACHINE, not merely a different one: this tab
+  // defaults to K 16 / E 0.15, the stiff end of both ladders, where the conventional machine
+  // alone already leaves 5.7e-2 against the 4.4e-1 it leaves at K 1 / E 0.06. Nearly the
+  // whole error the ladder exists to remove has gone before the button is pressed, so a
+  // half-hour commission would return a small number that demonstrates nothing. The label
+  // and the hint both say the plant is rebuilt, because a silent override of the operator's
+  // sliders would be its own defect.
+  setPathBadge('⑨ setting up the machine the 22.42× was measured on — K 1 / E 0.06, '
+    + 'rounded rectangle at feed 4e-3', 'warn');
+  await setupMeasuredMachineP();
   const K = KP_LADDER[+$('s-kP').value], E = EP_LADDER[+$('s-eP').value];
   const c0 = profP.at(0);
   const centre = armP.ik(PG.centre[0], PG.centre[1], true);
@@ -7406,7 +7428,7 @@ function syncPath() {
   set('ik6P-btn', !idle);
   // CLICKABLE WHILE IT RUNS, because while it runs is exactly when someone needs it.
   set('autoP-btn', autoComm ? false : !idle);
-  const alab = autoComm ? 'Stop ⑨ ■' : 'Commission ⑨ The button ▶';
+  const alab = autoComm ? 'Stop ⑨ ■' : '⑨ THE BUTTON — set up + commission ▶';
   if ($('autoP-btn').textContent !== alab) $('autoP-btn').textContent = alab;
   set('resetP', !armP || busyP);
   // THE PROGRAM SLIDERS GO WITH THEM. Commissioning and the sweep both install profiles
@@ -7420,7 +7442,10 @@ function syncPath() {
   // correction is applied to the next step, which is exactly what they are for.
   // The ladder's report stays visible once it exists: it is the record of what was tried,
   // not a control that belongs to the selected mode.
-  $('autoRow').style.display = (autoRep || autoComm) ? '' : 'none';
+  // VISIBLE WHEN ⑨ IS SELECTED, not only once it has run. The panel carries the only
+  // description of what the button does and what it costs, and hiding that until after the
+  // half-hour commission has started puts the explanation on the far side of the decision.
+  $('autoRow').style.display = (autoRep || autoComm || $('ctlP').value === 'auto') ? '' : 'none';
   const stk = $('ctlP').value === 'stack';
   const row = $('stackRow');
   if (row && (row.style.display === 'none') === stk) row.style.display = stk ? '' : 'none';
@@ -7482,14 +7507,19 @@ async function rebuildPlantP() {
 for (const id of ['s-kP', 's-eP']) $(id).addEventListener('input', rebuildPlantP);
 for (const id of ['s-spfP', 's-magP', 's-depthP', 's-rateP']) $(id).addEventListener('input', syncPathLabels);
 
-// ONE TAP TO THE MACHINE THE NUMBER WAS MEASURED ON. A page that CAN reach a result and
+// ONE TAP TO THE MACHINE THE NUMBERS WERE MEASURED ON. A page that CAN reach a result and
 // asks the reader to find it by moving two sliders has not demonstrated it: the defaults
 // here are the STIFF end of both ladders, where the conventional machine alone already
 // leaves 5.7e-2 and the stack has almost nothing left to remove. Every value below is read
 // off test/flexisim/reconcile.test.mjs rather than chosen, and the ones that are already
 // the page default are set anyway so a previous experiment cannot leak into the comparison.
-$('stk-setup').addEventListener('click', async () => {
-  if (busyP) return;
+//
+// ONE FUNCTION, TWO CALLERS: ⑧'s setup button and ⑨'s. A second copy of these constants
+// would be a second definition of "the machine the number was measured on", and the two
+// would drift -- silently, because both would still produce a plausible contour number.
+// `test/flexisim/autostack.test.mjs` measures 22.42x here and `reconcile.test.mjs` 5.70x;
+// they are the same machine and this is the only place that says so.
+async function setupMeasuredMachineP() {
   // A PENDING PROGRAM CHANGE BELONGS TO THE OLD ARM. Leaving one queued across the rebuild
   // would apply it at the next lap boundary of a machine it was never chosen for.
   runP = false; progPending = false; $('pendP').hidden = true;
@@ -7499,13 +7529,10 @@ $('stk-setup').addEventListener('click', async () => {
   $('shapeP').value = 'rounded';            // roundedRect w 8 h 8 r 1.5
   // NEAREST RUNG, NOT indexOf: a ladder edited to 0.061 would make indexOf return -1, a
   // range input clamps that to 0, and the page would quietly set up the WRONG machine while
-  // still claiming to be the 5.70x one. rung() cannot return -1.
+  // still claiming to be the measured one. rung() cannot return -1.
   const rung = (ladder, want) => ladder.reduce((best, v, i) =>
     Math.abs(v - want) < Math.abs(ladder[best] - want) ? i : best, 0);
   $('s-eP').value = String(rung(EP_LADDER, 0.06));
-  $('stk-over').checked = true;             // the pilot learns the RESIDUAL, not the whole error
-  $('stk-comp').checked = true;
-  $('stk-pilot').checked = true;
   $('s-kP').value = String(rung(KP_LADDER, 1));
   // ONE REBUILD, NOT FOUR. `buildP` re-reads every slider and calls `homeP`, which builds
   // the program from them and settles the arm on its start -- so the speed and shape set
@@ -7513,6 +7540,14 @@ $('stk-setup').addEventListener('click', async () => {
   // built. Dispatching each slider's own handler would start a rebuild per slider, three of
   // them on plants nobody asked for and the later ones racing the earlier ones' `await`.
   await rebuildPlantP();
+}
+
+$('stk-setup').addEventListener('click', async () => {
+  if (busyP) return;
+  $('stk-over').checked = true;             // the pilot learns the RESIDUAL, not the whole error
+  $('stk-comp').checked = true;
+  $('stk-pilot').checked = true;
+  await setupMeasuredMachineP();
   // `buildP` PUTS THE PAGE BACK ON ① -- a new machine has no commissioned correction, which
   // is right, but it also HIDES this row. Restore ⑧ so the button lands where it was pressed.
   $('ctlP').value = 'stack';
