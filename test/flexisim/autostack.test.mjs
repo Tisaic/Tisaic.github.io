@@ -40,6 +40,15 @@ const CMDNORM = !!process.env.CMDNORM;
 // inside J, so what is left is the gearbox — very nearly constant. It is also the frame the
 // pilot already reads its error in, three lines down in `drivePilot`.
 const HFFJOINT = !!process.env.HFFJOINT;
+// THE FULL TOOL ERROR RATHER THAN ITS NORMAL COMPONENT. Narrowing the signal to contour was
+// meant to stop the rung spending authority on lag, which the score cannot see removed. It
+// measured 2.05x -> 1.00x: the rung stopped being able to beat the cascade at all. The
+// reason is that the narrowing is itself a ROTATING OPERATOR — projecting onto n(k) is
+// P(k) = n n^T, and n turns 127.6 degrees around this lap, the very rotation `_lti.mjs`
+// measures. So the fitted operator is P(k)G rather than G, and a lap-varying factor was
+// introduced into exactly the map HarmonicFF assumes constant. Cancelling the whole error
+// necessarily cancels its normal part too; the lag authority is wasted, not harmful.
+const FULLERR = !!process.env.FULLERR;
 // ONE ERROR SIGNAL IS RETURNED PER RUN AND BOTH RUNGS READ IT, so putting it in joint space
 // for the lap-periodic rung also hands it to the conventional rung, whose basis is the
 // reference's WORLD velocity and acceleration. That combination is not a variant, it is a
@@ -242,7 +251,9 @@ async function run(extra, name, laps = 2 + AVG) {
           const t = path.tangent(d.s);
           nx = -t[1]; ny = t[0];
         }
-        let gx = d.contour * nx, gy = d.contour * ny;
+        let gx, gy;
+        if (FULLERR) { const tp = arm.toolXY(); gx = tp[0] - cmd.x; gy = tp[1] - cmd.y; }
+        else { gx = d.contour * nx; gy = d.contour * ny; }
         // A RUNG MUST BE SHOWN THE ERROR IN THE FRAME IT CORRECTS IN. The pilot already is;
         // the lap-periodic rung was not, and it is the one whose method assumes the map
         // between the two is constant.
