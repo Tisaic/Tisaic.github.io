@@ -37,6 +37,14 @@ const T0 = Date.now();
 // classifies the sequence. NOHFF skips the lap-periodic rung so the probe costs the
 // cascade's commissioning and nothing more.
 const NOISEPROBE = +(process.env.NOISEPROBE || 0);
+// ---- THE PILOT'S PHASE RELATIVE TO THE LAP. Its look-ahead is indexed continuously across
+// laps — floor((l*LAP + k)/S) — so if its cadence S does not divide LAP, the pilot starts
+// each lap at a different point within its own sample and its phase walks. That is a beat
+// by construction, and a beat is the one thing a lap-indexed rung cannot correct: HarmonicFF
+// represents integer harmonics of the lap, and a two-lap period is a HALF-integer one.
+// LAPSYNC indexes from the lap start instead, which costs a discontinuity at a boundary
+// that is not physical on a closed path, and makes the machine exactly lap-periodic.
+const LAPSYNC = !!process.env.LAPSYNC;
 const NOHFF = !!process.env.NOHFF;
 // ---- THE SIGNAL EACH RUNG IS SHOWN. Both settled by a 2x2 on the machine, one variable
 // each, with the pilot cascade coming back byte-identical (6.7033e-2 -> 5.5099e-2) in all
@@ -217,7 +225,7 @@ async function run(extra, name, laps = 2 + AVG) {
         { theta: c2, omega: r.dq[1], alpha: r.ddq[1] }];
       const ff = rc.feedforward([[1, 0], [0, 1]], servo.jointTorques(base), { enableToolff: false });
       const S = auto.stack ? auto.stack.sample : 1;
-      const kSamp = Math.floor((l * LAP + k) / S);
+      const kSamp = LAPSYNC ? Math.floor(k / S) : Math.floor((l * LAP + k) / S);
       const look = (off) => R[(((kSamp + off) * S) % LAP + LAP) % LAP];
       const ctx = { v: [cmd.vx, cmd.vy], a: [cmd.ax, cmd.ay], k, look, q: [c1, c2] };
       // THE RUNG UNDER TEST IS HANDED TO `act` RATHER THAN ADDED AFTER IT, so it goes through
@@ -528,7 +536,13 @@ if (NOISEPROBE > 0) {
   for (let i = 1; i < n; i++) num += res[i] * res[i - 1];
   const ac1 = den > 0 ? num / den : 0;
   const sd = Math.sqrt(den / Math.max(1, n - 2));
+  const S = auto.stack ? auto.stack.sample : 1;
   console.log(`\n  the shipped machine over ${n} laps — is the 'noise' noise?`);
+  console.log(`    pilot cadence S ${S}, lap ${LAP}, LAP/S ${(LAP / S).toFixed(3)} — `
+    + `${LAP % S === 0 ? 'S DIVIDES the lap, so the phase cannot walk'
+      : `remainder ${LAP % S}, so the pilot starts each lap ${(100 * (LAP % S) / S).toFixed(0)}% `
+        + 'of a sample later than the last'}`
+    + `   [look-ahead indexed ${LAPSYNC ? 'FROM THE LAP START' : 'continuously'}]`);
   console.log(`    ${r.map((v) => v.toExponential(3)).join(' ')}`);
   console.log(`    mean ${mu.toExponential(3)}   drift ${(slope * n).toExponential(2)} across the run`
     + `   scatter about it ${sd.toExponential(2)} (${(100 * sd / mu).toFixed(1)}%)`);
