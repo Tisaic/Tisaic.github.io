@@ -1684,3 +1684,189 @@ flexisim: the button, on the arm — against the strongest number this repo has
 autostack-arm: all checks passed
 
 ```
+
+### browser-nine-full — exit 1 — 2026-08-29T21:57Z
+
+```
+Suite level: full   areas: flexisim   phase: browser
+  (--all forces both; --only=ngrc,flowsim selects explicitly)
+
+module parse
+  ✓ 82 modules parse
+
+
+Smoke test → http://127.0.0.1:8137/
+
+  ✓ page loads with no uncaught errors
+  ✓ build version is stamped (> 0)
+  ✓ debug launcher present
+  ✓ console captured log/warn/error
+  ✓ console panel opens
+  ✓ version status reads "latest" vs local server
+  ✓ eval box evaluates JS (1 + 2 → 3)
+  ✓ modules.json ships and lists the module graph
+  ✓ and every module the pages import is in it
+  ✓ a stale MODULE raises the banner, where "latest" alone would have hidden it
+  ✓ index: the console Close button is on screen
+  ✓ index: the console launcher keeps its own 46px size
+  ✓ index: clicking Close actually closes the console
+  ✓ docs launcher present
+  ✓ marked library loaded
+  ✓ opens CLAUDE.md with CLAUDE tag
+  ✓ CLAUDE.md renders markdown (h1 element)
+  ✓ file list groups CLAUDE context + Docs
+  ✓ flexisim.html loads and builds the hybrid arm
+  ✓ flexisim: the lattice link is built
+  ✓ flexisim: the console Close button is on screen
+  ✓ flexisim: the console launcher keeps its own 46px size
+  ✓ flexisim: clicking Close actually closes the console
+  ✓ flexisim: commissioning identifies a compliance and a bending mode
+  ✓ flexisim: the identified compliance exceeds the gearbox alone, as a tip measurement must
+  flexisim: softest link E 0.02, decay record 23532 steps -> mode 1.967e-3 (period 3194), analytic true
+  ✓ flexisim: the softest link commissions without crashing
+  ✓ flexisim: the softest link is reported OVER-DAMPED rather than mis-measured
+  ✓ flexisim: and input shaping is disabled, because there is no mode to cancel
+  ✓ flexisim: a plant rebuild leaves commissioning available again
+  ✓ flexisim: a failed decay fit falls back and SAYS so, rather than throwing
+  ✓ flexisim: and the badge names it as estimated rather than measured
+  ✓ flexisim: and re-commissioning a link that DOES ring recovers a measured mode
+  flexisim: bias -7.365e-2 -> -8.872e-4, oscillation 1.602e-1 -> 1.361e-1
+  ✓ flexisim: mode ② (open loop + prediction) actually collapses the bias
+  ✓ flexisim: and it leaves the oscillation alone, which is the other mechanism
+  ✓ flexisim: the feedforward is evaluated AHEAD of the move, not on it
+  flexisim: rms limited by — the link ringing. A quasi-static model (② and ③) cannot canc…
+  ✓ flexisim: the stats name which mechanism limits the rms, not just its value
+  ✓ flexisim: mode ③ is REFUSED until the soft sensor is locked, and says which mode is live
+  ✓ flexisim: the error chart tracks the run rather than freezing on its first points
+  flexisim: chart means — commanded motor 7.36e-2, actual motor 7.93e-2, true arm 1.01e-2
+  ✓ flexisim: the chart carries all five positions
+  ✓ flexisim: with the correction on, the MOTOR is off target and the TOOL is on it
+  flexisim: drawn/true tool error over 90 frames — 1.0000 to 1.0000 of the magnification (want 1.0)
+  ✓ flexisim: the picture magnifies the WHOLE tool error, wind-up and bending alike
+  ✓ flexisim: training dithers the correction, so the model sees the loop it will be inside
+  flexisim: soft sensor estimating after 1440 pairs — estimate 0.0806 vs naive 1.1295, forecast 0.1023 vs persistence 0.6921
+  ✓ flexisim: the soft sensor reaches a locked, frozen readout
+  ✓ flexisim: and the LOCKED estimate beats the controller's own view of the tip
+  ✓ flexisim: the forecast beats persistence on the readout's own estimate
+  flexisim: closed loop active=closed offset 6.420 mrad — bias -7.365e-2 -> 1.001e-2, oscillation 1.602e-1 -> 1.645e-1
+  ✓ flexisim: once LOCKED, mode ③ really engages
+  ✓ flexisim: and the closed loop cuts the bias with no model at all
+  ✓ flexisim: it leaves the oscillation alone too — it cannot chase what it sits on
+  flexisim: compare filled open, ff, closed — bias open -7.13e-2 / ff 1.36e-4 / closed 1.00e-2
+  ✓ flexisim: Compare runs every mode by itself and fills the table
+  ✓ flexisim: and the table it produced ranks the corrections below the open loop
+  ✓ flexisim: Auto-tune starts a sequence and reports which step it is on
+  ✓ flexisim: …and LOCKS the manual controls while it owns the machine
+  flexisim: auto-tune selected learned, board open 9.51e-2 / ff 4.32e-2 / learned 2.28e-2 / closed 6.69e-2
+  ✓ flexisim: Auto-tune finishes and leaves a correction selected
+  ✓ flexisim: the learned filter gets fitted and reports its size
+  flexisim: learned 2.28e-2 vs model 4.32e-2 vs open 9.51e-2
+  ✓ flexisim: …and beats the quasi-static model it sits on top of
+  ✓ flexisim: …by reducing the OSCILLATION, which nothing else here can
+  ✓ flexisim: …the one its own table scored best, not a favourite
+  flexisim: after auto-tune — running learned, sensor commissioned under learned, estimate 0.0274 vs naive 1.9057, forecast 0.0349 vs persistence 0.6389
+  ✓ flexisim: the sensor is commissioned in the configuration auto-tune chose
+  flexisim: sensor locked at step "lock it" after 6020 pairs, under learned
+  ✓ flexisim: …and the LOCK is the last step of the sequence, not one in the middle
+  ✓ flexisim: …so the sensor keeps learning past the training target and tops up
+  ✓ flexisim: …and it is locked, so the tracker really has gone away
+  ✓ flexisim: …so the readout the user is left looking at is actually good
+  ✓ flexisim: …and so is its forecast
+  ✓ flexisim: …and the winner it kept is the one the settled machine measures
+  flexisim: control roughness — jerk off 1.29e-1, jerk 120 1.19e-3 (109x smoother), period 6516 -> 6756
+  ✓ flexisim: the jerk limit makes the control signal dramatically smoother
+  ✓ flexisim: …and it does NOT shrink the correction, which would be cheating
+  ✓ flexisim: …the dwell grows to cover its delay, so the move still finishes
+  flexisim: drive — rated 32x hold, saturated 0.0%, rms 4.318e-2; rated 2x, saturated 44.3%, rms 4.204e-1
+  ✓ flexisim: the drive has a torque rating and reports what it was asked for
+  ✓ flexisim: …the shipped rating carries the shipped move without saturating
+  ✓ flexisim: …and a drive too small for the move SATURATES and lags, as a real one does
+  ✓ flexisim: the stage draws the excursion the tool actually sweeps
+  ✓ flexisim: …and the arm drawn NOW is inside the band drawn around it
+  ✓ flexisim: …with the settled value between the two, which is what the tick marks
+  ✓ flexisim: and the manual controls come back afterwards
+  ✓ flexisim: the sinusoid profile takes, with the period the frequency slider asked for
+  ✓ flexisim: and only ONE profile's sliders are on screen at a time
+  ✓ flexisim: and the arm actually follows it rather than sitting at the home pose
+  ✓ flexisim: the stage is painted
+  flexisim/chain: M11 straight 7.778e+4 folded 3.847e+4 (2.02x); elbow load rms M21a1 9.03e-3 vs M22a2 4.86e-4; tool error 7.06e-3 over reach 22.0
+  ✓ flexisim/chain: the shoulder inertia changes by more than 2x across the elbow range
+  ✓ flexisim/chain: with the elbow commanded to HOLD, its inertial load is mostly the shoulder's
+  ✓ flexisim/chain: and the elbow gearbox really carries a torque it was never commanded
+  flexisim/chain: tool sensor estimating after 1056 pairs — whole arm 0.0682, elbow only 0.0461 (0.68x), naive 1.0961
+  flexisim/chain: drawn tool vs the model — 1.0059 of the magnification (want 1.0), axial 2.17e-2
+  ✓ flexisim/chain: the picture draws the same tool error the model reports
+  ✓ flexisim/chain: …and the sweep band spans the error it bounds
+  ✓ flexisim/chain: both tool sensors reach a locked, frozen readout
+  ✓ flexisim/chain: the whole-arm sensor beats the controller's own view of the tool
+  ✓ flexisim/chain: and the elbow-only model at matched capacity also beats naive
+  flexisim/chain: tool bias vs the program — open -1.027e-1 / model -8.995e-2 / closed -3.187e-3 (pre-distortion 5.36 mrad)
+  ✓ flexisim/chain: every correction mode reaches the shoulder as a real pre-distortion
+  ✓ flexisim/chain: and the loop SETTLES rather than running to its clamp
+  ✓ flexisim/chain: no correction makes the tool dramatically worse
+  ✓ flexisim/chain: a full scoring window really produces a table row
+  ✓ flexisim/chain: the learned filter is offered as a fourth correction
+  ✓ flexisim/chain: …and is REFUSED until one has been fitted
+  ✓ flexisim/chain: input shaping is refused until the bending mode is measured
+  flexisim/chain: with the ring fit forced to fail — stopped, badge "auto-tune: could not measure the bending mode — no usable ring in the decay, so shaping stays off"
+  ✓ flexisim/chain: a sub-task that cannot succeed STOPS the sequence rather than restarting it for ever
+  ✓ flexisim/chain: …and says which step could not be done
+  ✓ flexisim/chain: …and unwinds the training it had turned on
+  flexisim/chain: auto-tune selected learned, mode period 862, board open 2.40e-1 / ff 2.35e-1 / learned 1.10e-1 / closed 2.29e-1
+  ✓ flexisim/chain: auto-tune measures the bending mode from an unshaped kick
+  ✓ flexisim/chain: …and turns the shaper on once it has one
+  ✓ flexisim/chain: …fits the learned filter and reports its size
+  ✓ flexisim/chain: …scores every mode, so the table is not empty
+  ✓ flexisim/chain: …and the learned filter beats the quasi-static model it sits on
+  ✓ flexisim/chain: …by reducing the OSCILLATION, which nothing else here can
+  ✓ flexisim/chain: …and selects the mode its own table scored best
+  flexisim/chain: sensors locked at step "lock them" after 6016 pairs, under learned
+  ✓ flexisim/chain: the LOCK is the last step of the sequence, not one in the middle
+  ✓ flexisim/chain: …so the sensors keep learning past the target and top up
+  flexisim/chain: after auto-tune — running learned, sensors under learned, whole arm 0.0122 vs naive 1.0592
+  ✓ flexisim/chain: …commissions the tool sensors in the configuration it chose
+  ✓ flexisim/chain: …so the readout the user is left with is actually good
+  flexisim/chain: control roughness — jerk off 1.25e-1, jerk 120 1.10e-3 (114x smoother)
+  ✓ flexisim/chain: the jerk limit makes the shoulder correction smoother too
+  ✓ flexisim/chain: …without shrinking it
+  flexisim/chain: drive rated 32x hold, saturated 0.0% / 0.0%
+  ✓ flexisim/chain: both joints have a rated drive that reports its demand
+  ✓ flexisim/chain: …and it carries the shipped move without saturating
+  ✓ flexisim/chain: the stage bounds the magnified shake with the swept band
+  ✓ flexisim/chain: …and gives the manual controls back afterwards
+  ✓ flexisim/chain: the stage is painted
+  flexisim/path: rounded, 29.42 long, lap 7356 steps, 1080 cells; homed 2.09e-2 from the start of the program
+  ✓ flexisim/path: the arm homes onto the start of the program
+  ✓ flexisim/path: …and it is a closed loop the machine never stops on
+  ✓ flexisim/path: an identified correction that does not exist is not applied
+  ✓ flexisim/path: …and so is a pilot that has not vouched for itself
+  ✓ flexisim/path: …and ⑤+④ needs that same vouched pilot before its table acts
+  ✓ flexisim/path: …and so is a fully learned system that has not been commissioned
+  ✓ flexisim/path: …and ⑦ inherits exactly the same refusal
+  flexisim/path: after 3000 steps — contour 9.20e-2, lag 3.81e-1, unobservable 1.24e-1 vs following 3.78e-1
+  ✓ flexisim/path: the contour/lag split is live and both are finite
+  ✓ flexisim/path: a feedrate change mid-lap is queued rather than applied
+  flexisim/path: feedrate 4.0e-3 → 1.0e-2, lap 7356 → 3268; arc 26.400 → 26.397 of 29.42
+  ✓ flexisim/path: applying it changes the speed and keeps the place on the part
+  ✓ flexisim/path: …and the error trail and chart are still being fed after it
+  ✓ flexisim/path: the stage is painted
+  flexisim/path: drawn tool vs the model — gap 0.00e+0 on a 12.67 reach
+  ✓ flexisim/path: the drawn tool IS the tool every metric is computed from
+  ✓ flexisim/path: ⑨ starts with nothing commissioned and its panel hidden
+  ✓ flexisim/path: …and selecting ⑨ before commissioning is REFUSED, not run
+  flexisim/path: identified c -4.559e-1 / -1.443e+0 against −1/K = -6.250e-2
+  ✓ flexisim/path: the identified compliance has the gearbox's sign and exceeds it
+  ✓ flexisim/path: …and selecting it is then honoured
+  flexisim/path: learning, lap by lap — 5.87e-1 → 5.48e-1 → 4.84e-1 → 3.88e-1 → 2.68e-1 → 2.04e-1 → 1.74e-1 → 1.52e-1
+  ✓ flexisim/path: the learner drives the contour error down lap on lap
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+page.waitForFunction: Timeout 900000ms exceeded.
+    at /home/user/Tisaic.github.io/test/smoke.mjs:2880:12 {
+  name: 'TimeoutError'
+}
+
+Node.js v22.22.2
+```
