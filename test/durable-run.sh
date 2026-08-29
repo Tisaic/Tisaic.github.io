@@ -21,16 +21,30 @@ log="$scratch/${name}.log"
 "$@" > "$log" 2>&1
 rc=$?
 
-# The lines worth keeping: the machine's own description, the ceiling, every rung row, the
-# shipped verdict, and any diagnostic that fired. Raw logs are not committed — they are
-# thousands of lines of progress and the numbers are what the record is for.
+# KEEP THE WHOLE LOG WHEN IT IS SMALL, which it almost always is.
+#
+# This filtered by naming the lines worth keeping, and a filter that names lines drops
+# tomorrow's diagnostic. It did: a run added to answer whether a drift settles or continues
+# had its entire answer — the per-lap sequence, the two half-run drifts, the autocorrelation
+# — matched by none of the patterns, so the record kept the rung table and threw away the
+# finding, and the raw log was gone with the scratchpad by the time anyone looked.
+#
+# These logs are three or four kilobytes. The reason to filter was 'thousands of lines of
+# progress', which was true of a suite run and never of a single test. So: whole log under
+# the cap, filtered only above it, and the filter is a fallback rather than the rule.
+CAP=$((64 * 1024))
 {
   echo ""
   echo "### ${name} — exit ${rc} — $(date -u +%Y-%m-%dT%H:%MZ)"
   echo ""
   echo '```'
-  grep -E '^\s*\[|^\s*(as it arrived|conventional|pilot cascade|lap-periodic|— the)|shipped|nh  4|the lap-periodic rung reads|NOT SETTLED|floor ROSE|✗|check\(s\) FAILED|all checks passed' "$log" \
-    || echo "(no result lines — the run did not reach its table)"
+  if [ "$(wc -c < "$log")" -le "$CAP" ]; then
+    cat "$log"
+  else
+    echo "(log $(wc -c < "$log") bytes, over the ${CAP} cap — result lines only)"
+    grep -E '^\s*\[|^\s*(as it arrived|conventional|pilot cascade|lap-periodic|— the)|shipped|nh  4|reads the|NOT SETTLED|floor ROSE|lag-1|drift|mean |STOPPED|✗|check\(s\) FAILED|all checks passed' "$log" \
+      || echo "(no result lines — the run did not reach its table)"
+  fi
   echo '```'
 } >> docs/history/runs.md
 
@@ -38,8 +52,9 @@ git add -- docs/history/runs.md
 git commit -q -F - -- docs/history/runs.md <<MSG
 run: ${name} (exit ${rc})
 
-Result lines only, appended by test/durable-run.sh so the measurement
-survives a container reclaim. The raw log stays out of the repository.
+Appended by test/durable-run.sh so the measurement survives a container
+reclaim, which takes the scratchpad with it. Whole log when it is small
+enough to be worth keeping, result lines only above the cap.
 MSG
 
 for i in 2 4 8 16; do
