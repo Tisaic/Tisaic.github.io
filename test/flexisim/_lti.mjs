@@ -109,3 +109,38 @@ console.log(`  the world map's axis rotation outright and cuts the varying part 
 console.log(`  fold. If the rung does not improve, the frame is not the binding constraint`);
 console.log(`  and the gap is somewhere this file cannot see.\n`);
 await l1.destroy(); await l2.destroy();
+
+// ---- IS A CONTOUR-ONLY SIGNAL RICH ENOUGH FOR A 2-CHANNEL OPERATOR?
+// Narrowing the signal to the contour component makes it POINTWISE RANK 1: at every k it
+// is a scalar times the path normal n(k). If n(k) barely turned, both channels would carry
+// the same shape and the 4x4 operator would be fitted to a rank-deficient response — the
+// failure mode that once made |G| come back as noise and the arm measure 1.00x with every
+// check green. n(k) is geometry, so this is answerable without running the plant: take the
+// harmonic content of nx and ny themselves and ask how collinear the two channels are.
+{
+  const nh = 24;
+  const nx = new Float64Array(LAP), ny = new Float64Array(LAP);
+  for (let k = 0; k < LAP; k++) {
+    const t = path.tangent(path.at(k).s ?? 0);
+    nx[k] = -t[1]; ny[k] = t[0];
+  }
+  let worst = 0, worstH = 0, tiny = 0;
+  for (let h = 1; h <= nh; h++) {
+    let ar = 0, ai = 0, br = 0, bi = 0;
+    for (let k = 0; k < LAP; k++) {
+      const x = 2 * Math.PI * h * k / LAP, c = Math.cos(x), s = Math.sin(x);
+      ar += nx[k] * c; ai -= nx[k] * s; br += ny[k] * c; bi -= ny[k] * s;
+    }
+    const na = Math.hypot(ar, ai), nb = Math.hypot(br, bi);
+    if (na < 1e-9 * LAP || nb < 1e-9 * LAP) { tiny++; continue; }
+    // |cos| between the two channels' complex phasors: 1 means the harmonic carries one
+    // direction only and cannot separate the two inputs at that frequency.
+    const cs = Math.abs(ar * br + ai * bi) / (na * nb);
+    if (cs > worst) { worst = cs; worstH = h; }
+  }
+  console.log(`  the contour-only signal is pointwise rank 1 — it is a scalar on n(k).`);
+  console.log(`  Across the first ${nh} lap harmonics the two channels of n are at worst`);
+  console.log(`  ${worst.toFixed(3)} collinear (harmonic ${worstH}); ${tiny} harmonic(s) carried`);
+  console.log(`  no energy in one channel. 1.000 everywhere would mean the narrowed signal`);
+  console.log(`  cannot identify a 2-channel operator at all.\n`);
+}
