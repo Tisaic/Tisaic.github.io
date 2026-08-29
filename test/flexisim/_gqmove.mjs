@@ -207,6 +207,28 @@ if (process.env.GQ_IN) {
       + `      ${(100 * rel(sG)).toFixed(1).padStart(7)}%          ${(100 * rel(sP)).toFixed(1).padStart(7)}%`
       + `      ${(rel(sP) / Math.max(1e-12, rel(sG))).toFixed(2)}`);
   }
+  // ---- IS THE DISCREPANCY A GAIN, OR IS IT STRUCTURE? A held-pose operator that is simply
+  // the moving one times a constant is still usable — identify at rest, scale once on the
+  // machine. One that differs in SHAPE is not. So: the best single scalar per harmonic, and
+  // what it leaves. If the residual collapses, the calibration is rescuable by one number;
+  // if it barely moves, held-pose identification is finished for this plant.
+  console.log(`\n   h    best scalar   err after removing it   (was, global)`);
+  for (let h = 0; h < NH; h++) {
+    let num = 0, den = 0, sT = 0, sG = 0;
+    const gl = [];
+    for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) {
+      const g = Gs.reduce((t2, G) => t2 + G[h][r][c], 0) / Gs.length;
+      gl.push(g);
+      const truth = Gmove[h][r][c];
+      num += g * truth; den += g * g; sT += truth * truth; sG += (truth - g) ** 2;
+    }
+    const k2 = den > 0 ? num / den : 0;
+    let sK = 0, i = 0;
+    for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) sK += (Gmove[h][r][c] - k2 * gl[i++]) ** 2;
+    const rel = (x) => 100 * Math.sqrt(x / Math.max(1e-300, sT));
+    console.log(`  ${String(h + 1).padStart(2)}    ${k2.toFixed(3).padStart(9)}`
+      + `        ${rel(sK).toFixed(1).padStart(7)}%              ${rel(sG).toFixed(1)}%`);
+  }
   console.log(`\n  Both columns are error against the operator the machine shows IN MOTION.`);
   console.log(`  Below 1 says the pose scheduling still helps once the machine is moving;`);
   console.log(`  near 1 says it does not; and BOTH columns large says the motion terms`);
