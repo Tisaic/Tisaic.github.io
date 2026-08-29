@@ -6641,3 +6641,34 @@ thing it retracted: a number quoted from an instrument nobody had checked.
 
 The accept threshold is still far below the noise — that part of the diagnosis survives, and
 the 2-sigma stopping rule is still the right response to it.
+
+### Brick 73a — the beat is a phase walk, and it was helping the instrument
+
+`S = 9`, `LAP = 7357`, remainder 4: **the pilot starts each lap 44% of a sample later than
+the last**, because the harness indexed its look-ahead continuously across laps. Near half a
+sample is a period-2 walk, which is exactly what the autocorrelation found. Indexing from the
+lap start instead (`LAPSYNC`) removes it: lag-1 autocorrelation **−0.764 → −0.135**,
+independent.
+
+And the machine is better for it — the cascade ships 5.5099e-2 → **5.3554e-2**, with the
+16-lap mean 2.5% lower. That breaks a cascade figure identical across eleven consecutive
+runs, which is expected: it is a different machine, and the first change all session that
+was meant to be.
+
+**BUT THE BEAT WAS HELPING THE INSTRUMENT, WHICH IS THE PART WORTH KEEPING.**
+
+| | 16-lap mean | sigma of a 4-lap score |
+|---|---|---|
+| continuous | 5.5336e-2 | **1.51e-4** (0.27%) |
+| lap-synced | **5.3979e-2** | 4.70e-4 (0.87%) |
+
+A period-2 alternation cancels almost exactly in an EVEN averaging window, and the score
+averages four. Removing it leaves a slower drift that does not cancel over four laps, so the
+score of the better machine is **3.1x less repeatable**. A ladder that decides everything by
+comparison has just been handed a better plant and a worse instrument, and those trade
+against each other: at 4.70e-4 the margin needed to credit a rung is three times wider.
+
+That is not an argument against the fix — a real improvement in the machine beats a
+convenient artifact in the measurement — but it does mean the averaging window should now be
+chosen against the drift rather than inherited from a configuration where an even window was
+doing hidden work.
