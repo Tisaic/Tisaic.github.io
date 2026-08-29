@@ -45,29 +45,67 @@ for (let i = 0; i < N; i++) {
   const ax = 0.5 * Math.atan2(2 * C[0][1], C[0][0] - C[1][1]);
   rows.push({ s1, s2, ax, tr: C[0][0] + C[1][1] });
 }
-const gmax = Math.max(...rows.map((r) => r.s1)), gmin = Math.min(...rows.map((r) => r.s2));
-const trs = rows.map((r) => r.tr);
-const trMu = trs.reduce((a, b) => a + b, 0) / N;
-const trSd = Math.sqrt(trs.reduce((a, b) => a + (b - trMu) ** 2, 0) / N);
-// The axis wanders; unwrap it mod pi before taking a spread, or the wrap dominates.
-let prev = rows[0].ax, un = [prev];
-for (let i = 1; i < N; i++) {
-  let a = rows[i].ax;
-  while (a - prev > Math.PI / 2) a -= Math.PI;
-  while (a - prev < -Math.PI / 2) a += Math.PI;
-  un.push(a); prev = a;
-}
-const aMu = un.reduce((a, b) => a + b, 0) / N;
-const aSd = Math.sqrt(un.reduce((a, b) => a + (b - aMu) ** 2, 0) / N);
+// WHAT MAKES A MAP HARD FOR ONE OPERATOR IS VARIATION, NOT ANISOTROPY. A constant
+// anisotropic map is represented EXACTLY by a single 2x2 — it is only the changing that
+// the DFT averages away. The first version of this file reported the spread between the
+// largest eigenvalue anywhere and the smallest anywhere, which is mostly the shoulder
+// being heavier than the elbow, and it made the mass matrix look 11.66x worse than the
+// world compliance when its trace moves a THIRD as much. Rule 17: the instrument fails
+// before the model does.
+//
+// So: each eigenvalue against its OWN mean around the lap, and the rotation of the
+// eigenvectors. Both are zero for any constant map, however anisotropic.
+const spread = (xs) => {
+  const mu = xs.reduce((a, b) => a + b, 0) / xs.length;
+  return Math.sqrt(xs.reduce((a, b) => a + (b - mu) ** 2, 0) / xs.length) / Math.abs(mu);
+};
+const axisSwing = (axes) => {
+  let prev = axes[0]; const un = [prev];
+  for (let i = 1; i < axes.length; i++) {
+    let a = axes[i];
+    while (a - prev > Math.PI / 2) a -= Math.PI;
+    while (a - prev < -Math.PI / 2) a += Math.PI;
+    un.push(a); prev = a;
+  }
+  return 180 * (Math.max(...un) - Math.min(...un)) / Math.PI;
+};
+const describe = (label, mats) => {
+  const e1 = [], e2 = [], ax = [];
+  for (const M of mats) {
+    const [s1, s2] = svd2(M);
+    e1.push(s1); e2.push(s2);
+    ax.push(0.5 * Math.atan2(2 * M[0][1], M[0][0] - M[1][1]));
+  }
+  const an = e1.reduce((a, b) => a + b, 0) / e2.reduce((a, b) => a + b, 0);
+  console.log(`  ${label}`);
+  console.log(`    varies      stiff axis ${(100 * spread(e1)).toFixed(1)}%, `
+    + `soft axis ${(100 * spread(e2)).toFixed(1)}%   <- what one operator cannot follow`);
+  console.log(`    axis turns  ${axisSwing(ax).toFixed(1)} deg peak to peak`
+    + `                       <- likewise`);
+  console.log(`    anisotropy  ${an.toFixed(2)}x mean ratio`
+    + `                        <- costs a 2x2 operator NOTHING`);
+};
 
-console.log(`\nthe arm's world compliance around one lap  [K ${K} E ${E}, lap ${LAP}]\n`);
-console.log(`  gain spread          ${(gmax / gmin).toFixed(2)}x between the stiffest and`
-  + ` softest direction encountered anywhere on the lap`);
-console.log(`  trace, mean +- sd    ${trMu.toExponential(3)} +- ${trSd.toExponential(2)}`
-  + `   (${(100 * trSd / trMu).toFixed(1)}% of the mean)`);
-console.log(`  principal axis       ${(180 * aSd / Math.PI).toFixed(1)} deg sd, `
-  + `${(180 * (Math.max(...un) - Math.min(...un)) / Math.PI).toFixed(1)} deg peak to peak`);
-console.log(`\n  ONE operator per harmonic is fitted to all of that. On a single-axis servo`);
-console.log(`  the same numbers are 1.00x, 0%, 0 deg — which is the plant HarmonicFF`);
-console.log(`  reaches 10x on.\n`);
+const world = [], joint = [];
+for (let i = 0; i < N; i++) {
+  const c = path.at(Math.floor(i * LAP / N));
+  const [q1, q2] = arm.ik(c.x, c.y, true);
+  const J = arm.jacobian(q1, q2);
+  world.push([[J[0][0] * J[0][0] + J[0][1] * J[0][1], J[0][0] * J[1][0] + J[0][1] * J[1][1]],
+    [J[0][0] * J[1][0] + J[0][1] * J[1][1], J[1][0] * J[1][0] + J[1][1] * J[1][1]]]);
+  const M = arm.massMatrix(q2);
+  joint.push([[M[0][0], M[0][1]], [M[1][0], M[1][1]]]);
+}
+
+console.log(`\nthe map HarmonicFF fits ONE operator per harmonic to, around one lap`);
+console.log(`  [K ${K} E ${E}, lap ${LAP}, ${N} samples]\n`);
+describe('IN WORLD, where the rung runs today — J K^-1 J^T, the compliance it corrects through:', world);
+console.log('');
+describe('IN JOINT SPACE — J is gone; what is left that still varies is the mass matrix:', joint);
+console.log(`\n  On a single-axis servo every one of these is 0% and 0 deg, and that is the`);
+console.log(`  plant the rung reaches 10x on.`);
+console.log(`\n  PREDICTION, recorded before the comparison run reports: joint space removes`);
+console.log(`  the world map's axis rotation outright and cuts the varying part several`);
+console.log(`  fold. If the rung does not improve, the frame is not the binding constraint`);
+console.log(`  and the gap is somewhere this file cannot see.\n`);
 await l1.destroy(); await l2.destroy();
