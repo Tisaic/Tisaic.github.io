@@ -353,16 +353,14 @@ console.log(`  conventional machine ${probe0.score.toExponential(4)}`
   + `  bias ${probe0.bias.toExponential(2)}  osc ${probe0.osc.toExponential(2)}`
   + `  lag ${probe0.lag.toExponential(2)}`
   + `   lap-to-lap floor ${auto.floor.toExponential(3)}`);
-// THE PROBE SCALE MOVED WITH THE SIGNAL. HarmonicFF sizes its probe as a FRACTION of the
-// peak of the error it is handed, and both fractions on its ladder are that same ratio —
-// so narrowing the signal from the raw tool error to the contour component alone scales
-// every probe candidate down by the contour:lag ratio, and the ladder cannot compensate by
-// choosing a larger one. Arguably the more correct scale, since the probe should be sized
-// to the error it intends to remove; recorded because if the harmonic rung collapses this
-// is the first thing to look at.
-console.log(`  the signal handed to the lap-periodic rung is the CONTOUR component: `
-  + `${(probe0.score / probe0.lag).toFixed(2)}x the lag rms, which is the factor every `
-  + `probe candidate's amplitude moved by`);
+// WHAT THE LAP-PERIODIC RUNG IS ACTUALLY SHOWN, printed because it is the thing that
+// moved the rung 2.06x -> 2.65x and because a stale version of this line described the
+// narrowed signal for two commits after the narrowing was reverted (rule 30). It is
+// derived from the flags rather than written beside them, so it cannot say the wrong thing.
+console.log(`  the lap-periodic rung reads the ${CONTOURERR ? 'CONTOUR COMPONENT' : 'WHOLE TOOL ERROR'}`
+  + ` in ${HFFWORLD ? 'WORLD' : 'JOINT'} space`
+  + `${CONTOURERR || HFFWORLD ? '  — a REPRODUCTION of a measured null, not the default' : ''}`
+  + `   [contour ${(probe0.score / probe0.lag).toFixed(2)}x the lag rms]`);
 check('the harness reproduces the conventional machine `composite.test.mjs` measures, so the '
   + 'comparison below is one variable — who chooses the constants — and not two machines',
   Math.abs(probe0.score - CONV) / CONV < 0.02,
