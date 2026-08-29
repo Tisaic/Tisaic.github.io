@@ -27,6 +27,7 @@ const PASSES = +(process.env.PASSES || 9);
 const AMP = 4e-3;
 // The reconstruction normal: the path's own at the nearest point (right), or the commanded
 // velocity's (the approximation). Kept switchable only to measure the difference.
+const T0 = Date.now();
 const CMDNORM = !!process.env.CMDNORM;
 // THE FRAME THE LAP-PERIODIC RUNG CORRECTS IN. World was measured against a path-normal
 // axis (8.86x against 0.99x) and the conclusion drawn was "a frame that does not rotate
@@ -156,6 +157,13 @@ const auto = new AutoStack({
     hff: HFFJOINT ? { uMax: Math.min(2.0, 0.15 * (16 / K)) } : { uMax: 1.5, map: worldToJoint },
     stack: { uMax: Math.min(2.0, 0.15 * (16 / K)) } },      // composite.test.mjs's own figure
   pilot: {},                        // filled below, once the arm's own centre is known
+  // PROGRESS AS IT IS MEASURED. This commission takes about an hour; printed only as a
+  // table at the end, a run going wrong is indistinguishable from one going well until it
+  // is over. Rule 27: the unflattering diagnostic first, and soon enough to act on.
+  onRung: (r) => console.log(`  [${((Date.now() - T0) / 60000).toFixed(0)}m] `
+    + `${r.name}  ${r.score.toExponential(4)}`
+    + `${r.gain === null ? '' : '  ' + r.gain.toFixed(2) + 'x'}`
+    + `${r.deployed ? '' : '  — NOT deployed'}${r.note ? '   ' + r.note : ''}`),
 });
 
 async function fresh() {
