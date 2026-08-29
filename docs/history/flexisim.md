@@ -6173,6 +6173,66 @@ probes must exceed that, so **a richer basis costs conditioning quadratically, n
 Any future rung has to earn its place against a WORSE-CONDITIONED fit, which is a harder bar
 than more commissioning time.
 
+### Following tau: two hypotheses killed, and a measurement of mine that was half noise
+
+The owner's direction was to look hard at the signal paths and at tau in particular. Three
+taus exist here and the stack treats them very differently: **tau_id**, inverse dynamics on the
+REFERENCE — a prediction, and what `RobotComp` already deploys as tau/K; **tau_cmd**, after the
+servo's PD feedback on actual state; and **tau_act**, what deflects the plant. Nothing anywhere
+forms **tau_act − tau_id**, the innovation — the part of the loading the reference could not
+predict, which is the dynamic load that rings the structure, measured every sample and thrown
+away.
+
+**HYPOTHESIS 1: the structure is invariant and the servo is not.** Deploying the cascade moves
+the command→error operator; structural compliance should not care what generated the torque;
+so identify the invariant half once and re-measure only the cheap servo half. Fitting all
+three operators per harmonic and comparing clean against deployed:
+
+```
+Gu  command -> error : gain x1.16, phase  6.2 deg    LEAST drift
+S   command -> torque: gain x1.73, phase 29.1 deg
+Gt  torque  -> error : gain x1.76, phase 71.2 deg    MOST drift
+```
+
+**Exactly backwards.** The COMPOSITE is the invariant one. Torque is an internal signal of a
+feedback loop and a loop's input-output behaviour is more invariant than its internals — when
+the plant's torque response shifts, the servo commands different torque and command→error
+barely moves. Factoring through an internal signal EXPOSES variation the loop is suppressing.
+That kills this hypothesis and, for the same reason, kills indexing the harmonic table by
+predicted tau: both need Gt to be a property of the structure, and it is not.
+
+**HYPOTHESIS 2: memory in the conventional rung.** Also dead, and recorded above: no lag
+configuration beats a memoryless map, because the ringing is not a function of the reference at
+all.
+
+**AND THE DRIFT I DIAGNOSED THE GAP WITH WAS HALF NOISE.** The first measurement said 16.8
+degrees of phase with gain factors 0.44 to 3.06, and it explained the plateau beautifully: a
+3.06 ratio makes a full Newton step DIVERGE, the guard backtracks the global step to protect
+it, every matched harmonic crawls. Then a second experiment measured the same quantity better:
+
+```
+nh   per-harmonic probe   mean |dphase|
+256      epk/226              16.8 deg
+ 24      epk/69                9.6 deg    same code, 3.3x the amplitude
+ 24      epk/69                6.2 deg    independent implementation
+```
+
+Monotone in EXCITATION and in nothing about the plant. Real drift is 6-10 degrees; the gain
+ratios that made the story work were an under-excited fit. **Rule 14, and it was mine:** a
+surprising measurement is a reason to check the instrument, not to celebrate. The check only
+arrived because an unrelated experiment happened to measure the same thing at better SNR.
+
+### The probe budget was diluted by a band chosen before the plant was known
+
+What survives is better than the story it replaces, because it is the defect the instrument
+check found. `nh` defaults to 256 and this arm's channel is dead by h≈8-16, so most of the
+probe excited harmonics the machine cannot answer while the ones it CAN answer got 1/sqrt(256)
+of the peak instead of 1/sqrt(knee) — a factor of four thrown away on exactly the harmonics
+carrying the error. The ceiling candidate added earlier decides which harmonics to INVERT; it
+never touched which to PROBE. Once the survey finds the knee the whole budget is now spent
+inside it, one extra probe set, and it is inert where the channel has full reach — the servo
+axis is flat to h=256, nothing narrows, 242.1x unchanged.
+
 ### Not built, and the measurement that would change the answer
 
 The rung ORDER is still fixed, and the ladder is still a prefix — it deploys rungs 1..k and
