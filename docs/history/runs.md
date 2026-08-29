@@ -148,3 +148,126 @@ autostack-arm: 1 check(s) FAILED
   ✓ …and it is not the common cap doing the work by accident: the cap was not binding when the shipped configuration was scored
 autostack-arm: 1 check(s) FAILED
 ```
+
+### suite-node-flexisim — exit 0 — 2026-08-29T17:22Z
+
+```
+elastic: all checks passed
+joint: all checks passed
+    [self-weight] |sag| 5.3842e-1 vs theory 5.4276e-1 (-0.80%), bending 5.083e-1 + shear 3.446e-2
+    [joint limit] link sag 1.346e-1 is 1.32% of the joint tilt 1.021e+1
+    [split] K=1e-1  joint 4.845e+0  link 5.384e-1  joint share 90.0%
+    [split] K=2e-1  joint 2.151e+0  link 5.384e-1  joint share 80.0%
+    [split] K=4e-1  joint 1.256e+0  link 5.384e-1  joint share 70.0%
+    [split] K=9e-1  joint 5.384e-1  link 5.384e-1  joint share 50.0%
+    [mode 1] L/H 3.92  period 2817.7 steps  w 2.2299e-3 vs Euler-Bernoulli 2.4655e-3  (-9.56%)  over 5 crossings
+    [dynamic] alpha 5.5535e-7 vs 5.5535e-7 (0.000%)  windup 9.5115e-3 vs 9.5115e-3 (0.00%)
+    [dynamic] tip: tilt -2.235e-1 + bend -3.902e+0 = -4.126e+0   encoder 4.4483e+0 vs true link angle 4.4388e+0
+    [margin 2] 1216 cells, 168.5 us/step, tip -0.055692253940486, slope -0.00453250838961
+    [margin 1] 684 cells, 127.0 us/step, tip -0.055692253940486, slope -0.00453250838961
+    [margin] 1.33x faster at 684 cells against 1216
+  ✓ …and it is the shipped one, at a real saving
+arm: all checks passed
+    [inertia] M11 folded 38468 → straight 77780 (2.02x)   M12 -4368 / 5460 / 1.529e+4
+    [conservation] over 20000 free steps: energy drift 2.09e-4, momentum drift 1.60e-4   (shoulder swept 3.16 rad, elbow 3.079)
+    [conservation] with the Coriolis terms removed it drifts 2.31e-2 in a tenth of the run
+    [gravity] shoulder torque straight 1.006e-2 → folded 7.152e-3 (1.41x)
+    [frame] link 2 sees omega 4.000e-4, origin accel [-2.160e-6, 0.000e+0] (-L1 w^2 = -2.160e-6)
+    [frame] spun at omega 4.0e-4: sigma_xx fits the OFFSET bar to 0.60% and the un-offset one to 212.9%
+    [reach] straight 23.000 → folded 4.000 (L1 13.5, L2 9.5)
+    [load side] one step from rest — alpha load-side 2.462e-8 / -6.120e-8, closed form 2.462e-8 / -6.120e-8, motor-side 0.000e+0
+2R: all checks passed
+    [locked] learner 0.3645  compliance model 1.4223  "tip = encoder" 1.0012  (500 locked samples, 544 features)
+    [forecast +15 samples = 150 steps] learner 0.1035   persistence-of-estimate 0.6581   persistence-of-TRUTH 0.5417 (an oracle)
+    [delay] the motor-side baseline lines up with the tip at lag 52 samples = 520 steps (r 0.5003); a quarter of the gearbox period would be 26
+    [alignment] estimate correlates at lag 0 (r 0.9814), forecast at lag 14 (r 0.9969)
+    [backlash] dead band 7.35e-2 rad = 50% of the peak wind-up 1.47e-1
+    [backlash] memoryless 0.6206 -> 0.7238   windowed 0.3645 -> 0.5884
+    [backlash] memory is worth 1.70x clean and 1.23x under backlash; relative damage +16.6% vs +61.4%
+tipsensor: all checks passed
+    [agreement] worst relative difference over 12 states — M 2.81e-15, G 1.36e-16, C 1.08e-15, frame params 0.00e+0
+    [inertia] base M11 straight 1.7910e+5 · elbow folded 40428 · both folded 45548 (4.43× across the range)
+    [conservation] over 20000 free steps: energy drift 4.88e-4, momentum drift 3.85e-4   (base swept 2.75 rad)
+    [conservation] with the bias torques removed it drifts 4.40e-2 in a tenth of the run
+    [frame] link 3 sees omega 4.000e-4, origin accel -3.680e-6 (-(L1+L2) w^2 = -3.680e-6)
+    [frame] spun straight at omega 4.0e-4: sigma_xx fits the OFFSET bar to 1.95% and the un-offset one to 529%
+    [levers] reach 29.50; tilts -2.950e-2 / -1.600e-2 / -6.500e-3
+    [projection] pose 0.00,0.00,0.00  lever 29.500 against a distance of 29.500   tilt[0] -2.950e-2
+    [projection] pose 0.00,0.60,0.40  lever 22.544 against a distance of 27.111   tilt[0] -2.254e-2
+    [projection] pose 0.00,1.57,0.00  lever 16.000 against a distance of 20.934   tilt[0] -1.600e-2
+    [projection] pose 0.00,2.60,0.40  lever 1.885 against a distance of 5.913   tilt[0] -1.885e-3
+    [projection] wrist folded: lever -16.500 against a distance of 16.500   tilt[0] 1.650e-2
+NR: all checks passed
+    [whole arm] learner 0.0199   rigid model 0.9299   PLS frozen 0.1078   PLS adaptive 0.0737   "the tool is where the encoders say" 1.0000   (298 locked samples, 181 features from 10 signals)
+    [whole arm] PLS frozen 0.1078 vs adaptive 0.0737 — whichever leads here is a property of THIS stream's stationarity, not of the method
+chain sensor: all checks passed
+residual: all checks passed
+    [commission] c 1.21092 (1/K = 0.2500, so the link is 79% of it)   per pose 1.21454 1.21127 1.20918
+    [commission] first bending mode 6.215e-3 rad/step (period 1011), zeta 0.236   Euler-Bernoulli would say 7.092e-3 (14% high)
+    [plain      ] bias 7.366e-2   oscillation 1.944e-1   rms 2.079e-1   settled 1.104e-1
+    [compensated] bias 2.695e-4   oscillation 2.072e-1   rms 2.072e-1   settled 6.851e-2
+    [shaped     ] bias 7.375e-2   oscillation 7.599e-2   rms 1.059e-1   settled 7.392e-2
+    [both       ] bias 1.731e-4   oscillation 7.675e-2   rms 7.675e-2   settled 1.863e-2
+    [bias]        compensation 273x, shaping 0.999x (i.e. nothing)
+    [oscillation] compensation 0.94x (i.e. nothing), shaping 2.56x
+    [rms]         compensation 1.00x, shaping 1.96x, TOGETHER 2.71x
+    [sign] bias uncompensated 7.366e-2 → correct 2.695e-4, backwards 1.476e-1 (2.00x)
+    [jerk] biggest one-step acceleration jump: bare 6.857e-7, limited 5.714e-9 → 120x smaller
+  ✓ an unrated drive is ideal, which is what the page shipped with
+all checks passed
+    [feed] 3978 steps, covered 23.9398 of 23.9398, peak v 1.165e-2 (limit 2.000e-2), peak a 2.000e-5 (limit 2.000e-5)
+    [feed] fastest on a straight 1.165e-2, on an arc 4.899e-3 against sqrt(a*r) = 4.899e-3
+    [corner] 90°: v at the corner 5.756e-4 against the junction rule's 5.657e-4, and 1.414e-2 away from it
+    [decompose] a pure 120-step lag: tracking error up to 1.327e+0, contour error up to 4.839e-16 — a ratio of 2.7e+15
+toolpath: all checks passed
+    [lead  0] 5.30e-2 → 5.68e-1   9.33e-2×
+    [lead  5] 5.30e-2 → 2.05e-3   2.58e+1×
+    [lead 10] 5.30e-2 → 1.33e-4   4.00e+2×
+    [lead 15] 5.30e-2 → 1.37e-4   3.89e+2×
+    [lead 20] 5.30e-2 → 5.82e-4   9.12e+1×
+    [lead 30] 5.30e-2 → 2.21e+0   2.40e-2×
+    [lead 60] 5.30e-2 → 1.03e+3   5.13e-5×
+pathilc: all checks passed
+    [Jdot] at constant Cartesian velocity the joints must still accelerate: ddq 5.83e-7, -6.48e-7
+    [decompose] a 200-step LAG: tracking 2.627e+0, contour 9.113e-16
+    [decompose] a 0.05 NORMAL offset: tracking 5.000e-2, contour 5.000e-2
+    [trace] feed 8.0e-3 →   2039 steps, contour rms 4.918e-1 max 1.242e+0, lag rms 2.084e+0, tau^2 4.228e-3, work 8.28e-2, reversals 3
+    [trace] feed 2.0e-3 →   8155 steps, contour rms 6.338e-2 max 1.596e-1, lag rms 1.964e+0, tau^2 1.143e-4, work 8.42e-3, reversals 4
+    [trace] feed 5.0e-4 →  32618 steps, contour rms 3.955e-2 max 6.609e-2, lag rms 1.372e+0, tau^2 1.793e-4, work 5.67e-3, reversals 4
+    [floor] halving the feed twice buys 7.8x at the fast end and 1.60x at the slow end — the difference is the compliance, which slowing down cannot reach
+    [energy] tau^2 4.23e-3 → 1.14e-4 → 1.79e-4 — fast costs acceleration, slow costs holding position for longer
+    [reversals] one real direction change through a dwell: counting travel 0, counting sign 994
+    [bias/osc] offset part rms 0.2000 = bias -0.2000 + osc 0.0000; ringing part rms 0.2000 = bias -0.0000 + osc 0.2000
+contour: all checks passed
+excite: all checks passed
+pilot: all checks passed
+pilot/tanks: all checks passed
+pilot/thermal: all checks passed
+pilot/woodberry: all checks passed
+pilot/rollmill: all checks passed
+    tracking error over the program, mm rms (x against the shipped machine):
+      as shipped, cascade P/P             0.5764      1.0x   no plant knowledge
+  ✓ …and it improves the shipped machine by at least 8x
+  all checks passed
+      shrink as shipped            1.236e-2   12.00x
+  ✓ on a plant whose channel dies — the arm's defining property, which this axis does not have — the shipped shrink converges at least 3x
+  ✓ …and each factor still EARNS its place in the shipped configuration, measured one at a time against it
+hff: all checks passed
+  ✓ the banded operator is actually BUILT — not a flag that leaves every harmonic null, which is how this shipped the first time and reported a ratio of exactly 1.000
+band: all checks passed
+sum: all checks passed
+reuse: all checks passed
+    conventional: 5.7640e-1 → 1.3568e-3 mm   424.8x   14 laps   fit residual 0.0016
+  as it arrived                                  5.7640e-1       
+  conventional (self-tuned)                      1.3568e-3  424.82x   14 laps, 4 coefficients — AT THE INSTRUMENT'S FLOOR (1.60e-3), not distinguishable
+  pilot cascade, depth 1                         3.4388e-3    0.39x   no better than the rung below — stopping
+  pilot cascade, depth 1 (rungs below withheld)  5.0974e-2    0.03x   no better than the rung below — stopping
+  lap-periodic (harmonic)                        1.3549e-4   10.01x   71 laps, probe basis at 10% — NOT deployed — AT THE INSTRUMENT'S FLOOR (1.60e-3), not distinguishable
+    shipped {"classic":true,"stack":0,"hff":false}   5.7640e-1 → 1.3568e-3 mm   424.8x
+  ✓ the harmonic rung really did score better than the one that shipped — so the refusal is the FLOOR talking and not a rung that failed
+  as it arrived              2.5509e-2       
+  conventional (self-tuned)  2.5476e-2    1.00x   13 laps, 4 coefficients — NOT deployed
+  lap-periodic (harmonic)    1.1515e-3   22.15x   75 laps, probe spread at 10% — a MEMORY: it will not transfer to another program — AT THE INSTRUMENT'S FLOOR (1.15e-3), not distinguishable
+    shipped {"classic":false,"stack":0,"hff":true}   2.551e-2 → 1.151e-3   22.2x
+autostack: all checks passed
+```
