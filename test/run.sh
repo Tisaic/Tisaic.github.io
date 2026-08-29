@@ -295,6 +295,10 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     node test/pilot/rollmill.test.mjs
     node test/pilot/emps.test.mjs
     node test/pilot/hff.test.mjs
+    # The banded operator on a plant with KNOWN neighbour coupling, and the control that it
+    # is byte-identical where there is none. It shipped once with every harmonic's fit null
+    # and reported a ratio of exactly 1.000 at three coupling strengths.
+    node test/pilot/band.test.mjs
     node test/pilot/autostack.test.mjs
     # THE BUTTON ON FOUR MORE PLANTS THAT SHARE NO PHYSICS — a tank whose outflow goes as
     # sqrt(level), a column that is linear transfer functions with dead time, a mill whose
