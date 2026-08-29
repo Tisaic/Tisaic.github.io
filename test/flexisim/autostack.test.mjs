@@ -421,6 +421,27 @@ console.log(`\n${auto.table()}`);
 console.log(`\n  shipped ${JSON.stringify(rep.deployed)}   ${rep.base.toExponential(4)} → `
   + `${rep.best.toExponential(4)}   ${rep.gain.toFixed(2)}x   ${((Date.now() - t0) / 1000).toFixed(0)}s`);
 console.log(`  ${BAR.src}   ${TARGET.toExponential(4)}   ${(CONV / TARGET).toFixed(2)}x`);
+
+// THE LAP-PERIODIC RUNG'S OWN CONVERGENCE, which has been recorded since the rung was
+// written and never once shown. Whether it converged, stalled, or ran out of budget are
+// three different problems with three different fixes, and the table above cannot tell
+// them apart — every one of them prints a single number. `damped` is how many harmonics
+// had their own step halved on each pass, so a plateau caused by a handful of badly
+// identified harmonics looks different from one where the whole table gave up.
+if (rep.hff && rep.hff.hist && rep.hff.hist.length) {
+  const h = rep.hff;
+  const fmt = (xs) => xs.map((v) => v.toExponential(2)).join(' → ');
+  console.log(`\n  the lap-periodic rung, pass by pass:`);
+  console.log(`    ${fmt(h.hist)}`);
+  if (h.damped && h.damped.length) {
+    console.log(`    harmonics damped per pass: ${h.damped.join(' ')}`
+      + `   (of ${h.cut || 'nh'} in the band)`);
+  }
+  const alive = (h.stepH || []).filter((x) => x > 0).length;
+  console.log(`    step ended at ${h.finalStep === undefined ? '?' : h.finalStep.toExponential(2)}`
+    + ` with ${alive} harmonic(s) still above the floor`
+    + `  — ${h.finalStep >= 1 ? 'BUDGET ran out with step to spare' : 'the step was spent'}`);
+}
 if (rep.unsettled && rep.unsettled.length) {
   console.log(`  NOT SETTLED when scored — the number is a point on a transient, not a `
     + `converged one:`);
