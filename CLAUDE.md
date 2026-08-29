@@ -271,6 +271,7 @@ measurement behind each is in `docs/history/` — the pointer in brackets.
 | `lib/ngrc/` | The ported NGRC library. See its README. |
 | `lib/probesense/` | Soft-sensing a field from one point in it. |
 | `lib/flexisim/` | `joint.js`, `link.js`, `arm.js`, `arm2r.js`, `armnr.js`, `tipsensor.js`, `chainsensor.js`, `compliance.js`, `compensator.js`, and the contouring three — `toolpath.js`, `contour.js`, `pathilc.js`. |
+| `lib/flexisim/autohost.js` | **The arm's host for `AutoStack`, imported by BOTH the Node bar and the page** — one module, so ⑨ on screen runs the configuration the 22.42× was measured on by construction rather than by review. |
 | `lib/blackbox/` | `blackbox.js` (identify → design → verify → correct) and `qp.js` (the box-constrained preview solve). Imports nothing from `lib/flexisim/`. |
 | `lib/pilot/hff.js` | Harmonic feedforward: a lap-periodic correction identified ON the machine. Carries no per-plant constant — count, step, probe design and probe amplitude are all measured. |
 | `lib/pilot/classic.js` | The CONVENTIONAL layer, self-tuned: a static feedforward in the reference's own state (`[a, v, sign v, 1]`), fitted on the machine. 425× on the EMPS axis in 14 laps, past the published inverse-dynamics feedforward. |
@@ -758,6 +759,28 @@ that matches it** — the point-to-point tabs measure a different question.
   rotation applied to every probe and does not separate channels at all; and comparing two probe
   designs at matched per-harmonic AMPLITUDE rather than matched PEAK compared a probe against a
   saturation.
+  **⑨ THE BUTTON — the whole ladder, on the page, running the host the bar measures.**
+  `lib/pilot/autostack.js` picks its own rungs: conventional → pilot cascade → lap-periodic,
+  each SCORED on the machine with everything below it deployed, and the best PREFIX ships. On
+  this arm at K 1 / E 0.06 it measures **4.1216e-1 → 1.8387e-2, 22.42×** in 1934 s of Node.
+  **THE PAGE AND THE BAR IMPORT THE SAME HOST** (`lib/flexisim/autohost.js`): everything the
+  ladder measures depends on which signals the host observes, which frame each rung corrects
+  in, and how the look-ahead is indexed, so a page that built its own would put a number on
+  the screen that nobody had measured — with every check still passing, which is this
+  project's mode-⑧ failure exactly. The only difference is scheduling: `yieldEvery` hands a
+  frame back, and `test/pilot/yield.test.mjs` pins that a yielding host reaches an identical
+  result rung row for rung row. **THE BROWSER CHECKS ARE WIRING, DELIBERATELY NOT
+  PERFORMANCE** — the 22.42× belongs in Node where the plant is STATED rather than read off a
+  slider, and ⑧ already failed a browser performance assertion once for the tab's stiff
+  defaults, which had nothing to do with the thing under test. What the browser can break is
+  what the browser is asked: press the button, watch the machine turn, stop it. **AND A
+  MEASUREMENT THAT TAKES HALF AN HOUR NEEDS A WAY OUT** — the button disabled ITSELF while
+  commissioning, which is the state in which the operator most needs it. Stop is a THROW out
+  of the yield point rather than a flag, so `commission()` unwinds through `run`'s and
+  `drivePilot`'s `finally`, the lattices are destroyed and no partial rung reaches the table;
+  the settles inside `makeMachine` yield too, because twenty thousand lattice steps run
+  before the host is handed the machine and they froze the tab through the one stretch that
+  most looks like a hang.
   **Sweep feedrate**
   runs the whole ladder and tabulates the trade. The arm is drawn at TRUE geometry; the error trail
   is the exaggerated object, pushed out along the path normal only.

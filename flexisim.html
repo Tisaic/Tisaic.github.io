@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:310,built:"2026-08-28T15:59:12Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:423,built:"2026-08-29T21:35:23Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -6542,7 +6542,32 @@ $('pilotP-btn').addEventListener('click', startPilotP);
 // difference is scheduling: `yieldEvery` hands a frame back so the tab stays alive, and
 // `test/pilot/yield.test.mjs` pins that a yielding host reaches an identical result, rung row
 // for rung row.
-let autoP = null, autoComm = false, autoRep = null;
+let autoP = null, autoComm = false, autoRep = null, autoAbort = false;
+// HOW MANY TIMES THE HOST HANDED A FRAME BACK. It is the only evidence available from
+// outside that the machine BUILT and the loop is turning: a commission that runs for half an
+// hour before its first rung row would otherwise be indistinguishable from one that threw
+// inside `makeMachine` and left the badge on its last message.
+let autoYields = 0;
+/**
+ * HAND A FRAME BACK, AND TAKE THE CHANCE TO STOP -- the only way out of a run that takes
+ * half an hour.
+ *
+ * The ladder has no abort of its own and should not: it is a measurement, and one that can
+ * be interrupted half-way reports a number nobody can reproduce. So the interruption lives
+ * where the host already gives the tab a turn, and it is a THROW rather than a flag --
+ * `commission()` unwinds through `run`'s and `drivePilot`'s `finally`, the lattices are
+ * destroyed, and no partial rung reaches the table.
+ *
+ * EVERY long-running loop in ⑨ goes through here, including the settles inside
+ * `makeMachine` -- twenty thousand lattice steps the host cannot see, because they run
+ * before it is handed the machine. Without a yield in them the tab freezes for their whole
+ * duration and `Stop` cannot be pressed during the one stretch that most looks like a hang.
+ */
+function autoYield() {
+  autoYields++;
+  if (autoAbort) throw new Error('stopped');
+  return new Promise((r) => requestAnimationFrame(r));
+}
 
 function autoRowsHTML(rows) {
   const w = (r) => (r.deployed ? '' : ' style="opacity:.55"');
@@ -6560,7 +6585,11 @@ async function startAutoP() {
   const c0 = profP.at(0);
   const centre = armP.ik(PG.centre[0], PG.centre[1], true);
   const LAP = Math.ceil(profP.lap);
-  autoComm = true; autoRep = null;
+  autoComm = true; autoRep = null; autoAbort = false; autoYields = 0;
+  // THE BUTTON HAS TO BECOME `Stop` NOW, not at whatever later frame happens to call
+  // `syncPath`. Between the click and the first repaint the only control that can end this
+  // run reads as the control that starts it.
+  syncPath();
   $('autoRow').style.display = '';
   $('autoTable').innerHTML = '<p class="hint">commissioning…</p>';
   $('autoNotes').textContent = '';
@@ -6570,32 +6599,40 @@ async function startAutoP() {
     // every run starts from the same state rather than from wherever the last one left it.
     makeMachine: async () => {
       const m = await makePlantP(K, E);
-      const rc = new RobotComp(2, 2, 1e6);
-      for (const [a, b] of [[0.10, 0.30], [-0.05, 0.55], [0.25, 0.15], [0.00, 0.42]]) {
-        m.arm.setPose(a, b);
-        for (let i = 0; i < 4000; i++) {
-          const t = m.servo.torques([{ theta: a, omega: 0, alpha: 0 },
-            { theta: b, omega: 0, alpha: 0 }]);
-          m.arm.step(t[0], t[1], 1);
+      // DESTROY WHAT THIS FUNCTION BUILT IF IT DOES NOT FINISH. The host's own `finally`
+      // cannot help here: it protects the machine it was HANDED, and until this returns
+      // there is nothing to hand it. A stop pressed during the settles would otherwise
+      // leak two lattices per attempt.
+      try {
+        const rc = new RobotComp(2, 2, 1e6);
+        const settle = async (a, b, n) => {
+          m.arm.setPose(a, b);
+          for (let i = 0; i < n; i++) {
+            const t = m.servo.torques([{ theta: a, omega: 0, alpha: 0 },
+              { theta: b, omega: 0, alpha: 0 }]);
+            m.arm.step(t[0], t[1], 1);
+            if (i % 1500 === 1499) await autoYield();
+          }
+        };
+        for (const [a, b] of [[0.10, 0.30], [-0.05, 0.55], [0.25, 0.15], [0.00, 0.42]]) {
+          await settle(a, b, 4000);
+          const refs = [{ theta: a, omega: 0, alpha: 0 }, { theta: b, omega: 0, alpha: 0 }];
+          rc.calibrate([[1, 0], [0, 1]], m.servo.jointTorques(refs),
+            [m.arm.j1.windup(), m.arm.j2.windup()], 1.0);
         }
-        const refs = [{ theta: a, omega: 0, alpha: 0 }, { theta: b, omega: 0, alpha: 0 }];
-        rc.calibrate([[1, 0], [0, 1]], m.servo.jointTorques(refs),
-          [m.arm.j1.windup(), m.arm.j2.windup()], 1.0);
+        const [q1, q2] = m.arm.ik(c0.x, c0.y, true);
+        await settle(q1, q2, 4000);
+        return { arm: m.arm, l1: m.l1, l2: m.l2, servo: m.servo, rc };
+      } catch (e) {
+        await m.l1.destroy(); await m.l2.destroy();
+        throw e;
       }
-      const [q1, q2] = m.arm.ik(c0.x, c0.y, true);
-      m.arm.setPose(q1, q2);
-      for (let i = 0; i < 4000; i++) {
-        const t = m.servo.torques([{ theta: q1, omega: 0, alpha: 0 },
-          { theta: q2, omega: 0, alpha: 0 }]);
-        m.arm.step(t[0], t[1], 1);
-      }
-      return { arm: m.arm, l1: m.l1, l2: m.l2, servo: m.servo, rc };
     },
     path: profP, lap: LAP, K, centre,
     // HAND A FRAME BACK often enough that the tab survives a run of tens of thousands of
     // steps, and rarely enough that the yielding itself is not the cost.
     yieldEvery: 1500,
-    onYield: () => new Promise((r) => requestAnimationFrame(r)),
+    onYield: autoYield,
     onRung: (r) => {
       rows.push(r);
       $('autoTable').innerHTML = autoRowsHTML(rows);
@@ -6614,11 +6651,15 @@ async function startAutoP() {
   try {
     autoRep = await autoP.auto.commission({ run: autoP.run, drivePilot: autoP.drivePilot });
   } catch (e) {
-    setPathBadge(`⑨ commissioning failed — ${e && e.message ? e.message : e}`, 'bad');
-    autoComm = false; autoP = null; syncPath();
+    const msg = e && e.message ? e.message : String(e);
+    // A STOP IS NOT A FAILURE. Reporting one as the other trains the operator to ignore the
+    // red badge, which is the state this page most needs them to read.
+    setPathBadge(autoAbort ? '⑨ stopped — nothing was deployed'
+      : `⑨ commissioning failed — ${msg}`, autoAbort ? 'warn' : 'bad');
+    autoComm = false; autoAbort = false; autoP = null; syncPath();
     return;
   }
-  autoComm = false;
+  autoComm = false; autoAbort = false;
   // POINT THE FRAME MAPS AT THE ARM ON SCREEN. They were following the throwaway machines
   // the scored runs built, and deploying through a dead arm's Jacobian is a frame error
   // that produces plausible numbers rather than an exception.
@@ -6661,7 +6702,10 @@ function autoNotesHTML(rep) {
   if (rep.stopped) out.push(`<b>Stopped:</b> ${rep.stopped}`);
   return out.join(' ');
 }
-$('autoP-btn').addEventListener('click', startAutoP);
+$('autoP-btn').addEventListener('click', () => {
+  if (autoComm) { autoAbort = true; setPathBadge('⑨ stopping at the next frame…', 'warn'); return; }
+  startAutoP();
+});
 
 // ------------------------------------------------- the fully learned system (⑥/⑦)
 //
@@ -7360,7 +7404,10 @@ function syncPath() {
   set('sweepP', !idle);
   set('pilotP-btn', !idle);
   set('ik6P-btn', !idle);
-  set('autoP-btn', !idle || autoComm);
+  // CLICKABLE WHILE IT RUNS, because while it runs is exactly when someone needs it.
+  set('autoP-btn', autoComm ? false : !idle);
+  const alab = autoComm ? 'Stop ⑨ ■' : 'Commission ⑨ The button ▶';
+  if ($('autoP-btn').textContent !== alab) $('autoP-btn').textContent = alab;
   set('resetP', !armP || busyP);
   // THE PROGRAM SLIDERS GO WITH THEM. Commissioning and the sweep both install profiles
   // of their own, and a slider moved underneath either one either overwrites the routine's
@@ -7523,6 +7570,13 @@ window.__flxPathDbg = () => (armP ? {
     pilotBase: pilotBase ? pilotBase.slice() : null,
     havePilot: !!(pilotP && pilotP.verdict && pilotP.verdict.deploy) },
   pending: progPending,
+  // ⑨'s live state. `yields` is the liveness signal (see `autoYields`); `deployed` is what
+  // the ladder actually shipped, which is the one thing a contour number cannot tell you.
+  auto: { comm: autoComm, aborting: autoAbort, yields: autoYields, have: !!autoP,
+    rows: autoRep ? autoRep.rungs.length : 0,
+    deployed: autoRep ? autoRep.deployed : null,
+    gain: autoRep ? autoRep.gain : null,
+    panel: $('autoRow').style.display !== 'none' },
   path: { length: profP.length, lapSteps: profP.lap, closed: profP.closed,
     vMin: Math.min(...profP.v), vMax: Math.max(...profP.v) },
   mode: pathMode(), want: $('ctlP').value, c: cP, nominal: cFrom && cFrom.nominal,

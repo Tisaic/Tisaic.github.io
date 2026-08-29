@@ -2796,6 +2796,34 @@ await fx.waitForFunction((t) => window.__flxPathDbg().k > t, pk0 + 2500, { timeo
   check('flexisim/path: the drawn tool IS the tool every metric is computed from',
     gp && gp.gap < 1e-9, JSON.stringify(gp));
 }
+
+// ⑨ THE BUTTON: the state and the refusal, which cost nothing and therefore belong in the
+// QUICK tier. The press-the-button checks below need a machine to turn and are full tier --
+// but a mode gate is a CONTRACT, and this project's own rule is that anything pinning one
+// runs in both. Leaving all of ⑨ behind the full gate is how a regression ships for weeks:
+// the file that skipped and exited 0 without SUITE=full hid a gate defect here for three
+// bricks, and a plain `./test/run.sh` is what most changes are actually verified with.
+const a0 = await fx.evaluate(() => window.__flxPathDbg().auto);
+check('flexisim/path: ⑨ starts with nothing commissioned and its panel hidden',
+  a0.comm === false && a0.have === false && a0.rows === 0 && a0.panel === false,
+  JSON.stringify(a0));
+// A MODE THAT CANNOT ACT MUST NOT CLAIM TO. Selecting ⑨ before it has been commissioned
+// would otherwise reach `predistortP`, which dereferences the host on the first step -- an
+// uncaught error mid-run, which on this page means the machine stops and the badge keeps
+// whatever it last said. Every other mode on this tab refuses the same way, by running open.
+const gate9 = await fx.evaluate(() => {
+  const el = document.getElementById('ctlP');
+  const was = el.value;
+  el.value = 'auto';
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+  const d = window.__flxPathDbg();
+  el.value = was;
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+  return { want: d.want, mode: d.mode };
+});
+check('flexisim/path: …and selecting ⑨ before commissioning is REFUSED, not run',
+  gate9.want === 'auto' && gate9.mode === 'open', JSON.stringify(gate9));
+
 await fx.screenshot({ path: join(SHOTS, '08-flexisim-path.png') });
 // FULL TIER: the two things that need laps. Commissioning drives a whole slow lap
 // (~30k solver steps) and the learner needs several laps to show it converging, which is
@@ -3059,6 +3087,67 @@ if (FULL) {
   check('flexisim/path: …and the rebuild cleared the previous machine\u2019s learners',
     set.haveComp === false && set.havePilot === false && set.pilotBase === null,
     JSON.stringify(set));
+
+  // ---------------------------------------------------------------- ⑨ THE BUTTON
+  //
+  // WHAT THIS CAN CHECK AND WHAT IT DELIBERATELY CANNOT. The ladder's own number -- 22.42x
+  // -- is measured in Node against the CPU reference, where the plant is STATED rather than
+  // read off a slider, and it costs 1934 seconds there. Asserting performance here would be
+  // the mistake ⑨'s neighbour ⑧ already made once on this page: a browser assertion on a
+  // contour number that failed for a reason (the tab's stiff defaults) which had nothing to
+  // do with the thing under test. Rule 1 -- the cheapest route that can actually falsify the
+  // claim -- puts performance in Node and leaves the browser what only the browser can break.
+  //
+  // WHICH IS WIRING, AND WIRING HAS NEVER BEEN FREE HERE. ⑧ shipped containing NEITHER of
+  // its halves while every wiring assertion passed; the banded operator shipped inert for an
+  // afternoon; ⑨'s own first draft threw on `RobotComp` because the page imported the host
+  // and not the class it constructs. Every one of those is reachable ONLY by pressing the
+  // button and watching the machine turn, so that is what this does: press it, wait until
+  // the host has built a machine and handed back frames, then stop it. That covers the
+  // imports, the host construction, `makePlantP`, the settle, the scored run's inner loop,
+  // the yield path and the abort -- and it costs seconds rather than an hour.
+  await fx.click('#autoP-btn');
+  // THE LIVENESS SIGNAL IS THE YIELD COUNT, not the rung table. The first rung row is many
+  // minutes away; a frame handed back proves the imports resolved, `makePlantP` built two
+  // lattices, `RobotComp` calibrated over four poses, the settle ran and the scored run's
+  // inner loop is turning. A commission that threw inside `makeMachine` never reaches one.
+  // The wait is generous because this is a LIVENESS test and not a speed one: twenty
+  // thousand lattice steps of settling stand between the click and the second yield, and a
+  // tight bound would fail for the one reason that says nothing about ⑨.
+  await fx.waitForFunction(() => window.__flxPathDbg().auto.yields >= 2, null,
+    { timeout: 900000 });
+  const a1 = await fx.evaluate(() => window.__flxPathDbg().auto);
+  check('flexisim/path: ⑨ the button builds the host and the machine turns',
+    a1.comm === true && a1.have === true && a1.yields >= 2, JSON.stringify(a1));
+  check('flexisim/path: …and the report panel opens while it runs, so the run is visible',
+    a1.panel === true, JSON.stringify(a1));
+  const stopLabel = await fx.evaluate(() => ({
+    text: document.getElementById('autoP-btn').textContent,
+    disabled: document.getElementById('autoP-btn').disabled }));
+  // A RUN THAT TAKES HALF AN HOUR AND CANNOT BE STOPPED IS A HUNG TAB. The button was
+  // DISABLED while commissioning in the first version -- which is the state in which the
+  // operator most needs it.
+  check('flexisim/path: …and the button becomes a live Stop rather than going dead',
+    /Stop/.test(stopLabel.text) && stopLabel.disabled === false,
+    JSON.stringify(stopLabel));
+
+  await fx.click('#autoP-btn');
+  await fx.waitForFunction(() => window.__flxPathDbg().auto.comm === false, null,
+    { timeout: 120000 });
+  const a2 = await fx.evaluate(() => window.__flxPathDbg().auto);
+  // AND IT UNWINDS CLEANLY. The stop is a throw out of the yield point, so it travels
+  // through `run`'s and `drivePilot`'s `finally` and the two lattices are destroyed; what
+  // must NOT survive is a half-built host that a later mode selection could deploy through.
+  check('flexisim/path: …and stopping clears the host, so no partial ladder can deploy',
+    a2.comm === false && a2.have === false && a2.rows === 0, JSON.stringify(a2));
+  const gate2 = await fx.evaluate(() => {
+    const el = document.getElementById('ctlP');
+    el.value = 'auto';
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    return window.__flxPathDbg().mode;
+  });
+  check('flexisim/path: …and ⑨ is refused again after the stop, as it was before it',
+    gate2 === 'open', String(gate2));
 }
 
 // ---- THE BLACK BOX: the same arm, and a controller told nothing about it. Full tier
