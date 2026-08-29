@@ -6595,3 +6595,49 @@ program nobody has run.
 That is the practical payoff and it is a lap-cost one. A second program does not need the
 identification, only the refinement — and identification is where the probe sets and the
 candidate sweep spend their laps.
+
+### Brick 73 — the 'noise' is a two-lap beat, and the floor that measured it was 3.9x too big
+
+The refinement plateaus at pass 8 and then bounces. The obvious reading is measurement
+noise, and the ladder's own floor said 5.84e-4 against a score of 2.0e-2 — 2.9%, against an
+accept threshold of 0.1%. On that reading the guard was resolving differences thirty times
+finer than the machine could produce, the argmin of fifteen passes was the luckiest draw
+rather than the best table, and the banded rung's 4.2% win was inside the selection bias.
+All of that was written down and it was wrong.
+
+**The bare machine repeats to 1.3e-10. It is deterministic.** So the spread is lap-to-lap
+variation of a deterministic system, and which kind decides the fix. Sixteen laps of the
+shipped machine:
+
+```
+5.556e-2 5.451e-2 5.537e-2 5.521e-2 5.513e-2 5.535e-2 5.502e-2 5.592e-2
+5.487e-2 5.636e-2 5.491e-2 5.597e-2 5.452e-2 5.606e-2 5.538e-2 5.523e-2
+drift 3.38e-4 across the run, scatter about it 5.43e-4, lag-1 autocorrelation -0.764
+```
+
+**ALTERNATING.** A two-lap beat between the pilot's receding horizon and the lap, amplitude
+2.41e-4 — not independent scatter. An even averaging window cancels most of it, and the
+score already averages four. The true repeatability of a four-lap score, from
+non-overlapping blocks, is **1.51e-4**.
+
+**So the floor was 3.9x too large, and the reason is a statistical error of mine.** The floor
+took the running MAXIMUM of each run's self-reported spread. Every run estimates that from a
+handful of laps — three differences here — so the estimate is noisy, and the largest of
+twenty noisy estimates sits far above the truth. Taking the max looked conservative and is
+simply biased: a floor that size does not fail safe, it refuses improvements the machine can
+produce all day. It is now the MEDIAN, with the given floor still a lower bound so a host
+cannot talk the ladder below what the engineer stated.
+
+**And the banded result stands.** At the true sigma the difference is 5.7 sigma, and the
+selection bias over fifteen draws is 1.3% of the score against a 4.2% difference. The
+retraction written the previous hour was itself wrong, and wrong for the same reason as the
+thing it retracted: a number quoted from an instrument nobody had checked.
+
+| | reported at floor 5.84e-4 | at the measured 1.51e-4 |
+|---|---|---|
+| banded − diagonal | 1.48 sigma, "suggestive" | **5.7 sigma** |
+| argmin bias, 15 passes | 5.1% of score | 1.3% |
+| accept threshold 1e-3 | 0.03 sigma | 0.13 sigma |
+
+The accept threshold is still far below the noise — that part of the diagnosis survives, and
+the 2-sigma stopping rule is still the right response to it.
