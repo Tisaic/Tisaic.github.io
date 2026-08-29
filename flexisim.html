@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:427,built:"2026-08-29T22:06:30Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:429,built:"2026-08-29T22:44:15Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -7582,13 +7582,38 @@ function syncPathLabels() {
  * correction that does not help produce the same score. `predistortP` is the single
  * function the step loop asks, so asking it the same question is the honest probe.
  */
+/**
+ * THE APPLIED CORRECTION, TAKEN WITHOUT MOVING IT.
+ *
+ * `Pilot.act()` IS NOT A PURE FUNCTION. It calls `_controlTick`, which increments
+ * `tickPhase`, and `_uNowOf` interpolates linearly along that phase:
+ *
+ *     uNow = uPrevTick + (uTarget - uPrevTick) * tickPhase / (grid * sample)
+ *
+ * so every probe advances the answer by exactly one increment of that ramp. A check that
+ * probes five variants and compares them for EQUALITY is then measuring its own probing:
+ * ⑧'s pilot half came out 13% from ⑤'s, and ⑧-minus-its-parts came out at exactly HALF that
+ * with the opposite sign, which is the arithmetic of a constant step per call and not of a
+ * wiring fault. The COMPLIANCE half matched to the last bit throughout — it is stateless —
+ * and that contrast is what identified the instrument rather than the model (rule 17).
+ *
+ * So every probe is taken at the SAME phase: `tickPhase` is set to 0 on entry and restored
+ * on exit. 0 -> 1 cannot reach `grid * sample`, so `_controlTick` early-returns and nothing
+ * else in the pilot moves; and the running machine gets its phase back, so probing does not
+ * perturb the very correction being watched.
+ */
 window.__flxStackProbe = () => {
   if (!armP || !profP) return [0, 0];
-  const cmd = profP.at(kP);
-  const [q1, q2] = armP.ik(cmd.x, cmd.y, true);
-  const rt = armP.ikRates(q1, q2, cmd.vx, cmd.vy, cmd.ax, cmd.ay);
-  return predistortP([{ theta: q1, omega: rt.dq[0], alpha: rt.ddq[0] },
-    { theta: q2, omega: rt.dq[1], alpha: rt.ddq[1] }], cmd);
+  const R = pilotP && pilotP._run;
+  const saved = R ? R.tickPhase : null;
+  if (R) R.tickPhase = 0;
+  try {
+    const cmd = profP.at(kP);
+    const [q1, q2] = armP.ik(cmd.x, cmd.y, true);
+    const rt = armP.ikRates(q1, q2, cmd.vx, cmd.vy, cmd.ax, cmd.ay);
+    return predistortP([{ theta: q1, omega: rt.dq[0], alpha: rt.ddq[0] },
+      { theta: q2, omega: rt.dq[1], alpha: rt.ddq[1] }], cmd);
+  } finally { if (R) R.tickPhase = saved; }
 };
 
 window.__flxPathDbg = () => (armP ? {

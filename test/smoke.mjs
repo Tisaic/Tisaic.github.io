@@ -2961,6 +2961,17 @@ if (FULL) {
     stk.haveComp === true && stk.havePilot === true, JSON.stringify(stk));
   check('flexisim/path: …and its toggles are exposed and both on by default',
     stk.comp === true && stk.pilot === true, JSON.stringify(stk));
+  // THE INSTRUMENT BEFORE THE MODEL (rule 17). Everything below compares repeated probes of
+  // the applied correction, and that is only meaningful if a probe does not MOVE what it
+  // measures. `Pilot.act()` is not pure -- it advances `tickPhase` and `_uNowOf` interpolates
+  // along it -- so before `__flxStackProbe` was made phase-neutral, five probes returned five
+  // points on a ramp and the equality checks below failed by 13% while the app was correct.
+  // Two reads of one unchanged quantity must agree, and this is a cheaper, earlier and far
+  // more legible way to learn that they do not than an equality check on the model.
+  const twice = await fx.evaluate(() => [window.__flxStackProbe(), window.__flxStackProbe()]);
+  check('flexisim/path: probing the applied correction does not MOVE it — two reads agree',
+    Math.abs(twice[0][0] - twice[1][0]) < 1e-15 && Math.abs(twice[0][1] - twice[1][1]) < 1e-15,
+    JSON.stringify(twice));
   // FLIP THE PILOT OFF MID-RUN and read what the machine applies. `predistortP` is the one
   // function that decides, so calling it directly at the live reference is the honest probe
   // -- it is what the step loop calls.
@@ -3159,9 +3170,14 @@ if (FULL) {
       el.dispatchEvent(new Event('input', { bubbles: true }));
     }
   });
+  // 'sharp', NOT 'square'. The option's LABEL reads "square — four real corners" and its
+  // VALUE is `sharp`; assigning an unknown value to a <select> silently sets it to "" and
+  // fires change on a selection that does not exist. That is the same silent-wrong-state
+  // this page's own `rung()` helper exists to prevent on range inputs, and it is asserted
+  // below rather than trusted.
   await fx.evaluate(() => {
     const sh = document.getElementById('shapeP');
-    sh.value = 'square';
+    sh.value = 'sharp';
     sh.dispatchEvent(new Event('change', { bubbles: true }));
   });
   await fx.waitForFunction(() => !window.__flxPathDbg().busy, null, { timeout: 240000 });
@@ -3179,7 +3195,7 @@ if (FULL) {
     return { K: d.K, E: d.E, shape: d.shape, feed: d.feed, corner: d.corner };
   });
   check('flexisim/path: (the machine is first driven OFF the measured configuration, so the checks below have teeth)',
-    wrong.K > 8 && wrong.shape === 'square' && Math.abs(wrong.feed - 4e-3) > 1e-12,
+    wrong.K > 8 && wrong.shape === 'sharp' && Math.abs(wrong.feed - 4e-3) > 1e-12,
     JSON.stringify(wrong));
 
   await fx.click('#autoP-btn');
