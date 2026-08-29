@@ -521,6 +521,7 @@
       <button id="commP" class="sec">Commission ▶</button>
       <button id="pilotP-btn" class="sec">Commission ⑤ Pilot ▶</button>
       <button id="ik6P-btn" class="sec">Commission ⑥ Fully learned ▶</button>
+      <button id="autoP-btn" class="sec">Commission ⑨ The button ▶</button>
       <button id="sweepP" class="sec">Sweep feedrate ▶</button>
       <button id="resetP" class="sec">Reset</button>
       <div class="slider"><span>Cascade depth</span>
@@ -565,7 +566,21 @@
         <option value="ikfree">⑥ fully learned — geometry from the tracker, dynamics from noise</option>
         <option value="ikfree_ilc">⑦ fully learned + iterative learning on top</option>
         <option value="stack">⑧ the stack — conventional machine + pilot, switchable live</option>
+        <option value="auto">⑨ THE BUTTON — the ladder commissions itself and ships the best prefix</option>
       </select>
+      <!-- ⑨ THE LADDER'S OWN REPORT. Everything below is a number the ladder already
+           produces and nothing rendered until now: the rungs it tried with what each
+           measured, where its laps went, what the machine can reach at all, and the
+           diagnostics that say whether a row can be believed. -->
+      <div id="autoRow" style="display:none">
+        <p class="hint" id="autoHint">⑨ is not another correction — it is the process that
+          CHOOSES among ①–⑧. It commissions the conventional rung, then the pilot cascade,
+          then the lap-periodic rung, scores each one on this machine with everything below
+          it deployed, and ships the best prefix. A rung that measures worse than the rung
+          beneath it is not deployed, and the row still says what it measured.</p>
+        <div id="autoTable"></div>
+        <p class="hint" id="autoNotes"></p>
+      </div>
       <div class="controls" id="stackRow" style="display:none">
         <label><input type="checkbox" id="stk-comp" checked /> identified compliance</label>
         <label><input type="checkbox" id="stk-pilot" checked /> pilot</label>
@@ -974,6 +989,15 @@ import { FlexArm2R } from './lib/flexisim/arm2r.js';
 import { ChainServo } from './lib/flexisim/compensator.js';
 import { ChainSensor } from './lib/flexisim/chainsensor.js';
 import { roundedRect, sharpRect, circle as circlePath } from './lib/flexisim/toolpath.js';
+// THE SAME HOST THE NODE BAR USES. Not a page-side reimplementation: everything the ladder
+// measures depends on the host's details, and a second copy would let this tab report a
+// number from a machine nobody measured while every check still passed — which is exactly
+// what mode ⑧ did the first time it shipped.
+import { makeArmHost } from './lib/flexisim/autohost.js';
+// The conventional machine the ladder commissions ON TOP OF — the same identified compliance
+// the Node bar gives it, from the same four held poses. Without it the ladder would be
+// measured against a bare loop and every rung would look better than it is.
+import { RobotComp } from './lib/ngrc/robotcomp.js';
 import { ContourScore, decompose } from './lib/flexisim/contour.js';
 import { PathILC } from './lib/flexisim/pathilc.js';
 import { Pilot } from './lib/pilot/pilot.js';
@@ -5686,27 +5710,40 @@ function newScore() {
   return new ContourScore({ joints: 2, reversalTravel: 2 * BACKLASH * RATIO });
 }
 
+/**
+ * ONE PLANT BUILDER, used by the tab's own arm AND by the throwaway arms each of the
+ * ladder's scored runs needs. Written twice, the two would drift, and a ladder scoring a
+ * machine that is not the one on screen would still report perfectly consistent numbers —
+ * this page has that failure on record for mode ⑧.
+ */
+async function makePlantP(K, E) {
+  const mk = (length) => buildLink({ length, section: H, clamp: CLAMP, E,
+    nu: NU, rho: RHO, damping: DAMPING });
+  const link1 = await mk(PG.LEN1), link2 = await mk(PG.LEN2);
+  const j = (mp) => new Joint({ ratio: RATIO, motorInertia: mp.inertiaAboutPivot / 1e4,
+    loadInertia: mp.inertiaAboutPivot, stiffness: K, backlash: BACKLASH,
+    damping: 2 * Math.sqrt(K * mp.inertiaAboutPivot / 2) });
+  const arm = new FlexArm2R({ joint1: j(massProperties(link1)), link1,
+    joint2: j(massProperties(link2)), link2, gravityWorld: [0, -G, 0], dt: 1 });
+  arm.K = K; arm.E = E;
+  const hold = Math.abs(arm.gravityTorque([0, 0])[0]) / RATIO;
+  const servo = new ChainServo({ arm, bandwidth: 2e-3,
+    tauMax: PG.drive * hold, speedMax: NO_LOAD_SPEED });
+  return { arm, servo, hold, l1: link1, l2: link2 };
+}
+
 async function buildP() {
   if (armP) { await armP.l1.destroy(); await armP.l2.destroy(); armP = null; }
   const K = KP_LADDER[+$('s-kP').value];
   const E = EP_LADDER[+$('s-eP').value];
-  const mk = (length) => buildLink({ length, section: H, clamp: CLAMP, E,
-    nu: NU, rho: RHO, damping: DAMPING });
-  const link1 = await mk(PG.LEN1), link2 = await mk(PG.LEN2);
+  const built = await makePlantP(K, E);
+  const link1 = built.l1, link2 = built.l2;
   // BACKLASH IS ON HERE AND NOWHERE ELSE ON THE PAGE, because this is the only tab whose
   // metrics can see it: a point-to-point move crosses a dead band once and settles, while
   // a contour crosses it wherever a joint reverses, and the step it leaves in the surface
   // is the quadrant glitch every machine tool builder knows. Turning it off would leave
   // the direction-change count measuring something with no cost attached to it.
-  const j = (mp) => new Joint({ ratio: RATIO, motorInertia: mp.inertiaAboutPivot / 1e4,
-    loadInertia: mp.inertiaAboutPivot, stiffness: K, backlash: BACKLASH,
-    damping: 2 * Math.sqrt(K * mp.inertiaAboutPivot / 2) });
-  armP = new FlexArm2R({ joint1: j(massProperties(link1)), link1,
-    joint2: j(massProperties(link2)), link2, gravityWorld: [0, -G, 0], dt: 1 });
-  armP.K = K; armP.E = E;
-  holdP = Math.abs(armP.gravityTorque([0, 0])[0]) / RATIO;
-  servoP = new ChainServo({ arm: armP, bandwidth: 2e-3,
-    tauMax: PG.drive * holdP, speedMax: NO_LOAD_SPEED });
+  armP = built.arm; holdP = built.hold; servoP = built.servo;
   // A COMPLIANCE CONSTANT BELONGS TO ONE PLANT. K is the thing it is mostly measuring,
   // so carrying an identification across a K change applies yesterday's inverse to
   // today's arm -- the same rule the Chain tab's filter and shaper follow.
@@ -5718,6 +5755,9 @@ async function buildP() {
   // SO DOES THE LEARNED GEOMETRY: the static map is mostly droop and wind-up, and both
   // are K. A K change makes yesterday's inverse a map of a different machine.
   ik6 = null; ik6Comm = null; ilc6P = null; ilc6Hist = [];
+  // AND SO DOES THE LADDER. Every rung it deployed identified THIS plant; a K or E change
+  // makes all of them yesterday's inverse on today's arm, exactly as for ⑤ and ⑥.
+  autoP = null; autoComm = false; autoRep = null;
   $('ctlP').value = 'open';
   await homeP();
   console.log(`[flexisim] path: ${armP.describe()} | ${profP.length.toFixed(2)} long, `
@@ -5966,6 +6006,11 @@ function predistortP(refs, cmd) {
   // THE TOGGLES ARE THE INSTRUMENT. One machine, one lap, flip a box: two separate runs
   // never convince anyone, and a stale comparison between two commissioning sessions is
   // how a difference that is really seed noise gets reported as a result.
+  // ⑨ THE LADDER, DEPLOYED. Every rung it kept, summed and capped by the same `act()` the
+  // scored runs went through — not a re-implementation of them here. The look-ahead is
+  // indexed from the lap start exactly as it was during commissioning, so the pilot sees in
+  // deployment what it saw while it was learning.
+  if (m === 'auto') return autoP.actAt(kP, cmd, [refs[0].theta, refs[1].theta]);
   if (m === 'stack') {
     const useC = $('stk-comp').checked && !!cP;
     const useP = $('stk-pilot').checked
@@ -6071,6 +6116,11 @@ function pathMode() {
   // for. The same refusal shape again: selected but not commissioned quietly runs open.
   if ((want === 'ikfree' || want === 'ikfree_ilc')
     && !(ik6 && ik6.pilot && ik6.pilot.verdict && ik6.pilot.verdict.deploy)) return 'open';
+  // ⑨ REFUSES THE SAME WAY EVERYTHING ELSE HERE DOES. Selected before the ladder has
+  // commissioned, or while it is still commissioning, it runs open rather than half-armed —
+  // and a ladder that shipped nothing (every rung refused) is also nothing to deploy.
+  if (want === 'auto' && !(autoP && autoRep && !autoComm
+    && (autoRep.deployed.classic || autoRep.deployed.stack || autoRep.deployed.hff))) return 'open';
   // ⑧ NEEDS BOTH HALVES COMMISSIONED, and refuses the same way everything else here does
   // rather than half-deploying: with only one of them it IS one of them, so the honest
   // answer is to run that one and say so in the badge, not to pretend to be a stack.
@@ -6480,6 +6530,138 @@ function finishPilotP() {
   }).finally(() => { busyP = false; syncPath(); statsP(); });
 }
 $('pilotP-btn').addEventListener('click', startPilotP);
+
+// ------------------------------------------------- ⑨ THE BUTTON: the whole ladder
+//
+// Not another correction. ⑨ is the process that CHOOSES among the others: it commissions the
+// conventional rung, then the pilot cascade as deep as it pays, then the lap-periodic rung,
+// scoring each on THIS machine with everything below it deployed, and ships the best prefix.
+//
+// IT RUNS THE SAME HOST THE NODE BAR MEASURES 22.42x WITH — `lib/flexisim/autohost.js` — so
+// what happens here is the tested configuration rather than a page-side lookalike. The only
+// difference is scheduling: `yieldEvery` hands a frame back so the tab stays alive, and
+// `test/pilot/yield.test.mjs` pins that a yielding host reaches an identical result, rung row
+// for rung row.
+let autoP = null, autoComm = false, autoRep = null;
+
+function autoRowsHTML(rows) {
+  const w = (r) => (r.deployed ? '' : ' style="opacity:.55"');
+  return '<table class="tbl"><tr><th>rung</th><th>contour</th><th>gain</th><th></th></tr>'
+    + rows.map((r) => `<tr${w(r)}><td>${r.name}</td>`
+      + `<td class="num">${r.score.toExponential(4)}</td>`
+      + `<td class="num">${r.gain === null ? '' : r.gain.toFixed(2) + '×'}</td>`
+      + `<td>${r.deployed ? '' : 'not deployed'}${r.note ? ' — ' + r.note : ''}</td></tr>`).join('')
+    + '</table>';
+}
+
+async function startAutoP() {
+  if (autoComm || busyP) return;
+  const K = KP_LADDER[+$('s-kP').value], E = EP_LADDER[+$('s-eP').value];
+  const c0 = profP.at(0);
+  const centre = armP.ik(PG.centre[0], PG.centre[1], true);
+  const LAP = Math.ceil(profP.lap);
+  autoComm = true; autoRep = null;
+  $('autoRow').style.display = '';
+  $('autoTable').innerHTML = '<p class="hint">commissioning…</p>';
+  $('autoNotes').textContent = '';
+  const rows = [];
+  autoP = makeArmHost({
+    // A FRESH, SETTLED MACHINE PER SCORED RUN, which is what makes two rungs comparable:
+    // every run starts from the same state rather than from wherever the last one left it.
+    makeMachine: async () => {
+      const m = await makePlantP(K, E);
+      const rc = new RobotComp(2, 2, 1e6);
+      for (const [a, b] of [[0.10, 0.30], [-0.05, 0.55], [0.25, 0.15], [0.00, 0.42]]) {
+        m.arm.setPose(a, b);
+        for (let i = 0; i < 4000; i++) {
+          const t = m.servo.torques([{ theta: a, omega: 0, alpha: 0 },
+            { theta: b, omega: 0, alpha: 0 }]);
+          m.arm.step(t[0], t[1], 1);
+        }
+        const refs = [{ theta: a, omega: 0, alpha: 0 }, { theta: b, omega: 0, alpha: 0 }];
+        rc.calibrate([[1, 0], [0, 1]], m.servo.jointTorques(refs),
+          [m.arm.j1.windup(), m.arm.j2.windup()], 1.0);
+      }
+      const [q1, q2] = m.arm.ik(c0.x, c0.y, true);
+      m.arm.setPose(q1, q2);
+      for (let i = 0; i < 4000; i++) {
+        const t = m.servo.torques([{ theta: q1, omega: 0, alpha: 0 },
+          { theta: q2, omega: 0, alpha: 0 }]);
+        m.arm.step(t[0], t[1], 1);
+      }
+      return { arm: m.arm, l1: m.l1, l2: m.l2, servo: m.servo, rc };
+    },
+    path: profP, lap: LAP, K, centre,
+    // HAND A FRAME BACK often enough that the tab survives a run of tens of thousands of
+    // steps, and rarely enough that the yielding itself is not the cost.
+    yieldEvery: 1500,
+    onYield: () => new Promise((r) => requestAnimationFrame(r)),
+    onRung: (r) => {
+      rows.push(r);
+      $('autoTable').innerHTML = autoRowsHTML(rows);
+      setPathBadge(`⑨ ${r.name} — ${r.score.toExponential(3)}`
+        + (r.deployed ? '' : ' (not deployed)'), 'warn');
+    },
+  });
+  autoP.auto.pilotOpts.start = armP.ik(c0.x, c0.y, true);
+  autoP.auto.pilotOpts.workspace = (q) => {
+    const rr = Math.hypot(armP.L1 * Math.cos(q[0]) + armP.L2 * Math.cos(q[0] + q[1]),
+      armP.L1 * Math.sin(q[0]) + armP.L2 * Math.sin(q[0] + q[1]));
+    return rr > Math.abs(armP.L1 - armP.L2) + 0.5 && rr < armP.L1 + armP.L2 - 0.5;
+  };
+  setPathBadge('⑨ commissioning the ladder — this is a long run, not a button that returns',
+    'warn');
+  try {
+    autoRep = await autoP.auto.commission({ run: autoP.run, drivePilot: autoP.drivePilot });
+  } catch (e) {
+    setPathBadge(`⑨ commissioning failed — ${e && e.message ? e.message : e}`, 'bad');
+    autoComm = false; autoP = null; syncPath();
+    return;
+  }
+  autoComm = false;
+  // POINT THE FRAME MAPS AT THE ARM ON SCREEN. They were following the throwaway machines
+  // the scored runs built, and deploying through a dead arm's Jacobian is a frame error
+  // that produces plausible numbers rather than an exception.
+  autoP.attach(armP);
+  $('autoTable').innerHTML = autoRowsHTML(autoRep.rungs);
+  $('autoNotes').innerHTML = autoNotesHTML(autoRep);
+  const d = autoRep.deployed;
+  setPathBadge(`⑨ shipped {classic:${d.classic}, cascade:${d.stack}, lap-periodic:${d.hff}}`
+    + ` — ${autoRep.base.toExponential(3)} → ${autoRep.best.toExponential(3)}`
+    + ` (${autoRep.gain.toFixed(2)}×). Press Run`, 'good');
+  $('ctlP').value = 'auto';
+  await homeP();
+  syncPath(); statsP();
+}
+
+/** The diagnostics the ladder produces and nothing rendered until now. */
+function autoNotesHTML(rep) {
+  const out = [];
+  if (rep.budget) {
+    const b = rep.budget;
+    out.push(`<b>Laps:</b> ${b.total} total — ${b.probes} identifying, ${b.trials} scoring`
+      + ` candidates, ${b.refocus} re-probing, ${b.refine} refining.`);
+  }
+  if (rep.bandsBeforeHff) {
+    const bb = rep.bandsBeforeHff;
+    out.push(`<b>Ceiling:</b> a lap-harmonic table can only cancel what lives in its band —`
+      + ` ${[8, 16, 32].map((nh) => `nh ${nh} ${(100 * bb[nh]).toFixed(1)}%`).join(', ')}`
+      + ` of the error's variance on the machine it corrected.`);
+  }
+  if (rep.sigma) {
+    out.push(`<b>Resolution:</b> this machine repeats to ${rep.sigma.toExponential(2)}`
+      + `${rep.withinNoise ? `, and ${rep.withinNoise} refinement passes landed within one of`
+        + ' those of the best — so the table shipped is one draw from a cluster' : ''}.`);
+  }
+  if (rep.phaseWalk) out.push(`<b>Phase walk:</b> ${rep.phaseWalk.note}`);
+  if (rep.starved) out.push(`<b>Starved:</b> a deployed rung was never reached —`
+    + ` ${JSON.stringify(rep.starved)}.`);
+  if (rep.floorRevised) out.push(`<b>Floor moved:</b> ${rep.floorRevised.length} rung(s) were`
+    + ' deployed on a margin that no longer clears at the final resolution.');
+  if (rep.stopped) out.push(`<b>Stopped:</b> ${rep.stopped}`);
+  return out.join(' ');
+}
+$('autoP-btn').addEventListener('click', startAutoP);
 
 // ------------------------------------------------- the fully learned system (⑥/⑦)
 //
@@ -7178,6 +7360,7 @@ function syncPath() {
   set('sweepP', !idle);
   set('pilotP-btn', !idle);
   set('ik6P-btn', !idle);
+  set('autoP-btn', !idle || autoComm);
   set('resetP', !armP || busyP);
   // THE PROGRAM SLIDERS GO WITH THEM. Commissioning and the sweep both install profiles
   // of their own, and a slider moved underneath either one either overwrites the routine's
@@ -7188,6 +7371,9 @@ function syncPath() {
   // that is the whole instrument. Everything else on this row is disabled mid-run because
   // moving it would change the program underneath a measurement; these change only which
   // correction is applied to the next step, which is exactly what they are for.
+  // The ladder's report stays visible once it exists: it is the record of what was tried,
+  // not a control that belongs to the selected mode.
+  $('autoRow').style.display = (autoRep || autoComm) ? '' : 'none';
   const stk = $('ctlP').value === 'stack';
   const row = $('stackRow');
   if (row && (row.style.display === 'none') === stk) row.style.display = stk ? '' : 'none';
