@@ -99,6 +99,18 @@ for (let k = 0; k < LAP; k++) {
 }
 
 let armRef = null;                 // the arm currently being driven, for the frame maps
+
+// THE JOINT REFERENCE FOR A FIXED PATH IS A CONSTANT, so it is solved once. It was being
+// solved per SAMPLE per LAP, and again inside the look-ahead closure for every lead of the
+// pilot's horizon — the same answer, for the same k, millions of times per run.
+// `harmonic.test.mjs` has always precomputed it; this harness did not.
+let REFS = null;
+const refsFor = (arm) => {
+  if (REFS) return REFS;
+  REFS = new Array(LAP);
+  for (let k = 0; k < LAP; k++) { const c = path.at(k); REFS[k] = arm.ik(c.x, c.y, true); }
+  return REFS;
+};
 /** World (dx, dy) into joint offsets at the pose the machine is commanded to. */
 const worldToJoint = (u, ctx) => {
   const J = armRef.jacobian(ctx.q[0], ctx.q[1]);
@@ -134,6 +146,7 @@ const AVG = 4;                      // settled laps averaged into the error sign
 async function run(extra, name, laps = 2 + AVG) {
   const { arm, l1, l2, servo, rc } = await fresh();
   armRef = arm;
+  const R = refsFor(arm);
   auto.beginRun();
   const sc = new ContourScore({ joints: 2 });
   const ex = new Float64Array(LAP), ey = new Float64Array(LAP);
@@ -142,27 +155,20 @@ async function run(extra, name, laps = 2 + AVG) {
     const le = new Float64Array(LAP);
     for (let k = 0; k < LAP; k++) {
       const cmd = path.at(k);
-      const [c1, c2] = arm.ik(cmd.x, cmd.y, true);
+      const [c1, c2] = R[k];
       const r = arm.ikRates(c1, c2, cmd.vx, cmd.vy, cmd.ax, cmd.ay);
       const base = [{ theta: c1, omega: r.dq[0], alpha: r.ddq[0] },
         { theta: c2, omega: r.dq[1], alpha: r.ddq[1] }];
       const ff = rc.feedforward([[1, 0], [0, 1]], servo.jointTorques(base), { enableToolff: false });
       const S = auto.stack ? auto.stack.sample : 1;
       const kSamp = Math.floor((l * LAP + k) / S);
-      const look = (off) => {
-        const c = path.at((((kSamp + off) * S) % LAP + LAP) % LAP);
-        return arm.ik(c.x, c.y, true);
-      };
+      const look = (off) => R[(((kSamp + off) * S) % LAP + LAP) % LAP];
       const ctx = { v: [cmd.vx, cmd.vy], a: [cmd.ax, cmd.ay], k, look, q: [c1, c2] };
-      const u = auto.act(ctx);
-      let d0 = u[0], d1 = u[1];
-      // THE RUNG UNDER TEST GOES THROUGH ITS OWN FRAME MAP, the same one it will deploy
-      // through. Commissioning a rung through one map and deploying it through another is
-      // identifying one machine and correcting a different one.
-      if (extra) {
-        const w = auto.into(extra.at(k), name, ctx);
-        d0 += w[0]; d1 += w[1];
-      }
+      // THE RUNG UNDER TEST IS HANDED TO `act` RATHER THAN ADDED AFTER IT, so it goes through
+      // its own frame map AND inside the same common cap it will deploy inside. Added
+      // afterwards it was held only to its own authority while being scored.
+      const u = auto.act(ctx, extra ? extra.at(k) : null, name);
+      const d0 = u[0], d1 = u[1];
       const tau = servo.torques([{ ...base[0], theta: c1 + ff.dq[0] + d0 },
         { ...base[1], theta: c2 + ff.dq[1] + d1 }]);
       arm.step(tau[0], tau[1], 1);
