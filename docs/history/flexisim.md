@@ -6421,3 +6421,45 @@ either solve the banded system or apply G(q) in the time domain and iterate, the
 avoiding a truncated coupling band. And per-pose |G| feeds the `reach` shrink, which is
 load-bearing here (removed, the arm goes 4.81x to 1.05x), so scheduling the operator
 silently reschedules the step sizes too.
+
+### Brick 71a — the defaults confirmed, and both floor fixes verified in the field
+
+The 2x2 that chose the defaults was run with the conventional rung excluded (`NOCLASSIC`),
+because at that point one error signal served every rung and a joint-space signal would have
+been handed to a world-fitted basis. With the per-rung frames in place that restriction is
+gone, so the defaults were re-run with the conventional rung back in play — the one
+configuration the 2x2 did not cover.
+
+```
+as it arrived                                  4.1216e-1
+conventional (self-tuned)                      3.3200e-1    1.24x
+pilot cascade, depth 1                         9.7217e-2    3.42x
+pilot cascade, depth 2                         1.4120e-1    0.69x
+pilot cascade, depth 1 (rungs below withheld)  6.7033e-2    1.45x
+pilot cascade, depth 2 (rungs below withheld)  5.5099e-2    1.22x
+— the conventional rung WITHHELD               5.5099e-2    1.00x
+lap-periodic (harmonic)                        2.0770e-2    2.65x   79 laps
+shipped {classic:false, stack:2, hff:true}     2.0770e-2   19.84x   2124s
+```
+
+**2.0770e-2, identical to four significant figures to the 2x2's best cell**, which was
+measured with the rung excluded rather than merely refused. The conventional rung is
+withheld again by the drop-one pass, reproducing the finding that a cheap rung can cost an
+expensive one: armed, the cascade commissions to 1.4120e-1 at depth 2, WORSE than its own
+depth 1, and only dropping it recovers 5.5099e-2. That number is now the ninth consecutive
+identical cascade across three container lifetimes and every signal and frame variant tried,
+which is what has made each comparison in this arc one variable rather than several machines.
+
+**Both defects in the floor instrument are confirmed fixed on real data.** The label now
+reads `on 'pilot cascade depth 2, deployed'` — the configuration that actually produced the
+noise — where before every rise was attributed to `as it arrived`, a run that repeats to
+1.3e-10 and could not have produced it. And the drift-proof estimator returns **5.84e-4**,
+2.8% of the score beneath it, where the naive standard deviation returned 3.47e-2, which was
+63% of the score and was reading a still-converging configuration's transient as noise. No
+row tripped the unsettled report, so nothing was scored while still moving.
+
+Against the ceiling measured on the same run — 4.23e-3 at nh 16, once the basis captures
+essentially all the error — the ladder sits **4.9x above the floor of its own achievable
+set**, and the hand-built composite 3.3x above it. Neither is limited by what a lap-indexed
+table can represent, which is where the case for a better operator rather than a bigger
+budget comes from.
