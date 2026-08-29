@@ -6562,3 +6562,36 @@ refinement's own convergence history — `hist`, `damped`, `stepH` — has been 
 the rung was written and was never printed; it is printed now, but `aarm22` had already
 launched, so this rejection rests on an endpoint rather than on watching where the passes
 went. Print the instrument before running the experiment, not after.
+
+### Brick 72b — the operator TRANSFERS, and so does the banded advantage
+
+The lap-indexed table is a memory and does not transfer; that has been measured here and on
+the servo axis (an identical correction signal replayed as a table is 0.53x on a trajectory
+the machine has never run — worse than nothing). The OPERATOR is a different object, and
+whether it transfers had never been asked.
+
+roundedRect's perimeter is 2(w+h) − 8r + 2πr, so 8×8 and 10×6 at r 1.5 are both 29.424778
+long — verified identical to six decimals, lap 7357 both. Same lap means the same harmonic
+frequencies over an entirely different pose trajectory, which makes transfer answerable by
+PREDICTION, with no controller and no commissioning. The same probe phases are used on both
+programs, so the only thing differing between the datasets is the machine's behaviour.
+
+| h | diagonal on 10×6 | banded on 10×6 | band/diag | diagonal WITHIN 8×8 |
+|---|---|---|---|---|
+| 1 | 12.2% | 8.2% | 0.67 | 12.8% |
+| 4 | 20.0% | 11.0% | 0.55 | 16.3% |
+| 8 | 23.2% | 17.4% | 0.75 | 31.9% |
+| **all** | **15.8%** | **9.6%** | **0.61** | **15.6%** |
+
+**Crossing programs costs essentially nothing: 15.8% on a program the operator never saw
+against 15.6% within the one it was fitted on.** The operator is a plant model, and the
+gating of ③ on the `periodic` hint is about the TABLE, not about the operator that builds it.
+
+**And the banded advantage transfers intact** — 0.61 on the unseen program against 0.60
+within the fitted one. Whatever the coupling encodes, it is a property of the machine rather
+than of the path: the same 40% reduction in held-out prediction error is available on a
+program nobody has run.
+
+That is the practical payoff and it is a lap-cost one. A second program does not need the
+identification, only the refinement — and identification is where the probe sets and the
+candidate sweep spend their laps.
