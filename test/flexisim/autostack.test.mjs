@@ -28,6 +28,27 @@ const AMP = 4e-3;
 // The reconstruction normal: the path's own at the nearest point (right), or the commanded
 // velocity's (the approximation). Kept switchable only to measure the difference.
 const CMDNORM = !!process.env.CMDNORM;
+// THE FRAME THE LAP-PERIODIC RUNG CORRECTS IN. World was measured against a path-normal
+// axis (8.86x against 0.99x) and the conclusion drawn was "a frame that does not rotate
+// with the path". That is not the property that matters. What HarmonicFF needs is a frame
+// in which the map from its correction to the error it reads is CONSTANT around the lap,
+// because it fits ONE 2cx2c operator per harmonic and the DFT averages whatever varies.
+// In world that map is J K^-1 J^T, and `_lti.mjs` measures it on this very machine: 5.41x
+// between the stiffest and softest direction, the trace moving 29.9%, and the principal
+// axis turning 127.6 degrees peak to peak. In JOINT space the pose dependence is entirely
+// inside J, so what is left is the gearbox — very nearly constant. It is also the frame the
+// pilot already reads its error in, three lines down in `drivePilot`.
+const HFFJOINT = !!process.env.HFFJOINT;
+// ONE ERROR SIGNAL IS RETURNED PER RUN AND BOTH RUNGS READ IT, so putting it in joint space
+// for the lap-periodic rung also hands it to the conventional rung, whose basis is the
+// reference's WORLD velocity and acceleration. That combination is not a variant, it is a
+// frame error — so it refuses to run rather than producing a number nobody can interpret.
+// Rule 51: silence is a failure mode.
+if (HFFJOINT && !process.env.NOCLASSIC) {
+  console.log('  HFFJOINT puts the shared error signal in joint space, which the '
+    + 'conventional rung\'s world-fitted basis cannot read. Run it with NOCLASSIC=1.');
+  process.exit(2);
+}
 
 async function machine() {
   const mk = (length) => buildLink({ length, section: H, clamp: CLAMP, E, nu, rho,
@@ -131,7 +152,8 @@ const auto = new AutoStack({
   channels: [0, 1].map(() => ({ lo: -3, hi: 3, vMax: 8e-4, aMax: 4e-6, jMax: 2e-7 })),
   uMax: 3.0, periodic: LAP, maxDepth: 2,
   basis: process.env.NOCLASSIC ? null : motionBasis([{ v: wv[0], a: wa[0] }, { v: wv[1], a: wa[1] }]),
-  frames: { classic: { uMax: 1.5, map: worldToJoint }, hff: { uMax: 1.5, map: worldToJoint },
+  frames: { classic: { uMax: 1.5, map: worldToJoint },
+    hff: HFFJOINT ? { uMax: Math.min(2.0, 0.15 * (16 / K)) } : { uMax: 1.5, map: worldToJoint },
     stack: { uMax: Math.min(2.0, 0.15 * (16 / K)) } },      // composite.test.mjs's own figure
   pilot: {},                        // filled below, once the arm's own centre is known
 });
@@ -212,7 +234,12 @@ async function run(extra, name, laps = 2 + AVG) {
           const t = path.tangent(d.s);
           nx = -t[1]; ny = t[0];
         }
-        ex[k] += d.contour * nx / AVG; ey[k] += d.contour * ny / AVG;
+        let gx = d.contour * nx, gy = d.contour * ny;
+        // A RUNG MUST BE SHOWN THE ERROR IN THE FRAME IT CORRECTS IN. The pilot already is;
+        // the lap-periodic rung was not, and it is the one whose method assumes the map
+        // between the two is constant.
+        if (HFFJOINT) { const j = worldToJoint([gx, gy], { q: [c1, c2] }); gx = j[0]; gy = j[1]; }
+        ex[k] += gx / AVG; ey[k] += gy / AVG;
       }
     }
     lapE.push(le);
