@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:431,built:"2026-08-29T22:45:31Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:433,built:"2026-08-29T22:55:53Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -7646,8 +7646,24 @@ window.__flxPathDbg = () => (armP ? {
     deployed: autoRep ? autoRep.deployed : null,
     gain: autoRep ? autoRep.gain : null,
     panel: $('autoRow').style.display !== 'none' },
+  // LOOPED, NOT SPREAD. `profP.v` carries one entry per lap SAMPLE, so its length is set by
+  // the FEEDRATE: 7356 at 4e-3 and about 29400 at the slowest rung. Spreading that into
+  // `Math.min` passes every element as an ARGUMENT, and the limit is not a fixed count but
+  // the REMAINING STACK — plain Node swallows 30000 from a shallow frame, while the same
+  // call inside a page `evaluate` threw `RangeError: Maximum call stack size exceeded`. So
+  // it fails by depth of caller as much as by length, which is the worst kind of threshold.
+  // And it failed in the DEBUG HOOK, the one thing you reach for when a slow program is
+  // misbehaving: the instrument breaks first, and here only on the programs most worth
+  // inspecting (rule 17).
   path: { length: profP.length, lapSteps: profP.lap, closed: profP.closed,
-    vMin: Math.min(...profP.v), vMax: Math.max(...profP.v) },
+    ...(() => {
+      let lo = Infinity, hi = -Infinity;
+      for (let i = 0; i < profP.v.length; i++) {
+        if (profP.v[i] < lo) lo = profP.v[i];
+        if (profP.v[i] > hi) hi = profP.v[i];
+      }
+      return { vMin: lo, vMax: hi };
+    })() },
   mode: pathMode(), want: $('ctlP').value, c: cP, nominal: cFrom && cFrom.nominal,
   K: armP.K, E: armP.E,
   // The two samplers' fill levels — the instrument that caught the fractional-clock
