@@ -6672,3 +6672,45 @@ That is not an argument against the fix — a real improvement in the machine be
 convenient artifact in the measurement — but it does mean the averaging window should now be
 chosen against the drift rather than inherited from a configuration where an even window was
 doing hidden work.
+
+### Brick 74 — where does the channel die? The loop is half of it
+
+A 10x win on this arm means 2.0e-2 → 2.0e-3, which is BELOW the basis floor of 4.23e-3 — so
+no operator and no number of passes reaches it. The band itself has to widen, and the content
+is there: nh 16 leaves 4.23e-3, nh 32 leaves 7.05e-4, nh 64 leaves 1.36e-4, against a
+lap-to-lap repeatability of 1.51e-4. Thirty times sits between h16 and h64, unreachable
+because |G| falls from 0.83 at h1 to 0.15 at h8 and the ceiling cuts the band there.
+
+The suspected cause was the LOOP rather than the mechanics: a correction entering as a
+position reference passes through a servo of bandwidth 2e-3, and at h8 the harmonic is
+already ~1.1e-3. Injected as TORQUE it enters after the loop with only the mechanics in
+front. One variable, same probe phases, same harmonics, same error definition.
+
+| h | position reference | torque |
+|---|---|---|
+| 1 | 100% | 100% |
+| 9 | 15.3% | 15.1% |
+| 13 | 3.7% | **10.5%** |
+| 17 | 1.1% | **5.7%** |
+| 25 | 1.4%* | 2.1% |
+| 33 | 0.4% | 0.7% |
+| 10% reach | **h10** | **h13** |
+
+**Torque reaches further, and the shapes differ in kind.** At h17 it carries 5.2x the
+response relative to its own h1. Torque decays smoothly and monotonically — a real roll-off
+— while the position curve goes NON-MONOTONE past h17 (0.7% at h21, back up to 1.4% at h25),
+which is the signature of a measurement on its own noise floor. Position's true reach is if
+anything shorter than plotted.
+
+**But the mechanics roll off too, so this is not the whole story.** At the 1% level position
+reaches ~h17 and torque ~h30: roughly DOUBLE the usable band, not the four to eightfold that
+would unlock all thirty times. It moves the basis floor from 4.23e-3 toward ~7e-4 — about
+six times more room.
+
+So the verdict is that torque injection makes a large win POSSIBLE where it was structurally
+blocked, and is not itself the win. It removes a ceiling; something still has to take the
+space it opens.
+
+Stated rather than glossed: the two probes use different units and amplitudes (0.002 rad
+against 0.02 of torque), so only the SHAPE is comparable. '5.2x more response at h17' is
+relative to each route's own h1, not an absolute gain.
