@@ -70,3 +70,21 @@ autostack: 1 check(s) FAILED
     shipped {"classic":false,"stack":0,"hff":false}   5.271e+0 → 5.271e+0   1.00x   185s
 plants: all checks passed
 ```
+
+### emps-ladder-refix — exit 0 — 2026-08-29T15:50Z
+
+```
+    conventional: 5.7640e-1 → 1.3568e-3 mm   424.8x   14 laps   fit residual 0.0016
+  as it arrived                                  5.7640e-1       
+  conventional (self-tuned)                      1.3568e-3  424.82x   14 laps, 4 coefficients — AT THE INSTRUMENT'S FLOOR (1.60e-3), not distinguishable
+  pilot cascade, depth 1                         3.4388e-3    0.39x   no better than the rung below — stopping
+  pilot cascade, depth 1 (rungs below withheld)  5.0974e-2    0.03x   no better than the rung below — stopping
+  lap-periodic (harmonic)                        1.3540e-4   10.02x   84 laps, probe basis at 10% — NOT deployed — AT THE INSTRUMENT'S FLOOR (1.60e-3), not distinguishable
+    shipped {"classic":true,"stack":0,"hff":false}   5.7640e-1 → 1.3568e-3 mm   424.8x
+  ✓ the harmonic rung really did score better than the one that shipped — so the refusal is the FLOOR talking and not a rung that failed
+  as it arrived              2.5509e-2       
+  conventional (self-tuned)  2.5476e-2    1.00x   13 laps, 4 coefficients — NOT deployed
+  lap-periodic (harmonic)    1.2284e-3   20.77x   83 laps, probe spread at 10% — a MEMORY: it will not transfer to another program
+    shipped {"classic":false,"stack":0,"hff":true}   2.551e-2 → 1.228e-3   20.8x
+autostack: all checks passed
+```
