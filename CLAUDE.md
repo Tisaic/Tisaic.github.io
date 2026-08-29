@@ -256,6 +256,16 @@ measurement behind each is in `docs/history/` — the pointer in brackets.
     that state reachable for the first time.**
 59. **State what is NOT built, and the measurement that would change the answer** — a
     decision has to be falsifiable, not permanent.
+60. **A NODE GLOBAL IN SHIPPED LIBRARY CODE IS INVISIBLE TO THE HALF THAT COULD CATCH IT.**
+    `pilot.js` read `process.env` for one Node measurement; `process` does not exist in a
+    browser, and the line sat on the FIT path rather than the excite path, so ⑤ ran for tens
+    of thousands of steps and died the instant it started solving — ⑨'s pilot rung with it.
+    The Node half cannot see it (there the global exists) and the browser half reported only
+    `Timeout 900000ms exceeded`, because the frame loop CATCHES and the throw became a badge
+    nobody read. Parsing cannot catch it either: `process.env.X` parses perfectly and throws
+    only when reached. `test/parse.mjs` now rejects bare `process`/`require`/`__dirname` in
+    `lib/`, and every long page wait ends on EITHER outcome and asserts the badge. An env
+    read is not a free thing to add to library code.
 
 ## Key files
 
