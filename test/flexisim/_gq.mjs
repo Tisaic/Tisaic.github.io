@@ -17,14 +17,11 @@
 // At a held pose there is no lap, so the analogue of the lap harmonic h is the frequency
 // h/lap: inject a joint-space multisine at those frequencies, measure the joint-space
 // deflection, and take the 2x2 complex response per harmonic. That is G(q, w_h).
-import { Joint } from '../../lib/flexisim/joint.js';
-import { FlexArm2R } from '../../lib/flexisim/arm2r.js';
-import { buildLink, massProperties } from '../../lib/flexisim/link.js';
-import { ChainServo } from '../../lib/flexisim/compensator.js';
 import { roundedRect } from '../../lib/flexisim/toolpath.js';
-import { RobotComp } from '../../lib/ngrc/robotcomp.js';
+// ONE rig, shared. See _rig.mjs for why eight copies of a machine is eight
+// chances for one of them to stop being the machine everything else was measured on.
+import { machine, settle, commissionComp, projector } from './_rig.mjs';
 
-const H = 4, nu = 0.3, rho = 1, CLAMP = 3, RATIO = 100, g = 2e-6;
 const K = +(process.env.K || 1), E = +(process.env.E || 0.06);
 const PATH = { w: 8, h: 8, r: 1.5, centre: [12, 0], feed: 4e-3, accel: 4e-5,
   cornerDt: 40, closed: true };
@@ -32,18 +29,6 @@ const NH = +(process.env.NH || 8);          // harmonics surveyed
 const AMP = +(process.env.AMP || 2e-3);     // probe amplitude, joint space
 const PERIODS = +(process.env.PERIODS || 2);
 
-async function machine() {
-  const mk = (length) => buildLink({ length, section: H, clamp: CLAMP, E, nu, rho, damping: 3e-3 });
-  const l1 = await mk(14), l2 = await mk(10);
-  const jt = (mp) => new Joint({ ratio: RATIO, motorInertia: mp.inertiaAboutPivot / 1e4,
-    loadInertia: mp.inertiaAboutPivot, stiffness: K, backlash: 1e-4,
-    damping: 2 * Math.sqrt(K * mp.inertiaAboutPivot / 2) });
-  const arm = new FlexArm2R({ joint1: jt(massProperties(l1)), link1: l1,
-    joint2: jt(massProperties(l2)), link2: l2, gravityWorld: [0, -g, 0], dt: 1 });
-  const hold = Math.abs(arm.gravityTorque([0, 0])[0]) / RATIO;
-  const servo = new ChainServo({ arm, bandwidth: 2e-3, tauMax: 32 * hold, speedMax: 0.2 });
-  return { arm, l1, l2, servo };
-}
 
 const path = roundedRect(PATH);
 const LAP = Math.ceil(path.lap);
@@ -56,20 +41,6 @@ const N = PERIODS * LAP;
 // guess, and the instrument is the first thing to check when a measurement surprises (rule
 // 17) — so it is now measured instead. FF=0 reproduces the survey without it.
 const USEFF = process.env.FF !== '0';
-function commissionComp(arm, servo) {
-  const rc = new RobotComp(2, 2, 1e6);
-  for (const [a, b] of [[0.10, 0.30], [-0.05, 0.55], [0.25, 0.15], [0.00, 0.42]]) {
-    arm.setPose(a, b);
-    for (let i = 0; i < 4000; i++) {
-      const t = servo.torques([{ theta: a, omega: 0, alpha: 0 }, { theta: b, omega: 0, alpha: 0 }]);
-      arm.step(t[0], t[1], 1);
-    }
-    const refs = [{ theta: a, omega: 0, alpha: 0 }, { theta: b, omega: 0, alpha: 0 }];
-    rc.calibrate([[1, 0], [0, 1]], servo.jointTorques(refs),
-      [arm.j1.windup(), arm.j2.windup()], 1.0);
-  }
-  return rc;
-}
 
 /** Hold at (a,b) with a joint-space offset u(k); return the joint-space deflection. */
 async function probeAt(arm, servo, a, b, uOf, rc = null) {
@@ -101,19 +72,7 @@ async function probeAt(arm, servo, a, b, uOf, rc = null) {
   return e;
 }
 
-/** DFT of one channel at the lap harmonics, over whole periods only. */
-function project(sig) {
-  const re = new Float64Array(NH), im = new Float64Array(NH);
-  for (let h = 1; h <= NH; h++) {
-    let a = 0, b = 0;
-    for (let k = 0; k < N; k++) {
-      const x = 2 * Math.PI * h * k / LAP;
-      a += sig[k] * Math.cos(x); b -= sig[k] * Math.sin(x);
-    }
-    re[h - 1] = 2 * a / N; im[h - 1] = 2 * b / N;
-  }
-  return { re, im };
-}
+const project = projector(LAP, NH);
 
 // Solve a 4x4 real system (the 2x2 complex operator at one harmonic) by Gaussian
 // elimination with a RELATIVE pivot floor — an absolute one returns a fitted answer for a

@@ -15,14 +15,11 @@
 // it runs that program. No cascade underneath either, because the rung identifies with
 // reactive layers disarmed. If the two agree, held-pose identification is viable and the
 // plane can be fitted off-line. If they disagree, G(q) has to be identified in motion.
-import { Joint } from '../../lib/flexisim/joint.js';
-import { FlexArm2R } from '../../lib/flexisim/arm2r.js';
-import { buildLink, massProperties } from '../../lib/flexisim/link.js';
-import { ChainServo } from '../../lib/flexisim/compensator.js';
 import { roundedRect } from '../../lib/flexisim/toolpath.js';
-import { RobotComp } from '../../lib/ngrc/robotcomp.js';
+// ONE rig, shared. See _rig.mjs for why eight copies of a machine is eight
+// chances for one of them to stop being the machine everything else was measured on.
+import { machine, settle, commissionComp, projector } from './_rig.mjs';
 
-const H = 4, nu = 0.3, rho = 1, CLAMP = 3, RATIO = 100, g = 2e-6;
 const K = +(process.env.K || 1), E = +(process.env.E || 0.06);
 const PATH = { w: 8, h: 8, r: 1.5, centre: [12, 0], feed: 4e-3, accel: 4e-5,
   cornerDt: 40, closed: true };
@@ -30,35 +27,6 @@ const NH = +(process.env.NH || 8);
 const AMP = +(process.env.AMP || 2e-3);
 const LAPS = +(process.env.LAPS || 3);        // 1 to settle, the rest measured
 
-async function machine() {
-  const mk = (length) => buildLink({ length, section: H, clamp: CLAMP, E, nu, rho, damping: 3e-3 });
-  const l1 = await mk(14), l2 = await mk(10);
-  const jt = (mp) => new Joint({ ratio: RATIO, motorInertia: mp.inertiaAboutPivot / 1e4,
-    loadInertia: mp.inertiaAboutPivot, stiffness: K, backlash: 1e-4,
-    damping: 2 * Math.sqrt(K * mp.inertiaAboutPivot / 2) });
-  const arm = new FlexArm2R({ joint1: jt(massProperties(l1)), link1: l1,
-    joint2: jt(massProperties(l2)), link2: l2, gravityWorld: [0, -g, 0], dt: 1 });
-  const hold = Math.abs(arm.gravityTorque([0, 0])[0]) / RATIO;
-  const servo = new ChainServo({ arm, bandwidth: 2e-3, tauMax: 32 * hold, speedMax: 0.2 });
-  return { arm, l1, l2, servo };
-}
-function settle(arm, servo, a, b, n = 4000) {
-  arm.setPose(a, b);
-  for (let i = 0; i < n; i++) {
-    const t = servo.torques([{ theta: a, omega: 0, alpha: 0 }, { theta: b, omega: 0, alpha: 0 }]);
-    arm.step(t[0], t[1], 1);
-  }
-}
-function commissionComp(arm, servo) {
-  const rc = new RobotComp(2, 2, 1e6);
-  for (const [a, b] of [[0.10, 0.30], [-0.05, 0.55], [0.25, 0.15], [0.00, 0.42]]) {
-    settle(arm, servo, a, b);
-    const refs = [{ theta: a, omega: 0, alpha: 0 }, { theta: b, omega: 0, alpha: 0 }];
-    rc.calibrate([[1, 0], [0, 1]], servo.jointTorques(refs),
-      [arm.j1.windup(), arm.j2.windup()], 1.0);
-  }
-  return rc;
-}
 
 const path = roundedRect(PATH);
 const LAP = Math.ceil(path.lap);
@@ -99,18 +67,7 @@ async function runProgram(uOf) {
   await l1.destroy(); await l2.destroy();
   return e;
 }
-function project(sig) {
-  const re = new Float64Array(NH), im = new Float64Array(NH);
-  for (let h = 1; h <= NH; h++) {
-    let a = 0, b = 0;
-    for (let k = 0; k < LAP; k++) {
-      const x = 2 * Math.PI * h * k / LAP;
-      a += sig[k] * Math.cos(x); b -= sig[k] * Math.sin(x);
-    }
-    re[h - 1] = 2 * a / LAP; im[h - 1] = 2 * b / LAP;
-  }
-  return { re, im };
-}
+const project = projector(LAP, NH);
 
 console.log(`\nthe operator identified IN MOTION, against the same one identified at rest`);
 console.log(`  [K ${K} E ${E}, NH ${NH}, lap ${LAP}, amp ${AMP}]\n`);

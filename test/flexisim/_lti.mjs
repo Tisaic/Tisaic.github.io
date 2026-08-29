@@ -3,23 +3,14 @@
 // that is exact. On a 2R arm the quasi-static map from a world correction to a world tool
 // displacement is J K^-1 J^T, and J turns with the pose — so the operator the DFT fits is
 // the LAP AVERAGE of a map that varies. This is kinematics only: no simulation, no CPU.
-import { FlexArm2R } from '../../lib/flexisim/arm2r.js';
-import { buildLink, massProperties } from '../../lib/flexisim/link.js';
-import { Joint } from '../../lib/flexisim/joint.js';
 import { roundedRect } from '../../lib/flexisim/toolpath.js';
+import { machine } from './_rig.mjs';
 
-const H = 4, nu = 0.3, rho = 1, CLAMP = 3, RATIO = 100, g = 2e-6;
 const K = +(process.env.K || 1), E = +(process.env.E || 0.06);
 const PATH = { w: 8, h: 8, r: 1.5, centre: [12, 0], feed: 4e-3, accel: 4e-5,
   cornerDt: 40, closed: true };
 
-const mk = (length) => buildLink({ length, section: H, clamp: CLAMP, E, nu, rho, damping: 3e-3 });
-const l1 = await mk(14), l2 = await mk(10);
-const jt = (mp) => new Joint({ ratio: RATIO, motorInertia: mp.inertiaAboutPivot / 1e4,
-  loadInertia: mp.inertiaAboutPivot, stiffness: K, backlash: 1e-4,
-  damping: 2 * Math.sqrt(K * mp.inertiaAboutPivot / 2) });
-const arm = new FlexArm2R({ joint1: jt(massProperties(l1)), link1: l1,
-  joint2: jt(massProperties(l2)), link2: l2, gravityWorld: [0, -g, 0], dt: 1 });
+const { arm, l1, l2 } = await machine();
 
 const path = roundedRect(PATH);
 const LAP = Math.ceil(path.lap);
