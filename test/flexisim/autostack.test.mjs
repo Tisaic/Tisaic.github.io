@@ -329,7 +329,13 @@ async function run(extra, name, laps = 2 + AVG) {
   const spread = Math.sqrt(Math.max(0, dVa / 2) / rl.length);
   const drift = dMu * (rl.length - 1);          // total travel across the averaged laps
   return { score: rep.contourRms, err: [ex, ey], bias: rep.contourBias, osc: rep.contourOsc,
-    lag: rep.lagRms, lapE, spread, drift, band };
+    // THE CEILING FOR THIS MACHINE, not for the bare one. Computed here rather than only
+    // for the first run, because the lap-periodic rung runs on the CASCADE-DEPLOYED machine
+    // and that is whose spectrum decides what a lap-harmonic table can remove. The DFT is
+    // tens of milliseconds against a run of tens of seconds, so every scored run can carry
+    // its own denominator.
+    lag: rep.lagRms, lapE, spread, drift, band,
+    bands: Object.fromEntries([4, 8, 16, 32, 64].map((nh) => [nh, band(nh)])) };
 }
 
 /** Drive a Stack's phase machine in JOINT space, exactly as `composite.test.mjs` does. */
@@ -451,6 +457,20 @@ console.log(`  ${BAR.src}   ${TARGET.toExponential(4)}   ${(CONV / TARGET).toFix
 // them apart — every one of them prints a single number. `damped` is how many harmonics
 // had their own step halved on each pass, so a plateau caused by a handful of badly
 // identified harmonics looks different from one where the whole table gave up.
+// THE CEILING ON THE MACHINE THE RUNG ACTUALLY RAN ON, beside the one on the bare machine.
+// Where they differ, every headroom figure quoted against the bare one was measured on a
+// spectrum the rung never saw.
+if (rep.bandsBeforeHff) {
+  const b = rep.bandsBeforeHff;
+  const pre = rep.rungs.filter((r) => r.deployed && !/lap-periodic/.test(r.name)).pop();
+  const sc = pre ? pre.score : probe0.score;
+  console.log(`\n  what a lap-harmonic table could reach ON THE CASCADE-DEPLOYED machine`
+    + ` (score ${sc.toExponential(3)}):`);
+  console.log(`    ${[4, 8, 16, 32, 64].map((nh) => `nh ${String(nh).padStart(2)} `
+    + `${(100 * b[nh]).toFixed(1)}% → ${(sc * Math.sqrt(Math.max(0, 1 - b[nh]))).toExponential(2)}`).join('   ')}`);
+  console.log(`    (against ${(probe0.score * Math.sqrt(Math.max(0, 1 - probe0.band(16)))).toExponential(2)}`
+    + ` at nh 16 on the BARE machine — the denominator every headroom figure has used so far)`);
+}
 if (rep.hff && rep.hff.hist && rep.hff.hist.length) {
   const h = rep.hff;
   const fmt = (xs) => xs.map((v) => v.toExponential(2)).join(' → ');
