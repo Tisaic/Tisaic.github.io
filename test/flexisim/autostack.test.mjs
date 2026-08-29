@@ -158,6 +158,13 @@ const auto = new AutoStack({
     hff: HFFWORLD ? { uMax: 1.5, map: worldToJoint } : { uMax: Math.min(2.0, 0.15 * (16 / K)) },
     stack: { uMax: Math.min(2.0, 0.15 * (16 / K)) } },      // composite.test.mjs's own figure
   pilot: {},                        // filled below, once the arm's own centre is known
+  // THE LAP BUDGET IS THE OPERATOR'S, NOT THE PLANT'S. brick 67 measured this module still
+  // DESCENDING at 20 passes on this arm and reaching 9.17x at 82 laps, past the hand-tuned
+  // 8.86x — a machine that chooses its own step takes smaller ones, so the same endpoint
+  // costs more laps. HFFPASSES exists to test whether the remaining distance to the
+  // hand-built number is laps or model error, which are different problems with different
+  // fixes and cannot be told apart from one budget.
+  hff: { passes: +(process.env.HFFPASSES || 24) },
   // PROGRESS AS IT IS MEASURED. This commission takes about an hour; printed only as a
   // table at the end, a run going wrong is indistinguishable from one going well until it
   // is over. Rule 27: the unflattering diagnostic first, and soon enough to act on.
