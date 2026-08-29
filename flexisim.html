@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:429,built:"2026-08-29T22:44:15Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:431,built:"2026-08-29T22:45:31Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -7222,7 +7222,16 @@ function statsP() {
   rows.push(['plant', `K ${armP.K} · E ${armP.E} · L1 ${armP.L1} + L2 ${armP.L2} · `
     + `${armP.l1.lattice.cellCount + armP.l2.lattice.cellCount} cells · drive `
     + `${PG.drive}× hold`]);
-  rows.push(['program', `${$('shapeP').options[$('shapeP').selectedIndex].text} · `
+  // A <select> WITH NO SELECTION REPORTS ITSELF RATHER THAN THROWING. Assigning an unknown
+  // value to a <select> leaves `selectedIndex` at -1, `options[-1]` is undefined, and this
+  // line then threw `Cannot read properties of undefined (reading 'text')` on EVERY FRAME —
+  // from a function whose entire job is to display state. It is not hidden: an unnamed shape
+  // is a real fault and the row says so, because "not selected" and "some default" are
+  // different states and only one of them is a bug (rule 25).
+  const shSel = $('shapeP').selectedIndex;
+  const shName = shSel >= 0 ? $('shapeP').options[shSel].text
+    : `NO SHAPE SELECTED — value "${$('shapeP').value}" matches no option`;
+  rows.push(['program', `${shName} · `
     + `${profP.length.toFixed(2)} long · lap ${profP.lap.toFixed(0)} steps · `
     + `feed ${pathFeed().toExponential(2)} · accel ${pathAccel().toExponential(1)}`]);
   rows.push(['step / lap', `${kP} · ${lapP}`]);
