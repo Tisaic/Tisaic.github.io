@@ -28,37 +28,29 @@ const AMP = 4e-3;
 // The reconstruction normal: the path's own at the nearest point (right), or the commanded
 // velocity's (the approximation). Kept switchable only to measure the difference.
 const T0 = Date.now();
-const CMDNORM = !!process.env.CMDNORM;
-// THE FRAME THE LAP-PERIODIC RUNG CORRECTS IN. World was measured against a path-normal
-// axis (8.86x against 0.99x) and the conclusion drawn was "a frame that does not rotate
-// with the path". That is not the property that matters. What HarmonicFF needs is a frame
-// in which the map from its correction to the error it reads is CONSTANT around the lap,
-// because it fits ONE 2cx2c operator per harmonic and the DFT averages whatever varies.
-// In world that map is J K^-1 J^T, and `_lti.mjs` measures it on this very machine: 5.41x
-// between the stiffest and softest direction, the trace moving 29.9%, and the principal
-// axis turning 127.6 degrees peak to peak. In JOINT space the pose dependence is entirely
-// inside J, so what is left is the gearbox — very nearly constant. It is also the frame the
-// pilot already reads its error in, three lines down in `drivePilot`.
-const HFFJOINT = !!process.env.HFFJOINT;
-// THE FULL TOOL ERROR RATHER THAN ITS NORMAL COMPONENT. Narrowing the signal to contour was
-// meant to stop the rung spending authority on lag, which the score cannot see removed. It
-// measured 2.05x -> 1.00x: the rung stopped being able to beat the cascade at all. The
-// reason is that the narrowing is itself a ROTATING OPERATOR — projecting onto n(k) is
-// P(k) = n n^T, and n turns 127.6 degrees around this lap, the very rotation `_lti.mjs`
-// measures. So the fitted operator is P(k)G rather than G, and a lap-varying factor was
-// introduced into exactly the map HarmonicFF assumes constant. Cancelling the whole error
-// necessarily cancels its normal part too; the lag authority is wasted, not harmful.
-const FULLERR = !!process.env.FULLERR;
-// ONE ERROR SIGNAL IS RETURNED PER RUN AND BOTH RUNGS READ IT, so putting it in joint space
-// for the lap-periodic rung also hands it to the conventional rung, whose basis is the
-// reference's WORLD velocity and acceleration. That combination is not a variant, it is a
-// frame error — so it refuses to run rather than producing a number nobody can interpret.
-// Rule 51: silence is a failure mode.
-if (HFFJOINT && !process.env.NOCLASSIC) {
-  console.log('  HFFJOINT puts the shared error signal in joint space, which the '
-    + 'conventional rung\'s world-fitted basis cannot read. Run it with NOCLASSIC=1.');
-  process.exit(2);
-}
+// ---- THE SIGNAL EACH RUNG IS SHOWN. Both settled by a 2x2 on the machine, one variable
+// each, with the pilot cascade coming back byte-identical (6.7033e-2 -> 5.5099e-2) in all
+// five runs — which is what makes them comparisons rather than five different machines.
+//
+//                         world frame        joint frame
+//   contour component     1.00x REFUSED      1.18x
+//   full tool error       2.06x              2.65x      <- ships
+//
+// THE SIGNAL IS THE WHOLE TOOL ERROR. Narrowing it to the contour component was meant to
+// stop the rung spending authority on lag, which the score cannot see removed. It cost
+// half the rung's benefit, and the reason is that the narrowing is itself a ROTATING
+// operator: projecting onto n(k) is P(k) = n n^T, and n turns 127.6 degrees around this lap
+// (`_lti.mjs`). The fitted operator became P(k)G rather than G — a lap-varying factor put
+// into exactly the map HarmonicFF assumes constant, while removing a different one.
+// Cancelling the whole error necessarily cancels its normal part too, so the lag authority
+// is wasted, not harmful. That was not the trade it looked like.
+//
+// AND EACH RUNG IS SHOWN IT IN THE FRAME IT CORRECTS IN. `host.run` is told which rung is
+// asking, so this needs no flag: the lap-periodic rung reads joint space, where the pose
+// dependence has been divided out and one operator per harmonic is a much better
+// assumption, and the conventional rung keeps world, where its basis was fitted.
+const CONTOURERR = !!process.env.CONTOURERR;   // reproduce the narrowed signal (a null)
+const HFFWORLD = !!process.env.HFFWORLD;       // reproduce the world frame (a null)
 
 async function machine() {
   const mk = (length) => buildLink({ length, section: H, clamp: CLAMP, E, nu, rho,
@@ -163,7 +155,7 @@ const auto = new AutoStack({
   uMax: 3.0, periodic: LAP, maxDepth: 2,
   basis: process.env.NOCLASSIC ? null : motionBasis([{ v: wv[0], a: wa[0] }, { v: wv[1], a: wa[1] }]),
   frames: { classic: { uMax: 1.5, map: worldToJoint },
-    hff: HFFJOINT ? { uMax: Math.min(2.0, 0.15 * (16 / K)) } : { uMax: 1.5, map: worldToJoint },
+    hff: HFFWORLD ? { uMax: 1.5, map: worldToJoint } : { uMax: Math.min(2.0, 0.15 * (16 / K)) },
     stack: { uMax: Math.min(2.0, 0.15 * (16 / K)) } },      // composite.test.mjs's own figure
   pilot: {},                        // filled below, once the arm's own centre is known
   // PROGRESS AS IT IS MEASURED. This commission takes about an hour; printed only as a
@@ -228,36 +220,26 @@ async function run(extra, name, laps = 2 + AVG) {
       // lap-to-lap spread of a few percent, and one lap of that is noise in the very spectrum
       // the harmonic rung inverts — composite.test.mjs averages four for exactly this reason.
       // Rule 12: read the meter after it settles, and read it more than once.
-      // THE SIGNAL IS THE CONTOUR COMPONENT, CARRIED IN WORLD COORDINATES. The raw tool
-      // error is contour + lag, and the score is contourRms only — so a rung handed the raw
-      // error spends authority cancelling lag, which this project states is not a defect (the
-      // part is the right shape, the cycle is slower) and which the score cannot see it
-      // remove. This is NOT the path-normal FRAME that measured 0.99x: that expressed the
-      // CORRECTION as one scalar along a rotating axis. Here the correction stays a full
-      // two-vector in world; only which error it is asked to cancel changes.
-      // AND THE NORMAL IS THE ONE THE MAGNITUDE WAS SIGNED AGAINST. `decompose` signs
-      // `contour` by the left normal AT THE NEAREST POINT ON THE PATH; the commanded
-      // velocity's left normal is a different point, separated along the path by the LAG,
-      // so the two disagree by about lag x curvature — zero on the straights and largest
-      // on exactly the corner arcs where contour error is largest. Rule 47: every term of a
-      // projected quantity must be projected the same way. `path.tangent(d.s)` is the same
-      // point, so it costs nothing to be right.
+      // THE ERROR SIGNAL, AVERAGED OVER THE SETTLED LAPS. What it contains and which
+      // frame it is expressed in were both settled by measurement — see the note at the
+      // top of the file; the two nulls it records are reachable behind CONTOURERR and
+      // HFFWORLD so either can be reproduced rather than taken on trust.
       if (l >= laps - AVG) {
-        let nx, ny;
-        if (CMDNORM) {
-          const sp = Math.hypot(cmd.vx, cmd.vy) || 1;
-          nx = -cmd.vy / sp; ny = cmd.vx / sp;
-        } else {
-          const t = path.tangent(d.s);
-          nx = -t[1]; ny = t[0];
-        }
         let gx, gy;
-        if (FULLERR) { const tp = arm.toolXY(); gx = tp[0] - cmd.x; gy = tp[1] - cmd.y; }
-        else { gx = d.contour * nx; gy = d.contour * ny; }
-        // A RUNG MUST BE SHOWN THE ERROR IN THE FRAME IT CORRECTS IN. The pilot already is;
-        // the lap-periodic rung was not, and it is the one whose method assumes the map
-        // between the two is constant.
-        if (HFFJOINT) { const j = worldToJoint([gx, gy], { q: [c1, c2] }); gx = j[0]; gy = j[1]; }
+        if (CONTOURERR) {
+          // The recorded null, reachable: contour only, on the path's own normal at the
+          // nearest point — the frame the magnitude was signed against.
+          const t = path.tangent(d.s);
+          gx = d.contour * -t[1]; gy = d.contour * t[0];
+        } else {
+          const tp = arm.toolXY(); gx = tp[0] - cmd.x; gy = tp[1] - cmd.y;
+        }
+        // THE LAP-PERIODIC RUNG READS JOINT SPACE, EVERY OTHER RUNG READS WORLD. `name` is
+        // the rung asking, so each is shown the error in the frame it corrects in rather
+        // than one signal being right for whichever rung happens to consume it.
+        if (name === 'hff' && !HFFWORLD) {
+          const j = worldToJoint([gx, gy], { q: [c1, c2] }); gx = j[0]; gy = j[1];
+        }
         ex[k] += gx / AVG; ey[k] += gy / AVG;
       }
     }
