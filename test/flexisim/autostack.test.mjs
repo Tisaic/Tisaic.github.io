@@ -446,6 +446,16 @@ if (rep.hff && rep.hff.hist && rep.hff.hist.length) {
   // no per-harmonic survival to report, and printing a count from a field that was never
   // populated is how '0 harmonics above the floor' appeared on a run where every harmonic
   // was still moving.
+  // THE NOISE THE PASSES WERE JUDGED AGAINST, and how many of them the instrument cannot
+  // tell apart. A refinement that ends with most of its passes inside one standard
+  // deviation of the best did not converge to that number — it drew it.
+  if (h.sigma) {
+    console.log(`    the machine repeats to ${h.sigma.toExponential(2)} (`
+      + `${(100 * h.sigma / h.best).toFixed(1)}% of the score), and ${h.withinNoise} of `
+      + `${h.hist.length} passes land within one of those of the best — so the deployed `
+      + `table is one draw from ${h.withinNoise > 2 ? 'a cluster' : 'a clear winner'}`);
+  }
+  if (h.stopped) console.log(`    STOPPED: ${h.stopped}`);
   const fs = h.finalStep;
   console.log(`    step ended at ${fs === undefined ? 'not reported' : fs.toExponential(2)}`
     + (h.perHarmonicStep && h.stepH
