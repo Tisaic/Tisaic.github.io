@@ -22,6 +22,7 @@ import { FlexArm2R } from '../../lib/flexisim/arm2r.js';
 import { buildLink, massProperties } from '../../lib/flexisim/link.js';
 import { ChainServo } from '../../lib/flexisim/compensator.js';
 import { roundedRect } from '../../lib/flexisim/toolpath.js';
+import { RobotComp } from '../../lib/ngrc/robotcomp.js';
 
 const H = 4, nu = 0.3, rho = 1, CLAMP = 3, RATIO = 100, g = 2e-6;
 const K = +(process.env.K || 1), E = +(process.env.E || 0.06);
@@ -48,8 +49,30 @@ const path = roundedRect(PATH);
 const LAP = Math.ceil(path.lap);
 const N = PERIODS * LAP;
 
+// THE CONVENTIONAL FEEDFORWARD IS APPLIED HERE TOO, because the moving experiment applies
+// it and the comparison between them has to be one variable. This survey originally omitted
+// it: at a standstill `ff.dq` is a constant offset, so it shifts the operating pose rather
+// than changing the linearised operator, and it was judged too small to matter. That is a
+// guess, and the instrument is the first thing to check when a measurement surprises (rule
+// 17) — so it is now measured instead. FF=0 reproduces the survey without it.
+const USEFF = process.env.FF !== '0';
+function commissionComp(arm, servo) {
+  const rc = new RobotComp(2, 2, 1e6);
+  for (const [a, b] of [[0.10, 0.30], [-0.05, 0.55], [0.25, 0.15], [0.00, 0.42]]) {
+    arm.setPose(a, b);
+    for (let i = 0; i < 4000; i++) {
+      const t = servo.torques([{ theta: a, omega: 0, alpha: 0 }, { theta: b, omega: 0, alpha: 0 }]);
+      arm.step(t[0], t[1], 1);
+    }
+    const refs = [{ theta: a, omega: 0, alpha: 0 }, { theta: b, omega: 0, alpha: 0 }];
+    rc.calibrate([[1, 0], [0, 1]], servo.jointTorques(refs),
+      [arm.j1.windup(), arm.j2.windup()], 1.0);
+  }
+  return rc;
+}
+
 /** Hold at (a,b) with a joint-space offset u(k); return the joint-space deflection. */
-async function probeAt(arm, servo, a, b, uOf) {
+async function probeAt(arm, servo, a, b, uOf, rc = null) {
   arm.setPose(a, b);
   for (let i = 0; i < 6000; i++) {              // settle first, then measure (rule 12)
     const t = servo.torques([{ theta: a, omega: 0, alpha: 0 }, { theta: b, omega: 0, alpha: 0 }]);
@@ -58,10 +81,13 @@ async function probeAt(arm, servo, a, b, uOf) {
   const cx = arm.L1 * Math.cos(a) + arm.L2 * Math.cos(a + b);
   const cy = arm.L1 * Math.sin(a) + arm.L2 * Math.sin(a + b);
   const e = [new Float64Array(N), new Float64Array(N)];
+  const refs0 = [{ theta: a, omega: 0, alpha: 0 }, { theta: b, omega: 0, alpha: 0 }];
+  const fdq = rc ? rc.feedforward([[1, 0], [0, 1]], servo.jointTorques(refs0),
+    { enableToolff: false }).dq : [0, 0];
   for (let k = 0; k < N; k++) {
     const u = uOf(k);
-    const t = servo.torques([{ theta: a + u[0], omega: 0, alpha: 0 },
-      { theta: b + u[1], omega: 0, alpha: 0 }]);
+    const t = servo.torques([{ theta: a + fdq[0] + u[0], omega: 0, alpha: 0 },
+      { theta: b + fdq[1] + u[1], omega: 0, alpha: 0 }]);
     arm.step(t[0], t[1], 1);
     const tool = arm.toolXY();
     // JOINT SPACE, the frame the rung now corrects in. J at the HELD pose, which is the
@@ -114,7 +140,8 @@ function solve4(M, y) {
 /** The 2x2 complex response at one pose: 4 real columns per harmonic. */
 async function operatorAt(a, b) {
   const m = await machine();
-  const zero = await probeAt(m.arm, m.servo, a, b, () => [0, 0]);
+  const rc = USEFF ? commissionComp(m.arm, m.servo) : null;
+  const zero = await probeAt(m.arm, m.servo, a, b, () => [0, 0], rc);
   const Z = [project(zero[0]), project(zero[1])];
   // Four probes: cos and sin into each channel, every surveyed harmonic in phase. That is
   // the 'basis' design, which is the one this arm selected on the machine.
@@ -128,7 +155,7 @@ async function operatorAt(a, b) {
       }
       return c === 0 ? [AMP * v / NH, 0] : [0, AMP * v / NH];
     };
-    const e = await probeAt(m.arm, m.servo, a, b, u);
+    const e = await probeAt(m.arm, m.servo, a, b, u, rc);
     cols.push([project(e[0]), project(e[1])]);
   }
   await m.l1.destroy(); await m.l2.destroy();
