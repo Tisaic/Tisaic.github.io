@@ -6714,3 +6714,34 @@ space it opens.
 Stated rather than glossed: the two probes use different units and amplitudes (0.002 rad
 against 0.02 of torque), so only the SHAPE is comparable. '5.2x more response at h17' is
 relative to each route's own h1, not an absolute gain.
+
+### Brick 75 — six diagnostics failed the same way in one day, so the instruments got a test
+
+Not a physics result. The most expensive thing in this arc was not a wrong model, it was
+wrong instruments, and they all failed identically:
+
+| what broke | what it rendered |
+|---|---|
+| the floor label used `name`, null at every call site | the BARE machine as the source of noise measured on a deployed one |
+| `finalStep` maxed the whole `stepH` array | 'the step was never halved' on runs that halved it repeatedly |
+| `rep.damped` and `rep.stepH` were never copied to the report | '0 harmonics still above the floor' while every harmonic was moving |
+| durable-run's grep named the lines worth keeping | a whole finding dropped, and the raw log gone with the scratchpad |
+| a print described the signal it no longer used | 'CONTOUR component' two commits after the narrowing was reverted |
+| `laps += mm + 1` hard-coded at three sites | every banded lap count eleven short per probe set |
+
+**The mechanism is JavaScript's silence.** `undefined || []` has length zero. `Math.max` over
+an array nothing writes to returns the initial value. `undefined` in a template renders as
+text. A missing field does not read as missing — it reads as a plausible number, and a
+plausible number in a diagnostic is worse than no diagnostic, because it is believed.
+
+What it cost: a floor 3.9x too large, which refused improvements the machine could produce;
+a WRONG RETRACTION of the banded result, published and then withdrawn again; and one
+measurement lost outright.
+
+So every field the report is printed from is asserted to exist and to have the right shape.
+It is a test of the instruments rather than of the controller. **And it was mutation-tested
+rather than trusted** — with `rep.stepH = fin.stepH` removed it fails with
+`hff.stepH (the per-harmonic steps) = undefined`, which is exactly the defect that happened,
+caught at its source instead of three bricks later. Three checks in this session have already
+been found passing while asserting nothing; a new one that has only ever passed is not
+evidence of anything.
