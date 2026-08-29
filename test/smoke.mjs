@@ -2657,6 +2657,26 @@ await fx.screenshot({ path: join(SHOTS, '06-flexisim-chain.png') });
 // rather than a teleport, and that a correction nobody has identified yet is not silently
 // applied.
 section('flexisim path');
+// A HALT IS ITS OWN CHECK, AND IT GOES FIRST.
+//
+// This tab's frame loop CATCHES: a throw inside any commissioning routine becomes a badge
+// reading `halted: <message>`, the routine's phase stops advancing, and nothing else says a
+// word. A wait that watches only for SUCCESS therefore spends its entire timeout and reports
+// a TimeoutError naming nothing -- which is exactly how `process.env` in `pilot.js` shipped
+// to a browser. It threw `process is not defined` on the FIRST fit of every browser
+// commission, so ⑤ died the instant it stopped exciting and started solving, ⑨'s pilot rung
+// with it, and all fifteen minutes of waiting had to say was "Timeout 900000ms exceeded".
+// The Node half could not see it at all, because in Node the global exists.
+//
+// So every long path-tab wait ends on EITHER outcome and then asserts the badge. Silence is
+// a failure mode (rule 51), and a diagnostic that names the cause beats one that times out.
+// (The halt clause is written out inside each predicate rather than shared: `waitForFunction`
+// serialises its function into the PAGE, so it cannot close over anything defined here.)
+const checkNoHalt = async (label) => {
+  const b = await fx.evaluate(() => document.getElementById('stateP-badge').textContent);
+  check(`flexisim/path: ${label} runs to a result without halting`, !/^halted:/.test(b), b);
+  return b;
+};
 await fx.click('.tab[data-tab="path"]');
 await fx.waitForFunction(() => window.__flxPathDbg && window.__flxPathDbg(),
   null, { timeout: 180000 });
@@ -2888,8 +2908,10 @@ if (FULL) {
   await fx.click('#pilotP-btn');
   await fx.waitForFunction(() => {
     const d = window.__flxPathDbg();
-    return d && d.pilot && d.pilot.verdict && !d.busy;
+    const b = document.getElementById('stateP-badge');
+    return (d && d.pilot && d.pilot.verdict && !d.busy) || !!(b && /^halted:/.test(b.textContent));
   }, null, { timeout: 900000 });
+  await checkNoHalt('⑤ commissioning');
   const dv = await fx.evaluate(() => window.__flxPathDbg());
   console.log(`  flexisim/path: pilot ${dv.pilot.verdict.deploy ? 'deployed' : 'refused'} — `
     + `${dv.pilot.verdict.why}; Ts ${dv.pilot.Ts}, sample ${dv.pilot.sample}`);
@@ -3019,8 +3041,10 @@ if (FULL) {
   await fx.click('#pilotP-btn');
   await fx.waitForFunction(() => {
     const d = window.__flxPathDbg();
-    return d && d.pilot && d.pilot.verdict && !d.busy;
+    const b = document.getElementById('stateP-badge');
+    return (d && d.pilot && d.pilot.verdict && !d.busy) || !!(b && /^halted:/.test(b.textContent));
   }, null, { timeout: 900000 });
+  await checkNoHalt('⑧ over-commissioning the pilot');
   const over = await fx.evaluate(() => window.__flxPathDbg().stack);
   check('flexisim/path: ⑧ commissions the pilot OVER the identified compliance when asked',
     Array.isArray(over.pilotBase) && over.pilotBase.length === 2, JSON.stringify(over));
@@ -3181,9 +3205,18 @@ if (FULL) {
   // The wait is generous because this is a LIVENESS test and not a speed one: twenty
   // thousand lattice steps of settling stand between the click and the second yield, and a
   // tight bound would fail for the one reason that says nothing about ⑨.
-  await fx.waitForFunction(() => window.__flxPathDbg().auto.yields >= 2, null,
-    { timeout: 900000 });
-  const a1 = await fx.evaluate(() => window.__flxPathDbg().auto);
+  await fx.waitForFunction(() => {
+    const d = window.__flxPathDbg();
+    // EITHER OUTCOME ENDS IT. `startAutoP` catches and clears `comm`, so a commission that
+    // THREW would otherwise leave this spinning for the full timeout and report a bare
+    // TimeoutError -- the same silence that hid `process is not defined`.
+    return d.auto.yields >= 2 || d.auto.comm === false;
+  }, null, { timeout: 900000 });
+  const a1 = await fx.evaluate(() => ({
+    ...window.__flxPathDbg().auto,
+    badge: document.getElementById('stateP-badge').textContent }));
+  check('flexisim/path: ⑨ commissioning does not fail out of the gate', a1.comm === true,
+    a1.badge);
   check('flexisim/path: ⑨ the button builds the host and the machine turns',
     a1.comm === true && a1.have === true && a1.yields >= 2, JSON.stringify(a1));
   check('flexisim/path: …and the report panel opens while it runs, so the run is visible',

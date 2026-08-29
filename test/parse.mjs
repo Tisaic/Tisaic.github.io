@@ -68,5 +68,43 @@ for (const page of ['index.html', 'flowsim.html', 'ngrc.html', 'flexisim.html'])
   }
 }
 
+// ---------------------------------------------------------------------------
+// AND NO SHIPPED MODULE MAY REACH FOR A NODE GLOBAL.
+//
+// PARSING IS NOT ENOUGH: `process.env.X` parses perfectly and throws
+// `process is not defined` the moment a browser reaches that line. One did.
+// `pilot.js` read an env var to make a ridge penalty adjustable for a single
+// Node measurement, and because the line sits on the FIT path rather than the
+// excite path, ⑤ ran happily in the browser for tens of thousands of steps and
+// died the instant it stopped exciting and started solving. ⑨'s pilot rung
+// inherited it, since both drive the same `Pilot`.
+//
+// NOTHING REPORTED IT. The page's frame loop catches, so the throw became a
+// badge; the smoke check waited out its 900-second timeout and reported a
+// TimeoutError naming no cause; and the Node tests could not see it at all,
+// because in Node the global exists. A defect invisible to the Node half, and
+// reported by the browser half only as a timeout, is one that ships.
+//
+// This is the cheap static check that closes the class. `typeof process` is
+// allowed — that is the guard, not the hazard.
+const NODE_GLOBALS = ['process', 'require', '__dirname', '__filename'];
+let leaks = 0;
+for (const file of walk(join(ROOT, 'lib'))) {
+  const src = readFileSync(file, 'utf8');
+  const rel = relative(ROOT, file);
+  src.split('\n').forEach((line, i) => {
+    const code = line.replace(/\/\/.*$/, '');
+    for (const g of NODE_GLOBALS) {
+      const re = new RegExp(`(^|[^\\w.$'"\`])${g}\\s*[.([]`);
+      if (!re.test(code)) continue;
+      if (new RegExp(`typeof\\s+${g}`).test(code)) continue;   // the guard itself
+      console.log(`  ✗ ${rel}:${i + 1}: bare Node global \`${g}\` — this file ships to a browser`);
+      console.log(`      ${line.trim().slice(0, 100)}`);
+      leaks++;
+    }
+  });
+}
+if (!leaks) console.log(`  ✓ no shipped module reaches for a Node global`);
+
 console.log(failed ? `\n${failed} module(s) failed to parse\n` : `  ✓ ${n} modules parse\n`);
-process.exit(failed ? 1 : 0);
+process.exit(failed || leaks ? 1 : 0);
