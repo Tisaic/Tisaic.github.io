@@ -6347,3 +6347,77 @@ The prediction is recorded in `_lti.mjs` ahead of the comparison, so the run can
 joint space removes the axis rotation outright and cuts the varying gain several fold, and if
 the rung does not improve then the frame is not the binding constraint and the gap is
 somewhere that file cannot see.
+
+## Brick 71 — is the global operator the right model? Asked without the controller
+
+The proposal was a joint-space, configuration-dependent HarmonicFF: replace the single LTI
+2x2 per harmonic with G_n(q) = G_n0 + G_n1 q1 + G_n2 q2, identified over the workspace.
+
+**The objection I raised first was wrong, and by my own argument.** A damped Newton against
+a FROZEN operator has its fixed point where the error is zero, independent of how good that
+operator is, provided it is close enough to be stable. So the endpoint on a fixed program is
+set by the ACHIEVABLE SET — the lap-harmonic basis, the authority, the machine's
+repeatability — and NOT by operator quality. Any endpoint-on-the-trained-program comparison
+therefore has almost no power to test a model class. Brick 63's block-tridiagonal result
+(8.46x against the diagonal's 8.47x) was exactly that comparison, so it is much weaker
+evidence against configuration dependence than it looked, and I cited it while arguing the
+very mechanism that makes it weak.
+
+The harmonic-coupling equivalence is an IDENTIFIABILITY statement, not an emptiness one: on
+one program q(k) is a deterministic function of lap phase, so the scheduling collapses into
+coupling and cannot be separated from it. Across poses it does not collapse. That constrains
+where the data must come from; it says nothing about whether the structure is there.
+
+### So ask the model question with no controller in it
+
+`_gq.mjs`. At a held pose there is no lap, so the analogue of lap harmonic h is the frequency
+h/lap: inject a joint-space multisine at those frequencies, measure the joint-space
+deflection, take the 2x2 complex response. Nine poses spanning the program's own q range
+(q1 −1.191..−0.370, q2 1.608..2.520). Fit a global operator and the plane on some poses,
+score both on poses they never saw. Neither number passes through an iteration that
+self-corrects, and held-out scoring stops the richer model winning by fitting harder.
+
+| h | spread over poses | GLOBAL err | PLANE err | ratio | extrapolating: GLOBAL / PLANE / ratio |
+|---|---|---|---|---|---|
+| 1 | 3.3% | 2.3% | 0.3% | 0.12 | 2.8% / 0.8% / 0.29 |
+| 2 | 11.4% | 8.1% | 1.1% | 0.13 | 9.4% / 1.4% / 0.15 |
+| 4 | 22.0% | 15.7% | 2.5% | 0.16 | 18.1% / 2.2% / 0.12 |
+| 6 | 22.7% | 16.1% | 2.1% | 0.13 | 18.5% / 1.9% / 0.10 |
+| 8 | 32.0% | 22.7% | 2.1% | 0.09 | 25.8% / 2.1% / 0.08 |
+
+**The plane removes 84–91% of what one operator per harmonic leaves on poses it never saw,
+and the low-order form is close to sufficient** — there is little left for higher order to
+claim. Two splits were run because the first one flattered the model: alternating indices
+puts the corners and centre in training and the edge midpoints in test, so every test pose
+sits inside the convex hull and the plane only ever INTERPOLATES. `SPLIT=extrap` trains on
+the low-q1 half and tests on the high-q1 half, forcing it to reach past the range it was
+shown along an axis it never saw. **It holds** — 0.8% to 2.2%, ratios 0.08 to 0.29, barely
+changed. This project has three times found that a calibration does not reach past its
+range; this one does.
+
+Two internal checks. The variation cannot be noise, because noise is not predictable by a
+plane on held-out poses and this is predicted to about 2%. And the harmonic trend agrees
+with `_lti.mjs` by an independent route: 3.3% spread at h=1, where the response is
+gearbox-dominated — which is exactly why moving the rung to joint space worked — rising to
+32.0% at h=8 where it is inertia-dominated and tracks the mass matrix that joint space
+cannot divide out.
+
+### Stated, not closed
+
+**This is a HELD-pose survey.** The operator the rung actually uses is identified on a MOVING
+machine, where Coriolis, velocity-dependent friction and backlash traversal are all present
+and none of them appear here. What is established is that the model CLASS is right for the
+local operator — not that a held-pose fit predicts the moving one.
+
+The discriminating experiment is transfer to an unseen trajectory at equal commissioning
+cost, and it needs a control that is easy to omit: **the null is not "no transfer", it is
+"the global operator transfers too."** Warm-starting the global operator on the unseen
+program has to be in the comparison, or a positive result cannot be told from "any operator
+beats starting cold". Brick 63's stale-Jacobian finding says the operator is stable WITHIN a
+program; whether it survives a different pose range is exactly what is open.
+
+Two implementation notes. With G varying the harmonic solve stops being block-diagonal —
+either solve the banded system or apply G(q) in the time domain and iterate, the latter
+avoiding a truncated coupling band. And per-pose |G| feeds the `reach` shrink, which is
+load-bearing here (removed, the arm goes 4.81x to 1.05x), so scheduling the operator
+silently reschedules the step sizes too.
