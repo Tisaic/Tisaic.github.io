@@ -422,10 +422,20 @@ check('…and every rung that landed below the instrument\'s floor says so in it
   check('…leaving essentially the noise and nothing else, which is what removing a lap-periodic '
     + 'disturbance from a lap-periodic plant should leave',
     rep2.best < FLOOR2 * 1.5, `${rep2.best.toExponential(3)} against a ${FLOOR2.toExponential(3)} noise floor`);
-  check('…and because it landed just ABOVE that floor it is NOT labelled floor-limited, so the '
-    + 'label discriminates rather than decorating every row',
-    hRow && hRow.atFloor === false && !/FLOOR/.test(hRow.note || ''),
-    hRow ? `atFloor ${hRow.atFloor}, note ${hRow.note}` : 'no harmonic row');
+  // THE LABEL MUST DISCRIMINATE, and that is asserted on the WHOLE table rather than on one
+  // row. An earlier version pinned it to the harmonic rung landing just ABOVE the floor —
+  // and then the rung improved, landed exactly ON it, and a check written to prove the label
+  // was informative failed because the machine got better. Rule 4: a failing check can be
+  // stale in either direction.
+  const atF = rep2.rungs.filter((r) => r.atFloor), above = rep2.rungs.filter((r) => !r.atFloor);
+  check('…and the floor label discriminates — some rows carry it and some do not, so it is '
+    + 'informative rather than decoration',
+    atF.length > 0 && above.length > 0,
+    JSON.stringify(rep2.rungs.map((r) => [r.name, r.score.toExponential(2), r.atFloor])));
+  check('…and every row that carries it really is at or below the floor, and every row that '
+    + 'does not really is above — the label follows the measurement, not the other way round',
+    atF.every((r) => r.score <= FLOOR2) && above.every((r) => r.score > FLOOR2),
+    `floor ${FLOOR2.toExponential(3)}; ` + JSON.stringify(rep2.rungs.map((r) => [r.score.toExponential(2), r.atFloor])));
   check('…while the conventional rung\'s own row still REPORTS what it measured, so a refusal '
     + 'is a number and not a silence',
     rep2.rungs.some((r) => /conventional/.test(r.name) && typeof r.score === 'number'
