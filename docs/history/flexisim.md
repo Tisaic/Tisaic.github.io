@@ -6527,3 +6527,38 @@ error is the model question and it now has a clear answer; the controller questi
 separate, and the whole reason brick 63's endpoint comparison was weak applies to any
 endpoint comparison on the trained program. The honest test is convergence — laps to reach a
 given residual — and transfer to a program the table has never seen.
+
+### Brick 72a — a step per harmonic: built, measured, rejected, and it explains itself
+
+The refinement halves ONE step whenever a pass fails to improve the total, and exits once it
+has halved `backtracks` times. On a plant whose operator is well identified at low harmonics
+and badly at high ones that looked like the wrong control: the few harmonics whose Newton
+step overshoots spoil the total and every harmonic is damped for it. The file had already
+named the symptom — 'a noisy operator makes bad Newton steps, the guard backtracks to
+protect the worst of them, and the refinement plateaus' — and the per-harmonic error before
+and after each pass is already computed for the Broyden update, so the fix looked free.
+
+**It measured WORSE. 2.0770e-2 to 2.4171e-2, 2.65x down to 2.28x, and nineteen extra laps**
+(98 against 79). The ladder went 19.84x to 17.05x.
+
+The reason came from the other measurement taken the same day. A banded operator predicts
+this machine 40% better than a diagonal one, so the harmonics are COUPLED to a degree that
+matters — and accepting per harmonic assumes they are not. It reads 'this harmonic's error
+fell' as evidence that THIS harmonic's increment was good, when a neighbour's correction can
+be what moved it. The coordinate-wise rule is invalid exactly to the degree the coupling is
+real, and the coupling is real. Two results that look independent are one result.
+
+The reasoning that motivated it still stands, and is what the banded operator is for: a
+single global step really does damp harmonics that were converging. The answer is a better
+OPERATOR, not a per-coordinate accept rule laid over a coupled system.
+
+Kept reachable as `perHarmonicStep`, default off. One confound is stated rather than tuned
+away: the run also selected a different probe candidate (spread at 25% against 10%), so part
+of the 16% is candidate selection rather than step control. The direction is not in doubt and
+the mechanism is measured independently, but the number is not clean.
+
+**And the diagnostic that would have shown this directly went in one commit too late.** The
+refinement's own convergence history — `hist`, `damped`, `stepH` — has been recorded since
+the rung was written and was never printed; it is printed now, but `aarm22` had already
+launched, so this rejection rests on an endpoint rather than on watching where the passes
+went. Print the instrument before running the experiment, not after.
