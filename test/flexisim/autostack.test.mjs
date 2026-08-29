@@ -25,6 +25,9 @@ const NH = +(process.env.NH || 16);
 const STEP = +(process.env.STEP || 0.6);
 const PASSES = +(process.env.PASSES || 9);
 const AMP = 4e-3;
+// The reconstruction normal: the path's own at the nearest point (right), or the commanded
+// velocity's (the approximation). Kept switchable only to measure the difference.
+const CMDNORM = !!process.env.CMDNORM;
 
 async function machine() {
   const mk = (length) => buildLink({ length, section: H, clamp: CLAMP, E, nu, rho,
@@ -193,9 +196,22 @@ async function run(extra, name, laps = 2 + AVG) {
       // remove. This is NOT the path-normal FRAME that measured 0.99x: that expressed the
       // CORRECTION as one scalar along a rotating axis. Here the correction stays a full
       // two-vector in world; only which error it is asked to cancel changes.
+      // AND THE NORMAL IS THE ONE THE MAGNITUDE WAS SIGNED AGAINST. `decompose` signs
+      // `contour` by the left normal AT THE NEAREST POINT ON THE PATH; the commanded
+      // velocity's left normal is a different point, separated along the path by the LAG,
+      // so the two disagree by about lag x curvature — zero on the straights and largest
+      // on exactly the corner arcs where contour error is largest. Rule 47: every term of a
+      // projected quantity must be projected the same way. `path.tangent(d.s)` is the same
+      // point, so it costs nothing to be right.
       if (l >= laps - AVG) {
-        const sp = Math.hypot(cmd.vx, cmd.vy) || 1;
-        const nx = -cmd.vy / sp, ny = cmd.vx / sp;
+        let nx, ny;
+        if (CMDNORM) {
+          const sp = Math.hypot(cmd.vx, cmd.vy) || 1;
+          nx = -cmd.vy / sp; ny = cmd.vx / sp;
+        } else {
+          const t = path.tangent(d.s);
+          nx = -t[1]; ny = t[0];
+        }
         ex[k] += d.contour * nx / AVG; ey[k] += d.contour * ny / AVG;
       }
     }
