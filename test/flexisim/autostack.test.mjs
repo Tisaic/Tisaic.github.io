@@ -173,6 +173,12 @@ let hostRef = null;
     makeMachine: fresh, path, lap: LAP, K, centre,
     lapSync: process.env.LAPSYNC !== '0',
     banded: process.env.HFFBANDED !== '0',
+    // BUILD AND SETTLE ONE MACHINE, RESTORE IT PER RUN. A third of this bar's runtime went
+    // on rebuilding a state it had already had a hundred times, and re-settling only
+    // converges TOWARDS the same state where a restore IS it. Opt-in until this run has
+    // reproduced 1.8387e-2 byte for byte — a speed-up that quietly changes the machine is
+    // worse than no speed-up, because it looks like a free win (rule 21).
+    reuseMachine: !!process.env.REUSE,
     passes: +(process.env.HFFPASSES || 24),
     onRung: (r) => console.log(`  [${((Date.now() - T0) / 60000).toFixed(0)}m] `
       + `${r.name}  ${r.score.toExponential(4)}`

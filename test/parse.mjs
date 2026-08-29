@@ -106,5 +106,38 @@ for (const file of walk(join(ROOT, 'lib'))) {
 }
 if (!leaks) console.log(`  ✓ no shipped module reaches for a Node global`);
 
+// ---------------------------------------------------------------------------
+// AND NO CLASS MAY DEFINE THE SAME METHOD TWICE.
+//
+// A duplicate method name is legal JavaScript: the LATER definition silently wins. Nothing
+// reports it — not `node --check`, not the module parse above — and the loser simply never
+// runs. `cpu.js` already had `async snapshot(name)` (one field, host-visible copy, the CPU
+// half of the CPU/WebGPU parity API) when a whole-backend `snapshot()` was added ABOVE it;
+// the new one was dead on arrival and its caller silently got a function taking a field name.
+// The fix was to name it for what it is, but the class of defect is worth a check.
+//
+// Deliberately conservative: same indent, same file, between a `class` line and the next
+// one. It is a lint, not a parser, so it looks only where the shape is unambiguous.
+let dupes = 0;
+for (const file of walk(join(ROOT, 'lib'))) {
+  const lines = readFileSync(file, 'utf8').split('\n');
+  const rel = relative(ROOT, file);
+  let seen = null;
+  lines.forEach((line, i) => {
+    if (/^\s*(export\s+)?(abstract\s+)?class\s/.test(line)) { seen = new Map(); return; }
+    if (!seen) return;
+    const m = /^(\s\s)(?:static\s+|async\s+|\*)*([A-Za-z_$][\w$]*)\s*\(/.exec(line);
+    if (!m) return;
+    const name = m[2];
+    if (['if', 'for', 'while', 'switch', 'catch', 'return', 'constructor'].includes(name)) return;
+    if (seen.has(name)) {
+      console.log(`  ✗ ${rel}:${i + 1}: class method \`${name}\` is defined twice`
+        + ` (first at line ${seen.get(name)}) — the later one silently wins`);
+      dupes++;
+    } else seen.set(name, i + 1);
+  });
+}
+if (!dupes) console.log('  ✓ no class defines the same method twice');
+
 console.log(failed ? `\n${failed} module(s) failed to parse\n` : `  ✓ ${n} modules parse\n`);
-process.exit(failed || leaks ? 1 : 0);
+process.exit(failed || leaks || dupes ? 1 : 0);
