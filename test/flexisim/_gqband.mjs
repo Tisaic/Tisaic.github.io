@@ -34,7 +34,17 @@ const PATH = { w: 8, h: 8, r: 1.5, centre: [12, 0], feed: 4e-3, accel: 4e-5,
 const NH = +(process.env.NH || 8);
 const AMP = +(process.env.AMP || 2e-3);
 const LAPS = +(process.env.LAPS || 3);
-const NPROBE = +(process.env.NPROBE || 14);   // 10 to fit, 4 held out
+// ENOUGH PROBES THAT THE RICHER MODEL IS DETERMINED, which the first run of this was not.
+// An interior harmonic's banded row has 12 unknowns (h, h-1, h+1 at four components each)
+// and the first version fitted them from 10 training probes — underdetermined, so the ridge
+// chose the answer rather than the data, and the banded model lost on held-out probes for a
+// reason that had nothing to do with the plant. The tell was in the output: h1 and h8 are
+// EDGE harmonics with only 8 unknowns, and h1 — determined — was the one harmonic where
+// banded WON, at 0.53. This repository has the same defect on record from the other side:
+// 'three was right for one channel and silently UNDERDETERMINED for two — the solve returned
+// a fitted rank-deficient answer'. A model must be given the chance to be right before its
+// failure means anything.
+const NPROBE = +(process.env.NPROBE || 30);   // 26 to fit against 12 unknowns, 4 held out
 
 async function machine() {
   const mk = (length) => buildLink({ length, section: H, clamp: CLAMP, E, nu, rho, damping: 3e-3 });
@@ -175,6 +185,15 @@ const col = (P, h) => [P[0].re[h], P[0].im[h], P[1].re[h], P[1].im[h]];
 const dE = (p, h) => [Eo[p][0].re[h] - Z[0].re[h], Eo[p][0].im[h] - Z[0].im[h],
   Eo[p][1].re[h] - Z[1].re[h], Eo[p][1].im[h] - Z[1].im[h]];
 
+// REFUSE TO REPORT A COMPARISON THE DATA CANNOT SUPPORT (rule 51: silence is a failure mode).
+const NPAR = 12;                       // an interior harmonic's banded row
+if (tr < NPAR + 4) {
+  console.log(`\n  REFUSING: ${tr} training probes against ${NPAR} unknowns in the banded`);
+  console.log(`  model. Below ${NPAR + 4} the richer model is rank-deficient or barely`);
+  console.log(`  determined, and its held-out error would measure the ridge rather than the`);
+  console.log(`  plant. Raise NPROBE.\n`);
+  process.exit(2);
+}
 console.log(`\n   h    DIAGONAL err    BANDED err    banded/diagonal   (on ${NTEST} unseen probes)`);
 let dSum = 0, bSum = 0, tSum = 0;
 for (let h = 0; h < NH; h++) {
