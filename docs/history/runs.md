@@ -475,3 +475,71 @@ flexisim: the button, on the arm — against the strongest number this repo has
 autostack-arm: 1 check(s) FAILED
 
 ```
+
+### emps-report-complete — exit 0 — 2026-08-29T18:50Z
+
+```
+
+pilot: one button on a real servo axis — and the conventional layer wins
+
+    conventional: 5.7640e-1 → 1.3568e-3 mm   424.8x   14 laps   fit residual 0.0016
+      a0 0.055mm   v0 0.797mm   sgn v0 0.014mm   1 -0.002mm
+  ✓ four coefficients fitted on the machine beat the INVERSE-DYNAMICS FEEDFORWARD at the published M, Fv, Fc and OF — a learned correction reaching a model-based one with no model
+  ✓ …and it costs under twenty laps to do it
+      the velocity coefficient is 0.797 mm against the position loop's own lag vPeak/kp = 0.778 mm
+  ✓ …and the dominant coefficient IS the position loop's velocity lag, recovered from data to within 5% of vPeak/kp — an independent route agreeing, not a better score
+
+    a two-tone sine the axis has NEVER run:
+      open loop                                   4.7537e-1 mm
+      the same four coefficients, evaluated live  2.7996e-3 mm   169.8x
+      the identical signal replayed as a table    8.9865e-1 mm   0.53x
+  ✓ the coefficients transfer to a trajectory the machine has never run, because they multiply the reference's own state rather than an index
+  ✓ …and the IDENTICAL correction signal replayed as a lap-indexed table makes that machine WORSE THAN NOTHING — which is the difference between a model and a memory, on one signal, with everything else held
+
+    the button — nothing set but the maxes, the authority and the floor:
+
+  as it arrived                                  5.7640e-1       
+  conventional (self-tuned)                      1.3568e-3  424.82x   14 laps, 4 coefficients — AT THE INSTRUMENT'S FLOOR (1.60e-3), not distinguishable
+  pilot cascade, depth 1                         3.4388e-3    0.39x   no better than the rung below — stopping
+  pilot cascade, depth 1 (rungs below withheld)  5.0974e-2    0.03x   no better than the rung below — stopping
+  lap-periodic (harmonic)                        1.3549e-4   10.01x   71 laps, probe basis at 10% — NOT deployed — AT THE INSTRUMENT'S FLOOR (1.60e-3), not distinguishable
+
+    shipped {"classic":true,"stack":0,"hff":false}   5.7640e-1 → 1.3568e-3 mm   424.8x
+  ✓ the button ships something that improves the machine at least 100x, chosen from a ladder it measured rather than a rung it was told to use
+  ✓ …and what it ships is the rung that TRANSFERS, not the lap-indexed one that scored better below the instrument's floor
+  ✓ …and the refused rungs are REPORTED with what they measured, not hidden — a refusal that fires silently hides the thing worth looking at
+  ✓ the pilot rung was genuinely driving the machine when it was scored, so "it did not help" is a measurement and not a wiring fault
+  ✓ …and it was refused, because the rung below it had already removed the velocity lag that is this pilot's whole benefit on this axis
+  ✓ the harmonic rung really did score better than the one that shipped — so the refusal is the FLOOR talking and not a rung that failed
+  ✓ …and every rung that landed below the instrument's floor says so in its own row
+  ✓ the conventional rung, armed alone, puts its OWN correction on the output — not a rung that is present in the wiring and contributing zero
+  ✓ …the pilot rung likewise, through the look-ahead closure and not around it
+  ✓ …and the harmonic rung likewise, indexed by lap phase
+  ✓ …and all three armed together is EXACTLY their sum, so no rung is silently dropped or double-counted when they are combined
+  ✓ a rung declaring a frame is mapped OUT of it before summing — asserted against a rotation computed by hand, so an identity map cannot pass
+  ✓ …and the map is not the identity on this input, so the check above has teeth
+  ✓ …and each rung goes through ITS OWN map, not one map applied to the sum
+  ✓ …and actBelow maps too, so a rung commissions on the same machine it deploys onto
+  ✓ …and actBelow STOPS at the named rung — it is the machine beneath it, not including it
+  ✓ the conventional rung honours its OWN authority — asserted on coefficients that demand far more than it, because on this axis the cap never binds by itself
+  ✓ …and the live path is capped identically to the lap-indexed one, so a rung cannot be bounded when replayed and unbounded when driven
+  ✓ a rung demanding more than the COMMON cap is clipped — and the clipping is COUNTED, so an amputated rung shows up as a number instead of as a disappointing score
+  ✓ …and a rung that fits inside the cap reports NO clipping, so the counter is not simply always on
+
+    a disturbance no function of the reference's own state can express:
+  as it arrived              2.5509e-2       
+  conventional (self-tuned)  2.5476e-2    1.00x   13 laps, 4 coefficients — NOT deployed
+  lap-periodic (harmonic)    1.1515e-3   22.15x   75 laps, probe spread at 10% — a MEMORY: it will not transfer to another program — AT THE INSTRUMENT'S FLOOR (1.15e-3), not distinguishable
+    shipped {"classic":false,"stack":0,"hff":true}   2.551e-2 → 1.151e-3   22.2x
+  ✓ the conventional rung is REFUSED when the disturbance is orthogonal to everything its basis can express — the refusal path, which the axis above never takes
+  ✓ …and the harmonic rung DEPLOYS on the same plant, so its deploy path is exercised by a real commission and not only by a hand-armed wiring check
+  ✓ …and the machine gets better by a margin far larger than the floor, so the deployment is a measurement and not the rig flattering itself
+  ✓ …leaving essentially the noise and nothing else, which is what removing a lap-periodic disturbance from a lap-periodic plant should leave
+  ✓ …and the floor label discriminates across the suite — some rows carry it and some do not, so the check above cannot pass vacuously
+  ✓ …and every row that carries it really is at or below the floor, and every row that does not really is above — the label follows the measurement, not the other way round
+  ✓ …while the conventional rung's own row still REPORTS what it measured, so a refusal is a number and not a silence
+  ✓ every field the report is PRINTED from is populated — a missing one renders as a default and is believed, which is how six diagnostics went wrong in a day
+
+autostack: all checks passed
+
+```
