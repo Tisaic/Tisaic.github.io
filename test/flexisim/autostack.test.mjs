@@ -164,7 +164,12 @@ const auto = new AutoStack({
   // costs more laps. HFFPASSES exists to test whether the remaining distance to the
   // hand-built number is laps or model error, which are different problems with different
   // fixes and cannot be told apart from one budget.
-  hff: { passes: +(process.env.HFFPASSES || 24) },
+  hff: { passes: +(process.env.HFFPASSES || 24),
+    // The banded operator: h coupled to h+-1, identified and inverted together. Default off
+    // until it is measured on THIS machine — it is worth 14-20x on a synthetic plant with
+    // known coupling and byte-identical without, but that is a plant built to have the
+    // thing it exploits.
+    banded: !!process.env.HFFBANDED },
   // PROGRESS AS IT IS MEASURED. This commission takes about an hour; printed only as a
   // table at the end, a run going wrong is indistinguishable from one going well until it
   // is over. Rule 27: the unflattering diagnostic first, and soon enough to act on.
