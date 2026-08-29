@@ -512,6 +512,9 @@ if (rep.unsettled && rep.unsettled.length) {
 }
 // A DECISION THE FINAL FLOOR NO LONGER SUPPORTS is the one thing a rising floor can do
 // quietly, so it is printed rather than left in the report object.
+if (rep.phaseWalk) {
+  console.log(`  PHASE WALK: ${rep.phaseWalk.note}`);
+}
 if (rep.floorRevised) {
   console.log(`  the floor rose UNDER a decision already made — these rungs were deployed on `
     + `a margin that no longer clears at the final resolution:`);
