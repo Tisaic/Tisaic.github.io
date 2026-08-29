@@ -1,0 +1,13 @@
+
+flexisim: the button, on the arm — against the strongest number this repo has
+
+  [arm K 1 E 0.06, rounded rect, feed 0.004, lap 7357]
+  conventional machine 4.1216e-1  bias -1.15e-1  osc 3.96e-1  lag 2.21e-1   lap-to-lap floor 1.309e-10
+  the lap-periodic rung reads the WHOLE TOOL ERROR in JOINT space   [contour 1.87x the lag rms]
+  a lap-harmonic table can only cancel what lives in its own band, so the
+  floor it leaves is the rest — measured on this machine's own error:
+    nh  4 48.4% → 2.96e-1   nh  8 96.1% → 8.09e-2   nh 16 100.0% → 4.23e-3   nh 32 100.0% → 7.05e-4   nh 64 100.0% → 1.36e-4
+  (band share of the error's variance, and the residual a PERFECT correction
+   inside that band would leave — no Newton loop can go below it)
+  ✓ the harness reproduces the conventional machine `composite.test.mjs` measures, so the comparison below is one variable — who chooses the constants — and not two machines
+  [0m] as it arrived  4.1216e-1
