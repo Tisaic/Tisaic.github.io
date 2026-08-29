@@ -6137,6 +6137,42 @@ justify a design decision stay, because they are the record of why the code is s
 and they do not drift. **A property with a check behind it stays true; a number in a comment
 describes the behaviour the code used to have.**
 
+### Memory over the reference buys nothing — and a constraint on every future rung
+
+`motionBasis` was memoryless, and the obvious reading of the conventional rung's 425x on a
+servo axis against 1.24x on the arm was that a static map of the reference cannot represent a
+RINGING, which depends on the history of the excitation rather than its present value. Lag
+taps were added — wrapping the closed lap, so sample −1 is what the machine actually did — and
+the count swept against the STRIDE, because rule 37 is about reach and one servo step out of
+7357 reaches nothing:
+
+```
+lags x stride   basis   result       vs memoryless   cost
+ 0 x    1         7    3.3200e-1     1.000x         23 laps
+ 2 x  115        15    4.0665e-1     0.816x         39 laps
+ 3 x  307        19    3.3713e-1     0.985x         47 laps
+ 4 x  613        23    4.1216e-1     0.806x         48 laps
+```
+
+**Nothing beats memoryless.** The best ties it at 0.98x for double the commissioning, across
+strides reaching up to h=3's period — which is where the error energy actually is. So the
+ringing is not a function of the reference's history because it is not a function of the
+reference at all, and no basis over `[a, v, sgn v]` and its lags can reach it.
+
+**THE REAL EXPLANATION IS REDUNDANCY, NOT SPAN.** `[a, v, sgn v, 1]` on the reference spans
+essentially inverse dynamics AT the reference — τ_id. On the arm that term is already deployed
+as `RobotComp`'s τ/K, so the rung re-derives what the machine has. On EMPS the shipped baseline
+is a bare P/P cascade with no feedforward at all, so the same rung supplies it fresh. Same
+code, same basis; the difference is what was already there.
+
+**AND THE WIDEST ROW FAILED OUTRIGHT, WHICH IS THE OTHER FINDING.** 4.1216e-1 is exactly the
+conventional machine's open-loop score: that configuration deployed NOTHING. 23 basis functions
+means 46 unknowns fitted from 47 probes at an unchanged probe amplitude, and the operator came
+back too ill-conditioned for any pass to improve on. Unknowns scale as `nb x channels` and
+probes must exceed that, so **a richer basis costs conditioning quadratically, not just laps**.
+Any future rung has to earn its place against a WORSE-CONDITIONED fit, which is a harder bar
+than more commissioning time.
+
 ### Not built, and the measurement that would change the answer
 
 The rung ORDER is still fixed, and the ladder is still a prefix — it deploys rungs 1..k and
