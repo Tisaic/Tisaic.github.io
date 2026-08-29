@@ -459,5 +459,45 @@ check('…and every rung that landed below the instrument\'s floor says so in it
     JSON.stringify(rep2.rungs.map((r) => [r.name, r.score.toExponential(2), r.note])));
 }
 
+// ---- THE REPORT MUST BE COMPLETE, because a missing field does not read as missing.
+//
+// Six diagnostics went wrong in one day the same way: a reporter read a field that was
+// never populated and rendered the default as a measurement. `undefined || []` has length
+// zero, so 'no harmonics above the floor' printed on a run where every harmonic was still
+// moving. `Math.max` over an array nothing writes to returns the initial value, so 'the
+// step was never halved' printed on runs that halved it repeatedly. JavaScript turns an
+// absent field into a plausible number rather than an error, and a plausible number in a
+// diagnostic is worse than no diagnostic — it is believed.
+//
+// So the fields anything PRINTS from are asserted to exist and to have the right shape.
+// This is not a test of the controller; it is a test of the instruments, and it fails when
+// a refactor quietly stops populating one instead of when someone notices the output looks
+// odd three bricks later.
+{
+  const missing = [];
+  const need = (obj, path, pred, why) => {
+    const v = path.split('.').reduce((o, k) => (o == null ? o : o[k]), obj);
+    if (!pred(v)) missing.push(`${path} (${why}) = ${JSON.stringify(v)}`);
+  };
+  const arr = (v) => Array.isArray(v) && v.length > 0;
+  const num = (v) => Number.isFinite(v);
+  if (rep.hff) {
+    need(rep, 'hff.hist', arr, 'the convergence history the plateau is read from');
+    need(rep, 'hff.damped', (v) => Array.isArray(v), 'harmonics damped per pass');
+    need(rep, 'hff.stepH', arr, 'the per-harmonic steps');
+    need(rep, 'hff.finalStep', num, 'the step the refinement ended at');
+    need(rep, 'hff.laps', num, 'the lap cost the whole argument rests on');
+    need(rep, 'hff.budget.total', num, 'the lap budget breakdown');
+    need(rep, 'hff.operator.G', (v) => Array.isArray(v), 'the operator, for reuse elsewhere');
+  }
+  need(rep, 'rungs', arr, 'the table');
+  for (const r of rep.rungs) {
+    if (!Number.isFinite(r.score)) missing.push(`a rung row has no score: ${r.name}`);
+    if (!Number.isFinite(r.floorAt)) missing.push(`${r.name}: floorAt, the floor it was judged against`);
+  }
+  check('every field the report is PRINTED from is populated — a missing one renders as a '
+    + 'default and is believed, which is how six diagnostics went wrong in a day',
+    missing.length === 0, missing.join('; '));
+}
 console.log(failed ? `\nautostack: ${failed} check(s) FAILED\n` : '\nautostack: all checks passed\n');
 process.exit(failed ? 1 : 0);
