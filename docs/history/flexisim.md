@@ -6463,3 +6463,67 @@ essentially all the error — the ladder sits **4.9x above the floor of its own 
 set**, and the hand-built composite 3.3x above it. Neither is limited by what a lap-indexed
 table can represent, which is where the case for a better operator rather than a bigger
 budget comes from.
+
+## Brick 72 — the coupling is real, and the historical null was the same defect I just made
+
+The proposal was a configuration-dependent operator. Three measurements settled where it
+lives, and the second reversed the first.
+
+**A held-pose calibration cannot serve this plant.** The pose survey was beautiful and
+irrelevant: a plane in q removes 84–91% of a global operator's held-out error and
+extrapolates past its training range, but against the operator the machine shows WHILE
+RUNNING both predictors sit 26–45% out and the plane buys exactly nothing — 1.00 at every
+harmonic. The best single scalar per harmonic leaves 18–39%, so it is partly a gain and
+mostly a shape. The moving machine is 3–34% MORE responsive, which is the sign stiction
+predicts: a standstill probe fights static friction that a running joint does not.
+
+That comparison had a confound of my own making — the held survey did not apply the
+conventional feedforward while the moving one did — and closing it changed nothing:
+25.9 → 25.8%, ratios still 0.99–1.01. Worth closing, immaterial once closed, which is what
+checking an instrument should sometimes produce.
+
+**But in motion the coupling is real and predictive.** On one program q(k) is a
+deterministic function of lap phase, so a pose-scheduled operator IS a harmonic-coupled one.
+That equivalence was first raised as an objection and correctly rejected as one; here it is
+the enabling fact, because it means the scheduling is reachable from ordinary lap-periodic
+probes with NO pose survey at all. Fitting a diagonal operator and a banded one (h coupled
+to h±1) on the same probes and scoring both on probes neither has seen:
+
+| h | diagonal err | banded err | banded/diagonal |
+|---|---|---|---|
+| 1 | 12.8% | 9.4% | 0.74 |
+| 2 | 16.1% | 6.9% | **0.43** |
+| 5 | 18.2% | 8.6% | 0.47 |
+| 8 | 31.9% | 26.2% | 0.82 |
+| **all** | **15.6%** | **9.4%** | **0.60** |
+
+Every harmonic improves, and held-out prediction error falls by 40%.
+
+**THE FIRST RUN OF THAT TEST SAID THE OPPOSITE — 1.91x WORSE — AND IT WAS UNDERDETERMINED.**
+An interior harmonic's banded row has 12 unknowns and it was fitted from 10 training probes,
+so the ridge chose the answer and the held-out error measured that choice. The tell was in
+the output and was nearly published past: h1 is an EDGE harmonic with only 8 unknowns, hence
+determined at 10 probes, and it was the one harmonic where banded won. A model must be given
+the chance to be right before its failure means anything. The file now refuses to print the
+comparison below 16 training probes rather than emit a number nobody can interpret.
+
+**AND THAT EXPLAINS THE HISTORICAL NULL.** Brick 63 built a block-tridiagonal solve and
+measured it neutral, 8.46x against the diagonal's 8.47x. `HarmonicFF` probes with
+`nq = mm + 1` — five probe runs, which is one more than the four that exactly determine a
+DIAGONAL 2x2 complex operator. Twelve unknowns cannot be identified from five probes. That
+solve was necessarily rank-deficient, so the null measured the probe budget rather than the
+plant, twice over: the operator could not be identified, AND the endpoint comparison it was
+scored by has almost no power against a self-correcting iteration.
+
+### What it costs, and what is not yet known
+
+A banded operator needs at least sixteen probe sets where the diagonal one needs five. Probes
+cost about eleven seconds each on this machine — eleven extra laps of commissioning against
+the seventy-nine the rung already spends — so the price is real but small, and it may return
+laps by making better steps.
+
+What is NOT established is that a better operator moves the MACHINE. Held-out prediction
+error is the model question and it now has a clear answer; the controller question is
+separate, and the whole reason brick 63's endpoint comparison was weak applies to any
+endpoint comparison on the trained program. The honest test is convergence — laps to reach a
+given residual — and transfer to a program the table has never seen.
