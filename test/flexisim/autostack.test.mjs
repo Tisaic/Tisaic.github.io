@@ -28,6 +28,16 @@ const AMP = 4e-3;
 // The reconstruction normal: the path's own at the nearest point (right), or the commanded
 // velocity's (the approximation). Kept switchable only to measure the difference.
 const T0 = Date.now();
+// ---- WHAT KIND OF VARIATION IS THE 'NOISE'? The bare machine repeats to 1.3e-10 — it is
+// deterministic. The 5.84e-4 spread only appears once the pilot cascade is deployed, so it
+// is lap-to-lap variation of a deterministic system rather than noise, and which kind it is
+// decides the fix: independent scatter wants more averaging, a drift wants a longer settle,
+// and an oscillation means the pilot and the lap are beating against each other and no
+// amount of either will help. NOISEPROBE=N runs N extra laps on the shipped machine and
+// classifies the sequence. NOHFF skips the lap-periodic rung so the probe costs the
+// cascade's commissioning and nothing more.
+const NOISEPROBE = +(process.env.NOISEPROBE || 0);
+const NOHFF = !!process.env.NOHFF;
 // ---- THE SIGNAL EACH RUNG IS SHOWN. Both settled by a 2x2 on the machine, one variable
 // each, with the pilot cascade coming back byte-identical (6.7033e-2 -> 5.5099e-2) in all
 // five runs — which is what makes them comparisons rather than five different machines.
@@ -152,7 +162,7 @@ const auto = new AutoStack({
   // the harmonic rung was measured to need, 8.86x against a path-normal 0.99x — and declare a
   // map into it. Forcing one frame on all three cost the pilot 2.9x when it was tried.
   channels: [0, 1].map(() => ({ lo: -3, hi: 3, vMax: 8e-4, aMax: 4e-6, jMax: 2e-7 })),
-  uMax: 3.0, periodic: LAP, maxDepth: 2,
+  uMax: 3.0, periodic: NOHFF ? null : LAP, maxDepth: 2,
   basis: process.env.NOCLASSIC ? null : motionBasis([{ v: wv[0], a: wa[0] }, { v: wv[1], a: wa[1] }]),
   frames: { classic: { uMax: 1.5, map: worldToJoint },
     hff: HFFWORLD ? { uMax: 1.5, map: worldToJoint } : { uMax: Math.min(2.0, 0.15 * (16 / K)) },
@@ -496,6 +506,37 @@ check('…and it is not the common cap doing the work by accident: the cap was n
   + 'the shipped configuration was scored',
   auto.clipping().frac < 0.01, JSON.stringify(auto.clipping()));
 
+// ---- THE VARIATION, CLASSIFIED. Per-lap contour rms on the shipped machine, then the two
+// numbers that separate the three explanations: a linear trend (drift), and the lag-1
+// autocorrelation of what is left after removing it (near 0 independent, near +1 still
+// drifting, near -1 alternating).
+if (NOISEPROBE > 0) {
+  const probe = await run(null, null, 2 + NOISEPROBE);
+  const r = [];
+  for (let l = 2; l < 2 + NOISEPROBE; l++) {
+    let s2 = 0;
+    for (let k = 0; k < LAP; k++) s2 += probe.lapE[l][k] * probe.lapE[l][k];
+    r.push(Math.sqrt(s2 / LAP));
+  }
+  const n = r.length, mu = r.reduce((x, y) => x + y, 0) / n;
+  let sxy = 0, sxx = 0;
+  for (let i = 0; i < n; i++) { sxy += (i - (n - 1) / 2) * (r[i] - mu); sxx += (i - (n - 1) / 2) ** 2; }
+  const slope = sxx > 0 ? sxy / sxx : 0;
+  const res = r.map((v, i) => v - (mu + slope * (i - (n - 1) / 2)));
+  let num = 0, den = 0;
+  for (let i = 0; i < n; i++) den += res[i] * res[i];
+  for (let i = 1; i < n; i++) num += res[i] * res[i - 1];
+  const ac1 = den > 0 ? num / den : 0;
+  const sd = Math.sqrt(den / Math.max(1, n - 2));
+  console.log(`\n  the shipped machine over ${n} laps — is the 'noise' noise?`);
+  console.log(`    ${r.map((v) => v.toExponential(3)).join(' ')}`);
+  console.log(`    mean ${mu.toExponential(3)}   drift ${(slope * n).toExponential(2)} across the run`
+    + `   scatter about it ${sd.toExponential(2)} (${(100 * sd / mu).toFixed(1)}%)`);
+  console.log(`    lag-1 autocorrelation ${ac1.toFixed(3)} — `
+    + (ac1 > 0.5 ? 'STILL DRIFTING: a longer settle, not more averaging'
+      : ac1 < -0.5 ? 'ALTERNATING: the pilot and the lap are beating, averaging an even number of laps'
+        : 'INDEPENDENT: averaging N laps cuts it by sqrt(N)'));
+}
 console.log(failed ? `\nautostack-arm: ${failed} check(s) FAILED\n`
   : '\nautostack-arm: all checks passed\n');
 process.exit(failed ? 1 : 0);
