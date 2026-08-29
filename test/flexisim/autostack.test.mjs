@@ -44,7 +44,10 @@ const NOISEPROBE = +(process.env.NOISEPROBE || 0);
 // represents integer harmonics of the lap, and a two-lap period is a HALF-integer one.
 // LAPSYNC indexes from the lap start instead, which costs a discontinuity at a boundary
 // that is not physical on a closed path, and makes the machine exactly lap-periodic.
-const LAPSYNC = !!process.env.LAPSYNC;
+// DEFAULT ON, MEASURED HERE. Indexing the pilot's look-ahead from the lap start removes the
+// two-lap beat its cadence otherwise walks against the lap (autocorrelation -0.764 -> -0.135)
+// and takes the ladder from 20.70x to 22.42x. LAPSYNC=0 reproduces the continuous indexing.
+const LAPSYNC = process.env.LAPSYNC !== '0';
 const NOHFF = !!process.env.NOHFF;
 // ---- THE SIGNAL EACH RUNG IS SHOWN. Both settled by a 2x2 on the machine, one variable
 // each, with the pilot cascade coming back byte-identical (6.7033e-2 -> 5.5099e-2) in all
@@ -187,7 +190,12 @@ const auto = new AutoStack({
     // until it is measured on THIS machine — it is worth 14-20x on a synthetic plant with
     // known coupling and byte-identical without, but that is a plant built to have the
     // thing it exploits.
-    banded: !!process.env.HFFBANDED },
+    // DEFAULT ON, MEASURED HERE — 5.7 sigma better and eleven laps cheaper on this arm, whose
+    // operator `_gqband` measured as genuinely banded (40% better held-out prediction). It is
+    // NOT flipped in the library: a banded row needs 3*mm+4 probes against mm+1, so it triples
+    // identification cost, and rule 31 says a constant right for one plant is re-derived for
+    // another rather than assumed. HFFBANDED=0 reproduces the diagonal operator.
+    banded: process.env.HFFBANDED !== '0' },
   // PROGRESS AS IT IS MEASURED. This commission takes about an hour; printed only as a
   // table at the end, a run going wrong is indistinguishable from one going well until it
   // is over. Rule 27: the unflattering diagnostic first, and soon enough to act on.
