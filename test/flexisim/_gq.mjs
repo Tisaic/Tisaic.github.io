@@ -175,9 +175,19 @@ for (const [a, b] of poses) {
 
 // ---- HOW MUCH DOES IT ACTUALLY VARY, and can a plane in q predict the poses it never saw?
 // Held out: the four poses at odd indices, fitted on the five at even ones.
-const test = poses.map((_, i) => i).filter((i) => i % 2 === 1);
-const train = poses.map((_, i) => i).filter((i) => i % 2 === 0);
-console.log(`\n  fitted on ${train.length} poses, predicting the ${test.length} it never saw\n`);
+// TWO SPLITS, AND THEY ASK DIFFERENT QUESTIONS. The default alternates, which puts the
+// corners and the centre in training and the edge midpoints in test — every test pose
+// inside the convex hull of the training set, so the plane is only ever INTERPOLATING.
+// That is the easy case and it flatters a smooth model. SPLIT=extrap trains on the low-q1
+// half and tests on the high-q1 half, so the plane must extrapolate along the axis it was
+// never shown — which is what a workspace calibration actually has to do at the edges of
+// its range, and where this project has three times found that a fit does not reach.
+const EXTRAP = process.env.SPLIT === 'extrap';
+const q1mid = (q1lo + q1hi) / 2;
+const test = poses.map((_, i) => i).filter((i) => EXTRAP ? poses[i][0] > q1mid : i % 2 === 1);
+const train = poses.map((_, i) => i).filter((i) => EXTRAP ? poses[i][0] <= q1mid : i % 2 === 0);
+console.log(`\n  fitted on ${train.length} poses, predicting the ${test.length} it never saw`
+  + `  — ${EXTRAP ? 'EXTRAPOLATING past the training range in q1' : 'interpolating inside the training hull'}\n`);
 console.log('   h    spread over poses    GLOBAL err    PLANE err    plane/global');
 for (let h = 0; h < NH; h++) {
   // Global = the mean operator over the training poses. Plane = G0 + G1 q1 + G2 q2, least
