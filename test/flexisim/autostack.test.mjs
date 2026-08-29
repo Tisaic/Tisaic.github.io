@@ -254,6 +254,32 @@ async function run(extra, name, laps = 2 + AVG) {
   }
   await l1.destroy(); await l2.destroy();
   const rep = sc.report();
+  // WHAT A LAP-HARMONIC CORRECTION COULD REMOVE AT BEST, from the signal itself. A rung that
+  // writes a table indexed by lap phase and built from the first nh harmonics can only ever
+  // cancel the part of the error that LIVES there. The rest — content above the cut, and
+  // whatever does not repeat lap to lap — is a floor no number of Newton passes reaches,
+  // because the iteration converges to zero error only within the set it can represent.
+  // This is the achievable set measured by projection rather than inferred from an endpoint,
+  // and it costs nothing: the signal is already in hand.
+  const band = (nh) => {
+    let inb = 0, tot = 0;
+    for (let c = 0; c < 2; c++) {
+      const e = c ? ey : ex;
+      let dc = 0;
+      for (let k = 0; k < LAP; k++) dc += e[k];
+      dc /= LAP;
+      for (let k = 0; k < LAP; k++) tot += (e[k] - dc) * (e[k] - dc);
+      for (let h = 1; h <= nh; h++) {
+        let a2 = 0, b2 = 0;
+        for (let k = 0; k < LAP; k++) {
+          const x = 2 * Math.PI * h * k / LAP;
+          a2 += (e[k] - dc) * Math.cos(x); b2 -= (e[k] - dc) * Math.sin(x);
+        }
+        inb += 2 * (a2 * a2 + b2 * b2) / LAP;
+      }
+    }
+    return tot > 0 ? inb / tot : null;
+  };
   // THIS RUN'S OWN UNCERTAINTY, on the same quantity as the score. The score is the contour
   // rms pooled over the last AVG laps, so its uncertainty is the standard error of the
   // per-lap contour rms across those laps. The bare machine repeats to rounding; a machine
@@ -280,7 +306,7 @@ async function run(extra, name, laps = 2 + AVG) {
   const spread = Math.sqrt(Math.max(0, dVa / 2) / rl.length);
   const drift = dMu * (rl.length - 1);          // total travel across the averaged laps
   return { score: rep.contourRms, err: [ex, ey], bias: rep.contourBias, osc: rep.contourOsc,
-    lag: rep.lagRms, lapE, spread, drift };
+    lag: rep.lagRms, lapE, spread, drift, band };
 }
 
 /** Drive a Stack's phase machine in JOINT space, exactly as `composite.test.mjs` does. */
@@ -368,6 +394,22 @@ console.log(`  the lap-periodic rung reads the ${CONTOURERR ? 'CONTOUR COMPONENT
   + ` in ${HFFWORLD ? 'WORLD' : 'JOINT'} space`
   + `${CONTOURERR || HFFWORLD ? '  — a REPRODUCTION of a measured null, not the default' : ''}`
   + `   [contour ${(probe0.score / probe0.lag).toFixed(2)}x the lag rms]`);
+// THE CEILING ON THE LAP-PERIODIC RUNG, BEFORE IT IS COMMISSIONED. Reported first because
+// it is the denominator every later row is judged against: a rung that reaches the floor of
+// its own achievable set has nothing left to gain from a better operator, a bigger pass
+// budget or a longer horizon, and one that does not has all three still open. Rule 27.
+{
+  const rows = [4, 8, 16, 32, 64].map((nh) => {
+    const f = probe0.band(nh);
+    return `nh ${String(nh).padStart(2)} ${(100 * f).toFixed(1)}%`
+      + ` → ${(probe0.score * Math.sqrt(Math.max(0, 1 - f))).toExponential(2)}`;
+  });
+  console.log(`  a lap-harmonic table can only cancel what lives in its own band, so the`);
+  console.log(`  floor it leaves is the rest — measured on this machine's own error:`);
+  console.log(`    ${rows.join('   ')}`);
+  console.log(`  (band share of the error's variance, and the residual a PERFECT correction`);
+  console.log(`   inside that band would leave — no Newton loop can go below it)`);
+}
 check('the harness reproduces the conventional machine `composite.test.mjs` measures, so the '
   + 'comparison below is one variable — who chooses the constants — and not two machines',
   Math.abs(probe0.score - CONV) / CONV < 0.02,
