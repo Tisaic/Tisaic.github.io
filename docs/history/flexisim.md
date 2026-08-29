@@ -6797,3 +6797,26 @@ Stated rather than acted on, because the cost is real: a commission takes about 
 scored runs, so each extra settle lap costs a hundred laps. The bias over the four averaged
 laps is roughly 1e-4 against a sigma of 3.27e-4 — about a third of a standard deviation. Worth
 knowing, worth two more settle laps perhaps, not worth ten.
+
+### Brick 77 — simplification: the disproved null comes out, and the rig stops being copied
+
+**A trust region at the probe amplitude is gone from the hot loop, not kept as a reachable
+null.** This project's habit is to keep measured nulls reachable — `admit`, `reach`,
+`perHarmonicStep` — and that habit is right for findings that took real work to establish and
+that someone might reasonably want to re-run. It is not right for a hypothesis raised and
+disproved inside an hour by one cheap test, whose whole content is a sentence: the probe
+amplitude bounds identification NOISE, not the validity range of a linear operator, so
+bounding a Newton step by it throttles the one step that must be large. That sentence belongs
+here. Twenty-six hundred bytes of dead branch in the refinement's inner loop do not.
+
+**And the diagnostics stop carrying eight copies of the machine.** `_rig.mjs` holds what nine
+scripts in `test/flexisim/` had each cloned: `machine()` eight times, `commissionComp()`
+eight, `settle()` seven, the lap DFT five — around eight hundred duplicated lines.
+
+Copies drift, and two bugs in one afternoon came straight out of it: `_gqchan` inherited a
+local named `g` that collided with the gravity constant it also inherited, and `_gqxfer`
+announced itself as the file it was copied from for its entire first run, because the header
+came along with the code. A diagnostic is worth keeping only if its measurement can be
+reproduced, which is an argument for sharing the rig rather than cloning it — eight copies of
+a machine are eight chances for one to quietly stop being the machine everything else was
+measured on.
