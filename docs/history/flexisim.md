@@ -6243,3 +6243,107 @@ no reason to assume the next one is different, but there is also no evidence lef
 anywhere specific. The softest sliders were measured at the OLD pass budget and will be at
 least as good at the new one, which is stated rather than assumed because it has not been
 re-run.
+
+## Brick 70 — every signal path, traced
+
+The instruction was to analyse every signal path and make sure the setup was ideal. Four
+defects came out of it, and all four were on the MEASUREMENT side rather than in any
+method. That is worth saying first: nothing below changes what the ladder does, only what
+it is shown and what it is judged on.
+
+### The four
+
+**The score and the signal used different windows.** The score came off the LAST lap while
+the error signal handed to a rung was averaged over four. A rung was being judged on a
+different sample of the machine than the one it was fitted on. On a bare deterministic rig
+that is invisible; with a pilot deployed the lap-to-lap spread is percent-level, which is
+larger than several of the differences the ladder decides between. Both now use the same
+window — rule 12 and rule 20 in the same line.
+
+**The signal included an error the score cannot see removed.** The rung was handed the raw
+world tool error, which is contour plus lag, while the score is contour rms alone. Authority
+was being spent cancelling lag, which this project states explicitly is not a defect: the
+part is the right shape, the cycle is just slower. The signal is now the contour component
+carried in world coordinates. This is NOT the path-normal frame that measured 0.99x — that
+made the correction one scalar on a rotating axis. Here the correction stays a full
+two-vector; only the error it is asked to cancel changed.
+
+**The magnitude was projected onto the wrong normal.** `decompose` signs `contour` by the
+left normal AT THE NEAREST POINT on the path. Rebuilding the world vector from the commanded
+velocity's left normal uses a different point, separated along the path by the lag, so the
+two disagree by roughly lag times curvature — zero on the straights and largest on exactly
+the corner arcs where contour error is largest. Rule 47, and `path.tangent(d.s)` is the same
+point the magnitude came from, so being right costs nothing.
+
+**The floor belonged to a machine none of the rungs run on.** It was measured once on the
+bare machine, which repeats to rounding — 1.6e-10 here — and then applied to every later
+rung, each scored with a pilot deployed and repeating to percents. `res()` was the identity
+for exactly the comparisons that mattered, so a difference inside the noise was credited as
+a win. A host may now return the measured uncertainty of its own run and the floor rises to
+the largest seen, so a comparison happens at the resolution of the noisiest machine actually
+measured. A host that returns nothing keeps the static floor: not-measured and zero stay
+different states (rule 26).
+
+### Two objections to the narrowed signal, both answered by measurement rather than argument
+
+The probe amplitude is a fraction of the peak of whatever signal the rung is handed, and
+both fractions on HarmonicFF's own ladder are that same ratio — so narrowing the signal
+scales every probe candidate down together and the ladder cannot answer by picking a larger
+one. Measured on this machine the contour rms is **1.87x the lag rms**, so the scale barely
+moved. The number is printed on every run because if the rung ever collapses this is the
+first thing to look at.
+
+The narrowed signal is also POINTWISE RANK 1 — at every sample it is a scalar on the path
+normal — and a rank-deficient response is what once made |G| come back as noise and the arm
+measure 1.00x with every check green. But n(k) is geometry, so this is answerable without
+running the plant: across the first 24 lap harmonics the two channels of n are at worst
+**0.021 collinear**, and no harmonic carries energy in only one channel. The rotation of the
+normal decorrelates the channels completely at exactly the frequencies the rung uses. The
+check has teeth by its own output — a normal that did not turn would have shown no energy at
+any harmonic rather than a small collinearity.
+
+### And the frame note was the right measurement with the wrong conclusion drawn from it
+
+HarmonicFF fits ONE 2cx2c real operator per harmonic. That is an LTI assumption over the
+lap, and the DFT averages away whatever varies. On a single-axis servo the map is constant
+and the rung reaches 10x; on this arm it reaches about 2.3x, and the gap to composite's
+hand-built number is localised entirely in this rung.
+
+The frame was chosen by measurement — world 8.86x against a path-normal axis at 0.99x — and
+the lesson recorded was "a frame that does not rotate with the path". That is not the
+property that matters. What matters is that the map THROUGH the frame be constant, and
+`_lti.mjs` measures it on the very machine the arm bar runs, kinematics only, no simulation:
+
+| | varies, stiff axis | varies, soft axis | axis turns | anisotropy |
+|---|---|---|---|---|
+| world — `J K⁻¹ Jᵀ` | 44.2% | 16.7% | 127.6° | 2.76x |
+| joint — the mass matrix | 11.9% | 3.4% | 9.5° | 9.53x |
+
+One operator per harmonic is fitted to all of the first row. In joint space the pose
+dependence is entirely inside J, so what survives is the mass matrix: **3.7x less varying
+gain and 13x less rotation**. It is also the frame the pilot already reads its error in,
+three lines away in the same harness.
+
+**The first version of that instrument was wrong and would have argued against the change it
+was built to test.** It reported the spread between the largest eigenvalue anywhere on the
+lap and the smallest anywhere, which is mostly the shoulder being heavier than the elbow, and
+it made the mass matrix look 11.66x WORSE than the world compliance when the quantity that
+matters moves a third as much. A constant anisotropic map is represented exactly by a single
+2x2; only the changing is what the DFT cannot follow. Anisotropy is now reported beside the
+variation and labelled as free. Rule 17: the instrument fails before the model does.
+
+### Not built, and the measurement that would decide it
+
+One error signal is returned per run and every rung reads it, regardless of the frame that
+rung corrects in. The pilot gets joint-space error because `drivePilot` builds it that way by
+hand; the conventional and lap-periodic rungs get world because `run` does. **A rung should be
+shown the error in the frame it corrects in**, and AutoStack knows each rung's frame already.
+That is not built: for now the combination that would silently hand a world-fitted basis a
+joint-space signal refuses to run instead of producing a number nobody can interpret
+(rule 51). If the joint-frame comparison wins, this becomes the library fix rather than an
+environment flag.
+
+The prediction is recorded in `_lti.mjs` ahead of the comparison, so the run can refute it:
+joint space removes the axis rotation outright and cuts the varying gain several fold, and if
+the rung does not improve then the frame is not the binding constraint and the gap is
+somewhere that file cannot see.
