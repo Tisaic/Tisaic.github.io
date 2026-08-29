@@ -6820,3 +6820,28 @@ came along with the code. A diagnostic is worth keeping only if its measurement 
 reproduced, which is an argument for sharing the rig rather than cloning it — eight copies of
 a machine are eight chances for one to quietly stop being the machine everything else was
 measured on.
+
+### Brick 77a — the phase-walk detector, and why EMPS cannot test it
+
+`AutoStack` now reports `phaseWalk` when the pilot's cadence does not divide the lap. The
+host builds the look-ahead closure so the library cannot fix it, but the library holds both
+numbers and nothing else does.
+
+**The generalisation test is INCONCLUSIVE, not passed.** EMPS ships
+`{classic:true, stack:0, hff:false}` — its pilot is never deployed — and the mechanism
+requires a pilot cascade sitting BENEATH a lap-periodic rung. So that plant cannot exercise
+the condition in either direction, and the finding stands measured on one machine.
+
+Which is exactly the claim this project refuses to make on one plant. Stated rather than
+quietly upgraded: the mechanism is understood and its arithmetic is general — a cadence that
+does not divide a lap walks, and a walk is a half-integer harmonic — but the only measurement
+of it is the arm's, where the ladder went 20.70x to 22.42x. A second plant that deploys both
+rungs would settle it; none of the six currently does.
+
+### Brick 77b — the durable wrapper raced the session's own commits
+
+`durable-run.sh` commits from the background while the session is also committing, and the
+two collided on `.git/index.lock`. The measurement was not lost — it was already appended to
+the file — but the failed commit leaves the tree dirty and the NEXT commit sweeps the run log
+up under somebody else's message, which is how a measurement ends up filed under a refactor.
+It now waits for the lock rather than losing the race.

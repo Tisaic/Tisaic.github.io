@@ -48,6 +48,15 @@ CAP=$((64 * 1024))
   echo '```'
 } >> docs/history/runs.md
 
+# WAIT FOR THE INDEX RATHER THAN LOSING THE COMMIT. This runs in the background while the
+# session is also committing, and the two collided: 'Unable to create index.lock'. The run's
+# result was already appended to the file, so a failed commit here does not lose the
+# measurement — but it does leave the tree dirty and the next commit picks it up under
+# somebody else's message, which is how a run log ends up filed under a refactor.
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  [ -e .git/index.lock ] || break
+  sleep 3
+done
 git add -- docs/history/runs.md
 git commit -q -F - -- docs/history/runs.md <<MSG
 run: ${name} (exit ${rc})
