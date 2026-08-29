@@ -172,7 +172,7 @@ async function run(corr, laps = 2 + AVG) {
 
 /** Identify only — no refinement — and hand back the operator. */
 async function identify(disarmForProbe) {
-  const H = new HarmonicFF({ lap: LAP, channels: 2, uMax: 1.5, probeStyle: 'spread',
+  const H = new HarmonicFF({ lap: LAP, channels: 2, nh: +(process.env.PNH || 256), uMax: 1.5, probeStyle: 'spread',
     probeFracs: [0.10], reachPows: [1], cuts: [0], passes: 0, backtracks: 0, trialPasses: 0 });
   await H.commission(async (corr, phase) => {
     ARM_ON = !(disarmForProbe && phase === 'probe');
