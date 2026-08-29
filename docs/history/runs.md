@@ -47,3 +47,26 @@ autostack-arm: 1 check(s) FAILED
   ✗ …and the floor label discriminates — some rows carry it and some do not, so it is informative rather than decoration  → [["as it arrived","2.55e-2",false],["conventional (self-tuned)","2.55e-2",false],["lap-periodic (harmonic)","1.23e-3",false]]
 autostack: 1 check(s) FAILED
 ```
+
+### five-plants — exit 0 — 2026-08-29T15:46Z
+
+```
+  as it arrived                                  4.7706e-1       
+  conventional (self-tuned)                      4.5307e-2   10.53x   24 laps, 7 coefficients
+  pilot cascade, depth 1                         1.5805e-1    0.29x   no better than the rung below — stopping
+  pilot cascade, depth 1 (rungs below withheld)  2.2130e-1    0.20x   no better than the rung below — stopping
+    shipped {"classic":true,"stack":0,"hff":false}   4.771e-1 → 4.531e-2   10.53x   44s
+  as it arrived              1.3933e-1       
+  conventional (self-tuned)  1.3933e-1    1.00x   16 laps, 7 coefficients — NOT deployed
+  pilot cascade, depth 1     2.4709e-1    0.56x   no better than the rung below — stopping
+    shipped {"classic":false,"stack":0,"hff":false}   1.393e-1 → 1.393e-1   1.00x   19s
+  as it arrived              1.5301e-2       
+  conventional (self-tuned)  1.5301e-2    1.00x   6 laps, 4 coefficients — NOT deployed
+  pilot cascade, depth 1     3.1168e-2    0.49x   no better than the rung below — stopping
+    shipped {"classic":false,"stack":0,"hff":false}   1.530e-2 → 1.530e-2   1.00x   11s
+  as it arrived              5.2708e+0       
+  conventional (self-tuned)  5.2708e+0    1.00x   32 laps, 10 coefficients — NOT deployed
+  pilot cascade, depth 1     5.4773e+0    0.96x   no better than the rung below — stopping
+    shipped {"classic":false,"stack":0,"hff":false}   5.271e+0 → 5.271e+0   1.00x   185s
+plants: all checks passed
+```
