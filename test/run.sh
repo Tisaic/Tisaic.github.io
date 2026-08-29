@@ -299,6 +299,11 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # is byte-identical where there is none. It shipped once with every harmonic's fit null
     # and reported a ratio of exactly 1.000 at three coupling strengths.
     node test/pilot/band.test.mjs
+    # Every contribution intentional, summed exactly once, mapped through its OWN frame, and
+    # every signal inside a stated range — including the two states a bounds check cannot
+    # see by itself: a demand that never reached the cap, and a NaN that compares false
+    # against every limit.
+    node test/pilot/sum.test.mjs
     node test/pilot/autostack.test.mjs
     # THE BUTTON ON FOUR MORE PLANTS THAT SHARE NO PHYSICS — a tank whose outflow goes as
     # sqrt(level), a column that is linear transfer functions with dead time, a mill whose
