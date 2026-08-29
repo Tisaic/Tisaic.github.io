@@ -276,11 +276,22 @@ async function run(extra, name, laps = 2 + AVG) {
     for (let k = 0; k < LAP; k++) s2 += lapE[l][k] * lapE[l][k];
     rl.push(Math.sqrt(s2 / LAP));
   }
-  const mu = rl.reduce((x, y) => x + y, 0) / rl.length;
-  const va = rl.reduce((x, y) => x + (y - mu) * (y - mu), 0) / Math.max(1, rl.length - 1);
-  const spread = Math.sqrt(va / rl.length);
+  // ON SUCCESSIVE DIFFERENCES, WHICH A DRIFT CANNOT INFLATE. Taken as a plain standard
+  // deviation about the mean, a configuration still converging across the averaged laps
+  // reports its TRANSIENT as noise: on the arm that returned 3.47e-2 under a score of
+  // 5.5e-2, i.e. 63% noise on a rig whose bare machine repeats to 1.6e-10. A linear drift
+  // has constant successive differences, so their variance is zero and only the scatter
+  // about the drift survives. Rule 13: a measurement taken across a transient describes
+  // the transient — so the drift is reported SEPARATELY rather than folded in, because a
+  // rung that has not settled is a thing to see, not a thing to average away (rule 27).
+  const df = [];
+  for (let i = 1; i < rl.length; i++) df.push(rl[i] - rl[i - 1]);
+  const dMu = df.reduce((x, y) => x + y, 0) / Math.max(1, df.length);
+  const dVa = df.reduce((x, y) => x + (y - dMu) * (y - dMu), 0) / Math.max(1, df.length - 1);
+  const spread = Math.sqrt(Math.max(0, dVa / 2) / rl.length);
+  const drift = dMu * (rl.length - 1);          // total travel across the averaged laps
   return { score: rep.contourRms, err: [ex, ey], bias: rep.contourBias, osc: rep.contourOsc,
-    lag: rep.lagRms, lapE, spread };
+    lag: rep.lagRms, lapE, spread, drift };
 }
 
 /** Drive a Stack's phase machine in JOINT space, exactly as `composite.test.mjs` does. */
@@ -381,6 +392,14 @@ console.log(`\n${auto.table()}`);
 console.log(`\n  shipped ${JSON.stringify(rep.deployed)}   ${rep.base.toExponential(4)} → `
   + `${rep.best.toExponential(4)}   ${rep.gain.toFixed(2)}x   ${((Date.now() - t0) / 1000).toFixed(0)}s`);
 console.log(`  ${BAR.src}   ${TARGET.toExponential(4)}   ${(CONV / TARGET).toFixed(2)}x`);
+if (rep.unsettled && rep.unsettled.length) {
+  console.log(`  NOT SETTLED when scored — the number is a point on a transient, not a `
+    + `converged one:`);
+  for (const u of rep.unsettled) {
+    console.log(`    ${u.at}  score ${u.score.toExponential(3)}  drifting `
+      + `${u.drift > 0 ? '+' : ''}${u.drift.toExponential(2)} across the ${AVG} averaged laps`);
+  }
+}
 if (auto.floor > probe0.spread) {
   console.log(`  the instrument's floor ROSE during commissioning, `
     + `${probe0.spread.toExponential(2)} → ${auto.floor.toExponential(2)}, on `
