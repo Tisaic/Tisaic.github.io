@@ -455,6 +455,16 @@ if (rep.unsettled && rep.unsettled.length) {
       + `${u.drift > 0 ? '+' : ''}${u.drift.toExponential(2)} across the ${AVG} averaged laps`);
   }
 }
+// A DECISION THE FINAL FLOOR NO LONGER SUPPORTS is the one thing a rising floor can do
+// quietly, so it is printed rather than left in the report object.
+if (rep.floorRevised) {
+  console.log(`  the floor rose UNDER a decision already made — these rungs were deployed on `
+    + `a margin that no longer clears at the final resolution:`);
+  for (const f of rep.floorRevised) {
+    console.log(`    ${f.name}  ${f.score.toExponential(3)} against ${f.ref.toExponential(3)}`
+      + `  judged at floor ${f.judgedAt.toExponential(2)}, final ${f.finalFloor.toExponential(2)}`);
+  }
+}
 if (auto.floor > probe0.spread) {
   console.log(`  the instrument's floor ROSE during commissioning, `
     + `${probe0.spread.toExponential(2)} → ${auto.floor.toExponential(2)}, on `
