@@ -179,6 +179,7 @@ let hostRef = null;
     // reproduced 1.8387e-2 byte for byte — a speed-up that quietly changes the machine is
     // worse than no speed-up, because it looks like a free win (rule 21).
     reuseMachine: !!process.env.REUSE,
+    warmup: +(process.env.WARMUP ?? 2),
     passes: +(process.env.HFFPASSES || 24),
     onRung: (r) => console.log(`  [${((Date.now() - T0) / 60000).toFixed(0)}m] `
       + `${r.name}  ${r.score.toExponential(4)}`
