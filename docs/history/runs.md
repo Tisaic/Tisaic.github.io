@@ -543,3 +543,53 @@ pilot: one button on a real servo axis — and the conventional layer wins
 autostack: all checks passed
 
 ```
+
+### drift-40b — exit 1 — 2026-08-29T18:53Z
+
+```
+
+flexisim: the button, on the arm — against the strongest number this repo has
+
+  [arm K 1 E 0.06, rounded rect, feed 0.004, lap 7357]
+  conventional machine 4.1216e-1  bias -1.15e-1  osc 3.96e-1  lag 2.21e-1   lap-to-lap floor 1.309e-10
+  the lap-periodic rung reads the WHOLE TOOL ERROR in JOINT space   [contour 1.87x the lag rms]
+  a lap-harmonic table can only cancel what lives in its own band, so the
+  floor it leaves is the rest — measured on this machine's own error:
+    nh  4 48.4% → 2.96e-1   nh  8 96.1% → 8.09e-2   nh 16 100.0% → 4.23e-3   nh 32 100.0% → 7.05e-4   nh 64 100.0% → 1.36e-4
+  (band share of the error's variance, and the residual a PERFECT correction
+   inside that band would leave — no Newton loop can go below it)
+  ✓ the harness reproduces the conventional machine `composite.test.mjs` measures, so the comparison below is one variable — who chooses the constants — and not two machines
+  [0m] as it arrived  4.1216e-1
+  [6m] conventional (self-tuned)  3.3200e-1  1.24x   23 laps, 7 coefficients
+  [8m] pilot cascade, depth 1  9.9789e-2  3.33x
+  [10m] pilot cascade, depth 2  1.4156e-1  0.70x
+  [11m] pilot cascade, depth 1 (rungs below withheld)  6.3021e-2  1.58x
+  [14m] pilot cascade, depth 2 (rungs below withheld)  5.3554e-2  1.18x
+  [14m] — the conventional rung WITHHELD  5.3554e-2  1.00x   the cascade above it commissions better without it: a cheap rung that costs an expensive one, which no amount of re-scoring after the fact can recover
+
+  as it arrived                                  4.1216e-1       
+  conventional (self-tuned)                      3.3200e-1    1.24x   23 laps, 7 coefficients
+  pilot cascade, depth 1                         9.9789e-2    3.33x
+  pilot cascade, depth 2                         1.4156e-1    0.70x
+  pilot cascade, depth 1 (rungs below withheld)  6.3021e-2    1.58x
+  pilot cascade, depth 2 (rungs below withheld)  5.3554e-2    1.18x
+  — the conventional rung WITHHELD               5.3554e-2    1.00x   the cascade above it commissions better without it: a cheap rung that costs an expensive one, which no amount of re-scoring after the fact can recover
+
+  shipped {"classic":false,"stack":2,"hff":false}   4.1216e-1 → 5.3554e-2   7.70x   821s
+  composite.test.mjs's hand-built cascade(2) + HFF   1.3400e-2   30.76x
+  the floor rose UNDER a decision already made — these rungs were deployed on a margin that no longer clears at the final resolution:
+    pilot cascade, depth 2  1.416e-1 against 9.979e-2  judged at floor 8.40e-5, final 2.02e-4
+  the instrument's floor ROSE during commissioning, 1.31e-10 → 2.02e-4, on 'median of 6 runs' — the deployed machine is noisier than the bare one, and the comparisons above were made at the coarser resolution
+  ✗ THE HEADLINE: the self-tuning ladder matches or beats composite.test.mjs's hand-built cascade(2) + HFF on the same machine and program — the strongest result this repository has at these settings  → 5.3554e-2 against 1.3400e-2
+  ✓ …and it is not the common cap doing the work by accident: the cap was not binding when the shipped configuration was scored
+
+  the shipped machine over 40 laps — is the 'noise' noise?
+    pilot cadence S 9, lap 7357, LAP/S 817.444 — remainder 4, so the pilot starts each lap 44% of a sample later than the last   [look-ahead indexed FROM THE LAP START]
+    5.335e-2 5.341e-2 5.325e-2 5.401e-2 5.399e-2 5.479e-2 5.360e-2 5.568e-2 5.356e-2 5.380e-2 5.345e-2 5.389e-2 5.370e-2 5.421e-2 5.457e-2 5.440e-2 5.516e-2 5.391e-2 5.348e-2 5.384e-2 5.410e-2 5.356e-2 5.360e-2 5.433e-2 5.458e-2 5.492e-2 5.476e-2 5.297e-2 5.407e-2 5.322e-2 5.415e-2 5.301e-2 5.406e-2 5.389e-2 5.485e-2 5.492e-2 5.302e-2 5.483e-2 5.310e-2 5.463e-2
+    mean 5.402e-2   drift 1.77e-4 across the run   scatter about it 6.68e-4 (1.2%)
+    drift first half 4.98e-4, second half 5.47e-5 — SETTLING: a longer settle before measuring
+    lag-1 autocorrelation -0.120 — INDEPENDENT: averaging N laps cuts it by sqrt(N)
+
+autostack-arm: 1 check(s) FAILED
+
+```
