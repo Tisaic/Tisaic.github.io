@@ -144,3 +144,30 @@ await l1.destroy(); await l2.destroy();
   console.log(`  no energy in one channel. 1.000 everywhere would mean the narrowed signal`);
   console.log(`  cannot identify a 2-channel operator at all.\n`);
 }
+
+// ---- THE SAME NUMBERS BY A ROUTE THAT DOES NOT SHARE THE JACOBIAN (rule 15).
+// Everything above is built from arm.jacobian(). A defect in that one function would make
+// both rows wrong together and they would agree with each other perfectly. So: get the same
+// world map by FINITE DIFFERENCES of the forward kinematics, which shares no code with it.
+{
+  const h = 1e-6;
+  const fk = (a, b) => [arm.L1 * Math.cos(a) + arm.L2 * Math.cos(a + b),
+    arm.L1 * Math.sin(a) + arm.L2 * Math.sin(a + b)];
+  let worst = 0;
+  for (let i = 0; i < 64; i++) {
+    const c = path.at(Math.floor(i * LAP / 64));
+    const [q1, q2] = arm.ik(c.x, c.y, true);
+    const p0 = fk(q1, q2);
+    const c1 = fk(q1 + h, q2), c2 = fk(q1, q2 + h);
+    const Jd = [[(c1[0] - p0[0]) / h, (c2[0] - p0[0]) / h],
+      [(c1[1] - p0[1]) / h, (c2[1] - p0[1]) / h]];
+    const Ja = arm.jacobian(q1, q2);
+    for (let r = 0; r < 2; r++) for (let cc = 0; cc < 2; cc++) {
+      const rel = Math.abs(Jd[r][cc] - Ja[r][cc]) / Math.max(1e-9, Math.abs(Ja[r][cc]));
+      if (rel > worst) worst = rel;
+    }
+  }
+  console.log(`  the jacobian both rows are built from agrees with a finite difference of`);
+  console.log(`  the forward kinematics to ${(100 * worst).toFixed(4)}% at worst over the lap —`);
+  console.log(`  so the table above is not one function agreeing with itself.\n`);
+}
