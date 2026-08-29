@@ -6845,3 +6845,44 @@ two collided on `.git/index.lock`. The measurement was not lost — it was alrea
 the file — but the failed commit leaves the tree dirty and the NEXT commit sweeps the run log
 up under somebody else's message, which is how a measurement ends up filed under a refactor.
 It now waits for the lock rather than losing the race.
+
+### Brick 78 — prep: what the app needs to host the ladder
+
+The next step is the ladder in the page, so the R&D is visible on the model rather than only
+in a Node bar. What that needs, and what is already there.
+
+**THE ONE ASSUMPTION, TESTED FIRST.** `AutoStack.commission` drives the machine through
+`host.run` and `host.drivePilot`, and in Node those block until a scored run finishes. A
+browser cannot: one scored run on the arm is six laps of 7357 steps, which freezes the tab.
+The page already solves this for the pilot by stepping a budget per frame — and both host
+entry points are `async`, so a browser host can await a frame inside them.
+
+Whether the ladder SURVIVES that is a different question, because `beginRun()`,
+`_identifying` and the clip counters are synchronous state on a shared object.
+`test/pilot/yield.test.mjs` commissions one plant twice, once straight through and once
+awaiting a macrotask every seven samples: identical best, identical deployed set, and every
+rung row identical — not just the final number, since a ladder reaching the same place by a
+different route would still be a bug. **The browser can host it.**
+
+**THE HAZARD THAT COMES WITH IT.** The same test names what would break it: anything else
+calling `act()` between yields. The page's render loop draws the arm every frame and a
+commissioning run now spans thousands of frames, so the loop must not touch `act()` while
+the ladder is commissioning — the same shape as `pilotComm` already gating the Path tab.
+
+**WHAT THE LADDER ALREADY REPORTS**, which is most of a commissioning view and currently
+renders nowhere: `rungs` with each row's score, gain, whether it deployed and the floor it was
+judged against; `budget` split into probes, trials, refocus and refine; `range()` with peak
+demand against the cap and the box; `phaseWalk` when the host's indexing beats against the
+lap; `starved()` when an armed rung was never reached; and the harmonic rung's pass-by-pass
+history with its own sigma and how many passes landed inside it. `onRung` fires per row as it
+is measured, which is what a progress view wants.
+
+**AND WHAT MAKES IT AFFORDABLE TO USE.** `exportOperator()` means a second program pays for
+refinement only — 32 laps against 10 on the synthetic bar — so changing the path in the UI
+does not re-identify from scratch.
+
+**STATED, NOT SOLVED:** a full commission is about 2000 s in Node. Yielding does not make it
+cheaper, only survivable, so the page needs progress and a cancel, and the honest framing is
+that this is a commissioning run the user watches rather than a button that returns. And the
+22.42x is a NODE number on a stated plant; brick 61's lesson is that performance belongs
+where the plant is stated and the browser's job is what only the browser can break.

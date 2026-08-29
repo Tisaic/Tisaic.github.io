@@ -307,6 +307,9 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # An operator identified on one program, reused on another: the lap cost it saves, and
     # the refusal when the lap length differs and harmonic h is not the same frequency.
     node test/pilot/reuse.test.mjs
+    # The one assumption the browser integration rests on: a host that awaits a frame
+    # mid-run reaches the same result as one that runs straight through.
+    node test/pilot/yield.test.mjs
     node test/pilot/autostack.test.mjs
     # THE BUTTON ON FOUR MORE PLANTS THAT SHARE NO PHYSICS — a tank whose outflow goes as
     # sqrt(level), a column that is linear transfer functions with dead time, a mill whose
