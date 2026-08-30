@@ -320,6 +320,14 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # drove a machine delivering 3.5e-1 to 7.7e-1 against an open loop of 4.1e-1. Rule 6:
     # where two views show one quantity, assert they AGREE.
     node test/pilot/deploy.test.mjs
+    # A MEMORY MAY ONLY BE APPLIED WHERE IT WAS FORMED. The bench measured the lap-periodic
+    # rung as a NET NEGATIVE across five programs and four feedrates — model layers alone beat
+    # the full ladder in 14 of 20 cells — so it is withheld off its own program. Both halves
+    # pinned: inert at home, and withheld elsewhere with a reason distinct from 'starved'.
+    node test/pilot/offprogram.test.mjs
+    # THE PREDICTIVE VARIANCE THE RIDGE FIT WAS ALREADY PAYING FOR: x'(X'X+lam I)^-1 x from
+    # the Cholesky factor it was discarding, checked against an independently inverted matrix.
+    node test/pilot/leverage.test.mjs
     node test/pilot/autostack.test.mjs
     # THE BUTTON ON FOUR MORE PLANTS THAT SHARE NO PHYSICS — a tank whose outflow goes as
     # sqrt(level), a column that is linear transfer functions with dead time, a mill whose
