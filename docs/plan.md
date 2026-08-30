@@ -878,9 +878,25 @@ a result anyone would have predicted from "spend less arithmetic".
   moves, but it says the corner is a property of a pilot on a raw machine and has to be
   re-measured wherever the machine underneath it has changed (rule 31, again).
 
-*Outstanding before the defaults move: the 2R arm's whole ladder, both ways. It carries the
-22.42x and it is the only plant where the pilot and the lap-periodic rung BOTH deploy, so it
-is the only one that can show the corner interacting with a rung above it.*
+**AND THE ARM'S FIRST ANSWER WAS A WIRING FAULT WEARING A MEASUREMENT'S CLOTHES.** Run both
+ways it came back BYTE-IDENTICAL — 22.42x either way, every rung to five significant figures
+— which is impossible for a change that moves the horizon 56 → 45 and the iteration count
+60 → 2. It was not a null result: `test/flexisim/autostack.test.mjs` held a SECOND copy of
+the pilot's option bag and assigned it over `auto.pilotOpts` wholesale, after `makeArmHost`
+had built one, so the options never reached the pilot. Value for value the copies agreed, so
+nothing had ever been wrong and no check had ever gone red.
+
+Every hop tested clean in isolation — the host forwards, `AutoStack` carries, `Stack` spreads,
+the `Pilot` stores, and the four-plant bar visibly changes behaviour under the same override —
+and the wiring was genuinely there. What found it was making the ladder PRINT the solver it
+commissioned with and watching that disagree with the host: `pilotOpts.qpIters 2`,
+`layer0.qpIters 60`. That is now **rule 61**, the duplicate is deleted, and the bar asserts
+that every cascade layer commissioned with the solver the host was handed.
+
+*Outstanding before the defaults move: the arm's ladder, both ways, on the repaired harness.
+The default run is also the rule-21 check on the deletion — if removing the duplicate was
+value-neutral it must return exactly 22.42x, and if it does not, the two copies had ALREADY
+drifted and the flagship number was measured on options nobody was reading.*
 
 **7. Re-measure the rebuilt ladder on the transfer bench.** Programs x feedrates, headline is
 the WORST CELL. *This is where the shrink's cost shows up. If the worst cell falls below the

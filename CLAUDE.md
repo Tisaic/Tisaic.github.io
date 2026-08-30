@@ -532,6 +532,22 @@ measurement behind each is in `docs/history/` — the pointer in brackets.
     `lib/`, and every long page wait ends on EITHER outcome and asserts the badge. An env
     read is not a free thing to add to library code.
 
+61. **A SHARED CONFIGURATION EXISTS TO STOP TWO COPIES DRIFTING, AND A CALLER THAT ASSIGNS
+    OVER IT HAS PUT THE SECOND COPY BACK.** `lib/flexisim/autohost.js` is shared by the page
+    and the bar precisely so that ⑨ on screen runs the configuration the 22.42× was measured
+    on by construction rather than by review — and the bar then did
+    `auto.pilotOpts = { … }`, wholesale, over the bag the host had just built. Value for
+    value the copies agreed, so nothing was ever wrong and no check ever went red; the
+    duplicate simply waited for one of them to change. It drew blood the first time one did:
+    two new solver options were added to the host, the whole ladder ran TWICE, and it came
+    back byte-identical — 22.42× either way, every rung to five figures — because the bag
+    carrying them was discarded between construction and commissioning. Every hop tested
+    clean in isolation and the wiring was genuinely there, which is the mode-⑧ failure in a
+    new costume. **Mutate a shared bag, never replace it** — and ASSERT that what the machine
+    commissioned with is what the caller asked for, because that check's absence is the whole
+    reason a duplicate can sit there. What found it was not more reasoning: it was making the
+    ladder PRINT the solver it commissioned with and watching that disagree with the host.
+
 ## Key files
 
 | File | Purpose |
