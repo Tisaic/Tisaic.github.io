@@ -33,6 +33,16 @@ function check(name, cond, detail) {
 }
 console.log('\npilot: the button on plants that share no physics\n');
 
+// THE SOLVER BUDGET AS A KNOB, so `docs/plan.md` step 6b can be gated on plants that share
+// no physics. Both are pass-through Pilot options and both default to the library's own
+// values, so an unset environment runs byte-identically (rule 21). The proposed joint change
+// is HORIZON_TS=1.2 QPITERS=2 — measured better AND ~30-57x cheaper on the two plants that
+// deploy, and NOT separable, so they move together or not at all.
+const SOLVER = {};
+if (process.env.HORIZON_TS) SOLVER.horizonTs = +process.env.HORIZON_TS;
+if (process.env.QPITERS) SOLVER.qpIters = +process.env.QPITERS;
+if (Object.keys(SOLVER).length) console.log(`  solver budget override: ${JSON.stringify(SOLVER)}`);
+
 /**
  * One plant's ladder. `spec` supplies everything the machine knows about itself and nothing
  * about the controller.
@@ -57,7 +67,8 @@ async function ladder(spec) {
     // a property of the CODE (rule 18), and that is exactly what a stopping rule has to be.
     channels, uMax, periodic: null, floor, maxDepth: +(process.env.DEPTH || 2),
     basis: motionBasis(channels.map((_, c) => ({ v: v[c], a: a[c] }))),
-    pilot: { nMeasured, start, guards, workspace: () => true, seed: 1, autoRefuse: false },
+    pilot: { nMeasured, start, guards, workspace: () => true, seed: 1, autoRefuse: false,
+      ...SOLVER },
   });
 
   const run = async (corr, cname) => {

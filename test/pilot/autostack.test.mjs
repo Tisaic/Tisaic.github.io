@@ -51,6 +51,17 @@ import { P, PR, makeMachine, KP } from './emps-rig.mjs';
 import { AutoStack } from '../../lib/pilot/autostack.js';
 import { ClassicFF, motionBasis } from '../../lib/pilot/classic.js';
 
+// THE SOLVER BUDGET AS A KNOB, so `docs/plan.md` step 6b can be gated on plants that share
+// no physics. Both are pass-through Pilot options and both default to the library's own
+// values, so an unset environment runs byte-identically (rule 21). The proposed joint change
+// is HORIZON_TS=1.2 QPITERS=2 — measured better AND ~30-57x cheaper on the two plants that
+// deploy, and NOT separable, so they move together or not at all.
+const SOLVER = {};
+if (process.env.HORIZON_TS) SOLVER.horizonTs = +process.env.HORIZON_TS;
+if (process.env.QPITERS) SOLVER.qpIters = +process.env.QPITERS;
+if (Object.keys(SOLVER).length) console.log(`  solver budget override: ${JSON.stringify(SOLVER)}`);
+
+
 let failed = 0;
 function check(name, cond, detail) {
   const ok = !!cond;
@@ -144,7 +155,7 @@ const auto = new AutoStack({
   floor: FLOOR,
   periodic: P,
   basis: motionBasis([{ v: PR.v, a: PR.a }]),
-  pilot: { nMeasured: 1, start: [PR.q[0]], guards: [{ index: 0, max: 0.4 }],
+  pilot: { nMeasured: 1, start: [PR.q[0]], guards: [{ index: 0, max: 0.4 }], ...SOLVER,
     workspace: () => true, seed: 1, exciteSteps: 40000 },
 });
 let stackPk = 0;
