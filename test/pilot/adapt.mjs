@@ -136,6 +136,12 @@ console.log(`  the bar: a lap-indexed table on this axis reaches 0.0024 mm (242x
 const MUS = (process.env.MU || '0,0.02,0.05,0.15,0.4').split(',').map(Number);
 const CLAMPS = (process.env.CLAMP || '0.25,1,4').split(',').map(Number);
 const STRIDES = (process.env.STRIDE || '8,2,1').split(',').map(Number);
+// THE FREEZE OFF, SO THE UNGUARDED TRAJECTORY CAN BE SEEN. Guarded, every setting freezes
+// inside the first lap and the run says nothing about where adaptation was heading — only
+// that the guard stopped it. An update law's failure mode is the thing to look at directly:
+// this project has two on record (an ILC table pumped to 5.25, a harmonic solve at 0.98x)
+// and both were found by watching them run, not by trusting a guard to describe them.
+const FREEZE = process.env.FREEZE === '0' ? 1e9 : 3;
 
 console.log('\n     mu  clamp  stride    program mm        x     sine mm        x   updates  drift  frozen');
 const base = run(PR, null), baseS = run(SIN, null);
@@ -145,7 +151,7 @@ for (const mu of MUS) {
   if (mu === 0) continue;
   for (const clamp of CLAMPS) {
     for (const stride of STRIDES) {
-      const cfg = { mu, clamp, leadStride: stride, freezeAfter: 3 };
+      const cfg = { mu, clamp, leadStride: stride, freezeAfter: FREEZE };
       const r = run(PR, cfg), q = run(SIN, cfg);
       console.log(`  ${String(mu).padStart(5)}  ${String(clamp).padStart(5)}  ${String(stride).padStart(6)}   `
         + `${r.rms.toFixed(5).padStart(9)}  ${(openProg / r.rms).toFixed(2).padStart(6)}x  `
@@ -155,6 +161,22 @@ for (const mu of MUS) {
     }
   }
 }
-// THE LAP TRACE OF THE BEST SETTING, because "did it converge or was it always there" is the
-// question a single rms cannot answer and the one that decides whether this is the memory's
-// replacement or just a slightly better model.
+// THE LAP TRACE, because "did it converge, sit still, or walk away" is the question a single
+// rms cannot answer and the one that decides whether this is the memory's replacement or just
+// a slightly different model. Printed for the frozen baseline and for each swept setting, on
+// BOTH programs, since a law that improves the one it can see while ruining the one it cannot
+// is the exact failure the retirement exists to avoid.
+if (process.env.TRACE) {
+  const show = (name, r) => console.log(`  ${name.padEnd(26)} ${r.perLap.map((v) => v.toFixed(4)).join(' ')}`);
+  console.log('\n  error by lap, mm rms:');
+  show('frozen, program', base);
+  show('frozen, sine', baseS);
+  for (const mu of MUS) {
+    if (mu === 0) continue;
+    for (const clamp of CLAMPS) for (const stride of STRIDES) {
+      const cfg = { mu, clamp, leadStride: stride, freezeAfter: FREEZE };
+      show(`mu ${mu} cl ${clamp} st ${stride} prog`, run(PR, cfg));
+      show(`mu ${mu} cl ${clamp} st ${stride} sine`, run(SIN, cfg));
+    }
+  }
+}
