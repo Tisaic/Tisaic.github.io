@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:445,built:"2026-08-30T00:39:03Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:447,built:"2026-08-30T01:16:34Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -6023,7 +6023,9 @@ function predistortP(refs, cmd) {
   // scored runs went through — not a re-implementation of them here. The look-ahead is
   // indexed from the lap start exactly as it was during commissioning, so the pilot sees in
   // deployment what it saw while it was learning.
-  if (m === 'auto') return autoP.actAt(kP, cmd, [refs[0].theta, refs[1].theta]);
+  // THE WHOLE CORRECTION, baseline compliance included — see `actAt`. Handing the page only
+  // the ladder's own term deployed it onto a machine the ladder never measured.
+  if (m === 'auto') return autoP.actAt(kP, cmd, refs);
   if (m === 'stack') {
     const useC = $('stk-comp').checked && !!cP;
     const useP = $('stk-pilot').checked
@@ -6785,7 +6787,7 @@ async function startAutoP() {
   // POINT THE FRAME MAPS AT THE ARM ON SCREEN. They were following the throwaway machines
   // the scored runs built, and deploying through a dead arm's Jacobian is a frame error
   // that produces plausible numbers rather than an exception.
-  autoP.attach(armP);
+  autoP.attach(armP, servoP);
   $('autoTable').innerHTML = autoRowsHTML(autoRep.rungs);
   $('autoNotes').innerHTML = autoNotesHTML(autoRep);
   const d = autoRep.deployed;

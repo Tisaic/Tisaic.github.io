@@ -315,6 +315,11 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # that drifts from the run turns that into a lie in the direction that reads as a stall.
     # Its first version published 40 runs for a commission that spent 76.
     node test/pilot/plan.test.mjs
+    # WHAT THE LADDER DEPLOYS MUST BE WHAT THE LADDER SCORED. Every scored run drives
+    # `theta = c + ff.dq + u`; the page deployed `u` alone, so a rung table reading 1.7316e-2
+    # drove a machine delivering 3.5e-1 to 7.7e-1 against an open loop of 4.1e-1. Rule 6:
+    # where two views show one quantity, assert they AGREE.
+    node test/pilot/deploy.test.mjs
     node test/pilot/autostack.test.mjs
     # THE BUTTON ON FOUR MORE PLANTS THAT SHARE NO PHYSICS — a tank whose outflow goes as
     # sqrt(level), a column that is linear transfer functions with dead time, a mill whose
