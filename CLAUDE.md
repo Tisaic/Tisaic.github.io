@@ -114,17 +114,35 @@ Each of these is a claim that can be shown false, which is the only kind worth w
    per lead. That is exactly what `lib/ngrc/softsensor.js` already implements and
    golden-tests, and the pilot's batch `solveRidge` is the wrong shape for the product claim.
 
-   **THE FEASIBLE ENVELOPE, at 10% of 1 ms and 100 MMAC/s** — everything online, per cycle:
+   **MEASURED, and it corrects the estimate in both directions.** The first pass here was
+   arithmetic on a guessed feature count and `boxQP`'s default iteration count. `stack.test.mjs`
+   now reports the real ones:
 
-   | features | leads | layers | ch | MAC/cycle | kB | of budget |
+   ```
+   layer 1: 37 feat, N 68   QP   571,200 MAC   RLS P update  2,738   25.4 kB
+   layer 2: 37 feat, N 95   QP 1,105,800 MAC   RLS P update  2,738   33.6 kB
+   layer 3: 73 feat, N 90   QP   993,600 MAC   RLS P update 10,658   57.4 kB
+   TOTAL 2,683,201 MAC/cycle — 268x the 10% budget, and cyclesPerUpdate is 1, so
+   there is no slicing headroom at all.
+   ```
+
+   Features are 37-73, not the 241 estimated, and memory is **116 kB not 482 kB** — that
+   half of the problem barely exists. But the pilot runs the QP at **60 iterations**, not the
+   8 in `boxQP`'s signature, so the miss is **268x rather than 4x**.
+
+   **WHICH REVERSES THE LEVER.** At n=37 the RLS covariance update is 2,738 MAC — already
+   affordable. One QP iteration at N=68 is 9,520. **Iterations first (60 → 1 is 60x), horizon
+   second (it scales as N²), features barely at all.** The earlier "features first" was
+   arithmetic on a feature count 6x too high and an iteration count 7.5x too low.
+
+   **WHAT FITS**, one QP iteration per cycle in the real-time-iteration shape:
+
+   | layers | N | features | QP/cycle | RLS/cycle | total | of budget |
    |---|---|---|---|---|---|---|
-   | 241 | 68 | 3 | 1 | 407,893 | 1747 | 4079% |
-   | 64 | 24 | 2 | 1 | 20,832 | 89 | 208% |
-   | 48 | 16 | 2 | 2 | 22,848 | 97 | 228% |
-   | **32** | **12** | **1** | **2** | **5,600** | **23** | **56%** |
-
-   The `P` update is 2n² and dominates, so FEATURES come first: halving them is worth 4x
-   where halving the horizon only buys against the QP.
+   | 3 | 68 | 37 | 28,560 | 15,762 | 44,322 | 443% |
+   | 2 | 32 | 37 | 4,352 | 7,844 | 12,196 | 122% |
+   | **2** | **24** | **32** | 2,496 | 5,632 | **8,128** | **81%** |
+   | **1** | **32** | **37** | 2,176 | 3,922 | **6,098** | **61%** |
 
    **AND PART OF THE SHRINK IS ALREADY EVIDENCED AS FREE.** The bench measured model layers
    alone beating the full ladder across the envelope, and the cascade reading measured verify
