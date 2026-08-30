@@ -50,7 +50,6 @@ const pilot = new Pilot({
   workspace: () => true,
   seed: 1,
   exciteSteps: 40000,
-  moveBlocks: process.env.BLOCKS === '1',
 });
 {
   const m = makeMachine(PR.q[0], 0);

@@ -1115,6 +1115,46 @@ shrinks the move. That is a HYPOTHESIS with one supporting observation, not a re
 iteration count rises with authority, the rule is derivable rather than tuned, and a rung can
 choose it from the cap it was given — which is what a self-tuning machine has to do anyway.*
 
+**6c. MOVE BLOCKING — BUILT, MEASURED, AND A NULL. The theory was right and it bought nothing.**
+
+The QP is 66–89% of the deployed cost and is `2*N*min(N,M)` per iteration because `T` is a
+full Toeplitz: every iteration convolves the whole horizon twice, while a receding horizon
+applies `u[0]` and re-decides the rest next update. So the far plan is computed at full
+resolution and discarded, for ever. Holding `u` constant over geometrically widening blocks
+keeps the projection a CLAMP (disjoint blocks, so a box on `u` is a box on `z`), gives lead 0
+its own block, and precomputes each block's plant response — `2*N*nb` per iteration instead of
+`2*N*N`, **1,088 against 9,520** at N 68, nb 8. Against the full solver at matched iteration
+counts the applied moves tracked to 2–5%.
+
+**ON THE MACHINE IT SITS JUST BELOW THE FRONTIER IT WAS MEANT TO MOVE.** EMPS, one commissioned
+model, x per 1000 MAC/cycle as the common currency:
+
+```
+ config        MAC/cycle   % budget      x     x per 1000 MAC
+ blocked  2        7,010       70%    10.47         1.494
+ blocked  4        9,186       92%    12.27         1.336
+ full 1 @N56      10,148      101%    12.84         1.265
+ blocked  8       13,538      135%    13.58         1.003
+ full 1 @N68      14,354      144%    13.94         0.971
+ blocked 16       22,242      222%    14.29         0.642
+ full 4 @N68      42,914      429%    14.69         0.342
+```
+
+**Cheaper iterations, but MORE of them: blocked needs 16 to reach what the full solve reaches
+in 1** (14.29x at 22,242 MAC against 13.94x at 14,354). Every blocked point is a little under
+the unblocked one nearest it in cost — 9,186 MAC for 12.27x against 10,148 for 12.84x. The
+parameterisation costs about as much delivery as its arithmetic saves, because it makes each
+iteration cheaper and the problem harder to solve.
+
+**SO SHORTENING THE HORIZON REMAINS THE BETTER LEVER**, and the two do not compose: they are
+the same trade taken two ways. *Deleted rather than kept as a third mode.*
+
+**AND THE FRONTIER ITSELF IS THE USEFUL OUTPUT.** `x per 1000 MAC` falls monotonically with
+spend — 1.49 at 70% of budget down to 0.34 at 429% — so this controller has strongly
+diminishing returns in arithmetic, and the shipped setting sits at the far end of them. That
+is an argument for the budget gate rather than against the controller: told a scan, the ladder
+should land near 1.3–1.5 and not near 0.34.
+
 **7. Re-measure the rebuilt ladder on the transfer bench.** Programs x feedrates, headline is
 the WORST CELL. *This is where the shrink's cost shows up. If the worst cell falls below the
 4.53x the model layers already reach, the rebuild has bought budget with performance and the
