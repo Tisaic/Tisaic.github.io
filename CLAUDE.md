@@ -95,11 +95,43 @@ Each of these is a claim that can be shown false, which is the only kind worth w
 5. **HIGHER, NOT MERELY TRANSFERABLE.** Transfer bought by giving up performance is a
    different product, not this one. Target: beat 22.42x on the arm while satisfying 1 and 2.
 
-6. **IT HAS TO FIT A PLC SCAN, AS A NUMBER.** Target: MACs and bytes per scan for the
-   DEPLOYED ladder — conventional rung + cascade + QP — against a stated task period, on
-   every plant. The black box already carries such a check; the thing that ships does not.
-   Until that number exists the PLC claim is an architecture argument, and this project does
-   not accept those (rule 16). It either supports the claim or kills it, and both are useful.
+6. **IT HAS TO FIT A PLC SCAN — UNDER 10%, ALWAYS, INCLUDING THE FITTING.** The budget is
+   10% of a 1 ms task, it must be met in EVERY cycle rather than on average, and it covers
+   commissioning, training and fit, because all of it runs ONLINE on the PLC. Nothing is
+   done offline on a dev PC.
+
+   **MEASURED, AND THE CURRENT DESIGN MISSES BY ABOUT 4000x.** The deployed path alone is
+   428,660 MAC in its update cycle — 4x over even a generous budget, and it works only if
+   sliced across the 72 scans between updates, which "always fit" forbids. The FIT is worse
+   by orders of magnitude: batch ridge is 291.6 MMAC of normal equations plus a Cholesky per
+   lead, ~20 GMAC per channel per layer, or two million cycles of budget. Batch
+   normal-equations-and-Cholesky is an offline algorithm; requiring it online kills it
+   outright rather than by a margin.
+
+   **SO THE CONSTRAINT DICTATES THE ARCHITECTURE.** Online RLS with a SHARED covariance:
+   every lead uses the same design matrix — same features, different targets — so `X'X` is
+   common and only `X'y` differs. One `P` update per sample at 2n², one cheap readout update
+   per lead. That is exactly what `lib/ngrc/softsensor.js` already implements and
+   golden-tests, and the pilot's batch `solveRidge` is the wrong shape for the product claim.
+
+   **THE FEASIBLE ENVELOPE, at 10% of 1 ms and 100 MMAC/s** — everything online, per cycle:
+
+   | features | leads | layers | ch | MAC/cycle | kB | of budget |
+   |---|---|---|---|---|---|---|
+   | 241 | 68 | 3 | 1 | 407,893 | 1747 | 4079% |
+   | 64 | 24 | 2 | 1 | 20,832 | 89 | 208% |
+   | 48 | 16 | 2 | 2 | 22,848 | 97 | 228% |
+   | **32** | **12** | **1** | **2** | **5,600** | **23** | **56%** |
+
+   The `P` update is 2n² and dominates, so FEATURES come first: halving them is worth 4x
+   where halving the horizon only buys against the QP.
+
+   **AND PART OF THE SHRINK IS ALREADY EVIDENCED AS FREE.** The bench measured model layers
+   alone beating the full ladder across the envelope, and the cascade reading measured verify
+   RISING (1.35x → 1.54x → 1.70x) while far-lead R² collapsed to 0.046 — so the lead bank,
+   which is most of the memory, is largely paying for nothing. What the shrink costs against
+   what it saves is a measurement, not an argument, and it is the one that decides whether
+   this target and target 5 can both be met.
 
 7. **BREADTH, WHICH MEANS WINNING WHERE IT CURRENTLY LOSES.** Target: beat the published BLT
    on Wood–Berry — a linear plant with dead time, where a classical method beats this one
