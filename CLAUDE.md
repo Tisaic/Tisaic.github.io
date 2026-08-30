@@ -110,9 +110,19 @@ Each of these is a claim that can be shown false, which is the only kind worth w
 
    **SO THE CONSTRAINT DICTATES THE ARCHITECTURE.** Online RLS with a SHARED covariance:
    every lead uses the same design matrix — same features, different targets — so `X'X` is
-   common and only `X'y` differs. One `P` update per sample at 2n², one cheap readout update
-   per lead. That is exactly what `lib/ngrc/softsensor.js` already implements and
-   golden-tests, and the pilot's batch `solveRidge` is the wrong shape for the product claim.
+   common and only `X'y` differs. One `P` update per sample at 2n² (2,738 at n=37), one cheap
+   readout update per lead. `test/pilot/shared.test.mjs` pins that the sharing is EXACT in the
+   pilot — one row, N targets — and the pilot's batch `solveRidge` is the wrong shape for the
+   product claim.
+
+   **AND NOTHING IN THIS REPOSITORY IMPLEMENTS IT.** An earlier version of this line said
+   `lib/ngrc/softsensor.js` "already implements and golden-tests" it. It does not:
+   `rlsInit` is called once PER TARGET and `adapt()` runs `rls(theta[j], P[j], …)` in a loop,
+   so it holds `nt` separate n×n covariances and pays `nt·2n²` per sample — the expensive
+   shape, and the one the 2,738 figure assumes away. The per-target RLS is real and tested;
+   the SHARING is the part that has to be written. Reading a design claim off a directory's
+   reputation instead of its code is the same fault as costing the free response from
+   `PreviewMPC` (rules 17, 30), and it was found the same way — by going to read it.
 
    **MEASURED, and it corrects the estimate in both directions.** The first pass here was
    arithmetic on a guessed feature count and `boxQP`'s default iteration count. `stack.test.mjs`

@@ -544,16 +544,34 @@ can be afforded. Verify NUMERICALLY that per-lead batch solves equal a shared-fa
 multi-target solve on the same data. *If they disagree, steps 5-6 collapse and the envelope
 is smaller than computed.*
 
-**3. Find the smallest basis that holds the result.** Today: 241 features. Target: ≤32, since
-the `P` update is 2n² and features dominate everything. `lib/ngrc/commission.js` is exactly
+**3. Find the smallest basis that holds the result — NOW THE ONLY LEVER LEFT, and worth less
+than the "241 features" premise assumed.** The count is **37** on EMPS, not 241, so the
+forecast is 2,553 of the 14,354 MAC/cycle the deployed path costs at one QP iteration — 18%,
+and cutting it to zero would still leave 118% of budget. `lib/ngrc/commission.js` is exactly
 this search — linear-first, per-target held-out gating, importance-ranked pruning to the
 smallest subset within margin — and has never been pointed at the pilot. *Scored on the
-bench, never on fit: the record is unambiguous that fit ranks these backwards.*
+bench, never on fit: the record is unambiguous that fit ranks these backwards. And it can no
+longer close the gap alone, so what it is really being asked is whether the last 1.44x comes
+from here or from the free response, which is a comparable 2,278.*
 
-**4. Truncate the lead bank.** The bank is most of the memory (241 x 68 weights per layer),
-and two independent measurements say it is largely paying for nothing: per-lead trust weights
-measured EXACTLY neutral, and verify RISES 1.35x → 1.54x → 1.70x while far-lead R² collapses
-to 0.046. *Cut N, measure verify and the machine. Memory falls linearly, the QP as N².*
+**4. ~~Truncate the lead bank~~ — MEASURED, AND IT DOES NOT TRUNCATE.** The premise was that
+the bank is most of the memory and largely paying for nothing, on two indirect readings:
+per-lead trust weights measured EXACTLY neutral, and verify RISING 1.35x → 1.54x → 1.70x
+while far-lead R² collapsed to 0.046. Both are still true and neither predicted the machine.
+The same fitted bank truncated to its first N leads, at 4 iterations on EMPS:
+
+```
+N            8      12      16      24      32      48      68
+x         2.34    1.63    3.94    4.95    4.22   11.07   12.17
+```
+
+**N=48 costs 9%, N=32 loses two thirds.** `1.5·Tset/grid` is not slack, and a far lead with
+R² 0.046 is evidently still shaping the applied first move — which is the same lesson the
+`leadTrust` null already carried and nobody had connected to the horizon: a receding horizon
+applies only u[0], and u[0] is set by the whole plan. The curve is also NOT monotone (12 worse
+than 8, 32 worse than 24), which is stated rather than smoothed. *So memory does not fall
+linearly and the QP does not fall as N², because N cannot move. Step 4 is closed as a
+negative.*
 
 **5. Replace batch ridge with multi-target RLS.** One shared `P`, one readout per lead,
 `lib/ngrc/primitives.js`'s exact RLS. *Gate: it must reproduce the batch fit within noise on
