@@ -272,10 +272,21 @@ console.log(`  the lap-periodic rung reads the WHOLE TOOL ERROR in JOINT space`
   console.log(`  (band share of the error's variance, and the residual a PERFECT correction`);
   console.log(`   inside that band would leave — no Newton loop can go below it)`);
 }
+// ON THE CONTOUR COMPONENT, BECAUSE THAT IS WHAT `composite.test.mjs` MEASURES. This check
+// is about the MACHINE being the same one, not about the objective, and the ladder's score is
+// now the whole deviation while the number it is compared against is contour only. Comparing
+// them directly failed the moment lag entered the objective — 4.6748e-1 against 4.1220e-1 —
+// which is two different quantities disagreeing rather than two different machines, and
+// exactly the confusion this check exists to prevent. The host reports both, so the identity
+// is asserted on the component they share.
 check('the harness reproduces the conventional machine `composite.test.mjs` measures, so the '
   + 'comparison below is one variable — who chooses the constants — and not two machines',
-  Math.abs(probe0.score - CONV) / CONV < 0.02,
-  `${probe0.score.toExponential(4)} against composite's ${CONV.toExponential(4)}`);
+  Math.abs(probe0.contour - CONV) / CONV < 0.02,
+  `contour ${probe0.contour.toExponential(4)} against composite's ${CONV.toExponential(4)}`);
+// AND THE OBJECTIVE IS NOW THE WHOLE DEVIATION, so the two are printed together: a machine
+// whose lag is a third of its total error was being optimised against the other two thirds.
+console.log(`  scored on the WHOLE deviation ${probe0.score.toExponential(4)} `
+  + `= contour ${probe0.contour.toExponential(4)} and lag ${probe0.lag.toExponential(4)}`);
 
 const t0 = Date.now();
 const rep = await auto.commission({ run, drivePilot });
@@ -378,15 +389,31 @@ if (auto.floor > probe0.spread) {
     + `comparisons above were made at the coarser resolution`);
 }
 
+// THE SHIPPED CONFIGURATION, RE-SCORED, so the contract can be judged on the component it was
+// RECORDED on. Every bar in this file is a CONTOUR number and the ladder is now scored on the
+// whole deviation; comparing the two directly would report a regression that is only a change
+// of quantity. One extra scored run, which is cheap beside the twenty minutes above and much
+// cheaper than a wrong verdict on the flagship contract.
+const shippedRun = await run(null, null);
+console.log(`  shipped, re-scored: total ${shippedRun.score.toExponential(4)} `
+  + `= contour ${shippedRun.contour.toExponential(4)} and lag ${shippedRun.lag.toExponential(4)}`);
 check(`THE CONTRACT: the self-tuning ladder beats ${BAR.csrc} on the same machine and `
   + 'program — if this goes red the ladder has regressed against a number it has held',
-  rep.best <= BAR.contract,
-  `${rep.best.toExponential(4)} against ${BAR.contract.toExponential(4)}`);
+  shippedRun.contour <= BAR.contract,
+  `contour ${shippedRun.contour.toExponential(4)} against ${BAR.contract.toExponential(4)}`);
 // THE STRETCH, REPORTED. Asserting it would make this suite permanently red, and a suite
 // that is always red is one nobody reads.
 console.log(`  the stretch — ${BAR.src} at its best case — is ${TARGET.toExponential(4)};`
-  + ` this run is ${rep.best.toExponential(4)}, ${(rep.best / TARGET).toFixed(2)}x of it`
-  + `${rep.best <= TARGET ? ' — MET' : ' — not yet met'}`);
+  + ` this run's contour is ${shippedRun.contour.toExponential(4)}, `
+  + `${(shippedRun.contour / TARGET).toFixed(2)}x of it`
+  + `${shippedRun.contour <= TARGET ? ' — MET' : ' — not yet met'}`);
+// AND THE NEW OBJECTIVE HAS NO BAR YET, which is stated rather than papered over: the
+// composite's numbers were all taken on contour, so there is nothing recorded to compare the
+// total against until it is measured. Reported, not asserted (rule 3 — a check with no
+// reference is not a check).
+console.log(`  on the WHOLE deviation this run is ${rep.best.toExponential(4)} `
+  + `(${(shippedRun.score / rep.base).toFixed(2)}x of the conventional machine) — no recorded `
+  + `bar exists for this objective yet`);
 check('…and it is not the common cap doing the work by accident: the cap was not binding when '
   + 'the shipped configuration was scored',
   auto.clipping().frac < 0.01, JSON.stringify(auto.clipping()));
