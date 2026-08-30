@@ -59,7 +59,11 @@ const st = new Stack({
   workspace: () => true,
   seed: 1,
   exciteSteps: 40000,
-  depth: 3,
+  // DEPTH IS A KNOB SO THE DEPTH QUESTION CAN BE ASKED. The default is the 3 this file's
+  // numbers are quoted at; `DEPTH=5` runs the experiment that asks whether the LEVERAGE LEVEL
+  // predicts the layer that will fail to vouch, which would let `Stack` stop without paying a
+  // commission per layer to find out.
+  depth: +(process.env.DEPTH || 3),
 });
 {
   const m = makeMachine(PR.q[0], 0);
@@ -136,6 +140,40 @@ for (const p of st.layers) {
           : (r.levRatio > 1.5 ? 'EXTRAPOLATING — fix the EXCITATION'
             : 'covered — the FEATURES do not span it, fix the DICTIONARY')}`);
   }
+}
+
+// ---- WHAT IT COSTS A SCAN, WHICH THE PRODUCT CLAIM DEPENDS ON AND NOBODY HAD ------------
+//
+// `lib/blackbox` has asserted its own arithmetic budget since it was written; the ladder that
+// ships never had the number, so "it runs in a PLC scan" has been an architecture argument.
+// Rule 16: a number computed from the model cannot check the model — but a number is at least
+// checkable, and an architecture argument is not.
+console.log('    per-scan cost of the deployed cascade:');
+for (const p of st.layers) {
+  const c = p.cost && p.cost();
+  if (!c) continue;
+  console.log(`      layer ${st.layers.indexOf(p) + 1}: ${c.features} features x ${c.leads} leads`
+    + ` = ${c.dots} MAC forecast + ${c.qp} MAC QP`
+    + `   peak ${Math.round(c.peakMacPerCycle)} MAC/cycle,`
+    + ` sliced over ${c.cyclesPerUpdate} cycles ${Math.round(c.slicedMacPerCycle)}`
+    + `   ${(c.bytes / 1024).toFixed(1)} kB`);
+}
+{
+  const live = st.layers.filter((p) => p.verdict && p.verdict.deploy).map((p) => p.cost());
+  const peak = live.reduce((a, c) => a + c.peakMacPerCycle, 0);
+  const sliced = live.reduce((a, c) => a + c.slicedMacPerCycle, 0);
+  const kb = live.reduce((a, c) => a + c.bytes, 0) / 1024;
+  console.log(`      CASCADE TOTAL: ${Math.round(peak)} MAC/cycle peak, `
+    + `${Math.round(sliced)} sliced, ${kb.toFixed(1)} kB`);
+  // A BUDGET IS A NUMBER OR IT IS NOTHING. 1 ms of a mid-range PLC doing f64 is of order
+  // 50k MAC; the assertion is deliberately loose because the point is to HAVE a bound that
+  // fails when the cost grows, not to pretend the exact figure is known for a part nobody
+  // has named. It is the growth this catches.
+  const BUDGET = 50000;
+  check('the deployed cascade fits an arithmetic budget a 1 ms PLC task could afford',
+    sliced > 0 && sliced <= BUDGET, `${Math.round(sliced)} MAC/cycle sliced against ${BUDGET}`);
+  check('…and its frozen state is small enough to sit in PLC memory',
+    kb > 0 && kb < 256, `${kb.toFixed(1)} kB`);
 }
 
 /** Score `depth` layers of the stack on a program, over the last three of eight laps. */
