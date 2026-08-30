@@ -259,16 +259,51 @@ rung row beside `N` and the iteration count.
 **SO THE ORDER CHANGES, and the new first candidate has the strongest claim to what the table
 was doing:**
 
-0. **ONLINE ADAPTATION.** A frozen model is stuck at its commissioning residual; a model that
-   keeps updating converges on what the machine is doing NOW and is still addressed by STATE,
-   so it transfers to a program it has never seen. That is memory-like accuracy without a lap
-   index, which is exactly the shape this north star asks for. `Pilot.adapt` exists and is off,
-   and the single measurement on it — adapting lead 0 alone halved that lead's own forecast
-   residual and moved the machine 0.1% — is not evidence against it, because the QP plans over
-   all N leads and mending one of fifty-eight cannot show up. `leadStride` buys the rest at a
-   stated cost. *This is the cheapest test with the strongest prior and it has never been run
-   properly.*
+0. **~~ONLINE ADAPTATION~~ — MEASURED, AND FIRST-ORDER LMS IS NOT THE REPLACEMENT.**
 
+   The hypothesis was sound: a frozen model is stuck at its commissioning residual, while one
+   that keeps updating converges on what the machine is doing NOW and is still addressed by
+   STATE, so it transfers. `Pilot.adapt` implements it as normalised LMS per lead. Run on the
+   EMPS axis — chosen because the controlled quantity IS the measured one, so the truth is a
+   production signal and the algorithm is not confounded with the sensing question — one
+   commissioned model, weights restored between settings, 20 laps, scored on the program AND
+   on a two-tone sine it has never run:
+
+   ```
+     mu  clamp  stride   program   held-out sine   updates    drift
+   frozen    —      —     12.70x       8.27x           —        —
+    0.05  0.25      8     12.72x       8.26x         6785    0.010   FROZE
+    0.4   0.25      1     12.69x       3.39x         6841    0.008   FROZE
+    1.5   0.25      8     12.74x       8.18x       124719    0.039
+    1.5   0.25      1     12.59x       1.03x       124775    0.037
+    1.5      4      1     12.02x       0.98x       124775    0.121
+   ```
+
+   **The best case is +0.3% on the program it can see and −1% on the one it cannot**, and the
+   more thoroughly it adapts the worse transfer gets: adapting EVERY lead takes the held-out
+   sine from 8.27x to **0.98x — worse than doing nothing**. That is the failure the retirement
+   exists to avoid, arriving from the direction that was supposed to prevent it.
+
+   **THREE APPARATUS FAULTS HAD TO COME OUT FIRST and every one produced a plausible null.**
+   The report was read from `status().report`, which is the COMMISSIONING report and carries no
+   live adaptation state, so every row printed `updates: 0` while the machine moved. Then the
+   freeze guard was found to RATCHET — `e0` was assigned only when a window improved, so it
+   walked down to the best window ever seen, and three consecutive windows above that MINIMUM
+   froze the law. And its window was counted in UPDATES rather than time, so its duration
+   depended on `leadStride`: 28 samples at stride 8, under FOUR at stride 1, against a
+   6240-sample lap. Fixed, the guard still fires on most settings — which on this evidence is
+   it doing its job.
+
+   **WHAT IT DOES NOT KILL.** This is first-order LMS on the deployed readout, not adaptation
+   in general. The principled version is SECOND-ORDER: online RLS maintains the exact ridge
+   solution over a forgetting window instead of taking a gradient step per sample, and it is
+   the same object `lib/ngrc/primitives.js` already implements and golden-tests.
+   **AND IT IS ALREADY REQUIRED BY TARGET 6.** The PLC budget says batch
+   normal-equations-and-Cholesky is an offline algorithm that must become shared-covariance
+   RLS to run online at all. So the fit this project has to build for cost reasons IS the
+   adaptation mechanism done properly, and the two threads are one piece of work rather than
+   two. *That is the next thing to build, and it is the first time both halves of the north
+   star have pointed at the same code.*
 ## Ideas from the wider field that survive these constraints
 
 The constraints do most of the filtering. Anything needing an unbounded solver, a per-plant
