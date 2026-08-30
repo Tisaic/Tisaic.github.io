@@ -71,6 +71,9 @@ Each of these is a claim that can be shown false, which is the only kind worth w
 5. **HIGHER, NOT MERELY TRANSFERABLE.** Transfer bought by giving up performance is a
    different product, not this one. Target: beat 22.42x on the arm while satisfying 1 and 2.
 
+**The plan to get there is `docs/plan.md`**, sequenced so the experiment that CHOOSES the
+route runs early rather than last.
+
 ### The direction that follows from it
 
 The transferable layers are the ones that MODEL the machine — the conventional rung's fit in
