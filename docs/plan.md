@@ -23,6 +23,123 @@ and the composite 20.34x. The 130x figure in the record is the EMPS axis's model
 lap-repeatability, which is the hardest case; the arm's gap is a factor a better model could
 plausibly close.
 
+## What `lib/ngrc/` already has, and what it is worth here
+
+**Seven of its fifteen modules — about 1700 of 2700 lines — are reachable only from their own
+tests.** They are ported and golden-checked against the Python/ST reference, which is a
+parity claim and NOT a performance claim on this arm; none of them has ever been scored on a
+FlexiSim plant except `ServoFF`. That is the caveat on everything below. What follows is
+what each would be FOR, and the measurement that would decide it.
+
+### `servoff.js` (267 lines) — the strongest single candidate
+
+Self-commissioning feedforward torque over a "Universal Servo Basis" that HAS coulomb,
+Stribeck and viscous terms in it, plus GMS pre-sliding, preview delay, significance pruning,
+directional forgetting and output guards. It learns the required-torque map from the closed
+loop's own behaviour **while the existing feedforward is still driving**.
+
+Compare `lib/pilot/classic.js`, the rung this ladder actually ships: it fits `[a, v, sign v,
+1]`. `sign v` is a crude coulomb term with no Stribeck and no pre-sliding, and it is a
+STATE-ADDRESSED model, so whatever it learns transfers by construction.
+
+- **Targets 1, 2, 5** — a better transferable rung is exactly the thing the north star says
+  is being out-scored by a memory.
+- **Target 4** — it learns while the machine runs. No dedicated commissioning laps at all.
+- **Already pointed at this arm.** `test/flexisim/servoff.test.mjs` exists and states the
+  two-sided claim properly: on a plant with friction the learned feedforward wins because the
+  hand model is missing a real term; on a plant without it, it loses, because a fit to an
+  exact model can only add variance.
+- **Caveat:** single axis. The arm is two coupled axes, and the coupling is the thing
+  `RobotComp` handles with a 2x2. Per-axis ServoFF plus the existing compliance may be the
+  shape, and that is a measurement, not a guess.
+
+**Decides it:** ServoFF in place of `classic.js` in the ladder, scored on the Phase 0 bench.
+It has to beat 1.24x — what the conventional rung is currently worth on the arm — and it has
+to do it on the WORST cell.
+
+### `continuous.js` (407 lines) — the forecast layer the pilot hand-rolls
+
+An online NARX forecaster with **direct multi-horizon readouts**, difference-target,
+guards + per-variable clamp, auto-normalization, adaptive/directional forgetting, snapshot
+and restore — and a **gray-box residual mode (`baselineFn`)**.
+
+That last one is the cascade's own structure as a first-class feature: layer k models what the
+layers below it left. `lib/pilot/stack.js` builds that by stacking whole Pilots, each with its
+own commissioning cost; `Continuous` expresses it as one model with a baseline function.
+
+- **Target 5** — the pilot is AT its forecast bound, measured. This is a richer forecaster.
+- **Target 4** — if a gray-box baseline replaces a stacked layer, a cascade level stops
+  costing a full commission.
+- **The trap, and it is on the record:** *a forecast is not a controller.* Every model in
+  brick 63 that predicted deflection well made the machine WORSE applied directly, because
+  |G| runs 1.2 to 0.09 with phase +36 to -38 degrees. The QP INVERTS this model, and the
+  record is explicit that regularisation there serves the inversion rather than the fit. A
+  better held-out R^2 is not the acceptance test; the machine score on the bench is.
+
+### `commission.js` (179 lines) — move basis search OFF the machine
+
+Offline model search: linear-first, deploy linear if its held-out error clears the gate;
+otherwise fit the full universal map, rank features by contribution, and keep the SMALLEST
+subset within a margin of the full error. Gating is PER TARGET so an easy channel cannot mask
+a hard one.
+
+The pilot solves a thinner version of this by offering a quadratic block and picking on
+held-out data. The harmonic rung solves a different version by scoring 24-48 candidates ON
+THE MACHINE.
+
+- **Target 4, directly.** An offline search over a log costs zero machine time.
+- **Caveat, and it is the one that matters:** the record says the fit ranks probe designs
+  BACKWARDS — on both plants measured, the best-fitting candidate was the worst controller.
+  So an offline screen may prune the winner. It must be validated against a full machine
+  sweep before it is trusted to prune anything, and if it disagrees, that disagreement is
+  itself the finding.
+
+### `commstore.js` (168 lines) — the missing half of "commission once"
+
+Versioned payload with a config signature and a BigInt checksum; loads on startup and FAILS
+SAFE on any mismatch rather than applying a stale compensation; a health monitor that raises a
+recommission request with hysteresis; throttled autosave.
+
+Nothing in `lib/pilot/` persists anything. Every commission is thrown away when the page
+reloads, which is why "commission once per plant" is not currently a thing the product can
+do even when the model would allow it.
+
+- **Targets 1, 2 and 4** — this is the storage and lifecycle half of Phase 3B, already built.
+- **And the drift half nobody has planned for:** a controller that transfers still has to
+  notice when the PLANT has changed. The health monitor with hysteresis is exactly that, and
+  it fails safe, which is the refusal discipline this project already applies everywhere else.
+
+### The rest
+
+- **`afm.js` + `afm_select.js` (376)** — online feature selection with working-set
+  Gram/admit/screen and a frozen-inference `Runner`. `pilot.js` borrows the AFM's structured
+  prior BY COMMENT and none of its selection machinery.
+- **`axiscomp.js` (97)** — ballscrew pitch and BACKLASH position compensation. The Path tab
+  is the only tab that runs with backlash on, because it is the only one whose metrics can
+  see it, and nothing on it compensates backlash explicitly.
+- **`autotune.js` (139)** — offline commissioner for `Continuous`: linear-first, ridge sweep,
+  free-run stability REJECT, derived clamps and a windup bound. Pairs with `continuous.js`.
+- **`dropin.js` (86)** — turnkey front-end, angular `[sin,cos]` auto-embed. Least relevant
+  here; the arm's channels are already handled.
+
+### How this changes the phases
+
+Phase 2's candidate list was written as "improve the pilot's forecast". It should read: **the
+pilot's basis and forecaster are a restricted re-implementation of blocks that already exist,
+tested, in this repository.** The order changes accordingly, cheapest decisive experiment
+first:
+
+1. **ServoFF against `classic.js`** on the bench. Smallest change, strongest prior, and it
+   attacks commissioning cost and transfer at the same time.
+2. **`commission.js`'s offline search against the harmonic rung's on-machine sweep** — not to
+   replace it yet, but to find out whether an offline screen agrees with the machine. If it
+   does, 24-48 runs come out of every commission. If it does not, that is a sharper statement
+   of the "fit ranks them backwards" finding than currently exists.
+3. **`CommStore` wired to `AutoStack`.** Independent of which route Phase 3 takes, and it is
+   what makes "commission once" mean anything across a page reload.
+4. **`Continuous` as the pilot's forecaster**, last of the four, because it is the largest
+   change and the one most exposed to the forecast-is-not-a-controller trap.
+
 ## Phase 0 — build the bench, because transfer cannot be optimised unmeasured
 
 Nothing else in this plan is steerable without this, and it is the single largest gap in the
