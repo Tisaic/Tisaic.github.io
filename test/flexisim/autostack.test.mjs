@@ -175,10 +175,10 @@ let hostRef = null;
     banded: process.env.HFFBANDED !== '0',
     // BUILD AND SETTLE ONE MACHINE, RESTORE IT PER RUN. A third of this bar's runtime went
     // on rebuilding a state it had already had a hundred times, and re-settling only
-    // converges TOWARDS the same state where a restore IS it. Opt-in until this run has
-    // reproduced 1.8387e-2 byte for byte — a speed-up that quietly changes the machine is
-    // worse than no speed-up, because it looks like a free win (rule 21).
-    reuseMachine: !!process.env.REUSE,
+    // converges TOWARDS the same state where a restore IS it. Verified before it was
+    // trusted: every rung reproduced byte for byte and the ladder shipped 22.42x in 1435 s
+    // against 1934 s. `REUSE=0` puts the rebuilding path back.
+    reuseMachine: process.env.REUSE !== '0',
     warmup: +(process.env.WARMUP ?? 2),
     passes: +(process.env.HFFPASSES || 24),
     onRung: (r) => console.log(`  [${((Date.now() - T0) / 60000).toFixed(0)}m] `

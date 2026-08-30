@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:435,built:"2026-08-29T23:26:05Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:442,built:"2026-08-30T00:16:26Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -5764,6 +5764,7 @@ async function buildP() {
   ik6 = null; ik6Comm = null; ilc6P = null; ilc6Hist = [];
   // AND SO DOES THE LADDER. Every rung it deployed identified THIS plant; a K or E change
   // makes all of them yesterday's inverse on today's arm, exactly as for ⑤ and ⑥.
+  if (autoP) { autoP.dispose(); }        // a new plant orphans the old host's machine
   autoP = null; autoComm = false; autoRep = null;
   $('ctlP').value = 'open';
   await homeP();
@@ -6715,10 +6716,17 @@ async function startAutoP() {
     // red badge, which is the state this page most needs them to read.
     setPathBadge(autoAbort ? '⑨ stopped — nothing was deployed'
       : `⑨ commissioning failed — ${msg}`, autoAbort ? 'warn' : 'bad');
+    // THE HOST HOLDS A MACHINE NOW. `reuseMachine` builds one and keeps it for the whole
+    // commission, so the caller owns its teardown — without this, every stopped or failed
+    // ⑨ leaks two lattices, which on WebGPU is buffers the next build inherits (rule 57).
+    if (autoP) await autoP.dispose();
     autoComm = false; autoAbort = false; autoP = null; syncPath();
     return;
   }
   autoComm = false; autoAbort = false;
+  // THE COMMISSIONING MACHINE IS DONE WITH — the page deploys onto ITS OWN arm through
+  // `attach` below, never onto the throwaway the ladder measured on.
+  await autoP.dispose();
   $('autoProg').innerHTML = `<b>done</b> in ${Math.round((performance.now() - autoT0) / 60000)}`
     + ' min';
   // POINT THE FRAME MAPS AT THE ARM ON SCREEN. They were following the throwaway machines
