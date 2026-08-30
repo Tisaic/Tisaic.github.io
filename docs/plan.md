@@ -770,10 +770,57 @@ delivered     10.62x   12.17x   12.70x
 ```
 
 **One iteration at the full horizon is 144% of the 10,000 MAC budget and delivers 84% of the
-result.** That is the closest this project has been to the online requirement, and the
-remaining 1.44x is small enough to be reachable — but not by the horizon, which the sweep
-above has ruled out on this plant, so it has to come from the feature count (step 3) or from
-the corner the two knobs make together, which is what runs next.
+result** — the closest this project has been to the online requirement. The remaining 1.44x
+is not reachable by the horizon alone, which the sweep above ruled out on this plant, so the
+two knobs were run TOGETHER.
+
+**AND THE CORNER CLOSES IT: 14.16x AT 101% OF BUDGET, BETTER THAN WHAT SHIPS AT 5761%.**
+
+```
+iters   N     mm rms       x    peak MAC   % budget
+    1  40    0.12300    4.69x      5,660        57%
+    1  48    0.06615    8.71x      7,744        77%
+    1  56    0.04070   14.16x     10,148       101%
+    1  68    0.05429   10.62x     14,354       144%
+    2  48    0.04535   12.71x     12,544       125%
+    2  56    0.04531   12.72x     16,644       166%
+    4  68    0.04735   12.17x     42,914       429%
+   60  68    0.04539   12.70x    576,074      5761%
+```
+
+**Fifty-seven times cheaper and 12% better than the configuration that ships.** But the
+surface is RUGGED and not separable — at one iteration N=56 gives 14.16x and N=68 gives 10.62x
+— which is what two knobs that are both regularisers on the same inversion would look like,
+and it also means picking the best cell is fitting the grid. Rule 42's 5% band contains only
+that one cell, which is a warning rather than an endorsement. *Whether (1, 56) is a setting or
+a coincidence is decided by a program the model never saw, and `qpsweep.mjs` now scores the
+two-tone sine from `stack.test.mjs` in the same table.*
+
+**THE ARM IS A DIFFERENT REGIME IN EVERY TERM, WHICH IS WHY IT HAD TO BE MEASURED (rule 31).**
+Rounded rectangle, one commissioned model, contour x against the open loop's 1.343e-1:
+
+```
+iters   N    contour      x     osc    peak MAC   peak %   sliced %
+    1  32   3.296e-2   4.07x   0.033     13,336     133%         2%
+    1  44   2.514e-2   5.34x   0.025     20,884     209%         3%
+    2  32   2.328e-2   5.77x   0.023     17,688     177%         3%
+    2  44   1.945e-2   6.90x   0.019     28,980     290%         4%
+    2  58   1.937e-2   6.93x   0.019     45,430     454%         6%
+   60  58   2.255e-2   5.95x   0.023    852,790    8528%       119%
+```
+
+**2 iterations at N=44 is 29x cheaper than what ships and 16% better** (6.90x against 5.95x).
+Three things differ from EMPS and every one of them reverses a conclusion:
+
+* **Its horizon DOES truncate.** N=44 costs 0.4% where on EMPS N=48 cost 9%.
+* **Its forecast is the dominant fixed term**: 14,278 MAC, i.e. ~121 features PER CHANNEL
+  against EMPS's 37. So step 3 is an ARM lever and barely an EMPS one — the same constant,
+  re-derived, coming out four times different.
+* **`cyclesPerUpdate` is 72 here and 1 on EMPS**, so the arm has real slicing headroom and
+  EMPS has none. Both columns are reported because they answer different questions: `peak %`
+  is what "always fits" requires TODAY, and `sliced %` is what a restructured update — doing
+  1/72 of the work per scan — could reach. Quoting `sliced` as if it were `peak` is the exact
+  thing target 6's "in EVERY cycle rather than on average" was written to forbid.
 
 **7. Re-measure the rebuilt ladder on the transfer bench.** Programs x feedrates, headline is
 the WORST CELL. *This is where the shrink's cost shows up. If the worst cell falls below the
