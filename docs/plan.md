@@ -636,6 +636,53 @@ than 8, 32 worse than 24), which is stated rather than smoothed. *So memory does
 linearly and the QP does not fall as N², because N cannot move. Step 4 is closed as a
 negative.*
 
+**5. Replace batch ridge with an online fit — AND THE SHAPE OF IT CHANGED TWICE UNDER
+MEASUREMENT.**
+
+**FIRST, THE ECONOMY THIS STEP ASSUMED DOES NOT EXIST.** "Every lead shares a design matrix, so
+one covariance serves the bank" was the difference between 4079% of budget and 56%, and it is
+FALSE: `Pilot._row` indexes the command block at `k + L`, so 12 of 25 features are
+lead-dependent and `X'X` genuinely differs per lead. `shared.test.mjs` could not see it because
+it built its own shared `X` and verified linear algebra on it — assuming the fact it claimed to
+pin (rule 15). It now calls the real row builder at two leads and compares column by column.
+
+**SECOND, SHARING THE WEIGHTS WORKS WHERE SHARING THE COVARIANCE CANNOT.** The rows differ by
+lead in exactly the right way — a lead is the same function of (state now, command then) at a
+different `then` — so stacking every lead's rows into ONE regression is well-posed rather than
+approximate. Measured on EMPS, held out by TIME (the last 30%, so nothing scores by
+interpolating between rows it has seen), 9 leads across a 68-lead horizon:
+
+```
+ lead   per-lead R²   one model   one model + lead
+    0       0.99703     0.99549          0.99416
+    8       0.99664     0.99565          0.99577
+   24       0.99635     0.99684          0.99693
+   44       0.99645     0.99689          0.99660
+   67       0.99563     0.99622          0.99655
+ mean       0.99643     0.99627          0.99613
+```
+
+**ONE MODEL MATCHES SIXTY-EIGHT TO 0.00016 OF MEAN HELD-OUT R², for 68x less covariance memory
+— 727 kB to 10.7 kB per channel — and a fit that is ONE recursion instead of 68.**
+
+**AND THE PREDICTION WRITTEN DOWN BEFORE THE RUN WAS BACKWARDS, which is the more useful
+half.** The argument was that predicting `e(k+L)` from the state at `k` uses information L
+samples STALE, that how stale is a property of the lead, and that a shared model would
+therefore fail at LONG leads and need to be told the lead. The opposite happened: the shared
+model is worse at SHORT leads (lead 0, residual variance 0.00451 against 0.00297 — 52% more)
+and BETTER at long ones (lead 67, 0.00378 against 0.00437). Pooling nine leads' rows is nine
+times the data, and the far leads are the noisy ones that benefit; the near leads are the easy,
+specific ones that a dedicated fit does better on. It is bias-variance, not staleness. And the
+lead-scheduled variant — the fix for a problem that turned out not to exist — is WORSE on
+average than plain sharing (0.99613 against 0.99627), because it spends features on variance.
+
+*What this does NOT settle: lead 0 is the move the QP actually applies, and it is where sharing
+costs most. R² is a fit statistic and this project's record is unambiguous that fit ranks these
+backwards on a machine, so the decision belongs to a deployed comparison — one shared-weight
+pilot against the per-lead bank, scored on the machine. That is the next measurement, and it is
+now a question about 10.7 kB versus 727 kB rather than about whether an online fit is possible
+at all.*
+
 **5. Replace batch ridge with multi-target RLS.** One shared `P`, one readout per lead,
 `lib/ngrc/primitives.js`'s exact RLS. *Gate: it must reproduce the batch fit within noise on
 a FIXED dataset before it is allowed near a machine — a new fitting method that quietly
