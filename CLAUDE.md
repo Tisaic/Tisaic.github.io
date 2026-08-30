@@ -752,8 +752,20 @@ that matches it** — the point-to-point tabs measure a different question.
 - **③ Path** — CONTOURING, which is what the end application is: a 2R arm tracing a
   closed toolpath (circle, rounded rectangle or square) at a look-ahead feedrate profile
   with the corner rule and the acceleration ELLIPSE. The deviation is split into CONTOUR
-  error (normal — the part is the wrong shape) and LAG (along — the part is right and the
-  cycle is slower), and only the first is a defect; energy is reported as BOTH copper loss
+  error (normal — the part is the wrong shape) and LAG (along — the tool is late), and
+  **BOTH ARE DEFECTS AND THE SCORE IS THEIR TOTAL.** This tab used to say only the contour
+  component counted, on the argument that a lagging tool is on the right curve and merely
+  late — true of a UNIFORM lag on one closed contour and nowhere else, since a lag that
+  VARIES is a shape error as soon as two axes are coordinated, and any machine that must meet
+  another axis, a tool change or a clock is defective when it is late. The cost of the old
+  stance was structural: every rung, depth and prefix of the ladder was chosen against
+  `contourRms` while `lagRms` sat in the report unread — and the pilot's own truth here was
+  ALREADY the whole tool error, so the machine was CORRECTED for both and SCORED on one
+  (rule 6). On this arm lag is a real share: the conventional machine measures 4.6748e-1 total
+  against 4.1216e-1 contour, and the pilot's depth-1 gain falls from 3.33× to 2.85× once it is
+  counted. All three are reported — `contourRms`, `lagRms`, `totalRms` — because the two
+  failures have different causes and different fixes, but a rung can no longer buy one with
+  the other unseen; energy is reported as BOTH copper loss
   ∫τ² and mechanical work ∫|τω|, and direction changes are counted as TRAVEL past the
   joint's own lost motion. Backlash is on here and nowhere else, because this is the only
   tab whose metrics can see it. Four corrections: ① none, ② the wind-up model τ/K, ③ a
