@@ -338,6 +338,13 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # rate is set by the Hessian's conditioning, not by the horizon (same curve at N=8 as at
     # N=48), and the step size comes off a bound 1.8x looser than it needs to be.
     node test/pilot/rti.test.mjs
+    # THE ONLINE FIT THAT REPLACES BATCH RIDGE, and the second-order adaptation that replaces
+    # the retired lap rung -- one object, because they are the same recursion. Asserted to
+    # reproduce solveRidge to 4.6e-10% at matched absolute ridge, since a new fitting method
+    # that quietly changes the model is worse than a slow one. Also pins what the batch
+    # convention costs: the ridge is scale-relative, so its penalty depends on a statistic of
+    # the whole record that an online prior cannot know at row 1.
+    node test/pilot/rls.test.mjs
     node test/pilot/autostack.test.mjs
     # THE BUTTON ON FOUR MORE PLANTS THAT SHARE NO PHYSICS — a tank whose outflow goes as
     # sqrt(level), a column that is linear transfer functions with dead time, a mill whose
