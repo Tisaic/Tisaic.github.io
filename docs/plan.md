@@ -676,12 +676,33 @@ specific ones that a dedicated fit does better on. It is bias-variance, not stal
 lead-scheduled variant — the fix for a problem that turned out not to exist — is WORSE on
 average than plain sharing (0.99613 against 0.99627), because it spends features on variance.
 
-*What this does NOT settle: lead 0 is the move the QP actually applies, and it is where sharing
-costs most. R² is a fit statistic and this project's record is unambiguous that fit ranks these
-backwards on a machine, so the decision belongs to a deployed comparison — one shared-weight
-pilot against the per-lead bank, scored on the machine. That is the next measurement, and it is
-now a question about 10.7 kB versus 727 kB rather than about whether an online fit is possible
-at all.*
+**AND THE MACHINE PREFERS IT — 14.42x AGAINST 12.70x.** Both commissioned from the same stream
+through `Pilot`'s own fit path (`sharedWeights`), both deployed, scored on the EMPS program:
+
+```
+              mm rms        x     deployed        stored weights
+per-lead     0.04539    12.70x    576,034 MAC     68 vectors
+one model    0.03998    14.42x    576,034 MAC      1 vector
+```
+
+**13.5% BETTER for 68x less storage**, which makes this the third time in this phase that the
+fit statistic ranked two candidates backwards against the machine — after the QP's iteration
+count and the probe designs before it. Lead 0's residual really is worse under sharing, and the
+machine really does not care: the QP plans over the whole horizon and the far leads, which
+pooling IMPROVES, are most of it.
+
+**THE DEPLOYED ARITHMETIC IS UNCHANGED AND THAT IS CORRECT** — the forecast still evaluates
+every lead, so `dots` is the same 576,034 MAC. What sharing removes is the FIT and the STORAGE,
+which is precisely the half of target 6 that was unbuilt. `cost()` could not see the storage
+change at first and reported 25.4 kB for both, because it counted one weight vector per lead;
+it now counts by reference identity, so the saving is a property of the object rather than of a
+flag someone might forget to pass.
+
+*What remains before the default moves: the arm, where two channels and a cascade make the
+pooling argument different, and a plant where the bank is NOT the dominant cost. Also worth
+noting that `sharedWeights` and `SharedRLS` now compose exactly — one weight vector and one
+covariance per channel is the shape the online recursion wanted in the first place, and it was
+reachable by changing the model rather than by finding an economy in the algebra.*
 
 **5. Replace batch ridge with multi-target RLS.** One shared `P`, one readout per lead,
 `lib/ngrc/primitives.js`'s exact RLS. *Gate: it must reproduce the batch fit within noise on
