@@ -107,17 +107,36 @@ console.log(`    commissioned in ${steps} steps: Ts ${st.Ts}, sample ${st.sample
     `stride ${r.stride}/ridge ${r.ridge}`).join(', ')}`);
 console.log(`    verify: ${st.report.verify ? st.report.verify.ratio.toFixed(2) + 'x at λ '
   + st.report.verify.lambda.toExponential(1) : '—'}`);
-// WHY THE FAR LEAD IS BAD, WHICH THE R2 ALONE CANNOT SAY. A ratio above 1 means the far
-// lead's held-out rows sit further outside the data than the near lead's — the fit is
-// EXTRAPOLATING and the fix is excitation. Near 1 with a bad r2Far means the rows are covered
-// and the FEATURES cannot span the target — the fix is the dictionary. Opposite plans.
+// WHY THE FAR LEAD IS BAD — ASKED ONLY WHEN IT IS BAD.
+//
+// The first version of this printed a diagnosis unconditionally and pronounced "the FEATURES
+// do not span it" over a channel whose far lead scores 0.973. A diagnosis that fires on a
+// healthy channel is worse than none: it sends somebody after a dictionary problem that does
+// not exist. The verdict is now gated on there being something to explain (rule 9 — assert
+// both halves; a test that only ever says one thing has no teeth).
+//
+// AND THE LEVERAGE IS THE SAME ON BOTH CHANNELS, WHICH IS CORRECT. It depends on the design
+// matrix, not the target — same features and same excitation, so the channels share it
+// exactly. Printed per channel anyway because the R2 beside it does differ, and stated here
+// because identical numbers otherwise read as a copy-paste defect.
+const FAR_OK = 0.5;
 for (const r of st.report.readouts) {
+  const bad = r.r2Far !== null && r.r2Far !== undefined && r.r2Far < FAR_OK;
+  const why = r.levRatio === null ? 'no reading'
+    : !bad ? `far lead predicted well — nothing to explain`
+      : (r.levRatio > 1.5 ? 'EXTRAPOLATING — the fix is excitation'
+        : 'covered — the FEATURES do not span it, the fix is the dictionary');
   console.log(`    ch${r.ch ?? ''} R² lead0 ${r.r2Lead0.toFixed(3)} → far ${r2f(r.r2Far)}`
     + `   leverage lead0 ${ex(r.levLead0)} → far ${ex(r.levFar)}`
-    + `   ratio ${r.levRatio === null ? '—' : r.levRatio.toFixed(2)}`
-    + `   ⇒ ${r.levRatio === null ? 'no reading'
-      : (r.levRatio > 1.5 ? 'EXTRAPOLATING — excitation' : 'covered — the FEATURES do not span it')}`);
+    + `   ratio ${r.levRatio === null ? '—' : r.levRatio.toFixed(2)}   ⇒ ${why}`);
 }
+// THE ARM IS THE CONTROL, NOT THE CASE. `r2Far` at -0.035 — the reading this instrument was
+// built to explain — is ⑥'s elbow on the learned-IK system, not this configuration. Here the
+// far lead is fine, and pinning that keeps the instrument honest: if this ever goes bad the
+// diagnosis becomes live, and until then it says so.
+check('…and on THIS configuration the far lead needs no explaining — the instrument says so',
+  st.report.readouts.every((r) => r.r2Far > FAR_OK),
+  JSON.stringify(st.report.readouts.map((r) => [r.r2Lead0, r.r2Far, r.levRatio])));
 check('the pilot measured the arm\'s timescale and derived its grids from it',
   st.Ts > 1000 && st.Ts < 5000, `Ts ${st.Ts}`);
 check('…autotune chose the windows and the ridge on held-out data',
