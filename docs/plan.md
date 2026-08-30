@@ -710,10 +710,24 @@ refusing, and a rung that deploys costs scored runs that a refusal does not. So 
 statement is: **the fit got cheaper everywhere, and commissioning got faster only where nothing
 new deployed.** A cheaper fit that finds more to do is not a cheaper commission.
 
-**AND "DEPLOYS" IS STILL NOT "WORTH DEPLOYING".** The barrel ships 1.04x for 21,830 MAC/cycle
-and **256.7 kB** — the gate is right that the machine measured an improvement, and the improvement
-is marginal against a cost that a PLC budget would refuse outright. That is the same gap the
-1,541 kB reading showed earlier, and nothing in the ladder currently prices it.
+**AND "DEPLOYS" WAS NOT "WORTH DEPLOYING" — NOW PRICED, AND THE COST WAS WORSE THAN QUOTED.**
+The barrel shipped 1.04x, and the figure repeated for it here was "21,830 MAC/cycle and
+256.7 kB". **The MAC was the SLICED number**, read off the report line that says so, and used
+as though it were the per-cycle cost. Its PEAK is **1,657,248 MAC/cycle** — 76x larger, and
+peak is the only figure that means anything against a requirement to fit EVERY scan. Quoting
+the sliced number against a peak budget credits a restructuring nobody has done.
+
+`AutoStack` now takes a `budget` and refuses a rung that exceeds it, reported as REFUSED ON
+COST with the factor. Measured on the four-plant bar at 10,000 MAC/cycle and 64 kB:
+
+```
+barrel   REFUSED ON COST: 1,657,248 MAC/cycle and 122.9 kB — 165.7x the budget
+tank     ships classic, 21 MAC/cycle and 0.1 kB, 10.53x
+```
+
+**Both halves, which is the whole test of a gate**: it refuses the rung that provoked it and it
+does not refuse the cheap one that earns its place. The refusal fires at depth 1, before depth 2
+is attempted, so the commissioning that would have built the second layer is not spent either.
 
 *What remains: the arm and EMPS on the new defaults. Also worth noting that the deleted bank
 and `SharedRLS` compose exactly — one weight vector and one covariance per channel is the shape
