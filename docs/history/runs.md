@@ -3779,3 +3779,29 @@ pilot: the 2R arm, route–limit–run–deploy
 pilot/arm: all checks passed
 
 ```
+
+### lev-read2 — exit 0 — 2026-08-30T05:13Z
+
+```
+
+pilot: the 2R arm, route–limit–run–deploy
+    commissioned in 129513 steps: Ts 2142, sample 9, grid 8, N 58; chose stride 13/ridge 0.00001, stride 13/ridge 0.00001
+    verify: 3.20x at λ 4.9e-3
+    ch R² lead0 0.986 → far 0.973   leverage lead0 1.53e-2 → far 2.01e-2   ratio 1.32   ⇒ covered — the FEATURES do not span it
+    ch R² lead0 0.882 → far 0.831   leverage lead0 1.53e-2 → far 2.01e-2   ratio 1.32   ⇒ covered — the FEATURES do not span it
+  ✓ the pilot measured the arm's timescale and derived its grids from it
+  ✓ …autotune chose the windows and the ridge on held-out data
+  ✓ …and the verify round measured better than 2x ON THE MACHINE before deploying
+    rounded: contour 1.343e-1 → 2.253e-2 (5.96x), tau2 5.93e-4 → 3.80e-4, u peak 0.120
+  ✓ on the rounded — a program the pilot has never seen — the contour falls 5x
+  ✓ …while spending no more copper than the open loop times 1.15
+  ✓ …and the rounded's correction never exceeded the engineer's cap
+    circle: contour 7.101e-2 → 1.034e-2 (6.87x), tau2 2.23e-4 → 2.04e-4, u peak 0.038
+  ✓ on the circle — a program the pilot has never seen — the contour falls 6x
+  ✓ …and the circle's correction never exceeded the engineer's cap
+    ⑤+④ circle ladder: 7.1e-2 7.8e-2 5.5e-2 2.7e-2 2.3e-2 1.8e-2 1.0e-2 7.1e-3 5.9e-3 5.3e-3 3.1e-3 5.7e-3
+  ✓ ILC folding on the pilot's residual converges past what either does alone
+
+pilot/arm: all checks passed
+
+```
