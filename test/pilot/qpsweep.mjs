@@ -71,6 +71,16 @@ function runPilot(iters) {
   return { rms: 1000 * Math.sqrt(s / n), mx: 1000 * mx, uPk: 1000 * uPk, ns };
 }
 
+// ------------------------------------------------------ THE SECOND KNOB: THE HORIZON
+// LEAD-BANK TRUNCATION. The cost table below says the QP and the forecast BOTH scale with N,
+// so N is the only knob that cuts both — and it needs no re-commission, because the readout
+// bank holds one weight vector per lead and using the first N' of them is a strictly smaller
+// model fitted by the same run. Set N before `_initRun` and the horizon buffers are built at
+// the new size; the impulse response is longer than any N' so `boxQP` sees min(N', M) = N'.
+const NFULL = pilot.N;
+const NS = (process.env.NS || '').split(',').filter(Boolean).map(Number);
+
+
 console.log(`\nqpIters sweep on EMPS — one commissioned model, deployed ${ITERS.length} times`);
 console.log(`  shipped cascade ${shipped.toFixed(4)} mm rms; pilot N=${st.N} nc=${st.nc ?? '?'} `
   + `sample=${st.sample} Ts=${st.Ts}; qpIters as built = ${shippedIters}`);
@@ -85,15 +95,32 @@ for (const it of ITERS) {
 // WHAT EACH BUDGET COSTS, on the pilot's own cost model rather than on wall clock — the
 // online requirement is MAC per 1 ms cycle against 10,000, and a µs/step figure measured on
 // a dev machine under contention cannot be converted into one.
-console.log('\n  iters   peak MAC/cycle   sliced MAC/cycle   % of a 10,000 budget');
+console.log('\n  iters   forecast   free+QP   MAC/cycle   sliced   % of 10,000');
 for (const it of ITERS) {
   pilot.qpIters = it;
   const c = pilot.cost();
-  console.log(`  ${String(it).padStart(5)}   ${c.peakMacPerCycle.toLocaleString().padStart(14)}   `
-    + `${Math.round(c.slicedMacPerCycle).toLocaleString().padStart(16)}   `
-    + `${(100 * c.peakMacPerCycle / 10000).toFixed(0).padStart(6)}%`);
+  console.log(`  ${String(it).padStart(5)}   ${(c.features + c.dots).toLocaleString().padStart(8)}  ${c.qp.toLocaleString().padStart(8)}  ${c.peakMacPerCycle.toLocaleString().padStart(10)}  ${Math.round(c.slicedMacPerCycle).toLocaleString().padStart(7)}  ${(100 * c.slicedMacPerCycle / 10000).toFixed(0).padStart(9)}%`);
 }
 pilot.qpIters = shippedIters;
+
+if (NS.length) {
+  console.log(`\n  horizon x iteration corner — the SAME fitted bank, truncated to`
+    + ` its first N leads (full N = ${NFULL})`);
+  console.log('  iters      N      rms mm        x     uPk mm   MAC/cycle   % of 10,000');
+  const grid = (process.env.NITERS || '4').split(',').map(Number);
+  for (const it of grid) {
+    for (const nn of NS) {
+      pilot.N = nn;
+      const r = runPilot(it);
+      const c = pilot.cost();
+      console.log(`  ${String(it).padStart(5)}  ${String(nn).padStart(5)}   ${r.rms.toFixed(5).padStart(9)}  `
+        + `${(shipped / r.rms).toFixed(2).padStart(7)}x  `
+        + `${r.uPk.toFixed(4).padStart(8)}  ${c.peakMacPerCycle.toLocaleString().padStart(10)}  `
+        + `${(100 * c.slicedMacPerCycle / 10000).toFixed(0).padStart(9)}%`);
+    }
+  }
+  pilot.N = NFULL; pilot.qpIters = shippedIters;
+}
 
 const best = rows.reduce((a, b) => (b.rms < a.rms ? b : a));
 const band = rows.filter((r) => r.rms <= best.rms * 1.05);

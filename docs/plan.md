@@ -708,12 +708,54 @@ the slope is 9,520 MAC per iteration and the INTERCEPT is 22,922: with the QP en
 the forecast bank alone is 229% of budget. So iterations were the biggest single term and are
 no longer, and the remaining gap cannot be closed by this lever at all.
 
-**THE HORIZON IS WHAT CLOSES IT, and it closes it twice over.** Both surviving terms scale
-with N — the QP as `N·min(N,M)` per iteration and the forecast as `nFeat·N` dot products —
-so N is the only knob that cuts both. At 4 iterations and N=16 the same model costs ~7.6
-kMAC/cycle, **76% of budget, inside it**. That makes step 4 (lead-bank truncation) the step
-that decides whether the online claim is true, not step 6, and step 6's job was to get the
-QP out of the way of measuring it. It has.
+**THE HORIZON IS THE ONLY KNOB THAT CUTS BOTH** — the QP as `N·min(N,M)` per iteration and
+the forecast as `nFeat·N` dot products. **So it was measured, and on EMPS it does not
+truncate.** Same commissioned bank, truncated to its first N leads (which needs no
+re-commission: a shorter horizon is a strictly smaller model fitted by the same run), at 4
+iterations:
+
+```
+N            8      12      16      24      32      48      68
+x         2.34    1.63    3.94    4.95    4.22   11.07   12.17
+uPk       1.17    1.33    1.03    0.66    0.63    0.76    0.77
+```
+
+**Two thirds of the horizon is load-bearing.** N=48 already costs 9%, N=32 loses two thirds
+of the benefit and N=16 loses more than two thirds. The commissioned N=68 is `1.5·Tset/grid`
+and that is evidently not slack. Note also that the curve is NOT monotone — 12 is worse than
+8, and 32 worse than 24 — which is stated rather than smoothed: something is interacting with
+the horizon length beyond "shorter sees less", and it has not been chased.
+
+**SO THE ONLINE CLAIM DOES NOT COME FROM TRUNCATION, IT COMES FROM ITERATIONS AND A CORRECTED
+COST MODEL.** Measuring this found two faults in `cost()` itself, both of the same kind — the
+model of the code had drifted from the code (rules 17, 30) — and both were making the picture
+look worse than it is:
+
+* **It counted the stored lead bank, not the leads `act()` evaluates.** `_horizon` runs
+  `for (i = 0; i < this.N; i++)`, so a truncated horizon pays for fewer forecast rows. As
+  written, the forecast term was INVARIANT under the one knob that cuts it, which would have
+  reported the sweep above as buying only the QP.
+* **It costed the free response as `min(N,M)·M/2` on the FINE impulse.** `_horizon` builds it
+  from `hGrid`, which is N long; `hSample` here is 599 taps. That is the arithmetic
+  `PreviewMPC.cost()` counts, because the blackbox preview really does convolve the sampled
+  impulse, and it was carried across. It overstated the term by M/N — **20,366 MAC against
+  2,278**, a third of the reported total, and a third that would not have moved when the
+  horizon was cut.
+
+With both corrected, on the EMPS model (nFeat 37, leads 68, one channel, `cyclesPerUpdate` 1):
+
+```
+iters             1        4       60
+MAC/cycle    14,354   42,914  576,074
+% budget        144%     429%    5761%
+delivered     10.62x   12.17x   12.70x
+```
+
+**One iteration at the full horizon is 144% of the 10,000 MAC budget and delivers 84% of the
+result.** That is the closest this project has been to the online requirement, and the
+remaining 1.44x is small enough to be reachable — but not by the horizon, which the sweep
+above has ruled out on this plant, so it has to come from the feature count (step 3) or from
+the corner the two knobs make together, which is what runs next.
 
 **7. Re-measure the rebuilt ladder on the transfer bench.** Programs x feedrates, headline is
 the WORST CELL. *This is where the shrink's cost shows up. If the worst cell falls below the

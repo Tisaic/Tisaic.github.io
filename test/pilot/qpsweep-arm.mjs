@@ -128,14 +128,16 @@ async function deployOn(shape, active, iters) {
   return { r: score.report(), uPk, ns };
 }
 
+const NFULL = pilot.N;
+const NS = (process.env.NS || '').split(',').filter(Boolean).map(Number);
+const NITERS = +(process.env.NITERS || 4);
+
 function costLine() {
-  console.log('\n  iters   peak MAC/cycle   sliced MAC/cycle   % of a 10,000 budget');
+  console.log('\n  iters   forecast   free+QP   MAC/cycle   sliced   % of 10,000');
   for (const it of ITERS) {
     pilot.qpIters = it;
     const c = pilot.cost();
-    console.log(`  ${String(it).padStart(5)}   ${c.peakMacPerCycle.toLocaleString().padStart(14)}   `
-      + `${Math.round(c.slicedMacPerCycle).toLocaleString().padStart(16)}   `
-      + `${(100 * c.peakMacPerCycle / 10000).toFixed(0).padStart(6)}%`);
+    console.log(`  ${String(it).padStart(5)}   ${(c.features + c.dots).toLocaleString().padStart(8)}  ${c.qp.toLocaleString().padStart(8)}  ${c.peakMacPerCycle.toLocaleString().padStart(10)}  ${Math.round(c.slicedMacPerCycle).toLocaleString().padStart(7)}  ${(100 * c.slicedMacPerCycle / 10000).toFixed(0).padStart(9)}%`);
   }
   pilot.qpIters = built;
 }
@@ -163,3 +165,26 @@ for (const shape of (process.env.SHAPES || 'rounded,circle').split(',')) {
     + `${cheapest.it} iters at ${cheapest.ratio.toFixed(2)}x (rule 42).`);
 }
 costLine();
+
+// LEAD-BANK TRUNCATION — the same fitted bank, using only its first N leads. No
+// re-commission: a shorter horizon is a strictly smaller model fitted by the same run.
+if (NS.length) {
+  for (const shape of (process.env.SHAPES || 'rounded').split(',')) {
+    const off = await deployOn(shape, false, null);
+    console.log(`\n  ${shape}: horizon sweep at ${NITERS} iterations (full N = ${NFULL}),`
+      + ` open loop ${off.r.contourRms.toExponential(3)}`);
+    console.log('      N      contour        x        osc      uPk   MAC/cycle  sliced  % of 10,000');
+    for (const nn of NS) {
+      pilot.N = nn;
+      const on = await deployOn(shape, true, NITERS);
+      const c = pilot.cost();
+      console.log(`  ${String(nn).padStart(5)}   ${on.r.contourRms.toExponential(3)}  `
+        + `${(off.r.contourRms / on.r.contourRms).toFixed(2).padStart(6)}x  `
+        + `${(on.r.contourOsc ?? NaN).toFixed(3).padStart(7)}  ${on.uPk.toFixed(3).padStart(6)}  `
+        + `${c.peakMacPerCycle.toLocaleString().padStart(10)}  `
+        + `${Math.round(c.slicedMacPerCycle).toLocaleString().padStart(6)}  `
+        + `${(100 * c.slicedMacPerCycle / 10000).toFixed(0).padStart(9)}%`);
+    }
+    pilot.N = NFULL; pilot.qpIters = built;
+  }
+}
