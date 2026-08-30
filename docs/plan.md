@@ -918,11 +918,41 @@ the solve the MACHINE runs; the ladder commissions WITH the cheap solver, and th
 and the effort-weight replay both solve, so the model that comes out is a different model. The
 sweep's own horizon table rules out N as the cause (58 → 44 costs 0.4%).
 
-**SO THE LIVE READING IS NARROWER THAN "THE CORNER WORKS": it is a DEPLOYMENT setting, and
-commissioning wants the rich solve.** That is still worth having — deployment runs every cycle
-forever and commissioning runs once — but it MOVES the cost rather than removing it, and
-target 6 covers commissioning explicitly. `C_HORIZON_TS` / `C_QPITERS` commission cheap on the
-same rig so the two can be compared like with like; that run decides it.
+**THE OBVIOUS EXPLANATION — "commissioning wants the rich solve, deployment does not" — WAS
+TESTED AND IS FALSE.** Commissioning the bare-pilot rig at `horizonTs 1.2 / qpIters 2` and
+deploying it both ways, against the same rig commissioned rich:
+
+```
+                              deployed at 2    deployed at 60
+commissioned N 46 / it  2          6.95x            6.03x
+commissioned N 58 / it 60          6.94x            5.95x
+```
+
+**6.95x against 6.94x — commissioning cheap costs NOTHING**, three figures, and the cheap
+deploy beats the rich one by 15% under EITHER commission. The verify ratio DID fall (3.20x →
+2.82x) while the delivered machine did not move at all, which is this project's inverted gate
+ordering appearing again and a reminder that the verify is an estimate, not the result.
+
+**SO THE DIFFERENCE IS THE RIG, NOT THE PHASE — and the two rigs are not the same controller.**
+The bare-pilot sweep runs at `uMax` 0.15; the ladder's stack rung runs at `min(2.0, 0.15·16/K)`
+= **2.0 at K=1, thirteen times the authority**, over a conventional rung, with a second layer
+on top. On a tightly capped rung the constrained optimum sits ON the box and two iterations
+reach it; on a loosely capped one the optimum is far from the warm start and truncation
+shrinks the move. That is a HYPOTHESIS with one supporting observation, not a result.
+
+**WHAT IS ESTABLISHED:**
+
+* On the bare pilot, cheap commissioning AND cheap deployment together are **15% BETTER and
+  17x cheaper** — 31,114 MAC peak, 311% of budget (4% sliced), against 543,370 and 5434%.
+* On the arm's SHIPPED ladder the same setting is a small loss, 22.42x → 21.59x.
+* On EMPS the corner is a clear win at 101% of budget.
+* So `qpIters` is not a constant to be re-derived once per plant (rule 31) but **once per
+  RUNG**, because a rung's authority is part of what sets it — and that is a harder claim
+  than the one this step started with.
+
+*What would settle the hypothesis: sweep `qpIters` against `uMax` on ONE rig. If the best
+iteration count rises with authority, the rule is derivable rather than tuned, and a rung can
+choose it from the cap it was given — which is what a self-tuning machine has to do anyway.*
 
 **7. Re-measure the rebuilt ladder on the transfer bench.** Programs x feedrates, headline is
 the WORST CELL. *This is where the shrink's cost shows up. If the worst cell falls below the
