@@ -50,7 +50,12 @@ async function ladder(spec) {
     for (let c = 0; c < nc; c++) { v[c][k] = (p2[c] - p0[c]) / 2; a[c][k] = p2[c] - 2 * p1[c] + p0[c]; }
   }
   const auto = new AutoStack({
-    channels, uMax, periodic: null, floor, maxDepth: 2,
+    // DEPTH IS A KNOB SO THE DEPTH QUESTION CAN BE ASKED ON PLANTS THAT SHARE NO PHYSICS.
+    // The default 2 is what every number in this file is quoted at; `DEPTH=4` runs the
+    // experiment testing whether the LEVERAGE LEVEL predicts the layer that will fail to
+    // vouch. One plant is not a method — a common factor across plants sharing no physics is
+    // a property of the CODE (rule 18), and that is exactly what a stopping rule has to be.
+    channels, uMax, periodic: null, floor, maxDepth: +(process.env.DEPTH || 2),
     basis: motionBasis(channels.map((_, c) => ({ v: v[c], a: a[c] }))),
     pilot: { nMeasured, start, guards, workspace: () => true, seed: 1, autoRefuse: false },
   });
@@ -99,6 +104,35 @@ async function ladder(spec) {
   console.log(auto.table());
   console.log(`    shipped ${JSON.stringify(rep.deployed)}   ${rep.base.toExponential(3)} → `
     + `${rep.best.toExponential(3)}   ${rep.gain.toFixed(2)}x   ${((Date.now() - t0) / 1000).toFixed(0)}s`);
+  // ---- CAN A CASCADE KNOW WHEN TO STOP WITHOUT PAYING A COMMISSION TO FIND OUT? ---------
+  //
+  // Measured on the EMPS axis: the leverage RATIO stays flat with depth while the LEVEL
+  // triples — each deeper fit progressively less well-determined, the cascade running out of
+  // signal, visible DURING the fit. `Stack` currently discovers the same thing by
+  // commissioning a layer and finding it cannot vouch for itself ON THE MACHINE, which costs
+  // a full commission per layer.
+  //
+  // If a leverage threshold predicts the failing layer on plants that share no physics, depth
+  // stops costing a commission to discover. If it predicts on ONE plant only, it is a
+  // property of that plant and not a rule (rule 18). Printed against the verify each layer
+  // actually earned, so the two can be compared rather than asserted.
+  if (auto.stack && auto.stack.layers && auto.stack.layers.length) {
+    for (const [i, p] of auto.stack.layers.entries()) {
+      const ro = (p.status && p.status().report && p.status().report.readouts) || [];
+      const lev = ro.length && ro[0].levLead0 !== null && ro[0].levLead0 !== undefined
+        ? ro[0].levLead0 : null;
+      const vouched = !!(p.verdict && p.verdict.deploy);
+      console.log(`      layer ${i + 1}: ${vouched ? 'vouched' : 'REFUSED'}`
+        + `   verify ${p.verdict && p.verdict.ratio ? p.verdict.ratio.toFixed(2) + 'x' : '—'}`
+        + `   R² lead0 ${ro.length ? ro[0].r2Lead0.toFixed(3) : '—'}`
+        + `   leverage ${lev === null ? '—' : lev.toExponential(2)}`);
+    }
+  }
+  const cost = auto.cost && auto.cost();
+  if (cost) {
+    console.log(`      cost: ${Math.round(cost.slicedMac)} MAC/cycle sliced, `
+      + `${(cost.bytes / 1024).toFixed(1)} kB   rungs ${Object.keys(cost.rungs).join('+') || 'none'}`);
+  }
   return { rep, auto };
 }
 
