@@ -3805,3 +3805,767 @@ pilot: the 2R arm, route–limit–run–deploy
 pilot/arm: all checks passed
 
 ```
+
+### guard-verify — exit 0 — 2026-08-30T05:17Z
+
+```
+Suite level: quick   areas: flexisim,pilot   phase: node
+  (--all forces both; --only=ngrc,flowsim selects explicitly)
+
+module parse
+  ✓ no shipped module reaches for a Node global
+  ✓ no class defines the same method twice
+  ✓ 82 modules parse
+
+
+lattsim: linear elastodynamics
+  ✓ Lame <-> engineering constants round-trip
+  ✓ lambda grows and mu does not as nu -> 1/2
+  ✓ Poisson's ratio outside (-1, 1/2) is refused
+  ✓ stating both (E,nu) and (lambda,mu) is refused
+  ✓ a well-conditioned solid passes the CFL gate
+  ✓ a solid past the CFL limit is refused at build time, not at step 30
+  ✓ the CFL limit is 1/sqrt(3) for this 3D stencil
+  ✓ a P wave travels at c_p = sqrt((lambda+2mu)/rho)
+  ✓ an S wave travels at c_s = sqrt(mu/rho)
+  ✓ c_p / c_s carries the Poisson ratio, not a shared scale factor
+  ✓ the wave neither grows nor decays (no numerical dissipation)
+  ✓ dispersion error falls ~4x per doubling (second order in space)
+  ✓ velocity is a 3-component vector field
+  ✓ stress is stored as 6 components, not 9 (it is symmetric by construction)
+  ✓ both fields are single-buffered (the leapfrog needs no ping-pong)
+  ✓ the stress component order is the one the kernel writes
+  ✓ a solid at rest stays at rest (no self-excitation)
+  ✓ with damping off the amplitude is untouched
+  ✓ the uniaxial bar reaches static equilibrium
+  ✓ a free lateral surface gives uniaxial STRESS: sigma_xx / eps_xx = E
+  ✓ and the lateral stress really is free (sigma_yy ~ 0)
+  ✓ the bar contracts sideways by Poisson's ratio
+  ✓ the cantilever reaches static equilibrium
+  ✓ a tip-loaded cantilever matches FL^3/3EI + the shear term
+  ✓ and the shear term is doing real work (Euler-Bernoulli alone is worse)
+  ✓ the hanging bar settles
+  ✓ gravity: sigma_xx(x) = rho g (L - x), the weight hanging below
+  ✓ and the free surface really is the outer face, not the last cell centre
+  ✓ a frame accelerating at -g is bit-for-bit identical to gravity g
+  ✓ the spinning bar settles
+  ✓ centrifugal: sigma_xx(r) = 1/2 rho w^2 (L^2 - r^2), quadratic and not linear
+  ✓ and a linear profile through the same endpoints fits far worse
+  ✓ Coriolis is present at all (it is not silently zero)
+  ✓ Coriolis does no work: f . v is zero to round-off at every cell
+
+elastic: all checks passed
+
+
+flexisim: the lumped joint
+  ✓ the dead zone transmits nothing inside +/-b
+  ✓ and is continuous at the edges, not a step
+  ✓ zero backlash is exactly the identity
+  ✓ friction opposes motion in both directions
+  ✓ dry friction falls from stiction toward Coulomb as speed builds
+  ✓ friction is exactly zero at rest
+  ✓ the drive reflects N^2 J_m to the output
+  ✓ a torque step accelerates it at tau*N / (N^2 J_m + J_l)
+  ✓ and ignoring the reflected inertia would be wrong by ~3x here
+  ✓ the gearbox rings at sqrt(K (1/J_l + 1/(N^2 J_m)))
+  ✓ and the load-only formula is visibly different (so the check discriminates)
+  ✓ a held motor under load winds up by exactly tau/K
+  ✓ ...and the encoder reports nothing at all
+  ✓ backlash: the transmitted torque is zero over exactly 2b of encoder travel
+  ✓ and the dead band is centred on zero wind-up
+  ✓ inside the dead zone the link free-flies (no torque, so no acceleration)
+  ✓ progressive stiffness rises with wind-up
+  ✓ and a zero stiffening coefficient is exactly linear
+  ✓ a torque below breakaway does not move the motor at all
+  ✓ ...and one above it does
+
+joint: all checks passed
+
+
+flexisim: the hybrid arm (lumped joint + lattice link)
+  ✓ the link mass is the material the solver actually steps
+  ✓ and the centroid is the mean of the same distribution, not a formula
+  ✓ the gravity torque follows from those two
+  ✓ the self-weight link settles
+    [self-weight] |sag| 5.3842e-1 vs theory 5.4276e-1 (-0.80%), bending 5.083e-1 + shear 3.446e-2
+  ✓ a rigid joint leaves the self-weight sag rho g A L^4 / 8EI (+ shear)
+  ✓ and the same weight at the tip would deflect 8/3 as far (so the two differ)
+    [joint limit] link sag 1.346e-1 is 1.32% of the joint tilt 1.021e+1
+  ✓ with a stiff link the tip motion is the joint wind-up, tilted
+  ✓ and the wind-up is exactly tau_g / K
+    [split] K=1e-1  joint 4.845e+0  link 5.384e-1  joint share 90.0%
+    [split] K=2e-1  joint 2.151e+0  link 5.384e-1  joint share 80.0%
+    [split] K=4e-1  joint 1.256e+0  link 5.384e-1  joint share 70.0%
+    [split] K=9e-1  joint 5.384e-1  link 5.384e-1  joint share 50.0%
+  ✓ the joint share falls monotonically as the gearbox stiffens
+  ✓ and a realistic gearbox puts the tip error in the 70-90% band
+  ✓ the link term is percent-level, not negligible -- which is why it is a lattice
+  ✓ the encoder reads zero while the tip is not where it is commanded
+    [mode 1] L/H 3.92  period 2817.7 steps  w 2.2299e-3 vs Euler-Bernoulli 2.4655e-3  (-9.56%)  over 5 crossings
+  ✓ the link rings, and does so at a measurable period
+  ✓ the first bending mode is within 12% of (1.875)^2 sqrt(EI/rho A L^4)
+  ✓ and it rings LOW, which is what shear and rotary inertia do
+    [dynamic] alpha 5.5535e-7 vs 5.5535e-7 (0.000%)  windup 9.5115e-3 vs 9.5115e-3 (0.00%)
+    [dynamic] tip: tilt -2.235e-1 + bend -3.902e+0 = -4.126e+0   encoder 4.4483e+0 vs true link angle 4.4388e+0
+  ✓ a commanded torque accelerates the arm at tau*N / (N^2 J_m + J_link)
+  ✓ and delivering that acceleration winds the gearbox up by J*alpha/K
+  ✓ the encoder leads the true link angle by exactly the wind-up it cannot see
+  ✓ and the tip error is a real fraction of the move, not round-off
+  ✓ tip error against the reference and against the encoder differ by the following error (ref 0)
+  ✓ tip error against the reference and against the encoder differ by the following error (ref 0.3)
+  ✓ tip error against the reference and against the encoder differ by the following error (ref -1.2)
+  ✓ and the tilt is MINUS the wind-up times the arm
+  ✓ the link rings during the move rather than sitting at a static offset
+  ✓ an unintegrable gearbox is refused at build time, not discovered as NaN
+    [margin 2] 1216 cells, 165.0 us/step, tip -0.055692253940486, slope -0.00453250838961
+    [margin 1] 684 cells, 124.0 us/step, tip -0.055692253940486, slope -0.00453250838961
+  ✓ one vacuum layer gives BIT-IDENTICAL statics to two
+    [margin] 1.33x faster at 684 cells against 1216
+  ✓ …and it is the shipped one, at a real saving
+
+arm: all checks passed
+
+
+flexisim: the two-link arm
+    2R: joint N=100 K=4 J_refl=9.254e+4 w_n=0.01796 rad/s + joint N=100 K=4 J_refl=1.092e+4 w_n=0.03828 rad/s | L1=13.5 L2=9.5 M11=7.778e+4 M12=1.529e+4 M22=5460
+    [inertia] M11 folded 38468 → straight 77780 (2.02x)   M12 -4368 / 5460 / 1.529e+4
+  ✓ the mass matrix is symmetric, as a kinetic-energy quadratic form must be
+  ✓ M(q2=0.00) matches the closed form
+  ✓ M(q2=0.70) matches the closed form
+  ✓ M(q2=1.57) matches the closed form
+  ✓ M(q2=2.40) matches the closed form
+  ✓ M(q2=3.14) matches the closed form
+  ✓ the shoulder inertia changes by more than 2x across the elbow range
+    [conservation] over 20000 free steps: energy drift 2.09e-4, momentum drift 1.60e-4   (shoulder swept 3.16 rad, elbow 3.079)
+  ✓ a free arm conserves its energy
+  ✓ and the momentum conjugate to the cyclic shoulder angle
+  ✓ and it actually moved, so the conservation is not trivial
+    [conservation] with the Coriolis terms removed it drifts 2.31e-2 in a tenth of the run
+  ✓ without the Coriolis terms the momentum drifts by orders of magnitude more
+  ✓ gravity torques at (0, 0) match the trigonometric form
+  ✓ gravity torques at (0.6, -0.9) match the trigonometric form
+  ✓ gravity torques at (1.4, 2) match the trigonometric form
+    [gravity] shoulder torque straight 1.006e-2 → folded 7.152e-3 (1.41x)
+  ✓ folding the elbow back unloads the shoulder
+    [frame] link 2 sees omega 4.000e-4, origin accel [-2.160e-6, 0.000e+0] (-L1 w^2 = -2.160e-6)
+  ✓ the elbow's acceleration is centripetal, -L1 omega^2 along the link
+    [frame] spun at omega 4.0e-4: sigma_xx fits the OFFSET bar to 0.60% and the un-offset one to 212.9%
+  ✓ the spun link settled
+  ✓ link 2's stress is the rotating-bar profile about the SHOULDER, not its own root
+    [reach] straight 23.000 → folded 4.000 (L1 13.5, L2 9.5)
+  ✓ the reach folds with the elbow: L1 + L2 straight, |L1 - L2| folded
+  ✓ a milliradian at the shoulder costs more at the tool than one at the elbow
+    [load side] one step from rest — alpha load-side 2.462e-8 / -6.120e-8, closed form 2.462e-8 / -6.120e-8, motor-side 0.000e+0
+  ✓ a load-side torque is a generalised force on the LINK: alpha = M^-1 [T, 0]
+  ✓ …while the same torque at the MOTOR reaches the link through the gearbox, so on the first step it delivers nothing
+  ✓ …and the encoder reports the load-side torque as absent
+  ✓ a zero load is bit-for-bit the same as no load
+
+2R: all checks passed
+
+
+flexisim: the tip-error soft sensor
+    [locked] learner 0.3645  compliance model 1.4223  "tip = encoder" 1.0012  (500 locked samples, 544 features)
+  ✓ the lifecycle reaches a locked, frozen readout
+  ✓ and training is REFUSED once locked (the tracker is gone)
+  ✓ a locked soft sensor beats the controller's own view of where the tip is
+  ✓ and it beats the physics-based compliance model too
+    [forecast +15 samples = 150 steps] learner 0.1035   persistence-of-estimate 0.6581   persistence-of-TRUTH 0.5417 (an oracle)
+  ✓ the forecast beats the persistence baseline a machine could actually run
+  ✓ and at this lead it beats the ORACLE persistence too, which needs the tracker
+    [delay] the motor-side baseline lines up with the tip at lag 52 samples = 520 steps (r 0.5003); a quarter of the gearbox period would be 26
+    [alignment] estimate correlates at lag 0 (r 0.9814), forecast at lag 14 (r 0.9969)
+  ✓ the forecast lines up with the truth at its trained lead, to a sample
+  ✓ and it correlates with the truth better than the present-time readout does
+    [backlash] dead band 7.35e-2 rad = 50% of the peak wind-up 1.47e-1
+    [backlash] memoryless 0.6206 -> 0.7238   windowed 0.3645 -> 0.5884
+  ✓ backlash degrades a MEMORYLESS estimator
+    [backlash] memory is worth 1.70x clean and 1.23x under backlash; relative damage +16.6% vs +61.4%
+  ✓ a history window still wins UNDER backlash, in the absolute terms a machine gets
+  ✓ ...but it is hurt MORE in relative terms, having more structure to lose
+  ✓ memory helps even without backlash, because a ringing phase needs history
+
+tipsensor: all checks passed
+
+
+flexisim: the N-link chain
+    [agreement] worst relative difference over 12 states — M 2.81e-15, G 1.36e-16, C 1.08e-15, frame params 0.00e+0
+  ✓ the recursive solve reproduces the hand-derived 2R mass matrix to machine precision
+  ✓ ...and its gravity and Coriolis torques
+  ✓ ...and the frame parameters, which is the term only a chain has
+    3R: L=[13.5, 9.5, 6.5] m=[272, 208, 160] M11=1.7910e+5 reach=29.50
+    [inertia] base M11 straight 1.7910e+5 · elbow folded 40428 · both folded 45548 (4.43× across the range)
+  ✓ the base inertia varies by more than 3x across the workspace
+  ✓ the mass matrix is symmetric, as a kinetic-energy quadratic form must be
+    [conservation] over 20000 free steps: energy drift 4.88e-4, momentum drift 3.85e-4   (base swept 2.75 rad)
+  ✓ a free three-link arm conserves its energy
+  ✓ and the momentum conjugate to the cyclic base angle
+  ✓ and it actually moved, so the conservation is not trivial
+    [conservation] with the bias torques removed it drifts 4.40e-2 in a tenth of the run
+  ✓ without the Coriolis terms the momentum drifts by orders of magnitude more
+    [frame] link 3 sees omega 4.000e-4, origin accel -3.680e-6 (-(L1+L2) w^2 = -3.680e-6)
+  ✓ link 3's origin acceleration accumulates through BOTH joints upstream
+    [frame] spun straight at omega 4.0e-4: sigma_xx fits the OFFSET bar to 1.95% and the un-offset one to 529%
+  ✓ the spun third link settled
+  ✓ link 3's stress is the rotating-bar profile about the BASE, not its own root
+    [levers] reach 29.50; tilts -2.950e-2 / -1.600e-2 / -6.500e-3
+  ✓ each joint's wind-up is levered by the distance from THAT joint to the tool
+  ✓ and the tool error is the sum of every tilt, every slope and every bend
+    [projection] pose 0.00,0.00,0.00  lever 29.500 against a distance of 29.500   tilt[0] -2.950e-2
+  ✓ the base wind-up is levered by the PROJECTION at pose 0.0
+    [projection] pose 0.00,0.60,0.40  lever 22.544 against a distance of 27.111   tilt[0] -2.254e-2
+  ✓ the base wind-up is levered by the PROJECTION at pose 0.6
+    [projection] pose 0.00,1.57,0.00  lever 16.000 against a distance of 20.934   tilt[0] -1.600e-2
+  ✓ the base wind-up is levered by the PROJECTION at pose 1.6
+    [projection] pose 0.00,2.60,0.40  lever 1.885 against a distance of 5.913   tilt[0] -1.885e-3
+  ✓ the base wind-up is levered by the PROJECTION at pose 2.6
+    [projection] wrist folded: lever -16.500 against a distance of 16.500   tilt[0] 1.650e-2
+  ✓ …and somewhere in the workspace that projection is NEGATIVE, where a distance cannot be
+
+NR: all checks passed
+
+
+flexisim: the tool sensor on a chain
+    [whole arm] learner 0.0199   rigid model 0.9299   PLS frozen 0.1078   PLS adaptive 0.0737   "the tool is where the encoders say" 1.0000   (298 locked samples, 181 features from 10 signals)
+  ✓ the chain sensor reaches a locked, frozen readout
+  ✓ a locked whole-arm sensor beats the controller's own view of where the tool is
+  ✓ …and it beats PLS, the linear model industry actually deploys for soft sensing
+    [whole arm] PLS frozen 0.1078 vs adaptive 0.0737 — whichever leads here is a property of THIS stream's stationarity, not of the method
+  ✓ and it beats the rigid two-joint compliance model, which knows M(q) and both stiffnesses
+
+chain sensor: all checks passed
+
+
+flexisim: the residual trim and the feedrate governor
+
+  ✓ a trim passes its estimate through when enabled
+  ✓ …and injects EXACTLY zero when switched off, not merely a small number
+  ✓ …and comes back on to the same value, so an A/B is reversible
+  ✓ the per-joint scale converts the estimate into the domain's own units
+  ✓ the magnitude limit clamps rather than refusing
+  ✓ …and the peak is reported, because a trim held at its limit is being rescued rather than solving and the score cannot tell those apart
+  ✓ the slew limit bounds the FIRST step too, from a standing start
+  ✓ a non-finite estimate injects zero rather than propagating into the command
+  ✓ below the deadband the feed is untouched
+  ✓ at the tolerance the feed is cut to the floor
+  ✓ …and past it, no further -- the floor is a floor
+  ✓ halfway between deadband and tolerance is halfway to the floor
+  ✓ the override slews rather than stepping, so the governor cannot excite the mode it was added to avoid
+  ✓ time cost is mean(1/override), not 1/mean(override)
+  ✓ a machine inside tolerance pays no cycle time at all
+
+residual: all checks passed
+
+
+flexisim: active compensation
+    [commission] c 1.21092 (1/K = 0.2500, so the link is 79% of it)   per pose 1.21454 1.21127 1.20918
+  ✓ the servo holds a pose with no following error left
+  ✓ every commissioning pose settled
+  ✓ the identified compliance agrees across poses to 0.5%
+    [commission] first bending mode 6.215e-3 rad/step (period 1011), zeta 0.236   Euler-Bernoulli would say 7.092e-3 (14% high)
+  ✓ the measured bending mode is well below Euler-Bernoulli, as a stubby section must be
+    static sag at the home pose 7.407e-2 (0.48% of the arm)
+    [plain      ] bias 7.366e-2   oscillation 1.944e-1   rms 2.079e-1   settled 1.104e-1
+    [compensated] bias 2.695e-4   oscillation 2.072e-1   rms 2.072e-1   settled 6.851e-2
+    [shaped     ] bias 7.375e-2   oscillation 7.599e-2   rms 1.059e-1   settled 7.392e-2
+    [both       ] bias 1.731e-4   oscillation 7.675e-2   rms 7.675e-2   settled 1.863e-2
+    [bias]        compensation 273x, shaping 0.999x (i.e. nothing)
+    [oscillation] compensation 0.94x (i.e. nothing), shaping 2.56x
+    [rms]         compensation 1.00x, shaping 1.96x, TOGETHER 2.71x
+  ✓ compensation removes the BIAS by more than 100x
+  ✓ ...and does nothing whatever to the oscillation
+  ✓ shaping cuts the oscillation by more than 2x
+  ✓ ...and leaves the bias alone to a tenth of a percent, as a unit-sum convolution must
+  ✓ what shaping leaves behind IS the static sag at the home pose
+  ✓ TOGETHER the rms falls more than 2.5x, which neither alone gets near
+  ✓ the residual bias is under 1% of the sag it removed
+    [sign] bias uncompensated 7.366e-2 → correct 2.695e-4, backwards 1.476e-1 (2.00x)
+  ✓ the sign is fixed by the plant: backwards DOUBLES the bias instead of removing it
+
+  the jerk limit
+  ✓ a boxcar is unit-sum, so the move still goes exactly as far
+  ✓ …with one impulse per step, which is what makes the acceleration CONTINUOUS
+  ✓ convolving with a shaper preserves unit sum
+  ✓ …and the delays add rather than multiply
+  ✓ convolveShapers(null, x) is x, so an unshaped page composes cleanly
+  ✓ the jerk-limited move reaches exactly the same span
+    [jerk] biggest one-step acceleration jump: bare 6.857e-7, limited 5.714e-9 → 120x smaller
+  ✓ the jerk limit turns the acceleration STEP into a ramp
+  ✓ …and the ramp is exactly amax/W, which is what a jerk limit means
+  ✓ the tabulated profile IS the impulse sum, not an approximation of it
+
+  the drive envelope
+  ✓ an unrated drive is ideal, which is what the page shipped with
+  ✓ at standstill the ceiling is the peak torque, both directions
+  ✓ below the ceiling nothing is touched
+  ✓ the ceiling falls linearly with speed
+  ✓ …and reaches exactly zero at the no-load speed
+  ✓ …and does not go NEGATIVE past it, which would be a motor driving itself back
+  ✓ braking a fast motor keeps the FULL ceiling
+  ✓ a colossal commanded acceleration comes back at the torque ceiling
+  ✓ …so alpha_max is tau_max * N / J_reflected and needs no clamp of its own
+  ✓ the drive counts what it could not deliver, so the page can say so
+  ✓ …and the counters reset with the machine
+
+all checks passed
+
+
+flexisim: the toolpath and its feedrate
+  ✓ a line's arc length is its length
+  ✓ …and the contour error of a point offset from it IS that offset, signed
+  ✓ a quarter arc's length is R times its sweep
+  ✓ …and its curvature is 1/R
+  ✓ …and a point at radius R+d is |d| off it
+  ✓ the rounded rectangle is as long as its geometry says
+    [feed] 3978 steps, covered 23.9398 of 23.9398, peak v 1.165e-2 (limit 2.000e-2), peak a 2.000e-5 (limit 2.000e-5)
+  ✓ the profile covers the whole path and no more
+  ✓ …without exceeding the commanded feedrate
+  ✓ …or the acceleration limit
+    [feed] fastest on a straight 1.165e-2, on an arc 4.899e-3 against sqrt(a*r) = 4.899e-3
+  ✓ the feedrate comes down on the curves, to the centripetal limit
+  ✓ …and it is faster on the straights, so the limit is a limit and not a crawl
+    [corner] 90°: v at the corner 5.756e-4 against the junction rule's 5.657e-4, and 1.414e-2 away from it
+  ✓ a corner the curvature limit cannot see still slows the feedrate
+  ✓ …to the junction velocity the acceleration limit allows
+    [decompose] a pure 120-step lag: tracking error up to 1.327e+0, contour error up to 4.839e-16 — a ratio of 2.7e+15
+  ✓ a pure lag ALONG the path is a large tracking error
+  ✓ …and essentially ZERO contour error, which is why the part comes out right
+  ✓ …while a deviation NORMAL to it is a contour error of exactly that size
+
+toolpath: all checks passed
+
+
+flexisim: iterative learning on a path
+  ✓ the running-sum ring filter equals the definition
+  ✓ …and it is zero phase — the centroid does not move
+  ✓ a visited bin takes the negated error
+  ✓ …and an unvisited one is left alone, not driven to zero
+  ✓ the bin index wraps rather than running off the end
+    [lead  0] 5.30e-2 → 5.68e-1   9.33e-2×
+    [lead  5] 5.30e-2 → 2.05e-3   2.58e+1×
+    [lead 10] 5.30e-2 → 1.33e-4   4.00e+2×
+    [lead 15] 5.30e-2 → 1.37e-4   3.89e+2×
+    [lead 20] 5.30e-2 → 5.82e-4   9.12e+1×
+    [lead 30] 5.30e-2 → 2.21e+0   2.40e-2×
+    [lead 60] 5.30e-2 → 1.03e+3   5.13e-5×
+  ✓ a lead near the plant's own delay converges by two orders of magnitude
+  ✓ …with NO lead it winds up instead — the update is credited to the wrong place
+  ✓ …and too much lead winds up harder still, so the optimum is interior
+  ✓ at zero gain the laps repeat exactly, so the improvement is the learner
+
+pathilc: all checks passed
+
+
+flexisim: contour following
+  ✓ forward kinematics undoes the inverse, in both elbow branches
+  ✓ …and it refuses a point outside the reachable annulus
+  ✓ …and the Jacobian agrees with a numerical derivative
+    [Jdot] at constant Cartesian velocity the joints must still accelerate: ddq 5.83e-7, -6.48e-7
+  ✓ a constant Cartesian velocity still needs joint acceleration, and J*ddq alone does not give zero
+    [decompose] a 200-step LAG: tracking 2.627e+0, contour 9.113e-16
+    [decompose] a 0.05 NORMAL offset: tracking 5.000e-2, contour 5.000e-2
+  ✓ a pure lag is a large tracking error and no contour error
+  ✓ …and a normal offset of the same kind of size is ALL contour error
+  ✓ …so a single tracking number cannot tell a late part from a wrong one
+    [trace] feed 8.0e-3 →   2039 steps, contour rms 4.918e-1 max 1.242e+0, lag rms 2.084e+0, tau^2 4.228e-3, work 8.28e-2, reversals 3
+    [trace] feed 2.0e-3 →   8155 steps, contour rms 6.338e-2 max 1.596e-1, lag rms 1.964e+0, tau^2 1.143e-4, work 8.42e-3, reversals 4
+    [trace] feed 5.0e-4 →  32618 steps, contour rms 3.955e-2 max 6.609e-2, lag rms 1.372e+0, tau^2 1.793e-4, work 5.67e-3, reversals 4
+  ✓ the arm traces the path and stays on it at a feedrate it can follow
+  ✓ …with the deviation dominated by LAG rather than by contour error
+  ✓ going faster costs contour accuracy
+    [floor] halving the feed twice buys 7.8x at the fast end and 1.60x at the slow end — the difference is the compliance, which slowing down cannot reach
+  ✓ …and slowing down stops helping, because what is left is compliance
+    [energy] tau^2 4.23e-3 → 1.14e-4 → 1.79e-4 — fast costs acceleration, slow costs holding position for longer
+  ✓ motor energy has an interior minimum, so it does not optimise where accuracy does
+  ✓ …and the score records reversals too, which no rms can show
+    [reversals] one real direction change through a dwell: counting travel 0, counting sign 994
+  ✓ counting TRAVEL makes the reversal count physical rather than arithmetic
+    [bias/osc] offset part rms 0.2000 = bias -0.2000 + osc 0.0000; ringing part rms 0.2000 = bias -0.0000 + osc 0.2000
+  ✓ two streams a single contour rms cannot tell apart ARE the same rms
+  ✓ …the uniformly undersize part reads all bias and no oscillation
+  ✓ …the right-size ringing part reads the reverse
+  ✓ …and on a stream with both, rms² = bias² + osc² identically
+
+contour: all checks passed
+
+
+pilot: the excitation builder
+  ✓ velocity, acceleration, jerk and the position box hold on every commanded sample
+  ✓ …while the excitation still covers at least 95% of the box, which is its job
+  ✓ the same seed commands the same trajectory, so a commissioning is reproducible
+  ✓ a hostile workspace shrinks the span instead of being violated
+  ✓ …and a workspace that rejects everything refuses with a reason, not a loop
+  ✓ a duration these limits cannot fill refuses with the remedy, instead of returning a flat line that excites nothing
+  ✓ …and the unwarped case refuses too — the approach alone cannot fit
+  ✓ the approach ease respects the very limits its duration was solved from
+
+excite: all checks passed
+
+
+pilot: route, limit, run, deploy on a foreign plant
+    commissioned in 48400 steps: Ts 50, sample 1, grid 2, N 203; verify 1.98x
+  ✓ the pilot measures the plant's own timescale and derives every grid from it
+  ✓ …the verify round measured an improvement ON THE MACHINE and deployed
+  ✓ …and the forecast readouts validated on held-out data, not on what they fitted
+    deployed on two incommensurate sines: error rms 2.59e-2 → 1.11e-3  (23.45x), u peak 0.118
+  ✓ deployed on a program it never saw, the error falls by at least 2x
+  ✓ …without the correction ever exceeding the cap the engineer gave
+  ✓ a truth signal that never responds to the correction is REFUSED, with the reason
+  ✓ …and a refused pilot outputs exactly zero, not its best guess
+    guard: derates 2, verdict true
+  ✓ a guard trip derates the excitation AND the dither, instead of ignoring the ceiling
+  ✓ …and the derated commissioning still finishes and deploys
+    noisy: verdict true, verify 7.29x, readout R² 0.962
+  ✓ a quantised encoder and a dirty tracker still commission and deploy
+    noisy deploy: 14.97x at 1.6x the commissioned velocity (4327 excursion ticks reported)
+  ✓ …and the deployed improvement survives the dirt
+  ✓ a program faster than anything commissioned is REPORTED as outside the envelope
+  ✓ …while a program inside the envelope raises no excursion at all
+  ✓ a finer clock halves the decision spacing
+  ✓ …and the horizon grows to cover the same SETTLING TIME, not the same step count
+  ✓ …and λ rises with its SQUARE, so the physical smoothness penalty is unchanged
+  ✓ …and the default clock leaves λ where every plant on record had it
+
+pilot: all checks passed
+
+
+pilot: the quadruple-tank process — same algorithm, different signals
+    excitation without dwell: verify 1.28x · recipe 0.506 → 0.245 cm rms (2.07x) · worst 1.17 → 0.64 cm · u peak 0.383 V
+    excitation WITH dwell   : verify 2.28x · recipe 0.506 → 0.384 cm rms (1.32x) · worst 1.17 → 1.11 cm · u peak 0.283 V
+    commissioned in 122643 steps = 204 min of process time; Ts 2048, Tset 2769, sample 9, N 58, rings [0,0], windows 13/13
+  ✓ the pilot measures a timescale on a plant with no inertia in it anywhere
+  ✓ …chooses its own windows and ridge on held-out data from these signals
+  ✓ …asks for NO frequency sweep, because a tank has no mode to ring
+  ✓ …and the machine vouched for the controller before it deployed
+  ✓ on a recipe it never saw, level error falls — cm of liquid, from volts of pump
+  ✓ …without exceeding the engineer's correction cap
+  ✓ the sweeping excitation selects the nonlinear basis on a plant with sqrt outflow
+  ✓ …and the dwelling one does not need it, and does not pay for it
+  ✓ …and with the basis selected, the sweeping excitation is the better model
+    the verify reported 2.28x against 1.32x on the recipe — within a factor since the verify learned to dwell, against 3.8x before it did
+  ✓ the verify now tracks the program benefit within a factor of two on this plant
+    non-minimum phase (γ 0.43,0.34): REFUSED · verify — · recipe 1.599 → 1.599 cm rms (1.00x) · open-loop error is 3.2x the minimum-phase plant's
+  ✓ the pilot REFUSES the plant it cannot help, rather than deploying anyway
+  ✓ …so the recipe is left exactly as it was
+  ✓ …and it does not claim the minimum-phase win, because the RHP zero forbids it
+    (three commissionings and six scored recipes in 58s)
+    non-minimum phase with the gate OFF: DEPLOYED — would have refused: yes
+  ✓ with the gate off the model deploys anyway
+  ✓ …and the refusal it did not make is still reported
+
+pilot/tanks: all checks passed
+
+
+pilot: a three-zone extruder barrel — delay, noise, and a disturbance it cannot see
+    commissioned in 276735 steps = 76.9 h of process time; Ts 3169, Tset 17112, sample 13, N 247, rings [1,1,2]
+    readouts: z1 stride 13/ridge 1e-5 R² 0.745 · z2 stride 13/ridge 1e-5 R² 0.797 · z3 stride 13/ridge 1e-7 R² 0.753
+    verify 0.92x — the verify round measured 0.92x against doing nothing on the program regime (program 0.92x) — this pilot does not deploy a controller the machine has not vouched for
+  ✓ THREE channels commission from THREE signals, one measurement per channel
+  ✓ …and the measured timescale accounts for the transport delay
+    rings [1,1,2] overshoot ["1.108","1.196","1.232"] — the mode test on a plant with an unmeasured drift, see the note in this file
+  ✓ the ring count is bounded rather than counting noise, which is what it did before
+  ✓ …and on a plant it cannot help, the gate REFUSES rather than deploying
+    changeover: temperature error 5.405 → 5.405 K rms (1.00x), worst 10.67 → 10.67 K, u peak 0.00% of 12%, negative-power clips 0
+  ✓ …so the changeover runs exactly as it would have, untouched
+  ✓ …and a host that keeps feeding a refused pilot is not a crash
+    NOTE the autotune chose ridge 1e-5/1e-5/1e-7 against a noiseless plant's typical 1e-9..1e-5 — the first plant here where regularisation had observation noise to regularise
+  ✓ the readouts still generalise on a plant with real measurement noise
+  ✓ the barrel is SCORED before it is refused, not refused for want of a regime
+  ✓ …and what could not be built is reported rather than swallowed
+  ✓ the barrel accepts a nonlinear basis where its own physics is nonlinear
+    (commissioned and scored in 155s)
+
+pilot/thermal: all checks passed
+
+
+pilot: the Wood–Berry column — a published benchmark against a published baseline
+    commissioned in 67400 steps = 112 h of process time; Ts 436, Tset 660, sample 2, N 71, rings [0,0]
+    verify 2.08x — verified 2.08x on the machine (program; scribble 3.33x / program 2.08x)
+    IAE over the scenario (composition·min, both loops summed):
+      steady-state inversion only   43.90
+      Luyben BLT decentralized PI   51.95   [the published baseline]
+      the pilot                     72.08   (0.72x BLT), u peak 0.400
+      published bar: an extended-predictive tuning reports 28.9 against BLT's 55.34 on its own scenario — 1.91x
+  ✓ the pilot commissions on a plant defined only by published transfer functions
+  ✓ …and its measured timescale exceeds the longest dead time in the plant
+  ✓ a plant defined by linear transfer functions selects the LINEAR basis
+  ✓ our BLT baseline reproduces the published IAE for this plant within 15%
+  ✓ …and the correction never exceeded the engineer's cap
+    THE GATE OVERSTATES BY 3x: verify 2.08x against a measured 0.72x on the benchmark — it certified a controller that makes this plant worse
+  ✓ the verify/benchmark gap is smaller than it was and still recorded
+  ✓ …and the benchmark IAE is unchanged by the gate work
+    (three controllers scored in 24s)
+
+pilot/woodberry: all checks passed
+
+
+pilot: a cold mill stand — roll eccentricity, and the gaugemeter that amplifies it
+    commissioned in 142400 steps = 285 s of rolling; Ts 9, Tset 9, sample 1, N 14, rings [0]
+    verify 0.54x — the scribble regime measured 0.57x — the correction makes the machine worse away from its program, whatever it is worth on one (scribble 0.57x, program 0.54x) — this pilot does not deploy a controller the machine has not vouched for
+    exit gauge deviation over 40 s of rolling (microns rms / worst), eccentricity 30 µm at 1.22 Hz, gauge 200 ms downstream:
+      no AGC (fixed gap)            15.15 / 29.97
+      gaugemeter (BISRA) AGC        18.08 / 29.04
+      monitor AGC (X-ray, delayed)  14.00 / 25.85
+      the pilot                     15.15 / 29.97   u peak 0.0 µm
+  ✓ the gaugemeter AMPLIFIES roll eccentricity, which is why this plant is the test
+  ✓ …while monitor AGC, honest but late, buys only a little
+  ✓ the pilot commissions from force, gap and a delayed noisy gauge
+    PREDICTION FAILED: this plant was chosen as the pilot's wheelhouse and it refuses (verify 0.54x). Four routings, no change.
+  ✓ the pilot REFUSES rather than deploying onto a mill it cannot help
+  ✓ …so the mill runs exactly as it would have, and the gaugemeter's 1.19x penalty is avoided by declining
+
+pilot/rollmill: all checks passed
+
+
+pilot: EMPS — a real servo axis, real data, and a conventional method that wins
+    the machine: 0.5764 mm rms / 0.8517 mm peak against the recorded 0.5814 / 0.8522
+    commissioned done — Ts 19 Tset 45 sample 1 grid 1 N 68; verify 1.35x
+    tracking error over the program, mm rms (x against the shipped machine):
+      as shipped, cascade P/P             0.5764      1.0x   no plant knowledge
+      the pilot                           0.0454     12.7x   no plant knowledge
+      + velocity feedforward              0.0380     15.2x   no plant knowledge
+      ILC, Q width 21, best of 12 laps    0.0049    119x   a Q filter, tuned by hand
+      + inverse-dynamics feedforward      0.0021    275x   M, Fv, Fc, OF identified
+      the machine's own repeatability     0.0003    1900x   (the floor, measured lap to lap)
+      ILC with no Q filter                0.0177 at lap 4, then 63.5 mm by lap 40 — DIVERGED
+  ✓ our identification agrees with the published reference model
+  ✓ the rig reproduces the recorded tracking error within 1%
+  ✓ the measured friction curve departs from the four-parameter model by a few N
+  ✓ the pilot commissions and deploys with no plant model at all
+  ✓ …and it improves the shipped machine by at least 8x
+  ✓ …at a cadence derived from the rise the probe measured, not from a floor
+  ✓ …without ever exceeding the authority it was given
+  ✓ a hand-tuned ILC beats the pilot on this machine
+  ✓ …and the same ILC with no Q filter diverges past the uncontrolled machine
+  ✓ the model-based feedforward beats everything learned here
+
+  all checks passed
+
+
+pilot: harmonic feedforward on a real servo axis — the same module, another plant
+
+    candidates, each commissioned briefly and scored ON THE MACHINE:
+      spread probe 25% of the error peak   fit residual 0.029   machine 2.394e-3 mm
+      spread probe 25% of the error peak   fit residual 0.029   machine 5.356e-3 mm
+      spread probe 25% of the error peak   fit residual 0.029   machine 2.381e-3 mm
+      spread probe 25% of the error peak   fit residual 0.029   machine 5.356e-3 mm
+      spread probe 10% of the error peak   fit residual 0.024   machine 2.406e-3 mm
+      spread probe 10% of the error peak   fit residual 0.024   machine 5.362e-3 mm
+      spread probe 10% of the error peak   fit residual 0.024   machine 2.385e-3 mm
+      spread probe 10% of the error peak   fit residual 0.024   machine 5.358e-3 mm
+      basis  probe 25% of the error peak   fit residual 0.007   machine 2.405e-3 mm
+      basis  probe 25% of the error peak   fit residual 0.007   machine 5.938e-3 mm
+      basis  probe 25% of the error peak   fit residual 0.007   machine 2.393e-3 mm
+      basis  probe 25% of the error peak   fit residual 0.007   machine 5.939e-3 mm
+      basis  probe 10% of the error peak   fit residual 0.006   machine 2.466e-3 mm
+      basis  probe 10% of the error peak   fit residual 0.006   machine 5.388e-3 mm
+      basis  probe 10% of the error peak   fit residual 0.006   machine 2.472e-3 mm
+      basis  probe 10% of the error peak   fit residual 0.006   machine 5.397e-3 mm
+    picked spread at 10%   71 laps   256/256 harmonics live
+    5.7640e-1 → 2.3805e-3 mm rms   242.1x   peak correction 2.00 mm allowed
+  ✓ the same module that was derived on a compliant two-link arm commissions itself on a real servo axis, told only the lap length, the channel count and its authority
+  ✓ …and improves the machine by at least 100x, which is well outside the 1.6 µm the rig reproduces the hardware to
+  ✓ …which is at least the hand-tuned ILC's 119x on this same rig and program, so a correction with nothing tuned is the conventional one's equal here
+  ✓ …and it lands within the rig's own fidelity of the INVERSE-DYNAMICS feedforward at the published parameters, which is a learned correction reaching a model-based one without the model
+  ✓ …because this plant's channel still has reach at harmonic 160, where the arm's was dead by 16 — so a hand-set count is a plant constant wearing a method's clothes
+  ✓ the candidate the FIT likes best is not the one the MACHINE likes best — which is why the probe design and amplitude are chosen by deploying them, not by their residual
+  ✓ …and the difference is worth having, so this is a real selection and not a coin toss between equals
+  ✓ the deployed correction is never worse than not correcting at all, whatever the refinement did on the way
+  ✓ …and the refinement it kept improved monotonically
+    starved to 0.5 mm of authority against a 0.85 mm error: 2.2531e-1 mm  2.56x
+  ✓ given a third of the authority the correction actually needs, it still helps and is still bounded — the cap binds, the method does not fall over
+
+    a channel that dies at h~12, a saturating actuator, and measurement noise (mean of 6 draws):
+      open loop                    1.483e-1
+      shrink as shipped            1.236e-2   12.00x
+      REACH removed                1.305e-1   1.14x
+      CONFIDENCE removed           1.352e-2   10.97x
+      both removed                 1.315e-1   1.13x
+      REACH as an affordability CUT 3.556e-2   4.17x
+  ✓ on a plant whose channel dies — the arm's defining property, which this axis does not have — the shipped shrink converges at least 3x
+  ✓ …and with BOTH the ceiling and the weighting removed it barely converges at all, so bounding the inversion is what matters rather than which instrument does it
+  ✓ …and each factor still EARNS its place in the shipped configuration, measured one at a time against it
+  ✓ …and the affordability CUT, built to replace the weighting, is no better than what the machine-scored ceiling already does
+  ✓ at least one variant's refinement actually goes BACKWARDS at some pass — otherwise the guard check below is vacuous and would pass with no guard at all
+  ✓ …and on every variant what DEPLOYS is the best pass rather than the last one, which is the guard's whole contract
+  ✓ …and none of them is driven past the machine it started from
+  ✓ …while on the real axis, where every harmonic HAS reach, the same factor is inert to four figures — which is what makes it a selection and not an attenuation
+
+hff: all checks passed
+
+
+synthetic plant with KNOWN h->h-1 coupling (strength 0.5), 2 passes
+
+  diagonal operator   1.4819e-2   26 laps
+  banded operator     9.9806e-4   20 laps   Gb built: true
+  ratio banded/diagonal 0.067
+
+  CONTROL — a plant with NO coupling, 14 passes each so both converge:
+    diagonal 4.0333e-16   banded 4.0290e-16   ratio 0.999
+
+  ✓ the banded operator is actually BUILT — not a flag that leaves every harmonic null, which is how this shipped the first time and reported a ratio of exactly 1.000
+  ✓ it beats the diagonal solve on a plant with KNOWN neighbour coupling WITHOUT spending more laps — so it is the operator doing the work and not a longer refinement
+  ✓ …and the harmonics really ARE coupled here, so the comparison above has something to find
+  ✓ CONTROL: on a plant with no coupling at all, and a budget where both converge, banded lands where diagonal lands — the case it should not touch comes back untouched
+  ✓ …and that control is not vacuous: the uncoupled plant really did converge, so the two agreeing means the operators agree rather than both having failed
+
+band: all checks passed
+
+  ✓ all three armed is EXACTLY the sum of the three armed alone, to double precision
+  ✓ …and each rung alone really contributes something, so the sum above is not three zeros
+  ✓ a rung declaring a frame is mapped OUT of it before summing, and the other rungs are NOT
+  ✓ the cap clamps the SUM and does so once — not each rung separately
+  ✓ …and the clamp is COUNTED rather than silent
+  ✓ the peak DEMAND is recorded even when the cap never binds — the case a clamp counter cannot distinguish from safety
+  ✓ …and a cap larger than the channel box is reported as such, since it cannot protect it
+  ✓ a rung returning NaN is COUNTED — NaN compares false against every bound, so no range check catches it by accident
+
+sum: all checks passed
+
+
+an operator identified on one program, reused on another
+
+  program A, identified from scratch   4.6769e-16   32 laps
+  program B, identified from scratch   6.1146e-16   32 laps
+  program B, operator REUSED from A    5.9816e-16   10 laps
+
+  laps saved 22 of 32  (69%)
+  residual ratio reused/fresh 0.978
+  (both land at machine precision on an exact plant, so the residual ratio is
+   not informative — the LAP COST is what this measures)
+
+  ✓ the reused operator costs far fewer laps than identifying again — identification is where this rung spends them
+  ✓ …and it still corrects the second program, rather than being cheap and useless
+  ✓ …and it reports that it REUSED rather than identified, so a run cannot silently be cheaper than it looks
+  ✓ an operator from a different lap is REFUSED rather than reinterpreted — harmonic h is not the same frequency on both
+
+reuse: all checks passed
+
+
+can a yielding host drive the ladder?
+
+  straight through   2.622492e-3   {"classic":true,"stack":0,"hff":true}
+  yielding every 7   2.622492e-3   {"classic":true,"stack":0,"hff":true}
+
+  ✓ a host that awaits mid-run reaches the SAME result as one that runs straight through — so the ladder carries no state across an await that a frame boundary would break
+  ✓ …and every rung row matches, not just the final number — a ladder can reach the same place by a different route and that would still be a bug
+  ✓ …and the commission actually did something, so the comparison is not two nulls
+
+yield: all checks passed
+
+
+pilot: the harmonic rung publishes a plan it keeps
+  ✓ plan() names every stage and gives each a run count and a criterion
+  ✓ …and the CEILINGS are exactly the stages that genuinely cannot be counted ahead
+  BUDGET THE RUN REPORTS: {"base":1,"probeSizing":1,"probes":12,"trials":48,"refocus":3,"refine":11,"total":75}
+  PLAN: [["baseline",1],["sizing the probe",1],["probing candidate designs",12],["scoring candidates",48],["identifying the operator",3],["refining",11]]
+  runs spent 76; plan total ~76 (exact stages 17, refining ≤59); stages seen: baseline → sizing the probe → probing candidate designs → scoring candidates → probing candidate designs → scoring candidates → probing candidate designs → scoring candidates → probing candidate designs → scoring candidates → identifying the operator → refining
+  ✓ the run spends at least the stages that CANNOT stop early
+  ✓ …and never more than the published total, so the denominator cannot be exceeded
+  refinement used its full budget
+  ✓ …and a run that ends short SAYS why, rather than just ending
+  ✓ every stage the plan names is actually entered and reported
+  ✓ …and the rung still works — the correction improves the machine
+
+plan: all checks passed
+
+
+pilot: the deployed correction IS the scored correction
+  worst disagreement 0.00e+0; the baseline term alone is 8.83e-2 rad
+  ✓ the deploy path returns exactly what the scored path applies
+  ✓ …and the check has teeth — the baseline term it must include is not negligible
+  ✓ …and a host with no baseline REFUSES rather than deploying half a correction
+  contour — host loop 3.8380e-1, page loop 3.8380e-1
+  ✓ the page’s deployment loop reproduces the host’s scored loop
+
+deploy: all checks passed
+
+
+pilot: the lap-periodic rung is withheld off its own program
+  home 0.25   away 0   never-stamped 0.25   withheld {"hffOffProgram":1}
+  ✓ on its own program the table is applied, exactly as before the guard existed
+  ✓ on ANOTHER program it is withheld
+  ✓ …and a rung that was never stamped is NOT withheld — the guard stays inert
+  ✓ it reports WITHHELD, distinctly from starved
+
+offprogram: all checks passed
+
+
+pilot: the leverage the Cholesky already pays for
+  ✓ asking for the leverage leaves the weights byte-identical
+  worst disagreement against an independently inverted A: 2.22e-16
+  ✓ the leverage matches an independently computed x’A⁻¹x
+  well-excited 1.02e-2   barely-excited 2.47e+1 (2417x more)
+  inside the data 6.14e-3   far outside 9.92e+1 (16167x more)
+  ✓ a barely-excited direction costs far more variance than a well-excited one
+  ✓ …and a point far outside the data costs more than one inside it
+
+leverage: all checks passed
+
+
+pilot: one button on a real servo axis — and the conventional layer wins
+
+    conventional: 5.7640e-1 → 1.3568e-3 mm   424.8x   14 laps   fit residual 0.0016
+      a0 0.055mm   v0 0.797mm   sgn v0 0.014mm   1 -0.002mm
+  ✓ four coefficients fitted on the machine beat the INVERSE-DYNAMICS FEEDFORWARD at the published M, Fv, Fc and OF — a learned correction reaching a model-based one with no model
+  ✓ …and it costs under twenty laps to do it
+      the velocity coefficient is 0.797 mm against the position loop's own lag vPeak/kp = 0.778 mm
+  ✓ …and the dominant coefficient IS the position loop's velocity lag, recovered from data to within 5% of vPeak/kp — an independent route agreeing, not a better score
+
+    a two-tone sine the axis has NEVER run:
+      open loop                                   4.7537e-1 mm
+      the same four coefficients, evaluated live  2.7996e-3 mm   169.8x
+      the identical signal replayed as a table    8.9865e-1 mm   0.53x
+  ✓ the coefficients transfer to a trajectory the machine has never run, because they multiply the reference's own state rather than an index
+  ✓ …and the IDENTICAL correction signal replayed as a lap-indexed table makes that machine WORSE THAN NOTHING — which is the difference between a model and a memory, on one signal, with everything else held
+
+    the button — nothing set but the maxes, the authority and the floor:
+
+  as it arrived                                  5.7640e-1       
+  conventional (self-tuned)                      1.3568e-3  424.82x   14 laps, 4 coefficients — AT THE INSTRUMENT'S FLOOR (1.60e-3), not distinguishable
+  pilot cascade, depth 1                         3.4388e-3    0.39x   no better than the rung below — stopping
+  pilot cascade, depth 1 (rungs below withheld)  5.0974e-2    0.03x   no better than the rung below — stopping
+  lap-periodic (harmonic)                        1.3549e-4   10.01x   71 laps, probe basis at 10% — NOT deployed — AT THE INSTRUMENT'S FLOOR (1.60e-3), not distinguishable
+
+    shipped {"classic":true,"stack":0,"hff":false}   5.7640e-1 → 1.3568e-3 mm   424.8x
+  ✓ the button ships something that improves the machine at least 100x, chosen from a ladder it measured rather than a rung it was told to use
+  ✓ …and what it ships is the rung that TRANSFERS, not the lap-indexed one that scored better below the instrument's floor
+  ✓ …and the refused rungs are REPORTED with what they measured, not hidden — a refusal that fires silently hides the thing worth looking at
+  ✓ the pilot rung was genuinely driving the machine when it was scored, so "it did not help" is a measurement and not a wiring fault
+  ✓ …and it was refused, because the rung below it had already removed the velocity lag that is this pilot's whole benefit on this axis
+  ✓ the harmonic rung really did score better than the one that shipped — so the refusal is the FLOOR talking and not a rung that failed
+  ✓ …and every rung that landed below the instrument's floor says so in its own row
+  ✓ the conventional rung, armed alone, puts its OWN correction on the output — not a rung that is present in the wiring and contributing zero
+  ✓ …the pilot rung likewise, through the look-ahead closure and not around it
+  ✓ …and the harmonic rung likewise, indexed by lap phase
+  ✓ …and all three armed together is EXACTLY their sum, so no rung is silently dropped or double-counted when they are combined
+  ✓ a rung declaring a frame is mapped OUT of it before summing — asserted against a rotation computed by hand, so an identity map cannot pass
+  ✓ …and the map is not the identity on this input, so the check above has teeth
+  ✓ …and each rung goes through ITS OWN map, not one map applied to the sum
+  ✓ …and actBelow maps too, so a rung commissions on the same machine it deploys onto
+  ✓ …and actBelow STOPS at the named rung — it is the machine beneath it, not including it
+  ✓ the conventional rung honours its OWN authority — asserted on coefficients that demand far more than it, because on this axis the cap never binds by itself
+  ✓ …and the live path is capped identically to the lap-indexed one, so a rung cannot be bounded when replayed and unbounded when driven
+  ✓ a rung demanding more than the COMMON cap is clipped — and the clipping is COUNTED, so an amputated rung shows up as a number instead of as a disappointing score
+  ✓ …and a rung that fits inside the cap reports NO clipping, so the counter is not simply always on
+
+    a disturbance no function of the reference's own state can express:
+  as it arrived              2.5509e-2       
+  conventional (self-tuned)  2.5476e-2    1.00x   13 laps, 4 coefficients — NOT deployed
+  lap-periodic (harmonic)    1.1515e-3   22.15x   75 laps, probe spread at 10% — a MEMORY: it will not transfer to another program — AT THE INSTRUMENT'S FLOOR (1.15e-3), not distinguishable
+    shipped {"classic":false,"stack":0,"hff":true}   2.551e-2 → 1.151e-3   22.2x
+  ✓ the conventional rung is REFUSED when the disturbance is orthogonal to everything its basis can express — the refusal path, which the axis above never takes
+  ✓ …and the harmonic rung DEPLOYS on the same plant, so its deploy path is exercised by a real commission and not only by a hand-armed wiring check
+  ✓ …and the machine gets better by a margin far larger than the floor, so the deployment is a measurement and not the rig flattering itself
+  ✓ …leaving essentially the noise and nothing else, which is what removing a lap-periodic disturbance from a lap-periodic plant should leave
+  ✓ …and the floor label discriminates across the suite — some rows carry it and some do not, so the check above cannot pass vacuously
+  ✓ …and every row that carries it really is at or below the floor, and every row that does not really is above — the label follows the measurement, not the other way round
+  ✓ …while the conventional rung's own row still REPORTS what it measured, so a refusal is a number and not a silence
+  ✓ every field the report is PRINTED from is populated — a missing one renders as a default and is believed, which is how six diagnostics went wrong in a day
+
+autostack: all checks passed
+
+
+(--node — skipping the browser)
+
+```
