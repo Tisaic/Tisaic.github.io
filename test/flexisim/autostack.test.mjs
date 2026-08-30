@@ -6,6 +6,11 @@ import { roundedRect } from '../../lib/flexisim/toolpath.js';
 import { ContourScore, decompose } from '../../lib/flexisim/contour.js';
 import { RobotComp } from '../../lib/ngrc/robotcomp.js';
 import { makeArmHost } from '../../lib/flexisim/autohost.js';
+import { setLeadSamples } from '../../lib/pilot/pilot.js';
+// HOW MANY LEADS THE POOLED FIT ACTUALLY BUILDS. Nine was chosen from an offline table on the
+// EMPS axis and it cost this arm's model-only stack 11% (7.4340e-2 to 8.3206e-2), so it is a
+// knob here until it has been scored on more than the plant that suggested it.
+if (process.env.LEAD_SAMPLES) setLeadSamples(+process.env.LEAD_SAMPLES);
 
 let failed = 0;
 function check(name, cond, detail) {
@@ -299,12 +304,19 @@ console.log(`\n${auto.table()}`);
 // and it has teeth because `qpIters` differs from the Pilot's own default whenever the
 // override is set.
 {
-  const want = auto.pilotOpts.qpIters ?? 60;
+  // AGAINST THE HOST'S REQUEST WHEN THERE IS ONE, and against ITSELF when there is not. The
+  // first version hardcoded 60 as the fallback default and went red the moment the library
+  // default became 4 — asserting a number the host had never asked for. What this check is
+  // for is that a request REACHES the layers, so with no request the contract is that every
+  // layer agrees, whatever the library chose.
+  const want = auto.pilotOpts.qpIters;
   const built = (auto.built.stacks || []).map((st) => st.layers.map((L) => L.qpIters));
   const flat = built.flat();
-  check('every cascade layer commissioned with the solver the host was handed',
-    flat.length > 0 && flat.every((v) => v === want),
-    `host asked for ${want}, layers got ${JSON.stringify(built)}`);
+  check(want === undefined
+    ? 'every cascade layer commissioned with the same solver, the library default'
+    : 'every cascade layer commissioned with the solver the host was handed',
+  flat.length > 0 && flat.every((v) => v === (want ?? flat[0])),
+  `host asked for ${want ?? '(nothing)'}, layers got ${JSON.stringify(built)}`);
 }
 console.log(`\n  shipped ${JSON.stringify(rep.deployed)}   ${rep.base.toExponential(4)} → `
   + `${rep.best.toExponential(4)}   ${rep.gain.toFixed(2)}x   ${((Date.now() - t0) / 1000).toFixed(0)}s`);
