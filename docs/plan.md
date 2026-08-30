@@ -850,6 +850,38 @@ plants currently REFUSE or lose, so what has to be checked is whether a cheaper 
 refusal. A refusal that flips to a deploy is not automatically good news; it has to be the
 right answer for the right reason, which is the contract those four files pin.*
 
+**THE GATE HAS RUN ON FIVE OF THE SIX, AND IT TURNS A STANDING REFUSAL INTO AN IMPROVEMENT.**
+`HORIZON_TS=1.2 QPITERS=2` against the defaults, whole ladder, one commission each side:
+
+| plant | ships, default | ships, 1.2/2 | the cascade rung's own score |
+|---|---|---|---|
+| quadruple tank | classic, 10.53x | classic, 10.53x | 0.29x → 0.19x, refused both ways |
+| Wood–Berry | nothing | nothing | 0.56x → 0.53x |
+| cold mill | nothing | nothing | **0.49x → 1.01x**, still below the bar |
+| extruder barrel | **nothing (0.96x)** | **stack(2), 1.13x** | 1.13x, two layers vouching, R² 0.974 / 0.918 |
+| EMPS axis | classic, 424.8x | classic, 424.8x | 0.39x → 0.29x, refused both ways |
+
+**No plant is made worse and every contract in both files still holds.** The barrel was one of
+the two standing refusals target 7 names, and a cheaper solve is what moved it — which is not
+a result anyone would have predicted from "spend less arithmetic".
+
+**THREE THINGS QUALIFY IT AND ALL THREE ARE THE POINT.**
+
+* **1.13x is small, and it costs 4x the commissioning** (149 s → 600 s), because the flip is
+  a second cascade layer being admitted rather than the first getting better.
+* **It deploys but it is not DEPLOYABLE: 1,541 kB.** The budget row this whole phase is about
+  is memory as well as arithmetic, and a rung that ships 1.5 MB has not met it. "Deploys" and
+  "fits a PLC" are different verdicts and the barrel now has one of each.
+* **The corner does NOT carry to the cascaded position.** On EMPS the pilot rung is commissioned
+  OVER the conventional rung, so its plant is not the bare axis the 14.16x was measured on —
+  and there the cheaper solver is WORSE (0.39x → 0.29x). It is refused either way, so nothing
+  moves, but it says the corner is a property of a pilot on a raw machine and has to be
+  re-measured wherever the machine underneath it has changed (rule 31, again).
+
+*Outstanding before the defaults move: the 2R arm's whole ladder, both ways. It carries the
+22.42x and it is the only plant where the pilot and the lap-periodic rung BOTH deploy, so it
+is the only one that can show the corner interacting with a rung above it.*
+
 **7. Re-measure the rebuilt ladder on the transfer bench.** Programs x feedrates, headline is
 the WORST CELL. *This is where the shrink's cost shows up. If the worst cell falls below the
 4.53x the model layers already reach, the rebuild has bought budget with performance and the
