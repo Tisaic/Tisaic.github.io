@@ -117,59 +117,11 @@ console.log(`        one model ${NF} weights and ONE covariance = ${(NF * NF * 8
 console.log(`        one model + lead: ${3 * NF} weights, one ${3 * NF}² covariance = `
   + `${(9 * NF * NF * 8 / 1024).toFixed(1)} kB — still ${(nL / 9).toFixed(1)}x less.`);
 
-// ---- AND THE SAME THING THROUGH THE LIBRARY, because an offline refit of the pilot's data is
-// not the pilot. `sharedWeights` collapses the bank inside `_fitStep`, and a fit that agrees
-// with this table when done by hand and disagrees when done by the code would be the more
-// important result. Deployed on the machine, both ways, from the same commissioning stream.
-if (process.env.DEPLOY) {
-  const { P: PP, PR: PPR, makeMachine: mk } = await import('./emps-rig.mjs');
-  const open = (() => {
-    const m = mk(PPR.q[0], 0);
-    let s2 = 0, n = 0;
-    for (let k = 0; k < 8 * PP; k++) {
-      m.step(PPR.q[((k - 1) % PP + PP) % PP]);
-      if (k >= 4 * PP) { const e = m.q - PPR.q[k % PP]; s2 += e * e; n++; }
-    }
-    return 1000 * Math.sqrt(s2 / n);
-  })();
-  const build = async (shared) => {
-    const p = new Pilot({
-      autoRefuse: true, nMeasured: 1,
-      channels: [{ lo: -0.02, hi: 0.27, vMax: 1.25e-4, aMax: 8.3e-7, jMax: 5e-8 }],
-      uMax: UMAX, start: [PPR.q[0]], guards: [{ index: 0, max: 0.4 }],
-      workspace: () => true, seed: 1, exciteSteps: 40000, sharedWeights: shared,
-    });
-    const m = mk(PPR.q[0], 0);
-    let prevRef = PPR.q[0];
-    while (p.phase !== 'done') {
-      if (p.phase === 'fit') { p.work(); continue; }
-      const cmd = p.command();
-      m.step(prevRef);
-      prevRef = cmd[0].pos + cmd[0].u;
-      p.observe([m.q], [m.q - cmd[0].pos]);
-    }
-    return p;
-  };
-  const score = (p) => {
-    const m = mk(PPR.q[0], 0), S = p.sample;
-    p._initRun();
-    let s2 = 0, n = 0, pref = PPR.q[0];
-    for (let k = 0; k < 10 * PP; k++) {
-      m.step(pref);
-      const u = p.act((off) => [PPR.q[(((Math.floor(k / S) + off) * S) % PP + PP) % PP]]);
-      pref = PPR.q[k % PP] + u[0];
-      p.observe([m.q], null);
-      if (k >= 6 * PP) { const e = m.q - PPR.q[k % PP]; s2 += e * e; n++; }
-    }
-    return 1000 * Math.sqrt(s2 / n);
-  };
-  console.log('\n  ON THE MACHINE, which is what decides it:');
-  for (const shared of [false, true]) {
-    const p = await build(shared);
-    const rms = score(p);
-    const c = p.cost();
-    console.log(`    ${shared ? 'one model ' : 'per-lead  '}  ${rms.toFixed(5)} mm  `
-      + `${(open / rms).toFixed(2)}x   deploy ${c.peakMacPerCycle.toLocaleString()} MAC/cycle, `
-      + `${(c.bytes / 1024).toFixed(1)} kB   verdict ${p.verdict.deploy}`);
-  }
-}
+// ---- THE DEPLOYED COMPARISON THAT DECIDED IT is gone with the mode it compared against.
+// It measured the shared fit at 14.42x against the per-lead bank's 12.70x on this axis, and
+// on the 2R arm's model-only stack 7.4340e-2 against 7.8154e-2 — better on both, for 68x less
+// storage — so the bank was deleted and there is no longer a second mode to run. What stays
+// here is the OFFLINE table above, because it is the thing that says WHERE the trade sits
+// along the horizon: worse at lead 0, better past lead 16. That is the shape to re-measure on
+// any plant whose bank turns out to matter differently, and it needs no second implementation
+// to produce.
