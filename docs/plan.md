@@ -238,8 +238,36 @@ record is unambiguous that fit ranks these backwards: on both plants measured, t
 best-fitting probe design is the worst controller. Selection by rule 42 — within 5% of the
 best measured improvement, take the cheapest.
 
-**Decides the route.** Within 1.3x -> Phase 3A. Not within 1.3x, across plants -> Phase 3B,
-and the north star gets rewritten to say so.
+**~~Decides the route~~ — THE ROUTE IS DECIDED, BY INSTRUCTION.** The memory is retired and the
+controller is PLANT, not PATH; alternative algorithms replace what the lap rung was doing.
+Phase 3B (make the memory cheap and honest) is DEAD and Phase 3A is the road.
+
+So this phase is no longer a fork, it is a SEARCH, and its bar changed with it. It was "within
+1.3x of the table on the table's own program" — that measurement has now been taken on the arm
+and the answer is **2.91x apart** (model layers 5.3554e-2, table on top 1.8387e-2), which under
+the old framing would have triggered the rewrite clause. It does not any more. The bar is the
+ENVELOPE: within 1.3x of a per-program commission on every program and feedrate, none worse
+than the conventional machine.
+
+**AND CANDIDATE 1 IS ALREADY BUILT, which this file did not know.** "The pilot observes torque
+already; it does not pose-schedule" is stale: `schedTerms` multiplies the whole lagged block by
+the normalised command, `_row` offers linear / linear+quadratic / linear+scheduled per CHANNEL,
+and the choice is made on held-out data under the structured prior. What was missing was any
+way to see which one a run picked — the ladder reported none of it — and that is now in the
+rung row beside `N` and the iteration count.
+
+**SO THE ORDER CHANGES, and the new first candidate has the strongest claim to what the table
+was doing:**
+
+0. **ONLINE ADAPTATION.** A frozen model is stuck at its commissioning residual; a model that
+   keeps updating converges on what the machine is doing NOW and is still addressed by STATE,
+   so it transfers to a program it has never seen. That is memory-like accuracy without a lap
+   index, which is exactly the shape this north star asks for. `Pilot.adapt` exists and is off,
+   and the single measurement on it — adapting lead 0 alone halved that lead's own forecast
+   residual and moved the machine 0.1% — is not evidence against it, because the QP plans over
+   all N leads and mending one of fifty-eight cannot show up. `leadStride` buys the rest at a
+   stated cost. *This is the cheapest test with the strongest prior and it has never been run
+   properly.*
 
 ## Ideas from the wider field that survive these constraints
 

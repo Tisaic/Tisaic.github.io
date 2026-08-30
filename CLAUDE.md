@@ -270,11 +270,50 @@ lap. A model that good is also the thing that makes commissioning short, because
 generalises across the excitation while a table has to visit every phase of every program it
 will ever run.
 
-**What would falsify this direction:** a model-based layer that, given the same commissioning
-budget, cannot reach within 1.3x of the lap-periodic table on the program the table learned.
-If that is measured and holds across plants, then memory is doing something a model cannot,
-and the honest answer is a fast re-commission per program rather than transfer — which is a
-different north star and should be written as one.
+### THE MEMORY IS RETIRED. THE CONTROLLER IS PLANT, NOT PATH.
+
+**This is a decision, not a measurement.** The owner has settled it: the lap-indexed rung goes,
+and alternative algorithms replace what it was doing. Nothing addressed by POSITION IN A LAP
+survives — not `lib/pilot/hff.js`, not a `PathILC` table, not any correction indexed by phase.
+A component may only be addressed by the machine's own STATE.
+
+**WHAT IT COSTS, STATED UP FRONT SO NOBODY DISCOVERS IT LATER.** On the arm the model layers
+alone reach **5.3554e-2 from 4.1216e-1, which is 7.70x**, and the lap table on top of them
+reaches 1.8387e-2, 22.42x. **So retiring the memory today costs 2.91x and the headline drops
+from 22.42x to 7.70x.** That number is accepted, it is the honest starting point, and the work
+is to win it back with plant models rather than to protect the old figure.
+
+**AND THE ENVELOPE ALREADY AGREES WITH THE DECISION.** Across five programs and four feedrates
+the model layers alone win 14 of 20 cells, geometric mean 4.53x against the full ladder's
+3.11x, worst cell 1.45x against 1.17x. The memory is already a NET NEGATIVE anywhere but at
+home. The 22.42x was never a controller; it was a controller plus a calibration for one
+program, and the calibration is what has to go.
+
+**WHY THE PREVIOUS FRAMING IS GONE.** This section used to carry a falsification clause: if a
+model-based layer could not reach within 1.3x of the table on the table's own program, "the
+honest answer is a fast re-commission per program". That escape is closed. The measurement
+that would have triggered it has now been taken — 2.91x apart on the arm, against a 1.3x bar —
+and the answer is to find a better model, not to accept a per-program calibration.
+
+**WHAT MUST REPLACE IT.** In the order their evidence justifies:
+
+1. **ONLINE ADAPTATION, which is the plant-based way to get memory-like accuracy.** A frozen
+   model is stuck at its commissioning residual; a model that keeps updating converges on
+   whatever the machine is doing NOW, and it is addressed by state, so it transfers. This is
+   the closest thing to what the table does without being a table. `Pilot` already has an
+   `adapt` path and a `leadStride`; it is off, and the one measurement on it moved the machine
+   0.1% because it adapted lead 0 alone.
+2. **A basis rich enough to carry the machine.** The pose-scheduled block is already built and
+   selectable per channel — held-out R² 0.771 memory-alone against 0.840 scheduled — and the
+   ladder does not report whether it was chosen, which is now fixed.
+3. **A window that REACHES the mode** (rule 37) and multi-rate lags.
+4. **`lib/ngrc/`, a golden-vector-tested nonlinear VAR built for exactly this shape**, which
+   the pilot does not use.
+
+**THE BAR THE REPLACEMENT MUST CLEAR** is no longer 1.3x of the table on one program. It is
+**the ENVELOPE**: within 1.3x of a per-program commission on EVERY program and feedrate, with
+none made worse than the conventional machine — targets 1 and 2, which is what the memory
+could never do and is the whole reason it is going.
 
 ## Deploy model
 
