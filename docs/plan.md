@@ -524,6 +524,67 @@ Until one of these exists, the defensible sentence is: *beats the conventional m
 one real axis beats the published model-based feedforward at its own published parameters.*
 That is a good sentence. It is not the one the product claim makes.
 
+## Phase 7 — THE PLC-SHAPED REBUILD, ten steps
+
+The budget — under 10% of every 1 ms cycle, always, with commissioning and fitting ONLINE —
+does not adjust the design, it dictates it. Batch normal-equations-and-Cholesky is an offline
+algorithm and misses by about two million cycles; the deployed path alone misses by 4x and
+only works sliced, which "always" forbids. What follows is sequenced so the cheap
+falsifications come first and nothing is built on an unchecked assumption.
+
+**1. Cost the FIT as a check, not a note.** `Pilot.cost()` excludes fitting on the grounds
+that "the deployed path does not fit" — void the moment commissioning is online, and it was
+the assumption doing the most work. Extend it to report both regimes (batch as today, RLS as
+required) and ASSERT the online budget. *Decides nothing; it makes every later step
+measurable.*
+
+**2. Prove the shared-covariance claim before building on it.** Every lead uses the same
+design matrix, so `X'X` is common and only `X'y` differs — that is the whole reason the fit
+can be afforded. Verify NUMERICALLY that per-lead batch solves equal a shared-factor
+multi-target solve on the same data. *If they disagree, steps 5-6 collapse and the envelope
+is smaller than computed.*
+
+**3. Find the smallest basis that holds the result.** Today: 241 features. Target: ≤32, since
+the `P` update is 2n² and features dominate everything. `lib/ngrc/commission.js` is exactly
+this search — linear-first, per-target held-out gating, importance-ranked pruning to the
+smallest subset within margin — and has never been pointed at the pilot. *Scored on the
+bench, never on fit: the record is unambiguous that fit ranks these backwards.*
+
+**4. Truncate the lead bank.** The bank is most of the memory (241 x 68 weights per layer),
+and two independent measurements say it is largely paying for nothing: per-lead trust weights
+measured EXACTLY neutral, and verify RISES 1.35x → 1.54x → 1.70x while far-lead R² collapses
+to 0.046. *Cut N, measure verify and the machine. Memory falls linearly, the QP as N².*
+
+**5. Replace batch ridge with multi-target RLS.** One shared `P`, one readout per lead,
+`lib/ngrc/primitives.js`'s exact RLS. *Gate: it must reproduce the batch fit within noise on
+a FIXED dataset before it is allowed near a machine — a new fitting method that quietly
+changes the model is worse than a slow one.*
+
+**6. Restructure to bounded work per cycle.** One RLS update and one QP iteration per cycle,
+warm-started — the real-time-iteration shape. *Assert the PEAK per cycle, not the average:
+"always fits" is the constraint, and an average is exactly the wrong statistic for it.*
+
+**7. Re-measure the rebuilt ladder on the transfer bench.** Programs x feedrates, headline is
+the WORST CELL. *This is where the shrink's cost shows up. If the worst cell falls below the
+4.53x the model layers already reach, the rebuild has bought budget with performance and the
+trade has to be argued rather than assumed.*
+
+**8. Hold the budget on plants that share no physics.** The six-plant bar, each reporting its
+own MAC/cycle and kB. *A budget met on one plant is a property of that plant; rule 18 says a
+common factor across plants sharing no physics is a property of the CODE, and that is what a
+budget claim has to be.*
+
+**9. Choose cascade depth from the leverage, not from a commission.** The leverage LEVEL
+triples across three layers while the ratio stays flat — the cascade running out of signal,
+visible during the fit. `Stack` currently discovers this by commissioning a layer and finding
+it cannot vouch for itself. *If a threshold predicts the failing layer across plants, depth
+stops costing a commission to discover.*
+
+**10. Restate the scoreboard honestly.** Update the north star's table with what the rebuild
+actually achieves against all five parts of the claim. *Including, if it comes to it, that the
+PLC budget and the 22.42x cannot both be had — which would be a real finding and belongs in
+the open rather than in a footnote.*
+
 ## What would kill this plan
 
 - **Phase 1 shows the full ladder does not degrade away from home.** Then the premise is
