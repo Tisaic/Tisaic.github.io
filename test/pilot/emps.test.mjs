@@ -259,8 +259,27 @@ check('the model-based feedforward beats everything learned here',
   console.log(`    solver budget: ${IT0} iterations at N=${N0} → ${pil.rms.toFixed(4)} mm; `
     + `1 iteration at N=56 → ${cheap.rms.toFixed(4)} mm at `
     + `${cost.peakMacPerCycle.toLocaleString()} MAC/cycle`);
-  check('one QP iteration at a shorter horizon is at least as good as sixty at the full one',
-    cheap.rms <= pil.rms, `${cheap.rms.toFixed(5)} against ${pil.rms.toFixed(5)}`);
+  // THIS CHECK WENT RED BECAUSE THE CODE GOT BETTER, which is the other way a check goes
+  // stale (rule 4). It asserted that one iteration at N=56 beats sixty at N=68 — true when it
+  // was written, against the PER-LEAD fit: 0.04070 against 0.04539. The bank is now one shared
+  // model and the ordering reversed. Measured on this axis, all from the same rig:
+  //
+  //   per-lead, 60 it, N 68   0.04539   12.70x     576,074 MAC   5761% of budget
+  //   per-lead,  1 it, N 56   0.04070   14.16x      10,148 MAC    101%
+  //   shared,   60 it, N 68   0.03998   14.42x     576,074 MAC   5761%
+  //   shared,    4 it, N 68   0.03924   14.69x      42,914 MAC    429%   <- ships
+  //   shared,    1 it, N 56   0.04489   12.84x      10,148 MAC    101%
+  //
+  // SO THE THREE KNOBS ARE NOT SEPARABLE FROM THE FIT MODE EITHER. The short-horizon corner
+  // was a property of the per-lead bank; the shared model prefers the FULL horizon and pays
+  // for it. What ships delivers the best number measured on this axis and sits at 429% of a
+  // PLC scan — and the configuration that fits the scan gives up 13% of it. That is stated
+  // rather than resolved: it is a real trade and both ends are on this rig.
+  check('what ships beats the heavy setting it replaced, at a fifteenth of the arithmetic',
+    pil.rms < 0.0454, `${pil.rms.toFixed(5)} against the per-lead 60-iteration 0.04539`);
+  check('…and the budget-fitting corner is still reachable, at a stated cost in delivery',
+    cheap.rms > pil.rms && cheap.rms < 1.25 * pil.rms,
+    `${cheap.rms.toFixed(5)} at 10,148 MAC against ${pil.rms.toFixed(5)} at 42,914`);
   // BOTH HALVES (rule 9): cheaper is worthless if it stopped correcting, so the authority it
   // actually uses is asserted too — a solver that gave up would show as a collapsed uPk.
   check('…and it is not cheaper by declining to act — it still uses its authority',
