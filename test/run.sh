@@ -310,6 +310,11 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # The one assumption the browser integration rests on: a host that awaits a frame
     # mid-run reaches the same result as one that runs straight through.
     node test/pilot/yield.test.mjs
+    # THE PLAN A RUNG PUBLISHES MUST BE THE PLAN IT SPENDS. The page shows a denominator and
+    # a per-stage criterion so an operator can tell a long measurement from a stall; a plan
+    # that drifts from the run turns that into a lie in the direction that reads as a stall.
+    # Its first version published 40 runs for a commission that spent 76.
+    node test/pilot/plan.test.mjs
     node test/pilot/autostack.test.mjs
     # THE BUTTON ON FOUR MORE PLANTS THAT SHARE NO PHYSICS — a tank whose outflow goes as
     # sqrt(level), a column that is linear transfer functions with dead time, a mill whose

@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:443,built:"2026-08-30T00:18:08Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:445,built:"2026-08-30T00:39:03Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -6594,7 +6594,26 @@ function autoYield() {
  * — if this line stops advancing, the run really has stopped. It reports ELAPSED time
  * (which always moves), the rung being measured, the run index and the lap within it.
  */
-let autoT0 = 0, autoLastProg = 0;
+let autoT0 = 0, autoLastProg = 0, autoStage = null, autoPlan = null;
+
+/**
+ * WHAT THE LADDER IS DOING AND WHAT HAS TO HAPPEN FOR IT TO MOVE ON.
+ *
+ * `onProgress` proves the machine is turning; it cannot say how far through the run is or
+ * what it is waiting for, and a bare "run 37" gets read as a progress bar it is not. This is
+ * the rung's OWN plan — the stage list with a run count and the criterion that ends each one
+ * — reported by the rung rather than restated here, so it cannot drift from what actually
+ * runs (rule 30).
+ *
+ * The refinement figure is a CEILING and is shown as one: it stops early, deliberately, when
+ * four passes in a row improve by less than the machine's own repeatability. A number
+ * presented as a target that the run then beats by stopping short would read as a fault.
+ */
+function autoOnStage(d) {
+  if (d.plan) autoPlan = d.plan;
+  autoStage = d;
+  autoLastProg = 0;                    // a stage change is worth showing immediately
+}
 const AUTO_WHAT = { classic: 'conventional rung', stack: 'pilot cascade',
   hff: 'lap-periodic rung', pilot: 'pilot cascade', scoring: 'scoring' };
 function autoProgress(d) {
@@ -6607,12 +6626,40 @@ function autoProgress(d) {
   const secs = Math.round((now - autoT0) / 1000);
   const mm = Math.floor(secs / 60), ss = String(secs % 60).padStart(2, '0');
   const what = AUTO_WHAT[d.what] || d.what;
-  const where = d.phase === 'build' ? 'building a fresh machine'
+  const where = d.phase === 'build' ? 'preparing the machine'
     : d.phase === 'fit' ? 'fitting'
       : d.lap ? `lap ${d.lap}/${d.laps}` + (d.LAP ? ` · ${Math.round(100 * d.k / d.LAP)}%` : '')
         : d.phase;
-  $('autoProg').innerHTML = `<b>${mm}:${ss}</b> — measuring the <b>${what}</b>`
-    + ` · run ${d.run} · ${where}`;
+  // THE DENOMINATOR, WHERE ONE HONESTLY EXISTS. Only the rung that published a plan gets a
+  // "of N"; the others say what they are doing and no more, because inventing a total for
+  // them would be a progress bar with nothing behind it.
+  // THE STAGE POSITION LEADS, NOT A GLOBAL PERCENTAGE. Two of the six stages can only be
+  // published as CEILINGS — the candidate sweep depends on whether a knee is found in the
+  // measured spectrum, and refinement stops early on purpose — so the arm's plan totals ~103
+  // runs where a real commission spends about 68. A bar drawn against 103 would read 40%
+  // when the run is nearer 60%, which is a progress bar that lies in the reassuring
+  // direction. The stage index and the stage's own position are exact; the total is shown as
+  // a bound and labelled as one.
+  const st = autoStage;
+  const si = st && autoPlan ? autoPlan.stages.findIndex((x) => x.name === st.stage) : -1;
+  let head = `<b>${mm}:${ss}</b> — <b>${what}</b>`;
+  if (si >= 0) head += ` · <b>stage ${si + 1} of ${autoPlan.stages.length}: ${st.stage}</b>`;
+  else if (st && st.stage && st.stage !== 'starting') head += ` · <b>${st.stage}</b>`;
+  if (st && st.of > 1) {
+    head += ` ${st.i + 1}/${st.of}`;
+    if (si >= 0 && !autoPlan.stages[si].exact) head += ' max';
+  }
+  head += ` · run ${d.run}${autoPlan ? ` of ≤${autoPlan.total}` : ''} · ${where}`;
+  // WHAT HAS TO HAPPEN FOR IT TO MOVE ON — the question a run counter cannot answer.
+  const body = st && st.ends ? `<br><b>moves on when:</b> ${st.ends}` : '';
+  let planTxt = '';
+  if (autoPlan) {
+    planTxt = '<br><span style="opacity:.7">stages: '
+      + autoPlan.stages.map((x, i) => `${i === si ? '<b>' : ''}${i + 1}. ${x.name} `
+        + `${x.exact ? '' : '≤'}${x.runs}${i === si ? '</b>' : ''}`).join(' · ')
+      + ' — ≤ marks a stage that can end early, so the total is a bound, not a target</span>';
+  }
+  $('autoProg').innerHTML = head + body + planTxt;
 }
 
 function autoRowsHTML(rows) {
@@ -6648,7 +6695,7 @@ async function startAutoP() {
   const centre = armP.ik(PG.centre[0], PG.centre[1], true);
   const LAP = Math.ceil(profP.lap);
   autoComm = true; autoRep = null; autoAbort = false; autoYields = 0;
-  autoT0 = performance.now(); autoLastProg = 0;
+  autoT0 = performance.now(); autoLastProg = 0; autoStage = null; autoPlan = null;
   // THE BUTTON HAS TO BECOME `Stop` NOW, not at whatever later frame happens to call
   // `syncPath`. Between the click and the first repaint the only control that can end this
   // run reads as the control that starts it.
@@ -6698,6 +6745,7 @@ async function startAutoP() {
     yieldEvery: 1500,
     onYield: autoYield,
     onProgress: autoProgress,
+    onStage: autoOnStage,
     onRung: (r) => {
       rows.push(r);
       $('autoTable').innerHTML = autoRowsHTML(rows);
