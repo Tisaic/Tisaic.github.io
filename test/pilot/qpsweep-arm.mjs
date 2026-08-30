@@ -66,6 +66,14 @@ const pilot = new Pilot({
     return r > Math.abs(arm.L1 - arm.L2) + 0.5 && r < arm.L1 + arm.L2 - 0.5;
   },
   seed: 1,
+  // COMMISSION-TIME versus DEPLOY-TIME, which the tables below could not tell apart.
+  // Everything above re-deploys ONE model at different budgets, so it measures the solve
+  // the machine runs. The ladder changes the budget the model is FITTED under as well —
+  // the verify round and the effort-weight replay both solve — and on the arm those two
+  // disagree in DIRECTION: re-deploying cheap is better, commissioning cheap is 11% worse
+  // at every cascade stage. Set these to commission cheap and compare like with like.
+  ...(process.env.C_HORIZON_TS ? { horizonTs: +process.env.C_HORIZON_TS } : {}),
+  ...(process.env.C_QPITERS ? { qpIters: +process.env.C_QPITERS } : {}),
 });
 while (pilot.phase !== 'done') {
   if (pilot.phase === 'fit') { pilot.work(); continue; }
@@ -142,9 +150,9 @@ function costLine() {
   pilot.qpIters = built;
 }
 
-console.log(`\nqpIters sweep on the 2R arm — one commissioned model, N=${st.N} sample=${st.sample}`
-  + ` grid=${st.grid}, verify ${st.report.verify ? st.report.verify.ratio.toFixed(2) + 'x' : '—'}`
-  + `; qpIters as built = ${built}`);
+console.log(`\nqpIters sweep on the 2R arm — one commissioned model COMMISSIONED AT`
+  + ` horizonTs ${pilot.horizonTs} / qpIters ${built}, N=${st.N} sample=${st.sample}`
+  + ` grid=${st.grid}, verify ${st.report.verify ? st.report.verify.ratio.toFixed(2) + 'x' : '—'}`);
 for (const shape of (process.env.SHAPES || 'rounded,circle').split(',')) {
   const off = await deployOn(shape, false, null);
   console.log(`\n  ${shape}: open loop contour ${off.r.contourRms.toExponential(3)},`
