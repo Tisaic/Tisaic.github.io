@@ -893,10 +893,36 @@ commissioned with and watching that disagree with the host: `pilotOpts.qpIters 2
 `layer0.qpIters 60`. That is now **rule 61**, the duplicate is deleted, and the bar asserts
 that every cascade layer commissioned with the solver the host was handed.
 
-*Outstanding before the defaults move: the arm's ladder, both ways, on the repaired harness.
-The default run is also the rule-21 check on the deletion — if removing the duplicate was
-value-neutral it must return exactly 22.42x, and if it does not, the two copies had ALREADY
-drifted and the flagship number was measured on options nobody was reading.*
+**THE REPAIR IS VALUE-NEUTRAL AND THE ARM'S REAL ANSWER IS A LOSS.** Removing the duplicate
+returned exactly 22.42x, which is the signature of a repair rather than a change of
+measurement (rule 21). With the override actually reaching the pilot:
+
+```
+rung                             N 56 / it 60      N 45 / it 2
+cascade depth 1                    9.9789e-2        1.1095e-1
+depth 1 (rungs below withheld)     6.3021e-2        7.0356e-2
+depth 2 (rungs below withheld)     5.3554e-2        5.9538e-2
+lap-periodic, 68 vs 79 laps        1.8387e-2        1.9094e-2
+SHIPPED                              22.42x           21.59x
+```
+
+**11% worse at every cascade stage, 3.7% worse end to end, and 11 more harmonic laps.** The
+lap-periodic rung on top absorbs most of the cascade's loss, which is itself worth noting:
+the memory hides a weaker model underneath it, so a rung that is not program-agnostic is also
+what makes the degradation look small.
+
+**AND THAT CONTRADICTS THIS PROJECT'S OWN SWEEP ON THE SAME ARM**, which measured 2 iterations
+BEATING 60 by 16%. Both cannot be facts about the setting, and the difference is what was
+varied: `qpsweep-arm.mjs` re-deploys ONE model commissioned at `N 58 / it 60`, so it isolates
+the solve the MACHINE runs; the ladder commissions WITH the cheap solver, and the verify round
+and the effort-weight replay both solve, so the model that comes out is a different model. The
+sweep's own horizon table rules out N as the cause (58 → 44 costs 0.4%).
+
+**SO THE LIVE READING IS NARROWER THAN "THE CORNER WORKS": it is a DEPLOYMENT setting, and
+commissioning wants the rich solve.** That is still worth having — deployment runs every cycle
+forever and commissioning runs once — but it MOVES the cost rather than removing it, and
+target 6 covers commissioning explicitly. `C_HORIZON_TS` / `C_QPITERS` commission cheap on the
+same rig so the two can be compared like with like; that run decides it.
 
 **7. Re-measure the rebuilt ladder on the transfer bench.** Programs x feedrates, headline is
 the WORST CELL. *This is where the shrink's cost shows up. If the worst cell falls below the
