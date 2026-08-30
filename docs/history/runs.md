@@ -3707,3 +3707,51 @@ Section timings (s):
 PASS — 0 check(s) failed. Screenshots in test/screenshots/
 
 ```
+
+### bench-phase1 — exit 0 — 2026-08-30T04:32Z
+
+```
+
+flexisim: the transfer bench — one commission, 5 programs x 4 feedrates
+  [arm K 1 E 0.06, home = rounded 8x8 at 4e-3, lap 7457]
+  [0m] commissioning on the home cell…
+  [0m] as it arrived  3.8380e-1
+  [4m] conventional (self-tuned)  3.5651e-1  1.08x
+  [6m] pilot cascade, depth 1  8.8387e-2  4.03x
+  [8m] pilot cascade, depth 2  1.2216e-1  0.72x
+  [9m] pilot cascade, depth 1 (rungs below withheld)  6.2693e-2  1.41x
+  [11m] pilot cascade, depth 2 (rungs below withheld)  5.7443e-2  1.09x
+  [11m] — the conventional rung WITHHELD  5.7443e-2  1.00x
+  [26m] lap-periodic (harmonic)  2.7276e-2  2.11x
+  [26m] shipped {"classic":false,"stack":2,"hff":true}  3.8380e-1 → 2.7276e-2  14.07x at home
+
+  FULL LADDER (as shipped) — gain over the same machine with the correction OFF
+    program             1e-3     2e-3     4e-3     1e-2
+    rounded 8x8       1.22x    2.41x   13.93x*   6.62x 
+    rounded 10x6      1.60x    2.82x    9.20x    4.59x 
+    circle r3         1.17x    1.87x    6.10x    9.05x 
+    circle r5         1.22x    1.23x    2.55x   15.98x 
+    sharp 9x7         1.22x    1.52x    2.36x    4.29x 
+    (* the cell it was commissioned on)
+    HOME  13.93x   WORST  1.17x  on circle r3 at 1e-3   spread 11.9x
+    no cell made worse than the conventional machine
+
+  MODEL LAYERS ONLY (lap-periodic rung disarmed) — gain over the same machine with the correction OFF
+    program             1e-3     2e-3     4e-3     1e-2
+    rounded 8x8       3.18x    4.80x    6.66x*   6.56x 
+    rounded 10x6      4.37x    5.62x    6.79x    4.66x 
+    circle r3         2.88x    3.73x   17.19x    7.84x 
+    circle r5         3.01x    2.95x    5.95x   13.60x 
+    sharp 9x7         1.45x    1.68x    2.39x    4.19x 
+    (* the cell it was commissioned on)
+    HOME  6.66x   WORST  1.45x  on sharp 9x7 at 1e-3   spread 4.6x
+    no cell made worse than the conventional machine
+
+  WHAT THIS DECIDES
+    the memory is worth 2.09x at HOME and 0.81x at the WORST CELL.
+    full ladder   home 13.93x  worst 1.17x  spread 11.9x  hurt 0/20
+    model only    home 6.66x  worst 1.45x  spread 4.6x  hurt 0/20
+    If the full ladder's SPREAD is not materially worse than the model-only
+    spread, docs/plan.md's premise is wrong and the plan is the thing to change.
+
+```
