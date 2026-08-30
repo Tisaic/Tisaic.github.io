@@ -543,7 +543,12 @@ measurement behind each is in `docs/history/` — the pointer in brackets.
     back byte-identical — 22.42× either way, every rung to five figures — because the bag
     carrying them was discarded between construction and commissioning. Every hop tested
     clean in isolation and the wiring was genuinely there, which is the mode-⑧ failure in a
-    new costume. **Mutate a shared bag, never replace it** — and ASSERT that what the machine
+    new costume. **AND THE PAGE WAS THE ONE DOING IT RIGHT.** `flexisim.html` mutates exactly
+    two fields of the host's bag, `start` and `workspace`; the BAR is the copy that had
+    drifted. So the guarantee this whole arrangement exists to provide — the page runs what
+    the bar measured, by construction — was in fact being carried by the two literals
+    happening to hold the same numbers, which is construction in name only.
+    **Mutate a shared bag, never replace it** — and ASSERT that what the machine
     commissioned with is what the caller asked for, because that check's absence is the whole
     reason a duplicate can sit there. What found it was not more reasoning: it was making the
     ladder PRINT the solver it commissioned with and watching that disagree with the host.
