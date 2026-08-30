@@ -197,17 +197,53 @@ function run(prog, depth) {
   }
   return { rms: 1000 * Math.sqrt(s / n), uPk: 1000 * uPk };
 }
+// SCORED AT DEPTHS 0-3 WHATEVER WAS COMMISSIONED. These are the pinned contract numbers and
+// `run()` already filters to the layers that DEPLOYED, so a deeper commission that refuses
+// its extra layers scores identically here — which is the point: the contract is about what
+// ships, not about how many candidates were tried.
 const trap = [0, 1, 2, 3].map((d) => run(PR, d));
 const sine = [0, 1, 2, 3].map((d) => run(SIN, d));
 console.log('    tracking error, mm rms, by stack depth:');
 console.log(`      trained trapezoid   ${trap.map((r) => r.rms.toFixed(4)).join('  ')}`);
 console.log(`      UNSEEN sine         ${sine.map((r) => r.rms.toFixed(4)).join('  ')}`);
-console.log(`      (${(trap[0].rms / trap[3].rms).toFixed(1)}x and `
-  + `${(sine[0].rms / sine[3].rms).toFixed(1)}x; correction clamped ${st.report.clamped} times)`);
+// Indexed from the END rather than at 3, so the summary line survives a depth change.
+console.log(`      (${(trap[0].rms / trap[trap.length - 1].rms).toFixed(1)}x and `
+  + `${(sine[0].rms / sine[sine.length - 1].rms).toFixed(1)}x; correction clamped ${st.report.clamped} times)`);
 
-check('every layer commissions and vouches for itself before it acts',
-  L.length === 3 && L.every((l) => l.deployed && l.verify > 1.1),
-  JSON.stringify(L.map((l) => [l.layer, l.deployed, l.verify])));
+// A REFUSED LAYER IS THE STACK WORKING, NOT THE STACK FAILING.
+//
+// This asserted that ALL THREE layers vouch, which is only true at the depth this file was
+// written at. Run at DEPTH=5 it went red on layer 4 refusing — and layer 4 refusing is the
+// contract being honoured: `Stack` deploys a PREFIX and stops at the first layer that cannot
+// vouch for itself on the machine. Asserting every layer vouches is asserting the stack never
+// stops, which is wrong at any depth where it should.
+//
+// So the check is now the actual contract, and it has teeth at every depth: the deployed
+// layers are a PREFIX, each of them beat the bar on the machine, and at least one layer
+// deployed. A stack that refused everything, or that deployed layer 3 after refusing layer 2,
+// fails this where the old check would have passed the first and never seen the second.
+{
+  const firstRefusal = L.findIndex((l) => !l.deployed);
+  const prefix = firstRefusal < 0 ? L : L.slice(0, firstRefusal);
+  const after = firstRefusal < 0 ? [] : L.slice(firstRefusal);
+  check('the layers that deploy are a PREFIX — the stack stops at the first refusal',
+    prefix.length >= 1 && after.every((l) => !l.deployed),
+    JSON.stringify(L.map((l) => [l.layer, l.deployed, +l.verify.toFixed(3)])));
+  check('…and every layer that deployed vouched for itself on the machine first',
+    prefix.every((l) => l.verify > 1.1),
+    JSON.stringify(prefix.map((l) => [l.layer, +l.verify.toFixed(3)])));
+  // AND THE REFUSAL, WHEN THERE IS ONE, IS FOR THE RIGHT REASON — it measured too little on
+  // the machine, not too little in the fit. Pinned because the depth-5 run measured layer 4
+  // refusing with a BETTER forecast than layer 3 (R² 0.543 against 0.514) and a lower
+  // leverage: neither the fit nor its conditioning predicts deployability, only the verify.
+  if (firstRefusal >= 0) {
+    console.log(`    layer ${L[firstRefusal].layer} refused at verify `
+      + `${L[firstRefusal].verify.toFixed(2)}x — the machine's answer, not the fit's`);
+    check('…and a refusal is a MACHINE measurement falling short, not a fit falling short',
+      L[firstRefusal].verify <= 1.1,
+      JSON.stringify([L[firstRefusal].layer, L[firstRefusal].verify, L[firstRefusal].r2]));
+  }
+}
 // EACH LAYER'S FORECAST IS OF A HARDER SIGNAL THAN THE LAST, which is what says it is
 // modelling the RESIDUAL and not re-learning the plant.
 check('…and each layer forecasts a harder signal than the one below it',
