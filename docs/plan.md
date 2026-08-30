@@ -698,11 +698,27 @@ change at first and reported 25.4 kB for both, because it counted one weight vec
 it now counts by reference identity, so the saving is a property of the object rather than of a
 flag someone might forget to pass.
 
-*What remains before the default moves: the arm, where two channels and a cascade make the
-pooling argument different, and a plant where the bank is NOT the dominant cost. Also worth
-noting that `sharedWeights` and `SharedRLS` now compose exactly — one weight vector and one
-covariance per channel is the shape the online recursion wanted in the first place, and it was
-reachable by changing the model rather than by finding an economy in the algebra.*
+**THE DEFAULTS HAVE MOVED AND THE OTHER MODES ARE DELETED.** The per-lead bank, the LMS
+adaptation path, per-lead trust and `boxQP`'s weights argument are gone; `qpIters` defaults to
+4; the pooled fit is capped at 60,000 rows and builds ~9 leads instead of N.
+
+**AND COMMISSIONING TIME DID NOT SIMPLY FALL, which is the correction worth keeping.** Across
+the four-plant bar the tank went 45s → 23s, the column 20s → 11s and the mill 12s → 8s, all
+shipping identically — but the **barrel went 98s → 334s**, because the sampled fit made its
+model BETTER (depth 1, 5.1869e+0 → 5.0948e+0), enough to cross a deploy bar it had been
+refusing, and a rung that deploys costs scored runs that a refusal does not. So the honest
+statement is: **the fit got cheaper everywhere, and commissioning got faster only where nothing
+new deployed.** A cheaper fit that finds more to do is not a cheaper commission.
+
+**AND "DEPLOYS" IS STILL NOT "WORTH DEPLOYING".** The barrel ships 1.04x for 21,830 MAC/cycle
+and **256.7 kB** — the gate is right that the machine measured an improvement, and the improvement
+is marginal against a cost that a PLC budget would refuse outright. That is the same gap the
+1,541 kB reading showed earlier, and nothing in the ladder currently prices it.
+
+*What remains: the arm and EMPS on the new defaults. Also worth noting that the deleted bank
+and `SharedRLS` compose exactly — one weight vector and one covariance per channel is the shape
+the online recursion wanted in the first place, and it was reachable by changing the model
+rather than by finding an economy in the algebra that was not there.*
 
 **5. Replace batch ridge with multi-target RLS.** One shared `P`, one readout per lead,
 `lib/ngrc/primitives.js`'s exact RLS. *Gate: it must reproduce the batch fit within noise on

@@ -256,7 +256,7 @@ check('the model-based feedforward beats everything learned here',
   const cheap = runPilot(pilot.verdict.deploy);
   const cost = pilot.cost();
   pilot.N = N0; pilot.qpIters = IT0;
-  console.log(`    solver budget: 60 iterations at N=${N0} → ${pil.rms.toFixed(4)} mm; `
+  console.log(`    solver budget: ${IT0} iterations at N=${N0} → ${pil.rms.toFixed(4)} mm; `
     + `1 iteration at N=56 → ${cheap.rms.toFixed(4)} mm at `
     + `${cost.peakMacPerCycle.toLocaleString()} MAC/cycle`);
   check('one QP iteration at a shorter horizon is at least as good as sixty at the full one',
@@ -265,7 +265,7 @@ check('the model-based feedforward beats everything learned here',
   // actually uses is asserted too — a solver that gave up would show as a collapsed uPk.
   check('…and it is not cheaper by declining to act — it still uses its authority',
     cheap.uPk > 0.4 * pil.uPk, `${cheap.uPk.toFixed(3)} against ${pil.uPk.toFixed(3)} mm`);
-  check('…and it fits 10% of a 1 ms scan, where the shipped setting is 57x over it',
+  check('…and it fits 10% of a 1 ms scan',
     cost.peakMacPerCycle < 10500, `${cost.peakMacPerCycle.toLocaleString()} MAC/cycle`);
 }
 
