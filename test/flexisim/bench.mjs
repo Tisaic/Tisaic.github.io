@@ -18,6 +18,7 @@
  * the path per cell — which is what this file is.
  */
 import { snapshotArm, restoreArm } from '../../lib/flexisim/arm2r.js';
+import { programSignature } from '../../lib/flexisim/autohost.js';
 import { roundedRect, circle, sharpRect } from '../../lib/flexisim/toolpath.js';
 import { ContourScore, decompose } from '../../lib/flexisim/contour.js';
 
@@ -70,6 +71,14 @@ export function scoreCell(o) {
   for (let k = 0; k < LAP; k++) { const c = path.at(k); R[k] = m.arm.ik(c.x, c.y, true); }
   const S = auto && auto.stack ? auto.stack.sample : 1;
 
+  // THE CELL SAYS WHICH PROGRAM IT IS, and this is not optional. `AutoStack` withholds the
+  // lap-periodic rung off the program it was formed on, and that guard keys on `ctx.program`.
+  // The first version of this bench built its context without one, so the guard never fired
+  // and a run intended to MEASURE the guard measured the unguarded ladder a second time —
+  // returning a matrix identical to the previous run, which is the only reason it was caught.
+  // Same function the host uses, imported rather than reimplemented (rule 30).
+  const PROGRAM = programSignature(path, LAP);
+
   const sc = new ContourScore({ joints: 2 });
   for (let l = 0; l < WARM + AVG; l++) {
     for (let k = 0; k < LAP; k++) {
@@ -83,7 +92,8 @@ export function scoreCell(o) {
       if (auto) {
         const kSamp = Math.floor(k / S);
         const look = (off) => R[(((kSamp + off) * S) % LAP + LAP) % LAP];
-        u = auto.act({ v: [cmd.vx, cmd.vy], a: [cmd.ax, cmd.ay], k, look, q: [c1, c2] });
+        u = auto.act({ v: [cmd.vx, cmd.vy], a: [cmd.ax, cmd.ay], k, look, q: [c1, c2],
+          program: PROGRAM });
       }
       const tau = m.servo.torques([{ ...refs[0], theta: c1 + ff.dq[0] + u[0] },
         { ...refs[1], theta: c2 + ff.dq[1] + u[1] }]);
@@ -100,7 +110,11 @@ export function scoreCell(o) {
     }
   }
   const rep = sc.report();
-  return { contour: rep.contourRms, lag: rep.lagRms, bias: rep.contourBias, osc: rep.contourOsc };
+  // DID THE GUARD FIRE? Reported per cell so "the guard made no difference" and "the guard
+  // never ran" can never again look the same from the outside.
+  const st = auto && auto.starved ? auto.starved() : null;
+  return { contour: rep.contourRms, lag: rep.lagRms, bias: rep.contourBias, osc: rep.contourOsc,
+    withheld: st && st.hffOffProgram ? st.hffOffProgram : 0 };
 }
 
 /**
@@ -117,7 +131,8 @@ export function runMatrix({ m, rc, auto, label, onCell }) {
       const off = scoreCell({ m, snap, rc, auto: null, path });
       const on = scoreCell({ m, snap, rc, auto, path });
       const cell = { program: prog.name, feed, home: !!prog.home && feed === HOME_FEED,
-        off: off.contour, on: on.contour, gain: off.contour / on.contour };
+        off: off.contour, on: on.contour, gain: off.contour / on.contour,
+        withheld: on.withheld };
       rows.push(cell);
       if (onCell) onCell(cell);
     }
@@ -141,7 +156,9 @@ export function printMatrix(res) {
     }).join('');
     console.log(`    ${prog.name.padEnd(15)}${cells}`);
   }
-  console.log(`    (* the cell it was commissioned on)`);
+  const guarded = res.rows.filter((r) => r.withheld > 0).length;
+  console.log(`    (* the cell it was commissioned on;`
+    + ` the lap-periodic rung was WITHHELD on ${guarded} of ${res.rows.length} cells)`);
   console.log(`    HOME  ${res.home.gain.toFixed(2)}x`
     + `   WORST  ${res.worst.gain.toFixed(2)}x  on ${res.worst.program} at `
     + `${res.worst.feed.toExponential(0)}`
