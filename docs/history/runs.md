@@ -4913,3 +4913,43 @@ pilot: a cascade — the second instance learns what the first one left
 pilot/stack: 1 check(s) FAILED
 
 ```
+
+### stack-fixed — exit 1 — 2026-08-30T06:22Z
+
+```
+
+pilot: a cascade — the second instance learns what the first one left
+    commissioned 3 layers in 558s:
+      layer 1: deployed  Ts 19 N 68  verify 1.35x  forecast R² 0.9908
+      layer 2: deployed  Ts 18 N 95  verify 1.54x  forecast R² 0.7771
+      layer 3: deployed  Ts 17 N 90  verify 1.70x  forecast R² 0.5137
+    the forecast each layer is asked for, and why it is hard:
+      layer 1 ch  R² lead0 0.991 → far 0.987  leverage 7.73e-5 → 7.78e-5  ratio 1.01  ⇒ predicted well — nothing to explain
+      layer 2 ch  R² lead0 0.777 → far 0.566  leverage 1.49e-4 → 1.43e-4  ratio 0.96  ⇒ predicted well — nothing to explain
+      layer 3 ch  R² lead0 0.514 → far 0.046  leverage 2.21e-4 → 2.20e-4  ratio 0.99  ⇒ predicted well — nothing to explain
+    per-scan cost of the deployed cascade:
+      layer 1: 37 features x 68 leads = 2516 MAC forecast + 591566 MAC QP   peak 594122 MAC/cycle, sliced over 1 cycles 594122   25.4 kB
+      layer 2: 37 features x 95 leads = 3515 MAC forecast + 1134253 MAC QP   peak 1137808 MAC/cycle, sliced over 1 cycles 1137808   33.6 kB
+      layer 3: 73 features x 90 leads = 6570 MAC forecast + 1020555 MAC QP   peak 1027201 MAC/cycle, sliced over 1 cycles 1027201   57.4 kB
+      CASCADE TOTAL: 2759131 MAC/cycle peak, 2759131 sliced, 116.4 kB
+  ✗ the deployed cascade fits an arithmetic budget a 1 ms PLC task could afford  → 2759131 MAC/cycle sliced against 50000
+  ✓ …and its frozen state is small enough to sit in PLC memory
+    tracking error, mm rms, by stack depth:
+      trained trapezoid   0.5764  0.0454  0.0258  0.0194
+      UNSEEN sine         0.3634  0.0439  0.0248  0.0140
+      (29.8x and 26.0x; correction clamped 0 times)
+  ✓ the layers that deploy are a PREFIX — the stack stops at the first refusal
+  ✓ …and every layer that deployed vouched for itself on the machine first
+  ✓ …and each layer forecasts a harder signal than the one below it
+  ✓ …while still finding real structure in what reached it
+  ✓ …and a later layer reaches further ahead than the first, having measured why
+  ✓ depth buys accuracy on the program it was commissioned against
+  ✓ …AND on a program it has never seen, by at least as much
+    one cadence for the stack: samples 1 / 1 / 1 from Ts 19 / 18 / 17  (layers measured different timescales and still share a cadence)
+  ✓ every layer of the stack samples the machine at the FIRST layer's cadence
+  ✓ …while still choosing its own horizon on top of it
+  ✓ …and the summed correction never exceeds the engineer's single cap
+
+pilot/stack: 1 check(s) FAILED
+
+```
