@@ -82,6 +82,19 @@ for (const it of ITERS) {
   console.log(`  ${String(it).padStart(5)}   ${r.rms.toFixed(5).padStart(9)}  ${(shipped / r.rms).toFixed(2).padStart(7)}x  `
     + `${r.mx.toFixed(4).padStart(8)}  ${r.uPk.toFixed(4).padStart(8)}  ${(r.ns / 1000).toFixed(2).padStart(7)}`);
 }
+// WHAT EACH BUDGET COSTS, on the pilot's own cost model rather than on wall clock — the
+// online requirement is MAC per 1 ms cycle against 10,000, and a µs/step figure measured on
+// a dev machine under contention cannot be converted into one.
+console.log('\n  iters   peak MAC/cycle   sliced MAC/cycle   % of a 10,000 budget');
+for (const it of ITERS) {
+  pilot.qpIters = it;
+  const c = pilot.cost();
+  console.log(`  ${String(it).padStart(5)}   ${c.peakMacPerCycle.toLocaleString().padStart(14)}   `
+    + `${Math.round(c.slicedMacPerCycle).toLocaleString().padStart(16)}   `
+    + `${(100 * c.peakMacPerCycle / 10000).toFixed(0).padStart(6)}%`);
+}
+pilot.qpIters = shippedIters;
+
 const best = rows.reduce((a, b) => (b.rms < a.rms ? b : a));
 const band = rows.filter((r) => r.rms <= best.rms * 1.05);
 const cheapest = band.reduce((a, b) => (b.it < a.it ? b : a));

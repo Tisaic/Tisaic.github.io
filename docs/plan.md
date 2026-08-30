@@ -622,12 +622,41 @@ momentum never overshoots. Measured against a local re-implementation of the sol
 recorded here rather than asserted in `test/pilot/rti.test.mjs` — a duplicate of the solver
 cannot pin a property of the solver (rule 15).
 
-*Replacement experiment, now running: sweep `qpIters` on the EMPS axis and the arm and score
-the MACHINE, not the solver residual — `test/pilot/qpsweep.mjs`. If 8 or 16 iterations hold
-the delivered result, the budget is reachable at 2,176–4,352 MAC/cycle for a horizon of 32,
-and the tight `L` halves that again. If they do not, the two levers above buy 2x against a
-60x requirement and the QP has to be replaced by something that is not a first-order method
-at all.*
+**AND THE MACHINE ANSWERS FOUR, WHERE THE SOLVER ANSWERED FOUR HUNDRED AND EIGHTY.**
+`test/pilot/qpsweep.mjs` commissions ONE pilot on the EMPS axis and re-deploys that same
+model at a ladder of iteration budgets, changing nothing else. mm rms over the last four of
+ten laps, against the shipped cascade's 0.5764:
+
+```
+iters       1       2       4       8      16      32      60     120     240     480
+mm rms  0.0543  0.0557  0.0474  0.0493  0.0469  0.0459  0.0454  0.0454  0.0453  0.0453
+x        10.62   10.35   12.17   11.69   12.28   12.56   12.70   12.71   12.71   12.71
+uPk       0.76    0.76    0.77    0.77    0.91    1.28    1.49    1.47    1.47    1.47
+```
+
+**Four iterations reach 12.17x against sixty's 12.70x** — inside the 5% band, so rule 42 takes
+the cheapest and the answer is **4**. Even ONE iteration delivers 10.62x, 84% of the benefit at
+1/60 of the cost. The machine saturates at 60 and 120/240/480 are identical to four figures,
+so the extra 420 iterations the solver needs to converge buy the machine nothing whatsoever.
+
+**THAT IS A 15x COST REDUCTION THE SOLVER-RESIDUAL SWEEP WOULD HAVE FORBIDDEN**, and the two
+views disagreeing is the finding rather than a problem with either (rule 6). At 60 iterations
+the solve is 36% from its own optimum and delivers 12.70x; at 4 it is ~85% from its own
+optimum and delivers 12.17x. Truncation is not degrading the answer, it is choosing a
+different one.
+
+**THE `uPk` COLUMN SAYS WHY, and it is the most useful number in the table.** The truncated
+solve applies HALF the peak correction — 0.76 mm against 1.49 — for 96% of the result. The
+converged QP is spending twice the authority to buy 4%. Truncation is acting as an effort
+penalty that nobody tuned, which is exactly the implicit-regularisation reading, and it means
+the iteration count and `lambda` are the same knob approached from opposite ends. A future
+`lambda` search has to hold `qpIters` fixed or it is searching one dimension twice.
+
+*Still to run: the same sweep on the 2R arm (`test/pilot/qpsweep-arm.mjs`, two channels,
+coupled, with backlash), because a budget measured on one plant is a property of that plant
+(rule 18). And 4 iterations is 15x, not 60x: at N=68 that is ~38 kMAC/cycle against a 10,000
+budget, so the horizon and the feature count still have to come down. The lever is real and
+it is not sufficient alone.*
 
 **7. Re-measure the rebuilt ladder on the transfer bench.** Programs x feedrates, headline is
 the WORST CELL. *This is where the shrink's cost shows up. If the worst cell falls below the
