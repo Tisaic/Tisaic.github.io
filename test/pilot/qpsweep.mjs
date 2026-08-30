@@ -1,0 +1,89 @@
+/**
+ * @file STEP 6 REPLACEMENT EXPERIMENT — sweep the QP's iteration budget and score the
+ *       MACHINE, not the solver's own residual.
+ *
+ * `test/pilot/rti.test.mjs` measured that one iteration does not track sixty, and the
+ * sweep underneath it measured something more awkward: sixty is itself only 77% of the
+ * way to the QP's own optimum. That makes "is 60 enough?" the wrong question, because it
+ * scores the solver against itself (rule 16). The only question that pays is what the
+ * MACHINE does, so this file commissions ONE pilot and then re-deploys that same model at
+ * a ladder of iteration budgets, changing nothing else.
+ *
+ * Run: node test/pilot/qpsweep.mjs
+ */
+import { Pilot } from '../../lib/pilot/pilot.js';
+import { DT, P, PR, makeMachine } from './emps-rig.mjs';
+
+const ITERS = (process.env.ITERS || '1,2,4,8,16,32,60,120,240,480').split(',').map(Number);
+
+function score(ff) {                      // the shipped cascade, for the denominator
+  const m = makeMachine(PR.q[0], ff);
+  let s = 0, n = 0;
+  for (let k = 0; k < 8 * P; k++) {
+    m.step(PR.q[((k - 1) % P + P) % P]);
+    if (k >= 4 * P) { const e = m.q - PR.q[k % P]; s += e * e; n++; }
+  }
+  return 1000 * Math.sqrt(s / n);
+}
+const shipped = score(0);
+
+const UMAX = 2e-3;
+const pilot = new Pilot({
+  autoRefuse: true, nMeasured: 1,
+  channels: [{ lo: -0.02, hi: 0.27, vMax: 1.25e-4, aMax: 8.3e-7, jMax: 5e-8 }],
+  uMax: UMAX,
+  start: [PR.q[0]],
+  guards: [{ index: 0, max: 0.4 }],
+  workspace: () => true,
+  seed: 1,
+  exciteSteps: 40000,
+});
+{
+  const m = makeMachine(PR.q[0], 0);
+  let prevRef = PR.q[0];
+  while (pilot.phase !== 'done') {
+    if (pilot.phase === 'fit') { pilot.work(); continue; }
+    const cmd = pilot.command();
+    m.step(prevRef);
+    prevRef = cmd[0].pos + cmd[0].u;
+    pilot.observe([m.q], [m.q - cmd[0].pos]);
+  }
+}
+const shippedIters = pilot.qpIters;
+const st = pilot.status();
+
+function runPilot(iters) {
+  pilot.qpIters = iters;
+  const m = makeMachine(PR.q[0], 0), S = pilot.sample;
+  pilot._initRun();
+  let s = 0, mx = 0, n = 0, uPk = 0, pref = PR.q[0];
+  const LAPS = 10;
+  const t0 = process.hrtime.bigint();
+  for (let k = 0; k < LAPS * P; k++) {
+    m.step(pref);
+    const u = pilot.act((off) => [PR.q[(((Math.floor(k / S) + off) * S) % P + P) % P]]);
+    uPk = Math.max(uPk, Math.abs(u[0]));
+    pref = PR.q[k % P] + u[0];
+    pilot.observe([m.q], null);
+    if (k >= (LAPS - 4) * P) { const e = m.q - PR.q[k % P]; s += e * e; mx = Math.max(mx, Math.abs(e)); n++; }
+  }
+  const ns = Number(process.hrtime.bigint() - t0) / (LAPS * P);
+  return { rms: 1000 * Math.sqrt(s / n), mx: 1000 * mx, uPk: 1000 * uPk, ns };
+}
+
+console.log(`\nqpIters sweep on EMPS — one commissioned model, deployed ${ITERS.length} times`);
+console.log(`  shipped cascade ${shipped.toFixed(4)} mm rms; pilot N=${st.N} nc=${st.nc ?? '?'} `
+  + `sample=${st.sample} Ts=${st.Ts}; qpIters as built = ${shippedIters}`);
+console.log('  iters      rms mm        x     peak mm    uPk mm    µs/step');
+const rows = [];
+for (const it of ITERS) {
+  const r = runPilot(it);
+  rows.push({ it, ...r });
+  console.log(`  ${String(it).padStart(5)}   ${r.rms.toFixed(5).padStart(9)}  ${(shipped / r.rms).toFixed(2).padStart(7)}x  `
+    + `${r.mx.toFixed(4).padStart(8)}  ${r.uPk.toFixed(4).padStart(8)}  ${(r.ns / 1000).toFixed(2).padStart(7)}`);
+}
+const best = rows.reduce((a, b) => (b.rms < a.rms ? b : a));
+const band = rows.filter((r) => r.rms <= best.rms * 1.05);
+const cheapest = band.reduce((a, b) => (b.it < a.it ? b : a));
+console.log(`\n  best ${best.it} iters at ${best.rms.toFixed(5)} mm; within 5% of it, the cheapest is `
+  + `${cheapest.it} iters at ${cheapest.rms.toFixed(5)} mm (rule 42).`);

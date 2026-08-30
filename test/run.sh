@@ -332,6 +332,12 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # serves the whole forecast bank. It is the difference between 4079% of the online budget
     # and 56%, so it is asserted numerically rather than argued structurally.
     node test/pilot/shared.test.mjs
+    # WHAT SIXTY QP ITERATIONS ARE ACTUALLY WORTH. One-iteration-per-cycle (the real-time
+    # iteration scheme) does not track sixty, and sixty is itself 36% from this solver's own
+    # optimum -- so every delivered number in the project came out of a truncated solve. The
+    # rate is set by the Hessian's conditioning, not by the horizon (same curve at N=8 as at
+    # N=48), and the step size comes off a bound 1.8x looser than it needs to be.
+    node test/pilot/rti.test.mjs
     node test/pilot/autostack.test.mjs
     # THE BUTTON ON FOUR MORE PLANTS THAT SHARE NO PHYSICS — a tank whose outflow goes as
     # sqrt(level), a column that is linear transfer functions with dead time, a mill whose

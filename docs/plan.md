@@ -590,11 +590,44 @@ regularisation rather than as a defect. "How few iterations CONVERGE" and "how f
 ON THE MACHINE" are different questions and only the second one matters (rule 16: a number
 computed from the model cannot check the model).
 
-*Replacement experiment: sweep `qpIters` on the EMPS axis and the arm and score the MACHINE,
-not the solver residual. If 8 or 16 iterations hold the result, the budget is reachable at
-2,176-4,352 MAC/cycle for a horizon of 32. If they do not, the QP has to be replaced rather
-than tuned — and an accelerated projected gradient is the first thing to try, since it costs
-about two extra vector operations per iteration and changes the rate from O(1/k) to O(1/k²).*
+**AND THE OBVIOUS FIX IS ALREADY IN THE FILE, WHICH KILLS THE CHEAP ROUTE.** The sentence
+that stood here proposed replacing the solver with an accelerated projected gradient, "since
+it costs about two extra vector operations per iteration and changes the rate from O(1/k) to
+O(1/k²)". `lib/blackbox/qp.js` **is** FISTA — the momentum, the `t` recursion and the
+`beta` extrapolation are all there and have been since it was written. The 480 iterations
+above are what an accelerated method already delivers on this Hessian, so acceleration is
+spent, not available. Writing a plan step against a file's docstring instead of its code is
+rule 17 from the other side: check the instrument before proposing to replace the model.
+
+**TWO THINGS WERE THEN MEASURED AGAINST THE ACTUAL SOLVER, and one of them is real.**
+
+*The step size comes off a loose bound, and tightening it is worth exactly 2x.* The step is
+`1/L` for `L = 2((sum|h|)²·wMax + 4λ)`. `(sum|h|)²` bounds `‖T‖²` from above — always safe,
+which is why it is there — but on this impulse response it is **1.82x** the true spectral
+norm (451.3 against 248.1 by power iteration), so the solver has been stepping 1.82x shorter
+than it may. Replacing it with a power iteration at DESIGN time — twenty convolutions, once,
+free online — moves the 5% point from **480 iterations to 240**:
+
+```
+                                    8      16     32     60     120    240    480
+as shipped (loose L)               79%    69%    53%    36%    20%    6.4%   1.0%
+tight L (power iteration)          75%    62%    44%    29%    14%    2.1%   0.7%
+```
+
+*FISTA adaptive restart is a NULL here, which is worth recording because it is the next
+obvious thing to reach for.* Gradient restart (`t ← 1` whenever `g·(u − u_old) > 0`) gives a
+curve **identical to four figures** with or without the tight `L`. The restart test never
+fires on a warm-started receding horizon: the shifted previous plan is close enough that the
+momentum never overshoots. Measured against a local re-implementation of the solver, so it is
+recorded here rather than asserted in `test/pilot/rti.test.mjs` — a duplicate of the solver
+cannot pin a property of the solver (rule 15).
+
+*Replacement experiment, now running: sweep `qpIters` on the EMPS axis and the arm and score
+the MACHINE, not the solver residual — `test/pilot/qpsweep.mjs`. If 8 or 16 iterations hold
+the delivered result, the budget is reachable at 2,176–4,352 MAC/cycle for a horizon of 32,
+and the tight `L` halves that again. If they do not, the two levers above buy 2x against a
+60x requirement and the QP has to be replaced by something that is not a first-order method
+at all.*
 
 **7. Re-measure the rebuilt ladder on the transfer bench.** Programs x feedrates, headline is
 the WORST CELL. *This is where the shrink's cost shows up. If the worst cell falls below the
