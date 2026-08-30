@@ -214,29 +214,25 @@ async function fresh() {
   settle(m.arm, m.servo, q1, q2);
   return { ...m, rc };
 }
-// ---- the pilot's own limits, in ITS frame, read off `composite.test.mjs`
-{
-  const m = await machine();
-  const c = m.arm.ik(12, 0, true);
-  centre[0] = c[0]; centre[1] = c[1];
-  auto.channels = [0, 1].map((j) => ({ lo: c[j] - 0.55, hi: c[j] + 0.55,
-    vMax: 8e-4, aMax: 4e-6, jMax: 2e-7 }));
-  auto.pilotOpts = {
-    nMeasured: 6, autoRefuse: false, gateForecasts: false,
-    uMax: Math.min(2.0, 0.15 * (16 / K)),
-    probeAmp: 0.15 * Math.min(1.0, 0.15 * (16 / K)),
-    ditherAmp: 0.1 * Math.min(1.0, 0.15 * (16 / K)),
-    start: m.arm.ik(p0.x, p0.y, true),
-    guards: [], refusePartial: false,
-    workspace: (q) => {
-      const rr = Math.hypot(m.arm.L1 * Math.cos(q[0]) + m.arm.L2 * Math.cos(q[0] + q[1]),
-        m.arm.L1 * Math.sin(q[0]) + m.arm.L2 * Math.sin(q[0] + q[1]));
-      return rr > Math.abs(m.arm.L1 - m.arm.L2) + 0.5 && rr < m.arm.L1 + m.arm.L2 - 0.5;
-    },
-    seed: 1,
-  };
-  await m.l1.destroy(); await m.l2.destroy();
-}
+// ---- THE PILOT'S LIMITS COME FROM THE SHARED HOST, AND USED TO BE OVERWRITTEN HERE.
+//
+// This file's whole reason for existing is that the page and the bar import ONE host, so
+// that ⑨ on screen runs the configuration the bar measured by construction rather than by
+// review — and a second copy of the pilot's options lived right here and REPLACED the
+// host's, wholesale, after `makeArmHost` had built it. Value for value the two copies
+// agreed, so nothing was ever wrong and nothing ever failed; the duplicate simply sat there
+// waiting for one of them to change.
+//
+// IT DREW BLOOD THE FIRST TIME ONE DID. `horizonTs` and `qpIters` were added to the host,
+// the whole ladder was run twice, and it came back BYTE-IDENTICAL — 22.42x either way,
+// every rung to five figures — because the option bag carrying them was thrown away between
+// construction and commissioning. Every hop tested clean in isolation and the wiring was
+// genuinely there, which is this project's mode-⑧ failure exactly; what found it was making
+// the ladder PRINT the solver it commissioned with and watching it disagree with the host.
+//
+// So the duplicate is gone. `channels` and the option bag are the host's, and this file
+// fills only the two fields the host cannot know — `start` and `workspace`, which need the
+// arm's own reach — by MUTATING the bag above rather than replacing it.
 
 // ---- THE INSTRUMENT'S FLOOR, MEASURED. A deterministic rig has none of its own.
 // The SAME estimator every scored run reports for itself, on a full-length run so the two
@@ -284,6 +280,21 @@ check('the harness reproduces the conventional machine `composite.test.mjs` meas
 const t0 = Date.now();
 const rep = await auto.commission({ run, drivePilot });
 console.log(`\n${auto.table()}`);
+// THE LADDER COMMISSIONED WITH THE OPTIONS THE HOST WAS GIVEN — two views of one quantity,
+// asserted to AGREE (rule 6). This is the check whose absence let a duplicate option bag
+// silently replace the host's: the ladder ran, every rung scored, every existing check
+// passed, and the configuration under test was simply not the one that reached the pilot.
+// It is written against `pilotOpts` rather than against a literal so it cannot go stale,
+// and it has teeth because `qpIters` differs from the Pilot's own default whenever the
+// override is set.
+{
+  const want = auto.pilotOpts.qpIters ?? 60;
+  const built = (auto.built.stacks || []).map((st) => st.layers.map((L) => L.qpIters));
+  const flat = built.flat();
+  check('every cascade layer commissioned with the solver the host was handed',
+    flat.length > 0 && flat.every((v) => v === want),
+    `host asked for ${want}, layers got ${JSON.stringify(built)}`);
+}
 console.log(`\n  shipped ${JSON.stringify(rep.deployed)}   ${rep.base.toExponential(4)} → `
   + `${rep.best.toExponential(4)}   ${rep.gain.toFixed(2)}x   ${((Date.now() - t0) / 1000).toFixed(0)}s`);
 console.log(`  ${BAR.src}   ${TARGET.toExponential(4)}   ${(CONV / TARGET).toFixed(2)}x`);
