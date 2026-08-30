@@ -11,6 +11,88 @@ A single-page static site hosted on **GitHub Pages** at
 workflow**: iterate on the page from Claude Code, view it in Android Chrome,
 and feed console output back to Claude.
 
+## THE NORTH STAR
+
+**Wire it up, press one button, use it — on any dynamical system, for any program it is
+later asked to run.** That is the whole product. Everything in `Current state` is progress
+toward it and none of it is that yet.
+
+### What is actually wrong today
+
+**The rung that produces the biggest number is a MEMORY.** The lap-periodic table says so in
+its own report row — *"a MEMORY: it will not transfer to another program"* — and it is the
+difference between 5.4e-2 and 1.8e-2 on the arm. So the headline is carried by the one
+component that is guaranteed not to survive a change of program, and the parts that DO
+transfer are the ones that score less. That is not a bug to fix in the table; it is the
+shape of the whole design, and it is what has to change.
+
+**Anything the commissioning did not see, breaks it.** Change the feedrate, the plant or the
+path and the machine degrades — not gracefully, catastrophically. The evidence is already in
+this file and was written down as a success: the composite measures 4.9x to 20.3x across five
+programs and on one of them it makes the machine WORSE; a phase-indexed table worth 125x on
+the program it learned reaches 0.55x on a sine — worse than doing nothing. A number that
+holds only where it was measured is a calibration, not a controller.
+
+**Commissioning is outrageous.** Roughly half an hour on one plant for one program, and the
+honest accounting is worse than it sounds: it buys a result that a change of program can
+erase. The cost is ~127 scored runs; the physics inside them is about a tenth of the wall
+clock (`test/flexisim/_cost.mjs`).
+
+### What has to be true instead
+
+Each of these is a claim that can be shown false, which is the only kind worth writing down.
+
+1. **PROGRAM-AGNOSTIC.** Commission once on a plant. Then run programs the commissioning
+   never saw — different shapes, different corner counts, different lengths — with NO
+   recommissioning. Target: within 1.3x of a controller commissioned on each program
+   individually, on every program in the set, with none made worse than the conventional
+   machine. Today the transferable part alone is 10.94x where the memory-carrying stack
+   reaches 20.34x, and one program of five goes backwards.
+
+2. **FEEDRATE-AGNOSTIC.** The same deployed controller across the feedrate range the machine
+   is actually run at, no recommissioning, no per-feed table. Target: monotone degradation
+   bounded at 1.5x of a per-feed commission across a 5x span of feed. Today a feedrate change
+   moves the lap length and the whole lap-indexed layer is addressed by the wrong index.
+
+3. **PLANT-AGNOSTIC, AND ALREADY HALF PROVEN.** Six plants that share no physics is the
+   existing bar and it must not regress: the 2R arm, a quadruple tank, an extruder barrel,
+   the Wood-Berry column, a cold mill AGC, the EMPS servo axis. Target: every plant either
+   improves or refuses for a reason it can state, and the reasons stay measured rather than
+   tuned. Add a plant with a delay that dominates its own response, because none of the six
+   has one.
+
+4. **COMMISSIONING IN MINUTES, NOT AN AFTERNOON.** Target: 10x down — under three minutes on
+   the arm — while holding the contract bar. What has been measured so far: restoring the
+   machine instead of rebuilding it is 1.35x and byte-identical; the obvious remaining knobs
+   are NOT free (banded off with refinement 24 -> 10 ships 18.39x against 22.42x and fails
+   the contract). So the remaining factor has to come from needing FEWER SCORED RUNS, which
+   means a method that learns more per lap — not from making each lap cheaper.
+
+5. **HIGHER, NOT MERELY TRANSFERABLE.** Transfer bought by giving up performance is a
+   different product, not this one. Target: beat 22.42x on the arm while satisfying 1 and 2.
+
+### The direction that follows from it
+
+The transferable layers are the ones that MODEL the machine — the conventional rung's fit in
+the reference's own state, and the pilot cascade, where each layer models what the one below
+it left. The non-transferable layer is the one that REMEMBERS a lap. Every measurement in
+this file agrees on that split, including the ones that were surprises at the time: the
+cascade transfers to a signal it has never seen (26.0x) where a phase-indexed table is worth
+less than nothing (0.55x), and the learned path map adds essentially nothing on top of a
+cascade (1.15x, 1.02x) because the cascade has already removed the predictable part.
+
+So the work is to get what the memory is worth OUT OF A MODEL — to buy the lap-periodic
+rung's factor with something addressed by the machine's STATE rather than by position in a
+lap. A model that good is also the thing that makes commissioning short, because a model
+generalises across the excitation while a table has to visit every phase of every program it
+will ever run.
+
+**What would falsify this direction:** a model-based layer that, given the same commissioning
+budget, cannot reach within 1.3x of the lap-periodic table on the program the table learned.
+If that is measured and holds across plants, then memory is doing something a model cannot,
+and the honest answer is a fast re-commission per program rather than transfer — which is a
+different north star and should be written as one.
+
 ## Deploy model
 
 - **Hosting:** GitHub Pages, served from the **`main`** branch, root.
