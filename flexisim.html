@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:447,built:"2026-08-30T01:16:34Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:448,built:"2026-08-30T02:14:57Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -6188,6 +6188,22 @@ function stepPathOnce(collect) {
     ik6.pilot.observe([enc[0].angle, enc[1].angle, enc[0].speed * 1e3, enc[1].speed * 1e3,
       tau[0] * 1e3, tau[1] * 1e3], null);
   }
+  // ⑨ IS FED THE SAME WAY, AND WITHOUT THIS IT IS BLIND. The ladder's pilot cascade is a
+  // RECEDING-HORIZON controller: `auto.act()` computes from the state `auto.observe()` was
+  // given, and every scored run in the host calls it on every single step. The page called
+  // neither, so the deployed ladder was steering from an empty ring — a correction for a
+  // machine it could not see. Measured on the page: the rung table read 1.7316e-2 and the
+  // machine delivered 3.4e-1 against an open loop of 4.1e-1.
+  //
+  // THE SAME DEFECT SHAPE AS THE MISSING BASELINE, and the same reason nothing caught it:
+  // the deployed correction was real and non-zero, so every wiring check passed. Two views
+  // of one loop must AGREE, and the deploy path was missing a call the scored path makes
+  // 7357 times a lap.
+  if (autoP && autoRep) {
+    const enc = armP.encoders();
+    autoP.auto.observe([enc[0].angle, enc[1].angle, enc[0].speed * 1e3, enc[1].speed * 1e3,
+      tau[0] * 1e3, tau[1] * 1e3]);
+  }
   const tool = armP.toolXY();
   const dec = decompose(profP, tool, cmd);
   const sc = [scoreP, lapScoreP];
@@ -6788,6 +6804,10 @@ async function startAutoP() {
   // the scored runs built, and deploying through a dead arm's Jacobian is a frame error
   // that produces plausible numbers rather than an exception.
   autoP.attach(armP, servoP);
+  // START A RUN, exactly as every scored run does. `beginRun` resets the range/starvation
+  // diagnostics AND calls `_initRun()` on each deployed cascade layer, so without it the
+  // ladder deploys carrying whatever internal state its last commissioning run left behind.
+  autoP.auto.beginRun();
   $('autoTable').innerHTML = autoRowsHTML(autoRep.rungs);
   $('autoNotes').innerHTML = autoNotesHTML(autoRep);
   const d = autoRep.deployed;
@@ -7743,11 +7763,15 @@ window.__flxPathDbg = () => (armP ? {
   pending: progPending,
   // ⑨'s live state. `yields` is the liveness signal (see `autoYields`); `deployed` is what
   // the ladder actually shipped, which is the one thing a contour number cannot tell you.
+  // `starved` counts steps where a deployed rung was armed but could not be reached — the
+  // instrument that says a correction is being asked for and not delivered.
   auto: { comm: autoComm, aborting: autoAbort, yields: autoYields, have: !!autoP,
     rows: autoRep ? autoRep.rungs.length : 0,
     deployed: autoRep ? autoRep.deployed : null,
     gain: autoRep ? autoRep.gain : null,
-    panel: $('autoRow').style.display !== 'none' },
+    panel: $('autoRow').style.display !== 'none',
+    starved: autoP && autoP.auto ? autoP.auto.starved() : null,
+    range: autoP && autoP.auto ? autoP.auto.range() : null },
   // LOOPED, NOT SPREAD. `profP.v` carries one entry per lap SAMPLE, so its length is set by
   // the FEEDRATE: 7356 at 4e-3 and about 29400 at the slowest rung. Spreading that into
   // `Math.min` passes every element as an ARGUMENT, and the limit is not a fixed count but
