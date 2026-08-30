@@ -412,7 +412,7 @@ console.log(`  the stretch — ${BAR.src} at its best case — is ${TARGET.toExp
 // total against until it is measured. Reported, not asserted (rule 3 — a check with no
 // reference is not a check).
 console.log(`  on the WHOLE deviation this run is ${rep.best.toExponential(4)} `
-  + `(${(shippedRun.score / rep.base).toFixed(2)}x of the conventional machine) — no recorded `
+  + `(${(rep.base / shippedRun.score).toFixed(2)}x the conventional machine) — no recorded `
   + `bar exists for this objective yet`);
 check('…and it is not the common cap doing the work by accident: the cap was not binding when '
   + 'the shipped configuration was scored',
