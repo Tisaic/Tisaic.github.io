@@ -79,6 +79,41 @@ for (const l of L) {
     + `verify ${l.verify ? l.verify.toFixed(2) + 'x' : '—'}  forecast R² ${l.r2 ? l.r2[0].toFixed(4) : '—'}`);
 }
 
+// ---- WHERE A HARD FORECAST ACTUALLY LIVES, AND WHY IT IS HARD --------------------------
+//
+// A cascade layer models what the layer BELOW it left, so its target is the residual of an
+// already-good controller: less signal, more noise, every lap. That is where this project's
+// negative forecasts are — R² [0.848, -0.117] on ⑥'s layer 2, and r2Far -0.035 — and it is
+// why reading the leverage on a SINGLE pilot said "nothing to explain" twice. Both of those
+// readings came back 0.97 and 0.83 on a first-layer target, which is an easy one.
+//
+// The leverage separates two failures that look identical in the R² alone:
+//   ratio >> 1 : the far lead's held-out rows sit outside the commissioning data. The fit is
+//                EXTRAPOLATING, and the fix is excitation — cheap.
+//   ratio ~ 1  : those rows are covered and the FEATURES cannot span the residual. The fix is
+//                a richer dictionary — expensive, and worth knowing before starting.
+//
+// It also predicts something checkable: leverage is a property of the design matrix, not the
+// target, so two layers sharing an excitation must report the SAME leverage while their R²
+// differ. If they do not, the instrument is wrong before the model is.
+const r2f = (v) => (v === null || v === undefined ? '—' : v.toFixed(3));
+const ex = (v) => (v === null || v === undefined ? '—' : v.toExponential(2));
+console.log('    the forecast each layer is asked for, and why it is hard:');
+for (const p of st.layers) {
+  const ros = (p.status && p.status().report && p.status().report.readouts) || [];
+  for (const r of ros) {
+    const bad = r.r2Far !== null && r.r2Far !== undefined && r.r2Far < 0.5;
+    console.log(`      layer ${st.layers.indexOf(p) + 1} ch${r.ch ?? ''}`
+      + `  R² lead0 ${r2f(r.r2Lead0)} → far ${r2f(r.r2Far)}`
+      + `  leverage ${ex(r.levLead0)} → ${ex(r.levFar)}`
+      + `  ratio ${r.levRatio === null ? '—' : r.levRatio.toFixed(2)}`
+      + `  ⇒ ${r.levRatio === null ? 'no reading'
+        : !bad ? 'predicted well — nothing to explain'
+          : (r.levRatio > 1.5 ? 'EXTRAPOLATING — fix the EXCITATION'
+            : 'covered — the FEATURES do not span it, fix the DICTIONARY')}`);
+  }
+}
+
 /** Score `depth` layers of the stack on a program, over the last three of eight laps. */
 function run(prog, depth) {
   const live = st.layers.filter((p) => p.verdict && p.verdict.deploy).slice(0, depth);
