@@ -190,6 +190,8 @@ let hostRef = null;
       + `${r.gain === null ? '' : '  ' + r.gain.toFixed(2) + 'x'}`
       + `${r.deployed ? '' : '  — NOT deployed'}${r.note ? '   ' + r.note : ''}`),
   });
+  console.log(`  [pilot opts: horizonTs ${hostRef.auto.pilotOpts.horizonTs ?? '(default)'}`
+    + `  qpIters ${hostRef.auto.pilotOpts.qpIters ?? '(default)'}]`);
   hostRef.auto.pilotOpts.start = m.arm.ik(p0.x, p0.y, true);
   hostRef.auto.pilotOpts.workspace = (q) => {
     const rr = Math.hypot(m.arm.L1 * Math.cos(q[0]) + m.arm.L2 * Math.cos(q[0] + q[1]),
