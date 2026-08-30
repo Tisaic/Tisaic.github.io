@@ -270,6 +270,46 @@ Three uses, each attacking a stated target:
 commission and check whether it rises where the bench's worst cells are. If it does, it is a
 transfer predictor the machine can compute at run time.
 
+### 1b. MEASURED — and it retires idea 2's forecast claim while finding a better use
+
+The leverage was read on a three-layer cascade, where this project's hard forecasts actually
+live (a layer models the residual of an already-good controller — less signal, more noise,
+every lap):
+
+```
+layer 1   R² 0.991 → far 0.987   leverage 7.73e-5 → 7.78e-5   ratio 1.01   verify 1.35x
+layer 2   R² 0.777 → far 0.566   leverage 1.49e-4 → 1.43e-4   ratio 0.96   verify 1.54x
+layer 3   R² 0.514 → far 0.046   leverage 2.21e-4 → 2.20e-4   ratio 0.99   verify 1.70x
+```
+
+**No extrapolation at any depth.** The ratio is 1 throughout, so the far-lead rows are as well
+covered as the near ones. The forecast decay is a SPANNING failure, not an excitation one —
+which retires half of idea 2 below: **a persistency-of-excitation rule cannot improve forecast
+quality here.** It may still shorten commissioning, and that is worth having, but it is a
+different claim and should stop being written as one.
+
+**And the machine improves as the forecast decays** — verify rises 1.35x → 1.54x → 1.70x while
+R² falls to 0.046 at the far lead. That reconfirms the measured null on per-lead trust weights
+from a new direction: a receding horizon applies only its FIRST move, so the far lead barely
+shapes what the machine feels. Any diagnosis keyed on `r2Far` is diagnosing something that is
+not hurting anyone, which the first version of this instrument duly did.
+
+**THE LEVERAGE LEVEL IS THE FINDING, AND IT IS A NEW CAPABILITY.** The ratio stays flat while
+the absolute value TRIPLES across three layers — 7.73e-5 → 1.49e-4 → 2.21e-4. Each deeper fit
+is progressively less well-determined: the cascade running out of signal, visible DURING the
+fit.
+
+`Stack` currently stops when a layer cannot vouch for itself ON THE MACHINE, which is a
+post-hoc measurement costing a full commission per layer — and on the arm the ladder spends
+two of its rungs discovering exactly that. Leverage is the same information, earlier and free.
+
+**Next experiment, and it is cheap:** commission four or five layers on two plants, record the
+leverage level per layer against the verify each layer earns, and find whether a leverage
+threshold predicts the layer that will fail to vouch. If it does, cascade depth stops costing
+a commission to discover — which is target 4 (commissioning in minutes) reached by not doing
+work rather than by doing it faster, and unlike every other lever measured so far it costs no
+result quality.
+
 ### 2. Persistency of excitation as the stopping rule — behavioural systems theory
 
 Willems' fundamental lemma: a single input-output trajectory that is persistently exciting of

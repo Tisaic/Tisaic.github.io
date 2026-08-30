@@ -314,7 +314,7 @@ console.log(`    ⑥ pilot on the learned routing: ${pilot.verdict.deploy ? 'dep
 const r2f = (v) => (v === null || v === undefined ? '—' : v.toFixed(3));
 const ex = (v) => (v === null || v === undefined ? '—' : v.toExponential(2));
 for (const r of pilot.status().report.readouts) {
-  const bad = r.r2Far !== null && r.r2Far !== undefined && r.r2Far < 0.5;
+  const bad = r.r2Lead0 !== null && r.r2Lead0 !== undefined && r.r2Lead0 < 0.5;
   console.log(`    ⑥ ch${r.ch ?? ''} R² lead0 ${r2f(r.r2Lead0)} → far ${r2f(r.r2Far)}`
     + `   leverage ${ex(r.levLead0)} → ${ex(r.levFar)}`
     + `   ratio ${r.levRatio === null ? '—' : r.levRatio.toFixed(2)}`

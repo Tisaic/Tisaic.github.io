@@ -96,13 +96,37 @@ for (const l of L) {
 // It also predicts something checkable: leverage is a property of the design matrix, not the
 // target, so two layers sharing an excitation must report the SAME leverage while their R²
 // differ. If they do not, the instrument is wrong before the model is.
+//
+// ---- WHAT IT MEASURED, AND WHY THE VERDICT KEYS ON LEAD 0 ------------------------------
+//
+//   layer 1  R² 0.991 → far 0.987   leverage 7.73e-5 → 7.78e-5  ratio 1.01   verify 1.35x
+//   layer 2  R² 0.777 → far 0.566   leverage 1.49e-4 → 1.43e-4  ratio 0.96   verify 1.54x
+//   layer 3  R² 0.514 → far 0.046   leverage 2.21e-4 → 2.20e-4  ratio 0.99   verify 1.70x
+//
+// NO EXTRAPOLATION ANYWHERE — the ratio is 1 at every depth, so the far-lead rows are as well
+// covered as the near ones. The forecast decay is a SPANNING failure and not an excitation
+// one, which means a persistency-of-excitation stopping rule cannot fix forecast quality
+// (it may still cut commissioning time; that is a different claim).
+//
+// AND THE MACHINE IMPROVES AS THE FORECAST DECAYS: verify rises 1.35x → 1.54x → 1.70x while
+// R² falls. That reconfirms, from a new direction, the measured null on per-lead trust
+// weights — a receding horizon applies only its FIRST move, so the far lead barely shapes
+// what the machine feels. Which is why the verdict below keys on LEAD 0. Keyed on the far
+// lead it called layer 3 a dictionary problem on the strength of an R² the QP largely
+// ignores, which is a diagnosis of something that is not hurting anyone.
+//
+// THE LEVERAGE LEVEL IS THE FINDING. The ratio stays flat while the absolute value TRIPLES
+// across three layers: each deeper fit is progressively less well-determined — the cascade
+// running out of signal, visible DURING the fit. The stack currently stops when a layer
+// cannot vouch for itself on the machine, which is a post-hoc measurement costing a full
+// commission per layer. This is the same information, earlier and free.
 const r2f = (v) => (v === null || v === undefined ? '—' : v.toFixed(3));
 const ex = (v) => (v === null || v === undefined ? '—' : v.toExponential(2));
 console.log('    the forecast each layer is asked for, and why it is hard:');
 for (const p of st.layers) {
   const ros = (p.status && p.status().report && p.status().report.readouts) || [];
   for (const r of ros) {
-    const bad = r.r2Far !== null && r.r2Far !== undefined && r.r2Far < 0.5;
+    const bad = r.r2Lead0 !== null && r.r2Lead0 !== undefined && r.r2Lead0 < 0.5;
     console.log(`      layer ${st.layers.indexOf(p) + 1} ch${r.ch ?? ''}`
       + `  R² lead0 ${r2f(r.r2Lead0)} → far ${r2f(r.r2Far)}`
       + `  leverage ${ex(r.levLead0)} → ${ex(r.levFar)}`

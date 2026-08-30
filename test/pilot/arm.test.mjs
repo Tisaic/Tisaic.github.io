@@ -121,7 +121,7 @@ console.log(`    verify: ${st.report.verify ? st.report.verify.ratio.toFixed(2) 
 // because identical numbers otherwise read as a copy-paste defect.
 const FAR_OK = 0.5;
 for (const r of st.report.readouts) {
-  const bad = r.r2Far !== null && r.r2Far !== undefined && r.r2Far < FAR_OK;
+  const bad = r.r2Lead0 !== null && r.r2Lead0 !== undefined && r.r2Lead0 < FAR_OK;
   const why = r.levRatio === null ? 'no reading'
     : !bad ? `far lead predicted well — nothing to explain`
       : (r.levRatio > 1.5 ? 'EXTRAPOLATING — the fix is excitation'
