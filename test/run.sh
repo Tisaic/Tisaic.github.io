@@ -328,6 +328,10 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # THE PREDICTIVE VARIANCE THE RIDGE FIT WAS ALREADY PAYING FOR: x'(X'X+lam I)^-1 x from
     # the Cholesky factor it was discarding, checked against an independently inverted matrix.
     node test/pilot/leverage.test.mjs
+    # THE CLAIM THE PLC REBUILD RESTS ON: every lead shares a design matrix, so one covariance
+    # serves the whole forecast bank. It is the difference between 4079% of the online budget
+    # and 56%, so it is asserted numerically rather than argued structurally.
+    node test/pilot/shared.test.mjs
     node test/pilot/autostack.test.mjs
     # THE BUTTON ON FOUR MORE PLANTS THAT SHARE NO PHYSICS — a tank whose outflow goes as
     # sqrt(level), a column that is linear transfer functions with dead time, a mill whose
