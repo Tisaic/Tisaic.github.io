@@ -31,7 +31,7 @@ unmeasured or partial, and saying so is worth more than the claim is.
 | Completely self-tuning | **SUPPORTED** | No per-plant constants; every threshold re-derived from measurement; and it REFUSES with a stated reason, asserted to be right for the right reason. Rare, and the strongest thing here. |
 | Robust and tolerant | **PARTIAL** | The refusal machinery is genuinely strong. Transfer is the weakness, and it is the subject of this north star. |
 | Reusable across plants | **2 CLEAR WINS OF 6** | Arm and EMPS win. Tank 1.32x, barrel refused, mill refused (0.42x), Wood–Berry LOST. |
-| PLC memory and CPU | **MEASURED, 1.44x OVER ON THE DEPLOYED PATH; THE FIT IS UNBUILT** | Memory is not the problem: 116 kB, not the 482 kB estimated. The deployed EMPS path costs 14,354 MAC/cycle at one QP iteration — 144% of 10% of a 1 ms scan — and delivers 84% of the sixty-iteration result; at four iterations, 429% for 96%. That is down from a first measurement of 268x, half of it because the iteration count is a REGULARISER nobody was treating as one (on the arm two iterations BEAT sixty) and half because `cost()` itself had two faults, both overstating. The horizon does NOT truncate (N=32 loses two thirds), so what is left is the feature count. **The FIT is the unbuilt half**: batch normal-equations-and-Cholesky is ~20 GMAC per channel per layer, and the shared-covariance RLS that replaces it is specified and pinned but not written. |
+| PLC memory and CPU | **THE DEPLOYED PATH FITS ON ONE PLANT; THE FIT IS UNBUILT** | Memory was never the problem: 116 kB, not the 482 kB estimated. The deployed EMPS path measures **14.16x at 10,148 MAC/cycle — 101% of 10% of a 1 ms scan**, against the shipped setting's 12.70x at 5761%, and the same corner is best on a program the model never saw. On the arm it is 29x cheaper and 16% better. Down from a first measurement of 268x over: partly because the QP's iteration count is a REGULARISER nobody was treating as one, partly because `cost()` itself had two faults, both overstating. **The FIT is the unbuilt half**: batch normal-equations-and-Cholesky is ~20 GMAC per channel per layer, and nothing here implements the shared-covariance RLS that replaces it. And this is ONE plant plus one corroboration — six-plant, and the fit, before it is a claim. |
 | Linear AND nonlinear alike | **CONTRADICTED** | Sorted by nonlinearity the results run the WRONG WAY. The most linear plant — Wood–Berry, linear transfer functions with dead time — LOST to a 1980s classical method (72.08 against the published BLT's 51.95). The most nonlinear — barrel as T⁴, tank as √h — refused and 1.32x. The wins are the arm and EMPS. The honest description of what works is not "linear and nonlinear alike" but ONE ERROR CLASS done very well: mechanical compliance and friction. |
 
 **And nothing here has been compared to the state of the art.** The baselines are this
@@ -207,9 +207,37 @@ Each of these is a claim that can be shown false, which is the only kind worth w
    delivered     10.62x   12.17x   12.70x
    ```
 
-   **144% of budget for 84% of the result** is the closest this has come to the requirement,
-   against the 268x the first measurement reported. What is left is the feature count and the
-   fit, not the QP and not the horizon.
+   **AND RUN TOGETHER, THE TWO KNOBS CLOSE IT: 14.16x AT 101% OF BUDGET, BETTER THAN THE
+   5761% CONFIGURATION THAT SHIPS.** The knobs are not separable — at one iteration N=56 gives
+   14.16x and N=68 gives 10.62x — which is what two regularisers on the same inversion look
+   like, and it means the best cell of a grid is a suspect result. It was checked against a
+   two-tone sine the model has never seen, and **the same cell is best there too** (8.66x
+   against N=68's 7.36x), so it is a setting rather than a coincidence:
+
+   ```
+   iters  N     program        sine    peak MAC   % budget
+       1 52    12.46x        8.12x       8,906        89%
+       1 56    14.16x        8.66x      10,148       101%
+       1 68    10.62x        7.36x      14,354       144%
+       2 52    13.83x        8.68x      14,522       145%
+      60 68    12.70x           —      576,074      5761%
+   ```
+
+   **FIFTY-SEVEN TIMES CHEAPER AND 12% BETTER.** On the 2R arm the same corner is 29x cheaper
+   and 16% better (2 iterations at N=44: 6.90x against the shipped 5.95x). More horizon past
+   the optimum makes the machine WORSE, which no argument from settling time predicts.
+
+   **THE DEFAULTS ARE NOT CHANGED YET AND THE REASON IS RULE 31.** The two plants want
+   different cells and the knobs move together, so cutting `qpIters` alone REGRESSES EMPS
+   (10.35x at 2/68). The joint change is `N ≈ 1.2·Tset` with `qpIters` 1–2 against today's
+   `1.5·Tset` and 60, and it moves every gate in the suite, so it needs the six-plant pass.
+   What is pinned on the machine today is only what was measured: `emps.test.mjs` asserts the
+   cheap corner is at least as good, still uses its authority, and fits the scan.
+
+   **SO WHAT IS LEFT IS THE FIT, NOT THE DEPLOYED PATH.** The forecast is 18% of the deployed
+   cost on EMPS (37 features) and the dominant term on the arm (~121 per channel), so step 3
+   is an arm lever and barely an EMPS one — the same constant, re-derived, four times
+   different. The FIT is the unbuilt half and nothing in this repository implements it.
 
 7. **BREADTH, WHICH MEANS WINNING WHERE IT CURRENTLY LOSES.** Target: beat the published BLT
    on Wood–Berry — a linear plant with dead time, where a classical method beats this one

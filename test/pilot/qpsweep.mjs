@@ -113,7 +113,7 @@ console.log('\n  iters   forecast   free+QP   peak MAC  peak %  sliced %');
 for (const it of ITERS) {
   pilot.qpIters = it;
   const c = pilot.cost();
-  console.log(`  ${String(it).padStart(5)}   ${(c.features + c.dots).toLocaleString().padStart(8)}  ${c.qp.toLocaleString().padStart(8)}  ${c.peakMacPerCycle.toLocaleString().padStart(10)}  ${Math.round(c.slicedMacPerCycle).toLocaleString().padStart(7)}  ${(100 * c.slicedMacPerCycle / 10000).toFixed(0).padStart(9)}%`);
+  console.log(`  ${String(it).padStart(5)}   ${(c.features + c.dots).toLocaleString().padStart(8)}  ${c.qp.toLocaleString().padStart(8)}  ${c.peakMacPerCycle.toLocaleString().padStart(9)}  ${(100 * c.peakMacPerCycle / 10000).toFixed(0).padStart(5)}%  ${(100 * c.slicedMacPerCycle / 10000).toFixed(0).padStart(7)}%`);
 }
 pilot.qpIters = shippedIters;
 

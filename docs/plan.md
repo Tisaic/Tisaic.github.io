@@ -792,9 +792,28 @@ iters   N     mm rms       x    peak MAC   % budget
 surface is RUGGED and not separable — at one iteration N=56 gives 14.16x and N=68 gives 10.62x
 — which is what two knobs that are both regularisers on the same inversion would look like,
 and it also means picking the best cell is fitting the grid. Rule 42's 5% band contains only
-that one cell, which is a warning rather than an endorsement. *Whether (1, 56) is a setting or
-a coincidence is decided by a program the model never saw, and `qpsweep.mjs` now scores the
-two-tone sine from `stack.test.mjs` in the same table.*
+that one cell, which is a warning rather than an endorsement.
+
+**AND IT SURVIVES THE HELD-OUT PROGRAM, WHICH IS WHAT MAKES IT A SETTING.** Scored on the
+two-tone sine the model has never seen, in the same table (open loop 0.36337 mm):
+
+```
+iters   N   program        sine    peak MAC   % budget
+    1  48     8.71x       6.64x       7,744        77%
+    1  52    12.46x       8.12x       8,906        89%
+    1  56    14.16x       8.66x      10,148       101%
+    1  60    13.78x       8.49x      11,470       115%
+    1  68    10.62x       7.36x      14,354       144%
+    2  52    13.83x       8.68x      14,522       145%
+    2  68    10.35x       7.28x      23,874       239%
+```
+
+**The sine peaks at the same place**, N=52–56 at one to two iterations, and falls off toward
+N=68 exactly as the fitted program does. Two programs, one optimum, and the cheapest cell in
+it is (1, 56) at 101% of budget. **The commissioned `1.5·Tset` horizon is not merely slack on
+this plant, it is PAST THE OPTIMUM** — more horizon makes the machine worse — which no
+argument from settling time predicts and which only a machine measurement could find
+(rule 16).
 
 **THE ARM IS A DIFFERENT REGIME IN EVERY TERM, WHICH IS WHY IT HAD TO BE MEASURED (rule 31).**
 Rounded rectangle, one commissioned model, contour x against the open loop's 1.343e-1:
@@ -821,6 +840,15 @@ Three things differ from EMPS and every one of them reverses a conclusion:
   is what "always fits" requires TODAY, and `sliced %` is what a restructured update — doing
   1/72 of the work per scan — could reach. Quoting `sliced` as if it were `peak` is the exact
   thing target 6's "in EVERY cycle rather than on average" was written to forbid.
+
+**6b. THE JOINT DEFAULT CHANGE, which is what steps 4 and 6 together now propose.** Today
+`N = ceil(1.5·Tset/sample/grid)` and `qpIters = 60`. Both plants that deploy want roughly
+`1.2·Tset` and 1–2 iterations: EMPS's optimum is N=56 of 68 (0.82) and the arm's flat point is
+N=44 of 58 (0.76). *Gate: the six-plant pass of step 8, because the knobs are NOT separable —
+cutting `qpIters` alone regresses EMPS from 12.70x to 10.35x — and because four of the six
+plants currently REFUSE or lose, so what has to be checked is whether a cheaper solve flips a
+refusal. A refusal that flips to a deploy is not automatically good news; it has to be the
+right answer for the right reason, which is the contract those four files pin.*
 
 **7. Re-measure the rebuilt ladder on the transfer bench.** Programs x feedrates, headline is
 the WORST CELL. *This is where the shrink's cost shows up. If the worst cell falls below the
