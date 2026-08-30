@@ -6,11 +6,12 @@ import { roundedRect } from '../../lib/flexisim/toolpath.js';
 import { ContourScore, decompose } from '../../lib/flexisim/contour.js';
 import { RobotComp } from '../../lib/ngrc/robotcomp.js';
 import { makeArmHost } from '../../lib/flexisim/autohost.js';
-import { setLeadSamples } from '../../lib/pilot/pilot.js';
+import { setLeadSamples, setPoolRows } from '../../lib/pilot/pilot.js';
 // HOW MANY LEADS THE POOLED FIT ACTUALLY BUILDS. Nine was chosen from an offline table on the
 // EMPS axis and it cost this arm's model-only stack 11% (7.4340e-2 to 8.3206e-2), so it is a
 // knob here until it has been scored on more than the plant that suggested it.
 if (process.env.LEAD_SAMPLES) setLeadSamples(+process.env.LEAD_SAMPLES);
+if (process.env.POOL_ROWS) setPoolRows(+process.env.POOL_ROWS);
 
 let failed = 0;
 function check(name, cond, detail) {
