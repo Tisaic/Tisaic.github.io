@@ -4569,3 +4569,28 @@ autostack: all checks passed
 (--node — skipping the browser)
 
 ```
+
+### lev-ikfree — exit 0 — 2026-08-30T05:24Z
+
+```
+
+pilot: kinematics-free geometry — the inverse learned from the tracker
+    90 held points; degree 7: train 7.35e-5, HOLDOUT 3.252e-4 rad
+  ✓ the inverse is learned from the tracker to sub-milliradian holdout
+    static hold error on the circle: analytic 4.481e-2 (max 6.33e-2), learned 2.165e-3 (max 4.52e-3) — 20.7x
+  ✓ holding real path points, the learned map lands within 5e-3 of the ask
+  ✓ …and beats the analytic kinematics at least 5x, because it learned the MACHINE (droop and wind-up included) rather than the drawing
+    ⑥ pilot on the learned routing: deploys, verify 3.14x
+    ⑥ ch R² lead0 0.984 → far 0.972   leverage 1.53e-2 → 2.01e-2   ratio 1.32   ⇒ far lead predicted well — nothing to explain
+    ⑥ ch R² lead0 0.874 → far 0.828   leverage 1.53e-2 → 2.01e-2   ratio 1.32   ⇒ far lead predicted well — nothing to explain
+  ✓ the pilot commissions on the learned truth routing and the machine vouches for it
+    ⑦ circle ladder: 5.9e-2 6.9e-2 4.8e-2 2.5e-2 2.1e-2 1.7e-2 9.6e-3 5.3e-3 4.8e-3 3.5e-3 2.6e-3 1.7e-3
+  ✓ ⑦ — iteration on the fully learned chain — converges on the circle
+    softest corner DELIVERED on the circle: open 1.18e+0 → 2.71e-1 (4.36x) — against a verify that read scribble 0.28x / program 1.36x
+    softest corner (K 0.25, E 0.03): deploys, verify 1.36x
+  ✓ at the softest sliders the fully learned system commissions and deploys
+  ✓ …and its correction HELPS on a program, whatever the scribble regime said
+
+pilot/ikfree: all checks passed
+
+```
