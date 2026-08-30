@@ -61,7 +61,6 @@ if (process.env.HORIZON_TS) SOLVER.horizonTs = +process.env.HORIZON_TS;
 if (process.env.QPITERS) SOLVER.qpIters = +process.env.QPITERS;
 if (Object.keys(SOLVER).length) console.log(`  solver budget override: ${JSON.stringify(SOLVER)}`);
 
-
 let failed = 0;
 function check(name, cond, detail) {
   const ok = !!cond;
