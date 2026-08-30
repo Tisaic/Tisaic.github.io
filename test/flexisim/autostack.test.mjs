@@ -185,6 +185,7 @@ let hostRef = null;
     // and this bar runs exactly the configuration 22.42x was measured on.
     ...(process.env.HORIZON_TS ? { horizonTs: +process.env.HORIZON_TS } : {}),
     ...(process.env.QPITERS ? { qpIters: +process.env.QPITERS } : {}),
+    ...(process.env.SHARED ? { sharedWeights: process.env.SHARED !== '0' } : {}),
     onRung: (r) => console.log(`  [${((Date.now() - T0) / 60000).toFixed(0)}m] `
       + `${r.name}  ${r.score.toExponential(4)}`
       + `${r.gain === null ? '' : '  ' + r.gain.toFixed(2) + 'x'}`
