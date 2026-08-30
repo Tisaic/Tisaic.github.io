@@ -142,5 +142,83 @@ console.log(`    a gain that steps 1.0 -> 3.0 half way: lambda 1 ends at ${held.
 check('with forgetting it TRACKS the change, where without it it averages the two',
   tracked > 2.9 && held < 2.5, `${tracked.toFixed(3)} tracked, ${held.toFixed(3)} held`);
 
+// ---- THE POSTERIOR HANDED FROM THE BATCH FIT, AND THE MECHANISM THAT ACTUALLY SEPARATES
+// THE TWO LAWS. The first version of this block asserted the wrong thing and the measurement
+// said so, which is worth keeping because the wrong theory is the intuitive one.
+//
+// WHAT WAS CLAIMED: LMS destroyed transfer because it is unconstrained in directions the
+// current program does not excite, so the weights drift there. FALSE, and provably: an LMS
+// step is `mu e x/||x||^2`, which lies ALONG x, so a strictly unexcited direction does not
+// move under LMS either. Measured here: an RLS seeded with a diagonal prior moves such a
+// weight by exactly 0.00e+0, and one seeded with the batch posterior moves it by 0.198 —
+// through the prior's own off-diagonal CORRELATION, which is correct inference and not drift.
+//
+// WHAT ACTUALLY SEPARATES THEM IS THAT LMS NEVER STOPS. Its gain is `mu/||x||^2`, which
+// depends on the current row and not on how much data has already been seen, so it keeps
+// responding to noise at full strength for ever and a long run accumulates that. An RLS gain
+// is `Px/(lambda + x'Px)` and `P` SHRINKS as information arrives, so the law converges and
+// then holds. On a program where the commissioned model is already right, LMS keeps moving
+// and RLS does not — and "keeps moving on a program where it is already right" is exactly a
+// controller specialising to the trajectory in front of it, which is the memory the
+// retirement is trying to remove.
+//
+// So the test is: seed from the commissioning posterior, feed a stream carrying NO new
+// information — the same plant, only noise — and require the model to hold. Both halves, with
+// a constant-gain law on the identical stream as the control (rule 9).
+{
+  const out = {};
+  const Xa = [], ya = [];
+  let s2 = 999;
+  const nz = () => { s2 = (s2 * 1103515245 + 12345) & 0x7fffffff; return s2 / 0x7fffffff - 0.5; };
+  for (let k = 0; k < 400; k++) {
+    const a = Math.sin(k / 5), b = Math.sin(k / 3.3 + 1);
+    Xa.push([a, b]); ya.push(2 * a + 5 * b);
+  }
+  const w0 = solveRidge(Xa, ya, 1e-9, null, out);
+  const P0 = out.covariance();
+
+  const rls3 = new SharedRLS(2, 1, 1, 1);
+  rls3.seed(0, w0, P0);
+  // The SAME plant it was fitted on, plus measurement noise. Nothing here should change the
+  // model: a law that moves on this stream is chasing noise, and on a repeating program it
+  // will chase the same noise into the same corner every lap.
+  const lms = [w0[0], w0[1]];
+  for (let k = 0; k < 20000; k++) {
+    const a = Math.sin(k / 5), b = Math.sin(k / 3.3 + 1);
+    const y = 2 * a + 5 * b + 0.05 * nz();
+    rls3.update([a, b], [y]);
+    // the law it replaces, on the identical row: theta += mu e x/||x||^2
+    const n2 = a * a + b * b;
+    if (n2 > 0) {
+      const e = y - (lms[0] * a + lms[1] * b);
+      const g = 0.05 * e / n2;
+      lms[0] += g * a; lms[1] += g * b;
+    }
+  }
+  const rw = rls3.weights(0);
+  const dR = Math.hypot(rw[0] - 2, rw[1] - 5);
+  const dL = Math.hypot(lms[0] - 2, lms[1] - 5);
+  console.log(`    20,000 rows of the SAME plant plus noise, starting from the commissioned fit:`);
+  console.log(`      seeded RLS   [${rw[0].toFixed(4)}, ${rw[1].toFixed(4)}]  ${dR.toExponential(2)} from truth`);
+  console.log(`      LMS, mu 0.05 [${lms[0].toFixed(4)}, ${lms[1].toFixed(4)}]  ${dL.toExponential(2)} from truth`);
+  check('a seeded RLS HOLDS a model that is already right, because its gain decays with information',
+    dR < 2e-3, `${dR.toExponential(2)} from truth`);
+  check('…where a constant-gain law keeps chasing the noise on the same stream',
+    dL > 5 * dR, `LMS ${dL.toExponential(2)} against RLS ${dR.toExponential(2)}`);
+
+  // AND IT STILL LEARNS when the plant really does change — a law that held by being deaf
+  // would pass the checks above and be useless.
+  const rls4 = new SharedRLS(2, 1, 1, 0.999);
+  rls4.seed(0, w0, P0);
+  for (let k = 0; k < 20000; k++) {
+    const a = Math.sin(k / 5), b = Math.sin(k / 3.3 + 1);
+    rls4.update([a, b], [2 * a + 9 * b + 0.05 * nz()]);
+  }
+  const w4 = rls4.weights(0);
+  console.log(`      and when the plant DOES change (5 → 9): [${w4[0].toFixed(4)}, ${w4[1].toFixed(4)}]`);
+  check('…and with forgetting it still follows a plant that genuinely changed',
+    Math.abs(w4[1] - 9) < 0.1, `${w4[1].toFixed(4)} against 9`);
+}
+
 console.log(failed ? `\nrls: ${failed} check(s) FAILED\n` : '\nrls: all checks passed\n');
 process.exit(failed ? 1 : 0);
