@@ -574,11 +574,38 @@ own MAC/cycle and kB. *A budget met on one plant is a property of that plant; ru
 common factor across plants sharing no physics is a property of the CODE, and that is what a
 budget claim has to be.*
 
-**9. Choose cascade depth from the leverage, not from a commission.** The leverage LEVEL
-triples across three layers while the ratio stays flat — the cascade running out of signal,
-visible during the fit. `Stack` currently discovers this by commissioning a layer and finding
-it cannot vouch for itself. *If a threshold predicts the failing layer across plants, depth
-stops costing a commission to discover.*
+**9. ~~Choose cascade depth from the leverage~~ — FALSIFIED, and the null is the finding.**
+
+The hypothesis was that the leverage LEVEL, which tripled across three layers while the ratio
+stayed flat, marks the cascade running out of signal and could stop it without paying a
+commission per layer. A fourth layer was commissioned on the EMPS axis to test it:
+
+```
+layer 1  deployed  verify 1.35x  R² lead0 0.991  leverage 7.73e-5
+layer 2  deployed  verify 1.54x  R² lead0 0.777  leverage 1.49e-4
+layer 3  deployed  verify 1.70x  R² lead0 0.514  leverage 2.21e-4
+layer 4  REFUSED   verify 1.09x  R² lead0 0.543  leverage 1.94e-4
+```
+
+**Both candidate predictors point the wrong way.** The layer that fails to vouch has a BETTER
+forecast than the one that succeeded (0.543 against 0.514) and a LOWER leverage (1.94e-4
+against 2.21e-4). The triple across three points was a trend fitted to a monotone run, and
+the fourth point breaks it.
+
+**So neither forecast quality nor conditioning predicts deployability, and only the verify
+did.** That is consistent with this project's own hardest-won line — a forecast is not a
+controller — arriving from a new direction: layer 4 predicts the residual perfectly well and
+still cannot ACT on it, because what is left after three layers is not in a direction the QP
+can move with the authority it has.
+
+**What it costs us:** cascade depth genuinely requires a machine measurement. It cannot be
+read off the fit, and the commissioning time spent discovering the last layer is not
+recoverable this way. One of the two cheap levers on target 4 is gone, and the remaining one
+is fewer features rather than fewer layers.
+
+**What it is worth:** a stopping rule that looked obviously right, on three points, was wrong
+on the fourth. It cost one commission to find out and would have cost a rebuilt `Stack` to
+find out later.
 
 **10. Restate the scoreboard honestly.** Update the north star's table with what the rebuild
 actually achieves against all five parts of the claim. *Including, if it comes to it, that the
