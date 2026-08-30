@@ -31,7 +31,7 @@ unmeasured or partial, and saying so is worth more than the claim is.
 | Completely self-tuning | **SUPPORTED** | No per-plant constants; every threshold re-derived from measurement; and it REFUSES with a stated reason, asserted to be right for the right reason. Rare, and the strongest thing here. |
 | Robust and tolerant | **PARTIAL** | The refusal machinery is genuinely strong. Transfer is the weakness, and it is the subject of this north star. |
 | Reusable across plants | **2 CLEAR WINS OF 6** | Arm and EMPS win. Tank 1.32x, barrel refused, mill refused (0.42x), Wood–Berry LOST. |
-| PLC memory and CPU | **UNMEASURED ON THE SHIPPED PATH** | Exactly one budget check exists and it is on the BLACK BOX, not the ladder. The pilot cascade, the QP and the harmonic solve have no scan-time or byte count anywhere. The design is PLC-shaped — fixed-iteration `boxQP`, exact RLS, an IEC 61131 lineage — but that is an architecture argument, and rule 16 says a number computed from the model cannot check the model. |
+| PLC memory and CPU | **MEASURED, 1.44x OVER ON THE DEPLOYED PATH; THE FIT IS UNBUILT** | Memory is not the problem: 116 kB, not the 482 kB estimated. The deployed EMPS path costs 14,354 MAC/cycle at one QP iteration — 144% of 10% of a 1 ms scan — and delivers 84% of the sixty-iteration result; at four iterations, 429% for 96%. That is down from a first measurement of 268x, half of it because the iteration count is a REGULARISER nobody was treating as one (on the arm two iterations BEAT sixty) and half because `cost()` itself had two faults, both overstating. The horizon does NOT truncate (N=32 loses two thirds), so what is left is the feature count. **The FIT is the unbuilt half**: batch normal-equations-and-Cholesky is ~20 GMAC per channel per layer, and the shared-covariance RLS that replaces it is specified and pinned but not written. |
 | Linear AND nonlinear alike | **CONTRADICTED** | Sorted by nonlinearity the results run the WRONG WAY. The most linear plant — Wood–Berry, linear transfer functions with dead time — LOST to a 1980s classical method (72.08 against the published BLT's 51.95). The most nonlinear — barrel as T⁴, tank as √h — refused and 1.32x. The wins are the arm and EMPS. The honest description of what works is not "linear and nonlinear alike" but ONE ERROR CLASS done very well: mechanical compliance and friction. |
 
 **And nothing here has been compared to the state of the art.** The baselines are this
@@ -150,6 +150,56 @@ Each of these is a claim that can be shown false, which is the only kind worth w
    which is most of the memory, is largely paying for nothing. What the shrink costs against
    what it saves is a measurement, not an argument, and it is the one that decides whether
    this target and target 5 can both be met.
+
+   **NOW MEASURED ON THE MACHINE RATHER THAN PROJECTED, AND THE TABLE ABOVE WAS PESSIMISTIC
+   IN BOTH TERMS.** `test/pilot/qpsweep.mjs` and `qpsweep-arm.mjs` commission ONE pilot and
+   re-deploy that same model at a ladder of iteration budgets, so the only variable is the
+   solver's work. On the EMPS axis, x against the shipped cascade's 0.5764 mm:
+
+   ```
+   iters       1       2       4       8      16      32      60     120     480
+   x       10.62   10.35   12.17   11.69   12.28   12.56   12.70   12.71   12.71
+   uPk      0.76    0.76    0.77    0.77    0.91    1.28    1.49    1.47    1.47
+   ```
+
+   **ONE ITERATION DELIVERS 84% OF THE RESULT AND FOUR DELIVER 96%**, so rule 42 takes 4; and
+   on the 2R arm **two iterations BEAT sixty** — 6.94x against 5.97x on the rounded rectangle
+   and 8.71x against 6.92x on the circle — at a thirtieth of the cost. The arm's `uPk` is
+   0.118 against 0.120, so it is not a smaller correction but a differently shaped one, and
+   rule 39's split says where: bias ~0 in every row, the whole difference is OSCILLATION.
+   **The converged solve rings and the truncated one does not.** The QP inverts a forecast,
+   so the iteration count is a second regulariser on that inversion alongside `lambda` — and
+   the two are therefore one knob approached from opposite ends.
+
+   **WHICH RECONCILES THE ONE THING THAT FAILED.** `test/pilot/rti.test.mjs` measures that one
+   iteration per cycle does NOT track the sixty-iteration move — 88% of the applied signal —
+   and that sixty is itself 36% from this solver's own optimum. Both are true and neither
+   matters: **the converged solve is not the answer we want.** A scheme cannot be rejected for
+   failing to track a target that is worse than what it produces (rule 16).
+
+   **THE HORIZON, WHICH THE TABLE ABOVE LEANED ON, DOES NOT TRUNCATE.** Same fitted bank cut
+   to its first N leads, at 4 iterations on EMPS: N=48 costs 9%, N=32 loses two thirds, N=16
+   more than two thirds. `1.5·Tset/grid` is not slack, so the projected `N 24` and `N 32` rows
+   above are not available on that plant.
+
+   **AND TWO FAULTS IN `cost()` ITSELF WERE MAKING THE GAP LOOK BIGGER THAN IT IS** — both the
+   model of the code drifting from the code (rules 17, 30). It counted the STORED lead bank
+   rather than the leads `act()` evaluates, so the forecast term was invariant under the one
+   knob that cuts it; and it costed the free response as `min(N,M)·M/2` on the FINE impulse,
+   carried across from `PreviewMPC.cost()` where the preview really does convolve it, where
+   `_horizon` builds it from `hGrid` at N — 20,366 MAC against 2,278, a third of the total.
+   Corrected, the deployed EMPS path costs:
+
+   ```
+   iters             1        4       60
+   MAC/cycle    14,354   42,914  576,074
+   % budget        144%     429%    5761%
+   delivered     10.62x   12.17x   12.70x
+   ```
+
+   **144% of budget for 84% of the result** is the closest this has come to the requirement,
+   against the 268x the first measurement reported. What is left is the feature count and the
+   fit, not the QP and not the horizon.
 
 7. **BREADTH, WHICH MEANS WINNING WHERE IT CURRENTLY LOSES.** Target: beat the published BLT
    on Wood–Berry — a linear plant with dead time, where a classical method beats this one

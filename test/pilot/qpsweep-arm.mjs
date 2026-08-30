@@ -130,7 +130,7 @@ async function deployOn(shape, active, iters) {
 
 const NFULL = pilot.N;
 const NS = (process.env.NS || '').split(',').filter(Boolean).map(Number);
-const NITERS = +(process.env.NITERS || 4);
+const NITERS = (process.env.NITERS || '4').split(',').map(Number);
 
 function costLine() {
   console.log('\n  iters   forecast   free+QP   MAC/cycle   sliced   % of 10,000');
@@ -173,12 +173,12 @@ if (NS.length) {
     const off = await deployOn(shape, false, null);
     console.log(`\n  ${shape}: horizon sweep at ${NITERS} iterations (full N = ${NFULL}),`
       + ` open loop ${off.r.contourRms.toExponential(3)}`);
-    console.log('      N      contour        x        osc      uPk   MAC/cycle  sliced  % of 10,000');
-    for (const nn of NS) {
+    console.log('  iters      N      contour        x        osc      uPk   MAC/cycle  sliced  % of 10,000');
+    for (const it of NITERS) for (const nn of NS) {
       pilot.N = nn;
-      const on = await deployOn(shape, true, NITERS);
+      const on = await deployOn(shape, true, it);
       const c = pilot.cost();
-      console.log(`  ${String(nn).padStart(5)}   ${on.r.contourRms.toExponential(3)}  `
+      console.log(`  ${String(it).padStart(5)}  ${String(nn).padStart(5)}   ${on.r.contourRms.toExponential(3)}  `
         + `${(off.r.contourRms / on.r.contourRms).toFixed(2).padStart(6)}x  `
         + `${(on.r.contourOsc ?? NaN).toFixed(3).padStart(7)}  ${on.uPk.toFixed(3).padStart(6)}  `
         + `${c.peakMacPerCycle.toLocaleString().padStart(10)}  `
