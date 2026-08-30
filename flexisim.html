@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:442,built:"2026-08-30T00:16:26Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:443,built:"2026-08-30T00:18:08Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -5764,7 +5764,12 @@ async function buildP() {
   ik6 = null; ik6Comm = null; ilc6P = null; ilc6Hist = [];
   // AND SO DOES THE LADDER. Every rung it deployed identified THIS plant; a K or E change
   // makes all of them yesterday's inverse on today's arm, exactly as for ⑤ and ⑥.
-  if (autoP) { autoP.dispose(); }        // a new plant orphans the old host's machine
+  // A NEW PLANT ORPHANS THE OLD HOST'S MACHINE. `buildP` is not async at this point, so the
+  // teardown is fire-and-forget — and a floating promise that rejects is an UNHANDLED
+  // REJECTION, which neither Playwright's `pageerror` nor a console listener reports
+  // (rule 7). Swallowed deliberately: the host is being discarded either way, and a failed
+  // destroy of a machine nobody will use again must not take the rebuild down with it.
+  if (autoP) autoP.dispose().catch((e) => console.warn('⑨ host teardown:', e));
   autoP = null; autoComm = false; autoRep = null;
   $('ctlP').value = 'open';
   await homeP();
