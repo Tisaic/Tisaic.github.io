@@ -1174,11 +1174,27 @@ nearest-neighbour inheritance. It feeds `wouldGate`, `r2Far` and the leverage re
 is OFF on this arm (`gateForecasts: false`) so the obvious path is closed, which is why it is
 listed as untested rather than as the answer.
 
-**AND THE MEASUREMENT DISCIPLINE THIS FORCED IS WORTH MORE THAN THE 11%.** Two arm runs
-differing only in lead samples SHIPPED 23.12x and 19.96x — a 15% spread, because the
-lap-periodic rung probes randomly — while their model-only rows moved 0.7%. **Single-run
-comparisons on the shipped number are not evidence**, and several in this file were made that
-way. The model-only row is the stable one, and it is also the row the retirement leaves.
+**AND IT PRODUCED A BETTER ARGUMENT FOR THE RETIREMENT THAN ANY OF THE TRANSFER NUMBERS.**
+Three arm runs, same machine, same program, same code, differing only in a lead-sample count
+that moves the model by 0.7%:
+
+```
+              shipped (with the lap rung)     model-only stack
+run 1                    23.12x                   8.3206e-2
+run 2                    19.96x                   8.2614e-2
+run 3                    18.49x                   8.3121e-2
+spread                     25%                        0.7%
+```
+
+**The lap-periodic rung is not merely non-transferable — it is not REPEATABLE.** Its probe is
+random, and the whole 25% is its. The model layers reproduce to 0.7% on the same runs. A rung
+whose contribution swings a quarter on re-commissioning is not something a machine can be
+specified against, quite apart from what it does on a program it has not seen.
+
+**AND SINGLE-RUN COMPARISONS ON THE SHIPPED NUMBER ARE THEREFORE NOT EVIDENCE.** Several in
+this file were made that way, including the claim that the new defaults took this arm from
+20.08x to 23.12x: that difference is inside the noise and cannot be claimed. The model-only row
+is the stable one, and it is also the row the retirement leaves.
 
 **7. Re-measure the rebuilt ladder on the transfer bench.** Programs x feedrates, headline is
 the WORST CELL. *This is where the shrink's cost shows up. If the worst cell falls below the
