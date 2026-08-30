@@ -560,9 +560,41 @@ to 0.046. *Cut N, measure verify and the machine. Memory falls linearly, the QP 
 a FIXED dataset before it is allowed near a machine — a new fitting method that quietly
 changes the model is worse than a slow one.*
 
-**6. Restructure to bounded work per cycle.** One RLS update and one QP iteration per cycle,
-warm-started — the real-time-iteration shape. *Assert the PEAK per cycle, not the average:
-"always fits" is the constraint, and an average is exactly the wrong statistic for it.*
+**6. Restructure to bounded work per cycle — MEASURED, and the naive form fails.**
+
+One RLS update and one QP iteration per cycle, warm-started, in the real-time-iteration shape.
+The peak per cycle is what must be asserted; an average is the wrong statistic for "always
+fits". Two measurements changed what this step is:
+
+**One iteration per cycle does NOT track sixty.** Driven over 400 cycles against a moving
+horizon, the applied move comes out 7x SMALLER (rms 0.097 against 0.704) — 88% of the signal,
+with a worst cycle at 135% of rms. It never builds up: one iteration barely moves off a warm
+start that decays on every shift. The 60x lever is not available naively.
+
+**And the shipped QP is not converged either, which is the more useful half.** At N=48:
+
+```
+iters   30      60      120     240     480     960     1920
+rms     0.466   0.688   0.803   0.869   0.896   0.891   0.892
+```
+
+Sixty — the shipped setting — delivers **77% of the move its own optimum would**, and
+convergence needs about 480. Shortening the horizon does not help: >256 iterations are needed
+at N=48, 32, 24, 16, 12 AND 8 alike, because the convergence rate is set by the Hessian's
+conditioning (the plant's own spectrum) rather than by the number of variables.
+
+**WHICH MEANS THE SWEEP ABOVE ASKS THE WRONG QUESTION.** It scores the solver against its own
+optimum. The pilot has been running a heavily truncated solve for its entire measured history
+— 5.96x, 12.70x, 22.42x, all of it — so truncation is evidently acting as implicit
+regularisation rather than as a defect. "How few iterations CONVERGE" and "how few still work
+ON THE MACHINE" are different questions and only the second one matters (rule 16: a number
+computed from the model cannot check the model).
+
+*Replacement experiment: sweep `qpIters` on the EMPS axis and the arm and score the MACHINE,
+not the solver residual. If 8 or 16 iterations hold the result, the budget is reachable at
+2,176-4,352 MAC/cycle for a horizon of 32. If they do not, the QP has to be replaced rather
+than tuned — and an accelerated projected gradient is the first thing to try, since it costs
+about two extra vector operations per iteration and changes the rate from O(1/k) to O(1/k²).*
 
 **7. Re-measure the rebuilt ladder on the transfer bench.** Programs x feedrates, headline is
 the WORST CELL. *This is where the shrink's cost shows up. If the worst cell falls below the
