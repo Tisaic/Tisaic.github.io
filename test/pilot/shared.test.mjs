@@ -5,17 +5,31 @@
  * equations plus a Cholesky, per lead, is about 20 GMAC per channel per layer — two million
  * cycles of budget. It is an offline algorithm and no amount of tuning changes that.
  *
- * What makes an online fit affordable at all is one structural fact: EVERY LEAD SHARES A
- * DESIGN MATRIX. The forecast ladder fits the same features against a different target per
- * lead, so `X'X` is common to all of them and only `X'y` differs. One factorisation (or one
- * RLS covariance) serves the whole bank, and the per-lead work drops from O(n^3) to O(n).
+ * WHAT THIS FILE USED TO CLAIM, AND WHAT MEASURING THE REAL ROW SAYS INSTEAD.
  *
- * That is the difference between 4079% of budget and 56%, so it is worth an hour to check
- * rather than a week to discover. This asserts it NUMERICALLY — per-lead independent solves
- * against one shared factorisation, on the same data — because a structural argument is not
- * a measurement (rule 16), and because if it is false, steps 5 and 6 of the plan collapse.
+ * The claim was: EVERY LEAD SHARES A DESIGN MATRIX, so `X'X` is common and only `X'y` differs,
+ * one covariance serves the whole bank, and the per-lead work drops from O(n^3) to O(n). That
+ * is the difference between 4079% of budget and 56%, and steps 5 and 6 of the plan were built
+ * on it.
+ *
+ * IT IS FALSE, and this file could not see it, because it built its OWN shared `X` and then
+ * verified linear algebra on it — assuming the structural fact it claimed to pin. Two wrongs
+ * that agree (rule 15): a synthetic shared matrix and a solver that shares it cannot check
+ * whether the PILOT shares one.
+ *
+ * `Pilot._row(c, k, L, ...)` takes the lead as an argument and uses it. The measured block is
+ * `rec.x[k - l*stride]` and does not depend on L; the COMMAND block is `rec.cmd[k + L - l*cs]`
+ * and does. Measured on the real row builder at nm 2, mL 6, fL 6: **13 of 25 features are
+ * identical across leads and 12 are lead-dependent** — the model pairs a PAST measurement with
+ * a FUTURE command, and that pairing is the whole point of a forecast, so the lead-dependence
+ * is not an accident to be tidied away.
+ *
+ * SO THE ECONOMY IS PARTIAL, AND THIS FILE NOW MEASURES WHICH PART. A shared factorisation is
+ * exact for the shared block and wrong for the rest, and the honest cost of the online fit is
+ * one covariance PER LEAD unless the architecture changes — which is what `docs/plan.md`
+ * step 5 now has to answer rather than assume.
  */
-import { solveRidge } from '../../lib/pilot/pilot.js';
+import { solveRidge, Pilot } from '../../lib/pilot/pilot.js';
 
 let failed = 0;
 const check = (name, ok, detail = '') => {
@@ -24,6 +38,37 @@ const check = (name, ok, detail = '') => {
 };
 
 console.log('\npilot: one design matrix, many leads — the shared-covariance claim');
+
+// ---- THE REAL ROW BUILDER, FIRST, because everything below is arithmetic on a matrix this
+// file makes up, and the question that matters is what the PILOT builds. `_row` is called
+// with a lead and a minimal context; two leads at the same sample are compared column by
+// column. No synthetic data can answer this and no structural argument should be trusted for
+// it (rule 16).
+{
+  const nm = 2, mL = 6, fL = 6, ROWS = 400;
+  const rec = { x: [], cmd: [] };
+  for (let k = 0; k < ROWS; k++) {
+    rec.x.push([Math.sin(k / 9), Math.cos(k / 5)]);
+    rec.cmd.push([Math.sin(k / 13)]);
+  }
+  const ctx = { _rec: rec, nm, nc: 1, sample: 1, Ts: 10, channels: [{ lo: -1, hi: 1 }],
+    cmdFine: null, _mLag: () => mL, _fLag: () => fL, _schedVec: Pilot.prototype._schedVec };
+  const rowAt = (L) => Pilot.prototype._row.call(ctx, 0, 200, L, 1, false, mL, fL, false);
+  const a = rowAt(0), b = rowAt(7);
+  let shared = 0;
+  for (let i = 0; i < a.length; i++) if (Math.abs(a[i] - b[i]) < 1e-15) shared++;
+  const perLead = a.length - shared;
+  console.log(`    the pilot's OWN row at leads 0 and 7: ${a.length} features, `
+    + `${shared} identical and ${perLead} lead-DEPENDENT`);
+  check('the leads do NOT share a design matrix — the command block is indexed at k+L',
+    perLead > 0, `all ${a.length} features matched, which would mean the claim holds`);
+  // BOTH HALVES (rule 9): if nothing were shared, a partial economy would not exist either,
+  // and the fix below would have nothing to build on.
+  check('…but the MEASURED block is shared, so the economy is partial rather than absent',
+    shared >= 1 + nm * mL, `${shared} shared against ${1 + nm * mL} expected from the lag block`);
+  console.log(`    so an online fit costs one covariance PER LEAD as the row stands — the `
+    + `arithmetic below is exact only for the ${shared} shared columns`);
+}
 
 // A design matrix with the shape the pilot's actually has: a lag window over several
 // signals, with genuine collinearity between neighbouring taps, so a shared factorisation
