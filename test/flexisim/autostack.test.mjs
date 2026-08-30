@@ -181,6 +181,10 @@ let hostRef = null;
     reuseMachine: process.env.REUSE !== '0',
     warmup: +(process.env.WARMUP ?? 2),
     passes: +(process.env.HFFPASSES || 24),
+    // THE SOLVER BUDGET, for `docs/plan.md` step 6b. Unset, the Pilot's own defaults apply
+    // and this bar runs exactly the configuration 22.42x was measured on.
+    ...(process.env.HORIZON_TS ? { horizonTs: +process.env.HORIZON_TS } : {}),
+    ...(process.env.QPITERS ? { qpIters: +process.env.QPITERS } : {}),
     onRung: (r) => console.log(`  [${((Date.now() - T0) / 60000).toFixed(0)}m] `
       + `${r.name}  ${r.score.toExponential(4)}`
       + `${r.gain === null ? '' : '  ' + r.gain.toFixed(2) + 'x'}`
