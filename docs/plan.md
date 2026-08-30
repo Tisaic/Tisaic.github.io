@@ -287,7 +287,38 @@ and of a program, and check the ranking matches the measured 12.70x/3.93x. If it
 excitation can stop when the rank condition is met — which is the commissioning-time lever
 that does NOT cost result quality, unlike every knob measured so far.
 
-### 3. Fit the propagator, not one step — Koopman / EDMD
+### 3. Koopman / EDMD — CORRECTED: the premise was wrong, and the correction is sharper
+
+**Originally written as "fit the propagator, not one step", on the assumption that the
+forecast is fitted for near-term accuracy and compounds error across leads. Reading
+`pilot.js` kills that: it already fits every lead DIRECTLY.** `_planFits` builds a ladder of
+`N` leads and `F.ladder.push({ch, L, w, val})` stores a separate weight vector per (channel,
+lead), each from its own design matrix and its own block split. That is precisely the "direct
+multi-horizon readouts" `continuous.js` offers as a feature — the pilot has it already.
+
+**So `r2Far` at -0.035 is not compounding error.** It is a direct fit to the far lead that
+cannot predict it. That is a FEATURE problem, not a fitting-scheme problem, and the two need
+opposite responses:
+
+- if the far lead is unpredictable because the features do not SPAN it, a richer dictionary
+  is the fix and Koopman's contribution is real — but it is about choosing lifting functions,
+  not about how the fit is arranged;
+- if it is unpredictable because it is genuinely unpredictable at that horizon, no dictionary
+  helps and the honest move is to shorten the horizon the QP trusts.
+
+**And the instrument to tell them apart now exists.** `solveRidge`'s leverage answers exactly
+this: high leverage at the far lead means the far-lead rows are extrapolating from data that
+did not cover them — an EXCITATION deficiency, which is idea 2's territory and cheap to fix.
+Low leverage with negative R² means the features genuinely do not span the target, which is
+idea 3's territory and expensive. Nobody has looked, and the two have completely different
+plans behind them.
+
+**Cheapest experiment, replacing the one that was wrong:** during one commission, record the
+leverage of the far-lead design rows alongside the per-lead `val` the ladder already stores.
+That is one number against a number already kept, and it splits a question the project has
+been treating as one thing.
+
+### 3b. What the original idea 3 was reaching for, and where it survives
 
 The QP inverts the model over a HORIZON, but the forecast is fitted for near-term accuracy and
 error compounds across leads: `r2Far` was measured at **-0.035**, worse than predicting the
@@ -298,13 +329,11 @@ is linear, making a linear predictive controller exact rather than approximate.
 fast variable breaks the LTI-ness the QP needs" — hence the affine observer, which was worth
 0.48x -> 5.02x. That patch is a special case of the Koopman condition.
 
-**The machinery is already here:** `universalMap`/`prunedMap` is a dictionary with
-importance-ranked pruning, and `continuous.js` has DIRECT MULTI-HORIZON READOUTS — fitting
-each lead directly instead of iterating a one-step model, which is the pragmatic form of
-fitting the propagator.
-
-**Cheapest experiment:** refit the existing basis against each lead directly and compare
-`r2Far` and the machine score on the bench. No new model class required to test the idea.
+**The machinery that IS still unused:** `universalMap`/`prunedMap`, a dictionary with
+importance-ranked pruning. The pilot offers a quadratic block under a structured prior and
+picks on held-out data; that is a two-option search where the NGRC side has a ranked,
+prunable dictionary. If the leverage test above says the features do not span the far lead,
+this is what to reach for — and `commission.js` is the search procedure for it.
 
 ### 4. VRFT — one-shot controller synthesis from one dataset
 
