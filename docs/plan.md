@@ -652,11 +652,68 @@ penalty that nobody tuned, which is exactly the implicit-regularisation reading,
 the iteration count and `lambda` are the same knob approached from opposite ends. A future
 `lambda` search has to hold `qpIters` fixed or it is searching one dimension twice.
 
-*Still to run: the same sweep on the 2R arm (`test/pilot/qpsweep-arm.mjs`, two channels,
-coupled, with backlash), because a budget measured on one plant is a property of that plant
-(rule 18). And 4 iterations is 15x, not 60x: at N=68 that is ~38 kMAC/cycle against a 10,000
-budget, so the horizon and the feature count still have to come down. The lever is real and
-it is not sufficient alone.*
+**AND ON THE ARM THE TRUNCATED SOLVE IS NOT A COMPROMISE, IT IS BETTER.** The second plant —
+two channels, coupled, with backlash, `test/pilot/qpsweep-arm.mjs`, one commissioned model
+re-deployed nine times. Contour rms against the open loop's 1.343e-1 (rounded) and 7.101e-2
+(circle):
+
+```
+iters          1      2      4      8     16     32     60    120
+rounded     6.18x  6.94x  6.58x  6.29x  6.07x  5.96x  5.97x  5.96x
+circle      8.59x  8.71x  8.25x  7.67x  7.11x  6.83x  6.92x  6.87x
+uPk (rnd)   0.110  0.118  0.123  0.122  0.121  0.120  0.120  0.120
+osc (rnd)   0.022  0.019  0.020  0.021  0.022  0.023  0.022  0.023
+```
+
+**Two iterations beat sixty by 16% on the rectangle and 26% on the circle**, and both curves
+fall monotonically from 2 upward. The flagship 5.96x on the rounded rectangle — the number on
+the page — is what SIXTY iterations delivers; two deliver 6.94x, at 1/30 of the cost. Lower
+cost and higher performance from the same change, which is not a trade at all.
+
+**AND IT IS NOT THE CORRECTION GETTING SMALLER, which is the explanation to kill first.** On
+EMPS `uPk` halved (1.49 → 0.76) so "less authority happened to suit that plant" was live
+there. On the arm `uPk` is **0.118 against 0.120** — the same size correction, a different
+SHAPE. Rule 39's decomposition says where: bias is ~0 in every row, and the whole difference
+is OSCILLATION, 0.019 at two iterations against 0.023 at thirty-two. **The converged solve
+rings; the truncated one does not.**
+
+**THE MECHANISM IS ONE THIS PROJECT ALREADY WROTE DOWN FROM THE OTHER SIDE.** `lib/pilot/`
+notes that "the QP inverts this model, so regularisation serves the inversion, not the fit."
+The iteration count is a second regulariser on the same inversion, and nobody was treating it
+as one: a converged inverse of an imperfect forecast chases the forecast's high-frequency
+error, and a truncated one cannot. `qpIters` and `lambda` are therefore one knob approached
+from two ends, and a λ search must hold `qpIters` fixed or it searches one dimension twice.
+
+**WHAT IS NOT YET DONE, STATED RATHER THAN ASSUMED.** The default is NOT changed here. Two
+plants agree on the direction and disagree on the number — EMPS wants 4 (2 costs it 19%), the
+arm wants 2 (4 costs it 5%) — and rule 31 says a constant right for one plant must be
+re-derived for another. Changing `qpIters` moves every gate in the suite, so it needs the
+six-plant pass of step 8, and 4 is the joint candidate: EMPS −4%, arm +10%/+19%. Note also
+that only two of the six plants deploy at all (three refuse, one loses), so a "six-plant"
+iteration constant is really a two-plant one with four negative controls, and saying otherwise
+would be the kind of claim rule 18 exists to stop.
+
+**AND THE COST TABLE SAYS WHAT IS LEFT.** From the pilot's own `cost()` on the EMPS model
+(N=68, one channel, `cyclesPerUpdate` 1 so peak and sliced are the same number), against the
+10,000 MAC per 1 ms cycle the online requirement allows:
+
+```
+iters        1        2        4        8       16       60
+MAC/cyc  32,442   41,962   61,002   99,082  175,242  594,122
+% budget    324%     420%     610%     991%    1752%    5941%
+```
+
+**Sixty iterations is 5941% of the budget and four is 610% — a 9.7x cut for a 4% loss.** But
+the slope is 9,520 MAC per iteration and the INTERCEPT is 22,922: with the QP entirely free
+the forecast bank alone is 229% of budget. So iterations were the biggest single term and are
+no longer, and the remaining gap cannot be closed by this lever at all.
+
+**THE HORIZON IS WHAT CLOSES IT, and it closes it twice over.** Both surviving terms scale
+with N — the QP as `N·min(N,M)` per iteration and the forecast as `nFeat·N` dot products —
+so N is the only knob that cuts both. At 4 iterations and N=16 the same model costs ~7.6
+kMAC/cycle, **76% of budget, inside it**. That makes step 4 (lead-bank truncation) the step
+that decides whether the online claim is true, not step 6, and step 6's job was to get the
+QP out of the way of measuring it. It has.
 
 **7. Re-measure the rebuilt ladder on the transfer bench.** Programs x feedrates, headline is
 the WORST CELL. *This is where the shrink's cost shows up. If the worst cell falls below the
