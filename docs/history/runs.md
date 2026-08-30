@@ -2836,3 +2836,59 @@ Section timings (s):
 PASS — 0 check(s) failed. Screenshots in test/screenshots/
 
 ```
+
+### arm-fast — exit 1 — 2026-08-30T00:05Z
+
+```
+
+flexisim: the button, on the arm — against the strongest number this repo has
+
+  [arm K 1 E 0.06, rounded rect, feed 0.004, lap 7357]
+  conventional machine 4.1216e-1  bias -1.15e-1  osc 3.96e-1  lag 2.21e-1   lap-to-lap floor 1.309e-10
+  the lap-periodic rung reads the WHOLE TOOL ERROR in JOINT space   [contour 1.87x the lag rms]
+  a lap-harmonic table can only cancel what lives in its own band, so the
+  floor it leaves is the rest — measured on this machine's own error:
+    nh  4 48.4% → 2.96e-1   nh  8 96.1% → 8.09e-2   nh 16 100.0% → 4.23e-3   nh 32 100.0% → 7.05e-4   nh 64 100.0% → 1.36e-4
+  (band share of the error's variance, and the residual a PERFECT correction
+   inside that band would leave — no Newton loop can go below it)
+  ✓ the harness reproduces the conventional machine `composite.test.mjs` measures, so the comparison below is one variable — who chooses the constants — and not two machines
+  [0m] as it arrived  4.1216e-1
+  [6m] conventional (self-tuned)  3.3200e-1  1.24x   23 laps, 7 coefficients
+  [8m] pilot cascade, depth 1  9.9789e-2  3.33x
+  [10m] pilot cascade, depth 2  1.4156e-1  0.70x
+  [11m] pilot cascade, depth 1 (rungs below withheld)  6.3021e-2  1.58x
+  [14m] pilot cascade, depth 2 (rungs below withheld)  5.3554e-2  1.18x
+  [14m] — the conventional rung WITHHELD  5.3554e-2  1.00x   the cascade above it commissions better without it: a cheap rung that costs an expensive one, which no amount of re-scoring after the fact can recover
+  [35m] lap-periodic (harmonic)  2.2413e-2  2.39x   76 laps, probe basis at 25% — a MEMORY: it will not transfer to another program
+
+  as it arrived                                  4.1216e-1       
+  conventional (self-tuned)                      3.3200e-1    1.24x   23 laps, 7 coefficients
+  pilot cascade, depth 1                         9.9789e-2    3.33x
+  pilot cascade, depth 2                         1.4156e-1    0.70x
+  pilot cascade, depth 1 (rungs below withheld)  6.3021e-2    1.58x
+  pilot cascade, depth 2 (rungs below withheld)  5.3554e-2    1.18x
+  — the conventional rung WITHHELD               5.3554e-2    1.00x   the cascade above it commissions better without it: a cheap rung that costs an expensive one, which no amount of re-scoring after the fact can recover
+  lap-periodic (harmonic)                        2.2413e-2    2.39x   76 laps, probe basis at 25% — a MEMORY: it will not transfer to another program
+
+  shipped {"classic":false,"stack":2,"hff":true}   4.1216e-1 → 2.2413e-2   18.39x   2092s
+  composite.test.mjs's hand-built cascade(2) + HFF   1.3400e-2   30.76x
+
+  what a lap-harmonic table could reach ON THE CASCADE-DEPLOYED machine (score 5.355e-2):
+    nh  4 51.0% → 3.75e-2   nh  8 71.6% → 2.85e-2   nh 16 99.6% → 3.44e-3   nh 32 100.0% → 5.50e-4   nh 64 100.0% → 9.77e-5
+    (against 4.23e-3 at nh 16 on the BARE machine — the denominator every headroom figure has used so far)
+
+  the lap-periodic rung, pass by pass:
+    3.68e-2 → 3.09e-2 → 2.72e-2 → 2.66e-2 → 2.31e-2 → 1.35e-1 → 2.37e-2 → 2.74e-2 → 2.49e-2 → 2.38e-2 → 2.25e-2 → 2.20e-2 → 2.38e-2
+    harmonics damped per pass: 0 0 0 0 0 256 256 256 256 256 0 0 256   (of nh in the band)
+    the machine repeats to 6.20e-4 (2.8% of the score), and 2 of 13 passes land within one of those of the best — so the deployed table is one draw from a clear winner
+    step ended at 1.56e-2  — the step was halved 6x, so passes were being rejected
+  the floor rose UNDER a decision already made — these rungs were deployed on a margin that no longer clears at the final resolution:
+    pilot cascade, depth 2  1.416e-1 against 9.979e-2  judged at floor 8.40e-5, final 1.70e-4
+  the instrument's floor ROSE during commissioning, 1.31e-10 → 1.70e-4, on 'median of 9 runs' — the deployed machine is noisier than the bare one, and the comparisons above were made at the coarser resolution
+  ✗ THE CONTRACT: the self-tuning ladder beats the same composite re-measured on THIS program at 6 passes (brick 66, 20.34x) on the same machine and program — if this goes red the ladder has regressed against a number it has held  → 2.2413e-2 against 2.0260e-2
+  the stretch — composite.test.mjs's hand-built cascade(2) + HFF at its best case — is 1.3400e-2; this run is 2.2413e-2, 1.67x of it — not yet met
+  ✓ …and it is not the common cap doing the work by accident: the cap was not binding when the shipped configuration was scored
+
+autostack-arm: 1 check(s) FAILED
+
+```
