@@ -17,6 +17,30 @@ and feed console output back to Claude.
 later asked to run.** That is the whole product. Everything in `Current state` is progress
 toward it and none of it is that yet.
 
+Stated in full, the claim has five parts: small enough in memory and arithmetic to run in a
+PLC scan; reusable across plants that share no physics; robust and tolerant of what it was
+not shown; completely self-tuning; and strong on LINEAR and NONLINEAR plants alike.
+
+### Where it actually stands against that claim
+
+One of the five is supported by the evidence. One is contradicted by it. The rest are
+unmeasured or partial, and saying so is worth more than the claim is.
+
+| Part of the claim | Status | The evidence |
+|---|---|---|
+| Completely self-tuning | **SUPPORTED** | No per-plant constants; every threshold re-derived from measurement; and it REFUSES with a stated reason, asserted to be right for the right reason. Rare, and the strongest thing here. |
+| Robust and tolerant | **PARTIAL** | The refusal machinery is genuinely strong. Transfer is the weakness, and it is the subject of this north star. |
+| Reusable across plants | **2 CLEAR WINS OF 6** | Arm and EMPS win. Tank 1.32x, barrel refused, mill refused (0.42x), Wood–Berry LOST. |
+| PLC memory and CPU | **UNMEASURED ON THE SHIPPED PATH** | Exactly one budget check exists and it is on the BLACK BOX, not the ladder. The pilot cascade, the QP and the harmonic solve have no scan-time or byte count anywhere. The design is PLC-shaped — fixed-iteration `boxQP`, exact RLS, an IEC 61131 lineage — but that is an architecture argument, and rule 16 says a number computed from the model cannot check the model. |
+| Linear AND nonlinear alike | **CONTRADICTED** | Sorted by nonlinearity the results run the WRONG WAY. The most linear plant — Wood–Berry, linear transfer functions with dead time — LOST to a 1980s classical method (72.08 against the published BLT's 51.95). The most nonlinear — barrel as T⁴, tank as √h — refused and 1.32x. The wins are the arm and EMPS. The honest description of what works is not "linear and nonlinear alike" but ONE ERROR CLASS done very well: mechanical compliance and friction. |
+
+**And nothing here has been compared to the state of the art.** The baselines are this
+project's own conventional machine, published values for the specific rig, and a hand-tuned
+ILC. Not norm-optimal ILC, not modern MPC, not L1 adaptive, not DeePC or behavioural methods,
+not Koopman-EDMD. "Best in the world" is a claim about a field and the field has not been
+engaged. The defensible sentence today is: *beats the conventional machine, and on one real
+axis beats the published model-based feedforward at its own published parameters.*
+
 ### What is actually wrong today
 
 **The rung that produces the biggest number is a MEMORY.** The lap-periodic table says so in
@@ -70,6 +94,24 @@ Each of these is a claim that can be shown false, which is the only kind worth w
 
 5. **HIGHER, NOT MERELY TRANSFERABLE.** Transfer bought by giving up performance is a
    different product, not this one. Target: beat 22.42x on the arm while satisfying 1 and 2.
+
+6. **IT HAS TO FIT A PLC SCAN, AS A NUMBER.** Target: MACs and bytes per scan for the
+   DEPLOYED ladder — conventional rung + cascade + QP — against a stated task period, on
+   every plant. The black box already carries such a check; the thing that ships does not.
+   Until that number exists the PLC claim is an architecture argument, and this project does
+   not accept those (rule 16). It either supports the claim or kills it, and both are useful.
+
+7. **BREADTH, WHICH MEANS WINNING WHERE IT CURRENTLY LOSES.** Target: beat the published BLT
+   on Wood–Berry — a linear plant with dead time, where a classical method beats this one
+   today — and turn at least one of the two standing refusals (mill, barrel) into a measured
+   improvement or a refusal that is provably the right answer rather than an inability. A
+   method that wins only on compliance and friction is a good compliance-and-friction method.
+
+8. **MEASURED AGAINST SOMETHING THAT IS NOT US.** Target: one properly implemented rival from
+   the literature, on the arm, on the bench. Norm-optimal ILC is the cheapest honest choice.
+   Every comparison this project has is against its own baseline or a published number for a
+   specific rig; a rival implemented here, run on the same machine, is the first datum that
+   speaks to where this sits in the field.
 
 **The plan to get there is `docs/plan.md`**, sequenced so the experiment that CHOOSES the
 route runs early rather than last.

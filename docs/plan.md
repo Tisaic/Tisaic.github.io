@@ -243,6 +243,58 @@ Measured already, so this is arithmetic rather than hope:
   losing to the published BLT, the barrel. A refusal that is right for a measured reason is
   a result; one that is right by accident is a defect waiting.
 
+## Phase 6 — the four things that make the product claim checkable
+
+Targets 6, 7 and 8 in the north star are not performance work; they are the difference
+between a claim and a measurement. Three of the four are cheap, and each either supports the
+claim or kills it — both useful, neither optional.
+
+### 6a. A scan-time and memory budget for the DEPLOYED ladder
+
+`test/smoke.mjs` already asserts the black box fits *"an arithmetic budget a 1 ms PLC task can
+afford"* — MACs against a stated budget. The ladder that actually ships has no such number.
+
+- Count MACs and bytes per scan for the deployed path: the conventional rung's basis
+  evaluation, each cascade layer's feature build and readout, and `boxQP`'s fixed 8
+  iterations of two convolutions.
+- Report per plant, against a stated task period, and make it a CHECK rather than a print, so
+  a change that quietly doubles the scan cost fails.
+- The pieces are there: `boxQP` takes a FIXED iteration count by design, and
+  `primitives.calcMem` exists for exactly this.
+
+**Days of work, and it is the single largest gap between what is claimed and what is known.**
+
+### 6b. Win on a linear plant, or explain the loss
+
+Wood–Berry is a linear plant with dead time and a classical method beats this one on it:
+72.08 against the published BLT's 51.95. That is the standing loss and it is the cleanest
+target in the project, because the plant is fully known and the rival is published.
+
+Two outcomes and both are worth having: either the self-tuning ladder beats a hand-designed
+classical controller on its home ground, or the reason it cannot is a real and stateable
+limit of the method. Today neither is known.
+
+### 6c. Turn a refusal into a result
+
+The mill (0.42x) and the barrel refuse. A refusal for a measured reason is a result and this
+project treats it as one — but two of six is a lot of the plant range to decline, and the
+distinction that matters has never been drawn: is the refusal the RIGHT ANSWER for that plant,
+or an inability wearing a gate? Rule 9 applies — assert BOTH halves.
+
+### 6d. One rival from the literature, implemented properly
+
+Every comparison in this project is against its own conventional machine, a published number
+for a specific rig, or a hand-tuned ILC. That cannot locate the work in its field.
+
+**Norm-optimal ILC on the arm, on the bench**, is the cheapest honest choice: it is the method
+this one is closest to, it is well specified, and the bench already scores transfer, which is
+where the two should differ most. Modern MPC, L1 adaptive, DeePC and Koopman-EDMD are the
+other candidates and are all larger.
+
+Until one of these exists, the defensible sentence is: *beats the conventional machine, and on
+one real axis beats the published model-based feedforward at its own published parameters.*
+That is a good sentence. It is not the one the product claim makes.
+
 ## What would kill this plan
 
 - **Phase 1 shows the full ladder does not degrade away from home.** Then the premise is
