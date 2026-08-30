@@ -1155,6 +1155,31 @@ diminishing returns in arithmetic, and the shipped setting sits at the far end o
 is an argument for the budget gate rather than against the controller: told a scan, the ladder
 should land near 1.3–1.5 and not near 0.34.
 
+**6d. AN 11% REGRESSION ON THE ARM THAT THREE HYPOTHESES FAILED TO EXPLAIN — STATED, NOT
+SOLVED.** The arm's model-only stack (conventional withheld, which is what survives the
+retirement) reads 7.4340e-2 on one historical run with `sharedWeights` forced and every lead
+pooled uncapped, and **8.3e-2 consistently now**. Tested and killed in order:
+
+* **Lead sampling.** Re-run at 34 samples instead of 9: 8.2614e-2 against 8.3206e-2, within
+  0.7%. Not it — and testing it is what exposed the pool bug below.
+* **The pool cap under-filling.** Its stride was computed from `this.N` while only
+  `LEAD_SAMPLES` leads are built, so the pool held ~7,875 rows against 60,000 — a real bug,
+  fixed. Re-run: **8.3121e-2**, 0.1% different. Not it either.
+* **Run-to-run noise.** Three current runs give 8.3206, 8.2614, 8.3121 — a spread of 0.4%. The
+  historical 7.4340e-2 sits well outside it, so the difference is real.
+
+**WHAT REMAINS UNTESTED** is the per-lead validation change that landed with the sampling: `val`
+was the pooled R² for every lead and is now a held-out score per sampled lead with
+nearest-neighbour inheritance. It feeds `wouldGate`, `r2Far` and the leverage readout. Gating
+is OFF on this arm (`gateForecasts: false`) so the obvious path is closed, which is why it is
+listed as untested rather than as the answer.
+
+**AND THE MEASUREMENT DISCIPLINE THIS FORCED IS WORTH MORE THAN THE 11%.** Two arm runs
+differing only in lead samples SHIPPED 23.12x and 19.96x — a 15% spread, because the
+lap-periodic rung probes randomly — while their model-only rows moved 0.7%. **Single-run
+comparisons on the shipped number are not evidence**, and several in this file were made that
+way. The model-only row is the stable one, and it is also the row the retirement leaves.
+
 **7. Re-measure the rebuilt ladder on the transfer bench.** Programs x feedrates, headline is
 the WORST CELL. *This is where the shrink's cost shows up. If the worst cell falls below the
 4.53x the model layers already reach, the rebuild has bought budget with performance and the
