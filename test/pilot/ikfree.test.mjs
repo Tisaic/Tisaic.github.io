@@ -292,6 +292,37 @@ while (pilot.phase !== 'done') {
 }
 console.log(`    ⑥ pilot on the learned routing: ${pilot.verdict.deploy ? 'deploys' : 'refused'}`
   + (pilot.status().report.verify ? `, verify ${pilot.status().report.verify.ratio.toFixed(2)}x` : ''));
+
+// ---- WHY ⑥'s FAR LEAD IS THE ONE THAT GOES NEGATIVE -----------------------------------
+//
+// This is the configuration `r2Far` at -0.035 was measured on, and until now that number had
+// exactly one interpretation attached to it: "the elbow forecast is negative at lead 0, so it
+// is gated". The leverage says WHICH of two failures it is, and they have opposite fixes.
+//
+// A ratio well above 1 means the far lead's held-out rows sit further outside the
+// commissioning data than the near lead's — the fit is EXTRAPOLATING there, the excitation
+// never covered it, and the fix is cheap: excite differently, with Willems' rank condition
+// as the stopping test.
+//
+// A ratio near 1 with the far R2 bad anyway means those rows ARE covered and the features
+// simply cannot represent the target — a spanning failure, where the fix is a richer
+// dictionary and `lib/ngrc/commission.js`'s ranked prunable universal map is what to reach
+// for. That is much more expensive, and worth knowing before it is started.
+//
+// The ARM reads 0.973/0.831 here and needs no explanation at all, which is what makes this
+// plant the case rather than the control.
+const r2f = (v) => (v === null || v === undefined ? '—' : v.toFixed(3));
+const ex = (v) => (v === null || v === undefined ? '—' : v.toExponential(2));
+for (const r of pilot.status().report.readouts) {
+  const bad = r.r2Far !== null && r.r2Far !== undefined && r.r2Far < 0.5;
+  console.log(`    ⑥ ch${r.ch ?? ''} R² lead0 ${r2f(r.r2Lead0)} → far ${r2f(r.r2Far)}`
+    + `   leverage ${ex(r.levLead0)} → ${ex(r.levFar)}`
+    + `   ratio ${r.levRatio === null ? '—' : r.levRatio.toFixed(2)}`
+    + `   ⇒ ${r.levRatio === null ? 'no reading'
+      : !bad ? 'far lead predicted well — nothing to explain'
+        : (r.levRatio > 1.5 ? 'EXTRAPOLATING — the fix is EXCITATION'
+          : 'covered — the FEATURES do not span it, the fix is the DICTIONARY')}`);
+}
 check('the pilot commissions on the learned truth routing and the machine vouches for it',
   pilot.verdict.deploy === true, JSON.stringify(pilot.verdict));
 await a6.l1.destroy(); await a6.l2.destroy();
