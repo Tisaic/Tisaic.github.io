@@ -241,6 +241,120 @@ best measured improvement, take the cheapest.
 **Decides the route.** Within 1.3x -> Phase 3A. Not within 1.3x, across plants -> Phase 3B,
 and the north star gets rewritten to say so.
 
+## Ideas from the wider field that survive these constraints
+
+The constraints do most of the filtering. Anything needing an unbounded solver, a per-plant
+prior, or a training budget measured in episodes is out before it is considered. What follows
+survived, and each is tied to a measurement THIS project already made — that is the reason to
+believe it applies here rather than in general.
+
+### 1. The predictive variance the RLS already computes and throws away
+
+`primitives.rls()` returns `innovVar` = `x'Px`, the predictive variance implied by the
+parameter covariance, **on every single update**. `continuous.js` stores it as `confidence`.
+`lib/pilot/` never asks for it. This is a Bayesian/GP-flavoured quantity without any of the
+GP cost, and it is a by-product of arithmetic already being done.
+
+Three uses, each attacking a stated target:
+
+- **Per-lead trust in the QP.** `boxQP` already takes an optional per-lead weight; the
+  held-out weights measured *exactly neutral* (3.40x -> 3.40x, identical to four figures) and
+  ship OFF. A variance-derived weight is a different quantity, principled, and free.
+- **Refusal by extrapolation distance.** `x'Px` is large exactly where the operating point is
+  poorly covered by the training data. That is a stateable reason to decline — a much better
+  one than a threshold — and it serves the "robust and tolerant" half of the claim directly.
+- **A commissioning STOPPING rule.** Stop exciting when the parameter variance stops falling
+  rather than after a fixed budget (target 4).
+
+**Cheapest experiment:** log `innovVar` alongside the existing forecast diagnostics during one
+commission and check whether it rises where the bench's worst cells are. If it does, it is a
+transfer predictor the machine can compute at run time.
+
+### 2. Persistency of excitation as the stopping rule — behavioural systems theory
+
+Willems' fundamental lemma: a single input-output trajectory that is persistently exciting of
+sufficient order spans EVERY length-L behaviour of a linear system. That is the formal
+statement of "commission once, run any program", and it converts "how much excitation is
+enough" from a budget into a RANK TEST.
+
+**Why it applies here specifically:** this project already hit the failure mode the theory
+names. Identifying on a program instead of a scribble measured **12.70x -> 3.93x**, because
+"repeated trapezoids are collinear". Collinearity IS a persistency-of-excitation deficiency.
+The empirical finding and the theorem are the same fact, and the theorem comes with a test.
+
+**Cheapest experiment:** compute the PE order of the excitation the pilot already collects,
+and of a program, and check the ranking matches the measured 12.70x/3.93x. If it does, the
+excitation can stop when the rank condition is met — which is the commissioning-time lever
+that does NOT cost result quality, unlike every knob measured so far.
+
+### 3. Fit the propagator, not one step — Koopman / EDMD
+
+The QP inverts the model over a HORIZON, but the forecast is fitted for near-term accuracy and
+error compounds across leads: `r2Far` was measured at **-0.035**, worse than predicting the
+mean. Koopman's contribution is to choose the lifting dictionary so the MULTI-STEP propagator
+is linear, making a linear predictive controller exact rather than approximate.
+
+**This project arrived at the same constraint from the other side.** "A nonlinear map of the
+fast variable breaks the LTI-ness the QP needs" — hence the affine observer, which was worth
+0.48x -> 5.02x. That patch is a special case of the Koopman condition.
+
+**The machinery is already here:** `universalMap`/`prunedMap` is a dictionary with
+importance-ranked pruning, and `continuous.js` has DIRECT MULTI-HORIZON READOUTS — fitting
+each lead directly instead of iterating a one-step model, which is the pragmatic form of
+fitting the propagator.
+
+**Cheapest experiment:** refit the existing basis against each lead directly and compare
+`r2Far` and the machine score on the bench. No new model class required to test the idea.
+
+### 4. VRFT — one-shot controller synthesis from one dataset
+
+Virtual Reference Feedback Tuning: from a single open-loop dataset, solve DIRECTLY by least
+squares for the controller parameters that make the closed loop match a reference model. No
+iteration, no plant model.
+
+The conventional rung currently costs **23 laps** of frozen-operator Newton with backtracking.
+VRFT would initialise it from one dataset, and the Newton loop becomes refinement rather than
+search. Maximally PLC-compatible: it is a least-squares solve.
+
+**Cheapest experiment:** VRFT-initialise `classic.js` on the EMPS axis, where the rung is
+worth 425x and the ground truth is published, and count the laps to reach the same figure.
+
+### 5. L1-style filtered adaptation, replacing the ad-hoc safeguards
+
+L1 adaptive control decouples adaptation RATE from robustness by low-passing the control law,
+giving a stated bandwidth-versus-robustness trade instead of a tripwire.
+
+The monotone safeguard here — backoff, settling dwell, freeze after 3 — is the ad-hoc version,
+and its measured endpoint is telling: on a soft gearbox it lands at "exactly the continuous
+open loop". It protects by surrendering. A filter gives a design knob with a margin attached.
+
+### 6. Online period estimation — adaptive feedforward cancellation / higher-order RC
+
+`hff.js` is TOLD the lap length. AFC and higher-order repetitive control estimate the
+fundamental online and tolerate period variation by construction.
+
+**Phase 1 demoted this.** With the memory measured as a net negative across the envelope, the
+lap-periodic rung is a fallback rather than the main line, and period tracking only matters
+under Phase 3B. Kept on the list because if the memory earns its place back on a repeating
+program, this is what makes it survive a feedrate change.
+
+### What does NOT survive the constraints, and why
+
+- **DeePC in raw form** — the Hankel-matrix QP grows with the data and has no fixed
+  arithmetic bound. Take the lemma (idea 2), not the algorithm.
+- **GP-MPC** — cubic in the data. `x'Px` from the RLS is the affordable shadow of it (idea 1).
+- **Reinforcement learning** — sample cost measured in episodes on a real machine, and no
+  refusal semantics. Adopting it would mean giving up the one part of the product claim the
+  evidence currently SUPPORTS.
+
+### Where these land in the plan
+
+1 and 2 belong in **Phase 4** as well as Phase 2: both attack commissioning time without
+spending result quality, which every knob measured so far does. 3 belongs in Phase 2, since
+after Phase 1 the question is "how much of the memory's 2.09x home advantage can a model
+recover" and the horizon fit is the most likely source of it. 4 is independent and cheap. 5
+and 6 are robustness work that should wait for a route decision.
+
 ## Phase 3A — retire the memory
 
 If a model layer matches the table, the harmonic rung comes out of the default ladder and:
