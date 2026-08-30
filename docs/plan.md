@@ -165,6 +165,52 @@ better at home and worse or catastrophic away. If the full ladder is NOT worse a
 premise of this plan is wrong and the north star needs rewriting — which is exactly the
 check worth running first.
 
+### Phase 1 ANSWERED — and harder than the plan assumed
+
+`test/flexisim/bench.test.mjs`, one commission on the home cell, the matrix scored twice from
+the SAME commissioned object with only the lap-periodic rung armed or disarmed:
+
+```
+FULL LADDER              1e-3     2e-3     4e-3     1e-2
+  rounded 8x8           1.22x    2.41x   13.93x*   6.62x
+  rounded 10x6          1.60x    2.82x    9.20x    4.59x
+  circle r3             1.17x    1.87x    6.10x    9.05x
+  circle r5             1.22x    1.23x    2.55x   15.98x
+  sharp 9x7             1.22x    1.52x    2.36x    4.29x
+
+MODEL LAYERS ONLY        1e-3     2e-3     4e-3     1e-2
+  rounded 8x8           3.18x    4.80x    6.66x*   6.56x
+  rounded 10x6          4.37x    5.62x    6.79x    4.66x
+  circle r3             2.88x    3.73x   17.19x    7.84x
+  circle r5             3.01x    2.95x    5.95x   13.60x
+  sharp 9x7             1.45x    1.68x    2.39x    4.19x
+```
+
+**The premise held, and then went further than it claimed.** The plan assumed the memory wins
+at home and fails to transfer. It does not merely fail to transfer — **it is a net negative
+across the envelope**:
+
+- **model-only beats the full ladder in 14 of the 20 cells**
+- **geometric mean 4.53x against 3.11x — disarming the memory is 1.46x BETTER overall**
+- worst cell 1.45x against 1.17x; home/worst spread 4.6x against 11.9x
+- neither configuration made any cell worse than the conventional machine
+
+**And it is not only a feedrate effect.** The largest single loss is `circle r3` at **4e-3 —
+the commissioning feedrate** — where the model alone reaches 17.19x and the full ladder 6.10x.
+A change of SHAPE at the speed it was tuned on costs 2.8x. So the memory is brittle in both
+axes it was suspected of, and the one number it earns — 2.09x at home — it repays at 0.81x on
+the worst cell, i.e. it makes the worst cell WORSE.
+
+**What this decides.** Phase 3A is no longer conditional on Phase 2 succeeding: the ladder is
+better off, today, without the lap-periodic rung anywhere except its home cell. The remaining
+question is not "can a model replace the memory" but "how much of the memory's 2.09x home
+advantage can a model recover" — a smaller and much better-posed question, and one where the
+model layer starts 1.46x ahead rather than 2.09x behind.
+
+The default ladder should stop deploying the harmonic rung unless the program it was
+commissioned on is the program being run — which the machine can check, and currently does
+not.
+
 ## Phase 2 — THE DECIDING EXPERIMENT, run early because it chooses the route
 
 The north star's own falsification clause: **can a model-based layer, given the same
