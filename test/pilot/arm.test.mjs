@@ -17,6 +17,10 @@ import { ContourScore, decompose } from '../../lib/flexisim/contour.js';
 import { PathILC } from '../../lib/flexisim/pathilc.js';
 import { Pilot } from '../../lib/pilot/pilot.js';
 
+/** Readable nulls: 'not measured' and 'zero' are different states (rule 25). */
+const r2f = (v) => (v === null || v === undefined ? '—' : v.toFixed(3));
+const ex = (v) => (v === null || v === undefined ? '—' : v.toExponential(2));
+
 let failed = 0;
 function check(name, cond, detail) {
   const ok = !!cond;
@@ -103,6 +107,17 @@ console.log(`    commissioned in ${steps} steps: Ts ${st.Ts}, sample ${st.sample
     `stride ${r.stride}/ridge ${r.ridge}`).join(', ')}`);
 console.log(`    verify: ${st.report.verify ? st.report.verify.ratio.toFixed(2) + 'x at λ '
   + st.report.verify.lambda.toExponential(1) : '—'}`);
+// WHY THE FAR LEAD IS BAD, WHICH THE R2 ALONE CANNOT SAY. A ratio above 1 means the far
+// lead's held-out rows sit further outside the data than the near lead's — the fit is
+// EXTRAPOLATING and the fix is excitation. Near 1 with a bad r2Far means the rows are covered
+// and the FEATURES cannot span the target — the fix is the dictionary. Opposite plans.
+for (const r of st.report.readouts) {
+  console.log(`    ch${r.ch ?? ''} R² lead0 ${r.r2Lead0.toFixed(3)} → far ${r2f(r.r2Far)}`
+    + `   leverage lead0 ${ex(r.levLead0)} → far ${ex(r.levFar)}`
+    + `   ratio ${r.levRatio === null ? '—' : r.levRatio.toFixed(2)}`
+    + `   ⇒ ${r.levRatio === null ? 'no reading'
+      : (r.levRatio > 1.5 ? 'EXTRAPOLATING — excitation' : 'covered — the FEATURES do not span it')}`);
+}
 check('the pilot measured the arm\'s timescale and derived its grids from it',
   st.Ts > 1000 && st.Ts < 5000, `Ts ${st.Ts}`);
 check('…autotune chose the windows and the ridge on held-out data',
