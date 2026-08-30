@@ -133,7 +133,7 @@ const NS = (process.env.NS || '').split(',').filter(Boolean).map(Number);
 const NITERS = (process.env.NITERS || '4').split(',').map(Number);
 
 function costLine() {
-  console.log('\n  iters   forecast   free+QP   MAC/cycle   sliced   % of 10,000');
+  console.log('\n  iters   forecast   free+QP   peak MAC  peak %  sliced %');
   for (const it of ITERS) {
     pilot.qpIters = it;
     const c = pilot.cost();
@@ -173,7 +173,7 @@ if (NS.length) {
     const off = await deployOn(shape, false, null);
     console.log(`\n  ${shape}: horizon sweep at ${NITERS} iterations (full N = ${NFULL}),`
       + ` open loop ${off.r.contourRms.toExponential(3)}`);
-    console.log('  iters      N      contour        x        osc      uPk   MAC/cycle  sliced  % of 10,000');
+    console.log('  iters      N      contour        x        osc      uPk   peak MAC  peak %  sliced %');
     for (const it of NITERS) for (const nn of NS) {
       pilot.N = nn;
       const on = await deployOn(shape, true, it);

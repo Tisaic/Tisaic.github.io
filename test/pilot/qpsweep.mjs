@@ -16,6 +16,19 @@ import { DT, P, PR, makeMachine } from './emps-rig.mjs';
 
 const ITERS = (process.env.ITERS || '1,2,4,8,16,32,60,120,240,480').split(',').map(Number);
 
+// A SECOND PROGRAM THE MODEL NEVER SAW, so the corner below can be told apart from a grid
+// artifact. Two tones at 6 and 13 cycles per lap, inside the machine's envelope — the same
+// signal `stack.test.mjs` uses for exactly this purpose. A corner picked on one program and
+// held on another is a setting; one that moves is a coincidence dressed as a result.
+const SIN = { q: new Float64Array(P) };
+{
+  const A1 = 0.012, w1 = 2 * Math.PI * 6 / (P * DT), A2 = 0.002, w2 = 2 * Math.PI * 13 / (P * DT);
+  for (let k = 0; k < P; k++) {
+    const t = k * DT;
+    SIN.q[k] = 0.13 + A1 * Math.sin(w1 * t) + A2 * Math.sin(w2 * t);
+  }
+}
+
 function score(ff) {                      // the shipped cascade, for the denominator
   const m = makeMachine(PR.q[0], ff);
   let s = 0, n = 0;
@@ -52,24 +65,25 @@ const pilot = new Pilot({
 const shippedIters = pilot.qpIters;
 const st = pilot.status();
 
-function runPilot(iters) {
+function runPilot(iters, prog = PR, active = true) {
   pilot.qpIters = iters;
-  const m = makeMachine(PR.q[0], 0), S = pilot.sample;
+  const m = makeMachine(prog.q[0], 0), S = pilot.sample;
   pilot._initRun();
-  let s = 0, mx = 0, n = 0, uPk = 0, pref = PR.q[0];
+  let s = 0, mx = 0, n = 0, uPk = 0, pref = prog.q[0];
   const LAPS = 10;
   const t0 = process.hrtime.bigint();
   for (let k = 0; k < LAPS * P; k++) {
     m.step(pref);
-    const u = pilot.act((off) => [PR.q[(((Math.floor(k / S) + off) * S) % P + P) % P]]);
+    const u = active ? pilot.act((off) => [prog.q[(((Math.floor(k / S) + off) * S) % P + P) % P]]) : [0];
     uPk = Math.max(uPk, Math.abs(u[0]));
-    pref = PR.q[k % P] + u[0];
+    pref = prog.q[k % P] + u[0];
     pilot.observe([m.q], null);
-    if (k >= (LAPS - 4) * P) { const e = m.q - PR.q[k % P]; s += e * e; mx = Math.max(mx, Math.abs(e)); n++; }
+    if (k >= (LAPS - 4) * P) { const e = m.q - prog.q[k % P]; s += e * e; mx = Math.max(mx, Math.abs(e)); n++; }
   }
   const ns = Number(process.hrtime.bigint() - t0) / (LAPS * P);
   return { rms: 1000 * Math.sqrt(s / n), mx: 1000 * mx, uPk: 1000 * uPk, ns };
 }
+const sinOpen = runPilot(1, SIN, false).rms;
 
 // ------------------------------------------------------ THE SECOND KNOB: THE HORIZON
 // LEAD-BANK TRUNCATION. The cost table below says the QP and the forecast BOTH scale with N,
@@ -95,7 +109,7 @@ for (const it of ITERS) {
 // WHAT EACH BUDGET COSTS, on the pilot's own cost model rather than on wall clock — the
 // online requirement is MAC per 1 ms cycle against 10,000, and a µs/step figure measured on
 // a dev machine under contention cannot be converted into one.
-console.log('\n  iters   forecast   free+QP   MAC/cycle   sliced   % of 10,000');
+console.log('\n  iters   forecast   free+QP   peak MAC  peak %  sliced %');
 for (const it of ITERS) {
   pilot.qpIters = it;
   const c = pilot.cost();
@@ -106,17 +120,22 @@ pilot.qpIters = shippedIters;
 if (NS.length) {
   console.log(`\n  horizon x iteration corner — the SAME fitted bank, truncated to`
     + ` its first N leads (full N = ${NFULL})`);
-  console.log('  iters      N      rms mm        x     uPk mm   MAC/cycle   % of 10,000');
+  console.log(`  the program the model was fitted against, and a two-tone sine it has never`
+    + ` seen (open loop ${sinOpen.toFixed(5)} mm)`);
+  console.log('  iters      N   program mm        x      sine mm        x     peak MAC  peak %  sliced %');
   const grid = (process.env.NITERS || '4').split(',').map(Number);
   for (const it of grid) {
     for (const nn of NS) {
       pilot.N = nn;
       const r = runPilot(it);
+      const q = runPilot(it, SIN);
       const c = pilot.cost();
       console.log(`  ${String(it).padStart(5)}  ${String(nn).padStart(5)}   ${r.rms.toFixed(5).padStart(9)}  `
-        + `${(shipped / r.rms).toFixed(2).padStart(7)}x  `
-        + `${r.uPk.toFixed(4).padStart(8)}  ${c.peakMacPerCycle.toLocaleString().padStart(10)}  `
-        + `${(100 * c.slicedMacPerCycle / 10000).toFixed(0).padStart(9)}%`);
+        + `${(shipped / r.rms).toFixed(2).padStart(7)}x  ${q.rms.toFixed(5).padStart(9)}  `
+        + `${(sinOpen / q.rms).toFixed(2).padStart(7)}x  `
+        + `${c.peakMacPerCycle.toLocaleString().padStart(9)}  `
+        + `${(100 * c.peakMacPerCycle / 10000).toFixed(0).padStart(5)}%  `
+        + `${(100 * c.slicedMacPerCycle / 10000).toFixed(0).padStart(7)}%`);
     }
   }
   pilot.N = NFULL; pilot.qpIters = shippedIters;
