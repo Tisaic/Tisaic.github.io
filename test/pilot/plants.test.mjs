@@ -43,6 +43,16 @@ if (process.env.HORIZON_TS) SOLVER.horizonTs = +process.env.HORIZON_TS;
 if (process.env.QPITERS) SOLVER.qpIters = +process.env.QPITERS;
 if (Object.keys(SOLVER).length) console.log(`  solver budget override: ${JSON.stringify(SOLVER)}`);
 
+// THE SCAN THE LADDER HAS TO FIT, when one is stated. `BUDGET=mac,bytes` turns it on; unset,
+// nothing is enforced and every number in this file is what it always was. It exists because
+// the barrel deployed 1.04x for 21,830 MAC/cycle and 256.7 kB — an improvement the machine
+// measured honestly and no PLC would accept — and nothing in the ladder priced it.
+const BUDGET = process.env.BUDGET
+  ? { mac: +process.env.BUDGET.split(',')[0], bytes: +process.env.BUDGET.split(',')[1] }
+  : null;
+if (BUDGET) console.log(`  scan budget: ${BUDGET.mac.toLocaleString()} MAC/cycle, `
+  + `${(BUDGET.bytes / 1024).toFixed(0)} kB`);
+
 /**
  * One plant's ladder. `spec` supplies everything the machine knows about itself and nothing
  * about the controller.
@@ -65,7 +75,7 @@ async function ladder(spec) {
     // experiment testing whether the LEVERAGE LEVEL predicts the layer that will fail to
     // vouch. One plant is not a method — a common factor across plants sharing no physics is
     // a property of the CODE (rule 18), and that is exactly what a stopping rule has to be.
-    channels, uMax, periodic: null, floor, maxDepth: +(process.env.DEPTH || 2),
+    channels, uMax, periodic: null, floor, maxDepth: +(process.env.DEPTH || 2), budget: BUDGET,
     basis: motionBasis(channels.map((_, c) => ({ v: v[c], a: a[c] }))),
     pilot: { nMeasured, start, guards, workspace: () => true, seed: 1, autoRefuse: false,
       ...SOLVER },
