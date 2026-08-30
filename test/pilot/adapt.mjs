@@ -115,8 +115,13 @@ function run(prog, adapt) {
     }
     perLap.push(1000 * Math.sqrt(ls / ln));
   }
-  const rep = pilot.status().report;
-  const a = rep && rep.adapt && rep.adapt[0] ? rep.adapt[0] : null;
+  // `adapt` HANGS OFF status(), NOT off status().report — the report is the COMMISSIONING
+  // one and has no live adaptation state at all. Reading it there printed `updates: 0` and
+  // `drift 0.000` on every row while the machine numbers were visibly moving, which is the
+  // instrument failing before the model (rule 17) and would have been read as "adaptation
+  // never ran" if the scores had happened to sit still.
+  const stat = pilot.status();
+  const a = stat.adapt && stat.adapt[0] ? stat.adapt[0] : null;
   return { rms: 1000 * Math.sqrt(s / n), uPk: 1000 * uPk, perLap, a };
 }
 
@@ -145,7 +150,7 @@ for (const mu of MUS) {
       console.log(`  ${String(mu).padStart(5)}  ${String(clamp).padStart(5)}  ${String(stride).padStart(6)}   `
         + `${r.rms.toFixed(5).padStart(9)}  ${(openProg / r.rms).toFixed(2).padStart(6)}x  `
         + `${q.rms.toFixed(5).padStart(9)}  ${(openSine / q.rms).toFixed(2).padStart(6)}x  `
-        + `${String(r.a ? r.a.updates : 0).padStart(8)}  ${(r.a ? r.a.drift : 0).toFixed(3).padStart(5)}  `
+        + `${String(r.a ? r.a.updates : 0).padStart(8)}  ${(r.a && r.a.drift ? r.a.drift : 0).toFixed(3).padStart(5)}  `
         + `${r.a && r.a.frozen ? 'FROZE' : '  —  '}`);
     }
   }
