@@ -164,6 +164,10 @@ async function deployOn(pilot, shape, active, feed = 0.004) {
   const total = Math.ceil(path.lap * 3), scoreFrom = Math.ceil(path.lap * 2);
   const score = new ContourScore({ joints: 2, reversalTravel: 2e-2 });
   const split = { corner: { c2: 0, l2: 0, n: 0 }, straight: { c2: 0, l2: 0, n: 0 } };
+  // FOUR EQUAL SIDES ON THE SQUARE AND THE DIAMOND; anything else gets no profile rather than a
+  // meaningless one, since "position within a side" needs sides of equal length to mean anything.
+  const sideLen = (shape === 'sharp' || shape === 'diamond') ? path.length / 4 : 0;
+  const prof = Array.from({ length: 10 }, () => ({ c2: 0, l2: 0, n: 0 }));
   let kSamp = 0, uPk = 0;
   for (let k = 0; k < total; k++) {
     const cmd = path.at(k);
@@ -194,6 +198,22 @@ async function deployOn(pilot, shape, active, feed = 0.004) {
       const slow = v < 0.5 * path.feed;
       const b = slow ? split.corner : split.straight;
       b.c2 += dec.contour * dec.contour; b.l2 += dec.lag * dec.lag; b.n++;
+      // THE PROFILE ALONG A SIDE, which discriminates two accounts of why the straights are worse
+      // than the corners. `decompose` returns `s`, the arc length, so the position WITHIN a side
+      // is free once the side length is known.
+      //
+      //   OVERSHOOT-AND-RECOVER predicts a monotone DECAY from the corner: the tool overshoots the
+      //   vertex, then spends the side coming back onto the line before overshooting the next one.
+      //   ACCELERATION RAMPS predict a U: the corner rule decelerates into the vertex and
+      //   accelerates out of it, so the error is high at BOTH ends of a side and low in the middle.
+      //
+      // The two are opposite shapes, so ten buckets settle it without any further apparatus.
+      if (sideLen > 0) {
+        const f = ((dec.s % sideLen) + sideLen) % sideLen / sideLen;
+        const bi = Math.min(9, Math.max(0, Math.floor(f * 10)));
+        prof[bi].c2 += dec.contour * dec.contour;
+        prof[bi].l2 += dec.lag * dec.lag; prof[bi].n++;
+      }
     }
   }
   await a2.l1.destroy(); await a2.l2.destroy();
@@ -203,7 +223,9 @@ async function deployOn(pilot, shape, active, feed = 0.004) {
       cornerC: rms(split.corner, 'c2'), cornerL: rms(split.corner, 'l2'), cornerN: split.corner.n,
       straightC: rms(split.straight, 'c2'), straightL: rms(split.straight, 'l2'),
       straightN: split.straight.n,
-    } };
+    },
+    prof: sideLen ? prof.map((b) => ({ c: b.n ? Math.sqrt(b.c2 / b.n) : 0,
+      l: b.n ? Math.sqrt(b.l2 / b.n) : 0, n: b.n })) : null };
 }
 
 export { PG, RATIO, makeArm, mkPath, homeArm, routeSignals, deployOn };

@@ -160,7 +160,7 @@ async function row(pilot, shape, feed) {
   // saturating, and no improvement to the model or the horizon can help a controller that is
   // already asking for more authority than it is given.
   return { off: off.contourRms, on: on.contourRms, x: off.contourRms / on.contourRms,
-    lagOff: off.lagRms, lagOn: on.lagRms, uPk: onR.uPk, sp: onR.split, spOff: offR.split };
+    lagOff: off.lagRms, lagOn: on.lagRms, uPk: onR.uPk, sp: onR.split, spOff: offR.split, prof: onR.prof, profOff: offR.prof };
 }
 
 const subject = pilots.length > 1 ? (ensemble(pilots).pilot || pilots[0]) : pilots[0];
@@ -198,6 +198,24 @@ for (const r of [{ name: `${TRAIN.shape} @${TRAIN.feed}`, ...seen }].concat(spat
   console.log(`  ${r.name.padEnd(18)} ${r.sp.cornerC.toExponential(3).padStart(10)}`
     + ` ${r.sp.cornerL.toExponential(3).padStart(10)} ${r.sp.straightC.toExponential(3).padStart(11)}`
     + ` ${r.sp.straightL.toExponential(3).padStart(11)}  ${`${r.sp.cornerN}/${r.sp.straightN}`.padStart(11)}`);
+}
+
+// THE PROFILE ALONG A SIDE — the shape settles it: a monotone decay from the corner is
+// overshoot-and-recover, a U is acceleration ramps.
+for (const r of spatial) {
+  if (!r.prof) continue;
+  console.log(`\n  ${r.name} — contour along a side, corner at 0% to corner at 100%:`);
+  console.log(`    off  ${r.profOff.map((b) => b.c.toExponential(1)).join(' ')}`);
+  console.log(`    on   ${r.prof.map((b) => b.c.toExponential(1)).join(' ')}`);
+  const on = r.prof.map((b) => b.c);
+  const firstHalf = on.slice(0, 5).reduce((a, v) => a + v, 0) / 5;
+  const lastHalf = on.slice(5).reduce((a, v) => a + v, 0) / 5;
+  const mid = (on[4] + on[5]) / 2, ends = (on[0] + on[9]) / 2;
+  console.log(`    first half ${firstHalf.toExponential(2)} vs last half ${lastHalf.toExponential(2)}`
+    + `  ·  ends ${ends.toExponential(2)} vs middle ${mid.toExponential(2)}`);
+  console.log(`    → ${ends > 1.3 * mid ? 'U-SHAPED: acceleration ramps'
+    : (firstHalf > 1.3 * lastHalf ? 'DECAYING from the corner: overshoot-and-recover'
+      : 'FLAT: neither account')}`);
 }
 
 // TARGET 1 AND TARGET 2 READ SEPARATELY, because they are separate claims and a single
