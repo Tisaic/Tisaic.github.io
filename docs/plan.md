@@ -3,6 +3,72 @@
 Written against `CLAUDE.md`'s **THE NORTH STAR**. Every step below names the measurement that
 decides whether to continue, because a plan whose steps cannot fail is a wish list.
 
+## THE CURRENT SEQUENCE — read this first; the phases below predate it
+
+The phase order further down was written before the owner retired the memory, before the score
+became the FIRST SCORED LAP of an unseen program, and before the seed spreads were measured. It
+is kept because its measurements stand, but where it and this section disagree, this is what is
+being worked. Six steps, in the order their evidence justifies.
+
+**1. FINISH THE GATE, WHICH IS THE ONLY THING MEASURED TODAY THAT IS WORTH A FACTOR WITHOUT
+TOUCHING THE CONTROLLER.** `verifyRef` makes the deploy decision rank (tank correlation 0.989
+against -0.057; Wood-Berry's 9 harmful deployments become 12 refusals; EMPS byte-identical). It
+has been run on two plants of six. Run it on the arm — the second winner, where the control
+matters most — then the mill and the barrel. **Kill condition:** if it refuses on the arm, or if
+any plant's verdicts move where they should not, the third regime is a stricter gate rather than
+a better one and the tank's 0.989 was a coincidence of one plant.
+
+**2. THEN SPEND THE SPREAD, WHICH IS THE FACTOR ITSELF.** Every plant's headline is one
+commissioning draw; the plants that lose vary 2.2x and 4.2x across seeds. A gate that ranks turns
+that into a gain: commission k times, score each with the representative regime, keep the best.
+On the tank that is a deployed median of 1.512x against draws that reach 0.424x; on Wood-Berry it
+is the difference between refusing and shipping a controller that harms. **Target: the k-draw
+result is at least the best single draw, on every plant, with commissioning cost stated in laps.**
+**Kill condition:** if the gate's ranking does not survive being used for selection — the classic
+way a validation signal dies — then the spread cannot be spent and must be shrunk instead, and
+neither excitation length (measured: 3x buys nothing) nor the solver knobs shrink it.
+
+**3. CLEAR THE THREE RED TESTS, BECAUSE THEY HIDE THE NEXT ONE (rule 3).** `tanks`, `woodberry`
+and `stack` are all red and all pre-existing; all three were invisible behind the `set -e` abort
+until the collector, and `stack` was crashing rather than reporting. Two of them are the plants
+step 1 is about, so this is mostly step 1's bill. `stack`'s is separate: the EMPS cascade admits
+two layers where the test asserts three, and whether that is a regression or the machine's honest
+answer has not been established.
+
+**4. THE MODEL-ONLY BAR IS NOW THE PRODUCT (targets 1, 2, 5).** The memory is retired by
+decision, so the number that matters on the arm is the model-only stack — 8.5e-2, against the
+22.42x ladder's 1.8e-2 — and everything about "higher" runs through improving a cascade that has
+no lap table in it. Scored, always, on the FIRST lap of a program it has never run, with the
+converged value beside it and never instead of it. **Target: within 1.3x of a per-program
+commission on every program and feedrate, none worse than the conventional machine.**
+
+**5. THE PLC BUDGET, RE-DECIDED AGAINST CONTRACTS RATHER THAN HEADLINES (target 6).** The cheap
+corner is measured and reachable — 9,517 MAC/cycle against 10% of a 1 ms scan, where the default
+is 42,914 — and it is better on both plants this project loses on. It is NOT the default because
+it fails the arm's model-only contract. Re-run the corner search with the contracts in the
+objective, not the six plants' headlines. That is the single lesson of the failed defaults change
+and it is worth repeating: **a pass over plants is not a pass over contracts.**
+
+**6. THEN, AND ONLY THEN, A RIVAL (target 8).** Norm-optimal ILC on the arm, on this bench. Every
+comparison this project has is against its own baseline or a published number for a specific rig.
+It is last because a rival implemented while two plants are still harming their machines would
+measure the wrong thing — and because step 1 has already shown that a comparison can be
+misdirected by a third party: Wood-Berry was quoted against BLT for months while the plant WITHOUT
+the pilot beat BLT outright.
+
+### What is NOT on this list, and why
+
+**Target 7 as written is superseded.** "Beat the published BLT on Wood-Berry" was the goal; the
+measurement says the steady-state inversion already does (43.90 against 51.95), and the pilot's
+job there is to stop making a good machine worse. The real target on that plant is: **deploy
+something that beats 43.90, or refuse every time.** Step 1 already achieves the second.
+
+**Online adaptation is parked, not dead.** It delivers 9.32x against a frozen 8.77x on the first
+unseen lap — 6% — and its 12.16x is twenty laps of one program, which the scoring rule now
+excludes. The covariance bound makes it stable and the anchor makes the commissioning
+unforgettable, both measured, both shipped off. It becomes interesting again only if step 4's
+model stops improving.
+
 ## What the record already settles
 
 Three findings make this plan shorter than it looks, and all three are measured rather than
