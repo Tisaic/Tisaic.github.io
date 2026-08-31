@@ -788,6 +788,53 @@ carrying a result is a liability; the finding belongs in this file, not in the l
 The diamond itself stays in `arm-rig.mjs` as a shape any experiment can score against. It is four
 line segments and it changes nothing unless asked for.
 
+## THE DWELLING EXCITATION: A SECOND NEGATIVE, AND THE HYPOTHESIS IS NOW IN DOUBT
+
+The surviving half of the diamond experiment — put stops INTO the noise instead of appending
+structure after it. `dwell` time-warps the excitation so the machine lingers, keeping the record
+rich where the diamond made 19% of it collinear.
+
+```
+ program            scribble    dwelling
+ rounded @4e-3        6.18x       3.40x
+ circle  @4e-3        7.72x       3.06x
+ circle  @8e-3        4.86x       3.76x
+ sharp   @4e-3        1.69x       1.55x
+ sharp   @8e-3        2.27x       2.00x
+```
+
+**IT DEPLOYED — unlike the diamond, which the gate refused — AND MADE EVERY PROGRAM WORSE**,
+including the sharp square it was aimed at. Halving the circle is the price; the square did not
+move in the right direction at all.
+
+**ONE THING IMPROVED, AND IT IS NOT NOTHING:** feedrate sensitivity. The circle goes 1.59x → 1.23x
+across a 2x feed change and the sharp square 1.34x → 1.30x, both inside the 1.5x target. A
+dwelling excitation visits a wider range of speeds, so the model is flatter across feed — and
+worse everywhere. That is a real trade and it is available if feedrate-agnosticism is ever the
+binding constraint.
+
+**TWO INDEPENDENT ATTEMPTS TO SUPPLY THE MISSING MOVE PROFILE HAVE NOW FAILED**, which is enough to
+put the account itself in doubt rather than its implementations:
+
+* appending a diamond — the model was destroyed by collinearity and the gate refused;
+* dwelling the excitation — the model deployed and got uniformly worse.
+
+**THE CAVEAT THAT KEEPS IT ALIVE, STATED BECAUSE IT IS LOAD-BEARING:** the warp has a **2% rate
+floor**, and its own comment calls it "a dwell, not a stop". A corner takes junction velocity to
+NEARLY ZERO, and it is the reversal through backlash that the model has never seen. So a true
+zero-velocity reversal remains untried, and the right reading of this null is "the floor is too
+high", not "stops do not help".
+
+**BUT THE LAG COLUMN POINTS SOMEWHERE ELSE ENTIRELY, AND IT IS THE BETTER LEAD.** On the sharp
+square the correction removes 1.55x of contour and only **1.20x of lag**, and the post-correction
+residual is LAG on four of five programs. Lag is a timing quantity — how far the correction leads
+the reference — not a coverage one. No amount of showing the model a stop changes what a receding
+horizon can do about phase at a near-stop, where the plant's response is dominated by backlash and
+stiction. **The next thing to measure is whether the sharp square's residual is a modelling failure
+at all, or a horizon one**, and the two are distinguishable: a modelling failure shows up as a bad
+forecast R² near the corners, a horizon failure shows up as a good forecast the QP cannot act on
+in time.
+
 ## What the record already settles
 
 Three findings make this plan shorter than it looks, and all three are measured rather than

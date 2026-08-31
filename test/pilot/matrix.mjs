@@ -34,6 +34,7 @@ const SHAPES = (process.env.SHAPES || 'circle,sharp,rounded').split(',');
 // 7.72x — and the mechanism it suggested is testable by swapping the training program: if the
 // square fails because the model never saw a machine STOP AND RESTART, then commissioning on the
 // square should fix those rows. What it costs the smooth programs is the other half of the answer.
+const DWELL = process.env.DWELL === '1';
 const TRAIN = { shape: process.env.TRAIN || 'rounded', feed: +(process.env.TRAINFEED || 0.004) };
 
 async function commission(seed) {
@@ -54,6 +55,19 @@ async function commission(seed) {
       return r > Math.abs(arm.L1 - arm.L2) + 0.5 && r < arm.L1 + arm.L2 - 0.5;
     },
     seed,
+    // A DWELLING EXCITATION, WHICH PUTS STOPS INTO THE NOISE RATHER THAN STRUCTURE AFTER IT.
+    //
+    // This is the surviving half of the diamond experiment. What the model is missing on a sharp
+    // corner is a STOP — the corner rule takes junction velocity to nearly zero four times a lap
+    // and each reversal unloads the gearbox wind-up through the backlash — and the excitation is
+    // filtered noise that never stops. `dwell` time-warps that noise so it lingers, keeping the
+    // record RICH where appending a diamond made 19% of it collinear and took the gate below one.
+    //
+    // WORTH KNOWING BEFORE READING THE RESULT: the warp has a 2% RATE FLOOR, and its own comment
+    // calls it "a dwell, not a stop". If a true zero-velocity reversal is what the model needs,
+    // this flag cannot supply it and the right reading of a null result is "the floor is too
+    // high", not "stops do not help".
+    dwell: DWELL,
     // THE DIAMOND-IN-EXCITATION EXPERIMENT RAN AND IS REMOVED WITH ITS HOOK. Appending a diamond
     // at both feeds to the end of the scribble — the same corner profile on a path nothing is
     // scored on — took all three verify regimes below one (scribble 0.23x, program 0.40x,
@@ -86,6 +100,8 @@ async function commission(seed) {
 
 console.log('\npilot: one commissioning, four programs it has never run');
 console.log(`  trained on ${TRAIN.shape} at feed ${TRAIN.feed}; every row below is held out.`);
+console.log(`  excitation: ${DWELL ? 'DWELLING — the noise is time-warped so the machine lingers'
+  : 'the ordinary scribble, which never stops'}`);
 
 const pilots = [];
 for (let s = 1; s <= K; s++) {
