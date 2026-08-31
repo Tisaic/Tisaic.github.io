@@ -27,11 +27,27 @@
  *
  * Run: node test/pilot/tankspread.mjs   [SEEDS=8] [QPI=4] [HTS=1.5]
  */
-import { Pilot, setSolverDefaults } from '../../lib/pilot/pilot.js';
+import { Pilot, setSolverDefaults, setVerifyRateDiv, setVerifyRef } from '../../lib/pilot/pilot.js';
 import { UCAP, makeTanks, levelsAt, voltsFor, RECIPE, refAtStep, PROG }
   from './rigs/tanks-rig.mjs';
 
 const SEEDS = +(process.env.SEEDS || 8);
+// THE VERIFY'S RATE DIVISOR. Quarter rate is a MEASURED result about choosing lambda and an
+// untested one about the ratio the gate reads; RDIV=1 runs the regimes at the machine's own
+// limits, which is what the machine's programs actually do. It moves both jobs at once, so a
+// change in the ranking is evidence and not yet a design.
+if (process.env.RDIV) setVerifyRateDiv(+process.env.RDIV);
+// AND THE REPRESENTATIVE-PROGRAM GATE. On Wood-Berry it turned nine harmful deployments into
+// twelve refusals and left EMPS byte-identical — but on that plant the right answer IS to refuse
+// everything, so it cannot distinguish a gate that RANKS from one that merely refuses harder.
+// This plant can: some draws here deliver 1.775x, so a gate that refuses those is worse, not
+// better. The reference is the plant's own recipe, which is what the score is taken on.
+if (process.env.REP === '1') {
+  setVerifyRef((i, n) => {
+    const h = refAtStep(Math.round(i * PROG / n));
+    return voltsFor(GMP, h[0], h[1]);
+  });
+}
 if (process.env.QPI || process.env.HTS) {
   setSolverDefaults({
     ...(process.env.QPI ? { qpIters: +process.env.QPI } : {}),
@@ -124,7 +140,13 @@ for (let s = 1; s <= SEEDS; s++) {
   // as inverted on EMPS (the estimate falls as the delivered benefit rises, and it understates
   // 9x); this is the same reading on a plant where the errors go the other way and are harmful.
   const V = st.report.verify || {};
-  const est = V.ratio;
+  // THE NUMBER THE GATE NOW ACTS ON. `V.ratio` is the headline the old two-regime gate produced;
+  // with a representative regime present that is no longer the column doing the deciding, and a
+  // calibration statistic computed on the wrong column measures the instrument it replaced. It
+  // reported -0.141 while the representative regime's own values ran 0.50 → 0.424x, 0.54 →
+  // 0.820x, 0.88 → 1.248x, 1.27 → 1.512x, 1.58 → 1.775x — monotone in all five (rule 17).
+  const repReg = (V.regimes || []).find((r) => r.name === 'representative');
+  const est = repReg ? repReg.ratio : V.ratio;
   const regs = (V.regimes || []).map((r) => `${r.name} ${(+r.ratio).toFixed(2)}x`).join(' / ');
   ests.push({ est, x, dep });
   console.log(`  ${String(s).padStart(5)}   ${dep ? ' yes ' : ' NO  '}  ${off.toFixed(4)}  `
@@ -156,7 +178,8 @@ if (paired.length > 2) {
     sxy += (+e.est - mx) * (e.x - my); sxx += (+e.est - mx) ** 2; syy += (e.x - my) ** 2;
   }
   const r = (sxx > 0 && syy > 0) ? sxy / Math.sqrt(sxx * syy) : 0;
-  console.log(`  gate estimate vs delivered, ${paired.length} seeds: correlation ${r.toFixed(3)}`
+  console.log(`  gate estimate vs delivered (${process.env.REP === '1' ? 'representative regime'
+    : 'headline ratio'}), ${paired.length} seeds: correlation ${r.toFixed(3)}`
     + `  (mean estimate ${mx.toFixed(2)}x against mean delivered ${my.toFixed(3)}x)`);
   console.log('  a gate whose THRESHOLD is merely misplaced still ranks; one near zero is not '
     + 'measuring the thing it gates on.');

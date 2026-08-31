@@ -1789,6 +1789,229 @@ to rank, and that showing it must come before anything else is derived from it. 
 does establish beyond argument is the SPREAD — 4.18x between best and worst delivered, against a
 gate threshold of 1.1x — because that is a direct measurement and not an inference.
 
+**6g. THE SPREAD PASS: EVERY PLANT'S NUMBER IS A DRAW, AND ON TWO PLANTS EVERY DEPLOYMENT
+HARMS THE MACHINE.**
+
+`test/pilot/spread.mjs` runs each plant's OWN test with one module-level seed offset changed and
+scrapes that plant's OWN headline — no rig is copied, nothing is re-scored. `setSeedOffset`
+OFFSETS rather than overrides, because a test that passes different seeds to different
+commissionings is making a point with them and forcing them to one number silently rewrites the
+experiment (measured: forcing it made a passing commit report two unrelated failures).
+
+```
+ plant       median      min      max   spread   refused
+ emps       0.03980  0.03940  0.04120    1.05x     0/8
+ arm         0.02366  0.02240  0.02528    1.13x     0/6
+ woodberry     62.40    43.90    95.73    2.18x    3/12
+ tanks         1.000x   0.368x   1.775x   4.18x     3/8   (from `tankspread.mjs`)
+```
+
+**THE VARIANCE TRACKS WHETHER THE PLANT IS IN THE METHOD'S WHEELHOUSE.** The two plants this
+project WINS on are repeatable to 5% and 13%; the two it loses or refuses on are draws of 2.2x
+and 4.2x. That is a sharper statement of the north star's "ONE ERROR CLASS done very well" than
+the win/loss table gives, because it says the failures are not merely smaller wins — they are
+different in kind.
+
+**AND SPLITTING THE DRAWS BY WHETHER THE PILOT ACTUALLY ACTED IS THE FINDING.**
+
+```
+ Wood-Berry, 12 seeds
+   deployed (9)  78.28 60.18 61.58 64.65 78.17 61.13 88.62 95.73 63.22   median 64.65
+   refused  (3)  43.90 43.90 43.90    <- the plant WITHOUT the pilot
+   steady-state inversion only                43.90
+   Luyben BLT decentralized PI                51.95   [the published baseline]
+```
+
+**EVERY ONE OF THE NINE DEPLOYMENTS IS WORSE THAN NOT DEPLOYING.** The median deployment makes
+the plant 1.47x worse than the machine it sits on, the best is still 37% worse, and the three
+refusals are the three good outcomes. That is the same shape the tank showed at the old defaults
+— 4 of 8 deployed and all four hurt — on a plant that shares no physics with it.
+
+**AND THE BASELINE THIS PROJECT HAS BEEN "LOSING TO" IS BEATEN BY DOING NOTHING.** The
+steady-state inversion alone reads 43.90 against the published BLT's 51.95. So "the pilot loses
+to a 1980s classical method" was never the right frame: the pilot is making a machine that
+already beats BLT substantially worse, and quoting it against BLT hid that behind a comparison
+with a third party.
+
+**THE TARGET-7 CLAIM I MADE ONE STEP EARLIER WAS WRONG AND IS WITHDRAWN.** Reading the 12-seed
+minimum of 43.90 against BLT's 51.95, I wrote that the pilot beats the published baseline on one
+draw in twelve. It does not: that draw is the pilot REFUSING, `u peak 0.000`, and the number
+belongs to the plant. Three seeds share it to four figures, which is what made it checkable —
+three identical values are a floor, not a coincidence, and the summary table could not show that
+until it printed the draws (rule 28).
+
+**THE INSTRUMENT HAD THE MATCHING DEFECT AND IT IS FIXED.** `spread.mjs` detected refusals with
+`/REFUSED|refused|"deploy":false/` and the pilot's actual sentence is *"this pilot does not
+deploy a controller the machine has not vouched for"* — so Wood-Berry reported **0 of 12 refused
+while three had refused**, and their scraped score was the baseline pooled into a column of
+controller results. It now matches the real wording AND cross-checks it against `u peak 0.000`,
+two independent readings of one fact, printing a warning if they ever disagree (rule 6).
+
+**TWO EXPLANATIONS FOR THE VARIANCE WERE TESTED AND BOTH FAILED.**
+
+* **The verify's quarter rate.** CLAUDE.md carries the hypothesis in as many words — both regimes
+  run at quarter rates while the machine runs at its limits. `setVerifyRateDiv` exposes it. At
+  full rate on the tank the gate does not start ranking, it **anti-ranks**: correlation -0.445
+  against -0.057, with 6 of 8 deploying and the worst still 0.368x. The hypothesis is dead, and
+  the quarter rate stands on the measurement it was chosen for.
+* **A longer excitation.** `setExciteScale` triples it — 67,400 steps to 91,400 on Wood-Berry,
+  and at seed 0 that is worth 78.28 to 63.07. Across twelve seeds it buys nothing: spread 2.18x
+  to **2.27x**, median 62.40 to 66.50. More data does not close it, which is a real answer to
+  target 4 from the other side — commissioning length is not what is buying the result, so it is
+  a candidate for cutting rather than extending.
+
+**WHICH LEAVES THE ONE LEVER THAT WOULD CONVERT THE SPREAD INTO A GAIN, AND SAYS WHY IT IS
+BLOCKED.** A 2.2x spread is an opportunity if the draws can be RANKED: commission k times, keep
+the best, and Wood-Berry's median deployment goes from 64.65 to its best 60.18 — or, better, to
+the refusal at 43.90. Ranking is exactly what the gate does not do (correlation -0.06 on the
+tank), so the spread is currently pure loss. **Making the verify rank is now the highest-value
+open item in this file**, ahead of any further work on the controller itself, because it is worth
+a factor on two plants without changing the algorithm at all.
+
+**6h. NO RULE ON THE GATE'S OWN NUMBERS SEPARATES THE HARMFUL DEPLOYMENTS, BECAUSE ON THIS PLANT
+THERE IS NOTHING TO SEPARATE.**
+
+`spread.mjs` now records the gate's two regime ratios beside what each draw delivered, sorted by
+the outcome, so "can anything rank these?" is read off the page rather than argued.
+
+```
+ draw   delivered   scribble   program   acted
+    5       43.90       2.58      0.95   no      <- the three refusals are the three
+    9       43.90       0.83      1.04   no         best outcomes on this plant
+   10       43.90       0.28      1.26   no
+    1       60.18       7.95      1.64   YES
+    6       61.13       2.68      1.39   YES
+    2       61.58       7.73      3.22   YES
+   11       63.22       2.24      1.19   YES
+    3       64.65       1.44      1.19   YES
+    4       78.17       1.95      1.36   YES
+    0       78.28       1.58      1.22   YES
+    7       88.62       2.33      1.20   YES
+    8       95.73       1.70      1.33   YES
+```
+
+**NEITHER COLUMN ORDERS THE OUTCOMES.** The worst deployment (95.73) has a program ratio of 1.33
+and the fifth-best (64.65) has 1.19; the scribble runs 1.44 to 7.95 across deployments with no
+relation to delivery at all, and a scribble of 2.58 refused while 1.44 deployed. Raising the
+deploy threshold from 1.1 to 1.7 would pass only draws 1 and 2 — which deliver 60.18 and 61.58,
+still 37% and 40% worse than refusing.
+
+**SO THE GATE IS NOT MISCALIBRATED. IT IS ANSWERING A DIFFERENT QUESTION.** No threshold on this
+pair can work, because the correct policy on this plant is REFUSE EVERYTHING and the pair does not
+know that. The existing scribble veto reaches the right answer three times in twelve, and it does
+so by accident of the draw rather than by seeing the harm.
+
+**WHICH NAMES THE ACTUAL DEFECT: THE VERIFY SCORES REGIMES IT INVENTED, AND THE MACHINE RUNS A
+PROGRAM.** The two regimes are a filtered-noise scribble and a trapezoid built from the LIMITS —
+both synthetic, both program-agnostic by design, and neither is the scenario the plant is scored
+on. On the plants where the method works that gap does not bite (EMPS and the arm are repeatable
+to 5% and 13% and their gates behave); on the two where it does not, the gate is estimating the
+benefit of a controller on a trajectory nobody will run.
+
+**AND THAT SUGGESTS THE ONE CHANGE WORTH TRYING NEXT, STATED SO IT CAN BE SHOWN FALSE.** The
+pilot is program-agnostic at COMMISSIONING, which is the product claim and must not change. It
+does not follow that it must be program-blind at VERIFY: an engineer who is about to let a
+controller onto a plant almost always has one representative program, and letting the verify
+score THAT — while the model is still fitted from the scribble — costs nothing the north star
+asks for. The falsifiable form: gating on a caller-supplied representative program refuses the
+nine harmful Wood-Berry deployments and keeps the arm's and EMPS' current verdicts unchanged. If
+it does not, the verify's problem is deeper than its regimes.
+
+**6i. THE FIX, AND IT PASSES BOTH HALVES OF ITS OWN PREDICTION: A REPRESENTATIVE PROGRAM FOR THE
+VERIFY ONLY.**
+
+Built as stated in 6h. `verifyRef` is an optional `(i, n, start) => [pos per channel]` the caller
+supplies; it is scored as a third regime alongside the scribble and the limits-trapezoid and
+takes part in the same worst-case veto. **The fit never sees it** — the model is still identified
+from a program-agnostic scribble, which is the product claim and does not change. Only the
+DEPLOY DECISION sees it, and deciding whether to let a controller onto a plant is a question
+about the thing that will actually run. Absent, nothing changes.
+
+It is clamped into the engineer's own box rather than trusted raw: a caller's program is written
+for their machine and this one may have been derated by a guard, so an unclamped reference would
+have the verify measuring a saturation.
+
+**HALF ONE — IT REFUSES THE HARMFUL DEPLOYMENTS.** Wood-Berry, the plant's own benchmark scenario
+as the reference, every seed:
+
+```
+ without    78.28 60.18 61.58 64.65 78.17 [43.90] 61.13 88.62 95.73 [43.90] [43.90] 63.22
+ with       43.90 43.90 43.90 43.90 43.90  43.90  43.90 43.90 43.90  43.90   43.90  ...
+            — every seed refuses, u peak 0.000, and 43.90 is the plant without the pilot
+```
+
+Nine harmful deployments become zero. On this plant the measurement says the correct policy is to
+refuse everything, and the gate now reaches it every time instead of three times in twelve.
+
+**HALF TWO — IT LEAVES THE PLANT THAT WORKS ALONE, BYTE FOR BYTE.** EMPS with and without the
+representative regime: **0.0412 mm, 14.0x, identical**. That is the control rule 21 asks for — a
+repair that changes the cases it should not touch has changed the measurement rather than fixed
+anything — and it is what separates this from simply making the gate stricter until the bad plant
+goes quiet.
+
+**WHAT IS NOT YET SHOWN, STATED RATHER THAN IMPLIED.** This is two plants of six. The arm, the
+tank, the mill and the barrel have not been run with a representative reference, and the tank is
+the one that matters most, because there the correct policy is NOT "refuse everything" — some
+draws deliver 1.775x — so it tests something Wood-Berry cannot: whether the gate now RANKS, or
+merely refuses harder. A gate that only ever refuses would pass both halves above and be useless.
+
+**AND THE KNOBS THIS ARC ADDED ARE ALL THE SAME SHAPE, DELIBERATELY.** `setSolverDefaults`,
+`setSeedOffset`, `setVerifyRateDiv`, `setExciteScale`, `setVerifyRef` — module-level setters with
+constructor overrides, so a harness can sweep six plants without editing six test files and
+without `lib/` ever reaching for `process` (rule 60). Every experiment in 6e-6i is one of these
+plus `spread.mjs`.
+
+**6j. THE TANK SETTLES IT: THE GATE NOW RANKS. CORRELATION 0.989 AGAINST -0.057.**
+
+Wood-Berry could not distinguish a gate that RANKS from one that merely refuses harder, because
+there the right answer is to refuse everything. The tank can: some draws genuinely deliver 1.775x,
+so refusing those would be worse and not better. With the plant's own recipe as the reference:
+
+```
+ seed  deploy   delivered   scribble  program  REPRESENTATIVE
+    1    NO       1.000        —         —        —        (guard tripped three times)
+    2    NO       1.000       0.77      1.78     0.48       refused by the scribble veto
+    3   yes       1.512       0.90      1.75     1.27
+    4   yes       1.775       3.43      1.71     1.58
+    5    NO       1.000       2.38      2.98     0.54       refused BY THE REPRESENTATIVE
+    6    NO       1.000       5.29      1.42     0.50       refused BY THE REPRESENTATIVE
+    7   yes       1.248       2.39      2.06     0.88
+    8    NO       1.000       0.22      1.40     0.34       refused by the scribble veto
+```
+
+**EVERY DEPLOYMENT NOW HELPS, AND NOTHING IS MADE WORSE.** Deployed 3 of 8 at a median of
+**1.512x**; the minimum delivered across all eight seeds is **1.000x**, because a refusal applies
+nothing. The two seeds the representative regime vetoed are exactly the two that harmed the plant
+without it — 0.820x and 0.424x — and it caught them while the old gate rated them 2.98x and 1.42x,
+its highest and its middle.
+
+**AND THE REPRESENTATIVE REGIME'S OWN NUMBER TRACKS DELIVERY ALMOST EXACTLY:**
+
+```
+ representative   0.50    0.54    0.88    1.27    1.58
+ delivered       0.424   0.820   1.248   1.512   1.775      monotone in all five
+```
+
+**Correlation 0.989 against the old headline's -0.057.** The three readings on this plant now run:
+
+```
+ old defaults, old gate    4/8 deploy, ALL FOUR HARM, deployed median 0.675x, corr -0.057
+ new defaults, old gate    5/8 deploy, two harm,      deployed median 1.249x
+ new defaults, NEW gate    3/8 deploy, ALL THREE HELP, deployed median 1.512x, corr 0.989
+```
+
+**ONE MORE INSTRUMENT FAULT, CAUGHT BY THE SAME RULE AS THE OTHERS.** The first run of this
+reported correlation **-0.141** and it was reading `V.ratio`, the headline the OLD two-regime gate
+produced — no longer the column doing the deciding. A calibration statistic computed on the wrong
+column measures the instrument it replaced (rule 17). Reading the representative regime's own
+value gives 0.989 from the same eight commissionings.
+
+**WHAT IS STILL OPEN.** Three plants — the arm, the mill, the barrel — have not been run with a
+representative reference, and the arm is the one that matters, because it is the second winner and
+the control has only been taken on EMPS. And the reference has to come from somewhere: this is a
+new thing the engineer must supply, which is a real cost against "wire it up and press one button"
+even though it is one they almost always have.
+
 **6f. AN 11% REGRESSION ON THE ARM — SUPERSEDED BY 6d, KEPT FOR THE METHOD.** The arm's model-only stack (conventional withheld, which is what survives the
 retirement) reads 7.4340e-2 on one historical run with `sharedWeights` forced and every lead
 pooled uncapped, and **8.3e-2 consistently now**. Tested and killed in order:
