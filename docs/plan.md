@@ -1251,6 +1251,268 @@ constructor's defaults are not applied when a host sets `pilot.online` directly 
 LMS path carried a comment about exactly that for its own clamp, and the lesson was not carried
 forward with it; and the uninformative prior above.*
 
+**6e-CORRECTED. THE SCORING WAS WRONG, AND CORRECTING IT REVERSES WHICH SETTING WINS.**
+
+Everything above scores the LAST FOUR OF TWENTY LAPS. That measures the thing the retirement
+exists to remove: a controller that reaches its number only after laps of one program is a
+memory however it is implemented. The owner's ordering is explicit — *the unseen path is the
+score, lap improvement is secondary* — so the headline is now the FIRST SCORED LAP OF A PROGRAM
+THE MODEL HAS NEVER RUN, and `test/pilot/adapt.mjs` reports it that way.
+
+Two instrument corrections came with it. Lap 0 carries a start-up transient — the machine
+begins at rest on a sine that demands motion immediately — and it is IDENTICAL for a frozen and
+an adapting model (frozen sine: 0.1191 mm on lap 0, 0.0415 mm on lap 1, weights untouched, a
+factor of 2.9 that belongs to the transient), so it gets its own column and the first SCORED
+lap is lap 1 (rules 13, 25). And the dead `FREEZE` constant, left behind by the LMS law it
+guarded, is gone.
+
+```
+            |  UNSEEN two-tone sine — THE NUMBER THAT DECIDES  |  seen program   |
+   lambda   |  start   lap 1       x   converged       x  |   lap 1       x  |  updates
+   frozen   |  0.1191  0.0415    8.77x     0.0415    8.77x  |  0.0393   14.68x  |        —
+        1   |  0.1188  0.0390    9.32x     0.0299   12.16x  |  0.0379   15.19x  |   102374
+   0.9999   |  0.1187  0.0379    9.60x     0.0394    9.23x  |  0.0371   15.55x  |   124800
+    0.999   |  0.1169  0.0112   32.49x     4.4505    0.08x  |  0.0118   48.95x  |    30357
+```
+
+**THE 8.77x → 12.16x HEADLINE IS 6% OF CONTROLLER AND 39% OF REPETITION.** On the first unseen
+lap λ=1 reads 9.32x against frozen's 8.77x, and the rest of the way to 12.16x is twenty laps of
+that one sine. On the seen program, first lap, it is 14.68x → 15.19x: 3%.
+
+**AND THE SETTING THE OLD SCORE THREW AWAY IS THE ONE THAT WINS THE NEW ONE.** λ=0.999 was
+recorded above as "collapses to 0.08x". Scored on the first unseen lap it reads **32.49x
+against frozen's 8.77x — 3.7x better on a path it has never run, on the lap it first sees it**
+— and 48.95x on the seen program. Then it walks away. The lap trace says which of the two
+behaviours it is:
+
+```
+frozen, sine        0.1191 0.0415 0.0415 … 0.0415   (flat, by construction)
+lambda 0.999 sine   0.1169 0.0114 0.0507 0.0437 3.0827 4.4733 … 4.44
+lambda 0.9995 sine  0.1183 0.0225 0.0082 0.0182 0.0507 0.0767 0.0427 0.0970 0.5001 … 0.50
+```
+
+λ=0.9995 reaches **0.0082 mm on lap 2 — 44x, five times better than the frozen model — and
+blows up on lap 8**. So the estimator genuinely finds a far better model early and then
+destroys it, which is not a reason to prefer the estimator that never improves; it is a
+stability problem with a name.
+
+**THE MECHANISM IS COVARIANCE WIND-UP, and it is a property of the recursion rather than of
+this plant.** `P` is divided by λ on every update, so a stream that stops carrying new
+information inflates it geometrically — 1/0.999 is e³¹ over the thirty thousand rows this axis
+runs — and the gain grows until the estimator answers noise at full strength. The excitation
+gate cannot stop it: as `P` inflates, `x'Px` grows, so the gate that was meant to hold back
+redundant rows stops firing. That is exactly what the λ=0.9999 row shows above — 124,800
+admissions, i.e. not one skip.
+
+**SO THE FIX IS A BOUND ON THE COVARIANCE, TAKEN AS A MULTIPLE OF THE POSTERIOR THE FIT ALREADY
+COMPUTED** (`SharedRLS.setTraceBound`, `pilot.online.traceGain`, off at 0 so λ=1 stays
+byte-identical). A multiple, never an absolute number: `P0` carries the commissioning fit's own
+column scale, so a constant here would be a constant in units nobody chose (rule 32). It is
+applied by SCALING `P`, which keeps it positive definite and keeps every direction's relative
+confidence — the information the seed exists to carry — where clamping the diagonal would leave
+the off-diagonals describing a covariance that no longer exists.
+
+**AND IT CURES IT COMPLETELY. THE BOUND IS THE KNOB; λ IS NOT.** Same commissioned model,
+same runs, `traceGain` swept. Every lap trace is monotone decreasing — no blow-up anywhere —
+and the first unseen lap improves with the bound:
+
+```
+ traceGain   unseen sine lap 1        converged sine      seen program lap 1
+   frozen    0.0415    8.77x        0.0415    8.77x        0.0393   14.68x
+        1    0.0390    9.32x        0.0297   12.22x        0.0379   15.19x
+        2    0.0374    9.72x        0.0210   17.26x        0.0366   15.74x
+        8    0.0312   11.65x        0.0104   34.84x        0.0312   18.47x
+ (unbounded) 0.0112   32.49x        4.4505    0.08x        0.0118   48.95x
+```
+
+**λ = 0.999 AND λ = 0.9995 NOW GIVE THE SAME MACHINE TO THREE FIGURES** (9.32x/9.32x at bound 1,
+9.72x/9.70x at 2, 11.65x/11.24x at 8), which is the clearest statement of what the bound does:
+once it binds, the covariance is held at a fixed size and the forgetting factor no longer
+decides anything. One knob replaces the other, and it is the one with a bounded failure mode.
+
+**AND THE BOUND KEEPS THE EARLY GAIN TOO — THE TRADE WAS AN ARTEFACT OF STOPPING AT 8.**
+Swept up, λ=0.999 throughout, unseen sine:
+
+```
+ traceGain   lap 1 (THE SCORE)   converged      seen prog lap 1   lap trace, sine
+   frozen    0.0415    8.77x   0.0415  8.77x    0.0393  14.68x   flat by construction
+        8    0.0312   11.65x   0.0104 34.84x    0.0312  18.47x   monotone down
+       32    0.0210   17.32x   0.0077 47.41x    0.0223  25.88x   monotone down
+      128    0.0126   28.95x   0.0078 46.41x    0.0148  38.94x   0.0126 → 0.0077, then FLAT
+      512    0.0092   39.58x   0.0108 33.51x    0.0117  49.36x   0.0077 at lap 2, drifting UP
+ unbounded   0.0112   32.49x   4.4505  0.08x    0.0118  48.95x   0.0114 → 4.47, gone by lap 5
+```
+
+**THE FIRST UNSEEN LAP IS MONOTONE IN THE BOUND** — 11.65x, 17.32x, 28.95x, 39.58x at 8, 32,
+128, 512 — and **the seen program comes along for free**: 14.68x → 49.36x on its FIRST lap at
+bound 512, against the previously reported 21.20x that took twenty laps to reach.
+
+**AND THEN SIXTY LAPS FALSIFIED THE TWENTY-LAP READING, WHICH IS WHY IT WAS RUN.** Written from
+the 20-lap trace, bound 128 "settles to 0.0077 mm and STAYS there". It does not. Every bound
+creeps back up; they differ in the RATE, not in whether it happens (unseen sine, mm rms):
+
+```
+ traceGain   lap 1     floor (lap ~3-6)   lap 20    lap 60     drift off the floor
+      128    0.0126        0.0077         0.0078    0.0086          +12%
+      256    0.0103        0.0077         0.0089    0.0115          +49%
+      512    0.0092        0.0077         0.0110    0.0168         +118%
+ unbounded   0.0112        0.0114          4.47      —           gone by lap 5
+```
+
+**THREE THINGS THIS SETTLES AND ONE IT OPENS.**
+
+* **The bound converts a divergence into a drift, which is a real repair and not a complete
+  one.** Unbounded reaches 4.47 mm by lap 5 — 0.08x, worse than no controller. Bounded, nothing
+  blows up at any setting out to sixty laps.
+* **The floor is the same 0.0077 mm (47x) at every bound**, reached by lap 3 to 6. So the bound
+  does not decide how good the model gets; it decides how fast the model gets there and how fast
+  it then decays. That is one quantity, not two knobs.
+* **The bound is the knob and λ is inert once it binds** — λ 0.999 and 0.9995 give the same
+  machine to three figures at bounds 1, 2 and 8.
+* **THE RESIDUAL DRIFT IS WIND-UP AT A SLOWER RATE, NOT AN ABSENT ONE.** The excitation gate
+  does not stop it (203,800 admissions in the 60-lap run).
+
+**SO DIRECTIONAL FORGETTING WAS BUILT AND MEASURED, AND IT IS THE SIXTH NEUTRAL READING RULE 41
+PREDICTS — BUT NOT FOR THE REASON THE RULE GIVES.** Ordinary forgetting divides the WHOLE
+covariance by λ, unexcited directions included, and that is where the residual drift lives.
+Discounting only ALONG the incoming row (`SharedRLS.directional`, coefficient derived rather
+than chosen: `g g'/r` is the projection onto the row's direction in the P-metric, and adding
+`(1−λ) g g'/(r(λ+r))` without dividing the matrix reproduces exactly the ordinary update's
+inflation of THAT direction and leaves every other one alone).
+
+**IT WORKS EXACTLY AS ADVERTISED AND IT LOSES THE THING THAT MATTERS.** Sixty laps, λ=0.999,
+unseen sine:
+
+```
+                        lap 1            lap 20    lap 53+   drift off floor
+ frozen             0.0415   8.77x       0.0415    0.0415    none, by construction
+ directional        0.0388   9.37x       0.0156    0.0078    NONE — monotone all 60 laps
+ ordinary + bound 128  0.0126  28.95x    0.0078    0.0086    +12%
+ ordinary + bound 512  0.0092  39.58x    0.0110    0.0168   +118%
+ ordinary, unbounded   0.0112  32.49x      4.47      —      diverged by lap 5
+```
+
+**THE TRACE BOUND NEVER BINDS UNDER DIRECTIONAL FORGETTING** — `traceGain` 0 and 128 give
+byte-identical traces — which is the mechanism confirmed directly: there is no wind-up left to
+bound. And the price is the whole point. On the first lap of a program it has never run,
+directional reads **9.37x against the bounded ordinary law's 28.95x**: it removes the drift by
+behaving like λ=1, creeping down over fifty laps to the same 0.0078 mm floor everything else
+reaches by lap 3. Under the owner's ordering — first unseen lap first — that is a loss, and the
+converged column it wins (58x on the seen program by lap 53) is the column that does not decide.
+So the bound ships and directional does not, both default off, and rule 41 gets its sixth
+reading with the mechanism isolated rather than assumed.
+
+**AND THE UNIT CHECK CAME WITH IT.** `test/pilot/rls.test.mjs` now pins all of it directly
+rather than through a plant: 20,000 rows in ONE direction wind an unbounded λ=0.999 covariance
+up by **x2.45e+8** and the bound holds it at exactly x8.00; a bounded recursion still follows a
+plant that genuinely changes 5 → 9; and `setTraceBound(0)` is byte-identical to not having the
+option at all, which is what makes it safe to ship default-off (rules 9, 21).
+
+**6e-RETENTION. DOES A FORGETTING LAW DISCARD THE SCRIBBLE IT WAS IDENTIFIED ON? MEASURED —
+AND THE ANSWER IS NO, WHICH OVERTURNS WHAT THE DRIFT ABOVE LOOKED LIKE.**
+
+**THE TRAP, STATED FIRST BECAUSE IT IS THE RIGHT WORRY.** The pilot is identified on a broadband
+scribble and then run on ONE production program. A law that discounts old rows on a timer will,
+given enough of that program, have discounted away every row that carried the scribble's
+excitation — leaving a model of the one program, which is the memory rebuilt by an adaptive law
+and the exact object the retirement removes. Its shape is the worst a failure can have: correct
+immediately, bad slowly, invisible to a short test. The requirement is asymmetric — the
+identification is kept for ever, and forgetting applies only to what adaptation ADDS on top.
+
+**AND THE DRIFT IS NOT THAT.** Reading the creeping lap trace as the commissioning being lost
+was an inference from an instrument that cannot separate two faults: a trace that climbs is
+equally consistent with a correction that is merely becoming mistuned for the program in front
+of it. The instrument that CAN separate them is a transfer — adapt on program A for the whole
+run, FREEZE the weights so what is scored is the model rather than the law, then score B, which
+it never adapted on, against the commissioned model on that same B. Both directions, because a
+law can lose one program's information and not the other's (rule 9).
+
+```
+ 60 laps, lambda 0.999    adapted on SINE → program    adapted on PROGRAM → sine
+ frozen (commissioned)          14.68x                        8.77x
+ bound 128                      30.13x   +105%                53.38x   +509%
+ bound 512                      20.84x    +42%                30.72x   +250%
+ directional                    28.99x    +97%                52.96x   +504%
+```
+
+**EVERY SETTING COMES OUT OF SIXTY LAPS ON ONE PROGRAM WITH A MODEL THAT IS BETTER ON THE OTHER
+ONE** — twice as good on the program, six times on the sine. The scribble identification is not
+merely retained, it is improved: the production stream is adding information the scribble did
+not carry rather than displacing what it did. **Bound 128 retains better than 512** (+105%
+against +42%), which is the expected ordering and the reason the aggressive setting's better
+first lap is not free.
+
+**AND AT 300 LAPS — ~1,000,000 ROWS — IT IS STILL POSITIVE, BUT IT IS DECAYING.** Same law,
+same settings, the horizon multiplied by five:
+
+```
+ laps    adapted on SINE → program    adapted on PROGRAM → sine
+   60         30.13x   +105%                53.38x   +509%
+  300         28.44x    +94%                38.49x   +339%
+```
+
+**SO THE WORRY IS THE RIGHT SHAPE AND THE MAGNITUDE IS NOT ALARMING YET.** Retention erodes
+monotonically with the horizon — the sine direction loses a third of its advantage between 60
+and 300 laps — and at a million rows the carried model is still 1.9x and 4.4x BETTER than the
+commissioned one on the program it never adapted on. It has not crossed. Whether it eventually
+does is a longer run than this, and it is the reason the anchor exists rather than a reason to
+call the law safe.
+
+**THE ANCHOR IS MEASURED AND IT IS NOT A STRAIGHT WIN, WHICH IS WHY IT SHIPS OFF.** At
+`anchorRows` 50,000 over the same 300 laps it REVERSES the asymmetry rather than lifting both
+directions: sine → program 28.44x → **42.33x (+188% against +94%)**, and program → sine
+38.49x → **12.93x (+48% against +339%)**. Its converged score is better (39.09x against 31.54x)
+and its first unseen lap slightly worse (26.54x against 28.95x). One knob, four numbers, two of
+them moving each way: that is a trade to be chosen against a horizon and a duty cycle, not a
+default. Off until a case is measured that needs it.
+
+**AND THE ANCHOR IS BUILT FOR IT REGARDLESS** (`SharedRLS.setAnchor`, `pilot.online.anchorRows`,
+off at 0). The estimate is pulled back toward the commissioned weights a fixed fraction per row —
+`1/kappa` is the pull-back's time constant IN ROWS, which is the unit the caller thinks in and
+makes the constant a property of the stream rather than the plant (rule 32) — so the deviation
+settles where the update's pull and the anchor's balance, and the commissioned fit is a FLOOR
+the estimate cannot walk away from however long the machine runs. It is applied AFTER the
+update, so a row's information is taken in full and the accumulated DEVIATION is discounted
+rather than the row: discounting the row would make the estimator deaf to a plant that really
+changed, which is the thing the exercise exists to keep.
+
+**6e-REGRESSION. THE SHARED FIT COSTS THE TANK ITS DEPLOYMENT, AND IT SHIPPED BECAUSE I DID
+NOT RUN THE SIX-PLANT PASS.**
+
+`test/pilot/tanks.test.mjs` fails 6 checks at HEAD and passed at `c24bede`. Bisected by running
+that one test at each commit, with the two `_notch` crashes in between accounted for:
+
+```
+ c24bede                                   PASS
+ 65c86f6 / effc58a  (_notch crash)         throws — not evidence either way
+ 3baa869            (_notch restored)      3 FAIL
+ 20de1b7            (nine leads)           6 FAIL
+ HEAD                                      6 FAIL
+```
+
+**AND THE CAUSE IS ISOLATED, NOT INFERRED.** Forcing `sharedWeights` ON at the last PASSING
+commit reproduces exactly the first three failures — the plant that deployed at 1.32x now
+REFUSES ("the scribble regime measured 0.08x"), the sweeping-versus-dwelling basis comparison
+collapses to 1.00x against 1.35x, and the gate-off control stops deploying. Two other
+explanations were killed first: `qpIters` 60 → 4 is NOT it (forced back to 60 at HEAD, still 6
+failures, scribble 0.64x against 0.08x — better and still refusing), and my working changes are
+not it (identical 6 failures with `lib/pilot` stashed).
+
+**SO "ONE MODEL FOR EVERY LEAD IS BETTER ON BOTH PLANTS THAT DEPLOY" WAS TRUE AND INCOMPLETE.**
+It was measured on EMPS (12.70x → 14.69x) and the arm (7.8154e-2 → 7.4340e-2) and written into
+the north star's PLC row as a straight win. It is a win on those two and a REFUSAL on the tank,
+and the reason nobody knew is that the six-plant pass was never run — the same pass CLAUDE.md
+demands in the sentence right above it for a different default change, for exactly this reason.
+A change measured on the plants that deploy has been measured on the plants least able to
+falsify it.
+
+**THE FIX IS NOT TO REVERT.** The shared fit is what makes the online budget reachable at all
+(2n² per sample against nt·2n²), and it is better on two plants of the three that have been
+measured. What the tank says is that sharing is a MODELLING choice, not an arithmetic one, and
+this project's own principle covers it: do not decide it, measure it per plant on held-out data
+and let the fit choose, so the per-lead cost is paid only where it is earned. That is the next
+piece of work and it is sequenced ahead of anything else here.
+
 **6f. AN 11% REGRESSION ON THE ARM — SUPERSEDED BY 6d, KEPT FOR THE METHOD.** The arm's model-only stack (conventional withheld, which is what survives the
 retirement) reads 7.4340e-2 on one historical run with `sharedWeights` forced and every lead
 pooled uncapped, and **8.3e-2 consistently now**. Tested and killed in order:

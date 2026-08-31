@@ -31,7 +31,7 @@ unmeasured or partial, and saying so is worth more than the claim is.
 | Completely self-tuning | **SUPPORTED** | No per-plant constants; every threshold re-derived from measurement; and it REFUSES with a stated reason, asserted to be right for the right reason. Rare, and the strongest thing here. |
 | Robust and tolerant | **PARTIAL** | The refusal machinery is genuinely strong. Transfer is the weakness, and it is the subject of this north star. |
 | Reusable across plants | **2 CLEAR WINS OF 6** | Arm and EMPS win. Tank 1.32x, barrel refused, mill refused (0.42x), Wood–Berry LOST. |
-| PLC memory and CPU | **THE FIT IS BUILT AND THE MEMORY IS SOLVED; THE DEPLOYED PATH IS 4.3x OVER** | Memory was never the problem and is now smaller again: the forecast bank is ONE model for every lead, not one per lead — 727 kB of covariance to 10.7 kB, deployed bytes 25.4 kB to 6.0 kB, fit memory 30.4 kB to 11.0 kB — and it is BETTER on both plants that deploy (EMPS 12.70x → 14.69x, arm model-only 7.8154e-2 → 7.4340e-2). The fit is `lib/pilot/rls.js`: shared-covariance RLS, seeded from the commissioning posterior, gated at 4.6e-10% against the batch solver it replaces. **What is NOT met is the deployed arithmetic.** What ships is 42,914 MAC/cycle on EMPS, 429% of 10% of a 1 ms scan; the configuration that FITS the scan is 10,148 MAC and gives up 13% of the delivery. Both ends are measured on the same rig and the trade is real. And on six plants only two deploy, so this is two plants with four negative controls. |
+| PLC memory and CPU | **THE FIT IS BUILT AND THE MEMORY IS SOLVED; THE DEPLOYED PATH IS 4.3x OVER** | Memory was never the problem and is now smaller again: the forecast bank is ONE model for every lead, not one per lead — 727 kB of covariance to 10.7 kB, deployed bytes 25.4 kB to 6.0 kB, fit memory 30.4 kB to 11.0 kB — and it is BETTER on both plants that deploy (EMPS 12.70x → 14.69x, arm model-only 7.8154e-2 → 7.4340e-2) — **and it costs the QUADRUPLE TANK its deployment, which is a regression that shipped because the six-plant pass was never run.** `tanks.test.mjs` passed at `c24bede` and fails 6 checks now; forcing `sharedWeights` on at that last passing commit reproduces it exactly, and the plant that deployed at 1.32x refuses at 0.08x. Sharing is a MODELLING choice measured only on the two plants least able to falsify it, and the fix is to let the fit choose it per plant on held-out data rather than to revert the thing the online budget depends on. The fit is `lib/pilot/rls.js`: shared-covariance RLS, seeded from the commissioning posterior, gated at 4.6e-10% against the batch solver it replaces. **What is NOT met is the deployed arithmetic.** What ships is 42,914 MAC/cycle on EMPS, 429% of 10% of a 1 ms scan; the configuration that FITS the scan is 10,148 MAC and gives up 13% of the delivery. Both ends are measured on the same rig and the trade is real. And on six plants only two deploy, so this is two plants with four negative controls. |
 | Linear AND nonlinear alike | **CONTRADICTED** | Sorted by nonlinearity the results run the WRONG WAY. The most linear plant — Wood–Berry, linear transfer functions with dead time — LOST to a 1980s classical method (72.08 against the published BLT's 51.95). The most nonlinear — barrel as T⁴, tank as √h — refused and 1.32x. The wins are the arm and EMPS. The honest description of what works is not "linear and nonlinear alike" but ONE ERROR CLASS done very well: mechanical compliance and friction. |
 
 **And nothing here has been compared to the state of the art.** The baselines are this
@@ -61,6 +61,69 @@ holds only where it was measured is a calibration, not a controller.
 honest accounting is worse than it sounds: it buys a result that a change of program can
 erase. The cost is ~127 scored runs; the physics inside them is about a tenth of the wall
 clock (`test/flexisim/_cost.mjs`).
+
+### THE SCORE IS THE UNSEEN PATH. LAP IMPROVEMENT IS SECONDARY.
+
+**Every headline number is quoted on the FIRST SCORED LAP of a program the controller has
+never run.** Lap-over-lap improvement is reported beside it and never instead of it, because
+a number reached only after laps of ONE program is a memory however it is implemented: it
+buys performance by repetition and cannot deliver it on a part that has not been cut before.
+This is the ordering the whole north star rests on — a controller of the PLANT scores the
+same on the first part as on the hundredth; a controller of the PATH does not.
+
+Four consequences, all of them binding:
+
+- **A converged score is not a result, it is a trend.** Quote it as the second column. Where
+  a run scores its LAST laps — this repository did, on twenty — say so in the same sentence.
+- **The start-up transient belongs in its own column.** Lap 0 starts the machine at rest on
+  a program that demands motion immediately, and that transient is identical for a frozen and
+  an adapting model: on EMPS' held-out sine, frozen reads 0.1191 mm on lap 0 and 0.0415 mm on
+  lap 1 with the weights untouched, a factor of 2.9 that belongs to the transient and not the
+  controller (rules 13, 25). The first SCORED lap is lap 1.
+- **The ordering changes what wins, which is the evidence that it matters.** Online
+  adaptation on EMPS was written up here as 8.77x -> 12.16x on a held-out sine. Read on the
+  first unseen lap the same runs are 8.77x -> 9.32x, and the remaining 39% is twenty laps of
+  the one sine. Worse for the old ordering: it had ranked the accumulating estimator
+  (lambda 1) first and discarded fast forgetting as divergent. Scored on the first unseen
+  lap, **lambda 0.999 reads 32.49x against frozen's 8.77x — 3.7x better on a path it has
+  never run, on the lap it first sees it** — and then walks away to 0.08x by lap 20. The
+  configuration the converged score threw away is the one that wins the score that matters,
+  and its divergence turned out to be covariance WIND-UP with a name and a cure: `P` is
+  divided by lambda every update, so a stream carrying no new information inflates it
+  geometrically (measured directly: **x2.45e+8** over 20,000 rows in one direction). Bounding
+  the covariance trace at a multiple of the commissioning posterior removes the divergence
+  outright and leaves **28.95x on the first unseen lap at bound 128, 39.58x at 512**, with the
+  seen program at 49.36x on ITS first lap against the 21.20x that used to take twenty. Sixty
+  laps then falsified the twenty-lap reading in turn: every bound still creeps off its 0.0077 mm
+  floor, by +12% at 128 and +118% at 512, so the bound converts a divergence into a drift rather
+  than removing it. (`test/pilot/adapt.mjs`, `test/pilot/rls.test.mjs`, plan step 6e-corrected.)
+- **AND FORGETTING MUST NEVER COST THE COMMISSIONING. THE IDENTIFICATION IS KEPT FOR EVER;
+  FORGETTING APPLIES ONLY TO WHAT ADAPTATION ADDS ON TOP OF IT.** The model is identified on a
+  broadband SCRIBBLE and then run on one production program. A law that discounts old rows on a
+  timer will, given enough of that program, have discounted away every row that carried the
+  scribble's excitation — and what is left is a model of the one program, which is the memory
+  rebuilt by an adaptive law and the exact object the retirement removes. Its shape is the worst
+  a failure can have: excellent immediately, bad slowly, invisible to a short test.
+
+  **THE INSTRUMENT IS A TRANSFER, NOT A DRIFT READING**, and building it overturned the reading
+  above. Adapt on program A, FREEZE the weights, score on B, compare against the commissioned
+  model on B: a creeping trace is equally consistent with a correction merely becoming mistuned
+  for the program in front of it, and those are different faults with different fixes. Measured
+  over sixty laps, **the commissioning is not being lost — the transferred model is better, by a
+  lot**: adapted on the sine then scored on the program, 14.68x → **30.13x (+105%)**; adapted on
+  the program then scored on the sine, 8.77x → **53.38x (+509%)** (bound 128; bound 512 +42% /
+  +250%, directional +97% / +504%). So the drift is a property of the program being run, not of
+  the model, and the earlier sentence here — that the drift *was* this failure beginning — was
+  an inference from the wrong instrument. **At 300 laps — a million rows — it is still positive
+  but decaying**: +94% and +339% against 60 laps' +105% and +509%. Retention erodes with the
+  horizon and has not crossed; whether it eventually does is a longer run than any taken.
+
+  `SharedRLS.setAnchor` is built for it either way — the estimate is pulled back toward the
+  commissioned weights a fixed fraction per row, so the deviation is a bounded fading correction
+  and the commissioned fit is a floor rather than a starting point. Measured at 300 laps it
+  REVERSES the asymmetry rather than lifting both directions (sine → program +188% against +94%,
+  program → sine +48% against +339%), so it is a trade against a horizon and a duty cycle rather
+  than a default, and it ships off.
 
 ### What has to be true instead
 

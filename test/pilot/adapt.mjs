@@ -103,9 +103,13 @@ function restore() {
   });
 }
 
-/** Deploy on `prog`, optionally adapting against the error the machine really has. */
-function run(prog, online) {
-  restore();
+/**
+ * Deploy on `prog`, optionally adapting against the error the machine really has.
+ * `keep` continues from the weights the previous run left, which is what the retention
+ * test below needs: adapt on one program, then carry those weights to another.
+ */
+function run(prog, online, keep = false) {
+  if (!keep) restore();
   pilot.online = online;
   const m = makeMachine(prog.q[0], 0), S = pilot.sample;
   pilot._initRun();
@@ -136,7 +140,14 @@ function run(prog, online) {
   // instrument failing before the model (rule 17) and would have been read as "adaptation
   // never ran" if the scores had happened to sit still.
   const a = { updates: pilot.readouts[0]._onlineN || 0 };
-  return { rms: 1000 * Math.sqrt(s / n), uPk: 1000 * uPk, perLap, a };
+  // THE FIRST SCORED LAP IS LAP INDEX 1, NOT 0. Lap 0 starts the machine at rest on a
+  // program that demands velocity immediately, so it carries a start-up transient that is
+  // IDENTICAL for a frozen and an adapting model — on the sine, frozen reads 0.1191 on lap 0
+  // and 0.0415 on lap 1 with the weights untouched, a factor of 2.9 that belongs to the
+  // transient and not to the controller (rule 13). It is reported in its own column rather
+  // than dropped, because "not measured" and "no transient" are different states (rule 25).
+  return { rms: 1000 * Math.sqrt(s / n), start: perLap[0], first: perLap[Math.min(1, perLap.length - 1)],
+    uPk: 1000 * uPk, perLap, a };
 }
 
 const openProg = openLoop(PR), openSine = openLoop(SIN);
@@ -152,24 +163,96 @@ console.log(`  the bar: a lap-indexed table on this axis reaches 0.0024 mm (242x
 // between "keep fitting" and "keep adapting", which is why the sweep has one axis now where
 // the LMS version had three.
 const LAMBDAS = (process.env.LAMBDA || '1,0.9999,0.999,0.99').split(',').map(Number);
-// THE FREEZE OFF, SO THE UNGUARDED TRAJECTORY CAN BE SEEN. Guarded, every setting freezes
-// inside the first lap and the run says nothing about where adaptation was heading — only
-// that the guard stopped it. An update law's failure mode is the thing to look at directly:
-// this project has two on record (an ILC table pumped to 5.25, a harmonic solve at 0.98x)
-// and both were found by watching them run, not by trusting a guard to describe them.
-const FREEZE = process.env.FREEZE === '0' ? 1e9 : 3;
+// THE FAILURE MODE IS WATCHED, NOT GUARDED AWAY. The LMS version of this file carried a
+// `FREEZE` after three worsening windows; it is gone with the law it belonged to, and
+// deliberately not replaced, because a guard that stops a run says only that it stopped —
+// this project has two update laws on record (an ILC table pumped to 5.25, a harmonic solve
+// at 0.98x) and both were understood by watching them diverge, not by reading a guard.
+// AND THE COVARIANCE BOUND, which is the only other knob and exists because forgetting has a
+// failure mode: `P` is divided by lambda every update, so a stream that stops carrying new
+// information inflates it geometrically until the gain is answering noise. 0 leaves it
+// unbounded, which is what the first sweep here measured.
+const TG = +(process.env.TG || 0);
+// AND WHETHER THE FORGETTING IS DIRECTIONAL. Rule 41 records directional forgetting measuring
+// NEUTRAL five times in this project; all five were on a different question, and this is the
+// first time the mechanism it targets — inflating directions the data said nothing about — has
+// been isolated and measured on its own.
+const DIR = process.env.DIR === '1';
+// AND THE ANCHOR: how many rows the estimate may drift from the commissioned fit before that
+// fit pulls it back. 0 leaves it unanchored, which is what every reading before this one was.
+const AR = +(process.env.AR || 0);
 
-console.log('\n   lambda    program mm        x     sine mm        x   updates');
+// THE UNSEEN PATH IS THE HEADLINE. LAP IMPROVEMENT IS SECONDARY.
+//
+// Two separate things were being conflated in one rms. A controller that reaches its number
+// only after laps of ONE program is a memory however it is implemented — it buys performance
+// by repetition and cannot deliver it on a part it has not cut before — so the number that
+// decides is the FIRST SCORED LAP OF A PROGRAM THE MODEL HAS NEVER RUN. Everything after
+// that lap is improvement-by-repetition: worth knowing, never the claim.
+//
+// Scoring the LAST FOUR OF TWENTY laps, which this file did, measured exactly the thing the
+// retirement exists to remove, and it flattered the result twice over. Read properly:
+//
+//   unseen sine, first scored lap   frozen 8.77x   adapting 9.32x   (+6%)
+//   unseen sine, converged over 20  frozen 8.77x   adapting 12.16x  (+39%, all repetition)
+//   seen program, first scored lap  frozen 14.68x  adapting 14.71x  (+0.2%)
+//
+// So the whole 8.77x -> 12.16x headline is the second row, and the second row is laps.
+console.log('\n            |  UNSEEN two-tone sine — THE NUMBER THAT DECIDES  |  seen program   |');
+console.log('   lambda   |  start   lap 1       x   converged       x  |   lap 1       x  |  updates');
 const base = run(PR, null), baseS = run(SIN, null);
-console.log(`   frozen  ${base.rms.toFixed(5).padStart(9)}  ${(openProg / base.rms).toFixed(2).padStart(6)}x  `
-  + `${baseS.rms.toFixed(5).padStart(9)}  ${(openSine / baseS.rms).toFixed(2).padStart(6)}x         —`);
+const row = (name, r, q, upd) => console.log(`  ${name.padStart(7)}   | `
+  + `${q.start.toFixed(4).padStart(7)}  ${q.first.toFixed(4).padStart(6)}  `
+  + `${(openSine / q.first).toFixed(2).padStart(6)}x  ${q.rms.toFixed(4).padStart(9)}  `
+  + `${(openSine / q.rms).toFixed(2).padStart(6)}x  |  ${r.first.toFixed(4).padStart(6)}  `
+  + `${(openProg / r.first).toFixed(2).padStart(6)}x  |  ${String(upd).padStart(7)}`);
+row('frozen', base, baseS, '—');
 for (const lambda of LAMBDAS) {
-  const cfg = { lambda };
+  const cfg = { lambda, traceGain: TG, directional: DIR, anchorRows: AR };
   const r = run(PR, cfg), q = run(SIN, cfg);
-  console.log(`  ${String(lambda).padStart(7)}  ${r.rms.toFixed(5).padStart(9)}  `
-    + `${(openProg / r.rms).toFixed(2).padStart(6)}x  ${q.rms.toFixed(5).padStart(9)}  `
-    + `${(openSine / q.rms).toFixed(2).padStart(6)}x  ${String(r.a.updates).padStart(8)}`);
+  row(String(lambda), r, q, r.a.updates);
 }
+// ---- DOES ADAPTATION LOSE THE COMMISSIONING? THE DIRECT TEST, NOT THE DRIFT.
+//
+// THE TRAP, NAMED BY THE OWNER AND VISIBLE IN THE TRACE ABOVE: the model is identified on a
+// broadband scribble, and a forgetting law discounts old rows on a TIMER. Run one program long
+// enough and every row that carried the scribble's excitation has been discounted away, so what
+// is left is a model of that one program — the memory being rebuilt by an adaptive law, and the
+// exact object the retirement removes. It performs well immediately and goes bad slowly, which
+// is the worst shape a failure can have because a short test cannot see it.
+//
+// READING THE DRIFT IS NOT ENOUGH. A trace that creeps upward is CONSISTENT with losing the
+// commissioning, but it is also consistent with the correction simply becoming badly tuned for
+// the program in front of it. Those are different faults with different fixes, and one number
+// cannot separate them (rule 39's shape, applied to a different pair).
+//
+// SO THE INSTRUMENT IS A TRANSFER: adapt on program A for the whole run, FREEZE, and score the
+// resulting model on program B, which it never adapted on, against the commissioned model on
+// that same B. If the scribble identification survives, B is no worse than frozen. If it has
+// been discounted away, B is worse — and by how much is the size of what was lost.
+if (process.env.RETAIN) {
+  console.log('\n  RETENTION — adapt on one program, freeze, then score the OTHER one:');
+  console.log('    (the commissioned model reaches ' + (openProg / base.first).toFixed(2)
+    + 'x on the program and ' + (openSine / baseS.first).toFixed(2) + 'x on the sine, frozen)');
+  for (const lambda of LAMBDAS) {
+    const cfg = { lambda, traceGain: TG, directional: DIR, anchorRows: AR };
+    // adapt on the sine for the whole run, then carry those weights to the program with
+    // adaptation OFF — so what is scored is the MODEL, not the law that is still running.
+    run(SIN, cfg);
+    const carriedP = run(PR, null, true);
+    // and the other way round, because a law can lose one program's information and not the
+    // other's, and asserting one direction would be a one-sided claim (rule 9).
+    run(PR, cfg);
+    const carriedS = run(SIN, null, true);
+    const rp = openProg / carriedP.first, rs = openSine / carriedS.first;
+    const bp = openProg / base.first, bs = openSine / baseS.first;
+    console.log(`    lambda ${String(lambda).padStart(7)}  adapted on sine → program `
+      + `${rp.toFixed(2).padStart(6)}x (frozen ${bp.toFixed(2)}x, ${(100 * (rp / bp - 1)).toFixed(0)}%)`
+      + `   adapted on program → sine ${rs.toFixed(2).padStart(6)}x (frozen ${bs.toFixed(2)}x, `
+      + `${(100 * (rs / bs - 1)).toFixed(0)}%)`);
+  }
+}
+
 // THE LAP TRACE, because "did it converge, sit still, or walk away" is the question a single
 // rms cannot answer and the one that decides whether this is the memory's replacement or a
 // slightly different model.
@@ -179,7 +262,7 @@ if (process.env.TRACE) {
   show('frozen, program', base);
   show('frozen, sine', baseS);
   for (const lambda of LAMBDAS) {
-    show(`lambda ${lambda} prog`, run(PR, { lambda }));
-    show(`lambda ${lambda} sine`, run(SIN, { lambda }));
+    show(`lambda ${lambda} prog`, run(PR, { lambda, traceGain: TG, directional: DIR, anchorRows: AR }));
+    show(`lambda ${lambda} sine`, run(SIN, { lambda, traceGain: TG, directional: DIR, anchorRows: AR }));
   }
 }

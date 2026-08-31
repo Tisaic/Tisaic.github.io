@@ -220,5 +220,78 @@ check('with forgetting it TRACKS the change, where without it it averages the tw
     Math.abs(w4[1] - 9) < 0.1, `${w4[1].toFixed(4)} against 9`);
 }
 
+// ---- COVARIANCE WIND-UP, AND THE BOUND THAT STOPS IT — BOTH HALVES (rule 9).
+//
+// `lambda < 1` divides `P` by lambda on every update, so on a stream that carries no new
+// information the covariance inflates geometrically and the gain grows until the estimator is
+// answering noise at full strength. That is not a hypothetical: on the EMPS axis
+// `test/pilot/adapt.mjs` measures lambda 0.999 reading 32.5x on the first lap of a program it
+// has never seen and 0.08x by lap twenty — one estimator winding up, not two behaviours. The
+// excitation gate cannot catch it either, because as `P` inflates `x\'Px` grows and the gate
+// that was meant to hold back redundant rows stops firing.
+//
+// A bound that only stopped the growth would be half a check. It also has to leave a model
+// that genuinely needs to move free to move, and it has to be INERT when not asked for.
+{
+  console.log('\n  covariance wind-up on an uninformative stream, and the trace bound:');
+  const mkRow = (k) => {
+    // ONE DIRECTION, FOR EVER. The second coordinate is never excited, which is precisely the
+    // situation a repeating production program creates once its first lap is learned.
+    const a = 1 + 0.001 * Math.sin(k / 7);
+    return [a, 0];
+  };
+  const trace = (r) => { let t = 0; for (let i = 0; i < r.n; i++) t += r.P[i * r.n + i]; return t; };
+
+  const loose = new SharedRLS(2, 1, 1, 0.999);
+  const tr0 = trace(loose);
+  for (let k = 0; k < 20000; k++) loose.update(mkRow(k), [2 * mkRow(k)[0]]);
+  const grew = trace(loose) / tr0;
+
+  const bound = new SharedRLS(2, 1, 1, 0.999);
+  bound.setTraceBound(8);
+  for (let k = 0; k < 20000; k++) bound.update(mkRow(k), [2 * mkRow(k)[0]]);
+  const held = trace(bound) / tr0;
+
+  console.log(`    20,000 rows in ONE direction: trace x${grew.toExponential(2)} unbounded, `
+    + `x${held.toFixed(2)} bounded at 8`);
+  check('an unbounded forgetting recursion winds its covariance up on an uninformative stream',
+    grew > 1e3, `trace grew only x${grew.toExponential(2)} — the failure this bound exists for did not occur`);
+  check('…and the trace bound holds it, at the multiple it was given',
+    held <= 8 * (1 + 1e-9) && held > 1, `x${held.toFixed(3)} against a bound of 8`);
+
+  // AND IT IS NOT DEAF. The bounded recursion has to still follow a plant that really changed —
+  // a bound tight enough to stop wind-up by stopping learning would pass the check above.
+  const w0b = new Float64Array([2, 5]);
+  const P0b = new Float64Array([1e-4, 0, 0, 1e-4]);
+  let ns = 7; const nz2 = () => { ns = (ns * 1103515245 + 12345) & 0x7fffffff; return ns / 0x7fffffff - 0.5; };
+  const live = new SharedRLS(2, 1, 1, 0.999);
+  live.seed(0, w0b, P0b);
+  live.setTraceBound(8);
+  for (let k = 0; k < 20000; k++) {
+    const a = Math.sin(k / 5), b = Math.sin(k / 3.3 + 1);
+    live.update([a, b], [2 * a + 9 * b + 0.05 * nz2()]);
+  }
+  const wl = live.weights(0);
+  console.log(`    plant changes 5 → 9 with the bound ON: [${wl[0].toFixed(4)}, ${wl[1].toFixed(4)}]`);
+  check('…and a bounded recursion still follows a plant that genuinely changed',
+    Math.abs(wl[1] - 9) < 0.1, `${wl[1].toFixed(4)} against 9`);
+
+  // THE CONTROL (rule 21): a repair that changes cases it should not touch has changed the
+  // measurement rather than fixed anything. `setTraceBound(0)` must leave the recursion byte
+  // for byte where it was, which is what makes the option safe to ship default-off.
+  const offA = new SharedRLS(2, 1, 1, 0.999);
+  const offB = new SharedRLS(2, 1, 1, 0.999);
+  offB.setTraceBound(0);
+  for (let k = 0; k < 5000; k++) {
+    const a = Math.sin(k / 5), b = Math.sin(k / 3.3 + 1), y = 2 * a + 5 * b;
+    offA.update([a, b], [y]); offB.update([a, b], [y]);
+  }
+  let same = true;
+  for (let i = 0; i < offA.P.length; i++) if (offA.P[i] !== offB.P[i]) same = false;
+  for (let i = 0; i < 2; i++) if (offA.weights(0)[i] !== offB.weights(0)[i]) same = false;
+  check('…and at 0 the bound is byte-identical to not having it, which is why it ships off',
+    same, 'setTraceBound(0) changed the recursion');
+}
+
 console.log(failed ? `\nrls: ${failed} check(s) FAILED\n` : '\nrls: all checks passed\n');
 process.exit(failed ? 1 : 0);
