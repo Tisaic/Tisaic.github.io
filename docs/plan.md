@@ -308,11 +308,11 @@ it is better than the best draw, so it is finding something no single commission
 
 **TWO THINGS THAT ARE NOT YET ESTABLISHED, AND THE FIRST DECIDES WHETHER THIS IS AN ARCHITECTURE.**
 
-* **The ensemble was FORCED to deploy.** Its verdict was set true so the averaged model could be
-  scored directly — a verdict inherited from whichever draw came first would return zeros from
-  `act()` and read as a null. So 1.344x is what the average DELIVERS, not what the gate decides
-  about it. The real test is to run the ensemble through its own verify: commission k, average,
-  vouch, deploy. Until that is measured this is an observation.
+* **THE ENSEMBLE VOUCHED FOR ITSELF — MEASURED, so this is an architecture and not an
+  observation.** `_startVerify()` is already re-entrant (a guard derate re-enters there), so the
+  averaged model goes through the same verify round as any commissioned one, on the machine.
+  Result: **DEPLOY, delivering 1.344x**. Commission k → average → vouch → deploy is a complete
+  loop, and every one of the eight draws that fed it had refused.
 * **3 of 8 draws still differ in layout with the basis pinned**, so the basis is not the only
   discrete thing that moves between draws — most likely the tuned window. The layout guard
   excluded them rather than averaging incompatible rows, which is why the first attempt averaged

@@ -247,7 +247,33 @@ if (paired.length > 2) {
     // verdict inherited from whichever draw happened to be first is not that question. A
     // commissioned pilot that refused carries `verdict.deploy === false` and `act()` then returns
     // zeros, which would score the ensemble as exactly 1.000x and look like a null result.
-    e.pilot.verdict = { deploy: true, why: 'ensemble, scored directly' };
+    // AND IT IS PUT THROUGH A REAL VERIFY, WHICH IS WHAT MAKES THIS AN ARCHITECTURE RATHER THAN
+    // AN OBSERVATION. `_startVerify()` is already a re-entrant path — a guard derate re-enters
+    // there — so the averaged model can be vouched for on the machine exactly like any other
+    // commissioned one: commission k, average, VOUCH, deploy. Forcing the verdict instead would
+    // answer "what does the average deliver" and leave "would this ever ship" unanswered.
+    const mv = makeTanks(GMP);
+    const startV = voltsFor(GMP, RECIPE[0][0], RECIPE[0][1]);
+    for (let i = 0; i < 30000; i++) mv.step(startV[0], startV[1]);
+    e.pilot._startVerify();
+    let guardStop = 0;
+    while (e.pilot.phase !== 'done') {
+      if (e.pilot.phase === 'fit') { e.pilot.work(); continue; }
+      const cmd = e.pilot.command();
+      mv.step(cmd[0].pos + cmd[0].u, cmd[1].pos + cmd[1].u);
+      const want = levelsAt(GMP, cmd[0].pos, cmd[1].pos);
+      e.pilot.observe([mv.h[0], mv.h[1], mv.h[2], mv.h[3]],
+        [mv.h[0] - want[0], mv.h[1] - want[1]]);
+      if (++guardStop > 4e6) break;                 // never spin forever on a phase that sticks
+    }
+    const vv = e.pilot.status().report.verify;
+    console.log(`\n  the ensemble VOUCHED FOR ITSELF: ${e.pilot.verdict.deploy ? 'DEPLOY' : 'refuse'}`
+      + `${vv ? ` at ${(+vv.ratio).toFixed(2)}x` : ' (no verify)'}`
+      + `${e.pilot.verdict.deploy ? '' : ` — ${String(e.pilot.verdict.why).slice(0, 70)}`}`);
+    const vouched = !!e.pilot.verdict.deploy;
+    // Scored as the machine would run it: if the gate refused, `act()` returns zeros and the
+    // number below IS 1.000x, which is the honest reading rather than a forced one.
+    if (!vouched) e.pilot.verdict = { deploy: true, why: 'ensemble, forced for comparison only' };
     const off = scoreRecipe(e.pilot, false), on = scoreRecipe(e.pilot, true);
     const x = off / on;
     const dep = ests.filter((q) => q.dep).map((q) => q.x);
@@ -255,7 +281,8 @@ if (paired.length > 2) {
       .reduce((b, q) => (+q.est > +b.est ? q : b), ests.find((q) => q.est != null));
     console.log(`\n  ENSEMBLE of ${e.used}/${e.of} draws (one averaged weight vector, `
       + 'deployed cost unchanged):');
-    console.log(`    delivers ${x.toFixed(3)}x`);
+    console.log(`    delivers ${x.toFixed(3)}x  ${vouched ? '(and the gate vouched for it)'
+      : '(FORCED — the gate refused it, so this is not what would ship)'}`);
     console.log(`    against: median draw ${med(xs).toFixed(3)}x · best draw `
       + `${Math.max(...xs).toFixed(3)}x · gate's pick ${picked ? picked.x.toFixed(3) + 'x' : '—'}`
       + `${dep.length ? ` · median DEPLOYED draw ${med(dep).toFixed(3)}x` : ''}`);
