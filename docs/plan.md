@@ -709,6 +709,48 @@ square is made of.
 **AND NOTHING WAS MADE WORSE**, on any of the four held-out programs, which is the floor the
 refusal contract exists to hold and is a different claim from how much it gains.
 
+## CORRECTION: THE TRAINING PROGRAM NEVER ENTERS THE MODEL, SO THAT MATRIX MEASURED CAPABILITY
+
+Commissioning on the SHARP square instead of the rounded rectangle and re-running the same matrix:
+
+```
+                  trained on ROUNDED   trained on SHARP
+ sharp   @4e-3           1.69x               1.69x
+ circle  @4e-3           7.72x               7.66x
+ circle  @8e-3           4.86x               4.84x
+ sharp   @8e-3           2.27x               2.26x
+ rounded @4e-3           6.18x               6.17x
+```
+
+**EVERY NUMBER IS WITHIN 1%.** The training program makes no difference at all, and the reason is
+structural: **the pilot commissions on an EXCITATION SCRIBBLE built from the channel rate limits.**
+The path handed to `commission()` supplies only the home pose and the gate's representative
+reference. Nothing program-specific is ever fitted.
+
+**SO THE PREVIOUS ENTRY MISLABELLED ITS OWN RESULT.** "PROGRAM-AGNOSTIC: 3.65x degradation" read
+the sharp square's 1.69x as a transfer failure against the rounded rectangle's 6.18x. There is no
+transfer to fail: both numbers come from the same model, fitted on the same scribble. What the
+matrix measures is CAPABILITY PER GEOMETRY, and that is a different and better thing to know.
+
+**THE MECHANISM I PROPOSED SURVIVES; THE FIX I IMPLIED DOES NOT.** "The model is identified on a
+scribble that never stops, so the one motion it has never seen is the one the square is made of"
+is still the best account of why sharp corners read 1.69x. But the implied remedy — commission on
+the square — cannot work, because commissioning does not look at the square. **The lever is the
+EXCITATION, not the training program.** If a stop-restart is what the model is missing, the
+scribble has to contain one: dwells, reversals, and junction velocities near zero.
+
+**AND THAT IS A CHEAP, FALSIFIABLE NEXT STEP.** `buildExcitation` already takes a `dwell` flag —
+it is how the tank and the barrel declare that their programs hold still — and it has never been
+tried on the arm, whose programs stop four times a lap at every sharp corner. If a dwelling
+excitation lifts the sharp square and leaves the circle alone, the account is right and the fix is
+one flag. If it does not, the missing thing is not the stop.
+
+**ONE NEW NUMBER FELL OUT OF THE WIDER MATRIX:** the rounded rectangle at double feed reads
+**2.61x** against 6.17x, a **2.37x** feed sensitivity — the worst of the three shapes and well
+outside the 1.5x target, where the circle is 1.58x and the sharp square 1.34x. Feedrate-agnosticism
+is not uniform across geometry either, and the shape that fails it is not the shape that fails
+capability.
+
 ## What the record already settles
 
 Three findings make this plan shorter than it looks, and all three are measured rather than

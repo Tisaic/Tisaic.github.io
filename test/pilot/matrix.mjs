@@ -28,8 +28,13 @@ import { PG, makeArm, mkPath, homeArm, routeSignals, deployOn } from './rigs/arm
 
 const K = +(process.env.K || 1);
 const FEEDS = (process.env.FEEDS || '0.004,0.008').split(',').map(Number);
-const SHAPES = (process.env.SHAPES || 'circle,sharp').split(',');
-const TRAIN = { shape: 'rounded', feed: 0.004 };      // what it commissions on, and only that
+const SHAPES = (process.env.SHAPES || 'circle,sharp,rounded').split(',');
+// WHAT IT COMMISSIONS ON, AND ONLY THAT. Parameterised because the first run named the failure —
+// trained on the rounded rectangle, the sharp square transfers at 1.69x against the circle's
+// 7.72x — and the mechanism it suggested is testable by swapping the training program: if the
+// square fails because the model never saw a machine STOP AND RESTART, then commissioning on the
+// square should fix those rows. What it costs the smooth programs is the other half of the answer.
+const TRAIN = { shape: process.env.TRAIN || 'rounded', feed: +(process.env.TRAINFEED || 0.004) };
 
 async function commission(seed) {
   const { arm, servo } = await makeArm();
