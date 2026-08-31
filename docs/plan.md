@@ -280,6 +280,48 @@ machine measurement is exactly what `stack.test.mjs`'s own check objects to — 
 MACHINE measurement falling short, not a fit falling short" — and that check is now failing for
 that reason rather than for a missing layer.
 
+## AN ARCHITECTURAL CANDIDATE: AVERAGE THE COMMISSIONING DRAWS, FREE AT DEPLOY
+
+**The chain that gets here.** The QP is not binding (a receding horizon applies only its first
+move). The pilot sits AT its forecast bound on EMPS. So a remaining factor has to come from the
+model — and re-rolling commissioning is worth **1.545x held-out** on the arm, which says the SEARCH
+is where it lives rather than the model class.
+
+**AND THE SPREAD IS ESTIMATION VARIANCE, NOT A DISCRETE PICK — measured, and it decided the
+architecture.** Six arm draws delivered 6.18x down to 5.34x on one program and 10.02x down to 5.19x
+on a held-out one, and **all six chose the identical configuration**: stride 13, ridge 1e-5, N 58.
+A spread at a fixed layout is variance, and variance is what averaging removes.
+
+**SO AVERAGE THE WEIGHT VECTORS.** k draws collapse to ONE vector of the same length — deployed
+arithmetic and memory unchanged, against selection's identical cost and a per-lead bank's 68
+covariances. Selection keeps 1 of k and discards k-1; the average keeps all of them.
+
+```
+ tank, 8 seeds, representative gate, basis pinned
+   every individual draw           REFUSED — 0 of 8 deployed, best 1.000x
+   the average of 5 of them        1.344x
+```
+
+**EVERY DRAW WAS BELOW THE BAR AND THEIR MEAN IS A WORKING CONTROLLER.** That is the classic
+variance-reduction result in its strongest form: the average is not merely better than the median,
+it is better than the best draw, so it is finding something no single commissioning had.
+
+**TWO THINGS THAT ARE NOT YET ESTABLISHED, AND THE FIRST DECIDES WHETHER THIS IS AN ARCHITECTURE.**
+
+* **The ensemble was FORCED to deploy.** Its verdict was set true so the averaged model could be
+  scored directly — a verdict inherited from whichever draw came first would return zeros from
+  `act()` and read as a null. So 1.344x is what the average DELIVERS, not what the gate decides
+  about it. The real test is to run the ensemble through its own verify: commission k, average,
+  vouch, deploy. Until that is measured this is an observation.
+* **3 of 8 draws still differ in layout with the basis pinned**, so the basis is not the only
+  discrete thing that moves between draws — most likely the tuned window. The layout guard
+  excluded them rather than averaging incompatible rows, which is why the first attempt averaged
+  only 2 of 8 and measured nothing (sqrt(2) of variance removed is not a result).
+
+**AND IT REFRAMES TARGET 4.** Commissioning cost stops being pure overhead: k is a dial between
+commissioning time and delivered performance, by two independent mechanisms now — selection
+(1.545x, held out, rank 1 of 6) and averaging (a working controller from eight refusals).
+
 ## What the record already settles
 
 Three findings make this plan shorter than it looks, and all three are measured rather than

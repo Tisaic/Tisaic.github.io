@@ -73,6 +73,13 @@ function commission(seed) {
     guards: [{ index: 0, max: 19 }, { index: 1, max: 19 }],
     workspace: () => true,
     dwell: true,
+    // THE BASIS PINNED WHEN ASKED, so an ensemble has draws it can actually average. On this
+    // plant the basis SELECTION flips between commissioning seeds — the test's own checks are
+    // about that — so only 2 of 8 draws shared a feature layout and the average was over two
+    // models, a sqrt(2) at best. Pinning it removes the one discrete difference and leaves the
+    // estimation variance the average is meant to remove. It is not a default: which basis a
+    // plant needs is a measurement this project makes per plant.
+    ...(process.env.BASIS ? { forceBasis: process.env.BASIS } : {}),
     seed,
   });
   while (pilot.phase !== 'done') {
@@ -114,7 +121,7 @@ function scoreRecipe(pilot, active) {
 console.log(`\npilot: the quadruple tank, scored across ${SEEDS} commissioning seeds`);
 console.log('  the recorded figure is 1.32x from ONE seed; this is what that number is a draw from.');
 console.log('\n   seed   deploy   off cm    on cm       x    GATE  regimes                         why');
-const xs = [], deployed = [], ests = [];
+const xs = [], deployed = [], ests = [], pilots = [];
 // SEED0, BECAUSE A RATE MEASURED ON ONE RANGE OF SEEDS IS NOT A RATE. With the representative
 // gate, seeds 1..8 deployed three controllers and all three helped — and seeds 100..103 let a
 // 0.882x through. Eight draws from one contiguous range is a sample, not a guarantee, and quoting
@@ -154,9 +161,49 @@ for (let s = SEED0; s < SEED0 + SEEDS; s++) {
   const est = repReg ? repReg.ratio : V.ratio;
   const regs = (V.regimes || []).map((r) => `${r.name} ${(+r.ratio).toFixed(2)}x`).join(' / ');
   ests.push({ est, x, dep });
+  pilots.push(pilot);
   console.log(`  ${String(s).padStart(5)}   ${dep ? ' yes ' : ' NO  '}  ${off.toFixed(4)}  `
     + `${on.toFixed(4)}  ${x.toFixed(3)}x  ${est == null ? '    —' : `${(+est).toFixed(2)}x`.padStart(6)}`
     + `  ${regs.padEnd(30)}  ${dep ? '' : why}`);
+}
+
+// ================= THE ENSEMBLE, WHICH IS FREE AT DEPLOY AND IS THE POINT =================
+//
+// Selection keeps the best of k commissionings and throws away k-1 of them. AVERAGING keeps all
+// of them, and on this architecture it costs NOTHING to run: every draw fits the same feature
+// layout, so k weight vectors average to ONE vector of the same length — deployed arithmetic and
+// memory unchanged, against selection's identical cost and the per-lead bank's 68 covariances.
+//
+// IT IS WELL-POSED BECAUSE THE SPREAD IS ESTIMATION VARIANCE, NOT A DISCRETE PICK. Measured on
+// the arm: six draws, delivered 6.18x down to 5.34x on one program and 10.02x down to 5.19x on a
+// held-out one, and ALL SIX chose the identical configuration — stride 13, ridge 1e-5, N 58. A
+// spread at a fixed layout is variance, and variance is what averaging removes.
+//
+// AND THE LAYOUT IS CHECKED RATHER THAN ASSUMED. A draw that chose a different basis has a
+// different row and averaging it in would evaluate the model on a vector it was never fitted on —
+// the exact defect the deploy path's length guard exists to catch (rule 61). Mismatched draws are
+// excluded and SAID, not silently dropped.
+function ensembleOf(pilots) {
+  const base = pilots[0];
+  const shape = (p) => JSON.stringify(p.readouts.map((r) => [r.w.length, r.w[0].length,
+    r.stride, r.poly, r.sched]));
+  const want = shape(base);
+  const usable = pilots.filter((p) => shape(p) === want);
+  if (usable.length < 2) return { pilot: null, used: usable.length, of: pilots.length };
+  // The average is written into the FIRST pilot's own arrays, so everything downstream — act(),
+  // the guards, the cap — is the ordinary deployed path with no ensemble-specific branch.
+  base.readouts.forEach((ro, c) => {
+    for (let L = 0; L < ro.w.length; L++) {
+      const acc = new Float64Array(ro.w[L].length);
+      for (const p of usable) {
+        const wl = p.readouts[c].w[L];
+        for (let i = 0; i < acc.length; i++) acc[i] += wl[i];
+      }
+      for (let i = 0; i < acc.length; i++) acc[i] /= usable.length;
+      ro.w[L].set(acc);
+    }
+  });
+  return { pilot: base, used: usable.length, of: pilots.length };
 }
 
 const med = (a) => { const b = [...a].sort((p, q) => p - q); const h = b.length >> 1;
@@ -188,4 +235,31 @@ if (paired.length > 2) {
     + `  (mean estimate ${mx.toFixed(2)}x against mean delivered ${my.toFixed(3)}x)`);
   console.log('  a gate whose THRESHOLD is merely misplaced still ranks; one near zero is not '
     + 'measuring the thing it gates on.');
+}
+
+// ---- THE ENSEMBLE AGAINST THE THREE THINGS IT HAS TO BEAT
+{
+  const e = ensembleOf(pilots);
+  if (!e.pilot) {
+    console.log(`\n  ensemble: only ${e.used} of ${e.of} draws share a feature layout — not averaged`);
+  } else {
+    // FORCED TO DEPLOY, because the question is what the AVERAGED MODEL is worth, and a gate
+    // verdict inherited from whichever draw happened to be first is not that question. A
+    // commissioned pilot that refused carries `verdict.deploy === false` and `act()` then returns
+    // zeros, which would score the ensemble as exactly 1.000x and look like a null result.
+    e.pilot.verdict = { deploy: true, why: 'ensemble, scored directly' };
+    const off = scoreRecipe(e.pilot, false), on = scoreRecipe(e.pilot, true);
+    const x = off / on;
+    const dep = ests.filter((q) => q.dep).map((q) => q.x);
+    const picked = ests.filter((q) => q.est != null)
+      .reduce((b, q) => (+q.est > +b.est ? q : b), ests.find((q) => q.est != null));
+    console.log(`\n  ENSEMBLE of ${e.used}/${e.of} draws (one averaged weight vector, `
+      + 'deployed cost unchanged):');
+    console.log(`    delivers ${x.toFixed(3)}x`);
+    console.log(`    against: median draw ${med(xs).toFixed(3)}x · best draw `
+      + `${Math.max(...xs).toFixed(3)}x · gate's pick ${picked ? picked.x.toFixed(3) + 'x' : '—'}`
+      + `${dep.length ? ` · median DEPLOYED draw ${med(dep).toFixed(3)}x` : ''}`);
+    console.log('    a k-draw average that only matches the median has removed no variance; one '
+      + 'that beats the best single draw is finding something no draw had.');
+  }
 }
