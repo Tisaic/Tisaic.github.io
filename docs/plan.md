@@ -404,12 +404,26 @@ with it — **97 against 321**. That is not a perturbation: a stride of 32 looks
 window of a stride of 13, so the plant is being modelled at a different timescale depending on
 which random excitation it happened to see.
 
-**IT IS RULE 37 FROM THE OTHER SIDE.** "A lag window must REACH the period of what it has to see"
-is recorded here as a design requirement, measured twice, with the window chosen per plant on
-held-out data. What was never checked is whether that CHOICE is stable — and on this plant it is
-not. A held-out score is being used to pick between windows whose scores must be close enough that
-noise decides, which is rule 42's situation exactly: within the band, the tie should break on the
-CHEAPEST or the smoothest, not on whichever draw was run.
+**AND THE OBVIOUS EXPLANATION IS WRONG — THE TIE-BREAK IS ALREADY DETERMINISTIC.** Reading the
+code rather than assuming it: the window sorts `near.sort((a, b) => a.lag - b.lag)`, shortest lag
+inside the band, and the tune sorts `(a, b) => b.ridge - a.ridge || a.stride - b.stride`, largest
+ridge then smallest stride. Both ties are broken, and broken the way rule 42 asks.
+
+**WHAT MOVES IS THE BAND MEMBERSHIP, NOT THE TIE-BREAK.** Which combinations land within 5% of the
+best depends on the held-out r2 of each, and those scores are measured on a seeded draw. A stride
+that is inside the band on one commissioning is outside it on another, so a deterministic rule
+selects from a different candidate set and returns a different answer. That is not a defect in the
+rule; it is what selecting on a noisy score does, and no tie-break can fix it.
+
+**WHICH POINTS AT A DIFFERENT FIX, AND A BETTER ONE.** For averaging, the configuration does not
+need to be STABLE across draws — it needs to be THE SAME. So choose it once and draw k excitations
+against that fixed choice: commission one pilot fully, keep its window, stride, ridge and basis,
+and re-excite k times at that configuration. Every draw is then averageable by construction, k = 8
+averages 8 rather than 5, and the k sweep stops being confounded.
+
+**AND IT COMPOSES WITH THE REDUCTION ABOVE**, which wanted to share the probe and the verify across
+draws for the same reason: those stages are not what the average is drawing from. Sharing the TUNE
+as well makes the cost of k draws `1 + k·(excite+fit)` and makes them compatible in one move.
 
 **TWO CONSEQUENCES, AND THEY POINT OPPOSITE WAYS.**
 
