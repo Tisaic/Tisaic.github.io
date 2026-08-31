@@ -1212,12 +1212,44 @@ a scribble-fitted model toward the program-only solution — 14.68x → 9.96x he
 mechanism through a new door. Lower λ weights the collinear recent data harder, which is why
 0.999 collapses to 0.21x rather than tracking anything.
 
-**WHICH NAMES THE FIX RATHER THAN LEAVING A NULL.** The update must accept only rows that carry
-information the model does not already have, and `SharedRLS.update` already RETURNS that
-number: `x'Px`, the innovation variance, is the leverage of the row and is computed on the way
-to the gain. Gate on it and a repeating program stops contributing after its first lap, while a
-genuinely new manoeuvre still does. *That is the next thing to build, and it is the same
-quantity `solveRidge`'s leverage closure was added for — the third use of one measurement.*
+**BUILT, AND IT WORKS: 14.68x → 21.20x ON THE PROGRAM AND 8.77x → 12.16x ON A PROGRAM IT HAS
+NEVER SEEN.** Two things were needed and each was measured wrong first.
+
+* **AN EXCITATION GATE.** The update accepts a row only if it carries information the model
+  does not already have, and `x'Px` — the innovation variance — is that number and is computed
+  on the way to the gain anyway. At λ=1 it admits 102,374 rows of 124,800 and skips 18%: a
+  lap-one row is new, the same row on lap two is not.
+* **AND THE COMMISSIONING POSTERIOR AS THE PRIOR.** Seeded from `(1/ridge)I` — uninformative —
+  the recursion trusted its next two rows more than a fit that had seen sixty thousand, and
+  **two updates took the machine from 14.68x to 5.83x**. Seeded from the posterior the fit
+  already computes from its Cholesky factor, the same rows improve it.
+
+```
+ lambda    program       sine     updates
+ frozen    14.68x       8.77x         —
+      1    21.20x      12.16x    102,374
+ 0.9999    10.85x       9.23x    124,800
+  0.999     0.28x       0.08x     30,357
+```
+
+**λ = 1 IS THE SETTING, WHICH IS WORTH SAYING PLAINLY: NO FORGETTING AT ALL.** The gate does
+the work forgetting was supposed to do, and does it better — forgetting discards old
+information on a timer, while the gate declines new information that is redundant. With λ below
+1 the covariance never shrinks, the gate stops firing (124,800 admissions at 0.9999), and 0.999
+collapses to 0.28x. Rule 41 says directional forgetting has measured neutral five times here;
+this is the sixth reading and it says plain forgetting is worse than none once the gate exists.
+
+**AGAINST THE MEMORY IT REPLACES, ON THE SAME AXIS:** the lap table reaches 242x on the program
+it learned and **0.53x — worse than nothing — on this sine**. Online adaptation reaches 21.20x
+and **12.16x**. Far less on the trained program, and it IMPROVES the untrained one where the
+table destroys it. That is the trade the retirement was asking for, measured rather than
+argued.
+
+*Three faults came out on the way and all three were mine: a probe that normalised by the wrong
+variance and declared the pairing broken; a gate whose threshold was undefined because the
+constructor's defaults are not applied when a host sets `pilot.online` directly — the deleted
+LMS path carried a comment about exactly that for its own clamp, and the lesson was not carried
+forward with it; and the uninformative prior above.*
 
 **6f. AN 11% REGRESSION ON THE ARM — SUPERSEDED BY 6d, KEPT FOR THE METHOD.** The arm's model-only stack (conventional withheld, which is what survives the
 retirement) reads 7.4340e-2 on one historical run with `sharedWeights` forced and every lead
