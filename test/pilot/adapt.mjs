@@ -1,6 +1,19 @@
 /**
  * @file THE MEMORY IS RETIRED, SO SOMETHING ADDRESSED BY STATE HAS TO DO ITS JOB.
  *
+ * SECOND ATTEMPT, ON A DIFFERENT MECHANISM. The first ran normalised LMS per lead and is
+ * deleted: its best case was +0.3% on the program it could see and it took a held-out program
+ * from 8.27x to 0.98x. Two things have changed since, and together they are the whole reason
+ * this is worth asking again.
+ *
+ * ONE UPDATE NOW MENDS THE WHOLE BANK. The forecast is a single weight vector shared by every
+ * lead, so adapting lead 0 adapts all sixty-eight. The old measurement — "adapting lead 0
+ * moved the machine 0.1%" — was a fact about a per-lead bank, not about adaptation.
+ *
+ * AND THE GAIN DECAYS. `SharedRLS` is second order: its gain shrinks as information arrives,
+ * where LMS answered noise at full strength for ever and so specialised to whatever program
+ * was in front of it — rebuilding, by another route, exactly the memory being retired.
+ *
  * A lap-indexed table reaches accuracy a frozen model cannot because it keeps a separate
  * number for every phase of one program — and that is exactly why it does not transfer. The
  * plant-based way to get the same accuracy is to keep LEARNING: a model that updates online
@@ -83,15 +96,17 @@ const st = pilot.status();
 const W0 = pilot.readouts.map((ro) => (ro.w ? ro.w.map((v) => Float64Array.from(v)) : null));
 function restore() {
   pilot.readouts.forEach((ro, c) => {
+    // EVERY LEAD POINTS AT ONE ARRAY, so restoring it once restores the bank. Written as a
+    // loop anyway because it costs nothing and does not assume the sharing.
     if (W0[c]) for (let i = 0; i < ro.w.length; i++) ro.w[i].set(W0[c][i]);
-    ro._w0 = null; ro._aQ = null; ro._adapt = null;
+    ro._rls = null; ro._onlineN = 0;      // a new run is a new recursion, not a continuation
   });
 }
 
 /** Deploy on `prog`, optionally adapting against the error the machine really has. */
-function run(prog, adapt) {
+function run(prog, online) {
   restore();
-  pilot.adapt = adapt;
+  pilot.online = online;
   const m = makeMachine(prog.q[0], 0), S = pilot.sample;
   pilot._initRun();
   let s = 0, n = 0, uPk = 0, pref = prog.q[0];
@@ -109,7 +124,7 @@ function run(prog, adapt) {
       const err = m.q - prog.q[i];
       // THE TRUTH THE MACHINE REALLY HAS. On this axis the controlled quantity is the
       // measured one, so this is the production signal and not a simulator privilege.
-      pilot.observe([m.q], adapt ? [err] : null);
+      pilot.observe([m.q], online ? [err] : null);
       ls += err * err; ln++;
       if (lap >= LAPS - 4) { s += err * err; n++; }
     }
@@ -120,8 +135,7 @@ function run(prog, adapt) {
   // `drift 0.000` on every row while the machine numbers were visibly moving, which is the
   // instrument failing before the model (rule 17) and would have been read as "adaptation
   // never ran" if the scores had happened to sit still.
-  const stat = pilot.status();
-  const a = stat.adapt && stat.adapt[0] ? stat.adapt[0] : null;
+  const a = { updates: pilot.readouts[0]._onlineN || 0 };
   return { rms: 1000 * Math.sqrt(s / n), uPk: 1000 * uPk, perLap, a };
 }
 
@@ -133,9 +147,11 @@ console.log(`  open loop: program ${openProg.toFixed(4)} mm, held-out sine ${ope
 console.log(`  the bar: a lap-indexed table on this axis reaches 0.0024 mm (242x) on the program`
   + ` it learned, and 0.53x — WORSE than nothing — on this same sine.`);
 
-const MUS = (process.env.MU || '0,0.02,0.05,0.15,0.4').split(',').map(Number);
-const CLAMPS = (process.env.CLAMP || '0.25,1,4').split(',').map(Number);
-const STRIDES = (process.env.STRIDE || '8,2,1').split(',').map(Number);
+// FORGETTING IS THE ONLY KNOB. 1 accumulates every row ever seen — the batch fit continued;
+// below 1 the estimator tracks and old rows decay. That single number is the whole difference
+// between "keep fitting" and "keep adapting", which is why the sweep has one axis now where
+// the LMS version had three.
+const LAMBDAS = (process.env.LAMBDA || '1,0.9999,0.999,0.99').split(',').map(Number);
 // THE FREEZE OFF, SO THE UNGUARDED TRAJECTORY CAN BE SEEN. Guarded, every setting freezes
 // inside the first lap and the run says nothing about where adaptation was heading — only
 // that the guard stopped it. An update law's failure mode is the thing to look at directly:
@@ -143,40 +159,27 @@ const STRIDES = (process.env.STRIDE || '8,2,1').split(',').map(Number);
 // and both were found by watching them run, not by trusting a guard to describe them.
 const FREEZE = process.env.FREEZE === '0' ? 1e9 : 3;
 
-console.log('\n     mu  clamp  stride    program mm        x     sine mm        x   updates  drift  frozen');
+console.log('\n   lambda    program mm        x     sine mm        x   updates');
 const base = run(PR, null), baseS = run(SIN, null);
-console.log(`  frozen      —       —   ${base.rms.toFixed(5).padStart(9)}  ${(openProg / base.rms).toFixed(2).padStart(6)}x  `
-  + `${baseS.rms.toFixed(5).padStart(9)}  ${(openSine / baseS.rms).toFixed(2).padStart(6)}x        —      —       —`);
-for (const mu of MUS) {
-  if (mu === 0) continue;
-  for (const clamp of CLAMPS) {
-    for (const stride of STRIDES) {
-      const cfg = { mu, clamp, leadStride: stride, freezeAfter: FREEZE };
-      const r = run(PR, cfg), q = run(SIN, cfg);
-      console.log(`  ${String(mu).padStart(5)}  ${String(clamp).padStart(5)}  ${String(stride).padStart(6)}   `
-        + `${r.rms.toFixed(5).padStart(9)}  ${(openProg / r.rms).toFixed(2).padStart(6)}x  `
-        + `${q.rms.toFixed(5).padStart(9)}  ${(openSine / q.rms).toFixed(2).padStart(6)}x  `
-        + `${String(r.a ? r.a.updates : 0).padStart(8)}  ${(r.a && r.a.drift ? r.a.drift : 0).toFixed(3).padStart(5)}  `
-        + `${r.a && r.a.frozen ? 'FROZE' : '  —  '}`);
-    }
-  }
+console.log(`   frozen  ${base.rms.toFixed(5).padStart(9)}  ${(openProg / base.rms).toFixed(2).padStart(6)}x  `
+  + `${baseS.rms.toFixed(5).padStart(9)}  ${(openSine / baseS.rms).toFixed(2).padStart(6)}x         —`);
+for (const lambda of LAMBDAS) {
+  const cfg = { lambda };
+  const r = run(PR, cfg), q = run(SIN, cfg);
+  console.log(`  ${String(lambda).padStart(7)}  ${r.rms.toFixed(5).padStart(9)}  `
+    + `${(openProg / r.rms).toFixed(2).padStart(6)}x  ${q.rms.toFixed(5).padStart(9)}  `
+    + `${(openSine / q.rms).toFixed(2).padStart(6)}x  ${String(r.a.updates).padStart(8)}`);
 }
 // THE LAP TRACE, because "did it converge, sit still, or walk away" is the question a single
-// rms cannot answer and the one that decides whether this is the memory's replacement or just
-// a slightly different model. Printed for the frozen baseline and for each swept setting, on
-// BOTH programs, since a law that improves the one it can see while ruining the one it cannot
-// is the exact failure the retirement exists to avoid.
+// rms cannot answer and the one that decides whether this is the memory's replacement or a
+// slightly different model.
 if (process.env.TRACE) {
-  const show = (name, r) => console.log(`  ${name.padEnd(26)} ${r.perLap.map((v) => v.toFixed(4)).join(' ')}`);
+  const show = (name, r) => console.log(`  ${name.padEnd(22)} ${r.perLap.map((v) => v.toFixed(4)).join(' ')}`);
   console.log('\n  error by lap, mm rms:');
   show('frozen, program', base);
   show('frozen, sine', baseS);
-  for (const mu of MUS) {
-    if (mu === 0) continue;
-    for (const clamp of CLAMPS) for (const stride of STRIDES) {
-      const cfg = { mu, clamp, leadStride: stride, freezeAfter: FREEZE };
-      show(`mu ${mu} cl ${clamp} st ${stride} prog`, run(PR, cfg));
-      show(`mu ${mu} cl ${clamp} st ${stride} sine`, run(SIN, cfg));
-    }
+  for (const lambda of LAMBDAS) {
+    show(`lambda ${lambda} prog`, run(PR, { lambda }));
+    show(`lambda ${lambda} sine`, run(SIN, { lambda }));
   }
 }
