@@ -2036,6 +2036,16 @@ reachable and costed at **9,517 MAC/cycle against 10% of a 1 ms scan** where the
 42,914, and it is better on both plants this project loses on. It stays available through
 `setSolverDefaults` and is not imposed — the same shape as every other constant here (rule 31).
 
+**AND `stack.test.mjs` TURNS OUT TO HAVE BEEN RED ALREADY — A THIRD PRE-EXISTING FAILURE, AND MY
+CHANGES ARE EXONERATED BY THE CONTROL.** It still failed after the revert, which pointed at the
+one remaining candidate in the diff (the `_initRun` horizon clamp, which touches every deployed
+run). Run at `3d8db01`, the commit this session started from and before any library change here:
+**the identical machine answer, layer 2 refusing at verify 0.95x, exit 1**. So it joins
+`tanks.test.mjs` and `woodberry.test.mjs` as a test whose state was simply unknown — all three
+invisible behind the `set -e` abort at the tank, and all three surfaced only by the collector.
+The one difference my change makes is that at `3d8db01` it CRASHES with a TypeError and now it
+REPORTS the refusal, which is the diagnosis improving on a failure that was always there.
+
 **AND ONE TEST DEFECT IS FIXED RATHER THAN WORKED AROUND.** How deep the cascade goes is a MACHINE
 measurement — a layer that cannot vouch for itself ends the stack — so two layers where three ran
 before is a legitimate answer, not an error. `stack.test.mjs` turned it into `Cannot read
