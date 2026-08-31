@@ -1571,6 +1571,70 @@ plant this project already LOSES on (Luyben's BLT is 51.95, so the pilot has gon
 0.63x of it). Thirty test files ran after `tanks` in that run; nothing after it had been executed
 since the tank went red.
 
+**6e-WOODBERRY. THE SHARED FIT COSTS THIS PLANT 17.6%, AND THE REASON IS THAT IT IS A BETTER
+FORECAST. THAT IS NOT A PARADOX, IT IS RULE 16.**
+
+`woodberry.test.mjs` pins the pilot's IAE against a published baseline and reads **82.10 against
+the 72.08 this file recorded** — 14% worse on the one plant this project already LOSES on
+(Luyben's BLT is 51.95, so the pilot has gone 0.72x → 0.63x of it). It was invisible behind the
+tank until the suite stopped aborting.
+
+**ISOLATED IN ONE VARIABLE.** At `c24bede`, the last commit before the shared fit, the same test
+reads 72.08 and passes; with `sharedWeights` forced on and nothing else changed, **84.75**.
+
+**AND THE OBVIOUS EXPLANATIONS ARE ALL DEAD, EACH BY MEASUREMENT.**
+
+```
+ lead sampling   9 → all leads          82.10 → 82.64      not it
+ qpIters         4 → 16 → 60            82.10 → 84.47 → 84.71   not it (60 is WORSE)
+ pool only near leads  1 → .5 → .25 → .125   82.10 → 81.19 → 86.76 → 89.85   not it
+```
+
+The near-lead hypothesis is the one worth naming as dead: the shared fit is measurably worse at
+lead 0 on EMPS, a receding horizon only ever applies lead 0, and on the tank restricting the pool
+to near leads moved the scribble 0.08x → 0.68x. On Wood-Berry it does nothing and then hurts.
+
+**SO THE FIT WAS PUT UNDER A PROBE, AND IT SAYS THE OPPOSITE OF WHAT THE MACHINE SAYS.**
+`_poolFit` now re-fits the per-lead bank on demand — same rows, same ridge, same held-out tail,
+one variable — and on Wood-Berry the SHARED model wins everywhere:
+
+```
+ ch 0  L0 0.741/0.246   L112 0.748/0.050   L280 0.752/0.617   L490 0.778/-0.877
+ ch 1  L0 0.842/0.932   L112 0.847/0.503   L280 0.850/0.815   L490 0.847/-0.704
+        (shared / per-lead, held-out R² on the same tail)
+```
+
+**A FORECAST THAT IS BETTER AT NINE OF TEN LEADS AND FIVE TIMES BETTER AT THE FAR END, DRIVING A
+MACHINE THAT IS 17.6% WORSE.** The per-lead bank is plainly overfitting here — negative R² at the
+far leads — and inverting an overfitted model is producing a better controller than inverting a
+well-fitted one.
+
+**WHICH IS THIS PROJECT'S OWN RULE, ARRIVING FROM A NEW DIRECTION.** The ridge is already chosen
+NOT on the residual, on exactly this reasoning: *"the QP INVERTS this model, so regularisation
+serves the inversion, not the fit."* Pooling every lead's rows into one scale-relative ridge
+changes the effective regularisation of that inversion, and it changes it in the direction that
+fits better and inverts worse. **The consequence is binding: the shared-versus-per-lead choice
+cannot be made on held-out data.** Offered that evidence, any selector picks shared — on the
+plant where shared loses.
+
+**BOTH REGULARISERS OF THE INVERSION AGREE, AND POINT THE SAME WAY.** Less inversion is better
+here:
+
+```
+ qpIters    1  78.96      2  80.92      4  82.10
+ horizonTs  0.75  81.27   1.0  79.98    1.5  82.10    2.0  86.21
+```
+
+That recovers about a third of the gap without touching the fit, and neither knob is at its
+default. It does not reach 72.08 and nothing here reaches BLT's 51.95, so this stays a LOSS —
+which is target 7, and the first time the loss has had a mechanism attached to it rather than a
+number.
+
+**THE CHECK IS LEFT RED ON PURPOSE.** It asserts `|iae − 72.08|/72.08 < 0.05`, a hard-coded
+ceiling of exactly the kind rule 4 warns about — but it is reporting a real 14% regression, and
+editing a failing check until it passes is the one thing that must not happen. It stays red until
+the plant is fixed.
+
 **6f. AN 11% REGRESSION ON THE ARM — SUPERSEDED BY 6d, KEPT FOR THE METHOD.** The arm's model-only stack (conventional withheld, which is what survives the
 retirement) reads 7.4340e-2 on one historical run with `sharedWeights` forced and every lead
 pooled uncapped, and **8.3e-2 consistently now**. Tested and killed in order:
