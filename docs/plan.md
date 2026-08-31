@@ -1635,6 +1635,160 @@ ceiling of exactly the kind rule 4 warns about — but it is reporting a real 14
 editing a failing check until it passes is the one thing that must not happen. It stays red until
 the plant is fixed.
 
+**6e-TANK. THE GATE DOES NOT MERELY FLIP ON THIS PLANT — WHEN IT DEPLOYS, IT IS WRONG.**
+
+`test/pilot/tankspread.mjs` commissions the minimum-phase tank from eight seeds and scores every
+one on the same held-out recipe. It asserts nothing: an instrument that decided its own verdict
+before the verdict was understood is how the 1.32x got written down in the first place.
+
+```
+ seed   deploy   off cm    on cm       x
+    1     NO     0.4650   0.4650   1.000    refused: scribble 0.08x
+    2    yes     0.4650   0.8402   0.553
+    3     NO     0.4650   0.4650   1.000    refused: scribble 0.67x
+    4     NO     0.4650   0.4650   1.000    refused: scribble 0.64x
+    5    yes     0.4650   0.5836   0.797
+    6    yes     0.4650   1.2645   0.368
+    7    yes     0.4650   0.4248   1.095
+    8     NO     0.4650   0.4650   1.000    refused: scribble 0.14x
+
+ DELIVERED  median 1.000x   min 0.368x   max 1.095x
+ DEPLOYED   4 of 8 seeds, median 0.675x
+```
+
+**EVERY SEED THAT DEPLOYS MAKES THE PLANT WORSE.** The best deployment in eight draws is 1.095x —
+inside the noise of doing nothing — and the worst is 0.368x, nearly three times worse than the
+uncorrected machine. The median DEPLOYED benefit is **0.675x**. The four refusals are the four
+good outcomes, because on this plant "do nothing" is 1.000x and beats every controller that got
+through.
+
+**SO THE 1.32x IN THE SIX-PLANT LINE IS NOT A COIN BETWEEN GOOD AND NEUTRAL.** It is a single
+lucky draw from a distribution whose deployed median is 0.675x, and it has been quoted as one of
+the two non-refusals in this project's agnosticism claim.
+
+**AND IT LANDS ON THE ONE CLAIM THE NORTH STAR CALLS SUPPORTED.** "It REFUSES with a stated
+reason, asserted to be right for the right reason" is the strongest thing in this repository. On
+this plant the refusal machinery is right four times out of eight and wrong four times out of
+eight, and its errors are all in the dangerous direction — it never refuses something that would
+have helped, it deploys things that hurt. That is not a gate with a threshold slightly off; the
+gate's scribble regime reads 0.08x to 0.67x on the seeds it refuses, so where it refuses it is
+emphatic, and where it deploys it did not see the harm at all.
+
+**TWO INSTRUMENT DEFECTS CAME OUT OF BUILDING IT, BOTH MINE, BOTH CAUGHT BY THE MACHINE
+DISAGREEING WITH THE READOUT (rule 6).** The first read `report.verify.deploy` — the verify
+round's own row — instead of `pilot.verdict`, which is what `act()` obeys, and printed "not
+deployed" beside a correction that visibly moved the plant from 0.4650 to 0.8402. The file now
+CROSS-CHECKS the two: a refused pilot must score identically with the correction switched on,
+because `act()` returns zeros, and any difference is printed as a disagreement rather than
+averaged into the table. The second was a valve split passed as `{g1, g2}` where the rig indexes
+`g[0]`, `g[1]` — every level went NaN, nothing built, and the failure surfaced three layers away
+inside the verify.
+
+**AND THE SECOND ONE FOUND A REAL LIBRARY DEFECT.** With no regime producing a scored candidate,
+`_finishVerify` read `cands[0]` and threw a TypeError. A pilot that cannot verify has exactly one
+honest thing to say and it is the thing this project is best at saying, so it now REFUSES with
+`no verify regime produced a scored candidate — nothing was measured, so there is nothing to
+vouch for`. A crash three layers from the cause is the same fault as the barrel's refusal that
+was "a construction failure wearing a rate-limit message".
+
+**6e-SIXPLANT. THE PASS THAT WAS NEVER RUN, RUN — AND IT CHOOSES THE DEFAULTS, FINDS A NaN, AND
+MEETS THE PLC BUDGET.**
+
+`test/pilot/sixplant.mjs` runs every plant's OWN test in a child process with the module solver
+defaults set, and scrapes that plant's OWN headline — no plant is re-scored by a metric this file
+invented, and a scraper that misses prints `—` rather than a stale number (rule 25). Refusals are
+kept in the table beside the scores, because a plant that refuses is a result and not a gap.
+
+The knob it sweeps is `setSolverDefaults`, a new export: `qpIters` and `horizonTs` were
+constructor arguments with hard defaults, so sweeping them meant editing six test files. A
+caller's explicit value still wins; this only moves what "unspecified" means. It is a setter and
+not an env read because `lib/` may not touch `process` (rule 60, enforced by `test/parse.mjs`).
+
+```
+ qp:hTs   tanks   thermal   woodberry   rollmill      emps         arm      EMPS MAC/cycle
+  4:1.5   1.00x   1.00x     82.10 IAE   ver 0.57x    14.7x       6.18x      42,914   429%
+  2:1.2   1.00x   1.00x     78.28 IAE   ver 0.70x    14.0x       5.99x       9,517    95%   <-
+  1:1.2   1.00x   1.00x     76.39 IAE   ver 0.85x    13.3x   4.96x RED       ~5,900    59%
+```
+
+**THE TABLE DECIDES IT, BY RULE 42's BAND ON THE IMPROVEMENT.** At 2 iterations and a 1.2·Tset
+horizon, EMPS is 4.8% down and the arm 3.1% — both inside the 5% band — while **Wood-Berry, the
+plant this project LOSES on, improves 4.7%** and the mill's own verify climbs **23%** (0.57x →
+0.70x, toward the 0.85x veto it has to clear before it can deploy at all). One iteration is
+better still on both losers and is ruled out by both WINNERS rather than by preference: EMPS
+falls 9.5%, outside the band, and the arm falls 20% with its own test going red.
+
+**AND IT IS THE FIRST TIME WHAT SHIPS FITS THE SCAN.** The deployed EMPS path is **9,517 MAC per
+cycle against 10% of a 1 ms task** — target 6, met, on the one plant it has been costed on —
+where the old default is 42,914, i.e. 429%. CLAUDE.md's projected cheap corner reached 101% and
+gave up 13% of the delivery; this reaches 95% and gives up 4.8%, because the projection was made
+at one iteration with the fit mode held fixed and the two are not separable.
+
+**THE DIRECTION IS THE INTERESTING PART, AND IT IS THE SAME ONE WOOD-BERRY FOUND.** Less
+inversion helps the plants that lose and costs the plants that win, monotonically, on all four
+that move. That is not a coincidence of tuning: the QP inverts the forecast, so iterations and
+horizon are two regularisers of that inversion, and a plant whose forecast is poor is a plant
+whose inversion should be regularised harder. The band is what stops it going further.
+
+**AND THE PASS IMMEDIATELY EARNED ITSELF BY FINDING A NaN NO CHECK COULD SEE.** At 2:1.2,
+`emps.test.mjs` reported `NaN at 10,148 MAC`. `pilot.N` is writable and the test sets it to 56 to
+score the budget-fitting corner — a TRUNCATION at the default horizon and an EXTENSION past the
+fitted bank at any shorter one. Extended, `act()` reads leads that were never fitted and returns
+NaN, the machine drives on a number nobody computed, and nothing fires because **NaN passes every
+bounds test** (rule 51: silence is a failure mode). `_initRun` now clamps the horizon to the bank
+and RECORDS it in `report.horizonClamped` — clamping quietly would leave a later reading of "N
+56" describing a horizon the machine did not run (rule 30). With that fixed the corner reads
+0.0434 mm at 9,517 MAC and EMPS passes at the new defaults.
+
+**WHAT THE PASS DOES NOT DO IS RESCUE THE TWO REFUSALS.** The tank and the barrel read 1.00x at
+every configuration — neither knob touches them, because neither is what is wrong there.
+
+**6e-GATE. THE GATE'S ESTIMATE CARRIES NO INFORMATION ABOUT WHAT IT DELIVERS — CORRELATION
+-0.06 ON EIGHT DRAWS. THAT IS A DIFFERENT FAULT FROM A MISPLACED THRESHOLD, AND A WORSE ONE.**
+
+`tankspread.mjs` now prints the gate's OWN estimate and its two regime scores beside the
+delivered benefit, which is the only way to tell a gate whose THRESHOLD is wrong from one whose
+ESTIMATE is. At the NEW defaults, eight seeds:
+
+```
+ seed  deploy   x delivered   gate     regimes
+    1    NO       1.000       —        (guard on measured[0] tripped three times)
+    2    NO       1.000      1.78x     scribble 0.77x / program 1.78x
+    3   yes       1.512      1.75x     scribble 0.90x / program 1.75x
+    4   yes       1.775      1.71x     scribble 3.43x / program 1.71x
+    5   yes       0.820      2.98x     scribble 2.38x / program 2.98x
+    6   yes       0.424      1.42x     scribble 5.29x / program 1.42x
+    7   yes       1.249      2.06x     scribble 2.39x / program 2.06x
+    8    NO       1.000      1.40x     scribble 0.22x / program 1.40x
+
+ DEPLOYED 5/8, median 1.249x    gate estimate vs delivered: correlation -0.057
+                                mean estimate 1.87x, mean delivered 1.111x
+```
+
+**THE DEFAULT CHANGE HELPED THIS PLANT A LOT AND DID NOT FIX IT.** Deployed median goes 0.675x →
+**1.249x**, and two deployments now genuinely beat the recorded 1.32x (1.512x and 1.775x). But
+two of the five still HURT, and the worst is 0.424x.
+
+**AND THE RANKING IS THE FINDING.** A gate whose threshold is merely in the wrong place still
+ranks: its estimate would rise with the delivered benefit and the cut would be in the wrong
+spot. This one does not rank at all. The seed it rates HIGHEST (2.98x) delivers 0.820x; the seed
+that delivers best (1.775x) it rates second-LOWEST of those it passed; the 5.29x scribble on seed
+6 precedes a 0.424x machine. On seven paired draws the correlation is **-0.057**, and the mean
+estimate overstates by 68%.
+
+**SO THE GATE IS NOT MEASURING THE THING IT GATES ON, ON THIS PLANT.** CLAUDE.md already records
+the ordering as inverted on EMPS — "the estimate falls as the delivered benefit rises", and it
+understates 9x there — and this is the same defect read on a plant where the errors point the
+dangerous way. Two independent plants now say the verify's ratio is not a predictor of delivered
+benefit, which is a claim about the INSTRUMENT rather than about either plant, and it sits
+directly under the one line the north star calls SUPPORTED.
+
+**EIGHT DRAWS IS EIGHT DRAWS.** A correlation on seven paired points has a wide interval and this
+is not a proof that the estimate is worthless; it is enough to say the gate has never been shown
+to rank, and that showing it must come before anything else is derived from it. What the number
+does establish beyond argument is the SPREAD — 4.18x between best and worst delivered, against a
+gate threshold of 1.1x — because that is a direct measurement and not an inference.
+
 **6f. AN 11% REGRESSION ON THE ARM — SUPERSEDED BY 6d, KEPT FOR THE METHOD.** The arm's model-only stack (conventional withheld, which is what survives the
 retirement) reads 7.4340e-2 on one historical run with `sharedWeights` forced and every lead
 pooled uncapped, and **8.3e-2 consistently now**. Tested and killed in order:
