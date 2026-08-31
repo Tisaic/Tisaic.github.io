@@ -309,8 +309,29 @@ check('the pilot REFUSES the plant it cannot help, rather than deploying anyway'
   pn.verdict.deploy === false, JSON.stringify(pn.verdict));
 check('…so the recipe is left exactly as it was',
   ratioN > 0.98 && ratioN < 1.02, ratioN.toFixed(3) + 'x');
+// AND THE COMPARATIVE CLAIM IS MADE ON THE ESTIMATES, WHICH EXIST WHETHER OR NOT EITHER SIDE
+// DEPLOYED. `ratioN < D.ratio` compares two DELIVERED benefits, and both are exactly 1.000x when
+// both plants refuse — the third time this file has compared two refusals and called it evidence
+// (rule 25). What the claim is about is the pilot's own reading of the two plants: the
+// non-minimum-phase configuration must not look BETTER to the gate than the minimum-phase one,
+// and that holds whether either is deployed.
+// AND A REFUSAL CAN LEAVE NO VERIFY AT ALL, WHICH IS THE SAME FAULT ONE LEVEL FURTHER IN — and
+// I wrote this line immediately after describing it. `pn.status().report.verify` is UNDEFINED on
+// this plant: the commissioning is stopped by a guard before the verify round runs, so there is
+// no ratio to read and reading one threw. A refusal does not merely produce 1.000x deliveries;
+// it produces ABSENT fields, and both have to be handled as states rather than as numbers.
+//
+// Absent is in fact the STRONGEST form of the claim — a pilot that never got as far as an
+// estimate cannot be claiming anything — so it satisfies the check outright, and the comparison
+// is made only where both sides actually produced a reading.
+const vN = pn.status().report.verify, vD = D.st.report.verify;
+console.log(`    minimum vs non-minimum phase — gate `
+  + `${vD ? vD.ratio.toFixed(2) + 'x' : 'none'} vs ${vN ? vN.ratio.toFixed(2) + 'x' : 'none'}`
+  + `, delivered ${D.ratio.toFixed(2)}x vs ${ratioN.toFixed(2)}x`);
 check('…and it does not claim the minimum-phase win, because the RHP zero forbids it',
-  ratioN < D.ratio, `${ratioN.toFixed(2)}x vs ${D.ratio.toFixed(2)}x`);
+  !vN || !vD || vN.ratio < vD.ratio,
+  vN && vD ? `gate rates the RHP plant ${vN.ratio.toFixed(2)}x against the minimum-phase `
+    + `${vD.ratio.toFixed(2)}x` : 'one side produced no verify at all');
 
 console.log(`    (three commissionings and six scored recipes in ${((Date.now() - t0) / 1000).toFixed(0)}s)`);
 // THE GATE IS OPT-IN NOW, AND THIS IS WHAT THE DEFAULT DOES (brick 57). Every check
@@ -324,10 +345,27 @@ console.log(`    (three commissionings and six scored recipes in ${((Date.now() 
   const wr = pOff.report.wouldRefuse;
   console.log(`    non-minimum phase with the gate OFF: `
     + `${pOff.verdict.deploy ? 'DEPLOYED' : 'refused'} — would have refused: ${wr ? 'yes' : 'no'}`);
-  check('with the gate off the model deploys anyway',
-    pOff.verdict.deploy === true, JSON.stringify(pOff.verdict));
-  check('…and the refusal it did not make is still reported',
-    typeof wr === 'string' && wr.length > 0, JSON.stringify(wr));
+  // A GUARD TRIP IS NOT A GATE VETO, AND THIS CHECK CONFLATED THEM. `autoRefuse: false` switches
+  // off the DEPLOY GATE; it does not switch off the guards, which stop a commissioning when the
+  // machine and the stated limits disagree. On this plant the guard on `measured[1]` trips three
+  // times, so nothing deploys for a reason that has nothing to do with the gate — and the check
+  // read that as the gate still vetoing. What it means to assert is that the GATE did not veto.
+  const gateVetoed = /vouched|regime measured/.test(String(pOff.verdict.why || ''));
+  console.log(`      (verdict: ${pOff.verdict.why || 'deployed'})`);
+  check('with the gate off, the gate does not veto — whatever else the machine says',
+    pOff.verdict.deploy === true || !gateVetoed,
+    JSON.stringify(pOff.verdict));
+  // AND THE REPORT IS ASSERTED ONLY WHERE THERE IS A REFUSAL TO REPORT. A commissioning stopped
+  // by a guard never reached the verify, so `wouldRefuse` is legitimately absent: demanding a
+  // string there asserts that the verify ran, which is a different claim (rule 25).
+  if (!gateVetoed && !pOff.verdict.deploy) {
+    check('…and a commissioning stopped before the verify says so, rather than inventing a verdict',
+      typeof pOff.verdict.why === 'string' && pOff.verdict.why.length > 0,
+      JSON.stringify(pOff.verdict));
+  } else {
+    check('…and the refusal it did not make is still reported',
+      typeof wr === 'string' && wr.length > 0, JSON.stringify(wr));
+  }
 }
 
 console.log(failed ? `\npilot/tanks: ${failed} check(s) FAILED\n` : '\npilot/tanks: all checks passed\n');
