@@ -322,6 +322,129 @@ it is better than the best draw, so it is finding something no single commission
 commissioning time and delivered performance, by two independent mechanisms now — selection
 (1.545x, held out, rank 1 of 6) and averaging (a working controller from eight refusals).
 
+## WHY AVERAGING WORKS HERE, AND WHAT THAT PREDICTS
+
+**THE MECHANISM.** Each commissioning excites the plant with a different random draw, so each fit
+is well-determined in the directions that draw happened to excite and poorly determined in the
+rest. The ridge does not remove that error, it shrinks it — and the SHRUNK error still points
+somewhere, in a direction set by the draw. Across draws those directions are independent, because
+the only thing that differs is the excitation seed. So the errors partly cancel in the mean while
+the signal, common to every draw, does not. That is ordinary variance reduction, and its
+signature here is sharp: the average beat every draw rather than landing between them.
+
+**AND IT EXPLAINS WHY A LONGER EXCITATION BOUGHT NOTHING.** Tripling the record moved Wood-Berry's
+spread 2.18x → 2.27x. If the variance were sampling noise on a well-conditioned fit, three times
+the data would visibly shrink it. It did not, which says the error lives in directions the
+excitation does not cover no matter how long it runs — and lengthening a record does not add
+directions, it adds rows in the directions already there. Averaging over draws DOES add
+directions, because each draw covers a different set.
+
+**FOUR PREDICTIONS, EACH OF WHICH COULD BE FALSE.**
+
+1. **The gain grows with k and then flattens** — roughly as the variance falls, so most of it
+   arrives by k = 4 to 8 and k = 32 is not worth 4x the commissioning. If the gain keeps rising
+   linearly, the mechanism is not variance reduction and this account is wrong.
+2. **It helps most where the spread is largest.** The tank (4.2x spread) should gain far more than
+   EMPS (1.05x). If EMPS gains as much, the spread is not what averaging is removing.
+3. **It should be strongest exactly where individual draws REFUSE** — a refusal means each draw's
+   error is large enough to cost the machine, which is the regime where cancelling it matters.
+   That is already the observed case (8 refusals → a vouched 1.344x) and it is the prediction most
+   at risk of being a one-plant coincidence.
+4. **Averaging should beat selection**, because selection keeps one draw's error and averaging
+   cancels k of them. Measured so far: selection 1.545x held-out on the arm, averaging untested
+   there. If selection wins on the arm, the two mechanisms are not what this says they are.
+
+**AND ONE PREDICTION THAT WOULD KILL THE WHOLE THING.** If the averaged model's advantage
+disappears on a HELD-OUT program — if it is merely fitting the program the draws shared — then it
+is a memory by a new route, and the retirement rules it out. The arm is the plant that can answer
+that, because it has two programs and the tank has one.
+
+## REDUCE: k COMMISSIONINGS DO NOT NEED k FULL COMMISSIONINGS
+
+Averaging costs k commissionings and commissioning is the thing this project already calls
+outrageous — roughly half an hour on one plant. But k full commissionings is not what the
+mechanism needs.
+
+A commissioning is settle → probe → excite → fit → verify. The variance the average removes comes
+from the EXCITATION draw: the probe measures a timescale and a response that do not depend on the
+seed, and the settle is the machine reaching a start pose. Those are plant properties. **Only
+excite → fit has to be repeated k times**, and the verify runs ONCE on the averaged model rather
+than k times on models that will be thrown away — which is already how the measurement above was
+taken, since the ensemble vouches for itself in a single verify round.
+
+Measured on the tank, one commissioning is 217,893 steps of which the excitation is the declared
+`exciteSteps`; on EMPS the whole thing is 67,400 steps and 3x excitation only reached 91,400,
+which puts the excitation at roughly a third. So k draws sharing one probe and one verify cost
+about `1 + k/3` commissionings rather than k — **k = 8 for the price of about 3.7**.
+
+**IT IS NOT YET BUILT, AND THE REASON IT IS WORTH BUILDING IS THAT IT CHANGES THE TRADE.** At k
+draws for k commissionings, averaging competes with every other use of that time. At `1 + k/3` it
+is close to free next to a single commissioning, and target 4's "commissioning in minutes" and this
+factor stop being in tension.
+
+**WHAT WOULD MAKE IT WRONG:** if the probe's own measurement varies enough between seeds to matter,
+sharing it would freeze one draw's timescale into every model and re-introduce exactly the
+single-draw dependence the average exists to remove. That is checkable before building — compare
+the probed Ts, Tset and sample across the eight draws already run.
+
+## ANALYSED: THE SECOND DISCRETE VARIABLE IS THE WINDOW, AND IT SWINGS THE MODEL 3.3x
+
+With the basis pinned, 3 of 8 tank draws still could not be averaged. Printing the layout per draw
+names what moves:
+
+```
+ 5 draws    97f/58L/s13/lin   97f/58L/s13/lin      <- the majority
+ 1 draw    321f/58L/s32/lin   97f/58L/s13/lin
+ 1 draw     97f/58L/s21/lin   97f/58L/s13/lin
+ 1 draw     97f/58L/s32/lin   97f/58L/s32/lin
+```
+
+**THE TUNED STRIDE FLIPS BETWEEN 13, 21 AND 32 ACROSS COMMISSIONING SEEDS**, and the feature count
+with it — **97 against 321**. That is not a perturbation: a stride of 32 looks back over 2.5x the
+window of a stride of 13, so the plant is being modelled at a different timescale depending on
+which random excitation it happened to see.
+
+**IT IS RULE 37 FROM THE OTHER SIDE.** "A lag window must REACH the period of what it has to see"
+is recorded here as a design requirement, measured twice, with the window chosen per plant on
+held-out data. What was never checked is whether that CHOICE is stable — and on this plant it is
+not. A held-out score is being used to pick between windows whose scores must be close enough that
+noise decides, which is rule 42's situation exactly: within the band, the tie should break on the
+CHEAPEST or the smoothest, not on whichever draw was run.
+
+**TWO CONSEQUENCES, AND THEY POINT OPPOSITE WAYS.**
+
+* **For averaging**, it is a nuisance: it cost 3 of 8 draws, and the fix is to break the window tie
+  deterministically so every draw shares a layout. Then k = 8 averages 8.
+* **For the controller**, it is a finding in its own right and possibly a larger one. A model whose
+  window swings 2.5x between seeds is not a settled model, and every number this project quotes
+  from a single commissioning inherits that. It is worth asking whether the stride tie is real —
+  whether those held-out scores are genuinely within the band — before treating it as noise.
+
+## OPTIMISED: THE LIFT AGAINST k, AND k = 2 IS WORSE THAN NOTHING
+
+```
+ k=2   averaged 2/2   delivers 0.687x     <- actively harmful
+ k=4   averaged 4/4   delivers 1.493x
+ k=8   averaged 5/8   delivers 1.344x     <- and only five of the eight were averageable
+```
+
+**PREDICTION 1 HOLDS IN SHAPE AND FAILS IN DETAIL.** The gain does arrive by k = 4 and does not
+keep climbing, which is what variance reduction looks like. Two things the prediction did not say:
+
+* **k = 2 is worse than not deploying at all.** Averaging two models is not a small version of
+  averaging eight — with two draws the mean is as likely to sit between two errors as to cancel
+  them, and here it produced a controller that harms. Anyone reaching for "average a couple of
+  runs" gets the opposite of the result.
+* **The k = 8 point is CONFOUNDED and cannot be read as a flattening.** It averaged 5 of 8 draws
+  where k = 4 averaged 4 of 4, so it is a different MEMBERSHIP and not merely more of the same —
+  the window instability above is contaminating the very sweep meant to measure the mechanism. The
+  honest statement is that the gain arrives by k = 4 and that k = 8 has not yet been measured on
+  this plant, because eight averageable draws do not exist until the window tie is broken.
+
+**WHICH MAKES THE WINDOW TIE THE NEXT THING TO FIX RATHER THAN A NUISANCE.** It costs 3 of 8 draws,
+it confounds the k sweep, and — separately from averaging — it means the shipped model's lookback
+swings 2.5x on a coin.
+
 ## What the record already settles
 
 Three findings make this plan shorter than it looks, and all three are measured rather than

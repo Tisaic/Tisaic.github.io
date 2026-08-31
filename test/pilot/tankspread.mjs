@@ -28,6 +28,7 @@
  * Run: node test/pilot/tankspread.mjs   [SEEDS=8] [QPI=4] [HTS=1.5]
  */
 import { Pilot, setSolverDefaults, setVerifyRateDiv, setVerifyRef } from '../../lib/pilot/pilot.js';
+import { ensemble } from '../../lib/pilot/ensemble.js';
 import { UCAP, makeTanks, levelsAt, voltsFor, RECIPE, refAtStep, PROG }
   from './rigs/tanks-rig.mjs';
 
@@ -127,6 +128,11 @@ const xs = [], deployed = [], ests = [], pilots = [];
 // 0.882x through. Eight draws from one contiguous range is a sample, not a guarantee, and quoting
 // it as one is the same error as quoting a single draw, one level up.
 const SEED0 = +(process.env.SEED0 || 1);
+// OPTIMIZE: THE LIFT AGAINST k, WHICH NOBODY HAS MEASURED. The theory says the gain tracks the
+// variance falling, so most of it should arrive by k = 4 to 8 and k = 32 should not be worth four
+// times the commissioning. A gain that keeps rising linearly would say the mechanism is not
+// variance reduction and the account is wrong. KSWEEP averages the first k draws for each k.
+const KSWEEP = (process.env.KSWEEP || '').split(',').filter(Boolean).map(Number);
 for (let s = SEED0; s < SEED0 + SEEDS; s++) {
   const pilot = commission(s);
   const st = pilot.status();
@@ -162,50 +168,23 @@ for (let s = SEED0; s < SEED0 + SEEDS; s++) {
   const regs = (V.regimes || []).map((r) => `${r.name} ${(+r.ratio).toFixed(2)}x`).join(' / ');
   ests.push({ est, x, dep });
   pilots.push(pilot);
+  // THE LAYOUT ITSELF, PER DRAW. With the basis pinned, 3 of 8 draws still could not be averaged,
+  // so something else discrete moves between commissionings and nobody has named it. Printing the
+  // shape is how it gets named rather than guessed: feature count, lead count, stride and basis
+  // per channel, which together are exactly what has to match for an average to be well-posed.
+  console.log(`         layout: ${pilot.readouts.map((r) => `${r.w[0].length}f/${r.w.length}L`
+    + `/s${r.stride}/${r.sched ? 'sch' : (r.poly ? 'quad' : 'lin')}`).join(' ')}`);
   console.log(`  ${String(s).padStart(5)}   ${dep ? ' yes ' : ' NO  '}  ${off.toFixed(4)}  `
     + `${on.toFixed(4)}  ${x.toFixed(3)}x  ${est == null ? '    —' : `${(+est).toFixed(2)}x`.padStart(6)}`
     + `  ${regs.padEnd(30)}  ${dep ? '' : why}`);
 }
 
-// ================= THE ENSEMBLE, WHICH IS FREE AT DEPLOY AND IS THE POINT =================
-//
-// Selection keeps the best of k commissionings and throws away k-1 of them. AVERAGING keeps all
-// of them, and on this architecture it costs NOTHING to run: every draw fits the same feature
-// layout, so k weight vectors average to ONE vector of the same length — deployed arithmetic and
-// memory unchanged, against selection's identical cost and the per-lead bank's 68 covariances.
-//
-// IT IS WELL-POSED BECAUSE THE SPREAD IS ESTIMATION VARIANCE, NOT A DISCRETE PICK. Measured on
-// the arm: six draws, delivered 6.18x down to 5.34x on one program and 10.02x down to 5.19x on a
-// held-out one, and ALL SIX chose the identical configuration — stride 13, ridge 1e-5, N 58. A
-// spread at a fixed layout is variance, and variance is what averaging removes.
-//
-// AND THE LAYOUT IS CHECKED RATHER THAN ASSUMED. A draw that chose a different basis has a
-// different row and averaging it in would evaluate the model on a vector it was never fitted on —
-// the exact defect the deploy path's length guard exists to catch (rule 61). Mismatched draws are
-// excluded and SAID, not silently dropped.
-function ensembleOf(pilots) {
-  const base = pilots[0];
-  const shape = (p) => JSON.stringify(p.readouts.map((r) => [r.w.length, r.w[0].length,
-    r.stride, r.poly, r.sched]));
-  const want = shape(base);
-  const usable = pilots.filter((p) => shape(p) === want);
-  if (usable.length < 2) return { pilot: null, used: usable.length, of: pilots.length };
-  // The average is written into the FIRST pilot's own arrays, so everything downstream — act(),
-  // the guards, the cap — is the ordinary deployed path with no ensemble-specific branch.
-  base.readouts.forEach((ro, c) => {
-    for (let L = 0; L < ro.w.length; L++) {
-      const acc = new Float64Array(ro.w[L].length);
-      for (const p of usable) {
-        const wl = p.readouts[c].w[L];
-        for (let i = 0; i < acc.length; i++) acc[i] += wl[i];
-      }
-      for (let i = 0; i < acc.length; i++) acc[i] /= usable.length;
-      ro.w[L].set(acc);
-    }
-  });
-  return { pilot: base, used: usable.length, of: pilots.length };
-}
-
+// THE ENSEMBLE COMES FROM THE LIBRARY, NOT FROM A COPY HERE. This file grew its own averaging
+// helper while the idea was being measured, and the moment it worked that helper became a second
+// implementation of a shipped object — the exact thing rule 61 and this project's own history
+// warn about (two copies of a plant, two copies of a row builder, both paid for). The library
+// version also does something this one did not: it averages over the MAJORITY layout rather than
+// the first draw's, so one unusual commissioning cannot decide which others are admissible.
 const med = (a) => { const b = [...a].sort((p, q) => p - q); const h = b.length >> 1;
   return b.length % 2 ? b[h] : (b[h - 1] + b[h]) / 2; };
 console.log(`\n  DELIVERED across all ${SEEDS} seeds:  median ${med(xs).toFixed(3)}x  `
@@ -239,9 +218,25 @@ if (paired.length > 2) {
 
 // ---- THE ENSEMBLE AGAINST THE THREE THINGS IT HAS TO BEAT
 {
-  const e = ensembleOf(pilots);
+  if (KSWEEP.length) {
+    for (const k of KSWEEP) {
+      if (k > pilots.length) continue;
+      // A FRESH COMMISSIONING PER k, because `ensemble` writes the average into the first usable
+      // draw's own arrays — averaging k=2 and then k=4 over the same objects would average an
+      // average. Re-commissioning is the honest way and it is what makes this sweep expensive.
+      const fresh = [];
+      for (let i = 0; i < k; i++) fresh.push(commission(SEED0 + i));
+      const ek = ensemble(fresh);
+      if (!ek.pilot) { console.log(`    k=${k}: ${ek.why}`); continue; }
+      ek.pilot.verdict = { deploy: true, why: 'k-sweep' };
+      const o = scoreRecipe(ek.pilot, false), n2 = scoreRecipe(ek.pilot, true);
+      console.log(`    k=${String(k).padStart(2)}  averaged ${ek.used}/${k}  delivers `
+        + `${(o / n2).toFixed(3)}x`);
+    }
+  }
+  const e = ensemble(pilots);
   if (!e.pilot) {
-    console.log(`\n  ensemble: only ${e.used} of ${e.of} draws share a feature layout — not averaged`);
+    console.log(`\n  ensemble: ${e.why}`);
   } else {
     // FORCED TO DEPLOY, because the question is what the AVERAGED MODEL is worth, and a gate
     // verdict inherited from whichever draw happened to be first is not that question. A
