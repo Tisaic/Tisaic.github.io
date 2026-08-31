@@ -507,10 +507,29 @@ draws is LARGER than what they agree on. A single commissioned model on this pla
 than signal, which is simultaneously why averaging works, why one draw's score is a coin, and why
 every number this project quotes from a single commissioning deserves the spread beside it.
 
-**WHAT IS STILL NOT EXCLUDED**, and it is a one-run experiment: a ridge large enough to shrink a
-single draw by 0.554 has not been tried against the ensemble directly. The geometry says it should
-not match — a ridge scales all draws the same way and leaves them just as far apart — but the
-geometry is an argument and the machine is the arbiter.
+**AND THE MACHINE WAS ASKED, BECAUSE THE GEOMETRY IS AN ARGUMENT (rule 16).** One draw refit at
+ridge x100 — same window, same stride, same basis, `freezeConfig` making the ridge the only
+variable:
+
+```
+ raw draws (all eight)                            REFUSED, 1.000x
+ one draw at ridge x100   |w| 0.276 vs 0.578      1.176x
+ the average of five      |w| 0.739 vs 1.333      1.344x
+```
+
+**A RIDGE THAT SHRINKS MORE DELIVERS LESS.** It takes the weights to 0.478 of a draw's size against
+averaging's 0.554 — more shrinkage — and reaches 1.176x against 1.344x. Averaging is not a ridge,
+measured on the machine and not only in the geometry.
+
+**AND MORE REGULARISATION DOES HELP THIS PLANT, WHICH IS WORTH SEPARATING FROM THE MAIN RESULT.**
+1.000x → 1.176x is a real gain from the ridge alone, for one commissioning and no k-fold cost. The
+tune picked a ridge two orders of magnitude smaller than that on every draw, which is its own
+finding: rule 42 selects the ridge for the INVERSION rather than the fit, and on this plant it is
+still selecting one too small. Whether the two compose — a larger ridge AND an average — is
+untested and is the cheap next question.
+
+*One multiplier on one draw. The direction is unambiguous and the comparison is one-variable, but
+a sweep over the multiplier would say whether 1.176x is the ridge's best or merely one point.*
 
 ## What the record already settles
 

@@ -28,7 +28,7 @@
  * Run: node test/pilot/tankspread.mjs   [SEEDS=8] [QPI=4] [HTS=1.5]
  */
 import { Pilot, setSolverDefaults, setVerifyRateDiv, setVerifyRef } from '../../lib/pilot/pilot.js';
-import { ensemble } from '../../lib/pilot/ensemble.js';
+import { ensemble, freezeConfig } from '../../lib/pilot/ensemble.js';
 import { UCAP, makeTanks, levelsAt, voltsFor, RECIPE, refAtStep, PROG }
   from './rigs/tanks-rig.mjs';
 
@@ -62,7 +62,7 @@ if (process.env.QPI || process.env.HTS) {
 // rather than G because the rig already exports G for gravity (rule 17: the instrument first).
 const GMP = [0.70, 0.60];                             // gamma1 + gamma2 > 1: minimum phase
 
-function commission(seed) {
+function commission(seed, before = null) {
   const p = makeTanks(GMP);
   const start = voltsFor(GMP, RECIPE[0][0], RECIPE[0][1]);
   for (let i = 0; i < 30000; i++) p.step(start[0], start[1]);
@@ -83,6 +83,10 @@ function commission(seed) {
     ...(process.env.BASIS ? { forceBasis: process.env.BASIS } : {}),
     seed,
   });
+  // THE HOOK RUNS BEFORE THE FIRST STEP, which is the only point a frozen configuration can be
+  // applied: the fit reads those values when it reaches the tune stage, and copying them onto a
+  // pilot that has already fitted would change what its report SAYS without changing what it did.
+  if (before) before(pilot);
   while (pilot.phase !== 'done') {
     if (pilot.phase === 'fit') { pilot.work(); continue; }
     const cmd = pilot.command();
@@ -234,6 +238,34 @@ if (paired.length > 2) {
         + `${(o / n2).toFixed(3)}x`);
     }
   }
+  // AND THE SAME QUESTION PUT TO THE MACHINE RATHER THAN TO THE GEOMETRY.
+  //
+  // The geometry says averaging is cancellation and not shrinkage — |draw| tracks
+  // sqrt(|mean|^2 + spread^2), which a common scaling cannot produce. But that is an argument, and
+  // this project's own rule is that where a design and its prediction agree with each other and
+  // disagree with the machine, the machine decides (rule 16). So: take ONE draw, refit it at a
+  // ridge large enough to shrink it the way the average is shrunk, and score it. If a shrunken
+  // single draw matches the ensemble, the k-fold cost buys nothing a ridge does not.
+  //
+  // `freezeConfig` is what makes this a one-variable test: the shrunken pilot inherits the same
+  // window, stride and basis, so the ONLY difference is the ridge.
+  if (process.env.RIDGEX) {
+    const M = +process.env.RIDGEX;
+    const donor = pilots[0];
+    const shrunk = commission(SEED0, (p) => {
+      freezeConfig(donor, p);
+      p._frozenConfig.forEach((c) => { c.ridge *= M; });
+    });
+    const norm = (w) => Math.sqrt(w.reduce((a, v) => a + v * v, 0));
+    shrunk.verdict = { deploy: true, why: 'ridge probe' };
+    const o = scoreRecipe(shrunk, false), n3 = scoreRecipe(shrunk, true);
+    console.log(`\n  RIDGE PROBE: one draw refit at ridge x${M} (same window, stride and basis)`);
+    console.log(`    |w| ${norm(shrunk.readouts[0].w[0]).toExponential(3)} against the draw's own `
+      + `${norm(donor.readouts[0].w[0]).toExponential(3)}`);
+    console.log(`    delivers ${(o / n3).toFixed(3)}x — if this matches the ensemble, averaging is `
+      + 'a ridge and the k-fold cost buys nothing');
+  }
+
   // ANALYZE: IS THE AVERAGE JUST A SMALLER CORRECTION?
   //
   // The alternative explanation that has to be excluded before any of this is an architecture: if
