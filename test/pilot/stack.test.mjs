@@ -246,11 +246,24 @@ console.log(`      (${(trap[0].rms / trap[trap.length - 1].rms).toFixed(1)}x and
 }
 // EACH LAYER'S FORECAST IS OF A HARDER SIGNAL THAN THE LAST, which is what says it is
 // modelling the RESIDUAL and not re-learning the plant.
-check('…and each layer forecasts a harder signal than the one below it',
-  L[0].r2[0] > L[1].r2[0] && L[1].r2[0] > L[2].r2[0],
-  JSON.stringify(L.map((l) => +l.r2[0].toFixed(4))));
-check('…while still finding real structure in what reached it',
-  L[1].r2[0] > 0.3 && L[2].r2[0] > 0.2, JSON.stringify(L.map((l) => +l.r2[0].toFixed(4))));
+//
+// AND THE LAYER COUNT IS NOT GUARANTEED, so it is checked rather than assumed. How deep the
+// cascade goes is a MACHINE measurement — a layer that cannot vouch for itself ends the stack —
+// so a change to the solver can legitimately produce two layers where three ran before. Indexing
+// `L[2]` blind turned exactly that into `Cannot read properties of undefined`, a crash instead of
+// a report, on a run whose interesting content was the refusal it had just printed. A test that
+// dies where the machine merely answered differently cannot tell the two apart (rule 51).
+if (L.length < 3) {
+  check('…and each layer forecasts a harder signal than the one below it',
+    false, `only ${L.length} layer(s) admitted — the ordering needs three, and the stack stopped `
+    + `early: ${JSON.stringify(L.map((l) => ({ layer: l.layer, verify: l.verify })))}`);
+} else {
+  check('…and each layer forecasts a harder signal than the one below it',
+    L[0].r2[0] > L[1].r2[0] && L[1].r2[0] > L[2].r2[0],
+    JSON.stringify(L.map((l) => +l.r2[0].toFixed(4))));
+  check('…while still finding real structure in what reached it',
+    L[1].r2[0] > 0.3 && L[2].r2[0] > 0.2, JSON.stringify(L.map((l) => +l.r2[0].toFixed(4))));
+}
 // THE TIMESCALE SEPARATION IS MEASURED, NOT DESIGNED: what layer 1 leaves is slower than
 // what layer 1 was built for, and layer 2 discovers that on its own.
 check('…and a later layer reaches further ahead than the first, having measured why',

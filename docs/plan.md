@@ -2012,6 +2012,38 @@ the control has only been taken on EMPS. And the reference has to come from some
 new thing the engineer must supply, which is a real cost against "wire it up and press one button"
 even though it is one they almost always have.
 
+**6k. THE DEFAULTS CHANGE IS REVERTED, AND THE PASS THAT JUSTIFIED IT HAD THE SAME HOLE IT WAS
+BUILT TO CLOSE.**
+
+`sixplant.mjs` swept six plants, rule 42's band picked 2 iterations at 1.2·Tset, and the defaults
+were changed. The full suite then failed two tests that the pass never looked at:
+
+* **`autostack.test.mjs`, THE CONTRACT.** The arm's ladder actually SHIPS BETTER at the new
+  defaults — 2.0129e-2 total, **23.15x against the 22.42x on record** — while the contract, which
+  is on the **model-only** stack because that is what survives the memory's retirement, goes
+  8.5e-2 to **9.14e-2 and red**. The headline improved and the falsifiable claim regressed.
+* **`stack.test.mjs`.** On EMPS the cascade admits TWO layers instead of three (layer 2 refused at
+  verify 1.04x — the machine's answer, correctly reported), and the test indexes `L[2]` blind.
+
+**SO THE PASS MEASURED SIX HEADLINES WHILE THE CONTRACTS SAT ONE LEVEL DOWN.** That is precisely
+the fault this file recorded two entries earlier about the shared fit — "measured on the two
+plants least able to falsify it" — repeated in a new costume by the instrument built to prevent
+it. A pass over PLANTS is not a pass over CONTRACTS, and the six plants' own headlines are not
+where this project's claims live.
+
+**REVERTED TO 4:1.5.** What the measurement still buys is real and is kept: the cheap corner is
+reachable and costed at **9,517 MAC/cycle against 10% of a 1 ms scan** where the default is
+42,914, and it is better on both plants this project loses on. It stays available through
+`setSolverDefaults` and is not imposed — the same shape as every other constant here (rule 31).
+
+**AND ONE TEST DEFECT IS FIXED RATHER THAN WORKED AROUND.** How deep the cascade goes is a MACHINE
+measurement — a layer that cannot vouch for itself ends the stack — so two layers where three ran
+before is a legitimate answer, not an error. `stack.test.mjs` turned it into `Cannot read
+properties of undefined`: a crash instead of a report, on a run whose interesting content was the
+refusal it had just printed. It now checks the layer count and FAILS with the refusal in the
+message, so a machine answering differently and a test falling over are no longer the same
+observation (rule 51).
+
 **6f. AN 11% REGRESSION ON THE ARM — SUPERSEDED BY 6d, KEPT FOR THE METHOD.** The arm's model-only stack (conventional withheld, which is what survives the
 retirement) reads 7.4340e-2 on one historical run with `sharedWeights` forced and every lead
 pooled uncapped, and **8.3e-2 consistently now**. Tested and killed in order:
