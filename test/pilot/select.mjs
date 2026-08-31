@@ -37,6 +37,20 @@ const ROOT = join(HERE, '..', '..');
 // The selector is the gate's score on the program it was GIVEN; the held-out reading is a
 // different program the same commissioning is scored on. Both come from the plant's own test.
 const PLANTS = {
+  // THE KILL CONDITION FROM THE PLAN, MADE RUNNABLE. Six draws on one plant with one held-out
+  // program is one lucky ordering until it replicates somewhere a bad draw is actively HARMFUL
+  // rather than merely weaker. The tank is that plant: its draws run 0.368x to 1.834x.
+  //
+  // Its held-out program is the NON-MINIMUM-PHASE configuration — same algorithm, same recipe,
+  // a right-half-plane zero the selection never sees. A selector that ranks there is ranking the
+  // commissioning rather than the program.
+  tanks: {
+    file: 'tanks.test.mjs',
+    gate: /representative ([\d.]+)x/,
+    onSel: /recipe\s+[\d.]+ → [\d.]+ cm rms \(([\d.]+)x\)/,
+    onOut: /non-minimum phase[^·]*· recipe [\d.]+ → [\d.]+ cm rms \(([\d.]+)x\)/,
+    better: 'up',
+  },
   arm: {
     file: 'arm.test.mjs',
     // what the gate said, on the rounded rectangle it was handed
@@ -65,8 +79,12 @@ function run(off) {
     ch.stderr.on('data', (d) => { out += d; });
     ch.on('close', () => {
       const g = out.match(P.gate), a = out.match(P.onSel), b = out.match(P.onOut);
+      // LAST CAPTURE GROUP, not group 2: the arm's patterns capture an rms and then a ratio, the
+      // tank's capture the ratio alone. Hard-coding [2] read `undefined` on any plant whose line
+      // is shaped differently and silently dropped every draw (rule 25).
+      const last = (m) => (m ? +m[m.length - 1] : null);
       resolve({ off, gate: g ? +g[1] : null,
-        sel: a ? +a[2] : null, out: b ? +b[2] : null,
+        sel: last(a), out: last(b),
         refused: /REFUSED|does not deploy/.test(out) });
     });
   });

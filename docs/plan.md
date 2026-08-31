@@ -213,6 +213,38 @@ cascade on one plant. The honest statement is that one model for every lead is a
 with a measured price, not the free win it was written up as, and the price falls on residual
 signals that are already hard.
 
+## THE LAST RED IS A REAL REGRESSION, AND IT IS THE ONE THAT MATTERS MOST
+
+`stack.test.mjs` no longer crashes and no longer asserts a layer count the machine is entitled to
+change. What it now reports is worse than the crash was:
+
+```
+ depth buys accuracy on the program it was commissioned against
+   → 0.5764  0.0393  0.0393  0.0393      open, depth 1, depth 2, depth 3
+ …while still finding real structure in what reached it   → [0.9947, 0.1774]
+ …AND on a program it has never seen, by at least as much → 8.8x unseen vs 14.7x trained
+```
+
+**DEPTH BUYS NOTHING ON EMPS. Depth 2 and depth 3 are IDENTICAL to depth 1 to four figures**,
+because layer 2 cannot vouch for itself (verify 0.95x) and the stack correctly stops at one. Layer
+2's held-out R² is 0.1774 where the contract asks 0.3.
+
+**AND THE CASCADE IS THE MEMORY'S REPLACEMENT.** It is the component this project measured at 26.0x
+on a two-tone sine the machine had never run, against a phase-indexed table's 0.55x — the evidence
+that a stack of plant models transfers where a lap table does not. On EMPS it is now one layer
+deep.
+
+**THE CAUSE IS ISOLATED AND IS NOT REVERSIBLE.** With `sharedWeights` forced on at `c24bede` and
+nothing else changed, layer 3's held-out R² collapses to 0.0248 and the same three checks fail. One
+model for every lead is what makes the online budget reachable (2n² per sample against nt·2n²), so
+it cannot simply be undone — but its price is now measured in three places: Wood-Berry's 17.6% of
+IAE, the tank's basis selection, and here, the cascade's depth.
+
+**THIS CHECK STAYS RED ON PURPOSE.** The requirement — depth must buy accuracy — is correct, and
+the machine does not meet it. Restating it to pass would be deleting the finding. It is the top
+open item in this file: **make the shared fit able to model a residual**, because until it can, the
+cascade is a one-layer object and the memory's replacement does not exist.
+
 ## What the record already settles
 
 Three findings make this plan shorter than it looks, and all three are measured rather than
