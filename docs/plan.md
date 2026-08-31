@@ -3,58 +3,90 @@
 Written against `CLAUDE.md`'s **THE NORTH STAR**. Every step below names the measurement that
 decides whether to continue, because a plan whose steps cannot fail is a wish list.
 
-## THE CURRENT SEQUENCE — read this first; the phases below predate it
+## THE CURRENT SEQUENCE — read this first; everything below it is the record, not the plan
 
-The phase order further down was written before the owner retired the memory, before the score
-became the FIRST SCORED LAP of an unseen program, and before the seed spreads were measured. It
-is kept because its measurements stand, but where it and this section disagree, this is what is
-being worked. Six steps, in the order their evidence justifies.
+Rewritten after the gate repair and the ensemble arc. Where this and anything below disagree, this
+is what is being worked.
 
-**1. FINISH THE GATE, WHICH IS THE ONLY THING MEASURED TODAY THAT IS WORTH A FACTOR WITHOUT
-TOUCHING THE CONTROLLER.** `verifyRef` makes the deploy decision rank (tank correlation 0.989
-against -0.057; Wood-Berry's 9 harmful deployments become 12 refusals; EMPS byte-identical). It
-has been run on two plants of six. Run it on the arm — the second winner, where the control
-matters most — then the mill and the barrel. **Kill condition:** if it refuses on the arm, or if
-any plant's verdicts move where they should not, the third regime is a stricter gate rather than
-a better one and the tank's 0.989 was a coincidence of one plant.
+### What changed, and it changed the shape of the problem
 
-**2. THEN SPEND THE SPREAD, WHICH IS THE FACTOR ITSELF.** Every plant's headline is one
-commissioning draw; the plants that lose vary 2.2x and 4.2x across seeds. A gate that ranks turns
-that into a gain: commission k times, score each with the representative regime, keep the best.
-On the tank that is a deployed median of 1.512x against draws that reach 0.424x; on Wood-Berry it
-is the difference between refusing and shipping a controller that harms. **Target: the k-draw
-result is at least the best single draw, on every plant, with commissioning cost stated in laps.**
-**Kill condition:** if the gate's ranking does not survive being used for selection — the classic
-way a validation signal dies — then the spread cannot be spent and must be shrunk instead, and
-neither excitation length (measured: 3x buys nothing) nor the solver knobs shrink it.
+**THE CONTROLLER WAS NEVER THE BOTTLENECK.** Three independent measurements now say the same thing
+from different directions:
 
-**3. CLEAR THE THREE RED TESTS, BECAUSE THEY HIDE THE NEXT ONE (rule 3).** `tanks`, `woodberry`
-and `stack` are all red and all pre-existing; all three were invisible behind the `set -e` abort
-until the collector, and `stack` was crashing rather than reporting. Two of them are the plants
-step 1 is about, so this is mostly step 1's bill. `stack`'s is separate: the EMPS cascade admits
-two layers where the test asserts three, and whether that is a regression or the machine's honest
-answer has not been established.
+* the QP is not binding — a receding horizon applies only its first move, and per-lead trust
+  weights moved the arm 0.0%;
+* the pilot sits AT its forecast bound on EMPS — R² 0.9957 leaves 6.6% of the truth's rms, which is
+  0.038 mm against 0.045 delivered;
+* and **a single commissioned model is more error than signal** — on the tank the disagreement
+  between draws is **1.21x** the size of what they agree on.
 
-**4. THE MODEL-ONLY BAR IS NOW THE PRODUCT (targets 1, 2, 5).** The memory is retired by
-decision, so the number that matters on the arm is the model-only stack — 8.5e-2, against the
-22.42x ladder's 1.8e-2 — and everything about "higher" runs through improving a cascade that has
-no lap table in it. Scored, always, on the FIRST lap of a program it has never run, with the
-converged value beside it and never instead of it. **Target: within 1.3x of a per-program
-commission on every program and feedrate, none worse than the conventional machine.**
+So the remaining factor was never in the solver or the horizon. It is in the fact that one
+commissioning is one draw from a wide distribution, and nobody was choosing.
 
-**5. THE PLC BUDGET, RE-DECIDED AGAINST CONTRACTS RATHER THAN HEADLINES (target 6).** The cheap
-corner is measured and reachable — 9,517 MAC/cycle against 10% of a 1 ms scan, where the default
-is 42,914 — and it is better on both plants this project loses on. It is NOT the default because
-it fails the arm's model-only contract. Re-run the corner search with the contracts in the
-objective, not the six plants' headlines. That is the single lesson of the failed defaults change
-and it is worth repeating: **a pass over plants is not a pass over contracts.**
+**THREE THINGS THAT COST NOTHING AT DEPLOY NOW EXIST.**
 
-**6. THEN, AND ONLY THEN, A RIVAL (target 8).** Norm-optimal ILC on the arm, on this bench. Every
-comparison this project has is against its own baseline or a published number for a specific rig.
-It is last because a rival implemented while two plants are still harming their machines would
-measure the wrong thing — and because step 1 has already shown that a comparison can be
-misdirected by a third party: Wood-Berry was quoted against BLT for months while the plant WITHOUT
-the pilot beat BLT outright.
+```
+ tank, eight commissioning seeds
+   raw draws                       REFUSED, 1.000x   <- the gate correctly declined every one
+   ridge x100 alone                         1.176x
+   averaging 5 draws                        1.344x
+   ridge AND averaging                      1.594x   vouched for itself at 1.58x
+```
+
+1.176 x 1.344 = 1.581 against 1.594 observed: they multiply, so they are two mechanisms. The ridge
+shrinks each draw's own error; the average cancels the disagreement between draws. **All of it is
+one weight vector at deploy** — same arithmetic, same memory as a single commissioning.
+
+**AND THE GATE CAN NOW TELL DRAWS APART**, which is what makes any of it usable: a representative
+program supplied for the DEPLOY DECISION ONLY takes the tank's gate from correlation -0.057 to
+**0.989**, refuses all twelve harmful Wood-Berry deployments, scores the barrel for the first time
+ever, and leaves EMPS and the arm byte-identical.
+
+### The six steps, in the order their evidence justifies
+
+**1. THE HELD-OUT TEST DECIDES WHETHER ANY OF THIS SURVIVES.** `armens.mjs` commissions the arm six
+times, averages, and reads the CIRCLE — a program no draw was scored on and the average was not
+selected on. **If the advantage is only on the shared program, averaging is a memory by a new route
+and the retirement rules it out.** Nothing else on this list matters until that returns.
+
+**2. THEN THE SIX-PLANT PASS, ON CONTRACTS AND NOT HEADLINES.** Three changes are waiting on it —
+the lead basis (cascade depth 1 → 2 for +0.8% arithmetic), the ridge (the tune picks one 100x too
+small on the tank), and the ensemble. The lesson is already paid for: the defaults change that
+passed six plants' headlines broke the arm's model-only contract, because **a pass over plants is
+not a pass over contracts.**
+
+**3. PRICE k DOWN, WHICH IS NOW TARGET 4's PROBLEM AND ITS ANSWER AT ONCE.** k draws cost k
+commissionings today. `freezeConfig` exists and makes them averageable by construction; sharing the
+probe and running ONE verify on the average takes the cost to about `1 + k·(excite+fit)`. And the
+bootstrap fork tests the theory while cutting the cost: resampling one record gives k fits for zero
+machine time, but cannot add EXCITATION DIRECTIONS — so if it works the mechanism is not what this
+says, and if it does not, the theory stands and the sharing route is the one.
+
+**4. THE MODEL-ONLY BAR IS THE PRODUCT (targets 1, 2, 5).** The memory is retired, so the arm's
+number is the model-only stack — 8.5e-2 against the ladder's 1.8e-2 — scored always on the FIRST
+lap of a program never run, with the converged value beside it and never instead of it.
+
+**5. THE PLC BUDGET, RE-DECIDED AGAINST CONTRACTS (target 6).** The cheap corner is measured and
+reachable — 9,517 MAC/cycle against a 10,000 budget where the default is 42,914 — and is not the
+default because it fails the arm contract. Re-run that search with the contracts in the objective.
+
+**6. THEN A RIVAL (target 8).** Norm-optimal ILC on this bench. Last, because a rival measured
+while the refusal machinery is still being repaired would measure the wrong thing — and because
+this arc has already shown a comparison can be misdirected by a third party: Wood-Berry was quoted
+against BLT for months while the plant WITHOUT the pilot beat BLT outright.
+
+### Where the eight targets actually stand
+
+| target | movement this arc |
+|---|---|
+| 1 program-agnostic | **pending step 1** — the held-out test is the whole question |
+| 2 feedrate-agnostic | untouched |
+| 3 plant-agnostic | **materially better**: refusals are now honest on all six, the barrel scored for the first time, two harmful deployments prevented |
+| 4 commissioning in minutes | **in tension and with a route** — k draws cost k, reducible to `1 + k·(excite+fit)` |
+| 5 higher | **1.594x on the tank from eight refusals**; the arm untested |
+| 6 PLC scan | reachable at 95% of budget, not default — blocked on contracts |
+| 7 breadth | **reframed**: Wood-Berry's baseline is beaten by doing nothing, so the target there is "beat 43.90 or refuse every time", and refusing is achieved |
+| 8 a rival | untouched |
 
 ### What is NOT on this list, and why
 
