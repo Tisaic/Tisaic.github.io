@@ -152,6 +152,67 @@ seeds 1..8 and false of 100..103. Eight draws from one contiguous range is a sam
 guarantee, and quoting it as one is the same error as quoting a single draw — one level up.
 `tankspread.mjs` takes a `SEED0` now so a rate can be measured across ranges.
 
+## STEP 2 IS DONE: THE SPREAD IS SPENDABLE, 1.545x, ON A HELD-OUT PROGRAM
+
+Commission six times, score each with the gate on the ROUNDED rectangle, ship the best — and read
+the CIRCLE, which the selection never saw:
+
+```
+ draw   gate    rounded    circle
+    0   3.72x    6.18x      7.72x
+    1   4.10x    6.12x     10.02x   <- the gate's pick
+    2   3.64x    5.47x      6.72x
+    3   3.52x    5.43x      6.25x
+    4   3.64x    5.34x      5.85x
+    5   3.87x    5.31x      5.19x
+
+ selected delivers 10.02x on the held-out circle · median draw 6.48x · worst 5.19x
+ selection is worth 1.545x over shipping one commissioning, at 6x the commissioning cost
+ the selected draw ranks 1 of 6 on the held-out program
+```
+
+**RANK 1 OF 6.** The gate did not merely beat the median; it picked the genuinely best
+commissioning of the six on a program it never scored.
+
+**AND IT IS NOT CIRCULARITY, WHICH IS THE PART THAT MAKES IT WORTH ANYTHING.** The obvious
+objection is that the gate's representative regime runs the rounded rectangle and the selection is
+then validated on the same commissioning — so a correlation could be one measurement twice. The
+table refutes it directly: **draw 0 is the best on the rounded rectangle (6.18x against 6.12x) and
+the gate did not pick it.** It picked draw 1, which is SECOND on the program the gate scored and
+FIRST on the one it did not. A selector echoing its own program would have taken draw 0.
+
+**WHAT IT COSTS AND WHAT THAT MEANS FOR TARGET 4.** Six commissionings for 1.545x, and
+commissioning is already the thing this project calls outrageous. But the trade is now a knob
+rather than a mystery: the spread is real, it is rankable, and k is a dial between commissioning
+time and delivered performance. It also reframes target 4 — cutting commissioning cost by 6x and
+spending the saving on six draws would be free.
+
+**WHAT WOULD KILL IT, RESTATED SINCE IT SURVIVED THE FIRST TEST.** Six draws on one plant with one
+held-out program. If the rank-1 pick does not replicate on the tank (where a bad draw is actively
+harmful rather than merely weaker) or across more draws, this is one lucky ordering.
+
+## AND THE SHARED FIT COSTS THE THIRD CASCADE LAYER — THE THIRD PLACE IT HAS BEEN CAUGHT
+
+`stack.test.mjs` is the last of the three pre-existing reds. At `c24bede` it fails ONE check (the
+PLC budget, 2,694,105 MAC against 50,000 — a standing honest red). With `sharedWeights` forced on
+at that same commit and nothing else changed, it fails THREE, and the new two say what happened:
+
+```
+ …while still finding real structure in what reached it  → [0.9971, 0.3829, 0.0248]
+ …and a refusal is a MACHINE measurement falling short   → layer 3, verify 1.35x, r2 0.0248
+```
+
+**Layer 3's held-out R² collapses to 0.0248** — the shared model cannot represent what layer 2
+leaves — so the layer cannot vouch for itself and the stack stops at two. That is the same
+mechanism as Wood-Berry (where the shared fit costs 17.6% of IAE) and the tank's basis checks,
+and it is now three plants deep.
+
+**THE SHARED FIT IS STILL NOT REVERSIBLE.** It is what makes the online budget reachable — 2n²
+per sample against nt·2n² — and the cost here is measured and specific: the third layer of a
+cascade on one plant. The honest statement is that one model for every lead is a MODELLING choice
+with a measured price, not the free win it was written up as, and the price falls on residual
+signals that are already hard.
+
 ## What the record already settles
 
 Three findings make this plan shorter than it looks, and all three are measured rather than
