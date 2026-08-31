@@ -603,6 +603,54 @@ deployed four harmful controllers in eight, is now a 1.594x plant.
 only one, which is exactly why the held-out arm test exists. Multiplicative composition on one
 point is a suggestion, not a law; two more plants would make it a finding.
 
+## THE HELD-OUT TEST: AVERAGING TRANSFERS, AND IT LOSES TO SELECTION
+
+Six arm commissionings, the gate scoring the ROUNDED rectangle, the CIRCLE never part of any
+selection or average:
+
+```
+ draw 1  rounded 6.18x   circle  7.72x
+ draw 2  rounded 6.12x   circle 10.02x
+ draw 3  rounded 5.47x   circle  6.72x
+ draw 4  rounded 5.43x   circle  6.25x
+ draw 5  rounded 5.34x   circle  5.85x
+ draw 6  rounded 5.31x   circle  5.19x
+
+ ENSEMBLE of 4/6      rounded 5.78x   CIRCLE 7.47x
+ median draw          rounded 5.45x   circle 6.48x
+ best draw            rounded 6.18x   circle 10.02x
+```
+
+**IT IS NOT A MEMORY, WHICH WAS THE QUESTION THAT MATTERED.** The average beats the median draw on
+a program it was never scored on — 7.47x against 6.48x — so the thing it recovers is a property of
+the PLANT and not of the trajectory the draws happened to share. That was the one outcome that
+would have killed this outright, and it did not happen.
+
+**AND PREDICTION 4 IS FALSIFIED. Selection beats averaging on this plant.** The prediction was that
+averaging should win, because selection keeps one draw's error while averaging cancels k of them.
+Measured: the gate picks draw 2 and gets **10.02x**; the average gets **7.47x**. Not close.
+
+**THE TWO RESULTS TOGETHER SAY WHEN EACH ONE APPLIES, WHICH IS MORE USEFUL THAN EITHER WINNING.**
+
+* **On the tank, every draw REFUSED.** There was nothing to select — the best of eight was 1.000x —
+  and averaging turned that into a vouched 1.594x. Selection cannot rescue a set with no good
+  member; averaging can, because the good model is not any of them.
+* **On the arm, every draw DEPLOYS and one is much better than the rest** (10.02x against a median
+  6.48x). Selection finds it. Averaging DILUTES it — mixing one excellent model with three ordinary
+  ones lands between them, which is exactly what a mean does.
+
+**SO THE RULE IS ABOUT THE SHAPE OF THE DISTRIBUTION, NOT ABOUT WHICH METHOD IS BETTER.** Where the
+draws straddle the deploy bar and none is good, average. Where they are all usable and one is
+clearly best, select. The gate is what makes either possible, and it is the same gate.
+
+**AND THE OBVIOUS COMPOSITION IS UNTESTED:** select the best HALF of the draws and average those.
+It would keep the ensemble's variance reduction while dropping the draws that dilute — and on the
+tank, where nothing is worth keeping, it degenerates to averaging everything, which is correct.
+
+*Four of six draws averaged, not six: two chose a different layout again. The arm's six draws
+looked identical on a previous reading, so the layout instability is present here too and was
+simply not visible in a sample that happened to agree.*
+
 ## What the record already settles
 
 Three findings make this plan shorter than it looks, and all three are measured rather than
