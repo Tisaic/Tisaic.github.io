@@ -34,7 +34,9 @@ const SHAPES = (process.env.SHAPES || 'circle,sharp,rounded').split(',');
 // 7.72x — and the mechanism it suggested is testable by swapping the training program: if the
 // square fails because the model never saw a machine STOP AND RESTART, then commissioning on the
 // square should fix those rows. What it costs the smooth programs is the other half of the answer.
+const UCAP = +(process.env.UCAP || 0.15);
 const DWELL = process.env.DWELL === '1';
+const DPT = +(process.env.DPT || 30);
 const TRAIN = { shape: process.env.TRAIN || 'rounded', feed: +(process.env.TRAINFEED || 0.004) };
 
 async function commission(seed) {
@@ -46,7 +48,7 @@ async function commission(seed) {
     autoRefuse: true, nMeasured: 6,
     channels: [0, 1].map((j) => ({ lo: centre[j] - 0.55, hi: centre[j] + 0.55,
       vMax: 8e-4, aMax: 4e-6, jMax: 2e-7 })),
-    uMax: 0.15,
+    uMax: UCAP,
     start: arm.ik(startPath.at(0).x, startPath.at(0).y, true),
     guards: [{ index: 4, max: 6 }, { index: 5, max: 6 }],
     workspace: (q) => {
@@ -68,6 +70,18 @@ async function commission(seed) {
     // this flag cannot supply it and the right reading of a null result is "the floor is too
     // high", not "stops do not help".
     dwell: DWELL,
+    // THE DECISION CLOCK, WHICH IS THE HORIZON HALF OF THE QUESTION.
+    //
+    // Two attempts to fix the sharp square by giving the MODEL more coverage have failed, and the
+    // lag column says the residual is timing rather than shape: the correction removes 1.55x of
+    // contour and 1.20x of lag. `decisionsPerTs` is how often the QP re-solves within a settling
+    // time — a pure timing knob that changes nothing about what the model knows.
+    //
+    // CLAUDE.md already records it moving exactly this case: 30 → 60 is worth 4.62 → 5.19x sharp,
+    // 6.43 → 8.02x rounded, 12.99 → 14.16x circle, and ONLY with the effort weight scaled as
+    // (DPT/30)^2 because the QP differences DECISION steps. If the sharp square improves here, its
+    // residual is a horizon failure; if it does not while the smooth programs do, it is not.
+    decisionsPerTs: DPT,
     // THE DIAMOND-IN-EXCITATION EXPERIMENT RAN AND IS REMOVED WITH ITS HOOK. Appending a diamond
     // at both feeds to the end of the scribble — the same corner profile on a path nothing is
     // scored on — took all three verify regimes below one (scribble 0.23x, program 0.40x,
@@ -100,6 +114,8 @@ async function commission(seed) {
 
 console.log('\npilot: one commissioning, four programs it has never run');
 console.log(`  trained on ${TRAIN.shape} at feed ${TRAIN.feed}; every row below is held out.`);
+console.log(`  correction cap: ${UCAP} rad${UCAP !== 0.15 ? '  (default is 0.15)' : ''}`);
+console.log(`  decision clock: ${DPT}/Ts${DPT !== 30 ? '  (default is 30)' : ''}`);
 console.log(`  excitation: ${DWELL ? 'DWELLING — the noise is time-warped so the machine lingers'
   : 'the ordinary scribble, which never stops'}`);
 
@@ -123,21 +139,30 @@ if (!pilots.length) { console.log('  nothing commissioned'); process.exit(1); }
 /** One row of the matrix: contour error with the correction off and on. */
 async function row(pilot, shape, feed) {
   const off = (await deployOn(pilot, shape, false, feed)).r;
-  const on = (await deployOn(pilot, shape, true, feed)).r;
+  const onR = await deployOn(pilot, shape, true, feed);
+  const on = onR.r;
+  // THE PEAK CORRECTION, AGAINST THE CAP IT IS ALLOWED. Two accounts of the sharp square have
+  // failed — more model coverage and a faster decision clock — and there is a simpler one nobody
+  // has looked at: the correction may be CLIPPED. `uMax` is 0.15 rad here and the rounded
+  // rectangle already peaks at 0.125, so a program that demands more at its corners would be
+  // saturating, and no improvement to the model or the horizon can help a controller that is
+  // already asking for more authority than it is given.
   return { off: off.contourRms, on: on.contourRms, x: off.contourRms / on.contourRms,
-    lagOff: off.lagRms, lagOn: on.lagRms };
+    lagOff: off.lagRms, lagOn: on.lagRms, uPk: onR.uPk };
 }
 
 const subject = pilots.length > 1 ? (ensemble(pilots).pilot || pilots[0]) : pilots[0];
 if (pilots.length > 1) console.log(`  (averaged ${ensemble(pilots).used} of ${pilots.length} draws)`);
 
 console.log(`\n  ${'program'.padEnd(18)} ${'contour off'.padStart(12)} ${'on'.padStart(11)}`
-  + ` ${'x'.padStart(7)}   ${'lag off'.padStart(9)} ${'lag on'.padStart(9)}`);
+  + ` ${'x'.padStart(7)}   ${'lag off'.padStart(9)} ${'lag on'.padStart(9)}  ${'u peak'.padStart(7)}`
+  + `  of ${UCAP}`);
 // THE TRAINING PROGRAM FIRST, as the reference every held-out row is read against.
 const seen = await row(subject, TRAIN.shape, TRAIN.feed);
 console.log(`  ${`${TRAIN.shape} @${TRAIN.feed} (SEEN)`.padEnd(18)} ${seen.off.toExponential(3).padStart(12)}`
   + ` ${seen.on.toExponential(3).padStart(11)} ${seen.x.toFixed(2).padStart(6)}x   `
-  + `${seen.lagOff.toExponential(2).padStart(9)} ${seen.lagOn.toExponential(2).padStart(9)}`);
+  + `${seen.lagOff.toExponential(2).padStart(9)} ${seen.lagOn.toExponential(2).padStart(9)}`
+  + `  ${seen.uPk.toFixed(4).padStart(7)}${seen.uPk > 0.98 * UCAP ? '  AT THE CAP' : ''}`);
 const held = [];
 for (const shape of SHAPES) {
   for (const feed of FEEDS) {
@@ -145,7 +170,8 @@ for (const shape of SHAPES) {
     held.push({ shape, feed, ...r });
     console.log(`  ${`${shape} @${feed}`.padEnd(18)} ${r.off.toExponential(3).padStart(12)}`
       + ` ${r.on.toExponential(3).padStart(11)} ${r.x.toFixed(2).padStart(6)}x   `
-      + `${r.lagOff.toExponential(2).padStart(9)} ${r.lagOn.toExponential(2).padStart(9)}`);
+      + `${r.lagOff.toExponential(2).padStart(9)} ${r.lagOn.toExponential(2).padStart(9)}`
+      + `  ${r.uPk.toFixed(4).padStart(7)}${r.uPk > 0.98 * UCAP ? '  AT THE CAP' : ''}`);
   }
 }
 

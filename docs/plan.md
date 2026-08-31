@@ -835,6 +835,48 @@ at all, or a horizon one**, and the two are distinguishable: a modelling failure
 forecast R² near the corners, a horizon failure shows up as a good forecast the QP cannot act on
 in time.
 
+## THE SHARP SQUARE: FOUR HYPOTHESES KILLED, AND A 1.5x GAIN FOUND ON THE WAY
+
+```
+ program            cap 0.15   cap 0.3   cap 0.6      u peak at 0.15
+ rounded @4e-3        6.18x     6.05x     5.84x         0.125
+ circle  @4e-3        7.72x     7.25x     6.44x         0.039
+ circle  @8e-3        4.86x     6.82x     7.27x         0.150  AT THE CAP
+ sharp   @4e-3        1.69x     1.68x     1.69x         0.150  AT THE CAP
+ sharp   @8e-3        2.27x     2.20x     2.01x         0.150  AT THE CAP
+```
+
+**THE REAL GAIN: THE FAST CIRCLE WAS AUTHORITY-LIMITED, 4.86x → 7.27x.** It sat exactly on the cap
+and rose by half again when given room. And feedrate-agnosticism on the circle goes **1.59x →
+1.06x**, from outside the 1.5x target to comfortably inside, because the fast lap was the one being
+clipped. That is target 2 met on this plant, by a knob nobody had looked at.
+
+**AND THE SHARP SQUARE DOES NOT CARE.** It touches the same cap and reads 1.69 / 1.68 / 1.69 while
+its peak correction rises to 0.24 — well past the limit that was supposedly binding. **Hitting the
+cap is necessary but not sufficient evidence of being limited by it**: the square's saturation is
+momentary, at the corners, and lifting it changes nothing.
+
+**SO FOUR ACCOUNTS OF THE SHARP SQUARE ARE NOW DEAD, EACH BY A DIRECT MEASUREMENT:**
+
+| hypothesis | test | result |
+|---|---|---|
+| the model has not seen a stop-restart | append a diamond at two feeds | model destroyed by collinearity, gate refused |
+| …try it without adding structure | dwelling excitation | deployed, every program WORSE, square 1.69 → 1.55 |
+| the QP cannot re-solve fast enough | decision clock 30 → 60 | smooth +2-4%, square +0.6% |
+| the correction is clipped | cap 0.15 → 0.3 → 0.6 | fast circle +50%, square unchanged |
+
+**WHAT SURVIVES IS THE LAG COLUMN, WHICH HAS BEEN THE SIGNATURE THROUGHOUT.** On the sharp square
+the correction removes 1.69x of contour and 1.20x of lag, and every intervention above leaves that
+ratio where it was. Lag at a corner is the machine arriving late out of a near-stop, and none of
+model coverage, decision rate or authority touches it. The remaining candidates are the ones that
+change WHEN the correction acts rather than how much or how well: the lead the correction is
+applied with, and whether a receding horizon can act on a discontinuity at all.
+
+**AND THE COST OF THE CAP IS REAL AND MUST BE STATED.** Every program that was NOT saturating gets
+slightly worse with more authority — the rounded rectangle 6.18x → 5.84x, the slow circle 7.72x →
+6.44x. More authority is not free; it is a trade against the programs that did not need it, which
+is exactly why `uMax` is described in this project as the engineer's cap rather than a tuning knob.
+
 ## What the record already settles
 
 Three findings make this plan shorter than it looks, and all three are measured rather than
