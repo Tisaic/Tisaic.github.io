@@ -485,6 +485,33 @@ sees the same excitation coverage. So:
 other confirms the mechanism and prices the feature. Nothing measured so far distinguishes them,
 and the 3x-excitation null is the only evidence either way — which points at the second.
 
+## ANSWERED: THE AVERAGE IS CANCELLATION, AND A SINGLE COMMISSIONING IS MORE ERROR THAN SIGNAL
+
+The alternative that had to be excluded: if averaging k models mainly SHRINKS the weights, it is
+one commissioning with a bigger ridge and none of the k-fold cost is justified. Measured on the
+tank, channel 0, lead 0, five averageable draws:
+
+```
+ mean |w| of the draws        1.333
+ |w| of their average         0.739      ratio 0.554
+ rms spread about the mean    0.896    = 67.2% of a draw's own size
+```
+
+**THE RATIO LOOKS LIKE SHRINKAGE UNTIL THE GEOMETRY IS CHECKED.** If each draw is one signal plus
+an independent error, `|draw|` should be `sqrt(|mean|² + spread²)` = **1.161** against an observed
+**1.333**. That is the signature of cancellation, not of a common scaling — and the 15% gap says
+the errors are not perfectly independent, which is worth stating rather than rounding away.
+
+**AND THE NUMBER THAT MATTERS IS THE RATIO OF ERROR TO SIGNAL: 1.21.** The disagreement between
+draws is LARGER than what they agree on. A single commissioned model on this plant is more error
+than signal, which is simultaneously why averaging works, why one draw's score is a coin, and why
+every number this project quotes from a single commissioning deserves the spread beside it.
+
+**WHAT IS STILL NOT EXCLUDED**, and it is a one-run experiment: a ridge large enough to shrink a
+single draw by 0.554 has not been tried against the ensemble directly. The geometry says it should
+not match — a ridge scales all draws the same way and leaves them just as far apart — but the
+geometry is an argument and the machine is the arbiter.
+
 ## What the record already settles
 
 Three findings make this plan shorter than it looks, and all three are measured rather than
