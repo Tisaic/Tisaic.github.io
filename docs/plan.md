@@ -1188,13 +1188,36 @@ setup should leave a correct model roughly where it was. It goes 14.68x → 9.96
 is fitting the WRONG QUANTITY, and the lower λ rows are that error compounded rather than
 evidence about tracking.
 
-*Not reported as "adaptation fails". Five apparatus faults have already been found in this one
-line of work — a report read off the wrong object, a ratcheting guard, a window counted in
-updates, plumbing that dropped the truth, and a sink that missed two terms sharing a line — and
-every one of them produced a plausible null first. The candidates are the target (`truth −
-conv0`, whose convolution is stamped at a different moment from the row), the prior scale, and
-the lead-0 command block's alignment between fit and runtime. Until λ=1 is neutral, no
-statement about forgetting factors means anything.*
+**THE APPARATUS IS INNOCENT THIS TIME, AND CHECKING IT PRODUCED ONE MORE WRONG CONCLUSION
+FIRST.** The deploy row was fed to the COMMISSIONED weights with no adaptation at all, and the
+first reading — R² 0.011 against ~0.996 at commissioning — said the pairing was broken. It was
+not: that probe normalised the residual by `truth`'s variance instead of the TARGET's, and the
+target carries `conv`, which is far larger. Scored properly:
+
+```
+target form              R² of the commissioned model
+truth − conv                 0.99534     <- what is implemented
+truth + conv                -2.92944
+truth                     -205.15304
+```
+
+**The model predicts `truth − conv` to R² 0.995 at deploy.** The row is right, the target is
+right, and the sign is right.
+
+**SO λ=1 IS A REAL RESULT, AND IT IS A FINDING THIS PROJECT ALREADY HAS FROM THE OTHER
+DIRECTION.** CLAUDE.md records that identifying on a PROGRAM instead of a scribble takes EMPS
+from 12.70x to 3.93x, "since repeated trapezoids are collinear". Online adaptation on a
+production program feeds the estimator exactly that collinear stream, so accumulating it drags
+a scribble-fitted model toward the program-only solution — 14.68x → 9.96x here, the same
+mechanism through a new door. Lower λ weights the collinear recent data harder, which is why
+0.999 collapses to 0.21x rather than tracking anything.
+
+**WHICH NAMES THE FIX RATHER THAN LEAVING A NULL.** The update must accept only rows that carry
+information the model does not already have, and `SharedRLS.update` already RETURNS that
+number: `x'Px`, the innovation variance, is the leverage of the row and is computed on the way
+to the gain. Gate on it and a repeating program stops contributing after its first lap, while a
+genuinely new manoeuvre still does. *That is the next thing to build, and it is the same
+quantity `solveRidge`'s leverage closure was added for — the third use of one measurement.*
 
 **6f. AN 11% REGRESSION ON THE ARM — SUPERSEDED BY 6d, KEPT FOR THE METHOD.** The arm's model-only stack (conventional withheld, which is what survives the
 retirement) reads 7.4340e-2 on one historical run with `sharedWeights` forced and every lead
