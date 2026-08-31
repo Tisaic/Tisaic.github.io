@@ -245,6 +245,41 @@ the machine does not meet it. Restating it to pass would be deleting the finding
 open item in this file: **make the shared fit able to model a residual**, because until it can, the
 cascade is a one-layer object and the memory's replacement does not exist.
 
+## THE FIX FOR THE CASCADE: A LEAD-SCALED BLOCK, +5 COLUMNS, +0.8% ARITHMETIC
+
+The shared fit models a plant beautifully and a residual not at all, measured on the same rows:
+
+```
+ layer        1        2        3
+ per-lead   0.9908   0.7771   0.5137     held-out R², EMPS cascade
+ shared     0.9947   0.1774   0.0248
+```
+
+Layer 1's map barely varies with lead, so pooling is free and even helps. What layer 2 LEAVES does
+vary — it is dominated by dynamics whose phase rotates along the horizon — so one weight vector
+fitted across all leads fits the average of incompatible maps. `_blockSplit`'s leverage readout
+says which failure that is: a bad R² at ordinary leverage is a SPANNING failure, not extrapolation.
+
+So the row carries the lead itself, normalised, plus the newest block scaled by it — one vector can
+then express a map that rotates along the horizon. `setLeadBasis`, off by default.
+
+```
+                 layer 2 verify   layer 2 R²   depth   MAC/cycle   depth 1 → 2
+ control          0.95x REFUSED     0.1774       1       42,914    0.0393 → 0.0393
+ lead basis       1.48x deployed    0.2399       2       43,259    0.0398 → 0.0278
+```
+
+**`depth buys accuracy` passes for the first time since the shared fit landed**, and it costs five
+columns and 0.8% of the deployed arithmetic — against a per-lead bank's 68 covariances.
+
+**IT IS A PARTIAL RECOVERY AND THE REMAINDER IS INTERESTING.** Layer 3 still refuses at R² 0.0956
+against the per-lead bank's 0.5137 — but its VERIFY reads **1.44x**, so the machine says it helps
+and the FORECAST GATE refuses it anyway. This project already has one reading on that: arming a
+negative-R² channel on the arm made the machine BETTER, 2.93x → 3.18x. A fit gate overriding a
+machine measurement is exactly what `stack.test.mjs`'s own check objects to — "a refusal is a
+MACHINE measurement falling short, not a fit falling short" — and that check is now failing for
+that reason rather than for a missing layer.
+
 ## What the record already settles
 
 Three findings make this plan shorter than it looks, and all three are measured rather than
