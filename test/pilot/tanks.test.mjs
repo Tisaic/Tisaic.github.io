@@ -236,12 +236,29 @@ check('…and with the basis selected, the sweeping excitation is the better mod
 // which is the safe direction for a gate. The Wood–Berry column shows the same repair
 // is NOT sufficient there (8x, still certifying a controller that harms), so this is a
 // partial fix recorded as one.
-console.log(`    the verify reported ${D.st.report.verify.ratio.toFixed(2)}x against `
-  + `${D.ratio.toFixed(2)}x on the recipe — within a factor since the verify learned to `
-  + 'dwell, against 3.8x before it did');
-check('the verify now tracks the program benefit within a factor of two on this plant',
-  D.st.report.verify.ratio / D.ratio > 0.5 && D.st.report.verify.ratio / D.ratio < 2,
-  `${(D.st.report.verify.ratio / D.ratio).toFixed(2)}x`);
+// AND IT IS CIRCULAR WHEN THE PILOT REFUSES, WHICH IS NOW THE COMMON CASE HERE.
+//
+// `D.ratio` is the delivered benefit, and a refused pilot delivers EXACTLY 1.000x because
+// `act()` returns zeros. So on a refusing draw this check divides the gate's estimate of what a
+// controller WOULD have done by a 1.000x that exists only because the gate refused it — and
+// reads 0.15x, failing. That is not the gate mistracking; it is a comparison with nothing on
+// one side of it (rule 25: "not measured" and "exactly 1.0x" are different states).
+//
+// So the tracking claim is made only where there is something to track, and the refusing case
+// gets its own statement: the estimate has to be BELOW the deploy bar, because that is what a
+// refusal means and it is checkable.
+if (D.pilot.verdict && D.pilot.verdict.deploy) {
+  console.log(`    the verify reported ${D.st.report.verify.ratio.toFixed(2)}x against `
+    + `${D.ratio.toFixed(2)}x delivered`);
+  check('the verify tracks the program benefit within a factor of two when it deploys',
+    D.st.report.verify.ratio / D.ratio > 0.5 && D.st.report.verify.ratio / D.ratio < 2,
+    `${(D.st.report.verify.ratio / D.ratio).toFixed(2)}x`);
+} else {
+  check('…and when it refuses, the estimate it refused on is below the bar it refused against',
+    D.st.report.verify.ratio < 1.1,
+    `refused at ${D.st.report.verify.ratio.toFixed(2)}x — a refusal delivers exactly 1.000x by `
+    + 'construction, so comparing the estimate against it measures the refusal, not the gate');
+}
 
 // ========================================= NON-MINIMUM PHASE: the one that bites
 // gamma1 + gamma2 < 1 puts a zero in the right half plane: raise a pump and the level it
