@@ -114,6 +114,44 @@ untouched to four figures.** No plant lost anything.
 addition to "wire it up and press one button" — though it is one they almost always have, and it
 is asked for at the point where they are deciding whether to let a controller onto their plant.
 
+## STEP 1b: THE REGIME THAT PREDICTS DELIVERY WAS RELEGATED TO A VETO
+
+The gate's rule was right about WHICH KIND of regime decides — a program the machine runs, not a
+stress regime it never will — and it had only a SYNTHETIC program to apply that to: a trapezoid
+built from the rate limits. That synthetic program does not rank. On the tank its ratio correlates
+**-0.057** with delivered benefit while the caller's own recipe correlates **0.989** over the same
+eight commissionings.
+
+Left as a veto the better regime could not act. Seed 100 deployed on a representative score of
+**0.98** — above the 0.85 harm floor, so no veto fired — while the synthetic program's **4.05x**
+carried the benefit decision, and the machine delivered 1.088x. **The regime that knew was
+outvoted by the regime that did not.** Seed 102 went further and delivered **0.882x**, actual harm
+through a gate I had just written up as letting nothing harmful through.
+
+So when a representative program is supplied it now BECOMES the benefit regime and the synthetic
+trapezoid joins the scribble as a veto. Absent one, nothing changes.
+
+**MEASURED ON A DIFFERENT SEED RANGE FROM THE ONE THAT MOTIVATED IT**, which is the only kind of
+validation worth having here:
+
+```
+ gate                          seeds     deploy   min delivered   deployed median
+ old (two synthetic regimes)   1..8       4/8     0.368x  ALL FOUR HARM   0.675x
+ representative as VETO        1..8       3/8     1.000x                  1.512x
+ representative as VETO        100..103   3/4     0.882x  ONE HARMS       —
+ representative DECIDES        100..111   5/12    1.000x                  1.324x
+```
+
+**Nothing is made worse on any of the twelve, and the deployed median is 1.324x.** The correlation
+on that range reads 0.706 rather than 0.989, and the difference is worth stating rather than
+averaging: the set is now CENSORED, because only draws the gate passed are in it, so the statistic
+is computed on a narrower spread of estimates than before.
+
+**AND MY EARLIER CLAIM WAS SEED-RANGE-SPECIFIC.** "3 of 8 deploy and all three help" was true of
+seeds 1..8 and false of 100..103. Eight draws from one contiguous range is a sample, not a
+guarantee, and quoting it as one is the same error as quoting a single draw — one level up.
+`tankspread.mjs` takes a `SEED0` now so a rate can be measured across ranges.
+
 ## What the record already settles
 
 Three findings make this plan shorter than it looks, and all three are measured rather than

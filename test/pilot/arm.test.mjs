@@ -133,6 +133,13 @@ console.log(`    verify: ${st.report.verify ? st.report.verify.ratio.toFixed(2) 
 // two are indistinguishable from the outside. That is rule 61 exactly: a caller and a machine
 // agreeing by construction is worth nothing unless something checks that they agree.
 const REG = (st.report.verifyRegimes && st.report.verifyRegimes.built) || [];
+// AND EACH REGIME'S OWN RATIO, not only its name. `select.mjs` asks whether the gate's score
+// RANKS six commissioning draws against a held-out program, and it came back with an empty gate
+// column: this test deploys, so no refusal message prints the ratios, and the names alone cannot
+// answer a question about ordering. A readout that says WHICH regimes ran but not what they said
+// is half an instrument.
+console.log(`    verify regime ratios: ${(st.report.verify && st.report.verify.regimes || [])
+  .map((r) => `${r.name} ${(+r.ratio).toFixed(2)}x`).join(' / ') || '—'}`);
 console.log(`    verify regimes scored: ${REG.join(' + ') || '—'}`
   + (st.report.verifyRegimes && st.report.verifyRegimes.skipped
     ? `   (skipped: ${st.report.verifyRegimes.skipped})` : ''));
