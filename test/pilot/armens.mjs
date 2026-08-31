@@ -23,7 +23,7 @@
 import { Pilot } from '../../lib/pilot/pilot.js';
 import { ensemble } from '../../lib/pilot/ensemble.js';
 import { ContourScore } from '../../lib/flexisim/contour.js';
-import { PG, makeArm, mkPath, homeArm } from './rigs/arm-rig.mjs';
+import { PG, makeArm, mkPath, homeArm, routeSignals } from './rigs/arm-rig.mjs';
 
 const K = +(process.env.K || 6);
 
@@ -50,14 +50,28 @@ async function commission(seed) {
       return arm.ik(c.x, c.y, true);
     },
   });
+  // A STEP CAP, BECAUSE A PHASE THAT NEVER COMPLETES IS INDISTINGUISHABLE FROM A SLOW ONE.
+  // The first run of this file sat for 38 minutes with no output on work that should take about
+  // 16, and nothing could say whether a commissioning was stuck or merely slow: the loop had no
+  // bound and the file printed nothing until all six draws finished. Rule 44 in a new costume —
+  // a sub-task with no termination condition can be waited on but never diagnosed.
+  let nStep = 0;
   while (pilot.phase !== 'done') {
+    if (++nStep > 6e6) {
+      console.log(`  draw ${seed}: ABANDONED after ${nStep} steps, still in phase '${pilot.phase}'`);
+      return null;
+    }
     if (pilot.phase === 'fit') { pilot.work(); continue; }
     const cmd = pilot.command();
     const refs = cmd.map((c) => ({ theta: c.pos + c.u, omega: c.vel, alpha: c.acc }));
     const tau = servo.torques(refs);
     arm.step(tau[0], tau[1], 1);
-    pilot.observe([arm.q1, arm.q2, arm.dq1, arm.dq2, tau[0], tau[1]],
-      [arm.q1 - cmd[0].pos, arm.q2 - cmd[1].pos]);
+    // THE RIG'S OWN ROUTING, not a second copy of it. The first version of this file routed raw
+    // joint angles and the ENCODER error — and the servo closes on the encoder, so that truth is
+    // near zero while the tool droops, which is the whole error this controller exists to remove.
+    // The commissioning never terminated and the symptom read as "the plant is slow".
+    const r = routeSignals(arm, cmd, tau);
+    pilot.observe(r.measured, r.truth);
   }
   return pilot;
 }
@@ -86,7 +100,7 @@ async function deployOn(pilot, shape, active) {
       { theta: q2 + u[1], omega: rt.dq2, alpha: rt.ddq2 }];
     const tau = s2.torques(refs);
     a2.step(tau[0], tau[1], 1);
-    if (active) pilot.observe([a2.q1, a2.q2, a2.dq1, a2.dq2, tau[0], tau[1]], null);
+    if (active) pilot.observe(routeSignals(a2, [{ pos: q1 }, { pos: q2 }], tau).measured, null);
     if ((k + 1) % S === 0) kSamp++;
     if (k >= scoreFrom) {
       const t = a2.toolXY();
@@ -99,10 +113,20 @@ async function deployOn(pilot, shape, active) {
 console.log(`\npilot: does the ENSEMBLE survive a program no draw was scored on?`);
 console.log('  the gate scores the ROUNDED rectangle; the CIRCLE is never part of it.\n');
 const pilots = [];
-for (let s = 1; s <= K; s++) pilots.push(await commission(s));
+for (let s = 1; s <= K; s++) {
+  const t0 = Date.now();
+  const p = await commission(s);
+  // PROGRESS AS IT HAPPENS rather than a silent block that either finishes or does not — and the
+  // verdict with it, because every draw on this plant is expected to DEPLOY, so a refusal is
+  // itself the news and would otherwise stay invisible until the table at the end.
+  console.log(`  commissioned draw ${s} in ${((Date.now() - t0) / 1000).toFixed(0)}s`
+    + `${p ? ` — ${p.verdict && p.verdict.deploy ? 'deploy' : 'REFUSED'}` : ''}`);
+  if (p) pilots.push(p);
+}
+if (pilots.length < 2) { console.log('\n  too few draws survived to average'); process.exit(0); }
 
 const rows = [];
-for (let i = 0; i < K; i++) {
+for (let i = 0; i < pilots.length; i++) {
   const offR = await deployOn(pilots[i], 'rounded', false);
   const onR = await deployOn(pilots[i], 'rounded', true);
   const offC = await deployOn(pilots[i], 'circle', false);

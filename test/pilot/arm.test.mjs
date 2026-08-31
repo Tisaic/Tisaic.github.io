@@ -8,7 +8,7 @@
  * part program in sight, cuts the contour error on programs it has never seen while
  * spending LESS energy — and that the numbers on the page came off this machine.
  */
-import { PG, RATIO, makeArm, mkPath, homeArm } from './rigs/arm-rig.mjs';
+import { PG, RATIO, makeArm, mkPath, homeArm, routeSignals } from './rigs/arm-rig.mjs';
 import { ContourScore, decompose } from '../../lib/flexisim/contour.js';
 import { PathILC } from '../../lib/flexisim/pathilc.js';
 import { Pilot } from '../../lib/pilot/pilot.js';
@@ -76,17 +76,8 @@ while (pilot.phase !== 'done') {
   const tau = servo.torques(refs);
   arm.step(tau[0], tau[1], 1);
   steps++;
-  const enc = arm.encoders();
-  const tool = arm.toolXY();
-  const q1 = cmd[0].pos, q2 = cmd[1].pos;
-  const cx = arm.L1 * Math.cos(q1) + arm.L2 * Math.cos(q1 + q2);
-  const cy = arm.L1 * Math.sin(q1) + arm.L2 * Math.sin(q1 + q2);
-  const J = arm.jacobian(q1, q2);
-  const det = J[0][0] * J[1][1] - J[0][1] * J[1][0];
-  const ex = tool[0] - cx, ey = tool[1] - cy;
-  pilot.observe([enc[0].angle, enc[1].angle, enc[0].speed * 1e3, enc[1].speed * 1e3,
-    tau[0] * 1e3, tau[1] * 1e3],
-  [(J[1][1] * ex - J[0][1] * ey) / det, (-J[1][0] * ex + J[0][0] * ey) / det]);
+  const r = routeSignals(arm, cmd, tau);
+  pilot.observe(r.measured, r.truth);
 }
 const st = pilot.status();
 console.log(`    commissioned in ${steps} steps: Ts ${st.Ts}, sample ${st.sample}, grid `

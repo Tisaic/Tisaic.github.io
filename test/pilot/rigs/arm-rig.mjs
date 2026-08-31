@@ -49,4 +49,39 @@ function homeArm(arm, servo, path) {
   servo.resetLimitStats();
 }
 
-export { PG, RATIO, makeArm, mkPath, homeArm };
+/**
+ * THE ROUTING, WHICH IS PART OF THE RIG AND NOT PART OF THE EXPERIMENT.
+ *
+ * What this plant hands the pilot is six signals — two encoder angles, two encoder speeds and two
+ * torques, each scaled — and a truth that is the TOOL error mapped back through the inverse
+ * Jacobian. None of that is obvious and all of it matters: the servo closes on the ENCODER, so the
+ * encoder error is near zero while the tool droops, and a second copy of this loop that routed
+ * joint angles and encoder error would hand the pilot a truth with nothing in it.
+ *
+ * That is not hypothetical. It is exactly what a second copy of this loop did — written from
+ * memory beside the real one, it drove a commissioning that never terminated, and the diagnosis
+ * was "the plant is slow" until the two loops were put side by side. Extracting the PLANT into a
+ * module and leaving the ROUTING duplicated is half an extraction.
+ *
+ * @param {object} arm the arm being driven
+ * @param {Array} cmd the pilot's command, one entry per channel
+ * @param {number[]} tau the torques just applied
+ * @returns {{measured: number[], truth: number[]}} exactly what `pilot.observe` takes
+ */
+function routeSignals(arm, cmd, tau) {
+  const enc = arm.encoders();
+  const tool = arm.toolXY();
+  const q1 = cmd[0].pos, q2 = cmd[1].pos;
+  const cx = arm.L1 * Math.cos(q1) + arm.L2 * Math.cos(q1 + q2);
+  const cy = arm.L1 * Math.sin(q1) + arm.L2 * Math.sin(q1 + q2);
+  const J = arm.jacobian(q1, q2);
+  const det = J[0][0] * J[1][1] - J[0][1] * J[1][0];
+  const ex = tool[0] - cx, ey = tool[1] - cy;
+  return {
+    measured: [enc[0].angle, enc[1].angle, enc[0].speed * 1e3, enc[1].speed * 1e3,
+      tau[0] * 1e3, tau[1] * 1e3],
+    truth: [(J[1][1] * ex - J[0][1] * ey) / det, (-J[1][0] * ex + J[0][0] * ey) / det],
+  };
+}
+
+export { PG, RATIO, makeArm, mkPath, homeArm, routeSignals };
