@@ -312,6 +312,33 @@ if (paired.length > 2) {
       + 'the disagreement is what leaves. A ratio well below 1 is shrinkage, i.e. a ridge.');
     void pre;
   }
+  // AND DO THE TWO COMPOSE? A larger ridge is worth 1.000x -> 1.176x on one commissioning and
+  // averaging is worth 1.344x on k, by different mechanisms — one shrinks each draw toward zero,
+  // the other cancels the disagreement BETWEEN draws. Nothing says they overlap, and if they do
+  // not, k draws each at the better ridge should beat both. If instead the ridge's gain vanishes
+  // once the draws are averaged, then what the ridge was buying WAS variance suppression, badly,
+  // and the two are one mechanism after all.
+  if (process.env.BOTHX) {
+    const M = +process.env.BOTHX;
+    const donor = pilots[0];
+    const ridged = [];
+    for (let i2 = 0; i2 < Math.min(pilots.length, 5); i2++) {
+      ridged.push(commission(SEED0 + i2, (p) => {
+        freezeConfig(donor, p);
+        p._frozenConfig.forEach((c) => { c.ridge *= M; });
+      }));
+    }
+    const er = ensemble(ridged);
+    if (!er.pilot) { console.log(`\n  RIDGE+AVERAGE: ${er.why}`); } else {
+      er.pilot.verdict = { deploy: true, why: 'ridge+average probe' };
+      const o = scoreRecipe(er.pilot, false), n4 = scoreRecipe(er.pilot, true);
+      console.log(`\n  RIDGE + AVERAGE: ${er.used} draws, each at ridge x${M}`);
+      console.log(`    delivers ${(o / n4).toFixed(3)}x`);
+      console.log('    against ridge alone 1.176x and averaging alone 1.344x — a number above '
+        + 'both says two mechanisms, one near 1.344x says the ridge was suppressing variance too.');
+    }
+  }
+
   const e = ensemble(pilots);
   if (!e.pilot) {
     console.log(`\n  ensemble: ${e.why}`);

@@ -528,8 +528,19 @@ finding: rule 42 selects the ridge for the INVERSION rather than the fit, and on
 still selecting one too small. Whether the two compose — a larger ridge AND an average — is
 untested and is the cheap next question.
 
-*One multiplier on one draw. The direction is unambiguous and the comparison is one-variable, but
-a sweep over the multiplier would say whether 1.176x is the ridge's best or merely one point.*
+**AND THE SWEEP SAYS 1.176x IS THE RIDGE'S CEILING, not one lucky multiplier:**
+
+```
+ ridge x10      |w| 0.441    1.076x
+ ridge x100     |w| 0.276    1.176x   <- the ridge's best
+ ridge x1000    |w| 0.106    1.004x
+ ridge x10000   |w| 0.023    0.882x   <- over-regularised, actively harmful
+ the average    |w| 0.739    1.344x
+```
+
+The ridge has an interior optimum and averaging clears it by 14%. Note also that the average's
+weights are LARGER than any ridge setting that helps — 0.739 against 0.276 — so it is not reaching
+its result by being small, which is the same conclusion the geometry gave from the other side.
 
 ## What the record already settles
 
