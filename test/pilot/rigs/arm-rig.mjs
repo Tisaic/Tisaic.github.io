@@ -16,7 +16,7 @@ import { Joint } from '../../../lib/flexisim/joint.js';
 import { FlexArm2R } from '../../../lib/flexisim/arm2r.js';
 import { buildLink, massProperties } from '../../../lib/flexisim/link.js';
 import { ChainServo } from '../../../lib/flexisim/compensator.js';
-import { roundedRect, circle, sharpRect } from '../../../lib/flexisim/toolpath.js';
+import { roundedRect, circle, sharpRect, ToolPath, SEG } from '../../../lib/flexisim/toolpath.js';
 import { ContourScore, decompose } from '../../../lib/flexisim/contour.js';
 
 const H = 4, CLAMP = 3, NU = 0.3, RHO = 1, G = 2e-6, RATIO = 100, DAMPING = 3e-3;
@@ -54,6 +54,16 @@ function mkPath(shape, feed) {
   const o = { feed, accel: 4e-5, cornerDt: 40, centre: PG.centre };
   if (shape === 'circle') return circle({ ...o, r: 4 });
   if (shape === 'sharp') return sharpRect({ ...o, w: 8, h: 8, closed: true });
+  // A DIAMOND: the same square rotated 45 degrees. Same four sharp corners and the same stop-and-
+  // restart the corner rule forces at each, on a path that shares no straight with the square and
+  // sweeps a different part of the workspace. That is what makes it fair to put in an EXCITATION:
+  // it teaches the MOVE PROFILE without showing the machine the test geometry.
+  if (shape === 'diamond') {
+    const [cx, cy] = PG.centre, r = 4;
+    return new ToolPath({ start: [cx + r, cy], feed: o.feed, accel: o.accel, closed: true,
+      cornerDt: o.cornerDt,
+      segments: [[SEG.LINE, [cx, cy + r]], [SEG.LINE, [cx - r, cy]], [SEG.LINE, [cx, cy - r]]] });
+  }
   return roundedRect({ ...o, w: 8, h: 8, r: 1.5, closed: true });
 }
 

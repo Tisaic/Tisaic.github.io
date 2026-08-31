@@ -10,6 +10,7 @@
  * nobody runs.
  */
 import { ensemble, freezeConfig } from '../../lib/pilot/ensemble.js';
+import { Pilot } from '../../lib/pilot/pilot.js';
 
 let failed = 0;
 const check = (name, ok, detail = '') => {
@@ -90,6 +91,33 @@ const mk = (vals, { stride = 13, poly = false, sched = false, leads = 2, n = 4 }
     to._frozenConfig[0].stride === 21 && to._frozenConfig[0].ridge === 1e-7
       && to._frozenConfig[0].mLag === 24 && to._frozenConfig[0].poly === false,
     JSON.stringify(to._frozenConfig));
+}
+
+// ---- THE EXPERIMENTAL HOOKS ARE OFF, AND STAY OFF.
+//
+// `verifyRef` gives the deploy gate a program to score, and it changes what a machine DEPLOYS, so
+// a default that quietly flipped would alter every plant in the suite while every test still
+// passed — the changed behaviour would look like the plant rather than like a switch.
+//
+// Its sibling `exciteAppend` was built for one experiment, measured, and REMOVED: injecting a
+// structured path into the excitation took all three verify regimes below one and the gate
+// refused. An experimental hook that is not carrying a result is a liability, and this check
+// exists partly to make its absence permanent.
+//
+// Asserted on a constructed Pilot rather than by reading the source, because the question is what
+// a caller who asks for nothing actually gets.
+{
+  const p = new Pilot({
+    nMeasured: 1, channels: [{ lo: -1, hi: 1, vMax: 1e-3, aMax: 1e-5, jMax: 1e-7 }],
+    uMax: 0.1, start: [0], workspace: () => true, seed: 1,
+  });
+  check('a pilot that asks for nothing gets no verify reference, so the gate scores its own regimes',
+    p.verifyRef === null, String(p.verifyRef));
+  // AND THE REMOVED HOOK IS STILL ABSENT, asserted rather than assumed: a re-introduction that
+  // defaulted to on would change what every plant LEARNS, and nothing else here would notice.
+  check('…and the removed excitation hook has not come back',
+    p.exciteAppend === undefined && p.report.exciteAppended === undefined,
+    JSON.stringify({ hook: p.exciteAppend, report: p.report.exciteAppended }));
 }
 
 console.log(failed ? `\npilot/ensemble: ${failed} check(s) FAILED\n` : '\npilot/ensemble: all checks passed\n');

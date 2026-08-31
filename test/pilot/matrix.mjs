@@ -54,6 +54,14 @@ async function commission(seed) {
       return r > Math.abs(arm.L1 - arm.L2) + 0.5 && r < arm.L1 + arm.L2 - 0.5;
     },
     seed,
+    // THE DIAMOND-IN-EXCITATION EXPERIMENT RAN AND IS REMOVED WITH ITS HOOK. Appending a diamond
+    // at both feeds to the end of the scribble — the same corner profile on a path nothing is
+    // scored on — took all three verify regimes below one (scribble 0.23x, program 0.40x,
+    // representative 0.88x) and the gate refused. 9,281 structured rows on a 47,837-row record is
+    // 19% collinear data, and this project already measured that mechanism from the other side:
+    // identifying on a program instead of a scribble takes EMPS from 12.70x to 3.93x. The idea is
+    // sound and the implementation was not; `dwell` is the one to try, because it puts stops INTO
+    // the noise instead of appending structure to it.
     // THE REPRESENTATIVE PROGRAM IS THE ONE IT TRAINS ON, which is the honest setup: an engineer
     // hands the gate the program they have. Every row below is a program that gate never saw.
     verifyRef: (i) => {
@@ -83,8 +91,15 @@ const pilots = [];
 for (let s = 1; s <= K; s++) {
   const t0 = Date.now();
   const p = await commission(s);
+  // THE REASON, NOT ONLY THE VERDICT. A refusal printed as the bare word "REFUSED" tells you the
+  // machine declined and nothing about why, and the whole table below then reads 1.00x with no
+  // explanation anywhere in it — which is exactly what the first diamond run produced.
   console.log(`  commissioned draw ${s} in ${((Date.now() - t0) / 1000).toFixed(0)}s`
     + `${p ? ` — ${p.verdict && p.verdict.deploy ? 'deploy' : 'REFUSED'}` : ''}`);
+  if (p && p.verdict && !p.verdict.deploy) {
+    console.log(`      why: ${p.verdict.why}`);
+
+  }
   if (p) pilots.push(p);
 }
 if (!pilots.length) { console.log('  nothing commissioned'); process.exit(1); }

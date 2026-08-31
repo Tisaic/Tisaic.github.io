@@ -751,6 +751,43 @@ outside the 1.5x target, where the circle is 1.58x and the sharp square 1.34x. F
 is not uniform across geometry either, and the shape that fails it is not the shape that fails
 capability.
 
+## THE DIAMOND IN THE EXCITATION: A CLEAN NEGATIVE, AND THE HOOK IS REMOVED WITH IT
+
+The idea was well aimed. The excitation is filtered noise that never STOPS, a sharp-cornered
+program stops four times a lap, and each reversal unloads the gearbox wind-up through the
+backlash — so teach the machine that MOVE PROFILE on a path nothing will be scored on. A diamond
+is the square rotated 45 degrees: same four corners, same corner rule, sharing no straight with
+the square and sweeping a different part of the workspace.
+
+**IT MADE THE MODEL WORSE AND THE GATE REFUSED.**
+
+```
+ appended: 9,281 steps onto a 47,837-step record  (19%)
+ verify:   scribble 0.23x · program 0.40x · representative 0.88x  → REFUSED
+ without it, the same setup deploys at 6.18x rounded and 7.72x circle
+```
+
+**AND THE MECHANISM IS ALREADY IN THIS PROJECT'S RECORD, FROM THE OTHER SIDE.** Identifying on a
+program instead of a scribble takes EMPS from 12.70x to 3.93x, "since repeated trapezoids are
+collinear". A diamond traversed at two feeds is exactly that: a structured, repeating trajectory
+whose rows are nearly collinear, and 19% of them drag the fit toward a program-only solution. The
+excitation's value is its RICHNESS, and appending structure dilutes it.
+
+**SO THE IDEA SURVIVES AND THE IMPLEMENTATION DOES NOT.** What the model is missing is a STOP, not
+a path. `buildExcitation` already takes a `dwell` flag — it is how the tank and the barrel declare
+that their programs hold still — and it puts stops INTO the noise rather than appending structure
+to it. That is the experiment worth running, and it needs no new library surface at all.
+
+**AND THE HOOK IS GONE, WHICH IS THE POINT WORTH KEEPING.** `exciteAppend` was built for one
+experiment, measured, and removed the same day. It was proven inert first — `arm.test.mjs`
+byte-identical at 6.18x and 7.72x with the option present and unused — and it is now asserted
+ABSENT in `ensemble.test.mjs`, because a re-introduction that defaulted to on would change what
+every plant LEARNS and nothing else in the suite would notice. An experimental hook that is not
+carrying a result is a liability; the finding belongs in this file, not in the library.
+
+The diamond itself stays in `arm-rig.mjs` as a shape any experiment can score against. It is four
+line segments and it changes nothing unless asked for.
+
 ## What the record already settles
 
 Three findings make this plan shorter than it looks, and all three are measured rather than
