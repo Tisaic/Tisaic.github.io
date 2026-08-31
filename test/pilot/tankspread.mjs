@@ -115,7 +115,12 @@ console.log(`\npilot: the quadruple tank, scored across ${SEEDS} commissioning s
 console.log('  the recorded figure is 1.32x from ONE seed; this is what that number is a draw from.');
 console.log('\n   seed   deploy   off cm    on cm       x    GATE  regimes                         why');
 const xs = [], deployed = [], ests = [];
-for (let s = 1; s <= SEEDS; s++) {
+// SEED0, BECAUSE A RATE MEASURED ON ONE RANGE OF SEEDS IS NOT A RATE. With the representative
+// gate, seeds 1..8 deployed three controllers and all three helped — and seeds 100..103 let a
+// 0.882x through. Eight draws from one contiguous range is a sample, not a guarantee, and quoting
+// it as one is the same error as quoting a single draw, one level up.
+const SEED0 = +(process.env.SEED0 || 1);
+for (let s = SEED0; s < SEED0 + SEEDS; s++) {
   const pilot = commission(s);
   const st = pilot.status();
   // `pilot.verdict`, WHICH IS WHAT `act()` READS — not `report.verify.deploy`, which is the
