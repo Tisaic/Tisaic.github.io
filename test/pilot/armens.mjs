@@ -22,8 +22,7 @@
  */
 import { Pilot } from '../../lib/pilot/pilot.js';
 import { ensemble } from '../../lib/pilot/ensemble.js';
-import { ContourScore } from '../../lib/flexisim/contour.js';
-import { PG, makeArm, mkPath, homeArm, routeSignals } from './rigs/arm-rig.mjs';
+import { PG, makeArm, mkPath, homeArm, routeSignals, deployOn } from './rigs/arm-rig.mjs';
 
 const K = +(process.env.K || 6);
 
@@ -76,39 +75,8 @@ async function commission(seed) {
   return pilot;
 }
 
-/** Score a commissioned pilot on one shape, correction on and off. */
-async function deployOn(pilot, shape, active) {
-  const { arm: a2, servo: s2 } = await makeArm();
-  const path = mkPath(shape, 0.004);
-  homeArm(a2, s2, path);
-  const S = pilot.sample, cache = new Map();
-  const refAt = (i) => {
-    let r = cache.get(i);
-    if (!r) { const c = path.at(i * S); r = a2.ik(c.x, c.y, true); cache.set(i, r); }
-    return r;
-  };
-  pilot._initRun();
-  const total = Math.ceil(path.lap * 3), scoreFrom = Math.ceil(path.lap * 2);
-  const score = new ContourScore({ joints: 2, reversalTravel: 2e-2 });
-  let kSamp = 0;
-  for (let k = 0; k < total; k++) {
-    const cmd = path.at(k);
-    const [q1, q2] = a2.ik(cmd.x, cmd.y, true);
-    const rt = a2.ikRates(q1, q2, cmd.vx, cmd.vy, cmd.ax, cmd.ay);
-    const u = active ? pilot.act((off) => refAt(kSamp + off)) : [0, 0];
-    const refs = [{ theta: q1 + u[0], omega: rt.dq1, alpha: rt.ddq1 },
-      { theta: q2 + u[1], omega: rt.dq2, alpha: rt.ddq2 }];
-    const tau = s2.torques(refs);
-    a2.step(tau[0], tau[1], 1);
-    if (active) pilot.observe(routeSignals(a2, [{ pos: q1 }, { pos: q2 }], tau).measured, null);
-    if ((k + 1) % S === 0) kSamp++;
-    if (k >= scoreFrom) {
-      const t = a2.toolXY();
-      score.add({ path, x: t.x, y: t.y, cmdX: cmd.x, cmdY: cmd.y, tau, q: [a2.q1, a2.q2] });
-    }
-  }
-  return score.report();
-}
+// THE DEPLOY LOOP COMES FROM THE RIG. A second copy of it differed in four ways at once and
+// leaked two lattices per call; see `arm-rig.mjs`.
 
 console.log(`\npilot: does the ENSEMBLE survive a program no draw was scored on?`);
 console.log('  the gate scores the ROUNDED rectangle; the CIRCLE is never part of it.\n');
@@ -127,10 +95,10 @@ if (pilots.length < 2) { console.log('\n  too few draws survived to average'); p
 
 const rows = [];
 for (let i = 0; i < pilots.length; i++) {
-  const offR = await deployOn(pilots[i], 'rounded', false);
-  const onR = await deployOn(pilots[i], 'rounded', true);
-  const offC = await deployOn(pilots[i], 'circle', false);
-  const onC = await deployOn(pilots[i], 'circle', true);
+  const offR = (await deployOn(pilots[i], 'rounded', false)).r;
+  const onR = (await deployOn(pilots[i], 'rounded', true)).r;
+  const offC = (await deployOn(pilots[i], 'circle', false)).r;
+  const onC = (await deployOn(pilots[i], 'circle', true)).r;
   rows.push({ s: i + 1, r: offR.contourRms / onR.contourRms, c: offC.contourRms / onC.contourRms });
   console.log(`  draw ${i + 1}  rounded ${rows[i].r.toFixed(2)}x   circle ${rows[i].c.toFixed(2)}x`);
 }
@@ -138,8 +106,8 @@ for (let i = 0; i < pilots.length; i++) {
 const e = ensemble(pilots);
 if (!e.pilot) { console.log(`\n  ${e.why}`); process.exit(0); }
 e.pilot.verdict = { deploy: true, why: 'ensemble' };
-const offR = await deployOn(e.pilot, 'rounded', false), onR = await deployOn(e.pilot, 'rounded', true);
-const offC = await deployOn(e.pilot, 'circle', false), onC = await deployOn(e.pilot, 'circle', true);
+const offR = (await deployOn(e.pilot, 'rounded', false)).r, onR = (await deployOn(e.pilot, 'rounded', true)).r;
+const offC = (await deployOn(e.pilot, 'circle', false)).r, onC = (await deployOn(e.pilot, 'circle', true)).r;
 const med = (a) => { const b = [...a].sort((p, q) => p - q); const h = b.length >> 1;
   return b.length % 2 ? b[h] : (b[h - 1] + b[h]) / 2; };
 const eR = offR.contourRms / onR.contourRms, eC = offC.contourRms / onC.contourRms;

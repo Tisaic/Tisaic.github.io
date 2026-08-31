@@ -8,7 +8,7 @@
  * part program in sight, cuts the contour error on programs it has never seen while
  * spending LESS energy — and that the numbers on the page came off this machine.
  */
-import { PG, RATIO, makeArm, mkPath, homeArm, routeSignals } from './rigs/arm-rig.mjs';
+import { PG, RATIO, makeArm, mkPath, homeArm, routeSignals, deployOn } from './rigs/arm-rig.mjs';
 import { ContourScore, decompose } from '../../lib/flexisim/contour.js';
 import { PathILC } from '../../lib/flexisim/pathilc.js';
 import { Pilot } from '../../lib/pilot/pilot.js';
@@ -144,43 +144,7 @@ check('…and the verify round measured better than 2x ON THE MACHINE before dep
 await arm.l1.destroy(); await arm.l2.destroy();
 
 // -------------------------------------------------------------------------- DEPLOY
-async function deployOn(shape, active) {
-  const { arm: a2, servo: s2 } = await makeArm();
-  const path = mkPath(shape, 0.004);
-  homeArm(a2, s2, path);
-  const S = pilot.sample;
-  const cache = new Map();
-  const refAt = (i) => {
-    let r = cache.get(i);
-    if (!r) { const c = path.at(i * S); r = a2.ik(c.x, c.y, true); cache.set(i, r); }
-    return r;
-  };
-  pilot._initRun();
-  const total = Math.ceil(path.lap * 3);
-  const score = new ContourScore({ joints: 2, reversalTravel: 2e-2 });
-  const scoreFrom = Math.ceil(path.lap * 2);
-  let kSamp = 0, uPk = 0;
-  for (let k = 0; k < total; k++) {
-    const cmd = path.at(k);
-    const [q1, q2] = a2.ik(cmd.x, cmd.y, true);
-    const rt = a2.ikRates(q1, q2, cmd.vx, cmd.vy, cmd.ax, cmd.ay);
-    const u = active ? pilot.act((off) => refAt(kSamp + off)) : [0, 0];
-    uPk = Math.max(uPk, Math.abs(u[0]), Math.abs(u[1]));
-    const tau = s2.torques([{ theta: q1 + u[0], omega: rt.dq[0], alpha: rt.ddq[0] },
-      { theta: q2 + u[1], omega: rt.dq[1], alpha: rt.ddq[1] }]);
-    a2.step(tau[0], tau[1], 1);
-    if (k % S === 0) kSamp++;
-    const enc = a2.encoders();
-    pilot.observe([enc[0].angle, enc[1].angle, enc[0].speed * 1e3, enc[1].speed * 1e3,
-      tau[0] * 1e3, tau[1] * 1e3], null);
-    if (k >= scoreFrom) {
-      const dec = decompose(path, a2.toolXY(), cmd);
-      score.step(dec.contour, dec.lag, tau, [a2.j1.wM, a2.j2.wM]);
-    }
-  }
-  await a2.l1.destroy(); await a2.l2.destroy();
-  return { r: score.report(), uPk };
-}
+// `deployOn` LIVES IN THE RIG, so the ensemble experiment scores this plant with the same loop.
 
 // THE GATES MOVED UP WITH EACH REGISTRATION FIX AND THEY ARE MEANT TO: the attribution
 // instrument took the machine from 2.16x its own plan's prediction to 1.04x (FOH basis,
@@ -189,8 +153,8 @@ async function deployOn(shape, active) {
 // shot, on 36% less copper. A regression in any of those mechanisms fails these gates by
 // a factor, not a margin.
 for (const [shape, gate] of [['rounded', 5.0], ['circle', 6]]) {
-  const off = await deployOn(shape, false);
-  const on = await deployOn(shape, true);
+  const off = await deployOn(pilot, shape, false);
+  const on = await deployOn(pilot, shape, true);
   const ratio = off.r.contourRms / on.r.contourRms;
   console.log(`    ${shape}: contour ${off.r.contourRms.toExponential(3)} → `
     + `${on.r.contourRms.toExponential(3)} (${ratio.toFixed(2)}x), tau2 `

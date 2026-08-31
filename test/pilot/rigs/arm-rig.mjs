@@ -17,6 +17,7 @@ import { FlexArm2R } from '../../../lib/flexisim/arm2r.js';
 import { buildLink, massProperties } from '../../../lib/flexisim/link.js';
 import { ChainServo } from '../../../lib/flexisim/compensator.js';
 import { roundedRect, circle } from '../../../lib/flexisim/toolpath.js';
+import { ContourScore, decompose } from '../../../lib/flexisim/contour.js';
 
 const H = 4, CLAMP = 3, NU = 0.3, RHO = 1, G = 2e-6, RATIO = 100, DAMPING = 3e-3;
 const PG = { LEN1: 14, LEN2: 10, E: 0.15, centre: [12, 0], drive: 32 };
@@ -84,4 +85,60 @@ function routeSignals(arm, cmd, tau) {
   };
 }
 
-export { PG, RATIO, makeArm, mkPath, homeArm, routeSignals };
+/**
+ * SCORE A COMMISSIONED PILOT ON ONE SHAPE, correction on or off — the rig's own deploy loop.
+ *
+ * THE THIRD PIECE THAT HAD TO COME OUT OF THE TEST, and the one that had already gone wrong twice
+ * before it moved. A second copy of this loop, written beside the original, differed in four ways
+ * at once: it indexed `rt.dq1` where the rates come back as `rt.dq[0]`, ticked the sample counter
+ * on `(k+1) % S` instead of `k % S`, called a `score.add` that does not exist instead of
+ * `decompose` then `score.step`, and — the one no error message would ever have reported —
+ * omitted `l1.destroy()` and `l2.destroy()`, leaking two lattices per deploy across twenty-eight
+ * of them.
+ *
+ * The pattern is worth naming because it recurred three times in one afternoon: extracting a
+ * plant is not extracting a rig. The knowledge that matters lives in the ROUTING and the SCORING,
+ * not in the geometry, and those are exactly the parts a second copy gets wrong silently.
+ *
+ * @param {object} pilot a commissioned pilot
+ * @param {string} shape 'rounded' or 'circle'
+ * @param {boolean} active whether to apply its correction
+ * @returns {Promise<{r: object, uPk: number}>} the contour report and the peak correction
+ */
+async function deployOn(pilot, shape, active) {
+  const { arm: a2, servo: s2 } = await makeArm();
+  const path = mkPath(shape, 0.004);
+  homeArm(a2, s2, path);
+  const S = pilot.sample, cache = new Map();
+  const refAt = (i) => {
+    let r = cache.get(i);
+    if (!r) { const c = path.at(i * S); r = a2.ik(c.x, c.y, true); cache.set(i, r); }
+    return r;
+  };
+  pilot._initRun();
+  const total = Math.ceil(path.lap * 3), scoreFrom = Math.ceil(path.lap * 2);
+  const score = new ContourScore({ joints: 2, reversalTravel: 2e-2 });
+  let kSamp = 0, uPk = 0;
+  for (let k = 0; k < total; k++) {
+    const cmd = path.at(k);
+    const [q1, q2] = a2.ik(cmd.x, cmd.y, true);
+    const rt = a2.ikRates(q1, q2, cmd.vx, cmd.vy, cmd.ax, cmd.ay);
+    const u = active ? pilot.act((off) => refAt(kSamp + off)) : [0, 0];
+    uPk = Math.max(uPk, Math.abs(u[0]), Math.abs(u[1]));
+    const tau = s2.torques([{ theta: q1 + u[0], omega: rt.dq[0], alpha: rt.ddq[0] },
+      { theta: q2 + u[1], omega: rt.dq[1], alpha: rt.ddq[1] }]);
+    a2.step(tau[0], tau[1], 1);
+    if (k % S === 0) kSamp++;
+    const enc = a2.encoders();
+    pilot.observe([enc[0].angle, enc[1].angle, enc[0].speed * 1e3, enc[1].speed * 1e3,
+      tau[0] * 1e3, tau[1] * 1e3], null);
+    if (k >= scoreFrom) {
+      const dec = decompose(path, a2.toolXY(), cmd);
+      score.step(dec.contour, dec.lag, tau, [a2.j1.wM, a2.j2.wM]);
+    }
+  }
+  await a2.l1.destroy(); await a2.l2.destroy();
+  return { r: score.report(), uPk };
+}
+
+export { PG, RATIO, makeArm, mkPath, homeArm, routeSignals, deployOn };
