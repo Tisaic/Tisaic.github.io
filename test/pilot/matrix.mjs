@@ -114,6 +114,7 @@ async function commission(seed) {
 
 console.log('\npilot: one commissioning, four programs it has never run');
 console.log(`  trained on ${TRAIN.shape} at feed ${TRAIN.feed}; every row below is held out.`);
+console.log(`  arm: E ${PG.E} / K ${PG.K}${PG.E !== 0.15 || PG.K !== 16 ? '  (stiff default is E 0.15 / K 16)' : ''}`);
 console.log(`  correction cap: ${UCAP} rad${UCAP !== 0.15 ? '  (default is 0.15)' : ''}`);
 console.log(`  decision clock: ${DPT}/Ts${DPT !== 30 ? '  (default is 30)' : ''}`);
 console.log(`  excitation: ${DWELL ? 'DWELLING — the noise is time-warped so the machine lingers'
@@ -126,6 +127,16 @@ for (let s = 1; s <= K; s++) {
   // THE REASON, NOT ONLY THE VERDICT. A refusal printed as the bare word "REFUSED" tells you the
   // machine declined and nothing about why, and the whole table below then reads 1.00x with no
   // explanation anywhere in it — which is exactly what the first diamond run produced.
+  // DID THE PROBE FIND A MODE, AND DID THE EXCITATION SWEEP FOR IT? The sweep is GATED on the
+  // probe ringing — a plant with no oscillation gets no frequency sweep, and a quarter of the
+  // rate budget is not spent on one. If a softer arm rings where the stiff one does not, then the
+  // excitation's content changes with stiffness, and any comparison across stiffness is comparing
+  // two different experiments as well as two different machines.
+  if (p) {
+    const st = p.status();
+    console.log(`      probe rings ${JSON.stringify(st.rings)}  Ts ${st.Ts}  Tset ${st.Tset}`
+      + `  sweep ${st.report.excite && st.report.excite.chirp ? 'YES' : 'no'}`);
+  }
   console.log(`  commissioned draw ${s} in ${((Date.now() - t0) / 1000).toFixed(0)}s`
     + `${p ? ` — ${p.verdict && p.verdict.deploy ? 'deploy' : 'REFUSED'}` : ''}`);
   if (p && p.verdict && !p.verdict.deploy) {

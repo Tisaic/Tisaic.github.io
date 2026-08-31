@@ -20,15 +20,26 @@ import { roundedRect, circle, sharpRect, ToolPath, SEG } from '../../../lib/flex
 import { ContourScore, decompose } from '../../../lib/flexisim/contour.js';
 
 const H = 4, CLAMP = 3, NU = 0.3, RHO = 1, G = 2e-6, RATIO = 100, DAMPING = 3e-3;
-const PG = { LEN1: 14, LEN2: 10, E: 0.15, centre: [12, 0], drive: 32 };
+// THE ARM'S COMPLIANCE, SWEEPABLE — link modulus E and gearbox stiffness K.
+//
+// The FlexiSim page runs these as two sliders and the defaults here are the STIFF end of both
+// ladders (K 16 / E 0.15). Softening them is how a specific hypothesis gets tested: that a sharp
+// corner spring-loads the arm and launches it, that the excitation scribble never does this
+// because it is not built to excite the arm's own frequencies, and therefore that a SOFTER arm
+// should degrade on every path but degrade RELATIVELY MORE on the corners. That is a differential
+// prediction, which is worth far more than an absolute one — a softer arm being worse everywhere
+// proves nothing on its own.
+const ARM_E = +(process.env.ARM_E || 0.15);
+const ARM_K = +(process.env.ARM_K || 16);
+const PG = { LEN1: 14, LEN2: 10, E: ARM_E, K: ARM_K, centre: [12, 0], drive: 32 };
 
 async function makeArm() {
   const mk = (length) => buildLink({ length, section: H, clamp: CLAMP, E: PG.E,
     nu: NU, rho: RHO, damping: DAMPING });
   const l1 = await mk(PG.LEN1), l2 = await mk(PG.LEN2);
   const j = (mp) => new Joint({ ratio: RATIO, motorInertia: mp.inertiaAboutPivot / 1e4,
-    loadInertia: mp.inertiaAboutPivot, stiffness: 16, backlash: 1e-4,
-    damping: 2 * Math.sqrt(16 * mp.inertiaAboutPivot / 2) });
+    loadInertia: mp.inertiaAboutPivot, stiffness: PG.K, backlash: 1e-4,
+    damping: 2 * Math.sqrt(PG.K * mp.inertiaAboutPivot / 2) });
   const arm = new FlexArm2R({ joint1: j(massProperties(l1)), link1: l1,
     joint2: j(massProperties(l2)), link2: l2, gravityWorld: [0, -G, 0], dt: 1 });
   const hold = Math.abs(arm.gravityTorque([0, 0])[0]) / RATIO;
