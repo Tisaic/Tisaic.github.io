@@ -114,7 +114,7 @@ async function commission(seed) {
 
 console.log('\npilot: one commissioning, four programs it has never run');
 console.log(`  trained on ${TRAIN.shape} at feed ${TRAIN.feed}; every row below is held out.`);
-console.log(`  arm: E ${PG.E} / K ${PG.K}${PG.E !== 0.15 || PG.K !== 16 ? '  (stiff default is E 0.15 / K 16)' : ''}`);
+console.log(`  arm: E ${PG.E} / K ${PG.K} / backlash ${PG.BL}${PG.E !== 0.15 || PG.K !== 16 ? '  (stiff default is E 0.15 / K 16)' : ''}`);
 console.log(`  correction cap: ${UCAP} rad${UCAP !== 0.15 ? '  (default is 0.15)' : ''}`);
 console.log(`  decision clock: ${DPT}/Ts${DPT !== 30 ? '  (default is 30)' : ''}`);
 console.log(`  excitation: ${DWELL ? 'DWELLING — the noise is time-warped so the machine lingers'
@@ -149,7 +149,8 @@ if (!pilots.length) { console.log('  nothing commissioned'); process.exit(1); }
 
 /** One row of the matrix: contour error with the correction off and on. */
 async function row(pilot, shape, feed) {
-  const off = (await deployOn(pilot, shape, false, feed)).r;
+  const offR = await deployOn(pilot, shape, false, feed);
+  const off = offR.r;
   const onR = await deployOn(pilot, shape, true, feed);
   const on = onR.r;
   // THE PEAK CORRECTION, AGAINST THE CAP IT IS ALLOWED. Two accounts of the sharp square have
@@ -159,7 +160,7 @@ async function row(pilot, shape, feed) {
   // saturating, and no improvement to the model or the horizon can help a controller that is
   // already asking for more authority than it is given.
   return { off: off.contourRms, on: on.contourRms, x: off.contourRms / on.contourRms,
-    lagOff: off.lagRms, lagOn: on.lagRms, uPk: onR.uPk };
+    lagOff: off.lagRms, lagOn: on.lagRms, uPk: onR.uPk, sp: onR.split, spOff: offR.split };
 }
 
 const subject = pilots.length > 1 ? (ensemble(pilots).pilot || pilots[0]) : pilots[0];
@@ -174,16 +175,29 @@ console.log(`  ${`${TRAIN.shape} @${TRAIN.feed} (SEEN)`.padEnd(18)} ${seen.off.t
   + ` ${seen.on.toExponential(3).padStart(11)} ${seen.x.toFixed(2).padStart(6)}x   `
   + `${seen.lagOff.toExponential(2).padStart(9)} ${seen.lagOn.toExponential(2).padStart(9)}`
   + `  ${seen.uPk.toFixed(4).padStart(7)}${seen.uPk > 0.98 * UCAP ? '  AT THE CAP' : ''}`);
+// AND THE SPATIAL SPLIT, PRINTED SEPARATELY because it answers a different question from the
+// table above: not how much the correction removes, but WHERE what is left of it sits.
+const spatial = [];
 const held = [];
 for (const shape of SHAPES) {
   for (const feed of FEEDS) {
     const r = await row(subject, shape, feed);
     held.push({ shape, feed, ...r });
+    spatial.push({ name: `${shape} @${feed}`, ...r });
     console.log(`  ${`${shape} @${feed}`.padEnd(18)} ${r.off.toExponential(3).padStart(12)}`
       + ` ${r.on.toExponential(3).padStart(11)} ${r.x.toFixed(2).padStart(6)}x   `
       + `${r.lagOff.toExponential(2).padStart(9)} ${r.lagOn.toExponential(2).padStart(9)}`
       + `  ${r.uPk.toFixed(4).padStart(7)}${r.uPk > 0.98 * UCAP ? '  AT THE CAP' : ''}`);
   }
+}
+
+console.log(`\n  ${'program'.padEnd(18)} ${'corner C'.padStart(10)} ${'corner L'.padStart(10)}`
+  + ` ${'straight C'.padStart(11)} ${'straight L'.padStart(11)}  ${'steps'.padStart(11)}`);
+for (const r of [{ name: `${TRAIN.shape} @${TRAIN.feed}`, ...seen }].concat(spatial)) {
+  if (!r.sp) continue;
+  console.log(`  ${r.name.padEnd(18)} ${r.sp.cornerC.toExponential(3).padStart(10)}`
+    + ` ${r.sp.cornerL.toExponential(3).padStart(10)} ${r.sp.straightC.toExponential(3).padStart(11)}`
+    + ` ${r.sp.straightL.toExponential(3).padStart(11)}  ${`${r.sp.cornerN}/${r.sp.straightN}`.padStart(11)}`);
 }
 
 // TARGET 1 AND TARGET 2 READ SEPARATELY, because they are separate claims and a single

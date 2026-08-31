@@ -877,6 +877,45 @@ slightly worse with more authority — the rounded rectangle 6.18x → 5.84x, th
 6.44x. More authority is not free; it is a trade against the programs that did not need it, which
 is exactly why `uMax` is described in this project as the engineer's cap rather than a tuning knob.
 
+## THE SHARP SQUARE WAS NEVER A CORNER PROBLEM, AND SIX EXPERIMENTS WERE AIMED AT 2% OF THE PATH
+
+```
+ program        corner C   corner L   straight C   straight L      steps
+ rounded @4e-3  0.000e+0   0.000e+0     2.173e-2     2.763e-2     0/7356
+ circle  @4e-3  0.000e+0   0.000e+0     9.201e-3     1.420e-2     0/6283
+ circle  @8e-3  0.000e+0   0.000e+0     7.151e-2     6.215e-2     0/3141
+ sharp   @4e-3  6.467e-2   1.474e-1     1.205e-1     1.562e-1   174/8032
+ sharp   @8e-3  6.968e-2   1.951e-1     1.713e-1     3.043e-1   574/4016
+```
+
+**THE CORNER ERROR IS SMALLER THAN THE STRAIGHT ERROR.** Contour at the corners is 6.5e-2 and
+along the straights 1.2e-1, nearly double — and the corners are 174 of 8206 steps, about 2% of the
+lap. Whatever costs the sharp square its performance is happening on the other 98%.
+
+**SIX HYPOTHESES WERE TESTED AGAINST A PREMISE NOBODY MEASURED.** A model that never saw a stop, a
+QP that cannot re-solve fast enough, a clipped correction, a spring-loaded arm, backlash, a
+dwelling excitation — every one of them assumes the residual lives at the corner, and the check
+that would have said otherwise is three lines of accumulation in a loop that was already running.
+It cost six experiments and most of a session.
+
+**AND BACKLASH DIED IN THE SAME BATCH, cleanly.** Sharp @4e-3 reads 1.69x with backlash at 1e-4
+and 1.69x with backlash at ZERO — residual 1.196e-1 either way, identical to four figures. Even
+had the corner been the problem, lost motion was not it.
+
+**WHAT THE STRAIGHTS ACTUALLY ARE, AND WHY THIS IS NOT A CONTRADICTION.** A sharp square's straight
+is not a constant-speed traverse. The corner rule decelerates into the vertex and accelerates out
+of it, so most of each edge is an ACCELERATION RAMP — the classifier used here (speed below half
+the programmed feed) catches only the 174 steps at the vertex itself and books every ramp as
+"straight". The circle, by contrast, holds one speed for its whole lap and shows a contour of
+9.2e-3 where the square's straights show 1.2e-1, thirteen times worse. **The distinguishing
+feature is not the corner, it is that speed is CHANGING**, and that is spread across the whole
+path rather than concentrated anywhere.
+
+**WHICH IS A TESTABLE STATEMENT AND THE NEXT MEASUREMENT.** Split by |acceleration| instead of by
+speed. If the residual concentrates in the ramps, the target is a controller that handles
+commanded acceleration — and that reframes every knob tried so far, because none of them was about
+acceleration either.
+
 ## What the record already settles
 
 Three findings make this plan shorter than it looks, and all three are measured rather than

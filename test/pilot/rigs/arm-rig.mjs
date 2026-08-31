@@ -31,14 +31,22 @@ const H = 4, CLAMP = 3, NU = 0.3, RHO = 1, G = 2e-6, RATIO = 100, DAMPING = 3e-3
 // proves nothing on its own.
 const ARM_E = +(process.env.ARM_E || 0.15);
 const ARM_K = +(process.env.ARM_K || 16);
-const PG = { LEN1: 14, LEN2: 10, E: ARM_E, K: ARM_K, centre: [12, 0], drive: 32 };
+// AND THE BACKLASH, THE ONE PARAMETER HELD FIXED WHILE EVERYTHING ELSE MOVED.
+//
+// The sharp square's residual is pinned near 1.2-1.4e-1 across an 8x change in compliance — it
+// grows 1.18x where every other program grows 3.3x to 13.2x. A floor that ignores stiffness is
+// set by something that does not scale with stiffness, and backlash is the candidate: a fixed
+// 1e-4 rad of lost motion, and a sharp corner is exactly where the machine reverses and has to
+// cross it.
+const ARM_BL = process.env.ARM_BL === undefined ? 1e-4 : +process.env.ARM_BL;
+const PG = { LEN1: 14, LEN2: 10, E: ARM_E, K: ARM_K, BL: ARM_BL, centre: [12, 0], drive: 32 };
 
 async function makeArm() {
   const mk = (length) => buildLink({ length, section: H, clamp: CLAMP, E: PG.E,
     nu: NU, rho: RHO, damping: DAMPING });
   const l1 = await mk(PG.LEN1), l2 = await mk(PG.LEN2);
   const j = (mp) => new Joint({ ratio: RATIO, motorInertia: mp.inertiaAboutPivot / 1e4,
-    loadInertia: mp.inertiaAboutPivot, stiffness: PG.K, backlash: 1e-4,
+    loadInertia: mp.inertiaAboutPivot, stiffness: PG.K, backlash: ARM_BL,
     damping: 2 * Math.sqrt(PG.K * mp.inertiaAboutPivot / 2) });
   const arm = new FlexArm2R({ joint1: j(massProperties(l1)), link1: l1,
     joint2: j(massProperties(l2)), link2: l2, gravityWorld: [0, -G, 0], dt: 1 });
@@ -155,6 +163,7 @@ async function deployOn(pilot, shape, active, feed = 0.004) {
   pilot._initRun();
   const total = Math.ceil(path.lap * 3), scoreFrom = Math.ceil(path.lap * 2);
   const score = new ContourScore({ joints: 2, reversalTravel: 2e-2 });
+  const split = { corner: { c2: 0, l2: 0, n: 0 }, straight: { c2: 0, l2: 0, n: 0 } };
   let kSamp = 0, uPk = 0;
   for (let k = 0; k < total; k++) {
     const cmd = path.at(k);
@@ -172,10 +181,29 @@ async function deployOn(pilot, shape, active, feed = 0.004) {
     if (k >= scoreFrom) {
       const dec = decompose(path, a2.toolXY(), cmd);
       score.step(dec.contour, dec.lag, tau, [a2.j1.wM, a2.j2.wM]);
+      // WHERE THE ERROR ACTUALLY IS, which six hypotheses have been aimed at without measuring.
+      //
+      // Every account of the sharp square so far — a model that never saw a stop, a QP that
+      // cannot re-solve fast enough, a clipped correction, a spring-loaded arm, backlash — assumes
+      // the residual lives AT THE CORNERS. Nothing has checked. The commanded speed says which
+      // part of the path a step is on: the corner rule takes the junction velocity toward zero, so
+      // a step running well under the programmed feed is in a corner and one at feed is on a
+      // straight. If the residual is spread along the straights, every one of those six was aimed
+      // at the wrong place.
+      const v = Math.hypot(cmd.vx || 0, cmd.vy || 0);
+      const slow = v < 0.5 * path.feed;
+      const b = slow ? split.corner : split.straight;
+      b.c2 += dec.contour * dec.contour; b.l2 += dec.lag * dec.lag; b.n++;
     }
   }
   await a2.l1.destroy(); await a2.l2.destroy();
-  return { r: score.report(), uPk };
+  const rms = (b, k) => (b.n ? Math.sqrt(b[k] / b.n) : 0);
+  return { r: score.report(), uPk,
+    split: {
+      cornerC: rms(split.corner, 'c2'), cornerL: rms(split.corner, 'l2'), cornerN: split.corner.n,
+      straightC: rms(split.straight, 'c2'), straightL: rms(split.straight, 'l2'),
+      straightN: split.straight.n,
+    } };
 }
 
 export { PG, RATIO, makeArm, mkPath, homeArm, routeSignals, deployOn };
