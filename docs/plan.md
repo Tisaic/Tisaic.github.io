@@ -1476,42 +1476,100 @@ update, so a row's information is taken in full and the accumulated DEVIATION is
 rather than the row: discounting the row would make the estimator deaf to a plant that really
 changed, which is the thing the exercise exists to keep.
 
-**6e-REGRESSION. THE SHARED FIT COSTS THE TANK ITS DEPLOYMENT, AND IT SHIPPED BECAUSE I DID
-NOT RUN THE SIX-PLANT PASS.**
+**6e-REGRESSION. THE TANK FAILS 6 CHECKS AT HEAD — AND THE RESULT IT "LOST" WAS NEVER
+REPRODUCIBLE. THE FIRST DIAGNOSIS HERE WAS WRONG AND IS CORRECTED IN PLACE.**
 
-`test/pilot/tanks.test.mjs` fails 6 checks at HEAD and passed at `c24bede`. Bisected by running
-that one test at each commit, with the two `_notch` crashes in between accounted for:
+`test/pilot/tanks.test.mjs` fails 6 checks at HEAD and passed at `c24bede`, so the whole suite
+stops there under `set -e` and every pilot test after it stopped running. Bisected by running
+that one test at each commit, with the two `_notch` crashes accounted for:
 
 ```
  c24bede                                   PASS
  65c86f6 / effc58a  (_notch crash)         throws — not evidence either way
- 3baa869            (_notch restored)      3 FAIL
- 20de1b7            (nine leads)           6 FAIL
- HEAD                                      6 FAIL
+ 3baa869            (_notch restored)      3 FAIL — the DEPLOY check still passes
+ 20de1b7            (nine leads built)     6 FAIL — the deploy goes to 0.07x
+ HEAD                                      6 FAIL — 0.08x
 ```
 
-**AND THE CAUSE IS ISOLATED, NOT INFERRED.** Forcing `sharedWeights` ON at the last PASSING
-commit reproduces exactly the first three failures — the plant that deployed at 1.32x now
-REFUSES ("the scribble regime measured 0.08x"), the sweeping-versus-dwelling basis comparison
-collapses to 1.00x against 1.35x, and the gate-off control stops deploying. Two other
-explanations were killed first: `qpIters` 60 → 4 is NOT it (forced back to 60 at HEAD, still 6
-failures, scribble 0.64x against 0.08x — better and still refusing), and my working changes are
-not it (identical 6 failures with `lib/pilot` stashed).
+**FIRST DIAGNOSIS, AND IT WAS WRONG.** Forcing `sharedWeights` on at `c24bede` reproduces three
+failures, so sharing was written up here as the cause. It is not the cause of the one that
+matters: at `c24bede` with sharing forced the DEPLOY check still passes. Sharing costs the basis
+comparison and the gate-off control; the deployment is lost one commit later, at `20de1b7`.
 
-**SO "ONE MODEL FOR EVERY LEAD IS BETTER ON BOTH PLANTS THAT DEPLOY" WAS TRUE AND INCOMPLETE.**
-It was measured on EMPS (12.70x → 14.69x) and the arm (7.8154e-2 → 7.4340e-2) and written into
-the north star's PLC row as a straight win. It is a win on those two and a REFUSAL on the tank,
-and the reason nobody knew is that the six-plant pass was never run — the same pass CLAUDE.md
-demands in the sentence right above it for a different default change, for exactly this reason.
-A change measured on the plants that deploy has been measured on the plants least able to
-falsify it.
+**AND `20de1b7` IS CONFIRMED BY REVERSAL, WHICH IS THE ONLY KIND OF CONFIRMATION WORTH HAVING.**
+At that commit with `LEAD_SAMPLES` raised from 9 to every lead, the tank recovers to 3 failures
+and deploys again. At HEAD the same reversal works — `LEAD_SAMPLES` 999 with the pool cap at its
+default takes 6 failures to 3.
 
-**THE FIX IS NOT TO REVERT.** The shared fit is what makes the online budget reachable at all
-(2n² per sample against nt·2n²), and it is better on two plants of the three that have been
-measured. What the tank says is that sharing is a MODELLING choice, not an arithmetic one, and
-this project's own principle covers it: do not decide it, measure it per plant on held-out data
-and let the fit choose, so the per-lead cost is paid only where it is earned. That is the next
-piece of work and it is sequenced ahead of anything else here.
+**THREE OTHER EXPLANATIONS WERE KILLED FIRST, EACH BY A DIRECT MEASUREMENT.** `qpIters` 60 → 4
+is not it (forced back to 60 at HEAD: still 6 failures, scribble 0.64x against 0.08x — better and
+still refusing). The FORECAST is not it: dumped per lead, the tank's held-out R² is 0.93–0.99 at
+lead 0, mid and far, and NOTHING is gated — a model that good with a correction that measures
+0.08x is rule 16 exactly, and the gating hypothesis is dead. And my working changes are not it
+(identical 6 failures with `lib/pilot` stashed).
+
+**THEN THE FIX REFUSED TO BEHAVE LIKE A FIX, WHICH IS THE ACTUAL FINDING.** Swept, `LEAD_SAMPLES`
+is not monotone: 9 refuses at 0.08x, 16 refuses at 0.08x, **24 DEPLOYS at 1.28x**, 32 refuses at
+0.08x, 999 deploys. A knob whose result alternates is not a knob with a knee; it is a marginal
+result being flipped by which rows the pool happens to draw. Restricting the pool to the near
+leads — on the hypothesis that a receding horizon only ever applies lead 0, and the shared fit is
+measurably worse there — moves the scribble 0.08x → 0.68x → 0.65x and never reaches the 1.1x
+gate, so that mechanism is real and second-order.
+
+**SO THE QUESTION BECAME: WAS THE TANK EVER ROBUST? IT WAS NOT.** At `c24bede`, the last commit
+where this test passes, changing ONLY the commissioning seed:
+
+```
+ seed offset   0     PASS, recipe 2.07x
+ seed offset  10     PASS
+ seed offset  20     5 FAIL — the basis selection flips on BOTH loops, the sweeping/dwelling
+                     comparison reverses (1.92x against 2.88x), and the gate-off control
+                     refuses on a guard trip
+```
+
+**THE RESULT THAT WAS "LOST" FLIPS ON THE RANDOM SEED AT THE COMMIT THAT PASSES.** So the shared
+fit and the lead sampling did not break a solid measurement; they moved a marginal one across a
+threshold it was already sitting on. CLAUDE.md's six-plant line records the tank at 1.32x as one
+of the two non-refusals; at three seeds on the same commit it reads 2.07x, passes, and fails five
+checks — which is not a controller result, it is a coin.
+
+**WHICH CHANGES WHAT THE FIX IS.** Tuning `LEAD_SAMPLES` until the tank goes green would be
+fitting a constant to a coin flip, and rule 3 says a flaky check is a bug report rather than a
+number to chase. What has to happen first is that the tank's own result is made reproducible —
+scored across seeds rather than at one, with the spread reported — and only then is there
+something for a lead count to be measured against. The lead sampling still has to be re-derived
+per plant either way (rule 31: nine leads was measured on EMPS and carried to five other plants),
+but it cannot be derived against an instrument that answers differently on Tuesday.
+
+**6e-SUITE. ONE RED TEST WAS CANCELLING TWENTY, AND THE FIX FOUND A SECOND RED PLANT IN ITS
+FIRST RUN.**
+
+`test/run.sh` is `set -euo pipefail`, so the first non-zero exit aborted the whole run: when
+`tanks.test.mjs` went red, the twenty-odd pilot tests after it never ran and their state was
+simply unknown. This repository has already paid for this exact thing once — `composite.test.mjs`
+exited 1 from the commit that added it and "set -e meant it took the whole pilot block down with
+it" — and it recurred because nothing was changed after that diagnosis. A red suite that hides
+the next real failure is rule 3 in its most expensive form.
+
+Every check now runs through a collector: failures are recorded by name, the run continues, and
+it exits non-zero at the END with the list. The suite is exactly as red as it was; it now says
+how red, and `report_failures` is called before every early `exit 0` so a clean browser exit
+cannot step over a Node failure collected an hour earlier.
+
+**IT PAID FOR ITSELF ON THE FIRST RUN.** `--node --only=flexisim` now reports TWO failures where
+it used to report one and stop:
+
+```
+FAILED:
+  node test/pilot/tanks.test.mjs
+  node test/pilot/woodberry.test.mjs
+```
+
+**AND WOOD–BERRY IS A SECOND REGRESSION NOBODY KNEW ABOUT.** Its benchmark IAE is pinned against
+a published baseline and reads **82.10 against the 72.08 recorded in CLAUDE.md** — 14% worse on a
+plant this project already LOSES on (Luyben's BLT is 51.95, so the pilot has gone from 0.72x to
+0.63x of it). Thirty test files ran after `tanks` in that run; nothing after it had been executed
+since the tank went red.
 
 **6f. AN 11% REGRESSION ON THE ARM — SUPERSEDED BY 6d, KEPT FOR THE METHOD.** The arm's model-only stack (conventional withheld, which is what survives the
 retirement) reads 7.4340e-2 on one historical run with `sharedWeights` forced and every lead
