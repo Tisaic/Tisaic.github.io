@@ -54,6 +54,13 @@ async function commission(seed = 1) {
     start,
     guards: [0, 1, 2].map((i) => ({ index: i, max: 265 })),   // over-temperature
     workspace: () => true,
+    // THE REPRESENTATIVE PROGRAM: the changeover recipe itself, in the pilot's command units,
+    // which is `powerFor(setpointAt(k))` — exactly what `runRecipe` drives the barrel with. This
+    // plant has never once been SCORED here: its refusal was traced to a dwelling scribble that
+    // cannot cross a 44 K box at quarter rates, i.e. a construction failure wearing a rate-limit
+    // message. A regime built from the recipe cannot fail that way, because the recipe is a
+    // trajectory the machine demonstrably runs.
+    verifyRef: process.env.NOREP === '1' ? null : (i, n) => powerFor(setpointAt(Math.round(i * PROG / n))),
     dwell: true,                        // brick 48: this program HOLDS, so the excitation must
     seed,
   });

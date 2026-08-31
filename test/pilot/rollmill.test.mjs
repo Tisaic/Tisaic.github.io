@@ -73,6 +73,14 @@ async function commission(seed = 1) {
     start: [S0],
     guards: [{ index: 0, max: 400 }],                    // roll force, kN/mm
     workspace: () => true,
+    // THE REPRESENTATIVE PROGRAM OF A REGULATOR IS A HOLD, and that is the point. This mill's
+    // job is to keep the gap at S0 while an eccentricity disturbance acts on it — the setpoint
+    // never moves. Both of the verify's built-in regimes MOVE: a filtered-noise scribble and a
+    // trapezoid built from the rate limits. So on a regulation plant the gate has been scoring
+    // a controller on tracking, twice over, and the machine is doing disturbance rejection.
+    // That is a candidate explanation for a refusal this file's own header calls a PREDICTION
+    // FAILURE — "this plant was chosen as the pilot's wheelhouse and it refuses".
+    verifyRef: process.env.NOREP === '1' ? null : () => [S0],
     seed,
   });
   let steps = 0;

@@ -78,6 +78,26 @@ const pilot = new Pilot({
     return r > Math.abs(arm.L1 - arm.L2) + 0.5 && r < arm.L1 + arm.L2 - 0.5;
   },
   seed: 1,
+  // THE REPRESENTATIVE PROGRAM, FOR THE DEPLOY DECISION ONLY — this is the intended use of
+  // `verifyRef` and not a test fixture. The fit stays program-agnostic: it is identified from a
+  // scribble that knows nothing about this path. What the verify gains is the ability to score
+  // the controller on THE THING THE MACHINE WILL RUN, which on two other plants is the whole
+  // difference between a gate that ranks and one that does not (tank correlation 0.989 against
+  // -0.057; Wood-Berry's nine harmful deployments all refused).
+  //
+  // THIS IS ALSO THE CONTROL. Those two plants could only show that the third regime refuses
+  // MORE. The arm is a plant the pilot genuinely helps, so if the regime is merely a stricter
+  // gate rather than a better one, this is where it shows up as a refusal that costs a real
+  // 6.18x — and it must not.
+  //
+  // INDEXED IN SOLVER STEPS AND WRAPPED AT THE LAP, which is exactly how `deployOn` drives it —
+  // `path.at(k)` takes a STEP index with the feedrate profile already baked in, not an arc
+  // length. Parameterising by arc length instead would hand the verify the same geometry at the
+  // wrong speed, and speed is most of what this controller is correcting.
+  verifyRef: process.env.NOREP === '1' ? null : (i) => {
+    const c = startPath.at(i % Math.max(1, Math.round(startPath.lap)));
+    return arm.ik(c.x, c.y, true);
+  },
 });
 
 // --------------------------------------------------------------------------- RUN
@@ -107,6 +127,18 @@ console.log(`    commissioned in ${steps} steps: Ts ${st.Ts}, sample ${st.sample
     `stride ${r.stride}/ridge ${r.ridge}`).join(', ')}`);
 console.log(`    verify: ${st.report.verify ? st.report.verify.ratio.toFixed(2) + 'x at λ '
   + st.report.verify.lambda.toExponential(1) : '—'}`);
+// WHICH REGIMES THE GATE ACTUALLY SCORED, PRINTED AND ASSERTED — not assumed from the fact that
+// a `verifyRef` was passed. This run and its NOREP=1 control came back identical to four figures,
+// which is the control passing IF the third regime ran and a silent no-op if it did not, and the
+// two are indistinguishable from the outside. That is rule 61 exactly: a caller and a machine
+// agreeing by construction is worth nothing unless something checks that they agree.
+const REG = (st.report.verifyRegimes && st.report.verifyRegimes.built) || [];
+console.log(`    verify regimes scored: ${REG.join(' + ') || '—'}`
+  + (st.report.verifyRegimes && st.report.verifyRegimes.skipped
+    ? `   (skipped: ${st.report.verifyRegimes.skipped})` : ''));
+check('the gate scored the representative program it was given, not only its own regimes',
+  process.env.NOREP === '1' ? !REG.includes('representative') : REG.includes('representative'),
+  JSON.stringify({ built: REG, skipped: st.report.verifyRegimes && st.report.verifyRegimes.skipped }));
 // WHY THE FAR LEAD IS BAD — ASKED ONLY WHEN IT IS BAD.
 //
 // The first version of this printed a diagnosis unconditionally and pronounced "the FEATURES
