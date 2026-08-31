@@ -651,6 +651,64 @@ tank, where nothing is worth keeping, it degenerates to averaging everything, wh
 looked identical on a previous reading, so the layout instability is present here too and was
 simply not visible in a sample that happened to agree.*
 
+## TARGETS 1 AND 2 IN ONE TABLE: THE SHARP CORNER IS WHERE IT BREAKS
+
+One commissioning on the rounded rectangle at feed 4e-3, then four programs it has never run —
+two shapes at two feedrates (`test/pilot/matrix.mjs`).
+
+```
+ program                contour off       on        x      lag off    lag on
+ rounded @4e-3 (SEEN)      1.343e-1  2.173e-2   6.18x    7.54e-2   2.76e-2
+ circle  @4e-3             7.101e-2  9.201e-3   7.72x    3.91e-2   1.42e-2
+ circle  @8e-3             3.479e-1  7.151e-2   4.86x    1.47e-1   6.22e-2
+ sharp   @4e-3             2.025e-1  1.196e-1   1.69x    1.87e-1   1.56e-1
+ sharp   @8e-3             3.675e-1  1.621e-1   2.27x    3.59e-1   2.93e-1
+```
+
+**PROGRAM-AGNOSTIC: FAILS, AND FAILS IN ONE PLACE.** The circle transfers BETTER than the program
+the pilot trained on — 7.72x against 6.18x — so shape alone is not the problem. The sharp square
+reads 1.69x, a **3.65x degradation** against a target of 1.3x. Nothing here is program-agnosticism
+failing in general; it is one geometry the controller cannot handle.
+
+**FEEDRATE-AGNOSTIC: NEARLY HOLDS.** Circle 7.72x → 4.86x across a 2x feed change, i.e. 1.59x
+against a 1.5x target — just outside. Sharp 1.69x → 2.27x, **1.34x, inside**. So feed is close to
+solved on this plant and shape is not, which is the opposite of how the two targets are usually
+discussed.
+
+**AND THE SHARP SQUARE GETS BETTER WHEN DRIVEN FASTER, WHICH IS BACKWARDS AND IS A CLUE.** Its
+ratio rises 1.69x → 2.27x with the feed doubled, where the circle's falls. The corner rule caps
+junction velocity independently of the commanded feed, so a faster program spends proportionally
+MORE of its lap in corners — its lap is 8206 steps at 4e-3 and 4590 at 8e-3, a factor of 1.79 and
+not 2. The open-loop error nearly doubles (2.025e-1 → 3.675e-1) while the correction removes a
+similar absolute amount, so the RATIO improves while the machine gets worse. A ratio is not a
+performance.
+
+**THE LAG COLUMN SAYS WHAT IS ACTUALLY WRONG, and it is the reason lag was made a first-class
+metric.** Decomposed:
+
+```
+ program              contour x   lag x   TOTAL x   the residual is
+ rounded @4e-3 SEEN      6.18x   2.73x     4.38x   LAG
+ circle  @4e-3           7.72x   2.75x     4.79x   LAG
+ circle  @8e-3           4.87x   2.36x     3.98x   contour
+ sharp   @4e-3           1.69x   1.20x     1.40x   LAG
+ sharp   @8e-3           2.27x   1.23x     1.53x   LAG
+```
+
+**THE PILOT IS A CONTOUR CORRECTOR AND BARELY TOUCHES LAG — 1.20x on the sharp square against
+1.69x on contour.** On four of the five programs the residual after correction is LAG rather than
+shape, and on the sharp square the corrected lag (1.56e-1) is LARGER than the corrected contour
+(1.196e-1). On the whole deviation the sharp square is a **1.40x** machine, not a 1.69x one.
+
+**WHICH NAMES THE MECHANISM.** A sharp corner is where the machine stops and restarts, and a
+reversal unloads the gearbox wind-up through the backlash — a discontinuity in the correction's
+own target, not a smooth function of the state the forecast was fitted on. The model is
+identified on a scribble that never stops, so the one motion it has never seen is the one the
+square is made of.
+
+**AND NOTHING WAS MADE WORSE**, on any of the four held-out programs, which is the floor the
+refusal contract exists to hold and is a different claim from how much it gains.
+
 ## What the record already settles
 
 Three findings make this plan shorter than it looks, and all three are measured rather than

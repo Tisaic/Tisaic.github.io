@@ -16,7 +16,7 @@ import { Joint } from '../../../lib/flexisim/joint.js';
 import { FlexArm2R } from '../../../lib/flexisim/arm2r.js';
 import { buildLink, massProperties } from '../../../lib/flexisim/link.js';
 import { ChainServo } from '../../../lib/flexisim/compensator.js';
-import { roundedRect, circle } from '../../../lib/flexisim/toolpath.js';
+import { roundedRect, circle, sharpRect } from '../../../lib/flexisim/toolpath.js';
 import { ContourScore, decompose } from '../../../lib/flexisim/contour.js';
 
 const H = 4, CLAMP = 3, NU = 0.3, RHO = 1, G = 2e-6, RATIO = 100, DAMPING = 3e-3;
@@ -36,9 +36,25 @@ async function makeArm() {
   return { arm, servo };
 }
 
+/**
+ * THE PATHS, AND A SHARP SQUARE IS A DIFFERENT QUESTION FROM A ROUNDED ONE.
+ *
+ * `circle` has curvature everywhere and none of it changes: the feedrate profile settles to one
+ * speed and stays there, so it asks the controller about steady tracking. `roundedRect` has four
+ * arcs joining four straights — curvature steps, and the feed dips at each. `sharpRect` has
+ * corners with no arc at all, where the corner rule takes the junction velocity to nearly zero and
+ * the machine must stop and restart. That is the case where compliance shows: a reversal unloads
+ * the gearbox wind-up through the backlash, and it is the one a model fitted on smooth motion is
+ * least likely to have seen.
+ *
+ * @param {string} shape 'circle', 'rounded' or 'sharp'
+ * @param {number} feed the commanded feedrate
+ */
 function mkPath(shape, feed) {
   const o = { feed, accel: 4e-5, cornerDt: 40, centre: PG.centre };
-  return shape === 'circle' ? circle({ ...o, r: 4 }) : roundedRect({ ...o, w: 8, h: 8, r: 1.5, closed: true });
+  if (shape === 'circle') return circle({ ...o, r: 4 });
+  if (shape === 'sharp') return sharpRect({ ...o, w: 8, h: 8, closed: true });
+  return roundedRect({ ...o, w: 8, h: 8, r: 1.5, closed: true });
 }
 
 function homeArm(arm, servo, path) {
@@ -105,9 +121,9 @@ function routeSignals(arm, cmd, tau) {
  * @param {boolean} active whether to apply its correction
  * @returns {Promise<{r: object, uPk: number}>} the contour report and the peak correction
  */
-async function deployOn(pilot, shape, active) {
+async function deployOn(pilot, shape, active, feed = 0.004) {
   const { arm: a2, servo: s2 } = await makeArm();
-  const path = mkPath(shape, 0.004);
+  const path = mkPath(shape, feed);
   homeArm(a2, s2, path);
   const S = pilot.sample, cache = new Map();
   const refAt = (i) => {
