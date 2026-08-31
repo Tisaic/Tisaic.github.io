@@ -542,6 +542,35 @@ The ridge has an interior optimum and averaging clears it by 14%. Note also that
 weights are LARGER than any ridge setting that helps — 0.739 against 0.276 — so it is not reaching
 its result by being small, which is the same conclusion the geometry gave from the other side.
 
+## THEY COMPOSE, AND ALMOST EXACTLY MULTIPLICATIVELY: 1.594x FROM A PLANT WHERE EVERY DRAW REFUSED
+
+```
+ raw draws (all eight)              REFUSED, 1.000x
+ ridge x100 alone                            1.176x
+ averaging alone (5 draws)                   1.344x
+ ridge x100 AND averaging (5 draws)          1.594x     <- and it vouched for itself at 1.58x
+```
+
+**1.176 x 1.344 = 1.581 against an observed 1.594 — a gap of 0.9%.** The two gains multiply, which
+is what independent mechanisms do, and it is the strongest evidence yet that they ARE two
+mechanisms rather than one seen twice:
+
+* the **ridge** shrinks each draw's own error toward zero, a bias-variance trade inside one fit;
+* the **average** cancels the disagreement BETWEEN draws, which no single fit can do at any ridge.
+
+Had the ridge been suppressing variance badly, adding an average would have found little left to
+remove and the combination would have landed near 1.344x. It did not.
+
+**AND THE HEADLINE IS THE FIRST ROW.** Every one of the eight commissionings refused — the gate
+looked at each and correctly declined to deploy it — and two changes that cost NOTHING at deploy
+turn that into a controller delivering 1.594x which vouches for itself on the machine. The plant
+this project has been quoting at 1.32x from a single lucky draw, and which at the old gate
+deployed four harmful controllers in eight, is now a 1.594x plant.
+
+**WHAT THIS IS NOT.** One plant, one ridge multiplier, k = 5, and a single program — the tank has
+only one, which is exactly why the held-out arm test exists. Multiplicative composition on one
+point is a suggestion, not a law; two more plants would make it a finding.
+
 ## What the record already settles
 
 Three findings make this plan shorter than it looks, and all three are measured rather than
