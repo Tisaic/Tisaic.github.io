@@ -459,6 +459,32 @@ keep climbing, which is what variance reduction looks like. Two things the predi
 it confounds the k sweep, and — separately from averaging — it means the shipped model's lookback
 swings 2.5x on a coin.
 
+## BOOTSTRAP vs RE-EXCITATION: THE TEST THAT SAYS WHICH VARIANCE IS BEING REMOVED
+
+**THE REDUCTION.** k draws currently cost k excitations of the machine. But the k models do not
+have to come from k runs: one commissioning record can be RESAMPLED — fit k times on bootstrap
+draws of its own rows — for k fits and **zero extra machine time**. If that works, averaging costs
+one commissioning plus k cheap fits, and the whole k-fold objection disappears.
+
+**AND IT IS ALSO THE SHARPEST TEST OF THE THEORY, WHICH IS WHY IT IS WORTH RUNNING EVEN IF IT
+FAILS.** The account says each fit is well-determined in the directions its own excitation covered
+and shrunk-but-wrong elsewhere, and that averaging works because those directions differ BETWEEN
+DRAWS. A bootstrap resamples rows from ONE record, so it cannot add directions — every resample
+sees the same excitation coverage. So:
+
+* **If bootstrap recovers most of the gain**, the variance is row noise on a fixed design, and the
+  cheap version is the right version. It would also mean the theory above is wrong about
+  directions, and the honest reading would be that a bigger record should have helped — which it
+  did not (3x excitation, 2.18x → 2.27x spread), so this outcome would leave two measurements in
+  conflict and something else to find.
+* **If bootstrap recovers little**, the variance IS excitation coverage, the theory stands, k real
+  excitations are irreducible, and the reduction has to come from sharing the probe, tune and
+  verify instead — `1 + k·(excite+fit)` rather than `1 + k`.
+
+**IT IS A GENUINE FORK.** One outcome makes averaging nearly free and falsifies the mechanism; the
+other confirms the mechanism and prices the feature. Nothing measured so far distinguishes them,
+and the 3x-excitation null is the only evidence either way — which points at the second.
+
 ## What the record already settles
 
 Three findings make this plan shorter than it looks, and all three are measured rather than

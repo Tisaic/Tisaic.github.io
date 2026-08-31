@@ -375,6 +375,7 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # that quietly changes the model is worse than a slow one. Also pins what the batch
     # convention costs: the ridge is scale-relative, so its penalty depends on a statistic of
     # the whole record that an online prior cannot know at row 1.
+    t node test/pilot/ensemble.test.mjs
     t node test/pilot/rls.test.mjs
     t node test/pilot/autostack.test.mjs
     # THE BUTTON ON FOUR MORE PLANTS THAT SHARE NO PHYSICS — a tank whose outflow goes as

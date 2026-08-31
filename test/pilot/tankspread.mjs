@@ -234,6 +234,52 @@ if (paired.length > 2) {
         + `${(o / n2).toFixed(3)}x`);
     }
   }
+  // ANALYZE: IS THE AVERAGE JUST A SMALLER CORRECTION?
+  //
+  // The alternative explanation that has to be excluded before any of this is an architecture: if
+  // averaging k models mostly SHRINKS the weights toward zero, it is equivalent to one
+  // commissioning with a larger ridge — one knob, one commissioning, none of the k-fold cost. The
+  // two are distinguishable by geometry. Shrinkage moves the mean along the draws' own direction
+  // and leaves it inside their spread; genuine cancellation moves it somewhere no draw was, and
+  // the residual disagreement between draws is what got removed.
+  {
+    const norm = (w) => Math.sqrt(w.reduce((a, v) => a + v * v, 0));
+    const drawN = pilots.map((p) => norm(p.readouts[0].w[0]));
+    const pre = Float64Array.from(pilots[0].readouts[0].w[0]);   // before ensemble() overwrites it
+    const meanW = new Float64Array(pre.length);
+    let nUsed = 0;
+    const shape = (p) => JSON.stringify(p.readouts.map((r) => [r.w.length, r.w[0].length,
+      r.stride, !!r.poly, !!r.sched]));
+    const want = shape(pilots[0]);
+    for (const p of pilots) {
+      if (shape(p) !== want) continue;
+      const wl = p.readouts[0].w[0];
+      for (let i2 = 0; i2 < meanW.length; i2++) meanW[i2] += wl[i2];
+      nUsed++;
+    }
+    for (let i2 = 0; i2 < meanW.length; i2++) meanW[i2] /= Math.max(1, nUsed);
+    // The SPREAD between draws, as an rms distance from their own mean: this is the quantity
+    // averaging removes, and it is what a ridge cannot touch, because a ridge shrinks every draw
+    // the same way and leaves them just as far apart.
+    let spread = 0, cnt = 0;
+    for (const p of pilots) {
+      if (shape(p) !== want) continue;
+      const wl = p.readouts[0].w[0];
+      let d = 0;
+      for (let i2 = 0; i2 < meanW.length; i2++) d += (wl[i2] - meanW[i2]) ** 2;
+      spread += Math.sqrt(d); cnt++;
+    }
+    spread /= Math.max(1, cnt);
+    const mN = norm(meanW), avgN = drawN.reduce((a, v) => a + v, 0) / drawN.length;
+    console.log(`\n  IS THE AVERAGE JUST A SMALLER CORRECTION? (channel 0, lead 0, ${nUsed} draws)`);
+    console.log(`    mean |w| of the draws   ${avgN.toExponential(3)}`);
+    console.log(`    |w| of their average    ${mN.toExponential(3)}   ratio ${(mN / avgN).toFixed(3)}`);
+    console.log(`    rms spread about the mean ${spread.toExponential(3)}  `
+      + `= ${(spread / avgN * 100).toFixed(1)}% of a draw's own size`);
+    console.log('    a ratio near 1 with a large spread is CANCELLATION — the draws disagree and '
+      + 'the disagreement is what leaves. A ratio well below 1 is shrinkage, i.e. a ridge.');
+    void pre;
+  }
   const e = ensemble(pilots);
   if (!e.pilot) {
     console.log(`\n  ensemble: ${e.why}`);
