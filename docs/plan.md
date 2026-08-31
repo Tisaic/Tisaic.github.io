@@ -69,6 +69,51 @@ excludes. The covariance bound makes it stable and the anchor makes the commissi
 unforgettable, both measured, both shipped off. It becomes interesting again only if step 4's
 model stops improving.
 
+## STEP 1 IS DONE: THE REPRESENTATIVE GATE ON ALL SIX PLANTS
+
+Each plant supplies one program in its own units, indexed the way its own machine drives it. The
+fit never sees it; only the deploy decision does.
+
+```
+ plant       representative regime          outcome
+ tank        its own recipe                 gate RANKS: corr 0.989 (was -0.057); 3/8 deploy, ALL HELP
+ woodberry   its benchmark scenario         9 harmful deployments of 12 -> 12 refusals
+ EMPS        its trapezoid program          BYTE-IDENTICAL, 0.0412 mm / 14.0x        <- control
+ arm         its toolpath, step-indexed     BYTE-IDENTICAL, 6.18x / 7.72x            <- control
+ mill        a HOLD at S0                   0.61x — refusal independently confirmed
+ barrel      its changeover recipe          FIRST EVER SCORED: representative 0.22x, refused
+```
+
+**BOTH CONTROLS PASS, AND ONE OF THEM ONLY COUNTS BECAUSE IT WAS CHECKED.** The arm returned
+identical numbers with and without the third regime, which is the control passing IF the regime
+ran and a silent no-op if it did not — indistinguishable from outside. `arm.test.mjs` now prints
+the regimes the gate scored and asserts the representative one is among them, and ABSENT under
+`NOREP=1`: `scribble + program + representative`, 6.18x unchanged. Rule 61, caught before it
+became a result.
+
+**THE BARREL IS THE FIRST-TIME SCORE.** This plant has never been scored here: its refusal was
+traced to a dwelling scribble that cannot cross a 44 K box at quarter rates, i.e. a construction
+failure wearing a rate-limit message. Built from the recipe, the regime cannot fail that way, and
+the answer is a MEASURED refusal — **representative 0.22x** against **program 1.10x**. The program
+regime would have deployed it, one hundredth above the threshold; the recipe says the correction
+makes the machine four and a half times worse. Second plant where the new regime stops a
+deployment the old gate would have allowed.
+
+**THE MILL IS A CLEAN NEGATIVE AND IT KILLS A GOOD HYPOTHESIS.** A regulator's representative
+program is a HOLD — its setpoint never moves while an eccentricity disturbance acts — and both
+built-in regimes MOVE, so the gate had been scoring a disturbance-rejection machine on tracking,
+twice over. That was the best available explanation for a refusal this project calls a PREDICTION
+FAILURE. The hold reads **0.61x** beside scribble 0.63x and program 0.57x: all three agree, the
+refusal is right, and the hypothesis is dead.
+
+**SO THE SCORECARD FOR THE CHANGE IS: two harmful deployments prevented (tank seeds, barrel), one
+refusal independently confirmed, one plant scored for the first time, and the two plants that work
+untouched to four figures.** No plant lost anything.
+
+**WHAT IT COSTS, STATED.** The engineer must supply one representative program. That is a real
+addition to "wire it up and press one button" — though it is one they almost always have, and it
+is asked for at the point where they are deciding whether to let a controller onto their plant.
+
 ## What the record already settles
 
 Three findings make this plan shorter than it looks, and all three are measured rather than
