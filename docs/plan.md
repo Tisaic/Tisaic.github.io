@@ -1155,8 +1155,48 @@ diminishing returns in arithmetic, and the shipped setting sits at the far end o
 is an argument for the budget gate rather than against the controller: told a scan, the ladder
 should land near 1.3–1.5 and not near 0.34.
 
-**6d. AN 11% REGRESSION ON THE ARM THAT THREE HYPOTHESES FAILED TO EXPLAIN — STATED, NOT
-SOLVED.** The arm's model-only stack (conventional withheld, which is what survives the
+**6d. THE 11% WAS THE POOL CEILING, AND IT TOOK FOUR ATTEMPTS TO ASK THE QUESTION PROPERLY.**
+Run at `LEAD_SAMPLES=68` with the cap effectively removed, the arm's model-only stack returns
+**7.4340e-2 — the historical number exactly**. So pooling every row of every lead is worth 11%
+on this plant against the 60,000-row cap, and the trade is now priced rather than mysterious:
+the cap buys commissioning time and costs delivery.
+
+**THE THREE FAILED ATTEMPTS ARE THE USEFUL PART.** Lead sampling was tested (34 against 9:
+0.7% apart) and cleared. The pool STRIDE was found genuinely wrong — sized for 68 contributors
+while 9 are built, 7,875 rows against 60,000 — fixed, re-run, unchanged, and read as clearing
+the cap. **It cleared the stride and left the ceiling at 60,000, which is 32x below the
+configuration being compared against.** A conclusion drawn from a test that did not vary the
+thing being concluded about, for the third time in this phase.
+
+---
+
+**6e. ONLINE RLS ADAPTATION MAKES THE MACHINE WORSE, AND λ=1 SAYS THAT IS A FAULT RATHER THAN
+A FINDING.** EMPS, one commissioned model, weights and recursion reset between settings:
+
+```
+ lambda    program       sine     updates
+ frozen    14.68x       8.77x         —
+      1     9.96x       2.91x    124,775
+ 0.9999     7.55x       7.18x    124,800
+  0.999      0.21x      0.11x    124,800
+   0.99      0.21x        NaN    124,800
+```
+
+**λ = 1 is the internal control and it is the row that matters.** With no forgetting the
+recursion IS the batch fit continued, on more data drawn from the same process — a correct
+setup should leave a correct model roughly where it was. It goes 14.68x → 9.96x, so the update
+is fitting the WRONG QUANTITY, and the lower λ rows are that error compounded rather than
+evidence about tracking.
+
+*Not reported as "adaptation fails". Five apparatus faults have already been found in this one
+line of work — a report read off the wrong object, a ratcheting guard, a window counted in
+updates, plumbing that dropped the truth, and a sink that missed two terms sharing a line — and
+every one of them produced a plausible null first. The candidates are the target (`truth −
+conv0`, whose convolution is stamped at a different moment from the row), the prior scale, and
+the lead-0 command block's alignment between fit and runtime. Until λ=1 is neutral, no
+statement about forgetting factors means anything.*
+
+**6f. AN 11% REGRESSION ON THE ARM — SUPERSEDED BY 6d, KEPT FOR THE METHOD.** The arm's model-only stack (conventional withheld, which is what survives the
 retirement) reads 7.4340e-2 on one historical run with `sharedWeights` forced and every lead
 pooled uncapped, and **8.3e-2 consistently now**. Tested and killed in order:
 
