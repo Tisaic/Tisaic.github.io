@@ -1,6 +1,19 @@
-// TRANSFER: gated online adaptation on EMPS — the plant whose truth is an ordinary sensor,
-// whose ILC-vs-model gap (125x vs 12.7x) is distribution-match territory, and whose record
-// says UNGATED online hurt it (14.68x -> 9.96x). Same pilot setup as emps.test.mjs.
+/**
+ * @file THE GATED-ADAPTATION CONTRACT, pinned on EMPS — the plant where it is worth the most
+ * and where its failure mode was recorded first (ungated online measured 14.68x → 9.96x).
+ *
+ * What is asserted, as PROPERTIES with margins rather than frozen numbers (rule 4):
+ *   - the innovation gate FIRES on a repeating program (its reference was once frozen on the
+ *     first row and passed 2,583 of 2,583 — that bug must not come back);
+ *   - gated adaptation multiplies the static machine by at least 2x (measured 3.3–3.7x);
+ *   - the take-away installation HOLDS after the truth source is removed (measured better
+ *     than always-on here, because the program repeats);
+ *   - THE MEMORY TEST: the adapted-frozen bank is no worse than static on a two-tone sine
+ *     it never ran (measured 6x BETTER; phase-indexed ILC on this axis reads 0.55x there);
+ *   - and the MECHANISM is pinned: with forgetting off (λ = 1) the gain mostly vanishes,
+ *     because the commissioning posterior anchors the recursion — the forgetting is the
+ *     distribution-match mechanism and the gate is its safety, not the other way round.
+ */
 import { Pilot } from '../../lib/pilot/pilot.js';
 import { program, makeMachine, DT } from './emps-rig.mjs';
 const PR = program();
@@ -72,15 +85,23 @@ const SHIPPED = 0.5814;
 // broken; with it working, no-forgetting plus gating is a different machine. And directional
 // forgetting gets its SIXTH audition (five neutrals as a fit choice), the first with a
 // mechanism that wants it: inflate only what is being excited.
+let failed = 0;
+const check = (name, ok, detail = '') => {
+  console.log(`  ${ok ? '✓' : '✗'} ${name}${ok ? '' : `  → ${detail}`}`);
+  if (!ok) failed++;
+};
+const R = {};
 for (const [mode, cfg] of [['static', {}], ['online', {}], ['takeaway', {}],
-  ['takeaway λ=1', { lambda: 1 }], ['takeaway dir', { directional: true }]]) {
+  ['lambda1', { lambda: 1 }]]) {
   const snap = pilot.readouts.map((ro) => ro.w.map((a) => Float64Array.from(a)));
-  const r = runPilot(mode.startsWith('takeaway') ? 'takeaway' : mode, cfg);
+  const r = runPilot(mode === 'static' || mode === 'online' ? mode : 'takeaway', cfg);
   // The sine is scored with the weights EXACTLY as the protocol leaves them (adapted modes
   // score it frozen post-adaptation; static scores the commissioned bank).
   const sine = runSine();
-  console.log(`  ${mode.padEnd(13)} ${r.rms.toFixed(4)} mm rms  (${(SHIPPED / r.rms).toFixed(1)}x)`
-    + `  sine ${sine.toFixed(4)} mm  u ${r.uPk.toFixed(3)}  ${mode === 'static' ? '' : r.stats}`);
+  const ro0 = pilot.readouts[0];
+  R[mode] = { ...r, sine, gatedFrac: (ro0._infoSkipped || 0) / Math.max(1, ro0._infoSeen || 0) };
+  console.log(`  ${mode.padEnd(9)} ${r.rms.toFixed(4)} mm rms  (${(SHIPPED / r.rms).toFixed(1)}x)`
+    + `  sine ${sine.toFixed(4)} mm  ${mode === 'static' ? '' : r.stats}`);
   for (let c = 0; c < pilot.readouts.length; c++) {
     const ro = pilot.readouts[c];
     for (let i = 0; i < ro.w.length; i++) ro.w[i].set(snap[c][i]);
@@ -89,3 +110,16 @@ for (const [mode, cfg] of [['static', {}], ['online', {}], ['takeaway', {}],
   }
   pilot.online = null;
 }
+console.log('');
+check('the innovation gate fires on a repeating program (its reference bug stays dead)',
+  R.online.gatedFrac > 0.5, `gated fraction ${R.online.gatedFrac.toFixed(3)}`);
+check('gated adaptation multiplies the static machine by at least 2x',
+  R.static.rms / R.online.rms > 2, `${(R.static.rms / R.online.rms).toFixed(2)}x`);
+check('the take-away installation holds after the truth source is removed',
+  R.takeaway.rms < 1.2 * R.online.rms, `${R.takeaway.rms.toFixed(4)} vs ${R.online.rms.toFixed(4)}`);
+check('THE MEMORY TEST: adapted-frozen is no worse than static on a program never run',
+  R.takeaway.sine < 0.7 * R.static.sine, `${R.takeaway.sine.toFixed(4)} vs ${R.static.sine.toFixed(4)}`);
+check('the mechanism is the forgetting: at lambda 1 the gain mostly vanishes',
+  R.static.rms / R.lambda1.rms < 1.5, `${(R.static.rms / R.lambda1.rms).toFixed(2)}x`);
+console.log(failed ? `\npilot/onlinegate: ${failed} FAILED` : '\npilot/onlinegate: all checks passed');
+process.exit(failed ? 1 : 0);

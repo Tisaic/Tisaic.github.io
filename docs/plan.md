@@ -3913,3 +3913,12 @@ because each segment presents novelty the gate correctly admits. One number the 
 already computes distinguishes them: the gate's admit rate late in the run (EMPS take-away
 gated 8,603 of 24,935 and falling; the tank's first 40% gated 0 of 559 — everything still
 novel).
+
+**§26 addendum — the contract.** The gated-adaptation findings are now pinned as
+`test/pilot/onlinegate.test.mjs` in the full tier (after `emps.test.mjs` in the suite): the
+gate fires on repeats (its frozen-reference bug stays dead), adaptation multiplies the
+static machine ≥2x, the take-away installation holds, the adapted-frozen bank passes the
+memory test on the never-run sine, and λ=1 losing the gain pins the forgetting as the
+mechanism. Properties with margins, not frozen numbers (rule 4). The exploratory
+`empsonline.mjs` harness is retired into it — two near-copies of one protocol is how this
+project's defects get made (rule 61).

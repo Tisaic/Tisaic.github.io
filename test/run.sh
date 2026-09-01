@@ -325,6 +325,11 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     t node test/pilot/woodberry.test.mjs
     t node test/pilot/rollmill.test.mjs
     t node test/pilot/emps.test.mjs
+    # THE GATED-ADAPTATION CONTRACT on the same axis: the innovation gate fires on repeats,
+    # adaptation multiplies the static machine, the take-away installation holds after the
+    # truth source is removed, the adapted bank passes the memory test on a program it never
+    # ran, and the forgetting is pinned as the mechanism (lambda 1 loses the gain).
+    t node test/pilot/onlinegate.test.mjs
     t node test/pilot/hff.test.mjs
     # The banded operator on a plant with KNOWN neighbour coupling, and the control that it
     # is byte-identical where there is none. It shipped once with every harmonic's fit null
