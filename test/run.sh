@@ -334,6 +334,10 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # fits 10% of a 1 ms scan SLICED, each arming moves exactly its own part, and the sum
     # is asserted against the parts.
     t node test/pilot/scancost.test.mjs
+    # TARGET 1'S CONTRACT on the claim it can own: the price of agnosticism (self-fit
+    # ceiling over the agnostic recipe, same program, same instrument) inside 1.3x, with
+    # the ceiling real and the agnostic recipe clearly above baseline.
+    t node test/pilot/agnosticprice.mjs
     t node test/pilot/hff.test.mjs
     # The banded operator on a plant with KNOWN neighbour coupling, and the control that it
     # is byte-identical where there is none. It shipped once with every harmonic's fit null
