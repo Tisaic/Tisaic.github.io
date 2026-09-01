@@ -152,7 +152,8 @@ function routeSignals(arm, cmd, tau) {
  * @param {boolean} active whether to apply its correction
  * @returns {Promise<{r: object, uPk: number}>} the contour report and the peak correction
  */
-async function deployOn(pilot, shape, active, feed = 0.004) {
+async function deployOn(pilot, shape, active, feed = 0.004,
+  { laps = 3, scoreFromLap = 2, truthUntilLap = Infinity } = {}) {
   const { arm: a2, servo: s2 } = await makeArm();
   const path = mkPath(shape, feed);
   homeArm(a2, s2, path);
@@ -163,7 +164,12 @@ async function deployOn(pilot, shape, active, feed = 0.004) {
     return r;
   };
   pilot._initRun();
-  const total = Math.ceil(path.lap * 3), scoreFrom = Math.ceil(path.lap * 2);
+  const total = Math.ceil(path.lap * laps), scoreFrom = Math.ceil(path.lap * scoreFromLap);
+  // THE TRUTH SOURCE IS AN INSTALLATION PROPERTY, NOT A CONSTANT (the owner's constraint):
+  // it may be there for ever, for the first laps only — a tracker mounted for commissioning
+  // and taken away — or never. `truthUntilLap` cuts it mid-run so that scenario is a
+  // measurement, not a story; past the cut the pilot must degrade to its static bank.
+  const truthUntil = path.lap * truthUntilLap;
   const score = new ContourScore({ joints: 2, reversalTravel: 2e-2 });
   const split = { corner: { c2: 0, l2: 0, n: 0 }, straight: { c2: 0, l2: 0, n: 0 } };
   // FOUR EQUAL SIDES ON THE SQUARE AND THE DIAMOND; anything else gets no profile rather than a
@@ -188,7 +194,7 @@ async function deployOn(pilot, shape, active, feed = 0.004) {
     // instrument production may not have: any number measured through it is labelled as
     // such (EMPS and the tank read their truth off ordinary sensors; the arm does not).
     const rs = routeSignals(a2, [{ pos: q1 }, { pos: q2 }], tau);
-    pilot.observe(rs.measured, rs.truth);
+    pilot.observe(rs.measured, k < truthUntil ? rs.truth : null);
     if (k >= scoreFrom) {
       const dec = decompose(path, a2.toolXY(), cmd);
       score.step(dec.contour, dec.lag, tau, [a2.j1.wM, a2.j2.wM]);

@@ -3736,3 +3736,33 @@ measured neutral five times as a FIT choice) may earn its keep here as a GATE en
 inflate only directions being excited — which would be the sixth measurement of that knob
 and the first with a mechanism that wants it.
 
+
+### 21. GUIDED COMMISSIONING: ADAPT WHILE THE TRUTH SOURCE IS PRESENT, FREEZE, TAKE IT AWAY
+
+The owner's installation model, stated back and then measured: the truth source is a
+PROPERTY OF THE INSTALLATION, not of the controller — present for ever (a permanent
+tracker, or a plant whose truth is an ordinary sensor), present only for a GUIDED
+COMMISSIONING phase (a tracker mounted for install, run through real movements or the
+representative program, then removed), or never present. It is a setup switch and can never
+be assumed fixed. The pilot now runs all three: `online` unarmed is the static machine;
+armed with truth arriving it adapts; armed with truth gone it degrades to the frozen bank,
+silently and safely, and `status().onlineAtDeploy` says which machine it actually was.
+
+`test/pilot/trackaway.mjs`, sharp square @0.004, one commissioning, scored on laps 6–8 in
+every protocol so the windows match (rule 20):
+
+| installation | contour | vs open loop | lag |
+|---|---|---|---|
+| static (no truth ever) | 1.182e-1 | 1.71x | 1.56e-1 |
+| permanent truth (adapts throughout) | 9.173e-2 | **2.20x** | **7.60e-2** |
+| **take-away (truth laps 1–4, frozen after)** | 9.575e-2 | **2.11x** | 9.29e-2 |
+
+**The adapted bank HOLDS once the truth source leaves — 96% of the permanent-instrument
+gain at zero permanent instrumentation.** The gated recursion admitted 2,324 rows during
+the guided laps and the frozen weights carried laps 6–8 within 4% of the always-adapting
+machine. This composes with everything upstream: the corner banks were always fitted from
+truth-bearing records, so the guided phase is where bank population naturally lives — run
+the movements the machine will see, populate the grid, adapt the base, freeze, unbolt the
+tracker. What remains to measure: the full composition (router banks + guided adaptation,
+frozen together) and the transfer question — a bank adapted on the guided program, scored
+on a program the guide never ran, which is the memory test applied to adaptation.
