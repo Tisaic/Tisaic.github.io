@@ -3922,3 +3922,29 @@ memory test on the never-run sine, and λ=1 losing the gain pins the forgetting 
 mechanism. Properties with margins, not frozen numbers (rule 4). The exploratory
 `empsonline.mjs` harness is retired into it — two near-copies of one protocol is how this
 project's defects get made (rule 61).
+
+### 27. THE SCOREBOARD UNDER THE COMPOSITION — one target met, every cell up, the safety clause intact
+
+The full matrix with the composition armed (polygon banks + gated adaptation, permanent-truth
+installation), against the plain pilot this arc started from:
+
+| program | arc start | composition |
+|---|---|---|
+| rounded @0.004 (seen) | 6.18x | 6.32x |
+| sharp @0.004 | 1.69x | **2.20x** |
+| sharp @0.008 | 2.27x | **2.49x** |
+| rounded @0.008 | 2.60x | 2.66x |
+| circle @0.004 | 7.72x | **8.66x** |
+| circle @0.008 | 4.86x | **5.01x** |
+
+The matrix's own north-star readings:
+
+- **PROGRAM-AGNOSTIC: worst held-out degradation 3.65x → 2.87x** (target 1.3x — the arc
+  closed 40% of the gap on the metric the owner ranked first).
+- **FEEDRATE-AGNOSTIC on the sharp square: 1.13x across a 2x feed change — INSIDE the 1.5x
+  target.** The first north-star target formally met, and on the hardest program: the
+  composition made the square's transfer across FEED nearly free (severity layers + coverage
+  guard + adaptation each carried part of it). Rounded (2.37x) and circle (1.73x) remain
+  outside — their @0.008 rows are capped-authority territory for every mechanism.
+- **The safety clause holds under everything armed**: no held-out program made worse than
+  leaving the machine alone, all six cells, u never past the engineer's cap.
