@@ -3724,3 +3724,15 @@ positive. The gate reference needs to be a running property of the stream (next)
 open questions behind it: more laps (does adaptation converge toward the 3.27x self-fit or
 drift the way ungated EMPS did at 14.68 → 9.96), and shape-change transfer after adaptation
 (the memory test).
+
+**§20 addendum — the gate reference fixed and its next layer exposed.** With the reference a
+running maximum (rule 38's fix), the gate fires exactly where repeats coexist with novelty:
+864 of 2,583 rows gated on the sharp square (1.87 → 1.92x) — and zero on the smooth
+programs, whose rows never set a high-water mark to be measured against. The next layer,
+stated rather than absorbed: λ-forgetting at 0.9995 RE-INFLATES the covariance every update,
+so a lap-two repeat never looks fully familiar to the innovation — THE FORGETTING FIGHTS THE
+GATE, and the two knobs cannot be tuned independently. Directional forgetting (rule 41,
+measured neutral five times as a FIT choice) may earn its keep here as a GATE enabler —
+inflate only directions being excited — which would be the sixth measurement of that knob
+and the first with a mechanism that wants it.
+
