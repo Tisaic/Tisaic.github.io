@@ -244,53 +244,65 @@ if (ROUTER && subject.verdict && subject.verdict.deploy) {
       }
     }
   }
-  // AFULLK is exposed because the regime scale is derived from the fit record's own peak, and
-  // changing the EVENT SHAPE moves that peak: turn-through events spike at 2x the rest-only
-  // tour's (a through-zero reversal is Δv = 2v), which silently halved every program's blend
-  // engagement and made two shapes incomparable in one move (rule 24's cousin: a physics
-  // number moved when a probe-design control moved).
-  const aFull = +(process.env.AFULLK || 0.5) * peak, reachK = 1.7;
+  // THE REGIME SCALE IS ANCHORED TO THE DECLARED LIMITS, NOT TO THE RECORD. Three comparisons
+  // in a row were confounded by deriving aFull from the fit record's peak spike: every change
+  // to the EVENT SHAPE moved the peak (turn-through spikes at 2x rest-only; full-vMax events
+  // at 1.6x again), silently rescaling every program's engagement — a physics number moving
+  // when a probe-design control moves (rule 24). The anchor now is the machine's own declared
+  // aMax in per-sample units: a command accelerating at several times the limit its engineer
+  // declared is a corner outright, whatever the probe happened to record. The multiple sits
+  // where the shaped smoothstep saturates and is a constant to re-derive per plant (rule 31);
+  // AFULLK overrides it for experiments.
+  const S2 = subject.sample * subject.sample;
+  const aFull = +(process.env.AFULLK || 6) * 4e-6 * S2, reachK = 1.7;
+  // THREE LAYERS — SLOW, MEDIUM, FAST — WITH LINEAR INTERPOLATION BETWEEN THEM (the owner's
+  // design). The scribble bank is the slow layer at λ = 0; two corner banks sit at knots 0.5
+  // and 1.0 on the shaped blend axis, each fitted by weighted least squares under a HAT
+  // function peaked at its own knot — so a row teaches the layers in exactly the proportion
+  // the runtime will consult them, and the fit rule and the blend rule stay one definition.
+  // One bank at full severity was measured serving the slow square and betraying the fast one
+  // (2.15x / 0.86x): the corner regime is itself a spectrum, and two points on it cannot
+  // carry three regimes.
+  const KNOTS = [0.5, 1.0];
+  const hat = (l2, at) => {
+    if (at === KNOTS[0]) return Math.max(0, 1 - Math.abs(l2 - at) / 0.5);
+    return Math.max(0, (l2 - KNOTS[0]) / (1 - KNOTS[0]));
+  };
   let fitted = 0, kept = 0;
   for (let c = 0; c < 2; c++) {
     const ro = subject.readouts[c];
     const reach = Math.ceil(reachK * (ro.mLag - 1) * ro.stride);
-    // ONE λ DEFINITION, FIT AND RUNTIME: Pilot.regimeLambdas is the same decaying peak-hold
-    // _routerLambdas runs over the look-ahead at every decision step. The rows are weighted by
-    // √λ (weighted least squares), so a mild corner teaches the bank in proportion to how much
-    // of the bank will answer for it.
     const lams = recs.map((r) => Pilot.regimeLambdas(r.cmd, aFull, reach));
-    const wB = [];
+    const banks = KNOTS.map((at) => ({ at, bank: [] }));
     for (let li = 0; li < subject.N; li++) {
       const L = ro.leads[Math.min(li, ro.leads.length - 1)];
       const back = Math.max((ro.mLag - 1) * ro.stride, (ro.fLag - 1) * ro.stride - L);
-      const X = [], y = [];
-      for (let ri = 0; ri < recs.length; ri++) {
-        const rec = recs[ri], lam = lams[ri];
-        const saved = subject._rec;
-        subject._rec = { x: rec.x, cmd: rec.cmd, u: [], e: rec.e };
-        try {
-          for (let k = Math.max(back, rec.lap); k < rec.e.length - L - 1; k++) {
-            const l2 = lam[Math.min(k + L, lam.length - 1)];
-            if (l2 < 0.02) continue;
-            // WEIGHT λ³, NOT λ. The runtime blend hands the corner bank full authority at
-            // λ = 1, so the bank should BE the full-severity map — a λ-weighted fit lets the
-            // probe's many mild rows tilt it toward dynamics the blend already covers from
-            // the A side. Cubing concentrates the fit where the bank actually answers.
-            const sw = Math.pow(l2, 1.5);
-            const row = subject._row(c, k, L, ro.stride, ro.poly, ro.mLag, ro.fLag, ro.sched);
-            for (let q2 = 0; q2 < row.length; q2++) row[q2] *= sw;
-            X.push(row); y.push(rec.e[k + L][c] * sw);
-          }
-        } finally { subject._rec = saved; }
+      for (const kn of banks) {
+        const X = [], y = [];
+        for (let ri = 0; ri < recs.length; ri++) {
+          const rec = recs[ri], lam = lams[ri];
+          const saved = subject._rec;
+          subject._rec = { x: rec.x, cmd: rec.cmd, u: [], e: rec.e };
+          try {
+            for (let k = Math.max(back, rec.lap); k < rec.e.length - L - 1; k++) {
+              const h = hat(lam[Math.min(k + L, lam.length - 1)], kn.at);
+              if (h < 0.02) continue;
+              const sw = Math.sqrt(h);
+              const row = subject._row(c, k, L, ro.stride, ro.poly, ro.mLag, ro.fLag, ro.sched);
+              for (let q2 = 0; q2 < row.length; q2++) row[q2] *= sw;
+              X.push(row); y.push(rec.e[k + L][c] * sw);
+            }
+          } finally { subject._rec = saved; }
+        }
+        if (X.length > 4 * ro.w[0].length) { kn.bank.push(solveRidge(X, y, ro.ridge)); fitted++; }
+        else { kn.bank.push(ro.w[Math.min(li, ro.w.length - 1)]); kept++; }
       }
-      if (X.length > 4 * ro.w[0].length) { wB.push(solveRidge(X, y, ro.ridge)); fitted++; }
-      else { wB.push(ro.w[Math.min(li, ro.w.length - 1)]); kept++; }
     }
-    ro.wB = wB;
+    ro.wBanks = banks;
   }
   subject.router = { aFull, reachK };
   console.log(`  corner bank: source ${ROUTER}, aFull ${aFull.toExponential(2)}`
-    + ` (${+(process.env.AFULLK || 0.5)}x peak),`
+    + ` (${+(process.env.AFULLK || 6)}x declared aMax per sample²),`
     + ` reach ${reachK}x window, CONTINUOUS blend — ${fitted} leads fitted, ${kept} kept`
     + ` scribble (${((Date.now() - t0r) / 1000).toFixed(0)}s)`);
 }

@@ -440,7 +440,13 @@ async function recordCornerProbe(pilot, { steps = 30000, width = 40, dwell = 40,
   const c0 = path.at(0);
   const q0 = arm.ik(c0.x, c0.y, true);
   const S = pilot.sample;
-  const vTop = 0.63 * Math.min(...pilot.channels.map((c) => c.vMax));
+  // FULL vMax, NOT A FRACTION READ OFF ONE PROGRAM. This was 0.63x vMax — the slow programs'
+  // observed peak — and the bank it produced took the FAST square (feed 0.008, whose corners
+  // arrive at speeds the probe never gathered) from 2.27x to 0.86x: a fully-engaged corner
+  // bank extrapolating past its own fit range, with the smooth programs' byte-identical rows
+  // proving the blend itself was not at fault. The machine's own declared speed is the
+  // agnostic ceiling; the drive ladder below still decides how hard it may be worked.
+  const vTop = Math.min(...pilot.channels.map((c) => c.vMax));
   /** One go-and-return event as a velocity sequence: zero net displacement by symmetry. */
   const mkSeg = (v, alpha) => {
     const up = Math.max(1, Math.ceil(v / alpha));

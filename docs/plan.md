@@ -3506,3 +3506,43 @@ self-fitted bank still knows something about the square's specific corner geomet
 does not teach); a robust aFull; corner-regime mid leads (0.2–0.65 everywhere); and the
 six-plant question — the router is armed by injection on one plant, and making it a library
 default is exactly what rule 31 and the sixplant pass exist to gate.
+
+### 15. THREE LAYERS — SLOW, MEDIUM, FAST — AND THE AXIS THAT HAD TO STOP CLAMPING
+
+The owner's design, built as stated: the scribble bank at λ = 0 and two corner banks at knots
+0.5 and 1.0 on the blend axis, each fitted by weighted least squares under a hat function
+peaked at its own knot, the runtime interpolating piecewise-linearly between whichever two
+layers bracket the moment's severity (`readouts[].wBanks` in the pilot; `wB` remains the
+two-map shorthand). Fit rule and blend rule stay one definition.
+
+Two instrument repairs were forced on the way:
+
+- **The regime scale is anchored to the DECLARED aMax (x6, per sample²), not to the fit
+  record's peak.** Three comparisons in a row had been confounded by a peak-derived scale:
+  every change to the probe's event shape moved the peak and silently rescaled every
+  program's engagement (rule 24). The multiple is a constant to re-derive per plant (31).
+- **The axis had to stop saturating.** The smoothstep clamped at m = 0.6 — right for two
+  banks, wrong for a ladder: the slow square (m 0.93) and fast square (m 1.85) both read
+  λ = 1 and the knots could not tell them apart. Now: dead zone below 0.15 (the circle's
+  steady curvature is not a corner — the property that keeps every smooth program
+  byte-identical), then linear in severity to 2x the anchor.
+
+Machine scores, sharp square at both feeds, probe-fitted (no program supplied anywhere):
+
+| program | baseline | two banks | **three layers** |
+|---|---|---|---|
+| sharp @0.004 | 1.69x | 2.15x | **2.28x** |
+| sharp @0.008 | 2.27x | **0.86x** | **1.84x** |
+| rounded @0.004 / circle both | 6.18x / 7.72x / 4.86x | identical | identical |
+| rounded @0.008 | 2.60x | 2.59x | 2.54x |
+
+The two-bank 0.86x is the row that demanded the ladder: one bank fitted at full severity
+served the slow square and betrayed the fast one, because the corner regime is itself a
+spectrum and the probe's vTop had been read off one program's speeds (0.63x vMax — now full
+vMax, sized by the drive ladder like everything else). Three layers recover the fast square
+to 1.84x — still under its baseline, which is stated rather than absorbed: its severity sits
+at axis 0.92 where the fast knot's fit rows are dominated by probe events far harsher still
+(the probe reaches m ~ 5.5). Knot placement from the probe's own severity distribution, or
+the LPV form (weights affine in the axis, one solve, no knots — with the measured caution
+that extra columns on multi-regime records have lost every time here), are the two candidate
+next steps; the self-fitted ceiling remains 3.27x on the slow square.
