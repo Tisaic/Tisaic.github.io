@@ -1088,9 +1088,21 @@ that matches it** — the point-to-point tabs measure a different question.
   same fiction the acceleration was); and RANDOM POLYGONS through the corner rule — corner
   shapes with no part knowledge — the first agnostic bank above baseline in both cells (sharp
   square 2.02x/2.63x against 1.69x/2.27x; the joint-space tour reads 2.28x/2.16x; fitted on
-  the square itself, 3.27x). The wall has moved coverage → severity → GEOMETRY: every increase
-  in corner-geometry diversity in the fit source makes the square worse, because one linear
-  bank per severity knot averages over geometries. The scheduling variable is COMMANDED, the
+  the square itself, 3.27x). The wall was read as moving coverage → severity → GEOMETRY —
+  every increase in corner-geometry diversity made the square worse — **AND THE GEOMETRY WALL
+  WAS THE LABEL SCALE (plan §36).** The severity anchor's fix for the record-peak confound
+  SATURATED the λ labels on program-scale corners (31x declared against shapeLambda's 2x
+  clamp), the knot strata collapsed into one pool, and the fit's own fallback silently
+  rejected the corner weights at every lead — `116 kept scribble` against the record scale's
+  0 — while the stale 3.27x ceiling was carried forward through five tables from a commit
+  whose scaling no longer existed (both ends reproduced by checking out the commits: 1.99x at
+  the anchor commit byte-identical to head, 3.27x at the one before). Under `fitScale:
+  'record'` (0.5x the records' own peak, stored in the router so labels and addressing stay
+  one quantity) diversity PAYS — stars lift 2.39x → 2.93x where the anchor read them as harm
+  — smooth programs stay byte-identical, and the price of agnosticism against the self-fit
+  ceiling is **1.21x/1.10x at the two feeds, inside target 1's 1.3x**; what remains of the
+  degradation metric is the square's own hardness (its ceiling is 1.75x below the rounded
+  rectangle's for ANY bank, including one fitted on the square itself). The scheduling variable is COMMANDED, the
   row keeps the ACTUALS — measured split, and routing on actuals would put the blend inside
   the loop (rule 35). AND IT FITS THE PLC DISCIPLINE, COUNTED (plan §18): every fit is
   commissioning-time; the deployed λ scan is a bounded sparse-event list ingesting only the
@@ -1124,8 +1136,14 @@ that matches it** — the point-to-point tabs measure a different question.
   (≈ λ=1, the wrong tool, default off with a reason). Take-away vs always-on has its own
   selector: repeating production wants freezing, an evolving recipe wants the truth kept, and
   the gate's late-run admit rate distinguishes them. Pinned: `test/pilot/onlinegate.test.mjs`
-  (full tier); the full composition frozen — polygon banks + diamond-guided adaptation, no
-  production program anywhere — reads **2.39x on the sharp square** against static 1.71x.
+  (full tier); the full composition frozen read **2.39x on the sharp square** against static
+  1.71x with diamond-guided adaptation on anchor-scale banks — and plan §36 then measured
+  that guidance helps only broken banks (+11% on near-scribble anchor banks, −11% on the
+  square and 3.2x harm on the circle once the banks are real), so the composition SIMPLIFIED:
+  record-scale polygon+star banks, frozen, no guided phase, reading **2.87x/7.72x/6.18x**
+  (sharp/circle/rounded) with commissioning truth only. The engineered rival on the same
+  machine (plan §34: rigid model + datasheet Kalman + held-pose calibration, truth-free)
+  reads 1.01x/1.13x/1.02x.
   THE LAW COMPLETED TO SIX PLANTS AND SHARPENED (plan §31): **the deploy gate's own 1.1x
   threshold is ALSO the adaptation selector** — Wood-Berry (0.01x) and the mill (1.07x) below
   it stay null-or-harmful force-deployed; the barrel at exactly 1.10x FLIPS from 0.67x harmful

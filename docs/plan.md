@@ -4190,6 +4190,17 @@ is a tenth of the error. This is the anti-slosh rule from the other side once mo
 gearbox HAS a closed form and the Kalman duly recovers it — but what dominates this machine
 has no closed form the engineer possesses, and that part must be learned.
 
+**POSTSCRIPT AFTER §36: the learned side was itself understated, and the gap widens to
+2.9–7.7×.** The bench's learned protocol carried two components the scale finding overturned
+— anchor-scale labels (whose saturated λ had the fallback rejecting the corner weights at
+every lead) and a diamond-guided phase (measured pulling the shared weights off-geometry:
+−11% on the record-scale square and 3.2× on the circle). Its measured best self is record-
+scale polygon+star banks, frozen, NO guided phase — a SIMPLER installation than before
+(commissioning truth only, zero guided laps) — and the verdict re-reads: engineered full
+1.01× / 1.13× / 1.02× against learned frozen **2.87× / 7.72× / 6.18×** (sharp / circle /
+rounded), with the engineered rows byte-identical to the first table, which is the control
+that says the learned side improved rather than the bench moved.
+
 ### 35. TARGET 6 CLOSED: the full composition on one scan, one counted number, one contract
 
 The open item was that the budget claim covered the solver alone: `cost()` counted forecast +
@@ -4290,4 +4301,4 @@ than doing nothing), and the worst held-out degradation improves 2.87x → 2.55x
 | 5 higher | EMPS 14.8x → 55.5x; arm composition 2.2–2.5x on its hardest program |
 | 6 PLC scan | **CLOSED (§35)** — `scanCost()` composes QP + forecast + router + RLS; the full composition fits 10% of a 1 ms scan sliced (9,380 of 10,000), contract in `scancost.test.mjs` |
 | 7 breadth | achieved as reframed; the barrel flips helpful under adaptation |
-| 8 a rival | **measured twice — the two-regime PathILC verdict (§33), and the owner's truth-free Kalman rival (§34): engineered full 1.01–1.13× against the frozen composition's 2.28–2.86×** |
+| 8 a rival | **measured twice — the two-regime PathILC verdict (§33), and the owner's truth-free Kalman rival (§34): engineered full 1.01–1.13× against the frozen composition's 2.87–7.72× after §36's scale repair** |
