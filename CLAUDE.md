@@ -1108,6 +1108,24 @@ that matches it** — the point-to-point tabs measure a different question.
   now the θ-grid). Lead 0 binds, no axis lifts it, and the self bank's edge over the agnostic
   2.28x is lead-0 DISTRIBUTION MATCH (rule 34 from the scheduling side). Commanded torque is
   unavailable by contract; actuals stay in the row.
+  **AND THE DISTRIBUTION-MATCH ROUTE OPENED: GATED ONLINE ADAPTATION, MEASURED TO A LAW ON
+  FOUR PLANTS (plan §§20–26).** The pilot's own RLS at deploy — truth is an INSTALLATION
+  property (permanent / guided-then-removed / absent), a setup switch the report states
+  (`onlineAtDeploy`), never an assumption. The innovation gate's reference was frozen on the
+  first row (rule 38 verbatim, 2,583 of 2,583 rows passed on a repeating program) and is now a
+  running maximum, pinned by contract. THE LAW: gated adaptation MULTIPLIES a model the static
+  verify already vouched for — arm +29%, tank +18%, **EMPS 14.8x → 55.5x with the truth
+  REMOVED at lap 4 and the bank frozen** — and does nothing for a broken one (the refused mill:
+  null, its refusal confirmed); the deploy gate's ratio is the free selector. THE MEMORY TEST,
+  PASSED WHERE THE ILC FAILED IT: the adapted-frozen EMPS bank scores the never-run two-tone
+  sine 6x BETTER than static, on the axis where phase-indexed ILC's 125x reads 0.55x there.
+  THE MECHANISM IS THE FORGETTING (λ=1 loses the gain — the commissioning posterior anchors
+  the recursion), the gate is its safety, and directional forgetting FAILED its sixth audition
+  (≈ λ=1, the wrong tool, default off with a reason). Take-away vs always-on has its own
+  selector: repeating production wants freezing, an evolving recipe wants the truth kept, and
+  the gate's late-run admit rate distinguishes them. Pinned: `test/pilot/onlinegate.test.mjs`
+  (full tier); the full composition frozen — polygon banks + diamond-guided adaptation, no
+  production program anywhere — reads **2.39x on the sharp square** against static 1.71x.
   **THE CONTOUR ERROR IS NOW SPLIT INTO BIAS AND OSCILLATION** (`contourBias`,
   `contourOsc`), because rule 39 had no instrument behind it on the one tab that contours.
   It settled ⑥ against ⑤ in a single reading: both start with the same error (⑤ bias −0.626
