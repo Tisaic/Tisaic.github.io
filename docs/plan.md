@@ -3834,3 +3834,31 @@ Three findings, each carrying:
   on this exact sine. State-addressed adaptation learned the machine; the lap-indexed table
   learned the lap. That is the retirement's distinction, measured on the second plant, and
   it is the north star's program-agnostic claim holding through adaptation.
+
+### 24. ADAPTATION DOES NOT OVERTURN A REFUSAL — THE MILL'S NULL, AND WHAT THE MECHANISM IS
+
+The transfer question aimed at the refusals: force-deploy the mill (the refusal stays on the
+record; the gate is measured, not enforced — the page's own convention) and arm gated
+adaptation on the gauge, with the same delayed-reference routing commissioning uses
+(`test/pilot/millonline.mjs`):
+
+| | µm rms |
+|---|---|
+| no AGC | 15.15 |
+| BISRA gaugemeter | 18.08 (the famous amplification) |
+| monitor AGC | 14.00 |
+| forced static | 14.92 |
+| forced + gated online | 15.25 |
+| forced + take-away | 15.25 |
+
+**Adaptation makes the mill slightly WORSE, with the gate working exactly as designed**
+(1,004 of 19,333 rows admitted). The refusal stands. Placed beside the arm (+29% from
+adaptation) and EMPS (3.7x), the mechanism's shape is now measured from both sides: gated
+online MULTIPLIES a working model and does nothing for a broken one — rule 43 from the
+adaptation side. The mill's problem was never distribution match; its truth through a 200 ms
+gauge delay is barely predictable at all (the recorded eFree inflation), and no recursion on
+an unpredictable target buys anything. The pilot's refusal was a verdict about the plant's
+observability, and adaptation confirms it rather than overturning it. This also sharpens
+when to reach for the guided-commissioning protocol: it pays where the STATIC verify already
+vouches and the residual is distribution mismatch — the deploy gate's own ratio is the
+selector, at zero extra cost.
