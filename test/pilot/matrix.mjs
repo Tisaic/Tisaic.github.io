@@ -317,6 +317,82 @@ if (ROUTER && subject.verdict && subject.verdict.deploy) {
       }
     }
     ro.wBanks = banks;
+    // ─── GRID=1: THE 2D GRID — severity x turn angle, the triage's verdict built. `share`
+    // (which joint the corner bends) took the elbow's MID-lead forecast from -0.246 to
+    // +0.552 held-out while no axis carried lead-0 information; the full angle
+    // atan2(Δ²ch1, Δ²ch0) generalises it to any channel count and explains the geometry
+    // wall: polygons averaged different turn directions into one bank. Banks with too few
+    // rows fall back to the 1D severity bank, so the grid degrades to §15 rather than to
+    // noise.
+    if (process.env.GRID === '1') {
+      // FOLDED TO PERIOD π AND ALIGNED WITH THE TRIAGE'S PARTITION. The first grid put four
+      // knots at ±π/4 and ±3π/4 — the exact BOUNDARIES of the informative split (share is
+      // |Δ²ch0| ≥ |Δ²ch1|, i.e. θ near an axis against near a diagonal) — and treated θ and
+      // θ+π as different turns when the sign axis measured +0.016. Two knots at 0 and π/2 on
+      // a period-π circle ARE the share split, continuously.
+      const PERIOD = Math.PI;
+      const DIRS = [0, Math.PI / 2];
+      const hatD = (th, at) => {
+        let d = Math.abs((th % PERIOD + PERIOD) % PERIOD - at);
+        if (d > PERIOD / 2) d = PERIOD - d;
+        return Math.max(0, 1 - d / (PERIOD / 2));
+      };
+      const infos = recs.map((r) => {
+        const n = r.cmd.length, nc2 = r.cmd[0].length;
+        const ax = new Float64Array(n), th = new Float64Array(n);
+        let m = 0, g0 = 0, g1 = 0;
+        for (let k = 0; k < n; k++) {
+          let a = 0, s0 = 0, s1 = 0;
+          for (let c2 = 0; c2 < nc2; c2++) {
+            const p0 = r.cmd[k][c2], pm = r.cmd[Math.max(0, k - 1)][c2],
+              pp = r.cmd[Math.min(n - 1, k + 1)][c2];
+            const d2 = pp - 2 * p0 + pm;
+            if (Math.abs(d2) > a) a = Math.abs(d2);
+            if (c2 === 0) s0 = d2; else s1 = d2;
+          }
+          const mag = a / aFull, dec = m - 1 / reach;
+          if (mag >= dec) { m = mag; g0 = s0; g1 = s1; } else m = dec;
+          ax[k] = Math.max(0, (m - 0.15) / 1.85);
+          th[k] = Math.atan2(g1, g0);
+        }
+        return { ax, th };
+      });
+      const gBanks = KNOTS.map(() => DIRS.map(() => []));
+      let gFit = 0, gPool = 0;
+      for (let li = 0; li < subject.N; li++) {
+        const L = ro.leads[Math.min(li, ro.leads.length - 1)];
+        const back = Math.max((ro.mLag - 1) * ro.stride, (ro.fLag - 1) * ro.stride - L);
+        for (let ki = 0; ki < KNOTS.length; ki++) {
+          for (let di = 0; di < DIRS.length; di++) {
+            const X = [], y = [];
+            for (let ri = 0; ri < recs.length; ri++) {
+              const rec = recs[ri], inf = infos[ri];
+              const saved = subject._rec;
+              subject._rec = { x: rec.x, cmd: rec.cmd, u: [], e: rec.e };
+              try {
+                for (let k = Math.max(back, rec.lap); k < rec.e.length - L - 1; k++) {
+                  const t = Math.min(k + L, inf.ax.length - 1);
+                  const h = hat(inf.ax[t], KNOTS[ki]) * hatD(inf.th[t], DIRS[di]);
+                  if (h < 0.02) continue;
+                  const sw = Math.sqrt(h);
+                  const row = subject._row(c, k, L, ro.stride, ro.poly, ro.mLag, ro.fLag, ro.sched);
+                  for (let q2 = 0; q2 < row.length; q2++) row[q2] *= sw;
+                  X.push(row); y.push(rec.e[k + L][c] * sw);
+                }
+              } finally { subject._rec = saved; }
+            }
+            if (X.length > 4 * ro.w[0].length) { gBanks[ki][di].push(solveRidge(X, y, ro.ridge)); gFit++; }
+            else { gBanks[ki][di].push(banks[ki].bank[li]); gPool++; }
+            if (li === 0) {
+              console.log(`      ch${c} cell sev ${KNOTS[ki]} dir ${DIRS[di].toFixed(2)}:`
+                + ` ${X.length} rows ${X.length > 4 * ro.w[0].length ? 'FIT' : 'POOLED'}`);
+            }
+          }
+        }
+      }
+      ro.wGrid = { sev: KNOTS, dir: DIRS, period: PERIOD, banks: gBanks };
+      console.log(`  ch${c} grid: ${gFit} (lead x sev x dir) banks fitted, ${gPool} pooled to 1D`);
+    }
   }
   // The coverage ceiling: the probe's own top speed in PER-SAMPLE units, from its sizing —
   // beyond ~1.3x this the banks answer for a regime no record contains, and λ fades out.

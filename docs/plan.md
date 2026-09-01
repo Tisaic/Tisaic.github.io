@@ -3641,3 +3641,53 @@ popped event was still the maximum. Symptom, measured: identical peak λ to the 
 it went dark, and the machine quietly returned to its baseline score. The sound pruning is
 the reverse comparison: drop a NEW event the tail already dominates. After the fix the
 machine scores are byte-identical to the full rescan (1.97x / 2.49x / 6.18x — rule 21).
+
+### 19. AXIS TRIAGE, THE N-SITE GRID, AND A NULL WORTH MORE THAN THE FEATURE
+
+**The triage** (`test/pilot/triage.mjs`): split the SELF-fitted corner bank — the 3.27x
+ceiling — by each candidate lookup variable on the square's own record, held out across
+feedrates, judged against an unsplit control AND a random split of the same rows into the
+same bank count (the capacity control, rule 20). Verdict:
+
+| axis (ch1 elbow) | lead 0 | mid |
+|---|---|---|
+| none (control) | 0.910 | −0.246 |
+| random (capacity control) | 0.903 | −0.251 |
+| speed | 0.530 | +0.122 |
+| turn direction sign | 0.430 | +0.016 |
+| **turn share (which joint the corner bends)** | 0.718 | **+0.552** |
+
+**At lead 0 no axis carries information** — every informative split hurts while random
+matches the control, so the lagged actuals already tell lead 0 everything. At MID leads the
+geometry axis is decisive. Commanded torque is unavailable by contract (nobody commands
+torque and the pilot has no model to derive it); actuals stay in the row (measured: 0.84 vs
+0.66) and cannot schedule leads that have not happened.
+
+**The N-fit-site architecture, built and PLC-shaped** (`wGrid` in the pilot): a knot grid
+over (severity x turn angle θ = atan2(Δ²ch1, Δ²ch0) at the governing event), θ FOLDED to
+period π (a turn at θ and θ+π bends the same joints; the sign axis measured +0.016) with
+knots at 0 and π/2 — which IS the share split, continuously. Multilinear interpolation, at
+most 2^d banks touched per lead whatever the grid holds: per-scan cost scales with the
+DIMENSION count, memory alone with the bank count, every fit commissioning-time. The angle
+rides on the same sparse event list at two extra numbers per event.
+
+**And the machine said no, on a chain of evidence that closes the question rather than the
+experiment.** First grid: knots at ±π/4, ±3π/4 — the exact boundaries of the informative
+partition — and unfolded: null (1.98x/2.48x vs 1D's 1.97x/2.49x). Folded and aligned: still
+null (1.96x/2.50x), and the cell diagnostic rules out starvation — the sev-1.0 row has zero
+rows (polygon corners top out at axis ~0.5, dead weight), but the square deploys at axis
+0.42 and the cells it consults fitted on 4,200+ rows each. The grid is live where the square
+reads it and the machine does not move. The reconciliation: **the geometry axis's only
+information is at mid leads, and this project has now measured three independent times that
+mid-lead forecast quality does not move this machine** — leadTrust (weights moved, machine
+identical to four significant figures), the forecast-gate arming, and now the θ-grid. A
+receding horizon applies its first move and re-solves; lead 0 binds; no axis lifts lead 0
+above the unsplit ceiling; so the self bank's remaining edge over the agnostic 2.28x is
+DISTRIBUTION MATCH at lead 0, not any schedulable variable — the same lesson as rule 34,
+arriving from the scheduling side.
+
+**What this buys:** the grid machinery stays (it is the right shape for a plant whose
+regime IS multi-dimensional — the six-plant pass will say), the geometry probe programme
+stops before it spends weeks, and the honest statement of the agnostic ceiling on this
+plant is ~2.3–2.6x against a self-fit 3.27x, with the residual being lead-0 distribution
+match that no lookup variable reaches.
