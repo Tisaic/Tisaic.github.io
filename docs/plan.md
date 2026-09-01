@@ -3888,3 +3888,28 @@ matches λ = 1 almost exactly, because inflating only the excited directions kee
 unexcited ones anchored — and on a low-dimensional deployment stream that is nearly the whole
 posterior. Five neutrals said "default off"; this says it is the wrong tool for the one
 mechanism that finally had a story for it. Default off, now with a reason instead of a shrug.
+
+### 26. FOUR PLANTS, ONE LAW — AND THE TAKE-AWAY CHOICE HAS ITS OWN SELECTOR
+
+The tank (`test/pilot/tankonline.mjs`, seed-walked to a deploying draw — seed 2 at verify
+1.22x, seed 1 refusing at 1.08x, exactly the 3-of-8 record): static 1.47x, **online 1.73x
+(+18%)**, take-away 1.57x. The cross-plant picture of gated adaptation is now complete
+enough to state as law:
+
+| plant | static verdict | adaptation | note |
+|---|---|---|---|
+| arm | deploys | +29%, take-away holds | tracker = temporary instrument |
+| EMPS | deploys | **3.7x, take-away BEST** | repeating program → freeze wins |
+| tank | deploys (seed-dependent) | +18%, always-on best | novel recipe → keep adapting |
+| mill | refuses | null (slightly negative) | unpredictable truth; refusal correct |
+
+**The law: gated adaptation multiplies a model the static verify already vouched for, in
+proportion to the distribution mismatch, and does nothing for a broken one.** The deploy
+gate's ratio is the free selector for whether to bother. And the take-away-vs-always-on
+choice has its own selector, measured on two plants pointing opposite ways: a REPEATING
+production stream (EMPS) wants freezing — adaptation done, drift the only remaining motion —
+while an EVOLVING one (the tank's recipe) wants the truth kept if the installation has it,
+because each segment presents novelty the gate correctly admits. One number the machine
+already computes distinguishes them: the gate's admit rate late in the run (EMPS take-away
+gated 8,603 of 24,935 and falling; the tank's first 40% gated 0 of 559 — everything still
+novel).
