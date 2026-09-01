@@ -223,7 +223,7 @@ if (ROUTER && subject.verdict && subject.verdict.deploy) {
       const r = await recordCornerProbe(subject, { seed, steps: 45000, train: TRAIN });
       recs.push(r);
       console.log(`  probe seed ${seed}: drive-sized to alpha ${r.sizing.alphaMult}x declared`
-        + ` aMax at v ${r.sizing.vTop.toExponential(2)} (calibration peak `
+        + ` aMax at v ${r.sizing.vMult ?? 1}x declared vMax (calibration peak `
         + `${(100 * r.sizing.peak).toFixed(0)}%, clip ${(100 * (r.sizing.clipFrac || 0)).toFixed(1)}%),`
         + ` ${r.events[0]} events, run sat `
         + r.sat.map((st) => `${(100 * st.fraction).toFixed(2)}% (peak ${(100 * st.peak).toFixed(0)}%)`).join(' / '));
@@ -264,15 +264,18 @@ if (ROUTER && subject.verdict && subject.verdict.deploy) {
   // (2.15x / 0.86x): the corner regime is itself a spectrum, and two points on it cannot
   // carry three regimes.
   const KNOTS = [0.5, 1.0];
-  const hat = (l2, at) => {
-    if (at === KNOTS[0]) return Math.max(0, 1 - Math.abs(l2 - at) / 0.5);
-    return Math.max(0, (l2 - KNOTS[0]) / (1 - KNOTS[0]));
-  };
+  // TRIANGLES ON THE UNCLAMPED AXIS. The runtime clamps at 1 — the top layer answers
+  // everything harsher — but a fit weighted by the clamped value hands the top knot every
+  // row from axis 1 to the probe's ~2.9, and the fast square (axis 0.92) is then served by a
+  // bank fitted mostly on events three times its severity. Each knot's triangle is zero half
+  // a knot-spacing beyond itself, so a layer learns ITS severity and interpolation does the
+  // rest.
+  const hat = (ax, at) => Math.max(0, 1 - Math.abs(ax - at) / 0.5);
   let fitted = 0, kept = 0;
   for (let c = 0; c < 2; c++) {
     const ro = subject.readouts[c];
     const reach = Math.ceil(reachK * (ro.mLag - 1) * ro.stride);
-    const lams = recs.map((r) => Pilot.regimeLambdas(r.cmd, aFull, reach));
+    const lams = recs.map((r) => Pilot.regimeLambdas(r.cmd, aFull, reach, true));
     const banks = KNOTS.map((at) => ({ at, bank: [] }));
     for (let li = 0; li < subject.N; li++) {
       const L = ro.leads[Math.min(li, ro.leads.length - 1)];
@@ -300,7 +303,11 @@ if (ROUTER && subject.verdict && subject.verdict.deploy) {
     }
     ro.wBanks = banks;
   }
-  subject.router = { aFull, reachK };
+  // The coverage ceiling: the probe's own top speed in PER-SAMPLE units, from its sizing —
+  // beyond ~1.3x this the banks answer for a regime no record contains, and λ fades out.
+  const vTop = ROUTER === 'probe' && recs[0].sizing
+    ? (recs[0].sizing.vMult ?? 1) * 8e-4 * subject.sample : null;
+  subject.router = { aFull, reachK, ...(vTop ? { vTop } : {}) };
   console.log(`  corner bank: source ${ROUTER}, aFull ${aFull.toExponential(2)}`
     + ` (${+(process.env.AFULLK || 6)}x declared aMax per sample²),`
     + ` reach ${reachK}x window, CONTINUOUS blend — ${fitted} leads fitted, ${kept} kept`

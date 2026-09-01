@@ -440,13 +440,15 @@ async function recordCornerProbe(pilot, { steps = 30000, width = 40, dwell = 40,
   const c0 = path.at(0);
   const q0 = arm.ik(c0.x, c0.y, true);
   const S = pilot.sample;
-  // FULL vMax, NOT A FRACTION READ OFF ONE PROGRAM. This was 0.63x vMax — the slow programs'
-  // observed peak — and the bank it produced took the FAST square (feed 0.008, whose corners
-  // arrive at speeds the probe never gathered) from 2.27x to 0.86x: a fully-engaged corner
-  // bank extrapolating past its own fit range, with the smooth programs' byte-identical rows
-  // proving the blend itself was not at fault. The machine's own declared speed is the
-  // agnostic ceiling; the drive ladder below still decides how hard it may be worked.
-  const vTop = Math.min(...pilot.channels.map((c) => c.vMax));
+  // THE SPEED IS LADDERED PAST THE DECLARED vMax, DRIVE-GATED LIKE THE SEVERITY. This began
+  // as 0.63x vMax (one program's observed peak — cost the fast square 2.27x → 0.86x), then
+  // 1.0x — and the fast square still sat under its baseline, because at feed 0.008 the
+  // programs command ~126% of the declared vMax: the declared velocity is the same fiction
+  // the declared acceleration was (§4-5), and a probe that respects it cannot visit the
+  // regime the fast programs run. The calibration below walks BOTH dials and keeps the
+  // harshest (v, α) the drive runs clean, so the record's ceiling is the machine's, not the
+  // datasheet's.
+  const vDecl = Math.min(...pilot.channels.map((c) => c.vMax));
   /** One go-and-return event as a velocity sequence: zero net displacement by symmetry. */
   const mkSeg = (v, alpha) => {
     const up = Math.max(1, Math.ceil(v / alpha));
@@ -473,9 +475,10 @@ async function recordCornerProbe(pilot, { steps = 30000, width = 40, dwell = 40,
   let chosen = null;
   const aMax0 = Math.min(...pilot.channels.map((c) => c.aMax));
   const ffClamp = (d) => Math.max(-aMax0, Math.min(aMax0, d));
+  for (const vMult of [1, 1.5, 2]) {
   for (let mult = 1; mult <= 128; mult *= 2) {
     servo.resetLimitStats();
-    const seg = mkSeg(vTop, mult * aMax0);
+    const seg = mkSeg(vMult * vDecl, mult * aMax0);
     const pos = [0, 0];
     for (let k = 0; k < seg.length + 3200; k++) {
       const inSeg = k < seg.length;
@@ -495,10 +498,12 @@ async function recordCornerProbe(pilot, { steps = 30000, width = 40, dwell = 40,
     // so 2x clips 7% of its steps while 64x clips 2.4% of its. A ladder that stops at the
     // first red rung reads the dip as a ceiling and parks at 1x for ever (rule 12's cousin:
     // the meter was read before the sweep settled the question).
-    if (clipFrac <= 0.025) chosen = { alphaMult: mult, peak, clipFrac };
+    if (clipFrac <= 0.025) chosen = { vMult, alphaMult: mult, peak, clipFrac };
   }
-  if (!chosen) chosen = { alphaMult: 1, peak: NaN, clipFrac: NaN };
+  }
+  if (!chosen) chosen = { vMult: 1, alphaMult: 1, peak: NaN, clipFrac: NaN };
   const alphaTop = chosen.alphaMult * aMax0;
+  const vTop = chosen.vMult * vDecl;
   servo.resetLimitStats();
   // THE RECORD IS A STOP-AND-GO TOUR, NOT EVENTS AT ONE POSE. A version that held the start
   // pose and evented in place fitted a bank that made the square WORSE (1.35x against the
@@ -581,7 +586,8 @@ async function recordCornerProbe(pilot, { steps = 30000, width = 40, dwell = 40,
   const sat = servo.limitStats();
   await arm.l1.destroy(); await arm.l2.destroy();
   return { x, cmd, e, lap: Math.ceil(2000 / S), events: [nEv, nEv],
-    sizing: { alphaMult: chosen.alphaMult, alphaTop, vTop, peak: chosen.peak },
+    sizing: { alphaMult: chosen.alphaMult, vMult: chosen.vMult, alphaTop, vTop,
+      peak: chosen.peak },
     sat: sat.map((st) => ({ fraction: st.fraction, peak: st.peakDemand / st.tauMax })) };
 }
 

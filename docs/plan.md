@@ -3546,3 +3546,35 @@ at axis 0.92 where the fast knot's fit rows are dominated by probe events far ha
 the LPV form (weights affine in the axis, one solve, no knots — with the measured caution
 that extra columns on multi-regime records have lost every time here), are the two candidate
 next steps; the self-fitted ceiling remains 3.27x on the slow square.
+
+### 16. THE COVERAGE GUARD: A BANK MAY NOT ANSWER AT SPEEDS NO RECORD CONTAINS
+
+Three nulls closed the fast square's remaining gap the honest way:
+
+- **Hats on the unclamped severity axis** (so the top knot is not drowned by the probe's
+  harshest events): byte-identical, hypothesis dead.
+- **Row count**: saturated at §14.
+- **Laddering the probe's speed past the declared vMax**: the DRIVE refuses — no (v, α) at
+  1.5x vMax runs under the clip bar — so the regime the fast square cruises in (~126% of the
+  declared vMax, the declared velocity being the same fiction the declared acceleration was)
+  cannot be put into any bank. The machine can be commanded there; it cannot be PROBED there
+  cleanly.
+
+Which leaves exactly one right move, and it is the deploy gate's philosophy applied per lead:
+**λ fades to zero where the commanded speed exceeds the probe's own ceiling** (`router.vTop`;
+fade 1.0–1.15x, tightened from 1.3x after the residual 13% engagement measured a 10% cost).
+The scheduling stays entirely on the COMMAND — known N steps ahead, feedback-free (routing on
+actuals would put the blend inside the loop, rule 35), sharp-edged where the response smears —
+while the ROW keeps the actuals, which is the split the composite already measured (pose-
+scheduling pays on actual torque, 0.84 against 0.66 commanded).
+
+| sharp square | baseline | two banks | three layers | + coverage guard |
+|---|---|---|---|---|
+| @0.004 | 1.69x | 2.15x | 2.28x | **2.28x** |
+| @0.008 | 2.27x | 0.86x | 1.84x | **2.16x** |
+
+No program supplied anywhere; rounded and circle byte-identical at 0.004, within 2% at 0.008.
+The 0.008 row sits 5% under its baseline — the corner-engaged bank slightly misses at a feed
+whose corners it only saw scaled — and the slow square holds its best number. Open: per-bank
+TRUST from measured residuals (the actuals' honest way into the routing — a slow gate, not a
+schedule), and the six-plant pass before any of this becomes a default (rule 31).
