@@ -111,10 +111,13 @@ async function record(path) {
 }
 const rnd = (s0) => { let z = s0 >>> 0; return () => (z = (z * 1664525 + 1013904223) >>> 0) / 4294967296; };
 const recs = [];
-for (const [seed, feed] of [[81, 0.004], [82, 0.008], [83, 0.0055]]) {
-  recs.push(await record(randomPolygon(rnd(seed), feed)));
+for (const [seed, feed, star] of [[81, 0.004, 0], [82, 0.008, 0], [83, 0.0055, 0],
+  [85, 0.004, 1], [86, 0.008, 1], [87, 0.0055, 1]]) {
+  recs.push(await record(randomPolygon(rnd(seed), feed, !!star)));
 }
-const fb = fitCornerBanks(pilot, recs, {});
+// Plan §36's measured-best protocol: record-scale labels, and stars in the diet (diversity
+// pays once the labels can stratify it). FITSCALE=anchor reproduces the old rows.
+const fb = fitCornerBanks(pilot, recs, { fitScale: process.env.FITSCALE || 'record' });
 const routerSaved = pilot.router;
 console.log(`corner banks: fitted ${fb.fitted}, kept ${fb.kept}, aFull ${fb.aFull.toExponential(2)}`);
 
