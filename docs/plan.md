@@ -4372,6 +4372,21 @@ The experiment ladder, cheapest-falsifier first: ① wall-clock breakdown (DONE,
 ⑥ ensemble; ⑦ the integrated one-press bench — `autostack` takes the demo alongside
 signals and limits and ships the whole composition.
 
+**③ MEASURED, AND BOTH HALVES HOLD — WITH A BONUS THAT REVERSES THE EXPECTED COST.**
+`test/pilot/displace.mjs`: commissioned at a workspace-sized box (±1.2 rad — the standard
+±0.55 turned out to be PROGRAM-sized, the home square using 0.523 of it, so the workspace
+requirement had never been represented by the rig), demo banks fitted on the sharp square
+at (12,0), scored on squares displaced across the box. The banks fade MONOTONICALLY —
+3.81x at home, 3.48x at d=1.4, 3.08x at d=2.8, 2.75x at d=4.2 — always well above the base
+model (1.77–1.95x) and never near harm, so the pose-fade guard is optional rather than
+mandatory: the corner bank is a move-profile model with mild pose sensitivity, exactly what
+the diamond-transfer reading (0.950 on a never-fitted geometry) suggested. And the bonus:
+the WIDE box did not cost the home program, it helped it — base 1.77x and banks 3.81x
+against 1.69x/3.64x at the program-sized box. A commissioning that spans the range the
+machine is actually used over (manual + auto) is better even for the sub-range, which is
+the span rule arriving from its other side. Workspace-coverage generators remain worth
+building only to close the 3.81→2.75 slope, a second-order gain now.
+
 **② MEASURED, AND THE KILLER FIRED AS WRITTEN.** On the rounded program the self-fit
 ceiling, the agnostic banks and no banks at all are BYTE-IDENTICAL — 2.173e-2, 6.18x, in
 every row — so corner banks buy exactly nothing there even fitted on the rounded itself at
