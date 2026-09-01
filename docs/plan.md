@@ -4372,6 +4372,17 @@ The experiment ladder, cheapest-falsifier first: ① wall-clock breakdown (DONE,
 ⑥ ensemble; ⑦ the integrated one-press bench — `autostack` takes the demo alongside
 signals and limits and ships the whole composition.
 
+**② MEASURED, AND THE KILLER FIRED AS WRITTEN.** On the rounded program the self-fit
+ceiling, the agnostic banks and no banks at all are BYTE-IDENTICAL — 2.173e-2, 6.18x, in
+every row — so corner banks buy exactly nothing there even fitted on the rounded itself at
+record scale. (One mechanism note: a multi-feed diet re-dilutes the scale for gentle
+programs — the record's peak comes from the fastest feed's corners, so the slow feed's
+corners fall back into the dead zone; irrelevant here since even the ceiling is flat, but
+it will matter for demo-statistics scaling on mixed-feed demos.) Corner banks are a
+SHARP-PROGRAM lever, full stop. The flagship program's remaining headroom is in the BASE
+layer — forecast quality, DPT, cascade depth, ensemble — which re-ranks the ladder:
+⑤ and ⑥ rise, and target 5's path does not run through the router at all.
+
 ### The eight targets, restated (replacing the stale table above)
 
 | target | state |
