@@ -4098,3 +4098,46 @@ adaptation reclaims it). One matrix run at cap 0.3 with the composition armed:
 worse than leaving the machine alone, and the diagnosis-to-fix path was exactly one report
 line to one matrix run. Program-agnostic worst-row holds at 2.86x (the @0.004 sharp is
 model-bound, as its own binding verdict says, and the cap change correctly left it alone).
+
+### 33. TARGET 8, THE RIVAL — the verdict is two regimes, not a winner
+
+The plan held this for last on purpose, and with the refusal machinery law-grade it ran.
+A textbook norm-optimal ILC was built with model-free identification (`test/pilot/rival.mjs`:
+two probe laps, impulse response by cross-correlation, adjoint steepest descent, zero-phase
+Q). Two of its faults were mine and were repaired by this project's own rules — the step size
+needed the PEAK frequency gain, not the kernel energy (it diverged in three laps), and the
+kernel had to REACH the settling time (rule 37, biting the rival: at 257 taps against Tset's
+~305 samples its truncated DC crept the update the wrong way). Repaired, it converges to
+1.4x by lap 8 on the sharp square — and then DIVERGES from model error (6.4e-1 by lap 20),
+and never improves the circle at all. **Even a clean norm-optimal is fragile on this bench**,
+which is context for what PathILC's lead + zero-phase robustness is worth.
+
+So the rival of record is PathILC, already measured to convergence on this machine, and the
+target-8 verdict is a two-regime table rather than a winner:
+
+| regime | PathILC (recorded) | the composition |
+|---|---|---|
+| converged, on its own program | **circle 8.9e-4 @15 laps; rectangle 2.53e-2** | circle ~8e-3; sharp 9.2e-2 |
+| first part / a program never seen | 0.55x on the EMPS sine — worse than nothing | **transfers everywhere measured; 8.8x on that same sine** |
+| installation | needs the error signal EVERY lap, for ever | needs it for a guided phase, then frozen |
+| a program change | table invalid, relearn from lap one | same banks, same weights |
+
+Converged-on-program, the lap-indexed table wins by an order — lap-to-lap repeatability is
+0.3 µm against ~40 µm of model error, and remembering beats predicting where remembering is
+allowed. Everywhere else — first parts, changed programs, removed instruments — the
+composition wins outright. The north star chose its side of this table in its first line
+("lap improvement is great but secondary to the unseen path performance"), and both sides
+are now measured on the same machines with the same instruments.
+
+### The eight targets, restated (replacing the stale table above)
+
+| target | state |
+|---|---|
+| 1 program-agnostic (1.3x) | 2.86x worst-row, from 3.65x; remaining gap is lead-0 distribution match against the measured self-fit ceiling |
+| 2 feedrate-agnostic (1.5x) | **MET — all three programs** (1.16 / 1.49 / 1.14) |
+| 3 plant-agnostic | six plants, honest refusals, the 1.1x threshold law |
+| 4 commissioning in minutes | one gated layer + guided laps replaced 3-layer cascades |
+| 5 higher | EMPS 14.8x → 55.5x; arm composition 2.2–2.5x on its hardest program |
+| 6 PLC scan | router counted (21k worst / 320 smooth); full-composition scanCost contract still open |
+| 7 breadth | achieved as reframed; the barrel flips helpful under adaptation |
+| 8 a rival | **measured — the two-regime verdict above** |

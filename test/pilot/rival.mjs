@@ -16,6 +16,16 @@
  * failure mode; the pilot's composition is state-addressed and transfers, but its on-program
  * ceiling is the forecast bound. The comparison rows are chosen so both claims are visible.
  *
+ * MEASURED OUTCOME, kept honest in the header: after two instrument repairs of mine (the
+ * step size needed the peak frequency gain, not the kernel energy; the kernel had to REACH
+ * the settling time — rule 37 biting the rival), this norm-optimal converges to 1.4x by lap
+ * 8 on the sharp square and then DIVERGES from model error (6.4e-1 by lap 20), and never
+ * improves the circle. The un-modelled component integrates lap over lap through the mild Q.
+ * The STRONG ILC on this bench is the repo's own PathILC (lead + zero-phase over arc bins),
+ * whose converged numbers are the recorded rival; this file documents that even a textbook
+ * norm-optimal with clean model-free identification is fragile here, which is context for
+ * how much PathILC's robustness is worth.
+ *
  * Run: node test/pilot/rival.mjs [SHAPES=sharp,circle] [LAPS=12]
  */
 import { ContourScore, decompose } from '../../lib/flexisim/contour.js';
@@ -30,7 +40,11 @@ async function bench(shape) {
   const lap = Math.ceil(path.lap);
   const S = 9;                                   // the pilot's own sample on this plant
   const P = Math.ceil(lap / S);                  // samples per lap
-  const M = 257;                                 // FIR taps of the lifted response
+  // THE KERNEL MUST REACH THE SETTLING TIME — rule 37, biting the RIVAL this time. At 257
+  // taps against Tset ≈ 305 samples the identified response was a truncated smear whose DC
+  // was systematically wrong, and the update crept the wrong way (measured: e-rms 2.18e-2 →
+  // 2.37e-2 over six laps with the sign structure per joint intact). 512 covers it.
+  const M = 512;
 
   // One machine per protocol run, homed identically.
   async function fresh() {
@@ -75,7 +89,7 @@ async function bench(shape) {
   const e0 = await runLap(m, zero, null);
   let seed = 31 >>> 0;
   const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32) * 2 - 1;
-  const AMP = 0.01;
+  const AMP = 0.03;   // the dither must clear the truth it identifies through (was half of it)
   const d = [new Float64Array(P), new Float64Array(P)];
   for (let j = 0; j < 2; j++) for (let i = 0; i < P; i++) d[j][i] = AMP * rnd();
   const e1 = await runLap(m, d, null);
@@ -112,10 +126,22 @@ async function bench(shape) {
   // the table carries over, the plant keeps its state).
   const u = [new Float64Array(P), new Float64Array(P)];
   const ladder = [];
+  if (process.env.RIVAL_DEBUG) {
+    for (let j = 0; j < 2; j++) {
+      const hs = Array.from(h[j].slice(0, 8)).map((v) => v.toFixed(3)).join(' ');
+      console.log(`    [id] ch${j} h[0..7] ${hs}  sum ${h[j].reduce((a, v) => a + v, 0).toFixed(3)}`
+        + `  hMax2 ${hMax2[j].toExponential(2)}  eta ${(0.8 / hMax2[j]).toExponential(2)}`);
+    }
+  }
   for (let l = 0; l < LAPS; l++) {
     const score = new ContourScore({ joints: 2, reversalTravel: 2e-2 });
     const e = await runLap(m, u, score);
     ladder.push(score.report().contourRms);
+    if (process.env.RIVAL_DEBUG) {
+      const mu = Math.max(...u[0].map(Math.abs), ...u[1].map(Math.abs));
+      console.log(`    [lap ${l}] contour ${score.report().contourRms.toExponential(2)}`
+        + `  max|u| ${mu.toExponential(2)}  e0rms ${Math.sqrt(e[0].reduce((a, v) => a + v * v, 0) / P).toExponential(2)}`);
+    }
     for (let j = 0; j < 2; j++) {
       const eta = 0.8 / Math.max(hMax2[j], 1e-12);
       const nu = new Float64Array(P);
