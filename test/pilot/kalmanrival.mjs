@@ -17,9 +17,9 @@
  *     held, exactly `reconcile.test.mjs`'s conventional machine), applied as a per-joint
  *     feedforward at the command. Rows below split the two: static-only, KF-only, both.
  *   LEARNED — the frozen composition: commissioned from noise with a TEMPORARY tracker
- *     (its stated installation), corner banks from random polygons, guided adaptation on a
- *     DIAMOND (never the scored geometry), then frozen. No model, no geometry, no tracker
- *     at deploy.
+ *     (its stated installation), corner banks from random polygons and stars at the
+ *     record lambda scale, then frozen. No model, no geometry, no tracker at deploy —
+ *     and no guided phase either (measured harmful once the banks are real; see below).
  *
  * The bench's own instrument (the tool, for SCORING only) touches neither controller.
  *
@@ -162,15 +162,21 @@ const pilot = await commissionArm({ seed: 1 });
 if (!pilot || !pilot.verdict.deploy) { console.log('pilot refused'); process.exit(1); }
 const rnd = (s0) => { let z = s0 >>> 0; return () => (z = (z * 1664525 + 1013904223) >>> 0) / 4294967296; };
 const recs = [];
-for (const [seed, feed] of [[81, 0.004], [82, 0.008], [83, 0.0055]]) {
-  recs.push(await recordOpenLoop(pilot, randomPolygon(rnd(seed), feed), feed));
+for (const [seed, feed, star] of [[81, 0.004, 0], [82, 0.008, 0], [83, 0.0055, 0],
+  [85, 0.004, 1], [86, 0.008, 1], [87, 0.0055, 1]]) {
+  recs.push(await recordOpenLoop(pilot, randomPolygon(rnd(seed), feed, !!star), feed));
 }
-fitCornerBanks(pilot, recs, {});
-// guided adaptation on the DIAMOND, then frozen: the take-away installation.
-pilot.online = {};
-await deployOn(pilot, 'diamond', true, 0.004, { laps: 4, scoreFromLap: 3, truthUntilLap: 4 });
-pilot.online = null;
-console.log('  learned side: commissioned, polygon banks, diamond-guided, FROZEN');
+// RECORD-SCALE lambda labels, and NO guided phase. Both changes are the learned side's
+// measured best self (the same standard the engineered side got): under the record scale
+// the corner weights win at every lead (the anchor's saturated labels had the fallback
+// rejecting them, 116 kept-scribble against 0), star polygons ADD under it where they
+// subtracted under the anchor (2.39x -> 2.93x against 2.02x -> 1.97x), and the diamond-
+// guided RLS was measured pulling the shared weights off-geometry once the banks are real:
+// -11% on the record-scale square and 3.2x on the circle. So the learned installation is
+// now SIMPLER than the one it replaces - commissioning truth only, zero guided laps, zero
+// truth at deploy - and stronger everywhere.
+fitCornerBanks(pilot, recs, { fitScale: 'record' });
+console.log('  learned side: commissioned, record-scale polygon+star banks, FROZEN (no guided phase)');
 
 for (const shape of SHAPES) {
   const off = await (async () => {
