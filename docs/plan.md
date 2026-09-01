@@ -3608,3 +3608,36 @@ angle and direction), so geometry could be a second scheduling variable rather t
 averaged over. The measured caution stands — every capacity increase on a mixed record has
 lost here — so that experiment must hold the per-bank row count while splitting, not just
 add banks.
+
+### 18. THE ROUTER ON A PLC SCAN: COUNTED, SPARSE, AND ONE REAL BUG FOUND BY THE CONTROL
+
+Target 6's frame: the pilot's deployed tick is 42,914 MAC/cycle at defaults, with a measured
+cheap corner at 9,517 against a 10,000 budget (not default — fails the arm contract). The
+question was whether the two-regime machinery fits that discipline. The answer, counted:
+
+**What never touches the cyclic task:** every fit. The knot banks, the probe, the calibration
+ladder, the polygons — all commissioning-time, like the existing tune. Deployed, the banks
+are K × N × nw frozen doubles (~50 KB/channel) and the λ math is clamps, multiplies and
+compares — no transcendentals, fixed-point friendly.
+
+**What does, and how it got PLC-shaped:** the λ scan re-read ~700 look-ahead offsets per
+decision (~17,000 MAC-equivalents — it would have blown the budget alone). But a peak-hold
+with LINEAR decay is exactly max over past spikes of (mag − Δt/reach), a spike at or under
+the dead zone can never surface, and corners are sparse by definition — so the profile is
+carried exactly by a bounded list of corner events, ingesting only the `grid` offsets that
+newly enter the horizon each decision. `routerCost()` counts it the way `PreviewMPC.cost()`
+counts the QP: **worst case 20,852 MAC/decision both channels (every lead in corner regime,
+event list at its cap), smooth-program case 320** — the dead zone is not only correctness
+(byte-identical circles), it is the scan budget's friend: a machine cutting smooth geometry
+pays ~0.7% of the default tick. The honest shaves if worst case must fit a tighter cycle,
+in order: the event cap (24 is generous; 4 live events is typical), blending only engaged
+leads, and the delta-bank form of the blend.
+
+**And the sparse rewrite's first version had a real bug the side-by-side control caught:**
+monotone-deque eviction (pop older events when a stronger one arrives) is only sound for
+query times AFTER the new event — and the horizon queries times BETWEEN events, where the
+popped event was still the maximum. Symptom, measured: identical peak λ to the full rescan
+(0.289 = 0.289) with 6 engaged leads against its 33 — the corner fired and the approach to
+it went dark, and the machine quietly returned to its baseline score. The sound pruning is
+the reverse comparison: drop a NEW event the tail already dominates. After the fix the
+machine scores are byte-identical to the full rescan (1.97x / 2.49x / 6.18x — rule 21).

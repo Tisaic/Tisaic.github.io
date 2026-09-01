@@ -336,6 +336,9 @@ if (ROUTER && subject.verdict && subject.verdict.deploy) {
       return pk;
     })() : null);
   subject.router = { aFull, reachK, ...(vTop ? { vTop } : {}) };
+  const rc = subject.routerCost();
+  console.log(`  router arithmetic, counted: worst ${rc.worst} MAC/decision (both channels),`
+    + ` smooth-program ${rc.smooth}`);
   console.log(`  corner bank: source ${ROUTER}, aFull ${aFull.toExponential(2)}`
     + ` (${+(process.env.AFULLK || 6)}x declared aMax per sample²),`
     + ` reach ${reachK}x window, CONTINUOUS blend — ${fitted} leads fitted, ${kept} kept`
