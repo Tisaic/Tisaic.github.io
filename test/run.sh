@@ -330,6 +330,10 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # truth source is removed, the adapted bank passes the memory test on a program it never
     # ran, and the forgetting is pinned as the mechanism (lambda 1 loses the gain).
     t node test/pilot/onlinegate.test.mjs
+    # TARGET 6'S ONE NUMBER: the full deployed composition (QP + forecast + router + RLS)
+    # fits 10% of a 1 ms scan SLICED, each arming moves exactly its own part, and the sum
+    # is asserted against the parts.
+    t node test/pilot/scancost.test.mjs
     t node test/pilot/hff.test.mjs
     # The banded operator on a plant with KNOWN neighbour coupling, and the control that it
     # is byte-identical where there is none. It shipped once with every harmonic's fit null

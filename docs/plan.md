@@ -4190,6 +4190,31 @@ is a tenth of the error. This is the anti-slosh rule from the other side once mo
 gearbox HAS a closed form and the Kalman duly recovers it — but what dominates this machine
 has no closed form the engineer possesses, and that part must be learned.
 
+### 35. TARGET 6 CLOSED: the full composition on one scan, one counted number, one contract
+
+The open item was that the budget claim covered the solver alone: `cost()` counted forecast +
+QP + fit, `routerCost()` the router, and nothing asserted the SUM — three reports at three
+cadences that had to be added by hand and were not. `Pilot.scanCost()` now composes them,
+each term at its own cadence, and `test/pilot/scancost.test.mjs` is the contract, measured on
+the arm because it is the one plant that arms every stage:
+
+| arming | peak MAC/cycle | sliced MAC/cycle |
+|---|---|---|
+| bare (forecast 14,278 + QP 58,986 + interp 6) | 73,270 | 1,024 |
+| + corner banks (router worst 20,852 / smooth 320) | 94,122 | 1,313 |
+| + online RLS (72,600 per sample — the dominant term) | 166,722 | **9,380** |
+
+**The full composition fits 10% of a 1 ms scan SLICED, at 94% of budget** — the update spread
+over the interval between updates at the price of one more grid sample of look-ahead, exactly
+the scheduling `cost()` documents. The honest other half: the PEAK — every cadence landing on
+one scan — is 16.7× over, so a no-scheduling PLC cannot run this; the sliced schedule is the
+deployment mode and that is stated, not hidden. The contract also pins the instrument itself:
+each arming must move EXACTLY its own part (rule 21 — banks add only the router term, the RLS
+adds only its term and its covariance bytes), the composed peak must equal `cost()`'s peak
+plus the parts (rule 6), and the dead zone must keep a smooth program under 2% of the corner
+case. The RLS at 72,600/sample is now visibly the dominant deployed cost — the doc's own "why
+features are the first thing to cut," finally with a number attached.
+
 ### The eight targets, restated (replacing the stale table above)
 
 | target | state |
@@ -4199,6 +4224,6 @@ has no closed form the engineer possesses, and that part must be learned.
 | 3 plant-agnostic | six plants, honest refusals, the 1.1x threshold law |
 | 4 commissioning in minutes | one gated layer + guided laps replaced 3-layer cascades |
 | 5 higher | EMPS 14.8x → 55.5x; arm composition 2.2–2.5x on its hardest program |
-| 6 PLC scan | router counted (21k worst / 320 smooth); full-composition scanCost contract still open |
+| 6 PLC scan | **CLOSED (§35)** — `scanCost()` composes QP + forecast + router + RLS; the full composition fits 10% of a 1 ms scan sliced (9,380 of 10,000), contract in `scancost.test.mjs` |
 | 7 breadth | achieved as reframed; the barrel flips helpful under adaptation |
 | 8 a rival | **measured twice — the two-regime PathILC verdict (§33), and the owner's truth-free Kalman rival (§34): engineered full 1.01–1.13× against the frozen composition's 2.28–2.86×** |
