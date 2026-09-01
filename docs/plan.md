@@ -3777,3 +3777,31 @@ static 1.71 → diamond-guided frozen 1.93 → self-guided frozen 2.11 → perma
 self-fitted bank ceiling 3.27. The guided-commissioning instruction follows measured:
 guide with movements that SPAN the regimes production will run — the third arrival of
 "a calibration must span the range it is used over", this time from the adaptation side.
+
+### 22. THE FULL COMPOSITION, FROZEN: 2.39x WITH NOTHING PERMANENT AND NO PRODUCTION PROGRAM
+
+`fitCornerBanks` moved into the rig (third harness, one definition — the founding rule), and
+`trackaway.mjs` now runs the whole installation ladder on one commissioning, sharp square
+@0.004, every protocol scored on laps 6–8:
+
+| installation | score | lag |
+|---|---|---|
+| static | 1.71x | 1.56e-1 |
+| guide=rounded, frozen | 1.66x | — |
+| guide=diamond, frozen | 1.93x | — |
+| self-guided, frozen | 2.11x | — |
+| adapted, permanent truth | 2.20x | 7.60e-2 |
+| polygon router, frozen | 2.19x | 1.07e-1 |
+| **router + guide=diamond, ALL FROZEN** | **2.39x** | **7.71e-2** |
+| router + adapted, permanent truth | 2.47x | 6.91e-2 |
+
+**The mechanisms stack because they are different things**: the corner banks buy REGIME
+COVERAGE (fitted from truth-bearing polygon records — which the guided phase provides
+naturally) and the gated adaptation buys DISTRIBUTION MATCH; 2.19 + the diamond guide's
+increment lands at 2.39 frozen, within 3% of the permanent-truth 2.47. The deployable
+statement: polygon banks needing no program, one guided phase on a representative-profile
+part with a temporary truth source, freeze, unbolt — **1.71 → 2.39x on the production
+geometry the machine never saw during any of it**, against a 3.27x everything-on-the-square
+ceiling. (Suite note for the record: `--only=pilot` is not an area — the pilot tests live
+inside `flexisim`, and two suite launches ran only the parse checks before this was noticed;
+the honest tally from them is "nothing was verified", not "nothing failed".)

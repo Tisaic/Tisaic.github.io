@@ -3,7 +3,8 @@
 //   static     — online never armed (the no-tracker installation)
 //   adapted    — truth present all eight laps (the permanent-tracker installation)
 //   take-away  — truth present for laps 1-4 only (tracker mounted for commissioning, removed)
-import { commissionArm, deployOn } from './rigs/arm-rig.mjs';
+import { commissionArm, deployOn, recordOpenLoop, randomPolygon,
+  fitCornerBanks } from './rigs/arm-rig.mjs';
 const pilot = await commissionArm({ seed: 1 });
 if (!pilot || !pilot.verdict.deploy) { console.log('commissioning failed'); process.exit(1); }
 const opts = { laps: 8, scoreFromLap: 5 };
@@ -12,10 +13,25 @@ const opts = { laps: 8, scoreFromLap: 5 };
 // the adaptation learned the machine, its absence says it learned the program — which is
 // still a legitimate installation (guide on the representative program, run that program),
 // but must wear the label.
-for (const [name, online, cut, guide] of [['static', false, Infinity, null],
-  ['adapted', true, Infinity, null], ['take-away', true, 4, null],
-  ['guide=diamond', true, 4, 'diamond'], ['guide=rounded', true, 4, 'rounded']]) {
+// THE FULL COMPOSITION: the polygon corner banks (fitted from truth-bearing records — which
+// is exactly what the guided phase provides) plus guided adaptation, everything frozen before
+// the truth source leaves. The router is armed only for the protocols that name it, and the
+// banks are fitted once — they are frozen by construction.
+const polyRnd = (s0) => { let z = s0 >>> 0; return () => (z = (z * 1664525 + 1013904223) >>> 0) / 4294967296; };
+const polyRecs = [];
+for (const [seed, feed] of [[81, 0.004], [82, 0.008], [83, 0.0055]]) {
+  polyRecs.push(await recordOpenLoop(pilot, randomPolygon(polyRnd(seed), feed), feed));
+}
+fitCornerBanks(pilot, polyRecs, {});
+const routerSaved = pilot.router;
+for (const [name, online, cut, guide, router] of [['static', false, Infinity, null, false],
+  ['adapted', true, Infinity, null, false], ['take-away', true, 4, null, false],
+  ['guide=diamond', true, 4, 'diamond', false], ['guide=rounded', true, 4, 'rounded', false],
+  ['router', false, Infinity, null, true],
+  ['router+guide=diamond', true, 4, 'diamond', true],
+  ['router+adapted', true, Infinity, null, true]]) {
   const snap = pilot.readouts.map((ro) => ro.w.map((a) => Float64Array.from(a)));
+  pilot.router = router ? routerSaved : null;
   pilot.online = online ? {} : null;
   if (guide) {
     await deployOn(pilot, guide, true, 0.004, { laps: 4, scoreFromLap: 3, truthUntilLap: cut });
@@ -36,3 +52,4 @@ for (const [name, online, cut, guide] of [['static', false, Infinity, null],
   }
   pilot.online = null;
 }
+pilot.router = null;

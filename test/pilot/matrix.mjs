@@ -24,7 +24,7 @@
  */
 import { ensemble, freezeConfig } from '../../lib/pilot/ensemble.js';
 import { solveRidge, Pilot } from '../../lib/pilot/pilot.js';
-import { PG, mkPath, commissionArm, deployOn, recordOpenLoop, recordCornerProbe, randomPolygon } from './rigs/arm-rig.mjs';
+import { PG, mkPath, commissionArm, deployOn, recordOpenLoop, recordCornerProbe, randomPolygon, fitCornerBanks } from './rigs/arm-rig.mjs';
 
 const K = +(process.env.K || 1);
 const FEEDS = (process.env.FEEDS || '0.004,0.008').split(',').map(Number);
@@ -265,179 +265,19 @@ if (ROUTER && subject.verdict && subject.verdict.deploy) {
   if (!['poly', 'probe', 'both'].includes(ROUTER)) {
     for (const f of [0.004, 0.008]) recs.push(await recordOpenLoop(subject, ROUTER, f));
   }
-  // THE REGIME SCALE, from the fit record itself (rule 32): full corner engagement at half the
-  // record's own peak command-acceleration spike. The blend below is CONTINUOUS — the binary
-  // router this replaces mis-filed the rounded rectangle, whose corners are two orders of
-  // magnitude milder than the square's and belong partway between the banks, not in either.
-  let peak = 0;
-  for (const r of recs) {
-    for (let k = 1; k < r.cmd.length - 1; k++) {
-      for (let c = 0; c < r.cmd[0].length; c++) {
-        const a = Math.abs(r.cmd[k + 1][c] - 2 * r.cmd[k][c] + r.cmd[k - 1][c]);
-        if (a > peak) peak = a;
-      }
-    }
-  }
-  // THE REGIME SCALE IS ANCHORED TO THE DECLARED LIMITS, NOT TO THE RECORD. Three comparisons
-  // in a row were confounded by deriving aFull from the fit record's peak spike: every change
-  // to the EVENT SHAPE moved the peak (turn-through spikes at 2x rest-only; full-vMax events
-  // at 1.6x again), silently rescaling every program's engagement — a physics number moving
-  // when a probe-design control moves (rule 24). The anchor now is the machine's own declared
-  // aMax in per-sample units: a command accelerating at several times the limit its engineer
-  // declared is a corner outright, whatever the probe happened to record. The multiple sits
-  // where the shaped smoothstep saturates and is a constant to re-derive per plant (rule 31);
-  // AFULLK overrides it for experiments.
-  const S2 = subject.sample * subject.sample;
-  const aFull = +(process.env.AFULLK || 6) * 4e-6 * S2, reachK = 1.7;
-  // THREE LAYERS — SLOW, MEDIUM, FAST — WITH LINEAR INTERPOLATION BETWEEN THEM (the owner's
-  // design). The scribble bank is the slow layer at λ = 0; two corner banks sit at knots 0.5
-  // and 1.0 on the shaped blend axis, each fitted by weighted least squares under a HAT
-  // function peaked at its own knot — so a row teaches the layers in exactly the proportion
-  // the runtime will consult them, and the fit rule and the blend rule stay one definition.
-  // One bank at full severity was measured serving the slow square and betraying the fast one
-  // (2.15x / 0.86x): the corner regime is itself a spectrum, and two points on it cannot
-  // carry three regimes.
-  const KNOTS = [0.5, 1.0];
-  // TRIANGLES ON THE UNCLAMPED AXIS. The runtime clamps at 1 — the top layer answers
-  // everything harsher — but a fit weighted by the clamped value hands the top knot every
-  // row from axis 1 to the probe's ~2.9, and the fast square (axis 0.92) is then served by a
-  // bank fitted mostly on events three times its severity. Each knot's triangle is zero half
-  // a knot-spacing beyond itself, so a layer learns ITS severity and interpolation does the
-  // rest.
-  const hat = (ax, at) => Math.max(0, 1 - Math.abs(ax - at) / 0.5);
-  let fitted = 0, kept = 0;
-  for (let c = 0; c < 2; c++) {
-    const ro = subject.readouts[c];
-    const reach = Math.ceil(reachK * (ro.mLag - 1) * ro.stride);
-    const lams = recs.map((r) => Pilot.regimeLambdas(r.cmd, aFull, reach, true));
-    const banks = KNOTS.map((at) => ({ at, bank: [] }));
-    for (let li = 0; li < subject.N; li++) {
-      const L = ro.leads[Math.min(li, ro.leads.length - 1)];
-      const back = Math.max((ro.mLag - 1) * ro.stride, (ro.fLag - 1) * ro.stride - L);
-      for (const kn of banks) {
-        const X = [], y = [];
-        for (let ri = 0; ri < recs.length; ri++) {
-          const rec = recs[ri], lam = lams[ri];
-          const saved = subject._rec;
-          subject._rec = { x: rec.x, cmd: rec.cmd, u: [], e: rec.e };
-          try {
-            for (let k = Math.max(back, rec.lap); k < rec.e.length - L - 1; k++) {
-              const h = hat(lam[Math.min(k + L, lam.length - 1)], kn.at);
-              if (h < 0.02) continue;
-              const sw = Math.sqrt(h);
-              const row = subject._row(c, k, L, ro.stride, ro.poly, ro.mLag, ro.fLag, ro.sched);
-              for (let q2 = 0; q2 < row.length; q2++) row[q2] *= sw;
-              X.push(row); y.push(rec.e[k + L][c] * sw);
-            }
-          } finally { subject._rec = saved; }
-        }
-        if (X.length > 4 * ro.w[0].length) { kn.bank.push(solveRidge(X, y, ro.ridge)); fitted++; }
-        else { kn.bank.push(ro.w[Math.min(li, ro.w.length - 1)]); kept++; }
-      }
-    }
-    ro.wBanks = banks;
-    // ─── GRID=1: THE 2D GRID — severity x turn angle, the triage's verdict built. `share`
-    // (which joint the corner bends) took the elbow's MID-lead forecast from -0.246 to
-    // +0.552 held-out while no axis carried lead-0 information; the full angle
-    // atan2(Δ²ch1, Δ²ch0) generalises it to any channel count and explains the geometry
-    // wall: polygons averaged different turn directions into one bank. Banks with too few
-    // rows fall back to the 1D severity bank, so the grid degrades to §15 rather than to
-    // noise.
-    if (process.env.GRID === '1') {
-      // FOLDED TO PERIOD π AND ALIGNED WITH THE TRIAGE'S PARTITION. The first grid put four
-      // knots at ±π/4 and ±3π/4 — the exact BOUNDARIES of the informative split (share is
-      // |Δ²ch0| ≥ |Δ²ch1|, i.e. θ near an axis against near a diagonal) — and treated θ and
-      // θ+π as different turns when the sign axis measured +0.016. Two knots at 0 and π/2 on
-      // a period-π circle ARE the share split, continuously.
-      const PERIOD = Math.PI;
-      const DIRS = [0, Math.PI / 2];
-      const hatD = (th, at) => {
-        let d = Math.abs((th % PERIOD + PERIOD) % PERIOD - at);
-        if (d > PERIOD / 2) d = PERIOD - d;
-        return Math.max(0, 1 - d / (PERIOD / 2));
-      };
-      const infos = recs.map((r) => {
-        const n = r.cmd.length, nc2 = r.cmd[0].length;
-        const ax = new Float64Array(n), th = new Float64Array(n);
-        let m = 0, g0 = 0, g1 = 0;
-        for (let k = 0; k < n; k++) {
-          let a = 0, s0 = 0, s1 = 0;
-          for (let c2 = 0; c2 < nc2; c2++) {
-            const p0 = r.cmd[k][c2], pm = r.cmd[Math.max(0, k - 1)][c2],
-              pp = r.cmd[Math.min(n - 1, k + 1)][c2];
-            const d2 = pp - 2 * p0 + pm;
-            if (Math.abs(d2) > a) a = Math.abs(d2);
-            if (c2 === 0) s0 = d2; else s1 = d2;
-          }
-          const mag = a / aFull, dec = m - 1 / reach;
-          if (mag >= dec) { m = mag; g0 = s0; g1 = s1; } else m = dec;
-          ax[k] = Math.max(0, (m - 0.15) / 1.85);
-          th[k] = Math.atan2(g1, g0);
-        }
-        return { ax, th };
-      });
-      const gBanks = KNOTS.map(() => DIRS.map(() => []));
-      let gFit = 0, gPool = 0;
-      for (let li = 0; li < subject.N; li++) {
-        const L = ro.leads[Math.min(li, ro.leads.length - 1)];
-        const back = Math.max((ro.mLag - 1) * ro.stride, (ro.fLag - 1) * ro.stride - L);
-        for (let ki = 0; ki < KNOTS.length; ki++) {
-          for (let di = 0; di < DIRS.length; di++) {
-            const X = [], y = [];
-            for (let ri = 0; ri < recs.length; ri++) {
-              const rec = recs[ri], inf = infos[ri];
-              const saved = subject._rec;
-              subject._rec = { x: rec.x, cmd: rec.cmd, u: [], e: rec.e };
-              try {
-                for (let k = Math.max(back, rec.lap); k < rec.e.length - L - 1; k++) {
-                  const t = Math.min(k + L, inf.ax.length - 1);
-                  const h = hat(inf.ax[t], KNOTS[ki]) * hatD(inf.th[t], DIRS[di]);
-                  if (h < 0.02) continue;
-                  const sw = Math.sqrt(h);
-                  const row = subject._row(c, k, L, ro.stride, ro.poly, ro.mLag, ro.fLag, ro.sched);
-                  for (let q2 = 0; q2 < row.length; q2++) row[q2] *= sw;
-                  X.push(row); y.push(rec.e[k + L][c] * sw);
-                }
-              } finally { subject._rec = saved; }
-            }
-            if (X.length > 4 * ro.w[0].length) { gBanks[ki][di].push(solveRidge(X, y, ro.ridge)); gFit++; }
-            else { gBanks[ki][di].push(banks[ki].bank[li]); gPool++; }
-            if (li === 0) {
-              console.log(`      ch${c} cell sev ${KNOTS[ki]} dir ${DIRS[di].toFixed(2)}:`
-                + ` ${X.length} rows ${X.length > 4 * ro.w[0].length ? 'FIT' : 'POOLED'}`);
-            }
-          }
-        }
-      }
-      ro.wGrid = { sev: KNOTS, dir: DIRS, period: PERIOD, banks: gBanks };
-      console.log(`  ch${c} grid: ${gFit} (lead x sev x dir) banks fitted, ${gPool} pooled to 1D`);
-    }
-  }
-  // The coverage ceiling: the probe's own top speed in PER-SAMPLE units, from its sizing —
-  // beyond ~1.3x this the banks answer for a regime no record contains, and λ fades out.
-  const vTop = ROUTER === 'probe' && recs[0].sizing
-    ? (recs[0].sizing.vMult ?? 1) * 8e-4 * subject.sample
-    // The polygons' own coverage ceiling, measured off their records rather than assumed.
-    : (ROUTER === 'poly' || ROUTER === 'both' ? (() => {
-      let pk = 0;
-      for (const r of recs) {
-        for (let k = 1; k < r.cmd.length; k++) {
-          for (let c = 0; c < r.cmd[0].length; c++) {
-            const d = Math.abs(r.cmd[k][c] - r.cmd[k - 1][c]);
-            if (d > pk) pk = d;
-          }
-        }
-      }
-      return pk;
-    })() : null);
-  subject.router = { aFull, reachK, ...(vTop ? { vTop } : {}) };
+  // The fit itself lives in the rig now — a third harness needed it and a third copy is how
+  // this project's defects get made. See `fitCornerBanks` in arm-rig.mjs.
+  const res = fitCornerBanks(subject, recs,
+    { grid: process.env.GRID === '1', aFullK: +(process.env.AFULLK || 6),
+      sizedVTop: ROUTER === 'probe' && recs[0].sizing
+        ? (recs[0].sizing.vMult ?? 1) * 8e-4 * subject.sample : null });
   const rc = subject.routerCost();
+  console.log(`  corner bank: source ${ROUTER}, aFull ${res.aFull.toExponential(2)}`
+    + ` (${+(process.env.AFULLK || 6)}x declared aMax per sample²), ${res.fitted} leads`
+    + ` fitted, ${res.kept} kept scribble${res.grid ? `, grid ${res.gridFitted}/${res.gridPooled}` : ''}`
+    + ` (${((Date.now() - t0r) / 1000).toFixed(0)}s)`);
   console.log(`  router arithmetic, counted: worst ${rc.worst} MAC/decision (both channels),`
     + ` smooth-program ${rc.smooth}`);
-  console.log(`  corner bank: source ${ROUTER}, aFull ${aFull.toExponential(2)}`
-    + ` (${+(process.env.AFULLK || 6)}x declared aMax per sample²),`
-    + ` reach ${reachK}x window, CONTINUOUS blend — ${fitted} leads fitted, ${kept} kept`
-    + ` scribble (${((Date.now() - t0r) / 1000).toFixed(0)}s)`);
 }
 if (pilots.length > 1) console.log(`  (averaged ${ensemble(pilots).used} of ${pilots.length} draws)`);
 
