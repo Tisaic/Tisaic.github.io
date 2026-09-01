@@ -45,7 +45,8 @@ async function protocol(selfFit) {
       recs.push(await recordOpenLoop(pilot, randomPolygon(rnd(seed), feed), feed));
     }
   }
-  fitCornerBanks(pilot, recs, { vTopK: selfFit ? +(process.env.VTOPK || 1) : 1 });
+  fitCornerBanks(pilot, recs, { vTopK: selfFit ? +(process.env.VTOPK || 1) : 1,
+    fitScale: process.env.FITSCALE || 'anchor' });
   if (process.env.GUIDE !== '0') {
     pilot.online = {};
     await deployOn(pilot, selfFit ? SHAPE : 'diamond', true, 0.004,

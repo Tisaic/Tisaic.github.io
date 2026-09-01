@@ -643,9 +643,34 @@ async function recordCornerProbe(pilot, { steps = 30000, width = 40, dwell = 40,
  *   gridFitted:number, gridPooled:number}}
  */
 function fitCornerBanks(pilot, recs, { knots = [0.5, 1.0], aFullK = 6, reachK = 1.7,
-  grid = false, sizedVTop = null, vTopK = 1 } = {}) {
+  grid = false, sizedVTop = null, vTopK = 1, fitScale = 'anchor' } = {}) {
   const aMax0 = Math.min(...pilot.channels.map((ch) => ch.aMax));
-  const aFull = aFullK * aMax0 * pilot.sample * pilot.sample;
+  let aFull = aFullK * aMax0 * pilot.sample * pilot.sample;
+  // `fitScale: 'record'` restores the pre-anchor lambda scale: 0.5x the records' own peak
+  // |Δ²cmd|. The 6x-declared anchor was introduced because record-peak scaling made two
+  // EVENT-SHAPE configurations incomparable (changing the probe moved the peak and rescaled
+  // every program's engagement in one move) — but on a self-fit diet the anchor SATURATES
+  // the label: the square's corners run 31x declared, shapeLambda clamps at 2x, so every
+  // corner row lands at lambda 1, the knot strata collapse into one heterogeneous pool, and
+  // the fit's own fallback rejects the corner weights at every lead (116 kept-scribble
+  // against the record scale's 0). Measured: the self-fit ceiling is 3.27x under the record
+  // scale and 1.99x under the anchor — reproduced at both commits, same machine, same seed.
+  // The scale is stored in `pilot.router` either way, so fit labels and deploy addressing
+  // stay one quantity; what the anchor bought — cross-configuration comparability — is a
+  // property of EXPERIMENTS, not of a deployed fit, and rule 32 argues the label should be
+  // scaled to the quantity it acts on: the record's own accelerations.
+  if (fitScale === 'record') {
+    let pk = 0;
+    for (const r of recs) {
+      for (let k = 1; k < r.cmd.length - 1; k++) {
+        for (let c = 0; c < r.cmd[0].length; c++) {
+          const a = Math.abs(r.cmd[k + 1][c] - 2 * r.cmd[k][c] + r.cmd[k - 1][c]);
+          if (a > pk) pk = a;
+        }
+      }
+    }
+    if (pk > 0) aFull = 0.5 * pk;
+  }
   let vTop = sizedVTop;
   if (!vTop) {
     // The records' own coverage ceiling, measured rather than assumed (§16).
