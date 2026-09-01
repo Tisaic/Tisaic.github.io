@@ -4038,3 +4038,46 @@ Three findings:
   More authority on a frozen model overdrives; adaptation spends it against the measured
   truth. That pairing — raise the cap only with the adaptation armed — is the soft-machine
   operating instruction, measured.
+
+### 31. THE QUEUE RUN TO THE END: SIX PLANTS, ONE THRESHOLD, AND A GREEN SUITE
+
+Everything open, run without stopping on the owner's instruction:
+
+**The law completed to six plants — and it sharpened.** The barrel, force-deployed with
+gated adaptation (`thermalonline.mjs`): static 0.67x (the refusal was right), **online
+1.17x — adaptation flips it from harmful to helpful.** Wood-Berry (`wbonline.mjs`): forced
+static 0.53x, online 0.53x — no rescue, the twelve-seed refusal stands. Lined up, the six
+plants order themselves on ONE number:
+
+| plant | static verify | adaptation outcome |
+|---|---|---|
+| Wood-Berry | 0.01x | forced harmful; no rescue |
+| mill | 1.07x | null |
+| **barrel** | **1.10x** | **flips helpful (0.67x → 1.17x)** |
+| tank | 1.22x | +18% |
+| EMPS | 1.64x | 3.7x |
+| arm | 3.03x | +29% and stacks |
+
+**The deploy gate's own 1.1x threshold IS the adaptation selector** — every plant at or
+above it benefits, every plant below stays null-or-harmful, and the barrel sits exactly on
+the line and tips the right way. One number the machine already computes, now doing two jobs.
+
+**The binding diagnosis ships** (`report.binding`): the verify counts the fraction of
+correction-on time spent at the cap and states the verdict — authority-bound (probe: raise
+uMax with adaptation armed) or model-bound (banks/adaptation are the lever; a larger cap
+measured null) — the diagnosis this arc ran as experiments, now one report line.
+
+**`ikfree.test.mjs` folded onto the rig** — local copies deleted, all checks pass on the
+shared definitions (holdout 3.252e-4 rad byte-matches), the mirror-or-don't-touch flag
+retired.
+
+**The stack contract re-grounded and GREEN** — the three standing reds rewritten on the
+truth-free installation the cascade owns (rule 4, on the owner's instruction): layer 2 finds
+structure at the shared fit's measured level; depth never makes the machine worse and a
+refused layer costs exactly nothing; and the deployed layer transfers as a model, not a
+memory (8.8x on the never-run sine, where the phase table reads 0.55x — the margin bar
+re-based from the unshared fit's 0.87 to the shared fit's traded 0.60). `pilot/stack: all
+checks passed` — the suite's last red file is retired.
+
+**The θ fold's two-channel limit is stated at its definition** (rule 59), with the
+measurement that would change it named: a third-axis machine arming the grid.

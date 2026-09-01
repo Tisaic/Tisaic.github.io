@@ -25,6 +25,11 @@ import { circle } from '../../lib/flexisim/toolpath.js';
 import { ContourScore, decompose } from '../../lib/flexisim/contour.js';
 import { PathILC } from '../../lib/flexisim/pathilc.js';
 import { Pilot } from '../../lib/pilot/pilot.js';
+// THE GATHER, THE MAPS' SOLVER AND THE MACHINE come from the rig — one definition, shared
+// with the composition experiments (`ikfreecomp.mjs`). They were extracted from this file
+// verbatim; the local copies are gone and the mirror-or-don't-touch flag with them.
+import { makeArmIK as makeArm, visit, features, ridgeMulti as solveRidge,
+  quintic } from './rigs/ikfree-rig.mjs';
 
 let failed = 0;
 function check(name, cond, detail) {
@@ -41,21 +46,6 @@ if (process.env.SUITE !== 'full') {
 const H = 4, CLAMP = 3, NU = 0.3, RHO = 1, G = 2e-6, RATIO = 100, DAMPING = 3e-3;
 const PG = { LEN1: 14, LEN2: 10, E: 0.15, centre: [12, 0], drive: 32 };
 
-async function makeArm(K = 16, EE = PG.E) {
-  const mk = (length) => buildLink({ length, section: H, clamp: CLAMP, E: EE,
-    nu: NU, rho: RHO, damping: DAMPING });
-  const l1 = await mk(PG.LEN1), l2 = await mk(PG.LEN2);
-  const j = (mp) => new Joint({ ratio: RATIO, motorInertia: mp.inertiaAboutPivot / 1e4,
-    loadInertia: mp.inertiaAboutPivot, stiffness: K, backlash: 1e-4,
-    damping: 2 * Math.sqrt(K * mp.inertiaAboutPivot / 2) });
-  const arm = new FlexArm2R({ joint1: j(massProperties(l1)), link1: l1,
-    joint2: j(massProperties(l2)), link2: l2, gravityWorld: [0, -G, 0], dt: 1 });
-  const hold = Math.abs(arm.gravityTorque([0, 0])[0]) / RATIO;
-  const servo = new ChainServo({ arm, bandwidth: 2e-3, tauMax: PG.drive * hold, speedMax: 0.2 });
-  return { arm, servo };
-}
-
-const quintic = (t) => t * t * t * (10 + t * (-15 + 6 * t));
 
 /**
  * Ease both channels to `to`, then hold until the tracker is measurably QUIET — the
@@ -64,42 +54,6 @@ const quintic = (t) => t * t * t * (10 + t * (-15 + 6 * t));
  * geometry, at the soft corner (brick 44): ring-at-read 7e-2, map holdout 2.2e-2 rad.
  * Adaptive, the soft corner reads 1e-2 / 7.5e-4 — and a stiff machine settles FASTER.
  */
-const S_TOL = 2e-3, S_WIN = 400, S_AVG = 800, S_CAP = 30000;
-function visit(arm, servo, from, to, { T = 2500 } = {}) {
-  const bx = new Float64Array(S_AVG), by = new Float64Array(S_AVG);
-  let n = 0;
-  for (let k = 0; k < T + S_CAP; k++) {
-    let refs;
-    if (k < T) {
-      const t = k / T, s = quintic(t);
-      const sd = (t * t * (30 + t * (-60 + 30 * t))) / T;
-      const sdd = (t * (60 + t * (-180 + 120 * t))) / (T * T);
-      refs = [0, 1].map((j) => ({ theta: from[j] + (to[j] - from[j]) * s,
-        omega: (to[j] - from[j]) * sd, alpha: (to[j] - from[j]) * sdd }));
-    } else {
-      refs = [0, 1].map((j) => ({ theta: to[j], omega: 0, alpha: 0 }));
-    }
-    const tau = servo.torques(refs);
-    arm.step(tau[0], tau[1], 1);
-    if (k >= T) {
-      const p = arm.toolXY();
-      bx[n % S_AVG] = p[0]; by[n % S_AVG] = p[1]; n++;
-      if (n >= S_AVG && n % 50 === 0) {
-        let lo0 = Infinity, hi0 = -Infinity, lo1 = Infinity, hi1 = -Infinity;
-        for (let w = n - S_WIN; w < n; w++) {
-          const x = bx[w % S_AVG], y = by[w % S_AVG];
-          if (x < lo0) lo0 = x; if (x > hi0) hi0 = x;
-          if (y < lo1) lo1 = y; if (y > hi1) hi1 = y;
-        }
-        if (Math.hypot(hi0 - lo0, hi1 - lo1) < S_TOL) break;
-      }
-    }
-  }
-  let sx = 0, sy = 0;
-  const m = Math.min(n, S_AVG);
-  for (let w = n - m; w < n; w++) { sx += bx[w % S_AVG]; sy += by[w % S_AVG]; }
-  return [sx / m, sy / m];
-}
 
 // ------------------------------------------------------------ gather held points
 const { arm, servo } = await makeArm();
@@ -121,42 +75,6 @@ for (let i = 0; i < N_PTS; i++) {
 await arm.l1.destroy(); await arm.l2.destroy();
 
 // ------------------------------------------------------------------ fit inverse
-function features(x, y, D) {
-  const u = (x - PG.centre[0]) / 5, v = (y - PG.centre[1]) / 5;
-  const out = [];
-  for (let i = 0; i <= D; i++) for (let j = 0; j <= D - i; j++) out.push(u ** i * v ** j);
-  return out;
-}
-function solveRidge(X, Y, ridge) {
-  const n = X[0].length, no = Y[0].length;
-  const A = Array.from({ length: n }, () => new Float64Array(n));
-  const b = Array.from({ length: no }, () => new Float64Array(n));
-  for (let r = 0; r < X.length; r++) {
-    const xr = X[r];
-    for (let i = 0; i < n; i++) {
-      for (let j = i; j < n; j++) A[i][j] += xr[i] * xr[j];
-      for (let o = 0; o < no; o++) b[o][i] += xr[i] * Y[r][o];
-    }
-  }
-  for (let i = 0; i < n; i++) { A[i][i] += ridge; for (let j = 0; j < i; j++) A[i][j] = A[j][i]; }
-  const L = Array.from({ length: n }, () => new Float64Array(n));
-  for (let i = 0; i < n; i++) {
-    for (let j = 0; j <= i; j++) {
-      let s2 = A[i][j];
-      for (let k = 0; k < j; k++) s2 -= L[i][k] * L[j][k];
-      if (i === j) L[i][i] = Math.sqrt(Math.max(s2, 1e-300));
-      else L[i][j] = s2 / L[j][j];
-    }
-  }
-  const W = [];
-  for (let o = 0; o < no; o++) {
-    const z = new Float64Array(n), w = new Float64Array(n);
-    for (let i = 0; i < n; i++) { let s2 = b[o][i]; for (let k = 0; k < i; k++) s2 -= L[i][k] * z[k]; z[i] = s2 / L[i][i]; }
-    for (let i = n - 1; i >= 0; i--) { let s2 = z[i]; for (let k = i + 1; k < n; k++) s2 -= L[k][i] * w[k]; w[i] = s2 / L[i][i]; }
-    W.push(w);
-  }
-  return W;
-}
 const D = 7;    // 90 points carry degree 7 (36 features); 180 carry degree 8 (brick 40)
 const trn = pairs.filter((_, i) => i % 4 !== 3), val = pairs.filter((_, i) => i % 4 === 3);
 const W = solveRidge(trn.map((p) => features(p.x, p.y, D)), trn.map((p) => p.q), 1e-9);
