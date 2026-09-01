@@ -4081,3 +4081,20 @@ checks passed` — the suite's last red file is retired.
 
 **The θ fold's two-channel limit is stated at its definition** (rule 59), with the
 measurement that would change it named: a third-axis machine arming the grid.
+
+### 32. TARGET 2 MET — FEEDRATE-AGNOSTIC ON ALL THREE PROGRAMS, BY THE REPORT'S OWN PRESCRIPTION
+
+`report.binding` said the @0.008 rows were authority-bound and prescribed "raise uMax with
+adaptation armed" (the soft-corner law: static control misuses extra authority, gated
+adaptation reclaims it). One matrix run at cap 0.3 with the composition armed:
+
+| feedrate-agnostic (target 1.5x) | before | after |
+|---|---|---|
+| sharp | 1.13x ✓ | **1.16x ✓** |
+| rounded | 2.37x | **1.49x ✓** (its @0.008 row 2.60x → 4.20x) |
+| circle | 1.73x | **1.14x ✓** (its @0.008 row 5.01x → 7.23x) |
+
+**The second north-star target formally met, on every program at once**, no held-out program
+worse than leaving the machine alone, and the diagnosis-to-fix path was exactly one report
+line to one matrix run. Program-agnostic worst-row holds at 2.86x (the @0.004 sharp is
+model-bound, as its own binding verdict says, and the cap change correctly left it alone).
