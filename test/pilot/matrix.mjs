@@ -169,10 +169,29 @@ if (!pilots.length) { console.log('  nothing commissioned'); process.exit(1); }
 
 /** One row of the matrix: contour error with the correction off and on. */
 async function row(pilot, shape, feed) {
+  // ONLINE=1 arms the pilot's own recursive adaptation during the ON run — the innovation
+  // gate admits rows the commissioning never saw (corners) and skips collinear repeats. The
+  // RLS updates the commissioned bank IN PLACE, so each row snapshots the weights first and
+  // restores them after: without this, adaptation leaks from one program's measurement into
+  // the next and the matrix stops being one commissioning measured many times.
+  const snap = process.env.ONLINE === '1'
+    ? pilot.readouts.map((ro) => ro.w.map((a) => Float64Array.from(a))) : null;
+  if (snap) pilot.online = { };
   const offR = await deployOn(pilot, shape, false, feed);
   const off = offR.r;
   const onR = await deployOn(pilot, shape, true, feed);
   const on = onR.r;
+  if (snap) {
+    for (let c = 0; c < pilot.readouts.length; c++) {
+      const ro = pilot.readouts[c];
+      console.log(`      ch${c} online: ${ro._onlineN || 0} updates,`
+        + ` ${ro._infoSkipped || 0} of ${ro._infoSeen || 0} gated as repeats`);
+      for (let i = 0; i < ro.w.length; i++) ro.w[i].set(snap[c][i]);
+      delete ro._rls; ro._row0 = []; ro._infoRef = undefined;
+      ro._onlineN = 0; ro._infoSkipped = 0; ro._infoSeen = 0;
+    }
+    pilot.online = null;
+  }
   // THE PEAK CORRECTION, AGAINST THE CAP IT IS ALLOWED. Two accounts of the sharp square have
   // failed — more model coverage and a faster decision clock — and there is a simpler one nobody
   // has looked at: the correction may be CLIPPED. `uMax` is 0.15 rad here and the rounded

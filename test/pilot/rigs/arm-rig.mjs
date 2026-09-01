@@ -181,9 +181,14 @@ async function deployOn(pilot, shape, active, feed = 0.004) {
       { theta: q2 + u[1], omega: rt.dq[1], alpha: rt.ddq[1] }]);
     a2.step(tau[0], tau[1], 1);
     if (k % S === 0) kSamp++;
-    const enc = a2.encoders();
-    pilot.observe([enc[0].angle, enc[1].angle, enc[0].speed * 1e3, enc[1].speed * 1e3,
-      tau[0] * 1e3, tau[1] * 1e3], null);
+    // THE SAME ROUTING AS COMMISSIONING, one definition (this rig's founding lesson). The
+    // truth is passed so ONLINE adaptation can run when a host arms it — `_deployObserve`
+    // consumes truth only under `this.online`, so every existing run is byte-identical. On
+    // THIS plant a truth at deploy means a permanent tool tracker, which is an extra
+    // instrument production may not have: any number measured through it is labelled as
+    // such (EMPS and the tank read their truth off ordinary sensors; the arm does not).
+    const rs = routeSignals(a2, [{ pos: q1 }, { pos: q2 }], tau);
+    pilot.observe(rs.measured, rs.truth);
     if (k >= scoreFrom) {
       const dec = decompose(path, a2.toolXY(), cmd);
       score.step(dec.contour, dec.lag, tau, [a2.j1.wM, a2.j2.wM]);

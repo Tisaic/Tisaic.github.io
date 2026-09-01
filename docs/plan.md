@@ -3691,3 +3691,36 @@ regime IS multi-dimensional — the six-plant pass will say), the geometry probe
 stops before it spends weeks, and the honest statement of the agnostic ceiling on this
 plant is ~2.3–2.6x against a self-fit 3.27x, with the residual being lead-0 distribution
 match that no lookup variable reaches.
+
+### 20. ONLINE ADAPTATION AT DEPLOY: THE DISTRIBUTION-MATCH ROUTE, FIRST MEASUREMENT
+
+§19 said the self bank's remaining edge is lead-0 distribution match, which no lookup
+variable reaches. The pilot has owned the mechanism for buying distribution match honestly
+since the online work: `_onlineStep` — SharedRLS seeded from the commissioning posterior,
+the correction's own response subtracted, an innovation gate against collinear repeats. It
+had simply never been fed at deploy: the rig passed `truth = null`. It now routes the truth
+through the same `routeSignals` as commissioning (one definition), with the honesty label
+attached: on THIS plant a truth at deploy means a permanent tool tracker, an instrument
+production may not have — EMPS and the tank read their truth off ordinary sensors, the arm
+does not. `ONLINE=1` arms it per row with snapshot/restore, because the RLS updates the
+commissioned bank in place and adaptation must not leak between the matrix's programs.
+
+| ONLINE alone | @0.004 | @0.008 |
+|---|---|---|
+| sharp | 1.69 → **1.87** | 2.27 → **2.30** |
+| rounded | 6.18 → **6.32** | 2.60 → **2.66** |
+| circle | 7.72 → **8.66** | 4.86 → **5.01** |
+
+**Every cell improves**, and stacked with the polygon router the square reads 2.16x / 2.49x.
+This is the first mechanism in the whole arc that helps the smooth programs too — consistent
+with what it is: distribution match, not regime coverage.
+
+**AND THE INNOVATION GATE NEVER FIRED — 0 of 2,583 rows gated on a repeating program.** The
+reference is the FIRST row's innovation (rule 38's exact shape: a guard calibrated on an
+unrepresentative startup); a familiar first row makes the threshold microscopic and
+everything after passes. So these gains were measured with an effectively ungated recursion
+at λ = 0.9995 — the configuration the EMPS record warns about — and they still came out
+positive. The gate reference needs to be a running property of the stream (next), and the
+open questions behind it: more laps (does adaptation converge toward the 3.27x self-fit or
+drift the way ungated EMPS did at 14.68 → 9.96), and shape-change transfer after adaptation
+(the memory test).
