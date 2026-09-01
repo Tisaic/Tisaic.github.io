@@ -155,7 +155,7 @@ function routeSignals(arm, cmd, tau) {
 async function deployOn(pilot, shape, active, feed = 0.004,
   { laps = 3, scoreFromLap = 2, truthUntilLap = Infinity } = {}) {
   const { arm: a2, servo: s2 } = await makeArm();
-  const path = mkPath(shape, feed);
+  const path = typeof shape === 'string' ? mkPath(shape, feed) : shape;
   homeArm(a2, s2, path);
   const S = pilot.sample, cache = new Map();
   const refAt = (i) => {
