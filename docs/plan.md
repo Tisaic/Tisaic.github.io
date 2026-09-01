@@ -4305,6 +4305,73 @@ rejects more weights — and unlike the analytic chain its online rows still ADD
 scored shape (2.37x → 2.54x): guidance harmed only when it was a DIFFERENT geometry's
 distribution pulling shared weights; truth on the shape being cut remains a gain.
 
+### 37. THE DEMO-PATH CONTRACT AND THE ATTACK ON THE OPEN TARGETS — theory first, stated falsifiably
+
+**The owner amended the one-press contract:** alongside routing the signals and stating the
+limits, the engineer provides a DEMO PATH — representative dynamic moves (sharp corners,
+real features) at reasonable workspace locations — before pressing GO. And the correction
+that shapes everything: the demo does NOT span the workspace. Auto programs live in a
+sub-region; manual modes reach the full box; the model must survive far from the demo.
+The retirement holds absolutely: the demo is a DATA SOURCE, never an address — nothing
+lap-indexed ships, banks stay addressed by command state.
+
+**The architecture this implies is three tiers, and every tier already has measured parts:**
+
+1. **The global model spans the box, always.** The scribble-fitted base layer stays
+   commissioned over the full declared workspace — manual-mode survival and the safety
+   floor rest on it. A demo-clamped commissioning box is REJECTED by prior measurement:
+   one trajectory transfers 73x worse at the worst point (`transfer.test.mjs`), and the
+   box-shrink experiment lifted commissioning R² 0.833→0.970 while dropping every held-out
+   program — the third and fourth independent readings of "a calibration must span the
+   range it is used over", where the range is now the box, not the program.
+2. **The demo calibrates STATISTICS; generators provide COVERAGE.** The demo is measured
+   (`peakDiffs`: severity, corner density, feed span — rule 41b's instrument) and its
+   statistics drive the agnostic generators — random polygons and corner tours PLACED
+   ACROSS THE WORKSPACE — so banks see demo-grade dynamics at poses the demo never visits.
+   "One pose teaches one pose" is a measured finding, and the pose-scheduled basis (0.840
+   against 0.771 held-out, on the actual-torque signal) is the other half of the answer.
+3. **Graceful fade, never a cliff.** The router already fades λ where commanded speed
+   exceeds probe coverage; the same shape applies in POSE space — bank engagement fades
+   with distance from fitted pose coverage, falling back to the global model. Manual jogs
+   are gentle, and the router's dead zone (320 MAC, zero engagement on smooth motion)
+   already keeps banks out of manual moves by construction.
+
+**THE CRITICAL NEW EXPERIMENT — the displacement sweep.** Score the sharp square at
+increasing displacement and rotation from the demo's location, banks on and off. Both
+halves (rule 9): near the demo the banks deliver ~self-fit performance (3.6x), and far away
+they degrade MONOTONICALLY toward the base model and never below it — no cliff, never worse
+than open loop anywhere in the box. Harm under displacement makes the pose-fade guard
+mandatory rather than optional.
+
+**Performance predictions** (each with its killer): program-statistics banks 1.2–1.9x where
+corners matter (killed if the rounded program shows no headroom); cascade layer 2 fed the
+demo record 1.3–1.7x over generic depth 2 (killed if EMPS's program-collinearity failure
+reappears — 12.70x→3.93x was the forecast on trapezoids); DPT 60 + λ·(DPT/30)² is +12–25%
+already measured on the arm and not yet default; ensemble averaging 1.1–1.3x (killed if the
+arm's draws don't spread — at 1.13x over six seeds they barely do).
+
+**TUNING TIME, NOW MEASURED RATHER THAN THEORIZED.** `commissionArm` carries a permanent
+per-phase wall-clock instrument (`pilot._wall`), and the first reading overturns the
+overhead theory: per-step cost is uniform (~0.22 ms), so this loop is physics-bound and
+there is no flexisim-style 10x of plumbing. Where the 59.4s actually goes: **verify 25.4s
+(43%, 108k steps — 2.8x the excitation itself), fit 20.3s (34%, batch ridge at 145 ms per
+work() call)**, excite 8.5s (14%), probe+settle 4.2s, outside-loop 1.1s. So 77% of
+commissioning is fit + verify, and both have principled cuts:
+
+- **THE FIT'S CUT IS TARGET 6'S UNBUILT HALF.** Stream the shared-covariance RLS during
+  the excite phase and the batch ridge disappears — fit wall time → ~0, and the on-PLC
+  commissioning fit exists for the first time. One build, two targets.
+- **THE VERIFY'S CUT IS THE DEMO.** It is already the decisive regime (0.989 rank
+  correlation on the tank); the scribble regime shrinks to its veto role, sized against
+  its own margin (rule 2). Projected pilot layer: ~60s → ~20–25s, compounding per cascade
+  layer since each pays fit + verify again.
+
+The experiment ladder, cheapest-falsifier first: ① wall-clock breakdown (DONE, above);
+② program-statistics residual bank against generic layer 2 on the rounded program;
+③ the displacement sweep; ④ the streamed RLS commissioning fit; ⑤ DPT default on the arm;
+⑥ ensemble; ⑦ the integrated one-press bench — `autostack` takes the demo alongside
+signals and limits and ships the whole composition.
+
 ### The eight targets, restated (replacing the stale table above)
 
 | target | state |

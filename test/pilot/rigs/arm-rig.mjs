@@ -371,17 +371,28 @@ async function commissionArm({ seed = 1, train = { shape: 'rounded', feed: 0.004
     },
   });
   if (before) before(pilot);
+  // WHERE THE COMMISSIONING WALL CLOCK GOES, measured every run rather than argued about
+  // (rule 28; target 4's first question is whether the half hour is physics or plumbing).
+  // Each phase accumulates its wall ms and its iteration count; the report is attached to
+  // the pilot so any harness can print it.
+  const wall = {}; let lastPhase = pilot.phase, lastT = Date.now();
+  const tick = () => { const p = pilot.phase, t = Date.now();
+    const w = wall[lastPhase] || (wall[lastPhase] = { ms: 0, n: 0 });
+    w.ms += t - lastT; w.n++; lastPhase = p; lastT = t; };
   let n = 0;
   while (pilot.phase !== 'done') {
     if (++n > 6e6) { console.log(`  draw ${seed}: ABANDONED in '${pilot.phase}'`); return null; }
-    if (pilot.phase === 'fit') { pilot.work(); continue; }
+    if (pilot.phase === 'fit') { pilot.work(); tick(); continue; }
     const cmd = pilot.command();
     const refs = cmd.map((c) => ({ theta: c.pos + c.u, omega: c.vel, alpha: c.acc }));
     const tau = servo.torques(refs);
     arm.step(tau[0], tau[1], 1);
     const r = routeSignals(arm, cmd, tau);
     pilot.observe(r.measured, r.truth);
+    tick();
   }
+  tick();
+  pilot._wall = wall;
   await arm.l1.destroy(); await arm.l2.destroy();
   return pilot;
 }
