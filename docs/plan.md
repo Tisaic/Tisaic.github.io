@@ -3766,3 +3766,14 @@ the movements the machine will see, populate the grid, adapt the base, freeze, u
 tracker. What remains to measure: the full composition (router banks + guided adaptation,
 frozen together) and the transfer question — a bank adapted on the guided program, scored
 on a program the guide never ran, which is the memory test applied to adaptation.
+
+**§21 addendum — the transfer verdict.** Guide on one program, freeze, score on another:
+`guide=diamond → sharp` reads **1.93x against the static 1.71x** — the adaptation TRANSFERS
+across geometry when the guide shares the move profile, so it is a model by the
+retirement's own test, not a lap memory. And `guide=rounded → sharp` reads 1.66x, slightly
+BELOW static: a guide without the regime tilts the bank away from it (rule 9's other half,
+and the same law as every fit source in this arc). The installation ladder on the square:
+static 1.71 → diamond-guided frozen 1.93 → self-guided frozen 2.11 → permanent truth 2.20;
+self-fitted bank ceiling 3.27. The guided-commissioning instruction follows measured:
+guide with movements that SPAN the regimes production will run — the third arrival of
+"a calibration must span the range it is used over", this time from the adaptation side.

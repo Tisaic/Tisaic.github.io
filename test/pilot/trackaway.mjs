@@ -7,11 +7,22 @@ import { commissionArm, deployOn } from './rigs/arm-rig.mjs';
 const pilot = await commissionArm({ seed: 1 });
 if (!pilot || !pilot.verdict.deploy) { console.log('commissioning failed'); process.exit(1); }
 const opts = { laps: 8, scoreFromLap: 5 };
-for (const [name, online, cut] of [['static', false, Infinity],
-  ['adapted', true, Infinity], ['take-away', true, 4]]) {
+// GUIDE-THEN-TRANSFER: the memory test applied to adaptation (the retirement's rule). A bank
+// adapted during a guided phase on ONE program, frozen, then scored on ANOTHER: transfer says
+// the adaptation learned the machine, its absence says it learned the program — which is
+// still a legitimate installation (guide on the representative program, run that program),
+// but must wear the label.
+for (const [name, online, cut, guide] of [['static', false, Infinity, null],
+  ['adapted', true, Infinity, null], ['take-away', true, 4, null],
+  ['guide=diamond', true, 4, 'diamond'], ['guide=rounded', true, 4, 'rounded']]) {
   const snap = pilot.readouts.map((ro) => ro.w.map((a) => Float64Array.from(a)));
   pilot.online = online ? {} : null;
-  const r = await deployOn(pilot, 'sharp', true, 0.004, { ...opts, truthUntilLap: cut });
+  if (guide) {
+    await deployOn(pilot, guide, true, 0.004, { laps: 4, scoreFromLap: 3, truthUntilLap: cut });
+    pilot.online = null;      // frozen: the guided phase is over and the tracker is unbolted
+  }
+  const r = await deployOn(pilot, 'sharp', true, 0.004,
+    { ...opts, truthUntilLap: guide ? 0 : cut });
   const off = await deployOn(pilot, 'sharp', false, 0.004, opts);
   const st = pilot.status().onlineAtDeploy;
   console.log(`  ${name.padEnd(10)} contour ${r.r.contourRms.toExponential(3)}`
