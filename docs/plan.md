@@ -3948,3 +3948,29 @@ The matrix's own north-star readings:
   outside — their @0.008 rows are capped-authority territory for every mechanism.
 - **The safety clause holds under everything armed**: no held-out program made worse than
   leaving the machine alone, all six cells, u never past the engineer's cap.
+
+### 28. THE CASCADE IS DOMINATED WHERE A TRUTH SOURCE EXISTS — the standing red reframed by rule 4
+
+`stack.test.mjs`'s three standing reds pin a cascade whose layer 2 refuses (verify 0.95x) and
+whose layer 3 collapses on the shared fit (held-out R² 0.0248). Diagnosed before this arc;
+untouched by it. But this arc changed what the red MEANS, and rule 4 says a failing check can
+be stale in either direction — the code got better around it:
+
+| EMPS, mm rms | trapezoid program | two-tone sine (never run) | commissioning |
+|---|---|---|---|
+| stack, depth 3 (recorded best) | 0.0194 (29.8x) | 0.0140 (26.0x) | 3 layers, ~3x time |
+| **one pilot + gated take-away** | **0.0105 (55.5x)** | **0.0067** | 1 layer + 4 guided laps |
+
+**One gated layer beats the three-layer cascade on both of its headline rows at a third of
+the commissioning.** The cascade was the route past the forecast bound when the record was
+frozen; gated adaptation goes further for less — WHERE THE INSTALLATION HAS A TRUTH SOURCE,
+permanent or guided. The cascade remains the best truth-free route (its layers need no
+deploy truth at all), which is exactly the installation switch of §21: the two mechanisms
+serve the two installations, and neither obsoletes the other outright.
+
+**Recommendation, flagged for the owner rather than done unilaterally** (a contract's meaning
+is not mine to rewrite): the stack's "depth buys accuracy" contract should either be
+re-grounded on the truth-free installation it actually owns, or the Stack should learn to
+carry the online option per layer — and the layer-3 shared-fit collapse, still real, drops
+from "standing red on the flagship route" to "limitation of the fallback route", which is a
+different urgency.
