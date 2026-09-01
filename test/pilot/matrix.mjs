@@ -269,6 +269,7 @@ if (ROUTER && subject.verdict && subject.verdict.deploy) {
   // this project's defects get made. See `fitCornerBanks` in arm-rig.mjs.
   const res = fitCornerBanks(subject, recs,
     { grid: process.env.GRID === '1', aFullK: +(process.env.AFULLK || 6),
+      fitScale: process.env.FITSCALE || 'anchor',
       sizedVTop: ROUTER === 'probe' && recs[0].sizing
         ? (recs[0].sizing.vMult ?? 1) * 8e-4 * subject.sample : null });
   const rc = subject.routerCost();
