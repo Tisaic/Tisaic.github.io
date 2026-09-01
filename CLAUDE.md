@@ -1079,7 +1079,20 @@ that matches it** — the point-to-point tabs measure a different question.
   backlash in motion. The self-fitted ceiling is 3.27x. Six instrument-grade findings on the
   way (a flying reversal is not a corner; the ff convention is half the demand; clip fraction
   is non-monotone in severity; one pose teaches one pose; rows saturate; event shape moves the
-  regime scale). The full record is `docs/plan.md` §§9–14.
+  regime scale). The full record is `docs/plan.md` §§9–17, whose
+  arc since: THREE severity layers with hat interpolation (the blend axis un-saturated so the
+  slow and fast squares separate; regime scale anchored to 6x the declared aMax per sample²
+  after record-peak scaling confounded three comparisons); a COVERAGE GUARD fading λ where the
+  commanded speed exceeds the probe's own ceiling (the drive refuses clean events past the
+  declared vMax while the fast square cruises at 126% of it — the declared velocity is the
+  same fiction the acceleration was); and RANDOM POLYGONS through the corner rule — corner
+  shapes with no part knowledge — the first agnostic bank above baseline in both cells (sharp
+  square 2.02x/2.63x against 1.69x/2.27x; the joint-space tour reads 2.28x/2.16x; fitted on
+  the square itself, 3.27x). The wall has moved coverage → severity → GEOMETRY: every increase
+  in corner-geometry diversity in the fit source makes the square worse, because one linear
+  bank per severity knot averages over geometries. The scheduling variable is COMMANDED, the
+  row keeps the ACTUALS — measured split, and routing on actuals would put the blend inside
+  the loop (rule 35).
   **THE CONTOUR ERROR IS NOW SPLIT INTO BIAS AND OSCILLATION** (`contourBias`,
   `contourOsc`), because rule 39 had no instrument behind it on the one tab that contours.
   It settled ⑥ against ⑤ in a single reading: both start with the same error (⑤ bias −0.626

@@ -24,7 +24,7 @@
  */
 import { ensemble, freezeConfig } from '../../lib/pilot/ensemble.js';
 import { solveRidge, Pilot } from '../../lib/pilot/pilot.js';
-import { PG, mkPath, commissionArm, deployOn, recordOpenLoop, recordCornerProbe } from './rigs/arm-rig.mjs';
+import { PG, mkPath, commissionArm, deployOn, recordOpenLoop, recordCornerProbe, randomPolygon } from './rigs/arm-rig.mjs';
 
 const K = +(process.env.K || 1);
 const FEEDS = (process.env.FEEDS || '0.004,0.008').split(',').map(Number);
@@ -215,7 +215,21 @@ if (ROUTER && subject.verdict && subject.verdict.deploy) {
   // supplied or consulted, which is the owner's requirement stated back as code. `ROUTER=<shape>`
   // fits on that shape's open-loop record instead, as the ceiling the probe is measured against.
   const recs = [];
-  if (ROUTER === 'probe') {
+  if (ROUTER === 'poly' || ROUTER === 'both') {
+    // RANDOM SHARP POLYGONS — corner shapes with no part knowledge, four geometries at two
+    // feeds. Against 'probe' (joint-space stop-and-go tour) this asks whether what the
+    // self-fitted bank still knows (3.27x against the tour's 2.28x) is the CARTESIAN
+    // coordination of a corner: two joints decelerating and turning as one tool.
+    const rnd = (s0) => { let z = s0 >>> 0; return () => (z = (z * 1664525 + 1013904223) >>> 0) / 4294967296; };
+    for (const [seed, feed, star] of [[81, 0.004, 0], [82, 0.008, 0], [83, 0.0055, 0],
+      [85, 0.004, 1], [86, 0.008, 1], [87, 0.0055, 1]]) {
+      const path = randomPolygon(rnd(seed), feed, !!star);
+      const r = await recordOpenLoop(subject, path, feed);
+      recs.push(r);
+      console.log(`  ${star ? 'star   ' : 'polygon'} seed ${seed} @${feed}: lap ${r.lap} samples`);
+    }
+  }
+  if (ROUTER === 'probe' || ROUTER === 'both') {
     // Three records of 45k steps: the first pass used two of 30k and its 24-31 events were a
     // third of what one lap of the square shows the self-fit (90 corners) — the gap to the
     // self-fitted ceiling (3.26x against 2.08x) has row count as its cheapest explanation.
@@ -228,7 +242,8 @@ if (ROUTER && subject.verdict && subject.verdict.deploy) {
         + ` ${r.events[0]} events, run sat `
         + r.sat.map((st) => `${(100 * st.fraction).toFixed(2)}% (peak ${(100 * st.peak).toFixed(0)}%)`).join(' / '));
     }
-  } else {
+  }
+  if (!['poly', 'probe', 'both'].includes(ROUTER)) {
     for (const f of [0.004, 0.008]) recs.push(await recordOpenLoop(subject, ROUTER, f));
   }
   // THE REGIME SCALE, from the fit record itself (rule 32): full corner engagement at half the
@@ -306,7 +321,20 @@ if (ROUTER && subject.verdict && subject.verdict.deploy) {
   // The coverage ceiling: the probe's own top speed in PER-SAMPLE units, from its sizing —
   // beyond ~1.3x this the banks answer for a regime no record contains, and λ fades out.
   const vTop = ROUTER === 'probe' && recs[0].sizing
-    ? (recs[0].sizing.vMult ?? 1) * 8e-4 * subject.sample : null;
+    ? (recs[0].sizing.vMult ?? 1) * 8e-4 * subject.sample
+    // The polygons' own coverage ceiling, measured off their records rather than assumed.
+    : (ROUTER === 'poly' || ROUTER === 'both' ? (() => {
+      let pk = 0;
+      for (const r of recs) {
+        for (let k = 1; k < r.cmd.length; k++) {
+          for (let c = 0; c < r.cmd[0].length; c++) {
+            const d = Math.abs(r.cmd[k][c] - r.cmd[k - 1][c]);
+            if (d > pk) pk = d;
+          }
+        }
+      }
+      return pk;
+    })() : null);
   subject.router = { aFull, reachK, ...(vTop ? { vTop } : {}) };
   console.log(`  corner bank: source ${ROUTER}, aFull ${aFull.toExponential(2)}`
     + ` (${+(process.env.AFULLK || 6)}x declared aMax per sample²),`

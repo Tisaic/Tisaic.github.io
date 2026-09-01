@@ -3578,3 +3578,33 @@ The 0.008 row sits 5% under its baseline — the corner-engaged bank slightly mi
 whose corners it only saw scaled — and the slow square holds its best number. Open: per-bank
 TRUST from measured residuals (the actuals' honest way into the routing — a slow gate, not a
 schedule), and the six-plant pass before any of this becomes a default (rule 31).
+
+### 17. RANDOM POLYGONS BEAT THE BASELINE IN EVERY CELL — AND GEOMETRY DIVERSITY IS THE NEW WALL
+
+The owner's licence — corner SHAPES can be designed with no part knowledge — built literally:
+`randomPolygon` draws vertices around the workspace centre and traces them with the same
+corner rule every real program uses (`ROUTER=poly`: three convex polygons at three feeds).
+And a control that sharpens the question: star polygons (alternating radii, 40–80° vertices
+against the convex ones' 100–130°), plus the pooled tour+polygon source.
+
+| sharp square | baseline | tour (§16) | **polygons** | +stars | pooled tour+poly | self ceiling |
+|---|---|---|---|---|---|---|
+| @0.004 | 1.69x | **2.28x** | 2.02x | 1.97x | 1.86x | 3.27x |
+| @0.008 | 2.27x | 2.16x | **2.63x** | 2.49x | 2.45x | — |
+
+**The polygons are the first agnostic bank above baseline in BOTH cells** (+19% and +16%),
+and the fast square's 2.63x beats its baseline for the first time by any route — Cartesian
+coordination at the right feeds is what the joint-space tour could not teach. But the trend
+across five fit-source configurations is monotone and it is the real finding: **every
+increase in corner-geometry diversity makes the square worse** (tour alone 2.28 at its home
+feed; add geometries and it falls 2.02 → 1.97 → 1.86). One linear bank per severity knot
+AVERAGES over corner geometries, and the self bank's 3.27x is the measured value of knowing
+this corner's geometry rather than corners in general.
+
+So the wall has moved twice: coverage (§§4–8) → severity spectrum (§§14–15) → **geometry**.
+The same shape of answer suggests itself and is NOT yet built: the turn's geometry is
+command-derivable ahead of time exactly like its severity (the look-ahead contains the turn
+angle and direction), so geometry could be a second scheduling variable rather than a thing
+averaged over. The measured caution stands — every capacity increase on a mixed record has
+lost here — so that experiment must hold the per-bank row count while splitting, not just
+add banks.
