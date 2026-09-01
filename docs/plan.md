@@ -4290,6 +4290,21 @@ than doing nothing), and the worst held-out degradation improves 2.87x → 2.55x
    commissioning diet can buy it back — a per-program commission does not reach it either,
    which is what the original metric assumed it would.
 
+**Pinned:** `test/pilot/agnosticprice.mjs` (full tier) — price 1.27x on its own instrument
+(ceiling 3.64x / agnostic 2.87x, and the agnostic row matches the Kalman-rival bench byte
+for byte, rule 6's cross-check for free), with both halves asserted: the ceiling is real
+(knowing the geometry still buys something) and the agnostic recipe clearly beats baseline.
+
+**And on the KINEMATICS-FREE chain the protocol carries over with one asymmetry worth
+stating.** Record-scale polygon+star banks through the learned inverse read sharp
+router-static **2.37x with NO truth at deploy at all** (the old best frozen row was 2.46x
+and needed a guided phase), online 2.54x, takeaway 2.53x; the circle is untouched
+(6.87x/6.82x, the smooth-program control again). The learned chain keeps only 88 of 232
+corner fits — its truth is the affine observer rather than the tool, and a noisier truth
+rejects more weights — and unlike the analytic chain its online rows still ADD on the
+scored shape (2.37x → 2.54x): guidance harmed only when it was a DIFFERENT geometry's
+distribution pulling shared weights; truth on the shape being cut remains a gain.
+
 ### The eight targets, restated (replacing the stale table above)
 
 | target | state |
