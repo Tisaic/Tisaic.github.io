@@ -4008,3 +4008,33 @@ The `ikfree-rig` carries the gather/maps extracted verbatim; `ikfree.test.mjs` s
 its own copies (a frozen contract — refactoring it mid-arc was judged riskier than the
 duplication, which is FLAGGED: a change to either must be mirrored or not made, and folding
 the test onto the rig is queued).
+
+### 30. THE SOFT CORNER OF THE KINEMATICS-FREE CHAIN: AUTHORITY BINDS, AND ADAPTATION IS THE SAFE CONSUMER OF MORE
+
+`ikfreecomp.mjs` at brick 44's configuration (K 0.25 / E 0.03; 45 points, degree 5, holdout
+2.98e-3 rad), gate off per the contract's own precedent at this corner — the one place the
+gate's verdict was disputed across three rebuilt verifies and only DELIVERED numbers count
+(brick 58). The scribble vetoes at 0.40x; delivered:
+
+| through the learned inverse, soft | cap 0.15 | cap 0.5 |
+|---|---|---|
+| circle: static | **5.91x** | 4.57x |
+| circle: full composition | 5.94x (null) | **6.32x** |
+| sharp: static | 2.99x | 4.37x |
+| sharp: full composition | 2.96x (null) | **4.75x** |
+
+Three findings:
+
+- **The disputed gate verdict settles the same way again**: the scribble's 0.40x is
+  narrowness under a stress regime, and the delivered programs read 5.91x / 2.99x. (The
+  refusal stays printed; nothing here changes the gate's defaults.)
+- **At the soft corner AUTHORITY binds, not the model**: every armed row at cap 0.15 pins u
+  at 0.150 and the composition is NULL on contour (it still buys 17% of lag). The mechanism
+  map across the arc is now complete: the STIFF arm was model-bound (cap raises measured
+  null, composition paid), the SOFT arm is authority-bound (composition null, cap pays) —
+  one diagnosis per machine, readable off u-at-cap plus a cap probe.
+- **Static control MISUSES extra authority on the smooth program** (circle 5.91x → 4.57x at
+  the bigger cap) **and gated adaptation reclaims it** (6.32x, the best soft-circle number).
+  More authority on a frozen model overdrives; adaptation spends it against the measured
+  truth. That pairing — raise the cap only with the adaptation armed — is the soft-machine
+  operating instruction, measured.

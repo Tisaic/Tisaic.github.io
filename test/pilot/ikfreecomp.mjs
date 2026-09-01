@@ -17,14 +17,23 @@ import { decompose, ContourScore } from '../../lib/flexisim/contour.js';
 import { PGIK, makeArmIK, gatherHeldPoints, buildMaps } from './rigs/ikfree-rig.mjs';
 import { mkPath, randomPolygon, fitCornerBanks } from './rigs/arm-rig.mjs';
 
+// THE COMPLIANCE, SWEEPABLE — the stiff default, or the brick-44 soft corner (K 0.25,
+// E 0.03) where the flex dominates and the whole story is hardest. The soft gather uses
+// fewer points at a lower degree, exactly as the ikfree contract's soft block does: 45
+// points carry degree 5.
+const KK = +(process.env.ARM_K || 16), EE = +(process.env.ARM_E || 0.15);
+const PTS = +(process.env.PTS || (KK < 1 ? 45 : 90));
+const DEG = +(process.env.DEG || (KK < 1 ? 5 : 7));
+console.log(`arm: K ${KK} / E ${EE}; gather ${PTS} points, degree ${DEG}`);
+
 // ------------------------------------------------- gather, fit the maps, commission ⑥
-const { arm, servo } = await makeArmIK();
+const { arm, servo } = await makeArmIK(KK, EE);
 const centre = arm.ik(12, 0, true);          // experimental setup only: parking the arm
 const box = [0, 1].map((j) => ({ lo: centre[j] - 0.55, hi: centre[j] + 0.55 }));
 const t0 = Date.now();
-const pairs = gatherHeldPoints(arm, servo, box, { n: 90, seed: 7 });
-const M = buildMaps(pairs);
-console.log(`gather: 90 held points in ${((Date.now() - t0) / 1000).toFixed(0)}s, `
+const pairs = gatherHeldPoints(arm, servo, box, { n: PTS, seed: 7 });
+const M = buildMaps(pairs, { D: DEG });
+console.log(`gather: ${PTS} held points in ${((Date.now() - t0) / 1000).toFixed(0)}s, `
   + `inverse holdout ${M.holdout.toExponential(2)} rad`);
 
 const circle = mkPath('circle', 0.004);
@@ -35,10 +44,15 @@ for (let i = 0; i < 4000; i++) {
   arm.step(t[0], t[1], 1);
 }
 const centreQ = M.predict(PGIK.centre[0], PGIK.centre[1]);
-const pilot = new Pilot({ autoRefuse: true, nMeasured: 6,
+// FORCE=1 deploys past the gate, the contract's own precedent at the soft corner: its block
+// runs autoRefuse false deliberately, because that is the configuration where the gate's
+// verdict was disputed across three rebuilt verifies and only DELIVERED numbers settle it
+// (brick 58). The refusal it would have given is printed either way.
+const pilot = new Pilot({ autoRefuse: process.env.FORCE === '1' ? false : true, nMeasured: 6,
   channels: [0, 1].map((j) => ({ lo: centreQ[j] - 0.55, hi: centreQ[j] + 0.55,
     vMax: 8e-4, aMax: 4e-6, jMax: 2e-7 })),
-  uMax: 0.15, start: q0, guards: [{ index: 4, max: 6 }, { index: 5, max: 6 }],
+  uMax: +(process.env.UCAP || 0.15), start: q0,
+  guards: [{ index: 4, max: 6 }, { index: 5, max: 6 }],
   workspace: () => true, seed: 1 });
 const affine = (cmdQ, tool) => {
   const t2 = M.fwd(cmdQ);
@@ -59,12 +73,16 @@ while (pilot.phase !== 'done') {
 await arm.l1.destroy(); await arm.l2.destroy();
 const st = pilot.status();
 console.log(`⑥ commissioned: ${pilot.verdict.deploy ? 'deploys' : 'REFUSED'}, verify `
-  + `${st.report.verify ? st.report.verify.ratio.toFixed(2) + 'x' : '—'}`);
-if (!pilot.verdict.deploy) process.exit(0);
+  + `${st.report.verify ? st.report.verify.ratio.toFixed(2) + 'x' : '—'}`
+  + `${st.report.wouldRefuse ? `  (wouldRefuse: ${st.report.wouldRefuse.why || st.report.wouldRefuse})` : ''}`);
+if (!pilot.verdict.deploy) {
+  console.log(`  why: ${pilot.verdict.why}`);
+  process.exit(0);
+}
 
 // ---------------------------------- corner-bank records, ON THE LEARNED CHAIN, open loop
 async function record(path) {
-  const { arm: a, servo: s } = await makeArmIK();
+  const { arm: a, servo: s } = await makeArmIK(KK, EE);
   const p0 = M.predict(path.at(0).x, path.at(0).y);
   a.setPose(p0[0], p0[1]);
   for (let i = 0; i < 4000; i++) {
@@ -103,7 +121,7 @@ console.log(`corner banks: fitted ${fb.fitted}, kept ${fb.kept}, aFull ${fb.aFul
 // ------------------------------------------------------------------- deploy protocols
 async function deploy(shape, { router = false, online = false, cutLap = Infinity } = {}) {
   const path = mkPath(shape, 0.004);
-  const { arm: a, servo: s } = await makeArmIK();
+  const { arm: a, servo: s } = await makeArmIK(KK, EE);
   const p0 = M.predict(path.at(0).x, path.at(0).y);
   a.setPose(p0[0], p0[1]);
   for (let i = 0; i < 4000; i++) {
