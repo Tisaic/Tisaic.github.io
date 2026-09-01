@@ -4372,6 +4372,20 @@ The experiment ladder, cheapest-falsifier first: ① wall-clock breakdown (DONE,
 ⑥ ensemble; ⑦ the integrated one-press bench — `autostack` takes the demo alongside
 signals and limits and ships the whole composition.
 
+**⑤ MEASURED ON THE RIG, AND RULE 42 SAYS NO.** DPT 60 reads rounded +2%, sharp nil,
+circle +3.6% — not the +12–25% the soft ⑧-configuration measured — while N doubles to 115
+and the QP arithmetic roughly quadruples. Two things worth keeping: the λ replay re-picked
+the effort weight at exactly (60/30)² by itself, confirming the ⑧-arc's manual scaling law
+from inside the machine; and the lever is now placed — the decision clock pays on SOFT
+machines and not on stiff ones, a constant that must be re-derived per plant (rule 31),
+which is exactly what the replay already does.
+
+**AND THE FIT'S WALL CLOCK IS THE SEARCH, NOT THE RIDGE.** Sub-stage timing: tune 13.3s +
+window 4.3s against the per-lead ladder's 2.5s. So ④ as designed (stream the ladder through
+SharedRLS) buys almost no commissioning time — the on-PLC architecture claim stands on it,
+but target 4's lever here is the SEARCH, and `ensemble.freezeConfig` already skips it for
+every draw after the first. The verify (25.4s, 43%) remains the largest cut available.
+
 **③ MEASURED, AND BOTH HALVES HOLD — WITH A BONUS THAT REVERSES THE EXPECTED COST.**
 `test/pilot/displace.mjs`: commissioned at a workspace-sized box (±1.2 rad — the standard
 ±0.55 turned out to be PROGRAM-sized, the home square using 0.523 of it, so the workspace

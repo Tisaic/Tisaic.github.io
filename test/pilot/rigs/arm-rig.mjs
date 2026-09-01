@@ -375,8 +375,10 @@ async function commissionArm({ seed = 1, train = { shape: 'rounded', feed: 0.004
   // (rule 28; target 4's first question is whether the half hour is physics or plumbing).
   // Each phase accumulates its wall ms and its iteration count; the report is attached to
   // the pilot so any harness can print it.
-  const wall = {}; let lastPhase = pilot.phase, lastT = Date.now();
-  const tick = () => { const p = pilot.phase, t = Date.now();
+  const lbl = () => (pilot.phase === 'fit' && pilot._fit && pilot._fit.stage
+    ? `fit:${pilot._fit.stage}` : pilot.phase);
+  const wall = {}; let lastPhase = lbl(), lastT = Date.now();
+  const tick = () => { const p = lbl(), t = Date.now();
     const w = wall[lastPhase] || (wall[lastPhase] = { ms: 0, n: 0 });
     w.ms += t - lastT; w.n++; lastPhase = p; lastT = t; };
   let n = 0;
