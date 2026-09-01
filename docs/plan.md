@@ -4372,6 +4372,18 @@ The experiment ladder, cheapest-falsifier first: ① wall-clock breakdown (DONE,
 ⑥ ensemble; ⑦ the integrated one-press bench — `autostack` takes the demo alongside
 signals and limits and ships the whole composition.
 
+**⑥ MEASURED, AND THE TANK'S TOOL IS THE ARM'S SECOND CHOICE.** Six draws on the arm
+(rounded 5.31–6.18x, circle 5.19–10.02x — real spread), ensemble of the 4-draw majority
+layout: rounded 5.78x, held-out circle **7.47x against the median draw's 6.48x** — outcome
+(a) of the pre-stated three, a better plant model by variance reduction, +15% on a program
+no draw shared. But beside `select.mjs` the ranking inverts: the gate-pick delivered draw 2
+(10.02x on the circle, rank 1 of 6). So the k-commissioning budget has TWO tools and one
+selector, and it is the same selector as everything else here — whether the draws DEPLOY:
+draws that deploy and rank under the representative regime (0.989 correlation) want
+SELECTION; draws that refuse (the tank, all eight) leave nothing to select and want the
+AVERAGE, which vouched for itself there at 1.34x. Both are free at deploy; the choice costs
+nothing at runtime.
+
 **⑤ MEASURED ON THE RIG, AND RULE 42 SAYS NO.** DPT 60 reads rounded +2%, sharp nil,
 circle +3.6% — not the +12–25% the soft ⑧-configuration measured — while N doubles to 115
 and the QP arithmetic roughly quadruples. Two things worth keeping: the λ replay re-picked
