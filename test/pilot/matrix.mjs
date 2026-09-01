@@ -23,7 +23,7 @@
  * Run: node test/pilot/matrix.mjs   [K=1]
  */
 import { Pilot } from '../../lib/pilot/pilot.js';
-import { ensemble } from '../../lib/pilot/ensemble.js';
+import { ensemble, freezeConfig } from '../../lib/pilot/ensemble.js';
 import { PG, makeArm, mkPath, homeArm, routeSignals, deployOn } from './rigs/arm-rig.mjs';
 
 const K = +(process.env.K || 1);
@@ -39,7 +39,7 @@ const DWELL = process.env.DWELL === '1';
 const DPT = +(process.env.DPT || 30);
 const TRAIN = { shape: process.env.TRAIN || 'rounded', feed: +(process.env.TRAINFEED || 0.004) };
 
-async function commission(seed) {
+async function commission(seed, before = null) {
   const { arm, servo } = await makeArm();
   const startPath = mkPath(TRAIN.shape, TRAIN.feed);
   homeArm(arm, servo, startPath);
@@ -97,6 +97,7 @@ async function commission(seed) {
       return arm.ik(c.x, c.y, true);
     },
   });
+  if (before) before(pilot);
   let n = 0;
   while (pilot.phase !== 'done') {
     if (++n > 6e6) { console.log(`  draw ${seed}: ABANDONED in '${pilot.phase}'`); return null; }
@@ -120,10 +121,26 @@ console.log(`  decision clock: ${DPT}/Ts${DPT !== 30 ? '  (default is 30)' : ''}
 console.log(`  excitation: ${DWELL ? 'DWELLING — the noise is time-warped so the machine lingers'
   : 'the ordinary scribble, which never stops'}`);
 
+// FORCE THE WINDOW, USING THE MACHINERY THAT ALREADY EXISTS. `freezeConfig` copies one pilot's
+// chosen configuration onto another that has not fitted; overriding the lag count on the way is
+// how "what if the window reached the settling time?" becomes a one-variable experiment rather
+// than an argument. The tune picks 12 lags — the shortest of [12, 24, 40] — because rule 42 takes
+// the cheapest inside a 5% band, and 12 x 13 x 9 = 1404 steps is HALF the arm's Tset of 2743.
+// Rule 37 says a window must reach the period of what it has to see. On this plant the two rules
+// disagree and the cheaper one is winning.
+const WINDOW = +(process.env.WINDOW || 0);
 const pilots = [];
 for (let s = 1; s <= K; s++) {
   const t0 = Date.now();
-  const p = await commission(s);
+  let p = await commission(s);
+  if (WINDOW && p) {
+    // Re-commission with the SAME choices except the window, so the comparison is one variable.
+    const donor = p;
+    p = await commission(s, (q) => {
+      freezeConfig(donor, q);
+      q._frozenConfig.forEach((c) => { c.mLag = WINDOW; c.fLag = WINDOW; });
+    });
+  }
   // THE REASON, NOT ONLY THE VERDICT. A refusal printed as the bare word "REFUSED" tells you the
   // machine declined and nothing about why, and the whole table below then reads 1.00x with no
   // explanation anywhere in it — which is exactly what the first diamond run produced.
@@ -134,6 +151,20 @@ for (let s = 1; s <= K; s++) {
   // two different experiments as well as two different machines.
   if (p) {
     const st = p.status();
+    // RULE 37, PUT TO THIS PLANT: "a lag window must REACH the period of what it has to see." A
+    // model that is to schedule stored energy must be able to REPRESENT it, and a lag-window map
+    // can only carry what its window spans. If the window is shorter than the arm's own settling
+    // time, the flex's state is outside the model and no optimiser can plan against it — which
+    // would be a one-number explanation, plant-agnostic, for why anticipation is present and
+    // ineffective.
+    const ro = st.report.readouts || [];
+    for (let c = 0; c < ro.length; c++) {
+      const reach = (ro[c].lags || 0) * ro[c].stride * st.sample;
+      console.log(`      ch${c} window ${ro[c].lags} lags x stride ${ro[c].stride} x sample `
+        + `${st.sample} = ${reach} steps  vs Tset ${st.Tset}  → `
+        + `${reach >= st.Tset ? 'REACHES the settling time'
+          : `${(st.Tset / Math.max(1, reach)).toFixed(1)}x SHORT of it`}`);
+    }
     console.log(`      probe rings ${JSON.stringify(st.rings)}  Ts ${st.Ts}  Tset ${st.Tset}`
       + `  sweep ${st.report.excite && st.report.excite.chirp ? 'YES' : 'no'}`);
   }
@@ -160,7 +191,7 @@ async function row(pilot, shape, feed) {
   // saturating, and no improvement to the model or the horizon can help a controller that is
   // already asking for more authority than it is given.
   return { off: off.contourRms, on: on.contourRms, x: off.contourRms / on.contourRms,
-    lagOff: off.lagRms, lagOn: on.lagRms, uPk: onR.uPk, sp: onR.split, spOff: offR.split, prof: onR.prof, profOff: offR.prof };
+    lagOff: off.lagRms, lagOn: on.lagRms, uPk: onR.uPk, sp: onR.split, spOff: offR.split, prof: onR.prof, profOff: offR.prof, reach: onR.reach, sideSteps: onR.sideSteps };
 }
 
 const subject = pilots.length > 1 ? (ensemble(pilots).pilot || pilots[0]) : pilots[0];
@@ -213,6 +244,16 @@ for (const r of spatial) {
   const mid = (on[4] + on[5]) / 2, ends = (on[0] + on[9]) / 2;
   console.log(`    first half ${firstHalf.toExponential(2)} vs last half ${lastHalf.toExponential(2)}`
     + `  ·  ends ${ends.toExponential(2)} vs middle ${mid.toExponential(2)}`);
+  // THE CORRECTION'S OWN PHASE, which is the question of whether it SCHEDULES or REACTS.
+  console.log(`    |u|  ${r.prof.map((b) => b.u.toExponential(1)).join(' ')}`);
+  const us = r.prof.map((b) => b.u);
+  const uPeak = us.indexOf(Math.max(...us));
+  console.log(`    |u| peaks in bucket ${uPeak} of 0..9  →  `
+    + `${uPeak <= 1 || uPeak >= 8 ? 'AT the corner — reacting to it, or acting on the one behind'
+      : 'mid-side — neither at the corner nor before the next'}`);
+  console.log(`    horizon reaches ${r.reach} steps; a side lasts ${r.sideSteps} steps  →  `
+    + `${r.reach >= r.sideSteps ? 'the next corner IS inside the preview'
+      : `the next corner is ${(r.sideSteps / r.reach).toFixed(1)}x BEYOND the preview`}`);
   console.log(`    → ${ends > 1.3 * mid ? 'U-SHAPED: acceleration ramps'
     : (firstHalf > 1.3 * lastHalf ? 'DECAYING from the corner: overshoot-and-recover'
       : 'FLAT: neither account')}`);

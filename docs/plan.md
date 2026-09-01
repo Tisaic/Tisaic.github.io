@@ -916,6 +916,82 @@ speed. If the residual concentrates in the ramps, the target is a controller tha
 commanded acceleration — and that reframes every knob tried so far, because none of them was about
 acceleration either.
 
+## RULE 42'S TIE-BREAK IS DEFEATING RULE 37, AND FIXING IT IS WORTH 23%
+
+The tune picks the lag window by rule 42 — among candidates within 5% of the best held-out score,
+take the cheapest — and on the arm that selects **12 lags**, the shortest of `[12, 24, 40]`:
+
+```
+ 12 lags x stride 13 x sample 9 = 1404 steps   vs Tset 2743  →  2.0x SHORT
+ 24 lags                        = 2808 steps                 →  reaches
+ 40 lags                        = 4680 steps                 →  reaches
+```
+
+Rule 37 says a lag window must REACH the period of what it has to see, and it is recorded as
+measured twice. Rule 42 says take the cheapest inside the band. **On this plant they disagree and
+the cheaper one wins**, so the model spans half the arm's own settling time.
+
+```
+ program          W12      W24      W40
+ rounded @4e-3   6.18x    6.59x    6.82x
+ circle  @4e-3   7.72x    8.85x    9.47x
+ circle  @8e-3   4.86x    4.81x    4.84x
+ sharp   @4e-3   1.69x    1.68x    1.71x
+ sharp   @8e-3   2.27x    2.36x    2.41x
+```
+
+**+23% ON THE CIRCLE AND +10% ON THE ROUNDED RECTANGLE**, for no new machinery — the fix is to let
+rule 37 veto rule 42's band rather than lose to it. It is plant-agnostic by construction: "the
+window must span the settling time" is a comparison between two numbers the pilot already measures.
+
+**AND IT DOES NOTHING FOR THE SHARP SQUARE.** 1.69x → 1.71x. Its corner LAG does improve, 1.474e-1
+→ 1.208e-1, about 18% — so the longer window is representing something real near the corner — and
+the headline does not move.
+
+## WHY THE ARM CANNOT SCHEDULE ITS FLEX, AND WHAT WOULD LET IT
+
+The owner's account of what a corner requires: load the arm's flex before the vertex and release it
+through, staying on the line — a scheduled manoeuvre, not a reaction. Measured, the pilot already
+does the easy half of that:
+
+```
+ |u| along a side   1.4e-1  9.2e-2  7.2e-2  5.2e-2  3.3e-2  3.8e-2  5.2e-2  5.7e-2  1.4e-1  1.2e-1
+                    corner                          mid-side                        approaching
+ horizon reach 4176 steps vs a side of 2051  →  the next corner IS inside the preview
+```
+
+**IT ANTICIPATES AND IT STILL FAILS.** `|u|` bottoms out mid-side and climbs to 1.4e-1 before the
+vertex, and the horizon covers two full sides. Preview length is not the constraint.
+
+**THE STRUCTURAL BARRIER IS THAT `act()` APPLIES ONE MOVE.** It returns `_uNowOf(c)` — the first
+element of a plan over N leads — and re-solves next tick. A manoeuvre that must go OFF target now
+to be ON target later is optimal only when the future cost dominates, and a receding horizon
+re-optimises from the current state every tick, so the immediate error dominates every decision it
+actually executes. **The controller can plan the load-and-release and can never commit to it.**
+CLAUDE.md recorded the symptom without the diagnosis: "a receding horizon only ever applies its
+FIRST move and re-solves, so the far leads shape it far less than the argument assumed."
+
+**THREE PLANT-AGNOSTIC ROUTES, none of which know anything about arms.**
+
+1. **COMMIT m MOVES INSTEAD OF ONE.** Execute the first m elements of the plan before re-solving.
+   `m` is a number chosen by measurement per plant, exactly like `sample` and `grid`. This is NOT
+   the move-blocking that measured null here — that blocked the DECISION VARIABLES to make the
+   solve cheaper and changed nothing about what was executed. Committing the executed moves is the
+   opposite change and has never been tried.
+2. **GIVE THE MODEL THE STATE.** A lag-window map can only carry what its window spans, which is
+   why the rule-37 fix above helped at all. A plant whose stored energy decays over Tset needs a
+   window that reaches Tset — now enforceable — and possibly a state-space form where deflection is
+   a variable the optimiser can aim at rather than a pattern it must infer.
+3. **A TERMINAL COST.** If the horizon ends mid-manoeuvre the optimiser has no reason to finish in a
+   good state. Weighting the final lead is standard MPC, is one number, and composes with (1).
+
+**AND THE HONEST CAVEAT ON ALL THREE:** every one of them makes the controller commit further ahead
+on a model that is measured to be more error than signal in a single draw (error/signal 1.21 on the
+tank). Committing to a plan is only safe in proportion to how much the plan can be trusted, so
+(1) and (3) should be measured AFTER the ensemble work, not before it — a controller that commits
+harder to a worse model is the failure mode this project already has on record from ILC tables
+pumped to 5.25.
+
 ## What the record already settles
 
 Three findings make this plan shorter than it looks, and all three are measured rather than

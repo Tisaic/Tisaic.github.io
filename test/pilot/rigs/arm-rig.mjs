@@ -167,7 +167,7 @@ async function deployOn(pilot, shape, active, feed = 0.004) {
   // FOUR EQUAL SIDES ON THE SQUARE AND THE DIAMOND; anything else gets no profile rather than a
   // meaningless one, since "position within a side" needs sides of equal length to mean anything.
   const sideLen = (shape === 'sharp' || shape === 'diamond') ? path.length / 4 : 0;
-  const prof = Array.from({ length: 10 }, () => ({ c2: 0, l2: 0, n: 0 }));
+  const prof = Array.from({ length: 10 }, () => ({ c2: 0, l2: 0, n: 0, u2: 0 }));
   let kSamp = 0, uPk = 0;
   for (let k = 0; k < total; k++) {
     const cmd = path.at(k);
@@ -213,6 +213,12 @@ async function deployOn(pilot, shape, active, feed = 0.004) {
         const bi = Math.min(9, Math.max(0, Math.floor(f * 10)));
         prof[bi].c2 += dec.contour * dec.contour;
         prof[bi].l2 += dec.lag * dec.lag; prof[bi].n++;
+        // AND WHERE THE CORRECTION ITSELF SITS. To make a corner on a compliant arm the flex has
+        // to be LOADED before the vertex and released through it — the controller must schedule
+        // the deflection ahead of time, because a reactive correction can only respond to an
+        // overshoot that has already happened. The two are distinguishable by phase: a scheduling
+        // controller's |u| peaks BEFORE the corner, a reacting one's peaks at or after it.
+        prof[bi].u2 += u[0] * u[0] + u[1] * u[1];
       }
     }
   }
@@ -225,7 +231,11 @@ async function deployOn(pilot, shape, active, feed = 0.004) {
       straightN: split.straight.n,
     },
     prof: sideLen ? prof.map((b) => ({ c: b.n ? Math.sqrt(b.c2 / b.n) : 0,
-      l: b.n ? Math.sqrt(b.l2 / b.n) : 0, n: b.n })) : null };
+      l: b.n ? Math.sqrt(b.l2 / b.n) : 0, u: b.n ? Math.sqrt(b.u2 / b.n) : 0, n: b.n })) : null,
+    // THE PREVIEW THE CONTROLLER ACTUALLY HAS, in the same units as the path: how many solver
+    // steps ahead its horizon reaches, against how long a side lasts. A controller whose horizon
+    // does not reach the next corner cannot schedule for it whatever its model knows.
+    reach: pilot.N * pilot.grid * pilot.sample, sideSteps: sideLen ? Math.round(path.lap / 4) : 0 };
 }
 
 export { PG, RATIO, makeArm, mkPath, homeArm, routeSignals, deployOn };
