@@ -3974,3 +3974,37 @@ re-grounded on the truth-free installation it actually owns, or the Stack should
 carry the online option per layer — and the layer-3 shared-fit collapse, still real, drops
 from "standing red on the flagship route" to "limitation of the fallback route", which is a
 different urgency.
+
+### 29. THE KINEMATICS-FREE CHAIN UNDER THE FULL COMPOSITION — 2.46x FROZEN, NOTHING KNOWS THE ARM
+
+The owner's ask, built and measured (`test/pilot/ikfreecomp.mjs`, on the new `ikfree-rig`):
+mode ⑥ — inverse learned from 90 tracker-held points (holdout 3.25e-4 rad), affine-observer
+truth, verify 3.03x — with the corner banks, the command-routed blend, and gated adaptation
+on top. The banks are fitted from polygon records whose COMMANDS came out of the learned
+inverse itself: no geometry, no production program, anywhere in any fit.
+
+| through the LEARNED inverse | circle | sharp square (first measurement ever) |
+|---|---|---|
+| open loop | 6.50e-2 | 1.91e-1 |
+| static ⑥ | 6.87x | **1.89x** |
+| + corner banks | 6.82x | 2.22x |
+| + gated online | 6.54x | **2.53x** |
+| + take-away (tracker unbolted) | 6.55x | **2.46x** |
+
+Three findings:
+
+- **The learned chain's STATIC square beats the analytic chain's** (1.89x against 1.69x) —
+  brick 44's droop-carried-by-the-reference advantage, now measured on the corner program
+  where it was never checked.
+- **The composition stacks on a chain that has never seen ik()** exactly as on the analytic
+  one — banks +17%, adaptation +14% on top — and holds frozen after the tracker leaves.
+  2.46x with zero geometric knowledge and a temporary instrument is the arc's strongest
+  full-agnosticism statement.
+- **The circle is saturated** (6.87x static; nothing helps, adaptation trades ~4% — its
+  residual is not distribution mismatch), and the blend's dead zone keeps the router
+  byte-close there, the control that makes the square's column readable.
+
+The `ikfree-rig` carries the gather/maps extracted verbatim; `ikfree.test.mjs` still holds
+its own copies (a frozen contract — refactoring it mid-arc was judged riskier than the
+duplication, which is FLAGGED: a change to either must be mirrored or not made, and folding
+the test onto the rig is queued).
