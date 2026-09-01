@@ -1126,6 +1126,21 @@ that matches it** — the point-to-point tabs measure a different question.
   the gate's late-run admit rate distinguishes them. Pinned: `test/pilot/onlinegate.test.mjs`
   (full tier); the full composition frozen — polygon banks + diamond-guided adaptation, no
   production program anywhere — reads **2.39x on the sharp square** against static 1.71x.
+  THE LAW COMPLETED TO SIX PLANTS AND SHARPENED (plan §31): **the deploy gate's own 1.1x
+  threshold is ALSO the adaptation selector** — Wood-Berry (0.01x) and the mill (1.07x) below
+  it stay null-or-harmful force-deployed; the barrel at exactly 1.10x FLIPS from 0.67x harmful
+  to 1.17x helpful; tank, EMPS and arm above it all multiply. `report.binding` states which
+  constraint binds (time-at-cap during the verify: authority → raise uMax with adaptation
+  armed; model → banks/adaptation) — the diagnosis this arc ran as experiments, now one line.
+  ON THE KINEMATICS-FREE CHAIN (plan §§29–30) the composition reads 2.53x live / **2.46x
+  frozen** on the never-measured sharp square with nothing knowing the arm, the learned
+  reference's static square BEATS the analytic chain's (1.89x vs 1.69x, droop in the
+  reference), and the SOFT corner is AUTHORITY-bound where the stiff was model-bound — at cap
+  0.5 the sharp square reads 4.75x and static control MISUSES the extra authority on the
+  circle (5.91x → 4.57x) while gated adaptation reclaims it (6.32x): raise the cap only with
+  adaptation armed. `ikfree.test.mjs` runs on the shared `ikfree-rig`; the STACK contract is
+  re-grounded on the truth-free installation it owns (depth never harms, a refused layer costs
+  nothing, the deployed layer transfers as a model) and the suite's last red file is GREEN.
   **THE CONTOUR ERROR IS NOW SPLIT INTO BIAS AND OSCILLATION** (`contourBias`,
   `contourOsc`), because rule 39 had no instrument behind it on the one tab that contours.
   It settled ⑥ against ⑤ in a single reading: both start with the same error (⑤ bias −0.626
