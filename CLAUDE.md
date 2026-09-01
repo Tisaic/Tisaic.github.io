@@ -1092,7 +1092,12 @@ that matches it** — the point-to-point tabs measure a different question.
   in corner-geometry diversity in the fit source makes the square worse, because one linear
   bank per severity knot averages over geometries. The scheduling variable is COMMANDED, the
   row keeps the ACTUALS — measured split, and routing on actuals would put the blend inside
-  the loop (rule 35).
+  the loop (rule 35). AND IT FITS THE PLC DISCIPLINE, COUNTED (plan §18): every fit is
+  commissioning-time; the deployed λ scan is a bounded sparse-event list ingesting only the
+  offsets that newly enter the horizon — `routerCost()` reports worst 20,852 MAC/decision both
+  channels and 320 on smooth programs against the pilot's 42,914 default tick — and the sparse
+  rewrite's eviction bug (sound only for query times after the new event, while the horizon
+  queries between events) was caught by the side-by-side control and fixed to byte-identical.
   **THE CONTOUR ERROR IS NOW SPLIT INTO BIAS AND OSCILLATION** (`contourBias`,
   `contourOsc`), because rule 39 had no instrument behind it on the one tab that contours.
   It settled ⑥ against ⑤ in a single reading: both start with the same error (⑤ bias −0.626
