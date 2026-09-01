@@ -570,6 +570,12 @@ measurement behind each is in `docs/history/` — the pointer in brackets.
 40. **Learn the parameters that have no closed form; compute the ones that do.** [ngrc]
 41. **Directional forgetting has measured NEUTRAL five independent times here.** Default
     off.
+41b. **An excitation built to the DECLARED limits describes a machine the program does not
+    run.** Measure the program's own peak v/a/j against them: the arm's circle uses 1% of the
+    declared jerk and scores 7.72x, its sharp square uses 61537% and scores 1.69x. And raising
+    the declared numbers changes nothing — the box TRAVERSE binds through velocity, so a and j
+    ride along. Shrinking the box makes the excitation faster and every held-out program worse.
+    [flexisim]
 42. **Selection: among the candidates within 5% of the best MEASURED score, take the
     cheapest — or the smoothest.** A weighted sum of two incommensurable quantities is a
     preference dressed as a result. The band belongs on the IMPROVEMENT, never on the
@@ -695,6 +701,9 @@ measurement behind each is in `docs/history/` — the pointer in brackets.
 | `test/pilot/tankspread.mjs` | **A PLANT'S SCORE IS A DISTRIBUTION.** Commissions the tank from N seeds and reports the spread, the deployed median, and the GATE'S OWN ESTIMATE beside what it delivered. It asserts nothing — an instrument that decided its verdict before the verdict was understood is how the 1.32x got written down. What it measured: at the old defaults 4 of 8 seeds deploy and **all four hurt**; at the new ones 5 of 8 deploy at a median 1.249x, two still hurt, and the gate's estimate correlates **-0.057** with delivered benefit. |
 | `test/pilot/qpsweep.mjs`, `qpsweep-arm.mjs` | **Not tests — the solver-budget experiment.** Commission ONE pilot, re-deploy that same model over a grid of QP iteration counts and horizon lengths, and score the MACHINE. Found that the shipped 60 iterations at `1.5·Tset` is 57× more arithmetic than the machine wants and WORSE than 1 iteration at N=56 (EMPS 14.16× against 12.70×, at 101% of a PLC scan's 10% against 5761%), and that the arm agrees at 29× cheaper and 16% better. Scores a held-out program in the same table, because the surface is rugged enough that the best cell of a grid is a suspect result. |
 | `test/pilot/rti.test.mjs` | A FALSIFIED HYPOTHESIS, pinned as the four things measuring it found. One QP iteration per cycle does not track sixty (88% of the applied signal); sixty is itself 36% from this solver's own optimum, so every delivered number in the project came out of a truncated solve; the convergence curve at N=8 matches N=48, so the rate is the Hessian's conditioning and not the horizon; and the Lipschitz bound is 1.82× above the true spectral norm, which costs exactly 2× in iterations. |
+| `test/pilot/rigs/arm-rig.mjs` | The 2R arm rig — plant, paths, routing, `commissionArm` and `deployOn`. Every harness drives the arm through this; three separate copies of pieces of it have each shipped a defect. |
+| `test/pilot/forecast.mjs` | Held-out forecast R² on open-loop programs, plus an offline refit that separates an unreachable dictionary from an unvisited one. |
+| `test/pilot/spectrum.mjs` | Where the machine rings, where the defect's energy is, and where the excitation looked — three power spectra on one axis of periods. |
 | `test/pilot/` | Full-tier files here SKIP and exit 0 without `SUITE=full` — that hole let a gate regression ship for three bricks. Node tests for the pilot on six plants that share no physics: the 2R arm, a quadruple tank, a three-zone extruder barrel, the Wood–Berry column, a cold mill AGC, and the EMPS servo axis (real data). |
 | `docs/history/` | The measurement record — see the last section. |
 | `CLAUDE.md` | This file. |
@@ -1008,6 +1017,60 @@ that matches it** — the point-to-point tabs measure a different question.
   back BYTE-IDENTICAL at 12.21× with the gate off, which is the control (rule 21). A refusal
   on this tab now means only "there is nothing to deploy" — the excitation would not build,
   or the guards tripped three times.
+  **THE SHARP SQUARE IS A FORECAST FAILURE, AND TWELVE CONTROLLER KNOBS ARE NULL ON IT FOR
+  THAT REASON.** Committing 2, 4 or 8 moves of the QP's plan instead of one (`commitM`, shipped
+  at 1 and byte-identical there) measures 1.71 / 1.72 / 1.70 against 1.69; a forced frequency
+  sweep in three bands including the square's own measures 1.70 / 1.70 / 1.69; the correction
+  cap reads `AT THE CAP` in every row and raising it 0.15 → 0.30 lets the peak reach 0.2363 and
+  moves the score to 1.68. `test/pilot/forecast.mjs` says why, by evaluating the commissioned
+  bank on rows from an OPEN-LOOP run (so `eFree` is the truth exactly): held-out R² is rounded
+  0.979/0.898, circle 0.966/0.902, **sharp 0.701/−0.105 — the elbow is worse than predicting the
+  mean and its residual rms exceeds the truth's.** The machine is scored exactly as well as it is
+  predicted. **THE DICTIONARY IS NOT THE LIMIT:** refitting the same features, ridge and window on
+  the square itself and scoring at another FEEDRATE (rule 36) gives lead-0 0.962/0.946 — so more
+  state is not what is missing — while the far leads collapse to −1.5 on every shape, which is why
+  training on a program is not the fix either (rule 9, both halves). **IT IS COVERAGE, AND THE
+  RATE MISMATCH IS THREE ORDERS OF MAGNITUDE:** `peakDiffs` on the joint commands gives the
+  circle 63% / 16% / **1%** of the declared v/a/j and the square 63% / **3132%** / **61537%**.
+  Raising the declared limits is INERT — two commissionings at 50× the acceleration and 1000×
+  the jerk came back byte-identical, because `buildExcitation` tunes to tc 662 with velocity
+  binding through the 85% box traverse (rule 41b). Shrinking the box to ±0.15 lifts the
+  COMMISSIONING R² 0.833 → 0.970 and drops every held-out program (circle 0.902 → 0.836, sharp
+  −0.105 → −0.169); the gate refused it and the gate was right — the third independent time here
+  that a calibration had to span the range it is used over. And the corner is a **40-step event
+  read by regressors 117 steps apart** (stride 13 × sample 9); forcing `sample` to 3 does not
+  change it, because the tune raises stride to 39 to hold the same reach — spacing comes from Ts,
+  a settling number, and the corner is a geometry one. `test/pilot/spectrum.mjs` says the same
+  thing in the frequency domain: **the excitation covers 25% of the square's error energy and 91%
+  of the circle's**, and this arm does not ring at all (98% of its free step response is the step,
+  so `rings [0,0]` is correct and resonance is not the mechanism). WHAT IS LEFT IS THE ONE THING
+  NOBODY HAS BUILT: an excitation that SPANS the box and also carries the program's own
+  acceleration and jerk — a broadband fast component sized from `peakDiffs` of the representative
+  program rather than a tonal sweep at a quarter budget aimed at a band derived from Tset. TWO
+  INSTRUMENT FAULTS AND ONE FALSE READOUT CAME OUT OF IT: `toolXY()` returns an ARRAY and reading
+  it as `{x, y}` gave NaN, which renders as "no dynamics"; before that the recorded signal was the
+  tool's distance from the BASE, which a shoulder step barely changes; and **`sweep YES` has been
+  false in every log this project has produced** — `meta.chirp` is `[0, 0]` when no sweep was
+  armed and an array of zeros is truthy (rule 25).
+  **AND THE ARC ENDED SOMEWHERE NONE OF THE NULLS POINTED: TWO MAPS AND A COMMAND-DRIVEN
+  ROUTER.** The machine is never saturated (sharp square peaks at 86% of tauMax, 0% clipped —
+  the program is inside the drive, so no authority wall). Corner EVENTS in the excitation
+  (`cornerEvents` in excite.js, option `events`, default off — sparse out-and-back velocity
+  trapezoids, the only shape carrying program-scale a/j inside the velocity limit) were built
+  and measured: the square gains nothing and the smooth programs COLLAPSE (rounded ch1 0.898 →
+  −0.853, circle 0.902 → −5.1), because a second regime fights over one set of weights. One
+  linear map fitted on both regimes holds ~0.9 at lead 0 but costs the circle 11x in residual
+  variance, and the quadratic/scheduled dictionaries make the joint record WORSE (0.857 →
+  −1.7) — so "more state" is measured and dead: the state was always in the row, the licence
+  to use different weights per regime is what was missing. **Two maps split by one bit — a
+  command-acceleration spike (>10x the record's own median) within the window reach — read
+  sharp elbow 0.930 against the deployed model's −0.105, and 0.950 on the DIAMOND, a geometry
+  never fitted** — the corner map is a move-profile model addressed by command state, not a
+  memory (the retirement's distinction, measured). Honestly wrong with it: the rounded
+  rectangle is mis-filed by the binary router (−1.6; its corners are 300% of declared jerk
+  against the square's 61,000% and there is two orders of magnitude of threshold room), the
+  circle's elbow pays 0.879 → 0.688, and corner-regime mid leads are still poor. The full
+  record is `docs/plan.md` §§9–13.
   **THE CONTOUR ERROR IS NOW SPLIT INTO BIAS AND OSCILLATION** (`contourBias`,
   `contourOsc`), because rule 39 had no instrument behind it on the one tab that contours.
   It settled ⑥ against ⑤ in a single reading: both start with the same error (⑤ bias −0.626

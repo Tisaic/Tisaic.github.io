@@ -18,6 +18,7 @@ import { buildLink, massProperties } from '../../../lib/flexisim/link.js';
 import { ChainServo } from '../../../lib/flexisim/compensator.js';
 import { roundedRect, circle, sharpRect, ToolPath, SEG } from '../../../lib/flexisim/toolpath.js';
 import { ContourScore, decompose } from '../../../lib/flexisim/contour.js';
+import { Pilot } from '../../../lib/pilot/pilot.js';
 
 const H = 4, CLAMP = 3, NU = 0.3, RHO = 1, G = 2e-6, RATIO = 100, DAMPING = 3e-3;
 // THE ARM'S COMPLIANCE, SWEEPABLE — link modulus E and gearbox stiffness K.
@@ -238,4 +239,140 @@ async function deployOn(pilot, shape, active, feed = 0.004) {
     reach: pilot.N * pilot.grid * pilot.sample, sideSteps: sideLen ? Math.round(path.lap / 4) : 0 };
 }
 
-export { PG, RATIO, makeArm, mkPath, homeArm, routeSignals, deployOn };
+/**
+ * ONE COMMISSIONING ON THIS ARM, START TO 'done'. Every knob an experiment has wanted so far is a
+ * parameter with the shipped default, so a harness names what it changed and inherits the rest —
+ * a copy of this loop with one line different is indistinguishable from a copy with one line
+ * WRONG, and this rig exists because that has happened twice.
+ *
+ * @param {object} o
+ * @param {number} o.seed         the commissioning draw
+ * @param {{shape:string,feed:number}} o.train  the program the gate is handed as representative
+ * @param {number} o.uCap         the correction cap in rad
+ * @param {boolean} o.dwell       time-warp the excitation so it lingers
+ * @param {number} o.dpt          decision steps per settling time
+ * @param {Array|false} o.chirp   a forced sweep band [pLo, pHi] in solver steps, or false
+ * @param {function} o.before     called with the pilot before the loop starts
+ * @returns {Promise<object|null>} the commissioned pilot, or null if it never terminated
+ */
+async function commissionArm({ seed = 1, train = { shape: 'rounded', feed: 0.004 }, uCap = 0.15,
+  dwell = false, dpt = 30, chirp = false, before = null,
+  limits = { vMax: 8e-4, aMax: 4e-6, jMax: 2e-7 }, box = 0.55, sampleFixed = null,
+  events = null } = {}) {
+  const LIM = limits, BOX = box;
+  const TRAIN = train, UCAP = uCap, DWELL = dwell, DPT = dpt, CHIRP = chirp;
+  const { arm, servo } = await makeArm();
+  const startPath = mkPath(TRAIN.shape, TRAIN.feed);
+  homeArm(arm, servo, startPath);
+  const centre = arm.ik(12, 0, true);
+  const pilot = new Pilot({
+    autoRefuse: true, nMeasured: 6,
+    // THE BOX THE EXCITATION MUST TRAVERSE, WHICH IS WHAT SETS ITS BANDWIDTH.
+    //
+    // Measured directly on `buildExcitation`: at this box and these limits the tune settles at a
+    // correlation time of 662 solver steps with velocity, acceleration and jerk at 73 / 58 / 55%
+    // — VELOCITY binds, because the builder must traverse the box and a shorter correlation time
+    // means steeper slopes. Loosening acceleration and jerk alone leaves tc at 662 and the built
+    // series byte-identical, which is why raising them measured exactly nothing. Shrinking the
+    // box is the knob that actually moves it: ±0.05 with loose a/j reaches the tc floor of 60.
+    channels: [0, 1].map((j) => ({ lo: centre[j] - BOX, hi: centre[j] + BOX,
+      // THE LIMITS THE EXCITATION IS HELD TO, AND THEY ARE NOT THE MACHINE'S.
+      //
+      // Measured with `peakDiffs` on the joint commands each program actually issues: the circle
+      // uses 63% of vMax, 16% of aMax and 1% of jMax; the rounded rectangle 289–364% of jMax;
+      // and the SHARP SQUARE 3132–3893% of aMax and 61537–75419% of jMax. Three orders of
+      // magnitude. An excitation built to respect these numbers cannot visit the regime the
+      // square runs in, whatever band it sweeps or how long it runs — which is why the frequency
+      // sweep, the dwell, the clock, the cap and the plan commitment were all null on it.
+      ...LIM })),
+    uMax: UCAP,
+    ...(sampleFixed ? { sampleFixed } : {}),
+    // SPARSE CORNER EVENTS IN THE EXCITATION — see `cornerEvents` in excite.js. The one route
+    // left standing after twelve nulls: the record must carry the program's own acceleration
+    // and jerk, and only rare brief reversals can do that inside the velocity limit.
+    ...(events ? { events } : {}),
+    start: arm.ik(startPath.at(0).x, startPath.at(0).y, true),
+    guards: [{ index: 4, max: 6 }, { index: 5, max: 6 }],
+    workspace: (q) => {
+      const r = Math.hypot(arm.L1 * Math.cos(q[0]) + arm.L2 * Math.cos(q[0] + q[1]),
+        arm.L1 * Math.sin(q[0]) + arm.L2 * Math.sin(q[0] + q[1]));
+      return r > Math.abs(arm.L1 - arm.L2) + 0.5 && r < arm.L1 + arm.L2 - 0.5;
+    },
+    seed,
+    // THE FREQUENCY SWEEP, FORCED INTO A NAMED BAND — the excitation-design half of the account.
+    //
+    // `test/pilot/spectrum.mjs` measured where the three signals put their energy, in periods of
+    // solver steps, and the answer is not ambiguous: the sharp square's open-loop CONTOUR ERROR
+    // puts 72% of its energy in periods 512–2048, and the shipped excitation puts 0.7% there.
+    // The circle's error sits at 8192–16384, which is exactly where the excitation's own peak is,
+    // and the circle scores 7.72x against the square's 1.69x. Coverage: 91% against 25%.
+    //
+    // A fit cannot identify a transfer at a frequency its INPUT never visited, however rich the
+    // output was — and the output was rich there (the RESPONSE row is 71% in 512–2048), which is
+    // the trap: the truth looks well-explained because the model can attribute that motion to
+    // whatever slow regressor happens to correlate with it over one record.
+    //
+    // The sweep already exists and is GATED on the probe finding a ring. This arm reports
+    // rings [0,0] and the spectrum agrees — 98% of its free step response is the step itself,
+    // there is no resonance — so the gate is correct and the sweep never arms. The question this
+    // knob asks is whether a sweep is worth arming on a plant that does NOT ring, purely to cover
+    // a band the noise cannot reach at an affordable jerk.
+    forceChirp: CHIRP,
+    // A DWELLING EXCITATION, WHICH PUTS STOPS INTO THE NOISE RATHER THAN STRUCTURE AFTER IT.
+    //
+    // This is the surviving half of the diamond experiment. What the model is missing on a sharp
+    // corner is a STOP — the corner rule takes junction velocity to nearly zero four times a lap
+    // and each reversal unloads the gearbox wind-up through the backlash — and the excitation is
+    // filtered noise that never stops. `dwell` time-warps that noise so it lingers, keeping the
+    // record RICH where appending a diamond made 19% of it collinear and took the gate below one.
+    //
+    // WORTH KNOWING BEFORE READING THE RESULT: the warp has a 2% RATE FLOOR, and its own comment
+    // calls it "a dwell, not a stop". If a true zero-velocity reversal is what the model needs,
+    // this flag cannot supply it and the right reading of a null result is "the floor is too
+    // high", not "stops do not help".
+    dwell: DWELL,
+    // THE DECISION CLOCK, WHICH IS THE HORIZON HALF OF THE QUESTION.
+    //
+    // Two attempts to fix the sharp square by giving the MODEL more coverage have failed, and the
+    // lag column says the residual is timing rather than shape: the correction removes 1.55x of
+    // contour and 1.20x of lag. `decisionsPerTs` is how often the QP re-solves within a settling
+    // time — a pure timing knob that changes nothing about what the model knows.
+    //
+    // CLAUDE.md already records it moving exactly this case: 30 → 60 is worth 4.62 → 5.19x sharp,
+    // 6.43 → 8.02x rounded, 12.99 → 14.16x circle, and ONLY with the effort weight scaled as
+    // (DPT/30)^2 because the QP differences DECISION steps. If the sharp square improves here, its
+    // residual is a horizon failure; if it does not while the smooth programs do, it is not.
+    decisionsPerTs: DPT,
+    // THE DIAMOND-IN-EXCITATION EXPERIMENT RAN AND IS REMOVED WITH ITS HOOK. Appending a diamond
+    // at both feeds to the end of the scribble — the same corner profile on a path nothing is
+    // scored on — took all three verify regimes below one (scribble 0.23x, program 0.40x,
+    // representative 0.88x) and the gate refused. 9,281 structured rows on a 47,837-row record is
+    // 19% collinear data, and this project already measured that mechanism from the other side:
+    // identifying on a program instead of a scribble takes EMPS from 12.70x to 3.93x. The idea is
+    // sound and the implementation was not; `dwell` is the one to try, because it puts stops INTO
+    // the noise instead of appending structure to it.
+    // THE REPRESENTATIVE PROGRAM IS THE ONE IT TRAINS ON, which is the honest setup: an engineer
+    // hands the gate the program they have. Every row below is a program that gate never saw.
+    verifyRef: (i) => {
+      const c = startPath.at(i % Math.max(1, Math.round(startPath.lap)));
+      return arm.ik(c.x, c.y, true);
+    },
+  });
+  if (before) before(pilot);
+  let n = 0;
+  while (pilot.phase !== 'done') {
+    if (++n > 6e6) { console.log(`  draw ${seed}: ABANDONED in '${pilot.phase}'`); return null; }
+    if (pilot.phase === 'fit') { pilot.work(); continue; }
+    const cmd = pilot.command();
+    const refs = cmd.map((c) => ({ theta: c.pos + c.u, omega: c.vel, alpha: c.acc }));
+    const tau = servo.torques(refs);
+    arm.step(tau[0], tau[1], 1);
+    const r = routeSignals(arm, cmd, tau);
+    pilot.observe(r.measured, r.truth);
+  }
+  await arm.l1.destroy(); await arm.l2.destroy();
+  return pilot;
+}
+
+export { PG, RATIO, makeArm, mkPath, homeArm, routeSignals, deployOn, commissionArm };
+

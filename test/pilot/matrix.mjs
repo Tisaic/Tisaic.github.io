@@ -22,9 +22,8 @@
  *
  * Run: node test/pilot/matrix.mjs   [K=1]
  */
-import { Pilot } from '../../lib/pilot/pilot.js';
 import { ensemble, freezeConfig } from '../../lib/pilot/ensemble.js';
-import { PG, makeArm, mkPath, homeArm, routeSignals, deployOn } from './rigs/arm-rig.mjs';
+import { PG, mkPath, commissionArm, deployOn } from './rigs/arm-rig.mjs';
 
 const K = +(process.env.K || 1);
 const FEEDS = (process.env.FEEDS || '0.004,0.008').split(',').map(Number);
@@ -38,79 +37,39 @@ const UCAP = +(process.env.UCAP || 0.15);
 const DWELL = process.env.DWELL === '1';
 const DPT = +(process.env.DPT || 30);
 const TRAIN = { shape: process.env.TRAIN || 'rounded', feed: +(process.env.TRAINFEED || 0.004) };
+// A FORCED SWEEP BAND, in periods of solver steps: CHIRP=512,2048. Empty leaves the pilot's own
+// gate to decide, which on this arm means no sweep at all.
+const CHIRP = process.env.CHIRP ? process.env.CHIRP.split(',').map(Number) : false;
+// THE DECLARED RATE LIMITS, WHICH ARE WHAT THE EXCITATION IS BUILT AGAINST AND — measured — not
+// what the programs run at. LIM=v,a,j overrides them. The shipped triple is the one every number
+// in this project's arm history was taken under.
+const LIM = process.env.LIM
+  ? (([v, a, j]) => ({ vMax: v, aMax: a, jMax: j }))(process.env.LIM.split(',').map(Number))
+  : { vMax: 8e-4, aMax: 4e-6, jMax: 2e-7 };
+// THE EXCITATION'S BOX HALF-WIDTH, and the sample period if it is to be forced. Both are here
+// because they are the two knobs that set how FAST the commissioning record is: the box sets the
+// excitation's bandwidth (velocity binds the traverse) and the sample sets how finely the model
+// can index it. The sharp square's corner transition is 40 solver steps; the shipped regressor
+// spacing is stride 13 x sample 9 = 117.
+const BOX = +(process.env.BOX || 0.55);
+const SAMPLE = process.env.SAMPLE ? +process.env.SAMPLE : null;
+// SPARSE CORNER EVENTS IN THE EXCITATION: EVENTS=vShare,ramp,width,every (e.g. 0.4,2,16,600).
+// The velocity trapezoids are sized so the record carries the PROGRAM's acceleration and jerk —
+// the regime twelve controller-side knobs could not reach because the scribble never visits it.
+const EVENTS = process.env.EVENTS
+  ? (([v, r, w, e]) => ({ vShare: v, ramp: r, width: w, every: e }))(
+    process.env.EVENTS.split(',').map(Number))
+  : null;
 
 async function commission(seed, before = null) {
-  const { arm, servo } = await makeArm();
-  const startPath = mkPath(TRAIN.shape, TRAIN.feed);
-  homeArm(arm, servo, startPath);
-  const centre = arm.ik(12, 0, true);
-  const pilot = new Pilot({
-    autoRefuse: true, nMeasured: 6,
-    channels: [0, 1].map((j) => ({ lo: centre[j] - 0.55, hi: centre[j] + 0.55,
-      vMax: 8e-4, aMax: 4e-6, jMax: 2e-7 })),
-    uMax: UCAP,
-    start: arm.ik(startPath.at(0).x, startPath.at(0).y, true),
-    guards: [{ index: 4, max: 6 }, { index: 5, max: 6 }],
-    workspace: (q) => {
-      const r = Math.hypot(arm.L1 * Math.cos(q[0]) + arm.L2 * Math.cos(q[0] + q[1]),
-        arm.L1 * Math.sin(q[0]) + arm.L2 * Math.sin(q[0] + q[1]));
-      return r > Math.abs(arm.L1 - arm.L2) + 0.5 && r < arm.L1 + arm.L2 - 0.5;
-    },
-    seed,
-    // A DWELLING EXCITATION, WHICH PUTS STOPS INTO THE NOISE RATHER THAN STRUCTURE AFTER IT.
-    //
-    // This is the surviving half of the diamond experiment. What the model is missing on a sharp
-    // corner is a STOP — the corner rule takes junction velocity to nearly zero four times a lap
-    // and each reversal unloads the gearbox wind-up through the backlash — and the excitation is
-    // filtered noise that never stops. `dwell` time-warps that noise so it lingers, keeping the
-    // record RICH where appending a diamond made 19% of it collinear and took the gate below one.
-    //
-    // WORTH KNOWING BEFORE READING THE RESULT: the warp has a 2% RATE FLOOR, and its own comment
-    // calls it "a dwell, not a stop". If a true zero-velocity reversal is what the model needs,
-    // this flag cannot supply it and the right reading of a null result is "the floor is too
-    // high", not "stops do not help".
-    dwell: DWELL,
-    // THE DECISION CLOCK, WHICH IS THE HORIZON HALF OF THE QUESTION.
-    //
-    // Two attempts to fix the sharp square by giving the MODEL more coverage have failed, and the
-    // lag column says the residual is timing rather than shape: the correction removes 1.55x of
-    // contour and 1.20x of lag. `decisionsPerTs` is how often the QP re-solves within a settling
-    // time — a pure timing knob that changes nothing about what the model knows.
-    //
-    // CLAUDE.md already records it moving exactly this case: 30 → 60 is worth 4.62 → 5.19x sharp,
-    // 6.43 → 8.02x rounded, 12.99 → 14.16x circle, and ONLY with the effort weight scaled as
-    // (DPT/30)^2 because the QP differences DECISION steps. If the sharp square improves here, its
-    // residual is a horizon failure; if it does not while the smooth programs do, it is not.
-    decisionsPerTs: DPT,
-    // THE DIAMOND-IN-EXCITATION EXPERIMENT RAN AND IS REMOVED WITH ITS HOOK. Appending a diamond
-    // at both feeds to the end of the scribble — the same corner profile on a path nothing is
-    // scored on — took all three verify regimes below one (scribble 0.23x, program 0.40x,
-    // representative 0.88x) and the gate refused. 9,281 structured rows on a 47,837-row record is
-    // 19% collinear data, and this project already measured that mechanism from the other side:
-    // identifying on a program instead of a scribble takes EMPS from 12.70x to 3.93x. The idea is
-    // sound and the implementation was not; `dwell` is the one to try, because it puts stops INTO
-    // the noise instead of appending structure to it.
-    // THE REPRESENTATIVE PROGRAM IS THE ONE IT TRAINS ON, which is the honest setup: an engineer
-    // hands the gate the program they have. Every row below is a program that gate never saw.
-    verifyRef: (i) => {
-      const c = startPath.at(i % Math.max(1, Math.round(startPath.lap)));
-      return arm.ik(c.x, c.y, true);
-    },
-  });
-  if (before) before(pilot);
-  let n = 0;
-  while (pilot.phase !== 'done') {
-    if (++n > 6e6) { console.log(`  draw ${seed}: ABANDONED in '${pilot.phase}'`); return null; }
-    if (pilot.phase === 'fit') { pilot.work(); continue; }
-    const cmd = pilot.command();
-    const refs = cmd.map((c) => ({ theta: c.pos + c.u, omega: c.vel, alpha: c.acc }));
-    const tau = servo.torques(refs);
-    arm.step(tau[0], tau[1], 1);
-    const r = routeSignals(arm, cmd, tau);
-    pilot.observe(r.measured, r.truth);
-  }
-  await arm.l1.destroy(); await arm.l2.destroy();
-  return pilot;
+  // THE LOOP ITSELF LIVES IN THE RIG. It was here, and `test/pilot/forecast.mjs` needed the same
+  // commissioned pilot — which is the exact shape of the two defects this rig was created for:
+  // a second copy of the drive loop routed the wrong truth, and a second copy of `deployOn`
+  // leaked two lattices per call. A third copy would not have been the third mistake, it would
+  // have been the same one.
+  return commissionArm({ seed, before, train: TRAIN, uCap: UCAP,
+    dwell: DWELL, dpt: DPT, chirp: CHIRP, limits: LIM, box: BOX, sampleFixed: SAMPLE,
+    events: EVENTS });
 }
 
 console.log('\npilot: one commissioning, four programs it has never run');
@@ -165,8 +124,37 @@ for (let s = 1; s <= K; s++) {
         + `${reach >= st.Tset ? 'REACHES the settling time'
           : `${(st.Tset / Math.max(1, reach)).toFixed(1)}x SHORT of it`}`);
     }
+    // THE BASIS THE FIT CHOSE, AND WHY IT COULD CHOOSE IT. The open question is whether this
+    // controller is blind to STATE — whether "many dynamical states can produce one tool
+    // position" makes the map it fits ill-posed. The row already carries encoder speed and
+    // TORQUE at every lag, and torque through a gearbox spring is the stored energy, so the
+    // state is nominally there; the quadratic block is where tau^2, tau*omega and omega^2 —
+    // energy and power — would enter, and it is OFFERED on held-out data every time.
+    //
+    // `levRatio` is what separates the two explanations when a lead fits badly. Above 1 the far
+    // lead's held-out rows sit further outside the training data than the near lead's, so the fit
+    // is EXTRAPOLATING and the excitation is the constraint. Near 1 with a bad r2Far, the rows
+    // are covered and the DICTIONARY cannot span the target — which is when more state would
+    // help. Same symptom, opposite fixes.
+    for (let c = 0; c < ro.length; c++) {
+      console.log(`      ch${c} basis ${String(ro[c].basis).padEnd(17)}`
+        + ` R2 lin ${(+ro[c].r2Lin).toFixed(4)}`
+        + `  quad ${ro[c].r2Poly === null || ro[c].r2Poly === undefined ? '  n/a  ' : (+ro[c].r2Poly).toFixed(4)}`
+        + `  sched ${ro[c].r2Sched === null || ro[c].r2Sched === undefined ? '  n/a  ' : (+ro[c].r2Sched).toFixed(4)}`
+        + `   lead0 ${(+ro[c].r2Lead0).toFixed(3)} mid ${(+ro[c].r2Mid).toFixed(3)}`
+        + ` far ${(+ro[c].r2Far).toFixed(3)}`
+        + `   lev ${ro[c].levRatio === null ? 'n/a' : (+ro[c].levRatio).toFixed(2)}`);
+    }
     console.log(`      probe rings ${JSON.stringify(st.rings)}  Ts ${st.Ts}  Tset ${st.Tset}`
-      + `  sweep ${st.report.excite && st.report.excite.chirp ? 'YES' : 'no'}`);
+    + `  sweep ${(() => {
+      // THE SHARE, NOT THE FIELD'S EXISTENCE. `meta.chirp` is an array of the sweep's share of the
+      // rate budget, one entry per channel, and it is PUSHED UNCONDITIONALLY — `[0, 0]` when no
+      // sweep was armed. An array of zeros is truthy, so the old `? 'YES' : 'no'` printed YES on
+      // every run this project has ever logged, including the ones whose whole question was
+      // whether the sweep was on (rule 25).
+      const c = st.report.excite && st.report.excite.chirp;
+      return Array.isArray(c) && c.some((v) => v > 0) ? `YES ${c.join('/')}` : 'no';
+    })()}`);
   }
   console.log(`  commissioned draw ${s} in ${((Date.now() - t0) / 1000).toFixed(0)}s`
     + `${p ? ` — ${p.verdict && p.verdict.deploy ? 'deploy' : 'REFUSED'}` : ''}`);
@@ -195,6 +183,18 @@ async function row(pilot, shape, feed) {
 }
 
 const subject = pilots.length > 1 ? (ensemble(pilots).pilot || pilots[0]) : pilots[0];
+// COMMIT m MOVES INSTEAD OF ONE, SET AFTER COMMISSIONING SO IT IS ONE VARIABLE. The same
+// weights, the same gate, the same machine — only how much of the plan is executed before the
+// QP re-decides. The user's account of the sharp square is that the arm can only make a corner
+// by loading and releasing its own flex on a schedule, and that it "cannot do it reactively";
+// a receding horizon that applies one move and re-solves is reactive BY CONSTRUCTION, so this
+// is that account's first testable consequence. Committing during the VERIFY as well would
+// change the gate too, which is a second variable and a separate run.
+const COMMIT = +(process.env.COMMIT || 1);
+if (COMMIT > 1) {
+  subject.commitM = COMMIT;
+  console.log(`  committing ${COMMIT} moves per solve (default 1 — a pure receding horizon)`);
+}
 if (pilots.length > 1) console.log(`  (averaged ${ensemble(pilots).used} of ${pilots.length} draws)`);
 
 console.log(`\n  ${'program'.padEnd(18)} ${'contour off'.padStart(12)} ${'on'.padStart(11)}`

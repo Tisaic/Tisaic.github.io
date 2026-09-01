@@ -3143,3 +3143,314 @@ the open rather than in a footnote.*
   against the arm's ~2x. One plant agreeing is not a method — the six-plant bar exists
   precisely because a common factor across plants that share no physics is a property of the
   code (rule 18).
+
+---
+
+## THE SHARP SQUARE IS A FORECAST FAILURE, AND THE EXCITATION CANNOT REACH IT AT ANY SETTING OF ANY KNOB THAT EXISTS
+
+Ten experiments end here, and the useful thing about them is that nine are nulls with the
+SAME cause. What follows is measured on the 2R arm at the shipped stiff defaults (E 0.15,
+K 16, backlash 1e-4), commissioned once on the excitation scribble, scored on programs it
+has never run. `sharp` is the sharp-cornered square, `rounded` the same square with 1.5
+corner radii, `circle` a plain circle, all at feed 0.004.
+
+### 1. Every controller-side knob is null on the square
+
+| knob | setting | sharp | rounded | circle |
+|---|---|---|---|---|
+| baseline | — | **1.69x** | 6.18x | 7.72x |
+| commit m moves per solve | m = 2 | 1.71x | 6.20x | 7.72x |
+| | m = 4 | 1.72x | 5.76x | 7.79x |
+| | m = 8 | 1.70x | 4.59x | 8.00x |
+| forced frequency sweep | band 512–2048 | 1.70x | 5.78x | 8.02x |
+| | band 1371–5486 (what the gate would arm) | 1.70x | 6.19x | 8.42x |
+| | band 256–4096 | 1.69x | 6.11x | 7.43x |
+| correction cap | 0.30 (peak reached 0.2363) | 1.68x | 6.05x | 7.25x |
+| | 0.60 (peak reached 0.2421) | 1.69x | 5.84x | 6.44x |
+| forced sample period | 3 instead of 9 | 1.64x | 5.12x | 6.30x |
+
+Add the ones already on record — a dwelling excitation, the decision clock, backlash,
+compliance, the lag window — and the square has now been immovable under twelve knobs.
+
+**The cap was never binding even though it read as binding.** Every baseline row prints
+`u peak 0.1500 AT THE CAP`, which is what sent this at the cap in the first place; raising
+it to 0.30 lets the peak rise to 0.2363 and the score does not move. A saturated actuator
+that gains nothing from being unsaturated was never the constraint.
+
+**COMMIT m MOVES IS IMPLEMENTED AND SHIPPED OFF.** `commitM` (default 1) executes the first
+m elements of the QP's plan before re-solving, which is the direct test of "the arm can only
+make the corner by loading and releasing its flex on a schedule, and it cannot do it
+reactively". At m = 1 the code path is the single-step shift it replaced, term for term, and
+`arm.test.mjs` comes back byte-identical. The account is right about the machine and wrong
+about the remedy: committing harder does nothing on the square and costs the rounded
+rectangle a quarter of its factor by m = 8, which is what committing to a stale plan looks
+like.
+
+### 2. Because the square is a FORECAST failure — measured, not inferred
+
+`test/pilot/forecast.mjs` evaluates the commissioned readout bank on rows built from an
+OPEN-LOOP run of each program. Open loop, so the fit's target `eFree` is the truth exactly
+and no reconstruction of the correction's own effect can contaminate it (rule 16).
+
+| program | ch | R² lead 0 | R² mid | R² far | truth rms | resid rms |
+|---|---|---|---|---|---|---|
+| rounded | 0 | 0.979 | 0.986 | 0.979 | 1.26e-2 | 1.83e-3 |
+| rounded | 1 | 0.898 | 0.854 | 0.874 | 5.07e-3 | 1.62e-3 |
+| circle | 0 | 0.966 | 0.987 | 0.955 | 6.31e-3 | 1.16e-3 |
+| circle | 1 | 0.902 | 0.891 | 0.845 | 2.80e-3 | 8.76e-4 |
+| **sharp** | **0** | **0.701** | 0.682 | 0.651 | 2.18e-2 | 1.19e-2 |
+| **sharp** | **1** | **−0.105** | −0.192 | −0.076 | 1.47e-2 | **1.54e-2** |
+
+The elbow's forecast on the square is WORSE THAN PREDICTING THE MEAN, and its residual rms
+exceeds the truth's. The machine is scored exactly as well as it is predicted, so every
+controller-side knob above was null by construction — this is brick 55's EMPS argument
+arriving on a second plant from the failing side.
+
+**`TRAIN=` cannot test this and it looked as if it could.** Commissioned with the sharp
+square, the circle and the rounded rectangle as the representative program, the R² table
+comes back identical to three decimals. That is correct rather than null: `TRAIN` sets the
+program the GATE is handed and the pose the arm homes to, and the fit is always on the
+excitation. Reading it as a null would have been a fabricated finding.
+
+### 3. The DICTIONARY is not the limit
+
+Refit the same features, the same ridge, the same window on the square itself; fit at feed
+0.004 and score at 0.0055, so the model cannot pass by learning where in a repeating cycle
+it is (rule 36).
+
+| refit | ch | R² lead 0 | R² mid | R² far |
+|---|---|---|---|---|
+| sharp 0.004 → 0.0055 | 0 | **0.962** | 0.511 | 0.941 |
+| sharp 0.004 → 0.0055 | 1 | **0.946** | 0.381 | 0.584 |
+| rounded 0.004 → 0.0055 | 1 | 0.917 | 0.636 | **−1.589** |
+| circle 0.004 → 0.0055 | 0 | 0.982 | 0.836 | **−1.535** |
+
+**Lead 0 says the features CAN represent the square: 0.946 against −0.105.** So more state —
+stored energy, power, a scheduled term — is not what is missing; the quadratic block carries
+τ², τω and ω² and is offered on held-out data every time, and both arm channels decline it
+inside a 5% band. And BOTH HALVES are here (rule 9): the far leads collapse to −1.5 on every
+shape when the fit is given one program, which is the collinearity `excite.js` was built to
+avoid and the reason "just train on the program" is not the fix.
+
+### 4. So it is COVERAGE, and the rate mismatch behind it had never been measured
+
+`peakDiffs` on the joint commands each program actually issues, against the limits the
+excitation is built to respect (vMax 8e-4, aMax 4e-6, jMax 2e-7):
+
+| program | ch | %vMax | %aMax | %jMax |
+|---|---|---|---|---|
+| circle | 0 | 63% | 16% | **1%** |
+| circle | 1 | 54% | 16% | 0% |
+| rounded | 0 | 63% | 34% | 289% |
+| rounded | 1 | 57% | 32% | 364% |
+| **sharp** | **0** | 63% | **3132%** | **61537%** |
+| **sharp** | **1** | 62% | **3893%** | **75419%** |
+
+The circle uses one percent of the declared jerk and scores 7.72x. The square uses six
+hundred times it and scores 1.69x. **A pilot commissioned against declared limits that its
+program violates by three orders of magnitude has been commissioned for a machine that does
+not exist.** This is brick 53's EMPS reading — "78.5% of its velocity but 9.2% of
+acceleration and 3.1% of jerk against the program's 99.7% / 100.9%" — with the consequence
+followed through instead of noted.
+
+### 5. And RAISING the declared limits changes nothing, because they are not what binds
+
+Measured on `buildExcitation` directly, box ±0.55:
+
+```
+box .55 shipped      tc  662   v 73%  a 58%  j 55%   | abs a 2.32e-6  j 1.11e-7
+box .55 loose a/j    tc  662   v 73%  a  1%  j  0%   | abs a 2.32e-6  j 1.11e-7
+box .55 4x vMax      tc  148   v 80%  a 20%  j  3%   | abs a 3.92e-5  j 6.35e-6
+box .15 loose a/j    tc  199   v 62%  a  3%  j  0%   | abs a 5.82e-6  j 8.51e-7
+box .05 loose a/j    tc   60   v 68%  a 10%  j  2%   | abs a 1.92e-5  j 3.50e-6
+```
+
+**VELOCITY binds, through the box traverse.** The tune only ever RAISES the correlation time
+from its floor of 60, and a shorter correlation time across a fixed span means steeper
+slopes; so a and j are along for the ride. Loosening them by 50x and 1000x leaves tc at 662
+and the built series byte-identical, and two full commissionings at those limits came back
+byte-identical on the machine — the control that says the knob was inert rather than
+unhelpful (rule 21).
+
+### 6. Shrinking the box makes the excitation faster and the MODEL WORSE
+
+| | commissioning R² ch1 | rounded ch1 | circle ch1 | sharp ch1 |
+|---|---|---|---|---|
+| box ±0.55 | 0.833 | 0.898 | 0.902 | −0.105 |
+| box ±0.15 | **0.970** | 0.871 | 0.836 | **−0.169** |
+
+The commissioning fit improves because the excitation got easier to predict; every held-out
+program gets worse. The gate refused the narrow-box pilot at 1.04x on its representative
+regime, and **the gate was right** — the first explanation offered here was that the box
+clips the representative program and the refusal was an artefact, and the held-out table
+refutes that. This is the third independent time this project has reached *a calibration
+must span the range it will be used over*.
+
+### 7. The corner is a 40-step event and the regressors are 117 steps apart
+
+`cornerDt` is 40 solver steps. The window is 12 lags at stride 13 with sample 9, so
+consecutive regressors are 117 steps apart — the whole corner falls inside a third of one
+lag interval. **Forcing `sample` to 3 does not change it:** the tune raises stride to 39 and
+holds the same 117, because the spacing is chosen from Ts, a settling-time number, and the
+corner is a geometry number. The machine gets slightly worse for the trouble (1.64x), and
+the elbow selects the quadratic block for the first time — a real change to the model that
+buys nothing.
+
+### 8. What the spectra show, on one axis of periods in solver steps
+
+`test/pilot/spectrum.mjs`, as a fraction of each signal's own variance:
+
+| period | MODE | SHARP | CIRCLE | EXCITE | RESPONSE |
+|---|---|---|---|---|---|
+| 512–1024 | 0.0% | **37.3%** | 0.4% | **0.1%** | 23.2% |
+| 1024–2048 | 0.0% | **34.8%** | 8.5% | **0.6%** | 48.0% |
+| 2048–4096 | 0.1% | 16.8% | 9.5% | 18.4% | 21.2% |
+| 4096–8192 | 0.6% | 1.8% | 17.0% | 17.2% | 5.0% |
+| 8192–16384 | 1.0% | 4.8% | **64.7%** | **31.5%** | 1.2% |
+| 16384–32768 | 98.2% | 1.3% | 0.0% | 27.5% | 0.5% |
+
+**EXCITE covers 25% of the sharp square's error energy and 91% of the circle's** — the same
+ordering as 1.69x against 7.72x, in a completely different instrument. The MODE row is the
+free response to a held step and it is 98% the step itself: this arm does not ring, the
+probe's `rings [0,0]` is correct, and a resonance is not the mechanism. Note the trap in the
+RESPONSE row: the machine's own error DOES have 71% of its energy in 512–2048 while the
+command that produced it has 0.7% there, so the truth looks well-explained while the
+transfer at those frequencies is not identified at all.
+
+**Two instrument faults were found on the way to that table and both produced the same wrong
+reading** — that the arm has no dynamics. `toolXY()` returns an ARRAY and was read as
+`{x, y}`, giving NaN; and before that the recorded signal was the tool's distance from the
+BASE, which a shoulder step leaves very nearly constant. `octaves()` now refuses a
+non-finite or constant record instead of returning a row of zeros (rule 25), and rule 17 held
+twice in a row.
+
+**`sweep YES` HAS BEEN A FALSE READOUT IN EVERY LOG THIS PROJECT HAS PRODUCED.** `meta.chirp`
+is an array of the sweep's share, pushed unconditionally, so it is `[0, 0]` when no sweep was
+armed — and an array of zeros is truthy. Both harnesses now print the share.
+
+### What is left standing, and it is the one thing nobody has built
+
+An excitation that SPANS the program's box — so the fit stays valid, per §6 — while also
+carrying the program's own ACCELERATION and JERK content — so the corner regime is in the
+record, per §4. Those are not in conflict: a large-span slow scribble with a superimposed
+small-amplitude high-jerk component is one sequence. The frequency sweep is that idea built
+wrong: tonal (rank-deficient in any lag window, which is the whole reason `excite.js` uses
+noise), capped at a quarter of the rate budget, and aimed at a band derived from Tset rather
+than from the program.
+
+**The number to design against is measured and plant-agnostic:** run `peakDiffs` on the
+representative program's own command, compare against the declared limits, and size the fast
+component from the PROGRAM rather than from the engineer's box. Every plant here can produce
+that comparison from a `verifyRef` it already has.
+
+**What would kill it:** if a fast small-amplitude component cannot be added without either
+(a) breaking the 85% box-traverse acceptance, or (b) making the held-out R² fall the way §6
+did. Both are one commissioning to check, with `forecast.mjs` as the meter.
+
+---
+
+## THE SQUARE'S REGIME IS LEARNABLE, TRANSFERS TO A GEOMETRY IT NEVER FITTED, AND ONE MAP CANNOT HOLD IT TOGETHER WITH THE SMOOTH REGIME
+
+This continues the section above, same plant, same instruments, and it ends somewhere none of
+the twelve nulls pointed: not more excitation, not more state, not more authority — TWO MAPS
+AND A ROUTER THE COMMAND ITSELF DRIVES.
+
+### 9. The machine is never saturated, so none of this is an authority wall
+
+The servo's own counters, two laps of each program: rounded peaks at 26% of `tauMax` on the
+shoulder, the circle at 29%, **the sharp square at 86% — and 0.00% of steps clipped on every
+program.** The square is inside the drive's real envelope; its corners are just three times
+deeper into it than anything the other programs do. The owner's constraint — that cranking
+accel and jerk past what a motor and gearbox can do is brute force that does not exist in real
+life — is therefore respected by everything below: the fast content injected or fitted is
+sized to what the PROGRAM already does, and the program is measured to be within the machine.
+(The first read of these counters printed `peak 0%` for every program: `peakDemand` is
+absolute torque and the script divided by nothing. Rule 17, fourth time this arc.)
+
+### 10. Corner EVENTS in the excitation: built, measured, and they make the model WORSE
+
+`cornerEvents` in `excite.js` (option `events`, default off): sparse out-and-back velocity
+trapezoids superimposed on the scribble — the only shape that can carry the program's a/j
+inside the velocity limit, because stationary noise fast enough for the square's jerk runs at
+~25x vMax continuously while rare brief reversals do it at ~1.1x. Sized at `vShare 0.4, ramp
+2, width 16`, the composed record carries a 1.6e-4 and j 1.6e-4 — the square's own scale.
+
+Commissioned with it, held-out forecast R² at lead 0:
+
+| | rounded ch1 | circle ch1 | sharp ch1 |
+|---|---|---|---|
+| no events | 0.898 | 0.902 | −0.105 |
+| events every 600 | **−0.853** | **−5.099** | −0.111 |
+| events every 300 | −8.020 | −27.819 | −0.508 (gate refuses at 0.43x) |
+
+The square gains nothing and the smooth programs collapse. Injecting the fast regime into ONE
+shared linear fit does not add coverage, it adds a second regime fighting over the same
+weights — see §12, which measures that interpretation directly.
+
+### 11. The verify meter agrees with the machine and the gate caught both bad ideas
+
+The narrow box (§6) and the dense event train were both refused by the deploy gate, and in
+both cases the held-out forecast table independently confirms the refusal. The gate is now
+2-for-2 on excitation pathologies it was never designed for.
+
+### 12. One map cannot hold both regimes, and the richer dictionaries make it worse
+
+Fit ONE linear map on the sharp square's and the circle's rows together (feed 0.004), score
+each at 0.0055:
+
+| joint fit, lead 0 | ch0 | ch1 |
+|---|---|---|
+| sharp | 0.940 | 0.916 |
+| circle | 0.797 | 0.857 |
+
+Both hold roughly — but the circle's ch0 residual variance is **11x its solo fit's** (1−R²
+0.203 against 0.018), and the mid/far leads collapse outright (circle ch1 mid −4.2, far
+−18.5). And the tune's own richer bases go the wrong way on the joint record: quadratic takes
+the circle's elbow from 0.857 to **−1.665** at lead 0, scheduled to −1.427. More columns on a
+two-regime record buy variance, not regime capacity — the direct, measured answer to "does it
+need more state (velocity, energy)?": the state is already in the row (speeds and torques at
+every lag; τ² IS the stored energy and the quadratic block offers it every commissioning),
+and richer dictionaries lose. What is missing is not a column, it is the licence to use
+DIFFERENT weights in different regimes.
+
+### 13. TWO MAPS, ROUTED BY THE COMMAND'S OWN ACCELERATION — and the diamond proves it is a model
+
+Split the joint record's rows by one bit: does the command carry an acceleration spike (>10x
+the record's own median |Δ²cmd|, rule 32) within the model's window reach of the predicted
+sample. Fit a map on each half. Route test rows by the same bit. No program identity, no lap
+phase — the routing variable is the commanded acceleration, which the host already hands the
+QP N steps ahead, on any plant.
+
+| lead 0 | sharp | circle | **diamond (never fitted)** | rounded (never fitted) |
+|---|---|---|---|---|
+| ch0 | **0.973** | **0.971** | **0.941** | 0.698 |
+| ch1 | **0.930** | 0.688 | **0.950** | −1.614 |
+| corner rows | 98% | 0% | 100% | 98% |
+
+Against the deployed scribble model's −0.105 on the square's elbow, the routed pair reads
+**0.930 — and 0.950 on the DIAMOND, a geometry that was never in the fit**, sharing only the
+square's corner profile. That is the owner's diamond experiment landing at the right layer:
+the corner map is a model of the MOVE PROFILE addressed by command state, not a memory of the
+square — the exact distinction the memory retirement is built on, measured.
+
+**What is honestly wrong with it, stated before anyone builds on it:** the rounded rectangle
+collapses (−1.614) because the binary router mis-files it — its mild corners (jerk at ~300%
+of the declared limit against the square's 61,000%) trip the same tag and get answered by a
+map fitted on a much harsher regime; and the circle's elbow pays 0.879 → 0.688 because the
+smooth map inherits the square's 2% of untagged rows. The regime is a continuum and the
+router is a step function. The mid leads are also still poor in the corner regime (0.2–0.65).
+The next measurements, in order: a threshold that separates the rounded rectangle's corners
+from the square's (there are two orders of magnitude of room); a graded router (the accel
+magnitude as a scheduling variable rather than a gate); and only then the runtime half —
+`act()` selecting per-lead weights from the look-ahead's own accel tags, which the QP
+machinery already supports shape-wise (per-lead weight vectors exist; they would differ by
+regime instead of by lead alone).
+
+**Fit data for map B remains the open cost.** These maps were fitted on program rows, which a
+plant-agnostic commissioning does not have — but the pilot already asks the engineer for a
+representative program (`verifyRef`), the corner map transfers across geometry, and §10 says
+the alternative (events in the scribble) poisons the shared fit precisely because there is
+only one fit to poison. Two maps remove that objection: the events could feed map B without
+touching map A. That composition — scribble → map A, corner events → map B, command-accel
+router between them — is the first architecture in this arc that every measurement above is
+consistent with, and none contradicts.
