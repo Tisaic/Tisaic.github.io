@@ -3805,3 +3805,32 @@ geometry the machine never saw during any of it**, against a 3.27x everything-on
 ceiling. (Suite note for the record: `--only=pilot` is not an area — the pilot tests live
 inside `flexisim`, and two suite launches ran only the parse checks before this was noticed;
 the honest tally from them is "nothing was verified", not "nothing failed".)
+
+### 23. TRANSFER TO EMPS: THE GATED ADAPTATION IS A MODEL BY THE TEST THAT CONVICTED THE ILC
+
+The composition's most portable half — gated online adaptation — measured on the plant least
+like the arm: real machine, real data, truth an ordinary sensor (the installation where the
+switch is simply ON). The record said ungated online HURT this axis (14.68 → 9.96); with the
+running-max gate (`test/pilot/empsonline.mjs`, same commissioning as `emps.test.mjs`):
+
+| protocol | program, mm rms | vs shipped | two-tone sine (NEVER run) |
+|---|---|---|---|
+| static | 0.0393 | 14.8x | 0.0415 mm |
+| online, gated, truth throughout | 0.0121 | **48.2x** | **0.0070 mm** |
+| take-away (truth laps 1–4, frozen) | 0.0105 | **55.5x** | **0.0067 mm** |
+
+Three findings, each carrying:
+
+- **The repaired gate turns online from harm into a 3.7x multiplier** — 44,434 of 62,375
+  rows gated in permanent mode. The pilot with no plant knowledge now sits ABOVE velocity
+  feedforward (15.2x) on that page's controller ladder.
+- **Frozen-after-guided BEATS always-adapting** (55.5x against 48.2x) — the second plant to
+  show it: freezing locks the state before λ-forgetting drifts it on the collinear laps.
+  The guided-commissioning protocol is not a workaround for a missing tracker; it is the
+  better configuration even when the truth never leaves.
+- **THE MEMORY TEST, PASSED WHERE THE ILC FAILED IT**: the adapted-frozen bank scores the
+  two-tone sine — a program it never ran — at 0.0067 mm against the static bank's 0.0415,
+  six times BETTER, on the same axis where the phase-indexed ILC's 125x collapses to 0.55x
+  on this exact sine. State-addressed adaptation learned the machine; the lap-indexed table
+  learned the lap. That is the retirement's distinction, measured on the second plant, and
+  it is the north star's program-agnostic claim holding through adaptation.
