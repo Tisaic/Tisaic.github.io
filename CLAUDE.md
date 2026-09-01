@@ -1098,6 +1098,16 @@ that matches it** — the point-to-point tabs measure a different question.
   channels and 320 on smooth programs against the pilot's 42,914 default tick — and the sparse
   rewrite's eviction bug (sound only for query times after the new event, while the horizon
   queries between events) was caught by the side-by-side control and fixed to byte-identical.
+  THE AXIS TRIAGE THEN CLOSED THE LOOKUP QUESTION (plan §19): split the SELF-fit ceiling by
+  each candidate against a random-split capacity control — at lead 0 NO axis carries
+  information; at mid leads turn-share (which joint the corner bends) takes the elbow from
+  −0.246 to +0.552. A 2D (severity × folded turn angle) knot grid was built (`wGrid` — 2^d
+  banks per lead whatever the grid holds, the PLC property) and measured NULL on the machine
+  twice, cell diagnostics ruling out starvation: the third independent measurement that
+  MID-LEAD forecast quality does not move this machine (leadTrust, the forecast-gate arming,
+  now the θ-grid). Lead 0 binds, no axis lifts it, and the self bank's edge over the agnostic
+  2.28x is lead-0 DISTRIBUTION MATCH (rule 34 from the scheduling side). Commanded torque is
+  unavailable by contract; actuals stay in the row.
   **THE CONTOUR ERROR IS NOW SPLIT INTO BIAS AND OSCILLATION** (`contourBias`,
   `contourOsc`), because rule 39 had no instrument behind it on the one tab that contours.
   It settled ⑥ against ⑤ in a single reading: both start with the same error (⑤ bias −0.626
