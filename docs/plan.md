@@ -3454,3 +3454,55 @@ only one fit to poison. Two maps remove that objection: the events could feed ma
 touching map A. That composition — scribble → map A, corner events → map B, command-accel
 router between them — is the first architecture in this arc that every measurement above is
 consistent with, and none contradicts.
+
+### 14. THE COMPOSITION, BUILT AND MEASURED ON THE MACHINE: 1.69x → 2.15x WITH NO PROGRAM SUPPLIED
+
+The runtime half now exists in the pilot (`router` + `readouts[].wB` + `_routerLambdas`, all
+null by default — every existing plant byte-identical by construction), and the machine-score
+ladder on the sharp square, smooth programs untouched in every row that follows:
+
+| corner bank fitted on | sharp | rounded | circle |
+|---|---|---|---|
+| — (baseline) | 1.69x | 6.18x | 7.72x |
+| binary router, diamond | 1.84x | 6.18x | 7.72x |
+| continuous unshaped, diamond | 2.11x | 5.76x | 6.56x |
+| continuous SHAPED, diamond | 1.86x | **6.18x** | **7.72x** |
+| continuous shaped, sharp itself (ceiling) | **3.27x** | 6.18x | 7.72x |
+| **continuous shaped, DRIVE-SIZED PROBE — no program** | **2.15x** | 6.18x | 7.72x |
+
+The blend needed a SHAPE (smoothstep 0.15–0.6 of the peak-hold level): unshaped, the circle
+engaged the corner bank at λ 0.06–0.21 and paid 15–45% for a regime it is never in — a
+corner is an EVENT in the command, and sustained curvature must map to zero. Shaped, the
+smooth programs return byte-identical, which is the control that makes every sharp-square
+number above readable (rule 21). The sharp square's LAG also halves (1.56e-1 → 1.11e-1), so
+in the total-error metric the machine goes 1.40x → 2.0x.
+
+**The probe is the owner's requirement built and measured**: corners are program-specific but
+corner SHAPES are not. `recordCornerProbe` gathers a stop-and-go TOUR — decelerate to a
+random pose inside the commissioning box, dwell, go; one to three legs chained through a
+turn — with the severity read off the DRIVE: a calibration ladder walks the decel rate up
+from the declared aMax, both joints together, and keeps the harshest rung the machine runs
+with ≤2.5% of event steps clipped. Six findings from building it, each measured:
+
+- **A flying reversal is not a corner.** Reversals at 0.25·vMax demand 118% of tauMax; the
+  square's corners run at 86%, because a program corner decelerates to crawl speed before it
+  turns. The probe's first shape was a regime no machine runs, and its bank measured 0.77x.
+- **The feedforward convention is half the demand.** Programs hand the servo a BOUNDED alpha
+  and let feedback chase the spike (that chase is the contour error); feeding the spike to
+  the ff read 161% / 252 clipped steps at 2x aMax and gated the ladder at 1x for ever.
+- **The clip fraction is non-monotone in severity** — harsher events are shorter — so a
+  ladder that stops at the first red rung parks at 1x; every rung is measured and the
+  harshest passing one wins (128x the declared aMax, clip 0.0%).
+- **Events at one pose fit one pose's corners** (bank at 1.35x, worse than nothing);
+  compliance is pose-dependent, which is why the probe tours.
+- **Row count saturates**: 121 events score 2.11x against 55 events' 2.08x.
+- **Turn-through legs beat rest-only** (2.15x against 2.11x) — but only visible after fixing
+  a confound: through-zero turns spike at 2x the tour's peak, and a regime scale derived
+  from the record's peak silently halved every program's engagement when the event shape
+  changed (AFULLK exposes it; a per-event-median scale is the honest fix and is open).
+
+**Open, in order of expected value:** the probe-to-ceiling gap (2.15x against 3.27x — the
+self-fitted bank still knows something about the square's specific corner geometry the tour
+does not teach); a robust aFull; corner-regime mid leads (0.2–0.65 everywhere); and the
+six-plant question — the router is armed by injection on one plant, and making it a library
+default is exactly what rule 31 and the sixplant pass exist to gate.

@@ -23,7 +23,8 @@
  * Run: node test/pilot/matrix.mjs   [K=1]
  */
 import { ensemble, freezeConfig } from '../../lib/pilot/ensemble.js';
-import { PG, mkPath, commissionArm, deployOn } from './rigs/arm-rig.mjs';
+import { solveRidge, Pilot } from '../../lib/pilot/pilot.js';
+import { PG, mkPath, commissionArm, deployOn, recordOpenLoop, recordCornerProbe } from './rigs/arm-rig.mjs';
 
 const K = +(process.env.K || 1);
 const FEEDS = (process.env.FEEDS || '0.004,0.008').split(',').map(Number);
@@ -194,6 +195,104 @@ const COMMIT = +(process.env.COMMIT || 1);
 if (COMMIT > 1) {
   subject.commitM = COMMIT;
   console.log(`  committing ${COMMIT} moves per solve (default 1 — a pure receding horizon)`);
+}
+
+// ─── THE CORNER BANK AND ITS ROUTER — ROUTER=<shape> fits a second weight bank on the
+// corner-tagged rows of an open-loop run of that shape and arms the pilot's per-lead router.
+//
+// The offline chain that earns this: one linear map per regime scores each regime at its solo
+// ceiling; one map over both costs the smooth regime 11x in residual variance; the quadratic and
+// scheduled dictionaries make the joint record worse; and the routed pair reads the sharp
+// square's elbow at 0.946 against the deployed model's -0.105 — with 0.947 on a DIAMOND the
+// corner map never fitted, which is what says it is a move-profile model and not a memory.
+// ROUTER=diamond deployed on the square is therefore the honest machine test: geometry never
+// fitted, corners shared, routing by command state alone.
+const ROUTER = process.env.ROUTER || null;
+if (ROUTER && subject.verdict && subject.verdict.deploy) {
+  const t0r = Date.now();
+  // TWO SOURCES FOR THE CORNER BANK'S ROWS. `ROUTER=probe` is the plant-agnostic one: a
+  // severity ladder of velocity reversals built from the machine's OWN limits — no program is
+  // supplied or consulted, which is the owner's requirement stated back as code. `ROUTER=<shape>`
+  // fits on that shape's open-loop record instead, as the ceiling the probe is measured against.
+  const recs = [];
+  if (ROUTER === 'probe') {
+    // Three records of 45k steps: the first pass used two of 30k and its 24-31 events were a
+    // third of what one lap of the square shows the self-fit (90 corners) — the gap to the
+    // self-fitted ceiling (3.26x against 2.08x) has row count as its cheapest explanation.
+    for (const seed of [71, 72, 73]) {
+      const r = await recordCornerProbe(subject, { seed, steps: 45000, train: TRAIN });
+      recs.push(r);
+      console.log(`  probe seed ${seed}: drive-sized to alpha ${r.sizing.alphaMult}x declared`
+        + ` aMax at v ${r.sizing.vTop.toExponential(2)} (calibration peak `
+        + `${(100 * r.sizing.peak).toFixed(0)}%, clip ${(100 * (r.sizing.clipFrac || 0)).toFixed(1)}%),`
+        + ` ${r.events[0]} events, run sat `
+        + r.sat.map((st) => `${(100 * st.fraction).toFixed(2)}% (peak ${(100 * st.peak).toFixed(0)}%)`).join(' / '));
+    }
+  } else {
+    for (const f of [0.004, 0.008]) recs.push(await recordOpenLoop(subject, ROUTER, f));
+  }
+  // THE REGIME SCALE, from the fit record itself (rule 32): full corner engagement at half the
+  // record's own peak command-acceleration spike. The blend below is CONTINUOUS — the binary
+  // router this replaces mis-filed the rounded rectangle, whose corners are two orders of
+  // magnitude milder than the square's and belong partway between the banks, not in either.
+  let peak = 0;
+  for (const r of recs) {
+    for (let k = 1; k < r.cmd.length - 1; k++) {
+      for (let c = 0; c < r.cmd[0].length; c++) {
+        const a = Math.abs(r.cmd[k + 1][c] - 2 * r.cmd[k][c] + r.cmd[k - 1][c]);
+        if (a > peak) peak = a;
+      }
+    }
+  }
+  // AFULLK is exposed because the regime scale is derived from the fit record's own peak, and
+  // changing the EVENT SHAPE moves that peak: turn-through events spike at 2x the rest-only
+  // tour's (a through-zero reversal is Δv = 2v), which silently halved every program's blend
+  // engagement and made two shapes incomparable in one move (rule 24's cousin: a physics
+  // number moved when a probe-design control moved).
+  const aFull = +(process.env.AFULLK || 0.5) * peak, reachK = 1.7;
+  let fitted = 0, kept = 0;
+  for (let c = 0; c < 2; c++) {
+    const ro = subject.readouts[c];
+    const reach = Math.ceil(reachK * (ro.mLag - 1) * ro.stride);
+    // ONE λ DEFINITION, FIT AND RUNTIME: Pilot.regimeLambdas is the same decaying peak-hold
+    // _routerLambdas runs over the look-ahead at every decision step. The rows are weighted by
+    // √λ (weighted least squares), so a mild corner teaches the bank in proportion to how much
+    // of the bank will answer for it.
+    const lams = recs.map((r) => Pilot.regimeLambdas(r.cmd, aFull, reach));
+    const wB = [];
+    for (let li = 0; li < subject.N; li++) {
+      const L = ro.leads[Math.min(li, ro.leads.length - 1)];
+      const back = Math.max((ro.mLag - 1) * ro.stride, (ro.fLag - 1) * ro.stride - L);
+      const X = [], y = [];
+      for (let ri = 0; ri < recs.length; ri++) {
+        const rec = recs[ri], lam = lams[ri];
+        const saved = subject._rec;
+        subject._rec = { x: rec.x, cmd: rec.cmd, u: [], e: rec.e };
+        try {
+          for (let k = Math.max(back, rec.lap); k < rec.e.length - L - 1; k++) {
+            const l2 = lam[Math.min(k + L, lam.length - 1)];
+            if (l2 < 0.02) continue;
+            // WEIGHT λ³, NOT λ. The runtime blend hands the corner bank full authority at
+            // λ = 1, so the bank should BE the full-severity map — a λ-weighted fit lets the
+            // probe's many mild rows tilt it toward dynamics the blend already covers from
+            // the A side. Cubing concentrates the fit where the bank actually answers.
+            const sw = Math.pow(l2, 1.5);
+            const row = subject._row(c, k, L, ro.stride, ro.poly, ro.mLag, ro.fLag, ro.sched);
+            for (let q2 = 0; q2 < row.length; q2++) row[q2] *= sw;
+            X.push(row); y.push(rec.e[k + L][c] * sw);
+          }
+        } finally { subject._rec = saved; }
+      }
+      if (X.length > 4 * ro.w[0].length) { wB.push(solveRidge(X, y, ro.ridge)); fitted++; }
+      else { wB.push(ro.w[Math.min(li, ro.w.length - 1)]); kept++; }
+    }
+    ro.wB = wB;
+  }
+  subject.router = { aFull, reachK };
+  console.log(`  corner bank: source ${ROUTER}, aFull ${aFull.toExponential(2)}`
+    + ` (${+(process.env.AFULLK || 0.5)}x peak),`
+    + ` reach ${reachK}x window, CONTINUOUS blend — ${fitted} leads fitted, ${kept} kept`
+    + ` scribble (${((Date.now() - t0r) / 1000).toFixed(0)}s)`);
 }
 if (pilots.length > 1) console.log(`  (averaged ${ensemble(pilots).used} of ${pilots.length} draws)`);
 

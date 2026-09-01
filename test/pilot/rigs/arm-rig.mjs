@@ -19,6 +19,7 @@ import { ChainServo } from '../../../lib/flexisim/compensator.js';
 import { roundedRect, circle, sharpRect, ToolPath, SEG } from '../../../lib/flexisim/toolpath.js';
 import { ContourScore, decompose } from '../../../lib/flexisim/contour.js';
 import { Pilot } from '../../../lib/pilot/pilot.js';
+import { cornerEvents } from '../../../lib/pilot/excite.js';
 
 const H = 4, CLAMP = 3, NU = 0.3, RHO = 1, G = 2e-6, RATIO = 100, DAMPING = 3e-3;
 // THE ARM'S COMPLIANCE, SWEEPABLE — link modulus E and gearbox stiffness K.
@@ -374,5 +375,211 @@ async function commissionArm({ seed = 1, train = { shape: 'rounded', feed: 0.004
   return pilot;
 }
 
-export { PG, RATIO, makeArm, mkPath, homeArm, routeSignals, deployOn, commissionArm };
+/** One open-loop lap set, recorded in exactly the shape `pilot._rec` has during commissioning. */
+async function recordOpenLoop(pilot, shape, feed) {
+  const { arm, servo } = await makeArm();
+  const path = mkPath(shape, feed);
+  homeArm(arm, servo, path);
+  const S = pilot.sample;
+  const x = [], cmd = [], e = [];
+  const total = Math.ceil(path.lap * 3);
+  for (let k = 0; k < total; k++) {
+    const c = path.at(k);
+    const [q1, q2] = arm.ik(c.x, c.y, true);
+    const rt = arm.ikRates(q1, q2, c.vx, c.vy, c.ax, c.ay);
+    const tau = servo.torques([{ theta: q1, omega: rt.dq[0], alpha: rt.ddq[0] },
+      { theta: q2, omega: rt.dq[1], alpha: rt.ddq[1] }]);
+    arm.step(tau[0], tau[1], 1);
+    if (k % S === 0) {
+      // THE SAME THREE THINGS THE COMMISSIONING RECORDS, and the same routing: `routeSignals` is
+      // the rig's, so the six measured signals and the tool-error truth cannot drift from what
+      // the model was fitted on. A second copy of this routing is the defect this rig exists for.
+      const r = routeSignals(arm, [{ pos: q1 }, { pos: q2 }], tau);
+      x.push(r.measured);
+      cmd.push([q1, q2]);
+      e.push(r.truth);
+    }
+  }
+  await arm.l1.destroy(); await arm.l2.destroy();
+  return { x, cmd, e, lap: Math.round(path.lap / S) };
+}
+
+
+/**
+ * THE CORNER PROBE — a record of the machine making corners, built from NOTHING BUT ITS OWN
+ * LIMITS, with the DRIVE choosing the severity.
+ *
+ * THE EVENT IS A STOP-AND-GO, NOT A FLYING REVERSAL. The first probe superimposed out-and-back
+ * velocity reversals at speed, and the machine convicted it twice: at vShare 0.8 / ramp 2 the
+ * drive demand peaked at 5938% of tauMax with 1.4% of steps clipped, and even 0.25·vMax
+ * reversals demand 118% — while the sharp square, whose corners are the thing being probed,
+ * peaks at 86% and never clips. The difference is the SHAPE: a program's corner rule
+ * decelerates to near zero, turns, and accelerates out, so the big velocity change happens at
+ * a bounded RATE and the reversal itself happens at crawl speed. The probe now issues exactly
+ * that — go-and-return trapezoids: accelerate at α to v, cruise, decelerate at α, dwell,
+ * return — with a severity LADDER drawn per event (α and v both randomised down from the
+ * chosen maxima) so the record carries a spectrum of corner harshness for the continuous
+ * blend to be fitted against.
+ *
+ * α IS READ OFF THE DRIVE, NOT DECLARED. The calibration walks α up from the declared aMax,
+ * doubling, both joints evented together (the elbow's reaction loads the shoulder — a
+ * one-joint calibration measures a machine that will not be run), each rung followed by a
+ * settle longer than the measured Tset, and keeps the last rung the drive ran clean at ≤95%
+ * peak demand. Cranking commanded acceleration past what the motor and gearbox deliver is
+ * brute force that does not exist in real life; this is the machine stating its own ceiling.
+ *
+ * @param {object} pilot   a commissioned pilot (for sample cadence and channel limits)
+ * @param {object} o       { steps, width, dwell, every, seed, train }
+ * @returns the {x, cmd, e, lap} shape `recordOpenLoop` returns, plus {sizing, sat}.
+ */
+async function recordCornerProbe(pilot, { steps = 30000, width = 40, dwell = 40,
+  every = 300, seed = 71, train = { shape: 'rounded', feed: 0.004 } } = {}) {
+  const { arm, servo } = await makeArm();
+  const path = mkPath(train.shape, train.feed);
+  homeArm(arm, servo, path);
+  const c0 = path.at(0);
+  const q0 = arm.ik(c0.x, c0.y, true);
+  const S = pilot.sample;
+  const vTop = 0.63 * Math.min(...pilot.channels.map((c) => c.vMax));
+  /** One go-and-return event as a velocity sequence: zero net displacement by symmetry. */
+  const mkSeg = (v, alpha) => {
+    const up = Math.max(1, Math.ceil(v / alpha));
+    const half = [];
+    for (let i = 0; i < up; i++) half.push(v * (i + 1) / up);
+    for (let i = 0; i < width; i++) half.push(v);
+    for (let i = 0; i < up; i++) half.push(v * (up - 1 - i) / up);
+    for (let i = 0; i < dwell; i++) half.push(0);
+    return half.concat(half.map((x) => -x));
+  };
+  // THE FEEDFORWARD IS CLAMPED THE WAY PROGRAMS DRIVE THIS MACHINE. The square commands
+  // corner accelerations of 31x the declared aMax at 86% drive demand and zero clipping —
+  // because `ikRates` hands the servo a BOUNDED alpha and the loop chases the spike through
+  // feedback; that chase is the contour error itself. The first ladder fed the spike straight
+  // into the alpha feedforward and read 161% demand with 252 clipped steps at 2x, which is a
+  // measurement of a drive convention no program uses (rule 17). With the ff clamped to the
+  // declared aMax, the same events read 101-132% peak DEMAND with clipping FALLING as the
+  // events get shorter: 30 steps at 2x down to 4 at 64x.
+  //
+  // THE ACCEPTANCE IS TIME SPENT CLIPPED, NOT PEAK DEMAND. Demand is a request; the envelope
+  // clips it, and what corrupts a record is the fraction of it the drive spent saturated —
+  // a few clipped steps at event onset are the REAL machine answering a hard command, the
+  // same machine production runs at 86% with no margin. Commands never exceed vMax anywhere.
+  let chosen = null;
+  const aMax0 = Math.min(...pilot.channels.map((c) => c.aMax));
+  const ffClamp = (d) => Math.max(-aMax0, Math.min(aMax0, d));
+  for (let mult = 1; mult <= 128; mult *= 2) {
+    servo.resetLimitStats();
+    const seg = mkSeg(vTop, mult * aMax0);
+    const pos = [0, 0];
+    for (let k = 0; k < seg.length + 3200; k++) {
+      const inSeg = k < seg.length;
+      const refs = [0, 1].map((c) => {
+        if (inSeg) pos[c] += seg[k];
+        return { theta: q0[c] + pos[c], omega: inSeg ? seg[k] : 0,
+          alpha: inSeg ? ffClamp(k === 0 ? seg[0] : seg[k] - seg[k - 1]) : 0 };
+      });
+      const tau = servo.torques(refs);
+      arm.step(tau[0], tau[1], 1);
+    }
+    const st = servo.limitStats();
+    const peak = Math.max(...st.map((x) => x.peakDemand / x.tauMax));
+    const clipFrac = Math.max(...st.map((x) => x.saturated)) / seg.length;
+    // EVERY RUNG IS MEASURED AND THE HARSHEST PASSING ONE WINS — no break on first failure,
+    // because the clip FRACTION is non-monotone in alpha: a harsher event is a shorter event,
+    // so 2x clips 7% of its steps while 64x clips 2.4% of its. A ladder that stops at the
+    // first red rung reads the dip as a ceiling and parks at 1x for ever (rule 12's cousin:
+    // the meter was read before the sweep settled the question).
+    if (clipFrac <= 0.025) chosen = { alphaMult: mult, peak, clipFrac };
+  }
+  if (!chosen) chosen = { alphaMult: 1, peak: NaN, clipFrac: NaN };
+  const alphaTop = chosen.alphaMult * aMax0;
+  servo.resetLimitStats();
+  // THE RECORD IS A STOP-AND-GO TOUR, NOT EVENTS AT ONE POSE. A version that held the start
+  // pose and evented in place fitted a bank that made the square WORSE (1.35x against the
+  // 1.69x baseline) while the diamond's bank — same corner profile, four different poses —
+  // helped. Compliance is pose-dependent; that is the whole reason the pose-scheduled basis
+  // exists, and a one-pose corner record teaches one pose's corners. So the probe now walks:
+  // decelerate to a stop at a random pose inside the box, dwell, go — each leg with its own
+  // drawn speed and severity, which is a program's corner behaviour with no program supplied.
+  const rnd = (s0) => { let z = s0 >>> 0; return () => (z = (z * 1664525 + 1013904223) >>> 0) / 4294967296; };
+  const rng = rnd(seed);
+  const ev = [new Float64Array(steps), new Float64Array(steps)];
+  const cur = [0, 0];
+  let nEv = 0;
+  let k = 400 + Math.round(every * rng());
+  const HALF = 0.35;
+  // AN EVENT IS A TURN, NOT ONLY A REST. The square's corner decelerates in and immediately
+  // accelerates OUT in a new direction — the backlash is crossed in motion, which is a
+  // different mechanical event from crossing it out of a dwell. So an event here is one to
+  // three LEGS chained with no gap (a corner between each pair), the follow-on leg biased to
+  // reverse the joint's direction, and only the last leg ends in a dwell. A rest-only probe
+  // measured 2.11x on the square against the self-fitted bank's 3.27x; the turn is the
+  // biggest remaining difference between what that bank saw and what this one does.
+  const prevSgn = [1, -1];
+  while (k < steps - 8) {
+    const nLegs = 1 + (rng() < 0.6 ? 1 : 0) + (rng() < 0.3 ? 1 : 0);
+    let ok = true;
+    for (let leg = 0; leg < nLegs && ok; leg++) {
+      const vE = vTop * (0.3 + 0.7 * rng());
+      const aE = alphaTop * (0.25 + 0.75 * rng());
+      let maxLen = 0;
+      for (let c = 0; c < 2; c++) {
+        // A bounded walk biased to TURN: after the first leg the sign prefers to reverse,
+        // which is what a corner does to a joint. Reflected at ±HALF so the tour never
+        // leaves the neighbourhood the commissioning box declared safe.
+        const wantSgn = leg === 0 ? (rng() < 0.5 ? -1 : 1)
+          : (rng() < 0.7 ? -prevSgn[c] : prevSgn[c]);
+        let t = cur[c] + (0.05 + 0.3 * rng()) * wantSgn;
+        if (t > HALF) t = 2 * HALF - t - 0.1 * rng();
+        if (t < -HALF) t = -2 * HALF - t + 0.1 * rng();
+        const D = Math.abs(t - cur[c]), sgn = Math.sign(t - cur[c]) || 1;
+        prevSgn[c] = sgn;
+        const v = Math.min(vE, Math.sqrt(Math.max(1e-12, D * aE)));
+        const up = Math.max(1, Math.ceil(v / aE));
+        const cruise = Math.max(0, Math.round((D - v * up) / v));
+        const half = [];
+        for (let i2 = 0; i2 < up; i2++) half.push(v * (i2 + 1) / up);
+        for (let i2 = 0; i2 < cruise; i2++) half.push(v);
+        for (let i2 = 0; i2 < up; i2++) half.push(v * (up - 1 - i2) / up);
+        if (k + half.length + dwell >= steps) { ok = false; break; }
+        let p = cur[c];
+        for (let i2 = 0; i2 < half.length; i2++) { p += sgn * half[i2]; ev[c][k + i2] = p; }
+        for (let i2 = k + half.length; i2 < steps; i2++) ev[c][i2] = p;
+        cur[c] = p;
+        if (half.length > maxLen) maxLen = half.length;
+      }
+      if (!ok) break;
+      // The next leg starts the moment this one lands — that junction IS the corner.
+      k += maxLen;
+    }
+    if (!ok) break;
+    nEv++;
+    k += Math.round(dwell + every * (0.5 + rng()));
+  }
+  const x = [], cmd = [], e = [];
+  for (let k2 = 0; k2 < steps; k2++) {
+    const k = k2;
+    const q = [q0[0] + ev[0][k], q0[1] + ev[1][k]];
+    const om = [0, 1].map((c) => k > 0 ? ev[c][k] - ev[c][k - 1] : 0);
+    // The record is driven under the SAME clamped-ff convention the calibration measured —
+    // and that programs use. An unclamped ff here would gather a machine nobody runs.
+    const al = [0, 1].map((c) => ffClamp(k > 1 ? ev[c][k] - 2 * ev[c][k - 1] + ev[c][k - 2] : 0));
+    const tau = servo.torques([{ theta: q[0], omega: om[0], alpha: al[0] },
+      { theta: q[1], omega: om[1], alpha: al[1] }]);
+    arm.step(tau[0], tau[1], 1);
+    if (k % S === 0) {
+      const r = routeSignals(arm, [{ pos: q[0] }, { pos: q[1] }], tau);
+      x.push(r.measured); cmd.push([q[0], q[1]]); e.push(r.truth);
+    }
+  }
+  const sat = servo.limitStats();
+  await arm.l1.destroy(); await arm.l2.destroy();
+  return { x, cmd, e, lap: Math.ceil(2000 / S), events: [nEv, nEv],
+    sizing: { alphaMult: chosen.alphaMult, alphaTop, vTop, peak: chosen.peak },
+    sat: sat.map((st) => ({ fraction: st.fraction, peak: st.peakDemand / st.tauMax })) };
+}
+
+export { PG, RATIO, makeArm, mkPath, homeArm, routeSignals, deployOn, commissionArm,
+  recordOpenLoop, recordCornerProbe };
+
 

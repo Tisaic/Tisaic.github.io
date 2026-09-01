@@ -1069,8 +1069,17 @@ that matches it** — the point-to-point tabs measure a different question.
   memory (the retirement's distinction, measured). Honestly wrong with it: the rounded
   rectangle is mis-filed by the binary router (−1.6; its corners are 300% of declared jerk
   against the square's 61,000% and there is two orders of magnitude of threshold room), the
-  circle's elbow pays 0.879 → 0.688, and corner-regime mid leads are still poor. The full
-  record is `docs/plan.md` §§9–13.
+  circle's elbow pays 0.879 → 0.688, and corner-regime mid leads are still poor. **AND THE COMPOSITION NOW RUNS ON THE MACHINE — 1.69x → 2.15x ON THE SHARP SQUARE WITH NO
+  PROGRAM SUPPLIED ANYWHERE** (`router`/`wB` in the pilot, null by default and byte-identical
+  everywhere else; smooth programs return byte-identical, the control that makes it readable).
+  The blend is SHAPED (smoothstep 0.15–0.6) because unshaped the circle paid 15–45% for a
+  regime it is never in; the corner bank is fitted on a DRIVE-SIZED STOP-AND-GO TOUR
+  (`recordCornerProbe`): severity read off the machine's own saturation counters, poses walked
+  because compliance is pose-dependent, legs chained through turns because a corner crosses
+  backlash in motion. The self-fitted ceiling is 3.27x. Six instrument-grade findings on the
+  way (a flying reversal is not a corner; the ff convention is half the demand; clip fraction
+  is non-monotone in severity; one pose teaches one pose; rows saturate; event shape moves the
+  regime scale). The full record is `docs/plan.md` §§9–14.
   **THE CONTOUR ERROR IS NOW SPLIT INTO BIAS AND OSCILLATION** (`contourBias`,
   `contourOsc`), because rule 39 had no instrument behind it on the one tab that contours.
   It settled ⑥ against ⑤ in a single reading: both start with the same error (⑤ bias −0.626

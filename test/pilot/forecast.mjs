@@ -28,40 +28,11 @@
  * Run: node test/pilot/forecast.mjs   [SHAPES=sharp,circle,rounded] [FEEDS=0.004]
  */
 import { solveRidge } from '../../lib/pilot/pilot.js';
-import { PG, makeArm, mkPath, homeArm, routeSignals, commissionArm } from './rigs/arm-rig.mjs';
+import { PG, commissionArm, recordOpenLoop } from './rigs/arm-rig.mjs';
 
 const SHAPES = (process.env.SHAPES || 'rounded,circle,sharp').split(',');
 const FEEDS = (process.env.FEEDS || '0.004').split(',').map(Number);
 const TRAIN = { shape: process.env.TRAIN || 'rounded', feed: +(process.env.TRAINFEED || 0.004) };
-
-/** One open-loop lap set, recorded in exactly the shape `pilot._rec` has during commissioning. */
-async function record(pilot, shape, feed) {
-  const { arm, servo } = await makeArm();
-  const path = mkPath(shape, feed);
-  homeArm(arm, servo, path);
-  const S = pilot.sample;
-  const x = [], cmd = [], e = [];
-  const total = Math.ceil(path.lap * 3);
-  for (let k = 0; k < total; k++) {
-    const c = path.at(k);
-    const [q1, q2] = arm.ik(c.x, c.y, true);
-    const rt = arm.ikRates(q1, q2, c.vx, c.vy, c.ax, c.ay);
-    const tau = servo.torques([{ theta: q1, omega: rt.dq[0], alpha: rt.ddq[0] },
-      { theta: q2, omega: rt.dq[1], alpha: rt.ddq[1] }]);
-    arm.step(tau[0], tau[1], 1);
-    if (k % S === 0) {
-      // THE SAME THREE THINGS THE COMMISSIONING RECORDS, and the same routing: `routeSignals` is
-      // the rig's, so the six measured signals and the tool-error truth cannot drift from what
-      // the model was fitted on. A second copy of this routing is the defect this rig exists for.
-      const r = routeSignals(arm, [{ pos: q1 }, { pos: q2 }], tau);
-      x.push(r.measured);
-      cmd.push([q1, q2]);
-      e.push(r.truth);
-    }
-  }
-  await arm.l1.destroy(); await arm.l2.destroy();
-  return { x, cmd, e, lap: Math.round(path.lap / S) };
-}
 
 /** Held-out R² of one channel's readout at one lead, on a recorded program. */
 function score(pilot, rec, c, li) {
@@ -126,7 +97,7 @@ console.log(`\n  ${'program'.padEnd(18)} ${'ch'.padStart(3)}`
   + `  ${'truth rms'.padStart(10)} ${'resid rms'.padStart(10)}`);
 for (const shape of SHAPES) {
   for (const feed of FEEDS) {
-    const rec = await record(pilot, shape, feed);
+    const rec = await recordOpenLoop(pilot, shape, feed);
     for (let c = 0; c < 2; c++) {
       const idx = [0, Math.floor(pilot.N / 2), pilot.N - 1];
       const s = idx.map((i) => score(pilot, rec, c, i));
@@ -165,8 +136,8 @@ console.log('  controller-side knob is null on it by construction.');
 // feed is the same geometry, the same corners and the same reversals on a stream it cannot have
 // memorised.
 async function refit(shape, fitFeed, testFeed, alsoFit = [], basis = null) {
-  const A = await record(pilot, shape, fitFeed);
-  const B = await record(pilot, shape, testFeed);
+  const A = await recordOpenLoop(pilot, shape, fitFeed);
+  const B = await recordOpenLoop(pilot, shape, testFeed);
   // MORE FIT SOURCES, FOR THE ONE-MAP-TWO-REGIMES QUESTION. Fitting on the square alone reaches
   // 0.946 and on the scribble alone 0.898-0.902 on the smooth programs — each regime is linear
   // enough BY ITSELF. Injecting program-level corner events into the commissioning collapsed the
@@ -174,7 +145,7 @@ async function refit(shape, fitFeed, testFeed, alsoFit = [], basis = null) {
   // one set of weights. This measures that directly: one ridge solve over both regimes' rows,
   // scored on each regime separately at an unseen feedrate.
   const extra = [];
-  for (const sh of alsoFit) extra.push(await record(pilot, sh, fitFeed));
+  for (const sh of alsoFit) extra.push(await recordOpenLoop(pilot, sh, fitFeed));
   const out = [];
   for (let c = 0; c < 2; c++) {
     const ro = pilot.readouts[c];
@@ -290,17 +261,18 @@ function accelTags(rec, reachSamples, thr) {
   return tag;
 }
 
-async function routedRefit(fitFeed, testFeed) {
-  const recs = { sharp: await record(pilot, 'sharp', fitFeed),
-    circle: await record(pilot, 'circle', fitFeed) };
+async function routedRefit(fitFeed, testFeed, opt = {}) {
+  const { thrK = null, peakK = null, reachK = 1 } = opt;
+  const recs = { sharp: await recordOpenLoop(pilot, 'sharp', fitFeed),
+    circle: await recordOpenLoop(pilot, 'circle', fitFeed) };
   // THE DIAMOND AND THE ROUNDED RECTANGLE ARE SCORED AND NEVER FITTED. The diamond shares the
   // square's corner profile on a path that shares none of its geometry: if the corner map holds
   // there, it is a model of the MOVE PROFILE addressed by command state; if it collapses, it is
   // a memory of the square wearing a router (the retirement's distinction, measured).
-  const tests = { sharp: await record(pilot, 'sharp', testFeed),
-    circle: await record(pilot, 'circle', testFeed),
-    diamond: await record(pilot, 'diamond', testFeed),
-    rounded: await record(pilot, 'rounded', testFeed) };
+  const tests = { sharp: await recordOpenLoop(pilot, 'sharp', testFeed),
+    circle: await recordOpenLoop(pilot, 'circle', testFeed),
+    diamond: await recordOpenLoop(pilot, 'diamond', testFeed),
+    rounded: await recordOpenLoop(pilot, 'rounded', testFeed) };
   // One threshold for everything, derived from the JOINT fit record's own medians.
   const accels = [];
   for (const r of Object.values(recs)) {
@@ -313,12 +285,21 @@ async function routedRefit(fitFeed, testFeed) {
     }
   }
   accels.sort((a, b) => a - b);
-  const thr = 10 * accels[Math.floor(accels.length / 2)];
+  // TWO WAYS TO PLACE THE THRESHOLD, both relative to the record (rule 32). 10x the median was
+  // the first guess and it mis-files the rounded rectangle: its corners are ~300% of the
+  // declared jerk against the square's 61,000%, so there are two orders of magnitude of room
+  // for a threshold that separates them — a fraction of the record's own PEAK spike reaches it,
+  // a multiple of its median does not.
+  const thr = peakK ? peakK * accels[accels.length - 1]
+    : (thrK ?? 10) * accels[Math.floor(accels.length / 2)];
   const out = [];
   for (let c = 0; c < 2; c++) {
     const ro = pilot.readouts[c];
     const mL = ro.mLag, fL = ro.fLag, stride = ro.stride;
-    const reach = Math.ceil((mL - 1) * stride);            // in samples, the regressors' span
+    // In samples, the regressors' span — scaled by reachK, because at 1.0 the square's sides
+    // out-reach the window (2051 steps against 1287) and 2% of its rows land in the smooth map
+    // with mid-side amplitudes the circle never has.
+    const reach = Math.ceil(reachK * (mL - 1) * stride);
     const row2 = [];
     for (const li of [0, Math.floor(pilot.N / 2)]) {
       const L = ro.leads[li];
@@ -345,7 +326,12 @@ async function routedRefit(fitFeed, testFeed) {
           if (f.t[i]) { XB.push(f.X[i]); yB.push(f.y[i]); } else { XA.push(f.X[i]); yA.push(f.y[i]); }
         }
       }
-      const wA = solveRidge(XA, yA, ro.ridge);
+      // scribbleA routes the smooth rows to the pilot's OWN commissioned weights instead of a
+      // program-fitted map — the production composition: the scribble already serves the smooth
+      // regime (rounded deploys at 6.18x on it), so map A should BE the scribble fit and the
+      // corner map should be the only new object.
+      const wA = opt.scribbleA ? ro.w[Math.min(li, ro.w.length - 1)]
+        : solveRidge(XA, yA, ro.ridge);
       const wB = XB.length > 4 * wA.length ? solveRidge(XB, yB, ro.ridge) : null;
       const per = {};
       for (const name of Object.keys(tests)) {
@@ -372,16 +358,22 @@ async function routedRefit(fitFeed, testFeed) {
 
 console.log('\n  TWO MAPS, ROUTED BY THE COMMAND\'S OWN ACCELERATION — fitted on both programs,');
 console.log('  split only by whether a command-accel spike is inside the window reach:');
-const rr = await routedRefit(0.004, 0.0055);
-for (let c = 0; c < 2; c++) {
-  for (const [li, name] of [[0, 'lead0'], [1, 'mid']]) {
-    const p = rr[c][li];
-    console.log(`  ch${c} ${name.padEnd(6)}`
-      + ['sharp', 'circle', 'diamond', 'rounded'].map((nm) =>
-        ` ${nm} ${p[nm].toFixed(3).padStart(7)} (${(100 * p[nm + 'Corner']).toFixed(0)}% corner)`)
-        .join(' '));
+for (const opt of [{}, { peakK: 0.2 }, { reachK: 1.7 }, { peakK: 0.2, reachK: 1.7 },
+  { peakK: 0.2, reachK: 1.7, scribbleA: true }]) {
+  console.log(`  router: thr ${opt.peakK ? `${opt.peakK}x peak` : '10x median'}, reach `
+    + `${opt.reachK || 1}x window${opt.scribbleA
+      ? ', map A = the pilot\'s own scribble fit (production shape)' : ''}`);
+  const rr = await routedRefit(0.004, 0.0055, opt);
+  for (let c = 0; c < 2; c++) {
+    for (const [li, name] of [[0, 'lead0'], [1, 'mid']]) {
+      const p = rr[c][li];
+      console.log(`  ch${c} ${name.padEnd(6)}`
+        + ['sharp', 'circle', 'diamond', 'rounded'].map((nm) =>
+          ` ${nm} ${p[nm].toFixed(3).padStart(7)} (${(100 * p[nm + 'Corner']).toFixed(0)}%)`)
+          .join(' '));
+    }
   }
 }
 console.log('  vs one joint linear map at lead 0: sharp 0.916, circle 0.857 (ch1) — and the');
-console.log('  solo ceilings: sharp 0.946, circle 0.879.');
+console.log('  solo ceilings: sharp 0.946, circle 0.879; scribble-fitted rounded 0.898.');
 
