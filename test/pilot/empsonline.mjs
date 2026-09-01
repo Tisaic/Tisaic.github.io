@@ -23,11 +23,11 @@ const pilot = new Pilot({
   }
 }
 console.log(`commissioned: ${pilot.verdict.deploy ? 'deploy' : 'REFUSED'}`);
-function runPilot(mode) {
+function runPilot(mode, cfg = {}) {
   // mode: 'static' | 'online' | 'takeaway' (truth for laps 1-4 of 10, frozen after)
   const m = makeMachine(PR.q[0], 0), S = pilot.sample;
   pilot._initRun();
-  pilot.online = mode === 'static' ? null : {};
+  pilot.online = mode === 'static' ? null : { ...cfg };
   let s = 0, mx = 0, n = 0, uPk = 0, pref = PR.q[0];
   const LAPS = 10;
   for (let k = 0; k < LAPS * P; k++) {
@@ -66,13 +66,20 @@ function runSine() {
   return 1000 * Math.sqrt(s / n);
 }
 const SHIPPED = 0.5814;
-for (const mode of ['static', 'online', 'takeaway']) {
+// THE FORGETTING-VS-GATE INTERPLAY, measured: λ-forgetting re-inflates the covariance every
+// update, so repeats never look fully familiar and the gate under-fires on smooth streams.
+// λ = 1 is the recursion the record calls harmful — but that was measured with the gate
+// broken; with it working, no-forgetting plus gating is a different machine. And directional
+// forgetting gets its SIXTH audition (five neutrals as a fit choice), the first with a
+// mechanism that wants it: inflate only what is being excited.
+for (const [mode, cfg] of [['static', {}], ['online', {}], ['takeaway', {}],
+  ['takeaway λ=1', { lambda: 1 }], ['takeaway dir', { directional: true }]]) {
   const snap = pilot.readouts.map((ro) => ro.w.map((a) => Float64Array.from(a)));
-  const r = runPilot(mode);
+  const r = runPilot(mode.startsWith('takeaway') ? 'takeaway' : mode, cfg);
   // The sine is scored with the weights EXACTLY as the protocol leaves them (adapted modes
   // score it frozen post-adaptation; static scores the commissioned bank).
   const sine = runSine();
-  console.log(`  ${mode.padEnd(9)} ${r.rms.toFixed(4)} mm rms  (${(SHIPPED / r.rms).toFixed(1)}x)`
+  console.log(`  ${mode.padEnd(13)} ${r.rms.toFixed(4)} mm rms  (${(SHIPPED / r.rms).toFixed(1)}x)`
     + `  sine ${sine.toFixed(4)} mm  u ${r.uPk.toFixed(3)}  ${mode === 'static' ? '' : r.stats}`);
   for (let c = 0; c < pilot.readouts.length; c++) {
     const ro = pilot.readouts[c];

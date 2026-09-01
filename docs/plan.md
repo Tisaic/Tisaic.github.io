@@ -3862,3 +3862,29 @@ observability, and adaptation confirms it rather than overturning it. This also 
 when to reach for the guided-commissioning protocol: it pays where the STATIC verify already
 vouches and the residual is distribution mismatch — the deploy gate's own ratio is the
 selector, at zero extra cost.
+
+### 25. THE FORGETTING IS THE MECHANISM, THE GATE IS ITS SAFETY — AND DIRECTIONAL FORGETTING FAILS ITS SIXTH AUDITION
+
+§20 worried the λ-forgetting fights the innovation gate. Measured on EMPS (take-away
+protocol, everything else identical), the roles are the opposite of the worry:
+
+| recursion | program | sine (never run) |
+|---|---|---|
+| λ = 0.9995 (default) | **55.5x** | 0.0067 mm |
+| λ = 1 (no forgetting) | 15.1x | 0.0403 mm |
+| directional forgetting | 15.3x | 0.0395 mm |
+
+**No forgetting kills the gain almost entirely, gate or no gate**: at λ = 1 the commissioning
+posterior (40k rows) anchors the recursion and the 9k admitted deployment rows cannot move
+it — no distribution match happens. The 0.9995 discount (~2,000-row memory) is what lets the
+program's own rows take the model over; THAT is the distribution-match mechanism, and the
+innovation gate is its safety — filtering collinear repeats so the takeover cannot collapse
+onto one direction (which is exactly what the recorded ungated λ=1 harm was). The historical
+reading flips: 14.68 → 9.96 was never "adaptation is dangerous", it was "takeover without a
+working gate".
+
+And **directional forgetting fails its sixth audition, its first non-neutral result**: it
+matches λ = 1 almost exactly, because inflating only the excited directions keeps the
+unexcited ones anchored — and on a low-dimensional deployment stream that is nearly the whole
+posterior. Five neutrals said "default off"; this says it is the wrong tool for the one
+mechanism that finally had a story for it. Default off, now with a reason instead of a shrug.
