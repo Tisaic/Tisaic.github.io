@@ -643,7 +643,7 @@ async function recordCornerProbe(pilot, { steps = 30000, width = 40, dwell = 40,
  *   gridFitted:number, gridPooled:number}}
  */
 function fitCornerBanks(pilot, recs, { knots = [0.5, 1.0], aFullK = 6, reachK = 1.7,
-  grid = false, sizedVTop = null } = {}) {
+  grid = false, sizedVTop = null, vTopK = 1 } = {}) {
   const aMax0 = Math.min(...pilot.channels.map((ch) => ch.aMax));
   const aFull = aFullK * aMax0 * pilot.sample * pilot.sample;
   let vTop = sizedVTop;
@@ -658,7 +658,12 @@ function fitCornerBanks(pilot, recs, { knots = [0.5, 1.0], aFullK = 6, reachK = 
         }
       }
     }
-    vTop = pk;
+    // `vTopK` slackens the coverage guard's ceiling above the records' own peak. It exists
+    // for the CEILING measurement: a self-fit diet's records ARE the scored program, so the
+    // measured peak sits exactly on the program's corners and the guard fades the banks at
+    // the very events they were fitted for. An agnostic diet never needs it (the polygons'
+    // fast-feed peaks clear the square's), which is why the default is 1.
+    vTop = pk * vTopK;
   }
   const hat = (ax, at) => Math.max(0, 1 - Math.abs(ax - at) / 0.5);
   let fitted = 0, kept = 0, gridFitted = 0, gridPooled = 0;
