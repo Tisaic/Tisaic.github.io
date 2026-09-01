@@ -10,7 +10,12 @@
  *     the ONLY sensors on the machine — encoder and commanded torque — via the motor-side
  *     torque balance z = N·τcmd − N²·Jm·q̈enc = K·δ + C·δ̇, with the rigid model's load
  *     torque driving the process. Correction: motor ref += δ̂ (+ an optional lead), which
- *     re-places the LOAD at the reference. No tracker, ever.
+ *     re-places the LOAD at the reference. No tracker at deploy.
+ *     AND, since the learned side's installation includes a TEMPORARY tracker for its
+ *     guided phase, the engineer legitimately gets one for commissioning too: a RobotComp
+ *     static compliance identified at four HELD poses (reading the true wind-up while
+ *     held, exactly `reconcile.test.mjs`'s conventional machine), applied as a per-joint
+ *     feedforward at the command. Rows below split the two: static-only, KF-only, both.
  *   LEARNED — the frozen composition: commissioned from noise with a TEMPORARY tracker
  *     (its stated installation), corner banks from random polygons, guided adaptation on a
  *     DIAMOND (never the scored geometry), then frozen. No model, no geometry, no tracker
@@ -21,6 +26,7 @@
  * Run: node test/pilot/kalmanrival.mjs [SHAPES=sharp,circle,rounded] [FEED=0.004]
  */
 import { ContourScore, decompose } from '../../lib/flexisim/contour.js';
+import { RobotComp } from '../../lib/ngrc/robotcomp.js';
 import { PG, makeArm, mkPath, homeArm, deployOn, commissionArm, recordOpenLoop,
   randomPolygon, fitCornerBanks } from './rigs/arm-rig.mjs';
 
@@ -28,9 +34,35 @@ const SHAPES = (process.env.SHAPES || 'sharp,circle,rounded').split(',');
 const FEED = +(process.env.FEED || 0.004);
 const LEAD = +(process.env.LEAD || 0);        // engineer's lead on δ̂, in steps of δ̇̂
 
-/** One program run under the engineered KF controller. */
-async function runKF(shape, { lead = 0 } = {}) {
+function settleAt(arm, servo, a, b, n = 4000) {
+  arm.setPose(a, b);
+  const refs = [{ theta: a, omega: 0, alpha: 0 }, { theta: b, omega: 0, alpha: 0 }];
+  for (let i = 0; i < n; i++) { const t = servo.torques(refs); arm.step(t[0], t[1], 1); }
+}
+
+/**
+ * THE ENGINEER'S HELD-POSE COMPLIANCE, the reconcile file's conventional-machine recipe on
+ * this rig's workspace: settle at four tool points, read the true wind-up while HELD (that
+ * reading is what the temporary commissioning tracker buys — the same tracker the learned
+ * side's installation already grants itself), regress dq-per-torque, apply at the command.
+ */
+function commissionComp(arm, servo) {
+  const rc = new RobotComp(2, 2, 1e6);
+  for (const [px, py] of [[12, 0], [14, 2], [10, -2], [13, -3]]) {
+    const [a, b] = arm.ik(px, py, true);
+    settleAt(arm, servo, a, b);
+    const refs = [{ theta: a, omega: 0, alpha: 0 }, { theta: b, omega: 0, alpha: 0 }];
+    rc.calibrate([[1, 0], [0, 1]], servo.jointTorques(refs),
+      [arm.j1.windup(), arm.j2.windup()], 1.0);
+  }
+  return rc;
+}
+
+/** One program run under the engineered controller: KF wind-up loop, held-pose static
+ * compliance, or both summed. */
+async function runKF(shape, { lead = 0, useKF = true, useRC = false } = {}) {
   const { arm, servo } = await makeArm();
+  const rc = useRC ? commissionComp(arm, servo) : null;
   const path = mkPath(shape, FEED);
   homeArm(arm, servo, path);
   const joints = [arm.j1, arm.j2];
@@ -64,17 +96,20 @@ async function runKF(shape, { lead = 0 } = {}) {
     const c = path.at(k);
     const [q1, q2] = arm.ik(c.x, c.y, true);
     const rt = arm.ikRates(q1, q2, c.vx, c.vy, c.ax, c.ay);
-    const refs = [{ theta: q1 + u[0], omega: rt.dq[0], alpha: rt.ddq[0] },
-      { theta: q2 + u[1], omega: rt.dq[1], alpha: rt.ddq[1] }];
     // The rigid model's load torque at the COMMAND — the engineer's own feedforward model,
-    // reused as the KF's process drive.
+    // reused as the KF's process drive and as the static compliance's operating point.
     const tl = servo.jointTorques([{ theta: q1, omega: rt.dq[0], alpha: rt.ddq[0] },
       { theta: q2, omega: rt.dq[1], alpha: rt.ddq[1] }]);
+    let f0 = 0, f1 = 0;
+    if (rc) { const ff = rc.feedforward([[1, 0], [0, 1]], tl, { enableToolff: false });
+      f0 = ff.dq[0]; f1 = ff.dq[1]; }
+    const refs = [{ theta: q1 + u[0] + f0, omega: rt.dq[0], alpha: rt.ddq[0] },
+      { theta: q2 + u[1] + f1, omega: rt.dq[1], alpha: rt.ddq[1] }];
     const Mq = arm.massMatrix(q2);
     const tau = servo.torques(refs);
     arm.step(tau[0], tau[1], 1);
     const enc = arm.encoders();
-    for (let j = 0; j < 2; j++) {
+    if (useKF) for (let j = 0; j < 2; j++) {
       const aEnc = enc[j].speed - prevSpeed[j];           // q̈_M / N, one-step difference
       prevSpeed[j] = enc[j].speed;
       // ---- predict: δ̈ = q̈_M/N − q̈_L,  q̈_L = (Kδ + Cδ̇ − τ_l) / J_l
@@ -108,8 +143,8 @@ async function runKF(shape, { lead = 0 } = {}) {
       ];
       uf[j] += LP * (x[j][0] + lead * x[j][1] - uf[j]);
       u[j] = uf[j];
-      if (Math.abs(u[j]) > uPk) uPk = Math.abs(u[j]);
     }
+    uPk = Math.max(uPk, Math.abs(u[0] + f0), Math.abs(u[1] + f1));
     if (k >= scoreFrom) {
       const dec = decompose(path, arm.toolXY(), c);
       score.step(dec.contour, dec.lag, tau, [arm.j1.wM, arm.j2.wM]);
@@ -146,11 +181,15 @@ for (const shape of SHAPES) {
     return r;
   })();
   const kf = await runKF(shape, { lead: LEAD });
+  const rcOnly = await runKF(shape, { useKF: false, useRC: true });
+  const full = await runKF(shape, { lead: LEAD, useRC: true });
   const learned = await deployOn(pilot, shape, true, FEED);
   const f = (r) => `${r.r.contourRms.toExponential(3)} (${(off.r.contourRms / r.r.contourRms).toFixed(2)}x)`
     + ` lag ${r.r.lagRms.toExponential(2)} u ${r.uPk.toFixed(3)}`;
   console.log(`\n  ${shape} @${FEED}:`);
-  console.log(`    open loop          ${off.r.contourRms.toExponential(3)}  lag ${off.r.lagRms.toExponential(2)}`);
-  console.log(`    engineered KF-MBC  ${f(kf)}`);
-  console.log(`    learned, frozen    ${f(learned)}`);
+  console.log(`    open loop            ${off.r.contourRms.toExponential(3)}  lag ${off.r.lagRms.toExponential(2)}`);
+  console.log(`    engineered KF only   ${f(kf)}`);
+  console.log(`    engineered static    ${f(rcOnly)}`);
+  console.log(`    engineered full      ${f(full)}`);
+  console.log(`    learned, frozen      ${f(learned)}`);
 }

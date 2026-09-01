@@ -4129,6 +4129,67 @@ composition wins outright. The north star chose its side of this table in its fi
 ("lap improvement is great but secondary to the unseen path performance"), and both sides
 are now measured on the same machines with the same instruments.
 
+### 34. TARGET 8 RE-ARMED BY THE OWNER: the right competition is TRUTH-FREE, and it is a Kalman
+
+The owner overruled §33's framing: *"I don't think ILC is the right competition. I think
+running without the truth is more in line. I want to pit it against a model based controller
+using a kalman for the estimation — a learned controller with no model against a reasonably
+engineered model."* That is the sharper question, because an ILC needs the error signal every
+lap for ever, while both of these run blind at deploy. `test/pilot/kalmanrival.mjs`.
+
+**Each side gets its own kind of prior, and only that.** The engineered side gets what an
+engineer legitimately has: CAD geometry, the rigid-dynamics computed-torque servo, datasheet
+gearbox constants (K, C, N, Jm), and — because the learned side's installation includes a
+temporary tracker for its guided phase — a held-pose calibration too (RobotComp at four
+settled poses, the reconcile file's conventional-machine recipe). On top of that, a per-joint
+Kalman filter estimates the gearbox wind-up [δ, δ̇] from the only sensors on the machine,
+encoder and commanded torque, via the motor-side torque balance z = N·τcmd − N²·Jm·q̈enc =
+K·δ + C·δ̇, with the rigid model's load torque driving the process. The learned side is the
+frozen composition: commissioned from noise, polygon corner banks, diamond-guided adaptation,
+then frozen — no model, no geometry, no kinematics.
+
+**The engineered side was made its best self before the verdict, three measured repairs:**
+- R was set from the MEASURED noise of the z channel, which came out 48× and 93× its own
+  signal (one-step encoder differencing through N³·Jm). A datasheet-tuned R made the filter
+  chase that noise and its estimates were 30–80× the signal; the honest R makes the Kalman
+  gain the principled statement of how much the sensor can add — almost nothing.
+- The process inertia is M(q)'s diagonal; full coupling through the estimates was tried and
+  measured WORSE (shoulder δ̂ error 3.52e-3 → 4.51e-3), so it was reverted (rule 16: the
+  machine decided).
+- The correction is low-passed (1/300): the estimate's DC is right (bias ~2e-5 on a 2e-3
+  signal) and its AC is model mismatch — link elasticity and backlash the gearbox model
+  cannot represent — so the fast part is noise to the command.
+
+**The verdict, all rows on one machine (E 0.15 / K 16, feed 0.004, contour rms and the
+gain over open loop):**
+
+| program | open | KF only | static (RobotComp) | engineered full | learned, frozen |
+|---|---|---|---|---|---|
+| sharp | 2.025e-1 | 1.00× | 1.01× | 1.01× | **2.28×** |
+| circle | 7.101e-2 | 1.02× | 1.12× | 1.13× | **2.38×** |
+| rounded | 1.343e-1 | 1.01× | 1.02× | 1.02× | **2.86×** |
+
+**The reason is structural, not a tuning failure.** The true gearbox wind-up on this machine
+is ~2e-3 rad rms against a truth of ~2e-2 — the state the engineered observer can see is
+about 10% of the error. The rest is link elasticity and servo lag, which an encoder-only
+observer is blind to BY CONSTRUCTION: the servo closes on the encoder, so the encoder agrees
+with the reference while the tool droops, and no filter on encoder + torque can recover a
+deflection that never enters its measurement. The held-pose static model sees the DC droop
+(hence circle's 1.12×, the one steady program) and nothing of the dynamics. The applied
+corrections say the same thing: the engineered full's u peaks at 0.003–0.015 rad where the
+learned side deploys 0.039–0.150 — the engineered model isn't wrong, it is SMALL, because
+the model's states only span a tenth of the problem.
+
+**What the learned side actually bought is the sensor, not the cleverness.** Its temporary
+tracker SAW the tool during commissioning, so its banks encode tool-space reality the
+engineer's observer structurally cannot estimate. The fair statement of the result: given
+identical installations (temporary tracker, then truth-free), spending the tracker's
+information in a learned map beats spending it on four calibration constants by 2.3–2.9×,
+and the datasheet Kalman on top of the rigid model is worth ~1% because the observable state
+is a tenth of the error. This is the anti-slosh rule from the other side once more: the
+gearbox HAS a closed form and the Kalman duly recovers it — but what dominates this machine
+has no closed form the engineer possesses, and that part must be learned.
+
 ### The eight targets, restated (replacing the stale table above)
 
 | target | state |
@@ -4140,4 +4201,4 @@ are now measured on the same machines with the same instruments.
 | 5 higher | EMPS 14.8x → 55.5x; arm composition 2.2–2.5x on its hardest program |
 | 6 PLC scan | router counted (21k worst / 320 smooth); full-composition scanCost contract still open |
 | 7 breadth | achieved as reframed; the barrel flips helpful under adaptation |
-| 8 a rival | **measured — the two-regime verdict above** |
+| 8 a rival | **measured twice — the two-regime PathILC verdict (§33), and the owner's truth-free Kalman rival (§34): engineered full 1.01–1.13× against the frozen composition's 2.28–2.86×** |
