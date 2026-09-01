@@ -274,7 +274,8 @@ if (ROUTER && subject.verdict && subject.verdict.deploy) {
         ? (recs[0].sizing.vMult ?? 1) * 8e-4 * subject.sample : null });
   const rc = subject.routerCost();
   console.log(`  corner bank: source ${ROUTER}, aFull ${res.aFull.toExponential(2)}`
-    + ` (${+(process.env.AFULLK || 6)}x declared aMax per sample²), ${res.fitted} leads`
+    + ` (${(process.env.FITSCALE || 'anchor') === 'record' ? '0.5x record peak'
+      : `${+(process.env.AFULLK || 6)}x declared aMax per sample²`}), ${res.fitted} leads`
     + ` fitted, ${res.kept} kept scribble${res.grid ? `, grid ${res.gridFitted}/${res.gridPooled}` : ''}`
     + ` (${((Date.now() - t0r) / 1000).toFixed(0)}s)`);
   console.log(`  router arithmetic, counted: worst ${rc.worst} MAC/decision (both channels),`

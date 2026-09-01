@@ -4215,11 +4215,75 @@ plus the parts (rule 6), and the dead zone must keep a smooth program under 2% o
 case. The RLS at 72,600/sample is now visibly the dominant deployed cost — the doc's own "why
 features are the first thing to cut," finally with a number attached.
 
+### 36. THE GEOMETRY WALL WAS THE LABEL SCALE — the stale 3.27x, the archaeology, and the scale that lifts every bank
+
+Target 1's confrontation began with a discrepancy: the recorded self-fit ceiling on the sharp
+square is 3.27x, and the new price-of-agnosticism bench measured today's self-fit at 1.97x.
+Both numbers are now REPRODUCED, and the story between them overturns three standing findings.
+
+**The archaeology, both ends on the same machine and seed.** The severity-anchor commit
+(2ce8f08) reads the self-fit row at 1.99x — byte-identical to today's head, so nothing since
+regressed it. The commit before it (7ae94cb, record-peak scaling) reads **3.27x exactly as
+recorded**. So the anchor commit — introduced to fix a real confound (changing the probe's
+event shape moved the record peak and rescaled every program's engagement in one move) —
+silently traded away the self-fit bank's entire advantage, and the 3.27x was then carried
+forward through five tables as a static ceiling the machinery beneath it no longer reached
+(rule 30 in a new costume). Three cheaper explanations were measured and killed first: the
+coverage guard (vTop x2 is byte-identical — corners are LOW-velocity events and the guard
+fades at HIGH velocity, so the hypothesis was physically backwards), authority (cap 0.3
+reads 1.97x), and emulating the old scale through AFULLK=31 (fits zero leads — λ never
+clears the dead zone).
+
+**The mechanism is in the fit's own log line.** The square's corners run 31x the declared
+aMax; `shapeLambda` saturates at 2x; so under the anchored scale every corner row lands at
+λ=1, the knot strata collapse into one heterogeneous pool, and the held-out fallback rejects
+the corner weights at ALL 116 leads — `116 kept scribble` against the record scale's `0`.
+The anchored label was not conservative, it was BLIND: rule 32 verbatim (a threshold must be
+scaled to the quantity it acts on — the fit labels rows of a RECORD, so the record's own
+peak is the right scale), colliding with a constant that had been anchored for a different
+purpose. `fitCornerBanks` now takes `fitScale: 'record'` (0.5x the records' peak |Δ²cmd|,
+stored in `pilot.router` so fit labels and deploy addressing stay one quantity); the anchor
+remains the cross-EXPERIMENT scale, which is what it was actually for.
+
+**Measured, one instrument, sharp square (matrix, ROUTER diet as labeled):**
+
+| config | @0.004 | @0.008 |
+|---|---|---|
+| baseline (no banks) | 1.69x | 2.27x |
+| agnostic poly+stars, anchor | ~2.0x | 2.45x |
+| **agnostic poly+stars, record scale** | **2.93x** | **2.42x** |
+| **self-fit, record scale (ceiling)** | **3.54x** | **2.65x** |
+
+Smooth programs stay byte-identical under the record scale (circle 9.201e-3, rounded
+2.171e-2 — the shaped blend's control holds, rule 21), the safety floor holds (nothing worse
+than doing nothing), and the worst held-out degradation improves 2.87x → 2.55x.
+
+**Three standing findings overturned by one scale change:**
+
+1. **"Every increase in corner-geometry diversity makes the square worse" was an artifact.**
+   Under the anchor, adding stars measured 2.02x → 1.97x; under the record scale the same
+   addition measures 2.39x → 2.93x — diversity PAYS once the labels can stratify it. The
+   wall's third panel (coverage → severity → geometry) falls: geometry was never the wall,
+   the label scale was.
+2. **Diamond-guided adaptation helps only broken banks.** It bought +11% on anchor banks
+   (which were near-scribble, so any adaptation adds) and costs the record-scale square
+   -11% and the circle 3.2x — the shared-weight RLS pulls every program's weights toward
+   the diamond's distribution. The composition SIMPLIFIES: record-scale banks, frozen; no
+   guided phase; no truth after commissioning at all.
+3. **Target 1's residual is not transfer.** The price of agnosticism — self-fit ceiling
+   over the agnostic recipe, same instrument, same feed — is **1.21x @0.004 and 1.10x
+   @0.008, both inside the 1.3x target.** What remains of the degradation metric is
+   PROGRAM HARDNESS: the sharp square's own ceiling is 1.75x below the rounded rectangle's
+   6.18x for any bank, including one fitted on the square itself. That ratio belongs to the
+   machine and the corner rule (reversals crossing backlash at near-zero feed), and no
+   commissioning diet can buy it back — a per-program commission does not reach it either,
+   which is what the original metric assumed it would.
+
 ### The eight targets, restated (replacing the stale table above)
 
 | target | state |
 |---|---|
-| 1 program-agnostic (1.3x) | 2.86x worst-row, from 3.65x; remaining gap is lead-0 distribution match against the measured self-fit ceiling |
+| 1 program-agnostic (1.3x) | **the price the claim owns is MET (§36): 1.21x/1.10x against the self-fit ceiling, same instrument** — the residual degradation (2.55x worst-row, from 3.65x) is program hardness no diet reaches, not transfer |
 | 2 feedrate-agnostic (1.5x) | **MET — all three programs** (1.16 / 1.49 / 1.14) |
 | 3 plant-agnostic | six plants, honest refusals, the 1.1x threshold law |
 | 4 commissioning in minutes | one gated layer + guided laps replaced 3-layer cascades |
