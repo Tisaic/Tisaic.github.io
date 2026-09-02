@@ -4606,6 +4606,23 @@ properly, and the measured ceiling for the whole composition moves from R² 0.42
 forecasts to 0.99-class — the model reaching what only the memory could reach, which is
 what the owner said the physics allowed.
 
+**THE DELIVERY LEDGER (§38 continued): four routes into the machine, four convictions,
+one surviving design.** The mechanism model predicts at R² 0.9917 offline and every naive
+route into the pilot made the machine worse — each failure convicting one requirement:
+
+| route | result | conviction |
+|---|---|---|
+| batch refit, pilot-SILENT records | REFUSED 1.96e-1 vs 8.3e-2 | rows must come from the DEPLOYED distribution |
+| tune candidate at commissioning | won the scribble, cascade 3.59e-1 → 6.38e-1 | the scribble cannot SEE the mechanism; removed, refit-only |
+| guided online on the program (block prior) | 2.17e-2 → 5.07e-2 | collinear rows learn the program; and online fits LEAD 0 ONLY — a shared vector dragged to one lead's map corrupts the rest (the recorded shared-vs-per-lead failure, sharpened by a strongly lead-dependent block) |
+| guided online on demo diversity | 0.88x — worse than OPEN LOOP; circle destroyed 14x | same shared-vector structure, more energy to corrupt with |
+
+Controls held throughout: the zero-extended arming is byte-identical before learning, and
+every refusal reverted cleanly. The surviving design is the untested triple: PER-LEAD fit
+(only exp 1 had it) on DEPLOYED-distribution rows (only exps 2–4 had them) with the
+correction's own contribution DECONVOLVED offline through the identified hGrid (none had
+it) — experiment 5, in flight.
+
 ### The eight targets, restated (replacing the stale table above)
 
 | target | state |
