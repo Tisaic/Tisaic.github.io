@@ -33,31 +33,31 @@ await pg.evaluate(() => document.querySelector('[data-tab="path"]')?.click());
 await pg.waitForTimeout(2000);
 await pg.evaluate(() => document.getElementById('autoP-btn').click());
 console.log('pressed ⑨ — waiting for the ladder…');
+// THE PAGE'S STATE LIVES IN MODULE SCOPE, invisible to evaluate() — the DOM is the only
+// honest window. Completion is the badge saying "shipped".
 const t0 = Date.now();
 for (;;) {
   await pg.waitForTimeout(15000);
-  const st = await pg.evaluate(() => ({ comm: typeof autoComm !== 'undefined' && autoComm,
-    rep: typeof autoRep !== 'undefined' && !!autoRep,
-    badge: document.getElementById('path-badge')?.textContent || '' }));
-  console.log(`  [${((Date.now() - t0) / 60000).toFixed(1)}m] comm=${st.comm} rep=${st.rep} :: ${st.badge.slice(0, 110)}`);
-  if (!st.comm && st.rep) break;
+  const badge = await pg.evaluate(() => document.getElementById('stateP-badge')?.textContent || '');
+  console.log(`  [${((Date.now() - t0) / 60000).toFixed(1)}m] ${badge.slice(0, 120)}`);
+  if (/shipped/.test(badge)) break;
+  if (/failed|stopped/.test(badge)) { console.log('COMMISSION DID NOT FINISH'); process.exit(1); }
   if (Date.now() - t0 > 40 * 60000) { console.log('TIMEOUT'); process.exit(1); }
 }
 console.log('\nladder done — pressing Run and logging per-lap…');
 await pg.evaluate(() => document.getElementById('runP').click());
-let lastLap = -1;
+// Per-lap detection from the DOM alone: the auto-mode badge carries "lap 1, correction
+// still ramping" during lap 1, and the contour number is the CURRENT lap's running rms —
+// log it every 10 s with the mode, so ramp, convergence, and any per-lap reset are all
+// visible in one column.
 const t1 = Date.now();
 for (;;) {
-  await pg.waitForTimeout(2000);
-  const st = await pg.evaluate(() => ({ lap: lapP, k: kP,
-    mode: document.getElementById('ctlP').value,
-    lapRms: lapScoreP ? lapScoreP.report().contourRms : null,
-    badge: document.getElementById('errP-badge')?.textContent || '' }));
-  if (st.lap !== lastLap) {
-    console.log(`  lap ${st.lap} begins (k=${st.k}, mode=${st.mode}); previous lap's badge: ${st.badge}`);
-    lastLap = st.lap;
-  }
-  if (st.lap >= 4) { console.log(`\n  final badge: ${st.badge}`); break; }
-  if (Date.now() - t1 > 25 * 60000) { console.log('RUN TIMEOUT', JSON.stringify(st)); break; }
+  await pg.waitForTimeout(10000);
+  const st = await pg.evaluate(() => ({
+    mode: document.getElementById('ctlP')?.value,
+    badge: document.getElementById('errP-badge')?.textContent || '',
+    state: document.getElementById('stateP-badge')?.textContent || '' }));
+  console.log(`  [${((Date.now() - t1) / 60000).toFixed(1)}m] mode=${st.mode} :: ${st.badge} :: ${st.state.slice(0, 60)}`);
+  if (Date.now() - t1 > 20 * 60000) break;
 }
 await browser.close();
