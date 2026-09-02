@@ -163,8 +163,9 @@ for (const f of [4e-3]) {
     return { r2: 1 - sr / ss, rms: Math.sqrt(sr / test.length), nf };
   };
   console.log('\nA4 WINDOW REACH (rich local basis, held-out laps 5-6, feed 4e-3):');
-  for (const lags of [[], [3], [3, 6], [3, 6, 9], [3, 6, 9, 15], [3, 6, 9, 15, 24],
-    [3, 6, 9, 15, 24, 40]]) {
+  for (const lags of [[], [3, 6, 9, 15, 24, 40], [3, 6, 9, 15, 24, 40, 60],
+    [3, 6, 9, 15, 24, 40, 60, 90], [3, 6, 9, 15, 24, 40, 60, 90, 130],
+    [3, 6, 9, 15, 24, 40, 60, 90, 130, 180]]) {
     const span = lags.length ? lags[lags.length - 1] * D.sample : 0;
     const { r2, rms, nf } = fitR2(lags);
     console.log(`   window ${String(span).padStart(4)} steps (${String(nf).padStart(3)} feats): `
@@ -194,4 +195,60 @@ for (const f of [4e-3]) {
   const l2 = lapProf(2), l5 = lapProf(5);
   console.log(`\nA5 LAP-OVER-LAP SETTLING: profile corr lap2~lap5 ${corr(l2, l5).toFixed(4)}, `
     + `amplitude lap2 ${rms(l2).toExponential(3)} vs lap5 ${rms(l5).toExponential(3)}`);
+}
+
+// ---- A6. THE PHYSICS TEST: commanded joint rates ONLY, convolved over the loop's memory,
+// optionally pose-modulated. If the mechanism is the servo loop's filtered response to
+// commanded rates mapped through the kinematics, the rates-alone fit carries most of it
+// and the pose modulation carries the rest.
+{
+  const f = 4e-3, { rows } = D.feeds[f];
+  const LAGS = [0, 2, 4, 6, 9, 13, 18, 24, 32, 42, 55, 70, 90, 115, 145, 180];
+  const build = (mod) => {
+    const train = [], test = [];
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      if (r[C.lap] < 1) continue;
+      const x = [1];
+      let ok = true;
+      for (const d of LAGS) {
+        const p = rows[i - d];
+        if (!p) { ok = false; break; }
+        x.push(p[C.dq1] * 1e3, p[C.dq2] * 1e3);
+        if (mod) {
+          const s1 = Math.sin(r[C.q1]), c12 = Math.cos(r[C.q1] + r[C.q2]);
+          x.push(p[C.dq1] * 1e3 * s1, p[C.dq2] * 1e3 * c12,
+            p[C.dq1] * 1e3 * r[C.tx], p[C.dq2] * 1e3 * r[C.ty]);
+        }
+      }
+      if (!ok) continue;
+      if (r[C.lap] <= 3) train.push([x, r[C.en]]); else test.push([x, r[C.en]]);
+    }
+    const nf = train[0][0].length;
+    const A = Array.from({ length: nf }, () => new Float64Array(nf));
+    const b = new Float64Array(nf);
+    for (const [x, y] of train) for (let i = 0; i < nf; i++) {
+      b[i] += x[i] * y;
+      for (let j = 0; j < nf; j++) A[i][j] += x[i] * x[j];
+    }
+    for (let i = 0; i < nf; i++) A[i][i] += 1e-4 * A[i][i] + 1e-12;
+    const M = A.map((row, i) => [...row, b[i]]);
+    for (let c2 = 0; c2 < nf; c2++) {
+      let p = c2; for (let r2 = c2 + 1; r2 < nf; r2++) if (Math.abs(M[r2][c2]) > Math.abs(M[p][c2])) p = r2;
+      [M[c2], M[p]] = [M[p], M[c2]];
+      for (let r2 = 0; r2 < nf; r2++) { if (r2 === c2 || !M[c2][c2]) continue;
+        const f2 = M[r2][c2] / M[c2][c2]; for (let j = c2; j <= nf; j++) M[r2][j] -= f2 * M[c2][j]; }
+    }
+    const w = M.map((row, i) => row[nf] / (row[i] || 1));
+    let ss = 0, sr = 0, mu = 0;
+    for (const [, y] of test) mu += y; mu /= test.length;
+    for (const [x, y] of test) { let p = 0; for (let i = 0; i < nf; i++) p += w[i] * x[i];
+      sr += (y - p) ** 2; ss += (y - mu) ** 2; }
+    return { r2: 1 - sr / ss, rms: Math.sqrt(sr / test.length), nf };
+  };
+  console.log('\nA6 THE PHYSICS TEST (feed 4e-3, held-out laps 5-6, FIR over 1440 steps):');
+  const a = build(false);
+  console.log(`   commanded joint rates only     (${String(a.nf).padStart(3)} feats): R² ${a.r2.toFixed(4)}  rms ${a.rms.toExponential(3)}`);
+  const b2 = build(true);
+  console.log(`   + pose/tangent modulation      (${String(b2.nf).padStart(3)} feats): R² ${b2.r2.toFixed(4)}  rms ${b2.rms.toExponential(3)}`);
 }
