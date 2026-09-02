@@ -4835,12 +4835,41 @@ or feed change (re-convergence measured here at ~2 settled laps per halving). Th
 one feature row through one filter, so they COLLAPSE to a single vector at zero runtime
 cost, a pass needs one settled lap of rows, and the batch refit has an exact RLS form.
 
-**NOT YET DONE, STATED:** the six-pass run exists on the rounded rectangle at one feed and
-one seed; sharp/circle, a feed change mid-run (frozen vs adapting), the stack collapse
-control, the PLC cost of the prediction+filter path (rule 42's table), and the library form
-(a `refine` stage on the pilot, or gated continuous RLS) are the build list. The eventual
-floor may be set by the second-order phase-walk injection (§39: u lap-diff 1.8e-3 from the
-rig's free-running counters), which the page's lap-synced `actAt` already avoids.
+**THE QUARTET COMPLETED THE PICTURE THE SAME AFTERNOON** (`deploydeliver3/4.mjs`,
+`feedswitch.mjs`):
+
+- **CIRCLE: CONVERGED TO THE MACHINE'S OWN REPEATABILITY — 3.07e-3/4.38e-3 →
+  7.14e-6/1.65e-5, 430x/265x past the deployed pilot,** monotone in six passes with duPk
+  9e-3/1.3e-2 (2% of authority). The circle's open-loop floor is 1.3–6e-5: on that program
+  the controller now removes everything the plant can repeat. Nothing this project has
+  measured on any plant is within two orders of it.
+- **SHARP IS AUTHORITY-BOUND, MEASURED TWICE FROM ONE KNOB.** At a 0.4 correction cap it
+  converges 3x (1.74e-2 → 5.8e-3 by pass 2, duPk PINNED at the cap) and then pumps —
+  a clipped correction is not the deconvolved correction, so the refits fight the clip;
+  the guard catches it. At cap 1.2: **monotone through all six passes, 1.74e-2/2.05e-2 →
+  2.31e-3/2.96e-3 (7.5x/6.9x), duPk 0.93 and still descending.** The kinematics-free arc's
+  "the soft corner is authority-bound — raise the cap only with adaptation armed" verdict,
+  reproduced on the delivered system.
+- **A FROZEN CORRECTOR AT A FOREIGN FEED IS 3x WORSE THAN NOTHING** — 5.7e-2/8.0e-2 at
+  5.5e-3 against a plain-deploy control of ~2e-2/1.6e-2 — falsifier 11's prediction
+  delivered as harm, the "every deployment harms the machine" shape. And re-adapting
+  THROUGH the stale stack recovers only to control level in three passes: each re-pass
+  fits a residual that includes five wrong vectors' harm. **The product form follows: a
+  command-distribution change detector GATES the corrector off and CLEARS the stack**
+  (fresh convergence is a halving per pass; dragging a stale stack is 0.63x per pass to
+  merely break even), which is the refusal doctrine applied to adaptation, and the
+  §§20–26 selector ("repeating production wants freezing, an evolving recipe wants the
+  truth kept") now has its failure mode measured from the freezing side.
+
+**NOT YET DONE, STATED:** every refit consumes the routed truth, so on this plant the
+route is an installation property — a tracker mounted for ever, or convergence with it
+mounted and a frozen corrector after (legal, and now with the measured warning above);
+the stack collapse to one vector (exact algebra) and the RLS form of the refit, the PLC
+cost of the prediction+filter path (rule 42's table), sharp's remaining descent toward
+e-3 under the full uMax, more seeds, and the library form (a `refine` stage on the
+pilot with the change gate) are the build list. The eventual floor may be set by the
+second-order phase-walk injection (§39: u lap-diff 1.8e-3 from the rig's free-running
+counters), which the page's lap-synced `actAt` already avoids.
 
 ### The eight targets, restated (replacing the stale table above)
 
