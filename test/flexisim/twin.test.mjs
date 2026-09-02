@@ -86,7 +86,7 @@ console.log('compiling…');
 const PRE = 1500;
 const compiled = await compileTwin({
   simulate: sims.compileSim(path, { laps: 3, preRoll: PRE }),
-  H, iters: 9,
+  H, iters: 11,
   onProgress: (m) => console.log(`  ${m}`),
 });
 const runOn = async (K, E, du) => {
