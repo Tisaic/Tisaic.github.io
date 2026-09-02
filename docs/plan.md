@@ -4714,13 +4714,60 @@ measured to be impractical: the diversity asymptote is the result.
 
 **WHAT DIES AND WHAT SURVIVES.** Compile-the-program dies as a first-lap mechanism: the only
 records that identify the program's own map are the program's (a memory, banned and now also
-measured as one — it dies at a feed change). The preview family dies. What survives for e-3,
-untested: the FEED GOVERNOR (family 2 — by construction, priced in cycle time, and the price
-is measurable as a Pareto front) and the SOFT-SENSED SLOW TRIM (family 3 — feedback, which
-converges on a 97–99.8%-repeatable error without identifying anything, and inherits the
-monotone-safeguard discipline). The falsifier scripts and cached records are scratchpad
-instruments (`compile-falsifier*.mjs`, `olrecs/demorecs/feedrecs.json`); nothing here
-touches shipped code, which is why twelve experiments cost one afternoon and zero risk.
+measured as one — it dies at a feed change). The preview family dies. The falsifier scripts
+and cached records are scratchpad instruments (`compile-falsifier*.mjs`,
+`olrecs/demorecs/feedrecs/tourrecs.json`); nothing here touches shipped code, which is why
+sixteen experiments cost one afternoon and zero risk.
+
+**FOUR MORE FALSIFIERS CLOSED THE CAMPAIGN, AND THE LAST ONE NAMED THE SATURATION.**
+
+10. **The space-filling tour is the cleanest domain-shift reading of the arc.** A
+    `recordCornerProbe` pose-walking tour at drive-gated rates generalizes to a SECOND tour
+    at R² 0.84–0.86 — the class transfers WITHIN a distribution — and to the programs at the
+    worst numbers of the campaign (to −1210), while POISONING every pooled diet it joins.
+    Two regimes fighting over one weight vector, §§9–17's cornerEvents lesson reproduced at
+    the model level: the map is regime-local, and a global linear-in-dictionary fit is a
+    first-order approximation valid only near its fitting distribution.
+11. **Locality does not crack it either.** Locally-weighted identification (rows weighted by
+    window-speed/accel regime distance, six cells per program, the maximal diet) reproduces
+    the global fit almost exactly — 0.42–0.73 shoulder, elbow negative. The regime axis that
+    matters is not speed.
+12. **The measured signals — the record's own "THE ACTUAL TORQUE IS THE SIGNAL" — improve
+    the shoulder and tighten capacity absurdly** (scribble→rounded 0.70, the best
+    commissioning-only transfer measured; circle self-fit rms 6e-6), and the elbow's
+    cross-distribution failure survives even this. Fourteen falsifiers had built every
+    dictionary from the command stream; the fifteenth put the measured torque and encoder
+    speeds in and the wall moved by a fraction, not an order.
+13. **The failure decomposed (rule 39's spirit, applied to the instrument): it is part
+    SCALE, part SHAPE, and the ceiling after an ORACLE gain is R² ~0.8.** Scribble-fit
+    predictions correlate with program truth at 0.73–0.89 (shoulder) and up to 0.82 (elbow)
+    but run systematically oversized (optimal gains 0.3–0.9); rescaled by a per-program
+    scalar nobody agnostic can supply, the best cells reach R² 0.63–0.81. The deconvolution
+    to e-3 needs 0.999. **Program-free identification on this machine saturates near
+    corr 0.9**, an order of magnitude of residual variance short, invariant across sixteen
+    falsifiers' feature classes, diets, regularizers and localities.
+
+**THE OTHER TWO FAMILIES ARE PRICED OUT BY MEASUREMENTS ALREADY IN THE RECORD.** The FEED
+GOVERNOR: the campaign's own feed-scaling law (70% ∝feed, 19% ∝feed², 11% constant) prices
+e-3-by-slowdown at ~60x cycle time AND floors it at the feed-independent ~11% of today's
+residual — it cannot reach e-3 at any speed. The SOFT-SENSED SLOW TRIM: ⑤ already removes
+97.9% of the bias and the residual is oscillatory, which a quasi-static correction cannot
+cancel (rule 39); ⑧'s live-trim row measured the fast version at 0.81x.
+
+**THE HONEST POSITION ON THE e-3 BAR, STATED SO IT CAN BE ACTED ON.** (1) At the soft page
+config (K 1 / E 0.06) the machine's own lap-to-lap floor is 3.4e-3 — e-3 there is below the
+plant's repeatability and NO controller, memory included, can reach it; the bar is only
+meaningful at stiffer configs, where the measured floors are 1e-5–1e-3. (2) At those
+configs the capacity is proven (a single weight vector holds three programs at rms
+1.2–5.7e-4) but every program-free diet saturates an order short, and the span that
+identifies the map is the program's own manifold — which is memory by measurement (dies at
+a feed change), and the memory is retired. (3) What remains within the rules: gated online
+adaptation (the §§20–26 law — multiplies vouched models, +29% on this arm, 55x on EMPS
+with guided-then-removed truth), which does not reach 60x here. e-3 on unseen programs
+from agnostic commissioning, memory retired, is beyond everything this campaign measured —
+and this section is the evidence trail for whichever premise the owner chooses to relax:
+one open-loop calibration lap per program (prediction at 1e-4 measured, the cheapest
+relaxation), installation truth for adaptation, or a stiffer operating point.
 
 ### The eight targets, restated (replacing the stale table above)
 
