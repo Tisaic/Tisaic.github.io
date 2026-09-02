@@ -4754,20 +4754,30 @@ residual — it cannot reach e-3 at any speed. The SOFT-SENSED SLOW TRIM: ⑤ al
 97.9% of the bias and the residual is oscillatory, which a quasi-static correction cannot
 cancel (rule 39); ⑧'s live-trim row measured the fast version at 0.81x.
 
-**THE HONEST POSITION ON THE e-3 BAR, STATED SO IT CAN BE ACTED ON.** (1) At the soft page
-config (K 1 / E 0.06) the machine's own lap-to-lap floor is 3.4e-3 — e-3 there is below the
-plant's repeatability and NO controller, memory included, can reach it; the bar is only
-meaningful at stiffer configs, where the measured floors are 1e-5–1e-3. (2) At those
-configs the capacity is proven (a single weight vector holds three programs at rms
-1.2–5.7e-4) but every program-free diet saturates an order short, and the span that
-identifies the map is the program's own manifold — which is memory by measurement (dies at
-a feed change), and the memory is retired. (3) What remains within the rules: gated online
-adaptation (the §§20–26 law — multiplies vouched models, +29% on this arm, 55x on EMPS
-with guided-then-removed truth), which does not reach 60x here. e-3 on unseen programs
-from agnostic commissioning, memory retired, is beyond everything this campaign measured —
-and this section is the evidence trail for whichever premise the owner chooses to relax:
-one open-loop calibration lap per program (prediction at 1e-4 measured, the cheapest
-relaxation), installation truth for adaptation, or a stiffer operating point.
+**THE HONEST POSITION ON THE e-3 BAR — AND THE OWNER'S CORRECTION, CONFIRMED BY
+MEASUREMENT.** The first version of this paragraph claimed the soft config's 3.4e-3 "lap
+floor" made e-3 unreachable there for any controller. The owner rejected that — "the model
+can be controlled, we need to fix the controller" — and two measurements say the owner is
+right and the paragraph was reading the wrong instrument (rule 17): the 3.4e-3 was measured
+on the DEPLOYED machine, plant PLUS controller, and quoted as the plant's. (1) **The
+plant's own open-loop lap floor at the soft config is 1.3e-5–6.2e-4** (`softfloor.mjs`,
+rms(lap3−lap2) per channel across the three programs) — all below e-3. (2) **The deployed
+machine repeats at 1.1–1.6e-4 joint-space while leaving a residual of 6.1e-3/7.9e-3 — the
+controller leaves a 40x, 97.5%-repeatable, fully deterministic error on the table every
+lap** (`deployfloor.mjs`, which also ties the frames: 6.1e-3 joint ≈ 5.9e-2 tool, the
+campaign's own profile number, and 1.4e-4 joint ≈ the campaign's 3.4e-3 tool "floor"
+through the ~20x kinematic lever — same numbers, wrong attribution). The correction itself
+carries a second-order injection (u lap-diff 1.8e-3, 2% of u, tracking the rig's 3.19
+step/lap phase walk — `deployOn` free-runs its counters where the page's `actAt` is
+lap-synced), but the first-order problem is the repeatable residual the pilot cannot see.
+(3) So the bar stands and the work is the CONTROLLER: the campaign's own discoveries name
+the instrument — the pilot's forecast reach is an order short of the loop's measured memory
+(the 0.756 → 0.998 in-sample jump at reach 3240), the measured signals are the features
+the record already ruled are the signal, and the deployed distribution is the diet the
+convictions require. Identification on the deployed rows of the RUNNING program is not the
+banned memory: it is the §§20–26 online-adaptation route with a basis that can finally
+reach what it must model. That build — prediction on deployed rows first, delivery through
+hGrid second — is §40.
 
 ### The eight targets, restated (replacing the stale table above)
 
