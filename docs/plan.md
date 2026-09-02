@@ -5018,6 +5018,29 @@ product form stands: the engineer declares the structure template (articulated c
 commissioning fits its parameters, programs compile through it — "learn the parameters
 that have no closed form; compute the ones that do."
 
+**THE PHONE'S SECOND FIELD ROUND (§42 addendum) — four defects in an hour of the owner's
+hands, three mine, each measured before it was fixed.** (1) **The thinned identification
+grid**: the page identified K̂=1.47/Ê=0.0525 on a K=1.00/E=0.06 machine. Reproduced in
+Node to the digit and isolated three ways: 900 samples + thinned ladders lands in the K/E
+compensation valley (1.469/0.0525); the SAME record over the full ladders is EXACT (J=0);
+the FULL record with the thinned grid is still wrong (2.125/0.0475). The thinning was the
+whole defect — the coarse pass had dropped E=0.06 from the search and the refinement rings
+cannot walk back across a valley. The page searches every ladder rung now, and the twin
+test gained a soft-machine identification phase over the page's exact ladders, because a
+stiff-only test passed before and after the bug. (2) **The twin's buttons stayed live
+during ⑨'s 18-minute run** (`idle` never carried `autoComm`) — two commissioning drivers
+on one live arm. Locked out now, under every commissioning. (3) **"Demo banks: failed —
+call build() first"** on the phone's ⑨: convicted by elimination — the Node ladder at the
+same config runs ②b clean (1.7692e-1, 224 fitted), a headless browser pressing ⑨ alone
+runs it clean (224 fitted, 9 min), and the one thing the failing run had that neither
+reproduction has is the concurrent twin commissioning that defect (2) permitted; the
+combination is now impossible, and the demo-banks line reports rather than hides if it
+ever recurs. (4) **⑨ force-loaded K 1 / E 0.06** ("I can change the sliders and then when
+I hit the button it forces the sliders back") — a leftover from the ⑧ demo arc: the
+one-press now commissions the machine and program ON SCREEN, the hint says where the
+measured 22.42x machine lives instead of silently substituting it, and ⑧'s setup button
+keeps the substitution because substitution is that button's stated job.
+
 ### The eight targets, restated (replacing the stale table above)
 
 | target | state |

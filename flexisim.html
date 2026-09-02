@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:700,built:"2026-09-02T21:45:52Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:701,built:"2026-09-02T21:55:15Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -579,12 +579,17 @@
           then the lap-periodic rung, scores each one on this machine with everything below
           it deployed, and ships the best prefix. A rung that measures worse than the rung
           beneath it is not deployed, and the row still says what it measured.
-          <b>It needs nothing set up first: pressing it REBUILDS the plant</b> at K 1 /
-          E 0.06 on the rounded rectangle at feed 4e-3 — the machine
-          <code>test/flexisim/autostack.test.mjs</code> measures 4.1216e-1 → 1.8387e-2
-          (22.42×) on — because this tab defaults to the stiff end of both ladders, where
-          almost none of the error the ladder exists to remove is left. It is a MEASUREMENT
-          and takes a long time; <b>Stop</b> ends it at the next frame and deploys nothing.</p>
+          <b>It commissions the machine and program ON SCREEN</b> — set the sliders to the
+          setup you want studied and press; nothing is overridden (it used to force K 1 /
+          E 0.06 and the rounded rectangle, which discarded whatever machine you had dialed
+          in). Two things follow: at this tab's stiff defaults (K 16 / E 0.15) almost none
+          of the error the ladder exists to remove is left, so expect small numbers there —
+          the machine <code>test/flexisim/autostack.test.mjs</code> measures 4.1216e-1 →
+          1.8387e-2 (22.42×) on is K 1 / E 0.06, rounded rectangle, feed 4e-3, reachable by
+          the sliders or ⑧'s setup button. And the result belongs to the setup it ran on: a
+          slider change after commissioning discards the ladder, as it always has. It is a
+          MEASUREMENT and takes a long time; <b>Stop</b> ends it at the next frame and
+          deploys nothing.</p>
         <div id="autoTable"></div>
         <p class="hint" id="autoProg"></p>
         <p class="hint" id="autoNotes"></p>
@@ -6744,22 +6749,22 @@ function autoRowsHTML(rows) {
 
 async function startAutoP() {
   if (autoComm || busyP) return;
-  // ⑨ SETS UP ITS OWN MACHINE. It is ONE BUTTON, and one button that only works after
-  // another mode's setup button is two buttons in a trench coat -- worse, it is two buttons
-  // with an ordering the operator has to know and the page never states. ⑧'s setup was
-  // bolted on after ⑧ shipped broken, and inheriting that dependency would make ⑨'s result
-  // depend on trusting it.
-  //
-  // AND WITHOUT THIS THE DEFAULT IS THE WRONG MACHINE, not merely a different one: this tab
-  // defaults to K 16 / E 0.15, the stiff end of both ladders, where the conventional machine
-  // alone already leaves 5.7e-2 against the 4.4e-1 it leaves at K 1 / E 0.06. Nearly the
-  // whole error the ladder exists to remove has gone before the button is pressed, so a
-  // half-hour commission would return a small number that demonstrates nothing. The label
-  // and the hint both say the plant is rebuilt, because a silent override of the operator's
-  // sliders would be its own defect.
-  setPathBadge('⑨ setting up the machine the 22.42× was measured on — K 1 / E 0.06, '
-    + 'rounded rectangle at feed 4e-3', 'warn');
-  await setupMeasuredMachineP();
+  // ⑨ COMMISSIONS THE MACHINE THE SLIDERS DESCRIBE. It used to force the sliders back to
+  // K 1 / E 0.06 / rounded / feed 4e-3 (the machine the 22.42x was measured on) so the
+  // one press always had error worth removing — and the owner hit exactly what that
+  // override costs: set up a different machine to study, press ⑨, watch the page discard
+  // the setup ("I can change the sliders and then when I hit the button it forces the
+  // sliders back"). The operator's configuration is the experiment; the hint now says
+  // where the measured machine lives (⑧'s setup button, or the sliders themselves)
+  // instead of the button silently substituting it. The re-home below gives the ladder
+  // the same clean start the rebuild used to: program at its start, nothing pending,
+  // nothing queued — on the machine that is actually on screen.
+  runP = false; progPending = false; $('pendP').hidden = true;
+  setPathBadge('⑨ re-homing, then commissioning the machine on screen — '
+    + `K ${KP_LADDER[+$('s-kP').value].toFixed(2)} / E ${EP_LADDER[+$('s-eP').value].toFixed(2)}, `
+    + `${$('shapeP').value} at feed ${pathFeed().toExponential(1)}`, 'warn');
+  busyP = true;
+  try { await homeP(); } finally { busyP = false; }
   const K = KP_LADDER[+$('s-kP').value], E = EP_LADDER[+$('s-eP').value];
   const c0 = profP.at(0);
   const centre = armP.ik(PG.centre[0], PG.centre[1], true);
