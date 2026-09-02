@@ -4985,16 +4985,38 @@ program through the identified plant", §39 family 1, delivered in the form the
 twenty-falsifier campaign proved necessary: by SIMULATION, because regression's windows
 truncate a 6-9k-step memory and closed laps alias it).
 
-**WHAT STAGE A DOES NOT PROVE, STATED:** the twin was exact. The product claim rests on
-stages B and C: (B) HOW FAST does compile quality degrade with twin parameter error —
-perturb the twin's stiffness/modulus/backlash, compile against the wrong twin, apply to
-the true machine, measure the tolerance; (C) does OUTPUT-ERROR IDENTIFICATION from
-commissioning records (scribble + wanders, tracker on, no program knowledge) land the
-parameters inside that tolerance — the EMPS rig's IDIM-LS recovered a real machine's
-parameters to 0.8%, which is the precedent. On this sandbox the twin's structure is
-known exactly; on a real machine the structure template (articulated chain) is declared
-by the engineer and the parameters are fitted, which is the product form: "learn the
-parameters that have no closed form; compute the ones that do."
+**STAGE B — THE PARAMETER TOLERANCE IS WIDE (`compile30/apply30.mjs`).** Compile against
+a deliberately WRONG twin, apply the compiled correction to the true machine (rounded,
+lap 1): joint stiffness +10% is FREE (2.67e-4/5.57e-4 vs the exact twin's
+2.45e-4/5.58e-4), a backlash-ignorant twin is free (2.62e-4/5.71e-4), K+5%/E−5% costs
+2.3x (5.62e-4/7.50e-4), and the one sensitive axis is the LINK MODULUS: E−10% lands at
+1.18e-3/1.06e-3 — still e-3, still 11x/5x over open loop. The identification target is
+therefore merely E within ~5% and K within ~10%.
+
+**STAGE C — IDENTIFICATION CLOSES THE LOOP EXACTLY (`stageC.mjs`).** Output-error
+identification on ONE commissioning wander record (28k steps of random open-path
+contouring, tracker on, no program knowledge): a 5x5 grid over (K, E) plus two
+refinement rings, each evaluation an exact seeded replay of the wander against candidate
+parameters. The objective is sharply conditioned — machine-zero at the true values,
+1e-4–2e-3 at the +-0.5/+-0.005 neighbors — and recovers K and E EXACTLY. The compile
+with the FITTED twin, applied to the true machine: **LAP 1 = 2.45e-4/5.58e-4, identical
+to the exact-twin ceiling.**
+
+**THE PIPELINE, END TO END, UNDER THE OWNER'S CONSTRAINTS:** tracker used only at
+initial commissioning (the wander record); parameters identified from that record alone;
+any program compiled at load purely in software (simulate → guarded deconvolution →
+pre-roll), zero machine laps, zero tracker; **first lap at 2.45e-4/5.58e-4 (rounded),
+3.99e-4/2.18e-4 (circle), 1.27e-3/2.10e-3 (sharp)** — programs the identification never
+saw. Lap-1 accurate, path-agnostic, tracker-free at load.
+
+**WHAT REMAINS HONESTLY OPEN:** on this sandbox the twin's STRUCTURE matches the plant
+exactly, so stage C measures parameter identification only; a real machine adds
+structural mismatch, for which stage B's graceful degradation and the EMPS closed-form
+precedent (275x from four published parameters) are the encouraging evidence, and the
+§40 Refiner exists as the online trim for whatever a fitted-structure twin leaves. The
+product form stands: the engineer declares the structure template (articulated chain),
+commissioning fits its parameters, programs compile through it — "learn the parameters
+that have no closed form; compute the ones that do."
 
 ### The eight targets, restated (replacing the stale table above)
 
