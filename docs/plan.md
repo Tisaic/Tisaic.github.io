@@ -4544,6 +4544,19 @@ scored runs only ever drive the commissioning path:
    deployed machine survives a program switch; these were its not-rebuilt dependencies),
    and the page re-attaches on every program change.
 
+**AND A FOURTH DEFECT, THE ONE THE FIRST THREE UNCOVERED: 0.4 STEPS OF PHASE SLIP PER
+LAP.** With the ladder fixed, the deployed machine still DIVERGED on its own program —
+6.5e-2 climbing to 8e-1 over ~90 laps on the real page — while the Node parity bench held
+flat. Driving ONE commissioned ladder under both stepping disciplines isolated it: the
+command wraps at the path's TRUE fractional lap period (7356.6) while the deploy look-ahead
+wrapped at its integer ceiling (7357), so a continuously-counted deployment slips the
+correction's phase against the machine forever; commissioning never sees it because
+lapSync restarts its counter every lap. `actAt` now derives its intra-lap position from
+the true period — the discipline scoring always had — and the 20-lap two-style
+verification reads 1.00x/0.99x, flat. The headless page-press instrument
+(`test/_pagepress.mjs`) is what caught it: the operator's report was the only detector,
+and the instrument turned the report into a number.
+
 The sub-8-minute estimate was the bench's ladder, not the page's — old and new mixed, as
 the owner said. With the ladders unified the honest expectation on screen is roughly half
 the first press (the rounded keeps the drop-one pass the sharp bench never triggered, and
