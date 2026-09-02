@@ -125,7 +125,7 @@ check('and still not worse than that machine\'s own open loop',
 // climbing 4.6e-3 → 5.3e-3. Eight laps THROUGH THE ACCESSOR (the form the page runs),
 // both halves asserted: no phase bin spikes, and no lap-over-lap growth.
 console.log('driving 8 laps through the compiled accessor (the tail check)…');
-const acc = applyCompiled({ du: compiled.du, sample: SS, lapSteps: path.lap });
+const acc = applyCompiled({ du: compiled.du, sample: SS, lapSteps: path.lap, preRoll: PRE });
 const mTail = await buildArm({ K: TRUE_K, E: TRUE_E });
 homeArm(mTail.arm, mTail.servo, path);
 const tail8 = await drivePath({ arm: mTail.arm, servo: mTail.servo, path, sample: SS,
