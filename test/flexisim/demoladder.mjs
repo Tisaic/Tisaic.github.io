@@ -111,6 +111,12 @@ let hostRef = null;
 }
 
 const report = await hostRef.auto.commission(hostRef);
+if (report.classic) {
+  console.log(`\n  conventional commission: laps ${report.classic.laps}, `
+    + `headroom ${report.classic.headroom?.toFixed(3) ?? 'n/a'}, `
+    + `why ${report.classic.why || '(ran its budget)'}, `
+    + `hist ${(report.classic.hist || []).map((h) => h.toExponential(2)).join(' ')}`);
+}
 console.log(`\n  demo rung: ${JSON.stringify(report.demo || null)}`);
 console.log(`  shipped: ${JSON.stringify(hostRef.auto.deployed)}`);
 console.log(`  total ${((Date.now() - T0) / 60000).toFixed(1)} min`);
