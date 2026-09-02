@@ -92,6 +92,8 @@ let hostRef = null;
   hostRef = makeArmHost({
     makeMachine: fresh, path, lap: LAP, K, centre,
     demo: {},
+    // PROBE=0 restores decision-grade runs for the conventional rung's commissioning.
+    ...(process.env.PROBE === '0' ? {} : { probeLaps: { warmup: 1, avg: 2 } }),
     ...(process.env.DEMO === 'diamond' ? { demoPath: [diamond(4e-3), diamond(8e-3)] } : {}),
     onRung: (r) => console.log(`  [${((Date.now() - T0) / 60000).toFixed(0)}m] `
       + `${r.name}  ${r.score.toExponential(4)}`
