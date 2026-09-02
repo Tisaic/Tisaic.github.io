@@ -117,5 +117,37 @@ check('mismatch degrades the compiled machine (observable)',
 check('and still not worse than that machine\'s own open loop',
   soft[0][0] < openSoft.at(-1)[0] * 1.2 && soft[0][1] < openSoft.at(-1)[1] * 1.2);
 
+// 4) THE PHONE'S FIELD DEFECT, PINNED: on a SOFT machine (K=1, E=0.06) the page's
+// commissioning identified K̂=1.47/Ê=0.0525 — because its coarse grid THINNED the
+// ladders, dropping E=0.06, and the refinement rings walked into the K/E compensation
+// valley instead of back to truth. A stiff-only test passed before and after that bug,
+// which is why it shipped. This phase identifies the soft machine over the page's FULL
+// ladders on the page's own 900-sample record length and demands exactness.
+console.log('soft-machine identification over the page ladders (the phone defect)…');
+const SOFT_K = 1, SOFT_E = 0.06;
+PG.K = SOFT_K; PG.E = SOFT_E;
+const softM = await makeArm();
+PG.K = TRUE_K; PG.E = TRUE_E;
+homeArm(softM.arm, softM.servo, wpath);
+const softRec = await drivePath({ arm: softM.arm, servo: softM.servo, path: wpath,
+  sample: SS, steps: 900 * SS });
+await destroyArm(softM);
+const softSims = armSimulators({ buildArm, destroyArm,
+  home: async (m, path) => homeArm(m.arm, m.servo, path), sample: SS });
+const softFit = await identifyTwin({
+  record: softRec.e,
+  simulate: softSims.identifySim(wpath, 900),
+  space: [
+    { name: 'K', values: [0.25, 0.5, 1, 2, 4, 8, 16, 20, 32] },
+    { name: 'E', values: [0.03, 0.06, 0.10, 0.15, 0.22] },
+  ],
+  refine: 2,
+});
+console.log(`soft machine identified K=${softFit.params.K.toPrecision(4)} E=${softFit.params.E.toPrecision(4)} J=${softFit.J.toExponential(2)}`);
+check('the soft machine identifies exactly over the full page ladders',
+  Math.abs(softFit.params.K - SOFT_K) <= 0.05 * SOFT_K
+  && Math.abs(softFit.params.E - SOFT_E) <= 0.05 * SOFT_E,
+  `${softFit.params.K}/${softFit.params.E}`);
+
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall checks passed');
 process.exit(failures ? 1 : 0);

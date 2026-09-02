@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:699,built:"2026-09-02T19:08:34Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:700,built:"2026-09-02T21:45:52Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -7670,8 +7670,12 @@ function syncPath() {
   const twn = $('ctlP').value === 'twin';
   const trow = $('twinRow');
   if (trow && (trow.style.display === 'none') === twn) trow.style.display = twn ? '' : 'none';
-  set('b-twinComm', !armP || busyP || twinBusy);
-  set('b-twinCompile', !armP || busyP || twinBusy || !twinFit);
+  // THE TWIN'S BUTTONS OBEY THE SAME DOCTRINE AS EVERY CONTROL ON THIS ROW: disabled
+  // while ANY commissioning owns the machine — including ⑨'s, which `idle` does not
+  // carry. The first phone session pressed Commission twin DURING an 18-minute ⑨ run,
+  // two drivers on one live arm, which is exactly the interference this line forbids.
+  set('b-twinComm', !idle || twinBusy || autoComm);
+  set('b-twinCompile', !idle || twinBusy || autoComm || !twinFit);
   // A BOX THAT CANNOT DO ANYTHING SAYS SO. Ticking `pilot` before the pilot has vouched
   // for itself would otherwise look like a stack that simply does not help.
   set('stk-comp', !cP);
@@ -7822,7 +7826,7 @@ function twinStatusLine() {
       : ' | not compiled for a program yet');
 }
 async function twinCommission() {
-  if (!armP || busyP || twinBusy) return;
+  if (!armP || busyP || twinBusy || autoComm || commissionP || sweepP || pilotComm || ik6Comm) return;
   twinBusy = true; busyP = true; runP = false;
   const stat = $('twinStat');
   setPathBadge('⑩ commissioning the twin…', 'warn'); syncPath();
@@ -7845,14 +7849,16 @@ async function twinCommission() {
     const nSamp = Math.min(900, Math.floor(wpath.lap / TWIN_SS) - 2);
     const rec = await twinDrive({ arm: armP, servo: servoP, path: wpath,
       sample: TWIN_SS, steps: nSamp * TWIN_SS, yield_: twinYield });
-    // IDENTIFY over the sliders' WHOLE ladders — the domains, never the positions. The
-    // coarse pass thins each ladder (endpoints kept) and two rings refine; unbuildable
-    // candidates (the CFL gate) are recorded refusals.
-    const thin = (L) => L.filter((_, i) => i % 2 === 0 || i === L.length - 1);
+    // IDENTIFY over the sliders' WHOLE ladders — the domains, never the positions, and
+    // EVERY rung of them: a thinned coarse grid dropped E=0.06 and the refinement rings
+    // walked into the K/E compensation valley instead of back to truth — the owner's
+    // phone read K̂=1.47/Ê=0.0525 on a K=1.00/E=0.06 machine, reproduced to the digit in
+    // Node and exact (J=0) with the full ladders on the same 900-sample record.
+    // Unbuildable candidates (the CFL gate) are recorded refusals.
     const fit = await identifyTwin({
       record: rec.e,
       simulate: twinSims().identifySim(wpath, nSamp),
-      space: [{ name: 'K', values: thin(KP_LADDER) }, { name: 'E', values: thin(EP_LADDER) }],
+      space: [{ name: 'K', values: KP_LADDER.slice() }, { name: 'E', values: EP_LADDER.slice() }],
       refine: 2,
       onProgress: (m) => { stat.textContent = `identifying: ${m}`; },
     });
@@ -7869,7 +7875,7 @@ async function twinCommission() {
   }
 }
 async function twinCompileProgram() {
-  if (!armP || busyP || twinBusy || !twinFit || !profP) return;
+  if (!armP || busyP || twinBusy || autoComm || commissionP || sweepP || pilotComm || ik6Comm || !twinFit || !profP) return;
   twinBusy = true; busyP = true; runP = false;
   const stat = $('twinStat');
   setPathBadge('⑩ compiling this program in software…', 'warn'); syncPath();
