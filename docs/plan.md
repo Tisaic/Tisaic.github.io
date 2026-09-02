@@ -4400,6 +4400,28 @@ ladder; and target 4's next cut is sitting in this table — 5 of the 8.1 minute
 the conventional rung's 23 laps, a rung that was then REFUSED, so a cheaper early-exit
 for a rung that is measuring nothing is the largest remaining commissioning lever.
 
+**AND THE DEMO IS NOW DESIGNED, WITH THE ENGINEER'S PROGRAM AS THE OVERRIDE — the owner's
+next directive, measured the same day.** `lib/flexisim/demopath.js` generates the demo the
+block asks the machine to run when no program is supplied: random sharp polygons plus
+stars across a feed ladder, every design element a §36/§37 measurement (stars bracket a
+square's 90° corner from below where convex shapes bracket it from above; diversity pays
+under the record scale; feed² spans the severity knots), defaults reproducing the measured
+diet byte for byte (pinned against the rig's generator before the rig was cut over to a
+wrapper). The host falls back to it whenever the demo rung is armed without a `demoPath`;
+a supplied program replaces the geometry, never the machinery; and the report stamps
+`designed: true` so the two installations cannot be confused. Pressed on the same bench:
+
+| demo | ②b residual | gain over cascade | fit |
+|---|---|---|---|
+| diamond (engineer-supplied) | 1.8014e-1 | 1.43x | 189 fitted, 35 kept scribble |
+| **designed (nothing supplied)** | **1.7692e-1** | **1.45x** | **224 fitted, 0 kept scribble** |
+
+The designed demo OUTPERFORMS the supplied one — modestly on the residual, decisively on
+fit completeness: every lead carries real corner weights where the diamond left 35 on the
+scribble fallback. So the one press now needs no program at all to reach 3.12x in 8.5
+minutes, and handing it one is an override, not a requirement — exactly the contract the
+owner stated.
+
 **⑥ MEASURED, AND THE TANK'S TOOL IS THE ARM'S SECOND CHOICE.** Six draws on the arm
 (rounded 5.31–6.18x, circle 5.19–10.02x — real spread), ensemble of the 4-draw majority
 layout: rounded 5.78x, held-out circle **7.47x against the median draw's 6.48x** — outcome

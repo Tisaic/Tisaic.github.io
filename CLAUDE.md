@@ -1143,7 +1143,19 @@ that matches it** — the point-to-point tabs measure a different question.
   record-scale polygon+star banks, frozen, no guided phase, reading **2.87x/7.72x/6.18x**
   (sharp/circle/rounded) with commissioning truth only. The engineered rival on the same
   machine (plan §34: rigid model + datasheet Kalman + held-pose calibration, truth-free)
-  reads 1.01x/1.13x/1.02x.
+  reads 1.01x/1.13x/1.02x. **AND THE COMPOSITION IS BEHIND THE ONE PRESS (plan §37):**
+  `AutoStack` rung ②b fits record-scale corner banks on a DEMO the engineer hands the block
+  at wiring time — or, supplied nothing, on a demo the block DESIGNS for itself
+  (`lib/flexisim/demopath.js`: polygons + stars across a feed ladder, every design element a
+  measurement) — recorded by the shared host through the one routing, scored like any rung,
+  reversibly disarmed if refused. Pressed on the soft arm's sharp square with the diamond as
+  demo: conventional refused correctly, cascade 2.12x, demo banks 1.43x on top, 3.06x total
+  in 8.1 minutes; the DESIGNED demo beats the supplied one (1.7692e-1 against 1.8014e-1,
+  224/0 fitted-vs-kept against 189/35) so a program is an override, not a requirement. The
+  displacement sweep pins the demo-path contract's safety half: banks fade monotonically with
+  distance from the demo (3.81x → 2.75x at d=4.2), never below the base model, and the
+  workspace-sized commissioning box HELPS the home program (1.77x/3.81x against 1.69x/3.64x).
+  The page's ⑨ does not yet offer a demo input — stated, not wired.
   THE LAW COMPLETED TO SIX PLANTS AND SHARPENED (plan §31): **the deploy gate's own 1.1x
   threshold is ALSO the adaptation selector** — Wood-Berry (0.01x) and the mill (1.07x) below
   it stay null-or-harmful force-deployed; the barrel at exactly 1.10x FLIPS from 0.67x harmful

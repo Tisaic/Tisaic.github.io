@@ -78,7 +78,9 @@ async function fresh() {
 }
 
 const T0 = Date.now();
-console.log(`\nthe one-press demo ladder: sharp square scored, diamond demo, K ${K} / E ${E}\n`);
+console.log(`\nthe one-press demo ladder: sharp square scored, `
+  + `${process.env.DEMO === 'diamond' ? 'diamond demo' : 'DESIGNED demo (no program supplied)'}, `
+  + `K ${K} / E ${E}\n`);
 const centre = [0, 0];
 let hostRef = null;
 {
