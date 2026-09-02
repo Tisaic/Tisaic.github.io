@@ -17,7 +17,7 @@
  *
  * Full tier only: one wander record + a ~40-evaluation identification + a compile.
  */
-import { identifyTwin, compileTwin } from '../../lib/pilot/twin.js';
+import { identifyTwin, compileTwin, applyCompiled } from '../../lib/pilot/twin.js';
 import { drivePath, twinResponse, armSimulators } from '../../lib/flexisim/twin.js';
 import { randomWander } from '../../lib/flexisim/demopath.js';
 
@@ -116,6 +116,42 @@ check('mismatch degrades the compiled machine (observable)',
   `${soft[0][0].toExponential(2)}/${soft[0][1].toExponential(2)} vs ${laps[0][0].toExponential(2)}/${laps[0][1].toExponential(2)}`);
 check('and still not worse than that machine\'s own open loop',
   soft[0][0] < openSoft.at(-1)[0] * 1.2 && soft[0][1] < openSoft.at(-1)[1] * 1.2);
+
+// 3b) THE TAIL, DRIVEN PAST THE COMPILED SPAN — the owner's second field defect. The
+// artifact holds pre-roll + 3 laps; production runs longer, and the first accessor tiled
+// the settled lap by a ROUNDED sample count against the FRACTIONAL true lap: a
+// 0.4-sample-per-lap phase slip plus a du step at one fixed lap phase — measured 16.6x
+// the lap median AT THE START CORNER, exactly where the owner saw it, with per-lap rms
+// climbing 4.6e-3 → 5.3e-3. Eight laps THROUGH THE ACCESSOR (the form the page runs),
+// both halves asserted: no phase bin spikes, and no lap-over-lap growth.
+console.log('driving 8 laps through the compiled accessor (the tail check)…');
+const acc = applyCompiled({ du: compiled.du, sample: SS, lapSteps: path.lap });
+const mTail = await buildArm({ K: TRUE_K, E: TRUE_E });
+homeArm(mTail.arm, mTail.servo, path);
+const tail8 = await drivePath({ arm: mTail.arm, servo: mTail.servo, path, sample: SS,
+  steps: Math.ceil(path.lap * 8), du: acc, preRoll: PRE });
+await destroyArm(mTail);
+{
+  const L = Math.round(path.lap / SS);
+  const lapR = tail8.perLap.map((p) => Math.hypot(p[0], p[1]));
+  console.log(`  per-lap rms: ${lapR.map((v) => v.toExponential(1)).join(' ')}`);
+  const bins = Array.from({ length: 20 }, () => ({ s: 0, n: 0 }));
+  for (let i = 2 * L; i < tail8.e.length; i++) {
+    const ph = ((i * SS) % path.lap) / path.lap;
+    const b = Math.min(19, Math.floor(ph * 20));
+    bins[b].s += tail8.e[i][0] ** 2 + tail8.e[i][1] ** 2; bins[b].n++;
+  }
+  const prof = bins.map((b) => Math.sqrt(b.s / Math.max(1, b.n)));
+  const worst = Math.max(...prof), med = [...prof].sort((a, b2) => a - b2)[10];
+  console.log(`  phase bins (laps 3+): worst ${worst.toExponential(2)} vs median ${med.toExponential(2)} (${(worst / med).toFixed(1)}x)`);
+  check('no lap-phase hotspot past the compiled span (the start-corner seam is gone)',
+    worst < 3.5 * med, `${(worst / med).toFixed(1)}x`);
+  check('no lap-over-lap drift in the tail (the phase slip is gone)',
+    lapR.at(-1) < lapR[2] * 1.5,
+    `lap3 ${lapR[2].toExponential(2)} -> lap8 ${lapR.at(-1).toExponential(2)}`);
+  check('the tail laps hold the compiled accuracy (within 2x of lap 2)',
+    lapR.at(-1) < lapR[1] * 2, `${lapR.at(-1).toExponential(2)} vs ${lapR[1].toExponential(2)}`);
+}
 
 // 4) THE PHONE'S FIELD DEFECT, PINNED: on a SOFT machine (K=1, E=0.06) the page's
 // commissioning identified K̂=1.47/Ê=0.0525 — because its coarse grid THINNED the

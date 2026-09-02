@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:702,built:"2026-09-02T21:58:36Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:703,built:"2026-09-02T23:13:47Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -7889,12 +7889,16 @@ async function twinCompileProgram() {
     const H = await twinProbe({ buildArm: () => twinBuildAt(twinFit),
       destroyArm: twinDestroyArm, path: profP, sample: TWIN_SS, yield_: twinYield });
     const res = await compileTwin({
-      simulate: twinSims().compileSim(profP, { laps: 2, preRoll: TWIN_PRE }),
-      H, iters: 7,
+      // BENCH QUALITY, NOT A BUDGET CUT: 3 laps and 11 iterations are the measured
+      // configuration behind every §42 number. The first page build shipped 2/7 to save
+      // compile minutes and the owner read the difference as "performance is very poor";
+      // the compile is offline software time and buys delivered accuracy.
+      simulate: twinSims().compileSim(profP, { laps: 3, preRoll: TWIN_PRE }),
+      H, iters: 11,
       onProgress: (m) => { stat.textContent = m; },
     });
     twinDu = { f: applyCompiled({ du: res.du, sample: TWIN_SS,
-      tailSamples: Math.max(8, Math.round(profP.lap / TWIN_SS)) }), report: res.report };
+      lapSteps: profP.lap }), report: res.report };
     twinFor = { shape: $('shapeP').value, feed: pathFeed() };
     console.log(`[flexisim] ⑩ compiled ${twinFor.shape}@${twinFor.feed.toExponential(2)}: `
       + `sim rms ${res.report.rms.toExponential(2)} over ${res.report.iters.length} iterations`);
