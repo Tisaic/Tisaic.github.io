@@ -4946,6 +4946,56 @@ deconvolution machinery then turns it into a lap-1 feedforward. That build is ne
 random-wander generator (program-regime, non-periodic, the record the theory demands)
 and the physics-signal computation are already written and cached for it.
 
+## §42 — THE COMPILED TWIN, STAGE A: LAP-1 AT e-3 TO e-4 ON ALL THREE PROGRAMS, ZERO MACHINE LAPS AT LOAD
+
+The twin route's first stage ran with the PERFECT twin (the plant itself as the model),
+which measures the CEILING of the compile concept and debugs the delivery with the model
+axis held at zero. The compile: simulate the twin tracing the program, take the
+whole-record error, update a correction by frequency-domain 2x2 deconvolution against
+the twin's own centre-pose step response (Tikhonov-regularized per harmonic, cutoff
+where |H| falls below 2% of peak, opened to 0.8% once the guard holds), re-simulate,
+iterate under a MONOTONE BACKTRACKING guard — all software, zero machine laps, zero
+tracker at load. Two defects surfaced and were fixed by measurement:
+
+- **LAP 1 IS AN ENTRY-CAUSALITY PROBLEM, NOT A COMPILE DEFECT.** The periodic-lap compile
+  delivered laps 2-3 exactly and left lap 1 at ~1e-2 (§27 run); compiling the whole
+  record from home barely moved it — correcting a transient at t=0 needs correction
+  energy BEFORE t=0, and there is no before. The fix is the ILC lesson from the record
+  ("the flex has to be LOADED before the vertex") at program scale: a PRE-ROLL — 1500
+  samples of dwell at the start pose with the correction ramping in — after which lap 1
+  equals the settled laps.
+- **SHARP NEEDS THE GUARD AND THE CUTOFF.** Unguarded full-band inversion with a
+  centre-pose H pumps on the corner harmonics (iter 3: 1.7e-2/3.5e-2, worse than open
+  loop); guarded and bandwidth-limited it descends monotonically.
+
+**THE STAGE-A NUMBERS (`compile-falsifier29.mjs`), fresh machine, correction on from
+the pre-roll, FIRST LAP:**
+
+```
+             open loop (settled)   COMPILED LAP 1        laps 2-3
+rounded      1.3e-2 / 5.3e-3       2.45e-4 / 5.58e-4     1.2e-4 / 3.4e-4
+circle       7.0e-3 / 3.1e-3       3.99e-4 / 2.18e-4     3.1e-5 / 6.8e-5
+sharp        2.2e-2 / 1.7e-2       1.27e-3 / 2.10e-3     1.2e-3 / 1.9e-3
+```
+
+All three programs at or below ~e-3 on the FIRST LAP — the owner's requirement, at the
+ceiling. The compiled artifact is a per-program correction trajectory plus pre-roll,
+derived entirely from the model at program load (the owner's original "compile the
+program through the identified plant", §39 family 1, delivered in the form the
+twenty-falsifier campaign proved necessary: by SIMULATION, because regression's windows
+truncate a 6-9k-step memory and closed laps alias it).
+
+**WHAT STAGE A DOES NOT PROVE, STATED:** the twin was exact. The product claim rests on
+stages B and C: (B) HOW FAST does compile quality degrade with twin parameter error —
+perturb the twin's stiffness/modulus/backlash, compile against the wrong twin, apply to
+the true machine, measure the tolerance; (C) does OUTPUT-ERROR IDENTIFICATION from
+commissioning records (scribble + wanders, tracker on, no program knowledge) land the
+parameters inside that tolerance — the EMPS rig's IDIM-LS recovered a real machine's
+parameters to 0.8%, which is the precedent. On this sandbox the twin's structure is
+known exactly; on a real machine the structure template (articulated chain) is declared
+by the engineer and the parameters are fitted, which is the product form: "learn the
+parameters that have no closed form; compute the ones that do."
+
 ### The eight targets, restated (replacing the stale table above)
 
 | target | state |
