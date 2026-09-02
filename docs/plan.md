@@ -4372,6 +4372,34 @@ The experiment ladder, cheapest-falsifier first: ① wall-clock breakdown (DONE,
 ⑥ ensemble; ⑦ the integrated one-press bench — `autostack` takes the demo alongside
 signals and limits and ships the whole composition.
 
+**⑦ THE ONE PRESS RUNS END TO END, AND THE DEMO RUNG SHIPS ON ITS FIRST OUTING.**
+`fitCornerBanks` moved to `lib/pilot/banks.js` (the rig re-exports it — every bench
+byte-identical by construction), `AutoStack` gained rung ②b (demo banks on the cascade's
+first layer, scored like any rung, reversibly disarmed if refused, skipped states reported),
+and the shared host gained `recordDemo` — the demo driven exactly as the pilot's
+commissioning truth saw the machine, one routing (rule 61). Controls first: the EMPS
+no-demo button came back green (33 checks — the rung is inert when no demo is supplied).
+Then `test/flexisim/demoladder.mjs` pressed the button on the soft arm, sharp square
+scored, DIAMOND as the demo — a geometry the ladder is never scored on:
+
+```
+as it arrived              5.5131e-1
+conventional (self-tuned)  refused — correctly, 1.00x
+pilot cascade depth 1      2.6037e-1   2.12x
+pilot cascade depth 2      2.5724e-1   1.01x
+②b demo banks              1.8014e-1   1.43x   ← ships (189 fitted, 35 kept scribble)
+total: 8.1 minutes, wire → demo → press
+```
+
+3.06x over the open loop with nothing supplied but signals, limits and a demo, every
+refusal correct, and the banks earned their place through the ladder's own margin
+machinery rather than by being believed. The owner's amended contract is now a measured
+machine behavior, not a design. TWO OPEN ITEMS it exposes: the page (⑨ on flexisim.html)
+does not yet offer a demo input, so the one press on SCREEN still runs the demo-less
+ladder; and target 4's next cut is sitting in this table — 5 of the 8.1 minutes went to
+the conventional rung's 23 laps, a rung that was then REFUSED, so a cheaper early-exit
+for a rung that is measuring nothing is the largest remaining commissioning lever.
+
 **⑥ MEASURED, AND THE TANK'S TOOL IS THE ARM'S SECOND CHOICE.** Six draws on the arm
 (rounded 5.31–6.18x, circle 5.19–10.02x — real spread), ensemble of the 4-draw majority
 layout: rounded 5.78x, held-out circle **7.47x against the median draw's 6.48x** — outcome
