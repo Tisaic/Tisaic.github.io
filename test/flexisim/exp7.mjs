@@ -276,7 +276,6 @@ const rec = await driveLaps(5, null, 0);
       }
       return out;
     });
-    const nf = X[0].length;
     const A = Array.from({ length: nf }, () => new Float64Array(nf));
     const b = new Float64Array(nf);
     for (let q = 0; q < X.length; q++) for (let i = 0; i < nf; i++) {
