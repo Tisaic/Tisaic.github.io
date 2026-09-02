@@ -4618,10 +4618,28 @@ route into the pilot made the machine worse — each failure convicting one requ
 | guided online on demo diversity | 0.88x — worse than OPEN LOOP; circle destroyed 14x | same shared-vector structure, more energy to corrupt with |
 
 Controls held throughout: the zero-extended arming is byte-identical before learning, and
-every refusal reverted cleanly. The surviving design is the untested triple: PER-LEAD fit
-(only exp 1 had it) on DEPLOYED-distribution rows (only exps 2–4 had them) with the
-correction's own contribution DECONVOLVED offline through the identified hGrid (none had
-it) — experiment 5, in flight.
+every refusal reverted cleanly. The "surviving design" — per-lead, deployed-distribution, hGrid-deconvolved — FAILED
+IDENTICALLY (0.85x, worse than open loop), and five convictions name the real law:
+
+**THE RESIDUAL MODEL AND THE DEPLOYED CONTROLLER FORM A LOOP.** Identification on the
+closed loop's own records is self-referential: the QP inverts the model, the inversion
+drives the machine off the manifold the rows came from, and the model's null space —
+invisible to any offline R², which is why 0.9917 lied five times — becomes active control
+error. The scribble exists precisely to span what the QP will do; program-class rows,
+however geometrically diverse, cannot. This is the deep form of the recorded EMPS lesson
+(program identification 12.70x → 3.93x, "collinear trapezoids") and of rule 35 (a soft
+sensor inside a loop is positive feedback).
+
+**THE ONE MEASURED-POSITIVE ROUTE** is the separate feedforward stage OUTSIDE the pilot:
+the pose-modulated FIR applied directly at the refs with a lead, +1.30x naive, converging
+to 4.13e-2 (+1.43x) under iterative refit — the state-addressed analogue of what ILC does
+about self-reference: iterate on the machine rather than invert a one-shot model. The
+owner's "settles lap by lap" intuition was this, materialized: iteration is how a
+self-referential inverse is honestly computed, and a table that is a MODEL (features, not
+lap index) keeps the transfer the memory never had. That stage — hGrid-informed inverse,
+iterative refit to convergence, frozen, scored by the ladder — is the defined next build;
+rung ②c stays in the ladder opt-in (`demo: { lag: true }`) as the recorded refusal until
+it exists.
 
 ### The eight targets, restated (replacing the stale table above)
 
