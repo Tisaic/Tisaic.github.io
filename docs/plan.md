@@ -4641,6 +4641,87 @@ iterative refit to convergence, frozen, scored by the ladder — is the defined 
 rung ②c stays in the ladder opt-in (`demo: { lag: true }`) as the recorded refusal until
 it exists.
 
+## §39 — THE e-3 CAMPAIGN: THE PREVIEW FAMILY CONVICTED, AND TWELVE FALSIFIERS ON "COMPILE THE PROGRAM"
+
+The owner set the bar — the error gets to e-3 — and licensed theorizing while the last
+experiment ran. Three families came out of that session: (1) COMPILE THE PROGRAM through an
+identified plant model (evaluate the model on the program's own command stream at load time,
+deconvolve through hGrid, deploy the correction — a model evaluation, not a memory, IF the
+model was identified program-free); (2) a MODEL-PREDICTIVE FEED GOVERNOR (slow down where
+the predicted error exceeds target — e-3 by construction, paid in cycle time); (3) a
+SOFT-SENSED SLOW TRIM (integrate an estimated error — feedback, which iteration has already
+shown is how a self-referential inverse is honestly computed). Family 1 had the cheapest
+falsifier — pure prediction, zero control risk — so it went first, and twelve falsifiers
+later it is dead for the right reasons, with the mechanism mapped.
+
+**THE PREVIEW FAMILY IS CLOSED FIRST.** §38's "defined next build" — the iterative
+pose-modulated FIR stage — was built two more ways and convicted both times. The scalar-lead
+ladder stalls at 4.13e-2 (+1.43x). The joint-preview form (5 preview offsets x 97 features)
+DIVERGED as fitted — the fit weights preview 0 hardest because it predicts best, but
+prediction is not actuation. Made actuation-aware (design columns convolved with the mean
+hGrid, raw features at apply time) it descends two passes and then walks off monotonically:
+5.92e-2 → 4.88 → **4.60** → 4.94 → 5.91 → 6.77 → 7.46 → 8.32 → 10.07e-2 by pass 8 — the
+unguarded iterative pump the ILC monotone safeguard exists for, and even its best iterate is
+1.29x. Three implementations, one band (~1.3–1.4x), divergence when pushed, against a bar
+that needs 60x. The family is closed.
+
+**WHAT THE TWELVE FALSIFIERS SETTLED**, in the order the evidence forced:
+
+1. **The prize is real: the open-loop error is 97–99.8% DETERMINISTIC in the command.**
+   rms(lap3 − lap2) on the same record: rounded 2.1e-4/1.1e-4 of 1.25e-2/5.1e-3 per channel,
+   circle down to 1.6e-5. A perfect model leaves ~1e-4. Nothing floors e-3 away.
+2. **The scribble does not span the programs** (its recorded job was the QP's manifold, not
+   this one): scribble-fit predicts the elbow NEGATIVELY on all three programs at every
+   reach tried, while self-fitting at 0.97–0.999.
+3. **A single-program fit is a MEMORY wearing a model's clothes** — rule 36, now measured
+   directly: self-fit 0.9999/0.9978, then R² −0.58/−13.9 on the SAME GEOMETRY at 3e-3
+   feed. It scores by knowing where in the cycle it is; a feed change moves the cycle.
+4. **Backlash is exonerated** — the ARM_BL=0 twin reproduces every number to three figures
+   (rounded elbow self-fit 0.7550 vs 0.7568; transfer equally catastrophic). The clean
+   control: nothing changed, so the hysteresis hidden state is not the wall.
+5. **The truth's frame is exonerated** — `routeSignals` returns J⁻¹(cmd)·(tool − fk(cmd)),
+   joint-space deflections, pose-consistent; no rotating-normal operator in the target.
+6. **WINDOW REACH WAS THE CAPACITY WALL — rule 37's third strike.** At reach 1620 steps the
+   rounded elbow tops out at R² 0.756 IN-SAMPLE with 245 features; extending the lag ladder
+   to 3240 steps takes every self-fit to 0.998–0.9999, **rms 1–4e-4 — AT the repeatability
+   floor**. The Newton–Euler products (cos q₂·ddq₁, sin q₂·dq₁², the terms the basis had
+   omitted — rule 40) helped only marginally; the reach was the lever. The loop's memory is
+   far longer than any window this project had used.
+7. **ONE weight vector holds all three programs at the floor** — pooled in-sample R²
+   0.994–0.9996, rms 1.2–5.7e-4. Capacity is fully proven.
+8. **And NO program-free diet identifies it.** Scribble: negative. Six designed demo paths
+   (the ②b diet): negative. Demos + scribble: negative. Leave-one-program-out: negative.
+   Smoothness regularization across the lag axis (curvature penalty, the physically right
+   prior for a filter): NULL at every strength. An exponential kernel bank (7 one-pole
+   filters per product, 175 dof, infinite reach, zero-init matching the machine's rest —
+   the rational-loop hypothesis): carries the memory compactly in-sample (elbow 0.988 where
+   lags gave 0.756 at matched dof) and transfers WORSE. Reach ladder to 6300 steps:
+   transfer climbs weakly and non-monotonically, confounded by its own overfitting.
+9. **Feed diversity is the strongest decorrelator found** — rounded at {3,4,6}e-3 pooled
+   gives the campaign's best cross-geometry shoulder (sharp 0.73, circle 0.67) and pulls
+   the elbow from −73.6 to −1.1 — and the MAXIMAL diet (scribble + demos + two geometries
+   x feeds) still asymptotes at ~0.5–0.7 shoulder, negative elbow. The identification
+   curve bends an order of magnitude below the 0.99+ the deconvolution needs.
+
+**THE MECHANISM, NAMED.** Each closed path is a one-dimensional manifold in a state space of
+pose x rate x acceleration x thousands of steps of history. Any fit on few manifolds finds A
+convolution that matches THOSE manifolds — many kernels fit any one manifold, and the true
+kernel is pinned only by input diversity comparable to the kernel's support. In-sample
+success at the floor plus universal transfer failure is what "the map is in the span but the
+data cannot single it out" looks like. This is the fourth independent arrival at "a
+calibration must span the range it is used over," and the first where the span needed is
+measured to be impractical: the diversity asymptote is the result.
+
+**WHAT DIES AND WHAT SURVIVES.** Compile-the-program dies as a first-lap mechanism: the only
+records that identify the program's own map are the program's (a memory, banned and now also
+measured as one — it dies at a feed change). The preview family dies. What survives for e-3,
+untested: the FEED GOVERNOR (family 2 — by construction, priced in cycle time, and the price
+is measurable as a Pareto front) and the SOFT-SENSED SLOW TRIM (family 3 — feedback, which
+converges on a 97–99.8%-repeatable error without identifying anything, and inherits the
+monotone-safeguard discipline). The falsifier scripts and cached records are scratchpad
+instruments (`compile-falsifier*.mjs`, `olrecs/demorecs/feedrecs.json`); nothing here
+touches shipped code, which is why twelve experiments cost one afternoon and zero risk.
+
 ### The eight targets, restated (replacing the stale table above)
 
 | target | state |
