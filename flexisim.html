@@ -6126,9 +6126,15 @@ function predistortP(refs, cmd) {
   }
   if (m === 'twin') {
     // the compiled artifact is indexed from its own engage (pre-roll included); the
-    // program restarted at kP = 0 when ⑩ engaged, so the step index lines up exactly
+    // program restarted at kP = 0 when ⑩ engaged, so the step index lines up exactly.
+    // CLAMPED AT THE ENGINEER'S CAP, NOT A CONSTANT FROM ANOTHER CORRECTION: the twin's
+    // du carries the WHOLE wind-up droop, which scales as 1/K exactly like pilotUMax()
+    // does — measured duPk 1.84 rad at K=1 (cap 2.0) and ~0.12 at K=16 (cap 0.15). A
+    // 0.4 constant here cut lap 1 by 5x on the soft machine (2.5e-2 against 5.3e-3,
+    // probe pinned at 0.400 all lap), which is ⑧'s DQ_CLAMP defect in a third costume.
     const d = twinDu.f(TWIN_PRE * TWIN_SS + kP);
-    return [clampDq(d[0], 0.4), clampDq(d[1], 0.4)];
+    const cap = pilotUMax();
+    return [clampDq(d[0], cap), clampDq(d[1], cap)];
   }
   const tg = servoP.jointTorques(refs);
   // ONE CODE PATH FOR BOTH CORRECTIONS, because they are the same model with the
@@ -7921,11 +7927,12 @@ async function engageTwin() {
   try {
     const c0 = profP.at(0);
     const [q1, q2] = armP.ik(c0.x, c0.y, true);
+    const cap = pilotUMax();          // the same authority the runtime branch clamps at
     for (let k = 0; k < TWIN_PRE * TWIN_SS; k++) {
       const d = twinDu.f(k);
       const tau = servoP.torques([
-        { theta: q1 + clampDq(d[0], 0.4), omega: 0, alpha: 0 },
-        { theta: q2 + clampDq(d[1], 0.4), omega: 0, alpha: 0 }]);
+        { theta: q1 + clampDq(d[0], cap), omega: 0, alpha: 0 },
+        { theta: q2 + clampDq(d[1], cap), omega: 0, alpha: 0 }]);
       armP.step(tau[0], tau[1], 1);
       if (k % 4000 === 0) await twinYield();
     }
