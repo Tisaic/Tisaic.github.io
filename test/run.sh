@@ -312,6 +312,9 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     t node test/flexisim/toolpath.test.mjs
     t node test/flexisim/pathilc.test.mjs
     t node test/flexisim/contour.test.mjs
+    # THE COMPILED TWIN (§42) — identify from one wander with the tracker, compile any
+    # program in software, deliver lap 1 at e-3/e-4. Agnostic core + arm adapter.
+    if [ "${SUITE}" = "full" ]; then t node test/flexisim/twin.test.mjs; fi
     # THE PILOT — route, limit, run, deploy. The excitation builder and the whole
     # pipeline on a plant that shares no physics with the arm are quick (the plant is
     # three scalar states); the arm end-to-end — commissioning ~110k lattice steps and
