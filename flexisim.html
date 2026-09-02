@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:697,built:"2026-09-02T18:57:12Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:698,built:"2026-09-02T19:03:20Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -567,6 +567,7 @@
         <option value="ikfree_ilc">⑦ fully learned + iterative learning on top</option>
         <option value="stack">⑧ the stack — conventional machine + pilot, switchable live</option>
         <option value="auto">⑨ THE BUTTON — the ladder commissions itself and ships the best prefix</option>
+        <option value="twin">⑩ compiled twin — the pilot models this machine, programs compile in software</option>
       </select>
       <!-- ⑨ THE LADDER'S OWN REPORT. Everything below is a number the ladder already
            produces and nothing rendered until now: the rungs it tried with what each
@@ -610,6 +611,27 @@
           conventional machine alone already leaves 5.7e-2, so the whole error the stack
           exists to remove has already gone. The <b>square</b> is a different program again
           — none of these numbers is measured there.</p>
+      </div>
+      <div class="controls" id="twinRow" style="display:none">
+        <button id="b-twinComm">Commission twin</button>
+        <button id="b-twinCompile">Compile this program</button>
+        <span class="v" id="twinStat">no twin — press Commission twin</span>
+        <p class="hint" id="twinHint">⑩ is the §42 pipeline. <b>Commission twin</b> drives a
+          random contour wander on THIS machine with the tracker and identifies the plant's
+          K and E by output error over the sliders' WHOLE ladders — nothing reads the slider
+          positions, so you can move them AFTER commissioning and watch the mismatch live.
+          <b>Compile this program</b> then simulates the fitted twin and compiles a lap-1
+          feedforward entirely in software — no machine laps, no tracker at load — with a
+          pre-roll that loads the flex before the first block (lap 1 is a causality
+          problem: correcting a transient at t=0 needs correction energy before t=0).
+          Selecting ⑩ with a compiled artifact restarts the program behind that pre-roll.
+          Change the PROGRAM or FEED and the artifact no longer applies and says so; change
+          K or E and it DELIBERATELY keeps applying — a §42 stage-B mismatch you can watch
+          (measured there: a corrector frozen across a plant change can be worse than none).
+          Both steps take minutes and report progress here. Bench numbers, exact twin:
+          lap 1 at 2.45e-4/5.58e-4 rounded, 3.99e-4/2.18e-4 circle, 1.27e-3/2.10e-3 sharp
+          (<code>test/flexisim/twin.test.mjs</code> pins 2.48e-4/6.50e-4 with the twin
+          IDENTIFIED rather than given).</p>
       </div>
     </div>
     <div class="controls">
@@ -1009,6 +1031,12 @@ import { ContourScore, decompose } from './lib/flexisim/contour.js';
 import { PathILC } from './lib/flexisim/pathilc.js';
 import { Pilot } from './lib/pilot/pilot.js';
 import { Stack } from './lib/pilot/stack.js';
+// ⑩ THE COMPILED TWIN (§42): the agnostic core (identify/compile/apply — no plant
+// knowledge) plus this plant class's adapter (drive loop, truth routing, probes).
+import { identifyTwin, compileTwin, applyCompiled } from './lib/pilot/twin.js';
+import { drivePath as twinDrive, twinResponse as twinProbe, armSimulators }
+  from './lib/flexisim/twin.js';
+import { randomWander } from './lib/flexisim/demopath.js';
 // THE BLACK BOX IS ITS OWN DIRECTORY, which is the boundary made visible: nothing under
 // lib/blackbox/ imports anything from lib/flexisim/, so it cannot learn about an arm even
 // by accident.
@@ -5630,6 +5658,15 @@ const EP_LADDER = [0.03, 0.06, 0.10, 0.15, 0.22];
 
 let armP = null, servoP = null, profP = null, holdP = null;
 let kP = 0, lapP = 0, runP = false, busyP = false;
+// ⑩ THE TWIN'S STATE, and the one set of artifacts a plant rebuild does NOT clear: the
+// fitted (K̂, Ê) and the compiled correction belong to the machine they were trained on,
+// and KEEPING them across a slider change is what makes the mismatch OBSERVABLE — the
+// status line shows fitted-vs-current, and §42 stage B is the measurement this
+// reproduces live. Everything else is nulled on rebuild because it silently becomes
+// yesterday's inverse; the twin is kept because showing that is the point.
+let twinFit = null, twinDu = null, twinFor = null, twinBusy = false;
+const TWIN_SS = 9;              // the twin's sample cadence, the rigs' own
+const TWIN_PRE = 1500;          // pre-roll samples (§42: lap 1 is a causality problem)
 let progPending = false;        // a feedrate change waiting for a lap boundary
 let scoreP = null, lapScoreP = null, cP = null, cFrom = null;
 /**
@@ -6082,6 +6119,12 @@ function predistortP(refs, cmd) {
     const o = ilcP.offset(cmd.s);
     return [clampDq(o[0], ILC_CLAMP), clampDq(o[1], ILC_CLAMP)];
   }
+  if (m === 'twin') {
+    // the compiled artifact is indexed from its own engage (pre-roll included); the
+    // program restarted at kP = 0 when ⑩ engaged, so the step index lines up exactly
+    const d = twinDu.f(TWIN_PRE * TWIN_SS + kP);
+    return [clampDq(d[0], 0.4), clampDq(d[1], 0.4)];
+  }
   const tg = servoP.jointTorques(refs);
   // ONE CODE PATH FOR BOTH CORRECTIONS, because they are the same model with the
   // constant coming from two different places: the analytic one is c = -1/K exactly,
@@ -6126,6 +6169,11 @@ function pathMode() {
   const want = $('ctlP').value;
   if (want === 'ident' && !cP) return 'open';
   if (want === 'ilc' && !ilcP) return 'open';
+  // ⑩ before a compile — or after the program/feed changed under a compiled artifact —
+  // quietly runs open, the same refusal shape as every uncommissioned mode here. A K/E
+  // change does NOT gate it: the mismatch staying live is the experiment (§42 stage B).
+  if (want === 'twin' && !(twinDu && twinFor && twinFor.shape === $('shapeP').value
+    && twinFor.feed === pathFeed())) return 'open';
   // A PILOT THAT HAS NOT VOUCHED FOR ITSELF IS NOT IN CHARGE: selecting ⑤ before the
   // verify round has measured an improvement quietly runs open — the same refusal shape
   // as ③ before commissioning and the closed loop before the lock.
@@ -7619,6 +7667,11 @@ function syncPath() {
   const stk = $('ctlP').value === 'stack';
   const row = $('stackRow');
   if (row && (row.style.display === 'none') === stk) row.style.display = stk ? '' : 'none';
+  const twn = $('ctlP').value === 'twin';
+  const trow = $('twinRow');
+  if (trow && (trow.style.display === 'none') === twn) trow.style.display = twn ? '' : 'none';
+  set('b-twinComm', !armP || busyP || twinBusy);
+  set('b-twinCompile', !armP || busyP || twinBusy || !twinFit);
   // A BOX THAT CANNOT DO ANYTHING SAYS SO. Ticking `pilot` before the pilot has vouched
   // for itself would otherwise look like a stack that simply does not help.
   set('stk-comp', !cP);
@@ -7728,8 +7781,148 @@ $('ctlP').addEventListener('change', () => {
   if ($('ctlP').value === 'ilc' && !ilcP && profP) makeILC(true);
   if ($('ctlP').value === 'pilot_ilc' && !ilc5P && profP) makeILC5(true);
   if ($('ctlP').value === 'ikfree_ilc' && !ilc6P && profP) makeILC6(true);
+  // ⑩ with a compiled artifact restarts the program behind its pre-roll so the artifact's
+  // step index and the machine's line up from the first block
+  if ($('ctlP').value === 'twin' && twinDu && armP && !busyP && !twinBusy) engageTwin();
   syncPath(); statsP();
 });
+
+// ---------------------------------------------------------------- ⑩ the compiled twin
+const twinYield = () => new Promise((r) => setTimeout(r));
+async function twinDestroyArm(m) { await m.arm.l1.destroy(); await m.arm.l2.destroy(); }
+async function twinHome(m, path) {
+  const c0 = path.at(0);
+  const q = m.arm.ik(c0.x, c0.y, true);
+  m.arm.setPose(q[0], q[1]);
+  for (let i = 0; i < 4000; i++) {
+    const tau = m.servo.torques([{ theta: q[0], omega: 0, alpha: 0 },
+      { theta: q[1], omega: 0, alpha: 0 }]);
+    m.arm.step(tau[0], tau[1], 1);
+    if (i % 4000 === 3999) await twinYield();
+  }
+}
+async function twinBuildAt(params) {
+  const b = await makePlantP(params.K, params.E);
+  return { arm: b.arm, servo: b.servo };
+}
+const twinSims = () => armSimulators({
+  buildArm: (p) => twinBuildAt(p || twinFit),
+  destroyArm: twinDestroyArm, home: twinHome, sample: TWIN_SS, yield_: twinYield });
+function twinStatusLine() {
+  const el = $('twinStat');
+  if (!el) return;
+  if (twinBusy) return;                 // progress text owns the line while working
+  if (!twinFit) { el.textContent = 'no twin — press Commission twin'; return; }
+  const K = KP_LADDER[+$('s-kP').value], E = EP_LADDER[+$('s-eP').value];
+  const mm = Math.abs(twinFit.K - K) > 1e-9 || Math.abs(twinFit.E - E) > 1e-9;
+  el.textContent = `twin K̂=${twinFit.K.toPrecision(3)} Ê=${twinFit.E.toPrecision(3)}`
+    + ` | machine K=${K.toFixed(2)} E=${E.toFixed(2)}${mm ? ' — MISMATCH (the experiment)' : ''}`
+    + (twinDu && twinFor
+      ? ` | compiled for ${twinFor.shape} @ ${twinFor.feed.toExponential(1)}`
+      : ' | not compiled for a program yet');
+}
+async function twinCommission() {
+  if (!armP || busyP || twinBusy) return;
+  twinBusy = true; busyP = true; runP = false;
+  const stat = $('twinStat');
+  setPathBadge('⑩ commissioning the twin…', 'warn'); syncPath();
+  try {
+    // THE RECORD: a random contour wander on the LIVE machine, tracker on — the
+    // commissioning event. A partial wander suffices for two parameters: the §42
+    // objective is sharply conditioned (machine-zero at truth, e-3 at the neighbours).
+    const mk = (s) => { let z = s >>> 0;
+      return () => (z = (z * 1664525 + 1013904223) >>> 0) / 4294967296; };
+    const wpath = randomWander(mk(301), pathFeed(), { centre: [12, 0] });
+    stat.textContent = 'recording the wander on this machine…';
+    const c0 = wpath.at(0);
+    const q0 = armP.ik(c0.x, c0.y, true);
+    armP.setPose(q0[0], q0[1]);
+    for (let i = 0; i < 4000; i++) {
+      const tau = servoP.torques([{ theta: q0[0], omega: 0, alpha: 0 },
+        { theta: q0[1], omega: 0, alpha: 0 }]);
+      armP.step(tau[0], tau[1], 1);
+    }
+    const nSamp = Math.min(900, Math.floor(wpath.lap / TWIN_SS) - 2);
+    const rec = await twinDrive({ arm: armP, servo: servoP, path: wpath,
+      sample: TWIN_SS, steps: nSamp * TWIN_SS, yield_: twinYield });
+    // IDENTIFY over the sliders' WHOLE ladders — the domains, never the positions. The
+    // coarse pass thins each ladder (endpoints kept) and two rings refine; unbuildable
+    // candidates (the CFL gate) are recorded refusals.
+    const thin = (L) => L.filter((_, i) => i % 2 === 0 || i === L.length - 1);
+    const fit = await identifyTwin({
+      record: rec.e,
+      simulate: twinSims().identifySim(wpath, nSamp),
+      space: [{ name: 'K', values: thin(KP_LADDER) }, { name: 'E', values: thin(EP_LADDER) }],
+      refine: 2,
+      onProgress: (m) => { stat.textContent = `identifying: ${m}`; },
+    });
+    twinFit = { K: fit.params.K, E: fit.params.E };
+    console.log(`[flexisim] ⑩ identified K=${twinFit.K} E=${twinFit.E} (J ${fit.J.toExponential(2)}, `
+      + `${fit.evals.filter((ev) => ev.refused).length} refusals)`);
+    await homeP();
+    setPathBadge('⑩ twin commissioned — press Compile this program', 'good');
+  } catch (err) {
+    console.error('⑩ commissioning failed:', err);
+    setPathBadge('⑩ commissioning failed — see console', 'bad');
+  } finally {
+    twinBusy = false; busyP = false; syncPath(); twinStatusLine();
+  }
+}
+async function twinCompileProgram() {
+  if (!armP || busyP || twinBusy || !twinFit || !profP) return;
+  twinBusy = true; busyP = true; runP = false;
+  const stat = $('twinStat');
+  setPathBadge('⑩ compiling this program in software…', 'warn'); syncPath();
+  try {
+    stat.textContent = 'probing the fitted twin…';
+    const H = await twinProbe({ buildArm: () => twinBuildAt(twinFit),
+      destroyArm: twinDestroyArm, path: profP, sample: TWIN_SS, yield_: twinYield });
+    const res = await compileTwin({
+      simulate: twinSims().compileSim(profP, { laps: 2, preRoll: TWIN_PRE }),
+      H, iters: 7,
+      onProgress: (m) => { stat.textContent = m; },
+    });
+    twinDu = { f: applyCompiled({ du: res.du, sample: TWIN_SS,
+      tailSamples: Math.max(8, Math.round(profP.lap / TWIN_SS)) }), report: res.report };
+    twinFor = { shape: $('shapeP').value, feed: pathFeed() };
+    console.log(`[flexisim] ⑩ compiled ${twinFor.shape}@${twinFor.feed.toExponential(2)}: `
+      + `sim rms ${res.report.rms.toExponential(2)} over ${res.report.iters.length} iterations`);
+    setPathBadge('⑩ compiled — select ⑩ to engage from lap 1', 'good');
+    if ($('ctlP').value === 'twin') await engageTwin();
+  } catch (err) {
+    console.error('⑩ compile failed:', err);
+    setPathBadge('⑩ compile failed — see console', 'bad');
+  } finally {
+    twinBusy = false; busyP = false; syncPath(); twinStatusLine();
+  }
+}
+/** Restart the program behind the compiled pre-roll: hold the start pose while the
+ * correction ramps in (the flex is LOADED before the first block), then lap 1 begins
+ * with the artifact's clock at exactly the machine's. */
+async function engageTwin() {
+  if (!twinDu || !armP) return;
+  busyP = true; runP = false;
+  setPathBadge('⑩ pre-roll — loading the flex…', 'warn'); syncPath();
+  try {
+    const c0 = profP.at(0);
+    const [q1, q2] = armP.ik(c0.x, c0.y, true);
+    for (let k = 0; k < TWIN_PRE * TWIN_SS; k++) {
+      const d = twinDu.f(k);
+      const tau = servoP.torques([
+        { theta: q1 + clampDq(d[0], 0.4), omega: 0, alpha: 0 },
+        { theta: q2 + clampDq(d[1], 0.4), omega: 0, alpha: 0 }]);
+      armP.step(tau[0], tau[1], 1);
+      if (k % 4000 === 0) await twinYield();
+    }
+    kP = 0; lapP = 0; progPending = false;
+    scoreP = newScore(); lapScoreP = newScore();
+    trailP = []; pHist = { s: [], c: [], v: [] };
+    residP = { enc: 0, follow: 0, n: 0 };
+    setPathBadge('⑩ engaged — lap 1 is live', 'good');
+  } finally { busyP = false; syncPath(); }
+}
+$('b-twinComm').addEventListener('click', twinCommission);
+$('b-twinCompile').addEventListener('click', twinCompileProgram);
 
 function syncPathLabels() {
   $('v-feedP').textContent = pathFeed().toExponential(1);
@@ -7742,6 +7935,7 @@ function syncPathLabels() {
   $('v-rateP').textContent = `${pilotRate()}/Ts`;
   $('v-kP').textContent = KP_LADDER[+$('s-kP').value].toFixed(2);
   $('v-eP').textContent = EP_LADDER[+$('s-eP').value].toFixed(2);
+  twinStatusLine();
   $('v-spfP').textContent = $('s-spfP').value;
   $('v-magP').textContent = `${MAG_LADDER[+$('s-magP').value]}×`;
 }
