@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:701,built:"2026-09-02T21:55:15Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:702,built:"2026-09-02T21:58:36Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -521,7 +521,7 @@
       <button id="commP" class="sec">Commission ▶</button>
       <button id="pilotP-btn" class="sec">Commission ⑤ Pilot ▶</button>
       <button id="ik6P-btn" class="sec">Commission ⑥ Fully learned ▶</button>
-      <button id="autoP-btn" class="sec">⑨ THE BUTTON — set up + commission ▶</button>
+      <button id="autoP-btn" class="sec">⑨ THE BUTTON — commission what’s on screen ▶</button>
       <button id="sweepP" class="sec">Sweep feedrate ▶</button>
       <button id="resetP" class="sec">Reset</button>
       <div class="slider"><span>Cascade depth</span>
@@ -7651,7 +7651,7 @@ function syncPath() {
   set('ik6P-btn', !idle);
   // CLICKABLE WHILE IT RUNS, because while it runs is exactly when someone needs it.
   set('autoP-btn', autoComm ? false : !idle);
-  const alab = autoComm ? 'Stop ⑨ ■' : '⑨ THE BUTTON — set up + commission ▶';
+  const alab = autoComm ? 'Stop ⑨ ■' : '⑨ THE BUTTON — commission what’s on screen ▶';
   if ($('autoP-btn').textContent !== alab) $('autoP-btn').textContent = alab;
   set('resetP', !armP || busyP);
   // THE PROGRAM SLIDERS GO WITH THEM. Commissioning and the sweep both install profiles
