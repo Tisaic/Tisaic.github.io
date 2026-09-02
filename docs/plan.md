@@ -4779,6 +4779,69 @@ banned memory: it is the §§20–26 online-adaptation route with a basis that c
 reach what it must model. That build — prediction on deployed rows first, delivery through
 hGrid second — is §40.
 
+## §40 — THE CONTROLLER FIX DELIVERS e-3: 6.1e-3 → 3.95e-4 / 7.9e-3 → 6.76e-4 IN SIX REFIT PASSES
+
+The owner's correction (§39's close) said the plant is controllable and the controller is
+the gap. Two stages proved it on the machine, in one afternoon, with nothing changed in
+shipped code yet.
+
+**STAGE 1 — PREDICTION AT THE FLOOR ON DEPLOYED ROWS.** Fit the reach-3240 basis on laps
+2–6 of the DEPLOYED distribution (conviction 1's requirement), validate on a HELD-OUT lap:
+R² 0.9997/0.9999, rms 9.8e-5/6.8e-5 — at and below the machine's own 1.1–1.6e-4
+repeatability (`deploymodel.mjs`). The ablation (`deploymodel2.mjs`) then found the
+delivery-shaping fact: **command-only features predict at 1.1–1.2e-4 held-out** — the
+measured signals add nothing — so the prediction is purely feedforward-computable,
+available arbitrarily far ahead, with no feedback path and no rule-35 exposure.
+
+**STAGE 2 — DELIVERY THROUGH THE PILOT'S OWN hGRID, ITERATED.** The correction is a FIXED
+FILTER OF PREDICTIONS — state-addressed, no lap table: a regularized inverse of each
+channel's identified `hGrid` (48 taps, delay at the response peak, λ = 1e-2·‖h‖²) applied
+to the model's future predictions at decision cadence, linearly interpolated between ticks,
+added to the pilot's u at scale 0.8 under a per-pass monotone guard. Each pass refits the
+RESIDUAL the corrected machine actually leaves (2 settled laps of rows), which absorbs the
+pilot's own reaction and the channel cross-coupling the diagonal hGrid misses
+(`deploydeliver.mjs`, `deploydeliver2.mjs`):
+
+```
+                 ch0        ch1
+open loop      4.3e-2     1.4e-2
+pilot deployed 6.13e-3    7.85e-3
+pass 1         2.66e-3    3.09e-3
+pass 2         1.40e-3    2.22e-3
+pass 3         8.52e-4    1.70e-3
+pass 4         5.91e-4    1.28e-3
+pass 5         4.62e-4    9.01e-4
+pass 6         3.95e-4    6.76e-4    duPk 0.28/0.22, guard never tripped
+```
+
+Monotone the whole way, ~0.72x contraction per pass at pass 6, still descending toward the
+1.4e-4 floor. **15.5x/11.6x past the deployed pilot, 109x/21x past open loop, both channels
+through e-3 into the e-4 decade.** What made this converge where §38's six conviction
+routes and the preview family diverged, item by item: the model was validated AT THE FLOOR
+on held-out deployed rows BEFORE any control was attempted; the features are command-only
+(no loop); the inverse comes from the identified hGrid rather than a guessed lead; the
+correction never enters the pilot's own solver or weights (their interaction is measured by
+the refit, not assumed away); and the iteration refits on measured post-correction rows
+under a guard instead of pumping.
+
+**WHAT IT IS AND IS NOT.** It is the §§20–26 online-adaptation posture with the two
+ingredients the sixteen-falsifier campaign proved missing: a basis that reaches the loop's
+measured memory, and the deployed distribution as the diet. It is addressed by command
+state — no lap index anywhere — but it is fitted on the running program's rows, and
+falsifier 11 says a single-program fit dies at a feed change: transfer of the CONVERGED
+corrector is bounded by the campaign, and continuing adaptation is what carries a program
+or feed change (re-convergence measured here at ~2 settled laps per halving). The cost was
+18 laps for six passes and is compressible: the six stacked weight vectors are linear in
+one feature row through one filter, so they COLLAPSE to a single vector at zero runtime
+cost, a pass needs one settled lap of rows, and the batch refit has an exact RLS form.
+
+**NOT YET DONE, STATED:** the six-pass run exists on the rounded rectangle at one feed and
+one seed; sharp/circle, a feed change mid-run (frozen vs adapting), the stack collapse
+control, the PLC cost of the prediction+filter path (rule 42's table), and the library form
+(a `refine` stage on the pilot, or gated continuous RLS) are the build list. The eventual
+floor may be set by the second-order phase-walk injection (§39: u lap-diff 1.8e-3 from the
+rig's free-running counters), which the page's lap-synced `actAt` already avoids.
+
 ### The eight targets, restated (replacing the stale table above)
 
 | target | state |
