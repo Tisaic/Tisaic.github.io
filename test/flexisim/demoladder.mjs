@@ -92,6 +92,8 @@ let hostRef = null;
   hostRef = makeArmHost({
     makeMachine: fresh, path, lap: LAP, K, centre,
     demo: {},
+    // The retired memory stays off, through the same wire the page uses (rule 61).
+    lapMemory: false,
     // PROBE=0 restores decision-grade runs for the conventional rung's commissioning.
     ...(process.env.PROBE === '0' ? {} : { probeLaps: { warmup: 1, avg: 2 } }),
     ...(process.env.DEMO === 'diamond' ? { demoPath: [diamond(4e-3), diamond(8e-3)] } : {}),
@@ -106,9 +108,7 @@ let hostRef = null;
       m.arm.L1 * Math.sin(q[0]) + m.arm.L2 * Math.sin(q[0] + q[1]));
     return rr > Math.abs(m.arm.L1 - m.arm.L2) + 0.5 && rr < m.arm.L1 + m.arm.L2 - 0.5;
   };
-  // THE LAP-PERIODIC RUNG IS OFF: it is the retired memory, and this bench measures the
-  // demo rung against the model-only ladder the retirement leaves.
-  hostRef.auto.periodic = 0;
+
   // DEPTH=1 answers whether the cascade's second layer still earns its two minutes once
   // the demo banks exist: banks are fitted AFTER the depth-2 attempt, so depth 2 has never
   // had to justify itself against a banks-armed machine.

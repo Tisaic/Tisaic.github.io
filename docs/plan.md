@@ -4523,6 +4523,33 @@ SHARP-PROGRAM lever, full stop. The flagship program's remaining headroom is in 
 layer — forecast quality, DPT, cascade depth, ensemble — which re-ranks the ladder:
 ⑤ and ⑥ rise, and target 5's path does not run through the router at all.
 
+**THE FIRST ON-SCREEN PRESS WAS A FIELD REPORT, AND IT FOUND THREE DEFECTS THE SUITE
+COULD NOT.** The owner pressed ⑨ on the phone: 26 minutes, a "MEMORY" rung in the table,
+and the sharp square at 5.97e-1 — WORSE than its 5.5e-1 open loop, the trace oscillating
+wildly. All three were tested-to-app divergences, invisible to every check because the
+scored runs only ever drive the commissioning path:
+
+1. **The page ran the pre-retirement ladder.** The bench disables the lap-periodic rung
+   (the retirement's model-only ladder); the page's host hardcoded `periodic: LAP`. 74 of
+   the 26 minutes' laps were the retired memory being commissioned. Now one wired option
+   (`lapMemory`, default true so the recorded 22.42x bar stays byte-identical; the bench
+   and the page both pass false through the same wire, rule 61).
+2. **The deployed look-ahead was frozen to the commissioning program.** `actAt` served the
+   rounded rectangle's reference table forever, so after a program switch the cascade
+   steered toward moves the machine was not making.
+3. **The program signature was frozen too**, so the lap table's off-program guard compared
+   the commissioning signature to itself and applied the memory to every program — the
+   0.53x off-program failure this project has measured twice, now observed a third time,
+   on screen. `attach` now takes the live path and re-arms the deploy state (rule 58: the
+   deployed machine survives a program switch; these were its not-rebuilt dependencies),
+   and the page re-attaches on every program change.
+
+The sub-8-minute estimate was the bench's ladder, not the page's — old and new mixed, as
+the owner said. With the ladders unified the honest expectation on screen is roughly half
+the first press (the rounded keeps the drop-one pass the sharp bench never triggered, and
+a browser lap costs more than a Node lap). `deploy.test.mjs` green (actAt still agrees
+with what run() applies), browser suite green at zero failures.
+
 ### The eight targets, restated (replacing the stale table above)
 
 | target | state |

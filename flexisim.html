@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:653,built:"2026-09-02T02:15:54Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:654,built:"2026-09-02T03:06:33Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -5788,6 +5788,9 @@ async function buildP() {
  */
 async function homeP() {
   profP = makePath();
+  // A DEPLOYED LADDER FOLLOWS THE NEW PROGRAM. Guarded on !autoComm: during commissioning
+  // the host's frame maps belong to the throwaway machines the scored runs build.
+  if (autoP && !autoComm) autoP.attach(armP, servoP, null, profP, profP.lap);
   const c0 = profP.at(0);
   const [q1, q2] = armP.ik(c0.x, c0.y, true);
   armP.setPose(q1, q2);
@@ -6101,6 +6104,7 @@ function clampDq(x, lim = DQ_CLAMP) {
 function installProgram(next) {
   const s0 = profP ? profP.at(kP).s : 0;
   profP = next;
+  if (autoP && !autoComm) autoP.attach(armP, servoP, null, profP, profP.lap);
   // ROUNDED, BECAUSE A STEP COUNTER IS AN INTEGER. timeAt() interpolates, and a
   // fractional clock ticks kP++ forever without ever satisfying kP % N === 0 — which
   // silently starved every modulo-gated sampler in the loop (the orange error trail
@@ -6766,6 +6770,13 @@ async function startAutoP() {
     // byte-identical) the rung refuses, and the refusal is a row in the table, not a
     // silence.
     demo: {},
+    // THE RETIRED MEMORY STAYS RETIRED. The lap-periodic rung is addressed by position in
+    // a lap, so it cannot transfer to another program — and this page's whole point is
+    // switching programs on the deployed machine. The measured one-press runs without it;
+    // the first on-screen press ran WITH it (26 minutes, 74 of its laps, and its table
+    // applied to a program it was never formed on), which was a tested-to-app divergence,
+    // not a decision.
+    lapMemory: false,
     // Probe-grade commissioning runs for the conventional rung's identification — measured
     // free on this arm (identical coefficients, identical deploy re-score) and 28% of the
     // whole press.
@@ -6816,7 +6827,9 @@ async function startAutoP() {
   // POINT THE FRAME MAPS AT THE ARM ON SCREEN. They were following the throwaway machines
   // the scored runs built, and deploying through a dead arm's Jacobian is a frame error
   // that produces plausible numbers rather than an exception.
-  autoP.attach(armP, servoP);
+  // THE LIVE PROGRAM RIDES ALONG: the deployed look-ahead and the program signature
+  // follow whatever is on screen, not the path the ladder commissioned on.
+  autoP.attach(armP, servoP, null, profP, profP.lap);
   // START A RUN, exactly as every scored run does. `beginRun` resets the range/starvation
   // diagnostics AND calls `_initRun()` on each deployed cascade layer, so without it the
   // ladder deploys carrying whatever internal state its last commissioning run left behind.
