@@ -109,6 +109,10 @@ let hostRef = null;
   // THE LAP-PERIODIC RUNG IS OFF: it is the retired memory, and this bench measures the
   // demo rung against the model-only ladder the retirement leaves.
   hostRef.auto.periodic = 0;
+  // DEPTH=1 answers whether the cascade's second layer still earns its two minutes once
+  // the demo banks exist: banks are fitted AFTER the depth-2 attempt, so depth 2 has never
+  // had to justify itself against a banks-armed machine.
+  if (process.env.DEPTH) hostRef.auto.maxDepth = +process.env.DEPTH;
   await m.l1.destroy(); await m.l2.destroy();
 }
 
