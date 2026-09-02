@@ -1038,7 +1038,7 @@ import { Pilot } from './lib/pilot/pilot.js';
 import { Stack } from './lib/pilot/stack.js';
 // ⑩ THE COMPILED TWIN (§42): the agnostic core (identify/compile/apply — no plant
 // knowledge) plus this plant class's adapter (drive loop, truth routing, probes).
-import { identifyTwin, compileTwin, applyCompiled } from './lib/pilot/twin.js';
+import { identifyTwin, compileTwin, refineCompiled } from './lib/pilot/twin.js';
 import { drivePath as twinDrive, twinResponse as twinProbe, armSimulators }
   from './lib/flexisim/twin.js';
 import { randomWander } from './lib/flexisim/demopath.js';
@@ -7895,19 +7895,31 @@ async function twinCompileProgram() {
     const H = await twinProbe({ buildArm: () => twinBuildAt(twinFit),
       destroyArm: twinDestroyArm, path: profP, sample: TWIN_SS, yield_: twinYield });
     const res = await compileTwin({
-      // BENCH QUALITY, NOT A BUDGET CUT: 3 laps and 11 iterations are the measured
-      // configuration behind every §42 number. The first page build shipped 2/7 to save
-      // compile minutes and the owner read the difference as "performance is very poor";
-      // the compile is offline software time and buys delivered accuracy.
-      simulate: twinSims().compileSim(profP, { laps: 3, preRoll: TWIN_PRE }),
+      // BENCH QUALITY, NOT A BUDGET CUT: 5 laps and 11 iterations are the measured
+      // configuration. The first page build shipped 2/7 to save compile minutes and the
+      // owner read the difference as "performance is very poor"; the mode-9/10 trace
+      // then measured laps 3's tiled tail at 1.26e-1 on the soft machine against laps
+      // 5 + refine's 4.3e-3 — the compile is offline software time and buys delivered
+      // accuracy.
+      simulate: twinSims().compileSim(profP, { laps: 5, preRoll: TWIN_PRE }),
       H, iters: 11,
       onProgress: (m) => { stat.textContent = m; },
     });
-    twinDu = { f: applyCompiled({ du: res.du, sample: TWIN_SS,
-      lapSteps: profP.lap, preRoll: TWIN_PRE }), report: res.report };
+    // THE STEADY TILE IS FITTED SEPARATELY, AT LAP HARMONICS, AGAINST THE TILED
+    // DELIVERY ITSELF: the finite-window compile never converges to a periodic du (its
+    // consecutive-lap difference plateaus at 3e-2 on this machine), so what the host
+    // loops for ever is refined as a periodic table — measured on K=1/E=0.06:
+    // tail 5.6e-2 unrefined → 4.3e-3, joint 2.8e-4/5.2e-4 sustained.
+    const ref = await refineCompiled({
+      simulate: twinSims().compileSim(profP, { laps: 4, preRoll: TWIN_PRE }),
+      H, du: res.du, sample: TWIN_SS, lapSteps: profP.lap, preRoll: TWIN_PRE,
+      onProgress: (m) => { stat.textContent = m; },
+    });
+    twinDu = { f: ref.f, report: { ...res.report, refine: ref.report } };
     twinFor = { shape: $('shapeP').value, feed: pathFeed() };
     console.log(`[flexisim] ⑩ compiled ${twinFor.shape}@${twinFor.feed.toExponential(2)}: `
-      + `sim rms ${res.report.rms.toExponential(2)} over ${res.report.iters.length} iterations`);
+      + `sim rms ${res.report.rms.toExponential(2)} over ${res.report.iters.length} iterations, `
+      + `steady tile ${ref.report.openRms.toExponential(2)} → ${ref.report.rms.toExponential(2)}`);
     setPathBadge('⑩ compiled — select ⑩ to engage from lap 1', 'good');
     if ($('ctlP').value === 'twin') await engageTwin();
   } catch (err) {

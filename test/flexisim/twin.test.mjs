@@ -17,7 +17,7 @@
  *
  * Full tier only: one wander record + a ~40-evaluation identification + a compile.
  */
-import { identifyTwin, compileTwin, applyCompiled } from '../../lib/pilot/twin.js';
+import { identifyTwin, compileTwin, applyCompiled, refineCompiled } from '../../lib/pilot/twin.js';
 import { drivePath, twinResponse, armSimulators } from '../../lib/flexisim/twin.js';
 import { randomWander } from '../../lib/flexisim/demopath.js';
 
@@ -184,6 +184,54 @@ check('the soft machine identifies exactly over the full page ladders',
   Math.abs(softFit.params.K - SOFT_K) <= 0.05 * SOFT_K
   && Math.abs(softFit.params.E - SOFT_E) <= 0.05 * SOFT_E,
   `${softFit.params.K}/${softFit.params.E}`);
+
+// 5) THE SOFT MACHINE'S DELIVERY, IN THE PAGE'S SHIPPED CONFIG — the mode-⑨/⑩ trace's
+// fix, pinned. The stiff machine's tail (3b) passed while the soft machine delivered
+// 1.26e-1: compileTwin's finite-window du never becomes periodic (its consecutive-lap
+// difference PLATEAUS — 6.5e-2 → 2.4e-2 → 3.0e-2 here — instead of settling), so tiling
+// any lap of it injects that difference every lap, and a longer compile alone only
+// reached 5.6e-2. The page now compiles laps 5 and REFINES the steady tile at lap
+// harmonics against the tiled delivery (refineCompiled); this phase runs exactly that
+// on K=1/E=0.06 and demands the delivery the bench measured (tail 4.3e-3 contour,
+// joint 2.8e-4/5.2e-4, against an open loop of 4.5e-2/1.5e-2).
+console.log('soft-machine delivery in the shipped config (laps 5 + refineCompiled)…');
+fitted = { K: softFit.params.K, E: softFit.params.E };
+const softPath = mkPath('rounded', 0.004);
+const softH = await twinResponse({ buildArm, destroyArm, path: softPath, sample: SS });
+const softCompiled = await compileTwin({
+  simulate: softSims.compileSim(softPath, { laps: 5, preRoll: PRE }),
+  H: softH, iters: 11,
+  onProgress: (m) => console.log(`  ${m}`),
+});
+const softRef = await refineCompiled({
+  simulate: softSims.compileSim(softPath, { laps: 4, preRoll: PRE }),
+  H: softH, du: softCompiled.du, sample: SS, lapSteps: softPath.lap, preRoll: PRE,
+  onProgress: (m) => console.log(`  ${m}`),
+});
+check('the refined tile improves on the unrefined one (the refine is live)',
+  softRef.report.rms < softRef.report.openRms,
+  `${softRef.report.openRms.toExponential(2)} → ${softRef.report.rms.toExponential(2)}`);
+const softDrive = async (du) => {
+  const m = await buildArm({ K: SOFT_K, E: SOFT_E });
+  homeArm(m.arm, m.servo, softPath);
+  const out = await drivePath({ arm: m.arm, servo: m.servo, path: softPath, sample: SS,
+    steps: Math.ceil(softPath.lap * (du ? 8 : 2)), du, preRoll: du ? PRE : 0 });
+  await destroyArm(m);
+  return out.perLap.map((p) => Math.hypot(p[0], p[1]));
+};
+const softOpen8 = await softDrive(null);
+const softLaps = await softDrive(softRef.f);
+console.log(`  soft open: ${softOpen8.map((v) => v.toExponential(1)).join(' ')}`);
+console.log(`  soft ⑩   : ${softLaps.map((v) => v.toExponential(1)).join(' ')}`);
+check('soft lap 1 at least 8x below the soft open loop',
+  softLaps[0] < softOpen8.at(-1) / 8,
+  `${softLaps[0].toExponential(2)} vs open ${softOpen8.at(-1).toExponential(2)}`);
+check('the soft tail holds at least 15x below the soft open loop',
+  softLaps.at(-1) < softOpen8.at(-1) / 15,
+  `${softLaps.at(-1).toExponential(2)}`);
+check('no lap-over-lap drift in the soft tail',
+  softLaps.at(-1) < softLaps[2] * 1.5,
+  `lap3 ${softLaps[2].toExponential(2)} -> lap8 ${softLaps.at(-1).toExponential(2)}`);
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall checks passed');
 process.exit(failures ? 1 : 0);

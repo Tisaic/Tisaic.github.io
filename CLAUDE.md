@@ -1380,7 +1380,12 @@ that matches it** — the point-to-point tabs measure a different question.
   loop of 1.29e-2/5.28e-3, the pre-roll holding, and the mismatch observable. WHY A
   SIMULATION AND NOT A REGRESSION is §41's twenty-falsifier campaign: the elbow's measured
   memory is 6363–8649 steps — longer than a program lap — so windowed features truncate it
-  and closed paths alias it; a simulation propagates state.
+  and closed paths alias it; a simulation propagates state. PAST THE COMPILED SPAN THE
+  HOST LOOPS A PERIODIC TILE FITTED AT LAP HARMONICS (`refineCompiled` — plan §42's
+  mode-⑨/⑩ trace): the finite-window compile never converges to a periodic du, so the
+  steady lap is refined against the tiled delivery itself — measured on K=1/E=0.06, tail
+  5.6e-2 → 4.3e-3 with joint 2.8e-4/5.2e-4 sustained — and the page clamps the twin's du
+  at `pilotUMax()`, never a constant from another correction (duPk 1.84 rad at K=1).
   **Sweep feedrate**
   runs the whole ladder and tabulates the trade. The arm is drawn at TRUE geometry; the error trail
   is the exaggerated object, pushed out along the path normal only.

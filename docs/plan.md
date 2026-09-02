@@ -5041,6 +5041,53 @@ one-press now commissions the machine and program ON SCREEN, the hint says where
 measured 22.42x machine lives instead of silently substituting it, and ⑧'s setup button
 keeps the substitution because substitution is that button's stated job.
 
+**THE MODE-⑨/⑩ END-TO-END TRACE ("performance is still e-1 and not the e-3/-4 seen in
+Node") — the page was innocent, the units were part of it, and TWO artifact defects were
+the rest.** A headless tracer (`test/_trace10.mjs`) pressed the owner's exact sequence on
+the real page at K=1/E=0.06 and compared every stage against Node at the same machine.
+The stages agreed to the digit: identify K̂=1/Ê=0.06 exact (J 2.5e-5), compile sim rms
+1.72e-3 both sides, delivered laps 2.51e-2 / 9.43e-2 / 1.22–1.24e-1 flat against Node's
+clamped reproduction 2.49e-2 / 9.48e-2 / 1.25e-1 — no wiring loss anywhere. Three
+findings, in size order:
+
+1. **The Node e-3/e-4 was the STIFF machine.** Every seam-round bench ran the rig default
+   K=16/E=0.15 while the phone ran K=1/E=0.06; on the soft machine the same laps-3
+   artifact delivers 1.26e-1 tiled — the owner's e-1 exactly. Rule 31 applied to a
+   BENCHMARK: a validation is a constant too, and it was carried across plants.
+2. **The 0.4 clamp is ⑧'s DQ_CLAMP defect in a third costume.** The twin's du carries
+   the whole wind-up droop, which scales as 1/K: measured duPk 1.84 rad at K=1 against a
+   0.4 constant — the correction ran at a fifth of its size through the pre-roll (the
+   flex never loaded) and lap 1 paid 5x (2.5e-2 against 5.3e-3), the live probe pinned
+   at 0.400. Both page sites now clamp at `pilotUMax()`, the page's one authority
+   definition, which tracks the same 1/K physics (cap 2.0 at K=1, 0.15 at K=16, both
+   above the measured need).
+3. **The finite-window compile never becomes periodic, so no tiled lap can be right.**
+   The consecutive-lap du difference PLATEAUS — 6.5e-2 → 2.4e-2 → 3.0e-2 on the laps-5
+   artifact — because the transient's non-lap-harmonics leak corrections across the
+   whole window; tiling any lap injects that difference every lap. Compiling more laps
+   alone reached 5.6e-2 (from 1.26e-1); the tile had to be fitted as a PERIODIC object.
+   `refineCompiled` (lib/pilot/twin.js): simulate the tiled correction, average the
+   delivered truth at matched lap phase over every tiled lap but the handoff's, invert
+   through H at each lap harmonic (same Tikhonov solve), damped step, monotone guard —
+   HFF's shape run in software against the twin. Measured on K=1/E=0.06: **tail
+   5.6e-2 → 4.3e-3 contour, joint 2.8e-4/5.2e-4 sustained over 8 laps, flat** — 100x
+   over the open loop's 4.4e-1, and better than the artifact played straight (the
+   periodic fit beats the transient-contaminated original inside its own span). Laps 3 +
+   refine converges within 6.7% of laps 5 + refine but with a 2.3x worse handoff lap —
+   outside rule 42's band, so laps 5 ships. `applyCompiled` also now tiles the
+   PENULTIMATE compiled lap (identical at laps 3) and refuses an artifact too short to
+   hold a middle lap.
+
+The trace also scored ⑨ on the same machine end to end: ladder deployed the cascade
+alone (classic withheld by measurement), delivered 5.7e-2 = 7.6x, consistent with its own
+rung table — no ⑨ divergence. `test/flexisim/twin.test.mjs` gained the shipped-config
+soft-delivery phase (laps 5 + refine on K=1/E=0.06, tail ≥ 15x under open, no drift);
+the tracer is kept as `test/_trace10.mjs` beside `_pagepress.mjs`. **What remains
+honestly open:** the page's lap-1 number with the cap fix is predicted (~7.7e-3 contour)
+but not yet re-traced on screen; and the tool-space contour at the soft config floors
+near 4e-3 while the stiff machine reached 1.4e-3 joint — whether that floor is the
+compile's residual or the backlash this tab carries is unmeasured.
+
 ### The eight targets, restated (replacing the stale table above)
 
 | target | state |
