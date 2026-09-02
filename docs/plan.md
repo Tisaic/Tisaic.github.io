@@ -4425,6 +4425,20 @@ one (EMPS, 33 checks green throughout, 424.82x untouched):
    that is the six-plant `_verifySegLen` experiment — a different measurement per the
    verify's own warning, not a knob to turn on one plant.
 
+**DEPTH 2 STILL EARNS ITS MINUTES — THROUGH THE RUNG ABOVE IT, NOT ITS OWN ROW.** The
+owner asked whether the cascade's second layer is worth its CPU and time now that the demo
+banks exist; the DEPTH=1 press answers: depth 2 + banks 1.7692e-1 (6.1 min) against
+depth 1 + banks 1.9555e-1 (4.0 min) — a 10.5% better final machine for 2.1 minutes, on a
+program where depth 2's DIRECT row reads a sub-margin +1.2%. Its value flows downstream:
+banks fitted on what depth 2 leaves deliver 1.45x where banks on depth 1's residual
+deliver 1.33x — the layer removes lag-structured error that makes the remainder more
+bank-correctable, the cascade's thesis showing up BETWEEN rungs. (On the rounded program
+depth 2 was already the only game; banks do nothing there.) The sharp edge of the finding:
+the ladder judges rungs by their direct gain, and a rung's value can be downstream — a
+margin that refused depth 2 on its 1.2% would have silently cost the banks 10%. The
+per-rung table cannot see cross-rung enablement; the whole-prefix comparison just measured
+is the instrument that can.
+
 **AND THE DEMO IS NOW DESIGNED, WITH THE ENGINEER'S PROGRAM AS THE OVERRIDE — the owner's
 next directive, measured the same day.** `lib/flexisim/demopath.js` generates the demo the
 block asks the machine to run when no program is supplied: random sharp polygons plus
