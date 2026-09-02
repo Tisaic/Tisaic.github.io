@@ -21,6 +21,7 @@ import { ContourScore, decompose } from '../../../lib/flexisim/contour.js';
 import { Pilot, solveRidge } from '../../../lib/pilot/pilot.js';
 import { cornerEvents } from '../../../lib/pilot/excite.js';
 import { fitCornerBanks } from '../../../lib/pilot/banks.js';
+import { randomPolygon as libRandomPolygon } from '../../../lib/flexisim/demopath.js';
 
 const H = 4, CLAMP = 3, NU = 0.3, RHO = 1, G = 2e-6, RATIO = 100, DAMPING = 3e-3;
 // THE ARM'S COMPLIANCE, SWEEPABLE — link modulus E and gearbox stiffness K.
@@ -404,26 +405,12 @@ async function commissionArm({ seed = 1, train = { shape: 'rounded', feed: 0.004
 /**
  * A RANDOM SHARP POLYGON — corner SHAPES with no part knowledge, which is the owner's licence
  * stated back as code: corners are program-specific, but "those sorts of shapes can be
- * designed for an agnostic plant". Vertices drawn around the workspace centre, traced by the
- * same corner rule every real program uses, at a drawn feed; a polygon whose joint commands
- * exceed the declared vMax is rejected and redrawn smaller (measured acceptance, rule 16).
+ * designed for an agnostic plant". The generator moved to `lib/flexisim/demopath.js` the day
+ * the button's designed-demo fallback needed it; this wrapper keeps every bench's positional
+ * signature and centre, byte-identical by construction.
  */
 function randomPolygon(rnd, feed, star = false) {
-  const [cx, cy] = PG.centre;
-  const n = star ? 8 + 2 * Math.floor(2 * rnd()) : 4 + Math.floor(3 * rnd());
-  const r0 = 2.2 + 1.6 * rnd();
-  const pts = [];
-  for (let i = 0; i < n; i++) {
-    const th = (2 * Math.PI * i) / n + 0.5 * (rnd() - 0.5) / (star ? 3 : 1);
-    // A STAR ALTERNATES RADII, WHICH SHARPENS EVERY VERTEX. A random convex-ish polygon turns
-    // at 100-130 degrees — shallower than a square's 90 — and a bank fitted on shallow turns
-    // was measured weaker on the square (2.02x against the joint-space tour's 2.28x). The
-    // star's points turn at 40-80 degrees, so the two styles bracket the square's corner.
-    const r = r0 * (star ? (i % 2 ? 0.45 : 1) : 0.7 + 0.6 * rnd());
-    pts.push([cx + r * Math.cos(th), cy + r * Math.sin(th)]);
-  }
-  return new ToolPath({ start: pts[0], feed, accel: 4e-5, closed: true, cornerDt: 40,
-    segments: pts.slice(1).map((p) => [SEG.LINE, p]).concat([[SEG.LINE, pts[0]]]) });
+  return libRandomPolygon(rnd, feed, { centre: PG.centre, star });
 }
 
 async function recordOpenLoop(pilot, shape, feed) {

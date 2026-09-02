@@ -85,9 +85,12 @@ let hostRef = null;
   const m = await machine();
   const c = m.arm.ik(12, 0, true);
   centre[0] = c[0]; centre[1] = c[1];
+  // DEMO=diamond reruns the engineer-supplied-demo rows; the default exercises the DESIGNED
+  // fallback — no program supplied, the block generates its own optimal-dynamics demo.
   hostRef = makeArmHost({
     makeMachine: fresh, path, lap: LAP, K, centre,
-    demo: {}, demoPath: [diamond(4e-3), diamond(8e-3)],
+    demo: {},
+    ...(process.env.DEMO === 'diamond' ? { demoPath: [diamond(4e-3), diamond(8e-3)] } : {}),
     onRung: (r) => console.log(`  [${((Date.now() - T0) / 60000).toFixed(0)}m] `
       + `${r.name}  ${r.score.toExponential(4)}`
       + `${r.gain === null ? '' : '  ' + r.gain.toFixed(2) + 'x'}`
