@@ -241,12 +241,41 @@ const rec = await driveLaps(5, null, 0);
     for (const d of PREVIEWS) parts.push(featAtJ2(j0 + Math.round(d / S)));
     return parts.flat();
   };
+  // THE ACTUATION-AWARE FIT: the first joint fit put its weight at preview 0 — the best
+  // PREDICTOR of e(t) — and the machine diverged (5.9e-2 → 6.6e-2 → 7.4e-2), because
+  // prediction is not actuation: a correction at offset 0 rides the loop's roll-off.
+  // The regression target stays e, but the DESIGN COLUMNS are G-FILTERED — each feature
+  // convolved with the identified hGrid at its decision cadence — so a weight is priced by
+  // what its feature DOES through the loop, and the applied correction uses the raw
+  // features. This is the deconvolution the scalar lead approximated.
+  const P1 = hostRef.auto.stack.layers[0];
+  const hbar = (() => {
+    const a = P1.hs[0].hGrid, b = P1.hs[1].hGrid;
+    const n = Math.min(a.length, b.length);
+    const h = new Float64Array(n);
+    for (let i = 0; i < n; i++) h[i] = 0.5 * (a[i] + b[i]);
+    return h;
+  })();
+  const GRID = P1.grid;
   const fit = (rows) => {
-    const X = [], Y = [];
+    // raw rows in lap-order, then filter columns through hbar at decision cadence
+    const raw = [], Y = [], keys = [];
     for (const r of rows) {
       if (r.lap < 1) continue;
-      X.push(jointFeat2(r.kIn)); Y.push(r.en);
+      raw.push(jointFeat2(r.kIn)); Y.push(r.en); keys.push(r.lap * NS + r.kIn);
     }
+    const nf = raw[0].length;
+    const byKey = new Map(keys.map((k, i) => [k, i]));
+    const X = raw.map((row, i) => {
+      const out = new Float64Array(nf);
+      for (let m = 0; m < hbar.length; m++) {
+        const src = byKey.get(keys[i] - m * GRID);
+        if (src === undefined) continue;
+        const rr = raw[src], hm = hbar[m];
+        for (let q = 0; q < nf; q++) out[q] += hm * rr[q];
+      }
+      return out;
+    });
     const nf = X[0].length;
     const A = Array.from({ length: nf }, () => new Float64Array(nf));
     const b = new Float64Array(nf);
