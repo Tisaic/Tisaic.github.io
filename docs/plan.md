@@ -4861,15 +4861,28 @@ cost, a pass needs one settled lap of rows, and the batch refit has an exact RLS
   §§20–26 selector ("repeating production wants freezing, an evolving recipe wants the
   truth kept") now has its failure mode measured from the freezing side.
 
-**NOT YET DONE, STATED:** every refit consumes the routed truth, so on this plant the
-route is an installation property — a tracker mounted for ever, or convergence with it
-mounted and a frozen corrector after (legal, and now with the measured warning above);
-the stack collapse to one vector (exact algebra) and the RLS form of the refit, the PLC
-cost of the prediction+filter path (rule 42's table), sharp's remaining descent toward
-e-3 under the full uMax, more seeds, and the library form (a `refine` stage on the
-pilot with the change gate) are the build list. The eventual floor may be set by the
-second-order phase-walk injection (§39: u lap-diff 1.8e-3 from the rig's free-running
-counters), which the page's lap-synced `actAt` already avoids.
+**THE LIBRARY FORM SHIPS: `lib/pilot/refine.js`, pinned by `test/pilot/refine.test.mjs`
+(full tier).** `Refiner` is the corrector as a stage on a deployed pilot: streaming
+refits (XtX accumulates online — no row storage, an RLS-shaped footprint), the pass
+stack COLLAPSED to one weight vector per channel as it builds (the passes are linear in
+one feature row, so revert is subtraction), the monotone guard (revert + halve, two
+reverts freeze), truth-gated fitting (`observe(cmd, null)` applies frozen at zero truth
+cost — the tracker-removed installation), and the command-rate gate that zeroes du
+outside the band the fit saw. The test pins all three properties two-sidedly on the
+bench config: CONVERGES 6.12e-3/7.85e-3 → 5.88e-4/1.33e-3 in five passes, zero reverts,
+duPk 0.26 under a 0.4 cap; FREEZES with truth removed and HOLDS (5.72e-4/9.33e-4, no
+drift); GATES at a foreign feed with the post-gate correction EXACTLY zero and the
+machine at the plain-deploy control level (2.24e-2/1.51e-2 vs the 5.7e-2/8.0e-2 an
+ungated stale corrector inflicts). One measured cost stated: the stale corrector rails
+against its cap for the ~half lap before the rate-EMA trips — a surprise-based trigger
+could shrink that window.
+
+**STILL OPEN, STATED:** the PLC cost of the prediction+filter path (rule 42's table),
+sharp's remaining descent toward e-3 under the full uMax, more seeds, page wiring (a
+Refine control on ⑤/⑥), and the true RLS form (continuous refits instead of pass
+boundaries). The eventual floor may be set by the second-order phase-walk injection
+(§39: u lap-diff 1.8e-3 from the rig's free-running counters), which the page's
+lap-synced `actAt` already avoids.
 
 ### The eight targets, restated (replacing the stale table above)
 

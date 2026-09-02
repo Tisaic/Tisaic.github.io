@@ -400,6 +400,8 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     if [ "${SUITE}" = "full" ]; then t node test/pilot/stack.test.mjs; fi
     if [ "${SUITE}" = "full" ]; then t node test/pilot/arm.test.mjs; fi
     if [ "${SUITE}" = "full" ]; then t node test/pilot/ikfree.test.mjs; fi
+    # THE §40 CORRECTOR AS A LIBRARY — converge/freeze/gate, two-sided, on the soft arm.
+    if [ "${SUITE}" = "full" ]; then t node test/pilot/refine.test.mjs; fi
   fi
 fi
 
