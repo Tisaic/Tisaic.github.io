@@ -135,11 +135,9 @@ for (let lap = 0; lap < LAPS; lap++) {
       const tx = cmd.vx / sp, ty = cmd.vy / sp;
       const ex = tool[0] - cmd.x, ey = tool[1] - cmd.y;
       rows.push({ lap, kIn: Math.floor(((kP % T) + T) % T / S),
-        // INSTANTANEOUS ONLY, by design: pose harmonics (gravity and configuration),
-        // tangent, command velocity and acceleration, speed. No lags anywhere.
-        f: [1, Math.sin(q1), Math.cos(q1), Math.sin(q1 + q2), Math.cos(q1 + q2),
-          tx, ty, cmd.vx / 4e-3, cmd.vy / 4e-3, cmd.ax / 4e-5, cmd.ay / 4e-5, sp / 4e-3,
-          tx * Math.cos(q1), ty * Math.sin(q1)],
+        raw: { q1, q2, tx, ty, vx: cmd.vx / 4e-3, vy: cmd.vy / 4e-3,
+          axx: cmd.ax / 4e-5, ayy: cmd.ay / 4e-5, sp: sp / 4e-3,
+          kap: (cmd.vx * cmd.ay - cmd.vy * cmd.ax) / Math.pow(sp, 3) * 4e-3 },
         en: -ex * ty + ey * tx, et: ex * tx + ey * ty });
     }
     kP++;
@@ -171,33 +169,62 @@ console.log(`\n  repeatability of the residual, lap3~lap5 r=${r35.toFixed(4)}  l
     + `${Math.sqrt(b2 / n).toExponential(3)}, lap-to-lap deviation rms ${Math.sqrt(o2 / n).toExponential(3)}`);
 }
 
-// ---- 3. THE LOCAL FIT: instantaneous features, zero lags, held-out laps ---------------
+// ---- 3. THE BASIS LADDER, all LOCAL, fitted on laps 2-4, held out on laps 5-6 --------
 {
-  const train = rows.filter((r) => r.lap >= 1 && r.lap <= 3);
-  const test = rows.filter((r) => r.lap >= 4);
-  const nf = rows[0].f.length;
-  const A = Array.from({ length: nf }, () => new Float64Array(nf));
-  const b = new Float64Array(nf);
-  for (const r of train) for (let i = 0; i < nf; i++) {
-    b[i] += r.f[i] * r.en;
-    for (let j = 0; j < nf; j++) A[i][j] += r.f[i] * r.f[j];
-  }
-  for (let i = 0; i < nf; i++) A[i][i] += 1e-6 * A[i][i] + 1e-12;
-  // gauss solve
-  const M = A.map((row, i) => [...row, b[i]]);
-  for (let c = 0; c < nf; c++) {
-    let p = c; for (let r2 = c + 1; r2 < nf; r2++) if (Math.abs(M[r2][c]) > Math.abs(M[p][c])) p = r2;
-    [M[c], M[p]] = [M[p], M[c]];
-    for (let r2 = 0; r2 < nf; r2++) { if (r2 === c || !M[c][c]) continue;
-      const f2 = M[r2][c] / M[c][c]; for (let j = c; j <= nf; j++) M[r2][j] -= f2 * M[c][j]; }
-  }
-  const w = M.map((row, i) => row[nf] / (row[i] || 1));
-  let ss = 0, sr = 0, mu = 0;
-  for (const r of test) mu += r.en; mu /= test.length;
-  for (const r of test) { let p = 0; for (let i = 0; i < nf; i++) p += w[i] * r.f[i];
-    sr += (r.en - p) ** 2; ss += (r.en - mu) ** 2; }
-  console.log(`  LOCAL-FEATURE FIT (no lags): held-out R² ${(1 - sr / ss).toFixed(4)} on laps 5-6`
-    + ` — residual rms ${Math.sqrt(sr / test.length).toExponential(3)} against ${Math.sqrt(ss / test.length).toExponential(3)}`);
-  console.log('\n  reading: repeatability ~1 says the residual is deterministic; a high local R²');
-  console.log('  says instantaneous slow drivers explain it — the owner\'s premise, measured.');
+  const inst = (w) => { const { q1, q2, tx, ty, vx, vy, axx, ayy, sp, kap } = w;
+    return [1, Math.sin(q1), Math.cos(q1), Math.sin(q1 + q2), Math.cos(q1 + q2),
+      tx, ty, vx, vy, axx, ayy, sp, tx * Math.cos(q1), ty * Math.sin(q1)]; };
+  const rich = (w) => { const { q1, q2, tx, ty, vx, vy, axx, ayy, sp, kap } = w;
+    const s1 = Math.sin(q1), c1 = Math.cos(q1), s12 = Math.sin(q1 + q2), c12 = Math.cos(q1 + q2);
+    return [1, s1, c1, s12, c12, tx, ty, vx, vy, axx, ayy, sp, kap,
+      s1 * s1, c1 * s12, s1 * c12, s12 * s12, c1 * c12,
+      tx * c1, ty * s1, tx * s12, ty * c12, kap * sp, kap * c1, kap * s12,
+      sp * s1, sp * c12, axx * s1, ayy * c12, tx * ty, vx * s1, vy * c12]; };
+  const byIdx = new Map();
+  for (const r of rows) byIdx.set(r.lap + ':' + r.kIn, r);
+  const back = (r, d) => byIdx.get(r.kIn - d >= 0 ? r.lap + ':' + (r.kIn - d)
+    : (r.lap - 1) + ':' + (r.kIn - d + Math.ceil(T / S)));
+  // a SHORT window: the same rich features at t, t-3, t-6, t-9 samples (~240 steps, the
+  // settling scale) — local physics, three orders of magnitude below a lap.
+  const windowed = (r) => {
+    const parts = [rich(r.raw)];
+    for (const d of [3, 6, 9]) { const p = back(r, d); if (!p) return null; parts.push(rich(p.raw)); }
+    return parts.flat();
+  };
+  const fit = (name, feat) => {
+    const train = [], test = [];
+    for (const r of rows) {
+      const f = feat(r); if (!f) continue;
+      if (r.lap >= 2 && r.lap <= 3) train.push([f, r.en]);
+      else if (r.lap >= 4) test.push([f, r.en]);
+    }
+    const nf = train[0][0].length;
+    const A = Array.from({ length: nf }, () => new Float64Array(nf));
+    const b = new Float64Array(nf);
+    for (const [f, y] of train) for (let i = 0; i < nf; i++) {
+      b[i] += f[i] * y;
+      for (let j = 0; j < nf; j++) A[i][j] += f[i] * f[j];
+    }
+    for (let i = 0; i < nf; i++) A[i][i] += 1e-4 * A[i][i] + 1e-12;
+    const M = A.map((row, i) => [...row, b[i]]);
+    for (let c = 0; c < nf; c++) {
+      let p = c; for (let r2 = c + 1; r2 < nf; r2++) if (Math.abs(M[r2][c]) > Math.abs(M[p][c])) p = r2;
+      [M[c], M[p]] = [M[p], M[c]];
+      for (let r2 = 0; r2 < nf; r2++) { if (r2 === c || !M[c][c]) continue;
+        const f2 = M[r2][c] / M[c][c]; for (let j = c; j <= nf; j++) M[r2][j] -= f2 * M[c][j]; }
+    }
+    const w = M.map((row, i) => row[nf] / (row[i] || 1));
+    let ss = 0, sr = 0, mu = 0;
+    for (const [, y] of test) mu += y; mu /= test.length;
+    for (const [f, y] of test) { let p = 0; for (let i = 0; i < nf; i++) p += w[i] * f[i];
+      sr += (y - p) ** 2; ss += (y - mu) ** 2; }
+    console.log(`  ${name.padEnd(34)} ${String(nf).padStart(4)} feats  held-out R² ${(1 - sr / ss).toFixed(4)}`
+      + `  residual rms ${Math.sqrt(sr / test.length).toExponential(3)}`);
+  };
+  console.log('');
+  fit('instantaneous linear', (r) => inst(r.raw));
+  fit('+ curvature & pose nonlinearity', (r) => rich(r.raw));
+  fit('+ settling-scale window (~240 st)', windowed);
+  console.log('\n  the ceiling is the lap-noise floor 3.4e-3 (R² 0.997 against the profile);');
+  console.log('  memory-class performance needs ~0.95+. every basis here is LOCAL.');
 }
