@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:652,built:"2026-09-02T02:06:00Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:653,built:"2026-09-02T02:15:54Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -6758,6 +6758,18 @@ async function startAutoP() {
       }
     },
     path: profP, lap: LAP, K, centre,
+    // THE DEMO RUNG, ARMED (plan §37). No program is supplied, so the block DESIGNS its own
+    // demo — polygons and stars across a feed ladder — records it open-loop with the
+    // commissioning truth still present, fits record-scale corner banks on the cascade's
+    // first layer, and ships them only if they beat the cascade on the machine. On a
+    // program whose corners the banks cannot help (the rounded rectangle measured
+    // byte-identical) the rung refuses, and the refusal is a row in the table, not a
+    // silence.
+    demo: {},
+    // Probe-grade commissioning runs for the conventional rung's identification — measured
+    // free on this arm (identical coefficients, identical deploy re-score) and 28% of the
+    // whole press.
+    probeLaps: { warmup: 1, avg: 2 },
     // HAND A FRAME BACK often enough that the tab survives a run of tens of thousands of
     // steps, and rarely enough that the yielding itself is not the cost.
     yieldEvery: 1500,
@@ -6780,7 +6792,8 @@ async function startAutoP() {
   setPathBadge('⑨ commissioning the ladder — this is a long run, not a button that returns',
     'warn');
   try {
-    autoRep = await autoP.auto.commission({ run: autoP.run, drivePilot: autoP.drivePilot });
+    autoRep = await autoP.auto.commission({ run: autoP.run, drivePilot: autoP.drivePilot,
+      recordDemo: autoP.recordDemo });
   } catch (e) {
     const msg = e && e.message ? e.message : String(e);
     // A STOP IS NOT A FAILURE. Reporting one as the other trains the operator to ignore the
@@ -6822,6 +6835,13 @@ async function startAutoP() {
 /** The diagnostics the ladder produces and nothing rendered until now. */
 function autoNotesHTML(rep) {
   const out = [];
+  if (rep.demo) {
+    out.push(`<b>Demo banks:</b> ${rep.demo.error ? 'failed — ' + rep.demo.error
+      : rep.demo.note ? rep.demo.note
+        : `${rep.demo.records} record(s)${rep.demo.designed
+          ? ' (designed — no program supplied)' : ''}, ${rep.demo.fitted} leads fitted, `
+          + `${rep.demo.kept} kept the scribble weights`}.`);
+  }
   if (rep.budget) {
     const b = rep.budget;
     out.push(`<b>Laps:</b> ${b.total} total — ${b.probes} identifying, ${b.trials} scoring`
