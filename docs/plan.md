@@ -4425,6 +4425,16 @@ one (EMPS, 33 checks green throughout, 424.82x untouched):
    that is the six-plant `_verifySegLen` experiment — a different measurement per the
    verify's own warning, not a knob to turn on one plant.
 
+**THE VERIFY SWEEP RAN, AND THE WARNING WAS RIGHT.** `PILOT_VERIFY_SCALE=0.5` across all
+six plants, each test's own bars as the judge: thermal, Wood–Berry, the mill, EMPS and the
+arm all green — and the TANK fails one check, the one that matters: the sweeping
+excitation's deployed advantage collapses from 2.07x-vs-1.32x to 1.47x-vs-1.40x. The
+half-length verify re-prices λ and the deployed effort with it, so the verify's length is
+LOAD-BEARING on one plant of six and the 43% is bought, not wasted. The knob stays an
+experiment, the default stands, and the commissioning-time arc closes at 6.1 minutes
+(4.0 at depth 1) with the verify cut correctly refused by the machine it would have
+broken.
+
 **DEPTH 2 STILL EARNS ITS MINUTES — THROUGH THE RUNG ABOVE IT, NOT ITS OWN ROW.** The
 owner asked whether the cascade's second layer is worth its CPU and time now that the demo
 banks exist; the DEPTH=1 press answers: depth 2 + banks 1.7692e-1 (6.1 min) against
