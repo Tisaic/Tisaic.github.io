@@ -212,27 +212,26 @@ console.log('  recording the deployed machine, fitting the pose-modulated FIR…
 const rec = await driveLaps(5, null, 0);
 {
   const NS = rec.rows.filter((r) => r.lap === 2).length;
-  const rateOf = new Map();
   // rebuild commanded rate/pose tables once (same as driveLaps)
   const pth = mkPath(feed);
   const m0 = await machine();
-  const srate = [], spose = [];
+  const srate = [], spose2 = [];
   for (let j = 0; j < NS; j++) {
     const cmd = pth.at(j * S);
     const [q1, q2] = m0.arm.ik(cmd.x, cmd.y, true);
     const rt = m0.arm.ikRates(q1, q2, cmd.vx, cmd.vy, cmd.ax, cmd.ay);
     const sp = Math.hypot(cmd.vx, cmd.vy) || 1e-12;
     srate.push([rt.dq[0], rt.dq[1]]);
-    spose.push({ q1, q2, tx: cmd.vx / sp, ty: cmd.vy / sp });
+    spose2.push({ q1, q2, tx: cmd.vx / sp, ty: cmd.vy / sp });
   }
   await m0.l1.destroy(); await m0.l2.destroy();
-  const histAt = (j) => srate[((j % NS) + NS) % NS];
+  const histAt2 = (j) => srate[((j % NS) + NS) % NS];
   const X = [], Y = [];
   for (const r of rec.rows) {
     if (r.lap < 1) continue;
     const hist = Array.from({ length: LAGS[LAGS.length - 1] + 1 },
-      (_, d) => histAt(r.kIn - d)).reverse();
-    const f = featAt(hist, hist.length - 1, spose[r.kIn]);
+      (_, d) => histAt2(r.kIn - d)).reverse();
+    const f = featAt(hist, hist.length - 1, spose2[r.kIn]);
     if (f) { X.push(f); Y.push(r.en); }
   }
   const nf = X[0].length;
@@ -252,10 +251,52 @@ const rec = await driveLaps(5, null, 0);
   }
   const w = M.map((row, i) => row[nf] / (row[i] || 1));
   console.log(`  baseline settled contour(normal) rms ${rec.settled.map((v) => v.toExponential(3)).join(' ')}`);
-  // 2. DRIVE WITH THE INVERSE at a ladder of leads
-  for (const lead of [0, 250, 500, 750]) {
+  // 2. THE LEAD LADDER, extended past where the first run was still improving
+  let best = { lead: 0, rms: 1e9, w };
+  for (const lead of [750, 1000, 1250, 1500]) {
     const r = await driveLaps(5, w, lead);
-    console.log(`  CORRECTED, lead ${String(lead).padStart(4)} steps: settled rms `
+    const rms = r.settled.reduce((a, v) => a + v, 0) / r.settled.length;
+    console.log(`  pass 1, lead ${String(lead).padStart(4)}: settled rms `
+      + r.settled.map((v) => v.toExponential(3)).join(' '));
+    if (rms < best.rms) best = { lead, rms, w, rows: r.rows };
+  }
+  // 3. ITERATIVE REFIT at the best lead: fit the REMAINING residual on the same features
+  // and add it into the weights. A model each round — the table is state-addressed, so
+  // every pass remains program-agnostic in form; the iteration only sharpens the inverse.
+  const refit = (rows, wPrev) => {
+    const X = [], Y = [];
+    for (const r of rows) {
+      if (r.lap < 1) continue;
+      const hist = Array.from({ length: LAGS[LAGS.length - 1] + 1 },
+        (_, d) => histAt2(r.kIn - d)).reverse();
+      const f = featAt(hist, hist.length - 1, spose2[r.kIn]);
+      if (f) { X.push(f); Y.push(r.en); }
+    }
+    const nf = X[0].length;
+    const A = Array.from({ length: nf }, () => new Float64Array(nf));
+    const b = new Float64Array(nf);
+    for (let q = 0; q < X.length; q++) for (let i = 0; i < nf; i++) {
+      b[i] += X[q][i] * Y[q];
+      for (let j = 0; j < nf; j++) A[i][j] += X[q][i] * X[q][j];
+    }
+    for (let i = 0; i < nf; i++) A[i][i] += 1e-4 * A[i][i] + 1e-12;
+    const M = A.map((row, i) => [...row, b[i]]);
+    for (let c2 = 0; c2 < nf; c2++) {
+      let p = c2; for (let r2 = c2 + 1; r2 < nf; r2++) if (Math.abs(M[r2][c2]) > Math.abs(M[p][c2])) p = r2;
+      [M[c2], M[p]] = [M[p], M[c2]];
+      for (let r2 = 0; r2 < nf; r2++) { if (r2 === c2 || !M[c2][c2]) continue;
+        const f2 = M[r2][c2] / M[c2][c2]; for (let j = c2; j <= nf; j++) M[r2][j] -= f2 * M[c2][j]; }
+    }
+    const dw = M.map((row, i) => row[nf] / (row[i] || 1));
+    return wPrev.map((v, i) => v + 0.8 * dw[i]);
+  };
+  console.log(`  best lead ${best.lead}; refining the inverse…`);
+  let wCur = best.w, rowsCur = best.rows;
+  for (let pass = 2; pass <= 4; pass++) {
+    wCur = refit(rowsCur, wCur);
+    const r = await driveLaps(5, wCur, best.lead);
+    rowsCur = r.rows;
+    console.log(`  pass ${pass}, lead ${String(best.lead).padStart(4)}: settled rms `
       + r.settled.map((v) => v.toExponential(3)).join(' '));
   }
 }
