@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:698,built:"2026-09-02T19:03:20Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:699,built:"2026-09-02T19:08:34Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -8005,6 +8005,12 @@ window.__flxPathDbg = () => (armP ? {
     panel: $('autoRow').style.display !== 'none',
     starved: autoP && autoP.auto ? autoP.auto.starved() : null,
     range: autoP && autoP.auto ? autoP.auto.range() : null },
+  // ⑩'s live state: the fitted parameters (null before commissioning), what the artifact
+  // was compiled for, whether its row is visible, and whether the mode would act — the
+  // gate check needs `mode` to read 'open' when ⑩ is selected uncompiled.
+  twin: { fit: twinFit ? { ...twinFit } : null, busy: twinBusy,
+    compiledFor: twinFor ? { ...twinFor } : null, have: !!twinDu,
+    panel: $('twinRow').style.display !== 'none' },
   // LOOPED, NOT SPREAD. `profP.v` carries one entry per lap SAMPLE, so its length is set by
   // the FEEDRATE: 7356 at 4e-3 and about 29400 at the slowest rung. Spreading that into
   // `Math.min` passes every element as an ARGUMENT, and the limit is not a fixed count but

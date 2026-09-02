@@ -1363,6 +1363,24 @@ that matches it** — the point-to-point tabs measure a different question.
   the settles inside `makeMachine` yield too, because twenty thousand lattice steps run
   before the host is handed the machine and they froze the tab through the one stretch that
   most looks like a hang.
+  **⑩ THE COMPILED TWIN (plan §42): lap-1 accuracy from a model, tracker at commissioning
+  only.** Commission twin drives a random contour wander on the live machine and identifies
+  K and E by OUTPUT ERROR over the sliders' whole ladders (the domains, never the
+  positions; CFL-unbuildable candidates are recorded refusals); Compile this program
+  simulates the fitted twin and compiles a lap-1 feedforward IN SOFTWARE — zero machine
+  laps, zero tracker at load — behind a PRE-ROLL (lap 1 is a causality problem: the flex
+  must be loaded before t=0). Engaging ⑩ restarts the program behind the pre-roll. The twin
+  is the ONE artifact a plant rebuild keeps: move K/E after commissioning and the status
+  line shows fitted-vs-current while the correction keeps applying — §42 stage B live
+  (measured there: K±10% free, backlash-ignorance free, E−10% still e-3; a program/feed
+  change gates ⑩ to open instead). The machinery is the agnostic core `lib/pilot/twin.js`
+  (identify/compile/apply, no plant knowledge — the engineer wires signals and limits)
+  plus the arm's adapter `lib/flexisim/twin.js`; `test/flexisim/twin.test.mjs` pins
+  identification exact from one wander, compiled LAP 1 at 2.48e-4/6.50e-4 against an open
+  loop of 1.29e-2/5.28e-3, the pre-roll holding, and the mismatch observable. WHY A
+  SIMULATION AND NOT A REGRESSION is §41's twenty-falsifier campaign: the elbow's measured
+  memory is 6363–8649 steps — longer than a program lap — so windowed features truncate it
+  and closed paths alias it; a simulation propagates state.
   **Sweep feedrate**
   runs the whole ladder and tabulates the trade. The arm is drawn at TRUE geometry; the error trail
   is the exaggerated object, pushed out along the path normal only.

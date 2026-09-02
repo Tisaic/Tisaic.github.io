@@ -2852,6 +2852,32 @@ const gate9 = await fx.evaluate(() => {
 });
 check('flexisim/path: …and selecting ⑨ before commissioning is REFUSED, not run',
   gate9.want === 'auto' && gate9.mode === 'open', JSON.stringify(gate9));
+// ⑩ THE COMPILED TWIN gets the same two contracts as ⑨: its row is visible exactly when
+// it is the selected mode (the hint carries the only description of what the buttons cost),
+// and selecting it before anything is compiled runs OPEN — the tab's refusal shape.
+const t0 = await fx.evaluate(() => {
+  const d = window.__flxPathDbg();
+  return { ...d.twin, want: d.want };
+});
+check('flexisim/path: ⑩ starts with no twin and no compiled artifact',
+  t0.fit === null && t0.have === false && t0.busy === false, JSON.stringify(t0));
+check('flexisim/path: …and its row is shown exactly when ⑩ is the selected mode',
+  t0.panel === (t0.want === 'twin'), JSON.stringify(t0));
+const gate10 = await fx.evaluate(() => {
+  const el = document.getElementById('ctlP');
+  const was = el.value;
+  el.value = 'twin';
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+  const d = window.__flxPathDbg();
+  const out = { want: d.want, mode: d.mode, panel: d.twin.panel };
+  el.value = was;
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+  return out;
+});
+check('flexisim/path: …and selecting ⑩ before compiling is REFUSED, not run',
+  gate10.want === 'twin' && gate10.mode === 'open', JSON.stringify(gate10));
+check('flexisim/path: …with its row visible while selected (the biconditional\'s other half)',
+  gate10.panel === true, JSON.stringify(gate10));
 
 await fx.screenshot({ path: join(SHOTS, '08-flexisim-path.png') });
 // FULL TIER: the two things that need laps. Commissioning drives a whole slow lap
