@@ -4563,6 +4563,49 @@ the first press (the rounded keeps the drop-one pass the sharp bench never trigg
 a browser lap costs more than a Node lap). `deploy.test.mjs` green (actAt still agrees
 with what run() applies), browser suite green at zero failures.
 
+### 38. THE MECHANISM CAMPAIGN — the deterministic residual defined, understood, and traced to its controller gap
+
+The owner rejected the lap-harmonic framing ("there is no way the errors seen need 16 laps
+of view") and ordered a deep dive until the mechanisms were defined. They now are, each by
+measurement, on the deployed model-only machine (rounded, K1/E0.06, cascade(2), 5.9e-2):
+
+**THE RESIDUAL IS 99.7% DETERMINISTIC** (lap-to-lap correlation 0.997, profile 5.91e-2
+against a 3.4e-3 lap-noise floor) — the machine is physically capable of seventeen times
+better from a pure function of state, which was the owner's premise, proven first.
+
+**THE MECHANISM TABLE**, one analyzer per hypothesis, all on one recorded campaign:
+| hypothesis | verdict | evidence |
+|---|---|---|
+| lap-over-lap settling (the owner's alternative) | **NULL** | profile corr lap2~lap5 0.9995, amplitude identical |
+| backlash (H-LASH) | **minor, ≤5%** | reversal-conditioned rms 5.90e-2 vs 5.93e-2; BL=0 twin profile within 5% |
+| corner/transition transients (H-TRANS) | **NULL** | spatially UNIFORM — straights 6.2e-2 ≥ arcs 5.5e-2 ≥ transitions 5.2e-2 |
+| static droop (H-DROOP) | 11% | the feed-constant part of the 3-feed decomposition |
+| inertial (H-CENT) | 19% | the ∝feed² part |
+| **servo-loop response to commanded rates (H-LAG)** | **70%, and the window says the rest** | the ∝feed part; window-reach R² knees exactly at the loop's ~1000-step memory (0.57 instant → 0.82 @360 → 0.982 @1170 → sat 0.984) |
+
+**THE DEFINING FIT:** commanded joint-rate history alone, FIR over the loop's memory,
+R² 0.58; ADD POSE/TANGENT MODULATION and it reads **R² 0.9917, residual 5.4e-3** — within
+1.6x of the noise floor, from 97 local, commanded-state-addressed features. Stated as one
+sentence: **the residual is the servo loop's linear response to the commanded joint-rate
+history — a ~1000-step FIR — modulated by pose through the kinematics.** The debate
+resolves exactly: the needed view is the LOOP's memory (local physics, three orders below
+a lap — the owner's rejection was right) and it is still three times the pilot's current
+feature reach (the window insufficiency was real — at the servo scale, not the lap scale).
+
+**THE INVERSE, PUT TO THE MACHINE (rule 16), AND WHAT ITS STALL TEACHES.** Applied as a
+feedforward: lead 0 is WORSE (6.6e-2 — the correction rides the loop it corrects); the
+gain peaks at lead 750 (4.54e-2) and iterative refit converges geometrically to **4.13e-2
+and stalls**, far above the 5.4e-3 the model supports. A scalar lead inverts a delay; the
+loop is a FILTER, and deconvolution needs the identified impulse response — WHICH IS
+EXACTLY WHAT THE PILOT ALREADY OWNS (h identification + QP inversion). So the breakthrough
+layer is not a new controller: it is the PILOT'S FORECAST given the features this campaign
+proved sufficient — pose-modulated commanded-rate taps reaching the loop's own memory
+(derivable per plant from its measured Ts, rule 31), offered in the tune search the way
+poly and sched already are, taken where they earn their place. The QP then deconvolves
+properly, and the measured ceiling for the whole composition moves from R² 0.42-class
+forecasts to 0.99-class — the model reaching what only the memory could reach, which is
+what the owner said the physics allowed.
+
 ### The eight targets, restated (replacing the stale table above)
 
 | target | state |
