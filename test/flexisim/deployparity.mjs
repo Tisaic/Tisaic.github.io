@@ -23,7 +23,8 @@ import { makeArmHost } from '../../lib/flexisim/autohost.js';
 const K = +(process.env.K || 1), E = +(process.env.E || 0.06);
 const H = 4, CLAMP = 3, nu = 0.3, rho = 1, g = 2e-6, RATIO = 100, DRIVE = 32;
 const LEN1 = 14, LEN2 = 10, BACKLASH = 1e-4, CENTRE = [12, 0];
-const PATH = { w: 8, h: 8, r: 1.5, centre: CENTRE, feed: 4e-3, accel: 4e-5 };
+const PATH = { w: 8, h: 8, r: 1.5, centre: CENTRE, feed: 4e-3, accel: 4e-5,
+  cornerDt: 40, closed: true };
 
 async function machine() {
   const mk = (length) => buildLink({ length, section: H, clamp: CLAMP, E, nu, rho,
