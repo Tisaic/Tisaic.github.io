@@ -96,35 +96,74 @@ console.log(`  ladder best ${rep.best.toExponential(4)}, shipped `
   + `${JSON.stringify(hostRef.auto.deployed)}\n`);
 await hostRef.dispose();
 
-// ---- THE PAGE'S DEPLOY LOOP, replicated move for move: a live arm, attach with the live
-// path, continuous kP across laps, actAt + observe every step, each lap scored alone.
-const live = await fresh();
-hostRef.attach(live.arm, live.servo, live.rc, path, path.lap);
-hostRef.auto.beginRun();
-const LAPS = 6;
-for (let l = 0; l < LAPS; l++) {
-  const sc = new ContourScore({ joints: 2 });
-  for (let k = 0; k < LAP; k++) {
-    const kP = l * LAP + k;
-    const cmd = path.at(k);
-    const [q1, q2] = live.arm.ik(cmd.x, cmd.y, true);
-    const rt = live.arm.ikRates(q1, q2, cmd.vx, cmd.vy, cmd.ax, cmd.ay);
-    const refs = [{ theta: q1, omega: rt.dq[0], alpha: rt.ddq[0] },
-      { theta: q2, omega: rt.dq[1], alpha: rt.ddq[1] }];
-    const dq = hostRef.actAt(kP, cmd, refs);
-    const tau = live.servo.torques([{ ...refs[0], theta: q1 + dq[0] },
-      { ...refs[1], theta: q2 + dq[1] }]);
-    live.arm.step(tau[0], tau[1], 1);
-    const en = live.arm.encoders();
-    hostRef.auto.observe([en[0].angle, en[1].angle, en[0].speed * 1e3, en[1].speed * 1e3,
-      tau[0] * 1e3, tau[1] * 1e3]);
-    const d = decompose(path, live.arm.toolXY(), cmd);
-    sc.step(d.contour, d.lag, tau, [live.arm.j1.wM, live.arm.j2.wM]);
+// ---- TWO DEPLOY DRIVES, ONE COMMISSIONED ARTIFACT. Style A is this bench's original
+// stepping (per-lap k, integer wrap): it measured FLAT at 6.0e-2 for laps 2-6 while the
+// real page DIVERGED at +15-20% per lap from lap 2 — so the drive loop is the suspect,
+// and the same ladder driven both ways on fresh machines isolates it. Style B replicates
+// the page exactly: continuous kP, the command wrapping at the path's REAL (fractional)
+// lap time inside at(), lap boundaries at floor(kP / path.lap).
+const LAPS = +(process.env.LAPS || 15);
+async function drive(style) {
+  const live = await fresh();
+  hostRef.attach(live.arm, live.servo, live.rc, path, path.lap);
+  hostRef.auto.beginRun();
+  console.log(`  ${style}:`);
+  const out = [];
+  if (style === 'bench') {
+    for (let l = 0; l < LAPS; l++) {
+      const sc = new ContourScore({ joints: 2 });
+      for (let k = 0; k < LAP; k++) {
+        const kP = l * LAP + k;
+        const cmd = path.at(k);
+        const [q1, q2] = live.arm.ik(cmd.x, cmd.y, true);
+        const rt = live.arm.ikRates(q1, q2, cmd.vx, cmd.vy, cmd.ax, cmd.ay);
+        const refs = [{ theta: q1, omega: rt.dq[0], alpha: rt.ddq[0] },
+          { theta: q2, omega: rt.dq[1], alpha: rt.ddq[1] }];
+        const dq = hostRef.actAt(kP, cmd, refs);
+        const tau = live.servo.torques([{ ...refs[0], theta: q1 + dq[0] },
+          { ...refs[1], theta: q2 + dq[1] }]);
+        live.arm.step(tau[0], tau[1], 1);
+        const en = live.arm.encoders();
+        hostRef.auto.observe([en[0].angle, en[1].angle, en[0].speed * 1e3, en[1].speed * 1e3,
+          tau[0] * 1e3, tau[1] * 1e3]);
+        const d = decompose(path, live.arm.toolXY(), cmd);
+        sc.step(d.contour, d.lag, tau, [live.arm.j1.wM, live.arm.j2.wM]);
+      }
+      out.push(sc.report().contourRms);
+    }
+  } else {
+    let kP = 0, lap = 0, sc = new ContourScore({ joints: 2 });
+    for (;;) {
+      const lapNow = Math.floor(kP / path.lap);
+      if (lapNow !== lap) {
+        out.push(sc.report().contourRms);
+        sc = new ContourScore({ joints: 2 });
+        lap = lapNow;
+        if (lap >= LAPS) break;
+      }
+      const cmd = path.at(kP);
+      const [q1, q2] = live.arm.ik(cmd.x, cmd.y, true);
+      const rt = live.arm.ikRates(q1, q2, cmd.vx, cmd.vy, cmd.ax, cmd.ay);
+      const refs = [{ theta: q1, omega: rt.dq[0], alpha: rt.ddq[0] },
+        { theta: q2, omega: rt.dq[1], alpha: rt.ddq[1] }];
+      const dq = hostRef.actAt(kP, cmd, refs);
+      const tau = live.servo.torques([{ ...refs[0], theta: q1 + dq[0] },
+        { ...refs[1], theta: q2 + dq[1] }]);
+      live.arm.step(tau[0], tau[1], 1);
+      const en = live.arm.encoders();
+      hostRef.auto.observe([en[0].angle, en[1].angle, en[0].speed * 1e3, en[1].speed * 1e3,
+        tau[0] * 1e3, tau[1] * 1e3]);
+      const d = decompose(path, live.arm.toolXY(), cmd);
+      sc.step(d.contour, d.lag, tau, [live.arm.j1.wM, live.arm.j2.wM]);
+      kP++;
+    }
   }
-  const r = sc.report();
-  console.log(`  lap ${l + 1}: contour ${r.contourRms.toExponential(4)}  `
-    + `lag ${r.lagRms.toExponential(3)}`);
+  for (let i = 0; i < out.length; i++) console.log(`    lap ${i + 1}: ${out[i].toExponential(4)}`);
+  await live.l1.destroy(); await live.l2.destroy();
+  return out;
 }
-console.log(`\n  ladder promised ${rep.best.toExponential(4)} — the settled laps above are `
-  + 'the deployed truth; a gap that survives lap 3 is a parity defect, not a transient.');
-await live.l1.destroy(); await live.l2.destroy();
+const A = await drive('bench');
+const B = await drive('page');
+const trend = (o) => (o[o.length - 1] / o[1]).toFixed(2);
+console.log(`\n  bench-style lap15/lap2 = ${trend(A)}x   page-style lap15/lap2 = ${trend(B)}x`);
+console.log('  a page-style ratio well above 1 with a flat bench-style is the mechanism, captured.');
