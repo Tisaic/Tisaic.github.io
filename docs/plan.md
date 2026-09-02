@@ -4400,6 +4400,31 @@ ladder; and target 4's next cut is sitting in this table — 5 of the 8.1 minute
 the conventional rung's 23 laps, a rung that was then REFUSED, so a cheaper early-exit
 for a rung that is measuring nothing is the largest remaining commissioning lever.
 
+**THE COMMISSIONING-TIME ARC: 8.5 → 6.1 MINUTES, EVERY RUNG NUMBER BYTE-IDENTICAL.**
+Three cuts, each verified on both the refusing plant (the arm's press) and the deploying
+one (EMPS, 33 checks green throughout, 424.82x untouched):
+
+1. **The exits** (`ClassicFF`): a headroom floor after the baseline lap (basis-spanned
+   share of the error energy under 2% refuses before a single probe — fired on EMPS's own
+   always-refused stage, 1 lap instead of a budget); a dead-trial stop (three trials with
+   none accepted); and the PACE exit, measured into existence when the first two did NOT
+   fire on the arm — its basis spans 27% of the error and its trials accept at the 0.1%
+   level, so the verdict was in the pace: 0.36% after 4 refinement laps against the 2% the
+   ladder demands, priced exactly there by `refuseBelow` (the ladder passes its margin).
+   The ladder also stopped paying a deploy re-score for a rung whose commission found
+   nothing. 23 laps → 20 (1 baseline + 15 probes + 4 trials — the probes now dominate).
+2. **Probe grade** (`probeLaps`, opt-in): the rung's commissioning runs are identification,
+   not decisions, and each was paying a full scored run (2 warmup + 4 averaged laps).
+   Probe runs at 1+2 halve the block; every deploy re-score and ladder decision keeps full
+   grade. 8.0 → 6.1 minutes, rung table byte-identical — the identical coefficients
+   produced the identical re-score, which is the proof the grade split is free here.
+3. What remains and what it costs: conventional ~2 min (45 machine laps of probes — fewer
+   probes needs a smaller basis, a model change), cascade ~3 min (contains the measured
+   depth-2 decision at +1%, which is a decision and not waste), demo recording ~1 min.
+   The next big lever is the pilot's own VERIFY (43% of each layer's commissioning), and
+   that is the six-plant `_verifySegLen` experiment — a different measurement per the
+   verify's own warning, not a knob to turn on one plant.
+
 **AND THE DEMO IS NOW DESIGNED, WITH THE ENGINEER'S PROGRAM AS THE OVERRIDE — the owner's
 next directive, measured the same day.** `lib/flexisim/demopath.js` generates the demo the
 block asks the machine to run when no program is supplied: random sharp polygons plus
