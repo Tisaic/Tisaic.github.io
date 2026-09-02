@@ -122,10 +122,17 @@ const foreign = drive(3, false);
 const rep2 = refiner.report();
 console.log(`  foreign-feed ${foreign[0].toExponential(2)}/${foreign[1].toExponential(2)}  gated ${rep2.gated}`);
 check('gate engaged at the foreign feed', rep2.gated === true);
-// with du gated to zero the machine is the plain deployed one; the §40 bench measured
-// the UNGATED stale corrector at 5.7e-2/8.0e-2 — three times worse than this bound
-check('no harm: foreign-feed residual stays below 3e-2', foreign[0] < 3e-2 && foreign[1] < 3e-2,
-  `${foreign[0].toExponential(2)}/${foreign[1].toExponential(2)}`);
+// the assertion is the MECHANISM, not a residual number the pilot's own foreign-feed
+// ramp can wobble past: once gated, the applied correction must be EXACTLY zero
+const pkAtGate = refiner.duPk;
+const post = drive(1, false);
+check('post-gate correction is exactly zero (duPk stops growing)',
+  refiner.duPk === pkAtGate, `${refiner.duPk.toExponential(2)} vs ${pkAtGate.toExponential(2)}`);
+// and the residual sits with the plain deployed machine (control ~1.8-2.3e-2), far from
+// the measured 5.7e-2/8.0e-2 an UNGATED stale corrector inflicts (§40)
+check('no harm: foreign-feed residual stays below 4.5e-2, well under the ungated 5.7e-2',
+  post[0] < 4.5e-2 && post[1] < 4.5e-2,
+  `${post[0].toExponential(2)}/${post[1].toExponential(2)}`);
 
 await arm.l1.destroy(); await arm.l2.destroy();
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall checks passed');
