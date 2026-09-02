@@ -4884,6 +4884,68 @@ boundaries). The eventual floor may be set by the second-order phase-walk inject
 (§39: u lap-diff 1.8e-3 from the rig's free-running counters), which the page's
 lap-synced `actAt` already avoids.
 
+## §41 — THE LAP-1 REQUIREMENT REOPENS THE ESTIMATION, AND TEN MORE FALSIFIERS CORNER THE MECHANISM
+
+The owner rejected §39's settlement — the requirement is LAP-1 accuracy on unseen
+programs with the tracker at initial commissioning only, and "the limit found is gated by
+estimation and we can improve that as well. We are copping out." The reopened campaign
+(falsifiers 17–26, all scratchpad, zero shipped-code risk) dismantled the saturation
+claim and replaced it with three MEASURED physical facts and one verdict.
+
+**FACT 1 — THE MEMORY, MEASURED DIRECTLY (`impulse.mjs`).** A held-pose ref step:
+shoulder settles to 2% in 3240 steps; **the ELBOW takes 6363 steps to 2% and 8649 to
+0.1% — longer than a program lap, twice every window any falsifier had fitted.** At a
+stroke this explained the elbow being the universally failing channel, the transfer
+residual's 2100–3350-step harmonics (the truncated tail), and a structural theorem the
+campaign had been paying for blind: **a closed path with lap shorter than the memory
+cannot identify the deep tail — its own deep history is its own lap repeated, perfectly
+aliased.** The demo diet (laps 2800–6000 steps) was incapable BY CONSTRUCTION, arcs or
+no arcs; a truncated-window fit on a periodic command folds the deep taps modulo the lap
+length, which is why every per-program fit worked and none transferred.
+
+**FACT 2 — THE STEADY MAP IS UNIQUE (`compile-falsifier23.mjs`).** The same circle
+entered from home and after a 20000-step random pose-walk: settled-lap error identical to
+**eleven digits** (2.4e-11 of 7.0e-3), and one lap after entry to 1e-7. No hysteretic
+rest state, no backlash memory, no multi-stability: there IS one true function to
+identify, and history is forgotten within a lap.
+
+**FACT 3 — THE FAILURE IS CLASS BIAS, isolated at last (`compile-falsifier25/26.mjs`).**
+With both physics requirements finally met at once — reach 9000 ≥ the measured memory,
+and a NON-PERIODIC program-regime diet (random open contour wanders through the corner
+rule: arcs, corners, program feeds, ~25k steps each, never repeating) — transfer still
+failed, and the in-diet holdout convicted the model class itself: **wander→wander, same
+generator, same feeds, scores 0.51/−2.46.** The dictionary cannot generalize even inside
+its own regime. Twenty falsifiers of diet, reach, ridge, smoothness, kernels, locality
+and pose enrichment were pushing on estimation while the binding constraint was the
+class. The grey box — the rigid inverse-dynamics torques M(q)q̈+C(q,q̇)q̇+G(q) computed
+from the command through the arm's own closed forms, with small per-channel FIRs, 151
+dof — moves the elbow holdout to −0.47 and every program cell up (shoulder to 0.54–0.66
+from wanders+scribble alone), and still does not carry the elbow. The residual suspect is
+structural: the elbow truth mixes link-2 bending with link-1's downstream TILT (the 1.44x
+term), distributed dynamic states that no windowed regression on lumped signals has
+reached.
+
+**ALSO FALSIFIED ON THE WAY:** the arc-coverage hypothesis (the circle's rows are 100%
+INSIDE the polygon diet's span by leverage, yet worst-predicted — in-span + wrong =
+the feature vector is not a state); the slow-start-transient hypothesis (lap-2 and lap-3
+transfer scores identical to three digits); richer pose Fourier statics (worse — added
+dof feeds aliasing before it feeds accuracy); and the pooled 3-program vector itself
+(it scores NEGATIVELY on the demos and scribble — the §39 "capacity at the floor" pooled
+fit was three folded representations stitched, not one map).
+
+**THE VERDICT AND THE BUILD.** Windowed regression — any features, any diet, any
+regularizer — is exhausted on the elbow. What remains is different in KIND and is the
+physically principled route (rule 40 at full strength, the EMPS lesson from the other
+side): a REDUCED DYNAMIC TWIN — rigid 2R with fitted parameter corrections, per-joint
+wind-up spring-damper, one modal bending DOF per link with its downstream tilt term,
+~10–20 parameters — identified by OUTPUT ERROR on the commissioning records (scribble +
+wanders, tracker on, no program knowledge), then evaluated by SIMULATION at program
+load: states propagate, so there is no window to truncate and no lap to alias.
+Prediction of each program's open-loop error becomes a model evaluation; the §40
+deconvolution machinery then turns it into a lap-1 feedforward. That build is next; the
+random-wander generator (program-regime, non-periodic, the record the theory demands)
+and the physics-signal computation are already written and cached for it.
+
 ### The eight targets, restated (replacing the stale table above)
 
 | target | state |
