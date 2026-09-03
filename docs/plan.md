@@ -6027,3 +6027,36 @@ inversion, not the fit — which is why the basis choice compares residuals and 
 choice deliberately does not."* A better forecast is not a better controller, the verify
 round exists precisely because of that, and the ~3.5x should never have been stated
 without one.
+
+**§46 — WHERE THE LIVE ARCHITECTURE ACTUALLY STANDS, AFTER THE FALSIFICATION.** Three
+facts now sit together and they bound the route:
+
+1. **The twin cannot serve the QP live.** It runs 5.4x slower than real time (§44,
+   measured), so within one decision interval — the pilot's `sample`, 9 steps — it can
+   simulate under two steps ahead where the horizon needs hundreds. That is two orders of
+   magnitude, not a tuning gap.
+2. **No cheap model has inherited its memory.** Fitted directly on machine data, §43's
+   contraction-RNN with rollout fitting walled an order of magnitude short of the bar.
+   Fitted on TWIN data at the pilot's own window it delivers 0.72x/0.54x/1.10x — a trade,
+   not a win. Fitted on twin data with a log-spaced 768-sample window it wins the
+   FORECAST by 68-489x, and that forecast advantage did not survive deployment.
+3. **The pilot already searches the obvious window lever.** `wcands: [12, 24, 40]` lags x
+   3 strides x 3 ridges, chosen by held-out score, reaching ~520 samples at this arm's
+   stride 13. "Use a longer window" is not an unexplored idea here; what my bench had
+   that the pilot does not search is LOG SPACING — fine resolution near t=0 AND reach —
+   which remains unmeasured for DELIVERY and is the one honest remnant of that line.
+
+**SO THE OWNER'S ARCHITECTURE HAS A MEASURED WALL, AND IT IS NOT WHERE I SAID IT WAS.**
+It is not the model class being insufficiently expressive, and it is not the training
+data being scarce. It is that **a forecast good enough to matter has so far required
+propagating state through a simulation, and the simulation cannot run inside a scan.**
+Everything cheap enough to run live has landed within a factor of the pilot's own
+forecast, and improvements to that forecast do not reliably reach delivery because the QP
+inverts the model and regularisation serves the inversion rather than the fit.
+
+**WHAT REMAINS OPEN, HONESTLY (rule 59):** the log-spaced basis measured on DELIVERY
+rather than on R², since it is the one factor the pilot's own search does not cover; and
+a reduced-order model OF the twin (its dynamics, not its input-output regression) that
+propagates state cheaply — a small linear state space realised from the measured step
+response, which is a different object from anything tried here and the only remaining
+candidate for putting the simulation's memory inside a scan.
