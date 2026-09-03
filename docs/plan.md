@@ -5990,3 +5990,40 @@ the shipped controller unchanged" is not supported. Whatever the corrected refit
 better forecast R² did not by itself buy delivery here, and the ATTRIBUTION between the
 twin's data and the earlier bench's 768-sample window remains unmeasured — the earlier
 result changed both at once and I reported it as though the data were doing the work.
+
+**§46 — THE CORRECTED REFIT, AND THE HONEST VERDICT ON THE TWIN-AS-DATA-GENERATOR
+CLAIM.** With the readout's OWN ridge (both channels chose 1e-5 — my flat 1e-6 was 10x
+tighter, sharpening the fit and damaging the inverse exactly as the record predicts) and
+the pilot's own column scaling, every program improved, and the control reproduced
+byte-identically across both runs, which is what makes the comparison trustworthy:
+
+```
+ program        machine-fitted   twin-refitted    ratio
+ rounded              1.041e-1        1.456e-1     0.72x
+ circle               5.772e-2        1.062e-1     0.54x
+ sharp                2.422e-1        2.193e-1     1.10x
+```
+
+**Twin-generated training data is a TRADE, not a win: +10% on the hard program, -28% and
+-46% on the smooth ones.** The direction matches the command-only forecast bench exactly,
+so it is a signal rather than noise — broadband wanders COVER the corner regime and give
+up the DISTRIBUTION MATCH the pilot gets by training on the program it runs, which is
+this file's own rule-34 lesson arriving from the data side instead of the scheduling one,
+and the same shape as the measured price of agnostic corner banks (1.21x/1.10x).
+
+**THREE CLAIMS OF MINE DIE HERE AND ONE SURVIVES.** Dead: that the twin-trained model
+would deliver ~3.5x better (a projection from the forecast bound — the machine says
+0.54-1.10x); that "the twin's gift is the data and it plugs into the shipped controller
+unchanged"; and that the earlier bench's win was attributable to the data, when it
+changed the data AND the window together and the delivered result now points at the
+WINDOW. Surviving: the twin's own simulated forecast really is 68-489x better and flat in
+lead — but that is the SIMULATION, which runs 5.4x slower than real time, and no cheap
+model has yet inherited it.
+
+**AND THE SELECTION CRITERION IS THE LESSON, FOR THE THIRD TIME.** I chose a model on
+held-out forecast R² and it lost on the machine. This file already says why, in the
+pilot's own fitting code: *"the QP inverts this model, so regularisation serves the
+inversion, not the fit — which is why the basis choice compares residuals and the ridge
+choice deliberately does not."* A better forecast is not a better controller, the verify
+round exists precisely because of that, and the ~3.5x should never have been stated
+without one.
