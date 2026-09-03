@@ -406,6 +406,16 @@ must be:
 If any step fails, fix it first — do not push. Run `stamp-version.sh` last so
 the shipped commit carries the correct version.
 
+### The performance bench configuration (owner's standing rule)
+
+**Every performance bench going forward runs at the SOFTEST arm settings (K 0.25 /
+E 0.03) on the SHARP-CORNER program.** The mode-⑨/⑩ trace is the reason: every
+seam-round bench ran the rig default K=16/E=0.15 while the phone ran K=1/E=0.06, and a
+fix validated stiff shipped e-1 soft — a benchmark is a constant too (rule 31). The
+softest cell with the hardest program is the one that cannot flatter: compliance at its
+largest, and the corner regime the excitation covers worst. Numbers recorded at other
+settings stand as history; new performance claims are measured here.
+
 ### What `./test/run.sh` actually runs
 
 `--quick` (the default) and `--full` choose the tier; anything pinning a CONTRACT runs in
