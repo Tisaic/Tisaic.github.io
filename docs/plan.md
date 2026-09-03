@@ -5823,3 +5823,38 @@ complementary models: the cascade, where each layer models what the one below it
 — a live optimiser on that pair would be path- and feed-agnostic with no per-program
 compile, which is what the owner asked for, and it degrades gracefully on a plant whose
 class is only approximately right rather than failing when the template does.
+
+**§45 — THE PRE-ROLL OBJECTIVE FIXED, AND ONE OF TWO PREDICTIONS FALSIFIED
+(`test/_twinskipsweep.mjs`).** `compileTwin` gained `skip`: leading samples excluded from
+the OBJECTIVE, never from the artifact, and zeroed in the error fed to the deconvolution.
+Two predictions were registered before running it — that the delivered peak would move to
+higher iteration counts, and that the gain would improve at EVERY budget. The first held;
+the second is false, and the failure is the useful half:
+
+```
+ iters   delivered   gain     without skip
+     2   7.495e-3    8.2x     8.2x    identical
+     3   5.339e-3   11.5x    11.5x    identical
+     5   4.975e-3   12.3x    12.1x    +1.8%
+     8   4.880e-3   12.6x    11.8x    +6.9%
+    11   4.816e-3   12.7x    11.8x    +7.6%
+```
+
+**The compile is MONOTONE in iterations again and reaches 12.7x against 11.8x at the
+shipped budget** — but it is byte-for-byte identical at 2 and 3 iterations, so the
+pre-roll term is not "misdirected effort" as claimed. The mechanism is sharper than the
+first story: while the program error is large it DOMINATES the update and the pre-roll
+term is inert; once iterations shrink the program error, the pre-roll's IRREDUCIBLE error
+becomes the larger share and begins steering the update — which is exactly where the
+delivered result used to turn over. A term that is negligible early and dominant late
+produces precisely a non-monotone curve, and no reading of the energy split alone would
+have said which. Rule 42 now picks 5 iterations at 12.3x where it previously picked 3 at
+11.5x.
+
+**AND THE READING OF THAT TABLE WAS NEARLY WRONG TWICE, THE SAME WAY BOTH TIMES.** The
+sim and delivered columns differ by a sqrt(2) convention — `rmsOf` sums both channels and
+divides by SAMPLES, the bench's scorer divides by samples x channels — so the sim column
+read 41% worse than delivered and I twice began concluding a regression from it before
+checking. Same fault as the mismatched scoring window earlier in this section: comparing
+two numbers computed under different conventions (rule 17). The delivered column, which
+is one convention throughout, is the one that decides.
