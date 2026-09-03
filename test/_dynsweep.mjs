@@ -34,14 +34,36 @@ const path = mkPath('sharp', 0.004);
 const destroy = async (m) => { await m.arm.l1.destroy(); await m.arm.l2.destroy(); };
 const mkRnd = (s) => { let z = s >>> 0; return () => (z = (z * 1664525 + 1013904223) >>> 0) / 4294967296; };
 
-const record = async (p, nSamples) => {
+// a correction-like injection for rule 34: the compile asks the model about q + du,
+// so the commissioning records must contain corrected-scale inputs. Filtered noise,
+// ~500-step correlation, ~0.6 rad rms, clamped at the 2.0 cap.
+const mkInject = (seed, amp = 1.2) => {
+  // PIECEWISE-HELD offsets with smoothstep ramps: the compiled du is slow — measured,
+  // random OU even at 3000-step correlation excites the amplified mid-band (truth rms
+  // 0.3-2.1 against the normal 0.06-0.12) — so the corrected-scale excitation holds a
+  // random du for thousands of steps and ramps gently, covering the STATIC du manifold.
+  let z = seed >>> 0;
+  const rnd = () => ((z = (z * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+  let cur = [0, 0], nxt = [0, 0], k = 0, hold = 1, ramp = 900;
+  const draw = () => [amp * (2 * rnd() - 1), amp * (2 * rnd() - 1)];
+  return () => {
+    if (k >= hold + ramp) { cur = nxt; nxt = draw(); k = 0; hold = 2500 + 5000 * rnd(); }
+    k++;
+    if (k <= hold) return cur.slice();
+    const t = (k - hold) / ramp, sm = t * t * (3 - 2 * t);
+    return [cur[0] + (nxt[0] - cur[0]) * sm, cur[1] + (nxt[1] - cur[1]) * sm];
+  };
+};
+const record = async (p, nSamples, inject = null) => {
   const m = await makeArm();
   homeArm(m.arm, m.servo, p);
   const rows = [];
+  let dcur = [0, 0];
   for (let k = 0; k < nSamples * SS; k++) {
     const c = p.at(k);
-    const [q1, q2] = m.arm.ik(c.x, c.y, true);
+    let [q1, q2] = m.arm.ik(c.x, c.y, true);
     const rt = m.arm.ikRates(q1, q2, c.vx, c.vy, c.ax, c.ay);
+    if (inject) { dcur = inject(); q1 += dcur[0]; q2 += dcur[1]; }
     const tau = m.servo.torques([{ theta: q1, omega: rt.dq[0], alpha: rt.ddq[0] },
       { theta: q2, omega: rt.dq[1], alpha: rt.ddq[1] }]);
     m.arm.step(tau[0], tau[1], 1);
@@ -93,6 +115,19 @@ if (!R.c1) {
     writeFileSync(CACHE, JSON.stringify(R));
   }
 }
+if (!R.j1) {
+  console.log('extending the cache with INJECTED records (rule 34: corrected-scale inputs)…');
+  for (let i = 0; i < 4; i++) {
+    R['j' + (i + 1)] = await record(randomWander(mkRnd(801 + i), 0.004, { centre: [12, 0], reach: 6 }),
+      2000, mkInject(901 + i));
+    writeFileSync(CACHE, JSON.stringify(R));
+  }
+  for (let i = 0; i < 4; i++) {
+    R['k' + (i + 1)] = await record(bigPolygon(mkRnd(811 + i), 0.004, { star: i % 2 === 1 }),
+      2000, mkInject(911 + i));
+    writeFileSync(CACHE, JSON.stringify(R));
+  }
+}
 if (!R.e1) {
   console.log('extending the spanning corpus (12 more)…');
   for (let i = 0; i < 6; i++) {
@@ -123,7 +158,11 @@ if (!R.w4) {
   writeFileSync(CACHE, JSON.stringify(R));
 }
 const { w1, w2, w3, prog } = R;
-const FIT = process.env.COVER2
+const FIT = process.env.RULE34
+  ? [...'cdef'].flatMap((ch) => Array.from({ length: 6 }, (_, i) => R[ch + (i + 1)]))
+      .concat([...'jk'].flatMap((ch) => Array.from({ length: 4 }, (_, i) => R[ch + (i + 1)])))
+      .concat([R.w1, R.w2, R.p1, R.p2]).filter(Boolean)
+  : process.env.COVER2
   ? [...'cdef'].flatMap((ch) => Array.from({ length: 6 }, (_, i) => R[ch + (i + 1)]))
       .concat([R.w1, R.w2, R.p1, R.p2, R.p3, R.p4]).filter(Boolean)
   : process.env.COVER

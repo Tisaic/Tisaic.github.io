@@ -5140,6 +5140,35 @@ model is the complementary route; and the wander is the excitation the FIR is fi
 which covers the program's corners exactly as poorly as the pilot's scribble did (the
 §§9-17 lesson from the forecast side, now in free-run form).
 
+**§43 CONTINUED — THE 50x DIRECTIVE, AND WHERE THE CAMPAIGN CLOSED.** The owner's bar:
+50x, fully learned. The march from 4.4x: corner-rich records NULL for free-run (unlike
+the forecast side); sign/friction features marginal; then TWO real mechanisms — the
+mid-segment residual is SLOW (0/1 zero crossings, smooth ramps: the nonlinear droop
+surface a linear kernel can only linearize) and **the commissioning excitation never
+reached the program's workspace** (wander reach 4.2, polygon max 3.8, the square's
+half-diagonal 5.66 — the FOURTH "calibration must span the range"). A workspace-spanning
+corpus + a degree-5 pose polynomial: free-run **0.071/0.309**, and **v2 DELIVERS 5.6x**
+(2.03e-1 flat). But v2 captured only a third of the model's improvement, and the gap
+instrument said why: **the model-vs-machine gap ON THE CORRECTED RUN is 96% of the
+corrected error** — rule 34: the model is scored open-loop and consulted at q+du.
+**REACHING THE CORRECTED REGIME THEN FAILED FIVE INDEPENDENT WAYS, and the failures are
+the finding**: three injection designs (OU noise, slew-limited, piecewise-held — even a
+HELD 1.2 rad du displaces the machine off-path, truth 0.3-8 rad, because an arbitrary du
+cancels nothing) and two bootstrap rounds (model-compiled cancelling corrections for the
+spanning excitations at full and half gain — every one measured WORSE than open, all six
+REFUSED by the machine-vouching gate; the refit control held at 5.6x). The coupling is
+structural: visiting the corrected regime safely needs a model of the quality the visits
+are meant to buy. The program compile survives it only because refine+tiling squeeze the
+periodic case; the deep-lag L=780 cell separately measured §41's aliasing live (transfers
+on open wanders, breaks on closed laps).
+**THE FORK, STATED FOR THE OWNER (rule 59):** (A) a stronger model class — nonlinear
+state-space fitted by simulation-error descent, or the kernel/primitives route — genuine
+research, uncertain at the softest-nonlinear cell, unbounded weeks; or (B) a GENERIC
+articulated-chain template with EVERY parameter fitted by output error (masses,
+stiffnesses, damping, friction, backlash — §42's product form with nothing supplied but
+the structure CLASS), which reaches 44x by construction and is days. What would change
+the answer: a measured free-run at ≤0.05 NRMSE both channels from any learned class.
+
 **THE CANONICAL BENCH (owner's standing rule: softest arm, sharp corners — K 0.25 /
 E 0.03, the sharp square).** The twin pipeline in the shipped config, first measurement
 at the cell that cannot flatter: open loop 1.13 contour; ⑩ lap 1 **2.65e-2**, tail flat

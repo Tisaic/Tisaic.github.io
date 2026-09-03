@@ -14,7 +14,10 @@ const path = mkPath('sharp', 0.004);
 const destroy = async (m) => { await m.arm.l1.destroy(); await m.arm.l2.destroy(); };
 
 const R = JSON.parse(readFileSync(CACHE, 'utf8'));
-const FIT = [R.w1, R.w2, R.w4, R.w5, R.w6, R.w7];
+// v2: the workspace-spanning corpus and the pose-polynomial dictionary (0.071/0.309
+// free-run on this program — the best measured cell)
+const FIT = [...'cdef'].flatMap((ch) => Array.from({ length: 6 }, (_, i) => R[ch + (i + 1)]))
+  .concat([R.w1, R.w2, R.p1, R.p2, R.p3, R.p4]).filter(Boolean);
 const CQ = [0, 0];
 {
   let s0 = 0, s1 = 0, n = 0;
@@ -22,6 +25,12 @@ const CQ = [0, 0];
   CQ[0] = s0 / n; CQ[1] = s1 / n;
 }
 // features over a plain q-series (array of [q0,q1] per sample), held-extended below 0
+const poly5 = (q) => {
+  const u = (q[0] - CQ[0]) / 0.55, v = (q[1] - CQ[1]) / 0.55;
+  const out = [];
+  for (let i = 0; i <= 5; i++) for (let j = 0; j <= 5 - i; j++) out.push(u ** i * v ** j);
+  return out;
+};
 const featQ = (qs, t) => {
   const at = (i) => qs[Math.max(0, i)];
   const f = [1];
@@ -30,6 +39,9 @@ const featQ = (qs, t) => {
     const q = at(t - i), qm = at(t - i - 1);
     f.push(q[0] - qm[0], q[1] - qm[1]);
   }
+  for (const v of poly5(at(t))) f.push(v);
+  for (const v of poly5(at(t - 8))) f.push(v);
+  for (const v of poly5(at(t - 32))) f.push(v);
   return f;
 };
 console.log('fitting FIR L=384 on 12k wander samples…');
@@ -37,6 +49,7 @@ const X = [], Y = [];
 for (const w of FIT) {
   const qs = w.map((r) => r.q);
   for (let t = L; t < w.length - 1; t++) { X.push(featQ(qs, t)); Y.push(w[t + 1].e); }
+  qs.length = 0;
 }
 const W = ridgeMulti(X, Y, RIDGE);
 const predict = (f) => W.map((w) => { let s = 0; for (let i = 0; i < f.length; i++) s += w[i] * f[i]; return s; });
@@ -188,7 +201,7 @@ const drive = async (duF, laps) => {
     }
   }
   const total = Math.ceil(path.lap * laps);
-  const rows = []; let cAcc = 0, cn = 0, lapNo = 0;
+  const rows = []; const eReal = []; let cAcc = 0, cn = 0, lapNo = 0;
   for (let k = 0; k < total; k++) {
     const now = Math.floor(k / path.lap);
     if (now !== lapNo) { rows.push(Math.sqrt(cAcc / cn)); cAcc = 0; cn = 0; lapNo = now; }
@@ -204,11 +217,17 @@ const drive = async (duF, laps) => {
       const sp = Math.hypot(c.vx, c.vy) || 1;
       const cerr = (c.vx / sp) * (tool[1] - c.y) - (c.vy / sp) * (tool[0] - c.x);
       cAcc += cerr * cerr; cn++;
+      const cx = m.arm.L1 * Math.cos(q1) + m.arm.L2 * Math.cos(q1 + q2);
+      const cy = m.arm.L1 * Math.sin(q1) + m.arm.L2 * Math.sin(q1 + q2);
+      const J = m.arm.jacobian(q1, q2);
+      const det = J[0][0] * J[1][1] - J[0][1] * J[1][0];
+      const ex = tool[0] - cx, ey = tool[1] - cy;
+      eReal.push([(J[1][1] * ex - J[0][1] * ey) / det, (-J[1][0] * ex + J[0][0] * ey) / det]);
     }
   }
   if (cn > 10) rows.push(Math.sqrt(cAcc / cn));
   await destroy(m);
-  return rows;
+  return Object.assign(rows, { eReal });
 };
 console.log('delivering on the REAL machine…');
 const open = await drive(null, 2);
@@ -216,4 +235,22 @@ const got = await drive(ref.f, 8);
 console.log('open   :', open.map((v) => v.toExponential(2)).join('  '));
 console.log('v0 ⑩dyn:', got.map((v) => v.toExponential(2)).join('  '));
 console.log(`gain over open: ${(open.at(-1) / got.at(-1)).toFixed(1)}x   (structure twin: 44x)`);
+// THE MODEL-ON-THE-CORRECTED-TRAJECTORY GAP (rule 34): the model is scored on the OPEN
+// program but consulted about q+du. Compare its prediction of the corrected run against
+// what the machine actually did, over the sim's window past the handoff lap.
+{
+  const simE = await simSuper(4)(ref.f);
+  let d2 = 0, m2 = 0, n2 = 0;
+  const start = PRE + Math.ceil(path.lap / SS) + 50;
+  const end = Math.min(simE.length - 1, PRE + Math.floor(4 * path.lap / SS) - 2);
+  for (let t = start; t < end; t++) {
+    const r = got.eReal[t - PRE];
+    if (!r) continue;
+    for (const c of [0, 1]) { d2 += (simE[t][c] - r[c]) ** 2; m2 += r[c] ** 2; }
+    n2++;
+  }
+  console.log(`model-vs-machine ON THE CORRECTED RUN: gap rms ${Math.sqrt(d2 / (2 * n2)).toExponential(2)}`
+    + ` against real corrected rms ${Math.sqrt(m2 / (2 * n2)).toExponential(2)}`
+    + `  (the delivery floor if this ~equals the delivered error)`);
+}
 console.log('EXIT 0');
