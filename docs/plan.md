@@ -5467,3 +5467,25 @@ the value is in the first two). (4) The operator refine can alternatively run ag
 the REAL machine (~160 evals x 4 laps ≈ 90 min of machine laps, near-zero compute) —
 but that needs the truth signal present at refine time, an installation property like
 `onlineAtDeploy`, and it spends machine wear where the sliced sim spends calendar.
+
+**§44 CONTINUED — THE PAGE'S ⑩ WAS UNOPERABLE IN EXACTLY THE STATE THE PLC STORY
+NEEDS IT, and the owner found it from the phone.** Deep refine locked every button and
+showed ONE status line for its whole first operator cycle — 32 full simulations on a
+phone, an hour of "appears stuck" — with no way out; ⑨ learned this lesson (stop as a
+throw out of the yield point) and ⑩ never inherited it. Fixed, all three: (1)
+`refineOperator` reports per-probe (`operator probe 7/32`), per-step and per-rejected-
+scale progress; (2) ⑩ has a **Stop** button, live exactly while the others are locked
+— the throw unwinds through every `finally`, the lattices are destroyed, no partial
+artifact survives, and a stale flag cannot kill the next pre-roll (engageTwin re-arms
+it); (3) the badges distinguish stopped from failed. **The two efficiency levers were
+measured before the page adopted either (`test/_twinfastid.mjs`):** the SCREENED
+identification — every ladder cell still visited (a thinned grid shipped a defect here
+once), but on a 250-sample record first, the best 8 paying full length — matches the
+full search EXACTLY (dK/dE 0.00%, same J to the digit) at 24 full evals against 61,
+yet only **1.3x faster**, because each candidate's cost is dominated by BUILD-AND-
+SETTLE (a 4000-step home) rather than the record — the fixed cost is the real
+commissioning-time lever and is stated as unattacked. And FORWARD-DIFFERENCE operator
+probes (half the evals, 1.6x faster) measured **4.1% worse tile after one cycle,
+FAILING the pre-registered 3% bar** — central differences stay, on the page too. The
+compile's length is design (bench quality, plan §42) and now merely LOOKS long instead
+of looking dead.

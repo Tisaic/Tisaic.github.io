@@ -7900,11 +7900,20 @@ async function twinCommission() {
     // damping is not on a nameplate, and with it merely guessed the K/E grid lands off
     // truth — which is exactly why stage 2 exists.
     const idSim = twinSims().identifySim(wpath, nSamp);
+    // THE SCREEN (measured, `test/_twinfastid.mjs`): every ladder cell is still visited
+    // — a thinned grid shipped a defect here once — but on a 250-sample record first,
+    // and only the best 8 pay full length. Parity against the full search is EXACT
+    // (dK/dE 0.00%); the saving is bounded at ~1.3x because each candidate's cost is
+    // dominated by build-and-settle, not the record — stated, not hidden.
+    const SCREEN_N = Math.min(250, nSamp);
+    const idSimShort = twinSims().identifySim(wpath, SCREEN_N);
     const fit = await identifyTwin({
       record: rec.e,
       simulate: (p) => idSim({ ...p, damp: 1e-3, bl: 0 }),
       space: [{ name: 'K', values: KP_LADDER.slice() }, { name: 'E', values: EP_LADDER.slice() }],
       refine: 2,
+      screen: { record: rec.e.slice(0, SCREEN_N),
+        simulate: (p) => idSimShort({ ...p, damp: 1e-3, bl: 0 }), keep: 8 },
       onProgress: (m) => { stat.textContent = `identifying: ${m}`; },
     });
     // STAGE 2 (§43): free damping and backlash and walk all four by coordinate descent.
