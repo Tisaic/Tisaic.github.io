@@ -5082,6 +5082,21 @@ The trace also scored ⑨ on the same machine end to end: ladder deployed the ca
 alone (classic withheld by measurement), delivered 5.7e-2 = 7.6x, consistent with its own
 rung table — no ⑨ divergence.
 
+**§43 — THE OWNER'S NEXT DIRECTIVE: ⑩ BECOMES FULLY LEARNED, KINEMATICS AND DYNAMICS
+BOTH.** No analytic ik/fk/Jacobian anywhere in ⑩'s chain (refs from the learned inverse
+map, truth through the learned affine observer — the ⑥ routing), and no structure
+template either: the SIMULATOR the compile iterates against must itself be learned from
+commissioning data, so the K/E ladder search disappears and commissioning becomes
+gather + wander + probes. The honest prior art: §41 convicted windowed FEEDFORWARD maps
+(memory 6363–8649 steps > a lap; closed paths alias their history) but never closed the
+AUTOREGRESSIVE free-run class, which propagates state and is a simulation in §41's own
+sense; the probe-constructed kernel thread (falsifiers 33–38) reached near-signal on the
+elbow (4e-3) with the shoulder broken (8.8e-2). Both halves are being measured at the
+canonical cell before any page wiring: the learned-chain kinematics bench
+(gather 60 pts, holdout 7.5e-3 rad at K 0.25/E 0.03) and an AR free-run model-class
+screen (fit on wanders, free-run seeded at the model's own fixed point — no tracker at
+load — scored on the sharp program it never saw).
+
 **THE CANONICAL BENCH (owner's standing rule: softest arm, sharp corners — K 0.25 /
 E 0.03, the sharp square).** The twin pipeline in the shipped config, first measurement
 at the cell that cannot flatter: open loop 1.13 contour; ⑩ lap 1 **2.65e-2**, tail flat
