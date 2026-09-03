@@ -5318,7 +5318,21 @@ projection onto a rotating normal is itself a lap-varying operator" is no obstac
 an optimizer whose operator is lap-varying by construction — and warm-starts from v2's
 checkpointed tile.
 
-**ROUTE A MEASURED, AND THE MISSING-TOOLS HYPOTHESIS IS FALSIFIED IN ITS SIMPLE FORM
+**v3 PASSED THE OWNER'S BAR: 53.6x (`_tilelvo3.mjs`).** Same machinery, one change —
+the residual and the kernels are evaluated in TOOL space through the per-bin Jacobian
+(precomputable because the tile's bins align to program phase exactly), so the
+optimizer minimizes what the machine is scored on. Warm-started from v2's tile, four
+refresh cycles, 163 evals: tool tile 2.674e-2 → **2.298e-2**, every holdout within
+0.9%, and delivered **53.6x over the open loop** (contour 2.12e-2 steady over the
+last six laps) with the transfer instrument again exact — delivered tool rms
+2.306e-2 against sim 2.298e-2, 0.3%. The full arc from the six-null wall: shipped
+44.0x → subspace GN 45.9x → operator-joint 47.7x → operator-tool **53.6x**, at
+unchanged authority (duPk 1.92 against the 2.0 cap). Two lessons carried the arc: an
+objective must not be gameable at a resolution the machine cannot see (rule 21's
+costume), and it must WEIGH what the score weighs (the Path tab's own
+corrected-for-both-scored-on-one, from the other side). Promotion to
+`lib/pilot/twin.js` as `refineOperator` — plant-agnostic, the projection supplied by
+the adapter — is the next work item.
 (`test/_dynssm.mjs`).** The campaign's reading was that the generic learner lacked two
 tools — stable deep state and rollout-error fitting. Both were built and provided: a
 contraction-GUARANTEED nonlinear state-space (x' = g·x + (1−g)·tanh(Wx+Uu+b), g on a
