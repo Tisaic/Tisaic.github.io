@@ -5220,9 +5220,21 @@ corrected here where it was written): at truth parameters sim(ref.f) and the rea
 corrected run agree to 0.00e+0 — the pipeline is EXACTLY faithful — and the "gap"
 was tool-space contour (2.55e-2) read against joint-space residual (3.3e-3), which
 are the same number through the kinematic lever.** Past 44x therefore means shrinking
-the refined artifact's own residual; the measured suspect is the refine's harmonic
-cutoff (0.008·peak zeroes the weak-|G| harmonics, where the sharp corners' content
-lives) and its lambda — the sweep is the running experiment.
+the refined artifact's own residual — **and five routes into it are now measured NULLS,
+with the target quantified**: opening the cutoff/lambda (every opened cell reverted to
+the guard; the shipped cell is the only improving one); fitting the tile on settled
+laps only (`skipLaps` 3, window 7: 3.11e-3 vs 3.12e-3, 44.4x vs 44.0x — noise; the
+option ships, default 1, byte-identical); probing H at the correction's own amplitude
+(H(0.3) is 14.7% from H(2e-3) and refining with it is WORSE, 40x); and per-harmonic
+step gains in two variants (HFF's design — worse both times, 40x, reverted with the
+control reproducing 3.12e-3 exactly). **The decisive instrument: the corrected
+residual REPEATS lap-to-lap to 4.3e-4 against the 3.1e-3 the refine leaves — 7x of
+correctable headroom exists** — and the nulls together say the offending harmonics are
+PHASE-wrong in the small-signal H around the 1.9 rad corrected orbit: a direction
+error regresses at any positive gain, so no damping schedule can take the headroom.
+The stated next route (rule 59): a per-harmonic SECANT Jacobian estimated from the
+refine's own iterates (quasi-Newton in the frequency domain), which corrects direction
+rather than step size.
 
 **THE CANONICAL BENCH (owner's standing rule: softest arm, sharp corners — K 0.25 /
 E 0.03, the sharp square).** The twin pipeline in the shipped config, first measurement
