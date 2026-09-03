@@ -1404,6 +1404,23 @@ that matches it** — the point-to-point tabs measure a different question.
   requirement off-sandbox, not extra learning. Fitted-template delivery at the canonical
   cell: **44.5x, matching the exact-parameter oracle**; the fully learned alternatives
   measured 5.6x (generic FIR+poly) and 5.2x (rigid-lumped template) — §43's ladder.
+  **PAST THE FREQUENCY REFINE SITS THE LAP-VARYING OPERATOR (`refineOperator`, plan §43)
+  — 44x → 51.5x THROUGH THE SHIPPED CALL, 53.6x ON THE BENCH CHAIN.** Six refinement
+  schemes stalled at one tile residual; the gradient instrument then measured the sim
+  objective as exactly deterministic with slope 1e3-1e5 above the repeatability floor at
+  that very point (the schemes failed on DIRECTION — the small-signal H is one
+  lap-invariant response and this plant's is pose-dependent), and backlash was exonerated
+  by a bl=0 pipeline (44.4x against 44.0x). The operator refine measures the tile's OWN
+  response by hat probes at 8 phase nodes, hat-interpolates kernels between them, and
+  Gauss-Newtons the whole tile by CG — re-measuring each cycle (a refreshed operator's
+  first step took 7.3% where the stale one's last took 0.2%), in TOOL space through the
+  adapter's `toolProjection`, because two rule-21 lessons were paid for on the way: a
+  1024-bin objective was GAMEABLE at a resolution the machine cannot see (tile 14% better,
+  delivery 44.0x, nothing transferred) and a joint-rms objective delivered 47.7x with the
+  twin transferring EXACTLY (0.2%) — the solve parks error where the score punishes
+  hardest. The page's ⑩ row has **Refine deep (operator)**: fitted twin only, zero machine
+  laps, minutes of simulation; `twin.test.mjs` phase 6 pins the reduced-scale contract
+  both ways (projected residual falls AND the delivered tail improves, 7.54e-4 → 6.35e-4).
   **Sweep feedrate**
   runs the whole ladder and tabulates the trade. The arm is drawn at TRUE geometry; the error trail
   is the exaggerated object, pushed out along the path normal only.

@@ -5330,9 +5330,17 @@ last six laps) with the transfer instrument again exact — delivered tool rms
 unchanged authority (duPk 1.92 against the 2.0 cap). Two lessons carried the arc: an
 objective must not be gameable at a resolution the machine cannot see (rule 21's
 costume), and it must WEIGH what the score weighs (the Path tab's own
-corrected-for-both-scored-on-one, from the other side). Promotion to
-`lib/pilot/twin.js` as `refineOperator` — plant-agnostic, the projection supplied by
-the adapter — is the next work item.
+corrected-for-both-scored-on-one, from the other side). **PROMOTED AND VALIDATED
+THROUGH THE SHIPPED CODE (rule 61):** `refineOperator` in `lib/pilot/twin.js` —
+plant-agnostic, no env reads, the projection supplied by the adapter
+(`toolProjection` in `lib/flexisim/twin.js`) — called once after `refineCompiled`,
+tool-space from cold, measures 2.841e-2 → 2.422e-2 in 155 evals and **delivers 51.5x
+at the canonical cell** (`_tilelibop.mjs`); the two-stage bench chain's 53.6x says a
+joint-space pre-pass is worth ~2x of margin and stays a host option. The page's ⑩ row
+gains **Refine deep (operator)** — runs against the FITTED twin, zero machine laps,
+§42's contract intact; `twin.test.mjs` phase 6 pins the reduced-scale contract both
+ways (19 evals: projected residual 4.08e-3 → 2.94e-3 AND the delivered tail improves
+7.54e-4 → 6.35e-4 — the rule-21 guard that would catch a sim-only gain).
 (`test/_dynssm.mjs`).** The campaign's reading was that the generic learner lacked two
 tools — stable deep state and rollout-error fitting. Both were built and provided: a
 contraction-GUARANTEED nonlinear state-space (x' = g·x + (1−g)·tanh(Wx+Uu+b), g on a
