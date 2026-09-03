@@ -6371,3 +6371,38 @@ addressed by lap phase:
 The open question is no longer *what* binds. It is how a layer above the first gets a forecast
 of a residual good enough to keep iterating — and the one instrument that failed here
 (`_hpose.mjs`, under-regularised on a saturated design matrix) is aimed at exactly that.
+
+### POSE-SCHEDULING `h` IS DEAD, AND THE PROBE SAYS WHAT IS ALIVE INSTEAD (`test/_hvary.mjs`)
+
+Mode ⑩ found its operator pose-dependent one level up and fixing it was worth 44x → 51.5x, so
+the obvious next build was a pose-scheduled `h` for the pilot. Measured directly — hold the
+machine at a pose until quiet, step the correction, record the response against its own
+pre-step baseline, the pilot's own probe protocol with the pose as the only variable, no fit
+and nothing to condition — it is a null, and a decisive one:
+
+```
+                              DC gain across the workspace      shape corr vs pose 0
+  ch0 -> ch0  (modelled)      0.969 .. 1.012   (4.4%)           0.9898 .. 1.0000
+  ch1 -> ch1  (modelled)      0.985 .. 1.015   (3.0%)           0.9998 .. 1.0000
+  ch0 -> ch1  (NOT modelled)  +1.185e-2 .. -5.212e-2  SIGN       0.196 .. 0.602
+  ch1 -> ch0  (NOT modelled)  +4.396e-3 .. +2.980e-2  6.78x     -0.835 .. +0.835  SIGN
+```
+
+**The terms the pilot models do not move.** Four percent of gain and 0.99 of shape across the
+whole workspace is not what a scheduled kernel is for, and a build aimed at it would have
+measured nothing — which is the method lesson of §47 collecting a second instance.
+
+**What moves is the coupling the pilot does not model at all.** `h` is a per-channel SISO
+kernel; the true operator has off-diagonal terms that change SIGN across the workspace and
+whose shapes correlate at −0.84 to +0.84 with each other. But they are 3–5% of the direct
+term, and that bounds what a 2x2 operator could recover: raising R² from 0.941 toward 0.95
+moves 1/sqrt(1-R²) from 4.12x to about 4.5x. **The cross terms are real and they are not the
+missing 24% / 48%.**
+
+**AND THE INSTRUMENT CANNOT SEE THE THING ⑩ FOUND** (rule 1: say what the cheaper tier can no
+longer see). This probe holds the machine STILL. Stribeck friction, backlash crossing and
+inertial coupling exist only in motion, and ⑩'s operator is measured on a machine running a
+lap. A held response that is pose-independent does not imply a moving one is. That
+measurement — difference two runs of the deterministic plant, identical but for a small `du`
+pulse at one phase, repeated across phases — is the one still owed, and it is ⑩'s own hat
+probe pointed at the pilot's `h`.
