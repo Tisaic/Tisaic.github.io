@@ -6235,16 +6235,26 @@ magnitude. Iteration is doing the work, not the cap.
 the retirement forbids a shipped component to be. This bench exists to measure how much of
 ⑩'s advantage is iteration so the question can become *how do you iterate without a memory*.
 
-### And the cascade already IS that, pass for pass
+### The cascade IS that mechanism, but it captures about a quarter of it
 
-Passes 1 and 2 read 6.58x and 12.11x. `lib/pilot/stack.js` on this exact cell reads **6.43x
-and 12.21x** at depth 1 and 2 (brick 59) — inside the noise of a perfect-forecast iteration.
-The cascade is the pilot's iteration done as MODELS ADDRESSED BY STATE rather than as a table
-addressed by lap phase, and at depth 2 on this arm it is already achieving what a perfect
-forecast would. **So the route is depth, and where it stops is a measurement rather than an
-argument** — `test/_cascdepth.mjs` runs depths 1-4 with the stack's summed cap swept, because
-the cap is on the SUM (0.15 here) while the iteration ladder needed a peak of 0.60, and a
-depth that stalls at the clamp is measuring the clamp.
+`lib/pilot/stack.js` is iteration done as MODELS ADDRESSED BY STATE rather than as a table
+addressed by lap phase, so it is the north-star-legal form of what the oracle ladder measured.
+**An earlier draft of this section claimed it matched the ladder pass for pass, citing brick
+59's 6.43x and 12.21x against passes 1 and 2 — that comparison was wrong.** Those numbers were
+taken at a different slider cell on a different program; like for like at the canonical cell,
+the real cascade at depth 2 with the same authority the ladder used delivers **4.09x where
+perfect-forecast iteration reaches 16.43x**. It captures roughly a quarter.
+
+That does not contradict the 20% the forecast was worth at depth 1 — it locates where the
+forecast actually binds. Layer 1's job is to predict `eFree`, and `h` caps what any prediction
+of it is worth. Every layer above has to predict the RESIDUAL the layer below left, and those
+get progressively harder, so iteration's gain per pass is bought with forecast quality that
+the plant makes harder each time.
+
+**So the route is depth, and where it stops is a measurement rather than an argument** —
+`test/_cascdepth.mjs` runs depths 1-4 with the cap swept AT COMMISSIONING, because the cap is
+on the SUM (0.15 here) while the iteration ladder needed a peak of 0.60, and a depth that
+stalls at the clamp is measuring the clamp.
 
 ### THE DENOMINATOR, STATED BEFORE ANY FACTOR IS QUOTED
 
@@ -6313,3 +6323,51 @@ moved (rule 16). It refuses, the stack ends, and depths 2 and 3 return exactly d
 Against the same table before the fix — 1.82x / 3.76x / 1.99x at depth 2 — this is the
 contract "depth never harms, and a refused layer costs exactly nothing" holding by
 construction instead of by luck.
+
+### DEPTH × AUTHORITY: 1.85x OVER THE SHIPPED CONFIGURATION ON THREE UNSEEN PROGRAMS
+
+The cap swept AT COMMISSIONING — every layer fitted, verified and gated under the authority
+it will run with, because raising `stack.uMax` afterwards only measures the clamp (rule 34,
+and the two columns below differ by more than the fix did):
+
+```
+                          sharp     circle    rounded   layers   geo mean
+  uCap 0.15  depth 1      2.15x     3.99x     2.64x     1 of 1     2.83x   <- what ships
+  uCap 0.15  depth 2-4    2.15x     3.99x     2.64x     1 of 2     2.83x
+  uCap 0.60  depth 1      3.50x     2.76x     2.87x     1 of 1     3.03x
+  uCap 0.60  depth 2-4    4.09x     6.81x     5.25x     2 of 3     5.25x   <- 1.85x better
+```
+
+**AUTHORITY ALONE IS A TRADE AND DEPTH IS WHAT MAKES IT SAFE.** At depth 1 the larger cap is
++63% on the sharp square and **−31% on the circle** (uPk 0.3162, not even at the cap, so it is
+misuse rather than saturation) — this project's own "raise the cap only with adaptation armed"
+arriving from a third direction. Add the second layer and the circle goes 2.76x → **6.81x**,
+past the shipped 3.99x: the layer above does not merely add, it undoes what the extra
+authority did on its own. Nothing is worse than shipped on any of the three.
+
+**AND IT STOPS AT TWO, FOR A REASON THAT IS NOT THE CLAMP.** Layer 3 refuses at 0.95x
+(scribble 0.84x) with held-out R² 0.734/0.657 and only 841 clamped verify steps — a decent
+forecast that the machine declines to credit. Depths 3 and 4 return depth 2 to four figures,
+which is the contract holding: a refused layer costs exactly nothing.
+
+**THE COST IS ONE COMMISSIONING PER LAYER** — 1.6 min to 3.4 min in this bench's
+configuration — which is target 4's tension and has to be stated beside the 1.85x rather than
+under it.
+
+### WHERE THAT LEAVES THE OWNER'S DIRECTIVE
+
+Measured, on programs the controller never saw, with no per-program compute and nothing
+addressed by lap phase:
+
+- the mechanism is ITERATION, and its ceiling with a perfect forecast is 23.96x contour
+  against ⑩'s 44x — a factor under two, not the order of magnitude the first comparison gave
+- the pilot's legal form of iteration is the CASCADE, and it captures about a quarter of that
+- what is available today is **depth 2 at raised authority, 1.85x over the shipped
+  configuration**, and it is bounded above by each layer's forecast of the residual below it
+- three routes are closed by measurement: the clock, the effort weight and the solver's
+  iteration count are inert; every improvement to the free response is capped by the oracle
+  at 2.57x/2.78x; and the causal disturbance estimate is worse at every gain
+
+The open question is no longer *what* binds. It is how a layer above the first gets a forecast
+of a residual good enough to keep iterating — and the one instrument that failed here
+(`_hpose.mjs`, under-regularised on a saturated design matrix) is aimed at exactly that.
