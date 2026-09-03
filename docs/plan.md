@@ -5188,6 +5188,21 @@ backlash are fitted too (they were known constants). The lumped template stands 
 measured no-lattice lower bound, and A's falsifiable target is unchanged: any learned
 class at ≤0.05 free-run NRMSE replaces the lattice.
 
+**B MEASURED END TO END (`test/_dynlatt4.mjs`): the 4-parameter identification
+CONVERGES TO TRUTH and the fitted template DELIVERS 33.3x.** Output error over
+{K, E, link damping, backlash} from one 900-sample wander: K 0.2480 (truth 0.25),
+E 0.02977 (0.03), damp 3.00e-3 (EXACT), backlash insensitive (§42 stage B already
+measured backlash-ignorance free) — J 1.5e-6 in 26 lattice evaluations. **AND THE
+2-PARAMETER FIT IS NOT JUST LESS LEARNED, IT IS WRONG OFF-SANDBOX**: the K/E grid with
+damping held at a wrong guess misidentifies (K 0.19 / E 0.0375) — the page's current ⑩,
+which fixes damping at the known value, would do exactly this on a real machine.
+Delivered on the true machine at the fitted parameters: **3.4e-2 flat, 33.3x** against
+the exact-parameter oracle's 44x — the 0.8% identification error costs ~25%, and a
+tightening round is measuring how much of that comes back. The canonical-cell ladder,
+final form: generic learned 5.6x / rigid-lumped 5.2x / **fitted lattice template 33.3x
+delivered** / exact-oracle 44x. Note against the 50x bar: even the ORACLE delivers 44x —
+past it, the constraint is the compile chain's own residual, not identification.
+
 **THE CANONICAL BENCH (owner's standing rule: softest arm, sharp corners — K 0.25 /
 E 0.03, the sharp square).** The twin pipeline in the shipped config, first measurement
 at the cell that cannot flatter: open loop 1.13 contour; ⑩ lap 1 **2.65e-2**, tail flat
