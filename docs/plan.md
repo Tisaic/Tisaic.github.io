@@ -6254,3 +6254,62 @@ lap by the corrected run's last lap). The numbers above are **contour + lag, sco
 2 of 3**. On this arm lag is a real share — the conventional machine measures 4.6748e-1 total
 against 4.1216e-1 contour — so the two are not the same quantity and quoting one against the
 other is how a factor gets invented. The iteration bench now reports both columns.
+
+### THE ORACLE IS THE CEILING FOR EVERY IMPROVEMENT TO `f0`, AND THAT RETIRES A FAMILY
+
+The oracle rung is not just a diagnostic — it is the BOUND on an entire class of proposals.
+The QP's free response is (forecast of `eFree`) + (model of what past corrections did).
+Anything that improves the first half — a better basis, a longer window, online adaptation, a
+disturbance estimate, twin-generated training data — is bounded above by handing it the exact
+answer, which measures **2.57x on the sharp square and 2.78x on the rounded rectangle**
+against shipped 2.15x and 2.64x. No amount of forecast work passes those numbers. Only
+ITERATION does, and iteration is a correction built on top of a frozen previous one.
+
+### THE CAUSAL ANALOGUE OF ITERATION WAS BUILT AND IT IS A NULL (`test/_dobs.mjs`)
+
+The cheapest candidate for iterating without a memory is the oldest idea in the MPC
+literature: the machine is reporting the error it ACTUALLY has, the model says what it should
+be, and the difference is exactly the model error `_hcheck` measured. Fold it back into the
+horizon and the loop corrects its own model every sample, causally, from state, with no lap
+index anywhere — one subtraction and one filter per channel per decision.
+
+```
+                              sharp square        rounded rectangle
+  shipped                    6.3420e-1  2.15x    4.9386e-1  2.64x
+  + disturbance, gain 0.1    6.7483e-1  2.02x    5.1763e-1  2.52x
+  + disturbance, gain 0.3    6.8641e-1  1.99x    5.2911e-1  2.46x
+  + disturbance, gain 0.6    6.8181e-1  2.00x    5.2912e-1  2.46x
+  + disturbance, gain 1      7.0872e-1  1.93x    5.3011e-1  2.46x
+  (oracle forecast, bound)   5.3158e-1  2.57x    4.6811e-1  2.78x
+```
+
+Worse at every gain on both programs, and monotone in the gain — more feedback, more harm.
+The mechanism is visible in the shape of the thing: the model error is not a persistent
+offset, so a constant bias added across seventy leads is stale and mis-shaped by the far end,
+and the receding horizon applies the first move of a plan built on it.
+
+**AND THE INSTRUMENT FAILED BEFORE THE IDEA DID, which is why the null is trustworthy.** The
+first version compared a lead-0 prediction against the newest trace row — but lead 0 is about
+the tick's OWN sample and the comparison can only happen a tick later, eight samples on, so
+the reading was seven samples late (rule 29, inside the instrument built to measure exactly
+that). It produced the same uniform null, which is precisely what a mis-registration looks
+like. The prediction now carries the sample index it was about; the corrected run agrees, so
+the null is the idea's and not the bench's.
+
+### DEPTH AT THE SHIPPED CAP: THE CONTRACT HOLDS AGAIN, BY REFUSAL (`test/_cascdepth.mjs`)
+
+With the verify clamped, layer 2's gate reads **0.82x** where it read 1.21x unclamped — and
+the harm it used to deliver was 1.82/2.15 = 0.85x, so **the repaired gate predicts the
+machine to 4%**, which is the signature of a measurement repaired rather than a threshold
+moved (rule 16). It refuses, the stack ends, and depths 2 and 3 return exactly depth 1:
+
+```
+  uCap 0.15   sharp     circle    rounded     layers deployed
+  depth 1     2.15x     3.99x     2.64x       1 of 1
+  depth 2     2.15x     3.99x     2.64x       1 of 2  (layer 2 refused, 10,319 clamped)
+  depth 3     2.15x     3.99x     2.64x       1 of 2  (stack ends at the refusal)
+```
+
+Against the same table before the fix — 1.82x / 3.76x / 1.99x at depth 2 — this is the
+contract "depth never harms, and a refused layer costs exactly nothing" holding by
+construction instead of by luck.
