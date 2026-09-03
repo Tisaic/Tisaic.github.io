@@ -17,7 +17,7 @@
  *
  * Full tier only: one wander record + a ~40-evaluation identification + a compile.
  */
-import { identifyTwin, refineParams, compileTwin, applyCompiled, refineCompiled,
+import { identifyTwin, refineLM, compileTwin, applyCompiled, refineCompiled,
   refineOperator } from '../../lib/pilot/twin.js';
 import { drivePath, twinResponse, armSimulators, toolProjection } from '../../lib/flexisim/twin.js';
 import { randomWander } from '../../lib/flexisim/demopath.js';
@@ -158,8 +158,9 @@ await destroyArm(mTail);
 // assertion's own margin (rule 2): the longer record moved E 0.8% → 0.2% on the
 // canonical cell, far inside this phase's 5% bar, and the protocol under test — grid
 // at guesses, then coordinate descent over all four — is the page's exactly.
-console.log('soft-machine STAGED identification (the page protocol: grid at guesses, then 4-param descent)…');
+console.log('soft-machine STAGED identification (the page protocol: coarse seed, then 4-param LM)…');
 const SOFT_K = 1, SOFT_E = 0.06;
+const SOFT_DAMP = 3e-3, SOFT_BL = 1e-4;      // the rig's own, never told to the fit
 const softM = await makeArm({ K: SOFT_K, E: SOFT_E });
 homeArm(softM.arm, softM.servo, wpath);
 const softRec = await drivePath({ arm: softM.arm, servo: softM.servo, path: wpath,
@@ -168,33 +169,49 @@ await destroyArm(softM);
 const softSims = armSimulators({ buildArm, destroyArm,
   home: async (m, path) => homeArm(m.arm, m.servo, path), sample: SS });
 const softIdSim = softSims.identifySim(wpath, 900);
-const softGrid = await identifyTwin({
-  record: softRec.e,
-  simulate: (p) => softIdSim({ ...p, damp: 1e-3, bl: 0 }),
-  space: [
-    { name: 'K', values: [0.25, 0.5, 1, 2, 4, 8, 16, 20, 32] },
-    { name: 'E', values: [0.03, 0.06, 0.10, 0.15, 0.22] },
-  ],
-  refine: 2,
-});
-console.log(`  grid (damp/bl guessed): K=${softGrid.params.K.toPrecision(4)} E=${softGrid.params.E.toPrecision(4)} J=${softGrid.J.toExponential(2)}`);
-const softFit = await refineParams({
+// STAGE 1: three log-spaced rungs of each declared ladder — nine builds, the page's own
+// seed, NOT a thinned grid standing in for a full one (stage 2 is what handles the
+// valley now).
+const KL = [0.25, 0.5, 1, 2, 4, 8, 16, 20, 32], EL = [0.03, 0.06, 0.10, 0.15, 0.22];
+const seedOf = (lad) => [lad[0], lad[(lad.length - 1) >> 1], lad[lad.length - 1]];
+let softSeed = null;
+for (const K of seedOf(KL)) for (const E of seedOf(EL)) {
+  let sim;
+  try { sim = await softIdSim({ K, E, damp: 1e-3, bl: 0 }); } catch { continue; }
+  let sd = 0, n = 0;
+  const L = Math.min(sim.length, softRec.e.length);
+  for (let i = 0; i < L; i++) { for (let c = 0; c < 2; c++) sd += (sim[i][c] - softRec.e[i][c]) ** 2; n++; }
+  const J = Math.sqrt(sd / n);
+  if (!softSeed || J < softSeed.J) softSeed = { K, E, J };
+}
+console.log(`  seed (damp/bl guessed): K=${softSeed.K} E=${softSeed.E} J=${softSeed.J.toExponential(2)}`);
+// STAGE 2: all four TOGETHER by Levenberg-Marquardt (plan §44). The tolerances here are
+// tighter than the coordinate-descent contract they replace BECAUSE THE MEASUREMENT
+// EARNED THEM — on this cell and on the stiff end, LM recovers every parameter to four
+// figures at 2.1-2.4x fewer simulator calls.
+const softFit = await refineLM({
   record: softRec.e,
   simulate: softIdSim,
-  params: { K: softGrid.params.K, E: softGrid.params.E, damp: 1e-3, bl: 5e-5 },
-  keys: [{ name: 'damp', factor: 3 }, { name: 'bl', factor: 3 },
-    { name: 'K', factor: 1.15 }, { name: 'E', factor: 1.08 }],
-  rounds: 2, shrink: [1.04],
+  params: { K: softSeed.K, E: softSeed.E, damp: 1e-3, bl: 5e-5 },
+  keys: ['K', 'E', 'damp', 'bl'],
+  bounds: { K: [KL[0], KL.at(-1)], E: [EL[0], EL.at(-1)], damp: [1e-5, 1e-1], bl: [0, 1e-2] },
 });
 console.log(`soft machine identified K=${softFit.params.K.toPrecision(4)} E=${softFit.params.E.toPrecision(4)} `
-  + `damp=${softFit.params.damp.toExponential(2)} bl=${softFit.params.bl.toExponential(2)} J=${softFit.J.toExponential(2)}`);
+  + `damp=${softFit.params.damp.toExponential(2)} bl=${softFit.params.bl.toExponential(2)} `
+  + `J=${softFit.J.toExponential(2)} in ${softFit.evals.length} sims`);
 check('the staged fit recovers K and E over the full page ladders',
-  Math.abs(softFit.params.K - SOFT_K) <= 0.05 * SOFT_K
-  && Math.abs(softFit.params.E - SOFT_E) <= 0.05 * SOFT_E,
+  Math.abs(softFit.params.K - SOFT_K) <= 0.02 * SOFT_K
+  && Math.abs(softFit.params.E - SOFT_E) <= 0.02 * SOFT_E,
   `${softFit.params.K}/${softFit.params.E}`);
-check('…and the link damping, never told to it, within a factor of two',
-  softFit.params.damp > 1.5e-3 && softFit.params.damp < 6e-3,
-  `${softFit.params.damp.toExponential(2)} vs true 3e-3`);
+check('…and the link damping, never told to it, within 25%',
+  Math.abs(softFit.params.damp - SOFT_DAMP) <= 0.25 * SOFT_DAMP,
+  `${softFit.params.damp.toExponential(2)} vs true ${SOFT_DAMP.toExponential(2)}`);
+// THE BACKLASH IS THE PIN THAT SEPARATES THE TWO METHODS. Coordinate descent drove it
+// to ~1e-17 on both ends of the ladder — it never found it at all, because bl only pays
+// off jointly with K — so a joint step is not a speed-up here, it is a capability.
+check('…and the BACKLASH, which one-at-a-time descent never found, within 3x',
+  softFit.params.bl > SOFT_BL / 3 && softFit.params.bl < SOFT_BL * 3,
+  `${softFit.params.bl.toExponential(2)} vs true ${SOFT_BL.toExponential(2)}`);
 
 // 5) THE SOFT MACHINE'S DELIVERY, IN THE PAGE'S SHIPPED CONFIG — the mode-⑨/⑩ trace's
 // fix, pinned. The stiff machine's tail (3b) passed while the soft machine delivered

@@ -1415,10 +1415,22 @@ that matches it** — the point-to-point tabs measure a different question.
   at `pilotUMax()`, never a constant from another correction (duPk 1.84 rad at K=1).
   COMMISSIONING IS THE STAGED FOUR-PARAMETER FIT (plan §43): a SPANNING wander (reach 6 —
   at the default 4.2 the identified optimum sat 0.8% off truth and the delivered compile
-  paid 44x → 33x), the K/E grid at damping/backlash GUESSES, then `refineParams`
-  coordinate descent over all four — with damping merely guessed the grid MISIDENTIFIES
-  (K 0.19/E 0.0375 on a 0.25/0.03 machine), so the wider fit is a correctness
-  requirement off-sandbox, not extra learning. Fitted-template delivery at the canonical
+  paid 44x → 33x), a coarse K/E seed at damping/backlash GUESSES, then all four TOGETHER
+  — with damping merely guessed a K/E grid MISIDENTIFIES (K 0.19/E 0.0375 on a 0.25/0.03
+  machine), so the wider fit is a correctness requirement off-sandbox, not extra learning.
+  **THE JOINT STEP IS `refineLM`, LEVENBERG-MARQUARDT IN LOG SPACE (plan §44), AND IT IS
+  A CAPABILITY BEFORE IT IS A SPEED-UP.** The fit is nonlinear least-squares with a K/E
+  compensation valley; `refineParams` coordinate descent moves one parameter at a time
+  and so ignores exactly the coupling the valley IS — §43's per-harmonic failure one
+  level up. Measured against the full grid + coordinate descent on the identical record
+  at BOTH ends of the ladder: **2.1-2.4x fewer simulator calls** (the commissioning
+  lever, since each call is a build-and-settle) **and a fit three to six orders better,
+  every parameter to four figures** — soft K 0.2500/E 0.03000, stiff K 16.00/E 0.1500,
+  against coordinate descent's 0.2427 and 15.16. The BACKLASH column is the pin:
+  coordinate descent drove it to ~1e-17 on both cells, never finding it at all against a
+  true 1e-4, because bl only pays off JOINTLY with K. It also retires this file's own
+  stiff-cell caveat — the −30% K that cost 1.61x at delivery was a property of the
+  coordinate-descent fit, not of the stiff cell. Fitted-template delivery at the canonical
   cell: **44.5x, matching the exact-parameter oracle**; the fully learned alternatives
   measured 5.6x (generic FIR+poly) and 5.2x (rigid-lumped template) — §43's ladder.
   **PAST THE FREQUENCY REFINE SITS THE LAP-VARYING OPERATOR (`refineOperator`, plan §43)

@@ -5363,6 +5363,9 @@ oracle** (5.94e-4 vs 3.69e-4 tail). So the protocol's stiff-end limit is stated 
 its price, not hidden: K weakly observable, delivery within 2x of oracle. The lever,
 if it is ever needed: excitation that LOADS the gearbox — deflection ∝ torque/K, so a
 harder-accelerating wander raises K's signal where position amplitude cannot.
+**[SUPERSEDED below — the lever was not the excitation, it was the OPTIMISER:
+`refineLM` reads K=16.00 on this same record, so the −30% and its 1.61x delivery
+price belonged to the coordinate descent and not to the stiff cell.]**
 
 **THE ENGAGE TRANSIENT IS A STATE TRANSIENT, NOT A SPLICE — measured, and the fix
 reverted.** The operator-refined delivery spikes on its second lap (5.2e-2 against a
@@ -5489,3 +5492,52 @@ probes (half the evals, 1.6x faster) measured **4.1% worse tile after one cycle,
 FAILING the pre-registered 3% bar** — central differences stay, on the page too. The
 compile's length is design (bench quality, plan §42) and now merely LOOKS long instead
 of looking dead.
+
+**§44 CONTINUED — THE OWNER ASKED WHETHER GRADIENT DESCENT COULD WALK TO THE VALUES
+FASTER. IT CAN, AND THE SPEED IS THE SMALLER HALF OF THE ANSWER (`test/_twinlmfit.mjs`,
+`refineLM`).** The commissioning fit is nonlinear least-squares with a known K/E
+compensation valley; the shipped path was a full-ladder grid plus `refineParams`
+COORDINATE descent, which moves one parameter at a time and therefore ignores exactly
+the coupling the valley IS — the same fault, one level up, that stalled six per-harmonic
+tile schemes until coupled Gauss-Newton broke through (§43). Plain steepest descent
+would zig-zag such a valley; the right tool is Levenberg-Marquardt on the residual, with
+a forward-difference Jacobian (legitimate here and NOT in `refineOperator`, because the
+simulator is deterministic f64: no stochastic noise, only linearization error), fitted
+in LOG space so `bl ~1e-4` is not numerically invisible beside `K ~0.25`, and LM damping
+to carry the stiff cell's near-flat K column. Measured against the full grid + coordinate
+descent on the identical record, at both ends of the ladder:
+
+```
+ soft  K 0.25 / E 0.03 : grid+CD  K 0.2427  E 0.03110  damp 2.83e-3  bl 6.7e-18  J 2.22e-3   144 sims
+                         LM       K 0.2500  E 0.03000  damp 3.00e-3  bl 1.02e-4  J 1.03e-6    70 sims
+ stiff K 16   / E 0.15 : grid+CD  K 15.16   E 0.1497   damp 3.06e-3  bl 2.1e-17  J 3.41e-4   166 sims
+                         LM       K 16.00   E 0.1500   damp 3.00e-3  bl 1.00e-4  J 7.76e-11   70 sims
+```
+
+**2.1-2.4x fewer simulator calls** — the commissioning lever the screen could not touch,
+since each call is a build-and-settle — **and the fit is better by three to six orders of
+magnitude, with every parameter recovered to four figures.** Read the BACKLASH column:
+coordinate descent drove it to ~1e-17 on both cells, i.e. never found it at all, against
+a true 1e-4, because bl only pays off JOINTLY with K. So the joint step is not a
+speed-up here, it is a capability, and `twin.test.mjs` phase 4 now pins bl within 3x
+alongside K/E at 2% and damping at 25% — tolerances tightened because the measurement
+earned them, not because the bar was moved.
+
+**AND IT RETIRES §44'S OWN RECORDED LIMITATION.** The stiff cell's weakly-observable K
+(measured at −30% under the page protocol, costing 1.61x against the oracle at delivery)
+was a property of the COORDINATE-DESCENT fit, not of the stiff cell: LM reads K=16.00 on
+the same record. The delivery penalty is therefore removed by construction — the fitted
+parameters ARE the truth parameters to four figures, so the fitted compile and the oracle
+compile are the same run — and what remains genuinely open is a plant where truth is not
+recoverable at all, which no sandbox measurement can settle.
+
+**WHAT SHIPPED.** The page's ⑩ commissioning is now a nine-build coarse seed (three
+log-spaced rungs of each DECLARED ladder, at damping/backlash guesses) followed by
+`refineLM` over all four parameters, bounded to the ladders so a step cannot leave the
+domain the engineer stated (inert on both measured cells — a clamp, not a knob). The
+full-grid `identifyTwin` stays in the library and is still pinned by phase 1. **The
+screened grid, shipped one commit earlier, is superseded by this and stated as such:**
+its parity was exact but its saving was capped at 1.3x precisely BECAUSE per-candidate
+cost is build-and-settle, and that same measurement is what pointed at visiting fewer
+candidates as the only real lever. It cost one commit to learn where the cost actually
+lived.

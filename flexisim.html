@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:745,built:"2026-09-03T12:23:22Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:747,built:"2026-09-03T17:38:50Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -1044,7 +1044,7 @@ import { Pilot } from './lib/pilot/pilot.js';
 import { Stack } from './lib/pilot/stack.js';
 // ⑩ THE COMPILED TWIN (§42): the agnostic core (identify/compile/apply — no plant
 // knowledge) plus this plant class's adapter (drive loop, truth routing, probes).
-import { identifyTwin, refineParams, compileTwin, refineCompiled, refineOperator }
+import { refineLM, compileTwin, refineCompiled, refineOperator }
   from './lib/pilot/twin.js';
 import { drivePath as twinDrive, twinResponse as twinProbe, armSimulators, toolProjection }
   from './lib/flexisim/twin.js';
@@ -7900,40 +7900,53 @@ async function twinCommission() {
     // damping is not on a nameplate, and with it merely guessed the K/E grid lands off
     // truth — which is exactly why stage 2 exists.
     const idSim = twinSims().identifySim(wpath, nSamp);
-    // THE SCREEN (measured, `test/_twinfastid.mjs`): every ladder cell is still visited
-    // — a thinned grid shipped a defect here once — but on a 250-sample record first,
-    // and only the best 8 pay full length. Parity against the full search is EXACT
-    // (dK/dE 0.00%); the saving is bounded at ~1.3x because each candidate's cost is
-    // dominated by build-and-settle, not the record — stated, not hidden.
-    const SCREEN_N = Math.min(250, nSamp);
-    const idSimShort = twinSims().identifySim(wpath, SCREEN_N);
-    const fit = await identifyTwin({
-      record: rec.e,
-      simulate: (p) => idSim({ ...p, damp: 1e-3, bl: 0 }),
-      space: [{ name: 'K', values: KP_LADDER.slice() }, { name: 'E', values: EP_LADDER.slice() }],
-      refine: 2,
-      screen: { record: rec.e.slice(0, SCREEN_N),
-        simulate: (p) => idSimShort({ ...p, damp: 1e-3, bl: 0 }), keep: 8 },
-      onProgress: (m) => { stat.textContent = `identifying: ${m}`; },
-    });
-    // STAGE 2 (§43): free damping and backlash and walk all four by coordinate descent.
-    // Measured on the canonical cell: the grid at a wrong damping guess reads
-    // K 0.19 / E 0.0375 on a 0.25 / 0.03 machine; this stage recovers damping EXACTLY
-    // and K/E to ≤1%, and the delivered compile goes 33x → 44.5x, matching the oracle.
-    const fit2 = await refineParams({
+    // STAGE 1, A COARSE SEED — three log-spaced rungs of each declared ladder, at
+    // damping/backlash guesses. It is nine builds, not the full 45-cell grid, because
+    // stage 2 is now LEVENBERG-MARQUARDT and LM walks the K/E compensation valley that
+    // the old refinement rings fell into. (The screened full grid it replaces measured
+    // exact parity at only 1.3x, because per-candidate cost is build-and-settle, not
+    // record length — so the cost lever was always VISITING FEWER CANDIDATES.)
+    const seedOf = (lad) => [lad[0], lad[(lad.length - 1) >> 1], lad[lad.length - 1]];
+    const seedK = seedOf(KP_LADDER), seedE = seedOf(EP_LADDER);
+    let seed = null;
+    for (const K of seedK) for (const E of seedE) {
+      let J;
+      try {
+        const sim = await idSim({ K, E, damp: 1e-3, bl: 0 });
+        let sd = 0, n = 0;
+        const L = Math.min(sim.length, rec.e.length);
+        for (let i = 0; i < L; i++) { for (let c = 0; c < 2; c++) sd += (sim[i][c] - rec.e[i][c]) ** 2; n++; }
+        J = Math.sqrt(sd / n);
+      } catch (err) {
+        if (twinWasStop(err)) throw err;      // the operator's stop is not a refusal
+        continue;                              // CFL-unbuildable: a recorded refusal
+      }
+      stat.textContent = `seeding: K=${K} E=${E} → ${J.toExponential(2)}`;
+      if (!seed || J < seed.J) seed = { K, E, J };
+    }
+    if (!seed) throw new Error('every seed candidate refused to build');
+    // STAGE 2 (§44): all four parameters TOGETHER by Levenberg-Marquardt in log space.
+    // Measured against the full grid + coordinate descent on the identical record, on
+    // both ends of the ladder: 2.1-2.4x fewer simulator calls, and the fit is better by
+    // three to six orders — K/E/damp/bl all recovered to four figures where coordinate
+    // descent left K 3-5% out and never found the BACKLASH at all (it drove it to
+    // ~1e-17 against a true 1e-4, because bl only pays off jointly with K).
+    const fit2 = await refineLM({
       record: rec.e,
       simulate: idSim,
-      params: { K: fit.params.K, E: fit.params.E, damp: 1e-3, bl: 5e-5 },
-      keys: [{ name: 'damp', factor: 3 }, { name: 'bl', factor: 3 },
-        { name: 'K', factor: 1.15 }, { name: 'E', factor: 1.08 }],
-      rounds: 3, shrink: [1.04, 1.02],
-      onProgress: (m) => { stat.textContent = `refining: ${m}`; },
+      params: { K: seed.K, E: seed.E, damp: 1e-3, bl: 5e-5 },
+      keys: ['K', 'E', 'damp', 'bl'],
+      // the DECLARED domain, so a step cannot leave the ladders the engineer stated
+      bounds: { K: [KP_LADDER[0], KP_LADDER.at(-1)], E: [EP_LADDER[0], EP_LADDER.at(-1)],
+        damp: [1e-5, 1e-1], bl: [0, 1e-2] },
+      onProgress: (m) => { stat.textContent = m; },
     });
+    const fit = { J: seed.J, evals: [] };     // the seed's own reading, for the log line
     twinFit = { ...fit2.params };
     console.log(`[flexisim] ⑩ identified K=${twinFit.K} E=${twinFit.E} `
       + `damp=${twinFit.damp.toExponential(2)} bl=${twinFit.bl.toExponential(2)} `
-      + `(grid J ${fit.J.toExponential(2)} → refined ${fit2.J.toExponential(2)}, `
-      + `${fit.evals.filter((ev) => ev.refused).length} refusals)`);
+      + `(seed J ${fit.J.toExponential(2)} → LM ${fit2.J.toExponential(2)} `
+      + `in ${fit2.evals.length} sims)`);
     await homeP();
     setPathBadge('⑩ twin commissioned — press Compile this program', 'good');
   } catch (err) {
