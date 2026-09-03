@@ -163,7 +163,7 @@ function routeSignals(arm, cmd, tau) {
  * @returns {Promise<{r: object, uPk: number}>} the contour report and the peak correction
  */
 async function deployOn(pilot, shape, active, feed = 0.004,
-  { laps = 3, scoreFromLap = 2, truthUntilLap = Infinity } = {}) {
+  { laps = 3, scoreFromLap = 2, truthUntilLap = Infinity, oracle = null } = {}) {
   const { arm: a2, servo: s2 } = await makeArm();
   const path = typeof shape === 'string' ? mkPath(shape, feed) : shape;
   homeArm(a2, s2, path);
@@ -187,6 +187,29 @@ async function deployOn(pilot, shape, active, feed = 0.004,
   const sideLen = (shape === 'sharp' || shape === 'diamond') ? path.length / 4 : 0;
   const prof = Array.from({ length: 10 }, () => ({ c2: 0, l2: 0, n: 0, u2: 0 }));
   let kSamp = 0, uPk = 0;
+  // THE ORACLE PORT, WIRED WHERE `kSamp` IS DEFINED and nowhere else. `oracle` is
+  // { e: [[ch0, ch1], ...] per sample, lap: samples per lap } — an open-loop recording of
+  // this very program, so the free response the QP is handed is the TRUTH rather than a
+  // forecast of it. Indexed modulo the lap because the path is closed and the record is
+  // finite; `off` skips the record's own start-up transient (rule 13). The alignment is
+  // checkable rather than assumed: `oracle.probe`, when present, is handed the fitted value
+  // beside the oracle one at lead 0, and a mis-indexed oracle shows up as a collapsed
+  // correlation between them instead of as a quiet null.
+  if (typeof oracle === 'function') {
+    // THE CONTROL SHAPE. Handed `(c, leadSamp, fitted, kSamp)`, a function that returns
+    // `fitted` must reproduce the un-oracled run to the last digit — which is the check
+    // that says the port itself changes nothing (rule 21).
+    pilot.oracleF0 = (c, leadSamp, fitted) => oracle(c, leadSamp, fitted, kSamp);
+  } else if (oracle) {
+    const rec = oracle.e, lap = oracle.lap, off = oracle.off ?? lap;
+    const orProbe = oracle.probe || null;
+    pilot.oracleF0 = (c, leadSamp, fitted) => {
+      const j = off + ((kSamp + leadSamp) % lap);
+      const v = rec[Math.min(j, rec.length - 1)][c];
+      if (orProbe && leadSamp === 0) orProbe(c, v, fitted);
+      return v;
+    };
+  }
   for (let k = 0; k < total; k++) {
     const cmd = path.at(k);
     const [q1, q2] = a2.ik(cmd.x, cmd.y, true);
@@ -246,6 +269,7 @@ async function deployOn(pilot, shape, active, feed = 0.004,
     }
   }
   await a2.l1.destroy(); await a2.l2.destroy();
+  if (oracle) pilot.oracleF0 = null;
   const rms = (b, k) => (b.n ? Math.sqrt(b[k] / b.n) : 0);
   return { r: score.report(), uPk,
     split: {
