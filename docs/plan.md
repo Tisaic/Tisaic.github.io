@@ -5708,3 +5708,18 @@ early error. The objective should therefore be the program span alone, with the 
 du left as a free variable that helps achieve it — not a region whose own error is
 minimised. Bar: beat 12.1x on the raster and the closed square's 13.5x one-shot.
 STATED AND NOT YET BUILT (rule 59).
+
+**§44 — AND THE BETTER FIT SHOWS UP WHERE IT COUNTS, NOT ONLY IN J.** With stage 1
+restored to the screened grid and `refineLM` as stage 2, `twin.test.mjs` is green
+end to end, and the identification is the ONLY variable against the previous run of the
+same file on the same cell and the same path:
+
+```
+                      K        E        damp      backlash    J         soft tail   +operator
+  coordinate descent  0.9834   0.06010  2.88e-3   7.09e-18    1.39e-3   7.54e-4     6.35e-4
+  refineLM            0.9993   0.05997  3.00e-3   6.08e-5     4.02e-5   5.93e-4     4.43e-4
+```
+
+**A 35x better fit, the backlash found at last, and 21% better delivery — 30% after the
+operator refine.** That is the answer to whether the fit statistics were worth anything:
+they were, and the machine says so rather than the objective.
