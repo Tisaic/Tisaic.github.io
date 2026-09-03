@@ -5208,12 +5208,21 @@ oracle** (2.55e-2 flat, lap 1 at 2.65e-2). The compensation ridge rotates with t
 record (K and E swapped which is off), which is why coverage, not search precision, was
 the binding constraint — the FIFTH appearance of "span the range".
 **ROUTE B CLOSED. The canonical-cell ladder, final form: generic learned 5.6x /
-rigid-lumped 5.2x / fitted lattice template 44.5x delivered / oracle 44.0x.** Against
-the 50x bar the remaining constraint is the compile chain itself: at exact parameters
-the delivery (2.55e-2) sits 4x above the sim's own residual (5.9e-3), a pipeline
-property present in every oracle run. What ships next: ⑩'s page commissioning moves
-from the 2-parameter fit (measured WRONG under a mis-guessed damping) to the
-4-parameter spanning fit. Route A stays open in background at its bar.
+rigid-lumped 5.2x / fitted lattice template 44.5x delivered / oracle 44.0x.** What
+shipped next: ⑩'s page commissioning moved from the 2-parameter fit (measured WRONG
+under a mis-guessed damping) to the 4-parameter spanning fit, with `refineParams`
+LINE-SEARCHING each key — a single step per round was measured STEP-STARVED (the soft
+cell's grid bias is 1.85x in E and two single-step rounds reach 1.17x; it stuck at
+K 0.72 / E 0.092 on a 1 / 0.06 machine, recovered to 0.983 / 0.0601 with the line
+search, delivery 7.5e-4 flat at the FITTED machine). Route A stays open at its bar.
+**AND THE "4x PIPELINE GAP" THIS SECTION CLAIMED WAS A UNITS CONFUSION (rule 17,
+corrected here where it was written): at truth parameters sim(ref.f) and the real
+corrected run agree to 0.00e+0 — the pipeline is EXACTLY faithful — and the "gap"
+was tool-space contour (2.55e-2) read against joint-space residual (3.3e-3), which
+are the same number through the kinematic lever.** Past 44x therefore means shrinking
+the refined artifact's own residual; the measured suspect is the refine's harmonic
+cutoff (0.008·peak zeroes the weak-|G| harmonics, where the sharp corners' content
+lives) and its lambda — the sweep is the running experiment.
 
 **THE CANONICAL BENCH (owner's standing rule: softest arm, sharp corners — K 0.25 /
 E 0.03, the sharp square).** The twin pipeline in the shipped config, first measurement
