@@ -5915,3 +5915,45 @@ home on the smooth programs and extrapolating at the corners, while the twin-tra
 model saw broadband wanders and is uniformly mediocre but never collapses. **Training
 data you can generate freely, on excitation you choose, is a large part of what the twin
 buys** — and it buys it exactly where this project's hardest standing failure lives.
+
+**§46 — AND WITH THE PILOT'S OWN DEPLOY-TIME SIGNALS THE CHEAP TWIN-TRAINED MODEL BEATS
+THE MACHINE-FITTED FORECAST ON EVERY PROGRAM AND EVERY CHANNEL.** Same 13,002 rows of
+twin-generated open wanders, same log-spaced window reaching 768 samples, 201 terms, and
+the six signals `routeSignals` hands the pilot at deploy — encoders and torques, never
+the tracker:
+
+```
+ program      twin-trained    pilot fitted-on-machine    the twin itself
+ rounded     0.992 / 0.953        0.980 / 0.896              1.000
+ circle      0.994 / 0.956        0.981 / 0.909              1.000
+ sharp       0.995 / 0.951        0.919 / 0.402              1.000
+```
+
+**On the SHARP SQUARE's elbow — the binding failure of this whole project, where the
+forecast reads 0.402 and twelve controller knobs measured null — it reads 0.951, a 3.5x
+smaller residual (4.44e-3 against 1.55e-2).** Residuals improve 1.4-1.8x on the smooth
+programs and 3.5-4.0x on the hard one, so this is not a trade: it is better everywhere,
+from a model with no tracker and no per-program compile.
+
+**AND 0.951 AGAINST 1.000 LOOKS CLOSE AND IS NOT — R² SATURATES.** In residual terms it
+is 4.44e-3 against the twin's 4.31e-5, still **100x apart**. The cheap model does NOT
+inherit the twin's memory; the simulation's state propagation is worth two further orders
+that no lag window recovers. What the window buys is the part of that memory a linear
+functional of recent history can express, and that part is large enough to move the
+pilot's own bound: at R² 0.951 the bound `sqrt(1-R²) x truth rms` predicts ~3.5x better
+delivery on the sharp square than at 0.402.
+
+**WHAT THIS MEANS FOR THE ARCHITECTURE.** The owner's design asked for a generic model,
+tracker removed, optimising live with no per-program commissioning. That model now
+exists and is measured: cheap (201 linear terms), tracker-free, program-agnostic,
+trained once from the twin, and better than the machine-fitted forecast everywhere.
+**The structured template becomes a DATA GENERATOR rather than a runtime dependency** —
+it is identified once from one wander, used to generate unlimited chosen excitation, and
+then steps out of the loop. That is a stronger form of the proposal than either the
+"learn a generic model directly" version (§43 measured it walling an order of magnitude
+short on machine data) or the "run the twin live" version (5.4x slower than real time).
+
+**NOT MEASURED, STATED (rule 59):** this remains a sandbox where the twin structurally
+matches the machine, so the twin-trained model inherits no structural error here and
+would on hardware; and the 3.5x is a FORECAST-BOUND projection, not a delivered number —
+the QP has not been run on this model. Both are the obvious next measurements.

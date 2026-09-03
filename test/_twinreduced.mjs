@@ -15,10 +15,17 @@
 // 6363-8649-step memory (rule 37) instead of truncating it at 384.
 //
 // THE MODEL IS DELIBERATELY THE CHEAPEST THING THAT COULD WORK: a linear readout over a
-// LOG-SPACED lag window of COMMAND-derived signals only — no tracker, no measurement, so
-// it is admissible as a feedforward predictor at deploy, which is what the architecture
-// requires. Lags run to 768 samples (~6900 steps) on 4 signals, so it reaches the memory
-// with 80 terms rather than the 3000 a dense window would need.
+// LOG-SPACED lag window reaching 768 samples (~6900 steps), so it costs ~200 terms where a
+// dense window of that reach would need thousands.
+//
+// IT SEES WHAT THE PILOT SEES AT DEPLOY, WHICH IS NOT THE COMMAND ALONE. The first version
+// of this bench gave it command-derived signals only and measured 0.901/-0.177 on the
+// rounded rectangle and 0.844/-1.329 on the circle — but that was a bench flaw rather than
+// a finding: `routeSignals` hands the pilot [encoder angles, encoder speeds, applied
+// torques], every one of them available at deploy. Only `truth` (the tool position) comes
+// from the TRACKER and is commissioning-only. "Remove the tracker" therefore permits
+// encoder and torque feedback, and a model denied them is blinder than the architecture
+// requires (rule 20: matched capacity, or the comparison measures the handicap).
 //
 // READ IT AS: fitted-on-machine (the pilot today) vs fitted-on-twin-with-reach (this)
 // vs the twin itself (1.000). If this closes most of the gap, the live architecture has
@@ -44,7 +51,7 @@ const destroy = async (m) => { await m.arm.l1.destroy(); await m.arm.l2.destroy(
 const record = async (params, path, laps) => {
   const m = await makeArm(params);
   homeArm(m.arm, m.servo, path);
-  const cmd = [], e = [];
+  const cmd = [], mea = [], e = [];
   const total = Math.ceil(path.lap * laps);
   for (let k = 0; k < total; k++) {
     const c = path.at(k);
@@ -53,18 +60,23 @@ const record = async (params, path, laps) => {
     const tau = m.servo.torques([{ theta: q1, omega: rt.dq[0], alpha: rt.ddq[0] },
       { theta: q2, omega: rt.dq[1], alpha: rt.ddq[1] }]);
     m.arm.step(tau[0], tau[1], 1);
-    if (k % SS === 0) { cmd.push([q1, q2]); e.push(routeSignals(m.arm, [{ pos: q1 }, { pos: q2 }], tau).truth); }
+    if (k % SS === 0) {
+      const r = routeSignals(m.arm, [{ pos: q1 }, { pos: q2 }], tau);
+      cmd.push([q1, q2]); mea.push(r.measured); e.push(r.truth);
+    }
   }
   await destroy(m);
-  return { cmd, e };
+  return { cmd, mea, e };
 };
 
-// features at sample k: the COMMAND only (no tracker), log-spaced lags of q and dq
-const featAt = (cmd, k) => {
+// features at sample k: command AND the six DEPLOY-TIME measured signals (encoders and
+// torques — never the tracker), at log-spaced lags back to the measured memory
+const featAt = (cmd, mea, k) => {
   const f = [1];
   for (const L of LAGS) {
     const i = Math.max(0, k - L), j = Math.max(0, k - L - 1);
     f.push(cmd[i][0], cmd[i][1], cmd[i][0] - cmd[j][0], cmd[i][1] - cmd[j][1]);
+    for (let c = 0; c < 6; c++) f.push(mea[i][c]);
   }
   return f;
 };
@@ -77,7 +89,7 @@ for (let i = 0; i < NTRAIN; i++) {
   const w = randomWander(mkRnd(2000 + i), 0.004, { centre: [12, 0], reach: 6 });
   const r = await record(TWIN_FIT, w, 1);
   for (let k = REACH; k < r.e.length; k++) {
-    rows.push(featAt(r.cmd, k));
+    rows.push(featAt(r.cmd, r.mea, k));
     ys[0].push(r.e[k][0]); ys[1].push(r.e[k][1]);
   }
   console.log(`  wander ${i + 1}/${NTRAIN}: ${r.e.length} samples (${rows.length} rows total)`);
@@ -96,7 +108,7 @@ for (const shape of ['rounded', 'circle', 'sharp']) {
   for (let c = 0; c < 2; c++) {
     let sse = 0, n = 0, sy = 0, sy2 = 0;
     for (let k = Math.max(REACH, Math.round(path.lap / SS)); k < truth.e.length; k++) {
-      const f = featAt(truth.cmd, k);
+      const f = featAt(truth.cmd, truth.mea, k);
       let p = 0;
       for (let i = 0; i < nF; i++) p += W[c][i] * f[i];
       const y = truth.e[k][c];
