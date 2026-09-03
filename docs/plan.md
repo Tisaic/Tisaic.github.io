@@ -5775,3 +5775,51 @@ H actually beats the fitted forecast at the leads the QP uses — cheap, since b
 objects already exist and this is scoring rather than building — and the LIVE cost,
 since today's twin runs 5.4x slower than real time, so only its reduced form is
 admissible under the PLC-only rule.
+
+**§46 MEASURED — THE TWIN FORECAST BEATS THE FITTED ONE BY TWO TO THREE ORDERS, AND THE
+PILOT'S BOUND IS A PROPERTY OF THE REGRESSION CLASS RATHER THAN OF THE PROBLEM
+(`test/_forecasttwin.mjs`).** Built as a variant of `test/pilot/forecast.mjs` so the row
+range, the R² definition and the signal routing are identical between the competitors by
+construction. The comparison is deliberately stacked AGAINST the twin: the readout
+predicts e[k+L] from a lag window of MEASURED history up to k, while the twin is
+simulated open loop from t=0 with NO measurements at all, at its LM-FITTED parameters
+(K 0.07% out, E 0.05%, damping exact, backlash 1.6x out) rather than at truth.
+
+```
+ program        ch   R2 lead0   R2 mid   R2 far   twin (all leads)   fit resid   twin resid
+ rounded         0      0.980    0.980    0.967              1.000    6.09e-3      3.68e-5
+ rounded         1      0.896    0.818    0.806              1.000    4.62e-3      4.28e-5
+ circle          0      0.981    0.988    0.964              1.000    4.12e-3      3.68e-5
+ circle          1      0.909    0.821    0.790              1.000    2.71e-3      3.98e-5
+ sharp           0      0.919    0.909    0.875              1.000    1.51e-2      3.09e-5
+ sharp           1      0.402    0.436    0.442              1.000    1.55e-2      4.31e-5
+```
+
+**68x to 489x less residual rms, and FLAT IN LEAD where the regression decays** — the
+shape a simulation must have, since it predicts every lead in one pass. The largest
+margin is on the SHARP SQUARE's elbow, the exact channel that reads R² 0.402 here and
+−0.105 in the record, and against which twelve controller knobs measured null. Set
+beside brick 55's bound — delivered ~ sqrt(1−R²) x truth rms, needing sixty times less
+residual VARIANCE for an ILC-class result — the twin delivers ~1e4 times less. **It
+clears the bar by orders of magnitude, from a model that saw no measurements.**
+
+**WHAT THIS DOES AND DOES NOT ESTABLISH.** It establishes the thing the owner's
+architecture needs: the information IS in the state, the pilot's forecast bound is a
+property of the LAG-WINDOW REGRESSION CLASS and not of the problem, and a live optimiser
+fed a twin forecast would not be bounded where the pilot is. It does NOT predict
+hardware. This is a sandbox where the twin runs the SAME lattice code as the machine, so
+its only error is PARAMETER error; a real plant adds STRUCTURAL error the template does
+not carry. **The measurement is an upper bound on the route, not a forecast of it**, and
+saying so is the whole difference between this and the overclaim the gate caught earlier
+today.
+
+**AND THE TWO FORECASTS FAIL IN OPPOSITE WAYS, WHICH IS THE ARCHITECTURE.** The
+regression is fitted to the ACTUAL machine, so it carries no structural error, and it
+fails by TRUNCATING memory the plant has (6363-8649 steps against its window). The twin
+propagates that memory exactly and fails by whatever its template does not represent.
+Those are complementary, and this project already has the pattern for composing
+complementary models: the cascade, where each layer models what the one below it left.
+**Twin for the propagated part, regression for the residual the twin's structure misses**
+— a live optimiser on that pair would be path- and feed-agnostic with no per-program
+compile, which is what the owner asked for, and it degrades gracefully on a plant whose
+class is only approximately right rather than failing when the template does.
