@@ -5301,6 +5301,23 @@ operator bench runs 512 bins, a first-difference smoothness penalty in the CG, a
 out-of-config 8-sim-lap holdout printed each cycle, and the delivered JOINT rms beside
 the contour so the transfer gap is measured rather than inferred.
 
+**LVO v2 CLOSED THE ALIASING AND THE TRANSFER INSTRUMENT PAID FOR ITSELF TWICE
+(`_tilelvo2.mjs`).** With 512 bins, the first-difference penalty and operator REFRESH
+between step groups (v1's depletion was operator staleness: a refreshed operator's
+first step took 7.3% where the stale one's last took 0.2%), the tile went 3.101e-3 →
+**2.549e-3** in 181 evals, the 8-sim-lap holdout matching the 4-lap objective to 0.1%
+at every cycle. Delivered: **47.7x** — and the instrument line settles where the
+missing 4x went: **delivered joint rms 2.543e-3 against sim tile 2.549e-3 — the twin
+transfers EXACTLY (0.2%)**. The gap to 50x is not sim-to-machine, it is JOINT-TO-TOOL:
+the optimizer minimizes equally-weighted joint rms, the score is the contour projection
+through the Jacobian lever, and the residual's lever ratio drifted 8.2 → 9.3 — the
+solve parks error in the components the score punishes hardest. v3 therefore evaluates
+residual AND kernels in TOOL space (per-bin 2x2 Jacobian, precomputable because the
+bins align to program phase exactly), which the harmonic rung could never do — "the
+projection onto a rotating normal is itself a lap-varying operator" is no obstacle to
+an optimizer whose operator is lap-varying by construction — and warm-starts from v2's
+checkpointed tile.
+
 **ROUTE A MEASURED, AND THE MISSING-TOOLS HYPOTHESIS IS FALSIFIED IN ITS SIMPLE FORM
 (`test/_dynssm.mjs`).** The campaign's reading was that the generic learner lacked two
 tools — stable deep state and rollout-error fitting. Both were built and provided: a
