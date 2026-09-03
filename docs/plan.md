@@ -5341,6 +5341,18 @@ gains **Refine deep (operator)** — runs against the FITTED twin, zero machine 
 §42's contract intact; `twin.test.mjs` phase 6 pins the reduced-scale contract both
 ways (19 evals: projected residual 4.08e-3 → 2.94e-3 AND the delivered tail improves
 7.54e-4 → 6.35e-4 — the rule-21 guard that would catch a sim-only gain).
+
+**THE ENGAGE TRANSIENT IS A STATE TRANSIENT, NOT A SPLICE — measured, and the fix
+reverted.** The operator-refined delivery spikes on its second lap (5.2e-2 against a
+2.2e-2 tail at the canonical cell) because the tile now differs from the compiled head
+it hands off from. A quarter-lap smoothstep blend of head→tile was built on the du
+discontinuity theory and measured: lap 2 improved only 10% (5.24e-2 → 4.73e-2), the
+steady gain wobbled 51.5x → 50.9x, duPk rose to the 2.0 cap, and on the soft rounded
+config (tiny splice) lap 2 got WORSE (6.5e-4 → 8.1e-4). So the spike is the MACHINE's
+own transient between the head trajectory's steady state and the refined tile's — a
+du ramp cannot remove a state transient — and the blend is reverted (rule 16: the
+delivery decided). The one-lap engage transient stands recorded as a property of the
+deep refine; laps 1 and 3+ are unaffected.
 (`test/_dynssm.mjs`).** The campaign's reading was that the generic learner lacked two
 tools — stable deep state and rollout-error fitting. Both were built and provided: a
 contraction-GUARANTEED nonlinear state-space (x' = g·x + (1−g)·tanh(Wx+Uu+b), g on a
