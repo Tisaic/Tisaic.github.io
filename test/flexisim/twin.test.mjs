@@ -17,7 +17,7 @@
  *
  * Full tier only: one wander record + a ~40-evaluation identification + a compile.
  */
-import { identifyTwin, compileTwin, applyCompiled, refineCompiled } from '../../lib/pilot/twin.js';
+import { identifyTwin, refineParams, compileTwin, applyCompiled, refineCompiled } from '../../lib/pilot/twin.js';
 import { drivePath, twinResponse, armSimulators } from '../../lib/flexisim/twin.js';
 import { randomWander } from '../../lib/flexisim/demopath.js';
 
@@ -33,15 +33,9 @@ const check = (name, ok, detail) => {
 };
 
 let fitted = { K: TRUE_K, E: TRUE_E };   // overwritten by identification before compiling
-const buildArm = async (params) => {
-  const { K, E } = params || fitted;
-  PG.K = K; PG.E = E;
-  try {
-    return await makeArm();
-  } finally {
-    PG.K = TRUE_K; PG.E = TRUE_E;
-  }
-};
+// the rig's own constructor with parameter overrides (rule 61: one constructor) —
+// candidates carry K/E and, since the §43 four-parameter fit, damping and backlash too
+const buildArm = async (params) => makeArm(params || fitted);
 const destroyArm = async (m) => { await m.arm.l1.destroy(); await m.arm.l2.destroy(); };
 const home = async (m, path) => homeArm(m.arm, m.servo, path);
 const sims = armSimulators({ buildArm, destroyArm, home, sample: SS });
@@ -159,31 +153,47 @@ await destroyArm(mTail);
 // valley instead of back to truth. A stiff-only test passed before and after that bug,
 // which is why it shipped. This phase identifies the soft machine over the page's FULL
 // ladders on the page's own 900-sample record length and demands exactness.
-console.log('soft-machine identification over the page ladders (the phone defect)…');
+// The record length is 900 samples where the page ships 1500 — shrunk against the
+// assertion's own margin (rule 2): the longer record moved E 0.8% → 0.2% on the
+// canonical cell, far inside this phase's 5% bar, and the protocol under test — grid
+// at guesses, then coordinate descent over all four — is the page's exactly.
+console.log('soft-machine STAGED identification (the page protocol: grid at guesses, then 4-param descent)…');
 const SOFT_K = 1, SOFT_E = 0.06;
-PG.K = SOFT_K; PG.E = SOFT_E;
-const softM = await makeArm();
-PG.K = TRUE_K; PG.E = TRUE_E;
+const softM = await makeArm({ K: SOFT_K, E: SOFT_E });
 homeArm(softM.arm, softM.servo, wpath);
 const softRec = await drivePath({ arm: softM.arm, servo: softM.servo, path: wpath,
   sample: SS, steps: 900 * SS });
 await destroyArm(softM);
 const softSims = armSimulators({ buildArm, destroyArm,
   home: async (m, path) => homeArm(m.arm, m.servo, path), sample: SS });
-const softFit = await identifyTwin({
+const softIdSim = softSims.identifySim(wpath, 900);
+const softGrid = await identifyTwin({
   record: softRec.e,
-  simulate: softSims.identifySim(wpath, 900),
+  simulate: (p) => softIdSim({ ...p, damp: 1e-3, bl: 0 }),
   space: [
     { name: 'K', values: [0.25, 0.5, 1, 2, 4, 8, 16, 20, 32] },
     { name: 'E', values: [0.03, 0.06, 0.10, 0.15, 0.22] },
   ],
   refine: 2,
 });
-console.log(`soft machine identified K=${softFit.params.K.toPrecision(4)} E=${softFit.params.E.toPrecision(4)} J=${softFit.J.toExponential(2)}`);
-check('the soft machine identifies exactly over the full page ladders',
+console.log(`  grid (damp/bl guessed): K=${softGrid.params.K.toPrecision(4)} E=${softGrid.params.E.toPrecision(4)} J=${softGrid.J.toExponential(2)}`);
+const softFit = await refineParams({
+  record: softRec.e,
+  simulate: softIdSim,
+  params: { K: softGrid.params.K, E: softGrid.params.E, damp: 1e-3, bl: 5e-5 },
+  keys: [{ name: 'damp', factor: 3 }, { name: 'bl', factor: 3 },
+    { name: 'K', factor: 1.15 }, { name: 'E', factor: 1.08 }],
+  rounds: 2, shrink: [1.04],
+});
+console.log(`soft machine identified K=${softFit.params.K.toPrecision(4)} E=${softFit.params.E.toPrecision(4)} `
+  + `damp=${softFit.params.damp.toExponential(2)} bl=${softFit.params.bl.toExponential(2)} J=${softFit.J.toExponential(2)}`);
+check('the staged fit recovers K and E over the full page ladders',
   Math.abs(softFit.params.K - SOFT_K) <= 0.05 * SOFT_K
   && Math.abs(softFit.params.E - SOFT_E) <= 0.05 * SOFT_E,
   `${softFit.params.K}/${softFit.params.E}`);
+check('…and the link damping, never told to it, within a factor of two',
+  softFit.params.damp > 1.5e-3 && softFit.params.damp < 6e-3,
+  `${softFit.params.damp.toExponential(2)} vs true 3e-3`);
 
 // 5) THE SOFT MACHINE'S DELIVERY, IN THE PAGE'S SHIPPED CONFIG — the mode-⑨/⑩ trace's
 // fix, pinned. The stiff machine's tail (3b) passed while the soft machine delivered
@@ -195,7 +205,7 @@ check('the soft machine identifies exactly over the full page ladders',
 // on K=1/E=0.06 and demands the delivery the bench measured (tail 4.3e-3 contour,
 // joint 2.8e-4/5.2e-4, against an open loop of 4.5e-2/1.5e-2).
 console.log('soft-machine delivery in the shipped config (laps 5 + refineCompiled)…');
-fitted = { K: softFit.params.K, E: softFit.params.E };
+fitted = { ...softFit.params };   // all four — the compile runs at the FITTED machine
 const softPath = mkPath('rounded', 0.004);
 const softH = await twinResponse({ buildArm, destroyArm, path: softPath, sample: SS });
 const softCompiled = await compileTwin({

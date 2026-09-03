@@ -1038,7 +1038,7 @@ import { Pilot } from './lib/pilot/pilot.js';
 import { Stack } from './lib/pilot/stack.js';
 // ⑩ THE COMPILED TWIN (§42): the agnostic core (identify/compile/apply — no plant
 // knowledge) plus this plant class's adapter (drive loop, truth routing, probes).
-import { identifyTwin, compileTwin, refineCompiled } from './lib/pilot/twin.js';
+import { identifyTwin, refineParams, compileTwin, refineCompiled } from './lib/pilot/twin.js';
 import { drivePath as twinDrive, twinResponse as twinProbe, armSimulators }
   from './lib/flexisim/twin.js';
 import { randomWander } from './lib/flexisim/demopath.js';
@@ -5765,12 +5765,12 @@ function newScore() {
  * machine that is not the one on screen would still report perfectly consistent numbers —
  * this page has that failure on record for mode ⑧.
  */
-async function makePlantP(K, E) {
+async function makePlantP(K, E, damp = DAMPING, bl = BACKLASH) {
   const mk = (length) => buildLink({ length, section: H, clamp: CLAMP, E,
-    nu: NU, rho: RHO, damping: DAMPING });
+    nu: NU, rho: RHO, damping: damp });
   const link1 = await mk(PG.LEN1), link2 = await mk(PG.LEN2);
   const j = (mp) => new Joint({ ratio: RATIO, motorInertia: mp.inertiaAboutPivot / 1e4,
-    loadInertia: mp.inertiaAboutPivot, stiffness: K, backlash: BACKLASH,
+    loadInertia: mp.inertiaAboutPivot, stiffness: K, backlash: bl,
     damping: 2 * Math.sqrt(K * mp.inertiaAboutPivot / 2) });
   const arm = new FlexArm2R({ joint1: j(massProperties(link1)), link1,
     joint2: j(massProperties(link2)), link2, gravityWorld: [0, -G, 0], dt: 1 });
@@ -7817,7 +7817,11 @@ async function twinHome(m, path) {
   }
 }
 async function twinBuildAt(params) {
-  const b = await makePlantP(params.K, params.E);
+  // damp/bl are FITTED parameters since the §43 trace round: with damping merely
+  // guessed, the K/E grid MISIDENTIFIES (measured: K 0.19 / E 0.0375 on a 0.25 / 0.03
+  // machine) — the wider fit is a correctness requirement, not extra learning. Absent
+  // fields (an old artifact) fall back to the page constants.
+  const b = await makePlantP(params.K, params.E, params.damp, params.bl);
   return { arm: b.arm, servo: b.servo };
 }
 const twinSims = () => armSimulators({
@@ -7829,8 +7833,11 @@ function twinStatusLine() {
   if (twinBusy) return;                 // progress text owns the line while working
   if (!twinFit) { el.textContent = 'no twin — press Commission twin'; return; }
   const K = KP_LADDER[+$('s-kP').value], E = EP_LADDER[+$('s-eP').value];
-  const mm = Math.abs(twinFit.K - K) > 1e-9 || Math.abs(twinFit.E - E) > 1e-9;
+  // A TOLERANCE, NOT EQUALITY: the four-parameter fit lands within ~1% of truth, not on
+  // the ladder value, so exact comparison would cry MISMATCH at a matched machine.
+  const mm = Math.abs(twinFit.K - K) > 0.05 * K || Math.abs(twinFit.E - E) > 0.05 * E;
   el.textContent = `twin K̂=${twinFit.K.toPrecision(3)} Ê=${twinFit.E.toPrecision(3)}`
+    + (twinFit.damp ? ` ĉ=${twinFit.damp.toExponential(1)}` : '')
     + ` | machine K=${K.toFixed(2)} E=${E.toFixed(2)}${mm ? ' — MISMATCH (the experiment)' : ''}`
     + (twinDu && twinFor
       ? ` | compiled for ${twinFor.shape} @ ${twinFor.feed.toExponential(1)}`
@@ -7847,7 +7854,11 @@ async function twinCommission() {
     // objective is sharply conditioned (machine-zero at truth, e-3 at the neighbours).
     const mk = (s) => { let z = s >>> 0;
       return () => (z = (z * 1664525 + 1013904223) >>> 0) / 4294967296; };
-    const wpath = randomWander(mk(301), pathFeed(), { centre: [12, 0] });
+    // SPANNING, AND LONGER (§43): reach 6 covers the workspace the programs run in —
+    // the fit wander at the default 4.2 was the fifth "calibration must span the
+    // range", and on it the identified optimum sat 0.8% off truth, which cost the
+    // delivered compile 44x → 33x. 1500 samples for the four-parameter fit.
+    const wpath = randomWander(mk(301), pathFeed(), { centre: [12, 0], reach: 6 });
     stat.textContent = 'recording the wander on this machine…';
     const c0 = wpath.at(0);
     const q0 = armP.ik(c0.x, c0.y, true);
@@ -7857,7 +7868,7 @@ async function twinCommission() {
         { theta: q0[1], omega: 0, alpha: 0 }]);
       armP.step(tau[0], tau[1], 1);
     }
-    const nSamp = Math.min(900, Math.floor(wpath.lap / TWIN_SS) - 2);
+    const nSamp = Math.min(1500, Math.floor(wpath.lap / TWIN_SS) - 2);
     const rec = await twinDrive({ arm: armP, servo: servoP, path: wpath,
       sample: TWIN_SS, steps: nSamp * TWIN_SS, yield_: twinYield });
     // IDENTIFY over the sliders' WHOLE ladders — the domains, never the positions, and
@@ -7866,15 +7877,34 @@ async function twinCommission() {
     // phone read K̂=1.47/Ê=0.0525 on a K=1.00/E=0.06 machine, reproduced to the digit in
     // Node and exact (J=0) with the full ladders on the same 900-sample record.
     // Unbuildable candidates (the CFL gate) are recorded refusals.
+    // STAGE 1 at damping/backlash GUESSES, never the page's constants: a real machine's
+    // damping is not on a nameplate, and with it merely guessed the K/E grid lands off
+    // truth — which is exactly why stage 2 exists.
+    const idSim = twinSims().identifySim(wpath, nSamp);
     const fit = await identifyTwin({
       record: rec.e,
-      simulate: twinSims().identifySim(wpath, nSamp),
+      simulate: (p) => idSim({ ...p, damp: 1e-3, bl: 0 }),
       space: [{ name: 'K', values: KP_LADDER.slice() }, { name: 'E', values: EP_LADDER.slice() }],
       refine: 2,
       onProgress: (m) => { stat.textContent = `identifying: ${m}`; },
     });
-    twinFit = { K: fit.params.K, E: fit.params.E };
-    console.log(`[flexisim] ⑩ identified K=${twinFit.K} E=${twinFit.E} (J ${fit.J.toExponential(2)}, `
+    // STAGE 2 (§43): free damping and backlash and walk all four by coordinate descent.
+    // Measured on the canonical cell: the grid at a wrong damping guess reads
+    // K 0.19 / E 0.0375 on a 0.25 / 0.03 machine; this stage recovers damping EXACTLY
+    // and K/E to ≤1%, and the delivered compile goes 33x → 44.5x, matching the oracle.
+    const fit2 = await refineParams({
+      record: rec.e,
+      simulate: idSim,
+      params: { K: fit.params.K, E: fit.params.E, damp: 1e-3, bl: 5e-5 },
+      keys: [{ name: 'damp', factor: 3 }, { name: 'bl', factor: 3 },
+        { name: 'K', factor: 1.15 }, { name: 'E', factor: 1.08 }],
+      rounds: 3, shrink: [1.04, 1.02],
+      onProgress: (m) => { stat.textContent = `refining: ${m}`; },
+    });
+    twinFit = { ...fit2.params };
+    console.log(`[flexisim] ⑩ identified K=${twinFit.K} E=${twinFit.E} `
+      + `damp=${twinFit.damp.toExponential(2)} bl=${twinFit.bl.toExponential(2)} `
+      + `(grid J ${fit.J.toExponential(2)} → refined ${fit2.J.toExponential(2)}, `
       + `${fit.evals.filter((ev) => ev.refused).length} refusals)`);
     await homeP();
     setPathBadge('⑩ twin commissioned — press Compile this program', 'good');

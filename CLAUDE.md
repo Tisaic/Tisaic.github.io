@@ -1396,6 +1396,14 @@ that matches it** — the point-to-point tabs measure a different question.
   steady lap is refined against the tiled delivery itself — measured on K=1/E=0.06, tail
   5.6e-2 → 4.3e-3 with joint 2.8e-4/5.2e-4 sustained — and the page clamps the twin's du
   at `pilotUMax()`, never a constant from another correction (duPk 1.84 rad at K=1).
+  COMMISSIONING IS THE STAGED FOUR-PARAMETER FIT (plan §43): a SPANNING wander (reach 6 —
+  at the default 4.2 the identified optimum sat 0.8% off truth and the delivered compile
+  paid 44x → 33x), the K/E grid at damping/backlash GUESSES, then `refineParams`
+  coordinate descent over all four — with damping merely guessed the grid MISIDENTIFIES
+  (K 0.19/E 0.0375 on a 0.25/0.03 machine), so the wider fit is a correctness
+  requirement off-sandbox, not extra learning. Fitted-template delivery at the canonical
+  cell: **44.5x, matching the exact-parameter oracle**; the fully learned alternatives
+  measured 5.6x (generic FIR+poly) and 5.2x (rigid-lumped template) — §43's ladder.
   **Sweep feedrate**
   runs the whole ladder and tabulates the trade. The arm is drawn at TRUE geometry; the error trail
   is the exaggerated object, pushed out along the path normal only.

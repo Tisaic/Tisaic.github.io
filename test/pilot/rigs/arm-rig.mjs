@@ -45,13 +45,18 @@ const ARM_K = +(process.env.ARM_K || 16);
 const ARM_BL = process.env.ARM_BL === undefined ? 1e-4 : +process.env.ARM_BL;
 const PG = { LEN1: 14, LEN2: 10, E: ARM_E, K: ARM_K, BL: ARM_BL, centre: [12, 0], drive: 32 };
 
-async function makeArm() {
-  const mk = (length) => buildLink({ length, section: H, clamp: CLAMP, E: PG.E,
-    nu: NU, rho: RHO, damping: DAMPING });
+async function makeArm(over = {}) {
+  // Overrides serve the twin's four-parameter identification (candidate machines at
+  // fitted K/E/damping/backlash); every existing caller passes nothing and gets the
+  // rig's own machine, byte-identical — one constructor, no second copy (rule 61).
+  const K = over.K ?? PG.K, E = over.E ?? PG.E;
+  const damp = over.damp ?? DAMPING, bl = over.bl ?? ARM_BL;
+  const mk = (length) => buildLink({ length, section: H, clamp: CLAMP, E,
+    nu: NU, rho: RHO, damping: damp });
   const l1 = await mk(PG.LEN1), l2 = await mk(PG.LEN2);
   const j = (mp) => new Joint({ ratio: RATIO, motorInertia: mp.inertiaAboutPivot / 1e4,
-    loadInertia: mp.inertiaAboutPivot, stiffness: PG.K, backlash: ARM_BL,
-    damping: 2 * Math.sqrt(PG.K * mp.inertiaAboutPivot / 2) });
+    loadInertia: mp.inertiaAboutPivot, stiffness: K, backlash: bl,
+    damping: 2 * Math.sqrt(K * mp.inertiaAboutPivot / 2) });
   const arm = new FlexArm2R({ joint1: j(massProperties(l1)), link1: l1,
     joint2: j(massProperties(l2)), link2: l2, gravityWorld: [0, -G, 0], dt: 1 });
   const hold = Math.abs(arm.gravityTorque([0, 0])[0]) / RATIO;
