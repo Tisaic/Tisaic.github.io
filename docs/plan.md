@@ -6211,13 +6211,21 @@ MACHINE with that prefix in place, hand the pilot THAT as its oracle, and add th
 correction on top:
 
 ```
-  pass   free rms      totalRms    x over open   prefix pk
-     0   1.235e-1     5.3363e-1       2.56x        0.1500
-     1   5.123e-2     2.0762e-1       6.58x        0.3000
-     2   2.151e-2     1.1284e-1      12.11x        0.4500
-     3   1.196e-2     8.3159e-2      16.43x        0.6000
-     4   8.683e-3     7.0145e-2      19.48x        0.7237
+  pass   free rms     totalRms     x tot    contourRms    x con    prefix pk
+     0   1.235e-1    5.3363e-1     2.56x    4.4340e-1     2.54x      0.1500
+     1   5.123e-2    2.0762e-1     6.58x    1.2753e-1     8.84x      0.3000
+     2   2.151e-2    1.1284e-1    12.11x    7.7146e-2    14.62x      0.4500
+     3   1.196e-2    8.3159e-2    16.43x    5.7319e-2    19.67x      0.6000
+     4   8.683e-3    7.0145e-2    19.48x    4.7071e-2    23.96x      0.7237
+     5   7.289e-3    7.0194e-2    19.47x    4.7118e-2    23.93x   (prefix alone)
 ```
+
+**ON ⑩'s OWN DENOMINATOR THE GAP IS 1.8x, NOT TWELVE.** ⑩ is quoted at 44x contour on a
+converged lap; iterating the pilot's own QP with a perfect forecast reaches **23.96x
+contour** and converges there — pass 5 with the pilot switched off and only the prefix
+applied reads 23.93x, so the converged prefix is doing all of it. That is the honest size of
+what remains, and it is a factor under two rather than the order of magnitude the
+first-column comparison implied.
 
 **AND IT IS NOT ACCUMULATED AUTHORITY.** The one-shot rung reached uPk 0.4785 and delivered
 3.65x; pass 3 sits at a prefix peak of 0.60 and delivers 16.43x — 4.5x better at comparable

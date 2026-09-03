@@ -20,21 +20,28 @@ import { Stack } from '/home/user/Tisaic.github.io/lib/pilot/stack.js';
 import { commissionArm, deployOn, PG } from '/home/user/Tisaic.github.io/test/pilot/rigs/arm-rig.mjs';
 
 const DEPTHS = (process.env.CD_DEPTHS || '1,2,3,4').split(',').map(Number);
+// THE CAP IS SWEPT AT COMMISSIONING, NOT AT DEPLOY. Raising `stack.uMax` after the fact lets
+// the sum through but every layer was still fitted, verified and gated under the old cap — so
+// it measures the clamp, not the authority. Handing each layer the larger cap from the start
+// is the only version of the question the machine can answer (rule 34).
+const UCAPS = (process.env.CD_UCAPS || '0.15,0.6').split(',').map(Number);
 const SHAPES = (process.env.CD_SHAPES || 'sharp,circle,rounded').split(',');
 const FEED = +(process.env.CD_FEED || 0.004);
-const CAPS = (process.env.CD_CAPS || '1,4').split(',').map(Number);
+const CAPS = (process.env.CD_CAPS || '1').split(',').map(Number);
 
 console.log(`arm K ${PG.K} / E ${PG.E}, feed ${FEED}; scored on ${SHAPES.join(', ')}`);
 const open = {};
+for (const uCap of UCAPS) {
 for (const depth of DEPTHS) {
   const t0 = Date.now();
   const st = await commissionArm({ seed: 1, train: { shape: 'rounded', feed: FEED },
-    Cls: Stack, extra: { depth } });
+    uCap, Cls: Stack, extra: { depth } });
   const mins = (Date.now() - t0) / 60000;
   if (!st) { console.log(`  depth ${depth}: commissioning never terminated`); continue; }
   const live = st.report.layers.filter((l) => l.deployed).length;
-  console.log(`\n  depth ${depth}: ${live} of ${st.layers.length} layer(s) deployed in `
-    + `${mins.toFixed(1)} min — ${st.verdict ? st.verdict.why : 'no verdict'}`);
+  console.log(`\n  uCap ${uCap} depth ${depth}: ${live} of ${st.layers.length} layer(s) `
+    + `deployed in ${mins.toFixed(1)} min — ${st.verdict ? st.verdict.why : 'no verdict'}`
+    + `; verify clamped ${st.report.verifyClamped}`);
   for (const l of st.report.layers) {
     console.log(`    layer ${l.layer}: ${l.deployed ? 'deployed' : 'REFUSED'}`
       + `${l.verify != null ? `, verify ${l.verify.toFixed(2)}x` : ''}`
@@ -47,7 +54,7 @@ for (const depth of DEPTHS) {
   // stalls at the cap is measuring the CLAMP and not the cascade. `report.clamped` says which,
   // and the cap is swept for the same reason (rule 9, both halves).
   const cap0 = st.uMax;
-  for (const mult of CAPS) {
+  for (const mult of CAPS) {   // deploy-time cap multiplier, kept as the clamp control
     st.uMax = cap0 * mult;
     for (const shape of SHAPES) {
       if (!open[shape]) open[shape] = (await deployOn(st, shape, false, FEED)).r.totalRms;
@@ -61,5 +68,6 @@ for (const depth of DEPTHS) {
     }
   }
   st.uMax = cap0;
+}
 }
 console.log('EXIT 0');
