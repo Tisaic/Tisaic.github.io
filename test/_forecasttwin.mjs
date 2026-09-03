@@ -40,9 +40,9 @@
  *
  * Run: node test/pilot/forecast.mjs   [SHAPES=sharp,circle,rounded] [FEEDS=0.004]
  */
-import { solveRidge } from '../../lib/pilot/pilot.js';
+import { solveRidge } from '../lib/pilot/pilot.js';
 import { PG, commissionArm, recordOpenLoop, makeArm, mkPath, homeArm, routeSignals }
-  from './rigs/arm-rig.mjs';
+  from './pilot/rigs/arm-rig.mjs';
 
 const SHAPES = (process.env.SHAPES || 'rounded,circle,sharp').split(',');
 const FEEDS = (process.env.FEEDS || '0.004').split(',').map(Number);
