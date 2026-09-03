@@ -5279,6 +5279,28 @@ the probed subspace, backtrack, re-centre, with the predicted residual printed B
 each step so the machine grades the local-linear model (rules 16, 27). Running as
 `test/_tilesgn.mjs`.
 
+**THE OPTIMIZERS CONVICTED THEMSELVES IN ORDER (`_tilesgn.mjs`, `_tilesgn2.mjs`,
+`_tilelvo.mjs`), AND THE LAST ONE TAUGHT THE REAL LESSON.** Subspace Gauss-Newton v1
+(20 fresh probe directions/round, 4 rounds, 165 evals): tile 3.109e-3 → 2.876e-3 with
+the linear model verified to 0.4% at full step, and **delivered 45.9x — the first
+number past the shipped 44.0x** — transfer efficiency ~85%, so 50x needs tile ~2.6e-3.
+Column accumulation (v2) matched v1 at 60% of the evals and was stopped as legibly
+inferior once the operator route opened: fresh directions deplete because after the
+corner-concentrated part is taken the residual spreads over MANY directions (~1%/round,
+both variants). The LAP-VARYING OPERATOR (hat-bump kernels at 8 nodes placed at the
+corners and mid-edges, hat-interpolated between nodes, whole-tile Gauss-Newton by CG on
+the implicit operator): kernel support measured at 50%/121 bins, 99%/342 — long, as the
+900-sample memory predicts — and the whole-tile solve took the tile to **2.689e-3 in 45
+evals**, past everything. **AND IT DELIVERED 44.0x — NO TRANSFER (rule 21).** The
+sim-objective improvement below ~2.8e-3 lived in the EVAL'S OWN BINNING: at 1024 bins
+over ~817 samples/lap the 4-lap eval has ~2.4 samples per bin, and a whole-tile update
+with bin-scale freedom can game that aliasing without touching the machine — SGN's
+smoother few-direction steps could not, which is why its worse tile delivered more.
+The objective must not be gameable at a resolution the machine cannot see: v2 of the
+operator bench runs 512 bins, a first-difference smoothness penalty in the CG, an
+out-of-config 8-sim-lap holdout printed each cycle, and the delivered JOINT rms beside
+the contour so the transfer gap is measured rather than inferred.
+
 **ROUTE A MEASURED, AND THE MISSING-TOOLS HYPOTHESIS IS FALSIFIED IN ITS SIMPLE FORM
 (`test/_dynssm.mjs`).** The campaign's reading was that the generic learner lacked two
 tools — stable deep state and rollout-error fitting. Both were built and provided: a
