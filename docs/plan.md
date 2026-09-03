@@ -5545,3 +5545,20 @@ its parity was exact but its saving was capped at 1.3x precisely BECAUSE per-can
 cost is build-and-settle, and that same measurement is what pointed at visiting fewer
 candidates as the only real lever. It cost one commit to learn where the cost actually
 lived.
+
+**§44 — AND THE COSTING PASS FOUND THE MODE-⑧ FAILURE AGAIN, IN THE ONE PLACE NOBODY
+LOOKS: MY OWN DEFAULTS.** Checking what the page's deep refine actually runs against
+what the PLC table costed turned up that `refineOperator`'s signature carried
+`cycles = 2, steps = 4` — numbers I picked when I wrote the function and never measured
+— while **every delivered figure in the record (51.5x through the shipped call, 53.6x on
+the bench chain) was measured at `cycles: 4, steps: 5`**, which the benches passed
+explicitly. So the page was running about half the refinement its own documentation
+quoted, and no check could see it: the twin test deliberately overrides to a reduced
+scale, and the browser half asserts wiring rather than performance. The defaults are now
+the MEASURED configuration, so there is one configuration with one number and a caller
+wanting less has to say why (rule 61). The lesson is narrower than "check the wiring":
+**a default is a constant, and an unmeasured default is a constant nobody re-derived
+(rule 31) — sitting in the one file where the reader assumes a measurement stands
+behind it.** Both previous instances of this failure were caught by making the machine
+PRINT what it ran; this one was caught by making the COST MODEL name what it assumed,
+which is the same move applied to arithmetic instead of to wiring.
