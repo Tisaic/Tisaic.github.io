@@ -5883,3 +5883,35 @@ on; on a one-shot span the same term is only a late-iteration distraction. **Had
 been one-sided this would have shipped as a 7.6% win and cost 8% on the configuration
 that carries every headline in the record** (rule 9, both halves, earning its place
 again).
+
+**§46 — CAN A CHEAP MODEL INHERIT THE TWIN'S MEMORY? THE FIRST ANSWER, AND A BENCH FLAW
+WORTH MORE THAN IT (`test/_twinreduced.mjs`).** The twin's forecast wins by simulating,
+and the simulation is 5.4x slower than real time — inadmissible live — so the
+architecture needs a CHEAP model carrying the twin's memory. The reason to expect one now
+is that §43's learners were fitted on MACHINE records (one wander, limited, closed paths
+that alias, a window truncating a 6363-8649-step memory at 384), where a model fitted on
+the TWIN has unlimited data, chosen excitation, open paths and a window that can REACH.
+A log-spaced lag window to 768 samples does that in ~80 terms.
+
+**THE FIRST RUN GAVE THE MODEL THE COMMAND ONLY, WHICH IS BLINDER THAN THE ARCHITECTURE
+REQUIRES.** `routeSignals` hands the pilot [encoder angles, encoder speeds, applied
+torques] — every one available at deploy; only `truth`, the tool position, comes from the
+TRACKER and is commissioning-only. "Remove the tracker" therefore permits encoder and
+torque feedback, and denying them measures the handicap rather than the model (rule 20).
+The run is kept because of what it found anyway:
+
+```
+ program     twin-trained (command only)     pilot fitted-on-machine
+ rounded            0.901 / -0.177                 0.980 / 0.896
+ circle             0.844 / -1.329                 0.981 / 0.909
+ sharp              0.990 /  0.549                 0.919 / 0.402
+```
+
+**On the SHARP SQUARE — the program where the pilot's forecast collapses and twelve
+controller knobs measured null — the twin-trained model BEATS it on both channels, blind
+to every measurement, while losing badly on the smooth programs.** That is not a capacity
+difference, it is COVERAGE: the pilot is trained on the rounded rectangle, so it is at
+home on the smooth programs and extrapolating at the corners, while the twin-trained
+model saw broadband wanders and is uniformly mediocre but never collapses. **Training
+data you can generate freely, on excitation you choose, is a large part of what the twin
+buys** — and it buys it exactly where this project's hardest standing failure lives.
