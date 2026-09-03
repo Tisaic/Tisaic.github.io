@@ -5197,11 +5197,23 @@ measured backlash-ignorance free) — J 1.5e-6 in 26 lattice evaluations. **AND 
 damping held at a wrong guess misidentifies (K 0.19 / E 0.0375) — the page's current ⑩,
 which fixes damping at the known value, would do exactly this on a real machine.
 Delivered on the true machine at the fitted parameters: **3.4e-2 flat, 33.3x** against
-the exact-parameter oracle's 44x — the 0.8% identification error costs ~25%, and a
-tightening round is measuring how much of that comes back. The canonical-cell ladder,
-final form: generic learned 5.6x / rigid-lumped 5.2x / **fitted lattice template 33.3x
-delivered** / exact-oracle 44x. Note against the 50x bar: even the ORACLE delivers 44x —
-past it, the constraint is the compile chain's own residual, not identification.
+the exact-parameter oracle's 44x — the 0.8% identification error costs ~25%. Tightening
+the search 7x in J moved delivery 0.6% (33.5x): NOT precision. The attribution run —
+truth parameters through the template's own constructor — delivered **44.0x, byte-class
+equivalent to the oracle** (rule 21's control), so the gap was parameter error alone,
+and the identification RECORD was the cause: the fit wander ran at reach 4.2 against
+this section's own coverage rule. **On a spanning 1500-sample record the fit walks to
+K 0.8% / E 0.2% / damp 1% and DELIVERS 44.5x — the fitted template now matches the
+oracle** (2.55e-2 flat, lap 1 at 2.65e-2). The compensation ridge rotates with the
+record (K and E swapped which is off), which is why coverage, not search precision, was
+the binding constraint — the FIFTH appearance of "span the range".
+**ROUTE B CLOSED. The canonical-cell ladder, final form: generic learned 5.6x /
+rigid-lumped 5.2x / fitted lattice template 44.5x delivered / oracle 44.0x.** Against
+the 50x bar the remaining constraint is the compile chain itself: at exact parameters
+the delivery (2.55e-2) sits 4x above the sim's own residual (5.9e-3), a pipeline
+property present in every oracle run. What ships next: ⑩'s page commissioning moves
+from the 2-parameter fit (measured WRONG under a mis-guessed damping) to the
+4-parameter spanning fit. Route A stays open in background at its bar.
 
 **THE CANONICAL BENCH (owner's standing rule: softest arm, sharp corners — K 0.25 /
 E 0.03, the sharp square).** The twin pipeline in the shipped config, first measurement

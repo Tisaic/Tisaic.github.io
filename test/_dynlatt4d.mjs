@@ -10,7 +10,7 @@ import { ChainServo } from '/home/user/Tisaic.github.io/lib/flexisim/compensator
 const rig = await import('/home/user/Tisaic.github.io/test/pilot/rigs/arm-rig.mjs');
 const { makeArm, mkPath, homeArm } = rig;
 const SS = 9, PRE = 1500, LAPS = 8;
-const FIT = { K: 0.2480, E: 0.02977, damp: 3.00e-3, bl: 1.67e-5 };
+const FIT = { K: 0.24800, E: 0.030065, damp: 2.970e-3, bl: 1.64e-5 };
 const path = mkPath('sharp', 0.004);
 const destroy = async (m) => { await m.arm.l1.destroy(); await m.arm.l2.destroy(); };
 const H4 = 4, CLAMP = 3, NU = 0.3, G = 2e-6, RATIO = 100;
