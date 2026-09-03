@@ -5169,6 +5169,25 @@ stiffnesses, damping, friction, backlash — §42's product form with nothing su
 the structure CLASS), which reaches 44x by construction and is days. What would change
 the answer: a measured free-run at ≤0.05 NRMSE both channels from any learned class.
 
+**THE OWNER CHOSE: B NOW, A IN BACKGROUND — and B's ladder is measured
+(`test/_dyntemplate.mjs`).** The rigid-link lumped template (12 minimal identifiable
+parameters — Ia/B/J2/two gravity levers plus the joint set, the EMPS IDIM-LS
+discipline — fitted by H-staged output error on one wander, all machinery reused: Joint,
+ChainServo, the verified rigid core) fits to J 4.6e-4 in 2 minutes of pattern search and
+delivers **5.2x** — the same band as the generic learned model's 5.6x, and its open
+free-run (0.209/0.343) does not decide that: the structural-extrapolation advantage the
+lattice class shows under correction does NOT materialise in a class that lacks the
+dominant physics. At E 0.03 the LINKS are the compliance, and no rigid-link fit carries
+their distributed dynamics. **The B-ladder at the canonical cell: rigid-lumped 5.2x /
+generic learned 5.6x / lattice-class template 44x — the whole 8x step is the link-flex
+representation.** So B completes as the LATTICE-CLASS template with MORE parameters
+freed: "the links are slender elastic beams" is a structure-class declaration of the
+same epistemic status as "rigid links + springs", §42 proved K/E identification exact,
+and the running experiment asks whether output error stays sharp when link damping and
+backlash are fitted too (they were known constants). The lumped template stands as the
+measured no-lattice lower bound, and A's falsifiable target is unchanged: any learned
+class at ≤0.05 free-run NRMSE replaces the lattice.
+
 **THE CANONICAL BENCH (owner's standing rule: softest arm, sharp corners — K 0.25 /
 E 0.03, the sharp square).** The twin pipeline in the shipped config, first measurement
 at the cell that cannot flatter: open loop 1.13 contour; ⑩ lap 1 **2.65e-2**, tail flat
