@@ -5723,3 +5723,55 @@ same file on the same cell and the same path:
 **A 35x better fit, the backlash found at last, and 21% better delivery — 30% after the
 operator refine.** That is the answer to whether the fit statistics were worth anything:
 they were, and the machine says so rather than the objective.
+
+## §46 — THE OWNER'S PROPOSED ARCHITECTURE, AND WHAT THIS SESSION'S MEASUREMENTS SAY
+
+**The proposal.** Autotune the pilot with the tracker present only during training; then
+learn a GENERIC model rather than a structured one; remove the tracker; and use that
+model to optimise the path LIVE rather than commissioning or compiling a program in
+advance. Result: plant-, feed- and path-agnostic, with no offline per-program cost.
+
+**THREE OF THE FOUR PARTS ALREADY EXIST.** The pilot is autotuned, the tracker is a
+commissioning-only instrument (`onlineAtDeploy` is an installation property the report
+states, never an assumption), and the pilot IS a live path optimiser — a
+receding-horizon box-constrained QP re-solved every decision, which never sees the
+program in advance. "Optimise the path live, not a pre-done path" describes what ships.
+
+**THE ONE PART MEASURED AS NOT WORKING IS THE GENERIC MODEL**, and §43 tested it with
+precisely the tools the campaign had identified as missing — a contraction-GUARANTEED
+nonlinear state space fitted by full-record BPTT, so the training loss IS the free-run
+error. It reached 0.33/0.43 on the program and 0.47/0.46 on a held-out wander against a
+bar of 0.05, and adding a 128-tap FIR readout left it at the FIR wall: **the two missing
+tools bought 10%, not 10x**, while the four-parameter template from the SAME data is
+near-exact (J 4.02e-5, every parameter to four figures). §41's mechanism explains it:
+the elbow's memory is 6363-8649 steps, longer than a program lap, so windowed features
+truncate it and closed paths alias it. **A simulation propagates state; a regression
+truncates it.**
+
+**BUT THE BAR DEPENDS ON THE USE, AND THAT REOPENS THE ARCHITECTURE.** The 0.05 bar was
+set for replacing the twin as an OFFLINE SIMULATOR — free-running a whole program. Live
+optimisation needs only accuracy over the PREVIEW HORIZON, which the pilot already has
+(R² 0.99+ at lead 0) and is the reason it works at all. "Good enough to compile a program
+offline" and "good enough to steer live" are different requirements, and only the first
+is measured as out of reach.
+
+**THE SYNTHESIS THAT KEEPS NEARLY ALL OF IT, AND THE MEASUREMENT THAT DECIDES.** The
+pilot's binding constraint is named and measured (brick 55): it sits AT ITS FORECAST
+BOUND, delivered ~ sqrt(1-R²) x truth rms, and ILC-class accuracy needs sixty times less
+residual variance than a lag-window regression will reach. Meanwhile the twin predicts
+this machine essentially exactly, and `compileTwin` ALREADY reduces it to a cheap linear
+object — H, the measured step response. **Nobody has connected them.** Feeding the
+twin-derived forecast into the pilot's live QP, in place of the regression-derived one,
+would be path- and feed-agnostic (nothing precomputed about the program), keep the
+tracker off at deploy, cost nothing per program, and attack the exact quantity that
+bounds the pilot today. What it does NOT buy is full plant-agnosticism: it needs the
+structural template. That is the honest price, and route A's measurement says it is
+currently the right one to pay — the template is four parameters found automatically
+from one wander, so the WORKFLOW stays "wire it up and press one button" even though the
+CLASS is not free.
+
+**TWO THINGS TO MEASURE BEFORE BELIEVING ANY OF IT (rule 59):** whether the twin-derived
+H actually beats the fitted forecast at the leads the QP uses — cheap, since both
+objects already exist and this is scoring rather than building — and the LIVE cost,
+since today's twin runs 5.4x slower than real time, so only its reduced form is
+admissible under the PLC-only rule.
