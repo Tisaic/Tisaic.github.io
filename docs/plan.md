@@ -5449,11 +5449,19 @@ changes after build); and the count is analytic, the instrument class that has
 shipped faults twice (rules 17, 30), so every per-pass number is itemized for
 checking.
 
-**THE LEVERS, in the order of their leverage:** (1) RESOLUTION — a section-3 twin
-carries 44% fewer material cells, and rule 2 says resolution is nearly always a cost
-knob; the experiment that decides is running (`bench-coarse`: coarse template refits
-its OWN four parameters, compiles through itself, scored on the true section-4
-machine against the shipped 44.0x). (2) f32 state (already assumed for memory; the
+**THE RESOLUTION LEVER IS MEASURED AND REJECTED (`test/_twincoarse.mjs`): rule 2's
+"nearly always" found its exception.** The section-3 twin refit its own four
+parameters (K 0.135 / E 0.0534 / damp 2.67e-3 — lawfully different constants, they
+belong to the template), compiled through itself (3.50e-3 in its own world), and
+delivered **27.2x on the true section-4 machine against the fine twin's 44.0x**. Its
+identification residual (J 3.17e-3 against near-exact at section 4) shows up almost
+one-for-one at delivery: the twin's RESOLUTION is the product's fidelity, not a
+viewing knob — on FlowSim resolution is a cost knob because the assertion has margin;
+here the assertion IS the delivered part. The PLC table therefore stands at
+section 4: 1.1 h commissioning, 1.8 h per-program compile, overnight deep refine,
+all background at 10k MAC/cycle.
+
+**THE REMAINING LEVERS, with the first one dead:** (2) f32 state (already assumed for memory; the
 arithmetic too). (3) Eval diet on the operator refine (its cycles deplete — most of
 the value is in the first two). (4) The operator refine can alternatively run against
 the REAL machine (~160 evals x 4 laps ≈ 90 min of machine laps, near-zero compute) —
