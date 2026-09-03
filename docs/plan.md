@@ -5858,3 +5858,28 @@ read 41% worse than delivered and I twice began concluding a regression from it 
 checking. Same fault as the mismatched scoring window earlier in this section: comparing
 two numbers computed under different conventions (rule 17). The delivered column, which
 is one convention throughout, is the one that decides.
+
+**§45 — AND `skip` IS AN OPTION, NOT AN IMPROVEMENT: THE CLOSED-LAP BAR REFUSED IT.**
+The no-regression half of the pre-registered bar did its job. Measured on the shipped
+closed-lap path (compile laps 5 -> refineCompiled -> refineOperator), `skip` delivers
+**47.5x against 51.5x — an 8% regression**, from a worse artifact at every stage
+(refineCompiled 3.275e-3 against 3.124e-3; the operator refine entering at 3.044e-2
+against 2.841e-2 and ending at 2.471e-2 against 2.422e-2, using less authority,
+duPk 1.73 against 1.94). So:
+
+```
+ configuration              without skip   with skip
+ open one-shot raster            11.8x       12.7x   (+7.6%, and monotone in iters)
+ closed tiled lap (shipped)      51.5x       47.5x   (-8%)
+```
+
+**It ships default-off, documented by the split rather than by a preference.** Set it
+when the compiled span IS the program; leave it off when a steady lap is extracted and
+tiled — which is exactly the distinction the long-CNC case turns on, so the option lands
+where it is needed. HYPOTHESIS FOR THE SPLIT, STATED AND NOT TESTED (rule 59): with
+tiling, what ships is the steady lap, and that lap inherits the loading history the
+pre-roll du produced, so scoring the pre-roll constrains a du the tiled artifact depends
+on; on a one-shot span the same term is only a late-iteration distraction. **Had the bar
+been one-sided this would have shipped as a 7.6% win and cost 8% on the configuration
+that carries every headline in the record** (rule 9, both halves, earning its place
+again).
