@@ -61,7 +61,8 @@ const S = {
 console.log('e rms about mean: ch1', S.e1.sd.toExponential(2), 'ch2', S.e2.sd.toExponential(2));
 
 const NU = 4;             // state inputs
-const NP = 8;             // readout extras: 1,q1,q2,q1^2,q1q2,q2^2,dq1,dq2 (z-scored q)
+const FIRL = +(process.env.SSM_FIR || 0);   // optional FIR block in the readout: dq lags 0..FIRL-1
+const NP = 8 + 2 * FIRL;  // readout extras: 1,q1,q2,q1^2,q1q2,q2^2,dq1,dq2 (+ dq lags)
 const uOf = (s, t, out) => {
   out[0] = (s.q1[t] - S.q1.m) / S.q1.sd; out[1] = (s.q2[t] - S.q2.m) / S.q2.sd;
   out[2] = (s.d1[t] - S.d1.m) / S.d1.sd; out[3] = (s.d2[t] - S.d2.m) / S.d2.sd;
@@ -70,6 +71,11 @@ const pOf = (s, t, out) => {
   const a = (s.q1[t] - S.q1.m) / S.q1.sd, b = (s.q2[t] - S.q2.m) / S.q2.sd;
   out[0] = 1; out[1] = a; out[2] = b; out[3] = a * a; out[4] = a * b; out[5] = b * b;
   out[6] = (s.d1[t] - S.d1.m) / S.d1.sd; out[7] = (s.d2[t] - S.d2.m) / S.d2.sd;
+  for (let l = 0; l < FIRL; l++) {
+    const tt = Math.max(0, t - l);
+    out[8 + 2 * l] = (s.d1[tt] - S.d1.m) / S.d1.sd;
+    out[9 + 2 * l] = (s.d2[tt] - S.d2.m) / S.d2.sd;
+  }
 };
 
 // ---- model -------------------------------------------------------------------

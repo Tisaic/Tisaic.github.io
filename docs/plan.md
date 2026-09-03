@@ -5279,6 +5279,23 @@ the probed subspace, backtrack, re-centre, with the predicted residual printed B
 each step so the machine grades the local-linear model (rules 16, 27). Running as
 `test/_tilesgn.mjs`.
 
+**ROUTE A MEASURED, AND THE MISSING-TOOLS HYPOTHESIS IS FALSIFIED IN ITS SIMPLE FORM
+(`test/_dynssm.mjs`).** The campaign's reading was that the generic learner lacked two
+tools — stable deep state and rollout-error fitting. Both were built and provided: a
+contraction-GUARANTEED nonlinear state-space (x' = g·x + (1−g)·tanh(Wx+Uu+b), g on a
+time-constant ladder to 2000 samples, W's rows projected each update so
+g + (1−g)·||W||₁ ≤ 0.999 — provable ∞-norm contraction, not regularized-and-hoped) fit
+by full-record BPTT, where the model is input-driven so the training loss IS the
+free-run error — no teacher forcing to hide behind. Warm-started statics, 18 records,
+48 states. Result: prog [0.37, 0.57], w3 [0.44, 0.62] free-run NRMSE — AT the FIR wall.
+Adding a 128-tap FIR block to the readout (state only has to carry what the window
+can't): prog [0.33, 0.43], w3 [0.47, 0.46] — the elbow lands ~10% below the FIR-alone
+wall. The two tools bought 10%, not 10x, against a bar of 0.05 — while the
+4-parameter lattice-class template, driven by the SAME commands, sits near-exact on
+both channels. What the generic class lacks is the CLASS, not state or the fitting
+objective: the falsifiable bar stands (any learned class at ≤0.05 free-run NRMSE both
+channels replaces the lattice) and route A goes back to background.
+
 **THE CANONICAL BENCH (owner's standing rule: softest arm, sharp corners — K 0.25 /
 E 0.03, the sharp square).** The twin pipeline in the shipped config, first measurement
 at the cell that cannot flatter: open loop 1.13 contour; ⑩ lap 1 **2.65e-2**, tail flat
