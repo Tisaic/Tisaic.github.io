@@ -42,17 +42,22 @@ for (const shape of SHAPES) {
     // the trace is the machine's own report, one sample stale — the callback runs inside the
     // tick that precedes the observe, so the newest truth available is the previous sample's
     const trace = [];
-    const d = [0, 0], pred = [null, null];
-    const obs = (c, leadSamp, fitted, conv) => {
+    const d = [0, 0], pred = [null, null], predAt = [0, 0];
+    const obs = (c, leadSamp, fitted, conv, kSamp) => {
       if (leadSamp === 0) {
-        // WHAT THE MODEL SAID THE ERROR WOULD BE NOW, against what the machine reported. The
-        // previous tick's lead-0 prediction is the one that was about this sample (rule 29:
-        // a prediction is read where it is ABOUT, never where it was issued).
-        if (pred[c] !== null && trace.length) {
-          const meas = trace[trace.length - 1].e[c];
+        // READ THE PREDICTION WHERE IT IS ABOUT, NOT WHERE IT WAS ISSUED (rule 29, and the
+        // first version of this bench got it wrong). Lead 0 is offset 0, so a tick's lead-0
+        // value is about THAT tick's sample — but the comparison can only happen a tick
+        // later, and ticks are `grid * sample` steps apart (8 samples here). Comparing
+        // against the newest trace row would therefore be 7 samples late and would read as
+        // an uninformative estimate rather than a mis-registered one. The sample index is
+        // stored with the prediction and the trace is indexed by it.
+        if (pred[c] !== null && trace.length > predAt[c]) {
+          const meas = trace[predAt[c]].e[c];
           d[c] += g * ((meas - pred[c]) - d[c]);
         }
         pred[c] = fitted + conv + d[c];
+        predAt[c] = kSamp;
       }
       return fitted + d[c];
     };
