@@ -73,8 +73,11 @@ const refEval = Math.ceil((PRE + 4 * lapSamples) * SS);
 // own assumption was the least accurate thing in it (rule 17), so the counts now come
 // from `test/_twinlmfit.mjs` and the retired path is kept beside the shipped one.
 const stages = [
-  ['[retired] grid + coordinate descent (measured 144 sims)', 144 * idSteps],
-  ['commissioning: coarse seed + refineLM (measured 70 sims)', 70 * idSteps],
+  // MEASURED counts (test/_twinlmfit.mjs), not estimated: the first version of this
+  // table guessed 60 + 30 and was 37% low. The coarse-seed shortcut that would have cut
+  // this to 70 sims was measured and REFUSED by the gate (plan §44) — LM is local and
+  // the seed landed in the wrong basin — so the grid stands and so does its cost.
+  ['commissioning: screened grid + refineLM (measured ~144 sims)', 144 * idSteps],
   ['H probe (twinResponse, ~3 runs)', 3 * compEval],
   ['compileTwin (11 iters, laps 5)', 11 * compEval],
   ['refineCompiled (~10 evals, laps 4)', 10 * refEval],
@@ -86,7 +89,6 @@ for (const [name, steps] of stages) {
   const cycles = steps * CPS;
   const min = cycles / 1000 / 60;
   console.log(`  ${name}: ${steps.toLocaleString()} sim steps -> ${min >= 90 ? (min / 60).toFixed(1) + ' h' : min.toFixed(0) + ' min'}`);
-  if (name.startsWith('[retired]')) continue;              // costed for contrast only
   if (name.startsWith('commissioning')) commission += min;
   else perProgram += min;
 }

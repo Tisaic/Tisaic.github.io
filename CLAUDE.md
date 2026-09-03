@@ -425,9 +425,10 @@ budget (10,000 MAC per 1 ms cycle, met EVERY cycle) while the machine produces. 
 ⑩ pipeline is COSTED for exactly that (`test/_twincost.mjs`, plan §44): the twin's
 lattice sim is ~54k float ops per step from real cell counts (480 material + 600
 vacuum, both links), so sliced it runs 5.4x slower than the 1 kHz machine, in 63 kB of
-f32 state — commissioning ~0.8 h background (`refineLM`'s measured 70 sims; the
-retired grid + coordinate descent is 1.7 h, and the ~1.1 h this line used to claim came
-from a guessed evaluation count that measurement found 37% low), a program's compile
+f32 state — commissioning ~1.7 h background (measured evaluation counts; the ~1.1 h this
+line used to claim came from a guessed count that measurement found 37% low, and a
+coarse-seed shortcut that would have halved it was tried and REFUSED by the gate), a
+program's compile
 ~1.8 h background to the 44x-class artifact, the deep refine overnight to 51.5x. The deployed artifact is a
 tile lookup and costs nothing. Two stated caveats: the ~41k int index ops per step
 stretch the table ~1.75x unless the fixed lattice's neighbours are precompiled into
@@ -1424,15 +1425,17 @@ that matches it** — the point-to-point tabs measure a different question.
   A CAPABILITY BEFORE IT IS A SPEED-UP.** The fit is nonlinear least-squares with a K/E
   compensation valley; `refineParams` coordinate descent moves one parameter at a time
   and so ignores exactly the coupling the valley IS — §43's per-harmonic failure one
-  level up. Measured against the full grid + coordinate descent on the identical record
-  at BOTH ends of the ladder: **2.1-2.4x fewer simulator calls** (the commissioning
-  lever, since each call is a build-and-settle) **and a fit three to six orders better,
-  every parameter to four figures** — soft K 0.2500/E 0.03000, stiff K 16.00/E 0.1500,
+  level up. Measured against coordinate descent from an equivalent start at BOTH ends
+  of the ladder: **a fit three to six orders better, every parameter to four figures** — soft K 0.2500/E 0.03000, stiff K 16.00/E 0.1500,
   against coordinate descent's 0.2427 and 15.16. The BACKLASH column is the pin:
   coordinate descent drove it to ~1e-17 on both cells, never finding it at all against a
   true 1e-4, because bl only pays off JOINTLY with K. It also retires this file's own
   stiff-cell caveat — the −30% K that cost 1.61x at delivery was a property of the
-  coordinate-descent fit, not of the stiff cell. Fitted-template delivery at the canonical
+  coordinate-descent fit, not of the stiff cell. **IT DOES NOT REPLACE THE GRID, and
+  trying that is how the limit was found:** LM is LOCAL, so a coarse seed of these
+  ladders picked K=32 on a K=1 machine and LM stayed there. The grid finds the BASIN and
+  LM walks the valley floor inside it. Commissioning stays ~1.7 h background; the speed
+  claim was withdrawn and the accuracy claim stands (plan §44). Fitted-template delivery at the canonical
   cell: **44.5x, matching the exact-parameter oracle**; the fully learned alternatives
   measured 5.6x (generic FIR+poly) and 5.2x (rigid-lumped template) — §43's ladder.
   **PAST THE FREQUENCY REFINE SITS THE LAP-VARYING OPERATOR (`refineOperator`, plan §43)

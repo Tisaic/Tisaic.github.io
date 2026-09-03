@@ -5518,9 +5518,10 @@ descent on the identical record, at both ends of the ladder:
                          LM       K 16.00   E 0.1500   damp 3.00e-3  bl 1.00e-4  J 7.76e-11   70 sims
 ```
 
-**2.1-2.4x fewer simulator calls** — the commissioning lever the screen could not touch,
-since each call is a build-and-settle — **and the fit is better by three to six orders of
-magnitude, with every parameter recovered to four figures.** Read the BACKLASH column:
+**2.1-2.4x fewer simulator calls FROM THESE STARTS** — see the correction below, which
+withdraws the speed claim for the shipped path — **and, the part that survives, a fit
+better by three to six orders of magnitude with every parameter recovered to four
+figures.** Read the BACKLASH column:
 coordinate descent drove it to ~1e-17 on both cells, i.e. never found it at all, against
 a true 1e-4, because bl only pays off JOINTLY with K. So the joint step is not a
 speed-up here, it is a capability, and `twin.test.mjs` phase 4 now pins bl within 3x
@@ -5535,11 +5536,10 @@ parameters ARE the truth parameters to four figures, so the fitted compile and t
 compile are the same run — and what remains genuinely open is a plant where truth is not
 recoverable at all, which no sandbox measurement can settle.
 
-**WHAT SHIPPED.** The page's ⑩ commissioning is now a nine-build coarse seed (three
-log-spaced rungs of each DECLARED ladder, at damping/backlash guesses) followed by
-`refineLM` over all four parameters, bounded to the ladders so a step cannot leave the
-domain the engineer stated (inert on both measured cells — a clamp, not a knob). The
-full-grid `identifyTwin` stays in the library and is still pinned by phase 1. **The
+**WHAT SHIPPED** (after the correction below): the page's ⑩ commissioning keeps the
+SCREENED FULL LADDERS as stage 1 and replaces only the coordinate descent, with
+`refineLM` over all four parameters bounded to those ladders so a step cannot leave the
+domain the engineer stated. The coarse seed was tried, measured, and withdrawn. **The
 screened grid, shipped one commit earlier, is superseded by this and stated as such:**
 its parity was exact but its saving was capped at 1.3x precisely BECAUSE per-candidate
 cost is build-and-settle, and that same measurement is what pointed at visiting fewer
@@ -5562,3 +5562,31 @@ wanting less has to say why (rule 61). The lesson is narrower than "check the wi
 behind it.** Both previous instances of this failure were caught by making the machine
 PRINT what it ran; this one was caught by making the COST MODEL name what it assumed,
 which is the same move applied to arithmetic instead of to wiring.
+
+**§44 — AND THE GATE CAUGHT ME OVERCLAIMING THE LM RESULT, WHICH IS THE MEASUREMENT
+THAT MATTERS MOST IN THIS SECTION.** The A/B above is real: from an equivalent start,
+LM beats coordinate descent on both cells by three to six orders and finds the backlash.
+What was NOT real was the inference I drew from it — that LM could therefore replace the
+GRID as well, letting a nine-build coarse seed stand in for the full ladders. Shipped
+that way, `twin.test.mjs` phase 4 refused it: on the page's own ladders the three-rung
+seed picked **K=32 on a K=1 machine** — the compensation valley's far end, where a stiff
+gearbox and a soft material mimic the truth once damping is guessed wrong — and LM, being
+a LOCAL method, stayed there (K 32, E 0.045, backlash driven to its bound, J 1.72e-2
+against the grid path's 1.39e-3). Everything else in the file passed; only the two new
+assertions failed, and they failed on the SEED.
+
+**The error was mine and it has a name: I measured the optimiser at seeds 1.4-2x off
+truth and deployed it where the seed is 32x off — a constant validated in one regime and
+carried into another (rule 31), which is the third time this project has paid for it.**
+The correct division is not "LM replaces the search", it is **the grid finds the BASIN
+and LM walks the valley floor inside it**; they answer different questions and are not
+interchangeable. So stage 1 is the screened full ladders again and stage 2 is `refineLM`,
+which is a strict improvement over the coordinate descent it replaces at comparable cost
+— the accuracy claim stands, the SPEED claim does not, and the 2.1-2.4x quoted above
+belongs to the bench's own near-truth seeds and to nothing the page runs.
+
+The cheap thing that would have caught it earlier: the A/B's seeds were `[0.1, 0.35, 2]`
+against a truth of 0.25, chosen while writing the bench, and never compared to what the
+page's ladders would actually produce. **An optimiser benchmark inherits the whole
+protocol it will ship inside, starting point included** — a bench that picks its own
+favourable start measures the optimiser and not the product.

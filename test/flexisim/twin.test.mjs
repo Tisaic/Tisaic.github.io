@@ -158,7 +158,7 @@ await destroyArm(mTail);
 // assertion's own margin (rule 2): the longer record moved E 0.8% → 0.2% on the
 // canonical cell, far inside this phase's 5% bar, and the protocol under test — grid
 // at guesses, then coordinate descent over all four — is the page's exactly.
-console.log('soft-machine STAGED identification (the page protocol: coarse seed, then 4-param LM)…');
+console.log('soft-machine STAGED identification (the page protocol: screened grid, then 4-param LM)…');
 const SOFT_K = 1, SOFT_E = 0.06;
 const SOFT_DAMP = 3e-3, SOFT_BL = 1e-4;      // the rig's own, never told to the fit
 const softM = await makeArm({ K: SOFT_K, E: SOFT_E });
@@ -169,30 +169,27 @@ await destroyArm(softM);
 const softSims = armSimulators({ buildArm, destroyArm,
   home: async (m, path) => homeArm(m.arm, m.servo, path), sample: SS });
 const softIdSim = softSims.identifySim(wpath, 900);
-// STAGE 1: three log-spaced rungs of each declared ladder — nine builds, the page's own
-// seed, NOT a thinned grid standing in for a full one (stage 2 is what handles the
-// valley now).
+// STAGE 1: the full ladders, screened. A COARSE SEED WAS TRIED HERE AND FAILED — it
+// picked K=32 on this K=1 machine (the compensation valley's far end, where a stiff
+// gearbox and a soft material mimic the truth once damping is guessed wrong) and LM,
+// being LOCAL, stayed there: K 32, bl driven to its bound, J 1.72e-2. The grid finds
+// the BASIN; LM walks the valley floor inside it; they are not interchangeable.
 const KL = [0.25, 0.5, 1, 2, 4, 8, 16, 20, 32], EL = [0.03, 0.06, 0.10, 0.15, 0.22];
-const seedOf = (lad) => [lad[0], lad[(lad.length - 1) >> 1], lad[lad.length - 1]];
-let softSeed = null;
-for (const K of seedOf(KL)) for (const E of seedOf(EL)) {
-  let sim;
-  try { sim = await softIdSim({ K, E, damp: 1e-3, bl: 0 }); } catch { continue; }
-  let sd = 0, n = 0;
-  const L = Math.min(sim.length, softRec.e.length);
-  for (let i = 0; i < L; i++) { for (let c = 0; c < 2; c++) sd += (sim[i][c] - softRec.e[i][c]) ** 2; n++; }
-  const J = Math.sqrt(sd / n);
-  if (!softSeed || J < softSeed.J) softSeed = { K, E, J };
-}
-console.log(`  seed (damp/bl guessed): K=${softSeed.K} E=${softSeed.E} J=${softSeed.J.toExponential(2)}`);
-// STAGE 2: all four TOGETHER by Levenberg-Marquardt (plan §44). The tolerances here are
-// tighter than the coordinate-descent contract they replace BECAUSE THE MEASUREMENT
-// EARNED THEM — on this cell and on the stiff end, LM recovers every parameter to four
-// figures at 2.1-2.4x fewer simulator calls.
+const softGrid = await identifyTwin({
+  record: softRec.e,
+  simulate: (p) => softIdSim({ ...p, damp: 1e-3, bl: 0 }),
+  space: [{ name: 'K', values: KL }, { name: 'E', values: EL }],
+  refine: 2,
+});
+console.log(`  grid (damp/bl guessed): K=${softGrid.params.K.toPrecision(4)} E=${softGrid.params.E.toPrecision(4)} J=${softGrid.J.toExponential(2)}`);
+// STAGE 2 (plan section 44): all four TOGETHER by Levenberg-Marquardt. The tolerances
+// here are tighter than the coordinate-descent contract they replace BECAUSE THE
+// MEASUREMENT EARNED THEM — from an equivalent start, on this cell and on the stiff
+// end, LM recovers every parameter to four figures.
 const softFit = await refineLM({
   record: softRec.e,
   simulate: softIdSim,
-  params: { K: softSeed.K, E: softSeed.E, damp: 1e-3, bl: 5e-5 },
+  params: { K: softGrid.params.K, E: softGrid.params.E, damp: 1e-3, bl: 5e-5 },
   keys: ['K', 'E', 'damp', 'bl'],
   bounds: { K: [KL[0], KL.at(-1)], E: [EL[0], EL.at(-1)], damp: [1e-5, 1e-1], bl: [0, 1e-2] },
 });
