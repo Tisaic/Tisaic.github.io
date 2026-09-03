@@ -5342,6 +5342,15 @@ gains **Refine deep (operator)** — runs against the FITTED twin, zero machine 
 ways (19 evals: projected residual 4.08e-3 → 2.94e-3 AND the delivered tail improves
 7.54e-4 → 6.35e-4 — the rule-21 guard that would catch a sim-only gain).
 
+**THE DEEP REFINE'S GENERALITY CONTROL: the CIRCLE at the canonical cell
+(`bench-libop-circle`).** A cornerless program the compile already nails (joint
+1.71e-5, tool 2.65e-4): the operator refine IMPROVES it 20% (→ 2.13e-4, all in cycle
+0, duPk 0.31) and the delivery holds ~2.1e-4 contour steady against an open loop of
+1.21 — transfer exact again. Third program measured (sharp canonical 51.5x, rounded
+soft +16% in the test, circle canonical +20% and unharmed): the refine helps where
+residual remains and does no harm where almost none does, which is the rule-21
+control from the other side.
+
 **THE STIFF CELL'S STAGED IDENTIFICATION IS NOW MEASURED — the last untested cell of
 the protocol (`bench-stiffid`/`bench-stiffdel`, was stated-not-built).** At K=16/E=0.15
 the grid at guessed damping misidentifies WORSE than anywhere (K=2.375 on a K=16
