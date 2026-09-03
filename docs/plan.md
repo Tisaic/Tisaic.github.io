@@ -5667,3 +5667,44 @@ that gate becomes load-bearing rather than a convenience.
 argument that a pilot underneath HELPS the compile (by reducing the plant's deviation
 from any model, which is where a real machine's twin error lives) is an argument and not
 a measurement, and this session has already caught one of those.
+
+**§45 CONTINUED — `iters: 11` MEASURED, AND THE COMPILE IS OPTIMISING MOSTLY THE WRONG
+THING (`test/_twinitersweep.mjs`).** The compile's iteration count had never been
+measured — the same class of constant as `refineOperator`'s `cycles`, found and fixed
+hours earlier — and on a thousand-line program it is THE affordability lever, since cost
+is linear in (span x iterations). Swept on the open raster, compiling the same program
+at each budget and delivering every artifact on the true machine:
+
+```
+ iters   sim rms    delivered   gain    compile
+     1  2.088e-2   1.828e-2     3.4x   0.5 min
+     2  9.737e-3   7.459e-3     8.2x   0.7 min
+     3  8.533e-3   5.334e-3    11.5x   1.0 min
+     5  8.479e-3   5.067e-3    12.1x   1.5 min   <- best
+     8  8.203e-3   5.215e-3    11.8x   2.2 min
+    11  8.203e-3   5.215e-3    11.8x   2.6 min   <- shipped
+```
+
+**THE SIM OBJECTIVE IMPROVES MONOTONICALLY WHILE THE DELIVERED RESULT PEAKS AT 5 AND
+THEN GETS WORSE** — rule 16 in its purest form, a number computed from the model
+disagreeing with the machine, and the machine deciding. By rule 42 (5% band on the best
+measured, 12.1x, so >= 11.5x) the admitted candidates are 3, 5, 8 and 11, and the
+cheapest is **3 iterations: a 2.6x compile speedup for 2.5% of the factor**, which takes
+a 10-minute gcode program from ~10 h of sliced background compute to ~3.8 h.
+
+**AND THE NON-MONOTONICITY HAS AN ARITHMETIC EXPLANATION, NOT A HAND-WAVE.** The twin
+equals the machine here (truth parameters), so the delivered column IS the sim scored
+over the PROGRAM ONLY, while `compileTwin`'s own `rmsOf` covers the WHOLE record
+including the pre-roll. Backing the two apart at 11 iterations: program energy
+2559 x (5.215e-3)^2 = 6.96e-5 against a total 4058 x (8.203e-3)^2 = 2.73e-4, so the
+pre-roll carries **74% of the objective's energy on 37% of the samples** (pre-roll rms
+1.16e-2 against the program's 5.2e-3). **The compile is spending most of its
+optimisation on the pre-roll — where "error" is not a defect to remove but the
+deliberate flex-loading — and past iteration 5 it trades program accuracy for it.**
+
+The principled fix follows from causality and is testable: `du` at time t can only
+affect `e` at times >= t, so the pre-roll's du exists ENTIRELY to serve the program's
+early error. The objective should therefore be the program span alone, with the pre-roll
+du left as a free variable that helps achieve it — not a region whose own error is
+minimised. Bar: beat 12.1x on the raster and the closed square's 13.5x one-shot.
+STATED AND NOT YET BUILT (rule 59).
