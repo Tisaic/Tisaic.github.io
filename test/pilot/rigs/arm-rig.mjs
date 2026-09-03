@@ -200,7 +200,7 @@ async function deployOn(pilot, shape, active, feed = 0.004,
     // THE CONTROL SHAPE. Handed `(c, leadSamp, fitted, kSamp)`, a function that returns
     // `fitted` must reproduce the un-oracled run to the last digit — which is the check
     // that says the port itself changes nothing (rule 21).
-    pilot.oracleF0 = (c, leadSamp, fitted) => oracle(c, leadSamp, fitted, kSamp);
+    pilot.oracleF0 = (c, leadSamp, fitted, conv) => oracle(c, leadSamp, fitted, conv, kSamp);
   } else if (oracle) {
     const rec = oracle.e, lap = oracle.lap, off = oracle.off ?? lap;
     const orProbe = oracle.probe || null;
@@ -316,14 +316,19 @@ async function deployOn(pilot, shape, active, feed = 0.004,
 async function commissionArm({ seed = 1, train = { shape: 'rounded', feed: 0.004 }, uCap = 0.15,
   dwell = false, dpt = 30, chirp = false, before = null,
   limits = { vMax: 8e-4, aMax: 4e-6, jMax: 2e-7 }, box = 0.55, sampleFixed = null,
-  events = null } = {}) {
+  events = null, Cls = Pilot, extra = null } = {}) {
   const LIM = limits, BOX = box;
   const TRAIN = train, UCAP = uCap, DWELL = dwell, DPT = dpt, CHIRP = chirp;
   const { arm, servo } = await makeArm();
   const startPath = mkPath(TRAIN.shape, TRAIN.feed);
   homeArm(arm, servo, startPath);
   const centre = arm.ik(12, 0, true);
-  const pilot = new Pilot({
+  // THE CLASS IS A PARAMETER SO A CASCADE IS THE SAME COMMISSIONING. `Stack` presents a
+  // Pilot's surface — sample, phase, work, observe, act, verdict — so a harness that wants
+  // the cascade passes `Cls: Stack, extra: { depth }` and inherits every other constant on
+  // this arm rather than restating it. A copy of this constructor with one line different is
+  // indistinguishable from a copy with one line WRONG, which is what this rig is for.
+  const pilot = new Cls({
     autoRefuse: true, nMeasured: 6,
     // THE BOX THE EXCITATION MUST TRAVERSE, WHICH IS WHAT SETS ITS BANDWIDTH.
     //
@@ -415,6 +420,7 @@ async function commissionArm({ seed = 1, train = { shape: 'rounded', feed: 0.004
       const c = startPath.at(i % Math.max(1, Math.round(startPath.lap)));
       return arm.ik(c.x, c.y, true);
     },
+    ...(extra || {}),
   });
   if (before) before(pilot);
   // WHERE THE COMMISSIONING WALL CLOCK GOES, measured every run rather than argued about

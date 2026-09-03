@@ -6111,3 +6111,138 @@ levers all sit there rather than in the forecast:
 The bare commissioned pilot measured here is 2.2-4.0x; the composition with banks reads
 2.87x/7.72x/6.18x; ⑩ reads 44x. **The headroom between the bare pilot and ⑩ is in the
 STACK — iteration, depth and authority — and none of it is prediction.**
+
+## §48 — THE ORACLE LADDER: THE PILOT IS AT ITS PLANT MODEL'S ONE-SHOT CEILING, AND THE GAP IS ITERATION
+
+The owner: *"We need to explore this and any other path that can get us to that level of
+performance while maintaining all of the north star's constraints."* §47 had already
+pointed here and got the reasoning half wrong; this section is the measurement.
+
+### §47's ceiling was real and its argument was confounded
+
+§47 refitted the pilot's readouts IN SAMPLE on the target program's own record and measured
+delivery WORSE than shipped on all three programs, and read that as "forecast quality is not
+the gap". The conclusion survives; the argument does not. An in-sample fit on a closed
+program is COLLINEAR, so that bench changed two things at once — how good the forecast is,
+and how well conditioned the inverse the QP depends on. It proves you cannot get there by
+fitting on the program. It does not prove a better forecast would not help.
+
+**AN ORACLE HAS NO CONDITIONING.** `pilot.oracleF0` is a diagnostic port — null on every
+shipped path, one branch per lead — that replaces the MODEL's half of the QP's free response
+with the true `eFree` recorded open loop on that very program, keeping `conv`, because that
+half is the plant model rather than the forecast. The rig wires it where `kSamp` is defined
+and nowhere else, and it is checked before it is read: a pass-through oracle returning the
+fitted value reproduces the shipped run to 9.8e-5 relative (one bit through `(s2-conv)+conv`,
+amplified by the plant — **that is the noise floor of every A/B in this section**), and the
+correlation between oracle and fitted at lead 0 is 0.936 / 0.514, so the oracle is indexed
+where the model thinks it is. A mis-indexed oracle reads as an uninformative one and those
+are opposite conclusions.
+
+### The ladder: three knobs dead, and the ceiling named (`test/_oracle.mjs`)
+
+Canonical cell — K 0.25 / E 0.03, sharp square, feed 0.004 — against an open loop of 1.3665
+`totalRms`:
+
+```
+  shipped                              6.3420e-1     2.15x   uPk 0.1500
+  + oracle forecast                    5.3158e-1     2.57x   uPk 0.1500
+  + oracle, uMax x2                    3.8373e-1     3.56x   uPk 0.3000
+  + oracle, uMax x8                    3.7463e-1     3.65x   uPk 0.4785
+  + oracle, lambda /100                5.3115e-1     2.57x
+  + oracle, qpIters 60                 5.2786e-1     2.59x
+  fitted forecast, uMax x8 + lam/100   5.7520e-1     2.38x   uPk 0.7294
+```
+
+A perfect forecast is worth **20%**. Authority is worth a further 42% and then saturates on
+its own — at a cap of 1.20 the QP stops at 0.4785 of its own accord. The effort weight and
+the solver's iteration count are inert. And the two are not separable in the way the project
+had been reading them: authority pays 2.57 -> 3.65 on a perfect forecast and only 2.15 ->
+2.38 on the fitted one, so **raising the cap is worth having only once the model deserves
+it** — which is brick 30's "raise the cap only with adaptation armed" arriving from the
+other side.
+
+### The decision clock is inert at sixteen times the arithmetic (`test/_oracleclock.mjs`)
+
+The remaining representational suspect was that the plan is piecewise constant over
+`sample * grid` solver steps while the sharp square's corner is a 40-step event. Commissioned
+at `decisionsPerTs` 30 / 60 / 120 — decision periods of 72, 36 and 18 steps — with the
+horizon REACH held constant so resolution is the only variable:
+
+```
+  dpt  grid   N  period  reach   shipped   +oracle  +or,uMax x2   QP MAC/decision
+   30     8   70     72   5040     2.15x     2.57x        3.56x            39,200
+   60     4  140     36   5040     2.28x     2.58x        3.58x           156,800
+  120     2  280     18   5040     2.28x     2.58x        3.58x           627,200
+```
+
+Dead, at 16x the QP arithmetic. Note the shipped column DOES move (2.15 -> 2.28) and the
+oracle column does not: the finer clock is buying a little forecast quality, not resolution.
+
+### `h` is good, and it was checked on a HOLDOUT program (`test/_hcheck.mjs`, `_hpose.mjs`)
+
+What is left inside the QP is `h`, the identified response of the correction onto the error.
+The oracle record gives the second route rule 15 asks for: an open-loop run says what the
+error would have been, so `e - eFree` is what the correction DID and `h * u` is what the
+model SAID it would do — one measured on the machine, one predicted by the model the QP
+inverts. Fitted on the sharp square and scored on the CIRCLE:
+
+```
+  ch0: shape corr 0.955   gain 0.880   R2 as used 0.941
+  ch1: shape corr 0.897   gain 1.084   R2 as used 0.768
+```
+
+**A one-shot inverse leaves about sqrt(1 - R^2) of what it applied** — 4.12x and 2.07x of
+headroom — **and the oracle ladder stopped at 2.57x and 3.65x.** The pilot is AT its plant
+model's one-shot ceiling, which is exactly why every knob above was inert: a better answer to
+the wrong question is still the wrong answer.
+
+Three refits of `h` (a relaxed 40-tap LTI kernel, a per-pose scalar gain, a full kernel per
+pose bin) all scored WORSE than the commissioned kernel on the holdout, several with negative
+R^2. **That table does not refute the pose route, it fails to measure it**: the correction
+sits at its cap for most of the run, so lagged `u` is a badly conditioned design matrix, and
+a flat ridge with no column scaling is the confound this session has already paid for once
+(§46's twin-refit). Recorded as unmeasured, not as dead.
+
+### The gap is ITERATION, and it is the whole of it (`test/_oraclecascade.mjs`)
+
+A one-shot inverse cannot beat its model. An iterated one compounds the model error down
+instead of standing on it. Freeze what a pass applied, re-measure the free response ON THE
+MACHINE with that prefix in place, hand the pilot THAT as its oracle, and add the new
+correction on top:
+
+```
+  pass   free rms      totalRms    x over open   prefix pk
+     0   1.235e-1     5.3363e-1       2.56x        0.1500
+     1   5.123e-2     2.0762e-1       6.58x        0.3000
+     2   2.151e-2     1.1284e-1      12.11x        0.4500
+     3   1.196e-2     8.3159e-2      16.43x        0.6000
+     4   8.683e-3     7.0145e-2      19.48x        0.7237
+```
+
+**AND IT IS NOT ACCUMULATED AUTHORITY.** The one-shot rung reached uPk 0.4785 and delivered
+3.65x; pass 3 sits at a prefix peak of 0.60 and delivers 16.43x — 4.5x better at comparable
+magnitude. Iteration is doing the work, not the cap.
+
+**THE PREFIX IS A MEMORY AND THAT IS THE POINT.** It is indexed by position in a lap, which
+the retirement forbids a shipped component to be. This bench exists to measure how much of
+⑩'s advantage is iteration so the question can become *how do you iterate without a memory*.
+
+### And the cascade already IS that, pass for pass
+
+Passes 1 and 2 read 6.58x and 12.11x. `lib/pilot/stack.js` on this exact cell reads **6.43x
+and 12.21x** at depth 1 and 2 (brick 59) — inside the noise of a perfect-forecast iteration.
+The cascade is the pilot's iteration done as MODELS ADDRESSED BY STATE rather than as a table
+addressed by lap phase, and at depth 2 on this arm it is already achieving what a perfect
+forecast would. **So the route is depth, and where it stops is a measurement rather than an
+argument** — `test/_cascdepth.mjs` runs depths 1-4 with the stack's summed cap swept, because
+the cap is on the SUM (0.15 here) while the iteration ladder needed a peak of 0.60, and a
+depth that stalls at the clamp is measuring the clamp.
+
+### THE DENOMINATOR, STATED BEFORE ANY FACTOR IS QUOTED
+
+⑩'s published 44x is **contour-only, on the converged last of eight laps**
+(`test/_tilelibop.mjs` scores the signed normal component and divides the open loop's last
+lap by the corrected run's last lap). The numbers above are **contour + lag, scored from lap
+2 of 3**. On this arm lag is a real share — the conventional machine measures 4.6748e-1 total
+against 4.1216e-1 contour — so the two are not the same quantity and quoting one against the
+other is how a factor gets invented. The iteration bench now reports both columns.

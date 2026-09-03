@@ -44,20 +44,25 @@ console.log(`sample ${pilot.sample}, grid ${pilot.grid}, N ${pilot.N}, uMax ${pi
   + `lap ${LAPK} steps / ${LAPS} samples`);
 
 let pre = [new Float64Array(LAPK), new Float64Array(LAPK)];
-console.log('\n  pass   free rms      totalRms      x over open    uPk(total)  prefix pk');
-let open = null;
+// BOTH DENOMINATORS, because mode 10's published 44x is CONTOUR-only on a converged lap and
+// this project's own recurring trap is comparing two numbers that are not the same quantity.
+// `totalRms` is contour + lag and is what the Path tab scores; `contourRms` is the column
+// mode 10 is quoted in. Quoting one against the other is how a factor gets invented.
+console.log('\n  pass   free rms     totalRms     x tot    contourRms    x con    uPk   prefix pk');
+let open = null, openC = null;
 for (let pass = 0; pass <= PASSES; pass++) {
   // 1. THE FREE RESPONSE WITH THE PREFIX FROZEN — the pilot is off, so this is exactly the
   //    error the next pass has to remove, measured on the machine rather than predicted.
   const ftr = [];
   const fr = await deployOn(pilot, SHAPE, false, FEED, { pre, trace: ftr });
-  if (pass === 0) open = fr.r.totalRms;
+  if (pass === 0) { open = fr.r.totalRms; openC = fr.r.contourRms; }
   let s = 0, n = 0;
   for (let i = 2 * LAPS; i < ftr.length; i++) { s += ftr[i].e[0] ** 2 + ftr[i].e[1] ** 2; n++; }
   const freeRms = Math.sqrt(s / Math.max(1, n));
   if (pass === PASSES) {
     console.log(`  ${String(pass).padStart(4)}   ${freeRms.toExponential(3)}  `
-      + `${fr.r.totalRms.toExponential(4)}  ${(open / fr.r.totalRms).toFixed(2).padStart(8)}x`
+      + `${fr.r.totalRms.toExponential(4)} ${(open / fr.r.totalRms).toFixed(2).padStart(6)}x  `
+      + `${fr.r.contourRms.toExponential(4)} ${(openC / fr.r.contourRms).toFixed(2).padStart(6)}x`
       + `   (prefix alone, pilot off)`);
     break;
   }
@@ -72,7 +77,8 @@ for (let pass = 0; pass <= PASSES; pass++) {
     for (let i = 0; i < LAPK; i++) { pre[c][i] += uOut[c][i]; pk = Math.max(pk, Math.abs(pre[c][i])); }
   }
   console.log(`  ${String(pass).padStart(4)}   ${freeRms.toExponential(3)}  `
-    + `${r.r.totalRms.toExponential(4)}  ${(open / r.r.totalRms).toFixed(2).padStart(8)}x`
-    + `   ${r.uPk.toFixed(4).padStart(9)}   ${pk.toFixed(4)}`);
+    + `${r.r.totalRms.toExponential(4)} ${(open / r.r.totalRms).toFixed(2).padStart(6)}x  `
+    + `${r.r.contourRms.toExponential(4)} ${(openC / r.r.contourRms).toFixed(2).padStart(6)}x`
+    + `  ${r.uPk.toFixed(3)}   ${pk.toFixed(4)}`);
 }
 console.log('EXIT 0');
