@@ -17,8 +17,9 @@
  *
  * Full tier only: one wander record + a ~40-evaluation identification + a compile.
  */
-import { identifyTwin, refineParams, compileTwin, applyCompiled, refineCompiled } from '../../lib/pilot/twin.js';
-import { drivePath, twinResponse, armSimulators } from '../../lib/flexisim/twin.js';
+import { identifyTwin, refineParams, compileTwin, applyCompiled, refineCompiled,
+  refineOperator } from '../../lib/pilot/twin.js';
+import { drivePath, twinResponse, armSimulators, toolProjection } from '../../lib/flexisim/twin.js';
 import { randomWander } from '../../lib/flexisim/demopath.js';
 
 const rig = await import('../pilot/rigs/arm-rig.mjs');
@@ -242,6 +243,31 @@ check('the soft tail holds at least 15x below the soft open loop',
 check('no lap-over-lap drift in the soft tail',
   softLaps.at(-1) < softLaps[2] * 1.5,
   `lap3 ${softLaps[2].toExponential(2)} -> lap8 ${softLaps.at(-1).toExponential(2)}`);
+
+// 6) THE OPERATOR REFINE (plan §43: 44.0x → 53.6x at the canonical cell in Node). The
+// frequency refine assumes one lap-invariant response; refineOperator measures the
+// tile's own lap-varying response by hat probes and Gauss-Newtons the whole tile in
+// TOOL space through the adapter's projection. Reduced scale here against the
+// assertion's own margin (rule 2): 4 nodes, 1 cycle, 2 steps is ~20 sim evals and the
+// contract is the PROPERTY, both halves (rule 9) — the projected residual falls, AND
+// the delivered tail does not regress against phase 5's (a sim-only gain that costs
+// the machine is exactly the rule-21 failure this stage's holdout exists to catch).
+console.log('operator refine at reduced scale (4 nodes, 1 cycle, 2 steps)…');
+const softProject = await toolProjection({ buildArm, destroyArm, path: softPath });
+const softOp = await refineOperator({
+  simulate: softSims.compileSim(softPath, { laps: 4, preRoll: PRE }),
+  f: softRef.f, sample: SS, lapSteps: softPath.lap, preRoll: PRE,
+  nodes: 4, cycles: 1, steps: 2, project: softProject,
+  onProgress: (m) => console.log(`  ${m}`),
+});
+check('the operator refine reduces the projected residual',
+  softOp.report.rms < softOp.report.rms0,
+  `${softOp.report.rms0.toExponential(2)} → ${softOp.report.rms.toExponential(2)} in ${softOp.report.evals} evals`);
+const softOpLaps = await softDrive(softOp.f);
+console.log(`  soft ⑩+op: ${softOpLaps.map((v) => v.toExponential(1)).join(' ')}`);
+check('the operator-refined delivery does not regress the tail (rule 21 guard)',
+  softOpLaps.at(-1) < softLaps.at(-1) * 1.05,
+  `${softOpLaps.at(-1).toExponential(2)} vs ${softLaps.at(-1).toExponential(2)}`);
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall checks passed');
 process.exit(failures ? 1 : 0);

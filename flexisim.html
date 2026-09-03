@@ -620,6 +620,7 @@
       <div class="controls" id="twinRow" style="display:none">
         <button id="b-twinComm">Commission twin</button>
         <button id="b-twinCompile">Compile this program</button>
+        <button id="b-twinDeep">Refine deep (operator)</button>
         <span class="v" id="twinStat">no twin — press Commission twin</span>
         <p class="hint" id="twinHint">⑩ is the §42 pipeline. <b>Commission twin</b> drives a
           random contour wander on THIS machine with the tracker and identifies the plant's
@@ -630,6 +631,10 @@
           pre-roll that loads the flex before the first block (lap 1 is a causality
           problem: correcting a transient at t=0 needs correction energy before t=0).
           Selecting ⑩ with a compiled artifact restarts the program behind that pre-roll.
+          <b>Refine deep (operator)</b> then measures the twin's own lap-varying response
+          to the compiled tile — hat probes at 8 phase nodes — and Gauss-Newtons the whole
+          tile in TOOL space (plan §43: 44x → 53.6x measured in Node at the canonical
+          cell). It is many simulated laps: expect minutes, watch the status line.
           Change the PROGRAM or FEED and the artifact no longer applies and says so; change
           K or E and it DELIBERATELY keeps applying — a §42 stage-B mismatch you can watch
           (measured there: a corrector frozen across a plant change can be worse than none).
@@ -1038,8 +1043,9 @@ import { Pilot } from './lib/pilot/pilot.js';
 import { Stack } from './lib/pilot/stack.js';
 // ⑩ THE COMPILED TWIN (§42): the agnostic core (identify/compile/apply — no plant
 // knowledge) plus this plant class's adapter (drive loop, truth routing, probes).
-import { identifyTwin, refineParams, compileTwin, refineCompiled } from './lib/pilot/twin.js';
-import { drivePath as twinDrive, twinResponse as twinProbe, armSimulators }
+import { identifyTwin, refineParams, compileTwin, refineCompiled, refineOperator }
+  from './lib/pilot/twin.js';
+import { drivePath as twinDrive, twinResponse as twinProbe, armSimulators, toolProjection }
   from './lib/flexisim/twin.js';
 import { randomWander } from './lib/flexisim/demopath.js';
 // THE BLACK BOX IS ITS OWN DIRECTORY, which is the boundary made visible: nothing under
@@ -7687,6 +7693,7 @@ function syncPath() {
   // two drivers on one live arm, which is exactly the interference this line forbids.
   set('b-twinComm', !idle || twinBusy || autoComm);
   set('b-twinCompile', !idle || twinBusy || autoComm || !twinFit);
+  set('b-twinDeep', !idle || twinBusy || autoComm || !twinDu);
   // A BOX THAT CANNOT DO ANYTHING SAYS SO. Ticking `pilot` before the pilot has vouched
   // for itself would otherwise look like a stack that simply does not help.
   set('stk-comp', !cP);
@@ -7985,8 +7992,42 @@ async function engageTwin() {
     setPathBadge('⑩ engaged — lap 1 is live', 'good');
   } finally { busyP = false; syncPath(); }
 }
+/** The operator refine on the PAGE runs against the FITTED twin, like the compile —
+ * zero machine laps (§42's contract). The projection's Jacobian is the arm's analytic
+ * kinematics at the program's commanded poses, built on a twin instance. It rewrites
+ * the artifact's steady tile in place; the head and pre-roll are untouched. */
+async function twinDeepRefine() {
+  if (!armP || busyP || twinBusy || autoComm || commissionP || sweepP || pilotComm || ik6Comm) return;
+  if (!twinDu || !twinFit || !profP) { setPathBadge('⑩ compile first — deep refine needs an artifact', 'warn'); return; }
+  if (!twinFor || twinFor.shape !== $('shapeP').value || twinFor.feed !== pathFeed()) {
+    setPathBadge('⑩ artifact is for another program — recompile first', 'warn'); return;
+  }
+  twinBusy = true; busyP = true; runP = false;
+  const stat = $('twinStat');
+  setPathBadge('⑩ deep refine — measuring the lap-varying operator…', 'warn'); syncPath();
+  try {
+    const project = await toolProjection({ buildArm: () => twinBuildAt(twinFit),
+      destroyArm: twinDestroyArm, path: profP });
+    const op = await refineOperator({
+      simulate: twinSims().compileSim(profP, { laps: 4, preRoll: TWIN_PRE }),
+      f: twinDu.f, sample: TWIN_SS, lapSteps: profP.lap, preRoll: TWIN_PRE,
+      project, onProgress: (m) => { stat.textContent = m; },
+    });
+    twinDu = { f: op.f, report: { ...twinDu.report, operator: op.report } };
+    console.log(`[flexisim] ⑩ operator refine: tool rms ${op.report.rms0.toExponential(2)} `
+      + `→ ${op.report.rms.toExponential(2)} in ${op.report.evals} sim evals, duPk ${op.report.duPk.toFixed(2)}`);
+    setPathBadge('⑩ deep-refined — select ⑩ to engage from lap 1', 'good');
+    if ($('ctlP').value === 'twin') await engageTwin();
+  } catch (err) {
+    console.error('⑩ deep refine failed:', err);
+    setPathBadge('⑩ deep refine failed — see console', 'bad');
+  } finally {
+    twinBusy = false; busyP = false; syncPath(); twinStatusLine();
+  }
+}
 $('b-twinComm').addEventListener('click', twinCommission);
 $('b-twinCompile').addEventListener('click', twinCompileProgram);
+$('b-twinDeep').addEventListener('click', twinDeepRefine);
 
 function syncPathLabels() {
   $('v-feedP').textContent = pathFeed().toExponential(1);
