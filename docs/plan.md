@@ -6060,3 +6060,54 @@ a reduced-order model OF the twin (its dynamics, not its input-output regression
 propagates state cheaply — a small linear state space realised from the measured step
 response, which is a different object from anything tried here and the only remaining
 candidate for putting the simulation's memory inside a scan.
+
+## §47 — THE PILOT'S GAP TO ⑩ IS NOT ITS FORECAST, AND THE CEILING PROVES IT
+
+**The owner's directive is to bring the pilot to ⑩'s level.** ⑩ reaches 44-51x on a
+compiled program where the pilot reads single digits, and every route this session tried
+assumed the difference was FORECAST QUALITY. `test/_pilotceiling.mjs` tests that
+assumption at its limit: the pilot's readouts refitted IN-SAMPLE on each target program's
+own open-loop record — its own row builder, leads, window, ridge and column scaling — so
+nothing about the prediction can be improved further. It is fitted on the data it is then
+scored against. At the canonical cell:
+
+```
+ program     shipped (scribble)   self-fit ceiling   ratio    over open
+ rounded              4.940e-1           6.399e-1    0.77x    2.6x -> 2.0x
+ circle               3.401e-1           3.962e-1    0.86x    4.0x -> 3.4x
+ sharp                6.343e-1           7.072e-1    0.90x    2.2x -> 1.9x
+```
+
+**THE UNIMPROVABLE FORECAST DELIVERS WORSE THAN THE SHIPPED ONE ON EVERY PROGRAM.** So
+forecast quality is not the binding constraint, and no forecast improvement can close the
+gap — the best one available is already a regression. The mechanism is recorded elsewhere
+in this file by another route: *"identifying on a program instead of a scribble is far
+worse (12.70x → 3.93x, since repeated trapezoids are collinear)"*. A single closed
+program yields collinear rows; the model predicts beautifully and INVERTS badly, and the
+QP is an inverter. This is the third independent confirmation in one session that a
+better fit is not a better controller — and the cleanest, because in-sample is the
+ceiling by construction rather than by argument.
+
+**WHAT IT KILLS.** §46's twin-as-data-generator line, the log-spaced-window idea queued
+behind it, and any future proposal of the form "make the forecast better". Had this run
+FIRST it would have saved the session's whole §46 arc, which is the lesson: **when a
+component is suspected of binding, measure its CEILING before improving it.** A ceiling
+is one run; an improvement campaign is a day.
+
+**WHAT IT LEAVES — AND ⑩'s REAL ADVANTAGE IS ITERATION, NOT PREDICTION.** ⑩ computes its
+correction by repeatedly SIMULATING and UPDATING until the residual stops falling, with
+the whole program in hand and a non-causal deconvolution; the pilot computes once per
+decision, causally, from a finite preview, against a plant whose memory (6363-8649 steps)
+is comparable to an entire lap. Those are different problems. The pilot's own analogue of
+⑩'s iteration is not a better model but ONLINE ADAPTATION — converging on the machine as
+⑩ converges in simulation, state-addressed so it is not a memory — and the measured
+levers all sit there rather than in the forecast:
+
+- gated adaptation MULTIPLIES a vouched model: arm +29%, EMPS 14.8x -> 55.5x
+- cascade depth: 6.43x -> 12.21x at depth 2 on this arm
+- authority with adaptation armed: the soft corner is AUTHORITY-bound, sharp square 4.75x
+  at cap 0.5, where static control MISUSES the same authority
+
+The bare commissioned pilot measured here is 2.2-4.0x; the composition with banks reads
+2.87x/7.72x/6.18x; ⑩ reads 44x. **The headroom between the bare pilot and ⑩ is in the
+STACK — iteration, depth and authority — and none of it is prediction.**
