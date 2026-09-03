@@ -5236,6 +5236,28 @@ The stated next route (rule 59): a per-harmonic SECANT Jacobian estimated from t
 refine's own iterates (quasi-Newton in the frequency domain), which corrects direction
 rather than step size.
 
+**THE SECANT ROUTE IS A NULL, AND SO IS THE ONE AFTER IT — the refinement null-chain
+is now six long and every entry stalls at the same number.** The per-harmonic
+secant/Broyden Jacobian (diagonal complex gains learned from the refine's own iterates)
+delivered **40.7x** and never matched the shipped refine's 3.12e-3 tile. Read as: the
+per-harmonic CLASS is the fault, not the step law — a nonlinear du-response transfers
+energy BETWEEN harmonics, and any block-diagonal inverse chases a residual it moves
+somewhere else. The cross-harmonic-capable answer, time-domain **software-ILC against
+the twin** (DC 2x2 mixing inverse from H's finals, lead from H's half-rise, zero-phase
+boxcar, backtracking gain, up to 60 simulated laps — zero machine laps, §42's contract
+holds), measured tile **3.239e-3 and delivered 42.3x** against the shipped 3.12e-3 /
+44.0x, dead flat across 8 delivery laps. Two structurally different update laws now
+stall at the SAME 3.1-3.2e-3. That degeneracy has two readings and they demand
+different work: (a) the value is a true local optimum of the sim objective for the
+periodic-tile class — no optimizer passes it and the tile class is exhausted; (b) all
+six schemes share a defect and slope remains. The instrument that separates them is a
+DIRECT gradient measurement at the shipped refined tile (rule 23): eval-repeatability
+first (is the objective deterministic?), then central differences along random smooth
+directions and hat bumps at the residual's own worst bins. Also sized on the way: the
+50x directive needs only **1.15x** more tile (3.12e-3 → 2.7e-3) because the delivered
+contour tracks the refined tile residual directly — not the 7x to the repeatability
+floor.
+
 **THE CANONICAL BENCH (owner's standing rule: softest arm, sharp corners — K 0.25 /
 E 0.03, the sharp square).** The twin pipeline in the shipped config, first measurement
 at the cell that cannot flatter: open loop 1.13 contour; ⑩ lap 1 **2.65e-2**, tail flat
