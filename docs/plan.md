@@ -5080,7 +5080,20 @@ findings, in size order:
 
 The trace also scored ⑨ on the same machine end to end: ladder deployed the cascade
 alone (classic withheld by measurement), delivered 5.7e-2 = 7.6x, consistent with its own
-rung table — no ⑨ divergence. `test/flexisim/twin.test.mjs` gained the shipped-config
+rung table — no ⑨ divergence.
+
+**THE CANONICAL BENCH (owner's standing rule: softest arm, sharp corners — K 0.25 /
+E 0.03, the sharp square).** The twin pipeline in the shipped config, first measurement
+at the cell that cannot flatter: open loop 1.13 contour; ⑩ lap 1 **2.65e-2**, tail flat
+**2.55e-2** from lap 3 — **44x sustained, lap-1 accurate**, at the softest gearbox on the
+program whose corners carry 61537% of the declared jerk. Two things the cell exposed:
+**duPk 1.93 rad against the page's 2.0 cap** — the twin uses 97% of its authority here,
+so the cap is nearly binding and any softer plant or faster feed will clip; and **the
+refine bought only 7%** (3.35e-3 → 3.12e-3) because the delivery sits at the compile's
+own residual (sim rms 5.9e-3) — at this nonlinearity the LINEAR deconvolution is the
+wall, not the tiling. The delivered tail equals the refine's own measured residual, the
+same at-its-bound signature as the pilot's forecast bound (brick 55): the next factor at
+the canonical cell comes from a better inverse, not from more laps or more iterations. `test/flexisim/twin.test.mjs` gained the shipped-config
 soft-delivery phase (laps 5 + refine on K=1/E=0.06, tail ≥ 15x under open, no drift);
 the tracer is kept as `test/_trace10.mjs` beside `_pagepress.mjs`. **What remains
 honestly open:** the page's lap-1 number with the cap fix is predicted (~7.7e-3 contour)
