@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:744,built:"2026-09-03T12:09:36Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:745,built:"2026-09-03T12:23:22Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -621,6 +621,7 @@
         <button id="b-twinComm">Commission twin</button>
         <button id="b-twinCompile">Compile this program</button>
         <button id="b-twinDeep">Refine deep (operator)</button>
+        <button id="b-twinStop">Stop ⑩</button>
         <span class="v" id="twinStat">no twin — press Commission twin</span>
         <p class="hint" id="twinHint">⑩ is the §42 pipeline. <b>Commission twin</b> drives a
           random contour wander on THIS machine with the tracker and identifies the plant's
@@ -7694,6 +7695,8 @@ function syncPath() {
   set('b-twinComm', !idle || twinBusy || autoComm);
   set('b-twinCompile', !idle || twinBusy || autoComm || !twinFit);
   set('b-twinDeep', !idle || twinBusy || autoComm || !twinDu);
+  // the one button that must be LIVE exactly when the others are locked
+  set('b-twinStop', !twinBusy);
   // A BOX THAT CANNOT DO ANYTHING SAYS SO. Ticking `pilot` before the pilot has vouched
   // for itself would otherwise look like a stack that simply does not help.
   set('stk-comp', !cP);
@@ -7810,7 +7813,15 @@ $('ctlP').addEventListener('change', () => {
 });
 
 // ---------------------------------------------------------------- ⑩ the compiled twin
-const twinYield = () => new Promise((r) => setTimeout(r));
+// STOP IS A THROW OUT OF THE YIELD POINT, exactly ⑨'s design: a long commissioning
+// with no way out is the state in which the operator most needs one. The throw unwinds
+// through armSimulators'/twinResponse's/toolProjection's `finally`, so the sim lattices
+// are destroyed and no partial artifact survives; each entry point re-arms the flag.
+let twinStopFlag = false;
+const twinYield = () => new Promise((r) => setTimeout(r)).then(() => {
+  if (twinStopFlag) throw new Error('⑩ stopped by operator');
+});
+const twinWasStop = (err) => String((err && err.message) || err).includes('stopped by operator');
 async function twinDestroyArm(m) { await m.arm.l1.destroy(); await m.arm.l2.destroy(); }
 async function twinHome(m, path) {
   const c0 = path.at(0);
@@ -7852,6 +7863,7 @@ function twinStatusLine() {
 }
 async function twinCommission() {
   if (!armP || busyP || twinBusy || autoComm || commissionP || sweepP || pilotComm || ik6Comm) return;
+  twinStopFlag = false;
   twinBusy = true; busyP = true; runP = false;
   const stat = $('twinStat');
   setPathBadge('⑩ commissioning the twin…', 'warn'); syncPath();
@@ -7916,14 +7928,18 @@ async function twinCommission() {
     await homeP();
     setPathBadge('⑩ twin commissioned — press Compile this program', 'good');
   } catch (err) {
-    console.error('⑩ commissioning failed:', err);
-    setPathBadge('⑩ commissioning failed — see console', 'bad');
+    if (twinWasStop(err)) { setPathBadge('⑩ commissioning stopped — nothing kept', 'warn'); }
+    else {
+      console.error('⑩ commissioning failed:', err);
+      setPathBadge('⑩ commissioning failed — see console', 'bad');
+    }
   } finally {
     twinBusy = false; busyP = false; syncPath(); twinStatusLine();
   }
 }
 async function twinCompileProgram() {
   if (!armP || busyP || twinBusy || autoComm || commissionP || sweepP || pilotComm || ik6Comm || !twinFit || !profP) return;
+  twinStopFlag = false;
   twinBusy = true; busyP = true; runP = false;
   const stat = $('twinStat');
   setPathBadge('⑩ compiling this program in software…', 'warn'); syncPath();
@@ -7960,8 +7976,11 @@ async function twinCompileProgram() {
     setPathBadge('⑩ compiled — select ⑩ to engage from lap 1', 'good');
     if ($('ctlP').value === 'twin') await engageTwin();
   } catch (err) {
-    console.error('⑩ compile failed:', err);
-    setPathBadge('⑩ compile failed — see console', 'bad');
+    if (twinWasStop(err)) { setPathBadge('⑩ compile stopped — no artifact kept', 'warn'); }
+    else {
+      console.error('⑩ compile failed:', err);
+      setPathBadge('⑩ compile failed — see console', 'bad');
+    }
   } finally {
     twinBusy = false; busyP = false; syncPath(); twinStatusLine();
   }
@@ -7971,6 +7990,7 @@ async function twinCompileProgram() {
  * with the artifact's clock at exactly the machine's. */
 async function engageTwin() {
   if (!twinDu || !armP) return;
+  twinStopFlag = false;               // a stale stop must not kill the pre-roll
   busyP = true; runP = false;
   setPathBadge('⑩ pre-roll — loading the flex…', 'warn'); syncPath();
   try {
@@ -7990,6 +8010,9 @@ async function engageTwin() {
     trailP = []; pHist = { s: [], c: [], v: [] };
     residP = { enc: 0, follow: 0, n: 0 };
     setPathBadge('⑩ engaged — lap 1 is live', 'good');
+  } catch (err) {
+    if (twinWasStop(err)) setPathBadge('⑩ pre-roll stopped', 'warn');
+    else { console.error('⑩ engage failed:', err); setPathBadge('⑩ engage failed — see console', 'bad'); }
   } finally { busyP = false; syncPath(); }
 }
 /** The operator refine on the PAGE runs against the FITTED twin, like the compile —
@@ -8002,6 +8025,7 @@ async function twinDeepRefine() {
   if (!twinFor || twinFor.shape !== $('shapeP').value || twinFor.feed !== pathFeed()) {
     setPathBadge('⑩ artifact is for another program — recompile first', 'warn'); return;
   }
+  twinStopFlag = false;
   twinBusy = true; busyP = true; runP = false;
   const stat = $('twinStat');
   setPathBadge('⑩ deep refine — measuring the lap-varying operator…', 'warn'); syncPath();
@@ -8019,8 +8043,11 @@ async function twinDeepRefine() {
     setPathBadge('⑩ deep-refined — select ⑩ to engage from lap 1', 'good');
     if ($('ctlP').value === 'twin') await engageTwin();
   } catch (err) {
-    console.error('⑩ deep refine failed:', err);
-    setPathBadge('⑩ deep refine failed — see console', 'bad');
+    if (twinWasStop(err)) { setPathBadge('⑩ deep refine stopped — the compiled artifact is kept unchanged', 'warn'); }
+    else {
+      console.error('⑩ deep refine failed:', err);
+      setPathBadge('⑩ deep refine failed — see console', 'bad');
+    }
   } finally {
     twinBusy = false; busyP = false; syncPath(); twinStatusLine();
   }
@@ -8028,6 +8055,7 @@ async function twinDeepRefine() {
 $('b-twinComm').addEventListener('click', twinCommission);
 $('b-twinCompile').addEventListener('click', twinCompileProgram);
 $('b-twinDeep').addEventListener('click', twinDeepRefine);
+$('b-twinStop').addEventListener('click', () => { twinStopFlag = true; $('twinStat').textContent = 'stopping at the next yield…'; });
 
 function syncPathLabels() {
   $('v-feedP').textContent = pathFeed().toExponential(1);
