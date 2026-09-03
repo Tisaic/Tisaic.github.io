@@ -163,7 +163,8 @@ function routeSignals(arm, cmd, tau) {
  * @returns {Promise<{r: object, uPk: number}>} the contour report and the peak correction
  */
 async function deployOn(pilot, shape, active, feed = 0.004,
-  { laps = 3, scoreFromLap = 2, truthUntilLap = Infinity, oracle = null } = {}) {
+  { laps = 3, scoreFromLap = 2, truthUntilLap = Infinity, oracle = null, trace = null,
+    pre = null, preOut = null } = {}) {
   const { arm: a2, servo: s2 } = await makeArm();
   const path = typeof shape === 'string' ? mkPath(shape, feed) : shape;
   homeArm(a2, s2, path);
@@ -215,6 +216,12 @@ async function deployOn(pilot, shape, active, feed = 0.004,
     const [q1, q2] = a2.ik(cmd.x, cmd.y, true);
     const rt = a2.ikRates(q1, q2, cmd.vx, cmd.vy, cmd.ax, cmd.ay);
     const u = active ? pilot.act((off) => refAt(kSamp + off)) : [0, 0];
+    if (preOut) { preOut[0][k % preOut[0].length] = u[0]; preOut[1][k % preOut[1].length] = u[1]; }
+    // A FROZEN LAP-INDEXED PREFIX, for the ITERATION diagnostic and nothing else. It is a
+    // memory by construction — indexed by position in a lap, the one thing the retirement
+    // forbids a shipped component to be — and it exists here to measure how much of mode 10's
+    // advantage is ITERATION rather than modelling. Null on every other path.
+    if (pre) { u[0] += pre[0][k % pre[0].length]; u[1] += pre[1][k % pre[1].length]; }
     uPk = Math.max(uPk, Math.abs(u[0]), Math.abs(u[1]));
     const tau = s2.torques([{ theta: q1 + u[0], omega: rt.dq[0], alpha: rt.ddq[0] },
       { theta: q2 + u[1], omega: rt.dq[1], alpha: rt.ddq[1] }]);
@@ -227,6 +234,11 @@ async function deployOn(pilot, shape, active, feed = 0.004,
     // instrument production may not have: any number measured through it is labelled as
     // such (EMPS and the tank read their truth off ordinary sensors; the arm does not).
     const rs = routeSignals(a2, [{ pos: q1 }, { pos: q2 }], tau);
+    // THE APPLIED CORRECTION BESIDE THE ERROR IT PRODUCED, at the cadence the model is fitted
+    // at. `h` is the only part of the QP's plant model that is not the forecast, and this is
+    // the signal that can check it: an open-loop record says what the error would have been,
+    // so `e - eFree` is what `u` actually did and `h * u` is what the model said it would do.
+    if (trace && k % S === 0) trace.push({ u: [u[0], u[1]], e: rs.truth.slice() });
     pilot.observe(rs.measured, k < truthUntil ? rs.truth : null);
     if (k >= scoreFrom) {
       const dec = decompose(path, a2.toolXY(), cmd);
