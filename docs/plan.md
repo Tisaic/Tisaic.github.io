@@ -5957,3 +5957,36 @@ short on machine data) or the "run the twin live" version (5.4x slower than real
 matches the machine, so the twin-trained model inherits no structural error here and
 would on hardware; and the 3.5x is a FORECAST-BOUND projection, not a delivered number —
 the QP has not been run on this model. Both are the obvious next measurements.
+
+**§46 — AND THE DELIVERED NUMBER CONTRADICTED THE FORECAST NUMBER, WHICH IS RULE 16
+ARRIVING FOR ME (`test/_twinrefit.mjs`).** The forecast comparison said the twin-trained
+model beat the machine-fitted one on every program and channel, and I projected ~3.5x
+better delivery from the bound. Deployed through the same QP at the same cadence, scored
+on `totalRms`:
+
+```
+ program        machine-fitted   twin-refitted    ratio
+ rounded              1.041e-1        1.590e-1     0.65x
+ circle               5.772e-2        1.079e-1     0.54x
+ sharp                2.422e-1        2.402e-1     1.01x
+```
+
+**A strictly better forecast delivered strictly worse.** The projection is falsified as
+stated — a number computed from the model did not survive contact with the machine, which
+is the rule this file states and I still walked into.
+
+**AND THE FIRST REFIT CARRIED A CONFOUND THIS FILE ALSO ALREADY NAMES.** It solved with a
+flat ridge of 1e-6 and NO column scaling, where the pilot CHOOSES `ridge` per channel from
+[1e-9, 1e-7, 1e-5], the penalty is SCALE-RELATIVE (`lam = ridge x max diag(X'X)`), and the
+fit carries per-column weights. The recorded lesson is this case verbatim: *"the QP
+inverts this model, so regularisation serves the INVERSION, not the fit — which is why the
+basis choice compares residuals and the ridge choice deliberately does not."* A refit that
+improves the fit under the wrong regularisation is precisely how the inverse is damaged,
+so the 0.65x/0.54x may be measuring MY regularisation rather than the twin's data. Re-run
+with `ro.ridge` and `pilot._colScale`, one variable restored.
+
+**EITHER WAY ONE CLAIM IS ALREADY DEAD:** "the twin's gift is the data and it plugs into
+the shipped controller unchanged" is not supported. Whatever the corrected refit shows,
+better forecast R² did not by itself buy delivery here, and the ATTRIBUTION between the
+twin's data and the earlier bench's 768-sample window remains unmeasured — the earlier
+result changed both at once and I reported it as though the data were doing the work.
