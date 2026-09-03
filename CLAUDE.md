@@ -425,8 +425,10 @@ budget (10,000 MAC per 1 ms cycle, met EVERY cycle) while the machine produces. 
 ⑩ pipeline is COSTED for exactly that (`test/_twincost.mjs`, plan §44): the twin's
 lattice sim is ~54k float ops per step from real cell counts (480 material + 600
 vacuum, both links), so sliced it runs 5.4x slower than the 1 kHz machine, in 63 kB of
-f32 state — commissioning ~1.1 h background, a program's compile ~1.8 h background to
-the 44x-class artifact, the deep refine overnight to 51.5x. The deployed artifact is a
+f32 state — commissioning ~0.8 h background (`refineLM`'s measured 70 sims; the
+retired grid + coordinate descent is 1.7 h, and the ~1.1 h this line used to claim came
+from a guessed evaluation count that measurement found 37% low), a program's compile
+~1.8 h background to the 44x-class artifact, the deep refine overnight to 51.5x. The deployed artifact is a
 tile lookup and costs nothing. Two stated caveats: the ~41k int index ops per step
 stretch the table ~1.75x unless the fixed lattice's neighbours are precompiled into
 offset tables, and the count is analytic — itemized per kernel pass so it can be

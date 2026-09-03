@@ -67,9 +67,14 @@ const lapSamples = path.lap / SS;
 const idSteps = 900 * SS;                          // identification record length
 const compEval = Math.ceil((PRE + 5 * lapSamples) * SS);
 const refEval = Math.ceil((PRE + 4 * lapSamples) * SS);
+// EVAL COUNTS ARE MEASURED, NOT ESTIMATED (plan §44). The first version of this table
+// guessed 60 + 30 for the identification and was 37% LOW: the A/B against LM counted the
+// shipped path at 144 sims on the soft cell and 166 on the stiff one. The instrument's
+// own assumption was the least accurate thing in it (rule 17), so the counts now come
+// from `test/_twinlmfit.mjs` and the retired path is kept beside the shipped one.
 const stages = [
-  ['identify grid (9x5 + 2 refine rings ~ 60 evals)', 60 * idSteps],
-  ['refineParams (staged 4-param, ~30 evals)', 30 * idSteps],
+  ['[retired] grid + coordinate descent (measured 144 sims)', 144 * idSteps],
+  ['commissioning: coarse seed + refineLM (measured 70 sims)', 70 * idSteps],
   ['H probe (twinResponse, ~3 runs)', 3 * compEval],
   ['compileTwin (11 iters, laps 5)', 11 * compEval],
   ['refineCompiled (~10 evals, laps 4)', 10 * refEval],
@@ -81,7 +86,8 @@ for (const [name, steps] of stages) {
   const cycles = steps * CPS;
   const min = cycles / 1000 / 60;
   console.log(`  ${name}: ${steps.toLocaleString()} sim steps -> ${min >= 90 ? (min / 60).toFixed(1) + ' h' : min.toFixed(0) + ' min'}`);
-  if (name.startsWith('identify') || name.startsWith('refineParams')) commission += min;
+  if (name.startsWith('[retired]')) continue;              // costed for contrast only
+  if (name.startsWith('commissioning')) commission += min;
   else perProgram += min;
 }
 console.log(`\ncommissioning (once per plant): ${(commission / 60).toFixed(1)} h background`);

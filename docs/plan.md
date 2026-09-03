@@ -5441,11 +5441,15 @@ rule 17 in miniature); the elastic kernel is ~33 (velocity pass) + ~24 (stress p
 float ops per material cell, the frame operator ~36, vacuum ~15 → **~54k float ops
 per sim step**. Sliced at 10,000 MAC/cycle the twin simulates **5.4x slower than the
 1 kHz machine**, in **63 kB of f32 state** — PLC-plausible on both axes. The pipeline
-at that rate, machine producing meanwhile: identify grid 43 min + staged 4-param
-22 min (**commissioning ~1.1 h background**; the wander itself is ~8 s of machine
-motion), H probe 15 min + compile 54 min + refineCompiled 41 min (**a new program
-~1.8 h background to the 44x-class artifact**), refineOperator **~11 h — overnight —
-to 51.5x**. Deployed cost: a tile lookup. Two caveats stated rather than absorbed:
+at that rate, machine producing meanwhile: **commissioning 51 min background** (the
+wander itself is ~8 s of machine motion), H probe 15 min + compile 54 min +
+refineCompiled 41 min (**a new program ~1.8 h background to the 44x-class artifact**),
+refineOperator **~11 h — overnight — to 51.5x**. **[CORRECTED: this line first read
+"~1.1 h" for commissioning, from a GUESSED 90 evaluations. The A/B against LM later
+counted the real thing — 144 sims on the soft cell, 166 on the stiff — so the shipped
+path was 1.7 h and my estimate was 37% low. The 51 min above is `refineLM`'s measured
+70 sims. The instrument's own assumption was the least accurate number in it, which is
+rule 17 landing on the cost model instead of the physics.]** Deployed cost: a tile lookup. Two caveats stated rather than absorbed:
 ~41k int index ops per step stretch the table ~1.75x unless the fixed lattice's
 neighbour indexing is precompiled into offset tables (it can be — the lattice never
 changes after build); and the count is analytic, the instrument class that has
