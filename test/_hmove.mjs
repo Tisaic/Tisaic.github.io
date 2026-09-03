@@ -45,7 +45,12 @@ console.log(`sample ${S}, lap ${LAP} steps; the pilot's own hSample is `
 const run = async (ch, at) => {
   const { arm, servo } = await makeArm();
   homeArm(arm, servo, path);
-  const total = 2 * LAP + WIN;
+  // ROOM FOR THE PULSE AND ITS RESPONSE. Two laps of run-in, then the pulse lands anywhere
+  // inside the third, then a window for the response — the first version sized this at two
+  // laps and put every pulse a whole lap BEFORE the recording window, so all eight phases
+  // measured the same settled DC and the 3% spread they showed was that artifact rather than
+  // a flat operator (rule 17: the instrument fails before the model does).
+  const total = 3 * LAP + WIN;
   const out = [];
   for (let k = 0; k < total; k++) {
     const c = path.at(k);
@@ -74,7 +79,7 @@ for (let ch = 0; ch < 2; ch++) {
   console.log('  phase   at step    dc ch0      dc ch1     rel to commissioned   shape corr vs commissioned');
   const rels = [];
   for (let p = 0; p < NPH; p++) {
-    const at = 2 * LAP + Math.round((p / NPH) * LAP) - LAP;   // a phase within the steady lap
+    const at = 2 * LAP + Math.round((p / NPH) * LAP);   // a phase within the steady lap
     const r = await run(ch, at);
     const i0 = Math.max(0, Math.floor((at - (2 * LAP - S)) / S));
     const n = Math.min(base.length, r.length);
