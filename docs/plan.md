@@ -5258,6 +5258,27 @@ directions and hat bumps at the residual's own worst bins. Also sized on the way
 contour tracks the refined tile residual directly — not the 7x to the repeatability
 floor.
 
+**BOTH INSTRUMENTS CAME BACK, AND TOGETHER THEY EXONERATE THE PHYSICS AND CONVICT THE
+OPTIMIZERS.** The gradient instrument (`test/_tilegrad.mjs`): the sim objective is
+EXACTLY deterministic (two evals of the same tile differ by 0.00e+0), so any slope is
+real — and at the shipped refined tile every one of six probed directions carries
+slope 7e3-8.5e4 times the repeatability floor, the largest at the residual's own worst
+bins (hat at ch1's worst bin: slope -2.13e-2, hat at ch2's: -1.89e-2). The residual is
+CORNER-CONCENTRATED — the worst bins are two of the square's corners at 4-5x the rms —
+and the tile is NOT at a local optimum: six schemes stalled at one value because all
+six step in wrong directions (the phase-wrong small-signal H), not because the
+objective is exhausted. And the backlash hypothesis is DEAD (`bench-nobl`): the
+identical pipeline on a backlash-free machine compiles 5.89e-3 against 5.90e-3,
+refines 3.105e-3 against 3.12e-3, delivers 44.4x against 44.0x — the dead zone costs
+nothing measurable at the canonical cell and cannot be the wall. What follows from a
+deterministic objective with surviving slope: every eval is a PERMANENT constraint, so
+the optimizer that fits is subspace Gauss-Newton — probe M directions by central
+differences (residual-weighted hats at the corner bins plus smooth broadband), collect
+the MEASURED response columns J·D_i, solve the ridged least squares for the step in
+the probed subspace, backtrack, re-centre, with the predicted residual printed BEFORE
+each step so the machine grades the local-linear model (rules 16, 27). Running as
+`test/_tilesgn.mjs`.
+
 **THE CANONICAL BENCH (owner's standing rule: softest arm, sharp corners — K 0.25 /
 E 0.03, the sharp square).** The twin pipeline in the shipped config, first measurement
 at the cell that cannot flatter: open loop 1.13 contour; ⑩ lap 1 **2.65e-2**, tail flat
