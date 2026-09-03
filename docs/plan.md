@@ -5590,3 +5590,80 @@ against a truth of 0.25, chosen while writing the bench, and never compared to w
 page's ladders would actually produce. **An optimiser benchmark inherits the whole
 protocol it will ship inside, starting point included** — a bench that picks its own
 favourable start measures the optimiser and not the product.
+
+## §45 — THE ROBOTIC CNC QUESTION: A LONG OPEN PROGRAM, AND THE PILOT UNDERNEATH
+
+**The owner's question.** A real job is thousands of lines of gcode — one shot, not
+closed, far longer than a lap. Does ⑩ transfer there, or is the pilot the only option?
+And can the pilot sit UNDERNEATH a path model, so a planned program is highly accurate
+while unplanned programs and manual moves still improve?
+
+**READING THE CODE SAID YES, AND THE MACHINE AGREED.** Every ⑩ measurement in this
+repository had been a CLOSED lap, and I had been describing ⑩ as lap-periodic
+machinery. It is not: `compileTwin` pads its FFT to `N >= span + len(H) + 64`, so it is
+a zero-padded LINEAR deconvolution and never a circular one, and `ToolPath`'s `closed`
+flag DEFAULTS to false. The lap-periodicity lives entirely in the layers ABOVE the
+compile — `refineCompiled` (fits at lap harmonics), `applyCompiled` (tiles the
+penultimate lap), `refineOperator` (bins by lap phase) — and every one of them exists to
+answer "what do I apply after the compiled span runs out", a question a one-shot program
+never asks. **The compiled span IS the program.**
+
+**MEASURED (`test/_twinopen.mjs`), on a serpentine raster — a pocket-clearing toolpath,
+the commonest long gcode shape — open, 20 points, 2.8x the sharp square's lap, compiled
+once in 3.0 min with no laps and no tiling:**
+
+```
+                                 open loop    compiled     gain    compile
+  open raster (2.8x a lap)       6.136e-2     5.215e-3     11.8x    3.0 min
+  closed sharp square (control)  5.781e-2     4.273e-3     13.5x    2.2 min
+```
+
+**The long open program retains 87% of the closed lap's factor on a matched
+instrument.** The control matters more than the headline: the 44x in the record is
+CONTOUR rms over a refined, tiled steady lap, and this bench reads JOINT rms over a
+single-shot compile — different metric, different configuration, so quoting 11.8x
+against 44x would have been a cross-metric claim of exactly the kind this file keeps
+catching. Run through one instrument the comparison is 11.8x against 13.5x. **What the
+13% costs is not separated**: openness, length, and the raster's own geometry hardness
+are confounded in one pair of runs, and this project already knows program hardness is
+worth more than that (the square's ceiling is 1.75x below the rounded rectangle's for
+ANY bank).
+
+**THE COST IS LINEAR IN PROGRAM LENGTH AND IS THE REAL CONSTRAINT.** Per iteration the
+compile costs (preRoll + span), so the fixed pre-roll amortises away and long programs
+are asymptotically linear: measured 2.2 min for one lap and 3.0 min for 2.8. Under the
+PLC-only rule that is **~59 s of background compute per second of program at the shipped
+11 iterations** — a 10-minute job is ~10 h background, affordable overnight for a
+production part and not affordable for a one-off. The artifact scales the same way: one
+du per sample per channel, ~530 kB per 10 minutes. **`iters: 11` IS AN UNMEASURED
+CONSTANT** of exactly the class found in `refineOperator` today, and how much of the
+compile's value lands in the first three iterations is the single highest-leverage
+unmeasured number for making thousand-line programs affordable.
+
+**AN INSTRUMENT FAULT, CAUGHT AND THEN MIS-PREDICTED.** The first version scored the
+corrected run over its whole record while the open-loop run had no pre-roll — mismatched
+windows, the same fault as the verify run-out that once deflated every plant's OFF
+average (rules 13, 17). Caught before publishing. But the correction I PREDICTED was
+that excluding 1500 samples of "holding still at near-zero error" would drop the gain
+from 10.6x to ~8.4x; measured, it ROSE to 11.8x, because the pre-roll is precisely when
+the correction deliberately LOADS the flex and those samples carry large deflection. I
+checked that the windows matched and then assumed what one of them contained.
+
+**THE PILOT UNDERNEATH: THE ORDER IS ALREADY MEASURED, THE COMPOSITION IS NOT.** The
+composite measured model layers UNDERNEATH and the program-specific layer ON TOP
+(30.76x), while the reverse — commissioning the program-agnostic layer over the
+program-specific one — measured **0.71x, worse than the defect it was meant to fix**. So
+the architecture the owner describes is the one the evidence supports. Two requirements,
+both already paid for elsewhere in this file: the twin must simulate MACHINE + PILOT
+rather than the bare machine, or the compile inverts the wrong plant and reproduces ⑧'s
+double-correction defect verbatim (rule 34) — mechanically easy, since the pilot is
+deterministic and `stack.js` already commissions each layer with the ones below it
+deployed and frozen; and the compiled layer must DISENGAGE off-program rather than
+degrade, because a program-indexed correction applied off its program is the
+0.55x/0.71x failure measured repeatedly here. ⑩ already gates on program/feed change;
+that gate becomes load-bearing rather than a convenience.
+
+**NOT MEASURED, STATED (rule 59):** ⑩ + pilot has never been run as a composition; the
+argument that a pilot underneath HELPS the compile (by reducing the plant's deviation
+from any model, which is where a real machine's twin error lives) is an argument and not
+a measurement, and this session has already caught one of those.
