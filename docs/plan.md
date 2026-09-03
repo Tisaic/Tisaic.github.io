@@ -5097,6 +5097,49 @@ canonical cell before any page wiring: the learned-chain kinematics bench
 screen (fit on wanders, free-run seeded at the model's own fixed point — no tracker at
 load — scored on the sharp program it never saw).
 
+**§43 MEASURED — the two halves, both at the canonical cell, both bounded by their own
+models, and every bound now a number.**
+
+*Kinematics half (learned refs + affine-observer routing, structure twin underneath):*
+first bench delivered 8.9e-2 contour on a gather whose degree-7 fit was
+near-interpolating (45 training rows, 36 terms — holdout 7.5e-3 rad); the soft phase's
+MEASURED config (45 pts, degree 5) improves the map to 3.0e-3 rad and the delivery to
+**6.9e-2 — still 2.7x behind the analytic chain's 2.55e-2, and the gap is the map's AIM**:
+the routed truth is nulled equally well (3.5e-3 vs 3.1e-3 joint) but the learned truth
+cannot see the map's own error, because the map is its anchor. The learned-kinematics ⑩
+reaches parity when the map reaches ~1e-3 rad; the adapter ships as `learnedChain` in
+`lib/flexisim/twin.js` (chain-parameterized drivePath/twinResponse/armSimulators,
+analytic path byte-identical when omitted).
+
+*Dynamics half (no structure template at all):* five sweeps and two compiles, all on one
+cached record set (6 wanders + holdout + program truth, 12k fit samples).
+ONE-STEP IS NEVER THE QUESTION — 0.001-0.003 everywhere. FREE-RUN is:
+plain AR diverges at light ridge and is bias-dead at heavy (0.4-0.8); leaky-integrator
+states NULL; commanded-motion hysteresis states NULL; the corner-regime licensed-weight
+split — the cure that fixed the FORECAST elbow — NULL in free-run form; scheduled refit
+DIVERGES. What moves it: **dropping the e-feedback entirely** (input-only FIR — free-run
+is one-step, stable by construction; §41's conviction of windowed feedforward was at
+memory-truncating windows) and DATA — FIR L=384 at 12k samples reads **0.18 shoulder /
+0.53 elbow** on the program never seen, the elbow's best by 30%, and L=780 wins on
+wander (0.27) while breaking on the program — the deep window does not transfer.
+**v0 compile (H from the model's own step response): 0.4x — WORSE THAN NOTHING.** A held
+2e-3 step is outside the wander distribution; the compile inverted a fictional response.
+**v1 (H probed on the REAL machine at commissioning — held ref steps, tracker on,
+commissioning-legal — learned model only for the FREE response, superposition
+simulator): 4.4x delivered, flat over 8 laps (2.56e-1),** landing exactly at the free
+model's residual — the delivery equals what the model cannot predict, to the first
+digit. H's pose sensitivity centre-vs-program-start is 3.2% rms, so ONE commissioning
+pose suffices.
+
+**WHERE ⑩-FULLY-LEARNED STANDS: 4.4x against the structure twin's 44x, and the whole
+gap is one number — the elbow's free-response NRMSE (0.53).** Compile, refine, tiling,
+clamp and H all transfer; nothing else binds. The measured leads on the elbow: the
+parked probe-constructed kernel thread (falsifiers 33-38) had the OPPOSITE channel
+split — elbow near-signal, shoulder broken — so the superposition-of-move-kernels free
+model is the complementary route; and the wander is the excitation the FIR is fitted on,
+which covers the program's corners exactly as poorly as the pilot's scribble did (the
+§§9-17 lesson from the forecast side, now in free-run form).
+
 **THE CANONICAL BENCH (owner's standing rule: softest arm, sharp corners — K 0.25 /
 E 0.03, the sharp square).** The twin pipeline in the shipped config, first measurement
 at the cell that cannot flatter: open loop 1.13 contour; ⑩ lap 1 **2.65e-2**, tail flat
