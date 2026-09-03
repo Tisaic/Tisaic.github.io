@@ -416,6 +416,23 @@ softest cell with the hardest program is the one that cannot flatter: compliance
 largest, and the corner regime the excitation covers worst. Numbers recorded at other
 settings stand as history; new performance claims are measured here.
 
+### PLC only — no offline allowed (owner's standing rule)
+
+**Everything runs on the PLC: commissioning, identification, compile, refine, deploy.
+Nothing is done on a dev PC — the north star's target 6 is now unconditional.** Heavy
+computation is legitimate ONLY as background compute sliced into the 10%-of-scan
+budget (10,000 MAC per 1 ms cycle, met EVERY cycle) while the machine produces. The
+⑩ pipeline is COSTED for exactly that (`test/_twincost.mjs`, plan §44): the twin's
+lattice sim is ~54k float ops per step from real cell counts (480 material + 600
+vacuum, both links), so sliced it runs 5.4x slower than the 1 kHz machine, in 63 kB of
+f32 state — commissioning ~1.1 h background, a program's compile ~1.8 h background to
+the 44x-class artifact, the deep refine overnight to 51.5x. The deployed artifact is a
+tile lookup and costs nothing. Two stated caveats: the ~41k int index ops per step
+stretch the table ~1.75x unless the fixed lattice's neighbours are precompiled into
+offset tables, and the count is analytic — itemized per kernel pass so it can be
+checked, because this instrument class has shipped faults twice (rules 17, 30). Any
+new fitting machinery must state its MAC/cycle slice or it does not ship.
+
 ### What `./test/run.sh` actually runs
 
 `--quick` (the default) and `--full` choose the tier; anything pinning a CONTRACT runs in

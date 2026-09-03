@@ -51,7 +51,10 @@ async function makeArm(over = {}) {
   // rig's own machine, byte-identical — one constructor, no second copy (rule 61).
   const K = over.K ?? PG.K, E = over.E ?? PG.E;
   const damp = over.damp ?? DAMPING, bl = over.bl ?? ARM_BL;
-  const mk = (length) => buildLink({ length, section: H, clamp: CLAMP, E,
+  // section: the TWIN's resolution knob (plan §44, the PLC-only costing) — a coarser
+  // lattice is 44% fewer material cells at section 3. The TRUE machine never passes it.
+  const sec = over.section ?? H;
+  const mk = (length) => buildLink({ length, section: sec, clamp: CLAMP, E,
     nu: NU, rho: RHO, damping: damp });
   const l1 = await mk(PG.LEN1), l2 = await mk(PG.LEN2);
   const j = (mp) => new Joint({ ratio: RATIO, motorInertia: mp.inertiaAboutPivot / 1e4,

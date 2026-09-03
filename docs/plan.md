@@ -5422,3 +5422,40 @@ compile's residual or the backlash this tab carries is unmeasured.
 | 6 PLC scan | **CLOSED (§35)** — `scanCost()` composes QP + forecast + router + RLS; the full composition fits 10% of a 1 ms scan sliced (9,380 of 10,000), contract in `scancost.test.mjs` |
 | 7 breadth | achieved as reframed; the barrel flips helpful under adaptation |
 | 8 a rival | **measured twice — the two-regime PathILC verdict (§33), and the owner's truth-free Kalman rival (§34): engineered full 1.01–1.13× against the frozen composition's 2.87–7.72× after §36's scale repair** |
+
+## §44 — PLC ONLY, NO OFFLINE ALLOWED (the owner's directive), and the ⑩ pipeline costed for it
+
+**The directive closes the loophole §43's synthesis stated:** ⑩'s compile and refine
+were offline-shaped simulation, and the north star's target 6 says the fitting runs
+ONLINE. The owner has made it unconditional: no dev PC anywhere; heavy compute is
+legitimate only as background work sliced into the 10%-of-scan budget while the
+machine produces.
+
+**COSTED (`test/_twincost.mjs`), from real cell counts, per-kernel-pass itemized:**
+the twin's two links are 480 material + 600 vacuum cells (read from the BUILT
+lattices' flags — the first draft guessed the CELL ids and counted zero material,
+rule 17 in miniature); the elastic kernel is ~33 (velocity pass) + ~24 (stress pass)
+float ops per material cell, the frame operator ~36, vacuum ~15 → **~54k float ops
+per sim step**. Sliced at 10,000 MAC/cycle the twin simulates **5.4x slower than the
+1 kHz machine**, in **63 kB of f32 state** — PLC-plausible on both axes. The pipeline
+at that rate, machine producing meanwhile: identify grid 43 min + staged 4-param
+22 min (**commissioning ~1.1 h background**; the wander itself is ~8 s of machine
+motion), H probe 15 min + compile 54 min + refineCompiled 41 min (**a new program
+~1.8 h background to the 44x-class artifact**), refineOperator **~11 h — overnight —
+to 51.5x**. Deployed cost: a tile lookup. Two caveats stated rather than absorbed:
+~41k int index ops per step stretch the table ~1.75x unless the fixed lattice's
+neighbour indexing is precompiled into offset tables (it can be — the lattice never
+changes after build); and the count is analytic, the instrument class that has
+shipped faults twice (rules 17, 30), so every per-pass number is itemized for
+checking.
+
+**THE LEVERS, in the order of their leverage:** (1) RESOLUTION — a section-3 twin
+carries 44% fewer material cells, and rule 2 says resolution is nearly always a cost
+knob; the experiment that decides is running (`bench-coarse`: coarse template refits
+its OWN four parameters, compiles through itself, scored on the true section-4
+machine against the shipped 44.0x). (2) f32 state (already assumed for memory; the
+arithmetic too). (3) Eval diet on the operator refine (its cycles deplete — most of
+the value is in the first two). (4) The operator refine can alternatively run against
+the REAL machine (~160 evals x 4 laps ≈ 90 min of machine laps, near-zero compute) —
+but that needs the truth signal present at refine time, an installation property like
+`onlineAtDeploy`, and it spends machine wear where the sliced sim spends calendar.
