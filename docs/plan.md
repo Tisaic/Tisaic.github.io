@@ -6406,3 +6406,48 @@ lap. A held response that is pose-independent does not imply a moving one is. Th
 measurement — difference two runs of the deterministic plant, identical but for a small `du`
 pulse at one phase, repeated across phases — is the one still owed, and it is ⑩'s own hat
 probe pointed at the pilot's `h`.
+
+### `h` IS IDENTIFIED HELD AND INVERTED MOVING — REAL, NAMED, AND WORTH 5.5% (`test/_hswap.mjs`)
+
+Three instruments agreed that the operator the QP inverts is not the operator the machine
+has, and one mechanism predicts the whole pattern. `h` comes from a probe taken while the
+machine is HELD (rule 33 wants it held: a dithered probe cannot see what it is cancelling)
+and is then inverted with the machine MOVING. A held joint must break stiction before it
+moves; a moving one is already sliding. **Rules 33 and 34 pull opposite ways on this one
+model and nobody had noticed.**
+
+Measured by differencing two runs of the deterministic plant around a `du` step:
+
+```
+  channel 0 (shoulder)   moving DC 9.6014e-1 against the held probe's 7.5563e-1   1.271x
+  channel 1 (elbow)      moving DC 9.9042e-1 against the held probe's 9.8593e-1   1.005x
+```
+
+The shoulder is under-identified by 27% and the elbow is exact — which is physically
+coherent, since the shoulder carries the whole arm's gravity load and a loaded joint's
+stiction is larger. It also explains `_hlag`'s 13-sample lead on channel 0 against 3 on
+channel 1: a breakaway delay is exactly a late kernel.
+
+**AND THE MACHINE SAYS IT IS WORTH 5.5%**, installing the moving kernel through the pilot's
+own `_buildH`:
+
+```
+             held probe (ships)   moving probe    change
+  sharp      2.15x                2.57x           1.194x
+  circle     3.99x                3.65x           0.914x
+  rounded    2.64x                2.83x           1.075x
+                                  geo mean        1.055x
+```
+
+**THE CIRCLE GOING BACKWARDS IS THE USEFUL HALF** (rule 9). It is the smoothest program, where
+the shoulder genuinely spends time near-stationary and the HELD kernel is the right one — so
+the moving kernel overstates the gain there. Which names the scheduling variable at last:
+`h` depends on whether the joint is MOVING, not on where it is. Pose measured flat (4% across
+the workspace), phase measured flat (3% across a lap), and held-against-moving measures 27%.
+A `h` scheduled on commanded joint SPEED is the build this points at, and its ceiling is
+roughly the better of the two columns per program — about +8.5% geometric mean.
+
+**WHICH IS THE POINT.** The whole plant-model arc — pose scheduling, phase scheduling, cross
+coupling, registration, held-against-moving — is worth single-digit percentages. The
+iteration arc is worth 1.85x already and 23.96x at its ceiling. The model is not where the
+remaining factor is, and this section is the evidence rather than the assertion.
