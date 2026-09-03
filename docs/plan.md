@@ -5342,6 +5342,19 @@ gains **Refine deep (operator)** — runs against the FITTED twin, zero machine 
 ways (19 evals: projected residual 4.08e-3 → 2.94e-3 AND the delivered tail improves
 7.54e-4 → 6.35e-4 — the rule-21 guard that would catch a sim-only gain).
 
+**THE STIFF CELL'S STAGED IDENTIFICATION IS NOW MEASURED — the last untested cell of
+the protocol (`bench-stiffid`/`bench-stiffdel`, was stated-not-built).** At K=16/E=0.15
+the grid at guessed damping misidentifies WORSE than anywhere (K=2.375 on a K=16
+machine — deflection scales as 1/K, so K's output-error signal is weakest exactly
+where the machine is stiffest), and the 4-parameter descent walks it back 4.7x but
+stalls at K=11.18 (−30%) while recovering E to 0.2% and damping to 4%. The delivery
+verdict: the fitted twin still compiles and delivers **lap 1 at 16x and tail at 23x
+over the open loop** on the true machine — the K miss costs **1.61x against the
+oracle** (5.94e-4 vs 3.69e-4 tail). So the protocol's stiff-end limit is stated with
+its price, not hidden: K weakly observable, delivery within 2x of oracle. The lever,
+if it is ever needed: excitation that LOADS the gearbox — deflection ∝ torque/K, so a
+harder-accelerating wander raises K's signal where position amplitude cannot.
+
 **THE ENGAGE TRANSIENT IS A STATE TRANSIENT, NOT A SPLICE — measured, and the fix
 reverted.** The operator-refined delivery spikes on its second lap (5.2e-2 against a
 2.2e-2 tail at the canonical cell) because the tile now differs from the compiled head
