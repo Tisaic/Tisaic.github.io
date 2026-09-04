@@ -7537,3 +7537,41 @@ and was invisible to the instrument watching for it: a large, linear, amplitude-
 pose-dependent reverse cross-coupling, against a `nCross` that reports a settled DC. The
 CONTROLLER gain is +6.6% in one configuration and negative in the next one tried, which is not a
 step toward 44x and should not be quoted as one.
+
+### THE LAG WINDOW BUYS ONE OCTAVE, AND LOG SPACING BUYS FIVE FOR THE SAME COLUMNS
+
+**THE CEILING NOBODY HAD NAMED.** A lag window can only USE excitation between two bounds set by
+its own geometry: it cannot REACH a period longer than its span (rule 37) and cannot SAMPLE one
+shorter than twice its stride. On this arm the row is 12 lags at stride 14 samples, so the span is
+1232 solver steps and the lattice is 112 — **usable periods 224 to 1232, one octave** — and the
+commissioning scribble sits in the middle of it at a correlation time of 662. That is why the
+scribble fits at R^2 0.995 while five successive pose-multisine designs fitted at 0.01 to 0.18:
+the ceiling is the REGRESSOR GEOMETRY, not the plant and not the excitation.
+
+**AND THE PROJECT ALREADY RECORDED THE CONSEQUENCE WITHOUT THE CAUSE:** "the corner is a 40-step
+event read by regressors 117 steps apart", and "forcing `sample` to 3 does not change it, because
+the tune raises stride to 39 to hold the same reach — spacing comes from Ts, a settling number,
+and the corner is a geometry one". Reach and resolution were in conflict over ONE number and the
+tune could only trade them.
+
+**THEY DO NOT HAVE TO BE.** `test/_loglag.mjs`, same 12 lags, same 154-sample span, same 121
+columns, same ridge — only the spacing differs:
+
+```
+  uniform lags (samples): 0 14 28 42 56 70 84 98 112 126 140 154   usable periods 224..1232
+      log lags (samples): 0  2  3  4  6 10 16 25  39  62  97 154   usable periods  32..1232
+
+  channel 1 (elbow), lead 0, held-out      rounded   circle    sharp
+    uniform                                 0.7214   0.7470   0.4664
+    log                                     0.7194   0.7362   0.5545
+```
+
+**THE SHARP SQUARE'S ELBOW AT LEAD 0 GAINS 19% OF R^2 AND EVERY OTHER CELL MOVES BY UNDER 0.01.**
+That is the single binding forecast number in the system — a receding horizon applies lead 0, and
+the elbow is the channel that fails — and it lifts its own delivery bound from 1.37x to 1.50x. The
+cells it should not touch coming back where they were is the shape of a real repair (rule 21).
+
+**AND IT IS FREE.** Same column count, same arithmetic, same memory, no new constant: the spacing
+is derived from the stride the tune already measured. `lagSpacing` defaults to 'uniform', so every
+plant on record is byte-identical, and one generator serves the fit row and the runtime row
+because two lag tables are two tables that can drift (rules 30, 61).
