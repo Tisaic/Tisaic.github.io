@@ -25,12 +25,24 @@
 // is that lambda is selected at the wrong amplitude — measurable on any plant, derivable, and
 // shippable. If it does not, the h-scaling is doing something the effort weight cannot, and the
 // "lambda in disguise" reading is dead.
-import { commissionArm, deployOn, PG } from '/home/user/Tisaic.github.io/test/pilot/rigs/arm-rig.mjs';
+import { commissionArm, deployOn, mkPath, PG } from '/home/user/Tisaic.github.io/test/pilot/rigs/arm-rig.mjs';
 
 const SHAPES = (process.env.LM_SHAPES || 'sharp,circle,rounded').split(',');
 const FEED = +(process.env.LM_FEED || 0.004);
 const UCAP = +(process.env.LM_UCAP || 0.6);
-const MULTS = (process.env.LM_MULTS || '1,2,4,8,16,32').split(',').map(Number);
+// SWEPT BOTH WAYS AND READ ON THE SPECTRUM, NOT ONLY THE SCORE. `lambda` weights ||D u||^2,
+// which is a HIGH-PASS penalty: it taxes exactly the fast content a corner needs, so the QP
+// trades it away first. Mode 10's correction puts 92% of its shoulder energy above the fourth
+// lap harmonic on the sharp square and 32% on the circle; the pilot's puts 55% and 0.2%. Same
+// frame, same machine, same program — the pilot is correcting droop where mode 10 corrects
+// corners.
+//
+// AND EVERY LAMBDA SWEEP SO FAR HAS READ ONLY THE SCORE. Up at this cap: inert. Down at another
+// cap with the oracle: inert. Neither looked at what the knob DID to the correction, which is
+// the quantity it directly controls — the same blindness rule 39 was invoked to fix on the
+// error. If lowering it restores harmonics above 4 and the score does not move, the filter is
+// somewhere else and the horizon or the decision grid is next.
+const MULTS = (process.env.LM_MULTS || '0.001,0.01,0.1,1,10').split(',').map(Number);
 
 console.log(`arm K ${PG.K} / E ${PG.E}, feed ${FEED}, uCap ${UCAP}`);
 const pilot = await commissionArm({ seed: 1, train: { shape: 'rounded', feed: FEED }, uCap: UCAP });
@@ -50,8 +62,23 @@ for (const m of MULTS) {
     let s2 = 0;
     for (const t of tr) s2 += t.u[0] * t.u[0] + t.u[1] * t.u[1];
     const uRms = Math.sqrt(s2 / Math.max(1, tr.length));
-    cols.push(`${(open[shape] / r.r.totalRms).toFixed(2).padStart(5)}x b${r.r.contourBias.toExponential(1)}`
-      + ` o${r.r.contourOsc.toExponential(1)} u${uRms.toFixed(3)}`);
+    // THE SHARE OF THE SHOULDER'S CORRECTION ABOVE THE FOURTH LAP HARMONIC — the quantity the
+    // comparison against mode 10 says is wrong, and the one `lambda` directly controls.
+    const lap = Math.round(mkPath(shape, FEED).lap / pilot.sample);
+    const seg = tr.slice(Math.max(0, tr.length - lap)).map((t) => t.u[0]);
+    let lo = 0, hi = 0;
+    for (let h = 1; h <= 16; h++) {
+      let re = 0, im = 0;
+      for (let i = 0; i < seg.length; i++) {
+        const t = (2 * Math.PI * h * i) / seg.length;
+        re += seg[i] * Math.cos(t); im -= seg[i] * Math.sin(t);
+      }
+      const e = (re * re + im * im);
+      if (h <= 4) lo += e; else hi += e;
+    }
+    const share = hi / Math.max(1e-30, lo + hi);
+    cols.push(`${(open[shape] / r.r.totalRms).toFixed(2).padStart(5)}x o${r.r.contourOsc.toExponential(1)}`
+      + ` u${uRms.toFixed(3)} h5+${share.toFixed(3)}`);
   }
   console.log(`  ${String(m).padStart(8)}   ${cols.join('  ')}`);
 }
