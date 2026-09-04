@@ -7112,3 +7112,166 @@ the verify from a candidate set, exactly as `lambda` is, and that selection is n
 frequency table also says a FLAT penalty is not the right shape: `h` is trustworthy below h4 and
 wrong above h8, so a trust-weighted roll-off should beat uniform Tikhonov. And none of this has
 been run at depth 2, where the shipped configuration already reads 4.09x / 6.81x / 5.25x.
+
+### `mu` composes with depth, and the circle triples
+
+`test/_mudepth.mjs`, one commissioning per depth, the same model deployed at each `mu`, one QP
+iteration throughout, K 0.25 / E 0.03 at feed 0.004:
+
+```
+  depth 1                sharp           circle          rounded
+    mu 0.00       3.56x u0.600    2.95x u0.333    3.00x u0.472
+    mu 0.03       3.81x u0.508    3.37x u0.313    3.28x u0.413
+    mu 0.10       3.73x u0.388    4.59x u0.279    3.69x u0.340
+    mu 0.30       2.74x u0.268    5.71x u0.218    3.33x u0.248
+
+  depth 2                sharp           circle          rounded
+    mu 0.00       3.77x u0.600    7.03x u0.311    4.90x u0.486
+    mu 0.03       3.92x u0.504    9.18x u0.290    5.55x u0.411
+    mu 0.10       3.56x u0.378   11.65x u0.256    5.13x u0.327
+    mu 0.30       2.50x u0.255    4.42x u0.198    3.13x u0.233
+```
+
+**THE TWO ARE NOT THE SAME REPAIR.** Depth 2 at `mu` 0.03 beats depth 1 at its own best on every
+program, and the circle reaches **11.65x** — against 2.95x for depth 1 unregularised, and against
+the 4.90x the shipped depth-2 configuration reads. So the cascade and the magnitude penalty
+compose, which is what independent mechanisms do: the cascade adds a layer that models what the
+one below left, and `mu` stops each layer inverting its own model where that model is wrong.
+
+**AND THE PROGRAM-DEPENDENCE IS WORSE AT DEPTH, NOT BETTER.** Sharp wants 0.03 and the circle
+0.10; at 0.30 the circle collapses from 11.65x to 4.42x. A single shipped `mu` is a per-plant
+AND per-program constant, which rule 31 forbids twice over. It must be selected by the verify.
+
+### The phase error is a pure delay, and correcting it removes the low band's error entirely
+
+`test/_hspec.mjs` with the kernel advanced by the measured lag (`HS_SHIFT=117,27`):
+
+```
+  channel 0, advanced 117 steps      channel 1, advanced 27 steps
+   h   ratio   phase err            h   ratio   phase err
+   1   0.920      -0.4               1   1.001      -3.3
+   2   0.930      -0.8               2   1.004      -5.8
+   3   0.951      -1.1               3   1.052     -10.3
+   4   0.995      -1.2               4   1.026     -21.9
+   5   1.096      -0.7               5   0.753     -31.2
+   6   1.382       2.1               6   0.563      -2.2
+  relative model error h1-4  0.203 -> 0.068     0.115 -> 0.156
+```
+
+**THE SHOULDER'S LOW-BAND PHASE ERROR IS GONE** — the 5.1 / 10.1 / 14.8 / 19.2 / 23.7 / 29.5
+degree ramp becomes -0.4 / -0.8 / -1.1 / -1.2 / -0.7 / +2.1 — and the low-band relative model
+error falls by a factor of three from a ONE-PARAMETER correction. That is what a pure time delay
+looks like when it is removed.
+
+**THE ELBOW SAYS THE 27 WAS TOO SMALL, NOT THAT THE READING IS WRONG.** Its residual is still a
+ramp (-3.3, -5.8, -10.3, -21.9), sloping about -3.4 degrees per harmonic, which at an 8206-step
+lap asks for a further ~77 steps: 27 + 77 = 104, the same 13 samples the shoulder wanted. **Both
+channels want the same advance, so it is not a plant property — it is the commissioning
+CONFIGURATION.** `h` is identified from a probe taken while the machine is HELD and inverted
+while it is MOVING: from rest the step must cross stiction and the gearbox's lost motion before
+the tip sees anything, and in motion the joint is already sliding and already loaded on one side.
+Rule 34 with a number attached.
+
+**WHICH REFRAMES `mu`.** A fixed delay is 4.9 degrees at h1 and 90 by h18, so the high band is
+MISREGISTERED rather than unusable — the correction planned there arrives anti-phase and adds
+where it means to subtract. Suppressing the band is then a symptomatic treatment of a
+registration fault, and it is treating exactly the band the owner's mechanism needs: motor motion
+at frequencies the tip barely follows is how the structure is pre-loaded without the tip moving
+preemptively. `test/_hshift.mjs` puts the question to the machine.
+
+### The delay is real, removing it is harmful, and that kills the registration hypothesis
+
+`test/_hshift.mjs` advances the commissioned kernel by L solver steps and rebuilds through the
+pilot's own `_buildH`, so only the kernel's registration changes:
+
+```
+       L   samples            sharp           circle          rounded
+       0       0.0     3.49x u0.600     2.76x u0.332     2.87x u0.600
+      52       6.5     3.24x u0.600     2.46x u0.326     2.50x u0.600
+     104      13.0     2.71x u0.600     2.17x u0.322     2.11x u0.600
+     156      19.5     2.20x u0.600     1.92x u0.319     1.68x u0.600
+```
+
+**L = 0 IS THE BEST ROW AND THE SCORE FALLS MONOTONICALLY.** The phase error `_hspec` measured is
+real — advancing by 117 steps removes it on the shoulder and cuts the low-band model error from
+0.203 to 0.068 — and correcting it makes the machine WORSE on all three programs at once. So the
+delay is not what the high band's harm is made of, and the reframing above was wrong.
+
+**WHY, AND IT IS A SHAPE THIS PROJECT HAS MET BEFORE.** A receding horizon applies only its FIRST
+move and re-solves, so what reaches the machine is `hGrid` at the first few grid ticks and almost
+nothing about the kernel's phase across sixteen harmonics. `leadTrust` found exactly this — a
+per-lead trust profile that moved `uPk` by 85% and the delivered score by 0.0% — and the θ-grid
+found it a third time. **Mid- and far-lead forecast quality does not move this machine.** Three
+independent measurements now say so, and the phase table is a fourth. What advancing L actually
+does is raise the kernel's EARLY gain, which makes the QP think it has more authority than it has
+and apply less: `uPk` falls on the circle, 0.332 to 0.319, as the score falls with it.
+
+### The probe hold is a per-plant constant, and re-deriving it is worth 1.17x
+
+`_finishProbe` stops the probe at `10 * rise`. It entered as an ESCAPE — a barrel under a drifting
+ambient never goes quiet, and every channel ran to the 60000-step cap — and on this arm the escape
+is not an escape, it is the rule: the probe terminates on it, and ten rises is 1800 solver steps.
+It is now `probeRises`, an option defaulting to 10, and `test/_hlen.mjs` sweeps it:
+
+```
+  rises  10  resp 1800/3000  Tset 1799/2484  N 59  reach 3776   3.49x  2.76x  2.87x
+  rises  25  resp 4400/3200  Tset 3348/2651  N 70  reach 5040   3.20x  4.04x  3.41x
+```
+
+**THE CIRCLE GAINS 1.46x AND THE ROUNDED RECTANGLE 1.19x, THE SHARP SQUARE LOSES 8%** — a
+geometric mean of **1.17x from one constant nobody had re-derived** (rule 31, the eighth entry on
+its own list). The 10-rise row is byte-identical to the shipped configuration, which is the
+control that says the option is inert at its default (rule 21).
+
+**AND THE TRUNCATION STORY THAT MOTIVATED IT IS MOSTLY WRONG.** The shipped kernel reaches
+1.044 and 0.903 of its own settled DC at the 1800-step cut, not a fifth of it — so the claim that
+the model "spans a fifth of the plant's memory" was reading `_resid`'s 6363-8649 step memory of
+the PLANT against the length of the CORRECTION PATH's step response, which are different
+quantities. The two channels' kernels were already near their DC.
+
+**WHICH LEAVES THE ATTRIBUTION OPEN, AND IT IS TWO THINGS AT ONCE.** A longer probe lengthens the
+kernel AND raises `Tset`, and `N` is derived from `Tset` — the horizon's reach goes 3776 to 5040
+steps against an 8206-step lap. A score that moved because the HORIZON got longer is a different
+finding from one that moved because the KERNEL did, and this bench cannot tell them apart.
+
+### Both mechanistic hypotheses tested on the machine, and both are nulls
+
+**DITHER IS A NULL.** `test/_dither.mjs` adds a pure high-frequency dither to the applied
+correction — quadrature between the two channels so it is not a pose offset in disguise — and
+sweeps amplitude and period, on the OPEN loop as well as on the deployed pilot:
+
+```
+  OPEN LOOP     A 0.010 / 0.030 / 0.100   at P = 8, 16, 32, 64 steps:  1.00x in all twelve cells
+  WITH PILOT    P=8:  0.98x / 0.95x / 0.82x      P=32:  1.00x / 1.01x / 1.02x
+```
+
+The open-loop half is the one that matters: if fast motion linearised friction or held the
+gearbox off its lost motion, the plant would improve WITHOUT any controller, and it does not move
+at all. Closed-loop it is neutral at every period but the fastest, where it is harmful. So the
+nonlinear reading of "high-frequency effort is doing work" does not reproduce here.
+
+**NON-MINIMUM PHASE IS ALSO A NULL, AND IT IS THE SHARPER TEST.** `test/_nmp.mjs` steps the
+correction WHILE MOVING at four phases of the lap and both signs, and looks for the reverse
+excursion a cart-and-pendulum has:
+
+```
+  ch  phase  du    DC          reverse peak    as %DC    ch  phase  du    DC        reverse peak
+  0      0   +   9.251e-1      -3.736e-8       -0.0%      1      0   +   1.045e+0   -4.2e-12
+  0   2052   +   9.654e-1      -1.275e-11      -0.0%      1   2052   +   9.948e-1    0.0e+0
+  0   4103   +   9.641e-1      -9.306e-8       -0.0%      1   4103   +   1.013e+0    0.0e+0
+  0   6155   +   8.608e-1      -9.723e-8       -0.0%
+```
+
+**THERE IS NO WRONG-WAY-FIRST.** The path from a joint-command offset to the joint-space tool
+error is minimum-phase at every pose and both signs, with unit DC gain. The reverse excursion is
+1e-8 against a DC of 1, which is the integrator's noise floor and not a zero. Since that path is
+exactly the object the QP inverts, this is the right variable to have asked about.
+
+**WHAT THE SAME DATA DOES SAY, AND IT UNIFIES THE REGULARISATION FAMILY.** Read with `_hspec`'s
+frequency table, the correction channel is a LOW-PASS with roughly a 1000-step rise and a null
+near the eighth harmonic — `|H|` runs 0.884, 0.796, 0.664, 0.510, 0.355, 0.218, 0.111, 0.039,
+0.0085 across h1-h9. **Above h8 the machine does not respond to the correction at all.** So the
+high band is not invisible-but-useful, it is absent, and every knob that suppressed it —
+`mu`, fewer QP iterations, a larger claimed kernel gain, a larger `lambda` — was doing the same
+one thing: refusing to invert a plant where it has no gain. That is textbook Tikhonov, and it is
+why `mu` is the principled member of the family rather than a lucky one.

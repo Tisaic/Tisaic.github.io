@@ -31,6 +31,17 @@ const SHAPE = process.env.HS_SHAPE || 'sharp';
 const FEED = +(process.env.HS_FEED || 0.004);
 const UCAP = +(process.env.HS_UCAP || 0.6);
 const DU = +(process.env.HS_DU || 0.3);
+// THE REGISTRATION SHIFT, IN SOLVER STEPS. `_hlag` measured the machine's response LEADING the
+// commissioned kernel by 13 samples on the shoulder and 3 on the elbow, and the phase column
+// below turns out to be a straight line in harmonic number — 5.1, 10.1, 14.8, 19.2, 23.7, 29.5
+// degrees at h1-h6, about 4.9 per harmonic. Phase error linear in frequency IS a pure time
+// delay: 5.1 degrees at h1 over an 8206-step lap is 116 steps, which is the 13 samples.
+//
+// So the "anti-phase past h8" is not a second defect, it is the same delay accumulated — 4.9
+// per harmonic reaches 90 by h18. Shifting the kernel earlier by the measured lag should
+// straighten the phase across the whole band, and that is what makes the band USABLE rather
+// than merely suppressible.
+const SHIFT = (process.env.HS_SHIFT || '0,0').split(',').map(Number);
 
 console.log(`arm K ${PG.K} / E ${PG.E}, ${SHAPE} at feed ${FEED}, uCap ${UCAP}, pulse ${DU} rad`);
 const pilot = await commissionArm({ seed: 1, train: { shape: 'rounded', feed: FEED }, uCap: UCAP });
@@ -83,11 +94,17 @@ for (let ch = 0; ch < 2; ch++) {
   const n = Math.min(base.length, pulsed.length, pilot.hs[ch].resp.length);
   const meas = [];
   for (let i = 0; i < n; i++) meas.push((pulsed[i][ch] - base[i][ch]) / DU);
-  const model = Array.from(pilot.hs[ch].resp).slice(0, n);
+  // the model, optionally advanced by the measured lag: if the machine responds SOONER than
+  // the kernel says, the kernel's samples must be read from further in
+  const sh = Math.round(SHIFT[Math.min(ch, SHIFT.length - 1)]);
+  const raw = Array.from(pilot.hs[ch].resp);
+  const model = [];
+  for (let i = 0; i < n; i++) model.push(raw[Math.min(raw.length - 1, i + sh)]);
   // the commissioned `resp` is already per unit `u`, the same normalisation the moving
   // difference carries, so the two are directly comparable without any scaling
   const M = freqOf(meas, NH, LAP), P = freqOf(model, NH, LAP);
-  console.log(`\n=== channel ${ch} — is the model true at each harmonic of the lap? ===`);
+  console.log(`\n=== channel ${ch} — is the model true at each harmonic of the lap?`
+    + `${sh ? ` (kernel advanced ${sh} steps)` : ''} ===`);
   console.log('   h   |model|     |machine|    ratio      phase err (deg)');
   for (let h = 0; h < NH; h++) {
     let d = (M[h].ph - P[h].ph) * 180 / Math.PI;
