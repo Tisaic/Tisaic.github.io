@@ -44,13 +44,27 @@ const FEEDS = (process.env.RS_FEEDS || '0.004,0.006').split(',').map(Number);
 const FEED = +(process.env.RS_FEED || 0.004);
 const UCAP = +(process.env.RS_UCAP || 0.6);
 const DEPTH = +(process.env.RS_DEPTH || 2);
-const LAGS = +(process.env.RS_LAGS || 24);
-const STRIDE = +(process.env.RS_STRIDE || 13);
+// THE WINDOW MUST REACH WHAT IT HAS TO SEE (rule 37), AND THE FIRST VERSION DID NOT.
+// 24 lags x stride 13 x sample 8 is a 2,496-step window against this arm's MEASURED memory of
+// 6,363-8,649 steps on the elbow — short by a factor of three — with a spacing of 117 solver
+// steps against a 40-step corner event, and commanded POSITIONS only: no future, no explicit
+// derivatives. It reported "the residual does not transfer" and that was a statement about the
+// instrument. A difference measured with a broken instrument is not a finding (rule 22).
+//
+// LOG-SPACED LAGS ARE HOW BOTH ENDS ARE AFFORDABLE AT ONCE. A uniform grid long enough to
+// reach 8,600 steps costs 77 lags; geometric spacing reaches the same horizon in ~16 while
+// keeping the FINE end dense enough to resolve a corner. Reach and resolution stop trading
+// against each other, which is what made the uniform grid a false choice.
+const REACH = +(process.env.RS_REACH || 9000);   // solver steps the window must reach
+const LAGS = +(process.env.RS_LAGS || 16);
+const LEADS = +(process.env.RS_LEADS || 8);      // commanded FUTURE, which a corner needs
 const RIDGE = +(process.env.RS_RIDGE || 1e-5);
 const BINS = +(process.env.RS_BINS || 256);
 
 console.log(`arm K ${PG.K} / E ${PG.E}, feed ${FEED}, uCap ${UCAP}, depth ${DEPTH}; `
   + `fit on ${FIT}, score on ${TESTS.join(', ')} and feeds ${FEEDS.join(', ')}`);
+console.log(`  window reaches ${REACH} solver steps (the elbow's measured memory is 6363-8649); `
+  + `${LAGS} log-spaced lags, ${LEADS} command leads`);
 const st = await commissionArm({ seed: 1, train: { shape: 'rounded', feed: FEED },
   uCap: UCAP, Cls: Stack, extra: { depth: DEPTH } });
 if (!st) { console.log('commissioning never terminated'); process.exit(1); }
@@ -86,15 +100,42 @@ for (const t of targets) {
 // anything, and it would have been written up as "the fit finds it easily in sample and does
 // not transfer". The pilot's own row carries the six ROUTED MEASURED signals (two encoder
 // angles, two speeds, two torques) and the COMMAND, and never the truth; this mirrors that.
+// GEOMETRIC LAG OFFSETS IN SAMPLES, from 1 to the reach. Computed once so fit and score
+// cannot disagree about where the window looks.
+const OFFS = (() => {
+  const far = Math.max(2, Math.round(REACH / 8));   // sample cadence is 8 on this cell
+  const out = [];
+  for (let l = 0; l < LAGS; l++) {
+    const v = Math.round(Math.pow(far, l / (LAGS - 1)));
+    if (!out.length || v > out[out.length - 1]) out.push(v);
+  }
+  return out;
+})();
+const LEADOFF = Array.from({ length: LEADS }, (_, i) => Math.round(Math.pow(64, i / Math.max(1, LEADS - 1))));
+
 const design = (rows, c) => {
   const X = [], y = [];
-  const need = (LAGS - 1) * STRIDE;
-  for (let i = need; i < rows.length; i++) {
+  const need = OFFS[OFFS.length - 1];
+  const maxLead = LEADOFF[LEADOFF.length - 1];
+  for (let i = need; i < rows.length - maxLead; i++) {
     const row = [1];
-    for (let l = 0; l < LAGS; l++) {
-      const s = rows[i - l * STRIDE];
+    for (const o of OFFS) {
+      const s = rows[i - o];
       for (let j = 0; j < s.m.length; j++) row.push(s.m[j]);
       row.push(s.cmd[0], s.cmd[1]);
+    }
+    // THE COMMANDED FUTURE, AND ITS DERIVATIVES. A corner is an event the machine is about to
+    // MEET; a model shown only where the command has been cannot anticipate one, and the
+    // pilot's own row carries command futures for exactly this reason. Positions plus their
+    // first and second differences, because a linear fit spans differences only across the
+    // offsets it is given and these offsets are sparse.
+    for (const o of LEADOFF) {
+      const f = rows[i + o], f1 = rows[i + Math.max(0, o - 1)], f2 = rows[i + Math.max(0, o - 2)];
+      for (let ch = 0; ch < 2; ch++) {
+        row.push(f.cmd[ch]);
+        row.push(f.cmd[ch] - f1.cmd[ch]);
+        row.push(f.cmd[ch] - 2 * f1.cmd[ch] + f2.cmd[ch]);
+      }
     }
     X.push(Float64Array.from(row)); y.push(rows[i].e[c]);
   }
@@ -132,7 +173,7 @@ for (let c = 0; c < 2; c++) {
     const b = design(t.r.rows, c);
     return r2(b.y, dot(b.X)).toFixed(4).padStart(14);
   }).join('');
-  console.log(`  state (lags ${LAGS})     ${c}   ${r2(yf, dot(Xf)).toFixed(4).padStart(8)}`
+  console.log(`  state (${a.X[0].length} feat) ${c}   ${r2(yf, dot(Xf)).toFixed(4).padStart(8)}`
     + `    ${r2(yh, dot(Xh)).toFixed(4).padStart(9)}${cols}`);
 }
 // THE MEMORY ROUTE, as the negative control. A phase-indexed mean over `BINS` bins of the
