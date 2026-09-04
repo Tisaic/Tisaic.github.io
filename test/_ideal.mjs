@@ -49,6 +49,18 @@ const LAPS = +(process.env.ID_LAPS || 24);
 const GAIN = +(process.env.ID_GAIN || 0.4);
 const SMOOTH = +(process.env.ID_SMOOTH || 9);      // zero-phase, in samples
 const S = 8;                                        // sample cadence in solver steps
+// THE UPDATE NEEDS A LEAD, AND WITHOUT ONE IT DIVERGES RATHER THAN CONVERGING SLOWLY. The plant's
+// response to a joint offset rises over ~1000 solver steps, so correcting bin i from the error at
+// bin i lands the correction more than a hundred samples late — past 90 degrees of phase above the
+// lap's second harmonic, where an ILC update AMPLIFIES instead of cancelling. Measured with no
+// lead: |u| grows linearly and the error grows with it, 7.90e-2 -> 1.56e-1 in five passes. This
+// project's own ILC says the same thing in one line — "updated between laps with a lead of one
+// position-loop time constant and a zero-phase filter".
+// AND THE LEAD IS MEASURED BY CONVERGENCE RATHER THAN ASSUMED — 40 / 90 / 140 / 200 / 280 samples
+// deliver 1.1x / 2.2x / 3.2x / 1.9x / diverges on the rounded rectangle. The optimum sits at 140
+// samples = 1120 solver steps, which is the kernel's own rise: the lead that makes the correction
+// arrive when the plant responds to it.
+const LEAD = +(process.env.ID_LEAD || 140);
 const LEADS = (process.env.ID_LEADS || '-24,-12,-6,-2,0,2,6,12,24,48').split(',').map(Number);
 
 console.log(`arm K ${PG.K} / E ${PG.E}, feed ${FEED}; ILC ${LAPS} laps, gain ${GAIN}, smooth ${SMOOTH}`);
@@ -93,10 +105,20 @@ async function ideal(path) {
   for (let it = 0; it < LAPS; it++) {
     const e = await run(path, tab, 2);
     const r = rms(e);
+    // THE ITERATION IS PRINTED, because a converged table that came back ZERO is indistinguishable
+    // from a table that never moved, and the first run of this file could not tell them apart.
+    if (process.env.ID_TRACE) {
+      let pk = 0;
+      for (let c = 0; c < 2; c++) for (const v of tab[c]) pk = Math.max(pk, Math.abs(v));
+      console.log(`    it ${String(it).padStart(2)}  rms ${r.toExponential(4)}  |u| ${pk.toExponential(3)}`);
+    }
     if (r < bestRms) { bestRms = r; best = tab.map((t) => Float64Array.from(t)); }
     for (let c = 0; c < 2; c++) {
       const upd = new Float64Array(n);
-      for (let i = 0; i < n; i++) upd[i] = tab[c][i] - GAIN * e[Math.min(i, e.length - 1)][c];
+      for (let i = 0; i < n; i++) {
+        const j = ((i + LEAD) % n + n) % n;
+        upd[i] = tab[c][i] - GAIN * e[Math.min(j, e.length - 1)][c];
+      }
       tab[c] = zero(upd, SMOOTH);
     }
   }
