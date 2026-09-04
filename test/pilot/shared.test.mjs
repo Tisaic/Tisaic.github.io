@@ -51,8 +51,18 @@ console.log('\npilot: one design matrix, many leads — the shared-covariance cl
     rec.x.push([Math.sin(k / 9), Math.cos(k / 5)]);
     rec.cmd.push([Math.sin(k / 13)]);
   }
-  const ctx = { _rec: rec, nm, nc: 1, sample: 1, Ts: 10, channels: [{ lo: -1, hi: 1 }],
-    cmdFine: null, _mLag: () => mL, _fLag: () => fL, _schedVec: Pilot.prototype._schedVec };
+  // THE CONTEXT INHERITS, AND THAT IS A FIX FOR A WHOLE CLASS RATHER THAN FOR ONE NAME.
+  // This was a bare object literal listing the helpers `_row` happened to call on the day it
+  // was written, so every helper added to `_row` since has broken it with a TypeError instead
+  // of a failed assertion — `_lagOffsets` did exactly that and the file was RED at HEAD until
+  // the failure collector surfaced it. Inheriting from the prototype means the stubs below
+  // still override the three things this test deliberately controls, while anything `_row`
+  // reaches for that this test has no opinion about resolves to the real implementation.
+  const ctx = Object.assign(Object.create(Pilot.prototype), {
+    _rec: rec, nm, nc: 1, sample: 1, Ts: 10, channels: [{ lo: -1, hi: 1 }],
+    cmdFine: null, cmdFeat: null, lagSpacing: 'uniform', cmdStride: null, cmdAccel: 0,
+    N: 1, grid: 1,
+    _mLag: () => mL, _fLag: () => fL, _schedVec: Pilot.prototype._schedVec });
   const rowAt = (L) => Pilot.prototype._row.call(ctx, 0, 200, L, 1, false, mL, fL, false);
   const a = rowAt(0), b = rowAt(7);
   let shared = 0;
