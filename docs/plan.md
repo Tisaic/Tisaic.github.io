@@ -6740,3 +6740,58 @@ scalar — 1.15 fitted to three programs would be a per-plant constant of exactl
 `_hswap` at uCap 0.6 is the confirmation that matters, and a shoulder-only ladder out to 3.0x
 says whether 1.15 is an optimum or the beginning of "make no shoulder correction at all",
 which would be a much more damning reading.
+
+### THE SHOULDER GAIN IS A LARGE, REPRODUCIBLE EFFECT WITH NO ESTABLISHED MECHANISM — AND IT MUST NOT SHIP
+
+Three mechanisms were proposed for it and the machine rejected all three.
+
+**1. AMPLITUDE COMPRESSION — falsified in direction.** The shoulder's response per unit `u`
+compresses to 0.793 by 0.6 rad, which says scale DOWN; every cell in that direction is worse,
+monotonically, and the machine's optimum is UP. (It is right about the ELBOW, which expands to
+1.151 and measures marginally better at 1.20, so the amplitude effect is real and simply not
+what dominates.)
+
+**2. HELD-PROBE UNDER-IDENTIFICATION — cap-dependent, and absent where the effect is largest.**
+At uCap 0.15 the moving response is 1.271x the held probe on the shoulder; at uCap 0.6 it is
+**1.016x**. `probeAmp` defaults to 0.15·uMax, so the held probe sits at 0.0225 rad at one cap
+and 0.09 at the other, and the earlier ratio was comparing held@0.0225 against moving@0.15 — a
+seven-fold amplitude change conflated with held-against-moving. What it actually shows is that
+the shoulder's gain per unit RISES from very small amplitudes before it compresses, which is a
+stiction signature the amplitude sweep never sampled because it started at 0.05. **Real, and
+worth acting on separately: `probeAmp` should be set from the friction curve rather than as a
+fixed fraction of the cap, and the defect is therefore worst at SMALL caps.** It does not
+explain the 1.30 optimum at uCap 0.6, where the kernel is already well identified.
+
+**3. THE MOVING KERNEL AS THE REPAIR — helps at one cap and hurts at the other.** Installing the
+measured moving kernel is +5.5% geometric mean at uCap 0.15 and **0.86x / 0.80x / 0.80x at
+uCap 0.6**, because at the raised cap it mostly moves the ELBOW to 0.865 and elbow-down was
+already measured harmful. Not a general repair.
+
+**WHAT IS LEFT IS AN EMPIRICAL FACT WITHOUT A CAUSE.** At uCap 0.6, scaling only the shoulder's
+kernel:
+
+```
+  h ch0     sharp     circle    rounded        uPk
+  1.00      3.49x      2.76x      2.87x      0.6000
+  1.15      3.92x      4.60x      4.00x      0.6000
+  1.30      3.56x      6.60x      4.49x      0.6000
+  1.50      2.94x      5.56x      3.88x      0.6000
+  1.80      2.34x      3.52x      2.90x      0.6000
+  2.20      1.93x      2.52x      2.25x      0.5160
+  3.00      1.58x      1.85x      1.74x      0.3891
+```
+
+Reproduced across three runs, with a clean peak, both-direction controls, and every program
+turning over — so it is not noise and not a runaway. It is worth up to +139% on the circle.
+
+**AND BY THIS FILE'S OWN RULES IT CANNOT SHIP.** A number fitted to three programs on one plant,
+whose mechanism is unknown, is precisely the per-plant constant rule 31 exists to forbid — and
+the fact that its optimum MOVES BY PROGRAM (1.15 on the sharp square, 1.30 on the smooth ones)
+is the signature of a fitted constant rather than a measured property.
+
+**THE METHOD LESSON IS THE USEFUL PART.** Three mechanisms proposed and three rejected, each by
+the next measurement, means the proposing is the wrong activity. What has not been done is to
+measure what scaling `h` actually CHANGES about the applied correction — its bias against its
+oscillation, its timing, how it is allocated across the horizon (rule 39, pointed at the
+correction instead of the error). An effect this large has a signature, and reading it is
+cheaper than guessing at it a fourth time.
