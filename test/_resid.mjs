@@ -33,7 +33,14 @@ import { commissionArm, deployOn, PG }
   from '/home/user/Tisaic.github.io/test/pilot/rigs/arm-rig.mjs';
 
 const FIT = process.env.RS_FIT || 'sharp';
-const TEST = process.env.RS_TEST || 'circle';
+// SEVERAL TARGETS, NOT ONE, because sharp -> circle is the biggest jump available and a total
+// failure there does not distinguish "does not transfer at all" from "transfers to nearby
+// programs and not to far ones". The second is a cascade that can deepen within a program
+// family; the first is a wall. A different FEEDRATE of the fitting program is the mildest
+// target there is — same geometry, same corners, only the speed — so if transfer fails even
+// there it is not a question of how far apart the shapes are.
+const TESTS = (process.env.RS_TESTS || 'rounded,circle').split(',');
+const FEEDS = (process.env.RS_FEEDS || '0.004,0.006').split(',').map(Number);
 const FEED = +(process.env.RS_FEED || 0.004);
 const UCAP = +(process.env.RS_UCAP || 0.6);
 const DEPTH = +(process.env.RS_DEPTH || 2);
@@ -43,7 +50,7 @@ const RIDGE = +(process.env.RS_RIDGE || 1e-5);
 const BINS = +(process.env.RS_BINS || 256);
 
 console.log(`arm K ${PG.K} / E ${PG.E}, feed ${FEED}, uCap ${UCAP}, depth ${DEPTH}; `
-  + `fit on ${FIT}, score on ${TEST}`);
+  + `fit on ${FIT}, score on ${TESTS.join(', ')} and feeds ${FEEDS.join(', ')}`);
 const st = await commissionArm({ seed: 1, train: { shape: 'rounded', feed: FEED },
   uCap: UCAP, Cls: Stack, extra: { depth: DEPTH } });
 if (!st) { console.log('commissioning never terminated'); process.exit(1); }
@@ -52,17 +59,26 @@ console.log(`deployed ${st.report.layers.filter((l) => l.deployed).length} of `
 
 // THE RESIDUAL A THIRD LAYER WOULD SEE: the tool error with the deployed cascade running,
 // recorded at the cascade's own cadence, over the last two laps so the machine is settled.
-const residual = async (shape) => {
+const residual = async (shape, feed) => {
   const trace = [];
-  const r = await deployOn(st, shape, true, FEED, { trace });
+  const r = await deployOn(st, shape, true, feed, { trace });
   const lap = Math.round((await import('/home/user/Tisaic.github.io/test/pilot/rigs/arm-rig.mjs'))
-    .mkPath(shape, FEED).lap / st.sample);
+    .mkPath(shape, feed).lap / st.sample);
   const from = Math.max(0, trace.length - 2 * lap);
   return { rows: trace.slice(from), lap, rms: r.r.totalRms };
 };
-const A = await residual(FIT), B = await residual(TEST);
-console.log(`  ${FIT}: ${A.rows.length} samples, lap ${A.lap}, totalRms ${A.rms.toExponential(4)}`);
-console.log(`  ${TEST}: ${B.rows.length} samples, lap ${B.lap}, totalRms ${B.rms.toExponential(4)}`);
+const A = await residual(FIT, FEED);
+console.log(`  fit on ${FIT} @ ${FEED}: ${A.rows.length} samples, lap ${A.lap}, `
+  + `totalRms ${A.rms.toExponential(4)}`);
+const targets = [];
+for (const f of FEEDS) {
+  if (f !== FEED) targets.push({ name: `${FIT} @ ${f}`, r: await residual(FIT, f) });
+}
+for (const t of TESTS) targets.push({ name: `${t} @ ${FEED}`, r: await residual(t, FEED) });
+for (const t of targets) {
+  console.log(`  score on ${t.name.padEnd(16)}: ${t.r.rows.length} samples, lap ${t.r.lap}, `
+    + `totalRms ${t.r.rms.toExponential(4)}`);
+}
 
 // THE STATE ROUTE, AND IT MAY ONLY USE WHAT THE MACHINE HAS AT DEPLOY. The first version of
 // this bench put the RESIDUAL itself at lagged times into the design matrix and reported an
@@ -100,19 +116,24 @@ const r2 = (y, p) => {
 //
 // AND THE COLUMN SCALING IS THE PILOT'S OWN. A flat ridge on unscaled columns re-regularises
 // the inverse, which this session has already been caught by once.
-console.log('\n  route             ch   in-sample   HELD-OUT lap   CROSS-PROGRAM');
+const hdr = targets.map((t) => t.name.padStart(14)).join('');
+console.log(`\n  route             ch   in-sample   HELD-OUT lap${hdr}`);
 const L0 = st.layers[0];
 for (let c = 0; c < 2; c++) {
-  const a = design(A.rows, c), b = design(B.rows, c);
-  // fit on the FIRST lap of the fitting program, score on its second and on the other program
+  const a = design(A.rows, c);
+  // fit on the FIRST lap of the fitting program, score on its second, then on every target
   const half = Math.floor(a.X.length / 2);
   const Xf = a.X.slice(0, half), yf = a.y.slice(0, half);
   const Xh = a.X.slice(half), yh = a.y.slice(half);
   const cs = L0._colScale ? L0._colScale(Xf[0]) : null;
   const w = solveRidge(Xf, yf, RIDGE, cs);
   const dot = (X) => X.map((r) => { let s = 0; for (let i = 0; i < w.length; i++) s += w[i] * r[i]; return s; });
+  const cols = targets.map((t) => {
+    const b = design(t.r.rows, c);
+    return r2(b.y, dot(b.X)).toFixed(4).padStart(14);
+  }).join('');
   console.log(`  state (lags ${LAGS})     ${c}   ${r2(yf, dot(Xf)).toFixed(4).padStart(8)}`
-    + `    ${r2(yh, dot(Xh)).toFixed(4).padStart(9)}      ${r2(b.y, dot(b.X)).toFixed(4).padStart(9)}`);
+    + `    ${r2(yh, dot(Xh)).toFixed(4).padStart(9)}${cols}`);
 }
 // THE MEMORY ROUTE, as the negative control. A phase-indexed mean over `BINS` bins of the
 // lap: it must score well in-sample and collapse cross-program, or this bench is not
@@ -131,7 +152,8 @@ for (let c = 0; c < 2; c++) {
   };
   // the table is built on the WHOLE fitting record, so its "held-out lap" column is the
   // second lap of that same record — which is what a memory is FOR, and it should score well
+  const cols = targets.map((t) => scoreOn(t.r).toFixed(4).padStart(14)).join('');
   console.log(`  memory (${BINS} bins)  ${c}   ${scoreOn(A).toFixed(4).padStart(8)}`
-    + `    ${scoreOn(A, A.lap).toFixed(4).padStart(9)}      ${scoreOn(B).toFixed(4).padStart(9)}`);
+    + `    ${scoreOn(A, A.lap).toFixed(4).padStart(9)}${cols}`);
 }
 console.log('EXIT 0');
