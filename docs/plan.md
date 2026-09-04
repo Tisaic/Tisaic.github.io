@@ -7959,3 +7959,41 @@ resolution problem. The dictionary is simply the cleanest demonstration of the d
 mismatch available, because the search provably works — it self-limits to 0-2 terms out of a
 thousand where the unvalidated version took 24 and was still going — and finds physically
 interpretable structure that the programs do not exercise.
+
+## THE NULLS SORT INTO THREE SHAPES, AND TWO OF THEM SHARE ONE CANDIDATE CAUSE
+
+Classifying every failure of this section by HOW it failed, rather than by what it was, is more
+informative than any individual result in it.
+
+**SHAPE 1 — "THE MODEL GOT BETTER AND THE MACHINE DID NOT." Seven times.** Log-spaced lags lifted
+the sharp square's elbow at LEAD 0 — the lead a receding horizon applies, on the channel that
+fails, on the program that fails — from held-out R^2 0.4664 to 0.5545, and delivered 3.49x ->
+3.51x. Leaky states (+0.015 held-out, nothing). The validated dictionary (+23% validation, every
+program worse). And historically `leadTrust`, the theta-grid and the forecast gate.
+
+**SHAPE 2 — "THE CORRECTION CHANGED A LOT AND THE MACHINE DID NOT." Five times.** Raising `uCap` at
+a fixed probe takes `uPk` from 0.600 to **1.000** — used in full — with the delivered score
+identical to three figures on all three programs. `leadTrust` moved `uPk` 0.397 -> 0.736 for 0.0%.
+`qpIters` changes the correction's entire frequency content and the score moves monotonically the
+WRONG way. `commitM` and the notch, the same.
+
+**SHAPE 3 — "IT HELPED HERE AND HURT THERE." Five times, and this one is understood.** `mu`, the
+probe hold, the horizon, the probe amplitude, MIMO at the longer probe. One global number cannot
+serve a corner and an arc, and the two levers that DON'T trade — depth and adaptation — are exactly
+the two that change what is modelled rather than how much it is believed.
+
+**SHAPES 1 AND 2 ARE WHAT YOU SEE IF THE REMAINING ERROR IS LARGELY OUTSIDE THE CORRECTION'S
+REACH.** Predicting an unreachable component better cannot help, and pushing harder at it cannot
+either: two symptoms, one cause. Nothing in this section has tested it, and the channel was
+measured here — `|H|` runs 0.884 to 0.0085 across h1-h9. `test/_band.mjs` splits the DELIVERED
+residual and the open-loop error by what the pilot's OWN kernel says is reachable at each harmonic,
+so the verdict is the machine's opinion rather than this file's.
+
+**AND A FOURTH PATTERN, ABOUT METHOD RATHER THAN PHYSICS: SIX INSTRUMENT FAULTS, ALL THE SAME
+FAULT.** A statistic that could not represent the thing it was deciding about — `nCross` reading a
+settled DC of a transient that reverses and returns; `report.binding` measured on the verify
+regimes while the programs saturate; `uPk`, a PEAK, read as a duty cycle; `uCap` silently moving
+`probeAmp`; an R^2 quoted without the residual's own scale, so "explains nothing" and "the target
+is unexplainable" looked identical; and an oracle comparing a joint-space residual against a
+contour-space one. Every one was caught by asking what the number could not say, and rule 27 —
+report the unflattering diagnostic first — would have caught all six earlier.
