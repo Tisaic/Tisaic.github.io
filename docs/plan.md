@@ -8288,3 +8288,73 @@ least able to falsify it.
 alone and null in composition, after the ideal-correction map (4.78x -> 1.12x) and the named
 nonlinearity in the basis (null against its own shuffled control). The best measured configuration
 is unchanged at 6.89x-6.91x.
+
+### THE PLC BUDGET: HALVING THE HORIZON IS FREE AND BETTER, AND THE REST NEEDS THE QP's EXPONENT
+
+The owner's constraint: hold the 6.89x that depth 2 + mu 0.03 + all-layer adaptation measures at
+the bench cell, and get under 10,000 MAC/cycle — 1,000 wanted. `cost()` at that configuration:
+
+```
+  QP iterations        57,584   70%     qpIters * N^2, roughly
+  forecast dots        20,768   25%     features * leads * channels
+  QP free response      3,422    4%
+  row build + interp      358   <1%
+  TOTAL                82,132          821% of budget at DEPTH 1; depth 2 is 215,239
+```
+
+`test/_plc.mjs` commissions ONE pilot and re-deploys that same model over a grid of iteration
+budgets and horizon fractions, so the only variable is the solver's work (the `qpsweep` pattern —
+a grid that re-commissioned per cell would be measuring commissioning variance, and a draw is
+worth nearly 2x on this arm). `N` is CUT, never re-fitted, and the fitted bank's length is read so
+the grid can never ask for a lead that was not fitted — that path returns NaN and passes every
+bounds test.
+
+```
+  iters  Nfrac   N/layer    sharp   circle  rounded   geo mean   MAC/cycle   % of 10k
+      4   1.00     59/78    4.14x    9.19x    5.78x     6.038x     215,239      2152%
+      4   0.75     44/59    4.11x    8.75x    5.77x     5.918x     131,834      1318%
+      4   0.50     30/39    4.43x   10.70x    6.34x     6.698x      68,020       680%
+      4   0.35     21/27    1.40x    1.12x    0.99x     1.156x      38,794       388%
+      2   0.50     30/39    3.83x    7.80x    5.13x     5.350x      47,548       475%
+      1   0.50     30/39    3.22x    5.65x    4.01x     4.178x      37,312       373%
+      1   0.25     15/20    1.38x    1.88x    1.51x     1.575x      16,259       163%
+```
+
+**HALVING THE HORIZON IS A FREE 11% AND 3.2x CHEAPER** — 6.698x at 68,020 against 6.038x at
+215,239, reproducing on the arm what `qpsweep` found on EMPS: more horizon past the optimum makes
+the machine WORSE. Below that there is a CLIFF at 0.35 where every program collapses to ~1x, and
+**no cell fits 10,000**: the best that does is 16,259 MAC delivering 1.575x. The two solver knobs
+alone cannot get there. And against EMPS, ITERATIONS MATTER HERE — 4 -> 2 -> 1 at the short horizon
+reads 6.698x -> 5.350x -> 4.178x — the same two-regularisers-on-one-inversion coupling pointing the
+other way, which is why they were swept jointly rather than one at a time.
+
+**WHAT IS LEFT IS STRUCTURAL, AND TWO OF THE THREE ITEMS ARE FREE.**
+
+1. **HOISTING THE LEAD-INVARIANT COLUMNS OUT OF THE FORECAST — exact, bit-identical output.** The
+   forecast does `nf * N` dot products per channel, but the bank shares ONE weight vector across
+   leads and the row at lead L differs from lead L-1 only in the COMMAND block: the measured block
+   is identical. `shared.test.mjs` measures precisely that and says so in its own output — "25
+   features, 13 identical and 12 lead-DEPENDENT… the arithmetic below is exact only for the 13
+   shared columns". So the shared partial sum is computed ONCE and reused for every lead. On the
+   arm the measured block plus the constant is 73 of a 121-column base, so this is about 2x on the
+   35% forecast term at no cost in what the controller computes.
+2. **MOVE BLOCKING ON THE QP — the item that changes the exponent rather than the constant.**
+   `perIter = 2*N*min(N,M) + 4N` is O(N^2) because all N moves are free variables. With `u = B v`
+   for m << N PIECEWISE-CONSTANT blocks, `T*B` is precomputed at commissioning (N x m, negligible)
+   and each iteration is O(N*m) — 5x at N=30, m=6. The box is PRESERVED rather than approximated:
+   with non-overlapping 0/1 columns a box on `u` is exactly a box on `v`, so the projection step is
+   unchanged. And the plan is already smoothness-regularised by `lambda*||Du||^2`, so a
+   low-dimensional parameterisation should lose little — which is a prediction, and the machine
+   decides it.
+3. **FEATURES AND DEPTH**, the only two that trade. The torque ablation already measured 43 of 176
+   columns at 3.3%, and depth 1 halves everything while adaptation — the one lever this session
+   found that composes rather than collapses — was worth +30% at depth 1.
+
+Stacked against today's depth-1 82,132: horizon ~27,100, hoist ~21,800, blocking ~10,000, feature
+cut ~7,800 — **78% of budget**, and most of it bought without giving anything up.
+
+**1% IS NOT REACHABLE BY THESE KNOBS AND SAYING SO IS THE POINT.** At their floor — N 16, m 4,
+20 features — the count is ~2,032 MAC, still 2x over 1,000, and by then the horizon is far past the
+cliff this sweep measured. Reaching 1% needs the forecast evaluated RECURSIVELY rather than as a
+fresh dot product per lead, which is a different deployed structure and not a knob. That is a
+statement of what would have to be built, not a refusal (rule 59).

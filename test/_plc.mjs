@@ -40,15 +40,25 @@ const SHAPES = (process.env.PL_SHAPES || 'sharp,circle,rounded').split(',');
 const ITERS = (process.env.PL_ITERS || '4,2,1').split(',').map(Number);
 const FRACS = (process.env.PL_FRACS || '1,0.75,0.5,0.35,0.25').split(',').map(Number);
 const BUDGET = 10000;
+const NM = +(process.env.PL_NM || 6);              // routed signals: 6 shipped, 4 drops the torques
+const ADAPT = process.env.PL_ADAPT === '1';        // the one lever that has composed rather than collapsed
 
 const gm = (v) => Math.exp(v.reduce((a, x) => a + Math.log(x), 0) / v.length);
 
-console.log(`arm K ${PG.K} / E ${PG.E}, feed ${FEED}, uCap ${UCAP}, mu ${MU}, depth ${DEPTH}`);
+console.log(`arm K ${PG.K} / E ${PG.E}, feed ${FEED}, uCap ${UCAP}, mu ${MU}, depth ${DEPTH}`
+  + `, nMeasured ${NM}, adapt ${ADAPT}`);
+const extra = { ...(DEPTH > 1 ? { depth: DEPTH } : {}), nMeasured: NM };
 const pilot = await commissionArm({ seed: 1, train: { shape: 'rounded', feed: FEED },
-  uCap: UCAP, Cls: DEPTH > 1 ? Stack : undefined, extra: DEPTH > 1 ? { depth: DEPTH } : null });
+  uCap: UCAP, Cls: DEPTH > 1 ? Stack : undefined, extra,
+  before: (p) => { if (p.opts) p.opts.nMeasured = NM; } });
 if (!pilot) { console.log('commissioning never terminated'); process.exit(1); }
 const layers = pilot.layers || [pilot];
 for (const p of layers) p.uWeight = MU > 0 ? new Array(p.nc).fill(MU) : null;
+// ADAPTATION ARMED THE WAY `_cascadapt2.mjs` arms it, on EVERY layer, since that is the
+// configuration the 6.89x was measured in. The weights move as the grid runs, so a cell is scored
+// on a model the previous cell adapted -- which is why this axis is a SEPARATE RUN rather than a
+// column, and why the frozen table above is the one that carries the solver comparison.
+if (ADAPT) for (const p of layers) p.online = { lambda: 0.999, bound: 128 };
 
 // THE FITTED BANK'S OWN LENGTH PER LAYER, so a cut can never ask for a lead that was not fitted.
 const N0 = layers.map((p) => p.N);
