@@ -49,7 +49,15 @@ for (const s of SHAPES) {
   // SETTLED LAPS ONLY — the last two thirds, so the start-up transient is not in the ratio.
   const from = Math.floor(n / 3);
   for (let c = 0; c < pilot.nc; c++) {
-    const h = pilot.hs[c].hGrid;
+    // `hSample`, NOT `hGrid`, AND THE FIRST VERSION OF THIS FILE GOT IT WRONG. `hGrid[m]` is the
+    // response m DECISIONS later and a decision here is `grid * sample` = 64 solver steps, while
+    // the trace records every `sample` = 8 steps — so convolving hGrid against the trace stretches
+    // the impulse by 8x in time. It left the magnitudes roughly right and destroyed the phase,
+    // which read as slopes of 0.0155 and looked exactly like "the model is uncorrelated with the
+    // machine". A units error is not a modelling limit (rule 17), and this one would have been
+    // reported as a finding if the magnitudes had not been suspiciously close.
+    // `hSample` is the same identified response at the trace's own cadence.
+    const h = pilot.hs[c].hSample;
     let sp = 0, sm = 0, sx = 0, k = 0;
     for (let i = from; i < n; i++) {
       // what the model says the applied history did at this sample: h convolved with u
