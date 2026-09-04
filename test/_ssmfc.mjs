@@ -124,12 +124,41 @@ for (const shape of SHAPES) {
       }
     }
   }
+  // THE PILOT'S OWN BANK ON THE SAME RECORDS AT THE SAME LEADS — the only comparison that is
+  // one variable. Quoting a remembered R^2 from another configuration is how a difference gets
+  // invented, and this session has already caught itself doing exactly that.
+  const accP = Array.from({ length: NC }, () => LEADS.map(() => ({ sD: 0, sY: 0, sM: 0, n: 0 })));
+  const savedRec = pilot._rec;
+  pilot._rec = { x: R.x, cmd: R.cmd, u: [], e: R.e };
+  try {
   for (let c = 0; c < NC; c++) {
-    const cols = acc[c].map((a) => {
-      const v = a.sM - a.sY * a.sY / a.n;
-      return (1 - a.sD / v).toFixed(4).padStart(11);
-    }).join('   ');
-    console.log(`  ${shape.padEnd(9)} ${c}   ${cols}`);
+    const ro = pilot.readouts[c];
+    for (let li = 0; li < LEADS.length; li++) {
+      const Lsamp = LEADS[li];
+      const wIdx = Math.min(Math.round(Lsamp / pilot.grid), ro.w.length - 1);
+      const w = ro.w[wIdx];
+      for (let i = from; i < to; i++) {
+        // the pilot's row at this lead, built through its OWN `_row` so the comparison uses
+        // the model exactly as the QP evaluates it. `_row` reads `this._rec`, so the record is
+        // swapped under it and restored in a finally — the same idiom `test/pilot/forecast.mjs`
+        // uses to score the commissioned bank on an open-loop run.
+        let row;
+        try { row = pilot._row(c, i, Lsamp, ro.stride, ro.poly, ro.mLag, ro.fLag, ro.sched); }
+        catch { row = null; }
+        if (!row || row.length !== w.length) continue;
+        let p2 = 0; for (let t = 0; t < w.length; t++) p2 += w[t] * row[t];
+        const y = tgt[c][Math.min(i + Lsamp, tgt[c].length - 1)];
+        const a = accP[c][li];
+        a.sD += (y - p2) ** 2; a.sY += y; a.sM += y * y; a.n++;
+      }
+    }
+  }
+  } finally { pilot._rec = savedRec; }
+  for (let c = 0; c < NC; c++) {
+    const fmt = (A2) => A2.map((a) => (a.n ? (1 - a.sD / (a.sM - a.sY * a.sY / a.n)).toFixed(4)
+      : '     n/a').padStart(11)).join('   ');
+    console.log(`  ${shape.padEnd(9)} ${c}   ${fmt(acc[c])}   propagated`);
+    console.log(`  ${' '.repeat(9)} ${c}   ${fmt(accP[c])}   pilot's own bank`);
   }
 }
 console.log('EXIT 0');
