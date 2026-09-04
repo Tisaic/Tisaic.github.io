@@ -92,13 +92,27 @@ const r2 = (y, p) => {
   return 1 - sD / sMM;
 };
 
-console.log('\n  route          ch   in-sample R2    CROSS-PROGRAM R2');
+// THREE RUNGS, NOT TWO, because in-sample and cross-program cannot tell OVERFIT from
+// PROGRAM-SPECIFIC and those need opposite work. 192 features on ~1750 rows will fit anything
+// in sample; the held-out lap of the SAME program says whether there is a model there at all,
+// and only then does the cross-program column mean "it does not transfer" rather than "there
+// was never anything to transfer".
+//
+// AND THE COLUMN SCALING IS THE PILOT'S OWN. A flat ridge on unscaled columns re-regularises
+// the inverse, which this session has already been caught by once.
+console.log('\n  route             ch   in-sample   HELD-OUT lap   CROSS-PROGRAM');
+const L0 = st.layers[0];
 for (let c = 0; c < 2; c++) {
   const a = design(A.rows, c), b = design(B.rows, c);
-  const w = solveRidge(a.X, a.y, RIDGE, null);
+  // fit on the FIRST lap of the fitting program, score on its second and on the other program
+  const half = Math.floor(a.X.length / 2);
+  const Xf = a.X.slice(0, half), yf = a.y.slice(0, half);
+  const Xh = a.X.slice(half), yh = a.y.slice(half);
+  const cs = L0._colScale ? L0._colScale(Xf[0]) : null;
+  const w = solveRidge(Xf, yf, RIDGE, cs);
   const dot = (X) => X.map((r) => { let s = 0; for (let i = 0; i < w.length; i++) s += w[i] * r[i]; return s; });
-  console.log(`  state (lags ${LAGS})  ${c}   ${r2(a.y, dot(a.X)).toFixed(4).padStart(8)}`
-    + `        ${r2(b.y, dot(b.X)).toFixed(4).padStart(8)}`);
+  console.log(`  state (lags ${LAGS})     ${c}   ${r2(yf, dot(Xf)).toFixed(4).padStart(8)}`
+    + `    ${r2(yh, dot(Xh)).toFixed(4).padStart(9)}      ${r2(b.y, dot(b.X)).toFixed(4).padStart(9)}`);
 }
 // THE MEMORY ROUTE, as the negative control. A phase-indexed mean over `BINS` bins of the
 // lap: it must score well in-sample and collapse cross-program, or this bench is not
@@ -107,12 +121,17 @@ for (let c = 0; c < 2; c++) {
   const tab = new Float64Array(BINS), cnt = new Float64Array(BINS);
   A.rows.forEach((s, i) => { const b = Math.floor(((i % A.lap) / A.lap) * BINS) % BINS; tab[b] += s.e[c]; cnt[b]++; });
   for (let b = 0; b < BINS; b++) if (cnt[b]) tab[b] /= cnt[b];
-  const scoreOn = (R) => {
-    const y = R.rows.map((s) => s.e[c]);
-    const p = R.rows.map((s, i) => tab[Math.floor(((i % R.lap) / R.lap) * BINS) % BINS]);
+  const scoreOn = (R, from = 0) => {
+    const y = [], p = [];
+    for (let i = from; i < R.rows.length; i++) {
+      y.push(R.rows[i].e[c]);
+      p.push(tab[Math.floor(((i % R.lap) / R.lap) * BINS) % BINS]);
+    }
     return r2(y, p);
   };
-  console.log(`  memory (${BINS} bins) ${c}   ${scoreOn(A).toFixed(4).padStart(8)}`
-    + `        ${scoreOn(B).toFixed(4).padStart(8)}`);
+  // the table is built on the WHOLE fitting record, so its "held-out lap" column is the
+  // second lap of that same record — which is what a memory is FOR, and it should score well
+  console.log(`  memory (${BINS} bins)  ${c}   ${scoreOn(A).toFixed(4).padStart(8)}`
+    + `    ${scoreOn(A, A.lap).toFixed(4).padStart(9)}      ${scoreOn(B).toFixed(4).padStart(9)}`);
 }
 console.log('EXIT 0');
