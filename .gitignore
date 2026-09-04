@@ -4,3 +4,9 @@ test/screenshots/
 test/package-lock.json
 # Throwaway analysis/capture scripts (dev tooling, not shipped).
 scratchpad/
+# Agent git worktrees. The Agent tool creates a full repo checkout per background
+# agent here and removes it when the agent finishes, so these are transient copies
+# of the repository itself — tens of megabytes of duplicate, and committing them
+# would nest the repo inside itself. Scoped to `worktrees/` rather than `.claude/`
+# so genuine tracked content there (skills, settings) is still possible.
+.claude/worktrees/
