@@ -33,9 +33,15 @@ const NFRAC = +(process.env.BC_NFRAC || 0.5);
 const BLOCKS = +(process.env.BC_BLOCKS || 6);
 const SHAPES = ['sharp', 'circle', 'rounded'];
 const MODES = (process.env.BC_MODES || 'auto,linear').split(',');
+// THE PER-CHANNEL PLANT GAIN, which `_hgainauto.mjs` measured the pilot can pick for itself from
+// programs it designs — 3.482x -> 5.042x at depth 1 with every held-out program improving, and at
+// no cost in arithmetic or commissioning. It belongs in this table because the budget question is
+// what the machine delivers PER MAC, and a lever that is free on both axes changes that ratio
+// without appearing in either cost column.
+const HG = (process.env.BC_HGAIN || '1,1').split(',').map(Number);
 
 const gm = (v) => Math.exp(v.reduce((a, x) => a + Math.log(x), 0) / v.length);
-console.log(`arm K ${PG.K} / E ${PG.E}, depth ${DEPTH}, Nfrac ${NFRAC}, blocks ${BLOCKS}, mu ${MU}`);
+console.log(`arm K ${PG.K} / E ${PG.E}, depth ${DEPTH}, Nfrac ${NFRAC}, blocks ${BLOCKS}, mu ${MU}, hGain ${HG.join('/')}`);
 let open = null;
 console.log('\n  basis     features        sharp     circle    rounded   geo mean'
   + '    forecast      RLS 2n^2     deployed MAC');
@@ -55,6 +61,12 @@ for (const mode of MODES) {
     p.qpBlocks = BLOCKS > 0 ? BLOCKS : null;
     p.N = Math.max(2, Math.round(p.N * NFRAC));
   }
+  // Applied AFTER commissioning and before scoring, so the identified model is untouched and the
+  // only thing that changes is how much the QP believes each move does.
+  for (const p of layers) p.hs.forEach((h, ci) => {
+    const g = HG[ci] ?? 1;
+    if (g !== 1) for (let i = 0; i < h.hGrid.length; i++) h.hGrid[i] *= g;
+  });
   if (!open) {
     open = {};
     for (const s of SHAPES) open[s] = (await deployOn(pilot, s, false, FEED)).r.totalRms;
