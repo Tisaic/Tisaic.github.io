@@ -6964,3 +6964,48 @@ worse ON THE SCORE at other configurations, and every one of those readings was 
 the knob did to the CORRECTION — rule 39's blindness, applied to the input rather than the
 error. That is the fault the comparison against ⑩'s `du` exposed, and it is the reason this
 sweep reports the spectrum.
+
+### `qpIters` IS THE BAND LIMIT — AND CLOSING IT MAKES THE MACHINE WORSE
+
+`lambda` eliminated, the second regulariser on the same inversion swept at the selected lambda,
+with the shoulder correction's share above the fourth lap harmonic beside the score:
+
+```
+  qpIters    sharp                       circle                      rounded
+      1      3.56x u0.198 h5+0.297       2.94x u0.144 h5+0.000       2.99x u0.185 h5+0.197
+      4      3.48x u0.246 h5+0.542       2.76x u0.146 h5+0.002       2.87x u0.213 h5+0.401
+     16      3.40x u0.304 h5+0.694       2.78x u0.147 h5+0.013       2.90x u0.270 h5+0.616
+     60      3.32x u0.316 h5+0.715       2.70x u0.152 h5+0.073       2.80x u0.295 h5+0.698
+    240      3.29x u0.317 h5+0.721       2.69x u0.158 h5+0.220       2.71x u0.318 h5+0.764
+```
+
+**THE KNOB IS CONFIRMED AND ITS VALUE IS DENIED IN THE SAME TABLE.** Iterations restore the high
+band monotonically — 0.297 to 0.721 on the sharp square, 0.000 to 0.220 on the circle, a
+hundredfold — so a truncated solve IS what band-limits this correction, exactly as "the
+converged solve rings and the truncated one does not" implies. And the score falls
+monotonically as it does: 3.56 to 3.29, 2.94 to 2.69, 2.99 to 2.71. **One iteration is the best
+row on all three programs and 240 is the worst.**
+
+**SO THE PILOT'S HIGH-FREQUENCY CONTENT IS HARMFUL WHERE ⑩'s IS PART OF A 44x CORRECTION.** The
+spectral gap the ⑩ comparison found is real and it is NOT the cause of ⑩'s advantage: closing
+it by the only knob that closes it makes the machine worse. More iterations produce more of the
+WRONG high-frequency content.
+
+**AND THAT HAS ONE EXPLANATION CONSISTENT WITH EVERYTHING ELSE MEASURED.** Inverting a plant is
+a high-pass operation, so a converged solve amplifies the plant model's error most exactly
+where that error is largest. The QP cannot safely use the band because `h` is not accurate
+enough in it; ⑩ can, because it simulates a fitted nonlinear twin forward rather than inverting
+one LTI kernel. This is the same ceiling `_hcheck` measured as R^2 0.94/0.77 — now with a
+FREQUENCY attached to it rather than a single number.
+
+**WHICH TURNS "`h` IS THE CEILING" INTO SOMETHING MEASURABLE.** The specific claim is that `h`'s
+accuracy falls with frequency and that caps the correction's usable bandwidth. It is testable
+directly from the moving-probe data already collected: compare the measured moving response's
+spectrum against the commissioned kernel's, harmonic by harmonic. A model whose error grows
+with frequency predicts exactly this table.
+
+**AND IT SETTLES A SHIPPED DEFAULT IN PASSING.** `qpIters` ships at 4 and 1 is better on all
+three programs here — 3.56 against 3.48, 2.94 against 2.76, 2.99 against 2.87 — at a quarter of
+the QP's arithmetic. That is consistent with this file's own EMPS and arm sweeps, which found
+one and two iterations beating sixty, and it is one more reason the six-plant pass is what has
+to decide the default rather than any single plant.
