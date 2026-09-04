@@ -64,9 +64,12 @@ const A = await residual(FIT), B = await residual(TEST);
 console.log(`  ${FIT}: ${A.rows.length} samples, lap ${A.lap}, totalRms ${A.rms.toExponential(4)}`);
 console.log(`  ${TEST}: ${B.rows.length} samples, lap ${B.lap}, totalRms ${B.rms.toExponential(4)}`);
 
-// THE STATE ROUTE. Lagged measured signals — the same shape the pilot's row carries — with
-// the readout's own ridge and column scaling, because substituting my own re-regularises the
-// inverse and this project has measured that confound once already.
+// THE STATE ROUTE, AND IT MAY ONLY USE WHAT THE MACHINE HAS AT DEPLOY. The first version of
+// this bench put the RESIDUAL itself at lagged times into the design matrix and reported an
+// in-sample R^2 of 0.997 — which was the residual autocorrelating with itself, not a model of
+// anything, and it would have been written up as "the fit finds it easily in sample and does
+// not transfer". The pilot's own row carries the six ROUTED MEASURED signals (two encoder
+// angles, two speeds, two torques) and the COMMAND, and never the truth; this mirrors that.
 const design = (rows, c) => {
   const X = [], y = [];
   const need = (LAGS - 1) * STRIDE;
@@ -74,7 +77,8 @@ const design = (rows, c) => {
     const row = [1];
     for (let l = 0; l < LAGS; l++) {
       const s = rows[i - l * STRIDE];
-      row.push(s.u[0], s.u[1], s.e[0], s.e[1]);
+      for (let j = 0; j < s.m.length; j++) row.push(s.m[j]);
+      row.push(s.cmd[0], s.cmd[1]);
     }
     X.push(Float64Array.from(row)); y.push(rows[i].e[c]);
   }

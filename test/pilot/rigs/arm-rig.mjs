@@ -238,7 +238,12 @@ async function deployOn(pilot, shape, active, feed = 0.004,
     // at. `h` is the only part of the QP's plant model that is not the forecast, and this is
     // the signal that can check it: an open-loop record says what the error would have been,
     // so `e - eFree` is what `u` actually did and `h * u` is what the model said it would do.
-    if (trace && k % S === 0) trace.push({ u: [u[0], u[1]], e: rs.truth.slice() });
+    // THE MEASURED SIGNALS TOO, because they are what a model may legally use at deploy and
+    // the truth is not. A harness that fits on `e` is fitting the residual to itself.
+    if (trace && k % S === 0) {
+      trace.push({ u: [u[0], u[1]], e: rs.truth.slice(), m: rs.measured.slice(),
+        cmd: [q1, q2] });
+    }
     pilot.observe(rs.measured, k < truthUntil ? rs.truth : null);
     if (k >= scoreFrom) {
       const dec = decompose(path, a2.toolXY(), cmd);
