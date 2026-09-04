@@ -8255,3 +8255,36 @@ environment to its children, so the gate runs unmodified at 100 and at 1. And ru
 MEASURED score admits penalty 3 (4.628x) and 1 (4.713x) but not 10, so choosing inside the band is
 a separate decision from establishing the effect. Whether it composes with depth 2 and all-layer
 adaptation — which stand at 6.04x and 6.89x — is running beside it.
+
+### AND THE SIX-PLANT GATE REFUSED IT — the 41% is an arm-at-the-soft-cell result and not a default
+
+Run unmodified at `PILOT_RICH_PENALTY` 100 and 1, reference configuration 4:1.5:
+
+```
+  plant       penalty 100              penalty 1
+  tanks       1.00x  pass  refused     1.00x  EXIT 1  refused     <- REGRESSION
+  thermal     1.00x  pass  refused     1.00x  pass    refused     (EXIT 1 at 2:1.2 and 1:1.2)
+  woodberry  43.90 IAE  pass          43.90 IAE  pass             identical
+  rollmill    0.61x  pass              0.61x  pass                identical
+  emps       0.0393 mm 14.7x pass     0.0393 mm 14.7x pass        identical
+  arm      2.173e-2 rms 6.18x pass   2.173e-2 rms 6.18x pass      IDENTICAL
+```
+
+**Four plants are byte-identical and one breaks.** The three that do not move never selected a
+rich block at all, so the knob is inert on them — a clean negative control that says the
+measurement is real rather than noise. The tank does select curvature, and there the looser prior
+costs it its contract.
+
+**AND THE ARM'S OWN TEST DOES NOT MOVE EITHER**, at 6.18x to four figures. So the +41% belongs to
+ONE plant at ONE cell — the softest arm settings on the corner program, which is the bench the
+owner's standing rule fixed precisely because it cannot flatter. That is a legitimate result about
+that cell and it is not a default (rule 31), and the gate is what separated the two. Its own header
+said why: a change measured only on the plants that already win has been measured on the plants
+least able to falsify it.
+
+**WHAT IT COSTS TO SAY THIS PROPERLY.** Composed with depth 2 the gain was already almost gone —
+6.04x -> 6.34x frozen and 6.89x -> 6.91x adapting, and the sharp square goes BACKWARDS there
+(4.14x -> 3.99x) while the circle gains. So this is the third lever this session measured large
+alone and null in composition, after the ideal-correction map (4.78x -> 1.12x) and the named
+nonlinearity in the basis (null against its own shuffled control). The best measured configuration
+is unchanged at 6.89x-6.91x.
