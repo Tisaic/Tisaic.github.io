@@ -7575,3 +7575,51 @@ cells it should not touch coming back where they were is the shape of a real rep
 is derived from the stride the tune already measured. `lagSpacing` defaults to 'uniform', so every
 plant on record is byte-identical, and one generator serves the fit row and the runtime row
 because two lag tables are two tables that can drift (rules 30, 61).
+
+### THE SHARP SQUARE IS AT ITS CAP, AND THAT INVALIDATES THIS SECTION'S WHOLE READING
+
+**THE MEASUREMENT THAT SETTLES IT.** Log-spaced lags lift the sharp square's elbow at LEAD 0 from
+held-out R^2 0.4664 to 0.5545 — the single binding forecast number in the system, on the channel
+that fails, on the program that fails, at the lead a receding horizon actually applies. On the
+machine:
+
+```
+  lag spacing            sharp           circle          rounded     geo mean
+  uniform        3.49x u0.600     2.76x u0.332     2.87x u0.600         3.03
+  log            3.51x u0.600     2.75x u0.331     2.86x u0.600         3.02
+```
+
+**+0.6% ON THE SHARP SQUARE AND NOTHING ANYWHERE ELSE.** Every previous null of this shape was
+about MID and FAR leads and was explained by "a receding horizon only applies lead 0". This one is
+AT lead 0, and it means the explanation was never the right one: **this machine is not
+forecast-bound**, and the claim above that "the pilot is AT its forecast bound, exactly as EMPS
+was" is falsified on the arm.
+
+**AND THE ANSWER WAS IN THE COLUMN BESIDE EVERY SCORE IN EVERY TABLE HERE.** `uPk` reads 0.600
+against a `uCap` of 0.600 on the sharp square and the rounded rectangle, in every row of every
+sweep today. Those two programs are AUTHORITY-bound. That is why every knob that makes the QP ask
+for LESS — `mu`, the longer probe, the longer horizon — helps the CIRCLE, the one program not at
+its cap, and HURTS the square:
+
+```
+  shipped              3.49x  2.76x  2.87x   gm 3.03
+  rises25 hTs3 mu0.10  2.93x  6.44x  3.65x   gm 4.10    circle x2.3, square 16% WORSE
+```
+
+A geometric mean that improves while the hardest program regresses is a trade, not a gain, and
+quoting it alone is the fault this file exists to prevent.
+
+**THIS PROJECT ALREADY KNEW.** `report.binding` was built to state exactly this — "time-at-cap
+during the verify: authority -> raise uMax with adaptation armed; model -> banks/adaptation" — and
+the ⑥ arc recorded "the SOFT corner is AUTHORITY-bound where the stiff was model-bound: at cap 0.5
+the sharp square reads 4.75x, and static control MISUSES the extra authority on the circle
+(5.91x -> 4.57x) while gated adaptation reclaims it (6.32x)". The bench cell chosen for this
+session — the softest sliders on the sharp-corner program, which is the owner's standing rule
+precisely because it cannot flatter — is the cell where that finding applies, and it was not
+read. **Read the unflattering diagnostic FIRST (rule 27); it was printed all along.**
+
+**WHAT SURVIVES OF THE ARC.** The plant findings stand on their own evidence and are unaffected:
+the linear pose-dependent cross reversal, the statistic that could not see it, the one-octave
+window, the three excitation sizing rules, and the five nulls. What does NOT survive is the frame
+they were pursued under — that improving the model would move this machine — because on the two
+programs that matter here the model is not what binds.
