@@ -65,7 +65,22 @@ const open = {};
 for (const s of SHAPES) open[s] = (await deployOn(pilot, s, false, FEED)).r.totalRms;
 console.log('  open loop:  ' + SHAPES.map((s) => `${s} ${open[s].toExponential(3)}`).join('  '));
 
+// THE BASELINE IS MEASURED, NEVER ASSUMED TO BE IN THE GRID. The first version of this file set
+// `base` only when the sweep happened to visit (1.00, 1.00), so a grid starting anywhere else left
+// it empty and the "all three up" column read `no` on every row — a verdict that looked like a
+// finding and was an empty comparison. That column is the whole point of this file, so it gets its
+// own run at the identified plant before the sweep starts (rule 25: "not measured" and "no" are
+// different states, and only one of them is an answer).
 const base = {};
+{
+  layers.forEach((p, li) => p.hs.forEach((h, ci) => h.hGrid.set(h0[li][ci])));
+  for (const s of SHAPES) {
+    const d = await deployOn(pilot, s, true, FEED);
+    base[s] = open[s] / d.r.totalRms;
+  }
+  console.log('  identified plant (1.00, 1.00): '
+    + SHAPES.map((s) => `${s} ${base[s].toFixed(2)}x`).join('  '));
+}
 console.log('\n   g0    g1        sharp     circle    rounded   geo mean   all three up?');
 const rows = [];
 for (const a of G0) {
@@ -80,7 +95,6 @@ for (const a of G0) {
       xs.push(open[s] / d.r.totalRms);
       cols.push(`${(open[s] / d.r.totalRms).toFixed(2)}x`.padStart(11));
     }
-    if (a === 1 && b === 1) SHAPES.forEach((s, i) => { base[s] = xs[i]; });
     // THE TEST THE OWNER SET: not a better MEAN, better on EVERY program. A geometric mean can
     // rise while a program goes backwards, and that is the thing this must not do.
     const allUp = Object.keys(base).length === SHAPES.length
