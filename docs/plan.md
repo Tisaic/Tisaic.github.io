@@ -6927,3 +6927,40 @@ somewhere else — the decision grid, or the horizon.
 **3. AND ⑩ USES THREE TIMES THE AUTHORITY** on the sharp square: peak 1.800 rad against the
 pilot's 0.600, which is its cap. On the circle both sit near 0.33 and the cap is not binding, so
 the authority gap is specific to the aggressive program.
+
+### LAMBDA IS A ONE-WAY LEVER, WHICH ELIMINATES IT RATHER THAN LEAVING IT OPEN
+
+The effort weight swept across four decades at uCap 0.6, with the shoulder correction's share
+of energy above the fourth lap harmonic reported beside the score:
+
+```
+  lambda x    sharp                       circle                      rounded
+    0.001     3.48x u0.262 h5+0.572       2.76x u0.146 h5+0.002       2.88x u0.217 h5+0.419
+    0.01      3.48x u0.262 h5+0.572       2.76x u0.146 h5+0.002       2.87x u0.217 h5+0.419
+    0.1       3.47x u0.260 h5+0.568       2.76x u0.146 h5+0.002       2.87x u0.217 h5+0.417
+    1         3.47x u0.246 h5+0.541       2.76x u0.146 h5+0.002       2.87x u0.213 h5+0.401
+    10        3.48x u0.209 h5+0.404       2.76x u0.146 h5+0.001       2.85x u0.193 h5+0.294
+```
+
+**RAISING IT SUPPRESSES THE HIGH BAND AND LOWERING IT RESTORES NOTHING.** 0.541 -> 0.404 going
+up, 0.541 -> 0.572 going down a thousandfold. A `||D u||^2` penalty can only ever take fast
+content away, and the measurement says there is almost none there to release: something
+upstream has already removed it before `lambda` acts. The circle sits at 0.002 throughout,
+completely insensitive.
+
+That is an elimination rather than an ambiguous null, and it also confirms the readout itself —
+the baseline row reads sharp 0.541 and circle 0.002 against `_ducmp`'s independently written
+0.545 and 0.002, so two separately coded spectral instruments agree before either is acted on.
+
+**WHAT IT REDIRECTS AT IS ALREADY IN THIS FILE.** `qpIters` is the second regulariser on the
+same inversion, and the symptom is recorded here in its own words: *"the converged solve RINGS
+and the truncated one does not."* Ringing IS high-frequency content. Inverting a compliant
+plant is inherently high-pass, a truncated gradient method converges the LOW frequencies first,
+and the pilot runs FOUR iterations — so the band a corner needs is exactly what a short solve
+has not reached yet.
+
+**AND IT REFRAMES TWO EARLIER NULLS WITHOUT CONTRADICTING THEM.** `qpIters` measured neutral or
+worse ON THE SCORE at other configurations, and every one of those readings was blind to what
+the knob did to the CORRECTION — rule 39's blindness, applied to the input rather than the
+error. That is the fault the comparison against ⑩'s `du` exposed, and it is the reason this
+sweep reports the spectrum.
