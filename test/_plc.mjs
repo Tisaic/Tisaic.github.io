@@ -40,6 +40,7 @@ const SHAPES = (process.env.PL_SHAPES || 'sharp,circle,rounded').split(',');
 const ITERS = (process.env.PL_ITERS || '4,2,1').split(',').map(Number);
 const FRACS = (process.env.PL_FRACS || '1,0.75,0.5,0.35,0.25').split(',').map(Number);
 const BUDGET = 10000;
+const BLOCKS = (process.env.PL_BLOCKS || '0').split(',').map(Number);
 const NM = +(process.env.PL_NM || 6);              // routed signals: 6 shipped, 4 drops the torques
 const ADAPT = process.env.PL_ADAPT === '1';        // the one lever that has composed rather than collapsed
 
@@ -86,6 +87,8 @@ console.log('\n  iters  Nfrac    N per layer' + SHAPES.map((s) => s.padStart(10)
   + '   geo mean    MAC/cycle   % of 10k');
 for (const it of ITERS) {
   for (const fr of FRACS) {
+   for (const nb of BLOCKS) {
+    layers.forEach((p) => { p.qpBlocks = nb > 0 ? nb : null; });
     const Ns = layers.map((p, i) => Math.max(2, Math.min(NMAX[i], Math.round(N0[i] * fr))));
     layers.forEach((p, i) => { p.qpIters = it; p.N = Ns[i]; });
     const xs = [], cols = [];
@@ -97,12 +100,13 @@ for (const it of ITERS) {
       const x = open[s] / r;
       xs.push(x); cols.push(`${x.toFixed(2)}x`.padStart(10));
     }
-    if (bad) { console.log(`  ${String(it).padStart(5)}  ${fr.toFixed(2)}    NON-FINITE — skipped`); continue; }
+    if (bad) { console.log(`  ${String(it).padStart(5)}  ${fr.toFixed(2)}  blk ${nb || '-'}  NON-FINITE — skipped`); continue; }
     const mac = macOf(), g = gm(xs);
-    rows.push({ it, fr, Ns, g, mac });
+    rows.push({ it, fr, Ns, g, mac, nb });
     console.log(`  ${String(it).padStart(5)}  ${fr.toFixed(2)}   ${Ns.join('/').padStart(8)}`
       + `${cols.join('')}   ${g.toFixed(3).padStart(8)}x  ${String(mac).padStart(10)}`
-      + `  ${(100 * mac / BUDGET).toFixed(0).padStart(7)}%`);
+      + `  ${(100 * mac / BUDGET).toFixed(0).padStart(7)}%   blk ${nb || '-'}`);
+   }
   }
 }
 // restore, so nothing downstream inherits a swept value
@@ -114,7 +118,7 @@ if (rows.length) {
   const pick = band[0];
   console.log(`\n  best delivered ${best.g.toFixed(3)}x at ${best.it} iters, N ${best.Ns.join('/')}`
     + `, ${best.mac} MAC/cycle`);
-  console.log(`  RULE 42 — cheapest within 5% of it: ${pick.g.toFixed(3)}x at ${pick.it} iters,`
+  console.log(`  RULE 42 — cheapest within 5% of it: ${pick.g.toFixed(3)}x at ${pick.it} iters, blk ${pick.nb || '-'},`
     + ` N ${pick.Ns.join('/')}, ${pick.mac} MAC/cycle = ${(100 * pick.mac / BUDGET).toFixed(0)}%`
     + ` of the 10% budget`);
   const under = rows.filter((r) => r.mac <= BUDGET).sort((a, b) => b.g - a.g)[0];
