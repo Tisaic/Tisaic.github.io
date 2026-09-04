@@ -7472,3 +7472,40 @@ rather than a hope:
    horizon (3776 steps) only just covers. If the horizon still does nothing with a cross model in
    hand, that is the fifth independent measurement that the far leads do not matter — and if it
    does, the earlier reading was right about the machine and wrong about the reason.
+
+### Sizing an excitation: three rules tried, and the first two are not identification experiments
+
+The pose-gridded multisine has now failed three ways, and each failure named the next rule.
+
+```
+  sizing rule                     drive saturated   in-sample R^2   target rms   residual
+  matched to the scribble's rms         8.0%            0.185           —           —
+  as large as the drive will pass       0.0%            0.026        1.63e+0     1.61e+0
+  band capped at 16 strides             0.0%            0.008        6.92e-1     6.81e-1
+  (the scribble, for reference)          —              0.995        1.22e-1     8.24e-3
+```
+
+**FIRST, A PROBE AGAINST A SATURATION.** The scribble's command rms is mostly its slow traverse of
+the position box, so a multisine carrying the same rms puts vastly more of it at the top of the
+band, where torque goes as amplitude times frequency squared. The drive clipped 8% of the time and
+a clipped record is not linear — in-sample R^2 0.185, unable to fit its own data.
+
+**SECOND, AS LARGE AS THE DRIVE WILL PASS — CLEAN, AND WORSE.** The residual column is what makes
+it readable, and adding it was the whole repair (rule 17): an R^2 near zero has two explanations
+that are identical in the ratio, and only the residual against the target's own scale separates
+them. The target rms is **1.63 against the scribble's 0.122** — thirteen times the error — and
+essentially none of it is explained. Not saturated, not aliased: 0.33 rad rms of command deviation
+on programs that span 0.93 rad in total throws the arm far outside its small-signal regime, and
+the record is dominated by nonlinearity — backlash crossed repeatedly, large deflections, friction
+reversing. **"As much as the drive allows" is not a linear identification experiment.**
+
+**THIRD, THE PROGRAM IS THE SPECIFICATION**, which is rule 41b's own stated fix — "an excitation
+that SPANS the box and also carries the program's own acceleration and jerk" — and `peakDiffs`,
+the instrument that finding was made with, is what measures it. The multisine is now scaled so its
+peak per-sample velocity and acceleration match the programs' own, with the drive check kept as a
+guard rather than as the rule.
+
+**AND THE MIDDLE FAILURE IS WORTH KEEPING WHATEVER THE THIRD MEASURES.** It is the cleanest
+statement this project has of why the excitation cannot simply be made bigger: past the
+small-signal regime, extra amplitude buys nonlinearity the linear fit cannot use and cannot
+represent, so the record gets harder rather than richer. The scribble is not weak by oversight.

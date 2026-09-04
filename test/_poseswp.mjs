@@ -40,6 +40,7 @@
 // covers what the programs visit, the coverage reading is wrong, and the forecast bound is where
 // it is for a reason neither more data nor more capacity will move.
 import { solveRidge } from '/home/user/Tisaic.github.io/lib/pilot/pilot.js';
+import { peakDiffs } from '/home/user/Tisaic.github.io/lib/pilot/excite.js';
 import { PG, makeArm, mkPath, homeArm, routeSignals, commissionArm, recordOpenLoop }
   from '/home/user/Tisaic.github.io/test/pilot/rigs/arm-rig.mjs';
 
@@ -113,17 +114,51 @@ console.log(`  ${design.length} lines, periods ${Math.round(PER / design[0].h)} 
   + `${Math.round(PER / design[design.length - 1].h)} steps; amplitudes `
   + `${design[0].A.toExponential(2)} down to ${design[design.length - 1].A.toExponential(2)} rad`);
 
-// THE GAIN IS MEASURED ON THE MACHINE, NOT MATCHED TO THE SCRIBBLE'S RMS. The first version
-// scaled the multisine to the commissioning record's command-deviation rms and SATURATED the
-// shoulder drive 8% of the time (peak demand 0.0070 against a tauMax of 0.0032) — and the fit
-// then read in-sample R^2 0.185, unable to fit its own record, because a clipped record is not
-// linear. The error was in the matching rule: the scribble's rms is mostly its slow traverse of
-// the position box, so a multisine carrying the same rms puts vastly more of it at the top of
-// the band, where torque goes as amplitude times frequency squared.
+// THE GAIN IS SIZED TO THE PROGRAM'S OWN MOTION, WHICH IS THE THIRD RULE TRIED AND THE FIRST
+// THAT IS NOT ARBITRARY. Two failed first:
 //
-// A probe against a saturation is a probe against the saturation (the harmonic rung paid for
-// that lesson twice). So the gain is chosen the way every other constant here is: by asking the
-// machine. Halve until the drive passes it, and report what was used.
+//   MATCHED TO THE SCRIBBLE'S COMMAND RMS — saturated the shoulder drive 8% of the time (peak
+//   demand 0.0070 against a tauMax of 0.0032) and read in-sample R^2 0.185, unable to fit its own
+//   record, because a clipped record is not linear. The scribble's rms is mostly its slow
+//   traverse of the position box, so a multisine carrying the same rms puts vastly more of it at
+//   the top of the band, where torque goes as amplitude times frequency squared.
+//
+//   AS LARGE AS THE DRIVE WILL PASS — clean of saturation, and WORSE: in-sample R^2 0.026 with a
+//   target rms of 1.63 against the scribble's 0.122. Thirteen times the error, essentially none
+//   of it explained. Not saturated and not aliased: 0.33 rad rms of command deviation, on
+//   programs that span 0.93 rad in total, throws the arm far outside the small-signal regime and
+//   the record is dominated by nonlinearity — backlash crossed repeatedly, large deflections,
+//   friction reversing. "As much as the drive allows" is not a linear identification experiment.
+//
+// THE PROGRAM IS THE SPECIFICATION (rule 34: commission in the configuration it will RUN in, and
+// rule 41b, whose stated fix is exactly this — "an excitation that SPANS the box and also carries
+// the program's own acceleration and jerk"). `peakDiffs` is the instrument that finding was made
+// with, and it is used here as intended: measure the programs' own peak per-sample velocity and
+// acceleration, and scale the multisine so ITS peaks match. The drive check is kept as a guard
+// rather than as the rule, because a sizing that saturates is wrong whatever produced it.
+const progPk = { v: 0, a: 0 };
+{
+  const { arm: pa } = await makeArm();
+  for (const sh of SHAPES) {
+    const pth = mkPath(sh, FEED);
+    for (let c = 0; c < 2; c++) {
+      const q = [];
+      for (let k = 0; k < Math.round(pth.lap); k++) {
+        const pt = pth.at(k); q.push(pa.ik(pt.x, pt.y, true)[c]);
+      }
+      const d = peakDiffs(q);
+      progPk.v = Math.max(progPk.v, d.v); progPk.a = Math.max(progPk.a, d.a);
+    }
+  }
+  await pa.l1.destroy(); await pa.l2.destroy();
+}
+let sweepV = 0, sweepA = 0;
+for (const d of design) { sweepV += d.A * d.w; sweepA += d.A * d.w * d.w; }
+let GAIN = Math.min(progPk.v / Math.max(1e-30, sweepV), progPk.a / Math.max(1e-30, sweepA));
+console.log(`  the programs peak at v ${progPk.v.toExponential(3)} a ${progPk.a.toExponential(3)} `
+  + `rad/step; the raw multisine peaks at v ${sweepV.toExponential(3)} a ${sweepA.toExponential(3)}`
+  + ` -> gain ${GAIN.toExponential(3)}`);
+
 async function satAt(gain, pose) {
   const { arm, servo } = await makeArm();
   homeArm(arm, servo, mkPath('rounded', FEED));
@@ -135,7 +170,7 @@ async function satAt(gain, pose) {
     const tau = servo.torques([{ theta: q[0], omega: 0, alpha: 0 }, { theta: q[1], omega: 0, alpha: 0 }]);
     arm.step(tau[0], tau[1], 1);
   }
-  const before = servo.limitStats().map((s) => s.saturated);
+  const before = servo.limitStats().map((st) => st.saturated);
   const n = Math.min(PER, 12000);
   for (let k = 0; k < n; k++) {
     const q = [pose[0], pose[1]], v = [0, 0], a = [0, 0];
@@ -157,7 +192,6 @@ async function satAt(gain, pose) {
   for (let i = 0; i < st.length; i++) worst = Math.max(worst, (st[i].saturated - before[i]) / n);
   return worst;
 }
-let GAIN = 1;
 for (let tryN = 0; tryN < 12; tryN++) {
   const f = await satAt(GAIN, poses[0]);
   console.log(`  gain ${GAIN.toExponential(2)}: drive saturated ${(100 * f).toFixed(2)}% of steps`);
