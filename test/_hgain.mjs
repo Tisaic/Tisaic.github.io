@@ -41,7 +41,15 @@ const UCAP = +(process.env.HG_UCAP || 0.6);
 // a 0.6 rad joint offset is a large pose change, and the tool error's sensitivity to each
 // joint genuinely shifts with pose as one lever shortens and the other lengthens. A single
 // scalar would split the difference and measure neither (rule 31, per channel).
-const PAIRS = (process.env.HG_PAIRS || '1:1,0.90:1.07,0.79:1.15,0.70:1.25,1.15:0.79')
+// DECOMPOSED AND SWEPT, because the first pass found its BEST cell at the inverted control —
+// ch0 up, ch1 down, +56% on the circle — which is the direction opposite to the amplitude
+// compression that motivated the sweep. A single winning cell of five is a coincidence until
+// two things are separated: WHICH CHANNEL carries it (single-channel rows), and whether the
+// optimum is SMOOTH or a spike (a finer ladder through it). A re-weighting that only ever
+// reduces the shoulder's correction would also be explained by "less shoulder is better",
+// which is a different claim and has a different fix.
+const PAIRS = (process.env.HG_PAIRS
+  || '1:1,1.15:1,1:0.79,1.15:0.79,1.30:0.79,1.15:0.65,1.30:0.65,1.50:0.50,0.85:1,1:1.20')
   .split(',').map((p2) => p2.split(':').map(Number));
 
 console.log(`arm K ${PG.K} / E ${PG.E}, feed ${FEED}, uCap ${UCAP}; `
