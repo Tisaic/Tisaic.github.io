@@ -1,112 +1,85 @@
-// PUT THE GAIN COMPRESSION TO THE MACHINE — the mechanism explains three things and that is
-// exactly why it has to be deployed rather than believed (rule 16).
+// THE QP's PLANT GAIN AT DEPTH 1 — one scalar per channel, no extra training, no extra arithmetic.
 //
-// WHAT WAS MEASURED. `h` is identified from a probe at 0.0225 rad and inverted by the QP at
-// corrections up to 0.15 shipped and 0.60 at the raised cap — 27x the identification
-// amplitude, on a plant with Stribeck friction and backlash. Differencing two runs of the
-// deterministic plant around a `du` step during motion, at a ladder of amplitudes, the
-// response per unit `u` COMPRESSES monotonically and the shape does not move:
+// WHY THIS AND NOT ANOTHER LAYER. Depth 2 delivers 6.667x against depth 1's 3.486x, and it costs
+// TWICE: a second full commissioning (settle, probe, excite, fit, verify) and a second deployed
+// forecast and QP. A single layer that closes part of that gap pays on both, which is the whole
+// reason to look here first.
 //
-//   du 0.05 -> 1.0000    du 0.15 -> 0.9692    du 0.30 -> 0.9176    du 0.60 -> 0.7932
-//   shape corr 1.0000                0.9987              0.9914              0.9532
+// WHAT THE EVIDENCE SAYS THE SECOND LAYER IS DOING. `_oraclecascade.mjs` measured that a PERFECT
+// forecast, iterated, reaches 6.58x / 12.11x / 16.43x — within noise of what depth 1 and depth 2
+// deliver on this cell. So the cascade is largely ITERATION of the inversion rather than new
+// information: layer 2 corrects what layer 1's single truncated, box-constrained solve left.
 //
-// WHAT IT EXPLAINS. Given a 1.20 rad cap and a PERFECT forecast the QP stops at uPk 0.4785 of
-// its own accord and delivery saturates at 3.65x. It is not declining to act: it applies the
-// `u` its small-signal model says cancels `f0`, and then stops because that model says it is
-// finished — while the machine returns only ~79% of the response at that amplitude. It also
-// explains why DEPTH pays where a bigger cap alone does not: layer 2 sees exactly the residual
-// the compression left, so the cascade has been compensating iteratively for what an
-// amplitude-correct `h` would fix in one shot.
+// AND THERE IS A DIRECT MEASUREMENT OF WHY ONE PASS UNDER-DELIVERS. `boxQP`'s own comment records
+// that scaling one channel's `h` by 1.30 — "a lie about the plant that makes the QP request less"
+// — is worth up to +139% on this arm, while raising `lambda` 32x moves the score under 1%. The
+// QP inverts `h`; if `h` is wrong the inversion is wrong by the same factor, and no amount of
+// solver effort fixes a mis-scaled plant (rule 43: a better optimiser on a wrong model buys
+// nothing).
 //
-// THE FIX RUNS THE WRONG WAY ROUND, WHICH IS WHY IT IS WORTH STATING. Scaling `h` DOWN to the
-// true large-signal gain makes the QP believe each unit of `u` buys LESS, so it asks for MORE
-// correction to cancel the same `f0`. A model that under-states its own authority is what
-// makes a solver use the authority it has.
+// SO THIS SWEEPS THE ONE NUMBER, PER CHANNEL, ON THE MACHINE. `hGrid` is what the QP convolves;
+// scaling it scales the predicted effect of a move, so a factor above 1 makes the solver believe
+// each move does more and ask for less. One commissioned model, re-deployed at every factor, so
+// the only variable is the gain (the `qpsweep` pattern).
 //
-// SWEPT RATHER THAN SET, because the right scale depends on the amplitude the QP actually
-// runs at and that is a property of the program and the cap, not a constant (rule 31). The
-// scale is applied through the pilot's own `_buildH` so the triangle registration is the
-// shipped one, and every value is scored on three programs the model never saw.
-import { commissionArm, deployOn, PG } from '/home/user/Tisaic.github.io/test/pilot/rigs/arm-rig.mjs';
+// WHAT WOULD KILL IT: a flat curve, or a peak at 1.00. Then the identification is already right,
+// the cascade's gain is not a gain error, and the second layer is carrying information a single
+// layer cannot have — in which case depth 2 is the honest price of the performance and the budget
+// question is a product decision rather than an engineering one.
+//
+// AND IT IS SCORED ON THREE PROGRAMS, because a scalar tuned on one is a per-program constant
+// wearing a plant-model costume (rule 31). A factor that helps the square and hurts the circle is
+// a trade, not a repair, and the table has to be able to show that.
+import { commissionArm, deployOn, PG } from './pilot/rigs/arm-rig.mjs';
+import { Stack } from '../lib/pilot/stack.js';
 
-const SHAPES = (process.env.HG_SHAPES || 'sharp,circle,rounded').split(',');
-const FEED = +(process.env.HG_FEED || 0.004);
-// AT THE RAISED CAP BY DEFAULT, because that is where the amplitudes the compression was
-// measured at actually occur: at uCap 0.15 the two factors are 0.969 and 1.035 — three percent
-// — and at 0.6 they are 0.793 and 1.151.
-const UCAP = +(process.env.HG_UCAP || 0.6);
-// PER CHANNEL, AND THE TWO GO OPPOSITE WAYS. The shoulder's response per unit `u` COMPRESSES
-// to 0.793 by 0.6 rad while the elbow's EXPANDS to 1.151, both monotone and both
-// shape-preserving (corr 0.95+). That is a kinematic signature rather than a frictional one —
-// a 0.6 rad joint offset is a large pose change, and the tool error's sensitivity to each
-// joint genuinely shifts with pose as one lever shortens and the other lengthens. A single
-// scalar would split the difference and measure neither (rule 31, per channel).
-// DECOMPOSED AND SWEPT, because the first pass found its BEST cell at the inverted control —
-// ch0 up, ch1 down, +56% on the circle — which is the direction opposite to the amplitude
-// compression that motivated the sweep. A single winning cell of five is a coincidence until
-// two things are separated: WHICH CHANNEL carries it (single-channel rows), and whether the
-// optimum is SMOOTH or a spike (a finer ladder through it). A re-weighting that only ever
-// reduces the shoulder's correction would also be explained by "less shoulder is better",
-// which is a different claim and has a different fix.
-const PAIRS = (process.env.HG_PAIRS
-  || '1:1,1.15:1,1:0.79,1.15:0.79,1.30:0.79,1.15:0.65,1.30:0.65,1.50:0.50,0.85:1,1:1.20')
-  .split(',').map((p2) => p2.split(':').map(Number));
+const FEED = 0.004, UCAP = 0.6;
+const MU = process.env.HG_MU !== undefined ? +process.env.HG_MU : 0.03;
+const DEPTH = +(process.env.HG_DEPTH || 1);
+const NFRAC = +(process.env.HG_NFRAC || 0.75);
+const GAINS = (process.env.HG_GAINS || '0.7,0.85,1.0,1.15,1.3,1.5,1.8,2.2').split(',').map(Number);
+const SHAPES = ['sharp', 'circle', 'rounded'];
 
-console.log(`arm K ${PG.K} / E ${PG.E}, feed ${FEED}, uCap ${UCAP}; `
-  + `per-channel h scales ${PAIRS.map((p2) => p2.join(':')).join(', ')}`);
-const pilot = await commissionArm({ seed: 1, train: { shape: 'rounded', feed: FEED }, uCap: UCAP });
+const gm = (v) => Math.exp(v.reduce((a, x) => a + Math.log(x), 0) / v.length);
+const pilot = await commissionArm({ seed: 1, train: { shape: 'rounded', feed: FEED },
+  uCap: UCAP, Cls: DEPTH > 1 ? Stack : undefined, extra: DEPTH > 1 ? { depth: DEPTH } : null });
 if (!pilot) { console.log('commissioning never terminated'); process.exit(1); }
-console.log(`probe amplitude ${pilot.probeAmp}, uMax ${pilot.uMax} `
-  + `(${(pilot.uMax / pilot.probeAmp).toFixed(1)}x the amplitude h was identified at)`);
+const layers = pilot.layers || [pilot];
+for (const p of layers) {
+  p.uWeight = MU > 0 ? new Array(p.nc).fill(MU) : null;
+  p.N = Math.max(2, Math.round(p.N * NFRAC));
+}
+// THE ORIGINAL IMPULSE, KEPT, so every factor is applied to the SAME identified plant rather than
+// compounding onto the previous row's scaling — which would make the sweep a random walk.
+const h0 = layers.map((p) => p.hs.map((h) => Float64Array.from(h.hGrid)));
 
-const saved = pilot.hs.map((h) => ({ resp: h.resp.slice ? h.resp.slice() : Array.from(h.resp), dc: h.dc }));
+console.log(`arm K ${PG.K} / E ${PG.E}, depth ${DEPTH}, Nfrac ${NFRAC}, mu ${MU}`);
 const open = {};
-const traceFor = {};
-const openRep = {};
-for (const shape of SHAPES) {
-  const r0 = await deployOn(pilot, shape, false, FEED);
-  open[shape] = r0.r.totalRms; openRep[shape] = r0.r;
-  console.log(`  open ${shape.padEnd(8)} total ${r0.r.totalRms.toExponential(3)} `
-    + `bias ${r0.r.contourBias.toExponential(2)} osc ${r0.r.contourOsc.toExponential(2)}`);
-}
-
-console.log('\n  h ch0:ch1 ' + SHAPES.map((s) => s.padStart(20)).join('') + '        uPk');
-for (const gs of PAIRS) {
-  // SCALE THE RESPONSE, REBUILD THROUGH THE PILOT'S OWN PATH. `h.resp` is the recorded step
-  // response per unit `u`; scaling it is exactly "the machine returns g times as much per unit
-  // of correction as the small-signal probe said".
-  for (let c = 0; c < pilot.hs.length; c++) {
-    const g = gs[Math.min(c, gs.length - 1)];
-    pilot.hs[c].resp = saved[c].resp.map((v) => v * g);
-    pilot.hs[c].dc = saved[c].dc * g;
+for (const s of SHAPES) open[s] = (await deployOn(pilot, s, false, FEED)).r.totalRms;
+console.log('  open loop:  ' + SHAPES.map((s) => `${s} ${open[s].toExponential(3)}`).join('  '));
+console.log('\n   h gain        sharp     circle    rounded   geo mean      u peak');
+const rows = [];
+for (const g of GAINS) {
+  layers.forEach((p, li) => p.hs.forEach((h, ci) => {
+    const src = h0[li][ci];
+    for (let i = 0; i < h.hGrid.length; i++) h.hGrid[i] = src[i] * g;
+  }));
+  const xs = [], cols = [];
+  let uPk = 0;
+  for (const s of SHAPES) {
+    const d = await deployOn(pilot, s, true, FEED);
+    xs.push(open[s] / d.r.totalRms);
+    cols.push(`${(open[s] / d.r.totalRms).toFixed(2)}x`.padStart(11));
+    uPk = Math.max(uPk, d.uPk);
   }
-  pilot._buildH();
-  const cols = [];
-  let pk = 0;
-  for (const shape of SHAPES) {
-    // RULE 39, POINTED AT THE CORRECTION INSTEAD OF THE ERROR. Three mechanisms were proposed
-    // for this effect and the machine rejected all three, which means proposing is the wrong
-    // activity: what has never been read is what scaling `h` CHANGES. Bias and oscillation have
-    // different causes and different fixes — a scaled kernel that removes BIAS is a gain
-    // calibration, one that removes OSCILLATION is the QP being detuned into smoothness, and
-    // one RMS number hides which. `uRms` beside them says whether the correction got bigger,
-    // smaller or merely differently shaped.
-    const r = await deployOn(pilot, shape, true, FEED, { trace: (traceFor[shape] = []) });
-    pk = Math.max(pk, r.uPk);
-    const tr = traceFor[shape];
-    let s2 = 0, d2 = 0;
-    for (let i = 1; i < tr.length; i++) {
-      s2 += tr[i].u[0] * tr[i].u[0] + tr[i].u[1] * tr[i].u[1];
-      d2 += (tr[i].u[0] - tr[i - 1].u[0]) ** 2 + (tr[i].u[1] - tr[i - 1].u[1]) ** 2;
-    }
-    const uRms = Math.sqrt(s2 / Math.max(1, tr.length - 1));
-    const uRate = Math.sqrt(d2 / Math.max(1, tr.length - 1));
-    cols.push(`${(open[shape] / r.r.totalRms).toFixed(2).padStart(5)}x b${r.r.contourBias.toExponential(1)}`
-      + ` o${r.r.contourOsc.toExponential(1)} u${uRms.toFixed(3)} r${uRate.toExponential(1)}`);
-  }
-  console.log(`  ${gs.map((v) => v.toFixed(2)).join(':').padStart(9)} ${cols.join('  ')}     ${pk.toFixed(4)}`);
+  rows.push({ g, v: gm(xs) });
+  console.log(`  ${g.toFixed(2).padStart(6)}   ${cols.join('')}${gm(xs).toFixed(3).padStart(11)}x`
+    + `${uPk.toFixed(3).padStart(12)}`);
 }
-// restored, so anything measured after this bench is the commissioned kernel again
-for (let c = 0; c < pilot.hs.length; c++) { pilot.hs[c].resp = saved[c].resp; pilot.hs[c].dc = saved[c].dc; }
-pilot._buildH();
+// restore, so nothing downstream inherits a scaled plant
+layers.forEach((p, li) => p.hs.forEach((h, ci) => h.hGrid.set(h0[li][ci])));
+const best = rows.reduce((a, b) => (b.v > a.v ? b : a));
+const at1 = rows.find((r) => Math.abs(r.g - 1) < 1e-9);
+console.log(`\n  best ${best.v.toFixed(3)}x at gain ${best.g}`
+  + (at1 ? `, against ${at1.v.toFixed(3)}x at the identified plant — ${(best.v / at1.v).toFixed(2)}x` : ''));
 console.log('EXIT 0');
