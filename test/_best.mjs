@@ -30,6 +30,7 @@ console.log(`arm K ${PG.K} / E ${PG.E}, feed ${FEED}, uCap ${UCAP}`);
 const gm = (v) => Math.exp(v.reduce((a, x) => a + Math.log(x), 0) / v.length);
 let open = null;
 
+const ONLY = (process.env.BS_ROWS || '').split(',').filter(Boolean);
 const rows = [
   { name: 'shipped        ', depth: 1, rises: 10, hTs: 1.5, iters: null },
   { name: 'rises25 hTs3   ', depth: 1, rises: 25, hTs: 3.0, iters: null },
@@ -38,7 +39,7 @@ const rows = [
   { name: 'depth2 r25 h3 q1', depth: 2, rises: 25, hTs: 3.0, iters: 1 },
 ];
 
-for (const r of rows) {
+for (const r of rows.filter((r) => !ONLY.length || ONLY.some((o) => r.name.trim().startsWith(o)))) {
   const extra = r.depth > 1 ? { depth: r.depth } : null;
   const pilot = await commissionArm({ seed: 1, train: { shape: 'rounded', feed: FEED },
     uCap: UCAP, Cls: r.depth > 1 ? Stack : undefined, extra,

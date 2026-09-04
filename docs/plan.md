@@ -7704,3 +7704,59 @@ mean and regresses the square, which is the trade every trust knob makes and is 
 against depth2's 5.27-6.04, and puts the square back on its cap. They were compensations for
 over-trusting a single-layer forecast; a second layer removes what they were compensating for, and
 applying both over-corrects in the same direction twice.
+
+### `uCap` WAS NEVER MEASURING AUTHORITY — one knob, two things, for the second time today
+
+`test/_authamp.mjs` holds the cap and the identification amplitude apart, because `uCap` sets
+`uMax` and `probeAmp` defaults to `0.15*uMax`:
+
+```
+   cap   probe            sharp           circle          rounded     geo mean   basis chosen
+  0.60   0.054     2.65x u0.536     3.55x u0.348     2.91x u0.477       3.01     lin/quad
+  0.60   0.090     3.50x u0.600     2.76x u0.332     2.87x u0.600       3.03     quad/quad
+  0.60   0.180     3.12x u0.555     3.76x u0.348     3.24x u0.485       3.36     lin+sched/quad
+  1.00   0.054     2.65x u0.536     3.55x u0.348     2.91x u0.477       3.01     lin/quad
+```
+
+**THE FIRST AND LAST ROWS ARE BYTE-IDENTICAL.** With the probe held fixed, raising the cap from
+0.6 to 1.0 changes nothing — `uPk` is 0.536 and the cap never binds. So the whole `_cap` sweep
+above was measuring the PROBE AMPLITUDE and the authority half of it was inert. The authority
+question is not merely answered, it was never being asked.
+
+**AND THE PROBE AMPLITUDE CHOOSES THE MODEL CLASS, WHICH NOBODY KNEW.** Doubling it to 0.180 is
+worth **+11% geometric mean**, and the basis the selector picks moves with it: the shoulder reads
+LINEAR at 0.054, QUADRATIC at 0.090 and LINEAR+SCHEDULED at 0.180. `probeAmp = 0.15*uMax` is
+another constant nobody re-derived (rule 31), and it is deciding what kind of model gets fitted.
+
+**THE RECORD IS ALSO WRONG ABOUT THIS ARM.** This file says "the mill, the EMPS axis and BOTH arm
+channels stay linear". At the soft cell both channels select QUAD at the shipped probe. That
+statement was made at the stiff K 1 / E 0.06 cell, where the compliance is small enough to hide
+the curvature — the basis selection is CELL-dependent, and the claim needs its cell attached.
+
+**AND `mu` IS A SOFT-CELL INSTRUMENT.** At K 1 / E 0.06 the shipped pilot reads geometric mean
+4.52 and `mu` 0.03 reads 4.51 — nothing, against +27% at K 0.25 / E 0.03. It compensates for model
+error, and model error scales with compliance.
+
+### The rich cross-lag dictionary, and why the first attempt was not a test of it
+
+`test/_dict.mjs` offers 1095 candidates built on the DELAY EMBEDDING rather than the newest sample
+— products across lags, the `x[k-2]^2 * y[k]` cubic form, sin, cos, tanh, `|x|` and `x|x|` — all on
+standardised inputs (rule 32), with the shipped basis always kept as the base.
+
+**SELECTED GREEDILY ON THE TRAINING RESIDUAL IT OVERFITS IMMEDIATELY**, which is the failure the
+owner named in advance:
+
+```
+  channel 1, lead 0        in-sample    rounded   circle    sharp
+   0  (shipped basis)        0.9306     0.6195   0.6197   0.4102
+   5  m2[-4]*m5[-1]          0.9680     0.5262   0.4922   0.1877
+  24  m0[-8]*m2[-8]          0.9827     0.2910   0.1211  -0.1500
+```
+
+In-sample climbs at every step and held-out collapses from the first term. **But that is a
+measurement of GREEDY-ON-TRAINING, not of the idea**: impact was scored on the same rows the model
+is fitted to, and with a thousand candidates that memorises noise by construction. Pruning by
+impact requires the impact to be judged on rows the SELECTION has not seen. The corrected bench
+proposes terms on the fit rows, DECIDES on a held-back third of the commissioning record, and
+stops when no candidate improves it — leaving the three programs a true held-out set that the
+stopping rule never consults.
