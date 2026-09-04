@@ -7800,3 +7800,61 @@ implicitly regime-adaptive where a global knob cannot be.
 this arm — is a known-achievable correction through the shipped actuator. Any model-based route
 can be scored against it directly, and "how close did we get to what is provably there" is a
 better question than "how close did we get to 44x", which was never the same measurement.
+
+### THE VALIDATED DICTIONARY WORKS, FINDS REAL PHYSICS, AND STILL DOES NOT TRANSFER
+
+With terms PROPOSED on the fit rows and DECIDED on a held-back third of the commissioning record —
+the programs never consulted by the selection — the search self-limits instead of running away:
+
+```
+  channel 0                     validation  in-sample   rounded  circle   sharp
+    0  (shipped basis)             0.9908     0.9950    0.9909   0.9942  0.9583
+    1  -- nothing in 1095 candidates improves validation; 0 terms kept
+
+  channel 1
+    0  (shipped basis)             0.6231     0.9306    0.6195   0.6197  0.4102
+    1  m4[-1]*m4[-8]               0.7444     0.9600    0.6098   0.6102  0.3574
+    2  m4[-4]*m4[-4]               0.7698     0.9632    0.6472   0.6160  0.3130
+    3  -- nothing improves validation; 2 terms kept
+```
+
+**THE METHOD IS SOUND AND THE TERMS ARE INTERPRETABLE.** Zero terms on the shoulder and two on the
+elbow, out of 1095 — the greedy-on-training version took 24 and was still going. Both survivors are
+products of the SHOULDER TORQUE with itself at different lags, and deflection goes as torque, so a
+quadratic in lagged torque is a NONLINEAR COMPLIANCE term: real physics, cross-lag, and exactly the
+object the shipped newest-sample block cannot express. Validation improves 23%.
+
+**AND IT DOES NOT TRANSFER.** On the programs the rounded rectangle improves (0.6195 -> 0.6472),
+the circle is flat, and the sharp square falls 0.4102 -> 0.3130.
+
+**WHICH IS THE SAME FAILURE AS EVERYTHING ELSE IN THIS SECTION, AND NAMING IT IS THE RESULT.** The
+commissioning scribble and the programs are DIFFERENT DISTRIBUTIONS. Structure genuinely present in
+one need not be present in the other, so a selection validated on the record — however honestly —
+is validated on the wrong population. Five excitation designs failed for this reason; the
+pose-gridded multisine failed for it; `mu`, the probe hold and the horizon all trade the corner
+against the arcs for it. The dictionary is the cleanest instance because the method is provably
+working: it found real physics, on the record it was given, and the record is not the machine's
+working life.
+
+**SO THE BINDING PROBLEM IS NOT THE BASIS, THE SOLVER, THE ACTUATOR OR THE SEARCH. IT IS THAT
+COMMISSIONING SEES A DIFFERENT MACHINE FROM THE ONE THAT RUNS.** Everything measured today is
+consistent with that single statement, and it is what the next work has to attack.
+
+### AND AUTHORITY IS DEFINITIVELY NOT A LEVER
+
+```
+   cap   probe            sharp           circle          rounded     geo mean
+  0.60   0.090     3.50x u0.600     2.76x u0.332     2.87x u0.600         3.03
+  1.00   0.090     3.49x u1.000     2.76x u0.332     2.87x u0.614         3.02
+```
+
+At a fixed identification amplitude, raising the cap lets the correction peak go **0.600 to 1.000**
+— it is used, in full — and the delivered score is identical to three figures on all three
+programs. The machine takes the extra authority and does nothing with it. Combined with the
+byte-identical row at probe 0.054, the authority question is closed: `uCap` was only ever moving
+`probeAmp`, and `report.binding`'s verdict of `model` was right from the first row.
+
+`test/_floor.mjs` is retired rather than fixed: it reads circle predicted 11.6x / delivered 1.66x
+and rounded predicted 1.4x / delivered 1.83x, which is not a bound in either direction. The
+question it was built for is answered on the record instead — the harmonic feedforward reaches 242x
+through the same channel — and that is a measurement, not a model inverse.
