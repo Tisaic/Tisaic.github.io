@@ -6795,3 +6795,35 @@ measure what scaling `h` actually CHANGES about the applied correction — its b
 oscillation, its timing, how it is allocated across the horizon (rule 39, pointed at the
 correction instead of the error). An effect this large has a signature, and reading it is
 cheaper than guessing at it a fourth time.
+
+### AND IT DOES NOT COMPOSE WITH DEPTH — IT OVERLAPS (`test/_movedepth.mjs`)
+
+```
+                          sharp    circle   rounded
+  depth 1, commissioned    3.49x    2.76x    2.87x
+  depth 1, moving-probe h  2.64x    1.92x    1.97x
+  depth 1, shoulder x1.30  3.56x    6.60x    4.49x
+  depth 2, commissioned    4.09x    6.81x    5.25x
+  depth 2, moving-probe h  3.53x    4.15x    3.40x
+  depth 2, shoulder x1.30  3.20x    7.07x    4.68x
+```
+
+**Depth 2 with the tuned scale is WORSE than depth 2 alone on two programs of three.** The two
+mechanisms are not additive: the cascade's second layer already removes what the shoulder
+scaling removes, and doing both over-corrects. Two names for one deficit — the outcome this
+bench was built to catch, because this project has read an overlap as a sum before.
+
+**AND THAT IS THE MECHANISM, ARRIVED AT FROM THE OTHER SIDE.** After three hypotheses the
+machine has said what the shoulder scale is compensating: whatever LAYER 2 models. That is a
+lead for DERIVING the constant rather than fitting it — layer 2's own correction collapsed to a
+scalar — which is the difference between a per-plant constant rule 31 forbids and a measured
+property.
+
+**AND ONE PRACTICAL STATEMENT SURVIVES.** At depth 1 the tuned scale reads 3.56x / 6.60x /
+4.49x for ONE commissioning against depth 2's 4.09x / 6.81x / 5.25x for TWO — about 90% of the
+benefit at half the commissioning cost, which is target 4's currency. It cannot ship as a
+fitted number, but "one layer plus a derived scalar" is a cheaper shape than "two layers" if
+the scalar can be got honestly.
+
+**THE MOVING KERNEL IS DEAD AT BOTH DEPTHS** (2.64/1.92/1.97 and 3.53/4.15/3.40, worse than
+commissioned everywhere), which closes that route rather than leaving it open.
