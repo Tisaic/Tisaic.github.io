@@ -7275,3 +7275,93 @@ high band is not invisible-but-useful, it is absent, and every knob that suppres
 `mu`, fewer QP iterations, a larger claimed kernel gain, a larger `lambda` — was doing the same
 one thing: refusing to invert a plant where it has no gain. That is textbook Tikhonov, and it is
 why `mu` is the principled member of the family rather than a lucky one.
+
+### The horizon is not the lever, and that is the attribution `_hlen` could not make
+
+`test/_horizon.mjs` commissions at each `(probeRises, horizonTs)` pair — `horizonTs` has to be set
+BEFORE commissioning, because the forecast bank is fitted to N leads and reading past it returns
+NaN, which passes every bounds check:
+
+```
+  rises   hTs   resp        N   reach            sharp           circle          rounded
+     10   1.5  1800/3000   59    3776     3.49x u0.600     2.76x u0.332     2.87x u0.600
+     10   2.0  1800/3000   78    4992     2.20x u0.600     2.53x u0.391     2.14x u0.523
+     25   1.5  4400/3200   70    5040     3.20x u0.546     4.04x u0.342     3.41x u0.480
+```
+
+**THE SECOND AND THIRD ROWS REACH ALMOST EXACTLY THE SAME DISTANCE AHEAD — 4992 against 5040
+SOLVER STEPS — AND SCORE NOTHING ALIKE.** The short kernel at the long reach is the worst row in
+the table; the long kernel at the shipped reach is the best. So `_hlen`'s 1.17x was the KERNEL,
+and lengthening the look-ahead on its own makes the machine worse on all three programs.
+
+**WHICH KILLS THE PREVIEW THESIS A SECOND AND INDEPENDENT TIME.** `_nmp` said the correction path
+has no reverse response, so there is no right-half-plane zero to need non-causal inversion; this
+says that even given the extra look-ahead, the solver has no use for it. Four measurements now
+agree that this machine is not limited by what its solver can see ahead — `leadTrust`, the theta-grid,
+the phase table, and now the horizon itself.
+
+**AND IT PUTS THE WHOLE REMAINING QUESTION ON THE MODEL.** The arm's elbow forecast reads held-out
+R^2 ~0.90, which bounds delivery at 1/sqrt(1 - 0.90) ~ 3x, and the pilot delivers 2.9-3.5x. It is
+AT its forecast bound, exactly as EMPS was measured to be — so there is no controller-side knob
+left, which is what every one of them coming back null has been saying.
+
+### Held energy is a state the forecast cannot see, and that is the same finding twice
+
+The owner's reading — "the held energy in the arm is still relevant to making a high frequency
+corner with an arm that doesn't want to move the tip that way naturally" — and plan section 41's
+measurement are the same statement in two languages. The six routed signals are MOTOR-side:
+encoder angles, motor speeds, motor torques. Link deflection is never measured, so stored elastic
+energy can only be reconstructed from lagged history — and that history is 6363-8649 solver steps
+against a window that reaches 2496. **The arm holds energy the model cannot see, and the reason it
+cannot see it is that the memory outlives the window.**
+
+That also decides the SHAPE of the basis, which the statistical reading alone does not. Stored
+energy in a lightly damped mode is OSCILLATORY: a leaky integrator carries how much history there
+is but not what phase it is in, and a RESONATOR carries both in two numbers. `test/_leaky.mjs`
+offers all three — the pilot's own taps, a leaky bank, and a resonator bank — refitted by one
+ridge on one record and scored held-out on three programs, so only the block differs.
+
+### The cross channels are not minimum-phase, and the pilot has no cross term at all
+
+`_nmp` measured the DIAGONAL and read a null. That was half the question (rule 9): an arm's joints
+react against each other, and a two-link arm's version of a cart-and-pendulum has to live in the
+COUPLING, which the diagonal cannot see. Re-run with both outputs recorded per pulsed channel, at
+0.3 rad and four phases:
+
+```
+  ch->out  phase   du     DC          reverse peak    as %DC     peak at
+  0->0        0    +    9.251e-1      -3.736e-8       -0.0%        6
+  0->1        0    +    1.503e-1      -1.972e-1     -131.2%     1066
+  0->1        0    -   -4.220e-1       2.530e-3       -0.6%      220
+  0->1     4103    +    8.730e-2      -1.253e-1     -143.5%      671
+  1->0        0    +   -3.557e-2       1.013e-1     -284.9%      856
+  1->0     4103    -    1.540e-1      -7.330e-2      -47.6%     2994
+  1->1     4103    +    1.013e+0       0.000e+0        0.0%        0
+```
+
+**EVERY DIAGONAL IS CLEAN AND EVERY CROSS TERM HAS A LARGE, SLOW REVERSE EXCURSION** — up to 285%
+of where it ends up, peaking between 671 and 2994 solver steps after the step. And the pilot has
+no model of it whatsoever: `boxQP` is called PER CHANNEL, on `this.hs[c].hGrid`, so this arm is
+inverted as two independent SISO plants and the largest wrong-way dynamic in the machine is
+outside the model.
+
+**TWO THINGS IN THAT TABLE ARE NOT WHAT A LINEAR RESPONSE LOOKS LIKE, AND THEY ARE BEING CHECKED
+BEFORE ANYTHING IS BUILT ON IT.** The normalised response `(pulsed - base)/du` flips SIGN between
++du and -du (0->1 at phase 0 reads +0.150 and -0.422), and the reverse peak appears for one sign
+only — both consistent with a LARGE-SIGNAL effect rather than a zero: 0.3 rad held for 4000 steps
+is half a lap driven off a sharp-corner path, so the two runs can simply meet a corner
+differently, and backlash is crossed in one direction and not the other. A linear response is
+invariant in `du`; the amplitude sweep is the instrument check, and the invariance is the finding
+rather than the percentage.
+
+### The leaky/resonator harness was measuring itself, and its own control said so
+
+`test/_leaky.mjs` refits the pilot's row with and without a state block. Its first run reported
+the base arm at held-out R^2 0.53 on channel 1 where the pilot's own bank reads ~0.90 — and the
+file's own stated criterion was that the control must reproduce the pilot's number or the harness
+is measuring itself. It was: `_row` sets `nBase` ITSELF, before the rich blocks, and `_colScale`
+ridges everything past it a hundred times harder; overwriting `nBase` with the row's full length
+moved the poly, scheduled and lead blocks into the CHEAP prior, so the control arm was a
+different, over-fitted model. Fixed, with the pilot's OWN weight vector scored on the same rows
+by the same code as an explicit control row. **The first table is withdrawn** — it compared two
+arms that were matched to each other and to nothing else.

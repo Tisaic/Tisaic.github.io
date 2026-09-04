@@ -25,6 +25,13 @@
 // of any reverse excursion as a fraction of the DC, and how long it lasts. Both signs of `du`
 // are run, because a reverse excursion that appears for one sign only is friction, not a zero.
 //
+// MEASURED ON THE DIAGONAL AND IT IS A NULL: the reverse peak is 1e-8 to 1e-12 against a DC of
+// 1.0, at every phase and both signs, on both channels. The path a joint offset takes to its OWN
+// error is minimum-phase. THE CROSS CHANNELS ARE THE HALF THAT WAS MISSING (rule 9): an arm's
+// joints react against each other, so "move the wrong way first" on a COUPLED plant would show
+// up as a reversal in the response of the OTHER channel — which the diagonal cannot see, and
+// which is where a two-link arm's version of the pendulum would have to live.
+//
 // WHAT WOULD KILL IT: the response rises monotonically toward its DC from the first sample at
 // every phase and both signs. Then the path is minimum-phase, preview buys nothing beyond the
 // forecast's own reach, and the regularisation reading stands.
@@ -33,7 +40,17 @@ import { makeArm, mkPath, homeArm, routeSignals, PG }
 
 const SHAPE = process.env.NM_SHAPE || 'sharp';
 const FEED = +(process.env.NM_FEED || 0.004);
-const DU = +(process.env.NM_DU || 0.3);
+// THE STEP SIZES, AND SWEEPING THEM IS THE INSTRUMENT CHECK RATHER THAN AN EXTRA RESULT. The
+// first cross-channel run used a single 0.3 rad step held for 4000 steps on a SHARP-CORNER
+// program — half a lap driven off the path — and reported reverse excursions of 131% to 285% of
+// the DC. Two things in that table are not what a linear response looks like: the normalised
+// response `(pulsed - base)/du` flips SIGN between +du and -du, and the reverse peak appears for
+// one sign only. Both are consistent with a large-signal effect — backlash crossed in one
+// direction, or the two trajectories simply meeting a corner differently — rather than with a
+// zero. A LINEAR response is invariant in `du`; a large-signal one is not. So the same cell is
+// run at several amplitudes and the invariance is the finding, not the number (rule 17).
+const DUS = (process.env.NM_DUS || '0.3,0.1,0.03,0.01').split(',').map(Number);
+const DU = DUS[0];
 const NPH = +(process.env.NM_NPH || 4);
 const WIN = +(process.env.NM_WIN || 4000);
 
@@ -79,16 +96,17 @@ const baseAt = async (at) => {
   return out;
 };
 
-console.log('\n  ch  phase   du     DC        first     reverse peak   as %DC   crosses at');
+console.log('\n  ch->out  phase    du     DC        first     reverse peak   as %DC   crosses at');
 for (let ch = 0; ch < 2; ch++) {
   for (let p = 0; p < NPH; p++) {
     const at = Math.round(LAP + (p * LAP) / NPH);
     const base = await baseAt(at);
-    for (const du of [DU, -DU]) {
+    for (const du of DUS.flatMap((d) => [d, -d])) {
       const pulsed = await run(ch, at, du);
       const n = Math.min(base.length, pulsed.length, WIN);
+      for (let oc = 0; oc < 2; oc++) {
       const r = [];
-      for (let i = 0; i < n; i++) r.push((pulsed[i][ch] - base[i][ch]) / du);
+      for (let i = 0; i < n; i++) r.push((pulsed[i][oc] - base[i][oc]) / du);
       const dc = r.slice(Math.floor(n * 0.9)).reduce((a, v) => a + v, 0) / Math.max(1, Math.ceil(n * 0.1));
       const sgn = Math.sign(dc) || 1;
       // THE REVERSE EXCURSION: the most negative the response goes in the DC's own frame, and
@@ -103,10 +121,11 @@ for (let ch = 0; ch < 2; ch++) {
       const floor = 1e-4 * Math.abs(dc);
       let first = 0;
       for (let i = 0; i < n; i++) if (Math.abs(r[i]) > floor) { first = r[i]; break; }
-      console.log(`  ${ch}  ${String(at - LAP).padStart(5)}  ${du > 0 ? '+' : '-'}   `
+      console.log(`  ${ch}->${oc}  ${String(at - LAP).padStart(5)}  ${(du > 0 ? '+' : '-') + Math.abs(du).toFixed(2)}  `
         + `${dc.toExponential(3)}  ${first.toExponential(3)}  ${(rev * sgn).toExponential(3)}`
         + `  ${(100 * rev / Math.abs(dc)).toFixed(1).padStart(7)}%  ${String(cross).padStart(5)}`
         + `  (peak at ${revAt})`);
+      }
     }
   }
 }
