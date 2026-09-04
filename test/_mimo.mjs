@@ -24,27 +24,37 @@ import { commissionArm, deployOn, PG } from '/home/user/Tisaic.github.io/test/pi
 
 const FEED = +(process.env.MM_FEED || 0.004);
 const UCAP = +(process.env.MM_UCAP || 0.6);
-const RISES = +(process.env.MM_RISES || 10);
+const RISES = (process.env.MM_RISES || '10').split(',').map(Number);
+// THE HORIZON IS SWEPT WITH IT BECAUSE THE MIMO SOLVE CHANGES WHAT A LONG HORIZON IS FOR.
+// `_horizon` measured look-ahead as inert-to-harmful and that was read as "this machine is not
+// limited by what its solver can see ahead" — but at the time there was nothing at long lead
+// worth seeing: the diagonal response settles inside 1800 steps. The CROSS response reverses and
+// peaks 2818 to 2963 steps out, which the shipped horizon (3776 steps) only just covers. So the
+// prediction is that the horizon should start paying once, and only once, the cross model exists
+// — and if it does not, that is a fifth independent measurement that the far leads do not matter.
+const HTS = (process.env.MM_HTS || '1.5').split(',').map(Number);
 const SHAPES = (process.env.MM_SHAPES || 'sharp,circle,rounded').split(',');
 
 console.log(`arm K ${PG.K} / E ${PG.E}, feed ${FEED}, uCap ${UCAP}, probeRises ${RISES}`);
 let open = null;
-for (const mimo of [false, true]) {
+const ROWS = [];
+for (const R of RISES) for (const H of HTS) for (const mimo of [false, true]) ROWS.push({ R, H, mimo });
+for (const { R, H, mimo } of ROWS) {
   const pilot = await commissionArm({ seed: 1, train: { shape: 'rounded', feed: FEED },
-    uCap: UCAP, before: (p) => { p.probeRises = RISES; p.mimo = mimo; } });
+    uCap: UCAP, before: (p) => { p.probeRises = R; p.horizonTs = H; p.mimo = mimo; } });
   if (!pilot) { console.log(`  mimo ${mimo}: commissioning never terminated`); continue; }
   if (!open) {
     open = {};
     for (const s of SHAPES) open[s] = (await deployOn(pilot, s, false, FEED)).r.totalRms;
     console.log(`open loop: ${SHAPES.map((s) => `${s} ${open[s].toExponential(3)}`).join('  ')}`);
-    console.log('\n  mimo   crossPeak / DC per channel' + SHAPES.map((s) => s.padStart(17)).join(''));
+    console.log('\n  mimo  rises   hTs  reach' + SHAPES.map((s) => s.padStart(17)).join(''));
   }
-  const xr = pilot.hs.map((h) => `${(h.crossPeak || 0).toFixed(3)}/${Math.abs(h.cross[1 - pilot.hs.indexOf(h)] || 0).toFixed(3)}`);
   const cols = [];
   for (const s of SHAPES) {
     const d = await deployOn(pilot, s, true, FEED);
     cols.push(`${(open[s] / d.r.totalRms).toFixed(2)}x u${d.uPk.toFixed(3)}`.padStart(17));
   }
-  console.log(`  ${String(mimo).padEnd(5)}  ${xr.join('  ').padEnd(26)}${cols.join('')}`);
+  console.log(`  ${String(mimo).padEnd(5)}  ${String(R).padStart(5)}  ${H.toFixed(1).padStart(4)}`
+    + `  ${String(pilot.N * pilot.grid * pilot.sample).padStart(5)}${cols.join('')}`);
 }
 console.log('EXIT 0');

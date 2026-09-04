@@ -268,8 +268,19 @@ for (let c = 0; c < pilot.nc; c++) {
         const h = build(recs[sh], c, L, ro, recs[sh].e.map((v) => v[c]));
         return r2(h.X, h.y, w).toFixed(4).padStart(11);
       }).join('');
+      // THE TARGET'S OWN SCALE, because an R^2 near zero has two explanations that look
+      // identical in the ratio — the features explain nothing, or the target is mostly energy
+      // the features cannot represent — and only the residual against the target's rms tells
+      // them apart (rule 17).
+      let sy2 = 0, sse = 0;
+      for (let i = 0; i < tr.X.length; i++) {
+        let pr = 0; for (let j = 0; j < w.length; j++) pr += w[j] * tr.X[i][j];
+        sy2 += tr.y[i] * tr.y[i]; sse += (tr.y[i] - pr) ** 2;
+      }
       console.log(`  ${String(L).padStart(4)}   ${src.padEnd(9)}  ${String(tr.X.length).padStart(5)}`
-        + `   ${r2(tr.X, tr.y, w).toFixed(4).padStart(9)}${cols}`);
+        + `   ${r2(tr.X, tr.y, w).toFixed(4).padStart(9)}${cols}`
+        + `   | target rms ${Math.sqrt(sy2 / tr.X.length).toExponential(2)}`
+        + `  residual ${Math.sqrt(sse / tr.X.length).toExponential(2)}`);
     }
   }
 }

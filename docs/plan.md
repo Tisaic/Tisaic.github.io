@@ -7436,3 +7436,39 @@ target harder, which is precisely R^2 near zero with a clean drive.
 that bound belongs to the fit rather than to the plant. The band is now capped at four regressor
 strides, which makes the comparison against the scribble a test of POSE COVERAGE with the
 bandwidth held fixed — one variable, which is what it always needed to be.
+
+### THE MIMO SOLVE MOVES THE MACHINE, AND MOST WHERE THE MECHANISM SAID IT WOULD
+
+`test/_mimo.mjs`, one commissioning per row, K 0.25 / E 0.03 at feed 0.004, uCap 0.6:
+
+```
+  mimo   crossPeak / DC            sharp           circle          rounded
+  false  0.078/0.059 0.192/0.420   3.49x u0.600    2.76x u0.332    2.87x u0.600
+  true   (identical)               3.91x u0.600    2.82x u0.321    3.03x u0.573
+```
+
+**SHARP +12%, ROUNDED +5.6%, CIRCLE +2%, GEOMETRIC MEAN +6.6%, NOTHING WORSE.** The `mimo: false`
+row reproduces the shipped scores to four figures, which is the control that says the probe
+change, the `_gridOf` refactor and the whole MIMO plumbing are inert unarmed (rule 21); the EMPS
+contract passes end to end on the same build, which is the same control on a second plant.
+
+**THE LARGEST GAIN IS ON THE HARDEST PROGRAM**, which is the one the mechanism is about: a sharp
+corner is where the arm must be made to go somewhere it does not want to go. And `uPk` on the
+rounded rectangle came OFF the cap — 0.600 to 0.573 — so the solver is asking for less correction
+and delivering more, which is what modelling a term rather than fighting it looks like.
+
+**AND THIS IS THE WEAKEST VERSION OF IT.** The cross kernel is identified from a HELD probe at ONE
+pose, and the cross response is precisely the quantity measured as most pose-dependent: 18% of its
+DC at one phase of the lap and 432% at another. Two things follow, and the second is a prediction
+rather than a hope:
+
+1. **A cross kernel identified while MOVING** — the same `_hswap` construction that failed for the
+   diagonal (0.86x, because the diagonal was already right) should be worth something here, where
+   the held reading is wrong by a factor of five over the lap.
+2. **THE HORIZON SHOULD START PAYING, AND ONLY NOW.** `_horizon` measured look-ahead as
+   inert-to-harmful and that was read as "this machine is not limited by what its solver sees
+   ahead". At the time there was nothing at long lead worth seeing: the diagonal settles inside
+   1800 steps. The cross response REVERSES and peaks 2818 to 2963 steps out, which the shipped
+   horizon (3776 steps) only just covers. If the horizon still does nothing with a cross model in
+   hand, that is the fifth independent measurement that the far leads do not matter — and if it
+   does, the earlier reading was right about the machine and wrong about the reason.
