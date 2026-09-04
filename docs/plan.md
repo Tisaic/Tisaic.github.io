@@ -7661,3 +7661,46 @@ it to ask for, and a program pinned at its cap cannot use less.
 wants 0.03 and the circle 0.10 or more — so a fixed value is a per-plant AND per-program constant,
 which rule 31 forbids twice over. It has to be selected by the verify from a candidate set exactly
 as `lambda` is; that machinery exists and its candidate set has one member today.
+
+### AUTHORITY IS NOT THE CONSTRAINT EITHER, AND THE PILOT'S OWN DIAGNOSTIC SAID SO FIRST
+
+```
+  uCap            sharp                circle          rounded            geo mean  binding
+  0.60     3.49x u0.600 AT CAP    2.76x u0.332    2.87x u0.600 AT CAP       3.03    model
+  1.00     3.11x u0.586           4.30x u0.398    3.40x u0.544              3.57    model
+  1.50     2.91x u0.563           3.42x u0.356    2.92x u0.493              3.08    model
+  2.00     2.78x u0.566           3.19x u0.361    2.76x u0.497              2.90    model
+```
+
+**THE SHARP SQUARE DECLINES MONOTONICALLY AS AUTHORITY RISES**, and at cap 1.0 the correction comes
+OFF the cap everywhere — so it really was being clipped at 0.6, and unclipping it makes the hard
+program WORSE. The reading two sections above, that `uPk == uCap` means authority-bound, is
+retracted: a peak touched briefly is not a duty cycle. `report.binding` had it right in the first
+row — `capFrac` 0.0019, verdict `model` — and its own probe text already said "a larger cap
+measured null". **Rule 27 cost a day twice in one session: the diagnostic that redirects you is
+usually already in the output.**
+
+**AND THE SWEEP CANNOT SUPPORT A CLEAN CONCLUSION ABOUT AMPLITUDE, WHICH IS A SEPARATE FAULT.**
+`uCap` sets `uMax`, and `probeAmp` defaults to 0.15*uMax with `ditherAmp` at 0.1*uMax — so raising
+the cap raises the IDENTIFICATION amplitude by the same factor. The circle's 2.76x -> 4.30x may be
+an excitation effect wearing an authority label. One knob moving two things is exactly what rule
+20 forbids, and `test/_authamp.mjs` holds them apart.
+
+### Where the arm stands after the whole arc
+
+```
+  configuration       mu            sharp           circle          rounded     geo mean
+  shipped           0.00     3.49x u0.600     2.76x u0.332     2.87x u0.600         3.03
+  depth2            0.03     4.14x u0.578     9.19x u0.291     5.78x u0.445    ->   6.04
+  depth2            0.10     3.65x u0.387    12.79x u0.257     5.27x u0.331         6.26
+  depth2 r25 h3     0.03     3.53x u0.382     7.71x u0.393     4.39x u0.372         4.92
+```
+
+**`depth2 + mu 0.03` IS THE ONLY CONFIGURATION MEASURED THAT BEATS THE SHIPPED ONE ON EVERY
+PROGRAM: 3.03 -> 6.04 geometric mean, a doubling with nothing worse.** `mu` 0.10 reads a higher
+mean and regresses the square, which is the trade every trust knob makes and is not a result.
+
+**AND THE THREE DEPTH-1 REPAIRS ACTIVELY HARM THE CASCADE**: `depth2 r25 h3` reads 4.81-4.92
+against depth2's 5.27-6.04, and puts the square back on its cap. They were compensations for
+over-trusting a single-layer forecast; a second layer removes what they were compensating for, and
+applying both over-corrects in the same direction twice.
