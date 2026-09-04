@@ -78,12 +78,20 @@ for (const s of SHAPES) recs[s] = await recordOpenLoop(pilot, s, FEED);
 // variable times the whole lagged block — and it measured held-out R^2 0.771 against a
 // memory-alone 0.771 -> 0.840 on this arm, trained on five programs and tested on a sixth. A
 // general cross-lag dictionary with per-term selection is that finding without the hand-picking.
+// THE LAGS ARE IN STRIDES BY DEFAULT AND THAT WAS TOO COARSE TO TEST THE IDEA. The readout's
+// stride here is 14 samples = 112 solver steps, so the first run's `[-1]` meant 112 steps back and
+// the FINEST cross-lag product it could offer was 112 steps wide. The classic dictionary uses
+// ADJACENT taps, and log-spacing separately measured that this arm's corner needs resolution down
+// to ~32 steps — so the fast cross-lag terms, the ones that can express a quick interaction, were
+// never in the candidate set. `DC_UNIT` chooses what a lag step means: 'stride' (the first run) or
+// 'sample', which is 8 solver steps and is the tap the original form is written in.
+const UNIT = process.env.DC_UNIT || 'stride';
 const LAGS = (process.env.DC_LAGS || '0,1,2,4,8').split(',').map(Number);
 function baseSignals(rec, k, L, stride) {
   const v = [], name = [];
   for (let ch = 0; ch < pilot.nm; ch++) {
     for (const l of LAGS) {
-      v.push(rec.x[Math.max(0, k - l * stride)][ch]);
+      v.push(rec.x[Math.max(0, k - l * (UNIT === 'sample' ? 1 : stride))][ch]);
       name.push(`m${ch}${l ? `[-${l}]` : ''}`);
     }
   }

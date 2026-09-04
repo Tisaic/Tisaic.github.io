@@ -7902,3 +7902,32 @@ of what the levers DO, not an artefact of one operating point.
 (5.70 -> 5.39). It compensates for model error and model error scales with compliance, so a fixed
 value would be wrong at one end of the ladder whatever it was — which is the third independent
 reason it cannot ship as a constant.
+
+### Cascade x adaptation: a TRADE, and the diagnostic says the test was half-run
+
+```
+  depth  adapt            sharp           circle          rounded     geo mean   rows admitted
+      1  false     3.74x u0.576     3.19x u0.313     3.16x u0.440         3.35   0+0
+      1  true      4.56x u0.577     4.24x u0.308     4.28x u0.433         4.36   1964+1964
+      2  false     4.14x u0.579     9.20x u0.291     5.78x u0.445         6.04   0+0 | 0+0
+      2  true      4.95x u0.576     7.53x u0.296     5.94x u0.443         6.05   0+0 | 1803+1969
+```
+
+At depth 1 adaptation is **+30% on all three with nothing traded**. At depth 2 the geometric mean
+is unchanged (6.04 -> 6.05) but underneath it is a trade: **sharp +20%, circle -18%, rounded +3%**.
+
+**AND THE ADMITTED-ROW COLUMN SAYS WHY IT IS NOT THE EXPERIMENT IT LOOKS LIKE:** `0+0 | 1803+1969`.
+Only the TOP layer adapted; the lower layer admitted nothing. `Stack.observe` sends the truth to
+exactly one layer, and its comment gives the reason — each layer's model predicts the error with
+ITS OWN correction removed, so for any layer below the top the same arithmetic leaves the layers
+ABOVE still in the signal and it would adapt confidently toward a residual it never modelled.
+That is a correct argument about the target, not an oversight.
+
+**SO THE HONEST STATEMENT IS NARROW: adaptation on the TOP LAYER of a depth-2 cascade trades the
+circle for the square and leaves the mean where it was.** Whether adaptation composes with depth
+is still open, and answering it needs a target each lower layer can legitimately adapt against —
+which is a different piece of work from arming a flag.
+
+**WHAT IS NOT NARROW: 4.95x IS THE BEST THE SHARP SQUARE HAS READ**, against a shipped 3.49x — and
+it comes from the one configuration where BOTH mechanisms that change what is modelled are active.
+Every configuration that only re-weighted trust left the square at or below 4.14x.
