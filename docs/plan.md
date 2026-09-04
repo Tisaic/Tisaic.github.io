@@ -7365,3 +7365,74 @@ moved the poly, scheduled and lead blocks into the CHEAP prior, so the control a
 different, over-fitted model. Fixed, with the pilot's OWN weight vector scored on the same rows
 by the same code as an explicit control row. **The first table is withdrawn** — it compared two
 arms that were matched to each other and to nothing else.
+
+### The cross reversal is LINEAR, and the statistic that was watching for it could not see it
+
+The raw cross table was not amplitude-invariant, so the first reading was that it must be a
+large-signal effect. Splitting each +-du pair into its symmetric and antisymmetric halves — a
+linear response lives entirely in the symmetric one — says otherwise:
+
+```
+  ch->out  phase   du     sym DC      sym reverse   as %DC    peak at    asym DC
+   0->0       0   0.30    1.000e+0    -3.734e-8      -0.0%        6     -7.5e-2
+   0->0       0   0.03    1.015e+0    -3.737e-8      -0.0%        6     -7.4e-3
+   0->1       0   0.30   -1.359e-1     2.240e-2     -16.5%     2092      2.9e-1
+   0->1       0   0.10   -1.424e-1     2.560e-2     -18.0%     2092      9.6e-2
+   0->1       0   0.03   -1.432e-1     2.605e-2     -18.2%     2091      2.9e-2
+   0->1    4103   0.30   -2.849e-2     1.232e-1    -432.5%     2818      1.2e-1
+   0->1    4103   0.03   -3.004e-2     1.206e-1    -401.3%     2816      1.2e-2
+   1->0    4103   0.30    6.407e-3    -2.310e-1   -3605.3%     2963     -1.5e-1
+   1->0    4103   0.03    1.418e-2    -2.311e-1   -1629.8%     2952     -1.5e-2
+```
+
+**THE SYMMETRIC HALF IS INVARIANT ACROSS A TENFOLD RANGE OF AMPLITUDE** — DC -0.1359 / -0.1424 /
+-0.1432, reverse -16.5 / -18.0 / -18.2%, peak at 2092 / 2092 / 2091 — which is what makes it a
+LINEAR reverse response rather than backlash being crossed one way. The antisymmetric half scales
+cleanly with `du` (0.286 / 0.0959 / 0.0289), so the nonlinearity is real too and it was sitting on
+top of the linear part and hiding it. Both halves needed separating before either could be read.
+
+**AND IT IS POSE-DEPENDENT, WHICH IS WHAT THE OWNER SAID IT WOULD BE.** Shoulder-to-elbow reverses
+by 18% of its DC at one phase of the lap and by 432% at another; elbow-to-shoulder is clean at the
+first pose and -3605% at the second.
+
+**THE PILOT HAD NO MODEL OF ANY OF IT.** `boxQP` is called per channel, so the arm is inverted as
+two independent SISO plants. That was a stated decision with a stated falsifier — "cross-coupling
+is MEASURED by the probe and reported — 0.5% on the arm; a plant where it is large needs the MIMO
+QP this deliberately does not contain" — and the falsifier has fired. **The statistic doing the
+watching was structurally unable to fire it:** `nCross` is the mean of the last tenth of the cross
+trace, the settled DC of a HELD probe, and a DC cannot report a transient that reverses and
+returns. Against a transient of 0.12 it read 0.5%.
+
+`boxQPm` now solves every channel jointly over a block-Toeplitz operator, built from the probe
+trace that was already being recorded and discarded. Two properties are asserted rather than
+argued: on a DIAGONAL H the problem separates exactly and the per-channel Lipschitz bound applies,
+so it is **byte-identical to `boxQP` at 1, 2, 8 and 60 iterations** (the first version was not —
+a shared step size handed the weaker channel the stronger one's bound, worth 6.2e-4 after one
+iteration and 1.1e-1 after sixty, and a MIMO solve on an uncoupled plant that is not a no-op
+cannot be compared against anything on record); and with a cross kernel present the plan moves
+**83% rms**. Opt-in, `mimo` default false.
+
+### An excitation cannot teach a model frequencies the model cannot sample
+
+The pose-gridded multisine failed twice before it measured anything, and the second failure is
+worth more than the first.
+
+**FIRST: A PROBE AGAINST A SATURATION.** Sized to match the commissioning record's command rms, it
+saturated the shoulder drive 8% of the time (peak demand 0.0070 against a `tauMax` of 0.0032) and
+the fit read in-sample R^2 0.185 — unable to fit its OWN record, which is what a clipped record
+does to a linear model. The matching rule was the error: the scribble's rms is mostly its slow
+traverse of the position box, so a multisine carrying the same rms puts vastly more of it at the
+top of the band, where torque goes as amplitude times frequency squared. The gain is now MEASURED
+— halve until the drive passes it — and lands at 0.125, giving zero saturations.
+
+**SECOND, AND IT IS A PROPERTY OF THE IDEA RATHER THAN OF THE HARNESS.** Clean of saturation, the
+fit read in-sample R^2 **0.037**. The regressor window has stride 14 samples = 112 solver steps,
+so the lattice it samples on has a Nyquist period of 224 steps — and the multisine carried lines
+down to 64. Three and a half times past what the features can resolve. That energy arrives in the
+target as variance the model is STRUCTURALLY unable to explain: it teaches nothing and makes the
+target harder, which is precisely R^2 near zero with a clean drive.
+
+**SO "LEARN THE FREQUENCY DOMAIN OF EVERY POSE" IS BOUNDED ABOVE BY THE MODEL'S OWN SAMPLING**, and
+that bound belongs to the fit rather than to the plant. The band is now capped at four regressor
+strides, which makes the comparison against the scribble a test of POSE COVERAGE with the
+bandwidth held fixed — one variable, which is what it always needed to be.
