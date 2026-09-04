@@ -113,12 +113,20 @@ async function ideal(path) {
       for (let c = 0; c < 2; c++) for (const v of tab[c]) pk = Math.max(pk, Math.abs(v));
       console.log(`    it ${String(it).padStart(2)}  rms ${r.toExponential(4)}  |u| ${pk.toExponential(3)}`);
     }
-    if (r < bestRms) { bestRms = r; best = tab.map((t) => Float64Array.from(t)); }
     // STOP WHEN IT HAS STOPPED IMPROVING, rather than at a lap count nobody derived. A ceiling
-    // quoted from an unconverged run is a lower bound wearing a number, and this file's first
-    // pass reported 3.9x / 18.8x / 3.2x while still descending — which then gets compared against
-    // as though it were the ideal.
-    if (STOP > 0 && it > 4 && r > bestRms * (1 - STOP)) {
+    // quoted from an unconverged run is a lower bound wearing a number.
+    //
+    // THE COMPARISON IS AGAINST THE PREVIOUS BEST, AND THE FIRST VERSION COMPARED AGAINST THE
+    // ONE IT HAD JUST UPDATED. `bestRms` was set to `r` and then tested as `r > bestRms*(1-STOP)`
+    // — which is `r > r*0.996`, true for every improving iteration — so the counter advanced on
+    // progress and the run stopped after three passes whatever it was doing. It fired at it 7 on
+    // all three programs, and took the circle's ideal to 12.7x where twenty laps reach 18.8x:
+    // a convergence test that terminates on convergence AND on improvement can report neither
+    // (rule 17, and the same shape as every other instrument fault in this section — a statistic
+    // that could not represent the thing it was deciding).
+    const prevBest = bestRms;
+    if (r < bestRms) { bestRms = r; best = tab.map((t) => Float64Array.from(t)); }
+    if (STOP > 0 && it > 4 && r > prevBest * (1 - STOP)) {
       if (++stall >= 3) { if (process.env.ID_TRACE) console.log(`    converged at it ${it}`); break; }
     } else stall = 0;
     for (let c = 0; c < 2; c++) {
