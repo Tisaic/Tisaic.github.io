@@ -6451,3 +6451,70 @@ roughly the better of the two columns per program — about +8.5% geometric mean
 coupling, registration, held-against-moving — is worth single-digit percentages. The
 iteration arc is worth 1.85x already and 23.96x at its ceiling. The model is not where the
 remaining factor is, and this section is the evidence rather than the assertion.
+
+### WHAT THE CASCADE LEAVES IS NOT STATE-PREDICTABLE, AND THE ORACLE BOUND WAS A MEMORY BOUND
+
+Depth stops at two because layer 3 refuses on the machine at 0.95x, and the oracle ladder's
+third pass — perfect forecast, same authority, same `h` — takes 12.11x to 16.43x. So the
+residual is reachable by the actuator and what layer 3 lacks is a forecast of it. Whether one
+exists is the question that decides the whole route, and `test/_resid.mjs` puts it to the
+machine: fit on one program's depth-2 residual, score on a LADDER of targets, with a
+phase-indexed table carried as the negative control.
+
+```
+  route              ch  in-sample  HELD-OUT lap  sharp@0.006  rounded  circle
+  state (lags 24)     0    0.8898      0.8661       0.0023     -0.2804  -0.3696
+  state (lags 24)     1    0.9335      0.8487      -0.0644     -0.4616  -9.0764
+  memory (256 bins)   0    0.9927      0.9932       0.5480     -1.0031  -0.6438
+  memory (256 bins)   1    0.9977      0.9977       0.6399     -0.7031 -15.5955
+```
+
+**IT IS NOT OVERFITTING.** The state model generalises to a held-out lap of its own program at
+0.87 and 0.85, so there is real structure there and the fit is finding it. That independently
+corroborates the pilot's own layer 3, which reached held-out R² 0.734 by its own search over
+windows, strides, ridges and bases and then refused on the machine.
+
+**AND IT DOES NOT TRANSFER TO THE SAME SHAPE AT A DIFFERENT SPEED** — 0.0023 and −0.0644,
+which is no better than predicting the mean. That is the mildest target available: same
+geometry, same corners, only the feedrate. Failing there is not a question of how far apart
+the shapes are.
+
+**THE PHASE TABLE TRANSFERS ACROSS FEEDRATE AND THE STATE MODEL DOES NOT** (0.5480 / 0.6399
+against 0.0023 / −0.0644), which says what the residual IS: a GEOMETRY-indexed quantity. The
+same phase is the same corner whatever the speed, while every state regressor — speeds,
+torques — moves with the feedrate. Across geometry both collapse.
+
+**SO THE MODEL-ONLY LADDER'S CEILING ON THIS ARM IS DEPTH 2**, and what it leaves is precisely
+the object the retirement forbids: reproducible lap to lap, locatable by phase, not carried by
+state.
+
+### AND THAT REFRAMES THE ORACLE BOUND — IT WAS NEVER A NORTH-STAR TARGET
+
+The iteration ladder hands each pass the TRUE `eFree` of the program it is about to be scored
+on. That is per-program knowledge, which is what ⑩'s compile is and what a lap table is. **Its
+23.96x is the MEMORY bound, not a legal one**, and comparing a program-agnostic controller
+against it was comparing two different products — this project's oldest mistake, in a costume
+I built myself.
+
+Stated on one denominator, with the memory column marked as such:
+
+```
+  program-agnostic, model only    cascade depth 2 at raised authority    4.09x sharp
+  per-program (memory)            oracle iteration, converged           23.96x contour
+  per-program (memory)            mode 10, compiled and refined            44x contour
+```
+
+**The gap between the first row and the other two IS the memory the retirement removed**, and
+no amount of deeper cascading closes it, because the thing it would have to model is not
+state-predictable. That is a falsifiable claim and this table is what would have to be
+overturned to beat it.
+
+### WHICH LEAVES EXACTLY ONE LEGAL ROUTE TO PROGRAM-SPECIFIC ACCURACY
+
+Online adaptation. It is the only mechanism that can capture program-specific structure while
+staying addressed by state and storing no table: it learns on the program in front of it, and
+this project has already measured it multiplying a vouched model — arm +29%, tank +18%, EMPS
+14.8x → 55.5x with the truth removed at lap 4 and the bank frozen, and the memory test passed
+where a phase-indexed ILC failed it. The composition to measure is therefore cascade depth 2
+at raised authority WITH gated adaptation armed, which is also the configuration this file
+already predicts wants the larger cap ("raise the cap only with adaptation armed").
