@@ -6827,3 +6827,51 @@ the scalar can be got honestly.
 
 **THE MOVING KERNEL IS DEAD AT BOTH DEPTHS** (2.64/1.92/1.97 and 3.53/4.15/3.40, worse than
 commissioned everywhere), which closes that route rather than leaving it open.
+
+### THE MISSING TERM, CONFIRMED: THE QP HAD NO MAGNITUDE PENALTY (`test/_uw.mjs`)
+
+`boxQP` penalises `||D u||^2` — a RATE — plus an optional notch at one frequency, inside a box.
+Nothing in the objective says USE LESS CORRECTION, and the machine wanted exactly that. The
+proof is in three tables that agree:
+
+**1. THE RATE KNOB CANNOT REACH IT.** `lambda` from 1x to 32x moves the score under 1% on all
+three programs (3.49 -> 3.47, 2.76 -> 2.78, 2.87 -> 2.85) while shrinking the plan's rms from
+0.246 to 0.188. It smooths the PLAN and leaves the delivered bias and oscillation where they
+were. The "lambda in disguise" reading — which was pre-registered as the likely answer — is
+dead, and its death is what identifies the gap.
+
+**2. THE MAGNITUDE TERM DOES REACH IT**, and travels the same path through the signature space:
+
+```
+  configuration          sharp                      circle                     rounded
+  mu 0 (ships)           3.49x b-4.1e-2 o2.9e-1     2.76x b+1.5e-1 o2.7e-1     2.87x b+1.2e-1 o3.2e-1
+  h ch0 x1.30 (the lie)  3.57x b-1.5e-1 o2.2e-1     6.60x b-3.4e-2 o9.1e-2     4.49x b-2.9e-2 o1.9e-1
+  mu ch0 0.03            3.64x b-5.0e-2 o2.8e-1     3.17x b+1.2e-1 o2.2e-1     3.15x b+9.8e-2 o2.9e-1
+  mu ch0 0.1             3.64x b-8.4e-2 o2.6e-1     4.31x b+5.7e-2 o1.4e-1     3.61x b+5.1e-2 o2.6e-1
+  mu ch0 0.3             2.77x b-1.7e-1 o3.1e-1     5.75x b-8.1e-2 o1.4e-1     3.42x b-5.7e-2 o2.9e-1
+  mu ch0 1               1.69x b-3.2e-1 o5.2e-1     2.28x b-3.3e-1 o4.4e-1     1.94x b-2.5e-1 o5.4e-1
+  mu ch0 3               1.26x b-4.4e-1 o7.2e-1     1.42x b-5.4e-1 o6.9e-1     1.34x b-4.0e-1 o7.7e-1
+```
+
+**`mu` 0.1 and the `h` scale 1.15 put the machine in the SAME STATE** — bias +5.7e-2 against
++4.9e-2, oscillation 1.4e-1 against 1.4e-1, correction rms 0.127 against 0.128 — which is far
+stronger evidence than either score alone. Two different interventions traversing one
+trajectory is what "the kernel scale was standing in for a magnitude penalty" predicts.
+
+**3. AND IT HAS A CLEAN INTERIOR OPTIMUM.** Past it every program collapses together (1.26x /
+1.42x / 1.34x at mu 3) with the bias swinging hard negative and the oscillation rising — the
+signature of over-damping, the mirror of the under-damping at mu 0.
+
+**WHAT IS FIXED AND WHAT IS NOT.** The gap is named and the term is built: `mu` in `boxQP`,
+`uWeight` per channel in the pilot, both off by default so every golden vector and published
+number is untouched, with the Lipschitz bound seeing the new Hessian term. Unlike the `h` scale
+— a lie about the plant that could never be derived from anything — `mu` is a legitimate
+objective weight the pilot can select ON THE MACHINE exactly as it already selects `lambda`,
+from a candidate set under rule 42's band.
+
+**TWO THINGS ARE STILL OPEN AND NEITHER IS SMALL.** `mu` reaches 5.75x where the lie reaches
+6.60x on the circle, so the kernel scale does something beyond magnitude — presumably it also
+reshapes the tracking term, not just its size. And the optimum is PROGRAM-DEPENDENT (sharp near
+0.03-0.1, circle near 0.3), which is the same problem `lambda` has and needs the same answer:
+selected by measurement, never fixed. Until that selection is built and scored on six plants,
+this is a named defect with a built term, not a shipped improvement.
