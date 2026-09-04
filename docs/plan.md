@@ -7997,3 +7997,49 @@ regimes while the programs saturate; `uPk`, a PEAK, read as a duty cycle; `uCap`
 is unexplainable" looked identical; and an oracle comparing a joint-space residual against a
 contour-space one. Every one was caught by asking what the number could not say, and rule 27 —
 report the unflattering diagnostic first — would have caught all six earlier.
+
+### FOURIER CONTROL, AND WHY THE SCALAR PENALTY IS THE WRONG SHAPE
+
+**THE OWNER'S SECOND THOUGHT EXPERIMENT.** Every path is a sum of sine waves; each passes through
+the plant's attenuation; learn what to feed in at each frequency so that what arrives on the other
+side reconstructs the path.
+
+**THAT OPERATION IS ALREADY HERE, TWICE.** The harmonic feedforward IS Fourier control — probe,
+measure the complex gain per harmonic, solve for the pre-compensation — and it reaches 242x on
+EMPS and 9.17x on this arm. It is classified as a MEMORY for exactly one reason: **the frequencies
+it inverts are harmonics of the LAP**, so the object it builds is indexed by position in a program.
+Invert at frequencies belonging to the PLANT instead and the same mathematics yields a FILTER,
+which is addressed by state and transfers to any path. And the QP is the time-domain version of the
+same inverse, regularised.
+
+**WHY THE NAIVE FILTER CANNOT SIMPLY BE BUILT:** `1/H` is unstable wherever `H` carries
+right-half-plane structure, which this section measured in the cross channel — amplitude-invariant,
+peaking 2800 solver steps out. So the inverse is not realisable causally and must be solved
+non-causally over a horizon, which is what the QP does and why mode ⑩ needs the whole lap.
+
+**AND HERE IS WHAT THE FRAMING BUYS, BECAUSE IT MAKES ONE LINE OF ARITHMETIC OBVIOUS.** Cancelling
+error at a frequency where `|H|` is 0.2 requires a correction FIVE TIMES the size of the error
+there. Now put that beside `_band`: the elbow's error is 42-60% concentrated where `|H|` is between
+0.1 and 0.5 of DC, and the pilot removes **0.1%** of it on the rounded rectangle. A scalar `mu` is
+Tikhonov, so it shrinks the SMALL-SINGULAR-VALUE directions hardest — and for a Toeplitz `T` those
+are precisely the frequencies where `|H|` is small. **The regulariser is forbidding the one
+correction with the most left to give, and it refuses it for being LARGE rather than for being
+UNJUSTIFIED.**
+
+**TRUST AND GAIN FALL AT DIFFERENT RATES, WHICH IS WHY ONE NUMBER CANNOT SERVE.** `_hspec` measured
+the model's own relative error at 0.068 across h1-h4 against 0.485 across h5-h16 on the shoulder,
+while `|H|` falls 0.884 to 0.008 over roughly the same span. A penalty keyed to GAIN and a penalty
+keyed to TRUST are different objects, and only the second is a statement about what the model
+knows.
+
+**BUILT: `notches`, a per-band rank-2 profile** in both `boxQP` and `boxQPm`, generalising the
+single notch that was already there. The penalty is the sum of `w_k[(u.c_k)^2 + (u.s_k)^2]`, two
+dot products and two axpys per band per iteration — O(K*N), no matrix and no factorisation, so the
+fixed iteration count that makes the solver cyclic-task-safe is untouched. The Lipschitz bound
+takes the SUM over bands rather than the max, because a step size blind to that diverges exactly
+when a profile bites in several places at once.
+
+Four controls, all byte-identical: `notches` null, `[]`, and a zero-weight band each reproduce the
+un-notched solve; and a profile of ONE band reproduces the single notch it generalises, at every
+iteration count. A three-band profile moves the plan 65.9% rms, so it is not inert. `notchProfile`
+on the pilot defaults to null.
