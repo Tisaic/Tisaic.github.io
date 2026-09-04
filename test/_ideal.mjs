@@ -61,6 +61,7 @@ const S = 8;                                        // sample cadence in solver 
 // samples = 1120 solver steps, which is the kernel's own rise: the lead that makes the correction
 // arrive when the plant responds to it.
 const LEAD = +(process.env.ID_LEAD || 140);
+const STOP = +(process.env.ID_STOP || 0);   // relative improvement below which the ILC is done
 const LEADS = (process.env.ID_LEADS || '-24,-12,-6,-2,0,2,6,12,24,48').split(',').map(Number);
 
 console.log(`arm K ${PG.K} / E ${PG.E}, feed ${FEED}; ILC ${LAPS} laps, gain ${GAIN}, smooth ${SMOOTH}`);
@@ -100,7 +101,7 @@ const zero = (a, half) => {                 // zero-phase box, periodic
 async function ideal(path) {
   const n = Math.round(Math.round(path.lap) / S);
   const tab = [new Float64Array(n), new Float64Array(n)];
-  let best = null, bestRms = Infinity;
+  let best = null, bestRms = Infinity, stall = 0;
   const open = rms(await run(path, null, 2));
   for (let it = 0; it < LAPS; it++) {
     const e = await run(path, tab, 2);
@@ -113,6 +114,13 @@ async function ideal(path) {
       console.log(`    it ${String(it).padStart(2)}  rms ${r.toExponential(4)}  |u| ${pk.toExponential(3)}`);
     }
     if (r < bestRms) { bestRms = r; best = tab.map((t) => Float64Array.from(t)); }
+    // STOP WHEN IT HAS STOPPED IMPROVING, rather than at a lap count nobody derived. A ceiling
+    // quoted from an unconverged run is a lower bound wearing a number, and this file's first
+    // pass reported 3.9x / 18.8x / 3.2x while still descending — which then gets compared against
+    // as though it were the ideal.
+    if (STOP > 0 && it > 4 && r > bestRms * (1 - STOP)) {
+      if (++stall >= 3) { if (process.env.ID_TRACE) console.log(`    converged at it ${it}`); break; }
+    } else stall = 0;
     for (let c = 0; c < 2; c++) {
       const upd = new Float64Array(n);
       for (let i = 0; i < n; i++) {
