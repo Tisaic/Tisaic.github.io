@@ -44,6 +44,29 @@ for (const uCap of CAPS) {
     const live = st.report.layers.filter((l) => l.deployed).length;
     console.log(`\n  uCap ${uCap} depth ${depth}: ${live} of ${st.layers.length} deployed`
       + `; verify clamped ${st.report.verifyClamped}`);
+    // ONE SNAPSHOT, TAKEN BEFORE ANY RUN, AND VERIFIED AFTER EVERY RESTORE. Taking it per
+    // shape inherits whatever the previous shape left behind, and the symptom is subtle: the
+    // sharp square matched the depth sweep exactly while the circle read 4.45x against 3.99x
+    // on the same commissioning — one program agreeing is not a control, it is a coincidence
+    // until the other does too. `verify` re-reads the weights and reports the largest
+    // deviation, so a leak is a printed number rather than a quiet 12%.
+    const PRISTINE = st.layers.map((p2) => (p2.readouts || []).map((r) => ({
+      r, w: r.w ? r.w.map((v) => Float64Array.from(v)) : null, rls: r._rls })));
+    const restore = (sn) => sn.forEach((L) => L.forEach((e) => {
+      if (e.w) for (let i = 0; i < e.w.length; i++) e.r.w[i] = Float64Array.from(e.w[i]);
+      e.r._rls = e.rls; e.r._infoRef = undefined;
+      e.r._onlineN = 0; e.r._infoSkipped = 0;
+    }));
+    const drift = () => {
+      let m = 0;
+      PRISTINE.forEach((L) => L.forEach((e) => {
+        if (!e.w) return;
+        for (let i = 0; i < e.w.length; i++) {
+          for (let j = 0; j < e.w[i].length; j++) m = Math.max(m, Math.abs(e.r.w[i][j] - e.w[i][j]));
+        }
+      }));
+      return m;
+    };
     for (const shape of SHAPES) {
       const key = `${shape}`;
       if (!open[key]) open[key] = (await deployOn(st, shape, false, FEED)).r.totalRms;
@@ -55,13 +78,7 @@ for (const uCap of CAPS) {
       // SHARP-adapted model (5.39x against a pristine 6.81x), and the sharp's "take-away"
       // started from an already-adapted bank, making it MORE adaptation rather than less.
       // Snapshot and restore around every run, so each mode starts from the commissioned model.
-      const snap = () => st.layers.map((p2) => (p2.readouts || []).map((r) => ({
-        r, w: r.w ? r.w.map((v) => Float64Array.from(v)) : null, rls: r._rls })));
-      const restore = (sn) => sn.forEach((L) => L.forEach((e) => {
-        if (e.w) for (let i = 0; i < e.w.length; i++) e.r.w[i] = Float64Array.from(e.w[i]);
-        e.r._rls = e.rls; e.r._infoRef = undefined;
-      }));
-      const S0 = snap();
+      const S0 = PRISTINE;
       // STATIC: the truth is withheld at deploy, so the bank cannot move — the control.
       const stat = await deployOn(st, shape, true, FEED, { truthUntilLap: 0 });
       restore(S0);
@@ -88,7 +105,7 @@ for (const uCap of CAPS) {
         + `adapting ${live2.r.totalRms.toExponential(4)} ${x(live2.r.totalRms)}x   `
         + `take-away ${taken.r.totalRms.toExponential(4)} ${x(taken.r.totalRms)}x   `
         + `(adapt/static ${(stat.r.totalRms / live2.r.totalRms).toFixed(3)}x)`
-        + `  admitted ${counts}`);
+        + `  admitted ${counts}  restore drift ${drift().toExponential(1)}`);
     }
   }
 }
