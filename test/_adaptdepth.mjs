@@ -49,17 +49,27 @@ for (const uCap of CAPS) {
       if (!open[key]) open[key] = (await deployOn(st, shape, false, FEED)).r.totalRms;
       // STATIC: the truth is withheld at deploy, so the bank cannot move — the control.
       const stat = await deployOn(st, shape, true, FEED, { truthUntilLap: 0 });
-      // ADAPTING: the truth is present throughout — a permanent tracker installation.
+      // ADAPTING: the truth is present throughout — a permanent tracker installation. The
+      // counters are cleared first so what they report belongs to THIS run and not to the
+      // commissioning that preceded it.
+      for (const p2 of st.layers) for (const r of (p2.readouts || [])) { r._onlineN = 0; r._infoSkipped = 0; }
       const live2 = await deployOn(st, shape, true, FEED);
       // TAKE-AWAY: the truth is present for the first lap and removed, the bank frozen —
       // the installation this arm could actually have, and the one the memory test used.
       const taken = await deployOn(st, shape, true, FEED, { truthUntilLap: 1 });
+      // HOW MANY ROWS THE ADAPTATION ACTUALLY ADMITTED. "Inert" and "never ran" are different
+      // states and one RMS column cannot tell them apart (rule 25) — an innovation gate that
+      // rejected every row is a wiring result wearing a controller's clothes. Counted per
+      // layer per channel, and reset before the adapting run so the number belongs to it.
+      const counts = st.layers.map((p2) => (p2.readouts || []).map((r) =>
+        `${r._onlineN || 0}/${(r._onlineN || 0) + (r._infoSkipped || 0)}`).join(',')).join(' | ');
       const x = (v) => (open[key] / v).toFixed(2).padStart(6);
       console.log(`    ${shape.padEnd(8)} open ${open[key].toExponential(3)}   `
         + `static ${stat.r.totalRms.toExponential(4)} ${x(stat.r.totalRms)}x   `
         + `adapting ${live2.r.totalRms.toExponential(4)} ${x(live2.r.totalRms)}x   `
         + `take-away ${taken.r.totalRms.toExponential(4)} ${x(taken.r.totalRms)}x   `
-        + `(adapt/static ${(stat.r.totalRms / live2.r.totalRms).toFixed(3)}x)`);
+        + `(adapt/static ${(stat.r.totalRms / live2.r.totalRms).toFixed(3)}x)`
+        + `  admitted ${counts}`);
     }
   }
 }
