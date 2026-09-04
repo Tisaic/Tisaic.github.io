@@ -7931,3 +7931,31 @@ which is a different piece of work from arming a flag.
 **WHAT IS NOT NARROW: 4.95x IS THE BEST THE SHARP SQUARE HAS READ**, against a shipped 3.49x — and
 it comes from the one configuration where BOTH mechanisms that change what is modelled are active.
 Every configuration that only re-weighted trust left the square at or below 4.14x.
+
+### The fine-tap dictionary: the "wrong lags" hypothesis was wrong
+
+The stride-lag run offered products no tighter than 112 solver steps, and the classic dictionary is
+written in ADJACENT TAPS. Re-run at 8-step samples, 1761 candidates:
+
+```
+  channel 0
+    0  (shipped basis)      val 0.9908   |  0.9909  0.9942  0.9583
+    1  -- nothing improves validation; 0 terms kept
+
+  channel 1
+    0  (shipped basis)      val 0.6231   |  0.6195  0.6197  0.4102
+    1  m5*v0                val 0.6889   |  0.5408  0.5349  0.2929
+    2  -- nothing improves validation; 1 term kept
+```
+
+**FINER TAPS MADE IT WORSE.** The shoulder keeps nothing out of 1761; the elbow keeps ONE term, and
+it is `m5*v0` — elbow torque times shoulder command velocity, **both at lag zero**. Offered fast
+cross-lag products, the search preferred a same-time cross-SIGNAL one, and it degrades every
+program (0.6195 -> 0.5408, 0.6197 -> 0.5349, 0.4102 -> 0.2929).
+
+**TWO INDEPENDENT LAG SCALES, THE SAME OUTCOME**: terms that validate on the commissioning record
+do not transfer to the programs. That is not a dictionary problem, not a degree problem, and not a
+resolution problem. The dictionary is simply the cleanest demonstration of the distribution
+mismatch available, because the search provably works — it self-limits to 0-2 terms out of a
+thousand where the unvalidated version took 24 and was still going — and finds physically
+interpretable structure that the programs do not exercise.
