@@ -8142,3 +8142,55 @@ program set, no ILC — is also the better one. Any further gain has to come fro
 of them models, and the residual after the cascade is now measured to be small AND unpredictable
 from commanded state (val R2 < 0 on the program with the least left). That is a different target
 from the one this arc started with.
+
+### THE NAMED NONLINEARITY IS NULL INSIDE THE CONTROLLER, AND THE SHUFFLED CONTROL SAYS SO EXACTLY
+
+If the rigid gearbox torque is what took the ideal-correction map from 1.512x to 4.781x, the
+pilot's own forecast should want it too — and then the same physics is bought with no ILC, no
+program set and no laps. `pilot.cmdFeat` is that hook: an engineer-supplied named nonlinearity of
+the COMMAND, one generator for the fit row and the runtime row, appended after every other block
+so a model commissioned without it extends with zeros. The library never computes a torque; it
+calls what it is handed, and it is handed three consecutive commanded samples plus the layer's own
+cadence so one hook object serves every layer of a cascade.
+
+**THE FIRST TABLE WAS AN INSTRUMENT FAULT AND THE CONTROL IS WHAT CAUGHT IT.** `jointTorques` has
+rms 1.5e-2 on this arm against an applied torque of 2.3e-4, so scaling it like the row's own torque
+channels (x1e3) put the column at rms 15 where the largest neighbour is 2.06. `solveRidge` takes
+its penalty from the LARGEST diagonal of X'X and applies it to every column, so TWO columns
+re-penalised all 176 and the machine read 3.35x -> 2.74x — with the SHUFFLED control losing exactly
+as much, which is what said instrument rather than physics (rules 15, 17, 32). It is the same fault
+the map itself had to fix first, in its own change #1. The block's scale is now DERIVED from the
+commissioning record, pooled per output index so lead-to-lead structure survives, and frozen with
+the model.
+
+**CORRECTED, IT IS A NULL AT ONE TAP AND HARM AT MORE.** K 0.25 / E 0.03, feed 0.004, depth 1,
+mu 0.03:
+
+```
+  configuration      cols     sharp    circle   rounded   geo mean   MAC/cycle
+  off (shipped)       176     3.74x     3.19x     3.16x     3.350x      82,132
+  zeros [control]     188     3.74x     3.18x     3.16x     3.351x      83,572
+  shuffled [ctrl]     188     3.69x     3.17x     3.15x     3.327x      83,572
+  tau @ now           178     3.69x     3.18x     3.15x     3.328x      82,372
+  tau @ few (6 taps)  188     2.55x     2.50x     2.25x     2.428x      83,572
+  tau @ lead (17)     210     2.57x     2.52x     2.26x     2.446x      86,212
+```
+
+The zeros row is the plumbing control and it reproduces the baseline. **`tau @ now` measures 3.328x
+against the shuffled control's 3.327x** — the physics-carrying block and the physics-destroyed
+block are the same number to three digits, which is rule 9's both halves answered in one row. More
+taps do not help it; they cost a third of the machine, and they cost it where the shuffled control
+does NOT, so the harm at six taps is collinearity among near-identical lead offsets rather than
+capacity.
+
+**WHY, AND IT IS THE SAME REASON THE MAP DID NOT COMPOSE.** `arm-rig.mjs` routes SIX measured
+signals — two encoder angles, two speeds, and TWO APPLIED TORQUES — and `_row` carries every one at
+every lag in the window. The applied torque contains the servo's own rigid feedforward, so the term
+the map had to construct from kinematics, the pilot is simply handed. The map's feature set is
+commanded kinematics ONLY and has no torque channel at all, which is exactly why naming the
+nonlinearity was worth 3x there and nothing here.
+
+That is a testable claim rather than a story, and `test/_tauabl.mjs` puts it to the machine: withhold
+the torque channels (`nMeasured` 6 -> 4, which drops exactly those two signals and their lag block),
+then hand the commanded rigid torque back through the hook. If they are substitutes, the second
+recovers what the first loses.
