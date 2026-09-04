@@ -6587,3 +6587,76 @@ Its cost is the reason it is worth trying at all: propagation carries unbounded 
 FIXED cost, where a window pays linearly in reach and still truncates. At order 16 over 70
 leads one forward pass is ~18k MAC, the same order as the forecast it replaces, reaching
 9,000 steps instead of 2,500.
+
+### THE PROPAGATING FORECAST LOSES TO THE WINDOW, AND ONE-STEP FITTING IS WHY (`test/_ssmfc.mjs`)
+
+The shape change, measured as a forecast before being allowed near the QP: a one-step model of
+the six routed MEASURED signals driven by the command (an autoregression on `eFree` is
+impossible — there is no tracker at deploy), the pilot's readout on top, and lead L reached by
+iterating the first forward on the known future command. Fitted on the commissioning scribble,
+scored on programs it has never seen, against the PILOT'S OWN BANK on the same records at the
+same leads:
+
+```
+  program  ch   lead 0    lead 184   lead 368   lead 552
+  sharp     0   0.8823     -1.9422    -2.1692    -1.6704   propagated
+            0   0.8616      0.8543     0.8468     0.8507   pilot's own bank
+  sharp     1   0.0935     -3.5790    -7.7705    -5.7202   propagated
+            1   0.0289      0.1365     0.0231    -0.1967   pilot's own bank
+  circle    0   0.9555     -2.2606    -1.9493    -1.6250   propagated
+            0   0.9027      0.9100     0.9021     0.8890   pilot's own bank
+  rounded   0   0.9190     -2.5508    -2.5940    -2.0714   propagated
+            0   0.8817      0.8882     0.8835     0.8678   pilot's own bank
+```
+
+**THE DIRECT MULTI-HORIZON BANK WINS DECISIVELY.** It holds R² 0.85-0.91 across the whole
+horizon where the recursion compounds its own error into nonsense past lead 0 — the classic
+direct-against-recursive multi-step tradeoff, and direct wins on this plant. The propagated
+model's marginal lead-0 edge (0.88 against 0.86, 0.96 against 0.90) does not survive anywhere
+else.
+
+**AND IT CORRECTS A BELIEF THIS FILE CARRIES.** `forecast.mjs` recorded far leads collapsing
+to -1.5 on every shape; in THIS configuration the pilot's bank holds 0.85-0.89 at lead 552 on
+the shoulder. That number belongs to another configuration and was about to be quoted against
+a new measurement — which is the whole reason both rows are in one table.
+
+**THE FAILURE HAS A NAMED CAUSE AND §43 ALREADY NAMED THE CURE.** The one-step model was fitted
+by ONE-STEP least squares and then iterated 552 times: the fit optimised a criterion that has
+almost nothing to do with the quantity it was asked to produce. Simulation-error (multi-step)
+descent exists for exactly this, and §43 lists it — "state-space fitted by simulation-error
+descent, or the kernel/primitives route — genuine" — as named and not closed. **This bench does
+not convict the propagating shape; it convicts one-step fitting of a model that will be
+iterated.** What it does convict is the cheap version, which is worth knowing before the
+expensive one is built.
+
+### WHERE THE DIRECTIVE STANDS, WITH EVERY ROUTE'S EVIDENCE
+
+The owner's constraint is that the model is controllable and the algorithm may change shape.
+The consolidated position, all measured this session at the canonical cell:
+
+```
+  SHIPPABLE NOW
+    stack verify-clamp defect fixed, both contracts green
+    depth 2 at raised authority          1.85x over the shipped configuration, nothing worse
+
+  CLOSED BY MEASUREMENT
+    forecast quality                     20% (and the oracle bounds the whole family)
+    decision clock                       inert at 16x the arithmetic
+    effort weight, QP iterations         inert
+    pose scheduling                      4% of gain across the workspace
+    phase scheduling                     3% across a lap, in motion
+    cross-coupling                       3-5%, bounded well below the missing variance
+    held-vs-moving `h`                   5.5% net, and the circle goes backwards
+    causal disturbance estimate          harmful at every gain
+    online adaptation                    1.000-1.002x, rows genuinely admitted
+    propagated forecast, one-step fit    loses to the window at every lead but 0
+
+  UNRESOLVED, INSTRUMENT-LIMITED
+    depth-2 residual transferability     both attempts broken (window too short; rows too few)
+    simulation-error fitting             named in §43, never closed, and the one cure the
+                                         propagated result actually points at
+```
+
+**THE PILOT AT DEPTH 2 WITH AUTHORITY IS AT ITS PLANT MODEL'S ONE-SHOT CEILING** — `h` explains
+R² 0.94/0.77 of what a correction does, 1/sqrt(1-R²) is about 4x, and the machine delivers
+4.09x. Every knob that is not `h` or iteration has now been measured and is small.
