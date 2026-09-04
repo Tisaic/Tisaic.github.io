@@ -61,7 +61,14 @@ console.log(`probe amplitude ${pilot.probeAmp}, uMax ${pilot.uMax} `
 
 const saved = pilot.hs.map((h) => ({ resp: h.resp.slice ? h.resp.slice() : Array.from(h.resp), dc: h.dc }));
 const open = {};
-for (const shape of SHAPES) open[shape] = (await deployOn(pilot, shape, false, FEED)).r.totalRms;
+const traceFor = {};
+const openRep = {};
+for (const shape of SHAPES) {
+  const r0 = await deployOn(pilot, shape, false, FEED);
+  open[shape] = r0.r.totalRms; openRep[shape] = r0.r;
+  console.log(`  open ${shape.padEnd(8)} total ${r0.r.totalRms.toExponential(3)} `
+    + `bias ${r0.r.contourBias.toExponential(2)} osc ${r0.r.contourOsc.toExponential(2)}`);
+}
 
 console.log('\n  h ch0:ch1 ' + SHAPES.map((s) => s.padStart(20)).join('') + '        uPk');
 for (const gs of PAIRS) {
@@ -77,9 +84,25 @@ for (const gs of PAIRS) {
   const cols = [];
   let pk = 0;
   for (const shape of SHAPES) {
-    const r = await deployOn(pilot, shape, true, FEED);
+    // RULE 39, POINTED AT THE CORRECTION INSTEAD OF THE ERROR. Three mechanisms were proposed
+    // for this effect and the machine rejected all three, which means proposing is the wrong
+    // activity: what has never been read is what scaling `h` CHANGES. Bias and oscillation have
+    // different causes and different fixes — a scaled kernel that removes BIAS is a gain
+    // calibration, one that removes OSCILLATION is the QP being detuned into smoothness, and
+    // one RMS number hides which. `uRms` beside them says whether the correction got bigger,
+    // smaller or merely differently shaped.
+    const r = await deployOn(pilot, shape, true, FEED, { trace: (traceFor[shape] = []) });
     pk = Math.max(pk, r.uPk);
-    cols.push(`${r.r.totalRms.toExponential(3)} ${(open[shape] / r.r.totalRms).toFixed(2).padStart(6)}x`);
+    const tr = traceFor[shape];
+    let s2 = 0, d2 = 0;
+    for (let i = 1; i < tr.length; i++) {
+      s2 += tr[i].u[0] * tr[i].u[0] + tr[i].u[1] * tr[i].u[1];
+      d2 += (tr[i].u[0] - tr[i - 1].u[0]) ** 2 + (tr[i].u[1] - tr[i - 1].u[1]) ** 2;
+    }
+    const uRms = Math.sqrt(s2 / Math.max(1, tr.length - 1));
+    const uRate = Math.sqrt(d2 / Math.max(1, tr.length - 1));
+    cols.push(`${(open[shape] / r.r.totalRms).toFixed(2).padStart(5)}x b${r.r.contourBias.toExponential(1)}`
+      + ` o${r.r.contourOsc.toExponential(1)} u${uRms.toFixed(3)} r${uRate.toExponential(1)}`);
   }
   console.log(`  ${gs.map((v) => v.toFixed(2)).join(':').padStart(9)} ${cols.join('  ')}     ${pk.toFixed(4)}`);
 }
