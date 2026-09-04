@@ -39,9 +39,14 @@ const MODES = (process.env.BC_MODES || 'auto,linear').split(',');
 // what the machine delivers PER MAC, and a lever that is free on both axes changes that ratio
 // without appearing in either cost column.
 const HG = (process.env.BC_HGAIN || '1,1').split(',').map(Number);
+// QP ITERATIONS, re-asked because the gain changed the problem. Iterations and the gain are both
+// regularisers of the same inversion — the sweep that set 4 was run on an OVER-CORRECTING solver,
+// where more iterations converge harder onto a plan that was too large. Damped, the optimum can
+// move either way, and it is now the cheapest knob in the budget.
+const QI = +(process.env.BC_ITERS || 0);
 
 const gm = (v) => Math.exp(v.reduce((a, x) => a + Math.log(x), 0) / v.length);
-console.log(`arm K ${PG.K} / E ${PG.E}, depth ${DEPTH}, Nfrac ${NFRAC}, blocks ${BLOCKS}, mu ${MU}, hGain ${HG.join('/')}`);
+console.log(`arm K ${PG.K} / E ${PG.E}, depth ${DEPTH}, Nfrac ${NFRAC}, blocks ${BLOCKS}, mu ${MU}, hGain ${HG.join('/')}, iters ${QI || 'default'}`);
 let open = null;
 console.log('\n  basis     features        sharp     circle    rounded   geo mean'
   + '    forecast      RLS 2n^2     deployed MAC');
@@ -59,6 +64,7 @@ for (const mode of MODES) {
   for (const p of layers) {
     p.uWeight = MU > 0 ? new Array(p.nc).fill(MU) : null;
     p.qpBlocks = BLOCKS > 0 ? BLOCKS : null;
+    if (QI > 0) p.qpIters = QI;
     p.N = Math.max(2, Math.round(p.N * NFRAC));
   }
   // Applied AFTER commissioning and before scoring, so the identified model is untouched and the
