@@ -6660,3 +6660,41 @@ The consolidated position, all measured this session at the canonical cell:
 **THE PILOT AT DEPTH 2 WITH AUTHORITY IS AT ITS PLANT MODEL'S ONE-SHOT CEILING** — `h` explains
 R² 0.94/0.77 of what a correction does, 1/sqrt(1-R²) is about 4x, and the machine delivers
 4.09x. Every knob that is not `h` or iteration has now been measured and is small.
+
+### `h` IS AMPLITUDE-DEPENDENT, THE TWO CHANNELS GO OPPOSITE WAYS, AND IT EXPLAINS THE SATURATION
+
+The pilot identifies `h` from a probe at **0.0225 rad** and the QP inverts it at corrections up
+to 0.15 shipped and **0.60 at the raised cap — 27x the identification amplitude** — on a plant
+with Stribeck friction, backlash and a nominally-linear gearbox. Nobody had asked whether the
+response per unit correction is the same at both ends. It is not (`test/_hamp.mjs`,
+differencing two runs of the deterministic plant around a `du` step during motion):
+
+```
+   du     ch0 relative   ch0 shape      ch1 relative   ch1 shape
+  0.05      1.0000        1.0000          1.0000        1.0000
+  0.15      0.9692        0.9987          1.0350        0.9981
+  0.30      0.9176        0.9914          1.0817        0.9889
+  0.60      0.7932        0.9532          1.1512        0.9534
+```
+
+**THE SHOULDER COMPRESSES 21% AND THE ELBOW EXPANDS 15%**, both monotone, both with the shape
+preserved at 0.95+. Opposite signs is the useful half: it is a kinematic signature rather than
+a frictional one — a 0.6 rad joint offset is a large pose change, and the tool error's
+sensitivity to each joint shifts with pose as one lever shortens and the other lengthens. It
+also means a single scalar would split the difference and measure neither.
+
+**AND IT EXPLAINS THE ONE THING THE ORACLE LADDER COULD NOT.** Given a 1.20 rad cap and a
+perfect forecast the QP stops at uPk 0.4785 of its own accord and delivery saturates at 3.65x.
+A linear model cannot want to stop — the effort weight is measured inert — and it is not
+declining to act: it applies the `u` its SMALL-SIGNAL model says cancels `f0` and then stops,
+because that model says it is finished, while the machine returns ~79% of the response at that
+amplitude. **It also explains why DEPTH pays where a bigger cap alone does not**: layer 2 sees
+exactly the residual the compression leaves, so the cascade has been compensating iteratively
+for what an amplitude-correct `h` would fix in one shot.
+
+**THE FIX RUNS THE WRONG WAY ROUND.** Scaling `h` DOWN to the true large-signal gain makes the
+QP believe each unit of `u` buys LESS, so it asks for MORE correction to cancel the same `f0`.
+A model that under-states its own authority is what makes a solver use the authority it has.
+`test/_hgain.mjs` puts that to the machine at the raised cap, per channel and swept rather than
+set, because the right scale depends on the amplitude the QP actually runs at — a property of
+the program and the cap, not a constant.
