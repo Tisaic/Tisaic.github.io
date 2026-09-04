@@ -8358,3 +8358,56 @@ cut ~7,800 — **78% of budget**, and most of it bought without giving anything 
 cliff this sweep measured. Reaching 1% needs the forecast evaluated RECURSIVELY rather than as a
 fresh dot product per lead, which is a different deployed structure and not a knob. That is a
 statement of what would have to be built, not a refusal (rule 59).
+
+### ADAPTATION AND THE HORIZON DO NOT COMPOSE, AND THE BEST CELL HAS ADAPTATION OFF
+
+`test/_subspace.mjs` was built to ask whether the online fit can be compressed, because
+`_rowmake.mjs` measured it at 242,978 MAC/sample against the forecast's 14,233 — 17x — so the fit
+and not the controller is what breaks the scan budget. It answered that question and a second one
+nobody asked.
+
+**SUBSPACE ADAPTATION IS DEAD, IN BOTH REGIMES.** The residual is computed against the full weight
+vector while only the listed columns may move, so cost falls to O(m^2 + n) at no cost in forecast
+capacity. Measured at depth 2, mu 0.03, k 32:
+
+```
+  mode      adapted cols   HALF horizon   FULL horizon   RLS MAC/sample
+  none            -            6.667x         6.038x               0
+  full          176            6.251x         6.515x         244,372
+  newest         11            3.630x         3.253x           2,362
+  top            32            3.238x         3.088x           9,586
+  random         32            1.870x            —             9,586
+```
+
+Every restricted mode is far BELOW no adaptation at all. The mechanism is the opposite of the one
+the design argued for: forcing the whole innovation through a few weights does not gently track a
+moving operating point, it overfits a low-dimensional subspace and distorts the columns it is
+allowed to move. One prediction did hold — `random` at 1.87x is far worse than `top` at 3.24x and
+`newest` at 3.63x, so the selection genuinely carries information — and it does not save the idea,
+because the ceiling is wrong whatever the selection.
+
+**AND THE FIRST TWO ROWS ARE THE FINDING.** Adaptation HELPS at full horizon (6.038x -> 6.515x,
++7.9%) and HURTS at half (6.667x -> 6.251x, -6.2%). The best of all four cells is **half horizon
+with adaptation OFF, 6.667x** — better than full horizon with adaptation armed. The first run of
+this experiment changed both at once, which is rule 20, and the re-run at full N is what separated
+them; the verdict on subspaces survived the confound but the interaction only appeared because of
+it.
+
+**WHICH REORGANISES THE BUDGET PROBLEM.** "The fit is 87% of the sliced overage" was conditional on
+adaptation being armed, and the machine says it should not be at the horizon that wins. With it off
+the RLS leaves the budget entirely and what remains is the deployed path, already cut 8.9x:
+
+```
+  configuration                   delivered   MAC/cycle   % of 10k
+  half N, frozen, dense             6.667x      58,238       582%
+  + move blocking (m=6)             6.005x      24,302       243%
+  + linear basis                    5.652x      16,772       168%
+```
+
+1.7x left rather than 24x. Every earlier projection in this file that combined the horizon cut with
+adaptation's +14% is wrong on this evidence and is superseded by the table above.
+
+STILL OPEN AND STATED: the restore control in `_subspace.mjs` DRIFTED 0.7% (sharp 4.142865 vs
+4.175132) — larger than the 0.08% repeatability floor measured in `_hoist.mjs`, small against the
+gaps above, but it says `ro._rls = null` is not a complete reset and the marginal rows of that
+table deserve no more confidence than 0.7%.
