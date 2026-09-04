@@ -8194,3 +8194,64 @@ That is a testable claim rather than a story, and `test/_tauabl.mjs` puts it to 
 the torque channels (`nMeasured` 6 -> 4, which drops exactly those two signals and their lag block),
 then hand the commanded rigid torque back through the hook. If they are substitutes, the second
 recovers what the first loses.
+
+### THE RICH-BLOCK PRIOR IS COSTING 41% OF THE MACHINE, AND RULE 16 IS WHY NOBODY SAW IT
+
+The owner asked whether signal scaling is a knob anywhere — whether the inputs and outputs should
+be normalised to a common range instead of used raw. The answer is no, and chasing it found
+something else.
+
+**NOTHING IN `lib/pilot/pilot.js` NORMALISES THE FORECAST ROW.** Three things look like they do
+and do not: `_colScale` is a PENALTY multiplier (1 on the base block, 100 on the rich ones),
+`solveRidge` sets ONE global penalty from the largest diagonal of X'X and adds it to every column,
+and the only real signal scaling anywhere is the hand-picked `x1e3` constants inside each rig's
+`routeSignals` — a per-plant constant living in the harness, which is what rule 31 exists to
+forbid. The row is badly out of family: the six routed signals span 41x (`tau2` 4.97e-2 against
+`q2` 2.06e+0) and the 176-column fit row spans **864x**, 4.79e-3 to 4.14e+0.
+
+**BUT COLUMN SCALE IS NOT THE LEVER.** `test/_rowscale.mjs` fits the pilot's OWN `_buildXY` rows at
+lead 0 — no second copy of the row builder — with the ridge re-picked for every mode so only the
+penalty's DISTRIBUTION varies, and a time-ordered split because neighbouring rows share a window:
+
+```
+  channel 0 (shoulder)   pilot 0.99127   flat 0.98879   std 0.98890   std-flat 0.98699
+  channel 1 (elbow)      pilot 0.57971   flat 0.66807   std 0.64667   std-flat 0.61740
+```
+
+Standardising within a block (`colScale[i]` proportional to `A[i][i]`, which is algebraically what
+standardising a column IS) measures neutral on the shoulder, and on the elbow it helps only while
+the 100x prior is present — with the prior gone it HURTS. What moves the elbow is removing the
+prior, 21% less unexplained variance on the channel this project keeps measuring as the one that
+will not forecast.
+
+**AND ON THE MACHINE IT IS WORTH 41%, MONOTONE, WITH NOTHING TRADED.** `test/_richpen.mjs`, K 0.25 /
+E 0.03, depth 1, mu 0.03. `_colScale` already reads `PILOT_RICH_PENALTY`, so this needed no code
+change at all:
+
+```
+  penalty      sharp     circle    rounded    geo mean    the fit's own held-out R^2
+     100       3.74x      3.19x      3.16x      3.350x      0.9528 / 0.6156   <- SHIPPED
+      30       4.14x      3.52x      3.57x      3.733x      0.9555 / 0.6391
+      10       4.39x      3.83x      3.96x      4.055x      0.9577 / 0.6590
+       3       4.41x      4.68x      4.81x      4.628x      0.9585 / 0.4914
+       1       4.40x      4.81x      4.95x      4.713x      0.9585 / 0.4914
+```
+
+Three programs, all improving, no arithmetic cost — it is one number in a penalty vector.
+
+**THE LAST COLUMN IS WHY IT WAS MISSED, AND IT DOES NOT OVERTURN THE EARLIER MEASUREMENT — IT
+EXPLAINS IT.** From penalty 10 to 1 the fit's own held-out R^2 on the elbow FALLS, 0.6590 ->
+0.4914, while the machine keeps improving 4.055x -> 4.628x -> 4.713x. `_colScale`'s own comment
+records exactly that fall — "dropping it to 10 and then to 1 makes the SCHEDULED block score WORSE
+held-out, not better — 0.58680 -> 0.48061 -> 0.43306" — and the table above reproduces its shape.
+That measurement was RIGHT about the fit and never asked the machine, so a default was set by the
+one instrument this project's own rules say cannot decide it. Rule 16, in the place it is hardest
+to notice: not a wrong number, a right number answering a different question.
+
+**WHAT IS NOT YET ESTABLISHED, STATED BEFORE ANY DEFAULT MOVES.** This is ONE plant (rule 31), and
+CLAUDE.md is explicit that a default change needs `test/pilot/sixplant.mjs`, "whose absence is why
+two regressions shipped" — the penalty is an env var and that pass already forwards the parent
+environment to its children, so the gate runs unmodified at 100 and at 1. And rule 42's band on the
+MEASURED score admits penalty 3 (4.628x) and 1 (4.713x) but not 10, so choosing inside the band is
+a separate decision from establishing the effect. Whether it composes with depth 2 and all-layer
+adaptation — which stand at 6.04x and 6.89x — is running beside it.
