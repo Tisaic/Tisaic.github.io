@@ -7509,3 +7509,31 @@ guard rather than as the rule.
 statement this project has of why the excitation cannot simply be made bigger: past the
 small-signal regime, extra amplitude buys nonlinearity the linear fit cannot use and cannot
 represent, so the record gets harder rather than richer. The scribble is not weak by oversight.
+
+### The MIMO arc, honestly: a solid plant finding and a configuration-dependent controller gain
+
+Three follow-ups, and two of them are negative.
+
+```
+  A  mimo at the shipped probe hold (rises 10)      3.49 -> 3.91   2.76 -> 2.82   2.87 -> 3.03   +6.6%
+  B  mimo at the re-derived hold   (rises 25)       3.20 -> 3.26   4.04 -> 3.77   3.41 -> 3.35   -2%
+  C  moving cross kernel instead of the held one    3.90 -> 3.41   2.82 -> 2.73   3.03 -> 2.88   worse
+```
+
+**B: THE TWO REPAIRS DO NOT COMPOSE.** The best single configuration measured is the longer probe
+WITHOUT the MIMO solve (geometric mean 3.53) rather than the MIMO solve at the shipped probe
+(3.22). Both changes act largely through the same channel — asking for less correction, more
+accurately — so they overlap rather than add.
+
+**C: AND THE MOVING CROSS KERNEL IS WORSE, WHICH THE POSE DEPENDENCE PREDICTS IN HINDSIGHT.**
+Averaging the symmetric response over four phases of the lap blends operating points measured as
+incompatible (18% of DC at one phase, 432% at another), so the average is a model of nothing in
+particular. `0->1` reads a moving peak of 9.3e-2 against the held probe's 7.8e-2 — close — while
+`1->0` reads 5.6e-2 against 1.9e-1, a factor of 3.4 the other way. One LTI cross kernel cannot
+carry a term that changes by 20x over a lap; what that needs is SCHEDULING, not a better average.
+
+**SO THE ARC SPLITS INTO TWO CLAIMS WITH DIFFERENT STRENGTHS.** The PLANT finding is solid, new,
+and was invisible to the instrument watching for it: a large, linear, amplitude-invariant,
+pose-dependent reverse cross-coupling, against a `nCross` that reports a settled DC. The
+CONTROLLER gain is +6.6% in one configuration and negative in the next one tried, which is not a
+step toward 44x and should not be quoted as one.

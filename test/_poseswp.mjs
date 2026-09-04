@@ -48,6 +48,14 @@ const FEED = +(process.env.PS_FEED || 0.004);
 const UCAP = +(process.env.PS_UCAP || 0.6);
 const SHAPES = (process.env.PS_SHAPES || 'rounded,circle,sharp').split(',');
 const NPOSE = +(process.env.PS_NPOSE || 2);          // grid is NPOSE x NPOSE
+// THE AMPLITUDE LADDER, AS FRACTIONS OF THE LARGEST THE DRIVE WILL PASS. A single-amplitude
+// identification describes a single operating point, and the correction at deploy ranges from 0
+// to uMax — so one amplitude is a calibration that does not span the range it is used over, which
+// is the failure this project has now paid for five separate times. It also makes the plant's
+// nonlinearity MEASURABLE rather than fatal: if every rung fits well alone and the pooled fit
+// does not, the plant is amplitude-dependent and the model needs scheduling on amplitude. That is
+// a finding; a single rung can only produce a number.
+const AMPS = (process.env.PS_AMPS || '1,0.5,0.25,0.125').split(',').map(Number);
 const NF = +(process.env.PS_NF || 24);               // multisine lines
 const NYQ_MULT = +(process.env.PS_NYQ || 4);         // shortest period, in regressor strides
 const LIM = { vMax: 8e-4, aMax: 4e-6, jMax: 2e-7 };  // the rig's own declared limits
@@ -84,8 +92,9 @@ for (let i = 0; i < NPOSE; i++) {
     poses.push([lo[0] + (hi[0] - lo[0]) * f(i), lo[1] + (hi[1] - lo[1]) * f(j)]);
   }
 }
-const PER = Math.floor(NSAMP / poses.length) * S;    // one multisine period per pose
-console.log(`  ${poses.length} poses x ${PER} solver steps each = ${poses.length * PER} total`);
+const PER = Math.floor(NSAMP / (poses.length * AMPS.length)) * S;   // one period per (pose, amplitude)
+console.log(`  ${poses.length} poses x ${AMPS.length} amplitudes x ${PER} steps `
+  + `= ${poses.length * AMPS.length * PER} total`);
 
 // THE MULTISINE: log-spaced harmonics of the record period, each at the largest amplitude its
 // OWN binding limit allows, random phase per line and per channel.
@@ -98,11 +107,30 @@ const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed
 // STRUCTURALLY unable to explain, so it does not teach the model anything; it only makes the
 // target harder. "Learn the frequency domain of every pose" is bounded above by the model's own
 // sampling, and that bound is a property of the fit rather than of the plant.
+// AND THE BAND IS BOUNDED FROM BELOW AS WELL, WHICH THE FIRST THREE ATTEMPTS ALL MISSED. A lag
+// window must REACH the period of what it has to see (rule 37, measured twice on this project:
+// LINEAR features with the right window beat a 544-feature map with the wrong one at a third of
+// the cost). This row is 12 lags at stride 14 samples, so it spans 1232 solver steps — and the
+// multisine's lowest line had a period of 8960, seven times longer than the window can span.
+// Content the window cannot reach is as unusable as content the stride cannot sample: measured,
+// with the amplitude regime correct and the drive clean, in-sample R^2 0.009 and a residual of
+// 0.0548 against a target of 0.0586. The model explained one per cent of its own record.
+//
+// SO THE USABLE BAND IS PERIODS BETWEEN THE STRIDE'S NYQUIST AND THE WINDOW'S REACH — 224 to
+// 1232 steps here, BARELY ONE OCTAVE — and the commissioning scribble sits inside it by
+// construction, at a correlation time of 662. That is a property of the REGRESSOR GEOMETRY, not
+// of the plant, and it is the ceiling on what any excitation can teach this model.
 const STRIDE_STEPS = pilot.readouts[0].stride * S;
+const REACH_STEPS = (pilot.readouts[0].mLag - 1) * STRIDE_STEPS;
 const TOP = +(process.env.PS_TOP || 0) || Math.round(NYQ_MULT * STRIDE_STEPS);
+const BOT = +(process.env.PS_BOT || 0) || REACH_STEPS;
+console.log(`  the row spans ${REACH_STEPS} steps and samples on a ${STRIDE_STEPS}-step lattice, `
+  + `so it can only USE periods ${Math.round(2 * STRIDE_STEPS)}..${REACH_STEPS}; `
+  + `exciting outside that is energy the fit cannot represent`);
 const lines = [];
 for (let i = 0; i < NF; i++) {
-  const h = Math.round(Math.exp((Math.log(PER / TOP) * i) / Math.max(1, NF - 1)));
+  const per = Math.exp(Math.log(BOT) + (Math.log(TOP / BOT) * i) / Math.max(1, NF - 1));
+  const h = Math.max(1, Math.round(PER / per));
   if (!lines.length || h > lines[lines.length - 1]) lines.push(h);
 }
 const design = lines.map((h) => {
@@ -152,12 +180,47 @@ const progPk = { v: 0, a: 0 };
   }
   await pa.l1.destroy(); await pa.l2.destroy();
 }
-let sweepV = 0, sweepA = 0;
-for (const d of design) { sweepV += d.A * d.w; sweepA += d.A * d.w * d.w; }
-let GAIN = Math.min(progPk.v / Math.max(1e-30, sweepV), progPk.a / Math.max(1e-30, sweepA));
-console.log(`  the programs peak at v ${progPk.v.toExponential(3)} a ${progPk.a.toExponential(3)} `
-  + `rad/step; the raw multisine peaks at v ${sweepV.toExponential(3)} a ${sweepA.toExponential(3)}`
-  + ` -> gain ${GAIN.toExponential(3)}`);
+// ONE GLOBAL GAIN CANNOT HIT TWO LIMITS, AND SCALING TO THE TIGHTER ONE REPRODUCES THE VERY
+// TRAP THIS DESIGN EXISTS TO AVOID. Measured on the first attempt at this rule: the programs peak
+// at v 5.063e-4 and a 1.557e-4 per step, the raw multisine at v 7.074e-3 and a 2.738e-5, so
+// VELOCITY binds at 0.0716 while acceleration would have allowed 5.7x — the excitation ends up
+// carrying about a eightieth of the program's acceleration. That is rule 41b verbatim ("the box
+// TRAVERSE binds through velocity, so a and j ride along"), reappearing inside the fix for it.
+//
+// THE SHAPE IS THE FREE PARAMETER, NOT THE SCALE. With A_k = alpha/w_k + beta/w_k^2 the peak
+// velocity sum is alpha*n + beta*sum(1/w) and the peak acceleration sum is alpha*sum(w) + beta*n,
+// which is two linear equations in two unknowns: solve them and BOTH limits are met exactly.
+// Physically, alpha buys the low band (where velocity binds) and beta the high band (where
+// acceleration does), and the solve decides the trade instead of a global scale conceding it.
+let GAIN = 1;
+{
+  const n = design.length;
+  let sw = 0, si = 0;
+  for (const d of design) { sw += d.w; si += 1 / d.w; }
+  // [n, si; sw, n] [alpha, beta] = [v, a]
+  const det = n * n - si * sw;
+  let alpha = 0, beta = 0;
+  if (Math.abs(det) > 1e-30) {
+    alpha = (progPk.v * n - si * progPk.a) / det;
+    beta = (n * progPk.a - sw * progPk.v) / det;
+  }
+  if (alpha > 0 && beta > 0) {
+    for (const d of design) d.A = Math.min(d.A, alpha / d.w + beta / (d.w * d.w));
+    console.log(`  two-term shape: alpha ${alpha.toExponential(3)} beta ${beta.toExponential(3)}`);
+  } else {
+    // A NEGATIVE COEFFICIENT MEANS THE PROGRAM'S OWN v AND a ARE NOT SIMULTANEOUSLY REACHABLE
+    // WITH THIS LINE SET, and inventing a shape that ignores that would be a fabrication. Fall
+    // back to the tighter limit and SAY so, rather than reporting a match that was not made.
+    console.log(`  two-term shape UNREACHABLE with these lines (alpha ${alpha.toExponential(2)},`
+      + ` beta ${beta.toExponential(2)}); falling back to the binding limit alone`);
+  }
+  let sweepV = 0, sweepA = 0;
+  for (const d of design) { sweepV += d.A * d.w; sweepA += d.A * d.w * d.w; }
+  GAIN = Math.min(progPk.v / Math.max(1e-30, sweepV), progPk.a / Math.max(1e-30, sweepA));
+  console.log(`  the programs peak at v ${progPk.v.toExponential(3)} a ${progPk.a.toExponential(3)}`
+    + ` rad/step; the shaped multisine at v ${sweepV.toExponential(3)} a ${sweepA.toExponential(3)}`
+    + ` -> gain ${GAIN.toExponential(3)}`);
+}
 
 async function satAt(gain, pose) {
   const { arm, servo } = await makeArm();
@@ -192,11 +255,23 @@ async function satAt(gain, pose) {
   for (let i = 0; i < st.length; i++) worst = Math.max(worst, (st[i].saturated - before[i]) / n);
   return worst;
 }
-for (let tryN = 0; tryN < 12; tryN++) {
-  const f = await satAt(GAIN, poses[0]);
-  console.log(`  gain ${GAIN.toExponential(2)}: drive saturated ${(100 * f).toFixed(2)}% of steps`);
-  if (f < 0.005) break;
-  GAIN /= 2;
+// MAXIMISE THE TORQUE WITHOUT EVER VIOLATING THE LIMIT — bisected, not halved. Halving down from
+// an arbitrary start lands wherever the powers of two happen to fall and gave a drive running at
+// 30% of tauMax with the excitation matched to the PROGRAM's velocity, so most of the machine's
+// authority was going unused. Bisection finds the edge itself: the largest gain with no
+// saturation at all, to within a few per cent, measured on the machine like every other constant
+// here.
+{
+  let lo = 0, hi = GAIN;
+  // first make sure `hi` actually violates, so the bracket is a bracket rather than an assumption
+  for (let k = 0; k < 8 && (await satAt(hi, poses[0])) < 0.005; k++) { lo = hi; hi *= 2; }
+  for (let k = 0; k < 7; k++) {
+    const mid = 0.5 * (lo + hi);
+    if ((await satAt(mid, poses[0])) < 0.005) lo = mid; else hi = mid;
+  }
+  console.log(`  bisected to the saturation edge: ${lo.toExponential(3)} clean, `
+    + `${hi.toExponential(3)} violates`);
+  GAIN = lo;
 }
 let rawRms = 0;
 for (const d of design) rawRms += d.A * d.A / 2;
@@ -217,8 +292,9 @@ console.log(`  chosen gain ${GAIN.toExponential(3)}; command rms ${rawRms.toExpo
 async function recordSweep() {
   const { arm, servo } = await makeArm();
   homeArm(arm, servo, mkPath('rounded', FEED));
-  const x = [], cmd = [], e = [];
+  const x = [], cmd = [], e = [], amp = [];
   for (const pose of poses) {
+   for (const frac of AMPS) {
     // EASE INTO THE POSE AND LET IT SETTLE, because a record taken across the approach describes
     // the approach (rule 13). The settle is in periods of the plant's own measured Ts.
     const from = [arm.encoders()[0].angle, arm.encoders()[1].angle];
@@ -234,9 +310,9 @@ async function recordSweep() {
       for (const d of design) {
         for (let c = 0; c < 2; c++) {
           const th = d.w * k + d.ph[c];
-          q[c] += GAIN * d.A * Math.sin(th);
-          v[c] += GAIN * d.A * d.w * Math.cos(th);
-          a[c] -= GAIN * d.A * d.w * d.w * Math.sin(th);
+          q[c] += frac * GAIN * d.A * Math.sin(th);
+          v[c] += frac * GAIN * d.A * d.w * Math.cos(th);
+          a[c] -= frac * GAIN * d.A * d.w * d.w * Math.sin(th);
         }
       }
       const tau = servo.torques([{ theta: q[0], omega: v[0], alpha: a[0] },
@@ -244,13 +320,14 @@ async function recordSweep() {
       arm.step(tau[0], tau[1], 1);
       if (k % S === 0) {
         const r = routeSignals(arm, [{ pos: q[0] }, { pos: q[1] }], tau);
-        x.push(r.measured); cmd.push([q[0], q[1]]); e.push(r.truth);
+        x.push(r.measured); cmd.push([q[0], q[1]]); e.push(r.truth); amp.push(frac);
       }
     }
+   }
   }
   const st = servo.limitStats ? servo.limitStats() : null;
   await arm.l1.destroy(); await arm.l2.destroy();
-  return { x, cmd, u: [], e, lap: 0, sat: st };
+  return { x, cmd, u: [], e, amp, lap: 0, sat: st };
 }
 
 const sweep = await recordSweep();
