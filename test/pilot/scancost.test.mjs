@@ -73,11 +73,26 @@ check('the peak (no scheduling) is over budget and reported as such',
   full.peak > BUDGET, `${full.peak.toLocaleString()} MAC — the sliced schedule is the deployment mode`);
 
 // CONTROLS (rule 21): each arming moves exactly its own part.
-check('arming the banks adds ONLY the router term',
+// ARMING THE BANKS COSTS TWO THINGS, NOT ONE, AND THE SECOND IS A REAL LIMITATION RATHER THAN
+// AN ACCOUNTING ARTEFACT. The forecast evaluates its lead-INVARIANT columns once for the whole
+// horizon — the constant and the measured block, read at fixed offsets and multiplied by one
+// shared weight vector. A router blend materialises a DIFFERENT weight vector per lead, so that
+// hoist cannot fire and the forecast reverts to `features * leads`. This check used to assert
+// pure additivity and it was right to go red when the hoist landed: arming the banks really does
+// move the forecast term, and an engineer choosing whether to arm them needs the number.
+check('arming the banks adds the router term AND forfeits the forecast hoist',
   banks.parts.router > 0 && bare.parts.router === 0
-  && banks.parts.qp === bare.parts.qp && banks.parts.forecast === bare.parts.forecast
+  && banks.parts.forecast >= bare.parts.forecast
+  && banks.parts.qp === bare.parts.qp
   && banks.parts.rls === bare.parts.rls && banks.parts.interp === bare.parts.interp,
-  `router 0 → ${banks.parts.router}`);
+  `router 0 → ${banks.parts.router}, forecast ${bare.parts.forecast.toLocaleString()} → `
+  + `${banks.parts.forecast.toLocaleString()}`);
+// AND THE FORFEIT IS ASSERTED TO BE REAL, so it cannot quietly become zero if the hoist is
+// disabled or its guard is widened without anyone noticing (rule 9, both halves).
+check('…and that forfeit is non-zero, so the hoist is genuinely unavailable under a router',
+  banks.parts.forecast > bare.parts.forecast,
+  `${(banks.parts.forecast - bare.parts.forecast).toLocaleString()} MAC/cycle is what the`
+  + ' lead-invariant hoist is worth, and a router-armed plant does not get it');
 check('arming the RLS adds ONLY the rls term (and its covariance bytes)',
   full.parts.rls > 0 && banks.parts.rls === 0
   && full.parts.qp === banks.parts.qp && full.parts.forecast === banks.parts.forecast
