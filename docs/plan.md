@@ -8043,3 +8043,45 @@ Four controls, all byte-identical: `notches` null, `[]`, and a zero-weight band 
 un-notched solve; and a profile of ONE band reproduces the single notch it generalises, at every
 iteration count. A three-band profile moves the plan 65.9% rms, so it is not inert. `notchProfile`
 on the pilot defaults to null.
+
+### THE MEMORY IS NOT IRREDUCIBLE: the ideal correction is PARTLY a function of the commanded state
+
+`test/_ideal.mjs` finds theta*(t) - ik(path) by iteration on the machine — the object the owner's
+drag-the-TCP thought experiment describes — then asks whether it can be LEARNED from the commanded
+trajectory's local shape and applied to a program never run.
+
+```
+  the ideal correction (20 ILC laps, lead 140 samples)
+    rounded   7.899e-2 -> 2.014e-2   =  3.9x    |u*| peak 0.348
+    circle    7.523e-2 -> 3.996e-3   = 18.8x    |u*| peak 0.262
+    sharp     8.738e-2 -> 2.693e-2   =  3.2x    |u*| peak 0.353
+
+  fit on two programs, test on the third
+    held out   ch   R^2 in-sample   R^2 held-out    DELIVERED on the unseen program
+    rounded     0      0.5705        0.6493         1.62x   (ideal 3.9x)
+                1      0.3960        0.3838
+    circle      0      0.6668        0.2471         1.35x   (ideal 18.8x)
+                1      0.4410        0.1530
+    sharp       0      0.6248        0.4304         1.58x   (ideal 3.2x)
+                1      0.5347        0.2525
+```
+
+**A LINEAR MAP ON THE COMMANDED SHAPE, FITTED ON TWO PROGRAMS, DELIVERS 1.35-1.62x ON A THIRD IT
+HAS NEVER SEEN.** That is the first time this project has learned an ideal correction and
+transferred it at all — the closest prior attempt fitted DEFLECTION at held-out R^2 0.84 and made
+the machine WORSE applied (0.83-0.97x), because a forecast has to be inverted and the inversion is
+where it failed. A converged correction has the inversion already in it, and it transfers.
+
+**SO THE NORTH STAR'S CENTRAL QUESTION HAS AN ANSWER, AND IT IS THE FAVOURABLE ONE.** theta*(t) is
+not purely a property of position-in-a-lap; a meaningful part of it is a function of what the
+machine is being ASKED to do. The memory is not irreducible.
+
+**AND THE LIMIT IS THE MAP, NOT THE CONCEPT.** In-sample R^2 is 0.40-0.67, so a linear function of
+the local command shape captures about half of theta* even on the programs it was FITTED to. The
+elbow is again the weak channel — held-out 0.15-0.38 against the shoulder's 0.25-0.65 — which is
+the same channel `_band` found the pilot removing 0.1% of the error from.
+
+**THE IDEALS THEMSELVES ARE LOWER BOUNDS**: the ILC was still descending at 20 laps, so 3.9x /
+18.8x / 3.2x understate what is available. And the lead was measured rather than assumed — 40 / 90
+/ 140 / 200 / 280 samples give 1.1x / 2.2x / 3.2x / 1.9x / divergence, so 140 samples (1120 solver
+steps, the kernel's own rise) is where the update arrives when the plant responds to it.
