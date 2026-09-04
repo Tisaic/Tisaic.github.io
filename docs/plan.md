@@ -7760,3 +7760,43 @@ impact requires the impact to be judged on rows the SELECTION has not seen. The 
 proposes terms on the fit rows, DECIDES on a held-back third of the commissioning record, and
 stops when no candidate improves it — leaving the three programs a true held-out set that the
 stopping rule never consults.
+
+### THE ACTUATOR IS NOT THE LIMIT, AND THE PROOF WAS ALREADY IN THIS FILE
+
+**THE QUESTION.** Solver knobs null, authority inert, capacity null, and — the strange one —
+forecast quality AT LEAD 0 null. Better prediction not converting into better control is not what
+a model-limited system looks like; it is what an ACTUATOR-limited one looks like. And the channel
+measured this session rolls off hard: `|H|` runs 0.884 to 0.0085 across h1-h9, so past the eighth
+harmonic the correction barely moves the tip at all.
+
+**THE BENCH BUILT TO ANSWER IT IS WRONG, AND SAYING HOW IS THE POINT.** `test/_floor.mjs` solves
+for the best correction over a whole lap — non-causal, full preview, box-constrained — and applies
+it. It reads `sharp: predicted 1.6x, delivered 1.33x` against a causal pilot's 3.49x. An oracle
+that loses to the controller it bounds is not an oracle: the predicted residual is in joint-space
+truth units and the delivered one in contour mm, so the two columns are not comparable (rule 17);
+and it solves at `lambda 0` with 4000 iterations, which is the fully converged unregularised
+inverse — the single configuration this entire section measured as WORST. It bounds the model's
+inverse, not the machine.
+
+**AND THE ANSWER WAS ALREADY HERE.** The harmonic feedforward and the ILC apply their correction
+through EXACTLY the same channel — a joint reference offset, the same `u`, the same cap — and
+reach **242x on the EMPS axis** and **1.27e-2 on this arm's rounded rectangle**, against the
+pilot's ~6x. A correction therefore EXISTS, through this actuator, at this bandwidth, inside this
+box, twenty times better than anything the pilot produces. **The actuation path is not the
+ceiling.**
+
+**WHICH LOCATES THE GAP EXACTLY.** The memory finds that correction by RUNNING the program and
+remembering; the pilot must know it in advance, on a program it has never run. So the gap is not
+authority, not bandwidth, not the solver, not the regulariser, and not lead-0 forecast accuracy —
+it is the ability to PREDICT a never-run program's error, and nothing else.
+
+**AND THAT IS WHY DEPTH IS THE ONLY LEVER THAT HELPS EVERY PROGRAM AT ONCE.** Every global knob
+(`mu`, probe amplitude, probe hold, horizon) trades the corner against the arcs, because the two
+regimes want opposite settings and one number cannot serve both. A cascade layer does not adjust
+trust — it MODELS what the layer below left, which differs between corner and arc, so it is
+implicitly regime-adaptive where a global knob cannot be.
+
+**THE TARGET IS NOW A MEASURED CEILING RATHER THAN AN IMAGINED ONE.** The memory's margin — 20x on
+this arm — is a known-achievable correction through the shipped actuator. Any model-based route
+can be scored against it directly, and "how close did we get to what is provably there" is a
+better question than "how close did we get to 44x", which was never the same measurement.
