@@ -7623,3 +7623,41 @@ the linear pose-dependent cross reversal, the statistic that could not see it, t
 window, the three excitation sizing rules, and the five nulls. What does NOT survive is the frame
 they were pursued under — that improving the model would move this machine — because on the two
 programs that matter here the model is not what binds.
+
+### The cascade is the only thing that does not trade one program for another
+
+`test/_best.mjs`, one commissioning per configuration, everything scored on the same three
+programs against the same open loop:
+
+```
+  configuration       mu            sharp           circle          rounded     geo mean
+  shipped           0.00     3.49x u0.600     2.76x u0.332     2.87x u0.600         3.03
+  shipped           0.10     3.68x u0.394     4.37x u0.279     3.58x u0.342         3.86
+  rises25 hTs3      0.00     3.01x u0.600     4.49x u0.464     3.51x u0.557         3.62
+  rises25 hTs3      0.10     2.93x u0.319     6.44x u0.366     3.65x u0.317         4.10
+  depth2            0.00     4.09x u0.600     6.81x u0.316     5.25x u0.600         5.27
+  depth2            0.03     4.14x u0.578     9.19x u0.291     5.78x u0.445         6.04
+  depth2            0.10     3.65x u0.387    12.79x u0.257     5.27x u0.331         6.26
+```
+
+**EVERY DEPTH-1 LEVER CONVERGES ON 3.8-4.1 AND NONE OF THEM ADDS TO ANOTHER.** `mu`, the
+re-derived probe hold and the doubled horizon each reach that alone. They are one constraint
+wearing several names: all three adjust how much of an imperfect forecast to trust, and once the
+over-trust is removed there is nothing further to win at that depth.
+
+**AND THEY BUY THE MEAN BY REGRESSING THE HARD PROGRAM.** The best depth-1 combination reads 4.10
+with the sharp square at **2.93x against the shipped 3.49x**. A geometric mean that improves while
+the hardest case gets worse is a trade, and quoting it alone is the fault this file exists to
+prevent.
+
+**THE CASCADE IS THE EXCEPTION AND IT IS THE ONLY ONE.** `depth2 mu 0.03` beats the shipped
+configuration on EVERY program at once — sharp 3.49x -> **4.14x**, circle 2.76x -> **9.19x**,
+rounded 2.87x -> **5.78x**, geometric mean **3.03 -> 6.04, a doubling with nothing worse** — and
+it is the only row where the sharp square comes OFF its cap (0.600 -> 0.578). A layer that models
+what the one below it left changes WHAT the correction is; a trust knob only changes how much of
+it to ask for, and a program pinned at its cap cannot use less.
+
+**`mu` CANNOT SHIP AS A CONSTANT.** Its optimum is program-dependent at both depths — the square
+wants 0.03 and the circle 0.10 or more — so a fixed value is a per-plant AND per-program constant,
+which rule 31 forbids twice over. It has to be selected by the verify from a candidate set exactly
+as `lambda` is; that machinery exists and its candidate set has one member today.
