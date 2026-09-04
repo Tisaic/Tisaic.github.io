@@ -44,6 +44,14 @@ const HG = (process.env.BC_HGAIN || '1,1').split(',').map(Number);
 // where more iterations converge harder onto a plan that was too large. Damped, the optimum can
 // move either way, and it is now the cheapest knob in the budget.
 const QI = +(process.env.BC_ITERS || 0);
+// THE PROBE HOLD, because `_hcheck2.mjs` measured the identified plant UNDER-PREDICTING the
+// machine's response by 7-9% consistently across both channels and all three programs -- a common
+// factor across trajectories is a property of the identification, not of any one of them. The
+// probe measures the step response and `probeRises` is how many rise times it holds for; stopping
+// before it settles under-measures the DC gain, which is exactly the sign observed. Worth +5% in
+// an earlier bench and reported as saturating at 25, which is what recovering a truncated
+// response looks like.
+const PR = +(process.env.BC_RISES || 0);
 
 const gm = (v) => Math.exp(v.reduce((a, x) => a + Math.log(x), 0) / v.length);
 console.log(`arm K ${PG.K} / E ${PG.E}, depth ${DEPTH}, Nfrac ${NFRAC}, blocks ${BLOCKS}, mu ${MU}, hGain ${HG.join('/')}, iters ${QI || 'default'}`);
@@ -55,6 +63,7 @@ for (const mode of MODES) {
     uCap: UCAP, Cls: DEPTH > 1 ? Stack : undefined, extra: DEPTH > 1 ? { depth: DEPTH } : null,
     before: (p) => {
       const fb = mode === 'auto' ? null : mode;
+      if (PR > 0) { p.probeRises = PR; if (p.opts) p.opts.probeRises = PR; }
       p.forceBasis = fb;
       if (p.opts) p.opts.forceBasis = fb;
       (p.layers || []).forEach((q) => { q.forceBasis = fb; });
