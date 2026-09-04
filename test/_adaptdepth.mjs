@@ -47,22 +47,41 @@ for (const uCap of CAPS) {
     for (const shape of SHAPES) {
       const key = `${shape}`;
       if (!open[key]) open[key] = (await deployOn(st, shape, false, FEED)).r.totalRms;
+      // ADAPTATION IS DESTRUCTIVE AND `_initRun` DOES NOT UNDO IT. `_onlineStep` writes the
+      // updated weights IN PLACE into `ro.w[0]` — that is the whole point, the recursion
+      // continues the commissioning problem — so every run after an adapting one starts from
+      // the adapted bank unless something puts it back. The first version of this bench did
+      // not, and it cost both halves of the table: the circle's "static" was really the
+      // SHARP-adapted model (5.39x against a pristine 6.81x), and the sharp's "take-away"
+      // started from an already-adapted bank, making it MORE adaptation rather than less.
+      // Snapshot and restore around every run, so each mode starts from the commissioned model.
+      const snap = () => st.layers.map((p2) => (p2.readouts || []).map((r) => ({
+        r, w: r.w ? r.w.map((v) => Float64Array.from(v)) : null, rls: r._rls })));
+      const restore = (sn) => sn.forEach((L) => L.forEach((e) => {
+        if (e.w) for (let i = 0; i < e.w.length; i++) e.r.w[i] = Float64Array.from(e.w[i]);
+        e.r._rls = e.rls; e.r._infoRef = undefined;
+      }));
+      const S0 = snap();
       // STATIC: the truth is withheld at deploy, so the bank cannot move — the control.
       const stat = await deployOn(st, shape, true, FEED, { truthUntilLap: 0 });
+      restore(S0);
       // ADAPTING: the truth is present throughout — a permanent tracker installation. The
       // counters are cleared first so what they report belongs to THIS run and not to the
       // commissioning that preceded it.
       for (const p2 of st.layers) for (const r of (p2.readouts || [])) { r._onlineN = 0; r._infoSkipped = 0; }
       const live2 = await deployOn(st, shape, true, FEED);
+      const counts0 = st.layers.map((p2) => (p2.readouts || []).map((r) =>
+        `${r._onlineN || 0}/${(r._onlineN || 0) + (r._infoSkipped || 0)}`).join(',')).join(' | ');
+      restore(S0);
       // TAKE-AWAY: the truth is present for the first lap and removed, the bank frozen —
       // the installation this arm could actually have, and the one the memory test used.
       const taken = await deployOn(st, shape, true, FEED, { truthUntilLap: 1 });
+      restore(S0);
       // HOW MANY ROWS THE ADAPTATION ACTUALLY ADMITTED. "Inert" and "never ran" are different
       // states and one RMS column cannot tell them apart (rule 25) — an innovation gate that
       // rejected every row is a wiring result wearing a controller's clothes. Counted per
       // layer per channel, and reset before the adapting run so the number belongs to it.
-      const counts = st.layers.map((p2) => (p2.readouts || []).map((r) =>
-        `${r._onlineN || 0}/${(r._onlineN || 0) + (r._infoSkipped || 0)}`).join(',')).join(' | ');
+      const counts = counts0;
       const x = (v) => (open[key] / v).toFixed(2).padStart(6);
       console.log(`    ${shape.padEnd(8)} open ${open[key].toExponential(3)}   `
         + `static ${stat.r.totalRms.toExponential(4)} ${x(stat.r.totalRms)}x   `
