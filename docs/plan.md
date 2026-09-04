@@ -6875,3 +6875,55 @@ reshapes the tracking term, not just its size. And the optimum is PROGRAM-DEPEND
 0.03-0.1, circle near 0.3), which is the same problem `lambda` has and needs the same answer:
 selected by measurement, never fixed. Until that selection is built and scored on six plants,
 this is a named defect with a built term, not a shipped improvement.
+
+### WHAT A GOOD CORRECTION LOOKS LIKE — ⑩'s `du` AGAINST THE PILOT'S `u` (`test/_ducmp.mjs`)
+
+The owner's suggestion, and it produced the clearest reading of the gap in this whole arc. ⑩'s
+compiled `du` is a known-good correction in the SAME FRAME the pilot corrects in — a joint
+offset on the command — so the two traces are directly comparable over one lap:
+
+```
+  sharp square              rms        peak      sh:el   h1-h4   h5-h16
+    mode 10   shoulder   5.483e-1   1.800e+0    1.824   0.082   0.918
+    mode 10   elbow      3.006e-1   8.288e-1        -   0.014   0.986
+    pilot     shoulder   2.252e-1   6.000e-1    2.350   0.455   0.545
+    pilot     elbow      9.584e-2   2.841e-1        -   0.117   0.883
+
+  circle                    rms        peak      sh:el   h1-h4   h5-h16
+    mode 10   shoulder   1.393e-1   3.575e-1    3.124   0.681   0.319
+    mode 10   elbow      4.457e-2   1.309e-1        -   0.484   0.516
+    pilot     shoulder   1.420e-1   3.264e-1    4.318   0.998   0.002
+    pilot     elbow      3.289e-2   6.733e-2        -   0.990   0.010
+```
+
+**1. THE JOINT BALANCE, CONFIRMED BY A ROUTE THAT SHARES NOTHING WITH THE FIRST.** ⑩ runs
+shoulder:elbow at 1.824 on the sharp square and 3.124 on the circle; the pilot runs 2.350 and
+4.318. The pilot is too shoulder-heavy by **1.29x and 1.38x** — and that ratio is roughly
+PROGRAM-INDEPENDENT, which is what finally explains the `h ch0 x1.30` that has been unexplained
+through four hypotheses. Its apparent program-dependence lived in the SCORE optimum; the
+underlying balance error is a stable ~1.3. Two unrelated instruments — a swept scalar on the
+machine, and a correction compiled by a different algorithm from a fitted twin — agree on the
+number.
+
+**AND THE RIGHT BALANCE IS ITSELF PROGRAM-DEPENDENT, WHICH THE PILOT ALREADY TRACKS.** ⑩ uses
+1.82 on the aggressive program and 3.12 on the smooth one; the pilot moves the same way, 2.35
+to 4.32. So the scheduling the owner asked about is real and already present — the pilot is
+uniformly mis-balanced ON TOP of it, not failing to schedule.
+
+**2. THE SPECTRUM IS THE BIGGER GAP AND IT IS NEW.** On the circle the pilot applies the SAME
+MAGNITUDE as ⑩ — 1.420e-1 against 1.393e-1 rms on the shoulder — and puts **99.8% of it below
+the fourth lap harmonic**, where ⑩ puts 32% of the shoulder and 52% of the elbow above it. On
+the sharp square the split is 55% against 92%. Same amount of correction, almost entirely the
+wrong band: the pilot is correcting DROOP where ⑩ is correcting CORNERS.
+
+**AND THE PRIME SUSPECT IS `lambda`, WHICH IS A HIGH-PASS PENALTY.** It weights `||D u||^2`, so
+it taxes exactly the fast content the corners need, and the QP will trade it away first. It has
+been swept UP at this cap (inert, 1x to 32x) and DOWN only at a different cap with the oracle
+(also inert), and neither sweep looked at the correction's SPECTRUM — only at the score. That
+is the next measurement, and it is the first one in this arc with a specific prediction: if
+lowering `lambda` restores harmonics above 4 without improving the score, the filter is
+somewhere else — the decision grid, or the horizon.
+
+**3. AND ⑩ USES THREE TIMES THE AUTHORITY** on the sharp square: peak 1.800 rad against the
+pilot's 0.600, which is its cap. On the circle both sit near 0.33 and the cap is not binding, so
+the authority gap is specific to the aggressive program.
