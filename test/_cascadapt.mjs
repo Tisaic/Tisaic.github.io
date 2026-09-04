@@ -30,8 +30,8 @@
 // WHAT WOULD KILL IT: adaptation adds nothing on top of the cascade. Then depth has already
 // removed what adaptation was correcting, they are one repair twice, and the distribution
 // mismatch needs something neither of them is.
-import { commissionArm, deployOn, PG } from '/home/user/Tisaic.github.io/test/pilot/rigs/arm-rig.mjs';
-import { Stack } from '/home/user/Tisaic.github.io/lib/pilot/stack.js';
+import { commissionArm, deployOn, PG } from './pilot/rigs/arm-rig.mjs';
+import { Stack } from '../lib/pilot/stack.js';
 
 const FEED = +(process.env.CD_FEED || 0.004);
 const UCAP = +(process.env.CD_UCAP || 0.6);
