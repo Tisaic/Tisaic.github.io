@@ -169,6 +169,20 @@ for (const p of st.layers) {
   // 50k MAC; the assertion is deliberately loose because the point is to HAVE a bound that
   // fails when the cost grows, not to pretend the exact figure is known for a part nobody
   // has named. It is the growth this catches.
+  // AND THE SAME TOTAL WITH THE FIT COUNTED, because every deployed layer now runs its own RLS
+  // update per sample and the online arithmetic therefore scales with DEPTH. The line above
+  // counts forecast + QP + interpolation; this one adds the router and the fit at their own
+  // cadences, with the parts broken out so a disarmed stage reads zero rather than disappearing
+  // into a sum (rule 25). Reported rather than asserted for now: the bar above is the one with
+  // history behind it, and inventing a second bar in the same commit that raises the cost would
+  // be choosing the number to fit the answer.
+  const sc = st.scanCost && st.scanCost();
+  if (sc) {
+    console.log(`      WITH THE FIT COUNTED: ${sc.peak} MAC/cycle peak, ${sc.sliced} sliced, `
+      + `${(sc.bytes / 1024).toFixed(1)} kB across ${sc.layers} layer(s)`);
+    console.log(`        parts: forecast ${sc.parts.forecast}  qp ${sc.parts.qp}`
+      + `  router ${sc.parts.router}  rls ${sc.parts.rls}  interp ${sc.parts.interp}`);
+  }
   const BUDGET = 50000;
   check('the deployed cascade fits an arithmetic budget a 1 ms PLC task could afford',
     sliced > 0 && sliced <= BUDGET, `${Math.round(sliced)} MAC/cycle sliced against ${BUDGET}`);
