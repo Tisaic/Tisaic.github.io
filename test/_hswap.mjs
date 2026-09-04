@@ -30,9 +30,15 @@ const SHAPES = (process.env.HS_SHAPES || 'sharp,circle,rounded').split(',');
 const FEED = +(process.env.HS_FEED || 0.004);
 const DU = +(process.env.HS_DU || 0.15);
 const PROBE = process.env.HS_PROBE || 'sharp';   // the program the moving probe runs on
+// THE CAP MATTERS AND THE FIRST RUN OF THIS BENCH DID NOT SWEEP IT. At the shipped 0.15 the
+// moving kernel is worth 5.5% geometric mean; the per-channel gain sweep then measured the
+// same correction — the shoulder's kernel scaled by 1.15, which is the 1.18 `_hmove` measured
+// — worth up to +67% at uCap 0.6. An 18% gain error only matters where the corrections are
+// large, so the cap is not a detail of this experiment, it is its axis.
+const UCAP = +(process.env.HS_UCAP || 0.15);
 
 console.log(`arm K ${PG.K} / E ${PG.E}, feed ${FEED}; moving probe on ${PROBE}, pulse ${DU} rad`);
-const pilot = await commissionArm({ seed: 1, train: { shape: 'rounded', feed: FEED } });
+const pilot = await commissionArm({ seed: 1, train: { shape: 'rounded', feed: FEED }, uCap: UCAP });
 if (!pilot) { console.log('commissioning never terminated'); process.exit(1); }
 const S = pilot.sample;
 const path = mkPath(PROBE, FEED);

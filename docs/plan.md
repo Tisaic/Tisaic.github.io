@@ -6698,3 +6698,45 @@ A model that under-states its own authority is what makes a solver use the autho
 `test/_hgain.mjs` puts that to the machine at the raised cap, per channel and swept rather than
 set, because the right scale depends on the amplitude the QP actually runs at — a property of
 the program and the cap, not a constant.
+
+### THE SHOULDER'S KERNEL IS UNDER-IDENTIFIED, AND AT THE RAISED CAP THAT IS WORTH 67%
+
+Scaling `h` per channel at uCap 0.6, three programs the model never saw, one commissioning
+deployed ten ways (`test/_hgain.mjs`):
+
+```
+  h ch0:ch1      sharp     circle     rounded
+  1.00:1.00      3.49x      2.76x      2.87x     baseline, reproduces `_cascdepth`
+  0.85:1.00      2.42x      1.69x      1.89x     shoulder DOWN — much worse
+  1.00:1.20      3.60x      2.80x      2.94x     elbow up alone — marginally better
+  1.00:0.79      3.25x      2.67x      2.71x     elbow down alone — worse
+  1.15:0.79      3.62x      4.30x      3.66x
+  1.15:1.00      3.92x      4.60x      4.00x     THE SHOULDER ALONE
+  1.30:0.79      3.37x      6.03x      4.08x
+  1.50:0.50      2.41x      4.22x      2.81x
+```
+
+**THE SHOULDER CARRIES IT ALONE** — +12% / +67% / +39% — and the elbow term is a cost. Scaling
+the shoulder DOWN is much worse, so the effect has a direction and reversing it hurts (rule 9).
+
+**AND THE MECHANISM IS NOT THE ONE THE SWEEP WAS BUILT TO TEST.** It was aimed at amplitude
+compression, and that prediction is falsified on the shoulder: the shoulder COMPRESSES to
+0.793, which says scale DOWN, and the machine wants UP. It is right about the elbow — which
+EXPANDS to 1.151, says scale up, and measures marginally better at 1.20 — so the amplitude
+effect is real and is simply not what dominates here.
+
+**WHAT DOMINATES WAS ALREADY MEASURED HOURS EARLIER.** `_hmove` differenced two runs of the
+deterministic plant around a `du` step during motion and found the shoulder's moving response
+at **1.18x** the commissioned kernel and the elbow's at **1.006x** — the held probe
+under-identifies the shoulder because a held joint must break stiction before it moves and the
+shoulder carries the arm's gravity load. The machine's preferred scale, 1.15, IS that number.
+`_hswap` installed the measured moving kernel and got +19% / -9% / +7.5%, geometric mean 5.5%
+— **at the shipped cap of 0.15**. The same correction is worth up to 67% at 0.6, because an 18%
+gain error only matters where the corrections are large enough to expose it.
+
+**SO THE CAP IS THE AXIS, NOT A DETAIL**, and the fix is a MEASURED KERNEL rather than a tuned
+scalar — 1.15 fitted to three programs would be a per-plant constant of exactly the kind rule
+31 exists to forbid, while a moving probe is an instrument that re-derives it on any plant.
+`_hswap` at uCap 0.6 is the confirmation that matters, and a shoulder-only ladder out to 3.0x
+says whether 1.15 is an optimum or the beginning of "make no shoulder correction at all",
+which would be a much more damning reading.
