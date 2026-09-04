@@ -8085,3 +8085,60 @@ the same channel `_band` found the pilot removing 0.1% of the error from.
 18.8x / 3.2x understate what is available. And the lead was measured rather than assumed — 40 / 90
 / 140 / 200 / 280 samples give 1.1x / 2.2x / 3.2x / 1.9x / divergence, so 140 samples (1120 solver
 steps, the kernel's own rise) is where the update arrives when the plant responds to it.
+
+### THE MAP AND THE CASCADE ARE TWO ROUTES TO ONE PHYSICS, AND THEY DO NOT ADD
+
+The ideal-correction map was verified first, exactly, on a fresh container and a rebuilt cache:
+geometric mean delivered **1.512x -> 4.781x** leave-one-program-out, and **2.28x against an ideal
+of 2.6x** on the diamond that took part in no fit and no selection. Every digit reproduces.
+
+So the obvious next question is the composition. `_idealmap.mjs` gained an `IM_STACK` mode: an
+ordinary pilot cascade is commissioned ONCE, left deployed and FROZEN, and the ILC then iterates
+to the correction that is ideal for (machine + cascade) rather than for the bare machine. The map
+is fitted to THAT — the cascade's own construction applied one level up, layer k modelling what
+the layers below it left. Nothing about the map changes; what changes is the plant it is a map of.
+Bare mode is untouched and reproduces its published table, which is the control that says the mode
+switch and not the machine is what moved (rule 21).
+
+The order is not a preference. The cascade is commissioned from a SCRIBBLE and knows no program;
+the map is a function of the commanded trajectory and is fitted over a program set. Commissioning
+the agnostic layer on top of the program-fitted one is the inversion this project already measured
+at 0.71x when it put the pilot on top of a lap-indexed feedforward.
+
+**THE CEILING ITSELF HAS ALMOST GONE.** Depth 2, mu 0.03, at the bench cell — what a converged ILC
+can still reach after the cascade has run:
+
+```
+             bare      cascade   cascade alone   ILC ideal ON TOP   both
+  rounded  7.918e-2   1.391e-2       5.69x            1.3x          7.3x
+  circle   7.521e-2   8.838e-3       8.51x            3.1x         26.6x
+  sharp    8.731e-2   2.199e-2       3.97x            1.5x          5.9x
+  diamond  7.816e-2   2.207e-2       3.54x            1.3x          4.4x
+```
+
+On the bare machine an ILC converges to 3.9x-18.8x. After the cascade it converges to 1.3x-3.1x.
+**Most of what the memory was worth, the cascade has already taken** — and that is the north star's
+central question answered from the other side: not "can a model buy what the table buys" but "it
+already did".
+
+**AND THE MAP GETS MOST OF WHAT LITTLE IS LEFT, WHICH IS STILL ALMOST NOTHING.**
+
+```
+  variant                     rounded   circle    sharp    geo mean   over cascade | total
+  base (_ideal.mjs)             0.95x    1.02x    1.02x      0.996x      no change | 5.747x
+  JT, dense leads               1.06x    1.26x    1.05x      1.121x        +12%    | 6.470x
+  diamond (in no fit)                                        1.07x   (ideal 1.3x)
+```
+
+The map that is worth **4.781x on the bare machine is worth 1.121x on top of the cascade**, and
+against the cascade's own geometric mean of 5.77x the composition reads 6.47x. On the diamond it
+delivers 1.07x of an available 1.3x — so it is capturing about 80% of the residual; there is simply
+hardly any residual. A third training program makes it WORSE (1.026x against 1.121x) and the
+validation R2 goes NEGATIVE on rounded, which is what fitting noise looks like.
+
+**WHAT THIS SETTLES.** The 4.781x and the 5.77x are not two levers to be stacked; they are two
+routes to the same physics, and the cheap one — one commissioning from a scribble, no laps, no
+program set, no ILC — is also the better one. Any further gain has to come from something neither
+of them models, and the residual after the cascade is now measured to be small AND unpredictable
+from commanded state (val R2 < 0 on the program with the least left). That is a different target
+from the one this arc started with.

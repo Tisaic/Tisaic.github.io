@@ -58,6 +58,8 @@ import { dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { solveRidge } from '../lib/pilot/pilot.js';
 import { makeArm, mkPath, homeArm, routeSignals, PG } from './pilot/rigs/arm-rig.mjs';
+import { commissionArm } from './pilot/rigs/arm-rig.mjs';
+import { Stack } from '../lib/pilot/stack.js';
 
 const FEED = +(process.env.IM_FEED || 0.004);
 const SHAPES = (process.env.IM_SHAPES || 'rounded,circle,sharp').split(',');
@@ -80,29 +82,82 @@ const ONLY = process.env.IM_ONLY ? process.env.IM_ONLY.split(',') : null;
 // paid for six times.
 const KEY = `K${PG.K}_E${PG.E}_BL${PG.BL}_f${FEED}_L${LAPS}_g${GAIN}_s${SMOOTH}_d${LEAD}_S${S}`;
 const CACHE = process.env.IM_CACHE || `${tmpdir()}/idealmap-${KEY}.json`;
+// THE CASCADE UNDERNEATH — `IM_STACK=<depth>` commissions an ordinary pilot cascade ONCE and
+// leaves it deployed and FROZEN for every run in this file. `ideal()` then iterates to the
+// correction that is ideal for (machine + cascade) rather than for the bare machine, and the map
+// is fitted to THAT. Nothing about the map changes; what changes is the plant it is a map of, and
+// that is the cascade's own construction applied one level up — layer k models what the layers
+// below it left.
+//
+// WHY THIS ORDER AND NOT THE REVERSE. The cascade is commissioned from a SCRIBBLE and knows no
+// program; the map is a function of the commanded trajectory and is fitted over a program set.
+// Commissioning the cascade on top of the map would hand a program-agnostic layer a plant that
+// has already been corrected program by program, which is the inversion this project measured at
+// 0.71x when it put the pilot on top of a lap-indexed feedforward. The agnostic layer goes first.
+//
+// AND EVERY FACTOR IN STACK MODE IS ON TOP OF THE CASCADE, so the BARE open loop is measured and
+// carried through the cache as well: a residual map that doubles a 6x cascade and one that
+// doubles a bare machine are not the same result, and one number cannot tell them apart.
+const STACK = process.env.IM_STACK ? +process.env.IM_STACK : 0;
+const SMU = process.env.IM_MU !== undefined ? +process.env.IM_MU : 0.03;
+const SRISES = +(process.env.IM_RISES || 10);
+const SHTS = +(process.env.IM_HTS || 1.5);
+// A CACHED IDEAL BELONGS TO THE PLANT IT WAS ITERATED ON. The mode is written into the cache and
+// checked on read, so an explicit `IM_CACHE` cannot quietly hand stack-mode tables to a bare run
+// (a stale cache is the instrument fault this project has paid for six times).
+const MODE = STACK ? `stack${STACK}_mu${SMU}_r${SRISES}_h${SHTS}` : 'bare';
+// THE PILOT GETS A LAP OF WARM-UP IT DOES NOT NEED WHEN IT IS ABSENT (rule 13). Bare mode keeps
+// its two laps exactly, so every number this file has published is reproduced unchanged.
+const RUNLAPS = STACK ? 3 : 2;
+let BASE = null;                      // the frozen cascade, or null in bare mode
+
 
 console.log(`arm K ${PG.K} / E ${PG.E}, feed ${FEED}; ILC ${LAPS} laps, gain ${GAIN}, `
   + `smooth ${SMOOTH}, lead ${LEAD}`);
 console.log(`cache ${CACHE}`);
 
 /** One run of `laps` laps applying a per-sample periodic correction; returns per-sample error. */
-async function run(path, tab, laps) {
+async function run(path, tab, laps, { bare = false } = {}) {
   const { arm, servo } = await makeArm();
   homeArm(arm, servo, path);
   const lapSteps = Math.round(path.lap), n = Math.round(lapSteps / S);
   const e = [];
+  // THE FROZEN CASCADE UNDERNEATH, driven exactly as `deployOn` drives it — one definition of the
+  // routing, the reference closure and the sample clock, because three copies of a rig's inner
+  // loop have each shipped a defect here. `bare` switches it off for the one measurement that
+  // needs the machine without it.
+  const P = (BASE && !bare) ? BASE : null;
+  const PS = P ? P.sample : 0;
+  const rcache = P ? new Map() : null;
+  const refAt = (i) => {
+    let r = rcache.get(i);
+    if (!r) { const c = path.at(i * PS); r = arm.ik(c.x, c.y, true); rcache.set(i, r); }
+    return r;
+  };
+  let kSamp = 0;
+  if (P) P._initRun();
   for (let k = 0; k < lapSteps * laps; k++) {
     const c = path.at(k);
     const [q1, q2] = arm.ik(c.x, c.y, true);
     const rt = arm.ikRates(q1, q2, c.vx, c.vy, c.ax, c.ay);
     const b = Math.floor(k / S) % n;
     const u = tab ? [tab[0][b], tab[1][b]] : [0, 0];
+    if (P) {
+      const up = P.act((off) => refAt(kSamp + off));
+      u[0] += up[0]; u[1] += up[1];
+    }
     const tau = servo.torques([{ theta: q1 + u[0], omega: rt.dq[0], alpha: rt.ddq[0] },
       { theta: q2 + u[1], omega: rt.dq[1], alpha: rt.ddq[1] }]);
     arm.step(tau[0], tau[1], 1);
-    if (k % S === 0 && k >= lapSteps * (laps - 1)) {
-      e.push(routeSignals(arm, [{ pos: q1 }, { pos: q2 }], tau).truth.slice());
-    }
+    if (P && k % PS === 0) kSamp++;
+    const rs = (P || (k % S === 0 && k >= lapSteps * (laps - 1)))
+      ? routeSignals(arm, [{ pos: q1 }, { pos: q2 }], tau) : null;
+    // THE TRUTH IS WITHHELD. This file's cascade is FROZEN by construction: its weights must be
+    // the same on the first ILC pass and the last, or the plant the map is fitted to is not the
+    // plant the map is delivered on. `observe` is still called, because the pilot's own history
+    // is what its forecast reads.
+    if (P) P.observe(rs.measured, null);
+    if (k % S === 0 && k >= lapSteps * (laps - 1)) e.push(rs.truth.slice());
   }
   await arm.l1.destroy(); await arm.l2.destroy();
   return e;
@@ -123,9 +178,12 @@ async function ideal(path) {
   const n = Math.round(Math.round(path.lap) / S);
   const tab = [new Float64Array(n), new Float64Array(n)];
   let best = null, bestRms = Infinity;
-  const open = rms(await run(path, null, 2));
+  const open = rms(await run(path, null, RUNLAPS));
+  // THE BARE MACHINE, measured once per program so a stack-mode factor can be stated against
+  // BOTH denominators. In bare mode it is the same run and is not repeated.
+  const bare = STACK ? rms(await run(path, null, RUNLAPS, { bare: true })) : open;
   for (let it = 0; it < LAPS; it++) {
-    const e = await run(path, tab, 2);
+    const e = await run(path, tab, RUNLAPS);
     const r = rms(e);
     if (r < bestRms) { bestRms = r; best = tab.map((t) => Float64Array.from(t)); }
     for (let c = 0; c < 2; c++) {
@@ -137,7 +195,7 @@ async function ideal(path) {
       tab[c] = zero(upd, SMOOTH);
     }
   }
-  return { tab: best.map((t) => Array.from(t)), open, conv: bestRms };
+  return { tab: best.map((t) => Array.from(t)), open, bare, conv: bestRms };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -479,7 +537,36 @@ function dictSelect(trB, trR, trY, ridge, names, kmax, topk) {
 
 // ---------------------------------------------------------------------------------------------
 const ALL = SHAPES.concat(CONFIRM ? [CONFIRM] : []);
+
+// ONE COMMISSIONING FOR THE WHOLE FILE, and it happens BEFORE any ideal is iterated, because the
+// ideal correction is a property of the plant the cascade makes and not of the bare machine.
+if (STACK) {
+  const t0 = Date.now();
+  BASE = await commissionArm({ seed: 1, train: { shape: 'rounded', feed: FEED }, uCap: 0.6,
+    Cls: Stack, extra: { depth: STACK },
+    before: (p) => {
+      const set = (q) => { q.probeRises = SRISES; q.horizonTs = SHTS; };
+      set(p);
+      if (p.opts) { p.opts.probeRises = SRISES; p.opts.horizonTs = SHTS; }
+      (p.layers || [p]).forEach(set);
+    } });
+  if (!BASE) { console.log('  cascade never commissioned — nothing to fit a residual map to'); process.exit(1); }
+  // THE TIKHONOV WEIGHT IS A DEPLOY-TIME SHAPE, NOT A COMMISSIONING ONE — set exactly where
+  // `_best.mjs` set it when it measured 6.04, on the layers after the fit, so this file inherits
+  // that configuration rather than restating it approximately.
+  for (const q of (BASE.layers || [BASE])) q.uWeight = SMU > 0 ? new Array(q.nc).fill(SMU) : null;
+  const lay = BASE.layers ? BASE.layers.length : 1;
+  console.log(`  cascade: depth ${STACK} requested, ${lay} layer(s) deployed, mu ${SMU}, `
+    + `probeRises ${SRISES}, horizonTs ${SHTS}  (${((Date.now() - t0) / 1e3).toFixed(0)} s)`);
+}
+
 const cache = existsSync(CACHE) ? JSON.parse(readFileSync(CACHE, 'utf8')) : {};
+// A CACHED IDEAL BELONGS TO THE PLANT IT WAS ITERATED ON (rule 17: the instrument fails first).
+if (cache._mode && cache._mode !== MODE) {
+  console.log(`  REFUSING a cache written for mode "${cache._mode}" in mode "${MODE}"`);
+  process.exit(1);
+}
+cache._mode = MODE;
 const data = {};
 for (const sh of ALL) {
   const path = mkPath(sh, FEED);
@@ -491,10 +578,13 @@ for (const sh of ALL) {
     console.log(`  ${sh.padEnd(8)} ideal computed in ${((Date.now() - t0) / 1e3).toFixed(0)} s`);
   }
   const r = cache[sh];
-  data[sh] = { path, ...r, d: await describe(path), n: r.tab[0].length };
-  console.log(`  ${sh.padEnd(8)} open ${r.open.toExponential(3)} -> ideal ${r.conv.toExponential(3)}`
-    + `  = ${(r.open / r.conv).toFixed(1)}x   |u*| peak `
-    + `${Math.max(...r.tab[0].map(Math.abs), ...r.tab[1].map(Math.abs)).toFixed(4)}`);
+  // An older cache predates the bare column; in bare mode the two are the same measurement.
+  data[sh] = { path, ...r, bare: r.bare ?? r.open, d: await describe(path), n: r.tab[0].length };
+  console.log(`  ${sh.padEnd(8)} ${STACK ? 'cascade' : 'open'} ${r.open.toExponential(3)}`
+    + ` -> ideal ${r.conv.toExponential(3)}  = ${(r.open / r.conv).toFixed(1)}x`
+    + (STACK ? `   (bare ${data[sh].bare.toExponential(3)}, cascade alone `
+      + `${(data[sh].bare / r.open).toFixed(2)}x, both ${(data[sh].bare / r.conv).toFixed(1)}x)` : '')
+    + `   |u*| peak ${Math.max(...r.tab[0].map(Math.abs), ...r.tab[1].map(Math.abs)).toFixed(4)}`);
 }
 
 /** Build one program's design matrix for a feature spec. */
@@ -586,7 +676,7 @@ async function fold(tr, te, v) {
     su += data[te].tab[c][i] ** 2; se += (data[te].tab[c][i] - pred[c][i]) ** 2;
   }
   // THE FIT IS CHECKED ON THE MACHINE, NOT ON ITSELF (rule 16).
-  const del = rms(await run(data[te].path, pred, 2));
+  const del = rms(await run(data[te].path, pred, RUNLAPS));
   return { out, del, cols: built0[te].X[0].length, pred, xPred: Math.sqrt(su / Math.max(se, 1e-300)) };
 }
 
@@ -605,7 +695,7 @@ if (!process.env.IM_NO_MEMCTL) {
       const ns = data[src].n, nt = data[te].n;
       const tab = [0, 1].map((c) => Float64Array.from({ length: nt },
         (_, i) => data[src].tab[c][Math.round((i * ns) / nt) % ns]));
-      const del = rms(await run(data[te].path, tab, 2));
+      const del = rms(await run(data[te].path, tab, RUNLAPS));
       console.log(`   ${te.padEnd(10)}  ${src.padEnd(10)}  ${(data[te].open / del).toFixed(2)}x`);
     }
   }
@@ -618,30 +708,35 @@ for (const v of VARIANTS) {
   console.log(`\n  ${v.name}`);
   console.log('   held out    cols   ch   R^2 in    R^2 out    ridge                  DELIVERED'
     + '   (|u*|/|u*-u| predicts)');
-  const gains = [];
+  const gains = [], tots = [];
   for (const te of SHAPES) {
     const tr = SHAPES.filter((s) => s !== te);
     const f = await fold(tr, te, v);
     const g = data[te].open / f.del;
     gains.push(g);
+    tots.push(data[te].bare / f.del);
     for (let c = 0; c < 2; c++) {
       console.log(`   ${(c === 0 ? te : '').padEnd(9)} ${(c === 0 ? String(f.cols) : '').padStart(5)}`
         + `   ${c}   ${f.out[c].inR2.toFixed(4).padStart(7)}   ${f.out[c].outR2.toFixed(4).padStart(8)}`
         + `   ${f.out[c].note.padEnd(22)}`
         + (c === 0 ? ` ${g.toFixed(2)}x  (ideal ${(data[te].open / data[te].conv).toFixed(1)}x)`
-          + `   ${f.xPred.toFixed(2)}x` : ''));
+          + `   ${f.xPred.toFixed(2)}x`
+          + (STACK ? `   TOTAL ${(data[te].bare / f.del).toFixed(2)}x` : '') : ''));
     }
   }
   const gm = Math.exp(gains.reduce((a, b) => a + Math.log(b), 0) / gains.length);
-  console.log(`   geometric mean delivered  ${gm.toFixed(3)}x`);
-  summary.push({ name: v.name, gains, gm });
+  const gmT = Math.exp(tots.reduce((a, b) => a + Math.log(b), 0) / tots.length);
+  console.log(`   geometric mean delivered  ${gm.toFixed(3)}x`
+    + (STACK ? `   over the cascade;  ${gmT.toFixed(3)}x over the bare machine` : ''));
+  summary.push({ name: v.name, gains, gm, tots, gmT });
 }
 
 console.log('\n  SUMMARY — delivered, leave-one-program-out');
 console.log('   variant                     ' + SHAPES.map((s) => s.padStart(9)).join('') + '     geo mean');
 for (const s of summary) {
   console.log(`   ${s.name.padEnd(26)}` + s.gains.map((g) => `${g.toFixed(2)}x`.padStart(9)).join('')
-    + `${s.gm.toFixed(3)}x`.padStart(13));
+    + `${s.gm.toFixed(3)}x`.padStart(13)
+    + (STACK ? `   over cascade  |  ${s.gmT.toFixed(3)}x total` : ''));
 }
 
 // IS THE LIMIT THE MAP OR THE DATA? A THIRD TRAINING PROGRAM ANSWERS IT, AND IT COSTS THE PROTOCOL
