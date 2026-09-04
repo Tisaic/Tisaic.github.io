@@ -7858,3 +7858,47 @@ byte-identical row at probe 0.054, the authority question is closed: `uCap` was 
 and rounded predicted 1.4x / delivered 1.83x, which is not a bound in either direction. The
 question it was built for is answered on the record instead — the harmonic feedforward reaches 242x
 through the same channel — and that is a measurement, not a model inverse.
+
+### GATED ADAPTATION IS THE SECOND LEVER THAT HELPS EVERY PROGRAM, AND IT IS THE ONE THE DIAGNOSIS PREDICTS
+
+`test/_cascadapt.mjs`, adaptation armed at DEPLOY only so the commissioned model is identical in
+both rows and the sole difference is whether it keeps updating:
+
+```
+  depth  adapt            sharp           circle          rounded     geo mean   rows admitted
+      1  false     3.74x u0.576     3.19x u0.313     3.16x u0.440         3.35   0+0
+      1  true      4.56x u0.577     4.24x u0.308     4.28x u0.433         4.36   1964+1964
+```
+
+**+30%, ON ALL THREE PROGRAMS, WITH NOTHING TRADED** — sharp +22%, circle +33%, rounded +35%. It
+reproduces this file's recorded "arm +29%" from a different harness, and the `0+0` against
+`1964+1964` admitted rows is the control that says the two rows differ in exactly one thing.
+
+**AND IT IS THE ONLY KIND OF THING THAT HAS EVER DONE THAT HERE.** `mu`, the probe hold, the
+horizon and the probe amplitude each bought one regime by selling another, because they adjust HOW
+MUCH TO TRUST A FIXED MODEL and one number cannot serve a corner and an arc at once. Adaptation
+changes the model to match the program in front of it, so there is no regime to sell. Depth is the
+other, for the same reason: it models what the layer below LEFT, which differs between regimes.
+**Two levers help everything, both change WHAT is modelled; every lever that changes how much it is
+believed trades.** That is the cleanest organising statement this section has.
+
+### The reference cell agrees, which makes the non-composition a property rather than a coincidence
+
+```
+  K 1 / E 0.06        mu        sharp      circle    rounded   geo mean
+  shipped            0.00      2.59x      6.69x     5.33x       4.52
+  shipped            0.03      2.64x      7.57x     4.61x       4.51
+  depth2             0.00      2.64x     10.65x     6.59x       5.70
+  depth2             0.03      2.67x     11.42x     5.14x       5.39
+  depth2 r25 h3      0.00      2.65x      7.40x     6.35x       4.99
+  depth2 r25 h3 q1   0.03      2.57x      9.76x     4.97x       5.00
+```
+
+Depth 2 is **+26%** at the stiff cell, and `rises25 + horizonTs 3` degrades it there exactly as it
+does at the soft cell (5.70 -> 4.99). So the non-composition is cell-independent and is a property
+of what the levers DO, not an artefact of one operating point.
+
+**AND `mu` IS CONFIRMED AS A SOFT-CELL INSTRUMENT.** +27% at K 0.25 / E 0.03, and NEGATIVE here
+(5.70 -> 5.39). It compensates for model error and model error scales with compliance, so a fixed
+value would be wrong at one end of the ladder whatever it was — which is the third independent
+reason it cannot ship as a constant.
