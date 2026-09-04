@@ -7009,3 +7009,58 @@ three programs here — 3.56 against 3.48, 2.94 against 2.76, 2.99 against 2.87 
 the QP's arithmetic. That is consistent with this file's own EMPS and arm sweeps, which found
 one and two iterations beating sixty, and it is one more reason the six-plant pass is what has
 to decide the default rather than any single plant.
+
+### `h` INVERTS SIGN PAST THE EIGHTH HARMONIC, AND THAT EXPLAINS THE WHOLE ITERATION TABLE
+
+The frequency-resolved reading of the plant model the QP inverts — the moving response at the
+operating amplitude against the commissioned kernel, harmonic by harmonic of the lap
+(`test/_hspec.mjs`):
+
+```
+  channel 0 (shoulder)            channel 1 (elbow)
+   h   ratio    phase err          h   ratio    phase err
+   1   0.926      5.1              1   1.001     -2.1
+   2   0.929     10.1              2   1.004     -3.4
+   3   0.941     14.8              3   1.052     -6.8
+   4   0.977     19.2              4   1.027    -17.2
+   5   1.076     23.7              5   0.754    -25.3
+   6   1.399     29.5              6   0.564      4.9
+   7   4.673     57.5              9   1.426    -36.6
+   8   0.645   -149.8             10   0.899   -120.0
+   9   0.096    -58.9             12   3.233     35.4
+  16   0.436     40.8             16   6.499     15.5
+  relative error h1-4 0.203        relative error h1-4 0.115
+                 h5-16 0.654                     h5-16 0.544
+```
+
+**THE MODEL IS TRUE IN THE LOW BAND AND ANTI-PHASE IN THE HIGH ONE.** Below the fourth harmonic
+the magnitude ratio is 0.93-1.05 and the phase error under 20 degrees on both channels. Past
+the eighth it exceeds 90 degrees — **-149.8 on the shoulder, -120.0 on the elbow** — which means
+the model and the machine disagree about the SIGN of the response. A correction computed there
+ADDS to the error instead of cancelling it, which is brick 63's lesson ("a phase-shifted
+subtraction ADDS") reappearing inside the pilot's own kernel rather than in a harmonic operator.
+
+**AND THAT EXPLAINS THE ITERATION TABLE COMPLETELY.** A converged QP inverts the whole band, so
+it manufactures anti-phase content above h8; a truncated one cannot reach those components,
+because a gradient method converges the low frequencies first. `qpIters` 1 winning on all three
+programs is not a tuning accident — **truncation is an accidental low-pass that keeps the
+correction inside the band where the model is still true.** More iterations produce more of the
+wrong thing, monotonically, exactly as measured.
+
+**IT ALSO EXPLAINS WHY DEPTH WORKS WHERE INVERTING HARDER DOES NOT.** Layer 2 re-identifies its
+OWN `h` against the machine with layer 1 deployed, so it gets a fresh, accurate LOW-BAND model
+of the residual. The cascade extends the usable bandwidth by RE-IDENTIFYING rather than by
+inverting further into frequencies its model has wrong — which is why depth 2 is worth 1.85x
+and 240 iterations are worth less than 1.
+
+**AND IT NAMES A PRINCIPLED FIX THAT IS NOT A CONSTANT.** Truncation is a blunt instrument: it
+removes the useful part of the band along with the harmful part. What the measurement supports
+is weighting the inversion by the model's OWN per-frequency trust — the spectral analogue of
+`leadTrust`, but unlike `leadTrust` it has a mechanism and a measured 3.2x/4.7x error gradient
+behind it rather than an argument. `boxQP` already carries frequency-selective machinery in its
+notch; a trust-weighted roll-off is that generalised. And the trust is measurable per plant from
+the probe the pilot already runs, so it is derived and not carried over (rule 31).
+
+**WHAT WOULD KILL IT:** a trust-weighted solve that does no better than `qpIters` 1. Then
+truncation is not merely crude but sufficient, and the bandwidth is genuinely capped rather
+than mis-weighted.
