@@ -43,6 +43,13 @@ const UCAP = +(process.env.LM_UCAP || 0.6);
 // error. If lowering it restores harmonics above 4 and the score does not move, the filter is
 // somewhere else and the horizon or the decision grid is next.
 const MULTS = (process.env.LM_MULTS || '0.001,0.01,0.1,1,10').split(',').map(Number);
+// AND THE SECOND REGULARISER ON THE SAME INVERSION. `qpIters` truncates the solve, and a
+// truncated gradient method converges the LOW frequencies first — so the high band a corner
+// needs is exactly what a short solve has not reached yet. This file already records the
+// symptom without connecting it: "the converged solve RINGS and the truncated one does not."
+// Ringing is high-frequency content. Swept here with the same spectral readout, because the
+// score alone called this knob inert twice.
+const ITERS = (process.env.LM_ITERS || '').split(',').filter(Boolean).map(Number);
 
 console.log(`arm K ${PG.K} / E ${PG.E}, feed ${FEED}, uCap ${UCAP}`);
 const pilot = await commissionArm({ seed: 1, train: { shape: 'rounded', feed: FEED }, uCap: UCAP });
@@ -83,4 +90,34 @@ for (const m of MULTS) {
   console.log(`  ${String(m).padStart(8)}   ${cols.join('  ')}`);
 }
 pilot.lambda = lam0;
+if (ITERS.length) {
+  const it0 = pilot.qpIters;
+  console.log(`\n  qpIters (lambda at its selected ${lam0.toExponential(3)}, iters ships ${it0})`);
+  for (const it of ITERS) {
+    pilot.qpIters = it;
+    const cols = [];
+    for (const shape of SHAPES) {
+      const tr = [];
+      const r = await deployOn(pilot, shape, true, FEED, { trace: tr });
+      let s2 = 0;
+      for (const t of tr) s2 += t.u[0] * t.u[0] + t.u[1] * t.u[1];
+      const lap = Math.round(mkPath(shape, FEED).lap / pilot.sample);
+      const seg = tr.slice(Math.max(0, tr.length - lap)).map((t) => t.u[0]);
+      let lo = 0, hi = 0;
+      for (let h = 1; h <= 16; h++) {
+        let re = 0, im = 0;
+        for (let i = 0; i < seg.length; i++) {
+          const t = (2 * Math.PI * h * i) / seg.length;
+          re += seg[i] * Math.cos(t); im -= seg[i] * Math.sin(t);
+        }
+        const e = re * re + im * im;
+        if (h <= 4) lo += e; else hi += e;
+      }
+      cols.push(`${(open[shape] / r.r.totalRms).toFixed(2).padStart(5)}x o${r.r.contourOsc.toExponential(1)}`
+        + ` u${Math.sqrt(s2 / Math.max(1, tr.length)).toFixed(3)} h5+${(hi / Math.max(1e-30, lo + hi)).toFixed(3)}`);
+    }
+    console.log(`  ${String(it).padStart(8)}   ${cols.join('  ')}`);
+  }
+  pilot.qpIters = it0;
+}
 console.log('EXIT 0');
