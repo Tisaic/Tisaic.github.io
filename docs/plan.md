@@ -7064,3 +7064,51 @@ the probe the pilot already runs, so it is derived and not carried over (rule 31
 **WHAT WOULD KILL IT:** a trust-weighted solve that does no better than `qpIters` 1. Then
 truncation is not merely crude but sufficient, and the bandwidth is genuinely capped rather
 than mis-weighted.
+
+### `mu` SUBSUMES TRUNCATION, WHICH FREES `qpIters` TO BE A COST KNOB (`test/_reg2.mjs`)
+
+Both regularisers on the same inversion, run together for the first time, with the h5+ share in
+every cell:
+
+```
+  iters  mu      sharp                  circle                 rounded
+     1  0.00   3.56x h5+0.297         2.94x h5+0.000         3.00x h5+0.197
+     4  0.00   3.47x h5+0.541         2.76x h5+0.002         2.87x h5+0.401   <- ships
+    16  0.00   3.41x h5+0.694         2.77x h5+0.013         2.91x h5+0.617
+     1  0.03   3.81x h5+0.216         3.37x h5+0.000         3.28x h5+0.135
+     4  0.03   3.71x h5+0.271         3.18x h5+0.000         3.15x h5+0.182
+    16  0.03   3.78x h5+0.273         3.21x h5+0.000         3.15x h5+0.190
+     1  0.10   3.73x h5+0.127         4.59x h5+0.000         3.69x h5+0.071
+     4  0.10   3.68x h5+0.132         4.36x h5+0.000         3.60x h5+0.079
+    16  0.10   3.70x h5+0.134         4.37x h5+0.000         3.59x h5+0.081
+     1  0.30   2.74x h5+0.059         5.71x h5+0.000         3.33x h5+0.027
+     4  0.30   2.74x h5+0.062         5.64x h5+0.000         3.32x h5+0.029
+    16  0.30   2.74x h5+0.060         5.64x h5+0.000         3.32x h5+0.029
+```
+
+**AT `mu` 0 THE ITERATION COUNT MATTERS AND AT ANY `mu` > 0 IT DOES NOT.** 3.56 -> 3.41 down the
+first column; identical to three figures down every other. The h5+ share is set by `mu` alone —
+0.271 and 0.273 at four and sixteen iterations — so the BAND the correction lands in is the
+magnitude penalty's doing and not the solver's.
+
+**WHICH RESOLVES A TENSION THIS FILE ALREADY RECORDED.** `qpIters` has been doing double duty:
+solver effort AND hidden regulariser — "the iteration count is a second regulariser on that
+inversion alongside `lambda`, and the two are therefore one knob approached from opposite ends".
+With an explicit magnitude penalty the regularisation is NAMED, and the iteration count becomes
+a pure cost knob that can be chosen on arithmetic alone. That also explains why `qpIters` and
+`horizonTs` measured non-separable: both were partly regularising, so moving either moved the
+conditioning as a side effect.
+
+**ONE SETTING, THREE UNSEEN PROGRAMS, NOTHING WORSE:** `mu` 0.1 at ONE iteration reads 3.73x /
+4.59x / 3.69x against the shipped 3.47x / 2.76x / 2.87x — a geometric mean of **1.32x at a
+QUARTER of the QP's arithmetic**. Principled (Tikhonov on a demonstrably ill-posed inverse),
+derivable on the machine the way `lambda` already is, and with the mechanism measured rather
+than argued: `h` is anti-phase past the eighth harmonic and `mu` is what stops the solver
+inverting it there.
+
+**STILL OPEN AND NOT SMALL.** The optimum is program-dependent — sharp peaks at 0.03, circle at
+0.30 — so a fixed value is a per-plant constant and rule 31 forbids it; it has to be selected by
+the verify from a candidate set, exactly as `lambda` is, and that selection is not built. The
+frequency table also says a FLAT penalty is not the right shape: `h` is trustworthy below h4 and
+wrong above h8, so a trust-weighted roll-off should beat uniform Tikhonov. And none of this has
+been run at depth 2, where the shipped configuration already reads 4.09x / 6.81x / 5.25x.
