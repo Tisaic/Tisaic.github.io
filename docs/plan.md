@@ -6518,3 +6518,72 @@ this project has already measured it multiplying a vouched model — arm +29%, t
 where a phase-indexed ILC failed it. The composition to measure is therefore cascade depth 2
 at raised authority WITH gated adaptation armed, which is also the configuration this file
 already predicts wants the larger cap ("raise the cap only with adaptation armed").
+
+### ONLINE ADAPTATION IS INERT ON THIS ARM, AND THE 5.77x WAS AN ARTIFACT (`test/_adaptdepth.mjs`)
+
+`_onlineStep` writes the adapted weights IN PLACE into `ro.w[0]` — that is the design, the
+recursion continues the commissioning problem — and `deployOn`'s `_initRun()` restores rings
+and warm starts, not weights. So a bench that runs static, then adapting, then take-away, per
+shape, contaminates everything after the first adapting run. The first version did exactly
+that and produced a headline of 5.77x on the sharp square that was adapt-then-adapt-again, and
+a circle "static" that was really the sharp-ADAPTED model (5.39x against a pristine 6.81x).
+
+With one snapshot taken before any run, restored before every mode, and a `drift` column that
+re-reads the bank afterwards and prints 0.0e+0:
+
+```
+  uCap   program   static   adapting   take-away   adapt/static   rows admitted
+  0.15   sharp      2.15x     2.15x       2.15x       1.001x       1814/2736, 100/2736
+  0.15   circle     3.99x     3.99x       3.99x       1.000x       2094/2094, 2094/2094
+  0.15   rounded    2.64x     2.64x       2.64x       1.000x       2452/2452, 2452/2452
+  0.60   sharp      4.09x     4.10x       4.13x       1.002x       1947/3078, 2009/3078
+  0.60   circle     6.81x     6.81x       6.81x       1.000x       2356/2356, 2356/2356
+  0.60   rounded    5.25x     5.24x       5.26x       0.998x       2759/2759, 2759/2759
+```
+
+**IT RAN AND IT DID NOTHING** — the admit counts are there so "inert" cannot be confused with
+"never fired" (rule 25), and every static column reproduces `_cascdepth`'s independently
+measured table to four figures, which is the control that says the restore is real.
+
+**AND IT FAILS TO REPRODUCE THIS FILE'S OWN "+29% ON THE ARM"**, which was measured in some
+other configuration. Stated rather than absorbed: on this arm, at this cell, through the
+cascade, gated adaptation is worth nothing at either authority.
+
+So of the three routes the iteration finding opened — depth, authority, adaptation — the first
+two compose to 1.85x and the third is null here.
+
+### WHAT THE OWNER'S DIRECTIVE POINTS AT, AND WHAT THE RECORD ALREADY SAYS ABOUT IT
+
+*"The model is controllable. Even if the algorithm has to change shape."*
+
+**THE CONSTRUCTIVE DISPROOF OF MY OWN WALL IS ALREADY HERE.** ⑩ compiles a 44x feedforward
+from a fitted twin with zero machine laps. The twin is per-PLANT knowledge; only the compile
+is per-program. So the information needed to cancel this error IS available
+program-agnostically, and "the residual is not state-predictable" cannot be true of a quantity
+a plant-level model predicts well enough to invert. What is true is that a 2,496-step lag
+window with 117-step spacing and no command future could not predict it — an instrument three
+times short of the elbow's measured 6,363-8,649-step memory (rule 37, in this file's own
+words).
+
+**AND §43 ALREADY CONVICTED THE OBVIOUS SHAPE CHANGE, WHICH IS WHY IT IS WORTH READING BEFORE
+BUILDING.** For ⑩'s dynamics half it measured: plain AR diverges at light ridge and is
+bias-dead at heavy (0.4-0.8); leaky-integrator states NULL; hysteresis states NULL; the
+corner-regime split NULL in free-run form; scheduled refit DIVERGES. What moved it was
+DROPPING the recursion for an input-only FIR at L=384 — and L=780 won on the wander while
+BREAKING on the program, so "reach further" is convicted too in its dense form.
+
+**THE GAP IN THAT PRIOR ART IS THE ONE THAT MATTERS.** §43 tested FREE-RUN: a simulator
+running open, with no measurements, over a whole program. The pilot has six routed measured
+signals every sample and needs to predict only N leads. **A one-step recursion re-anchored by
+measurement is an OBSERVER, not a free-run**, and it cannot diverge the way §43's did because
+the measurements bound the state every sample. That is a different experiment from the one
+that was convicted, and it is the defensible form of the shape change:
+
+  identify per PLANT a small state-space model driven by the command, whose state is corrected
+  each sample from the measured signals, and propagate it over the horizon to produce `f0` —
+  keeping ⑩'s per-plant knowledge and dropping its per-program compile.
+
+Its cost is the reason it is worth trying at all: propagation carries unbounded memory at
+FIXED cost, where a window pays linearly in reach and still truncates. At order 16 over 70
+leads one forward pass is ~18k MAC, the same order as the forecast it replaces, reaching
+9,000 steps instead of 2,500.
