@@ -96,35 +96,37 @@ const baseAt = async (at) => {
   return out;
 };
 
-console.log('\n  ch->out  phase    du     DC        first     reverse peak   as %DC   crosses at');
+console.log('\n  SYMMETRIC and ANTISYMMETRIC halves of the response, per amplitude.');
+console.log('  A LINEAR response lives entirely in the SYMMETRIC half and is invariant in du; a');
+console.log('  direction-dependent one (backlash, friction) lives in the antisymmetric half and is');
+console.log('  not. Only a reverse excursion in the SYMMETRIC half is a zero.');
+console.log('\n  ch->out  phase    du    sym DC     sym rev    as %DC     asym DC    asym rev');
 for (let ch = 0; ch < 2; ch++) {
   for (let p = 0; p < NPH; p++) {
     const at = Math.round(LAP + (p * LAP) / NPH);
     const base = await baseAt(at);
-    for (const du of DUS.flatMap((d) => [d, -d])) {
-      const pulsed = await run(ch, at, du);
-      const n = Math.min(base.length, pulsed.length, WIN);
+    for (const mag of DUS) {
+      const plus = await run(ch, at, mag), minus = await run(ch, at, -mag);
       for (let oc = 0; oc < 2; oc++) {
-      const r = [];
-      for (let i = 0; i < n; i++) r.push((pulsed[i][oc] - base[i][oc]) / du);
-      const dc = r.slice(Math.floor(n * 0.9)).reduce((a, v) => a + v, 0) / Math.max(1, Math.ceil(n * 0.1));
-      const sgn = Math.sign(dc) || 1;
-      // THE REVERSE EXCURSION: the most negative the response goes in the DC's own frame, and
-      // the first index at which it stops being on the wrong side of zero.
-      let rev = 0, revAt = 0, cross = -1;
-      for (let i = 0; i < n; i++) {
-        const v = r[i] * sgn;
-        if (v < rev) { rev = v; revAt = i; }
-        if (cross < 0 && i > 0 && v > 0) cross = i;
-      }
-      // the first motion, read once the signal has left the numerical floor rather than at i=0
-      const floor = 1e-4 * Math.abs(dc);
-      let first = 0;
-      for (let i = 0; i < n; i++) if (Math.abs(r[i]) > floor) { first = r[i]; break; }
-      console.log(`  ${ch}->${oc}  ${String(at - LAP).padStart(5)}  ${(du > 0 ? '+' : '-') + Math.abs(du).toFixed(2)}  `
-        + `${dc.toExponential(3)}  ${first.toExponential(3)}  ${(rev * sgn).toExponential(3)}`
-        + `  ${(100 * rev / Math.abs(dc)).toFixed(1).padStart(7)}%  ${String(cross).padStart(5)}`
-        + `  (peak at ${revAt})`);
+        const n = Math.min(base.length, plus.length, minus.length, WIN);
+        const sym = [], asym = [];
+        for (let i = 0; i < n; i++) {
+          const rp = (plus[i][oc] - base[i][oc]) / mag;
+          const rm = (minus[i][oc] - base[i][oc]) / -mag;
+          sym.push((rp + rm) / 2); asym.push((rp - rm) / 2);
+        }
+        const stat = (r) => {
+          const dc = r.slice(Math.floor(n * 0.9)).reduce((a, v) => a + v, 0)
+            / Math.max(1, n - Math.floor(n * 0.9));
+          const sg = Math.sign(dc) || 1;
+          let rev = 0, revAt = 0;
+          for (let i = 0; i < n; i++) { const v = r[i] * sg; if (v < rev) { rev = v; revAt = i; } }
+          return { dc, rev: rev * sg, pct: 100 * rev / Math.max(1e-30, Math.abs(dc)), revAt };
+        };
+        const S = stat(sym), A = stat(asym);
+        console.log(`  ${ch}->${oc}  ${String(at - LAP).padStart(5)}  ${mag.toFixed(2).padStart(5)}  `
+          + `${S.dc.toExponential(3)}  ${S.rev.toExponential(3)}  ${S.pct.toFixed(1).padStart(7)}%  `
+          + `${A.dc.toExponential(3)}  ${A.rev.toExponential(3)}  (sym peak ${S.revAt})`);
       }
     }
   }
