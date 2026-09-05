@@ -8780,3 +8780,43 @@ against the response's own 1.9, because the eccentricity disturbance fills it. T
 hidden by a poor instrument — it is UNIDENTIFIABLE from a step response, since a dead time and a
 slow rise move the 90% crossing identically. A detector that told engineers to declare delays their
 plants do not have would be worse than none.
+
+### THE SIX-PLANT PASS ACCEPTS IT: FIVE BYTE-IDENTICAL, AND THE MILL GOES 0.61x -> 0.99x
+
+```
+  plant       control                with the mill declaring    
+  tanks       1.00 x  pass refused   1.00 x  pass refused    identical
+  thermal     1.00 x  pass refused   1.00 x  pass refused    identical
+  woodberry  43.90 IAE  pass        43.90 IAE  pass          identical
+  rollmill    0.61 x  pass           0.99 x  pass            <- the change
+  emps      0.0393 mm 14.7x pass   0.0393 mm 14.7x pass      identical
+  arm      2.173e-2 6.18x pass    2.173e-2 6.18x pass        identical
+```
+
+**Five plants byte-identical**, which is what a change gated on `_anyDead` and declared on ONE plant
+must produce — and the thing this pass exists to check, since it refused two arm-only improvements
+this week for exactly the collateral that is absent here.
+
+**AND THE MILL'S CORRECTION STOPS HARMING THE MACHINE.** 0.61x means the controller made the plant
+39% WORSE than doing nothing; 0.99x is neutral. It still refuses, because 0.99 sits under the 1.1
+deploy bar — but the refusal has changed KIND. It was refusing because its model was broken: an
+unresolvable rise of 9 steps on a plant with 100 steps of transport delay, a 14-step horizon, 100%
+of `hGrid`'s energy inside the dead zone, and `h*u` at 3.57x the truth it is subtracted from. It now
+refuses because this plant does not offer it a benefit worth taking, on a model that is no longer
+wrong.
+
+**THAT IS TARGET 7's SECOND CLAUSE** — "turn at least one of the two standing refusals into a
+measured improvement OR a refusal that is provably the right answer rather than an inability". An
+inability became a correct judgement, and the first change this session to survive the six-plant
+gate. The three that did not: the rich-block prior (+41% on the arm, broke the tank), the derived
+plant gain (+4.5% on the arm, broke the tank), and the ensemble on the tank (refused as the draws
+did).
+
+WHAT IT COST, STATED: one declared number per plant that has a transport delay, supplied by the
+engineer who mounted the instrument — the same honest cost `verifyRef` carries against "wire it up
+and press one button". Five of the six plants declare nothing, and the two others that HAVE delays
+(the barrel's 60 steps, the column's 1-7 minutes) resolve their own and assert as much in their own
+tests, so the parameter is not a general escape hatch.
+
+STILL TRUE AND WORTH KEEPING IN VIEW: the mill remains a refusal. Neutral is not a win, and the
+plant this project called "the pilot's wheelhouse" still declines to deploy.
