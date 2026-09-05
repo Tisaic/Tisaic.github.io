@@ -393,11 +393,39 @@ Each of these is a claim that can be shown false, which is the only kind worth w
    friction is a good compliance-and-friction method; this one now wins on two error classes of
    three tried, and loses on the one a 1980s method owns.
 
-8. **MEASURED AGAINST SOMETHING THAT IS NOT US.** Target: one properly implemented rival from
-   the literature, on the arm, on the bench. Norm-optimal ILC is the cheapest honest choice.
-   Every comparison this project has is against its own baseline or a published number for a
-   specific rig; a rival implemented here, run on the same machine, is the first datum that
-   speaks to where this sits in the field.
+8. **MEASURED AGAINST SOMETHING THAT IS NOT US. ONE LITERATURE METHOD IS NOW BUILT AND RUN,
+   AND IT AGREES WITH US TO FIVE FIGURES — INCLUDING ON THE FAILURE.** Norm-optimal ILC
+   (`test/pilot/noilc.mjs`, `noilcbench.mjs`), the textbook law
+   `Δu = (GᴴQG + R)⁻¹GᴴQe`, nothing tuned, against the harmonic rung on the EMPS axis with the
+   SAME identified operator, the same machine, the same authority and the same laps — it
+   borrows `hff`'s `exportOperator`, `_project` and `_table`, so what differs is the update law
+   and not a second convention:
+
+   ```
+     hff    5.7640e-1 → 2.3805e-3 mm   242.1x
+     NOILC  5.7640e-1 → 2.3804e-3 mm   242.1x    Q 1, R 1e-4
+     on a two-tone sine the axis has NEVER run:
+       open loop     4.7537e-1        hff 8.9848e-1 (0.53x)    NOILC 8.9849e-1 (0.53x)
+   ```
+
+   **THE TRANSFER ROW IS THE RESULT.** A properly implemented method from the literature makes
+   this machine WORSE THAN NOTHING on a trajectory it has not run, exactly as ours does, to four
+   figures. That is no longer a property of our implementation of ILC; it is a property of
+   LAP-INDEXED MEMORY, and it is the first evidence for the retirement that does not come out of
+   our own code. NOILC also converges in three update laps — but it paid nothing for
+   identification, so that is a statement about the law given an operator and not a cost
+   comparison.
+
+   **AND THE AGREEMENT IS EXPECTED ON THIS PLANT, WHICH IS THE LIMIT OF IT.** `hff`'s reach
+   factor is recorded here as "on the axis inert to four figures", so EMPS is precisely where the
+   two laws should land together. The ARM is where that shrinkage is load-bearing — removing it
+   costs 4.81x → 1.05x — and is therefore the venue where these two would actually discriminate.
+   The plan names the arm for that reason and it is NOT yet run: the arm drives `HarmonicFF`
+   through the shared `makeArmHost`, so the rival has to be plugged into that host rather than
+   given a harness of its own. A first draft of exactly such a harness invented an
+   `arm.jointErr` that does not exist and would have been the fourth private copy of that
+   routing, three of which have each shipped a defect (rule 61). Still absent entirely: modern
+   MPC, L1 adaptive, DeePC, Koopman-EDMD. One method is not a field.
 
 **The plan to get there is `docs/plan.md`**, sequenced so the experiment that CHOOSES the
 route runs early rather than last.
