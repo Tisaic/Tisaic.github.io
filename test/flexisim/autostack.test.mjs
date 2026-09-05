@@ -208,6 +208,9 @@ let hostRef = null;
     // the page offers it as an operator switch, and a policy the page can set that this bar
     // cannot is a configuration nobody has timed (rule 61).
     ...(process.env.MIMO === '1' ? { mimo: true } : {}),
+    // GUIDED commissioning laps, reachable here for the same reason DEPTH and MIMO are: the
+    // page offers it and a policy the page can set that this bar cannot is one nobody has timed.
+    ...(process.env.GUIDED ? { guidedLaps: +process.env.GUIDED } : {}),
     onRung: (r) => console.log(`  [${((Date.now() - T0) / 60000).toFixed(0)}m] `
       + `${r.name}  ${r.score.toExponential(4)}`
       + `${r.gain === null ? '' : '  ' + r.gain.toFixed(2) + 'x'}`
@@ -471,6 +474,15 @@ const modelOnly = rep.rungs.filter((r) => /withheld/.test(r.name)).pop()
 // first run of it was invisible in this bar's output — leaving "the law fired and lost" and
 // "the law never fired" as the same picture, which is the mode-8 failure this file exists to
 // avoid (rule 25: not measured and no effect are different states).
+if (rep.guided) {
+  const g = rep.guided;
+  console.log(`  guided commissioning: ${g.laps} laps with the tracker on ${g.layers} layer(s), `
+    + `then FROZEN — ${g.before.toExponential(4)} -> ${g.after.toExponential(4)} `
+    + `${g.kept ? 'KEPT' : 'rejected, the static model stands'}`);
+} else if (hostRef.auto.guidedLaps > 0) {
+  console.log(`  guided commissioning: ${hostRef.auto.guidedLaps} laps were asked for and the `
+    + `phase never ran — no cascade layer was armed to adapt`);
+}
 if (rep.crossGain) {
   const c = rep.crossGain;
   console.log(`  cross scale: diagonal ratio ${c.x.toFixed(2)} → proposed ${c.g.toFixed(3)}`
