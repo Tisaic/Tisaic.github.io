@@ -9345,7 +9345,12 @@ it should be.
 
 **IT WAS RIGHT ON THE MILL BY COINCIDENCE, WHICH IS WHY NOTHING CAUGHT IT.** The mill has
 `sample` 1, so `dSamp == dead` and `dead/(grid*sample) == dead/grid`, and every number it has
-produced is unchanged. It is also the ONLY plant that declares a delay, so the shipped behaviour
+produced is unchanged. **AND `sample` IS 1 ON EXACTLY ONE OF THE SIX PLANTS** — Wood-Berry runs
+2, the arm 9, the barrel 13 — so the option was correct on the plant it was built for and wrong
+on every other one in the set. Had the arm declared a delay the mask would have over-reached
+NINE-fold and the barrel THIRTEEN. That is not a narrow edge case with a lucky escape; it is the
+general case being wrong while the specific case is right, which is the shape a defect takes
+when its only test is the plant that motivated it. It is also the ONLY plant that declares a delay, so the shipped behaviour
 of all six is unaffected — the fix is byte-identical by inspection rather than by luck, the same
 standard the gate-lead change was held to. On any plant with `sample > 1` the option would have
 silently degraded the forecast in proportion to the delay declared, which is a trap set for the
