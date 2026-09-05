@@ -57,9 +57,10 @@ const want = (process.env.PLANTS || PLANTS.map((p) => p.name).join(',')).split('
 // this project has measured that coupling twice. `off` states the default explicitly where a row
 // wants to say so.
 const configs = (process.env.CONFIGS || '4:1.5,2:1.2,1:1.2').split(',').map((c) => {
-  const [q, h, g] = c.split(':');
+  const [q, h, g, r] = c.split(':');
   const cfg = { qpIters: Number(q), horizonTs: Number(h) };
-  if (g) cfg.hGain = g;
+  if (g && g !== '-') cfg.hGain = g;
+  if (r) cfg.probeRises = Number(r);
   return cfg;
 });
 
@@ -94,7 +95,7 @@ for (const cfg of configs) {
     if (!plant) { console.log(`  (no plant named ${name})`); continue; }
     const r = await runPlant(plant, cfg);
     rows.push({ cfg, plant, ...r });
-    console.log(`  ${`${cfg.qpIters}:${cfg.horizonTs}${cfg.hGain ? ':' + cfg.hGain : ''}`.padStart(7)}  ${name.padEnd(10)} `
+    console.log(`  ${`${cfg.qpIters}:${cfg.horizonTs}${cfg.hGain ? ':' + cfg.hGain : ''}${cfg.probeRises ? ':p' + cfg.probeRises : ''}`.padStart(7)}  ${name.padEnd(10)} `
       + `${(r.score === null ? '—' : r.score).padStart(10)} ${plant.unit.padEnd(4)} `
       + `${r.ratio ? `${r.ratio}x` : ''.padEnd(6)}`.padEnd(9)
       + `  ${r.code === 0 ? 'pass' : `EXIT ${r.code}`}${r.refused ? '  refused' : ''}  ${r.secs}s`);

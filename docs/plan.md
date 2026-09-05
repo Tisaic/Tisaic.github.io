@@ -8475,3 +8475,50 @@ its self-search lives in the library rather than in a harness, because the gate 
 own test and a searched constant carried over from this arm is exactly what rule 31 forbids. The
 probe finding is the one piece with a plausible claim to transfer, because a truncated step
 response is a property of the identification rather than of this plant.
+
+### THE GAIN FAILS THE SIX-PLANT GATE, AND THE THREE REFUSALS HAVE THREE DIFFERENT CAUSES
+
+`setSolverDefaults` gained `hGain` and `probeRises` so both could face `sixplant.mjs` — a knob that
+cannot be put to that pass is not a claim, and a constant searched on one arm is what rule 31
+forbids. The derivable form went first because it is the only one that can go at all.
+
+**IT IS REFUSED.** Control `4:1.5` against `4:1.5:r2`:
+
+```
+  plant       control                derived gain
+  tanks       1.00 x    pass         1.00 x    EXIT 1      <- regression
+  thermal     1.00 x    pass         1.00 x    pass        (both refuse)
+  woodberry  43.90 IAE  pass        43.90 IAE  pass        identical
+  rollmill    0.61 x    pass         0.63 x    pass        +3%, still refuses
+  emps      0.0393 mm   pass       0.0394 mm   pass        -0.3%, inside noise
+  arm      2.173e-2 6.18x pass    2.078e-2 6.46x pass      +4.5%
+```
+
+Same shape as the rich penalty the day before: small gains on the plants that already win, one
+plant's contract lost. So the honest statement of the whole gain arc is that it is worth 42% at the
+arm's bench cell as a SEARCHED pair, 4.5% on the arm's own test in DERIVABLE form, and it does not
+ship — the searched form cannot be gated and the gated form is refused.
+
+**AND THE THREE STANDING REFUSALS ARE THREE DIFFERENT FAULTS**, which is why "why does it refuse"
+had no single answer:
+
+- **THE TANK IS MARGINAL AND FIXABLE.** Its verify reads **1.08x against a 1.1x deploy bar** — it
+  refuses by 2% — and across 8 commissioning seeds it refuses 5 and delivers 1.045x, 1.392x, 1.590x
+  on the other 3. That is COMMISSIONING VARIANCE, not an uncontrollable plant, and the repair is
+  already measured in `lib/pilot/ensemble.js` on this exact plant: raw draws all eight refused ->
+  averaging alone 1.344x -> with the ridge 1.594x, and the average VOUCHED FOR ITSELF where no
+  single draw could. It is unused because it costs k commissionings. This is target 7's bar — a
+  refusal turned into a measured improvement — sitting on the shelf.
+- **THE MILL IS AN IDENTIFICATION FAILURE AND THE ARM'S FIX DOES NOT TRANSFER.** All three regimes
+  agree the correction HARMS (scribble 0.63x, program 0.57x, representative 0.61x), and the cause
+  on record is the fit target: `eFree` rms is 4.16x the truth's, forecast R^2 0.05 where the same
+  design matrix against the RAW truth reaches 0.73. `eFree = truth - h*u`, so `h` is wrong. But a
+  probe held to settling — worth 16% on the arm — is **byte-identical on the mill at 10, 25, 50 and
+  100 rises**, with the knob verified live (`pilot.probeRises = 50`), so it is a real null and not
+  a wiring failure. The mill's `h` is not truncated. Its routing carries a DELAYED GAUGE, and a
+  mis-timed delay corrupts `truth - h*u` while leaving magnitudes plausible — which is exactly the
+  signature `_hcheck2.mjs`'s own units bug produced (matching rms, near-zero correlation). Untested.
+- **THE NON-MINIMUM-PHASE TANK IS PROVABLY RIGHT.** gamma1 + gamma2 < 1 puts a zero in the right
+  half plane; no feedforward inverse can cancel it, and the test says so in as many words. That
+  refusal is the answer, not an inability.
+- **THE BARREL** refuses at 0.22x on the representative regime — neither mechanism, unexamined.
