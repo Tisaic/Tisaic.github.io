@@ -3225,21 +3225,27 @@ if (FULL) {
     JSON.stringify(wrong));
 
   await fx.click('#autoP-btn');
-  // ONE BUTTON: the plant it commissions on is the plant the 22.42x was measured on, and it
-  // got there by itself. Every value read off test/flexisim/autostack.test.mjs.
-  await fx.waitForFunction(() => Math.abs(window.__flxPathDbg().K - 1) < 1e-9, null,
-    { timeout: 240000 });
-  const setup9 = await fx.evaluate(() => {
-    const d = window.__flxPathDbg();
-    return { K: d.K, E: d.E, shape: d.shape, feed: d.feed, accel: d.accel, corner: d.corner };
-  });
-  check('flexisim/path: ⑨ sets up its own machine — K 1 / E 0.06, no other button pressed',
-    Math.abs(setup9.K - 1) < 1e-9 && Math.abs(setup9.E - 0.06) < 1e-9,
-    JSON.stringify(setup9));
-  check('flexisim/path: …and its own program — the rounded rectangle at 4e-3 / 4e-5 / 40',
-    setup9.shape === 'rounded' && Math.abs(setup9.feed - 4e-3) < 1e-12
-      && Math.abs(setup9.accel - 4e-5) < 1e-12 && setup9.corner === 40,
-    JSON.stringify(setup9));
+  // ⑨ COMMISSIONS THE MACHINE ON SCREEN, AND THIS BLOCK USED TO ASSERT THE OPPOSITE.
+  //
+  // It waited for `K → 1` and checked "⑨ sets up its own machine — K 1 / E 0.06", which was
+  // true when it was written: the button forced the sliders back to the configuration the
+  // 22.42x was measured on. That override was REMOVED deliberately — `startAutoP`'s own
+  // comment records why, from the owner hitting it: "set up a different machine to study,
+  // press ⑨, watch the page discard the setup ... the operator's configuration is the
+  // experiment". So the code got better and the check froze the old contract (rule 4).
+  //
+  // AND IT COULD NEVER PASS AGAIN, which is what made it expensive rather than merely wrong.
+  // The block above deliberately drives K to its maximum so these checks "have teeth", and
+  // under the corrected behaviour ⑨ commissions THERE — so the wait ran its full 240 s, threw
+  // an uncaught TimeoutError, and killed `smoke.mjs` outright. Every check below it — the
+  // liveness yields, the report advancing, the live Stop button, the clean unwind — has not
+  // run since. A stale check does not merely fail; this one deleted the coverage after it.
+  //
+  // WHAT REPLACES IT IS STRONGER. The old check asserted the button substitutes a known
+  // machine; the new one asserts it does NOT substitute the operator's, which is the property
+  // the removal was for and the one a regression would break. It is made below, once the
+  // liveness wait has established the machine is actually turning — that wait already ends on
+  // EITHER outcome, so no new bare-timeout silence is introduced here (rule 60).
   // THE LIVENESS SIGNAL IS THE YIELD COUNT, not the rung table. The first rung row is many
   // minutes away; a frame handed back proves the imports resolved, `makePlantP` built two
   // lattices, `RobotComp` calibrated over four poses, the settle ran and the scored run's
@@ -3263,6 +3269,22 @@ if (FULL) {
     a1.comm === true && a1.have === true && a1.yields >= 2, JSON.stringify(a1));
   check('flexisim/path: …and the report panel opens while it runs, so the run is visible',
     a1.panel === true, JSON.stringify(a1));
+  // THE CONTRACT THE OVERRIDE'S REMOVAL EXISTS TO PROVIDE, asserted on the machine that was
+  // deliberately driven OFF the measured configuration above: ⑨ commissions what is on
+  // screen. `wrong` was read before the click — K at its maximum, the sharp square, a feed
+  // that is not 4e-3 — and every one of those must survive the press.
+  const kept9 = await fx.evaluate(() => {
+    const d = window.__flxPathDbg();
+    return { K: d.K, E: d.E, shape: d.shape, feed: d.feed, corner: d.corner };
+  });
+  check('flexisim/path: ⑨ commissions the machine ON SCREEN — it does not substitute its own',
+    Math.abs(kept9.K - wrong.K) < 1e-9 && Math.abs(kept9.E - wrong.E) < 1e-9
+      && kept9.shape === wrong.shape && Math.abs(kept9.feed - wrong.feed) < 1e-12,
+    `${JSON.stringify(wrong)} -> ${JSON.stringify(kept9)}`);
+  // BOTH HALVES (rule 9): keeping the sliders is worthless if it kept them by doing nothing,
+  // so the run must also be live — which `a1` above has already established.
+  check('flexisim/path: …and it is commissioning that machine, not merely leaving it alone',
+    a1.comm === true && a1.yields >= 2, JSON.stringify(a1));
   // AND IT SAYS SO CONTINUOUSLY. The table is driven by rung COMPLETION and the lap-periodic
   // rung is the majority of the whole run, so after the cascade's last row the page used to
   // go silent for longer than everything before it put together -- reported from a phone as
