@@ -9138,28 +9138,53 @@ the last 10% of the response, which `_gridOf` then pads the entire horizon with 
 It is a self-referential settle test, and the barrel at `Ts` 3169 is where it should bite
 hardest.
 
-**MEASURED, AND IT IS REAL AND IT IS NOT THE CAUSE — both halves, which is the point (rule 9).**
-Quadrupling the hold, `probeRises` 10 → 40, on the barrel:
+**MEASURED TO CONVERGENCE, WITH ITS OWN INTERNAL CONTROL, AND IT IS REAL AND IT IS NOT THE
+CAUSE — both halves, which is the point (rule 9).** Sweeping the hold on the barrel and
+printing the recorded response length beside the DC it produces:
 
 ```
-  probeRises      identified dc per zone            capFrac    u peak    changeover
-      10     -2.542   0.9485   1.631                0.0943    12.0000   0.670x
-      40     -2.542   1.176    1.875                0.0430    11.5913   0.702x
+  probeRises   respLen z1,z2,z3        identified dc per zone        u peak    changeover
+      10      60200, 16400, 30200   -2.542   0.9485   1.631         12.0000    0.670x
+      40      60200, 60200, 60200   -2.542   1.176    1.875         11.5913    0.702x
+     200      60200, 60200, 60200   -2.542   1.176    1.875         11.5913    0.702x
 ```
 
-**The DC moves +24% on zone 2 and +15% on zone 3** and zone 1 not at all to four figures, so the
-bias exists and is worth between a seventh and a quarter of the identified gain on the zones
-that are still rising when the probe stops. And it is **fifteen times too small to be this
-plant's problem** — `hGain` needed 4x to 8x, this supplies 1.15x to 1.24x, and the delivered
-ratio barely moves (0.670x → 0.702x, still deeply harmful, still at the cap). Which agrees with
-the sweep above having already killed the mis-scaled-gain reading: there is no scale that makes
-this correction good, so finding a genuinely better scale does not make it good either.
+**THE TWO CHANNELS THAT STOP EARLY ARE EXACTLY THE TWO WHOSE DC UNDER-READS, AND BY AMOUNTS
+ORDERED BY HOW EARLY THEY STOP** — zone 2 stops at 16,400 and reads 24% low, zone 3 stops at
+30,200 and reads 15% low, and **zone 1 was already at the 60,000-step cap and does not move at
+all, to four figures**. That last is the control this measurement came with for free: the
+channel the knob cannot affect is byte-identical across a twenty-fold sweep (rule 21).
 
-So the settle test is a real defect of a real but modest size, on the plant where it should be
-largest, and repairing it is worth doing on its own terms — the arm's recorded 7-9% `hGrid` bias
-is the same mechanism — but not as the barrel's fix. It is not repaired here, because a change
-to how every plant identifies its DC has to go through the six-plant pass and this session has
-already spent that pass twice.
+**AND IT IS CONVERGED RATHER THAN merely IMPROVED.** At `probeRises` 40 every channel reaches
+the cap, and 200 returns the identical DC — so the +24% / +15% / 0% is the COMPLETE bias at the
+shipped default, not a lower bound, and what rescues it is not the settle test getting it right
+but an unrelated absolute cap of 60,000 steps.
+
+**WHICH IS ITS OWN RULE-31 QUESTION.** 60,000 steps is ~19 of this plant's measured `Ts` of
+3169, so here it is generous. It is an ABSOLUTE step count on a knob that ought to scale with
+the plant's own timescale, and on a plant slower than this one — or one whose slow mode is
+further from its identified `Ts` — nothing would bound the under-read at all.
+
+**AND THE NUMBERS SAY THE IDENTIFIED `Ts` IS ITSELF SHORT.** 16,400 steps is 5.2 of `Ts` 3169,
+at which a first-order plant is 99.4% settled — and zone 2 still reads 24% low there. Three
+zones conducting into each other have a slow mode much longer than the timescale the pilot
+measured, so `enough` fires against a `rise` computed from a `tail` that is itself
+pre-settlement, on a plant whose real settling the probe never saw. The self-reference is not a
+rounding error on this class of plant; it is the whole reading.
+
+**AND IT IS STILL NOT THIS PLANT'S PROBLEM, WHICH IS WHY BOTH HALVES HAD TO BE MEASURED.**
+`hGain` needed 4x to 8x; this supplies 1.15x to 1.24x, and the delivered ratio barely moves
+(0.670x → 0.702x, still deeply harmful, still at the cap). That agrees with the sweep above
+having already killed the mis-scaled-gain reading: there is no scale that makes this correction
+good, so finding a genuinely better scale does not make it good either.
+
+THE FIX THAT FOLLOWS, stated and not yet built: `enough` must not be allowed to fire while the
+record's own tail is still GROWING. The tail's last quarter against the quarter before it,
+compared to the noise floor the probe already computes, is the same shape as rule 45 — quiet is
+"it has not moved", not "it is moving slowly" — and it needs no new constant. It would take
+zones 2 and 3 to the cap by themselves. It is not built here because it changes how EVERY plant
+identifies its DC, which is a six-plant-pass change, and the arm's recorded 7-9% `hGrid` bias
+"worth 16%" says the plants that already win are the ones with something to lose.
 
 **THE SWEEP FOUND A DEFECT BEFORE IT FOUND ANY OF THIS.** The first pass at gains 2 and 4 came
 back BYTE-IDENTICAL to off, which is an inert instrument rather than a null (rule 25).
