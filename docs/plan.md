@@ -9195,3 +9195,54 @@ was a documented option that did nothing and said nothing (rule 51). Fixed by br
 `_hgain*.mjs` benches scaled `hGrid` directly rather than through the option, so nothing already
 recorded is affected — and had the option been working when those benches were written, the
 inertness would have been read as a null result about the gain.
+
+### AND THE SETTLE FIX RECOVERS THE BARREL'S WHOLE DEFICIT WITHOUT A CONSTANT — WHICH OVERTURNS THE SECTION ABOVE
+
+The section above concludes the settle bias is "real and not the cause" on this plant. That was
+true of the KNOB and false of the FIX, and the difference is the finding.
+
+Built as drafted — `enough` may not fire while the record's own tail is still climbing, the last
+quarter against the quarter before it, measured against the noise floor of a MEAN from the 400
+held-pose samples `p.pre` already records — and run on the barrel against an isolated copy of
+`lib/` so the suite in flight was not disturbed:
+
+```
+                        respLen z1,z2,z3      identified dc          u peak    changeover  verify(rep)
+  default             60200, 16400, 30200   -2.542  0.9485  1.631   12.0000     0.670x        0.22
+  probeRises 40       60200, 60200, 60200   -2.542  1.176   1.875   11.5913     0.702x         —
+  hGain 4 (forbidden) 60200, 16400, 30200   -2.542  0.9485  1.631    3.1969     1.006x        0.83
+  THE SETTLE FIX      60200, 32800, 30400   -2.542  1.109   1.738    6.2709     0.989x        1.00
+```
+
+**Fixing the identification alone recovers almost the entire deficit that a rule-31-forbidden
+per-plant constant was needed to buy.** 0.670x → 0.989x, the correction comes off its cap
+(12.0000 → 6.2709), and the representative regime goes 0.22 → 1.00. Rule 43 verbatim, from the
+plant that had been standing as its counterexample: a better optimiser on a wrong model buys
+nothing, and the optimiser was never the problem.
+
+**AND MORE CONVERGED IS NOT BETTER, WHICH IS THE PART THAT NEEDS CHECKING RATHER THAN
+BELIEVING.** `probeRises` 40 produces a DC closer to the asymptote (1.176 / 1.875 against the
+fix's 1.109 / 1.738) and a WORSE machine (0.702x against 0.989x). The candidate explanation is
+that the knob pushes every channel to the 60,000-step cap, and on a plant whose ambient drifts
+the extra 30,000 samples are mostly environment: a longer record buys a better DC and a worse
+`hSample`/`hGrid` SHAPE, which is what the QP actually inverts. Stopping when the tail stops
+climbing stops at the right moment; stopping at the maximum does not. That is a surprising
+measurement and rule 14 says a surprising measurement is a reason to check the instrument, so it
+is written down as a candidate and not as a mechanism.
+
+**THE RISK THIS FIX WAS EXPECTED TO CARRY DID NOT MATERIALISE, AND IT WAS NAMED BEFORE THE RUN.**
+`enough` exists precisely because a plant under a persistent disturbance never goes quiet — this
+file records a barrel that ran to its cap on every channel for 70 hours of process time — so
+suppressing `enough` whenever the tail climbs could have re-created exactly that. It does not:
+the probes terminate at 32,800 and 30,400, not 60,200. If a later plant does drift forever, the
+refinement is already identified — compare the tail's climb against the drift the HELD-POSE
+record was already showing, rather than against zero, which distinguishes "the response is still
+rising" from "the room is warming" and reuses `p.pre` for its actual meaning.
+
+**NOT SHIPPED, AND THE BAR IS THE SIX-PLANT PASS.** One plant is not a method (rule 18), this
+plant still does not deploy and still should not, and the change alters how EVERY plant
+identifies its DC — including the two that already win and therefore have something to lose. The
+arm's recorded 7-9% `hGrid` bias "worth 16%" is the reason to expect it pays there; the
+commissioning-time column is the reason it might not ship anyway, since target 4 asks for
+commissioning 10x SHORTER and this makes probes longer. Both are measurements, and neither has
+been taken.
