@@ -8724,3 +8724,59 @@ grid, fit stride, horizon, impulse length — comes off that unchecked number.
 So the fix is not a better floor. It is that a rise measured at 1.25:1 must be REFUSED rather than
 returned, in a module whose strongest property is that it declines to vouch for what it cannot
 measure. What that costs and which plants it touches is a six-plant question, not an arm one.
+
+### THE DEAD TIME IS DECLARED, NOT INFERRED — AND IT WORKS ON EVERY MEASURED SYMPTOM
+
+The owner's proposal, and it is the right shape rather than a workaround: a transport delay has a
+CLOSED FORM. The mill's X-ray gauge sits 1 m downstream of the roll gap at 5 m/s on a 2 ms step, so
+it is 100 steps and the engineer who mounted it knows that exactly. Rule 40 — learn what has no
+closed form, COMPUTE what does. Every fix attempted in this thread was an attempt to infer a known
+quantity through a probe that cannot resolve it.
+
+**IT FIXES EVERY SYMPTOM THAT WAS MEASURED.** `deadTime` floors the measured rise (a response cannot
+arrive before the delay) and ZEROES the identified impulse before it (the plant cannot respond
+there, and the QP inverts whatever is fitted):
+
+```
+                             control      declared 100
+  Ts                            9             111
+  grid / N                    1 / 14         4 / 42     (168 steps, spans the delay)
+  hGrid energy in dead zone   100.0%          0.0%
+  h*u against the truth        3.57x          1.59x
+  verify                       1.41x          1.58x
+```
+
+**AND HOW ROUGH THE NUMBER MAY BE IS MEASURED, not asserted.** True delay 100 steps:
+
+```
+  declared    Ts    grid/N   h*u/truth   verify   verdict
+       0       9     1/14      3.57x     1.41x    deploy
+      40      44     1/66      3.43x     1.44x    deploy   under-declaring recovers almost nothing
+      70      78     3/39      1.92x     1.50x    deploy
+     100     111     4/42      1.59x     1.58x    deploy
+     140     156     5/47      1.39x     2.00x    deploy   the best row of the sweep
+     200     222     7/48      1.09x     0.35x    REFUSED  real dynamics masked
+     300     333    11/46      0.88x     0.58x    REFUSED
+```
+
+The usable band is about **0.7x to 1.4x of the truth and it is ASYMMETRIC**: err HIGH, not low, and
+not by more than about half again. Over-declaring by 40% is the best cell — masking a little real
+response costs less than admitting noise — while 2x masks the dynamics and the plant is correctly
+refused.
+
+**THE THRESHOLD THE ENGINEER IS TOLD comes from a measurement already here.** `report.deadTimeAdvice`
+states it in steps after probing: declare a delay longer than **10% of the measured settle**. That
+number is the horizon's own delivery slack — the horizon reaches 1.5*Tset rather than 1.0 because a
+perfect forecast leaves 7.9e-3 on the circle at 1.0x, 5.1e-3 at 1.5x and is flat at 2.0x — so a
+timing error under a tenth of the horizon sits inside slack that already exists.
+
+**AND THERE IS NO DETECTOR, DELIBERATELY.** The obvious one — where the response's energy sits
+against where the crossing fired — was built and measured and it flags EMPS, which has no transport
+delay (ratio 17.8 against the mill's 30,057). The metric is wrong rather than mis-thresholded: for a
+step settling to a non-zero DC the energy spreads over the whole record, so the centroid sits near
+its middle whatever the rise did, and the statistic is really `record length / Ts`. The mill then
+shows why no cheap replacement works: its dead zone should be FLAT and instead carries rms 0.98
+against the response's own 1.9, because the eccentricity disturbance fills it. The delay is not
+hidden by a poor instrument — it is UNIDENTIFIABLE from a step response, since a dead time and a
+slow rise move the 90% crossing identically. A detector that told engineers to declare delays their
+plants do not have would be worse than none.
