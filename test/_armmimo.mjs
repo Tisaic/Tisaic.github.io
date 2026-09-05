@@ -26,7 +26,7 @@ const PROGS = [['sharp', 0.004], ['circle', 0.004], ['rounded', 0.004]];
 
 async function run(mimo) {
   const t0 = Date.now();
-  const { pilot } = await commissionArm({ seed: 1, uCap: 0.6,
+  const pilot = await commissionArm({ seed: 1, uCap: 0.6,
     train: { shape: 'rounded', feed: 0.004 },
     ...(mimo ? { extra: { mimo: true } } : {}) });
   const cost = pilot.cost();
@@ -37,8 +37,11 @@ async function run(mimo) {
   for (const [shape, feed] of PROGS) {
     const off = await deployOn(pilot, shape, false, feed);
     const on = await deployOn(pilot, shape, pilot.verdict.deploy, feed);
-    out.scores[shape] = { off: off.totalRms, on: on.totalRms, x: off.totalRms / on.totalRms,
-      uPk: on.uPk };
+    // THE WHOLE DEVIATION, not the contour component: `totalRms` is contour AND lag, which is
+    // what this tab scores and what the pilot is corrected for (rule 6 — a rung must not buy
+    // one with the other unseen).
+    out.scores[shape] = { off: off.r.totalRms, on: on.r.totalRms,
+      x: off.r.totalRms / on.r.totalRms, uPk: on.uPk };
   }
   return out;
 }
