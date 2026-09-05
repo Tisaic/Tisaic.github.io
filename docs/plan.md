@@ -8685,3 +8685,42 @@ NOT YET FIXED, AND ONE GAP STILL OPEN: this diagnostic deploys at verify 1.41x w
 limits, `uMax`, guards and `verifyRef` — most likely the seed. The mechanism above is a property of
 the plant and the probe rather than of a draw, but the link to the REFUSING commissioning is
 inference until that closes.
+
+### CORRECTION: THE 235x WAS MY OWN UNITS ERROR, AND THE REAL FAULT IS AN SNR THE RISE TEST CANNOT SURVIVE
+
+The section above claimed the probe's noise floor missed a disturbance 235x larger than it. That is
+wrong and the error was mine: `resp` is `(v - base) / amp`, normalised per unit probe amplitude,
+while `noise` is kept in raw truth units — the code divides when it compares them
+(`4 * noise / amp / sqrt(W)`) and my diagnostic did not. Comparing an unnormalised floor against a
+normalised response manufactures a disturbance that is not there. Sixth instrument fault of mine in
+this session, and the same CLASS as the `hGrid`/`hSample` cadence error earlier: a units mismatch
+that leaves magnitudes plausible.
+
+**THE CORRECTED NUMBERS SAY SOMETHING SHARPER.** Probe amplitude 9.000e-3, so the floor in the
+response's own units is 4.634e-1:
+
+```
+  floor (pre-probe hold, response units)   4.634e-1
+  dc (the settled response)                5.801e-1     <- 1.25x the floor
+  rms inside the 100-step dead time        9.809e-1     <- 2.1x the floor, not 235x
+  rms of the true response (100-317)       1.908e+0     <- 4.1x the floor
+  the bar Ts crosses, 0.9*|dc|             5.221e-1     <- BELOW the dead-zone rms
+```
+
+There is no disturbance the floor cannot see: the floor already comes from `p.pre`, the held record,
+and already contains it. **The fault is that the rise crossing is being applied at an SNR where it
+cannot mean anything.** `dc` stands only 1.25:1 above the floor, and the bar the crossing tests sits
+BELOW the noise in the dead zone — so the crossing at index 9 is not a spike, not a bad `dc` and not
+a hidden disturbance. It is INEVITABLE. At that SNR the noise alone clears the bar immediately, and
+`Ts` is then a measurement of the noise's first excursion rather than of the plant.
+
+**AND THE GAP IS BETWEEN TWO DIFFERENT QUESTIONS.** `identifiable` asks "is there a response at
+all" and answers it correctly by AVERAGING — `|dc| * amp * sqrt(tail) > 5 * noise` — which is why
+this plant passes it. `Ts` asks "how fast is the response", which is a question about a TIMESCALE
+and is answered from a SINGLE crossing. Detection and timing need different amounts of evidence, and
+nothing checks that the second is available when the first passes. Every cadence the pilot derives —
+grid, fit stride, horizon, impulse length — comes off that unchecked number.
+
+So the fix is not a better floor. It is that a rise measured at 1.25:1 must be REFUSED rather than
+returned, in a module whose strongest property is that it declines to vouch for what it cannot
+measure. What that costs and which plants it touches is a six-plant question, not an arm one.

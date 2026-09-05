@@ -81,7 +81,15 @@ const hg = pilot.hs[0].hGrid, hsm = pilot.hs[0].hSample;
 // if the crossing at index 9 is genuine and sustained then `dc` is the remaining suspect: a small
 // or mis-estimated settled value lowers the bar to where ordinary early content clears it.
 const H = pilot.hs[0];
-console.log(`\n  the probe: dc ${H.dc.toExponential(3)}, noise ${H.noise.toExponential(3)}`
+// THE FLOOR MUST BE COMPARED IN THE RESPONSE'S OWN UNITS. `resp` is `(v - base) / amp`, so it is
+// normalised per unit probe amplitude, while `noise` is left in raw truth units — the code divides
+// when it compares them (`4 * noise / amp / sqrt(W)`) and the first version of this diagnostic did
+// not. Comparing an unnormalised floor against a normalised response is a units error of exactly
+// the kind rule 17 is about, and it would have manufactured a disturbance that is not there.
+const AMP = pilot.probeAmp || (pilot._probe && pilot._probe.amp) || null;
+console.log(`\n  probe amplitude ${AMP === null ? '?' : AMP.toExponential(3)}`
+  + `  ->  the floor in response units is ${AMP ? (H.noise / AMP).toExponential(3) : '?'}`);
+console.log(`  the probe: dc ${H.dc.toExponential(3)}, noise ${H.noise.toExponential(3)}`
   + `, |dc|/noise ${(Math.abs(H.dc) / Math.max(H.noise, 1e-300)).toFixed(2)}`
   + `, resp ${H.resp.length} samples`);
 {
