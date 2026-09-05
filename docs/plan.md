@@ -8411,3 +8411,67 @@ STILL OPEN AND STATED: the restore control in `_subspace.mjs` DRIFTED 0.7% (shar
 4.175132) — larger than the 0.08% repeatability floor measured in `_hoist.mjs`, small against the
 gaps above, but it says `ro._rls = null` is not a complete reset and the marginal rows of that
 table deserve no more confidence than 0.7%.
+
+### THE GAIN IS AN EFFORT TRADE WITH 8% OF MODEL ERROR IN IT, AND THE PROBE IS WHERE THAT 8% LIVES
+
+The per-channel plant gain is worth 3.482x -> 5.042x on a SINGLE layer with every held-out program
+improving, at no arithmetic cost and no second commissioning, and the pilot finds the pair itself
+by scoring programs it designs (`_hgainauto.mjs`: its own pick (1.20, 1.00) recovers 97% of a pair
+chosen with the answer in hand). Three things then had to be established before it could be called
+anything, and two of them corrected the description rather than the number.
+
+**IT IS THE SECOND CASCADE LAYER, NOT AN ADDITION TO IT.** The same gain applied at depth 2 makes
+the machine WORSE, 6.667x -> 5.616x: the second layer was already correcting the over-correction and
+the gain over-damps on top of it. So depth 1 + gain and depth 2 are two routes to one mechanism,
+and the second layer costs a full extra commissioning and 5.3x the arithmetic to be 32% ahead of
+what a scalar gives free.
+
+**AND IT IS MOSTLY NOT A PLANT-MODEL REPAIR, which is the flattering reading I gave it twice.**
+`_hcheck2.mjs` regresses what the machine ACTUALLY did — `e_off - e_on` from two deploys of the
+same program — against what `hSample` said it would do from the same applied `u`. A regression and
+not a ratio of rms values, because rms/rms is blind to sign and phase and a correction that did the
+OPPOSITE of the prediction would read as a perfect match. Measured:
+
+```
+  program     ch   predicted rms   measured rms    slope
+  sharp      0      9.502e-2       1.223e-1      1.0438
+  circle     0      1.123e-1       1.279e-1      1.1305
+  rounded    0      9.539e-2       1.256e-1      1.0479
+  channel 0 mean 1.0741      channel 1 mean 1.0863
+```
+
+The plant responds 7-9% more than the model predicts — real, systematic across both channels and
+all three programs. But the searched pair is (1.20, 1.00) against model errors of (1.07, 1.09):
+they disagree in magnitude AND in direction per channel. So about 8% of the knob is a genuine
+identification bias and the rest is an EFFORT TRADE. The substitution says why it is still not
+`mu` or `lambda`: scaling `h` by g is solving with `lambda/g^2` and `mu/g^2` and then applying
+`1/g` of the answer — a different regularisation balance AND an output scale, which neither knob
+does alone, and which is consistent with `lambda` 32x moving the score under 1% while this moves
+it 45%.
+
+**THE FIRST VERSION OF THAT INSTRUMENT WAS WRONG AND ITS NUMBERS WOULD HAVE BEEN A FINDING.**
+`hGrid[m]` is the response m DECISIONS later and a decision here is `grid * sample` = 64 solver
+steps, while the trace records every 8 — so convolving hGrid against the trace stretches the
+impulse 8x in time. It left the magnitudes roughly right and destroyed the phase, reading as slopes
+of 0.0155 and 0.1087, which looks exactly like "the model is uncorrelated with the machine". The
+tell was that the magnitudes were TOO CLOSE: genuinely uncorrelated signals do not agree to 11% in
+amplitude while disagreeing completely in shape (rule 17).
+
+**AND THE 8% IS REAL, WORTH 16% ALONE, AND STILL DOES NOT SHIP.** A probe held to settling
+(`probeRises` 25, byte-identical at 50, so that is where the step response ends) takes the gain-off
+machine 3.106x -> 3.600x. But with the gain armed it adds only 3.4%, because both act on the same
+over-correction; it costs 24% more arithmetic (7,722 -> 9,556 MAC, the longer probe lengthening the
+fitted bank); and it is a TRADE — the sharp square regresses 3.33x -> 2.70x while the circle gains.
+It fails the no-trade rule the gain was built to satisfy.
+
+**WHAT SHIPS FOR THIS CELL:** depth 1, linear basis, move blocking m=6, horizon 0.55 of the fitted
+bank, per-channel gain found by the pilot on programs it designs — **4.418x at 7,722 MAC/cycle,
+77% of the 10,000 budget, on ONE commissioning**, against a shipped 6.038x at 215,239 MAC. 73% of
+the machine at 3.6% of the arithmetic and half the training.
+
+STILL UNVALIDATED AND STATED: none of this has been through `sixplant.mjs`, which this session
+already used to refuse an arm-only +41% that broke the tank. The gain cannot face that gate until
+its self-search lives in the library rather than in a harness, because the gate runs each plant's
+own test and a searched constant carried over from this arm is exactly what rule 31 forbids. The
+probe finding is the one piece with a plausible claim to transfer, because a truncated step
+response is a property of the identification rather than of this plant.
