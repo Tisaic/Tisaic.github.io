@@ -8597,3 +8597,40 @@ mill commissioning, not THE one.
 A causality constraint on the identified impulse is worth building on its own terms — an impulse
 that responds before its plant can is wrong whatever it costs — but it must not be sold as the
 mill's fix until both gaps are closed.
+
+### AND IT IS SCALE, NOT TIMING: THE MILL'S HORIZON IS SHORTER THAN ITS TRANSPORT DELAY
+
+Both gaps the previous section named are now closed, and the answer is worse than the hypothesis.
+
+**SCALE, AS THE ARITHMETIC PREDICTED.** `eFree = truth - h*u` is recorded at 4.16x the truth's rms.
+A purely MIS-TIMED `h*u` of the right magnitude subtracts incoherently and gives about sqrt(2)x, so
+4.16x needed `h*u` several times too large. Measured on the commissioning record the fit actually
+used: **truth rms 6.286e-3, `h*u` rms 2.245e-2 — `h*u` is 3.57x the truth.** Timing was the wrong
+suspect and the ratio is what separated them.
+
+**AND THE STRUCTURAL FAULT IS NOT 3.4%, IT IS EVERYTHING.** Re-run with `rollmill.test.mjs`'s exact
+configuration — channel limits, `uMax` 0.06, guards, `verifyRef` — rather than limits chosen here:
+
+```
+  hGrid    14 taps, one tap = 1 step   ->  100.0% of its energy lies before the 100-step delay
+  hSample  peak at 317 steps
+```
+
+**The QP's plant model spans 14 steps on a plant with 100 steps of dead time.** The entire deployed
+horizon lies inside the delay: the model never reaches the plant's response at all, and `hSample`
+finding the true peak at 317 steps says the dynamics ARE identifiable — the deployed model simply
+stops long before them. That is why the correction harms rather than merely failing to help: the
+solver believes its moves take effect within 14 steps when nothing can happen for 100. No seed
+changes that; it is a property of sizing the horizon from a settling time that the dead time
+dominates.
+
+This is target 3's missing plant — "add a plant with a delay that dominates its own response,
+because none of the six has one" — showing precisely what it was added to show, on a plant that was
+already here.
+
+**ONE GAP REMAINS AND IT IS STATED:** this run DEPLOYS at verify 1.41x where the test REFUSES at
+0.61x, so despite copying the configuration the commissioning is still not the test's — most likely
+the seed. So what is established is that the pilot builds a horizon shorter than the mill's dead
+time and that `h*u` is 3.57x its truth; what is not established is that this is what the REFUSING
+commissioning does. The two are close enough to be worth closing and far enough apart that claiming
+them as one would be the mistake this section exists to avoid.

@@ -24,11 +24,25 @@
 import { Pilot } from '../lib/pilot/pilot.js';
 import * as R from './pilot/rigs/rollmill-rig.mjs';
 
+// THE TEST'S EXACT CONFIGURATION, copied rather than chosen. The first version of this file picked
+// its own channel limits and uMax and read verify 1.01x where the test reads 0.61x — so it was
+// diagnosing A mill commissioning and not THE one that refuses, which makes any conclusion about
+// the refusal unavailable. The rate limits in particular are load-bearing: the test's own comment
+// records that routing them at 2e-4 put the eccentricity disturbance outside the identification
+// bandwidth entirely and the pilot refused at 0.40x for having no model where the disturbance
+// lives.
 const mill = R.makeMill(1);
+mill.quiet = true;
+for (let i = 0; i < 4000; i++) mill.step(R.S0);
 const pilot = new Pilot({
   autoRefuse: true, nMeasured: 3,
-  channels: [{ lo: -0.4, hi: 0.4, vMax: 2e-3, aMax: 1e-5, jMax: 1e-7 }],
-  uMax: 0.25, start: [R.S0], workspace: () => true, seed: 1,
+  channels: [{ lo: R.S0 - 0.12, hi: R.S0 + 0.12, vMax: 3e-3, aMax: 3e-4, jMax: 3e-5 }],
+  uMax: 0.06,
+  start: [R.S0],
+  guards: [{ index: 0, max: 400 }],
+  workspace: () => true,
+  verifyRef: () => [R.S0],
+  seed: 1,
 });
 // THE TEST'S OWN ROUTING, COPIED EXACTLY, because the mill's is not the obvious one: it delays the
 // REFERENCE by the same DLY as the gauge, so the truth is a properly ALIGNED error observed late
@@ -90,6 +104,32 @@ for (const [a, nm, per] of [[hsm, 'hSample', pilot.sample], [hg, 'hGrid', dec]])
   console.log(`\n  ${nm}: ${e.pct.toFixed(1)}% of the impulse's ENERGY lies in the first ${e.cut}`
     + ` taps — before the delay, where the true response is identically zero`);
 }
+// AND THE SECOND GAP: IS `h*u` THE RIGHT SIZE? The recorded corruption is that `eFree` rms is
+// 4.16x the truth's, and `eFree = truth - h*u`. A purely MIS-TIMED `h*u` of the right magnitude
+// subtracts incoherently and gives about sqrt(2)x; reaching 4.16x needs `h*u` several times larger
+// than the truth it is being subtracted from. Timing and scale are different faults with different
+// fixes, and the ratio below is what separates them — computed from the commissioning record the
+// fit actually used, not from a fresh run.
+const rec = pilot._rec;
+if (rec && rec.u && rec.e && rec.e.length) {
+  const n = Math.min(rec.e.length, rec.u.length);
+  const from = Math.floor(n / 3);                 // settled rows only (rule 13)
+  let st = 0, sh = 0, k = 0;
+  for (let i = from; i < n; i++) {
+    let conv = 0;
+    for (let m2 = 0; m2 < hsm.length && i - m2 >= 0; m2++) conv += hsm[m2] * (rec.u[i - m2][0] || 0);
+    const t = rec.e[i] ? (rec.e[i][0] || 0) : 0;
+    st += t * t; sh += conv * conv; k++;
+  }
+  if (k) {
+    const tr = Math.sqrt(st / k), hr = Math.sqrt(sh / k);
+    console.log(`\n  truth rms ${tr.toExponential(3)},  h*u rms ${hr.toExponential(3)}`
+      + `  ->  h*u is ${(hr / tr).toFixed(2)}x the truth`);
+    console.log(`    a mis-TIMED h*u of the right size would sit near 1.00x here and make eFree`
+      + ` about 1.41x the truth; the recorded eFree is 4.16x, which needs this ratio near 4`);
+  }
+} else console.log('\n  no commissioning record retained — the scale question cannot be asked here');
+
 console.log(`\n  verify ${pilot.status().report.verify ? pilot.status().report.verify.ratio.toFixed(2) + 'x' : '—'}`
   + `, verdict ${pilot.verdict && pilot.verdict.deploy ? 'DEPLOY' : 'refused'}`);
 console.log('EXIT 0');
