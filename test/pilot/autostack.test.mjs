@@ -153,7 +153,13 @@ const auto = new AutoStack({
   uMax: 2e-3,
   floor: FLOOR,
   periodic: P,
-  basis: motionBasis([{ v: PR.v, a: PR.a }]),
+  // THE CONVENTIONAL RUNG, WITHHOLDABLE FOR THE SIX-PLANT PASS. `basis` is what unlocks it —
+  // `if (this.basis)` in AutoStack — so NOCLASSIC=1 skips it with no new option. The question
+  // it answers is whether the rung can be dropped from the ladder for compute: on the ARM the
+  // bar's own table says the cascade commissions BETTER without it ("a cheap rung that costs
+  // an expensive one"), while on the EMPS axis it IS the result (425x in 14 laps, past the
+  // published inverse-dynamics feedforward). Six plants decide it, not either one.
+  basis: process.env.NOCLASSIC === '1' ? null : motionBasis([{ v: PR.v, a: PR.a }]),
   pilot: { nMeasured: 1, start: [PR.q[0]], guards: [{ index: 0, max: 0.4 }], ...SOLVER,
     workspace: () => true, seed: 1, exciteSteps: 40000 },
 });

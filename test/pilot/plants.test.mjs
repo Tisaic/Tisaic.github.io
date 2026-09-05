@@ -76,7 +76,14 @@ async function ladder(spec) {
     // vouch. One plant is not a method — a common factor across plants sharing no physics is
     // a property of the CODE (rule 18), and that is exactly what a stopping rule has to be.
     channels, uMax, periodic: null, floor, maxDepth: +(process.env.DEPTH || 2), budget: BUDGET,
-    basis: motionBasis(channels.map((_, c) => ({ v: v[c], a: a[c] }))),
+    // THE CONVENTIONAL RUNG, WITHHOLDABLE FOR THE SIX-PLANT PASS. `basis` is what unlocks it —
+    // `if (this.basis)` in AutoStack — so NOCLASSIC=1 skips it with no new option. The question
+    // it answers is whether the rung can be dropped from the ladder for compute: on the ARM the
+    // bar's own table says the cascade commissions BETTER without it ("a cheap rung that costs
+    // an expensive one"), while on the EMPS axis it IS the result (425x in 14 laps, past the
+    // published inverse-dynamics feedforward). Six plants decide it, not either one.
+    basis: process.env.NOCLASSIC === '1' ? null
+      : motionBasis(channels.map((_, c) => ({ v: v[c], a: a[c] }))),
     pilot: { nMeasured, start, guards, workspace: () => true, seed: 1, autoRefuse: false,
       ...SOLVER },
   });
