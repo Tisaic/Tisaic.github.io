@@ -344,7 +344,17 @@ Each of these is a claim that can be shown false, which is the only kind worth w
    setting that applies a real correction is worse than doing nothing, so the refusal is not
    hiding a scale error — which is target 7's second clause in its other form, on the other
    plant. Untested and stated: a SCHEDULED gain is a different object from a scaled one on a
-   plant that radiates as T⁴. The barrel is
+   plant that radiates as T⁴. **AND THE PROBE'S SETTLE TEST IS BIASED, WHICH IS A DIAGNOSIS
+   AND NOT A CHANGE.** `enough` fires against a `tail` computed from the last quarter of the
+   NOT-YET-SETTLED record, so two of the barrel's three channels stop at 16,400 and 30,200
+   steps and read their DC 24% and 15% low — measured to convergence, with the third channel,
+   already at the 60,000-step cap, byte-identical across a twenty-fold sweep as the control.
+   Repairing it recovers the barrel's whole deficit with no constant (0.670x → 0.989x, the
+   correction off its cap), which is rule 43 from the plant that stood as its counterexample —
+   **and the six-plant pass REFUSED it**: five plants byte-identical, zero improvements, and the
+   barrel's own `nonlinear basis` contract goes red. It is inert wherever the probe already
+   settles, and the arm improvement it was built for never existed — this file's "7-9% bias in
+   `hGrid` worth 16%" records a repair ALREADY MADE, read as an outstanding one (rules 17, 30). The barrel is
    the other standing refusal and it is still one. A method that wins only on compliance and
    friction is a good compliance-and-friction method; this one now wins on two error classes of
    three tried, and loses on the one a 1980s method owns.

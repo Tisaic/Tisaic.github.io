@@ -9246,3 +9246,53 @@ arm's recorded 7-9% `hGrid` bias "worth 16%" is the reason to expect it pays the
 commissioning-time column is the reason it might not ship anyway, since target 4 asks for
 commissioning 10x SHORTER and this makes probes longer. Both are measurements, and neither has
 been taken.
+
+### AND THE SIX-PLANT PASS REFUSES IT: FIVE BYTE-IDENTICAL, ONE REGRESSION, ZERO IMPROVEMENTS
+
+```
+  plant       control                    with the settle fix
+  tanks       1.00 x  pass refused       1.00 x  pass refused        identical
+  thermal     1.00 x  pass refused       1.00 x  EXIT 1  refused     <- REGRESSION
+  woodberry  43.90 IAE  pass            43.90 IAE  pass              identical
+  rollmill   10.17 um  pass             10.17 um  pass               identical
+  emps      0.0393 mm 14.7x pass       0.0393 mm 14.7x pass          identical
+  arm      2.173e-2 6.18x pass        2.173e-2 6.18x pass            identical
+```
+
+**THE FIX IS INERT ON EVERY PLANT WHOSE PROBE ALREADY SETTLES AND COSTS A CONTRACT ON THE ONE
+WHERE IT BITES.** The failing check is `the barrel accepts a nonlinear basis where its own
+physics is nonlinear`: the basis comes back `["linear+scheduled", "linear", "linear"]`, so the
+plant that radiates as T⁴ stops selecting curvature. CLAUDE.md treats that selection as
+load-bearing — the tank and the barrel accept curvature where their excitation exposes it while
+Wood-Berry declines it on both loops, which is the negative control that says the selection
+tracks physics rather than noise.
+
+**THERE IS A READING THAT WOULD EXONERATE IT AND IT IS NOT TAKEN.** With `h` under-identified,
+`eFree = truth − h·u` carries the part of the response `h·u` failed to subtract, and that
+residue is where the curvature was being detected — so the quadratic block may have been fitting
+the identification error rather than the T⁴ physics, and a better `h` would correctly stop
+selecting it. That is a real hypothesis and it is also exactly the explanation that happens to
+favour the change, which is the reason to require a measurement for it rather than an argument
+(rule 16). None has been taken. The check is red and the change does not ship.
+
+**AND THE IMPROVEMENT IT WAS BUILT FOR NEVER APPEARED.** The expectation was the arm, on the
+strength of this file's record that "a probe held to settling removed a 7-9% bias in `hGrid`
+worth 16%". That line describes a repair ALREADY MADE — the probe-hold work behind `probeRises`
+— not an outstanding bias waiting to be collected. Reading a fixed defect as a live one is the
+same class of error as costing the free response from `PreviewMPC` or reading a design claim off
+a directory's reputation instead of its code (rules 17, 30), and it is the reason a change with
+no measured beneficiary got built at all.
+
+**WHAT SURVIVES, AND IT IS THE PART THAT WAS WORTH THE TIME.** The bias is real, measured to
+convergence, and carries its own control: at the shipped default two of the barrel's three
+channels stop at 16,400 and 30,200 steps and read 24% and 15% low, while the third — already at
+the 60,000-step cap — is byte-identical across a twenty-fold sweep of `probeRises`. It explains
+why that plant's correction ran to exactly its cap. It is a DIAGNOSIS and it stays one. The
+repair is not entitled to ship because the diagnosis is correct.
+
+**FOUR CHANGES HAVE NOW GONE THROUGH THIS GATE THIS WEEK AND IT HAS REFUSED THREE**: the
+rich-block prior (+41% on the arm, broke the tank), the derived plant gain (+4.5% on the arm,
+broke the tank), and now the settle fix (whole deficit on the barrel, breaks the barrel's own
+basis contract and moves nothing else). The one it passed is the mill's gate lead, which was
+byte-identical on five plants by construction rather than by luck. The pattern is consistent and
+worth naming: every refused change was measured first on the plant that showcases it.
