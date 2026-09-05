@@ -43,6 +43,9 @@ const pilot = new Pilot({
   start: [R.S0],
   guards: [{ index: 0, max: 400 }],
   workspace: () => true,
+  // THE DECLARED DELAY, from the rig's own geometry: 1 m downstream at 5 m/s on a 2 ms step.
+  // Not a fitted quantity — a fact about where the gauge is mounted (rule 40).
+  deadTime: process.env.MD_DEAD === '1' ? R.DLY : 0,
   verifyRef: () => [R.S0],
   seed: 1,
 });
