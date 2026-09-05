@@ -204,13 +204,29 @@ let hostRef = null;
     // and this bar runs exactly the configuration 22.42x was measured on.
     ...(process.env.HORIZON_TS ? { horizonTs: +process.env.HORIZON_TS } : {}),
     ...(process.env.QPITERS ? { qpIters: +process.env.QPITERS } : {}),
+    // THE OFF-DIAGONAL SOLVE, reachable from here for the same reason DEPTH and PROBE are:
+    // the page offers it as an operator switch, and a policy the page can set that this bar
+    // cannot is a configuration nobody has timed (rule 61).
+    ...(process.env.MIMO === '1' ? { mimo: true } : {}),
     onRung: (r) => console.log(`  [${((Date.now() - T0) / 60000).toFixed(0)}m] `
       + `${r.name}  ${r.score.toExponential(4)}`
       + `${r.gain === null ? '' : '  ' + r.gain.toFixed(2) + 'x'}`
       + `${r.deployed ? '' : '  — NOT deployed'}${r.note ? '   ' + r.note : ''}`),
   });
   console.log(`  [pilot opts: horizonTs ${hostRef.auto.pilotOpts.horizonTs ?? '(default)'}`
-    + `  qpIters ${hostRef.auto.pilotOpts.qpIters ?? '(default)'}]`);
+    + `  qpIters ${hostRef.auto.pilotOpts.qpIters ?? '(default)'}`
+    + `  mimo ${hostRef.auto.pilotOpts.mimo ? 'on' : 'off'}`
+    + `  crossGain ${hostRef.auto.crossGain ?? '(none)'}]`);
+  // AND WHAT THE MACHINE COMMISSIONS WITH IS WHAT THE CALLER ASKED FOR, asserted rather than
+  // reviewed. Rule 61 was paid for by exactly this hop: two solver options were added to the
+  // host, the whole ladder ran twice, and it came back byte-identical because the bag
+  // carrying them was discarded between construction and commissioning — with every wiring
+  // check green, because the wiring was genuinely there.
+  if ((process.env.MIMO === '1') !== !!hostRef.auto.pilotOpts.mimo) {
+    console.log(`  ✗ MIMO asked ${process.env.MIMO === '1'} but the pilot opts say `
+      + `${!!hostRef.auto.pilotOpts.mimo}`);
+    failed++;
+  }
   hostRef.auto.pilotOpts.start = m.arm.ik(p0.x, p0.y, true);
   hostRef.auto.pilotOpts.workspace = (q) => {
     const rr = Math.hypot(m.arm.L1 * Math.cos(q[0]) + m.arm.L2 * Math.cos(q[0] + q[1]),
@@ -434,7 +450,35 @@ console.log(`  shipped, re-scored: total ${shippedRun.score.toExponential(4)} `
 //
 // It is also the row that survives the retirement, so the contract now guards the thing the
 // product is becoming rather than the thing it is being retired for.
-const modelOnly = rep.rungs.filter((r) => /withheld/.test(r.name)).pop();
+// AND WHERE THE CONVENTIONAL RUNG IS WITHHELD BY POLICY THERE IS NO `withheld` ROW TO FIND.
+// The `withheld` rows come from the ladder's SECOND attempt, which only runs when the
+// conventional rung actually deployed and there is therefore something to withhold. Pass
+// `NOCLASSIC=1` — or the page's own `classic: false`, which is what an operator presses today
+// — and `basis` is null, the rung never deploys, one attempt runs, and no such row is emitted.
+// The contract then read `missing` and went red on a configuration that is not a regression at
+// all: it is the configuration the retirement is heading for, and this cell's `modelOnly` bar
+// is Infinity, so ANY finite score would have passed it.
+//
+// So a missing row was being reported as a failing number, which is rule 25 in the place it
+// does most damage — a contract check. When the rung is withheld from the start the cascade
+// row IS the model-only stack, and it is named as such rather than inferred by a label that
+// only exists to distinguish two attempts from each other.
+const modelOnly = rep.rungs.filter((r) => /withheld/.test(r.name)).pop()
+  || (hostRef.auto.basis ? null
+    : rep.rungs.filter((r) => /^pilot cascade/.test(r.name) && r.deployed).pop());
+// AND THE CROSS-SCALE TRIAL REPORTS WHETHER IT RAN, WHAT IT PROPOSED AND WHETHER IT WON.
+// It is scored through `scored()` rather than `rung()`, so it emits no ladder row, and the
+// first run of it was invisible in this bar's output — leaving "the law fired and lost" and
+// "the law never fired" as the same picture, which is the mode-8 failure this file exists to
+// avoid (rule 25: not measured and no effect are different states).
+if (rep.crossGain) {
+  const c = rep.crossGain;
+  console.log(`  cross scale: diagonal ratio ${c.x.toFixed(2)} → proposed ${c.g.toFixed(3)}`
+    + `  ${c.kept ? 'KEPT' : `rejected (scored ${c.scored.toExponential(4)})`}`);
+} else if (hostRef.auto.crossGain === 'auto') {
+  console.log(`  cross scale: 'auto' was armed and the trial never ran — no cascade layer `
+    + `carried an off-diagonal H`);
+}
 console.log(`  model-only stack (what survives the retirement): `
   + `${modelOnly ? modelOnly.score.toExponential(4) : '—'}`);
 check(`THE CONTRACT: the self-tuning ladder beats ${BAR.csrc} on the same machine and `
