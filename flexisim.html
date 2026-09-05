@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:950,built:"2026-09-05T19:55:22Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:951,built:"2026-09-05T20:11:53Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -6965,6 +6965,19 @@ async function startAutoP() {
 /** The diagnostics the ladder produces and nothing rendered until now. */
 function autoNotesHTML(rep) {
   const out = [];
+  // THE CROSS-SCALE TRIAL, WHICH IS OTHERWISE INVISIBLE ON THIS PAGE. It is scored through the
+  // ladder's internal `scored()` rather than emitted as a rung, so without this line "the law
+  // fired and lost" and "the law never fired" render identically — the state rule 25 names,
+  // and the reason it has to be reported here as well as in the bar (rule 30: a second place
+  // that describes the first will eventually describe the behaviour it used to have, so this
+  // is generated from `rep`, not restated).
+  if (rep.crossGain) {
+    const c = rep.crossGain;
+    out.push(`<b>Cross scale:</b> the diagonal cascade delivered ${c.x.toFixed(2)}×, so the `
+      + `off-diagonal blocks were proposed at ${c.g.toFixed(3)} — `
+      + `${c.kept ? '<b>KEPT</b>: it scored better on the machine.'
+        : `<b>rejected</b>: it scored ${c.scored.toExponential(3)} and the diagonal stands.`}`);
+  }
   if (rep.demo) {
     out.push(`<b>Demo banks:</b> ${rep.demo.error ? 'failed — ' + rep.demo.error
       : rep.demo.note ? rep.demo.note
