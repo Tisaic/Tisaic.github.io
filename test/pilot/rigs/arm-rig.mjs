@@ -352,7 +352,12 @@ async function commissionArm({ seed = 1, train = { shape: 'rounded', feed: 0.004
       // magnitude. An excitation built to respect these numbers cannot visit the regime the
       // square runs in, whatever band it sweeps or how long it runs — which is why the frequency
       // sweep, the dwell, the clock, the cap and the plan commitment were all null on it.
-      ...LIM })),
+      // PER-CHANNEL LIMITS ARE ACCEPTED, because the arm measured that its two channels do not
+      // want the same excitation bandwidth: raising the declared velocity takes the ELBOW's
+      // forecast 0.546 -> 0.708 and the contour BIAS 36% better while the SHOULDER's goes
+      // 0.992 -> 0.980 and the OSCILLATION 65% worse. An array is one entry per channel; a bare
+      // object is broadcast, so every existing caller is unchanged (rule 21).
+      ...(Array.isArray(LIM) ? LIM[j] : LIM) })),
     uMax: UCAP,
     ...(sampleFixed ? { sampleFixed } : {}),
     // SPARSE CORNER EVENTS IN THE EXCITATION — see `cornerEvents` in excite.js. The one route
