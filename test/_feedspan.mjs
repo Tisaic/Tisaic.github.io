@@ -70,7 +70,23 @@ for (const feed of FEEDS) {
   // this program already at 86% of tauMax at the home feed, so saturation at 2-2.5x feed is a
   // live possibility rather than a remote one, and the first version of this bench CAPTURED
   // uPk and dropped it when building the row, which left the mechanism half-measured.
-  rows.push({ feed, open: off.r.totalRms, dep: on.r.totalRms, per: pfOn.r.totalRms,
+  // THE SPLIT, because the owner's account of WHY the ratio rises with feed is testable and
+  // this bench kept only the total. Uncontrolled, the arm's flex lets the tip carry further
+  // with momentum than the corrected one does — a spring-loaded excursion that scales with the
+  // ACCELERATION the corner rule demands rather than with speed, so it outruns the feed. The
+  // measured exponents agree: open grows as feed^1.25 across the span and corrected as
+  // feed^1.13, so the controller is removing the component that grows fastest, which is why
+  // the ratio rises 3.33x -> 4.48x instead of decaying.
+  //
+  // WHAT WOULD FALSIFY IT: if that growth sat in LAG rather than CONTOUR. A tip carrying wide
+  // at a corner is a contour error — the part is the wrong shape; a tip merely late is lag.
+  // The two have different causes and different fixes (rule 39), and one RMS hides both.
+  rows.push({
+    openC: off.r.contourRms, openL: off.r.lagRms,
+    depC: on.r.contourRms, depL: on.r.lagRms,
+    openBias: off.r.contourBias, openOsc: off.r.contourOsc,
+    depBias: on.r.contourBias, depOsc: on.r.contourOsc,
+    feed, open: off.r.totalRms, dep: on.r.totalRms, per: pfOn.r.totalRms,
     depX: off.r.totalRms / on.r.totalRms, perX: off.r.totalRms / pfOn.r.totalRms,
     ratio: on.r.totalRms / pfOn.r.totalRms, uPk: on.uPk, cap: UCAP,
     depOk: home.verdict.deploy, perOk: pf.verdict.deploy });
@@ -87,6 +103,21 @@ for (const r of rows) {
   console.log(`  ${r.feed.toExponential(1)}  ${r.open.toExponential(3)}  `
     + `${r.dep.toExponential(3)}  ${r.depX.toFixed(2)}x  ${(r.uPk / r.cap * 100).toFixed(0)}%`
     + `${r.uPk > 0.98 * r.cap ? '  AT THE CAP' : ''}${r.perOk ? '' : '  per-feed refused'}`);
+}
+console.log(`\n  the split — is the open loop's growth CONTOUR (the tip carries wide) or LAG?`);
+console.log(`  feed      openC     openL    depC      depL    contourX   lagX`);
+for (const r of rows) {
+  console.log(`  ${r.feed.toExponential(1)}  ${r.openC.toExponential(3)}  ${r.openL.toExponential(3)}`
+    + `  ${r.depC.toExponential(3)}  ${r.depL.toExponential(3)}`
+    + `  ${(r.openC / r.depC).toFixed(2)}x    ${(r.openL / r.depL).toFixed(2)}x`);
+}
+{
+  const f = rows[rows.length - 1].feed / rows[0].feed;
+  const gc = rows[rows.length - 1].openC / rows[0].openC;
+  const gl = rows[rows.length - 1].openL / rows[0].openL;
+  console.log(`  open loop across the span: contour grows ${gc.toFixed(2)}x `
+    + `(feed^${(Math.log(gc) / Math.log(f)).toFixed(2)}), lag grows ${gl.toFixed(2)}x `
+    + `(feed^${(Math.log(gl) / Math.log(f)).toFixed(2)})`);
 }
 // A RISING RATIO WITH FEED IS THE SURPRISE, so it gets the instrument check rather than the
 // write-up (rule 14). If uPk is pinned at the cap in the fast rows the correction is clamped
