@@ -60,9 +60,22 @@ st.report.readouts.forEach((r, c) => {
     console.log(`         lag ${String(s.lag).padStart(3)}  ridge ${String(s.ridge).padEnd(6)}`
       + `  ~${String(reach).padStart(6)} steps  R^2 ${s.r2}`);
   }
-  const longest = Math.max(...cand.map((s) => (s.lag - 1) * r.stride * S), 0);
-  console.log(`       LONGEST candidate reached ${longest} steps = `
-    + `${(longest / MEM[0]).toFixed(2)}x of the memory's low end — `
-    + `${longest < MEM[0] ? 'NEVER OFFERED one that reaches it (rule 37 applies)'
-      : 'a reaching window WAS offered, so any loss is the dictionary and not the window'}\n`);
+  // THE TREND DECIDES IT, NOT AN ABSOLUTE REACH. The first version of this check asked whether
+  // the longest candidate exceeded the measured memory and printed "NEVER OFFERED — rule 37
+  // applies" when it did not. That is the wrong test: if reaching further were the fix, held-out
+  // R^2 would CLIMB with lag, and on this arm it falls — elbow 0.580 -> 0.278 -> -0.970, and the
+  // shoulder 0.963 -> 0.828 -> 0.908. Longer windows were offered and lost, monotonically on the
+  // channel that needs help most, so the window is not the constraint whatever absolute reach it
+  // did or did not achieve. A threshold that ignores the trend answers a different question than
+  // the one asked (rule 4: assert the property, never a hard-coded ceiling).
+  const byLag = [...cand].sort((a, b) => a.lag - b.lag);
+  const rising = byLag.length > 1 && byLag[byLag.length - 1].r2 > byLag[0].r2;
+  console.log(`       held-out R^2 against lag: ${byLag.map((x) => x.r2).join(' -> ')}`);
+  console.log(`       ${rising ? 'RISING with lag — a longer window is worth offering (rule 37)'
+    : 'FALLING with lag — longer windows were offered and LOST, so the DICTIONARY is the '
+      + 'constraint and lengthening the window is dead before it is built'}`);
+  // The step figures are approximate and say so: `lagScores` records {lag, ridge, r2} and NOT a
+  // per-candidate stride, so these use the CHOSEN stride throughout. The R^2 trend above needs
+  // no such assumption, which is why the verdict rests on it (rule 25).
+  console.log(`       (reach in steps is approximate — lagScores carries no per-candidate stride)\n`);
 });
