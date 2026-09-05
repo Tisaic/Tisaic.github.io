@@ -38,7 +38,11 @@ const MODES = (process.env.BC_MODES || 'auto,linear').split(',');
 // no cost in arithmetic or commissioning. It belongs in this table because the budget question is
 // what the machine delivers PER MAC, and a lever that is free on both axes changes that ratio
 // without appearing in either cost column.
-const HG = (process.env.BC_HGAIN || '1,1').split(',').map(Number);
+const HGRAW = process.env.BC_HGAIN || '1,1';
+// 'r2' hands the DERIVED rule to the library instead of a pair of numbers, which is the form that
+// can face a six-plant pass: every term is measured per plant per commissioning and nothing is
+// carried over from this arm (rule 31).
+const HG = HGRAW === 'r2' ? 'r2' : HGRAW.split(',').map(Number);
 // QP ITERATIONS, re-asked because the gain changed the problem. Iterations and the gain are both
 // regularisers of the same inversion — the sweep that set 4 was run on an OVER-CORRECTING solver,
 // where more iterations converge harder onto a plan that was too large. Damped, the optimum can
@@ -54,7 +58,7 @@ const QI = +(process.env.BC_ITERS || 0);
 const PR = +(process.env.BC_RISES || 0);
 
 const gm = (v) => Math.exp(v.reduce((a, x) => a + Math.log(x), 0) / v.length);
-console.log(`arm K ${PG.K} / E ${PG.E}, depth ${DEPTH}, Nfrac ${NFRAC}, blocks ${BLOCKS}, mu ${MU}, hGain ${HG.join('/')}, iters ${QI || 'default'}`);
+console.log(`arm K ${PG.K} / E ${PG.E}, depth ${DEPTH}, Nfrac ${NFRAC}, blocks ${BLOCKS}, mu ${MU}, hGain ${Array.isArray(HG) ? HG.join('/') : HG}, iters ${QI || 'default'}`);
 let open = null;
 console.log('\n  basis     features        sharp     circle    rounded   geo mean'
   + '    forecast      RLS 2n^2     deployed MAC');
@@ -78,10 +82,17 @@ for (const mode of MODES) {
   }
   // Applied AFTER commissioning and before scoring, so the identified model is untouched and the
   // only thing that changes is how much the QP believes each move does.
-  for (const p of layers) p.hs.forEach((h, ci) => {
-    const g = HG[ci] ?? 1;
-    if (g !== 1) for (let i = 0; i < h.hGrid.length; i++) h.hGrid[i] *= g;
-  });
+  for (const p of layers) {
+    if (HG === 'r2') { p.hGain = 'r2'; p._applyHGain(); continue; }
+    p.hs.forEach((h, ci) => {
+      const g = HG[ci] ?? 1;
+      if (g !== 1) for (let i = 0; i < h.hGrid.length; i++) h.hGrid[i] *= g;
+    });
+  }
+  if (HG === 'r2') {
+    const r = layers[0].report && layers[0].report.hGain;
+    console.log(`  derived from held-out R^2: (${r ? r.applied.map((x) => x.toFixed(3)).join(', ') : '?'})`);
+  }
   if (!open) {
     open = {};
     for (const s of SHAPES) open[s] = (await deployOn(pilot, s, false, FEED)).r.totalRms;
