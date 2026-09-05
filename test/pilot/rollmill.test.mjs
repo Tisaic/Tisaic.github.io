@@ -209,7 +209,8 @@ check('…the worst excursion falls too, so it is not an rms bought with a spike
 // BOTH HALVES (rule 9). The correction must be a real one AND inside the authority it was
 // given — a controller that helps by running at its clamp is a different object.
 check('…using a real fraction of its authority, and not the whole of it',
-  uPk > 0.1 * 0.06 && uPk < 0.9 * 0.06, `u peak ${(1000 * uPk).toFixed(1)} of 60 µm`);
+  uPk > 0.1 * pilot.uMax && uPk < 0.9 * pilot.uMax,
+  `u peak ${(1000 * uPk).toFixed(1)} of ${(1000 * pilot.uMax).toFixed(0)} µm`);
 // THE MECHANISM, PINNED, so a regression to the old gate is visible as itself rather than as
 // a number that got worse. The gate must read past the declared dead time, and the lead it
 // abandoned must still be the bad one — if lead 0 ever becomes good here the delay has gone
@@ -220,6 +221,25 @@ check('the gate reads the first CONTROLLABLE lead, which on this plant is past t
     && st.report.readouts[0].r2GateLead > 0.5,
   `lead ${st.report.readouts[0].gateLead}, R^2 lead0 ${st.report.readouts[0].r2Lead0.toFixed(3)} `
   + `-> ${st.report.readouts[0].r2GateLead.toFixed(3)}`);
+
+// ------------------------------------------------- WHAT IT COSTS THE SCAN, NOW THAT IT DEPLOYS
+// The owner's standing rule: new machinery states its MAC/cycle slice or it does not ship, and
+// this plant only started shipping anything today. Its budget is not EMPS' — the mill runs at
+// 500 Hz (DT 2 ms), so 10% of a scan is 20,000 MAC here against EMPS' 10,000 at 1 kHz. Stated
+// against BOTH, because a budget that silently scales with the plant's own rate is a constant
+// carried over (rule 31), and the honest number is the fraction of the scan it actually runs in.
+{
+  const cost = pilot.cost();
+  const budget = 10000 * (DT / 1e-3);        // 10,000 MAC per 1 ms of scan, at this plant's scan
+  console.log(`    PLC slice: ${cost.peakMacPerCycle.toLocaleString()} MAC/cycle over `
+    + `${cost.cyclesPerUpdate} scan(s), ${cost.features} features, N ${cost.leads}, `
+    + `${cost.channels} channel — ${(100 * cost.peakMacPerCycle / budget).toFixed(0)}% of 10% of `
+    + `this plant's ${(DT * 1e3).toFixed(0)} ms scan, ${(100 * cost.peakMacPerCycle / 10000).toFixed(0)}% `
+    + `of 10% of a 1 ms one`);
+  check('the deployed mill fits 10% of its own scan',
+    cost.peakMacPerCycle < budget,
+    `${cost.peakMacPerCycle.toLocaleString()} against ${budget.toLocaleString()} MAC`);
+}
 
 console.log(failed ? `\npilot/rollmill: ${failed} check(s) FAILED\n` : '\npilot/rollmill: all checks passed\n');
 process.exit(failed ? 1 : 0);

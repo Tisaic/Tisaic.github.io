@@ -8973,3 +8973,88 @@ transport delay. Nothing about it is compliance.
 Byte-identical on five, which is what a rule conditioned on `deadTime` must produce and the
 reason the condition is there rather than the unconditional version. That is now two changes in
 a row through this gate, against three earlier ones it refused.
+
+### THE TWO STANDING LOSERS ARE BOTH STRONGLY COUPLED, AND THE PILOT INVERTS A DIAGONAL — MEASURED ON BOTH, AND IT IS A LEVER ON ONE
+
+With the mill won, target 7's open items are Wood-Berry (lose to a 1980s classical method) and
+the barrel (refuse). The barrel's report says its failure is NOT the forecast: held-out R² is
+0.886 / 0.927 / 0.897 on three channels, nothing gated, and the machine still measures 0.22x on
+the representative regime. A good forecast inverted badly is what a missing off-diagonal looks
+like — and both of these plants are strongly coupled multivariable systems. Wood-Berry is the
+textbook one; BLT ("Biggest Log-modulus Tuning") is a DETUNING method that exists precisely
+because of its interaction. The barrel's three zones conduct into each other. `mimo` already
+exists in `lib/pilot/pilot.js`, opt-in and off, and had never been armed on either.
+
+**WOOD-BERRY: IT IS A LARGE LEVER, AND IT IS STILL NOT ENOUGH.** One commissioning each, gate
+forced off so the MACHINE decides rather than the estimate (rule 16), IAE over the benchmark
+scenario:
+
+```
+                       lead-0 R^2      verify regimes                 IAE      vs open
+  doing nothing              —                —                      43.90      1.000x
+  published BLT PI           —                —                      51.95      0.845x
+  pilot, diagonal      0.741 / 0.842   scribble 1.57 program 1.21    82.10      0.535x
+  pilot, MIMO          0.986 / 0.993   scribble 7.99 program 3.78    52.52      0.836x
+```
+
+**The forecast goes from 0.74/0.84 to 0.986/0.993 and the delivered IAE from 82.10 to 52.52 —
+a 1.56x repair on the machine, landing level with the published BLT (0.99x of it).** And it is
+still WORSE than doing nothing, which on this plant is the bar: the steady-state inversion alone
+reads 43.90. The gate refuses both, correctly. Target 7's first clause stays open, and now has a
+measured direction rather than only a complaint.
+
+**ARMING MIMO IS NOT A PURE SOLVER CHANGE, which is why the R² moved at all.** `_mimoH` enters
+the free-response subtraction as well as the solve, so `eFree = truth − h·u` is a different
+target with the cross terms in it. That is the honest reading of the R² jump: the model got a
+better question, not a better fit.
+
+**THE BARREL SAYS THE OPPOSITE, AND THAT IS THE NEGATIVE CONTROL.** Same change, three zones:
+
+```
+                     lead-0 R^2 per zone        verify regimes
+  diagonal        0.886 / 0.927 / 0.897     program 1.10   representative 0.22
+  MIMO            0.786 / 0.764 / 0.753     program 0.73   representative 0.67
+```
+
+The forecast gets WORSE on every zone and the program regime falls from 1.10x to 0.73x, while
+the representative regime improves 3x. Both refuse, and the changeover is 1.000x either way —
+the control that says nothing was applied in either run (rule 21). So MIMO is not a general
+repair for coupling: it helps a plant whose coupling is fast and linear (Wood-Berry's
+off-diagonals are transfer functions of the same kind as its diagonal) and hurts one whose
+cross paths are slow conduction the held probe's DC cannot characterise. Its cost is `nc²`
+solve blocks against `nc`, which `cost()` already counts — 9 against 3 on the barrel — so on
+the PLC budget it is not free either.
+
+**NOTHING SHIPS FROM THIS.** `mimo` stays default off, both plants still refuse, and both
+refusals are still the right answer. What is now known that was not: the pilot's diagonal
+inversion is worth 1.56x of Wood-Berry's whole deficit, the remaining gap to "doing nothing" is
+43.90 against 52.52, and the barrel's problem is NOT its off-diagonal.
+
+**AND ONE MORE THING THE GATE GOT RIGHT FOR THE WRONG REASON.** Wood-Berry's representative
+regime read 0.02x on a controller the machine measured at 0.836x — the estimate is off by a
+factor of forty in MAGNITUDE while being right in ORDER (it refused both, and both deserved it).
+That is the same inverted-ordering complaint CLAUDE.md already carries about the gate, seen from
+a third plant, and it is why the forced-deploy run had to be done at all: a refusal is not
+evidence about how bad a controller is, only that the gate declined it.
+
+### AND THE MILL STATES ITS PLC SLICE, BECAUSE IT ONLY STARTED SHIPPING ANYTHING TODAY
+
+The owner's standing rule is that new machinery states its MAC/cycle slice or it does not ship,
+and until today this plant deployed nothing at all, so it had never been costed. Measured
+through `pilot.cost()`:
+
+```
+  18,374 MAC/cycle over 4 scans, 133 features, N 42, 1 channel
+  92% of 10% of this plant's own 2 ms scan   (500 Hz line)
+  184% of 10% of a 1 ms scan
+```
+
+**It fits, and only just.** Both fractions are printed because the budget is 10,000 MAC per 1 ms
+of scan and this plant runs at 500 Hz — quoting only the comfortable one would be a budget
+scaled silently by the plant's own rate, which is a constant carried over (rule 31). The number
+that matters for the north star's target 6 is the second: on a 1 ms machine this configuration
+does NOT fit, and the levers are the ones already measured — `qpIters`, the horizon, and the
+133 features.
+
+`peakMacPerCycle` is the PEAK, not the average over the 4 scans between updates, which is what
+"met in EVERY cycle" requires.
