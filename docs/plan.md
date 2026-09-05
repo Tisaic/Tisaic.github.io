@@ -8522,3 +8522,39 @@ had no single answer:
   half plane; no feedforward inverse can cancel it, and the test says so in as many words. That
   refusal is the answer, not an inability.
 - **THE BARREL** refuses at 0.22x on the representative regime — neither mechanism, unexamined.
+
+### THE ENSEMBLE DOES NOT CONVERT THE TANK'S REFUSAL EITHER, AND A SHIPPED DOCSTRING WAS STALE
+
+The tank is the one standing refusal that is a 2% miss rather than an inability — verify 1.08x
+against a 1.1x bar — so it is where a repair had the best chance. `ensemble.js` carried a measured
+one for this exact plant, and the point of running it rather than quoting it was that its gate has
+since changed.
+
+```
+  draw   verify    verdict     delivered
+  100      0.98x   refused     1.000x
+  101      0.63x   refused     1.000x
+  102      1.10x   DEPLOY      1.086x
+  103      0.91x   refused     1.000x
+  104      0.68x   refused     1.000x
+  average  0.98x   refused     1.000x      (5 of 5 draws, ONE layout)
+```
+
+**The average refuses too** — the outcome named in the file as fatal before it ran. And the
+averaging is not at fault: `freezeConfig` put 5 of 5 draws in a single layout, a cleaner average
+than the 5 of 8 the original measurement managed.
+
+**SO A CLAIM IN A SHIPPED MODULE'S DOCSTRING IS RETIRED.** `ensemble.js` said the average "vouched
+for itself on the machine and delivered 1.344x — better than every draw, not between them". That
+was taken before `verifyRef` gave the tank a representative regime; the gate it vouched against no
+longer exists, and under the current one the average reads 0.98x and refuses. The paragraph is kept
+as history and marked as such, because a module that went on asserting it would be describing the
+behaviour it used to have (rule 30) — and it was about to be relied on.
+
+**TARGET 7 IS UNMET AND ALL FOUR REFUSALS ARE NOW UNDERSTOOD.** The non-minimum-phase tank is
+provably right (a right-half-plane zero no feedforward can cancel). The minimum-phase tank is
+marginal and neither the gain nor the ensemble moves it. The mill is an identification failure
+whose cause is NOT a truncated probe — byte-identical at 10/25/50/100 rises with the knob verified
+live — and its routing carries a delayed gauge, which is the untested candidate. The barrel refuses
+at 0.22x on the representative regime and is unexamined. Four refusals, four diagnoses, none
+converted.
