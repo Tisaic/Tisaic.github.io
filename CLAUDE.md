@@ -336,7 +336,15 @@ Each of these is a claim that can be shown false, which is the only kind worth w
    change makes the BARREL worse on every zone (R² 0.89/0.93/0.90 → 0.79/0.76/0.75, program
    regime 1.10x → 0.73x), so the barrel's refusal is not about its off-diagonal, and `mimo`
    stays default off. It also costs `nc²` solve blocks against `nc`, which the PLC budget
-   counts. The barrel is
+   counts. **AND THE BARREL'S OWN REFUSAL IS NOW PROVED CORRECT RATHER THAN MERELY MADE.**
+   Forced to deploy, its correction sits at EXACTLY its cap (uPk 12.0000 of 12) and costs the
+   changeover 1.5x; swept over a sixteen-fold range of believed plant gain with the forecast
+   held fixed and good, the delivered ratio runs 0.670x → 0.917x → 1.006x → **1.017x** → 1.012x
+   and reaches that ceiling by making the correction VANISH (6.6% of the cap for 1.2%). Every
+   setting that applies a real correction is worse than doing nothing, so the refusal is not
+   hiding a scale error — which is target 7's second clause in its other form, on the other
+   plant. Untested and stated: a SCHEDULED gain is a different object from a scaled one on a
+   plant that radiates as T⁴. The barrel is
    the other standing refusal and it is still one. A method that wins only on compliance and
    friction is a good compliance-and-friction method; this one now wins on two error classes of
    three tried, and loses on the one a 1980s method owns.

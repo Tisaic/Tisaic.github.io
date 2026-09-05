@@ -9018,7 +9018,27 @@ better question, not a better fit.
 
 The forecast gets WORSE on every zone and the program regime falls from 1.10x to 0.73x, while
 the representative regime improves 3x. Both refuse, and the changeover is 1.000x either way —
-the control that says nothing was applied in either run (rule 21). So MIMO is not a general
+the control that says nothing was applied in either run (rule 21).
+
+**FORCED TO DEPLOY, THE BARREL GIVES A SHARPER DIAGNOSIS THAN EITHER VERIFY DID, AND IT IS NOT
+THE FORECAST.** Changeover temperature error, K rms:
+
+```
+                  changeover      worst      u peak
+  doing nothing      5.405        10.67         —
+  diagonal           8.068        17.34     12.0000   <- EXACTLY UCAP
+  MIMO               6.326        14.52      6.4905
+```
+
+**The diagonal correction runs to its clamp** — `uPk` is 12.0000 against a `UCAP` of 12 — and
+costs 1.5x. MIMO halves the effort and halves the harm. A correction pegged at its cap is not a
+subtly wrong one; it is one whose inverse gain is too large, which on a plant this slow
+(`Ts` 3169) points at an identified DC that has not settled rather than at the model's shape.
+The plant's own `report.binding` reads `verdict: "model"` at `capFrac` 0.094 — measured during
+the verify, where the correction is small — so the machine and that verdict disagree, and the
+verdict is reading a regime the machine does not run.
+
+So MIMO is not a general
 repair for coupling: it helps a plant whose coupling is fast and linear (Wood-Berry's
 off-diagonals are transfer functions of the same kind as its diagonal) and hurts one whose
 cross paths are slow conduction the held probe's DC cannot characterise. Its cost is `nc²`
@@ -9058,3 +9078,95 @@ does NOT fit, and the levers are the ones already measured — `qpIters`, the ho
 
 `peakMacPerCycle` is the PEAK, not the average over the 4 scans between updates, which is what
 "met in EVERY cycle" requires.
+
+### THE BARREL'S REFUSAL IS PROVABLY RIGHT: SWEPT OVER 16x OF BELIEVED GAIN, THE BEST IT CAN DO IS 1.017x
+
+Forced to deploy, the barrel's diagonal correction peaks at `uPk` **12.0000** against a `UCAP`
+of **12** — exactly at the cap — and costs the changeover 1.5x. That reads as an inverse gain
+too large, i.e. an identified plant gain too small, and `hGain` scales the identified `hGrid`,
+so it tests the reading directly. The forecast is IDENTICAL in every row (R² 0.886 / 0.927 /
+0.897), so nothing here is the model's shape — this is purely the inversion:
+
+```
+  hGain   capFrac    u peak    changeover K rms     ratio     verify (representative)
+    1     0.0943    12.0000         8.068          0.670x            0.22
+    2     0.0057     6.4227         5.898          0.917x            0.42
+    4     0          3.1969         5.372          1.006x            0.83
+    8     0          1.5948         5.316          1.017x             —
+   16     0          0.7965         5.343          1.012x             —
+  (doing nothing:                   5.405          1.000x)
+```
+
+**THE FIRST THREE ROWS LOOK LIKE A MIS-SCALED GAIN AND THE LAST TWO KILL THAT READING.** Written
+up at gain 4 this was "the identified plant gain is at least 4x too small", monotone in every
+column, mechanism found. Extended, the benefit SATURATES at 1.017x and then declines, and it
+reaches that ceiling by making the correction VANISH: at gain 16 the pilot applies 0.80 of an
+authority of 12 — 6.6% of its cap — to buy 1.2%. A genuinely mis-scaled gain has an optimum with
+a MEANINGFUL correction at it. This has an optimum at approximately zero correction, which is
+the signature of a correction that is harmful at every scale and whose best available setting is
+"off". Rule 42 says this exactly, from the other end: put the band on the residual instead of
+the improvement and "do nothing" falls inside it and wins on effort. Here do-nothing IS winning,
+and no scaling of the plant model changes that.
+
+**SO THIS IS TARGET 7's SECOND CLAUSE ON THE OTHER PLANT, IN ITS OTHER FORM.** The clause asks
+for "a measured improvement OR a refusal that is provably the right answer rather than an
+inability". The mill supplied the improvement. The barrel now supplies the proof: swept across a
+sixteen-fold range of believed plant gain — with the forecast held fixed and good, the cap
+released, and the machine scored each time — **the best achievable outcome is 1.017x, and every
+setting that applies a real correction is worse than doing nothing.** The pilot refuses at 0.22x
+and the refusal is correct. That is a stronger statement than the refusal itself, because it
+rules out the whole one-parameter family the refusal might have been hiding.
+
+WHAT IT DOES NOT RULE OUT, stated so the next attempt starts here: the gain was scaled as ONE
+number per channel over the whole horizon. A plant that radiates as T⁴ has a gain that depends
+on where it is, so a SCHEDULED gain is a different object from a scaled one and is untested. So
+is a longer probe hold — `probeRises` — which was queued on the hypothesis this sweep just
+killed and is worth finishing anyway, because the settle test below is genuinely biased and the
+arm's 7-9% `hGrid` bias is the same mechanism at a size that does not dominate.
+
+**AND THE SETTLE TEST IS BIASED, WHICH IS TRUE INDEPENDENTLY OF WHETHER IT MATTERS HERE:**
+
+```js
+tail = mean(sm[0.75*len ..])                       // the last quarter OF THE RECORD SO FAR
+rise = first i where |sm[i]| >= 0.9 * |tail|
+enough = p.i > probeRises * rise                   // probeRises default 10
+```
+
+`tail` is not the settled value; it is the mean of the recent record, which on a plant still
+rising sits below the DC. So `rise` is found early, `enough` fires early, and `dc` — the mean of
+the last 10% of the response, which `_gridOf` then pads the entire horizon with — under-reads.
+It is a self-referential settle test, and the barrel at `Ts` 3169 is where it should bite
+hardest.
+
+**MEASURED, AND IT IS REAL AND IT IS NOT THE CAUSE — both halves, which is the point (rule 9).**
+Quadrupling the hold, `probeRises` 10 → 40, on the barrel:
+
+```
+  probeRises      identified dc per zone            capFrac    u peak    changeover
+      10     -2.542   0.9485   1.631                0.0943    12.0000   0.670x
+      40     -2.542   1.176    1.875                0.0430    11.5913   0.702x
+```
+
+**The DC moves +24% on zone 2 and +15% on zone 3** and zone 1 not at all to four figures, so the
+bias exists and is worth between a seventh and a quarter of the identified gain on the zones
+that are still rising when the probe stops. And it is **fifteen times too small to be this
+plant's problem** — `hGain` needed 4x to 8x, this supplies 1.15x to 1.24x, and the delivered
+ratio barely moves (0.670x → 0.702x, still deeply harmful, still at the cap). Which agrees with
+the sweep above having already killed the mis-scaled-gain reading: there is no scale that makes
+this correction good, so finding a genuinely better scale does not make it good either.
+
+So the settle test is a real defect of a real but modest size, on the plant where it should be
+largest, and repairing it is worth doing on its own terms — the arm's recorded 7-9% `hGrid` bias
+is the same mechanism — but not as the barrel's fix. It is not repaired here, because a change
+to how every plant identifies its DC has to go through the six-plant pass and this session has
+already spent that pass twice.
+
+**THE SWEEP FOUND A DEFECT BEFORE IT FOUND ANY OF THIS.** The first pass at gains 2 and 4 came
+back BYTE-IDENTICAL to off, which is an inert instrument rather than a null (rule 25).
+`_applyHGain` reads `g[c]`, so a scalar resolved to `undefined` on every channel, fell to the
+identity, and reported `applied: Array.from(2)` = `[]`. Both the constructor and
+`setSolverDefaults` accept a scalar and `sixplant.mjs` documents it as a config field, so this
+was a documented option that did nothing and said nothing (rule 51). Fixed by broadcasting. The
+`_hgain*.mjs` benches scaled `hGrid` directly rather than through the option, so nothing already
+recorded is affected — and had the option been working when those benches were written, the
+inertness would have been read as a null result about the gain.
