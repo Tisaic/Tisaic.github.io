@@ -8634,3 +8634,54 @@ the seed. So what is established is that the pilot builds a horizon shorter than
 time and that `h*u` is 3.57x its truth; what is not established is that this is what the REFUSING
 commissioning does. The two are close enough to be worth closing and far enough apart that claiming
 them as one would be the mistake this section exists to avoid.
+
+### THE MILL'S ROOT CAUSE: THE PROBE'S NOISE FLOOR IGNORES A DISTURBANCE 235x LARGER THAN IT
+
+Three hypotheses died against measurement before this one, and each death was informative:
+
+- **a truncated probe** — byte-identical at `probeRises` 10, 25, 50 and 100 with the knob verified
+  live (`pilot.probeRises = 50`), so the step response was not being cut short;
+- **a noise SPIKE tripping the rise crossing** — byte-identical with the crossing required to
+  persist for i/2 samples, so the crossing at index 9 is genuine and sustained. The FIRST version
+  of that test was inert (`hold` = `resp.length/400` = 2 samples on an 800-sample probe) and
+  reporting it as a null would have buried the question under a broken instrument — an experiment
+  whose knob cannot move is not a result (rule 25);
+- **a small or mis-estimated `dc`** — measured at 5.801e-1 against a noise estimate of 4.170e-3,
+  so it is resolved at 139:1 and is not the problem.
+
+**THE PROBE SEES LARGE SIGNAL WHERE THE PLANT CANNOT RESPOND.**
+
+```
+  rms over steps   0-99  (inside the 100-step dead time)   9.809e-1
+  rms over steps 100-317 (the true response)               1.908e+0
+  the bar Ts crosses, 0.9*|dc| = 5.221e-1, is 20.1% of the response's own peak
+```
+
+Half the response's level, in a window where nothing the probe did can have arrived. That content is
+the mill's own **eccentricity disturbance** — 30 microns at 1.22 Hz, persistent, and nothing to do
+with the probe — and the probe's noise estimate is **4.170e-3**, which measures high-frequency gauge
+noise alone. **The interference is 235x the floor that every threshold here is derived from**: the
+`identifiable` test at 5*noise, the settle band at 4*noise/amp/sqrt(W), and through `dc` the rise
+crossing itself.
+
+**ONE FAULT EXPLAINS THE WHOLE CHAIN.** The disturbance crosses the rise bar immediately, so
+`Ts` = 9 on a plant with 100 steps of dead time; `Tset` is clamped to 6*Ts; the horizon is built at
+N = 14 taps of 1 step, so 100% of `hGrid`'s energy lies inside the dead time; `h` fits the
+disturbance rather than the response, which is why `h*u` measures 3.57x the truth and `eFree` lands
+at 4.16x it; and the QP then inverts a model of the wrong signal, which is why the correction HARMS
+on every regime rather than merely failing to help. It also explains why the two earlier fixes were
+inert: neither a longer probe nor a sustained crossing helps when the interference is real signal at
+a frequency the floor cannot see.
+
+**THIS IS RULE 33 FROM THE OTHER SIDE.** "Success at cancelling a disturbance removes the evidence
+of it" is about a disturbance hidden by a working controller; here the disturbance was never
+SEPARATED from the response at all. The probe's floor must be estimated from the machine's own
+variability with the probe held — the pre-probe record already exists (`preX`, added for cross-
+response baselining) — rather than from high-frequency noise, or every threshold derived from it
+describes a quieter machine than the one being commissioned.
+
+NOT YET FIXED, AND ONE GAP STILL OPEN: this diagnostic deploys at verify 1.41x where
+`rollmill.test.mjs` refuses at 0.61x, so the commissioning is still not the test's despite copied
+limits, `uMax`, guards and `verifyRef` — most likely the seed. The mechanism above is a property of
+the plant and the probe rather than of a draw, but the link to the REFUSING commissioning is
+inference until that closes.

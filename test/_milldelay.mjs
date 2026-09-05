@@ -21,7 +21,9 @@
 // declares, and asserts nothing: where the dead time should sit is arithmetic the rig gives us,
 // and whether `h` has it is a fact about the fit. A fix belongs after the fault is named, not
 // before (rule 16 — and this project has twice built a fix for a fault it had not localised).
-import { Pilot } from '../lib/pilot/pilot.js';
+import { Pilot, setSolverDefaults } from '../lib/pilot/pilot.js';
+// Off unless asked, so the control row is the shipped behaviour.
+if (process.env.MD_SUSTAIN === '1') setSolverDefaults({ riseSustain: true });
 import * as R from './pilot/rigs/rollmill-rig.mjs';
 
 // THE TEST'S EXACT CONFIGURATION, copied rather than chosen. The first version of this file picked
@@ -72,6 +74,32 @@ console.log(`  a decision is ${dec} steps, so the delay is ${(R.DLY / dec).toFix
   + ` and ${(R.DLY / pilot.sample).toFixed(2)} samples`);
 if (!pilot.hs || !pilot.hs[0]) { console.log('  no identified plant — commissioning stopped early'); process.exit(0); }
 const hg = pilot.hs[0].hGrid, hsm = pilot.hs[0].hSample;
+
+// THE PROBE'S OWN NUMBERS, because two hypotheses about `Ts` have now died against measurement —
+// a truncated probe (byte-identical at 10/25/50/100 rises) and a noise SPIKE (byte-identical with
+// the crossing required to persist for i/2 samples). What sets `Ts` is a crossing of 0.9*|dc|, so
+// if the crossing at index 9 is genuine and sustained then `dc` is the remaining suspect: a small
+// or mis-estimated settled value lowers the bar to where ordinary early content clears it.
+const H = pilot.hs[0];
+console.log(`\n  the probe: dc ${H.dc.toExponential(3)}, noise ${H.noise.toExponential(3)}`
+  + `, |dc|/noise ${(Math.abs(H.dc) / Math.max(H.noise, 1e-300)).toFixed(2)}`
+  + `, resp ${H.resp.length} samples`);
+{
+  const r = H.resp;
+  let pk = 0; for (const v of r) if (Math.abs(v) > Math.abs(pk)) pk = v;
+  const bar = 0.9 * Math.abs(H.dc);
+  console.log(`    the bar Ts crosses is 0.9*|dc| = ${bar.toExponential(3)}`
+    + `, and the response's own peak is ${pk.toExponential(3)}`
+    + `  ->  the bar is ${(bar / Math.abs(pk) * 100).toFixed(1)}% of the peak`);
+  const seg = (a, b) => {
+    let s2 = 0, n = 0;
+    for (let i = a; i < Math.min(b, r.length); i++) { s2 += r[i] * r[i]; n++; }
+    return n ? Math.sqrt(s2 / n) : 0;
+  };
+  console.log(`    rms over steps   0-99 (inside the dead time) ${seg(0, 100).toExponential(3)}`);
+  console.log(`    rms over steps 100-317 (the true response)   ${seg(100, 318).toExponential(3)}`);
+  console.log(`    if the first is not far below the second, the probe cannot see the delay at all`);
+}
 const show = (a, nm, per) => {
   let pk = 0, pi = 0;
   for (let i = 0; i < a.length; i++) if (Math.abs(a[i]) > Math.abs(pk)) { pk = a[i]; pi = i; }
