@@ -36,8 +36,8 @@
 import { ContourScore, decompose } from '../lib/flexisim/contour.js';
 // The AGNOSTIC core and the ARM's adapter are different modules and the split is the point:
 // `lib/pilot/twin.js` knows no plant, `lib/flexisim/twin.js` is the arm's wiring.
-import { identifyTwin, compileTwin } from '../lib/pilot/twin.js';
-import { drivePath, armSimulators, twinResponse } from '../lib/flexisim/twin.js';
+import { identifyTwin, compileTwin, refineCompiled, refineOperator } from '../lib/pilot/twin.js';
+import { drivePath, armSimulators, twinResponse, toolProjection } from '../lib/flexisim/twin.js';
 import { randomWander } from '../lib/flexisim/demopath.js';
 import { PG, makeArm, mkPath, homeArm, commissionArm, deployOn } from './pilot/rigs/arm-rig.mjs';
 
@@ -134,5 +134,40 @@ const tw = await scoreTwin(compiled.du);
 console.log(`\n  compiled twin (mode 10)   total ${tw.totalRms.toExponential(4)}  `
   + `contour ${tw.contourRms.toExponential(4)}  `
   + `(${(open.totalRms / tw.totalRms).toFixed(2)}x on total)`);
-console.log(`\n  the pilot's rows and the twin's row are the SAME metric object fed from the`);
-console.log(`  same drive loop, so the comparison is one measurement rather than two.\n`);
+// PAST THE COMPILE SIT THE TWO REFINES, and both run on the FITTED TWIN — no machine time at
+// all. The compile converged to its own simulated residual and delivered several times that on
+// the true machine, which is twin mismatch rather than a solver limit, and these are the two
+// steps the record says take that further: 44x -> 51.5x through the shipped call.
+console.log(`\n  refining the periodic tile against its own tiled delivery…`);
+const ref = await refineCompiled({
+  simulate: sims.compileSim(path, { laps: 4, preRoll: PRE }),
+  H, du: compiled.du, sample: SS, lapSteps: path.lap, preRoll: PRE,
+  onProgress: (m) => console.log(`    ${m}`),
+});
+console.log(`    tile ${ref.report.openRms.toExponential(2)} → ${ref.report.rms.toExponential(2)}`);
+const twRef = await scoreTwin(ref.f);
+console.log(`  + tile refine             total ${twRef.totalRms.toExponential(4)}  `
+  + `contour ${twRef.contourRms.toExponential(4)}  `
+  + `(${(open.totalRms / twRef.totalRms).toFixed(2)}x on total)`);
+
+// THE OPERATOR REFINE, IN TOOL SPACE. Scoring it in JOINT rms was measured to deliver a twin
+// that transferred exactly and a machine that did not improve — the solve parks error where the
+// objective punishes hardest, so the projection is not a detail (two rule-21 lessons paid for it).
+console.log(`\n  refining the lap-varying operator…`);
+const project = await toolProjection({ buildArm: buildTrue, destroyArm, path });
+const op = await refineOperator({
+  simulate: sims.compileSim(path, { laps: 4, preRoll: PRE }),
+  f: ref.f, sample: SS, lapSteps: path.lap, preRoll: PRE,
+  nodes: 4, cycles: 1, steps: 2, project,
+  onProgress: (m) => console.log(`    ${m}`),
+});
+console.log(`    projected ${op.report.rms0.toExponential(2)} → ${op.report.rms.toExponential(2)}`
+  + ` in ${op.report.evals} evals`);
+const twOp = await scoreTwin(op.f);
+console.log(`  + operator refine         total ${twOp.totalRms.toExponential(4)}  `
+  + `contour ${twOp.contourRms.toExponential(4)}  `
+  + `(${(open.totalRms / twOp.totalRms).toFixed(2)}x on total)`);
+
+console.log(`\n  every row is the SAME metric object fed from the same drive loop, so this is one`);
+console.log(`  measurement and not several that agree by inspection. The pilot row costs machine`);
+console.log(`  laps; every twin row past the wander costs simulation only.\n`);
