@@ -42,8 +42,13 @@ const VMULT = +(process.env.VMULT || 1);
 const BASE = { vMax: 8e-4, aMax: 4e-6, jMax: 2e-7 };
 const lim = { ...BASE, vMax: BASE.vMax * VMULT };
 
+// THE TRAINING PROGRAM IS FIXED, NOT KEYED OFF THE FEED LADDER. It was `FEEDS[0]`, which meant
+// three runs of this file commissioned against three different representative programs and the
+// same cell read 2.73x in one and 2.71x in another — a sweep whose control moved with its
+// variable. `TRAIN_FEED` defaults to the slowest feed on the ladder so every row is one model.
+const TRAIN_FEED = +(process.env.TRAIN_FEED || Math.min(...FEEDS));
 const p = await commissionArm({ seed: 1, uCap: UCAP, limits: [lim, lim],
-  train: { shape: SHAPE, feed: FEEDS[0] }, extra: { mimo: true } });
+  train: { shape: SHAPE, feed: TRAIN_FEED }, extra: { mimo: true } });
 const st = p.status();
 if (!st.mimo) throw new Error('mimo asked but status says it was not built');
 
@@ -61,7 +66,8 @@ const setGain = (g) => {
 };
 
 console.log(`\ncross-kernel gain against feed — K ${process.env.ARM_K || 16} / `
-  + `E ${process.env.ARM_E || 0.15}, ${SHAPE}, excitation ${VMULT}x`);
+  + `E ${process.env.ARM_E || 0.15}, ${SHAPE}, excitation ${VMULT}x, `
+  + `commissioned at feed ${TRAIN_FEED.toExponential(1)}`);
 console.log(`  measured cross/diagonal on the plant: 0.183 at 4.0e-3, 0.443 at 1.6e-2\n`);
 console.log(`  feed      gain    contour      bias        osc         uPk`);
 for (const f of FEEDS) {
