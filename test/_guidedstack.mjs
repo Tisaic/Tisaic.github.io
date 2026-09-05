@@ -40,6 +40,10 @@ const FEED = +(process.env.FEED || 4e-3);
 const UCAP = +(process.env.UCAP || 0.6);
 const GUIDED = +(process.env.GUIDED || 6);
 const DEPTHS = (process.env.DEPTHS || '1,2').split(',').map(Number);
+// SEEDS, because one commissioning is a DRAW and this repository has a plant whose headline
+// turned out to be a coin flip across seeds. A configuration that improves three programs on one
+// seed and not on another is not a configuration, and the only way to tell is to run it.
+const SEEDS = (process.env.SEEDS || '1').split(',').map(Number);
 
 console.log(`\nguided commissioning against the cascade — K ${PG.K} / E ${PG.E}, `
   + `${GUIDED} guided laps on ${SHAPE}, held out on ${HELDS.join(", ")}\n`);
@@ -48,10 +52,13 @@ console.log(`  config                  ${SHAPE} (adapted)  `
 
 let base = null;
 const baseH = new Map();
+for (const seed of SEEDS) {
 for (const depth of DEPTHS) {
   for (const guided of [0, GUIDED]) {
-    const p = await commissionArm({ seed: 1, uCap: UCAP, train: { shape: SHAPE, feed: FEED },
+    const p = await commissionArm({ seed, uCap: UCAP, train: { shape: SHAPE, feed: FEED },
       ...(depth > 1 ? { Cls: Stack, extra: { depth } } : {}) });
+    // THE OPEN LOOP IS THE PLANT AND NOT THE DRAW, so it is measured once and shared; a seed
+    // changes the commissioning, never the machine it is commissioned on.
     if (base === null) {
       base = (await deployOn(p, SHAPE, false, FEED)).r.totalRms;
       for (const hs of HELDS) baseH.set(hs, (await deployOn(p, hs, false, FEED)).r.totalRms);
@@ -71,11 +78,12 @@ for (const depth of DEPTHS) {
       cols.push(`${(baseH.get(hs) / h.r.totalRms).toFixed(2)}x (${h.r.contourRms.toExponential(2)})`
         .padStart(20));
     }
-    const tag = `depth ${depth}${guided ? ` + ${guided} guided` : ' static'}`;
+    const tag = `s${seed} depth ${depth}${guided ? ` + ${guided}g` : ' static'}`;
     console.log(`  ${tag.padEnd(23)} ${(base / r.r.totalRms).toFixed(2)}x `
       + `(${r.r.contourRms.toExponential(2)})  ${cols.join('')}`
       + `${guided ? `  [${armed}L]` : ''}`);
   }
+}
 }
 console.log(`\n  open loop               ${base.toExponential(3)}         `
   + HELDS.map((h) => baseH.get(h).toExponential(3).padStart(20)).join(''));
