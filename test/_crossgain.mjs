@@ -51,19 +51,13 @@ const p = await commissionArm({ seed: 1, uCap: UCAP, limits: [lim, lim],
   train: { shape: SHAPE, feed: TRAIN_FEED }, extra: { mimo: true } });
 const st = p.status();
 if (!st.mimo) throw new Error('mimo asked but status says it was not built');
+if (st.crossGain !== 1) throw new Error(`crossGain should commission at 1, got ${st.crossGain}`);
 
-// KEEP THE COMMISSIONED CROSS BLOCKS AND SCALE COPIES, never scale in place — a ladder that
-// multiplies the same array each pass measures a geometric sequence and reports it as a sweep.
-const H = p._mimoH, nc = H.length;
-const ORIG = H.map((row, j) => row.map((b, c) => (j === c || !b ? null : Float64Array.from(b))));
-const setGain = (g) => {
-  for (let j = 0; j < nc; j++) for (let c = 0; c < nc; c++) {
-    if (j === c || !ORIG[j][c]) continue;
-    const src = ORIG[j][c], dst = new Float64Array(src.length);
-    for (let i = 0; i < src.length; i++) dst[i] = src[i] * g;
-    H[j][c] = dst;
-  }
-};
+// THE SCALING NOW LIVES IN THE LIBRARY (`crossGain`), so this drives the shipped path rather
+// than a second copy of it — the fault this project has recorded most often is a harness whose
+// arithmetic drifts from the module it is measuring (rules 30, 61). `_buildH` re-reads
+// `crossGain` and rebuilds from the STORED kernels, so a ladder cannot compound.
+const setGain = (g) => { p.crossGain = g; p._buildH(); };
 
 console.log(`\ncross-kernel gain against feed — K ${process.env.ARM_K || 16} / `
   + `E ${process.env.ARM_E || 0.15}, ${SHAPE}, excitation ${VMULT}x, `
