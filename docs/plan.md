@@ -8558,3 +8558,42 @@ whose cause is NOT a truncated probe — byte-identical at 10/25/50/100 rises wi
 live — and its routing carries a delayed gauge, which is the untested candidate. The barrel refuses
 at 0.22x on the representative regime and is unexamined. Four refusals, four diagnoses, none
 converted.
+
+### THE PILOT'S IDENTIFICATION DOES NOT ENFORCE CAUSALITY, AND THE MILL IS WHERE THAT SHOWS
+
+The mill is the one refusal whose cause was still open: it harms on every regime (scribble 0.63x,
+program 0.57x, representative 0.61x) and the recorded mechanism is its fit target — `eFree` rms
+4.16x the truth's against 0.96-1.08 everywhere else, forecast R^2 0.05 where the same design matrix
+against the RAW truth reaches 0.73. `eFree = truth - h*u`, so `h` is wrong. A truncated probe was
+ruled out first: byte-identical at probeRises 10, 25, 50 and 100 with the knob verified live.
+
+**WHAT IS LEFT IS THE DELAY, AND THE IDENTIFIED PLANT DOES NOT HAVE IT.** `rollmill-rig.mjs` puts
+an X-ray gauge 1.0 m downstream at 5 m/s on a 2 ms step — `DLY = 100 steps` — and the test routes
+the reference through the SAME delay, so the truth is a properly aligned error observed late.
+Nothing can reach the gauge for 100 steps, so the true impulse is identically zero there.
+Measured:
+
+```
+  hSample (1 tap = 1 step)   first tap above 5% of peak at index 0     (the delay is 100)
+                             peak at 1727 steps
+  hGrid   (1 tap = 12 steps) first tap above 5% of peak at index 1     peak at 120 steps
+```
+
+The peak lands where the physics says it should. The pre-delay taps do not: they carry
+sign-alternating values at 4-13% of the peak, which is noise fitted as dynamics in a region where
+the response cannot exist. **The pilot's identification has no causality constraint**, and no other
+plant on the bench has a transport delay to expose it — which is target 3's missing plant arriving
+by another route.
+
+**AND IT IS NOT ESTABLISHED AS THE CAUSE OF THE REFUSAL, on two counts, both stated rather than
+left for a reader to find.** The pre-delay region holds **3.4% of `hSample`'s energy and 4.5% of
+`hGrid`'s** — a real defect, but 3-4% will not make a fit target 4.16x the truth. A purely
+MIS-TIMED `h*u` of the right magnitude gives about sqrt(2)x; reaching 4.16x needs `h*u` several
+times too large, which points at SCALE rather than timing. And this diagnostic is not the
+commissioning that refuses: its channel limits and `uMax` were chosen here rather than copied from
+`rollmill.test.mjs`, and it reports verify 1.01x where the test reports 0.61x. So it diagnoses A
+mill commissioning, not THE one.
+
+A causality constraint on the identified impulse is worth building on its own terms — an impulse
+that responds before its plant can is wrong whatever it costs — but it must not be sold as the
+mill's fix until both gaps are closed.
