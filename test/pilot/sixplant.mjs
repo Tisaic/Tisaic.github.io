@@ -42,8 +42,11 @@ const PLANTS = [
     re: /changeover: temperature error [\d.]+ → [\d.]+ K rms.*?\(([\d.]+)x\)/, unit: 'x' },
   { name: 'woodberry', file: 'woodberry.test.mjs',
     re: /the pilot\s+([\d.]+)\s+\(([\d.]+)x BLT\)/, unit: 'IAE' },
+  // THE DELIVERY, not the verify ratio: the mill deploys now, so its own headline is the µm
+  // rms the machine got. A seed or a default that makes it refuse lands here as the open
+  // loop's 15.15 and is visibly worse, which is what a refusal should look like in this table.
   { name: 'rollmill',  file: 'rollmill.test.mjs',
-    re: /verify ([\d.]+)x — /, unit: 'x' },
+    re: /the pilot\s+([\d.]+) \/ [\d.]+\s+u peak/, unit: 'um' },
   { name: 'emps',      file: 'emps.test.mjs',
     re: /the pilot\s+([\d.]+)\s+([\d.]+)x/, unit: 'mm' },
   { name: 'arm',       file: 'arm.test.mjs',

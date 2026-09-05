@@ -239,6 +239,20 @@ const mill = await ladder({
     return { measured: [st.m.F, st.m.S, g], truth: [g - want] };
   },
 });
+// STATED, NOT SILENT: THIS MILL DOES NOT DECLARE ITS TRANSPORT DELAY AND `rollmill.test.mjs`
+// DOES. There the gauge's 100-step delay is passed as `deadTime: DLY` — the mounting distance
+// over the line speed, geometry rather than a tuned constant — and it is what took that plant
+// from a refusal at 0.61x to a deployment delivering 1.49x, because the probe cannot recover a
+// dead time (it and a slow rise move the 90% crossing identically) and every tap of `hGrid`
+// otherwise lands inside the dead zone. `ladder()` here takes a fixed opts set and passes no
+// per-plant pilot options, so the mill row below is measured on the undeclared machine.
+//
+// TWO HARNESSES DRIVING ONE RIG WITH DIFFERENT DECLARATIONS IS EXACTLY THE DRIFT RULE 61 IS
+// ABOUT, so it is written down here rather than left to be found. WHAT WOULD CHANGE IT: a
+// `pilotOpts` passthrough in `ladder()` and `deadTime: RM.DLY` on this spec, then re-running
+// this file's four-plant table — the mill row should improve and the other three must come
+// back byte-identical (rule 21). Not done yet, and this check's bar is "no worse", which the
+// undeclared machine already clears.
 check('the mill commissions on a plant whose measurement is a metre downstream of where the '
   + 'quantity is made', mill.rep.best <= mill.rep.base,
   `${mill.rep.base.toExponential(3)} → ${mill.rep.best.toExponential(3)}`);

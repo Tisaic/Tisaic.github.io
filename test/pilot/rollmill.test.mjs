@@ -118,6 +118,8 @@ async function commission(seed = 1) {
 }
 const { pilot, steps } = await commission();
 const st = pilot.status();
+// The lead index counts DECISION grid steps, so the dead time in lead units is DLY/grid.
+const DLY_GRID = st.grid || pilot.grid;
 console.log(`    commissioned in ${steps} steps = ${(steps * DT).toFixed(0)} s of rolling; `
   + `Ts ${st.Ts}, Tset ${st.Tset}, sample ${st.sample}, N ${st.N}, rings ${JSON.stringify(st.rings)}`);
 console.log(`    verify ${st.report.verify ? st.report.verify.ratio.toFixed(2) + 'x' : '—'} — ${pilot.verdict.why}`);
@@ -153,41 +155,71 @@ check('…while monitor AGC, honest but late, buys only a little',
 check('the pilot commissions from force, gap and a delayed noisy gauge',
   st.report.readouts && st.report.readouts.length === 1, JSON.stringify(st.rings));
 
-// ================== A PREDICTION MADE BEFORE THE RUN, AND IT WAS WRONG
+// ================== THE PREDICTION MADE BEFORE THE RUN, AND WHAT IT COST TO KEEP IT
 //
 // The head of this file states it plainly: this plant was chosen BECAUSE its dominant
-// disturbance is periodic and repeatable, which every measurement in this project had
-// identified as the pilot's wheelhouse, and the prediction was that it would win here
-// and win largest against the baseline famous for failing. IT DOES NOT. Its own verify
-// round measures 0.42x, it declines, and the mill runs untouched.
+// disturbance is periodic and repeatable, and the prediction was that the pilot would win
+// here and win largest against the baseline famous for failing. FOR A LONG TIME IT DID NOT.
+// Its verify measured 0.40x, then 0.42x, then 0.61x, and it declined every time. It now
+// deploys and delivers, and NOT ONE LINE OF THE CONTROLLER CHANGED to get there — two
+// measurement faults were repaired, both of them in what the pilot was told rather than in
+// what it does.
 //
-// FOUR ROUTINGS WERE TRIED AND NONE OF THEM CHANGED IT, so it is not a slip in any one
-// of them, and three were real errors worth recording anyway: the X-ray gauge was
-// compared against the target implied by the command NOW rather than the command
-// 200 ms ago (strip tracking, which every mill does); the gauge was READ TWICE per
-// sample, giving the model and the truth independent noise; and the routed slew limit
-// was below the disturbance's own 4.6e-4 mm/step, so the excitation could not carry
-// energy where the disturbance lives. Fixing all three moved the verify from 0.40x to
-// 0.42x.
+// FOUR ROUTINGS WERE TRIED FIRST AND NONE OF THEM WAS IT, though three were real errors and
+// are kept fixed: the X-ray gauge was compared against the target implied by the command NOW
+// rather than the command 200 ms ago (strip tracking, which every mill does); the gauge was
+// READ TWICE per sample, giving the model and the truth independent noise; and the routed
+// slew limit sat below the disturbance's own 4.6e-4 mm/step, so the excitation could not
+// carry energy where the disturbance lives. All three together moved the verify 0.40x to
+// 0.42x, which is the measurement that says they were not the cause.
 //
-// WHAT IS NOT YET RULED OUT, stated so the next attempt starts from here rather than
-// from scratch: the model's memory is sized from the PLANT's settling time (a ~240-step
-// lag window) while a periodic disturbance has a timescale of its own (410 steps here),
-// so the window may be too short to carry the disturbance's phase — but the experiment
-// that would settle it did not run, and a hypothesis is not a finding.
+// THE FIRST REAL FAULT WAS THE DEAD TIME, AND IT IS DECLARED RATHER THAN FITTED. The probe
+// cannot recover it — a transport delay and a slow rise move the 90% crossing identically —
+// so the pilot read Ts 9 on a 100-step delay and built a 14-step horizon for a plant that
+// cannot move for 100. Every tap of `hGrid` then landed INSIDE the dead zone, `h*u` came out
+// 3.57x the truth it is subtracted from, and `eFree` reached 4.16x the truth against 0.96-1.08
+// on every other plant. `deadTime: DLY` above is the gauge's mounting distance over the line
+// speed — geometry, not a tuned constant — and it takes the plant from 0.61x to neutral.
 //
-// The honest reading is that the pilot's wheelhouse is narrower than four plants had
-// suggested: it wins where the repeatable error is a function of the COMMAND (droop,
-// wind-up, and the arm's whole vocabulary), and has not yet been shown to win where the
-// repeatable error is an exogenous rhythm the command does not explain.
-console.log(`    PREDICTION FAILED: this plant was chosen as the pilot's wheelhouse and it `
-  + `refuses (verify ${st.report.verify.ratio.toFixed(2)}x). Four routings, no change.`);
-check('the pilot REFUSES rather than deploying onto a mill it cannot help',
-  pilot.verdict.deploy === false, JSON.stringify(pilot.verdict));
-check('…so the mill runs exactly as it would have, and the gaugemeter\'s 1.19x penalty '
-  + 'is avoided by declining',
-  Math.abs(pil.rms - openLoop.rms) < 1e-9 && uPk === 0,
-  `${pil.rms.toFixed(2)} vs ${openLoop.rms.toFixed(2)} µm, u ${uPk}`);
+// THE SECOND WAS THE FORECAST GATE READING A LEAD THE CORRECTION CANNOT MOVE. With the delay
+// declared, `hGrid` is exactly zero for leads 0-24 and first moves at lead 25 = step 100. The
+// gate read lead 0, where held-out R^2 is 0.044, disarmed the only channel, and the pilot
+// reported "nothing about the truth is predictable from these signals" — about a plant whose
+// R^2 at the first lead it can actually act on is 0.87. The forecast was never the problem.
+// The gate now reads the first lead with a non-zero response, which is lead 0 on every plant
+// without a transport delay, so the other five are byte-identical.
+//
+// AND THE HYPOTHESIS THIS FILE USED TO CARRY IS DEAD, which is worth more than the win: it
+// said the lag window might be too short to carry the disturbance's 410-step period. It is
+// not. The window reaches 230 steps here and the fit reports held-out R^2 0.974 at lag 24;
+// the disturbance was always predictable and two instruments were lying about it (rule 17,
+// for the sixth time this project has paid for it).
+console.log(`    the pilot DEPLOYS: verify ${st.report.verify.ratio.toFixed(2)}x, delivered `
+  + `${(openLoop.rms / pil.rms).toFixed(2)}x, gate read at lead `
+  + `${st.report.readouts[0].gateLead} (R^2 ${st.report.readouts[0].r2GateLead.toFixed(3)}) `
+  + `against lead 0's ${st.report.readouts[0].r2Lead0.toFixed(3)}`);
+check('the pilot deploys on the mill, and its own verify vouched for it first',
+  pilot.verdict.deploy === true && st.report.verify.ratio > 1.1, JSON.stringify(pilot.verdict));
+check('…and it DELIVERS on the machine, past the two classical AGCs',
+  pil.rms < 0.8 * openLoop.rms && pil.rms < mon.rms && pil.rms < bisra.rms,
+  `pilot ${pil.rms.toFixed(2)} vs open ${openLoop.rms.toFixed(2)} / monitor `
+  + `${mon.rms.toFixed(2)} / gaugemeter ${bisra.rms.toFixed(2)} µm`);
+check('…the worst excursion falls too, so it is not an rms bought with a spike',
+  pil.worst < openLoop.worst, `${pil.worst.toFixed(2)} vs ${openLoop.worst.toFixed(2)} µm`);
+// BOTH HALVES (rule 9). The correction must be a real one AND inside the authority it was
+// given — a controller that helps by running at its clamp is a different object.
+check('…using a real fraction of its authority, and not the whole of it',
+  uPk > 0.1 * 0.06 && uPk < 0.9 * 0.06, `u peak ${(1000 * uPk).toFixed(1)} of 60 µm`);
+// THE MECHANISM, PINNED, so a regression to the old gate is visible as itself rather than as
+// a number that got worse. The gate must read past the declared dead time, and the lead it
+// abandoned must still be the bad one — if lead 0 ever becomes good here the delay has gone
+// missing and this assertion is measuring nothing.
+check('the gate reads the first CONTROLLABLE lead, which on this plant is past the dead time',
+  st.report.readouts[0].gateLead * DLY_GRID >= DLY
+    && st.report.readouts[0].r2Lead0 < 0.2
+    && st.report.readouts[0].r2GateLead > 0.5,
+  `lead ${st.report.readouts[0].gateLead}, R^2 lead0 ${st.report.readouts[0].r2Lead0.toFixed(3)} `
+  + `-> ${st.report.readouts[0].r2GateLead.toFixed(3)}`);
 
 console.log(failed ? `\npilot/rollmill: ${failed} check(s) FAILED\n` : '\npilot/rollmill: all checks passed\n');
 process.exit(failed ? 1 : 0);

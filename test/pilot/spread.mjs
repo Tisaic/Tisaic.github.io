@@ -35,8 +35,13 @@ const PLANTS = [
     re: /changeover: temperature error [\d.]+ → [\d.]+ K rms.*?\(([\d.]+)x\)/, unit: 'x', better: 'up' },
   { name: 'woodberry', file: 'woodberry.test.mjs',
     re: /the pilot\s+([\d.]+)\s+\(([\d.]+)x BLT\)/, unit: 'IAE', better: 'down' },
+  // THE MILL'S HEADLINE IS ITS DELIVERY NOW THAT IT DEPLOYS. It used to be scraped as the
+  // verify ratio, which was the only number that moved while the plant refused — and a refusal
+  // means the pilot applies nothing, so the delivered column would have read the open loop on
+  // every seed. Now it deploys, so the honest headline is the µm rms the machine actually got,
+  // and a seed that refuses still lands here as the open loop's 15.15, visibly worse.
   { name: 'rollmill',  file: 'rollmill.test.mjs',
-    re: /verify ([\d.]+)x — /, unit: 'ver', better: 'up' },
+    re: /the pilot\s+([\d.]+) \/ [\d.]+\s+u peak/, unit: 'um', better: 'down' },
   { name: 'emps',      file: 'emps.test.mjs',
     re: /the pilot\s+([\d.]+)\s+([\d.]+)x/, unit: 'mm',  better: 'down' },
   { name: 'arm',       file: 'arm.test.mjs',

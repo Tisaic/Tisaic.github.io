@@ -8820,3 +8820,156 @@ tests, so the parameter is not a general escape hatch.
 
 STILL TRUE AND WORTH KEEPING IN VIEW: the mill remains a refusal. Neutral is not a win, and the
 plant this project called "the pilot's wheelhouse" still declines to deploy.
+
+### THE MILL DEPLOYS AND DELIVERS: 1.49x, PAST BOTH CLASSICAL AGCs — AND THE GATE WAS READING A LEAD THE CORRECTION CANNOT MOVE
+
+The section above ends "the mill remains a refusal. Neutral is not a win." It is a win now, and
+nothing in the controller changed to make it one. The second of two measurement faults was
+found by asking a question the report itself invited: with the delay declared, the pilot said
+*"no channel's forecast survived held-out validation — the correction is routed, but nothing
+about the truth is predictable from these signals"*, and that sentence cannot be true on this
+plant. The truth is `gauge − want`, the exit thickness of metal that left the roll gap 100
+steps ago; the routed signals include the UNDELAYED roll force and gap, which the rig's own
+gaugemeter combines into that very thickness with no delay at all. Most of the truth is not a
+forecast on this plant. It is a lookup.
+
+**SO THE INSTRUMENT WAS SUSPECT BEFORE THE MODEL WAS (rule 17), AND THE INSTRUMENT WAS WRONG.**
+Dumping the fit one level below the refusal message:
+
+```
+grid 4  sample 1  N 42  declared dead 100 steps
+hGrid   0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  0.26 0.12 0.41 -0.13 ...
+                                                            ^ lead 25 = step 100
+held-out R^2 per lead
+        0.044 ......... 0.344 ....... 0.599 ..... 0.782 ... 0.875 ... 0.868 ... 0.767 ... 0.258
+        ^ lead 0                                                      ^ lead 25
+```
+
+`hGrid[l]` is the response of the truth at lead `l` to a decision made NOW. It is exactly zero
+for leads 0-24 — `_gridOf` zeroes them from the declared delay — so the QP has no authority
+over those leads at any lambda, at any iteration count, for any lambda schedule. **The forecast
+gate read lead 0.** R² 0.044, one channel, gated, refused: the pilot disarmed itself over a
+lead it could not have acted on if the forecast had been perfect, on a plant it was predicting
+at R² 0.868 at the first lead it CAN act on.
+
+The fix is one line of intent and it is derived rather than tuned: **read the gate at the first
+lead whose response is non-zero.** The test is exact zero, not a threshold, because those taps
+were set to zero by the declaration — there is no small number here to get right and inventing
+one would be a constant to re-derive per plant (rules 31, 32).
+
+**AND IT IS CONDITIONED ON THE DECLARATION, WHICH IS A CORRECTNESS REQUIREMENT AND NOT CAUTION.**
+The first version searched for the first non-zero tap unconditionally and the comment beside it
+claimed the other five plants were byte-identical. That claim was false and the code was wrong:
+`hGrid[0]` is structurally zero on EVERY plant, because at `m = 0` every lag in the ZOH triangle
+is negative — a decision made now cannot appear before one grid step. An unconditional rule
+would have moved the gate to lead 1 on all six, and whether that mattered would have depended on
+`val[1]` happening to equal `val[0]`, which it does under lead-sample interpolation. Byte-identity
+would have been a coincidence rather than a construction. Gated on `deadTime`, `dead` 0 leaves
+the lead at 0 and the other five are identical by inspection.
+
+**A SECOND HOLE WAS CLOSED WITH IT, BEFORE IT COULD BITE.** If the declared delay exceeds the
+whole horizon the walk runs off the end, and the loop would then gate on the LAST lead — and
+deploy a controller with zero authority if that lead happened to forecast well. `deadHorizon` now
+reports it as what it is: the horizon is shorter than the delay the engineer declared, which is a
+number they can act on, not a forecast failure (rule 27). It is inert on all six plants — the
+mill's first live tap is lead 25 of 42 — so this is a guard, not a change.
+
+**AND A FIX THAT WAS BUILT FIRST WAS DEAD CODE, REMOVED ON SCRUTINY RATHER THAN SHIPPED.**
+The first hypothesis was rule 37: the lag window does not reach the declared delay, so stretch
+the STRIDE — free in arithmetic, since the reach is `(mLag - 1) * stride` and widening the
+spacing extends the window at the same column count and the same `2n^2` in the fit. A
+diagnostic said the window reached 66 steps against 100 and that stretching took it to 110 with
+held-out R² 0.762 -> 0.801, and it was written, parsed and comment-blocked before the real
+commissioning was read. The real commissioning picks `mLag` 24 at stride 10 — reach 230 — so
+the branch **never fires on any of the six**, and its comment claimed credit for a repair it
+had not made. The diagnostic had been run at a different lag/stride pair than the fit chooses.
+Removed: unexercised code with a false description of its own behaviour is the fault this file
+names most often (rule 30), and it does not get to ship because it was almost right.
+
+**WHAT THE MACHINE DID.** Exit gauge deviation over 40 s of rolling, 30 µm eccentricity at
+1.22 Hz, X-ray gauge 200 ms downstream, µm rms / worst:
+
+```
+  no AGC (fixed gap)            15.15 / 29.97
+  gaugemeter (BISRA) AGC        18.08 / 29.04     <- the standard method, WORSE than nothing
+  monitor AGC (X-ray, delayed)  14.00 / 25.85
+  the pilot                     10.17 / 20.48     1.49x, u peak 31.3 of 60 µm
+```
+
+**1.49x on rms and 1.46x on the worst excursion**, past both classical AGCs — including the one
+this plant was chosen for, the gaugemeter, which amplifies the dominant disturbance by 3/2 and is
+the industrially famous failure. The correction uses 52% of the authority it was given, so it is
+not a controller helping by sitting at its clamp.
+
+**AND THE GATE'S ESTIMATE IS RIGHT ON THIS PLANT: 1.47x predicted, 1.49x delivered.** That is
+worth flagging beside CLAUDE.md's standing complaint that the gate's ORDERING is inverted and
+that on EMPS it understates by 9x. Here it is exact to 1.4%, on all three regimes at once
+(scribble 1.47x, program 1.44x, representative 1.47x).
+
+**AND ONE HYPOTHESIS THIS FILE CARRIED FOR THREE SESSIONS IS DEAD.** `rollmill.test.mjs` said
+the lag window might be too short to carry the disturbance's own 410-step period. It is not: the
+window reaches 230 steps and the fit reports held-out R² 0.974 at lag 24. The disturbance was
+always predictable; two instruments were lying about it. That is the sixth instrument fault this
+project has paid for in this class, and the third in this arc alone (the cadence error, the units
+error, and now the gate's lead).
+
+**TARGET 7's SECOND CLAUSE IS MET PROPERLY.** Not "an inability became a correct judgement" —
+a measured improvement on a plant that had refused since it was built, and the first plant of the
+six whose win comes from a transport-delay regime rather than from mechanical compliance. That
+matters for the "linear AND nonlinear alike" row too: this is a linear plant with a dominant dead
+time and a periodic exogenous disturbance, which is none of the arm's or EMPS' error class.
+
+**WOOD-BERRY IS THE CONTROL, AND IT IS A NEGATIVE ONE.** Declaring its own-loop delays
+(`[10, 30]` steps from `TH` [[1,3],[7,3]] minutes at DT 0.1) changes nothing: both channels were
+already ungated at R² 0.731 and 0.659, the gate lead moves to 1 and 4 and the R² there is the
+same, the verify still measures 0.020x on the representative regime, and it still refuses at
+43.90 IAE — `1.000x open`, identical. So the gate lead was never that plant's problem, and
+declaring a delay on a plant that does not need one is measured harmless rather than assumed to
+be. Target 7's FIRST clause — beat the published BLT on Wood-Berry — stays open.
+
+### AND THE MILL IS THE MOST REPEATABLE PLANT OF THE SIX: 8 SEEDS, 8 DEPLOYMENTS, 8 IMPROVEMENTS
+
+A single commissioning is a seeded draw and this file's own rule is that a plant's number is a
+distribution until it has been measured as one. `test/pilot/spread.mjs` on eight seeds, exit
+gauge µm rms (lower is better; the open loop is 15.15 and monitor AGC 14.00):
+
+```
+  draws            10.17  10.34  10.88  10.78  10.46  10.41  10.74  10.49
+  deployed 8 of 8  median 10.48   min 10.17   max 10.88   spread 1.07x   refused 0/8
+```
+
+**Every seed deploys, every seed helps, and the spread is 1.07x** — median 1.45x, worst draw
+1.39x, best 1.49x. The worst draw still beats both classical AGCs. Against the rest of the six:
+EMPS 1.05x, the arm 1.13x, the tank 2.2x, Wood-Berry 4.2x. So the mill is the second most
+repeatable plant in the set and the ONLY one besides those two whose every draw is an
+improvement — where the tank at the old defaults deployed 4 of 8 and all four hurt, and
+Wood-Berry deployed 9 of 12 and all nine were worse than the 3 that refused.
+
+**THE SCRAPE MOVED WITH IT, and it had to.** Both `spread.mjs` and `sixplant.mjs` scraped the
+mill's VERIFY ratio, because while the plant refused that was the only number that moved — a
+refusal applies nothing, so the delivered column would have read the open loop on every seed.
+Now it deploys, so its headline is the µm rms the machine actually got. A seed or a default that
+makes it refuse lands in that column as 15.15 and is visibly worse, which is what a refusal
+should look like in a table that keeps refusals as results.
+
+**SO THE "REUSABLE ACROSS PLANTS" ROW IS 3 CLEAR WINS OF 6, NOT 2**, and the third is the one
+that widens the claim rather than repeating it: the arm and EMPS are both mechanical compliance
+and friction, the error class CLAUDE.md concedes is the only one this method does well. The mill
+is a linear plant whose dominant error is an exogenous periodic disturbance arriving through a
+transport delay. Nothing about it is compliance.
+
+### AND THE SIX-PLANT PASS ACCEPTS IT TOO: FIVE BYTE-IDENTICAL, THE MILL 0.99x -> 1.47x
+
+```
+  plant       control (e31b0ce)        with the gate reading the live lead
+  tanks       1.00 x  pass refused     1.00 x  pass refused        identical
+  thermal     1.00 x  pass refused     1.00 x  pass refused        identical
+  woodberry  43.90 IAE  pass          43.90 IAE  pass              identical
+  rollmill    0.99 x  pass             1.47 x  pass                <- the change
+  emps      0.0393 mm 14.7x pass     0.0393 mm 14.7x pass          identical
+  arm      2.173e-2 6.18x pass      2.173e-2 6.18x pass            identical
+```
+
+Byte-identical on five, which is what a rule conditioned on `deadTime` must produce and the
+reason the condition is there rather than the unconditional version. That is now two changes in
+a row through this gate, against three earlier ones it refused.
