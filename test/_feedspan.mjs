@@ -8,13 +8,24 @@
  * by the machine's own state, there is nothing left for a change of lap length to misalign, so
  * stability across feed is the property the retirement was supposed to buy. This measures it.
  *
- * THE BAR IS TARGET 2's OWN, and it needs two controllers, not one: "monotone degradation
- * bounded at 1.5x of a PER-FEED commission across a 5x span of feed". A single controller
- * looking fine at several feeds is not that claim — the comparison is against a controller
- * commissioned AT each feed, which is what an engineer would otherwise have to do.
+ * AND THE PER-FEED CONTROL IS VACUOUS ON THIS ARCHITECTURE, WHICH IS ITSELF THE FINDING.
+ * Target 2's bar reads "within 1.5x of a PER-FEED commission", which assumes a controller
+ * commissioned at a feed is a DIFFERENT OBJECT from one commissioned elsewhere. For this pilot
+ * it is very nearly not: `commissionArm`'s `train` is, in the rig's own words, "the program the
+ * gate is handed as representative" — it sets the home pose and the verify's representative
+ * program, and the FIT never sees the program at all, because the model is identified from a
+ * program-agnostic scribble by construction. Measured: the penalty column reads 0.999x and
+ * 1.000x at the first two feeds, which says the two models are the same model, not that a
+ * deployed controller matched a feed-tuned rival. A control that cannot move is not a control
+ * (rule 8's shape). It is kept in the table BECAUSE it is near-unity — that is the evidence
+ * for the claim above, and a blank column would not be.
+ *
+ * SO THE BAR THAT MEANS SOMETHING HERE IS DEGRADATION AGAINST ITSELF AT HOME, and the absolute
+ * floor from targets 1 and 2: no feed may be made worse than the conventional machine.
  *
  *   deployed  — commissioned ONCE at HOME, scored at every feed. The product claim.
- *   per-feed  — commissioned AT that feed, scored there. The thing it must stay within 1.5x of.
+ *   open      — the same machine uncorrected at that feed. The floor nothing may fall below.
+ *   per-feed  — near-identical by construction; reported to show that it is.
  *
  * SCORED ON `totalRms`, contour AND lag, because this tab's rungs were once all chosen against
  * the contour component while lag sat in the report unread (rule 6).
@@ -71,10 +82,17 @@ for (const r of rows) {
     + `${r.dep.toExponential(3)}  ${r.per.toExponential(3)}  ${r.ratio.toFixed(3)}x`
     + `${r.perOk ? '' : '  per-feed refused'}`);
 }
+// THE HEADLINE IS THE SPAN OF THE DELIVERED RATIO, not the penalty against the per-feed
+// control — that control is near-unity by construction (see the header) and a "worst penalty
+// 1.00x, INSIDE the bar" line would be a headline this measurement has not earned.
+const xs = rows.map((r) => r.depX);
+const spanX = Math.max(...xs) / Math.min(...xs);
+console.log(`\n  DELIVERED RATIO ACROSS THE SPAN: ${Math.min(...xs).toFixed(2)}x to `
+  + `${Math.max(...xs).toFixed(2)}x — a ${spanX.toFixed(2)}x spread across ${(FEEDS[FEEDS.length - 1] / FEEDS[0]).toFixed(1)}x of feed`);
 const worst = Math.max(...rows.map((r) => r.ratio));
 const anyWorse = rows.filter((r) => r.dep > r.open);
-console.log(`\n  WORST PENALTY ${worst.toFixed(3)}x against target 2's 1.5x bar — `
-  + `${worst <= 1.5 ? 'INSIDE' : 'OUTSIDE'}`);
+console.log(`  per-feed penalty ${worst.toFixed(3)}x — near unity because the fit is `
+  + `program-agnostic, NOT because a deployed model matched a feed-tuned one`);
 console.log(`  none made worse than the open loop: ${anyWorse.length === 0 ? 'TRUE' : 'FALSE ('
   + anyWorse.map((r) => r.feed.toExponential(1)).join(', ') + ')'}`);
 // MONOTONE means degradation grows with distance from home, which is what "graceful" has to
