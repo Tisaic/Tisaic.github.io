@@ -65,23 +65,35 @@ for (const feed of FEEDS) {
   // engineer is being spared. Same seed, same everything else — one variable (rule 20).
   const pf = await commissionArm({ seed: 1, uCap: UCAP, train: { shape: SHAPE, feed } });
   const pfOn = await deployOn(pf, SHAPE, pf.verdict.deploy, feed);
+  // uPk IS BOTH HALVES (rule 9): a ratio that rises with feed is only a controller doing more
+  // if it still has authority left. At the clamp it is a different object — CLAUDE.md records
+  // this program already at 86% of tauMax at the home feed, so saturation at 2-2.5x feed is a
+  // live possibility rather than a remote one, and the first version of this bench CAPTURED
+  // uPk and dropped it when building the row, which left the mechanism half-measured.
   rows.push({ feed, open: off.r.totalRms, dep: on.r.totalRms, per: pfOn.r.totalRms,
     depX: off.r.totalRms / on.r.totalRms, perX: off.r.totalRms / pfOn.r.totalRms,
-    ratio: on.r.totalRms / pfOn.r.totalRms,
+    ratio: on.r.totalRms / pfOn.r.totalRms, uPk: on.uPk, cap: UCAP,
     depOk: home.verdict.deploy, perOk: pf.verdict.deploy });
   const r = rows[rows.length - 1];
   console.log(`  [${mins()}m] feed ${feed.toExponential(1)}  open ${r.open.toExponential(3)}`
     + `  deployed ${r.dep.toExponential(3)} (${r.depX.toFixed(2)}x)`
     + `  per-feed ${r.per.toExponential(3)} (${r.perX.toFixed(2)}x)`
-    + `  penalty ${r.ratio.toFixed(3)}x${r.perOk ? '' : '  [per-feed REFUSED]'}`);
+    + `  penalty ${r.ratio.toFixed(3)}x  uPk ${r.uPk.toFixed(3)} of ${r.cap}`
+    + `${r.uPk > 0.98 * r.cap ? ' AT THE CAP' : ''}${r.perOk ? '' : '  [per-feed REFUSED]'}`);
 }
 
-console.log(`\n  feed        open      deployed   per-feed   penalty`);
+console.log(`\n  feed        open      deployed      x    uPk/cap`);
 for (const r of rows) {
   console.log(`  ${r.feed.toExponential(1)}  ${r.open.toExponential(3)}  `
-    + `${r.dep.toExponential(3)}  ${r.per.toExponential(3)}  ${r.ratio.toFixed(3)}x`
-    + `${r.perOk ? '' : '  per-feed refused'}`);
+    + `${r.dep.toExponential(3)}  ${r.depX.toFixed(2)}x  ${(r.uPk / r.cap * 100).toFixed(0)}%`
+    + `${r.uPk > 0.98 * r.cap ? '  AT THE CAP' : ''}${r.perOk ? '' : '  per-feed refused'}`);
 }
+// A RISING RATIO WITH FEED IS THE SURPRISE, so it gets the instrument check rather than the
+// write-up (rule 14). If uPk is pinned at the cap in the fast rows the correction is clamped
+// and the ratio is not the controller doing more; if it has headroom, it is.
+const capped = rows.filter((r) => r.uPk > 0.98 * r.cap);
+console.log(`  rows at the correction cap: ${capped.length === 0 ? 'none — the rising ratio is '
+  + 'not a clamped correction' : capped.map((r) => r.feed.toExponential(1)).join(', ')}`);
 // THE HEADLINE IS THE SPAN OF THE DELIVERED RATIO, not the penalty against the per-feed
 // control — that control is near-unity by construction (see the header) and a "worst penalty
 // 1.00x, INSIDE the bar" line would be a headline this measurement has not earned.
