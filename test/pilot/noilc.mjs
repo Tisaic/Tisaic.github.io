@@ -112,3 +112,59 @@ function noilcStep(op, Er, q, r) {
 }
 
 export { noilcStep, solveR, HarmonicFF };
+
+// ---------------------------------------------------------------------------- the lap loop
+/**
+ * Run norm-optimal ILC over laps against a machine, using an operator identified elsewhere.
+ *
+ * `hostHff` is a HarmonicFF that has already commissioned — this rival borrows its `_project`
+ * and `_table` so the error is read and the correction written in the SAME basis the operator
+ * was measured in. Reimplementing either would make this a comparison of two conventions.
+ *
+ * @param {HarmonicFF} hostHff  a commissioned rung, for its operator and its basis
+ * @param {(corr) => Promise<{score:number, err:ArrayLike<number>[]}>} drive
+ * @param {object} o  { laps, q, r } — Q and R are the norm-optimal weights, scalars.
+ */
+async function runNoilc(hostHff, drive, { laps = 24, q = 1, r = 1e-4 } = {}) {
+  const op = hostHff.exportOperator();
+  const { nh, channels } = op;
+  const W = {
+    re: Array.from({ length: channels }, () => new Float64Array(nh)),
+    im: Array.from({ length: channels }, () => new Float64Array(nh)),
+  };
+  // The correction this rival applies, in the host's own synthesis and under the host's own
+  // authority cap — the cap is the engineer's, not the method's, and giving one method more
+  // authority than the other would decide the comparison before it ran.
+  const corr = {
+    tbl: hostHff._table(W),
+    at(k) { const o = []; for (let c = 0; c < channels; c++) o.push(this.tbl[c][k]); return o; },
+  };
+  const trace = [];
+  let best = Infinity, bestW = null;
+  for (let lap = 0; lap < laps; lap++) {
+    const res = await drive(lap === 0 ? null : corr);
+    trace.push(res.score);
+    if (res.score < best) {
+      best = res.score;
+      bestW = { re: W.re.map((a) => Float64Array.from(a)), im: W.im.map((a) => Float64Array.from(a)) };
+    }
+    const Er = hostHff._project(res.err);
+    const dU = noilcStep(op, Er, q, r);
+    for (let h = 0; h < nh; h++) {
+      const d = dU[h];
+      if (!d) continue;
+      for (let c = 0; c < channels; c++) { W.re[c][h] += d[2 * c]; W.im[c][h] += d[2 * c + 1]; }
+    }
+    corr.tbl = hostHff._table(W);
+  }
+  // THE BEST LAP, not the last. A method that converges and then walks away should be reported
+  // at both, and this project has been caught quoting a converged score that was still moving
+  // (rules 12, 13). `trace` carries every lap so the shape is visible rather than summarised.
+  const bestCorr = {
+    tbl: hostHff._table(bestW || W),
+    at(k) { const o = []; for (let c = 0; c < channels; c++) o.push(this.tbl[c][k]); return o; },
+  };
+  return { trace, base: trace[0], best, last: trace[trace.length - 1], corr: bestCorr, W: bestW };
+}
+
+export { runNoilc };
