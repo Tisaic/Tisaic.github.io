@@ -38,38 +38,53 @@
  */
 import { commissionArm, deployOn } from './pilot/rigs/arm-rig.mjs';
 
-const SHAPE = process.env.SHAPE || 'sharp';
-const FEED = +(process.env.FEED || 1.6e-2);
+const SHAPES = (process.env.SHAPES || 'sharp').split(',');
+const FEEDS = (process.env.FEEDS || '1.6e-2').split(',').map(Number);
 const UCAP = +(process.env.UCAP || 0.6);
 const BASE = { vMax: 8e-4, aMax: 4e-6, jMax: 2e-7 };
 const v = (m) => ({ ...BASE, vMax: BASE.vMax * m });
 const MULTS = (process.env.MULTS || '1,2').split(',').map(Number);
 
 console.log(`\ndiagonal against off-diagonal on a coupled 2x2 — K ${process.env.ARM_K || 16} / `
-  + `E ${process.env.ARM_E || 0.15}, ${SHAPE} at feed ${FEED.toExponential(1)}`);
-console.log(`  vMult  solve    r2 ch0   r2 ch1    total      contour     bias        osc        uPk`);
+  + `E ${process.env.ARM_E || 0.15}`);
 
+// COMMISSION ON ONE PROGRAM AND SCORE THE OTHERS, because a setting that only pays on the
+// program it was chosen against is a calibration and this project has reached that conclusion
+// three separate times (rules 31, 34). The training program is the first of SHAPES/FEEDS.
+const TRAIN = { shape: SHAPES[0], feed: FEEDS[0] };
 let off = null;
 for (const m of MULTS) {
   for (const mimo of [false, true]) {
     const p = await commissionArm({ seed: 1, uCap: UCAP, limits: [v(m), v(m)],
-      train: { shape: SHAPE, feed: FEED }, extra: { mimo } });
+      train: TRAIN, extra: { mimo } });
     const st = p.status(), ro = st.report.readouts;
-    if (!off) off = await deployOn(p, SHAPE, false, FEED);
-    const r = await deployOn(p, SHAPE, p.verdict.deploy, FEED);
-    // ASSERT THE SWITCH ACTUALLY TOOK. `report.mimo` is the pilot's own statement of whether an
-    // off-diagonal H was built — a flag that is set and an operator that is used are different
-    // things, and this project has shipped a toggle that changed nothing while every check
-    // asserting wiring passed (rule 61).
-    const armed = st.mimo;
-    if (armed !== mimo) throw new Error(`mimo asked ${mimo} but report says ${armed}`);
+    if (!off) {
+      off = new Map();
+      for (const s of SHAPES) for (const f of FEEDS)
+        off.set(`${s}@${f}`, await deployOn(p, s, false, f));
+      console.log(`  trained on ${TRAIN.shape} at ${TRAIN.feed.toExponential(1)}\n`);
+      console.log(`  vMult  solve    r2 ch0   r2 ch1  `
+        + SHAPES.flatMap((s) => FEEDS.map((f) => `${s}@${f.toExponential(1)}`.padStart(18))).join(''));
+      const oc = SHAPES.flatMap((s) => FEEDS.map((f) =>
+        off.get(`${s}@${f}`).r.contourRms.toExponential(3).padStart(18)));
+      console.log(`  open loop contour                ${oc.join('')}\n`);
+    }
+    const cols = [];
+    for (const s of SHAPES) for (const f of FEEDS) {
+      const d = await deployOn(p, s, p.verdict.deploy, f);
+      const o = off.get(`${s}@${f}`).r.contourRms;
+      cols.push(`${(o / d.r.contourRms).toFixed(2)}x o${d.r.contourOsc.toFixed(2)}`.padStart(18));
+    }
     console.log(`  ${String(m).padStart(4)}x  ${(mimo ? 'mimo' : 'diag').padEnd(7)} `
-      + `${ro[0].r2Lead0.toFixed(3)}    ${ro[1].r2Lead0.toFixed(3)}   `
-      + `${r.r.totalRms.toExponential(3)}  ${r.r.contourRms.toExponential(3)}  `
-      + `${r.r.contourBias.toExponential(3)}  ${r.r.contourOsc.toExponential(3)}  `
-      + `${r.uPk.toFixed(3)}${p.verdict.deploy ? '' : '  REFUSED'}`);
+      + `${ro[0].r2Lead0.toFixed(3)}    ${ro[1].r2Lead0.toFixed(3)}  ${cols.join('')}`
+      + `${p.verdict.deploy ? '' : '  REFUSED'}`);
+    // ASSERT THE SWITCH ACTUALLY TOOK. `status().mimo` is the pilot's own statement of whether an
+    // off-diagonal H was BUILT — a flag that is set and an operator that is used are different
+    // things, and this project has shipped a toggle that changed nothing while every check
+    // asserting wiring passed (rule 61). It has already earned its place: the first version of
+    // this file read the flag off `report` instead, and the run stopped rather than tabulating
+    // four rows of a switch it could not confirm.
+    if (st.mimo !== mimo) throw new Error(`mimo asked ${mimo} but status says ${st.mimo}`);
   }
 }
-console.log(`\n  open loop                            ${off.r.totalRms.toExponential(3)}  `
-  + `${off.r.contourRms.toExponential(3)}  ${off.r.contourBias.toExponential(3)}  `
-  + `${off.r.contourOsc.toExponential(3)}\n`);
+console.log(`\n  x is contour against the open loop; o is the oscillation half of it (rule 39).\n`);
