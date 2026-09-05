@@ -23,8 +23,10 @@ not shown; completely self-tuning; and strong on LINEAR and NONLINEAR plants ali
 
 ### Where it actually stands against that claim
 
-One of the five is supported by the evidence. One is contradicted by it. The rest are
-unmeasured or partial, and saying so is worth more than the claim is.
+One of the five is supported by the evidence and one is contradicted by it. Of the other
+three, one is contradicted on two plants and supported on three, one is halfway (three clear
+wins of six), and one is reachable and costed but not what ships. None is clean, and saying so
+is worth more than the claim is.
 
 | Part of the claim | Status | The evidence |
 |---|---|---|
