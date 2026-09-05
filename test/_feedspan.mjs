@@ -53,7 +53,8 @@ console.log(`  arm K ${process.env.ARM_K || 16} / E ${process.env.ARM_E || 0.15}
 console.log(`  span ${FEEDS[0].toExponential(1)} to ${FEEDS[FEEDS.length - 1].toExponential(1)}`
   + ` = ${(FEEDS[FEEDS.length - 1] / FEEDS[0]).toFixed(1)}x\n`);
 
-const home = await commissionArm({ seed: 1, uCap: UCAP, train: { shape: SHAPE, feed: HOME } });
+const SEED = +(process.env.SEED || 1);
+const home = await commissionArm({ seed: SEED, uCap: UCAP, train: { shape: SHAPE, feed: HOME } });
 console.log(`  [${mins()}m] deployed controller commissioned: `
   + `${home.verdict.deploy ? 'DEPLOYS' : 'REFUSES'} — ${home.verdict.why}\n`);
 
@@ -63,7 +64,7 @@ for (const feed of FEEDS) {
   const on = await deployOn(home, SHAPE, home.verdict.deploy, feed);
   // The per-feed control: a fresh commissioning AT this feed, which is the alternative the
   // engineer is being spared. Same seed, same everything else — one variable (rule 20).
-  const pf = await commissionArm({ seed: 1, uCap: UCAP, train: { shape: SHAPE, feed } });
+  const pf = await commissionArm({ seed: SEED, uCap: UCAP, train: { shape: SHAPE, feed } });
   const pfOn = await deployOn(pf, SHAPE, pf.verdict.deploy, feed);
   // uPk IS BOTH HALVES (rule 9): a ratio that rises with feed is only a controller doing more
   // if it still has authority left. At the clamp it is a different object — CLAUDE.md records
