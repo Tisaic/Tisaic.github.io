@@ -32,25 +32,29 @@ import { commissionArm, deployOn } from './pilot/rigs/arm-rig.mjs';
 import { PG } from './pilot/rigs/arm-rig.mjs';
 
 const SHAPE = process.env.SHAPE || 'rounded';
-const HELD = process.env.HELD || 'circle';
+// MORE THAN ONE HELD-OUT PROGRAM, because one is how this project has been misled before: the
+// same stack ranges 4.9x to 20.3x across five programs and makes one of them WORSE, so a single
+// transfer number is a draw from a distribution nobody has looked at (rule 9's both halves).
+const HELDS = (process.env.HELD || 'circle,sharp').split(',');
 const FEED = +(process.env.FEED || 4e-3);
 const UCAP = +(process.env.UCAP || 0.6);
 const GUIDED = +(process.env.GUIDED || 6);
 const DEPTHS = (process.env.DEPTHS || '1,2').split(',').map(Number);
 
 console.log(`\nguided commissioning against the cascade — K ${PG.K} / E ${PG.E}, `
-  + `${GUIDED} guided laps on ${SHAPE}, held out on ${HELD}\n`);
-console.log(`  config                  ${SHAPE}                    ${HELD} (never run)`);
-console.log(`  ${''.padEnd(23)} total      contour    x        total      contour    x`);
+  + `${GUIDED} guided laps on ${SHAPE}, held out on ${HELDS.join(", ")}\n`);
+console.log(`  config                  ${SHAPE} (adapted)  `
+  + HELDS.map((h) => `${h} (never run)`.padStart(20)).join(''));
 
-let base = null, baseH = null;
+let base = null;
+const baseH = new Map();
 for (const depth of DEPTHS) {
   for (const guided of [0, GUIDED]) {
     const p = await commissionArm({ seed: 1, uCap: UCAP, train: { shape: SHAPE, feed: FEED },
       ...(depth > 1 ? { Cls: Stack, extra: { depth } } : {}) });
     if (base === null) {
       base = (await deployOn(p, SHAPE, false, FEED)).r.totalRms;
-      baseH = (await deployOn(p, HELD, false, FEED)).r.totalRms;
+      for (const hs of HELDS) baseH.set(hs, (await deployOn(p, hs, false, FEED)).r.totalRms);
     }
     let armed = 0;
     if (guided > 0) {
@@ -61,16 +65,19 @@ for (const depth of DEPTHS) {
       for (const L of layers) if (L) L.online = null;
     }
     const r = await deployOn(p, SHAPE, p.verdict.deploy, FEED, { truthUntilLap: 0 });
-    const h = await deployOn(p, HELD, p.verdict.deploy, FEED, { truthUntilLap: 0 });
+    const cols = [];
+    for (const hs of HELDS) {
+      const h = await deployOn(p, hs, p.verdict.deploy, FEED, { truthUntilLap: 0 });
+      cols.push(`${(baseH.get(hs) / h.r.totalRms).toFixed(2)}x (${h.r.contourRms.toExponential(2)})`
+        .padStart(20));
+    }
     const tag = `depth ${depth}${guided ? ` + ${guided} guided` : ' static'}`;
-    console.log(`  ${tag.padEnd(23)} ${r.r.totalRms.toExponential(3)}  `
-      + `${r.r.contourRms.toExponential(3)}  ${(base / r.r.totalRms).toFixed(2)}x    `
-      + `${h.r.totalRms.toExponential(3)}  ${h.r.contourRms.toExponential(3)}  `
-      + `${(baseH / h.r.totalRms).toFixed(2)}x`
-      + `${guided ? `   [${armed} layer(s) armed]` : ''}`);
+    console.log(`  ${tag.padEnd(23)} ${(base / r.r.totalRms).toFixed(2)}x `
+      + `(${r.r.contourRms.toExponential(2)})  ${cols.join('')}`
+      + `${guided ? `  [${armed}L]` : ''}`);
   }
 }
-console.log(`\n  open loop               ${base.toExponential(3)}`
-  + `${''.padEnd(23)}${baseH.toExponential(3)}`);
+console.log(`\n  open loop               ${base.toExponential(3)}         `
+  + HELDS.map((h) => baseH.get(h).toExponential(3).padStart(20)).join(''));
 console.log(`\n  the cascade's cost moves in the direction target 6 cannot afford, so the`);
 console.log(`  depth-1 row stays beside it rather than being replaced by it.\n`);
