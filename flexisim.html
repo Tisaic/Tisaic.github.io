@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:925,built:"2026-09-05T14:26:03Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:926,built:"2026-09-05T14:30:04Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -668,7 +668,7 @@
         <input type="range" id="s-kP" min="0" max="8" step="1" value="6" />
         <span class="v" id="v-kP">16.0</span></div>
       <div class="slider"><span>Link E</span>
-        <input type="range" id="s-eP" min="0" max="4" step="1" value="3" />
+        <input type="range" id="s-eP" min="0" max="7" step="1" value="6" />
         <span class="v" id="v-eP">0.15</span></div>
       <div class="slider"><span>Steps/frame</span>
         <input type="range" id="s-spfP" min="20" max="300" step="20" value="60" />
@@ -5668,7 +5668,18 @@ const MAG_LADDER = [1, 2, 5, 10, 20, 50, 100, 200];
 // A change of either rebuilds the plant and clears every learner, because a compliance
 // constant, a pilot, and a learned geometry all belong to ONE machine.
 const KP_LADDER = [0.25, 0.5, 1, 2, 4, 8, 16, 20, 32];
-const EP_LADDER = [0.03, 0.06, 0.10, 0.15, 0.22];
+// THE LINK'S YOUNG MODULUS, EXTENDED DOWNWARD FOR TESTING. The ladder used to bottom out at
+// 0.03, which is the softest cell every performance claim here is measured at; these three
+// rungs go a further 6x below it so the compliant regime can be pushed until something breaks.
+// Softer is SAFER for the lattice's CFL condition, not riskier — elastic wave speed goes as
+// sqrt(E/rho), so a softer link has slower waves and more timestep margin, and what a soft cell
+// actually threatens is the small-deflection assumption in the tool-error projection, which is
+// a modelling limit rather than a solver one.
+//
+// EVERY SETTER USES `rung(EP_LADDER, value)` — a lookup BY VALUE — so prepending rungs shifts
+// no button to a different machine. The slider's own `max` and default `value` are the two
+// places that count indices, and both move with it.
+const EP_LADDER = [0.005, 0.01, 0.02, 0.03, 0.06, 0.10, 0.15, 0.22];
 
 let armP = null, servoP = null, profP = null, holdP = null;
 let kP = 0, lapP = 0, runP = false, busyP = false;
@@ -6776,7 +6787,7 @@ async function startAutoP() {
   // nothing queued — on the machine that is actually on screen.
   runP = false; progPending = false; $('pendP').hidden = true;
   setPathBadge('⑨ re-homing, then commissioning the machine on screen — '
-    + `K ${KP_LADDER[+$('s-kP').value].toFixed(2)} / E ${EP_LADDER[+$('s-eP').value].toFixed(2)}, `
+    + `K ${KP_LADDER[+$('s-kP').value].toFixed(2)} / E ${EP_LADDER[+$('s-eP').value].toFixed(3)}, `
     + `${$('shapeP').value} at feed ${pathFeed().toExponential(1)}`, 'warn');
   busyP = true;
   try { await homeP(); } finally { busyP = false; }
@@ -8123,7 +8134,10 @@ function syncPathLabels() {
   // steps a corner's acceleration lasts without doing arithmetic in their head.
   $('v-rateP').textContent = `${pilotRate()}/Ts`;
   $('v-kP').textContent = KP_LADDER[+$('s-kP').value].toFixed(2);
-  $('v-eP').textContent = EP_LADDER[+$('s-eP').value].toFixed(2);
+  // THREE DECIMALS, because the softest rungs are 0.005 and 0.01 and at two they render
+  // identically — a readout that cannot distinguish two machines is the silent-wrong-state
+  // this page's `rung()` helper exists to prevent, one level out (rules 25, 30).
+  $('v-eP').textContent = EP_LADDER[+$('s-eP').value].toFixed(3);
   twinStatusLine();
   $('v-spfP').textContent = $('s-spfP').value;
   $('v-magP').textContent = `${MAG_LADDER[+$('s-magP').value]}×`;
