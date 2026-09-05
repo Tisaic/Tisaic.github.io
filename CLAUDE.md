@@ -66,10 +66,15 @@ programs and on one of them it makes the machine WORSE; a phase-indexed table wo
 the program it learned reaches 0.55x on a sine — worse than doing nothing. A number that
 holds only where it was measured is a calibration, not a controller.
 
-**Commissioning is outrageous.** Roughly half an hour on one plant for one program, and the
-honest accounting is worse than it sounds: it buys a result that a change of program can
-erase. The cost is ~127 scored runs; the physics inside them is about a tenth of the wall
-clock (`test/flexisim/_cost.mjs`).
+**Commissioning WAS outrageous, and on the arm it is now two minutes.** This line used to say
+"roughly half an hour on one plant for one program" and it was true of the Node bar with the
+retired memory in it. Measured on the page's own configuration: 17 min with that memory, 8
+without it, 4 at cascade depth 1, **2 with the conventional rung dropped** — and the delivered
+result is identical at the last step, because that rung was commissioned, scored at 1.07x and
+discarded. The honest caveat the old line carried still stands for the other five plants,
+where none of this has been measured. And the number it quoted for WHERE the time goes was
+wrong in the direction that closed off the right lever: the physics is **69%** of a scored run,
+not a tenth (`test/flexisim/_cost.mjs`, which was built to check exactly that).
 
 ### THE SCORE IS THE UNSEEN PATH. LAP IMPROVEMENT IS SECONDARY.
 
@@ -164,12 +169,39 @@ Each of these is a claim that can be shown false, which is the only kind worth w
    second one, and Wood–Berry — four dead times, up to 7 minutes on a cross path — is still
    the plant this method loses on.
 
-4. **COMMISSIONING IN MINUTES, NOT AN AFTERNOON.** Target: 10x down — under three minutes on
-   the arm — while holding the contract bar. What has been measured so far: restoring the
-   machine instead of rebuilding it is 1.35x and byte-identical; the obvious remaining knobs
-   are NOT free (banded off with refinement 24 -> 10 ships 18.39x against 22.42x and fails
-   the contract). So the remaining factor has to come from needing FEWER SCORED RUNS, which
-   means a method that learns more per lap — not from making each lap cheaper.
+4. **COMMISSIONING IN MINUTES, NOT AN AFTERNOON. MET ON THE ARM — 17 MINUTES TO 2, AND THE
+   DELIVERED RESULT IS UNCHANGED.** Target: 10x down, under three minutes on the arm, while
+   holding the contract bar. Measured end to end on the page's own configuration at K 0.25 /
+   E 0.03:
+
+   ```
+     Node bar with the retired memory in it                    17 min
+     memory retired (the page already did this)                 8 min
+     + cascade depth 1 (owner's call, taken for compute)         4 min
+     + the conventional rung dropped                             2 min   ->  2.7878e-1, 3.13x
+   ```
+
+   The last step is free rather than a trade: with the rung the ladder spends 23 laps and two
+   of its four minutes commissioning a correction it scores at 1.07x and then DISCARDS,
+   because the cascade above commissions better without it. Removed, the same ladder delivers
+   the identical 2.7878e-1 to four significant figures — rule 21's signature, where the thing
+   that should not change comes back unchanged and only the cost moves. It is a CALLER POLICY
+   and not a library default, because the EMPS axis ships that rung ALONE at 424.8x and
+   removing it there costs 2.2x AND drives the ladder onto a three-layer cascade plus the
+   retired lap-periodic rung — the cheapest thing in the ladder is what keeps the most
+   expensive things out. The page carries an operator switch, default off.
+
+   **AND THE REASONING THIS TARGET USED TO CARRY WAS BUILT ON A NUMBER ITS OWN INSTRUMENT
+   REFUTES.** It said the physics is ~10% of the wall clock, and concluded that the remaining
+   factor "has to come from needing FEWER SCORED RUNS ... not from making each lap cheaper".
+   `test/flexisim/_cost.mjs` exists specifically to check that figure — its header cites rule
+   16 for why — and measures the scored laps at **69%** of a run: `fresh()` 3,213 ms against
+   6 scored laps at 7,027 ms. So the direction that was closed off was open, and the factors
+   that actually landed came from removing rungs rather than from learning more per lap.
+
+   WHAT IS NOT YET DONE: the same measurement on the other five plants, and the contract bar
+   at 2 minutes — the arm's ladder still reports 3.13x on the soft cell against the 22.42x the
+   memory-carrying stack reached, which is the retirement's stated cost and not a regression.
 
 5. **HIGHER, NOT MERELY TRANSFERABLE.** Transfer bought by giving up performance is a
    different product, not this one. Target: beat 22.42x on the arm while satisfying 1 and 2.
