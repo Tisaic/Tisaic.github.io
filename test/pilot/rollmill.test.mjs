@@ -70,6 +70,13 @@ async function commission(seed = 1) {
     // orders of magnitude faster than this; the first routing was simply wrong.
     channels: [{ lo: S0 - 0.12, hi: S0 + 0.12, vMax: 3e-3, aMax: 3e-4, jMax: 3e-5 }],
     uMax: 0.06,                                          // 60 microns of capsule authority
+    // THE TRANSPORT DELAY, DECLARED. The X-ray gauge sits L_GAUGE m downstream of the roll gap at
+    // V_LINE m/s, so the metal it reads left the gap DLY steps ago — a fact about where the gauge
+    // is MOUNTED, computed from the rig's own geometry rather than fitted. The probe cannot
+    // recover it: a dead time and a slow rise move the 90% crossing identically, and measured here
+    // the pilot read Ts 9 on a 100-step delay and built a 14-step horizon for a plant that cannot
+    // move for 100 (rule 40).
+    deadTime: DLY,
     start: [S0],
     guards: [{ index: 0, max: 400 }],                    // roll force, kN/mm
     workspace: () => true,
