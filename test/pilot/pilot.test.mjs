@@ -287,5 +287,50 @@ function run(pilot, plant, { truthOverride = null, maxSteps = 400000 } = {}) {
     `${la.toExponential(6)} vs ${want30.toExponential(6)}`);
 }
 
+// ============================== THE DEAD-TIME MASK LANDS IN THE RIGHT UNITS
+// A CHECK NO PLANT ON RECORD COULD HAVE PROVIDED. `deadTime` masks the identified response
+// inside the declared transport delay, and it was tested only on the cold mill — the one plant
+// that declares a delay, and a plant whose `sample` is 1, which makes both of the wrong
+// expressions numerically right. On any plant with `sample > 1` the mask over-reached by that
+// factor and ate real response: measured on Wood-Berry, declaring its own delays took the
+// second channel's held-out R^2 from 0.993 to 0.684, because a mask is not supposed to cost
+// forecast quality — it zeroes taps the plant provably cannot have responded in.
+//
+// So this asserts the ARITHMETIC directly, at `sample` 4, and needs no commissioning to do it
+// (rule 2). `s[k]` is `resp` at RAW step `k*sample`, so `hSample[i]` is an increment over
+// `[i*sample, (i+1)*sample]` and the mask must end at `dead/sample`; `hGrid[m]` sits at raw
+// time `m*grid*sample` — `cost()` says so itself, `cyclesPerUpdate = grid*sample` — so the lead
+// mask must end at `dead/(grid*sample)`. Both halves, and the second half is the one that
+// matters: the mask must not reach PAST the delay (rule 9).
+{
+  const p = new Pilot({ nMeasured: 1, channels: [{ lo: -1, hi: 1, vMax: 1e-3, aMax: 1e-5, jMax: 1e-7 }],
+    uMax: 1, start: [0] });
+  p.sample = 4; p.grid = 5; p.N = 20;
+  const DEAD = 40;                       // raw steps: 10 sample units, 2 decision steps
+  // A response that is RISING everywhere the mask could reach, so "not zero" is a real
+  // statement about the mask rather than about the response.
+  const resp = new Float64Array(2000);
+  for (let k = 0; k < resp.length; k++) resp[k] = Math.min(1, k / 400);
+  const g = p._gridOf(resp, 1, DEAD);
+  const dSamp = DEAD / p.sample, dGrid = DEAD / (p.grid * p.sample);
+  let sampZeroed = 0;
+  for (let i = 0; i < g.hSample.length && g.hSample[i] === 0; i++) sampZeroed++;
+  check('the dead-time mask ends at dead/sample in the per-sample response',
+    sampZeroed === dSamp, `zeroed ${sampZeroed} of ${dSamp} — a mask in RAW steps would read ${DEAD}`);
+  check('…and the first live tap is genuinely non-zero, so the count means what it says',
+    g.hSample[dSamp] > 0, `hSample[${dSamp}] = ${g.hSample[dSamp]}`);
+  // The grid response is zero for every lead whose raw time precedes the delay — and BOTH
+  // halves: it must also be live once the ZOH triangle clears it. `hGrid[0]` is structurally
+  // zero on every plant (at m=0 every lag in the triangle is negative), which is why the
+  // forecast gate advances past it only where a delay was declared.
+  let gridZeroed = 0;
+  for (let m = 0; m < g.hGrid.length && g.hGrid[m] === 0; m++) gridZeroed++;
+  check('…and no grid lead inside the delay carries a response',
+    gridZeroed >= dGrid, `${gridZeroed} zeroed against a delay of ${dGrid} leads`);
+  check('…and the mask does not reach PAST the delay, which is how it ate a real response',
+    gridZeroed <= dGrid + 2,
+    `${gridZeroed} zeroed — a mask short by a factor of sample would read ${DEAD / p.grid}`);
+}
+
 console.log(failed ? `\npilot: ${failed} check(s) FAILED\n` : '\npilot: all checks passed\n');
 process.exit(failed ? 1 : 0);
