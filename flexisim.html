@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:911,built:"2026-09-05T12:05:34Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:912,built:"2026-09-05T12:29:36Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -6843,6 +6843,22 @@ async function startAutoP() {
     // applied to a program it was never formed on), which was a tested-to-app divergence,
     // not a decision.
     lapMemory: false,
+    // AND NO CASCADE EITHER — the owner's decision, on the same footing as the retirement
+    // above. Depth 1 commissions ONE pilot and never builds a second layer, so the ladder is
+    // the conventional rung and a single model on top of it.
+    //
+    // WHAT IT COSTS, STATED UP FRONT SO NOBODY DISCOVERS IT LATER, which is how the memory's
+    // retirement was handled and for the same reason. On THIS page's softest cell — K 0.25 /
+    // E 0.03, the cell every performance claim is measured at — the second layer is worth
+    // 1.90x: open 1.205 -> depth 1 0.1875 (6.43x) -> depth 2 0.0987 (12.21x), with layer 2
+    // vouching for itself at 2.07x on held-out R^2 of what layer 1 left. That factor is given
+    // up deliberately, not lost.
+    //
+    // WHAT IT BUYS IS COMMISSIONING TIME, which is the north star's target 4 and the reason
+    // the decision was made: the ladder commissions the cascade FOUR times — depth 1 and 2,
+    // then both again with the conventional rung withheld to answer the prefix question — and
+    // one pilot commissioning on this arm measures 47 s. Depth 1 halves that count.
+    maxDepth: 1,
     // Probe-grade commissioning runs for the conventional rung's identification — measured
     // free on this arm (identical coefficients, identical deploy re-score) and 28% of the
     // whole press.

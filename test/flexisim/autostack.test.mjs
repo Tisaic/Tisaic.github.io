@@ -188,6 +188,15 @@ let hostRef = null;
     // converges TOWARDS the same state where a restore IS it. Verified before it was
     // trusted: every rung reproduced byte for byte and the ladder shipped 22.42x in 1435 s
     // against 1934 s. `REUSE=0` puts the rebuilding path back.
+    // THE PAGE'S POLICY, REACHABLE FROM HERE so the machine an operator presses ⑨ on can be
+    // timed without a second copy of this harness (rule 61). Both default to the bar's own
+    // configuration, so every number this file records is unchanged unless asked.
+    // DEPTH=1 commissions ONE pilot and never builds a second layer — the owner's decision,
+    // taken for compute: it halves the commissioning count AND the deployed arithmetic, at a
+    // measured cost of 1.90x on the softest cell (6.43x -> 12.21x is what the second layer is
+    // worth there). PROBE=1 uses the page's probe-grade conventional rung, {warmup 1, avg 2}.
+    maxDepth: +(process.env.DEPTH || 2),
+    ...(process.env.PROBE === '1' ? { probeLaps: { warmup: 1, avg: 2 } } : {}),
     reuseMachine: process.env.REUSE !== '0',
     warmup: +(process.env.WARMUP ?? 2),
     passes: +(process.env.HFFPASSES || 24),
