@@ -9296,3 +9296,63 @@ broke the tank), and now the settle fix (whole deficit on the barrel, breaks the
 basis contract and moves nothing else). The one it passed is the mill's gate lead, which was
 byte-identical on five plants by construction rather than by luck. The pattern is consistent and
 worth naming: every refused change was measured first on the plant that showcases it.
+
+### AND WOOD-BERRY FOUND A UNIT BUG IN `deadTime` THAT ONLY A PLANT WITH `sample > 1` COULD SHOW
+
+The mill's repair was that a transport delay makes `hGrid` wrong inside the dead zone and the QP
+plans against noise there. Wood-Berry has four dead times — own-loop 1 and 3 minutes, cross 3
+and 7 — and when `mimo` is armed the OFF-DIAGONAL grids are built with zero dead time by an
+explicit decision in the code ("Cross kernels get 0... declaring a full matrix is more than the
+engineer was asked for"). That is a product-claim objection and a fair one, but it is not a
+physics one, so the experiment was whether the remaining 52.52 → 43.90 gap is the mill's defect
+one level out from the diagonal. It is not, and the run said so by failing in the wrong
+direction:
+
+```
+  config                        lead-0 R^2         IAE     vs open
+  MIMO alone                  0.986 / 0.993       52.52     0.836x
+  MIMO + cross delays         0.962 / 0.901       53.37     0.822x
+  MIMO + full delays          0.961 / 0.684       53.93     0.814x
+```
+
+**DECLARING A DELAY MUST NEVER COST FORECAST QUALITY** — it zeroes taps the plant provably
+cannot have responded in — and channel 1, the channel with the larger declared delay, fell from
+0.993 to 0.684. That is a mask removing real response, not a model being corrected.
+
+**THE MASK IS IN THE WRONG UNITS, TWICE.** In `_gridOf`, `s[k]` is `resp` at RAW step `k*sample`
+and `hp[i] = s[i+1] - s[i]` is therefore an increment over the raw interval
+`[i*sample, (i+1)*sample]`. The mask tested `i < dead` with `dead` in RAW steps, so it zeroed
+`sample` times too far. And `hg[m]` sits at raw time `m*grid*sample` — `cost()` says as much
+itself, `cyclesPerUpdate = grid * sample` — so `dGrid = dead / grid` is also short by a factor
+of `sample`. Corrected:
+
+```js
+const dSamp = dead / this.sample;
+for (let i = 0; i < hp.length && i < dSamp; i++) hp[i] = 0;
+const dGrid = Math.floor(dead / (this.grid * this.sample));
+```
+
+**MEASURED, AND IT IS THE WHOLE EFFECT:**
+
+```
+  MIMO + full delays, broken units    0.961 / 0.684     53.93
+  MIMO + full delays, correct units   0.961 / 0.995     52.57
+  MIMO, no delays declared            0.986 / 0.993     52.52
+```
+
+A correct declaration is now neutral where the delay is not the binding problem, which is what
+it should be.
+
+**IT WAS RIGHT ON THE MILL BY COINCIDENCE, WHICH IS WHY NOTHING CAUGHT IT.** The mill has
+`sample` 1, so `dSamp == dead` and `dead/(grid*sample) == dead/grid`, and every number it has
+produced is unchanged. It is also the ONLY plant that declares a delay, so the shipped behaviour
+of all six is unaffected — the fix is byte-identical by inspection rather than by luck, the same
+standard the gate-lead change was held to. On any plant with `sample > 1` the option would have
+silently degraded the forecast in proportion to the delay declared, which is a trap set for the
+next engineer to use the feature.
+
+**AND WOOD-BERRY'S OWN CLAUSE IS STILL UNMET.** 52.57 against the 43.90 that doing nothing
+achieves. The delay declaration is neutral there, not a lever — the third route ruled out on
+that plant today, after the diagonal-only declaration (inert) and the gate lead (never its
+problem; both channels were ungated at R^2 0.73 and 0.66). What remains measured as a real lever
+there is still only the off-diagonal, worth 82.10 → 52.52, and still short.
