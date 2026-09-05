@@ -25,11 +25,15 @@
 // showing only the mean cannot tell those apart.
 import { ensemble, freezeConfig } from '../lib/pilot/ensemble.js';
 import { Pilot } from '../lib/pilot/pilot.js';
-import { UCAP, G, makeTanks, levelsAt, voltsFor, SEG, RECIPE, refAtStep, PROG }
+import { UCAP, makeTanks, levelsAt, voltsFor, SEG, RECIPE, refAtStep, PROG }
   from './pilot/rigs/tanks-rig.mjs';
 
 const K = +(process.env.TE_K || 5);
-const g = G;
+// THE MINIMUM-PHASE VALVE SPLIT, which is `tanks.test.mjs`'s own GMP. The first version of this
+// file passed the rig's exported `G` — which is GRAVITY, 981 cm/s^2 — as the valve split, and the
+// plant duly went non-finite in the OPEN LOOP, before the pilot was involved at all. An open-loop
+// NaN cannot be a controller fault, which is what made it obvious (rule 17).
+const g = [0.70, 0.60];
 
 async function commission(seed, freeze = null) {
   const p = makeTanks(g);
@@ -104,8 +108,9 @@ for (let k = 0; k < draws.length; k++) {
     + `   ${(dep ? 'DEPLOY' : 'refused').padEnd(9)}   ${(off.rms / on.rms).toFixed(3)}x`);
 }
 const r = ensemble(draws);
-console.log(`\n  ensemble of ${K}: kept ${r.kept}, excluded ${r.excluded}`
-  + (r.why ? ` (${r.why})` : ''));
+// THE RETURN SHAPE IS THE MODULE'S, read rather than guessed: { pilot, used, of, shapes, why }.
+console.log(`\n  ensemble of ${K}: averaged ${r.used} of ${r.of} draws across ${r.shapes} layout(s)`
+  + (r.why ? ` — ${r.why}` : ''));
 if (r.pilot) {
   const st = r.pilot.status();
   const v = st.report && st.report.verify ? st.report.verify.ratio : null;
