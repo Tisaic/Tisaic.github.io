@@ -9994,7 +9994,7 @@ machine, one refit and one deploy per rung, nothing re-converged:
   1e-6     5.52x    4.25x    7.07x      5.49x   <- used throughout this section
   1e-5     3.27x    3.02x    4.98x      3.66x
   1e-4     1.29x    1.34x    2.01x      1.49x
-  1e-3     0.85x    0.86x       -          -    <- worse than doing nothing
+  1e-3     0.85x    0.86x    1.13x      0.94x   <- worse than doing nothing on two of three
 ```
 
 **The optimum is where it already was — 1e-7 is +1.8% on the geometric mean over 1e-6 and
