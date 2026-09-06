@@ -42,14 +42,23 @@ console.log(`  configuration          MAC/cycle  %budget   ${SHAPE}   `
   + HELDS.map((h) => h.padStart(9)).join(''));
 
 let base = null; const baseH = new Map();
+// THE UNTESTED CELL IS THE ONE EVERY MEASURED PIECE POINTS AT. Guided commissioning on the
+// SCHEDULED basis reached 4.31x on the sharp square — the best square number this arc has
+// produced and past the shipped 3.50x — but it was measured at 737% of budget. The horizon knob
+// then put the scheduled basis inside the scan at 78% without the linear basis's cost. Nobody
+// has run the two together, and the linear-basis composition is exactly where the square went
+// backwards (3.05x), so the basis is the suspect rather than the guided phase.
 const CELLS = [
-  ['ships today', null, false, 0],
-  ['+ explicit gain', 'linear', true, 0],
-  ['+ guided', 'linear', true, GUIDED],
+  ['ships today', null, false, 0, null],
+  ['linear + gain', 'linear', true, 0, null],
+  ['linear + gain + guided', 'linear', true, GUIDED, null],
+  ['sched + gain, N short', null, true, 0, 0.9],
+  ['sched + gain + guided', null, true, GUIDED, 0.9],
 ];
-for (const [name, forceBasis, gain, guided] of CELLS) {
+for (const [name, forceBasis, gain, guided, ht] of CELLS) {
+  const extra = { ...(forceBasis ? { forceBasis } : {}), ...(ht ? { horizonTs: ht } : {}) };
   const p = await commissionArm({ seed: 1, uCap: UCAP, train: { shape: SHAPE, feed: FEED },
-    ...(forceBasis ? { extra: { forceBasis } } : {}) });
+    ...(Object.keys(extra).length ? { extra } : {}) });
   if (base === null) {
     base = (await deployOn(p, SHAPE, false, FEED)).r.totalRms;
     for (const h of HELDS) baseH.set(h, (await deployOn(p, h, false, FEED)).r.totalRms);
