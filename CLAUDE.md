@@ -557,6 +557,24 @@ deploy that instead.
   distilled, 6 polygons, +/-512       4.99x    4.22x    6.74x    5.22x          222
 ```
 
+**AND WHAT CARRIES IT IS PREVIEW, MEASURED AGAINST THE MATCHED CONTROL.** `classic.js`'s basis
+`[a, v, sign v, 1]` is the nearest thing here to the literature's task-flexible ILC, and the arm's
+ladder commissioned it, scored 1.07x and DISCARDED it. Put through the SAME distillation harness —
+same fitting route, same converged prefix, same training set, only the basis moving — it distils to
+**1.02x geometric, i.e. nothing**, which reproduces that discard by a route sharing none of its
+machinery. Then the control that matters: the same rows at 79 CAUSAL taps against the same 79 taps
+TRANSLATED across now — identical count, span and spacing, only the position relative to NOW
+differing — read **0.89x against 1.43x**, with fit R2 0.414/0.332 against 0.751/0.691. **Causal
+taps make the machine worse than doing nothing on all three programs; non-causal taps help on all
+three.** And `motionBasis` cannot express the difference: its `delay()` shifts backwards only and
+its `live()` refuses a lagged basis outright, so the shipped physical rung is REPRESENTATIONALLY
+incapable of the thing that carries the result. Preview is necessary and not sufficient — 1.43x
+against the generic window's 3.67x — so both terms are real and their ordering is now measured.
+The honest placement in the literature narrows and strengthens with it: non-causal feedforward
+inversion is ZPETC and stable inversion, which DERIVE that inverse from an LTI model, and what is
+here is one REGRESSED from data on a plant whose inverse is pose-dependent and nonlinear. Not "a
+big basis beats a physical one" — that framing died with the control.
+
 **EVERY TEST PROGRAM IS HELD OUT** — the polygons come from the block's own designer and no
 production geometry appears in training — and the deployed object is 111 linear coefficients
 per channel with **no QP, no forecast bank, no tracker, no lap index and no plant constant**.

@@ -10279,3 +10279,64 @@ the fit is shown.
 That closes the routing question the compute headroom opened. The 238 MAC deployed map has 2.4% of
 a PLC scan and the spare arithmetic still buys nothing here, for the third time in this section:
 capacity, cascade depth, and now input routing.
+
+### §49.14 THE PHYSICAL-BASIS LADDER: PREVIEW IS THE LOAD-BEARING STRUCTURE, NOT CAPACITY
+
+`lib/pilot/classic.js` fits the motion basis `[a, v, sign v, 1]` on the machine and is the
+nearest thing in this repository to the literature's TASK-FLEXIBLE ILC — a correction
+parameterised in functions of the REFERENCE, so it transfers. It reads 425x on the EMPS axis
+and the arm's ladder commissioned it, scored it at 1.07x and DISCARDED it. If that gap is real
+it is the finding; if it is an artefact of two different fitting routes it is nothing. So the
+basis was put through the distillation harness instead, where the fitting route, the training
+set, the converged prefix and the scoring are all held identical and only the BASIS moves.
+
+Four modes, one converged prefix, six polygons, K 0.25 / E 0.03:
+
+```
+  mode      feat   R2 ch0  R2 ch1    rounded  circle  sharp     geo
+  phys         7    0.280   0.186       1.00    1.17   0.90    1.02   classic.js's basis, memoryless
+  physlag     79    0.414   0.332       0.97    0.83   0.87    0.89   same rows, CAUSAL taps
+  physpre     79    0.751   0.691       1.33    1.73   1.26    1.43   same rows, NON-CAUSAL taps
+  rich       111    0.968   0.921       3.36    4.90   3.00    3.67   the distilled map
+```
+
+**`phys` DISTILS TO NOTHING — 1.02x geometric, and its fit explains 28%/19% of the converged
+correction.** That independently reproduces the ladder's own 1.07x-and-discard by a completely
+different route: different fitting method, different training set, same verdict (rule 15, two
+routes that do not share the mistake).
+
+**`physlag` -> `physpre` IS THE MATCHED CONTROL AND IT IS THE RESULT.** Identical 79 features,
+identical 1536-sample span, identical spacing — `physlag`'s taps are `physpre`'s TRANSLATED so
+none lies in the future. The only difference is the position relative to NOW. Fit R2 goes
+0.414/0.332 -> 0.751/0.691 and delivery goes **0.89x -> 1.43x, a 1.61x swing**: causal taps make
+the machine WORSE THAN DOING NOTHING on all three programs and non-causal taps help on all three.
+So what carries this method is PREVIEW, not the size of the dictionary.
+
+**AND `motionBasis` STRUCTURALLY CANNOT EXPRESS IT.** Its `delay()` shifts BACKWARDS only and its
+`live()` REFUSES a lagged basis outright. The shipped physical rung is therefore incapable of the
+one thing the measurement says carries the result — a representational limit, not a tuning
+difference, and the reason the 1.07x is a real gap rather than an artefact of two fitting routes.
+
+**PREVIEW IS NECESSARY AND NOT SUFFICIENT.** `physpre` 1.43x against `rich` 3.67x: given the same
+preview, the generic position window is worth another 2.6x over `[a, v, sign v]`. Both terms are
+real and the ordering between them is now measured rather than assumed.
+
+**AND THE ONE PLACE FIT AND DELIVERY DISAGREE IS THE THIRTEENTH ROW OF §49'S OWN TABLE.**
+`phys` -> `physlag` IMPROVES the fit (0.280 -> 0.414) and DEGRADES the machine (1.02x -> 0.89x),
+while every other step improves both. It is the most diagnostic row in that table because the
+direction of the added capacity is NAMED: capacity pointed backwards-only buys fit and costs the
+machine, exactly as the account predicts, and capacity pointed across NOW buys both.
+
+**WHERE THIS PUTS THE METHOD IN THE LITERATURE, WHICH IS NARROWER AND STRONGER THAN THE EARLIER
+CLAIM.** Non-causal feedforward inversion is not new — it is ZPETC and stable inversion, and those
+methods exist precisely because a plant inverse is non-causal whenever the plant has delay or
+non-minimum-phase zeros. What they do is DERIVE that inverse from an LTI model. What this does is
+REGRESS it from data, on a plant whose inverse is pose-dependent and nonlinear, by distilling a
+converged iteration. The defensible sentence is therefore "a data-driven non-causal FIR inverse
+fitted from a converged iteration, on a plant where model-based non-causal inversion does not
+apply" — and NOT "a large generic basis beats a physical one", which is the framing this section
+carried until the control was run.
+
+Two caveats, stated: this ran at 4 refinement passes against the 5 the recorded 5.49x used (the
+harness default; §49 measured 5.22x at 4 and 5.49x at 5, so the in-run `rich` row is the control
+that matters and the external anchor differs by one pass). And it is one plant.
