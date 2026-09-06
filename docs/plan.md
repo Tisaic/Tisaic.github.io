@@ -9890,11 +9890,34 @@ miss, from "worse than doing nothing at half the feed" to "uniformly mediocre an
 harmful". The fit says the same thing (0.974/0.921 -> 0.911/0.908): one linear map is
 AVERAGING three feeds rather than representing them.
 
-**WHICH NAMES THE REPAIR PRECISELY.** Not arc-length indexing — a sample window is the right
-object for a time-invariant plant — but SCHEDULING on commanded speed, so the map may use
-different weights per feed instead of one compromise set. That is the same licence the corner
-router needed for its two regimes ("the state was always in the row, the licence to use
-different weights per regime is what was missing"), arriving in a second variable.
+**I NAMED SCHEDULING AS THE REPAIR AND IT IS THE WORST ROW IN THIS WHOLE SECTION.** The
+argument was that one map cannot represent three feeds, so give it the licence to use different
+weights per feed — the corner router's own lesson in a second variable. Built (the `rich` row
+tensored with [1, rho, rho^2], rho the commanded speed relative to the diet's reference feed)
+and run on the ladder it was designed for:
+
+```
+  feed              unscheduled ladder   SCHEDULED ladder   pilot
+  2.0e-3 (0.5x)          2.58x                1.56x         2.18x
+  4.0e-3                 2.43x                1.45x         2.15x
+  6.0e-3 (1.5x)          3.11x                0.91x         1.78x
+  8.0e-3 (2x)            3.05x                0.56x         1.66x
+  fit R^2            0.911 / 0.908        0.969 / 0.947
+```
+
+**It fits far better across the feeds and delivers below 1.0x at both high ones.** Given the
+licence to use different weights per feed, the map spends it on each feed's LAP-SPECIFIC
+structure rather than on the plant — which is precisely what the account above predicts extra
+capacity to do, and precisely not what I predicted when I proposed it. The account beat the
+design argument, which is the second time in this section (the quadratic block was the first)
+and the reason the account is worth more than any single row in it.
+
+**SO THE REPAIR IS STILL NOT NAMED.** What is measured is that the feed confound is real, that
+varying the feed in training removes the DANGER (nothing below 1.0x) at the price of 2.3x at
+the commissioning feed, and that buying that price back with capacity does not work. Arc-length
+indexing remains untried and is now the only structural candidate left, but this section's
+record says to expect it to fit better and deliver worse unless it removes capacity rather than
+adding it.
 
 **AND THE ASYMMETRY NAMES THE REPAIR.** At a lower feed the same sample offset spans LESS arc,
 so the window sees a compressed version of the geometry it learned while the plant's own error
@@ -9920,6 +9943,7 @@ Nine measurements in this section point the same way and they are one statement,
   in-sample refit on the program the ceiling    0.77x-0.90x      the scribble fit (§47)
   quadratic block added          0.921 -> 0.955  5.49x -> 2.41x  the LINEAR basis
   speed-scheduled basis          0.921 -> 0.934  5.49x -> 5.09x  the UNSCHEDULED basis
+  scheduled, on a feed ladder    0.908 -> 0.947  3.05x -> 0.56x  the UNSCHEDULED basis
 ```
 
 **Every time a knob makes the FIT better it makes the MACHINE worse, and the sign is
