@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:1061,built:"2026-09-06T19:34:57Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:1062,built:"2026-09-06T20:07:30Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -1029,6 +1029,19 @@
       <div class="slider"><span>Guided laps</span>
         <input type="range" id="dep-guided" min="0" max="12" step="3" value="0" />
         <span class="v" id="v-depGuided">0</span></div>
+      <label>Grade
+        <select id="dep-grade">
+          <option value="full" selected>full — 2 warm-up + 4 scored laps a run</option>
+          <option value="fast">fast — 1 + 2, and a third of the refinement</option>
+          <option value="demo">demo — 1 + 1, fastest, for watching not measuring</option>
+        </select></label>
+      <label>PLC scan
+        <select id="dep-scan">
+          <option value="1" selected>1 ms task — 10,000 MAC budget</option>
+          <option value="0.5">0.5 ms task — 5,000 MAC</option>
+          <option value="2">2 ms task — 20,000 MAC</option>
+          <option value="5">5 ms task — 50,000 MAC</option>
+        </select></label>
       <label><input type="checkbox" id="dep-classic" /> build ① the conventional rung
         (static feedforward in the reference's own state)</label>
       <label><input type="checkbox" id="dep-demo" checked /> build ②b corner banks from a
@@ -1043,6 +1056,14 @@
     </div>
 
     <h4 class="grp">Commission <span>— the machine produces nothing while this runs</span></h4>
+    <!-- THE SAME RENDERER AS ③, NOT A SECOND ONE. `drawP` takes the stage and canvas to
+         draw into, so this box shows the machine that is actually turning — during a
+         commissioning that is the LADDER's own machine running its excitation, which is
+         labelled on the picture because an unlabelled moving arm reads as production. -->
+    <div class="stage" id="stageD">
+      <canvas id="cvD"></canvas>
+      <span class="badge" id="stateD-badge">idle</span>
+    </div>
     <div class="controls">
       <button id="dep-run">Commission this installation ▶</button>
       <span class="pill" id="dep-badge">not commissioned</span>
@@ -1235,7 +1256,13 @@ for (const t of document.querySelectorAll('.tab')) {
     // this tab is an instrument panel and deliberately has no second viewer of its own,
     // because two views of one machine that can disagree is the defect class this project
     // has paid for most often.
-    if (t.dataset.tab === 'deploy') { ensurePlantP(); depSync(); }
+    if (t.dataset.tab === 'deploy') {
+      ensurePlantP(); depSync();
+      // A HIDDEN CANVAS HAS NO SIZE, and 0/0 is NaN, which passes every bounds check
+      // (rule 55). This one is built while the panel is display:none, so it is drawn once
+      // the panel is actually visible.
+      requestAnimationFrame(() => drawP('stageD', 'cvD'));
+    }
     if (t.dataset.tab === 'chain') {
       if (chPosOn) Plotly.Plots.resize($('chain-pos'));
       if (chChartOn) Plotly.Plots.resize($('chain-chart'));
@@ -2856,7 +2883,12 @@ function frame() {
     drawP(); syncPath();
     if (frames % 6 === 0) { statsP(); pathChart(); }
   }
-  if (onDep && frames % 6 === 0) depSync();
+  if (onDep) {
+    // DRAWN EVERY FRAME, LIKE ③'s. The whole point of this box is to watch the machine
+    // move, and a stage refreshed on the stats cadence is a slideshow.
+    drawP('stageD', 'cvD');
+    if (frames % 6 === 0) depSync();
+  }
   if (!A || busy) return;
   // THE SEQUENCE ADVANCES BEFORE THE STEPPING, so a step that has just finished
   // hands over on the same frame rather than leaving the plant idling for one.
@@ -6851,6 +6883,12 @@ function autoYield() {
  * (which always moves), the rung being measured, the run index and the lap within it.
  */
 let autoT0 = 0, autoLastProg = 0, autoStage = null, autoPlan = null;
+// WHEN IT FINISHED, so the recorded wall clock stops rather than counting for ever after the
+// run is over — a "cost" that keeps rising while nothing runs is not a cost.
+let autoT1 = 0;
+// WHICH GRADE THE RUN THAT PRODUCED THESE NUMBERS RAN AT. Printed beside them, because a
+// fast commissioning's machine time is what THAT run would cost and not what a full one would.
+let autoGrade = 'full';
 
 /**
  * WHAT THE LADDER IS DOING AND WHAT HAS TO HAPPEN FOR IT TO MOVE ON.
@@ -6962,7 +7000,8 @@ async function startAutoP(inst = null) {
   const centre = armP.ik(PG.centre[0], PG.centre[1], true);
   const LAP = Math.ceil(profP.lap);
   autoComm = true; autoRep = null; autoAbort = false; autoYields = 0;
-  autoT0 = performance.now(); autoLastProg = 0; autoStage = null; autoPlan = null;
+  autoT0 = performance.now(); autoT1 = 0; autoLastProg = 0; autoStage = null; autoPlan = null;
+  autoGrade = inst && inst.grade ? inst.grade : 'full';
   // THE BUTTON HAS TO BECOME `Stop` NOW, not at whatever later frame happens to call
   // `syncPath`. Between the click and the first repaint the only control that can end this
   // run reads as the control that starts it.
@@ -7000,6 +7039,10 @@ async function startAutoP(inst = null) {
         }
         const [q1, q2] = m.arm.ik(c0.x, c0.y, true);
         await settle(q1, q2, 4000);
+        // THE STAGE FOLLOWS THIS ARM FROM HERE. It is stashed rather than copied, so the
+        // picture is of the object the ladder is scoring — not a pose sampled from it,
+        // which is a second view that can lag or disagree.
+        autoLiveArm = m.arm;
         return { arm: m.arm, l1: m.l1, l2: m.l2, servo: m.servo, rc };
       } catch (e) {
         await m.l1.destroy(); await m.l2.destroy();
@@ -7060,10 +7103,17 @@ async function startAutoP(inst = null) {
     // ⑥'s installation options, inert from ③ where `inst` is null.
     ...(inst && inst.distil ? { distil: {} } : {}),
     ...(inst && inst.guidedLaps ? { guidedLaps: inst.guidedLaps } : {}),
+    // ---- COMMISSIONING GRADE. `avg`/`warmup` are the laps every scored run spends, and
+    // `passes` the lap-periodic rung's refinement ceiling; cutting them is the one lever that
+    // shortens a commissioning without changing what is commissioned. ③'s button keeps the
+    // measured grade exactly, so nothing that was recorded moves.
+    ...(inst && GRADES[inst.grade] ? { avg: GRADES[inst.grade].avg,
+      warmup: GRADES[inst.grade].warmup, passes: GRADES[inst.grade].passes } : {}),
     // Probe-grade commissioning runs for the conventional rung's identification — measured
     // free on this arm (identical coefficients, identical deploy re-score) and 28% of the
     // whole press.
-    probeLaps: { warmup: 1, avg: 2 },
+    probeLaps: (inst && GRADES[inst.grade] ? GRADES[inst.grade].probeLaps
+      : { warmup: 1, avg: 2 }),
     // HAND A FRAME BACK often enough that the tab survives a run of tens of thousands of
     // steps, and rarely enough that the yielding itself is not the cost.
     yieldEvery: 1500,
@@ -7099,13 +7149,18 @@ async function startAutoP(inst = null) {
     // commission, so the caller owns its teardown — without this, every stopped or failed
     // ⑨ leaks two lattices, which on WebGPU is buffers the next build inherits (rule 57).
     if (autoP) await autoP.dispose();
+    // THE ARM IT POINTED AT IS DESTROYED. Left set, the stage would keep drawing a machine
+    // whose lattices are gone — which on WebGPU is reading freed buffers, and in Node-land
+    // is simply a frozen picture of a plant that no longer exists.
+    autoLiveArm = null; autoT1 = performance.now();
     autoComm = false; autoAbort = false; autoP = null; syncPath();
     return;
   }
-  autoComm = false; autoAbort = false;
+  autoComm = false; autoAbort = false; autoT1 = performance.now();
   // THE COMMISSIONING MACHINE IS DONE WITH — the page deploys onto ITS OWN arm through
   // `attach` below, never onto the throwaway the ladder measured on.
   await autoP.dispose();
+  autoLiveArm = null;
   $('autoProg').innerHTML = `<b>done</b> in ${Math.round((performance.now() - autoT0) / 60000)}`
     + ' min';
   // POINT THE FRAME MAPS AT THE ARM ON SCREEN. They were following the throwaway machines
@@ -7208,8 +7263,36 @@ $('autoP-btn').addEventListener('click', () => {
 // weaker claim it is.
 // The deploy-time tracker switch, cached because it is read once per servo step.
 let depOnline = false;
-const PLC_BUDGET = 10000;      // 10% of a 1 ms task at 1 MAC/ns — the north star's target 6
-const PLC_SCAN_MS = 1;         // the task period the budget is a share of
+// ---- THE SCAN THE BUDGET IS A SHARE OF, AND THE GRADE THE COMMISSIONING RAN AT.
+//
+// 10% of a 1 ms task at 1 MAC/ns is the north star's target 6 and stays the default. The
+// selector prices the same armed set against the operator's OWN task instead, because a
+// budget quoted against a period the plant does not run is a number nobody can act on.
+const plcScanMs = () => +($('dep-scan') ? $('dep-scan').value : 1);
+const plcBudget = () => 10000 * plcScanMs();
+
+/**
+ * ---- COMMISSIONING GRADE: BUY WALL CLOCK WITH RESOLUTION, AND SAY WHICH.
+ *
+ * Every scored run is `warmup` laps to clear the correction's own transient plus `avg` laps
+ * pooled into the score. Cutting them is the one lever that shortens a commissioning without
+ * changing what is being commissioned — and it is NOT free, which is why the grade is stated
+ * on the report rather than hidden in a preset: fewer pooled laps is a NOISIER score, the
+ * ladder measures its own spread and raises its floor accordingly, and a rung whose margin
+ * no longer clears that floor is refused for being indistinguishable rather than for being
+ * bad. On a phone that trade is usually worth taking to watch the thing run; it is not the
+ * grade a number gets quoted at.
+ */
+const GRADES = {
+  full: { avg: 4, warmup: 2, probeLaps: { warmup: 1, avg: 2 }, passes: 24,
+    note: 'the grade every recorded number on this project was measured at' },
+  fast: { avg: 2, warmup: 1, probeLaps: { warmup: 1, avg: 1 }, passes: 8,
+    note: 'about half the scored laps and a third of the lap-periodic refinement — '
+      + 'a noisier score and a higher instrument floor' },
+  demo: { avg: 1, warmup: 1, probeLaps: { warmup: 0, avg: 1 }, passes: 4,
+    note: 'the fewest laps that still produce a score — for WATCHING the machine, not for '
+      + 'quoting what it delivers' },
+};
 
 /** The installation the operator has declared: everything that decides what gets BUILT. */
 function depInstall() {
@@ -7227,6 +7310,7 @@ function depInstall() {
     // the checkbox cannot overrule the plant.
     lapMemory: lap && $('dep-lapmem').checked,
     mimo: $('dep-mimo').checked,
+    grade: $('dep-grade').value,
   };
 }
 
@@ -7282,25 +7366,25 @@ function depPlcHTML() {
       : k === 'distil' ? `fit ${r.fitMacPerRow.toLocaleString()} MAC/row` : '';
     return `<tr><td>${label[k] || k}</td>`
       + `<td class="num">${(r.mac || 0).toLocaleString()}</td>`
-      + `<td class="num">${(100 * (r.mac || 0) / PLC_BUDGET).toFixed(1)}%</td>`
+      + `<td class="num">${(100 * (r.mac || 0) / plcBudget()).toFixed(1)}%</td>`
       + `<td class="num">${((r.bytes || 0) / 1024).toFixed(1)} kB</td>`
       + `<td>${extra}</td></tr>`;
   });
   if (!rows.length) rows.push('<tr><td colspan="5">nothing armed — the machine runs open loop'
     + ' under whatever ③ Path selects</td></tr>');
-  const pct = 100 * c.mac / PLC_BUDGET;
+  const pct = 100 * c.mac / plcBudget();
   // THE PEAK CYCLE IS THE VERDICT, NOT THE AVERAGE. "Under 10%, ALWAYS" is the target, and a
   // number that fits on average is a different and weaker claim — so the sliced figure is
   // reported beside it and labelled, never instead of it.
   const verdict = pct <= 100
     ? `<b style="color:var(--accent2)">FITS</b> — ${c.mac.toLocaleString()} MAC in the peak cycle, `
-      + `${pct.toFixed(0)}% of the ${PLC_BUDGET.toLocaleString()} MAC budget`
+      + `${pct.toFixed(0)}% of the ${plcBudget().toLocaleString()} MAC budget`
     : `<b style="color:var(--bad)">DOES NOT FIT</b> — ${c.mac.toLocaleString()} MAC in the peak `
       + `cycle, ${pct.toFixed(0)}% of budget, i.e. ${(pct / 100).toFixed(1)}× over`;
   const online = $('dep-online').checked;
   return `<table class="tbl"><tr><th>armed rung</th><th>MAC/cycle</th><th>of budget</th>`
     + `<th>state</th><th></th></tr>${rows.join('')}</table>`
-    + `<p class="hint">${verdict}. The budget is 10% of a ${PLC_SCAN_MS} ms task and it must be `
+    + `<p class="hint">${verdict}. The budget is 10% of a ${plcScanMs()} ms task and it must be `
     + `met in <b>every</b> cycle — sliced across an update cadence the same set costs `
     + `${c.slicedMac.toLocaleString()} MAC, which is the weaker claim and is not the one being `
     + `made. Excluded and said so: ${c.excludes.join(', ')}.`
@@ -7310,21 +7394,48 @@ function depPlcHTML() {
     + `</p>`;
 }
 
-/** What the commissioning cost, in the unit an owner pays: machine time. */
+/**
+ * ---- WHAT THE COMMISSIONING COST, IN THE UNIT AN OWNER PAYS.
+ *
+ * COMPUTE TIME IS NOT COMMISSIONING TIME. Wall clock here measures the SIMULATOR and is an
+ * accident of what this browser is running on; on a plant the cost is LAPS — the machine
+ * produces nothing while rungs are scored — and that is the half of target 4 this project
+ * has never had an instrument for on this arm. `samples()` counts every step the host
+ * advanced the machine, so at the selected task period it converts straight to machine time.
+ *
+ * Kept AFTER the run, not only during it: `dispose()` frees the lattices and leaves the
+ * counter, so the figure stays on screen as the record of what this configuration cost.
+ * The GRADE is printed beside it, because a fast commissioning's machine time is what THAT
+ * run would cost a PLC and not what a full-grade one would.
+ */
 function depCostHTML() {
   if (!autoP) return '';
   const sm = autoP.samples();
   if (!sm.samples) return '';
-  const secs = sm.samples * (PLC_SCAN_MS / 1000);
-  const wall = autoT0 ? (performance.now() - autoT0) / 1000 : 0;
+  const scan = plcScanMs();
+  const secs = sm.samples * (scan / 1000);
+  const wall = (autoT1 || performance.now()) - autoT0;
   const mm = (x) => `${Math.floor(x / 60)}:${String(Math.round(x % 60)).padStart(2, '0')}`;
-  // COMPUTE TIME IS NOT COMMISSIONING TIME, and until now this page only had the first.
-  // On a plant the ladder's cost is LAPS: the machine is producing nothing while rungs are
-  // scored, and that is the half of target 4 a wall clock cannot see.
-  return `<b>Cost so far:</b> ${sm.samples.toLocaleString()} machine samples over ${sm.runs} `
-    + `scored run(s) — <b>${mm(secs)} of machine time</b> at a ${PLC_SCAN_MS} ms task, which is `
-    + `${(sm.samples / sm.lap).toFixed(0)} laps of this program. Wall clock here is ${mm(wall)}, `
-    + 'and it is the simulator: the machine time is what a plant actually pays.';
+  const g = GRADES[autoGrade] || GRADES.full;
+  const done = !autoComm && autoRep;
+  return '<table class="tbl">'
+    + `<tr><th>${done ? 'this commissioning cost' : 'cost so far'}</th><th></th></tr>`
+    + `<tr><td>machine time at a ${scan} ms task</td>`
+    + `<td class="num"><b>${mm(secs)}</b></td></tr>`
+    + `<tr><td>machine samples · scored runs</td>`
+    + `<td class="num">${sm.samples.toLocaleString()} · ${sm.runs}</td></tr>`
+    + `<tr><td>laps of this program</td>`
+    + `<td class="num">${(sm.samples / sm.lap).toFixed(0)}</td></tr>`
+    + `<tr><td>wall clock in this browser</td><td class="num">${mm(wall / 1000)}</td></tr>`
+    + `<tr><td>grade</td><td class="num">${autoGrade}</td></tr>`
+    + '</table>'
+    + `<p class="hint"><b>Machine time is the number that transfers.</b> The wall clock above `
+    + 'is this browser simulating a lattice arm and says nothing about a plant; the machine '
+    + 'time is laps the machine spends producing nothing, which is what an owner actually '
+    + `pays. Run at grade <b>${autoGrade}</b> — ${g.note}.`
+    + (autoGrade === 'full' ? '' : ' <b>So this is what THIS run would cost a PLC, not what '
+      + 'a full-grade commissioning would.</b>')
+    + '</p>';
 }
 
 /** What the armed configuration is delivering on the machine ③ Path is driving. */
@@ -7371,7 +7482,7 @@ function depSync(fromCommission = false) {
   depOnline = $('dep-online').checked && !$('dep-online').disabled;
   const busy = autoComm || busyP;
   for (const id of ['dep-tracker', 'dep-periodic', 'dep-depth', 'dep-guided', 'dep-classic',
-    'dep-demo', 'dep-distil', 'dep-mimo']) $(id).disabled = busy;
+    'dep-demo', 'dep-distil', 'dep-mimo', 'dep-grade']) $(id).disabled = busy;
   $('dep-lapmem').disabled = busy || !lap;
   $('dep-run').textContent = autoComm ? 'Stop ■' : 'Commission this installation ▶';
   $('dep-run').disabled = busyP;
@@ -7392,7 +7503,9 @@ function depSync(fromCommission = false) {
     + 'measured with and is the harder claim. <b>Continuous laps</b> is what makes a '
     + 'lap-indexed rung legal — on one-off parts nothing may be addressed by lap phase, so ③ '
     + 'is not offered. Depth, guided laps and the three build boxes each cost commissioning '
-    + `time; the machine time they cost is reported below once a run has started.`
+    + 'time; the machine time they cost is reported below once a run has started. '
+    + `<b>Grade</b> buys wall clock with resolution — ${GRADES[inst.grade].note} — so a fast `
+    + 'run is for watching the machine, and a number gets quoted at full.'
     + (inst.lapMemory ? ' <b>③ is armed to be built: it will not transfer to another program, '
       + 'and that is the trade you are making.</b>' : '');
   $('dep-runHint').innerHTML = inst.tracker === 'permanent'
@@ -7420,6 +7533,14 @@ function depSync(fromCommission = false) {
       .filter(([, v]) => v.on).map(([k]) => k).join(' + ') || 'nothing armed'}`
       : 'not commissioned';
   $('dep-badge').className = 'pill ' + (autoComm ? 'warn' : autoRep ? 'good' : '');
+  // THE STAGE'S OWN BADGE. `.badge` is position:absolute and this one IS inside a `.stage`,
+  // which is position:relative — the case the class was written for.
+  const sd = $('stateD-badge');
+  sd.textContent = autoComm
+    ? `commissioning at grade ${autoGrade} — the ladder's machine, not the program`
+    : autoRep ? (runP ? 'running the armed set' : 'ready — press Run')
+      : armP ? 'ready — commission an installation' : 'building…';
+  sd.className = 'badge' + (autoComm ? ' warn' : autoRep ? ' good' : '');
 }
 
 $('dep-run').addEventListener('click', () => {
@@ -7448,7 +7569,7 @@ $('dep-uMax').addEventListener('input', () => {
   depSync();
 });
 for (const id of ['dep-tracker', 'dep-periodic', 'dep-depth', 'dep-guided', 'dep-classic',
-  'dep-demo', 'dep-distil', 'dep-lapmem', 'dep-mimo']) {
+  'dep-demo', 'dep-distil', 'dep-lapmem', 'dep-mimo', 'dep-grade', 'dep-scan']) {
   $(id).addEventListener('input', () => depSync());
 }
 
@@ -7813,8 +7934,31 @@ function setPathBadge(s, cls) {
  * ellipse, and the whole point of a ball-bar test is that a departure from a circle is
  * the machine.
  */
-function drawP() {
-  const cv = $('cvP'), st = $('stageP');
+/**
+ * ---- THE ARM ON SCREEN MUST BE THE ARM THAT IS MOVING.
+ *
+ * The ladder does NOT drive the tab's arm: `makeMachine` builds a throwaway (well, a held
+ * one — `reuseMachine`) and every scored run turns THAT. So for the whole commissioning the
+ * stage drew `armP`, sitting exactly where `homeP()` left it, while the machine the numbers
+ * come from was running out of sight. Nothing errored and nothing was blank; the picture was
+ * simply of the wrong machine, which is this project's commonest defect class.
+ *
+ * `autoLiveArm` is stashed by the page's own `makeMachine` and cleared when the host is
+ * disposed, so the stage follows whichever arm is actually turning. It is the SAME object
+ * the ladder scores — not a copy of its pose — so the two cannot disagree.
+ */
+let autoLiveArm = null;
+const liveArmP = () => (autoComm && autoLiveArm ? autoLiveArm : armP);
+
+/**
+ * @param {string} [stageId] the stage box to fit to, and `cv<Id>` the canvas inside it.
+ *   ⑥ Deploy renders through THIS function into its own canvas rather than growing a second
+ *   renderer: one function and one source, so a second view cannot draw a different machine
+ *   from the first (rule 6). The smoke test asserts the two canvases agree on the pose.
+ */
+function drawP(stageId = 'stageP', cvId = 'cvP') {
+  const cv = $(cvId), st = $(stageId);
+  if (!cv || !st) return;
   const w = st.clientWidth, h = st.clientHeight;
   if (!(w > 0 && h > 0)) return;
   const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -7824,7 +7968,12 @@ function drawP() {
   const g = cv.getContext('2d');
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
   g.fillStyle = '#060a14'; g.fillRect(0, 0, w, h);
-  if (!armP || !profP) return;
+  const AR = liveArmP();
+  if (!AR || !profP) return;
+  // WHOSE MACHINE THIS IS, said on the picture. A moving arm during commissioning is the
+  // LADDER's machine running its own excitation, not the program being cut — and reading it
+  // as production is exactly the confusion a second, unlabelled view creates.
+  const commissioning = autoComm && autoLiveArm;
 
   // THE VIEW HAS TO CONTAIN THE MACHINE, NOT JUST THE PART, and on a serial arm those
   // are different regions: this elbow hangs well below the workpiece, so a frame fitted
@@ -7851,7 +8000,12 @@ function drawP() {
 
   // The error trail, exaggerated along the path normal and nowhere else.
   const mag = MAG_LADDER[+$('s-magP').value];
-  if (trailP.length > 1) {
+  // THE TRAIL AND THE COMMANDED MARKER BELONG TO THE DEPLOYED RUN. While the ladder is
+  // commissioning, the arm on screen is running an EXCITATION and is not on the program at
+  // all, so drawing a program-relative error trail beside it would be asserting a deviation
+  // from a path the machine is not trying to follow. Suppressed and said so, rather than
+  // left to be misread (rule 25 — the states are different and must not render the same).
+  if (!commissioning && trailP.length > 1) {
     g.strokeStyle = '#f59e0b'; g.lineWidth = 2;
     g.beginPath();
     let pen = false;
@@ -7869,8 +8023,8 @@ function drawP() {
   // through exactly the transform toolXY() uses, so the picture and the tool reading
   // cannot disagree. At this stiffness the bow is well under a pixel, which is the
   // honest appearance of a stiff arm and not a simplification.
-  const [p1, p2] = armP.profiles();
-  const piv1 = armP.l1.meta.pivot[0], piv2 = armP.l2.meta.pivot[0];
+  const [p1, p2] = AR.profiles();
+  const piv1 = AR.l1.meta.pivot[0], piv2 = AR.l2.meta.pivot[0];
   const bendAt = (prof, bx, piv) => {
     const want = piv + bx;
     let lo = 0;
@@ -7879,22 +8033,22 @@ function drawP() {
     const t = span > 0 ? (want - prof.x[lo]) / span : 0;
     return prof.dy[lo] + t * (prof.dy[lo + 1] - prof.dy[lo]);
   };
-  const q1 = armP.q[0], q2 = armP.q[1];
+  const q1 = AR.q[0], q2 = AR.q[1];
   const s1 = tipSlopeOf(p1);
   const c1 = Math.cos(q1), sn1 = Math.sin(q1);
   const a2 = q1 + s1 + q2, c2 = Math.cos(a2), sn2 = Math.sin(a2);
-  const ex = c1 * armP.L1 - sn1 * bendAt(p1, armP.L1, piv1);
-  const ey = sn1 * armP.L1 + c1 * bendAt(p1, armP.L1, piv1);
+  const ex = c1 * AR.L1 - sn1 * bendAt(p1, AR.L1, piv1);
+  const ey = sn1 * AR.L1 + c1 * bendAt(p1, AR.L1, piv1);
   g.strokeStyle = '#94a3b8'; g.lineWidth = 4; g.beginPath();
   for (let i = 0; i <= 20; i++) {
-    const bx = (i / 20) * armP.L1, by = bendAt(p1, bx, piv1);
+    const bx = (i / 20) * AR.L1, by = bendAt(p1, bx, piv1);
     g.lineTo(X(c1 * bx - sn1 * by), Y(sn1 * bx + c1 * by));
   }
   g.stroke();
   g.beginPath();
   let dtx = ex, dty = ey;
   for (let i = 0; i <= 20; i++) {
-    const bx = (i / 20) * armP.L2, by = bendAt(p2, bx, piv2);
+    const bx = (i / 20) * AR.L2, by = bendAt(p2, bx, piv2);
     dtx = ex + c2 * bx - sn2 * by; dty = ey + sn2 * bx + c2 * by;
     g.lineTo(X(dtx), Y(dty));
   }
@@ -7904,25 +8058,32 @@ function drawP() {
   // measured off the drawing rather than restated from the model, which is the mistake
   // that let a 1.44x disagreement survive on the Chain tab. Nothing here is magnified, so
   // this is an identity and its tolerance is machine precision rather than a percentage.
-  lastGeomP = { drawn: [dtx, dty], truth: armP.toolXY(), elbow: [ex, ey] };
+  lastGeomP = { drawn: [dtx, dty], truth: AR.toolXY(), elbow: [ex, ey] };
   g.fillStyle = '#64748b';
   g.beginPath(); g.arc(X(0), Y(0), 6, 0, 7); g.fill();
   g.beginPath(); g.arc(X(ex), Y(ey), 4, 0, 7); g.fill();
 
   // The tool, and where the program says it should be right now. The GAP between them
   // is the lag, drawn at true size -- it is not a defect and it is not exaggerated.
-  const tool = armP.toolXY();
-  const cmd = profP.at(kP);
-  g.strokeStyle = '#22d3ee'; g.lineWidth = 1.5;
-  g.beginPath(); g.arc(X(cmd.x), Y(cmd.y), 5, 0, 7); g.stroke();
-  g.fillStyle = '#fbbf24';
+  const tool = AR.toolXY();
+  if (!commissioning) {
+    const cmd = profP.at(kP);
+    g.strokeStyle = '#22d3ee'; g.lineWidth = 1.5;
+    g.beginPath(); g.arc(X(cmd.x), Y(cmd.y), 5, 0, 7); g.stroke();
+  }
+  g.fillStyle = commissioning ? '#22c55e' : '#fbbf24';
   g.beginPath(); g.arc(X(tool[0]), Y(tool[1]), 4.5, 0, 7); g.fill();
 
   // ALONG THE BOTTOM, because the two badges own the top corners and a legend that
   // overlaps one of them is a legend nobody can read.
   g.font = '10px ui-monospace, monospace';
   g.fillStyle = '#64748b';
-  g.fillText(`program (dashed) · tool ● · commanded ○ · contour error ×${mag}`, 12, h - 8);
+  // SHORT ENOUGH TO FIT. The first version ran off the right edge of a 412px phone and
+  // ended mid-word, which is a legend nobody can read — the same fault the comment above
+  // records for the badges, one line down.
+  g.fillText(commissioning
+    ? 'COMMISSIONING \u2014 the ladder\u2019s own machine, not the program'
+    : `program (dashed) · tool ● · commanded ○ · contour error ×${mag}`, 12, h - 8);
 }
 
 /** The same least squares over the last few cells that link.js and tipError() use. */
@@ -8667,7 +8828,14 @@ window.__flxPathDbg = () => (armP ? {
     gain: autoRep ? autoRep.gain : null,
     panel: $('autoRow').style.display !== 'none',
     starved: autoP && autoP.auto ? autoP.auto.starved() : null,
-    range: autoP && autoP.auto ? autoP.auto.range() : null },
+    range: autoP && autoP.auto ? autoP.auto.range() : null,
+    // THE COST, IN THE UNIT AN OWNER PAYS — in the dump so a phone report can be a paste
+    // rather than a description (rule 28), and so the grade travels with the numbers it
+    // produced rather than being remembered separately.
+    grade: autoGrade, scanMs: plcScanMs(),
+    cost: autoP && autoP.samples ? autoP.samples() : null,
+    armed: autoP && autoP.auto && autoRep ? autoP.auto.armed() : null,
+    plc: autoP && autoP.auto && autoRep ? autoP.auto.cost() : null },
   // ⑩'s live state: the fitted parameters (null before commissioning), what the artifact
   // was compiled for, whether its row is visible, and whether the mode would act — the
   // gate check needs `mode` to read 'open' when ⑩ is selected uncompiled.
@@ -8719,6 +8887,11 @@ window.__flxPathDbg = () => (armP ? {
   sweep: sweepP ? { i: sweepP.i, phase: sweepP.phase, left: sweepP.left } : null,
   board: sweepRows,
   tool: armP.toolXY(), cmd: profP.at(kP),
+  // THE POSE THE STAGE IS ACTUALLY DRAWING, which during a commissioning is the LADDER's
+  // machine and not this tab's. Reported so "the arm moves while it commissions" is a
+  // number that can be checked rather than an impression of a picture (rule 23).
+  drawnPose: (() => { const A = liveArmP(); return A ? { q: [A.q[0], A.q[1]],
+    tool: A.toolXY(), live: !!(autoComm && autoLiveArm) } : null; })(),
   geom: lastGeomP ? { ...lastGeomP,
     gap: Math.hypot(lastGeomP.drawn[0] - lastGeomP.truth[0],
       lastGeomP.drawn[1] - lastGeomP.truth[1]) } : null,

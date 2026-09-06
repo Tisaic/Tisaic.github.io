@@ -3752,6 +3752,91 @@ await fx.click('.tab[data-tab="deploy"]');
     + 'view rather than being clipped off the edge',
     strip.over && strip.lastVisible, JSON.stringify(strip));
 
+  // ---- THE ARM ON SCREEN MUST BE THE ARM THAT IS MOVING.
+  //
+  // The ladder does not drive the tab's arm — it builds its own and turns THAT — so for the
+  // whole commissioning the stage drew a machine standing still while the numbers came from
+  // one running out of sight. Nothing errored and nothing was blank; the picture was of the
+  // wrong machine, which is this project's commonest defect class and is exactly what a
+  // wiring check that only asks "is a canvas painted?" cannot see.
+  //
+  // BOTH HALVES (rule 9): before a commissioning the stage follows this tab's arm and is NOT
+  // flagged live; during one it follows the ladder's and MOVES. A check on the second alone
+  // would pass on a stage that always claimed to be live.
+  {
+    const idle = await fx.evaluate(() => window.__flxPathDbg().drawnPose);
+    check('flexisim/deploy: with nothing commissioning, the stage draws this tab’s own arm',
+      idle && idle.live === false && Array.isArray(idle.q), JSON.stringify(idle));
+
+    // The fastest installation there is: demo grade, no demo banks. This is a WIRING check,
+    // so it is stopped as soon as the machine is demonstrably turning — the score a full
+    // commissioning would produce belongs in Node where the plant is stated.
+    await fx.evaluate(() => {
+      const set = (id, v) => { const e = document.getElementById(id);
+        if (e.type === 'checkbox') e.checked = v; else e.value = v;
+        e.dispatchEvent(new Event('input', { bubbles: true })); };
+      set('dep-grade', 'demo'); set('dep-demo', false);
+    });
+    await fx.click('#dep-run');
+    await fx.waitForFunction(() => {
+      const d = window.__flxPathDbg();
+      return (d && d.drawnPose && d.drawnPose.live)
+        || /halted:|failed/.test(document.getElementById('stateP-badge').textContent);
+    }, null, { timeout: 300000 });
+    const badge0 = await fx.evaluate(() => document.getElementById('stateP-badge').textContent);
+    check('flexisim/deploy: pressing Commission reaches a running machine rather than halting',
+      !/^halted:|failed/.test(badge0), badge0);
+
+    const poses = [];
+    for (let i = 0; i < 6; i++) {
+      await fx.waitForTimeout(700);
+      poses.push(await fx.evaluate(() => window.__flxPathDbg().drawnPose.q));
+    }
+    let moved = 0, biggest = 0;
+    for (let i = 1; i < poses.length; i++) {
+      const d = Math.hypot(poses[i][0] - poses[i - 1][0], poses[i][1] - poses[i - 1][1]);
+      if (d > 1e-9) moved++;
+      biggest = Math.max(biggest, d);
+    }
+    console.log(`  flexisim/deploy: ${moved}/${poses.length - 1} pose samples changed, `
+      + `largest step ${biggest.toExponential(2)} rad`);
+    check('flexisim/deploy: …and the stage FOLLOWS it — the drawn pose moves while it '
+      + 'commissions, which a stage pointed at the idle tab arm could not do',
+      moved >= poses.length - 2 && biggest > 1e-4,
+      `${moved} of ${poses.length - 1} moved, largest ${biggest}`);
+
+    // THE COST IS IN THE UNIT AN OWNER PAYS, and it must be a real reading rather than a
+    // zero rendered as a time: "not measured" and "exactly zero" are different states.
+    const cost = await fx.evaluate(() => {
+      const d = window.__flxPathDbg();
+      return { txt: document.getElementById('dep-cost').textContent,
+        grade: d.drawnPose ? document.getElementById('dep-grade').value : null };
+    });
+    // `__flxPathDbg().auto` IS THE LADDER; `__flxDbg().auto` is ①-Move's auto-tune sequence
+    // and is null here. Two dumps, one key name — read the wrong one and you get a null that
+    // looks like "the ladder reported nothing" rather than "you asked the wrong object".
+    const dump = await fx.evaluate(() => window.__flxPathDbg().auto);
+    check('flexisim/deploy: the machine-time record reads a real cost and names its grade',
+      /machine time/.test(cost.txt) && /demo/.test(cost.txt)
+      && !!dump.cost && dump.cost.samples > 1000 && dump.grade === 'demo',
+      `${JSON.stringify(dump.cost)} grade ${dump.grade}; ${cost.txt.slice(0, 120)}`);
+
+    await fx.screenshot({ path: join(SHOTS, '11-flexisim-commissioning.png') });
+
+    // STOP IS THE WAY OUT OF A LONG MEASUREMENT, and pressing it is the only thing that
+    // exercises the abort path — a throw out of the yield point that unwinds the host's
+    // `finally` and destroys the lattices, rather than a flag nothing reads.
+    await fx.click('#dep-run');
+    await fx.waitForFunction(() => !window.__flxPathDbg().drawnPose.live, null, { timeout: 120000 });
+    const after = await fx.evaluate(() => ({
+      pose: window.__flxPathDbg().drawnPose,
+      badge: document.getElementById('stateD-badge').textContent,
+      btn: document.getElementById('dep-run').textContent }));
+    check('flexisim/deploy: Stop ends it, the stage goes back to this tab’s arm, and the '
+      + 'button offers to commission again',
+      after.pose.live === false && /Commission/.test(after.btn), JSON.stringify(after));
+  }
+
   const depOv = await fx.evaluate(() => ({
     doc: document.documentElement.scrollWidth, win: window.innerWidth }));
   check('flexisim/deploy: …and the tab does not scroll sideways on a phone',
