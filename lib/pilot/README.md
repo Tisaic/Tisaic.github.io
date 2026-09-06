@@ -20,7 +20,8 @@ transfers to a program it has never run, and one addressed by POSITION IN A LAP 
 | `excite.js`, `banks.js`, `refine.js` | Excitation design, corner banks, refinement. | — |
 | `autostack.js` | **One button.** Commissions the ladder, scores every rung on the machine, ships the best prefix. | — |
 
-`distil.js` is not yet a rung of `autostack.js`, so the one press does not reach it.
+`distil.js` is rung ②d of `autostack.js`, reached by the one press where the host supplies
+`distilRuns()`; a host without one gets a stated skip.
 
 ## `pilot.js` in detail
 

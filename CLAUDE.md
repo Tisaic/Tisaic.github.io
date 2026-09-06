@@ -688,8 +688,24 @@ the APPLIED CORRECTION rather than the weights: this design is collinear by cons
 fits differ by **12% in weight space while agreeing to 0.0009% rms in what reaches the machine**,
 and asserting on weights would have read as the failure of a fit that is exact where it counts.
 
-**WHAT IS NOT DONE:** the block is not yet wired into `AutoStack` as a rung, so the one press does
-not reach it; the offsets are
+**AND THE ONE PRESS NOW REACHES IT.** `AutoStack` rung ②d converges a lap-periodic correction on
+several training runs the host supplies (`host.distilRuns()`), regresses them through the shipped
+module, scores the result on the machine like every rung, and reverts if it does not win. It sits
+after the cascade and BEFORE the lap-periodic rung — a phase-indexed correction applied to a
+machine the rungs above have moved is the 0.71x failure — and unlike that rung it is NOT withheld
+off its program, because it is addressed by the commanded reference and transfers by construction.
+A host without `distilRuns` gets a STATED skip; a training run the rung could not improve is
+DROPPED and the drop reported, because that is a machine failing to track rather than a lesson,
+and if every run drops the report says the diet is the fault. Deployment runs through the host's
+OWN look-ahead closure, the same `ctx.look` the cascade uses, so no new deploy-time plumbing
+exists. That split the row builder in two: the absolute form clamps its window at a record's
+start, which is right for an index into a finite record and WRONG for a live reader where a
+negative offset is an ordinary request for the past — both are pinned, INCLUDING the boundary
+where they must disagree, since if they agree there the absolute form is not clamping at all.
+`autostack.test.mjs` on EMPS is unchanged at 20.2x with the rung registered and skipped, which is
+the control.
+
+**WHAT IS NOT DONE:** the offsets are
 indexed in SAMPLES, so it is not feedrate-invariant — training across a FEED LADDER removes the
 danger entirely (half-feed 0.75x -> 2.58x, nothing below the pilot) at the price of 2.3x at the
 commissioning feed, while both modelling escapes are built and worse than doing neither (speed
