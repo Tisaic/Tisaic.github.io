@@ -59,6 +59,22 @@ component that is guaranteed not to survive a change of program, and the parts t
 transfer are the ones that score less. That is not a bug to fix in the table; it is the
 shape of the whole design, and it is what has to change.
 
+**IT NEEDS AN INSTRUMENT THE CUSTOMER PROBABLY DOES NOT OWN, AND THIS FILE HAS NEVER SAID SO.**
+Every number in this project is obtained with GROUND-TRUTH TOOL POSITION available during
+commissioning. On a real machine that is a laser tracker, a ballbar or an instrumented artefact
+— a metrology service, machine downtime, and usually a specialist. The tracker being
+commissioning-only is a real and hard-won property and it is NOT the same as not needing one.
+"Wire it up, press one button" assumes an instrument most shops do not have, and that assumption
+decides who can buy this more than any factor in the table above does. Two consequences follow
+and neither is measured: what the method delivers from a CHEAPER truth (motor-side encoders
+alone, an accelerometer, a touch probe on a cut part), and how it degrades as that truth gets
+worse. Until one of those is measured, the commissioning-cost claim is stated at the wrong price.
+
+**AND COMPUTE TIME IS NOT COMMISSIONING TIME.** The "2 minutes on the arm" is wall clock for the
+ladder. The distillation route needs iteration converged on about six training programs, which is
+laps on real hardware producing nothing. A number that counts only the arithmetic is measuring
+the half that is free.
+
 **Anything the commissioning did not see, breaks it.** Change the feedrate, the plant or the
 path and the machine degrades — not gracefully, catastrophically. The evidence is already in
 this file and was written down as a success: the composite measures 4.9x to 20.3x across five
