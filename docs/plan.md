@@ -9955,8 +9955,27 @@ mixture, and the extra it captures is the half that does not transfer. Its uPk i
 on two programs of three where the linear basis is at the clamp on one, so it is also asking
 for a LARGER correction — a bigger, better-fitted, worse-aimed one.
 
-**AND IT PREDICTS SOMETHING THAT HAS NOT BEEN MEASURED (rule 59).** If the mixture account is
-right, the transferable component should be recoverable by fitting the EARLY passes'
-increments rather than the converged total — pass 1's `du` alone, or a weighted sum that
-decays with pass index — and the optimum in pass count should then disappear rather than
-merely move. That is one run and it would falsify or confirm the whole account.
+**AND ITS OWN PREDICTION WAS RUN AND CAME BACK HALF WRONG, WHICH IS THE USEFUL OUTCOME.** The
+account said: if the converged prefix is a mixture and the lap-specific half is what iteration
+reaches LAST, then down-weighting the late increments should isolate the transferable half and
+make the pass-count optimum DISAPPEAR. Nine passes with the increments decayed 0.55 per pass,
+the machine still running the true accumulated prefix and only the TARGET weighted:
+
+```
+  target                              sharp   rounded   circle    geo
+  5 passes                            5.52x    4.25x    7.07x    5.49x
+  9 passes, unweighted                3.06x    4.15x    6.19x    4.29x
+  9 passes, late increments x0.55     4.45x    3.69x    5.84x    4.58x
+```
+
+**It recovers a third of what the extra passes cost (+7%) and does not reach five passes, and
+it TRADES rather than lifting** — sharp +45%, rounded −11%. So the direction is right and the
+separability is wrong: **the late passes do not merely ADD a memory term on top of a fixed
+transferable one, they REDISTRIBUTE the whole correction**, because each pass is inverting a
+residual the previous passes changed. A mixture indexed by pass number would have been
+separable by a weight; this one is not.
+
+What survives is the ordering — earlier increments transfer better than later ones — and what
+dies is the arithmetic that would have let a shipped version simply discount them. The
+pass-count optimum is a real knob that must be chosen ON THE MACHINE, like everything else in
+this section.
