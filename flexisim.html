@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:1060,built:"2026-09-06T19:29:25Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:1061,built:"2026-09-06T19:34:57Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -7406,6 +7406,15 @@ function depSync(fromCommission = false) {
   $('dep-cost').innerHTML = depCostHTML();
   $('dep-plc').innerHTML = depPlcHTML();
   $('dep-score').innerHTML = depScoreHTML();
+  // AN EMPTY REPORT SHOULD TAKE NO ROOM. Before a commissioning the rung table and the two
+  // progress lines have nothing in them, and their margins left a hand's width of blank
+  // between the button and the section below — which reads as something that failed to
+  // render rather than as something that has not happened yet. `hidden` is safe here
+  // precisely because no class rule sets `display` on `.hint` (rule 52 is about the case
+  // where one does); `.controls > .hint` sets `flex`, which `display:none` overrides.
+  for (const id of ['dep-table', 'dep-prog', 'dep-cost']) {
+    $(id).hidden = !$(id).innerHTML.trim();
+  }
   $('dep-badge').textContent = autoComm ? 'commissioning…'
     : autoRep ? `shipped ${autoRep.gain.toFixed(2)}× — ${Object.entries(autoP.auto.armed())
       .filter(([, v]) => v.on).map(([k]) => k).join(' + ') || 'nothing armed'}`

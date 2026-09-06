@@ -3725,6 +3725,16 @@ await fx.click('.tab[data-tab="deploy"]');
     + 'rendering blank', plc.plc > 20 && plc.score > 20 && /not commissioned/.test(plc.badge),
     JSON.stringify(plc));
 
+  // AN EMPTY REPORT TAKES NO ROOM. Before a commissioning the rung table and the two
+  // progress lines have nothing in them, and their margins left a hand's width of blank
+  // between the button and the section below — which reads as something that failed to
+  // render rather than as something that has not happened yet. Asserted as GEOMETRY (rule
+  // 5), because "the element is hidden" is satisfied by an element that is still laid out.
+  const gap = await fx.evaluate(() => ['dep-table', 'dep-prog', 'dep-cost']
+    .map((id) => ({ id, h: Math.round(document.getElementById(id).getBoundingClientRect().height) })));
+  check('flexisim/deploy: the empty report blocks occupy no height before a commissioning',
+    gap.every((x) => x.h === 0), JSON.stringify(gap));
+
   // THE TAB STRIP CARRIES ITS OWN OVERFLOW AND THE PAGE DOES NOT. Seven tabs do not fit a
   // 412px phone, so the strip scrolls — and the check that matters is that the LAST tab is
   // reachable rather than clipped off the edge, which is what it looked like before: no
