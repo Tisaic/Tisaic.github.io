@@ -530,7 +530,11 @@ for (const mode of MODES) {
   const MAXL = (mode === 'cmd' || mode === 'rel' || mode === 'rich' || mode === 'diff'
     || mode === 'expo' || mode === 'quad' || mode === 'sched' || mode === 'arc')
     ? 0 : MLAGS[MLAGS.length - 1];
-  let W = null, fitR2 = [NaN, NaN], nF = 0, lastX = null, lastY = null;
+  // HOISTED, because the per-band and ridge-ladder blocks below run AFTER the DAGGER round loop
+  // and need the rows the last round built. `spans` was left inside the loop when the band block
+  // was added and threw on first use — the same scope fault as `TFEEDS`, and the third this
+  // session, which is why every one of these is now declared beside the thing that reads it.
+  let W = null, fitR2 = [NaN, NaN], nF = 0, lastX = null, lastY = null, lastSpans = null;
   // DAGGER: refit on the states the POLICY itself visits. A behaviour-cloned policy is fitted
   // on one distribution and then generates its own, and the gap between them is the whole
   // reason cloning diverges; each round records the policy's own states and re-labels them
@@ -577,6 +581,7 @@ for (const mode of MODES) {
         r2(X.map((r) => r.reduce((a, v, j) => a + v * W[c][j], 0)), Y[c]));
       if (round === DAGGER) console.log(`  ensemble: ${sets.length} per-program maps averaged `
         + `into one vector of ${nF} — deployed cost is a single map's`);
+      lastX = X; lastY = Y; lastSpans = spans;
       break;
     }
     // PER CHANNEL, because the two channels are not the same problem here: held out, the
@@ -616,7 +621,7 @@ for (const mode of MODES) {
         + `${sets.length} folds)`);
     }
     W = [solveRidge(X, Y[0], ridge[0]), solveRidge(X, Y[1], ridge[1])];
-    lastX = X; lastY = Y;
+    lastX = X; lastY = Y; lastSpans = spans;
     fitR2 = [0, 1].map((c) => r2(X.map((r) => r.reduce((a, v, j) => a + v * W[c][j], 0)), Y[c]));
     if (round === DAGGER) break;
     for (const st of sets) {
@@ -641,10 +646,10 @@ for (const mode of MODES) {
       const f = sets[g].path.feed;
       if (!byFeed.has(f)) byFeed.set(f, { X: [], Y: [[], []] });
       const bk = byFeed.get(f);
-      for (let j = 0; j < spans[g]; j++) {
-        bk.X.push(X[at + j]); bk.Y[0].push(Y[0][at + j]); bk.Y[1].push(Y[1][at + j]);
+      for (let j = 0; j < lastSpans[g]; j++) {
+        bk.X.push(lastX[at + j]); bk.Y[0].push(lastY[0][at + j]); bk.Y[1].push(lastY[1][at + j]);
       }
-      at += spans[g];
+      at += lastSpans[g];
     }
     BANK = [...byFeed.entries()].map(([f, bk]) => ({ feed: f, n: bk.X.length,
       W: [solveRidge(bk.X, bk.Y[0], RIDGE), solveRidge(bk.X, bk.Y[1], RIDGE)] }))
