@@ -9871,6 +9871,31 @@ pilot at twice the feed — and falls off a cliff downward, below 1.0x at half t
 programs. So the honest statement is that this component is feedrate-TOLERANT above its
 commissioning feed and feedrate-DANGEROUS below it.
 
+**AND TRAINING ACROSS THE FEED LADDER CONFIRMS THE CONFOUND AND PRICES IT.** The same
+scale-matched polygons at three feeds (0.5x, 1x, 2x), one map, scored on the sharp square:
+
+```
+  feed              single-feed diet   feed-ladder diet   pilot
+  2.0e-3 (0.5x)          0.75x              2.58x         2.18x
+  4.0e-3 (fitted)        5.52x              2.43x         2.15x
+  6.0e-3 (1.5x)          2.75x              3.11x         1.78x
+  8.0e-3 (2x)            1.81x              3.05x         1.66x
+  geometric over span     2.13x              2.78x
+```
+
+**The dangerous cell is gone — every feed now beats the pilot and none is below 1.0x — and the
+commissioning feed gives up 2.3x to buy it.** Target 2 asks for degradation bounded at 1.5x of
+a per-feed commission, so 5.52x against 2.43x still misses; what has changed is the KIND of
+miss, from "worse than doing nothing at half the feed" to "uniformly mediocre and never
+harmful". The fit says the same thing (0.974/0.921 -> 0.911/0.908): one linear map is
+AVERAGING three feeds rather than representing them.
+
+**WHICH NAMES THE REPAIR PRECISELY.** Not arc-length indexing — a sample window is the right
+object for a time-invariant plant — but SCHEDULING on commanded speed, so the map may use
+different weights per feed instead of one compromise set. That is the same licence the corner
+router needed for its two regimes ("the state was always in the row, the licence to use
+different weights per regime is what was missing"), arriving in a second variable.
+
 **AND THE ASYMMETRY NAMES THE REPAIR.** At a lower feed the same sample offset spans LESS arc,
 so the window sees a compressed version of the geometry it learned while the plant's own error
 is smaller and slower — a correction shaped for faster motion applied to a machine that is not
