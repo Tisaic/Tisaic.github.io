@@ -10106,3 +10106,43 @@ What survives is the ordering — earlier increments transfer better than later 
 dies is the arithmetic that would have let a shipped version simply discount them. The
 pass-count optimum is a real knob that must be chosen ON THE MACHINE, like everything else in
 this section.
+
+### WHERE §49 STOPS, AND THE ONE THING IT DID NOT BUILD
+
+Every lever this section had a MEASURED reason to try has been tried. What closed:
+
+```
+  route                              outcome
+  forecast improvement               retired by §48's oracle before I started (20%)
+  output-error / Steiglitz-McBride   inert — unstable at iteration 1 on all 24 orders
+  pose-scheduled LPV simulators      +0.045 over its own shuffled control
+  f0 as the regressor                worse than the command window at every ridge
+  exponential kernel bank            better fit, worse machine
+  quadratic basis                    best fit in the section, 2.41x — below the pilot
+  speed-scheduled basis              worst row in the section, 0.56x at 2x feed
+  arc-length indexing                worse at EVERY feed including its own
+  measured signals + DAGGER          divergence cured, and then worth nothing
+  averaging per-program maps         negative R^2 — not perturbations of a common vector
+  weighting the passes               recovers a third, and trades
+  the ridge, on the machine          optimum already where it was; heavier is catastrophic
+  raising the authority cap          +3%, then byte-identical — it self-limits
+```
+
+**THE ONE COMPOSITION LEFT UNBUILT, AND WHY.** `stack.js`'s own pattern: commission a pilot
+layer ON TOP of the distilled policy, frozen, so the layer models what the distillation left.
+That is genuinely untried and it is not what failed earlier — the `distilled + pilot` column
+throughout this section is an UNCOMMISSIONED pilot double-correcting (0.87x-1.30x), which is
+mode ⑧'s fault, not a cascade. It is left unbuilt because it needs `commissionArm` to run with
+a policy deployed, which is a real change to the shared rig rather than a harness option, and
+because the section's own record says to expect a layer commissioned on a residual that is
+already 8x down to refuse: `stack.js` ends a stack exactly there, and on this arm layer 3
+refused at 0.95x against a far easier residual.
+
+**AND THE HONEST BOUND ON THE DIRECTIVE.** 20x on the sharp square is above what per-program
+ITERATION converges to there (19.47x with a perfect forecast), so no method that transfers can
+reach it on that program — the memory's own ceiling is the obstacle, not the model. On the
+rounded rectangle (40.44x) and the circle (230.89x) the headroom is real and the distillation
+now captures 22% and 7% of it. That is where a further factor has to come from, and this
+section's twelve rows say it will not come from capacity, from regularisation, from
+reparameterisation, or from trying to isolate the transferable component — it has to come from
+a mechanism none of those four describes.
