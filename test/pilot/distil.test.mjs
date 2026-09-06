@@ -131,6 +131,25 @@ check('…fading through a partial value rather than switching', shrunk,
   `${half.map((v) => v.toExponential(2))} against ${ref0.map((v) => v.toExponential(2))}`);
 console.log(`    trained speed span ${lo.toFixed(4)} … ${hi.toFixed(4)}, fade over ${p.coverageFade * 100}% beyond`);
 
+// ---- 5b. THE TWO READERS, AND THE PLACE THEY MUST DISAGREE (rule 9)
+// `act` indexes a finite record and clamps the window at its start; `actLook` is driven by a
+// host's look-ahead closure, where a negative offset is an ordinary request for the past and
+// clamping it would silently feed the row the present instead. Away from the boundary they must
+// agree exactly — same arithmetic — and at the boundary they must NOT, or the clamp is not doing
+// the job the absolute form needs it for.
+const look = (k) => (o) => refAt(k + o);
+let readerGap = 0;
+for (let k = 800; k < N - 800; k += 53) {
+  const a = p.act(refAt, k, speedAt(k)), b = p.actLook(look(k), speedAt(k));
+  for (let c = 0; c < 2; c++) readerGap = Math.max(readerGap, Math.abs(a[c] - b[c]));
+}
+check('away from a record boundary the two readers agree exactly', readerGap < 1e-12,
+  `worst ${readerGap.toExponential(2)}`);
+const nearA = p.act(refAt, 3, speedAt(3)), nearB = p.actLook(look(3), speedAt(3));
+check('…and at the boundary they differ, because only one of them may clamp',
+  nearA.some((v, c) => Math.abs(v - nearB[c]) > 1e-12),
+  'if these agree the absolute form is not clamping and its window reads off the record');
+
 // ---- 6. THE STREAMING FIT — whether "nothing offline" is true or false
 // Batch ridge stores every row and ends in a Cholesky, which is an offline algorithm; requiring
 // it on the PLC kills the product claim outright. The streaming path is one shared-covariance
@@ -173,6 +192,86 @@ const hand = nF * 2 + (2 * (OFFS.length - 1) + 2 * 2 * SOFF.length);
 check('cost() is the arithmetic the block performs, hand-counted', mac === hand, `${mac} against ${hand}`);
 check('…and it fits 10% of a 1 ms scan', mac < 10000, `${mac} MAC/decision`);
 console.log(`    ${mac} MAC/decision for ${p.channels} channels — ${(mac / 100).toFixed(1)}% of budget`);
+
+// ---- 8. THE RUNG IS REACHABLE FROM THE ONE PRESS (plan §§49-50)
+// The block existed and `autostack.js` could not get to it, so the one press did not reach it —
+// which meant a validated component and not a product. This is a WIRING check on a synthetic
+// plant, deliberately: the performance claim is carried by §50 on the EMPS axis, and this
+// project has already paid once for asserting performance in the wrong harness. What only this
+// can break is whether the rung runs, deploys and CONTRIBUTES THROUGH act().
+const { AutoStack } = await import('../../lib/pilot/autostack.js');
+const runLap2 = (corr, a) => {
+  let s = 0;
+  for (let k = 0; k < 900; k++) { const e = 0.01 * Math.sin(k * 0.01) - (corr ? corr.at(k)[0] : 0); s += e * e; }
+  return { score: Math.sqrt(s / 900), err: [new Float64Array(900)] };
+};
+
+// A plant whose error is an exact linear functional of the reference window, so a converged
+// lap-periodic correction exists and its distillation is representable.
+const LAP = 900;
+const pref = (k) => [Math.sin(2 * Math.PI * ((k % LAP) + LAP) % LAP / LAP)
+  + 0.3 * Math.sin(6 * Math.PI * (((k % LAP) + LAP) % LAP) / LAP)];
+const KERN = [[-9, 0.4], [-3, -0.7], [0, 1.0], [4, 0.5], [11, -0.3]];
+const trueErr = (k) => KERN.reduce((a, [o, w]) => a + w * pref(k + o)[0], 0) * 0.05;
+const runLap = (corr) => {
+  const e = new Float64Array(LAP);
+  let s = 0;
+  for (let k = 0; k < LAP; k++) {
+    e[k] = trueErr(k) - (corr ? corr.at(k)[0] : 0) - (auto.deployed.distil
+      ? auto.act({ look: (o) => pref(k + o) })[0] : 0);
+    s += e[k] * e[k];
+  }
+  return { score: Math.sqrt(s / LAP), err: [e] };
+};
+const auto = new AutoStack({
+  channels: [{ max: 10 }], uMax: 1, resolve: 1e-9,
+  distil: { offsets: [-16, -8, -4, -2, 0, 2, 4, 8, 16], signOffsets: [0], ridge: 1e-9 },
+});
+const host = {
+  run: async (corr) => runLap(corr),
+  distilRuns: () => [0, 1, 2].map((i) => {
+    const ph = 0.7 * i, amp = 1 + 0.25 * i;
+    const rf = (k) => [amp * Math.sin(2 * Math.PI * (((k % LAP) + LAP) % LAP) / LAP + ph)
+      + 0.3 * Math.sin(6 * Math.PI * (((k % LAP) + LAP) % LAP) / LAP)];
+    const te = (k) => KERN.reduce((a, [o, w]) => a + w * rf(k + o)[0], 0) * 0.05;
+    return { lap: LAP, refAt: rf,
+      run: async (corr) => {
+        const e = new Float64Array(LAP); let s = 0;
+        for (let k = 0; k < LAP; k++) { e[k] = te(k) - (corr ? corr.at(k)[0] : 0); s += e[k] * e[k]; }
+        return { score: Math.sqrt(s / LAP), err: [e] };
+      } };
+  }),
+};
+const arep = await auto.commission(host);
+const drow = arep.rungs.find((r) => r.name.startsWith('②d'));
+console.log(`    rung: ${drow ? drow.name : '(absent)'}`
+  + `${drow ? '  ' + drow.score.toExponential(3) : ''}`);
+// The training gains are astronomical BY CONSTRUCTION and are not a result: this plant's error
+// is an exact linear functional of its own reference window, so the lap-periodic rung drives it
+// to numerical zero. That is what makes it a clean wiring substrate and what disqualifies it as
+// a performance claim — §50 carries that, on a real axis.
+console.log(`    training gains ${arep.distil && arep.distil.runs
+  ? arep.distil.runs.map((c) => c.gain.toExponential(1)).join(' ') : '(no runs)'}`
+  + ` (exactly representable by construction — a wiring substrate, not a measurement)`
+  + `   deployed ${auto.deployed.distil}`);
+check('the distilled rung is REACHED by commission() and produces a row',
+  !!drow, JSON.stringify(arep.rungs.map((r) => r.name)));
+check('…having actually converged its training runs rather than dropping them',
+  arep.distil && arep.distil.runs && arep.distil.runs.every((c) => !c.dropped),
+  JSON.stringify(arep.distil && arep.distil.runs));
+check('…and it DEPLOYS on a plant whose error its window can represent',
+  auto.deployed.distil === true, drow ? drow.note : '');
+check('…and contributes through act() on the host\'s own look-ahead closure, which is what a '
+  + 'rung that is armed but never reached would not',
+  Math.abs(auto.act({ look: (o) => pref(500 + o) })[0]) > 1e-6,
+  `${auto.act({ look: (o) => pref(500 + o) })[0]}`);
+check('…and a host WITHOUT distilRuns gets a stated skip rather than a silent one (rule 25)',
+  await (async () => {
+    const a2 = new AutoStack({ channels: [{ max: 10 }], uMax: 1, resolve: 1e-9,
+      distil: { offsets: [-4, 0, 4], signOffsets: [0] } });
+    const r2 = await a2.commission({ run: async (corr) => runLap2(corr, a2) });
+    return !!(r2.distil && r2.distil.note);
+  })(), 'a requested rung that vanishes without a word is the failure this guards');
 
 console.log(failed ? `\ndistil: ${failed} check(s) FAILED\n` : '\ndistil: all checks passed\n');
 process.exit(failed ? 1 : 0);
