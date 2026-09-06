@@ -68,7 +68,17 @@ commissioning-only is a real and hard-won property and it is NOT the same as not
 decides who can buy this more than any factor in the table above does. Two consequences follow
 and neither is measured: what the method delivers from a CHEAPER truth (motor-side encoders
 alone, an accelerometer, a touch probe on a cut part), and how it degrades as that truth gets
-worse. Until one of those is measured, the commissioning-cost claim is stated at the wrong price.
+worse. **THE FIRST HALF IS NOW PARTLY MEASURED AND THE INSTRUMENT IS NOT TRUSTED YET (plan §50.1).**
+Degrading the tracker reading — noise on the tool, score left on perfect metrology — costs about
+**2x of the delivered result at every level tried**, including sigma 1e-3, which is 0.1% of the
+error being measured. But the ladder is NON-MONOTONE (1.54x at 1e-3 against 2.13x at 3e-2), more
+noise reading better is not physical, and the specific hypothesis for it is FALSIFIED: averaging
+four laps of the oracle's re-measurement, which halves the noise entering it, moves the result
+-1%, with the one-lap control reproducing the original to every digit. Each row is ONE noise draw
+on three programs and this method's draw spread is already on record as large enough to reverse
+orderings, so the shape is probably draw noise and the table cannot support one. `ARM_TOOL_SEED`
+exists for the seed spread and it has not been run. Until one of those is measured, the
+commissioning-cost claim is stated at the wrong price.
 
 **AND COMPUTE TIME IS NOT COMMISSIONING TIME.** The "2 minutes on the arm" is wall clock for the
 ladder. The distillation route needs iteration converged on about six training programs, which is

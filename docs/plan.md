@@ -10395,3 +10395,54 @@ which is what the coverage guard requires and not an accident. A trajectory outs
 is a different measurement and the guard would fade the correction there rather than extrapolate.
 Four trajectories, one axis; and the distillation still trains on tables that iteration had to
 converge first, so the machine time §49 charges is unchanged.
+
+### §50.1 THE METROLOGY LADDER: A FALSIFIED HYPOTHESIS, AND WHY THE LADDER STILL MEANS NOTHING
+
+Every number in this project is taken with an exact tracker. `ARM_TOOL_NOISE` puts additive
+Gaussian error on the tool READING before the inverse-Jacobian map — where a real instrument's
+error enters — and leaves the SCORE on perfect metrology, so the question is "how good a
+controller does a worse instrument buy" and not "does a worse instrument flatter its own report".
+Wired the other way it would measure the instrument and read as a result (rule 17).
+
+```
+  sigma (tool units)   rounded  circle  sharp    geo
+  0                      3.36    4.90   3.00    3.67
+  1e-3                   1.64    1.60   1.38    1.54
+  1e-2                   1.53    2.69   1.69    1.91
+  3e-2                   2.00    2.55   1.89    2.13
+```
+
+Open-loop baselines are byte-identical across all four, so the score is clean. But the ladder is
+**NON-MONOTONE IN THE WRONG DIRECTION** — more noise reading better is not physical — so rule 14
+says look at the instrument before believing either end.
+
+**THE HYPOTHESIS WAS SPECIFIC AND IT IS FALSIFIED.** `or.e` is one lap of one free run, inverted
+directly, so instrument noise enters the oracle undiluted and compounds pass over pass instead of
+averaging out over the thousands of rows the regression sees. If that were the mechanism,
+averaging L laps should recover it as sqrt(L). Averaging FOUR laps at sigma 1e-3 moves the
+delivered result by **-1%**:
+
+```
+        rounded  circle  sharp    geo     fit R²
+  L=1     1.64    1.60    1.38    1.536   0.829 / 0.910
+  L=4     1.64    1.57    1.36    1.522   0.828 / 0.909
+```
+
+L=1 reproduces the original run to every digit, which is the control that makes the comparison
+readable. So the sensitivity is not in the oracle's re-measurement, and the remaining candidate is
+upstream of it: the noise also degrades the PILOT's commissioned model, since `routeSignals` feeds
+`pilot.observe` during commissioning, and that model produces the corrections in every pass. Not
+measured.
+
+**AND THE LADDER IS ONE DRAW PER SIGMA, WHICH IS PROBABLY THE WHOLE NON-MONOTONICITY.** Each row is
+a single noise realisation on three programs, and this method's draw-to-draw spread is already on
+record as large enough to reverse orderings (`spread.mjs`, and §49's own seed sensitivity). A
+ladder whose steps are single draws cannot support a shape. `ARM_TOOL_SEED` exists for exactly this
+and the seed spread has NOT been run — until it is, the only defensible statement from this table
+is that **an exact tracker is worth about 2x over a noisy one at every noise level tried**, and the
+ordering among the noisy rows is not evidence of anything.
+
+What this does establish, and it is the part that matters commercially: the method is not free of
+its instrument. Losing 2x of the delivered result for noise at 0.1% of the error being measured is
+a real cost, and pricing the commissioning claim needs the seed spread first and then a CHEAPER
+truth (motor-side encoders, an accelerometer, a probed part) rather than a degraded ideal one.
