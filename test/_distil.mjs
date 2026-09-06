@@ -747,8 +747,44 @@ for (const mode of MODES) {
           (Math.abs(Math.log(k.feed / f2)) < Math.abs(Math.log(best.feed / f2)) ? k : best));
         const db = await deployOn(pilot, sh, false, f2,
           { policy: mkPolicy(pick.W, buildRow, rf2) });
-        bandCol = `   band ${pick.feed.toExponential(1)} `
-          + `${(bb.o.r.totalRms / db.r.totalRms).toFixed(2).padStart(6)}x`;
+        bandCol = `   switch ${(bb.o.r.totalRms / db.r.totalRms).toFixed(2).padStart(6)}x`;
+        // BLENDED, WHICH IS FREE AT DEPLOY AND NOT THE SAME OBJECT AS THE SCHEDULE. The weight
+        // depends only on the COMMANDED feed, so the maps blend BEFORE the row does —
+        // sum_b w_b (W_b . row) = (sum_b w_b W_b) . row — and k maps collapse to one vector of
+        // the same length. 238 MAC, not 700, and the blend recomputes only when the feed does.
+        //
+        // It is not the failed `sched` basis: there ONE map got three times the DIRECTIONS and
+        // was fitted jointly across all feeds, so the extra directions could absorb each feed's
+        // lap structure. Here each W_b is fitted on its own band with no extra directions and
+        // the interpolation happens afterwards — the ensemble-versus-pooling distinction, in the
+        // feed variable.
+        //
+        // SHAPED, because this project has already paid for the unshaped version: the corner
+        // router's blend cost the circle 15-45% for a regime it is never in until a smoothstep
+        // went in. And STATED AS A RISK: blending IS averaging maps, and averaging maps is what
+        // produced negative R^2 in the per-program ensemble — a band fitted on too few programs
+        // is arbitrary in its null space and interpolating two such maps averages junk.
+        const lf = Math.log(f2);
+        let lo = BANK[0], hi = BANK[BANK.length - 1];
+        for (const k of BANK) {
+          if (Math.log(k.feed) <= lf && Math.log(k.feed) >= Math.log(lo.feed)) lo = k;
+        }
+        for (let i = BANK.length - 1; i >= 0; i--) {
+          if (Math.log(BANK[i].feed) >= lf && Math.log(BANK[i].feed) <= Math.log(hi.feed)) hi = BANK[i];
+        }
+        let t = lo === hi ? 0
+          : (lf - Math.log(lo.feed)) / (Math.log(hi.feed) - Math.log(lo.feed));
+        t = Math.min(1, Math.max(0, t));
+        t = t * t * (3 - 2 * t);                       // smoothstep, per the router's lesson
+        const Wb = [0, 1].map((c) => {
+          const v = new Float64Array(lo.W[c].length);
+          for (let j = 0; j < v.length; j++) v[j] = (1 - t) * lo.W[c][j] + t * hi.W[c][j];
+          return v;
+        });
+        const dbl = await deployOn(pilot, sh, false, f2,
+          { policy: mkPolicy(Wb, buildRow, rf2) });
+        bandCol += `   blend(${lo.feed.toExponential(1)}->${hi.feed.toExponential(1)} t${t.toFixed(2)}) `
+          + `${(bb.o.r.totalRms / dbl.r.totalRms).toFixed(2).padStart(6)}x`;
       }
       console.log(`    feed ${f2.toExponential(1)}  ${sh.padEnd(9)} `
         + `open ${bb.o.r.totalRms.toExponential(3)}  pilot `
