@@ -55,6 +55,17 @@ const FEED = +(process.env.D_FEED || 0.004);
 // PREDICTION with a sign; the point of the sweep is the SIZE rather than the direction.
 const TFEEDS = (process.env.D_TFEEDS || '').split(',').filter(Boolean).map(Number);
 const PASSES = +(process.env.D_PASSES || 4);
+// LAP-AVERAGED RE-MEASUREMENT, and it exists to check an INSTRUMENT rather than to improve a
+// score. The tracker-noise ladder read NON-MONOTONE — sigma 1e-3 delivering 1.54x and 3e-2
+// delivering 2.13x — and more noise reading better is not physical, so rule 14 says look at the
+// instrument before believing either end. The suspect is here: `or.e` is ONE lap of ONE free
+// run, inverted directly, so instrument noise enters the oracle undiluted and compounds pass
+// over pass instead of averaging out across the thousands of rows the regression sees. If that
+// is the mechanism, averaging L laps should recover the loss as ~sqrt(L); if it is not, the
+// ladder is telling us something about the method and not about the harness.
+//
+// At L = 1 this reads lap 2 of 3 exactly as before and every earlier number must reproduce.
+const ORAVG = Math.max(1, +(process.env.D_ORAVG || 1));
 const RIDGE = +(process.env.D_RIDGE || 1e-6);
 // A LADDER, SELECTED LEAVE-ONE-PROGRAM-OUT. The ridge is not a fit knob here, it is the
 // TRANSFER knob: `_gainfit.mjs` measured held-out R^2 running 0.811 / 0.924 / 0.580 / 0.204
@@ -266,9 +277,27 @@ for (const { name: TRAIN, path } of TRAINS) {
   let open = null, openC = null;
   for (let pass = 0; pass < PASSES; pass++) {
     const ftr = [];
-    const fr = await deployOn(pilot, path, false, FEED, { pre, trace: ftr });
+    const fr = await deployOn(pilot, path, false, FEED,
+      { pre, trace: ftr, ...(ORAVG > 1 ? { laps: 2 + ORAVG } : {}) });
     if (pass === 0) { open = fr.r.totalRms; openC = fr.r.contourRms; }
-    const or = { e: ftr.map((t) => t.e), lap: LAPS, off: 2 * LAPS };
+    let or;
+    if (ORAVG > 1) {
+      // Average laps 2 .. 2+L-1 at matching PHASE, so the averaged record is one lap long and
+      // is read from offset 0. Laps 0 and 1 stay excluded exactly as they are at L = 1.
+      const avg = [];
+      for (let k = 0; k < LAPS; k++) {
+        let a0 = 0, a1 = 0, n = 0;
+        for (let L = 0; L < ORAVG; L++) {
+          const t = ftr[(2 + L) * LAPS + k];
+          if (!t) continue;
+          a0 += t.e[0]; a1 += t.e[1]; n++;
+        }
+        avg.push(n ? [a0 / n, a1 / n] : [0, 0]);
+      }
+      or = { e: avg, lap: LAPS, off: 0 };
+    } else {
+      or = { e: ftr.map((t) => t.e), lap: LAPS, off: 2 * LAPS };
+    }
     const uOut = [new Float64Array(LAPK), new Float64Array(LAPK)];
     const r = await deployOn(pilot, path, true, FEED, { pre, oracle: or, preOut: uOut });
     let pk = 0;

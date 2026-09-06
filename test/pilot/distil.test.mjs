@@ -51,8 +51,16 @@ check('…and a straddling window is accepted', ok2, 'the other half — the gua
 // ---- 2. FIT AND DEPLOY BUILD THE SAME ROW
 const p = new DistilPolicy({ channels: 2, offsets: OFFS, signOffsets: SOFF, ridge: 1e-10, uMax: 10 });
 const nF = p.nFeatures;
-check('nFeatures matches the counted formula', nF === 2 + 2 * (OFFS.length - 1) + 2 * 2 * SOFF.length + 1,
-  `${nF}`);
+check('nFeatures matches the counted formula', nF === 2 * OFFS.length + 2 * 2 * SOFF.length + 1, `${nF}`);
+// THE REFERENCE DIMENSION IS NOT THE CHANNEL COUNT. This module shipped reading `q0[0], q0[1]`
+// literally while its direction block looped over `channels`, so it was silently wrong on any
+// plant that is not two-dimensional. A single-axis plant is the cheapest case that catches it.
+const one = new DistilPolicy({ channels: 1, refDim: 1, offsets: OFFS, signOffsets: SOFF });
+check('a single-axis plant gets a correctly sized row, not a two-axis one',
+  one.nFeatures === OFFS.length + 2 * SOFF.length + 1, `${one.nFeatures}`);
+check('…and its row is actually that long when built', 
+  one._row((k) => [Math.sin(k * 0.01)], 500, null).length === one.nFeatures,
+  `${one._row((k) => [Math.sin(k * 0.01)], 500, null).length} vs ${one.nFeatures}`);
 // a known linear functional of the deployed row, per channel
 const TRUE = [0, 1].map((c) => Float64Array.from({ length: nF }, (_, j) => Math.sin(j * 1.7 + c) * 0.01));
 const rowOf = (k) => p._row(refAt, k, null);
