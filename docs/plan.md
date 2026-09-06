@@ -9551,8 +9551,59 @@ which is a closed loop and a second experiment.
 Its sniffer needs no library change: `oracleF0`'s function form is specified so that a
 function returning `fitted` reproduces the un-oracled run to the last digit, so returning
 `fitted` and recording it is a byte-identical run that also hands out `f0` — and the harness
-asserts that identity against the 1e-4 floor §48 records for this port rather than assuming
-it. Its first version scored the recording run at 1.16x where the prefix alone reaches 40x,
-because the pilot was APPLYING a full one-shot correction on top of a converged prefix —
-mode 8's double-correction, in a bench built by someone who had just written that sentence
-down.
+asserts that identity rather than assuming it. Its first version scored the recording run at
+1.16x where the prefix alone reaches 40x, because the pilot was APPLYING a full one-shot
+correction on top of a converged prefix — mode 8's double-correction, in a bench built by
+someone who had just written that sentence down. Shrinking `uMax` to nothing for the
+recording run leaves `f0` computed exactly as before (it is built before the solve) and takes
+the identity to **0.00e+0 exactly** and the recorded machine to 40.44x / 230.89x / 19.47x.
+
+### AND THE FORMULATION ARGUMENT IS FALSIFIED — THE COMMAND WINDOW TRANSFERS BETTER
+
+Fitted on the rounded rectangle and the circle, scored on the sharp square, over a ridge
+ladder, with both regressors built from THE SAME ROWS so the comparison is one experiment:
+
+```
+  regressor        ridge    fit R^2 ch0/ch1     HELD-OUT R^2 on sharp
+  f0   141 feats    1e-8     0.991 / 0.996        -7.528 / -3.172
+  f0   141 feats    1e-6     0.985 / 0.994        -1.127 / -1.780
+  f0   141 feats    1e-4     0.912 / 0.945         0.546 / -0.598
+  f0   141 feats    1e-2     0.681 / 0.443         0.408 /  0.022
+  cmd   47 feats    1e-8     0.981 / 0.936         0.811 / -0.033
+  cmd   47 feats    1e-6     0.976 / 0.926         0.924 /  0.052
+  cmd   47 feats    1e-4     0.820 / 0.502         0.580 /  0.078
+  cmd   47 feats    1e-2     0.344 / 0.144         0.204 /  0.009
+```
+
+**The command window is better at every comparable ridge and better at its own best**: 0.924
+against 0.546 on the shoulder, 0.078 against 0.022 on the elbow. The argument that `u* =
+-G^-1 e_free` makes a map from `f0` program-independent BY CONSTRUCTION is sound about the
+operator and wrong about the estimate: `f0` is the FITTED forecast over 70 leads, its errors
+are program-dependent, and the free response is smooth in lead so the 141 columns are badly
+collinear. §48 already wrote the general form of this — *"the QP inverts this model, so
+regularisation serves the inversion, not the fit"* — and it applies to my regression exactly
+as it applies to the pilot's.
+
+**So the command window stands as the formulation**, not for lack of an alternative but
+because the alternative was built and measured against it on one set of rows.
+
+### THE FULLY AGNOSTIC ROW, WHICH IS WHAT THE ARC DELIVERS
+
+The `demo` diet failed for two reasons at once — a feed ladder against sample-indexed offsets,
+and radii of 2.2-3.8 against test programs at r 4 and 8x8. The same random polygons and stars
+at ONE feed and at the programs' own scale:
+
+```
+  controller                          sharp   rounded   circle    geo
+  shipped pilot                       2.15x    2.63x    3.99x    2.83x
+  distilled, 4 scale-matched polys    4.21x    3.85x    4.23x    4.09x
+```
+
+**Every program improves, none is a training program, and the training set contains no
+production geometry at all** — the polygons come out of the block's own designer. And the
+UNIFORMITY is the evidence rather than the mean: 4.21 / 3.85 / 4.23 across a sharp square, a
+rounded rectangle and a circle is what a model of the PLANT looks like, where the
+one-program fit in this same bench reads 21.78x at home and 0.29x away.
+
+It costs 166 MAC per decision — 1.7% of a PLC scan — with no tracker at deploy, no lap index,
+no plant constant and no per-program compile.
