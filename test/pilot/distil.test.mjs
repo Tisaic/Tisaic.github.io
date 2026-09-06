@@ -265,6 +265,57 @@ check('…and contributes through act() on the host\'s own look-ahead closure, w
   + 'rung that is armed but never reached would not',
   Math.abs(auto.act({ look: (o) => pref(500 + o) })[0]) > 1e-6,
   `${auto.act({ look: (o) => pref(500 + o) })[0]}`);
+// ---- THE WINDOW IS IN RAW SAMPLES, AND A DECIMATED LOOK-AHEAD IS A DIFFERENT GRID.
+//
+// The cascade's `ctx.look` steps by the pilot's own cadence, because that is the grid its
+// forecast lives on; this rung's offsets are raw machine steps, because what it regresses is a
+// prefix indexed by them. On a plant with no cascade the two closures are the same function,
+// which is why this could not be seen on the axis the rung was first built on and would have
+// stretched the window by the cadence on the next one. Both halves (rule 9): the rung must
+// PREFER the raw closure where one is offered, and be byte-identical where it is not.
+{
+  const raw = (o) => pref(500 + o);
+  const dec = (o) => pref(500 + 9 * o);          // the same shape on a stride-9 grid
+  const only = auto.act({ look: raw })[0];
+  const both = auto.act({ look: dec, lookRaw: raw })[0];
+  const wrong = auto.act({ look: dec })[0];
+  check('the distilled rung reads ctx.lookRaw where the host offers one, so a decimated '
+    + 'cascade cadence cannot stretch a window fitted in raw samples',
+    both === only && Math.abs(wrong - only) > 1e-9,
+    `raw ${only}, lookRaw ${both}, decimated-only ${wrong}`);
+}
+
+// ---- ARMING IS NOT COMMISSIONING, AND THE LADDER HAS TO SAY SO IN BOTH DIRECTIONS.
+//
+// `built.*` and `deployed.*` were always separate here — the ladder keeps every rung it
+// commissioned whether or not it shipped it — but the only way to move a rung between them
+// was two assignments at the call site, and setting the FLAG without the OBJECT arms a rung
+// that is not there: `act()` is guarded, so it contributes zero silently and reads exactly
+// like a rung that helped nothing. `setArmed` is the door, and these are its two halves.
+{
+  const look = (o) => pref(500 + o);
+  const on = auto.act({ look })[0];
+  const dis = auto.setArmed('distil', false);
+  const off = auto.act({ look })[0];
+  const re = auto.setArmed('distil', true);
+  const back = auto.act({ look })[0];
+  check('disarming a built rung silences it on the very next act(), with nothing rebuilt',
+    !dis.armed && off === 0 && Math.abs(on) > 1e-6, `${on} -> ${off}`);
+  // RULE 21 IN ITS STRONGEST FORM: the thing that should not change comes back unchanged.
+  // A re-arm that merely restored a similar correction would be a rung re-derived from
+  // whatever state was lying about, which is the whole failure this door exists to close.
+  check('…and re-arming it restores the SAME correction, bit for bit — no recommissioning',
+    re.armed && back === on, `${on} vs ${back}`);
+  const bad = auto.setArmed('hff', true);
+  check('…while arming a rung that was never built is REFUSED with a reason, not ignored',
+    !bad.armed && typeof bad.why === 'string' && !auto.deployed.hff, JSON.stringify(bad));
+  const a = auto.armed();
+  check('…and armed() states what each rung is addressed by, which is what decides transfer',
+    a.distil.addressedBy === 'commanded reference' && a.distil.transfers === true
+    && a.hff.transfers === false && a.hff.built === false,
+    JSON.stringify(a));
+}
+
 check('…and a host WITHOUT distilRuns gets a stated skip rather than a silent one (rule 25)',
   await (async () => {
     const a2 = new AutoStack({ channels: [{ max: 10 }], uMax: 1, resolve: 1e-9,

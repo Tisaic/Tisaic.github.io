@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:1059,built:"2026-09-06T18:44:31Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:1060,built:"2026-09-06T19:29:25Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -21,8 +21,17 @@
     header { padding:12px 14px 6px; text-align:center; }
     header h1 { font-size:1.15rem; margin:0; }
     header a { color:var(--muted); font-size:.8rem; text-decoration:none; }
-    #tabs { display:flex; gap:6px; padding:8px 10px; position:sticky; top:0; background:var(--bg); z-index:5; }
-    .tab { flex:1; padding:10px 6px; border:1px solid var(--line); border-radius:10px; background:var(--card);
+    /* THE STRIP SCROLLS RATHER THAN CLIPPING. At six tabs `flex:1` shared a 412px phone
+       between them and `Black box` wrapped to two lines; the seventh pushed `Architecture`
+       off the right edge, where it was unreachable and looked like a rendering fault rather
+       than like more content. `flex:1 0 auto` lets each tab take the width its label needs
+       and the strip carry the overflow, which is the one place on this page where sideways
+       scrolling is correct -- the PAGE still must not, and the smoke test asserts both. */
+    #tabs { display:flex; gap:6px; padding:8px 10px; position:sticky; top:0; background:var(--bg);
+      z-index:5; overflow-x:auto; scrollbar-width:none; }
+    #tabs::-webkit-scrollbar { display:none; }
+    .tab { flex:1 0 auto; padding:10px 10px; border:1px solid var(--line); border-radius:10px;
+      background:var(--card); white-space:nowrap;
       color:var(--muted); font-size:.85rem; font-weight:600; text-align:center; cursor:pointer; }
     .tab.on { background:var(--accent); color:#2b1a02; border-color:var(--accent); }
     .panel { display:none; padding:0 12px 40px; }
@@ -35,6 +44,13 @@
     .badge { position:absolute; left:10px; top:10px; font-size:.7rem; padding:4px 8px; border-radius:6px;
       background:rgba(15,23,42,.85); border:1px solid var(--line); color:var(--muted); }
     .badge.r { left:auto; right:10px; }
+    /* A STATUS CHIP THAT IS NOT INSIDE A STAGE. `.badge` is `position:absolute` and only
+       means anything inside `.stage`, which is `position:relative`; used in a `.controls`
+       row it positioned against the PAGE and landed on top of the header. Nothing errored
+       and nothing was blank -- it was simply the wrong picture, which is this project's
+       commonest defect class and the reason the screenshots are looked at every time. */
+    .pill { display:inline-block; font-size:.7rem; padding:4px 8px; border-radius:6px;
+      background:var(--card); border:1px solid var(--line); color:var(--muted); }
     /* EVERY PLOTLY CONTAINER NEEDS ITS HEIGHT FROM CSS, and a new one that is not in this
        list STROBES. Reported from the device as the Black box tab freaking out, and
        measured: every element on the tab moved ~8 times a second. With no CSS height the
@@ -51,6 +67,11 @@
     code { background:var(--card); padding:.1em .35em; border-radius:5px;
       font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.92em; }
     .controls { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; align-items:center; }
+    /* A `label` wrapping a `select` is a flex item with no basis, so its select sized to its
+       longest OPTION and ran off the right of the panel. Both halves are needed: the label
+       may not exceed the row, and the select may not exceed the label. */
+    .controls > label { max-width:100%; }
+    .controls label > select { max-width:100%; }
     /* `hidden` IS ONLY A UA `display:none`, AND ANY CLASS RULE THAT SETS `display`
        BEATS IT. `.controls` sets display:flex, so hiding one of the two profile's
        slider groups did nothing and the page showed the trapezoid's controls and the
@@ -94,6 +115,16 @@
     table.v th, table.v td { border:1px solid var(--line); padding:6px 7px; text-align:left;
       font-variant-numeric:tabular-nums; }
     table.v th { background:var(--card); color:var(--muted); font-weight:600; }
+    /* THE LADDER'S TABLES HAD NO STYLE AT ALL. `.tbl` has been emitted by the ⑨ report since
+       it was written and never had a rule, so it rendered as a bare UA table -- readable on a
+       desktop and cramped on the phone this page is driven from. Styled like `table.v`, plus
+       a numeric column that is right-aligned and tabular so a column of exponents lines up. */
+    table.tbl { width:100%; border-collapse:collapse; font-size:.72rem; margin:8px 0 0;
+      display:block; overflow-x:auto; white-space:nowrap; }
+    table.tbl th, table.tbl td { border:1px solid var(--line); padding:5px 7px; text-align:left;
+      font-variant-numeric:tabular-nums; }
+    table.tbl th { background:var(--card); color:var(--muted); font-weight:600; }
+    table.tbl td.num { text-align:right; }
     pre.tree { white-space:pre; overflow-x:auto; font-size:.68rem; line-height:1.5; color:#cbd5e1; margin:0; }
   </style>
 </head>
@@ -109,7 +140,8 @@
     <div class="tab" data-tab="path">③ Path</div>
     <div class="tab" data-tab="black">④ Black box</div>
     <div class="tab" data-tab="verify">⑤ Verify</div>
-    <div class="tab" data-tab="about">⑥ Architecture</div>
+    <div class="tab" data-tab="deploy">⑥ Deploy</div>
+    <div class="tab" data-tab="about">⑦ Architecture</div>
   </div>
 
   <!-- ================================ Tab 1: move ================================ -->
@@ -961,7 +993,95 @@
     <div id="verify-out"></div>
   </section>
 
-  <!-- ============================ Tab 3: architecture ============================ -->
+
+  <!-- ============================== Tab 6: deploy =============================== -->
+  <section class="panel" id="p-deploy">
+    <p class="lead"><b>The whole workflow, as a controls engineer would actually meet it.</b> Every
+      other tab studies one correction; this one is the INSTALLATION — what the plant lets the
+      controller have, what gets commissioned, what is armed on the running machine, and what
+      each of those costs a PLC scan. The machine turns on <b>③ Path</b>; this tab is the
+      cabinet.</p>
+    <p class="lead"><b>Two kinds of option, and the difference is the point.</b> An
+      <b>installation</b> choice is a property of the plant and the wiring, so it decides what
+      gets BUILT and changing it needs a new commissioning. An <b>armed</b> choice is which of
+      the built rungs is live right now: the ladder keeps every rung it commissioned whether it
+      shipped it or not, and <code>act()</code> reads only what is armed — so a prefix can be
+      changed, scored and changed back at the price of a lap instead of an afternoon. Everything
+      under <b>Armed</b> and <b>Deploy-time</b> below takes effect on the next sample with no
+      recommissioning.</p>
+
+    <h4 class="grp">Installation <span>— declared before commissioning; changing these
+      needs a new one</span></h4>
+    <div class="controls">
+      <label>Tracker
+        <select id="dep-tracker">
+          <option value="commission" selected>commissioning only — then removed</option>
+          <option value="permanent">stays on the machine — truth every scan</option>
+        </select></label>
+      <label>Program
+        <select id="dep-periodic">
+          <option value="once" selected>one-off parts — no lap to index</option>
+          <option value="lap">continuous laps — the same part again</option>
+        </select></label>
+      <div class="slider"><span>Cascade depth</span>
+        <input type="range" id="dep-depth" min="1" max="3" step="1" value="1" />
+        <span class="v" id="v-depDepth">1</span></div>
+      <div class="slider"><span>Guided laps</span>
+        <input type="range" id="dep-guided" min="0" max="12" step="3" value="0" />
+        <span class="v" id="v-depGuided">0</span></div>
+      <label><input type="checkbox" id="dep-classic" /> build ① the conventional rung
+        (static feedforward in the reference's own state)</label>
+      <label><input type="checkbox" id="dep-demo" checked /> build ②b corner banks from a
+        designed demo</label>
+      <label><input type="checkbox" id="dep-distil" /> build ②d the distilled iteration
+        (converge on training programs, regress onto the commanded reference)</label>
+      <label><input type="checkbox" id="dep-lapmem" /> build ③ the lap-periodic memory
+        (needs continuous laps)</label>
+      <label><input type="checkbox" id="dep-mimo" /> off-diagonal solve (this arm is a coupled
+        2×2 and the pilot inverts a diagonal)</label>
+      <p class="hint" id="dep-instHint"></p>
+    </div>
+
+    <h4 class="grp">Commission <span>— the machine produces nothing while this runs</span></h4>
+    <div class="controls">
+      <button id="dep-run">Commission this installation ▶</button>
+      <span class="pill" id="dep-badge">not commissioned</span>
+      <div id="dep-table"></div>
+      <p class="hint" id="dep-prog"></p>
+      <p class="hint" id="dep-cost"></p>
+    </div>
+
+    <h4 class="grp">Armed <span>— live, no recommissioning</span></h4>
+    <div class="controls">
+      <label><input type="checkbox" id="dep-a-classic" /> ① conventional</label>
+      <label><input type="checkbox" id="dep-a-stack" /> ② pilot cascade</label>
+      <label><input type="checkbox" id="dep-a-distil" /> ②d distilled</label>
+      <label><input type="checkbox" id="dep-a-hff" /> ③ lap-periodic (path convergence)</label>
+      <p class="hint" id="dep-armHint"></p>
+    </div>
+
+    <h4 class="grp">Deploy-time <span>— live, no recommissioning</span></h4>
+    <div class="controls">
+      <label><input type="checkbox" id="dep-online" /> keep the tracker connected: feed truth
+        every scan and let the cascade re-identify</label>
+      <div class="slider"><span>Authority (rad)</span>
+        <input type="range" id="dep-uMax" min="1" max="30" step="1" value="30" />
+        <span class="v" id="v-depUMax">3.00</span></div>
+      <p class="hint" id="dep-runHint"></p>
+    </div>
+
+    <h4 class="grp">PLC scan budget <span>— what the armed set costs, every cycle</span></h4>
+    <div id="dep-plc"></div>
+
+    <h4 class="grp">On the machine <span>— ③ Path is driving; this is what it delivers</span></h4>
+    <div class="controls">
+      <button id="dep-go">Run ▶</button>
+      <button id="dep-reset" class="sec">Reset the score</button>
+    </div>
+    <div id="dep-score"></div>
+  </section>
+
+  <!-- =========================== Tab 7: architecture ============================ -->
   <section class="panel" id="p-about">
     <div class="note">
       <h3>Why hybrid</h3>
@@ -1107,19 +1227,15 @@ for (const t of document.querySelectorAll('.tab')) {
     if (t.dataset.tab === 'black' && bbChartOn) Plotly.Plots.resize($('bb-chart'));
     if (t.dataset.tab === 'path') {
       if (pChartOn) Plotly.Plots.resize($('path-chart'));
-      // BUILT ON FIRST VISIT rather than at startup. This plant is a third pair of
-      // lattices and its home has to settle under gravity before anything it measures
-      // means anything, which is a couple of seconds nobody who never opens this tab
-      // should pay for.
-      if (!armP && !busyP) {
-        busyP = true;
-        setPathBadge('building…', 'warn');
-        buildP().then(() => { setPathBadge('ready — press Run', ''); })
-          .catch((e) => { setPathBadge('build failed: ' + e.message, 'bad'); console.error(e); })
-          .finally(() => { busyP = false; syncPath(); });
-      }
+      ensurePlantP();
       requestAnimationFrame(drawP);
     }
+    // ⑥ DRIVES THE SAME MACHINE ③ DOES, so it needs the same plant built and it must not
+    // build a second one — one arm, one loop, one host (rule 61). The stage stays on ③;
+    // this tab is an instrument panel and deliberately has no second viewer of its own,
+    // because two views of one machine that can disagree is the defect class this project
+    // has paid for most often.
+    if (t.dataset.tab === 'deploy') { ensurePlantP(); depSync(); }
     if (t.dataset.tab === 'chain') {
       if (chPosOn) Plotly.Plots.resize($('chain-pos'));
       if (chChartOn) Plotly.Plots.resize($('chain-chart'));
@@ -1130,6 +1246,20 @@ for (const t of document.querySelectorAll('.tab')) {
       requestAnimationFrame(draw2);
     }
   });
+}
+
+/**
+ * BUILT ON FIRST VISIT rather than at startup. This plant is a third pair of lattices and its
+ * home has to settle under gravity before anything it measures means anything, which is a
+ * couple of seconds nobody who never opens these tabs should pay for.
+ */
+function ensurePlantP() {
+  if (armP || busyP) return;
+  busyP = true;
+  setPathBadge('building…', 'warn');
+  buildP().then(() => { setPathBadge('ready — press Run', ''); })
+    .catch((e) => { setPathBadge('build failed: ' + e.message, 'bad'); console.error(e); })
+    .finally(() => { busyP = false; syncPath(); });
 }
 
 // ---------------------------------------------------------------- state
@@ -2706,7 +2836,11 @@ function frame() {
     if (frames % 6 === 0) { stats2(); chainPosChart(); chainChart(); csStats(); csChart(); }
   }
   const onPath = document.querySelector('.tab[data-tab="path"]').classList.contains('on');
-  if (onPath && armP && !busyP) {
+  // ⑥ DRIVES THE SAME LOOP. The stepping is gated on either tab being open and the DRAWING
+  // only on ③, because the deploy panel is numbers and a canvas it cannot see would be drawn
+  // at 0x0 — which is NaN rather than an error and passes every bounds check (rule 55).
+  const onDep = document.querySelector('.tab[data-tab="deploy"]').classList.contains('on');
+  if ((onPath || onDep) && armP && !busyP) {
     try {
       if (pilotComm) pilotStepP(LEARN_BUDGET);
       else if (ik6Comm) ik6StepP(LEARN_BUDGET);
@@ -2722,6 +2856,7 @@ function frame() {
     drawP(); syncPath();
     if (frames % 6 === 0) { statsP(); pathChart(); }
   }
+  if (onDep && frames % 6 === 0) depSync();
   if (!A || busy) return;
   // THE SEQUENCE ADVANCES BEFORE THE STEPPING, so a step that has just finished
   // hands over on the same frame rather than leaving the plant idling for one.
@@ -6285,12 +6420,29 @@ function stepPathOnce(collect) {
   // the deployed correction was real and non-zero, so every wiring check passed. Two views
   // of one loop must AGREE, and the deploy path was missing a call the scored path makes
   // 7357 times a lap.
+  const tool = armP.toolXY();
   if (autoP && autoRep) {
     const enc = armP.encoders();
+    // ---- THE TRACKER IS AN INSTALLATION PROPERTY, AND ⑥ IS WHERE IT IS DECLARED.
+    //
+    // Withheld — the default and what every headline in this project is measured with —
+    // every layer stays frozen at what commissioning fitted, and the deployed machine
+    // carries no instrument at all. Supplied, the cascade keeps re-identifying against the
+    // error the machine really has, which is measured to MULTIPLY a model the verify
+    // already vouched for (arm +29%, tank +18%, EMPS 14.8x -> 55.5x) and to do nothing for
+    // a broken one.
+    //
+    // It is a RUN-TIME switch because it needs nothing built: the truth is simply routed or
+    // not routed, sample by sample, so the operator can turn it on, watch, and turn it off
+    // without the ladder being re-commissioned. The gate inside the pilot is its safety.
+    // READ FROM A CACHED FLAG, NOT FROM THE DOM. This line runs once per SERVO STEP — a
+    // few thousand times a frame — and a `getElementById` there is the reporting becoming
+    // the cost. `depSync` and the checkbox's own handler are the only writers.
+    const jt = depOnline
+      ? autoP.worldToJoint([tool[0] - cmd.x, tool[1] - cmd.y], { q: [q1, q2] }) : null;
     autoP.auto.observe([enc[0].angle, enc[1].angle, enc[0].speed * 1e3, enc[1].speed * 1e3,
-      tau[0] * 1e3, tau[1] * 1e3]);
+      tau[0] * 1e3, tau[1] * 1e3], jt);
   }
-  const tool = armP.toolXY();
   const dec = decompose(profP, tool, cmd);
   const sc = [scoreP, lapScoreP];
   for (const s of sc) if (s) s.step(dec.contour, dec.lag, tau, [armP.j1.wM, armP.j2.wM]);
@@ -6763,7 +6915,11 @@ function autoProgress(d) {
         + `${x.exact ? '' : '≤'}${x.runs}${i === si ? '</b>' : ''}`).join(' · ')
       + ' — ≤ marks a stage that can end early, so the total is a bound, not a target</span>';
   }
+  // MIRRORED TO ⑥, which commissions through this same function and would otherwise show a
+  // static badge for the half hour the ladder runs. One string, two places to read it — the
+  // string is built once here rather than described again there (rule 30).
   $('autoProg').innerHTML = head + body + planTxt;
+  $('dep-prog').innerHTML = head + body + planTxt;
 }
 
 function autoRowsHTML(rows) {
@@ -6776,7 +6932,14 @@ function autoRowsHTML(rows) {
     + '</table>';
 }
 
-async function startAutoP() {
+/**
+ * THE ONE COMMISSIONING PATH, PARAMETERISED — pressed from ③ with the tab's own two
+ * checkboxes, or from ⑥ with a whole INSTALLATION. Written twice, the two would drift and
+ * ⑥ would put a number on the screen that nobody had measured, which is rule 61 in the
+ * costume it wore here before (the bar assigning over the host's bag). `inst` is null from
+ * ③ and every field then reads exactly as it always did.
+ */
+async function startAutoP(inst = null) {
   if (autoComm || busyP) return;
   // ⑨ COMMISSIONS THE MACHINE THE SLIDERS DESCRIBE. It used to force the sliders back to
   // K 1 / E 0.06 / rounded / feed 4e-3 (the machine the 22.42x was measured on) so the
@@ -6851,14 +7014,14 @@ async function startAutoP() {
     // program whose corners the banks cannot help (the rounded rectangle measured
     // byte-identical) the rung refuses, and the refusal is a row in the table, not a
     // silence.
-    demo: {},
+    demo: (inst ? inst.demo : true) ? {} : null,
     // THE RETIRED MEMORY STAYS RETIRED. The lap-periodic rung is addressed by position in
     // a lap, so it cannot transfer to another program — and this page's whole point is
     // switching programs on the deployed machine. The measured one-press runs without it;
     // the first on-screen press ran WITH it (26 minutes, 74 of its laps, and its table
     // applied to a program it was never formed on), which was a tested-to-app divergence,
     // not a decision.
-    lapMemory: false,
+    lapMemory: inst ? inst.lapMemory : false,
     // AND NO CASCADE EITHER — the owner's decision, on the same footing as the retirement
     // above. Depth 1 commissions ONE pilot and never builds a second layer, so the ladder is
     // the conventional rung and a single model on top of it.
@@ -6874,7 +7037,7 @@ async function startAutoP() {
     // the decision was made: the ladder commissions the cascade FOUR times — depth 1 and 2,
     // then both again with the conventional rung withheld to answer the prefix question — and
     // one pilot commissioning on this arm measures 47 s. Depth 1 halves that count.
-    maxDepth: 1,
+    maxDepth: inst ? inst.maxDepth : 1,
     // THE CONVENTIONAL RUNG IS AN OPERATOR SWITCH, DEFAULT OFF. Measured on this exact
     // configuration, both ways: with it the ladder spends 23 laps and two of its four minutes
     // commissioning a rung it scores at 1.07x and then DISCARDS, because the cascade above
@@ -6888,12 +7051,15 @@ async function startAutoP() {
     // its policy — the same shape as `lapMemory` and `maxDepth`. The box is here so the
     // operator can put it back and watch it be discarded, which is the measurement, not a
     // setting to trust.
-    classic: $('autoP-classic').checked,
+    classic: inst ? inst.classic : $('autoP-classic').checked,
     // THE OFF-DIAGONAL SOLVE. Off by default: it costs nc^2 solve blocks against nc, and on
     // this arm it is worth up to 2x on one cell and HARMFUL on a third of those measured —
     // which is why the scale is proposed and then scored rather than set. Armed, the host
     // also turns on `crossGain: 'auto'` so the ladder can overrule the proposal on the machine.
-    mimo: $('autoP-mimo').checked,
+    mimo: inst ? inst.mimo : $('autoP-mimo').checked,
+    // ⑥'s installation options, inert from ③ where `inst` is null.
+    ...(inst && inst.distil ? { distil: {} } : {}),
+    ...(inst && inst.guidedLaps ? { guidedLaps: inst.guidedLaps } : {}),
     // Probe-grade commissioning runs for the conventional rung's identification — measured
     // free on this arm (identical coefficients, identical deploy re-score) and 28% of the
     // whole press.
@@ -6907,6 +7073,7 @@ async function startAutoP() {
     onRung: (r) => {
       rows.push(r);
       $('autoTable').innerHTML = autoRowsHTML(rows);
+      $('dep-table').innerHTML = autoRowsHTML(rows);
       setPathBadge(`⑨ ${r.name} — ${r.score.toExponential(3)}`
         + (r.deployed ? '' : ' (not deployed)'), 'warn');
     },
@@ -6952,7 +7119,11 @@ async function startAutoP() {
   // ladder deploys carrying whatever internal state its last commissioning run left behind.
   autoP.auto.beginRun();
   $('autoTable').innerHTML = autoRowsHTML(autoRep.rungs);
+  $('dep-table').innerHTML = autoRowsHTML(autoRep.rungs);
   $('autoNotes').innerHTML = autoNotesHTML(autoRep);
+  // ⑥'s ARMED boxes follow whatever the ladder decided to ship, so the panel opens on the
+  // prefix that was measured rather than on a set the operator has to guess at.
+  depSync(true);
   const d = autoRep.deployed;
   setPathBadge(`⑨ shipped {classic:${d.classic}, cascade:${d.stack}, lap-periodic:${d.hff}}`
     + ` — ${autoRep.base.toExponential(3)} → ${autoRep.best.toExponential(3)}`
@@ -7013,6 +7184,264 @@ $('autoP-btn').addEventListener('click', () => {
   if (autoComm) { autoAbort = true; setPathBadge('⑨ stopping at the next frame…', 'warn'); return; }
   startAutoP();
 });
+
+// ================================================= ⑥ DEPLOY: the installation, and the cabinet
+//
+// WHAT THIS TAB IS FOR. Every other tab answers "does this correction work?". This one answers
+// the question an engineer actually has to answer before any of them matter: given what THIS
+// plant will let a controller have — an instrument or not, a repeating part or not, a scan
+// budget that must be met every cycle and not on average — which rungs are worth commissioning,
+// which of the commissioned ones should be live right now, and what does each one cost.
+//
+// THE SPLIT IS THE WHOLE DESIGN AND IT IS THE LIBRARY'S, NOT THIS PAGE'S. `AutoStack` keeps
+// `built.*` (what was commissioned, deployed or not) separate from `deployed.*` (what `act()`
+// reads), so a prefix is a decision that can be revisited for the price of a lap. That property
+// existed and was reachable only from a test; the panel below is it, made pressable. `setArmed`
+// is the door, because arming is two fields and setting only the flag arms a rung that is not
+// there — which contributes zero silently and reads exactly like a rung that did not help.
+//
+// AND THE PLC BUDGET IS SHOWN AGAINST THE ARMED SET, LIVE. `cost()` is computed from what is
+// armed at the moment it is called, so ticking a box moves the number: that is the trade the
+// north star's target 6 is about, made visible instead of argued. `mac` is the PEAK cycle and
+// is the binding one — the budget must be met in EVERY cycle, not on average — and `slicedMac`
+// is shown beside it as what an update sliced across its cadence would cost, labelled as the
+// weaker claim it is.
+// The deploy-time tracker switch, cached because it is read once per servo step.
+let depOnline = false;
+const PLC_BUDGET = 10000;      // 10% of a 1 ms task at 1 MAC/ns — the north star's target 6
+const PLC_SCAN_MS = 1;         // the task period the budget is a share of
+
+/** The installation the operator has declared: everything that decides what gets BUILT. */
+function depInstall() {
+  const lap = $('dep-periodic').value === 'lap';
+  return {
+    tracker: $('dep-tracker').value,
+    periodic: lap,
+    maxDepth: +$('dep-depth').value,
+    guidedLaps: +$('dep-guided').value,
+    classic: $('dep-classic').checked,
+    demo: $('dep-demo').checked,
+    distil: $('dep-distil').checked,
+    // A LAP-INDEXED RUNG ON A ONE-OFF PART IS NOT AN OPTION THAT IS MERELY UNWISE, it is one
+    // the plant does not have: there is no lap to index. So the installation decides it and
+    // the checkbox cannot overrule the plant.
+    lapMemory: lap && $('dep-lapmem').checked,
+    mimo: $('dep-mimo').checked,
+  };
+}
+
+/** What each rung is addressed by — the property that decides whether it can be carried. */
+const DEP_RUNGS = [
+  ['classic', 'dep-a-classic', '① conventional', 'reference state'],
+  ['stack', 'dep-a-stack', '② pilot cascade', 'machine state'],
+  ['distil', 'dep-a-distil', '②d distilled', 'commanded reference'],
+  ['hff', 'dep-a-hff', '③ lap-periodic', 'LAP PHASE — does not transfer'],
+];
+
+/** Push the ARMED checkboxes into the ladder. Live: the next sample uses the new set. */
+function depApplyArm() {
+  if (!autoP || !autoRep) return;
+  const notes = [];
+  for (const [name, id] of DEP_RUNGS) {
+    const want = $(id).checked;
+    const r = autoP.auto.setArmed(name, want);
+    // A REFUSED ARM PUTS THE BOX BACK. A checkbox that stays ticked over a rung that is not
+    // there is the page telling the operator something the machine will not do — and it would
+    // read as a rung that helped nothing rather than as one that is absent (rule 25).
+    if (want && !r.armed) { $(id).checked = false; notes.push(r.why); }
+  }
+  $('dep-armHint').innerHTML = notes.length ? '<b>' + notes.join(' · ') + '</b>'
+    : depArmHint();
+  depSync();
+}
+
+function depArmHint() {
+  if (!autoRep) return 'Nothing is commissioned yet, so there is nothing to arm.';
+  const a = autoP.auto.armed();
+  // WITHHELD IS A COUNT THE LADDER PUBLISHES, not a state this page infers: `armed()` carries
+  // `offProgram`, the number of samples the lap-periodic rung declined because the program on
+  // screen is not the one its table was formed on.
+  const off = a.hff.on && a.hff.offProgram > 0;
+  return 'Every box here is live: the ladder keeps each rung it commissioned whether or not '
+    + 'it shipped it, and the correction is whatever is ticked, summed and clamped once. '
+    + '<b>③ is the only one addressed by lap phase</b>, so the library withholds it on any '
+    + 'program but the one it was formed on — switch the shape on ③ Path with it armed and '
+    + 'watch it stop contributing, which is the retirement\'s whole argument in one toggle.'
+    + (off ? ' <b>It is being withheld right now.</b>' : '');
+}
+
+/** The PLC scan budget for whatever is armed at this instant. */
+function depPlcHTML() {
+  if (!autoP || !autoRep) return '<p class="hint">Commission an installation and the armed '
+    + 'set\'s cost per scan appears here.</p>';
+  const c = autoP.auto.cost();
+  const label = { classic: '① conventional', stack: '② pilot cascade', distil: '②d distilled',
+    hff: '③ lap-periodic' };
+  const rows = Object.entries(c.rungs).map(([k, r]) => {
+    const extra = k === 'stack' && r.layers ? `${r.layers} layer(s)`
+      : k === 'distil' ? `fit ${r.fitMacPerRow.toLocaleString()} MAC/row` : '';
+    return `<tr><td>${label[k] || k}</td>`
+      + `<td class="num">${(r.mac || 0).toLocaleString()}</td>`
+      + `<td class="num">${(100 * (r.mac || 0) / PLC_BUDGET).toFixed(1)}%</td>`
+      + `<td class="num">${((r.bytes || 0) / 1024).toFixed(1)} kB</td>`
+      + `<td>${extra}</td></tr>`;
+  });
+  if (!rows.length) rows.push('<tr><td colspan="5">nothing armed — the machine runs open loop'
+    + ' under whatever ③ Path selects</td></tr>');
+  const pct = 100 * c.mac / PLC_BUDGET;
+  // THE PEAK CYCLE IS THE VERDICT, NOT THE AVERAGE. "Under 10%, ALWAYS" is the target, and a
+  // number that fits on average is a different and weaker claim — so the sliced figure is
+  // reported beside it and labelled, never instead of it.
+  const verdict = pct <= 100
+    ? `<b style="color:var(--accent2)">FITS</b> — ${c.mac.toLocaleString()} MAC in the peak cycle, `
+      + `${pct.toFixed(0)}% of the ${PLC_BUDGET.toLocaleString()} MAC budget`
+    : `<b style="color:var(--bad)">DOES NOT FIT</b> — ${c.mac.toLocaleString()} MAC in the peak `
+      + `cycle, ${pct.toFixed(0)}% of budget, i.e. ${(pct / 100).toFixed(1)}× over`;
+  const online = $('dep-online').checked;
+  return `<table class="tbl"><tr><th>armed rung</th><th>MAC/cycle</th><th>of budget</th>`
+    + `<th>state</th><th></th></tr>${rows.join('')}</table>`
+    + `<p class="hint">${verdict}. The budget is 10% of a ${PLC_SCAN_MS} ms task and it must be `
+    + `met in <b>every</b> cycle — sliced across an update cadence the same set costs `
+    + `${c.slicedMac.toLocaleString()} MAC, which is the weaker claim and is not the one being `
+    + `made. Excluded and said so: ${c.excludes.join(', ')}.`
+    + (online ? ' <b>The tracker is connected</b>, so the cascade is also running its RLS '
+      + 'update — online identification is arithmetic on the PLC too, and it is the price of '
+      + 'the instrument staying on the machine.' : '')
+    + `</p>`;
+}
+
+/** What the commissioning cost, in the unit an owner pays: machine time. */
+function depCostHTML() {
+  if (!autoP) return '';
+  const sm = autoP.samples();
+  if (!sm.samples) return '';
+  const secs = sm.samples * (PLC_SCAN_MS / 1000);
+  const wall = autoT0 ? (performance.now() - autoT0) / 1000 : 0;
+  const mm = (x) => `${Math.floor(x / 60)}:${String(Math.round(x % 60)).padStart(2, '0')}`;
+  // COMPUTE TIME IS NOT COMMISSIONING TIME, and until now this page only had the first.
+  // On a plant the ladder's cost is LAPS: the machine is producing nothing while rungs are
+  // scored, and that is the half of target 4 a wall clock cannot see.
+  return `<b>Cost so far:</b> ${sm.samples.toLocaleString()} machine samples over ${sm.runs} `
+    + `scored run(s) — <b>${mm(secs)} of machine time</b> at a ${PLC_SCAN_MS} ms task, which is `
+    + `${(sm.samples / sm.lap).toFixed(0)} laps of this program. Wall clock here is ${mm(wall)}, `
+    + 'and it is the simulator: the machine time is what a plant actually pays.';
+}
+
+/** What the armed configuration is delivering on the machine ③ Path is driving. */
+function depScoreHTML() {
+  if (!armP) return '<p class="hint">The plant is still building.</p>';
+  const lr = lapScoreP.report(), r = scoreP.report();
+  if (!lr.steps) return '<p class="hint">Press <b>Run</b> and the last completed lap appears '
+    + 'here. Toggling an armed rung changes the very next sample, so a lap either side of a '
+    + 'toggle is the comparison — no recommissioning in between.</p>';
+  const e = (x) => (Number.isFinite(x) ? x.toExponential(3) : '—');
+  const base = autoRep ? autoRep.base : null;
+  const g = base && lr.totalRms > 0 ? base / lr.totalRms : null;
+  return '<table class="tbl"><tr><th></th><th>last lap</th><th>since reset</th></tr>'
+    + `<tr><td>contour rms</td><td class="num">${e(lr.contourRms)}</td>`
+    + `<td class="num">${e(r.contourRms)}</td></tr>`
+    + `<tr><td>lag rms</td><td class="num">${e(lr.lagRms)}</td>`
+    + `<td class="num">${e(r.lagRms)}</td></tr>`
+    + `<tr><td><b>total rms</b></td><td class="num"><b>${e(lr.totalRms)}</b></td>`
+    + `<td class="num">${e(r.totalRms)}</td></tr>`
+    + '</table>'
+    + `<p class="hint">Both halves are defects and the score is their total — a tool on the `
+    + `right curve but late is still a machine that cannot meet another axis.`
+    + (g ? ` Against the ladder's own commissioning baseline (${e(base)}) this lap is `
+      + `<b>${g.toFixed(2)}×</b>` : '')
+    + `${autoRep ? '' : ' Commission an installation to get a baseline to divide by.'}</p>`;
+}
+
+/** Everything the panel shows, derived from state rather than remembered (rule 30). */
+function depSync(fromCommission = false) {
+  if (!$('dep-plc')) return;
+  const inst = depInstall();
+  const lap = inst.periodic;
+  $('v-depDepth').textContent = $('dep-depth').value;
+  $('v-depGuided').textContent = $('dep-guided').value;
+  $('v-depUMax').textContent = (+$('dep-uMax').value / 10).toFixed(2);
+  // A ONE-OFF PART HAS NO LAP TO INDEX, so the memory box is not merely discouraged there.
+  $('dep-lapmem').disabled = !lap;
+  if (!lap) $('dep-lapmem').checked = false;
+  // GUIDED LAPS ARE A COMMISSIONING PHASE AND NEED THE INSTRUMENT PRESENT — which it is, at
+  // commissioning, under either tracker setting. The DEPLOY-time box is the one the tracker
+  // choice gates, and it is gated below rather than here.
+  $('dep-online').disabled = inst.tracker !== 'permanent' || !autoRep;
+  if (inst.tracker !== 'permanent') $('dep-online').checked = false;
+  depOnline = $('dep-online').checked && !$('dep-online').disabled;
+  const busy = autoComm || busyP;
+  for (const id of ['dep-tracker', 'dep-periodic', 'dep-depth', 'dep-guided', 'dep-classic',
+    'dep-demo', 'dep-distil', 'dep-mimo']) $(id).disabled = busy;
+  $('dep-lapmem').disabled = busy || !lap;
+  $('dep-run').textContent = autoComm ? 'Stop ■' : 'Commission this installation ▶';
+  $('dep-run').disabled = busyP;
+  $('dep-go').textContent = runP ? 'Pause ‖' : 'Run ▶';
+  $('dep-go').disabled = !armP || busy;
+
+  // The ARMED boxes: enabled only where a rung was actually built.
+  const a = autoRep ? autoP.auto.armed() : null;
+  for (const [name, id] of DEP_RUNGS) {
+    const row = a ? a[name] : null;
+    $(id).disabled = !row || !row.built || busy;
+    if (fromCommission || !row || !row.built) $(id).checked = !!(row && row.on);
+  }
+  if (fromCommission) $('dep-armHint').innerHTML = depArmHint();
+
+  $('dep-instHint').innerHTML = 'The tracker choice decides whether the deployed machine has '
+    + 'any truth at all: <b>commissioning only</b> is what every headline in this project is '
+    + 'measured with and is the harder claim. <b>Continuous laps</b> is what makes a '
+    + 'lap-indexed rung legal — on one-off parts nothing may be addressed by lap phase, so ③ '
+    + 'is not offered. Depth, guided laps and the three build boxes each cost commissioning '
+    + `time; the machine time they cost is reported below once a run has started.`
+    + (inst.lapMemory ? ' <b>③ is armed to be built: it will not transfer to another program, '
+      + 'and that is the trade you are making.</b>' : '');
+  $('dep-runHint').innerHTML = inst.tracker === 'permanent'
+    ? 'The instrument stays on the machine, so the cascade can keep re-identifying against the '
+      + 'error the machine really has. Measured, this MULTIPLIES a model the verify already '
+      + 'vouched for and does nothing for a broken one — the deploy gate\'s own ratio is the '
+      + 'selector. It also costs arithmetic, counted in the budget below.'
+    : 'The instrument is put away at the end of commissioning, so nothing here can adapt — '
+      + 'which is the installation every number in this project is measured under. Choose '
+      + '<b>stays on the machine</b> above and re-commission to make adaptation available.';
+  $('dep-cost').innerHTML = depCostHTML();
+  $('dep-plc').innerHTML = depPlcHTML();
+  $('dep-score').innerHTML = depScoreHTML();
+  $('dep-badge').textContent = autoComm ? 'commissioning…'
+    : autoRep ? `shipped ${autoRep.gain.toFixed(2)}× — ${Object.entries(autoP.auto.armed())
+      .filter(([, v]) => v.on).map(([k]) => k).join(' + ') || 'nothing armed'}`
+      : 'not commissioned';
+  $('dep-badge').className = 'pill ' + (autoComm ? 'warn' : autoRep ? 'good' : '');
+}
+
+$('dep-run').addEventListener('click', () => {
+  if (autoComm) { autoAbort = true; setPathBadge('⑥ stopping at the next frame…', 'warn');
+    depSync(); return; }
+  startAutoP(depInstall());
+});
+$('dep-go').addEventListener('click', () => {
+  if (!armP) return;
+  runP = !runP;
+  depSync();
+});
+$('dep-reset').addEventListener('click', () => {
+  scoreP = newScore(); lapScoreP = newScore();
+  if (autoP && autoRep) autoP.auto.beginRun();
+  depSync();
+});
+for (const [, id] of DEP_RUNGS) $(id).addEventListener('change', depApplyArm);
+$('dep-online').addEventListener('change', depSync);
+$('dep-uMax').addEventListener('input', () => {
+  // THE AUTHORITY IS A RUN-TIME LIMIT AND ALWAYS WAS — `act()` clamps the SUM at `uMax`
+  // once, every sample, so moving it takes effect immediately and needs nothing rebuilt.
+  // Clamping the terms separately is how this project once ran a pilot at a sixth of its
+  // authority, which is why there is one number here and not four.
+  if (autoP && autoP.auto) autoP.auto.uMax = +$('dep-uMax').value / 10;
+  depSync();
+});
+for (const id of ['dep-tracker', 'dep-periodic', 'dep-depth', 'dep-guided', 'dep-classic',
+  'dep-demo', 'dep-distil', 'dep-lapmem', 'dep-mimo']) {
+  $(id).addEventListener('input', () => depSync());
+}
 
 // ------------------------------------------------- the fully learned system (⑥/⑦)
 //

@@ -10544,3 +10544,119 @@ arm" — that is measured. It is whether the SHIPPED lap-periodic rung, with a r
 operator rather than an oracle, composes on the arm as the oracle ladder does. The arm's oracle
 number is an upper bound on what a real operator can reach there, and the EMPS row is the only
 place a real one has been measured on top of a distilled rung.
+
+---
+
+## §51 — THE INSTALLATION IS THE PRODUCT: ⑥ DEPLOY, AND THE THREE THINGS BUILDING IT FOUND
+
+**THE OWNER'S ASK.** *"Build into the app this entire workflow with all the integration options so
+I can play with the different setups of the overall algorithm. Make sure you emulate the plc cycle
+times and commissioning as it would be in real life. I want options such as tracker stays on
+machine instead of just commissioning and machine is a continuous lap application so path
+convergence can be turned on. All exclusive options that I can control without having to
+recommission."*
+
+That last clause is the whole design, and the answer to it was already in the library rather than
+missing from it.
+
+### §51.1 The split was already there and was reachable only from a test
+
+`AutoStack` has always kept `built.*` — every rung it commissioned, deployed or not — separate from
+`deployed.*`, and `act()` reads `deployed.*` and nothing else. So the ladder's chosen prefix is a
+DEFAULT rather than a fixture: any prefix of the built set can be armed, scored on the machine, and
+changed back, for the price of a lap instead of an afternoon. Nothing on the page could reach it,
+and nothing in the library made it safe to reach.
+
+`setArmed(name, on)` and `armed()` are that door. It is a method rather than two assignments at the
+call site because **arming is TWO fields and not one**: `deployed.x` says a rung is live, `this.x`
+is the object `act()` calls into, and a refused rung leaves the first false and the second NULL.
+Setting only the flag arms a rung that is not there — which does not throw, because `act()` is
+guarded, and instead contributes zero, silently, reading exactly like a rung that helped nothing.
+That failure class already has a paragraph in `autostack.js`; this was a second door onto it.
+
+Pinned in the quick tier (`distil.test.mjs`), both directions and the refusal:
+
+```
+  disarm  -> the very next act() returns exactly 0, nothing rebuilt
+  re-arm  -> the SAME correction, bit for bit                       (rule 21)
+  arm a rung that was never built -> REFUSED with a stated reason   (rule 25)
+```
+
+### §51.2 A units error that was invisible on the plant it was built on
+
+The distilled rung is driven by the host's look-ahead closure — deliberately, so a host that can
+run the pilot can run it with no new deploy-time plumbing. But **the cascade's `ctx.look` is
+DECIMATED to the pilot's own cadence**, because that is the grid its forecast lives on, while the
+distilled rung's offsets are in RAW machine samples, because what it regresses is a prefix indexed
+by them.
+
+On the EMPS axis there is no cascade, the cadence is 1, and the two closures are the same function.
+On the arm the cadence is 9–13, and the deployed window would have been stretched by that factor
+against the one the fit saw. Nothing would have thrown and the rung would have scored badly for a
+reason no diagnostic named.
+
+The fix is a second closure the host declares (`ctx.lookRaw`), preferred by that rung and absent
+everywhere else, so every existing host is byte-identical. The check asserts the discrimination
+rather than the wiring — the same shape read on a stride-9 grid must give a DIFFERENT answer, or
+the check would pass with the bug present.
+
+### §51.3 Commissioning cost, in the unit an owner actually pays
+
+`makeArmHost` now counts MACHINE SAMPLES at the four places it advances the machine, and
+`samples()` reports them with the run count. At a 1 ms task that is machine time — laps the plant
+spends producing nothing — which is the half of target 4 a wall clock cannot see and which this
+project has never had an instrument for on this arm. It deliberately does NOT count the lattice
+settles inside `makeMachine`: those are a property of building a SIMULATED arm and have no
+counterpart on a real one.
+
+### §51.4 What the tab is
+
+`⑥ Deploy` on `flexisim.html`. It drives the same machine ③ Path does, through the same
+`makeArmHost` the Node bar measures, and has no viewer of its own — two views of one machine that
+can disagree is the defect class this project has paid for most often.
+
+- **Installation** (decides what is BUILT; changing it needs a new commissioning): tracker
+  commissioning-only or permanent; one-off parts or continuous laps; cascade depth; guided laps;
+  and one box per rung. *A one-off part has no lap to index*, so the lap-periodic build is not
+  merely discouraged there — it is unavailable, and declaring continuous laps makes it available
+  again. Both halves are asserted, because a gate that only ever refuses is not a gate.
+- **Armed** (live): one box per built rung, straight onto `setArmed`. ③ is the only one addressed
+  by lap phase, and the library withholds it off its own program — switch the shape on ③ Path with
+  it armed and watch it stop contributing, which is the retirement's argument in one toggle.
+- **Deploy-time** (live): keep the tracker connected — truth routed to `observe()` every sample, so
+  the cascade keeps re-identifying — and the authority cap, which `act()` has always applied to the
+  SUM once per sample and which therefore needs nothing rebuilt.
+- **PLC scan budget**: `auto.cost()` for whatever is armed at that instant, per rung, against
+  10,000 MAC. The PEAK cycle is the verdict because the target is "under 10%, ALWAYS"; the sliced
+  figure is shown beside it and labelled as the weaker claim it is.
+
+### §51.5 The arm can now reach the distilled rung, which it could not before
+
+`makeArmHost` gained `distilRuns()`: the training programs come from `designDemoPaths` — the same
+designed diet the ②b banks use — and the error is returned in JOINT space, the frame the rung
+corrects in. This closes the gap CLAUDE.md named as not started: whether the shipped lap-periodic
+rung composes on the ARM as the oracle ladder of §49 does. **The host is wired; the measurement has
+not been taken.** The diet is designed rather than production geometry for §49.11's forced reason —
+the window must reach the plant's memory (6363–8649 steps) and must not span the training lap
+(7356), and on one closed program the two cannot both hold.
+
+### §51.6 Three things the screenshots caught that no assertion did
+
+Every one is rule 6 — no error, nothing blank, just the wrong picture.
+
+1. The status chip used `.badge`, which is `position:absolute` and only means anything inside a
+   `.stage`. In a `.controls` row it positioned against the PAGE and landed on top of the header.
+2. Seven tabs do not fit a 412 px phone. `flex:1` clipped `⑦ Architecture` off the right edge,
+   where it was unreachable and looked like a rendering fault rather than like more content. The
+   strip now carries its own overflow and the smoke test asserts the last tab can be brought fully
+   into view — the page still must not scroll sideways, and both are checked.
+3. A `label` wrapping a `select` is a flex item with no basis, so the select sized to its longest
+   OPTION and ran off the panel.
+
+### §51.7 What is NOT built
+
+The tab exposes the installation and the armed set; it does not yet let the operator supply their
+own demo path or training programs (the block designs both), and it does not sweep configurations
+for them. The measurement §51.5 makes possible — the real lap-periodic rung composing on top of a
+distilled one on this arm — is the next thing worth running, and it is a commissioning, not a
+click.

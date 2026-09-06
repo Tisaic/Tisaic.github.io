@@ -722,7 +722,18 @@ gains spanning 19x to 342x. §49's mixture account predicts the DIRECTION and no
 and three points are not a law; what is established is the sign and the rough size, twice,
 independently. The gap that remains is narrower than it first looked: not whether this composes on
 the arm, which is measured, but whether the SHIPPED lap-periodic rung with a real operator composes
-there as the oracle ladder does. **UNDER THE RETIREMENT ONLY THE FIRST SURVIVES
+there as the oracle ladder does. **THE HOST FOR THAT IS NOW WIRED AND THE MEASUREMENT IS NOT TAKEN
+(plan §51.5).** `makeArmHost` gained `distilRuns()` — training programs from `designDemoPaths`, the
+same designed diet the ②b banks use, with the error returned in JOINT space because that is the
+frame the rung corrects in — so the arm can reach ②d through the one press for the first time. The
+diet is designed rather than production geometry for §49.11's forced reason: the window must reach
+the plant's memory (6363-8649 steps) and must not span the training lap (7356), and on one closed
+program the two cannot both hold. Wiring it found a units error that was INVISIBLE on the plant the
+rung was built on: the cascade's `ctx.look` is DECIMATED to the pilot's cadence while this rung's
+offsets are RAW machine samples, and on EMPS the cadence is 1 so the two closures are the same
+function — on the arm it is 9-13 and the deployed window would have been stretched by that factor
+against the one the fit saw, with nothing thrown and no diagnostic naming it. Hosts now declare
+`ctx.lookRaw` and every existing one is byte-identical. **UNDER THE RETIREMENT ONLY THE FIRST SURVIVES
 — 27.10x that transfers against 242.1x that does not**, which is the retirement's trade stated by
 the one press on a real machine rather than argued, and the same rung reads 33.15x on the
 trajectory where the memory reads 0.53x.
@@ -1121,7 +1132,7 @@ measurement behind each is in `docs/history/` — the pointer in brackets.
 | `console-boot.js` | The debug-console bootstrap, shared by every page, loaded first in `<head>`. |
 | `flowsim.html` | FlowSim: the GPU lattice-field engine's page (Simulate / Verify / Architecture). |
 | `ngrc.html` | NGRC playground: four interactive tabs on `lib/ngrc`. |
-| `flexisim.html` | FlexiSim: compliant serial chains (Move / Chain / Path / Black box / Verify / Architecture). |
+| `flexisim.html` | FlexiSim: compliant serial chains (Move / Chain / Path / Black box / Verify / **Deploy** / Architecture). |
 | `lib/lattsim/` | The lattice engine — lattice, fields, materials, operators, solver, backends, renderers. See its README. |
 | `lib/lattsim/operators/` | `lbm.js` (D3Q19 fluid), `scalar.js` (passive scalar), `elastic.js` (velocity–stress leapfrog), `frame.js` (gravity and the non-inertial frame). |
 | `lib/ngrc/` | The ported NGRC library. See its README. |
@@ -1258,7 +1269,7 @@ Four tabs, each framed as NGRC against a common alternative.
 Compliant serial chains. Joints are LUMPED nonlinear elements (gearbox stiffness,
 backlash, Stribeck friction, ratio, motor inertia); LINKS are lattice elastic solids, one
 small dense lattice per link in its own body frame. Every mass property is INTEGRATED
-FROM THE LATTICE. Six tabs. **The end application is CNC contouring, so ③ Path is the tab
+FROM THE LATTICE. Seven tabs. **The end application is CNC contouring, so ③ Path is the tab
 that matches it** — the point-to-point tabs measure a different question.
 
 - **① Move** — a single-joint hybrid arm. Commissioning runs inside the frame loop (pose
@@ -1890,7 +1901,31 @@ that matches it** — the point-to-point tabs measure a different question.
   Corrections are linearly interpolated between grid samples, never held. It locks its own
   soft sensor at the end.
 - **⑤ Verify** — the closed forms run in this browser against the same modules.
-- **⑥ Architecture** — the design note.
+- **⑥ Deploy** — **THE INSTALLATION, WHICH IS THE PRODUCT (plan §51).** Every other tab studies
+  one correction; this one is the cabinet: what the plant lets the controller have, what gets
+  commissioned, what is armed on the running machine, and what each costs a PLC scan. It drives
+  the SAME machine ③ does through the SAME `makeArmHost` the Node bar measures, and has no viewer
+  of its own — two views of one machine that can disagree is the defect class this project has
+  paid for most often. **The split it exposes was already in the library and reachable only from
+  a test:** `built.*` is every rung that was commissioned and `deployed.*` is what `act()` reads,
+  so the ladder's chosen prefix is a DEFAULT rather than a fixture. `AutoStack.setArmed` is the
+  door — a method rather than two assignments at the call site, because arming is TWO fields and
+  setting only the flag arms a rung that is NOT THERE, which contributes zero silently and reads
+  exactly like a rung that helped nothing. **INSTALLATION** (decides what is BUILT; changing it
+  needs a new commissioning): tracker commissioning-only or permanent, one-off parts or
+  continuous laps, cascade depth, guided laps, one box per rung. A one-off part has no lap to
+  index, so the lap-periodic build is UNAVAILABLE there and available on continuous laps — both
+  halves asserted, because a gate that only ever refuses is not a gate. **ARMED** and
+  **DEPLOY-TIME** are live and need nothing rebuilt: any prefix of the built set, the tracker
+  routed to `observe()` or not, and the authority cap `act()` has always applied to the SUM once
+  per sample. **PLC SCAN BUDGET** is `auto.cost()` for whatever is armed at that instant, per
+  rung, against 10,000 MAC — the PEAK cycle is the verdict because the target is "under 10%,
+  ALWAYS", with the sliced figure beside it labelled as the weaker claim. And commissioning cost
+  is reported in MACHINE SAMPLES (`host.samples()`), which at a 1 ms task is machine time — laps
+  the plant spends producing nothing, the half of target 4 a wall clock cannot see and which this
+  arm has never had an instrument for. Browser checks are WIRING only; the arm/disarm contract is
+  pinned on the object in `test/pilot/distil.test.mjs`, quick tier.
+- **⑦ Architecture** — the design note.
 
 ### Libraries
 

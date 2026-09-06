@@ -3638,6 +3638,118 @@ check('flexisim: …and the page does not scroll sideways on a phone',
   overflow.doc <= overflow.win + 2, JSON.stringify(overflow));
 await fx.click('.tab[data-tab="move"]');
 
+// ---- ⑥ DEPLOY: the installation panel. WIRING ONLY, DELIBERATELY.
+//
+// The performance belongs in Node where the plant is STATED — this page has already failed a
+// browser performance assertion once for a tab's stiff defaults, which had nothing to do with
+// the thing under test. What only the browser can break is what is asserted here: that the
+// panel is reachable, that the gates it draws are real gates, and that it does not overflow a
+// phone. The arm/disarm CONTRACT is pinned in `test/pilot/distil.test.mjs`, on the object.
+section('flexisim deploy');
+await fx.click('.tab[data-tab="deploy"]');
+{
+  const shown = await fx.evaluate(() => {
+    const p = document.getElementById('p-deploy');
+    const r = p.getBoundingClientRect();
+    return { on: p.classList.contains('on'), w: Math.round(r.width), h: Math.round(r.height),
+      others: [...document.querySelectorAll('.panel.on')].map((x) => x.id) };
+  });
+  // ASSERT GEOMETRY, NOT PRESENCE (rule 5): a panel can carry `on` and be a zero-height box.
+  check('flexisim/deploy: the tab opens and is the only panel shown, with a real box',
+    shown.on && shown.w > 100 && shown.h > 200 && shown.others.length === 1,
+    JSON.stringify(shown));
+
+  // NOTHING IS COMMISSIONED, SO NOTHING MAY BE ARMED. A checkbox over a rung that does not
+  // exist is the page offering something the machine will not do, and `act()` would answer
+  // it with a silent zero that reads exactly like a rung that did not help (rule 25).
+  const armState = await fx.evaluate(() => ['dep-a-classic', 'dep-a-stack', 'dep-a-distil',
+    'dep-a-hff'].map((id) => ({ id, dis: document.getElementById(id).disabled,
+      on: document.getElementById(id).checked })));
+  check('flexisim/deploy: with nothing commissioned, every ARMED box is disabled and clear',
+    armState.length === 4 && armState.every((x) => x.dis && !x.on), JSON.stringify(armState));
+
+  // BOTH HALVES OF THE GATE (rule 9). A one-off part has no lap to index, so the lap-periodic
+  // build is not merely discouraged there — it is unavailable; and declaring continuous laps
+  // has to make it available again, or the gate is just a disabled control.
+  const lapGate = await fx.evaluate(async () => {
+    const sel = document.getElementById('dep-periodic');
+    const box = document.getElementById('dep-lapmem');
+    sel.value = 'once'; sel.dispatchEvent(new Event('input', { bubbles: true }));
+    const off = box.disabled;
+    sel.value = 'lap'; sel.dispatchEvent(new Event('input', { bubbles: true }));
+    const on = box.disabled;
+    sel.value = 'once'; sel.dispatchEvent(new Event('input', { bubbles: true }));
+    return { off, on };
+  });
+  check('flexisim/deploy: the lap-periodic build is refused on one-off parts AND offered on '
+    + 'continuous laps — a gate that only ever refuses is not a gate',
+    lapGate.off === true && lapGate.on === false, JSON.stringify(lapGate));
+
+  // The deploy-time tracker switch is gated on the INSTALLATION, both ways.
+  const trkGate = await fx.evaluate(() => {
+    const sel = document.getElementById('dep-tracker');
+    const box = document.getElementById('dep-online');
+    sel.value = 'permanent'; sel.dispatchEvent(new Event('input', { bubbles: true }));
+    const perm = box.disabled;
+    sel.value = 'commission'; sel.dispatchEvent(new Event('input', { bubbles: true }));
+    return { perm, comm: box.disabled, checked: box.checked };
+  });
+  // With nothing commissioned it stays disabled under BOTH settings, which is the honest
+  // state and is asserted as such rather than papered over: what the installation decides is
+  // whether adaptation is AVAILABLE, and what commissioning decides is whether there is
+  // anything to adapt.
+  check('flexisim/deploy: the deploy-time tracker cannot be armed before a commissioning, '
+    + 'under either installation, and is left unchecked',
+    trkGate.perm === true && trkGate.comm === true && trkGate.checked === false,
+    JSON.stringify(trkGate));
+
+  // The authority is a RUN-TIME limit and its readout must follow it — a slider whose number
+  // does not move is the state "not measured" rendered as a value (rule 25).
+  const auth = await fx.evaluate(() => {
+    const s = document.getElementById('dep-uMax');
+    s.value = '15'; s.dispatchEvent(new Event('input', { bubbles: true }));
+    const a = document.getElementById('v-depUMax').textContent;
+    s.value = '30'; s.dispatchEvent(new Event('input', { bubbles: true }));
+    return { a, b: document.getElementById('v-depUMax').textContent };
+  });
+  check('flexisim/deploy: the authority readout tracks its slider',
+    auth.a === '1.50' && auth.b === '3.00', JSON.stringify(auth));
+
+  // THE PLC BUDGET PANEL SAYS SOMETHING RATHER THAN NOTHING. Before a commissioning there is
+  // no armed set to cost, and it has to say so — a blank box reads as a cost of zero.
+  const plc = await fx.evaluate(() => ({
+    plc: (document.getElementById('dep-plc').textContent || '').trim().length,
+    score: (document.getElementById('dep-score').textContent || '').trim().length,
+    badge: document.getElementById('dep-badge').textContent }));
+  check('flexisim/deploy: the budget and score panels state their empty case rather than '
+    + 'rendering blank', plc.plc > 20 && plc.score > 20 && /not commissioned/.test(plc.badge),
+    JSON.stringify(plc));
+
+  // THE TAB STRIP CARRIES ITS OWN OVERFLOW AND THE PAGE DOES NOT. Seven tabs do not fit a
+  // 412px phone, so the strip scrolls — and the check that matters is that the LAST tab is
+  // reachable rather than clipped off the edge, which is what it looked like before: no
+  // error, nothing blank, just a control nobody could press (rule 6).
+  const strip = await fx.evaluate(() => {
+    const t = document.getElementById('tabs');
+    const last = t.lastElementChild;
+    t.scrollLeft = t.scrollWidth;
+    const r = last.getBoundingClientRect(), tr = t.getBoundingClientRect();
+    return { over: t.scrollWidth > t.clientWidth + 1,
+      lastVisible: r.right <= tr.right + 1 && r.left >= tr.left - 1 && r.width > 20,
+      label: last.textContent.trim() };
+  });
+  check('flexisim/deploy: the tab strip scrolls, and its last tab can be brought fully into '
+    + 'view rather than being clipped off the edge',
+    strip.over && strip.lastVisible, JSON.stringify(strip));
+
+  const depOv = await fx.evaluate(() => ({
+    doc: document.documentElement.scrollWidth, win: window.innerWidth }));
+  check('flexisim/deploy: …and the tab does not scroll sideways on a phone',
+    depOv.doc <= depOv.win + 2, JSON.stringify(depOv));
+  await fx.screenshot({ path: join(SHOTS, '10-flexisim-deploy.png') });
+}
+await fx.click('.tab[data-tab="move"]');
+
 // The in-browser Verify tab runs the same closed forms against the same modules.
 section('flexisim verify');
 await fx.click('.tab[data-tab="verify"]');
