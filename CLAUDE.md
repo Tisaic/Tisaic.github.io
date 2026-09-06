@@ -33,7 +33,7 @@ is worth more than the claim is.
 | Completely self-tuning | **SUPPORTED** | No per-plant constants; every threshold re-derived from measurement; and it REFUSES with a stated reason, asserted to be right for the right reason. Rare, and the strongest thing here. |
 | Robust and tolerant | **CONTRADICTED ON TWO PLANTS: EVERY DEPLOYMENT HARMS THE MACHINE — AND SUPPORTED ON THREE** | Every plant's number is one commissioning DRAW and only now measured across seeds (`test/pilot/spread.mjs`). The three plants that win are repeatable — EMPS 1.05x spread over 8 seeds, the arm 1.13x over 6, and the COLD MILL 1.07x over 8 with **every one of the eight deploying and every one helping**, which no other plant here manages — and the two that do not are draws of 2.2x and 4.2x, so the failures differ in KIND and not only in size. Split by whether the pilot acted: on **Wood–Berry 9 of 12 seeds deploy and ALL NINE are worse than the 3 that refuse** (median 64.65 against 43.90); on the **tank at the old defaults 4 of 8 deploy and ALL FOUR hurt** (median 0.675x). Two plants sharing no physics, same shape: the refusals are the good outcomes. |
 | Reusable across plants | **3 CLEAR WINS OF 6, AND THE THIRD WIDENS THE CLAIM RATHER THAN REPEATING IT** | Arm, EMPS and now the COLD MILL win and are repeatable across seeds (1.13x, 1.05x, 1.07x). The mill is the strongest of the three by repeatability — **8 of 8 seeds deploy, 8 of 8 help**, 10.17-10.88 µm rms against an open loop of 15.15, worst draw 1.39x and best 1.49x, and the worst draw still beats both classical AGCs — and it is the only win that is not mechanical compliance: a linear plant whose dominant error is an exogenous periodic disturbance arriving through a 100-step transport delay. It had refused since it was built, at 0.42x then 0.61x then neutral. Two measurement repairs, no controller change: the delay is DECLARED (the probe cannot recover it — a dead time and a slow rise move the 90% crossing identically) and the forecast gate now reads the first lead the correction can actually move, instead of lead 0 where `hGrid` is zero by construction and R² was 0.044 against 0.868 at the first live lead. The other four were quoted from single draws and are not: Wood–Berry deploys on 9 of 12 seeds and **all nine are worse than the 3 that refuse**, while the plant WITHOUT the pilot (43.90) already beats the published BLT (51.95); the tank's 1.32x is one draw from a distribution that deployed 4 harmful controllers in 8. **A representative program at the verify fixes both** — Wood–Berry refuses all 12, the tank deploys 3 of 8 and all three help (median 1.512x, nothing made worse, gate correlation 0.989 against -0.057) — and leaves EMPS byte-identical. All six now run that way; the barrel's representative regime reads 0.22x and refuses what its program regime's 1.10x would have deployed. |
-| PLC memory and CPU | **REACHABLE AND COSTED — 9,517 MAC/CYCLE AGAINST A 10,000 BUDGET — BUT NOT WHAT SHIPS** | Memory was never the problem and is now smaller again: the forecast bank is ONE model for every lead, not one per lead — 727 kB of covariance to 10.7 kB, deployed bytes 25.4 kB to 6.0 kB, fit memory 30.4 kB to 11.0 kB — and it is BETTER on both plants that deploy (EMPS 12.70x → 14.69x, arm model-only 7.8154e-2 → 7.4340e-2) — **and the QUADRUPLE TANK now REFUSES at 0.08x where it deployed at 1.32x — but the result it lost was never reproducible.** `tanks.test.mjs` fails 6 checks at HEAD, passed at `c24bede`, and the deploy is lost at `20de1b7` (nine leads built instead of every lead), confirmed by reversal: raise `LEAD_SAMPLES` and it deploys again. Then the fix refused to behave like one — 9 refuses, 16 refuses, **24 DEPLOYS at 1.28x**, 32 refuses — and at the last PASSING commit, changing only the commissioning seed, the tank passes at two offsets and fails five checks at a third. So the shared fit did not break a solid measurement; it moved a marginal one across a threshold it was already sitting on, and the 1.32x in the six-plant line is a coin rather than a controller result. The fix is to make the tank's own score reproducible across seeds BEFORE deriving any constant against it — tuning a lead count until it goes green is fitting to a coin flip (rules 3, 31). Three other explanations were killed by measurement: `qpIters`, forecast gating (R² 0.93-0.99 at every lead, nothing gated — rule 16), and my own working changes. The fit is `lib/pilot/rls.js`: shared-covariance RLS, seeded from the commissioning posterior, gated at 4.6e-10% against the batch solver it replaces. **The deployed arithmetic is now met too, and by the six-plant pass rather than by a projection.** What shipped was 42,914 MAC/cycle on EMPS, 429% of 10% of a 1 ms scan. `test/pilot/sixplant.mjs` swept `qpIters` and `horizonTs` across all six plants at once — the first such pass this project has run — and rule 42's band picked 2 iterations at 1.2·Tset: **9,517 MAC/cycle, 95% of budget**, with EMPS 4.8% down and the arm 3.1% (both inside the band) while Wood-Berry improves 4.7% and the mill's verify climbs 23%. The earlier projected corner reached 101% and gave up 13% of the delivery; this reaches 95% and gives up 4.8%, because that projection held the fit mode fixed and the knobs are not separable. **It was made the default and then REVERTED**: the arm's ladder ships BETTER there (23.15x against 22.42x) while `autostack.test.mjs`'s contract — on the MODEL-ONLY stack, which is what survives the memory's retirement — goes 8.5e-2 to 9.14e-2 and red, and EMPS' cascade drops to two layers. The pass measured six plants' HEADLINES while the contracts sat one level down, which is the same fault it was built to close. The corner stays available through `setSolverDefaults` and is not imposed (rule 31). The pass also found a NaN no check could see: `pilot.N` set beyond the fitted bank reads unfitted leads and returns NaN, which passes every bounds test — now clamped and reported. And on six plants only two deploy, so this is two plants with four negative controls. |
+| PLC memory and CPU | **MET ON THE ARM — 6,178 MAC/CYCLE, 62% OF BUDGET, AND IT DELIVERS BETTER THAN THE PATH THAT MISSES BY 7.4x** | Memory was never the problem and is now smaller again: the forecast bank is ONE model for every lead, not one per lead — 727 kB of covariance to 10.7 kB, deployed bytes 25.4 kB to 6.0 kB, fit memory 30.4 kB to 11.0 kB — and it is BETTER on both plants that deploy (EMPS 12.70x → 14.69x, arm model-only 7.8154e-2 → 7.4340e-2) — **and the QUADRUPLE TANK now REFUSES at 0.08x where it deployed at 1.32x — but the result it lost was never reproducible.** `tanks.test.mjs` fails 6 checks at HEAD, passed at `c24bede`, and the deploy is lost at `20de1b7` (nine leads built instead of every lead), confirmed by reversal: raise `LEAD_SAMPLES` and it deploys again. Then the fix refused to behave like one — 9 refuses, 16 refuses, **24 DEPLOYS at 1.28x**, 32 refuses — and at the last PASSING commit, changing only the commissioning seed, the tank passes at two offsets and fails five checks at a third. So the shared fit did not break a solid measurement; it moved a marginal one across a threshold it was already sitting on, and the 1.32x in the six-plant line is a coin rather than a controller result. The fix is to make the tank's own score reproducible across seeds BEFORE deriving any constant against it — tuning a lead count until it goes green is fitting to a coin flip (rules 3, 31). Three other explanations were killed by measurement: `qpIters`, forecast gating (R² 0.93-0.99 at every lead, nothing gated — rule 16), and my own working changes. The fit is `lib/pilot/rls.js`: shared-covariance RLS, seeded from the commissioning posterior, gated at 4.6e-10% against the batch solver it replaces. **The deployed arithmetic is now met too, and by the six-plant pass rather than by a projection.** What shipped was 42,914 MAC/cycle on EMPS, 429% of 10% of a 1 ms scan. `test/pilot/sixplant.mjs` swept `qpIters` and `horizonTs` across all six plants at once — the first such pass this project has run — and rule 42's band picked 2 iterations at 1.2·Tset: **9,517 MAC/cycle, 95% of budget**, with EMPS 4.8% down and the arm 3.1% (both inside the band) while Wood-Berry improves 4.7% and the mill's verify climbs 23%. The earlier projected corner reached 101% and gave up 13% of the delivery; this reaches 95% and gives up 4.8%, because that projection held the fit mode fixed and the knobs are not separable. **It was made the default and then REVERTED**: the arm's ladder ships BETTER there (23.15x against 22.42x) while `autostack.test.mjs`'s contract — on the MODEL-ONLY stack, which is what survives the memory's retirement — goes 8.5e-2 to 9.14e-2 and red, and EMPS' cascade drops to two layers. The pass measured six plants' HEADLINES while the contracts sat one level down, which is the same fault it was built to close. The corner stays available through `setSolverDefaults` and is not imposed (rule 31). The pass also found a NaN no check could see: `pilot.N` set beyond the fitted bank reads unfitted leads and returns NaN, which passes every bounds test — now clamped and reported. And on six plants only two deploy, so this is two plants with four negative controls. |
 | Linear AND nonlinear alike | **STILL CONTRADICTED, BUT NO LONGER ONE ERROR CLASS** | The ordering by nonlinearity is still wrong at the ends: the most nonlinear plants — barrel as T⁴, tank as √h — refuse or sit marginal, and Wood–Berry, linear transfer functions with dead time, still LOSES (43.90 doing nothing against the published BLT's 51.95, and every deployment worse than that). What changed is the middle: the COLD MILL is a linear plant with a dominant transport delay and a periodic exogenous disturbance, and it now wins 1.45x median across 8 of 8 seeds, past the gaugemeter AGC that AMPLIFIES its dominant disturbance by 3/2. So the honest description is no longer "one error class" — it is two: mechanical compliance and friction (arm, EMPS), and periodic disturbance rejection through a declared dead time (mill). Two of six is not "alike", and Wood–Berry is the standing counterexample: a linear plant with dead time where declaring the delay was measured and changed nothing. |
 
 **ONE RIVAL HAS BEEN BUILT AND RUN, AND THE FIELD STILL HAS NOT BEEN ENGAGED** — this line
@@ -210,6 +210,60 @@ Each of these is a claim that can be shown false, which is the only kind worth w
    10% of a 1 ms task, it must be met in EVERY cycle rather than on average, and it covers
    commissioning, training and fit, because all of it runs ONLINE on the PLC. Nothing is
    done offline on a dev PC.
+
+   **MET ON THE ARM, AND NOT BY GIVING ANYTHING UP.** The deployed path fits at 62% of budget
+   and delivers MORE than the configuration that misses by 7.4x:
+
+   ```
+   basis    gain   feat   MAC/cycle  %budget   rounded   circle   sharp
+   null     no      352      73,664     737%    2.87x    2.76x    3.50x   <- what shipped
+   null     yes     352      12,778     128%    3.50x    4.80x    3.31x
+   linear   no      242      67,064     671%    2.63x    2.53x    3.16x
+   linear   yes     242       6,178      62%    3.31x    4.42x    3.21x
+   ```
+
+   Geometric mean 1.19x BETTER at 11.9x less arithmetic, on one commissioned model per basis
+   deployed twice, scored on the fitted program and two never run.
+
+   **THE QP IS A FIXED LINEAR MAP AND NOBODY HAD EXPLOITED IT.** `boxQP` is projected
+   gradient: every iteration is a linear map followed by a clamp, so while no clamp fires the
+   whole solve — truncated at `qpIters` or converged — is AFFINE in the free response. The
+   pilot applies only `u[0]`, so what the machine computes each cycle is one row of that map,
+   `u0 = k·f0 + c·uPrev`, built once at commissioning. **61,006 MAC/cycle to 120.**
+
+   It is licensed by a measurement that was already in the report and unused: `report.binding`
+   reads `model` at every cap tried and `capFrac` reads **0.0019** — the box the solver exists
+   to enforce is active in a fifth of one percent of samples, and where it fires the gain
+   clamps as the QP's own projection clamps its first move. Superposition verified to **3e-13**
+   over 200 random free responses per channel, so this is the solver reassociated rather than
+   an approximation of it. `k` is obtained by PROBING the solver with unit vectors, never from
+   the KKT conditions: the truncation is part of the map, and the converged map is on record as
+   not the one that ships (two iterations beat sixty on this arm).
+
+   **AND REMOVING THE WARM START HELPS.** The shipped solver warm starts from its previous
+   plan and the gain has no state, so the two are different controllers rather than two
+   evaluations of one — which is why it was measured rather than asserted. The machine prefers
+   the stateless one on two programs of three (+22%, +74%, −5%), consistent with "the converged
+   solve rings and the truncated one does not": a warm start is extra convergence by another
+   route.
+
+   **WHAT IT COSTS AND WHAT IS NOT ESTABLISHED.** The linear basis is a real trade — the
+   scheduled block EARNS its place on held-out data (0.771 against 0.840) and every linear row
+   is below its scheduled twin. It ships anyway because a path at 671% is a proposal and not a
+   baseline. And the SHARP SQUARE — the owner's bench program — is the one column the shipped
+   configuration wins, 3.50x against 3.21x. One plant, one stiffness, one feedrate, one seed;
+   `explicitGain` and `forceBasis` are both opt-in and OFF, and the six-plant pass and the
+   feedrate span both have to run before any default moves (rule 31). `cost()` still costs the
+   QP the gain replaces, so the MAC figures above are computed in the HARNESS — a cost model
+   edited to flatter a proposal is the instrument failing before the model.
+
+   **THE REMAINING TERM IS THE FORECAST AND THE SAME REASSOCIATION REACHES IT.** Since
+   u0 = sum_i k_i (w_i · row_i), every position of the row whose value is the same at every
+   lead folds into one coefficient evaluated ONCE instead of N times. `row_i` IS lead-dependent
+   — `L = ro.leads[i]` moves the look-ahead offsets and there is an explicit `ell = i/(N-1)`
+   block — but the measured-state lags are identical at every lead, the command terms read a
+   sequence known ahead, and `ell` is a constant per lead. Order 800 MAC/cycle for both
+   channels if it is built, which is what would buy the scheduled basis back inside the scan.
 
    **MEASURED, AND THE CURRENT DESIGN MISSES BY ABOUT 4000x.** The deployed path alone is
    428,660 MAC in its update cycle — 4x over even a generous budget, and it works only if
@@ -476,9 +530,45 @@ and the answer is to find a better model, not to accept a per-program calibratio
 1. **ONLINE ADAPTATION, which is the plant-based way to get memory-like accuracy.** A frozen
    model is stuck at its commissioning residual; a model that keeps updating converges on
    whatever the machine is doing NOW, and it is addressed by state, so it transfers. This is
-   the closest thing to what the table does without being a table. `Pilot` already has an
-   `adapt` path and a `leadStride`; it is off, and the one measurement on it moved the machine
-   0.1% because it adapted lead 0 alone.
+   the closest thing to what the table does without being a table.
+
+   **AND IT SHIPS AS A COMMISSIONING PHASE, BECAUSE THE TRACKER IS ONLY LEGAL THERE.** Fit on
+   the scribble, run a program with the tracker STILL ATTACHED as part of commissioning, adapt,
+   FREEZE, unwire the tracker, deploy. The deployed machine has no truth by either route — the
+   scored runs pass `truthUntilLap: 0` AND null `online` — and nothing is addressed by lap
+   position, so it is admissible under the retirement. Measured at depth 1, six guided laps,
+   three seeds and three programs:
+
+   ```
+     seed   rounded (adapted)     circle (never run)    sharp (never run)
+      s1    2.87 -> 6.33 (2.21x)  2.76 -> 7.58 (2.75x)  3.50 -> 4.31 (1.23x)
+      s2    2.87 -> 4.23 (1.47x)  3.48 -> 8.90 (2.56x)  2.99 -> 3.21 (1.07x)
+      s3    3.38 -> 6.00 (1.78x)  3.81 -> 11.03 (2.89x) 3.18 -> 3.91 (1.23x)
+   ```
+
+   **9 of 9 cells improve**, worst 1.07x, geometric mean 1.79x — and the two programs the
+   adaptation NEVER RAN gain more than the one it did (circle 2.73x geometric against the
+   adapted rounded rectangle's 1.79x). A correction worth more on paths it has not run than on
+   the one it was refined on is a model of the plant; the reverse ordering is what a memory
+   looks like. Six laps is the optimum (3 laps 5.70x, 6 laps 6.33x, 12 laps 5.43x) and past it
+   BOTH columns fall together — the RLS drift already on record rather than an overfit, which
+   would show home improving while held-out fell.
+
+   It is wired as `AutoStack`'s `guidedLaps` (default 0), which runs the phase after the
+   cascade rung commissions, nulls adaptation, re-scores with truth gone, and keeps the guided
+   model only if that frozen score is better. On mode 9 it reads 3.13x -> 4.03x.
+
+   **COMPOSED WITH THE BUDGET CONFIGURATION IT IS SUB-ADDITIVE, AND THE BENCH PROGRAM GOES
+   BACKWARDS.** Together with the explicit gain and the linear basis, at 62% of a PLC scan:
+   4.16x / 9.22x / 3.05x — geometric mean 1.61x better than what ships, but the sharp square
+   degrades monotonically (3.50 -> 3.19 -> 3.05) and ends 13% BELOW it. Guided's own value
+   falls from 1.79x/2.73x/1.17x standalone to 1.26x/2.09x/0.96x there. Hypothesis, untested:
+   the standalone numbers were taken on the SCHEDULED basis and these on a forced linear one,
+   so there is less model for the adaptation to move — which predicts guided recovering its
+   value once the forecast collapse buys the scheduled basis back inside the scan.
+
+   `Pilot`'s `adapt` path and `leadStride` remain off at deploy; the one measurement on that
+   moved the machine 0.1% because it adapted lead 0 alone.
 2. **A basis rich enough to carry the machine.** The pose-scheduled block is already built and
    selectable per channel — held-out R² 0.771 memory-alone against 0.840 scheduled — and the
    ladder does not report whether it was chosen, which is now fixed.
