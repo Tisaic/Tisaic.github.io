@@ -10340,3 +10340,58 @@ carried until the control was run.
 Two caveats, stated: this ran at 4 refinement passes against the 5 the recorded 5.49x used (the
 harness default; §49 measured 5.22x at 4 and 5.49x at 5, so the in-run `rich` row is the control
 that matters and the external anchor differs by one pass). And it is one plant.
+
+## §50 THE SECOND PLANT: 0.53x → 33.15x ON A TRAJECTORY THE AXIS HAS NEVER RUN
+
+§49 is one plant. This is the EMPS servo axis — a real machine, real data, no physics in common
+with the 2R arm — and it carries a negative control this project did not choose: on a two-tone
+sine the axis has never run, a converged lap table reads **0.53x, worse than doing nothing**, and
+a textbook norm-optimal ILC reads 0.53x there too, to four figures (`noilcbench.mjs`). The failure
+the distillation exists to repair is a property of the METHOD CLASS, not of our implementation.
+
+`test/pilot/distil-emps.mjs` commissions `hff` on four periodic trajectories, distils the four
+converged tables onto a ±512-sample window of the commanded reference through the shipped
+`lib/pilot/distil.js`, and scores the result on the sine, which appears in no training set.
+
+```
+  trajectory     lap    open loop      converged table     x      rows
+  program       6240   5.7640e-1   2.3805e-3   242.1x     5727
+  tone-3-7      4800   2.5849e-1   1.1117e-3   232.5x     4287
+  tone-2-5      5600   3.7891e-1   1.6372e-3   231.4x     5087
+  tone-5-11     4200   5.0675e-1   1.9358e-3   261.8x     3687
+
+  fit  18,788 rows, 40 features, held-out R² 0.9982 (null -0.0034, leave-one-program-out)
+
+  on the two-tone sine the axis has NEVER run:
+    open loop                 4.7537e-1 mm
+    the converged TABLE       8.9848e-1 mm    0.53x
+    the DISTILLED policy      1.4341e-2 mm   33.15x
+
+  on the machine's own program:
+    open loop                 5.7640e-1 mm
+    the converged TABLE       2.3805e-3 mm   242.13x
+    the DISTILLED policy      1.7601e-2 mm    32.75x
+```
+
+**THE PRICE IS STATED BESIDE THE GAIN.** At home the distillation gives up 7.4x — 242x to 33x —
+to take the unseen trajectory from 0.53x to 33.15x, a factor of 62. That is the retirement's whole
+trade in one table on a second plant: a memory that is superb where it was built and harmful
+everywhere else, against a model that is even across both. The deployed object is 40 coefficients
+at **78 MAC/decision**.
+
+**AND THE TRAINING SET HAD TO BE SIZED FROM THE MACHINE, WHICH COST THE FIRST RUN.** The first
+version picked tone amplitudes by hand and produced a trajectory at 4.3x the program's velocity and
+7.5x its acceleration: open loop 74 mm, harmonic rung 1.0x, a quarter of the training rows a
+machine failing to track. The distillation REFUSED it — held-out R² -0.333 against a null of
+-0.001, in-sample 0.795 — and applied nothing, so both columns read exactly 1.00x rather than
+harm. Two things worth keeping from that: rule 41b bites on a training diet exactly as it bites on
+an excitation, and the capacity gate caught a construction failure it was not built for.
+Re-sized to 0.60, 0.90 and 1.20 of the program's own measured peak velocity, all four
+trajectories converge at 232-262x and the fit deploys.
+
+**WHAT THIS DOES NOT SHOW.** The held-out sine runs at 1.17x the program's velocity, inside the
+0.60-1.20 span the training set covers, so this is transfer WITHIN the trained rate envelope —
+which is what the coverage guard requires and not an accident. A trajectory outside that envelope
+is a different measurement and the guard would fade the correction there rather than extrapolate.
+Four trajectories, one axis; and the distillation still trains on tables that iteration had to
+converge first, so the machine time §49 charges is unchanged.

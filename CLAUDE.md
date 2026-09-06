@@ -609,6 +609,38 @@ reaches 25.16x, so the number was a property of one starting point rather than o
 What stands is that the route to it is a MEMORY and the one legal route measured makes the
 machine worse.
 
+**AND IT HAS A SECOND PLANT (plan §50), WHICH IS THE ONLY THING THAT MAKES IT A METHOD.** The EMPS
+servo axis — real machine, real data, no physics in common with the arm — carries a negative
+control this project did not choose: on a two-tone sine the axis has never run, a converged lap
+table reads **0.53x, worse than doing nothing**, and a textbook norm-optimal ILC reads 0.53x there
+too, to four figures. `hff` is commissioned on four periodic trajectories, the four converged
+tables are distilled onto a ±512-sample window of the commanded reference through the SHIPPED
+module, and the sine appears in no training set:
+
+```
+  on the two-tone sine the axis has NEVER run:
+    open loop                 4.7537e-1 mm
+    the converged TABLE       8.9848e-1 mm    0.53x
+    the DISTILLED policy      1.4341e-2 mm   33.15x
+  on the machine's own program:
+    the converged TABLE       2.3805e-3 mm   242.13x
+    the DISTILLED policy      1.7601e-2 mm    32.75x
+```
+
+Held-out R² 0.9982 against a null of -0.0034, leave-one-program-out; 40 coefficients at **78
+MAC/decision**. **The price is 7.4x at home to buy a factor of 62 on the unseen trajectory** — the
+retirement's whole trade in one table, on a plant that is not the arm. TWO CAVEATS STATED: the sine
+runs at 1.17x the program's velocity, INSIDE the 0.60-1.20 span the training set covers, so this is
+transfer within the trained envelope — which is what the coverage guard requires rather than an
+accident, and outside it the guard fades rather than extrapolates; and the distillation still
+trains on tables iteration had to converge first, so the machine time is unchanged.
+**AND THE TRAINING DIET HAD TO BE SIZED FROM THE MACHINE.** The first run picked tone amplitudes by
+hand, produced a trajectory at 4.3x the program's velocity and 7.5x its acceleration — open loop 74
+mm, the rung managing 1.0x — and a quarter of the rows were a machine failing to track. The gate
+REFUSED it (held-out -0.333 against a null of -0.001, in-sample 0.795) and applied nothing, so both
+columns read 1.00x rather than harm. Rule 41b bites on a training diet exactly as on an excitation,
+and the capacity gate caught a construction failure it was not built for.
+
 **IT IS NOW A BLOCK. `lib/pilot/distil.js`, pinned by `test/pilot/distil.test.mjs` in the QUICK
 tier.** One weight vector per channel, and three guards each carrying the measurement that
 justifies it rather than caution: a CAUSAL-ONLY WINDOW IS REFUSED AT CONSTRUCTION (§49.14 reads
