@@ -9632,6 +9632,27 @@ designer at one feed and at the programs' own scale, and no production geometry 
 anywhere in training. **5.22x geometric at 222 MAC per decision — 2.2% of a PLC scan — against
 the shipped pilot's 2.83x at 9,517.**
 
+### AND DEEP REACH THROUGH SMOOTH KERNELS LOSES TO DIRECT TAPS — A BETTER FIT, A WORSE MACHINE
+
+The reach/transfer trade suggested an obvious escape: get the depth from EXPONENTIAL kernels
+instead of taps. Nine one-pole averages of the commanded reference with time constants 4 to
+1024 samples reach as far as a 1024-tap window and have no phase resolution at all, so they
+cannot act as a lap index by construction. One MAC per state per sample at deploy. Same four
+polygons, same passes, same everything else:
+
+```
+  basis                          fit R^2 ch0/ch1   sharp   rounded   circle    geo   feats
+  direct taps +/-256                0.976 / 0.891   4.21x    3.85x    4.23x    4.09x    83
+  + exponential bank to tau 1024    0.977 / 0.905   3.39x    3.24x    4.26x    3.61x   101
+```
+
+**It fits the elbow BETTER and delivers WORSE on two programs of three.** That is this
+project's own recurring lesson arriving a fourth time, and here in its simplest form — there
+is no QP in this path to blame the inversion on, so what the extra columns do is take weight
+away from the near taps that actually drive the correction. Smooth summaries of deep history
+are the wrong shape for this correction even though the deep history is real: what the elbow
+needs from 800 samples ago is not its average.
+
 ### THE LONG TOUR CONFIRMS THE ALIASING MECHANISM DIRECTLY
 
 `designTour` chains twelve random shapes into ONE closed lap of ~6,500 samples — replayable,
