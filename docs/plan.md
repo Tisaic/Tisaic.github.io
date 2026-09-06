@@ -9622,6 +9622,34 @@ pilot's own deployed path is 9,517 at today's defaults.
   distilled, 6 polys, +/-768           5.52x    4.25x    7.07x    5.49x    119
 ```
 
+### THE INCUMBENT TO BEAT IS NOT THE DEPTH-1 PILOT, AND AGAINST IT THIS IS A TRADE
+
+The distilled policy is clamped at 5x the pilot's `uMax` and SATURATES there on the sharp
+square (uPk 0.750 of 0.750). §48 measured that authority alone is worth 2.15x -> 3.56x on that
+program, so comparing it against a pilot at the commissioned cap credits the distillation with
+a knob it did not earn. The honest incumbent is the best LEGAL configuration this project has
+measured — cascade depth 2 at uCap 0.6 — and `_cascadapt2.mjs` ran it today at this same cell
+on these same three programs with byte-identical open-loop denominators (sharp 1.366e+0,
+circle 1.357e+0, rounded 1.303e+0):
+
+```
+  controller                         sharp   circle   rounded    geo
+  shipped pilot, depth 1             2.16x    3.99x    2.64x    2.83x
+  cascade depth 2, uCap 0.6          4.14x    9.19x    5.78x    6.04x   <- the incumbent
+  distilled, 6 polys, +/-768         5.52x    7.07x    4.25x    5.49x
+```
+
+**So the distillation is 0.91x of the incumbent overall: +33% on the hardest program and
+-23% / -26% on the two smooth ones.** It is not a win outright and saying so is worth more
+than the 1.94x-over-the-pilot line it replaces.
+
+**AND THE TWO ARE STRONG IN OPPOSITE PLACES, WHICH IS WHAT MAKES IT INTERESTING.** Taking the
+better of them per program — which is exactly what `AutoStack` already does, scoring every rung
+on the machine and shipping the best prefix — reads 5.52x / 9.19x / 5.78x, **geo 6.72x**, and
+neither component is doing the other's job. That is the measurement to run rather than a claim,
+and the reason to run it is that the distillation costs 238 MAC against a two-layer cascade's
+two QPs.
+
 **AND +/-768 IS 1,536 SAMPLES AGAINST POLYGON LAPS OF ABOUT 1,100, SO THE RULE IS NOT "THE
 WINDOW MUST FIT INSIDE A LAP".** It is that the training laps must DIFFER: six laps of six
 lengths cannot all be explained by one phase map, and a window longer than any single one of
