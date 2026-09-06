@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:1064,built:"2026-09-06T21:37:49Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:1065,built:"2026-09-06T21:48:15Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -1030,7 +1030,12 @@
           <option value="once" selected>one-off parts — no lap to index</option>
           <option value="lap">continuous laps — the same part again</option>
         </select></label>
-      <div class="slider"><span>Cascade depth</span>
+      <!-- DEPTH ≥ 2 IS A DOOR THE OWNER CLOSED, and it is offered here rather than
+           reopened: default 1, with what it costs on the label. The reason on record is
+           COMMISSIONING TIME, not deployed compute — the ladder commissions the cascade
+           FOUR times (depth 1 and 2, each with and without the conventional rung below) at
+           ~47 s a pilot, and depth 1 halves that count. -->
+      <div class="slider"><span>Model layers</span>
         <input type="range" id="dep-depth" min="1" max="3" step="1" value="1" />
         <span class="v" id="v-depDepth">1</span></div>
       <div class="slider"><span>Guided laps</span>
@@ -7650,6 +7655,11 @@ function depSync(fromCommission = false) {
     + 'lap-indexed rung legal — on one-off parts nothing may be addressed by lap phase, so ③ '
     + 'is not offered. Depth, guided laps and the three build boxes each cost commissioning '
     + 'time; the machine time they cost is reported below once a run has started. '
+    + '<b>Model layers</b> is the one the owner already closed: depth 1 ships a SINGLE pilot '
+    + 'on top of the conventional rung. A second layer is worth 1.90× on this arm’s '
+    + 'softest cell (6.43× → 12.21×) and was given up deliberately for '
+    + 'COMMISSIONING TIME — not for deployed compute — because the ladder '
+    + 'commissions the cascade four times over. Raise it and watch the machine-time record. '
     + `<b>Grade</b> buys wall clock with resolution — ${GRADES[inst.grade].note} — so a fast `
     + 'run is for watching the machine, and a number gets quoted at full.'
     + (inst.lapMemory ? ' <b>③ is armed to be built: it will not transfer to another program, '
