@@ -9981,6 +9981,36 @@ mixture, and the extra it captures is the half that does not transfer. Its uPk i
 on two programs of three where the linear basis is at the clamp on one, so it is also asking
 for a LARGER correction — a bigger, better-fitted, worse-aimed one.
 
+### ARC-LENGTH INDEXING IS STRICTLY WORSE, WHICH CLOSES TARGET 2's REPAIR QUESTION
+
+This was the last named-but-unbuilt candidate and the only one the account could not predict:
+it adds no directions (109 features against the time window's 119) and it is not inert by
+construction the way `rel` was, because a NONLINEAR reparameterisation of the offsets spans a
+different space than {q(k+o)}. Deliberately the wrong physics — a time window is the right
+object for a time-invariant plant — asking whether geometric invariance is worth more than
+physical correctness when the feed changes:
+
+```
+  feed                    time window   arc window
+  2.0e-3 (0.5x)              0.75x        0.33x
+  4.0e-3 (fitted)            5.52x        5.36x
+  6.0e-3 (1.5x)              2.75x        1.85x
+  8.0e-3 (2x)                1.81x        1.46x
+  fit R^2              0.974 / 0.921   0.979 / 0.926
+```
+
+**Worse at EVERY feed including the one it was fitted at, and fitting better on both channels.**
+So the time window's physical correctness is load-bearing, geometric invariance buys nothing
+here, and — the twelfth row — the fit points the wrong way again even for a knob that adds no
+capacity at all.
+
+**WHICH CLOSES THE QUESTION RATHER THAN LEAVING IT OPEN.** Target 2 has exactly two answers on
+this component now, both measured: train across a feed ladder, which removes the danger
+entirely and costs 2.3x at the commissioning feed; or commission per feed band, which is a
+product decision rather than a modelling one. There is no reparameterisation that avoids the
+choice, and the two obvious modelling escapes — scheduling on speed, indexing by arc — are both
+built and both worse than doing neither.
+
 ### THE RIDGE IS A COUNTER-EXAMPLE, AND IT SEPARATES TWO THINGS THIS SECTION HAD CALLED ONE
 
 The account says capacity costs transfer, so a HEAVIER ridge — less capacity — should pay. The
