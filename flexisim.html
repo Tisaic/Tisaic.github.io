@@ -8,7 +8,7 @@
   <title>FlexiSim — Commissioning Bench</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:1069,built:"2026-09-06T23:21:28Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:1070,built:"2026-09-06T23:39:24Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
 
   <style>
@@ -864,7 +864,15 @@ window.__flxDbg = () => (arm ? {
     gain: rep ? rep.gain : null, restored: !!(rep && rep.restored), grade, scanMs: scanMs(),
     cost: restored ? restored.cost : (host && host.samples ? host.samples() : null),
     armed: host && rep ? host.auto.armed() : null, plc: host && rep ? host.auto.cost() : null,
-    online: onlineFlag, adapted: host && host.auto.distil ? host.auto.distil.adapted() : 0 },
+    online: onlineFlag, adapted: host && host.auto.distil ? host.auto.distil.adapted() : 0,
+    // THE RUNG'S OWN DIAGNOSTICS, so a refusal can be read to its cause: which training runs
+    // converged and how far, and what the fit thought of itself before the machine scored it.
+    // A 0.22x with a high in-sample R² is a deploy-side fault; with a low one it is the diet or
+    // the grade. Without this the two are one number.
+    distil: rep && rep.distil ? { runs: rep.distil.runs, fit: rep.distil.fit ? {
+      deploy: rep.distil.fit.deploy, rows: rep.distil.fit.rows, features: rep.distil.fit.features,
+      heldOutR2: rep.distil.fit.heldOutR2, speedSpan: rep.distil.fit.speedSpan,
+      reason: rep.distil.fit.reason } : null, note: rep.distil.note || null } : null },
   stored: (() => { const s = loadStored(); return s ? { K: s.K, E: s.E, shape: s.shape, gain: s.gain, matches: storedMatches(s) } : null; })(),
 } : null);
 
