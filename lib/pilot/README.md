@@ -1,5 +1,29 @@
 # lib/pilot — route, limit, run, deploy
 
+## What is in here
+
+This directory grew past the one module this file used to describe, and a README that names
+only `pilot.js` is rule 30 aimed at itself. Every entry states what it is addressed by, because
+that is the distinction the whole design turns on: a component addressed by the machine's STATE
+transfers to a program it has never run, and one addressed by POSITION IN A LAP does not.
+
+| Module | What it is | Addressed by |
+|---|---|---|
+| `pilot.js` | The receding-horizon controller described below: settle → probe → excite → fit → verify → deploy-or-refuse, over a box-constrained QP. | machine state |
+| `classic.js` | The conventional rung, self-tuned — a static feedforward in the reference's own state `[a, v, sign v, 1]`, fitted on the machine. | reference state |
+| `stack.js` | A cascade of pilots: layer k models what layers 1..k−1 left, each frozen beneath it. | machine state |
+| `distil.js` | The distilled iteration. Lap-indexed iteration converges to a correction worth *less than nothing* on a trajectory the machine has not run; this regresses that converged correction onto a local window of the commanded reference and deploys the regression. Window must straddle now. Fit streams. | commanded reference |
+| `hff.js` | Harmonic feedforward: invert the machine at the lap's own harmonics. **A memory** — it is retired by the north star and kept because it is the thing distillation distils, and because its operator is a plant model even though its table is not. | lap phase |
+| `twin.js` | Identify a parametric twin, simulate it, compile a lap-1 feedforward in software. | simulated state |
+| `rls.js` | Shared-covariance recursive least squares — one covariance, many targets. The online fit for everything above. | — |
+| `ensemble.js` | Average k commissioning draws into one weight vector; free at deploy. | — |
+| `excite.js`, `banks.js`, `refine.js` | Excitation design, corner banks, refinement. | — |
+| `autostack.js` | **One button.** Commissions the ladder, scores every rung on the machine, ships the best prefix. | — |
+
+`distil.js` is not yet a rung of `autostack.js`, so the one press does not reach it.
+
+## `pilot.js` in detail
+
 A controller commissioned by one button, told nothing about the plant. Built on the
 NGRC discipline — window features, ridge readouts, everything measured — plus the
 box-constrained QP from `lib/blackbox/qp.js`. Imports no plant knowledge: the boundary
