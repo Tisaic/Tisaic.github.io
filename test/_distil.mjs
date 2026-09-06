@@ -216,7 +216,21 @@ for (const { name: TRAIN, path } of TRAINS) {
 // ---- 3. THE ROW BUILDERS ----
 const NX = DTR[TRAINS[0].name][0].m.length;
 const ZROW = new Float64Array(NX);
+// THE SCHEDULED BASIS: the `rich` row tensored with [1, rho, rho^2] where rho is the commanded
+// path speed relative to the diet's own reference feed. One linear map cannot represent three
+// feeds and the feed-ladder run measured exactly that — every feed safe, the commissioning feed
+// down 2.3x, fit R^2 falling from 0.974/0.921 to 0.911/0.908 because it is AVERAGING them.
+// Scheduling is the licence to use different weights per feed instead of one compromise set,
+// which is the same repair the corner router needed for its two regimes.
 const mkRow = (mode) => (hist, i, refAt, kSamp) => {
+  if (mode === 'sched') {
+    const base = mkRow('rich')(hist, i, refAt, kSamp);
+    const v = refAt.speed ? refAt.speed(kSamp) : FEED;
+    const rho = v / FEED - 1;
+    const out = [];
+    for (let j = 0; j < base.length; j++) out.push(base[j], base[j] * rho, base[j] * rho * rho);
+    return out;
+  }
   const r = [];
   if (mode === 'meas' || mode === 'both' || mode === 'relmeas') {
     for (const L of MLAGS) {
@@ -356,6 +370,11 @@ const mkRefAt = (shape) => {
   // The reader CARRIES its path, so the exponential bank is keyed by the same object the reader
   // reads and a row built for one program can never be scored against another's states.
   f.path = p2;
+  // THE COMMANDED PATH SPEED, which is what the scheduled basis schedules ON. It is a property
+  // of the program and the feed, known ahead, and unaffected by the correction — so scheduling
+  // on it cannot put the blend inside the loop (rule 35, and the corner router's own split
+  // between a COMMANDED scheduling variable and ACTUAL row contents).
+  f.speed = (i) => { const c = p2.at(Math.max(0, i) * S); return Math.hypot(c.vx || 0, c.vy || 0); };
   return f;
 };
 // The rig's own inverse kinematics, reached through a throwaway arm so the harness does not carry
@@ -416,7 +435,7 @@ for (const mode of MODES) {
       + ` … (${QBASE.length} terms, prior ${QSCALE}x on top of the normalisation)`);
   }
   const MAXL = (mode === 'cmd' || mode === 'rel' || mode === 'rich' || mode === 'diff'
-    || mode === 'expo' || mode === 'quad') ? 0 : MLAGS[MLAGS.length - 1];
+    || mode === 'expo' || mode === 'quad' || mode === 'sched') ? 0 : MLAGS[MLAGS.length - 1];
   let W = null, fitR2 = [NaN, NaN], nF = 0;
   // DAGGER: refit on the states the POLICY itself visits. A behaviour-cloned policy is fitted
   // on one distribution and then generates its own, and the gap between them is the whole
