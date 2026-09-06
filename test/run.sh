@@ -323,6 +323,14 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # energy, or refused.
     t node test/pilot/excite.test.mjs
     t node test/pilot/pilot.test.mjs
+    # THE DISTILLED POLICY'S CONTRACT (plan §49). Synthetic reference, synthetic converged
+    # prefix, no plant — what it pins is the BLOCK: fit and deploy build the same row, a
+    # causal-only window is refused rather than fitted, a fit that has learned its own
+    # dictionary is refused on a HELD-OUT score through leakage-safe folds, the authority cap
+    # and the coverage fade do what they say, and cost() is the arithmetic performed. It runs
+    # in under a second on purpose — a contract test that needs fifteen minutes of lattice is
+    # one nobody runs, which is how three defects here survived.
+    t node test/pilot/distil.test.mjs
     t node test/pilot/tanks.test.mjs
     t node test/pilot/thermal.test.mjs
     t node test/pilot/woodberry.test.mjs
