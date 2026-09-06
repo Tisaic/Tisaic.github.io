@@ -85,6 +85,16 @@ for (const t of TRAIN_SPEC) {
   if (t === 'demo') {
     designDemoPaths({ centre: PG.centre }).slice(0, NDEMO)
       .forEach((path, i) => TRAINS.push({ name: `demo${i}`, path }));
+  } else if (t === 'poly') {
+    // THE DEMO SET AT ONE FEED AND AT THE PROGRAMS' OWN SCALE. The `demo` diet measured 0.22x
+    // to 1.09x — worse than doing nothing everywhere — and it differs from the test programs in
+    // TWO ways at once: a feed ladder against sample-indexed offsets (the same offset is a
+    // different piece of geometry at each feed) and radii of 2.2-3.8 against the test programs'
+    // r 4 and 8x8. This diet removes both confounds so the failure can be attributed instead of
+    // guessed, and it is the only diverse training source here that is comparable to the
+    // named-program rows.
+    designDemoPaths({ centre: PG.centre, feeds: [FEED, FEED, FEED], rMin: 3.4, rSpan: 2.4 })
+      .slice(0, NDEMO).forEach((path, i) => TRAINS.push({ name: `poly${i}`, path }));
   } else TRAINS.push({ name: t, path: mkPath(t, FEED) });
 }
 const pilot = await commissionArm({ seed: 1, train: { shape: 'rounded', feed: FEED } });

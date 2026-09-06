@@ -9361,3 +9361,198 @@ achieves. The delay declaration is neutral there, not a lever — the third rout
 that plant today, after the diagonal-only declaration (inert) and the gate lead (never its
 problem; both channels were ungated at R^2 0.73 and 0.66). What remains measured as a real lever
 there is still only the off-diagonal, worth 82.10 → 52.52, and still short.
+
+## §49 — ITERATION IS THE GAP, AND WHAT IT CONVERGES TO IS *MOSTLY* A FUNCTION OF STATE
+
+The owner's directive was a 20x gain inside every north-star constraint. This section is
+what the machine said, including the two passes I spent inside a family §48 had already
+retired.
+
+### The self-inflicted half: I improved a component whose ceiling was on record
+
+§48 measured, with an ORACLE handing the QP the true free response, that a PERFECT forecast
+is worth **20%** on this arm, and wrote down the consequence: *"no amount of forecast work
+passes those numbers. Only ITERATION does."* I then built two forecast improvements.
+`_oefit.mjs` swept a global LTI simulator over eight model orders and three input orders,
+fitted by equation error and by Steiglitz-McBride; `_lpvsim.mjs` added pose scheduling with
+a shuffled-scheduling capacity control. Both are kept as clean negatives:
+
+- **Steiglitz-McBride is INERT here, not merely unhelpful.** It is rejected as unstable at
+  its FIRST iteration on every one of the twenty-four order pairs, so every SM row is
+  byte-identical to its ARX row. The first run reported R^2 -6694 because the guard tested
+  only FINITENESS — a finite exploding iterate was kept and then fed back through 1/A. The
+  repaired guard runs the AR recursion from an impulse, which is what a pole radius stands
+  for (rule 17).
+- **The best global LTI simulator reads 0.994 / 0.815 held out**, truth never injected,
+  against the shipped FIR bank's 0.989 / 0.840 — better on the shoulder, worse on the elbow.
+  Pose scheduling on the elbow angle buys +0.045 over its own SHUFFLED control, and
+  both-angle scheduling diverges.
+
+**The method lesson is §47's, collecting its third instance: measure a component's CEILING
+before improving it.** A ceiling is one run; an improvement campaign is a day.
+
+### The oracle ladder is stronger than §48 recorded, because §48 read it off the hardest program
+
+§48 quoted 19.48x total / 23.96x contour from the SHARP SQUARE. Run on the others:
+
+```
+  program    converged prefix alone (pilot off)    passes
+  rounded          40.44x tot / 46.94x con           5, still climbing at pass 4
+  circle          230.89x tot / 268.46x con          5
+  diamond          16.78x tot /  18.68x con          5
+```
+
+So the memory bound on this arm is 40x-230x, not 24x, and mode 10's 44x is inside it.
+
+### THE QUESTION THIS SECTION EXISTS FOR: is the converged correction a FUNCTION OF STATE?
+
+The prefix is indexed by position in a lap, which the retirement forbids. But "iteration
+needs a memory" and "what iteration converges to can only be addressed by a memory" are
+different claims, and only measurement separates them. `test/_distil.mjs` converges the
+prefix by oracle iteration and then REGRESSES it onto signals a deployed machine has, and
+deploys that through a new `policy` port on the arm rig — deliberately beside `pre`, so the
+two are scored through one loop and the INDEX is the only difference between them.
+
+**THE MEASURED HALF DIVERGES AND THE COMMANDED HALF DOES NOT.** A policy fitted on the six
+`routeSignals` measurements reads 0.09x: those signals are DOWNSTREAM of the correction, so
+closing the policy around them is the positive feedback rule 35 names, and a clamp does not
+save it. The commanded reference cannot be affected by the correction at all, and it is a
+function of the program's LOCAL SHAPE rather than of position in a lap. Everything below is
+the commanded half.
+
+### Fitted on ONE program it is a memory in disguise; pooled over TWO it transfers
+
+```
+  training set        program           pilot alone   distilled   memory
+  rounded             rounded (fitted)      2.64x       21.78x    40.44x
+  rounded             circle                3.99x        0.29x     0.87x
+  rounded             sharp                 2.15x        0.61x     0.74x
+
+  rounded + circle    rounded (fitted)      2.64x       13.84x    40.44x
+  rounded + circle    circle  (fitted)      3.99x       14.04x   230.89x
+  rounded + circle    sharp   HELD OUT      2.15x        3.72x         -
+```
+
+**One program: 21.78x at home and worse than doing nothing everywhere else** — the same
+shape as every phase-indexed table here (125x at home, 0.55x on a signal never seen). **Two
+programs: 1.73x the shipped pilot on a program never converged.** That is the corner-bank
+arc's finding on a different object: a bank fitted on one program is at home there and
+nowhere else, and diversity is what buys the generalisation.
+
+### THE WINDOW'S REACH IS A TRADE AGAINST TRANSFER, AND THE PLANT FORCES IT
+
+```
+  config                       feats   rounded   circle   diamond   sharp (HELD OUT)
+  +/-256 samples, linear          47    13.84x   14.07x       -          3.70x
+  +/-256, friction basis          83    16.03x   13.77x       -          3.99x
+  +/-1024, linear                 83    24.93x   27.25x       -          0.47x
+  +/-1024, friction, 3 programs  119    19.77x   19.38x    10.76x        1.61x
+```
+
+Rule 37 was the right diagnosis and it cuts both ways. Reaching +/-1024 samples takes the
+fitted programs to 24.93x and 27.25x — **9.4x the shipped pilot, and 62% of the lap-indexed
+memory** — with elbow fit R^2 going 0.879 -> 0.944. And it takes the held-out program to
+**0.47x, worse than doing nothing**, because +/-1024 samples spans more than a whole
+817-sample lap: past that reach the feature set IS a lap index and the policy is the memory
+rebuilt through the regressors.
+
+**THE PLANT FORCES THIS ON A SINGLE PROGRAM.** This elbow's directly measured memory is
+6363-8649 solver steps and a lap is 7356, so a window that REACHES the plant necessarily
+SPANS the program. That is §41's aliasing theorem arriving from the other end, and it is
+why the memory works here and a model does not. Aliasing needs ONE lap, so pooling programs
+whose laps DIFFER should break it — measured, three lap lengths move held-out 0.47x ->
+1.61x, a real move in the predicted direction and still under the pilot's own 2.16x. Three
+closed programs are not enough.
+
+**THE FRICTION BASIS EARNS ITS PLACE AND IS SMALL.** Sign and magnitude of the commanded
+velocity at nine offsets, 36 extra coefficients: elbow fit 0.879 -> 0.922, rounded 13.84 ->
+16.03, and the HELD-OUT program up as well (3.70 -> 3.99) — the direction that says it is
+modelling the plant rather than the program. Stribeck friction and backlash switch on
+DIRECTION and no linear map of positions can express that; `classic.js` is [a, v, sign v, 1]
+for exactly this reason.
+
+### THE BLOCK'S OWN DESIGNED DEMO SET POISONS THIS OBJECT, AND THE REASON IS TARGET 2
+
+```
+  4 designed demo paths, +/-1024   0.28x rounded   1.09x circle   0.22x sharp
+  4 designed demo paths, +/-256    0.52x rounded   0.74x circle   0.47x sharp
+```
+
+Worse than doing nothing everywhere, including on programs the short-window pooled fit
+reaches 16x on. `designDemoPaths` is a FEED LADDER (4e-3, 8e-3, 5.5e-3) and these offsets
+are indexed in SAMPLES, so the same offset is a different piece of geometry at each feed and
+the fit averages three incompatible kernels. **It is target 2 arriving as a defect rather
+than as a test: a sample-indexed window is not feedrate-invariant.** Its paths are also
+r 2.2-3.8 against the test programs' r 4 and 8x8, so scale is confounded with feed and this
+run cannot separate them — which is why `randomPolygon` gained an optional radius range
+(defaults unchanged, so the §36/§37 diet is byte-identical) and a feed- and scale-matched
+diet is measured separately.
+
+### §48'S NAMED COMPOSITION IS A NULL IN ITS LEGAL FORM
+
+§48 ends by naming the legal route to program-specific accuracy — cascade depth 2 at raised
+authority WITH gated adaptation — and that row did not exist. `_cascadapt2.mjs` gained a
+`guided` mode: adapt through the peel on ONE program with the truth attached, FREEZE every
+layer, then score with `truthUntilLap: 0` so the truth is withheld outright. That is the
+only form admissible under the owner's constraint that the tracker exists at commissioning
+only; every other row in that bench adapts at DEPLOY, which on this arm means a permanent
+tool tracker.
+
+```
+  depth 2, uCap 0.6   sharp    circle   rounded   geo    legal?
+  none (static)       4.14x     9.19x    5.78x    6.04   yes
+  guided, frozen      3.59x    11.00x    5.82x    6.12   yes
+  all (deploy-time)   4.87x     9.77x    6.87x    6.89   no - permanent tracker
+```
+
+**+1.3%, and a trade** — sharp down 13%, circle up 20%. The guided weight fingerprint moved
+and the restore control came back identical to six decimals, so this is a null and not an
+inert run. My own earlier "guided is worth geo 1.79x" was measured at depth 1 and the
+shipped authority; at depth 2 with the cap raised it nets nothing. That is the third
+non-composition this session.
+
+### WHERE IT LEAVES THE DIRECTIVE, STATED ON ONE DENOMINATOR
+
+Everything below is open-loop `totalRms` at K 0.25 / E 0.03, feed 0.004, contour + lag.
+
+```
+  controller                                        rounded   circle   sharp   lap index?
+  shipped pilot (depth 1)                             2.64x    3.99x   2.15x   no
+  cascade depth 2, uCap 0.6                           5.78x    9.19x   4.14x   no
+  distilled iteration, 2 programs, +/-256 + friction 16.03x   13.77x   3.99x   no
+  distilled iteration, 2 programs, +/-1024           24.93x   27.25x   0.47x   in effect, yes
+  converged oracle prefix                            40.44x  230.89x       -   YES
+```
+
+**On the programs commissioning saw, a component addressed by the local command window and
+costing 166 MAC per decision — 1.7% of a PLC scan — delivers 16x where the shipped pilot
+delivers 2.6x.** On a program it has never seen it delivers 3.99x against 2.15x. The 20x
+line is crossed only in the +/-1024 row, and that row is a memory wearing a feature set, so
+it is quoted as the bound it is rather than as a result.
+
+### WHAT WOULD OVERTURN THIS, AND WHAT IS RUNNING
+
+The command window is the wrong regressor to be arguing about, because it has to encode
+BOTH the reference-to-error map and the plant inverse, and only the second is
+program-independent. What iteration converges to is
+
+```
+  u* = -G^-1 e_free
+```
+
+with G a PLANT operator, and the pilot ALREADY forecasts `e_free` over its whole horizon and
+hands the QP that vector as `f0`. A map from `f0` to `u*` is program-independent BY
+CONSTRUCTION, and it is the same shape — and the same 120 MAC — as this session's
+`explicitGain`, with the solver PROBE replaced by a regression against the converged
+correction. `test/_gainfit.mjs` measures whether it transfers better as a REGRESSION before
+anything is deployed, because a deployment changes the applied history and so changes `f0`,
+which is a closed loop and a second experiment.
+
+Its sniffer needs no library change: `oracleF0`'s function form is specified so that a
+function returning `fitted` reproduces the un-oracled run to the last digit, so returning
+`fitted` and recording it is a byte-identical run that also hands out `f0` — and the harness
+asserts that identity against the 1e-4 floor §48 records for this port rather than assuming
+it. Its first version scored the recording run at 1.16x where the prefix alone reaches 40x,
+because the pilot was APPLYING a full one-shot correction on top of a converged prefix —
+mode 8's double-correction, in a bench built by someone who had just written that sentence
+down.

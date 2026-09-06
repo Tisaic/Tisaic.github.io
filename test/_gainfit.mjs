@@ -100,9 +100,20 @@ async function gather(shape) {
     }
     return fitted;
   };
+  // THE PILOT MUST RUN AND MUST NOT ACT. `f0` only exists inside `act()`, but a pilot applying
+  // its full one-shot correction ON TOP of a converged prefix is the double-correction mode 8
+  // already paid for — the first version of this bench scored the recording run at 1.16x where
+  // the prefix alone reaches 40x, because the fitted forecast describes the BARE machine and the
+  // machine underneath it is already corrected. Shrinking `uMax` to nothing leaves `f0` computed
+  // exactly as before (it is built before the solve) while the applied correction is zero, so
+  // the machine being recorded is the converged one and `f0` is a clean forecast of its free
+  // response with no correction history folded in.
+  const uSave = pilot.uMax;
+  pilot.uMax = 1e-12;
   const tr = [];
   const withSniff = await deployOn(pilot, shape, true, FEED, { pre, oracle: sniff, trace: tr });
   const plain = await deployOn(pilot, shape, true, FEED, { pre });
+  pilot.uMax = uSave;
   return { shape, path, pre, LAPK, LAPS, rows, tr, open,
     ident: Math.abs(withSniff.r.totalRms - plain.r.totalRms) / plain.r.totalRms,
     x: open / plain.r.totalRms };
