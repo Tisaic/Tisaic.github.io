@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:1065,built:"2026-09-06T21:48:15Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:1066,built:"2026-09-06T22:02:20Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -7265,9 +7265,23 @@ async function startAutoP(inst = null) {
     // whole press.
     probeLaps: (inst && GRADES[inst.grade] ? GRADES[inst.grade].probeLaps
       : { warmup: 1, avg: 2 }),
-    // HAND A FRAME BACK often enough that the tab survives a run of tens of thousands of
-    // steps, and rarely enough that the yielding itself is not the cost.
-    yieldEvery: 1500,
+    // ---- HOW OFTEN THE MACHINE HANDS A FRAME BACK, WHICH IS THE ANIMATION'S FRAME RATE.
+    //
+    // This is not "how often the page redraws" — the frame loop already draws every rAF.
+    // It is how far the machine ADVANCES between one drawable state and the next, so at
+    // 1500 the arm teleported 1500 samples at a time and the commissioning looked like a
+    // slideshow. Measured on this page: 3,601 samples/s, so 1500 samples is 417 ms per
+    // visible update — 2.4 fps, which is exactly what it looked like.
+    //
+    // AND MAKING IT SMOOTH IS ALMOST FREE, because the run is COMPUTE-bound rather than
+    // frame-bound. 150 samples is ~42 ms of lattice work — still well above the 16.7 ms
+    // frame period, so the loop never idles waiting for a frame and the only added cost is
+    // one rAF round-trip per yield against 42 ms of physics. 1500 -> 150 buys 2.4 fps ->
+    // 24 fps for that.
+    //
+    // The RESULT cannot move: `test/pilot/yield.test.mjs` pins that a yielding host reaches
+    // an identical ladder, rung row for rung row, whatever the yield interval.
+    yieldEvery: 150,
     onYield: autoYield,
     onProgress: autoProgress,
     onStage: autoOnStage,
