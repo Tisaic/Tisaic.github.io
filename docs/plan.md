@@ -9882,6 +9882,24 @@ and the anti-correlation is still there. Any shipped version of this component m
 candidates on the machine — the leave-one-program-out selector built here is exactly the
 instrument that must NOT be trusted, and it is kept because measuring that is the finding.
 
+**AND IT WAS CONFIRMED PROSPECTIVELY, WHICH IS THE ONLY KIND OF CONFIRMATION WORTH HAVING
+HERE.** The account above was written and committed while the quadratic run was still
+converging; the rows landed afterwards and are the strongest instance in the section:
+
+```
+  basis                       fit R^2         sharp   rounded   circle    geo
+  linear + friction, 119 feat  0.974 / 0.921   5.52x    4.25x    7.07x    5.49x
+  + quadratic block, 419 feat  0.985 / 0.955   2.98x    1.94x    2.43x    2.41x
+```
+
+**The best fit in the whole section produces nearly the worst controller — 2.41x, below even
+the shipped pilot's 2.83x, at 56% of the linear basis's delivery.** The block is not inert
+this time (the first version was, at 6.5e-6 of the linear columns' scale, and returned
+byte-identical numbers), it is doing exactly what capacity does here: capturing more of the
+mixture, and the extra it captures is the half that does not transfer. Its uPk is at the clamp
+on two programs of three where the linear basis is at the clamp on one, so it is also asking
+for a LARGER correction — a bigger, better-fitted, worse-aimed one.
+
 **AND IT PREDICTS SOMETHING THAT HAS NOT BEEN MEASURED (rule 59).** If the mixture account is
 right, the transferable component should be recoverable by fitting the EARLY passes'
 increments rather than the converged total — pass 1's `du` alone, or a weighted sum that
