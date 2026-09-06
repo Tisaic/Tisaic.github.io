@@ -265,6 +265,59 @@ check('…and contributes through act() on the host\'s own look-ahead closure, w
   + 'rung that is armed but never reached would not',
   Math.abs(auto.act({ look: (o) => pref(500 + o) })[0]) > 1e-6,
   `${auto.act({ look: (o) => pref(500 + o) })[0]}`);
+// ---- KEEPING THE TRACKER ON: THE SAME RECURSION, CONTINUED.
+//
+// The commissioning fit streams, so the estimator that produced `W` is still here and can be
+// handed more rows. That is what lets a distil-only controller offer "the tracker stays on the
+// machine" as a real option rather than a dead switch — the pilot's RLS is 72,600 MAC/sample
+// and does not fit a scan unsliced; this one is paid per DECISION.
+//
+// BOTH HALVES (rule 9). It must LEARN from a row it should, and REFUSE the rows it must not:
+// outside the trained speed span the correction is already faded, so the target was never
+// actually commanded and learning there fits the fade rather than the plant.
+{
+  const look = (o) => pref(700 + o);
+  const pol = auto.built.distil;
+  const w0 = Float64Array.from(pol.W[0]);
+  const u0 = pol.actLook(look, null)[0];
+
+  // A residual the block is told about must move the estimate — and toward removing it.
+  const learned = pol.observe(look, null, [u0], [0.02]);
+  const u1 = pol.actLook(look, null)[0];
+  check('with the tracker left on, an observed residual is learned from and moves the applied '
+    + 'correction toward removing it',
+    learned && u1 > u0 && pol.adapted() === 1, `${u0} -> ${u1}, learned ${learned}`);
+
+  // …and it is the SAME recursion, so the commissioned posterior is its prior rather than a
+  // second estimate accumulated beside it.
+  const drift = Math.max(...pol.W[0].map((v, i) => Math.abs(v - w0[i])));
+  check('…as the same shared-covariance recursion the fit used, seeded by what it commissioned',
+    drift > 0 && Number.isFinite(drift), `largest weight move ${drift}`);
+
+  // THE REFUSALS. A non-finite reading, a wrong channel count, and a speed outside the span
+  // the fit saw must all leave the estimate untouched — a row learned from any of them is a
+  // row whose target the block never commanded.
+  const n0 = pol.adapted();
+  const bad = [
+    pol.observe(look, null, [u1], [NaN]),
+    pol.observe(look, null, [u1], []),
+    pol.observe(look, null, [Infinity], [0.01]),
+  ];
+  check('…while a non-finite reading or a wrong channel count is REFUSED, not learned from',
+    bad.every((b) => b === false) && pol.adapted() === n0, JSON.stringify(bad));
+
+  // The speed gate, on a policy whose fit actually saw a span.
+  const span = pol.report.speedSpan;
+  if (span) {
+    const outside = pol.observe(look, span[1] + 10 * (span[1] - span[0] + 1), [u1], [0.01]);
+    check('…and a row commanded outside the trained speed span is refused, because the '
+      + 'correction there is already faded and its target was never commanded',
+      outside === false, `span ${JSON.stringify(span)}`);
+  } else {
+    console.log('    (no speed span on this substrate — the fade gate is exercised on the arm)');
+  }
+}
+
 // ---- THE WINDOW IS IN RAW SAMPLES, AND A DECIMATED LOOK-AHEAD IS A DIFFERENT GRID.
 //
 // The cascade's `ctx.look` steps by the pilot's own cadence, because that is the grid its
