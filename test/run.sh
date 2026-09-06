@@ -331,6 +331,13 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # in under a second on purpose — a contract test that needs fifteen minutes of lattice is
     # one nobody runs, which is how three defects here survived.
     t node test/pilot/distil.test.mjs
+    # AND THE SECOND PLANT (plan §50), full tier: five harmonic commissions on the EMPS axis,
+    # distilling the converged tables through the shipped module and scoring a two-tone sine the
+    # machine has never run. It asserts BOTH halves — the table HARMS the machine there (0.53x,
+    # a negative control a textbook norm-optimal ILC reproduces to four figures) and the policy
+    # distilled from that same correction HELPS (33x) — plus the price at home, because a
+    # transfer bought by giving up the trained program is a different product.
+    if [ "${SUITE}" = "full" ]; then t node test/pilot/distil-emps.test.mjs; fi
     t node test/pilot/tanks.test.mjs
     t node test/pilot/thermal.test.mjs
     t node test/pilot/woodberry.test.mjs

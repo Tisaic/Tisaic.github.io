@@ -101,32 +101,38 @@ function transfer(corr) {
   return 1000 * Math.sqrt(s / n);
 }
 
-console.log('\ndistilling the converged lap table on the EMPS servo axis — a second plant\n');
+/**
+ * Run the whole second-plant measurement and RETURN the numbers. Exported so the contract test
+ * asserts on the same run this file prints, rather than growing a second copy of the routing —
+ * three separate copies of a rig's routing have each shipped a defect here (rule 61).
+ */
+export async function runEmpsDistil({ log = console.log } = {}) {
+  log('\ndistilling the converged lap table on the EMPS servo axis — a second plant\n');
 
-// ---- TRAINING TRAJECTORIES. The machine's own program plus periodic tones that differ from it
-// and from each other, so no single lap length dominates the window (the aliasing constraint).
-const VPROG = rates(PR.q).v;
-const TRAIN = [
+  // ---- TRAINING TRAJECTORIES. The machine's own program plus periodic tones that differ from it
+  // and from each other, so no single lap length dominates the window (the aliasing constraint).
+  const VPROG = rates(PR.q).v;
+  const TRAIN = [
   { name: 'program', q: PR.q, lap: P },
   { name: 'tone-3-7', q: tone(4800, 3, 7, 0.60, VPROG), lap: 4800 },
   { name: 'tone-2-5', q: tone(5600, 2, 5, 0.90, VPROG), lap: 5600 },
   { name: 'tone-5-11', q: tone(4200, 5, 11, 1.20, VPROG), lap: 4200 },
-];
-console.log(`  program peak |v| ${VPROG.toExponential(3)} /sample; training tones at `
+  ];
+  log(`  program peak |v| ${VPROG.toExponential(3)} /sample; training tones at `
   + '0.60, 0.90 and 1.20 of it, so the set SPANS a rate range rather than sitting at one point');
-const tq = rates(TQ);
-console.log(`  held-out sine at ${(tq.v / VPROG).toFixed(2)}x the program's velocity and `
+  const tq = rates(TQ);
+  log(`  held-out sine at ${(tq.v / VPROG).toFixed(2)}x the program's velocity and `
   + `${(tq.a / rates(PR.q).a).toFixed(2)}x its acceleration — inside the trained span or not, `
   + 'stated either way\n');
 
-const pol = new DistilPolicy({
+  const pol = new DistilPolicy({
   channels: 1, refDim: 1, offsets: OFFS, signOffsets: SOFF, ridge: 1e-8, uMax: UMAX * 5,
-});
-console.log(`  window ${OFFS[0]} … ${OFFS[OFFS.length - 1]} samples, `
+  });
+  log(`  window ${OFFS[0]} … ${OFFS[OFFS.length - 1]} samples, `
   + `${pol.nFeatures} features, ${pol.cost()} MAC/decision\n`);
-console.log('  trajectory     lap    open loop      converged table   x     rows');
+  log('  trajectory     lap    open loop      converged table   x     rows');
 
-for (const t of TRAIN) {
+  for (const t of TRAIN) {
   const hff = new HarmonicFF({ lap: t.lap, channels: 1, uMax: UMAX });
   const r = await hff.commission(async (c) => driveRef(t.q, t.lap, c ? (k) => c.at(k)[0] : null));
   // The converged table IS the memory. Its values are the distillation target.
@@ -135,40 +141,48 @@ for (const t of TRAIN) {
   const refAt = (k) => [t.q[((k % t.lap) + t.lap) % t.lap]];
   const used = pol.addProgram({ refAt, n: t.lap, prefix });
   const gain = r.base / r.best;
-  console.log(`  ${t.name.padEnd(12)} ${String(t.lap).padStart(5)}   ${r.base.toExponential(4)}   `
+  log(`  ${t.name.padEnd(12)} ${String(t.lap).padStart(5)}   ${r.base.toExponential(4)}   `
     + `${r.best.toExponential(4)}  ${gain.toFixed(1).padStart(6)}x  ${String(used).padStart(5)}`
     + (gain < 2 ? '   <- the rung got nothing here; these rows are a machine failing to track' : ''));
-}
+  }
 
-const rep = pol.fit();
-console.log(`\n  fit: ${rep.rows} rows, ${rep.features} features, `
+  const rep = pol.fit();
+  log(`\n  fit: ${rep.rows} rows, ${rep.features} features, `
   + `held-out R² ${rep.heldOutR2.map((v) => v.toFixed(4)).join(' / ')} `
   + `(null ${rep.controlR2.map((v) => v.toFixed(4)).join(' / ')}, ${rep.foldKind})`);
-console.log(`  ${rep.deploy ? 'DEPLOYS' : 'REFUSES'}${rep.reason ? ' — ' + rep.reason : ''}`);
+  log(`  ${rep.deploy ? 'DEPLOYS' : 'REFUSES'}${rep.reason ? ' — ' + rep.reason : ''}`);
 
-// ---- THE COLUMN THAT DECIDES IT. Both corrections scored on the same never-run sine.
-const hffHome = new HarmonicFF({ lap: P, channels: 1, uMax: UMAX });
-const rh = await hffHome.commission(async (c) => driveRef(PR.q, P, c ? (k) => c.at(k)[0] : null));
-const sineRef = (k) => [TQ[Math.min(N2 - 1, Math.max(0, k))]];
+  // ---- THE COLUMN THAT DECIDES IT. Both corrections scored on the same never-run sine.
+  const hffHome = new HarmonicFF({ lap: P, channels: 1, uMax: UMAX });
+  const rh = await hffHome.commission(async (c) => driveRef(PR.q, P, c ? (k) => c.at(k)[0] : null));
+  const sineRef = (k) => [TQ[Math.min(N2 - 1, Math.max(0, k))]];
 
-const openT = transfer(null);
-const tableT = transfer((k) => hffHome.at(k % P)[0]);
-const polT = transfer((k) => pol.act(sineRef, k)[0]);
+  const openT = transfer(null);
+  const tableT = transfer((k) => hffHome.at(k % P)[0]);
+  const polT = transfer((k) => pol.act(sineRef, k)[0]);
 
-console.log('\n  on the two-tone sine the axis has NEVER run '
+  log('\n  on the two-tone sine the axis has NEVER run '
   + '(the same object `noilcbench.mjs` scores):');
-console.log(`    open loop                 ${openT.toExponential(4)} mm`);
-console.log(`    the converged TABLE       ${tableT.toExponential(4)} mm   ${(openT / tableT).toFixed(2)}x`);
-console.log(`    the DISTILLED policy      ${polT.toExponential(4)} mm   ${(openT / polT).toFixed(2)}x`);
+  log(`    open loop                 ${openT.toExponential(4)} mm`);
+  log(`    the converged TABLE       ${tableT.toExponential(4)} mm   ${(openT / tableT).toFixed(2)}x`);
+  log(`    the DISTILLED policy      ${polT.toExponential(4)} mm   ${(openT / polT).toFixed(2)}x`);
 
-// ---- and at home, so the transfer number is read against what was given up.
-const homeOpen = driveRef(PR.q, P, null).score;
-const homeTable = driveRef(PR.q, P, (k) => hffHome.at(k)[0]).score;
-const progRef = (k) => [PR.q[((k % P) + P) % P]];
-const homePol = driveRef(PR.q, P, (k) => pol.act(progRef, k)[0]).score;
-console.log('\n  on the machine\'s own program:');
-console.log(`    open loop                 ${homeOpen.toExponential(4)} mm`);
-console.log(`    the converged TABLE       ${homeTable.toExponential(4)} mm   ${(homeOpen / homeTable).toFixed(2)}x`);
-console.log(`    the DISTILLED policy      ${homePol.toExponential(4)} mm   ${(homeOpen / homePol).toFixed(2)}x`);
-console.log(`\n  the table is a MEMORY and the policy is addressed by the commanded reference;`);
-console.log(`  the sine column is the whole question and the home column is its price.\n`);
+  // ---- and at home, so the transfer number is read against what was given up.
+  const homeOpen = driveRef(PR.q, P, null).score;
+  const homeTable = driveRef(PR.q, P, (k) => hffHome.at(k)[0]).score;
+  const progRef = (k) => [PR.q[((k % P) + P) % P]];
+  const homePol = driveRef(PR.q, P, (k) => pol.act(progRef, k)[0]).score;
+  log('\n  on the machine\'s own program:');
+  log(`    open loop                 ${homeOpen.toExponential(4)} mm`);
+  log(`    the converged TABLE       ${homeTable.toExponential(4)} mm   ${(homeOpen / homeTable).toFixed(2)}x`);
+  log(`    the DISTILLED policy      ${homePol.toExponential(4)} mm   ${(homeOpen / homePol).toFixed(2)}x`);
+  log(`\n  the table is a MEMORY and the policy is addressed by the commanded reference;`);
+  log(`  the sine column is the whole question and the home column is its price.\n`);
+
+  return { openT, tableT, polT, homeOpen, homeTable, homePol, rep,
+    sineTable: openT / tableT, sinePol: openT / polT,
+    homeTableX: homeOpen / homeTable, homePolX: homeOpen / homePol };
+  }
+
+  // Run directly: print the table. Imported: the caller decides.
+  if (import.meta.url === `file://${process.argv[1]}`) await runEmpsDistil();
