@@ -9705,6 +9705,32 @@ designer at one feed and at the programs' own scale, and no production geometry 
 anywhere in training. **5.22x geometric at 222 MAC per decision — 2.2% of a PLC scan — against
 the shipped pilot's 2.83x at 9,517.**
 
+### DAGGER CURES THE MEASURED-SIGNAL DIVERGENCE, AND THE MEASURED SIGNALS THEN BUY NOTHING
+
+A policy fitted on the six `routeSignals` measurements read **0.09x** — those signals are
+DOWNSTREAM of the correction, so closing the policy around them is rule 35's positive
+feedback and a clamp does not save it. The textbook cure is DAGGER: refit on the states the
+POLICY ITSELF visits, so the fit's distribution and the deployed distribution converge. Two
+rounds, measured + command basis, 197 features, +/-768, four polygons:
+
+```
+  basis                       feats   sharp   rounded   circle    geo    uPk
+  measured only, no DAGGER      115    0.09x       -        -        -   diverged
+  measured + command, DAGGER 2  197    4.01x    3.91x    4.39x    4.10x   0.750 on all three
+  command only, 4 polys +/-256   83    4.21x    3.85x    4.23x    4.09x
+  command only, 6 polys +/-768  119    5.52x    4.25x    7.07x    5.49x
+```
+
+**The cure works and the thing it rescues is not worth having.** 0.09x to 4.10x is a real
+repair of a real failure mode, and 4.10x is indistinguishable from the command-only fit at a
+THIRD the features and no DAGGER rounds — and well under command-only at the same window with
+more diversity. Which is what the physics says it should be: the converged correction is the
+plant inverse applied to the REFERENCE, and the measured state is itself downstream of that
+same reference, so it carries no information the command window does not already have while
+costing a closed loop to use. It also saturates at its clamp on ALL THREE programs (uPk 0.750
+of 0.750), so it is authority-bound rather than model-bound and the number is not even its
+best case.
+
 ### AND DEEP REACH THROUGH SMOOTH KERNELS LOSES TO DIRECT TAPS — A BETTER FIT, A WORSE MACHINE
 
 The reach/transfer trade suggested an obvious escape: get the depth from EXPONENTIAL kernels
