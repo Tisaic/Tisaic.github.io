@@ -60,6 +60,9 @@ const MLAGS = (process.env.D_MLAGS || '0,1,2,3,4,6,8,12,16,24,32,48,64,96,128,19
 const COFFS = (process.env.D_COFFS
   || '-256,-128,-64,-32,-16,-8,-4,-2,-1,0,1,2,4,8,16,24,32,48,64,96,128,192,256')
   .split(',').map(Number);
+// Where the sign/magnitude block is evaluated. Fewer offsets than COFFS because a sign is a
+// coarse feature and one per decade of look-ahead is what the physics asks for.
+const SOFFS = (process.env.D_SOFFS || '-32,-8,-2,0,2,8,32,96,256').split(',').map(Number);
 
 console.log(`\ndistilling the iteration prefix — K ${PG.K} / E ${PG.E}, feed ${FEED}`);
 console.log(`  converged on ${TRAINS.join(' + ')} over ${PASSES} passes, `
@@ -137,11 +140,35 @@ const mkRow = (mode) => (hist, i, refAt, kSamp) => {
     // translation-invariant: a corner looks like a corner wherever in the workspace it sits, and
     // the same window cannot say which corner of which lap it is over.
     const q0 = refAt(Math.max(0, kSamp));
-    if (mode === 'rel' || mode === 'relmeas') r.push(q0[0], q0[1]);
+    const rel = mode === 'rel' || mode === 'relmeas' || mode === 'rich' || mode === 'diff';
+    // `rel` IS A NULL BY CONSTRUCTION AND MEASURING IT SAID SO. {q(k)} together with
+    // {q(k+o) - q(k)} spans exactly the space {q(k+o)} spans, so a linear model cannot tell the
+    // two parameterisations apart — `rel` reproduced `cmd` to three digits and the same fit R²,
+    // which is what a reparameterisation must do. To actually remove the workspace position from
+    // the model it has to be DROPPED, and `diff` is that: differences only, so the policy
+    // literally cannot know where in the workspace — and therefore where in a closed lap — it is.
+    if (rel && mode !== 'diff') r.push(q0[0], q0[1]);
     for (const o of COFFS) {
       const q = refAt(Math.max(0, kSamp + o));
-      if (mode === 'rel' || mode === 'relmeas') { if (o !== 0) r.push(q[0] - q0[0], q[1] - q0[1]); }
+      if (rel) { if (o !== 0) r.push(q[0] - q0[0], q[1] - q0[1]); }
       else r.push(q[0], q[1]);
+    }
+    if (mode === 'rich') {
+      // FRICTION IS SIGN-DEPENDENT AND A LINEAR MAP OF POSITIONS CANNOT EXPRESS IT. This plant
+      // carries Stribeck friction and backlash, both of which switch on the DIRECTION of travel,
+      // so the converged correction has a term proportional to sign(velocity) that no amount of
+      // position window recovers — `classic.js` carries exactly this basis, [a, v, sign v, 1],
+      // and found the position loop's own lag term from data to 2.4% with it.
+      //
+      // Every term here is built from the COMMANDED reference by differencing, so it is still a
+      // function of the program's local shape and still immune to the correction's own effect.
+      for (const o of SOFFS) {
+        const a = refAt(Math.max(0, kSamp + o - 1)), b = refAt(Math.max(0, kSamp + o + 1));
+        for (let c = 0; c < 2; c++) {
+          const v = (b[c] - a[c]) * 0.5;
+          r.push(Math.sign(v), Math.abs(v));
+        }
+      }
     }
   }
   r.push(1);
@@ -190,7 +217,8 @@ console.log(`\n  mode   feats   fit R² ch0/ch1    program   open loop     pilot
   + `distilled      distilled+pilot     memory       uPk`);
 for (const mode of MODES) {
   const buildRow = mkRow(mode);
-  const MAXL = (mode === 'cmd' || mode === 'rel') ? 0 : MLAGS[MLAGS.length - 1];
+  const MAXL = (mode === 'cmd' || mode === 'rel' || mode === 'rich' || mode === 'diff')
+    ? 0 : MLAGS[MLAGS.length - 1];
   let W = null, fitR2 = [NaN, NaN], nF = 0;
   // DAGGER: refit on the states the POLICY itself visits. A behaviour-cloned policy is fitted
   // on one distribution and then generates its own, and the gap between them is the whole
