@@ -23,11 +23,16 @@
  * OPEN-LOOP run where `eFree` is the truth exactly, fitted on one program and scored on
  * another — never on the record it was fitted to (rule 36).
  *
- * MATCHED CAPACITY IS THE CONTROL THAT MAKES IT READABLE (rule 20). A richer basis that wins
- * because it has more parameters has shown nothing, so the linear row is also offered the SAME
- * number of extra columns filled with random features of SHUFFLED inputs — a capacity control
- * that cannot carry information. A lift over plain linear that does not survive the shuffle is
- * capacity, not nonlinearity.
+ * MATCHED CAPACITY IS THE CONTROL THAT MAKES IT READABLE (rule 20), AND THE FIRST VERSION OF
+ * THAT CONTROL WAS BROKEN. It permuted which INPUT DIMENSION each random weight multiplied — and
+ * with i.i.d. Gaussian weights `w·(Pz)` has the SAME DISTRIBUTION as `w·z`, so the control was
+ * statistically identical to the treatment. It duly "beat" it (elbow 0.710 against 0.657 at
+ * m=32), which is the instrument failing before the model.
+ *
+ * The control has to break the alignment with the TARGET, not the arrangement of the inputs. So
+ * the columns are shuffled across TIME: same marginals, same count, same ridge, no relationship
+ * to what is being predicted. What that measures is how much held-out R² a set of m nuisance
+ * columns buys through the fit alone, which is exactly the quantity a capacity claim needs.
  *
  * Run: ARM_K=0.25 ARM_E=0.03 SUITE=full node test/_randfeat.mjs
  */
@@ -39,6 +44,12 @@ const TRAIN = process.env.TRAIN || 'sharp';
 const TEST = process.env.TEST || 'diamond';
 const FEED = +(process.env.FEED || 4e-3);
 const MS = (process.env.MS || '0,32,64,128').split(',').map(Number);
+// NONZEROS PER PROJECTION. 0 means dense (every input), which is what the first pass measured
+// and what does not fit: a dense 64-projection of a 72-wide block is 4,608 MAC per channel,
+// 92% of the whole PLC budget on the projection alone. A SPARSE projection keeps the
+// Johnson-Lindenstrauss property the whole random-feature argument rests on while costing `nnz`
+// per row instead of `nBase`, so this sweeps the axis that decides whether the lift can ship.
+const NNZ = (process.env.NNZ || '0,16,8,4').split(',').map(Number);
 const RIDGE = +(process.env.RIDGE || 1e-5);
 
 const mkRnd = (s) => { let z = s >>> 0; return () => { z ^= z << 13; z >>>= 0; z ^= z >> 17; z ^= z << 5; z >>>= 0; return z / 4294967296; }; };
@@ -88,9 +99,11 @@ const r2 = (pred, act) => {
   return 1 - ss / Math.max(1e-30, st);
 };
 
-console.log(`  m      plain                       shuffled control (capacity)`);
-console.log(`  ${''.padEnd(6)} ch0      ch1                ch0      ch1`);
+const BUDGET = 10000;
+console.log(`  m     nnz   proj MAC   %budget    ch0      ch1     (control ch0 / ch1)`);
 for (const m of MS) {
+  for (const nnz of (m === 0 ? [0] : NNZ)) {
+  const ctrl = {};
   for (const shuffled of (m === 0 ? [false] : [false, true])) {
     // RANDOM FOURIER FEATURES: cos(w·z + b) with w ~ N(0, gamma) and b ~ U[0, 2pi), which is the
     // standard unbiased approximation to a Gaussian kernel. The projection is FROZEN — it is part
@@ -99,54 +112,77 @@ for (const m of MS) {
     const rnd = mkRnd(m * 7919 + (shuffled ? 13 : 0));
     const gauss = () => { let u = 0, v2 = 0; while (u === 0) u = rnd(); while (v2 === 0) v2 = rnd();
       return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v2); };
-    const W = [], B = [];
-    const gamma = 1 / Math.sqrt(nBase);
+    // SPARSE OR DENSE. `nnz` nonzeros drawn without replacement, scaled by sqrt(nBase/nnz) so the
+    // projection's variance matches the dense one — otherwise a sparse row is simply a quieter
+    // row and the comparison reads bandwidth as sparsity (rule 32).
+    const W = [], B = [], IDX = [];
+    const nz = nnz > 0 ? Math.min(nnz, nBase) : nBase;
+    const gamma = (1 / Math.sqrt(nBase)) * Math.sqrt(nBase / nz);
     for (let q = 0; q < m; q++) {
-      const w = new Float64Array(nBase);
-      for (let j = 0; j < nBase; j++) w[j] = gauss() * gamma;
-      W.push(w); B.push(rnd() * 2 * Math.PI);
+      const pick = Array.from({ length: nBase }, (_, j) => j);
+      for (let j = nBase - 1; j > 0; j--) { const t = Math.floor(rnd() * (j + 1)); [pick[j], pick[t]] = [pick[t], pick[j]]; }
+      const idx = pick.slice(0, nz);
+      const w = new Float64Array(nz);
+      for (let j = 0; j < nz; j++) w[j] = gauss() * gamma;
+      W.push(w); IDX.push(idx); B.push(rnd() * 2 * Math.PI);
     }
-    // The shuffled control permutes which STANDARDISED input each projection weight multiplies,
-    // per projection, so the columns have identical distribution and carry no relationship to
-    // the target. Same count, same scale, no information.
-    const perm = [];
-    if (shuffled) for (let q = 0; q < m; q++) {
-      const a = Array.from({ length: nBase }, (_, j) => j);
-      for (let j = nBase - 1; j > 0; j--) { const t = Math.floor(rnd() * (j + 1)); [a[j], a[t]] = [a[t], a[j]]; }
-      perm.push(a);
-    }
-    const row = (r, k) => {
+    // The feature values themselves, computed honestly for every row.
+    const feats = (r, k) => {
       const b = lin(r, k);
       const z = new Float64Array(nBase);
       for (let j = 0; j < nBase; j++) z[j] = (b[j] - mu[j]) / sd[j];
-      const out = b.slice();
+      const f = new Float64Array(m);
       for (let q = 0; q < m; q++) {
         let s2 = B[q];
-        const w = W[q], pm = shuffled ? perm[q] : null;
-        for (let j = 0; j < nBase; j++) s2 += w[j] * z[pm ? pm[j] : j];
-        out.push(Math.cos(s2));
+        const w = W[q], ix = IDX[q];
+        for (let j = 0; j < w.length; j++) s2 += w[j] * z[ix[j]];
+        f[q] = Math.cos(s2);
       }
-      out.push(1);
-      return out;
+      return { b, f };
     };
+    // THE CONTROL SHUFFLES ACROSS TIME. Each record's random-feature block is permuted by row, so
+    // every column keeps its exact marginal distribution and loses its alignment with the target.
+    // Identical count, identical scale, no information — which is the only shuffle that measures
+    // capacity rather than re-drawing the same object.
+    const rowsOf = (r) => {
+      const out = [];
+      for (let k = K0; k < r.e.length; k++) out.push(feats(r, k));
+      if (shuffled && m > 0) {
+        const idx = out.map((_, i) => i);
+        for (let j = idx.length - 1; j > 0; j--) { const t = Math.floor(rnd() * (j + 1)); [idx[j], idx[t]] = [idx[t], idx[j]]; }
+        const fs = out.map((o) => o.f);
+        out.forEach((o, i) => { o.f = fs[idx[i]]; });
+      }
+      return out.map((o) => [...o.b, ...o.f, 1]);
+    };
+    const Xtr = rowsOf(tr), Xte = rowsOf(te);
     const w = [];
     for (let c = 0; c < NC; c++) {
-      const X = [], y = [];
-      for (let k = K0; k < tr.e.length; k++) { X.push(row(tr, k)); y.push(tr.e[k][c]); }
-      w.push(solveRidge(X, y, RIDGE));
+      const y = [];
+      for (let k = K0; k < tr.e.length; k++) y.push(tr.e[k][c]);
+      w.push(solveRidge(Xtr, y, RIDGE));
     }
     const pr = [], ac = [];
     for (let c = 0; c < NC; c++) { pr.push([]); ac.push([]); }
-    for (let k = K0; k < te.e.length; k++) {
-      const rr = row(te, k);
+    for (let i = 0; i < Xte.length; i++) {
+      const rr = Xte[i];
       for (let c = 0; c < NC; c++) {
-        let s2 = 0; for (let i = 0; i < rr.length; i++) s2 += w[c][i] * rr[i];
-        pr[c].push(s2); ac[c].push(te.e[k][c]);
+        let s2 = 0; for (let j = 0; j < rr.length; j++) s2 += w[c][j] * rr[j];
+        pr[c].push(s2); ac[c].push(te.e[K0 + i][c]);
       }
     }
     const sc = ac.map((a, c) => r2(pr[c], a));
-    const tag = m === 0 ? 'linear' : `${shuffled ? 'shuf' : 'rand'} ${m}`;
-    console.log(`  ${tag.padEnd(9)} ${sc.map((v) => v.toFixed(3).padStart(7)).join('  ')}`);
+    if (shuffled) { ctrl.v = sc; continue; }
+    ctrl.real = sc; ctrl.m = m; ctrl.nnz = nz;
+  }
+  // The projection is evaluated ONCE per cycle for both channels, because the state block it
+  // reads is identical at every lead — the same property that lets it fold.
+  const proj = ctrl.m ? ctrl.m * ctrl.nnz * 2 : 0;
+  const tag = m === 0 ? 'linear' : `${m}`;
+  console.log(`  ${tag.padStart(5)} ${(m === 0 ? '—' : String(ctrl.nnz)).padStart(4)}  `
+    + `${String(proj).padStart(8)}  ${(100 * proj / BUDGET).toFixed(0).padStart(6)}%  `
+    + `${ctrl.real.map((v) => v.toFixed(3).padStart(7)).join('  ')}`
+    + (ctrl.v ? `     ${ctrl.v.map((v) => v.toFixed(3)).join(' / ')}` : ''));
   }
 }
 console.log(`\n  a lift that does not survive the shuffle is capacity, not nonlinearity (rule 20).`);
