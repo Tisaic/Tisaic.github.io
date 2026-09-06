@@ -9774,6 +9774,30 @@ costing a closed loop to use. It also saturates at its clamp on ALL THREE progra
 of 0.750), so it is authority-bound rather than model-bound and the number is not even its
 best case.
 
+### ITERATING THE TARGET FURTHER MAKES THE DISTILLATION WORSE, AND THAT SAYS WHAT ITERATION IS
+
+The training prefixes were still climbing at pass 4 (rounded 30.92x -> 40.38x), so a
+better-converged target looked like free headroom. Nine passes against five, everything else
+identical:
+
+```
+  passes   sharp   rounded   circle    geo    fit R^2
+     5     5.52x    4.25x    7.07x    5.49x   0.974 / 0.921
+     9     3.06x    4.15x    6.19x    4.29x   0.980 / 0.918
+```
+
+**-22%, and the elbow's fit does not move at all** (0.921 -> 0.918) while the shoulder's rises.
+So the extra passes are not producing a target that is harder to fit; they are producing one
+that is harder to TRANSFER.
+
+**Which says something about iteration rather than about this bench.** The residual iteration
+removes on its LAST passes is the part that only repetition can reach — the part a model of the
+plant, by construction, cannot predict. So the converged prefix is a mixture, and the mixture
+gets more memory-like the longer it runs. **The early passes are the transferable part and the
+late ones are the memory**, and a distillation wants a PARTIALLY converged target. That is the
+same statement as everything else in this section arriving from the time axis instead of the
+feature axis.
+
 ### AND DEEP REACH THROUGH SMOOTH KERNELS LOSES TO DIRECT TAPS — A BETTER FIT, A WORSE MACHINE
 
 The reach/transfer trade suggested an obvious escape: get the depth from EXPONENTIAL kernels
