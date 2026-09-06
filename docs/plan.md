@@ -9620,7 +9620,20 @@ pilot's own deployed path is 9,517 at today's defaults.
   distilled, 6 polys, +/-256           4.13x    3.75x    5.03x    4.27x     83
   distilled, 6 polys, +/-512           4.99x    4.22x    6.74x    5.22x    111
   distilled, 6 polys, +/-768           5.52x    4.25x    7.07x    5.49x    119
+  distilled, 6 polys, +/-1536          3.75x    4.13x    6.28x    4.60x    127
 ```
+
+**+/-768 IS AN INTERIOR OPTIMUM, WHICH IS WORTH MORE THAN A MONOTONE TREND.** Past it the
+window turns back down, so the reach is a real trade against something and not a knob that
+was simply never opened far enough.
+
+**AND THE RIDGE SELECTOR I ADDED FOR THIS RUN SELECTED THE WRONG THING.** Leave-one-PROGRAM-out
+over five decades picked 1e-8 at a mean held-out R^2 of **0.918 over six folds** — the best
+fit-transfer in the ladder — and that cell delivers 3.75x where +/-768 at a fixed 1e-6 delivers
+5.52x. The selector optimises how well the map TRANSFERS AS A FIT, and this project has now
+measured four separate times that this does not pick the better controller. Selection has to be
+on the machine, which is what the pilot's own verify round exists to do and what this bench
+does not yet do.
 
 ### THE DELIVERABLE: COMMISSION ON THE BLOCK'S POLYGONS *AND* THE PROGRAMS THE MACHINE RUNS
 
