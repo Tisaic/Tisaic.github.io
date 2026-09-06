@@ -9611,6 +9611,27 @@ REPLACES the pilot rather than sitting under it (`distilled + pilot` reads 0.96x
 double-correction mode 8 already paid for), so the deployed controller is 166 MAC where the
 pilot's own deployed path is 9,517 at today's defaults.
 
+### DIVERSITY AND REACH ONLY PAY TOGETHER, AND TOGETHER THEY REACH 5.22x AGNOSTIC
+
+```
+  controller                          sharp   rounded   circle    geo   feats
+  shipped pilot                       2.16x    2.64x    3.99x    2.83x      -
+  distilled, 4 polys, +/-256           4.21x    3.85x    4.23x    4.09x     83
+  distilled, 6 polys, +/-256           4.13x    3.75x    5.03x    4.27x     83
+  distilled, 6 polys, +/-512           4.99x    4.22x    6.74x    5.22x    111
+```
+
+**THE WINDOW IS WHAT MOVED IT, NOT THE DIVERSITY.** Six polygons at +/-256 read 4.13x on the
+held-out sharp square against four polygons' 4.21x — no better at all. The same six at +/-512
+read 4.99x. Diversity's job is not to add information directly; it is to let the window be
+LONGER without becoming a lap index, and the two only pay together. Two closed production
+programs at +/-1024 read 0.47x; six polygon laps at +/-512 read 4.99x.
+
+Every test program is held out in all three rows: the polygons come out of the block's own
+designer at one feed and at the programs' own scale, and no production geometry appears
+anywhere in training. **5.22x geometric at 222 MAC per decision — 2.2% of a PLC scan — against
+the shipped pilot's 2.83x at 9,517.**
+
 ### THE LONG TOUR CONFIRMS THE ALIASING MECHANISM DIRECTLY
 
 `designTour` chains twelve random shapes into ONE closed lap of ~6,500 samples — replayable,
