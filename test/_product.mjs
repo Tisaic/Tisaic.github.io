@@ -63,6 +63,20 @@ for (const [name, forceBasis, gain, guided, ht] of CELLS) {
     base = (await deployOn(p, SHAPE, false, FEED)).r.totalRms;
     for (const h of HELDS) baseH.set(h, (await deployOn(p, h, false, FEED)).r.totalRms);
   }
+  // THE GAIN IS ARMED BEFORE THE GUIDED PHASE, NOT AFTER, AND THE FIRST VERSION HAD IT BACKWARDS.
+  //
+  // Adaptation converges on whatever closed loop it runs INSIDE. Running the guided laps under
+  // the QP and then scoring under the explicit gain adapts a model in one loop and deploys it in
+  // another — rule 34, which this project has already paid for: "one locked model scored 0.032
+  // under the mode it trained in and 1.225 under another, a 38x spread with the weights frozen".
+  //
+  // The earlier order made guided commissioning HARM the sharp square in every budget-fitting
+  // cell (3.25x -> 2.90x on the scheduled basis) while it HELPED that program at 737% with the
+  // QP (3.50x -> 4.31x), and the harness printed "independent by construction" the whole time —
+  // which is true of the arithmetic (the gain is built from hGrid, lambda and qpIters, and
+  // adaptation moves forecast weights) and false of the LOOP.
+  p.explicitGain = gain;
+  if (!gain) p._gain = null;
   if (guided > 0) {
     // COMMISSIONING, so the tracker is legal. Adaptation is nulled before anything is scored
     // and every deployed run below passes `truthUntilLap: 0`, so no truth reaches a number.
@@ -70,8 +84,6 @@ for (const [name, forceBasis, gain, guided, ht] of CELLS) {
     await deployOn(p, SHAPE, p.verdict.deploy, FEED, { laps: guided + 1, truthUntilLap: Infinity });
     p.online = null;
   }
-  p.explicitGain = gain;
-  if (!gain) p._gain = null;
   const r = await deployOn(p, SHAPE, p.verdict.deploy, FEED, { truthUntilLap: 0 });
   if (gain !== !!p._gain) throw new Error(`explicitGain ${gain} but gain ${!!p._gain}`);
   const cols = [];
@@ -86,5 +98,6 @@ for (const [name, forceBasis, gain, guided, ht] of CELLS) {
     + `${(base / r.r.totalRms).toFixed(2)}x` + cols.join(''));
 }
 console.log(`\n  open loop ${base.toExponential(3)}`);
-console.log(`\n  the gain is built from hGrid, lambda and qpIters; adaptation moves the forecast`);
-console.log(`  weights and touches none of them, so the two are independent by construction.\n`);
+console.log(`\n  the gain and the adaptation are independent in ARITHMETIC and not in the LOOP:`);
+console.log(`  a model adapts to the closed loop it runs inside, so the gain is armed BEFORE the`);
+console.log(`  guided phase and the model is commissioned in the configuration it will run in.\n`);
