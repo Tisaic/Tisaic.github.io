@@ -119,7 +119,7 @@ const NX = DTR[TRAINS[0]][0].m.length;
 const ZROW = new Float64Array(NX);
 const mkRow = (mode) => (hist, i, refAt, kSamp) => {
   const r = [];
-  if (mode !== 'cmd') {
+  if (mode === 'meas' || mode === 'both' || mode === 'relmeas') {
     for (const L of MLAGS) {
       // AT THE FIRST DECISION THE HISTORY IS EMPTY, and `hist[0]` is undefined too — the
       // deployed policy is called at sample 0 before any measurement exists. Reading a
@@ -130,9 +130,18 @@ const mkRow = (mode) => (hist, i, refAt, kSamp) => {
     }
   }
   if (mode !== 'meas') {
+    // ABSOLUTE REFERENCE ANGLES ARE NEARLY A LAP INDEX ON A CLOSED PATH, which is the leak the
+    // first run measured: 21.78x at home and 0.29x on a program never converged. `rel` keeps the
+    // CURRENT pose — compliance and gravity load are genuinely pose-dependent, so that pair has
+    // to be there — and replaces every other offset with its DIFFERENCE from it. A difference is
+    // translation-invariant: a corner looks like a corner wherever in the workspace it sits, and
+    // the same window cannot say which corner of which lap it is over.
+    const q0 = refAt(Math.max(0, kSamp));
+    if (mode === 'rel' || mode === 'relmeas') r.push(q0[0], q0[1]);
     for (const o of COFFS) {
       const q = refAt(Math.max(0, kSamp + o));
-      r.push(q[0], q[1]);
+      if (mode === 'rel' || mode === 'relmeas') { if (o !== 0) r.push(q[0] - q0[0], q[1] - q0[1]); }
+      else r.push(q[0], q[1]);
     }
   }
   r.push(1);
@@ -181,7 +190,7 @@ console.log(`\n  mode   feats   fit R² ch0/ch1    program   open loop     pilot
   + `distilled      distilled+pilot     memory       uPk`);
 for (const mode of MODES) {
   const buildRow = mkRow(mode);
-  const MAXL = mode === 'cmd' ? 0 : MLAGS[MLAGS.length - 1];
+  const MAXL = (mode === 'cmd' || mode === 'rel') ? 0 : MLAGS[MLAGS.length - 1];
   let W = null, fitR2 = [NaN, NaN], nF = 0;
   // DAGGER: refit on the states the POLICY itself visits. A behaviour-cloned policy is fitted
   // on one distribution and then generates its own, and the gap between them is the whole
