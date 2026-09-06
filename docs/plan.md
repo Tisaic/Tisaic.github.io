@@ -10511,3 +10511,36 @@ trajectory the axis has never run, where the memory reads 0.53x.
 `autostack.test.mjs`'s flagship ladder is untouched by this — a separate AutoStack — so its 425x
 contract cannot move. Pinned in `distil-emps.test.mjs` at full tier, with the half that must never
 fail whichever way the verdict goes: the ladder does not end up worse than the bare machine.
+
+### §50.3 THE COMPOSITION IS ON TWO PLANTS BY TWO ROUTES, AND §50.2 UNDERSTATED IT
+
+§50.2 called the composition unpredicted and said it was one plant. The second half was wrong, and
+the record already contained the refutation: §49's TOP-UP ladder is the same experiment on the arm,
+run months earlier by a different route, and it was read at the time as "headroom above layer 1"
+rather than as composition.
+
+```
+  case                                  alone   on top of the policy   ratio
+  arm sharp    (oracle iteration)       19.47x         25.16x          1.29x
+  arm rounded  (oracle iteration)       40.44x         55.35x          1.37x
+  EMPS         (real hff operator)     242.13x        342.00x          1.41x
+```
+
+**THE TWO ROUTES SHARE NO MACHINERY.** On the arm the iteration is fed a PERFECT forecast by the
+oracle and the prefix is accumulated by the distillation harness; on EMPS it is `hff`'s
+probe-identified operator driven by `AutoStack` as a scored rung. Different engines, different
+harnesses, different plants, gains spanning 19x to 342x — and the composition factor lands in
+**1.29x-1.41x every time.** Two wrongs that agree would be indistinguishable from two rights
+(rule 15), and these two cannot be two wrongs of the same kind: they share no code path.
+
+**WHAT THE CONSISTENCY SUGGESTS AND WHAT IT DOES NOT SHOW.** §49's account predicts the direction —
+the converged correction is a MIXTURE, so a state-addressed rung that removes the transferable part
+leaves iteration a cleaner residue to work on — but it does not predict a CONSTANT factor, and
+three points across two plants is not enough to claim one. What is established is the sign and the
+rough size, twice, independently.
+
+**THE GAP THAT ACTUALLY REMAINS IS NARROWER THAN §50.2 SAID.** It is not "does this compose on the
+arm" — that is measured. It is whether the SHIPPED lap-periodic rung, with a real probe-identified
+operator rather than an oracle, composes on the arm as the oracle ladder does. The arm's oracle
+number is an upper bound on what a real operator can reach there, and the EMPS row is the only
+place a real one has been measured on top of a distilled rung.

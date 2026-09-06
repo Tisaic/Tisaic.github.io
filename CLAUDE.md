@@ -711,7 +711,18 @@ between them by measuring: **②d distilled 5.7640e-1 → 2.1269e-2 (27.10x)**, 
 → **1.6854e-3, 342.0x total**. The memory ALONE on this axis reaches 242.1x, so the pair beats
 either — §49's mixture account separated into two rungs, the distillation taking the part that
 transfers and the memory mopping up the residue it is actually good at. The ordering is brick 63's
-asymmetry holding: plant model first, memory last. **UNDER THE RETIREMENT ONLY THE FIRST SURVIVES
+asymmetry holding: plant model first, memory last. **AND IT IS TWO PLANTS BY TWO ROUTES, NOT ONE
+(plan §50.3)** — §49's TOP-UP ladder is the same experiment on the ARM, run earlier and read at the
+time as "headroom above layer 1" rather than as composition: iteration alone from the bare machine
+converges at 19.47x sharp and 40.44x rounded, and ON TOP of the frozen distilled policy it reaches
+**25.16x and 55.35x**. So the factor reads **1.29x / 1.37x / 1.41x** across arm-sharp, arm-rounded
+and EMPS — two plants, two iteration engines sharing no code path (an ORACLE-fed prefix in the
+distillation harness against `hff`'s probe-identified operator as an `AutoStack` rung), underlying
+gains spanning 19x to 342x. §49's mixture account predicts the DIRECTION and not a constant factor,
+and three points are not a law; what is established is the sign and the rough size, twice,
+independently. The gap that remains is narrower than it first looked: not whether this composes on
+the arm, which is measured, but whether the SHIPPED lap-periodic rung with a real operator composes
+there as the oracle ladder does. **UNDER THE RETIREMENT ONLY THE FIRST SURVIVES
 — 27.10x that transfers against 242.1x that does not**, which is the retirement's trade stated by
 the one press on a real machine rather than argued, and the same rung reads 33.15x on the
 trajectory where the memory reads 0.53x.
