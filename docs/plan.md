@@ -10152,11 +10152,15 @@ programs with layer 1 deployed, distil them the same way, deploy both maps summe
 once. Two top-up passes per training program, 14,734 rows:
 
 ```
-  controller                    sharp   rounded    layer-2 fit R^2
-  layer 1 alone                 5.52x    4.25x     (layer 1: 0.974 / 0.921)
-  layer 1 + layer 2             3.89x    3.98x      0.934 / 0.511
-  the ceiling above layer 1    25.16x   55.35x
+  controller                    sharp   rounded   circle    geo    layer-2 fit R^2
+  layer 1 alone                 5.52x    4.25x    7.07x    5.49x   (l1: 0.974 / 0.921)
+  layer 1 + layer 2             3.89x    3.98x    6.82x    4.73x    0.934 / 0.511
+  the ceiling above layer 1    25.16x   55.35x       -        -
 ```
+
+The shape is worth reading: layer 2 is nearly NEUTRAL on the two smooth programs (-6%, -4%)
+and costs 29% on the hard one, for -14% overall. It is not adding noise everywhere; it is
+failing precisely where the residual is hardest and the ceiling above it is largest.
 
 **A 4.6x ceiling, and the layer built to reach it costs 29%.** The elbow tells the story before
 the machine does: layer 2 fits its own residual at 0.511 IN SAMPLE, against layer 1's 0.921 —
