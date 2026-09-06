@@ -326,6 +326,12 @@ const base = {};
 for (const sh of TESTS) {
   const o = await deployOn(pilot, sh, false, FEED);
   const b = await deployOn(pilot, sh, true, FEED);
+  // Each test feed gets its OWN open loop and its OWN pilot row, because a ratio against
+  // another feed's denominator is two changes reported as one.
+  for (const f2 of TFEEDS) {
+    base[`${sh}@${f2}`] = { o: await deployOn(pilot, sh, false, f2),
+      b: await deployOn(pilot, sh, true, f2), m: null, feed: f2 };
+  }
   // THE MEMORY ROW IS ONLY MEANINGFUL WHERE THE PREFIX WAS CONVERGED. Replaying one program's
   // lap table onto another's lap is a table addressed by the wrong index, and this project has
   // twice measured what that is worth (0.55x, worse than doing nothing). It is printed for the
@@ -418,6 +424,15 @@ for (const mode of MODES) {
     const rf = mkRefAt(sh);
     const d = await deployOn(pilot, sh, false, FEED, { policy: mkPolicy(W, buildRow, rf) });
     const dp = await deployOn(pilot, sh, true, FEED, { policy: mkPolicy(W, buildRow, rf) });
+    for (const f2 of TFEEDS) {
+      const bb = base[`${sh}@${f2}`];
+      const rf2 = mkRefAt(mkPath(sh, f2));
+      const d2 = await deployOn(pilot, sh, false, f2, { policy: mkPolicy(W, buildRow, rf2) });
+      console.log(`    feed ${f2.toExponential(1)}  ${sh.padEnd(9)} `
+        + `open ${bb.o.r.totalRms.toExponential(3)}  pilot `
+        + `${(bb.o.r.totalRms / bb.b.r.totalRms).toFixed(2).padStart(6)}x   distilled `
+        + `${(bb.o.r.totalRms / d2.r.totalRms).toFixed(2).padStart(6)}x   uPk ${d2.uPk.toFixed(3)}`);
+    }
     for (const cx of CAPS) {
       const r = await deployOn(pilot, sh, false, FEED,
         { policy: mkPolicy(W, buildRow, rf, cx * pilot.uMax) });
