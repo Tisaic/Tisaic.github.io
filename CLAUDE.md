@@ -705,6 +705,17 @@ where they must disagree, since if they agree there the absolute form is not cla
 `autostack.test.mjs` on EMPS is unchanged at 20.2x with the rung registered and skipped, which is
 the control.
 
+**AND PRESSED ON A REAL PLANT THE TWO OBJECTS COMPOSE, WHICH WAS NOT PREDICTED HERE (plan §50.2).**
+On the EMPS axis with the rungs narrowed to distil → lap-periodic, so the ladder must choose
+between them by measuring: **②d distilled 5.7640e-1 → 2.1269e-2 (27.10x)**, then the memory on top
+→ **1.6854e-3, 342.0x total**. The memory ALONE on this axis reaches 242.1x, so the pair beats
+either — §49's mixture account separated into two rungs, the distillation taking the part that
+transfers and the memory mopping up the residue it is actually good at. The ordering is brick 63's
+asymmetry holding: plant model first, memory last. **UNDER THE RETIREMENT ONLY THE FIRST SURVIVES
+— 27.10x that transfers against 242.1x that does not**, which is the retirement's trade stated by
+the one press on a real machine rather than argued, and the same rung reads 33.15x on the
+trajectory where the memory reads 0.53x.
+
 **WHAT IS NOT DONE:** the offsets are
 indexed in SAMPLES, so it is not feedrate-invariant — training across a FEED LADDER removes the
 danger entirely (half-feed 0.75x -> 2.58x, nothing below the pilot) at the price of 2.3x at the

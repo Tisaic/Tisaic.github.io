@@ -30,7 +30,7 @@ const OFFS = (process.env.E_COFFS
 const SOFF = (process.env.E_SOFFS || '-128,-32,-8,-2,0,2,8,32,128').split(',').map(Number);
 
 /** Drive one periodic reference for `laps` laps; score the last three; return the final lap. */
-function driveRef(q, lap, corr, laps = 8) {
+export function driveRef(q, lap, corr, laps = 8) {
   const m = makeMachine(q[0], 0);
   let s = 0, n = 0; const e = new Float64Array(lap);
   for (let k = 0; k < laps * lap; k++) {
@@ -44,7 +44,7 @@ function driveRef(q, lap, corr, laps = 8) {
 }
 
 /** Peak |v| and |a| per sample of a reference, by central differences. */
-function rates(q) {
+export function rates(q) {
   let v = 0, a = 0;
   for (let k = 1; k < q.length - 1; k++) {
     v = Math.max(v, Math.abs((q[k + 1] - q[k - 1]) * 0.5));
@@ -64,7 +64,7 @@ function rates(q) {
  * range instead of sitting at one point. The scaling is exact in one step because peak velocity is
  * linear in the amplitudes.
  */
-function tone(lap, c1, c2, vFrac, vProg, mix = 0.35, mid = 0.125) {
+export function tone(lap, c1, c2, vFrac, vProg, mix = 0.35, mid = 0.125) {
   const build = (A1) => {
     const q = new Float64Array(lap);
     for (let k = 0; k < lap; k++) {

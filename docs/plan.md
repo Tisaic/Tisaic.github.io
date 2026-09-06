@@ -10475,3 +10475,39 @@ What this does establish, and it is the part that matters commercially: the meth
 its instrument. Losing 2x of the delivered result for noise at 0.1% of the error being measured is
 a real cost, and pricing the commissioning claim needs the seed spread first and then a CHEAPER
 truth (motor-side encoders, an accelerometer, a probed part) rather than a degraded ideal one.
+
+### §50.2 THE ONE PRESS ON A REAL PLANT: THEY COMPOSE, AND THE COMPOSITION BEATS THE MEMORY ALONE
+
+`AutoStack` rung ②d, on the EMPS axis, rungs narrowed to distil → lap-periodic so the ladder must
+choose between the two objects the retirement is about — one addressed by the commanded reference,
+one by lap phase — by measuring rather than by being told:
+
+```
+  as it arrived            5.7640e-1
+  ②d distilled             2.1269e-2   27.10x   3/3 training runs kept, 13,061 rows,
+                                                40 features, 78 MAC/decision
+  lap-periodic (harmonic)  1.6854e-3   12.62x   a MEMORY: it will not transfer
+  shipped   distil + hff   5.7640e-1 -> 1.6854e-3 mm   342.0x
+```
+
+**THE COMPOSITION IS THE FINDING AND IT WAS NOT PREDICTED HERE.** The memory ALONE on this axis
+reaches 2.3805e-3 (242.1x). With the distilled rung underneath it reaches **1.6854e-3, 342.0x** —
+so the two do not merely coexist, they compose, and the pair beats either alone. §49's account
+says why: the converged correction is a MIXTURE of a transferable plant inverse and a lap-specific
+residue, and here the ladder has separated them into two rungs — the distillation takes the part
+that transfers, and the memory mops up what is left, which is the part it is actually good at.
+
+**THE ORDERING IS THE COMPOSITE'S ASYMMETRY HOLDING.** Plant model first, memory last, exactly as
+brick 63 measured (the reverse there read 0.71x, worse than the double correction it was meant to
+fix). A phase-indexed correction applied to a machine that a state-addressed rung has already
+moved is fine; the reverse is not.
+
+**AND UNDER THE RETIREMENT ONLY THE FIRST RUNG SURVIVES.** Dropping the memory, as the north star
+requires, leaves **27.10x that transfers** against **242.1x that does not** — the retirement's
+trade, stated by the one press on a real machine rather than argued. That is the honest headline
+for this plant: the price is 8.9x and what is bought is a correction that reads 33.15x on a
+trajectory the axis has never run, where the memory reads 0.53x.
+
+`autostack.test.mjs`'s flagship ladder is untouched by this — a separate AutoStack — so its 425x
+contract cannot move. Pinned in `distil-emps.test.mjs` at full tier, with the half that must never
+fail whichever way the verdict goes: the ladder does not end up worse than the bare machine.
