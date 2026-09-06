@@ -332,11 +332,14 @@ for (const mode of MODES) {
       spans.push(X.length - before);
     }
     nF = X[0].length;
-    let ridge = RIDGE;
+    // PER CHANNEL, because the two channels are not the same problem here: held out, the
+    // shoulder regresses at R^2 0.92 and the elbow at 0.08, and their measured memories differ
+    // by a factor of two and a half. One ridge for both is rule 31 inside a single fit.
+    let ridge = [RIDGE, RIDGE];
     if (RIDGES.length > 1 && sets.length > 1) {
-      let best = -Infinity;
+      const best = [-Infinity, -Infinity];
       for (const cand of RIDGES) {
-        let tot = 0, n = 0;
+        const tot = [0, 0], n = [0, 0];
         for (let h = 0; h < sets.length; h++) {
           const Xi = [], Yi = [[], []], Xo = [], Yo = [[], []];
           let at = 0;
@@ -351,18 +354,21 @@ for (const mode of MODES) {
           if (!Xo.length || !Xi.length) continue;
           for (let c = 0; c < 2; c++) {
             const Wi = solveRidge(Xi, Yi[c], cand);
-            tot += r2(Xo.map((r) => r.reduce((a, v, j) => a + v * Wi[j], 0)), Yo[c]);
-            n++;
+            tot[c] += r2(Xo.map((r) => r.reduce((a, v, j) => a + v * Wi[j], 0)), Yo[c]);
+            n[c]++;
           }
         }
-        const sc = n ? tot / n : -Infinity;
-        if (sc > best) { best = sc; ridge = cand; }
+        for (let c = 0; c < 2; c++) {
+          const sc = n[c] ? tot[c] / n[c] : -Infinity;
+          if (sc > best[c]) { best[c] = sc; ridge[c] = cand; }
+        }
       }
       if (round === DAGGER) console.log(`  ridge selected leave-one-program-out: `
-        + `${ridge.toExponential(0)} (mean held-out R² ${best.toFixed(3)} over `
+        + `${ridge.map((v) => v.toExponential(0)).join(' / ')} (held-out R² `
+        + `${best.map((v) => (v > -9.99 ? v.toFixed(3) : v.toExponential(1))).join(' / ')} over `
         + `${sets.length} folds)`);
     }
-    W = [solveRidge(X, Y[0], ridge), solveRidge(X, Y[1], ridge)];
+    W = [solveRidge(X, Y[0], ridge[0]), solveRidge(X, Y[1], ridge[1])];
     fitR2 = [0, 1].map((c) => r2(X.map((r) => r.reduce((a, v, j) => a + v * W[c][j], 0)), Y[c]));
     if (round === DAGGER) break;
     for (const st of sets) {
