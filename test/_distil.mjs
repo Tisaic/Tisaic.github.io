@@ -94,6 +94,13 @@ const TAUS = (process.env.D_TAUS || '4,8,16,32,64,128,256,512,1024').split(',').
 // ridged than the linear one (columns scaled by 1/QSCALE, so the penalty is QSCALE^2).
 const QOFFS = (process.env.D_QOFFS || '-16,-4,0,4,16,48').split(',').map(Number);
 const QSCALE = +(process.env.D_QSCALE || 10);
+// THE FALSIFIER FOR §49'S OWN ACCOUNT. If the converged prefix is a MIXTURE of a transferable
+// plant inverse and a lap-specific residue that iteration reaches LAST, then down-weighting the
+// late increments should isolate the first component — and the pass-count optimum should
+// DISAPPEAR rather than move. The machine still runs the TRUE accumulated prefix, because the
+// next pass's residual depends on what was actually applied; only the distillation TARGET is
+// weighted. `D_PWEIGHT` 1 is the control and must reproduce the unweighted run to the digit.
+const PWEIGHT = +(process.env.D_PWEIGHT || 1);
 let QBASE = null;
 
 console.log(`\ndistilling the iteration prefix — K ${PG.K} / E ${PG.E}, feed ${FEED}`);
@@ -153,11 +160,14 @@ const r2 = (pred, act) => {
 // The converged controller is the PREFIX ALONE with the pilot off — that is what §48's last row
 // scores and it is the object being distilled. Running the pilot on top here would distil a
 // state distribution the deployed policy never visits.
-const PRE = {}, DTR = {};
+const PRE = {}, DTR = {}, TGT = {};
 console.log(`\n  program   pass    totalRms     x tot   contourRms    x con   prefix pk`);
 for (const { name: TRAIN, path } of TRAINS) {
   const LAPK = Math.round(path.lap), LAPS = Math.round(path.lap / S);
   const pre = [new Float64Array(LAPK), new Float64Array(LAPK)];
+  // The weighted target accumulates the SAME increments with a decaying weight; `pre` is what
+  // the machine runs and `tgt` is what the map is asked to reproduce.
+  const tgt = [new Float64Array(LAPK), new Float64Array(LAPK)];
   let open = null, openC = null;
   for (let pass = 0; pass < PASSES; pass++) {
     const ftr = [];
@@ -167,8 +177,11 @@ for (const { name: TRAIN, path } of TRAINS) {
     const uOut = [new Float64Array(LAPK), new Float64Array(LAPK)];
     const r = await deployOn(pilot, path, true, FEED, { pre, oracle: or, preOut: uOut });
     let pk = 0;
+    const w = Math.pow(PWEIGHT, pass);
     for (let c = 0; c < 2; c++) for (let i = 0; i < LAPK; i++) {
-      pre[c][i] += uOut[c][i]; pk = Math.max(pk, Math.abs(pre[c][i]));
+      pre[c][i] += uOut[c][i];
+      tgt[c][i] += w * uOut[c][i];
+      pk = Math.max(pk, Math.abs(pre[c][i]));
     }
     console.log(`  ${TRAIN.padEnd(9)} ${String(pass).padStart(4)}   `
       + `${r.r.totalRms.toExponential(4)} ${(open / r.r.totalRms).toFixed(2).padStart(6)}x   `
@@ -182,6 +195,7 @@ for (const { name: TRAIN, path } of TRAINS) {
     + `${(openC / conv.r.contourRms).toFixed(2)}x con`);
   PRE[TRAIN] = { pre, LAPK, LAPS, path };
   DTR[TRAIN] = dtr;
+  TGT[TRAIN] = { tgt, LAPK };
 }
 
 // ---- 3. THE ROW BUILDERS ----
@@ -394,7 +408,12 @@ for (const mode of MODES) {
   // reason cloning diverges; each round records the policy's own states and re-labels them
   // with the converged prefix at the same lap phase.
   const sets = TRAINS.map(({ name: T, path }) => ({ T, path, refAt: mkRefAt(path),
-    hist: DTR[T].map((t) => t.m), targ: DTR[T].map((t) => t.pre) }));
+    hist: DTR[T].map((t) => t.m),
+    // At PWEIGHT 1 `tgt` and `pre` are the same array of numbers, so this branch is the
+    // control: it must reproduce the unweighted run to the digit (rule 21).
+    targ: DTR[T].map((t, i) => (t.pre
+      ? [TGT[T].tgt[0][(i * S) % TGT[T].LAPK], TGT[T].tgt[1][(i * S) % TGT[T].LAPK]]
+      : null)) }));
   for (let round = 0; round <= DAGGER; round++) {
     const X = [], Y = [[], []], spans = [];
     for (const st of sets) {

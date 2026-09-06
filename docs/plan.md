@@ -9850,6 +9850,36 @@ Its overlapping shapes also break `decompose`'s nearest-point search, so its `to
 (1.47x) is an instrument artefact and only the contour column means anything on the tour
 itself; the TEST programs it is scored on are unaffected.
 
+### TARGET 2, MEASURED AT LAST — AND IT FAILS DOWNWARD, NOT UPWARD
+
+The offsets are indexed in SAMPLES, so a feed change hands the map a kernel it was not fitted
+for. That was a prediction with a sign; this is the size. One diet, fitted at 4e-3, scored
+across a 4x span with each feed carrying its OWN open loop and its OWN pilot row:
+
+```
+  feed              sharp                    circle
+                pilot   distilled        pilot   distilled
+  2.0e-3 (0.5x)  2.18x     0.75x          2.21x     0.91x   <- WORSE THAN NOTHING
+  4.0e-3 (fit)   2.16x     5.52x          3.99x     7.07x
+  6.0e-3 (1.5x)  1.78x     2.75x          2.03x     2.37x
+  8.0e-3 (2x)    1.66x     1.81x          1.43x     1.70x
+```
+
+**Target 2 asks for MONOTONE degradation bounded at 1.5x of a per-feed commission across a 5x
+span. This is neither monotone nor bounded**: it degrades gracefully upward — still beating the
+pilot at twice the feed — and falls off a cliff downward, below 1.0x at half the feed on both
+programs. So the honest statement is that this component is feedrate-TOLERANT above its
+commissioning feed and feedrate-DANGEROUS below it.
+
+**AND THE ASYMMETRY NAMES THE REPAIR.** At a lower feed the same sample offset spans LESS arc,
+so the window sees a compressed version of the geometry it learned while the plant's own error
+is smaller and slower — a correction shaped for faster motion applied to a machine that is not
+making it. Both halves of that are fixed by indexing the offsets in ARC LENGTH rather than
+samples, which `ToolPath` already supports (`at(k)` returns `s`, and `point(u)` takes arc
+length directly), with the commanded speed carried as a scheduling variable because the plant's
+dynamics are in time even when the geometry is not. That is the one repair this arc has
+identified and not built.
+
 ### THE ONE ACCOUNT THAT EXPLAINS EVERY ROW IN §49
 
 Nine measurements in this section point the same way and they are one statement, not nine:
