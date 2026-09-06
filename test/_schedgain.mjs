@@ -40,10 +40,15 @@ const HELDS = (process.env.HELD || 'circle,sharp').split(',');
 const FEED = +(process.env.FEED || 4e-3);
 const UCAP = +(process.env.UCAP || 0.6);
 const HT = +(process.env.HT || 0.9);
-const LADDER = (process.env.LADDER || '3,6').split(',').map(Number);
+// A rung is `iters` or `iters@N` — the horizon rides the same selection, downward only.
+const LADDER = (process.env.LADDER || '3,6').split(',').map((r) => {
+  const [it, n] = r.split('@');
+  return n ? { iters: +it, N: +n } : +it;
+});
+const label = (r) => (typeof r === 'object' ? `${r.iters}@${r.N}` : String(r));
 
-console.log(`\nscheduling the iteration count — K ${PG.K} / E ${PG.E}, ${SHAPE} at `
-  + `feed ${FEED.toExponential(1)}, horizonTs ${HT}, ladder [${LADDER}]\n`);
+console.log(`\nscheduling the solver — K ${PG.K} / E ${PG.E}, ${SHAPE} at `
+  + `feed ${FEED.toExponential(1)}, horizonTs ${HT}, ladder [${LADDER.map(label)}]\n`);
 
 const p = await commissionArm({ seed: 1, uCap: UCAP, train: { shape: SHAPE, feed: FEED },
   extra: { horizonTs: HT } });
@@ -67,11 +72,12 @@ const score = async () => {
 console.log(`\n  configuration   ${SHAPE.padEnd(9)}` + HELDS.map((h) => h.padStart(9)).join('')
   + `    geo`);
 const out = {};
-for (const it of [p.qpIters, ...LADDER]) {
-  p.explicitGain = true; p.gainLadder = null; p.qpIters = it; p._gain = null;
+for (const rung of [p.qpIters, ...LADDER]) {
+  p.explicitGain = true; p.gainLadder = typeof rung === 'object' ? [rung] : null;
+  p.qpIters = typeof rung === 'object' ? rung.iters : rung; p._gain = null;
   const r = await score();
-  out[`fixed ${it}`] = r;
-  console.log(`  fixed ${String(it).padEnd(10)}${r.xs[0].toFixed(2)}x   `
+  out[`fixed ${label(rung)}`] = r;
+  console.log(`  fixed ${label(rung).padEnd(10)}${r.xs[0].toFixed(2)}x   `
     + r.xs.slice(1).map((v) => `${v.toFixed(2)}x`.padStart(9)).join('') + `    ${r.geo.toFixed(3)}`);
 }
 // THE SCHEDULED ROW. `gainLadder` builds one row per rung at commissioning; the deployed tick
