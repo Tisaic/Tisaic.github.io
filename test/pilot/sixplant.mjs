@@ -64,6 +64,12 @@ const configs = (process.env.CONFIGS || '4:1.5,2:1.2,1:1.2').split(',').map((c) 
   const cfg = { qpIters: Number(q), horizonTs: Number(h) };
   if (g && g !== '-') cfg.hGain = g;
   if (r) cfg.probeRises = Number(r);
+  // A FIFTH FIELD: `2:1.2:-:-:gain` arms the explicit gain, which replaces the deployed QP with
+  // the fixed row it is equal to while its box is inactive. It belongs in the configuration
+  // rather than beside it for the same reason the plant gain does — it is not separable from
+  // `qpIters`, since the gain IS whatever that iteration count produced.
+  const g2 = c.split(':')[4];
+  if (g2 === 'gain') cfg.explicitGain = true;
   return cfg;
 });
 
