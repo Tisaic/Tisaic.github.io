@@ -88,6 +88,14 @@ const SHAPES = (process.env.CD_SHAPES || 'sharp,circle,rounded').split(',');
 const MU = +(process.env.CD_MU || 0.03);
 const DEPTHS = (process.env.CD_DEPTHS || '1,2').split(',').map(Number);
 const MODES = (process.env.CD_MODES || 'none,top,all,naive,below,none').split(',');
+// THE PROGRAM THE GUIDED PHASE ADAPTS ON, and how many laps of it. `guided` is the only mode
+// here that is LEGAL ON THIS ARM under the owner's constraint that the tracker exists at
+// commissioning only: every other row adapts at deploy, which on this plant means a tool
+// tracker mounted for ever. Guided adapts with the truth during COMMISSIONING, freezes, and is
+// then scored with the truth withheld outright (`truthUntilLap: 0`), so what it deploys is a
+// static model that happens to have been refined on a machine that was running.
+const GUIDE = process.env.CD_GUIDE || 'rounded';
+const GLAPS = +(process.env.CD_GLAPS || 7);
 const gm = (v) => Math.exp(v.reduce((a, x) => a + Math.log(x), 0) / v.length);
 /**
  * A FINGERPRINT OF THE MODEL THE ROW WAS SCORED ON. Two modes configured identically must
@@ -218,6 +226,17 @@ for (const depth of DEPTHS) {
             : ADAPTING));
     }
     pilot.observe = mode === 'naive' ? naive : routed;
+    // THE GUIDED PHASE: adapt through the peel on ONE program with the truth attached, then
+    // FREEZE every layer before a single scored lap is run. The scored rows below then get
+    // `truthUntilLap: 0`, so the comparison against `none` is a comparison of two STATIC
+    // models — one commissioned on a scribble, one additionally refined on a machine that was
+    // moving — and not a comparison of a static controller against an adapting one.
+    let guidedFp = null;
+    if (mode === 'guided') {
+      await deployOn(pilot, GUIDE, true, FEED, { laps: GLAPS, scoreFromLap: GLAPS - 1 });
+      guidedFp = fp(layers);
+      for (const p of layers) p.online = null;
+    }
     const fp0 = fp(layers);
     const xs = [], cols = [], tot = layers.map((p) => p.readouts.map(() => 0));
     let last = '';
@@ -226,7 +245,8 @@ for (const depth of DEPTHS) {
         for (const r of p.readouts) { r._onlineN = 0; r._infoSkipped = 0; r._infoSeen = 0; }
       }
       alignK(layers, kRec, SHAPES.indexOf(s));
-      const d = await deployOn(pilot, s, true, FEED);
+      const d = await deployOn(pilot, s, true, FEED,
+        mode === 'guided' ? { truthUntilLap: 0 } : undefined);
       const x = open[s] / d.r.totalRms;
       xs.push(x); cols.push(`${x.toFixed(2)}x u${d.uPk.toFixed(3)}`.padStart(17));
       layers.forEach((p, li) => p.readouts.forEach((r, ci) => { tot[li][ci] += r._onlineN || 0; }));
@@ -236,7 +256,8 @@ for (const depth of DEPTHS) {
     console.log(`  ${String(depth).padStart(5)}  ${mode.padEnd(6)}${cols.join('')}`
       + `   ${gm(xs).toFixed(2).padStart(10)}   ${tot.map((l) => l.join('+')).join(' | ')}`
       + ` | ${last}   ${pilot.report.adaptBlocked || 0}   clamp ${pilot.report.clamped || 0}`
-      + `   peel ${peelRatio(pilot)}   fp ${fp0}`);
+      + `   peel ${peelRatio(pilot)}   fp ${fp0}`
+      + (guidedFp !== null ? `   guided fp ${guidedFp} (frozen, truth withheld at score)` : ''));
   }
   pilot.observe = routed;
   // THE RESTORE IS ASSERTED, NOT ASSUMED. Two `none` rows around every adapting mode: if the

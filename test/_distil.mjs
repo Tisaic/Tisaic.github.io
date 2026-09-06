@@ -173,9 +173,14 @@ for (const mode of MODES) {
   let hist = mAll, targ = dtr.map((t) => t.pre);
   for (let round = 0; round <= DAGGER; round++) {
     const X = [], Y = [[], []];
-    for (let i = MAXL; i < targ.length; i++) {
+    for (let i = MAXL + 1; i < targ.length; i++) {
       if (!targ[i]) continue;
-      X.push(buildRow(hist, i, refTr, i));
+      // THE MEASURED HISTORY IS READ AT i-1 AND THE COMMAND AT i, because that is what the
+      // deployed policy has: `deployOn` calls it at a sample boundary BEFORE this step's
+      // measurement exists, while the reference is known ahead by construction. Fitting on
+      // row `i` and deploying on row `i-1` is a one-sample lookahead the machine does not
+      // have — invisible in the command-only mode, which is how it nearly shipped.
+      X.push(buildRow(hist, i - 1, refTr, i));
       Y[0].push(targ[i][0]); Y[1].push(targ[i][1]);
     }
     nF = X[0].length;
