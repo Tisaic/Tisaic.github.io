@@ -3845,6 +3845,82 @@ await fx.click('.tab[data-tab="deploy"]');
 }
 await fx.click('.tab[data-tab="move"]');
 
+// ---- THE GHOST: THE MACHINE WITHOUT OUR TOOLS, AND THE CONTROL THAT MAKES IT READABLE.
+//
+// Every number on this page is a RATIO against a baseline, and until now that baseline was a
+// row in a table while the picture showed only the corrected arm — so the gap, which is what
+// the whole project is about, was the one thing you could not see. The ghost is that baseline
+// recorded and drawn underneath.
+//
+// THE CHECK THAT MATTERS IS THE CONTROL, not that a ghost appears. With NO correction
+// selected the live machine and the ghost are the SAME MACHINE, so the ratio must come back
+// ~1. A ghost that were recorded wrong, drawn from the wrong lap index, or scored against a
+// partial lap would still render perfectly and would not read 1 (rules 15, 21).
+section('flexisim ghost');
+await fx.click('.tab[data-tab="path"]');
+{
+  // BOTH SIDES ON THE SAME MACHINE, which is what makes this a control at all. The ghost
+  // defaults to the CONVENTIONAL baseline, and by this point in the suite a compliance has
+  // been identified — so left alone it would compare a machine with the compliance
+  // feedforward against one without, and read 0.78 for a perfectly correct reason.
+  await fx.evaluate(() => { const set = (id, v, ev) => { const e = document.getElementById(id);
+      e.value = v; e.dispatchEvent(new Event(ev, { bubbles: true })); };
+    set('ctlP', 'open', 'change'); set('ghostP-mode', 'open', 'input');
+    set('s-spfP', '400', 'input'); });
+  const running = await fx.evaluate(() => window.__flxPathDbg().running);
+  if (!running) await fx.click('#runP');
+  // Three laps: the ghost's own recording, then a complete live lap to quote. Ends on EITHER
+  // outcome and asserts the badge, because this tab's frame loop CATCHES and a wait that
+  // watches only for success spends its whole timeout naming nothing.
+  await fx.waitForFunction(() => {
+    const d = window.__flxPathDbg();
+    return (d.ghost && d.ghost.rms && !d.ghost.stale)
+      || /^halted:/.test(document.getElementById('stateP-badge').textContent);
+  }, null, { timeout: 900000 });
+  await checkNoHalt('the ghost recording');
+  // A COMPLETE LAP RUN AFTER the ghost became valid. `lastLap` may hold a lap cut before the
+  // recording finished, which is a different machine's lap on this same tab.
+  const lap0 = await fx.evaluate(() => window.__flxPathDbg().lap);
+  await fx.waitForFunction((l0) => window.__flxPathDbg().lap >= l0 + 2, lap0,
+    { timeout: 900000 });
+
+  // ONE evaluate. Sampled a frame apart, the ghost can be mid-re-record and the state and
+  // the rendered row disagree — which is exactly what made three readings contradict each
+  // other while this was being built.
+  const g = await fx.evaluate(() => {
+    const d = window.__flxPathDbg();
+    const t = document.getElementById('statsP').textContent;
+    return { ghost: d.ghost, lastLap: d.lastLap, lap: d.lap,
+      hasRow: t.indexOf('vs the ghost') >= 0 };
+  });
+  console.log(`  flexisim/ghost: baseline ${g.ghost.rms.toExponential(3)} over ${g.ghost.lap} `
+    + `samples, live lap ${g.lastLap.totalRms.toExponential(3)}, `
+    + `ratio ${(g.ghost.rms / g.lastLap.totalRms).toFixed(3)}`);
+  check('flexisim/ghost: a baseline lap is recorded for THIS plant and program',
+    g.ghost && g.ghost.rms > 0 && g.ghost.stale === false && g.ghost.lap > 100,
+    JSON.stringify(g.ghost));
+  check('flexisim/ghost: …and the gap is reported against the last COMPLETE lap, never the '
+    + 'one in progress', g.hasRow && !!g.lastLap, JSON.stringify(g.lastLap));
+  // THE CONTROL. Open loop against an open-loop ghost is one machine compared with itself.
+  const ratio = g.ghost.rms / g.lastLap.totalRms;
+  check('flexisim/ghost: THE CONTROL — with no correction the ghost and the live machine are '
+    + 'the same machine, and the ratio reads ~1',
+    ratio > 0.8 && ratio < 1.25, `ratio ${ratio.toFixed(4)}`);
+
+  // A GHOST FROM ANOTHER MACHINE MUST NOT BE DRAWN. Moving a plant slider is the cheapest
+  // way to invalidate it, and the state has to say so rather than keep drawing the old one.
+  const before = await fx.evaluate(() => window.__flxPathDbg().ghost.stale);
+
+  await fx.evaluate(() => { const e = document.getElementById('s-kP');
+    e.value = String(Math.max(0, +e.value - 1));
+    e.dispatchEvent(new Event('input', { bubbles: true })); });
+  const after = await fx.evaluate(() => window.__flxPathDbg().ghost);
+  check('flexisim/ghost: …and a plant change marks it STALE, so a baseline from another '
+    + 'machine is never drawn under this one',
+    before === false && after.stale === true, `${before} -> ${JSON.stringify(after)}`);
+}
+await fx.evaluate(() => { if (window.__flxPathDbg().running) document.getElementById('runP').click(); });
+
 // The in-browser Verify tab runs the same closed forms against the same modules.
 section('flexisim verify');
 await fx.click('.tab[data-tab="verify"]');

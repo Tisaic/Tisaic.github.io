@@ -8,7 +8,7 @@
   <title>FlexiSim — Compliant Serial Chains</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:1063,built:"2026-09-06T20:25:12Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:1064,built:"2026-09-06T21:37:49Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
   <script src="vendor/plotly-basic.min.js"></script>
 
@@ -593,6 +593,13 @@
         <option value="rounded" selected>rounded rectangle — straights and arcs</option>
         <option value="sharp">square — four real corners</option>
       </select>
+      <!-- THE GHOST: the machine our tools were not given, drawn under the live one. -->
+      <label>Ghost
+        <select id="ghostP-mode">
+          <option value="conventional" selected>conventional machine — the denominator</option>
+          <option value="open">open loop — nothing at all</option>
+        </select></label>
+      <label><input type="checkbox" id="ghostP-off" /> hide the ghost</label>
       <select id="ctlP" aria-label="Correction">
         <option value="open">① none — command the kinematics and nothing else</option>
         <option value="model">② wind-up model — τ/K, which the controller knows</option>
@@ -1179,7 +1186,7 @@ import { roundedRect, sharpRect, circle as circlePath } from './lib/flexisim/too
 // measures depends on the host's details, and a second copy would let this tab report a
 // number from a machine nobody measured while every check still passed — which is exactly
 // what mode ⑧ did the first time it shipped.
-import { makeArmHost } from './lib/flexisim/autohost.js';
+import { makeArmHost, programSignature } from './lib/flexisim/autohost.js';
 // The conventional machine the ladder commissions ON TOP OF — the same identified compliance
 // the Node bar gives it, from the same four held poses. Without it the ladder would be
 // measured against a bare loop and every rung would look better than it is.
@@ -2869,7 +2876,16 @@ function frame() {
   const onDep = document.querySelector('.tab[data-tab="deploy"]').classList.contains('on');
   if ((onPath || onDep) && armP && !busyP) {
     try {
-      if (pilotComm) pilotStepP(LEARN_BUDGET);
+      // THE GHOST IS RECORDED BEFORE ANYTHING ELSE RUNS, and only when it is missing or
+      // stale. It drives the tab's own arm — there is one machine here — so it owns the
+      // machine while it runs and re-homes afterwards. Guarded on `runP` so it costs
+      // nothing until the operator actually asks the machine to turn.
+      if (ghostRec) {
+        let n = +$('s-spfP').value;
+        while (n-- > 0) { if (ghostStepOnce()) { void homeP(); break; } }
+      } else if (runP && ghostOn() && !ghostValid() && !autoComm && armP && cP !== undefined) {
+        ghostStart();
+      } else if (pilotComm) pilotStepP(LEARN_BUDGET);
       else if (ik6Comm) ik6StepP(LEARN_BUDGET);
       else if (sweepP) sweepStepP(LEARN_BUDGET);
       else if (commissionP) commissionStepP(LEARN_BUDGET);
@@ -5926,6 +5942,9 @@ function fitViewP() {
   viewP = { x0: x0 - pad, x1: x1 + pad, y0: y0 - pad, y1: y1 + pad };
 }
 let trailP = [], pHist = null, pChartOn = false, lastGeomP = null;
+// The last COMPLETE lap's score. The gap against the ghost is quoted from this and never
+// from the lap in progress — see the lap-boundary comment where it is captured.
+let lastLapP = null;
 let residP = { enc: 0, follow: 0, n: 0 };
 
 function pathFeed() { return PATH_FEED[+$('s-feedP').value]; }
@@ -6033,7 +6052,7 @@ async function homeP() {
   }
   servoP.resetLimitStats();
   kP = 0; lapP = 0; progPending = false; dwellP = null;
-  scoreP = newScore(); lapScoreP = newScore();
+  scoreP = newScore(); lapScoreP = newScore(); lastLapP = null;
   trailP = []; pHist = { s: [], c: [], v: [] };
   residP = { enc: 0, follow: 0, n: 0 };
   $('pendP').hidden = true;
@@ -6404,6 +6423,125 @@ function pathMode() {
  *
  * @param {object} [collect] when commissioning, the normal equations to accumulate into
  */
+/**
+ * A LINK'S DEFLECTION AT A DISTANCE ALONG IT, interpolated from its own centre-line
+ * profile. Hoisted out of `drawP` so the GHOST RECORDER and the renderer share ONE
+ * definition: the ghost is drawn from points the recorder computed, and if the two used
+ * different rules the ghost would be a second view that can disagree with the first —
+ * which is the whole reason the live arm is drawn through `toolXY()`'s own transform.
+ */
+const bendAt = (prof, bx, piv) => {
+  const want = piv + bx;
+  let lo = 0;
+  while (lo < prof.x.length - 2 && prof.x[lo + 1] < want) lo++;
+  const span = prof.x[lo + 1] - prof.x[lo];
+  const t = span > 0 ? (want - prof.x[lo]) / span : 0;
+  return prof.dy[lo] + t * (prof.dy[lo + 1] - prof.dy[lo]);
+};
+
+/* ==================================================================================
+ * THE GHOST: THE MACHINE WITHOUT OUR TOOLS, DRAWN UNDERNEATH THE ONE WITH THEM.
+ *
+ * WHY IT EXISTS. Every number on this page is a RATIO against a baseline, and until now
+ * that baseline was a number in a table while the picture showed only the corrected arm.
+ * So the thing the whole project is about — the gap — was the one thing you could not see.
+ * The ghost is that baseline made visible: the same plant, the same program, the same
+ * moment in the lap, with none of the ladder's rungs applied, drawn semi-transparent
+ * underneath the live arm along with THE SHAPE IT ACTUALLY CUTS.
+ *
+ * WHY IT IS RECORDED AND NOT SIMULATED LIVE. A second plant stepped every frame doubles
+ * the lattice work, which on the phone this page is driven from is the difference between
+ * watching and waiting. It is recorded instead — and that is exact rather than an
+ * approximation, because this machine's lap-to-lap repeatability is 0.03% and its scored
+ * floor is 1.309e-10: a recorded lap and a live one are the same lap. It costs
+ * `warmup + 1` laps once, instead of one extra lattice step every frame for ever.
+ *
+ * AND IT IS A CACHE WITH A STATED INVALIDATION, NOT A SECOND DESCRIPTION (rule 30). It is
+ * keyed on the plant (K, E) and the PROGRAM SIGNATURE — the same signature the ladder uses
+ * to decide whether a lap-indexed rung may be applied — so a slider change or a shape
+ * change discards it and it is re-recorded. A ghost from a different machine drawn under
+ * this one would be the most misleading picture this page could produce.
+ *
+ * THE BASELINE IS THE CONVENTIONAL MACHINE BY DEFAULT, not the open loop. `RobotComp`'s
+ * identified compliance on top of computed torque and PD is what an engineer would
+ * actually ship, and it is the denominator every recorded number here is quoted against
+ * (4.6748e-1 on this arm). The open loop is offered too, because the gap to a machine with
+ * NOTHING is a different and much flatterng question, and the two must not be confused.
+ */
+let ghostP = null;          // the recorded lap, or null when there is none
+let ghostRec = null;        // the in-progress recording, or null
+
+/** The key a recording belongs to. A ghost from another plant or program is not a ghost. */
+function ghostKey() {
+  if (!armP || !profP) return null;
+  return `${armP.K}|${armP.E}|${ghostMode()}|${programSignature(profP, Math.ceil(profP.lap))}`;
+}
+const ghostMode = () => ($('ghostP-mode') ? $('ghostP-mode').value : 'conventional');
+const ghostValid = () => !!(ghostP && ghostP.key === ghostKey());
+const ghostOn = () => !$('ghostP-off') || !$('ghostP-off').checked;
+
+/**
+ * START RECORDING. Drives the SAME plant the tab drives — there is only one machine here
+ * — so the run in progress is ended and the arm re-homed afterwards. That is why this
+ * happens once per plant/program rather than on demand.
+ */
+function ghostStart() {
+  const LAP = Math.ceil(profP.lap);
+  ghostRec = { key: ghostKey(), lap: LAP, warm: 1, l: 0, k: 0,
+    q1: new Float64Array(LAP), q2: new Float64Array(LAP),
+    ex: new Float64Array(LAP), ey: new Float64Array(LAP),
+    tx: new Float64Array(LAP), ty: new Float64Array(LAP),
+    s2: 0, n: 0 };
+}
+
+/**
+ * ONE STEP OF THE RECORDING. The correction applied is the BASELINE only — never a rung —
+ * which is the whole point: this is the machine our tools were not given.
+ */
+function ghostStepOnce() {
+  const r = ghostRec, cmd = profP.at(r.k);
+  const [q1, q2] = armP.ik(cmd.x, cmd.y, true);
+  const rt = armP.ikRates(q1, q2, cmd.vx, cmd.vy, cmd.ax, cmd.ay);
+  const refs = [{ theta: q1, omega: rt.dq[0], alpha: rt.ddq[0] },
+    { theta: q2, omega: rt.dq[1], alpha: rt.ddq[1] }];
+  // THE CONVENTIONAL MACHINE'S OWN TERM, and nothing else. `cP` is the compliance this tab
+  // identifies; without one the baseline IS the open loop, which is reported rather than
+  // silently substituted.
+  let d0 = 0, d1 = 0;
+  if (ghostMode() === 'conventional' && cP) {
+    const tg = servoP.jointTorques(refs);
+    d0 = clampDq(-cP[0] * tg[0]); d1 = clampDq(-cP[1] * tg[1]);
+  }
+  const tau = servoP.torques([{ ...refs[0], theta: q1 + d0 },
+    { ...refs[1], theta: q2 + d1 }]);
+  armP.step(tau[0], tau[1], 1);
+  if (r.l >= r.warm) {
+    // The three points the picture is drawn from, taken through exactly the transforms
+    // `drawP` uses for the live arm, so the ghost cannot be drawn by a different rule.
+    const [p1] = armP.profiles();
+    const piv1 = armP.l1.meta.pivot[0];
+    const c1 = Math.cos(armP.q[0]), sn1 = Math.sin(armP.q[0]);
+    const b1 = bendAt(p1, armP.L1, piv1);
+    const tool = armP.toolXY();
+    r.q1[r.k] = armP.q[0]; r.q2[r.k] = armP.q[1];
+    r.ex[r.k] = c1 * armP.L1 - sn1 * b1; r.ey[r.k] = sn1 * armP.L1 + c1 * b1;
+    r.tx[r.k] = tool[0]; r.ty[r.k] = tool[1];
+    const d = decompose(profP, tool, cmd);
+    r.s2 += d.contour * d.contour + d.lag * d.lag; r.n++;
+  }
+  if (++r.k >= r.lap) {
+    r.k = 0;
+    if (++r.l > r.warm) {
+      ghostP = { key: r.key, lap: r.lap, q1: r.q1, q2: r.q2, ex: r.ex, ey: r.ey,
+        tx: r.tx, ty: r.ty, rms: Math.sqrt(r.s2 / Math.max(1, r.n)),
+        mode: ghostMode(), hadComp: ghostMode() === 'conventional' && !!cP };
+      ghostRec = null;
+      return true;                 // done
+    }
+  }
+  return false;
+}
+
 function stepPathOnce(collect) {
   const cmd = profP.at(kP);
   const m0 = pathMode();
@@ -6612,6 +6750,14 @@ function onLapBoundaryP() {
       ilc6Hist.push({ lap: st.laps, contour: before.contourRms });
       if (ilc6Hist.length > 40) ilc6Hist.shift();
     }
+  }
+  // ---- KEEP THE LAP THAT JUST FINISHED. `lapScoreP` is reset here, so a reader arriving
+  // between boundaries sees a PARTIAL sum over whichever part of the shape has been cut so
+  // far — on a square that is a straight edge or a corner, which are not the same machine.
+  // The completed lap is the only comparable quantity, and it was being discarded.
+  {
+    const fin = lapScoreP.report();
+    if (fin.steps > 0.9 * profP.lap) lastLapP = fin;
   }
   lapScoreP = newScore();
   residP = { enc: 0, follow: 0, n: 0 };
@@ -7153,7 +7299,7 @@ async function startAutoP(inst = null) {
     // whose lattices are gone — which on WebGPU is reading freed buffers, and in Node-land
     // is simply a frozen picture of a plant that no longer exists.
     autoLiveArm = null; autoT1 = performance.now();
-    autoComm = false; autoAbort = false; autoP = null; syncPath();
+    autoComm = false; autoAbort = false; autoP = null; syncPath(); depSync();
     return;
   }
   autoComm = false; autoAbort = false; autoT1 = performance.now();
@@ -7185,7 +7331,7 @@ async function startAutoP(inst = null) {
     + ` (${autoRep.gain.toFixed(2)}×). Press Run`, 'good');
   $('ctlP').value = 'auto';
   await homeP();
-  syncPath(); statsP();
+  syncPath(); statsP(); depSync();
 }
 
 /** The diagnostics the ladder produces and nothing rendered until now. */
@@ -8019,20 +8165,52 @@ function drawP(stageId = 'stageP', cvId = 'cvP') {
     g.stroke();
   }
 
+  // ---- THE GHOST FIRST, UNDERNEATH EVERYTHING. The machine WITHOUT our tools: the shape
+  // it actually cuts, and where its arm is at this same moment of the lap. Drawn before the
+  // live arm so the live one sits on top of it, and at true scale — the gap you can see is
+  // the real gap, not an exaggerated one.
+  //
+  // NOT DRAWN WHILE COMMISSIONING, because then the live arm is running an excitation and is
+  // not on the program at all: a baseline lap beside it would invite a comparison between
+  // two machines doing different things.
+  // `ghostValid()` AND NOT MERELY `ghostP`. A recording that finished after the program
+  // changed under it — a pending shape applied at a lap boundary, which is exactly how this
+  // page installs one — belongs to the OLD program, and drawing it under the new one invites
+  // a comparison between two different parts. Measured while building this: the ghost
+  // recorded on the rounded rectangle, the sharp square came in at the lap boundary, and the
+  // gap row read "1.23x WORSE" from two machines cutting different shapes. The key already
+  // said `stale: true`; the drawing ignored it.
+  if (ghostOn() && ghostValid() && !commissioning && ghostP.lap > 1) {
+    const G = ghostP, gk = ((kP % G.lap) + G.lap) % G.lap;
+    g.save();
+    g.globalAlpha = 0.38;
+    // THE SHAPE THE UNTOOLED MACHINE LEAVES. This is the part that makes the gap legible:
+    // the dashed program is what was asked for, and this is what a conventional machine
+    // actually delivers, at TRUE size against it.
+    g.strokeStyle = '#f87171'; g.lineWidth = 1.5;
+    g.beginPath();
+    for (let i = 0; i <= 240; i++) {
+      const j = Math.min(G.lap - 1, Math.round((i / 240) * (G.lap - 1)));
+      if (i === 0) g.moveTo(X(G.tx[j]), Y(G.ty[j])); else g.lineTo(X(G.tx[j]), Y(G.ty[j]));
+    }
+    g.closePath(); g.stroke();
+    // …and its arm, at this moment of the lap.
+    g.strokeStyle = '#94a3b8'; g.lineWidth = 4; g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(X(0), Y(0)); g.lineTo(X(G.ex[gk]), Y(G.ey[gk]));
+    g.lineTo(X(G.tx[gk]), Y(G.ty[gk]));
+    g.stroke();
+    g.fillStyle = '#f87171';
+    g.beginPath(); g.arc(X(G.tx[gk]), Y(G.ty[gk]), 4, 0, 7); g.fill();
+    g.restore();
+  }
+
   // The arm, TRUE: each link's own deflected centre line in its own body frame, mapped
   // through exactly the transform toolXY() uses, so the picture and the tool reading
   // cannot disagree. At this stiffness the bow is well under a pixel, which is the
   // honest appearance of a stiff arm and not a simplification.
   const [p1, p2] = AR.profiles();
   const piv1 = AR.l1.meta.pivot[0], piv2 = AR.l2.meta.pivot[0];
-  const bendAt = (prof, bx, piv) => {
-    const want = piv + bx;
-    let lo = 0;
-    while (lo < prof.x.length - 2 && prof.x[lo + 1] < want) lo++;
-    const span = prof.x[lo + 1] - prof.x[lo];
-    const t = span > 0 ? (want - prof.x[lo]) / span : 0;
-    return prof.dy[lo] + t * (prof.dy[lo + 1] - prof.dy[lo]);
-  };
   const q1 = AR.q[0], q2 = AR.q[1];
   const s1 = tipSlopeOf(p1);
   const c1 = Math.cos(q1), sn1 = Math.sin(q1);
@@ -8081,9 +8259,11 @@ function drawP(stageId = 'stageP', cvId = 'cvP') {
   // SHORT ENOUGH TO FIT. The first version ran off the right edge of a 412px phone and
   // ended mid-word, which is a legend nobody can read — the same fault the comment above
   // records for the badges, one line down.
+  const gl = ghostOn() && ghostP && !commissioning
+    ? ` · ghost = ${ghostP.mode === 'open' ? 'open loop' : 'conventional'}` : '';
   g.fillText(commissioning
     ? 'COMMISSIONING \u2014 the ladder\u2019s own machine, not the program'
-    : `program (dashed) · tool ● · commanded ○ · contour error ×${mag}`, 12, h - 8);
+    : `program (dashed) · tool ● · error ×${mag}${gl}`, 12, h - 8);
 }
 
 /** The same least squares over the last few cells that link.js and tipError() use. */
@@ -8236,6 +8416,40 @@ function statsP() {
         : ilc6P._backoffs ? ` · <span class="warn">gain annealed to ${ilc6P.gain} after ${ilc6P._backoffs} backoff${ilc6P._backoffs === 1 ? '' : 's'}</span>` : '')
       + (ilc6Hist.length > 1 ? ' · contour ' + ilc6Hist.slice(-8).map((hh) =>
         hh.contour.toExponential(1)).join(' → ') : '')]);
+  }
+  // ---- THE GAP, WHICH IS THE WHOLE POINT AND HAD NO NUMBER. The ghost's own rms against
+  // the live lap's, on the same plant, the same program and the same metric — so the ratio
+  // on screen is the ratio the Node bar reports rather than a second definition of "gain".
+  // ---- READ ON A COMPLETE LAP, AND NOT ON LAP 0.
+  //
+  // `lapScoreP` resets at every lap boundary, so mid-lap it is a partial sum over whichever
+  // part of the shape has been cut so far — on a square that is a straight edge or a corner,
+  // which are not the same machine. And lap 0 starts from rest on a program that demands
+  // motion immediately: that transient is worth a factor of ~2.9 on this project's own
+  // record and belongs to the START, not to the controller (rules 12, 13). The ghost skips
+  // its own warm-up lap for exactly this reason, so comparing it against a live lap 0 is
+  // comparing a settled machine with a starting one.
+  if (ghostValid() && lastLapP && lastLapP.totalRms > 0) {
+    const gx = ghostP.rms / lastLapP.totalRms;
+    rows.push(['<b>vs the ghost</b>',
+      `<b>${gx >= 1 ? gx.toFixed(2) + '×  better' : (1 / gx).toFixed(2) + '×  WORSE'}</b>`
+      + ` <span style="opacity:.7">— ${fmt(ghostP.rms, 3)} without our tools, `
+      + `${fmt(lastLapP.totalRms, 3)} with them, on the last COMPLETE lap`
+      + (ghostP.mode === 'conventional' && !ghostP.hadComp
+        ? ' · <b>no compliance was identified, so this ghost IS the open loop</b>' : '')
+      + '</span>']);
+  } else if (ghostValid()) {
+    rows.push(['<b>vs the ghost</b>', 'waiting for the first complete lap — lap 0 starts the '
+      + 'machine at rest on a program that demands motion immediately, and that transient is '
+      + 'the start rather than the controller']);
+  } else if (ghostRec) {
+    rows.push(['<b>vs the ghost</b>', `recording the baseline lap — lap ${ghostRec.l + 1} of `
+      + `${ghostRec.warm + 1}, the machine without our tools on this plant and this program`]);
+  } else if (ghostP) {
+    // NOT THE SAME AS HAVING NONE. A stale ghost is a real recording of a DIFFERENT machine
+    // or program, and reporting it as absence would hide why the picture just changed.
+    rows.push(['<b>vs the ghost</b>', 'the recorded baseline belongs to another plant or '
+      + 'program — it is not drawn, and a fresh one records on the next run']);
   }
   rows.push(['<b>contour rms / max</b>', `<b>${fmt(lr.contourRms, 3)}</b> / `
     + `${fmt(lr.contourMax, 3)}   <span class="warn">this lap; `
@@ -8892,6 +9106,13 @@ window.__flxPathDbg = () => (armP ? {
   // number that can be checked rather than an impression of a picture (rule 23).
   drawnPose: (() => { const A = liveArmP(); return A ? { q: [A.q[0], A.q[1]],
     tool: A.toolXY(), live: !!(autoComm && autoLiveArm) } : null; })(),
+  // THE GHOST — the machine without our tools. `stale` is the state that matters: a ghost
+  // recorded on another plant or another program must never be drawn under this one.
+  lastLap: lastLapP ? { totalRms: lastLapP.totalRms, contourRms: lastLapP.contourRms,
+    lagRms: lastLapP.lagRms } : null,
+  ghost: ghostP ? { rms: ghostP.rms, mode: ghostP.mode, hadComp: ghostP.hadComp,
+    lap: ghostP.lap, stale: ghostP.key !== ghostKey() }
+    : (ghostRec ? { recording: true, lap: ghostRec.lap, l: ghostRec.l } : null),
   geom: lastGeomP ? { ...lastGeomP,
     gap: Math.hypot(lastGeomP.drawn[0] - lastGeomP.truth[0],
       lastGeomP.drawn[1] - lastGeomP.truth[1]) } : null,
