@@ -199,8 +199,16 @@ for (const t of TRAIN_SPEC) {
     // The block's own `demo` diet already ladders the feed, and it measured 0.22x-1.09x because
     // it confounded feed with SCALE (r 2.2-3.8 against test programs at r 4 and 8x8). This diet
     // ladders the feed at the programs' own scale, which is the one combination not yet run.
-    designDemoPaths({ centre: PG.centre, feeds: [FEED, 2 * FEED, 0.5 * FEED],
-      rMin: 3.4, rSpan: 2.4 }).slice(0, NDEMO)
+    // ENOUGH PROGRAMS PER BAND FOR A BAND TO BE WELL-POSED. `designDemoPaths` emits one convex
+    // and one star per entry of `feeds`, so a bare [F, 2F, 0.5F] gives TWO programs per band —
+    // and the smoke run measured what that costs: with one program per band the maps read 0.18x
+    // switched and 0.27x blended against a pooled 1.12x, which is the ensemble's null-space
+    // failure arriving exactly where it was predicted. Repeating each feed gives NDEMO/3
+    // programs per band instead.
+    const reps = Math.max(1, Math.round(NDEMO / 6));
+    const fl = [];
+    for (let r = 0; r < reps; r++) fl.push(FEED, 2 * FEED, 0.5 * FEED);
+    designDemoPaths({ centre: PG.centre, feeds: fl, rMin: 3.4, rSpan: 2.4 }).slice(0, NDEMO)
       .forEach((path, i) => TRAINS.push({ name: `pf${i}`, path }));
   } else if (t.startsWith('tour')) {
     // ONE LONG CLOSED LAP, which is the only shape of training program that lets a window REACH
