@@ -85,6 +85,10 @@ const SOFFS = (process.env.D_SOFFS || '-32,-8,-2,0,2,8,32,96,256').split(',').ma
 // plant's long memory is about what ALREADY HAPPENED, so these are causal only; the preview
 // needs resolution rather than reach and keeps its direct taps.
 const TAUS = (process.env.D_TAUS || '4,8,16,32,64,128,256,512,1024').split(',').map(Number);
+// Offsets the quadratic block's base terms are read at, and how much harder that block is
+// ridged than the linear one (columns scaled by 1/QSCALE, so the penalty is QSCALE^2).
+const QOFFS = (process.env.D_QOFFS || '-16,-4,0,4,16,48').split(',').map(Number);
+const QSCALE = +(process.env.D_QSCALE || 10);
 
 console.log(`\ndistilling the iteration prefix — K ${PG.K} / E ${PG.E}, feed ${FEED}`);
 console.log(`  converged on ${TRAIN_SPEC.join(' + ')} over ${PASSES} passes, `
@@ -198,7 +202,7 @@ const mkRow = (mode) => (hist, i, refAt, kSamp) => {
     // the same window cannot say which corner of which lap it is over.
     const q0 = refAt(Math.max(0, kSamp));
     const rel = mode === 'rel' || mode === 'relmeas' || mode === 'rich'
-      || mode === 'diff' || mode === 'expo';
+      || mode === 'diff' || mode === 'expo' || mode === 'quad';
     // `rel` IS A NULL BY CONSTRUCTION AND MEASURING IT SAID SO. {q(k)} together with
     // {q(k+o) - q(k)} spans exactly the space {q(k+o)} spans, so a linear model cannot tell the
     // two parameterisations apart — `rel` reproduced `cmd` to three digits and the same fit R²,
@@ -218,7 +222,31 @@ const mkRow = (mode) => (hist, i, refAt, kSamp) => {
         r.push(E[t][0][i2] - q0[0], E[t][1][i2] - q0[1]);
       }
     }
-    if (mode === 'rich' || mode === 'expo') {
+    if (mode === 'quad') {
+      // A QUADRATIC BLOCK UNDER A STRUCTURED PRIOR, aimed at the model bound the cap ladder
+      // just established. The base terms are LOCAL COMMAND DERIVATIVES — first and second
+      // differences of the reference at a few offsets — because those are what the plant's
+      // inverse acts on, and their products are what a compliance that varies with pose and a
+      // friction that varies with speed would need. Squares and cross-products of `nq` bases.
+      //
+      // THE COLUMNS ARE SCALED DOWN RATHER THAN GIVEN THEIR OWN RIDGE, which is the same
+      // penalty by another route (`solveRidge` takes one lambda) and matches what the pilot's
+      // own quadratic block does: ridged harder so it must EARN its weights. QSCALE 10 is a
+      // 100x heavier prior on this block than on the linear one.
+      const base = [];
+      for (const o of QOFFS) {
+        const a = refAt(Math.max(0, kSamp + o - 1)), b0 = refAt(Math.max(0, kSamp + o)),
+          c2 = refAt(Math.max(0, kSamp + o + 1));
+        for (let c = 0; c < 2; c++) {
+          base.push((c2[c] - a[c]) * 0.5);                 // velocity
+          base.push(c2[c] - 2 * b0[c] + a[c]);             // acceleration
+        }
+      }
+      for (let i = 0; i < base.length; i++) {
+        for (let j = i; j < base.length; j++) r.push(base[i] * base[j] / QSCALE);
+      }
+    }
+    if (mode === 'rich' || mode === 'expo' || mode === 'quad') {
       // FRICTION IS SIGN-DEPENDENT AND A LINEAR MAP OF POSITIONS CANNOT EXPRESS IT. This plant
       // carries Stribeck friction and backlash, both of which switch on the DIRECTION of travel,
       // so the converged correction has a term proportional to sign(velocity) that no amount of
@@ -312,7 +340,7 @@ console.log(`\n  mode   feats   fit R² ch0/ch1    program   open loop     pilot
 for (const mode of MODES) {
   const buildRow = mkRow(mode);
   const MAXL = (mode === 'cmd' || mode === 'rel' || mode === 'rich' || mode === 'diff'
-    || mode === 'expo') ? 0 : MLAGS[MLAGS.length - 1];
+    || mode === 'expo' || mode === 'quad') ? 0 : MLAGS[MLAGS.length - 1];
   let W = null, fitR2 = [NaN, NaN], nF = 0;
   // DAGGER: refit on the states the POLICY itself visits. A behaviour-cloned policy is fitted
   // on one distribution and then generates its own, and the gap between them is the whole
