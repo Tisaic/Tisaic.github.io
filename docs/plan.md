@@ -9981,6 +9981,44 @@ mixture, and the extra it captures is the half that does not transfer. Its uPk i
 on two programs of three where the linear basis is at the clamp on one, so it is also asking
 for a LARGER correction — a bigger, better-fitted, worse-aimed one.
 
+### THE ACCOUNT'S CENTRAL CLAIM IS FALSIFIED IN WEIGHT SPACE, AND THAT KILLS A WHOLE FAMILY
+
+The account says the converged prefix is a MIXTURE of a shared plant inverse and a
+program-specific residue. If that is a decomposition of the WEIGHT VECTOR, then fitting a map
+per program and AVERAGING them should cancel the residues and leave the inverse — the one move
+that reduces effective capacity instead of adding it, free at deploy, and already measured
+working in this project (`lib/pilot/ensemble.js` on the tank: eight draws all refusing at
+1.000x, their average delivering 1.344x, better than every draw rather than between them).
+
+Six per-program maps averaged into one vector of 119, against pooling the same rows:
+
+```
+  fitting                sharp   rounded   circle    fit R^2
+  pooled rows            5.52x    4.25x    7.07x    0.974 / 0.921
+  averaged maps (k=6)    0.17x    0.20x       -    -1.460 / -0.903
+```
+
+**The averaged vector does not even explain the pooled rows** — negative R^2 on both channels —
+so the six maps are not small perturbations of a common vector. They are wildly different, and
+their mean is not a plant model at all.
+
+**WHICH SAYS WHY POOLING ROWS WORKS, AND IT IS NOT "MORE DATA".** A map fitted on ONE closed
+program is badly under-determined: that program's reference spans a low-dimensional subspace,
+so the weights are arbitrary in the null space and six such fits differ mostly in null-space
+junk. Averaging junk gives junk. Pooling rows CONSTRAINS the null space — that is what the
+extra programs are for, and it is the same statement as §41's aliasing theorem seen from the
+parameter side rather than the data side.
+
+**SO THE ACCOUNT SURVIVES AS A STATEMENT ABOUT DELIVERED BEHAVIOUR AND DIES AS A LINEAR
+DECOMPOSITION.** Capacity, reach and convergence really do trade transfer for fit — eleven rows
+say so and none dissents. But the transferable component is NOT a subvector that can be
+isolated by averaging, by weighting the passes (which recovered a third and traded), or by any
+other linear operation tried here. It is whatever a pooled, capacity-limited fit lands on, and
+the only way to find it is to score candidates ON THE MACHINE. **That kills the entire family
+of "isolate the transferable part" proposals**, which is worth more than the two runs it cost,
+because both of the obvious members of that family have now been built and both failed in the
+same direction.
+
 **AND ITS OWN PREDICTION WAS RUN AND CAME BACK HALF WRONG, WHICH IS THE USEFUL OUTCOME.** The
 account said: if the converged prefix is a mixture and the lap-specific half is what iteration
 reaches LAST, then down-weighting the late increments should isolate the transferable half and
