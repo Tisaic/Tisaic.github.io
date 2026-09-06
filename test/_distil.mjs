@@ -66,6 +66,13 @@ const COFFS = (process.env.D_COFFS
 // Where the sign/magnitude block is evaluated. Fewer offsets than COFFS because a sign is a
 // coarse feature and one per decade of look-ahead is what the physics asks for.
 const SOFFS = (process.env.D_SOFFS || '-32,-8,-2,0,2,8,32,96,256').split(',').map(Number);
+// EXPONENTIAL KERNEL TIME CONSTANTS, in samples. Deep reach WITHOUT phase resolution is the
+// whole point: 41 independent taps reaching +/-1024 samples can locate themselves in an
+// 817-sample lap and did (held out 0.47x, worse than doing nothing), while a one-pole average
+// over 1024 samples is a single smooth number that cannot tell one phase from another. The
+// plant's long memory is about what ALREADY HAPPENED, so these are causal only; the preview
+// needs resolution rather than reach and keeps its direct taps.
+const TAUS = (process.env.D_TAUS || '4,8,16,32,64,128,256,512,1024').split(',').map(Number);
 
 console.log(`\ndistilling the iteration prefix — K ${PG.K} / E ${PG.E}, feed ${FEED}`);
 console.log(`  converged on ${TRAIN_SPEC.join(' + ')} over ${PASSES} passes, `
@@ -178,7 +185,8 @@ const mkRow = (mode) => (hist, i, refAt, kSamp) => {
     // translation-invariant: a corner looks like a corner wherever in the workspace it sits, and
     // the same window cannot say which corner of which lap it is over.
     const q0 = refAt(Math.max(0, kSamp));
-    const rel = mode === 'rel' || mode === 'relmeas' || mode === 'rich' || mode === 'diff';
+    const rel = mode === 'rel' || mode === 'relmeas' || mode === 'rich'
+      || mode === 'diff' || mode === 'expo';
     // `rel` IS A NULL BY CONSTRUCTION AND MEASURING IT SAID SO. {q(k)} together with
     // {q(k+o) - q(k)} spans exactly the space {q(k+o)} spans, so a linear model cannot tell the
     // two parameterisations apart — `rel` reproduced `cmd` to three digits and the same fit R²,
@@ -191,7 +199,14 @@ const mkRow = (mode) => (hist, i, refAt, kSamp) => {
       if (rel) { if (o !== 0) r.push(q[0] - q0[0], q[1] - q0[1]); }
       else r.push(q[0], q[1]);
     }
-    if (mode === 'rich') {
+    if (mode === 'expo') {
+      const E = expoOf(refAt.path);
+      const i2 = Math.min(E.n - 1, Math.max(0, kSamp));
+      for (let t = 0; t < TAUS.length; t++) {
+        r.push(E[t][0][i2] - q0[0], E[t][1][i2] - q0[1]);
+      }
+    }
+    if (mode === 'rich' || mode === 'expo') {
       // FRICTION IS SIGN-DEPENDENT AND A LINEAR MAP OF POSITIONS CANNOT EXPRESS IT. This plant
       // carries Stribeck friction and backlash, both of which switch on the DIRECTION of travel,
       // so the converged correction has a term proportional to sign(velocity) that no amount of
@@ -213,16 +228,45 @@ const mkRow = (mode) => (hist, i, refAt, kSamp) => {
   return r;
 };
 
+// THE EXPONENTIAL STATE BANK, precomputed per path by running each one-pole filter forward over
+// the record from its start — which is exactly what a deployed machine does, at ONE MAC per
+// state per sample, since the reference is known. Keyed by the path object so the fit and the
+// deploy read one table and cannot drift apart (rule 61).
+const EXPO = new Map();
+const expoOf = (path) => {
+  let E = EXPO.get(path);
+  if (E) return E;
+  const lapS = Math.max(1, Math.round(path.lap / S));
+  const n = 4 * lapS;                       // three scored laps plus a lead-in
+  E = TAUS.map(() => [new Float64Array(n), new Float64Array(n)]);
+  const q = [];
+  for (let k = 0; k < n; k++) q.push(pilotIk(path.at(k * S).x, path.at(k * S).y));
+  TAUS.forEach((tau, t) => {
+    const a = Math.exp(-1 / tau);
+    for (let c = 0; c < 2; c++) {
+      let v = q[0][c];
+      for (let k = 0; k < n; k++) { v = a * v + (1 - a) * q[k][c]; E[t][c][k] = v; }
+    }
+  });
+  E.n = n;
+  EXPO.set(path, E);
+  return E;
+};
+
 // Offline replay of the reference the same way the run reads it, so the fit and the deploy see
 // one definition of the command window (rule 61 — a second copy is the defect).
 const mkRefAt = (shape) => {
   const p2 = typeof shape === 'string' ? mkPath(shape, FEED) : shape;
   const cache = new Map();
-  return (i) => {
+  const f = (i) => {
     let v = cache.get(i);
     if (!v) { const c = p2.at(i * S); v = pilotIk(c.x, c.y); cache.set(i, v); }
     return v;
   };
+  // The reader CARRIES its path, so the exponential bank is keyed by the same object the reader
+  // reads and a row built for one program can never be scored against another's states.
+  f.path = p2;
+  return f;
 };
 // The rig's own inverse kinematics, reached through a throwaway arm so the harness does not carry
 // a second copy of the geometry (rule 61 — three copies of this rig's routing have each shipped
@@ -255,8 +299,8 @@ console.log(`\n  mode   feats   fit R² ch0/ch1    program   open loop     pilot
   + `distilled      distilled+pilot     memory       uPk`);
 for (const mode of MODES) {
   const buildRow = mkRow(mode);
-  const MAXL = (mode === 'cmd' || mode === 'rel' || mode === 'rich' || mode === 'diff')
-    ? 0 : MLAGS[MLAGS.length - 1];
+  const MAXL = (mode === 'cmd' || mode === 'rel' || mode === 'rich' || mode === 'diff'
+    || mode === 'expo') ? 0 : MLAGS[MLAGS.length - 1];
   let W = null, fitR2 = [NaN, NaN], nF = 0;
   // DAGGER: refit on the states the POLICY itself visits. A behaviour-cloned policy is fitted
   // on one distribution and then generates its own, and the gap between them is the whole
@@ -285,7 +329,7 @@ for (const mode of MODES) {
     for (const st of sets) {
       const tr2 = [];
       await deployOn(pilot, st.path, false, FEED,
-        { policy: mkPolicy(W, buildRow), trace: tr2 });
+        { policy: mkPolicy(W, buildRow, st.refAt), trace: tr2 });
       const { pre, LAPK } = PRE[st.T];
       st.hist = tr2.map((t) => t.m);
       st.targ = tr2.map((t, i) => [pre[0][(i * S) % LAPK], pre[1][(i * S) % LAPK]]);
@@ -293,8 +337,9 @@ for (const mode of MODES) {
   }
   for (const sh of TESTS) {
     const { o, b, m } = base[sh];
-    const d = await deployOn(pilot, sh, false, FEED, { policy: mkPolicy(W, buildRow) });
-    const dp = await deployOn(pilot, sh, true, FEED, { policy: mkPolicy(W, buildRow) });
+    const rf = mkRefAt(sh);
+    const d = await deployOn(pilot, sh, false, FEED, { policy: mkPolicy(W, buildRow, rf) });
+    const dp = await deployOn(pilot, sh, true, FEED, { policy: mkPolicy(W, buildRow, rf) });
     const x = (v) => (o.r.totalRms / v.r.totalRms).toFixed(2) + 'x';
     console.log(`  ${mode.padEnd(6)}${String(nF).padStart(5)}  `
       + `${fitR2.map((v) => v.toFixed(3)).join(' / ')}     ${sh.padEnd(9)} `
@@ -306,8 +351,12 @@ for (const mode of MODES) {
   }
 }
 
-function mkPolicy(W, buildRow) {
-  return (hist, kSamp, refAt) => {
+// THE READER IS PASSED IN, NOT TAKEN FROM THE PORT. `deployOn` offers its own `refAt`, and using
+// it would make the deployed row a second implementation of the fitted row — the exact defect
+// rule 61 is about, and the one that would silently break the exponential bank, which is keyed
+// by the reader's path. One reader, built by the harness, used by both.
+function mkPolicy(W, buildRow, refAt) {
+  return (hist, kSamp) => {
     const i = hist.length - 1;
     const r = buildRow(hist, i < 0 ? 0 : i, refAt, kSamp);
     const out = [0, 0];
