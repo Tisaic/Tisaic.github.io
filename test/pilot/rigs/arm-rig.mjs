@@ -43,6 +43,40 @@ const ARM_K = +(process.env.ARM_K || 16);
 // 1e-4 rad of lost motion, and a sharp corner is exactly where the machine reverses and has to
 // cross it.
 const ARM_BL = process.env.ARM_BL === undefined ? 1e-4 : +process.env.ARM_BL;
+
+// THE TRACKER'S OWN ERROR, WHICH EVERY NUMBER IN THIS PROJECT HAS ASSUMED AWAY.
+//
+// `routeSignals` builds the pilot's truth from `arm.toolXY()`, so that call IS the tracker and it
+// is exact to double precision. On a real machine the instrument is a laser tracker, a ballbar or
+// a probed artefact, and it has an error budget: tens of microns, at a rate below the servo's, with
+// latency. Which of those the method can tolerate decides who can buy it, and none of them has ever
+// been measured here.
+//
+// `ARM_TOOL_NOISE` is the first axis: additive independent Gaussian on the tool READING, in tool
+// length units (the arm's reach is 8.3), applied BEFORE the error and the inverse-Jacobian map,
+// which is where a real instrument's error actually enters. Unset, it is exactly zero and every
+// existing run is byte-identical by construction.
+//
+// IT PERTURBS THE TRUTH AND NOT THE SCORE. `deployOn` scores from its own `a2.toolXY()` call, which
+// this does not touch, so the machine is always graded by perfect metrology and only the
+// COMMISSIONING sees the degraded instrument. That direction is the whole experiment: "how good a
+// controller does a worse instrument buy", not "does a worse instrument flatter its own report".
+// Wired the other way round it would measure the instrument and read as a result (rule 17).
+//
+// NOT BUILT, and stated rather than implied: sample RATE (a tracker below the servo rate), LATENCY,
+// and SPARSITY (a probed part gives points per lap, not a trace). A rate hold needs per-loop state
+// and `routeSignals` is stateless and shared; doing it by module-level state would leak between
+// runs, so it wants a real signature change rather than a shortcut (rule 61).
+const ARM_TOOL_NOISE = +(process.env.ARM_TOOL_NOISE || 0);
+let _tnZ = (+(process.env.ARM_TOOL_SEED || 12345)) >>> 0;
+let _tnSpare = null;
+const _tnGauss = () => {
+  if (_tnSpare !== null) { const v = _tnSpare; _tnSpare = null; return v; }
+  const u = () => { _tnZ = (_tnZ * 1664525 + 1013904223) >>> 0; return (_tnZ + 1) / 4294967297; };
+  const r = Math.sqrt(-2 * Math.log(u())), th = 2 * Math.PI * u();
+  _tnSpare = r * Math.sin(th);
+  return r * Math.cos(th);
+};
 const PG = { LEN1: 14, LEN2: 10, E: ARM_E, K: ARM_K, BL: ARM_BL, centre: [12, 0], drive: 32 };
 
 async function makeArm(over = {}) {
@@ -128,7 +162,10 @@ function homeArm(arm, servo, path) {
  */
 function routeSignals(arm, cmd, tau) {
   const enc = arm.encoders();
-  const tool = arm.toolXY();
+  const tool0 = arm.toolXY();
+  const tool = ARM_TOOL_NOISE
+    ? [tool0[0] + ARM_TOOL_NOISE * _tnGauss(), tool0[1] + ARM_TOOL_NOISE * _tnGauss()]
+    : tool0;
   const q1 = cmd[0].pos, q2 = cmd[1].pos;
   const cx = arm.L1 * Math.cos(q1) + arm.L2 * Math.cos(q1 + q2);
   const cy = arm.L1 * Math.sin(q1) + arm.L2 * Math.sin(q1 + q2);
