@@ -10144,6 +10144,40 @@ running with a policy deployed, and a policy reading a two-sided command window 
 look-ahead off a live excitation — so it is rig surgery with a number attached rather than rig
 surgery on a hunch.
 
+### THE SECOND LAYER WAS BUILT AND IT LOSES — THE HEADROOM IS REAL AND NOT STATE-ADDRESSABLE
+
+The ceiling said a second layer had 4.6x above the policy on the sharp square and 13x on the
+rounded rectangle. It needed no rig surgery after all: converge top-up prefixes on the TRAINING
+programs with layer 1 deployed, distil them the same way, deploy both maps summed and clamped
+once. Two top-up passes per training program, 14,734 rows:
+
+```
+  controller                    sharp   rounded    layer-2 fit R^2
+  layer 1 alone                 5.52x    4.25x     (layer 1: 0.974 / 0.921)
+  layer 1 + layer 2             3.89x    3.98x      0.934 / 0.511
+  the ceiling above layer 1    25.16x   55.35x
+```
+
+**A 4.6x ceiling, and the layer built to reach it costs 29%.** The elbow tells the story before
+the machine does: layer 2 fits its own residual at 0.511 IN SAMPLE, against layer 1's 0.921 —
+the same per-layer decay `stack.js` records for a real cascade (0.991 -> 0.777 -> 0.514), and
+far below what transfers.
+
+**AND THIS REPRODUCES §48's `_resid.mjs` BY A COMPLETELY DIFFERENT ROUTE.** That bench fitted
+the depth-2 cascade's residual directly and found it generalises to a held-out lap of its own
+program at 0.87 and to the same shape at another feedrate at 0.0023 — "a GEOMETRY-indexed
+quantity", not state-predictable. This one never touches a cascade, distils rather than
+forecasts, and lands in the same place: **the headroom above a good correction is real, large,
+and not a function of state.** Two independent instruments, one conclusion, which is the only
+kind of agreement worth having (rule 15).
+
+**SO THE COMPOSITION QUESTION IS CLOSED, AND CLOSED THE OTHER WAY FROM THE CEILING.** What
+§49's retraction established stands — 20x is not barred on the sharp square, the composition
+reaches 25.16x — but that row is a MEMORY, and the one legal route to it measured here makes
+the machine worse. The gap between 10.25x delivered and 25x available is the same gap the
+retirement opened, in a new place: it is reachable by iterating on the program in front of you
+and not by any model of the plant this project has been able to fit.
+
 ### WHERE §49 STOPS, AND THE ONE THING IT DID NOT BUILD
 
 Every lever this section had a MEASURED reason to try has been tried. What closed:
