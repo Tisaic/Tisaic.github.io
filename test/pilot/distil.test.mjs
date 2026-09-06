@@ -123,7 +123,43 @@ check('…fading through a partial value rather than switching', shrunk,
   `${half.map((v) => v.toExponential(2))} against ${ref0.map((v) => v.toExponential(2))}`);
 console.log(`    trained speed span ${lo.toFixed(4)} … ${hi.toFixed(4)}, fade over ${p.coverageFade * 100}% beyond`);
 
-// ---- 6. THE BLOCK STATES ITS OWN SLICE
+// ---- 6. THE STREAMING FIT — whether "nothing offline" is true or false
+// Batch ridge stores every row and ends in a Cholesky, which is an offline algorithm; requiring
+// it on the PLC kills the product claim outright. The streaming path is one shared-covariance
+// update per row — the two channels share a design matrix EXACTLY here (one row, nc targets),
+// which is the clean case the pilot's lead bank is NOT — with O(n²) state and no row stored.
+const on = new DistilPolicy({ channels: 2, offsets: OFFS, signOffsets: SOFF, ridge: 1e-8, uMax: 10, online: true });
+on.addProgram({ refAt, n: N, prefix, speedAt });
+const onRep = on.fit();
+check('the streaming fit deploys on a signal it can represent', onRep.deploy === true, onRep.reason || '');
+check('…scored PREQUENTIALLY, so validation cannot leak by construction',
+  onRep.foldKind.startsWith('prequential') && onRep.heldOutR2.every((v) => v > 0.99),
+  `${onRep.foldKind} ${JSON.stringify(onRep.heldOutR2)}`);
+check('…and it stores no rows', on.X.length === 0, `${on.X.length} rows retained`);
+// THE AGREEMENT IS ASSERTED ON THE APPLIED CORRECTION, NOT ON THE WEIGHTS. This design is
+// collinear by construction — a smooth reference read at overlapping offsets — so many weight
+// vectors give the same predictions, and the two fits differ by 12% in weight space while
+// agreeing to five decimal places in what reaches the machine. Comparing weights on a collinear
+// design is the wrong instrument, and it would have read as a failure.
+let num = 0, den = 0;
+for (let k = 200; k < N - 200; k += 13) {
+  const ab = p.act(refAt, k), ao = on.act(refAt, k);
+  for (let c = 0; c < 2; c++) { num += (ab[c] - ao[c]) ** 2; den += ab[c] ** 2; }
+}
+const rel = Math.sqrt(num / den);
+check('the streaming fit and the batch solve agree on the APPLIED CORRECTION',
+  rel < 1e-4, `${(rel * 100).toFixed(5)}% rms`);
+const fc = on.fitCost();
+check('the fit states its own per-row cost and state size',
+  fc.perRow === 2 * nF * nF + nF * 2 && fc.stateBytes === 4 * nF * nF, JSON.stringify(fc));
+console.log(`    streaming: ${onRep.rows} rows, prequential R² `
+  + `${onRep.heldOutR2.map((v) => v.toFixed(6)).join(' / ')}, agreement `
+  + `${(rel * 100).toFixed(5)}% of the applied signal`);
+console.log(`    fit ${fc.perRow.toLocaleString()} MAC/ROW in ${(fc.stateBytes / 1024).toFixed(1)} kB `
+  + '— per ROW, not per scan: a row arrives once per DECISION, so the caller divides by its own '
+  + 'decision stride. Quoting a per-row figure against a per-scan budget is a units error.');
+
+// ---- 7. THE BLOCK STATES ITS OWN SLICE
 const mac = p.cost();
 const hand = nF * 2 + (2 * (OFFS.length - 1) + 2 * 2 * SOFF.length);
 check('cost() is the arithmetic the block performs, hand-counted', mac === hand, `${mac} against ${hand}`);
