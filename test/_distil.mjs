@@ -134,6 +134,18 @@ const RSWEEP = (process.env.D_RSWEEP || '').split(',').filter(Boolean).map(Numbe
 // policy has already corrected, and whatever that reaches is more than any fitted layer can.
 // If it gains little, the composition is closed without the surgery.
 const TOPUP = +(process.env.D_TOPUP || 0);
+// A SECOND DISTILLED LAYER, WHICH NEEDS NO RIG SURGERY AFTER ALL. I recorded the composition as
+// blocked because `commissionArm` cannot run with a policy deployed (a two-sided command window
+// has no look-ahead on a live excitation). But the second layer does not have to be a
+// COMMISSIONED PILOT: converge top-up prefixes on the TRAINING programs with layer 1 deployed —
+// which `deployOn` already supports — and distil those the same way layer 1 was distilled.
+// Everything needed is in this harness already.
+//
+// The ceiling says it is worth building: on the held-out sharp square the oracle ladder over the
+// policy reads 5.52x -> 19.45x -> 23.52x -> 25.16x, and on the rounded rectangle 4.25x -> 18.37x
+// -> 41.02x -> 55.35x, both PAST what iteration alone converges to from the bare machine
+// (19.47x, 40.44x) and both at almost no extra authority (uPk 0.669 -> 0.727 on the rounded).
+const LAYER2 = +(process.env.D_LAYER2 || 0);
 let QBASE = null;
 
 console.log(`\ndistilling the iteration prefix — K ${PG.K} / E ${PG.E}, feed ${FEED}`);
@@ -610,9 +622,56 @@ for (const mode of MODES) {
   // on every program it is scored on.
   const rungs = RSWEEP.map((rg) => ({ rg,
     W: [solveRidge(lastX, lastY[0], rg), solveRidge(lastX, lastY[1], rg)] }));
+  // ---- THE SECOND LAYER: top-up prefixes on the TRAINING programs, distilled the same way ----
+  let W2 = null, fit2 = [NaN, NaN];
+  if (LAYER2) {
+    const X2 = [], Y2 = [[], []];
+    for (const st of sets) {
+      const pol1 = mkPolicy(W, buildRow, st.refAt);
+      const lapK = Math.round(st.path.lap), lapS = Math.round(st.path.lap / S);
+      const pre2 = [new Float64Array(lapK), new Float64Array(lapK)];
+      for (let pass = 0; pass < LAYER2; pass++) {
+        const ftr = [];
+        await deployOn(pilot, st.path, false, FEED, { policy: pol1, pre: pre2, trace: ftr });
+        const or = { e: ftr.map((t) => t.e), lap: lapS, off: 2 * lapS };
+        const uOut = [new Float64Array(lapK), new Float64Array(lapK)];
+        await deployOn(pilot, st.path, true, FEED,
+          { policy: pol1, pre: pre2, oracle: or, preOut: uOut });
+        for (let c = 0; c < 2; c++) for (let i = 0; i < lapK; i++) pre2[c][i] += uOut[c][i];
+      }
+      // Record the state the machine visits under layer 1 PLUS the converged top-up, and pair it
+      // with what the top-up applied — the same shape layer 1's own fit used.
+      const tr2 = [];
+      await deployOn(pilot, st.path, false, FEED, { policy: pol1, pre: pre2, trace: tr2 });
+      const hist2 = tr2.map((t) => t.m);
+      for (let i = MAXL + 1; i < tr2.length; i++) {
+        if (!tr2[i].pre) continue;
+        X2.push(buildRow(hist2, i - 1, st.refAt, i));
+        Y2[0].push(tr2[i].pre[0]); Y2[1].push(tr2[i].pre[1]);
+      }
+    }
+    W2 = [solveRidge(X2, Y2[0], RIDGE), solveRidge(X2, Y2[1], RIDGE)];
+    fit2 = [0, 1].map((c) =>
+      r2(X2.map((r) => r.reduce((a, v, j) => a + v * W2[c][j], 0)), Y2[c]));
+    console.log(`  layer 2: ${LAYER2} top-up passes per training program, `
+      + `${X2.length} rows, fit R² ${fit2.map((v) => v.toFixed(3)).join(' / ')}`);
+  }
   for (const sh of TESTS) {
     const { o, b, m } = base[sh];
     const rf = mkRefAt(sh);
+    if (W2) {
+      // BOTH LAYERS, each a linear map on the same row — so the deployed cost is two vectors
+      // and the sum is clamped once, exactly as `stack.js` clamps a cascade's sum.
+      const p1 = mkPolicy(W, buildRow, rf), p2 = mkPolicy(W2, buildRow, rf);
+      const both = (hist, kSamp) => {
+        const a = p1(hist, kSamp), c = p2(hist, kSamp);
+        return [Math.max(-CAP, Math.min(CAP, a[0] + c[0])),
+          Math.max(-CAP, Math.min(CAP, a[1] + c[1]))];
+      };
+      const d2 = await deployOn(pilot, sh, false, FEED, { policy: both });
+      console.log(`    two layers  ${sh.padEnd(9)} ${d2.r.totalRms.toExponential(3)} `
+        + `${(o.r.totalRms / d2.r.totalRms).toFixed(2).padStart(6)}x   uPk ${d2.uPk.toFixed(3)}`);
+    }
     for (const rung of rungs) {
       const r = await deployOn(pilot, sh, false, FEED,
         { policy: mkPolicy(rung.W, buildRow, rf) });
