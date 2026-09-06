@@ -10107,6 +10107,43 @@ dies is the arithmetic that would have let a shipped version simply discount the
 pass-count optimum is a real knob that must be chosen ON THE MACHINE, like everything else in
 this section.
 
+### THE CEILING FOR A SECOND LAYER IS HUGE, AND IT RETRACTS THIS SECTION'S OWN BOUND
+
+The composition §49 left unbuilt is a layer commissioned ON TOP of the frozen policy. Rather
+than build it, bound it: run the oracle ladder on the machine the policy has already corrected,
+which is strictly more than any FITTED layer can reach. Held-out sharp square, policy fitted on
+six polygons and never on this program:
+
+```
+  pass                    delivered   uPk
+  0  (policy alone)          5.52x    0.750
+  1                         19.45x    0.848
+  2                         23.52x    0.930
+  3                         25.16x    0.998
+```
+
+**A SECOND LAYER HAS 4.6x OF HEADROOM ABOVE THE POLICY, AND THE COMPOSITION PASSES WHAT
+ITERATION ALONE CONVERGES TO.** Pure oracle iteration from the BARE machine converges at 19.47x
+on this program; starting from the policy it reads 19.45x after ONE pass and 25.16x by three.
+
+**WHICH RETRACTS A BOUND THIS SECTION STATED REPEATEDLY.** The claim was: 20x is unreachable on
+the sharp square because iteration WITH A PERFECT FORECAST converges at 19.47x there, so no
+transferring method can pass it. That is true of iteration ALONE, starting from the bare
+machine, and it was quoted as though it were a property of the program. It is not: the
+composition passes it at pass 2. The mechanism is visible in `uPk` — the policy carries 0.750
+of correction and iteration adds only 0.25 on top of it, so the two are not competing for the
+same authority but occupying different parts of the correction, and their endpoint is higher
+than either reaches alone.
+
+**AND IT MAKES THE UNBUILT COMPOSITION WORTH BUILDING.** The top-up prefix is lap-indexed, so
+this row is a memory bound and not a controller — but the whole finding of §49 is that such a
+prefix can be DISTILLED onto the command window. Policy → oracle top-up → distil again is a
+second state-addressed layer with a measured 4.6x of headroom above the first, which is a
+better-motivated build than anything else this section closed. What it needs is `commissionArm`
+running with a policy deployed, and a policy reading a two-sided command window cannot take
+look-ahead off a live excitation — so it is rig surgery with a number attached rather than rig
+surgery on a hunch.
+
 ### WHERE §49 STOPS, AND THE ONE THING IT DID NOT BUILD
 
 Every lever this section had a MEASURED reason to try has been tried. What closed:
@@ -10138,9 +10175,12 @@ because the section's own record says to expect a layer commissioned on a residu
 already 8x down to refuse: `stack.js` ends a stack exactly there, and on this arm layer 3
 refused at 0.95x against a far easier residual.
 
-**AND THE HONEST BOUND ON THE DIRECTIVE.** 20x on the sharp square is above what per-program
-ITERATION converges to there (19.47x with a perfect forecast), so no method that transfers can
-reach it on that program — the memory's own ceiling is the obstacle, not the model. On the
+**AND THE HONEST BOUND ON THE DIRECTIVE — WHICH THE TOP-UP LADDER ABOVE RETRACTS.** This
+paragraph used to end "20x on the sharp square is above what per-program ITERATION converges to
+there (19.47x), so no method that transfers can reach it". The 19.47x is iteration ALONE from
+the bare machine; iteration on top of the distilled policy reads 23.52x at pass 2 and 25.16x at
+pass 3, so the bound was a property of one starting point and not of the program, and quoting
+it as a hard limit was an over-claim. On the
 rounded rectangle (40.44x) and the circle (230.89x) the headroom is real and the distillation
 now captures 22% and 7% of it. That is where a further factor has to come from, and this
 section's twelve rows say it will not come from capacity, from regularisation, from
