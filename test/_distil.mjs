@@ -39,7 +39,11 @@
 import { solveRidge } from '../lib/pilot/pilot.js';
 import { commissionArm, deployOn, mkPath, makeArm, PG } from './pilot/rigs/arm-rig.mjs';
 
-const TRAIN = process.env.D_TRAIN || 'rounded';
+// A LIST, because one program's converged prefix is one distribution and a policy fitted on it
+// is at home there by construction — the same trap the corner banks paid for, where a bank
+// fitted on the square read 3.27x at home and polygons+stars were the first agnostic bank above
+// baseline. Each program is converged separately and the rows are POOLED into one fit.
+const TRAINS = (process.env.D_TRAIN || 'rounded').split(',');
 const TESTS = (process.env.D_TEST || 'rounded,circle,sharp').split(',');
 const FEED = +(process.env.D_FEED || 0.004);
 const PASSES = +(process.env.D_PASSES || 4);
@@ -58,15 +62,14 @@ const COFFS = (process.env.D_COFFS
   .split(',').map(Number);
 
 console.log(`\ndistilling the iteration prefix — K ${PG.K} / E ${PG.E}, feed ${FEED}`);
-console.log(`  converged on ${TRAIN} over ${PASSES} passes, policy clamp ${CAPX}x uMax\n`);
+console.log(`  converged on ${TRAINS.join(' + ')} over ${PASSES} passes, `
+  + `policy clamp ${CAPX}x uMax\n`);
 
-const pilot = await commissionArm({ seed: 1, train: { shape: TRAIN, feed: FEED } });
+const pilot = await commissionArm({ seed: 1, train: { shape: TRAINS[0], feed: FEED } });
 if (!pilot) { console.log('commissioning never terminated'); process.exit(1); }
 const S = pilot.sample;
-const path = mkPath(TRAIN, FEED);
-const LAPK = Math.round(path.lap), LAPS = Math.round(path.lap / S);
 const CAP = CAPX * pilot.uMax;
-console.log(`  sample ${S}, N ${pilot.N}, uMax ${pilot.uMax}; lap ${LAPK} steps / ${LAPS} samples`);
+console.log(`  sample ${S}, N ${pilot.N}, uMax ${pilot.uMax}, cap ${CAP.toFixed(3)}`);
 
 const r2 = (pred, act) => {
   const m = act.reduce((a, v) => a + v, 0) / act.length;
@@ -75,41 +78,54 @@ const r2 = (pred, act) => {
   return 1 - ss / Math.max(1e-30, st);
 };
 
-// ---- 1. CONVERGE THE PREFIX BY ORACLE ITERATION (the diagnostic, not the product) ----
-const pre = [new Float64Array(LAPK), new Float64Array(LAPK)];
-let open = null, openC = null;
-console.log(`\n  pass    totalRms     x tot   contourRms    x con   prefix pk`);
-for (let pass = 0; pass < PASSES; pass++) {
-  const ftr = [];
-  const fr = await deployOn(pilot, TRAIN, false, FEED, { pre, trace: ftr });
-  if (pass === 0) { open = fr.r.totalRms; openC = fr.r.contourRms; }
-  const or = { e: ftr.map((t) => t.e), lap: LAPS, off: 2 * LAPS };
-  const uOut = [new Float64Array(LAPK), new Float64Array(LAPK)];
-  const r = await deployOn(pilot, TRAIN, true, FEED, { pre, oracle: or, preOut: uOut });
-  let pk = 0;
-  for (let c = 0; c < 2; c++) for (let i = 0; i < LAPK; i++) {
-    pre[c][i] += uOut[c][i]; pk = Math.max(pk, Math.abs(pre[c][i]));
+// ---- 1-2. CONVERGE A PREFIX PER TRAINING PROGRAM, AND RECORD THE STATE IT PRODUCES ----
+// The converged controller is the PREFIX ALONE with the pilot off — that is what §48's last row
+// scores and it is the object being distilled. Running the pilot on top here would distil a
+// state distribution the deployed policy never visits.
+const PRE = {}, DTR = {};
+console.log(`\n  program   pass    totalRms     x tot   contourRms    x con   prefix pk`);
+for (const TRAIN of TRAINS) {
+  const path = mkPath(TRAIN, FEED);
+  const LAPK = Math.round(path.lap), LAPS = Math.round(path.lap / S);
+  const pre = [new Float64Array(LAPK), new Float64Array(LAPK)];
+  let open = null, openC = null;
+  for (let pass = 0; pass < PASSES; pass++) {
+    const ftr = [];
+    const fr = await deployOn(pilot, TRAIN, false, FEED, { pre, trace: ftr });
+    if (pass === 0) { open = fr.r.totalRms; openC = fr.r.contourRms; }
+    const or = { e: ftr.map((t) => t.e), lap: LAPS, off: 2 * LAPS };
+    const uOut = [new Float64Array(LAPK), new Float64Array(LAPK)];
+    const r = await deployOn(pilot, TRAIN, true, FEED, { pre, oracle: or, preOut: uOut });
+    let pk = 0;
+    for (let c = 0; c < 2; c++) for (let i = 0; i < LAPK; i++) {
+      pre[c][i] += uOut[c][i]; pk = Math.max(pk, Math.abs(pre[c][i]));
+    }
+    console.log(`  ${TRAIN.padEnd(9)} ${String(pass).padStart(4)}   `
+      + `${r.r.totalRms.toExponential(4)} ${(open / r.r.totalRms).toFixed(2).padStart(6)}x   `
+      + `${r.r.contourRms.toExponential(4)} ${(openC / r.r.contourRms).toFixed(2).padStart(6)}x`
+      + `     ${pk.toFixed(4)}`);
   }
-  console.log(`  ${String(pass).padStart(4)}   ${r.r.totalRms.toExponential(4)} `
-    + `${(open / r.r.totalRms).toFixed(2).padStart(6)}x   ${r.r.contourRms.toExponential(4)} `
-    + `${(openC / r.r.contourRms).toFixed(2).padStart(6)}x     ${pk.toFixed(4)}`);
+  const dtr = [];
+  const conv = await deployOn(pilot, TRAIN, false, FEED, { pre, trace: dtr });
+  console.log(`  ${TRAIN.padEnd(9)} converged prefix alone (A MEMORY): `
+    + `${conv.r.totalRms.toExponential(4)}  ${(open / conv.r.totalRms).toFixed(2)}x tot  `
+    + `${(openC / conv.r.contourRms).toFixed(2)}x con`);
+  PRE[TRAIN] = { pre, LAPK, LAPS };
+  DTR[TRAIN] = dtr;
 }
 
-// ---- 2. THE CONVERGED CONTROLLER IS THE PREFIX ALONE, WITH THE PILOT OFF ----
-// That is what §48's last row scores, and it is the object being distilled. Running the pilot on
-// top here would distil a state distribution the deployed policy never visits.
-const dtr = [];
-const conv = await deployOn(pilot, TRAIN, false, FEED, { pre, trace: dtr });
-console.log(`\n  converged prefix alone (A MEMORY): ${conv.r.totalRms.toExponential(4)}  `
-  + `${(open / conv.r.totalRms).toFixed(2)}x tot  ${(openC / conv.r.contourRms).toFixed(2)}x con`);
-
 // ---- 3. THE ROW BUILDERS ----
-const NX = dtr[0].m.length;
+const NX = DTR[TRAINS[0]][0].m.length;
+const ZROW = new Float64Array(NX);
 const mkRow = (mode) => (hist, i, refAt, kSamp) => {
   const r = [];
   if (mode !== 'cmd') {
     for (const L of MLAGS) {
-      const src = hist[Math.max(0, i - L)] || hist[0];
+      // AT THE FIRST DECISION THE HISTORY IS EMPTY, and `hist[0]` is undefined too — the
+      // deployed policy is called at sample 0 before any measurement exists. Reading a
+      // zero row there is the honest answer ("not measured"), and the alternative is the
+      // TypeError this line threw on the first `meas` run.
+      const src = hist[Math.max(0, i - L)] || hist[0] || ZROW;
       for (let c = 0; c < NX; c++) r.push(src[c]);
     }
   }
@@ -152,55 +168,65 @@ const base = {};
 for (const sh of TESTS) {
   const o = await deployOn(pilot, sh, false, FEED);
   const b = await deployOn(pilot, sh, true, FEED);
-  const lapK = Math.round(mkPath(sh, FEED).lap);
-  const pk2 = [new Float64Array(lapK), new Float64Array(lapK)];
-  for (let c = 0; c < 2; c++) for (let i = 0; i < lapK; i++) pk2[c][i] = pre[c][i % LAPK];
-  const m = await deployOn(pilot, sh, false, FEED, { pre: pk2 });
+  // THE MEMORY ROW IS ONLY MEANINGFUL WHERE THE PREFIX WAS CONVERGED. Replaying one program's
+  // lap table onto another's lap is a table addressed by the wrong index, and this project has
+  // twice measured what that is worth (0.55x, worse than doing nothing). It is printed for the
+  // programs that HAVE one and left blank elsewhere rather than filled with a number that
+  // measures the mis-indexing (rule 25).
+  let m = null;
+  if (PRE[sh]) m = await deployOn(pilot, sh, false, FEED, { pre: PRE[sh].pre });
   base[sh] = { o, b, m };
 }
 console.log(`\n  mode   feats   fit R² ch0/ch1    program   open loop     pilot alone       `
-  + `distilled        memory       uPk`);
+  + `distilled      distilled+pilot     memory       uPk`);
 for (const mode of MODES) {
   const buildRow = mkRow(mode);
-  const refTr = mkRefAt(TRAIN);
-  const mAll = dtr.map((t) => t.m);
   const MAXL = mode === 'cmd' ? 0 : MLAGS[MLAGS.length - 1];
   let W = null, fitR2 = [NaN, NaN], nF = 0;
-  // DAGGER: refit on the states the POLICY itself visits. A behaviour-cloned policy is fitted on
-  // one distribution and then generates its own, and the gap between them is the whole reason
-  // cloning diverges; each round records the policy's own states and re-labels them with the
-  // converged prefix at the same lap phase.
-  let hist = mAll, targ = dtr.map((t) => t.pre);
+  // DAGGER: refit on the states the POLICY itself visits. A behaviour-cloned policy is fitted
+  // on one distribution and then generates its own, and the gap between them is the whole
+  // reason cloning diverges; each round records the policy's own states and re-labels them
+  // with the converged prefix at the same lap phase.
+  const sets = TRAINS.map((T) => ({ T, refAt: mkRefAt(T),
+    hist: DTR[T].map((t) => t.m), targ: DTR[T].map((t) => t.pre) }));
   for (let round = 0; round <= DAGGER; round++) {
     const X = [], Y = [[], []];
-    for (let i = MAXL + 1; i < targ.length; i++) {
-      if (!targ[i]) continue;
-      // THE MEASURED HISTORY IS READ AT i-1 AND THE COMMAND AT i, because that is what the
-      // deployed policy has: `deployOn` calls it at a sample boundary BEFORE this step's
-      // measurement exists, while the reference is known ahead by construction. Fitting on
-      // row `i` and deploying on row `i-1` is a one-sample lookahead the machine does not
-      // have — invisible in the command-only mode, which is how it nearly shipped.
-      X.push(buildRow(hist, i - 1, refTr, i));
-      Y[0].push(targ[i][0]); Y[1].push(targ[i][1]);
+    for (const st of sets) {
+      for (let i = MAXL + 1; i < st.targ.length; i++) {
+        if (!st.targ[i]) continue;
+        // THE MEASURED HISTORY IS READ AT i-1 AND THE COMMAND AT i, because that is what the
+        // deployed policy has: `deployOn` calls it at a sample boundary BEFORE this step's
+        // measurement exists, while the reference is known ahead by construction. Fitting on
+        // row `i` and deploying on row `i-1` is a one-sample lookahead the machine does not
+        // have — invisible in the command-only mode, which is how it nearly shipped.
+        X.push(buildRow(st.hist, i - 1, st.refAt, i));
+        Y[0].push(st.targ[i][0]); Y[1].push(st.targ[i][1]);
+      }
     }
     nF = X[0].length;
     W = [solveRidge(X, Y[0], RIDGE), solveRidge(X, Y[1], RIDGE)];
     fitR2 = [0, 1].map((c) => r2(X.map((r) => r.reduce((a, v, j) => a + v * W[c][j], 0)), Y[c]));
     if (round === DAGGER) break;
-    const tr2 = [];
-    await deployOn(pilot, TRAIN, false, FEED, { policy: mkPolicy(W, buildRow), trace: tr2 });
-    hist = tr2.map((t) => t.m);
-    targ = tr2.map((t, i) => [pre[0][(i * S) % LAPK], pre[1][(i * S) % LAPK]]);
+    for (const st of sets) {
+      const tr2 = [];
+      await deployOn(pilot, st.T, false, FEED, { policy: mkPolicy(W, buildRow), trace: tr2 });
+      const { pre, LAPK } = PRE[st.T];
+      st.hist = tr2.map((t) => t.m);
+      st.targ = tr2.map((t, i) => [pre[0][(i * S) % LAPK], pre[1][(i * S) % LAPK]]);
+    }
   }
   for (const sh of TESTS) {
     const { o, b, m } = base[sh];
     const d = await deployOn(pilot, sh, false, FEED, { policy: mkPolicy(W, buildRow) });
+    const dp = await deployOn(pilot, sh, true, FEED, { policy: mkPolicy(W, buildRow) });
     const x = (v) => (o.r.totalRms / v.r.totalRms).toFixed(2) + 'x';
     console.log(`  ${mode.padEnd(6)}${String(nF).padStart(5)}  `
       + `${fitR2.map((v) => v.toFixed(3)).join(' / ')}     ${sh.padEnd(9)} `
       + `${o.r.totalRms.toExponential(3)}   ${b.r.totalRms.toExponential(3)} ${x(b).padStart(7)}   `
       + `${d.r.totalRms.toExponential(3)} ${x(d).padStart(7)}   `
-      + `${m.r.totalRms.toExponential(3)} ${x(m).padStart(7)}   ${d.uPk.toFixed(3)}`);
+      + `${dp.r.totalRms.toExponential(3)} ${x(dp).padStart(7)}   `
+      + `${m ? m.r.totalRms.toExponential(3) : '        -'} ${m ? x(m).padStart(7) : '      -'}`
+      + `   ${d.uPk.toFixed(3)}`);
   }
 }
 
