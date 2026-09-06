@@ -557,9 +557,29 @@ read 4.99x where six at +/-256 read 4.13x and two production programs at +/-1024
 A single long TOUR (one closed lap of ~6,500 samples) takes the same +/-1024 window from 0.47x
 to 3.29x, which is the mechanism measured rather than argued.
 
+**AND CASCADING IT LOSES, WHICH IS A REPRESENTATIONAL LIMIT AND NOT A COMPUTE ONE.** The
+deployed map is 238 MAC of a 10,000 budget — 2.4% — so capacity was never the constraint here
+the way it is for the pilot at 9,517. Measured: the oracle ladder ON TOP of the frozen policy
+reads 5.52x -> 19.45x -> 23.52x -> 25.16x on the held-out sharp square and 4.25x -> 18.37x ->
+41.02x -> 55.35x on the rounded rectangle, both PAST what iteration alone converges to from the
+bare machine and both at almost no extra authority. So there is 4.6x to 13x of headroom above
+layer 1. A second DISTILLED layer built to take it delivers **4.73x geometric against 5.49x** —
+it fits its own residual at 0.511 in sample and transfers worse still. That reproduces
+`_resid.mjs` by a completely different route: **the headroom above a good correction is real,
+large, and not a function of state.**
+
+**AND IT RETRACTS THIS FILE'S OWN BOUND.** §49 stated that 20x is unreachable on the sharp
+square because iteration with a perfect forecast converges at 19.47x there. That is iteration
+ALONE from the BARE machine; starting from the distilled policy it passes 19.47x at pass 2 and
+reaches 25.16x, so the number was a property of one starting point rather than of the program.
+What stands is that the route to it is a MEMORY and the one legal route measured makes the
+machine worse.
+
 **WHAT IS NOT DONE:** none of this is in `lib/`, so nothing ships from it yet; the offsets are
-indexed in SAMPLES, so it is not feedrate-invariant and the block's own feed-laddered demo set
-POISONS it (0.22x-1.09x) for exactly that reason; and it is one plant.
+indexed in SAMPLES, so it is not feedrate-invariant — training across a FEED LADDER removes the
+danger entirely (half-feed 0.75x -> 2.58x, nothing below the pilot) at the price of 2.3x at the
+commissioning feed, while both modelling escapes are built and worse than doing neither (speed
+scheduling 0.56x at 2x feed, arc-length indexing worse at EVERY feed); and it is one plant.
 
 **WHAT MUST REPLACE IT.** In the order their evidence justifies:
 
