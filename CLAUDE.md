@@ -74,11 +74,19 @@ Degrading the tracker reading — noise on the tool, score left on perfect metro
 error being measured. But the ladder is NON-MONOTONE (1.54x at 1e-3 against 2.13x at 3e-2), more
 noise reading better is not physical, and the specific hypothesis for it is FALSIFIED: averaging
 four laps of the oracle's re-measurement, which halves the noise entering it, moves the result
--1%, with the one-lap control reproducing the original to every digit. Each row is ONE noise draw
-on three programs and this method's draw spread is already on record as large enough to reverse
-orderings, so the shape is probably draw noise and the table cannot support one. `ARM_TOOL_SEED`
-exists for the seed spread and it has not been run. Until one of those is measured, the
-commissioning-cost claim is stated at the wrong price.
+-1%, with the one-lap control reproducing the original to every digit. **AND THE SECOND
+HYPOTHESIS — that the shape was one-draw noise — IS FALSIFIED TOO.** Three seeds at each of the
+two sigmas that disagree most give **1.536 / 1.579 / 1.568 against 2.128 / 2.376 / 2.442**:
+disjoint distributions, 1.35x apart, and only 3% spread within the lower one. So more tracker
+noise really does deliver a better controller between those levels, and the ladder's interior is
+a finding rather than an artefact. What holds against zero is the part that matters commercially:
+an exact tracker reads **3.67, which is 1.50x above the best noisy draw and 2.3x above the sigma
+1e-3 band**, so the metrology cost is real and this method is not free of its instrument.
+The mechanism is a HYPOTHESIS and it is §49's own law through a new knob — noise prevents the
+iteration converging onto the lap-specific residue, which is implicit early stopping and is rule
+35 priced from the other side — and the fit-R² evidence is mixed across seeds, so it is consistent
+with the numbers rather than shown by them. Still unmeasured, and the thing that actually prices
+the commissioning claim: a CHEAPER truth rather than a degraded ideal one.
 
 **AND COMPUTE TIME IS NOT COMMISSIONING TIME.** The "2 minutes on the arm" is wall clock for the
 ladder. The distillation route needs iteration converged on about six training programs, which is

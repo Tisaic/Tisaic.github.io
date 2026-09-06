@@ -10434,7 +10434,36 @@ upstream of it: the noise also degrades the PILOT's commissioned model, since `r
 `pilot.observe` during commissioning, and that model produces the corrections in every pass. Not
 measured.
 
-**AND THE LADDER IS ONE DRAW PER SIGMA, WHICH IS PROBABLY THE WHOLE NON-MONOTONICITY.** Each row is
+**THE SECOND HYPOTHESIS — THAT THE SHAPE IS DRAW NOISE — IS ALSO FALSIFIED, AND THIS PARAGRAPH
+USED TO ASSERT IT.** It read "one draw per sigma, which is probably the whole non-monotonicity"
+and concluded the ordering "is not evidence of anything". Three seeds at each of the two sigmas
+that disagree most say otherwise:
+
+```
+  sigma 1e-3   geometric per seed   1.536  1.579  1.568     range 1.536-1.579, spread 1.03x
+  sigma 3e-2   geometric per seed   2.128  2.376  2.442     range 2.128-2.442, spread 1.15x
+```
+
+**The distributions are DISJOINT, by 1.35x.** Within a sigma the draws are tight — 3% at 1e-3 —
+so this method's spread under tracker noise is far smaller than its spread under commissioning
+seed, and the ladder's shape survives it. More tracker noise really does deliver a better
+controller between these two levels.
+
+**WHAT IS STILL TRUE IS THE ORDERING AGAINST ZERO.** An exact tracker reads 3.67 against the best
+noisy draw's 2.442 — **1.50x above it, and 2.3x above the sigma 1e-3 band** — so noise is never
+good in absolute terms and the metrology cost is real. What is non-monotone is the interior.
+
+**THE MECHANISM IS A HYPOTHESIS AND IT IS §49'S OWN LAW ARRIVING THROUGH A NEW KNOB.** Every knob
+that improved the FIT degraded the MACHINE past its optimum, because the converged prefix is a
+mixture of a transferable plant inverse and a lap-specific residue that iteration reaches LAST.
+Noise in the truth prevents the iteration converging onto that residue — implicit early stopping,
+which is what rule 35 prices from the other direction when it dithers a correction during
+commissioning. NOT ESTABLISHED: the fit-R² evidence is mixed across seeds (0.912-0.917 at 1e-3
+against 0.836-0.929 at 3e-2), so the regularisation reading is consistent with the numbers rather
+than demonstrated by them. The measurement that would settle it is a sigma ladder against the pass
+count, since if noise is early stopping the two should trade against each other.
+
+**THE OLD PARAGRAPH'S CONCLUSION, KEPT BECAUSE IT WAS THE RIGHT INSTINCT AND THE WRONG CALL.** Each row is
 a single noise realisation on three programs, and this method's draw-to-draw spread is already on
 record as large enough to reverse orderings (`spread.mjs`, and §49's own seed sensitivity). A
 ladder whose steps are single draws cannot support a shape. `ARM_TOOL_SEED` exists for exactly this
