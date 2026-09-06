@@ -609,7 +609,37 @@ reaches 25.16x, so the number was a property of one starting point rather than o
 What stands is that the route to it is a MEMORY and the one legal route measured makes the
 machine worse.
 
-**WHAT IS NOT DONE:** none of this is in `lib/`, so nothing ships from it yet; the offsets are
+**IT IS NOW A BLOCK. `lib/pilot/distil.js`, pinned by `test/pilot/distil.test.mjs` in the QUICK
+tier.** One weight vector per channel, and three guards each carrying the measurement that
+justifies it rather than caution: a CAUSAL-ONLY WINDOW IS REFUSED AT CONSTRUCTION (§49.14 reads
+0.89x causal against 1.43x straddling, so it is a misconfiguration and not a safe choice); the
+correction FADES outside the commanded-speed span the fit saw (the measured 0.75x at half the
+trained feed and 0.53x at an untrained one); and the fit must beat a shuffled null. **THE FIT
+STREAMS**, one shared-covariance update per row — the clean case the pilot's lead bank is not,
+one row and nc targets — with no row retained, so the offline half of target 6 is closed as a
+CONDITIONAL that can be checked: at 111 features the deployed path is **330 MAC/decision, 3.3% of
+budget**, and the fit is **24,864 MAC/ROW in 48.1 kB**, which is 249% of budget at decision stride
+1 and **28% at the stride 9 this method actually uses**. `fitCost()` returns the per-ROW figure
+raw and says why — a row arrives once per DECISION and only the caller knows its stride, and
+quoting a per-row cost against a per-scan budget is the units error this project keeps paying for.
+Streaming validation is PREQUENTIAL, every row predicted before it is learned from, which cannot
+leak where the batch path's contiguous split can only approximate that.
+
+**AND THE GATE TOOK THREE ATTEMPTS, TWO OF WHICH WERE WRONG AND GREEN.** An in-sample fit compared
+against an in-sample shuffle is the same quantity twice: over 40 seeds on a PURE-NOISE target it
+deployed **29 times at one draw and 13 at best-of-five**. Moving the decision to a held-out score
+cut it to 4 and running the null through the same folds to 2, and raising the draw count does not
+close the rest (5/60 at k=5 against 4/60 at k=19). So the module states outright that it is a
+cheap PRE-FILTER and the decision remains a machine-scored verify — a block presenting that number
+as its safety case would be overselling it. The folds are contiguous with a GAP of the window
+span, because rows a few samples apart read most of the same window and a shuffled row split
+validates against data it has effectively seen. And the batch/streaming agreement is asserted on
+the APPLIED CORRECTION rather than the weights: this design is collinear by construction, the two
+fits differ by **12% in weight space while agreeing to 0.0009% rms in what reaches the machine**,
+and asserting on weights would have read as the failure of a fit that is exact where it counts.
+
+**WHAT IS NOT DONE:** the block is not yet wired into `AutoStack` as a rung, so the one press does
+not reach it; the offsets are
 indexed in SAMPLES, so it is not feedrate-invariant — training across a FEED LADDER removes the
 danger entirely (half-feed 0.75x -> 2.58x, nothing below the pilot) at the price of 2.3x at the
 commissioning feed, while both modelling escapes are built and worse than doing neither (speed
@@ -1784,6 +1814,7 @@ that matches it** — the point-to-point tabs measure a different question.
 | `lib/flexisim/` | `joint`, `link`, `arm`, `arm2r`, `armnr` (recursive Newton–Euler), `tipsensor`, `chainsensor`, `compliance`, `compensator`, plus contouring: `toolpath` (geometry + feedrate profile), `contour` (the metrics), `pathilc` (learning over laps). |
 | `lib/blackbox/` | A controller given nothing about the plant, plus `qp.js`. Imports nothing from `lib/flexisim/` — the boundary is the directory. Verified on three plants sharing no physics. |
 | `lib/pilot/hff.js` | **HARMONIC FEEDFORWARD, and the module that made the method plant-agnostic (brick 67).** A repeating program has a repeating error, so invert the machine at the lap's own harmonics: probe, solve, and take a damped Newton step against a FROZEN operator. It carries NO per-plant constant. The harmonic COUNT is gone (the arm's 16 is where THAT channel dies; the servo axis is flat to h≈128 and the same 16 costs 33x there); the STEP backtracks (1.0 converges the axis on pass one and diverges the arm); and the PROBE DESIGN AND AMPLITUDE are chosen by commissioning four candidates and SCORING THEM ON THE MACHINE, because the fit ranks them backwards — on the axis the best-fitting candidate is the worst controller, and on the arm a 25%→10% probe is worth 3.1x while its residual moves the wrong way. Each harmonic's step is shrunk by CONFIDENCE (its own fit residual) and REACH (min(1,\|G\|), load-bearing: removed, the arm goes 4.81x → 1.05x; on the axis inert to four figures). |
+| `lib/pilot/distil.js` | **THE DISTILLED ITERATION, SHIPPED (plan §49).** Iteration converges to a correction indexed by LAP PHASE, which is worth less than nothing on a trajectory the machine has not run — measured at 0.53x-0.55x by three independent routes, one a textbook norm-optimal ILC. This regresses that converged correction onto a local window of the COMMANDED reference and deploys the regression: one weight vector per channel, no QP, no forecast bank, no tracker, no lap index, no per-plant constant, 330 MAC/decision at 111 features. The window MUST STRADDLE NOW and it refuses otherwise, because the matched control — same features, same span, same spacing, translated so no tap lies in the future — reads 0.89x against 1.43x. The fit STREAMS (`online`), one shared-covariance update per row at 2n²+nc·n and O(n²) state, validated PREQUENTIALLY. Its capacity gate is a pre-filter and says so: on a pure-noise target it still deploys about one commissioning in twelve, and the decision is a machine-scored verify. |
 | `lib/pilot/stack.js` | **A CASCADE OF PILOTS, wired to the page as ⑤/⑥'s Cascade depth slider (brick 59).** Layer k is an ordinary Pilot commissioned with layers 1..k−1 deployed and FROZEN, so each models what the one below it left; a layer that cannot vouch for itself ends the stack, and the summed correction is clamped ONCE at the engineer's cap. Every layer above the first is PINNED to the first's cadence — one host, one look-ahead closure, one meaning for `act(off)` — and chooses its own Ts, horizon, lags, ridge and basis on top of it. |
 | `lib/pilot/autostack.js` | **On the softest 2R arm it now ships 22.42×, past the composite's re-measured 20.34× for that program (brick 76).** Getting there was four measurement repairs and two model changes: the rung reads the WHOLE tool error in JOINT space (narrowing it to the contour component cost half the benefit — the projection onto a rotating normal is itself a lap-varying operator); the floor is the MEDIAN of reported spreads, not the max, which was biased 3.9× high and refused improvements the machine could produce; the ceiling is measured on the CASCADE-DEPLOYED machine (3.44e-3 at nh 16) rather than the bare one; and every field the report prints from is asserted to exist, after six diagnostics in one day rendered a missing field as a plausible number. It also detects a PHASE WALK — a pilot cadence that does not divide the lap makes its phase walk, which is a beat at a half-integer harmonic the rung cannot represent; on the arm, cadence 9 against lap 7357 gave autocorrelation −0.764, and indexing from the lap start took it to −0.135 and the ladder from 20.70× to 22.42×. That last is measured on ONE plant: no other of the six deploys both rungs, so it is not yet a general claim. |
 | `lib/pilot/autostack.js` | **ONE BUTTON, and the answer it comes to is not the one this project would have predicted (brick 68).** Told the channels' maxes, the correction authority, what the instrument can RESOLVE, and optionally that the program repeats. Works out for itself: its timescale, whether each rung pays, how deep to cascade, and which prefix of the ladder to ship — every one by measuring on the machine. Order is conventional → pilot → harmonic and is not symmetric (the reverse measured 0.71×). On the EMPS axis it ships the CONVENTIONAL rung alone at 425× and refuses the other two: the pilot at 0.39× because the rung below already removed the velocity lag that is its whole benefit there, and the harmonic rung — which scored 25× better — because BOTH sides are below the rig's 1.6 µm fidelity and it declines to credit what its instrument cannot see. A first version without that floor reported **4254×**, which was the simulator. |
