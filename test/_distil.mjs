@@ -38,12 +38,14 @@
  */
 import { solveRidge } from '../lib/pilot/pilot.js';
 import { commissionArm, deployOn, mkPath, makeArm, PG } from './pilot/rigs/arm-rig.mjs';
+import { designDemoPaths } from '../lib/flexisim/demopath.js';
 
 // A LIST, because one program's converged prefix is one distribution and a policy fitted on it
 // is at home there by construction — the same trap the corner banks paid for, where a bank
 // fitted on the square read 3.27x at home and polygons+stars were the first agnostic bank above
 // baseline. Each program is converged separately and the rows are POOLED into one fit.
-const TRAINS = (process.env.D_TRAIN || 'rounded').split(',');
+const TRAIN_SPEC = (process.env.D_TRAIN || 'rounded').split(',');
+const NDEMO = +(process.env.D_NDEMO || 4);
 const TESTS = (process.env.D_TEST || 'rounded,circle,sharp').split(',');
 const FEED = +(process.env.D_FEED || 0.004);
 const PASSES = +(process.env.D_PASSES || 4);
@@ -65,10 +67,27 @@ const COFFS = (process.env.D_COFFS
 const SOFFS = (process.env.D_SOFFS || '-32,-8,-2,0,2,8,32,96,256').split(',').map(Number);
 
 console.log(`\ndistilling the iteration prefix — K ${PG.K} / E ${PG.E}, feed ${FEED}`);
-console.log(`  converged on ${TRAINS.join(' + ')} over ${PASSES} passes, `
+console.log(`  converged on ${TRAIN_SPEC.join(' + ')} over ${PASSES} passes, `
   + `policy clamp ${CAPX}x uMax\n`);
 
-const pilot = await commissionArm({ seed: 1, train: { shape: TRAINS[0], feed: FEED } });
+// `demo` EXPANDS TO THE BLOCK'S OWN DESIGNED SET — random polygons and stars across a feed
+// ladder, no engineer input and no production geometry. It is here because the transfer wall
+// looks like the oldest failure in this project rather than a new one: the converged prefix of
+// a near-LTI plant is a fixed kernel applied to the reference, so a long-enough linear window
+// recovers it and generalises to ANY program — UNLESS the references it was identified on span
+// too small a subspace. Two or three closed production programs are exactly that, and this
+// file's own record says so from the other side: "identifying on a program instead of a
+// scribble is far worse, since repeated trapezoids are collinear". The demo set is the
+// broadband excitation for the reference the scribble is for the plant, and its feed ladder
+// puts rows at three speeds, which is the only thing here that has ever addressed target 2.
+const TRAINS = [];
+for (const t of TRAIN_SPEC) {
+  if (t === 'demo') {
+    designDemoPaths({ centre: PG.centre }).slice(0, NDEMO)
+      .forEach((path, i) => TRAINS.push({ name: `demo${i}`, path }));
+  } else TRAINS.push({ name: t, path: mkPath(t, FEED) });
+}
+const pilot = await commissionArm({ seed: 1, train: { shape: 'rounded', feed: FEED } });
 if (!pilot) { console.log('commissioning never terminated'); process.exit(1); }
 const S = pilot.sample;
 const CAP = CAPX * pilot.uMax;
@@ -87,18 +106,17 @@ const r2 = (pred, act) => {
 // state distribution the deployed policy never visits.
 const PRE = {}, DTR = {};
 console.log(`\n  program   pass    totalRms     x tot   contourRms    x con   prefix pk`);
-for (const TRAIN of TRAINS) {
-  const path = mkPath(TRAIN, FEED);
+for (const { name: TRAIN, path } of TRAINS) {
   const LAPK = Math.round(path.lap), LAPS = Math.round(path.lap / S);
   const pre = [new Float64Array(LAPK), new Float64Array(LAPK)];
   let open = null, openC = null;
   for (let pass = 0; pass < PASSES; pass++) {
     const ftr = [];
-    const fr = await deployOn(pilot, TRAIN, false, FEED, { pre, trace: ftr });
+    const fr = await deployOn(pilot, path, false, FEED, { pre, trace: ftr });
     if (pass === 0) { open = fr.r.totalRms; openC = fr.r.contourRms; }
     const or = { e: ftr.map((t) => t.e), lap: LAPS, off: 2 * LAPS };
     const uOut = [new Float64Array(LAPK), new Float64Array(LAPK)];
-    const r = await deployOn(pilot, TRAIN, true, FEED, { pre, oracle: or, preOut: uOut });
+    const r = await deployOn(pilot, path, true, FEED, { pre, oracle: or, preOut: uOut });
     let pk = 0;
     for (let c = 0; c < 2; c++) for (let i = 0; i < LAPK; i++) {
       pre[c][i] += uOut[c][i]; pk = Math.max(pk, Math.abs(pre[c][i]));
@@ -109,16 +127,16 @@ for (const TRAIN of TRAINS) {
       + `     ${pk.toFixed(4)}`);
   }
   const dtr = [];
-  const conv = await deployOn(pilot, TRAIN, false, FEED, { pre, trace: dtr });
+  const conv = await deployOn(pilot, path, false, FEED, { pre, trace: dtr });
   console.log(`  ${TRAIN.padEnd(9)} converged prefix alone (A MEMORY): `
     + `${conv.r.totalRms.toExponential(4)}  ${(open / conv.r.totalRms).toFixed(2)}x tot  `
     + `${(openC / conv.r.contourRms).toFixed(2)}x con`);
-  PRE[TRAIN] = { pre, LAPK, LAPS };
+  PRE[TRAIN] = { pre, LAPK, LAPS, path };
   DTR[TRAIN] = dtr;
 }
 
 // ---- 3. THE ROW BUILDERS ----
-const NX = DTR[TRAINS[0]][0].m.length;
+const NX = DTR[TRAINS[0].name][0].m.length;
 const ZROW = new Float64Array(NX);
 const mkRow = (mode) => (hist, i, refAt, kSamp) => {
   const r = [];
@@ -224,7 +242,7 @@ for (const mode of MODES) {
   // on one distribution and then generates its own, and the gap between them is the whole
   // reason cloning diverges; each round records the policy's own states and re-labels them
   // with the converged prefix at the same lap phase.
-  const sets = TRAINS.map((T) => ({ T, refAt: mkRefAt(T),
+  const sets = TRAINS.map(({ name: T, path }) => ({ T, path, refAt: mkRefAt(path),
     hist: DTR[T].map((t) => t.m), targ: DTR[T].map((t) => t.pre) }));
   for (let round = 0; round <= DAGGER; round++) {
     const X = [], Y = [[], []];
@@ -246,7 +264,8 @@ for (const mode of MODES) {
     if (round === DAGGER) break;
     for (const st of sets) {
       const tr2 = [];
-      await deployOn(pilot, st.T, false, FEED, { policy: mkPolicy(W, buildRow), trace: tr2 });
+      await deployOn(pilot, st.path, false, FEED,
+        { policy: mkPolicy(W, buildRow), trace: tr2 });
       const { pre, LAPK } = PRE[st.T];
       st.hist = tr2.map((t) => t.m);
       st.targ = tr2.map((t, i) => [pre[0][(i * S) % LAPK], pre[1][(i * S) % LAPK]]);
