@@ -9849,3 +9849,41 @@ lap being shorter than the window, and nothing else. It is still below the polyg
 Its overlapping shapes also break `decompose`'s nearest-point search, so its `totalRms` column
 (1.47x) is an instrument artefact and only the contour column means anything on the tour
 itself; the TEST programs it is scored on are unaffected.
+
+### THE ONE ACCOUNT THAT EXPLAINS EVERY ROW IN §49
+
+Nine measurements in this section point the same way and they are one statement, not nine:
+
+```
+  what was varied                fit R^2         delivered      which won
+  window +/-768 -> +/-1536       0.921 -> 0.939  5.49x -> 4.60x  the SHORTER window
+  passes 5 -> 9                  0.921 -> 0.918  5.49x -> 4.29x  FEWER passes
+  ridge, leave-one-program-out   best of ladder  3.75x           the UNSELECTED ridge
+  exponential kernels added      0.891 -> 0.905  4.09x -> 3.61x  the SMALLER basis
+  f0 instead of command window   0.996 in-sample worse held out   the command window
+  twin-generated training data   better forecast 0.54x-1.10x     machine-fitted (§46)
+  in-sample refit on the program the ceiling    0.77x-0.90x      the scribble fit (§47)
+```
+
+**Every time a knob makes the FIT better it makes the MACHINE worse, and the sign is
+consistent across the feature axis, the time axis, the data axis and the regulariser.** That is
+not seven coincidences; it is one mechanism. The converged prefix is a MIXTURE of two things —
+a plant inverse, which is a function of the local command and transfers, and a lap-specific
+residue, which is what iteration reaches last and what only repetition can produce. Every knob
+that increases capacity, reach, convergence or fit fidelity captures MORE OF THE MIXTURE, and
+the second component is the one that does not transfer. So a better fit is not merely a
+different objective from delivery here — past the optimum it is an ANTI-correlated one.
+
+**WHICH MAKES ON-MACHINE SELECTION A CORRECTNESS REQUIREMENT AND NOT A PREFERENCE.** The
+pilot's verify round already works this way and §48 wrote the general form ("the QP inverts
+this model, so regularisation serves the inversion, not the fit"). This section is that
+statement without a QP in it, which is the cleanest form it has taken: no inversion to blame,
+and the anti-correlation is still there. Any shipped version of this component must score
+candidates on the machine — the leave-one-program-out selector built here is exactly the
+instrument that must NOT be trusted, and it is kept because measuring that is the finding.
+
+**AND IT PREDICTS SOMETHING THAT HAS NOT BEEN MEASURED (rule 59).** If the mixture account is
+right, the transferable component should be recoverable by fitting the EARLY passes'
+increments rather than the converged total — pass 1's `du` alone, or a weighted sum that
+decays with pass index — and the optimum in pass count should then disappear rather than
+merely move. That is one run and it would falsify or confirm the whole account.
