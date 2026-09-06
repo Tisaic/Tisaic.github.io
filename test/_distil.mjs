@@ -51,6 +51,13 @@ const TESTS = (process.env.D_TEST || 'rounded,circle,sharp').split(',');
 const FEED = +(process.env.D_FEED || 0.004);
 const PASSES = +(process.env.D_PASSES || 4);
 const RIDGE = +(process.env.D_RIDGE || 1e-6);
+// A LADDER, SELECTED LEAVE-ONE-PROGRAM-OUT. The ridge is not a fit knob here, it is the
+// TRANSFER knob: `_gainfit.mjs` measured held-out R^2 running 0.811 / 0.924 / 0.580 / 0.204
+// across 1e-8 / 1e-6 / 1e-4 / 1e-2 on the same rows, so a fixed value is a guess worth a factor
+// on the number that matters. Selection holds out a whole TRAINING PROGRAM rather than random
+// rows, because rows within one closed lap are not independent — the same trap that makes an
+// in-sample fit on a program look perfect and invert badly.
+const RIDGES = (process.env.D_RIDGES || '').split(',').filter(Boolean).map(Number);
 const CAPX = +(process.env.D_CAPX || 5);     // policy clamp, in multiples of the pilot's own uMax
 const DAGGER = +(process.env.D_DAGGER || 0); // refit rounds on the states the POLICY visits
 const MODES = (process.env.D_MODES || 'cmd,meas,both').split(',');
@@ -309,8 +316,9 @@ for (const mode of MODES) {
   const sets = TRAINS.map(({ name: T, path }) => ({ T, path, refAt: mkRefAt(path),
     hist: DTR[T].map((t) => t.m), targ: DTR[T].map((t) => t.pre) }));
   for (let round = 0; round <= DAGGER; round++) {
-    const X = [], Y = [[], []];
+    const X = [], Y = [[], []], spans = [];
     for (const st of sets) {
+      const before = X.length;
       for (let i = MAXL + 1; i < st.targ.length; i++) {
         if (!st.targ[i]) continue;
         // THE MEASURED HISTORY IS READ AT i-1 AND THE COMMAND AT i, because that is what the
@@ -321,9 +329,40 @@ for (const mode of MODES) {
         X.push(buildRow(st.hist, i - 1, st.refAt, i));
         Y[0].push(st.targ[i][0]); Y[1].push(st.targ[i][1]);
       }
+      spans.push(X.length - before);
     }
     nF = X[0].length;
-    W = [solveRidge(X, Y[0], RIDGE), solveRidge(X, Y[1], RIDGE)];
+    let ridge = RIDGE;
+    if (RIDGES.length > 1 && sets.length > 1) {
+      let best = -Infinity;
+      for (const cand of RIDGES) {
+        let tot = 0, n = 0;
+        for (let h = 0; h < sets.length; h++) {
+          const Xi = [], Yi = [[], []], Xo = [], Yo = [[], []];
+          let at = 0;
+          for (let g = 0; g < sets.length; g++) {
+            const len = spans[g];
+            for (let j = 0; j < len; j++) {
+              const dstX = g === h ? Xo : Xi, dstY = g === h ? Yo : Yi;
+              dstX.push(X[at + j]); dstY[0].push(Y[0][at + j]); dstY[1].push(Y[1][at + j]);
+            }
+            at += len;
+          }
+          if (!Xo.length || !Xi.length) continue;
+          for (let c = 0; c < 2; c++) {
+            const Wi = solveRidge(Xi, Yi[c], cand);
+            tot += r2(Xo.map((r) => r.reduce((a, v, j) => a + v * Wi[j], 0)), Yo[c]);
+            n++;
+          }
+        }
+        const sc = n ? tot / n : -Infinity;
+        if (sc > best) { best = sc; ridge = cand; }
+      }
+      if (round === DAGGER) console.log(`  ridge selected leave-one-program-out: `
+        + `${ridge.toExponential(0)} (mean held-out R² ${best.toFixed(3)} over `
+        + `${sets.length} folds)`);
+    }
+    W = [solveRidge(X, Y[0], ridge), solveRidge(X, Y[1], ridge)];
     fitR2 = [0, 1].map((c) => r2(X.map((r) => r.reduce((a, v, j) => a + v * W[c][j], 0)), Y[c]));
     if (round === DAGGER) break;
     for (const st of sets) {

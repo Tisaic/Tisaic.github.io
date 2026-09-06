@@ -9619,7 +9619,14 @@ pilot's own deployed path is 9,517 at today's defaults.
   distilled, 4 polys, +/-256           4.21x    3.85x    4.23x    4.09x     83
   distilled, 6 polys, +/-256           4.13x    3.75x    5.03x    4.27x     83
   distilled, 6 polys, +/-512           4.99x    4.22x    6.74x    5.22x    111
+  distilled, 6 polys, +/-768           5.52x    4.25x    7.07x    5.49x    119
 ```
+
+**AND +/-768 IS 1,536 SAMPLES AGAINST POLYGON LAPS OF ABOUT 1,100, SO THE RULE IS NOT "THE
+WINDOW MUST FIT INSIDE A LAP".** It is that the training laps must DIFFER: six laps of six
+lengths cannot all be explained by one phase map, and a window longer than any single one of
+them still pays. The two-program +/-1024 collapse was never about the absolute reach — it was
+one lap length, twice.
 
 **THE WINDOW IS WHAT MOVED IT, NOT THE DIVERSITY.** Six polygons at +/-256 read 4.13x on the
 held-out sharp square against four polygons' 4.21x — no better at all. The same six at +/-512
