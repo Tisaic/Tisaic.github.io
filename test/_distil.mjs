@@ -49,6 +49,11 @@ const NDEMO = +(process.env.D_NDEMO || 4);
 const NTOUR = +(process.env.D_NTOUR || 12);
 const TESTS = (process.env.D_TEST || 'rounded,circle,sharp').split(',');
 const FEED = +(process.env.D_FEED || 0.004);
+// FEEDRATES TO SCORE AT, which is target 2 and has never been measured on this component. The
+// offsets are indexed in SAMPLES, so at a different feed the same offset is a different piece
+// of geometry and the map is being asked for a kernel it was not fitted for. That is a
+// PREDICTION with a sign; the point of the sweep is the SIZE rather than the direction.
+const TFEEDS = (process.env.D_TFEEDS || '').split(',').filter(Boolean).map(Number);
 const PASSES = +(process.env.D_PASSES || 4);
 const RIDGE = +(process.env.D_RIDGE || 1e-6);
 // A LADDER, SELECTED LEAVE-ONE-PROGRAM-OUT. The ridge is not a fit knob here, it is the
@@ -89,6 +94,7 @@ const TAUS = (process.env.D_TAUS || '4,8,16,32,64,128,256,512,1024').split(',').
 // ridged than the linear one (columns scaled by 1/QSCALE, so the penalty is QSCALE^2).
 const QOFFS = (process.env.D_QOFFS || '-16,-4,0,4,16,48').split(',').map(Number);
 const QSCALE = +(process.env.D_QSCALE || 10);
+let QBASE = null;
 
 console.log(`\ndistilling the iteration prefix — K ${PG.K} / E ${PG.E}, feed ${FEED}`);
 console.log(`  converged on ${TRAIN_SPEC.join(' + ')} over ${PASSES} passes, `
@@ -233,6 +239,17 @@ const mkRow = (mode) => (hist, i, refAt, kSamp) => {
       // penalty by another route (`solveRidge` takes one lambda) and matches what the pilot's
       // own quadratic block does: ridged harder so it must EARN its weights. QSCALE 10 is a
       // 100x heavier prior on this block than on the linear one.
+      // THE BASE TERMS ARE NORMALISED BEFORE THEY ARE MULTIPLIED, and the first version of this
+      // block was not — which is rule 32 in its plainest form. A reference ANGLE is ~6.9e-1 and
+      // a velocity times a velocity is ~4.5e-6, so the raw products sat 6.5e-6 of the linear
+      // columns' scale BEFORE the extra 1/QSCALE, and no ridge in the ladder could have let them
+      // earn a weight. The run said so cleanly: 419 features returned the 83-feature numbers to
+      // four figures on all three programs AND the identical fit R^2, which is a block that is
+      // numerically absent rather than one that was measured and declined.
+      //
+      // `QBASE` is an rms per base term measured ONCE on the first training path and then held
+      // fixed for the fit and the deploy, so the prior is relative to the quantity it acts on
+      // and the two halves cannot drift apart.
       const base = [];
       for (const o of QOFFS) {
         const a = refAt(Math.max(0, kSamp + o - 1)), b0 = refAt(Math.max(0, kSamp + o)),
@@ -243,7 +260,11 @@ const mkRow = (mode) => (hist, i, refAt, kSamp) => {
         }
       }
       for (let i = 0; i < base.length; i++) {
-        for (let j = i; j < base.length; j++) r.push(base[i] * base[j] / QSCALE);
+        const si = QBASE ? QBASE[i] : 1;
+        for (let j = i; j < base.length; j++) {
+          const sj = QBASE ? QBASE[j] : 1;
+          r.push((base[i] / si) * (base[j] / sj) / QSCALE);
+        }
       }
     }
     if (mode === 'rich' || mode === 'expo' || mode === 'quad') {
@@ -345,6 +366,26 @@ console.log(`\n  mode   feats   fit R² ch0/ch1    program   open loop     pilot
   + `distilled      distilled+pilot     memory       uPk`);
 for (const mode of MODES) {
   const buildRow = mkRow(mode);
+  // MEASURE THE BASE-TERM SCALES ONCE, on the first training path, before any row is built.
+  if (mode === 'quad') {
+    const rf0 = mkRefAt(TRAINS[0].path);
+    const acc = [];
+    for (let k = 2; k < 600; k++) {
+      let i = 0;
+      for (const o of QOFFS) {
+        const a = rf0(Math.max(0, k + o - 1)), b0 = rf0(Math.max(0, k + o)),
+          c2 = rf0(Math.max(0, k + o + 1));
+        for (let c = 0; c < 2; c++) {
+          const v = (c2[c] - a[c]) * 0.5, ac = c2[c] - 2 * b0[c] + a[c];
+          acc[i] = (acc[i] || 0) + v * v; i++;
+          acc[i] = (acc[i] || 0) + ac * ac; i++;
+        }
+      }
+    }
+    QBASE = acc.map((v) => Math.sqrt(v / 598) || 1);
+    console.log(`  quadratic base rms: ${QBASE.slice(0, 4).map((v) => v.toExponential(2)).join(' ')}`
+      + ` … (${QBASE.length} terms, prior ${QSCALE}x on top of the normalisation)`);
+  }
   const MAXL = (mode === 'cmd' || mode === 'rel' || mode === 'rich' || mode === 'diff'
     || mode === 'expo' || mode === 'quad') ? 0 : MLAGS[MLAGS.length - 1];
   let W = null, fitR2 = [NaN, NaN], nF = 0;
