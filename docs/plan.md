@@ -9981,6 +9981,39 @@ mixture, and the extra it captures is the half that does not transfer. Its uPk i
 on two programs of three where the linear basis is at the clamp on one, so it is also asking
 for a LARGER correction — a bigger, better-fitted, worse-aimed one.
 
+### THE RIDGE IS A COUNTER-EXAMPLE, AND IT SEPARATES TWO THINGS THIS SECTION HAD CALLED ONE
+
+The account says capacity costs transfer, so a HEAVIER ridge — less capacity — should pay. The
+ridge is also the one capacity knob this arc had only ever swept on the FIT. Swept on the
+machine, one refit and one deploy per rung, nothing re-converged:
+
+```
+  ridge    sharp   rounded   circle      geo
+  1e-8     5.13x    4.34x    5.70x      5.02x
+  1e-7     6.01x    4.48x    6.50x      5.59x
+  1e-6     5.52x    4.25x    7.07x      5.49x   <- used throughout this section
+  1e-5     3.27x    3.02x    4.98x      3.66x
+  1e-4     1.29x    1.34x    2.01x      1.49x
+  1e-3     0.85x    0.86x       -          -    <- worse than doing nothing
+```
+
+**The optimum is where it already was — 1e-7 is +1.8% on the geometric mean over 1e-6 and
+TRADES (sharp and rounded up, circle down) — and heavier regularisation is catastrophic rather
+than helpful.** So the account's prediction is falsified for this knob, and cleanly.
+
+**WHICH SEPARATES TWO THINGS THE SECTION HAD BEEN CALLING ONE.** Every knob that traded fit
+against transfer — the window's reach, the quadratic block, the exponential bank, the speed
+schedule — adds DIRECTIONS the map can use, and the map spends the new ones on lap structure.
+The ridge does not add or remove directions; it shrinks the magnitude along ALL of them,
+including the plant inverse the map is there to carry. So "capacity" in the sense of available
+directions trades transfer for fit, and "capacity" in the sense of weight magnitude simply
+weakens the correction. They are different quantities and only the first is the mechanism.
+
+That is a refinement rather than a rescue, and it costs the account its only actionable
+prescription: there is no knob that buys transfer by removing capacity. The window, the passes
+and the basis each have an interior optimum that must be found ON THE MACHINE, and the ridge
+has one too — sitting, as it happens, within a factor of ten of where it was already set.
+
 ### THE ACCOUNT'S CENTRAL CLAIM IS FALSIFIED IN WEIGHT SPACE, AND THAT KILLS A WHOLE FAMILY
 
 The account says the converged prefix is a MIXTURE of a shared plant inverse and a
