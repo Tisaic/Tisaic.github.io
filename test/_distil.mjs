@@ -146,6 +146,16 @@ const TOPUP = +(process.env.D_TOPUP || 0);
 // -> 41.02x -> 55.35x, both PAST what iteration alone converges to from the bare machine
 // (19.47x, 40.44x) and both at almost no extra authority (uPk 0.669 -> 0.727 on the rounded).
 const LAYER2 = +(process.env.D_LAYER2 || 0);
+// PER-FEED-BAND MAPS, SELECTED BY COMMANDED FEED — which is NOT the scheduled basis that failed.
+// `sched` tensored one row with [1, rho, rho^2]: ONE map with three times the directions, and it
+// spent them on each feed's lap structure (fit 0.908 -> 0.947, delivery 3.05x -> 0.56x at 2x
+// feed, the worst row in §49). Discrete banks give no map a single extra direction — each is the
+// winning 119-feature map fitted on its own band — and the selection is by COMMANDED feed, which
+// is known ahead and unaffected by the correction (rule 35).
+//
+// The account's mechanism is capacity-as-DIRECTIONS, so it predicts the schedule fails and says
+// nothing against this. That is what makes it worth running rather than another confirmation.
+const BANDS = process.env.D_BANDS === '1';
 let QBASE = null;
 
 console.log(`\ndistilling the iteration prefix — K ${PG.K} / E ${PG.E}, feed ${FEED}`);
@@ -622,6 +632,27 @@ for (const mode of MODES) {
   // on every program it is scored on.
   const rungs = RSWEEP.map((rg) => ({ rg,
     W: [solveRidge(lastX, lastY[0], rg), solveRidge(lastX, lastY[1], rg)] }));
+  // ---- PER-FEED-BAND MAPS: one fit per distinct training feed, selected by commanded feed ----
+  let BANK = null;
+  if (BANDS) {
+    const byFeed = new Map();
+    let at = 0;
+    for (let g = 0; g < sets.length; g++) {
+      const f = sets[g].path.feed;
+      if (!byFeed.has(f)) byFeed.set(f, { X: [], Y: [[], []] });
+      const bk = byFeed.get(f);
+      for (let j = 0; j < spans[g]; j++) {
+        bk.X.push(X[at + j]); bk.Y[0].push(Y[0][at + j]); bk.Y[1].push(Y[1][at + j]);
+      }
+      at += spans[g];
+    }
+    BANK = [...byFeed.entries()].map(([f, bk]) => ({ feed: f, n: bk.X.length,
+      W: [solveRidge(bk.X, bk.Y[0], RIDGE), solveRidge(bk.X, bk.Y[1], RIDGE)] }))
+      .sort((a, b) => a.feed - b.feed);
+    console.log(`  bands: ${BANK.map((k) => `${k.feed.toExponential(1)} (${k.n} rows)`).join(', ')}`
+      + ` — each the same ${nF}-feature map, none with an extra direction`);
+  }
+
   // ---- THE SECOND LAYER: top-up prefixes on the TRAINING programs, distilled the same way ----
   let W2 = null, fit2 = [NaN, NaN];
   if (LAYER2) {
@@ -708,10 +739,21 @@ for (const mode of MODES) {
       const bb = base[`${sh}@${f2}`];
       const rf2 = mkRefAt(mkPath(sh, f2));
       const d2 = await deployOn(pilot, sh, false, f2, { policy: mkPolicy(W, buildRow, rf2) });
+      let bandCol = '';
+      if (BANK) {
+        // NEAREST BAND IN LOG FEED, because the bands are a ratio ladder and the midpoint
+        // between 4e-3 and 8e-3 is 5.66e-3, not 6e-3.
+        const pick = BANK.reduce((best, k) =>
+          (Math.abs(Math.log(k.feed / f2)) < Math.abs(Math.log(best.feed / f2)) ? k : best));
+        const db = await deployOn(pilot, sh, false, f2,
+          { policy: mkPolicy(pick.W, buildRow, rf2) });
+        bandCol = `   band ${pick.feed.toExponential(1)} `
+          + `${(bb.o.r.totalRms / db.r.totalRms).toFixed(2).padStart(6)}x`;
+      }
       console.log(`    feed ${f2.toExponential(1)}  ${sh.padEnd(9)} `
         + `open ${bb.o.r.totalRms.toExponential(3)}  pilot `
-        + `${(bb.o.r.totalRms / bb.b.r.totalRms).toFixed(2).padStart(6)}x   distilled `
-        + `${(bb.o.r.totalRms / d2.r.totalRms).toFixed(2).padStart(6)}x   uPk ${d2.uPk.toFixed(3)}`);
+        + `${(bb.o.r.totalRms / bb.b.r.totalRms).toFixed(2).padStart(6)}x   pooled `
+        + `${(bb.o.r.totalRms / d2.r.totalRms).toFixed(2).padStart(6)}x${bandCol}`);
     }
     for (const cx of CAPS) {
       const r = await deployOn(pilot, sh, false, FEED,
