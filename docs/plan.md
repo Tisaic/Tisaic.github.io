@@ -9623,6 +9623,22 @@ pilot's own deployed path is 9,517 at today's defaults.
   distilled, 6 polys, +/-1536          3.75x    4.13x    6.28x    4.60x    127
 ```
 
+**AND THE FIT RISES MONOTONICALLY WHILE THE MACHINE TURNS BACK, WHICH IS THE ALIASING
+DIAGNOSIS VISIBLE IN THE INSTRUMENT RATHER THAN INFERRED FROM IT:**
+
+```
+  window    fit R^2 shoulder / elbow    delivered geo
+  +/-256          0.970 / 0.879             4.27x
+  +/-512          0.973 / 0.920             5.22x
+  +/-768          0.974 / 0.921             5.49x   <- delivery peaks
+  +/-1536         0.976 / 0.939             4.60x   <- fit still climbing
+```
+
+The elbow's fit gains six points of R^2 between +/-768 and +/-1536 and the machine loses 16%.
+**What the extra reach is fitting is the lap**, and a training-set fit cannot tell that from
+plant structure — which is exactly why the selection has to be on the machine and why the
+ridge selector below picked the wrong cell.
+
 **+/-768 IS AN INTERIOR OPTIMUM, WHICH IS WORTH MORE THAN A MONOTONE TREND.** Past it the
 window turns back down, so the reach is a real trade against something and not a knob that
 was simply never opened far enough.
