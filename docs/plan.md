@@ -9606,4 +9606,30 @@ rounded rectangle and a circle is what a model of the PLANT looks like, where th
 one-program fit in this same bench reads 21.78x at home and 0.29x away.
 
 It costs 166 MAC per decision — 1.7% of a PLC scan — with no tracker at deploy, no lap index,
-no plant constant and no per-program compile.
+no plant constant and no per-program compile. And the QP is not paid at all: the policy
+REPLACES the pilot rather than sitting under it (`distilled + pilot` reads 0.96x-1.27x, the
+double-correction mode 8 already paid for), so the deployed controller is 166 MAC where the
+pilot's own deployed path is 9,517 at today's defaults.
+
+### THE LONG TOUR CONFIRMS THE ALIASING MECHANISM DIRECTLY
+
+`designTour` chains twelve random shapes into ONE closed lap of ~6,500 samples — replayable,
+so iteration can use it, and several times the plant's memory, so a reaching window covers a
+fraction of a lap instead of more than all of it. With the SAME +/-1024 window that read 0.47x
+trained on closed production programs:
+
+```
+  training set                    window     sharp   rounded   circle
+  rounded + circle                +/-1024    0.47x    24.93x   27.25x   (fitted on 2 of these)
+  rounded + circle + diamond      +/-1024    1.61x    19.77x   19.38x   (fitted on 2 of these)
+  tour12 (one 6,500-sample lap)   +/-1024    3.29x     2.42x    3.46x   (fitted on NONE of these)
+```
+
+**0.47x -> 3.29x on the held-out program at an unchanged window**, which is the aliasing
+argument measured rather than asserted: what makes a long window a lap index is the TRAINING
+lap being shorter than the window, and nothing else. It is still below the polygon diet's
+4.21x, and the reason is visible in the tour's own ladder — its converged prefix reaches only
+6.19x contour against the polygons' 16-20x, so it is a worse target as well as a longer lap.
+Its overlapping shapes also break `decompose`'s nearest-point search, so its `totalRms` column
+(1.47x) is an instrument artefact and only the contour column means anything on the tour
+itself; the TEST programs it is scored on are unaffected.
