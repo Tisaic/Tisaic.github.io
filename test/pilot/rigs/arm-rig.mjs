@@ -233,8 +233,16 @@ async function deployOn(pilot, shape, active, feed = 0.004,
       polU[0] = pu[0]; polU[1] = pu[1];
     }
     const u = active ? pilot.act((off) => refAt(kSamp + off)) : [0, 0];
-    if (policy) { u[0] += polU[0]; u[1] += polU[1]; }
+    // `preOut` RECORDS THE PILOT'S OWN INCREMENT, which is what every caller accumulating a
+    // prefix depends on. The policy is an EXTERNAL correction exactly as `pre` is, so it is
+    // added AFTER this write and not before — the first version added it before, and an oracle
+    // ladder run on top of a policy then folded the policy into its own prefix on every pass
+    // while still applying it separately. That reads as a diverging composition (5.52x -> 0.93x
+    // -> 0.36x, uPk 0.750 -> 1.598 -> 2.198, each increment about the policy's own magnitude)
+    // and is a harness fault, not a property of the composition (rule 17). No earlier number
+    // moves: `preOut` and `policy` had never been passed together before that run.
     if (preOut) { preOut[0][k % preOut[0].length] = u[0]; preOut[1][k % preOut[1].length] = u[1]; }
+    if (policy) { u[0] += polU[0]; u[1] += polU[1]; }
     // A FROZEN LAP-INDEXED PREFIX, for the ITERATION diagnostic and nothing else. It is a
     // memory by construction — indexed by position in a lap, the one thing the retirement
     // forbids a shipped component to be — and it exists here to measure how much of mode 10's
