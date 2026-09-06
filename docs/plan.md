@@ -9641,12 +9641,19 @@ A real machine's program set is usually known, and the block's designed polygons
 to add to it. Six polygons plus the rounded rectangle and the circle, one fit, +/-512:
 
 ```
-  controller                              sharp    circle   rounded    geo
-  shipped pilot, depth 1                  2.15x     3.99x    2.64x    2.83x
-  cascade depth 2, uCap 0.6               4.14x     9.19x    5.78x    6.04x   <- incumbent
-  distilled, 6 polys + rounded + circle   7.36x    13.97x    9.06x    9.77x
-                                        HELD OUT   fitted   fitted
+  controller                                     sharp    circle   rounded    geo
+  shipped pilot, depth 1                         2.15x     3.99x    2.64x    2.83x
+  cascade depth 2, uCap 0.6                      4.14x     9.19x    5.78x    6.04x  <- incumbent
+  distilled, 6 polys + rounded + circle, +/-512  7.36x    13.97x    9.06x    9.77x
+  distilled, same set, +/-768                    8.04x    15.27x    8.76x   10.25x
+                                               HELD OUT   fitted   fitted
 ```
+
+At the window the polygon-only sweep found optimal, **10.25x geometric — 3.62x the shipped
+pilot and 1.70x the incumbent — with the sharp square HELD OUT at 8.04x against the
+incumbent's 4.14x, which is 1.94x on the one program nothing was fitted to.** That 8.04x is
+**41% of what per-program iteration itself converges to there** (19.47x), from a component
+that has never run the program.
 
 **1.62x the incumbent on the geometric mean, and 1.78x on the one program that is HELD OUT** —
 the sharp square is not in that training set and still reads 7.36x against the cascade's 4.14x.
