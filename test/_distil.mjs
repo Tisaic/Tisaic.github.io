@@ -113,6 +113,12 @@ const PWEIGHT = +(process.env.D_PWEIGHT || 1);
 // all eight draws refused at 1.000x and their average delivered 1.344x, better than every draw
 // rather than between them.
 const ENSEMBLE = process.env.D_ENSEMBLE === '1';
+// A RIDGE LADDER SCORED ON THE MACHINE, which is the account's own prescription and the one
+// capacity knob never swept on DELIVERY here. `_gainfit.mjs` swept it on the FIT and the
+// leave-one-program-out selector swept it on held-out fit — and this section's whole finding is
+// that both of those pick the wrong cell. The ridge is the cheapest capacity control there is:
+// one refit and one deploy per rung, nothing re-converged.
+const RSWEEP = (process.env.D_RSWEEP || '').split(',').filter(Boolean).map(Number);
 let QBASE = null;
 
 console.log(`\ndistilling the iteration prefix — K ${PG.K} / E ${PG.E}, feed ${FEED}`);
@@ -448,7 +454,7 @@ for (const mode of MODES) {
   }
   const MAXL = (mode === 'cmd' || mode === 'rel' || mode === 'rich' || mode === 'diff'
     || mode === 'expo' || mode === 'quad' || mode === 'sched') ? 0 : MLAGS[MLAGS.length - 1];
-  let W = null, fitR2 = [NaN, NaN], nF = 0;
+  let W = null, fitR2 = [NaN, NaN], nF = 0, lastX = null, lastY = null;
   // DAGGER: refit on the states the POLICY itself visits. A behaviour-cloned policy is fitted
   // on one distribution and then generates its own, and the gap between them is the whole
   // reason cloning diverges; each round records the policy's own states and re-labels them
@@ -534,6 +540,7 @@ for (const mode of MODES) {
         + `${sets.length} folds)`);
     }
     W = [solveRidge(X, Y[0], ridge[0]), solveRidge(X, Y[1], ridge[1])];
+    lastX = X; lastY = Y;
     fitR2 = [0, 1].map((c) => r2(X.map((r) => r.reduce((a, v, j) => a + v * W[c][j], 0)), Y[c]));
     if (round === DAGGER) break;
     for (const st of sets) {
@@ -545,9 +552,20 @@ for (const mode of MODES) {
       st.targ = tr2.map((t, i) => [pre[0][(i * S) % LAPK], pre[1][(i * S) % LAPK]]);
     }
   }
+  // The ridge rungs are fitted ONCE, outside the program loop, so a rung's map is the same map
+  // on every program it is scored on.
+  const rungs = RSWEEP.map((rg) => ({ rg,
+    W: [solveRidge(lastX, lastY[0], rg), solveRidge(lastX, lastY[1], rg)] }));
   for (const sh of TESTS) {
     const { o, b, m } = base[sh];
     const rf = mkRefAt(sh);
+    for (const rung of rungs) {
+      const r = await deployOn(pilot, sh, false, FEED,
+        { policy: mkPolicy(rung.W, buildRow, rf) });
+      console.log(`    ridge ${rung.rg.toExponential(0).padStart(7)}  ${sh.padEnd(9)} `
+        + `${r.r.totalRms.toExponential(3)} `
+        + `${(o.r.totalRms / r.r.totalRms).toFixed(2).padStart(6)}x   uPk ${r.uPk.toFixed(3)}`);
+    }
     const d = await deployOn(pilot, sh, false, FEED, { policy: mkPolicy(W, buildRow, rf) });
     const dp = await deployOn(pilot, sh, true, FEED, { policy: mkPolicy(W, buildRow, rf) });
     for (const f2 of TFEEDS) {
