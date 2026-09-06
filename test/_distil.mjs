@@ -132,6 +132,21 @@ for (const t of TRAIN_SPEC) {
     // named-program rows.
     designDemoPaths({ centre: PG.centre, feeds: [FEED, FEED, FEED], rMin: 3.4, rSpan: 2.4 })
       .slice(0, NDEMO).forEach((path, i) => TRAINS.push({ name: `poly${i}`, path }));
+  } else if (t === 'polyfeed') {
+    // THE SCALE-MATCHED POLYGONS ACROSS A FEED LADDER — the third instance of one lesson.
+    // A window indexed in SAMPLES is the RIGHT object for a time-invariant plant, so the
+    // feedrate failure is not the indexing: it is that at ONE training feed a time offset and
+    // an arc offset are perfectly CONFOUNDED, and the map cannot tell which of them it learned.
+    // At a different feed they separate and the map has picked wrong. That is exactly the
+    // lap-phase confound in a second variable, and it has the same cure — vary the thing, so
+    // no single reading of the offsets explains all the rows.
+    //
+    // The block's own `demo` diet already ladders the feed, and it measured 0.22x-1.09x because
+    // it confounded feed with SCALE (r 2.2-3.8 against test programs at r 4 and 8x8). This diet
+    // ladders the feed at the programs' own scale, which is the one combination not yet run.
+    designDemoPaths({ centre: PG.centre, feeds: [FEED, 2 * FEED, 0.5 * FEED],
+      rMin: 3.4, rSpan: 2.4 }).slice(0, NDEMO)
+      .forEach((path, i) => TRAINS.push({ name: `pf${i}`, path }));
   } else if (t.startsWith('tour')) {
     // ONE LONG CLOSED LAP, which is the only shape of training program that lets a window REACH
     // this plant's memory without becoming a lap index. The reach/transfer trade measured above
