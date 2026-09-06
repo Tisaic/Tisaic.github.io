@@ -10660,3 +10660,75 @@ own demo path or training programs (the block designs both), and it does not swe
 for them. The measurement §51.5 makes possible — the real lap-periodic rung composing on top of a
 distilled one on this arm — is the next thing worth running, and it is a commissioning, not a
 click.
+
+### §51.8 The arm on screen was not the arm that was moving
+
+`AutoStack` never drives the tab's arm. `makeMachine` builds its own — held across runs by
+`reuseMachine` — and every scored run turns THAT. So for the entire commissioning the stage
+drew `armP`, sitting exactly where `homeP()` left it, while the machine every number comes
+from ran out of sight. Nothing threw, nothing was blank, and every wiring check passed,
+because they asked whether a canvas was painted and it was.
+
+`autoLiveArm` is stashed by the page's own `makeMachine` and cleared when the host is
+disposed, so the stage follows whichever arm is actually turning. It is the SAME object the
+ladder scores rather than a pose sampled from it, which is what makes it impossible for the
+two to disagree — a copied pose is a second view and can lag.
+
+⑥ renders through the SAME `drawP`, which now takes the stage and canvas to draw into. One
+function and one source: a second renderer is how two views of one machine end up drawing
+different machines, and this project has that failure on record.
+
+**AND THE PICTURE HAD TO SAY WHOSE MACHINE IT IS.** During a commissioning the arm is running
+an EXCITATION and is not on the program at all, so a program-relative error trail beside it
+asserts a deviation from a path the machine is not trying to follow. The trail and the
+commanded marker are suppressed, the tool marker changes colour, and the legend and badge
+name what is being watched. The first legend ran off the right of a 412 px phone and ended
+mid-word, which is the same fault the badges' own comment records one line below it.
+
+Measured rather than eyeballed (rule 23): **5 of 5 pose samples changed, largest step 3.73e-1
+rad**, with the idle case asserted too — a stage that always claimed to be live would satisfy
+the moving half on its own (rule 9).
+
+### §51.9 Commission fast on a phone, quote in machine time
+
+Two different questions were being answered by one number, and only one of them transfers.
+
+**GRADE** buys wall clock with resolution. Every scored run is `warmup` laps to clear the
+correction's own transient plus `avg` laps pooled into the score; cutting them is the one
+lever that shortens a commissioning without changing what is commissioned.
+
+```
+  full   2 + 4 laps a run, probe {1,2}, 24 refinement passes   the grade every recorded
+                                                               number here was measured at
+  fast   1 + 2,            probe {1,1},  8 passes              ~half the scored laps
+  demo   1 + 1,            probe {0,1},  4 passes              for WATCHING, not quoting
+```
+
+It is printed on the report rather than hidden in a preset, because it is **not free**: fewer
+pooled laps is a noisier score, the ladder measures its own spread and raises its floor
+accordingly, and a rung whose margin no longer clears that floor is refused for being
+INDISTINGUISHABLE rather than for being bad. That is a real failure mode of a fast run and it
+would otherwise read as the rung failing.
+
+**COST IS REPORTED IN MACHINE TIME.** `host.samples()` counts every step the host advanced the
+machine, so at the selected task period it converts straight to the thing an owner pays: laps
+the machine spends producing nothing. Wall clock is shown beside it and labelled as the
+SIMULATOR — it is an accident of what the browser is running on and says nothing about a
+plant. Measured on the phone viewport at demo grade:
+
+```
+  machine time at a 1 ms task    1:01        <- the number that transfers
+  machine samples · scored runs  61,214 · 1
+  laps of this program           8
+  wall clock in this browser     0:17        <- the simulator
+  grade                          demo
+```
+
+The record survives the run — `dispose()` frees the lattices and leaves the counter — and the
+wall clock stops when the run does, because a cost that keeps rising while nothing runs is not
+a cost. The scan period is selectable (0.5/1/2/5 ms) so the armed set's budget is priced
+against the operator's own task rather than only against the documented 1 ms. All of it goes
+into the debug dump so a phone report can be a paste rather than a description (rule 28).
+
+**THE HONEST SENTENCE THIS BUYS:** a fast run's machine time is what THAT run would cost a
+PLC, not what a full-grade commissioning would — and the page says so in those words.

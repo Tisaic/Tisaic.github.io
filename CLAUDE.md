@@ -1925,6 +1925,29 @@ that matches it** — the point-to-point tabs measure a different question.
   the plant spends producing nothing, the half of target 4 a wall clock cannot see and which this
   arm has never had an instrument for. Browser checks are WIRING only; the arm/disarm contract is
   pinned on the object in `test/pilot/distil.test.mjs`, quick tier.
+  **AND THE ARM ON SCREEN WAS NOT THE ARM THAT WAS MOVING (plan §51.8).** `AutoStack` never
+  drives the tab's arm — `makeMachine` builds its own and every scored run turns THAT — so for
+  the whole commissioning the stage drew `armP` frozen where `homeP()` left it while the
+  machine every number comes from ran out of sight. Nothing threw and every wiring check
+  passed, because they asked whether a canvas was painted. The stage now follows the SAME
+  OBJECT the ladder scores (not a pose copied from it, which is a second view that can lag),
+  ⑥ renders through the same `drawP` with a stage-id argument rather than a second renderer,
+  and the picture states whose machine it is: during commissioning the arm is running an
+  EXCITATION and is not on the program, so the program-relative error trail and the commanded
+  marker are SUPPRESSED — drawing a deviation from a path the machine is not trying to follow
+  asserts something false. Measured, not eyeballed: **5 of 5 pose samples changed, largest step
+  3.73e-1 rad**, with the idle case asserted too, since a stage that always claimed to be live
+  would satisfy the moving half alone.
+  **AND COMMISSIONING GRADE BUYS WALL CLOCK WITH RESOLUTION, WHICH IS STATED RATHER THAN HIDDEN
+  (plan §51.9).** full (2+4 laps a run, the grade every recorded number here was measured at),
+  fast (1+2), demo (1+1, for watching). It is on the report because it is not free: fewer
+  pooled laps is a noisier score, the ladder raises its own floor to match, and a rung can then
+  be refused for being INDISTINGUISHABLE rather than for being bad. **And the cost is quoted in
+  MACHINE TIME** — measured on the phone viewport at demo grade, 0:17 of wall clock against
+  **1:01 of machine time**, 61,214 samples, 8 laps — with wall clock beside it labelled as the
+  SIMULATOR, because it is an accident of what the browser runs on and says nothing about a
+  plant. The scan period is selectable so the armed set is priced against the operator's own
+  task, and the whole record goes into the debug dump so a phone report can be a paste.
 - **⑦ Architecture** — the design note.
 
 ### Libraries
