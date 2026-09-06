@@ -1132,7 +1132,7 @@ measurement behind each is in `docs/history/` — the pointer in brackets.
 | `console-boot.js` | The debug-console bootstrap, shared by every page, loaded first in `<head>`. |
 | `flowsim.html` | FlowSim: the GPU lattice-field engine's page (Simulate / Verify / Architecture). |
 | `ngrc.html` | NGRC playground: four interactive tabs on `lib/ngrc`. |
-| `flexisim.html` | FlexiSim: compliant serial chains (Move / Chain / Path / Black box / Verify / **Deploy** / Architecture). |
+| `flexisim.html` | **FlexiSim, rebuilt: the commissioning bench.** One machine, one program, the ghost, the distilled model, and the two options that stack on it. The seven-tab page it replaced is in `docs/history/flexisim.md`, brick 73. |
 | `lib/lattsim/` | The lattice engine — lattice, fields, materials, operators, solver, backends, renderers. See its README. |
 | `lib/lattsim/operators/` | `lbm.js` (D3Q19 fluid), `scalar.js` (passive scalar), `elastic.js` (velocity–stress leapfrog), `frame.js` (gravity and the non-inertial frame). |
 | `lib/ngrc/` | The ported NGRC library. See its README. |
@@ -1264,691 +1264,76 @@ Four tabs, each framed as NGRC against a common alternative.
   check runs an UNSHAPED probe, queued to a move boundary and followed by a settling
   dwell, feeding a vote-of-three fault panel with independent threshold tests.
 
-### FlexiSim — `flexisim.html` on `lib/flexisim/` + `lib/lattsim/` + `lib/blackbox/`
+### FlexiSim — `flexisim.html` on `lib/flexisim/` + `lib/lattsim/` + `lib/pilot/`
 
-Compliant serial chains. Joints are LUMPED nonlinear elements (gearbox stiffness,
-backlash, Stribeck friction, ratio, motor inertia); LINKS are lattice elastic solids, one
-small dense lattice per link in its own body frame. Every mass property is INTEGRATED
-FROM THE LATTICE. Seven tabs. **The end application is CNC contouring, so ③ Path is the tab
-that matches it** — the point-to-point tabs measure a different question.
+**ONE PAGE, ONE MACHINE, ONE PROGRAM, ONE CONTROLLER — rebuilt from scratch (plan §52).** The
+seven-tab page that grew here over the whole project is retired; its description and every
+number it carried are in `docs/history/flexisim.md` (brick 73), verbatim, and the libraries it
+drove are untouched with their Node tests still running. What ships is the commissioning bench
+an engineer would actually meet:
 
-- **① Move** — a single-joint hybrid arm. Commissioning runs inside the frame loop (pose
-  holds, then a deliberately excited decay). Four correction modes: ① open loop, ② the
-  identified compliance evaluated at the COMMAND with a lead of one servo time constant,
-  ③ a closed loop on the soft sensor's estimate, ④ a learned dynamic filter fitted to an
-  iteratively refined per-phase correction across three bracketing moves. Plus a measured
-  ZVD shaper, a boxcar jerk limit, a SETTLE dwell in periods of the measured ring, a drive
-  rating giving torque, acceleration and speed limits from one torque-speed curve, and a
-  labelled deflection magnification. **Compare** scores every mode over its own settled
-  window; **Auto-tune** runs the sequence and LOCKS THE SENSOR LAST, under the correction
-  actually selected. The stage draws program and encoder at true scale and the tool
-  magnified against the program, inside a sweep band.
-- **② Chain** — a 2R chain with computed torque evaluated at the commanded pose. The
-  coupling chart splits the elbow's inertial load into the shoulder's doing and its own.
-  Link 2 hangs off link 1's DRAWN tip, position and slope. Its reference is
-  amplitude-modulated at the golden ratio; the scoring window is three move periods and
-  the loop gain is derived from the move period. Two tool sensors — whole-arm and
-  elbow-only — trained side by side at matched capacity and matched window reach.
-- **③ Path** — CONTOURING, which is what the end application is: a 2R arm tracing a
-  closed toolpath (circle, rounded rectangle or square) at a look-ahead feedrate profile
-  with the corner rule and the acceleration ELLIPSE. The deviation is split into CONTOUR
-  error (normal — the part is the wrong shape) and LAG (along — the tool is late), and
-  **BOTH ARE DEFECTS AND THE SCORE IS THEIR TOTAL.** This tab used to say only the contour
-  component counted, on the argument that a lagging tool is on the right curve and merely
-  late — true of a UNIFORM lag on one closed contour and nowhere else, since a lag that
-  VARIES is a shape error as soon as two axes are coordinated, and any machine that must meet
-  another axis, a tool change or a clock is defective when it is late. The cost of the old
-  stance was structural: every rung, depth and prefix of the ladder was chosen against
-  `contourRms` while `lagRms` sat in the report unread — and the pilot's own truth here was
-  ALREADY the whole tool error, so the machine was CORRECTED for both and SCORED on one
-  (rule 6). On this arm lag is a real share: the conventional machine measures 4.6748e-1 total
-  against 4.1216e-1 contour, and the pilot's depth-1 gain falls from 3.33× to 2.85× once it is
-  counted. All three are reported — `contourRms`, `lagRms`, `totalRms` — because the two
-  failures have different causes and different fixes, but a rung can no longer buy one with
-  the other unseen; energy is reported as BOTH copper loss
-  ∫τ² and mechanical work ∫|τω|, and direction changes are counted as TRAVEL past the
-  joint's own lost motion. Backlash is on here and nowhere else, because this is the only
-  tab whose metrics can see it. Four corrections: ① none, ② the wind-up model τ/K, ③ a
-  per-joint compliance identified on ONE SLOW LAP and then locked, ④ ITERATIVE LEARNING —
-  a correction table indexed by arc length on the part, updated between laps with a lead
-  of one position-loop time constant and a zero-phase filter, ⑤ THE PILOT (`lib/pilot/`) —
-  commissioned once from noise by one button, deploys only if its own verify round
-  measured an improvement on the machine, then cuts programs it has never seen (6.2× on
-  the rectangle — BELOW ILC's fourteen-lap converged figure, first part, fewer reversals,
-  36% less copper — 7.0× on the circle). The pilot does not even need the KINEMATICS:
-  fed only held tracker points during commissioning it fits the direct inverse
-  (x,y)→commands itself (1.2e-4 rad holdout from 180 points), and holding real path
-  points that learned map beats the analytic ik() 23–44× statically — the analytic
-  kinematics commands the drawing, the learned map commands the machine, droop and
-  wind-up included (brick 40; `test/pilot/ikfree.test.mjs`). That system ships as
-  ⑥ FULLY LEARNED (Commission ⑥: gather held points → fit the inverse → pilot on top,
-  refs from the learned map, same refusal shape as ⑤) and ⑦ FULLY LEARNED + ILC (a
-  separate PathILC on the learned chain, tool error mapped through the learned routing):
-  measured circle 5.9e-2 → 1.14e-3 by lap 14 (within 28% of the analytic ILC@15) and
-  rectangle → 1.27e-2, twice BELOW the analytic ILC's converged 2.53e-2 (brick 41).
-  ⑤+④ stacks the same table on the ANALYTIC pilot (circle 1.03e-3, rectangle 1.30e-2
-  by lap 14) — and beside ⑦ that is the finding: iteration erases the difference
-  between knowing the kinematics and having learned them (brick 42). At the softest
-  compliance sliders two more lessons shipped (brick 44): ⑥'s gather settles until the
-  tracker is QUIET rather than for a fixed count, its truth routing is an AFFINE
-  observer — G(cmd)·(tool − fwd(cmd)), both learned halves evaluated at the command,
-  because a nonlinear map of the fast variable breaks the LTI-ness the QP needs
-  (verify 0.48× → 5.02× at K 0.25/E 0.03) — and every ILC table carries a MONOTONE
-  SAFEGUARD (backoff, settling dwell, freeze after 3) whose measured endpoint is
-  exactly the continuous open loop: a soft gearbox's table pumped to 5.25 unguarded.
-  THE PILOT'S FORECAST BASIS IS NOW SELECTED PER CHANNEL, NOT DECIDED (brick 54). It
-  was linear "by measurement" — but the measurement was ONE plant. The fit is now offered
-  a quadratic block under the AFM's STRUCTURED PRIOR (ridged 100× harder than the linear
-  one, so it must earn its weights) and picks on held-out data. THE SELECTION TRACKS THE
-  PHYSICS: the quadruple tank (outflow ~ √h) and the extruder barrel (radiates as T⁴)
-  accept curvature where their excitation exposes it; the Wood–Berry column — linear
-  transfer functions and nothing else — declines it on both loops, which is the negative
-  control; the mill, the EMPS axis and BOTH arm channels stay linear, so the original note
-  was right about the arm and wrong to be generalised. THE TIE-BREAK IS ON THE RESIDUAL:
-  on R² the tank's 0.9818 against 0.9661 sits inside any 5% band, while the unexplained
-  variance it leaves is 0.0182 against 0.0339 — nearly halved — and a forecast the QP
-  inverts is worth what its residual is worth. It overturned a shipped finding: brick 48's
-  "a dwelling excitation beats a sweeping one on a dwelling plant" was reading a linear
-  basis, and with curvature available the sweeping excitation selects it and goes
-  1.11× → **2.07×** against the dwelling one's unchanged 1.32×. The dwell advantage was
-  compensating for a basis that could not represent the plant.
-  **WHERE THE PILOT STANDS ACROSS SIX PLANTS THAT SHARE NO PHYSICS**, which is the only
-  honest way to state an agnosticism claim: the 2R arm 5.96× / 6.91×; a quadruple tank
-  1.32×, with its non-minimum-phase configuration — and its non-dwelling model — correctly REFUSED; a three-zone
-  extruder barrel refused — at 0.86×, and brick 55 found it had NEVER BEEN SCORED
-  before that: it declares a dwelling program, a dwelling scribble cannot cross its
-  44 K box at the verify's quarter rates, so the verify threw and the refusal was a
-  construction failure wearing a rate-limit message. The verify now scores whichever
-  regimes BUILD and reports what it skipped; the Wood–Berry column LOST — and the frame was wrong:
-  the **steady-state inversion alone reads 43.90 against the published BLT's 51.95**, so doing nothing
-  already beats the classical baseline, and the pilot at 82.10 is making a machine that beats BLT
-  nearly twice as bad. Across 12 seeds every one of the 9 deployments is worse than the 3 refusals; **a cold mill AGC now WINS at 1.49x** — it refused at 0.42x, then 0.61x, then neutral, and what changed was two measurement faults rather than the controller: its 100-step transport delay is DECLARED (`deadTime`, the gauge's mounting distance over line speed, which the probe cannot recover because a dead time and a slow rise move the 90% crossing identically) and the forecast gate now reads the first lead whose response is non-zero instead of lead 0, where `hGrid` is zeroed by that declaration and held-out R² is 0.044 against 0.868 at the first lead the QP can act on; and the **EMPS servo axis**
-  — a real machine, real data, `test/pilot/emps.test.mjs` — 4.8×, which is FOURTH OF SIX
-  controllers on that page. The rig is validated twice against the hardware (our IDIM-LS
-  recovers the published M/Fv/Fc/OF to 0.8%; the closed loop reproduces the recorded
-  encoder to 1.6 µm rms and the recorded tracking error to 0.03%), and on it a velocity
-  feedforward is worth 15.2×, a hand-tuned ILC 119× and an inverse-dynamics feedforward
-  at the published parameters 275×. **The reason is the plant, not a defect** — that
-  machine has a four-parameter closed form and its authors published it, which is the
-  anti-slosh tab's rule from the other side: learn the parameters with no closed form,
-  compute the ones that have one.
-  TWO DEFECTS CAME OUT OF IT AND BOTH ARE NOW FIXED (brick 53), because they were one
-  piece of work. **THE GATE SCORED ONE REGIME AND IT WAS THE WRONG ONE.** The verify's
-  filtered noise has a single correlation time tuned to the first limit that binds — and
-  since the builder demands an 85% traverse of the position box, that is always VELOCITY,
-  so the corner lands near box/vMax: measured on EMPS, 7303 steps, longer than a whole
-  6240-step lap of the machine's own program, using 78.5% of its velocity but 9.2% of
-  acceleration and 3.1% of jerk against the program's 99.7% / 100.9%. The verify now also
-  runs a **PROGRAM regime** (`buildProgram`) — trapezoid moves separated by dwells, whose
-  ramp comes from the LIMITS alone (1.875·vMax/aMax, and √(5.774·vMax/jMax)), giving 282
-  steps against the machine program's 148 — and (brick 56) **the PROGRAM regime decides the benefit at 1.1x while the other holds a
-  veto only below 0.85x** — gating on the worse outright refused the arm's learned-IK
-  system (scribble 0.89x / program 3.14x) which, forced, converges ⑦ to 1.7e-3, while
-  program-only would deploy the non-minimum-phase tank (0.33x / 1.20x) that was measured
-  DELIVERING 0.61x. A scribble is a stress regime the machine never runs: a poor score
-  there is narrowness, a bad one is danger, and only the second may veto. An earlier guess said to size the verify from the plant's settling time; the
-  measurement says the ramp is a property of the limits, not of the plant.
-  With the gate honest, **the 200-step cadence floor could go** (now 8): the probe had
-  measured this machine's rise correctly at 17 and had it replaced by a placeholder no
-  plant had ever been fast enough to trip, and EMPS ships at **12.70× instead of 4.79×**
-  with no change to the controller. The two had to move together — at every floor that
-  helps, the OLD gate refused.
-  **THE VERDICTS THAT MATTER FLIPPED THE RIGHT WAY.** On the same axis with its own
-  feedforward on: velocity FF, gate 3.74× → **0.96×, REFUSED** (it used to deploy for a
-  1.10× it had not earned); inverse-dynamics FF, gate 2.03× → **0.05×, REFUSED** (it used
-  to deploy a correction that measured 0.23×, i.e. four times WORSE). Wood–Berry's
-  overstatement fell 8× → 2.9×, the non-dwelling tank is now correctly refused, and the
-  arm's flagship numbers are unchanged (5.96× / 6.87×) — **the controllers did not move,
-  only the estimates of them**, which is the signature that says the gate was repaired
-  rather than the measurement changed.
-  THREE BUGS SURFACED ON THE WAY, all invisible until two regimes ran back to back: the
-  verify's run-out sat at the END of the plan INSIDE segment 0, so every plant's OFF
-  average was deflated by the approach ramp; the segment map was off by that pad once two
-  halves existed; and the guard derated the RATE LIMITS but not the BOX, so a derated
-  machine was asked to traverse the same span in the same time and `buildExcitation`
-  refused — which only showed once the corrected cadence made the dither fast enough to
-  trip the guard twice.
-  STILL WRONG, STATED RATHER THAN ABSORBED: the gate's ORDERING is still inverted (the
-  estimate falls as the delivered benefit rises), and on EMPS the error changed SIGN — it
-  now UNDERSTATES 9× (1.35× against 12.70× delivered) and clears its own 1.1× threshold
-  by a quarter on a controller worth twelve. Hypothesis, untested: both regimes run at
-  QUARTER rates while the machine's program runs at its limits, and this pilot's benefit
-  here is the velocity-lag term q̇/kp, which scales with speed.
-  **AND THE CEILING IS THE MODEL'S RESIDUAL, MEASURED (brick 55).** The scribble-fitted
-  forecast scores R² 0.9957 on PROGRAM data (0.9908 on the scribble it was fitted to,
-  0.9976 refitted on the program), so there is no distribution mismatch — and
-  √(1−0.9957) = 6.6% of the truth's rms is 0.038 mm against 0.045 mm delivered. **The
-  pilot is AT its forecast bound**; the QP, the cap and the horizon are not the
-  constraint. Reaching the ILC's 0.0046 mm needs R² 0.99994, sixty times less residual
-  variance, which a lag-window linear forecast will not reach. Folding a phase-indexed
-  residual on top of the deployed pilot measures **12.7× → 125×** — and converges to the
-  same floor as ILC alone, so the model buys LAP ZERO (0.049 against 0.576) and four laps
-  of head start, not a better endpoint. Model error here is ~40 µm and lap-to-lap
-  repeatability is 0.3 µm: a factor of 130 between predicting the error and REMEMBERING
-  it. Two avenues were closed on the way — identifying on a program instead of a scribble
-  is far worse (12.70× → 3.93×, since repeated trapezoids are collinear), and the mill's
-  forecast is destroyed by its own fit target (`eFree` rms is **4.16×** the truth's there,
-  against 0.96–1.08 on every other plant; against the raw truth the same design matrix
-  reaches R² 0.73 instead of 0.05).
-  **A CASCADE IS THE WAY PAST THE FORECAST BOUND (brick 56).** `lib/pilot/stack.js`
-  commissions ordinary pilots in sequence, each with the layers below it deployed and
-  FROZEN, so layer k's plant is (machine + layers 1..k−1) and each measures its own
-  timescale on it. EMPS, mm rms by depth: trapezoid 0.5764 → 0.0454 → 0.0258 → **0.0194
-  (29.8×)**; a two-tone sine it has NEVER SEEN 0.3634 → 0.0439 → 0.0248 → **0.0140
-  (26.0×)**. The second row is the point — a phase-indexed ILC table reaches 125× on the
-  program it learned and **0.55× on that same sine, i.e. worse than nothing** — the
-  cascade transfers because every layer is a plant model rather than a memory. Per-layer
-  forecasts on what reached them: R² 0.991 → 0.777 → 0.514, each vouching for itself
-  (1.35× / 1.54× / 1.70×), and layer 2 chose a LONGER horizon than layer 1 (N 95 vs 68)
-  by itself. A layer that cannot vouch ends the stack; the summed correction is clamped
-  once at the engineer's cap; the cost is commissioning time multiplied (70 s a layer
-  here, 62 h a layer on the barrel).
-  TWO OTHER THINGS WERE TRIED AND ONE IS A NULL. **Feeding the correction `u` and the
-  ERROR back in as regressors does nothing** — unchanged on EMPS, WORSE on the tank
-  (0.861 → 0.795) — because `truth = measured − fwd(command)` and both are already in the
-  row, so lagged truth is already spanned. And the WINDOW LENGTH is now tuned rather than
-  the constant 12, but it **earns its place on one plant of six** (24 taps on the mill):
-  a joint window/ridge search picks the looser ridge, which is a better held-out fit
-  (0.99305 vs 0.98931) and a WORSE machine (12.7× → 10.2×). **The QP inverts this model,
-  so regularisation serves the inversion, not the fit** — which is why the basis choice
-  compares residuals and the ridge choice deliberately does not.
-  **THE RESIDUAL CASCADE IS NOW REACHABLE — a Cascade depth slider (1–3) serving BOTH ⑤ and
-  ⑥ (brick 59).** It had been built and measured in brick 56 and connected to nothing a
-  person can click, which is the whole reason the page's numbers had not moved. Wiring it
-  found a defect only a cascade can have: each layer derives its own cadence from its own
-  measured Ts, but the host builds ONE look-ahead closure, so an upper layer's whole horizon
-  was registered at someone else's stride. Pinned, at the SOFTEST sliders and feed 0.004:
-  open 1.205 → depth 1 **0.1875 (6.43×)** → depth 2 **0.0987 (12.21×)**, layer 2 vouching
-  for itself at 2.07× with held-out R² 0.440/0.571 on what layer 1 left. Depth costs
-  commissioning time multiplied, and each layer reports separately so a layer that measured
-  nothing is visible rather than averaged away.
-  **AND IT DOES NOT RESCUE ⑥ — IT HARMS IT, which is the more useful half.** ⑥ depth 1
-  3.40× → depth 2 **2.93×** on 3.1× the copper, with layer 2 VERIFYING at 1.85×, better
-  than layer 1's 1.70×. Its readouts say why: R² [0.848, **−0.117**] — the elbow forecast
-  is negative at lead 0, so it is gated, and what deploys is a ONE-CHANNEL correction on a
-  COUPLED arm, which is not a smaller correction but one in a direction the QP never chose.
-  **NOTHING ON THIS TAB REFUSES ANY MORE** — the owner's instruction, and it immediately
-  refuted the explanation above. Three refusals were live: the deploy gate, the FORECAST
-  gate (`R²(lead 0) < 0.2` SILENTLY zeroed a channel), and a stack admission rule. All
-  three are now measured and reported (`wouldRefuse`, `wouldGate`, a `partial` note) and
-  never enforced here; they stay library options at their old defaults, so every plant
-  under test keeps its contract. Arming ⑥'s negative-R² elbow makes the machine BETTER —
-  2.93× → **3.18×**, layer 2's own verify 1.85× → 2.20× — so the gate was costing a quarter
-  of a factor by declining to act. But the fully armed layer still LOSES to not stacking at
-  all (3.18× against depth 1's 3.40×): partiality was a second-order cost, not the cause.
-  What an unforecastable channel marks is a layer with nothing left to model. ⑤ depth 2 came
-  back BYTE-IDENTICAL at 12.21× with the gate off, which is the control (rule 21). A refusal
-  on this tab now means only "there is nothing to deploy" — the excitation would not build,
-  or the guards tripped three times.
-  **THE SHARP SQUARE IS A FORECAST FAILURE, AND TWELVE CONTROLLER KNOBS ARE NULL ON IT FOR
-  THAT REASON.** Committing 2, 4 or 8 moves of the QP's plan instead of one (`commitM`, shipped
-  at 1 and byte-identical there) measures 1.71 / 1.72 / 1.70 against 1.69; a forced frequency
-  sweep in three bands including the square's own measures 1.70 / 1.70 / 1.69; the correction
-  cap reads `AT THE CAP` in every row and raising it 0.15 → 0.30 lets the peak reach 0.2363 and
-  moves the score to 1.68. `test/pilot/forecast.mjs` says why, by evaluating the commissioned
-  bank on rows from an OPEN-LOOP run (so `eFree` is the truth exactly): held-out R² is rounded
-  0.979/0.898, circle 0.966/0.902, **sharp 0.701/−0.105 — the elbow is worse than predicting the
-  mean and its residual rms exceeds the truth's.** The machine is scored exactly as well as it is
-  predicted. **THE DICTIONARY IS NOT THE LIMIT:** refitting the same features, ridge and window on
-  the square itself and scoring at another FEEDRATE (rule 36) gives lead-0 0.962/0.946 — so more
-  state is not what is missing — while the far leads collapse to −1.5 on every shape, which is why
-  training on a program is not the fix either (rule 9, both halves). **IT IS COVERAGE, AND THE
-  RATE MISMATCH IS THREE ORDERS OF MAGNITUDE:** `peakDiffs` on the joint commands gives the
-  circle 63% / 16% / **1%** of the declared v/a/j and the square 63% / **3132%** / **61537%**.
-  Raising the declared limits is INERT — two commissionings at 50× the acceleration and 1000×
-  the jerk came back byte-identical, because `buildExcitation` tunes to tc 662 with velocity
-  binding through the 85% box traverse (rule 41b). Shrinking the box to ±0.15 lifts the
-  COMMISSIONING R² 0.833 → 0.970 and drops every held-out program (circle 0.902 → 0.836, sharp
-  −0.105 → −0.169); the gate refused it and the gate was right — the third independent time here
-  that a calibration had to span the range it is used over. And the corner is a **40-step event
-  read by regressors 117 steps apart** (stride 13 × sample 9); forcing `sample` to 3 does not
-  change it, because the tune raises stride to 39 to hold the same reach — spacing comes from Ts,
-  a settling number, and the corner is a geometry one. `test/pilot/spectrum.mjs` says the same
-  thing in the frequency domain: **the excitation covers 25% of the square's error energy and 91%
-  of the circle's**, and this arm does not ring at all (98% of its free step response is the step,
-  so `rings [0,0]` is correct and resonance is not the mechanism). WHAT IS LEFT IS THE ONE THING
-  NOBODY HAS BUILT: an excitation that SPANS the box and also carries the program's own
-  acceleration and jerk — a broadband fast component sized from `peakDiffs` of the representative
-  program rather than a tonal sweep at a quarter budget aimed at a band derived from Tset. TWO
-  INSTRUMENT FAULTS AND ONE FALSE READOUT CAME OUT OF IT: `toolXY()` returns an ARRAY and reading
-  it as `{x, y}` gave NaN, which renders as "no dynamics"; before that the recorded signal was the
-  tool's distance from the BASE, which a shoulder step barely changes; and **`sweep YES` has been
-  false in every log this project has produced** — `meta.chirp` is `[0, 0]` when no sweep was
-  armed and an array of zeros is truthy (rule 25).
-  **AND THE ARC ENDED SOMEWHERE NONE OF THE NULLS POINTED: TWO MAPS AND A COMMAND-DRIVEN
-  ROUTER.** The machine is never saturated (sharp square peaks at 86% of tauMax, 0% clipped —
-  the program is inside the drive, so no authority wall). Corner EVENTS in the excitation
-  (`cornerEvents` in excite.js, option `events`, default off — sparse out-and-back velocity
-  trapezoids, the only shape carrying program-scale a/j inside the velocity limit) were built
-  and measured: the square gains nothing and the smooth programs COLLAPSE (rounded ch1 0.898 →
-  −0.853, circle 0.902 → −5.1), because a second regime fights over one set of weights. One
-  linear map fitted on both regimes holds ~0.9 at lead 0 but costs the circle 11x in residual
-  variance, and the quadratic/scheduled dictionaries make the joint record WORSE (0.857 →
-  −1.7) — so "more state" is measured and dead: the state was always in the row, the licence
-  to use different weights per regime is what was missing. **Two maps split by one bit — a
-  command-acceleration spike (>10x the record's own median) within the window reach — read
-  sharp elbow 0.930 against the deployed model's −0.105, and 0.950 on the DIAMOND, a geometry
-  never fitted** — the corner map is a move-profile model addressed by command state, not a
-  memory (the retirement's distinction, measured). Honestly wrong with it: the rounded
-  rectangle is mis-filed by the binary router (−1.6; its corners are 300% of declared jerk
-  against the square's 61,000% and there is two orders of magnitude of threshold room), the
-  circle's elbow pays 0.879 → 0.688, and corner-regime mid leads are still poor. **AND THE COMPOSITION NOW RUNS ON THE MACHINE — 1.69x → 2.15x ON THE SHARP SQUARE WITH NO
-  PROGRAM SUPPLIED ANYWHERE** (`router`/`wB` in the pilot, null by default and byte-identical
-  everywhere else; smooth programs return byte-identical, the control that makes it readable).
-  The blend is SHAPED (smoothstep 0.15–0.6) because unshaped the circle paid 15–45% for a
-  regime it is never in; the corner bank is fitted on a DRIVE-SIZED STOP-AND-GO TOUR
-  (`recordCornerProbe`): severity read off the machine's own saturation counters, poses walked
-  because compliance is pose-dependent, legs chained through turns because a corner crosses
-  backlash in motion. The self-fitted ceiling is 3.27x. Six instrument-grade findings on the
-  way (a flying reversal is not a corner; the ff convention is half the demand; clip fraction
-  is non-monotone in severity; one pose teaches one pose; rows saturate; event shape moves the
-  regime scale). The full record is `docs/plan.md` §§9–17, whose
-  arc since: THREE severity layers with hat interpolation (the blend axis un-saturated so the
-  slow and fast squares separate; regime scale anchored to 6x the declared aMax per sample²
-  after record-peak scaling confounded three comparisons); a COVERAGE GUARD fading λ where the
-  commanded speed exceeds the probe's own ceiling (the drive refuses clean events past the
-  declared vMax while the fast square cruises at 126% of it — the declared velocity is the
-  same fiction the acceleration was); and RANDOM POLYGONS through the corner rule — corner
-  shapes with no part knowledge — the first agnostic bank above baseline in both cells (sharp
-  square 2.02x/2.63x against 1.69x/2.27x; the joint-space tour reads 2.28x/2.16x; fitted on
-  the square itself, 3.27x). The wall was read as moving coverage → severity → GEOMETRY —
-  every increase in corner-geometry diversity made the square worse — **AND THE GEOMETRY WALL
-  WAS THE LABEL SCALE (plan §36).** The severity anchor's fix for the record-peak confound
-  SATURATED the λ labels on program-scale corners (31x declared against shapeLambda's 2x
-  clamp), the knot strata collapsed into one pool, and the fit's own fallback silently
-  rejected the corner weights at every lead — `116 kept scribble` against the record scale's
-  0 — while the stale 3.27x ceiling was carried forward through five tables from a commit
-  whose scaling no longer existed (both ends reproduced by checking out the commits: 1.99x at
-  the anchor commit byte-identical to head, 3.27x at the one before). Under `fitScale:
-  'record'` (0.5x the records' own peak, stored in the router so labels and addressing stay
-  one quantity) diversity PAYS — stars lift 2.39x → 2.93x where the anchor read them as harm
-  — smooth programs stay byte-identical, and the price of agnosticism against the self-fit
-  ceiling is **1.21x/1.10x at the two feeds, inside target 1's 1.3x**; what remains of the
-  degradation metric is the square's own hardness (its ceiling is 1.75x below the rounded
-  rectangle's for ANY bank, including one fitted on the square itself). The scheduling variable is COMMANDED, the
-  row keeps the ACTUALS — measured split, and routing on actuals would put the blend inside
-  the loop (rule 35). AND IT FITS THE PLC DISCIPLINE, COUNTED (plan §18): every fit is
-  commissioning-time; the deployed λ scan is a bounded sparse-event list ingesting only the
-  offsets that newly enter the horizon — `routerCost()` reports worst 20,852 MAC/decision both
-  channels and 320 on smooth programs against the pilot's 42,914 default tick — and the sparse
-  rewrite's eviction bug (sound only for query times after the new event, while the horizon
-  queries between events) was caught by the side-by-side control and fixed to byte-identical.
-  THE AXIS TRIAGE THEN CLOSED THE LOOKUP QUESTION (plan §19): split the SELF-fit ceiling by
-  each candidate against a random-split capacity control — at lead 0 NO axis carries
-  information; at mid leads turn-share (which joint the corner bends) takes the elbow from
-  −0.246 to +0.552. A 2D (severity × folded turn angle) knot grid was built (`wGrid` — 2^d
-  banks per lead whatever the grid holds, the PLC property) and measured NULL on the machine
-  twice, cell diagnostics ruling out starvation: the third independent measurement that
-  MID-LEAD forecast quality does not move this machine (leadTrust, the forecast-gate arming,
-  now the θ-grid). Lead 0 binds, no axis lifts it, and the self bank's edge over the agnostic
-  2.28x is lead-0 DISTRIBUTION MATCH (rule 34 from the scheduling side). Commanded torque is
-  unavailable by contract; actuals stay in the row.
-  **AND THE DISTRIBUTION-MATCH ROUTE OPENED: GATED ONLINE ADAPTATION, MEASURED TO A LAW ON
-  FOUR PLANTS (plan §§20–26).** The pilot's own RLS at deploy — truth is an INSTALLATION
-  property (permanent / guided-then-removed / absent), a setup switch the report states
-  (`onlineAtDeploy`), never an assumption. The innovation gate's reference was frozen on the
-  first row (rule 38 verbatim, 2,583 of 2,583 rows passed on a repeating program) and is now a
-  running maximum, pinned by contract. THE LAW: gated adaptation MULTIPLIES a model the static
-  verify already vouched for — arm +29%, tank +18%, **EMPS 14.8x → 55.5x with the truth
-  REMOVED at lap 4 and the bank frozen** — and does nothing for a broken one (the refused mill:
-  null, its refusal confirmed); the deploy gate's ratio is the free selector. THE MEMORY TEST,
-  PASSED WHERE THE ILC FAILED IT: the adapted-frozen EMPS bank scores the never-run two-tone
-  sine 6x BETTER than static, on the axis where phase-indexed ILC's 125x reads 0.55x there.
-  THE MECHANISM IS THE FORGETTING (λ=1 loses the gain — the commissioning posterior anchors
-  the recursion), the gate is its safety, and directional forgetting FAILED its sixth audition
-  (≈ λ=1, the wrong tool, default off with a reason). Take-away vs always-on has its own
-  selector: repeating production wants freezing, an evolving recipe wants the truth kept, and
-  the gate's late-run admit rate distinguishes them. Pinned: `test/pilot/onlinegate.test.mjs`
-  (full tier); the full composition frozen read **2.39x on the sharp square** against static
-  1.71x with diamond-guided adaptation on anchor-scale banks — and plan §36 then measured
-  that guidance helps only broken banks (+11% on near-scribble anchor banks, −11% on the
-  square and 3.2x harm on the circle once the banks are real), so the composition SIMPLIFIED:
-  record-scale polygon+star banks, frozen, no guided phase, reading **2.87x/7.72x/6.18x**
-  (sharp/circle/rounded) with commissioning truth only. The engineered rival on the same
-  machine (plan §34: rigid model + datasheet Kalman + held-pose calibration, truth-free)
-  reads 1.01x/1.13x/1.02x. **AND THE COMPOSITION IS BEHIND THE ONE PRESS (plan §37):**
-  `AutoStack` rung ②b fits record-scale corner banks on a DEMO the engineer hands the block
-  at wiring time — or, supplied nothing, on a demo the block DESIGNS for itself
-  (`lib/flexisim/demopath.js`: polygons + stars across a feed ladder, every design element a
-  measurement) — recorded by the shared host through the one routing, scored like any rung,
-  reversibly disarmed if refused. Pressed on the soft arm's sharp square with the diamond as
-  demo: conventional refused correctly, cascade 2.12x, demo banks 1.43x on top, 3.06x total
-  in 8.1 minutes; the DESIGNED demo beats the supplied one (1.7692e-1 against 1.8014e-1,
-  224/0 fitted-vs-kept against 189/35) so a program is an override, not a requirement. The
-  displacement sweep pins the demo-path contract's safety half: banks fade monotonically with
-  distance from the demo (3.81x → 2.75x at d=4.2), never below the base model, and the
-  workspace-sized commissioning box HELPS the home program (1.77x/3.81x against 1.69x/3.64x).
-  The page's ⑨ does not yet offer a demo input — stated, not wired.
-  THE LAW COMPLETED TO SIX PLANTS AND SHARPENED (plan §31): **the deploy gate's own 1.1x
-  threshold is ALSO the adaptation selector** — Wood-Berry (0.01x) and the mill (1.07x) below
-  it stay null-or-harmful force-deployed; the barrel at exactly 1.10x FLIPS from 0.67x harmful
-  to 1.17x helpful; tank, EMPS and arm above it all multiply. `report.binding` states which
-  constraint binds (time-at-cap during the verify: authority → raise uMax with adaptation
-  armed; model → banks/adaptation) — the diagnosis this arc ran as experiments, now one line.
-  ON THE KINEMATICS-FREE CHAIN (plan §§29–30) the composition reads 2.53x live / **2.46x
-  frozen** on the never-measured sharp square with nothing knowing the arm, the learned
-  reference's static square BEATS the analytic chain's (1.89x vs 1.69x, droop in the
-  reference), and the SOFT corner is AUTHORITY-bound where the stiff was model-bound — at cap
-  0.5 the sharp square reads 4.75x and static control MISUSES the extra authority on the
-  circle (5.91x → 4.57x) while gated adaptation reclaims it (6.32x): raise the cap only with
-  adaptation armed. `ikfree.test.mjs` runs on the shared `ikfree-rig`; the STACK contract is
-  re-grounded on the truth-free installation it owns (depth never harms, a refused layer costs
-  nothing, the deployed layer transfers as a model) and the suite's last red file is GREEN.
-  **THE CONTOUR ERROR IS NOW SPLIT INTO BIAS AND OSCILLATION** (`contourBias`,
-  `contourOsc`), because rule 39 had no instrument behind it on the one tab that contours.
-  It settled ⑥ against ⑤ in a single reading: both start with the same error (⑤ bias −0.626
-  / osc 1.030, ⑥ −0.666 / 0.918), and ⑤ removes **97.9%** of the bias where ⑥ removes
-  **73.4%** — ⑥ leaves THIRTEEN TIMES the bias, on a forecast as good as ⑤'s (R²
-  0.971/0.758 against 0.968/0.792). ⑥'s deficit is DC AUTHORITY, not dynamics; two other
-  explanations were measured and killed first (the maps' round trip disagrees by 5.1e-3
-  against a 0.33 contour, and the learned lever matches the true inverse Jacobian to a gain
-  ratio of 1.0072). **BUILT, MEASURED, AND DEAD — and the null is worth more than the fix
-  would have been.** The QP trusted every lead of its horizon equally while ⑥'s elbow
-  forecast reaches r2Far **−0.035**, worse than predicting the mean. `boxQP` now takes an
-  optional per-lead weight on the tracking residual (Lipschitz bound sees it; omitted, the
-  golden vectors are untouched) and the pilot derives them from held-out validation,
-  NORMALISED to mean 1 so the change moves where trust sits rather than doubling as an
-  effort increase. Measured on ONE commissioned model deployed twice: ⑤ 6.43× → 6.48×
-  (0.8%), ⑥ 3.40× → **3.40×, identical to four significant figures**. The weights are not
-  inert — ⑥'s far-lead weight is exactly 0.00 and `uPk` nearly DOUBLED, 0.397 → 0.736 — so
-  the solver responded substantially and the machine did not care. **THE QP IS NOT THE
-  BINDING CONSTRAINT:** a receding horizon only ever applies its FIRST move and re-solves,
-  so the far leads shape it far less than the argument assumed. Ships opt-in and OFF
-  (`leadTrust`). **⑥'s RESIDUAL BIAS IS EXPLAINED, and it is a design property rather
-  than a defect.** The pilot's truth is `tool − anchor(cmd)`, so the ANCHOR is where the
-  loop is AIMED; put it through the same signed-normal decomposition as the tool and aim
-  separates from delivery. ⑤ aims exact to DOUBLE PRECISION (−4.4e-18, the control, since
-  `fk(cmd)` is on the program by construction); **⑥ aims at 9.2e-5, nineteen hundred times
-  smaller than the −0.177 it leaves — ROUTING IS EXCLUDED, it aims right and does not get
-  there.** Swapping ⑥'s anchor to the rigid `fk` (mode ⑦) VERIFIED 2.61×/5.84× — matching
-  ⑤ — and DELIVERED 0.647, worse than ⑥'s 0.334: the anchor became `fk(predict(x,y))`, the
-  rigid position of a droop-compensated command, so a perfect ⑦ lands 0.252 off and the
-  verify measured truth reduction against a mis-aimed truth. One code change, two physical
-  changes; the aim instrument caught the flaw in the experiment that followed it. What
-  survives is the DELIVERY GAP, the column the confound cannot touch: **0.334 → 0.257, a
-  23% gain from giving the truth its DC back.** THE DROOP MUST BE CARRIED BY THE REFERENCE
-  OR BY THE CORRECTION, AND WHICHEVER CARRIES IT THE OTHER IS DC-FREE — ⑥ puts it in the
-  reference (`predict` is fitted to SETTLED poses), so its pilot trains on a DC-free signal,
-  and making the anchor DC-rich moves the aim by exactly the droop because they are one
-  quantity appearing twice. Hence ⑥'s open loop is BETTER (1.135 vs 1.205) and its
-  corrected loop worse. **A droop carried by the CORRECTION is re-measured at speed every
-  step; one carried by the REFERENCE is frozen at whatever the static gather saw.**
-  **⑧ THE STACK — the conventional machine and the pilot together, switchable live
-  (brick 61), and the arc that finally put every number on ONE DENOMINATOR.**
-  `test/flexisim/reconcile.test.mjs` runs one plant, one path and one baseline that is a
-  machine an engineer would actually ship — computed torque + PD + `RobotComp`'s identified
-  compliance — and measures: conventional **4.396e-1**, + pilot **7.715e-2 (5.70×, uPk
-  0.3186)**, + tipcomp 4.388e-1 (1.00×), + live trim 5.446e-1 (0.81×). **5.70× is LARGER
-  than the 4.22× the pilot scored against a bare loop**, which is the number this project
-  could not quote before, and the two rows under it are the estimation/control split in one
-  table: both are driven by a LIVE error reading and neither helps. `uPk` is in the table
-  because **`act()` returns zeros when `!verdict.deploy`**, so a pilot that REFUSED and one
-  that deployed and did not help print an identical 1.00×.
-  **COMMISSION OVER AN ENVELOPE, NOT OVER A PATH:** one trajectory transfers at **73× worse**
-  at the worst point, five at **2.04×** (`transfer.test.mjs`, `ONE_PATH=1` reproduces it) —
-  the third independent time this project has reached "a calibration must span the range it
-  will be used over". And **the pilot's CLOCK was a QP constant nobody re-measured**:
-  `decisionsPerTs` 30 → 60 is worth 4.62→5.19× sharp, 6.43→8.02× rounded, 12.99→14.16×
-  circle, but **only with λ scaled as (DPT/30)²**, since the QP's `D` differences DECISION
-  steps. Measured on the arm only; the other five plants still default 30.
-  **THREE DEFECTS IN ⑧ AND THE OWNER FOUND ALL THREE.** (1) The first version contained
-  NEITHER half — zero occurrences of the pilot, `TipCompensator` in comments only — and every
-  check passed, because they asserted wiring that was genuinely there. (2) It DOUBLE-
-  CORRECTED: the page commissioned the pilot BARE, so it already held the compliance term and
-  ticking both boxes applied that part twice (*"the mode 5 looks better than 8"*). Fixed by
-  an opt-in `commission OVER` flag, **default off** — making it unconditional regressed ⑤'s
-  own gate to 3.9e-2 against a 3.5e-2 bar, and the casualty was ⑤, not the idea. (3) **THE
-  PAGE COULD NOT REACH THE MACHINE THE NUMBER LIVES ON** (*"the point is to demonstrate the
-  5.7 this misses it"*): the tab DEFAULTS to K 16 / E 0.15, the stiff end of both ladders,
-  where the conventional machine alone already leaves 5.7e-2 against the 4.4e-1 it leaves at
-  K 1 / E 0.06 — **the whole error the stack exists to remove has already gone before ⑧ is
-  switched on** — and the report was taken on the SQUARE, which is not the program the 5.70×
-  is measured on. Everything else already matched (feed 4e-3, accel 4e-5, corner 40 and the
-  rounded rectangle are the page's own defaults, byte-identical to the test), so the gap was
-  two sliders and a checkbox and it is now **one button**, every value read off the test
-  rather than chosen. TWO DIFFERENCES REMAIN, STATED RATHER THAN TUNED AWAY: this tab works
-  about (12, 0) rather than (14, 1) and carries backlash, which the test does not.
-  **AND THEN ⑧ WAS BROKEN OUTRIGHT, BY A CLAMP THAT BELONGED TO A DIFFERENT CORRECTION.**
-  The stack branch returned `[clampDq(d0), clampDq(d1)]` over the SUM. `DQ_CLAMP` is 0.05 rad
-  and its own comment says it is "on the quasi-static corrections"; the pilot carries its own
-  `uMax`, 2.0 rad here — FORTY TIMES larger, measured peak 0.31 — so ⑧ ran the pilot at about
-  a sixth of its authority. Measured on the page, same pilot, same machine: ⑧'s pilot half
-  9.601e-1 against ⑤'s 3.901e-1, and ⑧ both **8.379e-1 → 1.310e-1**, i.e. 1.45× → **9.54×**
-  over the open loop and **7.4× over the conventional machine** — past the test's 5.70×/6.02×,
-  as it always should have been, since it is the same library on the same machine.
-  **EVERY WIRING CHECK PASSED THROUGHOUT**, because they asserted each toggle CHANGED the
-  applied correction and an amputated half still changes it. Three checks now pin that ⑧'s
-  compliance half IS ③ and its pilot half IS ⑤, bit for bit on `__flxStackProbe`, and that ⑧
-  is their SUM (rule 6). TWO OTHER EXPLANATIONS WERE KILLED FIRST: `reconcile.test.mjs` run on
-  the page's EXACT machine — drive limits, backlash, centre (12,0) — gives 6.02×, so the plant
-  differences were not it; nor the page's torque guards (byte-identical with them on) nor its
-  clock (DPT 60 measures 6.21× against 30's 6.02×). **STILL UNEXPLAINED AND STATED:** the
-  page's ③ leaves 1.052 where the test's conventional leaves 0.412 — a per-joint SCALAR from
-  one traced lap against `RobotComp`'s 2×2 from four held poses, and 2.5× between them that
-  nobody has measured.
-  **AND THE SUITE'S COST WAS MINE.** Every wiring change in this arc was verified with
-  `--only=flexisim --full`, re-running 450 Node checks that a button's reachability cannot
-  break. `--browser` and `--node` now select the half; the Node blocks are all gated on
-  `AREAS`, so emptying it for their half is the whole implementation. 50 minutes → 12.
-  **AND I ASSERTED PERFORMANCE IN THE BROWSER AND IT FAILED** — ⑧ 6.603e-2 against
-  compliance-only 5.671e-2 — for the stiff-default reason above and nothing to do with the
-  stack. Performance belongs in plain Node where the plant is STATED; the browser's job is
-  what only the browser can break, which is the wiring.
-  **THE COMPOSITE — A CASCADE OF PILOTS WITH HARMONIC FEEDFORWARD ON TOP, 30.76× (brick 63),
-  and the owner's physics is what found it.** The arm is not ringing at corners, it is
-  SPRING-LOADED: the deflection depends on geometry, inertia, gravity and direction of travel,
-  and it is lap-correlated only because a closed program revisits the same poses in the same
-  order. One plant, one program, one conventional baseline (4.122e-1): pilot alone 6.23×, HFF
-  alone 8.86×, pilot + HFF **16.93×**, **cascade(2) + HFF 1.340e-2 = 30.76×** — drive peak 30%
-  of `tauMax` with ZERO saturations, correction peak 0.382 rad, machine still repeating, all
-  four asserted. `test/flexisim/composite.test.mjs`.
-  **THE ORDER IS NOT SYMMETRIC.** The pilot commissions on a program-agnostic SCRIBBLE; an HFF
-  table is indexed by LAP PHASE. Commissioning the pilot OVER HFF applies a phase-indexed
-  correction to a machine that is not on the path and measures **0.71×, worse than the double
-  correction it was meant to fix**. Two feedforwards do not add when one knows the program and
-  the other deliberately does not. **AND THE OPERATOR MUST COME FROM THE CLEAN MACHINE:**
-  re-probing with the pilot active cannot be clean at any amplitude (it is a box-constrained QP
-  that REACTS to the probe), and using the conventional machine's operator instead is worth
-  11.27× → 16.93×.
-  **THE ACTUAL TORQUE IS THE SIGNAL.** Deflection fitted as a function of state, trained on
-  five programs and tested on a sixth never seen, held-out R²: static/commanded 0.20, +memory
-  0.68, +pose-scheduling on the COMMANDED torque 0.66 (nothing), ACTUAL applied torque +memory
-  0.77, **ACTUAL +memory +pose-scheduled 0.84** — against a shuffled-target control of 0.46
-  in-sample for the same 95 features. **Pose-scheduling only pays on a signal that carries the
-  machine**, which is brick 61's `cmd`-versus-`tx` lesson in a second costume. **AND A FORECAST
-  IS NOT A CONTROLLER:** every one of those models makes the machine WORSE applied directly
-  (0.83–0.97×), because |G| runs 1.2 → 0.09 with phase +36° → −38°, so a phase-shifted
-  subtraction ADDS. Inverting an identified channel is the whole value of both layers.
-  **SIX EXPLANATIONS FOR THE EARLIER 8.9× STALL, ALL KILLED BY MEASUREMENT:** drive saturation
-  (31% of `tauMax`), lap non-repeatability (0.03%), cross-harmonic coupling (real — 92%
-  on-diagonal at h=2 falling to 73% at h=8, all leakage into h±1 — but a block-TRIDIAGONAL
-  solve measures 8.46× against the diagonal's 8.47×), a stale Jacobian (re-identification
-  returns the same operator), basis size (more harmonics is worse), and noise (four-lap
-  averaging moves it 0.6%). **AND THE IDENTIFIED OPERATOR IS WORTH 4.2× OVER A LEAD-AND-GAIN:**
-  ILC with the correct 500-step lead reaches 2.1× where HFF reaches 8.88× on the same machine.
-    **AND THAT IS ONE PROGRAM, NOT THE STACK'S NUMBER (brick 66).** Re-measured across five
-  programs with the cascade commissioned once from noise and a table converged per program:
-  rounded 8×8 **20.34×**, rounded 10×6 **20.01×**, circle r3 4.90×, circle r5 **9.00× — WORSE
-  than the cascade's own 10.94×** — and sharp 9×7 4.97×. The cascade alone is program-dependent
-  too (2.48× to 10.94×). So the honest headline for the composite is a RANGE, 4.9–20.3×, and
-  the single 30.76× is its best case on the program it was tuned on. (That run used 6
-  refinement passes without backtracking where the 30× used 12 with, which widens the spread
-  but does not explain a program going backwards.)
-  **AND THE PATH MAP DOES NOT ADD TO THE CASCADE.** On programs it has never seen it is worth
-  **1.15× and 1.02×** over the cascade — the second inside its own constant control (1.01×) —
-  and the machine-scored selection could not find a candidate that beat the cascade on its own
-  held-back program (best 0.993×). It is worth 1.32×/2.00× over a CONVENTIONAL machine and
-  essentially nothing over a cascade, because the cascade has already removed the predictable
-  part and leaves a machine ~20% less lap-repeatable to learn from.
-**AND THE HARMONIC FEEDFORWARD NOW HAS A SECOND PLANT UNDER IT, WHICH IS THE ONLY THING THAT
-  MAKES IT A METHOD (brick 67).** `lib/pilot/hff.js` — the same module, told nothing but the lap
-  length, the channel count and its authority — commissions itself on the **EMPS servo axis**, a
-  real machine with real data and no physics in common with this arm: **0.5764 → 0.0024 mm rms,
-  242x**, against that page's pilot at 12.7x and its HAND-TUNED ILC at 119x, landing ON the
-  inverse-dynamics feedforward at the published parameters (275x, 0.0021 mm) — **which overturns
-  `emps.test.mjs`'s own headline that the model-based method beats everything learned.** The rig
-  reproduces the hardware to 1.6 µm and the top two are 0.2 µm apart, so what is claimed is
-  "matches", not "beats". THE COST IS STATED: 36 laps on the axis and 57 on the arm against the
-  hand-tuned 14 — **and the cost is LAPS, not performance.** Stopped at 20 passes on the ARM it
-  reaches 7.93x against the tuned 8.86x and that was first written up as giving up 1.12x; it was
-  still descending. Run to 82 laps it reaches **9.17x, PAST the tuned result**, and is descending
-  still. A machine that chooses its own step takes smaller ones, so the same endpoint costs more
-  laps, and those laps buy 32x on a plant nobody tuned it for.
-  `test/flexisim/harmonic.test.mjs` keeps its tuned constants anyway: 14 laps and 2m26s of suite
-  time against 82 and 13 minutes. Four
-  defects came out of it, all of which had passed every check they had: an in-phase probe whose
-  peak grows as NH drove the axis nonlinear and the resulting collapse was read as the PLANT's
-  limit; a 3-probe design was silently UNDERDETERMINED on a 2-channel plant and the solve's
-  absolute pivot floor returned a fitted operator instead of refusing (1.00x, fixed to `2c+1`
-  probes and a RELATIVE floor, worth 1.00x → 4.81x); a fixed per-channel phase offset is one
-  rotation applied to every probe and does not separate channels at all; and comparing two probe
-  designs at matched per-harmonic AMPLITUDE rather than matched PEAK compared a probe against a
-  saturation.
-  **⑨ THE BUTTON — the whole ladder, on the page, running the host the bar measures.**
-  `lib/pilot/autostack.js` picks its own rungs: conventional → pilot cascade → lap-periodic,
-  each SCORED on the machine with everything below it deployed, and the best PREFIX ships. On
-  this arm at K 1 / E 0.06 it measures **4.1216e-1 → 1.8387e-2, 22.42×** in 1934 s of Node.
-  **THE PAGE AND THE BAR IMPORT THE SAME HOST** (`lib/flexisim/autohost.js`): everything the
-  ladder measures depends on which signals the host observes, which frame each rung corrects
-  in, and how the look-ahead is indexed, so a page that built its own would put a number on
-  the screen that nobody had measured — with every check still passing, which is this
-  project's mode-⑧ failure exactly. The only difference is scheduling: `yieldEvery` hands a
-  frame back, and `test/pilot/yield.test.mjs` pins that a yielding host reaches an identical
-  result rung row for rung row. **THE BROWSER CHECKS ARE WIRING, DELIBERATELY NOT
-  PERFORMANCE** — the 22.42× belongs in Node where the plant is STATED rather than read off a
-  slider, and ⑧ already failed a browser performance assertion once for the tab's stiff
-  defaults, which had nothing to do with the thing under test. What the browser can break is
-  what the browser is asked: press the button, watch the machine turn, stop it. **AND A
-  MEASUREMENT THAT TAKES HALF AN HOUR NEEDS A WAY OUT** — the button disabled ITSELF while
-  commissioning, which is the state in which the operator most needs it. Stop is a THROW out
-  of the yield point rather than a flag, so `commission()` unwinds through `run`'s and
-  `drivePilot`'s `finally`, the lattices are destroyed and no partial rung reaches the table;
-  the settles inside `makeMachine` yield too, because twenty thousand lattice steps run
-  before the host is handed the machine and they froze the tab through the one stretch that
-  most looks like a hang.
-  **⑩ THE COMPILED TWIN (plan §42): lap-1 accuracy from a model, tracker at commissioning
-  only.** Commission twin drives a random contour wander on the live machine and identifies
-  K and E by OUTPUT ERROR over the sliders' whole ladders (the domains, never the
-  positions; CFL-unbuildable candidates are recorded refusals); Compile this program
-  simulates the fitted twin and compiles a lap-1 feedforward IN SOFTWARE — zero machine
-  laps, zero tracker at load — behind a PRE-ROLL (lap 1 is a causality problem: the flex
-  must be loaded before t=0). Engaging ⑩ restarts the program behind the pre-roll. The twin
-  is the ONE artifact a plant rebuild keeps: move K/E after commissioning and the status
-  line shows fitted-vs-current while the correction keeps applying — §42 stage B live
-  (measured there: K±10% free, backlash-ignorance free, E−10% still e-3; a program/feed
-  change gates ⑩ to open instead). The machinery is the agnostic core `lib/pilot/twin.js`
-  (identify/compile/apply, no plant knowledge — the engineer wires signals and limits)
-  plus the arm's adapter `lib/flexisim/twin.js`; `test/flexisim/twin.test.mjs` pins
-  identification exact from one wander, compiled LAP 1 at 2.48e-4/6.50e-4 against an open
-  loop of 1.29e-2/5.28e-3, the pre-roll holding, and the mismatch observable. WHY A
-  SIMULATION AND NOT A REGRESSION is §41's twenty-falsifier campaign: the elbow's measured
-  memory is 6363–8649 steps — longer than a program lap — so windowed features truncate it
-  and closed paths alias it; a simulation propagates state. PAST THE COMPILED SPAN THE
-  HOST LOOPS A PERIODIC TILE FITTED AT LAP HARMONICS (`refineCompiled` — plan §42's
-  mode-⑨/⑩ trace): the finite-window compile never converges to a periodic du, so the
-  steady lap is refined against the tiled delivery itself — measured on K=1/E=0.06, tail
-  5.6e-2 → 4.3e-3 with joint 2.8e-4/5.2e-4 sustained — and the page clamps the twin's du
-  at `pilotUMax()`, never a constant from another correction (duPk 1.84 rad at K=1).
-  COMMISSIONING IS THE STAGED FOUR-PARAMETER FIT (plan §43): a SPANNING wander (reach 6 —
-  at the default 4.2 the identified optimum sat 0.8% off truth and the delivered compile
-  paid 44x → 33x), a coarse K/E seed at damping/backlash GUESSES, then all four TOGETHER
-  — with damping merely guessed a K/E grid MISIDENTIFIES (K 0.19/E 0.0375 on a 0.25/0.03
-  machine), so the wider fit is a correctness requirement off-sandbox, not extra learning.
-  **THE JOINT STEP IS `refineLM`, LEVENBERG-MARQUARDT IN LOG SPACE (plan §44), AND IT IS
-  A CAPABILITY BEFORE IT IS A SPEED-UP.** The fit is nonlinear least-squares with a K/E
-  compensation valley; `refineParams` coordinate descent moves one parameter at a time
-  and so ignores exactly the coupling the valley IS — §43's per-harmonic failure one
-  level up. Measured against coordinate descent from an equivalent start at BOTH ends
-  of the ladder: **a fit three to six orders better, every parameter to four figures** — soft K 0.2500/E 0.03000, stiff K 16.00/E 0.1500,
-  against coordinate descent's 0.2427 and 15.16. The BACKLASH column is the pin:
-  coordinate descent drove it to ~1e-17 on both cells, never finding it at all against a
-  true 1e-4, because bl only pays off JOINTLY with K. It also retires this file's own
-  stiff-cell caveat — the −30% K that cost 1.61x at delivery was a property of the
-  coordinate-descent fit, not of the stiff cell. **IT DOES NOT REPLACE THE GRID, and
-  trying that is how the limit was found:** LM is LOCAL, so a coarse seed of these
-  ladders picked K=32 on a K=1 machine and LM stayed there. The grid finds the BASIN and
-  LM walks the valley floor inside it. Commissioning stays ~1.7 h background; the speed
-  claim was withdrawn and the accuracy claim stands (plan §44). Fitted-template delivery at the canonical
-  cell: **44.5x, matching the exact-parameter oracle**; the fully learned alternatives
-  measured 5.6x (generic FIR+poly) and 5.2x (rigid-lumped template) — §43's ladder.
-  **PAST THE FREQUENCY REFINE SITS THE LAP-VARYING OPERATOR (`refineOperator`, plan §43)
-  — 44x → 51.5x THROUGH THE SHIPPED CALL, 53.6x ON THE BENCH CHAIN.** Six refinement
-  schemes stalled at one tile residual; the gradient instrument then measured the sim
-  objective as exactly deterministic with slope 1e3-1e5 above the repeatability floor at
-  that very point (the schemes failed on DIRECTION — the small-signal H is one
-  lap-invariant response and this plant's is pose-dependent), and backlash was exonerated
-  by a bl=0 pipeline (44.4x against 44.0x). The operator refine measures the tile's OWN
-  response by hat probes at 8 phase nodes, hat-interpolates kernels between them, and
-  Gauss-Newtons the whole tile by CG — re-measuring each cycle (a refreshed operator's
-  first step took 7.3% where the stale one's last took 0.2%), in TOOL space through the
-  adapter's `toolProjection`, because two rule-21 lessons were paid for on the way: a
-  1024-bin objective was GAMEABLE at a resolution the machine cannot see (tile 14% better,
-  delivery 44.0x, nothing transferred) and a joint-rms objective delivered 47.7x with the
-  twin transferring EXACTLY (0.2%) — the solve parks error where the score punishes
-  hardest. The page's ⑩ row has **Refine deep (operator)**: fitted twin only, zero machine
-  laps, minutes of simulation; `twin.test.mjs` phase 6 pins the reduced-scale contract
-  both ways (projected residual falls AND the delivered tail improves, 7.54e-4 → 6.35e-4).
-  **Sweep feedrate**
-  runs the whole ladder and tabulates the trade. The arm is drawn at TRUE geometry; the error trail
-  is the exaggerated object, pushed out along the path normal only.
-- **④ Black box** — `lib/blackbox/`, a controller GIVEN NOTHING: a scalar command it can
-  read, a scalar correction it can add, unlabelled signals, and a tracker during
-  COMMISSIONING ONLY. It determines its own timescale from a quiet-detected step test;
-  identifies the plant from a probe taken while HELD and the disturbance while RUNNING;
-  designs a preview FIR and a box-constrained QP; then a VERIFY ROUND puts every candidate
-  on the machine — including a ZERO rung that measures the disturbance map's own bias so
-  the others can be divided by it — and deploys the best MEASURED one, or nothing.
-  Corrections are linearly interpolated between grid samples, never held. It locks its own
-  soft sensor at the end.
-- **⑤ Verify** — the closed forms run in this browser against the same modules.
-- **⑥ Deploy** — **THE INSTALLATION, WHICH IS THE PRODUCT (plan §51).** Every other tab studies
-  one correction; this one is the cabinet: what the plant lets the controller have, what gets
-  commissioned, what is armed on the running machine, and what each costs a PLC scan. It drives
-  the SAME machine ③ does through the SAME `makeArmHost` the Node bar measures, and has no viewer
-  of its own — two views of one machine that can disagree is the defect class this project has
-  paid for most often. **The split it exposes was already in the library and reachable only from
-  a test:** `built.*` is every rung that was commissioned and `deployed.*` is what `act()` reads,
-  so the ladder's chosen prefix is a DEFAULT rather than a fixture. `AutoStack.setArmed` is the
-  door — a method rather than two assignments at the call site, because arming is TWO fields and
-  setting only the flag arms a rung that is NOT THERE, which contributes zero silently and reads
-  exactly like a rung that helped nothing. **INSTALLATION** (decides what is BUILT; changing it
-  needs a new commissioning): tracker commissioning-only or permanent, one-off parts or
-  continuous laps, cascade depth, guided laps, one box per rung. A one-off part has no lap to
-  index, so the lap-periodic build is UNAVAILABLE there and available on continuous laps — both
-  halves asserted, because a gate that only ever refuses is not a gate. **ARMED** and
-  **DEPLOY-TIME** are live and need nothing rebuilt: any prefix of the built set, the tracker
-  routed to `observe()` or not, and the authority cap `act()` has always applied to the SUM once
-  per sample. **PLC SCAN BUDGET** is `auto.cost()` for whatever is armed at that instant, per
-  rung, against 10,000 MAC — the PEAK cycle is the verdict because the target is "under 10%,
-  ALWAYS", with the sliced figure beside it labelled as the weaker claim. And commissioning cost
-  is reported in MACHINE SAMPLES (`host.samples()`), which at a 1 ms task is machine time — laps
-  the plant spends producing nothing, the half of target 4 a wall clock cannot see and which this
-  arm has never had an instrument for. Browser checks are WIRING only; the arm/disarm contract is
-  pinned on the object in `test/pilot/distil.test.mjs`, quick tier.
-  **AND THE ARM ON SCREEN WAS NOT THE ARM THAT WAS MOVING (plan §51.8).** `AutoStack` never
-  drives the tab's arm — `makeMachine` builds its own and every scored run turns THAT — so for
-  the whole commissioning the stage drew `armP` frozen where `homeP()` left it while the
-  machine every number comes from ran out of sight. Nothing threw and every wiring check
-  passed, because they asked whether a canvas was painted. The stage now follows the SAME
-  OBJECT the ladder scores (not a pose copied from it, which is a second view that can lag),
-  ⑥ renders through the same `drawP` with a stage-id argument rather than a second renderer,
-  and the picture states whose machine it is: during commissioning the arm is running an
-  EXCITATION and is not on the program, so the program-relative error trail and the commanded
-  marker are SUPPRESSED — drawing a deviation from a path the machine is not trying to follow
-  asserts something false. Measured, not eyeballed: **5 of 5 pose samples changed, largest step
-  3.73e-1 rad**, with the idle case asserted too, since a stage that always claimed to be live
-  would satisfy the moving half alone.
-  **AND COMMISSIONING GRADE BUYS WALL CLOCK WITH RESOLUTION, WHICH IS STATED RATHER THAN HIDDEN
-  (plan §51.9).** full (2+4 laps a run, the grade every recorded number here was measured at),
-  fast (1+2), demo (1+1, for watching). It is on the report because it is not free: fewer
-  pooled laps is a noisier score, the ladder raises its own floor to match, and a rung can then
-  be refused for being INDISTINGUISHABLE rather than for being bad. **And the cost is quoted in
-  MACHINE TIME** — measured on the phone viewport at demo grade, 0:17 of wall clock against
-  **1:01 of machine time**, 61,214 samples, 8 laps — with wall clock beside it labelled as the
-  SIMULATOR, because it is an accident of what the browser runs on and says nothing about a
-  plant. The scan period is selectable so the armed set is priced against the operator's own
-  task, and the whole record goes into the debug dump so a phone report can be a paste.
-- **⑦ Architecture** — the design note.
+- **The machine** — the same 2R compliant arm every number in this project is quoted on
+  (`makePlant`, carried over unchanged: two lattice links, lumped gearboxes with backlash, the
+  same servo), on the bench cell **K 0.25 / E 0.03** by default, with K and E sliders. The
+  **conventional baseline** is `RobotComp`'s compliance identified at four held poses — the
+  denominator the ladder commissions on top of, the ghost's default, and what runs when the
+  controller is off. One routine (`calibrateComp`) serves all three, because a baseline
+  described twice is two baselines.
+- **The program** — square (the bench program), rounded rectangle, or circle, and a
+  **feedrate** slider; accel 4e-5 and corner 40 are fixed at the bench values. A change installs
+  at the next lap boundary.
+- **The ghost, always on** — the machine WITHOUT our tools, drawn semi-transparent underneath
+  the live arm together with THE SHAPE IT ACTUALLY CUTS, at true scale, so the gap is the
+  picture. Recorded once per plant+program (exact on a machine that repeats to 0.03%), keyed on
+  the plant and the SAME program signature the ladder uses, so a ghost from another machine is
+  never drawn under this one. **Its control is pinned in the browser: with nothing armed the
+  live machine IS the conventional baseline, so the ratio must read ~1, and reads 0.999.**
+- **Commission** — one button. The ladder is configured for the one rung this bench is about:
+  `classic: false`, `maxDepth: 0`, no demo banks — **the distilled model** (`lib/pilot/distil.js`,
+  addressed by the commanded reference, **234 MAC/decision, 2.3% of a 1 ms scan**, no solver, no
+  forecast bank, no tracker at deploy) — plus **lap learning** (the lap-periodic rung) only when
+  the installation declares a periodic application. Every rung is still SCORED on the machine and
+  reverted if it does not win; the page decides what is offered, never what is deployed. **Grade**
+  (full / fast / demo) buys wall clock with resolution and is printed on the record, because fewer
+  pooled laps is a noisier score and the ladder raises its own floor to match. **The arm on
+  screen is the arm that is turning** — the stage follows the ladder's own machine at ~15+
+  visible updates/s, with the program-relative overlays suppressed and the picture saying whose
+  machine it is.
+- **The cost, in machine time.** `host.samples()` counts every step the host advanced the
+  machine, so at the selected task period it converts to laps the plant spends producing nothing
+  — the half of target 4 a wall clock cannot see. Wall clock is shown beside it and labelled as
+  the simulator. A fast run's machine time is what THAT run would cost a PLC, and the page says so.
+- **The controller, live** — three boxes, none of which recommission: the distilled model
+  armed or not (`AutoStack.setArmed`, which refuses what was never built); **the tracker stays on
+  the machine**, which routes the truth into `observe()` so the distilled model keeps learning
+  through the SAME streaming recursion the fit used (`DistilPolicy.observe`, paid once per
+  DECISION — the pilot's RLS is 72,600 MAC/sample and is why the old composition only fit
+  sliced); and **lap learning**, withheld by the library on any program but the one it learned.
+  The tracker-stays law is measured for the PILOT and does NOT transfer here by assertion: it
+  ships off, and the page scores it a lap either way. The plant's sign for that update is
+  DECLARED by the host (`adaptSign: -1` on this arm — truth is actual − commanded and the
+  correction adds to the command), never guessed by the block.
+- **PLC scan budget** — `auto.cost()` for the armed set at the selected task period, the PEAK
+  cycle as the verdict, and the learning update added to the peak when the tracker is on.
+- **The last model is kept.** After a commissioning the DEPLOYED object is stored —
+  `DistilPolicy.toJSON()` (weights, window, cap, coverage span, and the recursion so learning
+  resumes; pinned to restore `actLook` BIT-IDENTICAL), the lap table, the deployed set, the plant,
+  the program signature and the machine-time record. On load it is offered back ONLY to the
+  machine it was fitted on — sliders and program signature must match — and on any other it is
+  reported and NOT armed. Restoring is a deployment through the same host and the same `act()`
+  the ladder scored with, never a re-statement of the controller. Replaced by the next
+  commissioning. The round trip found the defect it exists for: `±Infinity` speed-span sentinels
+  became `null` through JSON and would have restored as a fade that fires everywhere.
+- **Score** — the gap against the ghost, quoted on the last COMPLETE lap (mid-lap is a partial
+  sum over whichever edge or corner has been cut, and lap 0 carries the start-up transient the
+  ghost skips — rules 12, 13), plus contour · lag · total.
+
+**WHAT IS NOT ON THE PAGE, AND WHY.** The conventional rung, the pilot model layers, the corner
+banks and the compiled twin all still exist in `lib/` with their tests, and none of them is
+offered here: the distilled model REPLACES the pilot rather than sitting under it (0.96x–1.30x
+stacked), depth ≥ 2 was retired for commissioning time, and the twin compiles per program. The
+browser checks are WIRING and INSTRUMENTS, deliberately not performance: the numbers belong in
+Node where the plant is stated.
 
 ### Libraries
 

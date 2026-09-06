@@ -318,6 +318,32 @@ check('…and contributes through act() on the host\'s own look-ahead closure, w
   }
 }
 
+// ---- SAVE AND RESTORE: THE DEPLOYED OBJECT, EXACTLY.
+//
+// A page that keeps the last commissioned model across reloads is only as good as the
+// restore being BIT-IDENTICAL on what reaches the machine. Asserted on the applied
+// correction rather than the weights, for the same reason the batch/streaming agreement is:
+// what matters is what the machine gets. And the recursion must survive too, or a restored
+// policy silently loses the ability the page offers as "the tracker stays on".
+{
+  const pol = auto.built.distil;
+  const j = JSON.parse(JSON.stringify(pol.toJSON()));
+  const back = DistilPolicy.fromJSON(j);
+  const look = (o) => pref(320 + o);
+  const a = pol.actLook(look, null), b = back.actLook(look, null);
+  check('a policy survives JSON and restores to the SAME applied correction, bit for bit',
+    a.length === b.length && a.every((v, i) => v === b[i]), `${a} vs ${b}`);
+  check('…with its coverage span and report intact, so the fade and the deploy verdict '
+    + 'restore with it', back.report.deploy === pol.report.deploy
+    && back._sLo === pol._sLo && back._sHi === pol._sHi, JSON.stringify(back.report));
+  const l2 = back.observe(look, null, b, [0.01]);
+  check('…and the recursion restores with it, so a restored policy can still learn',
+    l2 === true && back.adapted() === pol.adapted() + 1, `learned ${l2}`);
+  let threw = false;
+  try { DistilPolicy.fromJSON({ v: 0 }); } catch { threw = true; }
+  check('…while a record it does not recognise is REFUSED rather than half-restored', threw);
+}
+
 // ---- THE WINDOW IS IN RAW SAMPLES, AND A DECIMATED LOOK-AHEAD IS A DIFFERENT GRID.
 //
 // The cascade's `ctx.look` steps by the pilot's own cadence, because that is the grid its

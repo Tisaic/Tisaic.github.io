@@ -10732,3 +10732,69 @@ into the debug dump so a phone report can be a paste rather than a description (
 
 **THE HONEST SENTENCE THIS BUYS:** a fast run's machine time is what THAT run would cost a
 PLC, not what a full-grade commissioning would — and the page says so in those words.
+
+---
+
+## §52 — THE PAGE, REBUILT FROM SCRATCH AS THE COMMISSIONING BENCH
+
+**THE OWNER'S ASK, in order:** *"The only thing I want on the page is the distilled model … the
+highest performance and well within the compute. I still want a feedrate slider and the path
+selector. … The options are tracker stays during run and lap learning for a periodic
+application."* Then: *"Get rid of the entire flexisim page and redo to what is needed today.
+Retain model and run controls and clean it all up. Use old page as merely a reference."*
+
+### §52.1 What went, and where it went
+
+Seven tabs, eleven correction modes on ③ alone, ~9,000 lines, and 1,200 lines / 88 browser
+checks coupled to those modes. All of it off the page. The description CLAUDE.md carried for it
+moved VERBATIM to `docs/history/flexisim.md` (brick 73), because it is the measurement record
+and the numbers in it are still the numbers; the libraries those tabs drove are untouched and
+their Node tests still run, so nothing recorded became unreproducible.
+
+### §52.2 What the bench is
+
+873 lines. The machine (`makePlant`, unchanged, bench cell K 0.25 / E 0.03), the program
+(square / rounded / circle and a feedrate slider; accel and corner fixed at the bench values),
+the ghost always on, one Commission button with a grade, the controller with three live boxes,
+the PLC budget, the machine-time record, and the score against the ghost on the last complete
+lap. The ladder is configured distil-only — `classic: false`, `maxDepth: 0`, no banks — with lap
+learning built only for a declared periodic application. Every rung is still scored on the
+machine and reverted if it does not win.
+
+**"It says the model does not fit"** was the pilot's QP. The distilled model is **234
+MAC/decision, 2.3% of a 1 ms scan** — 79 features × 2 channels plus the row build — and fits
+outright, unsliced.
+
+### §52.3 The tracker-stays option had to be made real
+
+With no pilot layer, `AutoStack.observe` routed truth to nothing: the switch would have applied
+nothing and read like a switch that helped nothing (rule 25). `DistilPolicy.observe` is the SAME
+streaming recursion the fit used, continued, with the commissioned posterior as prior and the
+deployed weights refreshed FROM the recursion rather than accumulated beside it. Paid once per
+decision. The sign of the update is the PLANT's and is declared by the host (`adaptSign: -1` on
+the arm: truth is actual − commanded, the correction adds to the command) — the synthetic
+substrate reports the error REMAINING and needs +1, which is exactly the units error a guessed
+sign ships. Measured law for the pilot; NOT measured here; ships off; the page scores it a lap
+either way.
+
+### §52.4 Persistence, and the defect the round trip caught
+
+`toJSON`/`fromJSON` on the deployed object — weights, window, cap, coverage span, recursion —
+pinned to restore `actLook` bit-identical and to keep learning. Offered back only to the machine
+it was fitted on (sliders and program signature), reported and not armed elsewhere. The first
+round trip failed: the speed span's `±Infinity` sentinels became `null` through JSON and would
+have restored as a fade that fires everywhere. The check exists for exactly that.
+
+### §52.5 What the browser now asserts
+
+Wiring and instruments only: zero page errors, the bench cell on open, no rung armable before a
+commissioning, the ghost's CONTROL at ~1 (nothing armed IS the conventional baseline), the arm
+moving while it commissions, the ②d rung producing a row (deployed or refused — either is a
+result), the budget verdict, the machine-time record, and persistence BOTH ways — restored and
+armed on the same machine, reported and not armed on a different one.
+
+### §52.6 Not built
+
+The distilled rung has still not been SCORED on this arm through the ladder; the bench is the
+instrument that will do it. And a stored model does not survive a plant or program change — it
+is not supposed to.
