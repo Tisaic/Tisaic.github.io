@@ -164,7 +164,7 @@ function routeSignals(arm, cmd, tau) {
  */
 async function deployOn(pilot, shape, active, feed = 0.004,
   { laps = 3, scoreFromLap = 2, truthUntilLap = Infinity, oracle = null, trace = null,
-    pre = null, preOut = null } = {}) {
+    pre = null, preOut = null, policy = null } = {}) {
   const { arm: a2, servo: s2 } = await makeArm();
   const path = typeof shape === 'string' ? mkPath(shape, feed) : shape;
   homeArm(a2, s2, path);
@@ -211,11 +211,29 @@ async function deployOn(pilot, shape, active, feed = 0.004,
       return v;
     };
   }
+  // A STATE-ADDRESSED CORRECTION PORT — the legal counterpart of `pre`, and the reason both
+  // exist side by side. `pre` is indexed by POSITION IN A LAP and is a memory by construction;
+  // `policy` is handed the history of MEASURED signals, a REFERENCE READER over the same
+  // look-ahead the pilot itself uses, and the sample index — and nothing else. What it returns
+  // is therefore a function of the machine's state and of the program's local shape, neither of
+  // which is a lap index. A component that scores through this port is admissible under the
+  // retirement and one that scores through `pre` is not, which is exactly the comparison the
+  // distillation bench needs. Null on every shipped path.
+  const mHist = [];
+  const polU = [0, 0];
   for (let k = 0; k < total; k++) {
     const cmd = path.at(k);
     const [q1, q2] = a2.ik(cmd.x, cmd.y, true);
     const rt = a2.ikRates(q1, q2, cmd.vx, cmd.vy, cmd.ax, cmd.ay);
+    // EVALUATED AT SAMPLE BOUNDARIES AND HELD, at the cadence the model is fitted at, from the
+    // rows recorded BEFORE this step — a policy that read this step's own measurement would be
+    // reading the future of its own correction.
+    if (policy && k % S === 0) {
+      const pu = policy(mHist, kSamp, refAt);
+      polU[0] = pu[0]; polU[1] = pu[1];
+    }
     const u = active ? pilot.act((off) => refAt(kSamp + off)) : [0, 0];
+    if (policy) { u[0] += polU[0]; u[1] += polU[1]; }
     if (preOut) { preOut[0][k % preOut[0].length] = u[0]; preOut[1][k % preOut[1].length] = u[1]; }
     // A FROZEN LAP-INDEXED PREFIX, for the ITERATION diagnostic and nothing else. It is a
     // memory by construction — indexed by position in a lap, the one thing the retirement
@@ -234,6 +252,7 @@ async function deployOn(pilot, shape, active, feed = 0.004,
     // instrument production may not have: any number measured through it is labelled as
     // such (EMPS and the tank read their truth off ordinary sensors; the arm does not).
     const rs = routeSignals(a2, [{ pos: q1 }, { pos: q2 }], tau);
+    if (policy && k % S === 0) mHist.push(rs.measured);
     // THE APPLIED CORRECTION BESIDE THE ERROR IT PRODUCED, at the cadence the model is fitted
     // at. `h` is the only part of the QP's plant model that is not the forecast, and this is
     // the signal that can check it: an open-loop record says what the error would have been,
@@ -242,7 +261,10 @@ async function deployOn(pilot, shape, active, feed = 0.004,
     // the truth is not. A harness that fits on `e` is fitting the residual to itself.
     if (trace && k % S === 0) {
       trace.push({ u: [u[0], u[1]], e: rs.truth.slice(), m: rs.measured.slice(),
-        cmd: [q1, q2] });
+        cmd: [q1, q2],
+        // WHAT THE FROZEN PREFIX CONTRIBUTED AT THIS SAMPLE, so a harness pairing state with
+        // target reads the same indexing the run applied rather than recomputing it.
+        pre: pre ? [pre[0][k % pre[0].length], pre[1][k % pre[1].length]] : null });
     }
     pilot.observe(rs.measured, k < truthUntil ? rs.truth : null);
     if (k >= scoreFrom) {
