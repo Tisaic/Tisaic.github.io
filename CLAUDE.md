@@ -525,6 +525,42 @@ honest answer is a fast re-commission per program". That escape is closed. The m
 that would have triggered it has now been taken — 2.91x apart on the arm, against a 1.3x bar —
 and the answer is to find a better model, not to accept a per-program calibration.
 
+**AND THE THING THAT REPLACES IT IS NOW MEASURED: DISTIL THE ITERATION, DON'T KEEP THE TABLE
+(plan §49).** §48 established with an ORACLE that a PERFECT forecast is worth 20% on this arm
+and that the whole remaining gap is ITERATION — freeze what a pass applied, re-measure on the
+machine, invert again — which converges at **40.44x on the rounded rectangle, 230.89x on the
+circle and 19.47x on the sharp square**, past mode ⑩'s 44x. The prefix that carries it is
+indexed by lap phase, so the question is not whether to iterate but whether **what iteration
+CONVERGES TO is a function of state**, and those are different claims. Measured: converge the
+prefix at commissioning, then REGRESS it onto the commanded reference over a local window and
+deploy that instead.
+
+```
+  controller                          sharp   rounded   circle    geo   MAC/decision
+  shipped pilot                       2.16x    2.64x    3.99x    2.83x        9,517
+  distilled, 6 polygons, +/-512       4.99x    4.22x    6.74x    5.22x          222
+```
+
+**EVERY TEST PROGRAM IS HELD OUT** — the polygons come from the block's own designer and no
+production geometry appears in training — and the deployed object is 111 linear coefficients
+per channel with **no QP, no forecast bank, no tracker, no lap index and no plant constant**.
+It REPLACES the pilot rather than sitting under it (stacked, they double-correct at
+0.96x-1.30x).
+
+**THE ONE CONSTRAINT THAT BINDS IS RULE 37 AGAINST §41's ALIASING THEOREM, AND THEY PULL
+OPPOSITE WAYS.** The window must REACH the plant's memory (elbow 6363-8649 steps) and must not
+SPAN the training lap, and on this arm a program lap is 7356 steps — shorter than the memory.
+So on a single closed program the trade is forced: +/-1024 samples reads 24.93x on the programs
+it was fitted on and **0.47x, worse than doing nothing**, on one it was not. What breaks it is
+training laps that DIFFER, and the two levers only pay together — six polygon laps at +/-512
+read 4.99x where six at +/-256 read 4.13x and two production programs at +/-1024 read 0.47x.
+A single long TOUR (one closed lap of ~6,500 samples) takes the same +/-1024 window from 0.47x
+to 3.29x, which is the mechanism measured rather than argued.
+
+**WHAT IS NOT DONE:** none of this is in `lib/`, so nothing ships from it yet; the offsets are
+indexed in SAMPLES, so it is not feedrate-invariant and the block's own feed-laddered demo set
+POISONS it (0.22x-1.09x) for exactly that reason; and it is one plant.
+
 **WHAT MUST REPLACE IT.** In the order their evidence justifies:
 
 1. **ONLINE ADAPTATION, which is the plant-based way to get memory-like accuracy.** A frozen
