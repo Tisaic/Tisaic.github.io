@@ -9782,9 +9782,17 @@ identical:
 
 ```
   passes   sharp   rounded   circle    geo    fit R^2
+     3     5.29x    3.79x    7.10x    5.22x   0.952 / 0.919
      5     5.52x    4.25x    7.07x    5.49x   0.974 / 0.921
      9     3.06x    4.15x    6.19x    4.29x   0.980 / 0.918
 ```
+
+**AN INTERIOR OPTIMUM, AND ITS ASYMMETRY IS THE EVIDENCE.** Losing 5% below the optimum and
+22% above is what the account predicts and a symmetric dip would not: too FEW passes leaves a
+smaller correction, which the map reproduces faithfully and simply under-delivers; too MANY
+puts lap-specific structure into the target, which the map cannot represent and which
+mis-shapes what it does learn. The fit R^2 tells the same story from the other side — it rises
+monotonically with passes, 0.952 -> 0.974 -> 0.980, straight through the delivery peak.
 
 **-22%, and the elbow's fit does not move at all** (0.921 -> 0.918) while the shoulder's rises.
 So the extra passes are not producing a target that is harder to fit; they are producing one
