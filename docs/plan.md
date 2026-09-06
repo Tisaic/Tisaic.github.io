@@ -9918,11 +9918,13 @@ Nine measurements in this section point the same way and they are one statement,
   f0 instead of command window   0.996 in-sample worse held out   the command window
   twin-generated training data   better forecast 0.54x-1.10x     machine-fitted (§46)
   in-sample refit on the program the ceiling    0.77x-0.90x      the scribble fit (§47)
+  quadratic block added          0.921 -> 0.955  5.49x -> 2.41x  the LINEAR basis
+  speed-scheduled basis          0.921 -> 0.934  5.49x -> 5.09x  the UNSCHEDULED basis
 ```
 
 **Every time a knob makes the FIT better it makes the MACHINE worse, and the sign is
-consistent across the feature axis, the time axis, the data axis and the regulariser.** That is
-not seven coincidences; it is one mechanism. The converged prefix is a MIXTURE of two things —
+consistent across the feature axis, the time axis, the data axis and the regulariser.** Nine
+rows now, and not one exception. That is not nine coincidences; it is one mechanism. The converged prefix is a MIXTURE of two things —
 a plant inverse, which is a function of the local command and transfers, and a lap-specific
 residue, which is what iteration reaches last and what only repetition can produce. Every knob
 that increases capacity, reach, convergence or fit fidelity captures MORE OF THE MIXTURE, and
