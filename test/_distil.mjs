@@ -93,6 +93,13 @@ const TAUS = (process.env.D_TAUS || '4,8,16,32,64,128,256,512,1024').split(',').
 // Offsets the quadratic block's base terms are read at, and how much harder that block is
 // ridged than the linear one (columns scaled by 1/QSCALE, so the penalty is QSCALE^2).
 const QOFFS = (process.env.D_QOFFS || '-16,-4,0,4,16,48').split(',').map(Number);
+// ARC offsets, in workspace units. A lap of these programs is roughly 30, and the polygons'
+// laps 25-45, so +/-6 is a fifth of a lap — comparable in fraction to the +/-768-sample window
+// that measured best in time, which is what makes the two comparable at the training feed.
+const AOFFS = (process.env.D_AOFFS
+  || '-6,-4.5,-3,-2,-1.4,-1,-0.7,-0.5,-0.35,-0.25,-0.18,-0.12,-0.08,-0.05,-0.03,-0.02,-0.01,0,'
+   + '0.01,0.02,0.03,0.05,0.08,0.12,0.18,0.25,0.35,0.5,0.7,1,1.4,2,3,4.5,6').split(',').map(Number);
+const ASOFF = (process.env.D_ASOFF || '-1,-0.25,-0.05,0,0.05,0.25,1,2,4').split(',').map(Number);
 const QSCALE = +(process.env.D_QSCALE || 10);
 // THE FALSIFIER FOR §49'S OWN ACCOUNT. If the converged prefix is a MIXTURE of a transferable
 // plant inverse and a lap-specific residue that iteration reaches LAST, then down-weighting the
@@ -241,6 +248,31 @@ const ZROW = new Float64Array(NX);
 // Scheduling is the licence to use different weights per feed instead of one compromise set,
 // which is the same repair the corner router needed for its two regimes.
 const mkRow = (mode) => (hist, i, refAt, kSamp) => {
+  if (mode === 'arc') {
+    // THE WINDOW IN ARC LENGTH RATHER THAN SAMPLES. A time window is the physically right
+    // object for a time-invariant plant, and this is deliberately the wrong one: it asks
+    // whether GEOMETRIC invariance is worth more than physical correctness when the feed
+    // changes. At one feed the two are the same map re-parameterised; across feeds they are
+    // different objects, and target 2 is the only place they can be told apart.
+    const r = [];
+    const s0 = refAt.sAt ? refAt.sAt(kSamp) : 0;
+    const q0 = refAt.arcAt ? refAt.arcAt(s0) : refAt(kSamp);
+    r.push(q0[0], q0[1]);
+    for (const a of AOFFS) {
+      const q = refAt.arcAt(s0 + a);
+      r.push(q[0] - q0[0], q[1] - q0[1]);
+    }
+    // The same direction block, built from arc derivatives so it stays a geometric quantity.
+    for (const a of ASOFF) {
+      const p1 = refAt.arcAt(s0 + a - 0.02), p3 = refAt.arcAt(s0 + a + 0.02);
+      for (let c = 0; c < 2; c++) {
+        const d = (p3[c] - p1[c]) * 25;
+        r.push(Math.sign(d), Math.abs(d));
+      }
+    }
+    r.push(1);
+    return r;
+  }
   if (mode === 'sched') {
     const base = mkRow('rich')(hist, i, refAt, kSamp);
     const v = refAt.speed ? refAt.speed(kSamp) : FEED;
@@ -393,6 +425,19 @@ const mkRefAt = (shape) => {
   // on it cannot put the blend inside the loop (rule 35, and the corner router's own split
   // between a COMMANDED scheduling variable and ACTUAL row contents).
   f.speed = (i) => { const c = p2.at(Math.max(0, i) * S); return Math.hypot(c.vx || 0, c.vy || 0); };
+  // ARC-LENGTH ACCESS, for the one repair target 2's failure has a name for. `at(k)` returns the
+  // arc length `s` the command has reached, and `point(u)` takes arc length directly, so the
+  // reference at a GEOMETRIC offset is available without any new geometry in this file.
+  f.sAt = (i) => p2.at(Math.max(0, i) * S).s;
+  f.len = p2.length;
+  const acache = new Map();
+  f.arcAt = (u) => {
+    const w = ((u % p2.length) + p2.length) % p2.length;
+    const key = Math.round(w * 2048);
+    let v = acache.get(key);
+    if (!v) { const pt = p2.point(w); v = pilotIk(pt[0], pt[1]); acache.set(key, v); }
+    return v;
+  };
   return f;
 };
 // The rig's own inverse kinematics, reached through a throwaway arm so the harness does not carry
@@ -453,7 +498,8 @@ for (const mode of MODES) {
       + ` … (${QBASE.length} terms, prior ${QSCALE}x on top of the normalisation)`);
   }
   const MAXL = (mode === 'cmd' || mode === 'rel' || mode === 'rich' || mode === 'diff'
-    || mode === 'expo' || mode === 'quad' || mode === 'sched') ? 0 : MLAGS[MLAGS.length - 1];
+    || mode === 'expo' || mode === 'quad' || mode === 'sched' || mode === 'arc')
+    ? 0 : MLAGS[MLAGS.length - 1];
   let W = null, fitR2 = [NaN, NaN], nF = 0, lastX = null, lastY = null;
   // DAGGER: refit on the states the POLICY itself visits. A behaviour-cloned policy is fitted
   // on one distribution and then generates its own, and the gap between them is the whole
