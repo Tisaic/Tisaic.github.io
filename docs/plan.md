@@ -10224,3 +10224,58 @@ now captures 22% and 7% of it. That is where a further factor has to come from, 
 section's twelve rows say it will not come from capacity, from regularisation, from
 reparameterisation, or from trying to isolate the transferable component — it has to come from
 a mechanism none of those four describes.
+
+### §49.13 FEED BANDS: BLENDING BEATS SWITCHING, AND BOTH LOSE TO NOT BANDING
+
+Target 2's cure on record is a feed-laddered training diet — one pooled map fitted on programs
+run at several feeds. The obvious next move is to give each feed its own map and interpolate, so
+the question was put to the machine: three bands (2.0e-3, 4.0e-3, 8.0e-3), four polygon programs
+per band so no band is under-determined, the same 119-feature map in every band and in the pooled
+control, and **none of the four maps carries a direction the others lack** — this is a data-split
+comparison, not a capacity one. `switch` takes the nearest band in LOG feed; `blend` is a
+smoothstep between the two nearest, also in log feed, shaped for the corner router's measured
+reason (an unshaped blend cost the circle 15-45%). Blending is FREE at deploy: the weight depends
+only on commanded feed, so `sum_b w_b(f)*(W_b*row) = (sum_b w_b(f)*W_b)*row` — k maps collapse to
+one vector before the row is touched, and the deployed cost stays 238 MAC.
+
+```
+  feed     program   pilot   pooled   switch   blend
+  2.0e-3   sharp     2.18x    2.30x    2.15x   2.15x   (band centre, t 0.00)
+  3.0e-3   sharp     2.17x    3.28x    1.64x   2.56x
+  6.0e-3   sharp     1.78x    4.48x    0.53x   0.80x
+  8.0e-3   sharp     1.66x    2.96x    2.27x   2.27x   (band centre, t 0.00)
+  2.0e-3   circle    2.21x    3.02x    3.50x   3.50x   (band centre, t 0.00)
+  3.0e-3   circle    2.62x    3.40x    3.74x   3.83x
+  6.0e-3   circle    2.03x    7.01x    4.12x   3.50x
+  8.0e-3   circle    1.43x    2.32x    1.94x   1.94x   (band centre, t 0.00)
+
+  geometric   pilot 1.98x   pooled 3.37x   switch 2.14x   blend 2.34x
+  worst cell  pilot 1.43x   pooled 2.30x   switch 0.53x   blend 0.80x
+```
+
+**BLENDING IS STRICTLY BETTER THAN SWITCHING AND IT DOES NOT RESCUE THE IDEA.** Blend is ahead in
+3 cells, equal in the 4 band centres where it reduces to the switch by construction, and behind in
+1 (circle at 6.0e-3, 3.50x against 4.12x — averaging maps costs something, which is the per-program
+ensemble's negative-R2 failure showing through at a survivable size now that each band is
+well-posed). Geometric 2.34x against 2.14x, +9%. So the mechanism works and the premise it serves
+does not.
+
+**POOLED WINS 6 CELLS OF 8, INCLUDING BOTH SHARP-SQUARE BAND CENTRES WHERE THE BANDED MAP IS AT
+HOME**, and it is the only one of the three that never falls below the pilot: worst pooled cell
+2.30x against the pilot's 2.18x there, where the worst switch cell is **0.53x, worse than doing
+nothing**, and the worst blend cell 0.80x. A banded map is DANGEROUS at an interpolated feed on the
+hard program, which is precisely the condition target 2 exists to cover.
+
+**THE MECHANISM IS THE CONFOUND, NOT THE CAPACITY.** At a single feed, time offsets and arc-length
+offsets are perfectly confounded, and the feed ladder exists to break exactly that. A band map sees
+ONE feed, so the confound is restored IN FULL inside each band; the pooled map is the only one that
+ever sees the two parameterisations disagree. Capacity is a contributing term and not the story —
+the bands hold 17,467 / 10,284 / 5,692 rows against the pooled 33,443 at identical feature counts,
+which predicts a smooth degradation and cannot predict a 0.53x. **Feed-invariance comes from
+TRAINING ACROSS FEEDS, not from INDEXING BY FEED** — which is the memory retirement's own lesson one
+level up: a confound is not repaired by adding an index to it, it is repaired by diversifying what
+the fit is shown.
+
+That closes the routing question the compute headroom opened. The 238 MAC deployed map has 2.4% of
+a PLC scan and the spare arithmetic still buys nothing here, for the third time in this section:
+capacity, cascade depth, and now input routing.

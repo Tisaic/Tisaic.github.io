@@ -101,6 +101,23 @@ const AOFFS = (process.env.D_AOFFS
    + '0.01,0.02,0.03,0.05,0.08,0.12,0.18,0.25,0.35,0.5,0.7,1,1.4,2,3,4.5,6').split(',').map(Number);
 const ASOFF = (process.env.D_ASOFF || '-1,-0.25,-0.05,0,0.05,0.25,1,2,4').split(',').map(Number);
 const QSCALE = +(process.env.D_QSCALE || 10);
+
+// THE PHYSICAL-BASIS LADDER (`phys`, `physlag`, `physpre`). `lib/pilot/classic.js` fits the
+// motion basis [a, v, sign v, 1] on the machine and reads 425x on a servo axis and 1.07x on
+// this arm, where the ladder commissioned it and threw it away. Its own `motionBasis` offers
+// lag taps — and `delay()` shifts BACKWARDS only, while `live()` refuses a lagged basis
+// outright. So the shipped physical rung is CAUSAL and effectively memoryless, and the
+// distilled map is NON-CAUSAL. That is the one structural difference between them and it is
+// the difference inversion-based feedforward says decides everything (a plant inverse is
+// non-causal whenever the plant has delay or non-minimum-phase zeros).
+//
+// `physlag` uses the SAME taps as `physpre`, TRANSLATED so none lies in the future: identical
+// count, identical span, identical spacing, only the position relative to now differs. That is
+// the control that isolates PREVIEW and nothing else (rule 20).
+const PHOFFS = (process.env.D_PHOFFS || '-256,-96,-32,-8,-2,0,2,8,32,96,256')
+  .split(',').map(Number);
+const PHLEAD = Math.max(...PHOFFS);
+const PHCAUS = PHOFFS.map((o) => o - PHLEAD);
 // THE FALSIFIER FOR §49'S OWN ACCOUNT. If the converged prefix is a MIXTURE of a transferable
 // plant inverse and a lap-specific residue that iteration reaches LAST, then down-weighting the
 // late increments should isolate the first component — and the pass-count optimum should
@@ -318,6 +335,24 @@ const mkRow = (mode) => (hist, i, refAt, kSamp) => {
     const out = [];
     for (let j = 0; j < base.length; j++) out.push(base[j], base[j] * rho, base[j] * rho * rho);
     return out;
+  }
+  if (mode === 'phys' || mode === 'physlag' || mode === 'physpre') {
+    // `classic.js`'s basis, evaluated on the COMMANDED reference stream rather than by lap
+    // index — which is what makes a lagged version of it legal under the retirement at all.
+    const offs = mode === 'phys' ? [0] : (mode === 'physlag' ? PHCAUS : PHOFFS);
+    const r2 = [];
+    for (const o of offs) {
+      const k = kSamp + o;
+      const a1 = refAt(Math.max(0, k - 1)), b1 = refAt(Math.max(0, k)), c1 = refAt(Math.max(0, k + 1));
+      for (let c = 0; c < 2; c++) {
+        const v = (c1[c] - a1[c]) * 0.5;
+        r2.push(c1[c] - 2 * b1[c] + a1[c]);   // acceleration
+        r2.push(v);                            // velocity
+        r2.push(Math.sign(v));                 // Coulomb / direction of travel
+      }
+    }
+    r2.push(1);
+    return r2;
   }
   const r = [];
   if (mode === 'meas' || mode === 'both' || mode === 'relmeas') {

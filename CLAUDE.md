@@ -579,7 +579,18 @@ machine worse.
 indexed in SAMPLES, so it is not feedrate-invariant — training across a FEED LADDER removes the
 danger entirely (half-feed 0.75x -> 2.58x, nothing below the pilot) at the price of 2.3x at the
 commissioning feed, while both modelling escapes are built and worse than doing neither (speed
-scheduling 0.56x at 2x feed, arc-length indexing worse at EVERY feed); and it is one plant.
+scheduling 0.56x at 2x feed, arc-length indexing worse at EVERY feed), and so is PER-FEED BANDING:
+three bands, four programs each so none is under-determined, the same 119 features everywhere.
+**Blending the bands beats switching between them — geometric 2.34x against 2.14x, ahead in 3 cells,
+equal in the 4 band centres, behind in 1 — and BOTH lose to the POOLED map at 3.37x**, which wins 6
+cells of 8 including both band centres of the hard program and is the only one that never falls
+below the pilot (worst cell 2.30x against switch's **0.53x, worse than doing nothing**). The
+mechanism is the CONFOUND and not the capacity: at one feed the time offsets and the arc offsets are
+perfectly confounded, so a band map restores in full the confound the feed ladder exists to break,
+and only the pooled map ever sees the two disagree. Feed-invariance comes from TRAINING ACROSS
+FEEDS, never from INDEXING BY FEED — the retirement's own lesson one level up. Third time in this
+arc that spare arithmetic bought nothing: capacity, cascade depth, now input routing. And it is one
+plant.
 
 **WHAT MUST REPLACE IT.** In the order their evidence justifies:
 
