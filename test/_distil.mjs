@@ -101,6 +101,18 @@ const QSCALE = +(process.env.D_QSCALE || 10);
 // next pass's residual depends on what was actually applied; only the distillation TARGET is
 // weighted. `D_PWEIGHT` 1 is the control and must reproduce the unweighted run to the digit.
 const PWEIGHT = +(process.env.D_PWEIGHT || 1);
+// AVERAGE THE PER-PROGRAM MAPS INSTEAD OF POOLING THEIR ROWS — the one move the §49 account
+// actively recommends, because it REDUCES effective capacity rather than adding it. Each
+// program's map is fitted alone and absorbs that program's lap-specific structure; averaging k
+// weight vectors CANCELS what differs between them and keeps what they share, which is exactly
+// the split the account claims exists. Pooling rows lets ONE map fit every program's lap
+// structure at once; averaging maps cannot.
+//
+// Free at deploy: k vectors of length n average to ONE vector of length n, so the deployed
+// arithmetic and memory are a single map's. `lib/pilot/ensemble.js` measured this on the tank —
+// all eight draws refused at 1.000x and their average delivered 1.344x, better than every draw
+// rather than between them.
+const ENSEMBLE = process.env.D_ENSEMBLE === '1';
 let QBASE = null;
 
 console.log(`\ndistilling the iteration prefix — K ${PG.K} / E ${PG.E}, feed ${FEED}`);
@@ -465,6 +477,26 @@ for (const mode of MODES) {
       spans.push(X.length - before);
     }
     nF = X[0].length;
+    if (ENSEMBLE && sets.length > 1) {
+      // One fit per training program on its OWN rows, then the mean of the weight vectors.
+      const acc = [new Float64Array(nF), new Float64Array(nF)];
+      let at = 0;
+      for (let g = 0; g < sets.length; g++) {
+        const len = spans[g];
+        const Xg = X.slice(at, at + len);
+        for (let c = 0; c < 2; c++) {
+          const Wg = solveRidge(Xg, Y[c].slice(at, at + len), RIDGE);
+          for (let j = 0; j < nF; j++) acc[c][j] += Wg[j] / sets.length;
+        }
+        at += len;
+      }
+      W = acc;
+      fitR2 = [0, 1].map((c) =>
+        r2(X.map((r) => r.reduce((a, v, j) => a + v * W[c][j], 0)), Y[c]));
+      if (round === DAGGER) console.log(`  ensemble: ${sets.length} per-program maps averaged `
+        + `into one vector of ${nF} — deployed cost is a single map's`);
+      break;
+    }
     // PER CHANNEL, because the two channels are not the same problem here: held out, the
     // shoulder regresses at R^2 0.92 and the elbow at 0.08, and their measured memories differ
     // by a factor of two and a half. One ridge for both is rule 31 inside a single fit.
