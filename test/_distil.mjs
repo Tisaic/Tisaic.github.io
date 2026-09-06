@@ -126,6 +126,14 @@ const ENSEMBLE = process.env.D_ENSEMBLE === '1';
 // that both of those pick the wrong cell. The ridge is the cheapest capacity control there is:
 // one refit and one deploy per rung, nothing re-converged.
 const RSWEEP = (process.env.D_RSWEEP || '').split(',').filter(Boolean).map(Number);
+// THE CEILING FOR A SECOND LAYER, MEASURED BEFORE ANY SECOND LAYER IS BUILT (§47's lesson,
+// which this session already paid for once). `stack.js`'s pattern — commission a pilot ON TOP
+// of the frozen policy — needs `commissionArm` to run with a policy deployed, and a policy with
+// a two-sided command window cannot read look-ahead off a live excitation, so it is real rig
+// surgery. But the oracle ladder bounds it: iterate with a PERFECT forecast on the machine the
+// policy has already corrected, and whatever that reaches is more than any fitted layer can.
+// If it gains little, the composition is closed without the surgery.
+const TOPUP = +(process.env.D_TOPUP || 0);
 let QBASE = null;
 
 console.log(`\ndistilling the iteration prefix — K ${PG.K} / E ${PG.E}, feed ${FEED}`);
@@ -614,6 +622,29 @@ for (const mode of MODES) {
     }
     const d = await deployOn(pilot, sh, false, FEED, { policy: mkPolicy(W, buildRow, rf) });
     const dp = await deployOn(pilot, sh, true, FEED, { policy: mkPolicy(W, buildRow, rf) });
+    if (TOPUP) {
+      // The oracle ladder ON TOP of the distilled policy. `pre` accumulates what iteration adds
+      // ABOVE the policy, so pass 0's row is the policy alone and every later row is the ceiling
+      // for a second layer that has run that many passes.
+      const pol = mkPolicy(W, buildRow, rf);
+      const p2 = mkPath(sh, FEED);
+      const lapK = Math.round(p2.lap), lapS = Math.round(p2.lap / S);
+      const pre2 = [new Float64Array(lapK), new Float64Array(lapK)];
+      for (let pass = 0; pass <= TOPUP; pass++) {
+        const ftr = [];
+        const fr = await deployOn(pilot, sh, false, FEED,
+          { policy: pol, pre: pre2, trace: ftr });
+        console.log(`    top-up pass ${pass}  ${sh.padEnd(9)} `
+          + `${fr.r.totalRms.toExponential(3)} `
+          + `${(o.r.totalRms / fr.r.totalRms).toFixed(2).padStart(6)}x   uPk ${fr.uPk.toFixed(3)}`);
+        if (pass === TOPUP) break;
+        const or = { e: ftr.map((t) => t.e), lap: lapS, off: 2 * lapS };
+        const uOut = [new Float64Array(lapK), new Float64Array(lapK)];
+        await deployOn(pilot, sh, true, FEED,
+          { policy: pol, pre: pre2, oracle: or, preOut: uOut });
+        for (let c = 0; c < 2; c++) for (let i = 0; i < lapK; i++) pre2[c][i] += uOut[c][i];
+      }
+    }
     for (const f2 of TFEEDS) {
       const bb = base[`${sh}@${f2}`];
       const rf2 = mkRefAt(mkPath(sh, f2));
