@@ -9622,6 +9622,31 @@ pilot's own deployed path is 9,517 at today's defaults.
   distilled, 6 polys, +/-768           5.52x    4.25x    7.07x    5.49x    119
 ```
 
+### THE DELIVERABLE: COMMISSION ON THE BLOCK'S POLYGONS *AND* THE PROGRAMS THE MACHINE RUNS
+
+A real machine's program set is usually known, and the block's designed polygons cost nothing
+to add to it. Six polygons plus the rounded rectangle and the circle, one fit, +/-512:
+
+```
+  controller                              sharp    circle   rounded    geo
+  shipped pilot, depth 1                  2.15x     3.99x    2.64x    2.83x
+  cascade depth 2, uCap 0.6               4.14x     9.19x    5.78x    6.04x   <- incumbent
+  distilled, 6 polys + rounded + circle   7.36x    13.97x    9.06x    9.77x
+                                        HELD OUT   fitted   fitted
+```
+
+**1.62x the incumbent on the geometric mean, and 1.78x on the one program that is HELD OUT** —
+the sharp square is not in that training set and still reads 7.36x against the cascade's 4.14x.
+Fit R^2 0.971 / 0.908. The deployed object is 111 coefficients per channel, 222 MAC per
+decision, no QP, no forecast bank, no tracker, no lap index.
+
+**AND THE TOUR DILUTES RATHER THAN HELPING.** The same fit with `tour12` added and the window
+opened to +/-1024 reads 6.72x / 5.89x / 3.82x, **geo 5.35x** — worse than the polygons alone at
++/-768. The tour's own converged prefix is weak (6.19x contour against the polygons' 16-20x),
+so it contributes a large block of rows carrying a poor target, and pooling on rows rather than
+on programs lets it dominate. A training program that iteration cannot converge well is not
+worth its rows however long its lap is.
+
 ### THE INCUMBENT TO BEAT IS NOT THE DEPTH-1 PILOT, AND AGAINST IT THIS IS A TRADE
 
 The distilled policy is clamped at 5x the pilot's `uMax` and SATURATES there on the sharp
