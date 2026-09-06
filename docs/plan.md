@@ -9667,6 +9667,26 @@ so it contributes a large block of rows carrying a poor target, and pooling on r
 on programs lets it dominate. A training program that iteration cannot converge well is not
 worth its rows however long its lap is.
 
+### AND IT IS MODEL-BOUND, NOT CLAMP-BOUND — THE CAP LADDER SATURATES ON ITS OWN
+
+Every headline above reads AT its clamp (uPk 0.750 of 0.750), and a number taken at a bound is
+not the model's number. Sweeping the clamp at the evaluation stage — one deploy per cap,
+nothing re-converged — on the polygon diet at +/-768, held-out sharp square:
+
+```
+  cap            sharp    uPk
+  3x uMax 0.450   2.50x   0.450   at the cap
+  5x uMax 0.750   5.52x   0.750   at the cap   <- every headline in this section
+  8x uMax 1.200   5.68x   0.846   SELF-LIMITS
+ 12x uMax 1.800   5.68x   0.846   identical, so the extra authority is inert
+```
+
+**Authority binds below 5x and stops mattering above it: +3% and then exactly flat.** The
+policy asks for 0.846 and no more however much it is given, which is §48's own signature from
+the other side — there the QP stopped at 0.4785 of its own accord given a cap of 1.20. So the
+remaining headroom is in the MAP and not in the authority, and a proposal to raise the cap is
+measured dead before it is made.
+
 ### THE INCUMBENT TO BEAT IS NOT THE DEPTH-1 PILOT, AND AGAINST IT THIS IS A TRADE
 
 The distilled policy is clamped at 5x the pilot's `uMax` and SATURATES there on the sharp
