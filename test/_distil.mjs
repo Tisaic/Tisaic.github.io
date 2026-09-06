@@ -59,6 +59,11 @@ const RIDGE = +(process.env.D_RIDGE || 1e-6);
 // in-sample fit on a program look perfect and invert badly.
 const RIDGES = (process.env.D_RIDGES || '').split(',').filter(Boolean).map(Number);
 const CAPX = +(process.env.D_CAPX || 5);     // policy clamp, in multiples of the pilot's own uMax
+// A CAP LADDER AT THE EVALUATION STAGE, because the policy reads AT ITS CLAMP on every program
+// (uPk 0.750 of 0.750) and a number taken at a bound is not the model's number. Sweeping here
+// costs one deploy per cap and re-converges nothing, and section 48's rule — authority pays only
+// once the model deserves it — is a measurement rather than a preference.
+const CAPS = (process.env.D_CAPS || '').split(',').filter(Boolean).map(Number);
 const DAGGER = +(process.env.D_DAGGER || 0); // refit rounds on the states the POLICY visits
 const MODES = (process.env.D_MODES || 'cmd,meas,both').split(',');
 // LOG-SPACED OFFSETS. The elbow's measured memory is 6363-8649 solver steps, so a linear window
@@ -385,6 +390,13 @@ for (const mode of MODES) {
     const rf = mkRefAt(sh);
     const d = await deployOn(pilot, sh, false, FEED, { policy: mkPolicy(W, buildRow, rf) });
     const dp = await deployOn(pilot, sh, true, FEED, { policy: mkPolicy(W, buildRow, rf) });
+    for (const cx of CAPS) {
+      const r = await deployOn(pilot, sh, false, FEED,
+        { policy: mkPolicy(W, buildRow, rf, cx * pilot.uMax) });
+      console.log(`    cap ${String(cx).padStart(4)}x uMax = ${(cx * pilot.uMax).toFixed(3)}  `
+        + `${sh.padEnd(9)} ${r.r.totalRms.toExponential(3)} `
+        + `${(o.r.totalRms / r.r.totalRms).toFixed(2).padStart(6)}x   uPk ${r.uPk.toFixed(3)}`);
+    }
     const x = (v) => (o.r.totalRms / v.r.totalRms).toFixed(2) + 'x';
     console.log(`  ${mode.padEnd(6)}${String(nF).padStart(5)}  `
       + `${fitR2.map((v) => v.toFixed(3)).join(' / ')}     ${sh.padEnd(9)} `
@@ -400,7 +412,7 @@ for (const mode of MODES) {
 // it would make the deployed row a second implementation of the fitted row — the exact defect
 // rule 61 is about, and the one that would silently break the exponential bank, which is keyed
 // by the reader's path. One reader, built by the harness, used by both.
-function mkPolicy(W, buildRow, refAt) {
+function mkPolicy(W, buildRow, refAt, cap = CAP) {
   return (hist, kSamp) => {
     const i = hist.length - 1;
     const r = buildRow(hist, i < 0 ? 0 : i, refAt, kSamp);
@@ -411,7 +423,7 @@ function mkPolicy(W, buildRow, refAt) {
       // CLAMPED AT A STATED MULTIPLE OF THE PILOT'S OWN CAP. The converged prefix runs past uMax
       // because it accumulates outside the QP's clamp; a policy reproducing it needs the same
       // authority, and giving it unbounded authority is how the first run of this bench diverged.
-      out[c] = Math.max(-CAP, Math.min(CAP, Number.isFinite(v) ? v : 0));
+      out[c] = Math.max(-cap, Math.min(cap, Number.isFinite(v) ? v : 0));
     }
     return out;
   };
