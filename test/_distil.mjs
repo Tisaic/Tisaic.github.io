@@ -38,7 +38,7 @@
  */
 import { solveRidge } from '../lib/pilot/pilot.js';
 import { commissionArm, deployOn, mkPath, makeArm, PG } from './pilot/rigs/arm-rig.mjs';
-import { designDemoPaths } from '../lib/flexisim/demopath.js';
+import { designDemoPaths, designTour } from '../lib/flexisim/demopath.js';
 
 // A LIST, because one program's converged prefix is one distribution and a policy fitted on it
 // is at home there by construction — the same trap the corner banks paid for, where a bank
@@ -46,6 +46,7 @@ import { designDemoPaths } from '../lib/flexisim/demopath.js';
 // baseline. Each program is converged separately and the rows are POOLED into one fit.
 const TRAIN_SPEC = (process.env.D_TRAIN || 'rounded').split(',');
 const NDEMO = +(process.env.D_NDEMO || 4);
+const NTOUR = +(process.env.D_NTOUR || 12);
 const TESTS = (process.env.D_TEST || 'rounded,circle,sharp').split(',');
 const FEED = +(process.env.D_FEED || 0.004);
 const PASSES = +(process.env.D_PASSES || 4);
@@ -95,6 +96,15 @@ for (const t of TRAIN_SPEC) {
     // named-program rows.
     designDemoPaths({ centre: PG.centre, feeds: [FEED, FEED, FEED], rMin: 3.4, rSpan: 2.4 })
       .slice(0, NDEMO).forEach((path, i) => TRAINS.push({ name: `poly${i}`, path }));
+  } else if (t.startsWith('tour')) {
+    // ONE LONG CLOSED LAP, which is the only shape of training program that lets a window REACH
+    // this plant's memory without becoming a lap index. The reach/transfer trade measured above
+    // is forced by lap < memory; a tour of `NTOUR` shapes is several times the memory, so a
+    // +/-1024 sample window covers a fraction of it instead of more than all of it.
+    let z = (81 + TRAINS.length) >>> 0;
+    const rnd = () => (z = (z * 1664525 + 1013904223) >>> 0) / 4294967296;
+    const nS = +(t.slice(4) || NTOUR);
+    TRAINS.push({ name: t, path: designTour(rnd, FEED, { centre: PG.centre, nShapes: nS }) });
   } else TRAINS.push({ name: t, path: mkPath(t, FEED) });
 }
 const pilot = await commissionArm({ seed: 1, train: { shape: 'rounded', feed: FEED } });
