@@ -8,7 +8,7 @@
   <title>FlexiSim — Commissioning Bench</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:1076,built:"2026-09-07T04:43:58Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:1077,built:"2026-09-07T07:50:48Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
 
   <style>
@@ -588,7 +588,12 @@ function makeHost(periodic, gr) {
       } catch (e) { await m.l1.destroy(); await m.l2.destroy(); throw e; }
     },
     path: prof, lap: LAP, K, centre,
-    classic: false, maxDepth: 0, demo: null, lapMemory: periodic, distil: {},
+    // THE CASCADE IS COMMISSIONED AS THE DISTILLED MODEL'S TEACHER, NOT AS A RUNG THAT SHIPS
+    // (plan §52.8): the rung converges its training prefixes with the pilot's QP handed the
+    // measured error as its free response, then the distilled policy REPLACES the cascade and
+    // the compliance feedforward at deploy — 138 MAC/decision, no solver on the machine. The
+    // cascade's row stays in the table so what it taught is on record.
+    classic: false, maxDepth: 1, demo: null, lapMemory: periodic, distil: {},
     // THE DIET IS MEASURED, NOT DEFAULTED (plan §52.7). The designer's own defaults — a feed
     // ladder at r 2.2-3.8 — refuse on this square at 0.74x; the same designer at the programs'
     // scale and the CURRENT feed deploys at 1.36x; laddering the feed at that scale reads 0.96x.

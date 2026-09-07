@@ -10959,19 +10959,86 @@ oracle-QP iteration that read 4.99x on this diet in `_distil.mjs`) and the autho
 `ARM_K=0.25 ARM_E=0.03 D_TRAIN=poly D_NDEMO=6`, default window (±256, 47 features), cmd mode:
 rounded 5.95x, circle 8.20x, sharp **6.40x** against a BARE open loop of 1.366 — the policy
 leaves 2.134e-1 where the ladder's leaves 7.791e-1, a 3.65x gap in what reaches the machine.
-Its training prefixes converge to 9.8x-16.2x from bare where the ladder's converge to
-3.1x-5.1x from the conventional machine, so the two teachers are not the same object even
-before the engine is compared. **And the composition is the suspect, not the engine.** The
-ladder converges and deploys the rung ON TOP of the RobotComp compliance feedforward; that
-feedforward is worth **14.8x on a polygon** (1.22 bare → 0.0825) and **1.29x on the sharp
-square** (1.366 → 1.059), so under it the diet's residual and the square's error are different
-objects, and a map fitted to one is being asked for the other. The harness distils the BARE
-machine and its policy is worth 4.97x against the conventional 1.059 by that route. The host
-now has `distilReplaces` (default off, byte-identical off): the training runs go bare and the
-rung deploys bare, so it REPLACES the feedforward rather than sitting under it — §49's own
-"it replaces the pilot rather than sitting under it" one rung down — and `REPLACE=1` on the
-same diet is running. If it lands near 5x the engine was never the gap; if it stays near 1.4x
-the engine is.
+Its training prefixes converge to 9.8x-16.2x where the ladder's `hff` prefixes converge to
+3.1x-5.1x on the same polygons — the teacher is 3-5x better before anything is distilled.
+
+**A UNITS ERROR WAS CAUGHT BY ITS OWN EXPERIMENT (rule 17).** The first reading of this gap
+blamed the COMPOSITION: the ladder's training-run baseline on a polygon read 0.0825 against the
+harness's 1.22 "bare", which looked like the compliance feedforward removing 14.8x on polygons
+and 1.29x on the square, so that the diet's residual and the program's error were different
+objects. `distilReplaces` was built to test it (the training runs and the deployment go bare;
+default off, byte-identical off) — and `REPLACE=1` reads **1.43x** against 1.36x, with the bare
+polygon baseline at **0.100**, not 1.22. The ladder scores its training runs in JOINT space
+(radians) and the harness in TOOL space; 0.0825 rad against 1.22 tool units was never a 14.8x.
+On one frame the feedforward is worth 1.21x on the polygons and 1.29x on the square, the
+composition is not the gap, and `distilReplaces` stays as a measured null. **What is left is
+the ENGINE**: the harness converges each prefix with the commissioned PILOT's QP handed the
+measured error of the previous lap as its free response (the `oracleF0` port, §48), reaching
+9.8x-16.2x in four passes, where `hff`'s harmonic Newton reaches 2.3x-5.1x and stalls.
+
+### §52.8 THE HARNESS'S PERFORMANCE THROUGH THE ONE PRESS: 4.88x ON THE BENCH SQUARE, 138 MAC
+
+The owner's requirement was the number `test/_distil.mjs` measures, delivered by the page's
+own commissioning. It is now delivered, and every step between 0.74x and it is a measurement
+with a name:
+
+```
+  configuration (fast grade, poly diet, sharp square, conventional 1.0593)      rms       x conv   x bare
+  hff teacher, raw ±512 window, under the feedforward                        1.4254e+0    0.74x    0.96x
+  hff teacher, bare (`distilReplaces`)                                        7.3997e-1    1.43x    1.85x
+  PILOT teacher (stride fault: record per step, read per sample)             harmful, 0.69x of the cascade
+  pilot teacher, record on the pilot's grid, ±512 raw window                 6.8643e-1    1.54x    1.99x
+  pilot teacher, window in PILOT SAMPLES (±256 = ±2048 steps, 47 feats)     5.0021e-1    2.12x    2.73x
+  + bare                                                                     3.6654e-1    2.89x    3.73x
+  + stride 8 (one row per decision, correction held)                         3.6333e-1    2.92x    3.76x
+  + coverage guard off                                                       3.6333e-1    byte-identical
+  + teacher cap 0.25 / 0.15 / 0.10 / 0.05                    0.321 / 0.269 / **0.217** / 0.444
+  the harness itself, today, same diet                                       2.134e-1     4.97x    6.40x
+  full grade, cap 0.10                                                       2.1713e-1    4.88x    6.29x
+```
+
+**THREE FAULTS, EACH ONE VARIABLE, EACH FOUND BY PUTTING THE SAME QUANTITY THROUGH BOTH
+LOOPS.** (1) THE TEACHER. `HarmonicFF` converges the training prefixes to 2.3-5.1x on these
+polygons and stalls; the harness iterates the commissioned PILOT with its QP handed the measured
+error of the previous lap as the free response (`oracleF0`, §48), reaching 10-16x in four passes.
+`makeArmHost.distilRuns()` now supplies `converge()` — that engine, in the host's one drive loop
+— when a cascade layer was commissioned and admitted, and the rung uses it in place of `hff`;
+the cascade is therefore commissioned as the TEACHER and the distilled policy REPLACES it at
+deploy (§49: stacked they double-correct), its row kept in the table. Building it found a
+stride fault no check could see: the record was built in a pilot-OFF drive, where the stride
+read 1, and consumed in a pilot-ON drive at stride 8 — index 205 was step 205 where the pilot
+wanted step 1640 — and the oracle steered the machine wrong in BOTH signs, which is what a
+mis-indexed record looks like. The rig's own `deployOn` with the same pilot, record and index
+arithmetic converged 3.9x on pass 0 (the control that split the pilot from the loop), and
+printing the QP's input at one matched decision from both loops was what found it. (2) THE
+WINDOW'S UNITS. The harness indexes its offsets in PILOT SAMPLES (`refAt(kSamp + o)`), so its
+default ±256 is ±2048 machine steps; the rung's are raw steps, and the port reached a quarter
+of what was tested (rule 37 against a 6363-8649-step memory). `offsetsPerSample` is now the
+stated form, converted by the rung at the stack's own sample. (3) THE TEACHER'S CAP. The harness
+iterates its pilot at 0.15 rad — its prefix reads exactly 0.1500 on pass 0 — where the host's
+stack has 2.0. The cap is a REGULARISER on the teacher: at 2.0 the prefix converges to 12-15x
+and teaches a policy worth 3.73x; at 0.10 it converges to 7-11x and teaches one worth 6.29x;
+at 0.05 four passes cannot converge it. §49's law and §50.1's tracker-noise ladder from a third
+knob — a more converged teacher is a worse one — measured as a ladder rather than tuned to a
+point, and it is one plant, one cell, one seed (rule 31).
+
+Nulls, kept as nulls: the coverage guard (byte-identical), the decision stride (0.363 → 0.363),
+the deployed cap (0.500 → 0.497), the teacher's truth at `observe` (no change), bypassing the
+stack wrapper (no change), the rig's sample counting (no change), and the grade (fast 2.169e-1,
+full 2.171e-1 — the page's default grade reads the same). The composition matters only with the
+good teacher: bare 0.217 against 0.338 under the feedforward at cap 0.10, so `distilReplaces`
+is the default. Cost: 380 s of Node for the whole ladder at fast grade against 1344 s with the
+`hff` teacher — the pilot iterates in 4 passes of 3 laps where `hff` probes, trials and refines
+for ~60 — and the deployed object is 47 coefficients per channel, **138 MAC/decision, 1.4% of a
+1 ms scan**, no solver, no forecast bank, no tracker.
+
+**AND ON THE PAGE, DECLARED PERIODIC, THE TWO OBJECTS COMPOSE AS §50.2 SAID THEY WOULD.** The
+full-tier browser check at demo grade: 1.0592 → cascade 4.7441e-1 (2.23x, the teacher) → **②d
+distilled 2.1525e-1 (4.92x total, REPLACING the cascade)** → lap-periodic on top **8.8351e-2,
+11.99x total**, in 10:38 of browser and **40 machine-minutes** against 135 with the `hff`
+teacher; restore, off-program withholding and the plant-change refusal all exercised on it.
+The memory's factor on top of the distilled model is 2.44x, beside §50.2's 1.29-1.41x on the
+oracle ladders — more, not less, because the model underneath is now the better one.
 
 **AND LEAVE-ONE-OUT SAYS THE OVER-FIT IS TO THE DIET, NOT TO THE SQUARE'S CORNERS.** Six folds:
 converge the lap-periodic correction on each training program once (the gains reproduce the

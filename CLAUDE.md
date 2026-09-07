@@ -1138,7 +1138,7 @@ measurement behind each is in `docs/history/` — the pointer in brackets.
 | `lib/ngrc/` | The ported NGRC library. See its README. |
 | `lib/probesense/` | Soft-sensing a field from one point in it. |
 | `lib/flexisim/` | `joint.js`, `link.js`, `arm.js`, `arm2r.js`, `armnr.js`, `tipsensor.js`, `chainsensor.js`, `compliance.js`, `compensator.js`, and the contouring three — `toolpath.js`, `contour.js`, `pathilc.js`. |
-| `lib/flexisim/autohost.js` | **The arm's host for `AutoStack`, imported by BOTH the Node bar and the page** — one module, so ⑨ on screen runs the configuration the 22.42× was measured on by construction rather than by review. |
+| `lib/flexisim/autohost.js` | **The arm's host for `AutoStack`, imported by BOTH the Node bar and the page** — one module, so the page runs the configuration the bar measured by construction rather than by review. It carries the distilled rung's TEACHER: `distilRuns()` supplies `converge()`, the commissioned pilot iterated in the host's one drive loop with the measured error as its free response (`oracleF0`), under a 0.10 rad cap, on the bare machine — and the measured defaults for the rung (window in pilot samples, one row per decision, replaces the feedforward; plan §52.8). |
 | `lib/blackbox/` | `blackbox.js` (identify → design → verify → correct) and `qp.js` (the box-constrained preview solve). Imports nothing from `lib/flexisim/`. |
 | `lib/pilot/hff.js` | Harmonic feedforward: a lap-periodic correction identified ON the machine. Carries no per-plant constant — count, step, probe design and probe amplitude are all measured. |
 | `lib/pilot/classic.js` | The CONVENTIONAL layer, self-tuned: a static feedforward in the reference's own state (`[a, v, sign v, 1]`), fitted on the machine. 425× on the EMPS axis in 14 laps, past the published inverse-dynamics feedforward. |
@@ -1164,7 +1164,7 @@ measurement behind each is in `docs/history/` — the pointer in brackets.
 | `test/pilot/tankspread.mjs` | **A PLANT'S SCORE IS A DISTRIBUTION.** Commissions the tank from N seeds and reports the spread, the deployed median, and the GATE'S OWN ESTIMATE beside what it delivered. It asserts nothing — an instrument that decided its verdict before the verdict was understood is how the 1.32x got written down. What it measured: at the old defaults 4 of 8 seeds deploy and **all four hurt**; at the new ones 5 of 8 deploy at a median 1.249x, two still hurt, and the gate's estimate correlates **-0.057** with delivered benefit. |
 | `test/pilot/qpsweep.mjs`, `qpsweep-arm.mjs` | **Not tests — the solver-budget experiment.** Commission ONE pilot, re-deploy that same model over a grid of QP iteration counts and horizon lengths, and score the MACHINE. Found that the shipped 60 iterations at `1.5·Tset` is 57× more arithmetic than the machine wants and WORSE than 1 iteration at N=56 (EMPS 14.16× against 12.70×, at 101% of a PLC scan's 10% against 5761%), and that the arm agrees at 29× cheaper and 16% better. Scores a held-out program in the same table, because the surface is rugged enough that the best cell of a grid is a suspect result. |
 | `test/pilot/rti.test.mjs` | A FALSIFIED HYPOTHESIS, pinned as the four things measuring it found. One QP iteration per cycle does not track sixty (88% of the applied signal); sixty is itself 36% from this solver's own optimum, so every delivered number in the project came out of a truncated solve; the convergence curve at N=8 matches N=48, so the rate is the Hessian's conditioning and not the horizon; and the Lipschitz bound is 1.82× above the true spectral norm, which costs exactly 2× in iterations. |
-| `test/pilot/distil-arm.mjs` | **Not a test — the instrument that reads a distilled-rung refusal to its cause.** Runs the bench's distil-only ladder on the arm at a chosen grade, then scores the fitted policy on its OWN training programs: helps them and harms the square → transfer; harms them too → the fit or the deploy path. Its first reading exonerated the fit and the deploy path (plan §52.7). |
+| `test/pilot/distil-arm.mjs` | **Not a test — the instrument that reads a distilled-rung refusal to its cause, and the one every knob in plan §52.8 was measured through.** Runs the bench's ladder on the arm at a chosen grade (`GRADE`, `DIET`, `ENGINE`, `REPLACE`, `TEACHCAP`, `STRIDE`, `OFFS=raw`, `PASSES`, `PERIODIC`, `LOO`), then scores the fitted policy on its OWN training programs: helps them and harms the square → transfer; harms them too → the fit or the deploy path. At its defaults it reads the host's shipped configuration: **2.169e-1 on the bench square, 4.88x, in 380 s**. |
 | `test/pilot/rigs/arm-rig.mjs` | The 2R arm rig — plant, paths, routing, `commissionArm` and `deployOn`. Every harness drives the arm through this; three separate copies of pieces of it have each shipped a defect. |
 | `test/pilot/forecast.mjs` | Held-out forecast R² on open-loop programs, plus an offline refit that separates an unreachable dictionary from an unvisited one. |
 | `test/pilot/spectrum.mjs` | Where the machine rings, where the defect's energy is, and where the excitation looked — three power spectra on one axis of periods. |
@@ -1290,9 +1290,10 @@ an engineer would actually meet:
   never drawn under this one. **Its control is pinned in the browser: with nothing armed the
   live machine IS the conventional baseline, so the ratio must read ~1, and reads 0.999.**
 - **Commission** — one button. The ladder is configured for the one rung this bench is about:
-  `classic: false`, `maxDepth: 0`, no demo banks — **the distilled model** (`lib/pilot/distil.js`,
-  addressed by the commanded reference, **234 MAC/decision, 2.3% of a 1 ms scan**, no solver, no
-  forecast bank, no tracker at deploy) — plus **lap learning** (the lap-periodic rung) only when
+  `classic: false`, `maxDepth: 1` — the cascade commissioned as the distilled model's TEACHER,
+  never as a rung that ships — no demo banks — **the distilled model** (`lib/pilot/distil.js`,
+  addressed by the commanded reference, **138 MAC/decision, 1.4% of a 1 ms scan**, no solver, no
+  forecast bank, no tracker at deploy; it replaces the cascade and the compliance feedforward) — plus **lap learning** (the lap-periodic rung) only when
   the installation declares a periodic application. Every rung is still SCORED on the machine and
   reverted if it does not win; the page decides what is offered, never what is deployed. **Grade**
   (full / fast / demo) buys wall clock with resolution and is printed on the record, because fewer
@@ -1329,7 +1330,22 @@ an engineer would actually meet:
   sum over whichever edge or corner has been cut, and lap 0 carries the start-up transient the
   ghost skips — rules 12, 13), plus contour · lag · total.
 
-**AND ITS FIRST READING IS A REFUSAL, WHICH IS THE PAGE DOING ITS JOB (plan §52.7).** Distil-only
+**AND IT NOW DELIVERS THE HARNESS'S NUMBER THROUGH THE ONE PRESS (plan §52.8): 1.0593 →
+2.169e-1 on the bench square, 4.88x over the conventional machine and 6.29x over the bare one,
+against `test/_distil.mjs`'s 2.134e-1 today — at 47 coefficients per channel, 138 MAC/decision,
+1.4% of a 1 ms scan, in 380 s of Node.** Three faults stood between 0.74x and it, each one
+variable: the TEACHER (`hff` converges the training prefixes to 2.3-5.1x and stalls; the
+commissioned PILOT iterated with the measured error as its free response reaches 10-16x, so the
+cascade is now commissioned as the teacher and the distilled policy REPLACES it — and building
+that found a record built per step and read per pilot sample, which steered the machine wrong in
+both signs); the WINDOW'S UNITS (the harness's offsets are in pilot samples, ±256 = ±2048 steps,
+and the port had ±512 raw steps — a quarter of the reach); and the TEACHER'S CAP (a regulariser:
+2.0 → 0.363, 0.15 → 0.269, **0.10 → 0.217**, 0.05 → 0.444; a more converged prefix teaches a
+worse policy, §49's law from a third knob). Bare beats under-the-feedforward 0.217 to 0.338 with
+the good teacher, so the policy replaces the compliance feedforward too. The grade is inert
+(full 2.171e-1). One plant, one cell, one seed.
+
+**ITS FIRST READING WAS A REFUSAL, WHICH WAS THE PAGE DOING ITS JOB (plan §52.7).** Distil-only
 ladder on the bench square: `②d distilled — REFUSED` at 0.22x (demo), 0.43x (fast, browser),
 0.74x (fast, Node, after the rung got a derived authority). The training runs converged
 (1.7–5.8x), the fit vouched for itself, and the machine refused it. `test/pilot/distil-arm.mjs`
