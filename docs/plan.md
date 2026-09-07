@@ -10853,7 +10853,52 @@ is therefore a REGULARISER on the distillation, as the QP iteration count was on
 (rule 42 territory: two knobs that turn out to be one), and it must be measured as a ladder at
 fixed authority rather than inherited from the scoring grade. `distil-arm.mjs` takes `PASSES=n`
 for exactly that; the page's grade table couples the two today and must not be re-derived from
-three points (rule 31).
+three points (rule 31). **The ladder, and it is NOT a passes ladder.** `PASSES=n` at fast grade, authority 2.0:
+
+```
+  grade   passes    ②d on the square    own diet (geometric)    training gains
+  fast       4          0.75x               ~2.0x               5.76 2.05 4.80 2.43 1.71 2.15
+  fast       8          0.74x               ~2.0x               5.76 2.05 4.82 2.43 1.71 2.15
+  fast      16          0.74x               ~2.0x               5.76 2.05 4.82 2.43 1.71 2.15
+  full      24          0.17x               ~1.4x               5.73 5.06 4.50 2.51 1.84 2.94
+```
+
+**8 and 16 are BYTE-IDENTICAL** — the same 1.4254e+0, the same six gains, the same held-out R²
+to four figures — and 4 differs from them in one gain at the third figure. So the passes knob is
+INERT above about five: `_refine` stops on its own when four consecutive passes improve by less
+than 2 sigma of the host's reported lap-to-lap spread, and at fast grade that fires before the
+ceiling does. The paragraph above read the 24 row as the far end of a passes ladder; it is the
+FULL GRADE, and full grade moves three other things at once — scoring laps averaged (4 against
+2), warmup laps (2 against 1) and the probe's own laps — every one of which changes the sigma
+the stop rule counts against, and so how long the refine keeps walking. The regulariser is real
+(run 1 goes 2.05x → 5.06x and the machine gets worse), but it is the SCORING GRADE and not the
+pass count, which is rule 20's matched-capacity fault aimed at a knob: two runs that differ in
+four settings were written up as differing in one. The pair that splits it is `GRADE=full
+PASSES=8` against `PASSES=24` at fast — the same 24 with the averaging held and the same
+averaging with the passes held — and both are running.
+
+**AND LEAVE-ONE-OUT SAYS THE OVER-FIT IS TO THE DIET, NOT TO THE SQUARE'S CORNERS.** Six folds:
+converge the lap-periodic correction on each training program once (the gains reproduce the
+ladder's exactly — 5.76, 2.05, 4.82, 2.43, 1.71, 2.15 — the control), fit a policy on five,
+score it on the machine on the sixth AND on the square:
+
+```
+  fold   held-out polygon   square    held-out R²
+    0        1.04x           0.38x    [ 0.351, -0.034]
+    1        1.02x           0.43x    [-0.230,  0.140]
+    2        1.10x           0.65x    [-0.093,  0.035]
+    3        1.00x           0.45x    [-0.032,  0.030]
+    4        1.41x           0.41x    [ 0.152,  0.132]
+    5        1.11x           0.48x    [-0.167,  0.050]
+  geometric  1.11x           0.46x
+```
+
+A policy fitted on five polygons does ~nothing on the sixth. So the ~2.0x it reads on its own
+programs is memorised, not modelled: the route carries to nothing it was not fitted on, not
+even a program of its own class, and the square's corner regime is not the specific fault.
+This is the strongest negative reading the distillation has had, and it is of the REAL route —
+`hff` prefixes converged on a designed diet, through the ladder — rather than of the oracle
+route §49 measured.
 
 **THIS DOES NOT REPRODUCE §49.** §49's 4.99x on the sharp square used an ORACLE-converged
 prefix (a perfect forecast, iterated to convergence) on the arm's rig; the ladder route
@@ -10861,6 +10906,15 @@ distils REAL `hff` prefixes converged on the designed demo at 1.7–5.8x, and so
 does not carry. Whether full grade (24 passes) crosses 1x is the run in progress; whether a
 diet carrying the square's corner class without being the square is the repair is the next
 question, and it is a measurement rather than an argument.
+
+**AND THE OTHER OPTION WORKS, THROUGH THE SAME LADDER.** `PERIODIC=1` at fast grade: the distil
+rung reproduces the non-periodic run BYTE-IDENTICAL (1.4254e+0, 0.74x — declaring a periodic
+application does not perturb it, which is the control), and then **lap learning deploys at
+4.56x** on the square, 1.0593e+0 → 2.3254e-1, in 59 laps with a random-phase probe at 25%.
+The ladder ships `{hff: true, distil: false}`. For a periodic application the memory is the rung
+that helps and the ladder picks it by measuring; it costs 126 minutes of machine time at this
+grade, most of it the six distil convergences that did not ship. (The old harness reached
+8.9–9.2x on this square at 24–82 passes; 4.56x at 8 is the cost being laps, as recorded.)
 
 **AND THE PAGE DID WHAT IT IS FOR.** Nothing harmful shipped: the refusal is a row, the machine
 runs the conventional baseline, and the cost record says what the refusal cost — 101 minutes of

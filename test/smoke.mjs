@@ -1817,7 +1817,13 @@ await fx.click('#run');   // pause
 // ---- COMMISSION, AT DEMO GRADE, AND WATCH. The ladder is configured distil-only; either
 // outcome for the rung is a result and both are handled. What is asserted is the machine
 // visibly turning, the record being real, and the deployed state matching what shipped.
-await fx.evaluate(() => { const g = document.getElementById('grade'); g.value = 'demo'; g.dispatchEvent(new Event('input', { bubbles: true })); });
+// QUICK commissions non-periodic: the distilled rung refuses on this arm (plan §52.7) in ~16
+// minutes and that pins the refused-not-stored half. FULL declares a periodic application, so
+// lap learning deploys and the restore and the off-program withholding are exercised for real —
+// at the cost of a commissioning that outran a 25-minute wait in this environment. A 40-minute
+// browser check has no place in the tier that runs before every push.
+await fx.evaluate((full) => { const g = document.getElementById('grade'); g.value = 'demo'; g.dispatchEvent(new Event('input', { bubbles: true }));
+  const p = document.getElementById('periodic'); p.checked = full; p.dispatchEvent(new Event('input', { bubbles: true })); }, FULL);
 await fx.click('#commission');
 await fx.waitForFunction(() => { const d = window.__flxDbg(); return d.drawnPose.live || /^halted:|failed/.test(document.getElementById('badge').textContent); }, null, { timeout: 300000 });
 await halted('commissioning');
@@ -1828,14 +1834,17 @@ await halted('commissioning');
   check('flexisim/commission: the stage FOLLOWS the ladder’s machine — the drawn pose moves while it commissions', moved >= poses.length - 2, `${moved}/${poses.length - 1}`);
   await fx.screenshot({ path: join(SHOTS, '05-flexisim-commissioning.png') });
 }
-// Let it finish. Demo grade on a distil-only ladder is a few minutes of browser.
-await fx.waitForFunction(() => { const d = window.__flxDbg(); return (!d.auto.commissioning && d.auto.rows > 0) || /^halted:|failed/.test(document.getElementById('badge').textContent); }, null, { timeout: 1500000 });
+// Let it finish. Demo grade is ~16 minutes of browser non-periodic and ~40 periodic (measured).
+await fx.waitForFunction(() => { const d = window.__flxDbg(); return (!d.auto.commissioning && d.auto.rows > 0) || /^halted:|failed/.test(document.getElementById('badge').textContent); }, null, { timeout: FULL ? 5400000 : 1800000 });
 await halted('the whole commissioning');
 {
   const d = await fx.evaluate(() => window.__flxDbg());
   const names = await fx.evaluate(() => [...document.querySelectorAll('#rungs tr td:first-child')].map((x) => x.textContent));
   console.log(`  flexisim/commission: rungs ${JSON.stringify(names)}, shipped ${JSON.stringify(d.auto.deployed)}, gain ${d.auto.gain && d.auto.gain.toFixed(2)}x`);
   check('flexisim/commission: the ladder reaches the distilled rung and produces a row for it — deployed or refused, either is a result', names.some((n) => /②d/.test(n)), JSON.stringify(names));
+  if (FULL) check('flexisim/commission: …and, declared periodic, it builds and scores lap learning too', names.some((n) => /lap-periodic/.test(n)), JSON.stringify(names));
+  const hffArm = await fx.evaluate(() => ({ on: document.getElementById('arm-hff').checked, dis: document.getElementById('arm-hff').disabled }));
+  check('flexisim/commission: the lap-learning box agrees with what shipped', hffArm.on === !!d.auto.deployed.hff && hffArm.dis === !d.auto.armed.hff.built, JSON.stringify({ hffArm, deployed: d.auto.deployed }));
   check('flexisim/commission: the machine-time record is a real reading and names its grade', d.auto.cost && d.auto.cost.samples > 1000 && d.auto.grade === 'demo', JSON.stringify(d.auto.cost));
   const arm = await fx.evaluate(() => ({ distil: document.getElementById('arm-distil').checked, dis: document.getElementById('arm-distil').disabled }));
   check('flexisim/commission: the armed box agrees with what shipped, and is enabled only if the rung was built', arm.distil === !!d.auto.deployed.distil && arm.dis === !d.auto.armed.distil.built, JSON.stringify({ arm, deployed: d.auto.deployed }));
@@ -1849,14 +1858,30 @@ await halted('the whole commissioning');
 // shipped; and must be reported and NOT armed on a different one.
 {
   const before = await fx.evaluate(() => window.__flxDbg());
-  if (before.auto.deployed.distil) {
+  const shipped = before.auto.deployed.distil || before.auto.deployed.hff;
+  if (shipped) {
     await fx.reload({ waitUntil: 'load' });
     await fx.waitForFunction(() => window.__flxDbg && window.__flxDbg() && window.__flxDbg().cells > 0 && !window.__flxDbg().busy, null, { timeout: 180000 });
     const after = await fx.evaluate(() => window.__flxDbg());
     check('flexisim/store: a reload restores the last commissioned model on the same machine, armed as it shipped',
-      after.auto.restored === true && after.auto.deployed.distil === true && after.stored && after.stored.matches === true, JSON.stringify(after.auto));
+      after.auto.restored === true && after.auto.deployed.distil === before.auto.deployed.distil
+      && after.auto.deployed.hff === before.auto.deployed.hff && after.stored && after.stored.matches === true, JSON.stringify(after.auto));
     const same = Math.abs(after.auto.gain - before.auto.gain) < 1e-12;
     check('flexisim/store: …carrying the same record it was saved with', same, `${before.auto.gain} vs ${after.auto.gain}`);
+    // THE OWNER'S SCENARIO: switch the program with lap learning armed. It is a MEMORY of the
+    // program it learned, and the library WITHHOLDS it on any other — the retirement's whole
+    // argument in one toggle. Asserted as a count the ladder publishes, not as an impression.
+    if (before.auto.deployed.hff) {
+      await fx.evaluate(() => { const e = document.getElementById('shape'); e.value = 'rounded'; e.dispatchEvent(new Event('change', { bubbles: true })); });
+      await fx.click('#run');
+      await fx.waitForFunction(() => { const d = window.__flxDbg(); return (d.shape === 'rounded' && d.auto.armed && d.auto.armed.hff.offProgram > 200) || /^halted:/.test(document.getElementById('badge').textContent); }, null, { timeout: 600000 });
+      await fx.click('#run');
+      const w = await fx.evaluate(() => ({ off: window.__flxDbg().auto.armed.hff.offProgram, row: /WITHHELD/.test(document.getElementById('stats').textContent) }));
+      check('flexisim/store: lap learning is WITHHELD on a program it did not learn, and the page says so', w.off > 200 && w.row, JSON.stringify(w));
+      // Back to the program it learned, so the plant-change check below starts from a restore.
+      await fx.evaluate(() => { const e = document.getElementById('shape'); e.value = 'sharp'; e.dispatchEvent(new Event('change', { bubbles: true })); });
+      await fx.waitForFunction(() => window.__flxDbg().shape === 'sharp' && !window.__flxDbg().busy, null, { timeout: 180000 });
+    }
     // A different machine: move K one notch. The model stays stored, is reported, and is NOT armed.
     await fx.evaluate(() => { const s = document.getElementById('s-k'); s.value = '1'; s.dispatchEvent(new Event('change', { bubbles: true })); });
     await fx.waitForFunction(() => { const d = window.__flxDbg(); return d && d.K === 0.5 && !d.busy; }, null, { timeout: 180000 });
@@ -1868,7 +1893,7 @@ await halted('the whole commissioning');
     // harmful — a stale, misleading record offered back on the next load.
     check('flexisim/store: a REFUSED model is not stored — nothing deployed means nothing kept',
       before.stored === null, JSON.stringify(before.stored));
-    console.log('  flexisim/store: the distilled rung was refused at demo grade, so the same-machine restore is not exercised — stated');
+    console.log('  flexisim/store: nothing deployed at demo grade, so the same-machine restore is not exercised — stated');
   }
 }
 

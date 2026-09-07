@@ -1336,9 +1336,18 @@ ladder on the bench square: `②d distilled — REFUSED` at 0.22x (demo), 0.43x 
 splits the cause: the policy helps EVERY one of its six training programs (1.40–2.91x) and harms
 the square — TRANSFER, not the fit and not the deploy path, since a sign, units or window fault
 would harm the training programs too. The ladder route with real `hff` prefixes does not yet
-reproduce §49's oracle-converged 4.99x; full grade is the run in progress. Nothing harmful
-shipped, the conventional baseline runs, and the cost record says the refusal cost 101 minutes
-of machine time.
+reproduce §49's oracle-converged 4.99x — and full grade is WORSE (0.17x) while its prefixes
+converge further and its fit R² rises, so a more converged prefix is a WORSE teacher — and the
+knob is the SCORING GRADE, not the pass count: `PASSES` 4, 8 and 16 at fast grade read 0.75x /
+0.74x / 0.74x with 8 and 16 byte-identical, because `_refine` stops itself once four passes in a
+row fall inside 2 sigma of the host's lap spread, and full grade changes that sigma (4 scoring
+laps against 2) rather than the ceiling. Leave-one-out over the six training
+programs reads a geometric **1.11x on the held-out polygon** against ~2.0x in-sample — the route
+memorises its diet and carries to nothing it was not fitted on, not even its own class, so the
+square's corners are not the specific fault. **The other option works: declared
+periodic, lap learning deploys at 4.56x on the square through the same ladder** (59 laps, fast
+grade), with the distil rung reproduced byte-identical beside it as the control. Nothing harmful
+shipped, the conventional baseline runs, and the cost record says what each refusal cost.
 
 **WHAT IS NOT ON THE PAGE, AND WHY.** The conventional rung, the pilot model layers, the corner
 banks and the compiled twin all still exist in `lib/` with their tests, and none of them is
