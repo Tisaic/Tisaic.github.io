@@ -230,9 +230,13 @@ check('the page\u2019s deployment loop reproduces the host\u2019s scored loop',
   // exactly 0 — this check first demanded every sample be positive and failed on the machine
   // telling the truth. What has teeth is that the speed VARIES and reaches a real cruise:
   // a constant would satisfy any weaker version and is what a wrong wiring would return.
+  // THE ROW IS THE JOINT REFERENCE AND ITS RIGID-BODY TORQUES (plan §52.16): `refDim` says how
+  // many, the first two are the commanded angles (the ik of the command, checked against it),
+  // and the torque channels are scaled by the drive's own limit so they sit inside |1|.
   const rf = tr.refAt(10), sp = [0, 1, 2, 3].map((k) => tr.speedAt(k * 37));
-  check('…addressed by the JOINT reference, with a commanded speed that actually varies',
-    rf.length === 2 && rf.every(Number.isFinite)
+  check('…addressed by the JOINT reference (angles, then reference torques inside the drive limit), with a commanded speed that actually varies',
+    rf.length === tr.refDim && (tr.refDim === 2 || tr.refDim === 4) && rf.every(Number.isFinite)
+      && (tr.refDim === 2 || rf.slice(2).every((v) => Math.abs(v) <= 1))
       && sp.every((v) => Number.isFinite(v) && v >= 0)
       && Math.max(...sp) > 0 && Math.max(...sp) > Math.min(...sp),
     `${JSON.stringify(rf)}  speeds ${sp.map((v) => v.toExponential(2)).join(' ')}`);

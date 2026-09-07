@@ -11408,3 +11408,81 @@ absorbed by a receding horizon that re-plans every nine steps — and the distil
 1.4% from a teacher whose oracle now reads the truth at the step it decides on; but the deploy
 path, the scored runs and the teacher now agree with commissioning on what "now" is, which none
 of them did, and the page and the ladder run the same schedule. E 0.005 at the shipped configuration: distilled 5.2256e-1 (4.00x) against §52.14's 5.2468e-1, the cascade 4.7879e-1 (4.36x) — the policy within 9% of its teacher on the soft plant.
+
+### §52.16 THE CONTROL THEORY, TAKEN APART ON THE MACHINE: WHAT BINDS, WHAT DOES NOT, AND WHAT WAS FOUND UNDERNEATH
+
+The owner's instruction: there are bigger, more structural bugs in the control theory. Each
+candidate below was built as a knob and MEASURED on the bench square (K 0.25 / E 0.03, fast
+grade, four programs, the §52.15 baseline of 1.8739e-1 / 5.65x) and, where it mattered, on the
+soft cell; the numbers are the argument.
+
+**THE STRUCTURAL FACT EVERY EXPERIMENT AGREES ON.** On its own training programs the policy
+reaches 5-7x under every engine, window, regressor and stride tried, while the converged
+prefix it is regressed from reaches 9-11x. The square sits at that same in-sample level. So
+the transfer is no longer what binds — the policy carries to the square what it can do on
+its own diet — and what binds is what a linear map of the reference window can EXPRESS.
+
+**Q-FILTER — INERT.** Iterative learning with a model-inverse gain and no robustness filter
+is the textbook recipe for amplifying what the model does not represent, and the record read
+like the symptom list (a more converged prefix teaches a worse policy; the cap regularises;
+noise helps). A circular moving-average Q on the learned increment (`distilQ`) at 9 / 27 /
+81 / 243 steps reads 5.65x / 5.65x / 5.66x / 5.70x. Four passes under a 0.10 cap were already
+the early stopping a Q-filter would buy.
+
+**THE TEACHER'S CAP IS A REGULARISER, AND A MORE FAITHFUL TEACHER IS WORSE.** Cap 0.10 / 0.15
+/ 0.20 → 5.65x / 4.68x / 4.35x on the square while the fit's R² RISES (0.88 → 0.90 → 0.93); on
+the soft cell 0.10 / 0.20 / 0.30 → 4.00x / 3.53x / 3.64x. The converged SIGNAL contains,
+accumulated over every pass, everything the basis cannot express, and the regression imitates it.
+
+**PARAMETRIC (BASIS-FUNCTION) ILC — BUILT, CAP-INSENSITIVE, AND WORSE.** The textbook
+structure for exactly that: iterate the policy's PARAMETERS, not the signal — each pass drives
+every program with the current policy, lets the pilot add one increment against the measured
+error, fits the next policy to `policy + increment` across all programs, and re-measures that
+policy (`distil.parametric`, `tr.teach`). It behaves as the theory says: R² 0.98 / 0.93, and the
+cap no longer matters (0.10 and 0.30 both read 5.06x). But it transfers WORSE — 5.06x against
+5.65x on the square, 3.76x against 4.00x on the soft cell — at 16.3 machine-minutes against
+10.7. The signal engine's cap-regularised prefix carries something to the square that the
+projected iteration does not. It stays as an opt-in engine.
+
+**KEEPING THE PHYSICS TERM UNDERNEATH — WORSE, AGAIN.** With the static compliance
+feedforward left under the policy (`distilReplaces: false`) the square reads 3.91x (signal) and
+3.66x (parametric) against 5.65x, and on the training programs the converged error is
+0.028 against 0.019: from a better starting point the iteration converges to a worse place in
+four capped passes, because the static term is dynamically wrong at every corner and the
+increments spend themselves undoing it.
+
+**STRIDE AND THE STAIRCASE — INERT.** Rows and evaluation at every step (`stride 1`, 29,955
+rows) read 5.67x, 5.72x with a Q-filter: the zero-order hold is not what binds.
+
+**THE WINDOW'S REACH IS NOT WHAT BINDS EITHER, WHICH RETIRES RULE 37 AS THE EXPLANATION.** A
+tour diet was built (`distilDiet.tour`: two closed laps of six shapes each, 43k and 51k steps,
+so a window can reach the plant's memory without spanning the lap — §41's theorem and rule 37
+satisfied together for the first time). Window x1 / x2 / x3 on it: 5.63x / 5.01x / 5.14x on the
+square, 5.4-5.7x in-sample at every width, at 20.4 machine-minutes. The ceiling does not move
+with the reach.
+
+**WHAT DID MOVE IT: THE REGRESSOR.** A compliant arm's error is gearbox wind-up and link bend,
+both linear in the REFERENCE TORQUE and not in the angle; a window of angles has to
+reconstruct cos(q) and M(q)·alpha through a linear map. Handing the policy the rigid-body
+inverse dynamics of the reference as well (`distilRef: 'both'`, 93 features, 274 MAC/decision,
+2.7% of a scan; computed, never learned — rule 40; scaled by the drive's own limit at the load,
+because the hold torque as a scale put a corner's inertial spike at 19 and the streaming fit
+diverged at R² -14,446) reads **6.05x on the square** and 3.96x on the soft cell. Torques ALONE
+refuse (the angle carries the pose the torque does not). It ships as the default. The ridge under it is flat from 1e-6 to 1e-3 (6.05x / 6.05x / 6.04x) and falls past it (5.97x at 1e-2, 5.68x at 1e-1); 1e-3 ships, for the held-out R² it buys on the elbow (0.84 against 0.76) at the same delivered number (rule 32).
+
+**AND UNDERNEATH, TWO THINGS THAT ARE WRONG AND NOT YET FIXED.** (1) **The streaming fit is not
+the batch fit.** On an EXACTLY linear target (true weights ≤ 0.01) the batch solve recovers
+weights of 0.018 and the streaming recursion 0.30 — 1.48 with a sign block — with the
+window's differences collinear by construction, a prior of 1e6 per feature and a ridge of
+1e-6 (rule 32: a prior not scaled to the rows it acts on). Both routes deploy on the square
+(5.66x batch, 5.65x streaming) because the applied correction agrees where the rows agree;
+they part company on rows the fit never saw. With a sign block or torque-only rows the
+recursion returns R² of -16 to -14,446 where the batch fit on the same rows reads 0.45-0.82,
+so the gate refused what the second route deploys (rule 15). The fix is a square-root form and a
+scaled prior; not done. (2) **The cascade is stable on this arm because of the backlash.** With
+the gearbox dead-zone removed (`ARM_BL=0`) the pilot cascade the ladder commissioned reads
+**6.08 against 1.06 — 0.17x** — on the scored run, having passed its own verify; the ladder
+caught it ("no better than the rung below") and nothing shipped, but a receding-horizon
+inversion of a lightly damped mode that the dead-zone had been de-tuning is a stability
+margin the design does not measure. On the bench plant it is 2.23x; one backlash value away
+it is a divergence. Neither is a page defect; both are the control theory, stated.

@@ -63,7 +63,11 @@ const DISTIL = { ...(process.env.OFFS === 'raw'
   // STRIDE=<n|pilot>: one row per n steps and the correction held between (default the host's, pilot).
   ...(process.env.STRIDE ? { stride: process.env.STRIDE === 'pilot' ? 'pilot' : +process.env.STRIDE } : {}),
   // FADE=<fraction of the trained speed span>: the coverage guard's ramp (measured inert here).
-  ...(process.env.FADE ? { coverageFade: +process.env.FADE } : {}) };
+  ...(process.env.FADE ? { coverageFade: +process.env.FADE } : {}),
+  // RIDGE=<x>: the fit's ridge (rule 32 — a prior scaled to the rows it acts on).
+  ...(process.env.RIDGE ? { ridge: +process.env.RIDGE } : {}),
+  // ONLINE=0: the batch ridge fit instead of the streaming recursion (the second route, rule 15).
+  ...(process.env.ONLINE === '0' ? { online: false } : {}) };
 if (!['hff', 'pilot'].includes(ENGINE)) throw new Error(`ENGINE ${ENGINE}: hff or pilot`);
 const F = 4e-3;
 const DIETS = {
@@ -72,6 +76,8 @@ const DIETS = {
   polyfeed: { feeds: [F, 2 * F, 0.5 * F], rMin: 3.4, rSpan: 2.4 },
   poly1: { feeds: [F], rMin: 3.4, rSpan: 2.4 },   // two programs, for a quick look at the engine
   poly4: { feeds: [F, F], rMin: 3.4, rSpan: 2.4 }, // four programs (two convex, two stars) — the shipped diet
+  tour2: { feeds: [F, F], rMin: 3.4, rSpan: 2.4, tour: { nShapes: 6 } },   // two long closed tours, six shapes each (plan §52.16)
+  tour1: { feeds: [F], rMin: 3.4, rSpan: 2.4, tour: { nShapes: 6 } },
 };
 if (!(DIET in DIETS)) throw new Error(`DIET ${DIET}: one of ${Object.keys(DIETS).join(', ')}`);
 const K = +(process.env.ARM_K || 0.25), E = +(process.env.ARM_E || 0.03);
@@ -98,6 +104,14 @@ const host = makeArmHost({
   ...(DIETS[DIET] ? { distilDiet: DIETS[DIET] } : {}), distilReplaces: REPLACE,
   ...(process.env.CAP ? { distilCap: +process.env.CAP } : {}),
   ...(process.env.TEACHCAP ? { distilTeachCap: +process.env.TEACHCAP } : {}),
+  // Q=<steps>: a circular moving-average Q-filter on the teacher's learned increment (plan §52.16).
+  ...(process.env.Q ? { distilQ: +process.env.Q } : {}),
+  // SOFFS=a,b,c: the direction-of-travel block's offsets, in pilot samples (default none).
+  ...(process.env.SOFFS ? { distil: { ...DISTIL, signOffsetsPerSample: process.env.SOFFS.split(',').map(Number) } } : {}),
+  // REF=angles|torques|both: what the policy reads at each window offset (plan §52.16).
+  ...(process.env.REF ? { distilRef: process.env.REF } : {}),
+  // PARAM=1: the parametric engine — iterate the policy's parameters, not the signal (plan §52.16).
+  ...(process.env.PARAM === '1' ? { distilParametric: true } : {}),
   // COMMISSIONING-TIME KNOBS (plan §52.9): TLAPS laps per teacher drive, TPASSES passes,
   // TRACE=1 re-measures the prefix between passes (the old behaviour, the control).
   ...(process.env.TLAPS ? { distilTeachLaps: +process.env.TLAPS } : {}),
@@ -147,7 +161,7 @@ if (pol && pol.W) {
     // evaluates the fit at phases it never saw and scores an object that does not ship.
     const withP = await tr.run(heldPolicy(pol, tr));
     console.log(`    program ${i} (lap ${tr.lap}): ${base.score.toExponential(4)} -> ${withP.score.toExponential(4)}`
-      + `   ${(base.score / withP.score).toFixed(2)}x`);
+      + `   ${(base.score / withP.score).toFixed(2)}x` + (withP.sat != null ? `   drive saturated ${(100 * withP.sat).toFixed(1)}% of steps (bare ${(100 * base.sat).toFixed(1)}%)` : ''));
   }
   console.log('\n  reading: helps its own programs and harms the square -> transfer (diet/window);'
     + '\n           harms even its own programs -> the fit or the deploy path (units, sign).');
@@ -178,7 +192,7 @@ if (LOO) {
   for (let i = 0; i < runs.length; i++) {
     const shipped = host.auto.built.distil;
     const S0 = host.auto.built.stack ? host.auto.built.stack.sample : 1;
-    const pol = new DistilPolicy({ channels: 2, refDim: 2,
+    const pol = new DistilPolicy({ channels: 2, refDim: shipped ? shipped.refDim : 2,
       offsets: shipped ? shipped.offsets : opts.offsets, signOffsets: shipped ? shipped.signOffsets : opts.signOffsets,
       ridge: opts.ridge, uMax, online: opts.online !== false, adaptSign: opts.adaptSign });
     pol.stride = shipped ? shipped.stride : S0;

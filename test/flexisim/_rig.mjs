@@ -29,7 +29,7 @@ export async function machine(o = {}) {
     nu: RIG.nu, rho: RIG.rho, damping: 3e-3 });
   const l1 = await mk(RIG.LEN1), l2 = await mk(RIG.LEN2);
   const jt = (mp) => new Joint({ ratio: RIG.RATIO, motorInertia: mp.inertiaAboutPivot / 1e4,
-    loadInertia: mp.inertiaAboutPivot, stiffness: K, backlash: RIG.BACKLASH,
+    loadInertia: mp.inertiaAboutPivot, stiffness: K, backlash: o.bl ?? (process.env.ARM_BL !== undefined ? +process.env.ARM_BL : RIG.BACKLASH),
     damping: 2 * Math.sqrt(K * mp.inertiaAboutPivot / 2) });
   const arm = new FlexArm2R({ joint1: jt(massProperties(l1)), link1: l1,
     joint2: jt(massProperties(l2)), link2: l2, gravityWorld: [0, -RIG.gravity, 0], dt: 1 });

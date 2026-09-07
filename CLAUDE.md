@@ -1165,7 +1165,7 @@ measurement behind each is in `docs/history/` — the pointer in brackets.
 | `test/pilot/tankspread.mjs` | **A PLANT'S SCORE IS A DISTRIBUTION.** Commissions the tank from N seeds and reports the spread, the deployed median, and the GATE'S OWN ESTIMATE beside what it delivered. It asserts nothing — an instrument that decided its verdict before the verdict was understood is how the 1.32x got written down. What it measured: at the old defaults 4 of 8 seeds deploy and **all four hurt**; at the new ones 5 of 8 deploy at a median 1.249x, two still hurt, and the gate's estimate correlates **-0.057** with delivered benefit. |
 | `test/pilot/qpsweep.mjs`, `qpsweep-arm.mjs` | **Not tests — the solver-budget experiment.** Commission ONE pilot, re-deploy that same model over a grid of QP iteration counts and horizon lengths, and score the MACHINE. Found that the shipped 60 iterations at `1.5·Tset` is 57× more arithmetic than the machine wants and WORSE than 1 iteration at N=56 (EMPS 14.16× against 12.70×, at 101% of a PLC scan's 10% against 5761%), and that the arm agrees at 29× cheaper and 16% better. Scores a held-out program in the same table, because the surface is rugged enough that the best cell of a grid is a suspect result. |
 | `test/pilot/rti.test.mjs` | A FALSIFIED HYPOTHESIS, pinned as the four things measuring it found. One QP iteration per cycle does not track sixty (88% of the applied signal); sixty is itself 36% from this solver's own optimum, so every delivered number in the project came out of a truncated solve; the convergence curve at N=8 matches N=48, so the rate is the Hessian's conditioning and not the horizon; and the Lipschitz bound is 1.82× above the true spectral norm, which costs exactly 2× in iterations. |
-| `test/pilot/distil-arm.mjs` | **Not a test — the instrument that reads a distilled-rung refusal to its cause, and the one every knob in plan §52.8 was measured through.** Runs the bench's ladder on the arm at a chosen grade (`GRADE`, `DIET`, `ENGINE`, `REPLACE`, `TEACHCAP`, `STRIDE`, `WIN`, `OFFS=raw`, `PASSES`, `PERIODIC`, `LOO`), then scores the fitted policy on its OWN training programs — evaluated as it deploys, once per decision and held: helps them and harms the square → transfer; harms them too → the fit or the deploy path. At its defaults it reads the host's shipped configuration: **1.8739e-1 on the bench square, 5.65x, 10.7 machine-minutes, ~130 s of Node** (plan §52.15). |
+| `test/pilot/distil-arm.mjs` | **Not a test — the instrument that reads a distilled-rung refusal to its cause, and the one every knob in plan §52.8 was measured through.** Runs the bench's ladder on the arm at a chosen grade (`GRADE`, `DIET`, `ENGINE`, `REPLACE`, `TEACHCAP`, `STRIDE`, `WIN`, `OFFS=raw`, `PASSES`, `PERIODIC`, `LOO`), then scores the fitted policy on its OWN training programs — evaluated as it deploys, once per decision and held: helps them and harms the square → transfer; harms them too → the fit or the deploy path. Knobs for the structural experiments of plan §52.16 too: `Q`, `PARAM=1`, `REF=angles|torques|both`, `DIET=tour2`, `RIDGE`, `ONLINE=0`, `SOFFS`, `LAPSYNC=1`, `ARM_BL`. At its defaults it reads the host's shipped configuration: **1.7528e-1 on the bench square, 6.04x, 10.7 machine-minutes, ~160 s of Node** (plan §52.16). |
 | `test/pilot/rigs/arm-rig.mjs` | The 2R arm rig — plant, paths, routing, `commissionArm` and `deployOn`. Every harness drives the arm through this; three separate copies of pieces of it have each shipped a defect. |
 | `test/pilot/forecast.mjs` | Held-out forecast R² on open-loop programs, plus an offline refit that separates an unreachable dictionary from an unvisited one. |
 | `test/pilot/spectrum.mjs` | Where the machine rings, where the defect's energy is, and where the excitation looked — three power spectra on one axis of periods. |
@@ -1405,7 +1405,22 @@ decides on its own tick (a "now" up to 8 steps stale), the ring was sampled on t
 step counter that nothing resets at deploy, and the teacher's oracle read its record on the
 sample grid rather than at the decision step. All three read the step they are taken at now,
 every loop counts continuous time (the 0.4-step seam is gone), and a per-lap re-phase was built,
-measured worse on both rungs, and ships off. Bench square today: **1.8739e-1, 5.65x**.
+measured worse on both rungs, and ships off.
+**AND THE CONTROL THEORY WAS TAKEN APART ON THE MACHINE (plan §52.16).** Every structural
+candidate was built as a knob and measured: a Q-filter on the teacher (inert), the teacher's cap
+(a regulariser — a more faithful teacher is worse, 5.65x → 4.35x at 0.20), parametric
+basis-function ILC (built; cap-insensitive at R² 0.98 and WORSE at 5.06x), the physics term kept
+underneath (3.91x), rows at every step (inert), and a TOUR diet with a window that reaches the
+plant's memory (5.63x / 5.01x / 5.14x at x1 / x2 / x3 — the reach is not what binds, which
+retires rule 37 as the explanation). On its own diet the policy reaches 5-7x under every one of
+them while the prefix reaches 9-11x: the ceiling is what a linear map of the reference can
+EXPRESS. What moved it was the REGRESSOR — the rigid-body reference torques beside the angles,
+since wind-up and link bend are linear in torque and not in angle — **1.7528e-1, 6.04x on the
+bench square** (93 features, 274 MAC/decision, 2.7% of a scan), 3.98x on the soft cell, with the
+ridge scaled to the rows (1e-3). Two things found underneath and not fixed: the streaming fit
+returns weights 30-150x the batch fit's on an exactly linear target and refuses rows the batch
+route deploys; and the cascade is stable on this arm because of its backlash — with the dead-zone
+removed it reads 0.17x past its own verify. Bench square today: **1.7528e-1, 6.04x**.
 
 **ITS FIRST READING WAS A REFUSAL, WHICH WAS THE PAGE DOING ITS JOB (plan §52.7).** Distil-only
 ladder on the bench square: `②d distilled — REFUSED` at 0.22x (demo), 0.43x (fast, browser),
