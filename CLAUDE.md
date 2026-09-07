@@ -1383,6 +1383,15 @@ bench square through the driven host reads 2.2638e-1 against the restore's 2.263
 machine-minutes against 8.5: the approaches are the difference, and the settle is sized to the
 run's warmup rather than the eye's (the page's policy would have cost 13.9).
 
+**AND THE TWO LOOPS READ SIDE BY SIDE CLOSED TEN MORE (plan §52.13).** The deploy path handed
+every rung the CONTINUOUS step, so on the page the lap table slid 0.4 steps per lap (27 steps by
+lap 40, pinned) and the distilled rung's decision phase walked against the one it was fitted at;
+online learning fired once per servo step instead of once per decision, nine times the cost and a
+row weighting the fit never saw; the ghost was drawn at `k % ceil(lap)` with the same slip; a
+ghost made stale mid-lap recorded from where the arm stood; Pause did not pause a recording; a
+faded correction read "armed" in silence. All closed and pinned; the scoring itself was read
+against the host's expression and is the same quantity.
+
 **ITS FIRST READING WAS A REFUSAL, WHICH WAS THE PAGE DOING ITS JOB (plan §52.7).** Distil-only
 ladder on the bench square: `②d distilled — REFUSED` at 0.22x (demo), 0.43x (fast, browser),
 0.74x (fast, Node, after the rung got a derived authority). The training runs converged

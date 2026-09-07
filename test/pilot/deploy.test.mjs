@@ -18,7 +18,7 @@
  * bit, which no partial deployment can satisfy.
  */
 import { machine, settle, commissionComp } from '../flexisim/_rig.mjs';
-import { makeArmHost } from '../../lib/flexisim/autohost.js';
+import { makeArmHost, programSignature } from '../../lib/flexisim/autohost.js';
 import { snapshotArm, restoreArm } from '../../lib/flexisim/arm2r.js';
 import { ContourScore, decompose } from '../../lib/flexisim/contour.js';
 import { roundedRect } from '../../lib/flexisim/toolpath.js';
@@ -86,6 +86,31 @@ check('the deploy path returns exactly what the scored path applies', maxGap < 1
 // could not have slipped under any tolerance this check would plausibly use.
 check('…and the check has teeth — the baseline term it must include is not negligible',
   ffMag > 1e-4, `${ffMag.toExponential(3)} rad`);
+
+// ---- AND ON THE SECOND LAP, WHERE THE COUNTER HAS PASSED THE FRACTIONAL PERIOD. The page
+// counts steps continuously; every scored run restarts at the lap. `actAt` derives the
+// look-ahead from the true period, but handed `act()` the CONTINUOUS step, which the lap
+// table indexes `k % ceil(lap)` and the distilled rung's hold reads `k % stride` — so on
+// the page the table slid 0.4 steps per lap and the decision phase walked. A fake table
+// that returns its own index makes the slip a number.
+{
+  const T = path.lap;
+  const saved = { hff: host.auto.hff, on: host.auto.deployed.hff, built: host.auto.built.hff, prog: host.auto._hffProgram };
+  host.auto.built.hff = { lap: LAP, channels: 2, at(i) { const kk = ((i % LAP) + LAP) % LAP; return [kk * 1e-6, 0]; } };
+  host.auto.hff = host.auto.built.hff; host.auto.deployed.hff = true; host.auto._hffProgram = programSignature(path, LAP);
+  let worst = 0;
+  for (const k of [LAP + 5, 3 * LAP + 1000, 40 * LAP + 7]) {
+    const kr = Math.floor(((k % T) + T) % T);
+    const cmd = path.at(k), [c1, c2] = R[kr];
+    const refs = [{ theta: c1, omega: 0, alpha: 0 }, { theta: c2, omega: 0, alpha: 0 }];
+    const ff = rc.feedforward([[1, 0], [0, 1]], m.servo.jointTorques(refs), { enableToolff: false });
+    const got = host.actAt(k, cmd, refs)[0] - ff.dq[0];
+    worst = Math.max(worst, Math.abs(got / 1e-6 - kr));
+  }
+  console.log(`  lap-table index on later laps: worst slip ${worst.toFixed(2)} steps`);
+  check('on later laps the deploy path reads every rung at the IN-LAP step — no slip against the fractional period', worst < 1e-9, `${worst} steps`);
+  host.auto.hff = saved.hff; host.auto.deployed.hff = saved.on; host.auto.built.hff = saved.built; host.auto._hffProgram = saved.prog;
+}
 
 // AND A HOST WITHOUT A BASELINE REFUSES rather than handing back half a correction — the
 // silent-degradation path is how the original defect would have survived this very check.

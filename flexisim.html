@@ -8,7 +8,7 @@
   <title>FlexiSim — Commissioning Bench</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:1082,built:"2026-09-07T18:34:06Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:1083,built:"2026-09-07T20:21:33Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
 
   <style>
@@ -374,6 +374,10 @@ function home(resume = false) {
   approach = Object.assign(planApproach(arm, [q1, q2], feedNow()), { resume: resume || running });
   running = false;
   k = 0; lap = 0; pendingProgram = false;
+  // A GHOST RECORDING DOES NOT SURVIVE A MOVE. It drives the program from its own index; left
+  // alive across a Reset or a program change it resumed mid-lap on an arm now standing at the
+  // start, a step in the reference. It restarts from k = 0 when the run resumes.
+  ghostRec = null;
   score = newScore(); lapScore = newScore(); lastLap = null; trail = [];
   fitView();
 }
@@ -498,7 +502,10 @@ function draw() {
   // running an excitation and is not on the program, and a baseline beside it would invite a
   // comparison between two machines doing different things.
   if (ghostOn() && ghostValid() && !isComm && ghost.lap > 1) {
-    const Gh = ghost, gk = ((k % Gh.lap) + Gh.lap) % Gh.lap;
+    // AT THE LAP'S TRUE PHASE. The program wraps at its fractional period (7356.6 here) and
+    // the ghost was recorded on integer steps of one lap, so `k % ceil(lap)` slid the ghost
+    // 0.4 steps per lap against the machine beside it — the deploy path's own old slip, drawn.
+    const Gh = ghost, T = prof.lap, gk = Math.min(Gh.lap - 1, Math.floor(((k % T) + T) % T));
     g.save(); g.globalAlpha = 0.38;
     g.strokeStyle = '#f87171'; g.lineWidth = 1.5; g.beginPath();
     for (let i = 0; i <= 240; i++) { const j = Math.min(Gh.lap - 1, Math.round((i / 240) * (Gh.lap - 1))); if (i === 0) g.moveTo(X(Gh.tx[j]), Y(Gh.ty[j])); else g.lineTo(X(Gh.tx[j]), Y(Gh.ty[j])); }
@@ -540,7 +547,7 @@ function draw() {
   g.beginPath(); g.arc(X(0), Y(0), 6, 0, 7); g.fill();
   g.beginPath(); g.arc(X(ex), Y(ey), 4, 0, 7); g.fill();
   const tool = A.toolXY();
-  if (!isComm) { const cmd = prof.at(k); g.strokeStyle = '#22d3ee'; g.lineWidth = 1.5; g.beginPath(); g.arc(X(cmd.x), Y(cmd.y), 5, 0, 7); g.stroke(); }
+  if (!isComm) { const cmd = prof.at(ghostRec ? ghostRec.k : k); g.strokeStyle = '#22d3ee'; g.lineWidth = 1.5; g.beginPath(); g.arc(X(cmd.x), Y(cmd.y), 5, 0, 7); g.stroke(); }
   g.fillStyle = isComm ? '#22c55e' : '#fbbf24';
   g.beginPath(); g.arc(X(tool[0]), Y(tool[1]), 4.5, 0, 7); g.fill();
 
@@ -883,6 +890,21 @@ function plcHTML() {
     + `<p class="hint">${verdict}. The budget is 10% of a ${scanMs()} ms task, met in <b>every</b> cycle. Excluded and said so: ${c.excludes.join(', ')}.</p>`;
 }
 
+/*
+ * A CORRECTION THAT HAS FADED TO NOTHING MUST SAY SO. The distilled model fades outside the
+ * commanded-speed span it was fitted on (the coverage guard), so at a feed the training diet
+ * did not cover the box reads "armed" while the machine runs conventional — a silent zero that
+ * would be read as the model doing nothing. The fade is reported beside the armed set.
+ */
+function distilFadeNote() {
+  const d = host && host.auto.deployed.distil ? host.auto.distil : null;
+  if (!d || !prof) return '';
+  const g = d.coverage(feedNow());
+  if (g >= 1) return '';
+  const sp = d.report && d.report.speedSpan;
+  return ` · <b>the distilled correction is FADED to ${(100 * g).toFixed(0)}%</b> — feed ${feedNow().toExponential(1)} is outside the trained span`
+    + (sp ? ` [${sp[0].toExponential(1)}, ${sp[1].toExponential(1)}]` : '');
+}
 function statsHTML() {
   if (!arm) return '';
   const rows = [];
@@ -905,7 +927,8 @@ function statsHTML() {
     const on = Object.entries(a).filter(([, v]) => v.on).map(([kk]) => kk === 'distil' ? 'distilled' : kk === 'hff' ? 'lap learning' : kk === 'stack' ? 'pilot cascade' : kk);
     rows.push(['armed', (on.join(' + ') || 'nothing — the conventional machine')
       + (a.hff.on && a.hff.offProgram > 0 ? ' · <b>lap learning is being WITHHELD: this is not the program it learned</b>' : '')
-      + (onlineFlag && host.auto.distil ? ` · learning, ${host.auto.distil.adapted().toLocaleString()} rows so far` : '')]);
+      + (onlineFlag && host.auto.distil ? ` · learning, ${host.auto.distil.adapted().toLocaleString()} rows so far` : '')
+      + distilFadeNote()]);
   }
   return rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('');
 }
@@ -987,8 +1010,12 @@ function frame() {
   if (arm && !busy) {
     try {
       if (approach && !commissioning) { let n = +$('s-spf').value; while (n-- > 0) { if (approachStep()) { approachDone(); break; } } }
-      else if (ghostRec) { let n = +$('s-spf').value; while (n-- > 0) { if (ghostStepOnce()) { home(true); break; } } }
-      else if (running && ghostOn() && !ghostValid() && !commissioning) ghostStart();
+      else if (ghostRec && running) { let n = +$('s-spf').value; while (n-- > 0) { if (ghostStepOnce()) { home(true); break; } } }
+      // A STALE GHOST IS RE-RECORDED FROM THE PROGRAM START, never from mid-lap: the record
+      // drives the program from k = 0, and starting it with the arm mid-lap handed the servo a
+      // step to the start. If the arm is not at the start (a ghost-mode change mid-run), it is
+      // driven there first and the recording begins when it arrives.
+      else if (running && ghostOn() && !ghostValid() && !commissioning) { if (k === 0) ghostStart(); else home(true); }
       else if (running && !commissioning) stepN(+$('s-spf').value);
     } catch (e) { running = false; setBadge('halted: ' + e.message, 'bad'); console.error(e); }
   }
@@ -1031,6 +1058,9 @@ window.__flxDbg = () => (arm ? {
       reason: rep.distil.fit.reason } : null, note: rep.distil.note || null } : null },
   stored: (() => { const s = loadStored(); return s ? { K: s.K, E: s.E, shape: s.shape, gain: s.gain, matches: storedMatches(s) } : null; })(),
   trainedOn, mismatch: plantMismatch(), plantNote: plantNote(),
+  recording: !!ghostRec, recordingLap: ghostRec ? ghostRec.l : null,
+  ghostK: ghost ? Math.min(ghost.lap - 1, Math.floor(((k % prof.lap) + prof.lap) % prof.lap)) : null, lapT: prof ? prof.lap : null,
+  fade: host && host.auto.deployed.distil ? host.auto.distil.coverage(feedNow()) : null,
   approaching: !!approach, approachSteps: approach ? approach.steps : 0, frames, mag: magNow(),
   hop: { on: hop.on, max: hop.max, n: hop.n, maxAt: hop.maxAt, big: hop.big },
   badge: $('badge').textContent,

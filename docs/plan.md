@@ -11270,3 +11270,43 @@ along the old edge and snapped to the new one. The base is now the tool's true p
 the component along the local normal is scaled, so x1 IS the tool path (pinned in the browser:
 every drawn point on the tool, x10 moves it) and higher magnifications grow the deviation out of
 the path rather than out of a projection.
+
+### §52.13 THE BUGS IN THE ANIMATION, THE MODEL AND THE SCORING — FOUND BY READING THE TWO LOOPS SIDE BY SIDE
+
+The owner's instruction: there are bugs in the animation and in the model and scoring, find and
+close them all. The method was the one rule 61 prescribes — put the page's loop beside the
+host's scored loop and read every place they differ — plus the ghost, which has no twin at all.
+
+**THE MODEL.** (1) **The deploy path handed every rung the CONTINUOUS step.** `actAt` had been
+repaired once to derive its look-ahead from the lap's true, fractional period, and left `ctx.k`
+as the page's running counter. The lap table indexes `k % ceil(lap)`, so on the page it slid
+0.4 steps per lap against the machine — the very slip that repair was for, back through the
+other door — and the distilled rung's hold reads `k % stride`, so its decision phase walked
+against the one it was fitted at (7357 is not a multiple of 9). Every scored run hands `act()`
+the in-lap step; the deploy path now does too. Pinned in `deploy.test.mjs` with a lap table
+that returns its own index: on the old code the slip reads **27 steps at lap 40**, on the new
+0.00. (2) **Online learning fired once per SERVO STEP, not once per decision.** The row and
+applied term kept for `observe` were refreshed on held steps too, and `observe` consumed them
+every step — one decision's row learned nine times over with nine different truths: nine times
+the fit cost the budget panel charges, and a row weighting the commissioning fit never saw. The
+context is now kept only on a decision step and consumed once. (3) A held decision and its
+context survived into the next run; `beginRun` clears both. (4) **A faded correction was
+silent.** Outside the trained speed span the coverage guard fades the policy to zero while the
+box reads "armed"; the score panel now says FADED to N% and names the span.
+
+**THE ANIMATION.** (5) **The ghost was drawn at `k % ceil(lap)`** — the same 0.4-step slip,
+drawn, so after ninety laps the ghost arm ran 36 steps out of phase with the machine beside it.
+Drawn at the in-lap step by the true period now, pinned after two laps. (6) **A ghost made stale
+mid-lap (a mode change) began recording where the arm stood**, which hands the servo a step to
+the program start; the arm is driven there first and the record begins at k = 0. (7) **Pause did
+not pause a ghost recording** — the arm kept stepping under a button reading Run. (8) A ghost
+recording survived a Reset or program change and resumed mid-lap on an arm at the start; a move
+cancels it and it restarts. (9) The command marker was drawn at the run's frozen index while the
+ghost recorded at its own. (10) §52.12's spike: the trail was a projection, not the tool path.
+
+**THE SCORING.** Read against the host's expression, the page's score is the same quantity —
+contour and lag through the same `decompose`, `totalRms` the whole deviation, the ghost's rms
+the same sum over its recorded lap, the last complete lap the unit — and it was not changed.
+What the scoring HAD been reading wrongly was the machine: with the deploy path's phase slip
+(1) and the ghost's (5), a page left running long enough scored a correction drifting off its
+program against a baseline drifting off the machine, and neither number meant what it said.

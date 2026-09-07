@@ -1813,12 +1813,57 @@ await halted('the ghost recording');
   console.log(`  flexisim/ghost: baseline ${g.ghost.rms.toExponential(3)}, live lap ${g.lastLap.totalRms.toExponential(3)}, ratio ${ratio.toFixed(3)}`);
   check('flexisim/ghost: a baseline lap is recorded for THIS plant and program', g.ghost.stale === false && g.ghost.lap > 100, JSON.stringify(g.ghost));
   check('flexisim/ghost: THE CONTROL — nothing armed against the conventional ghost is one machine twice, and reads ~1', ratio > 0.85 && ratio < 1.18 && g.row, `ratio ${ratio.toFixed(4)}`);
+  // THE GHOST IS DRAWN AT THE LAP'S TRUE PHASE. After two laps the continuous counter has
+  // passed the fractional period twice; the ghost index must be the in-lap step by that
+  // period, not `k % ceil(lap)`, which slides 0.4 steps a lap against the machine.
+  const gp = await fx.evaluate(() => { const d = window.__flxDbg(); const T = d.lapT; return { k: d.k, T, ghostK: d.ghostK, want: Math.floor(((d.k % T) + T) % T), lapInt: Math.ceil(T) }; });
+  check('flexisim/ghost: …and after two laps the ghost is drawn at the in-lap step by the TRUE period, not by its ceiling', gp.k > gp.lapInt && gp.ghostK === gp.want && gp.T !== gp.lapInt, JSON.stringify(gp));
+  // A STALE GHOST MID-LAP IS RE-RECORDED FROM THE START, AND PAUSE PAUSES THE RECORDING.
+  // Switching the ghost mode mid-run invalidates the record; the old page began recording
+  // where the arm stood (a step to the start for the servo), and Pause left the recording
+  // stepping the arm. Now the arm is driven home first, records from k = 0, and holds still
+  // under Pause.
+  {
+    const kMid = await fx.evaluate(() => window.__flxDbg().k % window.__flxDbg().lapT);
+    await fx.selectOption('#ghost-mode', 'open');
+    // The whole sequence — drive home, record two laps — takes a few seconds at this speed,
+    // so it is SAMPLED rather than awaited state by state, and the trace is the diagnostic.
+    const seen = [];
+    let paused = false, still = null;
+    for (let i = 0; i < 1500; i++) {
+      const d = await fx.evaluate(() => { const x = window.__flxDbg(); return { k: x.k, appr: x.approaching, rec: x.recording, recLap: x.recordingLap, running: x.running, tool: x.drawnPose.tool, done: !!(x.ghost && x.ghost.rms && !x.ghost.stale && x.ghost.mode === 'open') }; });
+      seen.push(d);
+      if (d.rec && !paused) {
+        // PAUSE DURING THE RECORDING: the arm must hold still.
+        await fx.click('#run'); paused = true;
+        const p0 = await fx.evaluate(() => window.__flxDbg().drawnPose.tool);
+        await fx.waitForTimeout(400);
+        const p1 = await fx.evaluate(() => window.__flxDbg().drawnPose.tool);
+        still = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]);
+        await fx.click('#run');   // resume
+      }
+      if (d.done && paused) break;
+      await fx.waitForTimeout(20);
+    }
+    const sawApproach = seen.some((d) => d.appr);
+    const firstRec = seen.find((d) => d.rec);
+    const trace = seen.filter((d, i) => i === 0 || d.appr !== seen[i - 1].appr || d.rec !== seen[i - 1].rec).map((d) => `${d.appr ? 'A' : d.rec ? 'R' : 'r'}@${d.k}`).join(' ');
+    console.log(`  flexisim/ghost: stale mid-lap (k ${kMid}) → ${trace}`);
+    check('flexisim/ghost: a ghost made stale mid-lap is re-recorded only after the arm is DRIVEN to the start, from k = 0', kMid > 50 && sawApproach && !!firstRec && firstRec.k === 0, JSON.stringify({ kMid, sawApproach, firstRec }));
+    check('flexisim/ghost: …and Pause pauses the recording — the arm holds still', paused && still === 0, `paused ${paused}, moved ${still === null ? 'n/a' : still.toExponential(2)} while paused`);
+    await fx.waitForFunction(() => { const d = window.__flxDbg(); return d.ghost && d.ghost.rms && !d.ghost.stale && d.ghost.mode === 'open' && d.running; }, null, { timeout: 180000 });
+    await fx.selectOption('#ghost-mode', 'conventional');
+    await fx.waitForFunction(() => { const d = window.__flxDbg(); return d.ghost && d.ghost.rms && !d.ghost.stale && d.ghost.mode === 'conventional' && d.running; }, null, { timeout: 180000 });
+  }
   // ---- GOING HOME IS A MOVE. Reset from mid-lap: the arm must SERVO to the program start
   // — an approach the page reports, drawn every frame — and never jump there. Sampled at
   // frame rate: at least a few distinct tool positions on the way, no single sample-to-
   // sample jump larger than a third of the whole travel, and the run controls locked until
   // it arrives. The old page set the pose in one call, which no machine can do.
   {
+    // From MID-LAP — the re-recordings above end with the arm driven home, and a Reset from
+    // the start is no move at all.
+    await fx.waitForFunction(() => { const d = window.__flxDbg(); return d.running && !d.approaching && !d.recording && (d.k % d.lapT) > 1500; }, null, { timeout: 120000 });
     const mid = await fx.evaluate(() => window.__flxDbg().drawnPose.tool);
     const perFrame = await fx.evaluate(() => (+document.getElementById('s-spf').value) * window.__flxDbg().feed);
     await fx.evaluate(() => window.__flxHop(true));
@@ -1890,8 +1935,9 @@ await halted('the ghost recording');
     await fx.waitForFunction(() => { const x = window.__flxDbg(); return x && x.E === 0.03 && !x.busy && !x.approaching; }, null, { timeout: 120000 });
     const bench = await fx.evaluate(() => { const x = window.__flxDbg(); return { K: x.K, E: x.E }; });
     check('flexisim/plant: …and back on the bench cell', bench.K === 0.25 && bench.E === 0.03, JSON.stringify(bench));
-    await fx.click('#run');
-    await fx.waitForFunction(() => window.__flxDbg().running === true, null, { timeout: 10000 });
+    // The run was going when the plant changed, so it resumes by itself once the arm is home
+    // and the new plant's ghost is recorded; wait for that rather than toggling the button.
+    await fx.waitForFunction(() => { const d = window.__flxDbg(); return d.ghost && d.ghost.rms && !d.ghost.stale && d.running && !d.approaching && !d.recording; }, null, { timeout: 180000 });
   }
   // THE ERROR MAGNIFICATION IS A SLIDER, and the legend says what the orange trail is.
   {
