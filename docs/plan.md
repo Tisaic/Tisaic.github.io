@@ -10798,3 +10798,56 @@ armed on the same machine, reported and not armed on a different one.
 The distilled rung has still not been SCORED on this arm through the ladder; the bench is the
 instrument that will do it. And a stored model does not survive a plant or program change — it
 is not supposed to.
+
+### §52.7 The distilled rung, scored on the arm through the ladder for the first time — REFUSED, and the split says why
+
+The bench is the instrument, and its first reading is a refusal. Distil-only ladder, bench cell,
+sharp square, three grades, two hosts:
+
+```
+  grade   host      passes   ②d score     ratio    authority   verdict
+  demo    browser      4     4.8592e+0    0.22x    3.0 (*)     REFUSED
+  fast    browser      8     2.4712e+0    0.43x    3.0 (*)     REFUSED
+  fast    Node         8     1.4254e+0    0.74x    2.0         REFUSED
+  full    Node        24     (running)
+  (*) before the distil rung had a derived authority frame — see dae5c30
+```
+
+Every training run converged past the 1.5x drop gate (fast: 5.76x, 2.05x, 4.82x, 2.43x, 1.71x,
+2.15x), the fit vouched for itself (21,049 rows, 79 features, held-out R² only 0.006 / 0.078),
+and the MACHINE refused it. One number, three candidate causes, and `test/pilot/distil-arm.mjs`
+takes the measurement that separates them — the fitted policy scored on its OWN training
+programs, on the machine:
+
+```
+  program 0   8.8634e-2 -> 3.3428e-2   2.65x
+  program 1   2.4113e-1 -> 1.0151e-1   2.38x
+  program 2   1.3808e-1 -> 4.7524e-2   2.91x
+  program 3   8.5012e-2 -> 6.0619e-2   1.40x
+  program 4   1.5593e-1 -> 9.6303e-2   1.62x
+  program 5   1.3693e-1 -> 7.6500e-2   1.79x
+  the bench square                       0.74x
+```
+
+**It helps every program it was fitted on and harms the one it was not.** That is TRANSFER, and
+it exonerates the fit and the deploy path in one reading: a sign error, a units error or a
+stretched window would harm the training programs too. The policy carries a correction shaped
+for the designed polygons' corners onto the square's, which are a different regime — the square
+uses 61,537% of the declared jerk and its ceiling is 1.75x below the rounded rectangle's for ANY
+bank (§36). Two further readings agree: the score improves with refinement (0.22x → 0.43x →
+0.74x as the training prefixes converge further), and it improves when the correction is
+CAPPED SMALLER (3.0 → 2.0), which is what a wrong-shaped correction looks like from the
+outside.
+
+**THIS DOES NOT REPRODUCE §49.** §49's 4.99x on the sharp square used an ORACLE-converged
+prefix (a perfect forecast, iterated to convergence) on the arm's rig; the ladder route
+distils REAL `hff` prefixes converged on the designed demo at 1.7–5.8x, and so far that route
+does not carry. Whether full grade (24 passes) crosses 1x is the run in progress; whether a
+diet carrying the square's corner class without being the square is the repair is the next
+question, and it is a measurement rather than an argument.
+
+**AND THE PAGE DID WHAT IT IS FOR.** Nothing harmful shipped: the refusal is a row, the machine
+runs the conventional baseline, and the cost record says what the refusal cost — 101 minutes of
+machine time at fast grade, 370 scored runs. One page defect fell out: a REFUSED model was being
+STORED and offered back as "matches this machine, 1.00x"; nothing deployed now means nothing
+kept, pinned in the browser.

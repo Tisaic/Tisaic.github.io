@@ -8,7 +8,7 @@
   <title>FlexiSim — Commissioning Bench</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:1070,built:"2026-09-06T23:39:24Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:1071,built:"2026-09-07T00:23:55Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
 
   <style>
@@ -644,7 +644,13 @@ async function startCommission() {
 function saveModel() {
   if (!rep || !host) return;
   const a = host.auto;
-  if (!a.built.distil && !a.built.hff) { try { localStorage.removeItem(STORE_KEY); } catch {} return; }
+  // ONLY A MODEL THAT DEPLOYED IS WORTH KEEPING. A rung that was built, scored and REFUSED
+  // still sits in `built.*` — that is what lets a refusal be inspected — but storing it wrote
+  // a record that read "matches this machine, 1.00x" for a controller the ladder had just
+  // measured as harmful. Measured on the bench: the fast-grade run refused ②d at 0.43x and
+  // the page stored it anyway. Nothing deployed means nothing stored, and a stale record from
+  // an earlier commissioning is removed rather than left to be offered back.
+  if (!a.deployed.distil && !a.deployed.hff) { try { localStorage.removeItem(STORE_KEY); } catch {} return; }
   const L = Math.ceil(prof.lap);
   let hff = null;
   if (a.built.hff) {

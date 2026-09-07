@@ -1862,7 +1862,14 @@ await halted('the whole commissioning');
     await fx.waitForFunction(() => { const d = window.__flxDbg(); return d && d.K === 0.5 && !d.busy; }, null, { timeout: 180000 });
     const other = await fx.evaluate(() => window.__flxDbg());
     check('flexisim/store: …and on a different machine it is reported but NOT armed', other.auto.have === false && other.stored && other.stored.matches === false && other.stored.K === 0.25, JSON.stringify({ auto: other.auto, stored: other.stored }));
-  } else console.log('  flexisim/store: the distilled rung was refused at demo grade, so persistence has nothing to store — skipped, stated');
+  } else {
+    // THE OTHER HALF: a refused model must NOT be stored. The first version stored it and
+    // reported "matches this machine, 1.00x" for a controller the ladder had just measured as
+    // harmful — a stale, misleading record offered back on the next load.
+    check('flexisim/store: a REFUSED model is not stored — nothing deployed means nothing kept',
+      before.stored === null, JSON.stringify(before.stored));
+    console.log('  flexisim/store: the distilled rung was refused at demo grade, so the same-machine restore is not exercised — stated');
+  }
 }
 
 const fxBuf = await fx.evaluate(() => window.__dbg.buffer().filter((e) => e.type === 'error'));

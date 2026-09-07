@@ -1164,6 +1164,7 @@ measurement behind each is in `docs/history/` — the pointer in brackets.
 | `test/pilot/tankspread.mjs` | **A PLANT'S SCORE IS A DISTRIBUTION.** Commissions the tank from N seeds and reports the spread, the deployed median, and the GATE'S OWN ESTIMATE beside what it delivered. It asserts nothing — an instrument that decided its verdict before the verdict was understood is how the 1.32x got written down. What it measured: at the old defaults 4 of 8 seeds deploy and **all four hurt**; at the new ones 5 of 8 deploy at a median 1.249x, two still hurt, and the gate's estimate correlates **-0.057** with delivered benefit. |
 | `test/pilot/qpsweep.mjs`, `qpsweep-arm.mjs` | **Not tests — the solver-budget experiment.** Commission ONE pilot, re-deploy that same model over a grid of QP iteration counts and horizon lengths, and score the MACHINE. Found that the shipped 60 iterations at `1.5·Tset` is 57× more arithmetic than the machine wants and WORSE than 1 iteration at N=56 (EMPS 14.16× against 12.70×, at 101% of a PLC scan's 10% against 5761%), and that the arm agrees at 29× cheaper and 16% better. Scores a held-out program in the same table, because the surface is rugged enough that the best cell of a grid is a suspect result. |
 | `test/pilot/rti.test.mjs` | A FALSIFIED HYPOTHESIS, pinned as the four things measuring it found. One QP iteration per cycle does not track sixty (88% of the applied signal); sixty is itself 36% from this solver's own optimum, so every delivered number in the project came out of a truncated solve; the convergence curve at N=8 matches N=48, so the rate is the Hessian's conditioning and not the horizon; and the Lipschitz bound is 1.82× above the true spectral norm, which costs exactly 2× in iterations. |
+| `test/pilot/distil-arm.mjs` | **Not a test — the instrument that reads a distilled-rung refusal to its cause.** Runs the bench's distil-only ladder on the arm at a chosen grade, then scores the fitted policy on its OWN training programs: helps them and harms the square → transfer; harms them too → the fit or the deploy path. Its first reading exonerated the fit and the deploy path (plan §52.7). |
 | `test/pilot/rigs/arm-rig.mjs` | The 2R arm rig — plant, paths, routing, `commissionArm` and `deployOn`. Every harness drives the arm through this; three separate copies of pieces of it have each shipped a defect. |
 | `test/pilot/forecast.mjs` | Held-out forecast R² on open-loop programs, plus an offline refit that separates an unreachable dictionary from an unvisited one. |
 | `test/pilot/spectrum.mjs` | Where the machine rings, where the defect's energy is, and where the excitation looked — three power spectra on one axis of periods. |
@@ -1327,6 +1328,17 @@ an engineer would actually meet:
 - **Score** — the gap against the ghost, quoted on the last COMPLETE lap (mid-lap is a partial
   sum over whichever edge or corner has been cut, and lap 0 carries the start-up transient the
   ghost skips — rules 12, 13), plus contour · lag · total.
+
+**AND ITS FIRST READING IS A REFUSAL, WHICH IS THE PAGE DOING ITS JOB (plan §52.7).** Distil-only
+ladder on the bench square: `②d distilled — REFUSED` at 0.22x (demo), 0.43x (fast, browser),
+0.74x (fast, Node, after the rung got a derived authority). The training runs converged
+(1.7–5.8x), the fit vouched for itself, and the machine refused it. `test/pilot/distil-arm.mjs`
+splits the cause: the policy helps EVERY one of its six training programs (1.40–2.91x) and harms
+the square — TRANSFER, not the fit and not the deploy path, since a sign, units or window fault
+would harm the training programs too. The ladder route with real `hff` prefixes does not yet
+reproduce §49's oracle-converged 4.99x; full grade is the run in progress. Nothing harmful
+shipped, the conventional baseline runs, and the cost record says the refusal cost 101 minutes
+of machine time.
 
 **WHAT IS NOT ON THE PAGE, AND WHY.** The conventional rung, the pilot model layers, the corner
 banks and the compiled twin all still exist in `lib/` with their tests, and none of them is
