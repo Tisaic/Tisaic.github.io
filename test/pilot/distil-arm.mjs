@@ -57,6 +57,9 @@ const ENGINE = process.env.ENGINE || 'pilot';
 const DISTIL = { ...(process.env.OFFS === 'raw'
   ? { offsets: [-512, -256, -128, -64, -32, -16, -8, -4, -2, -1, 0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512],
       signOffsets: [-128, -32, -8, -2, 0, 2, 8, 32, 128] } : {}),
+  // WIN=<k>: the host's pilot-sample window with every offset scaled by k (rule 37: the window must
+  // reach the plant's memory, and a softer link has a longer one).
+  ...(process.env.WIN ? { offsetsPerSample: [-256, -128, -64, -32, -16, -8, -4, -2, -1, 0, 1, 2, 4, 8, 16, 24, 32, 48, 64, 96, 128, 192, 256].map((o) => Math.round(o * +process.env.WIN)) } : {}),
   // STRIDE=<n|pilot>: one row per n steps and the correction held between (default the host's, pilot).
   ...(process.env.STRIDE ? { stride: process.env.STRIDE === 'pilot' ? 'pilot' : +process.env.STRIDE } : {}),
   // FADE=<fraction of the trained speed span>: the coverage guard's ramp (measured inert here).
@@ -110,6 +113,7 @@ const rep = await host.auto.commission({ run: host.run, drivePilot: host.drivePi
   recordDemo: host.recordDemo, distilRuns: host.distilRuns });
 
 console.log(`\n  shipped ${JSON.stringify(rep.deployed)}   ${rep.base.toExponential(4)} -> ${rep.best.toExponential(4)}   ${rep.gain.toFixed(2)}x`);
+const _st = host.auto.built.stack; if (_st) console.log(`  pilot sample stride ${_st.sample} steps, so the ±256-sample window spans ±${256 * _st.sample} steps${process.env.WIN ? ` (WIN ${process.env.WIN}: ±${Math.round(256 * +process.env.WIN) * _st.sample})` : ''}`);
 console.log(`  machine samples ${host.samples().samples.toLocaleString()} over ${host.samples().runs} runs`
   + `  (${(host.samples().samples / 1000 / 60).toFixed(1)} min at 1 ms)  wall ${Math.round((Date.now() - t0) / 1000)} s`);
 const d = rep.distil;

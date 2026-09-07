@@ -11229,3 +11229,34 @@ magnified along the normal, fixed at x10 — on a plant with 2.09 rms of error i
 stage and the legend said "error x10", which told nobody what it was. It is a slider now (x1 to
 x20, x10 by default) and the legend names the object. Also fixed: `docs/plan.md` had §52.8-§52.11
 inserted INSIDE §52.7, ahead of its last five paragraphs; they are back in order.
+
+**WHY THE POLICY LOSES TO ITS TEACHER ON THE SOFT PLANT — MEASURED AS FAR AS ONE LADDER GOES.**
+The owner's question: the harness shows the distilled model beating the cascade, so why is it
+so much worse on the page? It is not the page. The harness at K 0.25 / **E 0.005** reproduces
+the page's row to every digit — 2.0881, 4.7617e-1, 7.9875e-1 — and the harness number the
+owner knows (4.68x, 2.2638e-1) is the bench cell, E 0.03. Same code, a link six times softer.
+What the soft plant changes is the two rungs' fortunes in opposite directions: the cascade,
+which has FEEDBACK (encoders, torques) and a receding-horizon solve, nearly doubles its gain
+(2.23x → 4.39x), while the policy — pure feedforward from the commanded reference over a
+±2304-step window — halves on the square (4.68x → 2.61x) although it still helps every
+training program 3.8-5.4x and its held-out R² is HIGHER there (0.85/0.88 against 0.87/0.66).
+So the fit is fine and the transfer is what falls. The hypothesis with a number behind it is
+rule 37: a link six times softer rings at a period ~2.45x longer, and the window that reaches
+the memory at E 0.03 does not reach it at E 0.005. Tested by widening the window on the soft
+plant, `WIN=k` in the harness:
+
+```
+  window                 rows    own programs      square
+  ±2304 steps (x1)       2305    3.8x - 5.4x       7.9875e-1   2.61x   deployed
+  ±4608 steps (x2)       1281    0.17x - 0.25x     7.5728e+0   REFUSED, harms its own programs
+  ±9216 steps (x4)          0    —                 no training rows — the fit refused
+```
+
+The training laps are 5,715-9,008 steps, so a ±4608 window SPANS them and the policy collapses
+on its own programs — §49.11's aliasing constraint, reproduced on a second cell — and x4 has no
+row at all. On this plant the two constraints that must both hold (reach the memory; do not
+span the training lap) cannot with the shipped diet, which is why the policy sits at 2.6x
+there and the state-fed cascade does not. The route the plan already records for exactly this
+bind is a single long TOUR lap (§49: ±1024 from 0.47x to 3.29x), not measured at E 0.005. And
+the x4 run found one more ladder defect: a fit that REFUSED left the cascade ARMED, because the
+withdrawal ran only on the scored-and-lost exit — a teacher now withdraws by both exits.
