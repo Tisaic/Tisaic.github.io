@@ -44,7 +44,7 @@ if (process.env.PASSES) G.passes = +process.env.PASSES;
 // 0.22x-1.09x on this square. `poly` is that harness's 4.99x diet: the same designer at the
 // programs' own scale, one feed. `polyfeed` is the scale-matched diet across a feed ladder,
 // which §49.13 measured as the only one safe off the commissioning feed.
-const DIET = process.env.DIET || 'demo';
+const DIET = process.env.DIET || 'poly4';
 // REPLACE=1 converges and deploys the rung WITHOUT the compliance feedforward under it — the
 // composition test/_distil.mjs measures — instead of on top of it (plan §52.7).
 const REPLACE = process.env.REPLACE !== '0';   // the host's default; REPLACE=0 keeps the feedforward under it
@@ -68,13 +68,14 @@ const DIETS = {
   poly: { feeds: [F, F, F], rMin: 3.4, rSpan: 2.4 },
   polyfeed: { feeds: [F, 2 * F, 0.5 * F], rMin: 3.4, rSpan: 2.4 },
   poly1: { feeds: [F], rMin: 3.4, rSpan: 2.4 },   // two programs, for a quick look at the engine
+  poly4: { feeds: [F, F], rMin: 3.4, rSpan: 2.4 }, // four programs (two convex, two stars) — the shipped diet
 };
 if (!(DIET in DIETS)) throw new Error(`DIET ${DIET}: one of ${Object.keys(DIETS).join(', ')}`);
 const K = +(process.env.ARM_K || 0.25), E = +(process.env.ARM_E || 0.03);
 const path = sharpRect({ w: 8, h: 8, centre: [12, 0], feed: 4e-3, accel: 4e-5, cornerDt: 40 });
 const LAP = Math.ceil(path.lap);
 console.log(`\ndistil on the arm through the ladder — K ${K} / E ${E}, sharp square, grade ${GRADE}${PERIODIC ? ', PERIODIC (lap learning built)' : ''}`
-  + ` (avg ${G.avg}, warmup ${G.warmup}, passes ${G.passes}, diet ${DIET}, ${ENGINE} teacher${process.env.OFFS === 'raw' ? ', raw window' : ''}${process.env.STRIDE ? `, stride ${process.env.STRIDE}` : ''}${process.env.TEACHCAP ? `, teach cap ${process.env.TEACHCAP}` : ''}${REPLACE ? ', REPLACES the compliance feedforward' : ', under the feedforward'})`);
+  + ` (avg ${G.avg}, warmup ${G.warmup}, passes ${G.passes}, diet ${DIET}, ${ENGINE} teacher${process.env.OFFS === 'raw' ? ', raw window' : ''}${process.env.STRIDE ? `, stride ${process.env.STRIDE}` : ''}${process.env.TEACHCAP ? `, teach cap ${process.env.TEACHCAP}` : ''}${process.env.TLAPS ? `, teach laps ${process.env.TLAPS}` : ''}${process.env.TPASSES ? `, teach passes ${process.env.TPASSES}` : ''}${process.env.TRACE === '1' ? ', re-measured' : ''}${REPLACE ? ', REPLACES the compliance feedforward' : ', under the feedforward'})`);
 
 const t0 = Date.now();
 const m0 = await machine({ K, E });
@@ -92,10 +93,16 @@ const host = makeArmHost({
   ...(DIETS[DIET] ? { distilDiet: DIETS[DIET] } : {}), distilReplaces: REPLACE,
   ...(process.env.CAP ? { distilCap: +process.env.CAP } : {}),
   ...(process.env.TEACHCAP ? { distilTeachCap: +process.env.TEACHCAP } : {}),
+  // COMMISSIONING-TIME KNOBS (plan §52.9): TLAPS laps per teacher drive, TPASSES passes,
+  // TRACE=1 re-measures the prefix between passes (the old behaviour, the control).
+  ...(process.env.TLAPS ? { distilTeachLaps: +process.env.TLAPS } : {}),
+  ...(process.env.TPASSES ? { distilPasses: +process.env.TPASSES } : {}),
+  ...(process.env.TRACE === '1' ? { distilTeachTrace: true } : {}),
+  ...(process.env.HOLD ? { distilTeachHold: +process.env.HOLD } : {}),
   distilEngine: ENGINE, distilDebug: process.env.DEBUG === '1',
   distilOracle: process.env.ORACLE === '0' ? false : process.env.ORACLE === 'control' ? 'control' : true,
   avg: G.avg, warmup: G.warmup, passes: G.passes, probeLaps: G.probeLaps,
-  onRung: (r) => console.log(`  [${Math.round((Date.now() - t0) / 1000)}s] ${r.name}  ${r.score.toExponential(4)}`
+  onRung: (r) => console.log(`  [${Math.round((Date.now() - t0) / 1000)}s, ${(host.samples().samples / 60000).toFixed(1)} machine-min] ${r.name}  ${r.score.toExponential(4)}`
     + `  ${r.gain === null ? '' : r.gain.toFixed(2) + 'x'}${r.deployed ? '' : '  NOT deployed'}${r.note ? '  — ' + r.note : ''}`),
 });
 host.auto.pilotOpts.start = m0.arm.ik(path.at(0).x, path.at(0).y, true);

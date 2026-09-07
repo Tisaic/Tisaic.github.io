@@ -1910,11 +1910,24 @@ await halted('the whole commissioning');
       await fx.evaluate(() => { const e = document.getElementById('shape'); e.value = 'sharp'; e.dispatchEvent(new Event('change', { bubbles: true })); });
       await fx.waitForFunction(() => window.__flxDbg().shape === 'sharp' && !window.__flxDbg().busy, null, { timeout: 180000 });
     }
-    // A different machine: move K one notch. The model stays stored, is reported, and is NOT armed.
+    // A DIFFERENT MACHINE: move K one notch. The owner wants to SEE a model degrade on a plant
+    // it was not trained on, so the model stays armed and the page flags the mismatch wherever
+    // the model is named — the Machine header pill, the score panel, the debug dump. Both
+    // halves: flagged on the other plant, and NOT flagged back on its own.
     await fx.evaluate(() => { const s = document.getElementById('s-k'); s.value = '1'; s.dispatchEvent(new Event('change', { bubbles: true })); });
     await fx.waitForFunction(() => { const d = window.__flxDbg(); return d && d.K === 0.5 && !d.busy; }, null, { timeout: 180000 });
-    const other = await fx.evaluate(() => window.__flxDbg());
-    check('flexisim/store: …and on a different machine it is reported but NOT armed', other.auto.have === false && other.stored && other.stored.matches === false && other.stored.K === 0.25, JSON.stringify({ auto: other.auto, stored: other.stored }));
+    const other = await fx.evaluate(() => { const d = window.__flxDbg(); const p = document.getElementById('plant-note');
+      return { ...d, pill: { hidden: p.hidden, text: p.textContent, box: p.getBoundingClientRect().width } }; });
+    check('flexisim/store: …and on a different machine the model stays ARMED and is flagged as a PLANT MISMATCH',
+      other.auto.have === true && other.auto.deployed && other.auto.deployed.distil === before.auto.deployed.distil
+      && other.mismatch === true && other.trainedOn && other.trainedOn.K === 0.25 && other.stored && other.stored.matches === false,
+      JSON.stringify({ mismatch: other.mismatch, trainedOn: other.trainedOn, deployed: other.auto.deployed }));
+    check('flexisim/store: …the flag is ON SCREEN and names both plants', !other.pill.hidden && other.pill.box > 40 && /PLANT MISMATCH/.test(other.pill.text) && /K 0.25/.test(other.pill.text) && /K 0.5/.test(other.pill.text), JSON.stringify(other.pill));
+    await fx.screenshot({ path: join(SHOTS, '07-flexisim-mismatch.png') });
+    await fx.evaluate(() => { const s = document.getElementById('s-k'); s.value = '0'; s.dispatchEvent(new Event('change', { bubbles: true })); });
+    await fx.waitForFunction(() => { const d = window.__flxDbg(); return d && d.K === 0.25 && !d.busy; }, null, { timeout: 180000 });
+    const backHome = await fx.evaluate(() => ({ mismatch: window.__flxDbg().mismatch, hidden: document.getElementById('plant-note').hidden }));
+    check('flexisim/store: …and back on its own plant the flag clears', backHome.mismatch === false && backHome.hidden === true, JSON.stringify(backHome));
   } else {
     // THE OTHER HALF: a refused model must NOT be stored. The first version stored it and
     // reported "matches this machine, 1.00x" for a controller the ladder had just measured as

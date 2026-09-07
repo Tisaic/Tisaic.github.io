@@ -1343,7 +1343,14 @@ and the port had ±512 raw steps — a quarter of the reach); and the TEACHER'S 
 2.0 → 0.363, 0.15 → 0.269, **0.10 → 0.217**, 0.05 → 0.444; a more converged prefix teaches a
 worse policy, §49's law from a third knob). Bare beats under-the-feedforward 0.217 to 0.338 with
 the good teacher, so the policy replaces the compliance feedforward too. The grade is inert
-(full 2.171e-1). One plant, one cell, one seed.
+(full 2.171e-1). One plant, one cell, one seed. **Commissioning is 26.8 → 8.5 machine-minutes
+(plan §52.9)**: the active run doubles as the next record (free), two laps per teacher drive
+(free), four training programs (4%, inside the band), a 500-step hold (free) — and three passes,
+two passes or one lap lose the result, while the cascade's 2.9 minutes are where its `lambda` is
+selected, so the floor of this route is about 8 minutes. **And the model survives a plant
+change, flagged (plan §52.10)**: move K or E and the page keeps the model armed on the new plant,
+re-records the ghost, and names both plants in a PLANT MISMATCH pill, so the degradation is a
+number on the score panel rather than a refusal.
 
 **ITS FIRST READING WAS A REFUSAL, WHICH WAS THE PAGE DOING ITS JOB (plan §52.7).** Distil-only
 ladder on the bench square: `②d distilled — REFUSED` at 0.22x (demo), 0.43x (fast, browser),

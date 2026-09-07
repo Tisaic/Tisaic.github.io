@@ -8,7 +8,7 @@
   <title>FlexiSim — Commissioning Bench</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:1077,built:"2026-09-07T07:50:48Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:1078,built:"2026-09-07T12:13:23Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
 
   <style>
@@ -32,6 +32,9 @@
     .pill { display:inline-block; font-size:.7rem; padding:4px 8px; border-radius:6px;
       background:var(--card); border:1px solid var(--line); color:var(--muted); }
     .good { color:var(--accent2); } .warn { color:var(--warn); } .bad { color:var(--bad); }
+    /* The mismatch flag sits inside the group header, whose muted span rule outranks `.warn`
+       on specificity — a warning rendered in the caption colour is not a warning (rule 52). */
+    #plant-note { color:var(--warn); font-weight:600; border-color:var(--warn); display:block; margin-top:6px; }
     .controls { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; align-items:center; }
     .controls > label { max-width:100%; }
     .controls label > select { max-width:100%; }
@@ -96,7 +99,7 @@
       <span class="v" id="v-spf">400 steps/frame</span></div>
   </div>
 
-  <h4 class="grp">Machine <span>— the plant; a change discards the model and the ghost</span></h4>
+  <h4 class="grp">Machine <span>— the plant; a change keeps the model and re-records the ghost</span> <span class="pill warn" id="plant-note" hidden></span></h4>
   <div class="controls">
     <div class="slider"><span>Gearbox K</span>
       <input type="range" id="s-k" min="0" max="8" step="1" value="0" />
@@ -285,18 +288,23 @@ async function build() {
   busy = true; setBadge('building the machine…', 'warn');
   try {
     if (arm) { await l1.destroy(); await l2.destroy(); arm = null; }
-    if (host) { await host.dispose(); host = null; rep = null; }
-    ghost = null; ghostRec = null; restored = null;
+    ghost = null; ghostRec = null;
     const m = await makePlant(kNow(), eNow());
     arm = m.arm; servo = m.servo; l1 = m.l1; l2 = m.l2;
     prof = makePath();
     rc = await calibrateComp(m, prof.at(0), frameYield);
     home();
-    // A STORED MODEL IS OFFERED ONLY TO THE MACHINE IT WAS FITTED ON. A model applied to a
-    // plant it never measured is the failure that produces a plausible number and a worse
-    // machine, so the match is checked here and a mismatch is reported, never armed.
-    tryRestore();
-    setBadge(rep ? 'restored from storage — press Run' : 'ready — press Run', rep ? 'good' : '');
+    // THE MODEL SURVIVES A PLANT CHANGE, AND THE PAGE SAYS WHOSE IT IS. Moving K or E builds a
+    // new plant and re-records the ghost (the conventional machine on THIS plant), but the
+    // commissioned or restored model is re-attached to it as it stands, armed as it was, so
+    // the score reads how a controller trained on one plant degrades on another. The
+    // mismatch is flagged (`plantMismatch`) in the Machine header, the score panel and the
+    // stored-model line — it is never silently a different machine.
+    if (host && rep) { host.attach(arm, servo, rc, prof, prof.lap); host.auto.beginRun(); }
+    else tryRestore();
+    setBadge(rep ? (plantMismatch() ? 'model kept — PLANT MISMATCH, press Run to see it degrade'
+      : (restored ? 'restored from storage — press Run' : 'model kept — press Run'))
+      : 'ready — press Run', rep ? (plantMismatch() ? 'warn' : 'good') : '');
   } finally { busy = false; sync(); }
 }
 
@@ -598,7 +606,10 @@ function makeHost(periodic, gr) {
     // ladder at r 2.2-3.8 — refuse on this square at 0.74x; the same designer at the programs'
     // scale and the CURRENT feed deploys at 1.36x; laddering the feed at that scale reads 0.96x.
     // Off the feed it was fitted at the block's own coverage guard fades the correction out.
-    distilDiet: { feeds: [feedNow(), feedNow(), feedNow()], rMin: 3.4, rSpan: 2.4 },
+    // FOUR PROGRAMS, NOT SIX: two convex polygons and two stars at the programs' own scale, which
+    // reads 0.2263 against six programs' 0.2169 on the square (4%, inside the band) for 12.7 →
+    // 9.7 machine-minutes (plan §52.9).
+    distilDiet: { feeds: [feedNow(), feedNow()], rMin: 3.4, rSpan: 2.4 },
     avg: G2.avg, warmup: G2.warmup, passes: G2.passes, probeLaps: G2.probeLaps,
     yieldEvery: 150, onYield: autoYield, onProgress, onStage,
     onRung: (r) => { rows.push(r); $('rungs').innerHTML = rungsHTML(rows); },
@@ -641,6 +652,7 @@ async function startCommission() {
   host.auto.beginRun();
   $('rungs').innerHTML = rungsHTML(rep.rungs);
   $('prog').innerHTML = `<b>done</b> in ${Math.round((t1 - t0) / 1000)} s of wall clock`;
+  trainedOn = { K: arm.K, E: arm.E }; restored = null;
   saveModel();
   const d = rep.deployed;
   setBadge(`shipped {distilled:${d.distil}, lap learning:${d.hff}} — ${rep.base.toExponential(3)} → ${rep.best.toExponential(3)} (${rep.gain.toFixed(2)}×). Press Run`, 'good');
@@ -689,9 +701,21 @@ function storedMatches(s) {
   return !!(s && s.v === 1 && arm && prof && s.K === kNow() && s.E === eNow()
     && s.program === programSignature(prof, Math.ceil(prof.lap)));
 }
+/** What the live model was trained on — the commissioning's plant, or the stored record's. */
+let trainedOn = null;
+function plantMismatch() {
+  return !!(rep && trainedOn && arm && (trainedOn.K !== arm.K || trainedOn.E !== arm.E));
+}
+function plantNote() {
+  return plantMismatch() ? `PLANT MISMATCH — trained on K ${trainedOn.K} / E ${trainedOn.E}, running on K ${arm.K} / E ${arm.E}` : '';
+}
 function tryRestore() {
   const s = loadStored();
-  if (!s || !storedMatches(s)) return false;
+  // A STORED MODEL IS OFFERED TO ANY PLANT, FLAGGED. The distilled model transfers across
+  // programs by construction and lap learning withholds itself off its program, so the
+  // program need not match; a different K or E is exactly the degradation the owner wants
+  // to see, so it restores armed and `plantMismatch()` says so wherever the model is named.
+  if (!s || s.v !== 1 || !arm || !prof) return false;
   try {
     const h = makeHost(!!s.hff, s.grade || 'full');
     const a = h.auto;
@@ -708,7 +732,7 @@ function tryRestore() {
     h.attach(arm, servo, rc, prof, prof.lap);
     host = h;
     rep = { rungs: s.rungs, deployed: { ...a.deployed }, base: s.base, best: s.best, gain: s.gain, restored: true };
-    grade = s.grade || 'full'; restored = s; t0 = 0; t1 = 0;
+    grade = s.grade || 'full'; restored = s; t0 = 0; t1 = 0; trainedOn = { K: s.K, E: s.E };
     $('rungs').innerHTML = rungsHTML(s.rungs);
     $('prog').innerHTML = `<b>restored</b> from storage — commissioned ${new Date(s.savedAt).toLocaleString()}`;
     a.beginRun();
@@ -771,6 +795,8 @@ function statsHTML() {
   const rows = [];
   const e = (x) => (Number.isFinite(x) ? x.toExponential(3) : '—');
   rows.push(['plant', `K ${arm.K} · E ${arm.E} · ${$('shape').value} at feed ${feedNow().toExponential(1)}`]);
+  if (rep && trainedOn) rows.push(['model trained on', plantMismatch()
+    ? `<b>K ${trainedOn.K} · E ${trainedOn.E} — NOT this plant</b>` : `K ${trainedOn.K} · E ${trainedOn.E} — this plant`]);
   if (ghostValid() && lastLap && lastLap.totalRms > 0) {
     const gx = ghost.rms / lastLap.totalRms;
     rows.push(['<b>vs the ghost</b>', `<b>${gx >= 1 ? gx.toFixed(2) + '× better' : (1 / gx).toFixed(2) + '× WORSE'}</b>`
@@ -798,7 +824,8 @@ function storedHTML() {
   return `<b>Stored model:</b> K ${s.K} / E ${s.E}, ${s.shape} at feed ${FEED_LADDER[s.feed].toExponential(1)}, `
     + `grade ${s.grade}, ${s.gain.toFixed(2)}×, commissioned ${new Date(s.savedAt).toLocaleString()} — `
     + (match ? (restored ? '<b>restored and armed as it shipped.</b>' : 'matches this machine.')
-      : '<b>not this machine or program, so it is not armed</b>; commissioning replaces it.')
+      : (restored ? `<b>restored and armed on a plant it was NOT trained on</b> (K ${arm.K} / E ${arm.E}) so the degradation can be seen; commissioning replaces it.`
+        : 'a different plant or program; it restores armed and flagged on the next load.'))
     + ' <a href="#" id="forget">forget it</a>';
 }
 
@@ -823,6 +850,7 @@ function sync() {
   $('reset').disabled = !idle;
   $('commission').disabled = busy || !arm; $('commission').textContent = commissioning ? 'Stop ■' : 'Commission ▶';
   for (const id of ['s-k', 's-e', 'grade', 'periodic']) $(id).disabled = !idle;
+  const pn = $('plant-note'); pn.hidden = !plantMismatch(); pn.textContent = plantNote();
   const a = host && rep ? host.auto.armed() : null;
   $('arm-distil').disabled = !a || !a.distil.built || !idle;
   $('arm-hff').disabled = !a || !a.hff.built || !idle;
@@ -896,6 +924,7 @@ window.__flxDbg = () => (arm ? {
       heldOutR2: rep.distil.fit.heldOutR2, speedSpan: rep.distil.fit.speedSpan,
       reason: rep.distil.fit.reason } : null, note: rep.distil.note || null } : null },
   stored: (() => { const s = loadStored(); return s ? { K: s.K, E: s.E, shape: s.shape, gain: s.gain, matches: storedMatches(s) } : null; })(),
+  trainedOn, mismatch: plantMismatch(), plantNote: plantNote(),
 } : null);
 
 build().then(() => requestAnimationFrame(frame))

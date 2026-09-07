@@ -11040,6 +11040,45 @@ teacher; restore, off-program withholding and the plant-change refusal all exerc
 The memory's factor on top of the distilled model is 2.44x, beside §50.2's 1.29-1.41x on the
 oracle ladders — more, not less, because the model underneath is now the better one.
 
+### §52.9 COMMISSIONING TIME: 26.8 → 8.5 MACHINE-MINUTES, AND WHERE THE FLOOR IS
+
+The owner's reading was that the commissioning is 10-20x too long. It is now 3.2x shorter, every
+cut measured on the bench square against the 0.2169 it must keep (rule 42's 5% band on the
+improvement), and the cuts that would reach 10x each lose the result:
+
+```
+  configuration                                machine-min    rms       verdict
+  re-measure the prefix between passes            26.8        0.2169    the first shipped teacher
+  the active run doubles as the next record       16.4        0.2169    free — the live pilot on the
+                                                                        frozen prefix and the next prefix
+                                                                        alone agree to four figures
+  + 2 laps per teacher drive (1 warmup, 1 scored) 12.7        0.2151    free (lap-to-lap corr 1.0000)
+  + 4 training programs instead of 6               9.7        0.2263    4%, inside the band
+  + 500-step hold before each drive, not 4000      8.5        0.2264    free
+  3 passes instead of 4                           13.8        0.2999    loses 38%
+  2 passes                                        11.2        0.4639    loses 2.1x
+  1 lap per drive (no warmup)                      8.8        refused   rule 13: scored across the transient
+```
+
+The teacher is now 4 programs × (1 record drive + 4 active drives) × 2 laps ≈ 5.2 of the 8.5
+minutes; the cascade that teaches it is 2.9 and cannot be trimmed without changing the teacher —
+its verify is where `lambda` is SELECTED by machine scoring, so skipping it is a different pilot,
+not a cheaper one; the base and candidate scoring runs are the rest. The passes cannot go below
+four at the 0.10 cap (§52.8's cap ladder is the same trade from the other side: a looser cap
+converges in fewer passes and teaches worse). Wall clock in Node 380 → ~150 s. The floor of this
+route on this arm is therefore about 8 machine-minutes; a 10x cut needs a different teacher, not
+a faster one of these.
+
+### §52.10 THE MODEL SURVIVES A PLANT CHANGE, FLAGGED
+
+Moving K or E used to discard the model. It now builds the new plant, re-records the ghost (the
+conventional machine on THIS plant) and re-attaches the commissioned or stored model armed as it
+was, so the score reads how a controller trained on one plant degrades on another — which is the
+robustness question the north star asks and the page could not show. The mismatch is flagged in
+the Machine header (a pill naming both plants), the score panel and the debug dump, and a stored
+model restores on any plant the same way, flagged. Pinned in the full browser tier both ways:
+flagged and armed on the other plant, clear again on its own.
+
 **AND LEAVE-ONE-OUT SAYS THE OVER-FIT IS TO THE DIET, NOT TO THE SQUARE'S CORNERS.** Six folds:
 converge the lap-periodic correction on each training program once (the gains reproduce the
 ladder's exactly — 5.76, 2.05, 4.82, 2.43, 1.71, 2.15 — the control), fit a policy on five,
