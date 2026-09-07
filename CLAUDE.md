@@ -1338,10 +1338,11 @@ the square — TRANSFER, not the fit and not the deploy path, since a sign, unit
 would harm the training programs too. The ladder route with real `hff` prefixes does not yet
 reproduce §49's oracle-converged 4.99x — and full grade is WORSE (0.17x) while its prefixes
 converge further and its fit R² rises, so a more converged prefix is a WORSE teacher — and the
-knob is the SCORING GRADE, not the pass count: `PASSES` 4, 8 and 16 at fast grade read 0.75x /
-0.74x / 0.74x with 8 and 16 byte-identical, because `_refine` stops itself once four passes in a
+knob is the SCORING GRADE, not the pass count: `PASSES` 4, 8, 16 and 24 at fast grade read 0.75x /
+0.74x / 0.74x / 0.74x with 8, 16 and 24 byte-identical, because `_refine` stops itself once four passes in a
 row fall inside 2 sigma of the host's lap spread, and full grade changes that sigma (4 scoring
-laps against 2) rather than the ceiling. Leave-one-out over the six training
+laps against 2) rather than the ceiling — full grade at 8 passes reads 0.18x, reproducing the
+24-pass 0.17x with the passes held, so both halves are measured. Leave-one-out over the six training
 programs reads a geometric **1.11x on the held-out polygon** against ~2.0x in-sample — the route
 memorises its diet and carries to nothing it was not fitted on, not even its own class, so the
 square's corners are not the specific fault. **The other option works: declared

@@ -10860,6 +10860,8 @@ three points (rule 31). **The ladder, and it is NOT a passes ladder.** `PASSES=n
   fast       4          0.75x               ~2.0x               5.76 2.05 4.80 2.43 1.71 2.15
   fast       8          0.74x               ~2.0x               5.76 2.05 4.82 2.43 1.71 2.15
   fast      16          0.74x               ~2.0x               5.76 2.05 4.82 2.43 1.71 2.15
+  fast      24          0.74x               ~2.0x               5.76 2.05 4.82 2.43 1.71 2.15
+  full       8          0.18x               ~1.4x               5.68 4.93 4.50 2.50 1.84 2.75
   full      24          0.17x               ~1.4x               5.73 5.06 4.50 2.51 1.84 2.94
 ```
 
@@ -10875,7 +10877,21 @@ the stop rule counts against, and so how long the refine keeps walking. The regu
 pass count, which is rule 20's matched-capacity fault aimed at a knob: two runs that differ in
 four settings were written up as differing in one. The pair that splits it is `GRADE=full
 PASSES=8` against `PASSES=24` at fast — the same 24 with the averaging held and the same
-averaging with the passes held — and both are running.
+averaging with the passes held. **`PASSES=24` at fast grade is BYTE-IDENTICAL to 8 and 16** —
+1.4254e+0, 0.74x, the same six gains, the same R² — so the pass count is measured inert from 8 to
+24 and the collapse cannot be its doing. **And full grade at 8 passes reads 0.18x** (5.9449e+0
+against the 24-pass 6.0804e+0) with the same shape everywhere — gains 5.68, 4.93, 4.50, 2.50,
+1.84, 2.75, held-out R² 0.515 / 0.322, own diet 1.35x, 1.90x, 1.15x, 1.00x, 1.58x, 1.77x — so the
+SCORING GRADE alone reproduces the collapse with the passes held. Both halves measured (rule 9):
+passes 8 → 24 at fixed grade moves nothing, grade fast → full at fixed passes moves 0.74x → 0.18x.
+Full grade costs 190.8 machine-minutes against fast's 101.0, and delivers the worse controller.
+What full grade changes is how the refine READS the machine: four scoring laps averaged against
+two make the reported spread smaller, the 2-sigma stall fires later, and run 1's prefix walks
+from 2.05x to 4.93x — a better lap table that is a worse teacher, which is §49's law again with
+the noise entering through the STOP RULE rather than the tracker. The page's grade table
+therefore couples two things that should not be coupled — how well a rung is SCORED and how far
+its prefix CONVERGES — and the right split is a measurement not yet taken: full-grade scoring
+with the refine's stall sigma pinned at the fast grade's.
 
 **AND LEAVE-ONE-OUT SAYS THE OVER-FIT IS TO THE DIET, NOT TO THE SQUARE'S CORNERS.** Six folds:
 converge the lap-periodic correction on each training program once (the gains reproduce the
