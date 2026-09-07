@@ -1138,7 +1138,8 @@ measurement behind each is in `docs/history/` — the pointer in brackets.
 | `lib/ngrc/` | The ported NGRC library. See its README. |
 | `lib/probesense/` | Soft-sensing a field from one point in it. |
 | `lib/flexisim/` | `joint.js`, `link.js`, `arm.js`, `arm2r.js`, `armnr.js`, `tipsensor.js`, `chainsensor.js`, `compliance.js`, `compensator.js`, and the contouring three — `toolpath.js`, `contour.js`, `pathilc.js`. |
-| `lib/flexisim/autohost.js` | **The arm's host for `AutoStack`, imported by BOTH the Node bar and the page** — one module, so the page runs the configuration the bar measured by construction rather than by review. It carries the distilled rung's TEACHER: `distilRuns()` supplies `converge()`, the commissioned pilot iterated in the host's one drive loop with the measured error as its free response (`oracleF0`), under a 0.10 rad cap, on the bare machine — and the measured defaults for the rung (window in pilot samples, one row per decision, replaces the feedforward; plan §52.8). |
+| `lib/flexisim/approach.js` | **GOING SOMEWHERE IS A MOVE.** The one planner for every move between programs and poses — a joint-space rapid timed at the feed along the tool's arc, then rule 45's settle — used by the page's Reset and calibration and by the host between every scored run and teacher drive. It exists so that "how the arm moves between programs" is stated once and is the same in the browser and the bar. |
+| `lib/flexisim/autohost.js` | **The arm's host for `AutoStack`, imported by BOTH the Node bar and the page** — one module, so the page runs the configuration the bar measured by construction rather than by review. **It drives ONE machine between runs and never restores a snapshot** (plan §52.12); a `borrowed` machine is the caller's and is handed back where the last run left it. It carries the distilled rung's TEACHER: `distilRuns()` supplies `converge()`, the commissioned pilot iterated in the host's one drive loop with the measured error as its free response (`oracleF0`), under a 0.10 rad cap, on the bare machine — and the measured defaults for the rung (window in pilot samples, one row per decision, replaces the feedforward; plan §52.8). |
 | `lib/blackbox/` | `blackbox.js` (identify → design → verify → correct) and `qp.js` (the box-constrained preview solve). Imports nothing from `lib/flexisim/`. |
 | `lib/pilot/hff.js` | Harmonic feedforward: a lap-periodic correction identified ON the machine. Carries no per-plant constant — count, step, probe design and probe amplitude are all measured. |
 | `lib/pilot/classic.js` | The CONVENTIONAL layer, self-tuned: a static feedforward in the reference's own state (`[a, v, sign v, 1]`), fitted on the machine. 425× on the EMPS axis in 14 laps, past the published inverse-dynamics feedforward. |
@@ -1298,15 +1299,26 @@ an engineer would actually meet:
   reverted if it does not win; the page decides what is offered, never what is deployed. **Grade**
   (full / fast / demo) buys wall clock with resolution and is printed on the record, because fewer
   pooled laps is a noisier score and the ladder raises its own floor to match. **The arm on
-  screen is the arm that is turning** — the stage follows the ladder's own machine at ~15+
-  visible updates/s, with the program-relative overlays suppressed and the picture saying whose
-  machine it is.
+  screen is the arm that is turning, and it is THIS arm** — the ladder BORROWS the bench's
+  machine and its identified baseline rather than building a second one, drives it to every
+  run's start from wherever the last run ended, and hands it back where the last scored run
+  left it (plan §52.12). **The distilled rung's bar is the machine BELOW the cascade**
+  (`distil.teacherOnly`, on by the host): the cascade is its teacher and not a candidate to
+  ship, so the policy is refused only if it fails to beat the conventional machine, and a
+  refused policy WITHDRAWS its teacher rather than leaving a 9,500-MAC solve armed. Measured
+  where it differs: at K 0.25 / E 0.005 the policy reads 2.6x over the bare machine and the
+  cascade 4.4x, so against the cascade it was refused and the page ran the conventional machine
+  under a pill reading "shipped 4.39x" — two defects, one row.
 - **The cost, in machine time.** `host.samples()` counts every step the host advanced the
   machine, so at the selected task period it converts to laps the plant spends producing nothing
   — the half of target 4 a wall clock cannot see. Wall clock is shown beside it and labelled as
   the simulator. A fast run's machine time is what THAT run would cost a PLC, and the page says so.
-- **The controller, live** — three boxes, none of which recommission: the distilled model
-  armed or not (`AutoStack.setArmed`, which refuses what was never built); **the tracker stays on
+- **The controller, live** — three boxes, none of which recommission, plus a fourth that
+  appears only when it applies: the distilled model armed or not (`AutoStack.setArmed`, which
+  refuses what was never built); **the pilot cascade**, shown only when it was built and the
+  distilled model is not the armed controller — the teacher, at ~9,500 MAC, offered so a plant
+  where the policy refused can still be seen corrected, with the scan verdict saying it does not
+  fit; **the tracker stays on
   the machine**, which routes the truth into `observe()` so the distilled model keeps learning
   through the SAME streaming recursion the fit used (`DistilPolicy.observe`, paid once per
   DECISION — the pilot's RLS is 72,600 MAC/sample and is why the old composition only fit
@@ -1328,7 +1340,10 @@ an engineer would actually meet:
   became `null` through JSON and would have restored as a fade that fires everywhere.
 - **Score** — the gap against the ghost, quoted on the last COMPLETE lap (mid-lap is a partial
   sum over whichever edge or corner has been cut, and lap 0 carries the start-up transient the
-  ghost skips — rules 12, 13), plus contour · lag · total.
+  ghost skips — rules 12, 13), plus contour · lag · total. **The orange trail is the tool's path
+  with its error off the program magnified along the normal, and the magnification is a slider
+  (×1 to ×20, ×10 by default)** — at a fixed ×10 a soft plant's error swept off the stage and the
+  line said nothing; the legend now names what it is.
 
 **AND IT NOW DELIVERS THE HARNESS'S NUMBER THROUGH THE ONE PRESS (plan §52.8): 1.0593 →
 2.169e-1 on the bench square, 4.88x over the conventional machine and 6.29x over the bare one,
@@ -1353,7 +1368,18 @@ re-records the ghost, and names both plants in a PLANT MISMATCH pill, so the deg
 number on the score panel rather than a refusal. **And going home is a move (plan §52.11)**: the
 arm no longer snaps to the program start after a commissioning, a program change or a Reset — it
 is driven there as a feed-limited rapid, drawn every frame, settled by rule 45, with the run
-resumed on arrival; the browser pins that no frame moves the tool faster than the feed allows.
+resumed on arrival. **AND THE ARM IS CONTINUOUS EVERYWHERE, NOT ONLY AT HOME (plan §52.12).**
+Every remaining teleport is gone: the ladder's per-run snapshot RESTORE (dozens of jumps per
+commissioning), the held start before every teacher drive, the calibration poses the baseline
+was SET at, and the plant rebuilt at the origin on a K or E change. One planner
+(`lib/flexisim/approach.js`) drives every move, the ladder borrows the bench's own arm, a rebuilt
+plant takes the WHOLE state of the one it replaces (a joint pose alone left the tool 0.54 away,
+because fresh links are straight), and the browser reads the largest tool displacement
+between two consecutive SOLVER STEPS — across a Reset, a plant change and a stopped
+commissioning — because a per-frame sample cannot tell 600 steps of motion from one jump. The
+bench square through the driven host reads 2.2638e-1 against the restore's 2.2635e-1, at 10.7
+machine-minutes against 8.5: the approaches are the difference, and the settle is sized to the
+run's warmup rather than the eye's (the page's policy would have cost 13.9).
 
 **ITS FIRST READING WAS A REFUSAL, WHICH WAS THE PAGE DOING ITS JOB (plan §52.7).** Distil-only
 ladder on the bench square: `②d distilled — REFUSED` at 0.22x (demo), 0.43x (fast, browser),

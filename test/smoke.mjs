@@ -1793,6 +1793,8 @@ const halted = async (label) => {
   check('flexisim: it opens on the bench configuration — K 0.25 / E 0.03 on the square', geo.bench, JSON.stringify(geo));
   const gate = await fx.evaluate(() => ['arm-distil', 'arm-hff', 'online'].map((id) => document.getElementById(id).disabled));
   check('flexisim: with nothing commissioned, no rung can be armed', gate.every(Boolean), JSON.stringify(gate));
+  const stkBox = await fx.evaluate(() => getComputedStyle(document.getElementById('arm-stack').parentElement).display === 'none');
+  check('flexisim: …and the cascade box is not on screen until a ladder has built one (hidden by style, not by `hidden` — rule 52)', stkBox, `display none: ${stkBox}`);
 }
 
 // ---- THE GHOST AND ITS CONTROL. With nothing armed the machine runs the conventional
@@ -1819,6 +1821,7 @@ await halted('the ghost recording');
   {
     const mid = await fx.evaluate(() => window.__flxDbg().drawnPose.tool);
     const perFrame = await fx.evaluate(() => (+document.getElementById('s-spf').value) * window.__flxDbg().feed);
+    await fx.evaluate(() => window.__flxHop(true));
     await fx.click('#reset');
     const samples = [];
     for (let i = 0; i < 60; i++) {
@@ -1839,12 +1842,65 @@ await halted('the ghost recording');
     const dist = Math.hypot(samples[samples.length - 1].tool[0] - mid[0], samples[samples.length - 1].tool[1] - mid[1]);
     console.log(`  flexisim/home: ${seen.length} frames approaching, ${seen.length ? seen[seen.length - 1].steps : 0} steps, distance ${dist.toFixed(3)}, largest frame jump ${jump.toFixed(3)}`);
     check('flexisim/home: Reset from mid-lap is a reported APPROACH, drawn over several frames, with Run locked meanwhile', seen.length >= 3 && seen.every((d) => d.runOff), `${seen.length} frames, run locked ${seen.map((d) => d.runOff).join('')}`);
-    // THE PHYSICAL CLAIM: between two frames the tool moves at most what the feedrate allows
-    // in that many steps (a smoothstep rapid peaks at 1.5x the feed) — it never jumps.
-    check('flexisim/home: …and the tool travels there no faster than the feed allows — it never jumps', dist > 0.05 && worst <= 1.6 * perFrame + 0.02, `dist ${dist.toFixed(3)} worst per-frame ${worst.toFixed(3)} allowance ${(1.6 * perFrame).toFixed(3)} largest hop ${jump.toFixed(3)} travel ${travel.toFixed(3)}`);
     await fx.waitForFunction(() => !window.__flxDbg().approaching, null, { timeout: 60000 });
+    // THE PHYSICAL CLAIM, READ PER SOLVER STEP: the largest tool displacement between two
+    // consecutive steps stays a small multiple of the feed (a rapid reversing a moving arm
+    // peaks near 2x) — a teleport to the start would be a whole program width in one step.
+    // Per-frame samples cannot see this: at 600 steps a frame the program itself moves the
+    // tool 3-4 units between frames, which is exactly what a jump looks like from outside.
+    const hp = await fx.evaluate(() => window.__flxDbg().hop);
+    check('flexisim/home: …and the tool travels there CONTINUOUSLY — no step moves it more than a few feeds, it never jumps', dist > 0.05 && hp.n > 1000 && hp.max < 4 * (perFrame / (+await fx.evaluate(() => document.getElementById('s-spf').value))), `dist ${dist.toFixed(3)} largest per-step hop ${hp.max.toExponential(2)} over ${hp.n} steps (feed ${(await fx.evaluate(() => window.__flxDbg().feed)).toExponential(1)}); per-frame worst ${worst.toFixed(3)}, travel ${travel.toFixed(3)}`);
     await fx.click('#run');   // the Reset stopped the run; resume it so the pause below pauses
     await fx.waitForFunction(() => window.__flxDbg().running === true, null, { timeout: 10000 });
+  }
+  // THE ARM IS CONTINUOUS THROUGH A PLANT CHANGE TOO. Moving E rebuilds the plant, which
+  // used to appear at a calibration pose and then be SET at the start — two jumps. The new
+  // plant is initialised where the old one stood, driven between the four calibration poses,
+  // then driven to the start: sampled per frame, no hop exceeds what the feed allows.
+  {
+    const feed = await fx.evaluate(() => window.__flxDbg().feed);
+    const before = await fx.evaluate(() => window.__flxDbg().drawnPose.tool);
+    await fx.evaluate(() => window.__flxHop(true));
+    await fx.evaluate(() => { const e = document.getElementById('s-e'); e.value = '2'; e.dispatchEvent(new Event('input')); e.dispatchEvent(new Event('change')); });
+    const samples = [];
+    for (let i = 0; i < 4000; i++) {
+      const d = await fx.evaluate(() => { const x = window.__flxDbg(); return x ? { tool: x.drawnPose.tool, frames: x.frames, busy: x.busy, on: x.approaching, E: x.E, badge: x.badge } : null; });
+      if (d) samples.push(d);
+      if (d && d.E === 0.02 && !d.busy && !d.on && i > 5) break;
+      await fx.waitForTimeout(40);
+    }
+    let worst = 0, travel = 0;
+    for (let i = 1; i < samples.length; i++) {
+      const a = samples[i - 1], b = samples[i];
+      const h = Math.hypot(b.tool[0] - a.tool[0], b.tool[1] - a.tool[1]);
+      travel += h; worst = Math.max(worst, h / Math.max(1, b.frames - a.frames));
+    }
+    const first = samples.find((d) => d.E === 0.02);
+    const hop0 = first ? Math.hypot(first.tool[0] - before[0], first.tool[1] - before[1]) : NaN;
+    const last = samples[samples.length - 1];
+    const hp = await fx.evaluate(() => window.__flxDbg().hop);
+    console.log(`  flexisim/plant: ${samples.length} samples over the rebuild, travel ${travel.toFixed(2)}, largest per-step hop ${hp.max.toExponential(2)} over ${hp.n} steps, first new-plant sample ${hop0.toFixed(3)} away, ended '${last.badge}'`);
+    // The instrument spans the rebuild: the first step of the NEW plant is measured against
+    // the last tool position of the old one, so a plant initialised anywhere but where the
+    // old one stood reads as the jump it is.
+    check('flexisim/plant: a plant change rebuilds the machine WHERE IT STOOD and calibrates it by driving — the tool never jumps', last.E === 0.02 && !last.busy && hp.n > 1000 && hp.max < 4 * feed, `largest per-step hop ${hp.max.toExponential(2)} (feed ${feed.toExponential(1)}) E ${last.E} busy ${last.busy} per-frame worst ${worst.toFixed(3)}`);
+    check('flexisim/plant: …calibration went through four driven poses, more than one program width of travel', travel > 8, `travel ${travel.toFixed(2)}`);
+    // Back to the bench cell, the same way, so every check below runs where the numbers are quoted.
+    await fx.evaluate(() => { const e = document.getElementById('s-e'); e.value = '3'; e.dispatchEvent(new Event('input')); e.dispatchEvent(new Event('change')); });
+    await fx.waitForFunction(() => { const x = window.__flxDbg(); return x && x.E === 0.03 && !x.busy && !x.approaching; }, null, { timeout: 120000 });
+    const bench = await fx.evaluate(() => { const x = window.__flxDbg(); return { K: x.K, E: x.E }; });
+    check('flexisim/plant: …and back on the bench cell', bench.K === 0.25 && bench.E === 0.03, JSON.stringify(bench));
+    await fx.click('#run');
+    await fx.waitForFunction(() => window.__flxDbg().running === true, null, { timeout: 10000 });
+  }
+  // THE ERROR MAGNIFICATION IS A SLIDER, and the legend says what the orange trail is.
+  {
+    const m0 = await fx.evaluate(() => window.__flxDbg().mag);
+    await fx.evaluate(() => { const e = document.getElementById('s-mag'); e.value = '1'; e.dispatchEvent(new Event('input')); });
+    await fx.waitForTimeout(300);
+    const m1 = await fx.evaluate(() => ({ mag: window.__flxDbg().mag, v: document.getElementById('v-mag').textContent }));
+    check('flexisim/stage: the error trail’s magnification is a slider, ×10 by default and readable down to ×1', m0 === 10 && m1.mag === 1 && /×1$/.test(m1.v), JSON.stringify({ m0, m1 }));
+    await fx.evaluate(() => { const e = document.getElementById('s-mag'); e.value = '10'; e.dispatchEvent(new Event('input')); });
   }
 }
 await fx.click('#run');   // pause
@@ -1887,7 +1943,13 @@ if (!FULL) {
     prog: document.getElementById('prog').textContent, rungs: document.getElementById('rungs').textContent }; });
   check('flexisim/commission: Stop unwinds the ladder — the page says so, nothing is deployed and the host is gone', /^stopped/.test(st.badge) && !st.have && st.rows === 0 && !st.live, JSON.stringify(st));
   check('flexisim/commission: …and the record says STOPPED rather than describing the scoring it was doing', /stopped/.test(st.prog) && !/commissioning|scoring|lap \d/.test(st.prog + st.rungs), JSON.stringify({ prog: st.prog, rungs: st.rungs }));
-  check('flexisim/commission: …the button comes back as Commission, enabled, from its Stop state', /Stop/.test(btn0) && /Commission/.test(st.btn) && !st.disabled, JSON.stringify({ btn0, btn: st.btn, disabled: st.disabled }));
+  // After a Stop the arm is DRIVEN home from wherever the ladder left it, and the button
+  // waits for it to arrive — so the assertion waits for the approach, not the click.
+  await fx.waitForFunction(() => !window.__flxDbg().approaching, null, { timeout: 120000 });
+  const btn1 = await fx.evaluate(() => ({ btn: document.getElementById('commission').textContent, disabled: document.getElementById('commission').disabled }));
+  check('flexisim/commission: …the button comes back as Commission, enabled once the arm has been driven home from where the ladder left it', /Stop/.test(btn0) && /Commission/.test(btn1.btn) && !btn1.disabled, JSON.stringify({ btn0, btn1 }));
+  const hpc = await fx.evaluate(() => window.__flxDbg().hop);
+  check('flexisim/commission: …and through the whole stopped commissioning — its drives, its scored runs, the drive home — the arm never jumped', hpc.on && hpc.n > 5000 && hpc.max < 4 * (await fx.evaluate(() => window.__flxDbg().feed)), `largest per-step hop ${hpc.max.toExponential(2)} over ${hpc.n} steps${hpc.maxAt ? ' at step ' + hpc.maxAt.n : ''}`);
   check('flexisim/commission: …no rung is armable and nothing was stored', st.gate.every(Boolean) && st.stored === null, JSON.stringify({ gate: st.gate, stored: st.stored }));
   // The stage's own machine must still be there and runnable after the ladder's was destroyed.
   await fx.click('#run');
@@ -1911,6 +1973,15 @@ await halted('the whole commissioning');
   check('flexisim/commission: the machine-time record is a real reading and names its grade', d.auto.cost && d.auto.cost.samples > 1000 && d.auto.grade === 'demo', JSON.stringify(d.auto.cost));
   const arm = await fx.evaluate(() => ({ distil: document.getElementById('arm-distil').checked, dis: document.getElementById('arm-distil').disabled }));
   check('flexisim/commission: the armed box agrees with what shipped, and is enabled only if the rung was built', arm.distil === !!d.auto.deployed.distil && arm.dis === !d.auto.armed.distil.built, JSON.stringify({ arm, deployed: d.auto.deployed }));
+  // THE CASCADE IS OFFERED WHEN IT SHIPPED. On a plant where the distilled model refuses the
+  // ladder keeps its teacher, and a page that could not arm it ran the conventional machine
+  // under a pill reading "shipped" (measured at E 0.005: distil 0.59x, cascade 4.39x).
+  const stk = await fx.evaluate(() => { const b = document.getElementById('arm-stack'); return { on: b.checked, dis: b.disabled, shown: getComputedStyle(b.parentElement).display !== 'none' }; });
+  check('flexisim/commission: the cascade box agrees with what shipped — armed when it is what the ladder kept, hidden when the distilled model replaced it', stk.on === (d.auto.deployed.stack > 0) && stk.shown === (d.auto.armed.stack.built && (stk.on || !d.auto.deployed.distil)), JSON.stringify({ stk, deployed: d.auto.deployed }));
+  // AND THE ARM ON SCREEN IS THE PAGE'S OWN, handed back where the ladder left it and driven
+  // home — the ladder borrowed it rather than building a second machine.
+  const own = await fx.evaluate(() => { const x = window.__flxDbg(); return { live: x.drawnPose.live, on: x.approaching || !x.busy }; });
+  check('flexisim/commission: after commissioning the stage shows the page’s own machine, not a second one', own.live === false && own.on, JSON.stringify(own));
   const plc = await fx.evaluate(() => document.getElementById('plc').textContent);
   check('flexisim/plc: the budget panel renders a verdict for the armed set', /FITS|DOES NOT FIT|nothing armed/.test(plc), plc.slice(0, 120));
   if (d.auto.deployed.distil) check('flexisim/plc: …and the distilled model FITS a 1 ms scan outright', /FITS/.test(plc) && !/DOES NOT/.test(plc), plc.slice(0, 160));

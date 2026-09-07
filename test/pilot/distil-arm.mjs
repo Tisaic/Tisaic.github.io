@@ -98,7 +98,7 @@ const host = makeArmHost({
   ...(process.env.TLAPS ? { distilTeachLaps: +process.env.TLAPS } : {}),
   ...(process.env.TPASSES ? { distilPasses: +process.env.TPASSES } : {}),
   ...(process.env.TRACE === '1' ? { distilTeachTrace: true } : {}),
-  ...(process.env.HOLD ? { distilTeachHold: +process.env.HOLD } : {}),
+  // HOLD is gone: every drive starts with a driven APPROACH and rule 45's settle (plan §52.12).
   distilEngine: ENGINE, distilDebug: process.env.DEBUG === '1',
   distilOracle: process.env.ORACLE === '0' ? false : process.env.ORACLE === 'control' ? 'control' : true,
   avg: G.avg, warmup: G.warmup, passes: G.passes, probeLaps: G.probeLaps,

@@ -10976,6 +10976,52 @@ the ENGINE**: the harness converges each prefix with the commissioned PILOT's QP
 measured error of the previous lap as its free response (the `oracleF0` port, §48), reaching
 9.8x-16.2x in four passes, where `hff`'s harmonic Newton reaches 2.3x-5.1x and stalls.
 
+**AND LEAVE-ONE-OUT SAYS THE OVER-FIT IS TO THE DIET, NOT TO THE SQUARE'S CORNERS.** Six folds:
+converge the lap-periodic correction on each training program once (the gains reproduce the
+ladder's exactly — 5.76, 2.05, 4.82, 2.43, 1.71, 2.15 — the control), fit a policy on five,
+score it on the machine on the sixth AND on the square:
+
+```
+  fold   held-out polygon   square    held-out R²
+    0        1.04x           0.38x    [ 0.351, -0.034]
+    1        1.02x           0.43x    [-0.230,  0.140]
+    2        1.10x           0.65x    [-0.093,  0.035]
+    3        1.00x           0.45x    [-0.032,  0.030]
+    4        1.41x           0.41x    [ 0.152,  0.132]
+    5        1.11x           0.48x    [-0.167,  0.050]
+  geometric  1.11x           0.46x
+```
+
+A policy fitted on five polygons does ~nothing on the sixth. So the ~2.0x it reads on its own
+programs is memorised, not modelled: the route carries to nothing it was not fitted on, not
+even a program of its own class, and the square's corner regime is not the specific fault.
+This is the strongest negative reading the distillation has had, and it is of the REAL route —
+`hff` prefixes converged on a designed diet, through the ladder — rather than of the oracle
+route §49 measured.
+
+**THIS DOES NOT REPRODUCE §49.** §49's 4.99x on the sharp square used an ORACLE-converged
+prefix (a perfect forecast, iterated to convergence) on the arm's rig; the ladder route
+distils REAL `hff` prefixes converged on the designed demo at 1.7–5.8x, and so far that route
+does not carry. Whether full grade (24 passes) crosses 1x is the run in progress; whether a
+diet carrying the square's corner class without being the square is the repair is the next
+question, and it is a measurement rather than an argument.
+
+**AND THE OTHER OPTION WORKS, THROUGH THE SAME LADDER.** `PERIODIC=1` at fast grade: the distil
+rung reproduces the non-periodic run BYTE-IDENTICAL (1.4254e+0, 0.74x — declaring a periodic
+application does not perturb it, which is the control), and then **lap learning deploys at
+4.56x** on the square, 1.0593e+0 → 2.3254e-1, in 59 laps with a random-phase probe at 25%.
+The ladder ships `{hff: true, distil: false}`. For a periodic application the memory is the rung
+that helps and the ladder picks it by measuring; it costs 126 minutes of machine time at this
+grade, most of it the six distil convergences that did not ship. (The old harness reached
+8.9–9.2x on this square at 24–82 passes; 4.56x at 8 is the cost being laps, as recorded.)
+
+**AND THE PAGE DID WHAT IT IS FOR.** Nothing harmful shipped: the refusal is a row, the machine
+runs the conventional baseline, and the cost record says what the refusal cost — 101 minutes of
+machine time at fast grade, 370 scored runs. One page defect fell out: a REFUSED model was being
+STORED and offered back as "matches this machine, 1.00x"; nothing deployed now means nothing
+kept, pinned in the browser.
+
+
 ### §52.8 THE HARNESS'S PERFORMANCE THROUGH THE ONE PRESS: 4.88x ON THE BENCH SQUARE, 138 MAC
 
 The owner's requirement was the number `test/_distil.mjs` measures, delivered by the page's
@@ -11095,47 +11141,91 @@ a "jump" of 97% — the sample spanned two and a half frames, i.e. the whole 1,6
 so the check now judges each hop against the frames it spans and the feed's allowance per
 frame: 18 frames, 12,000 steps, largest per-frame hop 0.30 on a 6.42 move.
 
-**AND LEAVE-ONE-OUT SAYS THE OVER-FIT IS TO THE DIET, NOT TO THE SQUARE'S CORNERS.** Six folds:
-converge the lap-periodic correction on each training program once (the gains reproduce the
-ladder's exactly — 5.76, 2.05, 4.82, 2.43, 1.71, 2.15 — the control), fit a policy on five,
-score it on the machine on the sixth AND on the square:
+### §52.12 THE ARM IS CONTINUOUS EVERYWHERE, THE CASCADE IS A TEACHER, AND THE ERROR TRAIL HAS A SLIDER
+
+**THE OWNER'S WORDS: "the arm needs to be continuous — it can't move in jumps in real life."**
+§52.11 made going home a move and left every other teleport in place. Enumerated by reading
+every call that set a pose or held one: the ladder's per-run snapshot RESTORE (`acquire()`
+put the settled machine's bits back before every scored run — dozens of jumps per
+commissioning, and the reason "the arm on screen is the arm that is turning" was a second arm
+built for the ladder at a calibration pose); the 4,000-step held start before a demo record;
+the 500-step held start before every teacher drive; the page's `calibrateComp`, which SET the
+arm at four poses and then at the program start; and a plant rebuilt on a K or E change at the
+origin. Every one is now a DRIVE through one planner, `lib/flexisim/approach.js`: a joint-space
+rapid timed at the feed along the tool's ARC (a joint interpolation draws an arc, and timing
+it by the chord exceeds the feed on a long swing), then rule 45's settle. Measured in Node on
+the bench arm, the servo's answer peaks at 1.65x the feed per step. The ladder BORROWS the
+bench's arm and its identified baseline (`makeMachine` returns `borrowed: true`; the host never
+destroys it), drives it to each run's start from wherever the previous run ended, and hands it
+back where the last scored run left it; a rebuilt plant is initialised at the pose the old one
+stood at (a machine is somewhere when it is switched on — that is not a move). The Node rigs'
+`homeArm`/`settle` keep `setPose` at CONSTRUCTION, which is the same statement.
+
+**WHAT IT COSTS AGAINST THE RESTORE, MEASURED (rule 21).** `test/pilot/distil-arm.mjs` at its
+defaults, bench square, fast grade:
 
 ```
-  fold   held-out polygon   square    held-out R²
-    0        1.04x           0.38x    [ 0.351, -0.034]
-    1        1.02x           0.43x    [-0.230,  0.140]
-    2        1.10x           0.65x    [-0.093,  0.035]
-    3        1.00x           0.45x    [-0.032,  0.030]
-    4        1.41x           0.41x    [ 0.152,  0.132]
-    5        1.11x           0.48x    [-0.167,  0.050]
-  geometric  1.11x           0.46x
+                                        delivered    machine-min
+  snapshot restore (what shipped)       2.2635e-1        8.5
+  driven, page's settle policy          2.2648e-1       13.9     (1e-5 over 300 steps, min 1500)
+  driven, host's settle policy          2.2638e-1       10.7     (1e-4 over 300, min 500, cap 6000)
 ```
 
-A policy fitted on five polygons does ~nothing on the sixth. So the ~2.0x it reads on its own
-programs is memorised, not modelled: the route carries to nothing it was not fitted on, not
-even a program of its own class, and the square's corner regime is not the specific fault.
-This is the strongest negative reading the distillation has had, and it is of the REAL route —
-`hff` prefixes converged on a designed diet, through the ladder — rather than of the oracle
-route §49 measured.
+The delivered number is unchanged to four figures either way — the warmup laps were already
+absorbing what a settle leaves — and the settle is the whole cost: the page's visible policy
+waits for a compliant arm to stop ringing to 1e-5, which is 5.4 machine-minutes of nothing per
+commissioning, so the host reads "arrived" at 1e-4 (0.05% of the error being scored) and
+caps at 6,000 without calling it a fault. Every scored run now starts from a state the settle
+CONVERGED to rather than the same bits, and the machine carries what the previous run left in
+it, which is what a plant does.
 
-**THIS DOES NOT REPRODUCE §49.** §49's 4.99x on the sharp square used an ORACLE-converged
-prefix (a perfect forecast, iterated to convergence) on the arm's rig; the ladder route
-distils REAL `hff` prefixes converged on the designed demo at 1.7–5.8x, and so far that route
-does not carry. Whether full grade (24 passes) crosses 1x is the run in progress; whether a
-diet carrying the square's corner class without being the square is the repair is the next
-question, and it is a measurement rather than an argument.
+**THE INSTRUMENT IS PER SOLVER STEP, BECAUSE PER FRAME CANNOT SEE IT.** §52.11's check judged
+per-frame hops against the feed's allowance and passed; re-run after this work it read a
+"jump" of 4.7 on a 3.9 move. It was not a jump: at 600 steps a frame the PROGRAM moves the
+tool 3-4 units between frames, and a Reset that reverses a moving arm peaks near 2x the feed
+for 600 steps — 600 steps of motion and one teleport look identical from outside. So every arm
+the page builds now reports the largest tool displacement between two consecutive SOLVER
+STEPS (`__flxHop`, off unless asked: a tool solve per step), carried ACROSS a rebuild so a
+plant initialised anywhere but where the old one stood reads as the jump it is, and the
+browser asserts it stays under four feeds through a Reset (14,400 steps), a plant change
+(81,922 steps, largest hop 1.14e-2 = 2.9 feeds, through four driven calibration poses and
+87 units of travel) and a stopped commissioning.
 
-**AND THE OTHER OPTION WORKS, THROUGH THE SAME LADDER.** `PERIODIC=1` at fast grade: the distil
-rung reproduces the non-periodic run BYTE-IDENTICAL (1.4254e+0, 0.74x — declaring a periodic
-application does not perturb it, which is the control), and then **lap learning deploys at
-4.56x** on the square, 1.0593e+0 → 2.3254e-1, in 59 laps with a random-phase probe at 25%.
-The ladder ships `{hff: true, distil: false}`. For a periodic application the memory is the rung
-that helps and the ladder picks it by measuring; it costs 126 minutes of machine time at this
-grade, most of it the six distil convergences that did not ship. (The old harness reached
-8.9–9.2x on this square at 24–82 passes; 4.56x at 8 is the cost being laps, as recorded.)
+**THE TWO JUMPS THE INSTRUMENT FOUND, NEITHER OF WHICH A FRAME COULD SEE.** First, through a
+stopped commissioning it read **0.635 in one step** (160 feeds). The page's `startCommission`
+called `home()` — an approach — and then handed the same arm to the ladder, and the frame
+loop's approach branch had no commissioning guard: two drivers stepping one machine, each
+commanding its own reference, which the badge separately reported as a settle that never
+arrived ("capped at 30,000 steps, the tool was still moving") while the ladder was moving the
+arm underneath it. The ladder drives to every start itself; the page no longer approaches
+before it and never steps an approach while it commissions. Second, across a plant change it
+read **0.538 with the joints unchanged to 1e-7** — the joint pose had been carried to the new
+plant and the LINKS had not: fresh links are straight, the old ones were bent under load, and
+the tool is at the end of the bend. The rebuilt plant now takes the whole `snapshotArm` of the
+one it replaces — joints, rates, wind-up and both lattices' state — which for a modulus change
+is a material that changed while loaded and relaxes continuously. Re-measured: largest hop
+1.16e-2 across the change, 2.9 feeds, joints and links both carried.
 
-**AND THE PAGE DID WHAT IT IS FOR.** Nothing harmful shipped: the refusal is a row, the machine
-runs the conventional baseline, and the cost record says what the refusal cost — 101 minutes of
-machine time at fast grade, 370 scored runs. One page defect fell out: a REFUSED model was being
-STORED and offered back as "matches this machine, 1.00x"; nothing deployed now means nothing
-kept, pinned in the browser.
+**THE DISTILLED REFUSAL ON THE OWNER'S PLANT WAS A BAR SET AT THE WRONG RUNG.** The owner's
+screenshot at K 0.25 / E 0.005, fast grade: as arrived 2.0881, pilot cascade 4.7615e-1 (4.39x),
+`②d distilled — REFUSED` at 8.0036e-1, 0.59x — and the page then ran the CONVENTIONAL machine
+under a pill reading "shipped 4.39x", because the page can arm the distilled model and lap
+learning and never the cascade. Two defects in one row. The refusal: the rung is scored
+against the best the ladder has, which with the cascade armed IS the cascade — its own
+TEACHER — so on a plant where the teacher out-runs the student the student is refused and the
+teacher stays armed, a 9,500-MAC solve the page's contract says never ships. `distil.teacherOnly`
+(on by the host) scores the policy against what the ladder had BELOW the cascade, and a refused
+policy WITHDRAWS its teacher as its own row rather than leaving it armed. Re-run at E 0.005
+through the harness: distilled **7.9875e-1 against the bar 2.0881e+0, 2.61x, DEPLOYED**, the
+cascade 4.7617e-1 still on record as what taught it. On the bench cell it is inert to the
+decision (the policy beat the cascade there anyway) and to the number. The second defect: the
+page now offers the cascade as a fourth box, shown only when it was built and the distilled
+model is not the armed controller, so a plant where the policy loses to its teacher can still be
+seen corrected — with the scan verdict saying it does not fit — and `armedAny` counts it, so
+the pill and the machine agree.
+
+**AND THE ORANGE LINE.** The error trail is the tool's path with its deviation from the program
+magnified along the normal, fixed at x10 — on a plant with 2.09 rms of error it swept off the
+stage and the legend said "error x10", which told nobody what it was. It is a slider now (x1 to
+x20, x10 by default) and the legend names the object. Also fixed: `docs/plan.md` had §52.8-§52.11
+inserted INSIDE §52.7, ahead of its last five paragraphs; they are back in order.
