@@ -8,7 +8,7 @@
   <title>FlexiSim — Commissioning Bench</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:1081,built:"2026-09-07T18:08:43Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:1082,built:"2026-09-07T18:34:06Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
 
   <style>
@@ -509,14 +509,14 @@ function draw() {
     g.restore();
   }
 
-  // The error trail, exaggerated along the path normal only — and only for the deployed run.
+  // The error trail: the TOOL'S OWN PATH, with its deviation from the program exaggerated
+  // along the path normal — and only for the deployed run.
   if (!isComm && trail.length > 1) {
     g.strokeStyle = '#f59e0b'; g.lineWidth = 2; g.beginPath(); let pen = false;
+    const mag = magNow();
     for (const t of trail) {
       if (!t) { pen = false; continue; }
-      const [, , d, u] = t, p = prof.point(u), tg = prof.tangent(u);
-      const mag = magNow();
-      const px = p[0] - tg[1] * d * mag, py = p[1] + tg[0] * d * mag;
+      const [px, py] = trailPoint(t, mag);
       if (!pen) { g.moveTo(X(px), Y(py)); pen = true; } else g.lineTo(X(px), Y(py));
     }
     g.stroke();
@@ -549,6 +549,24 @@ function draw() {
   g.fillText(isComm ? 'COMMISSIONING — the ladder’s own machine, not the program'
     : `program (dashed) · tool ● · orange = tool path with its error off the program ×${magNow()}${gl}`, 12, h - 8);
 }
+/*
+ * WHERE A TRAIL SAMPLE IS DRAWN. It used to be RECONSTRUCTED — the program point nearest the
+ * tool, pushed out along that segment's normal by the contour error — which is not the tool's
+ * path: it drops the lag component, and at a CORNER the nearest point sticks on the vertex while
+ * the tool sails past it, so the drawn point ran out sideways along the old edge and snapped to
+ * the new one. On the soft plant at x1 that read as a bright spike hanging off the corner, on a
+ * line whose legend said "tool path". Now the base is the tool's true position and only the
+ * component along the local normal is scaled, so x1 IS the tool path — pinned in the browser —
+ * and higher magnifications grow the deviation out of the path rather than out of a projection.
+ */
+function trailPoint(t, mag) {
+  const [tx, ty, , u] = t;
+  if (mag === 1) return [tx, ty];
+  const p = prof.point(u), tg = prof.tangent(u), nx = -tg[1], ny = tg[0];
+  const en = (tx - p[0]) * nx + (ty - p[1]) * ny;
+  return [tx + (mag - 1) * nx * en, ty + (mag - 1) * ny * en];
+}
+window.__flxTrail = (mag) => trail.filter(Boolean).map((t) => ({ tool: [t[0], t[1]], drawn: trailPoint(t, mag) }));
 function tipSlopeOf(p) {
   const n = p.x.length, m = Math.min(5, n); if (m < 2) return 0;
   let sx = 0, sy = 0, sxx = 0, sxy = 0;

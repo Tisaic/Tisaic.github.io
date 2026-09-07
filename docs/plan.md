@@ -11260,3 +11260,13 @@ there and the state-fed cascade does not. The route the plan already records for
 bind is a single long TOUR lap (§49: ±1024 from 0.47x to 3.29x), not measured at E 0.005. And
 the x4 run found one more ladder defect: a fit that REFUSED left the cascade ARMED, because the
 withdrawal ran only on the scored-and-lost exit — a teacher now withdraws by both exits.
+
+**AND THE SPIKE ON THE ORANGE LINE WAS THE INSTRUMENT, NOT THE MACHINE.** At x1 on the soft plant
+the trail hung a bright triangle off the square's lower-right corner. The trail was RECONSTRUCTED
+— the program point nearest the tool, pushed out along that segment's normal by the contour
+error — which is not the tool's path: it drops the lag component, and at a corner the nearest
+point sticks on the vertex while the tool sails past it, so the drawn point ran out sideways
+along the old edge and snapped to the new one. The base is now the tool's true position and only
+the component along the local normal is scaled, so x1 IS the tool path (pinned in the browser:
+every drawn point on the tool, x10 moves it) and higher magnifications grow the deviation out of
+the path rather than out of a projection.

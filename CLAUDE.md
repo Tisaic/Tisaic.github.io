@@ -1343,7 +1343,9 @@ an engineer would actually meet:
   ghost skips — rules 12, 13), plus contour · lag · total. **The orange trail is the tool's path
   with its error off the program magnified along the normal, and the magnification is a slider
   (×1 to ×20, ×10 by default)** — at a fixed ×10 a soft plant's error swept off the stage and the
-  line said nothing; the legend now names what it is.
+  line said nothing; the legend now names what it is. **At ×1 it IS the tool's path, pinned**: it
+  used to be reconstructed from the nearest program point, which sticks on a vertex while the tool
+  passes a corner and hung a bright spike off every corner of the soft plant's square.
 
 **AND IT NOW DELIVERS THE HARNESS'S NUMBER THROUGH THE ONE PRESS (plan §52.8): 1.0593 →
 2.169e-1 on the bench square, 4.88x over the conventional machine and 6.29x over the bare one,

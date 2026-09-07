@@ -1900,6 +1900,11 @@ await halted('the ghost recording');
     await fx.waitForTimeout(300);
     const m1 = await fx.evaluate(() => ({ mag: window.__flxDbg().mag, v: document.getElementById('v-mag').textContent }));
     check('flexisim/stage: the error trail’s magnification is a slider, ×10 by default and readable down to ×1', m0 === 10 && m1.mag === 1 && /×1$/.test(m1.v), JSON.stringify({ m0, m1 }));
+    // AT x1 THE ORANGE LINE IS THE TOOL PATH, EXACTLY — not a projection of it. The projected
+    // form hung a spike off every corner on the soft plant (the nearest program point stuck on
+    // the vertex while the tool passed it), on a line the legend called the tool path.
+    const tr = await fx.evaluate(() => { const r = window.__flxTrail(1); let worst = 0; for (const q of r) worst = Math.max(worst, Math.hypot(q.drawn[0] - q.tool[0], q.drawn[1] - q.tool[1])); const r10 = window.__flxTrail(10); let moved = 0; for (const q of r10) moved = Math.max(moved, Math.hypot(q.drawn[0] - q.tool[0], q.drawn[1] - q.tool[1])); return { n: r.length, worst, moved }; });
+    check('flexisim/stage: …and at ×1 the orange trail IS the tool’s path (every drawn point on the tool), while ×10 moves it', tr.n > 50 && tr.worst === 0 && tr.moved > 0, JSON.stringify(tr));
     await fx.evaluate(() => { const e = document.getElementById('s-mag'); e.value = '10'; e.dispatchEvent(new Event('input')); });
   }
 }
