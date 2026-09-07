@@ -11360,3 +11360,51 @@ command steps back 0.4 steps at each seam — a one-step velocity discontinuity 
 feed once per lap. The page counts continuously and has none. It is a shared property of every
 recorded number and is small against the error scored; changing it would move every number in
 this file by a hair and needs its own rule-21 pass, so it is recorded rather than done.
+
+### §52.15 THE CASCADE DECIDED ON ONE PHASE, LOOKED AHEAD ON ANOTHER, AND SAMPLED ON A THIRD
+
+The owner's instruction, again: there are more. Read this time at the level below the loops —
+WHEN the pilot decides, WHEN it samples its ring, and WHAT "now" it is handed at each.
+
+**(1) THE LOOK-AHEAD WAS PINNED TO THE LAP GRID WHILE THE DECISION WALKED.** The host built the
+cascade's look-ahead as `R[(floor(k / S) + off) · S]` — "now" snapped down to the nearest
+multiple of the sample stride — while the pilot decides on its own tick counter, which starts
+at zero with each run and fires on the ninth call: in the first lap every decision is taken at
+k ≡ 8 (mod 9) and reads a "now" eight steps behind the machine, and in later laps the offset
+walks (the lap is not a multiple of nine). Commissioning's verify reads its look-ahead at the
+decision step itself. Every look-ahead — the scored runs, the teacher's drives, the page's
+`actAt` — now reads `R[k + off · S]` at the step it is taken. **(2) THE RING WAS SAMPLED ON THE
+COMMISSIONING COUNTER.** `_deployObserve` gated its ring push on `this.k % sample`, the step
+counter that has been counting since the commissioning began and that nothing resets at deploy;
+so the offset between a ring sample and the decision that reads it — eight steps at
+commissioning — was whatever that counter happened to read when each run started, and differed
+between two scored runs of one machine. The run now has its own observe counter, restarted with
+the run, and pushes at the phase commissioning used. **(3) THE TEACHER'S ORACLE READ THE
+RECORD ON THE SAMPLE GRID.** The record of the previous drive was kept at every ninth step and
+handed to the pilot as its free response indexed by `floor(k / S) + lead`, i.e. up to eight steps
+away from the step the decision was actually taken at. The record is per step now and read at
+`k + lead · S`. **(4) THE SEAM DWELL** stated in §52.14 is gone: every scored run and every
+training drive counts continuously and derives its in-lap step from the true period, as the
+page does; the "as it arrived" row moves 1.0593 → 1.0592, which is that 0.4-step seam. **(5)
+RE-PHASING AT EVERY LAP START WAS BUILT, MEASURED, AND SHIPS OFF.** With (1) in place the old
+`lapSync` index has nothing left to do, and what remained — restart the tick and the ring at
+each lap so every lap is decided at commissioning's phase — measured worse on BOTH rungs: the
+cascade at 4.8406e-1 (2.19x) against 4.7557e-1 (2.23x) free-running, a nine-step hold at every
+seam for no phase benefit; and the teacher's drives re-phased teach a policy reading 1.8954e-1
+against 1.8739e-1 free-running. `lapSync: true` keeps it reachable; the default and the page
+are free-running (rule 31, and rule 42 on a hypothesis that lost).
+
+```
+  bench square, fast grade, four programs           cascade            distilled
+  §52.14 (closed window)                             4.7448e-1  2.23x   1.9009e-1  5.57x
+  + exact look-ahead, ring re-phased per run,
+    per-step oracle, continuous time — SHIPS         4.7557e-1  2.23x   1.8739e-1  5.65x
+  + re-phase at every lap start, teacher only        4.7557e-1  2.23x   1.8954e-1  5.59x
+  + re-phase at every lap start, teacher and deploy  4.8406e-1  2.19x   1.8954e-1  5.59x
+```
+
+The rule-21 reading: the cascade's delivered number barely moves — its stale "now" was mostly
+absorbed by a receding horizon that re-plans every nine steps — and the distilled policy gains
+1.4% from a teacher whose oracle now reads the truth at the step it decides on; but the deploy
+path, the scored runs and the teacher now agree with commissioning on what "now" is, which none
+of them did, and the page and the ladder run the same schedule. E 0.005 at the shipped configuration: distilled 5.2256e-1 (4.00x) against §52.14's 5.2468e-1, the cascade 4.7879e-1 (4.36x) — the policy within 9% of its teacher on the soft plant.

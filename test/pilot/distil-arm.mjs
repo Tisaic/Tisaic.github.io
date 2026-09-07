@@ -92,6 +92,8 @@ const host = makeArmHost({
     return { arm: m.arm, l1: m.l1, l2: m.l2, servo: m.servo, rc };
   },
   path, lap: LAP, K, centre,
+  // LAPSYNC=1: re-phase the cascade's tick at each lap start (measured 2.23x -> 2.19x; off, plan §52.15).
+  ...(process.env.LAPSYNC === '1' ? { lapSync: true } : {}),
   classic: false, maxDepth: ENGINE === 'pilot' ? 1 : 0, demo: null, lapMemory: PERIODIC, distil: DISTIL,
   ...(DIETS[DIET] ? { distilDiet: DIETS[DIET] } : {}), distilReplaces: REPLACE,
   ...(process.env.CAP ? { distilCap: +process.env.CAP } : {}),
@@ -135,7 +137,7 @@ const heldPolicy = (p, tr, refAt = tr.refAt, speedAt = tr.speedAt) => {
 };
 const pol = host.auto.built.distil;
 if (pol && pol.W) {
-  console.log('\n  the policy on its OWN training programs (baseline -> with the policy):');
+  console.log('\n  the policy on its OWN training programs (BARE machine -> with the policy; the square above is over the CONVENTIONAL machine):');
   const runs = await host.distilRuns();
   for (let i = 0; i < runs.length; i++) {
     const tr = runs[i];

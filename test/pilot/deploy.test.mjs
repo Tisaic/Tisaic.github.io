@@ -60,8 +60,9 @@ const scored = (k) => {
     { theta: c2, omega: r.dq[1], alpha: r.ddq[1] }];
   const ff = rc.feedforward([[1, 0], [0, 1]], m.servo.jointTorques(base),
     { enableToolff: false });
+  const S = host.auto.stack ? host.auto.stack.sample : 1;
   const u = host.auto.act({ v: [cmd.vx, cmd.vy], a: [cmd.ax, cmd.ay], k,
-    look: (off) => R[(((k + off) % LAP) + LAP) % LAP], q: [c1, c2] });
+    look: (off) => R[(((k + off * S) % LAP) + LAP) % LAP], q: [c1, c2] });
   return [ff.dq[0] + u[0], ff.dq[1] + u[1]];
 };
 
@@ -165,8 +166,9 @@ const snap0 = snapshotArm(m);
 // THE HOST'S OWN EXPRESSION, and the PAGE'S. Identical inputs, identical machine.
 const asHost = await contourOf((k, cmd, refs, c1, c2) => {
   const ff = rc.feedforward([[1, 0], [0, 1]], m.servo.jointTorques(refs), { enableToolff: false });
+  const S = armed.stack ? armed.stack.sample : 1;
   const u = armed.act({ v: [cmd.vx, cmd.vy], a: [cmd.ax, cmd.ay], k,
-    look: (off) => R[(((k + off) % LAP) + LAP) % LAP], q: [c1, c2] });
+    look: (off) => R[(((k + off * S) % LAP) + LAP) % LAP], q: [c1, c2] });
   const tau = m.servo.torques([{ ...refs[0], theta: c1 + ff.dq[0] + u[0] },
     { ...refs[1], theta: c2 + ff.dq[1] + u[1] }]);
   const en = m.arm.encoders();
