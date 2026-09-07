@@ -11486,3 +11486,63 @@ caught it ("no better than the rung below") and nothing shipped, but a receding-
 inversion of a lightly damped mode that the dead-zone had been de-tuning is a stability
 margin the design does not measure. On the bench plant it is 2.23x; one backlash value away
 it is a divergence. Neither is a page defect; both are the control theory, stated.
+
+### §52.17 THE CEILING IS THE DIET, NOT THE BASIS — SAME CONTROLLER, 14x TAUGHT ON THE SQUARE, 6x TAUGHT ON POLYGONS
+
+The owner's next two points: feed the positions in with the angles normalised; and there is
+still a major control-theory bug, because the control is too underwhelming against the result
+for any other explanation. Both were put to the machine.
+
+**NORMALISED ROWS — INERT ON THE NUMBER, RIGHT IN PRINCIPLE.** `standardize` divides every
+feature by its rms over the training rows (measured on a first pass that rebuilds the rows
+from the references, so nothing is stored; the scale is carried into the deployed row). The
+square reads 6.05x against 6.04x. It is the correct conditioning for the streaming recursion
+(rule 32) and it does not move what is delivered, because the collinear weights it tames
+cancel on the rows the square presents. It stays available, off.
+
+**THE TEACHER'S SOLVE IS NOT WHAT PLATEAUS IT.** The teacher's QP truncates at the deployed
+iteration count; solved to convergence (`distilTeachIters` 60) its per-program gains are
+unchanged (9.45x / 11.6x / 10.2x / 6.9x against 9.45x / 11.4x / 10.2x / 6.8x) and the square
+reads 6.04x. Eight passes at 60 iterations take the teacher to 13-18x — and the square to
+3.98x, the §52.16 law again. **The control is not small.** Measured in the same units, the
+applied correction is 2.3-3.1x the rms of the error it cancels (0.26 rad against 0.10 rad on
+the polygons; 1.9-2.6x on the square), which is what pushing a correction through a slow
+position loop costs. And the teacher's increment sits AT its 0.10 rad cap on every pass of
+every program (`uPk 0.1000`), so the cap is binding rather than incidental.
+
+**THE DECISIVE MEASUREMENT: THE SAME BASIS, TAUGHT ON THE SQUARE ITSELF.** `DIET=self` puts
+the bench square in as the only training program — the in-sample ceiling of this window on
+the program it is scored on:
+
+```
+  diet                              passes   square (ladder)   square (own-program score)
+  four polygons (shipped)             4        6.04x
+  the square itself                   4        9.14x            10.42x
+  the square itself                   8       14.35x            16.83x
+  the square plus the four polygons   4        7.46x             8.69x
+```
+
+Same controller, same 93 features, same machine: **14x when taught on the program, 6x when
+taught on polygons, and 7.5x when taught on both.** The basis is not the ceiling. The diet is,
+and adding the polygons to the square DILUTES it: one linear map of the window is being asked
+to serve geometries whose inverse differs, and it cannot serve both. That is the structural
+fact under every number in §52.16, and it is not a bug in an equation; it is what a single
+global linear feedforward learned from data can and cannot carry across programs on a plant
+whose inverse depends on pose, direction and regime.
+
+**A POSE-SCHEDULED MAP MAKES IT WORSE, WHICH SAYS WHAT KIND OF LIMIT IT IS.** Every window
+feature also offered times the pose's offset from the workspace centre (`schedule: 'pose'`,
+277 features): the polygons improve in-sample to 6.9-9.0x and the square is **REFUSED at
+0.65x** — the added capacity is spent on the polygons' own regime and extrapolates off it;
+with the square in the diet it reads 6.75x against the unscheduled 7.46x. More capacity buys
+less transfer, for the fourth time in this project (capacity, cascade depth, input routing,
+now scheduling): the limit is COVERAGE, not expressiveness.
+
+**WHAT THIS MEANS FOR THE NORTH STAR, STATED.** A program-agnostic feedforward on this arm is
+bounded by how far the commissioning diet is from the program it will run. Taught on the
+program's own class it reaches 14x; taught on polygons that share nothing with a square's
+stop-and-go right angles, 6x. The honest levers are a diet designed to cover the programs'
+REGIMES (corner angle, stop-and-go, pose region) rather than random polygons — target 1's own
+words — and a deploy-time adaptation that closes the rest on the machine (the tracker-stays
+path, which is built). Not measured here: a diet of squares and rectangles at several sizes
+and poses scored on a held-out rectangle, which is the experiment target 1 actually asks for.

@@ -15,6 +15,7 @@
 import { machine, settle, commissionComp } from '../flexisim/_rig.mjs';
 import { makeArmHost } from '../../lib/flexisim/autohost.js';
 import { sharpRect } from '../../lib/flexisim/toolpath.js';
+import { designDemoPaths } from '../../lib/flexisim/demopath.js';
 import { HarmonicFF } from '../../lib/pilot/hff.js';
 import { DistilPolicy } from '../../lib/pilot/distil.js';
 
@@ -79,7 +80,7 @@ const DIETS = {
   tour2: { feeds: [F, F], rMin: 3.4, rSpan: 2.4, tour: { nShapes: 6 } },   // two long closed tours, six shapes each (plan §52.16)
   tour1: { feeds: [F], rMin: 3.4, rSpan: 2.4, tour: { nShapes: 6 } },
 };
-if (!(DIET in DIETS)) throw new Error(`DIET ${DIET}: one of ${Object.keys(DIETS).join(', ')}`);
+if (!(DIET in DIETS) && DIET !== 'self' && DIET !== 'selfpoly') throw new Error(`DIET ${DIET}: one of ${Object.keys(DIETS).join(', ')}, self, selfpoly`);
 const K = +(process.env.ARM_K || 0.25), E = +(process.env.ARM_E || 0.03);
 const path = sharpRect({ w: 8, h: 8, centre: [12, 0], feed: 4e-3, accel: 4e-5, cornerDt: 40 });
 const LAP = Math.ceil(path.lap);
@@ -102,10 +103,19 @@ const host = makeArmHost({
   ...(process.env.LAPSYNC === '1' ? { lapSync: true } : {}),
   classic: false, maxDepth: ENGINE === 'pilot' ? 1 : 0, demo: null, lapMemory: PERIODIC, distil: DISTIL,
   ...(DIETS[DIET] ? { distilDiet: DIETS[DIET] } : {}), distilReplaces: REPLACE,
+  // DIET=self: the bench square ITSELF as the only training program — the in-sample ceiling of the
+  // basis on the program it is scored on; DIET=selfpoly: the square plus the four polygons.
+  ...(DIET === 'self' ? { distilPath: [path] } : DIET === 'selfpoly' ? { distilPath: [path, ...designDemoPaths({ centre: [12, 0], feeds: [F, F], rMin: 3.4, rSpan: 2.4 })] } : {}),
   ...(process.env.CAP ? { distilCap: +process.env.CAP } : {}),
   ...(process.env.TEACHCAP ? { distilTeachCap: +process.env.TEACHCAP } : {}),
   // Q=<steps>: a circular moving-average Q-filter on the teacher's learned increment (plan §52.16).
   ...(process.env.Q ? { distilQ: +process.env.Q } : {}),
+  // TEACHITERS=<n>: the teacher solves its QP with this many iterations (deploy keeps its own).
+  ...(process.env.TEACHITERS ? { distilTeachIters: +process.env.TEACHITERS } : {}),
+  // SCHED=1: the pose-scheduled map (every window feature also times the pose offset).
+  ...(process.env.SCHED === '1' ? { distilSchedule: 'pose' } : {}),
+  // STD=1: standardised rows (each feature divided by its rms over the training rows).
+  ...(process.env.STD === '1' ? { distilStandardize: true } : {}),
   // SOFFS=a,b,c: the direction-of-travel block's offsets, in pilot samples (default none).
   ...(process.env.SOFFS ? { distil: { ...DISTIL, signOffsetsPerSample: process.env.SOFFS.split(',').map(Number) } } : {}),
   // REF=angles|torques|both: what the policy reads at each window offset (plan §52.16).
@@ -160,6 +170,11 @@ if (pol && pol.W) {
     // deployed object holds (AutoStack's distil.stride); reading the policy at every step
     // evaluates the fit at phases it never saw and scores an object that does not ship.
     const withP = await tr.run(heldPolicy(pol, tr));
+    // THE SIZE OF THE CONTROL AGAINST THE SIZE OF THE ERROR IT CANCELS, in the same units
+    // (joint rad, rms over the lap): a correction much smaller than the error it removes is
+    // a scale fault somewhere, not a clever controller.
+    { const hp = heldPolicy(pol, tr); let s2 = 0; for (let k = 0; k < tr.lap; k++) { const u = hp.at(k); s2 += u[0] * u[0] + u[1] * u[1]; }
+      console.log(`      control rms ${Math.sqrt(s2 / tr.lap).toExponential(3)} rad against bare error rms ${base.score.toExponential(3)} rad (ratio ${(Math.sqrt(s2 / tr.lap) / base.score).toFixed(2)})`); }
     console.log(`    program ${i} (lap ${tr.lap}): ${base.score.toExponential(4)} -> ${withP.score.toExponential(4)}`
       + `   ${(base.score / withP.score).toFixed(2)}x` + (withP.sat != null ? `   drive saturated ${(100 * withP.sat).toFixed(1)}% of steps (bare ${(100 * base.sat).toFixed(1)}%)` : ''));
   }

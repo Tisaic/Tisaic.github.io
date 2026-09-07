@@ -1421,6 +1421,14 @@ ridge scaled to the rows (1e-3). Two things found underneath and not fixed: the 
 returns weights 30-150x the batch fit's on an exactly linear target and refuses rows the batch
 route deploys; and the cascade is stable on this arm because of its backlash — with the dead-zone
 removed it reads 0.17x past its own verify. Bench square today: **1.7528e-1, 6.04x**.
+**AND THE CEILING IS THE DIET, NOT THE BASIS (plan §52.17).** The same controller, same 93
+features, same machine reads **14x taught on the square itself** (8 passes; 9x at 4), **6x taught
+on four polygons, and 7.5x taught on both** — the polygons dilute it. A pose-scheduled map (277
+features) improves the polygons in-sample and is REFUSED on the square at 0.65x: more capacity
+buys less transfer, for the fourth time. Normalised rows are inert on the number; a converged
+teacher solve is inert; the applied control is 2-3x the rms of the error it cancels, so it is
+not small. What bounds a program-agnostic feedforward here is how far the commissioning diet is
+from the program it will run.
 
 **ITS FIRST READING WAS A REFUSAL, WHICH WAS THE PAGE DOING ITS JOB (plan §52.7).** Distil-only
 ladder on the bench square: `②d distilled — REFUSED` at 0.22x (demo), 0.43x (fast, browser),
