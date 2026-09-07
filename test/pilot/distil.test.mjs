@@ -150,6 +150,30 @@ check('…and at the boundary they differ, because only one of them may clamp',
   nearA.some((v, c) => Math.abs(v - nearB[c]) > 1e-12),
   'if these agree the absolute form is not clamping and its window reads off the record');
 
+// ---- 5c. A CLOSED LAP HAS NO START. A closed program's reference before k = 0 is its
+// reference at n - |o| — what the deploy path reads — so `closed` wraps the window instead of
+// clamping it and admits EVERY row. The finite form skipped the first `-offsets[0]` steps of
+// each program (a third of a training lap at the shipped window) and the deployed policy then
+// read wrapped windows at the lap's start that the fit had never seen.
+{
+  const wrap = (k) => refAt(((k % N) + N) % N);
+  const pc = new DistilPolicy({ channels: 2, offsets: OFFS, signOffsets: SOFF, ridge: 1e-10, uMax: 10 });
+  const prefixC = new Array(N).fill(null);
+  for (let k = 0; k < N; k++) prefixC[k] = [0, 1].map((c) => pc._row(wrap, k, null).reduce((a, v, j) => a + v * TRUE[c][j], 0));
+  const usedC = pc.addProgram({ refAt: wrap, n: N, prefix: prefixC, speedAt, closed: true });
+  check('a CLOSED lap admits every row — none skipped at the start', usedC === N && used === N - 65, `${usedC} closed vs ${used} finite of ${N}`);
+  const lookC = (k) => (o) => wrap(k + o);
+  let seamGap = 0;
+  for (const k of [0, 3, 40, N - 2, N - 70]) {
+    const a = pc.act(wrap, k, speedAt(k)), b = pc.actLook(lookC(k), speedAt(k));
+    for (let c = 0; c < 2; c++) seamGap = Math.max(seamGap, Math.abs(a[c] - b[c]));
+  }
+  check('…and at the seam its two readers AGREE, because a closed window wraps in both', seamGap < 1e-12, `worst ${seamGap.toExponential(2)}`);
+  pc.fit();
+  const back = DistilPolicy.fromJSON(JSON.parse(JSON.stringify(pc.toJSON())));
+  check('…and `closed` survives the JSON round trip', back.closed === true && Math.abs(back.act(wrap, 3, speedAt(3))[0] - pc.act(wrap, 3, speedAt(3))[0]) < 1e-15, `${back.closed}`);
+}
+
 // ---- 6. THE STREAMING FIT — whether "nothing offline" is true or false
 // Batch ridge stores every row and ends in a Cholesky, which is an offline algorithm; requiring
 // it on the PLC kills the product claim outright. The streaming path is one shared-covariance

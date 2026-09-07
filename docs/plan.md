@@ -11310,3 +11310,53 @@ the same sum over its recorded lap, the last complete lap the unit — and it wa
 What the scoring HAD been reading wrongly was the machine: with the deploy path's phase slip
 (1) and the ghost's (5), a page left running long enough scored a correction drifting off its
 program against a baseline drifting off the machine, and neither number meant what it said.
+
+### §52.14 THE BUGS IN THE HARNESS — A THIRD OF EVERY TRAINING LAP WAS NEVER FITTED
+
+The owner's instruction: there are bugs in the harness as well, find and fix them. Read the same
+way — the training drive and the rung's fit beside the deploy path, and the harness's own
+diagnostics beside the ladder they claim to explain.
+
+**(1) THE FIT SKIPPED THE FIRST 2,304 STEPS OF EVERY TRAINING LAP.** `addProgram` began its
+rows at `-offsets[0] + 1` so that no window clamped at the record's start would enter the fit —
+right for a finite record, and every training program here is a CLOSED lap, whose reference
+before k = 0 is its reference at n − |o|. The deploy path already reads it that way (`lookRaw`
+wraps modulo the lap). So 32% of each program was never a row, and the deployed policy read
+wrapped windows at every lap's start that the fit had never seen. It was visible in the report
+all along: `used 538 rows` of a 7,145-step lap at stride 9, where 794 exist — a number printed
+on every run and read by nobody (rule 30). `closed` now wraps the window and admits every row;
+a finite record keeps the clamp and the skip (pinned both ways in `distil.test.mjs`, with the
+two readers agreeing at the seam of a closed lap and disagreeing at the start of a finite one).
+Re-measured, same everything else:
+
+```
+                              rows      square (bench, E 0.03)     square (E 0.005)
+  finite window (shipped)     2,721     2.2638e-1   4.68x          7.9875e-1   2.61x
+  closed window               3,746     1.9009e-1   5.57x          5.2468e-1   3.98x
+```
+
+Every training program improves with it (bench 4.4-5.5x → 4.7-6.2x; soft 3.8-5.4x →
+4.8-7.7x), the held-out R² is unchanged in kind, and on the soft plant the policy now sits
+within 10% of its teacher (0.525 against 0.476) where §52.12 had it at 1.7x behind. This is
+the largest single move on the bench square since the teacher was changed, and it cost no
+constant: it is the fit being shown the part of its own diet it had been denied.
+
+**(2) THE HARNESS SCORED AN OBJECT THAT DOES NOT SHIP.** Its "policy on its own training
+programs" split — the instrument that separates a transfer failure from a fit failure —
+evaluated `pol.act` at EVERY step, while the deployed object is evaluated once per decision
+and HELD between (the stride the rows were fitted at, and how `deployOn` in the original
+harness always applied it). Reading the fit at eight phases it never saw is a different
+controller. It now holds, in the split and in leave-one-out.
+
+**(3) LEAVE-ONE-OUT MEASURED A SECOND ROUTE.** The LOO instrument converged its folds with
+`HarmonicFF` at stride 1 and a default window, whatever the ladder shipped — so §52.7's 1.11x
+held-out reading is of the hff route at stride 1, not of what ships. It now takes the host's
+engine, the shipped window, the shipped stride and the closed window. Not re-run here; the
+1.11x stands as the old instrument's reading and is labelled so.
+
+**Read and left alone, stated:** every scored run and every training drive restarts its step
+counter each lap at `ceil(lap)`, while the program wraps at its fractional period, so the
+command steps back 0.4 steps at each seam — a one-step velocity discontinuity of 40% of the
+feed once per lap. The page counts continuously and has none. It is a shared property of every
+recorded number and is small against the error scored; changing it would move every number in
+this file by a hair and needs its own rule-21 pass, so it is recorded rather than done.

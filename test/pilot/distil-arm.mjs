@@ -129,6 +129,10 @@ if (d && d.fit) {
 if (d && d.note) console.log(`  note: ${d.note}`);
 
 // ---- THE SPLIT. Score the fitted policy on the programs it was fitted on, on the machine.
+const heldPolicy = (p, tr, refAt = tr.refAt, speedAt = tr.speedAt) => {
+  const st = p.stride || 1; let held = [0, 0];
+  return { at: (k) => { if (k % st === 0) held = p.act(refAt, k, speedAt(k)); return held; } };
+};
 const pol = host.auto.built.distil;
 if (pol && pol.W) {
   console.log('\n  the policy on its OWN training programs (baseline -> with the policy):');
@@ -136,8 +140,10 @@ if (pol && pol.W) {
   for (let i = 0; i < runs.length; i++) {
     const tr = runs[i];
     const base = await tr.run(null);
-    const corr = { at: (k) => pol.act(tr.refAt, k, tr.speedAt(k)) };
-    const withP = await tr.run(corr);
+    // EVALUATED AS IT DEPLOYS: once per decision and HELD between, never at every step. The
+    // deployed object holds (AutoStack's distil.stride); reading the policy at every step
+    // evaluates the fit at phases it never saw and scores an object that does not ship.
+    const withP = await tr.run(heldPolicy(pol, tr));
     console.log(`    program ${i} (lap ${tr.lap}): ${base.score.toExponential(4)} -> ${withP.score.toExponential(4)}`
       + `   ${(base.score / withP.score).toFixed(2)}x`);
   }
@@ -152,9 +158,12 @@ if (LOO) {
   const prefixes = [];
   for (let i = 0; i < runs.length; i++) {
     const tr = runs[i];
-    const h = new HarmonicFF({ lap: tr.lap, channels: 2, uMax, ...a.hffOpts });
-    const r = await h.commission(async (corr) => tr.run(corr));
-    const pre = new Array(tr.lap); for (let k = 0; k < tr.lap; k++) pre[k] = h.at(k);
+    // THE LADDER'S OWN ENGINE where the host supplies it, so the folds measure the route that
+    // ships and not a second one (the first version converged with HarmonicFF at stride 1).
+    let r, at;
+    if (tr.converge) { r = await tr.converge(); at = r.at; }
+    else { const h = new HarmonicFF({ lap: tr.lap, channels: 2, uMax, ...a.hffOpts }); r = await h.commission(async (corr) => tr.run(corr)); at = (k) => h.at(k); }
+    const pre = new Array(tr.lap); for (let k = 0; k < tr.lap; k++) pre[k] = at(k);
     prefixes.push({ pre, gain: r.best > 0 ? r.base / r.best : 0 });
     console.log(`    converged run ${i}: ${prefixes[i].gain.toFixed(2)}x`);
   }
@@ -165,19 +174,23 @@ if (LOO) {
   const opts = a.distilOpts;
   const rows = [];
   for (let i = 0; i < runs.length; i++) {
-    const pol = new DistilPolicy({ channels: 2, refDim: 2, offsets: opts.offsets, signOffsets: opts.signOffsets,
+    const shipped = host.auto.built.distil;
+    const S0 = host.auto.built.stack ? host.auto.built.stack.sample : 1;
+    const pol = new DistilPolicy({ channels: 2, refDim: 2,
+      offsets: shipped ? shipped.offsets : opts.offsets, signOffsets: shipped ? shipped.signOffsets : opts.signOffsets,
       ridge: opts.ridge, uMax, online: opts.online !== false, adaptSign: opts.adaptSign });
+    pol.stride = shipped ? shipped.stride : S0;
     for (let j = 0; j < runs.length; j++) {
       if (j === i || prefixes[j].gain <= 1.5) continue;
-      pol.addProgram({ refAt: runs[j].refAt, n: runs[j].lap, prefix: prefixes[j].pre, speedAt: runs[j].speedAt });
+      pol.addProgram({ refAt: runs[j].refAt, n: runs[j].lap, prefix: prefixes[j].pre, speedAt: runs[j].speedAt, stride: pol.stride, closed: !!runs[j].closed });
     }
     const fit = pol.fit();
     if (!fit.deploy) { console.log(`    fold ${i}: fit refused — ${fit.reason}`); continue; }
     const tr = runs[i];
     const b = await tr.run(null);
-    const w = await tr.run({ at: (k) => pol.act(tr.refAt, k, tr.speedAt(k)) });
+    const w = await tr.run(heldPolicy(pol, tr));
     const sqB = await host.run(null, null);
-    const sqW = await host.run({ at: (k) => pol.act(sqRef, k, sqSpeed(k)) }, 'distil');
+    const sqW = await host.run(heldPolicy(pol, null, sqRef, sqSpeed), 'distil');
     rows.push({ i, held: b.score / w.score, square: sqB.score / sqW.score, r2: fit.heldOutR2.map((v) => +v.toFixed(3)) });
     console.log(`    fold ${i}: held-out program ${(b.score / w.score).toFixed(2)}x   square ${(sqB.score / sqW.score).toFixed(2)}x   R² ${JSON.stringify(rows[rows.length - 1].r2)}`);
   }

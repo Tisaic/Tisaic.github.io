@@ -1165,7 +1165,7 @@ measurement behind each is in `docs/history/` — the pointer in brackets.
 | `test/pilot/tankspread.mjs` | **A PLANT'S SCORE IS A DISTRIBUTION.** Commissions the tank from N seeds and reports the spread, the deployed median, and the GATE'S OWN ESTIMATE beside what it delivered. It asserts nothing — an instrument that decided its verdict before the verdict was understood is how the 1.32x got written down. What it measured: at the old defaults 4 of 8 seeds deploy and **all four hurt**; at the new ones 5 of 8 deploy at a median 1.249x, two still hurt, and the gate's estimate correlates **-0.057** with delivered benefit. |
 | `test/pilot/qpsweep.mjs`, `qpsweep-arm.mjs` | **Not tests — the solver-budget experiment.** Commission ONE pilot, re-deploy that same model over a grid of QP iteration counts and horizon lengths, and score the MACHINE. Found that the shipped 60 iterations at `1.5·Tset` is 57× more arithmetic than the machine wants and WORSE than 1 iteration at N=56 (EMPS 14.16× against 12.70×, at 101% of a PLC scan's 10% against 5761%), and that the arm agrees at 29× cheaper and 16% better. Scores a held-out program in the same table, because the surface is rugged enough that the best cell of a grid is a suspect result. |
 | `test/pilot/rti.test.mjs` | A FALSIFIED HYPOTHESIS, pinned as the four things measuring it found. One QP iteration per cycle does not track sixty (88% of the applied signal); sixty is itself 36% from this solver's own optimum, so every delivered number in the project came out of a truncated solve; the convergence curve at N=8 matches N=48, so the rate is the Hessian's conditioning and not the horizon; and the Lipschitz bound is 1.82× above the true spectral norm, which costs exactly 2× in iterations. |
-| `test/pilot/distil-arm.mjs` | **Not a test — the instrument that reads a distilled-rung refusal to its cause, and the one every knob in plan §52.8 was measured through.** Runs the bench's ladder on the arm at a chosen grade (`GRADE`, `DIET`, `ENGINE`, `REPLACE`, `TEACHCAP`, `STRIDE`, `OFFS=raw`, `PASSES`, `PERIODIC`, `LOO`), then scores the fitted policy on its OWN training programs: helps them and harms the square → transfer; harms them too → the fit or the deploy path. At its defaults it reads the host's shipped configuration: **2.169e-1 on the bench square, 4.88x, in 380 s**. |
+| `test/pilot/distil-arm.mjs` | **Not a test — the instrument that reads a distilled-rung refusal to its cause, and the one every knob in plan §52.8 was measured through.** Runs the bench's ladder on the arm at a chosen grade (`GRADE`, `DIET`, `ENGINE`, `REPLACE`, `TEACHCAP`, `STRIDE`, `WIN`, `OFFS=raw`, `PASSES`, `PERIODIC`, `LOO`), then scores the fitted policy on its OWN training programs — evaluated as it deploys, once per decision and held: helps them and harms the square → transfer; harms them too → the fit or the deploy path. At its defaults it reads the host's shipped configuration: **1.9009e-1 on the bench square, 5.57x, 10.7 machine-minutes, ~130 s of Node** (plan §52.14). |
 | `test/pilot/rigs/arm-rig.mjs` | The 2R arm rig — plant, paths, routing, `commissionArm` and `deployOn`. Every harness drives the arm through this; three separate copies of pieces of it have each shipped a defect. |
 | `test/pilot/forecast.mjs` | Held-out forecast R² on open-loop programs, plus an offline refit that separates an unreachable dictionary from an unvisited one. |
 | `test/pilot/spectrum.mjs` | Where the machine rings, where the defect's energy is, and where the excitation looked — three power spectra on one axis of periods. |
@@ -1390,7 +1390,15 @@ online learning fired once per servo step instead of once per decision, nine tim
 row weighting the fit never saw; the ghost was drawn at `k % ceil(lap)` with the same slip; a
 ghost made stale mid-lap recorded from where the arm stood; Pause did not pause a recording; a
 faded correction read "armed" in silence. All closed and pinned; the scoring itself was read
-against the host's expression and is the same quantity.
+against the host's expression and is the same quantity. **AND THE HARNESS HAD THE LARGEST ONE
+(plan §52.14): the fit skipped the first 2,304 steps of every training lap** — a closed lap
+treated as a finite record, its window clamped at a start it does not have, 32% of each program
+never a row, and the deployed policy reading wrapped windows at every lap's start that the fit
+had never seen. It was in the report all along as `used 538 rows` of 794. With the window closed
+the bench square reads **1.9009e-1, 5.57x** (from 2.2638e-1, 4.68x) and the soft plant 3.98x
+(from 2.61x), every training program improves, and no constant moved. The harness's own split
+also scored the policy at every step where the deployed object holds between decisions, and
+leave-one-out measured a different route (hff, stride 1) from the one that ships; both fixed.
 
 **ITS FIRST READING WAS A REFUSAL, WHICH WAS THE PAGE DOING ITS JOB (plan §52.7).** Distil-only
 ladder on the bench square: `②d distilled — REFUSED` at 0.22x (demo), 0.43x (fast, browser),
