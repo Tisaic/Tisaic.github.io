@@ -45,6 +45,9 @@ if (process.env.PASSES) G.passes = +process.env.PASSES;
 // programs' own scale, one feed. `polyfeed` is the scale-matched diet across a feed ladder,
 // which §49.13 measured as the only one safe off the commissioning feed.
 const DIET = process.env.DIET || 'demo';
+// REPLACE=1 converges and deploys the rung WITHOUT the compliance feedforward under it — the
+// composition test/_distil.mjs measures — instead of on top of it (plan §52.7).
+const REPLACE = process.env.REPLACE === '1';
 const F = 4e-3;
 const DIETS = {
   demo: null,
@@ -56,7 +59,7 @@ const K = +(process.env.ARM_K || 0.25), E = +(process.env.ARM_E || 0.03);
 const path = sharpRect({ w: 8, h: 8, centre: [12, 0], feed: 4e-3, accel: 4e-5, cornerDt: 40 });
 const LAP = Math.ceil(path.lap);
 console.log(`\ndistil on the arm through the ladder — K ${K} / E ${E}, sharp square, grade ${GRADE}${PERIODIC ? ', PERIODIC (lap learning built)' : ''}`
-  + ` (avg ${G.avg}, warmup ${G.warmup}, passes ${G.passes}, diet ${DIET})`);
+  + ` (avg ${G.avg}, warmup ${G.warmup}, passes ${G.passes}, diet ${DIET}${REPLACE ? ', REPLACES the compliance feedforward' : ''})`);
 
 const t0 = Date.now();
 const m0 = await machine({ K, E });
@@ -71,7 +74,7 @@ const host = makeArmHost({
   },
   path, lap: LAP, K, centre,
   classic: false, maxDepth: 0, demo: null, lapMemory: PERIODIC, distil: {},
-  ...(DIETS[DIET] ? { distilDiet: DIETS[DIET] } : {}),
+  ...(DIETS[DIET] ? { distilDiet: DIETS[DIET] } : {}), distilReplaces: REPLACE,
   avg: G.avg, warmup: G.warmup, passes: G.passes, probeLaps: G.probeLaps,
   onRung: (r) => console.log(`  [${Math.round((Date.now() - t0) / 1000)}s] ${r.name}  ${r.score.toExponential(4)}`
     + `  ${r.gain === null ? '' : r.gain.toFixed(2) + 'x'}${r.deployed ? '' : '  NOT deployed'}${r.note ? '  — ' + r.note : ''}`),

@@ -10939,6 +10939,40 @@ accident — and the sweet spot is the property of a stop rule that was designed
 for a teacher. The rung needs its own convergence limit, stated in laps and independent of how
 the machine is scored; `PASSES=2` at fast and at demo grade, on this diet, is running.
 
+**DEMO GRADE AT 2 PASSES STILL REFUSES (0.91x), AND ITS TEACHER IS NOT OVER-CONVERGED — IT IS
+NOISY.** Prefix gains 4.01, 3.93, 4.16, 4.43, 2.91, 3.57 — still ABOVE fast grade's at 8 passes —
+and the fit's held-out R² is **-1.43 / 0.05**: the regression cannot explain the prefix at all,
+where at fast grade it explains 0.34 of it. A prefix converged against ONE scoring lap (avg 1)
+is a table of that lap, including the part of it that does not repeat; the lap-averaged prefix
+at fast grade is the part that does. So the three grades fail for two different reasons —
+demo teaches a noisy table, full teaches an over-converged one — and the rung's own diet needs
+BOTH a lap average and a convergence limit, neither of which is what the scoring grade is for.
+**And at fast grade 2 passes reads 1.27x, DEPLOYED** (8.3675e-1; gains 3.11, 3.26, 4.83, 4.21,
+3.07, 3.24 against 8 passes' 3.12, 3.35, 5.10, 4.34, 3.17, 3.24; own diet 1.30x-1.75x) — a
+touch less converged and a touch worse, so on this diet the pass count at fast grade is a flat
+axis between 2 and 24 and the 1.36x is not sitting on a convergence cliff. The lever that is
+left is not convergence: it is the prefix ENGINE (`hff`'s band-limited Newton against the
+oracle-QP iteration that read 4.99x on this diet in `_distil.mjs`) and the authority (2.0 here,
+5x the pilot's cap there), and the control that has to run first is that harness today.
+
+**THE CONTROL, TODAY: `_distil.mjs` ON THE SAME DIET READS 6.40x ON THE SQUARE, NOT 4.99x.**
+`ARM_K=0.25 ARM_E=0.03 D_TRAIN=poly D_NDEMO=6`, default window (±256, 47 features), cmd mode:
+rounded 5.95x, circle 8.20x, sharp **6.40x** against a BARE open loop of 1.366 — the policy
+leaves 2.134e-1 where the ladder's leaves 7.791e-1, a 3.65x gap in what reaches the machine.
+Its training prefixes converge to 9.8x-16.2x from bare where the ladder's converge to
+3.1x-5.1x from the conventional machine, so the two teachers are not the same object even
+before the engine is compared. **And the composition is the suspect, not the engine.** The
+ladder converges and deploys the rung ON TOP of the RobotComp compliance feedforward; that
+feedforward is worth **14.8x on a polygon** (1.22 bare → 0.0825) and **1.29x on the sharp
+square** (1.366 → 1.059), so under it the diet's residual and the square's error are different
+objects, and a map fitted to one is being asked for the other. The harness distils the BARE
+machine and its policy is worth 4.97x against the conventional 1.059 by that route. The host
+now has `distilReplaces` (default off, byte-identical off): the training runs go bare and the
+rung deploys bare, so it REPLACES the feedforward rather than sitting under it — §49's own
+"it replaces the pilot rather than sitting under it" one rung down — and `REPLACE=1` on the
+same diet is running. If it lands near 5x the engine was never the gap; if it stays near 1.4x
+the engine is.
+
 **AND LEAVE-ONE-OUT SAYS THE OVER-FIT IS TO THE DIET, NOT TO THE SQUARE'S CORNERS.** Six folds:
 converge the lap-periodic correction on each training program once (the gains reproduce the
 ladder's exactly — 5.76, 2.05, 4.82, 2.43, 1.71, 2.15 — the control), fit a policy on five,
