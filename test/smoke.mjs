@@ -1811,6 +1811,41 @@ await halted('the ghost recording');
   console.log(`  flexisim/ghost: baseline ${g.ghost.rms.toExponential(3)}, live lap ${g.lastLap.totalRms.toExponential(3)}, ratio ${ratio.toFixed(3)}`);
   check('flexisim/ghost: a baseline lap is recorded for THIS plant and program', g.ghost.stale === false && g.ghost.lap > 100, JSON.stringify(g.ghost));
   check('flexisim/ghost: THE CONTROL — nothing armed against the conventional ghost is one machine twice, and reads ~1', ratio > 0.85 && ratio < 1.18 && g.row, `ratio ${ratio.toFixed(4)}`);
+  // ---- GOING HOME IS A MOVE. Reset from mid-lap: the arm must SERVO to the program start
+  // — an approach the page reports, drawn every frame — and never jump there. Sampled at
+  // frame rate: at least a few distinct tool positions on the way, no single sample-to-
+  // sample jump larger than a third of the whole travel, and the run controls locked until
+  // it arrives. The old page set the pose in one call, which no machine can do.
+  {
+    const mid = await fx.evaluate(() => window.__flxDbg().drawnPose.tool);
+    const perFrame = await fx.evaluate(() => (+document.getElementById('s-spf').value) * window.__flxDbg().feed);
+    await fx.click('#reset');
+    const samples = [];
+    for (let i = 0; i < 60; i++) {
+      const d = await fx.evaluate(() => { const x = window.__flxDbg(); return { tool: x.drawnPose.tool, on: x.approaching, steps: x.approachSteps, frames: x.frames, runOff: document.getElementById('run').disabled }; });
+      samples.push(d);
+      if (!d.on && i > 2) break;
+      await fx.waitForTimeout(40);
+    }
+    const seen = samples.filter((d) => d.on);
+    // Samples are coarser than frames, so each hop is judged against the frames it spans.
+    let travel = 0, jump = 0, worst = 0;
+    for (let i = 1; i < samples.length; i++) {
+      const a = samples[i - 1], b = samples[i];
+      const h = Math.hypot(b.tool[0] - a.tool[0], b.tool[1] - a.tool[1]);
+      travel += h; jump = Math.max(jump, h);
+      worst = Math.max(worst, h / Math.max(1, b.frames - a.frames));
+    }
+    const dist = Math.hypot(samples[samples.length - 1].tool[0] - mid[0], samples[samples.length - 1].tool[1] - mid[1]);
+    console.log(`  flexisim/home: ${seen.length} frames approaching, ${seen.length ? seen[seen.length - 1].steps : 0} steps, distance ${dist.toFixed(3)}, largest frame jump ${jump.toFixed(3)}`);
+    check('flexisim/home: Reset from mid-lap is a reported APPROACH, drawn over several frames, with Run locked meanwhile', seen.length >= 3 && seen.every((d) => d.runOff), `${seen.length} frames, run locked ${seen.map((d) => d.runOff).join('')}`);
+    // THE PHYSICAL CLAIM: between two frames the tool moves at most what the feedrate allows
+    // in that many steps (a smoothstep rapid peaks at 1.5x the feed) — it never jumps.
+    check('flexisim/home: …and the tool travels there no faster than the feed allows — it never jumps', dist > 0.05 && worst <= 1.6 * perFrame + 0.02, `dist ${dist.toFixed(3)} worst per-frame ${worst.toFixed(3)} allowance ${(1.6 * perFrame).toFixed(3)} largest hop ${jump.toFixed(3)} travel ${travel.toFixed(3)}`);
+    await fx.waitForFunction(() => !window.__flxDbg().approaching, null, { timeout: 60000 });
+    await fx.click('#run');   // the Reset stopped the run; resume it so the pause below pauses
+    await fx.waitForFunction(() => window.__flxDbg().running === true, null, { timeout: 10000 });
+  }
 }
 await fx.click('#run');   // pause
 

@@ -1350,7 +1350,10 @@ two passes or one lap lose the result, while the cascade's 2.9 minutes are where
 selected, so the floor of this route is about 8 minutes. **And the model survives a plant
 change, flagged (plan §52.10)**: move K or E and the page keeps the model armed on the new plant,
 re-records the ghost, and names both plants in a PLANT MISMATCH pill, so the degradation is a
-number on the score panel rather than a refusal.
+number on the score panel rather than a refusal. **And going home is a move (plan §52.11)**: the
+arm no longer snaps to the program start after a commissioning, a program change or a Reset — it
+is driven there as a feed-limited rapid, drawn every frame, settled by rule 45, with the run
+resumed on arrival; the browser pins that no frame moves the tool faster than the feed allows.
 
 **ITS FIRST READING WAS A REFUSAL, WHICH WAS THE PAGE DOING ITS JOB (plan §52.7).** Distil-only
 ladder on the bench square: `②d distilled — REFUSED` at 0.22x (demo), 0.43x (fast, browser),

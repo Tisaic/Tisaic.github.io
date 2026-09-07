@@ -8,7 +8,7 @@
   <title>FlexiSim — Commissioning Bench</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:1078,built:"2026-09-07T12:13:23Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:1079,built:"2026-09-07T14:48:13Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
 
   <style>
@@ -308,19 +308,60 @@ async function build() {
   } finally { busy = false; sync(); }
 }
 
-function home() {
+/* ==================================================================================
+ * GOING TO THE PROGRAM START IS A MOVE, NOT A TELEPORT. The first version of this page set
+ * the pose and held it for 4000 steps inside one call, so the arm on screen jumped to the
+ * start at the end of every run, every program change and every Reset — a thing no machine
+ * can do. `home()` now only ASKS for the start; the frame loop servos the arm there from
+ * wherever it is, drawn every frame, and declares it arrived by rule 45 — the TOOL has not
+ * moved over a 300-step window — with a stated cap, never by a step count alone. A run that
+ * was in progress resumes when the arm arrives.
+ */
+let approach = null;
+function home(resume = false) {
   prof = makePath();
   if (host && !commissioning) host.attach(arm, servo, rc, prof, prof.lap);
   const c0 = prof.at(0);
   const [q1, q2] = arm.ik(c0.x, c0.y, true);
-  arm.setPose(q1, q2);
-  const refs = [{ theta: q1, omega: 0, alpha: 0 }, { theta: q2, omega: 0, alpha: 0 }];
-  for (let i = 0; i < 4000; i++) { const t = servo.torques(refs); arm.step(t[0], t[1], 1); }
-  servo.resetLimitStats();
+  // A RAPID, PLANNED: the reference is interpolated in joint space from where the arm IS to
+  // the start, timed so the tool covers the distance at the program's feedrate — a step
+  // reference to a far target is a move no controller issues, and the servo's answer to one
+  // reads on screen as the very snap this replaces. Then the quiet settle.
+  const from = arm.toolXY(), q0 = [arm.q[0], arm.q[1]];
+  const dist = Math.hypot(c0.x - from[0], c0.y - from[1]);
+  approach = { q0, q1: [q1, q2], T: Math.max(1, Math.ceil(dist / feedNow())),
+    refs: [{ theta: q1, omega: 0, alpha: 0 }, { theta: q2, omega: 0, alpha: 0 }],
+    steps: 0, win: [], resume: resume || running, capped: false, from, dist };
+  running = false;
   k = 0; lap = 0; pendingProgram = false;
   score = newScore(); lapScore = newScore(); lastLap = null; trail = [];
-  if (host && rep && !commissioning) host.auto.beginRun();
   fitView();
+}
+const APPROACH = { min: 1500, window: 300, quiet: 1e-5, cap: 30000 };
+/** One solver step of the approach; true once the tool has stopped moving (or the cap hit). */
+function approachStep() {
+  const a = approach;
+  let refs = a.refs;
+  if (a.steps < a.T) {
+    // smoothstep in joint space: zero rate at both ends, peak tool speed ~1.5x the feed.
+    const u = (a.steps + 1) / a.T, sm = u * u * (3 - 2 * u), dsm = 6 * u * (1 - u) / a.T;
+    refs = [0, 1].map((c) => ({ theta: a.q0[c] + (a.q1[c] - a.q0[c]) * sm, omega: (a.q1[c] - a.q0[c]) * dsm, alpha: 0 }));
+  }
+  const t = servo.torques(refs); arm.step(t[0], t[1], 1); a.steps++;
+  const tp = arm.toolXY();
+  a.win.push(tp); if (a.win.length > APPROACH.window) a.win.shift();
+  if (a.steps < a.T + APPROACH.min) return false;
+  const t0 = a.win[0], travel = Math.hypot(tp[0] - t0[0], tp[1] - t0[1]);
+  if (travel < APPROACH.quiet) return true;
+  if (a.steps >= APPROACH.cap) { a.capped = true; return true; }
+  return false;
+}
+function approachDone() {
+  const a = approach; approach = null;
+  servo.resetLimitStats();
+  if (host && rep && !commissioning) host.auto.beginRun();
+  running = a.resume;
+  if (a.capped) setBadge(`at the program start — settle capped at ${APPROACH.cap.toLocaleString()} steps, the tool was still moving`, 'warn');
 }
 
 function fitView() {
@@ -529,6 +570,9 @@ function stepN(n) {
   for (let i = 0; i < n; i++) {
     const lapNow = Math.floor(k / prof.lap);
     if (lapNow !== lap) { lap = lapNow; onLapBoundary(); }
+    // A program change at the lap boundary starts an APPROACH to the new start; the rest of
+    // this frame belongs to that move, not to stepping a program the arm is not at.
+    if (approach || !running) return;
     const { dec, tool } = stepOnce();
     const back = trail.length && trail[trail.length - 1] && dec.s < trail[trail.length - 1][3] - 0.1 * prof.length;
     if (k % 8 === 0 || back) {
@@ -845,18 +889,21 @@ function applyArm() {
 function sync() {
   $('v-k').textContent = kNow().toFixed(2); $('v-e').textContent = eNow().toFixed(3);
   $('v-feed').textContent = feedNow().toExponential(1); $('v-spf').textContent = `${$('s-spf').value} steps/frame`;
-  const idle = !commissioning && !busy && !!arm;
+  // The run controls and the plant wait for an approach to arrive; arming a rung does not
+  // need the machine idle, so the controller boxes follow only the commissioning state.
+  const settled = !commissioning && !busy && !!arm;
+  const idle = settled && !approach;
   $('run').disabled = !idle; $('run').textContent = running ? 'Pause ‖' : 'Run ▶';
   $('reset').disabled = !idle;
-  $('commission').disabled = busy || !arm; $('commission').textContent = commissioning ? 'Stop ■' : 'Commission ▶';
+  $('commission').disabled = busy || !arm || !!approach; $('commission').textContent = commissioning ? 'Stop ■' : 'Commission ▶';
   for (const id of ['s-k', 's-e', 'grade', 'periodic']) $(id).disabled = !idle;
   const pn = $('plant-note'); pn.hidden = !plantMismatch(); pn.textContent = plantNote();
   const a = host && rep ? host.auto.armed() : null;
-  $('arm-distil').disabled = !a || !a.distil.built || !idle;
-  $('arm-hff').disabled = !a || !a.hff.built || !idle;
+  $('arm-distil').disabled = !a || !a.distil.built || !settled;
+  $('arm-hff').disabled = !a || !a.hff.built || !settled;
   if (!a) { $('arm-distil').checked = false; $('arm-hff').checked = false; }
   else { $('arm-distil').checked = a.distil.on; $('arm-hff').checked = a.hff.on; }
-  $('online').disabled = !a || !a.distil.on || !idle;
+  $('online').disabled = !a || !a.distil.on || !settled;
   if ($('online').disabled) $('online').checked = false;
   onlineFlag = $('online').checked;
   $('state').textContent = commissioning ? 'commissioning…' : rep ? `${rep.restored ? 'restored' : 'shipped'} ${rep.gain.toFixed(2)}×` : 'not commissioned';
@@ -873,7 +920,8 @@ function sync() {
       + 'model keep learning; it is new on this rung and unmeasured, so score it a lap either way.'
       : 'Commission an installation and the rungs it built appear here.');
   $('stats').innerHTML = statsHTML();
-  $('badge-r').textContent = lastLap ? `total ${lastLap.totalRms.toExponential(2)}` : (lap ? 'lap 0' : '—');
+  $('badge-r').textContent = approach ? `moving to the program start · ${approach.steps.toLocaleString()} steps`
+    : lastLap ? `total ${lastLap.totalRms.toExponential(2)}` : (lap ? 'lap 0' : '—');
 }
 
 // ---------------------------------------------------------------- frame loop
@@ -881,7 +929,8 @@ function frame() {
   frames++;
   if (arm && !busy) {
     try {
-      if (ghostRec) { let n = +$('s-spf').value; while (n-- > 0) { if (ghostStepOnce()) { home(); break; } } }
+      if (approach) { let n = +$('s-spf').value; while (n-- > 0) { if (approachStep()) { approachDone(); break; } } }
+      else if (ghostRec) { let n = +$('s-spf').value; while (n-- > 0) { if (ghostStepOnce()) { home(true); break; } } }
       else if (running && ghostOn() && !ghostValid() && !commissioning) ghostStart();
       else if (running && !commissioning) stepN(+$('s-spf').value);
     } catch (e) { running = false; setBadge('halted: ' + e.message, 'bad'); console.error(e); }
@@ -893,7 +942,7 @@ function frame() {
 
 // ---------------------------------------------------------------- wiring
 $('run').addEventListener('click', () => { running = !running; if (running && !commissioning) setBadge(armedAny() ? 'running the armed controller' : 'running the conventional machine', ''); sync(); });
-$('reset').addEventListener('click', () => { running = false; home(); setBadge('re-homed — press Run', ''); sync(); });
+$('reset').addEventListener('click', () => { running = false; home(); setBadge('moving to the program start — press Run when it arrives', ''); sync(); });
 $('commission').addEventListener('click', () => { if (commissioning) { abort = true; setBadge('stopping at the next frame…', 'warn'); return; } startCommission(); });
 for (const id of ['s-k', 's-e']) $(id).addEventListener('change', () => { if (!commissioning) build(); });
 $('shape').addEventListener('change', () => { pendingProgram = true; if (!running) { home(); tryRestore(); } sync(); });
@@ -925,6 +974,7 @@ window.__flxDbg = () => (arm ? {
       reason: rep.distil.fit.reason } : null, note: rep.distil.note || null } : null },
   stored: (() => { const s = loadStored(); return s ? { K: s.K, E: s.E, shape: s.shape, gain: s.gain, matches: storedMatches(s) } : null; })(),
   trainedOn, mismatch: plantMismatch(), plantNote: plantNote(),
+  approaching: !!approach, approachSteps: approach ? approach.steps : 0, frames,
 } : null);
 
 build().then(() => requestAnimationFrame(frame))

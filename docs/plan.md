@@ -11079,6 +11079,22 @@ the Machine header (a pill naming both plants), the score panel and the debug du
 model restores on any plant the same way, flagged. Pinned in the full browser tier both ways:
 flagged and armed on the other plant, clear again on its own.
 
+### §52.11 GOING HOME IS A MOVE
+
+The page set the arm's pose and held it for 4000 steps inside one call, so the arm jumped to the
+program start at the end of every commissioning, every program change and every Reset — the
+owner's words: a thing that cannot happen in real life. `home()` now only asks for the start;
+the frame loop drives a RAPID there — the reference interpolated in joint space from where the
+arm is, timed so the tool covers the distance at the program's feedrate, smoothstep so the rate
+is zero at both ends — and then settles it by rule 45 (the tool has not moved over a 300-step
+window, after at least 1500 steps, capped at 30,000 and reported if capped), drawn every frame
+with the stage badge counting the steps, the run controls locked until it arrives, and a run
+that was in progress resumed on arrival. A program change at a lap boundary is the same move.
+The first version of the check judged each 40 ms sample against a third of the travel and read
+a "jump" of 97% — the sample spanned two and a half frames, i.e. the whole 1,600-step rapid —
+so the check now judges each hop against the frames it spans and the feed's allowance per
+frame: 18 frames, 12,000 steps, largest per-frame hop 0.30 on a 6.42 move.
+
 **AND LEAVE-ONE-OUT SAYS THE OVER-FIT IS TO THE DIET, NOT TO THE SQUARE'S CORNERS.** Six folds:
 converge the lap-periodic correction on each training program once (the gains reproduce the
 ladder's exactly — 5.76, 2.05, 4.82, 2.43, 1.71, 2.15 — the control), fit a policy on five,
