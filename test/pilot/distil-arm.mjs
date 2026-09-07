@@ -39,11 +39,24 @@ const G = { ...GRADES[GRADE] };
 // PASSES=n overrides the refinement passes alone, at the grade's scoring laps — the ladder of
 // passes at fixed authority is the measurement §52.7 says has to be taken.
 if (process.env.PASSES) G.passes = +process.env.PASSES;
+// DIET selects what the host converges the rung on. `demo` is the host's own default — the
+// designer's feed ladder at r 2.2-3.8 — which is the diet plan §49's harness measured at
+// 0.22x-1.09x on this square. `poly` is that harness's 4.99x diet: the same designer at the
+// programs' own scale, one feed. `polyfeed` is the scale-matched diet across a feed ladder,
+// which §49.13 measured as the only one safe off the commissioning feed.
+const DIET = process.env.DIET || 'demo';
+const F = 4e-3;
+const DIETS = {
+  demo: null,
+  poly: { feeds: [F, F, F], rMin: 3.4, rSpan: 2.4 },
+  polyfeed: { feeds: [F, 2 * F, 0.5 * F], rMin: 3.4, rSpan: 2.4 },
+};
+if (!(DIET in DIETS)) throw new Error(`DIET ${DIET}: one of ${Object.keys(DIETS).join(', ')}`);
 const K = +(process.env.ARM_K || 0.25), E = +(process.env.ARM_E || 0.03);
 const path = sharpRect({ w: 8, h: 8, centre: [12, 0], feed: 4e-3, accel: 4e-5, cornerDt: 40 });
 const LAP = Math.ceil(path.lap);
 console.log(`\ndistil on the arm through the ladder — K ${K} / E ${E}, sharp square, grade ${GRADE}${PERIODIC ? ', PERIODIC (lap learning built)' : ''}`
-  + ` (avg ${G.avg}, warmup ${G.warmup}, passes ${G.passes})`);
+  + ` (avg ${G.avg}, warmup ${G.warmup}, passes ${G.passes}, diet ${DIET})`);
 
 const t0 = Date.now();
 const m0 = await machine({ K, E });
@@ -58,6 +71,7 @@ const host = makeArmHost({
   },
   path, lap: LAP, K, centre,
   classic: false, maxDepth: 0, demo: null, lapMemory: PERIODIC, distil: {},
+  ...(DIETS[DIET] ? { distilDiet: DIETS[DIET] } : {}),
   avg: G.avg, warmup: G.warmup, passes: G.passes, probeLaps: G.probeLaps,
   onRung: (r) => console.log(`  [${Math.round((Date.now() - t0) / 1000)}s] ${r.name}  ${r.score.toExponential(4)}`
     + `  ${r.gain === null ? '' : r.gain.toFixed(2) + 'x'}${r.deployed ? '' : '  NOT deployed'}${r.note ? '  — ' + r.note : ''}`),

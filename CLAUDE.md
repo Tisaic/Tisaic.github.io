@@ -1342,7 +1342,14 @@ knob is the SCORING GRADE, not the pass count: `PASSES` 4, 8, 16 and 24 at fast 
 0.74x / 0.74x / 0.74x with 8, 16 and 24 byte-identical, because `_refine` stops itself once four passes in a
 row fall inside 2 sigma of the host's lap spread, and full grade changes that sigma (4 scoring
 laps against 2) rather than the ceiling — full grade at 8 passes reads 0.18x, reproducing the
-24-pass 0.17x with the passes held, so both halves are measured. Leave-one-out over the six training
+24-pass 0.17x with the passes held, so both halves are measured. **AND THE REFUSAL WAS THE DIET: the host converged the rung on
+`designDemoPaths()` at its defaults, which is the `demo` diet §49's harness had already measured
+at 0.22x-1.09x on this square (feed laddered at r 2.2-3.8, confounding feed with scale). At the
+programs' own scale and one feed — §49's 4.99x diet, now `distilDiet` — the rung DEPLOYS through
+the one press at 1.36x** (1.0593e+0 → 7.7912e-1, 6/6 runs kept, 41,137 rows, 234 MAC/decision,
+every training program improved 1.53x-2.70x, 163 machine-minutes at fast grade). The gap to 4.99x
+is three unmoved variables: `hff`'s band-limited prefix against the oracle-QP iteration, authority
+2.0, and the fast grade. Leave-one-out over the six training
 programs reads a geometric **1.11x on the held-out polygon** against ~2.0x in-sample — the route
 memorises its diet and carries to nothing it was not fitted on, not even its own class, so the
 square's corners are not the specific fault. **The other option works: declared

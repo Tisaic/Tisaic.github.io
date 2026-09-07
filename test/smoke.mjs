@@ -1817,11 +1817,15 @@ await fx.click('#run');   // pause
 // ---- COMMISSION, AT DEMO GRADE, AND WATCH. The ladder is configured distil-only; either
 // outcome for the rung is a result and both are handled. What is asserted is the machine
 // visibly turning, the record being real, and the deployed state matching what shipped.
-// QUICK commissions non-periodic: the distilled rung refuses on this arm (plan §52.7) in ~16
-// minutes and that pins the refused-not-stored half. FULL declares a periodic application, so
-// lap learning deploys and the restore and the off-program withholding are exercised for real —
-// at the cost of a commissioning that outran a 25-minute wait in this environment. A 40-minute
-// browser check has no place in the tier that runs before every push.
+// QUICK presses it, watches the machine turn, and STOPS it — the operator's way out, which is
+// the state a half-hour measurement most needs and which nothing else exercises: the throw out
+// of the yield point must unwind the ladder, destroy the lattices, re-enable the button, deploy
+// nothing and store nothing. FULL lets a PERIODIC commission run to the end — lap learning
+// deploys there and the restore and the off-program withholding are exercised for real. The
+// whole commission at demo grade is ~35 minutes of browser on the scale-matched diet the page
+// now ships (plan §52.7), and a check that long has no place in the tier that runs before
+// every push (rule 2); what the quick tier can no longer see is the shipped state, which is
+// pinned on the object in Node (`distil.test.mjs`, `deploy.test.mjs`) and here in FULL.
 await fx.evaluate((full) => { const g = document.getElementById('grade'); g.value = 'demo'; g.dispatchEvent(new Event('input', { bubbles: true }));
   const p = document.getElementById('periodic'); p.checked = full; p.dispatchEvent(new Event('input', { bubbles: true })); }, FULL);
 await fx.click('#commission');
@@ -1834,7 +1838,31 @@ await halted('commissioning');
   check('flexisim/commission: the stage FOLLOWS the ladder’s machine — the drawn pose moves while it commissions', moved >= poses.length - 2, `${moved}/${poses.length - 1}`);
   await fx.screenshot({ path: join(SHOTS, '05-flexisim-commissioning.png') });
 }
-// Let it finish. Demo grade is ~16 minutes of browser non-periodic and ~40 periodic (measured).
+if (!FULL) {
+  // STOP. The button is the same element in its commissioning state; the abort is a throw at
+  // the next yield, so the unwind is asynchronous and is awaited on the page's own flag.
+  const btn0 = await fx.evaluate(() => document.getElementById('commission').textContent);
+  await fx.click('#commission');
+  await fx.waitForFunction(() => !window.__flxDbg().auto.commissioning, null, { timeout: 120000 });
+  await fx.waitForTimeout(300);
+  const st = await fx.evaluate(() => { const d = window.__flxDbg(); return {
+    badge: document.getElementById('badge').textContent, btn: document.getElementById('commission').textContent,
+    disabled: document.getElementById('commission').disabled, have: d.auto.have, rows: d.auto.rows, live: d.drawnPose.live,
+    gate: ['arm-distil', 'arm-hff', 'online'].map((id) => document.getElementById(id).disabled), stored: d.stored, cells: d.cells,
+    prog: document.getElementById('prog').textContent, rungs: document.getElementById('rungs').textContent }; });
+  check('flexisim/commission: Stop unwinds the ladder — the page says so, nothing is deployed and the host is gone', /^stopped/.test(st.badge) && !st.have && st.rows === 0 && !st.live, JSON.stringify(st));
+  check('flexisim/commission: …and the record says STOPPED rather than describing the scoring it was doing', /stopped/.test(st.prog) && !/commissioning|scoring|lap \d/.test(st.prog + st.rungs), JSON.stringify({ prog: st.prog, rungs: st.rungs }));
+  check('flexisim/commission: …the button comes back as Commission, enabled, from its Stop state', /Stop/.test(btn0) && /Commission/.test(st.btn) && !st.disabled, JSON.stringify({ btn0, btn: st.btn, disabled: st.disabled }));
+  check('flexisim/commission: …no rung is armable and nothing was stored', st.gate.every(Boolean) && st.stored === null, JSON.stringify({ gate: st.gate, stored: st.stored }));
+  // The stage's own machine must still be there and runnable after the ladder's was destroyed.
+  await fx.click('#run');
+  await fx.waitForFunction((k0) => window.__flxDbg().k > k0 + 200, await fx.evaluate(() => window.__flxDbg().k), { timeout: 60000 });
+  await fx.click('#run');
+  check('flexisim/commission: …and the page’s own machine still runs afterwards', true, 'ran 200 steps');
+  await fx.screenshot({ path: join(SHOTS, '06-flexisim-stopped.png') });
+}
+if (FULL) {
+// Let it finish. Demo grade is ~35 minutes of browser non-periodic on the shipped diet, more periodic.
 await fx.waitForFunction(() => { const d = window.__flxDbg(); return (!d.auto.commissioning && d.auto.rows > 0) || /^halted:|failed/.test(document.getElementById('badge').textContent); }, null, { timeout: FULL ? 5400000 : 1800000 });
 await halted('the whole commissioning');
 {
@@ -1896,6 +1924,7 @@ await halted('the whole commissioning');
     console.log('  flexisim/store: nothing deployed at demo grade, so the same-machine restore is not exercised — stated');
   }
 }
+}   // end FULL
 
 const fxBuf = await fx.evaluate(() => window.__dbg.buffer().filter((e) => e.type === 'error'));
 check('flexisim: the page reports no errors of its own', fxBuf.length === 0, JSON.stringify(fxBuf).slice(0, 300));

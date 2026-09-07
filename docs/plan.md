@@ -10893,6 +10893,52 @@ therefore couples two things that should not be coupled — how well a rung is S
 its prefix CONVERGES — and the right split is a measurement not yet taken: full-grade scoring
 with the refine's stall sigma pinned at the fast grade's.
 
+**AND THE FAULT WAS THE DIET, WHICH §49 HAD ALREADY MEASURED AND THE HOST WAS NOT READING.**
+`makeArmHost.distilRuns()` converges the rung on `designDemoPaths()` at its DEFAULTS — the feed
+ladder [4e-3, 8e-3, 5.5e-3] at r 2.2-3.8 — which is exactly the `demo` diet `test/_distil.mjs`
+recorded at 0.22x-1.09x on this square, "worse than doing nothing everywhere", because it
+confounds FEED with SCALE against programs at r 4 (its own comment says so). The 4.99x came
+from the same designer at the programs' own scale (rMin 3.4, rSpan 2.4) at ONE feed, the `poly`
+diet — and the host had no way to ask for it. That is rule 30 with a directory in place of a
+page: the diet that works was written down beside the diet that does not, and the one press was
+wired to the second. `distilDiet` now hands the designer's scale and feeds through, and
+`distil-arm.mjs` takes `DIET=demo|poly|polyfeed`. One variable moved, fast grade, authority 2.0:
+
+```
+  diet       laps            ②d on the square    own diet (geo)    R² held-out   machine min
+  demo       2784-6009          0.74x REFUSED        ~2.0x         0.006/0.078      101
+  poly       5715-9008          1.36x DEPLOYED       ~1.8x         0.343/0.055      163
+```
+
+**THE RUNG DEPLOYS ON THE ARM FOR THE FIRST TIME THROUGH THE ONE PRESS**: 1.0593e+0 → 7.7912e-1,
+6/6 runs kept, 41,137 rows, 234 MAC/decision, and every one of its own six programs improved
+(1.53x-2.70x). The training prefixes converge to 3.12x-5.10x on laps of 5715-9008 samples — the
+window's ±512 now spans 6-9% of a lap instead of 9-18%, which is §49.11's reach/span trade moving
+the right way with the same window. It is 1.36x and not 4.99x: the prefix engine is still `hff`'s
+band-limited Newton against an identified operator rather than the oracle-QP iteration, the
+authority is 2.0, and the grade is fast. Each is one variable and none has been moved yet.
+`polyfeed` — the same scale across [F, 2F, F/2], which §49.13 measured as the only diet safe off
+the commissioning feed — reads **0.96x, REFUSED** (1.1071e+0; 48,923 rows; R² 0.359 / 0.017;
+181 machine-minutes), and the row that says why is its own diet: the half-feed program, lap
+16,056 samples, reads **0.83x with the policy on the program it was fitted on**, while the other
+five improve 1.53x-1.81x. That is §49.13's price — 2.3x at the commissioning feed for safety off
+it — arriving as a refusal through the gate, and it means the page ships `poly` at the CURRENT
+feed and relies on the block's coverage guard to fade the correction off it, which is the
+measured 0.75x at half feed turned into 1.00x. Diet ordering on the square, one press, fast
+grade: **demo 0.74x < polyfeed 0.96x < poly 1.36x.**
+
+**AND THE PAGE'S WATCHING GRADE REFUSES THE SAME DIET, FOR THE STOP-RULE REASON ABOVE.** `poly`
+at demo grade (avg 1, warmup 1, passes 4) reads **0.96x, REFUSED** — and its training prefixes
+converge FURTHER than fast grade's (4.31, 4.14, 4.34, 4.43, 3.00, 4.19 against 3.12-5.10), the
+fit's held-out R² collapses to -1.23 / 0.05, and the policy is worth 1.04x-1.09x even on its own
+diet. One scoring lap reports no spread, so sigma stays 0, the 2-sigma stall never fires, and
+the refine takes every pass it is given; fast grade's two laps report a spread large enough to
+stop it after a few. So the three grades bracket the SAME variable from both sides — demo over-
+converges by having no stop, full over-converges by a small sigma, fast lands between by
+accident — and the sweet spot is the property of a stop rule that was designed for a memory, not
+for a teacher. The rung needs its own convergence limit, stated in laps and independent of how
+the machine is scored; `PASSES=2` at fast and at demo grade, on this diet, is running.
+
 **AND LEAVE-ONE-OUT SAYS THE OVER-FIT IS TO THE DIET, NOT TO THE SQUARE'S CORNERS.** Six folds:
 converge the lap-periodic correction on each training program once (the gains reproduce the
 ladder's exactly — 5.76, 2.05, 4.82, 2.43, 1.71, 2.15 — the control), fit a policy on five,

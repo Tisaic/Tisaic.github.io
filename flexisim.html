@@ -8,7 +8,7 @@
   <title>FlexiSim — Commissioning Bench</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:1074,built:"2026-09-07T02:11:06Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:1075,built:"2026-09-07T03:47:32Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
 
   <style>
@@ -589,6 +589,11 @@ function makeHost(periodic, gr) {
     },
     path: prof, lap: LAP, K, centre,
     classic: false, maxDepth: 0, demo: null, lapMemory: periodic, distil: {},
+    // THE DIET IS MEASURED, NOT DEFAULTED (plan §52.7). The designer's own defaults — a feed
+    // ladder at r 2.2-3.8 — refuse on this square at 0.74x; the same designer at the programs'
+    // scale and the CURRENT feed deploys at 1.36x; laddering the feed at that scale reads 0.96x.
+    // Off the feed it was fitted at the block's own coverage guard fades the correction out.
+    distilDiet: { feeds: [feedNow(), feedNow(), feedNow()], rMin: 3.4, rSpan: 2.4 },
     avg: G2.avg, warmup: G2.warmup, passes: G2.passes, probeLaps: G2.probeLaps,
     yieldEvery: 150, onYield: autoYield, onProgress, onStage,
     onRung: (r) => { rows.push(r); $('rungs').innerHTML = rungsHTML(rows); },
@@ -616,7 +621,13 @@ async function startCommission() {
     const msg = e && e.message ? e.message : String(e);
     setBadge(abort ? 'stopped — nothing was deployed' : `commissioning failed — ${msg}`, abort ? 'warn' : 'bad');
     if (host) await host.dispose();
-    host = null; rep = null; liveArm = null; t1 = performance.now(); commissioning = false; abort = false;
+    host = null; rep = null; liveArm = null; t1 = performance.now();
+    // The record must say what happened, not what was happening: a progress line left reading
+    // 'scoring · lap 2/2 · 94%' after a stop describes a state the page has left.
+    $('rungs').innerHTML = '';
+    $('prog').innerHTML = abort ? `<b>stopped</b> after ${Math.round((t1 - t0) / 1000)} s — nothing was deployed, nothing was kept`
+      : `<b>failed</b> after ${Math.round((t1 - t0) / 1000)} s — ${msg}`;
+    commissioning = false; abort = false;
     sync(); return;
   }
   commissioning = false; abort = false; t1 = performance.now();
