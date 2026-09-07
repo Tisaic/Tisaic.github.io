@@ -10809,7 +10809,7 @@ sharp square, three grades, two hosts:
   demo    browser      4     4.8592e+0    0.22x    3.0 (*)     REFUSED
   fast    browser      8     2.4712e+0    0.43x    3.0 (*)     REFUSED
   fast    Node         8     1.4254e+0    0.74x    2.0         REFUSED
-  full    Node        24     (running)
+  full    Node        24     6.0804e+0    0.17x    2.0         REFUSED
   (*) before the distil rung had a derived authority frame — see dae5c30
 ```
 
@@ -10838,6 +10838,22 @@ bank (§36). Two further readings agree: the score improves with refinement (0.2
 0.74x as the training prefixes converge further), and it improves when the correction is
 CAPPED SMALLER (3.0 → 2.0), which is what a wrong-shaped correction looks like from the
 outside.
+
+**AND FULL GRADE OVERTURNS THE TREND: MORE CONVERGENCE IS WORSE, ON ITS OWN DIET TOO.** At 24
+passes the training prefixes converge further (5.73x, 5.06x, 4.50x, 2.51x, 1.84x, 2.94x against
+fast's 5.76x, 2.05x, 4.82x, 2.43x, 1.71x, 2.15x), the fit's held-out R² rises from 0.006 / 0.078
+to **0.475 / 0.246** — and the machine reads **0.17x on the square** against fast's 0.74x, while the
+policy on its OWN six programs falls to 1.33x, 1.91x, 1.17x, 0.99x, 1.48x, 1.72x (geometric ~1.4x)
+from fast's 2.65x, 2.38x, 2.91x, 1.40x, 1.62x, 1.79x (~2.0x). A better prefix and a better fit
+delivered a worse controller in BOTH columns. That is §49's law read from the other side — a
+more converged prefix is more lap-specific, so what it carries is more memory and less plant —
+and it is the metrology finding of §50.1 in a new costume, where MORE tracker noise delivered
+a BETTER controller because noise is implicit early stopping. The number of refinement passes
+is therefore a REGULARISER on the distillation, as the QP iteration count was on the pilot
+(rule 42 territory: two knobs that turn out to be one), and it must be measured as a ladder at
+fixed authority rather than inherited from the scoring grade. `distil-arm.mjs` takes `PASSES=n`
+for exactly that; the page's grade table couples the two today and must not be re-derived from
+three points (rule 31).
 
 **THIS DOES NOT REPRODUCE §49.** §49's 4.99x on the sharp square used an ORACLE-converged
 prefix (a perfect forecast, iterated to convergence) on the arm's rig; the ladder route
