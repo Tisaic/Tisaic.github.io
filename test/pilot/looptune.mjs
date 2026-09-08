@@ -22,6 +22,10 @@ const CELLS = (process.env.CELLS || '0.25/0.03,64/0.20').split(',').map((s) => {
   const [K, E] = s.split('/').map(Number); return { K, E };
 });
 const BWS = (process.env.BWS || '7.7e-4,1.2e-3,2e-3,3e-3,4e-3,6e-3,8e-3').split(',').map(Number);
+// DRIVES: the torque limit as a multiple of the gravity hold torque (plan §52.30). The shipped 32
+// clips 2.0% of the bench square's samples on the CONVENTIONAL machine, so how much of that cell's
+// error is the actuator rather than the controller is a plain sweep nobody has run.
+const DRIVES = (process.env.DRIVES || '').split(',').filter(Boolean).map(Number);
 const LAPS = +(process.env.LAPS || 2);
 // The commissioned column from §52.28, so the two can be read side by side rather than from memory.
 const KNOWN = {
@@ -35,6 +39,41 @@ const progs = () => [
   ['circle', circle({ r: 4, centre: [12, 0], feed: F, accel: 4e-5 })],
 ];
 
+if (DRIVES.length) {
+  console.log('=== 0. THE DRIVE SWEEP — how much of this cell\'s error is the ACTUATOR (plan §52.30)');
+  console.log('  cell K/E     drive   square      rounded     circle      geo mean    sat ch0/ch1   peak/tauMax');
+  for (const { K, E } of CELLS) {
+    for (const drive of DRIVES) {
+      const m = await machine({ K, E, drive });
+      const { arm, servo } = m; const rc = commissionComp(arm, servo);
+      const out = []; let s0 = 0, s1 = 0, p0 = 0, p1 = 0;
+      for (const [name, path] of progs()) {
+        const L = Math.round(path.lap);
+        const [q1, q2] = arm.ik(path.at(0).x, path.at(0).y, true);
+        settle(arm, servo, q1, q2, 6000); servo.resetLimitStats();
+        let s2 = 0, n = 0;
+        for (let k = 0; k < L * (LAPS + 1); k++) {
+          const c = path.at(k); const q = arm.ik(c.x, c.y, true);
+          const rt = arm.ikRates(q[0], q[1], c.vx, c.vy, c.ax, c.ay);
+          const base = [{ theta: q[0], omega: rt.dq[0], alpha: rt.ddq[0] },
+            { theta: q[1], omega: rt.dq[1], alpha: rt.ddq[1] }];
+          const ff = rc.feedforward([[1, 0], [0, 1]], servo.jointTorques(base), { enableToolff: false });
+          const t = servo.torques([{ ...base[0], theta: q[0] + ff.dq[0] }, { ...base[1], theta: q[1] + ff.dq[1] }]);
+          arm.step(t[0], t[1], 1);
+          if (k >= L) { const tool = arm.toolXY(); const ex = tool[0] - c.x, ey = tool[1] - c.y; s2 += ex * ex + ey * ey; n++; }
+        }
+        out.push(Math.sqrt(s2 / Math.max(1, n)));
+        const st = servo.limitStats();
+        s0 = Math.max(s0, st[0].fraction); s1 = Math.max(s1, st[1].fraction);
+        p0 = Math.max(p0, st[0].peakDemand / st[0].tauMax); p1 = Math.max(p1, st[1].peakDemand / st[1].tauMax);
+      }
+      const geo = Math.exp(out.reduce((a, v) => a + Math.log(v), 0) / out.length);
+      console.log(`  ${String(K).padStart(5)}/${String(E).padEnd(5)} ${String(drive).padStart(6)}  ${out.map((v) => v.toExponential(3).padStart(10)).join('  ')}  ${geo.toExponential(3).padStart(10)}   ${(100 * s0).toFixed(1)}%/${(100 * s1).toFixed(1)}%      ${p0.toFixed(2)}/${p1.toFixed(2)}`);
+      await m.l1.destroy(); await m.l2.destroy();
+    }
+  }
+  console.log('');
+}
 for (const { K, E } of CELLS) {
   const key = `${K}/${E}`;
   console.log(`\n=== cell K ${K} / E ${E} — the CONVENTIONAL machine's contour rms, before any commissioning`);

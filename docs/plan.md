@@ -12776,3 +12776,91 @@ names — measure in the configuration the claim is about — and it is the patt
 caught by two sections ago. The fourth result is not a correction but a boundary, and it is the
 most useful thing here: it says which half of this design is worth working on and which half
 cannot pay, and it was found by a change that came back byte-identical (rule 21, read forwards).
+
+### §52.30 THE ACTUATOR AND THE LOOP TOGETHER — A REPEATABLE 1.13x / 1.29x THAT IS A MACHINE CHANGE, AND TWO MORE OF MY OWN CLAIMS RETRACTED
+
+§52.29 closed the model route by construction and left five things that could still move the
+distilled policy. One of them — the iteration — turned out to be built and already measured:
+`_iteratePolicy` fits ONE policy across ALL programs at every pass and takes the next increment
+against that policy's own residual, which is joint projected iteration, and §52.16 read it at
+5.06x against 6.04x with an in-sample R² of 0.98. Constraining the iteration to what the deployed
+map can express fits the diet better and transfers worse, which is the same law for the fifth
+time. So this section went to the one thing the loop-tune table had shown and nobody had chased:
+**the bench drive is clipping before any controller is armed.**
+
+**1. THE DRIVE IS NOT A LEVER, AND THE MEASUREMENT IS FLAT.** `ARM_DRIVE` makes the torque limit
+a knob (it is `drive * hold`, 32x the gravity hold torque, and unset is byte-identical). On the
+CONVENTIONAL machine at the shipped bandwidth, removing the clipping entirely:
+
+```
+  drive   square      rounded     circle      saturated   peak/tauMax
+     16   1.231e+0    8.743e-1    8.483e-1      5.2%         3.24
+     32   1.051e+0    8.743e-1    8.483e-1      2.0%         1.62   <- ships
+     64   1.009e+0    8.743e-1    8.483e-1      0.0%         0.81
+    256   1.009e+0    8.743e-1    8.483e-1      0.0%         0.20
+```
+
+Four percent on the square, nothing on the other two, and saturated by drive 64. With the
+POLICY armed it is flatter still — the delivered error moves under 1.5% for a drive 2x and 4x
+larger (bench 1.7528e-1 → 1.7634e-1 → 1.7778e-1; soft 5.2494e-1 → 5.2791e-1) — even though the
+applied correction is 2-3x the rms of the error it cancels (§52.17). The hypothesis that the
+policy's own correction was being clipped away is refused.
+
+**2. WHICH RETRACTS §52.29's SATURATION LINE, ONE SECTION AFTER IT SHIPPED.** That section said
+saturation was "the leading candidate for why the bench cell's commissioned score falls above
+2e-3". Run the ladder at those bandwidths with a drive that cannot clip:
+
+```
+  bw       drive    bare        square (abs)   square x
+  2e-3        32    1.0592      1.7528e-1        6.04x   <- ships
+  3e-3        32    1.0771      2.2474e-1        4.79x
+  3e-3       256    0.95261     2.1377e-1        4.46x
+  4e-3        32    1.0835      2.6536e-1        4.08x
+  4e-3       256    0.87119     2.4480e-1        3.56x
+```
+
+Removing the clipping recovers **5% and 8%** of a degradation that is ~50%. Saturation is not the
+mechanism. The line was a candidate named on the strength of a correlation and it is now measured
+and wrong; what remains is that the fall-off above 2e-3 is real and its cause is not established.
+
+**3. AND THE STRUCTURAL ACCOUNT NARROWS TOO: THE BANDWIDTH OPTIMUM IS A PROPERTY OF THE PROGRAM,
+NOT OF THE PLANT.** §52.28 concluded that both cells "want the loop at 0.4-0.5 of the slowest
+structural mode". Scored on programs the controller never saw, that is false. At bw 8e-3 the ratio
+is **2.07** — four times past that rule — and the held-out programs are BETTER, in absolute error:
+
+```
+  BENCH K 0.25 / E 0.03, absolute contour rms (the ratio's denominator moves, so absolutes compare)
+  configuration              bare       square      rounded     circle      geo(3)
+  bw 2e-3, drive 32 (ships)  1.0592     1.7528e-1   1.9490e-2   1.3486e-2   3.556e-2
+  bw 8e-3, drive 32          1.0452     1.9672e-1   1.5040e-2   1.3145e-2   3.390e-2   1.05x
+  bw 8e-3, drive 1024        0.68508    1.9284e-1   1.3729e-2   1.1694e-2   3.139e-2   1.13x
+  bw 8e-3, drive 1024, seed2 0.68508    1.9407e-1   1.3834e-2   1.1753e-2   3.159e-2   1.13x
+
+  SOFT K 0.25 / E 0.005
+  bw 2e-3, drive 32 (ships)  2.0879     5.2494e-1   5.0282e-2   2.5293e-2   8.753e-2
+  bw 8e-3, drive 1024        1.8939     4.4142e-1   3.2201e-2   2.1672e-2   6.759e-2   1.29x
+```
+
+**The BENCH SQUARE prefers 2e-3 at every drive and the two held-out programs prefer 8e-3.** So
+§52.28's rule was fitted to the bench program, which is exactly the fault the standing bench rule
+was written to prevent one level up (a benchmark is a constant too, rule 31). On the SOFT cell
+there is no trade at all: every program improves, including the square, by 14% to 36%.
+
+**4. WHAT IS ACTUALLY ON OFFER, AND WHAT IT COSTS.** A faster loop with a drive that does not clip
+delivers **1.13x geometric across three programs on the bench cell, repeatable to 0.6% across two
+seeds, and 1.29x on the soft cell with every program improved**. The split is measured: the
+bandwidth alone is 1.05x and the non-clipping drive adds 1.08x, so both terms are real and neither
+is sufficient. That is comparable to everything four sections of controller work produced, which
+was nothing — and it is **not a controller change**. It is a bigger drive and a retuned position
+loop, which the customer buys and installs. Under the standing bench rule it is not a default: it
+costs 10-12% on the bench square, and a configuration that loses the bench program does not ship
+on the strength of winning two others.
+
+**SO THE HONEST STATEMENT OF WHERE THE CEILING IS.** On this arm the delivered accuracy is bounded
+by three things and only one of them is ours: the map's expressiveness (a linear function of the
+reference window, R² 0.836 against the teacher's answer, and the missing part is feedback the
+plant cannot pass in time — §52.27, §52.28); the position loop's bandwidth; and the drive's torque
+limit. The last two are the MACHINE, they are worth 1.13x to 1.29x measured, and every number this
+project has ever quoted was taken with both of them at values nobody derived. Nothing ships:
+`ARM_DRIVE` is a harness knob, unset is byte-identical, and the bench square stands at 1.7528e-1,
+6.04x.

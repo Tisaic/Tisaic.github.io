@@ -78,7 +78,10 @@ const _tnGauss = () => {
   _tnSpare = r * Math.sin(th);
   return r * Math.cos(th);
 };
-const PG = { LEN1: 14, LEN2: 10, E: ARM_E, K: ARM_K, BL: ARM_BL, centre: [12, 0], drive: 32 };
+// `drive` is the torque limit as a multiple of the gravity hold torque; it BINDS at the bench
+// cell (plan §52.30) and `ARM_DRIVE` re-derives it. Unset is byte-identical.
+const PG = { LEN1: 14, LEN2: 10, E: ARM_E, K: ARM_K, BL: ARM_BL, centre: [12, 0],
+  drive: process.env.ARM_DRIVE === undefined ? 32 : +process.env.ARM_DRIVE };
 
 async function makeArm(over = {}) {
   // Overrides serve the twin's four-parameter identification (candidate machines at

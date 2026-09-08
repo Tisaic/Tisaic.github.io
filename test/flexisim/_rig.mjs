@@ -41,7 +41,12 @@ export async function machine(o = {}) {
   // docstring requires the loop to sit WELL BELOW it, and at K 64 / E 0.20 it is 5.0x. It is a knob
   // now so the constant can be re-derived per cell; unset it is byte-identical.
   const bw = o.bw ?? (process.env.ARM_BW !== undefined ? +process.env.ARM_BW : 2e-3);
-  const servo = new ChainServo({ arm, bandwidth: bw, tauMax: RIG.DRIVE * hold, speedMax: 0.2 });
+  // THE DRIVE'S TORQUE LIMIT IS A PLANT SPECIFICATION AND IT BINDS AT THE BENCH CELL (plan
+  // §52.30). `DRIVE * hold` is 32x the gravity hold torque, and the CONVENTIONAL machine on the
+  // bench square already demands 1.6x that and clips 2.0% of its samples before any learned
+  // controller is armed. A knob, so the question can be asked; unset is byte-identical.
+  const drv = o.drive ?? (process.env.ARM_DRIVE !== undefined ? +process.env.ARM_DRIVE : RIG.DRIVE);
+  const servo = new ChainServo({ arm, bandwidth: bw, tauMax: drv * hold, speedMax: 0.2 });
   return { arm, l1, l2, servo, K, E };
 }
 
