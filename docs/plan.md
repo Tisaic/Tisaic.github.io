@@ -11692,3 +11692,152 @@ accelerometer at the tool), which this project has never allowed itself. Neither
 is established: feedforward from the reference, kept a model, is 6-8x on this arm; a memory of
 the lap is 14-19x; feedback from the motor side, as this cascade does it, is blind to the
 difference.
+
+### §52.21 THE OBSERVABILITY QUESTION, ASKED TWICE — AND THE FIRST ANSWER WAS A MEMORY
+
+§52.20 closed with a sentence written from a failed controller: that the residual the distilled
+policy leaves — link ringing and wind-up — "is not observable from the motor-side signals this
+controller is allowed to read." A layer that harms the machine is evidence that something between
+its inputs and its correction is wrong, not that its inputs are blind (rule 16, pointed the wrong
+way). So the question was put to the machine, and the way it was first put was itself wrong.
+
+**THE INSTRUMENT.** `test/pilot/observe.mjs` commissions the bench ladder (distil-only, the
+cascade as teacher), then runs the DISTILLED machine — the policy armed exactly as deployed — and
+captures at every step the six measured signals (motor angles, speeds, torques) and the
+two-channel truth (tool error in joint space). Offline, standardised ridge, streamed so no row is
+stored; the residual is regressed on nested feature sets, each answering one question: what
+feedforward can ever see (the command window alone); what a linear observer adds (lagged motor
+signals); what a nonlinear lift adds (quadratic products, the NGRC / EDMD shape); what a PHYSICAL
+lift adds — only the quadratic forms an energy is made of: kinetic ω², ω₁ω₂ and ω²·cos θ₂ (the
+2R mass matrix's term), elastic τ² (a spring stores τ²/2k), power τ·ω, the energy DELIVERED
+through the motor port over windows of 32 to 2048 steps (∑τ·ω), and the configuration's sines
+and cosines; and the PILOT'S OWN row shape, read off the teacher layer it just built. The
+training-run drive gained a per-step `tap` for this — off by default, free when off — because the
+one thing that decides the answer is which PROGRAMS the fit is scored on.
+
+**THE FIRST ANSWER: HELD-OUT LAPS OF THE SQUARE, AND IT READ 0.95.** Fitted on the square's first
+three laps, scored on its last two:
+
+```
+  held-out LAPS of the same program, R² per channel   feat    bench (E 0.03)    soft (E 0.005)
+  command window only                                    47   -0.234 / 0.925     0.559 / 0.985
+  + motor lags, linear                                  125    0.820 / 0.962     0.782 / 0.990
+  + quadratic lift                                     1028    0.938 / 0.994     0.929 / 0.996
+  + ENERGY lift                                         223    0.909 / 0.991     0.949 / 0.995
+  ENERGY lift + motor lags, no command                  177    0.620 / 0.943     0.727 / 0.977
+  PILOT-SHAPED                                          119    0.920 / 0.982     0.832 / 0.980
+  PILOT-SHAPED + quadratic lift of its own lags        2747    1.000 / 1.000     0.996 / 1.000
+```
+
+A first draft of this section was written from that table. It said the state was observable at
+0.95, that the energy lift was its generic form at a fifth the features, and that §52.20's
+diagnosis was refuted. **It was never pushed, because the last row is impossible.** R² 1.000 on
+held-out laps for 2,747 features is rule 14's surprising measurement and rule 36's exact
+mechanism: a rich enough lift of a REPEATING stream learns where in the lap it is, and later laps
+of the same program cannot tell that from a model. Every number in that table is an upper bound
+that a memory can reach.
+
+**THE SECOND ANSWER: PROGRAMS THE FIT NEVER SAW.** The same fits, scored on the circle and the
+rounded rectangle run on the same distilled machine, read **−40 to −290** on the circle's first
+channel — for the energy lift as much as the linear one. Not a small drop: a prediction whose
+error is many times the residual it claims to explain, which on a controller is a correction of
+the wrong size on a machine that did not need it. The fit on one program IS the memory §52.19
+measured by another route. So the instrument was rebuilt: fit on the pooled DIET — the four
+designed polygons the policy was distilled from, run on the distilled machine, laps 2-5 — and
+score on three programs the fit never saw, at a ladder of ridges because a lift that transfers
+worse than the linear rows can be variance rather than non-transfer (rule 32).
+
+```
+  fitted on the DIET, R² on programs never fitted, per channel — bench cell (E 0.03), best ridge
+                                                 feat     SQUARE           CIRCLE          ROUNDED
+  command window only                              47    0.47 / -0.15    -0.39 /  0.23    0.27 / -0.23
+  + motor lags, linear (λ 1e-4)                   125    0.51 /  0.29     0.27 /  0.60    0.48 /  0.29
+  + quadratic lift (best of four λ)              1028   -0.55 /  0.44    -0.51 /  0.50   -0.07 /  0.34
+  + ENERGY lift (λ 1e-2)                          223    0.28 /  0.39    -0.40 /  0.42    0.02 /  0.34
+  motor lags alone, no command                     79   -0.04 /  0.15    -0.10 / -0.12    0.02 /  0.05
+  ENERGY lift + motor lags, no command            177   -0.42 /  0.26    -0.48 / -0.23   -0.09 /  0.12
+  PILOT-SHAPED (λ 1e-4)                           119    0.55 /  0.09     0.23 /  0.53    0.61 /  0.02
+
+  soft cell (E 0.005)
+  + motor lags, linear (λ 1e-4)                   125    0.82 /  0.27    -0.04 /  0.01    0.43 /  0.25
+  + quadratic lift (λ 1e-1)                      1028    0.30 /  0.43     0.12 /  0.53    0.34 /  0.52
+  + ENERGY lift (λ 1e-1)                          223    0.55 /  0.46     0.28 /  0.36    0.39 /  0.45
+  ENERGY lift + motor lags, no command (λ 1e-2)   177   -0.09 /  0.41     0.29 /  0.29    0.22 /  0.46
+  PILOT-SHAPED (λ 1e-4)                           117    0.81 /  0.46    -0.39 / -0.02    0.42 /  0.43
+```
+
+And at the leads a controller needs, diet-fitted, linear rows, bench: square 0.51/0.29 at lead 0
+→ 0.58/0.41 at 243 → 0.64/−0.27 at 729; circle 0.27/0.60 → 0.30/0.60 → 0.21/0.30. The forecast
+holds to about 250 steps and the second channel goes at 729. Five diet laps against three moved
+the linear rows by 0.003, so this is not data quantity.
+
+**WHAT THE HONEST TABLE SAYS.**
+
+1. **THE RESIDUAL IS PARTLY OBSERVABLE FROM THE MOTOR SIDE, AND "PARTLY" IS HALF.** Across
+   programs a LINEAR observer of lagged motor signals plus the command reads R² 0.3-0.6 on the
+   bench and 0.3-0.8 on the soft cell, at leads to a few hundred steps. That is neither §52.20's
+   "not observable" nor the first draft's 0.95: about half the residual's variance is a function
+   of what the motor can read, on programs the observer never saw, and the other half is not.
+
+2. **THE NONLINEAR LIFTS ADD MEMORY, NOT TRANSFERABLE SIGNAL.** On the bench the quadratic lift is
+   below the linear rows at every ridge and negative on two of three programs' first channel; the
+   energy lift at its best ridge is below linear on the square (0.28 against 0.51) and negative on
+   the circle. Within-program both read 0.91-0.94. The extra columns are learning the lap, and no
+   ridge in a four-decade ladder turns that into a plant model. On the soft cell — more compliance,
+   a bigger stored state — the energy lift at heavy ridge (λ 0.1) is the ONE set positive in all six
+   cells (0.55/0.46, 0.28/0.36, 0.39/0.45), so there is a transferable energy term on that plant,
+   and it is smaller than the linear observer's on the program that matters most (0.82 against
+   0.55 on the square's first channel).
+
+3. **AN ENERGY STATE ALONE — NO COMMAND — IS NOT AN OBSERVER OF THIS RESIDUAL.** The energy lift
+   of the motor-side signals, without the command window, reads negative on the bench everywhere
+   and 0.2-0.4 on the soft cell at heavy ridge. Within-program it read 0.62-0.73 and looked like
+   the answer. So to the question "can it be done on an energy basis, generally": on this arm an
+   energy state learned from excitation is worth about a quarter of the residual's variance on
+   the compliant cell and nothing on the bench cell, and the command window — feedforward's own
+   input — carries more of it than any state the motor can measure. The reason is the physics
+   this project keeps re-measuring: the state that matters is bend in the link and wind-up in the
+   gearbox, and the motor port sees it through a compliance whose transfer is nearly the same at
+   every energy the program reaches; ∑τ·ω through that port is dominated by the rigid-body work,
+   not by what is stored.
+
+4. **THE PILOT'S OWN ROWS SEE WHAT A LINEAR OBSERVER SEES — 0.55/0.09 and 0.23/0.53 — SO THE
+   FEEDBACK LAYER'S FAULT IS PARTLY ITS INPUTS AND PARTLY NOT.** The §52.20 layer's shape (12 lags
+   at stride 35, command −3080..+4992 steps) transfers as well as the wide window. Two faults are
+   separated:
+
+   - **ONE WAS THE CONFIGURATION, AND IT IS FIXED.** `drivePilot` applied the compliance feedforward
+     unconditionally, while the scored machine, once the policy is deployed, runs BARE (`bareFor`:
+     the policy replaces the feedforward). The layer was identified and verified UNDER a term the
+     deployed machine does not carry — rule 34. Identified bare, same seed:
+
+     ```
+                                        before        after
+       bench, authority 2.0 rad        0.17x         0.39x     (verify 1.59x)
+       bench, authority 0.05 rad       0.29x         0.41x     (verify 1.64x)
+       soft,  authority 2.0 rad        0.38x         0.84x     (verify 0.91x)
+     ```
+
+     The "monotone toward 1.0x as the cap shrinks" signature §52.20 read as a wrong-signed model is
+     what a correction biased by a missing term looks like.
+
+   - **THE OTHER IS THE HALF IT CANNOT SEE, INVERTED AT FULL GAIN.** A forecast at R² 0.5 fed to a
+     QP that inverts it applies a correction for the half it does not know as confidently as for
+     the half it does, and the verify — a scribble and a trapezoid, whose residual under the policy
+     is nothing like the square's ringing — cannot price that. The measurement that would close it
+     is the layer's own forecast recorded against the truth during the scored square (rule 16),
+     not taken. The basis question of the last session is closed on the way: the default selection
+     picks the polynomial block on this layer, which is why `BASIS=poly` reproduced it byte for
+     byte and `long` read 8.8015e-1 rather than 1.0231e+0.
+
+**WHAT THIS LICENSES.** Not a full-state controller on a lifted state — the lift that would carry
+it is a memory on this plant, and the state the motor side can see across programs is half the
+residual with a LINEAR observer. What it licenses is narrower and real: an observer at R² 0.5 is
+worth using only under a law that weighs its confidence — a Kalman-shaped gain on the linear
+forecast rather than a QP inversion of it — and the cheapest test of that is the feedback layer
+at a `lambda` chosen for the square's residual rather than the verify's. The generic route to the
+OTHER half is the instrument, not the algorithm: a strain gauge on the link or an accelerometer
+at the tool makes the stored state observable at deploy, and this project has never allowed
+itself one. And the general lesson is the one this project already had in rule 36 and paid for
+again here in an hour: **a held-out lap is not a held-out program**, and an observability number
+taken on one program is a memory reading until it is scored on another.

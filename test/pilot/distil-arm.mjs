@@ -141,6 +141,8 @@ const host = makeArmHost({
     + `  ${r.gain === null ? '' : r.gain.toFixed(2) + 'x'}${r.deployed ? '' : '  NOT deployed'}${r.note ? '  — ' + r.note : ''}`),
 });
 host.auto.pilotOpts.start = m0.arm.ik(path.at(0).x, path.at(0).y, true);
+// BASIS=quad|lin|sch: force the pilot's forecast basis (every cascade layer, including the feedback layer).
+if (process.env.BASIS) host.auto.pilotOpts.forceBasis = process.env.BASIS;
 const rep = await host.auto.commission({ run: host.run, drivePilot: host.drivePilot,
   recordDemo: host.recordDemo, distilRuns: host.distilRuns });
 

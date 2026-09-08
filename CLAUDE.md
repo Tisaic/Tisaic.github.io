@@ -1165,6 +1165,7 @@ measurement behind each is in `docs/history/` — the pointer in brackets.
 | `test/pilot/tankspread.mjs` | **A PLANT'S SCORE IS A DISTRIBUTION.** Commissions the tank from N seeds and reports the spread, the deployed median, and the GATE'S OWN ESTIMATE beside what it delivered. It asserts nothing — an instrument that decided its verdict before the verdict was understood is how the 1.32x got written down. What it measured: at the old defaults 4 of 8 seeds deploy and **all four hurt**; at the new ones 5 of 8 deploy at a median 1.249x, two still hurt, and the gate's estimate correlates **-0.057** with delivered benefit. |
 | `test/pilot/qpsweep.mjs`, `qpsweep-arm.mjs` | **Not tests — the solver-budget experiment.** Commission ONE pilot, re-deploy that same model over a grid of QP iteration counts and horizon lengths, and score the MACHINE. Found that the shipped 60 iterations at `1.5·Tset` is 57× more arithmetic than the machine wants and WORSE than 1 iteration at N=56 (EMPS 14.16× against 12.70×, at 101% of a PLC scan's 10% against 5761%), and that the arm agrees at 29× cheaper and 16% better. Scores a held-out program in the same table, because the surface is rugged enough that the best cell of a grid is a suspect result. |
 | `test/pilot/rti.test.mjs` | A FALSIFIED HYPOTHESIS, pinned as the four things measuring it found. One QP iteration per cycle does not track sixty (88% of the applied signal); sixty is itself 36% from this solver's own optimum, so every delivered number in the project came out of a truncated solve; the convergence curve at N=8 matches N=48, so the rate is the Hessian's conditioning and not the horizon; and the Lipschitz bound is 1.82× above the true spectral norm, which costs exactly 2× in iterations. |
+| `test/pilot/observe.mjs` | **Not a test — IS THE RESIDUAL OBSERVABLE FROM THE MOTOR SIDE, AND THROUGH WHAT LIFT? (plan §52.21).** Runs the distilled machine on the square, the circle, the rounded rectangle and the polygon diet with a per-step tap on the measured signals and the truth, then fits the residual offline from nested feature sets — the command window, linear motor lags, a quadratic lift, an ENERGY lift (the quadratic forms an energy is made of, plus windowed power integrals), the pilot's own row shape — and scores every fit TWICE: on later laps of the fitted program (the memory control, where everything reads 0.9-1.0) and on programs the fit never saw, at a ladder of ridges and leads. The second column is the claim: a linear observer transfers at R² 0.3-0.6, the lifts transfer worse, and a lap-held-out 1.000 was a memory. |
 | `test/pilot/distil-arm.mjs` | **Not a test — the instrument that reads a distilled-rung refusal to its cause, and the one every knob in plan §52.8 was measured through.** Runs the bench's ladder on the arm at a chosen grade (`GRADE`, `DIET`, `ENGINE`, `REPLACE`, `TEACHCAP`, `STRIDE`, `WIN`, `OFFS=raw`, `PASSES`, `PERIODIC`, `LOO`), then scores the fitted policy on its OWN training programs — evaluated as it deploys, once per decision and held: helps them and harms the square → transfer; harms them too → the fit or the deploy path. Knobs for the structural experiments of plan §52.16 too: `Q`, `PARAM=1`, `REF=angles|torques|both`, `DIET=tour2`, `RIDGE`, `ONLINE=0`, `SOFFS`, `LAPSYNC=1`, `ARM_BL`. At its defaults it reads the host's shipped configuration: **1.7528e-1 on the bench square, 6.04x, 10.7 machine-minutes, ~160 s of Node** (plan §52.16). |
 | `test/pilot/rigs/arm-rig.mjs` | The 2R arm rig — plant, paths, routing, `commissionArm` and `deployOn`. Every harness drives the arm through this; three separate copies of pieces of it have each shipped a defect. |
 | `test/pilot/forecast.mjs` | Held-out forecast R² on open-loop programs, plus an offline refit that separates an unreachable dictionary from an unvisited one. |
@@ -1439,14 +1440,23 @@ and the circle: a memory, checked and refused.** The unit-gain "keep learning ev
 was offered for this measured 0.54x and is removed. A single honest linear map of the reference
 window sits at 6-8x on this arm; the 14-19x the lap-converged path proves is what a memory of one
 lap buys, and every route to it that keeps the object a model has been measured and paid back.
-**AND THE INVERTED-PENDULUM TEST IS TAKEN AND FAILED FOR A STATED REASON (plan §52.20):** a
-feedback cascade layer identified ON the distilled machine — the policy armed below it during
-its excitation and verify — passes its verify (1.7x) and harms the square at every authority,
-monotonically toward 1.0x as its cap goes to zero (0.17x at 2.0 rad, 0.86x at 0.005 rad): not a
-gain too high but a correction of the wrong sign at every size. The residual the policy leaves is
-link ringing and wind-up, and that state is not observable from the motor-side signals this
-controller is allowed to read. The next level is an observer for the flexible state, or the
-instrument that makes it observable at deploy; neither is built.
+**AND THE INVERTED-PENDULUM TEST IS TAKEN, FAILED, AND ITS DIAGNOSIS HALF-RETRACTED (plan
+§52.20, §52.21):** a feedback cascade layer identified ON the distilled machine passes its verify
+(1.6x) and harms the square. §52.20 read that as the residual — link ringing and wind-up — being
+unobservable from the motor side. `test/pilot/observe.mjs` put the question to the machine twice.
+Scored on held-out LAPS of the square, every lift read 0.9-1.0 — including R² 1.000 for 2,747
+features, which is rule 36's memory and not observability, and a first draft claiming 0.95 was
+withdrawn before it shipped. Scored on PROGRAMS the fit never saw (fitted on the polygon diet, run
+on the distilled machine), a LINEAR observer of motor-side lags plus the command reads R² **0.3-0.6**
+on the bench and 0.3-0.8 on the soft cell, to leads of a few hundred steps; the quadratic and the
+ENERGY lifts (ω², τ², τ·ω, windowed ∑τ·ω — the energy-state idea, explored) transfer WORSE than
+linear on the bench at every ridge, and an energy state alone, no command, reads negative on the
+bench and 0.2-0.4 on the soft cell. So half the residual is observable from the motor side and half
+is not, and the nonlinearity buys memory. Half the layer's deficit was a configuration fault —
+identified UNDER the compliance feedforward and deployed BARE (rule 34; fixed, 0.17x → 0.39x on the
+bench, 0.38x → 0.84x on the soft cell) — and the rest is a half-blind forecast inverted at full gain.
+What is licensed is a confidence-weighted law on the linear observer, or the instrument that makes
+the stored state observable at deploy; neither is built.
 
 **ITS FIRST READING WAS A REFUSAL, WHICH WAS THE PAGE DOING ITS JOB (plan §52.7).** Distil-only
 ladder on the bench square: `②d distilled — REFUSED` at 0.22x (demo), 0.43x (fast, browser),
