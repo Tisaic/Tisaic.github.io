@@ -43,6 +43,7 @@ const ARM_K = +(process.env.ARM_K || 16);
 // 1e-4 rad of lost motion, and a sharp corner is exactly where the machine reverses and has to
 // cross it.
 const ARM_BL = process.env.ARM_BL === undefined ? 1e-4 : +process.env.ARM_BL;
+const ARM_BW = process.env.ARM_BW === undefined ? 2e-3 : +process.env.ARM_BW;
 
 // THE TRACKER'S OWN ERROR, WHICH EVERY NUMBER IN THIS PROJECT HAS ASSUMED AWAY.
 //
@@ -97,7 +98,9 @@ async function makeArm(over = {}) {
   const arm = new FlexArm2R({ joint1: j(massProperties(l1)), link1: l1,
     joint2: j(massProperties(l2)), link2: l2, gravityWorld: [0, -G, 0], dt: 1 });
   const hold = Math.abs(arm.gravityTorque([0, 0])[0]) / RATIO;
-  const servo = new ChainServo({ arm, bandwidth: 2e-3, tauMax: PG.drive * hold, speedMax: 0.2 });
+  // The loop's bandwidth is a plant constant that was carried across every cell (rule 31, plan
+  // §52.28); `ARM_BW` re-derives it and unset is byte-identical.
+  const servo = new ChainServo({ arm, bandwidth: over.bw ?? ARM_BW, tauMax: PG.drive * hold, speedMax: 0.2 });
   return { arm, servo };
 }
 

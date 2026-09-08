@@ -34,7 +34,14 @@ export async function machine(o = {}) {
   const arm = new FlexArm2R({ joint1: jt(massProperties(l1)), link1: l1,
     joint2: jt(massProperties(l2)), link2: l2, gravityWorld: [0, -RIG.gravity, 0], dt: 1 });
   const hold = Math.abs(arm.gravityTorque([0, 0])[0]) / RIG.RATIO;
-  const servo = new ChainServo({ arm, bandwidth: 2e-3, tauMax: RIG.DRIVE * hold, speedMax: 0.2 });
+  // THE POSITION LOOP'S BANDWIDTH IS A PLANT CONSTANT AND IT WAS CARRIED (rule 31, plan §52.28).
+  // 2e-3 rad/step is fixed here across a 256-fold range of gearbox stiffness. Measured against the
+  // machine's own modes, that is the right loop for a STIFF cell and 2.6x too fast for the bench
+  // one: at K 0.25 / E 0.03 the slowest structural mode is 1.9x the loop, where `ChainServo`'s own
+  // docstring requires the loop to sit WELL BELOW it, and at K 64 / E 0.20 it is 5.0x. It is a knob
+  // now so the constant can be re-derived per cell; unset it is byte-identical.
+  const bw = o.bw ?? (process.env.ARM_BW !== undefined ? +process.env.ARM_BW : 2e-3);
+  const servo = new ChainServo({ arm, bandwidth: bw, tauMax: RIG.DRIVE * hold, speedMax: 0.2 });
   return { arm, l1, l2, servo, K, E };
 }
 

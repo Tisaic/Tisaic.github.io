@@ -12533,3 +12533,130 @@ already measured — a better TEACHER at the same object (the square taught on i
 14x through the same 93 features) — and the instrument that would change this section's
 answer is a plant whose spring is faster than its residual, where F's 0.96 would be
 deliverable and the state term would pay.
+
+### §52.28 THE ARC TURNED ON THE PLANT: ONE CONCLUSION INVERTED, ONE OF MY OWN HYPOTHESES KILLED, AND THE LARGEST LEVER IN THE PROJECT IS A SERVO CONSTANT NOBODY SWEPT
+
+§52.20-§52.27 closed the feedback route on a physical argument: the tool answers a command over
+~951 steps, the residual is coherent for ~300, so nothing on the motor side can arrive in time.
+The owner asked the question that argument deserves — the plant is MANUFACTURED, can it be
+trusted, and are the prediction and the inversion structurally sound? Three suspicions were put
+to the machine. One inverted a shipped conclusion, one was killed by the instrument, and the
+third turned into the biggest single lever measured in this project. `test/pilot/timescales.mjs`
+and `test/pilot/geom.mjs`; bench K 0.25 / E 0.03 and a stiff cell K 64 / E 0.20.
+
+**1. §52.26.5's CONCLUSION IS INVERTED: THE 951-STEP RISE IS THE POSITION LOOP, NOT THE GEARBOX
+SPRING.** `stepresp.mjs` read 951 steps through the command and 948 through a torque step at the
+motor and called the agreement proof that the spring is the low-pass. Both paths run through the
+CLOSED LOOP — the torque step is added on top of `servo.torques(...)`, so the PD sees the motor
+move and pushes back — and two measurements through one loop cannot check each other (rule 15).
+Sweeping the servo bandwidth, which the argument never did:
+
+```
+  bench cell             bw 5e-4    1e-3    2e-3    4e-3    8e-3
+  command path rise       5156     2745     943     636     509   steps
+  torque  path rise       2467     2681     943     636     509
+  stiff cell (16/0.15)    5509     3346    1731     436     240
+```
+
+The rise tracks the bandwidth. 951 steps IS `bandwidth 2e-3` (tau 500 steps), the number the rig
+hard-codes. And the agreement the old reading leaned on is itself the evidence: at bw >= 2e-3 the
+two paths are IDENTICAL to the step because one pole dominates both, and at bw 5e-4 they SEPARATE
+(5156 against 2467) as the loop slows out of the way and the mechanical path finally shows
+through. The gearbox two-mass mode is 2.2x FASTER than the loop and critically damped by
+construction (`damping: 2*sqrt(K*J/2)`), so it was never a candidate for the plant's low-pass.
+
+**2. AND THE BENCH CELL HAS NO TIMESCALE SEPARATION AT ALL.** Computed from the constants the
+machine is built from — the loop's designed bandwidth against the gearbox two-mass modes and each
+link's first cantilever mode:
+
+```
+  cell K/E     loop bw   gearbox 1       gearbox 2       link 1 bend     link 2 bend    slowest/bw
+  0.25/0.03    2.0e-3    4.49e-3 (1399)  9.57e-3 (657)   3.86e-3 (1629)  7.79e-3 (806)     1.9x
+    16/0.15    2.0e-3    3.59e-2 (175)   7.66e-2 (82)    8.63e-3 (728)   1.74e-2 (361)     4.3x
+    64/0.20    2.0e-3    7.18e-2 (87)    1.53e-1 (41)    9.96e-3 (631)   2.01e-2 (312)     5.0x
+```
+
+w in rad/step, period in steps. `ChainServo`'s own docstring states the design rule — "keep the
+bandwidth well below the SLOWER gearbox resonance; a position loop faster than the resonance it
+is acting through does not control the tool, it excites it" — and at the bench cell the slowest
+structural mode is **1.9x** the loop. A real industrial arm runs its position loop 5-20x below its
+first structural mode. So every conclusion from §52.20 onward was measured on a machine whose
+loop and whose structure sit on top of each other. The lattice caps this too: E above ~0.24 fails
+the elastic CFL at dt 1, so 5.0x is about the widest separation this simulator can represent.
+
+**3. THE INVERSION IS SOUND, AND THIS SECTION'S OWN HYPOTHESIS ABOUT IT IS DEAD.** The obvious
+next suspicion was the cold mill's fault on the arm: a settle read short, a horizon that cannot
+reach, a QP inverting a near-null response. It is wrong, and the instrument said so before it
+shipped (rule 17 — I had computed the horizon as `N*grid` and it is `N*grid*sample`):
+
+```
+  probe:   Ts 2048   Tset 3360   Tset/Ts 1.64   (the 6*Ts clamp sits at 12288 and does not bind)
+  solver:  sample 9 steps   grid 8 samples   N 70 leads   ->  HORIZON 5040 raw machine steps
+  hGrid:   ch0 51% by lead 17 (1224 steps), 117% by lead 35 (2520)
+           ch1 72% by lead 17,               97% by lead 35
+```
+
+The horizon is 5040 steps against a 943-step rise, the response is fully delivered by half of it,
+and the settle the pilot measures is honest at 1.64x its own Ts. The QP has full authority over
+its own decision. Nothing here is starved, and the units error that would have made it look
+starved is the one this project keeps paying for.
+
+**4. SO THE THIRD SUSPICION WAS PUT TO THE LADDER: SWEEP THE ONE PLANT CONSTANT NOBODY HAS EVER
+SWEPT.** `bandwidth: 2e-3` is hard-coded in both rigs at every cell, across a 256-fold range of
+gearbox stiffness — a constant carried, in the plain sense of rule 31. `ARM_BW` makes it a knob
+(unset is byte-identical) and the whole ladder was run at a ladder of it, feedback layer armed,
+the rounded rectangle and the circle scored as held-out programs:
+
+```
+  BENCH K 0.25 / E 0.03      slowest structural mode 3.86e-3
+  bw      bw/w_slow   bare      ②d distilled        ②e feedback      rounded   circle
+  7.7e-4    0.20      1.3200    6.036e-1  2.19x     0.24x REFUSED     0.92x     1.08x
+  1.2e-3    0.31      1.0923    3.790e-1  2.88x     0.31x REFUSED     2.41x     4.17x
+  2.0e-3    0.52      1.0592    1.753e-1  6.04x     0.39x REFUSED     5.74x     7.89x   <- ships
+  3.0e-3    0.78      1.0771    2.247e-1  4.79x     0.61x REFUSED     5.29x     6.51x
+  4.0e-3    1.04      1.0835    2.654e-1  4.08x     0.36x REFUSED     5.09x     5.94x
+
+  STIFF K 64 / E 0.20        slowest structural mode 9.96e-3
+  2.0e-3    0.20      2.393e-1  2.077e-1  1.15x     0.97x REFUSED     0.82x     0.46x
+  4.0e-3    0.40      1.948e-1  1.534e-1  1.27x     1.08x DEPLOYS     1.62x     1.27x
+  8.0e-3    0.80      1.925e-1  1.443e-1  1.33x     0.96x REFUSED     2.19x     1.86x
+```
+
+**THE SHIPPED 2e-3 IS AT THE BENCH CELL'S OPTIMUM AND 2x BELOW THE STIFF CELL'S**, in absolute
+error as well as in ratio (bench 6.04e-1 / 3.79e-1 / **1.75e-1** / 2.25e-1 / 2.65e-1). So the
+constant is right where it was tuned and wrong where it was not, which is rule 31 in its ordinary
+form rather than the dramatic one this section went looking for — and the direction is the
+opposite of what the docstring's rule predicts: on both cells the machine wants the loop at
+**0.4-0.5 of its slowest structural mode**, not "well below" it. Drive saturation is not the
+mechanism: 0.0% of samples clipped at every bench row, 0.6-0.9% at the stiff cell's two fastest.
+
+**5. AND FEEDBACK DEPLOYS AND HELPS EXACTLY ONCE IN THAT TABLE.** Every §52.20-§52.26 reading of
+the feedback layer was taken at one point of this constant. At the stiff cell with the loop
+raised to 0.40 of its slowest mode, `②e` passes its verify AND the machine: **1.08x on top of the
+distilled policy**, the first time a feedback layer has ever deployed and helped on this arm
+through the one press. The same cell at the carried 2e-3 refuses it at 0.97x. And the distilled
+policy's TRANSFER moves with it in the same direction and much harder — on programs it never saw,
+**0.82x and 0.46x (worse than doing nothing) at 2e-3, and 1.62x and 1.27x at 4e-3** — same code,
+same fit, same diet, one plant constant.
+
+**6. WHAT THIS SAYS ABOUT §52.26's LIMIT, AND ABOUT THE BENCH.** The limit is real and it is
+LOCAL. On the bench cell there is no bandwidth that both leaves the structure alone and delivers
+a correction in time, because the slowest structural mode is 1.9x the loop and the loop is already
+at its own optimum — the machine is at the ceiling its structure allows, which is exactly why the
+correction takes ~950 steps and why nothing on the motor side can answer a 300-step residual.
+That verdict was correct for the cell it was measured on and it does not generalise: at 5.0x
+separation, with the loop tuned to the cell, feedback deploys and helps.
+
+Which lands on the owner's standing bench rule. "The softest cell with the hardest program is the
+one that cannot flatter" chose K 0.25 / E 0.03 for compliance at its largest, and by the plant's
+own numbers that cell has its position loop and its first structural mode 1.9x apart. A benchmark
+is a constant too (rule 31), and this one was never checked against the modes of the machine it
+selects. It does not merely make the problem hard — it removes the timescale separation that every
+feedback method in control requires, and three sessions of feedback work were spent inside it.
+
+**WHAT IS NOT ESTABLISHED.** One seed per cell, two cells, one program set; the stiff cell's
+absolute gains are small because its bare machine is already good (1.9e-1 against the bench's
+1.06), so 1.08x there is a smaller quantity than 1.08x would be at the bench; and the lattice caps
+E near 0.24 at dt 1, so no cell with a real machine's 10-20x separation can be built here at all.
+Nothing shipped moves: `ARM_BW` is a harness knob, unset is byte-identical, and the bench square
+still reads 1.7528e-1, 6.04x.

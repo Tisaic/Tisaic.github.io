@@ -6,6 +6,19 @@
  * measures the ratio directly: the bench machine held at the square's start pose, a step on
  * each path, the joint-space tool error recorded, and the 10-90% rise, the time to first peak,
  * and the settled value reported. No controller, no fit — a plant property.
+ *
+ * ITS NUMBERS STAND AND ITS CONCLUSION IS INVERTED (plan §52.28). This file read 951 steps on the
+ * command path and 948 on the torque path, and concluded "the gearbox spring is the plant's
+ * low-pass, not the loop". BOTH PATHS RUN THROUGH THE CLOSED LOOP: the torque step is added on top
+ * of `servo.torques(...)`, so the PD sees the motor move and pushes back, and two measurements
+ * through one loop cannot check each other (rule 15). `timescales.mjs` sweeps the servo bandwidth
+ * and the rise tracks it — 5156 / 2745 / 943 / 636 / 509 steps at bw 5e-4 / 1e-3 / 2e-3 / 4e-3 /
+ * 8e-3 — so the 951 is the position loop's DESIGNED bandwidth (2e-3 rad/step, tau 500) and not the
+ * spring, whose two-mass mode is 2.2x FASTER than the loop and critically damped by construction.
+ * The agreement this file reported is itself the evidence: at bw >= 2e-3 the two paths are
+ * IDENTICAL to the step (943/943, 636/636, 509/509) because one pole dominates both, and at
+ * bw 5e-4 they SEPARATE (5156 against 2467) as the loop slows out of the way and the mechanical
+ * path shows through. Run it at more than one bandwidth before reading a rise as a plant property.
  */
 import { machine, settle } from '../flexisim/_rig.mjs';
 const K = +(process.env.ARM_K || 0.25), E = +(process.env.ARM_E || 0.03);
