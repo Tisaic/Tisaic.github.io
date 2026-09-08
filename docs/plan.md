@@ -12285,3 +12285,27 @@ one thing that would change the ratio. Neither the pilot's own fit nor its QP is
 section; every instrument lives in `test/pilot/distil-arm.mjs` behind `FBFORECAST`, `FBEXT`,
 `FBEXTLAM`, `FBEXTSIGN`, `FBEXTLAMBDA`, `FBLAW`, `FBLAWG`, `FBLAWLEAD`, `SEED`, and the
 default ladder is untouched.
+
+**5. AND THE ONE LEVER THIS SECTION NAMED IS MEASURED AND CLOSED: TORQUE AT THE MOTOR IS NO
+FASTER THAN THE COMMAND.** `test/pilot/stepresp.mjs` holds the bench machine at the square's
+start and steps each path, reading the tool error in joint space — a plant property, no
+controller, no fit:
+
+```
+  path                                settled       10-90% rise      first peak        overshoot
+  COMMAND  +0.01 rad on the reference  9.64e-3 rad   951 steps (521→1472)   at 2115 steps   1.11x
+  TORQUE   +2% of tauMax at motor 1    1.65e-2 rad   948 steps (525→1473)   at 2116 steps   1.11x
+  TORQUE   +5% of tauMax at motor 1    4.12e-2 rad   944 steps (529→1473)   at 2118 steps   1.11x
+```
+
+The two paths are the same response to three figures: the rise is not the position loop, it is
+the LOAD behind the gearbox spring — K 0.25 against the link's inertia, near-critically damped,
+first peak at 2,100 steps — and a torque at the motor reaches the tool through exactly that
+spring. Nothing applied on the motor side of this gearbox moves the tool in under ~1,000 steps,
+and the residual the distilled policy leaves is coherent for ~300. So feedback of this residual
+from the motor side is impossible on this cell by the plant's own low-pass, on any path, with
+any observer; the only correction that can be in place when the error arrives is one placed in
+advance from a reference known ahead, which is preview, which is what ships. The feedback arc
+that began at §52.20 ends here with its limit measured rather than inferred: the state is
+observable (§52.23), the forecast is right (§52.26.2), the law is sound (§52.26.4), and the
+actuator cannot arrive.
