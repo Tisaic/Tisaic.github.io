@@ -123,6 +123,12 @@ const host = makeArmHost({
   ...(process.env.FBGAIN ? { distilFeedbackGain: +process.env.FBGAIN } : {}),
   ...(process.env.FBBASIS ? { distilFeedbackBasis: process.env.FBBASIS } : {}),
   ...(process.env.INSTR === '1' ? { instruments: true } : {}),
+  // FBOPTS=key=value,...: any Pilot option for the feedback layer alone — e.g. FBOPTS=ditherAmp=0.005,
+  // because its dither defaults to a tenth of its authority, sized for the bare machine's error and
+  // not for the residual it is identified on (plan §52.25).
+  ...(process.env.FBOPTS ? { distilFeedbackSched: Object.fromEntries(process.env.FBOPTS.split(',').map((kv) => { const [k, v] = kv.split('='); return [k, isNaN(+v) ? v : +v]; })) } : {}),
+  // FBSCHED=order[,lags[,cmd]]: the feedback layer's scheduled block shape (plan §52.25), e.g. FBSCHED=2,1,1
+  ...(process.env.FBSCHED ? (() => { const a = process.env.FBSCHED.split(','); const prev = process.env.FBOPTS ? Object.fromEntries(process.env.FBOPTS.split(',').map((kv) => { const [k, v] = kv.split('='); return [k, isNaN(+v) ? v : +v]; })) : {}; return { distilFeedbackSched: { ...prev, schedOrder: +a[0], ...(a[1] ? { schedLags: +a[1] } : {}), ...(a[2] ? { schedCmd: a[2] === '1' } : {}), ...(a[3] ? { schedFn: a[3] } : {}) } }; })() : {}),
   // STD=1: standardised rows (each feature divided by its rms over the training rows).
   ...(process.env.STD === '1' ? { distilStandardize: true } : {}),
   // SOFFS=a,b,c: the direction-of-travel block's offsets, in pilot samples (default none).
@@ -146,8 +152,16 @@ const host = makeArmHost({
 host.auto.pilotOpts.start = m0.arm.ik(path.at(0).x, path.at(0).y, true);
 // BASIS=quad|lin|sch: force the pilot's forecast basis (every cascade layer, including the feedback layer).
 if (process.env.BASIS) host.auto.pilotOpts.forceBasis = process.env.BASIS;
+// LEADPROBE=1: the pilot re-fits every sampled lead ALONE beside the shared fit and records both
+// held-out R² per lead (plan §52.25) — is one weight vector for every lead what the feedback
+// layer's forecast is paying for?
+if (process.env.LEADPROBE === '1') globalThis.__LEADPROBE = {};
 const rep = await host.auto.commission({ run: host.run, drivePilot: host.drivePilot,
   recordDemo: host.recordDemo, distilRuns: host.distilRuns });
+if (globalThis.__LEADPROBE) for (const c of Object.keys(globalThis.__LEADPROBE)) {
+  const rows = globalThis.__LEADPROBE[c];
+  console.log(`  lead probe ch${c} (last layer fitted): ` + rows.map((r) => `L${r.L} shared ${r.shared.toFixed(2)} per-lead ${r.perLead.toFixed(2)}`).join('  '));
+}
 // THE FEEDBACK LAYER'S OWN FORECAST, per channel: which basis it chose and its held-out R² at
 // the near, middle and far lead — so a refused layer can be read to its forecast or its inversion.
 for (const stF of host.auto.built.stacks || []) for (const p of stF.layers) if (p.report && p.report.readouts) {

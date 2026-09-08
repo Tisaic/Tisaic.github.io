@@ -12098,3 +12098,96 @@ the same block read LOPO 0.31 offline (§52.23's `sched_m0`), so on the shipped 
 worth the second channel and not the first, and the 1.25x plain layer on the soft cell remains
 the only deployed feedback result. `feedbackBasis`, `feedbackGain` and `instruments` all ship
 opt-in and off.
+
+### §52.25 THE NEXT REVISION, TESTED: A GENERIC SCHEDULED BLOCK IS PROVEN OFFLINE, AND THE PILOT'S FIT PIPELINE IS WHAT STANDS BETWEEN IT AND THE MACHINE
+
+The owner asked for tests and data on the next proven revisions that hold the north star — a
+model rather than a path memory, plant- and feed-agnostic, PLC-shaped, commissioned in minutes.
+§52.24 left one stated build: the pose-scheduled block that reads the residual at 0.99, put into
+the pilot's row. This section is that build and its measurement. Bench and soft cell, one seed.
+
+**1. THE GENERIC FORM IS PROVEN OFFLINE.** The hand-written block used cos and sin of q₁, q₂
+and q₁+q₂ — an arm's geometry, named. The generic form declares each scheduling channel ROTARY
+and contributes [cos q, sin q] of its own angle, with the cross-channel products at order 2
+spanning a chain's sum angles without naming them — a declaration like `deadTime`, meaning
+nothing on a tank and costing nothing there. Same rows, same programs, λ by leave-one-out:
+
+```
+                                          LOPO     SQUARE          CIRCLE          ROUNDED
+  bench  hand-written six-term trig      0.993   0.988/0.997     0.992/0.998     0.994/0.998
+         GENERIC trig (per-channel)      0.991   0.988/0.997     0.992/0.998     0.995/0.998
+  soft   hand-written                    0.946   0.943/0.996     0.944/0.997     0.925/0.997
+         GENERIC trig                    0.945   0.940/0.995     0.914/0.995     0.924/0.995
+```
+
+Identical to the third figure. A POLYNOMIAL scheduling vector — the form that would mean the
+same thing on any channel type — read as a failure at orders 2, 3 and 4 (LOPO 0.16, 0.02, −0.23)
+and fitted on the excitation record collapsed to −57/−78. That was the instrument: the vector
+had no ORDER-0 term, so those sets lacked the unscheduled newest sample the trig sets carry
+through cos ≈ 1, and it was found by comparing spans rather than by re-running. Corrected, the
+order-2 polynomial of the normalised pose — NO declaration of any kind, the same thing on a tank
+— reads **LOPO 0.976, 0.972/0.997 on the square, 0.989/0.998 on the circle, 0.988/0.998 on the
+rounded rectangle** on the bench, against the trig block's 0.991; orders 3 and 4 fall to 0.850 and
+0.548 (variance). So the block needs no declaration: a quadratic in the scheduling variables is
+within 1.5% of the exact geometry, and `schedOrder: 2` on the pilot's existing normalised
+scheduling variable is that block, with `schedFn: 'trig'` the declared exact form beside it.
+
+**2. THE BLOCK IS IN THE PILOT, BEHIND THREE KNOBS THAT DEFAULT TO THE SHIPPED SHAPE.**
+`schedFn: 'trig'` (per-channel cosine and sine of the scheduling variable), `schedOrder: 2`
+(the cross products), `schedLags: 1` (schedule the newest sample only), `schedCmd: true` (the
+commanded positions scheduled too). One generator serves the fit row and the runtime row, as
+before. The default ladder reads 1.7528e-1, 6.04x, byte for byte (the control ran twice).
+`distil.feedbackSched` passes any of these — or any pilot option — to the feedback layer alone.
+
+**3. ON THE MACHINE THE LAYER STILL CANNOT FIT IT, AND FOUR INSTRUMENTS SAY WHERE THE FIT
+IS LOST.** Every row is the feedback layer on the distilled, instrumented machine, its own
+held-out forecast of the residual at lead 0, and the deployed score at gain 0.35:
+
+```
+  configuration                                     bench forecast    deployed   soft forecast    deployed
+  plain basis (§52.22)                              0.44 / 0.45       0.77x      0.68 / 0.27      1.25x
+  order-2 polynomial block                          0.49 / 0.45       0.90x      0.51 / 0.33      1.00x
+  GENERIC trig block                                0.50 / 0.43       0.87x      0.66 / 0.37      0.97x
+  trig, rich-block ridge penalty removed            0.75 / 0.37       0.85x      0.56 / 0.55      0.82x
+  trig, dither 0.02 / 0.005 / 0.001 (20x span)      0.48 / 0.43-0.45  0.84x  ×3   —                —
+  trig, horizon 0.3·Tset                            0.72 / 0.48       0.60x      —                —
+  trig, horizon 0.1·Tset                            0.88 / 0.85       0.14x      0.87 / 0.80      0.11x
+    ... at gain 0.1 / 0.03                          —                 0.44x / 0.84x
+```
+
+And the two offline probes on the layer's OWN excitation record:
+
+- **The observer fitted on the layer's rows with the RAW truth reads 0.96/0.99 on the programs;
+  fitted on the layer's own target, `eFree` — the truth minus the dither's modelled response —
+  it reads −3.6/−4.1.** Yet the dither's amplitude, swept twenty-fold, moves the pilot's fit by
+  0.01 and its deployment by nothing. So `eFree` IS corrupted on the corrected machine and the
+  dither is NOT the term that corrupts it; two faults that mask each other (rule 15), and the
+  one that remains in the subtraction is not identified.
+- **The lead probe** (`__LEADPROBE`, wired to `LEADPROBE=1`): the shared fit against the same
+  rows fitted on each lead alone, held-out. Feedback layer, bench: lead 0 shared 0.49/0.44
+  against per-lead 0.67/0.07; at lead 544 shared 0.79/0.64 against per-lead −0.03/−1.46. So
+  one weight vector for every lead costs the first channel a third at lead 0, and the per-lead
+  bank the shared fit replaced is far worse everywhere else — the pooling is a compromise, not
+  the fault.
+
+**WHAT IS PROVEN AND WHAT IS NOT.** Proven: the residual is a pose-scheduled linear function of
+the instrumented state, the generic rotary declaration reaches it exactly, and the pilot's row
+can now carry that block. Also proven, from the other side: a short-horizon pilot DOES fit it
+(0.88/0.85, 0.87/0.80) and then deploys the worst numbers in this arc (0.14x, 0.11x) because in
+the pilot the forecast's horizon and the QP's horizon are one constant, and a QP inverting a
+100-step plant over an 8-lead horizon rings at any gain. Not proven: any deployed feedback
+improvement beyond the plain layer's 1.25x on the soft cell. The pilot's fit pipeline has the
+gap — same rows, 0.49/0.44 against 0.96/0.99 — and its cause is not one knob: the target's
+subtraction, the shared-lead pooling and the horizon coupling each move it, none alone closes
+it, and every constant in that pipeline is derived from the others (rule 31 in its worst form).
+
+**THE REVISION THIS LICENSES, STATED AS A BUILD.** The feedback layer's forecast and its
+actuation have to be separated: a forecast bank fitted at the leads a correction can reach
+(lead 0 to about 250 steps, where the offline observer holds at 0.9 or better) on the RAW truth
+with the correction's own response modelled separately, driving a QP whose horizon is the
+plant's settle. That is a second row builder and a second target definition inside `pilot.js`,
+not a knob, and the offline instrument says what it should read before the machine is scored —
+0.96/0.99 on the record with the instruments, and 0.55/0.09 on the bench without them
+(§52.23's `PILOT-SHAPED` row), which bounds what it can deliver on the shipped machine to the
+second channel. Everything built here ships opt-in and off: `schedFn`, `schedOrder`,
+`schedLags`, `schedCmd`, `feedbackSched`, `instruments`, `feedbackGain`, `feedbackBasis`.

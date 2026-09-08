@@ -78,7 +78,10 @@ if (process.env.FB === '1' && process.env.INSTR === '1' && host.auto.built.stack
     const PS = p.sample, cap = [], Q = [];
     for (let i = 0; i < rec.x.length; i++) for (let r = 0; r < PS; r++) {
       const xr = rec.x[i];
-      cap.push({ m: xr.slice(0, 6), t: rec.e[i].slice(), x: { tool: [0, 0], wu: [xr[6] / 1e2, xr[7] / 1e2], w: [xr[8] / 1e2, xr[9] / 1e2], s1: xr[10] / 1e2 } });
+      // `tf`: the pilot's OWN target, eFree — the truth with the dither's modelled response
+      // subtracted — so TARGET=efree fits what the pilot fits and scores the programs' truth.
+      cap.push({ m: xr.slice(0, 6), t: rec.e[i].slice(), tf: p._fit && p._fit.eFree ? [p._fit.eFree[0][i], p._fit.eFree[1][i]] : null,
+        x: { tool: [0, 0], wu: [xr[6] / 1e2, xr[7] / 1e2], w: [xr[8] / 1e2, xr[9] / 1e2], s1: xr[10] / 1e2 } });
       Q.push(rec.cmd[i].slice());
     }
     scribble = { name: 'scribble', cap, LAP: Math.round(cap.length / 4), q: (k) => Q[Math.max(0, Math.min(Q.length - 1, k))], acc: cap.map(() => [0, 0]) };
@@ -112,6 +115,31 @@ const trigOf = (P, k) => { const r = at(P, k).m; return [Math.cos(r[0]), Math.si
 const sched = (v, tg) => { const out = []; for (const a of v) for (const b of tg) out.push(a * b); return out; };
 groups.push({ name: 'sched_m0', kind: 'sched', fn: (P, k) => { const r = at(P, k).m, q0 = P.q(k); return sched([r[0] - q0[0], r[1] - q0[1], r[2], r[3], r[4], r[5]], trigOf(P, k)); } });
 groups.push({ name: 'sched_inst', kind: 'schedinst', fn: (P, k) => { const x = at(P, k).x; return sched([x.wu[0], x.wu[1], x.w[0], x.w[1], x.s1], trigOf(P, k)); } });
+// THE GENERIC FORM (plan §52.25): the pilot cannot know its measured signals are angles, so the
+// scheduling vector is a second-order polynomial of the measured positions NORMALISED to the
+// channels' declared boxes — [q1, q2, q1², q1q2, q2²] — which spans sine and cosine over a box
+// of ±0.55 rad to a fraction of a percent, and means the same thing on a tank.
+const CH = host.auto.channels;
+// WITH THE ORDER-0 TERM: the first version of this vector had none, so the polynomial sets
+// lacked the unscheduled newest sample the trig sets carry through cos ≈ 1, and read as failures
+// of the form at every order (plan §52.25) — an instrument fault, found by comparing spans.
+const polyOf = (P, k) => { const r = at(P, k).m; const n = [0, 1].map((c) => (r[c] - (CH[c].lo + CH[c].hi) / 2) / ((CH[c].hi - CH[c].lo) / 2)); return [1, n[0], n[1], n[0] * n[0], n[0] * n[1], n[1] * n[1]]; };
+groups.push({ name: 'psched_m0', kind: 'psched', fn: (P, k) => { const r = at(P, k).m, q0 = P.q(k); return sched([r[0] - q0[0], r[1] - q0[1], r[2], r[3], r[4], r[5]], polyOf(P, k)); } });
+groups.push({ name: 'psched_inst', kind: 'pschedinst', fn: (P, k) => { const x = at(P, k).x; return sched([x.wu[0], x.wu[1], x.w[0], x.w[1], x.s1], polyOf(P, k)); } });
+// higher orders, to tell a Taylor error from a failure of the form
+const polyN = (P, k, order) => { const r = at(P, k).m; const n = [0, 1].map((c) => (r[c] - (CH[c].lo + CH[c].hi) / 2) / ((CH[c].hi - CH[c].lo) / 2)); const out = []; for (let i = 0; i <= order; i++) for (let j = 0; i + j <= order; j++) out.push(n[0] ** i * n[1] ** j); return out; };
+for (const ord of [3, 4]) {
+  groups.push({ name: `p${ord}sched_m0`, kind: `p${ord}sched`, fn: (P, k) => { const r = at(P, k).m, q0 = P.q(k); return sched([r[0] - q0[0], r[1] - q0[1], r[2], r[3], r[4], r[5]], polyN(P, k, ord)); } });
+  groups.push({ name: `p${ord}sched_inst`, kind: `p${ord}schedinst`, fn: (P, k) => { const x = at(P, k).x; return sched([x.wu[0], x.wu[1], x.w[0], x.w[1], x.s1], polyN(P, k, ord)); } });
+}
+// THE GENERIC TRIG FORM: each scheduling channel declared ROTARY contributes [cos q, sin q] of
+// its own angle, and the products of those across channels (order 2) span the chain's sum
+// angles without naming them — cos(q1+q2) = cos q1 cos q2 − sin q1 sin q2.
+const trigGen = (P, k) => { const r = at(P, k).m; const base = [Math.cos(r[0]), Math.sin(r[0]), Math.cos(r[1]), Math.sin(r[1])]; const out = base.slice(); for (let i = 0; i < 2; i++) for (let j = 2; j < 4; j++) out.push(base[i] * base[j]); return out; };
+groups.push({ name: 'tgsched_m0', kind: 'tgsched', fn: (P, k) => { const r = at(P, k).m, q0 = P.q(k); return sched([r[0] - q0[0], r[1] - q0[1], r[2], r[3], r[4], r[5]], trigGen(P, k)); } });
+groups.push({ name: 'tgsched_inst', kind: 'tgschedinst', fn: (P, k) => { const x = at(P, k).x; return sched([x.wu[0], x.wu[1], x.w[0], x.w[1], x.s1], trigGen(P, k)); } });
+groups.push({ name: 'lsched_m0', kind: 'lsched', fn: (P, k) => { const r = at(P, k).m, q0 = P.q(k); return sched([r[0] - q0[0], r[1] - q0[1], r[2], r[3], r[4], r[5]], polyOf(P, k).slice(0, 3)); } });
+groups.push({ name: 'lsched_inst', kind: 'lschedinst', fn: (P, k) => { const x = at(P, k).x; return sched([x.wu[0], x.wu[1], x.w[0], x.w[1], x.s1], polyOf(P, k).slice(0, 3)); } });
 // the quadratic lift is too wide for one matrix beside everything else; it is its own library
 const quad = (v) => { const out = []; for (let i = 0; i < v.length; i++) for (let j = i; j < v.length; j++) out.push(v[i] * v[j]); return out; };
 const quadGroup = { name: 'quad', kind: 'quad', fn: (P, k) => { const v = []; for (const l of MLAGS_Q) v.push(...at(P, k - l).m); return quad(v); } };
@@ -124,7 +152,7 @@ console.log(`  library: ${groups.length} groups, ${LIB.dim} columns; pilot caden
 // (load-side) encoder present during commissioning would supply as truth for a soft sensor.
 // TARGET=bend: the links' tip deflections (a strain gauge present during commissioning).
 const TARGET = process.env.TARGET || 'residual';
-const targetOf = (P, k) => TARGET === 'wu' ? P.cap[k].x.wu : TARGET === 'bend' ? P.cap[k].x.w : P.cap[k].t;
+const targetOf = (P, k) => TARGET === 'wu' ? P.cap[k].x.wu : TARGET === 'bend' ? P.cap[k].x.w : TARGET === 'efree' ? (P.cap[k].tf || P.cap[k].t) : P.cap[k].t;
 const accumulate = (gs, L, P, from, to, lead, tf = targetOf) => {
   const nt = tf(P, from).length;
   const A = new Float64Array(L.dim * L.dim), b = Array.from({ length: nt }, () => new Float64Array(L.dim));
@@ -214,6 +242,17 @@ const sets = {
   'THE OBSERVER the soft cell selected: command + scheduled sample + scheduled instruments': ['bias', 'cmd', 'sched_m0', 'sched_inst'],
   'CHAIN: command + scheduled sample + ESTIMATED states, scheduled (no instrument at deploy)': ['bias', 'cmd', 'sched_m0', 'est', 'sched_est'],
   'CHAIN + motor lags': ['bias', 'cmd', ...gm('motor'), 'sched_m0', 'est', 'sched_est'],
+  'GENERIC order-2 poly: command + scheduled sample + scheduled instruments': ['bias', 'cmd', 'psched_m0', 'psched_inst'],
+  'GENERIC order-1 (the pilot\'s form): command + scheduled sample + scheduled instruments': ['bias', 'cmd', 'lsched_m0', 'lsched_inst'],
+  'GENERIC order-2 poly, NO instruments: command + scheduled sample': ['bias', 'cmd', 'psched_m0'],
+  'GENERIC order-2 poly, NO instruments, + motor lags': ['bias', 'cmd', ...gm('motor'), 'psched_m0'],
+  'TRIG, NO instruments: command + scheduled sample': ['bias', 'cmd', 'sched_m0'],
+  'GENERIC order-3 poly: command + scheduled sample + scheduled instruments': ['bias', 'cmd', 'p3sched_m0', 'p3sched_inst'],
+  'GENERIC order-4 poly: command + scheduled sample + scheduled instruments': ['bias', 'cmd', 'p4sched_m0', 'p4sched_inst'],
+  'TRIG + order-2 poly together, with instruments': ['bias', 'cmd', 'sched_m0', 'sched_inst', 'psched_m0', 'psched_inst'],
+  'GENERIC TRIG (per-channel cos/sin, products): command + scheduled sample + scheduled instruments': ['bias', 'cmd', 'tgsched_m0', 'tgsched_inst'],
+  'GENERIC TRIG, NO instruments: command + scheduled sample': ['bias', 'cmd', 'tgsched_m0'],
+  'GENERIC TRIG, NO instruments, + motor lags': ['bias', 'cmd', ...gm('motor'), 'tgsched_m0'],
 };
 for (const lead of LEADS) {
   const tA = Date.now();
@@ -244,7 +283,7 @@ for (const lead of LEADS) {
   if (scribble && lead === LEADS[0]) {
     const accS = accumulate(groups, LIB, scribble, scribble.LAP, scribble.cap.length, lead);
     console.log(`  D. the observer and the pilot's shape across REGIMES (the excitation record against the programs):`);
-    for (const name of ['+ motor-side lags, linear (the pilot\'s shape)', 'INSTRUMENT: all three + motor lags + command', 'THE OBSERVER the soft cell selected: command + scheduled sample + scheduled instruments']) {
+    for (const name of ['+ motor-side lags, linear (the pilot\'s shape)', 'THE OBSERVER the soft cell selected: command + scheduled sample + scheduled instruments', 'GENERIC order-2 poly: command + scheduled sample + scheduled instruments', 'GENERIC order-1 (the pilot\'s form): command + scheduled sample + scheduled instruments', 'GENERIC order-3 poly: command + scheduled sample + scheduled instruments', 'GENERIC order-4 poly: command + scheduled sample + scheduled instruments', 'GENERIC TRIG (per-channel cos/sin, products): command + scheduled sample + scheduled instruments', 'GENERIC TRIG, NO instruments, + motor lags']) {
       const idx = idxOf(LIB, sets[name]);
       for (const lam of [1e-4, 1e-2]) {
         const Ws = fitSub(accS, idx, lam), Wd = fitSub(dietAcc, idx, lam);
