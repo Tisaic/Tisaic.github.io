@@ -12660,3 +12660,119 @@ absolute gains are small because its bare machine is already good (1.9e-1 agains
 E near 0.24 at dt 1, so no cell with a real machine's 10-20x separation can be built here at all.
 Nothing shipped moves: `ARM_BW` is a harness knob, unset is byte-identical, and the bench square
 still reads 1.7528e-1, 6.04x.
+
+### §52.29 THREE OF THIS PROJECT'S OWN CLAIMS RE-MEASURED IN THE CONFIGURATION THEY ARE ABOUT, AND ALL THREE MOVE
+
+§52.28 ended with a lever and two loose ends: whether the loop could be tuned CHEAPLY (its own
+sweep cost a ladder of commissionings), and whether §52.27's rectangle diet — quoted there as
+worth 10% and never scored on a program it had not seen — was an improvement at all. Both were
+measured. Both came back against the claim, and measuring the first exposed an instrument fault
+in §52.28 itself. `test/pilot/looptune.mjs`; bench K 0.25 / E 0.03 and stiff K 64 / E 0.20.
+
+**1. §52.28's "SATURATION IS NOT THE MECHANISM" IS WRONG, AND IT IS RULE 34 IN THE PLAINEST
+FORM.** That line rested on a saturation sweep run on the BARE machine — no compliance
+feedforward — while every number it was defending came from the ladder, which runs the
+CONVENTIONAL machine with `rc.feedforward` applied. Measured in the configuration the claim is
+about, on the three bench programs:
+
+```
+  BENCH K 0.25 / E 0.03, the conventional machine before any commissioning
+  bw       square     rounded    circle     geo mean   saturated   peak demand / tauMax   commissioned
+  7.7e-4   1.331e+0   1.020e+0   1.173e+0   1.168e+0     0.3%              0.94              2.19x
+  1.2e-3   1.093e+0   9.712e-1   1.015e+0   1.025e+0     0.8%              1.12              2.88x
+  2.0e-3   1.051e+0   8.743e-1   8.483e-1   9.204e-1     2.0%              1.62              6.04x  <- ships
+  3.0e-3   1.066e+0   7.752e-1   7.019e-1   8.341e-1     3.6%              2.66              4.79x
+  4.0e-3   1.074e+0   6.913e-1   6.111e-1   7.684e-1     4.6%              4.16              4.08x
+  6.0e-3   1.053e+0   5.753e-1   5.256e-1   6.828e-1     6.2%              8.11                —
+  8.0e-3   1.039e+0   5.225e-1   5.044e-1   6.493e-1     6.9%             12.72                —
+```
+
+The drive is clipping **2.0% of samples at the shipped bandwidth and 6.9% at the top, demanding
+1.6x to 12.7x its own torque limit**. Saturation is not merely present, it is the leading
+candidate for why the bench cell's commissioned score falls above 2e-3 — a learned linear
+feedforward is fitted through a drive that is running out, which is a nonlinearity it cannot
+express. §52.28's structural account (the loop is at the ceiling 1.9x of separation allows) is
+not refuted by this and is no longer the only explanation on the table; what IS refuted is the
+sentence saying saturation was ruled out.
+
+**2. AND THE CHEAP LOOP TUNING IS REFUSED, BECAUSE THE TWO OBJECTIVES DIVERGE.** Reading
+§52.28's runs back, the bare machine's error appeared to rank the bandwidths as the commissioned
+ladder did, which would have made loop tuning cost laps instead of commissionings. Measured
+across seven bandwidths and three programs it does not. On the bench cell the bare geometric
+mean falls MONOTONICALLY to the top of the sweep (1.168 → 0.649) while the commissioned score
+peaks at 2e-3 and falls away (6.04x → 4.08x): **above 2e-3 the loop that makes the conventional
+machine better makes what the learned controller can add worse**, and the two point in opposite
+directions. On the stiff cell they agree and both flatten past 4e-3 (bare 1.045e-1 → 1.034e-1,
+commissioned 1.27x → 1.33x) with saturation under 1%. So the free route works only where the
+drive is not the binding constraint, which is not the cell this project benches on. The apparent
+agreement in §52.28 was read off the SQUARE alone, where the first five bandwidths do rank
+together and the last two break it.
+
+**3. AND §52.27's RECTANGLE DIET IS NOT AN IMPROVEMENT — IT TRADES THE SQUARE FOR THE PROGRAMS
+IT WAS NEVER SCORED ON.** §52.27 read 6.56x and 6.85x on the bench square and 3.98x → 6.01x on
+the soft cell and called the diet's shape "worth 10%, not a factor". It never scored a held-out
+program, and the rectangles are the square's OWN CLASS — axis-aligned, sharp-cornered, the same
+four edge directions. Scored on the rounded rectangle and the circle, neither of which is a
+rectangle:
+
+```
+                          bench K 0.25 / E 0.03            soft K 0.25 / E 0.005
+  diet              square  rounded  circle  geo(HO)   square  rounded  circle  geo(HO)   min
+  poly4 (ships)     6.04x    5.74x   7.89x    6.73x     3.98x   3.77x   8.04x    5.51x    10.7
+  rectangles        6.56x    3.87x   3.42x    3.64x     6.01x   4.22x   3.65x    3.92x    11.2
+  rectangles+poly4  6.85x    4.99x   5.50x    5.24x     6.20x   5.18x   6.86x    5.96x    18.2
+```
+
+On the BENCH cell the shipped diet is the best of the three on programs it never saw (6.73x
+against 5.24x and 3.64x) and the rectangle diets buy the square by giving up 22% and 46% of that.
+On the SOFT cell the rectangles+polygons diet is better on two columns of three and still loses
+the circle (6.86x against 8.04x), so it fails target 1's "none made worse" on both cells — and it
+costs **70% more commissioning time** (18.2 machine-minutes against 10.7), against target 4. The
+soft cell's 6.01x that §52.27 called "the largest single move on that cell in this arc" is a diet
+moved closer to the test program, and its circle halves.
+
+**4. AND THE LAST UNCOMPOSED MECHANISM IS INERT — FOR A REASON THAT REFRAMES A RUN OF EARLIER
+RESULTS.** Guided commissioning (the tracker-attached online adaptation of "what must replace
+it", 9 of 9 cells improving at 1.79x geometric) had never been composed with the distilled
+policy. Composed, it costs 1.6 machine-minutes and returns the deployed object BIT-IDENTICAL on
+both cells — 1.7528e-1 / 5.74x / 7.89x on the bench and 5.2494e-1 / 3.77x / 8.04x on the soft
+cell, every figure, and 3,746 rows either way. Byte-identity that exact is never a small effect,
+so the ladder was made to state what it did (rule 61), and it did plenty:
+
+```
+  guided commissioning: 6 laps over 1 layer(s)   4.7557e-1 -> 2.7425e-1   KEPT
+```
+
+**A teacher 1.73x better on the machine taught a policy identical to five figures.** The cause is
+structural and it is in the host's own description: the teacher iterates the commissioned pilot
+with the MEASURED ERROR as its free response (`oracleF0`), so the model's forecast is replaced
+before the inverse is applied — and online adaptation updates exactly that forecast. The control
+turns the port off and the identity breaks:
+
+```
+  oracle        teacher's convergence on the 4 diet programs      policy   rounded   circle
+  ON  guided    (the cascade itself 4.7557e-1 -> 2.7425e-1)        6.04x    5.74x    7.89x
+  ON  control                                                      6.04x    5.74x    7.89x   identical
+  OFF control   1.54 / 1.53 / 1.58 / 1.55x                         1.34x    2.18x    2.32x
+  OFF guided    1.94 / 1.85 / 1.67 / 2.01x                         1.49x    2.36x    2.52x   +11%
+```
+
+With the model in the loop, adaptation is worth 11% on the policy and 8-9% on programs it never
+saw. With the oracle in the loop — which is worth 4.5x and is why it ships — it is worth exactly
+nothing. **So every route this project has tried that improves the plant MODEL was inert by
+construction rather than by measurement**: §52.16's Q-filter, its converged teacher solve and its
+rows-at-every-step, and now guided adaptation. The distilled policy's ceiling cannot be raised by
+a better model, because the object it learns from does not consult one. What can still move it is
+the diet, the basis, the teacher's cap, the iteration's authority — and the ORACLE's own quality,
+which is metrology and is already on record as worth 1.5x between an exact tracker and the best
+noisy one (§50.1). (`converge()` also captured `auto.stack` and never used it, which is what a
+reader would check first to ask this question; removed.)
+
+**NOTHING SHIPS FROM THIS SECTION.** The diet default stays where it was, the loop stays at
+2e-3, and the value delivered is three corrections to claims this file was carrying: a saturation
+sweep run in the wrong configuration, a rank agreement read off one program of three, and a diet
+scored only on the class it was drawn from. The pattern in all three is the same one rule 34
+names — measure in the configuration the claim is about — and it is the pattern §52.26.5 was
+caught by two sections ago. The fourth result is not a correction but a boundary, and it is the
+most useful thing here: it says which half of this design is worth working on and which half
+cannot pay, and it was found by a change that came back byte-identical (rule 21, read forwards).

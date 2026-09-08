@@ -114,6 +114,10 @@ const host = makeArmHost({
   ...(DIET === 'rects' || DIET === 'rectspoly' ? { distilPath: [
     ...[[5, 11], [11, 5], [6, 6], [10, 10]].map(([w, h]) => sharpRect({ w, h, centre: [12, 0], feed: F, accel: 4e-5, cornerDt: 40 })),
     ...(DIET === 'rectspoly' ? designDemoPaths({ centre: [12, 0], feeds: [F, F], rMin: 3.4, rSpan: 2.4 }) : [])] } : {}),
+  // GUIDED=<laps>: the commissioning-phase online adaptation (plan §52.29). It adapts the CASCADE,
+  // which in this configuration is the distilled policy's TEACHER rather than a rung that ships, so
+  // what it buys here is a better teacher and not a better deployed object.
+  ...(process.env.GUIDED ? { guidedLaps: +process.env.GUIDED } : {}),
   ...(process.env.CAP ? { distilCap: +process.env.CAP } : {}),
   ...(process.env.TEACHCAP ? { distilTeachCap: +process.env.TEACHCAP } : {}),
   // Q=<steps>: a circular moving-average Q-filter on the teacher's learned increment (plan §52.16).
@@ -299,6 +303,15 @@ console.log(`\n  shipped ${JSON.stringify(rep.deployed)}   ${rep.base.toExponent
 const _st = host.auto.built.stack; if (_st) console.log(`  pilot sample stride ${_st.sample} steps, so the ±256-sample window spans ±${256 * _st.sample} steps${process.env.WIN ? ` (WIN ${process.env.WIN}: ±${Math.round(256 * +process.env.WIN) * _st.sample})` : ''}`);
 console.log(`  machine samples ${host.samples().samples.toLocaleString()} over ${host.samples().runs} runs`
   + `  (${(host.samples().samples / 1000 / 60).toFixed(1)} min at 1 ms)  wall ${Math.round((Date.now() - t0) / 1000)} s`);
+// THE GUIDED PHASE MUST STATE WHAT IT DID (rule 61, plan §52.29). Composed with the distilled
+// policy it comes back byte-identical while costing 1.6 machine-minutes, and "the ladder scored it
+// and rolled it back" is a different finding from "it never reached the deployed object".
+if (rep.guided) {
+  const g = rep.guided;
+  console.log(`\n  guided commissioning: ${g.laps} laps over ${g.layers} layer(s)  ${g.before.toExponential(4)} -> ${g.after.toExponential(4)}  ${g.kept ? 'KEPT' : 'ROLLED BACK'}`);
+} else if (process.env.GUIDED) {
+  console.log(`\n  guided commissioning: asked for ${process.env.GUIDED} laps and the ladder reports NOTHING — the phase did not run (it is inside the cascade rung and needs that rung armed)`);
+}
 const d = rep.distil;
 if (d && d.runs) {
   console.log('\n  training runs (gain of the converged lap-periodic correction on each):');
