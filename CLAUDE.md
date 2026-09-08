@@ -1318,15 +1318,15 @@ an engineer would actually meet:
   refuses what was never built); **the pilot cascade**, shown only when it was built and the
   distilled model is not the armed controller — the teacher, at ~9,500 MAC, offered so a plant
   where the policy refused can still be seen corrected, with the scan verdict saying it does not
-  fit; **the tracker stays on
-  the machine**, which routes the truth into `observe()` so the distilled model keeps learning
-  through the SAME streaming recursion the fit used (`DistilPolicy.observe`, paid once per
-  DECISION — the pilot's RLS is 72,600 MAC/sample and is why the old composition only fit
-  sliced); and **lap learning**, withheld by the library on any program but the one it learned.
-  The tracker-stays law is measured for the PILOT and does NOT transfer here by assertion: it
-  ships off, and the page scores it a lap either way. The plant's sign for that update is
-  DECLARED by the host (`adaptSign: -1` on this arm — truth is actual − commanded and the
-  correction adds to the command), never guessed by the block.
+  fit; **Learn on this program ▶** (plan §52.18), which teaches the deployed model on the program
+  in front of it with the tracker attached, by the ladder's own law — the pilot's model inverse
+  against the measured error, one increment per pass, the model re-fitted and re-measured —
+  **6.04x → 15.88x in four passes, 17.98x in eight on the bench square, 3.98x → 20.52x on the
+  soft cell**, still a model of the commanded reference; and **lap learning**, withheld by the
+  library on any program but the one it learned. The box that used to sit here — "the tracker
+  stays on the machine, keep learning every scan", a unit-gain law fed every decision — was
+  measured at **0.54x after twelve laps and is gone**: a law with no plant model in it pairs the
+  residual with the wrong rows on a plant that answers hundreds of steps later.
 - **PLC scan budget** — `auto.cost()` for the armed set at the selected task period, the PEAK
   cycle as the verdict, and the learning update added to the peak when the tracker is on.
 - **The last model is kept.** After a commissioning the DEPLOYED object is stored —
@@ -1428,7 +1428,12 @@ features) improves the polygons in-sample and is REFUSED on the square at 0.65x:
 buys less transfer, for the fourth time. Normalised rows are inert on the number; a converged
 teacher solve is inert; the applied control is 2-3x the rms of the error it cancels, so it is
 not small. What bounds a program-agnostic feedforward here is how far the commissioning diet is
-from the program it will run.
+from the program it will run. **AND THE COMPOSITION THAT CLOSES IT IS MEASURED AND ON THE PAGE
+(plan §52.18): teach the deployed model on the program it is running, with the tracker
+attached, by the ladder's own parametric law — 6.04x → 15.88x (four passes) → 17.98x (eight) on
+the bench square, 3.98x → 20.52x on the soft cell, at +4.4 / +7.3 machine-minutes, the result
+still a model of the commanded reference.** The unit-gain "keep learning every scan" law that
+was offered for this measured 0.54x and is removed.
 
 **ITS FIRST READING WAS A REFUSAL, WHICH WAS THE PAGE DOING ITS JOB (plan §52.7).** Distil-only
 ladder on the bench square: `②d distilled — REFUSED` at 0.22x (demo), 0.43x (fast, browser),

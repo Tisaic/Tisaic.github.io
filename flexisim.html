@@ -8,7 +8,7 @@
   <title>FlexiSim — Commissioning Bench</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:1087,built:"2026-09-07T23:50:13Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:1088,built:"2026-09-08T00:37:16Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
 
   <style>
@@ -155,8 +155,20 @@
     <label><input type="checkbox" id="arm-stack" disabled /> the pilot cascade — the distilled
       model's TEACHER, kept only when the distilled model REFUSED on this plant; a receding-horizon
       solve at ~9,500 MAC per cycle, so read the scan budget below</label>
-    <label><input type="checkbox" id="online" disabled /> the tracker stays on the machine — keep
-      learning from the error every scan</label>
+    <div class="controls" style="margin:6px 0">
+      <button id="learn" class="sec" disabled>Learn on this program ▶</button>
+      <label>passes
+        <select id="learn-passes">
+          <option value="4" selected>4 — measured 6.0× → 15.9× on the bench square</option>
+          <option value="8">8 — measured 6.0× → 18.0×</option>
+          <option value="1">1 — a quick look</option>
+        </select></label>
+    </div>
+    <p class="hint">With the tracker attached, the deployed model is taught on the program in front of it by the
+      ladder's own law — the pilot's model inverse against the measured error, one increment per pass, the
+      model re-fitted to what it applied plus that increment, kept only if it measures better. The result is
+      still a model of the commanded reference, with no lap index, and it replaces the deployed one; the old
+      "keep learning every scan" box was a unit-gain law that measured 0.54× and is gone.</p>
     <label><input type="checkbox" id="arm-hff" disabled /> lap learning — a table indexed by
       lap phase, applied only on the program it learned</label>
     <label>PLC scan
@@ -233,7 +245,7 @@ let frames = 0;
 // The ladder: host, report, and the arm it is turning.
 let host = null, rep = null, commissioning = false, abort = false, liveArm = null;
 let t0 = 0, t1 = 0, lastProg = 0, stage = null, plan = null, grade = 'full';
-let onlineFlag = false;              // cached: read once per servo step
+let learning = false;                // a learn-on-this-program pass is running the arm
 let restored = null;                 // what storage handed back, if it matched this machine
 
 /*
@@ -349,6 +361,54 @@ async function build() {
       : (restored ? 'restored from storage — press Run' : 'model kept — press Run'))
       : 'ready — press Run', rep ? (plantMismatch() ? 'warn' : 'good') : '');
   } finally { busy = false; sync(); }
+}
+
+/*
+ * LEARN ON THE PROGRAM IN FRONT OF THE MACHINE, WITH THE TRACKER ATTACHED (plan §52.18). The
+ * deployed model is iterated by the ladder's own parametric law on the live program: measured
+ * on the bench square 6.04x → 15.88x in four passes and 17.98x in eight, and on the soft cell
+ * 3.98x → 20.52x, at 4-7 machine-minutes. It runs the arm through the same host and the same
+ * borrowed machine a commissioning does, so Stop, the stage and the cost record all behave as
+ * they do there; the machine is then driven home and the learned model replaces the deployed
+ * one in storage.
+ */
+async function startLearn() {
+  if (commissioning || learning || busy || !arm || !host || !rep || !host.auto.deployed.distil) return;
+  const passes = +$('learn-passes').value;
+  running = false; pendingProgram = false; approach = null;
+  k = 0; lap = 0; score = newScore(); lapScore = newScore(); lastLap = null; trail = [];
+  learning = true; commissioning = true; abort = false; liveArm = arm;
+  t0 = performance.now(); t1 = 0;
+  host.attach(arm, servo, rc, prof, prof.lap);
+  setBadge(`learning on this program — ${passes} pass(es) with the tracker attached`, 'warn');
+  const before = rep.best;
+  sync();
+  let lr = null;
+  try {
+    const live = await host.liveRuns();
+    lr = await host.auto.learnLive(live, { passes, onPass: (p2) => {
+      rep.rungs.push({ name: `learned on this program — pass ${p2.pass}`, score: p2.score, gain: null, deployed: p2.accepted, note: p2.accepted ? 'kept' : 'not kept' });
+      $('rungs').innerHTML = rungsHTML(rep.rungs);
+    } });
+    // THE NUMBER IS A SCORED RUN, the same one every rung is judged by, not the teaching laps'.
+    const r = await host.run(null, null);
+    rep.best = r.score; rep.gain = rep.base / rep.best;
+    rep.learned = { passes: lr.passes, before, after: r.score, changed: lr.changed };
+  } catch (e) {
+    const msg = e && e.message ? e.message : String(e);
+    setBadge(abort ? 'stopped — the model is as it was' : `learning failed — ${msg}`, abort ? 'warn' : 'bad');
+    learning = false; commissioning = false; abort = false; liveArm = null;
+    host.attach(arm, servo, rc, prof, prof.lap); host.auto.beginRun();
+    home(); sync(); return;
+  }
+  learning = false; commissioning = false; abort = false; liveArm = null; t1 = performance.now();
+  host.attach(arm, servo, rc, prof, prof.lap);
+  host.auto.beginRun();
+  home();
+  $('rungs').innerHTML = rungsHTML(rep.rungs);
+  saveModel();
+  setBadge(`learned on this program in ${Math.round((t1 - t0) / 1000)} s — ${before.toExponential(3)} → ${rep.best.toExponential(3)} (${rep.gain.toFixed(2)}× over the conventional machine). Press Run`, 'good');
+  sync();
 }
 
 /* ==================================================================================
@@ -472,7 +532,7 @@ function elbowXY(a) {
 }
 // WHICH ARM THE STAGE DRAWS: the ladder's while it commissions, this page's otherwise. It
 // is the same OBJECT the ladder is scoring, not a pose copied from it.
-const drawnArm = () => (commissioning && liveArm ? liveArm : arm);
+const drawnArm = () => ((commissioning || learning) && liveArm ? liveArm : arm);
 
 function draw() {
   const cv = $('cv'), st = $('stage');
@@ -607,8 +667,9 @@ function stepOnce() {
     // THE TRACKER IS AN INSTALLATION PROPERTY. Withheld, every rung stays frozen at what
     // commissioning fitted. Supplied, the distilled model keeps learning from the error the
     // machine really has. A cached flag, because this runs once per servo step.
-    const jt = onlineFlag ? host.worldToJoint([tool[0] - cmd.x, tool[1] - cmd.y], { q: [q1, q2] }) : null;
-    host.auto.observe([en[0].angle, en[1].angle, en[0].speed * 1e3, en[1].speed * 1e3, tau[0] * 1e3, tau[1] * 1e3], jt);
+    // NO TRUTH AT DEPLOY. The unit-gain law that used to be fed here measured 0.54x after twelve
+    // laps (plan §52.18); learning on the program is a teaching pass, not a per-step update.
+    host.auto.observe([en[0].angle, en[1].angle, en[0].speed * 1e3, en[1].speed * 1e3, tau[0] * 1e3, tau[1] * 1e3], null);
   }
   const dec = decompose(prof, tool, cmd);
   score.step(dec.contour, dec.lag, tau, [arm.j1.wM, arm.j2.wM]);
@@ -875,13 +936,12 @@ function plcHTML() {
   const rows = Object.entries(c.rungs).map(([kk, r]) => `<tr><td>${label[kk] || kk}</td>`
     + `<td class="num">${(r.mac || 0).toLocaleString()}</td><td class="num">${(100 * (r.mac || 0) / budget()).toFixed(1)}%</td>`
     + `<td class="num">${((r.bytes || 0) / 1024).toFixed(1)} kB</td>`
-    + `<td>${kk === 'distil' && onlineFlag ? `+ ${r.fitMacPerRow.toLocaleString()} MAC per decision while learning` : ''}</td></tr>`);
+    + `<td></td></tr>`);
   if (!rows.length) rows.push('<tr><td colspan="5">nothing armed — the conventional machine is running</td></tr>');
   // THE PEAK IS THE VERDICT: "under 10%, ALWAYS", not on average. The learning update, when
   // the tracker is on, is paid once per decision and is added to the peak here rather than
   // averaged away.
   let peak = c.mac;
-  if (onlineFlag && c.rungs.distil) peak += c.rungs.distil.fitMacPerRow;
   const pct = 100 * peak / budget();
   const verdict = pct <= 100
     ? `<b class="good">FITS</b> — ${peak.toLocaleString()} MAC in the peak cycle, ${pct.toFixed(1)}% of ${budget().toLocaleString()}`
@@ -927,7 +987,7 @@ function statsHTML() {
     const on = Object.entries(a).filter(([, v]) => v.on).map(([kk]) => kk === 'distil' ? 'distilled' : kk === 'hff' ? 'lap learning' : kk === 'stack' ? 'pilot cascade' : kk);
     rows.push(['armed', (on.join(' + ') || 'nothing — the conventional machine')
       + (a.hff.on && a.hff.offProgram > 0 ? ' · <b>lap learning is being WITHHELD: this is not the program it learned</b>' : '')
-      + (onlineFlag && host.auto.distil ? ` · learning, ${host.auto.distil.adapted().toLocaleString()} rows so far` : '')
+      + (rep && rep.learned ? ` · <b>learned on this program</b>: ${rep.learned.passes} pass(es), ${rep.learned.before.toExponential(3)} → ${rep.learned.after.toExponential(3)}` : '')
       + distilFadeNote()]);
   }
   return rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('');
@@ -983,9 +1043,9 @@ function sync() {
   $('arm-stack').parentElement.style.display = (!a || !a.stack.built || (!a.stack.on && a.distil.on)) ? 'none' : '';
   if (!a) { $('arm-distil').checked = false; $('arm-hff').checked = false; $('arm-stack').checked = false; }
   else { $('arm-distil').checked = a.distil.on; $('arm-hff').checked = a.hff.on; $('arm-stack').checked = a.stack.on; }
-  $('online').disabled = !a || !a.distil.on || !settled;
-  if ($('online').disabled) $('online').checked = false;
-  onlineFlag = $('online').checked;
+  $('learn').disabled = !a || !a.distil.on || !idle || !(host && host.auto.built && host.auto.built.stack);
+  $('learn').textContent = learning ? 'Stop ■' : 'Learn on this program ▶';
+  $('learn-passes').disabled = !idle;
   $('state').textContent = commissioning ? 'commissioning…' : rep ? `${rep.restored ? 'restored' : 'shipped'} ${rep.gain.toFixed(2)}×` : 'not commissioned';
   $('state').className = 'pill ' + (commissioning ? 'warn' : rep ? 'good' : '');
   $('cost').innerHTML = costHTML(); $('cost').hidden = !$('cost').innerHTML.trim();
@@ -1033,7 +1093,7 @@ $('shape').addEventListener('change', () => { pendingProgram = true; if (!runnin
 $('s-feed').addEventListener('change', () => { pendingProgram = true; if (!running) { home(); tryRestore(); } sync(); });
 for (const id of ['s-spf', 's-feed', 's-k', 's-e', 's-mag']) $(id).addEventListener('input', sync);
 for (const id of ['arm-distil', 'arm-stack', 'arm-hff']) $(id).addEventListener('change', applyArm);
-$('online').addEventListener('change', sync);
+$('learn').addEventListener('click', () => { if (learning) { abort = true; setBadge('stopping at the next frame…', 'warn'); return; } startLearn(); });
 for (const id of ['scan', 'grade', 'periodic', 'ghost-mode', 'ghost-off']) $(id).addEventListener('input', sync);
 
 /** The debug dump, so a phone report can be a paste (rule 28) and the smoke test a number. */
@@ -1047,7 +1107,7 @@ window.__flxDbg = () => (arm ? {
     gain: rep ? rep.gain : null, restored: !!(rep && rep.restored), grade, scanMs: scanMs(),
     cost: restored ? restored.cost : (host && host.samples ? host.samples() : null),
     armed: host && rep ? host.auto.armed() : null, plc: host && rep ? host.auto.cost() : null,
-    online: onlineFlag, adapted: host && host.auto.distil ? host.auto.distil.adapted() : 0,
+    learned: rep && rep.learned ? rep.learned : null, learning,
     // THE RUNG'S OWN DIAGNOSTICS, so a refusal can be read to its cause: which training runs
     // converged and how far, and what the fit thought of itself before the machine scored it.
     // A 0.22x with a high in-sample R² is a deploy-side fault; with a low one it is the diet or

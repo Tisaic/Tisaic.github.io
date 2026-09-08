@@ -1791,7 +1791,7 @@ const halted = async (label) => {
       bench: window.__flxDbg().K === 0.25 && window.__flxDbg().E === 0.03 && window.__flxDbg().shape === 'sharp' }; });
   check('flexisim: the stage has a real box and the page does not scroll sideways', geo.w > 200 && geo.h > 150 && geo.doc <= geo.win + 2, JSON.stringify(geo));
   check('flexisim: it opens on the bench configuration — K 0.25 / E 0.03 on the square', geo.bench, JSON.stringify(geo));
-  const gate = await fx.evaluate(() => ['arm-distil', 'arm-hff', 'online'].map((id) => document.getElementById(id).disabled));
+  const gate = await fx.evaluate(() => ['arm-distil', 'arm-hff', 'learn'].map((id) => document.getElementById(id).disabled));
   check('flexisim: with nothing commissioned, no rung can be armed', gate.every(Boolean), JSON.stringify(gate));
   const stkBox = await fx.evaluate(() => getComputedStyle(document.getElementById('arm-stack').parentElement).display === 'none');
   check('flexisim: …and the cascade box is not on screen until a ladder has built one (hidden by style, not by `hidden` — rule 52)', stkBox, `display none: ${stkBox}`);
@@ -1990,7 +1990,7 @@ if (!FULL) {
   const st = await fx.evaluate(() => { const d = window.__flxDbg(); return {
     badge: document.getElementById('badge').textContent, btn: document.getElementById('commission').textContent,
     disabled: document.getElementById('commission').disabled, have: d.auto.have, rows: d.auto.rows, live: d.drawnPose.live,
-    gate: ['arm-distil', 'arm-hff', 'online'].map((id) => document.getElementById(id).disabled), stored: d.stored, cells: d.cells,
+    gate: ['arm-distil', 'arm-hff', 'learn'].map((id) => document.getElementById(id).disabled), stored: d.stored, cells: d.cells,
     prog: document.getElementById('prog').textContent, rungs: document.getElementById('rungs').textContent }; });
   check('flexisim/commission: Stop unwinds the ladder — the page says so, nothing is deployed and the host is gone', /^stopped/.test(st.badge) && !st.have && st.rows === 0 && !st.live, JSON.stringify(st));
   check('flexisim/commission: …and the record says STOPPED rather than describing the scoring it was doing', /stopped/.test(st.prog) && !/commissioning|scoring|lap \d/.test(st.prog + st.rungs), JSON.stringify({ prog: st.prog, rungs: st.rungs }));
@@ -2036,6 +2036,21 @@ await halted('the whole commissioning');
   const plc = await fx.evaluate(() => document.getElementById('plc').textContent);
   check('flexisim/plc: the budget panel renders a verdict for the armed set', /FITS|DOES NOT FIT|nothing armed/.test(plc), plc.slice(0, 120));
   if (d.auto.deployed.distil) check('flexisim/plc: …and the distilled model FITS a 1 ms scan outright', /FITS/.test(plc) && !/DOES NOT/.test(plc), plc.slice(0, 160));
+  // LEARN ON THIS PROGRAM (plan §52.18): one pass with the tracker attached, through the same
+  // host; a "learned" row appears, the machine is driven home, and the model is re-stored.
+  if (d.auto.deployed.distil) {
+    const canLearn = await fx.evaluate(() => !document.getElementById('learn').disabled);
+    check('flexisim/learn: the learn button is offered once a distilled model is deployed with its teacher built', canLearn, 'disabled');
+    if (canLearn) {
+      await fx.selectOption('#learn-passes', '1');
+      await fx.click('#learn');
+      await fx.waitForFunction(() => { const x = window.__flxDbg(); return (!x.learning && x.learned) || /^halted:|failed/.test(document.getElementById('badge').textContent); }, null, { timeout: 1800000 });
+      await fx.waitForFunction(() => !window.__flxDbg().approaching, null, { timeout: 120000 });
+      const l = await fx.evaluate(() => { const x = window.__flxDbg(); return { learned: x.learned, rows: [...document.querySelectorAll('#rungs tr td:first-child')].map((t) => t.textContent).filter((t) => /learned on this program/.test(t)), badge: document.getElementById('badge').textContent, stored: x.stored }; });
+      console.log(`  flexisim/learn: ${JSON.stringify(l.learned)} rows ${JSON.stringify(l.rows)}`);
+      check('flexisim/learn: one pass ran through the ladder\u2019s law, produced its row, and re-scored the deployed model', !!l.learned && l.learned.passes === 1 && l.rows.length === 1 && Number.isFinite(l.learned.after), JSON.stringify(l));
+    }
+  }
   await fx.screenshot({ path: join(SHOTS, '06-flexisim-shipped.png') });
 }
 

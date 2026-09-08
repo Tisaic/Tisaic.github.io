@@ -11546,3 +11546,60 @@ REGIMES (corner angle, stop-and-go, pose region) rather than random polygons —
 words — and a deploy-time adaptation that closes the rest on the machine (the tracker-stays
 path, which is built). Not measured here: a diet of squares and rectangles at several sizes
 and poses scored on a held-out rectangle, which is the experiment target 1 actually asks for.
+
+### §52.18 THE COMPOSITION: TEACH THE DEPLOYED MODEL ON THE PROGRAM IN FRONT OF IT — 6x → 16-18x ON THE SQUARE, 4x → 21x ON THE SOFT CELL
+
+The owner's reading of §52.17: if there is no code bug it is a composition issue — the arm is
+capable, the lap-converged path proves it, and the deployed decisions are nowhere near it.
+That is exactly what the numbers said: the same policy reads 14x taught on the program and 6x
+taught on polygons. So the composition question is how the deployed model gets taught on the
+program it is running, without becoming a lap index.
+
+**THE BOX THE PAGE OFFERED FOR THIS WAS A UNIT-GAIN LAW, AND IT MAKES THE MACHINE WORSE.** "The
+tracker stays on the machine — keep learning from the error every scan" fed the deployed
+policy's recursion `applied + adaptSign · adaptRate · truth` at every decision. CLAUDE.md
+recorded it as "new on this rung and unmeasured". Measured (`ADAPT=12`), contour rms on the
+square, frozen policy 1.047e-1 on its last lap:
+
+```
+  lap   0        1        2        4        7        11      then frozen again
+  1.5e-1 (ramp)  1.568e-1 1.605e-1 1.708e-1 1.800e-1 1.932e-1   1.936e-1   → 0.54x
+```
+
+Every lap with the tracker on makes the next lap worse, and the damage stays when the tracker
+comes off. The plant answers a correction hundreds of steps later, and a unit-gain law that
+pairs the residual at k with the row at k learns to mend the wrong rows; pairing them with a
+lag (`adaptLag` 250 / 500 / 1000 steps) reads 0.51x / 0.45x / 0.47x, and a tenth of the rate
+merely slows it (0.93x). The law has no model of the plant in it, and on this plant that is
+fatal. It is removed from the page.
+
+**THE LAW THAT WORKS IS THE ONE THE LADDER ALREADY TEACHES WITH.** `AutoStack.learnLive` runs
+§52.16's parametric iteration on the live program from the DEPLOYED policy: drive the program
+with the policy and record the truth; drive it with the policy and the pilot ON, its free
+response replaced by that record, so the pilot adds one model-inverse increment; re-fit a fresh
+policy to `policy + increment`; re-measure it; keep it only if it measures better. The host
+describes the production path as a teachable run (`liveRuns`), the same object the training
+programs are. `LEARN=<passes>` in the harness, from the shipped commissioning:
+
+```
+                                  shipped    pass 1    pass 2    pass 3    pass 4    pass 8    scored run
+  bench square (E 0.03)           6.04x      (teaching laps 8.7e-3 → 6.7e-3 → 5.9e-3 contour)  15.88x at 4, 17.98x at 8
+  soft cell    (E 0.005)          3.98x      (1.76e-2 → 1.05e-2)                                20.52x at 4
+  machine time                    10.7 min   +4.4 min for four passes, +7.3 for eight
+```
+
+**16-18x on the square and 21x on the soft cell from a model that is still a function of the
+commanded reference** — no lap index, the same 93 coefficients, the same 274 MAC/decision — where
+the lap-converged path reads 14-19x. That is the plant's capability reached by a deployable
+object, and it is the composition the north star needs: commission once on a diet for
+coverage, then teach the deployed model on each program with the tracker attached for a few
+passes. It is honest about its cost: the tracker is attached during those passes, and each pass
+is two drives of the program producing nothing. It ships on the page as **Learn on this
+program ▶** with a pass count (4 / 8 / 1), through the same borrowed machine, Stop, stage and
+cost record a commissioning uses; the model it produces replaces the deployed one in storage,
+and the pill and the score are re-measured by a scored run, not by the teaching laps.
+
+**WHAT IS NOT MEASURED:** whether a model learned on the square still carries to the polygons
+(it is fitted fresh each pass to the square's own rows, from a policy that started on the
+polygons — the parametric control in §52.16 says the polygons' regime is not retained by that
+route), and the same on the page at demo grade, where the full tier's check runs one pass.

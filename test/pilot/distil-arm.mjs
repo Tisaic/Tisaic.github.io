@@ -114,6 +114,9 @@ const host = makeArmHost({
   ...(process.env.TEACHITERS ? { distilTeachIters: +process.env.TEACHITERS } : {}),
   // SCHED=1: the pose-scheduled map (every window feature also times the pose offset).
   ...(process.env.SCHED === '1' ? { distilSchedule: 'pose' } : {}),
+  // ADAPTLAG=<steps> / ADAPTRATE=<x>: the tracker-stays law's pairing lag and gain (plan §52.18).
+  ...(process.env.ADAPTLAG ? { distilAdaptLag: +process.env.ADAPTLAG } : {}),
+  ...(process.env.ADAPTRATE ? { distilAdaptRate: +process.env.ADAPTRATE } : {}),
   // STD=1: standardised rows (each feature divided by its rms over the training rows).
   ...(process.env.STD === '1' ? { distilStandardize: true } : {}),
   // SOFFS=a,b,c: the direction-of-travel block's offsets, in pilot samples (default none).
@@ -159,6 +162,35 @@ const heldPolicy = (p, tr, refAt = tr.refAt, speedAt = tr.speedAt) => {
   const st = p.stride || 1; let held = [0, 0];
   return { at: (k) => { if (k % st === 0) held = p.act(refAt, k, speedAt(k)); return held; } };
 };
+// ADAPT=<laps>: THE TRACKER STAYS ON THE MACHINE (plan §52.18). Run the bench square with the
+// truth routed into `observe` — the deployed policy's own streaming recursion continuing on
+// the program in front of it — and score every lap, so the composition the page offers as a
+// box is a number rather than an assertion.
+if (process.env.ADAPT && host.auto.deployed.distil) {
+  const N = +process.env.ADAPT;
+  const lapRms = (r) => r.lapE.map((le) => { let s2 = 0; for (let k = 0; k < le.length; k++) s2 += le[k] * le[k]; return Math.sqrt(s2 / le.length); });
+  const frozen = await host.run(null, null, 3, false);
+  const fr = lapRms(frozen);
+  console.log(`\n  the tracker stays on: contour rms per lap on the square (frozen policy ${fr[fr.length - 1].toExponential(3)} on its last lap)`);
+  const r = await host.run(null, null, N, true);
+  const lr = lapRms(r);
+  console.log('    ' + lr.map((v, i) => `lap ${i}: ${v.toExponential(3)}`).join('\n    '));
+  console.log(`    adapted ${host.auto.distil.adapted().toLocaleString()} rows; frozen -> adapted last lap ${(fr[fr.length - 1] / lr[lr.length - 1]).toFixed(2)}x`);
+  const after = await host.run(null, null, 3, false);
+  const ar = lapRms(after);
+  console.log(`    then FROZEN again (tracker off): ${ar[ar.length - 1].toExponential(3)} on its last lap (${(fr[fr.length - 1] / ar[ar.length - 1]).toFixed(2)}x over the commissioned policy)`);
+}
+// LEARN=<passes>: learn on the bench square itself with the tracker attached, by the ladder's own
+// parametric law (plan §52.18), then score the square frozen.
+if (process.env.LEARN && host.auto.deployed.distil) {
+  const before = await host.run(null, null);
+  const live = await host.liveRuns();
+  const lr = await host.auto.learnLive(live, { passes: +process.env.LEARN,
+    onPass: (p2) => console.log(`    pass ${p2.pass}: ${p2.score.toExponential(4)} on the live program${p2.accepted ? '' : ' — not kept'}`) });
+  const after = await host.run(null, null);
+  console.log(`\n  learned on the live program (${lr.passes} passes, ${lr.changed ? 'policy replaced' : 'policy unchanged'}): square ${before.score.toExponential(4)} -> ${after.score.toExponential(4)}   ${(rep.base / after.score).toFixed(2)}x over the conventional machine (was ${(rep.base / before.score).toFixed(2)}x)`);
+  console.log(`  machine samples now ${host.samples().samples.toLocaleString()} (${(host.samples().samples / 60000).toFixed(1)} machine-min)`);
+}
 const pol = host.auto.built.distil;
 if (pol && pol.W) {
   console.log('\n  the policy on its OWN training programs (BARE machine -> with the policy; the square above is over the CONVENTIONAL machine):');
