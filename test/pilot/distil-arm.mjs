@@ -14,7 +14,7 @@
  */
 import { machine, settle, commissionComp } from '../flexisim/_rig.mjs';
 import { makeArmHost } from '../../lib/flexisim/autohost.js';
-import { sharpRect } from '../../lib/flexisim/toolpath.js';
+import { sharpRect, roundedRect, circle } from '../../lib/flexisim/toolpath.js';
 import { designDemoPaths } from '../../lib/flexisim/demopath.js';
 import { HarmonicFF } from '../../lib/pilot/hff.js';
 import { DistilPolicy } from '../../lib/pilot/distil.js';
@@ -182,14 +182,38 @@ if (process.env.ADAPT && host.auto.deployed.distil) {
 }
 // LEARN=<passes>: learn on the bench square itself with the tracker attached, by the ladder's own
 // parametric law (plan §52.18), then score the square frozen.
+// HELD-OUT PROGRAMS the model has never been shown — the rounded rectangle and the circle — and
+// the commissioning diet: scored with the policy BEFORE and AFTER learning on the square, so a
+// gain that is a memory of the square (worse elsewhere) reads as one.
+const heldOut = await host.distilRuns({ paths: [
+  roundedRect({ w: 8, h: 8, r: 1.5, centre: [12, 0], feed: F, accel: 4e-5, cornerDt: 40, closed: true }),
+  circle({ r: 4, centre: [12, 0], feed: F, accel: 4e-5, cornerDt: 40 })] });
+const heldNames = ['rounded rectangle', 'circle'];
+const scoreSet = async (label, p2, set, names) => {
+  const out = [];
+  for (let i = 0; i < set.length; i++) {
+    const tr = set[i];
+    const b = await tr.run(null), w = await tr.run(heldPolicy(p2, tr));
+    out.push(b.score / w.score);
+    console.log(`    ${label}: ${names[i]} (lap ${tr.lap})  ${b.score.toExponential(4)} -> ${w.score.toExponential(4)}   ${(b.score / w.score).toFixed(2)}x`);
+  }
+  return out;
+};
 if (process.env.LEARN && host.auto.deployed.distil) {
   const before = await host.run(null, null);
   const live = await host.liveRuns();
-  const lr = await host.auto.learnLive(live, { passes: +process.env.LEARN,
+  const dietRuns = await host.distilRuns();
+  console.log(`\n  BEFORE learning on the square (${process.env.LEARNMODE || 'diet'} mode):`);
+  await scoreSet('held-out', host.auto.distil, heldOut, heldNames);
+  await scoreSet('diet', host.auto.distil, dietRuns, dietRuns.map((t, i) => `polygon ${i}`));
+  const lr = await host.auto.learnLive(live, { passes: +process.env.LEARN, mode: process.env.LEARNMODE || 'diet',
     onPass: (p2) => console.log(`    pass ${p2.pass}: ${p2.score.toExponential(4)} on the live program${p2.accepted ? '' : ' — not kept'}`) });
   const after = await host.run(null, null);
   console.log(`\n  learned on the live program (${lr.passes} passes, ${lr.changed ? 'policy replaced' : 'policy unchanged'}): square ${before.score.toExponential(4)} -> ${after.score.toExponential(4)}   ${(rep.base / after.score).toFixed(2)}x over the conventional machine (was ${(rep.base / before.score).toFixed(2)}x)`);
   console.log(`  machine samples now ${host.samples().samples.toLocaleString()} (${(host.samples().samples / 60000).toFixed(1)} machine-min)`);
+  console.log(`\n  AFTER learning on the square:`);
+  await scoreSet('held-out', host.auto.distil, heldOut, heldNames);
+  await scoreSet('diet', host.auto.distil, dietRuns, dietRuns.map((t, i) => `polygon ${i}`));
 }
 const pol = host.auto.built.distil;
 if (pol && pol.W) {

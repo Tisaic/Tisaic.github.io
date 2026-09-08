@@ -11603,3 +11603,40 @@ and the pill and the score are re-measured by a scored run, not by the teaching 
 (it is fitted fresh each pass to the square's own rows, from a policy that started on the
 polygons — the parametric control in §52.16 says the polygons' regime is not retained by that
 route), and the same on the page at demo grade, where the full tier's check runs one pass.
+
+### §52.19 CHECK THE POLYGONS: THE 16x WAS A MEMORY, AND THE MODEL'S GAIN IS 7.7x
+
+The owner's instruction: check the polygons; the gain has to come from model understanding
+and not lap memory. The check is the one §52.18 listed as not measured, and it overturns
+§52.18's headline. The policy learned on the square in §52.18 was fitted FRESH to the
+square's rows each pass; the window spans half that lap, and a policy fitted to one closed
+program locates itself in it (§41's theorem, §49.11's measurement). Scored on programs it
+had been commissioned on and on two it has never seen:
+
+```
+  bench square, E 0.03           square    rounded rect   circle    polygon 0-3
+  shipped (commissioned)          6.04x        5.74x       7.89x    5.46 / 6.11 / 6.11 / 4.78
+  learned FRESH on the square    15.88x        1.03x       0.44x    0.32 / 0.43 / 0.95 / 0.50
+  learned WITH the diet kept      7.71x        5.94x       7.00x    5.45 / 6.24 / 6.06 / 4.53
+```
+
+Learned fresh, it is worse than doing nothing on three of four polygons and on the circle: the
+15.88x is a memory of the square, exactly what the retirement forbids, and §52.18's "still a
+policy of the commanded reference" was true of the object's form and false of its content.
+With the commissioning diet kept in every pass's fit, the square reads **7.71x** and every
+other program is unchanged within a few percent — the rounded rectangle up, the circle down,
+the polygons level. That is the gain that comes from model understanding, and it is what the
+page's Learn button now does. Two ways of keeping the diet were built and are bit-identical:
+re-fitting on the diet's retained targets plus the live rows, and CONTINUING the deployed
+recursion with the live rows — exact least squares does not care about the order, so the
+recursion, which the stored model carries, is the default and nothing extra is retained. The
+passes plateau by the third (1.374e-2 → 1.3555e-2 on the teaching laps); eight read the same
+as four. On the soft cell the same law reads **3.98x → 6.47x** on the square, with the circle at
+11.84x and the polygons at 4.6-7.7x.
+
+**WHAT THIS SETTLES.** A single linear map of the reference window, kept honest across
+programs, sits at 6-8x on this arm; the same map allowed to become a memory of one lap reads
+16-18x on that lap and harms everything else. The 14-19x the lap-converged path proves is
+capability the plant has, and every route measured to it that keeps the object a model has
+paid it back: the window's reach, the regressors, the schedule, the engine, the cap, the fit
+and now the live teaching. The remaining gap is what the north star costs on this plant.

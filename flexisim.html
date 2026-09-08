@@ -8,7 +8,7 @@
   <title>FlexiSim — Commissioning Bench</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:1088,built:"2026-09-08T00:37:16Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:1089,built:"2026-09-08T01:17:00Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
 
   <style>
@@ -159,16 +159,18 @@
       <button id="learn" class="sec" disabled>Learn on this program ▶</button>
       <label>passes
         <select id="learn-passes">
-          <option value="4" selected>4 — measured 6.0× → 15.9× on the bench square</option>
-          <option value="8">8 — measured 6.0× → 18.0×</option>
+          <option value="4" selected>4 — measured 6.0× → 7.7× on the bench square, held-out programs unchanged</option>
+          <option value="2">2</option>
           <option value="1">1 — a quick look</option>
         </select></label>
     </div>
     <p class="hint">With the tracker attached, the deployed model is taught on the program in front of it by the
       ladder's own law — the pilot's model inverse against the measured error, one increment per pass, the
-      model re-fitted to what it applied plus that increment, kept only if it measures better. The result is
-      still a model of the commanded reference, with no lap index, and it replaces the deployed one; the old
-      "keep learning every scan" box was a unit-gain law that measured 0.54× and is gone.</p>
+      model re-fitted to what it applied plus that increment — TOGETHER WITH the commissioning diet, so it
+      stays a model rather than becoming a memory of this lap — and kept only if it measures better. Measured:
+      6.0× → 7.7× on the bench square with the rounded rectangle, circle and polygons unchanged; fitted to this
+      program alone it reads 15.9× here and WORSE THAN NOTHING elsewhere, which is the memory the retirement
+      forbids. The old "keep learning every scan" box was a unit-gain law that measured 0.54× and is gone.</p>
     <label><input type="checkbox" id="arm-hff" disabled /> lap learning — a table indexed by
       lap phase, applied only on the program it learned</label>
     <label>PLC scan
@@ -1043,6 +1045,9 @@ function sync() {
   $('arm-stack').parentElement.style.display = (!a || !a.stack.built || (!a.stack.on && a.distil.on)) ? 'none' : '';
   if (!a) { $('arm-distil').checked = false; $('arm-hff').checked = false; $('arm-stack').checked = false; }
   else { $('arm-distil').checked = a.distil.on; $('arm-hff').checked = a.hff.on; $('arm-stack').checked = a.stack.on; }
+  // Learning continues the deployed model's own recursion, which carries the commissioning
+  // diet (a model, not a memory — plan §52.19); it needs the teacher, which a restored model
+  // does not carry: commission first.
   $('learn').disabled = !a || !a.distil.on || !idle || !(host && host.auto.built && host.auto.built.stack);
   $('learn').textContent = learning ? 'Stop ■' : 'Learn on this program ▶';
   $('learn-passes').disabled = !idle;

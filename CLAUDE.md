@@ -1321,8 +1321,11 @@ an engineer would actually meet:
   fit; **Learn on this program ▶** (plan §52.18), which teaches the deployed model on the program
   in front of it with the tracker attached, by the ladder's own law — the pilot's model inverse
   against the measured error, one increment per pass, the model re-fitted and re-measured —
-  **6.04x → 15.88x in four passes, 17.98x in eight on the bench square, 3.98x → 20.52x on the
-  soft cell**, still a model of the commanded reference; and **lap learning**, withheld by the
+  together with the commissioning diet the deployed recursion already carries — **6.04x → 7.71x
+  on the bench square with the rounded rectangle, circle and polygons unchanged (5.9x / 7.0x /
+  4.5-6.2x), 3.98x → 6.47x on the soft cell** (plan §52.19). Fitted to the live program ALONE it
+  reads 15.9x there and 0.3-1.0x everywhere else — a memory, which is the check the owner asked
+  for and the reason the diet stays in the fit; and **lap learning**, withheld by the
   library on any program but the one it learned. The box that used to sit here — "the tracker
   stays on the machine, keep learning every scan", a unit-gain law fed every decision — was
   measured at **0.54x after twelve laps and is gone**: a law with no plant model in it pairs the
@@ -1428,12 +1431,14 @@ features) improves the polygons in-sample and is REFUSED on the square at 0.65x:
 buys less transfer, for the fourth time. Normalised rows are inert on the number; a converged
 teacher solve is inert; the applied control is 2-3x the rms of the error it cancels, so it is
 not small. What bounds a program-agnostic feedforward here is how far the commissioning diet is
-from the program it will run. **AND THE COMPOSITION THAT CLOSES IT IS MEASURED AND ON THE PAGE
-(plan §52.18): teach the deployed model on the program it is running, with the tracker
-attached, by the ladder's own parametric law — 6.04x → 15.88x (four passes) → 17.98x (eight) on
-the bench square, 3.98x → 20.52x on the soft cell, at +4.4 / +7.3 machine-minutes, the result
-still a model of the commanded reference.** The unit-gain "keep learning every scan" law that
-was offered for this measured 0.54x and is removed.
+from the program it will run. **TEACHING THE DEPLOYED MODEL ON THE PROGRAM IT RUNS, WITH THE
+TRACKER ATTACHED, BY THE LADDER'S OWN LAW (plan §52.18-19): 6.04x → 7.71x on the bench square
+and 3.98x → 6.47x on the soft cell WITH every other program unchanged — the model's gain. The
+same law fitted to that program alone reads 15.9x there and worse than nothing on the polygons
+and the circle: a memory, checked and refused.** The unit-gain "keep learning every scan" law that
+was offered for this measured 0.54x and is removed. A single honest linear map of the reference
+window sits at 6-8x on this arm; the 14-19x the lap-converged path proves is what a memory of one
+lap buys, and every route to it that keeps the object a model has been measured and paid back.
 
 **ITS FIRST READING WAS A REFUSAL, WHICH WAS THE PAGE DOING ITS JOB (plan §52.7).** Distil-only
 ladder on the bench square: `②d distilled — REFUSED` at 0.22x (demo), 0.43x (fast, browser),
