@@ -12864,3 +12864,78 @@ limit. The last two are the MACHINE, they are worth 1.13x to 1.29x measured, and
 project has ever quoted was taken with both of them at values nobody derived. Nothing ships:
 `ARM_DRIVE` is a harness knob, unset is byte-identical, and the bench square stands at 1.7528e-1,
 6.04x.
+
+### §52.31 THE QUESTION UNDERNEATH ALL OF THEM: IS THE CONVERGED CORRECTION A FUNCTION OF THE REFERENCE WINDOW, AND HOW MUCH IS LEFT IN IT?
+
+Five sections have hit the same ceiling from five directions — a linear map of the reference
+window reaches 6-8x, more capacity transfers worse (five times), the missing term is the measured
+deviation (§52.27), the teacher's quality cannot reach it (§52.29), and the machine's own
+constants are worth more than any of it (§52.30). Every one of those assumes the MAP is the
+limitation. Nobody had asked the question underneath: **is the target a function of the row at
+all, and if it is, how much of it has the shipped fit already taken?**
+
+`test/pilot/consist.mjs` asks it without fitting anything. It builds the shipped 92-feature rows
+and the converged targets for the four diet polygons and the square, standardises them so distance
+means the same thing in every column, and reports the target DISAGREEMENT as a function of row
+DISTANCE — cross-program, and against the same-program control that sets the scale.
+
+**1. THE TARGET IS A FUNCTION OF THE ROW, AND IT GENERALISES ACROSS PROGRAMS WITH NO PENALTY.**
+Disagreement as a fraction of what two unrelated targets would differ by (1.0 = no relationship):
+
+```
+  row distance     bench cell                          soft cell
+                 polygon↔polygon  same program       polygon↔polygon  same program
+  0.0 - 0.2          0.326           —                   0.334           —
+  0.2 - 0.3          0.502          0.440                0.538          0.404
+  0.3 - 0.4          0.529          0.339                0.501          0.510
+  0.4 - 0.5          0.622          0.618                0.602          1.003
+  0.5 - 0.7          0.767          0.781                0.763          0.876
+  0.7 - 1.0          0.957          0.957                0.903          0.928
+  1.0 - 1.5          0.975          1.025                0.929          0.967
+```
+
+The two columns track each other at every distance. **Rows that are close in feature space demand
+the same correction whether they come from the same program or from different ones** — so the
+"programs demand conflicting things at the same window" hypothesis, which would have made 6x a
+proof, is dead. There is no transfer penalty in the target itself; the function exists and it is
+shared.
+
+**2. AND THE TEACHER IS NOT THE NOISE.** The obvious reading of the residual scatter is the
+teacher's own non-repeatability, which would be the opposite conclusion — "the target is noisy"
+rather than "the window does not carry it". Converging the square's prefix a SECOND time through
+the same host, the two independent runs differ by **2.4e-6 rad against a target rms of 1.7e-1**,
+which is 1.4e-5 of its scale, on both cells. The pipeline is deterministic and the scatter at
+small row distance is real structure.
+
+**3. SO THE WINDOW HAS A MEASURABLE INFORMATION CEILING, AND THE SHIPPED FIT IS NEAR IT.** If two
+samples at the same row differ by `d` in units of "unrelated", the per-sample residual is `d`
+times the target's rms and the best achievable R² is `1 − d²`. Read at the closest measured bin,
+and extrapolated linearly to zero distance (the bin is 0-0.2, not zero, so the measured value is
+a lower bound on the ceiling):
+
+```
+                    closest bin   extrapolated to d = 0    shipped fit's held-out R²
+  bench cell          0.894            0.931                    0.856 / 0.870
+  soft cell           0.888            0.913                    0.815 / 0.778
+```
+
+**What is left in the reference window is between 1.1x and 1.6x of the CORRECTION's residual
+error** — 1.38-1.45x on the bench at the extrapolated ceiling, 1.46-1.60x on the soft cell — and
+that is an upper bound on what any better map of that window could deliver, local or nonlinear or
+global. It is not a factor of three, and it is nowhere near the 20x the memory reaches.
+
+**WHAT THIS SETTLES.** The distilled policy's 6.04x is not a failure of the linear form and not a
+failure of the diet: it is within about 1.4x of everything the reference window contains, measured
+without fitting anything. Every negative in §52.16 through §52.30 is that one fact seen from a
+different side — capacity cannot find what is not there, a better teacher cannot put it there, and
+a richer diet only moves which programs get the little that remains. The routes that are still
+open are the two that change the INPUT rather than the map: more information at deploy (the
+measured deviation, worth R² 0.836 → 0.962, and unusable on this arm because the plant answers
+950 steps later — §52.27, §52.28), or a better machine (§52.30's 1.13x-1.29x).
+
+**WHAT WOULD FALSIFY IT.** The distance metric is a plain standardised Euclidean norm over 92
+features, which is a crude proxy for "the same window": rows at distance 0.2 in a 92-dimensional
+space are not identical, so a better metric — or a longer window — could find closer neighbours
+and read a higher ceiling. And this is one seed per cell, on one diet, with the square as the only
+held-out program. What it does NOT depend on is any fit, any ridge, or any choice of basis, which
+is why it is worth more than the five sections of fitting that preceded it.
