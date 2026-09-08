@@ -12018,3 +12018,83 @@ never-fitted columns are not.
    one.
 4. The energy basis is closed on this plant. The states it was meant to reach are reachable
    linearly, and the map it could not express is geometry.
+
+### §52.24 THE OBSERVER, TESTED ON THE MACHINE: THE PILOT CANNOT FIT IT, AND THE REGIME CHECK SAYS WHY
+
+§52.23 measured a 113-column pose-scheduled observer of the residual at R² 0.99 on never-fitted
+programs, with a strain gauge and a load-side encoder on the machine. The owner asked for it to
+be tested — fed to the feedback layer and scored deployed. Three machine-scored rungs and one
+offline check, bench and soft cell, one seed:
+
+**1. THE PILOT'S OWN SCHEDULED BASIS ON THE FEEDBACK LAYER (`distil.feedbackBasis: 'sched'`)
+MAKES IT WORSE.** The layer alone changes basis; the distilled policy's teacher keeps its own.
+
+```
+  soft cell, gain      0.35      0.5      1.0
+  plain basis         1.25x    1.24x    0.84x     (§52.22)
+  scheduled basis     0.90x    0.85x    0.67x
+  bench, gain 0.35: plain 0.86x at 0.25 / scheduled 0.83x
+```
+
+The layer's own report explains it: on its held-out excitation split the scheduled block
+scores BELOW the plain one on the channel that matters (ch1 −0.33 against −0.22 on the soft
+cell), so forcing it fits worse. The pilot's scheduling variable is the COMMANDED position at
+the lead, normalised to the box and linear, multiplying its four nearest lags — a different
+object from §52.23's block, which multiplies the newest measured sample and the instruments by
+the pose's sines and cosines.
+
+**2. THE INSTRUMENTS IN THE PILOT'S MEASURED VECTOR (`instruments: true`, six signals to eleven)
+DO NOT IMPROVE ITS FORECAST.** Both wind-ups, both tip deflections and link 1's slope, scaled
+to the angles' order, fed at all three observe sites. The feedback layer's forecast of the
+residual at lead 0 on its own held-out excitation:
+
+```
+                        plain, no instruments   instruments   instruments + scheduled
+  soft   ch0 / ch1        0.676 / 0.272         0.689 / 0.239      0.689 / 0.100
+  bench  ch0 / ch1        0.439 / 0.449         0.704 / -0.074     0.456 / 0.418
+  deployed, gain 0.35     1.25x (soft)          0.94x (soft)       0.89x (soft)
+                          0.77x (bench)         0.92x (bench)      0.83x (bench)
+```
+
+Five signals that make the residual 99% observable offline move the pilot's forecast by
+nothing on the channel it is weakest on, and the deployed layer goes from the one positive
+result in this arc (1.25x) to a refusal.
+
+**3. THE REGIME CHECK: THE SAME OBSERVER, FITTED ON THE PILOT'S OWN EXCITATION RECORD, READS
+0.96/0.99 ON THE PROGRAMS.** `observe.mjs` with `FB=1 INSTR=1` takes the feedback layer's own
+record — 4,083-4,272 pilot samples of scribble plus dither, the exact rows the pilot fitted —
+and fits the offline observer on it, then scores the programs; and the reverse.
+
+```
+  fitted on the RECORD, scored on          SQUARE          CIRCLE          ROUNDED   | on the DIET -> the record
+  bench  the observer (λ 1e-4)           0.961/0.987     0.947/0.984     0.975/0.989 |   0.997/0.995
+         the pilot's shape, linear      -1.545/-0.152   -2.842/0.600    -0.746/0.500 |   0.301/0.432
+         instruments unscheduled         0.728/0.442     0.397/0.168     0.676/0.535 |   0.739/0.220
+  soft   the observer (λ 1e-4)           0.786/0.975     0.169/0.949     0.527/0.972 |   0.942/0.978
+         the pilot's shape, linear      -0.329/-0.241   -3.725/-0.760   -0.079/-0.051|   0.622/-0.089
+  the pilot's own forecast on the same record, lead 0:  bench 0.704/-0.074   soft 0.689/0.239
+```
+
+So the excitation regime is not the fault — the observer learns the residual from the scribble
+as well as from the diet and carries it to every program. What falls short is the pilot's
+FEATURE PIPELINE: on identical rows its forecast reads 0.70/−0.07 where the observer reads
+0.96/0.99. The pilot has 132 lagged columns of the eleven signals and a linear-in-command
+scheduling of the four nearest; it does not have the pose's sines and cosines multiplying the
+newest sample, the command difference and the instrument readings, and that block is the whole
+difference. On the soft cell the record-fitted observer is weaker on the first channel
+(0.79/0.17/0.53) than the diet-fitted one (0.94), so there the excitation does cost something,
+and the scribble's coverage of pose is the suspect (rule 41b).
+
+**CONTROL.** With `instruments` off the measured vector is byte-identical to before, and the
+default ladder reads the same 1.7528e-1 (6.04x) it did before the refactor.
+
+**WHAT THIS LEAVES.** The feedback route now has a stated build rather than a hypothesis: a
+trig-scheduled block in the pilot's row — the newest measured sample, the command difference
+and, where fitted, the instruments, each multiplied by the six trig terms of the measured pose;
+about 60 columns without instruments and 90 with — in place of the linear-in-command scheduling
+of four lags. The offline instrument says what it should read on the record before any machine
+is scored (0.96/0.99 bench), which is the check the build must pass first. Without instruments
+the same block read LOPO 0.31 offline (§52.23's `sched_m0`), so on the shipped machine this is
+worth the second channel and not the first, and the 1.25x plain layer on the soft cell remains
+the only deployed feedback result. `feedbackBasis`, `feedbackGain` and `instruments` all ship
+opt-in and off.

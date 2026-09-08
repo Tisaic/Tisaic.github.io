@@ -31,6 +31,10 @@ const host = makeArmHost({
   makeMachine: async () => { const m = await machine({ K, E }); const rc = commissionComp(m.arm, m.servo); const c0 = path.at(0); const [q1, q2] = m.arm.ik(c0.x, c0.y, true); settle(m.arm, m.servo, q1, q2); return { arm: m.arm, l1: m.l1, l2: m.l2, servo: m.servo, rc }; },
   path, lap: LAP, K, centre: m0.arm.ik(12, 0, true), classic: false, maxDepth: 1, demo: null, lapMemory: false, distil: {},
   distilDiet: { feeds: [F, F], rMin: 3.4, rSpan: 2.4 }, avg: 2, warmup: 1, passes: 8, probeLaps: { warmup: 1, avg: 1 },
+  // FB=1 INSTR=1: also commission the feedback layer on the instrumented machine, so its own
+  // excitation record can be scored by the offline observer (plan §52.24).
+  ...(process.env.FB === '1' ? { distilFeedbackOnTop: true, distilFeedbackGain: 0.35 } : {}),
+  ...(process.env.INSTR === '1' ? { instruments: true } : {}),
 });
 host.auto.pilotOpts.start = m0.arm.ik(path.at(0).x, path.at(0).y, true);
 const t0 = Date.now();
@@ -65,6 +69,24 @@ const heldRuns = await host.distilRuns({ paths: [path,
   roundedRect({ w: 8, h: 8, r: 1.5, centre: [12, 0], feed: F, accel: 4e-5, cornerDt: 40, closed: true })] });
 const square = await capture(heldRuns[0], 'square', HLAPS + 2);
 const held = [square, await capture(heldRuns[1], 'circle', HLAPS), await capture(heldRuns[2], 'rounded', HLAPS)];
+// ---- THE FEEDBACK LAYER'S OWN EXCITATION RECORD AS A PROGRAM (plan §52.24): one row per pilot
+// sample, held for S steps so the step-indexed groups read it, with the instruments unscaled.
+let scribble = null;
+if (process.env.FB === '1' && process.env.INSTR === '1' && host.auto.built.stacks && host.auto.built.stacks.length) {
+  const stF = host.auto.built.stacks[host.auto.built.stacks.length - 1], p = stF.layers[0], rec = p._rec;
+  if (rec && rec.x && rec.x.length && rec.x[0].length >= 11) {
+    const PS = p.sample, cap = [], Q = [];
+    for (let i = 0; i < rec.x.length; i++) for (let r = 0; r < PS; r++) {
+      const xr = rec.x[i];
+      cap.push({ m: xr.slice(0, 6), t: rec.e[i].slice(), x: { tool: [0, 0], wu: [xr[6] / 1e2, xr[7] / 1e2], w: [xr[8] / 1e2, xr[9] / 1e2], s1: xr[10] / 1e2 } });
+      Q.push(rec.cmd[i].slice());
+    }
+    scribble = { name: 'scribble', cap, LAP: Math.round(cap.length / 4), q: (k) => Q[Math.max(0, Math.min(Q.length - 1, k))], acc: cap.map(() => [0, 0]) };
+    const N = cap.length; scribble.P1 = new Float64Array(N + 1); scribble.P2 = new Float64Array(N + 1);
+    for (let k = 0; k < N; k++) { const m = cap[k].m; scribble.P1[k + 1] = scribble.P1[k] + m[4] * m[2]; scribble.P2[k + 1] = scribble.P2[k] + m[5] * m[3]; }
+    console.log(`  the feedback layer's excitation record: ${rec.x.length.toLocaleString()} samples at stride ${PS}, held to ${N.toLocaleString()} steps; its own forecast R² lead0 ${p.report.readouts.map((r) => (r.r2Lead0 ?? NaN).toFixed(3)).join('/')}`);
+  }
+}
 // ---- THE LIBRARY, in named groups. Every column is a function of (program, k).
 const CMD_OFFS = [-256, -128, -64, -32, -16, -8, -4, -2, -1, 0, 1, 2, 4, 8, 16, 24, 32, 48, 64, 96, 128, 192, 256].map((o) => o * S);
 const LAGS = [0, 1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64].map((l) => l * S);
@@ -154,7 +176,7 @@ const fmt = (r) => r.map((v) => (Math.abs(v) < 10 ? v.toFixed(3) : v.toFixed(0))
   let a1 = null; for (const P of diet) a1 = addAcc(a1, accumulate(g1, L1, P, P.LAP, P.cap.length, 0, hidden));
   const idx1 = idxOf(L1, g1.map((g) => g.name)), W1 = fitSub(a1, idx1, 1e-3);
   const x1 = new Float64Array(L1.dim);
-  for (const P of [...diet, ...held]) {
+  for (const P of [...diet, ...held, ...(scribble ? [scribble] : [])]) {
     P.est = new Array(P.cap.length);
     for (let k = 0; k < P.cap.length; k++) { let o = 0; for (const g of g1) { const v = g.fn(P, k); for (let i = 0; i < v.length; i++) x1[o++] = v[i]; } P.est[k] = W1.map((w) => { let s2 = 0; for (let i = 0; i < w.length; i++) s2 += w[i] * x1[i]; return s2; }); }
   }
@@ -216,6 +238,19 @@ for (const lead of LEADS) {
   for (const [name, gs] of Object.entries(sets)) {
     const idx = idxOf(LIB, gs), bl = bestLam(idx), W = fitSub(dietAcc, idx, bl.lam);
     console.log(`    ${name.padEnd(60)} ${String(idx.length).padStart(4)}  λ ${String(bl.lam).padEnd(6)} LOPO ${bl.v.toFixed(3)}   ${held.map((P) => fmt(r2on(acc.get(P.name), idx, W)).padEnd(16)).join(' ')}`);
+  }
+  // ---- THE PIPELINE CHECK (plan §52.24): the same observer, fitted on the feedback layer's own
+  // excitation record, scored on the programs; and fitted on the diet, scored on that record.
+  if (scribble && lead === LEADS[0]) {
+    const accS = accumulate(groups, LIB, scribble, scribble.LAP, scribble.cap.length, lead);
+    console.log(`  D. the observer and the pilot's shape across REGIMES (the excitation record against the programs):`);
+    for (const name of ['+ motor-side lags, linear (the pilot\'s shape)', 'INSTRUMENT: all three + motor lags + command', 'THE OBSERVER the soft cell selected: command + scheduled sample + scheduled instruments']) {
+      const idx = idxOf(LIB, sets[name]);
+      for (const lam of [1e-4, 1e-2]) {
+        const Ws = fitSub(accS, idx, lam), Wd = fitSub(dietAcc, idx, lam);
+        console.log(`    ${name.slice(0, 44).padEnd(44)} λ ${String(lam).padEnd(6)} fitted on the RECORD -> square ${fmt(r2on(acc.get('square'), idx, Ws))}  circle ${fmt(r2on(acc.get('circle'), idx, Ws))}  rounded ${fmt(r2on(acc.get('rounded'), idx, Ws))}   |   fitted on the DIET -> record ${fmt(r2on(accS, idx, Wd))}`);
+      }
+    }
   }
   // the quadratic lift, its own library
   if (lead === LEADS[0] && process.env.QUAD !== '0') {

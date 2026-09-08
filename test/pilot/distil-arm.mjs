@@ -121,6 +121,8 @@ const host = makeArmHost({
   ...(process.env.FB === '1' ? { distilFeedbackOnTop: true } : {}),
   ...(process.env.FBCAP ? { distilFeedbackCap: +process.env.FBCAP } : {}),
   ...(process.env.FBGAIN ? { distilFeedbackGain: +process.env.FBGAIN } : {}),
+  ...(process.env.FBBASIS ? { distilFeedbackBasis: process.env.FBBASIS } : {}),
+  ...(process.env.INSTR === '1' ? { instruments: true } : {}),
   // STD=1: standardised rows (each feature divided by its rms over the training rows).
   ...(process.env.STD === '1' ? { distilStandardize: true } : {}),
   // SOFFS=a,b,c: the direction-of-travel block's offsets, in pilot samples (default none).
@@ -146,6 +148,11 @@ host.auto.pilotOpts.start = m0.arm.ik(path.at(0).x, path.at(0).y, true);
 if (process.env.BASIS) host.auto.pilotOpts.forceBasis = process.env.BASIS;
 const rep = await host.auto.commission({ run: host.run, drivePilot: host.drivePilot,
   recordDemo: host.recordDemo, distilRuns: host.distilRuns });
+// THE FEEDBACK LAYER'S OWN FORECAST, per channel: which basis it chose and its held-out R² at
+// the near, middle and far lead — so a refused layer can be read to its forecast or its inversion.
+for (const stF of host.auto.built.stacks || []) for (const p of stF.layers) if (p.report && p.report.readouts) {
+  console.log('  feedback layer forecast: ' + p.report.readouts.map((r, c) => `ch${c} ${r.basis} lags ${r.lags} R² lin ${(r.r2Lin ?? NaN).toFixed(3)} poly ${(r.r2Poly ?? NaN).toFixed(3)} sched ${(r.r2Sched ?? NaN).toFixed(3)} | lead0 ${(r.r2Lead0 ?? NaN).toFixed(3)} mid ${(r.r2Mid ?? NaN).toFixed(3)} far ${(r.r2Far ?? NaN).toFixed(3)}${r.gated ? ' GATED' : ''}`).join('   '));
+}
 
 console.log(`\n  shipped ${JSON.stringify(rep.deployed)}   ${rep.base.toExponential(4)} -> ${rep.best.toExponential(4)}   ${rep.gain.toFixed(2)}x`);
 const _st = host.auto.built.stack; if (_st) console.log(`  pilot sample stride ${_st.sample} steps, so the ±256-sample window spans ±${256 * _st.sample} steps${process.env.WIN ? ` (WIN ${process.env.WIN}: ±${Math.round(256 * +process.env.WIN) * _st.sample})` : ''}`);
