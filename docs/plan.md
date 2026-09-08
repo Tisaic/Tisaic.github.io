@@ -11640,3 +11640,55 @@ programs, sits at 6-8x on this arm; the same map allowed to become a memory of o
 capability the plant has, and every route measured to it that keeps the object a model has
 paid it back: the window's reach, the regressors, the schedule, the engine, the cap, the fit
 and now the live teaching. The remaining gap is what the north star costs on this plant.
+
+### §52.20 THE INVERTED-PENDULUM TEST: A FEEDBACK LAYER ON TOP OF THE DISTILLED MODEL CANNOT SEE THE STATE IT WOULD HAVE TO DAMP
+
+The owner's reading: results are still subpar; a controller that could balance an inverted
+pendulum behaves differently from this one, and that may be the key. It is the right lens. A
+pendulum cannot be balanced by feedforward from the reference — only by feedback on its
+state — and the deployed model here is pure feedforward: at deploy it never reads the
+machine. What it leaves on the square (0.175 rms, 6x) is the part of the error that is not a
+function of the reference window: link ringing and gearbox wind-up, which are STATE. So the
+composition to test is a feedback layer commissioned ON the distilled machine, on the residual
+the policy leaves, reading what the deployed machine has — the motor-side encoders and torques.
+
+**BUILT.** `distil.feedbackOnTop`: after the distilled rung deploys, a fresh cascade layer is
+identified and verified with the policy armed BELOW it — the policy reads the pilot's own
+command series through the same window (`Pilot.posAt`, the rows built as at deploy, the
+coverage guard held open because the excitation runs outside the program's speed span by
+design) — and scored deployed on top of the policy, kept only if it wins. Two wiring faults
+were found and fixed on the way (the rung sat before the distilled rung it needs, and the
+"below" test excluded the policy at the stack's own position), each of which produced a layer
+identified on the BARE machine and deployed on the corrected one.
+
+**MEASURED, ON BOTH CELLS, AND AT A LADDER OF AUTHORITY:**
+
+```
+  feedback layer on the distilled machine       verify     deployed on the square
+  bench (E 0.03), authority 2.0 rad             1.71x      1.0231e+0   0.17x
+  soft  (E 0.005), authority 2.0 rad            1.19x      1.3698e+0   0.38x
+  bench, authority 0.05 rad                     1.73x      6.0472e-1   0.29x
+  bench, authority 0.02 rad                     1.15x      3.5352e-1   0.50x
+  bench, authority 0.005 rad                    0.87x      2.0345e-1   0.86x
+```
+
+The layer passes its own verify and harms the machine at EVERY authority, monotonically toward
+1.0x as its authority goes to zero. That is not an unstable gain — a gain too high would read
+well at a small cap and diverge at a large one — it is a correction whose sign is wrong against
+what the residual needs at every size: the layer's model of the residual, regressed on lagged
+motor-side signals as the pilot's forecast is, does not describe the residual. The pendulum
+test fails for the reason it fails on a pendulum without an angle sensor: **the state that has
+to be damped is not observable from what this controller is allowed to read.** The link's bend
+is not in the motor encoder, and the torque sees it only through a dynamics the linear lag
+model does not carry (§34 measured the same on the wind-up: a datasheet Kalman recovers it and it
+is not what dominates this machine). The instrument stays available and off.
+
+**WHAT THE NEXT LEVEL THEREFORE NEEDS, STATED AS A DESIGN.** An OBSERVER for the flexible state
+— the link modes and the wind-up estimated from motor angle and torque through an identified
+modal model, the thing a pendulum controller has in its angle sensor — and a damping law on
+that estimate, commissioned with the tracker and deployed without it. Or, on a real machine,
+the instrument that makes the state observable at deploy (a strain gauge on the link, an
+accelerometer at the tool), which this project has never allowed itself. Neither is built. What
+is established: feedforward from the reference, kept a model, is 6-8x on this arm; a memory of
+the lap is 14-19x; feedback from the motor side, as this cascade does it, is blind to the
+difference.

@@ -1439,6 +1439,14 @@ and the circle: a memory, checked and refused.** The unit-gain "keep learning ev
 was offered for this measured 0.54x and is removed. A single honest linear map of the reference
 window sits at 6-8x on this arm; the 14-19x the lap-converged path proves is what a memory of one
 lap buys, and every route to it that keeps the object a model has been measured and paid back.
+**AND THE INVERTED-PENDULUM TEST IS TAKEN AND FAILED FOR A STATED REASON (plan §52.20):** a
+feedback cascade layer identified ON the distilled machine — the policy armed below it during
+its excitation and verify — passes its verify (1.7x) and harms the square at every authority,
+monotonically toward 1.0x as its cap goes to zero (0.17x at 2.0 rad, 0.86x at 0.005 rad): not a
+gain too high but a correction of the wrong sign at every size. The residual the policy leaves is
+link ringing and wind-up, and that state is not observable from the motor-side signals this
+controller is allowed to read. The next level is an observer for the flexible state, or the
+instrument that makes it observable at deploy; neither is built.
 
 **ITS FIRST READING WAS A REFUSAL, WHICH WAS THE PAGE DOING ITS JOB (plan §52.7).** Distil-only
 ladder on the bench square: `②d distilled — REFUSED` at 0.22x (demo), 0.43x (fast, browser),

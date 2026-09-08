@@ -117,6 +117,9 @@ const host = makeArmHost({
   // ADAPTLAG=<steps> / ADAPTRATE=<x>: the tracker-stays law's pairing lag and gain (plan §52.18).
   ...(process.env.ADAPTLAG ? { distilAdaptLag: +process.env.ADAPTLAG } : {}),
   ...(process.env.ADAPTRATE ? { distilAdaptRate: +process.env.ADAPTRATE } : {}),
+  // FB=1: a feedback cascade layer identified and scored ON TOP of the distilled model (plan §52.20).
+  ...(process.env.FB === '1' ? { distilFeedbackOnTop: true } : {}),
+  ...(process.env.FBCAP ? { distilFeedbackCap: +process.env.FBCAP } : {}),
   // STD=1: standardised rows (each feature divided by its rms over the training rows).
   ...(process.env.STD === '1' ? { distilStandardize: true } : {}),
   // SOFFS=a,b,c: the direction-of-travel block's offsets, in pilot samples (default none).
