@@ -12309,3 +12309,227 @@ advance from a reference known ahead, which is preview, which is what ships. The
 that began at §52.20 ends here with its limit measured rather than inferred: the state is
 observable (§52.23), the forecast is right (§52.26.2), the law is sound (§52.26.4), and the
 actuator cannot arrive.
+
+### §52.27 THE QUESTION TURNED ON THE INSTRUMENT: WHAT, IF ANYTHING, IS STOPPING IMPROVEMENT — AND THE ONE STRUCTURAL FAULT IT FOUND
+
+§52.20–§52.26 tried every route from the state to the tool and every one ended at a measured
+limit, so the owner asked the question this file should have asked itself: when nothing moves
+the needle, is that a property of the plant or of something wrong in what is being measured
+(rule 14, aimed at a whole arc rather than one number)? This section takes that question
+literally. A "something wrong" would show as one of four things: the teacher is not the object
+it is believed to be; the residual is somewhere the diet cannot reach; the diet is the wrong
+shape rather than merely too far from the square; or the deployed OBJECT cannot express the
+converged correction however it is fitted. Each was put to the machine. The first three were
+cleared with numbers. The fourth is real — the converged correction is a function of the
+machine's measured state, and the shipped policy has no such term — and building the term
+found why it cannot deploy as a feedback path, which is §52.26's limit reached by a third
+route. Bench K 0.25 / E 0.03 and soft cell E 0.005, one seed, `test/pilot/distil-arm.mjs`
+and the new `test/pilot/stateaug.mjs`.
+
+**1. THE TEACHER IS STABLE ONLY BECAUSE OF THE GEARBOX BACKLASH.** `ARM_BL=0` removes the
+dead-zone from both gearboxes and re-runs the shipped ladder:
+
+```
+                        bench (E 0.03)                      soft cell (E 0.005)
+  backlash ON   cascade 4.7557e-1 2.23x   distilled 6.04x   cascade 4.37x   distilled 3.99x
+  backlash OFF  cascade 6.0779e+0 0.17x   ladder STOPS      cascade 4.37x   distilled 3.99x
+```
+
+On the bench cell the cascade the whole distillation rests on goes from 2.23x to 0.17x —
+worse than doing nothing by six — with the backlash removed, its verify passing on the way
+(0.026 → 0.018 at its own lambda), and the ladder stops there with the distilled rung never
+built (the periodic ladder does the same: `bl0-bench-periodic.log`). The soft cell is
+byte-identical either way. So §52.16's note — "the cascade is stable on this arm because of
+its backlash" — is a bench-cell fact and not a general one: the dead-zone is a low-pass at
+the small-signal end that the cascade's own verify cannot see through, and a customer's
+backlash-free gearbox on this cell would get a teacher that diverges under its own verify.
+This is a teacher-robustness defect on record and it is NOT what limits the square: with the
+backlash on, the teacher converges the square's own prefix to 10.27x (bench) and 8.93x
+(soft), well past anything the policy reaches.
+
+**2. THE RESIDUAL IS ON THE EDGES, NOT AT THE CORNERS.** The standing hypothesis since §52.7
+was that the polygon diet cannot teach the square's corners. `CORNERSHARE=1` reads the
+shipped policy's residual on the square by distance from each corner:
+
+```
+  window about each corner    share of the residual's ENERGY    share of the lap's STEPS
+    ±100 steps                        5.2%                             7.3%
+    ±300 steps                       30.9%                            22.0%
+   ±1000 steps                       67.9%                            73.2%
+  mid-edge rms 1.145e-1 against the lap's rms 1.047e-1
+```
+
+Within ±100 steps of a corner the residual carries LESS than its share; the mid-edge rms is
+above the lap's. The corner is not where the policy fails. What is left is a residual spread
+along the edges — the ~300-step coherent error §52.26 measured the forecast reach against —
+and it is the same error class on the edges of the diet's polygons, which the policy reaches
+5-6x on and the teacher 7-11x.
+
+**3. AND THE DIET'S SHAPE IS WORTH 10%, NOT A FACTOR.** If the fault were coverage, a diet of
+rectangles sharing the square's edge directions and corner angle but not its size would close
+it. `DIET=rects` (four rectangles at the square's feed, aspect and scale ladders) and
+`DIET=rectspoly` (the four plus the four polygons):
+
+```
+                          bench square    fit R² (held-out)   own programs
+  poly4 (ships)              6.04x          0.888 / 0.837        4.8-6.1x
+  rects                      6.56x          0.860 / 0.870        7.2-7.5x
+  rects + poly4              6.85x          0.856 / 0.864        4.1-7.2x
+  soft cell, poly4           3.98x          0.880 / 0.838
+  soft cell, rects           6.01x          0.814 / 0.743        3.9-6.5x
+```
+
+The rectangles help — 6.04x → 6.85x on the bench, and the soft cell moves from 3.98x to
+6.01x, which is the largest single move on that cell in this arc — and they do NOT reach the
+14x the square teaches itself (§52.17). Note the ordering on the bench: the rectangle diet's
+policy reaches 7.2-7.5x on its OWN programs, all of them rectangles, and 6.56x on the square,
+which is also a rectangle. A policy that cannot reach 7.5x on the square from a diet of
+rectangles including the square's own shape at other sizes is not short of coverage; it is
+short of something the reference window cannot carry. Which is the fourth test.
+
+**4. THE STRUCTURAL FINDING: THE CONVERGED CORRECTION IS A FUNCTION OF THE MEASURED STATE,
+AND THE SHIPPED OBJECT HAS NO SUCH TERM.** `test/pilot/stateaug.mjs` commissions the bench
+ladder, converges every training program's prefix AND the square's own (through the same
+cascade teacher, put back for the purpose), runs each program WITH its converged prefix
+applied while tapping the measured motor-side vector `[θ1, θ2, ω1, ω2, τ1, τ2]`, and then
+regresses the prefix — the teacher's answer, not the policy's — on four row shapes at the
+policy's own stride, scored leave-one-polygon-out over the diet, in-sample, and fitted on the
+whole diet against the SQUARE's prefix, which the fit never sees:
+
+```
+  row shape                                            cols   LOPO    in-sample      SQUARE
+  A  reference window only (the shipped shape)          93   0.836   0.897/0.873   0.850/0.821
+  D  + newest measured sample, order-2 POLYNOMIAL       131   0.968   0.997/0.977   0.996/0.950
+     scheduled on the measured positions
+  B  + newest measured sample, trig pose-scheduled      147   0.970   0.997/0.976   0.996/0.944
+  C  B + measured lags at 1, 4, 16 samples              165   0.976   0.998/0.980   0.997/0.957
+  soft cell:
+  A                                                      93   0.725                 0.760/0.510
+  B                                                     147   0.965                 0.996/0.945
+```
+
+The reference window explains 0.84 of the square's converged correction; ONE measured sample
+— the two following errors, two speeds and two torques of the newest sample, multiplied by six
+polynomial terms of the measured pose — takes it to 0.996 / 0.950 on a program the fit never
+saw, and 0.725 → 0.965 leave-one-out on the soft cell where the reference window alone is
+weakest. The polynomial and the trig scheduling agree to the second figure, so the generic
+form of §52.25 carries it without knowing the channels are angles. The lags add 0.007. So the
+thing the reference window cannot express — 15% of the square's converged correction on the
+bench, 25-50% on the soft cell — is a function of where the machine actually IS, and the
+teacher's answer depends on it. That is the structural fault the owner's question was
+looking for: the deployed object is an open-loop map of the reference, and the object the
+iteration converges to is not.
+
+**5. BUILT, IT DEPLOYS AT 1.44x — AND THE REASON IS RULE 35, MEASURED.** `DistilPolicy`
+gained `stateDim`: a state vector appended to every row, supplied by the host's
+`distilStateRow` (the 38-term polynomial form above; `distilState: true` on the host, off by
+default), captured at commissioning by running each training program under its converged
+prefix (`captureState`) and read at deploy from the newest observation the ladder is handed
+(`_lastMeas`). The fit vouches for itself at **0.992 / 0.928** held-out — the best fit any
+policy here has produced — and the machine reads:
+
+```
+                       fit R²          bench square    own training programs
+  reference only    0.888 / 0.837          6.04x          4.8-6.1x
+  + state           0.992 / 0.928          1.44x          0.59x - 2.05x
+  soft cell, + state 0.989 / 0.956        REFUSED 0.26x   0.37x - 0.46x, all worse than nothing
+```
+
+A policy that harms its OWN training programs — where the fit is 0.99 — is not a transfer
+fault (rule: helps its programs and harms the square → transfer; harms its programs → the fit
+or the deploy path). And the deploy path is not the fault either: the state row is the same
+function at fit and deploy, and the rows without the state deploy at 6.04x through the same
+code. What is wrong is the FIXED POINT. The state was captured under the converged PREFIX,
+so the fit learned "in the state the prefix produces, apply the prefix"; the policy is not
+the prefix, its state is not that state, and the state term — a feedback path through the
+gearbox spring — then answers a state it was never shown, which is rule 35 (a soft sensor
+inside a loop is positive feedback unless trained over the operating points the loop will
+occupy) in a new costume.
+
+**6. AGGREGATING THE POLICY'S OWN STATE STABILISES IT AT 3.24x, BELOW THE OBJECT WITHOUT
+THE TERM.** The textbook repair is to close the loop at commissioning: run each training
+program under the CURRENT policy, capture the state it actually produces, refit on the prefix
+target with the rows of every round aggregated, repeat (`stateRounds`, default 2 when a state
+is declared; 3 here):
+
+```
+                             rounds' held-out R²        bench square   rounded   circle   own programs
+  reference only (control)          —                      6.04x        5.74x    7.89x    4.8-6.1x
+  + state, prefix rows only    0.992 / 0.928               1.44x        2.36x    2.97x    0.6-2.1x
+  + state, 3 rounds            0.909 / 0.835 → 0.910 / 0.857   3.24x    4.06x    4.75x    4.9-6.8x
+  + state, 6 rounds            → 0.913 / 0.871 (26,222 rows)   2.95x    3.97x    4.54x    5.0-6.8x
+  soft: reference only              —                      3.98x
+  soft: + state, 3 rounds      0.894 / 0.861               3.53x        3.37x    6.08x    4.8-8.0x
+```
+
+Three things the table says. The rounds work as a stabiliser: 1.44x → 3.24x, own programs
+0.6-2.1x → 4.9-6.8x, the soft cell from a refusal to 3.53x, and every round vouches — and
+doubling them does not climb: six rounds read 2.95x with the fit at 0.913 / 0.871, so the
+iteration has converged to where it is going. The fit under the policy's own state reads
+0.91 / 0.86, not 0.99 — the state under the policy is a
+LESS informative regressor than the state under the prefix, because the residual the policy
+leaves is what the state would have to explain, and it is the part the reference window
+already could not. And the result is BELOW the object without the term on the bench (3.24x
+against 6.04x) and on the soft cell (3.53x against 3.98x), on the square and on both
+held-out programs. So a state term that explains 0.996 of the teacher's answer, deployed
+through a loop, delivers less than an open-loop map that explains 0.85 of it.
+
+**7. THE SPLIT THAT DECIDES IT: THE INFORMATION IS THE MEASURED DEVIATION, WHICH IS FEEDBACK,
+AND NOT THE SCHEDULING.** Row D can be read two ways. Either the gain is pose SCHEDULING of the
+newest sample — a nonlinear function of the reference that a linear window cannot express but
+an open-loop map could, with no measurement at deploy and no rule-35 loop — or it is the
+measured DEVIATION from the reference, which only a loop can supply. `stateaug.mjs` splits
+D into exactly those two: E is the reference's OWN newest sample (its position, its finite-
+difference speed, its rigid torque in the encoder's units) scheduled on the REFERENCE pose,
+and F is the measured deviation from that sample scheduled the same way:
+
+```
+                                                          bench                    soft cell
+  row shape                                       cols  LOPO    SQUARE          LOPO    SQUARE
+  A  reference window (ships)                      93   0.836   0.850/0.821     0.745   0.770/0.512
+  E  + newest REFERENCE sample, ref-pose scheduled 119   0.803   0.810/0.792     0.683   0.746/0.612
+  F  + measured DEVIATION from it, ref-scheduled   129   0.962   0.994/0.864     0.939   0.992/0.774
+  G  E + F                                         155   0.956   0.994/0.870     0.936   0.992/0.816
+  D  + newest measured sample, measured-scheduled  131   0.968   0.996/0.950     0.943   0.996/0.908
+```
+
+E is WORSE than the window alone on both cells: scheduling the reference buys nothing, and
+§52.17's refusal of the 277-feature scheduled map is the same reading from the machine. F
+carries everything: 0.836 → 0.962 leave-one-out on the bench, 0.745 → 0.939 on the soft
+cell, 0.85 → 0.99 on the square's first channel. What D adds over F is the measured pose in
+the schedule rather than the commanded one, which is the deviation again, one level up. So
+the term the converged correction needs and the reference window lacks is the plant's
+CURRENT DEVIATION — following error, speed error, torque error — read at the motor side.
+That is a feedback term by definition, and its value at deploy is the value it has under the
+correction being applied, which is why the prefix-state fit (0.99) was worthless (1.44x) and
+the policy-state rounds read 0.91 and deliver 3.24x: under a policy that has not yet removed
+the residual, the deviation IS the residual, and a correction that answers it through the
+command arrives ~1,000 steps later (§52.26.5). §52.26 closed feedback with a forecast bank
+and a QP; this closes it with the distilled object's own regression, sharing no code with
+either, and reaches the same limit.
+
+**8. WHAT THE INVESTIGATION SAYS, AND WHAT SHIPS.** The owner's question was whether
+"nothing moves" is a fault of the method or of the instrument. Measured:
+
+- **Not the teacher, on this cell.** It converges the square itself to 10.27x / 8.93x. It IS
+  fragile — it needs the gearbox's backlash to stay stable on the bench cell — and that is a
+  robustness defect on record, not the ceiling.
+- **Not the corners.** The residual is on the edges; within ±100 steps of a corner it is
+  under-represented.
+- **Not the diet's shape, beyond 10%.** Rectangles including the square's own shape at other
+  sizes reach 6.56x on it and 7.2-7.5x on themselves.
+- **The object.** A linear map of the reference window explains 0.84 of the teacher's answer;
+  the rest is the machine's measured deviation, and a map that reads it is a feedback loop
+  through a spring whose 10-90% rise is 951 steps. Fitted open-loop it deploys at 1.44x;
+  fitted in the loop it stabilises at 3.24x; neither reaches the 6.04x of the map without it.
+
+So the thing "stopping improvement" is not a wrong instrument. It is that the residual a
+reference-only map leaves is, by the split above, the part that depends on the plant's
+current state, and this plant cannot be corrected from its state in the time the residual
+persists. What ships is unchanged: `distilState` is opt-in on the host and off, the
+reference-only control reads 1.7528e-1 byte-identical with the term declared and unused, and
+every number here is one seed on one plant. The lever that remains open is the one §52.18
+already measured — a better TEACHER at the same object (the square taught on itself reads
+14x through the same 93 features) — and the instrument that would change this section's
+answer is a plant whose spring is faster than its residual, where F's 0.96 would be
+deliverable and the state term would pay.

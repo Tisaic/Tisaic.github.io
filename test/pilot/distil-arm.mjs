@@ -80,7 +80,7 @@ const DIETS = {
   tour2: { feeds: [F, F], rMin: 3.4, rSpan: 2.4, tour: { nShapes: 6 } },   // two long closed tours, six shapes each (plan §52.16)
   tour1: { feeds: [F], rMin: 3.4, rSpan: 2.4, tour: { nShapes: 6 } },
 };
-if (!(DIET in DIETS) && DIET !== 'self' && DIET !== 'selfpoly') throw new Error(`DIET ${DIET}: one of ${Object.keys(DIETS).join(', ')}, self, selfpoly`);
+if (!(DIET in DIETS) && !['self', 'selfpoly', 'rects', 'rectspoly'].includes(DIET)) throw new Error(`DIET ${DIET}: one of ${Object.keys(DIETS).join(', ')}, self, selfpoly, rects, rectspoly`);
 const K = +(process.env.ARM_K || 0.25), E = +(process.env.ARM_E || 0.03);
 const path = sharpRect({ w: 8, h: 8, centre: [12, 0], feed: 4e-3, accel: 4e-5, cornerDt: 40 });
 const LAP = Math.ceil(path.lap);
@@ -106,6 +106,14 @@ const host = makeArmHost({
   // DIET=self: the bench square ITSELF as the only training program — the in-sample ceiling of the
   // basis on the program it is scored on; DIET=selfpoly: the square plus the four polygons.
   ...(DIET === 'self' ? { distilPath: [path] } : DIET === 'selfpoly' ? { distilPath: [path, ...designDemoPaths({ centre: [12, 0], feeds: [F, F], rMin: 3.4, rSpan: 2.4 })] } : {}),
+  // DIET=rects: RECTANGLES that share the square's edge DIRECTIONS (axis-aligned) and its centre but
+  // not its size — 5x11, 11x5, 6x6, 10x10 — the square itself in none of them (plan §52.27). The
+  // residual the shipped diet leaves lives along the square's straight edges, and random polygons
+  // at random rotations rarely put a long axis-aligned edge at those poses. DIET=rectspoly adds the
+  // shipped four polygons to the rectangles.
+  ...(DIET === 'rects' || DIET === 'rectspoly' ? { distilPath: [
+    ...[[5, 11], [11, 5], [6, 6], [10, 10]].map(([w, h]) => sharpRect({ w, h, centre: [12, 0], feed: F, accel: 4e-5, cornerDt: 40 })),
+    ...(DIET === 'rectspoly' ? designDemoPaths({ centre: [12, 0], feeds: [F, F], rMin: 3.4, rSpan: 2.4 }) : [])] } : {}),
   ...(process.env.CAP ? { distilCap: +process.env.CAP } : {}),
   ...(process.env.TEACHCAP ? { distilTeachCap: +process.env.TEACHCAP } : {}),
   // Q=<steps>: a circular moving-average Q-filter on the teacher's learned increment (plan §52.16).
@@ -123,6 +131,8 @@ const host = makeArmHost({
   ...(process.env.FBGAIN ? { distilFeedbackGain: +process.env.FBGAIN } : {}),
   ...(process.env.FBBASIS ? { distilFeedbackBasis: process.env.FBBASIS } : {}),
   ...(process.env.INSTR === '1' ? { instruments: true } : {}),
+  // STATE=1: the distilled policy carries the state term (plan §52.27).
+  ...(process.env.STATE === '1' ? { distilState: 'poly', ...(process.env.STATEROUNDS ? { distilStateRounds: +process.env.STATEROUNDS } : {}) } : {}),
   // FBOPTS=key=value,...: any Pilot option for the feedback layer alone — e.g. FBOPTS=ditherAmp=0.005,
   // because its dither defaults to a tenth of its authority, sized for the bare machine's error and
   // not for the residual it is identified on (plan §52.25).
@@ -255,6 +265,25 @@ if (process.env.FBFORECAST === '1' && host.auto.built.stacks && host.auto.built.
     console.log(`  forecast ON THE SQUARE at a ladder of leads — ${rows.join('   ')}`); }
   console.log(`  ${ext ? 'EXTERNAL' : 'feedback layer\'s own'} forecast ON THE SQUARE (${pred[0].length} decisions, layer forced on): R² ${r2.map((v) => v.r2.toFixed(3)).join('/')}   truth rms ${r2.map((v) => v.rmsT.toExponential(2)).join('/')}   predicted rms ${r2.map((v) => v.rmsP.toExponential(2)).join('/')}   deployed score ${r.score.toExponential(4)}`);
 }
+// CORNERSHARE=1: WHERE THE RESIDUAL LIVES (plan §52.27). The deployed machine runs three laps of
+// the square, the per-step contour error is read, and the share of its energy within ±W steps
+// of the four corners is reported against the share of steps there — a residual that is all
+// corner is a residual of velocity reversals, which is where a dead zone is traversed.
+if (process.env.CORNERSHARE === '1') {
+  const r = await host.run(null, null, 3, false);
+  const le = r.lapE[r.lapE.length - 1], L = le.length;
+  const sp = Array.from({ length: L }, (_, k) => { const c = path.at(k); return Math.hypot(c.vx, c.vy); });
+  const corners = []; for (let k = 1; k < L - 1; k++) if (sp[k] < sp[k - 1] && sp[k] <= sp[k + 1] && sp[k] < 0.5 * F) { if (!corners.length || k - corners[corners.length - 1] > 200) corners.push(k); }
+  let tot = 0; for (let k = 0; k < L; k++) tot += le[k] * le[k];
+  const rows = [];
+  for (const W of [100, 300, 1000]) {
+    const near = new Uint8Array(L); for (const c of corners) for (let k = c - W; k <= c + W; k++) near[((k % L) + L) % L] = 1;
+    let e2 = 0, n = 0; for (let k = 0; k < L; k++) if (near[k]) { e2 += le[k] * le[k]; n++; }
+    rows.push(`±${W}: ${(100 * e2 / tot).toFixed(1)}% of the energy in ${(100 * n / L).toFixed(1)}% of the steps`);
+  }
+  let far2 = 0, nf = 0; const nearW = new Uint8Array(L); for (const c of corners) for (let k = c - 1000; k <= c + 1000; k++) nearW[((k % L) + L) % L] = 1; for (let k = 0; k < L; k++) if (!nearW[k]) { far2 += le[k] * le[k]; nf++; }
+  console.log(`  residual on the square (lap ${L}, corners at ${corners.join(', ')}): ${rows.join('   ')};  mid-edge rms ${Math.sqrt(far2 / Math.max(1, nf)).toExponential(3)} against lap rms ${Math.sqrt(tot / L).toExponential(3)}`);
+}
 if (globalThis.__LEADPROBE) for (const c of Object.keys(globalThis.__LEADPROBE)) {
   const rows = globalThis.__LEADPROBE[c];
   console.log(`  lead probe ch${c} (last layer fitted): ` + rows.map((r) => `L${r.L} shared ${r.shared.toFixed(2)} per-lead ${r.perLead.toFixed(2)}`).join('  '));
@@ -278,14 +307,19 @@ if (d && d.runs) {
 if (d && d.fit) {
   console.log(`\n  fit: deploy ${d.fit.deploy}  rows ${d.fit.rows}  features ${d.fit.features}`
     + `  held-out R² ${JSON.stringify((d.fit.heldOutR2 || []).map((v) => +v.toFixed(4)))}`
+    + (d.stateRounds ? `\n  state rounds: ` + d.stateRounds.map((r) => `round ${r.round} ${r.deploy ? 'vouches' : 'REFUSED'} R² ${JSON.stringify((r.heldOutR2 || []).map((v) => +v.toFixed(3)))} ${r.rows} rows`).join('; ') : '')
     + `  speed span ${JSON.stringify(d.fit.speedSpan)}${d.fit.reason ? '  reason: ' + d.fit.reason : ''}`);
 }
 if (d && d.note) console.log(`  note: ${d.note}`);
 
 // ---- THE SPLIT. Score the fitted policy on the programs it was fitted on, on the machine.
+// A policy with a state term reads the newest measured sample: `tap` receives it after every
+// step and `at` uses it at the next decision, exactly as the ladder's own deploy path does.
 const heldPolicy = (p, tr, refAt = tr.refAt, speedAt = tr.speedAt) => {
-  const st = p.stride || 1; let held = [0, 0];
-  return { at: (k) => { if (k % st === 0) held = p.act(refAt, k, speedAt(k)); return held; } };
+  const st = p.stride || 1; let held = [0, 0], last = null;
+  const sr = host.auto.distilOpts && host.auto.distilOpts.stateRow;
+  const at = (k) => { if (k % st === 0) { if (p.stateDim && !last) return held; held = p.act(refAt, k, speedAt(k), p.stateDim ? sr(last, refAt(k)) : null); } return held; };
+  return { at, tap: (nn, k, m) => { last = m; } };
 };
 // ADAPT=<laps>: THE TRACKER STAYS ON THE MACHINE (plan §52.18). Run the bench square with the
 // truth routed into `observe` — the deployed policy's own streaming recursion continuing on
@@ -318,12 +352,20 @@ const scoreSet = async (label, p2, set, names) => {
   const out = [];
   for (let i = 0; i < set.length; i++) {
     const tr = set[i];
-    const b = await tr.run(null), w = await tr.run(heldPolicy(p2, tr));
+    const hp = heldPolicy(p2, tr);
+    const b = await tr.run(null), w = await tr.run(hp, { tap: hp.tap });
     out.push(b.score / w.score);
     console.log(`    ${label}: ${names[i]} (lap ${tr.lap})  ${b.score.toExponential(4)} -> ${w.score.toExponential(4)}   ${(b.score / w.score).toFixed(2)}x`);
   }
   return out;
 };
+// HELDOUT=1: score the deployed policy on the two programs no diet contains — the rounded
+// rectangle and the circle — so a diet that lifts the square can be told from one that memorises
+// its edges (plan §52.27).
+if (process.env.HELDOUT === '1' && host.auto.deployed.distil) {
+  console.log('\n  held-out programs, the deployed policy against the bare machine:');
+  await scoreSet('held-out', host.auto.distil, heldOut, heldNames);
+}
 if (process.env.LEARN && host.auto.deployed.distil) {
   const before = await host.run(null, null);
   const live = await host.liveRuns();
@@ -350,11 +392,12 @@ if (pol && pol.W) {
     // EVALUATED AS IT DEPLOYS: once per decision and HELD between, never at every step. The
     // deployed object holds (AutoStack's distil.stride); reading the policy at every step
     // evaluates the fit at phases it never saw and scores an object that does not ship.
-    const withP = await tr.run(heldPolicy(pol, tr));
+    const hpT = heldPolicy(pol, tr);
+    const withP = await tr.run(hpT, { tap: hpT.tap });
     // THE SIZE OF THE CONTROL AGAINST THE SIZE OF THE ERROR IT CANCELS, in the same units
     // (joint rad, rms over the lap): a correction much smaller than the error it removes is
     // a scale fault somewhere, not a clever controller.
-    { const hp = heldPolicy(pol, tr); let s2 = 0; for (let k = 0; k < tr.lap; k++) { const u = hp.at(k); s2 += u[0] * u[0] + u[1] * u[1]; }
+    if (!pol.stateDim) { const hp = heldPolicy(pol, tr); let s2 = 0; for (let k = 0; k < tr.lap; k++) { const u = hp.at(k); s2 += u[0] * u[0] + u[1] * u[1]; }
       console.log(`      control rms ${Math.sqrt(s2 / tr.lap).toExponential(3)} rad against bare error rms ${base.score.toExponential(3)} rad (ratio ${(Math.sqrt(s2 / tr.lap) / base.score).toFixed(2)})`); }
     console.log(`    program ${i} (lap ${tr.lap}): ${base.score.toExponential(4)} -> ${withP.score.toExponential(4)}`
       + `   ${(base.score / withP.score).toFixed(2)}x` + (withP.sat != null ? `   drive saturated ${(100 * withP.sat).toFixed(1)}% of steps (bare ${(100 * base.sat).toFixed(1)}%)` : ''));
@@ -400,7 +443,8 @@ if (LOO) {
     if (!fit.deploy) { console.log(`    fold ${i}: fit refused — ${fit.reason}`); continue; }
     const tr = runs[i];
     const b = await tr.run(null);
-    const w = await tr.run(heldPolicy(pol, tr));
+    const hpL = heldPolicy(pol, tr);
+    const w = await tr.run(hpL, { tap: hpL.tap });
     const sqB = await host.run(null, null);
     const sqW = await host.run(heldPolicy(pol, null, sqRef, sqSpeed), 'distil');
     rows.push({ i, held: b.score / w.score, square: sqB.score / sqW.score, r2: fit.heldOutR2.map((v) => +v.toFixed(3)) });
