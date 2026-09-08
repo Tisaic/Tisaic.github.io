@@ -120,6 +120,7 @@ const host = makeArmHost({
   // FB=1: a feedback cascade layer identified and scored ON TOP of the distilled model (plan §52.20).
   ...(process.env.FB === '1' ? { distilFeedbackOnTop: true } : {}),
   ...(process.env.FBCAP ? { distilFeedbackCap: +process.env.FBCAP } : {}),
+  ...(process.env.FBGAIN ? { distilFeedbackGain: +process.env.FBGAIN } : {}),
   // STD=1: standardised rows (each feature divided by its rms over the training rows).
   ...(process.env.STD === '1' ? { distilStandardize: true } : {}),
   // SOFFS=a,b,c: the direction-of-travel block's offsets, in pilot samples (default none).

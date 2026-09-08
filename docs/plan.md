@@ -11841,3 +11841,180 @@ at the tool makes the stored state observable at deploy, and this project has ne
 itself one. And the general lesson is the one this project already had in rule 36 and paid for
 again here in an hour: **a held-out lap is not a held-out program**, and an observability number
 taken on one program is a memory reading until it is scored on another.
+
+### §52.22 THREE EXPERIMENTS ON THE ENERGY BASIS, AND THE ONE THAT WORKED IS THE SMALLEST
+
+Three questions from §52.21, each run as an instrument rather than argued. All on the distilled
+machine, bench cell K 0.25 / E 0.03 and soft cell E 0.005, one seed each.
+
+**A. SELECTION BY TRANSFER OVER THE ENERGY LIBRARY — NO TRANSFERABLE SUBSET EXISTS.**
+`observe.mjs` now accumulates ONE normal matrix per program over a library of 66 named groups
+(314 columns: the command window, 13 lags of the six motor signals, the energy quadratics at 7
+lags, ∑τ·ω over 4 windows, configuration trig, and the instruments below), so any subset is a
+sub-matrix solve and a thousand fits cost one accumulation. Greedy forward selection over the
+deployable groups, each step scored LEAVE-ONE-PROGRAM-OUT over the four diet polygons at a
+ladder of ridges, never in-sample:
+
+```
+                          bench                                  soft
+  step 1   P@32   LOPO -0.053                        P@32    LOPO -0.029
+  step 2   stop (best P@128 -0.048)                  P@2048  LOPO -0.010, then stop
+```
+
+No deployable group — motor lag, energy quadratic, power integral, trig, or the command window
+itself — raises the leave-one-polygon-out R² above zero. The full sets read LOPO −0.25 to −0.33
+on the bench and −0.03 to −0.17 on the soft cell. The diet polygons span a 3.4-5.8 scale, so
+holding one out asks the fit to EXTRAPOLATE in size, and nothing here does; the 0.4-0.6 the same
+fits read on the square (§52.21) is interpolation inside that span. The energy library's answer
+is now complete: on this plant no combination of energy-shaped motor-side terms is a transferable
+observer of the residual, at any ridge, selected by any criterion that is not a memory.
+
+**B. THE INSTRUMENTS — STRAIN AND WIND-UP HELP, AN ACCELEROMETER DOES NOT, AND NONE CLOSES IT
+BY REGRESSION.** The training-run tap now carries what a customer could bolt on: the tool's
+position (differenced over the pilot's cadence into an accelerometer, 5% white noise added), the
+two links' tip deflections and link 1's tip slope (strain gauges), and the gearboxes' wind-up.
+Fitted on the diet, scored on programs never fitted, λ by LOPO:
+
+```
+  + to the linear motor-side rows          LOPO      SQUARE          CIRCLE          ROUNDED
+  bench   (none)                          -0.246   0.420/0.012    -0.588/0.051    -0.021/-0.038
+          + accelerometer                 -0.120   0.168/0.299    -0.853/0.194    -0.016/0.286
+          + link strain                    0.036   0.522/0.810     0.054/0.624     0.463/0.713
+          + gearbox wind-up                0.106   0.560/0.834    -0.339/0.567     0.344/0.713
+          + all three                      0.061   0.605/0.856    -0.408/0.647     0.328/0.768
+  soft    (none)                          -0.048   0.604/0.002     0.182/-0.135    0.347/0.028
+          + accelerometer                  0.172   0.563/0.353     0.207/0.424     0.414/0.377
+          + link strain                    0.223   0.586/0.702     0.168/0.623     0.396/0.701
+          + gearbox wind-up                0.252   0.602/0.549     0.303/0.442     0.471/0.549
+          + all three                      0.279   0.645/0.820     0.219/0.805     0.430/0.822
+```
+
+Two readings. The second channel goes from nothing to 0.6-0.85 the moment a strain or wind-up
+reading is available, on every program, both cells — that is the stored state the motor side
+cannot see, seen. The first channel does not follow: 0.5-0.6 on the square and rounded, and the
+circle's first channel stays near zero on the bench. That is not a limit of the instruments, it
+is a limit of the REGRESSION: `arm2r.toolXY` composes the tool from the load-side angles, the
+tip deflections and the slope in closed form, so with strain and wind-up in hand the tool error
+is GEOMETRY through a pose-dependent Jacobian, and a pose-averaged linear map of it transfers
+only where the poses match (rule 40: compute what has a closed form). With those instruments the
+observer to build is not a fit but the kinematics. The accelerometer — the cheap one — is the
+disappointment: LOPO −0.12 on the bench and 0.17 on the soft cell, because what dominates the
+residual is a low-frequency deflection an acceleration cannot integrate back to.
+
+**C. THE FEEDBACK LAYER AT A GAIN — HARMFUL AT EVERY GAIN ON THE BENCH, AND 1.25x ON THE SOFT
+CELL.** `distil.feedbackGain` scales what the layer APPLIES; identification and verify are
+untouched. Same seed as §52.21's bare-identified layer:
+
+```
+  gain            0.1      0.25     0.35     0.5      1.0
+  bench          0.97x    0.86x     —       0.65x    0.39x     (all REFUSED)
+  soft           1.09x    1.20x    1.25x    1.24x    0.84x     (deployed at every gain below 1)
+```
+
+On the bench the layer is monotone toward doing nothing as its gain goes to zero and never
+crosses 1.0x — the sign of its correction is wrong there at any size, which is what §52.20 first
+read and §52.21's "half-blind at full gain" softened too far. On the soft cell — more compliance,
+a bigger stored state, and the cell where the linear observer reads 0.8 on the square's first
+channel — a third of the layer's correction is worth **1.25x on top of the distilled policy:
+5.2494e-1 → 4.2061e-1, 3.98x → 4.97x over the conventional machine**, the first time a feedback
+layer has helped anywhere in this arc. The optimum is broad (0.35-0.5) and it is one plant cell,
+one seed. The knob is opt-in and off; the two cells disagree on its sign, so a default would be
+rule 31 in the wrong direction, and a gain the machine chose by scoring — a ladder rung with the
+gain as its knob — is the honest form of it.
+
+**WHAT THE THREE SAY TOGETHER.** The energy basis is finished as a route on this plant: neither
+the lift, the balance, nor a selected subset transfers. What transfers is a plain linear observer
+worth half the residual, and it is worth using only where the plant is compliant enough for that
+half to be the larger part — the soft cell says yes at 1.25x, the bench says no. Above that, the
+state is reachable only through an instrument on the link or the joint, and once it is there the
+map to the tool is geometry, not a fit.
+
+### §52.23 THE TRACKER PLUS EXTERNAL ENCODERS AT COMMISSIONING — EVERY HIDDEN STATE IS OBSERVABLE, THE TOOL ERROR IS THEIR POSE-SCHEDULED SUM, AND THE CHAIN BUYS THE SECOND CHANNEL
+
+The owner's question: what if the laser tracker is combined with EXTERNAL (load-side) encoders
+during the training period? An external encoder reads the joint after the gearbox, so at
+commissioning it supplies the wind-up as a truth; a strain gauge supplies the link's bend the
+same way. `observe.mjs` gained `TARGET=wu|bend` so the hidden states themselves become the
+target of a soft sensor from the motor side, fitted on the diet and scored on programs never
+fitted, λ by leave-one-polygon-out:
+
+```
+  target: the two WIND-UPS                LOPO     SQUARE          CIRCLE          ROUNDED
+  bench  motor lags + command            0.950   0.996/0.848     0.991/0.930     0.994/0.860
+         + energy lift                   0.953   0.989/0.930     0.988/0.970     0.991/0.947
+         motor lags alone, no command    0.904   0.905/0.867     0.904/0.945     0.922/0.893
+  soft   motor lags + command            0.963   0.993/0.901     0.997/0.908     0.990/0.888
+
+  target: the two tip DEFLECTIONS
+  bench  motor lags + command            0.912   0.992/0.811     0.994/0.878     0.986/0.741
+  soft   motor lags + command            0.927   0.990/0.640     0.997/0.829     0.991/0.640
+         + energy lift                   0.937   0.984/0.871     0.982/0.922     0.982/0.867
+```
+
+**EVERY HIDDEN STATE IS OBSERVABLE FROM THE MOTOR SIDE, ACROSS PROGRAMS, AT 0.9 OR BETTER.** The
+wind-up at 0.95 leave-one-out and 0.99 on joint 1; the bend at 0.91-0.93, 0.99 on link 1. Joint
+2's wind-up and link 2's bend are the weaker ones (0.85-0.93 and 0.64-0.88). §52.21 called the
+residual half-observable; the states that make it up are not half-observable at all. So the
+half that was missing is not a state — it is the MAP from the states to the tool.
+
+**THE MAP IS GEOMETRY, AND ITS GENERIC FORM IS A POSE-SCHEDULED LINEAR BLOCK.** `arm2r.toolXY`
+composes the tool from the load-side angles, the deflections and the slope through the
+configuration's sines and cosines, so a linear map of the states transfers only where the poses
+match. The library gained two scheduled groups — the newest motor-side sample and the command
+difference multiplied by the pose's six trig terms (`sched_m0`, deployable), and the newest
+instrument readings multiplied by the same (`sched_inst`) — and the soft cell's greedy selection
+found the observer on its own: `cmd + sched_m0 + sched_inst`, 113 columns, LOPO 0.948. Scored
+directly on both cells:
+
+```
+  residual, instruments present AT DEPLOY          LOPO     SQUARE          CIRCLE          ROUNDED
+  bench  cmd + scheduled sample + scheduled instr  0.992   0.988/0.997     0.991/0.998     0.994/0.998
+  soft   the same                                  0.946   0.943/0.996     0.944/0.997     0.925/0.997
+  (unscheduled, the same instruments, §52.22)      0.06    0.605/0.856    -0.408/0.647     0.328/0.768
+```
+
+With a strain gauge and a load-side encoder on the machine, the residual is 99% observable on
+programs the observer never saw, through 113 linear coefficients and no declared kinematics.
+That is the full state, and it is the first time in this project the tool error has been
+reconstructed to that figure from anything but the tracker.
+
+**THE CHAIN — INSTRUMENTS AT COMMISSIONING ONLY — BUYS THE SECOND CHANNEL AND NOT THE FIRST.**
+Two learned stages, deployed with neither instrument: stage 1 estimates the five hidden states
+from the motor side and the command (the external encoder and the strain gauge as truth, fitted
+on the diet); stage 2 composes the ESTIMATED states, pose-scheduled, into the tool error (the
+tracker as truth).
+
+```
+  stage 1 on never-fitted programs (wu1 / wu2 / w1 / w2 / s1)
+  bench   square 0.996/0.864/0.992/0.811/0.992   circle 0.993/0.934/0.994/0.878/0.994
+  soft    square 0.992/0.888/0.990/0.688/0.989   circle 0.996/0.896/0.998/0.841/0.997
+
+  stage 2, the residual from estimated states       LOPO     SQUARE          CIRCLE          ROUNDED
+  bench   chain                                    0.488   0.175/0.867     0.289/0.954     0.535/0.871
+  soft    chain                                    0.460   0.594/0.861    -0.166/0.852     0.406/0.861
+  for comparison, the plain linear observer        -0.25   0.420/0.012    -0.588/0.051    -0.021/-0.038
+```
+
+The chain takes the second channel from nothing to 0.85-0.95 across programs on both cells and
+leaves the first channel where the linear observer had it. The reason is in stage 1's weak
+entries: joint 2's wind-up and link 2's bend are estimated at 0.69-0.93, and the tool error is
+a SUM of terms that largely cancel, so a 10% error in one state is a large fraction of the
+residual. A tenth of a state is half the residual's variance on the channel that state
+dominates. The chain's LOPO is flattered a little by stage 1 being in-sample on the diet; its
+never-fitted columns are not.
+
+**WHAT THIS SETTLES.**
+
+1. The state IS observable from the motor side. §52.21's "half" was the composition, not the
+   states, and the composition is a pose-scheduled linear block — generic, 30 columns per
+   state vector, learned from the same data.
+2. A strain gauge and a load-side encoder on the machine make the residual 99% observable on
+   never-seen programs. An accelerometer does not (§52.22). If an instrument is to be bought,
+   it is one of those two, and the load-side encoder is the one machine builders already fit.
+3. Instruments at commissioning only, chained through soft sensors, deliver the second channel
+   (0.85-0.95) and not the first (0.2-0.6). Whether that half-observer, fed to a feedback law
+   at a chosen gain, beats the 1.25x the plain layer reads on the soft cell (§52.22) is the
+   next machine-scored measurement, and it is a deploy question rather than an observability
+   one.
+4. The energy basis is closed on this plant. The states it was meant to reach are reachable
+   linearly, and the map it could not express is geometry.
