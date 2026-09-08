@@ -12191,3 +12191,97 @@ not a knob, and the offline instrument says what it should read before the machi
 (§52.23's `PILOT-SHAPED` row), which bounds what it can deliver on the shipped machine to the
 second channel. Everything built here ships opt-in and off: `schedFn`, `schedOrder`,
 `schedLags`, `schedCmd`, `feedbackSched`, `instruments`, `feedbackGain`, `feedbackBasis`.
+
+### §52.26 THE OPEN PATH BROUGHT TO ITS END: THE FORECAST IS SEPARATED, IT READS 0.98 ON THE MACHINE, AND FEEDBACK THROUGH THE COMMAND CANNOT REACH WHAT IT PREDICTS
+
+§52.25 left one build: a forecast bank at reachable leads on the raw truth, separated from the
+QP's horizon. This section builds it, scores it, and follows the result to the physical limit
+that closes the feedback route on this arm. Bench and soft cell, one seed except where stated.
+
+**1. THE PILOT'S OWN FORECAST, SCORED ON THE SQUARE, IS BELOW THE MEAN.** `FBFORECAST=1` forces
+the feedback layer on, captures its lead-0 prediction per decision through the oracle port
+(returning the fitted value, so nothing else changes), pairs it with the truth of the guided
+run, and scores it — the forecast on the machine it corrects, which its own held-out R² on the
+excitation never was:
+
+```
+                                 forecast R² on the square    deployed
+  bench   plain basis                  -1.194 / -0.254          0.77x
+  bench   instruments, trig block       0.131 / -0.035          0.84x
+  soft    plain basis                  -0.158 / -0.703          1.25x
+  soft    instruments, trig block      -0.224 / -0.065          0.92x
+```
+
+The one positive feedback result in this arc, the soft cell's 1.25x, rides on a forecast worse
+than the mean: it corrects a bias, not a model.
+
+**2. THE SEPARATED BANK (`FBEXT=1`) READS 0.96-0.99 ON THE MACHINE WITH THE LAYER ACTING.** The
+offline observer — the command window at ±256 samples, the newest sample and the instruments
+multiplied by the generic trig of the pose, 135 columns — fitted in the harness on the layer's
+OWN excitation record against the raw truth, one ridge per lead for every lead of the horizon,
+and handed to the QP through the oracle port; the QP, its response model, its horizon and its
+cap untouched.
+
+```
+                                 forecast R² on the square    deployed (gain 0.35)
+  bench   no instruments             -1.955 /  0.013             0.55x
+  bench   instruments                 0.963 /  0.974             0.55x
+  soft    no instruments             -0.173 / -0.018             0.92x
+  soft    instruments                 0.910 /  0.969             0.49x
+```
+
+The forecast is now right on the machine, at 0.96/0.97 and 0.91/0.97, and the machine gets
+WORSE. A correct forecast and a correction that harms at every gain (0.1 → 0.92x, 0.35 → 0.55x,
+1.0 → 0.18x) with the sign checked — flipped, it reads 0.63 and 12.1 against 0.19 — and the
+response's DC sensible at 0.9-1.0. The effort weight the pilot chose on its own wrong forecast
+was re-swept for the correct one, and it does not rescue it: λ×10 0.62, ×100 0.85, ×1000 0.49,
+one iteration 0.61, non-monotone; the dither that identified the response, swept 40-fold, moves
+nothing. Every knob of the inversion was turned and none of them is the fault.
+
+**3. THE FORECAST'S REACH IS 300 STEPS AND THE ACTUATOR'S RISE IS 3,000.** The same instrument
+at a ladder of leads, on the square, layer acting, instruments on, bench:
+
+```
+  lead (steps)      0        288        576        1152        2304        4608
+  R²          0.963/0.974  0.396/0.305  -0.452/-1.090  -2.40/-3.82  -3.92/-4.95  -14.4/-4.2
+```
+
+And the identified response of the tool error to a unit command correction on this gearbox
+(K 0.25), from the layer's own `hGrid`: 0 at lead 0, −8.7e-4 at 72 steps, 2.3e-2 at 504 steps,
+its DC of 0.91 reached over the ~3,300-step settle the pilot sized its horizon from. So the QP
+plans over 69 leads of which 4 carry a forecast, and a horizon cut to the reach (8-14 leads)
+rings, as §52.25 measured: 6.97 and 1.21 at gain 1, 0.52 at 0.35. The receding-horizon
+inversion is the wrong actuation for this residual, and no regularisation of it is the right one.
+
+**4. THE LAW THAT READS THE FORECAST ONLY WHERE IT IS GOOD IS INERT.** `FBLAW=prop` replaces the
+QP with u = −g·ê(L*)/dc — the bank's prediction at a lead inside its reach, over the response's
+DC, clamped:
+
+```
+  lead (steps)   72       144      288      144
+  gain           0.3      0.3      0.3      0.1
+  deployed     1.7403e-1  1.7415e-1  1.7460e-1  1.7466e-1     doing nothing 1.7528e-1
+```
+
+Never harmful, 1.004x-1.007x, and it says the same thing the reach ladder and the response table
+say together: a correction commanded now arrives over thousands of steps, and the error it was
+computed against is unpredictable past three hundred. **Feedback through the command cannot reach
+what it predicts on this arm.** The 1.25x on the soft cell is the slow, biased part of the
+residual — the part a slow actuator can meet — and across three commissioning seeds it reads
+**1.25x / 1.03x / 1.15x**, all deployed, none harmful: a small, real, repeatable bias correction
+and not a damping of anything.
+
+**WHAT THIS CLOSES, AND WHAT IT LICENSES.** The feedback route on the arm is finished by
+physics rather than by a missing build: the plant's response through the compliance is an order
+of magnitude slower than the residual's coherence, and that ratio is a property of the gearbox
+and the link, not of any block in this repository. It is also the explanation this arc lacked
+for why every route that ever worked on this arm was PREVIEW: the distilled policy reads the
+reference 2,048 steps ahead, which is the only way a 3,000-step actuator can place a correction
+where the error will be. What is licensed is narrow and stated: the separated forecast bank is a
+correct observer of the tool error from a strain gauge and a load-side encoder at R² 0.96-0.99,
+built from the pilot's own excitation with no plant constant, and a faster actuator path —
+torque injection at the motor rather than a position-command offset through the loop — is the
+one thing that would change the ratio. Neither the pilot's own fit nor its QP is touched by this
+section; every instrument lives in `test/pilot/distil-arm.mjs` behind `FBFORECAST`, `FBEXT`,
+`FBEXTLAM`, `FBEXTSIGN`, `FBEXTLAMBDA`, `FBLAW`, `FBLAWG`, `FBLAWLEAD`, `SEED`, and the
+default ladder is untouched.

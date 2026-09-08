@@ -150,6 +150,8 @@ const host = makeArmHost({
     + `  ${r.gain === null ? '' : r.gain.toFixed(2) + 'x'}${r.deployed ? '' : '  NOT deployed'}${r.note ? '  — ' + r.note : ''}`),
 });
 host.auto.pilotOpts.start = m0.arm.ik(path.at(0).x, path.at(0).y, true);
+// SEED=n: another commissioning draw (the excitation's seed), for a spread on one result.
+if (process.env.SEED) host.auto.pilotOpts.seed = +process.env.SEED;
 // BASIS=quad|lin|sch: force the pilot's forecast basis (every cascade layer, including the feedback layer).
 if (process.env.BASIS) host.auto.pilotOpts.forceBasis = process.env.BASIS;
 // LEADPROBE=1: the pilot re-fits every sampled lead ALONE beside the shared fit and records both
@@ -158,6 +160,101 @@ if (process.env.BASIS) host.auto.pilotOpts.forceBasis = process.env.BASIS;
 if (process.env.LEADPROBE === '1') globalThis.__LEADPROBE = {};
 const rep = await host.auto.commission({ run: host.run, drivePilot: host.drivePilot,
   recordDemo: host.recordDemo, distilRuns: host.distilRuns });
+// FBFORECAST=1: THE FEEDBACK LAYER'S FORECAST SCORED ON THE SQUARE (rule 16, plan §52.26). Its
+// held-out R² is measured on its own excitation, which is not the regime it deploys on. Here the
+// layer is forced on, its lead-0 prediction of the error is captured per decision through the
+// oracle port (returning the fitted value, so nothing changes), paired with the truth the guided
+// run reports, and scored — the forecast on the machine it corrects, beside what it delivers.
+if (process.env.FBFORECAST === '1' && host.auto.built.stacks && host.auto.built.stacks.length) {
+  const stF = host.auto.built.stacks[host.auto.built.stacks.length - 1], p = stF.layers[0];
+  const prev = { stack: host.auto.stack, depth: host.auto.deployed.stack, below: host.auto._distilBelowStack, dobs: host.auto.distil && host.auto.distil.observe };
+  host.auto.stack = stF; host.auto.deployed.stack = 1; host.auto._distilBelowStack = true;
+  if (host.auto.distil) host.auto.distil.observe = () => false;
+  const pred = [[], []], tru = [[], []]; let pending = null;
+  // ...and at a LADDER OF LEADS: the QP plans against every lead of its horizon, and a forecast
+  // right at lead 0 can be noise at lead 500. Decisions record their per-lead predictions; the
+  // truth per step is kept; both are paired at the end.
+  const LEADIDX = [0, 4, 8, 16, 32, 64]; const decs = []; const truthLog = [];
+  // FBEXT=1: THE SEPARATED FORECAST BANK (plan §52.26). The observer that reads the residual at
+  // 0.96/0.99 offline (§52.24-25), fitted HERE on the layer's own excitation record — the raw
+  // truth at every lead the QP plans over, one ridge per lead, the command window at ±256
+  // samples, the newest sample and the instruments multiplied by the generic trig of the pose —
+  // and handed to the QP through the oracle port in place of the pilot's own forecast. The QP,
+  // its horizon, its response model and its cap are untouched: only the forecast moves.
+  let ext = null, kNow = 0, last = null;
+  if (process.env.FBEXT === '1' && p._rec && p._rec.x && p._rec.x.length) {
+    const rec = p._rec, PS = p.sample, grid = p.grid, leads = p.readouts[0].leads, NL = Math.min(p.N, leads.length);
+    const OFFS = [-256, -128, -64, -32, -16, -8, -4, -2, -1, 1, 2, 4, 8, 16, 24, 32, 48, 64, 96, 128, 192, 256];
+    const trig = (m) => { const c0 = Math.cos(m[0]), s0 = Math.sin(m[0]), c1 = Math.cos(m[1]), s1 = Math.sin(m[1]); return [c0, s0, c1, s1, c0 * c1, c0 * s1, s0 * c1, s0 * s1]; };
+    const row = (m, cmd0, cmdAt) => { const f = [1, cmd0[0], cmd0[1]]; for (const o of OFFS) { const q = cmdAt(o); f.push(q[0] - cmd0[0], q[1] - cmd0[1]); } const base = [m[0] - cmd0[0], m[1] - cmd0[1], ...m.slice(2)]; const tg = trig(m); for (const a of base) for (const t of tg) f.push(a * t); return f; };
+    const n = rec.x.length;
+    const X = rec.x.map((m, i) => row(m, rec.cmd[i], (o) => rec.cmd[Math.max(0, Math.min(n - 1, i + o))]));
+    const dim = X[0].length, A = new Float64Array(dim * dim);
+    for (const x of X) for (let i = 0; i < dim; i++) { const xi = x[i]; for (let j = i; j < dim; j++) A[i * dim + j] += xi * x[j]; }
+    for (let i = 0; i < dim; i++) for (let j = 0; j < i; j++) A[i * dim + j] = A[j * dim + i];
+    const sc = new Float64Array(dim); for (let i = 0; i < dim; i++) sc[i] = Math.sqrt(A[i * dim + i] / n) || 1;
+    const lam = +(process.env.FBEXTLAM || 1e-3);
+    const M = new Float64Array(dim * dim);
+    for (let i = 0; i < dim; i++) { for (let j = 0; j < dim; j++) M[i * dim + j] = A[i * dim + j] / (sc[i] * sc[j]); M[i * dim + i] += lam * n; }
+    const Lc = new Float64Array(dim * dim);
+    for (let i = 0; i < dim; i++) for (let j = 0; j <= i; j++) { let s2 = M[i * dim + j]; for (let k = 0; k < j; k++) s2 -= Lc[i * dim + k] * Lc[j * dim + k]; Lc[i * dim + j] = i === j ? Math.sqrt(Math.max(s2, 1e-300)) : s2 / Lc[j * dim + j]; }
+    const solve = (b) => { const z = new Float64Array(dim); for (let i = 0; i < dim; i++) { let s2 = b[i] / sc[i]; for (let k = 0; k < i; k++) s2 -= Lc[i * dim + k] * z[k]; z[i] = s2 / Lc[i * dim + i]; } const ws = new Float64Array(dim); for (let i = dim - 1; i >= 0; i--) { let s2 = z[i]; for (let k = i + 1; k < dim; k++) s2 -= Lc[k * dim + i] * ws[k]; ws[i] = s2 / Lc[i * dim + i]; } const w = new Float64Array(dim); for (let i = 0; i < dim; i++) w[i] = ws[i] / sc[i]; return w; };
+    // one weight vector per lead per channel, target the RAW truth at k + lead (the dither is small)
+    const W = [];
+    for (let li = 0; li < NL; li++) {
+      const L = leads[li]; const b = [new Float64Array(dim), new Float64Array(dim)];
+      for (let i = 0; i + L < n; i++) { const x = X[i], e = rec.e[i + L]; for (let j = 0; j < dim; j++) { b[0][j] += x[j] * e[0]; b[1][j] += x[j] * e[1]; } }
+      W.push([solve(b[0]), solve(b[1])]);
+    }
+    // in-sample R² at lead 0, as a sanity floor for the fit itself
+    { const r2 = [0, 1].map((c) => { let ss = 0, st = 0, mu = 0; for (let i = 0; i < n; i++) mu += rec.e[i][c]; mu /= n; for (let i = 0; i < n; i++) { let q = 0; for (let j = 0; j < dim; j++) q += W[0][c][j] * X[i][j]; ss += (rec.e[i][c] - q) ** 2; st += (rec.e[i][c] - mu) ** 2; } return 1 - ss / st; });
+      console.log(`  external forecast bank: ${dim} columns, ${NL} leads (grid ${grid}, sample ${PS}), λ ${lam}, in-sample R² at lead 0 ${r2.map((v) => v.toFixed(3)).join('/')}`); }
+    const R = host.refsFor(m0.arm), LAPn = R.length;
+    const qAt = (k) => R[((k % LAPn) + LAPn) % LAPn];
+    let cache = { k: -1, x: null };
+    ext = (c, leadSamples, fitted, conv) => {
+      if (!last) return fitted;
+      if (cache.k !== kNow) cache = { k: kNow, x: row(last, qAt(kNow), (o) => qAt(kNow + o * PS)) };
+      const li = Math.min(NL - 1, Math.round(leadSamples / grid)), w = W[li][c];
+      let q = 0; for (let j = 0; j < dim; j++) q += w[j] * cache.x[j];
+      // FBEXTSIGN=-1 flips the forecast's sign: a forecast that is right and a correction that
+      // harms monotonically with gain is what a response model of the wrong sign looks like.
+      return (process.env.FBEXTSIGN === '-1' ? -q : q) - conv;
+    };
+  }
+  // FBLAW=prop: REPLACE THE QP with the simplest law that reads the forecast only where it is
+  // good (plan §52.26): u = −g · ê(L*) / dc, the external bank's prediction at the lead where the
+  // response has risen, scaled by the response's DC, clamped at the layer's cap. No horizon, no
+  // inversion, no effort weight; g is the one knob and L* is read off the identified response.
+  if (ext && process.env.FBLAW === 'prop') {
+    const g = +(process.env.FBLAWG || 0.3), grid = p.grid, PS = p.sample;
+    const rise = p.hs.map((h) => { const hg = h.hGrid; let i = 0; while (i < hg.length - 1 && Math.abs(hg[i]) < 0.9 * Math.abs(h.dc)) i++; return i; });
+    const Ls = process.env.FBLAWLEAD ? p.hs.map(() => +process.env.FBLAWLEAD) : rise;
+    console.log(`  proportional law on the external forecast: g ${g}, lead index ${Ls.join('/')} (${Ls.map((l) => l * grid * PS).join('/')} steps), dc ${p.hs.map((h) => h.dc.toExponential(2)).join('/')}, cap ${stF.uMax}; hGrid[0..7] ${Array.from(p.hs[0].hGrid.slice(0, 8)).map((v) => v.toExponential(1)).join(',')} (${p.hs[0].hGrid.length} leads), hSample ${p.hs[0].hSample.length}`);
+    stF.act = () => { const u = [0, 0]; for (let c = 0; c < 2; c++) { const e = ext(c, Ls[c] * grid, 0, 0); u[c] = Math.max(-stF.uMax, Math.min(stF.uMax, -g * e / p.hs[c].dc)); } return u; };
+  }
+  // FBEXTLAMBDA=k scales the QP's effort weight for the forced run: the pilot chose its lambda by
+  // replaying its OWN forecast, which on the square reads below the mean (§52.26); with the
+  // external bank the regularisation the inversion needs is a fresh question.
+  if (process.env.FBEXTLAMBDA) { p.lambda = (p.lambda || 0) * +process.env.FBEXTLAMBDA; console.log(`  forced run: lambda scaled x${process.env.FBEXTLAMBDA} to ${p.lambda.toExponential(2)}`); }
+  let dec = null;
+  p.oracleF0 = (c, lead, fitted, conv) => { const f = ext ? ext(c, lead, fitted, conv) : fitted; if (lead === 0) { pending = pending || [null, null]; pending[c] = f + conv; }
+    const li = Math.round(lead / p.grid); if (LEADIDX.includes(li)) { if (!dec || dec.k !== kNow) { dec = { k: kNow, v: {} }; decs.push(dec); } (dec.v[li] = dec.v[li] || [null, null])[c] = f + conv; } return f; };
+  const o0 = host.auto.observe.bind(host.auto);
+  host.auto.observe = (m, t) => { last = m; kNow++; if (t) truthLog[kNow] = t.slice(); if (pending && t) { for (let c = 0; c < 2; c++) if (pending[c] != null) { pred[c].push(pending[c]); tru[c].push(t[c]); } pending = null; } return o0(m, t); };
+  const r = await host.run(null, null, 3, true);
+  host.auto.observe = o0; p.oracleF0 = null;
+  host.auto.stack = prev.stack; host.auto.deployed.stack = prev.depth; host.auto._distilBelowStack = prev.below; if (host.auto.distil) host.auto.distil.observe = prev.dobs;
+  const r2 = [0, 1].map((c) => { const y = tru[c], mu = y.reduce((a, v) => a + v, 0) / y.length; let ss = 0, st = 0, sp = 0; for (let i = 0; i < y.length; i++) { const e = y[i] - pred[c][i]; ss += e * e; st += (y[i] - mu) ** 2; sp += pred[c][i] ** 2; } return { r2: 1 - ss / st, rmsT: Math.sqrt(st / y.length), rmsP: Math.sqrt(sp / y.length) }; });
+  { const PS = p.sample, rows = [];
+    for (const li of LEADIDX) { if (li >= p.N) continue; const stepsAhead = li * p.grid * PS; const y = [[], []], q = [[], []];
+      for (const d of decs) { const v = d.v[li]; const t = truthLog[d.k + 1 + stepsAhead]; if (!v || !t) continue; for (let c = 0; c < 2; c++) if (v[c] != null) { q[c].push(v[c]); y[c].push(t[c]); } }
+      if (y[0].length < 20) continue;
+      const r2 = [0, 1].map((c) => { const mu = y[c].reduce((a, v) => a + v, 0) / y[c].length; let ss = 0, st = 0; for (let i = 0; i < y[c].length; i++) { ss += (y[c][i] - q[c][i]) ** 2; st += (y[c][i] - mu) ** 2; } return 1 - ss / st; });
+      rows.push(`lead ${String(li * p.grid).padStart(4)} smp (${stepsAhead} steps): ${r2.map((v) => v.toFixed(3)).join('/')}`); }
+    console.log(`  forecast ON THE SQUARE at a ladder of leads — ${rows.join('   ')}`); }
+  console.log(`  ${ext ? 'EXTERNAL' : 'feedback layer\'s own'} forecast ON THE SQUARE (${pred[0].length} decisions, layer forced on): R² ${r2.map((v) => v.r2.toFixed(3)).join('/')}   truth rms ${r2.map((v) => v.rmsT.toExponential(2)).join('/')}   predicted rms ${r2.map((v) => v.rmsP.toExponential(2)).join('/')}   deployed score ${r.score.toExponential(4)}`);
+}
 if (globalThis.__LEADPROBE) for (const c of Object.keys(globalThis.__LEADPROBE)) {
   const rows = globalThis.__LEADPROBE[c];
   console.log(`  lead probe ch${c} (last layer fitted): ` + rows.map((r) => `L${r.L} shared ${r.shared.toFixed(2)} per-lead ${r.perLead.toFixed(2)}`).join('  '));
@@ -165,6 +262,7 @@ if (globalThis.__LEADPROBE) for (const c of Object.keys(globalThis.__LEADPROBE))
 // THE FEEDBACK LAYER'S OWN FORECAST, per channel: which basis it chose and its held-out R² at
 // the near, middle and far lead — so a refused layer can be read to its forecast or its inversion.
 for (const stF of host.auto.built.stacks || []) for (const p of stF.layers) if (p.report && p.report.readouts) {
+  console.log(`  feedback layer solver: lambda ${p.lambda != null ? p.lambda.toExponential(2) : '?'}  N ${p.N} grid ${p.grid} qpIters ${p.qpIters}  response dc ${(p.hs || []).map((h) => (h.dc ?? NaN).toExponential(2)).join('/')}  uMax ${p.uMax}  verify ${p.report.verify ? JSON.stringify(p.report.verify).slice(0, 160) : '?'}`);
   console.log('  feedback layer forecast: ' + p.report.readouts.map((r, c) => `ch${c} ${r.basis} lags ${r.lags} R² lin ${(r.r2Lin ?? NaN).toFixed(3)} poly ${(r.r2Poly ?? NaN).toFixed(3)} sched ${(r.r2Sched ?? NaN).toFixed(3)} | lead0 ${(r.r2Lead0 ?? NaN).toFixed(3)} mid ${(r.r2Mid ?? NaN).toFixed(3)} far ${(r.r2Far ?? NaN).toFixed(3)}${r.gated ? ' GATED' : ''}`).join('   '));
 }
 
