@@ -67,7 +67,23 @@ const TSC = m0.servo.tauMax * 1e3; // reference joint torque (scaled by tauMax·
 const schedRow = (base, pos, head) => { const sv = polyOf(pos); const f = [...head]; for (const a of base) for (const t of sv) f.push(a * t); return f; };
 const stateRowRefOnly = (P, k) => { const r = refSample(P, k); return schedRow([r[2], r[3], r[4], r[5]], r, [r[0], r[1]]); };
 const stateRowDev = (P, k) => { const m = at(P, k), r = refSample(P, k); return schedRow([m[0] - r[0], m[1] - r[1], m[2] - r[2], m[3] - r[3], m[4] - r[4], m[5] - r[5]], r, []); };
+// THE ONE TERM MEASURED ABOVE THE REFERENCE WINDOW'S CEILING IS THE MEASURED DEVIATION (F,
+// R2 0.962 against A's 0.836), and deployed it is worse than not having it — 3.24x against
+// 6.04x, even fitted with the policy in the loop over aggregated rounds. The reading in §52.27
+// was that the plant answers 951 steps later, so a loop closed on the deviation rings. That is a
+// statement about the FAST part of the deviation. The SLOW part — a bias that persists far longer
+// than the plant's own rise — is a trim, and a loop closed on it has almost no gain at the
+// frequency that rings. So the question §52.27 never separated: how much of F's lift survives
+// when the deviation is averaged over a window LONGER than the 951-step response, which is the
+// only form of it this plant can safely be given (rule 39: bias and oscillation are different
+// mechanisms and one rms hides both).
+const devAvg = (P, k, W) => { const r = refSample(P, k); const a = [0, 0, 0, 0, 0, 0]; let n = 0;
+  for (let j = k - W; j <= k; j += S) { const m = at(P, j), q = refSample(P, j); for (let c = 0; c < 6; c++) a[c] += m[c] - q[c]; n++; }
+  for (let c = 0; c < 6; c++) a[c] /= (n || 1); return schedRow(a, r, []); };
 const sets = { 'A: reference window only (the shipped shape)': (P, k) => refRow(P, k),
+  'Fa256:  + deviation AVERAGED over the last 256 steps': (P, k) => [...refRow(P, k), ...devAvg(P, k, 256)],
+  'Fa1024: + deviation AVERAGED over the last 1024 steps': (P, k) => [...refRow(P, k), ...devAvg(P, k, 1024)],
+  'Fa4096: + deviation AVERAGED over the last 4096 steps': (P, k) => [...refRow(P, k), ...devAvg(P, k, 4096)],
   'E: + newest REFERENCE sample, ref-pose scheduled': (P, k) => [...refRow(P, k), ...stateRowRefOnly(P, k)],
   'F: + measured DEVIATION from it, ref-pose scheduled': (P, k) => [...refRow(P, k), ...stateRowDev(P, k)],
   'G: E + F': (P, k) => [...refRow(P, k), ...stateRowRefOnly(P, k), ...stateRowDev(P, k)],

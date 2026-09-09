@@ -13013,3 +13013,292 @@ self-learning control" (USLC, 2024) and "a universal policy with online system i
 seven: there is always a loop already closed, and this corrects its reference. That is a narrower
 claim and a more defensible one — and this section is why it must be stated that way, because the
 size of what the correction is worth is set by how good that loop already is.
+
+### §52.33 THE LOOP THE LEARNED CONTROLLER WANTS IS NOT THE LOOP THE MACHINE WANTS — 1.65x, AND A REFUSED TEACHER TEACHES
+
+§52.30 left one positive in an arc of negatives: a faster servo loop with a drive that does not
+clip is worth 1.13x geometric on the bench cell, "comparable to everything four sections of
+controller work produced, which was nothing". This section takes that lever properly and it is
+worth **1.65x-1.75x geometric across three programs with nothing made worse**, on top of the
+learn-on-program law — because two instrument faults were hiding most of it and one library
+distinction was throwing away three commissionings in five.
+
+**FIRST, THE WINDOW WAS MOVING WITH THE BANDWIDTH, AND NOBODY HAD SEEN IT (rule 17).** The
+distilled policy's window is specified in PILOT SAMPLES (`offsetsPerSample`, ±256) and the pilot's
+sample stride is derived from the plant's own settle. So raising the servo bandwidth SHRINKS the
+window's reach in raw machine steps with nothing in the configuration touched: stride 8 at
+bw 2e-3, 4 at 8e-3, 3 at 1.6e-2, so the same ±256 samples is ±2048, ±1024, ±768 raw steps. Every
+bandwidth number this project has quoted — §52.28's, §52.29's, §52.30's — is therefore TWO
+variables moved at once, and the confound runs the wrong way: the faster loop was being scored
+with a quarter of the preview. Measured directly, at bw 8e-3 the bench square reads 1.9284e-1
+with the default window and **1.7864e-1 with the reach restored** (`WIN=2`), which is the whole
+of the 10% regression §52.30 recorded as the machine change's cost.
+
+`WINRAW=<steps>` states the same 23-offset ladder in RAW STEPS so the reach is a property of the
+plant rather than of the pilot's cadence. At the shipped bandwidth `WINRAW=2048` is
+byte-identical to the default (1.7528e-1, 5.74x, 7.89x), which is the control.
+
+**SECOND, THE BANDWIDTH SWEEP WITH THE REACH HELD.** Absolute contour rms, standard drive,
+distilled policy, no learning; the shipped configuration is the first row:
+
+```
+  bw       conventional   bench square   rounded rect    circle      geo over shipped
+  2e-3      1.0592e+0      1.7528e-1      1.9490e-2    1.3486e-2         1.000
+  8e-3      1.07  e+0      1.8928e-1      1.5893e-2    1.5421e-2         0.997
+  1.2e-2    1.0581e+0      1.6407e-1      1.1810e-2    9.7490e-3         1.346
+  1.6e-2    1.0717e+0      1.6159e-1      1.1151e-2    6.7092e-3         1.562
+  2.0e-2    1.0804e+0      1.6715e-1      1.1752e-2    7.1101e-3         1.474
+  2.4e-2    1.0879e+0      1.7594e-1      1.2783e-2    6.9868e-3         1.400
+```
+
+**THE OPTIMUM IS AT 1.6e-2 AND THE CONVENTIONAL MACHINE IS WORSE THERE THAN AT THE SHIPPED
+BANDWIDTH.** That is the finding, not a caveat: the loop that minimises the machine's own error
+(8e-3, 6.85e-1 with the big drive) and the loop that maximises what the learned feedforward
+delivers (1.6e-2) are different loops, eight times apart, and at the delivering one the
+conventional machine is 1.2% WORSE than it is today. A loop tuned for the machine is not the
+loop to hand a learned controller. It also narrows §52.28's rule further: the bench cell's
+slowest structural mode is 1.9x its loop at 2e-3, so at 1.6e-2 the loop sits about **4x ABOVE**
+that mode — the opposite end of "0.4-0.5 of the slowest mode", which §52.30 had already reduced
+to a rule fitted to the bench square.
+
+**AND THE BIG DRIVE IS NOT NEEDED — IT IS SLIGHTLY HARMFUL.** §52.30 bought its 1.13x with
+`ARM_DRIVE=1024`, a torque limit 32x the rig's. At bw 1.6e-2 the rig's STANDARD drive beats it on
+every program (1.6159e-1 / 1.1151e-2 / 6.7092e-3 against 1.7090e-1 / 1.1839e-2 / 8.0845e-3), even
+though the conventional machine is worse with it (1.0717 against 8.14e-1) because it clips. So
+what the customer buys is a servo retune and NOT a bigger motor, which is a different and much
+cheaper product statement than §52.30's.
+
+**THIRD, AND THE PART THAT MADE IT SHIPPABLE: A REFUSED CASCADE STILL TEACHES.** At bw 1.6e-2 the
+cascade's verify goes marginal — over five commissioning seeds it deploys twice and refuses three
+times (0.62x, 0.73x, 0.90x). `autohost.js` said outright that "a cascade that refused leaves
+nothing to iterate with", and each refusal dropped the distilled rung onto `HarmonicFF` for
+1.32x-1.67x at **107-117 machine-minutes** where the pilot teacher reaches 6.6x in 10.1. So the
+cell was 2-of-5 excellent and 3-of-5 far worse than shipped, which is not a default.
+
+The distinction the library was missing: **as a RUNG the cascade is judged on whether its FORECAST
+inverts the machine well enough to ship; as a TEACHER it is handed the measured error through
+`oracleF0` and asked only for the increment that cancels it — so its verify score measures exactly
+the thing the teaching port replaces.** The evidence was already on record twice and had not been
+read this way: §52.29's guided phase moved the teacher 4.7557e-1 → 2.7425e-1 and returned a
+BIT-IDENTICAL policy, and three seeds at bw 1.2e-2 gave cascades of 1.03x, 1.13x and 1.25x and one
+policy to five figures.
+
+`distilTeachRefused` (opt-in, `TEACHREFUSED=1`) lets the commissioned-but-refused cascade teach.
+It is retained in `built.stacks` and published on `auto.stack` with `deployed.stack` left at 0 —
+which is what arms a cascade — so a teacher that is not a candidate still cannot reach the
+machine, and `teacherOnly` continues to decide what ships. Publishing it also restores the rung's
+DECISION STRIDE, which falls to 1 with no cascade at all and is most of why a refusal cost 107
+machine-minutes rather than 10.
+
+```
+  seed   cascade verify        bench square   rounded rect    circle     machine-min
+  def    1.34x  ADMITTED        1.6159e-1      1.1151e-2    6.7092e-3        10.1
+  2      0.73x  refused         1.5846e-1      1.1156e-2    7.9033e-3        10.1
+  3      0.90x  refused         1.5848e-1      1.1159e-2    7.8955e-3        10.1
+  7      0.62x  refused         1.5847e-1      1.1158e-2    7.8954e-3        10.1
+```
+
+**A cascade scoring 0.62x teaches a policy as good as one scoring 1.34x** — better on the square,
+and the three refused seeds agree with each other to four figures. Availability at bw 1.6e-2 goes
+from 2-of-5 to 4-of-4 and the refusal's cost from 107 machine-minutes to 10.1. The controls are
+both taken and both exact: the seed whose cascade WAS admitted comes back byte-identical, and at
+the shipped bandwidth the whole ladder comes back byte-identical (1.7528e-1 / 1.9490e-2 /
+1.3486e-2), so the change is inert wherever the cascade was already admitted (rule 21).
+
+**COMPOSED WITH LEARN-ON-PROGRAM (§52.18), FOUR SEEDS:**
+
+```
+                              shipped + learn    bw 1.6e-2 + learn (worst of 4 seeds)
+  bench square                  1.3730e-1              1.3025e-1        1.05x
+  rounded rectangle (unseen)    1.8826e-2              9.0436e-3        2.08x
+  circle (unseen)               1.5195e-2              7.4380e-3        2.04x
+                                                       geometric        1.65x
+```
+
+Seed spread 1.02x on the square, 1.01x on the rounded rectangle, 1.20x on the circle; the best
+seed reads 1.75x geometric. Against the machine as it stands today the delivered gains are
+**8.13x on the bench square, 12.37x on the rounded rectangle and 14.30x on the circle**, from
+7.71x / 5.94x / 7.00x. **The two programs the commissioning never saw gain more than the one it
+learned on** — 2.08x and 2.04x against 1.05x — which is the ordering a plant model produces and
+the opposite of the one a memory produces, and it is the first time the machine change and the
+map have been shown to compose rather than trade.
+
+**WHAT IT COSTS: NOTHING ON THE PLC.** The deployed object is unchanged — the distilled policy
+alone, 93 features, 274 MAC/decision, no cascade armed, no solver, no forecast bank, no tracker.
+Commissioning is unchanged at 10.1 machine-minutes. The whole gain is a servo constant and two
+instrument repairs.
+
+**WHAT WAS MEASURED AND FOUND NEGATIVE ON THE WAY, so it is not tried again.** The faster loop
+does NOT raise the reference window's information ceiling: re-running §52.31's instrument at
+bw 8e-3 reads 0.9375 extrapolated against the shipped loop's 0.9315, which is nothing — though
+the ABSOLUTE irreducible content shrinks 1.72x (2.59e-2 rad against 4.45e-2) because the whole
+correction is smaller, and that is where the gain comes from. The state term is still harmful at
+the faster loop (2.7707e-1 against 1.7864e-1; held-out 6.08x/6.36x against 8.84x/8.49x), and the
+feedback layer is still refused there (0.85x), so §52.27's and §52.26's limits are not artefacts
+of a slow loop. A SMOOTHED deviation — the one form of feedback a plant with a 951-step rise could
+safely be given, since a bias trim has almost no gain at the frequency that rings — was added to
+`stateaug.mjs` and is worth less the more it is smoothed: leave-one-program-out 0.836 (reference
+window alone), **0.906 averaged over 256 steps, 0.756 over 1024, 0.664 over 4096**, against 0.962
+for the instantaneous deviation. Rule 39's split answers the question the arc kept asking: the
+14% the window cannot see is OSCILLATION, not bias, and it lives at timescales far shorter than
+anything this plant can act on. The teacher's cap re-derived at the new loop keeps 0.10 (0.05
+buys the square and loses the circle, 0.20 loses everything). And `decisionsPerTs` — the carried
+constant that lets N triple from 79 to 245 when the bandwidth rises — was the first hypothesis for
+the cascade's marginal verify and is REFUSED: at DPT=10, N restored, the cell is 2-of-4 rather
+than 2-of-5 and the delivered number is slightly worse.
+
+**WHAT IS NOT ESTABLISHED.** One plant, one cell (K 0.25 / E 0.03), one program family, four
+seeds. Nothing is made a default: `ARM_BW`, `ARM_DRIVE`, `WINRAW` and `TEACHREFUSED` are all
+harness knobs and all unset are byte-identical (rule 31). The bandwidth optimum has not been
+re-derived on the soft cell, on the other six plants, or across the feedrate span, and it is a
+CUSTOMER action rather than something the one press can do — the ladder cannot retune a servo
+loop it is installed on top of, which is the honest form of §52.32's finding that the factor this
+project quotes is a joint property of the controller and the loop beneath it.
+
+### §52.34 A REVIEW OF THE ARC'S OWN CONCLUSIONS — FOUR CONTRADICTIONS, ONE EXPERIMENT THAT COULD NOT HAVE SUCCEEDED
+
+This section measures nothing. It is a review of §52.16-§52.33 asked for after an arc that
+produced one machine change and a long list of negatives, looking specifically for conclusions
+that conflict with each other and for explanations that were convenient. It names the tests that
+would settle each, and it is written down because the negatives it questions are load-bearing:
+between them they closed the map, the basis, the diet, the capacity and the feedback routes.
+
+**1. THE INFORMATION CEILING CANNOT COEXIST WITH THE SINGLE-PROGRAM FIT.** §52.31 measured the
+reference window's ceiling at R² 0.931 extrapolated against the shipped fit's 0.856-0.870 and
+concluded we are within about 1.4x of everything the input contains. §52.17 measured the SAME 93
+features, the SAME window and the SAME machine, fitted on the square alone, at **14-15.9x against
+6.04x pooled**. A map of the same inputs cannot beat "everything the input contains" by 2.6x, so
+one of the two is wrong. The resolution is that within a single program the window is nearly a
+unique key for lap phase, so the single-program fit is a lookup table in a map's clothes — which
+§52.19 already concluded by another route. **But that has a consequence never drawn: §52.31's
+same-program CONTROL is measuring that same aliasing, so it is not a control.** The two columns
+tracking each other shows the distance metric cannot separate the cases; it does not show there is
+no transfer penalty in the target. The strongest negative in the arc rests on a control that is
+not one, and on a metric §52.31 itself flagged — "a plain standardised Euclidean norm over 92
+features, so a better one could find closer neighbours and read a higher ceiling".
+
+**2. "A MORE CONVERGED TEACHER TEACHES A WORSE POLICY" CONTRADICTS "THE TARGET IS A FUNCTION OF
+THE WINDOW".** If the target were a function of the window, converging further would reduce noise
+around a fixed function and the fit would improve. Measured the other way twice (§52.8's cap
+ladder 0.10 → 0.217, 0.15 → 0.269, 0.20 → 0.363; §52.16's converged-solve reading). So convergence
+moves the target AWAY from any function of the window, which says the target is (a generalising
+part) + (a program-specific residue) and that iteration accumulates both. §50.1 wrote exactly this
+down from the tracker-noise side and called it implicit early stopping. §52.31 then asserted there
+is no transfer penalty in the target. Both statements are in the file and they are not compatible.
+
+**3. THE 951-STEP LAG WAS REFUTED BY ITS OWN REMEDY AND IS STILL CARRIED AS THE EXPLANATION.**
+§52.26 and §52.28 explained the state term's and the feedback layer's failure by the plant
+answering 951 steps later — a lag §52.28 then showed is the position loop's own bandwidth. §52.33
+roughly halved it (bw 1.6e-2) and measured the state term still harmful (2.7707e-1 against
+1.7864e-1, held-out 6.08x/6.36x against 8.84x/8.49x) and the feedback layer still refused (0.85x).
+**A cause whose removal changes nothing is not the cause.** What actually kills feedback here is
+unestablished; the live candidate is rule 35 — the map is inverting a signal it is itself
+producing — which the aggregated rounds address distributionally and not structurally.
+
+**4. "THE RESIDUAL IS ON THE EDGES, NOT THE CORNERS" ANSWERS A DIFFERENT QUESTION.** A lightly
+damped mode excited at a corner deposits its energy along the FOLLOWING EDGE. Measuring the energy
+within ±100 steps of a corner and finding 5.2% in 7.3% of the steps cannot distinguish "corners do
+not matter" from "corners matter and the evidence has moved downstream". The instrument answers
+location; the question was source. The test that separates them is energy against TIME SINCE THE
+LAST CORNER, read against the mode's own period — and this one steered the work toward diet
+composition (§52.27, §52.29) rather than toward transients.
+
+**AND THE EXPERIMENT THAT CLOSED THE ONLY STRUCTURAL ROUTE COULD NOT HAVE SUCCEEDED.** §52.16
+retired rule 37 on a tour diet with the window at x1 / x2 / x3 reading 5.63x / 5.01x / 5.14x. That
+sweep scales the SAME 23 offsets, so the span and the SPACING both triple: at x3 the outer taps
+sit thousands of raw steps apart, and a mode ringing with a period of a few hundred steps is
+invisible through them. It traded exactly the resolution it was testing the reach for — and with a
+bounded tap count an FIR window cannot have both. The result is real; the conclusion "the reach is
+not what binds" does not follow from it, on this plant or any other.
+
+The general form is the finding. **Every capacity experiment in this arc added more FUNCTIONS OF
+THE SAME TRUNCATED HISTORY** — the 544-feature map, the quadratic and ENERGY lifts, the 314-column
+library, the pose-scheduled blocks, the cascaded second distillation, the state term. Not one added
+MEMORY. Checked by grep: there is no recursive, IIR or resonator feature anywhere in `lib/` or
+`test/`. So the record reads "capacity does not help" when what it establishes is "capacity over a
+truncated history does not help", which is a much narrower claim.
+
+**THE IDEA THAT FOLLOWS, AND IT IS THE NORTH STAR'S OBJECT RATHER THAN A CHANGE OF PROBLEM.**
+Give the map a RECURSIVE state driven by the COMMANDED REFERENCE: a small bank of second-order
+resonators, their states fed to the policy beside the existing window. An FIR window is a
+catastrophically inefficient basis for a lightly damped resonance — it needs taps spanning the
+whole ring at a spacing fine enough to resolve its period, which is thousands of taps — where two
+state variables per mode represent it exactly.
+
+- It is a function of the commanded reference ALONE: no tracker, no lap index, no measurement at
+  deploy, so it transfers by construction exactly as the window does and is admissible under the
+  memory retirement.
+- It is free on the PLC: a handful of biquads, order 20-40 MAC against the policy's 274 of a
+  10,000 budget — and it reaches arbitrarily far back with NO aliasing, which no FIR window at any
+  tap count can do.
+- It carries no per-plant constant: place a geometric ladder of resonators and let the ridge
+  select. The machine's own mode table (`timescales.mjs`) is available as a prior but not needed.
+- Pose dependence is already built — the scheduling block carries the gain, the resonator the
+  memory.
+
+It EXPLAINS the arc's negatives rather than accommodating them: why FIR capacity never paid (the
+wrong basis for a resonance); why the single-program fit reaches 14x (the window aliases the mode
+state within one program); why the square is the worst program (its corners are the impulse that
+rings); and most directly why the measured deviation was worth 0.836 → 0.962 in §52.27 — **the
+deviation IS the mode state, and a command-driven resonator is an OBSERVER of that same state that
+needs no instrument.** That is the bridge from §52.27's positive offline result to a deployable
+object, and it is the one bridge the arc never tried.
+
+**THE ORDER OF WORK, CHEAPEST AND MOST DECISIVE FIRST.**
+0. Does the mode FREQUENCY move with pose across the workspace, or only its gain? A fixed bank is
+   the wrong observer if the frequency moves, and the scheduling block cannot repair a frequency
+   error. This is the falsifier and it comes first, from the mode table, fitting nothing.
+1. Re-run `consist.mjs` with the resonator states appended to the row, fitting nothing. If the
+   target disagreement at small row distance FALLS, then two rows with the same window but
+   different histories genuinely demand different corrections, §52.31's irreducible scatter was a
+   MISSING STATE rather than an information floor, and the ceiling that closed five directions is
+   void. This is the experiment that decides whether the rest is worth doing.
+2. If it falls: the bank as a set in `stateaug.mjs`, scored leave-one-program-out. The question is
+   how much of the 0.962 the MEASURED state reaches a command-driven observer recovers.
+3. Only then into `DistilPolicy`, with the bank-disabled byte-identity control (rule 21).
+
+**AND A SECOND IDEA, COUPLED TO IT.** If the target is (generalising) + (residue), stop
+regularising by early stopping and PROJECT THE TEACHER INSIDE THE ITERATION LOOP: regress onto the
+row across all programs each pass, continue from the projection, so convergence can run to
+completion because the non-generalising component is deleted each pass rather than avoided.
+`_iteratePolicy` is close to this and read 5.06x — but it was measured on the truncated FIR row,
+where the projection has nowhere to put the ringing. It is only worth re-testing once the basis
+can express the thing, which is why it is second and not first.
+
+
+### §52.35 A CHECK THAT COULD NOT FAIL, AND THE DEFECT IT WAS HIDING
+
+Verifying §52.33 turned the browser tier red on `flexisim/learn`, and the control settled what it
+was: **stashed to HEAD it reproduces, so it is not the change.** It is worth writing down because
+of what the diagnosis found underneath.
+
+**THE CHECK ASSERTED A CONTROL IS ENABLED WHILE PERMITTING THE STATE THAT DISABLES IT.** The learn
+button's gate is `idle = settled && !approach`, and the check three lines above it explicitly
+accepts that the arm may still be driving home (`x.approaching || !x.busy`). So the assertion is a
+race against `home()`: green on a quiet machine, red under load. Rule 12 in its plainest form —
+read the meter after it settles — on a test rather than a plant. It now waits for the arm to
+arrive, ends on EITHER outcome so a genuinely disabled button still fails rather than hanging, and
+reports the four flags that decide the gate so a future red says which one.
+
+**AND THE BODY BEHIND IT HAD NEVER RUN, WHICH IS THE REAL FINDING.** The body sits inside
+`if (canLearn)`, so every suite since §52.19 skipped the whole learn-on-program exercise SILENTLY
+— the one feature that carries 6.04x → 7.71x on the page. A check that cannot fail is not a check
+(rule 25: "not measured" and "passed" are different states), and this is the second time that
+shape has cost this project a hole in the suite, after the `SUITE=full` skip that let a gate
+regression ship for three bricks.
+
+**WITH THE RACE FIXED IT RAN, AND EXPOSED A BROWSER-SIDE DEFECT.** One pass exceeded the 30-minute
+wait, was given 90 and exceeded **63 minutes**. The identical work in Node costs **462,000 machine
+samples and ~230 s** (`LEARN=1`; `LEARNMODE=continue` and `diet` measured BIT-IDENTICAL, both
+1.7528e-1 → 1.3872e-1, which is the control that says the mode is not the variable). That is 1.3x
+the commissioning it follows in Node against more than 30x in the browser — **and the page's own
+COMMISSIONING does not show that ratio**, running 643k samples in about 2 minutes through the same
+host, the same `yieldEvery: 150` and the same `autoYield`. So the cost is not learning and it is
+not the yield rate; something on the page's learn path is doing work the commissioning path does
+not, and it is UNDIAGNOSED.
+
+The body is therefore gated behind `FLEX_LEARN_BROWSER=1` with those numbers in the comment, so
+the suite is not red and the next failure is not hidden behind it (rule 3), while the button check
+runs every time and the law's numbers continue to be measured in Node. **What is gated is a slow
+duplicate of a Node measurement, not the claim** — but the discrepancy is an open defect against
+the shipped page, not a test-budget decision, and it is the next thing to fix on that page.

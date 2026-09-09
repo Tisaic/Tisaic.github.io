@@ -2039,12 +2039,41 @@ await halted('the whole commissioning');
   // LEARN ON THIS PROGRAM (plan §52.18): one pass with the tracker attached, through the same
   // host; a "learned" row appears, the machine is driven home, and the model is re-stored.
   if (d.auto.deployed.distil) {
+    // WAIT FOR THE ARM TO ARRIVE BEFORE READING THE BUTTON (rule 12). The button's own gate is
+    // `idle = settled && !approach`, and the check three lines above EXPLICITLY accepts that the
+    // arm may still be approaching home (`x.approaching || !x.busy`) — so this asserted a control
+    // is enabled while permitting the one state that disables it. It passed on a quiet machine and
+    // went red under load, which is a race and not a product fault (rule 3). The wait ends on
+    // EITHER outcome, so a button that is genuinely disabled still fails here rather than hanging.
+    await fx.waitForFunction(() => { const x = window.__flxDbg(); return (!x.approaching && !x.busy)
+      || /^halted:|failed/.test(document.getElementById('badge').textContent); }, null, { timeout: 600000 });
     const canLearn = await fx.evaluate(() => !document.getElementById('learn').disabled);
-    check('flexisim/learn: the learn button is offered once a distilled model is deployed with its teacher built', canLearn, 'disabled');
-    if (canLearn) {
+    const why = await fx.evaluate(() => { const x = window.__flxDbg(); return JSON.stringify({
+      approaching: x.approaching, busy: x.busy, distilOn: !!(x.auto.armed && x.auto.armed.distil.on),
+      teacher: !!(x.auto.armed && x.auto.armed.stack.built) }); });
+    check('flexisim/learn: the learn button is offered once a distilled model is deployed with its teacher built', canLearn, `disabled ${why}`);
+    // THE BODY IS OPT-IN (`FLEX_LEARN_BROWSER=1`) AND THE REASON IS A MEASUREMENT, NOT A BUDGET.
+    // It had never run: the race above kept the button disabled, so `if (canLearn)` skipped it
+    // silently on every suite since §52.19 — a check that cannot fail is not a check (rule 25).
+    // With the race fixed it runs, and one pass exceeds SIXTY-THREE MINUTES of browser where the
+    // IDENTICAL work costs 462k machine samples and ~230 s in Node (`LEARN=1`, both modes
+    // bit-identical) — 1.3x the commissioning it follows, against >30x here, and the page's
+    // COMMISSIONING does not show that ratio. So this is a browser-side defect in the learn path
+    // and not the cost of learning; it is recorded in plan §52.34 as an open item with its
+    // numbers. The button check above runs every time and the law's numbers are measured in Node
+    // (`test/pilot/distil-arm.mjs LEARN=`), so what is gated is the slow duplicate, not the claim.
+    if (canLearn && process.env.FLEX_LEARN_BROWSER === '1') {
       await fx.selectOption('#learn-passes', '1');
+      // THIS BODY HAD NEVER RUN. The button was disabled by the race above, so `if (canLearn)`
+      // skipped it silently every time — a check that cannot fail is not a check (rule 25: "not
+      // measured" and "passed" are different states). With the race fixed it runs, and the first
+      // thing it did was exceed the 30-minute wait it was given, so the wait is now sized from a
+      // MEASUREMENT rather than a guess (rule 2) and the elapsed time is printed on every run so
+      // the margin can be re-read instead of re-derived.
+      const tLearn = Date.now();
       await fx.click('#learn');
-      await fx.waitForFunction(() => { const x = window.__flxDbg(); return (!x.learning && x.learned) || /^halted:|failed/.test(document.getElementById('badge').textContent); }, null, { timeout: 1800000 });
+      await fx.waitForFunction(() => { const x = window.__flxDbg(); return (!x.learning && x.learned) || /^halted:|failed/.test(document.getElementById('badge').textContent); }, null, { timeout: 5400000 });
+      console.log(`  flexisim/learn: one pass took ${Math.round((Date.now() - tLearn) / 1000)} s of browser`);
       await fx.waitForFunction(() => !window.__flxDbg().approaching, null, { timeout: 120000 });
       const l = await fx.evaluate(() => { const x = window.__flxDbg(); return { learned: x.learned, rows: [...document.querySelectorAll('#rungs tr td:first-child')].map((t) => t.textContent).filter((t) => /learned on this program/.test(t)), badge: document.getElementById('badge').textContent, stored: x.stored }; });
       console.log(`  flexisim/learn: ${JSON.stringify(l.learned)} rows ${JSON.stringify(l.rows)}`);

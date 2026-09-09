@@ -61,6 +61,16 @@ const DISTIL = { ...(process.env.OFFS === 'raw'
   // WIN=<k>: the host's pilot-sample window with every offset scaled by k (rule 37: the window must
   // reach the plant's memory, and a softer link has a longer one).
   ...(process.env.WIN ? { offsetsPerSample: [-256, -128, -64, -32, -16, -8, -4, -2, -1, 0, 1, 2, 4, 8, 16, 24, 32, 48, 64, 96, 128, 192, 256].map((o) => Math.round(o * +process.env.WIN)) } : {}),
+  // WINRAW=<steps>: the SAME 23-offset ladder expressed in RAW MACHINE STEPS, so the window's
+  // reach is a property of the plant rather than of the pilot's cadence. The default window is
+  // in PILOT SAMPLES, and the pilot's sample stride is set by the plant's own settle — so raising
+  // the servo bandwidth SHRINKS the raw reach of a window nobody touched (stride 8 -> 4 at
+  // bw 8e-3, i.e. +/-2048 raw steps -> +/-1024). A bandwidth sweep read through the default
+  // window is therefore two variables at once, and the first one taken here read the bench square
+  // 10% worse for that reason alone (rule 17: the instrument, before the plant). WINRAW=2048 is
+  // the shipped reach at the shipped bandwidth and is byte-identical there, which is the control.
+  ...(process.env.WINRAW ? { offsets: [-256, -128, -64, -32, -16, -8, -4, -2, -1, 0, 1, 2, 4, 8, 16, 24, 32, 48, 64, 96, 128, 192, 256]
+    .map((o) => Math.round(o * (+process.env.WINRAW / 256))) } : {}),
   // STRIDE=<n|pilot>: one row per n steps and the correction held between (default the host's, pilot).
   ...(process.env.STRIDE ? { stride: process.env.STRIDE === 'pilot' ? 'pilot' : +process.env.STRIDE } : {}),
   // FADE=<fraction of the trained speed span>: the coverage guard's ramp (measured inert here).
@@ -135,6 +145,9 @@ const host = makeArmHost({
   ...(process.env.FBGAIN ? { distilFeedbackGain: +process.env.FBGAIN } : {}),
   ...(process.env.FBBASIS ? { distilFeedbackBasis: process.env.FBBASIS } : {}),
   ...(process.env.INSTR === '1' ? { instruments: true } : {}),
+  // TEACHREFUSED=1: let a cascade that lost its verify still TEACH the distilled rung
+  // (plan §52.33). Byte-identical wherever the cascade was admitted anyway, which is the control.
+  ...(process.env.TEACHREFUSED === '1' ? { distilTeachRefused: true } : {}),
   // STATE=1: the distilled policy carries the state term (plan §52.27).
   ...(process.env.STATE === '1' ? { distilState: 'poly', ...(process.env.STATEROUNDS ? { distilStateRounds: +process.env.STATEROUNDS } : {}) } : {}),
   // FBOPTS=key=value,...: any Pilot option for the feedback layer alone — e.g. FBOPTS=ditherAmp=0.005,
@@ -166,6 +179,17 @@ const host = makeArmHost({
 host.auto.pilotOpts.start = m0.arm.ik(path.at(0).x, path.at(0).y, true);
 // SEED=n: another commissioning draw (the excitation's seed), for a spread on one result.
 if (process.env.SEED) host.auto.pilotOpts.seed = +process.env.SEED;
+// DPT=<n>: `decisionsPerTs`, which sets how finely the horizon is gridded — `grid` is
+// `Ts / sample / DPT` and the QP's size is `N = horizonTs*Tset / sample / grid`. It is a CARRIED
+// CONSTANT (30) and raising the servo bandwidth shrinks the pilot's sample stride, so the same
+// horizon in raw steps arrives as THREE TIMES the decision variables: N 79 at bw 2e-3 against
+// 245-255 at 1.2e-2 to 2.4e-2, inverted by the same 4 truncated iterations. The horizon and the
+// iteration count are two regularisers of one inversion, so tripling one and holding the other
+// is not a neutral change (rule 31). DPT=10 restores N at bw 1.6e-2 without shortening the
+// horizon's REACH in raw steps, and costs three times less arithmetic while doing it.
+if (process.env.DPT) host.auto.pilotOpts.decisionsPerTs = +process.env.DPT;
+// QPITERS=<n>: the other end of the same knob — leave the horizon fine and converge it further.
+if (process.env.QPITERS) host.auto.pilotOpts.qpIters = +process.env.QPITERS;
 // BASIS=quad|lin|sch: force the pilot's forecast basis (every cascade layer, including the feedback layer).
 if (process.env.BASIS) host.auto.pilotOpts.forceBasis = process.env.BASIS;
 // LEADPROBE=1: the pilot re-fits every sampled lead ALONE beside the shared fit and records both
@@ -300,7 +324,7 @@ for (const stF of host.auto.built.stacks || []) for (const p of stF.layers) if (
 }
 
 console.log(`\n  shipped ${JSON.stringify(rep.deployed)}   ${rep.base.toExponential(4)} -> ${rep.best.toExponential(4)}   ${rep.gain.toFixed(2)}x`);
-const _st = host.auto.built.stack; if (_st) console.log(`  pilot sample stride ${_st.sample} steps, so the ±256-sample window spans ±${256 * _st.sample} steps${process.env.WIN ? ` (WIN ${process.env.WIN}: ±${Math.round(256 * +process.env.WIN) * _st.sample})` : ''}`);
+const _st = host.auto.built.stack; if (_st) console.log(`  pilot sample stride ${_st.sample} steps, so the ±256-sample window spans ±${256 * _st.sample} steps${process.env.WIN ? ` (WIN ${process.env.WIN}: ±${Math.round(256 * +process.env.WIN) * _st.sample})` : ''}${process.env.WINRAW ? ` (WINRAW: the window is ±${process.env.WINRAW} RAW steps whatever the stride)` : ''}`);
 console.log(`  machine samples ${host.samples().samples.toLocaleString()} over ${host.samples().runs} runs`
   + `  (${(host.samples().samples / 1000 / 60).toFixed(1)} min at 1 ms)  wall ${Math.round((Date.now() - t0) / 1000)} s`);
 // THE GUIDED PHASE MUST STATE WHAT IT DID (rule 61, plan §52.29). Composed with the distilled

@@ -1190,8 +1190,8 @@ measurement behind each is in `docs/history/` — the pointer in brackets.
 | `test/pilot/looptune.mjs` | **Not a test — can the loop be tuned before any commissioning, and how much of a cell's error is its ACTUATOR? (plan §52.29, §52.30).** `DRIVES=` adds a torque-limit sweep: on the bench cell, removing the clipping entirely is worth 4% on the square and nothing on the other two, saturating by drive 64 — which is what refused the saturation reading §52.29 had shipped.**Also:** The CONVENTIONAL machine's contour rms on three programs at a ladder of servo bandwidths, with the drive's saturation beside it, on both cells. It refused the cheap route (the bench cell's bare error falls monotonically while the commissioned score peaks at 2e-3) and, in passing, retracted §52.28's "saturation is not the mechanism": measured with the compliance feedforward the ladder actually runs, the bench drive clips 2.0% of samples at the shipped bandwidth and 6.9% at the top, at 1.6x to 12.7x its torque limit. |
 | `test/pilot/geom.mjs` | **Not a test — what does the pilot's horizon reach, in RAW MACHINE STEPS? (plan §52.28).** A lead is `grid` samples and a sample is `sample` raw steps, so the horizon is `N·grid·sample` and not `N·grid` — the units error this project keeps paying for, and one §52.28 nearly shipped. On the bench cell: Ts 2048, Tset 3360 (ratio 1.64, the 6·Ts clamp does not bind), sample 9, grid 8, N 70 → **5,040 steps** against a 943-step rise, with `hGrid` 97-117% delivered by lead 35 of 70. The inversion is not starved and the settle is honest, which killed §52.28's own second hypothesis before it shipped. |
 | `test/pilot/consist.mjs` | **Not a test — IS THE CONVERGED CORRECTION A FUNCTION OF THE REFERENCE WINDOW, AND HOW MUCH IS LEFT IN IT? (plan §52.31).** Builds the shipped rows and converged targets for the diet and the square, standardises them, and reports target DISAGREEMENT against row DISTANCE — cross-program against the same-program control — fitting nothing. Cross-program and same-program track each other at every distance, so the function exists and generalises; `REPEAT=1` converges a prefix twice and finds the two draws differ by 1.4e-5 of the target's scale, so the scatter is structure and not teacher noise; and the disagreement at small distance caps R² at **0.89 measured, 0.93 extrapolated to zero distance** against the shipped fit's 0.856-0.870. **At most 1.1x-1.6x of the correction's error remains in the window**, which is the quantitative form of every negative in §52.16-§52.30. |
-| `test/pilot/stateaug.mjs` | **Not a test — is the converged correction a function of the reference window, or of the machine's state? (plan §52.27).** Commissions the bench ladder, converges every training program's prefix and the square's own, runs each under its prefix tapping the motor-side vector, and regresses the PREFIX on the shipped row shape against the same row plus the newest measured sample, pose-scheduled, split into the reference's own sample (E) and the measured deviation from it (F): leave-one-polygon-out 0.836 → 0.803 (E) → 0.962 (F), the square 0.85/0.82 → 0.996/0.95 — the missing term is the deviation, which is feedback, which the gearbox cannot pass in time. |
-| `test/pilot/distil-arm.mjs` | **Not a test — the instrument that reads a distilled-rung refusal to its cause, and the one every knob in plan §52.8 was measured through.** Runs the bench's ladder on the arm at a chosen grade (`GRADE`, `DIET`, `ENGINE`, `REPLACE`, `TEACHCAP`, `STRIDE`, `WIN`, `OFFS=raw`, `PASSES`, `PERIODIC`, `LOO`), then scores the fitted policy on its OWN training programs — evaluated as it deploys, once per decision and held: helps them and harms the square → transfer; harms them too → the fit or the deploy path. Knobs for the structural experiments of plan §52.16 too: `Q`, `PARAM=1`, `REF=angles|torques|both`, `DIET=tour2`, `RIDGE`, `ONLINE=0`, `SOFFS`, `LAPSYNC=1`, `ARM_BL`, and for the feedback layer `FB=1`, `FBCAP`, `FBGAIN`, `FBBASIS`, `FBSCHED=order,lags,cmd,fn`, `FBOPTS=key=value,...` (any pilot option for the layer alone), `LEADPROBE=1`, `FBFORECAST=1` (the layer's forecast scored on the square, at a ladder of leads), `FBEXT=1` (the separated forecast bank through the oracle port; `FBEXTLAM`, `FBEXTSIGN`, `FBEXTLAMBDA`), `FBLAW=prop` (a proportional law in place of the QP; `FBLAWG`, `FBLAWLEAD`), `SEED`, `BASIS`, `INSTR=1` (strain and wind-up in the pilot's measured vector), and for plan §52.27 `CORNERSHARE=1` (the residual's energy by distance from each corner), `HELDOUT=1` (the rounded rectangle and the circle scored beside the square), `DIET=rects|rectspoly`, `STATE=1` and `STATEROUNDS` (the state term and its in-the-loop rounds), `GUIDED=<laps>` (the commissioning-phase online adaptation, which §52.29 measured as bit-identical through the oracle-fed teacher and worth 11% without it), and for §52.28-30 `ARM_BW` (the servo loop's bandwidth, the plant constant that was carried across every cell) and `ARM_DRIVE` (the torque limit as a multiple of the gravity hold torque) — both unset are byte-identical. At its defaults it reads the host's shipped configuration: **1.7528e-1 on the bench square, 6.04x, 10.7 machine-minutes, ~160 s of Node** (plan §52.16). |
+| `test/pilot/stateaug.mjs` | **Not a test — is the converged correction a function of the reference window, or of the machine's state? (plan §52.27).** Commissions the bench ladder, converges every training program's prefix and the square's own, runs each under its prefix tapping the motor-side vector, and regresses the PREFIX on the shipped row shape against the same row plus the newest measured sample, pose-scheduled, split into the reference's own sample (E) and the measured deviation from it (F): leave-one-polygon-out 0.836 → 0.803 (E) → 0.962 (F), the square 0.85/0.82 → 0.996/0.95 — the missing term is the deviation, which is feedback, which the gearbox cannot pass in time. **And §52.33 added the SMOOTHED deviation, which is the one form of feedback a plant with a 951-step rise could safely be given** — a bias trim has almost no gain at the frequency that rings — and it is worth LESS the more it is smoothed: 0.906 averaged over 256 steps, **0.756 over 1024 and 0.664 over 4096, both BELOW the 0.836 of the reference window alone**. Rule 39's split answers the arc's standing question: what the window cannot see is OSCILLATION, not bias. |
+| `test/pilot/distil-arm.mjs` | **Not a test — the instrument that reads a distilled-rung refusal to its cause, and the one every knob in plan §52.8 was measured through.** Runs the bench's ladder on the arm at a chosen grade (`GRADE`, `DIET`, `ENGINE`, `REPLACE`, `TEACHCAP`, `STRIDE`, `WIN`, `OFFS=raw`, `PASSES`, `PERIODIC`, `LOO`), then scores the fitted policy on its OWN training programs — evaluated as it deploys, once per decision and held: helps them and harms the square → transfer; harms them too → the fit or the deploy path. Knobs for the structural experiments of plan §52.16 too: `Q`, `PARAM=1`, `REF=angles|torques|both`, `DIET=tour2`, `RIDGE`, `ONLINE=0`, `SOFFS`, `LAPSYNC=1`, `ARM_BL`, and for the feedback layer `FB=1`, `FBCAP`, `FBGAIN`, `FBBASIS`, `FBSCHED=order,lags,cmd,fn`, `FBOPTS=key=value,...` (any pilot option for the layer alone), `LEADPROBE=1`, `FBFORECAST=1` (the layer's forecast scored on the square, at a ladder of leads), `FBEXT=1` (the separated forecast bank through the oracle port; `FBEXTLAM`, `FBEXTSIGN`, `FBEXTLAMBDA`), `FBLAW=prop` (a proportional law in place of the QP; `FBLAWG`, `FBLAWLEAD`), `SEED`, `BASIS`, `INSTR=1` (strain and wind-up in the pilot's measured vector), and for plan §52.27 `CORNERSHARE=1` (the residual's energy by distance from each corner), `HELDOUT=1` (the rounded rectangle and the circle scored beside the square), `DIET=rects|rectspoly`, `STATE=1` and `STATEROUNDS` (the state term and its in-the-loop rounds), `GUIDED=<laps>` (the commissioning-phase online adaptation, which §52.29 measured as bit-identical through the oracle-fed teacher and worth 11% without it), and for §52.28-30 `ARM_BW` (the servo loop's bandwidth, the plant constant that was carried across every cell) and `ARM_DRIVE` (the torque limit as a multiple of the gravity hold torque) — both unset are byte-identical. **And for §52.33 the four that produced this project's largest composed gain:** `WINRAW=<steps>` (the window's reach in RAW machine steps rather than pilot samples — the default is in samples and the pilot's stride moves with the bandwidth, so every bandwidth number before §52.33 was two variables at once), `TEACHREFUSED=1` (a cascade that lost its verify may still TEACH, since the teaching port replaces the forecast its verify scores), `LEARN=<passes>`/`LEARNMODE` (the learn-on-program law of §52.18 through the harness), and `DPT`/`QPITERS` (the two regularisers of the horizon's inversion, swept and refused as the cascade's marginal-verify mechanism). At its defaults it reads the host's shipped configuration: **1.7528e-1 on the bench square, 6.04x, 10.7 machine-minutes, ~160 s of Node** (plan §52.16). |
 | `test/pilot/pend.test.mjs` | **A SEVENTH PLANT, AND THE ONE CLASS THE OTHER SIX DO NOT CONTAIN: OPEN-LOOP UNSTABLE (plan §52.32).** A nonlinear cart-pole that the test asserts diverges — 1e-4 rad to 0.5 rad in 1.36 s with no force — under a cascade an installation would already have, with the pilot correcting the cart's position REFERENCE and the TIP scored, which is not what the stabiliser regulates. Told four signals, one channel, its authority, a box, a GUARD on the pole angle and a representative program; nothing about pendulums or instability. **Deploys at 9.4-9.8x across four seeds (spread 1.04x, the tightest here) and saturates at 13.7x rather than running to its cap — and on a stabilising loop tuned 3.5x better it REFUSES all four times with a stated reason.** So the headline was the loop, caught prospectively for the first time; `PEND_UCAP`, `PEND_SEED` and `PEND_TUNED` are the knobs. |
 | `test/pilot/rigs/arm-rig.mjs` | The 2R arm rig — plant, paths, routing, `commissionArm` and `deployOn`. Every harness drives the arm through this; three separate copies of pieces of it have each shipped a defect. |
 | `test/pilot/forecast.mjs` | Held-out forecast R² on open-loop programs, plus an offline refit that separates an unreachable dictionary from an unvisited one. |
@@ -1671,6 +1671,108 @@ reading is a range rather than a number. **And it narrows the product claim usef
 published work (USLC 2024, UP-OSI RSS 2017) SYNTHESISES a controller for an unknown plant, and this
 does not on any of the seven — there is always a loop already closed and this corrects its
 reference. That is narrower and more defensible, and §52.32 is why it has to be said that way.
+**AND THAT LINE IS THE LEVER: THE LOOP THE LEARNED CONTROLLER WANTS IS NOT THE LOOP THE MACHINE
+WANTS, AND TAKING IT PROPERLY IS WORTH 1.65x (plan §52.33).** §52.30's 1.13x was measured through a
+window that was moving with the bandwidth. The distilled policy's window is specified in PILOT
+SAMPLES and the pilot's stride is derived from the plant's settle, so raising the servo bandwidth
+SHRINKS its reach in raw machine steps with nothing in the configuration touched — stride 8 at
+bw 2e-3, 4 at 8e-3, 3 at 1.6e-2 — and every bandwidth number this project has quoted moved two
+variables at once, the wrong way round (rule 17). Restoring the reach at bw 8e-3 takes the bench
+square from 1.9284e-1 to 1.7864e-1, which is the whole of the 10% regression §52.30 booked as the
+change's cost; `WINRAW` states the window in raw steps and is byte-identical at the shipped
+bandwidth. Swept with the reach held, the optimum is **bw 1.6e-2 at the rig's STANDARD drive** —
+the 32x drive §52.30 bought its result with is slightly HARMFUL there, so what the customer buys is
+a servo retune and not a bigger motor — and **the conventional machine is 1.2% WORSE at that
+bandwidth than it is today**. That is the finding rather than a caveat: the loop that minimises the
+machine's own error and the loop that maximises what a learned feedforward delivers are different
+loops, eight times apart, and the delivering one sits about **4x ABOVE** the bench cell's slowest
+structural mode — the opposite end of §52.28's "0.4-0.5 of the slowest mode", which §52.30 had
+already reduced to a rule fitted to the bench square. **What made it shippable is a distinction the
+library was missing: a REFUSED cascade still teaches.** At bw 1.6e-2 the cascade's verify goes
+marginal — 3 of 5 seeds refuse — and each refusal dropped the distilled rung onto `HarmonicFF` for
+1.32-1.67x at **107-117 machine-minutes** where the pilot teacher reaches 6.6x in 10.1. But as a
+RUNG the cascade is judged on whether its FORECAST inverts the machine well enough to ship, while
+as a TEACHER it is handed the measured error through `oracleF0` and asked only for the increment
+that cancels it — its verify measures exactly what the teaching port replaces. The evidence was
+already on record twice unread: §52.29's guided phase moved the teacher 1.73x and returned a
+BIT-IDENTICAL policy, and three seeds gave cascades of 1.03x/1.13x/1.25x and one policy to five
+figures. `distilTeachRefused` (opt-in) publishes the refused cascade as the teacher with
+`deployed.stack` left at 0, so it still cannot reach the machine, and **a cascade scoring 0.62x
+teaches a policy as good as one scoring 1.34x** — availability 2-of-5 → 4-of-4, refusal cost 107
+machine-minutes → 10.1, with both controls exact (the admitted seed and the whole shipped-loop
+ladder both byte-identical). Composed with learn-on-program over four seeds, worst cell of each:
+**bench square 1.3025e-1, rounded rectangle 9.0436e-3, circle 7.4380e-3 against the shipped
+1.3730e-1 / 1.8826e-2 / 1.5195e-2 — 1.65x geometric with nothing made worse**, or 8.13x / 12.37x /
+14.30x over the machine as it stands against 7.71x / 5.94x / 7.00x. **The two programs the
+commissioning never saw gain 2.08x and 2.04x where the one it learned on gains 1.05x**, which is
+the ordering a plant model produces and the opposite of a memory's. It costs NOTHING on the PLC —
+the deployed object is the same 93-feature, 274-MAC policy with no cascade armed — and nothing is
+made a default: `ARM_BW`, `ARM_DRIVE`, `WINRAW` and `TEACHREFUSED` are harness knobs, all unset
+byte-identical, on one plant and one cell (rule 31). Measured and negative on the way, so they are
+not tried again: the faster loop does NOT raise the reference window's information ceiling (0.9375
+against 0.9315, though the ABSOLUTE irreducible content shrinks 1.72x, which is where the gain
+comes from); the state term is still harmful there and the feedback layer still refused, so
+§52.26's and §52.27's limits are not artefacts of a slow loop; a SMOOTHED deviation — the one
+feedback a 951-step plant could safely take — is worth less the more it is smoothed (0.906 at 256
+steps, 0.756 at 1024, 0.664 at 4096, the last two BELOW the window alone), so rule 39's split says
+the missing 14% is OSCILLATION and not bias; and `decisionsPerTs`, which lets N triple from 79 to
+245 as the bandwidth rises, was the first hypothesis for the marginal verify and is refused.
+**AND THE ARC WAS THEN REVIEWED AGAINST ITSELF, WHICH FOUND FOUR CONTRADICTIONS AND ONE EXPERIMENT
+THAT COULD NOT HAVE SUCCEEDED (plan §52.34).** It measures nothing; it names what the record cannot
+hold simultaneously, and every one of the negatives it questions is load-bearing. **(1)** §52.31's
+ceiling — 0.931 against the shipped 0.856-0.870, "within 1.4x of everything the input contains" —
+cannot coexist with §52.17's SAME 93 features, SAME window and SAME machine reading **14-15.9x
+fitted on the square alone against 6.04x pooled**. The resolution is that within one program the
+window nearly keys lap phase, which means **§52.31's same-program CONTROL is measuring that same
+aliasing and is therefore not a control**; the two columns tracking each other shows the metric
+cannot separate the cases, not that the target has no transfer penalty. **(2)** "A more converged
+teacher teaches a worse policy" (0.10 → 0.217, 0.15 → 0.269, 0.20 → 0.363) says convergence moves
+the target AWAY from any function of the window — target = generalising part + program-specific
+residue, which §50.1 already wrote down as implicit early stopping — and that contradicts §52.31's
+"no transfer penalty in the target". **(3)** The 951-step lag was REFUTED BY ITS OWN REMEDY and is
+still carried as the explanation: §52.33 halved it and the state term is still harmful and the
+feedback layer still refused, so the cause is unestablished and rule 35 is the live candidate.
+**(4)** "The residual is on the edges, not the corners" answers LOCATION where the question was
+SOURCE — a lightly damped mode excited at a corner deposits its energy along the following edge —
+and it steered the work to diet composition instead of transients. **AND THE ROUTE-CLOSING
+EXPERIMENT IS VOID:** §52.16 retired rule 37 on a window swept x1/x2/x3 that scales the SAME 23
+offsets, so span and SPACING tripled together and a mode ringing at a few hundred steps is
+invisible through the wide taps — it traded exactly the resolution it was testing the reach for,
+and an FIR window at bounded tap count cannot have both. **The general form is the finding: every
+capacity experiment in this arc added more FUNCTIONS OF THE SAME TRUNCATED HISTORY** — the
+544-feature map, the quadratic and energy lifts, the 314-column library, the scheduled blocks, the
+second distillation, the state term — **and not one added MEMORY** (checked by grep: no recursive,
+IIR or resonator feature exists anywhere in `lib/` or `test/`). So the record reads "capacity does
+not help" where it establishes only "capacity over a truncated history does not help".
+**WHAT IS PROPOSED, AND IT IS THIS FILE'S OWN OBJECT RATHER THAN A CHANGE OF PROBLEM:** a small
+bank of SECOND-ORDER RESONATORS driven by the COMMANDED REFERENCE, their states fed to the policy
+beside the window. An FIR window is a hopeless basis for a lightly damped resonance — thousands of
+taps to span the ring at a spacing that resolves its period — where two state variables per mode
+do it exactly, at order 20-40 MAC against the policy's 274, with NO aliasing at any reach, no
+tracker, no lap index and no per-plant constant (a geometric ladder, the ridge selecting). It
+explains the negatives rather than accommodating them, and above all it is the bridge §52.27 left
+open: **the measured deviation that took 0.836 → 0.962 IS the mode state, and a command-driven
+resonator is an observer of it that needs no instrument.** The order is stated and the falsifier
+comes FIRST — does the mode FREQUENCY move with pose, since a fixed bank is the wrong observer if
+it does and the scheduling block cannot repair a frequency error — then `consist.mjs` re-run with
+the states in the row, fitting nothing: if the disagreement at small row distance FALLS, the
+ceiling that closed five directions was a missing state and not an information floor.
+**AND VERIFYING ALL OF IT TURNED THE BROWSER TIER RED ON A CHECK THAT COULD NOT FAIL (plan
+§52.35).** `flexisim/learn` asserted the learn button is ENABLED while the check three lines above
+it explicitly permits the arm to still be driving home — and `idle = settled && !approach` is the
+button's own gate, so it was a race against `home()`: green on a quiet machine, red under load,
+and reproduced with the changes STASHED TO HEAD, which is what says it is not the change. Worse,
+the body sat inside `if (canLearn)` and so **every suite since §52.19 silently skipped the entire
+learn-on-program exercise** — the feature carrying 6.04x → 7.71x — which is rule 25's "not
+measured" and "passed" being different states, and the second hole of that exact shape after the
+`SUITE=full` skip. Fixed, it ran and exposed a defect: one pass exceeds **63 minutes of browser**
+where the IDENTICAL work costs 462k machine samples and ~230 s in Node (`LEARNMODE=continue` and
+`diet` measured bit-identical, which is the control saying the mode is not the variable) — 1.3x
+the commissioning it follows in Node against >30x in the browser, **and the page's own
+commissioning does not show that ratio** through the same host and the same yield. So it is not
+the cost of learning and not the yield rate; it is UNDIAGNOSED and it is the next thing to fix on
+that page. The body is gated behind `FLEX_LEARN_BROWSER=1` carrying those numbers so the suite is
+not red and the next failure is not hidden behind it (rule 3); the button check runs every time.
 
 **ITS FIRST READING WAS A REFUSAL, WHICH WAS THE PAGE DOING ITS JOB (plan §52.7).** Distil-only
 ladder on the bench square: `②d distilled — REFUSED` at 0.22x (demo), 0.43x (fast, browser),
