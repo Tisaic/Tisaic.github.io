@@ -191,7 +191,15 @@ Each of these is a claim that can be shown false, which is the only kind worth w
 
 3. **PLANT-AGNOSTIC, AND ALREADY HALF PROVEN.** Six plants that share no physics is the
    existing bar and it must not regress: the 2R arm, a quadruple tank, an extruder barrel,
-   the Wood-Berry column, a cold mill AGC, the EMPS servo axis. Target: every plant either
+   the Wood-Berry column, a cold mill AGC, the EMPS servo axis. **AND THERE IS NOW A SEVENTH,
+   ADDED BECAUSE ALL SIX SHARE SOMETHING NO LINE HERE HAD NOTICED — EVERY ONE OF THEM IS STABLE
+   WITHOUT A CONTROLLER (plan §52.32).** A nonlinear cart-pole, asserted unstable in the test
+   (1e-4 rad to 0.5 rad in 1.36 s with no force), corrected at the REFERENCE of the cascade an
+   installation would already have. It deploys at 9.4-9.8x across four seeds at a 1.04x spread —
+   the tightest distribution here — and saturates at 13.7x rather than running to its cap. **And
+   on a stabilising loop tuned 3.5x better it REFUSES all four times with a stated reason: the
+   headline was the loop.** Both are measured, and the fault was caught before the claim rather
+   than retracted after it, which is the first time in this project. Target: every plant either
    improves or refuses for a reason it can state, and the reasons stay measured rather than
    tuned. **THE DELAY CLAUSE IS MET AND IT WAS ALREADY IN THE SET.** This used to read "add a
    plant with a delay that dominates its own response, because none of the six has one" — the
@@ -1184,6 +1192,7 @@ measurement behind each is in `docs/history/` — the pointer in brackets.
 | `test/pilot/consist.mjs` | **Not a test — IS THE CONVERGED CORRECTION A FUNCTION OF THE REFERENCE WINDOW, AND HOW MUCH IS LEFT IN IT? (plan §52.31).** Builds the shipped rows and converged targets for the diet and the square, standardises them, and reports target DISAGREEMENT against row DISTANCE — cross-program against the same-program control — fitting nothing. Cross-program and same-program track each other at every distance, so the function exists and generalises; `REPEAT=1` converges a prefix twice and finds the two draws differ by 1.4e-5 of the target's scale, so the scatter is structure and not teacher noise; and the disagreement at small distance caps R² at **0.89 measured, 0.93 extrapolated to zero distance** against the shipped fit's 0.856-0.870. **At most 1.1x-1.6x of the correction's error remains in the window**, which is the quantitative form of every negative in §52.16-§52.30. |
 | `test/pilot/stateaug.mjs` | **Not a test — is the converged correction a function of the reference window, or of the machine's state? (plan §52.27).** Commissions the bench ladder, converges every training program's prefix and the square's own, runs each under its prefix tapping the motor-side vector, and regresses the PREFIX on the shipped row shape against the same row plus the newest measured sample, pose-scheduled, split into the reference's own sample (E) and the measured deviation from it (F): leave-one-polygon-out 0.836 → 0.803 (E) → 0.962 (F), the square 0.85/0.82 → 0.996/0.95 — the missing term is the deviation, which is feedback, which the gearbox cannot pass in time. |
 | `test/pilot/distil-arm.mjs` | **Not a test — the instrument that reads a distilled-rung refusal to its cause, and the one every knob in plan §52.8 was measured through.** Runs the bench's ladder on the arm at a chosen grade (`GRADE`, `DIET`, `ENGINE`, `REPLACE`, `TEACHCAP`, `STRIDE`, `WIN`, `OFFS=raw`, `PASSES`, `PERIODIC`, `LOO`), then scores the fitted policy on its OWN training programs — evaluated as it deploys, once per decision and held: helps them and harms the square → transfer; harms them too → the fit or the deploy path. Knobs for the structural experiments of plan §52.16 too: `Q`, `PARAM=1`, `REF=angles|torques|both`, `DIET=tour2`, `RIDGE`, `ONLINE=0`, `SOFFS`, `LAPSYNC=1`, `ARM_BL`, and for the feedback layer `FB=1`, `FBCAP`, `FBGAIN`, `FBBASIS`, `FBSCHED=order,lags,cmd,fn`, `FBOPTS=key=value,...` (any pilot option for the layer alone), `LEADPROBE=1`, `FBFORECAST=1` (the layer's forecast scored on the square, at a ladder of leads), `FBEXT=1` (the separated forecast bank through the oracle port; `FBEXTLAM`, `FBEXTSIGN`, `FBEXTLAMBDA`), `FBLAW=prop` (a proportional law in place of the QP; `FBLAWG`, `FBLAWLEAD`), `SEED`, `BASIS`, `INSTR=1` (strain and wind-up in the pilot's measured vector), and for plan §52.27 `CORNERSHARE=1` (the residual's energy by distance from each corner), `HELDOUT=1` (the rounded rectangle and the circle scored beside the square), `DIET=rects|rectspoly`, `STATE=1` and `STATEROUNDS` (the state term and its in-the-loop rounds), `GUIDED=<laps>` (the commissioning-phase online adaptation, which §52.29 measured as bit-identical through the oracle-fed teacher and worth 11% without it), and for §52.28-30 `ARM_BW` (the servo loop's bandwidth, the plant constant that was carried across every cell) and `ARM_DRIVE` (the torque limit as a multiple of the gravity hold torque) — both unset are byte-identical. At its defaults it reads the host's shipped configuration: **1.7528e-1 on the bench square, 6.04x, 10.7 machine-minutes, ~160 s of Node** (plan §52.16). |
+| `test/pilot/pend.test.mjs` | **A SEVENTH PLANT, AND THE ONE CLASS THE OTHER SIX DO NOT CONTAIN: OPEN-LOOP UNSTABLE (plan §52.32).** A nonlinear cart-pole that the test asserts diverges — 1e-4 rad to 0.5 rad in 1.36 s with no force — under a cascade an installation would already have, with the pilot correcting the cart's position REFERENCE and the TIP scored, which is not what the stabiliser regulates. Told four signals, one channel, its authority, a box, a GUARD on the pole angle and a representative program; nothing about pendulums or instability. **Deploys at 9.4-9.8x across four seeds (spread 1.04x, the tightest here) and saturates at 13.7x rather than running to its cap — and on a stabilising loop tuned 3.5x better it REFUSES all four times with a stated reason.** So the headline was the loop, caught prospectively for the first time; `PEND_UCAP`, `PEND_SEED` and `PEND_TUNED` are the knobs. |
 | `test/pilot/rigs/arm-rig.mjs` | The 2R arm rig — plant, paths, routing, `commissionArm` and `deployOn`. Every harness drives the arm through this; three separate copies of pieces of it have each shipped a defect. |
 | `test/pilot/forecast.mjs` | Held-out forecast R² on open-loop programs, plus an offline refit that separates an unreachable dictionary from an unvisited one. |
 | `test/pilot/spectrum.mjs` | Where the machine rings, where the defect's energy is, and where the excitation looked — three power spectra on one axis of periods. |
@@ -1637,6 +1646,31 @@ the INPUT rather than the map: the measured deviation (R² 0.836 → 0.962, unus
 answers 950 steps later) or the machine itself (§52.30's 1.13x-1.29x). Caveat stated: the metric is
 a plain standardised Euclidean norm over 92 features, so a better one could find closer neighbours
 and read a higher ceiling.
+**AND A SEVENTH PLANT WAS ADDED, THE ONE CLASS THE SIX DO NOT CONTAIN (plan §52.32).** A survey of
+the "universal self-learning controller" literature puts an INVERTED PENDULUM first among the
+plants such a claim must answer for, and the six here share one thing no line in this file had
+noticed: **every one of them is stable without a controller.** `test/pilot/pend.test.mjs` adds a
+nonlinear cart-pole and asserts the instability rather than asserting it in prose (1e-4 rad to 0.5
+rad in 1.36 s with no force). The pilot corrects the cart's position REFERENCE into the cascade an
+installation would already have, is told four signals, one channel, an authority, a box, a GUARD
+on the pole angle and a representative program, and is scored on the TIP — which the stabiliser
+does not regulate. **It deploys at 9.770x / 9.396x / 9.630x / 9.766x across four seeds (spread
+1.04x, tighter than any of the six), the excitation never reaches the guard, and the correction
+SATURATES at 13.7x rather than sitting at its cap**, which is what separates it from the barrel's
+refusal. **THEN THE LOOP WAS SWEPT BEFORE THE NUMBER WAS CLAIMED**, because §52.28 and §52.30 cost
+three sections on exactly that: over 560 cells of its own four gains the best reads 2.914e-2
+against the shipped 1.027e-1, **3.5x better — and re-run there the pilot REFUSES all four times**
+(verify 0.99x / 1.02x / 1.02x / 1.10x). So the 9.77x was the LOOP, and the correction layer has
+nothing to add to a loop that is already good. Three things that is worth: the weak-denominator
+fault was caught PROSPECTIVELY for the first time here; target 3's improve-or-refuse-with-a-reason
+is met on a plant class the method had never met, 4 of 4 unharmed; and §52.30 generalises — the
+factor this project quotes is a joint property of the controller AND the loop beneath it. Stated
+asymmetry: the shipped loop was tuned to HOLD the pole and the swept one ON the program the pilot
+is scored against, which is per-program tuning the method itself is not allowed, so the honest
+reading is a range rather than a number. **And it narrows the product claim usefully**: the nearest
+published work (USLC 2024, UP-OSI RSS 2017) SYNTHESISES a controller for an unknown plant, and this
+does not on any of the seven — there is always a loop already closed and this corrects its
+reference. That is narrower and more defensible, and §52.32 is why it has to be said that way.
 
 **ITS FIRST READING WAS A REFUSAL, WHICH WAS THE PAGE DOING ITS JOB (plan §52.7).** Distil-only
 ladder on the bench square: `②d distilled — REFUSED` at 0.22x (demo), 0.43x (fast, browser),

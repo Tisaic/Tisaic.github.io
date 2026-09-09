@@ -12939,3 +12939,77 @@ space are not identical, so a better metric — or a longer window — could fin
 and read a higher ceiling. And this is one seed per cell, on one diet, with the square as the only
 held-out program. What it does NOT depend on is any fit, any ridge, or any choice of basis, which
 is why it is worth more than the five sections of fitting that preceded it.
+
+### §52.32 A SEVENTH PLANT, OPEN-LOOP UNSTABLE — AND ITS HEADLINE WAS THE LOOP, CAUGHT BEFORE IT WAS CLAIMED
+
+A literature scan of the "universal self-learning controller" claim put an INVERTED PENDULUM
+first among the plants such a claim has to answer for, and the six plants here share one thing
+that no line in this file had noticed: every one of them is STABLE without a controller. That is
+the class this method had never met, and it is where its shape is most exposed — `lib/pilot/` is
+a PREVIEW CORRECTION layer that sits on top of a loop somebody else closed, and on an unstable
+plant that loop is the only reason the plant exists.
+
+**THE PLANT.** `test/pilot/pend.test.mjs`: a cart-pole in the textbook nonlinear form, pole from
+upright, cart friction, no small-angle approximation. The test asserts the instability rather
+than asserting it in prose — released at 1e-4 rad with no force it passes 0.5 rad in **273 steps
+(1.36 s)**. The conventional machine is the loop an installation would already have, a cascade
+leaning the pole toward the target and chasing the lean. The pilot is told four measured signals,
+ONE correction channel (an offset on the cart's position REFERENCE, in metres), its authority, the
+channel's box, a GUARD on the pole angle — an index and a number, the same shape as the tank's
+overflow — and the representative program. It is told nothing about pendulums, nothing about
+instability, and nothing about the loop underneath it. What is scored is the TIP, `x + L sinθ`,
+which is not what the stabiliser regulates.
+
+**IT DEPLOYS, IT IS SAFE, AND IT IS REPEATABLE.**
+
+```
+  the conventional machine        tip rms 1.027e-1 m   |θ| peak 0.048 rad
+  the pilot, 4 commissioning seeds   9.770x / 9.396x / 9.630x / 9.766x     spread 1.04x
+  authority sweep (metres of cart reference):
+    0.05  1.559x      0.10  3.023x      0.15  9.770x      0.30  13.681x      0.60  13.345x
+```
+
+Four of four seeds deploy and four of four help, at a 1.04x spread — tighter than any of the six
+(EMPS 1.05x, the mill 1.07x, the arm 1.13x). The correction SATURATES at 13.7x rather than
+running to its cap, which is what separates a real correction from the barrel's failure (there,
+the correction sits AT the cap and every setting that applies a real one is worse than nothing).
+The excitation did not topple the pole, the guard was never reached, and the pole's swing rises
+from 0.048 to 0.171 rad — a real cost on an unstable plant, stated: the correction buys tip
+accuracy by spending angle envelope.
+
+**AND THEN THE LOOP WAS SWEPT, WHICH IS THE POINT OF THIS SECTION.** §52.28 and §52.30 cost this
+project three sections on exactly one lesson — a stabilising loop nobody derived is a carried
+constant, and a ratio quoted against a weak denominator is the loop's number. So before the 9.77x
+was written anywhere, the cascade's own four gains were swept over 560 cells:
+
+```
+  the loop this test shipped with       tip rms 1.027e-1 m   (tuned for the HOLD)
+  the best cell of its own sweep        tip rms 2.914e-2 m   (tuned on the PROGRAM) — 3.5x better
+```
+
+Re-run on that loop, at three seeds and at double authority, the pilot **REFUSES all four times**,
+each with a stated reason — the verify reads 0.99x, 1.02x, 1.02x and 1.10x against doing nothing.
+**So the 9.77x was the loop.** A stabilising loop tuned 3.5x better leaves nothing a preview
+correction of its reference can take, and the method declines rather than harming the machine.
+
+**WHAT THAT IS WORTH, IN THREE PARTS.** First, this is the first time in this project that the
+weak-denominator fault was caught PROSPECTIVELY rather than retracted afterwards — §52.28's
+lesson, applied before the claim rather than to it. Second, the refusal is target 3's requirement
+met on a plant class the method had never seen: improve, or refuse for a reason it can state, with
+the machine left as it was — 4 of 4, unharmed. Third, it generalises §52.30 to a new plant: **the
+factor this project quotes is a joint property of the controller AND the loop beneath it**, and
+where that loop is already good the correction layer has nothing to add.
+
+**THE ONE ASYMMETRY, STATED.** The two loops were not tuned the same way. The shipped default was
+chosen to hold the pole at rest; the sweep's best was chosen ON the program the pilot is then
+scored against, which is per-program tuning the method itself is not allowed (it is the rectangle
+diet's fault one level down — a denominator fitted to the test). So the fair reading is a RANGE
+rather than a number: against a loop tuned without the program the method delivers ~9.8x, and
+against one tuned on it the method correctly finds nothing. Both are measured and both are here.
+
+**AND IT NARROWS THE PRODUCT CLAIM USEFULLY.** The nearest published work on "universal
+self-learning control" (USLC, 2024) and "a universal policy with online system identification"
+(UP-OSI, RSS 2017) SYNTHESISE a controller for an unknown plant. This does not, on any of the
+seven: there is always a loop already closed, and this corrects its reference. That is a narrower
+claim and a more defensible one — and this section is why it must be stated that way, because the
+size of what the correction is worth is set by how good that loop already is.
