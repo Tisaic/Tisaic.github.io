@@ -8,7 +8,7 @@
   <title>FlexiSim — Commissioning Bench</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:1104,built:"2026-09-09T12:45:27Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:1105,built:"2026-09-09T16:57:51Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
 
   <style>
@@ -192,7 +192,7 @@
 import { Joint } from './lib/flexisim/joint.js';
 import { buildLink, massProperties } from './lib/flexisim/link.js';
 import { FlexArm2R, snapshotArm, restoreArm } from './lib/flexisim/arm2r.js';
-import { ChainServo } from './lib/flexisim/compensator.js';
+import { ChainServo, BENCH_SERVO } from './lib/flexisim/compensator.js';
 import { roundedRect, sharpRect, circle as circlePath } from './lib/flexisim/toolpath.js';
 import { ContourScore, decompose } from './lib/flexisim/contour.js';
 import { RobotComp } from './lib/ngrc/robotcomp.js';
@@ -209,7 +209,7 @@ const $ = (id) => document.getElementById(id);
  */
 const H = 4, CLAMP = 3, NU = 0.3, RHO = 1, G = 2e-6;
 const RATIO = 100, DAMPING = 3e-3, NO_LOAD_SPEED = 0.2, BACKLASH = 1e-4;
-const PG = { LEN1: 14, LEN2: 10, centre: [12, 0], drive: 32 };
+const PG = { LEN1: 14, LEN2: 10, centre: [12, 0], drive: BENCH_SERVO.drive };
 const K_LADDER = [0.25, 0.5, 1, 2, 4, 8, 16, 20, 32];
 const E_LADDER = [0.005, 0.01, 0.02, 0.03, 0.06, 0.10, 0.15, 0.22];
 const FEED_LADDER = [0.001, 0.002, 0.004, 0.006, 0.010, 0.016];
@@ -294,7 +294,7 @@ async function makePlant(K, E, carry = null) {
   a.K = K; a.E = E;
   trackHops(a);
   const hold = Math.abs(a.gravityTorque([0, 0])[0]) / RATIO;
-  const sv = new ChainServo({ arm: a, bandwidth: 2e-3, tauMax: PG.drive * hold,
+  const sv = new ChainServo({ arm: a, bandwidth: BENCH_SERVO.bandwidth, tauMax: PG.drive * hold,
     speedMax: NO_LOAD_SPEED });
   const m = { arm: a, servo: sv, l1: link1, l2: link2 };
   // A MACHINE IS SOMEWHERE WHEN IT IS SWITCHED ON. A rebuilt plant (K or E moved) takes the
@@ -832,6 +832,16 @@ async function startCommission() {
  * reported and not armed. Restoring is a deployment through the same host and the same
  * `act()` the ladder scored with, never a re-statement of the controller here.
  */
+/**
+ * THE STORED RECORD'S VERSION, IN ONE PLACE. It was written in `saveModel` and checked in BOTH
+ * `storedMatches` and `tryRestore`, and raising it for the servo-loop key (plan §52.37) updated
+ * two of the three — so the page saved a v2 record and then refused to restore it, with the
+ * smoke test reading `13.65 vs null`. Rule 30 in its smallest form: a value described in a second
+ * place eventually describes the value it used to have. Bumping this retires every record written
+ * before the loop moved, which is intended — a v1 record carries no bandwidth to compare.
+ */
+const STORE_V = 2;
+
 function saveModel() {
   if (!rep || !host) return;
   const a = host.auto;
@@ -850,7 +860,14 @@ function saveModel() {
     hff = { lap: L, channels: 2, table: t, program: a._hffProgram };
   }
   const saved = {
-    v: 1, savedAt: new Date().toISOString(), K: kNow(), E: eNow(), shape: $('shape').value,
+    // THE SERVO LOOP IS PART OF THE MACHINE AND MUST BE PART OF THE KEY (plan §52.37). The record
+    // keyed on K, E and the program signature, which was complete while `bandwidth` was one
+    // hard-coded literal everywhere. It is now a shipped constant that has MOVED (2e-3 -> 1.6e-2),
+    // and a policy fitted under the old loop restored onto the new one is a model of a different
+    // plant offered as a match — silently, with a gain pill from the machine it no longer runs on.
+    // `v: 2` retires every record written before the loop moved rather than trusting the key to
+    // catch them, because a v1 record carries no bandwidth to compare.
+    v: STORE_V, bw: BENCH_SERVO.bandwidth, savedAt: new Date().toISOString(), K: kNow(), E: eNow(), shape: $('shape').value,
     feed: +$('s-feed').value, program: programSignature(prof, L), lap: L, grade, scanMs: scanMs(),
     deployed: { ...a.deployed },
     rungs: rep.rungs.map((r) => ({ name: r.name, score: r.score, gain: r.gain, deployed: r.deployed, note: r.note })),
@@ -861,7 +878,8 @@ function saveModel() {
 }
 function loadStored() { try { const s = localStorage.getItem(STORE_KEY); return s ? JSON.parse(s) : null; } catch { return null; } }
 function storedMatches(s) {
-  return !!(s && s.v === 1 && arm && prof && s.K === kNow() && s.E === eNow()
+  return !!(s && s.v === STORE_V && arm && prof && s.K === kNow() && s.E === eNow()
+    && s.bw === BENCH_SERVO.bandwidth
     && s.program === programSignature(prof, Math.ceil(prof.lap)));
 }
 /** What the live model was trained on — the commissioning's plant, or the stored record's. */
@@ -878,7 +896,7 @@ function tryRestore() {
   // programs by construction and lap learning withholds itself off its program, so the
   // program need not match; a different K or E is exactly the degradation the owner wants
   // to see, so it restores armed and `plantMismatch()` says so wherever the model is named.
-  if (!s || s.v !== 1 || !arm || !prof) return false;
+  if (!s || s.v !== STORE_V || !arm || !prof) return false;
   try {
     const h = makeHost(!!s.hff, s.grade || 'full');
     const a = h.auto;
@@ -971,7 +989,12 @@ function statsHTML() {
   if (!arm) return '';
   const rows = [];
   const e = (x) => (Number.isFinite(x) ? x.toExponential(3) : '—');
-  rows.push(['plant', `K ${arm.K} · E ${arm.E} · ${$('shape').value} at feed ${feedNow().toExponential(1)}`]);
+  // THE SERVO LOOP IS NAMED, because it is now a shipped choice rather than a carried literal and
+  // it is worth as much as anything the controller does (plan §52.37). It is stated FROM the
+  // machine that is running, not from the constant, so the panel cannot describe a loop the arm
+  // does not have (rule 30).
+  rows.push(['plant', `K ${arm.K} · E ${arm.E} · position loop ${(servo.bw ?? BENCH_SERVO.bandwidth).toExponential(1)}`
+    + ` · ${$('shape').value} at feed ${feedNow().toExponential(1)}`]);
   if (rep && trainedOn) rows.push(['model trained on', plantMismatch()
     ? `<b>K ${trainedOn.K} · E ${trainedOn.E} — NOT this plant</b>` : `K ${trainedOn.K} · E ${trainedOn.E} — this plant`]);
   if (ghostValid() && lastLap && lastLap.totalRms > 0) {
@@ -1122,7 +1145,7 @@ window.__flxDbg = () => (arm ? {
       heldOutR2: rep.distil.fit.heldOutR2, speedSpan: rep.distil.fit.speedSpan,
       reason: rep.distil.fit.reason } : null, note: rep.distil.note || null } : null },
   stored: (() => { const s = loadStored(); return s ? { K: s.K, E: s.E, shape: s.shape, gain: s.gain, matches: storedMatches(s) } : null; })(),
-  trainedOn, mismatch: plantMismatch(), plantNote: plantNote(),
+  trainedOn, mismatch: plantMismatch(), plantNote: plantNote(), bw: servo.bw ?? null, drive: PG.drive,
   recording: !!ghostRec, recordingLap: ghostRec ? ghostRec.l : null,
   ghostK: ghost ? Math.min(ghost.lap - 1, Math.floor(((k % prof.lap) + prof.lap) % prof.lap)) : null, lapT: prof ? prof.lap : null,
   fade: host && host.auto.deployed.distil ? host.auto.distil.coverage(feedNow()) : null,

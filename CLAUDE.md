@@ -1790,6 +1790,33 @@ deployment (1.44x, 3.24x), its standing explanation — the 951-step lag — was
 remedy, so the cause is unestablished and rule 35 is the live candidate. Every additive-term-at-
 full-bandwidth route has been tried; entering the deviation through a SLOWLY ADAPTED PARAMETER of
 the feedforward map, at a bandwidth far below the measured 3,400-step ring, has not.
+**AND IT IS NOW SHIPPED — THE MEASURED BEST IS THE DEFAULT AND THE APP RUNS IT (plan §52.37).**
+Everything §52.33 measured sat behind environment variables. Three changes make it the shipped
+configuration, each with the control that licenses it. **One servo constant**: `bandwidth: 2e-3`
+was hard-coded in the page's `makePlant` AND the rig's `machine()` with nothing linking them —
+rule 61 waiting for one to move — so it becomes `BENCH_SERVO` in `compensator.js` and both read
+it, at **1.6e-2**. What it is NOT matters as much: the CONVENTIONAL machine is 1.2% WORSE there,
+and the loop sits ~4x ABOVE the cell's slowest structural mode, so this is the loop the LEARNED
+controller wants and the customer buys a retune rather than a bigger motor. **The window in RAW
+STEPS**, which is a units repair and not a tuning change — specified in pilot samples it shrank
+with the bandwidth (stride 8/4/3 → ±2048/±1024/±768 raw) with nothing in the configuration
+touched, and the raw ladder is **byte-identical to the old one at stride 8**, so the repair is a
+no-op where it was measured and correct everywhere else. **`distilTeachRefused` on by default**,
+byte-identical wherever the cascade was admitted and worth 6.6x in 10.1 machine-minutes against
+1.3x in 107 where it was not. **The app now delivers, at its own defaults through the one press:
+bench square 1.0717e+0 → 1.6159e-1 → 1.3025e-1 with learn (8.23x), the rounded rectangle it never
+saw 9.0436e-3 (13.42x) and the circle 6.2215e-3 (17.19x)** — 1.65x geometric over the previous
+shipped configuration with nothing made worse, at the SAME deployed object (93 features, 274
+MAC/decision, 2.7% of a scan, no cascade armed, no solver, no tracker). **And the change
+introduced one real defect into the app, which is the part worth recording**: the page offers a
+stored model back only to the machine it was fitted on, keyed on K, E and the program signature —
+a key that was COMPLETE while the bandwidth was one literal everywhere and became INCOMPLETE the
+moment it became a shipped constant that moved, so a policy fitted under the old loop would have
+restored onto the new one as a match, silently, under a gain pill from a machine it no longer runs
+on. The loop joins the key and the record goes to `v: 2`, retiring every record written before it
+moved rather than trusting a comparison they carry no field for; the panel NAMES the loop, read
+from the running machine rather than the constant (rule 30). Not claimed: one plant, one cell,
+four seeds, and on a real installation the retune is a CUSTOMER action the one press cannot take.
 **AND VERIFYING ALL OF IT TURNED THE BROWSER TIER RED ON A CHECK THAT COULD NOT FAIL (plan
 §52.35).** `flexisim/learn` asserted the learn button is ENABLED while the check three lines above
 it explicitly permits the arm to still be driving home — and `idle = settled && !approach` is the

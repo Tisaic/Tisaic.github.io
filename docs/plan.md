@@ -13400,3 +13400,67 @@ additive-term-at-full-bandwidth route has been tried; what has not is entering t
 through a SLOWLY ADAPTED PARAMETER of the feedforward map — a bandwidth far below the 3,400-step
 ring, which cannot excite what an additive term excites. That is the next thing to put to the
 machine, and it is stated here so the next session does not re-run a basis experiment.
+
+### §52.37 SHIPPED: THE MEASURED BEST IS NOW THE DEFAULT, AND THE APP RUNS IT
+
+Everything §52.33 measured sat behind environment variables. This makes it the shipped
+configuration — three changes, each with the control that licenses it, and one real defect the
+change itself introduced into the page.
+
+**1. ONE SERVO CONSTANT, BECAUSE IT WAS ABOUT TO BE TWO.** `bandwidth: 2e-3` was hard-coded in
+the page's `makePlant` AND in the test rig's `machine()`, with nothing linking them. Value for
+value they agreed, so nothing was ever wrong and no check went red — rule 61 exactly, waiting for
+one of them to move. It moves here, so it becomes `BENCH_SERVO` in `lib/flexisim/compensator.js`
+and both read it. `drive` was already 32 in both and joins it rather than being left as the next
+one to drift.
+
+**The value is 1.6e-2, and what it is NOT matters as much as what it is.** The CONVENTIONAL
+machine is **1.2% WORSE** there than at 2e-3, and the loop sits ~4x ABOVE the bench cell's
+slowest structural mode rather than below it. This is the loop the learned controller wants, not
+the loop that flatters the plant, and the customer buys a servo retune rather than a bigger motor
+— a 32x drive measured slightly HARMFUL at this bandwidth (§52.33).
+
+**2. THE WINDOW IS STATED IN RAW MACHINE STEPS, WHICH IS A UNITS REPAIR AND NOT A TUNING CHANGE.**
+Specified in PILOT SAMPLES it moved with the plant: the pilot's stride is derived from the measured
+settle, so raising the bandwidth shrank the policy's reach with nothing in the configuration
+touched — stride 8 / 4 / 3 at bw 2e-3 / 8e-3 / 1.6e-2, i.e. ±2048 / ±1024 / ±768 raw steps. That
+is why every bandwidth number before §52.33 moved two variables at once. **The control is exact:
+the raw ladder is byte-identical to the old one at stride 8**, asserted in the commit rather than
+argued, so the repair is a no-op at the configuration it was measured on and correct everywhere
+else.
+
+**3. `distilTeachRefused` DEFAULTS ON.** As a RUNG the cascade is judged on whether its forecast
+inverts the machine well enough to ship; as a TEACHER it is handed the measured error and asked
+only for the increment that cancels it, so its verify scores exactly what the teaching port
+replaces. Byte-identical wherever the cascade was admitted anyway — measured on the admitted seed
+and on the whole shipped-loop ladder — and where it was not, the difference is 6.6x in 10.1
+machine-minutes against 1.3x in 107.
+
+**WHAT THE APP NOW DELIVERS**, at its own defaults, through the one press:
+
+```
+                                as it arrived   commissioned    + learn on this program
+  bench square                    1.0717e+0      1.6159e-1          1.3025e-1     8.23x
+  rounded rectangle (never seen)  1.2134e-1      1.1151e-2          9.0436e-3    13.42x
+  circle (never seen)             1.0693e-1      6.7092e-3          6.2215e-3    17.19x
+```
+
+against the previous shipped 1.3730e-1 / 1.8826e-2 / 1.5195e-2 — **1.65x geometric with nothing
+made worse**, at 10.1 machine-minutes and the SAME deployed object: 93 features, 274 MAC/decision,
+2.7% of a 1 ms scan, no cascade armed, no solver, no forecast bank, no tracker.
+
+**AND THE CHANGE INTRODUCED ONE REAL DEFECT INTO THE APP, WHICH IS THE PART WORTH RECORDING.** The
+page keeps the last deployed model and offers it back only to the machine it was fitted on — keyed
+on K, E and the program signature. That key was COMPLETE while the bandwidth was one literal
+everywhere and became INCOMPLETE the moment it became a shipped constant that moved: a policy
+fitted under the old loop would restore onto the new one as a match, silently, under a gain pill
+from a machine it no longer runs on. The loop joins the key, and the record version goes to `v: 2`
+so every record written before the loop moved is retired rather than trusted to a comparison it
+carries no field for. The panel also NAMES the loop, read from the running machine rather than
+from the constant, so it cannot describe a loop the arm does not have (rule 30).
+
+**WHAT IS NOT CLAIMED.** One plant, one cell, four seeds. The bandwidth has not been re-derived on
+the soft cell, on the other six plants, or across the feedrate span, and on a real installation it
+is a customer action the one press cannot take — the ladder cannot retune a servo loop it is
+installed on top of, which is §52.32's finding that the factor this project quotes is a joint
+property of the controller and the loop beneath it.
