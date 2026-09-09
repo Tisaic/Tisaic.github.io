@@ -13464,3 +13464,47 @@ the soft cell, on the other six plants, or across the feedrate span, and on a re
 is a customer action the one press cannot take — the ladder cannot retune a servo loop it is
 installed on top of, which is §52.32's finding that the factor this project quotes is a joint
 property of the controller and the loop beneath it.
+
+### §52.38 THE LIVE CPU READING — AND THE PEAK AND THE AVERAGE ARE NOT THE SAME NUMBER
+
+The page reported the armed set's cost as MAC/cycle against the 10%-of-scan allowance. Two
+things were wrong with that as a statement of what the CPU is doing.
+
+**1. THE DENOMINATOR WAS THE ALLOWANCE, NOT THE TASK.** `budget()` is 10,000 MAC per 1 ms — the
+10% this project is permitted — so a percentage against it is a fraction of the permission and
+not of the scan, and the two read identically while being a factor of ten apart. "CPU usage"
+plainly means the whole task, so `scanMac()` is the denominator for the live figure and the
+allowance keeps the FITS / DOES NOT FIT verdict where it belongs.
+
+**2. AND `cost()` REPORTS THE PEAK, WHICH MOST SCANS DO NOT PAY.** Every rung's `mac` is what it
+costs on a scan it DECIDES, and most of them do not decide every scan: the cascade decides on its
+own `sample` and the distilled map on its `stride`, HOLDING the correction between. So the load a
+CPU actually carries is `mac / cadence` summed, and the two differ by that stride. `cost()` now
+returns a `cadence` per rung — read from the DEPLOYED OBJECT (`stack.sample`, `distil.stride`)
+rather than declared, so a rung that changes its cadence cannot leave this arithmetic describing
+the old one (rule 30) — and an `avgMac` beside the peak. `stride` already round-trips through
+`DistilPolicy.toJSON`, so a restored model reports its own cadence rather than 1.
+
+**THE BUDGET RULE DOES NOT MOVE.** "Under 10%, ALWAYS" is a statement about the WORST scan; an
+average that hides a spike an order of magnitude larger is the reassuring half of the truth. The
+panel leads with the peak (rule 27) and shows the average beside it against the same denominator:
+
+```
+  CPU now — 0.27% in the peak scan · 0.07% average of a 1 ms task, a 4.0x spread because
+  the correction is decided on its own cadence and HELD between.
+```
+
+**AND IT IMMEDIATELY PRICED SOMETHING §52.37 SHIPPED WITHOUT NOTICING.** The servo retune halves
+the pilot's sample stride (8 at bw 2e-3, 4 at 1.6e-2) because the stride is derived from the
+measured settle. The deployed object is unchanged at 274 MAC/decision and the PEAK is therefore
+identical — which is the number §52.37 quoted and the number the budget rule tests — but the map
+now decides twice as often, so **the average CPU load doubles, 34 MAC/scan to 68**. That is a real
+cost of the change, it was invisible while only the peak was reported, and it is still 0.07% of a
+1 ms task so nothing is at risk. The point is that the instrument found it rather than that it
+matters here: a plant where the stride fell to 1 would pay the full peak every scan with the
+verdict line unchanged.
+
+**PINNED, BOTH HALVES (rule 9).** `flexisim/plc` asserts the line renders, that the average never
+exceeds the peak, and — where a rung actually holds between decisions — that the average is
+STRICTLY below it. The last is the half that fails if `cadence` comes back 1, which is the only
+way this arithmetic can be silently wrong.

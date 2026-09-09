@@ -1817,6 +1817,25 @@ on. The loop joins the key and the record goes to `v: 2`, retiring every record 
 moved rather than trusting a comparison they carry no field for; the panel NAMES the loop, read
 from the running machine rather than the constant (rule 30). Not claimed: one plant, one cell,
 four seeds, and on a real installation the retune is a CUSTOMER action the one press cannot take.
+**AND THE PAGE NOW STATES THE LIVE CPU LOAD, WHICH PRICED SOMETHING THAT SHIP HAD NOT (plan
+§52.38).** The budget panel reported MAC/cycle against the 10% ALLOWANCE — a fraction of the
+permission rather than of the task, ten times apart and reading identically — and it reported the
+PEAK, which most scans do not pay: every rung's `mac` is what it costs on a scan it DECIDES, and
+the cascade decides on its own `sample` while the distilled map decides on its `stride` and HOLDS
+between. `cost()` now carries a `cadence` per rung, read from the DEPLOYED OBJECT rather than
+declared (rule 30, and `stride` already round-trips through `toJSON` so a restored model reports
+its own), and an `avgMac` beside the peak; the panel leads with the unflattering one against the
+whole scan — **`CPU now — 0.27% in the peak scan · 0.07% average of a 1 ms task, a 4.0x spread`**
+— and the 10% rule keeps the FITS verdict, because "always" is about the worst scan and an average
+that hides a 4x spike is the reassuring half of the truth. **It immediately priced a cost §52.37
+shipped without noticing**: the retune halves the pilot's stride (8 at 2e-3, 4 at 1.6e-2) since
+the stride is derived from the measured settle, so the deployed object and the PEAK are identical
+— the number §52.37 quoted and the one the budget tests — while **the average load DOUBLES, 34 MAC
+per scan to 68**. Still 0.07% of a scan, so nothing is at risk; the point is that the instrument
+found it, and a plant whose stride fell to 1 would pay the full peak every scan with the verdict
+line unchanged. Pinned both halves (rule 9): the line renders, the average never exceeds the peak,
+and where a rung holds between decisions the average is STRICTLY below it — the half that fails if
+`cadence` comes back 1, which is the only way this arithmetic can be silently wrong.
 **AND VERIFYING ALL OF IT TURNED THE BROWSER TIER RED ON A CHECK THAT COULD NOT FAIL (plan
 §52.35).** `flexisim/learn` asserted the learn button is ENABLED while the check three lines above
 it explicitly permits the arm to still be driving home — and `idle = settled && !approach` is the

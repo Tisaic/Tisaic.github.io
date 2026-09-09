@@ -8,7 +8,7 @@
   <title>FlexiSim — Commissioning Bench</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:1105,built:"2026-09-09T16:57:51Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:1106,built:"2026-09-09T22:37:43Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
 
   <style>
@@ -236,6 +236,10 @@ const eNow = () => E_LADDER[+$('s-e').value];
 const feedNow = () => FEED_LADDER[+$('s-feed').value];
 const scanMs = () => +$('scan').value;
 const budget = () => 10000 * scanMs();
+// THE WHOLE SCAN, which is the denominator "CPU usage" means. `budget()` is the 10% ALLOWANCE,
+// so a percentage against it is a fraction of what we are permitted rather than of the task —
+// two numbers a factor of ten apart that read identically if the denominator is not named.
+const scanMac = () => 100000 * scanMs();
 
 // ---------------------------------------------------------------- state
 let arm = null, servo = null, rc = null, prof = null, view = null;
@@ -953,21 +957,36 @@ function costHTML() {
 function plcHTML() {
   if (!host || !rep) return '<p class="hint">Commission, or restore a stored model, and the armed set’s cost per scan appears here.</p>';
   const c = host.auto.cost(), label = { distil: 'the distilled model', hff: 'lap learning', stack: 'the pilot cascade' };
-  const rows = Object.entries(c.rungs).map(([kk, r]) => `<tr><td>${label[kk] || kk}</td>`
-    + `<td class="num">${(r.mac || 0).toLocaleString()}</td><td class="num">${(100 * (r.mac || 0) / budget()).toFixed(1)}%</td>`
-    + `<td class="num">${((r.bytes || 0) / 1024).toFixed(1)} kB</td>`
-    + `<td></td></tr>`);
-  if (!rows.length) rows.push('<tr><td colspan="5">nothing armed — the conventional machine is running</td></tr>');
-  // THE PEAK IS THE VERDICT: "under 10%, ALWAYS", not on average. The learning update, when
-  // the tracker is on, is paid once per decision and is added to the peak here rather than
-  // averaged away.
-  let peak = c.mac;
-  const pct = 100 * peak / budget();
-  const verdict = pct <= 100
-    ? `<b class="good">FITS</b> — ${peak.toLocaleString()} MAC in the peak cycle, ${pct.toFixed(1)}% of ${budget().toLocaleString()}`
-    : `<b class="bad">DOES NOT FIT</b> — ${peak.toLocaleString()} MAC in the peak cycle, ${pct.toFixed(0)}% of budget`;
-  return `<table class="tbl"><tr><th>armed</th><th>MAC/cycle</th><th>of budget</th><th>state</th><th></th></tr>${rows.join('')}</table>`
-    + `<p class="hint">${verdict}. The budget is 10% of a ${scanMs()} ms task, met in <b>every</b> cycle. Excluded and said so: ${c.excludes.join(', ')}.</p>`;
+  const rows = Object.entries(c.rungs).map(([kk, r]) => {
+    const cad = Math.max(1, r.cadence || 1);
+    return `<tr><td>${label[kk] || kk}</td>`
+      + `<td class="num">${(r.mac || 0).toLocaleString()}</td>`
+      + `<td class="num">${cad === 1 ? 'every scan' : `1 in ${cad}`}</td>`
+      + `<td class="num">${((r.mac || 0) / cad / scanMac() * 100).toFixed(2)}%</td>`
+      + `<td class="num">${((r.bytes || 0) / 1024).toFixed(1)} kB</td></tr>`;
+  });
+  if (!rows.length) rows.push('<tr><td colspan="5">nothing armed — the conventional machine is running, 0.00% of the scan</td></tr>');
+  // THE PEAK IS THE VERDICT AND THE AVERAGE IS THE CPU READING (plan §52.38). "Under 10%,
+  // ALWAYS" is a statement about the WORST scan, so the verdict stays on the peak; but "what is
+  // the CPU doing right now" is the average, and on this arm they differ by the distilled map's
+  // stride — it decides once in 8-9 scans and HOLDS the correction between. Reporting only the
+  // average would hide a spike an order of magnitude larger, and reporting only the peak
+  // overstates the load by the same factor, so both are shown against the SAME denominator: the
+  // whole 1 ms task, which is what "CPU usage" plainly means. The 10%-of-scan budget rule is
+  // then stated against the peak, where it belongs. Unflattering number first (rule 27).
+  const peak = c.mac, avg = c.avgMac || 0;
+  const peakPct = 100 * peak / scanMac(), avgPct = 100 * avg / scanMac();
+  const fits = peak <= budget();
+  const live = `<p><b>CPU now — <span class="${fits ? 'good' : 'bad'}">${peakPct.toFixed(2)}% in the peak scan</span>`
+    + ` · ${avgPct.toFixed(2)}% average</b> of a ${scanMs()} ms task`
+    + (peak > 0 && avg > 0 && peak / avg > 1.5 ? `, a ${(peak / avg).toFixed(1)}× spread because the correction is decided on its own cadence and HELD between` : '')
+    + `.</p>`;
+  const verdict = fits
+    ? `<b class="good">FITS</b> — ${peak.toLocaleString()} MAC in the peak cycle, ${(100 * peak / budget()).toFixed(1)}% of the ${budget().toLocaleString()} allowed`
+    : `<b class="bad">DOES NOT FIT</b> — ${peak.toLocaleString()} MAC in the peak cycle, ${(100 * peak / budget()).toFixed(0)}% of the allowance`;
+  return live
+    + `<table class="tbl"><tr><th>armed</th><th>MAC/decision</th><th>decides</th><th>% of scan</th><th>state</th></tr>${rows.join('')}</table>`
+    + `<p class="hint">${verdict}. The budget is 10% of a ${scanMs()} ms task met in <b>every</b> cycle, so the PEAK is the verdict and the average is what the CPU carries. Excluded and said so: ${c.excludes.join(', ')}.</p>`;
 }
 
 /*

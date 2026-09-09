@@ -2036,6 +2036,21 @@ await halted('the whole commissioning');
   const plc = await fx.evaluate(() => document.getElementById('plc').textContent);
   check('flexisim/plc: the budget panel renders a verdict for the armed set', /FITS|DOES NOT FIT|nothing armed/.test(plc), plc.slice(0, 120));
   if (d.auto.deployed.distil) check('flexisim/plc: …and the distilled model FITS a 1 ms scan outright', /FITS/.test(plc) && !/DOES NOT/.test(plc), plc.slice(0, 160));
+  // THE LIVE CPU READING, BOTH HALVES (rule 9, plan §52.38). The peak is the verdict and the
+  // average is what the CPU carries; asserting only that a percentage appears would pass on a
+  // panel that printed one number twice, which is exactly the failure worth catching here since
+  // the two differ only by a cadence read from the deployed object. So: the line renders, the
+  // average never exceeds the peak, and where a rung actually HOLDS between decisions the
+  // average is strictly BELOW it — the half that would fail if `cadence` came back 1.
+  check('flexisim/plc: the panel states the live CPU load against the whole scan',
+    /CPU now/.test(plc) && /% in the peak scan/.test(plc) && /% average/.test(plc), plc.slice(0, 200));
+  if (d.auto.plc) {
+    const { mac, avgMac, rungs } = d.auto.plc;
+    check('flexisim/plc: …the average load never exceeds the peak', avgMac <= mac + 1e-9, `avg ${avgMac} peak ${mac}`);
+    const held = Object.entries(rungs || {}).filter(([, r]) => (r.cadence || 1) > 1);
+    if (held.length) check('flexisim/plc: …and a rung that HOLDS between decisions costs strictly less on average',
+      avgMac < mac, `avg ${avgMac} peak ${mac} — held: ${held.map(([k, r]) => `${k} 1-in-${r.cadence}`).join(', ')}`);
+  }
   // LEARN ON THIS PROGRAM (plan §52.18): one pass with the tracker attached, through the same
   // host; a "learned" row appears, the machine is driven home, and the model is re-stored.
   if (d.auto.deployed.distil) {
