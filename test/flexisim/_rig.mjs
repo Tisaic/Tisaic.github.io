@@ -15,7 +15,7 @@
 import { Joint } from '../../lib/flexisim/joint.js';
 import { FlexArm2R } from '../../lib/flexisim/arm2r.js';
 import { buildLink, massProperties } from '../../lib/flexisim/link.js';
-import { ChainServo, BENCH_SERVO } from '../../lib/flexisim/compensator.js';
+import { ChainServo, BENCH_SERVO, bandwidthFor } from '../../lib/flexisim/compensator.js';
 import { RobotComp } from '../../lib/ngrc/robotcomp.js';
 
 /** The arm `composite.test.mjs` and the autostack bar are measured on. */
@@ -40,7 +40,7 @@ export async function machine(o = {}) {
   // one: at K 0.25 / E 0.03 the slowest structural mode is 1.9x the loop, where `ChainServo`'s own
   // docstring requires the loop to sit WELL BELOW it, and at K 64 / E 0.20 it is 5.0x. It is a knob
   // now so the constant can be re-derived per cell; unset it is byte-identical.
-  const bw = o.bw ?? (process.env.ARM_BW !== undefined ? +process.env.ARM_BW : BENCH_SERVO.bandwidth);
+  const bw = o.bw ?? (process.env.ARM_BW !== undefined ? +process.env.ARM_BW : bandwidthFor(arm));
   // THE DRIVE'S TORQUE LIMIT IS A PLANT SPECIFICATION AND IT BINDS AT THE BENCH CELL (plan
   // §52.30). `DRIVE * hold` is 32x the gravity hold torque, and the CONVENTIONAL machine on the
   // bench square already demands 1.6x that and clips 2.0% of its samples before any learned

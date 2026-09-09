@@ -8,7 +8,7 @@
   <title>FlexiSim — Commissioning Bench</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:1106,built:"2026-09-09T22:37:43Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:1107,built:"2026-09-09T23:59:06Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
 
   <style>
@@ -192,7 +192,7 @@
 import { Joint } from './lib/flexisim/joint.js';
 import { buildLink, massProperties } from './lib/flexisim/link.js';
 import { FlexArm2R, snapshotArm, restoreArm } from './lib/flexisim/arm2r.js';
-import { ChainServo, BENCH_SERVO } from './lib/flexisim/compensator.js';
+import { ChainServo, BENCH_SERVO, bandwidthFor } from './lib/flexisim/compensator.js';
 import { roundedRect, sharpRect, circle as circlePath } from './lib/flexisim/toolpath.js';
 import { ContourScore, decompose } from './lib/flexisim/contour.js';
 import { RobotComp } from './lib/ngrc/robotcomp.js';
@@ -298,7 +298,7 @@ async function makePlant(K, E, carry = null) {
   a.K = K; a.E = E;
   trackHops(a);
   const hold = Math.abs(a.gravityTorque([0, 0])[0]) / RATIO;
-  const sv = new ChainServo({ arm: a, bandwidth: BENCH_SERVO.bandwidth, tauMax: PG.drive * hold,
+  const sv = new ChainServo({ arm: a, bandwidth: bandwidthFor(a), tauMax: PG.drive * hold,
     speedMax: NO_LOAD_SPEED });
   const m = { arm: a, servo: sv, l1: link1, l2: link2 };
   // A MACHINE IS SOMEWHERE WHEN IT IS SWITCHED ON. A rebuilt plant (K or E moved) takes the
@@ -390,16 +390,34 @@ async function startLearn() {
   const before = rep.best;
   sync();
   let lr = null;
+  // WHERE THE TIME GOES, PER PHASE (plan §52.40). One learn pass exceeds 63 minutes of browser
+  // where the identical work costs ~230 s in Node, and the page's own commissioning — same host,
+  // same yield closure — does not show that ratio. "It is slow" is not a diagnosis and the whole
+  // difference has been invisible because only the total was ever recorded. Machine SAMPLES are
+  // taken beside the wall clock at every boundary, because samples are what the work is and the
+  // ratio of the two is the only thing that separates "doing more" from "running slower" (rule
+  // 17 before the physics).
+  const ph = [];
+  const mark = (what) => { ph.push({ what, ms: Math.round(performance.now() - t0), samples: host.samples().samples }); };
+  mark('start');
   try {
     const live = await host.liveRuns();
+    mark('liveRuns');
     lr = await host.auto.learnLive(live, { passes, onPass: (p2) => {
+      mark(`pass ${p2.pass}`);
       rep.rungs.push({ name: `learned on this program — pass ${p2.pass}`, score: p2.score, gain: null, deployed: p2.accepted, note: p2.accepted ? 'kept' : 'not kept' });
       $('rungs').innerHTML = rungsHTML(rep.rungs);
     } });
     // THE NUMBER IS A SCORED RUN, the same one every rung is judged by, not the teaching laps'.
+    mark('learnLive');
     const r = await host.run(null, null);
+    mark('scored');
     rep.best = r.score; rep.gain = rep.base / rep.best;
-    rep.learned = { passes: lr.passes, before, after: r.score, changed: lr.changed };
+    rep.learned = { passes: lr.passes, before, after: r.score, changed: lr.changed,
+      // The per-phase record, as DELTAS with the samples each phase advanced the machine, so a
+      // phase that is slow per sample is distinguishable from one that simply runs more.
+      phases: ph.map((e, i) => ({ what: e.what, ms: e.ms - (i ? ph[i - 1].ms : 0),
+        samples: e.samples - (i ? ph[i - 1].samples : 0) })) };
   } catch (e) {
     const msg = e && e.message ? e.message : String(e);
     setBadge(abort ? 'stopped — the model is as it was' : `learning failed — ${msg}`, abort ? 'warn' : 'bad');

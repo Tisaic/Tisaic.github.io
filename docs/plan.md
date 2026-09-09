@@ -13508,3 +13508,69 @@ verdict line unchanged.
 exceeds the peak, and — where a rung actually holds between decisions — that the average is
 STRICTLY below it. The last is the half that fails if `cadence` comes back 1, which is the only
 way this arithmetic can be silently wrong.
+
+### §52.39 THE DERIVED LOOP: BUILT, CONTROLLED EXACTLY, AND REFUSED BY THE SECOND CELL
+
+§52.37 made the servo bandwidth one constant and moved it to 1.6e-2. That fixed rule 61's
+duplicate and RE-CREATED the fault it replaced: a single absolute bandwidth carried across a
+256-fold stiffness range, which is exactly what §52.28 indicted about the 2e-3. So it was rebuilt
+as a RATIO against the plant's own slowest structural mode.
+
+**THE DERIVATION NEEDED NOTHING PASSED ALONGSIDE.** `joint.naturalFrequency()` already computes
+the gearbox two-mass resonance from its own K0/N/Jm/Jl, and each link's `meta` carries the E,
+section and density its first cantilever mode needs. `slowestStructuralMode(arm)` takes the
+minimum, so the rule reads the machine rather than the build parameters (rule 30):
+
+```
+  cell K/E        slowest mode   ratio x 4.1472 -> bw
+  0.25 / 0.03      3.858e-3          1.600e-2      (the bench cell, and the shipped value)
+  0.25 / 0.005     1.575e-3          6.631e-3
+  16   / 0.15      8.627e-3          3.632e-2
+  64   / 0.20      9.961e-3          4.194e-2
+```
+
+**THE BENCH CONTROL WAS EXACT.** The ratio is set so the bench cell reproduces the shipped loop
+to the last bit, and the ladder came back byte-identical: 1.6159e-1 → 1.3025e-1 with held-out
+9.0436e-3 / 6.2215e-3. So the derivation is the shipped number where it was fitted, by
+construction (rule 21).
+
+**AND THE SOFT CELL REFUSED IT.** Absolute contour rms after learning at K 0.25 / E 0.005:
+
+```
+  loop                 square      rounded rect   circle
+  2e-3   (the old)    3.2211e-1    3.4771e-2     2.5537e-2
+  1.6e-2 (ships)      2.6192e-1    2.1061e-2     1.2645e-2    <- BEST on all three
+  6.63e-3 (the rule)  4.6285e-1    3.0491e-2     3.0533e-2    <- WORST on all three
+```
+
+The soft cell's own slowest mode is 1.575e-3, so what it actually wants is **10.2x its structure
+where the bench cell wants 4.15x**. The ratio does not transfer, and "bandwidth = k · slowest
+mode" is not the law — the THIRD narrowing of §52.28's structural rule, after §52.30 reduced it
+to a fit on the bench square and §52.33 inverted its sign. A rule fitted on one cell and shipped
+would have made the soft cell 1.77x worse on its own program.
+
+**SO THE CONSTANT STAYS, AND ITS COMMENT NOW CARRIES THE REFUSAL.** `slowestStructuralMode` stays
+exported as the instrument that refused it, so the next attempt starts from this measurement
+rather than repeating it. What is honestly claimed: 1.6e-2 is a carried constant, it is what BOTH
+measured cells prefer, and the self-tuning column of the north star does not yet cover the servo
+loop.
+
+### §52.39b THE SOFT CELL CONFIRMS THE SHIPPED DEFAULT, AND THE SEED SPREAD HOLDS
+
+The table above is also the second-cell validation §52.37 did not have. Against the loop it
+replaced, on the cell it was NOT fitted on, the shipped 1.6e-2 reads **1.23x / 1.65x / 2.02x**
+better — geometric **1.60x with nothing made worse**, beside the bench cell's 1.65x. Two cells,
+same direction, same rough size.
+
+And the shipped defaults' seed spread, end to end through the harness with learning composed:
+
+```
+  seed      square      rounded rect   circle
+  default  1.3025e-1    9.0436e-3     6.2215e-3
+  2        1.2739e-1    8.9305e-3     7.4327e-3
+  3        1.2730e-1    8.9427e-3     7.4380e-3
+  spread     1.023x       1.014x       1.196x
+```
+
+The circle's 1.20x is the widest and is the same spread the four-seed reading gave in §52.33, so
+it is a property of that program rather than a new draw.
