@@ -13302,3 +13302,101 @@ the suite is not red and the next failure is not hidden behind it (rule 3), whil
 runs every time and the law's numbers continue to be measured in Node. **What is gated is a slow
 duplicate of a Node measurement, not the claim** — but the discrepancy is an open defect against
 the shipped page, not a test-budget decision, and it is the next thing to fix on that page.
+
+### §52.36 THE REVIEW'S OWN PROPOSAL, TESTED AND REFUTED — AND FIR CLOSED FROM BOTH ENDS BY MEASUREMENT
+
+§52.34 reviewed the arc against itself, found that every capacity experiment had added more
+FUNCTIONS OF THE SAME TRUNCATED HISTORY and none had added MEMORY, and proposed a bank of
+second-order resonators driven by the commanded reference. It named its falsifier first and the
+order to test in. Both were run. **The falsifier did not fire and the proposal failed anyway**,
+which is the outcome that ordering exists to produce cheaply.
+
+**1. THE PLANT'S RING, MEASURED — and the first instrument was wrong in the way §52.34 had just
+criticised.** `test/pilot/modes.mjs` holds the arm at nine poses across the workspace the bench
+programs occupy, hits it with a 200-step torque pulse and reads the free ring of the tool error.
+The first estimator detrended by a moving mean of +/-NREC/3 and reported **"no coherent ring at
+any pose", coherence EXACTLY 0.000 everywhere** — the signature of an instrument that found
+nothing, not of a plant that has nothing (rule 17). The raw record says otherwise: it rises to
+8.0e-3, crosses zero near 2,400, undershoots to -1.5e-3 and bumps again near 4,400. The detrend
+span was LONGER than the period being sought, so the moving mean removed the oscillation itself
+— the same fault §52.34 had just identified in §52.16's window sweep, committed two hours later
+by the section that identified it. Read with quantities that survive a damped ring (the peak, the
+crossings around it, the decay between extrema):
+
+```
+   pose x,y     Jeff1        ring period   decay/cycle
+     8,-4     5.813e+4          3182          5.7
+    12, 0     6.303e+4          3364          5.5
+    16, 4     7.284e+4          3868          5.5
+   9 of 9 poses ring.  PERIOD 3166-3868 steps, SPAN 1.22x; mean decay 5.6x per cycle
+   ANALYTIC PREDICTION from Jeff alone (w ~ sqrt(kp/Jeff), gains frozen):  1.13x   — AGREES
+```
+
+**The falsifier does not fire**: the frequency moves 1.22x across the workspace and an
+independent analytic route predicts 1.13x, so a fixed bank covers the plant (rule 15 — two routes
+to one number). **But the damping retracts half of §52.34's argument.** At 5.6x per cycle there
+are only 2.3 cycles, so this is a moderately damped mode and "an FIR window is a hopeless basis
+for it" was overstated. What the measurement gives instead is the number that matters: the
+response is 2% of peak after **~7,850 raw steps**, and the shipped +/-2048 window reaches **52%**
+of that.
+
+**2. WHICH MADE THE SHARP TEST OBVIOUS, AND IT IS ALSO NEGATIVE.** §52.34's strongest point was
+that §52.16 retired rule 37 on a sweep that scaled the same 23 offsets, so span and SPACING moved
+together and could not be separated. `WINEXT` runs the missing experiment — EXTEND the reach by
+APPENDING taps at the ladder's own outer spacing, 23 taps to 31, +/-2048 to +/-4096, 93 features
+to 109, ~32 MAC of a 10,000 budget:
+
+```
+                          bench square   rounded rect     circle
+  shipped +/-2048           1.7528e-1     1.9490e-2     1.3486e-2
+  +/-4096, spacing held     3.1945e-1     2.5489e-2     1.4981e-2     WORSE on all three
+  +/-4096 at bw 1.6e-2      1.9878e-1     1.4390e-2     7.2125e-3     worse on two of three
+```
+
+So §52.16's CONCLUSION was right even though its experiment could not have established it, and
+the reason is already in this file: the plant's memory is ~7,850 steps and the arm's program lap
+is 7,356, so a window that REACHES the memory SPANS the lap and §41's aliasing theorem bites. The
+diet's own laps are 5,715-9,008 steps and a +/-4096 window spans 8,192. **FIR is now closed from
+both ends by measurement** — reach it by scaling and the resolution goes, reach it at preserved
+spacing and the lap is spanned — which is §49.11's forced trade with the memory measured rather
+than inherited.
+
+**3. AND THAT IS THE PROPER CASE FOR A RECURSIVE STATE, WHICH IS THEN REFUTED.** A resonator has
+no window: it reaches arbitrarily far back in O(1) state and O(1) arithmetic, so it is subject to
+neither failure, and driven by the commanded reference it carries no tracker and no lap index.
+Added to `stateaug.mjs` as a geometric ladder of periods with the ridge selecting — no per-plant
+constant, and bracketing the measured ring by a wide margin so nothing is fitted to it:
+
+```
+  row shape                                   cols   LOPO    in-sample
+  A: reference window only (shipped)            93   0.836   0.897/0.873
+  R: + resonator bank driven by the reference  113   0.814   0.915/0.898
+  Rs: + the bank, pose-scheduled               213   0.488   0.939/0.892
+  F: + the measured DEVIATION (the control)    129   0.962   0.997/0.976
+```
+
+**In-sample rises and leave-one-program-out falls** — the non-transferring-capacity signature for
+the sixth time in this arc, and the fifth time a pose-scheduled block has bought less transfer
+than the thing it schedules. The recursive state adds NOTHING the window does not already have.
+It cost one instrument and no build, because the order was stated before the answer was known.
+
+**WHAT SIX INDEPENDENT EXPERIMENTS NOW AGREE ON.** More FIR taps, longer reach at preserved
+spacing, longer reach by scaling, nonlinear and energy lifts, pose scheduling, and now a
+recursive state driven by the command — none improves TRANSFER, and several improve in-sample
+while harming it. **The information about the correction that the COMMANDED REFERENCE contains is
+essentially exhausted at R² ~0.84**, and §52.31's ceiling — whose control §52.34 correctly showed
+is not a control — turns out to have been reporting roughly the right number for the wrong
+reason. A feedforward from the commanded reference alone is capped near 6-8x on this arm and no
+basis will move it.
+
+**SO THE OPEN QUESTION IS NOT THE BASIS, AND §52.34's CONFLICT (3) IS WHERE THE WORK IS.** The one
+input measured to carry the missing content is the MEASURED DEVIATION, at 0.836 -> 0.962, and it
+is unusable only because deploying it makes the machine worse (1.44x captured under the prefix,
+3.24x fitted in the loop over aggregated rounds). §52.34 established that the standing explanation
+for that — the plant's 951-step lag — was REFUTED BY ITS OWN REMEDY, since halving it changed
+nothing. So the deviation's failure has no established cause, rule 35 is the live candidate, and
+that is a question about HOW feedback enters rather than about what the row contains. Every
+additive-term-at-full-bandwidth route has been tried; what has not is entering the deviation
+through a SLOWLY ADAPTED PARAMETER of the feedforward map — a bandwidth far below the 3,400-step
+ring, which cannot excite what an additive term excites. That is the next thing to put to the
+machine, and it is stated here so the next session does not re-run a basis experiment.

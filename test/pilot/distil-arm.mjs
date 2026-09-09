@@ -71,6 +71,24 @@ const DISTIL = { ...(process.env.OFFS === 'raw'
   // the shipped reach at the shipped bandwidth and is byte-identical there, which is the control.
   ...(process.env.WINRAW ? { offsets: [-256, -128, -64, -32, -16, -8, -4, -2, -1, 0, 1, 2, 4, 8, 16, 24, 32, 48, 64, 96, 128, 192, 256]
     .map((o) => Math.round(o * (+process.env.WINRAW / 256))) } : {}),
+  // WINEXT=<steps>: EXTEND the raw window to this reach by APPENDING taps at the ladder's own
+  // outer spacing, instead of SCALING every offset (plan §52.36). This is the test §52.16 never
+  // ran. That section swept the window x1/x2/x3 by multiplying the same 23 offsets, so the span
+  // and the SPACING tripled together and a ring at a few thousand steps became invisible through
+  // the wide taps — it traded exactly the resolution it was testing the reach for, and concluded
+  // "the reach is not what binds", which retired rule 37. `test/pilot/modes.mjs` measures the
+  // plant's impulse ring at period 3166-3868 steps across the workspace decaying 5.6x per cycle,
+  // so the memory to 2% is ~7,850 raw steps and the shipped +/-2048 window reaches 52% of it.
+  // Extending to +/-4096 at the outer spacing costs 8 taps, i.e. 16 features of 93 and ~32 MAC
+  // of a 10,000 budget — so if reach binds at PRESERVED resolution it is nearly free to fix.
+  ...(process.env.WINEXT ? (() => {
+    const base = [-256, -128, -64, -32, -16, -8, -4, -2, -1, 0, 1, 2, 4, 8, 16, 24, 32, 48, 64, 96, 128, 192, 256]
+      .map((o) => o * ((+(process.env.WINRAW || 2048)) / 256));
+    const reach = +process.env.WINEXT, outer = base[base.length - 1] - base[base.length - 2];
+    const ext = [];
+    for (let v = base[base.length - 1] + outer; v <= reach + 1e-9; v += outer) ext.push(v);
+    return { offsets: [...ext.map((v) => -v).reverse(), ...base, ...ext].map(Math.round) };
+  })() : {}),
   // STRIDE=<n|pilot>: one row per n steps and the correction held between (default the host's, pilot).
   ...(process.env.STRIDE ? { stride: process.env.STRIDE === 'pilot' ? 'pilot' : +process.env.STRIDE } : {}),
   // FADE=<fraction of the trained speed span>: the coverage guard's ramp (measured inert here).

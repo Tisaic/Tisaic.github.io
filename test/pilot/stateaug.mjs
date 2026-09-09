@@ -80,7 +80,55 @@ const stateRowDev = (P, k) => { const m = at(P, k), r = refSample(P, k); return 
 const devAvg = (P, k, W) => { const r = refSample(P, k); const a = [0, 0, 0, 0, 0, 0]; let n = 0;
   for (let j = k - W; j <= k; j += S) { const m = at(P, j), q = refSample(P, j); for (let c = 0; c < 6; c++) a[c] += m[c] - q[c]; n++; }
   for (let c = 0; c < 6; c++) a[c] /= (n || 1); return schedRow(a, r, []); };
+// A RECURSIVE STATE, WHICH IS THE ONE THING NO EXPERIMENT IN THIS ARC HAS TRIED (plan §52.36).
+// Every capacity experiment here added more FUNCTIONS OF THE SAME TRUNCATED WINDOW; none added
+// MEMORY. And FIR is now closed from both ends by measurement: `modes.mjs` puts this plant's
+// impulse memory at ~7,850 raw steps, the arm's program lap is 7,356, so a window that REACHES
+// the memory SPANS the lap and §41's aliasing theorem bites — measured, +/-4096 at preserved
+// spacing reads 3.19e-1 against the shipped 1.75e-1 — while reaching it by SCALING the same taps
+// loses the resolution instead (§52.16's x2/x3). A second-order resonator driven by the commanded
+// reference has no window at all: it reaches arbitrarily far back in O(1) state and O(1)
+// arithmetic, so it is subject to neither failure, and it is still a function of the COMMANDED
+// REFERENCE alone — no tracker, no lap index, admissible under the retirement.
+//
+// The bank is a geometric ladder of periods with no per-plant constant: the ridge selects, which
+// is what rule 40 asks (learn what has no closed form, compute what does). It brackets the
+// measured 3,166-3,868-step ring by a wide margin so that nothing here is fitted to it.
+const RES_T = (process.env.REST || '850,1700,3400,6800,13600').split(',').map(Number);
+const RES_Z = +(process.env.RESZ || 0.27);      // from the measured 5.6x decay per cycle
+/**
+ * Run the bank over one closed lap of a program and return `(k) -> states`. Driven by the
+ * reference ANGLE of each channel, so the two state variables are a band-passed and an
+ * integrated view of the command's own history. The lap is CLOSED, so the filter is warmed over
+ * several laps before the states are kept — a resonator started at rest reads its own startup
+ * transient for as long as its memory, which is the whole quantity being measured (rule 13).
+ */
+const resonators = (P) => {
+  const L = P.L, nT = RES_T.length, nc = 2, warm = 4;
+  const st = Array.from({ length: nT * nc }, () => ({ x: 0, v: 0 }));
+  const out = Array.from({ length: L }, () => new Float64Array(nT * nc * 2));
+  for (let pass = 0; pass < warm + 1; pass++) {
+    for (let k = 0; k < L; k++) {
+      const q = P.tr.refAt(k);
+      for (let t = 0; t < nT; t++) {
+        const w = 2 * Math.PI / RES_T[t];
+        for (let c = 0; c < nc; c++) {
+          const e = st[t * nc + c];
+          // semi-implicit Euler at dt = 1 raw step: stable for w << 1, which every period here is
+          e.v += (w * w * (q[c] - e.x) - 2 * RES_Z * w * e.v);
+          e.x += e.v;
+          if (pass === warm) { const b = (t * nc + c) * 2; out[k][b] = e.x - q[c]; out[k][b + 1] = e.v / w; }
+        }
+      }
+    }
+  }
+  return (k) => out[((k % L) + L) % L];
+};
+const RES = new Map();
+const resRow = (P, k) => { if (!RES.has(P.name)) RES.set(P.name, resonators(P)); return Array.from(RES.get(P.name)(k)); };
 const sets = { 'A: reference window only (the shipped shape)': (P, k) => refRow(P, k),
+  'R:  + a RESONATOR BANK driven by the reference': (P, k) => [...refRow(P, k), ...resRow(P, k)],
+  'Rs: + the bank, pose-scheduled': (P, k) => [...refRow(P, k), ...schedRow(resRow(P, k), refSample(P, k), [])],
   'Fa256:  + deviation AVERAGED over the last 256 steps': (P, k) => [...refRow(P, k), ...devAvg(P, k, 256)],
   'Fa1024: + deviation AVERAGED over the last 1024 steps': (P, k) => [...refRow(P, k), ...devAvg(P, k, 1024)],
   'Fa4096: + deviation AVERAGED over the last 4096 steps': (P, k) => [...refRow(P, k), ...devAvg(P, k, 4096)],
