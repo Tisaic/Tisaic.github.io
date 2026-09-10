@@ -13937,3 +13937,67 @@ from "reading a field that does not exist" reports the wrong thing for exactly a
 timeout allows. This check has now failed silently three ways: `SUITE=full` skipping it, `if
 (canLearn)` skipping it against a race, and a gate added to work around a number that was itself
 an artefact — each of which made the suite green while measuring nothing (rule 25).
+
+### §52.46 BACKLASH COMPENSATION: THE LEVER IS REAL ON REAL DRIVES AND THIS PLANT WANTS THE OPPOSITE
+
+Asked whether a drive-level BACKLASH PITCH TABLE — lash mapped bidirectionally against
+position, a table lookup on direction reversal, and a fast open-loop dash across the dead zone
+with the motion not counted as encoder counts — is relevant here. It is a real and widely
+shipped feature, and three of its properties are exactly what this arc has been failing to find:
+
+- it is indexed by joint POSITION and DIRECTION OF TRAVEL, which is machine state and not lap
+  phase, so it is admissible under the retirement and transfers to any program by construction;
+- it is the ONLY correction in this project that a CHEAP instrument can calibrate — lash is
+  measurable from the motor side alone (reverse, watch when the load starts responding), where
+  §52.42 measured the motor encoders as worthless for teaching the tool error (0.7-2.7% of it);
+- the dash is PREVIEW — the drive acts on the commanded reversal before the error appears — and
+  preview is the only correction class that has ever worked on this arm (§49.14: causal taps
+  0.89x, straddling taps 1.43x).
+
+So it was measured rather than argued. `Joint.transmitted()` returns zero inside a dead zone of
+half-width `b`; `ARM_BL` is that half-width and the rig carries `1e-4` (2e-4 rad lost motion).
+The sweep spans zero to ten times it, one commissioning each, everything else held:
+
+```
+  ARM_BL     lost motion   bench square    x      cascade    fit R²
+  0          none          1.6183e-1     6.62x    1.33x     0.9517 / 0.8398
+  1e-4       2e-4 rad      1.6159e-1     6.63x    1.34x     0.9518 / 0.8399   <- the rig's value
+  3e-4       6e-4 rad      1.6135e-1     6.65x    1.33x     0.9518 / 0.8396
+  1e-3       2e-3 rad      1.6075e-1     6.69x    1.33x     0.9516 / 0.8402
+```
+
+**IT IS MONOTONE IN THE WRONG DIRECTION: MORE LASH IS BETTER.** From no backlash at all to ten
+times the rig's, the delivered error FALLS by 0.7%. At the top of the sweep the lost motion is
+4.8e-2 tool units at the shoulder lever — **30% of the residual being delivered** — and the
+machine is still better than with none. A compensator cannot beat DELETING the thing it
+compensates, and deleting it is the worst row in the table, so a lash table has negative headroom
+on this plant.
+
+**AND THE POLICY'S JOB IS UNCHANGED, WHICH SAYS IT IS THE PLANT AND NOT THE FIT.** Held-out R² is
+stable to ±0.0002 / ±0.0006 across the whole sweep and the cascade sits at 1.33-1.34x throughout;
+what moves is the machine underneath. The teacher agrees — its converged gains on the four
+training programs rise slightly with lash (17.64/22.03/23.59/26.99 at zero against
+17.71/22.36/23.72/27.49 at 1e-3).
+
+**THE MECHANISM IS ALREADY ON RECORD, READ FROM THE OTHER SIDE.** §52.27 measured that the
+cascade is stable on this arm ONLY because of the backlash (`ARM_BL=0` took it 2.23x → 0.17x at
+the old loop and stopped the ladder) and filed it as a robustness DEFECT. It is the same
+phenomenon: the dead zone DECOUPLES the motor inertia from the link across a reversal, so the
+link does not receive the full reversal impulse. That is a mechanical impulse limiter acting at
+exactly the moment §52.34's conflict (4) suspected of depositing energy into the following edge.
+Compensating the lash would put that impulse back.
+
+**AND THE POLICY'S OWN DIRECTION-OF-TRAVEL BLOCK IS THE EIGHTH CAPACITY NEGATIVE.** `signOffsets`
+is built and default off; armed at ±2 samples it takes 93 features to 133 and 274 MAC to 394, and
+the bench square goes **1.6159e-1 → 1.9012e-1, 6.63x → 5.64x, 18% worse** — with channel 1's
+held-out R² FALLING 0.8399 → 0.79 while channel 0 is unchanged. More columns, worse transfer, for
+the eighth time in this arc.
+
+**WHAT IS AND IS NOT CLAIMED.** Established: on this plant, at this cell, across a range of lash
+from zero to 30% of the delivered residual, backlash compensation has nothing to win and the dead
+zone is mildly helpful. NOT established, and the honest limit: one plant, one cell, one program,
+and a gearbox whose lash is SYMMETRIC and position-INDEPENDENT by construction — `deadZone` is a
+single half-width, so the rig cannot express the position-varying, direction-asymmetric lash a
+real pitch table exists to map. A machine whose lash varies along the screw is a plant this
+simulator does not contain, and the feature is right for it. What this measurement forecloses is
+only the version of the question that could be asked here.

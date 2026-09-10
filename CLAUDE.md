@@ -1910,6 +1910,27 @@ production feed; degradation inside it is not monotone either. The remedy has no
 commission the diet at a feed ladder that BRACKETS the production feed — and §51 measured exactly
 that at the OLD loop (half-feed 0.75x → 2.58x at 2.3x cost), which rule 31 says is a constant to
 re-derive rather than to carry.
+**AND BACKLASH COMPENSATION WAS PUT TO THE MACHINE, BECAUSE IT IS THE ONE CORRECTION CLASS WITH
+ALL THREE PROPERTIES THIS ARC HAS BEEN LOOKING FOR — AND THIS PLANT WANTS THE OPPOSITE (plan
+§52.46).** A drive-level lash pitch table is indexed by joint POSITION and DIRECTION OF TRAVEL, so
+it is machine state and not lap phase and transfers by construction; it is the ONLY correction here
+a CHEAP instrument can calibrate, since lash is measurable from the motor side alone where §52.42
+measured those encoders as worthless for teaching the tool error; and the dash across the dead zone
+is PREVIEW, the only class that has ever worked on this arm. Swept from no backlash to ten times the
+rig's, one commissioning each: **1.6183e-1 / 1.6159e-1 / 1.6135e-1 / 1.6075e-1 — monotone, and MORE
+LASH IS BETTER.** At the top the lost motion is 30% of the delivered residual and the machine is
+still better than with none, so a compensator has NEGATIVE headroom: it cannot beat deleting what it
+compensates, and deleting it is the worst row. Held-out R² is stable to ±0.0006 and the cascade to
+1.33-1.34x across the whole sweep, so it is the plant moving and not the fit. **The mechanism is
+already on record read from the other side**: §52.27 filed "the cascade is stable ONLY because of the
+backlash" as a robustness DEFECT, and it is the same thing — the dead zone decouples the motor
+inertia from the link across a reversal, an impulse limiter acting exactly where §52.34's conflict
+(4) suspected energy was being deposited into the following edge. **And the policy's own
+direction-of-travel block is the EIGHTH capacity negative**: `signOffsets` armed takes 93 features to
+133 and the square 1.6159e-1 → 1.9012e-1, 18% worse, with channel 1's held-out R² falling 0.8399 →
+0.79. Stated limit: this rig's `deadZone` is a single symmetric half-width, so it cannot express the
+position-varying, direction-asymmetric lash a real pitch table exists to map — that plant is one this
+simulator does not contain, and the feature is right for it.
 **AND THE PAGE NOW STATES THE LIVE CPU LOAD, WHICH PRICED SOMETHING THAT SHIP HAD NOT (plan
 §52.38).** The budget panel reported MAC/cycle against the 10% ALLOWANCE — a fraction of the
 permission rather than of the task, ten times apart and reading identically — and it reported the
