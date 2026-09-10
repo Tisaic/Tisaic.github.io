@@ -13574,3 +13574,77 @@ And the shipped defaults' seed spread, end to end through the harness with learn
 
 The circle's 1.20x is the widest and is the same spread the four-seed reading gave in §52.33, so
 it is a property of that program rather than a new draw.
+
+### §52.40 THREE STANDING DEBTS PAID: THE BACKLASH DEFECT IS GONE, STANDARDISATION IS INERT ON BOTH CELLS, AND TARGET 2 IS MEASURED FOR THE FIRST TIME
+
+Three things this file has carried as open, each measured at the shipped defaults rather than
+argued.
+
+**THE BACKLASH ROBUSTNESS DEFECT IS REPAIRED, AND NOT BY A CODE CHANGE.** §52.27 recorded it as a
+defect on record: with the gearbox dead-zone removed (`ARM_BL=0`) the cascade went **2.23x → 0.17x
+past its own verify and the ladder stopped**, so the bench cell's teacher was stable only because
+of a nonlinearity nobody designed for. Re-run at the shipped loop:
+
+```
+                       backlash        ARM_BL=0
+  pilot cascade      1.34x deploys   1.33x deploys     (was 2.23x -> 0.17x, ladder stopped)
+  ②d distilled       1.6159e-1       1.6183e-1         0.15% apart
+  held-out rounded   1.1151e-2       1.1104e-2
+  held-out circle    6.7092e-3       6.6706e-3
+```
+
+A cascade that lost its verify and took the ladder with it now deploys within 1% of its
+backlashed self, and the object that ships is byte-identical to three figures. So the
+robustness fault was a property of the LOOP the cascade was identified under, not of the
+cascade — the fourth thing §52.28's carried `bandwidth: 2e-3` was costing, and the first
+one that is a defect rather than a number.
+
+**AND THE STREAMING FIT'S STANDARDISATION IS INERT ON BOTH CELLS, IN BOTH DIRECTIONS.** §52.16
+found the streaming fit returning weights 30-150x the batch fit's on an exactly linear target
+and left it open. Measured end to end through the ladder with `STD=1`:
+
+```
+  cell                 shipped        STD=1        delta
+  bench K.25/E.03     1.6159e-1     1.6325e-1     1.0% WORSE
+  soft  K.25/E.005    3.7226e-1     3.7117e-1     0.3% better
+```
+
+Two cells, opposite signs, both inside a seed spread of 1.02x. Held-out agrees (bench 13.42x /
+17.19x against 13.21x / 17.16x; soft 7.53x / 14.74x against 7.49x / 14.87x). The weight-scale
+disagreement is real and is a collinearity artefact that does not reach the machine — which is
+`distil.js`'s own stated reason for asserting on the APPLIED CORRECTION rather than the weights,
+now confirmed one level up at the ladder. Nothing changes; the debt is closed as measured-inert.
+
+**AND TARGET 2 IS MEASURED, WHICH IT NEVER HAS BEEN ON THIS CONFIGURATION. IT IS HALF MET AND THE
+MISSING HALF IS THE DIET, NOT THE METHOD.** `FEEDSPAN` scores ONE commissioning at 4.0e-3 across a
+feed ladder, each feed against the CONVENTIONAL machine at that same feed, so the denominator
+moves with the plant:
+
+```
+  feed            conventional   with policy    x      coverage
+  1.6e-3 (0.40x)   4.8647e-2     7.2446e-3    6.71x     1.000
+  2.4e-3 (0.60x)   6.6118e-2     1.1308e-2    5.85x     1.000
+  4.0e-3 (1.00x)   1.3046e-1     1.5944e-2    8.18x     1.000
+  6.0e-3 (1.50x)   2.1944e-1     1.8383e-1    1.19x     0.000  FADED
+  8.0e-3 (2.00x)   3.1558e-1     2.6910e-1    1.17x     0.000  FADED
+```
+
+**Below the commissioning feed the policy holds 5.85x-8.18x across a 2.5x span with nothing made
+worse.** Above it the coverage guard fades the correction to zero and the machine reads 1.17-1.19x
+— which is the guard doing exactly what §49 built it to do (fade, never extrapolate) rather than
+harming, and it is why the row is not a failure of the controller.
+
+**THE ASYMMETRY IS THE FINDING AND IT IS ARITHMETIC, NOT PHYSICS.** The fit's reported speed span
+is **[8.83e-4, 4.0e-3]** — the polygon diet is commanded at 4.0e-3 and the commanded speed only
+falls within a lap, at the corners. So the trained envelope is 0.22x to 1.00x of the production
+feed and there is no headroom above it BY CONSTRUCTION. Target 2 asks for a 5x span; what is
+covered is 4.5x of span sitting entirely BELOW the feed the machine was commissioned at.
+Degradation inside it is also not monotone (6.71x / 5.85x / 8.18x), so target 2's "monotone
+degradation bounded at 1.5x" is not met either, though every cell is far inside the bound.
+
+The remedy is stated by the numbers and is a DIET change with no constant in it: commission with
+the polygon diet run at a ladder of feeds that BRACKETS the production feed rather than sitting at
+its top. This project has the prior — §51's feed-ladder training removed the danger entirely
+(half-feed 0.75x → 2.58x) at 2.3x cost at the commissioning feed — but that was at the old loop,
+before §52.37, and rule 31 says a constant carried across a configuration change is a constant to
+re-derive. Measured next.

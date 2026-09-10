@@ -414,6 +414,27 @@ const scoreSet = async (label, p2, set, names) => {
   }
   return out;
 };
+// FEEDSPAN=<list>: TARGET 2, THE ONE THE NORTH STAR HAS NEVER MEASURED ON THIS CONFIGURATION.
+// The deployed policy's offsets are indexed in TIME, so a feedrate change moves how far the same
+// window reaches along the PATH — and the coverage guard fades the correction outside the
+// commanded-speed span the fit saw rather than extrapolating. Target 2 asks for monotone
+// degradation bounded at 1.5x of a per-feed commission across a 5x span; this measures the
+// cheaper half honestly: ONE commissioning at the bench feed, scored on the SAME square at a
+// ladder of feeds, each against the conventional machine AT THAT FEED, so the denominator moves
+// with the plant and a feed the machine simply finds harder cannot read as the policy failing.
+if (process.env.FEEDSPAN && host.auto.deployed.distil) {
+  const feeds = process.env.FEEDSPAN.split(',').map(Number);
+  console.log(`\n  FEED SPAN — one commissioning at ${F.toExponential(1)}, the same policy scored at each feed:`);
+  const paths = feeds.map((f) => sharpRect({ w: 8, h: 8, centre: [12, 0], feed: f, accel: 4e-5, cornerDt: 40 }));
+  const runs = await host.distilRuns({ paths });
+  for (let i = 0; i < runs.length; i++) {
+    const tr = runs[i], hp = heldPolicy(host.auto.distil, tr);
+    const b = await tr.run(null), w = await tr.run(hp, { tap: hp.tap });
+    const cov = host.auto.distil.coverage(feeds[i]);
+    console.log(`    feed ${feeds[i].toExponential(1)} (${(feeds[i] / F).toFixed(2)}x)  ${b.score.toExponential(4)} -> ${w.score.toExponential(4)}`
+      + `   ${(b.score / w.score).toFixed(2)}x   coverage ${cov.toFixed(3)}${cov < 1 ? ' — FADED' : ''}`);
+  }
+}
 // HELDOUT=1: score the deployed policy on the two programs no diet contains — the rounded
 // rectangle and the circle — so a diet that lifts the square can be told from one that memorises
 // its edges (plan §52.27).
