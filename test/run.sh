@@ -19,16 +19,40 @@ PORT="${PORT:-8137}"
 # So every check runs, failures are collected by name, and the run exits non-zero at the END
 # with the list. The suite is exactly as red as it was; it now says how red.
 FAILED_TESTS=""
+TEST_TIMES=""
+# EVERY TEST GOES THROUGH HERE, which makes this the one place the suite can be made to
+# state its own cost. Rule 2 — "a check too slow to be run is a verification problem" — has
+# been applied to individual checks throughout this project and never to the SUITE, because
+# nothing measured where the minutes went. A tier split that drifts silently is one nobody can
+# re-derive, and this file's own notes say it has drifted and been cut twice. Timing is free
+# here (one `date` per test) and the summary is printed at the end, slowest first.
 t() {
+  local __t0 __dt
+  __t0=$(date +%s%N)
   if "$@"; then
     :
   else
     FAILED_TESTS="${FAILED_TESTS}${FAILED_TESTS:+
 }  $*"
   fi
+  __dt=$(( ($(date +%s%N) - __t0) / 1000000 ))
+  TEST_TIMES="${TEST_TIMES}${TEST_TIMES:+
+}${__dt} $*"
+}
+
+# The suite's own cost, slowest first. Printed on success AND on failure, because the run you
+# most want the timing from is the one that just cost you twenty minutes.
+report_timing() {
+  [ -n "${TEST_TIMES}" ] || return 0
+  local total
+  total=$(printf '%s\n' "${TEST_TIMES}" | awk '{s+=$1} END {printf "%.0f", s/1000}')
+  echo
+  echo "suite cost — ${total} s over $(printf '%s\n' "${TEST_TIMES}" | wc -l | tr -d ' ') checks, slowest first:"
+  printf '%s\n' "${TEST_TIMES}" | sort -rn | head -12 | awk '{ms=$1; $1=""; printf "  %7.1f s  %s\n", ms/1000, substr($0,2)}'
 }
 # Called before any `exit 0`, so a clean exit cannot step over a collected failure.
 report_failures() {
+  report_timing
   if [ -n "${FAILED_TESTS}" ]; then
     echo
     echo "FAILED:"
@@ -382,6 +406,13 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # drove a machine delivering 3.5e-1 to 7.7e-1 against an open loop of 4.1e-1. Rule 6:
     # where two views show one quantity, assert they AGREE.
     t node test/pilot/deploy.test.mjs
+    # THE DEPLOYABLE ARTEFACT: a dependency-free reimplementation of the act path from the stored
+    # record alone, asserted bit-identical to the shipped one. Quick tier — it is a CONTRACT and
+    # it runs in two seconds (rule 2).
+    t node test/pilot/artefact.test.mjs
+    # WHAT SHIPS, WHAT COMMISSIONS, WHAT IS ONLY THE BENCH. Fails when a module appears that
+    # nobody classified, so the deploy boundary cannot rot quietly (rule 30 on a dependency graph).
+    t node test/inventory.test.mjs
     # A MEMORY MAY ONLY BE APPLIED WHERE IT WAS FORMED. The bench measured the lap-periodic
     # rung as a NET NEGATIVE across five programs and four feedrates — model layers alone beat
     # the full ladder in 14 of 20 cells — so it is withheld off its own program. Both halves

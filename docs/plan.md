@@ -14001,3 +14001,146 @@ single half-width, so the rig cannot express the position-varying, direction-asy
 real pitch table exists to map. A machine whose lash varies along the screw is a plant this
 simulator does not contain, and the feature is right for it. What this measurement forecloses is
 only the version of the question that could be asked here.
+
+### §53 SIMPLIFY, OPTIMIZE, PRODUCTIONIZE — the boundary this repository never stated
+
+The research arc closed at §52.46: eight capacity negatives, the commanded reference exhausted at
+R² ≈ 0.84, and the two remaining levers (the drive/loop, the instrument) are things a customer buys
+rather than things the controller computes. What was never done in all of that is the engineering
+question: **what does a machine actually receive?**
+
+**FOUR FOOTPRINTS WERE BEING CONFLATED, AND NOTHING NAMED THEM.** `test/inventory.test.mjs`
+classifies every module in `lib/` by its fate on a real installation and fails when one appears
+that nobody classified:
+
+```
+  lib/ is 69 modules, 29,202 lines. On an installation:
+    DEPLOY        1 module      117 lines    0%   runs for ever — a dot product and a clamp
+    COMMISSION   20 modules  13,684 lines   47%   runs once, on the PLC, then idle
+    BENCH        29 modules   7,670 lines   26%   the plant SIMULATOR — a machine HAS a machine
+    RETIRED       4 modules   2,639 lines    9%   superseded, kept because its test is the record
+    OTHER        15 modules   5,092 lines   17%   the other pages of this sandbox
+```
+
+The product is the first row. Everything a customer receives is **117 lines and a 1.8 kB JSON
+record**; a quarter of this repository is a lattice simulator that exists only because there is no
+real arm here.
+
+**AND THE DEPLOY BOUNDARY IS NOW PINNED RATHER THAN ASSERTED.** `distil.js` has claimed in prose
+since §49 that the deployed object needs "no QP, no forecast bank, no tracker, no lap index and no
+per-plant constant". Nothing checked it — rule 30's exact failure mode, in the module whose whole
+value is that claim. `lib/pilot/deploy.js` is a complete reimplementation of the act path **from
+the stored record alone, importing nothing**, and `test/pilot/artefact.test.mjs` asserts the two
+agree BIT-EXACTLY over 4,000 random windows — not to a tolerance, since a tolerance would hide
+precisely the drift this exists to catch. Both halves are pinned (rule 9): a 1e-9 change to one
+stored weight must move >150 of 200 decisions, or the comparison would be vacuous.
+
+It also enforces what the prose only stated: strip the streaming covariance and the whole report
+and the machine is byte-identical, so the record IS the controller. And it is the DELIVERABLE's
+acceptance test — `EXPORT=<path>` writes a conformance vector (record, windows, expected
+corrections) against which a PLC vendor checks a port in any language without running any of this.
+
+**THE SUITE NOW STATES ITS OWN COST.** Rule 2 — "a check too slow to be run is a verification
+problem" — has been applied to individual checks throughout this project and never to the suite,
+because nothing measured where the minutes went, and this file's own notes say the tier split has
+drifted and been cut twice. `t()` is the one choke point every test passes through; it now times
+each and prints the total and the twelve slowest at the end, on success and on failure alike.
+
+**TWO SIMPLIFICATION CANDIDATES WERE MEASURED, AND THEY DID NOT AGREE.**
+
+*The `hff` fallback teacher never fires.* `distilTeachRefused` has been on by default since §52.37,
+and across four commissioning seeds — sixteen training runs — the engine is `pilot` **16 of 16**,
+never `hff`. That is 1,194 lines of a module retired by owner decision sitting in the page's live
+closure. **It is NOT removed, and the reason is that the measurement does not support removal**:
+the fallback fires when NO cascade layer is built at all, which none of these four seeds reached,
+so 16/16 says the net was never needed here — not that the net is unnecessary. Deleting a safety
+path on the strength of never having fallen would be exactly the reasoning this file exists to
+prevent. It is classified RETIRED with its reason instead, which is what rule 59 asks for.
+
+*The teacher's QP is inert within the seed spread.* Truncating the teacher's solve:
+
+```
+  shipped        1.6159e-1   6.63x
+  TEACHITERS=2   1.6230e-1   6.60x    0.4% worse
+  TEACHITERS=1   1.6414e-1   6.53x    1.6% worse
+  seed spread (4 draws, shipped)      2.1%
+```
+
+Both truncations sit inside the spread across commissioning seeds. That is the ninth independent
+"inert" on the teaching path, after §52.16's Q-filter, its converged solve and its rows-at-every-
+step, and §52.29's guided adaptation — and it is the same finding from the opposite end, since
+§52.16 measured that MORE convergence is inert too. **What it licenses is a narrower claim than it
+first appears**: the teacher still needs a forecast to produce any increment at all, so this does
+not say `pilot.js`'s 4,534 lines are removable. It says the QP inside it is barely working, which
+is consistent with §52.29's account — the oracle port replaces exactly the forecast the solve
+inverts. A real reduction of the teaching path needs the experiment that removes the forecast
+rather than truncating its inversion, and that is not this measurement.
+
+**AND THE INVENTORY'S OWN FIRST WALKER WAS WRONG, WHICH IS RECORDED BECAUSE IT NEARLY SHIPPED AS AN
+ARGUMENT FOR DELETION.** A static-import walk reported **8,648 lines "unreachable from any page"**.
+Four of those modules — `backends/webgpu.js`, `backends/wgsl.js`, `render/volume3d.js`,
+`verify.js`, about 1,900 lines — are `await import(...)`ed by `flowsim.html` and are as live as
+anything else. The walker followed `from '...'` and not `import('...')`. Rule 17 aimed at a
+dependency graph: the instrument was incomplete before the codebase was untidy, and the corrected
+answer is the opposite of the first one — **nothing in `lib/` is rotting**. Every module is either
+page-reachable or exercised by a test, and that is now a check rather than a hope.
+
+**WHAT REMAINS, AND THE HONEST ORDER.** The commissioning path is 13,684 lines and is the real
+simplification target, but every measurement that would license cutting it is a machine run rather
+than a reading of the code — the QP result above is the first and it is narrow. The deliverable is
+half built: the artefact and its conformance vector exist; a commissioning that WRITES one, and an
+implementation note beside it, do not. And the non-code critical path is unchanged and unmoved by
+any of this: §52.42's tracker at 3.9x over the best mounted instrument, and §52.41's feed-laddered
+diet, which is a commissioning procedure and not a line of code.
+
+---
+
+### §54 A REAL DEPLOYMENT TARGET: WIRE EDM + HOLE POPPER ON B&R CONTROLS
+
+**The full scoping is `docs/edm.md`.** It is written BEFORE any EDM plant exists here, on purpose:
+its value is that its predictions can later be read against what was claimed before the data,
+which is the one thing this project's own record shows is hard to reconstruct afterwards.
+
+The short form, and the reason it is not an unqualified yes:
+
+- **FINISHING is this method's shape and the case is strong.** A repeatable geometric error on a
+  repeated contour, skim passes that are iterations on one geometry, wire lag that is a function
+  of commanded curvature and feed — the arm's problem with different physics. And the
+  commissioning truth is **the measured part**, which is the instrument the north star lists as
+  its own open case (*"a touch probe on the cut part, which is the instrument a shop actually
+  owns"*) and which on this machine is free because the part is measured anyway. §50.1 prices the
+  tracker at 1.50x-2.3x and §52.42 at 3.9x over the best mounted alternative; a measured part
+  sits between those and is unmeasured.
+- **ROUGHING gap regulation should be REFUSED and that is the gate working.** The optimum sits ON
+  the arcing boundary and the constraint is stochastic — debris, flushing, wire wear — not a
+  function of the commanded reference. §52.36 established that the reference's information about
+  the correction is exhausted at R² ≈ 0.84 and six capacity experiments could not move it; there
+  is no basis argument that reaches a stochastic constraint. A preview feedforward has nothing to
+  say here and the cart-pole precedent (§52.32, four refusals with a stated reason once the loop
+  beneath was good) is the behaviour to expect.
+- **But one preview-shaped sub-problem sits inside roughing and it is where wire actually
+  breaks**: height steps (a step change in plant GAIN, since simultaneous discharges scale with
+  height), corners, entry/exit and flushing-regime changes are all known from the program ahead
+  of time. Reducing feed BEFORE them is preview, and §52.26's finding — feedback cannot reach what
+  it predicts when the plant answers slowly, so preview is the only correction that can be in
+  place when the error arrives — transfers directly.
+
+**THE GATE IS DATA AND THE MACHINE REMOVES IT.** No public EDM dataset gives gap dynamics (the
+literature is response-surface/DoE tables: pulse parameters against Ra and MRR, static), and the
+Karalic 1997 set is 154 rows of an operator's separable, monotone policy with no causal u→y
+direction and no absolute gap — a valid human baseline and operating-region validator, not a
+plant. Building a simulator from an asserted structure and commissioning on it is **rule 15
+exactly**: the model and the controller would share their assumptions and the number would be a
+statement about the simulator. Real records from the actual machine are worth more than any
+published model and cost nothing extra during build and tune, so `docs/edm.md` carries the
+LOGGING SPEC instead of a simulator — with two load-bearing items: **pulse CLASSIFICATION counts
+rather than average gap voltage** (the average is a lossy summary of exactly the spark/arc
+distinction that decides whether the wire survives — rule 17), and **a ring buffer that dumps the
+seconds preceding every wire BREAK** (breaks are rare, each one is a labelled example of the
+boundary, and it cannot be reconstructed later).
+
+Sequenced with each step's falsifier, so none of it can be declared a success by inspection:
+identify a plant from the logs and require it to predict a HELD-OUT cut → the finishing route
+scored on a part the fit never saw against target 1's "none made worse" → the roughing geometry
+schedule scored on breaks-per-metre with the gap servo untouched underneath, which must not
+increase breaks. Nothing above is measured.
