@@ -13878,3 +13878,62 @@ not a basis, a lift, a state or an entry mechanism — every one of those has be
 the MACHINE (§52.30's 1.13x-1.29x from the drive and the loop) and the INSTRUMENT (§52.42's 3.9x
 between the tracker and the best mounted alternative). Both are things the customer buys rather
 than things the controller computes, and saying so is worth more than another 279-column fit.
+
+### §52.45 THE BROWSER LEARN DEFECT DOES NOT EXIST. THE WAIT READ TWO FIELDS THAT ARE NOT THERE
+
+§52.35 recorded that one learn pass exceeds **63 minutes of browser** where the identical work
+costs 462k machine samples and ~230 s in Node, called it "UNDIAGNOSED and the next thing to fix on
+that page", and gated the check behind `FLEX_LEARN_BROWSER=1` so the suite would not be red.
+
+**THE CAUSE IS ONE LINE OF THE TEST.** The wait was
+
+```js
+  const x = window.__flxDbg();
+  return (!x.learning && x.learned) || /^halted:|failed/.test(badge)
+```
+
+and `__flxDbg` publishes those two under `x.auto`, not at the top level. So the condition is
+`(!undefined && undefined) || false` — **`undefined`, which can never become true** — and every
+run sat there for the whole of its `timeout: 5400000`. The 63 minutes was a TIMEOUT, not a
+measurement, and it was written into this project's record as a property of the code.
+
+**THE PAGE IS FINE, IN EVERY CONFIGURATION THE SUITE PUTS IT IN.** `test/_pagerate.mjs`
+commissions and learns in ONE page session and reports samples/s for each, which is the control
+§52.35's load-bearing clause — "the page's own commissioning does not show that ratio" — needed
+and never had:
+
+```
+  configuration                            commission            one learn pass
+  fresh page, demo grade            580k in 167 s  3,474/s     87k in 22 s  4,253/s
+  fresh page, full grade            678k in 192 s  3,532/s    120k in 29 s  4,207/s
+  + spf 600, the run going, full    680k in 194 s  3,500/s    120k in 29 s  4,146/s
+  + demo, PERIODIC, hop on (= the suite)  1729k in 444 s  3,898/s   87k in 22 s  4,007/s
+```
+
+**One learn pass is twenty-two to twenty-nine seconds and it is FASTER per sample than the
+commissioning it follows**, in all four. For reference the same machine in Node measures 6,246
+steps/s on this box, so the browser is within 1.6x of it and the "~230 s in Node against 63
+minutes of browser" comparison was between a real number and a timeout.
+
+**TWO CHEAPER HYPOTHESES WERE KILLED FIRST, WHICH IS WHY THIS TOOK MINUTES RATHER THAN A DAY
+(rule 1).** The host yields one `requestAnimationFrame` per 150 samples, so the rAF PERIOD is a
+hard ceiling nothing else can beat: measured at 30-37 ms, a ceiling of 4,400-4,900 samples/s, or
+under two minutes for the whole learn — so rAF was not it. And the continuity instrument
+(`__flxHop`), which `smoke.mjs` turns on and never turns off and which costs a full flexible tool
+solve per step, measures **1.1x** per step in Node — so that was not it either.
+
+**WHAT CHANGES.** The fields are corrected and the timeout drops from 90 minutes to 10. A new
+assertion runs BEFORE the finish wait: `startLearn` opens with a guard that RETURNS SILENTLY, and
+the button being enabled is a different predicate from that guard, so a click can land, do
+nothing, change no badge and leave a wait to sit — the failure this defect actually had a shape
+for. The body is un-gated. And FlowSim is now closed at the end of its own block and the hub page
+before FlexiSim opens: that was found while chasing this, is right on its own terms — FlowSim goes
+on running its SwiftShader lattice sim against the same compositor — and is NOT the cause, which
+the table above establishes rather than assumes.
+
+**THE LESSON IS RULE 17 AIMED AT A TEST HARNESS, AND IT IS THE THIRD HOLE OF THIS SHAPE.** A
+timeout is not a measurement; a wait that cannot distinguish "still running" from "never started"
+from "reading a field that does not exist" reports the wrong thing for exactly as long as its
+timeout allows. This check has now failed silently three ways: `SUITE=full` skipping it, `if
+(canLearn)` skipping it against a race, and a gate added to work around a number that was itself
+an artefact — each of which made the suite green while measuring nothing (rule 25).

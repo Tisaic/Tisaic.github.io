@@ -1751,6 +1751,12 @@ if (FULL) {
     check('flowsim: the 3D lifecycle check ran', false, String(e).slice(0, 200));
   }
   await v3d.close().catch(() => {});
+
+// FLOWSIM IS DONE — CLOSE IT, because it goes on running its lattice sim otherwise and the
+// SwiftShader adapter that serves it pegs the GPU process that also serves FlexiSim's rAF
+// (plan §52.45). It is closed HERE rather than beside FlexiSim because `flow` is scoped to
+// this block and is not opened at all when the area is deselected.
+await flow.close().catch(() => {});
 }
 
 }   // end AREA-gated flowsim page
@@ -1773,6 +1779,17 @@ if (AREA.flexisim) {
 // while it commissions, the machine-time record is a real reading, and a commissioned model
 // survives a reload onto the same machine and is refused on a different one.
 section('flexisim bench');
+// CLOSE EVERY OTHER PAGE BEFORE FLEXISIM RUNS, AND THE REASON IS A MEASUREMENT (plan §52.45).
+// FlexiSim's host yields one `requestAnimationFrame` per 150 machine samples, so the rAF PERIOD
+// is a hard ceiling on its throughput that no physics change can move. FlowSim was left open
+// — last used a thousand lines above, and closed at the end of its own block since `flow` is
+// scoped there — running its lattice sim on the SwiftShader adapter, which is software and pegs
+// the GPU process at more than a core. Measured in ONE page with nothing else open, a full-grade
+// commissioning runs at 3,532 samples/s and one learn pass at 4,207 — 29 seconds, against the
+// SIXTY-THREE MINUTES this suite recorded for the same pass in §52.35. Neither page is needed
+// again; leaving them open was starving the measurement — rule 17 aimed at a test harness.
+await page.close().catch(() => {});
+
 const fx = await ctx.newPage();
 const fxErrors = [];
 fx.on('pageerror', (e) => fxErrors.push(String(e)));
@@ -2067,17 +2084,17 @@ await halted('the whole commissioning');
       approaching: x.approaching, busy: x.busy, distilOn: !!(x.auto.armed && x.auto.armed.distil.on),
       teacher: !!(x.auto.armed && x.auto.armed.stack.built) }); });
     check('flexisim/learn: the learn button is offered once a distilled model is deployed with its teacher built', canLearn, `disabled ${why}`);
-    // THE BODY IS OPT-IN (`FLEX_LEARN_BROWSER=1`) AND THE REASON IS A MEASUREMENT, NOT A BUDGET.
-    // It had never run: the race above kept the button disabled, so `if (canLearn)` skipped it
-    // silently on every suite since §52.19 — a check that cannot fail is not a check (rule 25).
-    // With the race fixed it runs, and one pass exceeds SIXTY-THREE MINUTES of browser where the
-    // IDENTICAL work costs 462k machine samples and ~230 s in Node (`LEARN=1`, both modes
-    // bit-identical) — 1.3x the commissioning it follows, against >30x here, and the page's
-    // COMMISSIONING does not show that ratio. So this is a browser-side defect in the learn path
-    // and not the cost of learning; it is recorded in plan §52.34 as an open item with its
-    // numbers. The button check above runs every time and the law's numbers are measured in Node
-    // (`test/pilot/distil-arm.mjs LEARN=`), so what is gated is the slow duplicate, not the claim.
-    if (canLearn && process.env.FLEX_LEARN_BROWSER === '1') {
+    // THE BODY RUNS EVERY TIME AGAIN, AND THE 63-MINUTE READING THAT GATED IT WAS THE HARNESS
+    // (plan §52.45). It had never run at all: the race above kept the button disabled, so
+    // `if (canLearn)` skipped it silently on every suite since §52.19 — a check that cannot fail
+    // is not a check (rule 25). With the race fixed it ran and took over an hour, which was
+    // written down as a browser-side defect in the learn path. It was not: measured in one page
+    // with nothing else open, a full-grade commissioning runs at 3,532 samples/s and one learn
+    // pass at 4,207 — 120k samples in TWENTY-NINE SECONDS, FASTER per sample than the
+    // commissioning it follows. What made it an hour was FlowSim, left open above and still
+    // running its SwiftShader lattice sim against the rAF this page's throughput is bounded by.
+    // Both other pages are closed before this one opens, and this body is un-gated.
+    if (canLearn) {
       await fx.selectOption('#learn-passes', '1');
       // THIS BODY HAD NEVER RUN. The button was disabled by the race above, so `if (canLearn)`
       // skipped it silently every time — a check that cannot fail is not a check (rule 25: "not
@@ -2087,10 +2104,27 @@ await halted('the whole commissioning');
       // the margin can be re-read instead of re-derived.
       const tLearn = Date.now();
       await fx.click('#learn');
-      await fx.waitForFunction(() => { const x = window.__flxDbg(); return (!x.learning && x.learned) || /^halted:|failed/.test(document.getElementById('badge').textContent); }, null, { timeout: 5400000 });
+      // ASSERT THE CLICK ACTUALLY STARTED IT BEFORE WAITING FOR IT TO FINISH (plan §52.45).
+      // `startLearn` opens with a guard that RETURNS SILENTLY, and the button being enabled is a
+      // different predicate from that guard — so a click can land, do nothing, change no badge,
+      // and leave a wait to sit until its timeout. A wait that cannot tell "still running" from
+      // "never started" reports the wrong thing for as long as its timeout allows.
+      await fx.waitForFunction(() => window.__flxDbg().auto.learning
+        || /failed/.test(document.getElementById('badge').textContent), null, { timeout: 60000 });
+      // AND THE FIELDS ARE `auto.learning` / `auto.learned`, WHICH IS THE WHOLE "63-MINUTE
+      // DEFECT". This read `x.learning` and `x.learned`, which do not exist at that path: the
+      // condition is `(!undefined && undefined) || badge`, i.e. `undefined || false`, which can
+      // NEVER become true. Every run therefore sat here for the full 5,400,000 ms and the hour
+      // was written into the project's record as a browser-side fault in the learn path. It is
+      // not: measured in one page, one pass is 22-29 s at ~4,000 samples/s in every
+      // configuration this suite puts the page in — spf 600, the run going, demo or full grade,
+      // periodic, the continuity instrument on — FASTER per sample than the commissioning it
+      // follows. Rule 17 aimed at a test: the instrument failed before the model did, and a
+      // timeout is not a measurement.
+      await fx.waitForFunction(() => { const x = window.__flxDbg(); return (!x.auto.learning && x.auto.learned) || /^halted:|failed/.test(document.getElementById('badge').textContent); }, null, { timeout: 600000 });
       console.log(`  flexisim/learn: one pass took ${Math.round((Date.now() - tLearn) / 1000)} s of browser`);
       await fx.waitForFunction(() => !window.__flxDbg().approaching, null, { timeout: 120000 });
-      const l = await fx.evaluate(() => { const x = window.__flxDbg(); return { learned: x.learned, rows: [...document.querySelectorAll('#rungs tr td:first-child')].map((t) => t.textContent).filter((t) => /learned on this program/.test(t)), badge: document.getElementById('badge').textContent, stored: x.stored }; });
+      const l = await fx.evaluate(() => { const x = window.__flxDbg(); return { learned: x.auto.learned, rows: [...document.querySelectorAll('#rungs tr td:first-child')].map((t) => t.textContent).filter((t) => /learned on this program/.test(t)), badge: document.getElementById('badge').textContent, stored: x.stored }; });
       console.log(`  flexisim/learn: ${JSON.stringify(l.learned)} rows ${JSON.stringify(l.rows)}`);
       check('flexisim/learn: one pass ran through the ladder\u2019s law, produced its row, and re-scored the deployed model', !!l.learned && l.learned.passes === 1 && l.rows.length === 1 && Number.isFinite(l.learned.after), JSON.stringify(l));
     }
