@@ -13648,3 +13648,233 @@ its top. This project has the prior — §51's feed-ladder training removed the 
 (half-feed 0.75x → 2.58x) at 2.3x cost at the commissioning feed — but that was at the old loop,
 before §52.37, and rule 31 says a constant carried across a configuration change is a constant to
 re-derive. Measured next.
+
+### §52.41 TARGET 2 IS MET, AND THE FIX HAS NO CONSTANT IN IT
+
+§52.40 measured target 2 for the first time and found the covered feed span sitting entirely
+BELOW the commissioning feed — an arithmetic consequence of a diet commanded at 4.0e-3 whose
+commanded speed only FALLS within a lap. The remedy it named is the diet, and `polyfeed` — the
+same designer, the same scale, six programs at feeds 2.0e-3 / 4.0e-3 / 8.0e-3 — is it.
+
+One commissioning per row; the same policy scored at every feed, each against the CONVENTIONAL
+machine at that same feed, so the denominator moves with the plant:
+
+```
+  diet                 0.40x   0.60x   1.00x   1.50x   2.00x   the square    fitted span
+  poly4 (shipped)      6.71x   5.85x   8.18x   1.19x*  1.17x*  1.6159e-1   [8.8e-4, 4.0e-3]
+  poly  (6, one feed)  6.24x   5.61x   7.78x   1.20x*  1.17x*  1.7244e-1   [8.8e-4, 4.0e-3]
+  polyfeed (6, three)  7.49x   6.73x   7.75x   7.94x   6.65x   1.9847e-1   [8.8e-4, 8.0e-3]
+                                                * coverage 0.000 — the guard FADED the correction
+```
+
+**Across a 5x span of feed the feed-laddered policy delivers 6.65x-7.94x with coverage 1.000
+everywhere and nothing made worse. Worst to best is 1.19x, inside target 2's 1.5x bound.** What
+it is NOT is monotone — 0.40x reads 7.49x and 1.00x reads 7.75x — so the target's "monotone
+degradation" clause is not met in letter, though every cell is far inside the bound it exists to
+enforce.
+
+**THE MATCHED-CAPACITY CONTROL SAYS IT IS THE FEED LADDER AND NOT THE PROGRAMS (rule 20).** Six
+programs at ONE feed cover the same span as four and fade at exactly the same place; the only
+diet that reaches past the commissioning feed is the one whose training set does. Feed-invariance
+comes from TRAINING ACROSS FEEDS — the same lesson §51 reached on the old loop, re-derived here
+because rule 31 forbids carrying it across a configuration change.
+
+**WHAT IT COSTS.** 1.23x at the commissioning feed against the shipped diet, 1.15x against the
+matched-capacity control, and 14.7 machine-minutes against 10.1. The deployed object is
+unchanged: 93 features, 274 MAC/decision, no solver, no tracker.
+
+**IT IS NOT MADE THE DEFAULT.** One plant, one cell, one seed, and the bench rule scores the
+square, where this is 23% worse. `DIET=polyfeed` is the measured configuration for an
+installation whose production feed varies; the shipped default remains the one the bench cell
+was measured on (rule 31).
+
+### §52.42 THE CHEAPEST TRUTH: WHAT COMMISSIONING DELIVERS FROM INSTRUMENTS THE CUSTOMER ALREADY OWNS
+
+This file has said since §50.1 that the method needs an instrument most shops do not have, and
+has never priced the alternative. §50.1 degraded an IDEAL truth (noise on the tool) and found it
+costs ~2x. Nobody has measured a CHEAPER one.
+
+**FIRST THE CHEAP FALSIFIER, BEFORE ANY COMMISSIONING (rule 1).** `test/pilot/truthcost.mjs`
+runs the machine on the bench square and asks what each candidate instrument reads against what
+the tracker reads, in the JOINT frame the teacher corrects in — the Jacobian inverse at the live
+pose, which is `makeArmHost`'s own construction and not a second one:
+
+```
+                        the CONVENTIONAL machine          the BARE machine
+  instrument   ch    corr   rms/trk   resid/trk      corr   rms/trk   resid/trk
+  encoder      0   -0.2381   0.3892     1.1562      0.5575   0.0072     0.9960
+  encoder      1   -0.5547   0.2842     1.1815      0.6845   0.0269     0.9818
+  wu           0    0.9717   0.5586     0.4759      0.9893   0.5958     0.4196
+  wu           1    0.7114   0.2498     0.8408      0.8316   0.3560     0.7312
+  bend         0    0.7492   0.4704     0.7186      0.9774   0.4089     0.6065
+  bend         1    0.8989   0.8510     0.4407      0.9584   0.8439     0.3077
+```
+
+**THE MOTOR ENCODERS ARE WORTH NOTHING, AND THE REASON IS SCALE RATHER THAN SIGN.** On the BARE
+machine the encoder-side error is **0.7% and 2.7% of the tool error's rms** — the position loop
+tracks its own encoder almost perfectly and essentially the whole tool error is downstream of it,
+in the gearbox wind-up and the link bend. The residual column says it outright: the instrument
+does not see 98-100% of the quantity a teacher would have to invert. On the CONVENTIONAL machine
+the encoder's signal is larger (0.39 and 0.28 of the tracker) and ANTI-correlated (−0.24, −0.55),
+which is the compliance feedforward rather than the error: it deliberately drives the encoder off
+the geometric reference by the deflection it predicts, so what has grown is the compensation.
+
+**THE FIRST DRAFT OF THIS TABLE WAS WRONG AND SO WAS THE MECHANISM IT SUPPORTED (rules 17, 47,
+61).** It projected the world error onto the TRANSVERSE LEVER — `tipError`'s frame — where the
+host uses the Jacobian inverse, and read −0.81 on channel 0 with the bare machine at −0.69. That
+supported "it is the plant, not the compensation", which the corrected projection reverses: bare
+is **+0.56 / +0.68** and it is the compensation after all. A second projection of a projected
+quantity is the fault rule 47 exists for, and a private copy of the host's own routing is the one
+rule 61 exists for; both were in four lines of harness written to check something else.
+
+**THE WIND-UP INSTRUMENT SEES CHANNEL 0 AND HALF OF CHANNEL 1.** 0.97 and 0.71 correlation with
+residuals 0.48 and 0.84, so before any fit it cannot remove more than about half of one channel
+and a sixth of the other. That is the prediction, and it is the size of the result.
+
+**THEN THE MACHINE WAS ASKED, BECAUSE A CORRELATION IS A NUMBER COMPUTED FROM THE MODEL (rule
+16).** `distilTruth` degrades what the TEACHER may measure — the oracle record, the prefix's
+convergence and its monotone gate, all three, so a degraded commissioning never peeks — while
+the ladder's rung scoring and the DELIVERED number stay on the tracker, deliberately, so what is
+read is the cost of a cheap teacher and not a cheap scoreboard (rule 15):
+
+```
+  the teacher's instrument      training runs converged      the ladder ships        delivered
+  tracker (what ships)          17.6x 22.0x 23.6x 27.0x      ②d distilled            6.63x
+  wu  (encoders + wind-up)       1.70x 2.11x 2.06x 1.55x     ②d distilled            1.72x
+  encoder (encoders alone)       ALL FOUR DROPPED at 1.00x   the cascade, 1.34x      1.34x
+```
+
+**THE ENCODER-ONLY COMMISSIONING CANNOT IMPROVE A SINGLE TRAINING PROGRAM.** Every run is dropped
+by the rung's own gate at exactly 1.00x, the policy is never fitted, and the ladder falls back to
+the cascade. That is the correct outcome and the gate produced it unprompted — nothing harmful
+was deployed from an instrument reading the wrong sign — and it is the correlation table's
+prediction confirmed on the machine.
+
+**AND THE MIDDLE RUNG IS WORTH ABOUT A QUARTER OF THE TRACKER, WHICH IS WHAT ITS RESIDUALS SAID
+IT WOULD BE.** Encoders plus wind-up readings — a permanently mounted instrument set, no metrology
+service, no machine downtime — delivers **1.72x where the tracker delivers 6.63x**, its teacher
+converging the same four programs to 1.55x-2.11x against the tracker's 17.6x-27.0x. Held-out R²
+0.7878/0.9505 against the tracker's 0.9517/0.8398: the policy fits what the instrument shows it,
+and what the instrument shows it is 52% of channel 0 and 16% of channel 1, because the rest is
+link bend and a wind-up reading cannot see it.
+
+**SO THE COMMISSIONING CLAIM IS NOW PRICED RATHER THAN CAVEATED.** The tracker is not a
+convenience: on this arm it is worth 3.9x over the best permanently-mounted alternative and the
+free one is worth nothing at all. That decides who can buy this more than any row in the north
+star's table, and it is now a measurement instead of a warning.
+
+### §52.43 TARGET 8 ON THE ARM: THE TEXTBOOK LAW FAILS WHERE OURS DOES NOT, AND IT IS NOT A TUNING GAP
+
+`noilc.mjs` ran norm-optimal ILC against the harmonic rung on EMPS and the two agreed to five
+figures — including on the failure. This file records why that agreement was EXPECTED and where
+it would not hold: `hff`'s reach shrinkage is "on the axis inert to four figures", so EMPS is
+precisely where the two laws land together, and the ARM is where the shrinkage is load-bearing —
+removing it costs 4.81x → 1.05x. That measurement is target 8's standing debt and it is now taken.
+
+`test/pilot/noilc-arm.mjs` drives through `makeArmHost`, so no fourth private copy of the arm's
+routing exists (rule 61), and holds everything but the update law: same machine, same program,
+same probe, same identification, same operator `G`, same synthesis basis, same authority cap,
+same laps. Bench cell, sharp square, cap 0.10:
+
+```
+  hff                          1.3046e-1 -> 8.3434e-2    1.56x
+  NOILC  r 1e-6                1.3046e-1 -> 1.2198e-1    1.07x    last lap 1.2498e-1
+  NOILC  r 1e-4                1.3046e-1 -> 1.3046e-1    1.00x    last lap 1.7440e-1
+  NOILC  r 1e-2                1.3046e-1 -> 1.3046e-1    1.00x    last lap 2.0659e-1
+  NOILC  r 1                   1.3046e-1 -> 1.2605e-1    1.03x    last lap 1.5226e-1
+  NOILC  r 100                 1.3046e-1 -> 1.2631e-1    1.03x    last lap 1.3207e-1
+```
+
+**IT DIVERGES AT EVERY SETTING.** The last lap is worse than the first in all five rows, and the
+best lap is lap 0 or 1 — the rival's best move on this plant is not to move. At r 1e-4 the trace
+climbs 1.30e-1 → 1.47e-1 → 1.69e-1 → 1.77e-1 in four laps and saturates against the cap.
+
+**AND THE SWEEP IS COMPLETE RATHER THAN GENEROUS.** The update is
+`Δu = (qMᵀM + rI)⁻¹ qMᵀ(−e)`, so scaling q and r together leaves Δu unchanged: the law has ONE
+free parameter and eight orders of magnitude of it are covered here. `hff` gets no corresponding
+sweep at all — it ran at its own defaults, as it ships — so if the rival could win anywhere in its
+own knob it would have won this comparison.
+
+**SO THE DIFFERENCE IS THE SHRINKAGE, AND THE SHRINKAGE IS A CONTROL DECISION.** `hff` shrinks
+each harmonic's step by its own fit CONFIDENCE and by REACH `min(1,|G|)`, and this file already
+records that removing reach costs 4.81x → 1.05x on this arm. The rival is the same operator under
+the textbook step without either, and it reads 1.00x-1.07x. Two independent routes to the same
+number, from opposite directions, on the same plant — which is what rule 15 asks for.
+
+**AND THE TRANSFER COLUMN IS NOW TWO LAWS ON TWO PLANTS.** On the rounded rectangle, which neither
+law has run, read at the matched phase fraction (the most generous indexing a lap table can be
+given off its program):
+
+```
+  bare    6.1084e-2
+  hff     1.1376e-1    0.54x    worse than doing nothing
+  NOILC   1.0037e-1    0.61x    worse than doing nothing
+```
+
+EMPS gave 0.53x for both; the arm gives 0.54x and 0.61x. **A lap-indexed memory is worth less than
+nothing off its program under two different update laws on two plants sharing no physics**, which
+is the retirement's case made without any of this project's own machinery in it.
+
+**WHAT IS STILL ABSENT.** One method is still not a field: modern MPC, L1 adaptive, DeePC and
+Koopman-EDMD have not been run. And the defensible sentence lengthens by one clause rather than
+changing: beats the conventional machine; beats an engineered truth-free rival on the arm; matches
+the published model-based feedforward on one real axis at its own published parameters; and beats
+norm-optimal ILC on the arm at every setting of the rival's own regulariser.
+
+### §52.44 THE LAST OPEN ROUTE IS CLOSED: THERE IS NO SMOOTHING BOTH SLOW ENOUGH TO BE SAFE AND INFORMATIVE ENOUGH TO BE WORTH ENTERING
+
+§52.36 ended with one route left. The measured DEVIATION carries the content the reference window
+lacks (0.836 → 0.962), deploying it fails (1.44x offline-fitted, 3.24x fitted in the loop, both
+below the map without it), its standing explanation — the 951-step lag — was refuted by its own
+remedy in §52.33, and every ADDITIVE-term-at-full-bandwidth route has been tried. What had not
+been tried is entering the deviation through a SLOWLY ADAPTED PARAMETER of the feedforward map,
+at a bandwidth far below the measured 3,400-step ring.
+
+That is a different object from a smoothed additive term and the difference is the whole
+proposal: a slow scalar ADDED to the correction contributes its own value, while the same scalar
+MULTIPLYING the row changes the map's SHAPE and contributes nothing of its own — at s = 0 the
+deployed controller is exactly the shipped one. It is gain scheduling on a slow measured state
+rather than feedback through it, its bandwidth is the smoother's rather than the loop's, and it
+cannot excite the ring at any gain.
+
+Measured in `stateaug.mjs` before any build, leave-one-program-out over the diet, at the shipped
+loop:
+
+```
+  row shape                                              cols   LOPO    in-sample     SQUARE
+  A: reference window only (what ships)                    93   0.870   0.953/0.854   0.932/0.754
+  M256:  window MODULATED by the deviation over 256        279   0.838   0.971/0.934   0.930/0.770
+  M1024: window MODULATED by the deviation over 1024       279   0.817   0.968/0.901   0.885/0.692
+  M4096: window MODULATED by the deviation over 4096       279   0.856   0.968/0.910   0.919/0.761
+  Fa256:  + deviation ADDED, averaged over 256             129   0.951   0.984/0.964   0.975/0.881
+  Fa1024: + deviation ADDED, averaged over 1024            129   0.861   0.968/0.913   0.911/0.617
+  Fa4096: + deviation ADDED, averaged over 4096            129   0.847   0.965/0.905   0.889/0.540
+  F: + the INSTANTANEOUS deviation, ref-pose scheduled     129   0.995   0.997/0.999   0.995/0.999
+```
+
+**THE MULTIPLICATIVE ROUTE IS REFUTED, WITH THE SIGNATURE THIS ARC HAS NOW PRODUCED SEVEN TIMES.**
+Every modulated row is BELOW the window alone on transfer (0.838, 0.817, 0.856 against 0.870)
+while in-sample RISES from 0.953/0.854 to 0.971/0.934. Three times the columns, better in sample,
+worse where it counts — the fault §52.34 identified as the shape of this whole arc, and rule 36's
+warning arriving exactly where the design invited it: a scalar smoothed over thousands of steps is
+nearly constant within a program, so a modulated row keys WHICH PROGRAM is running.
+
+**AND THE PREMISE UNDERNEATH IT IS REFUTED TOO, WHICH IS THE MORE USEFUL HALF.** The proposal
+required a smoothing slow enough to be safe on a plant that rings at ~3,400 steps. Read the
+additive column as a function of the smoother instead of as a candidate: 256 steps keeps the
+content (0.951, well above the window) but **256 steps is INSIDE the ring, not below it** — it is
+not the slow parameter the proposal needed and it is exactly the bandwidth §52.27 already deployed
+and measured at 1.44x/3.24x. At 1024 and 4096 steps, which genuinely are below the ring, the
+content is gone: 0.861 and 0.847, level with the window alone and below Fa256 by the margin the
+whole route depended on. **There is no smoothing that is both slow enough to be safe and
+informative enough to be worth entering**, multiplicatively or additively, and that is a property
+of the signal rather than of the entry mechanism — which is why it closes both.
+
+**SO §52.36's SENTENCE STANDS AND ITS LAST QUALIFIER IS SPENT.** The information the COMMANDED
+REFERENCE carries about the correction is exhausted at R² ≈ 0.87 on this arm; the deviation
+carries the rest and cannot be delivered from it in the time it persists; and the one entry route
+that had not been tried is now tried and is worse than doing nothing extra. What remains open is
+not a basis, a lift, a state or an entry mechanism — every one of those has been measured — but
+the MACHINE (§52.30's 1.13x-1.29x from the drive and the loop) and the INSTRUMENT (§52.42's 3.9x
+between the tracker and the best mounted alternative). Both are things the customer buys rather
+than things the controller computes, and saying so is worth more than another 279-column fit.

@@ -146,6 +146,11 @@ const host = makeArmHost({
   // which in this configuration is the distilled policy's TEACHER rather than a rung that ships, so
   // what it buys here is a better teacher and not a better deployed object.
   ...(process.env.GUIDED ? { guidedLaps: +process.env.GUIDED } : {}),
+  // TRUTH=encoder|wu: THE COMMISSIONING'S INSTRUMENT (plan §52.42). What the teacher may
+  // measure — the tracker (default), the motor encoders and a rigid model, or the encoders
+  // plus wind-up readings. The DELIVERED number stays on the tracker either way, so what
+  // this reads is the cost of a cheaper commissioning and not a cheaper scoreboard.
+  ...(process.env.TRUTH ? { distilTruth: process.env.TRUTH } : {}),
   ...(process.env.CAP ? { distilCap: +process.env.CAP } : {}),
   ...(process.env.TEACHCAP ? { distilTeachCap: +process.env.TEACHCAP } : {}),
   // Q=<steps>: a circular moving-average Q-filter on the teacher's learned increment (plan §52.16).

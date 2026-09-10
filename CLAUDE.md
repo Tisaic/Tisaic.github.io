@@ -85,8 +85,33 @@ an exact tracker reads **3.67, which is 1.50x above the best noisy draw and 2.3x
 The mechanism is a HYPOTHESIS and it is §49's own law through a new knob — noise prevents the
 iteration converging onto the lap-specific residue, which is implicit early stopping and is rule
 35 priced from the other side — and the fit-R² evidence is mixed across seeds, so it is consistent
-with the numbers rather than shown by them. Still unmeasured, and the thing that actually prices
-the commissioning claim: a CHEAPER truth rather than a degraded ideal one.
+with the numbers rather than shown by them.
+**AND THE CHEAPER TRUTH IS NOW MEASURED, WHICH IS THE THING THAT ACTUALLY PRICES THE CLAIM (plan
+§52.42). THE TRACKER IS WORTH 3.9x OVER THE BEST PERMANENTLY-MOUNTED ALTERNATIVE AND THE FREE ONE
+IS WORTH NOTHING AT ALL.** The cheap falsifier ran first (rule 1): against the tool error in the
+joint frame the teacher corrects in, **the MOTOR ENCODERS ARE WORTH NOTHING AND THE REASON IS SCALE,
+NOT SIGN** — on the bare machine the encoder-side error is **0.7% and 2.7% of the tool error's rms**,
+because the position loop tracks its own encoder almost perfectly and essentially the whole tool
+error is downstream of it; the residual column says the instrument does not see 98-100% of what a
+teacher would have to invert. On the CONVENTIONAL machine its signal is larger (0.39, 0.28 of the
+tracker) and ANTI-correlated (−0.24, −0.55), which is the compliance feedforward and not the error.
+**The first draft of that table was wrong and so was the mechanism it supported** — it projected onto
+the transverse LEVER where the host uses the Jacobian inverse, read −0.81 and −0.69, and concluded
+"it is the plant, not the compensation", which the corrected projection reverses (rules 17, 47, 61).
+Then the machine was asked (rule 16), with `distilTruth` degrading what the TEACHER may measure — the oracle
+record, the prefix's convergence AND its monotone gate — while the delivered number stays on the
+tracker so that what is read is a cheap teacher and not a cheap scoreboard (rule 15): the tracker
+ships the policy at **6.63x**; encoders plus WIND-UP readings, a permanently mounted instrument set,
+at **1.72x**; and encoders ALONE cannot improve a single training program — all four dropped by the
+rung's own gate at exactly 1.00x, nothing fitted, nothing deployed, the ladder falling back to the
+cascade at 1.34x. That last is the gate producing the right refusal unprompted from an instrument
+reading the wrong sign. The wind-up instrument sees 52% of channel 0 (corr 0.97) and 16% of channel 1
+(corr 0.71) before any fit, which is the size of the result it produced; the rest is link bend, and
+a wind-up reading cannot see it. The
+`tracker` control is byte-identical to the shipped default, which is what says the knob measured
+something rather than moved it (rule 21). Still unmeasured: a touch probe on the cut part, which is
+the instrument a shop actually owns, and which supplies one rms per run rather than truth per
+sample.
 
 **AND COMPUTE TIME IS NOT COMMISSIONING TIME.** The "2 minutes on the arm" is wall clock for the
 ladder. The distillation route needs iteration converged on about six training programs, which is
@@ -188,11 +213,17 @@ Each of these is a claim that can be shown false, which is the only kind worth w
    is actually run at, no recommissioning, no per-feed table. Target: monotone degradation
    bounded at 1.5x of a per-feed commission across a 5x span of feed. Today a feedrate change
    moves the lap length and the whole lap-indexed layer is addressed by the wrong index.
-   **NOW MEASURED ON THE SHIPPED OBJECT AND HALF MET (plan §52.40):** 6.71x / 5.85x / 8.18x across
-   0.40x-1.00x of the commissioning feed with nothing made worse, and above it the coverage guard
-   fades rather than extrapolating (1.17-1.19x). The 4.5x of covered span sits entirely BELOW the
-   production feed because the diet is commanded at the top of its own speed range, which is a diet
-   fault with no constant in it.
+   **MEASURED, AND THEN MET (plan §52.40, §52.41).** The shipped diet reads 6.71x / 5.85x / 8.18x
+   across 0.40x-1.00x of the commissioning feed with nothing made worse, and above it the coverage
+   guard FADES rather than extrapolating (1.17-1.19x) — the 4.5x of covered span sitting entirely
+   BELOW the production feed, because the diet is commanded at the top of its own speed range. That
+   is a diet fault with no constant in it, and the diet fixes it: the same designer at the same
+   scale over feeds 2.0e-3 / 4.0e-3 / 8.0e-3 delivers **6.65x-7.94x across a 5x span of feed with
+   coverage 1.000 everywhere and nothing made worse — worst to best 1.19x, inside the 1.5x bound**.
+   Not monotone, so the target's letter is not met while its bound is. **The matched-capacity
+   control says it is the FEED LADDER and not the extra programs** (six programs at one feed fade at
+   exactly the same place, rule 20), and it costs 1.23x at the commissioning feed and 1.46x of
+   commissioning time. `DIET=polyfeed`; not a default on one plant, one cell, one seed (rule 31).
 
 3. **PLANT-AGNOSTIC, AND ALREADY HALF PROVEN.** Six plants that share no physics is the
    existing bar and it must not regress: the 2R arm, a quadruple tank, an extruder barrel,
@@ -517,16 +548,30 @@ Each of these is a claim that can be shown false, which is the only kind worth w
    identification, so that is a statement about the law given an operator and not a cost
    comparison.
 
-   **AND THE AGREEMENT IS EXPECTED ON THIS PLANT, WHICH IS THE LIMIT OF IT.** `hff`'s reach
-   factor is recorded here as "on the axis inert to four figures", so EMPS is precisely where the
-   two laws should land together. The ARM is where that shrinkage is load-bearing — removing it
-   costs 4.81x → 1.05x — and is therefore the venue where these two would actually discriminate.
-   The plan names the arm for that reason and it is NOT yet run: the arm drives `HarmonicFF`
-   through the shared `makeArmHost`, so the rival has to be plugged into that host rather than
-   given a harness of its own. A first draft of exactly such a harness invented an
-   `arm.jointErr` that does not exist and would have been the fourth private copy of that
-   routing, three of which have each shipped a defect (rule 61). Still absent entirely: modern
-   MPC, L1 adaptive, DeePC, Koopman-EDMD. One method is not a field.
+   **AND THE AGREEMENT WAS EXPECTED ON THAT PLANT, WHICH IS WHY THE ARM WAS THE MEASUREMENT THAT
+   MATTERED — AND ON THE ARM THEY SPLIT, AT EVERY SETTING OF THE RIVAL'S OWN KNOB (plan §52.43).**
+   `hff`'s reach factor is recorded here as "on the axis inert to four figures", so EMPS is
+   precisely where the two laws land together; the ARM is where that shrinkage is load-bearing —
+   removing it costs 4.81x → 1.05x. `test/pilot/noilc-arm.mjs` drives through the shared
+   `makeArmHost` rather than a fourth private copy of the routing (rule 61) and holds machine,
+   program, probe, identification, operator, basis, cap and laps, moving only the update law:
+
+   ```
+     hff                     1.3046e-1 -> 8.3434e-2   1.56x
+     NOILC  r 1e-6 .. 100    best 1.00x-1.07x, and the LAST lap worse than the first in all five
+   ```
+
+   **It diverges at every setting**, its best move on this plant is not to move, and the sweep is
+   COMPLETE rather than generous: the law is `Δu = (qMᵀM + rI)⁻¹qMᵀ(−e)`, so scaling q and r
+   together leaves Δu unchanged and the one free parameter is covered over eight orders of
+   magnitude — while `hff` ran at its shipped defaults with no sweep at all. So the difference is
+   the confidence-and-reach shrinkage, which this file already prices from the other direction, and
+   it is a control decision rather than a safety margin. **And the transfer column is now two laws
+   on two plants**: on a program neither has run, hff reads 0.54x and NOILC 0.61x, against EMPS'
+   0.53x for both — a lap-indexed memory is worth less than nothing off its program under two
+   different update laws on plants sharing no physics, which is the retirement's case with none of
+   this project's own machinery in it. Still absent entirely: modern MPC, L1 adaptive, DeePC,
+   Koopman-EDMD. One method is not a field.
 
 **The plan to get there is `docs/plan.md`**, sequenced so the experiment that CHOOSES the
 route runs early rather than last.
@@ -1190,6 +1235,8 @@ measurement behind each is in `docs/history/` — the pointer in brackets.
 | `test/pilot/qpsweep.mjs`, `qpsweep-arm.mjs` | **Not tests — the solver-budget experiment.** Commission ONE pilot, re-deploy that same model over a grid of QP iteration counts and horizon lengths, and score the MACHINE. Found that the shipped 60 iterations at `1.5·Tset` is 57× more arithmetic than the machine wants and WORSE than 1 iteration at N=56 (EMPS 14.16× against 12.70×, at 101% of a PLC scan's 10% against 5761%), and that the arm agrees at 29× cheaper and 16% better. Scores a held-out program in the same table, because the surface is rugged enough that the best cell of a grid is a suspect result. |
 | `test/pilot/rti.test.mjs` | A FALSIFIED HYPOTHESIS, pinned as the four things measuring it found. One QP iteration per cycle does not track sixty (88% of the applied signal); sixty is itself 36% from this solver's own optimum, so every delivered number in the project came out of a truncated solve; the convergence curve at N=8 matches N=48, so the rate is the Hessian's conditioning and not the horizon; and the Lipschitz bound is 1.82× above the true spectral norm, which costs exactly 2× in iterations. |
 | `test/pilot/observe.mjs` | **Not a test — IS THE RESIDUAL OBSERVABLE FROM THE MOTOR SIDE, AND THROUGH WHAT LIFT? (plan §52.21).** Runs the distilled machine on the square, the circle, the rounded rectangle and the polygon diet with a per-step tap on the measured signals and the truth, then fits the residual offline from nested feature sets — the command window, linear motor lags, a quadratic lift, an ENERGY lift (the quadratic forms an energy is made of, plus windowed power integrals), the pilot's own row shape — and scores every fit TWICE: on later laps of the fitted program (the memory control, where everything reads 0.9-1.0) and on programs the fit never saw, at a ladder of ridges and leads. The second column is the claim: a linear observer transfers at R² 0.3-0.6, the lifts transfer worse, and a lap-held-out 1.000 was a memory. **Now ONE normal matrix per program over a 314-column library in named groups** (plan §52.22), so every set is a sub-matrix solve: adds the INSTRUMENTS (tool accelerometer with noise, link strain, gearbox wind-up) and `SELECT` — greedy forward selection scored leave-one-polygon-out, which found no transferable energy subset; `TARGET=wu|bend` makes a hidden state the target (plan §52.23), and the pose-scheduled groups and the two-stage CHAIN are built in. |
+| `test/pilot/truthcost.mjs` | **Not a test — WHAT DOES A CHEAPER COMMISSIONING INSTRUMENT ACTUALLY SEE? (plan §52.42).** The cheapest thing that can falsify "the tracker is needed" (rule 1), run before spending a commissioning per instrument: the conventional machine on the bench square, and what each candidate reads against what the tracker reads, in the JOINT frame the teacher corrects in. **The motor encoders see 0.7-2.7% of the tool error on the bare machine** — the loop tracks its own encoder and the whole error is downstream — while on the conventional machine their larger signal is the compliance feedforward's pre-distortion and is anti-correlated; `FF=0` is the control that separates the two. It projects with the HOST's Jacobian inverse, because a first draft that used the transverse lever instead read −0.81 where the truth is +0.56 and supported the opposite conclusion (rules 47, 61). Reports correlation, scale and the residual the instrument cannot see, which is the floor on what a correction taught from it can remove. |
+| `test/pilot/noilc-arm.mjs` | **Not a test — TARGET 8 WHERE THE TWO LAWS ACTUALLY DIFFER.** Norm-optimal ILC against `hff` on the ARM, where `hff`'s reach shrinkage is load-bearing (removing it costs 4.81x → 1.05x) rather than on EMPS where it is inert and the two agreed to five figures. One identification, one machine, one probe, one operator, one basis, one cap, one lap count — only the update law moves — and it drives through `makeArmHost` rather than a fourth private copy of the arm's routing (rule 61). `RSWEEP` sweeps the rival's OWN regulariser while `hff` gets no corresponding sweep, so if the rival wins anywhere in its own knob it wins the comparison. |
 | `test/pilot/stepresp.mjs` | **Not a test — the two-path step response (plan §52.26.5), whose NUMBERS STAND AND WHOSE CONCLUSION IS INVERTED (§52.28).** The bench machine held, a step on the position command against a torque step at the motor: 951 against 948 steps, first peak at 2,100. It read that agreement as "the gearbox spring is the plant's low-pass, not the loop". Both paths run through the CLOSED LOOP — the torque step is added on top of `servo.torques(...)`, so the PD pushes back — and two measurements through one loop cannot check each other (rule 15). The 951 is the position loop's designed bandwidth, and the agreement is the proof: at bw ≥ 2e-3 the two paths are identical to the step, and at 5e-4 they separate (5156 against 2467) as the loop slows out of the way. |
 | `test/pilot/modes.mjs` | **Not a test — DOES THE RINGING FREQUENCY MOVE WITH POSE? (plan §52.36, the falsifier §52.34 named first).** Holds the arm at nine poses across the workspace the bench programs occupy, hits it with a torque PULSE and reads the free ring of the tool error from quantities that survive heavy damping — the peak, the crossings around it, the decay between extrema — beside the analytic `Jeff` prediction, because two routes to one number is what makes either usable. **Period 3166-3868 steps, a 1.22x span against the analytic 1.13x; decay 5.6x per cycle, so 2.3 cycles and a memory to 2% of ~7,850 raw steps** — against a program lap of 7,356, which is why no FIR window can reach the memory without spanning the lap. Its FIRST estimator detrended with a moving mean LONGER than the period and duly reported "no ring anywhere, coherence exactly 0.000", the signature of an instrument that found nothing (rule 17) — and the same fault §52.34 had just criticised in §52.16. |
 | `test/pilot/timescales.mjs` | **Not a test — IS THIS CELL A MACHINE, AND WHAT SETS ITS RISE? (plan §52.28).** Three things from the constants the plant is built from and from the plant itself: the MODE TABLE (the position loop's bandwidth against each gearbox two-mass mode and each link's first cantilever mode — the bench cell's slowest structural mode is **1.9x** the loop where a real arm has 5-20x, and the lattice's elastic CFL caps E near 0.24 so 5.0x is about the widest this simulator can build); the BANDWIDTH SWEEP (the rise tracks the loop: 5156 / 2745 / 943 / 636 / 509 steps at bw 5e-4 → 8e-3); and the HORIZON AUTHORITY, the fraction of the response delivered inside a given window. |
@@ -1795,6 +1842,23 @@ deployment (1.44x, 3.24x), its standing explanation — the 951-step lag — was
 remedy, so the cause is unestablished and rule 35 is the live candidate. Every additive-term-at-
 full-bandwidth route has been tried; entering the deviation through a SLOWLY ADAPTED PARAMETER of
 the feedforward map, at a bandwidth far below the measured 3,400-step ring, has not.
+**AND IT NOW HAS BEEN, AND IT IS THE SEVENTH NEGATIVE — WITH THE PREMISE UNDERNEATH IT REFUTED TOO
+(plan §52.44).** A slow scalar MULTIPLYING the row is a different object from one ADDED to it: it
+changes the map's shape and contributes nothing of its own, so at s = 0 the controller is exactly
+what ships, and its bandwidth is the smoother's rather than the loop's. Measured leave-one-program-
+out before any build, every modulated row is BELOW the window alone (0.838 / 0.817 / 0.856 at 256 /
+1024 / 4096 steps against **0.870**) while in-sample RISES from 0.953/0.854 to 0.971/0.934 — three
+times the columns, better in sample, worse where it counts, which is this arc's signature for the
+seventh time and rule 36 arriving exactly where the design invited it. **And the premise is the more
+useful half**: read the ADDITIVE column as a function of the smoother and 256 steps keeps the content
+(0.951) but 256 steps is INSIDE the 3,400-step ring rather than below it — it is not the slow
+parameter the route needed, and it is the bandwidth §52.27 already deployed at 1.44x/3.24x — while
+1024 and 4096, which genuinely are below the ring, read 0.861 and 0.847, level with the window alone.
+**There is no smoothing both slow enough to be safe and informative enough to be worth entering**,
+which is a property of the signal rather than of the entry mechanism and therefore closes both. What
+remains open is the MACHINE (§52.30's 1.13x-1.29x from the drive and the loop) and the INSTRUMENT
+(§52.42's 3.9x between the tracker and the best mounted alternative) — things the customer buys
+rather than things the controller computes.
 **AND IT IS NOW SHIPPED — THE MEASURED BEST IS THE DEFAULT AND THE APP RUNS IT (plan §52.37).**
 Everything §52.33 measured sat behind environment variables. Three changes make it the shipped
 configuration, each with the control that licenses it. **One servo constant**: `bandwidth: 2e-3`

@@ -126,9 +126,40 @@ const resonators = (P) => {
 };
 const RES = new Map();
 const resRow = (P, k) => { if (!RES.has(P.name)) RES.set(P.name, resonators(P)); return Array.from(RES.get(P.name)(k)); };
+// THE DEVIATION AS A SLOW PARAMETER OF THE MAP, NOT AS A TERM ADDED TO IT (plan §52.42).
+// §52.27 measured that the newest measured DEVIATION carries the content the reference window
+// lacks (0.836 -> 0.962) and §52.26/§52.27 measured that DEPLOYING it fails (1.44x offline-fitted,
+// 3.24x fitted in the loop, both below the 6.04x of the map without it). §52.33 then measured the
+// obvious remedy — SMOOTH it, so the correction has almost no gain at the frequency that rings —
+// and found it worth LESS the more it is smoothed (0.906 / 0.756 / 0.664 at 256 / 1024 / 4096,
+// the last two BELOW the window alone). That is the ADDITIVE form, and it is refuted.
+//
+// This is the multiplicative one, and it is a different object. A slow scalar ADDED to the
+// correction contributes its own value; the same scalar MULTIPLYING the row changes the map's
+// SHAPE without contributing anything of its own — at s = 0 the deployed controller is exactly
+// the shipped one. So it is gain scheduling on a slow measured state rather than feedback
+// through it, its bandwidth is the smoother's rather than the loop's, and it cannot excite the
+// 3,400-step ring at any gain. It is addressed by the machine's STATE, so it is admissible under
+// the retirement, and it is the one route §52.36 left open.
+//
+// THE RISK IS RULE 36 AND LOPO IS WHY THIS IS THE TEST. A scalar smoothed over thousands of steps
+// is nearly constant within a program, so a modulated row can key WHICH PROGRAM is running and
+// score beautifully in sample. A held-out program's scalar was never seen, so LOPO is the column
+// that decides — and in-sample rising while LOPO falls is the signature this arc has produced six
+// times already.
+const devSlow = (P, k, W) => { const a = [0, 0]; let n = 0;
+  for (let j = k - W; j <= k; j += S) { const m = at(P, j), q = refSample(P, j); a[0] += m[0] - q[0]; a[1] += m[1] - q[1]; n++; }
+  return [a[0] / (n || 1), a[1] / (n || 1)]; };
+// The row, then the row scaled by each slow scalar. Column scale is irrelevant — `fit` standardises
+// every column by its own rms before the ridge — so no constant is chosen here (rule 32).
+const modRow = (P, k, W) => { const r = refRow(P, k), sc = devSlow(P, k, W), out = r.slice();
+  for (const m of sc) for (const x of r) out.push(m * x); return out; };
 const sets = { 'A: reference window only (the shipped shape)': (P, k) => refRow(P, k),
   'R:  + a RESONATOR BANK driven by the reference': (P, k) => [...refRow(P, k), ...resRow(P, k)],
   'Rs: + the bank, pose-scheduled': (P, k) => [...refRow(P, k), ...schedRow(resRow(P, k), refSample(P, k), [])],
+  'M256:  window MODULATED by the deviation averaged over 256 steps': (P, k) => modRow(P, k, 256),
+  'M1024: window MODULATED by the deviation averaged over 1024 steps': (P, k) => modRow(P, k, 1024),
+  'M4096: window MODULATED by the deviation averaged over 4096 steps': (P, k) => modRow(P, k, 4096),
   'Fa256:  + deviation AVERAGED over the last 256 steps': (P, k) => [...refRow(P, k), ...devAvg(P, k, 256)],
   'Fa1024: + deviation AVERAGED over the last 1024 steps': (P, k) => [...refRow(P, k), ...devAvg(P, k, 1024)],
   'Fa4096: + deviation AVERAGED over the last 4096 steps': (P, k) => [...refRow(P, k), ...devAvg(P, k, 4096)],
