@@ -14144,3 +14144,60 @@ identify a plant from the logs and require it to predict a HELD-OUT cut → the 
 scored on a part the fit never saw against target 1's "none made worse" → the roughing geometry
 schedule scored on breaks-per-metre with the gap servo untouched underneath, which must not
 increase breaks. Nothing above is measured.
+
+#### §54.1 THE BREAK-RISK SOFT SENSOR — the object that reaches roughing, where preview does not
+
+§54's table closed the third roughing row ("deciding how close to the boundary to sit") as
+"not this". That was right about the DISTILLED POLICY and wrong as a verdict on the problem: a
+preview feedforward has nothing to say to a stochastic constraint, but a RISK ESTIMATOR is the
+correct instrument for one. `docs/edm.md` §6 is that object — a soft sensor estimating how close
+a cut is to breaking, driving a slow outer loop that trims the feedrate reference under the
+existing gap servo, which is untouched. Same relationship the pilot has to all seven plants
+(§52.32): there is always a loop already closed and this corrects its reference.
+
+**IT IS THE CHEAPEST-INSTRUMENT CASE THIS PROJECT HAS BEEN LOOKING FOR.** The north star's hardest
+open problem is metrology — §50.1 prices an exact tracker at 1.50x-2.3x over noisy readings and
+§52.42 at 3.9x over the best permanently-mounted alternative, with motor encoders alone worth
+nothing at all. This loop has no such problem: its inputs come off the gap electronics that exist
+to run the generator, and its ground truth is "the wire broke", which the machine cannot fail to
+notice. No tracker, no part measurement, no lap index, addressed by machine STATE — admissible
+under the retirement by construction.
+
+Five hazards, and the useful thing is that every one is this project's own rule arriving BEFORE
+the build rather than after it:
+
+- **Rule 36 in a new costume.** Breaks are rare; a model with hundreds of features and twenty
+  positives is a memory of twenty events. Learn the DENSE precursor — consecutive-arc run length,
+  arc fraction, ignition-delay collapse, retract frequency — which fires thousands of times an
+  hour, and calibrate precursor→break separately on the handful of real events, where a handful
+  suffices for a two-parameter stage.
+- **Rule 17 before the physics.** "5%" is not a quantity until the exposure is named, and a
+  per-SECOND probability moves with the feedrate that the loop is controlling — it would chase its
+  own denominator. The well-posed target is breaks per METRE.
+- **The costs are asymmetric** (a break is a rethread and a scrapped part; slowing 10% is
+  seconds), so regulate an UPPER CONFIDENCE BOUND rather than a mean, and rate-limit
+  asymmetrically: back off fast, recover slowly.
+- **Rule 35 is the one that will bite.** A soft sensor inside a loop is positive feedback unless
+  trained over the operating points the loop will occupy, and this loop drives the machine
+  precisely to the states the model has least data on. Dither the feedrate at commissioning; the
+  price is on record at ~8% of accuracy.
+- **Rule 33: success removes the evidence.** If it works the machine stops breaking wire and the
+  model stops being told it is right — excellent immediately, bad slowly, invisible to a short
+  test. The precursor design is what survives this, and it is the strongest argument for it:
+  near-misses keep firing at full rate after breaks have stopped.
+
+**THE FALSIFIER IS CHEAP AND RUNS FIRST (rule 1).** §52.26 is the transplant — a forecast good to
+R² 0.96 was worth nothing on the arm because the plant could not answer inside the time the
+prediction stayed true. So: from logged cuts, does arc fraction separate the seconds before a
+break from ordinary cutting, and if so with what LEAD TIME against the gap state's own settling
+after a feed step? Both are readable off existing logs with no model at all, and if the separation
+is clean the controller may be a threshold and a rate limiter with no learning in it — which this
+project has repeatedly paid for skipping. The logging spec is extended for exactly this: the
+pre-break buffer goes 5 s → **30 s** (a window sized to the answer you expect is not an
+instrument), cumulative cut LENGTH is logged so a per-metre hazard is computable at all once the
+feed has been varying, and near-miss events are logged as first-class because they are the dense
+labels the whole design rests on.
+
+Nothing in §54.1 is measured, and the shape is a real build rather than a re-parameterisation:
+every soft sensor in `lib/` is a REGRESSOR onto a continuous target, and this is a hazard model
+with rare, asymmetric, censored labels.

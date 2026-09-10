@@ -133,9 +133,11 @@ that can be in place when the error arrives"*).
 |---|---|
 | gap regulation against the arcing boundary | **no** — stochastic, not a function of the reference. Keep the conventional gap servo. |
 | geometry-scheduled feed (corners, height steps, entry/exit, flushing regime) | **yes** — this is preview on the commanded reference |
-| deciding how close to the boundary to sit | **no** — that is a constraint/economics problem, not this |
+| deciding how close to the boundary to sit | **not the distilled policy — but a DIFFERENT object reaches it, and §6 is that object** |
 
-The second row is worth having: it is the row the wire actually breaks on.
+The second row is worth having: it is the row the wire actually breaks on. The third row is not
+closed, and §6 is the route into it: a risk estimator is the correct instrument for a stochastic
+constraint, where a preview feedforward is not.
 
 ---
 
@@ -214,7 +216,9 @@ At the per-cut rate:
 |---|---|
 | **the measured part** — CMM or comparator profile, indexed by position along the contour | the commissioning truth. This is the whole finishing route. |
 | surface finish (Ra) per pass, per region if it varies | the finishing objective's other axis |
-| wire breaks: timestamp, position along the contour, and the 5 s of log preceding | the roughing objective. Every break is one labelled example of the boundary, and there are never many. |
+| wire breaks: timestamp, position along the contour, and the **30 s** of log preceding | the roughing objective. Every break is one labelled example of the boundary, and there are never many. **30 s and not 5**: §6's whole falsifier is the LEAD TIME distribution, and a buffer shorter than the warning cannot measure it — a window sized to the answer you expect is not an instrument (rule 17). |
+| **cumulative cut LENGTH, and arc position along the contour, at the cyclic rate** | the EXPOSURE. A hazard is breaks per metre, and per-metre cannot be recovered from a per-second log once the feedrate has been varying (§6, item 2). |
+| **near-miss events: retracts, generator fold-backs, adaptive-control interventions, with timestamps** | the DENSE labels §6 rests on. These fire thousands of times an hour where breaks fire twenty, and unlike breaks they keep firing after the loop starts working — which is what stops rule 33 blinding the model it trained. |
 
 Two things about that list are load-bearing:
 
@@ -244,3 +248,118 @@ Two things about that list are load-bearing:
 
 **What is not claimed:** none of the above is measured. This document exists so that when it is,
 the predictions can be read against what was written before the measurement rather than after.
+
+---
+
+## 6. THE BREAK-RISK SOFT SENSOR — A SLOW OUTER LOOP ON FEEDRATE
+
+**This is a different object from everything above and that is why it reaches the row preview
+cannot.** Not a feedforward addressed by the commanded reference — a SOFT SENSOR estimating a
+quantity nobody can measure directly (how close this cut is to breaking), driving a slow
+constraint-following loop on feedrate. It is addressed by the machine's own STATE, so it is
+admissible under the memory retirement; it needs no tracker, no laser, no part measurement and no
+lap index; and the labels it learns from are produced by the machine's own electronics for free.
+
+That last point is worth stating on its own, because the north star's hardest open problem is the
+instrument. §52.42 priced the tracker at **3.9x over the best permanently-mounted alternative**
+and encoders alone at nothing at all. **This loop's instrument problem does not exist**: pulse
+classification comes off the gap electronics that already exist to run the generator, and the
+ground truth is "the wire broke", which the machine cannot fail to notice. Of everything in this
+document it is the cheapest to commission by a wide margin.
+
+### What it is, structurally
+
+```
+  hazard h(t)  =  f( pulse-class fractions, ignition-delay statistics, their recent history,
+                     wire tension/wear, flush pressure, and the commanded geometry ahead )
+  feedrate     :  slow outer loop holding an UPPER CONFIDENCE BOUND on h at a set point,
+                  under the existing gap servo, which is untouched.
+```
+
+Two loops on one machine, at separated rates: the gap servo regulates the gap as it always did;
+this trims the feed *reference* it works against. Same relationship the pilot has to every one of
+the seven plants — there is always a loop already closed and this corrects its reference (§52.32).
+
+### Six things that will decide whether it works, five of them already named in the rules
+
+**1. PREDICT THE PRECURSOR, NOT THE BREAK — otherwise it is rule 36 with a new costume.** Breaks
+are rare. A hundred hours of cutting might give twenty positive labels, and a model with hundreds
+of features and twenty positives is a memory of twenty events, scoring beautifully in sample and
+worthless on the twenty-first. **The dense labels are the near-misses**: consecutive-arc run
+length, arc fraction over a window, ignition-delay collapse, short-circuit retract frequency.
+Those fire thousands of times an hour, on every cut, whether or not anything breaks. Learn the
+dense thing; calibrate the rare mapping from precursor to break separately, on the handful of real
+events, where a handful is enough because that second stage has one or two parameters.
+
+**2. "5%" IS NOT A QUANTITY UNTIL YOU NAME THE EXPOSURE — rule 17 before the physics.** 5% per
+what? A per-second probability and a per-metre probability differ by the feedrate, which is the
+very thing being controlled, so a set point stated per unit TIME moves as the loop acts on it —
+the loop would chase its own denominator. The well-posed target is a **HAZARD RATE: expected
+breaks per metre of cut** (or per part). Then "5%" becomes "0.05 breaks per part", the loss is in
+the units the shop actually cares about, and the set point does not move when the feed does. This
+is the units error this project has paid for three times, arriving before anything is built.
+
+**3. THE COST IS WILDLY ASYMMETRIC, SO THE MEAN IS THE WRONG STATISTIC.** A break costs a
+rethread, likely a scrapped part, and minutes; slowing 10% costs seconds. So the loop should
+regulate an **upper confidence bound** on the hazard, not its expectation — act on what the
+estimate does not rule out — and its rate limits should be asymmetric: **back off fast, recover
+slowly**. That is also what a good operator does, and it is what the Karalic set records them
+doing.
+
+**4. RULE 35 IS THE ONE THAT WILL BITE. A soft sensor inside a loop is positive feedback** unless
+it was trained over the operating points the loop will occupy. Train the hazard model on an
+uncontrolled machine, close a loop on it, and the loop immediately drives the machine to states
+the model never saw — where its errors are unbounded and systematically in the direction that
+made it act. The project's own answer is on record and costs about 8% of accuracy: **dither the
+feedrate during commissioning**, so the model keeps seeing both sides of its own threshold.
+
+**5. RULE 33: SUCCESS AT CANCELLING A DISTURBANCE REMOVES THE EVIDENCE OF IT.** If the loop
+works, the machine stops breaking wire — and the model stops receiving the labels that told it it
+was right. It then drifts, silently, with no signal that anything is wrong: excellent immediately,
+bad slowly, invisible to a short test, which is the worst shape a failure can have. **The
+precursor design in (1) is what saves this**, and it is the strongest argument for it: near-misses
+keep firing at full rate even when breaks have stopped, so the dense half of the model stays
+supervised for ever. Only the rare calibration stage goes quiet, and that is the stage with two
+parameters rather than two hundred.
+
+**6. LEAD TIME AGAINST ACTUATOR RESPONSE IS THE FALSIFIER, AND IT IS CHEAP.** §52.26 is the
+transplant: on the arm, a forecast good to R² 0.96 was worth nothing because the plant could not
+answer inside the time the prediction stayed true. Here the same question is: **how many
+milliseconds of warning does the precursor give, against how long a feed change takes to alter the
+thermal and debris state of the gap?** If the warning is 20 ms and the gap state has 500 ms of
+memory, no estimator of any quality can help and the answer is a geometry schedule (§3) plus a
+more conservative set point. If it is seconds, this works and the modelling is the easy part.
+
+### The order, cheapest falsifier first (rule 1)
+
+Nothing here should be built before this runs, and it needs no model at all:
+
+1. **From logged cuts, plot arc fraction (or consecutive-arc run length) over the 30 s before every
+   break, against the same statistic over ordinary cutting.** If a plain moving average separates
+   them, you have your answer and possibly your controller — a threshold and a rate limiter, no
+   learning involved. Ship that and stop. This project has repeatedly paid for skipping the cheap
+   version, and here the cheap version might simply be the product.
+2. **If it separates, measure the LEAD TIME DISTRIBUTION** — how far ahead, and with what spread —
+   and put it beside the measured settling time of the gap state after a feed step. That is (6),
+   and it can kill the whole idea for the cost of reading two numbers off existing logs.
+3. **Only then** fit a hazard model, and only on dense precursor labels, validated
+   PREQUENTIALLY — every window scored before it is learned from — which is what `distil.js`
+   already does and cannot leak the way a shuffled split can.
+4. **Close the loop with dither**, per (4), and score it on **breaks per metre AND cut time
+   together**. Either alone is trivially winnable: infinitely slow never breaks.
+
+### What exists here already, and what does not
+
+`lib/probesense/` is the right home — *"soft-sensing a field from one point in it. Fed numbers;
+knows no physics"* — and `lib/ngrc/softsensor.js` already carries the guards this needs, each one
+earned: a frozen standardisation with a relative floor, a clamp, and ROLLING recalibration
+(rule 38, because a guard that latches off after its first success answers only an
+unrepresentative startup). What does NOT exist is the shape: every soft sensor in this repository
+is a REGRESSOR onto a continuous target, and this is a hazard model with rare, asymmetric,
+censored labels. That is a real build, not a re-parameterisation.
+
+**And it does not replace §2.** Finishing accuracy and roughing survival are different objectives
+with different instruments — the cut part and the gap electronics — and a machine wants both. This
+is the second loop, not a substitute for the first.
+
+**Nothing in this section is measured.**
