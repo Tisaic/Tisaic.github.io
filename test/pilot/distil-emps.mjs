@@ -1,5 +1,7 @@
 /**
- * @file THE DISTILLED POLICY ON A SECOND PLANT — a real servo axis, real data, no physics in
+ * @file THE DISTILLED POLICY ON A SECOND PLANT — a servo axis whose parameters were identified
+ * from a real machine's record (the rig is a SIMULATION; plan §55 corrects the wording this line
+ * used to carry), no physics in
  * common with the 2R arm.
  *
  * Plan §49's result is one plant. This asks whether its central claim holds on another: that what

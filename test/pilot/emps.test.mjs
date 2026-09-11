@@ -77,7 +77,7 @@ function check(name, cond, detail) {
   console.log(`  ${ok ? '✓' : '✗'} ${name}${(!ok && detail !== undefined) ? '  → ' + detail : ''}`);
   if (!ok) failed++;
 }
-console.log('\npilot: EMPS — a real servo axis, real data, and a conventional method that wins');
+console.log('\npilot: EMPS — a servo axis identified from a real record, and a conventional method that wins');
 
 import { GTAU, KP, KV, DT, VSAT, LSB, M1, FV1, FC1, OF1, PUB, VM, FRICTION, NB,
   P, PR, makeMachine } from './emps-rig.mjs';

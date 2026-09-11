@@ -2,7 +2,7 @@
  * @file THE SECOND PLANT'S CONTRACT (plan §50) — full tier.
  *
  * `lib/pilot/distil.js` is one plant's result until another plant carries it. This pins the EMPS
- * measurement so the numbers cannot rot: a real servo axis, real data, no physics in common with
+ * measurement so the numbers cannot rot: a servo axis identified from a real record, no physics in common with
  * the 2R arm, and a negative control this project did not choose — on a two-tone sine the axis has
  * never run, a converged lap table reads 0.53x, worse than doing nothing, and a textbook
  * norm-optimal ILC reads 0.53x there too (`noilcbench.mjs`).
