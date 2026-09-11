@@ -14201,3 +14201,260 @@ labels the whole design rests on.
 Nothing in §54.1 is measured, and the shape is a real build rather than a re-parameterisation:
 every soft sensor in `lib/` is a REGRESSOR onto a continuous target, and this is a hazard model
 with rare, asymmetric, censored labels.
+
+---
+
+### §54.2-§54.6 — SIX ITEMS, AND TWO OF THEM CORRECT A NORTH-STAR CLAIM
+
+Run back to back. Two are cheap repairs that stop future wrong conclusions, two are measurements
+that move a target, one is a build, one is a cleanup.
+
+#### §54.2 THE FILE'S OWN RED CLAIMS WERE STALE, IN THE DIRECTION RULE 4 NAMES
+
+Rule 4 says a failing check can be stale in EITHER direction and this file carried three claims of
+RED against a suite that is green — 887 checks, 0 failures, full node tier. The tank was repaired by
+`verifyRef` (the fix the same paragraph said it had to be, arrived at from the other end);
+Wood-Berry's "IAE 82.10 against the 72.08 recorded here" is stale TWICE, because that plant now
+**REFUSES** at a representative-regime 0.01x and delivers 43.90, which IS the do-nothing number, so
+the harmful deployment being reported no longer happens; and `stack.test.mjs`'s EMPS cascade still
+admits two layers rather than three — the BEHAVIOUR is unchanged and the test now asserts it. Two
+different reasons for one colour, which is why the row keeps the distinction rather than being
+deleted. A claim of RED goes stale exactly as a claim of green does, and this file is rendered
+in-app as current state.
+
+#### §54.3 THE SIX-PLANT PASS HAD THE FAULT IT WAS BUILT TO CLOSE
+
+CLAUDE.md recorded the diagnosis when the 2-iteration corner was made the default and reverted:
+"the pass measured six plants' HEADLINES while the contracts sat one level down, which is the same
+fault it was built to close." Nothing then changed, so a second default move would have shipped the
+same way. The pass ran six PLANT tests and scraped six headlines; the regression went red in
+`autostack.test.mjs` and `stack.test.mjs`, **neither of which is a plant test**. Both now run under
+every configuration, cheapest first, a red one short-circuits the rest of that configuration, the
+failing checks are NAMED so a red row does not send you to a 19-minute rerun to find out which, and
+the summary leads with contracts and prints DISQUALIFIED regardless of how the headline table reads
+(rule 27). `CONTRACTS=none` prints as a stated skip — UNVERIFIED, not verified (rule 25).
+
+**And it gained rule 61's own remedy, which was missing at the place a regression shipped from.**
+`setSolverDefaults` silently ignores an unrecognised knob and clamps the ones it knows, so a
+configuration this table PRINTS was not necessarily the one the plant COMMISSIONED with — two
+literals happening to agree is construction in name only. The child now prints its ACCEPTED
+defaults through `getSolverDefaults` and the parent compares, reporting CONFIG DRIFT per row. Both
+halves are pinned: at `qpIters` 0, which the library clamps to 1, it reads "qpIters asked 0 got 1".
+
+#### §54.4 THE DEPLOYED OBJECT ON A THIRD PLANT: IT REACHED, IT REFUSED, AND THE COUNT IS 2 OF 7
+
+**The gap was a misattributed number, not a missing one.** Under the retirement the deployed
+artefact is `distil.js`'s weight vector — `inventory.test.mjs` says so and `artefact.test.mjs` pins
+it — and `distil.js` is imported by exactly TWO plant harnesses. Every other plant scores
+`pilot.js`, which under that same retirement is the TEACHER. So "reusable across plants: 3 clear
+wins of 6" is a claim about a component that no longer ships, and the honest figure for what a
+customer receives was 2 of 7 before this and is 2 of 7 after it.
+
+`test/pilot/distil-tank.mjs` asks the tank, chosen over the mill deliberately: the recipe IS a
+commanded reference with structure, so a deploy is physically possible and the answer is informative
+either way, where the mill's exogenous eccentricity would make a refusal predicted by the
+architecture rather than measured (rule 16 in reverse). The shipped `RECIPE` appears in no training
+run.
+
+**The rung reached the plant, fitted 49,864 rows into 55 features at 162 MAC/decision, was scored on
+the machine, lost, and was reverted — 1.000x, nothing harmed.** The split that says why:
+
+```
+  the policy on its OWN training runs   14.512x  14.294x  20.769x  27.819x
+  the held-out shipped recipe            1.000x
+```
+
+So the map EXPRESSES this plant's correction easily and carries none of it across programs. That is
+TRANSFER — not the fit, not the basis, not the deploy path — and it reproduces §52.7's arm result on
+a plant sharing no physics with it.
+
+**Three diets, each fault found by measurement rather than guessed.** Quasi-static first: built at
+the shipped SEG of 4000 against a measured Tset of 2769, every ramp outlasts the plant, so the
+teacher "converged" at gains of 3.2e6-5.6e6 — not a controller result but the signature of a target
+already at zero (rule 14). Then out of envelope: at 0.5·Tset the lag is real and it still read
+EXACTLY 1.000x, which is a FADED correction and not a scored one — the diet ran 2.89x faster than
+production, so the scored program sat BELOW the trained speed span. That is §52.40's feedrate
+finding in mirror image and §52.41's remedy applies verbatim with no constant in it: bracket the
+production rate. A rate ladder of 1385/2770/4000/6000 does, and the transfer gap survived it.
+
+**The seed is not a control here and the harness now says so.** Seeds 1, 2 and 3 are BYTE-IDENTICAL
+— one draw three times, not three draws agreeing, because no cascade builds on this plant in this
+configuration so no seeded excitation ever runs. Identical numbers are a control only if the regime
+varied, which is rule 61's lesson aimed at a seed.
+
+**One library change, and it is a diagnosis change rather than a behaviour one.** A refused rung is
+REVERTED, so `this.distil` is gone by the time anything could examine it — and the one question that
+separates the two explanations for a refusal needs that object. `rep.distil.policy` now publishes
+the fitted policy on the report even when the rung is refused, kept in sync through the state refit.
+It is a report field; nothing reads it to correct the machine.
+
+#### §54.5 THE REFUSAL MECHANISM IS NOT THE ONE THE FILE DESCRIBES
+
+`autoRefuse` defaults to FALSE, and the shipped arm host passes `autoRefuse: false` explicitly. So
+the product's refusals do not come from the pilot's gate at all: they come from the LADDER, which
+scores every rung on the machine and calls `h.revert()` with "did not beat the cascade below it;
+weights reverted — NOT deployed". Two different mechanisms, and the north star's one SUPPORTED claim
+describes them as one. The gate matters where a bare `Pilot` is deployed directly — which is what
+the six plant tests do, and every one of them passes `autoRefuse: true` explicitly. Nothing needs to
+move; the file needs to say which mechanism it is claiming.
+
+#### §54.6 TARGET 4 WAS ALREADY MEASURED ON EVERY PLANT AND NOBODY COLLECTED IT
+
+Target 4 reads "MET ON THE ARM — 17 MINUTES TO 2" and records "WHAT IS NOT YET DONE: the same
+measurement on the other five plants". It was done. Every rig prints its own commissioning cost in
+its own process time on every full run — "421 min of process time", "91.2 h", "333 s of rolling" —
+six numbers never put in one table. `test/pilot/commtime.mjs` is that table, a SCRAPE rather than a
+re-measurement so no plant is re-scored by a metric this file invented:
+
+```
+  plant           steps      the PLANT's own time    target 4
+  cold mill       166,400        5.5 min          MET
+  quad tank       252,613          7.0 h          MISSED
+  barrel          328,270       3.8 days          MISSED
+  Wood-Berry       91,400       6.3 days          MISSED
+  EMPS             48,400              —          no clock — UNKNOWN
+  2R arm          165,643              —          no clock — UNKNOWN
+```
+
+**One of four plants that state a clock meets target 4, and the spread is 1643x.** The two that do
+not state one are UNKNOWN and not met (rule 25) — and the arm is the plant target 4 currently claims
+as MET, on a simulator's WALL CLOCK, from a rig that does not convert to plant time at all.
+
+**And steps and time rank differently, which is what settles it.** By steps Wood-Berry is the
+CHEAPEST commissioning here; by the clock its plant pays it is the most expensive, because one of
+its steps is six minutes of column. A target counted in steps, or in this repository's wall clock,
+is measuring the simulator.
+
+**The sharp consequence, which nothing here had priced: the two plants that REFUSE are the two most
+expensive to commission.** Wood-Berry spends 6.3 days to arrive at "no controller" and the barrel
+3.8 days to arrive at 0.22x and the same answer. The refusals are correct and are this project's
+strongest claim, and on the two plants where refusing is right it is the most expensive outcome
+available. Nothing in the north star prices a refusal.
+
+#### §54.7 DEAD CODE, AND WHAT WAS DELIBERATELY NOT DELETED
+
+Audited rather than guessed. Every exported symbol in `lib/` was checked for an external reference
+and every private one for any call at all; separately, all 72 ALLCAPS knobs CLAUDE.md names in
+backticks were checked against the code.
+
+REMOVED: `schedCount` and `polyCount`, arity helpers written beside the scheduling block and the
+polynomial lift and never called by anything; and the module-level `setCommitM`/`getCommitM`, a
+SECOND way to configure a per-instance option that no caller used — rule 61's shape exactly, a
+duplicate waiting for the two copies to disagree. The option stays; the default is now a constant.
+
+NOT REMOVED, with reasons, because deleting these would be the reasoning this file exists to
+prevent. `setLeadBasis`/`getLeadBasis` is an UNMEASURED PROPOSAL whose own comment names its
+decision procedure — "decided by the six-plant pass rather than by the argument that motivated it" —
+so the answer is to run it through the pass §54.3 just repaired, not to delete it. The remaining
+`get*` readbacks pair with live setters and are the mechanism rule 61 asks for; `getSolverDefaults`
+was one of them and is now load-bearing in §54.3, which is the argument for keeping its siblings.
+Exported constants like `NUM_SIGNALS` and `FORMAT_VERSION` are contract surface, not dead code.
+
+KNOB DRIFT: 1 of 72. `FLEX_LEARN_BROWSER` is named in CLAUDE.md and no longer exists in code — and
+it is narrated in the past tense by the paragraph that removed it (§52.45), so it reads as history
+rather than as a live knob. Nothing else has drifted, which is worth recording as a measurement
+rather than assumed.
+
+---
+
+### §54.8 TARGET 8, RIVAL TWO: DeePC — IT BEATS US ON A SIMULATOR AND IS WORTH NOTHING ON A MACHINE
+
+`test/pilot/deepc.mjs`. Data-enabled predictive control on the EMPS axis: by Willems' fundamental
+lemma one persistently exciting input/output trajectory spans every trajectory an LTI system can
+produce, so a Hankel matrix of raw data REPLACES the model inside a receding-horizon controller.
+
+**IT IS THE RIGHT SECOND RIVAL BECAUSE IT CONTESTS THE THING THAT SHIPS.** The deployed artefact is
+a map regressed from data with no plant model in it; DeePC is the literature's canonical form of
+that same claim. Modern MPC would contest the cascade and L1 an adaptive law this project does not
+ship. Held equal on the NOILC precedent: same machine, same program, same correction channel, same
+authority, and a data budget no larger than the shipped route's own commissioning. And the rival
+gets the sweep while ours runs at its defaults.
+
+**FIRST IT WINS, AND THE MARGIN GREW EVERY TIME THE GRID WAS WIDENED.** 1.97x at the first grid,
+whose best cell sat on its own EDGE; 17.87x when `lg` was extended six decades down; 142.78x when
+`lu` was bracketed too; **189.68x on the program and 131.82x on the held-out sine** at the widest.
+Against the distilled policy's 32.75x and 33.15x, that is a rival beating the shipped object by
+5.8x at home and 4.0x on the column this project says matters most — and it was still climbing.
+
+**A NUMBER THAT CLIMBS WITHOUT BOUND AS A REGULARISER GOES TO ZERO IS NOT A CONTROLLER CONVERGING**
+(rule 14). It is an unregularised Hankel solve approaching EXACT INTERPOLATION of its own data,
+which is available only because this rig is a DETERMINISTIC simulator — and it is precisely the
+regime regularised DeePC was invented to escape. So the deciding measurement is not the noiseless
+one, and publishing 189x without asking would have been this project's own recorded mistake in a
+new costume.
+
+**THE FALSIFIER FIRED, AND IT IS NOT CLOSE.** `NOISE=0.0016` puts 1.6 µm on what the CONTROLLER
+reads — not on the plant and not on the score — which is the rig's OWN stated instrument fidelity,
+the floor `autostack.test.mjs` already refuses to credit improvements below. Across **98 cells of
+its own knobs** the best DeePC can do is:
+
+```
+                      program            held-out sine
+  noiseless           189.68x            131.82x        (and still climbing as lg -> 0)
+  at 1.6 um             1.00x              1.00x        — it cannot act at all
+  at 1.6 um, at the settings that won noiseless
+                        0.04x              0.02x        — catastrophically worse than nothing
+```
+
+**And the cost columns say the rest.** 145,082 MAC/decision, **1451% of a 1 ms PLC scan's 10%
+budget**, against the distilled policy's 78 MAC at 0.8% — **1,860x more arithmetic**. And the
+instrument: DeePC needs `y_ini`, the measured TRACKING ERROR, at every decision for ever. That is
+the tracker the deployed object explicitly does not need at deploy and which §52.42 prices at 3.9x
+over the best mounted alternative. Not a tuning difference — a different product with a different
+bill.
+
+**WHAT TARGET 8 CAN NOW SAY.** Two literature methods have been built and run. Norm-optimal ILC
+agrees with `hff` to five figures including on the failure. DeePC beats everything here on a
+noise-free simulator, is worth exactly 1.00x at the noise level this rig already declares, does not
+fit the scan, and needs an instrument the product does not. The field is still not engaged —
+Koopman-EDMD, L1 and modern MPC remain absent, and two methods are not a field either — but the
+honest sentence has improved: *beats the conventional machine; beats an engineered truth-free rival
+on the arm; matches a published model-based feedforward at its own published parameters; and
+against a properly swept DeePC it loses on a deterministic rig and wins by 33x on one that has an
+instrument.*
+
+Stated and not measured: one axis, one program pair, a linear method on a plant with friction and
+quantisation (which disadvantages the rival on its own terms), and a noise model that is white where
+a real encoder's is not.
+
+#### §54.8b THE RECLASSIFICATION, AND WHAT AN ADMISSIBLE OPPONENT ACTUALLY IS
+
+§54.8 called DeePC "target 8, rival two". It is not a rival. It reads the measured tracking error at
+every decision for ever, and the deployed object measures NOTHING at runtime — that is the whole of
+the tracker claim and §52.42 prices the instrument at 3.9x. A method that keeps the commissioning
+instrument bolted on is answering a different question, so its numbers belong beside §48's
+perfect-forecast ORACLE. The work stands; the label was wrong.
+
+**THE ADMISSIBILITY TEST, stated once so it can be applied rather than re-argued.** A competitor must
+deploy with (a) no runtime truth, (b) no lap index or per-program table, (c) transfer to programs the
+commissioning never saw, (d) inside the scan budget. That rules out DeePC, MPC, L1 and every adaptive
+law, on the same ground — all need the instrument at runtime — and rules out ILC, NOILC and `hff` on
+the memory ground.
+
+```
+  ADMISSIBLE, BUILT, AND BEATEN
+    inverse-dynamics feedforward at published parameters   425x vs our 275x-equivalent  (EMPS)
+    engineered truth-free rival (rigid + Kalman + calib)   1.01/1.13/1.02 vs 2.87/7.72/6.18  (arm)
+    task-flexible / basis-function ILC, same harness       1.02x — i.e. nothing
+  ADMISSIBLE AND NOT BUILT — the only two that could still contest it
+    ZPETC / stable inversion
+    a NONLINEAR learner on the identical rows
+  INADMISSIBLE (runtime instrument)   DeePC, MPC, L1, MRAC
+  INADMISSIBLE (memory)               ILC, NOILC, hff, any phase-indexed table
+```
+
+**SO "CUTTING EDGE, BEST IN CLASS" IS NOT SUPPORTABLE TODAY, AND THE GAP IS SPECIFIC.** Every
+admissible rival beaten so far is conventional or 1980s-vintage. The two that remain are exactly the
+two unbuilt, and the second falsifies this project's own central negative: §52.36 concludes "the
+information the commanded reference carries about the correction is exhausted at R² ~0.84, so no
+basis will move it" — and all six experiments behind it were LINEAR-IN-PARAMETERS ridge with
+different features. An MLP or GP on the same window is a different FUNCTION CLASS, not more
+features. If it also reads ~0.84 leave-one-program-out, the ceiling is confirmed by a method that
+could have broken it, which is far stronger than six linear variants; if it reads higher, this
+project has been denying headroom it has. It needs no machine time — `consist.mjs` and
+`stateaug.mjs` already build the rows.
+
+**THE DEFENSIBLE SENTENCE TODAY**: beats the conventional machine on every plant it deploys on;
+beats an engineered truth-free rival on the arm; beats published inverse-dynamics feedforward at its
+own published parameters; beats lap-indexed ILC by ~60x on unseen trajectories while losing ~7x at
+home; and has never been compared to the two methods that would actually contest it.

@@ -1,0 +1,268 @@
+/**
+ * @file THE DEPLOYED OBJECT ON A THIRD PLANT — and the reason it had to be asked (plan §54.4).
+ *
+ * THE GAP THIS CLOSES IS NOT A MISSING NUMBER, IT IS A MISATTRIBUTED ONE. Under the memory's
+ * retirement the deployed artefact is `distil.js`'s weight vector and nothing else —
+ * `test/inventory.test.mjs` says so, `lib/pilot/deploy.js` reimplements it, and
+ * `test/pilot/artefact.test.mjs` pins the two bit-identical. But `distil.js` is imported by
+ * exactly TWO plant harnesses, the arm and the EMPS axis. Every other plant here — the tank,
+ * Wood-Berry, the mill, the barrel, the cart-pole — scores `pilot.js`, which under that same
+ * retirement is the TEACHER and not the product.
+ *
+ * So CLAUDE.md's "reusable across plants: 3 clear wins of 6" is a claim about a component that no
+ * longer ships. The honest figure for the thing a customer receives is 2 of 7, and it stays 2 of 7
+ * until a third plant is asked. This asks the tank.
+ *
+ * WHY THE TANK AND NOT THE MILL. The distilled policy is a map of a WINDOW OF THE COMMANDED
+ * REFERENCE, so the only plants it can possibly help are ones whose error is a function of that
+ * reference. The tank's recipe IS a commanded reference with structure — ramps and holds in pump
+ * volts — so a deploy is physically possible there and the measurement is informative either way.
+ * The mill's dominant error is roll eccentricity, an EXOGENOUS periodic disturbance that the
+ * commanded reference carries no information about, so a refusal there would be predicted by the
+ * design rather than measured from it (rule 16 in reverse: do not spend a commissioning to
+ * confirm what the architecture already states). The mill is the right SECOND question and the
+ * wrong first one.
+ *
+ * WHAT IS HELD OUT. The shipped `RECIPE` from `rigs/tanks-rig.mjs` — the exact program
+ * `tanks.test.mjs` scores — appears in NO training run. The diet is built from the same generator
+ * at other level pairs, which is the tank's analogue of the arm's polygon diet: the same class of
+ * program at other parameters, never the production geometry (§49.11).
+ *
+ * EITHER OUTCOME IS A RESULT, and the file states which before running (rule 27, and §52.32's
+ * lesson that a claim checked after the fact is worth less than one checked before):
+ *   DEPLOYS AND HELPS  -> the product is 3 of 7, and the retirement has a plant it was not built on
+ *   REFUSES            -> the product is 2 of 7 and CLAUDE.md's plant-agnosticism line needs
+ *                         rewriting to say whose claim it is. A refusal is still target 3's
+ *                         improve-or-refuse-with-a-reason, and the reason is what this prints.
+ *   DEPLOYS AND HARMS  -> the gate failed on a plant where `verifyRef` was supposed to have fixed
+ *                         exactly that, which would be the most valuable outcome of the three.
+ *
+ * Run: SUITE=full node test/pilot/distil-tank.mjs   [SEEDS=1,2]  [GRADE=fast]
+ */
+import { AutoStack } from '../../lib/pilot/autostack.js';
+import { UCAP, makeTanks, voltsFor, SEG, HOLD, RECIPE, quintic, refAtStep, PROG }
+  from './rigs/tanks-rig.mjs';
+
+if (process.env.SUITE !== 'full') {
+  console.log('\ndistil-tank: SKIPPED (full tier only — one commissioning per seed)\n');
+  process.exit(0);
+}
+
+const G = [0.70, 0.60];
+
+// THE REACH, DERIVED (see the `distil` block below). Tset 2769 x 0.61 = 1688 raw steps each way.
+const REACH = 1688;
+const OFFSETS = [0, 8, 16, 32, 64, 128, 224, 352, 512, 736, 1024, 1344, REACH]
+  .flatMap((o) => (o === 0 ? [0] : [-o, o])).sort((a, b) => a - b);
+const SEEDS = (process.env.SEEDS || '1').split(',').map(Number);
+let failed = 0;
+const check = (name, cond, detail) => {
+  console.log(`  ${cond ? '✓' : '✗'} ${name}${cond ? '' : `  → ${detail}`}`);
+  if (!cond) failed++;
+};
+console.log('\ndistil-tank: the DEPLOYED object on a third plant\n');
+
+// ---------------------------------------------------------------- the diet
+// THE SAME GENERATOR AT OTHER LEVEL PAIRS. Not the shipped recipe, and not a different KIND of
+// program: the arm's diet is polygons from the block's own designer and this is its analogue.
+// Each is CYCLED so it has a lap, which is what the distilled rung's teacher needs — a batch
+// recipe that repeats is an ordinary process, not a contrivance.
+const DIETS = [
+  [[9.8, 11.4], [12.9, 9.3], [9.1, 12.1], [11.8, 10.2]],
+  [[11.2, 9.9], [8.9, 12.4], [12.6, 10.8], [10.1, 11.1]],
+  [[10.2, 12.2], [13.1, 10.4], [9.6, 9.4], [11.4, 12.6]],
+  [[12.4, 11.0], [9.4, 10.6], [11.9, 12.9], [10.6, 9.1]],
+];
+
+// THE DIET'S RATE LADDER, AND IT TOOK TWO WRONG DIETS TO ARRIVE AT, BOTH RECORDED.
+//
+// FIRST WRONG DIET — QUASI-STATIC. Built at the shipped recipe's SEG of 4000 against this plant's
+// measured Tset of 2769, every ramp gives the tank longer than a full settle, so it tracks its own
+// commanded steady state almost exactly and there is nearly NO dynamic error to teach from. The
+// teacher duly "converged" the training runs at gains of 3.2e6 to 5.6e6 — not a controller result,
+// the signature of a target that is already zero (rule 14: a surprising measurement is a reason to
+// check the instrument). That is rule 41b aimed at a training diet, which §50 paid for once.
+//
+// SECOND WRONG DIET — OUT OF THE SCORED PROGRAM'S ENVELOPE. Shortening every segment to 0.5·Tset
+// made the lag real (gains fell to 4e4-4e5) and the rung still refused at EXACTLY 1.000x, which is
+// the signature of a FADED correction rather than a scored one: the diet's ramps run 2.89x faster
+// than the shipped recipe's, so the production program sits BELOW the commanded-speed span the fit
+// saw and the coverage guard fades the correction to zero. That is §52.40's feedrate finding in
+// mirror image — there the diet was commanded at the top of its own range and production had no
+// headroom ABOVE it — and §52.41's remedy is the same and has no constant in it: BRACKET the
+// production rate rather than sitting to one side of it.
+//
+// So the diet is a RATE LADDER around the shipped SEG of 4000, one recipe per rate, spanning
+// 0.5·Tset to 1.5x the production segment. The holds keep the shipped recipe's 30% duty, so what
+// varies across the ladder is the RATE and not the shape.
+const DSEGS = [Math.round(0.5 * 2769), 2770, SEG, Math.round(1.5 * SEG)];
+const holdOf = (seg) => Math.round(seg * (HOLD / SEG));
+/** One recipe's reference in LEVELS, at raw step k, cycled at its own lap. */
+const refOf = (rec, seg) => (k) => {
+  const lap = seg * rec.length, hold = holdOf(seg);
+  const kk = ((k % lap) + lap) % lap;
+  const i = Math.floor(kk / seg);
+  const t = (kk - i * seg - hold) / (seg - hold);
+  const s = t <= 0 ? 0 : t >= 1 ? 1 : quintic(t);
+  const a = rec[i], b = rec[(i + 1) % rec.length];
+  return [a[0] + (b[0] - a[0]) * s, a[1] + (b[1] - a[1]) * s];
+};
+
+/** Settle the plant at a recipe's own start, so no run is scored across its startup (rule 13). */
+function settled(rec, seg) {
+  const p = makeTanks(G);
+  const h0 = refOf(rec, seg)(0), v0 = voltsFor(G, h0[0], h0[1]);
+  for (let i = 0; i < 30000; i++) p.step(v0[0], v0[1]);
+  return p;
+}
+
+// ---------------------------------------------------------------- the ladder
+async function once(seed) {
+  const auto = new AutoStack({
+    // ROUTED EXACTLY AS `tanks.test.mjs` ROUTES IT — same signals, same box, same guard, same cap.
+    // If this harness gave the plant a different envelope it would be measuring a different plant
+    // and the comparison against that file's numbers would be worthless (rule 20).
+    nMeasured: 4, channels: [0, 1].map(() => ({ lo: 2.0, hi: 3.6, vMax: 4e-3, aMax: 2e-5, jMax: 2e-7 })),
+    uMax: UCAP, guards: [{ index: 0, max: 19 }, { index: 1, max: 19 }],
+    workspace: () => true, seed,
+    classic: false, maxDepth: 1, periodic: false,
+    // THE WINDOW IS RE-DERIVED FROM THIS PLANT'S OWN MEASURED SETTLE, not carried from the arm
+    // (rule 31, which names the scoring window and the ridge among the constants this project has
+    // carried and been wrong about). The arm's shipped ladder reaches ±2048 raw steps against its
+    // own Tset of 3360 — a reach of 0.61·Tset each way — and `tanks.test.mjs` measures THIS plant
+    // at Tset 2769, so the same reach is ±1688. The ladder below is that number with the arm's
+    // geometric SHAPE, which is the part that is a design and not a constant: dense near now
+    // where the correction is decided, sparse far out where it only has to span the memory.
+    distil: { refDim: 2, ridge: 1e-6, offsets: OFFSETS },
+  });
+
+  const start = voltsFor(G, RECIPE[0][0], RECIPE[0][1]);
+  auto.start = start;
+
+  /** The SHIPPED recipe — held out of training, and the only thing scored. */
+  const run = async (corr) => {
+    const p = makeTanks(G);
+    for (let i = 0; i < 30000; i++) p.step(start[0], start[1]);
+    let s2 = 0, n = 0, uPk = 0;
+    const e0 = new Float64Array(PROG), e1 = new Float64Array(PROG);
+    for (let k = 0; k < PROG; k++) {
+      const h = refAtStep(k), v = voltsFor(G, h[0], h[1]);
+      const u = corr ? corr.at(k) : [0, 0];
+      uPk = Math.max(uPk, Math.abs(u[0] || 0), Math.abs(u[1] || 0));
+      p.step(v[0] + (u[0] || 0), v[1] + (u[1] || 0));
+      auto.observe([p.h[0], p.h[1], p.h[2], p.h[3]]);
+      e0[k] = p.h[0] - h[0]; e1[k] = p.h[1] - h[1];
+      if (k > SEG) { s2 += (p.h[0] - h[0]) ** 2 + (p.h[1] - h[1]) ** 2; n += 2; }
+    }
+    return { score: Math.sqrt(s2 / n), err: [e0, e1], uPk };
+  };
+
+  /** The training diet: four recipes the scored program is not one of. */
+  const distilRuns = () => DIETS.map((rec, di) => {
+    const seg = DSEGS[di % DSEGS.length];
+    const lap = seg * rec.length, ref = refOf(rec, seg);
+    return {
+      lap,
+      refAt: (k) => { const h = ref(k); return voltsFor(G, h[0], h[1]); },
+      run: async (corr) => {
+        const p = settled(rec, seg);
+        let s2 = 0, n = 0;
+        const e0 = new Float64Array(lap), e1 = new Float64Array(lap);
+        for (let k = 0; k < 3 * lap; k++) {
+          const kk = ((k % lap) + lap) % lap;
+          const h = ref(k), v = voltsFor(G, h[0], h[1]);
+          const u = corr ? corr.at(kk) : [0, 0];
+          p.step(v[0] + (u[0] || 0), v[1] + (u[1] || 0));
+          if (k >= 2 * lap) { e0[kk] = p.h[0] - h[0]; e1[kk] = p.h[1] - h[1]; }
+          if (k >= lap) { s2 += (p.h[0] - h[0]) ** 2 + (p.h[1] - h[1]) ** 2; n += 2; }
+        }
+        return { score: Math.sqrt(s2 / n), err: [e0, e1] };
+      },
+    };
+  });
+
+  const rep = await auto.commission({ run, distilRuns });
+
+  // THE SPLIT THAT SAYS *WHY*, and the one `distil-arm.mjs` exists to make: score the fitted
+  // policy on its OWN TRAINING RUNS. Helps them and refuses the held-out recipe -> TRANSFER, and
+  // the diet or the plant's program-to-program similarity is the subject. Cannot help even the
+  // programs it was fitted on -> the map cannot EXPRESS this plant's correction, and no diet fixes
+  // that. Without this column a refusal has two explanations and the table cannot tell them apart.
+  let inSample = null;
+  if (rep.distil && rep.distil.policy) {
+    const pol = rep.distil.policy;
+    inSample = [];
+    for (const r of distilRuns()) {
+      const bare = await r.run(null);
+      const withP = await r.run({ at: (k) => pol.actLook((o) => r.refAt(k + o)) });
+      inSample.push(bare.score / withP.score);
+    }
+  }
+  return { auto, rep, inSample };
+}
+
+// ---------------------------------------------------------------- the run
+const results = [];
+for (const seed of SEEDS) {
+  const t0 = Date.now();
+  const r0 = await once(seed);
+  const { auto, rep } = r0;
+  const secs = Math.round((Date.now() - t0) / 1000);
+  console.log(auto.table());
+  const shipped = JSON.stringify(rep.deployed);
+  console.log(`    seed ${seed}: shipped ${shipped}  ${rep.base.toExponential(4)} -> `
+    + `${rep.best.toExponential(4)} cm rms   ${rep.gain.toFixed(3)}x   ${secs}s`);
+  // THE RUNG'S OWN REPORT, read from the object rather than from a field this harness invented.
+  if (rep.distil) console.log(`    ②d report: ${JSON.stringify(rep.distil).slice(0, 400)}`);
+  if (r0.inSample) {
+    console.log(`    IN SAMPLE — the policy on its OWN training runs: `
+      + r0.inSample.map((x) => x.toFixed(3) + 'x').join('  '));
+  } else {
+    console.log('    IN SAMPLE — not scored: the rung published no policy to score (a refusal before the fit)');
+  }
+  results.push({ seed, rep, inSample: r0.inSample,
+    deployedDistil: !!(rep.deployed && rep.deployed.distil), gain: rep.gain });
+}
+
+// ---------------------------------------------------------------- what it means
+const anyDeploy = results.some((r) => r.deployedDistil);
+const worst = Math.min(...results.map((r) => r.gain));
+
+if (SEEDS.length > 1) {
+  const sig = results.map((r) => (r.inSample || []).map((x) => x.toFixed(6)).join(','));
+  const same = sig.every((x) => x === sig[0]);
+  console.log(`\n  ${same
+    ? 'SEEDS ARE BYTE-IDENTICAL — and that is ONE draw N times, not N draws agreeing: no cascade\n'
+      + '    builds here, so no seeded excitation runs. A spread on this plant needs the DIET varied.'
+    : 'the seeds differ, so the spread below is a real distribution'}`);
+}
+console.log('\n  THE QUESTION THIS FILE EXISTS TO ANSWER:');
+console.log(`    the deployed object reached a third plant: ${anyDeploy ? 'YES — it DEPLOYED' : 'NO — it REFUSED'}`);
+console.log(`    worst delivered ratio across ${results.length} seed(s): ${worst.toFixed(3)}x`);
+
+// BOTH HALVES (rule 9). "It refused" is only a good outcome if the refusal also did no harm, and
+// "it deployed" is only a good outcome if the machine actually got better. Assert each separately
+// so neither can carry the other.
+check('the ladder REACHES the distilled rung on this plant — a row exists, deployed or refused',
+  results.every((r) => r.rep && r.rep.deployed !== undefined), JSON.stringify(results.map((r) => r.rep && r.rep.deployed)));
+check('…and NOTHING was made worse than the machine it sits on, deployed or refused',
+  worst >= 0.995, `worst ${worst.toFixed(3)}x`);
+if (anyDeploy) {
+  check('…and where it deployed, the machine is actually better', worst > 1.0, `worst ${worst.toFixed(3)}x`);
+  console.log('\n    => the DEPLOYED object is 3 of 7 plants, not 2. CLAUDE.md\'s plant line can say so.');
+} else {
+  const ins = results.flatMap((r) => r.inSample || []);
+  const helpedOwn = ins.length && ins.every((x) => x > 1.02);
+  console.log('\n    => the DEPLOYED object is still 2 of 7. The six-plant evidence belongs to the');
+  console.log('       TEACHER, and CLAUDE.md must say whose claim it is (plan §54.4).');
+  if (ins.length) {
+    console.log(helpedOwn
+      ? '    => and it HELPS its own training runs, so the refusal is TRANSFER: this plant\'s programs\n'
+        + '       do not inform each other through a reference window, which is a property of the plant.'
+      : '    => and it does NOT reliably help even its own training runs, so the limit is what the map\n'
+        + '       can EXPRESS on this plant — a diet cannot fix that, and the next question is the basis.');
+  }
+}
+
+console.log(failed ? `\ndistil-tank: ${failed} check(s) FAILED\n` : '\ndistil-tank: all checks passed\n');
+process.exit(failed ? 1 : 0);

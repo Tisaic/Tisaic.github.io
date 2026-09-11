@@ -21,7 +21,25 @@
  * claim is that it declines to deploy what it cannot vouch for, and a table that hid refusals
  * would be measuring the wrong thing.
  *
+ * AND ITS FIRST VERSION HAD THE VERY FAULT IT WAS BUILT TO CLOSE (plan §54.3). It ran six PLANT
+ * tests and scraped six headlines — and the regression that made it necessary, and that was then
+ * made the default and REVERTED, went red in `autostack.test.mjs` and `stack.test.mjs`, NEITHER OF
+ * WHICH IS A PLANT TEST. CLAUDE.md recorded the diagnosis at the time — "the pass measured six
+ * plants' HEADLINES while the contracts sat one level down, which is the same fault it was built
+ * to close" — and then nothing changed, so a second default move would have shipped exactly the
+ * same way. The CONTRACTS block below is that fix: the cross-cutting tests run under every
+ * configuration too, and their exit status is reported beside the headlines. A configuration that
+ * turns one red is REPORTED AS DISQUALIFIED however good its headline table looks, because that is
+ * precisely the trade the revert had to be made by hand.
+ *
+ * WHAT IT COSTS, STATED (rule 2). `autostack.test.mjs` is ~19 min and `stack.test.mjs` ~1.5 min per
+ * configuration, so contracts roughly triple a three-config pass. That is the price of the check
+ * whose absence cost a shipped regression, and `CONTRACTS=` narrows or `CONTRACTS=none` skips it —
+ * a skip prints as a stated skip rather than an empty column, because "not measured" and "passed"
+ * are different states (rule 25).
+ *
  * Run: node test/pilot/sixplant.mjs   [CONFIGS="4:1.5,4:1.5:r2"]  [PLANTS=tanks,woodberry]
+ *      [CONTRACTS=stack,autostack|none]
  *      a config is qpIters:horizonTs[:hGain], where hGain 'r2' derives the per-channel plant
  *      gain from each plant's own held-out forecast quality and 'off' is the shipped default.
  */
@@ -53,6 +71,18 @@ const PLANTS = [
     re: /rounded: contour [\d.e-]+ → ([\d.e-]+) \(([\d.]+)x\)/, unit: 'rms' },
 ];
 
+// THE CONTRACTS, WHICH ARE NOT PLANTS. These pin cross-cutting behaviour — the ladder's shipped
+// prefix, the cascade's admitted depth, the deployed artefact's bit-identity — and they are where
+// the reverted regression actually went red. They have no headline to scrape: their result IS
+// their exit status, which is the whole point. `stack` first because it is 13x cheaper and caught
+// the same regression, so a config that fails it never pays for `autostack`.
+const CONTRACTS = [
+  { name: 'stack',     file: 'stack.test.mjs' },
+  { name: 'autostack', file: 'autostack.test.mjs' },
+];
+const wantC = process.env.CONTRACTS === 'none' ? []
+  : (process.env.CONTRACTS || CONTRACTS.map((c) => c.name).join(',')).split(',').filter(Boolean);
+
 const want = (process.env.PLANTS || PLANTS.map((p) => p.name).join(',')).split(',');
 // A THIRD FIELD, OPTIONAL: `4:1.5:r2` also arms the derived per-channel plant gain. It is written
 // as part of the configuration rather than as a separate axis because it is not separable from the
@@ -79,8 +109,15 @@ function runPlant(plant, cfg) {
     // A WRAPPER RATHER THAN AN ENV READ INSIDE THE LIBRARY. `lib/` may not touch `process`
     // (rule 60, and `test/parse.mjs` rejects it), so the knob is an exported setter and the
     // child imports it before the test.
+    // AND THE CHILD READS BACK WHAT IT WAS SET TO, which is rule 61's own remedy and was missing
+    // at exactly the place a regression shipped from. `setSolverDefaults` silently IGNORES a knob
+    // it does not recognise and clamps the ones it does, so a config this table prints is not
+    // necessarily the config the plant commissioned with — the two literals happening to agree is
+    // construction in name only. The child prints the ACCEPTED defaults and the parent compares;
+    // a mismatch is reported per row rather than left for a later session to discover.
     const boot = `import('${JSON.stringify(join(ROOT, 'lib/pilot/pilot.js')).slice(1, -1)}')`
       + `.then((m) => { m.setSolverDefaults(${JSON.stringify(cfg)}); `
+      + `console.log('SIXPLANT_ACCEPTED ' + JSON.stringify(m.getSolverDefaults())); `
       + `return import('${JSON.stringify(join(ROOT, 'test/pilot', plant.file)).slice(1, -1)}'); });`;
     const t0 = Date.now();
     const ch = spawn(process.execPath, ['--input-type=module', '-e', boot],
@@ -89,15 +126,33 @@ function runPlant(plant, cfg) {
     ch.stdout.on('data', (d) => { out += d; });
     ch.stderr.on('data', (d) => { out += d; });
     ch.on('close', (code) => {
-      const m = out.match(plant.re);
-      resolve({ score: m ? m[1] : null, ratio: m && m[2] ? m[2] : null, code,
+      // A CONTRACT HAS NO HEADLINE — its result IS its exit status, so `re` is optional and a
+      // missing one is not a scrape miss. Distinguishing the two matters: `—` under a plant means
+      // the report changed shape and the number is unknown; under a contract it means there was
+      // never a number to read (rule 25).
+      const m = plant.re ? out.match(plant.re) : null;
+      // What the child ACTUALLY commissioned with. Compared only on the keys this row asked for:
+      // the rest are the module's own defaults and are not this table's business.
+      const am = out.match(/SIXPLANT_ACCEPTED (.*)$/m);
+      let drift = null;
+      if (!am) drift = 'the child never reported its accepted defaults';
+      else {
+        const acc = JSON.parse(am[1]);
+        const bad = Object.keys(cfg).filter((k) => String(acc[k]) !== String(cfg[k]));
+        if (bad.length) drift = bad.map((k) => `${k} asked ${cfg[k]} got ${acc[k]}`).join('; ');
+      }
+      resolve({ drift, score: m ? m[1] : null, ratio: m && m[2] ? m[2] : null, code,
         secs: Math.round((Date.now() - t0) / 1000),
+        // The failing check NAMES itself, so a red contract says WHICH assertion moved rather
+        // than only that one did — otherwise the table sends you to a 19-minute rerun to find out.
+        failed: (out.match(/^\s*✗ .*$/gm) || []).map((l) => l.trim().slice(2)).slice(0, 3),
         refused: /REFUSED|refused|deploy":false/.test(out) });
     });
   });
 }
 
 const rows = [];
+const cRows = [];
 for (const cfg of configs) {
   for (const name of want) {
     const plant = PLANTS.find((p) => p.name === name);
@@ -107,7 +162,24 @@ for (const cfg of configs) {
     console.log(`  ${`${cfg.qpIters}:${cfg.horizonTs}${cfg.hGain ? ':' + cfg.hGain : ''}${cfg.probeRises ? ':p' + cfg.probeRises : ''}`.padStart(7)}  ${name.padEnd(10)} `
       + `${(r.score === null ? '—' : r.score).padStart(10)} ${plant.unit.padEnd(4)} `
       + `${r.ratio ? `${r.ratio}x` : ''.padEnd(6)}`.padEnd(9)
-      + `  ${r.code === 0 ? 'pass' : `EXIT ${r.code}`}${r.refused ? '  refused' : ''}  ${r.secs}s`);
+      + `  ${r.code === 0 ? 'pass' : `EXIT ${r.code}`}${r.refused ? '  refused' : ''}  ${r.secs}s`
+      + (r.drift ? `\n${' '.repeat(22)}CONFIG DRIFT — ${r.drift}` : ''));
+  }
+  // THE CONTRACTS, under the same configuration. Cheapest first, and a red one SHORT-CIRCUITS the
+  // rest of this configuration's contracts — the config is already disqualified and there is no
+  // information in paying 19 more minutes to disqualify it again (rule 2).
+  if (!wantC.length) {
+    console.log(`  ${''.padStart(7)}  contracts   SKIPPED — CONTRACTS=none; this configuration is UNVERIFIED, not verified`);
+  }
+  for (const name of wantC) {
+    const c = CONTRACTS.find((x) => x.name === name);
+    if (!c) { console.log(`  (no contract named ${name})`); continue; }
+    const r = await runPlant(c, cfg);
+    cRows.push({ cfg, contract: c, ...r });
+    console.log(`  ${`${cfg.qpIters}:${cfg.horizonTs}`.padStart(7)}  ${('~' + name).padEnd(10)} `
+      + `${''.padStart(15)}${r.code === 0 ? 'CONTRACT pass' : `CONTRACT RED`}  ${r.secs}s`
+      + (r.failed && r.failed.length ? `\n${' '.repeat(22)}${r.failed.join(`\n${' '.repeat(22)}`)}` : ''));
+    if (r.code !== 0) { console.log(`  ${''.padStart(7)}  — remaining contracts skipped: this configuration is already disqualified`); break; }
   }
 }
 
@@ -117,4 +189,23 @@ for (const r of rows) {
   console.log(`  ${`${r.cfg.qpIters}:${r.cfg.horizonTs}`.padStart(7)}  ${r.plant.name.padEnd(10)} `
     + `${(r.score === null ? '—' : r.score).padStart(10)} ${r.plant.unit.padEnd(4)}  `
     + `${r.code === 0 ? 'pass' : `EXIT ${r.code}`}`);
+}
+
+// THE VERDICT PER CONFIGURATION, AND IT LEADS WITH THE CONTRACTS (rule 27). A headline table is
+// what made the reverted regression look like a win; the contract column is what said it was not.
+// So a configuration is DISQUALIFIED by a red contract regardless of how the six headlines read,
+// and this block says so in that order rather than leaving the reader to cross-reference.
+console.log('\n  per configuration — CONTRACTS FIRST, because a headline table is what shipped the regression:');
+for (const cfg of configs) {
+  const key = `${cfg.qpIters}:${cfg.horizonTs}`;
+  const cs = cRows.filter((r) => r.cfg === cfg);
+  const red = cs.filter((r) => r.code !== 0);
+  const ps = rows.filter((r) => r.cfg === cfg);
+  const scraped = ps.filter((r) => r.score !== null).length;
+  const verdict = !wantC.length ? 'UNVERIFIED — contracts were skipped, so this configuration is not a candidate'
+    : red.length ? `DISQUALIFIED — ${red.length} contract(s) RED: ${red.map((r) => r.contract.name).join(', ')}`
+    : `contracts green (${cs.length}) — eligible; now read the headlines`;
+  console.log(`  ${key.padStart(7)}  ${verdict}`);
+  console.log(`  ${''.padStart(7)}  ${scraped}/${ps.length} plant headlines scraped, ${ps.filter((r) => r.refused).length} refused`);
+  for (const r of red) for (const f of r.failed || []) console.log(`  ${''.padStart(7)}    ✗ ${f}`);
 }

@@ -362,6 +362,12 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # distilled from that same correction HELPS (33x) — plus the price at home, because a
     # transfer bought by giving up the trained program is a different product.
     if [ "${SUITE}" = "full" ]; then t node test/pilot/distil-emps.test.mjs; fi
+    # THE DEPLOYED OBJECT ON A THIRD PLANT (plan §54.4). It asserts the two halves that matter
+    # whichever way the plant answers: the rung REACHES the tank, and nothing is made worse
+    # whether it deploys or refuses. Today it refuses at 1.000x with in-sample 14-28x, so the
+    # count for the SHIPPED object is 2 of 7 — and if a diet or a basis ever changes that, this
+    # is the file that says so rather than a claim in a document.
+    if [ "${SUITE}" = "full" ]; then t node test/pilot/distil-tank.mjs; fi
     t node test/pilot/tanks.test.mjs
     t node test/pilot/thermal.test.mjs
     t node test/pilot/woodberry.test.mjs
