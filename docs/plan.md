@@ -14884,3 +14884,79 @@ but the verdict is now supported rather than merely stated: the two escapes a re
 propose have been measured and both are negative, with controls. §55.8's list of what WOULD
 change the answer is unchanged and the 1 kHz raw recordings remain the first thing to try —
 none of this touches the aliasing, which is the standing hypothesis for the free-run ceiling.
+
+### §55.10 — The raw recordings, and the question that did not need a plant model
+
+Two things were asked: try the raw recordings, and if the free run still fails, model the
+robot instead of fitting it. The first was done and failed. The second turns out to be the
+wrong next step, because the recordings contain a better question than the one the forward
+simulator was for.
+
+**THE RAW RECORDINGS DO NOT RESCUE THE FREE RUN.** They are 250 Hz — not the 1 kHz this file
+predicted, which `time` says plainly (rule 17) — and they carry the MEASURED VELOCITY, so the
+kinematics can be ENFORCED rather than fitted, removing one integrator by construction from a
+plant whose whole difficulty is that it integrates twice. Measured on a recording the fit
+never saw, against the filtered 10 Hz benchmark file:
+
+```
+  config          feat    0.5s      1s      2s      4s      8s     16s
+  na=nb=8          145  0.1610  0.8109  3.7181 13.0283 26.0310 33.0535
+  benchmark 10 Hz   73      —   0.0900  1.0700  6.9300 16.8610 21.0540
+```
+
+Worse, and two reasons are stated rather than argued away: the benchmark file is filtered and
+decimated by its own authors, and the held-out cut here is a WHOLE DIFFERENT RECORDING where
+the benchmark's test split comes from the same session. What they agree on is the shape —
+bandwidth and a measured velocity move the short horizon and leave the long one alone.
+
+**BUT THE RECORDINGS CARRY `q_ref` AND `q_se_meas`, WHICH IS THE CLOSED-LOOP TRACKING PROBLEM
+AND IS OUR ACTUAL OBJECT.** The deployed artefact is ONE thing: a map from a straddling window
+of the COMMANDED REFERENCE to a correction. §52.31 bounded how much of the correction that
+input can carry on our lattice arm at R² ~0.836. These recordings let the identical question
+be asked on a real six-axis industrial robot, with no plant model anywhere:
+
+```
+  leave-one-recording-out, 6 recordings at 250 Hz      joint0   joint1   joint2
+  straddling window, 15 taps, ±2.05 s                   0.880    0.705    0.606
+  `classic.js` basis [a, v, sign v, 1] on all 6 joints  0.888    0.113    0.001
+  causal — same taps, span and spacing, translated      0.879    0.704    0.608
+  null — the window read at unrelated times            -0.000   -0.044   -0.056
+```
+
+**JOINT 0 IS PURE VELOCITY LAG AND THE WINDOW ADDS NOTHING** — 0.888 from four coefficients
+against the window's 0.880. That is the rung this project already ships, and on a real robot's
+base axis it is the whole story. Quoting the window's 0.880 without this control would have
+credited a 91-coefficient map with what `classic.js` does.
+
+**JOINTS 1 AND 2 ARE THE RESULT: 0.113 and 0.001 from the conventional basis against 0.705 and
+0.606 from the window.** Those are the SHOULDER and ELBOW, the gravity- and compliance-loaded
+pair, and the conventional basis already contains every joint's velocity and acceleration — so
+the gain is not cross-axis lag either. **That is this project's central claim measured on a
+machine nobody here built, landing either side of the lattice arm's own 0.836 ceiling.** The
+simulator was not flattering the method on the axis that matters.
+
+**CAUSAL MATCHES STRADDLING HERE, AND IT DOES NOT CONTRADICT §49.14.** That experiment compared
+deployed CONTROL results (0.89x causal against 1.43x straddling); this one predicts e[k] from
+the reference, and the past causes e[k], so a causal filter can do it. Preview is about having
+a correction IN PLACE before the error arrives — a question about lead time, which this does
+not measure. Stating the two as agreeing or disagreeing would be comparing different
+quantities.
+
+**WHAT IT IS NOT.** Not a control result: nothing is applied, nothing is re-measured, and a
+record cannot say what the machine would have done under our input. It is an upper bound on
+what a feedforward of this form could remove. Going further needs either a plant to drive —
+which is the forward simulator, still unbuilt — or the machine itself.
+
+**SO THE "MODEL IT INSTEAD OF FITTING IT" ROUTE IS STILL OPEN AND IS NOW BETTER AIMED.** The
+classical route is rigid-body dynamics with identified inertial parameters — `M(q)qdd +
+C(q,qd)qd + g(q) + friction`, which is LINEAR IN THE PARAMETERS and so identifiable by least
+squares (IDIM-LS, the same method EMPS' own constants came from). What it needs and this
+repository does not have is the KUKA KR300's kinematic structure — the DH parameters — without
+which the regressor cannot be built. That is the gate on it, and it is a datasheet rather than
+a measurement. Worth noting before anyone starts: the gravity fit of §55.8 already recovers
+the right physics from data alone (34% and 51% on the loaded joints, ~0% on the two whose axes
+carry no gravity moment), so the structured route would be starting from something that works.
+
+**REPOSITORY NOTE.** The twelve raw recordings and `trained_model.mat` are moved from the
+repository root into `test/pilot/rigs/realdata/records/kuka/raw/`, where the two probes read
+them.
