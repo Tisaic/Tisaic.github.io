@@ -452,6 +452,23 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # from the other side: a ladder measured on one plant has measured one plant. It is
     # ~4 minutes because three of the four correctly refuse and stop early.
     if [ "${SUITE}" = "full" ]; then t node test/pilot/plants.test.mjs; fi
+    # THE BUTTON ON THREE PLANTS WHOSE DYNAMICS CAME FROM REAL HARDWARE -- a flexible robot
+    # arm, cascaded water tanks and a steam heat exchanger, each identified from its own
+    # published record and validated by FREE-RUN simulation on a cut the fit never saw. Every
+    # other plant here is a simulation somebody wrote, EMPS included: what separates these is
+    # the provenance of their parameters, and `rigs/realdata/PROVENANCE.md` says so plainly.
+    # They are registered in BOTH tiers on purpose. Each is seconds to a minute, and the two
+    # holes this project has already paid for -- a `SUITE=full` skip and an `if (canLearn)`
+    # race -- were both a test that existed and never ran.
+    t node test/pilot/realarm.test.mjs
+    t node test/pilot/realtanks.test.mjs
+    t node test/pilot/realexch.test.mjs
+    # THE KUKA KR300 INDUSTRIAL ROBOT — six axes, 67 minutes of real movement. It reports NO
+    # control factor: the record supports a one-second plant and not a six-minute one, and the
+    # replay control proves it by feeding the model the torques that made the record. What it
+    # pins is the reader, the shapes, the uniformity, the one-step/free-run split, and the
+    # gravity physics on the joints that carry gravity AND on the two that cannot.
+    t node test/pilot/realkuka.test.mjs
     if [ "${SUITE}" = "full" ]; then t node test/pilot/stack.test.mjs; fi
     if [ "${SUITE}" = "full" ]; then t node test/pilot/arm.test.mjs; fi
     if [ "${SUITE}" = "full" ]; then t node test/pilot/ikfree.test.mjs; fi

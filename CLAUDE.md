@@ -247,6 +247,47 @@ Each of these is a claim that can be shown false, which is the only kind worth w
    second one, and Wood–Berry — four dead times, up to 7 minutes on a cross path — is still
    the plant this method loses on.
 
+   **AND THERE ARE NOW THREE MORE WHOSE DYNAMICS CAME FROM REAL HARDWARE, WHICH IS A DIFFERENT
+   AXIS FROM "SHARE NO PHYSICS" AND THE ONE THE SEVEN WERE WEAKEST ON (plan §55).** Every plant
+   in this project is a SIMULATION — EMPS included, and this file used to call it "real machine,
+   real data" when what is real about it is the PROVENANCE of its constants. Three plants now
+   join it on that axis: a flexible robot arm (DaISy 96-009), cascaded water tanks (Schoukens &
+   Noël 2017) and a steam heat exchanger (DaISy 97-002), each identified from its published
+   record and validated by FREE-RUN simulation on a cut the fit never saw. All three improve —
+   1.93x, 6.54x and 89.8x — so target 3's improve-or-refuse clause holds on all ten.
+
+   **AND THEY IMMEDIATELY PRICED THEIR OWN FACTORS DOWNWARD, WHICH IS WHY THEY ARE WORTH MORE
+   THAN THREE MORE ROWS.** A plant identified as a linear ARX sits INSIDE the conventional
+   rung's own hypothesis class — the basis is `[a, v, sign v, 1]` and the plant is linear, so
+   the inversion is exact and the number measures the class rather than the machine (rule 15).
+   Measured on both plants that can carry the control, and they share no physics (rule 18 in
+   its useful direction): the tank reads **2012x linear against 6.54x with its documented
+   OVERFLOW restored**, a factor of 307, and the exchanger **1364x linear against 89.8x** with
+   the counterflow effectiveness relation in the fit, a factor of 15. The collapse scales with
+   how far the plant sits outside the class — a hard clip costs 307x, a smooth exponential 15x
+   — which is what makes it a mechanism rather than a coincidence. **The standing caution that
+   follows is general: any "real data" plant built by fitting a linear model to a record is a
+   soft target for a linear feedforward, and its factor is not a claim about the machine.**
+   EMPS escapes this only because its rig is a nonlinear simulation — a binned friction curve,
+   a drive saturation and an encoder quantisation — rather than an identified ARX.
+
+   **AND THE KUKA ARRIVED — SUPPLIED BY THE OWNER AFTER EVERY HOST SERVING IT WAS REFUSED —
+   AND IT DOES NOT BECOME AN EIGHTH PLANT (plan §55.8).** 39,988 training samples and 3,636
+   test at 10 Hz, 67 minutes of full six-axis movement, six motor torques against six joint
+   positions. `test/pilot/realkuka.test.mjs` reports NO control factor and says why in its own
+   header. The one-step fit is essentially exact (0.06% NRMSE on every joint) and the FREE RUN
+   is not, which together are the whole character of a plant that integrates twice: 0.09° at
+   1 s, 6.9° at 4 s, and ~21° — no better than the mean — beyond 16 s, with more lags buying
+   horizon (na 40 reads 4.4° at 8 s against na 6's 16.9°) and every order hitting the same
+   floor. **The decisive control is a REPLAY**: fed the EXACT torques the real robot used, the
+   model is 18.6° off by sample 50, so a closed-loop factor measured on it would be measuring
+   the model's drift rather than a controller. What IS established is the reader, the record's
+   two different uniform sample periods (25 and 275 ppm off nominal, 250 ppm apart), a 12x
+   inertia spread with a shoulder torque moving the ELBOW further than the shoulder, and a
+   gravity fit that recovers the right physics on a record it never saw — 34% and 51% on the
+   shoulder and elbow, and ~0% on the two joints whose axes carry no gravity moment, which is
+   the half that makes it a physics check rather than a curve fit.
+
 4. **COMMISSIONING IN MINUTES, NOT AN AFTERNOON. MET ON THE ARM — 17 MINUTES TO 2, AND THE
    DELIVERED RESULT IS UNCHANGED.** Target: 10x down, under three minutes on the arm, while
    holding the contract bar. Measured end to end on the page's own configuration at K 0.25 /
@@ -746,7 +787,9 @@ What stands is that the route to it is a MEMORY and the one legal route measured
 machine worse.
 
 **AND IT HAS A SECOND PLANT (plan §50), WHICH IS THE ONLY THING THAT MAKES IT A METHOD.** The EMPS
-servo axis — real machine, real data, no physics in common with the arm — carries a negative
+servo axis — whose parameters were identified from a real machine's record, no physics in common
+with the arm (this used to read "real machine, real data", which overstates it: the rig is a
+SIMULATION and what is real about it is the PROVENANCE of its constants — plan §55) — carries a negative
 control this project did not choose: on a two-tone sine the axis has never run, a converged lap
 table reads **0.53x, worse than doing nothing**, and a textbook norm-optimal ILC reads 0.53x there
 too, to four figures. `hff` is commissioned on four periodic trajectories, the four converged
@@ -980,6 +1023,101 @@ those modules (~1,900 lines) are `await import(...)`ed by `flowsim.html` and are
 else. Rule 17 aimed at a dependency graph — the instrument was incomplete before the codebase was
 untidy — and the corrected answer is the opposite of the first: **nothing in `lib/` is rotting.**
 Every module is page-reachable or test-exercised, and that is now a check rather than a hope.
+
+### EVERY PLANT HERE IS A SIMULATION, AND THREE NOW HAVE REAL PROVENANCE (plan §55)
+
+**This file said "real machine, real data" about the EMPS axis and that overstates it.** The EMPS
+rig is a SIMULATION: its constants are read out of `DATA_EMPS.mat`, its friction is a 61-bin curve
+binned from the raw record, its program is reconstructed from the recorded reference to 1.18e-5 m.
+What is real about it is the PROVENANCE OF ITS PARAMETERS, not that anything of ours ever moved a
+real axis. That distinction is now stated where the claim is made, and three more plants join EMPS
+on that axis — a flexible robot arm, cascaded water tanks and a steam heat exchanger, identified
+from published records in `test/pilot/rigs/realdata/records/`.
+
+**A RECORDED TRAJECTORY IS NOT A DEPLOYABLE PLANT, AND THAT IS THE WHOLE REASON THIS TOOK A
+BUILD.** Our method must APPLY a correction and MEASURE the result; a record says what the machine
+did under ITS input, never what it would have done under ours. So the route is EMPS' own —
+identify, validate held out, simulate, deploy — and what licenses it is the validation, taken by
+**FREE-RUN SIMULATION** rather than one-step prediction. A one-step predictor is handed the true
+`y[k-1]` at every sample and so scores well on any smooth record: it measures the sampling rate,
+not the model. That number is quoted beside every control result these plants produce.
+
+```
+  plant                       held-out free run            ships          refuses
+  flexible robot arm          2.83% in ACCELERATION        1.93x          the pilot cascade
+   (DaISy 96-009)             36.45% in POSITION           conventional   (correction wrong, not clipped)
+  cascaded tanks              0.649 V, on the benchmark's  6.54x          — (cascade deploys, 2 layers)
+   (Schoukens & Noël 2017)    OWN second excitation        cascade
+  steam heat exchanger        0.663 degC of an 8.6 degC    89.8x          the pilot cascade
+   (DaISy 97-002)             range — the weakest here     conventional
+```
+
+**ALL THREE IMPROVE, SO TARGET 3's IMPROVE-OR-REFUSE CLAUSE HOLDS ON ALL TEN PLANTS — AND THE MOST
+USEFUL THING THEY MEASURED IS HOW MUCH THEIR OWN FACTORS ARE WORTH.** A plant identified as a
+linear ARX sits INSIDE the conventional rung's hypothesis class: the basis is `[a, v, sign v, 1]`,
+the plant is linear, the inversion is exact, and the number measures the class rather than the
+machine (rule 15). The tank read **2012x** that way, which is not a plausible controller result and
+so is a reason to check the instrument rather than to celebrate (rule 14). Checked on both plants
+that can carry the control, and they share no physics (rule 18 in its useful direction):
+
+```
+  cascaded tanks     linear 2012.2x  ->  documented OVERFLOW restored   6.5x      a factor of 307
+  heat exchanger     linear 1363.7x  ->  counterflow effectiveness     89.8x      a factor of  15
+```
+
+The collapse scales with how far the plant sits outside the class — a hard clip costs 307x, a
+smooth exponential 15x — which is what makes it a mechanism and not a coincidence. **The standing
+caution is general and applies to anything built this way: a "real data" plant obtained by fitting
+a LINEAR model to a record is a soft target for a linear feedforward, and its factor is not a
+claim about the machine.** EMPS escapes it only because its rig is a nonlinear simulation — binned
+friction, drive saturation, encoder quantisation — rather than an identified ARX.
+
+**AND THE ARM IS THE FALSIFIER FOR A CLAIM THIS FILE DREW ON A SIMULATOR.** §52.36 called an FIR
+window "hopeless" for a lightly damped resonance, then measured the lattice arm's ring at 5.6x
+decay per cycle and softened the claim to "overstated". The real arm's identified modes decay
+about **1.03x per cycle** — fifty times lighter. The number is a BOUND rather than a measurement
+and the rig says so (a 1024-sample record cannot resolve a Q above ~65 and the fit reports 92;
+the two modes come back with Q equal to within 1%, which is the fit near its own stability edge,
+not two physical modes agreeing). What survives is the direction and the order of magnitude, and
+they are enough: the regime §52.36 dismissed on a simulator's evidence exists on hardware.
+
+**TWO MEASUREMENT FAULTS WERE MADE ON THE WAY AND BOTH ARE RECORDED, BECAUSE EACH ONE LOOKED
+EXACTLY LIKE A PLANT PROPERTY.** Sizing the arm's program from the record's own acceleration range
+was rule 41b in a new costume: that range is a RESONANT response reached where |H| = 36.7, while a
+program lives where |H| = 0.108, so the first program demanded ELEVEN TIMES the torque the machine
+has — and the symptom was a loop swept over 88 gain cells that could not beat DOING NOTHING at any
+of them, which reads as "this plant cannot be controlled" and is actually "this reference cannot be
+reached". Then the loop sweep itself scored 20 laps on a machine whose ring locks in over ~300
+laps, because the program's 30th harmonic lands 0.8% from a mode whose half-power bandwidth is
+1.1%. It duly picked the gain that locks ONTO the resonance: 1.06 at lap 20, **12.36 once settled**,
+against 0.185 for the gain a settled sweep picks — **sixty-seven times better**, and rule 12 for
+the seventh time in this project. Every number on that plant is now taken after a settle whose
+length was measured (13 laps) rather than assumed.
+
+**WHAT IS MISSING IS THE ONE THAT WAS ASKED FOR, AND IT IS AN ACCESS PROBLEM RATHER THAN A
+MEASUREMENT ONE.** The KUKA KR300 R2500 ultra SE Industrial Robot benchmark (Weigand et al. 2022,
+DOI TUK 10.26204/DATA/5) is the real six-axis robot datum this project wants: 12 states, backlash
+in every joint, pose-dependent inertia and gravity, 40,000 samples of full robot movement. It is
+served from `fdm-fallback.uni-kl.de` alone as a 12.7 MB `.rar`, and that host — together with
+`nonlinearbenchmark.org`, `data.4tu.nl`, `zenodo.org`, `huggingface.co`, `archive.ics.uci.edu`,
+`figshare.com` and `homes.esat.kuleuven.be` — is refused by this session's egress policy. No GitHub
+repository mirrors the archive or any extract of it, and the one repository that mirrors the rest
+of that collection keeps its copies in Git LFS, which the anonymous git lane does not serve. The
+flexible arm is the available real-arm datum and it is **one link and 1024 samples against six axes
+and 40,000** — a gap stated rather than a substitution made quietly.
+
+**AND OPENML IS THE WRONG SHELF FOR THIS, WHICH IS WORTH WRITING DOWN BECAUSE IT LOOKS LIKE THE
+RIGHT ONE.** It is an i.i.d. tabular benchmark repository, and its format strips the two things
+needed here: the time ordering and a CONTROLLABLE INPUT. Its arm-adjacent sets — `pumadyn`,
+`kin8nm`, `elevators`, `ailerons`, `bank8FM` — are the trap: they look like robot dynamics and are
+either synthetic to begin with or rendered as shuffled regression tables. They can be fitted; they
+cannot be DRIVEN, and a plant we cannot apply a correction to is a regression dataset.
+
+**STILL OUT OF REACH AND WANTED, in the order their evidence would be worth most:** the KUKA robot;
+Bouc-Wen, whose hysteresis is a nonlinearity class nothing here contains and which is adjacent to
+§52.46's backlash finding; Silverbox, a lightly damped resonance driven by a known input, which
+would give the arm's result a second plant; and the Wiener-Hammerstein and Coupled Electric Drives
+sets. All five are reachable only through hosts this session is refused, or through Git LFS.
 
 ## Deploy model
 
@@ -1363,12 +1501,17 @@ measurement behind each is in `docs/history/` — the pointer in brackets.
 | `test/pilot/rigs/arm-rig.mjs` | The 2R arm rig — plant, paths, routing, `commissionArm` and `deployOn`. Every harness drives the arm through this; three separate copies of pieces of it have each shipped a defect. |
 | `test/pilot/forecast.mjs` | Held-out forecast R² on open-loop programs, plus an offline refit that separates an unreachable dictionary from an unvisited one. |
 | `test/pilot/spectrum.mjs` | Where the machine rings, where the defect's energy is, and where the excitation looked — three power spectra on one axis of periods. |
-| `test/pilot/` | Full-tier files here SKIP and exit 0 without `SUITE=full` — that hole let a gate regression ship for three bricks. Node tests for the pilot on six plants that share no physics: the 2R arm, a quadruple tank, a three-zone extruder barrel, the Wood–Berry column, a cold mill AGC, and the EMPS servo axis (real data). |
+| `test/pilot/` | Full-tier files here SKIP and exit 0 without `SUITE=full` — that hole let a gate regression ship for three bricks. Node tests for the pilot on six plants that share no physics: the 2R arm, a quadruple tank, a three-zone extruder barrel, the Wood–Berry column, a cold mill AGC, and the EMPS servo axis (parameters identified from a real record). **AND THREE MORE WHOSE DYNAMICS ALSO CAME FROM REAL HARDWARE (plan §55):** `realarm.test.mjs`, `realtanks.test.mjs` and `realexch.test.mjs`, each identified from a published record in `rigs/realdata/records/` and validated by FREE-RUN simulation on a cut the fit never saw. Registered in BOTH tiers, because the two holes this project has already paid for were a test that existed and never ran. |
 | `test/pilot/nonlinear.mjs` | **THE COMPETITOR THAT CONTESTS US RATHER THAN A RIVAL (plan §54.9).** §52.36's "no basis will move it" ceiling rests on six experiments that were ALL global linear-in-parameters ridge with different features; a different FUNCTION CLASS is not more features. Reads `consist.mjs`'s own row dump (`DUMP=`) so there is one builder and not a second copy (rule 61), standardises on the TRAINING rows only so the held-out program's distribution cannot leak in, and swaps only the learner at identical folds: **ridge 0.8610, kernel ridge 0.8303, locally weighted linear 0.8266, MLP 0.7456, kNN 0.7147.** Nothing beats the shipped linear fit — and the two nearest are the two still linear in disguise while the MLP's worst fold falls to 0.39 against the ridge's 0.68. The ceiling is confirmed by methods that could have broken it. |
 | `test/pilot/directopt.mjs` | **THE GA / NEAT QUESTION, POSED PROPERLY AND NOT ESTABLISHED (plan §54.11).** Evolutionary search brings three things and this project already answers two: topology search is refused by §54.9 (a kernel machine and an MLP both lose to the linear ridge) and evolvable recurrence by §52.36 (a resonator bank reads 0.814 against 0.836). The third is live — a GA can optimise the DELIVERED error rather than the converged-prefix SURROGATE that §52.34's conflict (2) says is compromised. **Its numbers are withheld by the file itself**: the ridge arm reads 5.49x where this axis is on record at 32.75x, and a GA compared against a baseline 6x off its own recorded value measures the harness. Two hypotheses refuted by byte-identical controls (a hand-rolled fit, then a double clamp deploying at 5x less authority than fitted — rule 34). **The BILL is established and stands either way: 33 scored runs = 20.6 minutes of plant time at a trivial budget**, against target 4 already missed on three plants — the ground DeePC was disqualified on. |
 | `test/pilot/zpetc.mjs` | **THE CLASSICAL ADMISSIBLE COMPETITOR, ATTEMPTED AND NOT ESTABLISHED (plan §54.10).** Stable inversion is what this file already calls the distilled policy a data-regressed version of, and it is admissible on exactly our terms — identified once, deployed as an FIR over the commanded reference, no runtime truth, no lap index. **Its numbers are NOT reported as a result**: it measures either 0.02x with the correction pinned at its cap or 1.00-1.02x with the correction at under 1% of its authority, a diverging inverse or an inert one with nothing between, and publishing that would be this repository's bug presented as the method's property. What IS established: both paths identify at R² 1.000, so identification is not the fault; the architecture needs TWO models (u = -Gu⁻¹·Gr·r) where the first version inverted one and applied it to the wrong signal; and the scale hypothesis for the remainder was REFUTED by a byte-identical control. The live candidate is a z vs z⁻¹ convention error, stated so the next attempt starts there. |
 | `test/pilot/deepc.mjs` | **TARGET 8, RIVAL TWO — AND THE FIRST THING THAT BEATS THIS PROJECT, ON A SIMULATOR (plan §54.8).** DeePC on the EMPS axis: a Hankel matrix of one persistently exciting trajectory REPLACES the model inside a receding-horizon solve, which is the literature's canonical form of the claim the shipped object actually makes. Swept over its own regularisers while ours runs at defaults, it reads **189.68x / 131.82x against the distilled policy's 32.75x / 33.15x** — and the margin grew every time the grid widened, because the best cell kept sitting on its own EDGE. **That is the finding and the artefact at once**: a score climbing without bound as a regulariser goes to zero is an unregularised Hankel solve approaching exact interpolation of its own data, which only a DETERMINISTIC rig allows. `NOISE=` is the falsifier and it fired — at the rig's own stated 1.6 µm fidelity the best of 98 cells reads **1.00x on both columns**, and at the noiseless winner's settings 0.04x and 0.02x. It also prints the two columns a delivered error hides: **145,082 MAC/decision (1451% of a PLC scan, 1,860x the policy's 78)** and the live tracking error it needs for ever. |
 | `test/pilot/distil-tank.mjs` | **THE DEPLOYED OBJECT ON A THIRD PLANT — and the file that corrected a north-star claim by asking (plan §54.4).** `distil.js` is imported by exactly TWO plant harnesses; every other plant scores `pilot.js`, which under the retirement is the TEACHER. This asks the tank — chosen over the mill because its recipe IS a commanded reference with structure, so a deploy is physically possible and the answer is informative either way. **The rung reached the plant, fitted, was scored on the machine, lost and was reverted: 1.000x, nothing harmed — with in-sample 14.512x / 14.294x / 20.769x / 27.819x against a held-out 1.000x**, which is TRANSFER and not the fit, the basis or the deploy path. Carries both wrong diets with the measurement that condemned each: quasi-static (teacher gains of 3.2e6 — a target already at zero, rule 14) and out-of-envelope (exactly 1.000x — a FADED correction, §52.40 mirrored). Says outright that its three byte-identical seeds are ONE draw three times, because no cascade builds so no seeded excitation runs. |
+| `test/pilot/rigs/realdata/` | **THE RECORDS FROM REAL MACHINES, AND THE INSTRUMENT THAT TURNS ONE INTO A PLANT (plan §55).** Three published identification records — a flexible robot arm, cascaded water tanks, a steam heat exchanger — with `PROVENANCE.md` naming each source, its citation, and the hosts that are blocked. `sysid.mjs` fits a model on an ESTIMATION cut and scores it by **FREE-RUN SIMULATION** on a VALIDATION cut it never saw: a one-step predictor is handed the true `y[k-1]` at every sample, so it scores well on any smooth record and is measuring the sampling rate rather than the model (rule 36 in a second costume). Order is chosen by the held-out free run, never by the in-sample fit (rule 16), ties broken by rule 42. Every rig re-identifies AT MODULE LOAD from the committed record, so the plant cannot drift from the data it claims to come from (rule 30). |
+| `test/pilot/rigs/ladder.mjs` | **THE LADDER DRIVER, EXTRACTED FROM `plants.test.mjs` when the real-data plants needed the same one** — a second copy of a plant's routing has shipped a defect three times here (`arm-rig.mjs` says so in its own header, rule 61). `plants.test.mjs` is **byte-identical across the move**, wall clock excepted, which is what says the extraction changed nothing (rule 21). |
+| `test/pilot/realarm.test.mjs` | **A REAL FLEXIBLE ROBOT ARM (DaISy 96-009), AND THE FALSIFIER FOR A CLAIM THIS FILE DREW ON A SIMULATOR.** Every arm number here is quoted on a lattice whose ring `modes.mjs` measures decaying 5.6x per cycle; this arm's identified modes decay about **1.03x per cycle** — fifty times lighter, and the regime §52.36 called hopeless for an FIR window before measuring the simulator and softening the claim. The damping is a BOUND, not a measurement, and the rig says so: the record is 1024 samples so a Q above ~65 is not resolvable from it, the fit reports 92, and the two modes come back with Q equal to 1%, which is a signature of the fit sitting near its own stability edge. **It ships 1.93x on the conventional rung and REFUSES the pilot cascade**, whose correction is wrong rather than merely clipped — opened 3x it clamps 56% of samples at 0.00x, opened 10x it trips the guard, and the shipped result is byte-identical at every cap. **Two measurement faults were made and both are recorded because each looked like a plant property.** Sizing the program from the record's own acceleration range was rule 41b exactly — that range is a RESONANT response reached where \|H\| = 36.7, the program lives where \|H\| = 0.108, so the first program demanded eleven times the torque the machine has and a loop swept over 88 gain cells could not beat DOING NOTHING at any of them. And the first loop sweep scored 20 laps on a machine whose ring locks in over ~300: it chose the gain that locks ONTO the resonance, which reads 1.06 at lap 20 and **12.36 settled**, against 0.185 for the gain the settled sweep picks — **sixty-seven times better**, rule 12 for the seventh time in this project. |
+| `test/pilot/realtanks.test.mjs` | **THE REAL CASCADED TANKS — and the file that measured what a factor on a linearly-identified plant is actually worth.** The counterpart to our own quadruple tank, where `distil-tank.mjs` read 1.000x held out and `tankspread.mjs` found 4 of 8 seeds deploying harmfully. Its validation is the strongest here and that is the benchmark's doing: it ships **two independent excitations** (r = 0.12 with means removed), so the held-out free run is a different experiment rather than a time split of one. It read **2012x**, which is not a plausible controller result and so is a reason to check the instrument (rule 14). It was: restoring the benchmark's own documented **OVERFLOW** — 84 samples pinned at exactly 10.00 in the record, which the linear fit lost so completely that it extrapolates to 20.9 V where there is no 20 cm of tank — collapses it to **6.54x**, and there the PILOT CASCADE deploys two layers where our own quadruple tank refuses everything. Also measured and negative: the sqrt(y) lift, the obvious reading of Torricelli, validates WORSE than linear (0.738 against 0.649 V) — narrowly, because the lift available applies to the OBSERVED lower level while the physics it approximates is dominated by the UNOBSERVED upper tank. |
+| `test/pilot/realexch.test.mjs` | **A REAL STEAM HEAT EXCHANGER (DaISy 97-002), the counterpart to the extruder barrel — and the REPLICATION that makes the tanks' finding a mechanism rather than one plant's story (rule 18).** Same comparison on steam rather than water: **1364x linear against 89.8x** with the counterflow effectiveness relation `exp(-1/u)` in the fit, which also validates 7% better on the held-out half. **Its validation is the weakest in the directory and it is printed first (rule 27)**: 0.66 °C free-run against an 8.6 °C range, and 48% NRMSE even ONE STEP ahead with the true previous temperature in hand — the record is disturbance-dominated. Its NRMSE is also a trap and the absolute error is not (rule 19): fitting the first half reads 69%, fitting the second reads 35%, and the free-run rms is 0.71 and 0.62 °C — essentially the same model both ways, the whole gap being that one half carries an operating-point excursion and the other does not. The unflattering direction is the one that ships. |
 | `test/pilot/commtime.mjs` | **WHAT COMMISSIONING COSTS THE PLANT, ON EVERY PLANT — target 4's number, which each rig has been PRINTING all along (plan §54.6).** A SCRAPE of the line each plant already prints in its OWN process time, not a re-measurement, so no plant is re-scored by a metric this file invented. **One of the four plants that state a clock meets target 4; the spread is 1643x; and the two that state none read UNKNOWN rather than met (rule 25) — one of them being the arm, which the target claims as MET on a simulator's wall clock.** It prints the STEPS and TIME rankings side by side and says when they disagree, which they do: Wood-Berry is the cheapest here in steps and the most expensive in days. |
 | `docs/edm.md` | **A PROSPECTIVE DEPLOYMENT, SCOPED BEFORE ANY MEASUREMENT — a custom wire EDM and hole popper on B&R controls.** Written so the predictions can be read against what was claimed BEFORE the data existed. It splits the machine's two objectives by this project's own evidence: FINISHING is this method's own shape (a repeatable geometric error on a repeated contour, with the cut part as the commissioning truth — which closes the north star's own open case, the touch probe a shop actually owns), while ROUGHING gap regulation against the arcing boundary is stochastic and the gate should REFUSE it — with one preview-shaped sub-problem inside it that is where the wire actually breaks (height steps, corners, entry/exit are all known from the program). Carries the LOGGING SPEC, because no public EDM dataset gives gap dynamics and building a simulator to suit the controller is rule 15 exactly — the machine removes that gate by supplying real records. **AND §6 IS THE OBJECT THAT REACHES THE ROW PREVIEW CANNOT**: a BREAK-RISK SOFT SENSOR trimming feedrate under the existing gap servo — addressed by machine state, no tracker, no lap index, and the one loop here whose instrument is FREE (pulse electronics that already exist, and a break the machine cannot fail to notice) against §52.42's 3.9x tracker premium. Its five hazards are this file's own rules arriving before the build: predict the dense PRECURSOR not the rare break (rule 36), a hazard is per METRE not per second or the loop chases its own denominator (rule 17), regulate an upper confidence bound because the costs are asymmetric, DITHER or the loop drives the sensor off its training set (rule 35), and success removes the evidence (rule 33) — which the precursor design is what survives. The falsifier is LEAD TIME against the gap's own settling, readable off existing logs before anything is built (§52.26 transplanted). Nothing in it is measured. |
 | `docs/history/` | The measurement record — see the last section. |
