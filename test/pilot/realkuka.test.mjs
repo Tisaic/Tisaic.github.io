@@ -37,16 +37,33 @@
  *     from the measured inertias read 1.02x: neither is a controller result, both are a
  *     decoupled law on a coupled plant.
  *
+ *   - AND THE CLASSICAL ROUTE IS NOW TAKEN, WHICH CHANGES WHY THIS FILE REPORTS NO PLANT
+ *     (plan §55.11). Rigid-body dynamics on kinematics sourced from two independent places
+ *     IDENTIFIES this robot — held-out R2 0.785-0.891 from 78 physical parameters — and the
+ *     FORWARD equation from the same parameters reads R2 at or below zero on five of six
+ *     joints IN SAMPLE with q, qd, qdd and tau all measured. Neither the integrator nor the
+ *     missing velocity record is the fault, and both were checked rather than argued: M(q) is
+ *     positive definite at condition 12, and sub-stepping 10x moves the free run under 6%.
+ *     What separates the two numbers is that GRAVITY IS THE TORQUE — 6.71 of 6.93 N.m on the
+ *     shoulder — while the INERTIAL term, the only part carrying qdd, is BELOW the fit's own
+ *     residual on five of six joints. So an R2 of 0.85 on torque is an R2 of ~0 on
+ *     acceleration: one fit against two denominators (rule 19). **This record identifies the
+ *     robot's STATICS, and a forward simulation needs its DYNAMICS.**
+ *
  * WHAT WOULD CHANGE THE ANSWER, stated so the next attempt does not start from scratch
- * (rule 59): a model that survives a 606-sample free run is what this benchmark is FOR and is
- * an open problem in the literature, not an oversight here. The benchmark also ships an
- * INVERSE record (position -> torque) which does not integrate and should condition far
- * better; that is a regression benchmark rather than a plant, so it would test the FIT — the
- * thing `distil.js` actually is — rather than the ladder. The raw recordings shipped
- * alongside are at 1 kHz rather than 10 Hz and would remove the aliasing entirely.
+ * (rule 59): an EXCITATION that moves this robot at a real fraction of its rated acceleration
+ * — a different experiment, not a different fit. Peak |qdd| here is 14-40 deg/s² on a machine
+ * rated for several rad/s², and split by decile the inertial term does rise above the residual
+ * in the fastest 1-10% of samples, so the dynamics are present and thin rather than absent.
+ * The raw recordings shipped alongside are at 250 Hz rather than 10 Hz and would sharpen qd
+ * and qdd; whether they also carry larger accelerations is not measured. Nothing about the
+ * method is implicated either way — and two controls say the model is not the limitation: the
+ * fit is SATURATED (625 rows read what 19,994 read) and a 490-feature universal map of the
+ * same inputs on the same rows is worse on every joint.
  */
 import { readMat } from './rigs/realdata/matread.mjs';
 import { fitMimo, simulateMimo, buildMimo, ridgeSolve, makePlantMimo } from './rigs/realdata/sysid.mjs';
+import { regressor, identify, dynamics, fk, NP, ZERO6, URDF_ORIGINS } from './rigs/realdata/kuka-kin.mjs';
 
 let failed = 0;
 function check(name, cond, detail) {
@@ -224,6 +241,208 @@ check('…and a LINEAR fit is invariant to that coupling, because the coupled co
   + 'combination of columns it already carries — so the coupling can only matter inside a '
   + 'NONLINEARITY, where `kuka-ngrc.mjs` measures it as the same or worse',
   Math.abs(cpl - raw) / raw < 0.05, `${raw.toFixed(4)} vs ${cpl.toFixed(4)}`);
+
+/** Extreme eigenvalues of a symmetric 6x6 by power iteration, then shifted power iteration —
+ *  enough to answer "is this a realisable inertia matrix, and how badly conditioned", which is
+ *  all the check below asks of it. */
+function sym6Eigs(M) {
+  const S = M.map((r, i) => Array.from({ length: 6 }, (_, j) => (r[j] + M[j][i]) / 2));
+  const mul = (A, v) => A.map((r) => r.reduce((s, x, j) => s + x * v[j], 0));
+  let v = [1, 0.3, -0.7, 0.2, 0.9, -0.4], hi = 0;
+  for (let it = 0; it < 300; it++) {
+    const w = mul(S, v); const n = Math.hypot(...w);
+    if (!n) break;
+    v = w.map((x) => x / n); hi = n;
+  }
+  const sh = S.map((r, i) => r.map((x, j) => x - hi * 1.001 * (i === j ? 1 : 0)));
+  let u = [1, -0.2, 0.5, -0.8, 0.3, 0.6], lo = 0;
+  for (let it = 0; it < 300; it++) {
+    const w = mul(sh, u); const n = Math.hypot(...w);
+    if (!n) break;
+    u = w.map((x) => x / n); lo = n;
+  }
+  return { hi, lo: hi * 1.001 - lo };
+}
+
+// ---- THE CLASSICAL ROUTE: IDIM-LS ON SOURCED KINEMATICS (plan §55.11) ---------------------
+// §55.10 left "model it instead of fitting it" open with its gate named — the KR300's DH
+// parameters, which this repository did not have. They were sourced, and this is what the
+// route delivers. The probe that reports all of it is `test/pilot/kuka-idim.mjs`; what is
+// PINNED here is the part a regression would make silently wrong.
+console.log('\n  -- the classical route: rigid-body dynamics on sourced kinematics --');
+{
+  const inv = readMat(new URL('rigs/realdata/records/kuka/inverse.mat', import.meta.url).pathname);
+  const D2R = Math.PI / 180;
+  const split = (U) => ({
+    q: U.map((r) => Array.from({ length: 6 }, (_, c) => r[c] * D2R)),
+    qd: U.map((r) => Array.from({ length: 6 }, (_, c) => r[6 + c] * D2R)),
+    qdd: U.map((r) => Array.from({ length: 6 }, (_, c) => r[12 + c] * D2R)),
+  });
+  const TRq = split(inv.u_train), TEq = split(inv.u_test);
+
+  // ---- FOUR STRUCTURAL CONTROLS ON THE REGRESSOR, which no identification can fake --------
+  // Every number below is produced by a 6-link Newton-Euler recursion in modified-DH written
+  // here from a paper's table. That is exactly the kind of thing that is silently wrong and
+  // still plausible, so it is checked against properties rather than against its own output.
+  const rnd = (seed) => { let x = seed; return () => (x = (x * 1103515245 + 12345) % 2147483648) / 2147483648 - 0.5; };
+  const rr = rnd(11);
+  const arb = Array.from({ length: NP }, () => rr() * 4);   // ARBITRARY, not identified
+  const Marb = (q) => {
+    const out = Array.from({ length: 6 }, () => new Float64Array(6));
+    for (let j = 0; j < 6; j++) {
+      const e = ZERO6.slice(); e[j] = 1;
+      const Y = regressor(q, ZERO6, e, 0);
+      for (let i = 0; i < 6; i++) { let sum = 0; for (let c = 0; c < NP; c++) sum += Y[i][c] * arb[c]; out[i][j] = sum; }
+    }
+    return out;
+  };
+  let asym = 0, scale = 0, g0 = 0, g12 = Infinity;
+  for (let t = 0; t < 60; t++) {
+    const q = Array.from({ length: 6 }, () => rr() * 6);
+    const M = Marb(q);
+    for (let i = 0; i < 6; i++) for (let j = 0; j < 6; j++) {
+      asym = Math.max(asym, Math.abs(M[i][j] - M[j][i])); scale = Math.max(scale, Math.abs(M[i][j]));
+    }
+    const Yg = regressor(q, ZERO6, ZERO6, 9.81);
+    const tq = Array.from({ length: 6 }, (_, i) => { let sum = 0; for (let c = 0; c < NP; c++) sum += Yg[i][c] * arb[c]; return sum; });
+    g0 = Math.max(g0, Math.abs(tq[0]));
+    g12 = Math.min(g12, Math.max(Math.abs(tq[1]), Math.abs(tq[2])));
+  }
+  check('M(q) from the regressor comes back SYMMETRIC with ARBITRARY parameters — a property '
+    + 'of the recursion, so this tests the Newton-Euler and the DH conventions and not the fit',
+    asym / scale < 1e-12, `${asym.toExponential(2)} of ${scale.toFixed(2)}`);
+  check('the gravity torque about the VERTICAL first axis is exactly zero, and the shoulder '
+    + 'and elbow carry a real one — both halves, or a regressor of zeros would pass (rule 9)',
+    g0 < 1e-10 && g12 > 0.1, `joint0 ${g0.toExponential(2)}, min shoulder/elbow ${g12.toFixed(3)}`);
+  const qs = [0.3, -0.7, 0.9, 0.2, -0.4, 1.1], as = [0.5, -0.2, 0.8, 0.1, 0.3, -0.6];
+  const Y1 = regressor(qs, ZERO6, as, 0), Y3 = regressor(qs, ZERO6, as.map((x) => 3 * x), 0);
+  let lin = 0;
+  for (let i = 0; i < 6; i++) for (let c = 0; c < NP; c++) lin = Math.max(lin, Math.abs(Y3[i][c] - 3 * Y1[i][c]));
+  check('the regressor is exactly LINEAR in qdd, which is what makes the inertial term '
+    + 'separable below', lin < 1e-9, lin.toExponential(2));
+  const org = fk(ZERO6).org;
+  const dev = org.map((o, i) => Math.hypot(...o.map((v, k) => v - URDF_ORIGINS[i][k])));
+  check('the DH chain and the ROS-Industrial URDF — two sources neither derived from the '
+    + 'other — put every frame origin in the same place, the flange offset d6 excepted',
+    Math.max(...dev.slice(0, 5)) < 1e-12 && Math.abs(dev[5] - 0.240) < 1e-9,
+    dev.map((v) => v.toFixed(4)).join(' '));
+
+  // ---- THE IDENTIFICATION SUCCEEDS ------------------------------------------------------
+  // Stride 16 rather than 1: the fit is SATURATED in data — the probe measures 625 rows
+  // reading the same held-out error as 19,994 — so this is rule 2 against the assertion's own
+  // margin and not a weakened check.
+  const f = identify(TRq, inv.y_train, { lam: 1e-6, stride: 16 });
+  const dyn = dynamics(f.beta);
+  const r2 = [], resid = [];
+  {
+    const se = new Float64Array(6), sy = new Float64Array(6), mu = new Float64Array(6);
+    for (const r of inv.y_test) for (let i = 0; i < 6; i++) mu[i] += r[i] / inv.y_test.length;
+    for (let k = 0; k < inv.y_test.length; k++) {
+      const p = dyn.tau(TEq.q[k], TEq.qd[k], TEq.qdd[k]);
+      for (let i = 0; i < 6; i++) { se[i] += (p[i] - inv.y_test[k][i]) ** 2; sy[i] += (inv.y_test[k][i] - mu[i]) ** 2; }
+    }
+    for (let i = 0; i < 6; i++) { r2.push(1 - se[i] / sy[i]); resid.push(Math.sqrt(se[i] / inv.y_test.length)); }
+  }
+  console.log('  held-out R2 on torque: ' + r2.map((v) => v.toFixed(3)).join(' '));
+  check('IDIM-LS on the sourced kinematics IDENTIFIES this robot: held-out R2 above 0.7 on '
+    + 'every joint from 78 physical parameters, so the classical route is not the thing that '
+    + 'failed', r2.every((v) => v > 0.7), r2.map((v) => v.toFixed(3)).join(' '));
+
+  // ---- AND THE FORWARD DIRECTION STILL FAILS, WITH EVERYTHING MEASURED -------------------
+  // This is the decisive pair. The free run mixes the model with an integrator and with a
+  // record that carries no measured velocity; evaluating qdd = M^-1 (tau - h) HERE, where q,
+  // qd, qdd and tau are all given, leaves the model alone (rule 1).
+  const fse = new Float64Array(6), fsy = new Float64Array(6), fmu = new Float64Array(6);
+  let negEig = 0, worstCond = 0;
+  for (const r of TEq.qdd) for (let i = 0; i < 6; i++) fmu[i] += r[i] / TEq.qdd.length;
+  for (let k = 0; k < inv.y_test.length; k++) {
+    const a = dyn.forward(TEq.q[k], TEq.qd[k], inv.y_test[k]);
+    for (let i = 0; i < 6; i++) { fse[i] += (a[i] - TEq.qdd[k][i]) ** 2; fsy[i] += (TEq.qdd[k][i] - fmu[i]) ** 2; }
+    if (k % 53 === 0) {                       // an unconstrained fit need not be a REALISABLE
+      const M = dyn.M(TEq.q[k]);              // rigid body, and the inverse fit would not notice
+      const ev = sym6Eigs(M);
+      if (ev.lo <= 0) negEig++;
+      worstCond = Math.max(worstCond, ev.hi / Math.abs(ev.lo));
+    }
+  }
+  const fr2 = Array.from({ length: 6 }, (_, i) => 1 - fse[i] / fsy[i]);
+  console.log('  held-out R2 on ACCELERATION from the same beta: ' + fr2.map((v) => v.toFixed(3)).join(' '));
+  check('…and the FORWARD equation from the SAME parameters reads R2 at or below zero on five '
+    + 'of six joints, with every quantity measured — so the free run\'s failure is not the '
+    + 'integrator and not the missing velocity record',
+    fr2.filter((v) => v <= 0.1).length >= 5, fr2.map((v) => v.toFixed(3)).join(' '));
+  check('…and it is NOT that the identified inertia matrix is unphysical, which was the first '
+    + 'hypothesis: M(q) is positive definite at every pose tried and well conditioned',
+    negEig === 0 && worstCond < 100, `${negEig} non-PD, worst condition ${worstCond.toFixed(1)}`);
+
+  // ---- WHAT SEPARATES THE TWO NUMBERS: WHAT THE TORQUE IS MADE OF ------------------------
+  const acc = { grav: new Float64Array(6), vel: new Float64Array(6), iner: new Float64Array(6), res: new Float64Array(6) };
+  let sd = 0, sf = 0;
+  for (let k = 0; k < inv.y_test.length; k++) {
+    const iner = dyn.tau(TEq.q[k], ZERO6, TEq.qdd[k], 0);
+    const vel = dyn.tau(TEq.q[k], TEq.qd[k], ZERO6, 0);
+    const grav = dyn.tau(TEq.q[k], ZERO6, ZERO6, 9.81);
+    const full = dyn.tau(TEq.q[k], TEq.qd[k], TEq.qdd[k], 9.81);
+    for (let i = 0; i < 6; i++) {
+      acc.grav[i] += grav[i] ** 2; acc.vel[i] += vel[i] ** 2; acc.iner[i] += iner[i] ** 2;
+      acc.res[i] += (inv.y_test[k][i] - full[i]) ** 2;
+      sd += (iner[i] + vel[i] + grav[i] - full[i]) ** 2; sf += full[i] ** 2;
+    }
+  }
+  const n = inv.y_test.length, rm = (x, i) => Math.sqrt(x[i] / n);
+  // Newton-Euler carries no product of qdd with qd or with g, so the three groups must sum to
+  // the whole. Two things had to be got right before this control said anything.
+  //   - It is an ABSOLUTE rms. A per-sample RELATIVE error blows up wherever a torque crosses
+  //     zero, and reading 650% that way is how this control first looked broken (rule 19).
+  //   - It is taken with ARBITRARY O(1) parameters, not the identified ones. The identified
+  //     beta reaches 1e14 in directions this excitation barely moves (pinned below), and a
+  //     structurally-zero quantity computed from it is f64 cancellation at 1e-2 N.m rather
+  //     than a non-additive term. Checking the recursion with the pathological vector it
+  //     happens to be paired with would be testing the identification (rules 17, 32).
+  let sdA = 0, sfA = 0;
+  {
+    const dynA = dynamics(arb);
+    for (let k = 0; k < 200; k++) {
+      const i1 = dynA.tau(TEq.q[k], ZERO6, TEq.qdd[k], 0), v1 = dynA.tau(TEq.q[k], TEq.qd[k], ZERO6, 0);
+      const g1 = dynA.tau(TEq.q[k], ZERO6, ZERO6, 9.81), f1 = dynA.tau(TEq.q[k], TEq.qd[k], TEq.qdd[k], 9.81);
+      for (let i = 0; i < 6; i++) { sdA += (i1[i] + v1[i] + g1[i] - f1[i]) ** 2; sfA += f1[i] ** 2; }
+    }
+  }
+  check('the model torque splits EXACTLY into gravity + velocity + inertial, so the shares '
+    + 'below are a decomposition and not an attribution', Math.sqrt(sdA / sfA) < 1e-12,
+    `${(Math.sqrt(sdA / sfA) * 100).toExponential(1)}%`);
+  check('THE IDENTIFIED PARAMETERS ARE ENORMOUS IN THE DIRECTIONS THIS EXCITATION DOES NOT '
+    + 'MOVE — so no single one of them may be read as a mass or an inertia, and a quantity '
+    + 'that is structurally zero comes back at 1e-2 N.m of cancellation rather than at zero. '
+    + 'The PREDICTIONS are unaffected, because what is huge is multiplied by what is tiny',
+    Math.max(...Array.from(f.beta, Math.abs)) > 1e8
+      && Math.sqrt(sd / sf) < 1e-2 && Math.sqrt(sdA / sfA) < 1e-12,
+    `max|beta| ${Math.max(...Array.from(f.beta, Math.abs)).toExponential(2)}, `
+    + `split with it ${(Math.sqrt(sd / sf) * 100).toExponential(1)}% against `
+    + `${(Math.sqrt(sdA / sfA) * 100).toExponential(1)}% with O(1) parameters`);
+  console.log('  joint  gravity  vel+fric  INERTIAL  fit resid   inertial/resid');
+  const ratio = [];
+  for (let i = 0; i < 6; i++) {
+    ratio.push(rm(acc.iner, i) / rm(acc.res, i));
+    console.log(`    ${i}  ${rm(acc.grav, i).toFixed(2).padStart(7)} ${rm(acc.vel, i).toFixed(2).padStart(9)}`
+      + ` ${rm(acc.iner, i).toFixed(2).padStart(9)} ${rm(acc.res, i).toFixed(2).padStart(10)}`
+      + ` ${ratio[i].toFixed(2).padStart(15)}`);
+  }
+  check('GRAVITY IS THE TORQUE on the shoulder and the elbow — above 90% of their rms — so an '
+    + 'R2 of 0.8 on torque is mostly a statement about statics',
+    rm(acc.grav, 1) / rm(acc.iner, 1) > 4 && rm(acc.grav, 2) / rm(acc.iner, 2) > 4,
+    `${(rm(acc.grav, 1) / rm(acc.iner, 1)).toFixed(1)}x and ${(rm(acc.grav, 2) / rm(acc.iner, 2)).toFixed(1)}x the inertial term`);
+  check('…and THE INERTIAL TERM IS BELOW THE FIT\'S OWN RESIDUAL on five of six joints — the '
+    + 'model\'s error exceeds the whole signal the forward direction needs, which is why the '
+    + 'two R2 columns above disagree',
+    ratio.filter((v) => v < 1).length >= 5, ratio.map((v) => v.toFixed(2)).join(' '));
+  check('…and the ONE joint above that line is joint 0, the VERTICAL axis carrying no gravity '
+    + 'moment — and it is the one joint whose forward prediction works. Two independent '
+    + 'readings agreeing (rule 15), which is what makes this the record and not the model',
+    ratio[0] > 1.5 && fr2[0] > 0.5 && rm(acc.grav, 0) / rm(acc.grav, 2) < 0.01,
+    `ratio ${ratio[0].toFixed(2)}, forward R2 ${fr2[0].toFixed(3)}, gravity `
+    + `${rm(acc.grav, 0).toExponential(1)} against the elbow's ${rm(acc.grav, 2).toFixed(2)}`);
+}
 
 console.log('\n  *** THE CLOSED-LOOP PLANT IS NOT ESTABLISHED — see this file\'s header for what');
 console.log('      was measured, what it refused, and what would change the answer. ***');

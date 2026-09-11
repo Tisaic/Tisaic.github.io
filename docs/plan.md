@@ -14960,3 +14960,175 @@ carry no gravity moment), so the structured route would be starting from somethi
 **REPOSITORY NOTE.** The twelve raw recordings and `trained_model.mat` are moved from the
 repository root into `test/pilot/rigs/realdata/records/kuka/raw/`, where the two probes read
 them.
+
+### §55.11 — The kinematics were sourced and the model built; the record is what fails
+
+§55.10 left the classical route open and named its gate: rigid-body dynamics is LINEAR IN THE
+INERTIAL PARAMETERS, so IDIM-LS identifies it by least squares given the KR300's kinematics,
+which this repository did not have. They were sourced. The route was built. **The
+identification succeeds and the forward simulation still fails, and the reason is now a
+measured property of the RECORD rather than a failure to fit it.**
+
+**THE KINEMATICS, FROM TWO SOURCES NEITHER DERIVED FROM THE OTHER (rule 15).** The
+ROS-Industrial URDF `kuka_kr300_support/urdf/kr300r2500ultra.urdf`, whose link geometry comes
+from CAD, and Table 1 of *J. Intell. Robot. Syst.* (2023) 109:58, "DH model of the KR300 robot
+(nominal geometric parameters)". At q = 0 every frame origin agrees **to 1.3e-16 m**, with the
+single exception of frame 6 at exactly **0.240 m** — the flange offset the URDF carries inside
+`link_6`/`tool0` and the DH table carries as d6. That is a bookkeeping difference and not a
+disagreement, and `realkuka.test.mjs` pins it. The convention is MODIFIED (Craig) DH, not
+standard DH: the paper's eq. (1) is `Rot(x,α)·Trans(x,a)·Rot(z,θ)·Trans(z,r)`, and getting that
+ordering wrong shifts every frame while still producing a plausible arm.
+
+What the URDF does NOT give is the dynamics — every link there carries `mass=2` and
+`inertia=0.01`, ROS-Industrial's placeholders, because the real values are proprietary. That is
+the right split rather than a gap: IDIM-LS needs the KINEMATICS to build the regressor and
+IDENTIFIES the inertial parameters from data. The half that is faked is exactly the half the
+measurement determines.
+
+**FOUR STRUCTURAL CONTROLS ON THE REGRESSOR, PASSED AT MACHINE PRECISION.** A 6-link
+Newton-Euler recursion in modified DH, written from a paper's table, is exactly the kind of
+thing that is silently wrong and still plausible, so it is checked against PROPERTIES rather
+than against its own output — and three of the four use ARBITRARY parameters, so they test the
+recursion and not the identification:
+
+```
+  M(q) comes back SYMMETRIC over 60 random poses      3.1e-16 relative
+  gravity torque about the VERTICAL first axis        7.7e-15  (and shoulder/elbow > 0.1 — both halves)
+  the regressor is exactly LINEAR in qdd              3.6e-15
+  the DH chain against the URDF's own chain           1.3e-16 m, d6 excepted
+```
+
+**THE IDENTIFICATION SUCCEEDS.** 78 parameters — 10 inertial per link about the LINK FRAME
+ORIGIN, plus viscous friction, Coulomb friction and motor inertia per joint — held out on the
+benchmark's own test cut:
+
+```
+  joint                    0       1       2       3       4       5
+  train (in sample)    0.904   0.873   0.872   0.855   0.844   0.834
+  test  (held out)     0.891   0.785   0.867   0.831   0.805   0.822
+```
+
+Train ≈ test, and the ridge is inert across four decades.
+
+**AND THE FORWARD EQUATION FROM THE SAME PARAMETERS READS R² AT OR BELOW ZERO ON FIVE OF SIX
+JOINTS — IN SAMPLE, WITH EVERY QUANTITY MEASURED.** This is the decisive pair, and it is the
+cheap falsifier that should have run first (rule 1): the free run mixes the model with an
+integrator and with a forward record carrying no measured velocity, while evaluating
+`qdd = M⁻¹(tau − h)` on the INVERSE record — where q, q̇, q̈ AND τ are all given — leaves the
+model alone.
+
+```
+  joint                    0       1       2       3       4       5
+  train (in sample)    0.760  -0.094  -0.465  -0.087  -0.966  -0.204
+  test  (held out)     0.729  -0.708  -0.206  -0.224  -1.624  -0.101
+```
+
+**BOTH OF THE CANDIDATE FAULTS WERE MINE AND BOTH ARE DEAD BY MEASUREMENT.** An unconstrained
+IDIM-LS need not return a physically realisable rigid body, and the inverse fit would not
+notice (rule 16) — measured, **M(q) is positive definite at every pose tried and its condition
+number is 12**. And forward Euler at the record's own 0.1 s is a very large step for a robot —
+measured, **sub-stepping the integrator 10× moves the free run by under 6% at 1 s and under 1%
+at 4 s** (1.857 → 1.746 deg, 25.848 → 25.813). Neither is the fault.
+
+**WHAT SEPARATES THE TWO R² TABLES IS WHAT THE TORQUE IS MADE OF.** Newton-Euler carries no
+product of q̈ with q̇ or with g, so the model torque splits EXACTLY into three additive groups —
+asserted, not assumed. Decomposed on the held-out cut, rms N·m:
+
+```
+  joint   measured   gravity  vel+fric  INERTIAL  fit resid   inertial/resid
+    0       2.58      0.00      1.50      1.62       0.85            1.91
+    1       6.93      6.71      1.62      1.07       1.42            0.76
+    2      10.04      9.69      1.57      1.07       1.18            0.90
+    3       0.93      0.32      0.61      0.36       0.38            0.94
+    4       1.98      1.54      0.76      0.36       0.60            0.60
+    5       1.26      0.01      0.98      0.51       0.53            0.95
+```
+
+**GRAVITY IS THE TORQUE**: 6.71 of 6.93 N·m on the shoulder and 9.69 of 10.04 on the elbow. The
+INERTIAL term — the only part that carries q̈, and the only part the forward direction can use —
+is 1.04-1.07 N·m against a fit residual of 1.18-1.42. **The model's own error exceeds the
+entire signal the forward problem needs, on five of six joints.** An R² of 0.85 on torque is an
+R² of ~0 on acceleration, and the two numbers are not in conflict: they are the same fit read
+against two different denominators (rule 19).
+
+**THE ONE JOINT THAT WORKS SAYS IT FROM THE OTHER SIDE (rule 15).** Joint 0 is the vertical
+axis. Its gravity torque is structurally zero, its inertial/residual ratio is the only one above
+1.0, and it is the only joint whose forward prediction reads a positive R² — 0.73. Two
+independent readings, agreeing, neither put there by hand.
+
+**AND IT IS THE EXCITATION, NOT THE AVERAGING (rule 19).** A whole-record rms cannot see
+dynamics living in a minority of samples, so the same ratio is read by each joint's OWN |q̈|
+decile:
+
+```
+  joint   rms|qdd|  peak|qdd|      all   top 10%    top 1%   (deg/s2)
+    0       7.44      29.15     2.05      3.93      5.40
+    1       2.98      14.11     0.94      2.22      3.03
+    2       6.34      24.10     0.83      2.22      2.84
+    3      10.71      38.64     0.97      1.85      2.23
+    4       7.18      30.40     0.72      1.99      2.52
+    5      11.56      40.21     0.91      2.27      2.75
+```
+
+The dynamics ARE in this record — in the top few percent of its samples. Peak |q̈| is 14-40
+deg/s², a fraction of a rad/s² on a machine rated for several. **Rule 41b from the other side**:
+an excitation adequate for the benchmark's OWN inverse task and inadequate for the forward one.
+
+**TWO CONTROLS SAY THE MODEL IS NOT THE LIMITATION**, which is what makes that a statement about
+the record rather than about this file (rule 9). **The fit is SATURATED in data** — 625 training
+rows read the same held-out error as 19,994 (0.8502 / 1.4216 / 1.1854 against 0.8492 / 1.4161 /
+1.1798), so the residual is structural and not estimation variance. And **a 490-feature
+universal map of the SAME 18 inputs on the SAME rows** (rule 20, both classes reading exactly
+the same samples) is WORSE on every joint:
+
+```
+  joint    rigid body (78p)   universal map (490f)
+    0             0.849              1.204
+    1             1.416              1.909
+    2             1.180              1.508
+    3             0.383              0.537
+    4             0.597              0.800
+    5             0.532              0.702
+```
+
+Six times the freedom from the same inputs transfers worse — this project's capacity negative
+arriving on a real robot rather than on a simulator.
+
+**ONE THING FOUND ON THE WAY, AND IT IS A CAUTION RATHER THAN A RESULT.** `max|beta|` is
+**9.8e13**: the excitation does not move every direction of the parameter space, and a
+nearly-dead column divided by its own nearly-zero scale comes back enormous. The predictions are
+unaffected — what is huge multiplies what is tiny — but **no single identified parameter may be
+read as a mass or an inertia**, and a structurally-zero quantity computed from that vector lands
+at 1e-2 N·m of f64 cancellation rather than at zero. Both of this section's first two red checks
+were that, and both were thresholds set in absolute terms against a quantity that does not live
+at that scale (rules 17, 32). The additive-split control is therefore run with O(1) parameters,
+where it reads 1e-13%, and the identified-beta number is reported beside it with its cause named.
+
+**SO THE KUKA STILL DOES NOT BECOME AN EIGHTH PLANT, AND THE REASON HAS CHANGED.** §55.8 filed
+it as NOT ESTABLISHED because nothing fitted could free-run. What is established now is
+stronger and more useful: **this record identifies the robot's STATICS, and a forward
+simulation needs its DYNAMICS.** That is a property of the excitation, it is measured from four
+directions that share no machinery, and it predicts the black-box failure rather than merely
+sitting beside it.
+
+**AND IT IS THE MIRROR IMAGE OF §55's OWN HEADLINE.** There, a plant identified as a linear ARX
+sat INSIDE the correction's hypothesis class and its factor measured the class rather than the
+machine — the tanks' 2012x and the exchanger's 1364x. Here, the quantity the forward direction
+needs sits BELOW the model's own error floor and the R² measures gravity. Both are one fault:
+**the metric's support does not match the claim's** (rule 19), and in both cases the repair was
+to find a second denominator rather than a better model.
+
+**WHAT WOULD CHANGE THE ANSWER (rule 59).** An excitation that moves this robot at a real
+fraction of its rated acceleration — which is a different experiment, not a different fit, and
+is what a trajectory designed for IDIM-LS normally is. The benchmark's raw recordings are at
+250 Hz rather than 10 Hz (§55.10 measured that rate — this paragraph first repeated the 1 kHz
+§55.8 had predicted, which is the stale number rule 30 exists for) and would sharpen q̇ and q̈
+considerably; whether they also carry larger accelerations is not measured here. Nothing about the method is implicated either way.
+
+**WHAT IS COMMITTED.** `test/pilot/rigs/realdata/kuka-kin.mjs` (the kinematics, the regressor,
+`identify` and `dynamics` — one implementation, because three separate copies of a plant's
+routing have each shipped a defect here, rule 61); `test/pilot/kuka-idim.mjs` (the probe that
+reports all of the above, with `FLOOR=1` and `FREE=1` for the two slow controls); and the
+IDIM block in `test/pilot/realkuka.test.mjs`, which pins the four structural controls, the
+identification, the forward failure, the positive-definiteness, the decomposition and the
+joint-0 agreement.
