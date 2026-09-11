@@ -171,6 +171,60 @@ check('…and essentially NOTHING on joints 0 and 5, whose axes carry no gravity
   + 'half that makes this a physics check rather than a curve fit (rule 9)',
   gR2[0] < 10 && gR2[5] < 10, `joint0 ${gR2[0].toFixed(1)}%, joint5 ${gR2[5].toFixed(1)}%`);
 
+// ---- THE A2/A3 COUPLING, AND WHY IT CHANGES NOTHING FOR A LINEAR FIT (plan §55.9) --------
+// A KUKA's axes 2 and 3 are mechanically coupled, so the natural suspicion is that the model
+// is fitted in the wrong coordinates. The coupling IS in this record — and a linear ARX is
+// invariant to it, which is asserted here rather than argued because the alternative was to
+// carry a plausible explanation nobody had checked.
+const corr = (a, b) => {
+  const n = Utr.length;
+  let ma = 0, mb = 0;
+  for (let k = 0; k < n; k++) { ma += Utr[k][a]; mb += Utr[k][b]; }
+  ma /= n; mb /= n;
+  let c = 0, x = 0, y = 0;
+  for (let k = 0; k < n; k++) { const p1 = Utr[k][a] - ma, q1 = Utr[k][b] - mb; c += p1 * q1; x += p1 * p1; y += q1 * q1; }
+  return c / Math.sqrt(x * y);
+};
+const cPos = (a, b) => {
+  const n = Ytr.length;
+  let ma = 0, mb = 0;
+  for (let k = 0; k < n; k++) { ma += Ytr[k][a]; mb += Ytr[k][b]; }
+  ma /= n; mb /= n;
+  let c = 0, x = 0, y = 0;
+  for (let k = 0; k < n; k++) { const p1 = Ytr[k][a] - ma, q1 = Ytr[k][b] - mb; c += p1 * q1; x += p1 * p1; y += q1 * q1; }
+  return c / Math.sqrt(x * y);
+};
+console.log(`  torque coupling: corr(u1,u2) = ${corr(1, 2).toFixed(3)} against a worst position `
+  + `pair of ${Math.max(...[[1, 2], [1, 3], [2, 3], [0, 1]].map(([a, b]) => Math.abs(cPos(a, b)))).toFixed(3)}`);
+check('the shoulder and elbow TORQUES are strongly coupled while their POSITIONS are not — '
+  + 'the excitation was designed uncorrelated, so this is the machine and not the experiment',
+  Math.abs(corr(1, 2)) > 0.3 && Math.abs(cPos(1, 2)) < 0.3,
+  `u1·u2 ${corr(1, 2).toFixed(3)}, q1·q2 ${cPos(1, 2).toFixed(3)}`);
+
+// The control (rule 21): q2 + q1 is a LINEAR COMBINATION of columns the fit already has, so a
+// linear model must be invariant to the coupling. If this ever stops holding, the reasoning
+// above is wrong and the coordinates are doing something this file does not understand.
+function fitCoupled(cpl) {
+  const Yc = Ytr.map((r) => { const o = Float64Array.from(r); o[2] = r[2] + cpl * r[1]; return o; });
+  const mm = fitMimo({ U: Utr, Y: Yc, na: 4, nb: 4, nk: 1, lam: 1e-6 });
+  const Yv = Yte.map((r) => { const o = Float64Array.from(r); o[2] = r[2] + cpl * r[1]; return o; });
+  const H = 40;
+  let se = 0, n = 0;
+  for (let s2 = 0; s2 + H <= Yv.length; s2 += H) {
+    const sim = simulateMimo(mm, Ute.slice(s2, s2 + H), Yv.slice(s2, s2 + H), H, 50, Yv);
+    if (!sim) return null;
+    for (let k = mm.k0; k < H; k++) for (let c = 0; c < 6; c++) { se += (Yv[s2 + k][c] - sim[k][c]) ** 2; n++; }
+  }
+  return Math.sqrt(se / n);
+}
+const raw = fitCoupled(0), cpl = fitCoupled(1);
+console.log(`  free-run at 4 s: raw axes ${raw.toFixed(3)}°, coupled q2+q1 ${cpl.toFixed(3)}° `
+  + `— ${(100 * Math.abs(cpl - raw) / raw).toFixed(1)}% apart`);
+check('…and a LINEAR fit is invariant to that coupling, because the coupled coordinate is a '
+  + 'combination of columns it already carries — so the coupling can only matter inside a '
+  + 'NONLINEARITY, where `kuka-ngrc.mjs` measures it as the same or worse',
+  Math.abs(cpl - raw) / raw < 0.05, `${raw.toFixed(4)} vs ${cpl.toFixed(4)}`);
+
 console.log('\n  *** THE CLOSED-LOOP PLANT IS NOT ESTABLISHED — see this file\'s header for what');
 console.log('      was measured, what it refused, and what would change the answer. ***');
 console.log(failed ? `\nrealkuka: ${failed} check(s) FAILED\n` : '\nrealkuka: all checks passed\n');

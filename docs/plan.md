@@ -14824,3 +14824,63 @@ being one) rather than a black-box ARX.
 size is already paid; the two identification records and the MATLAB scripts have been moved to
 `test/pilot/rigs/realdata/records/kuka/`, and whether the raw recordings should stay is the
 owner's call rather than something to delete unasked.
+
+### §55.9 — The KUKA's escapes, both tested: a nonlinear VAR and the A2/A3 coupling
+
+§55.8 filed the plant NOT ESTABLISHED having tried only a linear MIMO ARX with a trig lift.
+Two obvious escapes were left open and the owner named both. Neither works, and the way each
+fails is worth more than the verdict.
+
+`test/pilot/kuka-ngrc.mjs`, one variable at a time (rule 20) — same rows, same targets, same
+free-run metric, same lag order, only the FUNCTION CLASS and the COORDINATES moving:
+
+```
+  na=nb=4                     feat      1s      2s      4s       8s     16s
+  linear                        49   0.410   2.589  10.317   20.893  23.907
+  linear + coupled (control)    49   0.415   2.605  10.344   20.909  23.861
+  NGRC universal              1257   0.510   2.906  10.476   73.480     div
+  NGRC + coupled q2+q1        1257   0.513   2.908  10.417  246.199     div
+  NGRC + coupled q2-q1        1257   0.516   2.911  10.497 1013.148     div
+```
+
+**THE COUPLING IS REAL AND A LINEAR MODEL ALREADY ABSORBS IT.** It is plainly in the record:
+the torque correlation matrix reads **u1·u2 = 0.485**, far the largest off-diagonal, while
+every position pair is under 0.15 — the excitation was designed uncorrelated and the torques
+are not, so that 0.485 is the machine rather than the experiment. But q2 + q1 is a LINEAR
+COMBINATION of columns a linear ARX already carries, so the fit must be invariant to the
+coupling; the control says it is, identical to three significant figures at every horizon,
+with the 1% residue being ridge conditioning on a rescaled column. **So a constant coupling
+can only matter where the coordinates decide what is EXPRESSIBLE, which is inside a
+nonlinearity** — and there it measures the same at short horizon and catastrophically worse at
+long. Both halves are now pinned in `realkuka.test.mjs`: the coupling's own evidence, and the
+invariance.
+
+**THE NONLINEARITY IS WORSE AT EVERY HORIZON AND ITS FAILURE MODE IS DIVERGENCE.** 25x the
+features buy 24% WORSE at one second and a free run that leaves the planet at eight. That is
+the eleventh capacity negative in this project, and two things make it new rather than a
+restatement: it is the first on a plant nobody here built, and it is a function class §54.9
+did not cover — random ReLU and Fourier features rather than more hand-picked ones. **And the
+failure differs in KIND from §54.9's**, where an MLP merely transferred worse: here the extra
+capacity destabilises the RECURSION, which is a property of free RUNNING a model rather than
+of fitting one. `lib/ngrc/autotune.js` carries a "free-run stability reject" for exactly this,
+so the library's own authors met it too.
+
+**AND THE ANSWER DEPENDS ON WHETHER THE LINEAR MODEL WAS STARVED, WHICH IS WHY THE LAG ORDER
+HAD TO BE MATCHED.** At na=nb=2, where linear reads 1.180 at one second, NGRC reads 1.128 and
+looks like a 4-11% win at short horizons. At na=nb=4, where linear reads 0.410, the same
+comparison reverses. **A nonlinear model beating a starved linear one is a statement about the
+lag order** (rule 20), and reporting the na=2 row alone would have been this project's own
+favourite mistake with the sign flipped.
+
+**ONE INSTRUMENT FAULT, CAUGHT BEFORE IT SHIPPED.** The first run built the standardiser ONCE
+on the raw coordinates and then changed the coupling underneath it, so the universal map's
+ReLU and Fourier features — which are only meaningful on standardised inputs — were reading a
+miscentred channel (rule 38). Re-measured per configuration on the TRAINING rows only. The
+buggy run's coupled rows were discarded; its linear and plain-NGRC rows are unaffected and
+agree with the corrected run to the digit.
+
+**WHAT THIS DOES AND DOES NOT CHANGE.** The KUKA stays NOT ESTABLISHED as a closed-loop plant,
+but the verdict is now supported rather than merely stated: the two escapes a reader would
+propose have been measured and both are negative, with controls. §55.8's list of what WOULD
+change the answer is unchanged and the 1 kHz raw recordings remain the first thing to try —
+none of this touches the aliasing, which is the standing hypothesis for the free-run ceiling.

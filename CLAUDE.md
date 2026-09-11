@@ -286,7 +286,19 @@ Each of these is a claim that can be shown false, which is the only kind worth w
    inertia spread with a shoulder torque moving the ELBOW further than the shoulder, and a
    gravity fit that recovers the right physics on a record it never saw — 34% and 51% on the
    shoulder and elbow, and ~0% on the two joints whose axes carry no gravity moment, which is
-   the half that makes it a physics check rather than a curve fit.
+   the half that makes it a physics check rather than a curve fit. **AND THE TWO ESCAPES A
+   READER WOULD PROPOSE ARE NOW MEASURED AND BOTH ARE NEGATIVE (plan §55.9).** A nonlinear VAR
+   — `lib/ngrc/`'s universal random-feature map, which this file lists as the fourth thing that
+   must replace the memory and §55.8 had not reached for — is **WORSE AT EVERY HORIZON at
+   matched lag order** (0.510 against 0.410 at 1 s) and its failure mode is DIVERGENCE rather
+   than drift: 73° at 8 s where the linear model is at 21, for 25x the features. That is the
+   eleventh capacity negative here, the first on a plant nobody here built, and a function class
+   §54.9 did not cover. And the A2/A3 COUPLING is real — torque correlation u1·u2 = **0.485**
+   against every position pair under 0.15 — but a LINEAR fit is invariant to it, because the
+   coupled coordinate is a combination of columns it already carries, which is now a pinned
+   control rather than an argument. Stated because it reverses on a starved model: at na=2 the
+   same nonlinearity looks like a 4-11% win, and reporting that row alone would have been this
+   project's own favourite mistake with the sign flipped (rule 20).
 
 4. **COMMISSIONING IN MINUTES, NOT AN AFTERNOON. MET ON THE ARM — 17 MINUTES TO 2, AND THE
    DELIVERED RESULT IS UNCHANGED.** Target: 10x down, under three minutes on the arm, while
