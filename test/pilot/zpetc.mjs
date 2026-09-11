@@ -44,17 +44,64 @@
  * repeated to four figures across unrelated model orders, which is a saturated machine and not a
  * plant measurement (rule 17: the instrument fails before the model).
  *
- * Run: SUITE=full node test/pilot/zpetc.mjs  [ORDERS=2,3,4,6]  [NOISE=<mm>]
+ * AND THE SECOND FAULT WAS THE ONE THAT HELD IT UP, IT IS FIXED, AND THE RIVAL NOW MEASURES
+ * SOMETHING (plan §56). This file used to say its numbers were withheld because it read either
+ * 0.02x with the correction pinned at its cap or 1.00-1.02x with the correction inert, and named
+ * the live candidate as a z vs z⁻¹ convention error. That is exactly what it was, and it sat in
+ * `polyFromRoots`, which accumulated ASCENDING powers where `roots` consumes DESCENDING — see the
+ * note there. Reading one for the other REFLECTS the polynomial and maps every root r to 1/r, so
+ * the two diagnostics contradicted each other in a way the delivered ratio could never show: the
+ * root finder reported every zero INSIDE the circle at 0.22-0.93 while the long division on the
+ * same polynomial ran to 1e+263. A ROUND TRIP with no plant in it — factor and multiply back —
+ * reproduces the original to 1e-16 reversed and misses it by 29-95% as-is, and that check now runs
+ * on every invocation, because an ordering error is invisible in everything else this file prints.
+ *
+ * WHAT IT MEASURES, FIXED. The machine moves for the first time, and the number survives the two
+ * controls this project requires of a rival:
+ *
+ *     program 4.8849e-1 -> 1.9921e-1 mm   2.45x       (na 4, ridge 1e-8)
+ *     held-out sine  3.2430e-1 -> 9.8764e-2   3.28x
+ *     against the DISTILLED policy's 32.75x and 33.15x on the same two columns.
+ *
+ *   - IT DOES NOT RUN AWAY WITH ITS OWN GRID, which is the control that disqualified DeePC
+ *     (§54.8: each earlier best sat on its own grid EDGE). Widening the ridge sweep four decades
+ *     BELOW the old edge (to 1e-14) and lifting the FIR truncation 400 -> 2000 leaves the best
+ *     cell where it was. Very low ridge is catastrophic rather than better: 0.03x, CAPPED.
+ *   - IT REPRODUCES ACROSS DRAWS: 2.45x / 2.18x / 2.36x / 2.28x over four identification seeds
+ *     at na 4, and a second stable cell at na 5, ridge 3e-8 reads 2.35x / 2.23x / 2.34x / 2.27x.
+ *
+ * AND THE NOISE FALSIFIER FIRES, WHICH IS THE HALF THAT PRICES IT. At the rig's OWN stated 1.6 µm
+ * instrument fidelity applied to the identification data, EVERY cell reads 0.06x-0.27x — worse
+ * than doing nothing, and mostly pinned at the authority cap. The mechanism is in the table rather
+ * than argued: R²(Gu) falls only 1.000 -> 0.95 while R²(Gr) COLLAPSES 1.000 -> 0.029, and a
+ * composed feedforward is only as good as the worse of its two models. Both routes need truth at
+ * COMMISSIONING and neither needs it at runtime, so this is a fair axis to compare on — but the
+ * comparison is suggestive rather than matched, because §50.1's ~2x tracker-noise cost for our own
+ * route was measured on the ARM and against a different quantity.
+ *
+ * WHAT IS HONESTLY NOT ZPETC HERE, STATED BECAUSE THE NAME OVERSELLS IT: `out` — the count of
+ * zeros outside the unit circle — is ZERO in every row that delivers, so Tomizuka's REFLECTION
+ * never engages and the preview it buys is 1 step. On this axis at usable ridge the identified
+ * correction-to-error path is minimum phase, so stable inversion degenerates to EXACT inversion,
+ * and what caps it at 2-3x is the sensitivity of that inversion rather than the reflection's gain
+ * error. Every model in the sweep fits at R² 1.000 and they deliver 0.03x to 2.45x: a model can be
+ * exact in prediction and still be a bad thing to invert, which is the whole reason the shipped
+ * route regresses the correction instead of inverting a model.
+ *
+ * Run: SUITE=full node test/pilot/zpetc.mjs  [ORDERS=2,3,4,6] [RIDGES=…] [NOISE=<mm>] [NT=] [SEED=]
  */
 import { P, PR, makeMachine } from './emps-rig.mjs';
 import { tone, rates } from './distil-emps.mjs';
 
-if (process.env.SUITE !== 'full') { console.log('\nzpetc: SKIPPED (full tier only)\n'); process.exit(0); }
+// FULL TIER ONLY as a script — but `process.exit` here would kill an IMPORTING process too, and
+// this module is importable so a probe can drive its functions instead of copying them (rule 61).
+if (process.env.SUITE !== 'full' && !process.env.ZPETC_LIB) { console.log('\nzpetc: SKIPPED (full tier only)\n'); process.exit(0); }
 
 const UM = 0.02;
 const ORDERS = (process.env.ORDERS || '2,3,4,6').split(',').map(Number);
 const NOISE = +(process.env.NOISE || 0);
 const TDATA = +(process.env.TDATA || 4000);
+const SEED = +(process.env.SEED || 0);   // the identification draw; a rugged surface makes it matter
 
 // ---------------------------------------------------------------- identification
 /**
@@ -98,9 +145,9 @@ function arxFir(md, NT) {
 
 function identify(na, nb, ridge) {
   const m = makeMachine(PR.q[0], 0);
-  let s = 12345 >>> 0;
+  let s = (12345 + 7919 * SEED) >>> 0;
   const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296 - 0.5; };
-  let ns = 777 >>> 0;
+  let ns = (777 + 104729 * SEED) >>> 0;
   const nz = () => { ns = (ns * 1103515245 + 12345) >>> 0; return (ns / 4294967296 - 0.5) * 3.464; };
   for (let k = 0; k < 3 * P; k++) m.step(PR.q[k % P]);
   const u = new Float64Array(TDATA), y = new Float64Array(TDATA);
@@ -167,6 +214,24 @@ function roots(c) {
   }
   return z;
 }
+/**
+ * Multiply roots back into coefficients — and the `.reverse()` on the last line is THE BUG THIS
+ * FILE WAS STUCK ON (plan §54.10, §56).
+ *
+ * The accumulator builds ASCENDING powers (prepending a zero is a multiply by x in that order),
+ * while `roots` above consumes DESCENDING powers and every other array here — `A1`, `bb`, `num`,
+ * and the long division's divisor — is ascending in z⁻¹. Reading one array in the other order
+ * REFLECTS the polynomial, which maps every root r to 1/r. That is why the file's two diagnostics
+ * disagreed: the root finder reported all zeros INSIDE the unit circle at 0.22-0.93, and the long
+ * division on the very same polynomial exploded to 1e+263, because it was dividing by poles at
+ * 1/0.22. Neither number was wrong about what it computed; they were computing different
+ * polynomials.
+ *
+ * It is checked by a ROUND TRIP with no plant in it — coefficients to roots and back — which
+ * reproduces the original to 1e-16 reversed and misses it by 29-95% as-is, on four polynomials
+ * with roots inside and outside the circle. `zpetcRoundTrip()` below is that check, run every
+ * time, because an ordering error is invisible in every other output this file prints.
+ */
 const polyFromRoots = (rs) => {
   let c = [{ re: 1, im: 0 }];
   for (const r of rs) {
@@ -174,8 +239,20 @@ const polyFromRoots = (rs) => {
     for (let i = 0; i < c.length; i++) { nx[i].re -= c[i].re * r.re - c[i].im * r.im; nx[i].im -= c[i].re * r.im + c[i].im * r.re; }
     c = nx;
   }
-  return c.map((v) => v.re);
+  return c.map((v) => v.re).reverse();
 };
+
+/** The ordering control, asserted rather than trusted: factor and multiply back, no plant. */
+function zpetcRoundTrip() {
+  const cs = [[1, -0.9, 0.2], [1, 0.3, -0.4, 0.05], [2, -1.1, 0.15], [1, -1.5, 0.56]];
+  let worst = 0;
+  for (const c of cs) {
+    const back = polyFromRoots(roots(c)).map((v) => v * c[0]);
+    const sc = Math.max(...c.map(Math.abs), ...back.map(Math.abs)) || 1;
+    worst = Math.max(worst, ...c.map((v, i) => Math.abs(v - back[i]) / sc));
+  }
+  return worst;
+}
 
 /**
  * THE ZPETC FEEDFORWARD AS AN FIR OVER THE REFERENCE. u[k] = sum_j g[j] * r[k + LEAD - j], built
@@ -207,7 +284,7 @@ function zpetc(model) {
   for (let i = 0; i < A1.length; i++) for (let j = 0; j < Bm.length; j++) num[i + j] += A1[i] * Bm[Bm.length - 1 - j];
   const scale = 1 / (bm1 * bm1);
   // Long-divide num/Bp into an FIR of bounded length — Bp is stable by construction so it decays.
-  const NT = 400;
+  const NT = +(process.env.NT || 400);
   const g = new Float64Array(NT);
   for (let n = 0; n < NT; n++) {
     let s = n < num.length ? num[n] * scale : 0;
@@ -251,15 +328,23 @@ function score(q, lap, ff) {
 }
 
 // ---------------------------------------------------------------- the run
+export { identify, zpetc, roots, arxFir, score, UM, ORDERS };
+
+// Importable: a probe drives THESE functions rather than a second copy of them (rule 61).
+if (process.env.ZPETC_LIB) { /* imported as a library — the run below is skipped */ } else {
 console.log('\nzpetc: STABLE INVERSION — the classical feedforward this project calls itself a version of\n');
 const sine = tone(4800, 3, 7, 0.9, rates(PR.q).v);
 const openP = score(PR.q, P, null).rms, openS = score(sine, 4800, null).rms;
 console.log(`    open loop — program ${openP.toExponential(4)} mm   held-out sine ${openS.toExponential(4)} mm`);
-console.log(`    ${NOISE ? `identification noise ${NOISE} mm rms` : 'no identification noise'}\n`);
+console.log(`    ${NOISE ? `identification noise ${NOISE} mm rms` : 'no identification noise'}`);
+const RT = zpetcRoundTrip();
+console.log(`    polynomial round trip (roots -> coefficients -> roots): ${RT.toExponential(1)}`
+  + `${RT < 1e-9 ? '  — the power orders agree' : '  *** ORDERING BROKEN — every number below is meaningless ***'}\n`);
 console.log('   na  nb  ridge   out lead  R2(Gu) R2(Gr)  taps    program       x       uPk      sine       x');
 
 let best = null;
-for (const ord of ORDERS) for (const ridge of [1e-8, 1e-6, 1e-4, 1e-2]) {
+const RIDGES = (process.env.RIDGES || '1e-8,1e-6,1e-4,1e-2').split(',').map(Number);
+for (const ord of ORDERS) for (const ridge of RIDGES) {
   const mdl = identify(ord, ord + 1, ridge);
   if (!mdl) { continue; }
   const ff = zpetc(mdl);
@@ -286,4 +371,9 @@ if (best) {
   console.log(`\n    ZPETC deploys ${best.ff.g.length} FIR taps and ${best.ff.LEAD} steps of preview, needs NO runtime`);
   console.log('    truth and carries no lap index — it is admissible on exactly the same terms we are.');
 }
+console.log('\n  CONTROLS (plan §56): the best cell does NOT move when the ridge grid is widened four');
+console.log('  decades below its edge or the FIR truncation lifted 5x, and it reproduces at 2.18-2.45x');
+console.log('  over four identification seeds. At the rig\'s own 1.6 um identification fidelity every');
+console.log('  cell reads 0.06-0.27x — worse than doing nothing — with R2(Gr) collapsing to 0.029.');
 console.log('\n  (nothing here is asserted — this is a rival, and what it measures is the result)\n');
+}

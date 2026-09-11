@@ -15179,3 +15179,80 @@ does not move the robot hard enough to identify what a plant needs. The next can
 be screened on that FIRST, before anything is vendored: decompose its torque, and if the
 inertial term sits below a plausible model residual, the record is a regression benchmark and
 not a plant. That check is cheap, it is now written down, and it would have saved this arc.
+
+### §56 — ZPETC is built, the bug was where the file said it would be, and the rival loses
+
+§54.10 left stable inversion attempted and NOT established, with its numbers withheld because the
+file would not publish this repository's own bug as the method's property. It named the live
+candidate: *"a z vs z⁻¹ convention error, stated so the next attempt starts there."* That is
+exactly what it was.
+
+**WHERE IT WAS.** `polyFromRoots` accumulated ASCENDING powers — prepending a zero is a multiply
+by x in that order — while `roots` consumes DESCENDING, and every other array in the file (`A1`,
+`bb`, `num`, and the long division's divisor) is ascending in z⁻¹. Reading one for the other
+REFLECTS the polynomial and maps every root r to 1/r.
+
+**HOW IT WAS FOUND, AND THE INSTRUMENT IS THE POINT.** The delivered ratio cannot tell a bad
+inverse from a plant that cannot be helped, so the question went to two diagnostics that must
+agree and did not: the root finder reported every zero of B INSIDE the unit circle at
+**0.22-0.93**, which makes the inverse stable, while the long division on that same polynomial ran
+to **1e+263**. Neither was wrong about what it computed; they were computing different
+polynomials. The confirming control has no plant in it at all — factor a polynomial into its roots
+and multiply them back — and on four cases with roots inside and outside the circle it reproduces
+the original **to 1e-16 REVERSED** and misses it by **29-95% as-is**. `zpetcRoundTrip()` now runs on
+every invocation and prints first, because an ordering error is invisible in everything else the
+file reports (rule 27).
+
+**WHAT THE RIVAL MEASURES, FIXED.** The machine moves for the first time:
+
+```
+  open loop           program 4.8849e-1 mm      held-out sine 3.2430e-1 mm
+  ZPETC (na 4, 1e-8)          1.9921e-1   2.45x               9.8764e-2   3.28x
+  the DISTILLED policy                   32.75x                          33.15x
+  hff / NOILC (lap-indexed)             242.1x   ·  0.53x    — INADMISSIBLE, a memory
+```
+
+**TWO CONTROLS, BECAUSE A BEST-OF-SWEEP IS A SUSPECT RESULT.**
+
+- **It does not run away with its own grid**, which is what disqualified DeePC (§54.8: each
+  earlier best sat on its own grid EDGE, the margin growing every time the grid widened). Widening
+  the ridge sweep four decades BELOW its old edge — to 1e-14 — and lifting the FIR truncation from
+  400 to 2000 taps leaves the best cell exactly where it was. Very low ridge is *catastrophic*
+  rather than better: 0.03x, capped.
+- **It reproduces across identification draws**: 2.45x / 2.18x / 2.36x / 2.28x over four seeds at
+  na 4, with a second stable cell at na 5, ridge 3e-8 reading 2.35x / 2.23x / 2.34x / 2.27x. So
+  ~2.2-2.5x is the number, not a lucky draw.
+
+**AND THE NOISE FALSIFIER FIRES, WHICH IS THE HALF THAT PRICES IT.** At the rig's OWN stated 1.6 µm
+fidelity applied to the identification data, **every cell reads 0.06x-0.27x — worse than doing
+nothing, and mostly pinned at the authority cap**. The mechanism is in the table rather than
+argued: R²(Gu) falls only 1.000 → 0.95 while **R²(Gr) collapses 1.000 → 0.029**, and the file's own
+comment already says a composed feedforward is only as good as the worse of its two models. Stated
+limit: both routes need truth at COMMISSIONING and neither needs it at runtime, so this is a fair
+axis — but the comparison is suggestive rather than matched, because §50.1's ~2x tracker-noise cost
+for our own route was measured on the ARM against a different quantity.
+
+**WHAT IS HONESTLY NOT ZPETC HERE, SAID BECAUSE THE NAME OVERSELLS IT.** `out` — the count of zeros
+outside the unit circle — is **ZERO in every row that delivers**, so Tomizuka's reflection never
+engages and the preview it buys is one step. On this axis at usable ridge the identified
+correction-to-error path is minimum phase, so stable inversion degenerates to EXACT inversion, and
+what caps it at 2-3x is the sensitivity of that inversion rather than the reflection's gain error.
+The sharpest form of that: **every model in the sweep fits at R² 1.000 and they deliver 0.03x to
+2.45x.** A model can be exact in prediction and still be a bad thing to invert — which is the whole
+reason the shipped route regresses the correction instead of inverting a model, and it is the first
+time this project has evidence for that choice from outside its own machinery.
+
+**WHAT IT DOES TO TARGET 8.** The count goes from one admissible rival to **two**, and the second
+is the one this file has been calling itself a version of. CLAUDE.md places the distilled policy in
+the literature as "non-causal feedforward inversion is ZPETC and stable inversion, which DERIVE
+that inverse from an LTI model, and what is here is one REGRESSED from data". That comparison is no
+longer stated and unmeasured: on a near-LTI single axis, the comparison most likely to go against
+us, the derived inverse reads 2.45x against the regressed map's 32.75x, and it is the fragile one
+under instrument noise. Still absent: modern MPC, L1 adaptive, Koopman-EDMD — and L1 and MPC remain
+inadmissible on §54.8's grounds.
+
+**WHAT IS NOT ESTABLISHED (rule 59).** One plant. EMPS is the axis where ZPETC should do best (near
+LTI, single channel), so this is the rival's strong ground rather than a hard case — but it is also
+only one point, and the arm is where `hff`'s own reach shrinkage is load-bearing (§52.43) and would
+be the informative second. And because `out` is 0 throughout, nothing here tests Tomizuka's
+reflection at all; a plant with genuine non-minimum-phase zeros would.
