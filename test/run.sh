@@ -463,12 +463,12 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     t node test/pilot/realarm.test.mjs
     t node test/pilot/realtanks.test.mjs
     t node test/pilot/realexch.test.mjs
-    # THE KUKA KR300 INDUSTRIAL ROBOT — six axes, 67 minutes of real movement. It reports NO
-    # control factor: the record supports a one-second plant and not a six-minute one, and the
-    # replay control proves it by feeding the model the torques that made the record. What it
-    # pins is the reader, the shapes, the uniformity, the one-step/free-run split, and the
-    # gravity physics on the joints that carry gravity AND on the two that cannot.
-    t node test/pilot/realkuka.test.mjs
+    # THE KUKA KR300 IS GONE AND ITS FINDINGS ARE NOT (plan §55.8-§55.12). Its records were
+    # 222 MB — 89% of this repository — against 272 kB for the three real-data plants above,
+    # and four sections of measurement established that the record cannot support a plant at
+    # all: it identifies the robot's STATICS while a forward simulation needs its DYNAMICS.
+    # Once that is settled the data buys nothing and costs every clone, so it was removed on
+    # the owner's call. The measurement record stays in docs/plan.md, which is the point.
     if [ "${SUITE}" = "full" ]; then t node test/pilot/stack.test.mjs; fi
     if [ "${SUITE}" = "full" ]; then t node test/pilot/arm.test.mjs; fi
     if [ "${SUITE}" = "full" ]; then t node test/pilot/ikfree.test.mjs; fi

@@ -15132,3 +15132,50 @@ reports all of the above, with `FLOOR=1` and `FREE=1` for the two slow controls)
 IDIM block in `test/pilot/realkuka.test.mjs`, which pins the four structural controls, the
 identification, the forward failure, the positive-definiteness, the decomposition and the
 joint-0 agreement.
+
+### §55.12 — The KUKA is removed, and its findings are not
+
+**The owner's call, and the right one: once a record is established as unable to support a
+plant, keeping 222 MB of it costs every clone and buys nothing.** The KUKA records were
+**89% of this repository** — 222 MB against 272 kB for the three real-data plants that do
+work — and four sections of measurement had already settled what they can and cannot do.
+
+**WHAT IS DELETED.** `records/kuka/` (the inverse and forward benchmark files, the twelve raw
+recordings, `trained_model.mat` and the benchmark's own MATLAB scripts), `realkuka.test.mjs`,
+the four probes `kuka-ngrc.mjs`, `kuka-raw.mjs`, `kuka-track.mjs` and `kuka-idim.mjs`, the
+kinematics module `kuka-kin.mjs`, and `matread.mjs` — the MATLAB v5 reader, which existed
+solely because Node has none and which nothing else reads, the other three records being CSV
+and DAT. The `run.sh` registration goes with them.
+
+**WHAT IS KEPT, AND WHY THAT IS THE POINT.** §55.8 through §55.11 stay exactly as written.
+This repository's standing practice is that a retired thing keeps its record — `inventory.test.mjs`
+requires every RETIRED module to state WHY rather than merely that — and the asymmetry here is
+stark: re-obtaining the data is a download, while re-deriving why it does not work is four
+sections and two measurement faults. Someone who deletes the findings with the files will try
+the KUKA again.
+
+**THE ONE-PARAGRAPH VERSION, so the next reader does not have to open §55.11.** The record is
+39,988 samples of real six-axis movement at 10 Hz. Nothing fitted to it survives a free run,
+and the classical route explains why rather than merely reproducing the failure: rigid-body
+dynamics on sourced kinematics IDENTIFIES the robot at held-out R² 0.785-0.891 on torque, and
+the forward equation from those same parameters reads R² at or below zero on five of six
+joints IN SAMPLE with q, q̇, q̈ and τ all measured. **Gravity is the torque** — 6.71 of 6.93
+N·m on the shoulder — while the inertial term, the only part carrying q̈, is BELOW the fit's
+own residual on five of six joints. This record identifies the robot's STATICS and a forward
+simulation needs its DYNAMICS. That is a property of the EXCITATION (peak |q̈| 14-40 deg/s²),
+not of the method, and it is confirmed from four directions that share no machinery.
+
+**WHAT THIS DOES NOT FIX, STATED PLAINLY (rule 59).** Deleting the files removes them from the
+working tree; **it does not remove them from git history**, so a fresh clone still pays the
+222 MB. Shrinking that needs a history rewrite and a force-push over `main`, which is
+destructive and outward-facing, so it is not done here on my own judgement. It is a single
+explicit decision for the owner, and the blobs are already in `main` from the original dump
+either way.
+
+**AND THE REAL-ARM GAP IS OPEN AGAIN, HONESTLY.** §55 wanted a multi-axis machine with real
+provenance, and the flexible robot arm (one link, 1024 samples, one sine sweep) is what stands.
+The KUKA did not close that gap — not because it was unavailable, but because its excitation
+does not move the robot hard enough to identify what a plant needs. The next candidate should
+be screened on that FIRST, before anything is vendored: decompose its torque, and if the
+inertial term sits below a plausible model residual, the record is a regression benchmark and
+not a plant. That check is cheap, it is now written down, and it would have saved this arc.

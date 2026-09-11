@@ -4,9 +4,10 @@
  * cut the fit never saw.
  *
  * WHY THIS PLANT AND NOT THE ONE THAT WAS ASKED FOR. The KUKA KR300 Industrial Robot
- * identification benchmark is the real-robot datum this project wants and every host that
- * serves it is blocked from this session; `rigs/realdata/PROVENANCE.md` names them. This is
- * the available real arm, and it is one link and 1024 samples against six axes and 40,000.
+ * benchmark was obtained, measured over four sections and then DELETED (plan §55.8-§55.12) —
+ * 222 MB for a record that identifies the robot's statics while a forward simulation needs
+ * its dynamics. This is the real arm that remains, and it is one link and 1024 samples
+ * against six axes; `rigs/realdata/PROVENANCE.md` carries the rest.
  *
  * WHAT IT IS FOR. Every arm number in this repository is quoted on a lattice simulator, and
  * §52.36 softened a claim about lightly damped modes on the strength of that simulator's own

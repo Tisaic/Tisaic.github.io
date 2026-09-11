@@ -271,95 +271,37 @@ Each of these is a claim that can be shown false, which is the only kind worth w
    EMPS escapes this only because its rig is a nonlinear simulation — a binned friction curve,
    a drive saturation and an encoder quantisation — rather than an identified ARX.
 
-   **AND THE KUKA ARRIVED — SUPPLIED BY THE OWNER AFTER EVERY HOST SERVING IT WAS REFUSED —
-   AND IT DOES NOT BECOME AN EIGHTH PLANT (plan §55.8).** 39,988 training samples and 3,636
-   test at 10 Hz, 67 minutes of full six-axis movement, six motor torques against six joint
-   positions. `test/pilot/realkuka.test.mjs` reports NO control factor and says why in its own
-   header. The one-step fit is essentially exact (0.06% NRMSE on every joint) and the FREE RUN
-   is not, which together are the whole character of a plant that integrates twice: 0.09° at
-   1 s, 6.9° at 4 s, and ~21° — no better than the mean — beyond 16 s, with more lags buying
-   horizon (na 40 reads 4.4° at 8 s against na 6's 16.9°) and every order hitting the same
-   floor. **The decisive control is a REPLAY**: fed the EXACT torques the real robot used, the
-   model is 18.6° off by sample 50, so a closed-loop factor measured on it would be measuring
-   the model's drift rather than a controller. What IS established is the reader, the record's
-   two different uniform sample periods (25 and 275 ppm off nominal, 250 ppm apart), a 12x
-   inertia spread with a shoulder torque moving the ELBOW further than the shoulder, and a
-   gravity fit that recovers the right physics on a record it never saw — 34% and 51% on the
-   shoulder and elbow, and ~0% on the two joints whose axes carry no gravity moment, which is
-   the half that makes it a physics check rather than a curve fit. **AND THE TWO ESCAPES A
-   READER WOULD PROPOSE ARE NOW MEASURED AND BOTH ARE NEGATIVE (plan §55.9).** A nonlinear VAR
-   — `lib/ngrc/`'s universal random-feature map, which this file lists as the fourth thing that
-   must replace the memory and §55.8 had not reached for — is **WORSE AT EVERY HORIZON at
-   matched lag order** (0.510 against 0.410 at 1 s) and its failure mode is DIVERGENCE rather
-   than drift: 73° at 8 s where the linear model is at 21, for 25x the features. That is the
-   eleventh capacity negative here, the first on a plant nobody here built, and a function class
-   §54.9 did not cover. And the A2/A3 COUPLING is real — torque correlation u1·u2 = **0.485**
-   against every position pair under 0.15 — but a LINEAR fit is invariant to it, because the
-   coupled coordinate is a combination of columns it already carries, which is now a pinned
-   control rather than an argument. Stated because it reverses on a starved model: at na=2 the
-   same nonlinearity looks like a 4-11% win, and reporting that row alone would have been this
-   project's own favourite mistake with the sign flipped (rule 20).
-
-   **AND THE RAW RECORDINGS DO NOT RESCUE THE FREE RUN EITHER — BUT THEY CONTAIN A BETTER
-   QUESTION, AND ITS ANSWER IS THIS PROJECT'S CENTRAL CLAIM MEASURED ON REAL HARDWARE (plan
-   §55.10).** At 250 Hz (not the 1 kHz this file predicted — rule 17) with the MEASURED
-   VELOCITY letting the kinematics be enforced rather than fitted, the free run is still worse
-   than the filtered 10 Hz file (0.81° at 1 s against 0.09°). So the forward simulator stays
-   unbuilt. What the recordings do carry is `q_ref` beside `q_se_meas` — the COMMANDED
-   REFERENCE and the real axis position — which is the closed-loop tracking problem and needs
-   no plant model at all. The deployed artefact is a map from a straddling window of that
-   reference to a correction, and §52.31 bounds what that input can carry on our lattice arm
-   at R² ~0.836. On the real robot, leave-one-RECORDING-out over six separate runs:
-   **joint 0 reads 0.880, joint 1 0.705, joint 2 0.606** — either side of the simulator's own
-   ceiling. **The controls are what make it mean anything**: `classic.js`'s four-coefficient
-   basis, given every joint's velocity and acceleration, reads **0.888 on joint 0 and 0.113
-   and 0.001 on joints 1 and 2**. So the base axis is pure velocity lag and the window adds
-   nothing there — that rung already ships — while the SHOULDER and ELBOW, the gravity- and
-   compliance-loaded pair, carry structure only a window sees. A null reads −0.00/−0.04/−0.06.
-   **It is NOT a control result and is not reported as one**: nothing is applied and nothing
-   re-measured, so it is an upper bound on what a feedforward of this form could remove. What
-   it settles is that the lattice arm was not flattering the method on the axis that matters.
-
-   **AND THE CLASSICAL ROUTE WAS THEN TAKEN — THE KINEMATICS SOURCED, THE RIGID-BODY MODEL
-   BUILT AND IDENTIFIED — AND IT ESTABLISHES THAT THE FAULT IS THE RECORD AND NOT THE FITTING
-   (plan §55.11).** §55.10 left "model it instead of fitting it" open with its gate named, the
-   KR300's DH parameters. They came from TWO sources neither derived from the other — the
-   ROS-Industrial URDF and Table 1 of *J. Intell. Robot. Syst.* (2023) 109:58 — **agreeing to
-   1.3e-16 m at every frame** bar the flange offset d6, which both carry in different places.
-   IDIM-LS on that regressor **identifies this robot**: 78 physical parameters, held-out R²
-   **0.891 / 0.785 / 0.867 / 0.831 / 0.805 / 0.822**, train ≈ test, ridge inert over four
-   decades. **AND THE FORWARD EQUATION FROM THE SAME PARAMETERS READS R² AT OR BELOW ZERO ON
-   FIVE OF SIX JOINTS — IN SAMPLE, WITH q, q̇, q̈ AND τ ALL MEASURED**, which is the cheap
-   falsifier that should have run before any free run (rule 1), since it removes the integrator
-   and the missing velocity record and leaves the model alone. **Both candidate faults were mine
-   and both are dead by measurement**: M(q) is positive definite at every pose tried at condition
-   number 12, and sub-stepping the integrator 10× moves the free run under 6%. **What separates
-   the two R² tables is what the torque is made of.** The model splits EXACTLY into gravity,
-   velocity and inertial (asserted with O(1) parameters at 1e-13%, not assumed), and **GRAVITY
-   IS THE TORQUE** — 6.71 of 6.93 N·m on the shoulder, 9.69 of 10.04 on the elbow — while the
-   INERTIAL term, the only part carrying q̈, is 1.04-1.07 N·m against a fit residual of
-   1.18-1.42. **The model's own error exceeds the whole signal the forward direction needs, on
-   five of six joints**, so an R² of 0.85 on torque is an R² of ~0 on acceleration; the two are
-   one fit read against two denominators (rule 19). **The one joint that works says it from the
-   other side**: joint 0 is the vertical axis, gravity structurally zero, the only ratio above
-   1.0 and the only positive forward R² (0.73) — two independent readings agreeing (rule 15).
-   **And it is the excitation, not the averaging**: by each joint's own |q̈| decile the ratio
-   rises to 2.2-3.0 in the top 10% and 5.4 in the top 1%, with peak |q̈| of 14-40 deg/s² on a
-   machine rated for several rad/s² — rule 41b from the other side. **Two controls say the model
-   is not the limitation**: the fit is SATURATED (625 rows read what 19,994 read, so the residual
-   is structural and not variance) and a 490-feature universal map of the SAME 18 inputs on the
-   SAME rows is WORSE on every joint, which is the capacity negative arriving on a real robot.
-   **So the KUKA still does not become an eighth plant and the reason has changed: this record
-   identifies the robot's STATICS and a forward simulation needs its DYNAMICS.** That is the
-   MIRROR IMAGE of this section's own headline — there a linearly-identified plant sat INSIDE
-   the correction's hypothesis class and its factor measured the class; here the quantity the
-   forward direction needs sits BELOW the model's error floor and the R² measures gravity. One
-   fault twice: the metric's support does not match the claim's. One caution found on the way
-   and reported rather than tidied: `max|beta|` is **9.8e13**, because the excitation does not
-   move every parameter direction, so **no single identified parameter may be read as a mass or
-   an inertia** — the predictions are unaffected, but a structurally-zero quantity computed from
-   that vector lands at 1e-2 N·m of cancellation, which is what both of this section's first red
-   checks actually were (rules 17, 32).
+   **AND THE KUKA WAS TRIED AND IS DELIBERATELY GONE — 222 MB, 89% OF THIS REPOSITORY,
+   REMOVED ON THE OWNER'S CALL ONCE ITS RECORD WAS ESTABLISHED AS UNABLE TO SUPPORT A PLANT
+   (plan §55.8-§55.12).** It arrived after every host serving it was refused, supplied by the
+   owner: 39,988 training samples at 10 Hz, 67 minutes of full six-axis movement, six motor
+   torques against six joint positions. Nothing fitted to it survives a free run — a one-step
+   fit is essentially exact at 0.06% NRMSE while the same model simulating itself reaches
+   ~21°, no better than the mean, and the decisive control is a REPLAY: fed the EXACT torques
+   the real robot used, the model is 18.6° off by sample 50. **THE CLASSICAL ROUTE THEN
+   EXPLAINED WHY RATHER THAN REPRODUCING IT.** Rigid-body dynamics on kinematics sourced from
+   two independent places (agreeing to 1.3e-16 m) IDENTIFIES this robot — 78 physical
+   parameters, held-out R² 0.785-0.891 on torque — **and the FORWARD equation from those same
+   parameters reads R² at or below zero on five of six joints IN SAMPLE, with q, q̇, q̈ and τ
+   all measured.** Both candidate faults were mine and both died by measurement: M(q) is
+   positive definite at condition 12, and sub-stepping the integrator 10× moves the free run
+   under 6%. **GRAVITY IS THE TORQUE** — 6.71 of 6.93 N·m on the shoulder — while the inertial
+   term, the only part carrying q̈, is BELOW the fit's own residual on five of six joints, so
+   an R² of 0.85 on torque is an R² of ~0 on acceleration: one fit against two denominators
+   (rule 19). Joint 0 confirms it independently — vertical axis, gravity structurally zero,
+   the only ratio above 1.0 and the only positive forward R². **This record identifies the
+   robot's STATICS and a forward simulation needs its DYNAMICS**, which is a property of the
+   EXCITATION (peak |q̈| 14-40 deg/s²) and not of the method — rule 41b from the other side —
+   and two controls say the model is not the limitation: the fit is SATURATED (625 rows read
+   what 19,994 read) and a 490-feature universal map of the same inputs on the same rows is
+   worse on every joint. **SO THE DATA WENT AND THE FINDINGS STAYED**, which is this project's
+   standing practice for anything retired: re-obtaining the record is a download, re-deriving
+   why it does not work is four sections. **WHAT IT LEAVES OPEN, STATED PLAINLY**: deleting the
+   files does not remove them from git history, so a fresh clone still pays the 222 MB until
+   someone decides on a rewrite; the real multi-axis-arm gap is open again, with the flexible
+   robot arm (one link, 1024 samples) standing; and the next candidate should be SCREENED on
+   this first — decompose its torque, and if the inertial term sits below a plausible model
+   residual it is a regression benchmark and not a plant.
 
 4. **COMMISSIONING IN MINUTES, NOT AN AFTERNOON. MET ON THE ARM — 17 MINUTES TO 2, AND THE
    DELIVERED RESULT IS UNCHANGED.** Target: 10x down, under three minutes on the arm, while
@@ -1167,17 +1109,19 @@ against 0.185 for the gain a settled sweep picks — **sixty-seven times better*
 the seventh time in this project. Every number on that plant is now taken after a settle whose
 length was measured (13 laps) rather than assumed.
 
-**WHAT IS MISSING IS THE ONE THAT WAS ASKED FOR, AND IT IS AN ACCESS PROBLEM RATHER THAN A
-MEASUREMENT ONE.** The KUKA KR300 R2500 ultra SE Industrial Robot benchmark (Weigand et al. 2022,
-DOI TUK 10.26204/DATA/5) is the real six-axis robot datum this project wants: 12 states, backlash
-in every joint, pose-dependent inertia and gravity, 40,000 samples of full robot movement. It is
-served from `fdm-fallback.uni-kl.de` alone as a 12.7 MB `.rar`, and that host — together with
-`nonlinearbenchmark.org`, `data.4tu.nl`, `zenodo.org`, `huggingface.co`, `archive.ics.uci.edu`,
-`figshare.com` and `homes.esat.kuleuven.be` — is refused by this session's egress policy. No GitHub
-repository mirrors the archive or any extract of it, and the one repository that mirrors the rest
-of that collection keeps its copies in Git LFS, which the anonymous git lane does not serve. The
-flexible arm is the available real-arm datum and it is **one link and 1024 samples against six axes
-and 40,000** — a gap stated rather than a substitution made quietly.
+**THIS FILE USED TO SAY THE MISSING SIX-AXIS ROBOT WAS AN ACCESS PROBLEM. IT WAS OBTAINED, AND IT
+IS A MEASUREMENT PROBLEM (plan §55.8-§55.12).** The KUKA KR300 benchmark was supplied by the owner
+after every host serving it was refused, read, identified and measured over four sections — and
+then DELETED, because its records were 222 MB, 89% of this repository, and what the measurement
+established is that they cannot support a plant at all: **gravity is the torque, the inertial term
+sits below the fit's own residual on five of six joints, and a forward simulation therefore reads
+R² at or below zero even in sample with every quantity measured.** The record identifies the
+robot's STATICS where a forward simulation needs its DYNAMICS, which is a property of its
+EXCITATION and not of the method. So the real multi-axis-arm gap is STILL OPEN, and the flexible
+arm is still what stands — **one link and 1024 samples against six axes** — but the reason has
+changed from "we cannot get it" to "that one does not work, and here is the cheap screen that
+says so before anything is vendored: decompose the torque, and if the inertial term sits below a
+plausible model residual, the record is a regression benchmark and not a plant.
 
 **AND OPENML IS THE WRONG SHELF FOR THIS, WHICH IS WORTH WRITING DOWN BECAUSE IT LOOKS LIKE THE
 RIGHT ONE.** It is an i.i.d. tabular benchmark repository, and its format strips the two things
@@ -1186,11 +1130,13 @@ needed here: the time ordering and a CONTROLLABLE INPUT. Its arm-adjacent sets �
 either synthetic to begin with or rendered as shuffled regression tables. They can be fitted; they
 cannot be DRIVEN, and a plant we cannot apply a correction to is a regression dataset.
 
-**STILL OUT OF REACH AND WANTED, in the order their evidence would be worth most:** the KUKA robot;
-Bouc-Wen, whose hysteresis is a nonlinearity class nothing here contains and which is adjacent to
-§52.46's backlash finding; Silverbox, a lightly damped resonance driven by a known input, which
-would give the arm's result a second plant; and the Wiener-Hammerstein and Coupled Electric Drives
-sets. All five are reachable only through hosts this session is refused, or through Git LFS.
+**STILL OUT OF REACH AND WANTED, in the order their evidence would be worth most:** Bouc-Wen,
+whose hysteresis is a nonlinearity class nothing here contains and which is adjacent to §52.46's
+backlash finding; Silverbox, a lightly damped resonance driven by a known input, which would give
+the arm's result a second plant; and the Wiener-Hammerstein and Coupled Electric Drives sets. All
+four are reachable only through hosts this session is refused, or through Git LFS. The KUKA is no
+longer on this list — it was obtained and it did not work, which is a better outcome than still
+wanting it.
 
 ## Deploy model
 
@@ -1582,14 +1528,9 @@ measurement behind each is in `docs/history/` — the pointer in brackets.
 | `test/pilot/distil-tank.mjs` | **THE DEPLOYED OBJECT ON A THIRD PLANT — and the file that corrected a north-star claim by asking (plan §54.4).** `distil.js` is imported by exactly TWO plant harnesses; every other plant scores `pilot.js`, which under the retirement is the TEACHER. This asks the tank — chosen over the mill because its recipe IS a commanded reference with structure, so a deploy is physically possible and the answer is informative either way. **The rung reached the plant, fitted, was scored on the machine, lost and was reverted: 1.000x, nothing harmed — with in-sample 14.512x / 14.294x / 20.769x / 27.819x against a held-out 1.000x**, which is TRANSFER and not the fit, the basis or the deploy path. Carries both wrong diets with the measurement that condemned each: quasi-static (teacher gains of 3.2e6 — a target already at zero, rule 14) and out-of-envelope (exactly 1.000x — a FADED correction, §52.40 mirrored). Says outright that its three byte-identical seeds are ONE draw three times, because no cascade builds so no seeded excitation runs. |
 | `test/pilot/rigs/realdata/` | **THE RECORDS FROM REAL MACHINES, AND THE INSTRUMENT THAT TURNS ONE INTO A PLANT (plan §55).** Three published identification records — a flexible robot arm, cascaded water tanks, a steam heat exchanger — with `PROVENANCE.md` naming each source, its citation, and the hosts that are blocked. `sysid.mjs` fits a model on an ESTIMATION cut and scores it by **FREE-RUN SIMULATION** on a VALIDATION cut it never saw: a one-step predictor is handed the true `y[k-1]` at every sample, so it scores well on any smooth record and is measuring the sampling rate rather than the model (rule 36 in a second costume). Order is chosen by the held-out free run, never by the in-sample fit (rule 16), ties broken by rule 42. Every rig re-identifies AT MODULE LOAD from the committed record, so the plant cannot drift from the data it claims to come from (rule 30). |
 | `test/pilot/rigs/ladder.mjs` | **THE LADDER DRIVER, EXTRACTED FROM `plants.test.mjs` when the real-data plants needed the same one** — a second copy of a plant's routing has shipped a defect three times here (`arm-rig.mjs` says so in its own header, rule 61). `plants.test.mjs` is **byte-identical across the move**, wall clock excepted, which is what says the extraction changed nothing (rule 21). |
-| `test/pilot/rigs/realdata/kuka-kin.mjs` | **THE KUKA KR300's KINEMATICS AND ITS INVERSE-DYNAMICS REGRESSOR — the gate §55.10 named, opened (plan §55.11).** Modified (Craig) DH from TWO sources neither derived from the other, the ROS-Industrial URDF and a published DH table, agreeing to **1.3e-16 m** at every frame bar the flange offset d6 that both carry in different places. The regressor is propagated as a MATRIX through the Newton-Euler recursion rather than by calling RNEA once per parameter — same answer, 60x less work — and it carries `identify` and `dynamics` too, because three separate copies of a plant's routing have each shipped a defect here (rule 61). `realkuka.test.mjs` checks it against PROPERTIES rather than its own output, three of them with ARBITRARY parameters so they test the recursion and not the fit: M(q) symmetric to 3.1e-16, the gravity torque about the vertical first axis 7.7e-15 with the shoulder and elbow above 0.1 (both halves), and exact linearity in q̈. |
-| `test/pilot/kuka-idim.mjs` | **Not a test — THE CLASSICAL ROUTE ON THE KUKA, AND THE REASON THE RECORD RATHER THAN THE FITTING IS AT FAULT (plan §55.11).** IDIM-LS identifies this robot at held-out R² 0.785-0.891 and **the forward equation from the SAME parameters reads R² at or below zero on five of six joints, in sample, with every quantity measured** — the cheap falsifier that removes the integrator and the missing velocity record (rule 1). Both candidate faults were the author's and both are dead: M(q) is positive definite at condition 12, and 10x sub-stepping moves the free run under 6%. What separates the two tables is the decomposition: **gravity IS the torque** (6.71 of 6.93 N·m on the shoulder) while the inertial term is BELOW the fit's own residual on five of six joints, so an R² of 0.85 on torque is an R² of ~0 on acceleration. Joint 0 — vertical axis, gravity structurally zero — is the only ratio above 1.0 and the only positive forward R², which is the same finding from an independent direction (rule 15). `FLOOR=1` runs the capacity control (a 490-feature map of the same inputs on the same rows, worse on every joint) and `FREE=1` the free run. |
 | `test/pilot/realarm.test.mjs` | **A REAL FLEXIBLE ROBOT ARM (DaISy 96-009), AND THE FALSIFIER FOR A CLAIM THIS FILE DREW ON A SIMULATOR.** Every arm number here is quoted on a lattice whose ring `modes.mjs` measures decaying 5.6x per cycle; this arm's identified modes decay about **1.03x per cycle** — fifty times lighter, and the regime §52.36 called hopeless for an FIR window before measuring the simulator and softening the claim. The damping is a BOUND, not a measurement, and the rig says so: the record is 1024 samples so a Q above ~65 is not resolvable from it, the fit reports 92, and the two modes come back with Q equal to 1%, which is a signature of the fit sitting near its own stability edge. **It ships 1.93x on the conventional rung and REFUSES the pilot cascade**, whose correction is wrong rather than merely clipped — opened 3x it clamps 56% of samples at 0.00x, opened 10x it trips the guard, and the shipped result is byte-identical at every cap. **Two measurement faults were made and both are recorded because each looked like a plant property.** Sizing the program from the record's own acceleration range was rule 41b exactly — that range is a RESONANT response reached where \|H\| = 36.7, the program lives where \|H\| = 0.108, so the first program demanded eleven times the torque the machine has and a loop swept over 88 gain cells could not beat DOING NOTHING at any of them. And the first loop sweep scored 20 laps on a machine whose ring locks in over ~300: it chose the gain that locks ONTO the resonance, which reads 1.06 at lap 20 and **12.36 settled**, against 0.185 for the gain the settled sweep picks — **sixty-seven times better**, rule 12 for the seventh time in this project. |
 | `test/pilot/realtanks.test.mjs` | **THE REAL CASCADED TANKS — and the file that measured what a factor on a linearly-identified plant is actually worth.** The counterpart to our own quadruple tank, where `distil-tank.mjs` read 1.000x held out and `tankspread.mjs` found 4 of 8 seeds deploying harmfully. Its validation is the strongest here and that is the benchmark's doing: it ships **two independent excitations** (r = 0.12 with means removed), so the held-out free run is a different experiment rather than a time split of one. It read **2012x**, which is not a plausible controller result and so is a reason to check the instrument (rule 14). It was: restoring the benchmark's own documented **OVERFLOW** — 84 samples pinned at exactly 10.00 in the record, which the linear fit lost so completely that it extrapolates to 20.9 V where there is no 20 cm of tank — collapses it to **6.54x**, and there the PILOT CASCADE deploys two layers where our own quadruple tank refuses everything. Also measured and negative: the sqrt(y) lift, the obvious reading of Torricelli, validates WORSE than linear (0.738 against 0.649 V) — narrowly, because the lift available applies to the OBSERVED lower level while the physics it approximates is dominated by the UNOBSERVED upper tank. |
 | `test/pilot/realexch.test.mjs` | **A REAL STEAM HEAT EXCHANGER (DaISy 97-002), the counterpart to the extruder barrel — and the REPLICATION that makes the tanks' finding a mechanism rather than one plant's story (rule 18).** Same comparison on steam rather than water: **1364x linear against 89.8x** with the counterflow effectiveness relation `exp(-1/u)` in the fit, which also validates 7% better on the held-out half. **Its validation is the weakest in the directory and it is printed first (rule 27)**: 0.66 °C free-run against an 8.6 °C range, and 48% NRMSE even ONE STEP ahead with the true previous temperature in hand — the record is disturbance-dominated. Its NRMSE is also a trap and the absolute error is not (rule 19): fitting the first half reads 69%, fitting the second reads 35%, and the free-run rms is 0.71 and 0.62 °C — essentially the same model both ways, the whole gap being that one half carries an operating-point excursion and the other does not. The unflattering direction is the one that ships. |
-| `test/pilot/kuka-ngrc.mjs` | **DOES A NONLINEAR VAR OR THE A2/A3 COUPLING RESCUE THE KUKA'S FREE RUN? NEITHER (plan §55.9).** One variable at a time at matched lag order: `lib/ngrc/`'s universal random-feature map is **WORSE at every horizon** (0.510 against 0.410 at 1 s) and its failure mode is DIVERGENCE rather than drift — 73° at 8 s where the linear model is at 21, for 25x the features. Eleventh capacity negative here, first on a plant nobody here built, and a function class §54.9 did not cover. The COUPLING is real (torque corr u1·u2 = **0.485** against every position pair under 0.15) and a linear fit is INVARIANT to it, because the coupled coordinate is a combination of columns it already carries — pinned as a control in `realkuka.test.mjs` rather than argued. It reverses on a starved model (at na=2 the same nonlinearity looks like a 4-11% win), which is why the lag order had to be matched (rule 20). |
-| `test/pilot/kuka-raw.mjs` | **THE RAW RECORDINGS, WHICH DO NOT RESCUE THE FREE RUN (plan §55.10).** 250 Hz — not the 1 kHz this file predicted, which `time` says plainly (rule 17) — with the MEASURED VELOCITY letting `q[k+1] = q[k] + dt·qd[k]` be ENFORCED rather than fitted, one integrator removed by construction. Still worse than the filtered 10 Hz benchmark file (0.81° at 1 s against 0.09°), and two reasons are stated rather than argued away: that file is filtered and decimated by its own authors, and the held-out cut here is a WHOLE DIFFERENT RECORDING where the benchmark's test split comes from the same session. Bandwidth and a measured velocity move the short horizon and leave the long one alone. |
-| `test/pilot/kuka-track.mjs` | **THE QUESTION THAT NEEDED NO PLANT MODEL, AND THIS PROJECT'S CENTRAL CLAIM MEASURED ON REAL HARDWARE (plan §55.10).** The raw recordings carry `q_ref` beside `q_se_meas`, so a real six-axis robot's TRACKING ERROR is measured beside the deployed object's own input. Leave-one-RECORDING-out over six separate runs of the machine: the straddling window reads **0.880 / 0.705 / 0.606** against the lattice arm's own 0.836 ceiling (§52.31). **The controls are what make it mean anything**: `classic.js`'s four-coefficient basis, handed every joint's velocity and acceleration, reads **0.888 on joint 0** — the base axis is pure velocity lag and the window adds NOTHING there, which is the rung this project already ships — **and 0.113 and 0.001 on joints 1 and 2**, the gravity- and compliance-loaded shoulder and elbow, where only a window sees the structure. A null reads −0.00/−0.04/−0.06; a causal window matches the straddling one, which does NOT contradict §49.14 because that compared deployed CONTROL results while this predicts e[k] from a past that caused it. **NOT a control result and not reported as one** — nothing is applied, nothing re-measured, so it is an upper bound on what a feedforward of this form could remove. |
 | `test/pilot/commtime.mjs` | **WHAT COMMISSIONING COSTS THE PLANT, ON EVERY PLANT — target 4's number, which each rig has been PRINTING all along (plan §54.6).** A SCRAPE of the line each plant already prints in its OWN process time, not a re-measurement, so no plant is re-scored by a metric this file invented. **One of the four plants that state a clock meets target 4; the spread is 1643x; and the two that state none read UNKNOWN rather than met (rule 25) — one of them being the arm, which the target claims as MET on a simulator's wall clock.** It prints the STEPS and TIME rankings side by side and says when they disagree, which they do: Wood-Berry is the cheapest here in steps and the most expensive in days. |
 | `docs/edm.md` | **A PROSPECTIVE DEPLOYMENT, SCOPED BEFORE ANY MEASUREMENT — a custom wire EDM and hole popper on B&R controls.** Written so the predictions can be read against what was claimed BEFORE the data existed. It splits the machine's two objectives by this project's own evidence: FINISHING is this method's own shape (a repeatable geometric error on a repeated contour, with the cut part as the commissioning truth — which closes the north star's own open case, the touch probe a shop actually owns), while ROUGHING gap regulation against the arcing boundary is stochastic and the gate should REFUSE it — with one preview-shaped sub-problem inside it that is where the wire actually breaks (height steps, corners, entry/exit are all known from the program). Carries the LOGGING SPEC, because no public EDM dataset gives gap dynamics and building a simulator to suit the controller is rule 15 exactly — the machine removes that gate by supplying real records. **AND §6 IS THE OBJECT THAT REACHES THE ROW PREVIEW CANNOT**: a BREAK-RISK SOFT SENSOR trimming feedrate under the existing gap servo — addressed by machine state, no tracker, no lap index, and the one loop here whose instrument is FREE (pulse electronics that already exist, and a break the machine cannot fail to notice) against §52.42's 3.9x tracker premium. Its five hazards are this file's own rules arriving before the build: predict the dense PRECURSOR not the rare break (rule 36), a hazard is per METRE not per second or the loop chases its own denominator (rule 17), regulate an upper confidence bound because the costs are asymmetric, DITHER or the loop drives the sensor off its training set (rule 35), and success removes the evidence (rule 33) — which the precursor design is what survives. The falsifier is LEAD TIME against the gap's own settling, readable off existing logs before anything is built (§52.26 transplanted). Nothing in it is measured. |
 | `docs/history/` | The measurement record — see the last section. |

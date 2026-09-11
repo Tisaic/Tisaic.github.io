@@ -3,10 +3,13 @@
  * reaction torque of the structure on the ground against the acceleration of the arm.
  *
  * THIS IS THE REAL-ARM DATUM, AND IT IS NOT THE ONE THAT WAS ASKED FOR. The KUKA KR300
- * Industrial Robot benchmark is served from one host and that host is blocked from this
- * session; `realdata/PROVENANCE.md` names the hosts and what was tried. This record is one
- * link, 1024 samples and a single multisine against six axes and 40,000 samples of full
- * robot movement, and that gap is stated rather than papered over.
+ * Industrial Robot benchmark WAS obtained — supplied by the owner after every host serving it
+ * was refused — and it was then measured and DELETED (plan §55.8-§55.12): its records were
+ * 222 MB, 89% of this repository, and four sections established that they identify the robot's
+ * STATICS while a forward simulation needs its DYNAMICS. So this record is still one link,
+ * 1024 samples and a single multisine against six axes, and the gap is still stated rather
+ * than papered over — but it is open because the six-axis record does not work, not because
+ * it could not be reached.
  *
  * WHAT IT BUYS ANYWAY IS THE THING THIS PROJECT MOST NEEDED: a structural resonance
  * MEASURED ON REAL HARDWARE. Every arm number in this repository is quoted on a lattice

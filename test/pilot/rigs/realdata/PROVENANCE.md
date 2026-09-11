@@ -47,12 +47,24 @@ public repository that vendors it, and the table above states what each file IS 
 reader can check it against the benchmark's own published description rather than trusting
 the path it arrived by.
 
-**One intended plant is therefore MISSING and it is the one that was asked for**: the
-KUKA KR300 R2500 ultra SE Industrial Robot identification benchmark (Weigand et al., 2022;
-DOI TUK 10.26204/DATA/5). It is served from `fdm-fallback.uni-kl.de` alone, as a 12.7 MB
-`.rar`; that host is blocked, no GitHub repository mirrors the archive or any extract of
-it, and the one repository that mirrors the rest of this collection keeps its copies in Git
-LFS, which this session's anonymous git lane does not serve. The flexible robot arm here is
-the available real-arm datum, not a substitute of equal value: it is one link, 1024
-samples and a single sine sweep, against six axes and 40,000 samples of full robot
-movement. That gap is stated rather than papered over.
+**THE KUKA KR300 WAS HERE AND IS DELIBERATELY GONE** (Weigand et al., 2022; DOI TUK
+10.26204/DATA/5). Every host serving it is blocked from this session, so the owner supplied
+the files directly; they were read, identified and measured over four sections of
+`docs/plan.md` (§55.8-§55.12), and then removed. Two facts decided it. Its records were
+**222 MB — 89% of this repository** — against 272 kB for the three plants above. And it was
+established, by four routes sharing no machinery, that **this record cannot support a plant
+at all**: gravity is the torque, the inertial term sits below the fit's own residual on five
+of six joints, and a forward simulation therefore reads R² at or below zero even in sample
+with every quantity measured. Once that is settled the data buys nothing further and costs
+every clone.
+
+What replaces it is the WRITTEN RECORD rather than a smaller file, which is this
+repository's standing practice for anything retired: §55.8-§55.12 carry the reader, the
+sample-period findings, the one-step/free-run split, the replay control, the sourced
+kinematics, the IDIM-LS identification and the decomposition that closed it. Re-obtaining
+the data is a download; re-deriving why it does not work is four sections.
+
+**So the real-arm gap is still open and is now stated without a candidate**: the flexible
+robot arm here is one link, 1024 samples and a single sine sweep, where what is wanted is a
+multi-axis machine whose excitation moves it at a real fraction of its rated acceleration.
+The KUKA was not that either — that is the finding, not an excuse.
