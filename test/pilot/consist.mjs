@@ -107,6 +107,19 @@ for (const s of sets) for (const y of s.Y) { t2 += y[0] * y[0] + y[1] * y[1]; tn
 const TRMS = Math.sqrt(t2 / tn);
 console.log(`  target rms ${TRMS.toExponential(3)} rad; two unrelated targets differ by ~${(Math.SQRT2 * TRMS).toExponential(3)}\n`);
 
+// THE ROWS ARE DUMPED FROM HERE AND NOWHERE ELSE (`DUMP=<path>`). `test/pilot/nonlinear.mjs`
+// asks whether a different FUNCTION CLASS can beat the shipped ridge on exactly these rows, and
+// the one thing that would make its answer meaningless is fitting rows built by a second copy of
+// this construction (rule 61). So there is one builder, and the learner reads what it wrote.
+if (process.env.DUMP) {
+  const { writeFileSync } = await import('node:fs');
+  writeFileSync(process.env.DUMP, JSON.stringify({
+    D, S, STRIDE, OFFS, TRMS,
+    sets: sets.map((s) => ({ name: s.name, L: s.L, KS: s.KS, X: s.X, Y: s.Y })),
+  }));
+  console.log(`\n  rows written to ${process.env.DUMP} — ${sets.length} programs, ${sets.reduce((a, s) => a + s.X.length, 0)} rows, ${D} features`);
+}
+
 const sqSet = sets[sets.length - 1], poly = sets.slice(0, -1);
 const BINS = [0.2, 0.3, 0.4, 0.5, 0.7, 1.0, 1.5, 2.0, 1e9];
 const acc = () => BINS.map(() => ({ n: 0, s2: 0 }));

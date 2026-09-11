@@ -14458,3 +14458,127 @@ project has been denying headroom it has. It needs no machine time — `consist.
 beats an engineered truth-free rival on the arm; beats published inverse-dynamics feedforward at its
 own published parameters; beats lap-indexed ILC by ~60x on unseen trajectories while losing ~7x at
 home; and has never been compared to the two methods that would actually contest it.
+
+---
+
+### §54.9 THE FUNCTION-CLASS TEST: NOTHING BEATS THE SHIPPED RIDGE, AND NOW THAT MEANS SOMETHING
+
+§52.36 closes six directions with one sentence — "the information the COMMANDED REFERENCE carries
+about the correction is exhausted at R² ~0.84 ... no basis will move it". Every one of those six
+experiments added FEATURES to one GLOBAL LINEAR-IN-PARAMETERS RIDGE, and `consist.mjs` said so in
+its own header: a local model is "the lever that every capacity experiment so far has not actually
+tested — they all added features to ONE global fit." So the ceiling had never been tested by a
+method that could break it.
+
+`test/pilot/nonlinear.mjs` is that test. The rows and targets are READ FROM `consist.mjs`'s own
+dump (`DUMP=<path>`), so there is one builder and not a second copy (rule 61); every learner sees
+the identical 92-feature window, the identical converged targets and the identical
+leave-one-program-out folds. Standardisation is computed on the TRAINING rows only, because
+standardising on the pooled set leaks the held-out program's distribution into the fit. Each
+learner is swept over its own knob while the ridge runs at the shipped value.
+
+```
+  learner   best LOO R²   worst fold   what it is
+  ridge        0.8610       0.6847     the shipped fit: one global linear map
+  rbf          0.8303       0.6549     kernel ridge, Gaussian — a GP posterior mean in all but name
+  lwr          0.8266       0.6110     locally weighted linear — `consist.mjs`'s OWN named lever
+  mlp          0.7456       0.4589     one hidden layer, tanh, Adam — the modern default
+  knn          0.7147       0.5962     the crudest local model there is
+```
+
+**NOTHING BEATS THE LINEAR RIDGE, and the ordering is the informative part.** The two that come
+closest are the two that are still linear in disguise — LWR is a local linear map and kernel ridge
+is a linear smoother — while the genuinely nonlinear PARAMETRIC model is second-worst and its worst
+fold falls to 0.39-0.46 against the ridge's 0.68. More capacity, worse transfer, for the ninth
+independent time in this arc.
+
+**So §52.36's ceiling is CONFIRMED by four function classes that could have broken it**, which is a
+far stronger statement than six variants of one. The claim is no longer "no basis will move it" — a
+basis is a feature set — but the sharper and more defensible *no function class of the commanded
+reference window will move it*, and that is now measured rather than inferred from a family of
+experiments that all shared a form.
+
+Stated: offline regression, so a held-out R² is not a delivered ratio and a win would still have had
+to be deployed and scored; one plant, one cell, four programs, 938 rows; and a larger network on
+938 rows would be answering a capacity question this arc has already answered eight times.
+
+### §54.10 ZPETC: NOT ESTABLISHED, AND RECORDED AS NOT ESTABLISHED
+
+`test/pilot/zpetc.mjs` is the other admissible competitor — stable inversion, the classical
+feedforward CLAUDE.md already calls this project a data-regressed version of. It is admissible on
+§54.8b's test: the model is identified once at commissioning, the inverse is computed offline, and
+what deploys is an FIR over the commanded reference with no runtime truth and no lap index.
+
+**IT IS NOT REPORTED AS A RESULT, BECAUSE THE IMPLEMENTATION IS NOT ESTABLISHED AS CORRECT.** What
+it measures today is either 0.02x with the correction pinned at its cap, or 1.00-1.02x with the
+correction at 0.03-1% of its authority — a diverging inverse or an inert one, with nothing between.
+Reporting 1.02x would publish this repository's bug as the method's property, which is the fault
+`noilc.mjs`'s header exists to prevent.
+
+What IS established, and is why the file is kept:
+
+- **The identification is not the problem.** Both paths fit at R² 1.000 one-step-ahead at low ridge
+  — `Gu` (added correction to its effect on the tracking error) and `Gr` (commanded reference to
+  the error the program leaves).
+- **The architecture needed TWO paths and the first version used one.** Textbook ZPETC inverts
+  reference-to-output; here the plant already tracks through a closed position loop and a rung ADDS
+  a correction, so the feedforward is the composition u = -Gu⁻¹·Gr·r. Inverting `Gu` and applying
+  it to `r` is dimensionally the wrong signal, and it read 0.02x with an error of 2.000e+1 mm
+  repeated to four figures across unrelated model orders — a saturated machine, not a measurement.
+- **The remaining fault is bracketed and not found.** At low ridge the inverse diverges while the
+  root finder reports NO zeros outside the unit circle — two diagnostics that cannot both be right.
+  A scale hypothesis (an absolute 1e-12 delay threshold where rule 32 requires a relative one) was
+  the obvious candidate and is REFUTED: making it relative returned byte-identical output. At high
+  ridge the inversion is stable and `Gr` is regularised into uselessness (R² 0.006-0.75), so there
+  is no cell where the model is good AND the inverse is bounded.
+
+The live candidate, untested: a z versus z⁻¹ convention error in the factorisation, which would
+make "zeros outside the unit circle" come back as their reciprocals and explains both diagnostics
+at once. Stated here so the next attempt starts from it rather than from the beginning.
+
+**TARGET 8 THEREFORE STANDS AT ONE ADMISSIBLE RIVAL BUILT AND BEATEN, ONE UPPER BOUND, AND ONE
+COMPETITOR ATTEMPTED AND NOT ESTABLISHED.** "Cutting edge, best in class" remains unsupportable,
+and the specific thing that would move it is unchanged.
+
+---
+
+### §54.11 THE GA / NEAT QUESTION: POSED PROPERLY, AND THE HARNESS IS NOT ESTABLISHED
+
+Asked whether a NEAT-style evolutionary search would help. Its three properties split cleanly and
+two are already answered by this project's own record. **Topology search** is answered by §54.9: a
+kernel machine and an MLP both LOSE to the shipped linear ridge on identical rows, so the function
+class is not the binding constraint and searching harder inside it cannot be. **Evolvable
+recurrence** is answered by §52.36: a resonator bank reads 0.814 leave-one-program-out against the
+window's 0.836, and the reason is mechanical — memory ~7,850 steps against a 7,356-step lap.
+
+**The third is live and is the only one worth machine time.** A GA needs no differentiable target,
+so it can optimise the DELIVERED MACHINE ERROR. Everything this project ships is regressed onto a
+converged prefix — a surrogate — and §52.34's conflict (2) says that surrogate is compromised: "a
+more converged teacher teaches a WORSE policy". No fit here has ever optimised the quantity it is
+scored on.
+
+`test/pilot/directopt.mjs` poses it with the objective as the only variable: same plant, same
+program, same authority, same feature row, same coefficient count. **Its result is NOT reported.**
+The ridge arm reads **5.49x where `distil-emps.test.mjs` records 32.75x for the same axis, block and
+window** — a baseline 6x below a number already in this repository — and against that denominator
+the GA duly reads "5.7x better at home, 16.8x better on the held-out sine", which is the shape a
+broken baseline produces rather than a finding. The file now REFUSES to print a verdict when the
+ridge arm falls below half the recorded value.
+
+Two hypotheses tested, both refuted by byte-identical controls: a hand-rolled ridge instead of the
+shipped block (replaced with `DistilPolicy` itself — 8.8900e-2 against 8.9032e-2), and a double
+clamp deploying the policy under 5x less authority than it was fitted for (rule 34; removed,
+byte-identical). Still unchecked and where the next attempt starts: the `hff` teacher is
+commissioned here at `uMax: UM*5` where the shipped test uses `UMAX` for the teacher and `UMAX*5`
+only for the policy, so the two arms may converge different prefixes; and the `refAt`/`look`
+conventions between this harness and the shipped host are asserted equal nowhere.
+
+**THE BILL IS THE HALF THAT IS ESTABLISHED**, and it stands whatever the score turns out to be: 33
+scored runs cost **20.6 minutes of plant time** at a trivial POP=8/GENS=4 budget. A realistic search
+is hundreds to thousands of evaluations, target 4 is already missed on three plants by up to 1643x,
+and DeePC was disqualified on exactly this ground. An evolutionary route must state its machine-time
+bill up front or it is disqualified before its score is read.
+
+**THREE FILES IN THIS ARC ARE NOW MARKED NOT ESTABLISHED** — ZPETC (§54.10), this one, and DeePC's
+noiseless column (§54.8, which its own falsifier closed). That is the discipline working rather than
+failing: each measures something, each has a diagnostic trail, and none is quoted as a result.
