@@ -42,6 +42,7 @@ import { tankSpec, wbSpec, millSpec, barrelSpec } from './rigs/specs.mjs';
 const env = (k, d) => (process.env[k] === undefined ? d : Number(process.env[k]));
 const ITERS = env('ITERS', 4000);
 const PASSES = env('PASSES', 4);
+const REACHW = env('REACHW', 1.5);   // window span as a multiple of the measured settle
 const WANT = (process.env.PLANTS || 'tank,column,mill,barrel').split(',');
 const DLIST = (process.env.BLOCKS || '').split(',').filter(Boolean).map(Number);
 const SPECS = [['tank', tankSpec], ['column', wbSpec], ['mill', millSpec], ['barrel', barrelSpec]];
@@ -72,6 +73,104 @@ const rms = (a, from) => {
   for (const ch of a) for (let k = from; k < ch.length; k++) { s += ch[k] * ch[k]; n++; }
   return Math.sqrt(s / n);
 };
+
+/**
+ * IS THE ORACLE'S CORRECTION A FUNCTION OF THE COMMANDED REFERENCE? §49's analysis transplanted.
+ * The oracle is NON-CAUSAL — it chooses knowing the whole future error — so its headroom says
+ * what is AVAILABLE and not what is REACHABLE. A deployed policy here is addressed by the
+ * commanded reference alone, so the question is how much of the oracle a window of that
+ * reference can express, and what such a map then DELIVERS on the machine.
+ *
+ * Two numbers, labelled, because they answer different questions and conflating them is how a
+ * memory gets reported as a model: IN-SAMPLE says whether the form can express the correction at
+ * all, HELD-OUT says whether it transfers. The folds are CONTIGUOUS with a GAP of the window
+ * span, because rows a few blocks apart read most of the same window and a shuffled split
+ * validates against data it has effectively seen — `distil.js`'s own convention.
+ */
+function reachable(spec, n, D, M, x, nc, k0, from, base0, drive, rms, LSETOUT) {
+  // ROWS AT A FINE STRIDE, NOT ONE PER BLOCK — and the first version got this wrong in the way
+  // that matters. One row per block gave 40 rows against 40 features on the barrel: an exactly
+  // determined fit whose held-out split trained on ~12 rows, so its R² of -0.35 measured the
+  // instrument and not the plant (rules 20, 32). The correction is piecewise constant, so a
+  // finer stride adds rows without changing the target it is asked to explain, and the
+  // contiguous GAP below is what keeps neighbouring rows out of each other's test set.
+  // THE WINDOW IS IN STEPS AND SCALED TO THE PLANT'S OWN MEASURED SETTLE (rule 37), not in
+  // blocks. Fixed at +/-8 blocks it reached +/-1,000 steps on the barrel at D=125 against
+  // cross-channel rises of 4,464 — a window too short to carry what it is being asked to
+  // explain, which is the trap that read 1.047x on the shake data at K=8 and 1.63x at K=16.
+  // REACHW multiplies the span so the claim can be tested rather than asserted.
+  const span = Math.round(REACHW * LSETOUT.v);
+  const OFFS = [-1, -0.75, -0.5, -0.35, -0.22, -0.13, -0.06, 0, 0.06, 0.13, 0.22, 0.35, 0.5, 0.75, 1]
+    .map((f) => Math.round(f * span));
+  const nf = OFFS.length * nc + 1;
+  const STRIDE = Math.max(1, Math.round(D / 8));
+  const rows = [], tgt = Array.from({ length: nc }, () => []), rowT = [];
+  for (let t = 0; t < n; t += STRIDE) {
+    const m = Math.min(M - 1, Math.floor(t / D));
+    const r = [1];
+    for (const o of OFFS) {
+      const tt = Math.min(n - 1, Math.max(0, t + o));
+      const ref = spec.refAt(tt);
+      for (let c = 0; c < nc; c++) r.push(ref[c]);
+    }
+    rows.push(r); rowT.push(t);
+    for (let j = 0; j < nc; j++) tgt[j].push(x[m * nc + j]);
+  }
+  const solve = (idx, j, lam) => {
+    const A = new Float64Array(nf * nf), b = new Float64Array(nf);
+    for (const i of idx) {
+      const r = rows[i];
+      for (let a = 0; a < nf; a++) { b[a] += r[a] * tgt[j][i]; for (let c = 0; c < nf; c++) A[a * nf + c] += r[a] * r[c]; }
+    }
+    for (let a = 0; a < nf; a++) A[a * nf + a] += lam;
+    const Aug = [];
+    for (let a = 0; a < nf; a++) { const row = new Float64Array(nf + 1); for (let c = 0; c < nf; c++) row[c] = A[a * nf + c]; row[nf] = b[a]; Aug.push(row); }
+    for (let i = 0; i < nf; i++) {
+      let piv = i;
+      for (let r2 = i + 1; r2 < nf; r2++) if (Math.abs(Aug[r2][i]) > Math.abs(Aug[piv][i])) piv = r2;
+      if (Math.abs(Aug[piv][i]) < 1e-300) continue;
+      [Aug[i], Aug[piv]] = [Aug[piv], Aug[i]];
+      const d = Aug[i][i];
+      for (let c = 0; c <= nf; c++) Aug[i][c] /= d;
+      for (let r2 = 0; r2 < nf; r2++) { if (r2 === i) continue; const f = Aug[r2][i]; for (let c = 0; c <= nf; c++) Aug[r2][c] -= f * Aug[i][c]; }
+    }
+    return Aug.map((r) => r[nf]);
+  };
+  let scale = 0;
+  for (const r of rows) for (const v of r) scale += v * v;
+  const lam = 1e-6 * scale / Math.max(1, rows.length);
+  const GAP = span;                                 // the window's own span, in STEPS
+  const half = Math.floor(n / 2);
+  const trainI = [], testI = [];
+  for (let i = 0; i < rows.length; i++) {
+    if (rowT[i] < half - GAP) trainI.push(i); else if (rowT[i] >= half + GAP) testI.push(i);
+  }
+  let r2sum = 0, r2n = 0;
+  for (let j = 0; j < nc; j++) {
+    if (!trainI.length || !testI.length) continue;
+    const w = solve(trainI, j, lam);
+    let mu = 0; for (const i of testI) mu += tgt[j][i]; mu /= testI.length;
+    let ss = 0, tt = 0;
+    for (const i of testI) { let p = 0; for (let a = 0; a < nf; a++) p += w[a] * rows[i][a];
+      ss += (tgt[j][i] - p) ** 2; tt += (tgt[j][i] - mu) ** 2; }
+    if (tt > 0) { r2sum += 1 - ss / tt; r2n++; }
+  }
+  const held = r2n ? r2sum / r2n : NaN;
+  // and what a reference-only map DELIVERS, fitted on everything (in-sample, stated as such)
+  const all = Array.from({ length: rows.length }, (_, i) => i);
+  const useq = Array.from({ length: nc }, () => new Float64Array(n));
+  for (let j = 0; j < nc; j++) {
+    const w = solve(all, j, lam);
+    for (let i = 0; i < rows.length; i++) {
+      let p = 0; for (let a = 0; a < nf; a++) p += w[a] * rows[i][a];
+      p = Math.max(-spec.uMax, Math.min(spec.uMax, p));
+      const e = i + 1 < rows.length ? rowT[i + 1] : n;
+      for (let t = rowT[i]; t < e; t++) useq[j][t] = p;
+    }
+  }
+  const got = rms(drive(spec, n, k0, -1, 0, useq), from);
+  return { held, deliv: base0 / got, rows: rows.length, feats: nf, span, tr: trainI.length, te: testI.length };
+}
 
 console.log('\nHEADROOM — the best ANY correction of this class could do, and what the machine'
   + ' then delivers.\n');
@@ -182,6 +281,12 @@ for (const [name, spec] of SPECS) {
         : base0 / got > 1.5 ? 'HEADROOM EXISTS — the gap is ours'
         : base0 / got < 1.1 ? 'NOTHING TO WIN — an oracle with full future knowledge gets ~nothing'
         : 'little to win at this resolution'));
+    if (process.env.REACH === '1') {
+      const R = reachable(spec, n, D, M, x, nc, k0, from, base0, drive, rms, { v: LSET });
+      console.log(`          REACHABLE by a reference-only map: held-out R² ${R.held.toFixed(3)}`
+        + `, delivers ${R.deliv.toFixed(2)}x of the ${(base0 / got).toFixed(2)}x oracle`
+        + `   (${R.rows} rows / ${R.feats} feat, span +/-${R.span} steps vs settle ${LSET})`);
+    }
     }
   }
   console.log('');

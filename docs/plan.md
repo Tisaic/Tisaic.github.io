@@ -15703,3 +15703,47 @@ would be a sharper and more useful limit than "this plant is hard".
 was worse than nothing. That sweep was of the PILOT's correction, and it establishes only that
 the pilot was right to decline. An oracle feedforward of the same class, on the same program,
 delivers 15.11x. The refusal is correct FOR THE PILOT and wrong ABOUT THE PLANT.
+
+### §61.2 — Reachability: the question, the instrument, and three of its own faults
+
+§61.1 measured 2.6x-250x of headroom on all four plants and stated the limit of that claim: the
+oracle is NON-CAUSAL, so it bounds what is AVAILABLE and not what is REACHABLE. `headroom.mjs`
+gains `REACH=1`, which regresses the solved oracle correction onto a window of the COMMANDED
+REFERENCE — §49's analysis transplanted, the same object `distil.js` deploys — and reports two
+numbers that are never merged: HELD-OUT R² on contiguous folds with a gap of the window span,
+and what a map fitted IN-SAMPLE then DELIVERS on the machine.
+
+**THE BARREL'S ANSWER IS NOT YET ESTABLISHED AND THE FIRST TWO ATTEMPTS WERE BOTH THE
+INSTRUMENT.**
+
+The first read held-out R² -0.351 and in-sample delivery 1.00x, which would have said the 15.11x
+is oracle-only and finally explained a refusal three accounts had failed to. It rested on **40
+rows against 40 features** — an exactly determined fit whose held-out split trained on ~12 rows
+(rules 20, 32). Rows are now built at a stride of D/8 rather than one per block, which adds rows
+without changing the piecewise-constant target: 938 rows / 40 features, 407 train, 406 test. The
+verdict survived that (R² -0.225 and -1.555, in-sample delivery still 1.00x).
+
+The second is rule 37 and it is still open: the window was fixed at ±8 BLOCKS, which is ±1,000
+steps on the barrel at D=125 against measured cross-channel rises of **4,464**. A window too
+short to carry what it is asked to explain is the trap that read 1.047x on the shake data at K=8
+and 1.63x at K=16, in this same session. The window is now specified in STEPS and scaled to the
+plant's OWN measured settle, and `REACHW` sweeps it so the claim is tested rather than asserted.
+
+**A CANDIDATE MECHANISM WAS PROPOSED AND KILLED BY MEASUREMENT.** The barrel's rig carries an
+ambient that it calls UNMEASURED and drifting, which would explain a correction no reference can
+predict. Correlation of the error with that ambient is **0.036 / 0.050 / 0.074** — nothing. And
+the error IS strongly reference-correlated, at **-0.644 / -0.659 / -0.681**, which is what made
+the first negative R² implausible enough to re-check.
+
+**WHAT STANDS EITHER WAY.** The headroom itself: converged, machine-delivered, agreeing with its
+own prediction on every row of all four plants. No plant is a strike candidate. What is open is
+only whether the barrel's 15.11x lies inside the class of object this project deploys.
+
+**AND THE SESSION'S OWN PATTERN IS NOW THE MOST USEFUL THING IN IT.** Six faults today were in
+the instrument and one finding was in a plant: the mill's missing warmup, the truncation account
+refuted by the plant settling sooner than its own probe, a headroom of 1.01x that was a frozen
+operating point, a PREDICTED column measuring a zero-initialised array, an under-determined
+reachability fit, and an ambient hypothesis at correlation 0.04. Every one surfaced by the
+instrument disagreeing with the machine rather than by reading the code. A plant's verdict is not
+trustworthy until its harness has been checked, and there are now three cheap probes that do it:
+startup transient, response linearity, and window reach.
