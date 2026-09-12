@@ -146,7 +146,12 @@ const summary = [];
 for (const [name, spec] of SPECS) {
   if (!WANT.includes(name)) continue;
   const nc = spec.channels.length;
-  const n = Math.min(spec.N, env('WINDOW', spec.N));
+  // WINDOW MAY EXCEED THE PROGRAM, and it has to: the barrel's own account of its failure
+  // concerns a probe halting at 16,400 and 30,200 steps against a program of 15,000, so a knob
+  // that can only SHORTEN cannot test it. Every rig's `refAt` clamps at its own program end and
+  // this instrument freezes the reference at the step point anyway, so running past N is holding
+  // the last setpoint — which is exactly the condition a settling measurement wants.
+  const n = env('WINDOW', spec.N);
   const k0 = Math.round(n * K0F);
   const amp = AMP * spec.uMax;
   const base = drive(spec, n, k0, -1, 0);

@@ -15572,3 +15572,27 @@ bodies are character-identical to the originals — and the only semantic change
 moved modules at the same literal value and the spec objects are constructed at module load rather
 than inline, which cannot matter because every field is a pure expression with no side effect and
 no RNG consumed at construction (the rigs seed inside `fresh()`).
+
+### §59.1 — The barrel settles inside its own probe, so truncation is not the under-read
+
+§59 left the barrel as the one plant firing NONE of the four diagnostics, and named the next
+measurement: `invert.mjs` at a window past 40,000 steps, because the 15,000-step window it ran
+could not test this file's own account — that the probe "halts at 16,400 and 30,200 steps and
+reads its DC 24% and 15% LOW".
+
+**Run at 60,000 steps, every channel reads DC@25% = 100% and DC@50% = 100%, all settled.** The
+barrel's step response to a held correction is at its full DC gain **within 15,000 steps**, and
+both of the probe halts the file quotes are LONGER than that.
+
+**So the plant is not outrunning the probe, and the standing explanation is wrong in its
+mechanism even where its numbers are right.** A probe that stops at 16,400 steps on a plant
+settled by 15,000 has not been truncated by the plant. What remains as the live candidate is the
+probe's EXCITATION rather than its LENGTH: a band-limited dither carries little energy at DC, and
+a DC gain identified from it can read low however long the record runs. Those are different faults
+with different fixes — one is a stopping rule, the other is a design — and the record has been
+carrying the first.
+
+**STATED LIMITS.** One amplitude (25% of uMax), one operating point, reference frozen. The probe
+also identifies a whole response rather than a DC gain, so this measurement bounds the settling
+explanation and does not by itself establish the excitation one. What it does close is §59's named
+next step: the truncation account is refused, and the barrel's failure is still unexplained.
