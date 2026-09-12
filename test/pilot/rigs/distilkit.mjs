@@ -57,7 +57,39 @@ function deriveWindow({ settle, lapMin, win }) {
  * correction and no diet repairs that. Without it a refusal has two explanations and nothing
  * distinguishes them.
  */
-async function reportDistil({ rep, runs, nFeat, segs = null }) {
+async function reportDistil({ rep, runs, nFeat, segs = null, auto = null }) {
+  // ---- THE TWO CHECKS THAT WOULD HAVE CAUGHT §65's DEFECTS, AND DID NOT EXIST.
+  //
+  // Both faults were silent, both were of a class this project had already paid for once, and
+  // both were found by an outside objection rather than by a check. Each is one line.
+  //
+  // (1) A CLOSED LAP MUST CONTRIBUTE EVERY SAMPLE. If a run's `refAt` wraps but the descriptor
+  //     does not declare `closed`, `addProgram` clamps the window at index 0 and the fit silently
+  //     skips the first REACH samples — 939 of 7,500 on the barrel, 376 of 3,000 on the column,
+  //     each exactly the window's own reach (plan §52.14, §65.1). The row count says so for free.
+  //
+  // (2) A DECIMATED LOOK-AHEAD MUST BE DECLARED. The rung's offsets are RAW machine steps and
+  //     `_distilTerm` falls back to `ctx.look`, so a host whose cascade decides on its own sample
+  //     deploys a window stretched by that factor against the one the fit saw — invisible wherever
+  //     the cascade refuses, because there the stride is 1 (plan §51.5, §65.2).
+  if (rep.distil && rep.distil.runs) {
+    for (const [i, c] of rep.distil.runs.entries()) {
+      if (c.dropped) continue;
+      const want = Math.ceil(c.lap / (rep.distil.stride || 1));
+      if (c.used < want) {
+        console.log(`  ⚠ run ${i} contributed ${c.used} rows of a ${c.lap}-step lap — short by `
+          + `${want - c.used}. A CLOSED lap must declare \`closed: true\` on its run descriptor, `
+          + 'or `addProgram` clamps the window at index 0 and the fit never sees the wrap the '
+          + 'deployed policy will read (plan §52.14, §65.1).');
+      }
+    }
+  }
+  const strideBelow = auto && auto.stack ? (auto.stack.sample || 1) : 1;
+  if (auto && auto.distilNoLookRaw && strideBelow > 1) {
+    console.log(`  ⚠ the cascade below decides on a stride of ${strideBelow} and the host `
+      + 'declared no `lookRaw` — the DEPLOYED window is stretched by that factor against the one '
+      + 'the fit saw, silently (plan §51.5, §65.2).');
+  }
   let inSample = null;
   if (rep.distil && rep.distil.policy) {
     inSample = [];

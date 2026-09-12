@@ -107,8 +107,20 @@ async function ladder(spec) {
       const S = auto.stack ? auto.stack.sample : 1;
       const kS = Math.floor(k / S);
       const look = (off) => refAt(Math.min(N - 1, Math.max(0, (kS + off) * S)));
+      // AND THE RAW-STEP LOOK-AHEAD BESIDE IT, because two rungs here read the reference on two
+      // different grids. The cascade decides on its own `sample` and its offsets are in DECISIONS,
+      // so `look` is decimated by S; the distilled rung's offsets are RAW machine steps, because
+      // what it regresses is a converged prefix indexed by the machine's own step. `autostack.js`
+      // warns about exactly this in its own comment — a host with a decimated look-ahead must
+      // declare `lookRaw`, and one with a single grid passes only `look` and is byte-identical —
+      // and this driver did not, so `_distilTerm` fell back to `look` and the DEPLOYED window was
+      // stretched by S against the one the fit saw, with nothing thrown and no diagnostic naming
+      // it (plan §51.5). It was invisible on the column, where the cascade REFUSES and S is 1,
+      // and it is the barrel's whole signature: in-sample 9-14x read through the raw reference,
+      // and 0.27-0.48x on the machine read through a window S times too wide.
+      const lookRaw = (off) => refAt(Math.min(N - 1, Math.max(0, k + off)));
       const u = auto.act({ v: channels.map((_, c) => v[c][k]), a: channels.map((_, c) => a[c][k]),
-        look });
+        look, lookRaw });
       if (corr) { const w = auto.into(corr.at(k), cname, {}); for (let c = 0; c < nc; c++) u[c] += w[c]; }
       const r = step(st, ref, u, k);
       auto.observe(r.measured);

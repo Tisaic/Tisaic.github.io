@@ -16289,3 +16289,67 @@ instrument that would make it one.
 training patterns (2.22x, 1.88x, 1.81x, 1.65x) INCLUDING the three the fit never saw, and then
 helps the published scenario. That ordering — helps what it was taught, helps what it was not —
 is what a plant model looks like, and it is the opposite of the barrel's.
+
+## §65 — THE BARREL'S VERDICT WAS AN INSTRUMENT FAULT, AND §63.9 IS RETRACTED
+
+§63.9 concluded that the barrel's correction "is learnable from its own program and does not
+carry from other programs", and closed the plant as correctly refused. The owner's objection was
+that this plant should be in the wheelhouse — slow, repeatable, the reference known far ahead —
+and it was right. **Two defects, both in the harness, both of a class this project has already
+paid for once.**
+
+### §65.1 The lap was never declared closed (plan §52.14, again)
+
+Both new harnesses return a CYCLIC `refAt` and neither set `closed` on the run descriptor, so
+`addProgram` clamped the window at index 0 — treating a closed lap as a finite record. The row
+counts named it exactly: **6,561 of 7,500 on the barrel and 2,624 of 3,000 on the column, each
+short by the window's own reach**. So the fit never saw the first REACH samples of any recipe AND
+the deployed policy then read wrapped windows at every lap start that the fit had never seen.
+That is §52.14 verbatim, where it cost the arm 19% and the soft cell 2.61x → 3.98x, returning
+because a new host is the one place the flag has to be set by hand.
+
+### §65.2 And the ladder handed the rung a DECIMATED look-ahead (plan §51.5, again)
+
+`rigs/ladder.mjs` passed only `ctx.look`, which is decimated by the cascade's `sample`. The
+distilled rung's offsets are RAW machine steps and `_distilTerm` falls back to `ctx.look` when no
+`lookRaw` is declared, so **the DEPLOYED window was stretched by that factor against the one the
+fit saw**, with nothing thrown and no diagnostic naming it. `autostack.js` warns about this in its
+own comment — *"invisible on the plant it was first built on (stride 1) and would have stretched
+the window by a factor of nine on the next one"* — and that is exactly what happened: the COLUMN's
+cascade REFUSES, so its S is 1 and the two closures are the same function, while the BARREL's
+cascade deploys two layers.
+
+**It explains the barrel's whole signature, which should have been suspicious on its own**:
+in-sample 9-14x computed by reading the reference directly, 0.27-0.48x on the machine through the
+stretched closure, and the fit vouching at R² 0.95-0.98 the entire time. A map that helps
+everything it was taught and harms only what it is deployed on is a DEPLOY-PATH fault, and
+`distil-arm.mjs`'s own split says so in its header; I read it as transfer instead.
+
+### §65.3 What the repairs are worth, and what is retracted
+
+```
+  column   2.44x -> 2.58x deployed     rows 2624 -> 3000    over the published BLT 1.35x -> 1.41x
+                                                            cold, 1.96x -> 2.16x settled
+  barrel   0.48x -> 0.78x refused      rows 26244 -> 37500  in sample 9-14x -> 11.4/9.4/14.2/4.1
+```
+
+**RETRACTED: §63.9's verdict that the barrel's correction does not transfer.** It was measured
+three times through a stretched window, so §63.6's transfer reading, §63.7's rate-ladder result
+and §63.8's equal-lap result are all void as evidence about the PLANT. What survives from them is
+about the instrument: §63.6's streaming-vs-batch split (the fit route is upstream of the deploy
+path and unaffected), and §63.8's demonstration that the capacity gate is anti-correlated with
+delivery — which is now doubly confirmed, since the gate read 0.94-0.98 while the deploy path was
+stretched.
+
+**STILL REFUSED AT 0.78x, AND THE NEXT FAULT IS ALREADY NAMED.** The teacher column shows one
+recipe with a lap of 5,000 steps against a plant that settles in 7,861 — a "converged" correction
+the machine never reached steady state inside — and because the window rule takes the SHORTEST
+lap, that one recipe also dragged the reach to ±625, well under the ±983-1965 band §62.5 measured
+offline. The diet now runs four setpoints each at the production segment: laps of 20,000, longer
+than the settle, equal across the diet, reach ±2,500 against a production ramp of 3,500 steps,
+which is the feature the correction has to invert.
+
+**THE COUNT THIS SESSION IS NOW ELEVEN INSTRUMENT FAULTS TO TWO PLANT FINDINGS**, and both of
+today's were caught by an outside objection rather than by a check. The cheap check that would
+have caught both exists and was not written: **assert that the rows the fit USED equal the lap**,
+and **assert that a host with a decimated look-ahead declares `lookRaw`**. Both are one line.

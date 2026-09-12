@@ -94,6 +94,15 @@ const distilRuns = () => DIETS.map((rec) => {
   return {
     lap,
     refAt: (k) => { const s = ref(k); return WB.inputsFor(s[0], s[1]); },
+    // THE LAP IS CLOSED AND MUST SAY SO. `refAt` above wraps at `lap`, but `addProgram` clamps
+    // the window at index 0 unless the run declares itself closed — so without this the fit skips
+    // the first REACH samples of every recipe (measured: 939 of 7500 on the barrel, 376 of 3000
+    // on the column, each equal to the window's own reach) AND the deployed policy then reads
+    // wrapped windows at every lap start that the fit never saw. That is plan §52.14's defect
+    // exactly, which cost the arm 19% and the soft cell 2.61x -> 3.98x, reappearing because a new
+    // host is the one place the flag has to be set by hand.
+    closed: true,
+
     run: async (corr) => {
       const c = settled(rec);
       let s2 = 0, n = 0;
@@ -124,10 +133,10 @@ const spec = { ...wbSpec,
 
 announce();
 if (process.env.MIMO === '1') console.log('  pilotOpts + {"mimo":true}');
-const { rep } = await ladder(spec);
+const { rep, auto } = await ladder(spec);
 
 const { inSample } = await reportDistil({ rep, runs: distilRuns(),
-  nFeat: OFFSETS.length * 2 + 1 });
+  nFeat: OFFSETS.length * 2 + 1, auto });
 
 // ---------------------------------------------------------------- the PUBLISHED comparison
 // THE LADDER SCORES AN RMS AND THE LITERATURE SCORES AN IAE, AND THEY ARE NOT THE SAME CLAIM

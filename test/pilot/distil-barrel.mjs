@@ -78,7 +78,14 @@ console.log('\ndistil-barrel: the DEPLOYED object on the plant we have always re
 // per-recipe weighting would be a library change made to rescue a diet.
 const POINTS = [[175, 195, 205], [190, 210, 218], [178, 198, 208],
   [185, 205, 215], [170, 190, 200], [192, 212, 220]];
-const PICK = [[0, 1, 2, 3, 4, 5], [0, 2, 3, 5], [1, 3, 4], [0, 4]];
+// EVERY RECIPE'S LAP MUST EXCEED THE PLANT'S OWN SETTLE, AND THEY SHOULD BE EQUAL. A lap of
+// 5,000 steps on a plant that settles in 7,861 is a "converged" correction the machine never
+// reached steady state inside — and because the window rule takes the SHORTEST lap, that one
+// recipe also dragged the reach to ±625, well under the ±983-1965 band §62.5 measured offline.
+// Four setpoints each at the production segment gives laps of 20,000: longer than the settle,
+// equal across the diet so no recipe outweighs another, and a reach of ±2,500 against a
+// production ramp of SEG-HOLD = 3,500 steps, which is the feature the correction has to invert.
+const PICK = [[0, 1, 2, 3], [2, 3, 4, 5], [0, 2, 4, 5], [1, 3, 5, 0]];
 const DIETS = PICK.map((ix) => ix.map((i) => POINTS[i]));
 // THE DIET'S RATE LADDER, WHICH IS THE LEVER §63.6 MEASURED AND HAS NO CONSTANT IN IT. The first
 // diet ran every recipe at SEG 2500 against the production program's 5000, so every training ramp
@@ -139,6 +146,15 @@ const distilRuns = () => DIETS.map((rec, di) => {
   return {
     lap,
     refAt: (k) => TH.powerFor(ref(k)),
+    // THE LAP IS CLOSED AND MUST SAY SO. `refAt` above wraps at `lap`, but `addProgram` clamps
+    // the window at index 0 unless the run declares itself closed — so without this the fit skips
+    // the first REACH samples of every recipe (measured: 939 of 7500 on the barrel, 376 of 3000
+    // on the column, each equal to the window's own reach) AND the deployed policy then reads
+    // wrapped windows at every lap start that the fit never saw. That is plan §52.14's defect
+    // exactly, which cost the arm 19% and the soft cell 2.61x -> 3.98x, reappearing because a new
+    // host is the one place the flag has to be set by hand.
+    closed: true,
+
     run: async (corr) => {
       const p = settled(rec, seg);
       let s2 = 0, n = 0;
@@ -166,11 +182,11 @@ const spec = { ...barrelSpec,
   distilRuns };
 
 announce();
-const { rep } = await ladder(spec);
+const { rep, auto } = await ladder(spec);
 
 // ---------------------------------------------------------------- what it says and why
 const { inSample } = await reportDistil({ rep, runs: distilRuns(),
-  nFeat: OFFSETS.length * 3 + 1, segs: DSEGS });
+  nFeat: OFFSETS.length * 3 + 1, segs: DSEGS, auto });
 
 check('the barrel is not made worse by anything the ladder ships',
   rep.best <= rep.base, `${rep.base.toExponential(3)} → ${rep.best.toExponential(3)}`);
