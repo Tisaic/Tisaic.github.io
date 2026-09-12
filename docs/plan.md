@@ -16077,3 +16077,48 @@ where that disagreement DECIDES an answer rather than being a curiosity. `ONLINE
 **AND IT MATTERS BEYOND THIS PLANT.** Target 6 requires the fit to STREAM — batch
 normal-equations-and-Cholesky is the offline algorithm the north star rules out — so a streaming
 fit that cannot fit what the batch route can is a PRODUCT constraint and not a harness detail.
+
+### §63.6 THE STREAMING FIT WAS THE BLOCKER — AND UNDERNEATH IT THE ANSWER IS TRANSFER
+
+`ONLINE=0` changes the fit route and nothing else. Same rows, same features, same target, same
+window, same diet, same teacher:
+
+```
+                                streaming                    batch
+  held-out R²        -5.78 / -15.86 / -20.36     0.948 / 0.795 / 0.885
+  vouches                           false                      true
+  in sample     1.000x 1.000x 1.000x 1.000x   9.157x 14.445x 13.858x 10.602x
+  scored program                   1.000x                    0.479x
+```
+
+**So §52.16's open finding is closed and it is worse than it looked.** The streaming
+shared-covariance fit does not merely return badly scaled weights on this plant — it fails to
+find a fit that exists, is well posed and is strongly determined (410 rows per feature), and it
+fails by 20 units of R² rather than at the margin. Standardising the row recovers 3-5x of that
+and no more (§63.4). **This is a constraint on the PRODUCT and not on the barrel**: target 6
+forbids the batch route outright — normal equations and a Cholesky are the offline algorithm the
+north star rules out — so the object that ships cannot today fit what its own data contains on
+this plant. The arm is the negative control that kept it hidden: there the two routes agree to
+0.0009% rms in what reaches the machine, which `distil.js` records as the reason it asserts on
+the applied correction rather than the weights.
+
+**AND WITH THE FIT REPAIRED THE PLANT STILL REFUSES, FOR THE REASON THE SPLIT EXISTS TO NAME.**
+The policy helps every one of its four training recipes — 9.16x, 14.45x, 13.86x, 10.60x — and
+makes the scored program **2.1x WORSE**. That is TRANSFER, not the fit, not the basis and not the
+deploy path, because a sign, units or window fault would harm the training recipes too. It is
+`distil-arm.mjs`'s split reading the same verdict on a plant sharing no physics with the arm.
+
+**AND IT DOES NOT CONTRADICT §62.5's 5.38x — THE TWO ARE DIFFERENT TRANSFER TESTS AND THE HARDER
+ONE IS THIS.** §62.5 fitted the oracle correction of the SCORED program and evaluated it on a
+RETIMED, RESCALED version of that same program: transfer across a warp. This fits FOUR OTHER
+RECIPES and evaluates on the production program: transfer across a diet. A correction that
+survives a 0.7x clock and a 0.6x size on its own program, and does not survive being taught from
+four different ones, is §52.17's finding arriving on a second plant — *what bounds a
+program-agnostic feedforward is how far the commissioning diet is from the program it will run*.
+
+**THE NEXT LEVER HAS NO CONSTANT IN IT AND IS ALREADY ON RECORD TWICE.** The diet's recipes run
+at SEG 2500 against the production program's 5000, so every training ramp is twice production's
+rate and the whole diet sits to ONE SIDE of it — `distil-tank.mjs`'s second wrong diet exactly,
+and §52.40's feedrate finding in mirror image. §52.41's remedy is to BRACKET the production rate
+rather than sit beside it, and it cost 1.23x at the commissioning feed to buy a 5x span. The
+window must then be derived from the SHORTEST lap in the diet, not the first.
