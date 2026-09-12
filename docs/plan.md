@@ -15814,3 +15814,48 @@ first half, a gap cap that made an impossible split read as NaN, a `pkill -f` ma
 shell, and this. **Every one was caught by two measurements disagreeing, never by inspection.**
 That is why the column now runs in every barrel invocation: a positive control is not a courtesy,
 it is the only thing that has worked.
+
+### §61.5 — The barrel's headroom IS reference-expressible. Every negative was the instrument.
+
+With the target corrected to the TOTAL correction (§61.4), the sweep that §61.2 and §61.4 could
+not complete finally reports, barrel and column together so the column is a positive control:
+
+```
+  REACHW=1.5        delivers          of oracle   held-out R²   window
+    column b75      2.62x   of 2.65x      99%      -13273       +/-1491
+    column b25      2.54x   of 6.15x      41%      -28153       +/-1491
+    barrel b375    14.64x   of 15.11x     97%      -0.514      +/-11792
+    barrel b125    15.06x   of 15.21x     99%      -4.446      +/-11792
+  REACHW=3
+    barrel b125    14.60x   of 15.21x     96%                  +/-23583
+    column b75      1.91x   of 2.65x      72%                  +/-2982
+```
+
+**THE BARREL'S 15.1x LIES INSIDE THE CLASS OF OBJECT THIS PROJECT DEPLOYS.** A map of the
+commanded reference alone captures 97-99% of an oracle that chose its correction knowing the
+entire future error. So the plant is winnable, the FORM that wins it is the one already shipped,
+and the pilot's 1.05x is a failure of its route and not a structural limit. Three earlier
+readings said the opposite and all three were this instrument: a 40-row fit against 40 features,
+a window a quarter of the plant's own rise, and a target that vanished as the iteration converged.
+
+**A WIDER WINDOW IS WORSE ON BOTH PLANTS.** 1.5x the measured settle beats 3x — barrel 99% → 96%,
+column 99% → 72%. More reach costs rather than buys, which is this project's aliasing finding
+arriving on two plants that share no physics, by a route with no pilot in it.
+
+**AND THE HELD-OUT COLUMN DOES NOT SUPPORT THE SAME CLAIM, WHICH IS THE HALF THAT MATTERS FOR A
+PRODUCT.** In-sample delivery says the form can EXPRESS the correction; held-out R² says a fit on
+one part of the record does not carry to another, and it is negative everywhere. The two are
+different claims and the table keeps them apart rather than merging them.
+
+**THE COLUMN'S R² MAGNITUDES ARE NOT TRUSTWORTHY AND ARE FLAGGED RATHER THAN READ.** -13273 and
+-28153 are not a transfer statement, they are a solve coming apart: the ridge is
+`1e-6 * scale / rows`, which on this plant is order 3e-5 against normal-equation entries in the
+thousands — effectively unregularised against 31 collinear reference-window features (rule 32, a
+threshold not scaled to the quantity it acts on). The barrel's -0.51 and -4.45 are in a range a
+genuine transfer failure produces. So the honest reading is: expressible in-sample on both,
+transfer unmeasured on the column until the ridge is scaled, and plausibly negative on the barrel.
+
+**WHAT THIS LEAVES.** The mandate's question for the barrel is no longer "is it winnable" — it is
+"why does the pilot take 1.05x of a 15.1x that its own deployed form can express". That is a far
+better-posed question than the one four previous accounts failed to answer, and it points at the
+route (forecast, QP, cascade) rather than at the plant.
