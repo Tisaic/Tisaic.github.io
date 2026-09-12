@@ -67,12 +67,18 @@ console.log('\ndistil-barrel: the DEPLOYED object on the plant we have always re
 // program — a changeover between three-zone temperature profiles, which is what this machine
 // does — and each one CYCLED so it has a lap, because the rung's teacher converges a
 // lap-indexed correction. A batch recipe that repeats is an ordinary process, not a contrivance.
-const DIETS = [
-  [[175, 195, 205], [190, 210, 218], [178, 198, 208]],
-  [[185, 205, 215], [170, 190, 200], [192, 212, 220]],
-  [[181, 199, 213], [196, 209, 223], [174, 194, 202]],
-  [[188, 202, 214], [176, 196, 206], [194, 215, 220]],
-];
+// THE RATE VARIES BY THE NUMBER OF SETPOINTS, NOT THE LENGTH OF EACH, SO EVERY LAP IS THE SAME
+// (§63.7). A ladder built from segment length makes a slower recipe a LONGER lap, and the fit
+// duly weighted itself 4.4x toward the recipes carrying 0.43x the teaching — rule 20 violated by
+// a construction in which nothing looks like a capacity knob. Six points at 2500, four at 3750,
+// three at 5000 and two at 7500 all close in 15,000 steps, so the rates span 0.67x to 2.0x of
+// production WITH PRODUCTION INSIDE and every recipe contributes the same rows. It needs no
+// per-program stride, which matters: `AutoStack` passes ONE stride to every program, and a
+// per-recipe weighting would be a library change made to rescue a diet.
+const POINTS = [[175, 195, 205], [190, 210, 218], [178, 198, 208],
+  [185, 205, 215], [170, 190, 200], [192, 212, 220]];
+const PICK = [[0, 1, 2, 3, 4, 5], [0, 2, 3, 5], [1, 3, 4], [0, 4]];
+const DIETS = PICK.map((ix) => ix.map((i) => POINTS[i]));
 // THE DIET'S RATE LADDER, WHICH IS THE LEVER §63.6 MEASURED AND HAS NO CONSTANT IN IT. The first
 // diet ran every recipe at SEG 2500 against the production program's 5000, so every training ramp
 // was twice production's rate and the whole diet sat to ONE SIDE of it — `distil-tank.mjs`'s
@@ -82,9 +88,10 @@ const DIETS = [
 // the holds keep the shipped program's duty so what varies across the ladder is the RATE and not
 // the shape. `DSEG` still forces a single segment length, which is how the one-sided diet is
 // reproduced as the control.
+const EQLAP = env('EQLAP', 3 * TH.SEG);   // every recipe closes in the production lap
 const DSEGS = process.env.DSEG
   ? DIETS.map(() => env('DSEG', TH.SEG))
-  : [0.5, 1.0, 1.5, 2.0].map((f) => Math.round(f * TH.SEG));
+  : DIETS.map((rec) => Math.round(EQLAP / rec.length));
 const holdOf = (seg) => Math.round(seg * (TH.HOLD / TH.SEG));
 const LAP = (rec, seg) => seg * rec.length;
 
@@ -125,7 +132,8 @@ const OFFSETS = [0, 0.008, 0.016, 0.031, 0.063, 0.125, 0.219, 0.344, 0.5, 0.719,
 console.log(`  window reach ±${REACH} raw steps  (settle ${SETTLE}, shortest diet lap ${lapMin}, `
   + `min(0.61·settle, lap/8) = ${Math.round(Math.min(0.61 * SETTLE, lapMin / 8))})`);
 console.log(`  ${OFFSETS.length} offsets per channel, ${DIETS.length} training recipes at SEG `
-  + `${DSEGS.join('/')} against the scored program's ${TH.SEG} — `
+  + `${DSEGS.join('/')} (laps ${DIETS.map((r, i) => r.length * DSEGS[i]).join('/')}) `
+  + `against the scored program's ${TH.SEG} — `
   + `${DSEGS.some((d) => d < TH.SEG) && DSEGS.some((d) => d > TH.SEG)
     ? 'production is INSIDE the span' : 'production is at the EDGE of the span'}\n`);
 

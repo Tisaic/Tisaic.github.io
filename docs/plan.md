@@ -16157,3 +16157,61 @@ four at 3750, three at 5000, two at 7500 all close in 15,000 steps. Rates then s
 of production with production inside, every recipe contributes the same rows, and no per-program
 stride is needed — which matters because `AutoStack` passes ONE stride to every program and a
 per-recipe weighting would be a library change made to rescue a diet.
+
+### §63.8 THE EQUAL-LAP REPAIR IS REFUSED TOO — SO §63.7's MECHANISM IS WRONG, AND THE GATE IS ANTI-CORRELATED WITH DELIVERY
+
+§63.7 proposed that the bracketing ladder failed because a longer segment is a longer lap, so the
+fit weighted itself 4.4x toward the recipes with 0.43x the teaching. Holding the LAP fixed and
+varying the rate by the NUMBER of setpoints removes that imbalance exactly — 13,124 rows from
+every recipe — and the machine is WORSE again:
+
+```
+  diet                         held-out R²              in sample                scored
+  one-sided, SEG 2500 x4    0.948/0.795/0.885   9.16 14.45 13.86 10.60          0.479x
+  bracketing by segment     0.779/0.574/0.571  10.24  9.28  6.52  5.02          0.305x
+  equal-lap bracketing      0.976/0.978/0.976  10.19  6.66  8.70  2.71          0.266x
+```
+
+**So the row-count account is refuted by its own repair** — the fix that should have recovered the
+result made it worse, which is rule 21 read in reverse and the reason the repair was run rather
+than the mechanism written up as established. What survives from §63.7 is the measurement (the
+imbalance was real, the teacher does fall from 11.3x to 4.9x with segment length) and not the
+inference from it.
+
+**AND THE GATE IS ANTI-CORRELATED WITH WHAT THE MACHINE DELIVERS.** Ranked by held-out R² the
+order is equal-lap (0.977), one-sided (0.876), bracketing (0.641); ranked by delivery it is
+one-sided (0.479x), bracketing (0.305x), equal-lap (0.266x). The best fit by its own gate is the
+worst controller on the machine, by 1.8x. `distil.js` already states that its capacity gate is a
+cheap PRE-FILTER and that the decision remains a machine-scored verify; this is the first plant
+where that statement is demonstrated with the gate emphatic and wrong, at R² 0.977 on all three
+channels. A block that shipped this number as its safety case would be overselling it exactly as
+that module's header says.
+
+### §63.9 THE BARREL'S VERDICT: CORRECTLY REFUSED, AND WINNABLE ONLY FROM ITS OWN PROGRAM
+
+Three diets, all with a converged teacher (2.4x-11.3x per recipe, none dropped), all fitting
+their own recipes at 2.7x-14.5x, and **all three delivering WORSE THAN DOING NOTHING on the
+production program**. The ladder refused every one and the plant was never harmed, which is
+target 3's improve-or-refuse clause holding on the plant it was hardest to hold on.
+
+Read against §62, the two routes now say one thing:
+
+```
+  fitted on the SCORED program's own oracle correction, tested on a warp of it   5.38x
+  fitted on four OTHER recipes, tested on the production program            0.27-0.48x
+```
+
+**The barrel's correction is learnable from its own program and does not carry from other
+programs.** That is a plant-level statement supported by two routes sharing no code — an offline
+normal-equations regression of an oracle correction, and the shipped rung with an `hff` teacher
+through the ladder — and it is the honest answer to "winner or struck": the plant is VALID and
+its refusal is CORRECT, and it becomes a winner only under a per-program commission, which is
+exactly what "THE MEMORY IS RETIRED" closed off. The pilot's gain sweep was the wrong instrument
+for that conclusion (§62 stands), but the conclusion it reached is the one the right instruments
+now support.
+
+**WHAT WOULD CHANGE IT**, stated so the verdict is falsifiable rather than final: a diet whose
+recipes are CLOSER to production than any tried — the ordering across three diets says distance
+from the production program, not rate span or row balance, is what predicts delivery — or a
+correction addressed by something other than the commanded reference window, since §52.36's six
+experiments and §54.9's five function classes all bound what that input contains.
