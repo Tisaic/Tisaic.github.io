@@ -16122,3 +16122,38 @@ rate and the whole diet sits to ONE SIDE of it — `distil-tank.mjs`'s second wr
 and §52.40's feedrate finding in mirror image. §52.41's remedy is to BRACKET the production rate
 rather than sit beside it, and it cost 1.23x at the commissioning feed to buy a 5x span. The
 window must then be derived from the SHORTEST lap in the diet, not the first.
+
+### §63.7 BRACKETING THE RATE MAKES IT WORSE, AND THE REASON IS THE LADDER'S OWN ARITHMETIC
+
+§52.41's remedy transplanted to this plant — recipes at 0.5x, 1.0x, 1.5x and 2.0x of the shipped
+segment, so production sits INSIDE the span instead of at its edge — is REFUSED by the machine:
+
+```
+                                 one-sided diet        bracketing ladder
+  scored program                        0.479x                   0.305x
+  held-out R²             0.948 / 0.795 / 0.885    0.779 / 0.574 / 0.571
+  in sample        9.16x 14.45x 13.86x 10.60x   10.24x 9.28x 6.52x 5.02x
+```
+
+The teacher column names the mechanism, and it is arithmetic rather than physics:
+
+```
+  recipe 0: SEG  2500  lap  7500  teacher 11.325x  rows  6561
+  recipe 1: SEG  5000  lap 15000  teacher  8.539x  rows 14061
+  recipe 2: SEG  7500  lap 22500  teacher  5.890x  rows 21561
+  recipe 3: SEG 10000  lap 30000  teacher  4.907x  rows 29061
+```
+
+**A longer segment is a longer lap, so the slowest recipe contributes 4.4x the ROWS of the
+fastest while carrying 0.43x the TEACHING.** The fit is weighted toward the recipes with the
+least to say, because a slower ramp gives this plant longer than a settle and so leaves less
+dynamic error to teach from — `distil-tank.mjs`'s FIRST wrong diet (quasi-static) reappearing
+inside the remedy for its SECOND. That is rule 20 violated by the ladder's own construction:
+matched capacity was never checked because nothing in a rate ladder looks like a capacity knob.
+
+**THE REPAIR HAS NO CONSTANT IN IT EITHER, AND IT IS NOT A WEIGHTING.** Hold the LAP fixed and
+vary the rate by the NUMBER of setpoints rather than the length of each: six points at SEG 2500,
+four at 3750, three at 5000, two at 7500 all close in 15,000 steps. Rates then span 0.67x to 2.0x
+of production with production inside, every recipe contributes the same rows, and no per-program
+stride is needed — which matters because `AutoStack` passes ONE stride to every program and a
+per-recipe weighting would be a library change made to rescue a diet.

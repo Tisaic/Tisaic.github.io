@@ -73,25 +73,36 @@ const DIETS = [
   [[181, 199, 213], [196, 209, 223], [174, 194, 202]],
   [[188, 202, 214], [176, 196, 206], [194, 215, 220]],
 ];
-const DSEG = env('DSEG', 2500);
-const DHOLD = Math.round(DSEG * (TH.HOLD / TH.SEG));
-const LAP = (rec) => DSEG * rec.length;
+// THE DIET'S RATE LADDER, WHICH IS THE LEVER §63.6 MEASURED AND HAS NO CONSTANT IN IT. The first
+// diet ran every recipe at SEG 2500 against the production program's 5000, so every training ramp
+// was twice production's rate and the whole diet sat to ONE SIDE of it — `distil-tank.mjs`'s
+// second wrong diet exactly, and §52.40's feedrate finding in mirror image. §52.41's remedy is to
+// BRACKET the production rate rather than sit beside it. The ladder is therefore 0.5x, 1.0x, 1.5x
+// and 2.0x of the shipped SEG, so production sits INSIDE the span rather than at its edge, and
+// the holds keep the shipped program's duty so what varies across the ladder is the RATE and not
+// the shape. `DSEG` still forces a single segment length, which is how the one-sided diet is
+// reproduced as the control.
+const DSEGS = process.env.DSEG
+  ? DIETS.map(() => env('DSEG', TH.SEG))
+  : [0.5, 1.0, 1.5, 2.0].map((f) => Math.round(f * TH.SEG));
+const holdOf = (seg) => Math.round(seg * (TH.HOLD / TH.SEG));
+const LAP = (rec, seg) => seg * rec.length;
 
 /** One recipe's setpoints at raw step k, cycled at its own lap. */
-const refOf = (rec) => (k) => {
-  const lap = LAP(rec);
+const refOf = (rec, seg) => (k) => {
+  const lap = LAP(rec, seg);
   const kk = ((k % lap) + lap) % lap;
-  const i = Math.floor(kk / DSEG);
-  const t = (kk - i * DSEG - DHOLD) / (DSEG - DHOLD);
+  const i = Math.floor(kk / seg);
+  const t = (kk - i * seg - holdOf(seg)) / (seg - holdOf(seg));
   const s = t <= 0 ? 0 : t >= 1 ? 1 : TH.quintic(t);
   const a = rec[i], b = rec[(i + 1) % rec.length];
   return a.map((av, j) => av + (b[j] - av) * s);
 };
 
 /** Settle the barrel at a recipe's own start, so no run is scored across its startup (rule 13). */
-function settled(rec) {
+function settled(rec, seg) {
   const p = TH.makeBarrel(7);
-  const st = TH.powerFor(refOf(rec)(0));
+  const st = TH.powerFor(refOf(rec, seg)(0));
   for (let i = 0; i < 20000; i++) p.step(st);
   return p;
 }
@@ -100,27 +111,33 @@ function settled(rec) {
 // The plant's memory, measured rather than assumed: the barrel's own step response settles in
 // ~7,861 steps (`headroom.mjs` measures it from the response itself, no probe in the route).
 const SETTLE = 7861;
-const lap0 = LAP(DIETS[0]);
-const REACH = Math.round(env('WIN', Math.min(0.61 * SETTLE, lap0 / 8)));
+// THE SHORTEST LAP IN THE DIET, not the first. The aliasing half of the constraint is about the
+// lap the window could SPAN, so a diet of mixed rates is bounded by its fastest recipe; sizing
+// from `DIETS[0]` was right only while every lap was the same length (rule 31 inside one file).
+const lapMin = Math.min(...DIETS.map((rec, i) => LAP(rec, DSEGS[i % DSEGS.length])));
+const REACH = Math.round(env('WIN', Math.min(0.61 * SETTLE, lapMin / 8)));
 // The arm's geometric SHAPE — dense near now where the correction is decided, sparse far out
 // where it only has to span the memory — scaled to this plant's own reach. The shape is a
 // design; the reach is the plant's (rule 31).
 const OFFSETS = [0, 0.008, 0.016, 0.031, 0.063, 0.125, 0.219, 0.344, 0.5, 0.719, 1]
   .flatMap((f) => { const o = Math.round(f * REACH); return o === 0 ? [0] : [-o, o]; })
   .sort((a, b) => a - b);
-console.log(`  window reach ±${REACH} raw steps  (settle ${SETTLE}, diet lap ${lap0}, `
-  + `min(0.61·settle, lap/8) = ${Math.round(Math.min(0.61 * SETTLE, lap0 / 8))})`);
-console.log(`  ${OFFSETS.length} offsets per channel, ${DIETS.length} training recipes at `
-  + `SEG ${DSEG}, none of them the scored program\n`);
+console.log(`  window reach ±${REACH} raw steps  (settle ${SETTLE}, shortest diet lap ${lapMin}, `
+  + `min(0.61·settle, lap/8) = ${Math.round(Math.min(0.61 * SETTLE, lapMin / 8))})`);
+console.log(`  ${OFFSETS.length} offsets per channel, ${DIETS.length} training recipes at SEG `
+  + `${DSEGS.join('/')} against the scored program's ${TH.SEG} — `
+  + `${DSEGS.some((d) => d < TH.SEG) && DSEGS.some((d) => d > TH.SEG)
+    ? 'production is INSIDE the span' : 'production is at the EDGE of the span'}\n`);
 
 /** The training diet as the rung consumes it: a lap, its reference, and a run closure. */
-const distilRuns = () => DIETS.map((rec) => {
-  const lap = LAP(rec), ref = refOf(rec);
+const distilRuns = () => DIETS.map((rec, di) => {
+  const seg = DSEGS[di % DSEGS.length];
+  const lap = LAP(rec, seg), ref = refOf(rec, seg);
   return {
     lap,
     refAt: (k) => TH.powerFor(ref(k)),
     run: async (corr) => {
-      const p = settled(rec);
+      const p = settled(rec, seg);
       let s2 = 0, n = 0;
       const err = [0, 1, 2].map(() => new Float64Array(lap));
       for (let k = 0; k < 3 * lap; k++) {
@@ -174,7 +191,8 @@ if (rep.distil && rep.distil.policy) {
 if (rep.distil && rep.distil.runs) {
   console.log('\n  the TEACHER, per training recipe:');
   for (const [i, c] of rep.distil.runs.entries()) {
-    console.log(`    recipe ${i}: lap ${c.lap}  teacher ${c.gain.toFixed(3)}x  rows ${c.used}`
+    console.log(`    recipe ${i}: SEG ${DSEGS[i % DSEGS.length]}  lap ${c.lap}  `
+      + `teacher ${c.gain.toFixed(3)}x  rows ${c.used}`
       + `  ${c.dropped ? 'DROPPED' : 'kept'}  engine ${c.engine}`
       + (c.passes === null || c.passes === undefined ? '' : `  passes ${c.passes}`));
   }
