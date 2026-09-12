@@ -86,7 +86,21 @@ const FAR = [
   [[10.2, 12.2], [13.1, 10.4], [9.6, 9.4], [11.4, 12.6]],
   [[12.4, 11.0], [9.4, 10.6], [11.9, 12.9], [10.6, 9.1]],
 ];
-const DIETS = process.env.DIET === 'far' ? FAR : NEAR;
+// AND THE ONE CONSTRUCTION THE CONFLICT LEAVES OPEN (plan §67.1): DECOUPLE SPEED FROM RATE.
+// This plant's bind is that production's own ramp is 1.01x its settle, so a diet covering
+// production's commanded-speed envelope teaches mostly from targets already at zero (teacher
+// gains of 4e6 — rule 14) while a diet fast enough to excite falls outside the envelope and the
+// coverage guard fades it. Bracketing the RATE cannot resolve that, because production's rate is
+// itself quasi-static. But SPEED is |Δlevel| / ramp and the two factors are independent: a
+// SMALLER level change on a FASTER ramp holds the speed and restores the excitation. At ramp 969
+// (0.35·Tset, so every recipe excites) amplitudes of 0.20/0.35/0.60/0.85 cm give commanded speeds
+// of 4.1e-4 … 1.75e-3, which brackets production's own measured 4.29e-4 … 1.82e-3. It is the
+// default because it is the only diet here that satisfies both constraints; `DIET=far` and
+// `DIET=near` remain as the controls that say what each of the other two measured.
+const SPEED = [0.20, 0.35, 0.60, 0.85].map((A) => [
+  [10.7 + A, 10.7 - A], [10.7 - A, 10.7 + A], [10.7 + A, 10.7 + A], [10.7 - A, 10.7 - A]]);
+const DIETS = process.env.DIET === 'far' ? FAR
+  : process.env.DIET === 'near' ? NEAR : SPEED;
 
 // THE DIET'S RATE LADDER, AND IT TOOK TWO WRONG DIETS TO ARRIVE AT, BOTH RECORDED.
 //
@@ -109,7 +123,12 @@ const DIETS = process.env.DIET === 'far' ? FAR : NEAR;
 // So the diet is a RATE LADDER around the shipped SEG of 4000, one recipe per rate, spanning
 // 0.5·Tset to 1.5x the production segment. The holds keep the shipped recipe's 30% duty, so what
 // varies across the ladder is the RATE and not the shape.
-const DSEGS = [Math.round(0.5 * 2769), 2770, SEG, Math.round(1.5 * SEG)];
+// THE SEGMENT LADDER IS NOW FLAT FOR THE SPEED DIET, because its ladder is in AMPLITUDE. A rate
+// ladder here put 3 of its 4 recipes past a full settle (§67.1); one exciting rate with four
+// amplitudes spans the same commanded speeds and leaves every recipe with something to teach.
+const DSEGS = (process.env.DIET === 'far' || process.env.DIET === 'near')
+  ? [Math.round(0.5 * 2769), 2770, SEG, Math.round(1.5 * SEG)]
+  : [1385, 1385, 1385, 1385];
 const holdOf = (seg) => Math.round(seg * (HOLD / SEG));
 /** One recipe's reference in LEVELS, at raw step k, cycled at its own lap. */
 const refOf = (rec, seg) => (k) => {
@@ -147,7 +166,18 @@ async function once(seed) {
     // at Tset 2769, so the same reach is ±1688. The ladder below is that number with the arm's
     // geometric SHAPE, which is the part that is a design and not a constant: dense near now
     // where the correction is decided, sparse far out where it only has to span the memory.
-    distil: { refDim: 2, ridge: 1e-6, offsets: OFFSETS },
+    // THE TWO KNOBS THE BARREL NEEDED, AND THE REASON THIS FILE'S 1.000x MAY NEVER HAVE BEEN A
+    // MACHINE VERDICT AT ALL. `act()` returns ZEROS when the fit did not vouch, so an EXACT
+    // 1.000x is the signature of a fit that refused rather than a correction that was scored and
+    // lost — and the barrel read exactly that until two things moved (plan §63.4, §63.6):
+    // STANDARDISING the row, because `_rowFrom` leads with the ABSOLUTE reference (volts of
+    // order 3.5 here) beside DIFFERENCES of order 0.1 under one ridge and one covariance prior
+    // (rule 32); and the BATCH route, because the streaming shared-covariance fit could not find
+    // a fit that exists, is well posed and has hundreds of rows per feature — reading held-out
+    // -20 where batch read 0.95. Neither was ever tried on this plant.
+    distil: { refDim: 2, ridge: 1e-6, offsets: OFFSETS,
+      ...(process.env.STD === '1' ? { standardize: true } : {}),
+      ...(process.env.ONLINE === '0' ? { online: false } : {}) },
   });
 
   const start = voltsFor(G, RECIPE[0][0], RECIPE[0][1]);
@@ -209,6 +239,29 @@ async function once(seed) {
   // the diet or the plant's program-to-program similarity is the subject. Cannot help even the
   // programs it was fitted on -> the map cannot EXPRESS this plant's correction, and no diet fixes
   // that. Without this column a refusal has two explanations and the table cannot tell them apart.
+  // WHAT THE POLICY ACTUALLY APPLIES ON PRODUCTION, measured rather than inferred. The rung's row
+  // reads identical to the bare machine to five digits while the fit VOUCHES (held-out 0.99999)
+  // and the in-sample column reads 129-564x. There are only two ways that happens: the applied
+  // correction is ZERO — a fade or a refused fit, and both are ruled out, since `_coverage(null)`
+  // returns 1 and `deploy` is true — or it is NON-ZERO and cancels to nothing on this program.
+  // Those are different findings with different fixes, so the applied signal is printed beside
+  // the error it did or did not move (rule 25: "not measured" and "exactly zero" differ).
+  if (rep.distil && rep.distil.policy) {
+    const pol0 = rep.distil.policy;
+    let uPk = 0, u2 = 0;
+    for (let k = 0; k < PROG; k++) {
+      const u = pol0.actLook((o) => {
+        const h = refAtStep(Math.min(PROG - 1, Math.max(0, k + o)));
+        return voltsFor(G, h[0], h[1]);
+      });
+      for (const v of u) { uPk = Math.max(uPk, Math.abs(v)); u2 += v * v; }
+    }
+    console.log(`    APPLIED on production: peak |u| ${uPk.toExponential(3)}, rms `
+      + `${Math.sqrt(u2 / (2 * PROG)).toExponential(3)}, authority ${UCAP} — `
+      + (uPk < 1e-9 ? 'ZERO, so the rung never acted'
+        : 'NON-ZERO, so it acted and delivered nothing'));
+  }
+
   let inSample = null;
   if (rep.distil && rep.distil.policy) {
     const pol = rep.distil.policy;
@@ -234,7 +287,12 @@ for (const seed of SEEDS) {
   console.log(`    seed ${seed}: shipped ${shipped}  ${rep.base.toExponential(4)} -> `
     + `${rep.best.toExponential(4)} cm rms   ${rep.gain.toFixed(3)}x   ${secs}s`);
   // THE RUNG'S OWN REPORT, read from the object rather than from a field this harness invented.
-  if (rep.distil) console.log(`    ②d report: ${JSON.stringify(rep.distil).slice(0, 400)}`);
+  if (rep.distil) console.log(`    ②d fit: deploy ${rep.distil && rep.distil.fit ? rep.distil.fit.deploy : '—'}, held-out ${
+      rep.distil && rep.distil.fit ? JSON.stringify(rep.distil.fit.heldOutR2) : '—'}, rows ${
+      rep.distil && rep.distil.fit ? rep.distil.fit.rows : '—'}
+    ②d fit: deploy ${rep.distil && rep.distil.fit ? rep.distil.fit.deploy : '—'}, held-out ${rep.distil && rep.distil.fit ? JSON.stringify(rep.distil.fit.heldOutR2) : '—'}  — act() returns ZEROS when deploy is false, so an EXACT 1.000x is a fit that refused and
+      not a correction that was scored and lost
+    ②d report: ${JSON.stringify(rep.distil).slice(0, 400)}`);
   if (r0.inSample) {
     console.log(`    IN SAMPLE — the policy on its OWN training runs: `
       + r0.inSample.map((x) => x.toFixed(3) + 'x').join('  '));

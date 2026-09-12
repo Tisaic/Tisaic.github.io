@@ -16509,3 +16509,44 @@ that decouples SPEED from RATE — smaller level changes on faster ramps, so the
 covers production's while the ramp still excites — which no diet tried here does, and which is
 the one construction the conflict above leaves open. Until then the tank's 1.000x is honest for
 the DEPLOYED object and its 10.53x from the conventional rung is what a customer actually gets.
+
+### §67.2 AND THE TANK'S 1.000x IS NOT A FADE, NOT A REFUSED FIT, AND NOT A DIET — IT IS A SATURATED CORRECTION, WITH ONE READING THAT DOES NOT ADD UP
+
+The exact 1.000x looked like `distil-tank.mjs`'s own recorded signature for a FADED correction,
+so the candidates were enumerated and each one killed by measurement rather than by argument:
+
+- **A refused fit?** No. `act()` returns zeros when `report.deploy` is false, and it is TRUE in
+  every cell — held-out R² **0.99999** on this plant's own rows.
+- **The coverage guard?** No. `_coverage(null)` returns 1 and this harness passes no speed, so
+  nothing is faded.
+- **The row's scales, or the streaming fit?** No — the two repairs that converted the barrel
+  (§63.4, §63.6) both move the FIT here and neither moves the MACHINE:
+
+```
+                    held-out R²              in sample                delivered
+  base        0.9999911 / 0.9999838   129.4x 181.4x 564.5x 450.1x       1.000x
+  STD=1       0.9999944 / 0.9999894   123.2x 176.2x 536.5x 436.1x       1.000x
+  ONLINE=0    0.9984267 / 0.9981679    14.3x  36.1x 123.3x  79.4x       1.000x
+  both        0.9999310 / 0.9999609   107.4x 148.8x 439.6x 338.8x       1.000x
+```
+
+- **The diet?** No. Three diets — the shipped far ladder, production's own levels, and §67.1's
+  speed-decoupled amplitude ladder — all deliver exactly 1.000x, and the speed diet's teacher
+  converges UNIFORMLY (59,350 / 59,295 / 59,544 / 60,217) where the far ladder's was 3/4
+  quasi-static. The diet fault of §67.1 is real and fixed and it changed nothing delivered.
+
+**WHAT IS LEFT IS THE APPLIED SIGNAL, AND IT IS PINNED AT ITS CAP.** Driven over the production
+program the policy's output reads **peak |u| 1.200 against an authority of 1.2, rms 1.055 — 88%
+of the cap**. That is CLAUDE.md's recorded BARREL signature ("its correction sits at EXACTLY its
+cap, uPk 12.0000 of 12") arriving on a plant sharing no physics with it, and it is not a
+correction at all — it is a bang-bang signal.
+
+**AND TWO READINGS NOW DISAGREE, WHICH IS STATED RATHER THAN RESOLVED (rule 15).** A correction
+saturated across a program cannot leave that program's error unchanged to five significant
+figures, yet the rung's own row reads **5.0636e-1 against a bare 5.0636e-1**. Either the deploy
+path the ladder scores differs from the `actLook` probe above, or the saturated signal is clamped
+away downstream of the rung. Those are different faults with different fixes and nothing here
+distinguishes them, so the tank's status is **open with a named next measurement** — instrument
+the scored run's own applied signal, not the probe's — rather than the plant verdict §54.4 gave
+it. What can be said is that every explanation this project had on file for the tank's 1.000x is
+now refuted by measurement, and the surviving one was never on the list.
