@@ -16353,3 +16353,43 @@ which is the feature the correction has to invert.
 today's were caught by an outside objection rather than by a check. The cheap check that would
 have caught both exists and was not written: **assert that the rows the fit USED equal the lap**,
 and **assert that a host with a decimated look-ahead declares `lookRaw`**. Both are one line.
+
+### §65.4 ALL THE HARM IS IN THE CLAMPED BAND, AND UNDERNEATH IT THE MAP IS NEUTRAL
+
+The training runs are CLOSED laps and the production program is an OPEN record, so every row the
+fit saw came from a window that WRAPPED while the deployed window CLAMPS at both ends. With the
+reach at ±2,500 of a 15,000-step program that is a third of production reading a window shape the
+fit never saw. Scored by band, against the same bands undriven:
+
+```
+  head (window clamps)     0.4986 → 1.3651   0.365x
+  middle (window whole)    5.5352 → 5.5636   0.995x
+  tail  (window clamps)    5.9657 → 8.4456   0.706x
+```
+
+**EVERY BIT OF THE HARM IS IN THE CLAMPED THIRD, AND THE MIDDLE IS NEUTRAL TO 0.5%.** The bands
+partition the program, so what a window-validity gate would recover is exact arithmetic rather
+than a projection:
+
+```
+  bare                                5.1380
+  with the map                        5.7301    0.897x
+  gated to the whole-window band      5.1584    0.996x
+```
+
+**SO THERE ARE TWO FINDINGS AND THE SECOND IS THE IMPORTANT ONE.** The harm is entirely an
+artefact of deploying a wrapped-window map onto a clamped-window program — a fourth defect of the
+same family as §65.1 and §65.2, and one the deployed object already has the shape of a fix for,
+since `distil.js` fades its correction outside the SPEED span the fit covered and this is the same
+idea applied to the WINDOW's validity, with no constant in it. **But gating it recovers 0.996x,
+not a win.** Where its window is whole the map does nothing at all on this plant, against an
+oracle of the same class that `headroom.mjs` measures at 15.11x.
+
+**THE BARREL'S HONEST STATUS, AND IT IS NOT THE ONE §63.9 GAVE.** Not refused because a
+reference-addressed correction cannot work here — §62 measured 97-99% of the oracle's correction
+as expressible in exactly this form. Not refused because of the deploy path either, now that
+three defects in it are repaired and the fourth is located and priced. It is refused because the
+map, taught from four other recipes, carries NOTHING to this program — neutral, not harmful — and
+that is the transfer question standing on its own for the first time on this plant, with every
+instrument fault between it and the answer removed. `spread.mjs`-style repetition and a diet
+closer to production are the levers; nothing here licenses a verdict on the plant.

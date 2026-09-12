@@ -188,6 +188,49 @@ const { rep, auto } = await ladder(spec);
 const { inSample } = await reportDistil({ rep, runs: distilRuns(),
   nFeat: OFFSETS.length * 3 + 1, segs: DSEGS, auto });
 
+// ---------------------------------------------------------------- WHERE the harm is
+// THE TRAINING RUNS ARE CLOSED LAPS AND THE PRODUCTION PROGRAM IS AN OPEN RECORD. Every row the
+// fit saw came from a window that WRAPPED; the deployed window CLAMPS at both ends, so the first
+// and last REACH steps of production read a window shape the fit never saw — here 5,000 of
+// 15,000 steps, a third of the program. That is a structural mismatch rather than a tuning one,
+// and it is cheap to locate: score the policy on production and report the rms by thirds against
+// the same thirds undriven. If the ENDS carry the harm, the mismatch is the subject; if the
+// MIDDLE does too, it is not, and the diet or the map is.
+if (rep.distil && rep.distil.policy) {
+  const pol = rep.distil.policy;
+  const N = TH.PROG;
+  const drive = (on) => {
+    const p = barrelSpec.fresh();
+    const e = new Float64Array(N);
+    for (let k = 0; k < N; k++) {
+      const ref = barrelSpec.refAt(k);
+      const u = on
+        ? pol.actLook((o) => barrelSpec.refAt(Math.min(N - 1, Math.max(0, k + o))))
+        : [0, 0, 0];
+      const r = barrelSpec.step(p, ref, u, k);
+      let s2 = 0; for (const v of r.truth) s2 += v * v;
+      e[k] = Math.sqrt(s2 / r.truth.length);
+    }
+    return e;
+  };
+  const bare = drive(false), withP = drive(true);
+  const rmsOn = (a, lo, hi) => { let s = 0; for (let k = lo; k < hi; k++) s += a[k] * a[k];
+    return Math.sqrt(s / (hi - lo)); };
+  const bands = [['head (window clamps)', 0, REACH],
+    ['middle (window whole)', REACH, N - REACH],
+    ['tail (window clamps)', N - REACH, N]];
+  console.log(`\n  WHERE the correction helps and harms, by band of the production program`
+    + ` (reach ±${REACH} of ${N} steps):`);
+  for (const [name, lo, hi] of bands) {
+    const b = rmsOn(bare, lo, hi), w = rmsOn(withP, lo, hi);
+    console.log(`    ${name.padEnd(24)} ${b.toFixed(4)} → ${w.toFixed(4)}   ${(b / w).toFixed(3)}x`);
+  }
+  const clampFrac = (2 * REACH) / N;
+  console.log(`    the clamped bands are ${(100 * clampFrac).toFixed(0)}% of the program, and `
+    + 'every row the fit saw came from a window that WRAPPED — so if the harm lives there, the '
+    + 'closed-lap diet and the open production record are the mismatch (plan §65.4).');
+}
+
 check('the barrel is not made worse by anything the ladder ships',
   rep.best <= rep.base, `${rep.base.toExponential(3)} → ${rep.best.toExponential(3)}`);
 check('the distilled rung reached this plant at all — it was offered, fitted and SCORED on the '
