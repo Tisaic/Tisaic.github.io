@@ -16662,3 +16662,32 @@ Everything this arc touched is exercised: `autostack.test.mjs` (the `distilNoLoo
 and the ten plants. **The two plants converted this session are green from a cold suite run
 rather than from the runs that measured them**, which is the difference between a result and a
 result that ships.
+
+## §69 — WHICH PLANTS THE DEPLOYED OBJECT CAN EVEN BE ASKED, DECIDED BEFORE COMMISSIONING
+
+"4 of the 5 plants asked" left open why the sixth was not, and the answer is structural rather
+than a gap in the work. The deployed object is a map of a WINDOW OF THE COMMANDED REFERENCE. The
+COLD MILL's reference is a constant:
+
+```
+  millSpec.refAt = () => [RM.S0]      one distinct value over the whole program (1.25)
+```
+
+**With no variation in the window there is nothing for the map to key on** — every row is
+identical, and the only function of them it can express is a fixed offset. The mill's error is an
+exogenous periodic disturbance arriving through a transport delay at a HELD setpoint, which is a
+regulation problem and not a tracking one. So the mill is not a plant the shipped object refused;
+it is one the shipped object does not address, and the cascade — which reads MEASUREMENTS rather
+than the reference — is the right rung there and is what it deploys (1.74x, §60).
+
+**THAT IS A USEFUL PROPERTY AND IT IS FREE.** Whether the deployed object can apply at all is
+decidable from the PROGRAM before a single lap is run: does the commanded reference vary over the
+window? A ladder could state that instead of commissioning to discover it, and the two rungs are
+complementary rather than competing — the distilled map for tracking a varying reference, the
+cascade for regulating against a disturbance at a held one. Every plant this session converted
+(barrel, column) is a tracking problem; the mill is the regulation one.
+
+So the honest scope of the deployed object's record is: **of the plants whose reference varies, it
+is asked on five and wins four** — the arm, EMPS, the column (2.50x) and the barrel (11.22x), with
+the tank the one honest refusal (0.08x, saturated, correctly gated). The cart-pole has a varying
+reference and has never been asked; the mill cannot be.
