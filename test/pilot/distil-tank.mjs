@@ -184,21 +184,50 @@ async function once(seed) {
   auto.start = start;
 
   /** The SHIPPED recipe — held out of training, and the only thing scored. */
-  const run = async (corr) => {
+  // THE SCORED RUN'S OWN APPLIED SIGNAL, which is §67.2's named next measurement. The `actLook`
+  // probe reads the policy saturated at its cap on this program while the rung's row reads the
+  // bare machine's error to five figures, and those cannot both be true of one deploy path. This
+  // prints what the SCORING loop actually added, per candidate, so the two can be compared
+  // instead of reasoned about (rule 16: put the question to the machine).
+  const run = async (corr, cname) => {
     const p = makeTanks(G);
     for (let i = 0; i < 30000; i++) p.step(start[0], start[1]);
     let s2 = 0, n = 0, uPk = 0;
     const e0 = new Float64Array(PROG), e1 = new Float64Array(PROG);
     for (let k = 0; k < PROG; k++) {
       const h = refAtStep(k), v = voltsFor(G, h[0], h[1]);
-      const u = corr ? corr.at(k) : [0, 0];
+      // THE DEPLOYED RUNGS ACT THROUGH `auto.act`, AND THIS HOST NEVER CALLED IT. The distilled
+      // rung is applied by `act()` — `rigs/ladder.mjs` calls it every step and adds the candidate
+      // on top through `auto.into` — while this file applied ONLY the candidate `corr`. So the
+      // rung was never present in the run that scored it: both scored calls came back with peak
+      // |u| 0.000 and an rms identical to the bare machine to five figures, which is exactly the
+      // 1.000x §54.4 reported as "scored on the machine, lost and was reverted". It was not
+      // scored at all. (plan §67.3; rule 25 — "not measured" and "no better" are different
+      // states, and this is the third time that distinction has cost this project a verdict.)
+      const look = (o) => {
+        const hh = refAtStep(Math.min(PROG - 1, Math.max(0, k + o)));
+        return voltsFor(G, hh[0], hh[1]);
+      };
+      const sp = (() => {
+        const p0 = refAtStep(Math.max(0, k - 1)), p1 = refAtStep(Math.min(PROG - 1, k + 1));
+        const v0 = voltsFor(G, p0[0], p0[1]), v1 = voltsFor(G, p1[0], p1[1]);
+        return Math.hypot(v1[0] - v0[0], v1[1] - v0[1]) * 0.5;
+      })();
+      const a = auto.act({ look, lookRaw: look, k, speed: sp });
+      const w = corr ? auto.into(corr.at(k), cname, {}) : [0, 0];
+      const u = [(a[0] || 0) + (w[0] || 0), (a[1] || 0) + (w[1] || 0)];
       uPk = Math.max(uPk, Math.abs(u[0] || 0), Math.abs(u[1] || 0));
       p.step(v[0] + (u[0] || 0), v[1] + (u[1] || 0));
       auto.observe([p.h[0], p.h[1], p.h[2], p.h[3]]);
       e0[k] = p.h[0] - h[0]; e1[k] = p.h[1] - h[1];
       if (k > SEG) { s2 += (p.h[0] - h[0]) ** 2 + (p.h[1] - h[1]) ** 2; n += 2; }
     }
-    return { score: Math.sqrt(s2 / n), err: [e0, e1], uPk };
+    const out = { score: Math.sqrt(s2 / n), err: [e0, e1], uPk };
+    if (process.env.APPLIED === '1') {
+      console.log(`      scored run [${cname || 'bare'}]: rms ${out.score.toExponential(4)}, `
+        + `peak |u| ${uPk.toExponential(3)} of ${UCAP}`);
+    }
+    return out;
   };
 
   /** The training diet: four recipes the scored program is not one of. */
@@ -208,6 +237,16 @@ async function once(seed) {
     return {
       lap,
       refAt: (k) => { const h = ref(k); return voltsFor(G, h[0], h[1]); },
+      // THE COVERAGE GUARD NEEDS A COMMANDED SPEED, AND THIS HOST NEVER GAVE IT ONE. `distil.js`
+      // fades its correction outside the speed span the fit saw, and `_coverage(null)` returns 1
+      // — so a host that omits `speedAt` disables the one mechanism built to stop a linear map
+      // extrapolating off its training distribution. With the rung finally reaching the machine
+      // (§67.3) it saturates at its cap on the production recipe and delivers 0.08x; the guard is
+      // what that measurement is for. Speed is the commanded reference's own rate, differenced.
+      speedAt: (k) => {
+        const a = ref(k - 1), b = ref(k + 1);
+        return Math.hypot(b[0] - a[0], b[1] - a[1]) * 0.5;
+      },
       // THE LAP IS CLOSED AND MUST SAY SO (plan §52.14, §65.1). `refOf` wraps at `lap`, but
       // `addProgram` clamps the window at index 0 unless the run declares itself closed — so
       // without this the fit skips the first REACH samples of every recipe AND the deployed

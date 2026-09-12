@@ -16550,3 +16550,51 @@ distinguishes them, so the tank's status is **open with a named next measurement
 the scored run's own applied signal, not the probe's — rather than the plant verdict §54.4 gave
 it. What can be said is that every explanation this project had on file for the tank's 1.000x is
 now refuted by measurement, and the surviving one was never on the list.
+
+### §67.3 THE TANK'S RUNG WAS NEVER APPLIED IN THE RUN THAT SCORED IT — §54.4's HEADLINE IS FALSE
+
+§67.2 left two readings that could not both be true. Instrumenting the SCORING loop's own applied
+signal settles it in one line:
+
+```
+      scored run [bare]: rms 5.0636e-1, peak |u| 0.000e+0 of 1.2
+      scored run [bare]: rms 5.0636e-1, peak |u| 0.000e+0 of 1.2
+```
+
+**Both scored calls ran with NO correction at all.** The distilled rung deploys through
+`auto.act`, which `rigs/ladder.mjs` calls every step — and `distil-tank.mjs` never called it,
+applying only the candidate `corr` AutoStack hands it. So the rung was absent from the run that
+scored it, and 1.000x is the plant compared against itself.
+
+**§54.4's headline is therefore false in its load-bearing clause.** It reads: *"the rung REACHED
+the tank, fitted 49,864 rows into 55 features at 162 MAC/decision, was scored on the machine, lost
+and was reverted — 1.000x, nothing harmed"*. It was never scored on the machine. And that number
+is the sole evidence behind CLAUDE.md's *"the honest count for what a customer receives is 2 of 7"*.
+
+**APPLIED, THE TANK READS 0.08x — 13x WORSE, SATURATED AT ITS CAP.**
+
+```
+      scored run [distil]: rms 6.7031e+0, peak |u| 1.200e+0 of 1.2
+      ②d distilled — REFUSED  6.7031e+0  0.08x
+```
+
+That is a real measurement where there was none, and the ladder refuses it correctly, so "nothing
+harmed" survives — but as a property of the GATE rather than of the correction.
+
+**AND THE COVERAGE GUARD IS NOT THE FIX, WHICH IS ITSELF A RESULT.** This host also never supplied
+`speedAt`, so the fade `distil.js` exists to apply was disabled; both are now plumbed (the run
+descriptor's commanded rate, and `ctx.speed` on the act path, which `autostack.js` does forward).
+It changes NOTHING — 6.7031e+0 either way — and that is correct rather than broken: §67.1's
+speed-decoupled diet was built to BRACKET production's commanded speed, so coverage is genuinely
+1 and the guard has nothing to fade. **The map saturates INSIDE its own trained speed span**,
+which is a statement about extrapolation in the window and not about coverage.
+
+**WHAT THE TANK'S STATUS IS NOW.** Its distilled rung is measured for the first time, reads 0.08x,
+saturates at its authority, and is correctly refused; the plant ships the conventional rung at
+10.53x. Three explanations that stood for two sections — a faded correction, a refused fit, a bad
+diet — are each refuted by measurement, and the fourth was that the experiment had never run.
+**That is rule 25 for the third time in this session** ("not measured" and "no better" are
+different states), and the second time a host was structurally incapable of measuring the thing it
+was built to measure. `distilkit.mjs`'s guards catch the row-count and look-ahead versions of this;
+a host that never calls `act` is a third shape, and the cheap check is the one that found it —
+print what the scoring loop actually applied.
