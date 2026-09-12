@@ -15334,3 +15334,147 @@ number stays in SAMPLES; converting to seconds would be inventing the missing co
 levels, four rigs, one published experiment. And the patent position is unexamined beyond a
 keyword sweep — adaptive filtering for faster settling exists (US7538281B2); nothing found
 combined a learned prediction of settled weight, but that is not a freedom-to-operate search.
+
+### §58 — A distributed BINARY actuator array: the screen that runs before the plant
+
+**What was asked.** The owner has ~200 points of B&R X20DO9322 digital output (24 VDC, 0.5 A
+per point) with an X20PS2200 behind every card, and asked what can be built by using those
+outputs to ACTUATE a plant while analog inputs capture its state. The digital inputs are
+explicitly not the interesting half.
+
+**What the datasheet decides, and it decides everything.** The card is **12 current-sourcing
+FET outputs, 0.5 A nominal each, 6 A total nominal per module** — which is exactly 12 × 0.5 A,
+so the card is not the constraint and all twelve points at full load are within rating; the
+10 A potential group is not the binding number either. And the two rows that matter:
+
+```
+  Switching delay        <300 us, both 0->1 and 1->0
+  Switching frequency    max 500 Hz (resistive load)
+  Inductive load         a published curve of cycles/second against coil inductance
+  Diagnostics            per-output monitoring, 10 ms delay
+  Output protection      thermal shutdown, internal freewheeling diode
+```
+
+**500 Hz with 300 µs edges means these are not on/off bits, they are PWM channels.** Against a
+plant whose time constant is seconds, 500 Hz is ~10⁴ cycles per time constant, so the plant
+integrates and each point becomes a continuous 0–100% channel. So the hardware is **~200
+analog channels of 0–12 W each, ~2.4 kW total, quantised at 12 W** — not 200 bits. The
+space-time DITHERING that a binary array would need on a fast plant is unnecessary here, and
+saying so removes the only interesting-sounding idea in the proposal before it costs anything.
+The per-output monitoring is worth more than it looks on a 200-element array: elements will
+die, and a map fitted with a dead element silently bakes in the hole.
+
+**What it is for.** A heated-zone ARRAY — thermoform oven, composite cure tool, glass
+tempering bed, extrusion die, reflow — each DO driving an SSR or cartridge heater, analog
+inputs reading thermocouples. Four properties, each of which this project has separately
+measured as load-bearing: the profile is a COMMANDED REFERENCE known ahead, so the correction
+is preview-shaped (§49.14: causal taps read 0.89x, straddling 1.43x); the truth is FREE, the
+thermocouples being the sensors, against §52.42's 3.9x tracker premium; the incumbent —
+per-zone PID — is STRUCTURALLY BLIND to spatial non-uniformity because each loop sees only its
+own sensor; and it would be the first DISTRIBUTED-PARAMETER plant here, where all eleven are
+lumped.
+
+**AND THE SCREEN RAN FIRST, WHICH IS THE WHOLE POINT OF THIS SECTION (rule 1, and §55.12's
+own lesson transplanted).** The KUKA was vendored, identified and measured over four sections
+before anyone decomposed its torque; the one-line screen that would have refused it up front is
+now this project's standing practice, and the analogue for a distributed actuator is *decompose
+the map*. A diffusive plant attenuates high spatial frequency, so the steady map from element
+powers to sensor readings has singular values that decay, and the ones below what the sensors
+resolve are channels the array **does not have**. `test/pilot/arrayrank.mjs` is that screen: it
+assumes nothing, measures nothing on a machine, and is arithmetic on a plate's own constants.
+
+**TWO ROUTES, because a model checked against itself is not checked (rule 15).** The steady
+operator is `A = loss·I + kc·L` with `L` the 5-point Neumann graph Laplacian, so on a
+rectangular grid its eigenvalues have a closed form
+`λ(m,n) = loss + 4·kc·(sin²(πm/2Nx) + sin²(πn/2Ny))` and the co-located full-array singular
+values are exactly `1/λ`. The file ALSO assembles `A`, solves `A X = I` by Cholesky and takes
+the singular values numerically through a Jacobi eigensolver. They share no arithmetic and
+**agree to 4.12e-12 worst case over six substrates**, so neither is the answer alone. **And a
+THIRD route checks the solve rather than the eigenvalues**: in steady state every watt injected
+leaves through the loss term and conduction is internal, so `sum(loss * T_i) = P` for ANY
+element and therefore `sum(T_i) = 1/loss` exactly, wherever that element sits. That is a
+property of the physics and not of the arithmetic, it is the cheapest possible form of rule 15,
+and the Cholesky satisfies it to **3.79e-14**.
+
+**THE ANSWER IS THE SUBSTRATE, NOT THE ARRAY**, at 20×10 elements on 60 mm pitch, 0.35 K rms
+per sensor (the barrel rig's own figure) and 4 W of authority per element:
+
+```
+  substrate              LIVE  of    cond   weakest   decay        tau_slow   tau_fast
+  steel sheet 6 mm        200  200      40   1.834 K   2.24 cells    1540 s     38.1 s
+  steel plate 20 mm       200  200     132   0.560 K   4.08 cells    5133 s     38.8 s
+  aluminium 20 mm          69  200     585   0.127 K   8.61 cells    3227 s      5.5 s
+  aluminium 40 mm          32  200    1168   0.063 K  12.17 cells    6453 s      5.5 s
+  glass 6 mm              200  200       2  39.500 K   0.33 cells     800 s    426.6 s
+  composite tool 10 mm    200  200       2  37.658 K   0.43 cells    1333 s    542.3 s
+```
+
+Thin steel, glass and composite carry all 200 channels; a thick aluminium platen carries 69 or
+32. **That is a hardware-selection answer available before any controller exists**, and it is
+the first time this project has produced one.
+
+**AND IT SPLITS THE PURCHASING QUESTION, which is bought from two different suppliers.** Swept
+over 10 / 50 / 98 / 200 sensors, the MARGINAL yield at the top of the ladder reads **1.00
+channel per sensor on steel, glass and composite and 0.21 / 0.08 on the two aluminium plates**
+— so on steel you buy channels by buying thermocouples, and on thick aluminium thermocouples
+past ~30 are nearly wasted. The first version of that verdict called aluminium "saturated"
+while its count was still rising 48 → 69, which is sub-linear and not saturated: an
+overstatement in the direction that made the screen look decisive, and the metric was replaced
+with the marginal yield (rule 19).
+
+**THE INVARIANCE CONTROL FIRED ON ITS OWN METRIC, AND THE METRIC WAS THE FAULT.** `NOISE` and
+`AUTH` are ONE knob — live requires `σ·AUTH > NOISE`, so only the ratio enters — and what has
+to be shown is that the substrate ORDERING does not move with it, or the table is reporting the
+instrument. The first version compared the full ranking as a permutation string and read "3
+distinct orderings, the ranking moves with the knob" — but at the two lowest ratios every
+substrate reads 200 and TIES, and a permutation cannot express a tie. Re-read as pairwise
+INVERSIONS with ties compatible with anything: **0 inversions over 14 discriminating pairs
+across four decades** (rules 17, 19).
+
+**AND THE SCREEN THEN REFUTED ITS OWN BEST ROWS, WHICH IS THE MOST USEFUL THING IN IT.** Cross-
+talk — the fraction of one element's steady effect landing on cells other than its own, measured
+on an interior element so no Neumann edge inflates it — is the deficit a per-zone PID is blind
+to, and it is the entire business case:
+
+```
+  steel sheet 6 mm       92.0% off-zone   200 live   COUPLED and full rank
+  steel plate 20 mm      96.9%            200        COUPLED and full rank
+  aluminium 20 mm        98.8%             69        coupled, array collapses
+  aluminium 40 mm        99.2%             32        coupled, array collapses
+  glass 6 mm             29.0%            200        zones INDEPENDENT — PID already near-optimal
+  composite tool 10 mm   39.6%            200        COUPLED and full rank
+```
+
+Glass reads condition number 2 and a decay length of a THIRD of a cell: its elements heat
+essentially only their own zone, and independent zones are exactly what a per-zone PID is
+already optimal for. **So the substrate where the array is most capable is the substrate where
+the incumbent has no deficit to attack**, and the two refusals in the rank table and the one
+here are for OPPOSITE reasons. One row refused for too little coupling, two for too much, three
+survive both. The 0.35 cut behind that word is the one arbitrary constant in the file and it
+says so: how much cross-talk a per-zone loop must be blind to before a whole-field controller
+beats it is a machine question, and the PERCENTAGE is the finding while the verdict word is a
+reading of it. A first draft of the summary asserted "two rows have no coupling" where only one
+does, and the counts are now derived from the rows (rules 17, 30).
+
+**AND THE PLC COLUMN CORRECTED A CLAIM MADE IN THIS SESSION'S OWN CHAT BEFORE IT WAS CHECKED.**
+The proposal said "200 channels against 10,000 MAC is 50 MAC per channel, so 200 independent
+maps is not affordable". At 40 taps a per-element map is 200 × 40 = **8,000 MAC, 80% of budget,
+and it FITS**. What the budget actually forbids is a per-element map at a REAL feature count —
+the arm's shipped policy is 93 features and 200 × 93 is **186%** — so the modal architecture is
+forced once the window is wide enough to reach the plant's own memory (rule 37), not by the
+channel count alone. A 32-channel modal map at 93 taps is 2,976 MAC, 30% of budget, leaving the
+scan free for everything else.
+
+**WHAT IS NOT DONE, AND WHAT WOULD CHANGE THE ANSWER (rule 59).** Nothing here is measured on a
+machine; it is arithmetic on a plate's constants and its only job is to say which substrate is
+worth a rig. The steady screen ignores the transport of a moving web and any radiative coupling
+between non-adjacent zones, both of which would change the decay length. It says nothing about
+whether the learned map beats a per-zone PID — and the standing warning from this project is the
+one that applies hardest here: the nearest existing plant is the three-zone extruder BARREL,
+which is thermal and is one of the two standing REFUSALS at 0.22x, proved correct rather than
+merely made. Its error is changeover against a T⁴ nonlinearity through 60 steps of dead time,
+which is regulation under an already-good loop; an array's error is spatial non-uniformity, a
+quantity the incumbent cannot see at all. That distinction is the business case and it is
+asserted, not measured. And the baseline must be a per-zone PID **tuned on the array** plus the
+hand-trimmed per-zone power bias a commissioning engineer applies, never "do nothing" — §52.32's
+cart-pole read 9.77x and then refused all four seeds once its loop was tuned properly.
