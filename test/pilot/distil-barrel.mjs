@@ -55,6 +55,11 @@ import { barrelSpec } from './rigs/specs.mjs';
 import { deriveWindow, reportDistil } from './rigs/distilkit.mjs';
 import * as TH from './rigs/thermal-rig.mjs';
 
+if (process.env.SUITE !== 'full') {
+  console.log('\ndistil-barrel: SKIPPED (full tier only — one commissioning, ~15 min)\n');
+  process.exit(0);
+}
+
 const env = (k, d) => (process.env[k] === undefined ? d : Number(process.env[k]));
 let failed = 0;
 const check = (name, cond, detail) => {
@@ -107,10 +112,12 @@ const DIETS = PICK.map((ix) => ix.map((i) => POINTS[i]));
 // the holds keep the shipped program's duty so what varies across the ladder is the RATE and not
 // the shape. `DSEG` still forces a single segment length, which is how the one-sided diet is
 // reproduced as the control.
-const EQLAP = env('EQLAP', 3 * TH.SEG);   // every recipe closes in the production lap
-const DSEGS = process.env.DSEG
-  ? DIETS.map(() => env('DSEG', TH.SEG))
-  : DIETS.map((rec) => Math.round(EQLAP / rec.length));
+// THE DIET RUNS AT PRODUCTION'S OWN SEGMENT, which is a match rather than a tuned constant: the
+// correction has to invert a ramp of SEG-HOLD, so a diet commanded at another rate is inverting a
+// different feature. Laps are then rec.length*SEG — equal across the diet, and longer than this
+// plant's 7,861-step settle, which §65.3 measured as necessary. Deriving SEG from a lap budget
+// instead gave 3,750 and read 8.69x where production's own 5,000 reads 11.22x.
+const DSEGS = DIETS.map(() => env('DSEG', TH.SEG));
 const holdOf = (seg) => Math.round(seg * (TH.HOLD / TH.SEG));
 const LAP = (rec, seg) => seg * rec.length;
 
@@ -187,8 +194,21 @@ const distilRuns = () => DIETS.map((rec, di) => {
 });
 
 const spec = { ...barrelSpec,
+  // STANDARDISATION IS ON BY DEFAULT HERE, AND IT IS A SCALE REPAIR RATHER THAN A TUNED KNOB
+  // (rule 32). `_rowFrom` leads with the ABSOLUTE reference and follows with DIFFERENCES: on the
+  // arm that is a joint angle beside small travels, all within an order of magnitude of the
+  // trailing constant, and §52.40 duly measured this inert there; here the absolute term is
+  // PERCENT OF FULL POWER, 18-62, beside differences of order 0.1, so one ridge and one
+  // covariance prior act on blocks ~400x apart. Measured on this plant: 8.69x → 11.22x.
+  // `STD=0` turns it off as the control.
   distil: { refDim: 3, ridge: env('RIDGE', 1e-6), offsets: OFFSETS,
-    ...(process.env.STD === '1' ? { standardize: true } : {}),
+    ...(process.env.STD === '0' ? {} : { standardize: true }),
+    // AND THE FIT STREAMS BY DEFAULT, WHICH §63.6 SAID IT COULD NOT. That section measured the
+    // streaming shared-covariance route failing to find a fit the batch route found (held-out -20
+    // against 0.95) and called it a constraint on the PRODUCT, since target 6 forbids batch
+    // normal equations outright. It was a property of the DIET, not of the route: on this diet
+    // streaming reads 0.951/0.938/0.915 and delivers 11.22x, BETTER than batch's 10.61x.
+    // `ONLINE=0` is the control that says so.
     ...(process.env.ONLINE === '0' ? { online: false } : {}) },
   distilRuns };
 

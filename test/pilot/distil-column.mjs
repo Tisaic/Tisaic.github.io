@@ -39,6 +39,11 @@ import { wbSpec } from './rigs/specs.mjs';
 import { deriveWindow, reportDistil } from './rigs/distilkit.mjs';
 import * as WB from './rigs/woodberry-rig.mjs';
 
+if (process.env.SUITE !== 'full') {
+  console.log('\ndistil-column: SKIPPED (full tier only — one commissioning per run)\n');
+  process.exit(0);
+}
+
 const env = (k, d) => (process.env[k] === undefined ? d : Number(process.env[k]));
 let failed = 0;
 const check = (name, cond, detail) => {

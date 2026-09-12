@@ -368,6 +368,14 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # count for the SHIPPED object is 2 of 7 — and if a diet or a basis ever changes that, this
     # is the file that says so rather than a claim in a document.
     if [ "${SUITE}" = "full" ]; then t node test/pilot/distil-tank.mjs; fi
+    # THE DEPLOYED OBJECT ON THE TWO PLANTS THAT WERE STANDING REFUSALS (plan §64, §66). Both
+    # DEPLOY — the column at 2.58x past the published BLT, the barrel at 10.61x replacing a
+    # 21,440-MAC cascade — and both got there by repairing an instrument or a diet rather than the
+    # controller. They are registered here because a test that exists and never runs is the hole
+    # this project has already paid for twice, and `distil-barrel` is where four separate harness
+    # defects hid a factor of 22.
+    if [ "${SUITE}" = "full" ]; then t node test/pilot/distil-column.mjs; fi
+    if [ "${SUITE}" = "full" ]; then t node test/pilot/distil-barrel.mjs; fi
     t node test/pilot/tanks.test.mjs
     t node test/pilot/thermal.test.mjs
     t node test/pilot/woodberry.test.mjs

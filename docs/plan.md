@@ -16598,3 +16598,49 @@ different states), and the second time a host was structurally incapable of meas
 was built to measure. `distilkit.mjs`'s guards catch the row-count and look-ahead versions of this;
 a host that never calls `act` is a third shape, and the cheap check is the one that found it —
 print what the scoring loop actually applied.
+
+## §68 — REGISTERED, AND §63.6's "PRODUCT CONSTRAINT" IS RETRACTED: THE STREAMING FIT WAS THE DIET
+
+`distil-barrel.mjs` and `distil-column.mjs` were sitting in `test/pilot/` and **never ran**:
+`run.sh` lists its tests explicitly, so a new file is invisible to the suite. That is the hole
+this project has already paid for twice (a `SUITE=full` skip, an `if (canLearn)` race). Both are
+now gated to the full tier and registered.
+
+### §68.1 The column passes at DEFAULTS
+
+§64's numbers were taken with `STD=1 ONLINE=0`. At the shipped defaults the column reads **2.50x
+deployed**, IAE **37.86** cold against doing nothing's 43.90 and the published BLT's 51.95, and
+24.67 settled against 29.12 and 49.62. So target 7's clause is met by the configuration that
+ships, not by a knob — and the default is marginally BETTER in IAE than the knobbed run.
+
+### §68.2 And the barrel deploys at defaults too — WITH THE STREAMING FIT
+
+```
+  configuration                        fit route   held-out              delivered
+  lap-derived SEG 3750, no STD         streaming   0.888/0.860/0.827        8.69x
+  production's SEG 5000, STD on        streaming   0.951/0.938/0.915       11.22x
+  production's SEG 5000, STD, ONLINE=0 batch       0.950/0.940/0.913       10.61x
+```
+
+**§63.6 IS RETRACTED.** It concluded that the streaming shared-covariance fit *"does not merely
+return badly scaled weights — it fails to find a fit that exists, is well posed and is strongly
+determined, and it fails by 20 units of R²"*, and called that a constraint on the PRODUCT because
+target 6 forbids batch normal equations outright. **It was a property of the DIET.** On a diet
+the teacher can actually converge, the streaming route fits at 0.95/0.94/0.91 and delivers
+**11.22x — better than the batch route's 10.61x**. The shipped fit is not the blocker on this
+plant and never was; what §63.6 measured was a streaming solve being asked to fit a target that
+four unrelated profiles could not teach.
+
+**THE TWO DEFAULTS THAT MOVED, AND WHY NEITHER IS A TUNED CONSTANT.** The diet now runs at
+PRODUCTION'S OWN SEGMENT — the correction inverts a ramp of `SEG-HOLD`, so a diet commanded at
+another rate is inverting a different feature, and deriving the segment from a lap budget instead
+gave 3,750 and 8.69x. And standardisation is ON, which is rule 32 rather than tuning: `_rowFrom`
+leads with the ABSOLUTE reference and follows with DIFFERENCES, and here that is 18-62 percent of
+full power beside 0.1 — blocks ~400x apart under one ridge and one covariance prior — where on the
+arm the same block is a joint angle and §52.40 duly measured it inert. `STD=0` and `ONLINE=0`
+remain as the controls that price each.
+
+**SO THE DEPLOYED OBJECT NOW WINS ON 4 OF THE 5 PLANTS IT HAS BEEN ASKED**, all at shipped
+defaults, with the streaming fit target 6 requires: the arm, EMPS, the column at 2.50x and the
+barrel at 11.22x. The tank is the one refusal and it is honest (0.08x, saturated, correctly
+gated). The mill and the cart-pole have never been asked.
