@@ -52,6 +52,7 @@
  */
 import { ladder, announce } from './rigs/ladder.mjs';
 import { barrelSpec } from './rigs/specs.mjs';
+import { deriveWindow, reportDistil } from './rigs/distilkit.mjs';
 import * as TH from './rigs/thermal-rig.mjs';
 
 const env = (k, d) => (process.env[k] === undefined ? d : Number(process.env[k]));
@@ -118,19 +119,13 @@ function settled(rec, seg) {
 // The plant's memory, measured rather than assumed: the barrel's own step response settles in
 // ~7,861 steps (`headroom.mjs` measures it from the response itself, no probe in the route).
 const SETTLE = 7861;
-// THE SHORTEST LAP IN THE DIET, not the first. The aliasing half of the constraint is about the
-// lap the window could SPAN, so a diet of mixed rates is bounded by its fastest recipe; sizing
-// from `DIETS[0]` was right only while every lap was the same length (rule 31 inside one file).
-const lapMin = Math.min(...DIETS.map((rec, i) => LAP(rec, DSEGS[i % DSEGS.length])));
-const REACH = Math.round(env('WIN', Math.min(0.61 * SETTLE, lapMin / 8)));
-// The arm's geometric SHAPE — dense near now where the correction is decided, sparse far out
-// where it only has to span the memory — scaled to this plant's own reach. The shape is a
-// design; the reach is the plant's (rule 31).
-const OFFSETS = [0, 0.008, 0.016, 0.031, 0.063, 0.125, 0.219, 0.344, 0.5, 0.719, 1]
-  .flatMap((f) => { const o = Math.round(f * REACH); return o === 0 ? [0] : [-o, o]; })
-  .sort((a, b) => a - b);
+// The window rule, the offset shape and the shortest-lap bound live in `rigs/distilkit.mjs` —
+// they are not this plant's business and a second copy of either has already drifted here.
+const lapMin = Math.min(...DIETS.map((rec, i) => rec.length * DSEGS[i % DSEGS.length]));
+const { reach: REACH, offsets: OFFSETS, rule: RULE } = deriveWindow({
+  settle: SETTLE, lapMin, win: process.env.WIN === undefined ? undefined : env('WIN') });
 console.log(`  window reach ±${REACH} raw steps  (settle ${SETTLE}, shortest diet lap ${lapMin}, `
-  + `min(0.61·settle, lap/8) = ${Math.round(Math.min(0.61 * SETTLE, lapMin / 8))})`);
+  + `min(0.61·settle, lap/8) = ${RULE})`);
 console.log(`  ${OFFSETS.length} offsets per channel, ${DIETS.length} training recipes at SEG `
   + `${DSEGS.join('/')} (laps ${DIETS.map((r, i) => r.length * DSEGS[i]).join('/')}) `
   + `against the scored program's ${TH.SEG} — `
@@ -174,46 +169,8 @@ announce();
 const { rep } = await ladder(spec);
 
 // ---------------------------------------------------------------- what it says and why
-// THE SPLIT THAT SAYS *WHY* (the one `distil-arm.mjs` exists to make): score the fitted policy
-// on its OWN TRAINING RUNS. Helps them and refuses the scored program -> TRANSFER, and the diet
-// is the subject. Cannot help even the runs it was fitted on -> the map cannot EXPRESS this
-// plant's correction, and no diet repairs that. Without this column a refusal has two
-// explanations and nothing here can tell them apart.
-let inSample = null;
-if (rep.distil && rep.distil.policy) {
-  inSample = [];
-  for (const r of distilRuns()) {
-    const bare = await r.run(null);
-    const withP = await r.run({ at: (k) => rep.distil.policy.actLook((o) => r.refAt(k + o)) });
-    inSample.push(bare.score / withP.score);
-  }
-  console.log(`\n  in sample, on its own training recipes: `
-    + inSample.map((x) => `${x.toFixed(3)}x`).join('  '));
-}
-// THE TEACHER'S OWN COLUMN, WHICH THE FIRST VERSION OF THIS FILE DID NOT PRINT AND SHOULD HAVE.
-// A prequential R² of -20 has at least three explanations that the score cannot tell apart: a
-// target the teacher never converged (`distil-tank.mjs` read gains of 3.2e6 on a quasi-static
-// diet, a target already at zero — rule 14), a target CLIPPED at the rung's authority, and too
-// few rows for the features. `conv` carries the first and third and they cost nothing to state,
-// so they are stated before any account of the fit is offered (rule 27).
-if (rep.distil && rep.distil.runs) {
-  console.log('\n  the TEACHER, per training recipe:');
-  for (const [i, c] of rep.distil.runs.entries()) {
-    console.log(`    recipe ${i}: SEG ${DSEGS[i % DSEGS.length]}  lap ${c.lap}  `
-      + `teacher ${c.gain.toFixed(3)}x  rows ${c.used}`
-      + `  ${c.dropped ? 'DROPPED' : 'kept'}  engine ${c.engine}`
-      + (c.passes === null || c.passes === undefined ? '' : `  passes ${c.passes}`));
-  }
-}
-if (rep.distil && rep.distil.fit) {
-  const f = rep.distil.fit;
-  console.log(`  the FIT: ${f.rows} rows / ${OFFSETS.length * 3 + 1} features, `
-    + `held-out ${JSON.stringify(f.heldOutR2)}, deploy ${f.deploy}`);
-}
-const dr = rep.rungs.find((r) => /distil/.test(r.name));
-console.log(`  distilled rung: ${dr ? `${dr.deployed ? 'DEPLOYED' : 'REFUSED'} at `
-  + `${dr.gain === null ? '—' : dr.gain.toFixed(3)}x` : 'not reported'}`);
-console.log(`  ${rep.distil && rep.distil.note ? rep.distil.note : ''}`);
+const { inSample } = await reportDistil({ rep, runs: distilRuns(),
+  nFeat: OFFSETS.length * 3 + 1, segs: DSEGS });
 
 check('the barrel is not made worse by anything the ladder ships',
   rep.best <= rep.base, `${rep.base.toExponential(3)} → ${rep.best.toExponential(3)}`);

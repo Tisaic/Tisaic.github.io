@@ -16215,3 +16215,77 @@ recipes are CLOSER to production than any tried — the ordering across three di
 from the production program, not rate span or row balance, is what predicts delivery — or a
 correction addressed by something other than the commanded reference window, since §52.36's six
 experiments and §54.9's five function classes all bound what that input contains.
+
+## §64 — WOOD-BERRY IS A WINNER, AND TARGET 7's STANDING OPEN CLAUSE IS MET
+
+The barrel and the column split in §62 on the one property that decides whether the shipped
+object can carry a result: fitted on a program's own oracle correction and tested on a retimed,
+rescaled version of it, the barrel collapsed 14.70x → 0.16x and the column lost 1%, 2.62x →
+2.59x. §63.9 settled the barrel against it. This asks the column the harder question — a diet of
+four OTHER setpoint programs, scored on the published scenario — through the shared `ladder()`,
+the shared `wbSpec` and the shared `distilkit.mjs`.
+
+### §64.1 The one press deploys, at 92% of the oracle's headroom
+
+```
+  as it arrived              1.3641e-1
+  conventional (self-tuned)  1.3641e-1    1.00x   refused — the basis spans 0.0% of the error
+  pilot cascade, depth 1     3.5047e-1    0.39x   refused — no better than the rung below
+  ②d distilled               5.5855e-2    2.44x   DEPLOYED
+    shipped {"distil":true}   43 features, 138 MAC/decision, 0.7 kB, no QP, no forecast bank,
+                              no tracker, no lap index
+```
+
+`headroom.mjs` measured this plant's oracle at **2.65x** with the machine in the loop, so the
+deployed object takes **92% of everything available to a correction of its class** — on the plant
+this project has lost on since it was built, and where the pilot cascade delivers 0.39x.
+
+### §64.2 And in the PUBLISHED metric it beats the published BLT, in both conventions
+
+An rms and an IAE are not the same claim (rule 19), and target 7's clause is stated in IAE. The
+first version of this comparison got it wrong in the way rule 20 names: it warmed the column
+3,000 steps before scoring — right by rule 13 — and set that against `runBLT()`, which starts
+from a FRESH column. A warmed candidate against a cold incumbent, and it showed as doing nothing
+reading 29.12 where this project's record says 43.90. The gap IS the startup transient, **1.51x,
+larger than anything being claimed**. So there is now ONE scoring loop, every controller goes
+through it, and both conventions are reported:
+
+```
+                       cold start     settled first
+    doing nothing           43.90          29.12
+    BLT-tuned PI pair       51.95          49.62
+    the distilled map       38.52          25.26
+    over doing nothing      1.14x          1.15x
+    over the BLT            1.35x          1.96x
+```
+
+**TWO CONTROLS SAY THE LOOP IS THE ONE THOSE NUMBERS CAME FROM** (rule 21): the cold do-nothing
+reproduces the recorded **43.90**, and the cold BLT reproduces the rig's own `runBLT` to **1e-9**
+through the shared loop rather than through the rig's. So the result is not an artefact of
+re-implementing either baseline.
+
+**TARGET 7's STANDING OPEN CLAUSE IS MET.** It read: *"beat the published BLT on Wood-Berry, where
+doing nothing (43.90) already beats it (51.95) and every deployment across twelve seeds is worse
+than that."* The deployed object beats BOTH, in both conventions, and it is the object a machine
+receives rather than the teacher.
+
+### §64.3 What is NOT established, stated at the same volume
+
+**Three of the four training runs were DROPPED.** The teacher improved them 1.26x-1.38x, below
+the rung's own 1.5x bar, so the fit is on ONE program — 2,624 rows against 43 features. The diet
+is therefore not doing the work a diet is supposed to do, and a better one is the obvious next
+lever rather than a refinement.
+
+**The gate is weak and the machine disagrees with it, in the direction §63.8 found unreliable.**
+Held-out R² is 0.397 and 0.046 — the second channel is nearly nothing — and the policy still
+delivers 2.44x. On the barrel the gate read 0.977 and delivered 0.266x. Two plants, the gate
+wrong in opposite directions, which is `distil.js`'s own statement that it is a PRE-FILTER and the
+decision is a machine-scored verify, demonstrated rather than asserted.
+
+**One seed, one diet, one scenario.** Nothing here is a distribution, and `spread.mjs` is the
+instrument that would make it one.
+
+**And the in-sample column is the reason to believe it anyway**: the policy helps all four
+training patterns (2.22x, 1.88x, 1.81x, 1.65x) INCLUDING the three the fit never saw, and then
+helps the published scenario. That ordering — helps what it was taught, helps what it was not —
+is what a plant model looks like, and it is the opposite of the barrel's.

@@ -95,4 +95,4 @@ function runOpen() {
 }
 
 
-export { DET, DLY, DT, K, MAXD, TAU, TH, T_END, UBOX, UMAX, iaeOf, inputsFor, makeColumn, outputsFor, runBLT, runOpen, setpointAt };
+export { DET, DLY, DT, K, MAXD, TAU, TH, T_END, T_STEP2, UBOX, UMAX, iaeOf, inputsFor, makeColumn, outputsFor, runBLT, runOpen, setpointAt };
