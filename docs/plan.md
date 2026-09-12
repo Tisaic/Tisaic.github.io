@@ -15779,3 +15779,38 @@ delivery 1.00x, but at a +/-1,000-step window against a measured cross-channel r
 a quarter of what rule 37 requires. The sweep now runs barrel and column TOGETHER, so the column
 is a positive control: an instrument reading 99% on one plant and 0% on another at identical
 settings is measuring the plants and not itself.
+
+### §61.4 — The reachability target was the increment, not the correction
+
+**WHAT §61.3 CLAIMED AND WHAT IT WAS ENTITLED TO.** It recorded Wood-Berry's headroom as
+reference-expressible at 2.62x of a 2.65x oracle. That measurement was taken at `PASSES=1`, and
+it did not say so. Re-run at `PASSES=3` with IDENTICAL rows, features and window, the same plant
+read **1.00x** — the positive control disagreeing with itself, which is the only reason the fault
+was found at all.
+
+**THE CAUSE.** `reachable()` was handed `x`, the block amplitudes of the LAST PASS'S INCREMENT,
+where the question is about the TOTAL applied correction. The two are the same object only at
+`PASSES=1`; once the machine-in-the-loop iteration converges the increment goes to ~0 and the map
+is being asked to explain nothing. The target is now `useq`, the accumulated correction, sampled
+at each row's own time.
+
+**WHAT IS VOID AND WHAT SURVIVES.** Every `PASSES=3` reachability number taken today is void —
+barrel and column alike. The column's 2.62x SURVIVES and is stronger than it first looks: at
+block 75 its passes read [2.65 2.65 2.65 2.65], so the iteration converges at pass one and the
+single-pass oracle IS the converged oracle there. The claim stands with its condition attached
+rather than bare.
+
+**AND THE BARREL IS UNMEASURED FOR THE THIRD DISTINCT REASON TODAY** — first an under-determined
+40-row fit, then a window a quarter of the plant's own rise, now a target that vanishes as the
+iteration converges. Each of the three produced a plausible negative and each was a different
+fault.
+
+**THE DAY'S SCOREBOARD, because it is now the most useful thing in this section.** Nine faults
+were in instruments and one was in a plant. The one plant finding — the mill's missing warmup —
+converted that plant from a refusal to a winner. The nine: a zero-initialised array reading
+`Infinity`, a frozen operating point, a window that could only shorten, a 40-row-40-feature fit,
+an ambient hypothesis at correlation 0.04, a silently failed edit hiding a crash that printed its
+first half, a gap cap that made an impossible split read as NaN, a `pkill -f` matching its own
+shell, and this. **Every one was caught by two measurements disagreeing, never by inspection.**
+That is why the column now runs in every barrel invocation: a positive control is not a courtesy,
+it is the only thing that has worked.

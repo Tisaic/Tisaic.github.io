@@ -87,7 +87,7 @@ const rms = (a, from) => {
  * span, because rows a few blocks apart read most of the same window and a shuffled split
  * validates against data it has effectively seen — `distil.js`'s own convention.
  */
-function reachable(spec, n, D, M, x, nc, k0, from, base0, drive, rms, S) {
+function reachable(spec, n, D, M, utot, nc, k0, from, base0, drive, rms, S) {
   // ROWS AT A FINE STRIDE, NOT ONE PER BLOCK — and the first version got this wrong in the way
   // that matters. One row per block gave 40 rows against 40 features on the barrel: an exactly
   // determined fit whose held-out split trained on ~12 rows, so its R² of -0.35 measured the
@@ -125,7 +125,13 @@ function reachable(spec, n, D, M, x, nc, k0, from, base0, drive, rms, S) {
       for (let c = 0; c < nc; c++) r.push(ref[c]);
     }
     rows.push(r); rowT.push(t);
-    for (let j = 0; j < nc; j++) tgt[j].push(x[m * nc + j]);
+    // THE TARGET IS THE TOTAL APPLIED CORRECTION, not the last pass's INCREMENT. An earlier
+    // version passed the per-pass block amplitudes `x`, which equal the total only at PASSES=1;
+    // once the iteration converges the increment is ~0 and the map is asked to explain nothing.
+    // It showed as the column reading 2.62x of its 2.65x oracle at PASSES=1 and 1.00x at
+    // PASSES=3 with identical rows, features and window — the positive control disagreeing with
+    // itself, which is the only reason it was found.
+    for (let j = 0; j < nc; j++) tgt[j].push(utot[j][Math.min(n - 1, t)]);
   }
   const solve = (idx, j, lam) => {
     const A = new Float64Array(nf * nf), b = new Float64Array(nf);
@@ -300,7 +306,7 @@ for (const [name, spec] of SPECS) {
         : base0 / got < 1.1 ? 'NOTHING TO WIN — an oracle with full future knowledge gets ~nothing'
         : 'little to win at this resolution'));
     if (process.env.REACH === '1') {
-      const R = reachable(spec, n, D, M, x, nc, k0, from, base0, drive, rms, S);
+      const R = reachable(spec, n, D, M, useq, nc, k0, from, base0, drive, rms, S);
       const h = Number.isFinite(R.held) ? R.held.toFixed(3)
         + (R.capped ? ' (gap capped — optimistic)' : '') : 'no split possible';
       console.log(`          REACHABLE by a reference-only map: held-out R² ${h}`
