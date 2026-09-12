@@ -15256,3 +15256,81 @@ LTI, single channel), so this is the rival's strong ground rather than a hard ca
 only one point, and the arm is where `hff`'s own reach shrinkage is load-bearing (§52.43) and would
 be the informative second. And because `out` is 0 throughout, nothing here tests Tomizuka's
 reflection at all; a plant with genuine non-minimum-phase zeros would.
+
+### §57 — Weighing under vibration, on a real load cell, and the first plant whose truth is free
+
+A new application, opened because the owner asked which industrial weighing problem best suits
+this method. The premise: read a weight before it settles, where **the ground truth is the same
+sensor, later**. That inverts this project's worst commercial fact — §52.42 prices the arm's
+laser tracker at 3.9x over any mounted alternative, and CLAUDE.md calls that the assumption
+deciding who can buy this. Here commissioning costs a bag of grain and a reference scale.
+
+**NO PUBLIC DATA EXISTS FOR BATCHING HOPPERS.** Searching returns PATENTS, not datasets; the one
+candidate record sits on a host this session is refused. That is informative rather than
+disappointing — the signal is proprietary process data, which is `docs/edm.md`'s whole premise.
+So a simulator was built first (`rigs/batch-rig.mjs`, `batch.mjs`), and **the owner then supplied
+a real record**: Sitorus (2021), Mendeley Data, CC BY 4.0 — a grain basket on a load cell,
+deliberately shaken, true mass known from a 0.01 g scale.
+
+**THE SIMULATOR FOUND FOUR FAULTS IN ITSELF AND THEN DECLINED TO ANSWER THE QUESTION.** Each
+fault would have decided the result: it fed on a TIMER where gravimetric batching cuts on
+WEIGHT (8.5% of scatter that was a modelling error wearing a material property's costume); the
+controller compared an UNFILTERED ringing signal to setpoint and cut 7.5% light; feeder
+pulsation ran at 27% of flow ungated, so the material-HELD control was noisier than the varying
+one (rule 9 firing); and the ring was "measured" by zero crossings twice, reading 78 Hz then
+162 Hz against an analytic 15.4 (§52.36's instrument error, repeated). Repaired, it says the
+learned map beats the incumbent 2.8x early but saves only **0.02-0.06 s per batch**, because
+that rig's settle is dominated by a fast ring rather than a slow tail. Honest and unusable: the
+simulator's own settle decides the answer, which is rule 15 exactly.
+
+**THE REAL RECORD ANSWERS A DIFFERENT AND SHARPER QUESTION.** It is a shaking basket, not a
+hopper — sustained imposed vibration, no cutoff, no settle — so it measures how well a shaken
+cell can be READ, and `shakeweigh.test.mjs` says so in its own header and claims nothing about
+settles. What it establishes, all held out, all on hardware:
+
+```
+  static (A0) scatter, the experiment's own control   0.47 g median
+  shaken scatter                                      8.39 g median      17.9x
+  lag-1 autocorrelation of the error                 +0.404 median (worst +0.84)
+  sd of an 8-sample mean vs independent-noise theory   1.40x
+```
+
+Vibration is the whole problem, and the error is **autocorrelated**, which is the precondition
+for any model to beat a mean. Then, leave-one-LOAD-out so the held-out mass never appears in
+training — **which matters because the true weight takes only five values and a model given the
+window mean could otherwise SNAP to the nearest, a five-way classification wearing a
+regression's clothes**:
+
+```
+     K    mean    +calibration   LEARNED    vs calibrated
+     4    7.33 g         6.85 g      6.81 g        1.006x
+     8    5.98 g         5.42 g      5.17 g        1.047x
+    16    4.42 g         3.63 g      2.23 g        1.631x
+    32    3.49 g         2.51 g      1.52 g        1.647x
+    64    3.04 g         1.97 g      1.47 g        1.340x
+```
+
+**1.65x over a CALIBRATED mean — and the window is load-bearing.** The first pass of this
+experiment ran at K=8, read 1.047x, and would have been written down as "no product". It was a
+window too short to carry the structure: rule 37, on real hardware, with the reach measured
+rather than assumed. The calibration itself earns its place (1.39x over the raw mean), so the
+learned map is measured against a real incumbent and not against doing nothing (rule 15).
+
+**AND IT DOES NOT TRANSFER BETWEEN RIGS: median 1.08x over 12 ordered pairs, worst 0.94x,
+against 1.65x on its own rig.** Most of the result is the installation. The incumbent's own
+calibration constant transfers no better — carried across rigs it is often WORSE than the raw
+mean (soy-b2 → maize-b1: 7.77 g against 2.73 g), which is the same finding from the other side.
+
+**SO THE PRODUCT SHAPE IS THE OPPOSITE OF THE OBVIOUS ONE.** Not an algorithm shipped blind —
+cross-rig it is worth nothing. A **self-commissioning** estimator: log a few hundred windows
+against a reference scale on each installation, fit, deploy, take 1.65x. That is viable only
+because the truth is free, which is the property the application was chosen for. Every transfer
+negative in this project says the same thing from the other direction: what does not generalise
+must be re-learned per machine, and the only question is whether re-learning is cheap. Here it is.
+
+**WHAT IS NOT ESTABLISHED (rule 59).** A shaking basket is not a batching hopper, and nothing
+here measures settle prediction. There is no timestamp and no stated sample rate, so every
+number stays in SAMPLES; converting to seconds would be inventing the missing column. Five load
+levels, four rigs, one published experiment. And the patent position is unexamined beyond a
+keyword sweep — adaptive filtering for faster settling exists (US7538281B2); nothing found
+combined a learned prediction of settled weight, but that is not a freedom-to-operate search.

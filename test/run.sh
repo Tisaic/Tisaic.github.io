@@ -463,6 +463,9 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     t node test/pilot/realarm.test.mjs
     t node test/pilot/realtanks.test.mjs
     t node test/pilot/realexch.test.mjs
+    # A REAL LOAD CELL UNDER VIBRATION (Sitorus 2021, CC BY 4.0) — and the first plant here
+    # whose ground truth is FREE, which is the assumption §52.42 prices at 3.9x everywhere else.
+    t node test/pilot/shakeweigh.test.mjs
     # THE KUKA KR300 IS GONE AND ITS FINDINGS ARE NOT (plan §55.8-§55.12). Its records were
     # 222 MB — 89% of this repository — against 272 kB for the three real-data plants above,
     # and four sections of measurement established that the record cannot support a plant at
