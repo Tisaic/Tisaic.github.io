@@ -15478,3 +15478,97 @@ quantity the incumbent cannot see at all. That distinction is the business case 
 asserted, not measured. And the baseline must be a per-zone PID **tuned on the array** plus the
 hand-trimmed per-zone power bias a commissioning engineer applies, never "do nothing" — §52.32's
 cart-pole read 9.77x and then refused all four seeds once its loop was tuned properly.
+
+### §59 — Why it fails on some plants: two hypotheses dead, two failures named, one not
+
+**The datum that started it.** On BOTH standing refusals the record says the forecast was GOOD
+and the correction was still harmful. Wood-Berry with `mimo` armed reaches R² 0.986/0.993 and
+delivers 52.52 against doing nothing's 43.90; the barrel was swept over a sixteen-fold range of
+believed plant gain WITH THE FORECAST HELD FIXED AND GOOD, and every setting that applied a real
+correction was worse than nothing. A good model and a harmful correction, on two plants sharing
+no physics, is rule 18 pointing at the code rather than at either plant.
+
+**THE INSTRUMENT HAS NO PILOT IN IT (rule 15).** `test/pilot/invert.mjs` runs each plant twice
+from the same `fresh()` — once undriven, once with a correction HELD on one channel — and
+subtracts. What is left is the plant's own response to a correction, with no fit, no probe design
+and no forecast anywhere in the route. The seeded rigs make it exact rather than statistical:
+`makeMill(1)` and `makeBarrel(7)` seed their own noise, so two `fresh()` calls replay the SAME
+noise and the subtraction cancels it to the last bit.
+
+```
+  plant    dead     rise  dead/rise  INVERSE  DC@25%   RGA diag        scale
+  tank       17    2016       0.01     0.0%     98%   1.38/1.38       2.04
+  column     32     393       0.08     0.0%     98%   2.01/2.01       2.00
+  mill      100     121       0.83     0.0%    100%   —               2.00
+  barrel     76    2912       0.03     0.0%     93%   1.39/1.78/1.39  2.00
+```
+
+**NON-MINIMUM PHASE IS NOT THE FAILURE MODE.** The leading hypothesis was structural and
+plausible: the QP inverts a forecast, and inverting a plant that first goes the WRONG WAY gives a
+correction that is right inside the horizon and wrong after it, which is exactly "good forecast,
+harmful correction". **INVERSE reads 0.0% on all four plants** — no response has any excursion
+opposite in sign to its final value. Killed by the cheapest instrument that could have killed it,
+before any build was spent on it.
+
+**AND NONLINEARITY IS NOT EITHER, WHICH CONTRADICTS THIS FILE'S OWN NORTH STAR.** Halving the
+correction halves every response: **2.00 to 2.04 on all four, INCLUDING the barrel at T⁴ and the
+tank at √h**. The "Linear AND nonlinear alike" row orders the plants by nonlinearity and says the
+most nonlinear ones refuse — but at the amplitudes a correction actually uses, the barrel is as
+linear as the Wood-Berry column, which is nothing but linear transfer functions. The ordering is
+not supported by the plants' own local behaviour, and the row should say so.
+
+**WOOD-BERRY IS INTERACTION, AND THE INSTRUMENT VALIDATES ITSELF AGAINST THE LITERATURE.** Its
+RGA reads **2.01**, which is the PUBLISHED textbook value for that column, reproduced here from a
+route with no model in it (rule 15 in its strongest form — an outside number the instrument could
+have missed and did not). The pilot inverts a DIAGONAL; an RGA of 2.01 states that the diagonal
+pairing is the wrong one, which is consistent with `mimo` taking the forecast from 0.74/0.84 to
+0.986/0.993. **What it does NOT explain is the delivery failure**: at R² 0.99 the machine was
+still worse than doing nothing. Interaction explains the FORECAST and not the HARM, and that gap
+is open.
+
+**THE MILL IS DEAD TIME, AND IT IS THE STRONGEST RESULT HERE BECAUSE THE PLANT DOES NOT MOVE
+BETWEEN ITS TWO STATES.** `dead/rise = 0.83` — 83% of the mill's response is transport delay
+before anything happens at all. The mill REFUSES in `plants.test.mjs` and delivers 1.45x on 8 of 8
+seeds in `rollmill.test.mjs`, and the only difference is whether `deadTime` is DECLARED — a
+controller option, not a plant change. So **one measurement of the plant explains both states**,
+which was the test set for this instrument before it was run rather than after.
+
+**THE BARREL IS NOT EXPLAINED BY ANY OF THE FOUR AND IS NOT FORCED INTO ONE.** `dead/rise` 0.03,
+no inverse response, scales at 2.00, RGA 1.39/1.78/1.39 — nothing fires. It has the slowest
+approach to DC in the set (93% at the 25% mark against 98-100%), which is SUGGESTIVE of this
+file's own "the probe halts early and reads its DC 24% and 15% low" account, but the window here
+is 15,000 steps and that claim concerns a probe stopping at 16,400 and 30,200. **The window is too
+short to test it** (rule 25: not measured and refuted are different states). The named next
+measurement is the same instrument at a window past 40,000 steps.
+
+**THE STRUCTURAL POINT, AND IT IS UNCOMFORTABLE FOR THE PRODUCT CLAIM.** Both repaired failures
+were repaired the same way: **by telling the algorithm something it could not measure** — declare
+the transport delay, arm the MIMO solve. Neither was an algorithmic improvement. That is a better-
+shaped problem than "some plants are hard", and it cuts directly against "wire it up, press one
+button", because every fix on record so far is a DECLARATION an engineer has to supply.
+
+**TWO INSTRUMENT FAULTS WERE MADE AND BOTH ARE RECORDED, because each produced a plausible
+number.** The first version let the program RUN underneath the measurement, on the reasoning that
+the paired subtraction removes the program's own response — which is true only on a LINEAR plant.
+On the tank the operating point moves with the recipe and the response moves with it, so the
+difference of two runs is a moving target rather than a response; it showed as a tail that never
+settled (rules 12, 13), and the repair is to FREEZE the reference at the step point. The second
+was the scaling aggregator, initialised at 0 and taking the value furthest from 2, so it reported
+`0.00` in the summary while the per-row column correctly read 2.00-2.04 — the summary of a
+measurement disagreeing with the measurement (rule 17).
+
+**WHAT IS NOT ESTABLISHED.** No plant in this table WINS on its own physics — the tank is
+marginal and the other three refuse — so these diagnostics are validated as EXPLANATIONS OF
+FAILURES and not as a discriminator between winners and losers. The arm and EMPS would have to
+join, and EMPS does not route through `ladder()`, so adding it properly means extending the driver
+rather than writing a second copy of its routing (rule 61). Until that happens the table can say
+why three plants fail and cannot say what the winners have that they lack.
+
+**AND THE SPECS ARE NOW SHARED, which is what let an instrument drive these plants at all.**
+`rigs/specs.mjs` holds the four spec literals extracted from `plants.test.mjs` — the same move made
+for `rigs/ladder.mjs` when the real-data plants needed the driver, one level up. The control is the
+same: `plants.test.mjs` must come back byte-identical. The STATIC half is verified — all four spec
+bodies are character-identical to the originals — and the only semantic changes are that `G_MP`
+moved modules at the same literal value and the spec objects are constructed at module load rather
+than inline, which cannot matter because every field is a pure expression with no side effect and
+no RNG consumed at construction (the rigs seed inside `fresh()`).
