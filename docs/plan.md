@@ -16032,3 +16032,48 @@ of order 0.1: one ridge and one covariance prior acting on blocks that differ by
 rule 32 in the place the rule was written for. `standardize` was built for exactly this and
 §52.40 measured it as INERT on the arm — a repair that is a no-op where it was measured and
 load-bearing where it was not is the shape rule 21 says a real one has.
+
+### §63.4 Standardising the row is worth 3-5x of it, and is not the cause
+
+`STD=1` divides each feature by its rms over the training rows, nothing else moving:
+
+```
+  prequential R²   plain   -28.576  -49.105  -63.225
+                   STD=1    -5.776  -15.862  -20.365
+```
+
+So rule 32 was real here — and that settles §52.16's open finding in the direction rule 31
+predicts: the streaming fit's weight-scale pathology is INERT on the arm, where the absolute and
+difference blocks sit within an order of magnitude of each other and §52.40 measured it as a
+no-op, and load-bearing on a plant where they differ by ~400x. It is not the cause: -20 still
+loses to predicting the mean, and the in-sample column is still exactly 1.000x four times.
+
+### §63.5 And the teacher column kills the other three explanations at once
+
+A prequential R² of -20 has three cheap explanations and `conv` carries two of them, so they are
+printed before any account of the fit (rule 27):
+
+```
+  recipe 0: lap 7500  teacher 11.325x  rows 6561  kept  engine hff
+  recipe 1: lap 7500  teacher 14.750x  rows 6561  kept
+  recipe 2: lap 7500  teacher 14.110x  rows 6561  kept
+  recipe 3: lap 7500  teacher 11.548x  rows 6561  kept
+  the FIT: 26244 rows / 64 features   held-out -5.78, -15.86, -20.36
+```
+
+**The teacher converged every recipe at 11-15x** — real controller results, not `distil-tank.mjs`'s
+3.2e6 signature of a target already at zero — **none was dropped**, so the diet is not the fault;
+and the solve has **410 rows per feature**, so it is not under-determined. The correction is a
+real one, the target is well posed, and the fit still loses to the mean.
+
+**WHICH LEAVES ONE DIFFERENCE, AND IT IS THE ONE THIS PROJECT HAS SUSPECTED SINCE §52.16.** §62
+fitted the SAME object on THIS plant by BATCH normal equations and read **97-99% in sample**; the
+rung fits it by the STREAMING shared-covariance route and reads -20. Two routes to one quantity
+disagreeing, with one of them already on record as suspect in exactly this way — §52.16: *"the
+streaming fit returns weights 30-150x the batch fit's on an exactly linear target and refuses
+rows the batch route deploys"* — is rule 15 in its useful direction, and this is the first plant
+where that disagreement DECIDES an answer rather than being a curiosity. `ONLINE=0` is the test.
+
+**AND IT MATTERS BEYOND THIS PLANT.** Target 6 requires the fit to STREAM — batch
+normal-equations-and-Cholesky is the offline algorithm the north star rules out — so a streaming
+fit that cannot fit what the batch route can is a PRODUCT constraint and not a harness detail.

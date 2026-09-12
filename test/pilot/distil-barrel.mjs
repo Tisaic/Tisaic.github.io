@@ -36,8 +36,19 @@
  * built for exactly this and which §52.40 measured as INERT on the arm — the signature of a
  * repair that is a no-op where it was measured and load-bearing where it was not.
  *
- * KNOBS: WIN (reach in raw steps, overriding the derivation), STD, SEEDS, DSEG (the diet's
- * segment length), RIDGE. It asserts the plant is not made worse and reports everything else.
+ * AND THE ONE DIFFERENCE LEFT IS THE FIT ROUTE, WHICH THIS PROJECT HAS SUSPECTED SINCE §52.16
+ * AND NEVER TESTED WHERE IT DECIDES AN ANSWER. The teacher converges these recipes at 11-15x,
+ * none is dropped, and the fit has 410 rows per feature — so the diet is good, the target is a
+ * real correction and the solve is massively over-determined. Meanwhile §62 fitted the SAME
+ * object on this plant by BATCH normal equations and read 97-99% in sample. Two routes to one
+ * quantity disagreeing, with one of them already on record as suspect — §52.16: "the streaming
+ * fit returns weights 30-150x the batch fit's on an exactly linear target and REFUSES ROWS THE
+ * BATCH ROUTE DEPLOYS" — is rule 15 in its useful direction. `ONLINE=0` takes the batch route.
+ * It matters beyond this plant: target 6 requires the fit to STREAM, so a streaming fit that
+ * cannot fit what the batch route can is a product constraint and not a harness detail.
+ *
+ * KNOBS: WIN (reach in raw steps, overriding the derivation), STD, ONLINE, SEEDS, DSEG (the
+ * diet's segment length), RIDGE. It asserts the plant is not made worse and reports the rest.
  */
 import { ladder, announce } from './rigs/ladder.mjs';
 import { barrelSpec } from './rigs/specs.mjs';
@@ -130,7 +141,8 @@ const distilRuns = () => DIETS.map((rec) => {
 
 const spec = { ...barrelSpec,
   distil: { refDim: 3, ridge: env('RIDGE', 1e-6), offsets: OFFSETS,
-    ...(process.env.STD === '1' ? { standardize: true } : {}) },
+    ...(process.env.STD === '1' ? { standardize: true } : {}),
+    ...(process.env.ONLINE === '0' ? { online: false } : {}) },
   distilRuns };
 
 announce();
@@ -152,6 +164,25 @@ if (rep.distil && rep.distil.policy) {
   }
   console.log(`\n  in sample, on its own training recipes: `
     + inSample.map((x) => `${x.toFixed(3)}x`).join('  '));
+}
+// THE TEACHER'S OWN COLUMN, WHICH THE FIRST VERSION OF THIS FILE DID NOT PRINT AND SHOULD HAVE.
+// A prequential R² of -20 has at least three explanations that the score cannot tell apart: a
+// target the teacher never converged (`distil-tank.mjs` read gains of 3.2e6 on a quasi-static
+// diet, a target already at zero — rule 14), a target CLIPPED at the rung's authority, and too
+// few rows for the features. `conv` carries the first and third and they cost nothing to state,
+// so they are stated before any account of the fit is offered (rule 27).
+if (rep.distil && rep.distil.runs) {
+  console.log('\n  the TEACHER, per training recipe:');
+  for (const [i, c] of rep.distil.runs.entries()) {
+    console.log(`    recipe ${i}: lap ${c.lap}  teacher ${c.gain.toFixed(3)}x  rows ${c.used}`
+      + `  ${c.dropped ? 'DROPPED' : 'kept'}  engine ${c.engine}`
+      + (c.passes === null || c.passes === undefined ? '' : `  passes ${c.passes}`));
+  }
+}
+if (rep.distil && rep.distil.fit) {
+  const f = rep.distil.fit;
+  console.log(`  the FIT: ${f.rows} rows / ${OFFSETS.length * 3 + 1} features, `
+    + `held-out ${JSON.stringify(f.heldOutR2)}, deploy ${f.deploy}`);
 }
 const dr = rep.rungs.find((r) => /distil/.test(r.name));
 console.log(`  distilled rung: ${dr ? `${dr.deployed ? 'DEPLOYED' : 'REFUSED'} at `
