@@ -15747,3 +15747,35 @@ reachability fit, and an ambient hypothesis at correlation 0.04. Every one surfa
 instrument disagreeing with the machine rather than by reading the code. A plant's verdict is not
 trustworthy until its harness has been checked, and there are now three cheap probes that do it:
 startup transient, response linearity, and window reach.
+
+### §61.3 — Wood-Berry's headroom IS reference-expressible, and a silent edit hid a crash
+
+**THE COLUMN'S ANSWER, AND IT IS THE OPPOSITE OF WHAT THIS PLANT'S HISTORY PREDICTS.** A
+reference-only map delivers **2.62x of the 2.65x oracle** — 99% of everything available on the
+plant this campaign opened by calling the likeliest strike candidate. So Wood-Berry's gap is
+squarely inside the class of object this project deploys, `distil.js` is the thing that should
+capture it, and the failure is in the pilot's route to it rather than in the plant or the form.
+
+**AND THE SWEEP THAT WAS SUPPOSED TO ANSWER THE BARREL PRODUCED NOTHING WHILE LOOKING LIKE THREE
+COMPLETED RUNS.** An edit adding the measured-settle block FAILED SILENTLY — the target string
+did not match, the replace was a no-op, and nothing checked. Three consequences, in increasing
+order of cost: the support-bounding optimisation never landed, so every run since has been slow
+but correct; `LSET` did not exist, so `reachable()` threw; and it threw AFTER printing its
+headroom row, so all three window settings emitted a plausible-looking table and no reachability
+line at all. A crash that prints its first half is the worst shape a failure can have.
+
+Every replacement in that file now ASSERTS its target before applying. A silent no-op edit is
+the one fault that makes an instrument look like it is answering.
+
+**THE GAP CAP, AND WHY NaN WAS NOT A FIT FAILING.** With a +/-1,491-step window on the column's
+3,000-step record the contiguous split with a gap of the window span left ~9 training rows and
+the R² came back NaN. That is a split that could not be MADE, not a fit that failed, and the two
+must not read alike (rule 25). The gap is now capped at n/8, the cap is reported, and where it
+binds the folds no longer fully exclude the window so the held-out number is stated as
+optimistic rather than quoted plain.
+
+**THE BARREL REMAINS GENUINELY UNMEASURED.** Its row-count-fixed run read R² -1.555 and in-sample
+delivery 1.00x, but at a +/-1,000-step window against a measured cross-channel rise of 4,464 —
+a quarter of what rule 37 requires. The sweep now runs barrel and column TOGETHER, so the column
+is a positive control: an instrument reading 99% on one plant and 0% on another at identical
+settings is measuring the plants and not itself.

@@ -87,7 +87,7 @@ const rms = (a, from) => {
  * span, because rows a few blocks apart read most of the same window and a shuffled split
  * validates against data it has effectively seen — `distil.js`'s own convention.
  */
-function reachable(spec, n, D, M, x, nc, k0, from, base0, drive, rms, LSETOUT) {
+function reachable(spec, n, D, M, x, nc, k0, from, base0, drive, rms, S) {
   // ROWS AT A FINE STRIDE, NOT ONE PER BLOCK — and the first version got this wrong in the way
   // that matters. One row per block gave 40 rows against 40 features on the barrel: an exactly
   // determined fit whose held-out split trained on ~12 rows, so its R² of -0.35 measured the
@@ -99,7 +99,18 @@ function reachable(spec, n, D, M, x, nc, k0, from, base0, drive, rms, LSETOUT) {
   // cross-channel rises of 4,464 — a window too short to carry what it is being asked to
   // explain, which is the trap that read 1.047x on the shake data at K=8 and 1.63x at K=16.
   // REACHW multiplies the span so the claim can be tested rather than asserted.
-  const span = Math.round(REACHW * LSETOUT.v);
+  // THE PLANT'S OWN SETTLE, measured from the step response rather than passed in — an earlier
+  // version read a `LSET` that a silently-failed edit had never created, so every sweep setting
+  // threw AFTER printing its headroom row and the reachability question went unanswered while
+  // looking answered (rule 25: not measured and refuted are different states).
+  let settle = 1;
+  for (let c = 0; c < nc; c++) for (let j = 0; j < nc; j++) {
+    const arr = S[c][j], f = arr[arr.length - 1];
+    let i = arr.length - 1;
+    while (i > 0 && Math.abs(arr[i] - f) < 0.01 * Math.max(1e-30, Math.abs(f))) i--;
+    settle = Math.max(settle, i + 1);
+  }
+  const span = Math.max(D, Math.round(REACHW * settle));
   const OFFS = [-1, -0.75, -0.5, -0.35, -0.22, -0.13, -0.06, 0, 0.06, 0.13, 0.22, 0.35, 0.5, 0.75, 1]
     .map((f) => Math.round(f * span));
   const nf = OFFS.length * nc + 1;
@@ -139,7 +150,13 @@ function reachable(spec, n, D, M, x, nc, k0, from, base0, drive, rms, LSETOUT) {
   let scale = 0;
   for (const r of rows) for (const v of r) scale += v * v;
   const lam = 1e-6 * scale / Math.max(1, rows.length);
-  const GAP = span;                                 // the window's own span, in STEPS
+  // THE GAP IS THE WINDOW'S SPAN, CAPPED so a wide window on a short record still leaves a
+  // split. At +/-1491 steps on the column's 3,000 it left ~9 training rows and the R² came back
+  // NaN — which is a split that could not be made, not a fit that failed, and the two must not
+  // read alike (rule 25). Where the cap binds, the folds no longer fully exclude the window and
+  // the held-out number is optimistic; that is reported rather than hidden.
+  const GAP = Math.min(span, Math.floor(n / 8));
+  const capped = GAP < span;
   const half = Math.floor(n / 2);
   const trainI = [], testI = [];
   for (let i = 0; i < rows.length; i++) {
@@ -169,7 +186,8 @@ function reachable(spec, n, D, M, x, nc, k0, from, base0, drive, rms, LSETOUT) {
     }
   }
   const got = rms(drive(spec, n, k0, -1, 0, useq), from);
-  return { held, deliv: base0 / got, rows: rows.length, feats: nf, span, tr: trainI.length, te: testI.length };
+  return { held, deliv: base0 / got, rows: rows.length, feats: nf, span, settle, capped,
+    tr: trainI.length, te: testI.length };
 }
 
 console.log('\nHEADROOM — the best ANY correction of this class could do, and what the machine'
@@ -282,10 +300,12 @@ for (const [name, spec] of SPECS) {
         : base0 / got < 1.1 ? 'NOTHING TO WIN — an oracle with full future knowledge gets ~nothing'
         : 'little to win at this resolution'));
     if (process.env.REACH === '1') {
-      const R = reachable(spec, n, D, M, x, nc, k0, from, base0, drive, rms, { v: LSET });
-      console.log(`          REACHABLE by a reference-only map: held-out R² ${R.held.toFixed(3)}`
+      const R = reachable(spec, n, D, M, x, nc, k0, from, base0, drive, rms, S);
+      const h = Number.isFinite(R.held) ? R.held.toFixed(3)
+        + (R.capped ? ' (gap capped — optimistic)' : '') : 'no split possible';
+      console.log(`          REACHABLE by a reference-only map: held-out R² ${h}`
         + `, delivers ${R.deliv.toFixed(2)}x of the ${(base0 / got).toFixed(2)}x oracle`
-        + `   (${R.rows} rows / ${R.feats} feat, span +/-${R.span} steps vs settle ${LSET})`);
+        + `   (${R.rows} rows / ${R.feats} feat, window +/-${R.span} steps vs settle ${R.settle})`);
     }
     }
   }
