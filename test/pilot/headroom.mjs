@@ -43,6 +43,14 @@ const env = (k, d) => (process.env[k] === undefined ? d : Number(process.env[k])
 const ITERS = env('ITERS', 4000);
 const PASSES = env('PASSES', 4);
 const REACHW = env('REACHW', 1.5);   // window span as a multiple of the measured settle
+// A SECOND PROGRAM, BUILT FROM THE PLANT'S OWN ONE SO NO RIG IS TOUCHED. `ALT=1` evaluates the
+// map fitted on the plant's program against a RETIMED and RESCALED version of it: the same
+// class of move at different times and different sizes. It exists because the time-split R2 is
+// not a transfer measurement — on the column the second half of the record holds 0.7% of the
+// correction's own spread, so its R2 has no denominator (rule 19) — and because transfer here
+// has always meant a program the fit never saw, never a later slice of the one it did.
+const ALTW = env('ALTW', 0.7);       // time warp applied to the program's own clock
+const ALTS = env('ALTS', 0.6);       // amplitude scale about the program's starting reference
 const WANT = (process.env.PLANTS || 'tank,column,mill,barrel').split(',');
 const DLIST = (process.env.BLOCKS || '').split(',').filter(Boolean).map(Number);
 const SPECS = [['tank', tankSpec], ['column', wbSpec], ['mill', millSpec], ['barrel', barrelSpec]];
@@ -87,7 +95,7 @@ const rms = (a, from) => {
  * span, because rows a few blocks apart read most of the same window and a shuffled split
  * validates against data it has effectively seen — `distil.js`'s own convention.
  */
-function reachable(spec, n, D, M, utot, nc, k0, from, base0, drive, rms, S) {
+function reachable(spec, n, D, M, utot, nc, k0, from, base0, drive, rms, S, specEval, base0Eval) {
   // ROWS AT A FINE STRIDE, NOT ONE PER BLOCK — and the first version got this wrong in the way
   // that matters. One row per block gave 40 rows against 40 features on the barrel: an exactly
   // determined fit whose held-out split trained on ~12 rows, so its R² of -0.35 measured the
@@ -133,12 +141,20 @@ function reachable(spec, n, D, M, utot, nc, k0, from, base0, drive, rms, S) {
     // itself, which is the only reason it was found.
     for (let j = 0; j < nc; j++) tgt[j].push(utot[j][Math.min(n - 1, t)]);
   }
-  const solve = (idx, j, lam) => {
+  // THE RIDGE IS RELATIVE TO THIS MATRIX'S OWN DIAGONAL (rule 32). It used to be
+  // `1e-6 * sum(row^2) / rows`, which is a mean ROW norm and is smaller than a diagonal entry by
+  // the row count: at 938 rows that is 3e-8 of the quantity it is regularising, i.e. no ridge at
+  // all on a design whose columns are the same reference a few steps apart. It showed as the
+  // column's held-out R2 reading -13273 and -28153 — magnitudes a transfer failure cannot
+  // produce and a solve coming apart can (rule 17: the instrument fails before the model).
+  const solve = (idx, j, rel) => {
     const A = new Float64Array(nf * nf), b = new Float64Array(nf);
     for (const i of idx) {
       const r = rows[i];
       for (let a = 0; a < nf; a++) { b[a] += r[a] * tgt[j][i]; for (let c = 0; c < nf; c++) A[a * nf + c] += r[a] * r[c]; }
     }
+    let trA = 0; for (let a = 0; a < nf; a++) trA += A[a * nf + a];
+    const lam = rel * trA / nf;
     for (let a = 0; a < nf; a++) A[a * nf + a] += lam;
     const Aug = [];
     for (let a = 0; a < nf; a++) { const row = new Float64Array(nf + 1); for (let c = 0; c < nf; c++) row[c] = A[a * nf + c]; row[nf] = b[a]; Aug.push(row); }
@@ -153,9 +169,20 @@ function reachable(spec, n, D, M, utot, nc, k0, from, base0, drive, rms, S) {
     }
     return Aug.map((r) => r[nf]);
   };
-  let scale = 0;
-  for (const r of rows) for (const v of r) scale += v * v;
-  const lam = 1e-6 * scale / Math.max(1, rows.length);
+  const LADDER = [1e-10, 1e-8, 1e-6, 1e-4, 1e-3, 1e-2, 1e-1, 1];
+  // IN SAMPLE the question is EXPRESSIBILITY, so the ridge is as small as the solve survives;
+  // HELD OUT it is a fitted quantity and is SELECTED, on an inner split of the TRAINING half
+  // alone. Selecting it on the test fold would be the leak this whole split exists to prevent.
+  const REL_IN = 1e-10;
+  const r2of = (w, idx, j) => {
+    let mu = 0; for (const i of idx) mu += tgt[j][i]; mu /= idx.length;
+    let ss = 0, tt = 0;
+    for (const i of idx) {
+      let p = 0; for (let a = 0; a < nf; a++) p += w[a] * rows[i][a];
+      ss += (tgt[j][i] - p) ** 2; tt += (tgt[j][i] - mu) ** 2;
+    }
+    return tt > 0 ? 1 - ss / tt : NaN;
+  };
   // THE GAP IS THE WINDOW'S SPAN, CAPPED so a wide window on a short record still leaves a
   // split. At +/-1491 steps on the column's 3,000 it left ~9 training rows and the R² came back
   // NaN — which is a split that could not be made, not a fit that failed, and the two must not
@@ -168,32 +195,77 @@ function reachable(spec, n, D, M, utot, nc, k0, from, base0, drive, rms, S) {
   for (let i = 0; i < rows.length; i++) {
     if (rowT[i] < half - GAP) trainI.push(i); else if (rowT[i] >= half + GAP) testI.push(i);
   }
-  let r2sum = 0, r2n = 0;
+  const innerCut = trainI.length ? rowT[trainI[Math.floor(trainI.length / 2)]] : 0;
+  const inTr = trainI.filter((i) => rowT[i] < innerCut - GAP);
+  const inTe = trainI.filter((i) => rowT[i] >= innerCut + GAP);
+  let relSel = 1e-4;
+  if (inTr.length > nf && inTe.length) {
+    let best = -Infinity;
+    for (const rel of LADDER) {
+      let acc = 0, m = 0;
+      for (let j = 0; j < nc; j++) { const v = r2of(solve(inTr, j, rel), inTe, j); if (Number.isFinite(v)) { acc += v; m++; } }
+      if (m && acc / m > best) { best = acc / m; relSel = rel; }
+    }
+  }
+  // R2 IS MEASURED AGAINST THE TEST FOLD'S OWN MEAN, AND THAT DENOMINATOR CAN VANISH (rule 19).
+  // Where a program holds still over the second half the correction it needs is nearly constant,
+  // so the fold's own variance is a rounding error and any bias at all divides by it — which is
+  // how the column reported -13705 from a solve that is no longer ill-conditioned. So the fold's
+  // spread is reported BESIDE the R2, as a fraction of the whole record's, together with an
+  // NRMSE against the WHOLE record's scale — a denominator that does not collapse. Where the
+  // spread ratio is small the R2 is not a transfer measurement and must not be read as one.
+  let r2sum = 0, r2n = 0, nrsum = 0, sdsum = 0;
   for (let j = 0; j < nc; j++) {
     if (!trainI.length || !testI.length) continue;
-    const w = solve(trainI, j, lam);
-    let mu = 0; for (const i of testI) mu += tgt[j][i]; mu /= testI.length;
-    let ss = 0, tt = 0;
-    for (const i of testI) { let p = 0; for (let a = 0; a < nf; a++) p += w[a] * rows[i][a];
-      ss += (tgt[j][i] - p) ** 2; tt += (tgt[j][i] - mu) ** 2; }
-    if (tt > 0) { r2sum += 1 - ss / tt; r2n++; }
+    const w = solve(trainI, j, relSel);
+    const v = r2of(w, testI, j);
+    if (Number.isFinite(v)) { r2sum += v; r2n++; }
+    let muAll = 0; for (let i = 0; i < rows.length; i++) muAll += tgt[j][i]; muAll /= rows.length;
+    let vAll = 0; for (let i = 0; i < rows.length; i++) vAll += (tgt[j][i] - muAll) ** 2;
+    vAll = Math.sqrt(vAll / rows.length);
+    let muT = 0; for (const i of testI) muT += tgt[j][i]; muT /= testI.length;
+    let vT = 0, ss = 0;
+    for (const i of testI) {
+      vT += (tgt[j][i] - muT) ** 2;
+      let pr = 0; for (let a = 0; a < nf; a++) pr += w[a] * rows[i][a];
+      ss += (tgt[j][i] - pr) ** 2;
+    }
+    vT = Math.sqrt(vT / testI.length); ss = Math.sqrt(ss / testI.length);
+    if (vAll > 0) { nrsum += ss / vAll; sdsum += vT / vAll; }
   }
   const held = r2n ? r2sum / r2n : NaN;
+  const nrmse = r2n ? nrsum / r2n : NaN;
+  const foldSd = r2n ? sdsum / r2n : NaN;
   // and what a reference-only map DELIVERS, fitted on everything (in-sample, stated as such)
+  // THE MAP IS FITTED ON `spec` AND EVALUATED ON `specEval`, which is the same object unless a
+  // transfer test asked otherwise — so the default path is byte-identical (rule 21). The row is
+  // rebuilt from the EVALUATION program's own reference, because a map of the commanded
+  // reference is only a transferable object if it is READ from whatever reference it is handed.
+  const sx = specEval || spec, bx = base0Eval === undefined ? base0 : base0Eval;
   const all = Array.from({ length: rows.length }, (_, i) => i);
   const useq = Array.from({ length: nc }, () => new Float64Array(n));
+  const rowAt = (t) => {
+    const r = [1];
+    for (const o of OFFS) {
+      const tt = Math.min(n - 1, Math.max(0, t + o));
+      const ref = sx.refAt(tt);
+      for (let c = 0; c < nc; c++) r.push(ref[c]);
+    }
+    return r;
+  };
   for (let j = 0; j < nc; j++) {
-    const w = solve(all, j, lam);
+    const w = solve(all, j, REL_IN);
     for (let i = 0; i < rows.length; i++) {
-      let p = 0; for (let a = 0; a < nf; a++) p += w[a] * rows[i][a];
-      p = Math.max(-spec.uMax, Math.min(spec.uMax, p));
+      const rr = rowAt(rowT[i]);
+      let p = 0; for (let a = 0; a < nf; a++) p += w[a] * rr[a];
+      p = Math.max(-sx.uMax, Math.min(sx.uMax, p));
       const e = i + 1 < rows.length ? rowT[i + 1] : n;
       for (let t = rowT[i]; t < e; t++) useq[j][t] = p;
     }
   }
-  const got = rms(drive(spec, n, k0, -1, 0, useq), from);
-  return { held, deliv: base0 / got, rows: rows.length, feats: nf, span, settle, capped,
-    tr: trainI.length, te: testI.length };
+  const got = rms(drive(sx, n, k0, -1, 0, useq), from);
+  return { held, nrmse, foldSd, deliv: bx / got, rows: rows.length, feats: nf, span, settle,
+    capped, tr: trainI.length, te: testI.length, relSel, inTr: inTr.length, inTe: inTe.length };
 }
 
 console.log('\nHEADROOM — the best ANY correction of this class could do, and what the machine'
@@ -221,6 +293,17 @@ for (const [name, spec] of SPECS) {
   };
   const zero = Array.from({ length: nc }, () => new Float64Array(n));
   const base0 = rms(drive(spec, n, k0, -1, 0, zero), from);
+  // THE SECOND PROGRAM. Retimed AND rescaled, because a pure time shift moves only the
+  // window-centre terms of a map of the reference and so tests almost nothing — that is
+  // `artefact.test.mjs`'s own structural argument for why the object transfers, read as the
+  // reason it cannot be the test. `ALT=0` leaves every number on this file byte-identical.
+  const ref0 = spec.refAt(0);
+  const specAlt = process.env.ALT === '1' ? { ...spec,
+    refAt: (k) => {
+      const r = spec.refAt(Math.min(n - 1, Math.max(0, Math.round(ALTW * k))));
+      return r.map((v, c) => ref0[c] + ALTS * (v - ref0[c]));
+    } } : null;
+  const base0Alt = specAlt ? rms(drive(specAlt, n, k0, -1, 0, zero), from) : 0;
 
   const Ds = DLIST.length ? DLIST : [Math.max(1, Math.round(n / 40)), Math.max(1, Math.round(n / 120))];
   console.log(`  ${name}  (${nc} ch, ${n} steps, undriven rms ${base0.toExponential(3)})`);
@@ -307,11 +390,21 @@ for (const [name, spec] of SPECS) {
         : 'little to win at this resolution'));
     if (process.env.REACH === '1') {
       const R = reachable(spec, n, D, M, useq, nc, k0, from, base0, drive, rms, S);
+      const A = specAlt
+        ? reachable(spec, n, D, M, useq, nc, k0, from, base0, drive, rms, S, specAlt, base0Alt)
+        : null;
       const h = Number.isFinite(R.held) ? R.held.toFixed(3)
         + (R.capped ? ' (gap capped — optimistic)' : '') : 'no split possible';
       console.log(`          REACHABLE by a reference-only map: held-out R² ${h}`
+        + `, NRMSE ${R.nrmse.toFixed(3)} of the record's own spread (test fold holds `
+        + `${R.foldSd.toFixed(3)} of it${R.foldSd < 0.25 ? ' — R² has no denominator here' : ''})`
         + `, delivers ${R.deliv.toFixed(2)}x of the ${(base0 / got).toFixed(2)}x oracle`
-        + `   (${R.rows} rows / ${R.feats} feat, window +/-${R.span} steps vs settle ${R.settle})`);
+        + `   (${R.rows} rows / ${R.feats} feat, window +/-${R.span} steps vs settle ${R.settle}`
+        + `, ridge ${R.relSel.toExponential(0)} of the diagonal, chosen on ${R.inTr}/${R.inTe} inner rows)`);
+      if (A) console.log(`          the SAME map on a program it was not fitted on `
+        + `(clock x${ALTW}, size x${ALTS}): ${A.deliv.toFixed(2)}x over doing nothing there`
+        + `, against ${R.deliv.toFixed(2)}x at home.  NOTE: that program's OWN oracle is not`
+        + ' computed, so this says whether the map transfers and not what was available there.');
     }
     }
   }

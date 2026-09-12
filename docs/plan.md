@@ -15859,3 +15859,125 @@ transfer unmeasured on the column until the ridge is scaled, and plausibly negat
 "why does the pilot take 1.05x of a 15.1x that its own deployed form can express". That is a far
 better-posed question than the one four previous accounts failed to answer, and it points at the
 route (forecast, QP, cascade) rather than at the plant.
+
+## §62 — THE COLUMN'S HEADROOM IS NOT ONLY EXPRESSIBLE, IT TRANSFERS; AND §61.5's "NEGATIVE EVERYWHERE" WAS THE METRIC
+
+§61.5 read the reachability question and reported, in its own words, that held-out transfer was
+"negative everywhere", with the column's -13273/-28153 flagged as a solve coming apart. Both
+halves of that sentence are now measured, and both were the instrument.
+
+### §62.1 The ridge was 3e-8 of the quantity it was regularising (rule 32)
+
+`reachable()` set `lam = 1e-6 * sum(row²) / rows`. That is a mean ROW norm; a diagonal entry of
+the normal matrix is a sum over ROWS of the same squares, so the ridge was smaller than the thing
+it regularised by the row count — 1e-6 × 31/938 ≈ **3e-8 relative** — which is no ridge at all on
+a design whose columns are the same reference a few steps apart. It is now RELATIVE to that
+matrix's own trace, and it is **SELECTED on an inner split of the TRAINING half alone**, over
+eight decades, because a ridge chosen on the test fold is the leak the split exists to prevent.
+
+```
+  barrel, held-out R²      before  -0.514      after  -0.039
+```
+
+### §62.2 And on the column the R² has no denominator (rule 19)
+
+With the solve repaired the column still read -13705. It is not the solve. The instrument now
+reports the TEST FOLD'S OWN SPREAD as a fraction of the whole record's, and it is **0.007** — the
+Wood-Berry program holds still over the second half, so the correction it needs there is very
+nearly constant and R² is dividing by a rounding error. An NRMSE against the WHOLE record's
+scale, a denominator that cannot collapse, reads **0.263**. So the column's number was never a
+transfer failure; it was a variance ratio with no variance in it, which is rule 19 arriving for
+the third time in this arc.
+
+### §62.3 The real transfer test is a PROGRAM, not a later slice of one — and the column PASSES
+
+A time split cannot be the transfer test here: `artefact.test.mjs` already argues that
+translating a program moves only the window-centre terms of a map of the reference, which is
+exactly why a shifted or later slice tests almost nothing. `ALT=1` builds a second program from
+the plant's own one — **retimed to 0.7 of its clock and rescaled to 0.6 of its size about its
+starting reference** — fits the map on the plant's program and evaluates it on that one:
+
+```
+  column, block 75    at home 2.62x        on the program it was never fitted on  2.59x
+```
+
+**A 1% loss across a program with different step times and different magnitudes.** So the
+column's 2.65x oracle headroom is reachable by a causal, reference-addressed map AND that map
+transfers — which is task 37 answered in the affirmative on the plant this project loses on.
+Stated limit: the second program's OWN oracle is not computed, so this says the map transfers
+and not what was available there. The default path (`ALT` unset, `specEval === spec`) returns
+2.62x, the same figure as before the refactor — rule 21's control.
+
+### §62.4 So what fails on Wood-Berry is the ROUTE, and three candidates are now dead
+
+Four cells through the shared ladder, one variable each, everything else at its shipped value:
+
+```
+  neither                      3.5047e-1   0.39x
+  deadTime [10,30] alone       3.4953e-1   0.39x      inert (0.3%)
+  mimo alone                   2.0196e-1   0.68x      1.74x, the only thing that moves it
+  mimo + deadTime              2.0156e-1   0.68x      inert on top of mimo (0.2%)
+  horizon, mimo armed:  N 71 → 95 → 142 → 236 reads 0.68x → 0.65x → 0.63x → 0.65x
+```
+
+**The interaction is real and is the only repair that moves this plant** — 1.74x, which is
+`invert.mjs`'s RGA 2.01 confirmed on the machine by a route with a model in it, having been
+measured by one with none. **And the mill's two-repair shape does NOT reproduce here**: the delay
+is inert with and without the interaction fix, and the horizon is inert over a 3.3x range. So the
+column is not the mill, the diagnosis that separates them was taken before either was repaired,
+and what remains is 0.68x against 2.65x with the forecast at 0.986/0.993, the pairing fixed, the
+delay declared and the horizon three times longer than it needs to be.
+
+**The remaining gap is the pilot's ROUTE against a map of the reference that delivers 2.62x and
+transfers.** The deployed object this project ships IS that map, and the oracle that teaches it
+is machine-in-the-loop and therefore a legal commissioning procedure. That, and not another
+repair to the cascade, is the live route to making this plant a winner.
+
+### §62.5 AND THE BARREL SPLITS FROM IT — ITS 15.1x IS A MEMORY OF ITS OWN PROGRAM, AND THE WINDOW IS THE WHOLE STORY
+
+The same test on the barrel reads **0.16x on the retimed, rescaled program against 14.70x at
+home** — worse than doing nothing by six. Both program axes were then moved one at a time and
+BOTH break it (retime alone 0.31x, rescale alone 0.14x), so it is not the T⁴ nonlinearity
+answering an amplitude change; the map is keyed to that program in both axes.
+
+Then the window was swept, and it is the mechanism:
+
+```
+  barrel, block 375, oracle 15.11x
+  REACHW   window        at home     on a program it never saw
+   1.5     +/-11792      14.70x            0.16x
+   0.5     +/- 3931      14.70x            1.65x
+   0.25    +/- 1965      14.70x            4.80x
+   0.125   +/-  983      14.68x            5.38x
+   0.06    +/-  472      14.63x            5.16x
+```
+
+**The in-sample number is flat to 0.5% across the whole ladder while transfer moves 34x.** That
+is §41's aliasing theorem on a plant that shares no physics with the arm: the barrel's measured
+settle is 7,861 steps against a 15,000-step program, so a window scaled to the plant's memory
+SPANS the training program and the map can read WHERE IT IS instead of WHAT IS COMMANDED — and
+the fit's own score cannot see the difference. The peak is at **±983 steps, an eighth of the
+settle**, and it falls away below that, so the trade is two-sided and has an optimum rather than
+a direction.
+
+**THE MATCHED CONTROL IS THE COLUMN, AND IT IS INERT** — 2.59x / 2.70x / 2.56x transferred at
+±1491 / ±497 / ±249 against 2.62x / 2.66x / 2.62x at home. So the window is not a knob that
+flatters every plant; it is 34x on one and nothing on the other, which is what makes it a
+property rather than a fitted constant. The plants differ in how much their programs contain to
+memorise — the column commands two setpoint steps and the barrel a richer profile — and that is
+a hypothesis the numbers are consistent with rather than one they establish.
+
+**SO THE BARREL'S STANDING VERDICT CHANGES.** This file and `CLAUDE.md` have carried "the
+barrel's refusal is proved correct" since the sixteen-fold gain sweep. That sweep was of the
+PILOT's correction and the conclusion drawn from it — that no correction of this class can help —
+is now contradicted: **a causal, reference-addressed map at ±983 steps delivers 5.38x on a
+program it was never fitted on**, where the pilot delivers 1.05x. The refusal remains correct FOR
+THE PILOT and is wrong ABOUT THE PLANT, which is the same shape §61 found and the same shape the
+mill's missing warmup had. Two of the four ladder plants are now measured as winnable by the
+object this project actually ships, and neither is won by it today.
+
+**WHAT IS NOT ESTABLISHED.** The second program's own oracle is not computed, so 5.38x is a
+transfer measurement and not a fraction of what was available there. One retiming and one
+rescale is one held-out program, not a set. And nothing here commissions: the teacher is the
+machine-in-the-loop oracle, which is a legal commissioning procedure but is not the route the
+ladder runs.
