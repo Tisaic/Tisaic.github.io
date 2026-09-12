@@ -43,7 +43,8 @@ function announce() {
  * about the controller.
  */
 async function ladder(spec) {
-  const { name, channels, uMax, guards, nMeasured, start, N, refAt, fresh, step, floor } = spec;
+  const { name, channels, uMax, guards, nMeasured, start, N, refAt, fresh, step, floor,
+    pilotOpts } = spec;
 
   // The reference's own rate and acceleration, in COMMAND space, by differencing the program
   // it will actually run. This is what the conventional rung reads; it is not a model.
@@ -69,8 +70,19 @@ async function ladder(spec) {
     // published inverse-dynamics feedforward). Six plants decide it, not either one.
     basis: process.env.NOCLASSIC === '1' ? null
       : motionBasis(channels.map((_, c) => ({ v: v[c], a: a[c] }))),
+    // PER-PLANT PILOT OPTIONS, WHICH EXIST FOR ONE REASON AND IT IS NOT TUNING. A transport
+    // delay is DECLARED BY THE ENGINEER WHO MOUNTED THE INSTRUMENT — a mounting distance over a
+    // line speed, geometry rather than a fitted constant — and the probe provably CANNOT recover
+    // it, because a dead time and a slow rise move the 90% crossing identically. Without the
+    // passthrough this file drove the mill as an undeclared machine while `rollmill.test.mjs`
+    // drove the same rig as a declared one, which is exactly the two-copies drift of rule 61 and
+    // was written down in `plants.test.mjs` as a known gap rather than left to be found.
+    //
+    // `pilotOpts` is applied AFTER the shared defaults and BEFORE `SOLVER`, so a plant may state
+    // what it knows about itself while the environment override still wins — an env knob that a
+    // spec could silently defeat would make the six-plant pass measure the wrong configuration.
     pilot: { nMeasured, start, guards, workspace: () => true, seed: 1, autoRefuse: false,
-      ...SOLVER },
+      ...(pilotOpts || {}), ...SOLVER },
   });
 
   const run = async (corr, cname) => {

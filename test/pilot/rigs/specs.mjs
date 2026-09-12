@@ -62,7 +62,9 @@ const wbSpec = {
   guards: [{ index: 0, max: 25 }, { index: 1, max: 25 }],
   start: [0, 0], N: WB.T_END, floor: 0,
   refAt: (k) => { const sp = WB.setpointAt(Math.min(k, WB.T_END - 1)); return WB.inputsFor(sp[0], sp[1]); },
-  fresh: () => WB.makeColumn(),
+  fresh: () => { const c = WB.makeColumn(); const sp = WB.setpointAt(0);
+    const u0 = WB.inputsFor(sp[0], sp[1]);
+    for (let i = 0; i < 3000; i++) c.step(u0); return c; },
   step: (c, ref, u) => {
     c.step(ref.map((r, j) => r + u[j]));
     const want = WB.outputsFor(ref);
@@ -74,10 +76,24 @@ const millSpec = {
   name: 'cold mill AGC — exit gauge, mm rms',
   channels: [{ lo: RM.S0 - 0.12, hi: RM.S0 + 0.12, vMax: 3e-3, aMax: 3e-4, jMax: 3e-5 }],
   uMax: 0.06, nMeasured: 3,
+  // THE GAUGE IS A METRE DOWNSTREAM AND THAT IS GEOMETRY, NOT A TUNED CONSTANT. `RM.DLY` is the
+  // mounting distance over the line speed — the number the engineer who installed the gauge
+  // already knows — and the probe cannot recover it from data because a dead time and a slow
+  // rise move the 90% crossing identically. `invert.mjs` measures this plant at dead/rise 0.83:
+  // 83% of its response is transport delay before anything moves at all, so a horizon built from
+  // a measured settle lands entirely inside the dead zone. Undeclared the ladder refuses at
+  // 1.00x; declared, `rollmill.test.mjs` delivers 1.45x on 8 of 8 seeds.
+  // AND THE REPRESENTATIVE PROGRAM OF A REGULATOR IS A HOLD, which is the second declaration
+  // this plant needs and for the same reason as the first: it is a fact the engineer knows and
+  // the probe cannot recover. This mill's job is to hold the gap at S0 while an eccentricity
+  // disturbance acts on it — the setpoint never moves — while BOTH of the verify's built-in
+  // regimes MOVE (a filtered-noise scribble and a trapezoid from the rate limits). Without it
+  // the gate scores a regulator on tracking, twice over.
+  pilotOpts: { deadTime: RM.DLY, verifyRef: () => [RM.S0] },
   guards: [{ index: 0, max: 400 }],
   start: [RM.S0], N: RM.T_RUN, floor: 0,
   refAt: () => [RM.S0],
-  fresh: () => ({ m: RM.makeMill(1), want: [] }),
+  fresh: () => { const m = RM.makeMill(1); for (let i = 0; i < 4000; i++) m.step(RM.S0); return { m, want: [] }; },
   step: (st, ref, u) => {
     st.m.step(ref[0] + u[0]);
     // THE REFERENCE IS DELAYED TO MATCH THE MEASUREMENT — strip tracking, and what every

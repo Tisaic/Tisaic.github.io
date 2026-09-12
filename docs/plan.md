@@ -15596,3 +15596,66 @@ carrying the first.
 also identifies a whole response rather than a DC gain, so this measurement bounds the settling
 explanation and does not by itself establish the excitation one. What it does close is §59's named
 next step: the truncation account is refused, and the barrel's failure is still unexplained.
+
+### §60 — The mill is a winner, and it was never the algorithm
+
+**THE RESULT.** In the shared four-plant table the cold mill goes from **1.00x, refused** to
+**1.74x deploying a two-layer cascade** — past `rollmill.test.mjs`'s own 1.49x on the same rig.
+The tank and the barrel come back BYTE-IDENTICAL, which is what says the plant was repaired and
+the table was not moved (rule 21).
+
+**AND NEITHER REPAIR WORKS ALONE, WHICH IS WHY IT SAT UNDISCOVERED.**
+
+```
+  neither          1.01x  refused   N 14
+  deadTime only    0.72x  refused   N 42     <- WORSE than doing neither
+  warmup only      1.01x  refused   N 14
+  both             1.74x  DEPLOYS   N 42, stack 2
+```
+
+Declaring the transport delay builds a correct-length horizon (N 14 → 42, exactly reproducing
+this file's own record of a "14-step horizon" on the undeclared machine) — and on a plant still
+in its startup transient that horizon inverts the transient, so the delivered result gets WORSE.
+The warmup alone leaves the horizon inside the dead zone, where `hGrid` is structurally zero.
+Tested one at a time each repair looks useless or harmful and would have been rejected; the knobs
+are not separable, which is the same shape this project already found for `qpIters` and
+`horizonTs`.
+
+**THE FAULT WAS IN THE HARNESS, NOT THE CONTROLLER.** `millSpec.fresh()` built the plant and
+handed it straight to commissioning with NO warmup — the only one of the four specs without one.
+The tank settles 30,000 steps, the barrel 20,000, and `rollmill.test.mjs` — the harness that WINS
+on this rig — runs 4,000 before its own commissioning. The shared spec ran zero. So the pilot was
+identifying and scoring a machine that was still starting up: rules 12 and 13, one level above
+where anyone was looking.
+
+**THREE THINGS HAD TO BE ELIMINATED FIRST AND ALL THREE CAME BACK BYTE-IDENTICAL**, which is what
+made the real cause findable rather than guessable: `verifyRef` (inert because `ladder` passes
+`autoRefuse: false`, so the verify is reported and never vetoes — the 0.72x was a MACHINE score,
+not a gate), withholding the conventional rung (`NOCLASSIC=1`), and the `pilotOpts` wiring itself.
+
+**AND THE FIRST CONTROL WAS READING THE WRONG QUANTITY (rule 19).** The four-plant table's
+shipped row is IDENTICAL whether the mill refuses declared or undeclared, because a refusal
+delivers the open-loop number by construction. Reading it as "the declaration did nothing" was
+the summary of a measurement disagreeing with the measurement; the internals (N 14 → 42, basis
+`lin` → `sch`) said the option had landed all along.
+
+**A STARTUP-TRANSIENT PROBE NOW EXISTS AND IT CAUGHT A SECOND PLANT — AND THE REPAIR IS INERT
+THERE.** Measuring each plant's undriven truth over its first 5% against its last 50%:
+
+```
+  tank      7.14e-13 / 4.69e-1     0.00   starts settled
+  column    4.48e-1  / 2.34e-2    19.13   STARTS IN A TRANSIENT
+  mill      1.44e-2  / 1.53e-2     0.94   (after the repair)
+  barrel    3.50e-1  / 6.31e+0     0.06   starts settled
+```
+
+Wood-Berry starts **nineteen times** out. The same repair applied there is **INERT on the
+outcome** — cascade 0.40x → 0.39x, N 71 either way, baseline 1.393e-1 → 1.364e-1 — so it ships as
+hygiene that removes a confound from all future column work rather than as a fix. That is the
+right signature for a repair that is not the answer, and it CONFIRMS §59: the column's failure is
+interaction (RGA 2.01 against a pilot that inverts a diagonal), not its starting condition.
+
+**WHAT THIS SAYS ABOUT THE REMAINING ROSTER.** Two faults today were in the instrument rather
+than the model — this one, and `invert.mjs`'s own `WINDOW` knob that could only SHORTEN and so
+could not ask the question §59 named. Before any plant's ALGORITHM is worked, its HARNESS should
+be checked for whether it measures what it claims.
