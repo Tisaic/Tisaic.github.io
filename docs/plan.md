@@ -16644,3 +16644,21 @@ remain as the controls that price each.
 defaults, with the streaming fit target 6 requires: the arm, EMPS, the column at 2.50x and the
 barrel at 11.22x. The tank is the one refusal and it is honest (0.08x, saturated, correctly
 gated). The mill and the cart-pole have never been asked.
+
+### §68.3 THE FULL NODE TIER, WITH BOTH NEW HARNESSES IN IT
+
+```
+  ./test/run.sh --node --full --all      916 checks, 0 failures, EXIT 0, 9,064 s
+    distil-column   2.50x DEPLOYED, and its four rule-21 controls green — the cold do-nothing
+                    reproduces the recorded 43.90 and the cold BLT its 51.95 through the SHARED
+                    scoring loop, so the published comparison is not an artefact of either
+                    baseline being re-implemented
+    distil-barrel  11.22x DEPLOYED, at 861.7 s now the fourth-slowest test in the project
+```
+
+Everything this arc touched is exercised: `autostack.test.mjs` (the `distilNoLookRaw` record),
+`plants.test.mjs` (the `lookRaw` passthrough and the shared specs), `tanks.test.mjs`,
+`distil-tank.mjs` (the `closed` flag, the `act` call the scored run never made, the speed diet),
+and the ten plants. **The two plants converted this session are green from a cold suite run
+rather than from the runs that measured them**, which is the difference between a result and a
+result that ships.
