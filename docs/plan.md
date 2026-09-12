@@ -15981,3 +15981,54 @@ transfer measurement and not a fraction of what was available there. One retimin
 rescale is one held-out program, not a set. And nothing here commissions: the teacher is the
 machine-in-the-loop oracle, which is a legal commissioning procedure but is not the route the
 ladder runs.
+
+## §63 — THE DEPLOYED OBJECT REACHES THE BARREL, AND IS REFUSED BY ITS OWN FIT
+
+§62 established that the barrel's 15.11x oracle correction is 97-99% expressible by a causal map
+of the commanded reference and that 5.38x of it survives a program the map never saw. That is a
+statement about an offline regression. This asks the LADDER.
+
+### §63.1 It is reached through the shared driver, not a fourth copy of the plant's routing
+
+`rigs/ladder.mjs` now passes `spec.distil` and `spec.distilRuns` through to `AutoStack`; a spec
+declaring neither leaves the driver byte-identical, and `plants.test.mjs` run across the change
+is the control — **tank 10.53x, column 1.00x, mill 1.74x, barrel 1.05x, all checks passed**,
+every figure matching the record. `test/pilot/distil-barrel.mjs` adds exactly two fields to the
+shared `barrelSpec`: the rung's options and a training diet of four three-zone changeover
+recipes, each CYCLED so it has a lap, none of them the scored program.
+
+### §63.2 The window is DERIVED, and the derivation agrees with a route that has no rung in it
+
+Two constraints pull opposite ways (§49.11): the window must REACH the plant's memory and must
+not SPAN the training lap. Every harness here has sized it from the first alone — `distil-tank.mjs`
+carries 0.61·Tset from the arm's shipped ladder — and on this plant that is the wrong constraint
+to obey, because the barrel's settle is 7,861 steps against a 15,000-step program. The rule
+`min(0.61·settle, lap/8)` has no plant constant in it and gives **±938 raw steps**, against the
+**±983** §62.5 measured as the transfer optimum by an offline route with no rung, no teacher and
+no ladder in it. Two derivations of one number, 5% apart, on a plant sharing no physics with the
+one the rule came from. Stated as agreement and not proof: §62.5's ladder was coarse (±1965,
+±983, ±472), so it locates the optimum to about a factor of two.
+
+### §63.3 And the rung is refused — by the FIT, not by the machine
+
+```
+  ②d distilled — REFUSED   5.0069e+0   1.00x
+    the fit did not vouch for itself: prequential R² -28.576, -49.105, -63.225
+  in sample, on its own training recipes: 1.000x  1.000x  1.000x  1.000x
+```
+
+Those are not the numbers of a map that cannot express its target; a map with no information in
+it reads 0, not -63. And the in-sample column reading EXACTLY 1.000x four times is
+`distil-tank.mjs`'s own recorded signature for a correction that was never applied, rather than
+one that was applied and lost.
+
+**THE LIVE CANDIDATE IS THE ROW'S SCALES, AND IT IS THIS FILE'S OWN OPEN FINDING.** `_rowFrom`
+leads with the ABSOLUTE reference at now and follows it with DIFFERENCES from now. On the arm
+that is a joint angle in radians beside small travels, everything within an order of magnitude of
+the trailing constant — and §52.16 recorded that even there "the streaming fit returns weights
+30-150x the batch fit's on an exactly linear target and refuses rows the batch route deploys",
+left open. On the barrel the absolute term is PERCENT OF FULL POWER, 18 to 62, beside differences
+of order 0.1: one ridge and one covariance prior acting on blocks that differ by ~400x, which is
+rule 32 in the place the rule was written for. `standardize` was built for exactly this and
+§52.40 measured it as INERT on the arm — a repair that is a no-op where it was measured and
+load-bearing where it was not is the shape rule 21 says a real one has.

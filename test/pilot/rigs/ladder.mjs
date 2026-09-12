@@ -44,7 +44,7 @@ function announce() {
  */
 async function ladder(spec) {
   const { name, channels, uMax, guards, nMeasured, start, N, refAt, fresh, step, floor,
-    pilotOpts } = spec;
+    pilotOpts, distil, distilRuns } = spec;
 
   // The reference's own rate and acceleration, in COMMAND space, by differencing the program
   // it will actually run. This is what the conventional rung reads; it is not a model.
@@ -83,6 +83,14 @@ async function ladder(spec) {
     // spec could silently defeat would make the six-plant pass measure the wrong configuration.
     pilot: { nMeasured, start, guards, workspace: () => true, seed: 1, autoRefuse: false,
       ...(pilotOpts || {}), ...SOLVER },
+    // THE DISTILLED RUNG, OFFERED ONLY WHERE A SPEC SUPPLIES ITS OWN TRAINING DIET. It is the
+    // DEPLOYED object — every other plant in this driver scores the TEACHER — and §62 measured
+    // two of these four as winnable by it and won by neither: the column's oracle correction is
+    // 99% expressible by a causal map of the commanded reference AND transfers at 2.59x against
+    // 2.62x at home, and the barrel's reaches 5.38x on a program it never saw where the pilot
+    // delivers 1.05x and refuses. A spec that declares neither field leaves every number this
+    // driver produces byte-identical (rule 21).
+    ...(distil ? { distil } : {}),
   });
 
   const run = async (corr, cname) => {
@@ -124,7 +132,8 @@ async function ladder(spec) {
   };
 
   const t0 = Date.now();
-  const rep = await auto.commission({ run, drivePilot });
+  const rep = await auto.commission({ run, drivePilot,
+    ...(distilRuns ? { distilRuns } : {}) });
   console.log(`\n  ${name}`);
   console.log(auto.table());
   console.log(`    shipped ${JSON.stringify(rep.deployed)}   ${rep.base.toExponential(3)} → `

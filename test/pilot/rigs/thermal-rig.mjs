@@ -104,4 +104,4 @@ const PBOX = { lo: 18, hi: 62 };
 const UCAP = Number(process.env.UC || 12);
 
 
-export { CAP, DEAD, DT, HL, KC, KH, NOISE, NZ, PBOX, PROG, RAD, RECIPE, SEG, TA0, UCAP, gauss, lcg, makeBarrel, powerFor, quintic, rad, setpointAt, tempsAt };
+export { CAP, DEAD, DT, HL, HOLD, KC, KH, NOISE, NZ, PBOX, PROG, RAD, RECIPE, SEG, TA0, UCAP, gauss, lcg, makeBarrel, powerFor, quintic, rad, setpointAt, tempsAt };
