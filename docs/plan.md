@@ -16462,3 +16462,50 @@ session's count is twelve instrument faults to two plant findings, and the two l
 stretched window and the diet — were found because the owner said the barrel should be in the
 wheelhouse and did not accept the refusal. A refusal this project's own rules call "the strongest
 thing here" was, on this plant, four of its own defects wearing a verdict's clothes.
+
+## §67 — THE TANK CARRIED THE SAME `closed` DEFECT, AND IT IS NOT WHAT REFUSES IT
+
+§66's repairs are not local to the barrel's harness. `distil-tank.mjs` returns a CYCLIC `refAt`
+and never declared `closed` either, so §54.4's held-out 1.000x — the evidence behind CLAUDE.md's
+"the honest count for what a customer receives is 2 of 7" — was measured through the same defect
+(plan §52.14, §65.1). The lookRaw defect does NOT reach it: that harness never calls `auto.act`,
+so there is no decimated closure to fall back to.
+
+**Repaired, on its OWN diet, the tank still refuses at exactly 1.000x.** The fix is real and lands
+where it should — the in-sample column rises from §54.4's 14.512/14.294/20.769/27.819 to
+**20.399/14.081/24.475/28.720** — and changes nothing delivered. So the tank's refusal is not the
+closed-lap defect, which is the control that says the barrel's conversion was not a lucky repair
+applied blind.
+
+### §67.1 And the diet is still 3/4 quasi-static — including at PRODUCTION'S OWN RATE
+
+The teacher column gives it away in the way this file's own header describes: gains of **4.6e6,
+5.0e6, 4.1e6** on three of four recipes, which is *"not a controller result, the signature of a
+target that is already zero"* (rule 14). `distil-tank.mjs` records quasi-static as its FIRST wrong
+diet and says a rate ladder fixed it. **It fixed one recipe of four**, and the plant's own numbers
+say why:
+
+```
+  SEG 1385  ramp  969  ramp/Tset 0.35  excites
+  SEG 2770  ramp 1939  ramp/Tset 0.70  excites
+  SEG 4000  ramp 2800  ramp/Tset 1.01  QUASI-STATIC   <- production's own rate
+  SEG 6000  ramp 4200  ramp/Tset 1.52  QUASI-STATIC
+```
+
+**PRODUCTION'S OWN RAMP IS 1.01x THE PLANT'S SETTLE.** So the two constraints this project has
+been treating as independent are in direct conflict on this plant: a diet that COVERS production's
+commanded-speed envelope is mostly teaching from targets already at zero, and a diet fast enough
+to EXCITE sits outside the envelope where the coverage guard fades the correction — which is
+exactly the 1.000x this file recorded as its second wrong diet. Bracketing production's rate
+cannot resolve it, because production's rate is itself inside the quasi-static regime.
+
+**SO THE NEAR-DIET TEST WAS INVALID AS RUN AND IS NOT REPORTED AS A RESULT.** Changing the diet's
+POINTS to production's own levels while leaving its SEGMENT ladder reproduced the quasi-static
+fault (gains 4.6e6/4.3e6/3.6e6), so `DIET=near` here measures the ladder and not the proximity.
+The barrel's lesson does not transplant, and the reason is a plant property with a number on it.
+
+**WHAT WOULD SETTLE IT**, stated so the tank's status stays falsifiable rather than filed: a diet
+that decouples SPEED from RATE — smaller level changes on faster ramps, so the commanded speed
+covers production's while the ramp still excites — which no diet tried here does, and which is
+the one construction the conflict above leaves open. Until then the tank's 1.000x is honest for
+the DEPLOYED object and its 10.53x from the conventional rung is what a customer actually gets.

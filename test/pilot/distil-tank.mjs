@@ -67,12 +67,26 @@ console.log('\ndistil-tank: the DEPLOYED object on a third plant\n');
 // program: the arm's diet is polygons from the block's own designer and this is its analogue.
 // Each is CYCLED so it has a lap, which is what the distilled rung's teacher needs — a batch
 // recipe that repeats is an ordinary process, not a contrivance.
-const DIETS = [
+// AND THE DIET'S DISTANCE FROM PRODUCTION IS THE FIRST-ORDER TERM, WHICH THIS FILE LEARNED FROM
+// THE BARREL (plan §66). There, four unrelated profiles read 0.85x and four built from the
+// machine's OWN profiles in orders production never runs read 10.61x — the same rung, the same
+// window, the same teacher, only the diet moving. `DIET=near` (the default) is that construction
+// here: production runs RECIPE[0..4] in order, and these cycles are its own level pairs in other
+// sequences, none of them production's. `DIET=far` keeps the unrelated levels this file shipped
+// with, as the control that says which of the two the number came from.
+const NEAR = [
+  [RECIPE[0], RECIPE[2], RECIPE[1], RECIPE[3]],
+  [RECIPE[1], RECIPE[4], RECIPE[0], RECIPE[2]],
+  [RECIPE[3], RECIPE[0], RECIPE[4], RECIPE[1]],
+  [RECIPE[2], RECIPE[4], RECIPE[3], RECIPE[0]],
+];
+const FAR = [
   [[9.8, 11.4], [12.9, 9.3], [9.1, 12.1], [11.8, 10.2]],
   [[11.2, 9.9], [8.9, 12.4], [12.6, 10.8], [10.1, 11.1]],
   [[10.2, 12.2], [13.1, 10.4], [9.6, 9.4], [11.4, 12.6]],
   [[12.4, 11.0], [9.4, 10.6], [11.9, 12.9], [10.6, 9.1]],
 ];
+const DIETS = process.env.DIET === 'far' ? FAR : NEAR;
 
 // THE DIET'S RATE LADDER, AND IT TOOK TWO WRONG DIETS TO ARRIVE AT, BOTH RECORDED.
 //
@@ -164,6 +178,13 @@ async function once(seed) {
     return {
       lap,
       refAt: (k) => { const h = ref(k); return voltsFor(G, h[0], h[1]); },
+      // THE LAP IS CLOSED AND MUST SAY SO (plan §52.14, §65.1). `refOf` wraps at `lap`, but
+      // `addProgram` clamps the window at index 0 unless the run declares itself closed — so
+      // without this the fit skips the first REACH samples of every recipe AND the deployed
+      // policy then reads wrapped windows at every lap start that the fit never saw. It was
+      // missing here from the day this file was written, so §54.4's held-out 1.000x was measured
+      // through it; the row count is what says so, and `distilkit.mjs` now checks it for free.
+      closed: true,
       run: async (corr) => {
         const p = settled(rec, seg);
         let s2 = 0, n = 0;
