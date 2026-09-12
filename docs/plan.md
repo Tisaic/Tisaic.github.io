@@ -15659,3 +15659,47 @@ interaction (RGA 2.01 against a pilot that inverts a diagonal), not its starting
 than the model — this one, and `invert.mjs`'s own `WINDOW` knob that could only SHORTEN and so
 could not ask the question §59 named. Before any plant's ALGORITHM is worked, its HARNESS should
 be checked for whether it measures what it claims.
+
+### §61.1 — Every plant has headroom. None is invalid. The gap is ours.
+
+`headroom.mjs` run on all four, four passes, two block resolutions, with the LTI prediction
+agreeing with the machine on EVERY row — so the screen is validated rather than assumed:
+
+```
+  plant    oracle headroom        pilot delivers   verdict
+  tank     47.82x -> 249.64x      10.53x           gap is ours
+  column    2.65x ->   6.15x       1.00x refused   gap is ours
+  mill      1.07x ->   1.69x       1.74x           pilot BEATS the bound
+  barrel   15.11x                  1.05x           gap is ours
+```
+
+**NO PLANT DESERVES A STRIKE.** The screen was built to let a plant be retired for a measured
+reason, and on all four it says the opposite: there is 2.6x to 250x of correction available that
+the pilot is not taking. The mandate's question was never whether these plants are valid.
+
+**AND THE MILL EXCEEDING THE BOUND IS A VALIDATION, NOT A CONTRADICTION.** The oracle's
+correction is piecewise-constant on 167-step blocks while the pilot acts every step, so a finer
+correction does better — which is what the instrument's own header says a small bound means. The
+mill is also the plant nearest saturation: 1.74x delivered against 1.69x from a 119-unknown
+oracle, so on one plant of four the pilot is already taking essentially everything available at
+that resolution.
+
+**THE RESOLUTION DEPENDENCE IS THE SECOND FINDING AND IT IS LARGE.** Shrinking the block from
+400 to 133 steps takes the tank from 47.8x to 249.6x and the column from 2.65x to 6.15x. These
+are LOWER bounds and the true headroom is higher; a bound that moves this much with its own
+discretisation is quoted as a floor and never as a ceiling.
+
+**WHAT THIS DOES NOT SAY, AND IT IS THE WHOLE OF THE NEXT QUESTION.** The oracle is NON-CAUSAL:
+it chooses its correction knowing the entire future error, which no deployed controller can. So
+15.1x on the barrel bounds what is AVAILABLE, not what is REACHABLE. The right next measurement
+is §49's analysis transplanted: regress the oracle's correction onto a window of the COMMANDED
+REFERENCE and report held-out R². Where the reference predicts the oracle, a distilled policy
+can capture it and the pilot's failure is in the forecast or the QP; where it does not, the
+oracle is exploiting future ERROR knowledge and the headroom is real but unreachable — which
+would be a sharper and more useful limit than "this plant is hard".
+
+**AND IT REWRITES THE BARREL'S STANDING VERDICT.** This file has recorded the barrel's refusal as
+"proved correct" on a sixteen-fold sweep of believed plant gain in which every real correction
+was worse than nothing. That sweep was of the PILOT's correction, and it establishes only that
+the pilot was right to decline. An oracle feedforward of the same class, on the same program,
+delivers 15.11x. The refusal is correct FOR THE PILOT and wrong ABOUT THE PLANT.
