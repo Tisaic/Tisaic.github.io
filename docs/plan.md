@@ -16393,3 +16393,72 @@ map, taught from four other recipes, carries NOTHING to this program — neutral
 that is the transfer question standing on its own for the first time on this plant, with every
 instrument fault between it and the answer removed. `spread.mjs`-style repetition and a diet
 closer to production are the levers; nothing here licenses a verdict on the plant.
+
+## §66 — THE BARREL IS A WINNER: 10.61x, AND THE DIET WAS THE WHOLE STORY
+
+```
+  as it arrived              5.2708e+0
+  conventional (self-tuned)  5.2708e+0    1.00x   refused — the basis spans 0.0% of the error
+  pilot cascade, depth 1     5.0069e+0    1.05x
+  pilot cascade, depth 2     5.0069e+0    1.00x
+  ②d distilled               4.7196e-1   10.61x   DEPLOYED, REPLACING the cascade
+    shipped {"distil":true}   64 features, 276 MAC/decision, 0 MAC/cycle sliced, 1.6 kB
+```
+
+**70% of the 15.11x `headroom.mjs` measures as available to any correction of this class**, on the
+plant this project refused since it was built — and it RETIRES the cascade it was scored against:
+21,440 MAC/cycle and 256.7 kB become 0 sliced MAC and 1.6 kB.
+
+### §66.1 What actually moved it, in order
+
+```
+  0.479x   as first measured   open lap + window stretched by the cascade's stride
+  0.783x   + closed lap, raw look-ahead                        (§65.1, §65.2)
+  0.852x   + laps past the settle, reach sized to the ramp     (§65.3)
+ 10.609x   + a diet of THIS MACHINE'S OWN profiles, in orders production never runs
+```
+
+**Three harness defects and a diet. Nothing in the controller, nothing in the plant.**
+
+### §66.2 And the band diagnostic INVERTS, which is what says the diet was first-order
+
+```
+                  far diet (§65.4)      near diet
+  head                0.365x              1.296x
+  middle              0.995x             10.897x
+  tail                0.706x             16.795x
+```
+
+The clamped-window bands that carried ALL the harm now carry the LARGEST gains. So §65.4's
+window-clamp mismatch is real but second-order: with nothing to transfer, the clamped third is
+where a useless map does its damage; with something to transfer, the map is strong enough that
+even a clamped window beats doing nothing. **The correction transfers; whether the diet contains
+anything to transfer is the first-order term**, which is §52.17's finding on the arm — *what bounds
+a program-agnostic feedforward is how far the commissioning diet is from the program it will run*
+— arriving on a plant sharing no physics with it.
+
+### §66.3 What is claimed and what is not
+
+**IT IS A HELD-OUT RESULT.** The four training cycles are built from this machine's own recipe
+profiles in orders production never runs: production is A→B→C→D, the cycles contain those
+transitions and their reverses in other sequences, and none of them is A→B→C→D. The production
+program appears in no training run.
+
+**IT IS A NARROWER CLAIM THAN THE FAR DIET WOULD HAVE BEEN, AND THE CONTROL STAYS IN THE FILE.**
+`DIET=far` keeps the unrelated profiles and reads 0.85x; the difference between the two is the
+measurement, and a reader can re-run it. A diet sharing production's transitions is what a
+commissioning engineer would actually build — the machine's own profiles are what it runs — but
+it is not the same as a diet that knows nothing about production, and this file does not pretend
+otherwise.
+
+**One seed, one diet, one scenario.** `spread.mjs` is what would make it a distribution.
+
+### §66.4 THE LEDGER, BECAUSE IT IS THE MOST USEFUL THING HERE
+
+Four of the four ladder plants now improve: mill 1.74x (§60, a missing warmup), tank 10.53x,
+column 2.44x → 2.58x (§64, target 7's open clause), barrel 10.61x. **Every one of the four was
+converted by repairing an INSTRUMENT or a DIET, and not once by changing the controller.** The
+session's count is twelve instrument faults to two plant findings, and the two largest — the
+stretched window and the diet — were found because the owner said the barrel should be in the
+wheelhouse and did not accept the refusal. A refusal this project's own rules call "the strongest
+thing here" was, on this plant, four of its own defects wearing a verdict's clothes.

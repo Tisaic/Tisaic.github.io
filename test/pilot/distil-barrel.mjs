@@ -76,8 +76,17 @@ console.log('\ndistil-barrel: the DEPLOYED object on the plant we have always re
 // production WITH PRODUCTION INSIDE and every recipe contributes the same rows. It needs no
 // per-program stride, which matters: `AutoStack` passes ONE stride to every program, and a
 // per-recipe weighting would be a library change made to rescue a diet.
-const POINTS = [[175, 195, 205], [190, 210, 218], [178, 198, 208],
+// THE DIET'S PROFILES. Default: this machine's OWN recipe points, in orders production never
+// runs — `DIET=near`. §65.4 left the barrel neutral rather than harmful once its deploy path was
+// repaired, so what is untested is whether a diet CLOSER to production carries anything, and the
+// closest legal one shares production's transitions while holding out its sequence. Production
+// runs A→B→C→D; these cycles contain those transitions and their reverses in other orders, and
+// none of them is A→B→C→D. `DIET=far` restores the unrelated profiles as the control, because a
+// diet that wins only by being production in disguise is a memory and the comparison says which.
+const NEAR = TH.RECIPE;
+const FAR = [[175, 195, 205], [190, 210, 218], [178, 198, 208],
   [185, 205, 215], [170, 190, 200], [192, 212, 220]];
+const POINTS = process.env.DIET === 'far' ? FAR : NEAR;
 // EVERY RECIPE'S LAP MUST EXCEED THE PLANT'S OWN SETTLE, AND THEY SHOULD BE EQUAL. A lap of
 // 5,000 steps on a plant that settles in 7,861 is a "converged" correction the machine never
 // reached steady state inside — and because the window rule takes the SHORTEST lap, that one
@@ -85,7 +94,9 @@ const POINTS = [[175, 195, 205], [190, 210, 218], [178, 198, 208],
 // Four setpoints each at the production segment gives laps of 20,000: longer than the settle,
 // equal across the diet so no recipe outweighs another, and a reach of ±2,500 against a
 // production ramp of SEG-HOLD = 3,500 steps, which is the feature the correction has to invert.
-const PICK = [[0, 1, 2, 3], [2, 3, 4, 5], [0, 2, 4, 5], [1, 3, 5, 0]];
+const PICK = process.env.DIET === 'far'
+  ? [[0, 1, 2, 3], [2, 3, 4, 5], [0, 2, 4, 5], [1, 3, 5, 0]]
+  : [[0, 2, 1, 3], [1, 0, 3, 2], [0, 3, 1, 2], [2, 0, 1, 3]];
 const DIETS = PICK.map((ix) => ix.map((i) => POINTS[i]));
 // THE DIET'S RATE LADDER, WHICH IS THE LEVER §63.6 MEASURED AND HAS NO CONSTANT IN IT. The first
 // diet ran every recipe at SEG 2500 against the production program's 5000, so every training ramp
