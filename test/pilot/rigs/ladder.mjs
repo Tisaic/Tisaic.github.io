@@ -14,6 +14,7 @@
  */
 import { AutoStack } from '../../../lib/pilot/autostack.js';
 import { motionBasis } from '../../../lib/pilot/classic.js';
+import { into } from './meter.mjs';
 // THE SOLVER BUDGET AS A KNOB, so `docs/plan.md` step 6b can be gated on plants that share
 // no physics. Both are pass-through Pilot options and both default to the library's own
 // values, so an unset environment runs byte-identically (rule 21). The proposed joint change
@@ -22,6 +23,15 @@ import { motionBasis } from '../../../lib/pilot/classic.js';
 const SOLVER = {};
 if (process.env.HORIZON_TS) SOLVER.horizonTs = +process.env.HORIZON_TS;
 if (process.env.QPITERS) SOLVER.qpIters = +process.env.QPITERS;
+
+// THE TEACHER'S OWN BUDGET AS A KNOB, because it is where the PRODUCT's plant time goes and
+// nothing here had ever priced it (plan §72). `hff` spends `passes` refinement laps per training
+// run on top of its identification, and §49's law says a MORE converged prefix teaches a WORSE
+// policy — which, if it holds here, makes a shorter teacher cheaper AND better rather than a
+// trade. Unset is the library's own 24 and byte-identical (rule 21).
+const HFF = {};
+if (process.env.TPASSES) HFF.passes = +process.env.TPASSES;
+if (process.env.TTRIALS) HFF.trialPasses = +process.env.TTRIALS;
 
 // THE SCAN THE LADDER HAS TO FIT, when one is stated. `BUDGET=mac,bytes` turns it on; unset,
 // nothing is enforced and every number in this file is what it always was. It exists because
@@ -34,6 +44,7 @@ const BUDGET = process.env.BUDGET
 /** Print the active overrides at the caller's chosen point in its own output. */
 function announce() {
   if (Object.keys(SOLVER).length) console.log(`  solver budget override: ${JSON.stringify(SOLVER)}`);
+  if (Object.keys(HFF).length) console.log(`  teacher budget override: ${JSON.stringify(HFF)}`);
   if (BUDGET) console.log(`  scan budget: ${BUDGET.mac.toLocaleString()} MAC/cycle, `
     + `${(BUDGET.bytes / 1024).toFixed(0)} kB`);
 }
@@ -96,9 +107,22 @@ async function ladder(spec) {
     // delivers 1.05x and refuses. A spec that declares neither field leaves every number this
     // driver produces byte-identical (rule 21).
     ...(distil ? { distil } : {}),
+    ...(Object.keys(HFF).length ? { hff: HFF } : {}),
   });
 
-  const run = async (corr, cname) => {
+  // WHERE THE PLANT TIME GOES, LABELLED IN ONE PLACE (plan §72.4). `AutoStack` calls back into
+  // exactly three things that advance the machine — this scored `run`, `drivePilot`, and the
+  // host's own diet closures — and the three are completely different levers: a verify is one
+  // program, the cascade is a probe-and-excite, and the diet is the teacher iterating a prefix to
+  // convergence on every training run. A total cannot say which to cut, and this project has
+  // already shipped one accounting that closed off the right lever by guessing that split
+  // (target 4's "~10%" against `_cost.mjs`'s measured 69%). Anything the labels do not cover
+  // lands in `other` rather than being attributed to the phase above it (rule 25).
+  const inPhase = async (label, fn) => {
+    const back = into(label);
+    try { return await fn(); } finally { into(back); }
+  };
+  const run0 = async (corr, cname) => {
     const st = fresh();
     auto.beginRun();
     let ss = 0, n = 0;
@@ -136,7 +160,8 @@ async function ladder(spec) {
     }
     return { score: Math.sqrt(ss / n), err };
   };
-  const drivePilot = async (stk) => {
+  const run = (corr, cname) => inPhase('verify', () => run0(corr, cname));
+  const drivePilot0 = async (stk) => {
     const st = fresh();
     let guard = 0;
     while (stk.phase !== 'done' && guard++ < 4e6) {
@@ -147,10 +172,29 @@ async function ladder(spec) {
       stk.observe(r.measured, r.truth);
     }
   };
+  const drivePilot = (stk) => inPhase('cascade', () => drivePilot0(stk));
 
   const t0 = Date.now();
+  // The diet's run closures belong to the plant's harness, so they are labelled HERE by wrapping
+  // what `distilRuns` hands back — one place, and a harness that never heard of the meter is
+  // still counted correctly (rule 61).
+  // Every closure a run descriptor can carry is wrapped, not just `run` — `teach`, `converge` and
+  // `captureState` all advance the machine, and a phase that is added later and not listed here
+  // lands in `other` rather than being credited to whatever ran before it (rule 25).
+  // PER TRAINING RUN, because the aggregate hides the lever. On Wood-Berry three of four runs are
+  // DROPPED below the rung's 1.5x bar (plan §64) and each one paid a full identification first, so
+  // the question "how much of the teacher's time bought rows that were kept" is the one that
+  // decides whether the diet or the teacher is the thing to cut — and a single `teacher` bucket
+  // cannot answer it.
+  const metered = distilRuns ? async () => (await distilRuns()).map((t, i) => {
+    const w = { ...t, run: (...a) => inPhase(`teacher#${i}`, () => t.run(...a)) };
+    for (const k of ['teach', 'converge', 'captureState']) {
+      if (t[k]) w[k] = (...a) => inPhase(`teacher#${i}`, () => t[k](...a));
+    }
+    return w;
+  }) : null;
   const rep = await auto.commission({ run, drivePilot,
-    ...(distilRuns ? { distilRuns } : {}) });
+    ...(metered ? { distilRuns: metered } : {}) });
   console.log(`\n  ${name}`);
   console.log(auto.table());
   console.log(`    shipped ${JSON.stringify(rep.deployed)}   ${rep.base.toExponential(3)} → `
@@ -188,4 +232,4 @@ async function ladder(spec) {
 }
 
 
-export { ladder, announce, SOLVER, BUDGET };
+export { ladder, announce, SOLVER, BUDGET, HFF };

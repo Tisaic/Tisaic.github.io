@@ -16831,3 +16831,132 @@ or stochastic one — the entry wander here — which is what feedback is for, a
 the pilot cascade delivers 1.74x against the distilled map's 1.15x. So the mill remains a plant
 where a customer receives the cascade, and what changed is that the deployed object is no longer
 structurally excluded from regulators.
+
+## §72 The commissioning cost column: the recorded table prices the wrong object
+
+The next column by gap after DIS is **COM**, 3/10 against PID+FF's 8/10, and CLAUDE.md's own
+target 4 quotes `test/pilot/commtime.mjs`:
+
+```
+  cold mill     166,400 steps      5.5 min     MET
+  quad tank     252,613 steps        7.0 h     MISSED
+  barrel        328,270 steps     3.8 days     MISSED
+  Wood-Berry     91,400 steps     6.3 days     MISSED
+  EMPS           48,400 steps            —     UNKNOWN — the rig states no clock
+  2R arm        165,643 steps            —     UNKNOWN — the rig states no clock
+```
+
+Before improving a number, check the instrument (rule 17). **Every line above counts the steps a
+bare `Pilot` advanced — the TEACHER.** Under the memory's retirement the teacher is not what a
+machine receives: the deployed artefact is `distil.js`'s weight vector, and the route to it adds a
+DIET of training runs whose prefixes have to be CONVERGED before one row exists. CLAUDE.md names
+that cost in prose — *"the distillation route needs iteration converged on about six training
+programs, which is laps on real hardware producing nothing"* — and nothing in this repository
+counted it.
+
+### §72.1 The meter goes in the plant, not in the harnesses
+
+`test/pilot/rigs/meter.mjs` is one counter ticked inside each rig's own `step`. It is there and
+not in the harnesses because every harness advances its plant from a different place — the
+ladder's scored `run`, its `drivePilot`, and each diet closure's own loop — so a counter wired per
+call site misses the next call site added, and a per-harness copy of the arithmetic is rule 61
+with the ink still wet. One tick inside the plant cannot be bypassed by any caller and counts the
+teacher and the product on the same axis.
+
+`distilkit.mjs`'s `priceFrom()` opens it and `close()` prints, in a wording `commtime.mjs` scrapes
+SEPARATELY from the teacher's line, because the second column is not a correction of the first —
+they are the costs of two different objects and only one of them ships. It is closed the moment
+the ladder returns: `reportDistil`'s in-sample column re-runs every training program, and charging
+that would price the instrument rather than the product.
+
+### §72.2 What the product actually costs, and it changes target 4's verdict
+
+Byte-identity control first (rule 21): the mill still reads **1.153x** and the column **2.50x**
+with the meter in, so the counter changed nothing.
+
+```
+  plant         TEACHER            PRODUCT           factor
+  cold mill     5.5 min    MET     4.6 h    MISSED     50x
+  quad tank     7.0 h      MISSED  18.9 days MISSED    65x
+  Wood-Berry    6.3 days   MISSED  249 days MISSED     40x
+```
+
+**The mill was the ONE plant of four meeting "commissioning in minutes", and the object that
+actually deploys there costs fifty times more and misses.** So target 4 is not merely unmet on
+five plants of six — it is unmet on the plant it claimed, for the object that ships, and the
+teacher column was measuring a component the retirement had already removed from the deliverable.
+Nothing here is a regression; it is the first honest reading of a number that has always been
+quoted about the wrong thing.
+
+### §72.3 And measuring it found a claim the harness does not deliver
+
+Running `distil-tank.mjs` at its committed defaults reads **0.08x, REFUSED**, where §70 records
+the tank as a **1.80x win**. Both are true: §70 measured at `RIDGE=1e-1` and **never made it the
+default**, leaving the harness on `1e-6` — the arm's value, carried, which its own comment says in
+so many words ("1e-6 was carried here from the arm and never re-derived (rule 31)") and then
+leaves in place. A win that appears only under an environment variable is not a win the product
+delivers, and the standing claim was wrong for two sections.
+
+The fix is not to write `1e-1` into the tank's harness — that is a per-plant constant, and "no
+per-plant constants; every threshold re-derived from measurement" is this project's single
+strongest claim. **The ridge is chosen by the machine.** `AutoStack`'s ②d rung now takes an
+optional `ridges` ladder, refits the SAME converged prefixes at each candidate, SCORES EACH ON THE
+MACHINE, and takes rule 42's band — among candidates within 5% of the best measured improvement,
+the LARGEST ridge, which is the smoothest map and rule 42's own tie-break.
+
+Three things make it affordable and honest rather than a sweep with a nicer name:
+
+- **The expensive half is already paid.** Converging the teacher on the diet happens ONCE; a
+  candidate is a refit of the retained prefixes plus one scored run. `select.mjs`'s established
+  method ("commission k times and keep the best") costs k commissionings; this costs k scored runs.
+- **The fit's own score cannot do it.** On the tank `heldOutR2` is monotone DECREASING in the ridge
+  and would take the worst cell of five. That is `distil.js`'s own "the gate is a PRE-FILTER and
+  the decision is a machine-scored verify", holding for the one constant nobody had put through it.
+- **The band is on the IMPROVEMENT, not the residual**, or doing nothing falls inside it and wins
+  on smoothness — rule 42's own warning, and the reason the bar is the same one the winner is
+  finally judged against.
+
+The ladder is a fixed geometric grid over six decades and is a DESIGN in the same sense as the
+offset `SHAPE`: it carries no plant's number, which is the entire point.
+
+### §72.4 Where the plant time actually goes, and it is not where a cut would have been aimed
+
+A total says target 4 is missed; it does not say what to cut. `rigs/ladder.mjs` labels the three
+things `AutoStack` calls back into — the scored `run`, `drivePilot`, and the host's diet closures
+— in ONE place, and the meter buckets by label. Anything unlabelled lands in `other` rather than
+being credited to the phase above it (rule 25), which is why `distil-tank.mjs` read `other 100%`
+until it labelled its own phases: it drives `AutoStack` directly rather than through the driver.
+
+```
+  Wood-Berry   teacher 242.5 days (96%)  ·  cascade 4.9 days (2%)  ·  verify 4.2 days (2%)
+  cold mill    teacher   4.4 h   (94%)  ·  cascade 9.1 min (3%)  ·  verify 8.8 min (3%)
+```
+
+**The verify is 2-3%.** Every instinct in this file says a machine-scored ladder is the expensive
+part — it is what `select.mjs` prices at k commissionings and what made the ridge ladder look like
+a cost — and it is a rounding error. The commissioning IS the teacher converging the diet, on two
+plants sharing no physics.
+
+### §72.5 The teacher's refinement budget is 24 and the machine wants 4 — cheaper AND better
+
+`hff`'s `passes: 24` is another carried constant: it was derived on the arm, and rule 31 says
+re-derive it. Swept on Wood-Berry with everything else held, `TPASSES` against delivered and
+against what the plant paid:
+
+```
+  TPASSES      plant time     delivered
+      1        235.7 days       3.271x
+      2        239.1 days       3.287x
+      4        245.7 days       3.510x   <- rule 42's pick
+      8        251.6 days       2.978x
+     24        251.6 days       2.978x   (the default; `_refine` stops early, so 8 and 24 agree)
+```
+
+Two findings, and the second is the one that matters. **§49's law holds here — a more converged
+teacher teaches a worse policy** (3.510x at 4 passes against 2.978x at 8), so cutting the budget
+is not a trade at all: 2.4% less plant time and 18% better delivery. And **the refinement is only
+6% of the teacher's own cost** (235.7 days at one pass against 251.6 at twenty-four), so cutting
+it does not touch COM. The other 94% is `hff`'s IDENTIFICATION — probe sets and candidate trials —
+paid once per training run *including the three of four this plant then DROPS* below the rung's
+1.5x bar (plan §64). That is the lever this decomposition exposes and the earlier accounting could
+not have found, and it is named here rather than claimed as taken.

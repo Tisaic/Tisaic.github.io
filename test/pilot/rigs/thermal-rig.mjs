@@ -5,6 +5,8 @@
  * plant is exactly how two copies drift apart, which this project has paid for before; the
  * narrative for every number, and the rig's own validation, stays in `thermal.test.mjs`.
  */
+
+import { tick } from './meter.mjs';
 // --------------------------------------------------------------------------- plant
 const NZ = 3;
 const CAP = 6000;        // J/K per zone
@@ -39,6 +41,7 @@ function makeBarrel(seed) {
       return TA0 + 0.6 * Math.sin(2 * Math.PI * kk / 9300) + 0.4 * Math.sin(2 * Math.PI * kk / 4100);
     },
     step(P) {
+      tick();
       const Ta = this.ambient(k);
       const d = [];
       for (let i = 0; i < NZ; i++) {

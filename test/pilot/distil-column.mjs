@@ -36,7 +36,7 @@
  */
 import { ladder, announce } from './rigs/ladder.mjs';
 import { wbSpec } from './rigs/specs.mjs';
-import { deriveWindow, reportDistil } from './rigs/distilkit.mjs';
+import { deriveWindow, reportDistil, priceFrom, ridgeLadder } from './rigs/distilkit.mjs';
 import * as WB from './rigs/woodberry-rig.mjs';
 
 if (process.env.SUITE !== 'full') {
@@ -132,13 +132,18 @@ const spec = { ...wbSpec,
   ...(process.env.MIMO === '1'
     ? { pilotOpts: { ...(wbSpec.pilotOpts || {}), mimo: true } } : {}),
   distil: { refDim: 2, ridge: env('RIDGE', 1e-6), offsets: OFFSETS,
+    ...(ridgeLadder() ? { ridges: ridgeLadder() } : {}),
     ...(process.env.STD === '1' ? { standardize: true } : {}),
     ...(process.env.ONLINE === '0' ? { online: false } : {}) },
   distilRuns };
 
 announce();
+const price = priceFrom();
 if (process.env.MIMO === '1') console.log('  pilotOpts + {"mimo":true}');
 const { rep, auto } = await ladder(spec);
+// Closed the moment the ladder returns: `reportDistil`'s in-sample column re-runs every
+// training program, and that is SCORING rather than commissioning (plan §72).
+price.close({ dt: WB.DT, unit: 'min', rep });
 
 const { inSample } = await reportDistil({ rep, runs: distilRuns(),
   nFeat: OFFSETS.length * 2 + 1, auto });

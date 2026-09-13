@@ -40,7 +40,9 @@
  * Run: SUITE=full node test/pilot/distil-tank.mjs   [SEEDS=1,2]  [GRADE=fast]
  */
 import { AutoStack } from '../../lib/pilot/autostack.js';
-import { UCAP, makeTanks, voltsFor, SEG, HOLD, RECIPE, quintic, refAtStep, PROG }
+import { priceFrom, ridgeLadder } from './rigs/distilkit.mjs';
+import { into } from './rigs/meter.mjs';
+import { UCAP, makeTanks, voltsFor, SEG, HOLD, RECIPE, quintic, refAtStep, PROG, DT }
   from './rigs/tanks-rig.mjs';
 
 if (process.env.SUITE !== 'full') {
@@ -196,7 +198,11 @@ async function once(seed) {
     // from the WORST in-sample fit of the four. That is overfitting, and it is §49's own law
     // ("a more converged prefix teaches a worse policy") arriving as fit capacity rather than as
     // teacher convergence. 1e-6 was carried here from the arm and never re-derived (rule 31).
+    // THE TEACHER'S BUDGET, matching `rigs/ladder.mjs`'s knob so the sweep is the same experiment
+    // on every plant (rule 61). Unset is the library's own 24 and byte-identical.
+    ...(process.env.TPASSES ? { hff: { passes: +process.env.TPASSES } } : {}),
     distil: { refDim: 2, ridge: Number(process.env.RIDGE || 1e-6), offsets: OFFSETS,
+      ...(ridgeLadder() ? { ridges: ridgeLadder() } : {}),
       ...(process.env.STD === '1' ? { standardize: true } : {}),
       ...(process.env.ONLINE === '0' ? { online: false } : {}) },
   });
@@ -210,7 +216,14 @@ async function once(seed) {
   // bare machine's error to five figures, and those cannot both be true of one deploy path. This
   // prints what the SCORING loop actually added, per candidate, so the two can be compared
   // instead of reasoned about (rule 16: put the question to the machine).
-  const run = async (corr, cname) => {
+  // WHERE THE PLANT TIME GOES (plan §72.4). This harness drives `AutoStack` directly rather than
+  // through `rigs/ladder.mjs`, so it labels its own phases; unlabelled work lands in `other`
+  // rather than being credited to the phase above it (rule 25).
+  const inPhase = async (label, fn) => {
+    const back = into(label);
+    try { return await fn(); } finally { into(back); }
+  };
+  const run0 = async (corr, cname) => {
     const p = makeTanks(G);
     for (let i = 0; i < 30000; i++) p.step(start[0], start[1]);
     let s2 = 0, n = 0, uPk = 0;
@@ -252,6 +265,7 @@ async function once(seed) {
   };
 
   /** The training diet: four recipes the scored program is not one of. */
+  const run = (corr, cname) => inPhase('verify', () => run0(corr, cname));
   const distilRuns = () => DIETS.map((rec, di) => {
     const seg = DSEGS[di % DSEGS.length];
     const lap = seg * rec.length, ref = refOf(rec, seg);
@@ -275,7 +289,7 @@ async function once(seed) {
       // missing here from the day this file was written, so §54.4's held-out 1.000x was measured
       // through it; the row count is what says so, and `distilkit.mjs` now checks it for free.
       closed: true,
-      run: async (corr) => {
+      run: (corr) => inPhase(`teacher#${di}`, async () => {
         const p = settled(rec, seg);
         let s2 = 0, n = 0;
         const e0 = new Float64Array(lap), e1 = new Float64Array(lap);
@@ -288,11 +302,16 @@ async function once(seed) {
           if (k >= lap) { s2 += (p.h[0] - h[0]) ** 2 + (p.h[1] - h[1]) ** 2; n += 2; }
         }
         return { score: Math.sqrt(s2 / n), err: [e0, e1] };
-      },
+      }),
     };
   });
 
+  // WHAT THE PRODUCT COSTS THE PLANT, metered at the plant's own `step` (plan §72). Closed the
+  // moment the commissioning returns: everything after it — the in-sample column, the held-out
+  // program — is SCORING, and charging it would price the instrument rather than the product.
+  const price = priceFrom();
   const rep = await auto.commission({ run, distilRuns });
+  price.close({ dt: DT, rep });
 
   // THE SPLIT THAT SAYS *WHY*, and the one `distil-arm.mjs` exists to make: score the fitted
   // policy on its OWN TRAINING RUNS. Helps them and refuses the held-out recipe -> TRANSFER, and
@@ -358,7 +377,21 @@ async function once(seed) {
     console.log(`    APPLIED on production: peak |u| ${uPk.toExponential(3)}, rms `
       + `${Math.sqrt(u2 / (2 * PROG)).toExponential(3)}, authority ${UCAP} — `
       + (uPk < 1e-9 ? 'ZERO, so the rung never acted'
-        : 'NON-ZERO, so it acted and delivered nothing'));
+        : uPk >= 0.999 * UCAP ? 'SATURATED at its cap'
+        : 'NON-ZERO and off its cap'));
+    // THE RIDGE LADDER'S OWN TABLE, and this plant is the reason it exists (plan §72.3). The
+    // MACHINE column and the fit's own held-out column order INVERSELY here, so a report showing
+    // one alone would reproduce the fault the ladder removes.
+    if (rep.distil.ridges) {
+      console.log('    the RIDGE LADDER, scored on the machine:');
+      for (const c of rep.distil.ridges) {
+        console.log(`      ridge ${String(c.ridge).padStart(7)}  `
+          + `machine ${c.score === null ? 'not scored (the fit refused)' : c.score.toExponential(4)}`
+          + `  held-out ${JSON.stringify(c.heldOutR2)}`
+          + (c.ridge === rep.distil.ridgePicked ? '   <- PICKED (rule 42: largest in the band)' : ''));
+      }
+    }
+    if (rep.distil.ridgeNote) console.log(`    ${rep.distil.ridgeNote}`);
   }
 
   let inSample = null;

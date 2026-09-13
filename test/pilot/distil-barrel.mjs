@@ -52,7 +52,7 @@
  */
 import { ladder, announce } from './rigs/ladder.mjs';
 import { barrelSpec } from './rigs/specs.mjs';
-import { deriveWindow, reportDistil } from './rigs/distilkit.mjs';
+import { deriveWindow, reportDistil, priceFrom, ridgeLadder } from './rigs/distilkit.mjs';
 import * as TH from './rigs/thermal-rig.mjs';
 
 if (process.env.SUITE !== 'full') {
@@ -202,6 +202,7 @@ const spec = { ...barrelSpec,
   // covariance prior act on blocks ~400x apart. Measured on this plant: 8.69x → 11.22x.
   // `STD=0` turns it off as the control.
   distil: { refDim: 3, ridge: env('RIDGE', 1e-6), offsets: OFFSETS,
+    ...(ridgeLadder() ? { ridges: ridgeLadder() } : {}),
     ...(process.env.STD === '0' ? {} : { standardize: true }),
     // AND THE FIT STREAMS BY DEFAULT, WHICH §63.6 SAID IT COULD NOT. That section measured the
     // streaming shared-covariance route failing to find a fit the batch route found (held-out -20
@@ -213,7 +214,13 @@ const spec = { ...barrelSpec,
   distilRuns };
 
 announce();
+// WHAT THE PRODUCT COSTS THE PLANT, metered at the plant's own `step` so no caller can
+// bypass it (plan §72). Opened here and closed the moment the ladder returns, because
+// `reportDistil`'s in-sample column re-runs every training program and that is SCORING, not
+// commissioning — charging it would price the instrument.
+const price = priceFrom();
 const { rep, auto } = await ladder(spec);
+price.close({ dt: TH.DT, rep });
 
 // ---------------------------------------------------------------- what it says and why
 const { inSample } = await reportDistil({ rep, runs: distilRuns(),

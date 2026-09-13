@@ -5,6 +5,8 @@
  * plant is exactly how two copies drift apart, which this project has paid for before; the
  * narrative for every number, and the rig's own validation, stays in `rollmill.test.mjs`.
  */
+
+import { tick } from './meter.mjs';
 // --------------------------------------------------------------------------- plant
 const MM = 500;            // mill modulus, kN/mm
 const QM = 250;            // material modulus, kN/mm
@@ -36,6 +38,7 @@ function makeMill(seed) {
     quiet: false,
     ecc(kk) { return this.quiet ? 0 : A_ECC * Math.sin(2 * Math.PI * F_ECC * kk * DT); },
     step(Scmd) {
+      tick();
       S += (DT / TAU_A) * (Scmd - S);                    // hydraulic capsule
       const H = this.entryAt(k), e = this.ecc(k);
       this.h = (MM * (S + e) + QM * H) / (MM + QM);

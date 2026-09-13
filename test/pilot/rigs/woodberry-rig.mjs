@@ -5,6 +5,8 @@
  * plant is exactly how two copies drift apart, which this project has paid for before; the
  * narrative for every number, and the rig's own validation, stays in `woodberry.test.mjs`.
  */
+
+import { tick } from './meter.mjs';
 // ------------------------------------------------------------------- the plant
 const DT = 0.1;                                   // minutes per step
 const K = [[12.8, -18.9], [6.6, -19.4]];          // steady gains
@@ -20,6 +22,7 @@ function makeColumn() {
   return {
     y: [0, 0],
     step(u) {
+      tick();
       hist.push([u[0], u[1]]);
       if (hist.length > MAXD + 2) hist.shift();
       for (let i = 0; i < 2; i++) {

@@ -23,6 +23,88 @@
  * window could span, so a diet of mixed rates is bounded by its fastest recipe.
  */
 
+import { count, reset, split } from './meter.mjs';
+
+/**
+ * WHAT THE PRODUCT COSTS THE PLANT, on the plant's own clock (plan §72).
+ *
+ * `commtime.mjs` collects the line each plant test prints, and every one of those counts the
+ * steps a bare `Pilot` advanced — the TEACHER. Under the memory's retirement the teacher is not
+ * the product, and the route to the product adds a DIET whose prefixes must be converged before
+ * one row exists. CLAUDE.md names that cost in prose — "laps on real hardware producing nothing"
+ * — and no number here has ever counted it.
+ *
+ * `priceFrom()` zeroes the meter and REPORTS what it read, because the rigs that compute an
+ * open-loop or classical reference at import have already advanced the plant and that baseline
+ * must be visible rather than never accrued (rule 25). `close()` prints steps and the plant's own
+ * time, in a wording `commtime.mjs` scrapes separately from the teacher's, so the two columns can
+ * be read against each other rather than one silently replacing the other.
+ */
+function priceFrom() {
+  const pre = reset();
+  return {
+    pre,
+    close({ dt, unit = 's', rep = null }) {
+      // Which runs the rung KEPT, read off the report rather than restated (rule 30).
+      const kept = rep && rep.distil && rep.distil.runs
+        ? rep.distil.runs.map((c, i) => (c.dropped ? null : i)).filter((x) => x !== null) : null;
+      const steps = count();
+      const s = unitS(steps, dt, unit);
+      console.log(`\n  the PRODUCT commissioned in ${steps} steps = ${human(s)} of plant time`
+        + `  (rig baseline before this, not charged: ${pre} steps)`);
+      const by = split();
+      // The per-run teacher buckets are rolled up for the headline and printed separately, so
+      // "the teacher is 96%" and "run 2 of that 96% was thrown away" are both readable.
+      const roll = Object.create(null);
+      for (const [k, v] of Object.entries(by)) {
+        const key = k.startsWith('teacher#') ? 'teacher' : k;
+        roll[key] = (roll[key] || 0) + v;
+      }
+      const ord = Object.entries(roll).sort((a, b) => b[1] - a[1]);
+      if (ord.length) {
+        console.log('    where it goes: ' + ord.map(([k, v]) =>
+          `${k} ${human(unitS(v, dt, unit))} (${(100 * v / (steps || 1)).toFixed(0)}%)`).join('  ·  '));
+      }
+      const per = Object.entries(by).filter(([k]) => k.startsWith('teacher#'))
+        .sort((a, b) => a[0].localeCompare(b[0]));
+      if (per.length > 1) {
+        console.log('    the teacher, per training run: ' + per.map(([k, v]) =>
+          `${k.slice(8)}: ${human(unitS(v, dt, unit))}`).join('  ·  ')
+          + (kept ? `   (kept ${kept.join(',')})` : ''));
+      }
+      return { steps, seconds: s, pre, by };
+    },
+  };
+}
+
+/** A rig's own step count in seconds, given its stated step and the unit that step is in. */
+const unitS = (n, dt, unit) => (unit === 'min' ? n * dt * 60
+  : unit === 'h' ? n * dt * 3600 : unit === 'days' ? n * dt * 86400 : n * dt);
+
+/** Seconds on one axis, so six rigs with six different steps print comparably. */
+const human = (s) => (s < 90 ? `${s.toFixed(0)} s`
+  : s < 5400 ? `${(s / 60).toFixed(1)} min`
+  : s < 172800 ? `${(s / 3600).toFixed(1)} h`
+  : `${(s / 86400).toFixed(1)} days`);
+
+/**
+ * THE RIDGE LADDER, READ ONCE (rule 61). `RIDGES=1e-6,1e-4,1e-2,1e-1,1` hands `AutoStack`'s ②d
+ * rung a set of candidates to REFIT and SCORE ON THE MACHINE, rule 42's band picking the largest
+ * within 5% of the best improvement. Unset returns null and every harness is byte-identical.
+ *
+ * `DEFAULT_RIDGES` is a fixed geometric grid spanning six decades and is a DESIGN in the same
+ * sense as `SHAPE` above: it carries no plant's number, which is the whole point — `1e-6` was the
+ * arm's value carried to every plant after it, and on the quadruple tank that carried value
+ * delivers 0.08x where 1e-1 delivers 1.80x (plan §70, §72).
+ */
+const DEFAULT_RIDGES = [1e-6, 1e-4, 1e-3, 1e-2, 1e-1, 1];
+function ridgeLadder(env = process.env.RIDGES) {
+  if (!env) return null;
+  if (env === '1' || env === 'default') return DEFAULT_RIDGES;
+  const v = env.split(',').map(Number).filter((x) => Number.isFinite(x) && x > 0);
+  return v.length > 1 ? v : null;
+}
+
 /** The geometric offset SHAPE — dense near now where the correction is decided, sparse far out
  * where it only has to span the memory. The shape is a design; the reach is the plant's. */
 const SHAPE = [0, 0.008, 0.016, 0.031, 0.063, 0.125, 0.219, 0.344, 0.5, 0.719, 1];
@@ -110,6 +192,19 @@ async function reportDistil({ rep, runs, nFeat, segs = null, auto = null }) {
         + (c.passes === null || c.passes === undefined ? '' : `  passes ${c.passes}`));
     }
   }
+  // THE LADDER'S OWN TABLE, printed whenever one ran — the fit's score beside what the MACHINE
+  // said, because on the tank those two order INVERSELY and a report showing one alone would
+  // reproduce the fault this ladder exists to remove (plan §70, §72).
+  if (rep.distil && rep.distil.ridges) {
+    console.log('  the RIDGE LADDER, scored on the machine:');
+    for (const c of rep.distil.ridges) {
+      console.log(`    ridge ${String(c.ridge).padStart(7)}  `
+        + `machine ${c.score === null ? 'not scored (the fit refused)' : c.score.toExponential(4)}`
+        + `  held-out ${JSON.stringify(c.heldOutR2)}`
+        + (c.ridge === rep.distil.ridgePicked ? '   <- PICKED (rule 42: largest in the band)' : ''));
+    }
+  }
+  if (rep.distil && rep.distil.ridgeNote) console.log(`  ${rep.distil.ridgeNote}`);
   if (rep.distil && rep.distil.fit) {
     const f = rep.distil.fit;
     console.log(`  the FIT: ${f.rows} rows / ${nFeat} features, `
@@ -122,4 +217,4 @@ async function reportDistil({ rep, runs, nFeat, segs = null, auto = null }) {
   return { inSample, dr };
 }
 
-export { deriveWindow, reportDistil, SHAPE };
+export { deriveWindow, reportDistil, priceFrom, ridgeLadder, human, SHAPE, DEFAULT_RIDGES };

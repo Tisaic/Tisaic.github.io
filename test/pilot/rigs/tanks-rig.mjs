@@ -6,6 +6,8 @@
  * which this project has paid for before; the narrative for every number, and the validation
  * of the rig against the published model, stays in `tanks.test.mjs`.
  */
+
+import { tick } from './meter.mjs';
 const UCAP = 1.2;
 
 const G = 981;                            // cm/s^2
@@ -17,6 +19,7 @@ const DT = 0.1;                           // s per step
 function makeTanks(g) {
   const h = [10.7, 10.7, 3.0, 3.0];
   return { h, step(v1, v2) {
+    tick();
     const v = [Math.max(0, v1), Math.max(0, v2)];
     const q = h.map((x, i) => AO[i] * Math.sqrt(2 * G * Math.max(0, x)));
     const d = [
