@@ -32,6 +32,14 @@ if (process.env.QPITERS) SOLVER.qpIters = +process.env.QPITERS;
 const HFF = {};
 if (process.env.TPASSES) HFF.passes = +process.env.TPASSES;
 if (process.env.TTRIALS) HFF.trialPasses = +process.env.TTRIALS;
+// AND THE PROBE PHASE, WHICH IS THE LARGEST REMAINING TERM (plan §73). The candidate designs are
+// (style x frac) and both axes are already `hff` options: `probeStyle` 'auto' gives two styles and
+// `probeFracs` defaults to two fractions, so FOUR designs are probed at `nq` laps each — 28 of the
+// barrel's 54 teacher laps and 20 of the column's. `hff` has halved this once already on the arm
+// ("8 probe sets where 4 suffice: 20 wasted laps of 64") and it has never been swept here.
+// `TSTYLE=spread|basis` fixes the style, `TFRACS=0.25,0.1` sets the ladder — unset is both.
+if (process.env.TSTYLE) HFF.probeStyle = process.env.TSTYLE;
+if (process.env.TFRACS) HFF.probeFracs = process.env.TFRACS.split(',').map(Number);
 
 // THE SCAN THE LADDER HAS TO FIT, when one is stated. `BUDGET=mac,bytes` turns it on; unset,
 // nothing is enforced and every number in this file is what it always was. It exists because

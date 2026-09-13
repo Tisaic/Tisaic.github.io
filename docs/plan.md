@@ -17329,3 +17329,36 @@ against 14.949x without, on the same plant, the same diet and the same controlle
 plants sharing no physics, and the same sentence explains both — **a feedforward can cancel a
 disturbance it is told about and cannot cancel one it is not**, which is a much better description
 of what this object does than "it wins on compliance and friction".
+
+## §73 "No levers left" was wrong, and the first two are free
+
+§72 closed by naming the probe phase and the harness's laps-per-call as unspent and then saying a
+day was out of reach on the slow plants. Asked whether there was really nothing left, the honest
+answer is that I stopped at the first two that looked hard. Four remained. Measured on Wood-Berry,
+one variable each:
+
+```
+  configuration            plant time   delivered   teacher laps
+  today's defaults          59.3 days     3.643x    probes 20 · trials 16 · refocus 5 · refine 9
+  the CASCADE dropped       54.0 days     3.643x    unchanged
+  TWO probe designs         48.0 days     3.643x    probes 10 · trials  8 · refocus 5 · refine 9
+  ONE probe design          34.9 days     2.843x    probes  0 · trials  0 · refocus 0 · refine 9
+```
+
+**THE CASCADE IS COMMISSIONED AND THEN THROWN AWAY.** On these four plants the distilled rung's
+teacher is `hff` — none of them supplies a `converge()` — so the cascade is not the teacher, it is
+scored and then REPLACED by the rung that wins. That is the arm's own recorded finding arriving on
+a plant sharing no physics with it: *"the ladder spends two of its four minutes commissioning a
+correction it scores at 1.07x and then DISCARDS... removed, it delivers the identical result."*
+1.10x here, delivered identical.
+
+**AND THE PROBE PHASE IS FOUR CANDIDATE DESIGNS WHERE TWO DELIVER THE SAME NUMBER.** The designs
+are `styles x fracs`, both already `hff` options, so this needed no library change — only a sweep
+nobody had run. Halving the fraction ladder is **1.24x, delivered identical to four figures**.
+`hff`'s own header records halving this once already on the arm ("8 probe sets where 4 suffice: 20
+wasted laps of 64"), which is the second time the same phase has been found overprovisioned.
+
+**ONE DESIGN IS A REAL TRADE AND THE TABLE SAYS SO.** At a single candidate `cands.length > 1` is
+false, the whole sweep is skipped, and the teacher costs 15 laps instead of 51 — 1.70x — for
+2.843x against 3.643x, a 22% loss. That is the cost of not CHOOSING the design, and `hff` says why
+it must be chosen on the machine: the fit ranks the candidates backwards. So the band stops at two.
