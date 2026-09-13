@@ -124,13 +124,27 @@ and the SCORE its monotone gate reads is their rms alone. Delivered on the bench
    32 points  6.52x  (0.98x)                    tracker     6.63x   the control, reproduced exactly
 ```
 
-**The ladder SATURATES at 64 and is within 2% at 32.** The arm's lap is 7,356 machine steps, so
+**The ladder SATURATES at 64 and is within 2% at 32, and the knee reproduces**: over three
+commissioning draws the ratios read 0.729-0.733 at 16 points, 0.978-0.983 at 32 and 1.006-1.009 at
+64 — every row inside 0.6% of itself. Said in the same breath, because it limits the claim: the
+SEED barely moves this configuration at all (draws 2 and 3 agree to four figures), since it sets
+the cascade's excitation and the teacher replaces exactly that through `oracleF0` — §52.29's
+bit-identical finding showing through. So those are three draws of one thing, not three
+independent commissionings, and a real spread needs the diet or the plant to move. The arm's lap is 7,356 machine steps, so
 that is one touch per 115 steps — a two-to-three-minute on-machine inspection routine, the thing a
-shop already runs on a first article, against a metrology service and machine downtime. The count
-that works is a sampling rate against the PLANT'S timescales rather than a fraction of the lap (64
-points resolve the measured ring at ~30 per cycle and the loop's rise at ~8), and the falsifier for
-that is the FEED, which moves the lap in steps while every plant timescale stays fixed — named and
-not run. NOT CLAIMED: the points are evenly spaced in lap phase where a real routine touches
+shop already runs on a first article, against a metrology service and machine downtime. **The mechanism I proposed for it is REFUTED by its own falsifier**: a sampling
+rate against the PLANT'S timescales predicts that a slower plant needs fewer touches, and at an
+eight-times slower servo loop the ratios read 0.649 / 0.969 / 0.997 at 16 / 32 / 64 against the
+shipped cell's 0.733 / 0.983 / 1.006 — **the slower plant needs MORE**. What survives is the SHAPE,
+a knee at 32 and saturation at 64 on two cells eight times apart in bandwidth, which makes the
+count a property of the MAP and its window rather than of the plant — so the shop's number reads
+"sixty-four touches, whatever the part" rather than "one per N millimetres". **And the FEED test — the other half — was BUILT and cannot be asked on this plant**, which is a
+stronger statement than "not run": `DIETFEED` scales the training feeds with the plant held (unset
+byte-identical), and at half feed the diet REFUSES at 0.75x with nothing for the probe to degrade,
+while at double feed it delivers only 1.65x and the ladder is NON-MONOTONE with **16 points beating
+the tracker** — §50.1's own established signature arriving in a column too small to separate from
+it. The lap-length axis is confounded with diet quality here; what would answer it is a plant whose
+diet is insensitive to its own feed. NOT CLAIMED: the points are evenly spaced in lap phase where a real routine touches
 features, the reading is exact at the points taken, and it is one plant, one cell, one seed.
 
 **AND COMPUTE TIME IS NOT COMMISSIONING TIME.** The "2 minutes on the arm" is wall clock for the

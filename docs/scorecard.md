@@ -31,7 +31,7 @@ machines these plants model, and every factor this project quotes is against it.
 | 3 | **COM** commissioning cost | how long does the plant stop earning? | **4** | 8 | plan §72-§73: mill 55 min, tank 1.3 d, Wood-Berry 30 d, extruder 33 d. One of four inside "a day or less"; the other three are a property of a five-hour lap, not of the method (§72.12) |
 | 4 | **CPU** runtime arithmetic and memory | does it fit the scan it has to run in? | **9** | 9 | 78-330 MAC/decision against a 10,000 MAC budget — 0.8-3.3%; 0.7-1.8 kB. `artefact.test.mjs` pins the deployed path bit-identical to a 117-line reimplementation that imports nothing. DeePC on the same axis is 145,082 MAC, 1451% of a scan |
 | 5 | **GEN** generalisation | does it hold off the program it was commissioned on? | **6** | 7 | target 2 MET inside its bound (6.65-7.94x across a 5x feed span, nothing made worse, plan §52.41); target 1 partly — the deployed map transfers by construction and the retired memory did not (0.53x, reproduced by a textbook norm-optimal ILC) |
-| 6 | **INS** instrument the customer must own | what does it cost to commission at all? | **3** | 9 | plan §52.42: the teacher needs GROUND-TRUTH TOOL POSITION at every sample — a laser tracker, worth **3.9x** over the best permanently mounted alternative, and motor encoders alone deliver **nothing** (all four training runs dropped). A touch probe on the cut part is measured in plan §74 |
+| 6 | **INS** instrument the customer must own | what does it cost to commission at all? | **6** | 9 | was 3. plan §52.42: a tracker is worth **3.9x** over the best permanently mounted alternative and motor encoders alone deliver **nothing**. plan §74: a TOUCH PROBE at **64 points per lap delivers the tracker's result to 0.6%**, 32 points to 2%, reproducing across three draws — the instrument a shop already owns, on a two-to-three-minute inspection routine. Not 9, because the count's scaling law is unestablished (the plant-timescale account is refuted, the lap-length axis confounded) and it is one plant |
 | 7 | **SAF** safe failure | what happens when it cannot help? | **8** | 7 | it REFUSES with a stated reason and applies nothing — 4 of 4 cart-pole seeds on a well-tuned loop, the barrel before §66, Wood-Berry's 12 of 12 under `verifyRef`. `AutoStack` scores every rung on the machine and reverts |
 | 8 | **ROB** robustness to what it was not shown | does it degrade or fall over? | **4** | 8 | CLAUDE.md states it plainly: change the feedrate, plant or path outside what was commissioned and it degrades — the coverage guard FADES rather than extrapolating (1.17-1.19x above the trained span), which is a refusal rather than robustness |
 | 9 | **EXP** explainability | can the engineer see why? | **6** | 9 | the record IS the controller (a weight vector plus a window), and every rung prints its own verdict, cost and refusal reason — but nobody can read 111 coefficients the way they read a PID gain |
@@ -42,13 +42,21 @@ machines these plants model, and every factor this project quotes is against it.
 The gaps against the incumbent, largest first:
 
 ```
-  INS   3 vs 9   -6     the instrument the customer must own
   ROB   4 vs 8   -4     anything the commissioning did not see
   COM   4 vs 8   -4     was -5 before plan §72-§73
+  INS   6 vs 9   -3     was -6 before plan §74's touch probe
   EXP   6 vs 9   -3
   DIS   4 vs 6   -2     was -4 before plan §71
   BRD   7 vs 9   -2
 ```
+
+**Updated once, by the column it named.** §74 measured the touch probe and moved INS from 3 to 6,
+so the largest gap is now **ROB** — what happens off the envelope the commissioning saw. That is
+also the column CLAUDE.md describes most bluntly ("change the feedrate, the plant or the path and
+the machine degrades — not gracefully, catastrophically") and the one targets 1 and 2 exist for.
+
+**INS was the largest when this file was written and is no longer** (see the update above).
+It was picked first for the reason below and the pick was right: it moved 3 points in one section.
 
 **INS is the largest and always was**, and CLAUDE.md has said so in prose for longer than the
 scorecard has existed: *"it needs an instrument the customer probably does not own, and this file

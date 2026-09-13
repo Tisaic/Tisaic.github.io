@@ -17823,6 +17823,31 @@ The arm's lap is 7,356 machine steps, so 64 points is **one touch per 115 steps*
 machine that is a two-to-three-minute on-machine inspection routine — the thing a shop already
 runs on a first article — against a metrology service, machine downtime and a specialist.
 
+### §74.2b The knee reproduces across draws, and the seed's near-inertness is itself a result
+
+A ladder's interior is not a finding until it is a distribution — §50.1 spent a section falsifying
+"it was one draw" for the tracker-noise ladder. Three commissioning seeds:
+
+```
+  probed points     seed 1            seed 2            seed 3       against its own tracker
+  tracker           6.63x             6.76x             6.76x         1.000x
+    16              4.86x  (0.733)    4.94x  (0.731)    4.93x  (0.729)
+    32              6.52x  (0.983)    6.61x  (0.978)    6.61x  (0.978)
+    64              6.67x  (1.006)    6.82x  (1.009)    6.82x  (1.009)
+```
+
+**Every row holds to better than 0.6% of itself**, so the deficit at 16, the 2% at 32 and the
+saturation at 64 are all properties of the instrument rather than of a draw.
+
+**AND THE SEED BARELY MOVES THIS CONFIGURATION AT ALL, WHICH IS §52.29 SHOWING THROUGH RATHER THAN
+A BROKEN CONTROL.** Seeds 2 and 3 agree with each other to four significant figures. `SEED` sets
+the cascade's excitation, and the teacher iterates that cascade with the MEASURED error as its free
+response (`oracleF0`) — which replaces exactly the forecast the excitation identifies. §52.29
+measured the extreme form of this already: a teacher improved 1.73x by guided adaptation returned a
+BIT-IDENTICAL policy. So this knob cannot supply a spread here, and the table above is three draws
+of the same thing rather than three independent commissionings (rule 25). What would supply one is
+the DIET or the plant, not the seed.
+
 ### §74.3 The mechanism, and the falsifier it names
 
 The count that works is not a fraction of the lap, it is a sampling rate against the PLANT'S OWN
@@ -17830,11 +17855,52 @@ timescales: 64 points per 7,356 steps resolves the measured ring (~3,400 steps) 
 samples per cycle and the position loop's rise (951 steps) at about 8. Saturation right there is
 what that predicts.
 
-**The falsifier is the FEED**, and it is cheap: a feedrate change moves the lap length in steps
-while every plant timescale stays fixed. If the probe count needed scales with the lap, this is
-Nyquist on the plant and the shop's number is "one touch per N millimetres of path"; if it stays
-at 64, it is a property of the map's own coefficient count and the shop's number is "sixty-four
-touches, whatever the part". Not yet run.
+**IT WAS PUT TO THE MACHINE AND IT IS REFUTED IN THE DIRECTION IT PREDICTS.** The knob that moves
+the plant's timescales while holding the lap length in steps is the servo loop, and it already
+exists (`ARM_BW`). At **2e-3, an eight-times slower loop** than the shipped 1.6e-2 — so a rise
+about three times longer and a correction whose content sits lower in frequency — Nyquist-on-the-
+plant says FEWER points should do. Measured, against each cell's OWN tracker:
+
+```
+  probed points     bw 1.6e-2 (shipped)      bw 2e-3 (8x slower loop)
+  tracker             6.63x   1.000x           6.04x   1.000x
+    16                4.86x   0.733            3.92x   0.649
+    32                6.52x   0.983            5.85x   0.969
+    64                6.67x   1.006            6.02x   0.997
+```
+
+**The slower plant needs MORE touches, not fewer**, which is the opposite of the stated mechanism,
+so that account is dead. What survives is the SHAPE: a knee at 32 and saturation at 64 on both
+cells, eight times apart in loop bandwidth — which points at the other branch, that the count is a
+property of the MAP and its window rather than of the plant, and makes the shop's number "sixty-
+four touches, whatever the part" rather than "one per N millimetres". That is now the better
+supported reading and it is still not proved: **the lap length in steps is IDENTICAL in both
+columns** (same program, same feed), so this moved the timescale axis alone. 
+
+**AND THE FEED TEST WAS BUILT AND IT CANNOT BE ASKED ON THIS PLANT, WHICH IS THE FINDING.**
+`DIETFEED` scales every TRAINING feed while the scored program stays at the bench feed — the one
+knob that moves a training lap's length in steps with every plant timescale held (unset is 1 and
+the default run is byte-identical, 1.6159e-1 / 6.63x). Both directions are confounded by the
+diet's own quality, which is already on record:
+
+```
+  DIETFEED 0.5   laps 10,869-17,453 steps    tracker 0.75x  REFUSED — and so is every probe row
+  DIETFEED 2     laps  3,734- 5,376 steps    tracker 1.65x · 8 pts 1.45x · 16 pts 2.04x · 32 pts 1.79x
+```
+
+At half feed the diet cannot teach a policy that beats the bench square at all — CLAUDE.md records
+that number as 0.75x independently — so there is nothing for the probe to degrade. At double feed
+the diet delivers 1.65x and the ladder is NON-MONOTONE with **16 points beating the tracker**,
+which is §50.1's own signature on this plant (a degraded commissioning instrument reading better,
+established there as real and explained as implicit early stopping) arriving in a column too small
+and too noisy to separate from it.
+
+**So the lap-length axis is CONFOUNDED with diet quality on this arm and the question stays open.**
+That is a stronger statement than "not run": the knob exists, both directions were measured, and
+what they establish is that this plant cannot answer it. What would is a plant whose diet is
+insensitive to its own feed, or a program set at one feed with genuinely different lap lengths.
+What stands is the other half — the count is insensitive to the plant's own rise, and the map's
+window is the better supported account.
 
 ### §74.4 What is NOT claimed
 

@@ -98,7 +98,13 @@ const DISTIL = { ...(process.env.OFFS === 'raw'
   // ONLINE=0: the batch ridge fit instead of the streaming recursion (the second route, rule 15).
   ...(process.env.ONLINE === '0' ? { online: false } : {}) };
 if (!['hff', 'pilot'].includes(ENGINE)) throw new Error(`ENGINE ${ENGINE}: hff or pilot`);
-const F = 4e-3;
+// DIETFEED=<x>: scale every TRAINING feed by x, leaving the scored program at the bench feed.
+// It is the one knob that moves a training lap's LENGTH IN STEPS while every plant timescale
+// stays fixed, which is the half of plan §74.3's falsifier that `ARM_BW` cannot reach: the probe
+// takes K points per LAP, so halving the feed halves their density per millimetre of path while
+// leaving the machine identical. Unset is 1 and byte-identical.
+const DF = +(process.env.DIETFEED || 1);
+const F = 4e-3 * DF;
 const DIETS = {
   demo: null,
   poly: { feeds: [F, F, F], rMin: 3.4, rSpan: 2.4 },
