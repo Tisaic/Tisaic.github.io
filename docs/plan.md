@@ -17617,3 +17617,47 @@ teacher simply does not transfer off the arm.
 **And the uncomfortable corollary is worth stating whichever way it lands**: a teacher that needs
 a cascade that already works is least available exactly where it is most needed. The barrel wants
 a cheap teacher BECAUSE its plant is hard; a hard plant is where `hGrid` is poor.
+
+### §73.12 The mill confirms it, and the numbers invert the obvious reading
+
+```
+  cold mill   oracle teacher   32.8 min   5.8845e-3   teacher 7.14-7.40x   4/4 kept
+  cold mill   hff (control)    54.8 min   5.8650e-3   teacher 6.78-8.25x   4/4 kept
+  barrel      oracle teacher   16.8 days  REFUSED     teacher 1.00-1.18x   4/4 DROPPED
+```
+
+**1.67x cheaper on the mill at a delivered number 0.3% apart — inside the instrument.** The
+teacher half alone is 21.7 min against ~48, and the cascade it needs costs 3.1. Backtracking also
+earns its place rather than merely existing: on three of four recipes pass 3 succeeds at HALF step
+where the full step failed.
+
+**And the two cascades say the opposite of what "the oracle needs a good cascade" would predict:**
+
+```
+  plant      cascade forecast R² lead0   cascade DELIVERS   oracle teacher
+  cold mill            0.062                  1.74x          works
+  barrel               0.970                  1.05x          refuses
+```
+
+The mill's forecast is nearly worthless and its cascade still delivers; the barrel's forecast is
+excellent and its cascade delivers almost nothing. So it is not forecast quality and not "a good
+cascade" in the round — **it is WHICH HALF of the cascade is broken.**
+
+`oracleF0` replaces the FORECAST. On the mill that is exactly the weak half, so substituting a
+measured target for a useless prediction is the right surgery and the QP's inverse — already good,
+1.74x delivered — does the rest. On the barrel the forecast was never the problem: it is 0.970 and
+the plant still only moves 1.05x, so the INVERSE is what is wrong, `oracleF0` replaces the half
+that worked, and a perfect target through a broken inverse gives a wrong move at every step
+length. That is rule 43 stated precisely — a better optimiser, or a better target, on a wrong
+model buys nothing.
+
+**It also answers a question §59 left open.** `invert.mjs` was built to name why a plant with a
+good forecast takes a harmful correction, and it reported the barrel "fires none of the four"
+diagnostics. This is the fifth: **a plant can have an excellent forecast and a broken inverse**,
+and the two are told apart by reading `R² lead0` against the cascade's DELIVERED verify — both of
+which the ladder already prints and neither of which anyone had read against the other.
+
+**Not defaulted, and the reason is rule 31**: two plants is not a rule. The gate it suggests is
+cheap and self-tuning — the cascade's delivered verify is known before the teacher runs, so a
+ladder could choose its own teacher — but it needs the column (cascade 0.39x, predicted worse than
+the barrel) and the tank before it becomes one.
