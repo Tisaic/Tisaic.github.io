@@ -36,7 +36,7 @@
  */
 import { ladder, announce } from './rigs/ladder.mjs';
 import { wbSpec } from './rigs/specs.mjs';
-import { deriveWindow, reportDistil, priceFrom, ridgeLadder, teacherReuse, carrier } from './rigs/distilkit.mjs';
+import { deriveWindow, reportDistil, priceFrom, ridgeLadder, teacherReuse, carrier, teachLaps } from './rigs/distilkit.mjs';
 import * as WB from './rigs/woodberry-rig.mjs';
 
 if (process.env.SUITE !== 'full') {
@@ -94,6 +94,11 @@ console.log(`  ${OFFSETS.length} offsets per channel, ${DIETS.length} training p
   + `${WB.T_END})\n`);
 
 /** The training diet as the rung consumes it: a lap, its reference, and a run closure. */
+// LAPS PER TEACHER CALL (plan §73.2). One lap settles under the correction just handed over, the
+// rest are scored and the last is the record the teacher inverts. With the plant carried the
+// first is the only settle there is, so `TLAPS=2` asks whether the second scored lap is buying
+// noise reduction worth a third of the commissioning. Unset is 3 and byte-identical.
+const TLAPS = teachLaps();
 const distilRuns = () => DIETS.map((rec) => {
   const lap = LAP(rec), ref = refOf(rec);
   // ONE PLANT FOR THIS RUN, CARRIED ACROSS THE TEACHER'S CALLS (plan §72.15).
@@ -114,7 +119,7 @@ const distilRuns = () => DIETS.map((rec) => {
       const c = hold();
       let s2 = 0, n = 0;
       const err = [0, 1].map(() => new Float64Array(lap));
-      for (let k = 0; k < 3 * lap; k++) {
+      for (let k = 0; k < TLAPS * lap; k++) {
         const kk = ((k % lap) + lap) % lap;
         const sp = ref(k), u0 = WB.inputsFor(sp[0], sp[1]);
         const u = corr ? corr.at(kk) : [0, 0];
@@ -122,7 +127,7 @@ const distilRuns = () => DIETS.map((rec) => {
         const want = WB.outputsFor(u0);
         // The last lap is the RECORD the teacher inverts; the last two are what it is SCORED on,
         // so a run is never scored across the lap that established its own operating point.
-        if (k >= 2 * lap) for (let j = 0; j < 2; j++) err[j][kk] = c.y[j] - want[j];
+        if (k >= (TLAPS - 1) * lap) for (let j = 0; j < 2; j++) err[j][kk] = c.y[j] - want[j];
         if (k >= lap) for (let j = 0; j < 2; j++) { s2 += (c.y[j] - want[j]) ** 2; n++; }
       }
       return { score: Math.sqrt(s2 / n), err };
@@ -131,6 +136,9 @@ const distilRuns = () => DIETS.map((rec) => {
 });
 
 const spec = { ...wbSpec,
+  // NO CASCADE: this rung's teacher is `hff`, so the cascade would be commissioned,
+  // scored and then REPLACED by the rung that wins (plan §73.1). `DEPTH=2` is the control.
+  depth: 0,
   ...(process.env.MIMO === '1'
     ? { pilotOpts: { ...(wbSpec.pilotOpts || {}), mimo: true } } : {}),
   distil: { refDim: 2, ridge: env('RIDGE', 1e-6), offsets: OFFSETS,

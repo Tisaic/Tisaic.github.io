@@ -42,7 +42,7 @@
  */
 import { ladder, announce } from './rigs/ladder.mjs';
 import { millSpec } from './rigs/specs.mjs';
-import { deriveWindow, reportDistil, priceFrom, ridgeLadder, teacherReuse } from './rigs/distilkit.mjs';
+import { deriveWindow, reportDistil, priceFrom, ridgeLadder, teacherReuse, teachLaps } from './rigs/distilkit.mjs';
 import * as RM from './rigs/rollmill-rig.mjs';
 
 if (process.env.SUITE !== 'full') {
@@ -79,6 +79,11 @@ console.log(`  the UNMEASURED entry wander runs at 2150 and 950 steps, NOT comme
   + `${PER.toFixed(0)}-step turn — so it cannot be memorised against the declared phase\n`);
 
 /** Four training runs: the same declared phase, four different unmeasured-disturbance draws. */
+// LAPS PER TEACHER CALL (plan §73.2). One lap settles under the correction just handed over, the
+// rest are scored and the last is the record the teacher inverts. With the plant carried the
+// first is the only settle there is, so `TLAPS=2` asks whether the second scored lap is buying
+// noise reduction worth a third of the commissioning. Unset is 3 and byte-identical.
+const TLAPS = teachLaps();
 const distilRuns = () => [0, 1, 2, 3].map((i) => {
   // Each run starts a whole number of TURNS in, so the declared phase is aligned to the lap,
   // and a different number of them, so the UNMEASURED entry wander sits at a different phase.
@@ -101,7 +106,7 @@ const distilRuns = () => [0, 1, 2, 3].map((i) => {
       const want = [];
       let s2 = 0, n = 0;
       const err = [new Float64Array(LAP)];
-      for (let j = 0; j < 3 * LAP; j++) {
+      for (let j = 0; j < TLAPS * LAP; j++) {
         const kk = ((j % LAP) + LAP) % LAP;
         const u = corr ? corr.at(kk) : [0];
         m.step(RM.S0 + (u[0] || 0));
@@ -109,7 +114,7 @@ const distilRuns = () => [0, 1, 2, 3].map((i) => {
         if (want.length > RM.DLY + 2) want.shift();
         const w = want.length > RM.DLY ? want[want.length - 1 - RM.DLY] : RM.HREF;
         const g = m.gauge();
-        if (j >= 2 * LAP) err[0][kk] = g - w;
+        if (j >= (TLAPS - 1) * LAP) err[0][kk] = g - w;
         if (j >= LAP) { s2 += (g - w) ** 2; n++; }
       }
       return { score: Math.sqrt(s2 / n), err };
@@ -126,6 +131,9 @@ const distilRuns = () => [0, 1, 2, 3].map((i) => {
 // look-ahead, in a third costume, and it is worth the four lines it takes to say so.
 const WARM = 4000;
 const spec = { ...millSpec,
+  // NO CASCADE: this rung's teacher is `hff`, so the cascade would be commissioned,
+  // scored and then REPLACED by the rung that wins (plan §73.1). `DEPTH=2` is the control.
+  depth: 0,
   refAt: (k) => refOf(WARM + k),
   distil: { refDim: REFDIM, ridge: env('RIDGE', 1e-6), offsets: OFFSETS,
     ...(ridgeLadder() ? { ridges: ridgeLadder() } : {}),

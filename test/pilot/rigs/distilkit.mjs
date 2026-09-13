@@ -112,6 +112,21 @@ function ridgeLadder(env = process.env.RIDGES) {
 }
 
 /**
+ * HOW MANY LAPS A TEACHER CALL COSTS, READ ONCE (plan §73.2).
+ *
+ * Every diet closure runs `3*lap` per call: one lap to settle under the correction just handed to
+ * it, then two that are scored, the last of which is the record the teacher inverts. With the
+ * plant CARRIED (§72.15) the first of those three is the only settle there is, so the question is
+ * whether the SECOND scored lap is buying noise reduction worth a third of the commissioning.
+ * MEASURED ON THREE PLANTS AND IT IS FREE (plan §73.2): the column 42.7 -> 30.0 days at an
+ * identical 3.744e-2, the tank 48.0 -> 31.7 h at an identical 1.9531e-1, the mill 57.6 -> 54.8 min
+ * and 6.085e-3 -> 5.865e-3, BETTER. So two is the default and `TLAPS=3` is the control. The
+ * mechanism is §49's law once more: a second scored lap makes `hff`'s own score quieter, which
+ * lets it refine FURTHER, and a more converged teacher teaches a worse policy.
+ */
+const teachLaps = () => Math.max(2, +(process.env.TLAPS || 2));
+
+/**
  * THE TEACHER'S OPERATOR REUSE, READ ONCE — now the default, `REUSE=0` the control. It hands the
  * operator identified on the first KEPT training run to every later member of the diet, which is
  * where 84-98% of the product's plant time goes (plan §72.6). Measured on all four plants: the
@@ -275,4 +290,4 @@ async function reportDistil({ rep, runs, nFeat, segs = null, auto = null }) {
   return { inSample, dr };
 }
 
-export { deriveWindow, reportDistil, priceFrom, ridgeLadder, teacherReuse, carrier, human, SHAPE, DEFAULT_RIDGES };
+export { deriveWindow, reportDistil, priceFrom, ridgeLadder, teacherReuse, carrier, teachLaps, human, SHAPE, DEFAULT_RIDGES };

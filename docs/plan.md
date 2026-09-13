@@ -17362,3 +17362,35 @@ wasted laps of 64"), which is the second time the same phase has been found over
 false, the whole sweep is skipped, and the teacher costs 15 laps instead of 51 — 1.70x — for
 2.843x against 3.643x, a 22% loss. That is the cost of not CHOOSING the design, and `hff` says why
 it must be chosen on the machine: the fit ranks the candidates backwards. So the band stops at two.
+
+### §73.1 The cascade and the probe ladder become defaults, scoped where each belongs
+
+**The cascade is a SPEC field, not a driver default.** Where the distilled rung's teacher is `hff`
+— which is every one of these four plants, none of which supplies a `converge()` — the cascade is
+commissioned, scored and then REPLACED by the rung that wins. The three ladder-driven harnesses
+declare `depth: 0` and `DEPTH=2` is the control; `plants.test.mjs` drives the same plants through
+the same driver and is untouched, because there the cascade IS the result (the mill ships at 1.74x
+on it).
+
+**One probe fraction is the TEACHER's default**, beside `trialPasses: 1` and `passes: 4`, for the
+same reason those are: as a RUNG the sweep picks what ships, as a TEACHER it picks a design whose
+increment is then thrown at the measured error. The STYLE ladder stays — collapsing to a single
+design skips the sweep entirely and costs 3.643x → 2.843x, and `hff` says why the design must be
+chosen on the machine.
+
+### §73.2 Two laps per teacher call, not three — free on three plants, better on one
+
+One lap settles under the correction just handed over; with the plant CARRIED that is the only
+settle there is, so the question is whether the SECOND scored lap earns a third of the
+commissioning.
+
+```
+  plant        3 laps/call   2 laps/call   delivered
+  Wood-Berry     42.7 days    30.0 days    3.744e-2 -> 3.744e-2   identical
+  quad tank      48.0 h       31.7 h       1.9531e-1 -> 1.9531e-1 identical
+  cold mill      57.6 min     54.8 min     6.085e-3 -> 5.865e-3   BETTER
+```
+
+1.42x, 1.51x and 1.05x, and the mill is 3.6% better delivered. The mechanism is §49's law for the
+sixth time: a second scored lap makes `hff`'s own score quieter, which lets it refine FURTHER, and
+a more converged teacher teaches a worse policy. `TLAPS=3` is the control.

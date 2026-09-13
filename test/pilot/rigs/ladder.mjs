@@ -63,7 +63,7 @@ function announce() {
  */
 async function ladder(spec) {
   const { name, channels, uMax, guards, nMeasured, start, N, refAt, fresh, step, floor,
-    pilotOpts, distil, distilRuns } = spec;
+    pilotOpts, distil, distilRuns, depth } = spec;
 
   // The reference's own rate and acceleration, in COMMAND space, by differencing the program
   // it will actually run. This is what the conventional rung reads; it is not a model.
@@ -80,7 +80,17 @@ async function ladder(spec) {
     // experiment testing whether the LEVERAGE LEVEL predicts the layer that will fail to
     // vouch. One plant is not a method — a common factor across plants sharing no physics is
     // a property of the CODE (rule 18), and that is exactly what a stopping rule has to be.
-    channels, uMax, periodic: null, floor, maxDepth: +(process.env.DEPTH || 2), budget: BUDGET,
+    // A SPEC MAY DECLARE ITS OWN CASCADE DEPTH, AND THE DISTIL HARNESSES DECLARE ZERO (plan
+    // §73.1). Where the distilled rung's teacher is `hff` the cascade is not the teacher: it is
+    // commissioned, scored, and then REPLACED by the rung that wins — 14.9 of the barrel's 77.9
+    // days and 5.3 of the column's 59.3, for a delivered number identical to four figures. That
+    // is the arm's own recorded finding ("two of its four minutes commissioning a correction it
+    // scores at 1.07x and then DISCARDS") on plants sharing no physics with it. It is a SPEC
+    // field and not a driver default because `plants.test.mjs` drives the same plants through
+    // this driver and there the cascade IS the result — the mill ships at 1.74x on it.
+    channels, uMax, periodic: null, floor, budget: BUDGET,
+    maxDepth: process.env.DEPTH !== undefined ? +process.env.DEPTH
+      : (depth !== undefined ? depth : 2),
     // THE CONVENTIONAL RUNG, WITHHOLDABLE FOR THE SIX-PLANT PASS. `basis` is what unlocks it —
     // `if (this.basis)` in AutoStack — so NOCLASSIC=1 skips it with no new option. The question
     // it answers is whether the rung can be dropped from the ladder for compute: on the ARM the

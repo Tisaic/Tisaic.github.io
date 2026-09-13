@@ -40,10 +40,16 @@
  * Run: SUITE=full node test/pilot/distil-tank.mjs   [SEEDS=1,2]  [GRADE=fast]
  */
 import { AutoStack } from '../../lib/pilot/autostack.js';
-import { priceFrom, ridgeLadder, teacherReuse, carrier } from './rigs/distilkit.mjs';
+import { priceFrom, ridgeLadder, teacherReuse, carrier, teachLaps } from './rigs/distilkit.mjs';
 import { into } from './rigs/meter.mjs';
 import { UCAP, makeTanks, voltsFor, SEG, HOLD, RECIPE, quintic, refAtStep, PROG, DT }
   from './rigs/tanks-rig.mjs';
+
+// LAPS PER TEACHER CALL (plan §73.2). One lap settles under the correction just handed over, the
+// rest are scored and the last is the record the teacher inverts. With the plant carried the
+// first is the only settle there is, so `TLAPS=2` asks whether the second scored lap is buying
+// noise reduction worth a third of the commissioning. Unset is 3 and byte-identical.
+const TLAPS = teachLaps();
 
 if (process.env.SUITE !== 'full') {
   console.log('\ndistil-tank: SKIPPED (full tier only — one commissioning per seed)\n');
@@ -200,9 +206,13 @@ async function once(seed) {
     // teacher convergence. 1e-6 was carried here from the arm and never re-derived (rule 31).
     // THE TEACHER'S BUDGET, matching `rigs/ladder.mjs`'s knob so the sweep is the same experiment
     // on every plant (rule 61). Unset is the library's own 24 and byte-identical.
-    ...(process.env.TPASSES || process.env.TTRIALS ? { hff: {
-      ...(process.env.TPASSES ? { passes: +process.env.TPASSES } : {}),
-      ...(process.env.TTRIALS ? { trialPasses: +process.env.TTRIALS } : {}) } } : {}),
+    ...(process.env.TPASSES || process.env.TTRIALS || process.env.TSTYLE || process.env.TFRACS
+      ? { hff: {
+        ...(process.env.TPASSES ? { passes: +process.env.TPASSES } : {}),
+        ...(process.env.TTRIALS ? { trialPasses: +process.env.TTRIALS } : {}),
+        ...(process.env.TSTYLE ? { probeStyle: process.env.TSTYLE } : {}),
+        ...(process.env.TFRACS ? { probeFracs: process.env.TFRACS.split(',').map(Number) } : {}),
+      } } : {}),
     distil: { refDim: 2, ridge: Number(process.env.RIDGE || 1e-6), offsets: OFFSETS,
       ...(ridgeLadder() ? { ridges: ridgeLadder() } : {}),
       ...(teacherReuse() ? {} : { teacherReuse: false }),
@@ -300,12 +310,12 @@ async function once(seed) {
         const p = hold();
         let s2 = 0, n = 0;
         const e0 = new Float64Array(lap), e1 = new Float64Array(lap);
-        for (let k = 0; k < 3 * lap; k++) {
+        for (let k = 0; k < TLAPS * lap; k++) {
           const kk = ((k % lap) + lap) % lap;
           const h = ref(k), v = voltsFor(G, h[0], h[1]);
           const u = corr ? corr.at(kk) : [0, 0];
           p.step(v[0] + (u[0] || 0), v[1] + (u[1] || 0));
-          if (k >= 2 * lap) { e0[kk] = p.h[0] - h[0]; e1[kk] = p.h[1] - h[1]; }
+          if (k >= (TLAPS - 1) * lap) { e0[kk] = p.h[0] - h[0]; e1[kk] = p.h[1] - h[1]; }
           if (k >= lap) { s2 += (p.h[0] - h[0]) ** 2 + (p.h[1] - h[1]) ** 2; n += 2; }
         }
         return { score: Math.sqrt(s2 / n), err: [e0, e1] };
