@@ -161,14 +161,25 @@ console.log(`  ${OFFSETS.length} offsets per channel, ${DIETS.length} training r
 const distilRuns = () => DIETS.map((rec, di) => {
   const seg = DSEGS[di % DSEGS.length];
   const lap = LAP(rec, seg), ref = refOf(rec, seg);
-  // THIS PLANT IS REBUILT PER TEACHER CALL AND THE MEASUREMENT IS WHY (plan §72.15, §72.17).
-  // Carrying it — free on the tank (4.6 d -> 2.0 d) and the column (74.9 -> 59.3 d) at an
-  // unchanged delivered number — collapses this teacher from 9.3/11.0/9.3/9.2x to
-  // 1.85/1.03/2.17/4.03x, drops a training run, and takes the rung 11.176x -> 3.951x. So it is
-  // measured OFF here, not assumed off. `CARRY=1` is the control, and §72.17 asks WHY, because
-  // the two candidate causes mean very different things about this plant's numbers.
-  const hold = process.env.CARRY === '1' ? carrier(() => settled(rec, seg))
-    : () => settled(rec, seg);
+  // THE PLANT IS CARRIED, AND THAT COSTS THIS PLANT'S HEADLINE 11.176x -> 3.951x (plan §72.18).
+  //
+  // Rebuilding per teacher call scored far better and the reason is not a property of the barrel.
+  // `ambient(k)` reads the plant's OWN step counter, so a rebuild resets the unmeasured drift to
+  // k = 0 and every teacher call sees the IDENTICAL disturbance trajectory. A lap-periodic teacher
+  // can invert a disturbance that repeats exactly and cannot invert one that does not — and 20,000
+  // steps is a whole number of neither 9,300 nor 4,100. The falsifier confirms it outright: carried
+  // with `TH_NOAMB=1` the teacher recovers to 10.9/13.2/10.9/10.4x and the rung reads 14.949x.
+  //
+  //   rebuilt + drift    teacher  9.3/11.0/ 9.3/ 9.2x   11.176x   94.4 d
+  //   carried + drift    teacher  1.85/1.03/2.17/4.03x   3.951x   77.9 d   <- ships
+  //   carried, NO drift  teacher 10.9/13.2/10.9/10.4x   14.949x   73.5 d
+  //
+  // A real barrel's room temperature is not phase-locked to a five-hour recipe cycle, so the
+  // CARRIED configuration is the one that models a machine and the rebuild was flattering the
+  // teacher by a factor of three. It is also cheaper, which is not why it is chosen. `CARRY=0`
+  // restores the old configuration as the control.
+  const hold = process.env.CARRY === '0' ? () => settled(rec, seg)
+    : carrier(() => settled(rec, seg));
   return {
     lap,
     refAt: (k) => TH.powerFor(ref(k)),

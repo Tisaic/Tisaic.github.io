@@ -17296,3 +17296,36 @@ phase-locked across calls, which is a property of the SIMULATOR and not of a bar
 drifts as it likes — and the carried configuration is the better model of a real machine even
 though it scores worse. `TH_NOAMB=1` holds the drift flat and is the falsifier; unset is
 byte-identical.
+
+### §72.18 The falsifier fires, and it retracts the barrel's headline
+
+`TH_NOAMB=1` holds the barrel's unmeasured ambient drift flat. Carried, with the drift gone, the
+teacher **fully recovers** — and so does the rung:
+
+```
+  rebuilt + drift    teacher  9.3 / 11.0 /  9.3 /  9.2x    delivered 11.176x    94.4 d
+  carried + drift    teacher  1.85/  1.03/  2.17/  4.03x   delivered  3.951x    77.9 d
+  carried, NO drift  teacher 10.9 / 13.2 / 10.9 / 10.4x    delivered 14.949x    73.5 d
+```
+
+So the cause is the DRIFT and not the thermal state, and the consequence is not about carrying at
+all: **`ambient(k)` reads the plant's own step counter, so a per-call rebuild resets the unmeasured
+disturbance to k = 0 and every teacher call sees the identical trajectory.** A lap-periodic teacher
+can invert a disturbance that repeats exactly and cannot invert one that does not — 20,000 steps is
+a whole number of neither 9,300 nor 4,100 — so the rebuild was quietly making an aperiodic
+disturbance periodic.
+
+**A real barrel's room temperature is not phase-locked to a five-hour recipe cycle.** The carried
+configuration is the one that models a machine, so it ships, and the barrel's delivered figure is
+**3.951x, not 11.176x**. It remains a win and it remains the deployed object beating a 21,440-MAC
+cascade with 1.6 kB; what is retracted is the factor, by three, and the reason it was wrong is a
+harness convenience nobody had examined rather than anything in the controller.
+
+**AND IT IS THE MILL'S FINDING FROM THE OTHER SIDE.** §71 won the mill by DECLARING its dominant
+disturbance — a roll eccentricity, periodic, measurable, known ahead — and the win was provably
+entirely that declaration (withheld, the object is inert at exactly 1.000x). The barrel's dominant
+disturbance is aperiodic and undeclared, and the teacher cannot invert it: 3.951x with the drift
+against 14.949x without, on the same plant, the same diet and the same controller. One method, two
+plants sharing no physics, and the same sentence explains both — **a feedforward can cancel a
+disturbance it is told about and cannot cancel one it is not**, which is a much better description
+of what this object does than "it wins on compliance and friction".
