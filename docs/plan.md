@@ -17581,3 +17581,39 @@ damped Newton step … the STEP backtracks (1.0 converges the axis on pass one a
 arm)"*. So a failing pass no longer ends the iteration — it HALVES the step and retries, and only
 failure at the smallest step stops it. A search over step length rather than a tuned damping, one
 drive per backtrack exactly as `hff` pays, and the monotone guarantee intact.
+
+### §73.11 Backtracking does not rescue it, and the trace says the direction is wrong
+
+With the damped step in, the barrel reads 16.8 days — the backtracks cost drives — and refuses
+again. The trace is uniform across all four recipes and is a stronger negative than overshoot:
+
+```
+  recipe 0   base 3.7659   pass 0 @1  3.1896  KEPT
+                           pass 1 @1  5.7367  @0.5 4.1739  @0.25 3.5421  @0.125 3.4447   all worse
+  recipe 1   base 4.3951   pass 0 @1  5.0008  @0.5 4.9221  @0.25 4.4565  @0.125 4.4518   all worse
+  recipe 2   base 3.7022   pass 0 @1  3.4040  KEPT, then every scale worse
+  recipe 3   base 3.7173   pass 0 @1  3.3117  KEPT, then every scale worse
+  teacher gains 1.181x / 1.000x / 1.088x / 1.122x — ALL FOUR DROPPED below the 1.5x bar
+```
+
+**Halving approaches the current best FROM ABOVE at every scale, so the increment is not a descent
+direction and no step length exists.** Backtracking can fix a length and not a direction, and it
+correctly declines to take one. On recipe 1 the very FIRST increment is already uphill.
+
+**So the account is not operating-point drift after a large step, which was the obvious guess.**
+The sharper reading is that the oracle port replaces the FORECAST and not the INVERSE: `oracleF0`
+substitutes a measured target for the model's prediction, but the QP still inverts `hGrid`, the
+plant response identified when the cascade was commissioned. **A perfect target inverted through a
+wrong model gives a wrong move**, which is rule 43 from the other side — a better optimiser on a
+wrong model buys nothing — and this plant's cascade scores **1.05x**, barely better than doing
+nothing, so its `hGrid` is exactly that wrong model.
+
+**Which makes a prediction, and the mill is the falsifier.** The oracle teacher should work in
+proportion to how good the cascade already is: the arm's deploys, the mill's is 1.74x and deploys,
+the barrel's is 1.05x, the column's is 0.39x. If this reading is right the mill works and the
+column is worse than the barrel. If the mill also refuses, the account is wrong and the oracle
+teacher simply does not transfer off the arm.
+
+**And the uncomfortable corollary is worth stating whichever way it lands**: a teacher that needs
+a cascade that already works is least available exactly where it is most needed. The barrel wants
+a cheap teacher BECAUSE its plant is hard; a hard plant is where `hGrid` is poor.

@@ -43,6 +43,13 @@
 import { ladder, announce } from './rigs/ladder.mjs';
 import { millSpec } from './rigs/specs.mjs';
 import { deriveWindow, reportDistil, priceFrom, ridgeLadder, teacherReuse, teachLaps, dietN } from './rigs/distilkit.mjs';
+import { oracleConverge } from './rigs/oracleteach.mjs';
+
+// THE ORACLE TEACHER, AND THIS PLANT IS ITS FALSIFIER (plan §73.11). It needs a cascade to
+// iterate, and this plant's cascade is the GOOD one — 1.74x, deploying — where the barrel's is
+// 1.05x and the column's 0.39x. If the barrel's refusal is the cascade's plant model rather than
+// the teacher, this is where it should work.
+const ORACLE = process.env.ORACLE === '1';
 import * as RM from './rigs/rollmill-rig.mjs';
 
 if (process.env.SUITE !== 'full') {
@@ -84,7 +91,7 @@ console.log(`  the UNMEASURED entry wander runs at 2150 and 950 steps, NOT comme
 // first is the only settle there is, so `TLAPS=2` asks whether the second scored lap is buying
 // noise reduction worth a third of the commissioning. Unset is 3 and byte-identical.
 const TLAPS = teachLaps();
-const distilRuns = () => dietN([0, 1, 2, 3]).map((i) => {
+const distilRuns = (auto) => dietN([0, 1, 2, 3]).map((i) => {
   // Each run starts a whole number of TURNS in, so the declared phase is aligned to the lap,
   // and a different number of them, so the UNMEASURED entry wander sits at a different phase.
   const W = Math.round((37 + 11 * i) * PER);
@@ -119,6 +126,33 @@ const distilRuns = () => dietN([0, 1, 2, 3]).map((i) => {
       }
       return { score: Math.sqrt(s2 / n), err };
     },
+    // The plant's own drive loop for the oracle teacher; the iteration is in `oracleteach.mjs`.
+    ...(ORACLE ? { converge: oracleConverge({
+      auto, lap: LAP, nc: 1, passes: +(process.env.OPASSES || 4), debug: process.env.ODBG === '1',
+      drive: async ({ pre, active = false, uOut = null, trace = false, onStep = null }) => {
+        const m = RM.makeMill(1 + i);
+        for (let q = 0; q < W; q++) m.step(RM.S0);
+        const want = [];
+        let s2 = 0, n = 0;
+        const out = trace ? Array.from({ length: LAP }, () => [0]) : null;
+        for (let j = 0; j < TLAPS * LAP; j++) {
+          const kk = ((j % LAP) + LAP) % LAP;
+          if (onStep) onStep(kk);
+          const look = (o) => refOf(W + ((j + o) % LAP + LAP) % LAP);
+          const a = active ? auto.act({ look, lookRaw: look, k: j }) : null;
+          const u = pre[0][kk] + (a ? (a[0] || 0) : 0);
+          if (uOut && a) uOut[0][kk] = a[0] || 0;
+          m.step(RM.S0 + u);
+          want.push((RM.MM * RM.S0 + RM.QM * RM.H0) / (RM.MM + RM.QM));
+          if (want.length > RM.DLY + 2) want.shift();
+          const w = want.length > RM.DLY ? want[want.length - 1 - RM.DLY] : RM.HREF;
+          const g = m.gauge();
+          if (trace && j >= (TLAPS - 1) * LAP) out[kk][0] = g - w;
+          if (j >= (TLAPS - 1) * LAP) { s2 += (g - w) ** 2; n++; }
+        }
+        return { score: Math.sqrt(s2 / n), rec: out };
+      },
+    }) } : {}),
   };
 });
 
@@ -133,7 +167,7 @@ const WARM = 4000;
 const spec = { ...millSpec,
   // NO CASCADE: this rung's teacher is `hff`, so the cascade would be commissioned,
   // scored and then REPLACED by the rung that wins (plan §73.1). `DEPTH=2` is the control.
-  depth: 0,
+  depth: ORACLE ? 1 : 0,
   refAt: (k) => refOf(WARM + k),
   distil: { refDim: REFDIM, ridge: env('RIDGE', 1e-6), offsets: OFFSETS,
     ...(ridgeLadder() ? { ridges: ridgeLadder() } : {}),
