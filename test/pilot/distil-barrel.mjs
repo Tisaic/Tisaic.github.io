@@ -52,7 +52,7 @@
  */
 import { ladder, announce } from './rigs/ladder.mjs';
 import { barrelSpec } from './rigs/specs.mjs';
-import { deriveWindow, reportDistil, priceFrom, ridgeLadder } from './rigs/distilkit.mjs';
+import { deriveWindow, reportDistil, priceFrom, ridgeLadder, teacherReuse } from './rigs/distilkit.mjs';
 import * as TH from './rigs/thermal-rig.mjs';
 
 if (process.env.SUITE !== 'full') {
@@ -203,6 +203,7 @@ const spec = { ...barrelSpec,
   // `STD=0` turns it off as the control.
   distil: { refDim: 3, ridge: env('RIDGE', 1e-6), offsets: OFFSETS,
     ...(ridgeLadder() ? { ridges: ridgeLadder() } : {}),
+    ...(teacherReuse() ? { teacherReuse: true } : {}),
     ...(process.env.STD === '0' ? {} : { standardize: true }),
     // AND THE FIT STREAMS BY DEFAULT, WHICH §63.6 SAID IT COULD NOT. That section measured the
     // streaming shared-covariance route failing to find a fit the batch route found (held-out -20

@@ -40,7 +40,7 @@
  * Run: SUITE=full node test/pilot/distil-tank.mjs   [SEEDS=1,2]  [GRADE=fast]
  */
 import { AutoStack } from '../../lib/pilot/autostack.js';
-import { priceFrom, ridgeLadder } from './rigs/distilkit.mjs';
+import { priceFrom, ridgeLadder, teacherReuse } from './rigs/distilkit.mjs';
 import { into } from './rigs/meter.mjs';
 import { UCAP, makeTanks, voltsFor, SEG, HOLD, RECIPE, quintic, refAtStep, PROG, DT }
   from './rigs/tanks-rig.mjs';
@@ -203,6 +203,7 @@ async function once(seed) {
     ...(process.env.TPASSES ? { hff: { passes: +process.env.TPASSES } } : {}),
     distil: { refDim: 2, ridge: Number(process.env.RIDGE || 1e-6), offsets: OFFSETS,
       ...(ridgeLadder() ? { ridges: ridgeLadder() } : {}),
+      ...(teacherReuse() ? { teacherReuse: true } : {}),
       ...(process.env.STD === '1' ? { standardize: true } : {}),
       ...(process.env.ONLINE === '0' ? { online: false } : {}) },
   });

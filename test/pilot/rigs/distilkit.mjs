@@ -105,6 +105,13 @@ function ridgeLadder(env = process.env.RIDGES) {
   return v.length > 1 ? v : null;
 }
 
+/**
+ * THE TEACHER'S OPERATOR REUSE, READ ONCE. `REUSE=1` hands the operator identified on the first
+ * KEPT training run to every later member of the diet, which is where 94-98% of the product's
+ * plant time goes (plan §72.6). Unset is false and byte-identical.
+ */
+const teacherReuse = () => process.env.REUSE === '1';
+
 /** The geometric offset SHAPE — dense near now where the correction is decided, sparse far out
  * where it only has to span the memory. The shape is a design; the reach is the plant's. */
 const SHAPE = [0, 0.008, 0.016, 0.031, 0.063, 0.125, 0.219, 0.344, 0.5, 0.719, 1];
@@ -217,4 +224,4 @@ async function reportDistil({ rep, runs, nFeat, segs = null, auto = null }) {
   return { inSample, dr };
 }
 
-export { deriveWindow, reportDistil, priceFrom, ridgeLadder, human, SHAPE, DEFAULT_RIDGES };
+export { deriveWindow, reportDistil, priceFrom, ridgeLadder, teacherReuse, human, SHAPE, DEFAULT_RIDGES };

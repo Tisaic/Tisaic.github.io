@@ -16960,3 +16960,49 @@ it does not touch COM. The other 94% is `hff`'s IDENTIFICATION — probe sets an
 paid once per training run *including the three of four this plant then DROPS* below the rung's
 1.5x bar (plan §64). That is the lever this decomposition exposes and the earlier accounting could
 not have found, and it is named here rather than claimed as taken.
+
+### §72.6 The teacher identifies the plant once, not once per training run — 2.4-2.8x, free
+
+The decomposition above points at one thing: 94-98% of the product's plant time is the teacher
+loop, and inside `hff` the refinement is ~6% of that. The rest is IDENTIFICATION — the probe sets
+and the candidate sweep — and it was being paid **in full for every member of the diet**.
+
+It never had to be. `hff` already says in its own header that the operator is a property of the
+PLANT and the servo rather than of the program, already measures the crossing (held-out prediction
+error **15.8% across programs against 15.6% at home**, a banded operator keeping its full
+advantage), already ships `exportOperator()` and an `operator` input that CHECKS the lap and
+channel count rather than trusting them, and already records what it buys: *"a second program of
+the same lap pays for refinement only, 32 laps → 10"*. `AutoStack`'s ②d rung constructed a fresh
+`HarmonicFF` per training run and never handed it on. Every diet in this project is equal-lap by
+construction, so the facility applies unchanged.
+
+It hands on from the first **KEPT** run, not simply the first: a run the rung could not improve is
+a machine failing to track (the 1.5x bar), and an operator identified through that is not a reading
+of the plant. Measured, `RIDGES=1` on both sides so only the teacher moves:
+
+```
+  plant         plant time                    delivered
+  Wood-Berry    251.6 d  ->   90.7 d  2.77x   2.978x -> 2.978x   IAE 27.43/13.94 both
+  cold mill       4.7 h  ->    1.7 h  2.76x   1.446x -> 1.446x
+  quad tank      19.3 d  ->    8.1 d  2.38x   2.591x -> 2.591x   held-out 2.299x both
+```
+
+**THE DELIVERED NUMBER DOES NOT MOVE ON ANY OF THE THREE.** That is rule 21's signature rather
+than a lucky trade — the thing that should not change comes back unchanged and only the cost does
+— and the per-run split says why:
+
+```
+  cold mill    run 0: 51.5 min   runs 1-3: 8.8 / 10.2 / 11.5 min      teacher gains 1.995 1.977 2.017 1.953
+  Wood-Berry   run 0: 59.2 d     runs 1-3: 7.5 d each
+  quad tank    run 0:  4.8 d     runs 1-3: 22.0 / 22.0 / 24.6 h
+```
+
+The mill's four teacher gains are **identical to four figures with and without reuse**, so the
+operator identified on run 0 predicts runs 1-3 exactly as well as their own identifications did —
+`hff`'s recorded cross-program transfer, confirmed on three more plants sharing no physics (rule
+18 in its useful direction).
+
+What it does NOT fix, stated: run 0 still pays full identification and on the column that is 65%
+of what remains (59.2 of 90.7 days). That is the plant identification itself and it is irreducible
+for this teacher. And on Wood-Berry runs 1-3 are DROPPED below the 1.5x bar either way, so their
+22.5 days still buy no rows — the diet, not the teacher, is what would remove that.

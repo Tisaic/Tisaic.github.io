@@ -42,7 +42,7 @@
  */
 import { ladder, announce } from './rigs/ladder.mjs';
 import { millSpec } from './rigs/specs.mjs';
-import { deriveWindow, reportDistil, priceFrom, ridgeLadder } from './rigs/distilkit.mjs';
+import { deriveWindow, reportDistil, priceFrom, ridgeLadder, teacherReuse } from './rigs/distilkit.mjs';
 import * as RM from './rigs/rollmill-rig.mjs';
 
 if (process.env.SUITE !== 'full') {
@@ -121,6 +121,7 @@ const spec = { ...millSpec,
   refAt: (k) => refOf(WARM + k),
   distil: { refDim: REFDIM, ridge: env('RIDGE', 1e-6), offsets: OFFSETS,
     ...(ridgeLadder() ? { ridges: ridgeLadder() } : {}),
+    ...(teacherReuse() ? { teacherReuse: true } : {}),
     ...(process.env.STD === '0' ? {} : { standardize: true }),
     ...(process.env.ONLINE === '0' ? { online: false } : {}) },
   distilRuns };
