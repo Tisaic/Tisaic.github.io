@@ -17267,3 +17267,32 @@ question is which one happened. Both the shared reporter and `distil-tank.mjs` n
 refusal is a result and a crash is not. It is the same shape as the two holes this project has
 already paid for — a `SUITE=full` skip and an `if (canLearn)` race — a check that existed, ran, and
 could not fail.
+
+### §72.17 Carrying the plant is free on two and refused on two, and the barrel's refusal is the finding
+
+```
+  quad tank    4.6 d  ->  2.0 days   held out 2.301x -> 2.301x        CARRIED
+  Wood-Berry  74.9 d  -> 59.3 days            3.643x -> 3.643x        CARRIED
+  cold mill   80 min  -> —           the warm-up is a PHASE ALIGNMENT  NOT carried, by construction
+  barrel      94.4 d  -> 77.9 days           11.176x -> 3.951x        NOT carried, by MEASUREMENT
+```
+
+The barrel's teacher collapses from **9.3 / 11.0 / 9.3 / 9.2x to 1.85 / 1.03 / 2.17 / 4.03x** and
+drops a training run. So on two plants of four the per-call rebuild was doing something other than
+settling — which is the second time in this section that a blanket change would have been wrong,
+and the first time the reason had to be measured rather than read off the construction.
+
+Two candidates, and they mean entirely different things:
+
+- a thermal state left under the PREVIOUS correction, which is a fair cost of continuity; or
+- the plant's UNMEASURED AMBIENT DRIFT. `ambient(k)` reads the plant's own step counter, so a
+  per-call rebuild resets it to k = 0 and every call sees the IDENTICAL drift trajectory. A
+  lap-periodic teacher can invert a disturbance that repeats exactly, and cannot invert one that
+  does not — and 20,000 is not a whole number of either 9,300 or 4,100, so with a carried plant
+  the drift arrives at a different phase every call.
+
+If the second, **the barrel's teacher has been relying on an unmeasured disturbance being
+phase-locked across calls, which is a property of the SIMULATOR and not of a barrel** — a real one
+drifts as it likes — and the carried configuration is the better model of a real machine even
+though it scores worse. `TH_NOAMB=1` holds the drift flat and is the falsifier; unset is
+byte-identical.

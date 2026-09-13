@@ -7,6 +7,9 @@
  */
 
 import { tick } from './meter.mjs';
+
+// See `ambient` below — one falsifier, not a tuning knob.
+const NOAMB = process.env.TH_NOAMB === '1';
 // --------------------------------------------------------------------------- plant
 const NZ = 3;
 const CAP = 6000;        // J/K per zone
@@ -38,6 +41,15 @@ function makeBarrel(seed) {
       // rather than a convenience — see the note at the foot of this file. A drift
       // comparable to the probe corrupts `dc`, and every statistic derived from the
       // probe is normalised by `dc`.
+      // AND IT IS A KNOB, FOR ONE FALSIFIER AND NOT FOR TUNING (plan §72.17). Carrying the plant
+      // across the teacher's calls collapses this plant's teacher from 9.3x to 1.85x, and there
+      // are two explanations with completely different meanings: a thermal state left under the
+      // previous correction, or THIS drift — which a per-call rebuild resets to k = 0, so every
+      // call sees the identical ambient trajectory and a lap-periodic teacher can invert it. If
+      // the second, the barrel's teacher has been relying on an unmeasured disturbance being
+      // phase-locked across calls, which is a property of the SIMULATOR and not of a barrel.
+      // `TH_NOAMB=1` holds it flat; unset is byte-identical (rule 21).
+      if (NOAMB) return TA0;
       return TA0 + 0.6 * Math.sin(2 * Math.PI * kk / 9300) + 0.4 * Math.sin(2 * Math.PI * kk / 4100);
     },
     step(P) {

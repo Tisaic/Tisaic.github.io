@@ -161,8 +161,14 @@ console.log(`  ${OFFSETS.length} offsets per channel, ${DIETS.length} training r
 const distilRuns = () => DIETS.map((rec, di) => {
   const seg = DSEGS[di % DSEGS.length];
   const lap = LAP(rec, seg), ref = refOf(rec, seg);
-  // ONE PLANT FOR THIS RUN, CARRIED ACROSS THE TEACHER'S CALLS (plan §72.15).
-  const hold = carrier(() => settled(rec, seg));
+  // THIS PLANT IS REBUILT PER TEACHER CALL AND THE MEASUREMENT IS WHY (plan §72.15, §72.17).
+  // Carrying it — free on the tank (4.6 d -> 2.0 d) and the column (74.9 -> 59.3 d) at an
+  // unchanged delivered number — collapses this teacher from 9.3/11.0/9.3/9.2x to
+  // 1.85/1.03/2.17/4.03x, drops a training run, and takes the rung 11.176x -> 3.951x. So it is
+  // measured OFF here, not assumed off. `CARRY=1` is the control, and §72.17 asks WHY, because
+  // the two candidate causes mean very different things about this plant's numbers.
+  const hold = process.env.CARRY === '1' ? carrier(() => settled(rec, seg))
+    : () => settled(rec, seg);
   return {
     lap,
     refAt: (k) => TH.powerFor(ref(k)),
