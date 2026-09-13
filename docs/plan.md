@@ -17530,3 +17530,54 @@ the cheap half of the trade was half imaginary.
 not a wait, it is the plant's memory; it sets the minimum lap, and §73.6 is the measurement of what
 happens below it — every configuration refuses. Between §73.6 and §73.8 the two obvious "stop
 waiting" levers are both closed, from opposite ends.
+
+### §73.9 The pilot as the teacher, built for the plant harnesses — and its precondition priced
+
+`hff` is 74-89% of what the product costs these plants, and §73.6 and §73.8 closed both ways of
+making its laps cheaper. What remains is a DIFFERENT teacher, and this project already has one:
+the arm iterates the COMMISSIONED PILOT with the measured error as its free response through
+`oracleF0`, at 6.6x in 10.1 machine-minutes against `hff`'s 107.
+
+**The precondition was measured first (rule 1), because it cuts against §73.1** — the oracle
+teacher iterates a cascade, and §73.1 dropped the cascade as waste:
+
+```
+  plant        hff teacher   cascade at depth 1
+  barrel       29.6 days     4.0 days
+  Wood-Berry   26.3 days     4.9 days
+```
+
+I had quoted 14.9 days for the barrel's cascade and **that was DEPTH 2**. At the depth this route
+needs it is 4.0 — an eighth of what `hff` spends — which is what made the build worth doing. It
+also says why the arm's 10x cannot transfer as a number: it is a ratio between two costs that
+scale differently with a plant's lap.
+
+`test/pilot/rigs/oracleteach.mjs` is the arm's algorithm EXTRACTED rather than rewritten (rule 61).
+`ladder()` hands its own `auto` to the spec's diet closure, since the driver builds the object
+whose port the teacher arms; a closure taking no argument is unaffected.
+
+### §73.10 It is 2.95x cheaper and it did not work, for the reason stated in advance
+
+```
+  control          33.3 days   6.12x
+  oracle teacher   11.3 days   REFUSED — the cascade alone ships at 1.05x
+```
+
+The bill is right — teacher 29.6 → **6.0 days**, cascade 4.0, verify 1.2 — and the teacher is
+useless: it converges **3.7659 → 3.1896, a mere 1.18x**, against `hff`'s 4.283 / 3.943 / 7.047 /
+8.063x on the same four recipes, so every run falls below the rung's own 1.5x bar and the
+distillation has nothing to fit.
+
+**The cause is the one this file named when the module was written and not an afterthought.** The
+header said: the arm band-limits each increment (`qFilter`), that filter lives in the arm's own
+harmonic basis with no plant-agnostic form, this takes the increment RAW, "and if a plant's prefix
+picks up content the machine cannot follow, that is the first thing to look at". The trace says
+exactly that — `uPk` 8.74 of a cap of 12 on pass 0, and **pass 1 makes every run worse** (3.19 →
+5.74, 3.40 → 6.20, 3.31 → 6.12). A full Newton step at near-cap authority overshoots, and the
+monotone gate then allows exactly one pass.
+
+**The remedy carries no constant and is this project's own.** `hff`'s header states it: *"take a
+damped Newton step … the STEP backtracks (1.0 converges the axis on pass one and diverges the
+arm)"*. So a failing pass no longer ends the iteration — it HALVES the step and retries, and only
+failure at the smallest step stops it. A search over step length rather than a tuned damping, one
+drive per backtrack exactly as `hff` pays, and the monotone guarantee intact.
