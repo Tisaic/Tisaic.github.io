@@ -151,6 +151,10 @@ const host = makeArmHost({
   // plus wind-up readings. The DELIVERED number stays on the tracker either way, so what
   // this reads is the cost of a cheaper commissioning and not a cheaper scoreboard.
   ...(process.env.TRUTH ? { distilTruth: process.env.TRUTH } : {}),
+  // THE TOUCH PROBE (plan §74): the teacher may read the truth at K evenly spaced points of the
+  // lap and nowhere else — the instrument a shop already owns, against the tracker it does not.
+  // `PROBEPTS=0` is the default and byte-identical.
+  ...(process.env.PROBEPTS ? { distilProbePts: +process.env.PROBEPTS } : {}),
   ...(process.env.CAP ? { distilCap: +process.env.CAP } : {}),
   ...(process.env.TEACHCAP ? { distilTeachCap: +process.env.TEACHCAP } : {}),
   // Q=<steps>: a circular moving-average Q-filter on the teacher's learned increment (plan §52.16).

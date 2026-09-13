@@ -37,7 +37,17 @@
 import { ladder, announce } from './rigs/ladder.mjs';
 import { wbSpec } from './rigs/specs.mjs';
 import { deriveWindow, reportDistil, priceFrom, ridgeLadder, teacherReuse, carrier, teachLaps, dietN } from './rigs/distilkit.mjs';
+import { oracleConverge } from './rigs/oracleteach.mjs';
 import * as WB from './rigs/woodberry-rig.mjs';
+
+// THE ORACLE TEACHER, AND THIS PLANT IS THE SHARP PREDICTION (plan §73.13). §73.12 read the mill
+// and the barrel as splitting on WHICH HALF of the pilot is broken: the mill's forecast is poor
+// (R² lead0 0.062) and its inverse good (the cascade delivers 1.74x), so replacing the forecast
+// works; the barrel's forecast is excellent (0.970) and its cascade delivers 1.05x, so there is
+// nothing for the port to replace. This column's cascade delivers **0.39x** — worse than the
+// barrel's — so that account predicts it fails here at least as badly. A prediction made before
+// the measurement is the only kind worth making.
+const ORACLE = process.env.ORACLE === '1';
 
 if (process.env.SUITE !== 'full') {
   console.log('\ndistil-column: SKIPPED (full tier only — one commissioning per run)\n');
@@ -99,7 +109,7 @@ console.log(`  ${OFFSETS.length} offsets per channel, ${DIETS.length} training p
 // first is the only settle there is, so `TLAPS=2` asks whether the second scored lap is buying
 // noise reduction worth a third of the commissioning. Unset is 3 and byte-identical.
 const TLAPS = teachLaps();
-const distilRuns = () => dietN(DIETS).map((rec) => {
+const distilRuns = (auto) => dietN(DIETS).map((rec) => {
   const lap = LAP(rec), ref = refOf(rec);
   // ONE PLANT FOR THIS RUN, CARRIED ACROSS THE TEACHER'S CALLS (plan §72.15).
   const hold = carrier(() => settled(rec));
@@ -132,16 +142,51 @@ const distilRuns = () => dietN(DIETS).map((rec) => {
       }
       return { score: Math.sqrt(s2 / n), err };
     },
+
+    // The plant's own drive loop for the oracle teacher; the iteration is in `oracleteach.mjs`.
+    // It re-settles per call rather than using `hold()`, because the iteration compares scores
+    // ACROSS passes and a carried plant makes pass k's starting point pass k-1's ending one —
+    // which is the confound §72.15's carry was allowed precisely because `run` does not do.
+    ...(ORACLE ? { converge: oracleConverge({
+      auto, lap, nc: 2, passes: +(process.env.OPASSES || 8), debug: process.env.ODBG === '1',
+      drive: async ({ pre, active = false, uOut = null, trace = false, onStep = null }) => {
+        const c = settled(rec);
+        let s2 = 0, n = 0;
+        const out = trace ? Array.from({ length: lap }, () => [0, 0]) : null;
+        for (let k = 0; k < TLAPS * lap; k++) {
+          const kk = ((k % lap) + lap) % lap;
+          if (onStep) onStep(kk);
+          const sp = ref(k), u0 = WB.inputsFor(sp[0], sp[1]);
+          const look = (o) => { const t = ref(k + o); return WB.inputsFor(t[0], t[1]); };
+          const a = active ? auto.act({ look, lookRaw: look, k }) : null;
+          const u = [0, 1].map((j) => pre[j][kk] + (a ? (a[j] || 0) : 0));
+          if (uOut && a) for (let j = 0; j < 2; j++) uOut[j][kk] = a[j] || 0;
+          c.step(u0.map((v, j) => v + u[j]));
+          const want = WB.outputsFor(u0);
+          if (trace && k >= (TLAPS - 1) * lap) for (let j = 0; j < 2; j++) out[kk][j] = c.y[j] - want[j];
+          if (k >= (TLAPS - 1) * lap) for (let j = 0; j < 2; j++) { s2 += (c.y[j] - want[j]) ** 2; n++; }
+        }
+        return { score: Math.sqrt(s2 / n), rec: out };
+      },
+    }) } : {}),
   };
 });
 
 const spec = { ...wbSpec,
   // NO CASCADE: this rung's teacher is `hff`, so the cascade would be commissioned,
   // scored and then REPLACED by the rung that wins (plan §73.1). `DEPTH=2` is the control.
-  depth: 0,
+  // `ORACLE=1` needs one, because the oracle teacher IS the commissioned pilot iterated.
+  depth: ORACLE ? 1 : 0,
   ...(process.env.MIMO === '1'
     ? { pilotOpts: { ...(wbSpec.pilotOpts || {}), mimo: true } } : {}),
   distil: { refDim: 2, ridge: env('RIDGE', 1e-6), offsets: OFFSETS,
+    // THE CASCADE IS THE TEACHER AND NOT A CANDIDATE TO SHIP (plan §73.14). A cascade exists on
+    // these plants only because `ORACLE=1` asks for one to iterate; judged as a RUNG it changes
+    // the bar the distilled policy must clear, and on the quadruple tank that is the difference
+    // between shipping 2.59x and shipping the cascade's 1.05x with the policy refused for not
+    // beating it. `lib/flexisim/autohost.js` has defaulted this to TRUE since the rung was built,
+    // for exactly this reason; the plant harnesses never set it because they never had a cascade.
+    ...(ORACLE ? { teacherOnly: true } : {}),
     ...(ridgeLadder() ? { ridges: ridgeLadder() } : {}),
     ...(teacherReuse() ? {} : { teacherReuse: false }),
     ...(process.env.STD === '1' ? { standardize: true } : {}),

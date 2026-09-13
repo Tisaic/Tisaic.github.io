@@ -128,7 +128,7 @@ const distilRuns = (auto) => dietN([0, 1, 2, 3]).map((i) => {
     },
     // The plant's own drive loop for the oracle teacher; the iteration is in `oracleteach.mjs`.
     ...(ORACLE ? { converge: oracleConverge({
-      auto, lap: LAP, nc: 1, passes: +(process.env.OPASSES || 4), debug: process.env.ODBG === '1',
+      auto, lap: LAP, nc: 1, passes: +(process.env.OPASSES || 8), debug: process.env.ODBG === '1',
       drive: async ({ pre, active = false, uOut = null, trace = false, onStep = null }) => {
         const m = RM.makeMill(1 + i);
         for (let q = 0; q < W; q++) m.step(RM.S0);
@@ -170,6 +170,13 @@ const spec = { ...millSpec,
   depth: ORACLE ? 1 : 0,
   refAt: (k) => refOf(WARM + k),
   distil: { refDim: REFDIM, ridge: env('RIDGE', 1e-6), offsets: OFFSETS,
+    // THE CASCADE IS THE TEACHER AND NOT A CANDIDATE TO SHIP (plan §73.14). A cascade exists on
+    // these plants only because `ORACLE=1` asks for one to iterate; judged as a RUNG it changes
+    // the bar the distilled policy must clear, and on the quadruple tank that is the difference
+    // between shipping 2.59x and shipping the cascade's 1.05x with the policy refused for not
+    // beating it. `lib/flexisim/autohost.js` has defaulted this to TRUE since the rung was built,
+    // for exactly this reason; the plant harnesses never set it because they never had a cascade.
+    ...(ORACLE ? { teacherOnly: true } : {}),
     ...(ridgeLadder() ? { ridges: ridgeLadder() } : {}),
     ...(teacherReuse() ? {} : { teacherReuse: false }),
     ...(process.env.STD === '0' ? {} : { standardize: true }),

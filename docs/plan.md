@@ -17661,3 +17661,186 @@ which the ladder already prints and neither of which anyone had read against the
 cheap and self-tuning — the cascade's delivered verify is known before the teacher runs, so a
 ladder could choose its own teacher — but it needs the column (cascade 0.39x, predicted worse than
 the barrel) and the tank before it becomes one.
+
+### §73.13 The column and the tank were asked, and the answer retracts §73.12's account
+
+§73.12 read the mill and the barrel as splitting on WHICH HALF of the pilot is broken — replacing
+a poor forecast works, replacing a good one has nothing to replace — and named the cascade's
+delivered verify as the gate. **The column falsifies it.** Its cascade delivers **0.39x**, the
+worst of the four, and the oracle teacher works there better than anywhere: 2.59-2.99x per
+training run at four passes where `hff` produces a fit with held-out R² 0.397/0.046.
+
+Asking took **three instrument repairs**, and every one of them was "did not run" reading as "ran
+and declined" (rule 25) at a different level:
+
+1. **`AutoStack` nulls `this.stack` the moment a cascade loses its verify**, so the column and the
+   tank had no pilot to iterate and the teacher returned gain EXACTLY 1.000x — indistinguishable
+   in the report from four passes that got nowhere. The library already answers this and the
+   measurement is on record: `lib/flexisim/autohost.js` has recovered a refused cascade as the
+   TEACHER since §52.37, default ON, because a rung's verify scores exactly what the teaching port
+   replaces — a cascade at 0.62x there teaches a policy as good as one at 1.34x. `built.stacks`
+   keeps every commissioned cascade, so the recovery is a lookup; `deployed.stack` is untouched, so
+   what is recovered is a teacher and never a controller. Written in `oracleteach.mjs`, once.
+2. **`deployed.stack` is what `auto.act` reads**, and the plant harnesses reach the pilot through
+   it, so a recovered teacher published on `auto.stack` alone produced an increment of EXACTLY
+   ZERO at every backtrack scale — an iteration that never acted, logged as one that converged.
+   The teaching drive now arms it and a `finally` puts it back. **The mill is byte-identical
+   across the change** (rule 21), because there the cascade was admitted anyway.
+3. **`distil-tank.mjs` supplies no `drivePilot` and never has**, so its `maxDepth: 1` has been
+   inert since the file was written and `"stack":0` in its report meant "never attempted". It went
+   unnoticed because the object that file is about does not need a cascade; the oracle teacher
+   asked for one and got back "no cascade was commissioned at all".
+
+The converge note is now carried into `rep.distil.runs[].note` and printed, so a teacher that
+never ran says so.
+
+### §73.14 §49's law has a turning point and it is a plant constant
+
+The pass count was swept on three plants and they do not agree:
+
+```
+  Wood-Berry   passes  2      4      8     16     32
+               deliv  1.92x  3.43x  5.49x  4.87x  4.82x     peak at 8
+  quad tank    passes  2      4      8
+               deliv  (worse) 2.94x  2.62x                  peak at 4
+  cold mill    its own monotone gate stops at 5-6 whatever is asked
+```
+
+So §49's law fires — a MORE converged teacher teaches a WORSE policy, now through an eighth knob —
+and WHERE it turns is the plant's, not the method's. A written-in 8 would be Wood-Berry's constant
+carried to the others, which is the exact fault the ridge ladder exists to undo (rule 31).
+
+**It is therefore the ladder's SECOND AXIS.** The iteration is monotone and keeps its best prefix,
+so a snapshot at each rung of a fixed geometric grid is free — the deepest rung is paid once and
+every shallower candidate falls out of the same drives — and what a candidate costs is one scored
+run. A teacher that offers no snapshots (`HarmonicFF`, every plant's default) has one depth and is
+byte-identical.
+
+**JOINT AND NOT SEQUENTIAL, WHICH THE TANK DECIDED.** The first version scored the depths at the
+DEFAULT ridge and then the ridges at the winning depth. On the tank the default ridge is `1e-6` —
+the value §70 measured as delivering 0.08x where 1e-1 delivers 1.80x — so every depth was compared
+at a setting that makes the controller useless: two selections sharing one bad constant, which
+cannot check each other (rule 15), and rule 31 one level up. It picked depth 2 and shipped a
+REFUSAL at 1.000x where the joint ladder picks (4 passes, ridge 1e-1) and delivers **2.911x on
+production and 2.536x on the held-out recipe**. This project already records one pair of knobs that
+are not separable (`qpIters` against the horizon); these are the second, and the product is what a
+commissioning pays to find that out. Rule 42's band then has something real to spend itself on for
+the first time: among candidates indistinguishable at the instrument's own resolution, FEWER
+TEACHER PASSES wins, because that is plant time spent producing nothing.
+
+### §73.15 A host teacher that fails is probed for, not discovered at the end
+
+The barrel cannot be taught by the oracle at all — 1.00-1.18x against a 1.5x bar on all four
+training runs, where `hff` reaches 3.9-7.1x on the same recipes. Without a fallback that is the
+whole commissioning: the rung refuses and the plant ships nothing, having spent the teacher's time
+to find out. So run 0 is a **PROBE** — one run of four, so the wasted quarter is the price of the
+question — and a probe that fails switches the engine for the whole diet, run 0 included, with the
+reason printed. Measured: the barrel falls back and ships **4.61x**, and on the other three plants
+the probe agrees with the remaining runs, which is what makes one run enough to ask with.
+
+### §73.16 What the oracle teacher is worth, on four plants, and why it is not a default
+
+```
+  plant         lap-harmonic teacher (default)    oracle teacher (ORACLE=1)
+  cold mill     54.8 min   2.63x                  54.8 min   2.59x
+  quad tank     31.7 h     2.593x (held 2.299x)   3.0 days   2.911x (held 2.536x)
+  Wood-Berry    30.0 days  3.64x                  38.4 days  5.49x
+  extruder      33.3 days  6.12x                  41.0 days  4.61x  (probe failed, fell back)
+```
+
+**Two plants better, two worse, so it does not become a default (rule 31).** What it is worth
+where it wins is large — **Wood-Berry 3.64x → 5.49x, on the plant this project has lost on since
+it was built** — and what it costs where it loses is a probe and a cascade. The mill is the
+informative middle: §73.12 measured the oracle route there at 32.8 min against 54.8, and the joint
+ladder's extra scored runs and the cascade have since eaten the whole saving, so the 1.7x that
+section reported was a property of a shallower ladder rather than of the teacher.
+
+**What IS a default, because it is inert without a snapshotting teacher:** the joint depth × ridge
+ladder, the probe-and-fallback, the refused-cascade recovery, and the three instrument repairs of
+§73.13. Every plant's default path is byte-identical across all of them.
+
+**NOT CLAIMED:** one seed per plant, one diet per plant, one scenario. The column's 5.49x is a
+single draw from a distribution nobody has measured (this is the same debt §72 left open for the
+barrel), and the tank's own held-out column is the only place any of this is scored twice.
+
+## §74 THE INSTRUMENT COLUMN: A TOUCH PROBE ON THE CUT PART
+
+`docs/scorecard.md` is new and exists because the rating driving three sessions of work lived in
+conversation and nowhere in the repository (rule 30). With every cell written down against its
+measurement, the largest gap against the incumbent is not COM and never was:
+
+```
+  INS   3 vs 9   -6     the instrument the customer must own
+  ROB   4 vs 8   -4
+  COM   4 vs 8   -4     was -5 before §72-§73
+```
+
+CLAUDE.md has said so in prose for longer than the scorecard has existed: *"it needs an instrument
+the customer probably does not own, and this file has never said so ... that assumption decides
+who can buy this more than any factor in the table above does."* §52.42 measured the cheap
+PERMANENT instruments and priced the tracker at **3.9x** over the best of them, with motor encoders
+alone worth exactly nothing. What it did not measure is the instrument a shop actually owns, and
+`lib/flexisim/autohost.js`'s own comment names the gap: *"the teacher needs truth at every sample
+of every lap, where a rung's verify needs one rms per run — which a touch probe on the cut part
+supplies."*
+
+### §74.1 What a probe is, as an instrument
+
+The three existing `distilTruth` modes vary WHAT is measured and leave WHEN alone — all of them
+read the machine at every sample of every lap, which is a tracker's property and not a probe's. A
+touch probe gives the part's geometry at a HANDFUL of points, once, after the cut.
+
+`distilProbePts: K` is that instrument, and it degrades both halves because a probe degrades both:
+
+- the RECORD the oracle inverts is those K points, linearly interpolated around the CLOSED lap —
+  the teacher's best guess between touches, and the honest one, since an unmeasured sample is not
+  a zero (rule 25);
+- the SCORE its monotone gate reads is the rms of those K points alone, which is what a probe
+  report gives a shop.
+
+The delivered number and every rung's verify stay on the tracker, exactly as §52.42 keeps them,
+so what is measured is the cost of the cheap TEACHER and not two wrongs agreeing (rule 15).
+
+### §74.2 SIXTY-FOUR TOUCHES PER PART BUY WHAT A LASER TRACKER BUYS
+
+Bench cell, sharp square, one commissioning per rung, delivered error on the machine:
+
+```
+  probed points per lap    delivered      x over bare      against the tracker
+  tracker (every sample)   1.6159e-1         6.63x            1.000x   <- the control
+     8                     7.0748e-1         1.51x            0.228x
+    16                     2.2072e-1         4.86x            0.732x
+    32                     1.6438e-1         6.52x            0.983x
+    64                     1.6057e-1         6.67x            1.006x
+   128                     1.6167e-1         6.63x            0.999x
+```
+
+**The ladder saturates at 64 and is within 2% at 32.** The control is exact: `PROBEPTS=0`
+reproduces §52.42's recorded 6.63x to every digit, so the knob measured something rather than
+moved it (rule 21).
+
+The arm's lap is 7,356 machine steps, so 64 points is **one touch per 115 steps**. On a real
+machine that is a two-to-three-minute on-machine inspection routine — the thing a shop already
+runs on a first article — against a metrology service, machine downtime and a specialist.
+
+### §74.3 The mechanism, and the falsifier it names
+
+The count that works is not a fraction of the lap, it is a sampling rate against the PLANT'S OWN
+timescales: 64 points per 7,356 steps resolves the measured ring (~3,400 steps) at about 30
+samples per cycle and the position loop's rise (951 steps) at about 8. Saturation right there is
+what that predicts.
+
+**The falsifier is the FEED**, and it is cheap: a feedrate change moves the lap length in steps
+while every plant timescale stays fixed. If the probe count needed scales with the lap, this is
+Nyquist on the plant and the shop's number is "one touch per N millimetres of path"; if it stays
+at 64, it is a property of the map's own coefficient count and the shop's number is "sixty-four
+touches, whatever the part". Not yet run.
+
+### §74.4 What is NOT claimed
+
+The probed points are EVENLY SPACED IN LAP PHASE, where a real inspection routine touches
+features. The probe reading is EXACT at the points it takes — defensible for a touch probe, which
+is µm-class where §50.1 measured the tracker's own noise as costing about 2x, but it is an
+assumption and not a measurement. One plant, one cell, one seed, one program. And this prices the
+TEACHER only: the cascade below it is still commissioned from the machine's own signals, and the
+scored verify in these runs is still the tracker's.

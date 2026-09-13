@@ -267,13 +267,20 @@ async function reportDistil({ rep, runs, nFeat, segs = null, auto = null }) {
     console.log('\n  in sample, on its own training runs: '
       + inSample.map((x) => `${x.toFixed(3)}x`).join('  '));
   }
+  if (rep.distil && rep.distil.teacherFallback) {
+    console.log(`  the TEACHER FELL BACK: ${rep.distil.teacherFallback}`);
+  }
   if (rep.distil && rep.distil.runs) {
     console.log('  the TEACHER, per training run:');
     for (const [i, c] of rep.distil.runs.entries()) {
       console.log(`    run ${i}: ${segs ? `SEG ${segs[i % segs.length]}  ` : ''}lap ${c.lap}  `
         + `teacher ${c.gain.toFixed(3)}x  rows ${c.used}  ${c.dropped ? 'DROPPED' : 'kept'}`
         + `  engine ${c.engine}`
-        + (c.passes === null || c.passes === undefined ? '' : `  passes ${c.passes}`));
+        + (c.passes === null || c.passes === undefined ? '' : `  passes ${c.passes}`)
+        // A TEACHER THAT NEVER RAN READS AS ONE THAT RAN AND GOT NOWHERE, unless it says so.
+        // The oracle teacher needs a commissioned pilot to iterate and returns a stated note
+        // when there is none; both produce gain EXACTLY 1.000x and DROPPED (rule 25).
+        + (c.note ? `\n             note: ${c.note}` : ''));
       // The teacher's own laps by phase, which decides what can be cut (plan §72.11).
       if (c.budget) {
         console.log(`             laps: ${Object.entries(c.budget)
@@ -285,13 +292,24 @@ async function reportDistil({ rep, runs, nFeat, segs = null, auto = null }) {
   // THE LADDER'S OWN TABLE, printed whenever one ran — the fit's score beside what the MACHINE
   // said, because on the tank those two order INVERSELY and a report showing one alone would
   // reproduce the fault this ladder exists to remove (plan §70, §72).
+  // THE TEACHER'S PASS LADDER, SCORED ON THE MACHINE (plan §73.14) — printed beside the
+  // ridge's for the same reason: the pick is a measurement and the table is what says so.
+  if (rep.distil && rep.distil.teacherLadder) {
+    console.log('  the TEACHER LADDER, scored on the machine:');
+    for (const c of rep.distil.teacherLadder) {
+      console.log(`    ${String(c.passes).padStart(3)} pass(es)  machine `
+        + `${c.score === null ? '—        ' : c.score.toExponential(4)}`
+        + `  held-out [${(c.heldOutR2 || []).map((x) => x.toFixed(4)).join(', ')}]`
+        + `${rep.distil.teacherPicked === c.passes ? '   <- PICKED' : ''}`);
+    }
+  }
   if (rep.distil && rep.distil.ridges) {
     console.log('  the RIDGE LADDER, scored on the machine:');
     for (const c of rep.distil.ridges) {
-      console.log(`    ridge ${String(c.ridge).padStart(7)}  `
+      console.log(`    ridge ${String(c.ridge).padStart(7)}${c.passes ? ` · teacher ${String(c.passes).padStart(2)}p` : ""}  `
         + `machine ${c.score === null ? 'not scored (the fit refused)' : c.score.toExponential(4)}`
         + `  held-out ${JSON.stringify(c.heldOutR2)}`
-        + (c.ridge === rep.distil.ridgePicked ? '   <- PICKED'
+        + (c.ridge === rep.distil.ridgePicked && c.passes === rep.distil.teacherPicked ? '   <- PICKED'
           : (rep.distil.ridgeBand || []).includes(c.ridge) ? '   (in band)' : ''));
     }
   }

@@ -42,7 +42,8 @@
 import { AutoStack } from '../../lib/pilot/autostack.js';
 import { priceFrom, ridgeLadder, teacherReuse, carrier, teachLaps, dietN } from './rigs/distilkit.mjs';
 import { into } from './rigs/meter.mjs';
-import { UCAP, makeTanks, voltsFor, SEG, HOLD, RECIPE, quintic, refAtStep, PROG, DT }
+import { oracleConverge } from './rigs/oracleteach.mjs';
+import { UCAP, makeTanks, voltsFor, levelsAt, SEG, HOLD, RECIPE, quintic, refAtStep, PROG, DT }
   from './rigs/tanks-rig.mjs';
 
 // LAPS PER TEACHER CALL (plan §73.2). One lap settles under the correction just handed over, the
@@ -50,6 +51,11 @@ import { UCAP, makeTanks, voltsFor, SEG, HOLD, RECIPE, quintic, refAtStep, PROG,
 // first is the only settle there is, so `TLAPS=2` asks whether the second scored lap is buying
 // noise reduction worth a third of the commissioning. Unset is 3 and byte-identical.
 const TLAPS = teachLaps();
+
+// THE ORACLE TEACHER (plan §73.13). The third plant asked, and the one whose cascade sits between
+// the mill's 1.74x and the column's 0.39x. `maxDepth` is already 1 here, so the pilot the port
+// iterates is the one this file already commissions.
+const ORACLE = process.env.ORACLE === '1';
 
 if (process.env.SUITE !== 'full') {
   console.log('\ndistil-tank: SKIPPED (full tier only — one commissioning per seed)\n');
@@ -182,6 +188,13 @@ async function once(seed) {
     uMax: UCAP, guards: [{ index: 0, max: 19 }, { index: 1, max: 19 }],
     workspace: () => true, seed,
     classic: false, maxDepth: 1, periodic: false,
+    // THE PILOT'S OWN OPTIONS, which `Stack` reads and which this file has never supplied. It
+    // routes them exactly as `rigs/ladder.mjs` does — `pilot: { nMeasured, start, guards,
+    // workspace, seed }` — and they are only ever read when a cascade is commissioned, so every
+    // number this file produced before `drivePilot` existed is unaffected.
+    pilot: { nMeasured: 4, start: voltsFor(G, RECIPE[0][0], RECIPE[0][1]),
+      guards: [{ index: 0, max: 19 }, { index: 1, max: 19 }],
+      workspace: () => true, seed },
     // THE WINDOW IS RE-DERIVED FROM THIS PLANT'S OWN MEASURED SETTLE, not carried from the arm
     // (rule 31, which names the scoring window and the ridge among the constants this project has
     // carried and been wrong about). The arm's shipped ladder reaches ±2048 raw steps against its
@@ -214,6 +227,13 @@ async function once(seed) {
         ...(process.env.TFRACS ? { probeFracs: process.env.TFRACS.split(',').map(Number) } : {}),
       } } : {}),
     distil: { refDim: 2, ridge: Number(process.env.RIDGE || 1e-6), offsets: OFFSETS,
+      // THE CASCADE IS THE TEACHER AND NOT A CANDIDATE TO SHIP (plan §73.14). A cascade exists on
+      // these plants only because `ORACLE=1` asks for one to iterate; judged as a RUNG it changes
+      // the bar the distilled policy must clear, and on the quadruple tank that is the difference
+      // between shipping 2.59x and shipping the cascade's 1.05x with the policy refused for not
+      // beating it. `lib/flexisim/autohost.js` has defaulted this to TRUE since the rung was built,
+      // for exactly this reason; the plant harnesses never set it because they never had a cascade.
+      ...(ORACLE ? { teacherOnly: true } : {}),
       ...(ridgeLadder() ? { ridges: ridgeLadder() } : {}),
       ...(teacherReuse() ? {} : { teacherReuse: false }),
       ...(process.env.STD === '1' ? { standardize: true } : {}),
@@ -279,7 +299,37 @@ async function once(seed) {
 
   /** The training diet: four recipes the scored program is not one of. */
   const run = (corr, cname) => inPhase('verify', () => run0(corr, cname));
-  const distilRuns = () => dietN(DIETS).map((rec, di) => {
+
+  // ---- THE CASCADE'S PHASE MACHINE, WHICH THIS HARNESS HAS NEVER SUPPLIED (plan §73.13).
+  //
+  // `AutoStack` commissions a cascade only if the host gives it `drivePilot`, and this file
+  // never has — so `maxDepth: 1` above has been inert since the day it was written and the
+  // report's `"stack":0` meant "never attempted", not "attempted and refused" (rule 25). It went
+  // unnoticed because the object this file is about is the distilled rung, which does not need
+  // one; it surfaced the moment the oracle teacher asked for a pilot to iterate and got back
+  // "no cascade was commissioned at all".
+  //
+  // It is the same loop `rigs/ladder.mjs` runs, on this plant's own `fresh`/`step` (rule 61 — the
+  // routing is written once per plant and this harness's plant is the shared spec's plant with a
+  // different settle length). `actBelow` keeps the rungs under the cascade applied while it
+  // probes, exactly as the shared driver does, so the layer is identified on the machine it will
+  // sit on (rule 34).
+  const drivePilot0 = async (stk) => {
+    const p = makeTanks(G);
+    for (let i = 0; i < 30000; i++) p.step(start[0], start[1]);
+    let guard = 0;
+    while (stk.phase !== 'done' && guard++ < 4e6) {
+      if (stk.phase === 'fit') { stk.work(); continue; }
+      const cmd = stk.command();
+      const below = auto.actBelow('stack', { v: cmd.map((c) => c.vel), a: cmd.map((c) => c.acc) });
+      const ref = cmd.map((c) => c.pos), u = cmd.map((c, j) => c.u + below[j]);
+      p.step(ref[0] + u[0], ref[1] + u[1]);
+      const want = levelsAt(G, ref[0], ref[1]);
+      stk.observe([p.h[0], p.h[1], p.h[2], p.h[3]], [p.h[0] - want[0], p.h[1] - want[1]]);
+    }
+  };
+  const drivePilot = (stk) => inPhase('cascade', () => drivePilot0(stk));
+  const distilRuns = (au) => dietN(DIETS).map((rec, di) => {
     const seg = DSEGS[di % DSEGS.length];
     const lap = seg * rec.length, ref = refOf(rec, seg);
     // ONE PLANT FOR THIS RUN, CARRIED ACROSS THE TEACHER'S CALLS (plan §72.15). The settle is
@@ -320,6 +370,35 @@ async function once(seed) {
         }
         return { score: Math.sqrt(s2 / n), err: [e0, e1] };
       }),
+
+      // The plant's own drive loop for the oracle teacher; the iteration is in `oracleteach.mjs`.
+      // It re-settles per call rather than using `hold()`, because the iteration compares scores
+      // ACROSS passes and a carried plant makes pass k's starting point pass k-1's ending one.
+      ...(ORACLE ? { converge: oracleConverge({
+        auto: au, lap, nc: 2, passes: +(process.env.OPASSES || 8),
+        debug: process.env.ODBG === '1',
+        drive: async ({ pre, active = false, uOut = null, trace = false, onStep = null }) => {
+          const p = settled(rec, seg);
+          let s2 = 0, n = 0;
+          const out = trace ? Array.from({ length: lap }, () => [0, 0]) : null;
+          for (let k = 0; k < TLAPS * lap; k++) {
+            const kk = ((k % lap) + lap) % lap;
+            if (onStep) onStep(kk);
+            const h = ref(k), v = voltsFor(G, h[0], h[1]);
+            const look = (o) => { const t = ref(k + o); return voltsFor(G, t[0], t[1]); };
+            const spd = (() => { const a0 = ref(k - 1), b0 = ref(k + 1);
+              return Math.hypot(b0[0] - a0[0], b0[1] - a0[1]) * 0.5; })();
+            const a = active ? au.act({ look, lookRaw: look, k, speed: spd }) : null;
+            const u = [0, 1].map((j) => pre[j][kk] + (a ? (a[j] || 0) : 0));
+            if (uOut && a) for (let j = 0; j < 2; j++) uOut[j][kk] = a[j] || 0;
+            p.step(v[0] + u[0], v[1] + u[1]);
+            if (active) au.observe([p.h[0], p.h[1], p.h[2], p.h[3]]);
+            if (trace && k >= (TLAPS - 1) * lap) { out[kk][0] = p.h[0] - h[0]; out[kk][1] = p.h[1] - h[1]; }
+            if (k >= (TLAPS - 1) * lap) { s2 += (p.h[0] - h[0]) ** 2 + (p.h[1] - h[1]) ** 2; n += 2; }
+          }
+          return { score: Math.sqrt(s2 / n), rec: out };
+        },
+      }) } : {}),
     };
   });
 
@@ -327,7 +406,16 @@ async function once(seed) {
   // moment the commissioning returns: everything after it — the in-sample column, the held-out
   // program — is SCORING, and charging it would price the instrument rather than the product.
   const price = priceFrom();
-  const rep = await auto.commission({ run, distilRuns });
+  // BOUND TO THE `auto` BEING COMMISSIONED, because the oracle teacher iterates the pilot that
+  // this commissioning built. `rigs/ladder.mjs` does the same for the harnesses that go through
+  // it; this file drives `AutoStack` itself, so it has to hand the reference over by hand — and
+  // an unbound `distilRuns` would have produced a `converge` closure reading `auto.stack` off
+  // `undefined`, which is a throw into `rep.distil.error` and a rung that never ran (rule 25).
+  const rep = await auto.commission({ run, distilRuns: () => distilRuns(auto),
+    // OFFERED ONLY UNDER `ORACLE=1`, so every number this file has ever produced is reproducible
+    // by leaving it unset — a cascade commissioned where none was before changes the ladder's
+    // own best-so-far and would silently re-base the hff route's comparison (rule 20).
+    ...(ORACLE ? { drivePilot } : {}) });
   price.close({ dt: DT, rep });
 
   // THE SPLIT THAT SAYS *WHY*, and the one `distil-arm.mjs` exists to make: score the fitted
@@ -389,7 +477,7 @@ async function once(seed) {
         console.log(`      ridge ${String(c.ridge).padStart(7)}  production `
           + `${c.score === null ? "—" : (rep.base / c.score).toFixed(3) + "x"}`
           + `   held out ${x.toFixed(3)}x`
-          + (c.ridge === rep.distil.ridgePicked ? '   <- PICKED' : ''));
+          + (c.ridge === rep.distil.ridgePicked && c.passes === rep.distil.teacherPicked ? '   <- PICKED' : ''));
       }
     }
   }
@@ -416,13 +504,14 @@ async function once(seed) {
       + (uPk < 1e-9 ? 'ZERO, so the rung never acted'
         : uPk >= 0.999 * UCAP ? 'SATURATED at its cap'
         : 'NON-ZERO and off its cap'));
+    if (rep.distil.teacherFallback) console.log(`    the TEACHER FELL BACK: ${rep.distil.teacherFallback}`);
     // THE RIDGE LADDER'S OWN TABLE, and this plant is the reason it exists (plan §72.3). The
     // MACHINE column and the fit's own held-out column order INVERSELY here, so a report showing
     // one alone would reproduce the fault the ladder removes.
     if (rep.distil.ridges) {
       console.log('    the RIDGE LADDER, scored on the machine:');
       for (const c of rep.distil.ridges) {
-        console.log(`      ridge ${String(c.ridge).padStart(7)}  `
+        console.log(`      ridge ${String(c.ridge).padStart(7)}${c.passes ? ` · teacher ${String(c.passes).padStart(2)}p` : ''}  `
           + `machine ${c.score === null ? 'not scored (the fit refused)' : c.score.toExponential(4)}`
           + `  held-out ${JSON.stringify(c.heldOutR2)}`
           + (c.ridge === rep.distil.ridgePicked ? '   <- PICKED'

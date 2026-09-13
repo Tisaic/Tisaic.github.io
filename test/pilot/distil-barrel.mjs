@@ -239,7 +239,7 @@ const distilRuns = (auto) => dietN(DIETS).map((rec, di) => {
     // applies a frozen PREFIX rather than a candidate, it may arm `auto.act` on top of that
     // prefix and capture what it applied, and it may return the measured truth per raw step.
     ...(ORACLE ? { converge: oracleConverge({
-      auto, lap, nc: 3, passes: +(process.env.OPASSES || 4), debug: process.env.ODBG === '1',
+      auto, lap, nc: 3, passes: +(process.env.OPASSES || 8), debug: process.env.ODBG === '1',
       drive: async ({ pre, active = false, uOut = null, trace = false, onStep = null }) => {
         const p = hold();
         let s2 = 0, n = 0;
@@ -280,6 +280,13 @@ const spec = { ...barrelSpec,
   // covariance prior act on blocks ~400x apart. Measured on this plant: 8.69x → 11.22x.
   // `STD=0` turns it off as the control.
   distil: { refDim: 3, ridge: env('RIDGE', 1e-6), offsets: OFFSETS,
+    // THE CASCADE IS THE TEACHER AND NOT A CANDIDATE TO SHIP (plan §73.14). A cascade exists on
+    // these plants only because `ORACLE=1` asks for one to iterate; judged as a RUNG it changes
+    // the bar the distilled policy must clear, and on the quadruple tank that is the difference
+    // between shipping 2.59x and shipping the cascade's 1.05x with the policy refused for not
+    // beating it. `lib/flexisim/autohost.js` has defaulted this to TRUE since the rung was built,
+    // for exactly this reason; the plant harnesses never set it because they never had a cascade.
+    ...(ORACLE ? { teacherOnly: true } : {}),
     ...(ridgeLadder() ? { ridges: ridgeLadder() } : {}),
     ...(teacherReuse() ? {} : { teacherReuse: false }),
     ...(process.env.STD === '0' ? {} : { standardize: true }),

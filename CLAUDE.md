@@ -109,9 +109,29 @@ reading the wrong sign. The wind-up instrument sees 52% of channel 0 (corr 0.97)
 (corr 0.71) before any fit, which is the size of the result it produced; the rest is link bend, and
 a wind-up reading cannot see it. The
 `tracker` control is byte-identical to the shipped default, which is what says the knob measured
-something rather than moved it (rule 21). Still unmeasured: a touch probe on the cut part, which is
-the instrument a shop actually owns, and which supplies one rms per run rather than truth per
-sample.
+something rather than moved it (rule 21).
+**AND THE INSTRUMENT A SHOP ACTUALLY OWNS IS NOW MEASURED, AND IT IS THE BEST NEWS IN THIS SECTION:
+SIXTY-FOUR TOUCHES PER PART BUY WHAT A LASER TRACKER BUYS (plan §74).** The three modes above vary
+WHAT is measured and leave WHEN alone — every one of them reads the machine at each sample of each
+lap, which is a tracker's property and not a probe's. `distilProbePts: K` lets the teacher read the
+truth at K evenly spaced points of the lap and NOWHERE ELSE, degrading both halves because a probe
+degrades both: the RECORD the oracle inverts is those K points interpolated around the closed lap,
+and the SCORE its monotone gate reads is their rms alone. Delivered on the bench square:
+
+```
+    8 points  1.51x  (0.23x of the tracker)      64 points  6.67x  (1.006x)
+   16 points  4.86x  (0.73x)                    128 points  6.63x  (0.999x)
+   32 points  6.52x  (0.98x)                    tracker     6.63x   the control, reproduced exactly
+```
+
+**The ladder SATURATES at 64 and is within 2% at 32.** The arm's lap is 7,356 machine steps, so
+that is one touch per 115 steps — a two-to-three-minute on-machine inspection routine, the thing a
+shop already runs on a first article, against a metrology service and machine downtime. The count
+that works is a sampling rate against the PLANT'S timescales rather than a fraction of the lap (64
+points resolve the measured ring at ~30 per cycle and the loop's rise at ~8), and the falsifier for
+that is the FEED, which moves the lap in steps while every plant timescale stays fixed — named and
+not run. NOT CLAIMED: the points are evenly spaced in lap phase where a real routine touches
+features, the reading is exact at the points taken, and it is one plant, one cell, one seed.
 
 **AND COMPUTE TIME IS NOT COMMISSIONING TIME.** The "2 minutes on the arm" is wall clock for the
 ladder. The distillation route needs iteration converged on about six training programs, which is
@@ -379,10 +399,10 @@ Each of these is a claim that can be shown false, which is the only kind worth w
 
    ```
      plant        product, first measured   ->   at today's defaults      delivered
-     cold mill        4.6 h                      80 min      MET          1.153x -> 1.450x
-     quad tank       18.9 days                    2.0 days   2x over      REFUSED -> 2.591x
-     Wood-Berry     249 days                     59.3 days  59x over      2.50x  -> 3.643x
-     barrel         338 days                     77.9 days  78x over      see the retraction below
+     cold mill        4.6 h                      55 min      MET          1.153x -> 2.63x
+     quad tank       18.9 days                    1.3 days   1.3x over    REFUSED -> 2.593x
+     Wood-Berry     249 days                     30.0 days  30x over      2.50x  -> 3.64x
+     barrel         338 days                     33.3 days  33x over      see the retraction below
    ```
 
    In order of what they were worth: the OPERATOR is identified once per plant rather than once
@@ -409,6 +429,42 @@ Each of these is a claim that can be shown false, which is the only kind worth w
    the operator handoff exposed: **the plant is characterised ONCE and each new program after that
    costs a fraction of it** (barrel 79.6 days then 8.3; column 59.2 then 7.5). That is target 1
    priced for the first time, and stating which of the two a figure refers to is now compulsory.
+
+   **AND A SECOND TEACHER IS BUILT, MEASURED ON FOUR PLANTS AND NOT MADE A DEFAULT (plan §73.13
+   to §73.16).** `hff` is 74-89% of what the product costs these plants, and §73.6 and §73.8 closed
+   both ways of making its laps cheaper by measurement — the lap cannot go below the plant's settle
+   and the settle lap inside a call cannot go at all. So the remaining lever is a DIFFERENT teacher,
+   and this project already had one: `oracleteach.mjs` iterates the COMMISSIONED PILOT with the
+   measured error as its free response, which replaces exactly the probe set `hff` spends its laps
+   on. Asking three more plants took three instrument repairs, every one of them "did not run"
+   reading as "ran and declined" (rule 25) — `AutoStack` discards a cascade the moment it loses its
+   verify, `deployed.stack` and not `auto.stack` is what `act` reads, and `distil-tank.mjs` has
+   never supplied a `drivePilot` so its `maxDepth: 1` was inert from the day it was written.
+
+   ```
+     plant         lap-harmonic teacher (default)    oracle teacher (ORACLE=1)
+     cold mill     54.8 min   2.63x                  54.8 min   2.59x
+     quad tank     31.7 h     2.593x (held 2.299x)   3.0 days   2.911x (held 2.536x)
+     Wood-Berry    30.0 days  3.64x                  38.4 days  5.49x
+     extruder      33.3 days  6.12x                  41.0 days  4.61x  (probe failed, fell back)
+   ```
+
+   **Two plants better, two worse, so it is not a default (rule 31)** — and what it is worth where
+   it wins is large: **Wood-Berry 3.64x → 5.49x, on the plant this project has lost on since it was
+   built**. §73.12's "which half of the pilot is broken" account is RETRACTED by the column, whose
+   cascade delivers 0.39x — the worst of the four — and which the oracle teaches best of all.
+
+   **WHAT IS A DEFAULT, because it is inert without a snapshotting teacher**: the ladder gained a
+   SECOND AXIS. §49's law says a more converged teacher teaches a WORSE policy — an eighth knob now
+   — but WHERE it turns is the plant's (Wood-Berry peaks at 8 passes, the tank at 4, the mill's own
+   gate stops at 5-6), so the pass count is scored on the machine like the ridge. It is JOINT with
+   the ridge and not sequential, which the TANK decided: scored first at the default `1e-6` — the
+   value §70 measured as delivering 0.08x — every depth was compared at a setting that makes the
+   controller useless, and it shipped a REFUSAL where the joint ladder delivers 2.911x. Two
+   selections sharing one bad constant cannot check each other (rule 15). The snapshots themselves
+   are free, since the iteration is monotone and the deepest rung pays for every shallower one.
+   Rule 42's band also gets something real to spend itself on for the first time: among candidates
+   indistinguishable at the instrument's resolution, FEWER TEACHER PASSES wins.
 
    WHAT IS NOT YET DONE: the contract bar at 2 minutes — the arm's ladder still reports 3.13x on
    the soft cell against the 22.42x the memory-carrying stack reached, which is the retirement's
@@ -1681,6 +1737,8 @@ measurement behind each is in `docs/history/` — the pointer in brackets.
 | `test/pilot/rigs/meter.mjs` | **THE PLANT'S OWN CLOCK, COUNTED AT THE PLANT (plan §72).** One counter, ticked inside each rig's own `step`, so no caller can bypass it and the TEACHER and the PRODUCT land on one axis. It is here and not in the harnesses because every harness advances its plant from a different place — the ladder's scored `run`, its `drivePilot`, and each diet closure's own loop — so a counter wired per call site misses the next one added (rule 61). It buckets by a LABEL that `rigs/ladder.mjs` sets in one place, and anything unlabelled lands in `other` rather than being credited to the phase above it (rule 25) — which is how `distil-tank.mjs` read `other 100%` until it labelled its own phases. What it found: **the product's commissioning is 40-65x the teacher's**, and the mill — the ONE plant of four meeting target 4 — misses it by fifty for the object that actually deploys. Then it decomposed: **teacher 84-98%, cascade 2-19%, verify 2-6%**, so the machine-scored verify everything here treats as the expensive part is a rounding error. |
 | `test/pilot/rigs/distilkit.mjs` — `priceFrom`, `ridgeLadder`, `carrier` | **THE THREE THINGS §72 ADDED TO THE SHARED KIT, EACH BECAUSE A SECOND COPY WOULD HAVE DRIFTED.** `priceFrom` opens the meter and prints the product's bill with its per-phase split, closed the moment the ladder returns because `reportDistil`'s in-sample column re-runs every training program and charging that would price the instrument. `ridgeLadder` hands `AutoStack` a fixed geometric grid of candidates to refit and SCORE ON THE MACHINE — a DESIGN in the same sense as the offset `SHAPE`, carrying no plant's number, which is the point since `1e-6` was the arm's. `carrier` keeps ONE plant per training run across the teacher's calls, which `lib/flexisim/autohost.js` has done for the arm since §52.12 and the plant harnesses never did. **It also throws when the rung throws**: `AutoStack` catches what `distilRuns()` raises into `rep.distil.error` — right, one bad diet must not take a commissioning down — and nothing read the field, so a missing import produced a rung that never ran, a 1.000x, a summary reading "it REFUSED" and a GREEN test. "Did not run" and "ran and declined" are different states (rule 25). |
 | `test/pilot/commtime.mjs` | **WHAT COMMISSIONING COSTS THE PLANT, ON EVERY PLANT — target 4's number, which each rig has been PRINTING all along (plan §54.6).** A SCRAPE of the line each plant already prints in its OWN process time, not a re-measurement, so no plant is re-scored by a metric this file invented. **One of the four plants that state a clock meets target 4; the spread is 1643x; and the two that state none read UNKNOWN rather than met (rule 25) — one of them being the arm, which the target claims as MET on a simulator's wall clock.** It prints the STEPS and TIME rankings side by side and says when they disagree, which they do: Wood-Berry is the cheapest here in steps and the most expensive in days. |
+| `docs/scorecard.md` | **WHERE THIS OBJECT STANDS AGAINST THE FIELD, COLUMN BY COLUMN — and it exists because the scorecard did not (plan §74).** The rating that has driven three sessions of work — "disturbance rejection is 2/10, its worst aspect", "the next column by gap after DIS is COM, 3/10 against PID+FF's 8/10" — lived in conversation and nowhere in this repository, which is rule 30 aimed at a priority order: a list nobody can re-derive is a preference. Ten columns, every cell citing a measurement or saying UNKNOWN (rule 25), rating the DEPLOYED object and not the teacher or the simulator. What it changed the moment it was written down: **the largest gap is INS, the instrument the customer must own (3 against 9), and it always was** — CLAUDE.md has said so in prose for longer than the scorecard has existed. It also states what it is not: one rival built on the arm, two on EMPS, one disqualified, and the incumbent column is PID+FF measured on this project's own rigs. |
+| `test/pilot/rigs/oracleteach.mjs` | **THE PILOT AS THE TEACHER, FOR THE PLANT HARNESSES (plan §73.9-§73.16).** `hff` spends its laps IDENTIFYING an operator by probing at the lap's harmonics; the oracle port replaces exactly that, so the QP inverts the truth instead of a prediction of it and no probe set is needed. The arm's algorithm EXTRACTED rather than rewritten (rule 61), with the one thing that does not carry — the arm's harmonic-basis `qFilter` — replaced by a BACKTRACKING step, which is `hff`'s own remedy and carries no constant. **It teaches from a REFUSED cascade**, which is what made it reach three plants instead of one: `AutoStack` nulls `this.stack` when a cascade loses its verify, and a rung's verify scores exactly what the teaching port replaces. It also returns SNAPSHOTS of the prefixes it passed through, free because the iteration is monotone, so the pass count becomes the ladder's second machine-scored axis instead of a carried constant. Two plants better, two worse; opt-in. |
 | `docs/edm.md` | **A PROSPECTIVE DEPLOYMENT, SCOPED BEFORE ANY MEASUREMENT — a custom wire EDM and hole popper on B&R controls.** Written so the predictions can be read against what was claimed BEFORE the data existed. It splits the machine's two objectives by this project's own evidence: FINISHING is this method's own shape (a repeatable geometric error on a repeated contour, with the cut part as the commissioning truth — which closes the north star's own open case, the touch probe a shop actually owns), while ROUGHING gap regulation against the arcing boundary is stochastic and the gate should REFUSE it — with one preview-shaped sub-problem inside it that is where the wire actually breaks (height steps, corners, entry/exit are all known from the program). Carries the LOGGING SPEC, because no public EDM dataset gives gap dynamics and building a simulator to suit the controller is rule 15 exactly — the machine removes that gate by supplying real records. **AND §6 IS THE OBJECT THAT REACHES THE ROW PREVIEW CANNOT**: a BREAK-RISK SOFT SENSOR trimming feedrate under the existing gap servo — addressed by machine state, no tracker, no lap index, and the one loop here whose instrument is FREE (pulse electronics that already exist, and a break the machine cannot fail to notice) against §52.42's 3.9x tracker premium. Its five hazards are this file's own rules arriving before the build: predict the dense PRECURSOR not the rare break (rule 36), a hazard is per METRE not per second or the loop chases its own denominator (rule 17), regulate an upper confidence bound because the costs are asymmetric, DITHER or the loop drives the sensor off its training set (rule 35), and success removes the evidence (rule 33) — which the precursor design is what survives. The falsifier is LEAD TIME against the gap's own settling, readable off existing logs before anything is built (§52.26 transplanted). Nothing in it is measured. |
 | `docs/history/` | The measurement record — see the last section. |
 | `CLAUDE.md` | This file. |

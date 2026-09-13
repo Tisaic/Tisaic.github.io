@@ -22,6 +22,15 @@
  * adds what the pilot applied to the prefix. The prefix ALONE is what the distillation receives,
  * so it is a correction of the conventional machine and never of a machine the pilot has moved.
  *
+ * AND IT TEACHES FROM A REFUSED CASCADE, which is what made it reach three plants instead of one
+ * (plan §73.13). `AutoStack` nulls `this.stack` the moment a cascade loses its verify, so the
+ * column (0.39x) and the quadruple tank had nothing here to iterate and the report read as the
+ * teacher trying and failing rather than never running (rule 25). The arm's host has done this
+ * since plan §52.37 under `distilTeachRefused`, default ON, on the measured ground that a rung's
+ * verify scores exactly what the teaching port replaces — a cascade at 0.62x there teaches a
+ * policy as good as one at 1.34x. What is recovered is `built.stacks`' last entry;
+ * `deployed.stack` is untouched, so a teacher can never become a controller.
+ *
  * MONOTONE, as every iteration in this project is: a pass that made the machine worse is undone
  * and the loop stops, so what is handed on is the BEST prefix and never the last one.
  *
@@ -66,14 +75,77 @@ function oracleConverge({ auto, lap, nc, drive, passes = 4, backtracks = 3, debu
     let rec = first.rec, base = first.score, best = base, bestPre = null, done = 0;
     if (dbg) dbg(`lap ${L}: base ${base.toExponential(4)}`);
 
-    // The stack's layers carry the port. A host whose cascade never built has nothing to arm,
-    // and says so rather than silently converging nothing (rule 25).
-    const layers = (auto.stack && auto.stack.layers) || [];
+    // ---- A REFUSED CASCADE IS STILL A TEACHER, AND THIS IS WHERE THE PLANTS NEEDED IT.
+    //
+    // `AutoStack` sets `this.stack = null` the moment a cascade attempt loses its verify, so on
+    // a plant whose cascade does not ship there is nothing here to iterate — and the first
+    // version of this file duly returned "no cascade layer was built" on the COLUMN (verify
+    // 0.39x) and the TANK (no layer admitted at all), which read in the report as the oracle
+    // teacher trying four passes and getting nowhere. It had not run (rule 25).
+    //
+    // The library already answers this and the measurement is on record: as a RUNG the cascade
+    // is judged on whether its FORECAST inverts the machine well enough to ship, while as a
+    // TEACHER it is handed the measured error through `oracleF0` and asked only for the
+    // increment that cancels it — so its verify scores exactly what the teaching port replaces.
+    // `lib/flexisim/autohost.js` does this for the arm under `distilTeachRefused`, DEFAULT ON
+    // since plan §52.37, where a cascade scoring 0.62x teaches a policy as good as one scoring
+    // 1.34x. This is that mechanism for the plant harnesses, written once (rule 61).
+    //
+    // `built.stacks` retains every commissioned cascade including the refused ones, and
+    // `deployed.stack` is NOT touched — which is what arms a cascade — so what is recovered here
+    // is a teacher and can never become a controller.
+    let st = auto.stack;
+    let recovered = false;
+    if (!(st && st.layers && st.layers.length)) {
+      const b = auto.built && auto.built.stacks;
+      if (b && b.length) { st = b[b.length - 1]; recovered = true; }
+    }
+    const layers = (st && st.layers) || [];
     if (!layers.length) return { base, best: base, passes: 0, at: () => new Array(nc).fill(0),
-      note: 'no cascade layer was built, so there is no pilot to iterate' };
-    const S = auto.stack.sample || 1;
+      note: 'no cascade was commissioned at all, so there is no pilot to iterate' };
+    const S = st.sample || 1;
+    // The rung reads its decision stride off `auto.stack`, so a recovered teacher is published
+    // there exactly as the arm's host publishes its fallback.
+    if (recovered && !auto.stack) auto.stack = st;
+    if (dbg && recovered) dbg('the cascade REFUSED its verify and is being used as a teacher anyway');
+
+    // ---- ARMED FOR THE TEACHING DRIVE ONLY, AND THAT IS NOT THE SAME AS DEPLOYED.
+    //
+    // The plant harnesses reach the pilot through `auto.act`, which skips the cascade unless
+    // `deployed.stack` is non-zero — so publishing a recovered teacher on `auto.stack` alone
+    // produced an increment of EXACTLY ZERO at every backtrack scale on the column, which reads
+    // in the log as an iteration that converged rather than one that never acted (rule 25
+    // again, one level down). The arm's host does not hit this because it calls the Stack
+    // directly. So the teaching drive arms it and a `finally` puts it back — the same shape as
+    // the `oracleF0` port below, a property set for one drive and restored whether or not it
+    // threw. Nothing outside this loop ever sees it armed, so the cascade cannot reach the
+    // machine: what ships is decided after this returns, by scoring the distilled policy.
+    const wasDeployed = auto.deployed.stack;
+    const armDepth = layers.length;
+
+    // ---- THE PASS COUNT IS A PLANT CONSTANT AND MUST NOT BE WRITTEN IN (rule 31).
+    //
+    // Swept on three plants it does not agree: the COLUMN peaks at 8 passes (1.92x at 2, 3.43x
+    // at 4, 5.49x at 8, 4.87x at 16, 4.82x at 32 — §49's law firing on the far side), the TANK
+    // peaks at 4 (2.942x against 2.621x at 8) and the MILL's own monotone gate stops it at 5-6
+    // whatever is asked. So there is no number to pick, and this project's answer to that is the
+    // ridge ladder's: hand the caller CANDIDATES and let it score them ON THE MACHINE.
+    //
+    // The iteration is monotone and already keeps the best prefix, so a snapshot at each rung of
+    // the ladder is FREE — what is paid is the deepest rung, once, and every shallower candidate
+    // comes out of the same drives. The ladder is a fixed geometric grid and carries no plant's
+    // number, exactly as the ridge ladder and the offset SHAPE do.
+    const ladder = [];
+    for (let q = 2; q < passes; q *= 2) ladder.push(q);
+    const snaps = [];
+    const snapNow = (n) => {
+      const cur = bestPre || pre;
+      snaps.push({ passes: n, at: ((c) => (k) => { const i = (((k % L) + L) % L);
+        return c.map((a) => a[i]); })(cur.map((a) => Float64Array.from(a))) });
+    };
 
     for (let pass = 0; pass < passes; pass++) {
+      if (ladder.includes(pass)) snapNow(pass);
       const uOut = Array.from({ length: nc }, () => new Float64Array(L));
       // THE ORACLE: the measured truth at this decision's step plus the lead, on the PILOT's own
       // grid. `leadSamp` is in pilot samples and the record is per raw step, so the conversion is
@@ -83,9 +155,10 @@ function oracleConverge({ auto, lap, nc, drive, passes = 4, backtracks = 3, debu
       const or = rec ? (c, leadSamp) => rec[(((kNow + leadSamp * S) % L) + L) % L][c] : null;
       for (const p of layers) p.oracleF0 = or;
       let on;
+      auto.deployed.stack = armDepth;
       try {
         on = await drive({ pre, active: true, uOut, trace: true, onStep: (k) => { kNow = k; } });
-      } finally { for (const p of layers) p.oracleF0 = null; }
+      } finally { for (const p of layers) p.oracleF0 = null; auto.deployed.stack = wasDeployed; }
 
       done = pass + 1;
       let pk = 0;
@@ -110,7 +183,14 @@ function oracleConverge({ auto, lap, nc, drive, passes = 4, backtracks = 3, debu
       if (!took) break;
     }
     const fin = bestPre || pre;
+    // The deepest rung is the one the loop just finished, whatever it stopped at.
+    snapNow(done);
     return { base, best, passes: done,
+      // Every rung of the ladder the iteration actually reached, shallowest first, for a caller
+      // that scores them. A caller that ignores the field gets the deepest, as before.
+      snapshots: snaps.filter((x, i) => i === snaps.length - 1 || x.passes < done),
+      ...(recovered ? { note: 'taught by a cascade that REFUSED its own verify — the teaching '
+        + 'port replaces the forecast that verify scores' } : {}),
       at: (k) => { const i = (((k % L) + L) % L); return fin.map((a) => a[i]); } };
   };
 }
