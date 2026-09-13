@@ -204,7 +204,11 @@ async function ladder(spec) {
   // the question "how much of the teacher's time bought rows that were kept" is the one that
   // decides whether the diet or the teacher is the thing to cut — and a single `teacher` bucket
   // cannot answer it.
-  const metered = distilRuns ? async () => (await distilRuns()).map((t, i) => {
+  // THE SPEC'S DIET CLOSURE IS HANDED THE LADDER'S OWN `auto` (plan §73.9). The oracle teacher
+  // iterates the COMMISSIONED PILOT, so a harness that wants it must reach the stack whose
+  // `oracleF0` port it arms — and this driver builds that object internally. A closure that takes
+  // no argument is unaffected, so every existing spec is byte-identical.
+  const metered = distilRuns ? async () => (await distilRuns(auto)).map((t, i) => {
     const w = { ...t, run: (...a) => inPhase(`teacher#${i}`, () => t.run(...a)) };
     for (const k of ['teach', 'converge', 'captureState']) {
       if (t[k]) w[k] = (...a) => inPhase(`teacher#${i}`, () => t[k](...a));

@@ -53,6 +53,12 @@
 import { ladder, announce } from './rigs/ladder.mjs';
 import { barrelSpec } from './rigs/specs.mjs';
 import { deriveWindow, reportDistil, priceFrom, ridgeLadder, teacherReuse, carrier, teachLaps, dietN } from './rigs/distilkit.mjs';
+import { oracleConverge } from './rigs/oracleteach.mjs';
+
+// THE ORACLE TEACHER IS OPT-IN UNTIL IT IS MEASURED (plan §73.9). It needs a cascade to iterate,
+// which §73.1 dropped here as waste — so `ORACLE=1` also restores `depth`, and the two must be
+// priced together: the cascade is 4.0 days on this plant at depth 1 against hff's 29.6.
+const ORACLE = process.env.ORACLE === '1';
 import * as TH from './rigs/thermal-rig.mjs';
 
 if (process.env.SUITE !== 'full') {
@@ -171,7 +177,7 @@ console.log(`  ${OFFSETS.length} offsets per channel, ${DIETS.length} training r
 // first is the only settle there is, so `TLAPS=2` asks whether the second scored lap is buying
 // noise reduction worth a third of the commissioning. Unset is 3 and byte-identical.
 const TLAPS = teachLaps();
-const distilRuns = () => dietN(DIETS).map((rec, di) => {
+const distilRuns = (auto) => dietN(DIETS).map((rec, di) => {
   const seg = DSEGS[di % DSEGS.length];
   const lap = LAP(rec, seg), ref = refOf(rec, seg);
   // THE PLANT IS CARRIED, AND THAT COSTS THIS PLANT'S HEADLINE 11.176x -> 3.951x (plan §72.18).
@@ -222,13 +228,50 @@ const distilRuns = () => dietN(DIETS).map((rec, di) => {
       }
       return { score: Math.sqrt(s2 / n), err };
     },
+
+    // ---- THE PILOT AS THE TEACHER, OFFERED WHERE A CASCADE WAS BUILT (plan §73.9).
+    //
+    // `hff` is 79% of what this plant's commissioning costs — 29.6 days of extruder — and §73.6
+    // and §73.8 closed both ways of making its laps cheaper. What remains is a different teacher,
+    // and the oracle port replaces exactly the thing `hff` spends its probe sets identifying: a
+    // forecast. The iteration itself is `rigs/oracleteach.mjs`, written once for every plant; this
+    // is only the plant's own drive loop, which differs from `run` above in three ways — it
+    // applies a frozen PREFIX rather than a candidate, it may arm `auto.act` on top of that
+    // prefix and capture what it applied, and it may return the measured truth per raw step.
+    ...(ORACLE ? { converge: oracleConverge({
+      auto, lap, nc: 3, passes: +(process.env.OPASSES || 4), debug: process.env.ODBG === '1',
+      drive: async ({ pre, active = false, uOut = null, trace = false, onStep = null }) => {
+        const p = hold();
+        let s2 = 0, n = 0;
+        const out = trace ? Array.from({ length: lap }, () => [0, 0, 0]) : null;
+        for (let k = 0; k < TLAPS * lap; k++) {
+          const kk = ((k % lap) + lap) % lap;
+          if (onStep) onStep(kk);
+          const want = ref(k), P = TH.powerFor(want);
+          // The pilot decides on the cascade's own grid and the prefix is per raw step, so both
+          // are read at `kk` and the pilot's own stride is its business (plan §51.5).
+          const look = (o) => TH.powerFor(ref(k + o));
+          const a = active ? auto.act({ look, lookRaw: look, k }) : null;
+          for (let c = 0; c < 3; c++) {
+            const v = pre[c][kk] + (a ? (a[c] || 0) : 0);
+            if (uOut && a) uOut[c][kk] = a[c] || 0;
+            P[c] += v;
+          }
+          p.step(P);
+          const y = p.read();
+          if (trace && k >= (TLAPS - 1) * lap) for (let c = 0; c < 3; c++) out[kk][c] = y[c] - want[c];
+          if (k >= (TLAPS - 1) * lap) for (let c = 0; c < 3; c++) { s2 += (y[c] - want[c]) ** 2; n++; }
+        }
+        return { score: Math.sqrt(s2 / n), rec: out };
+      },
+    }) } : {}),
   };
 });
 
 const spec = { ...barrelSpec,
   // NO CASCADE: this rung's teacher is `hff`, so the cascade would be commissioned,
   // scored and then REPLACED by the rung that wins (plan §73.1). `DEPTH=2` is the control.
-  depth: 0,
+  depth: ORACLE ? 1 : 0,
   // STANDARDISATION IS ON BY DEFAULT HERE, AND IT IS A SCALE REPAIR RATHER THAN A TUNED KNOB
   // (rule 32). `_rowFrom` leads with the ABSOLUTE reference and follows with DIFFERENCES: on the
   // arm that is a joint angle beside small travels, all within an order of magnitude of the
