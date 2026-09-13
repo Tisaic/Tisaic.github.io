@@ -152,11 +152,42 @@ ladder. The distillation route needs iteration converged on about six training p
 laps on real hardware producing nothing. A number that counts only the arithmetic is measuring
 the half that is free.
 
-**Anything the commissioning did not see, breaks it.** Change the feedrate, the plant or the
-path and the machine degrades — not gracefully, catastrophically. The evidence is already in
-this file and was written down as a success: the composite measures 4.9x to 20.3x across five
-programs and on one of them it makes the machine WORSE; a phase-indexed table worth 125x on
-the program it learned reaches 0.55x on a sine — worse than doing nothing. A number that
+**Anything the commissioning did not see, breaks it — AND THAT SENTENCE IS NOW HALF RETRACTED,
+BY THE AXIS IT NEVER MEASURED (plan §75).** It named three things a customer changes — the
+feedrate, the plant, the path — and cited evidence for two: the composite measures 4.9x to 20.3x
+across five programs and on one of them makes the machine WORSE, and a phase-indexed table worth
+125x at home reaches 0.55x on a sine. **Both of those are the RETIRED MEMORY**, and the PLANT
+itself had never been measured at all — a memory-era sentence kept alive three sections after the
+memory went (rule 4, in the direction this file warns about).
+
+Measured: commission ONCE on the bench cell, then deploy that same frozen weight vector on a
+machine built at another stiffness, each scored against the CONVENTIONAL machine at ITS OWN
+stiffness so a harder cell cannot read as the policy failing.
+
+```
+  K 0.25 / E 0.03   8.17x  <- the control      K 0.25 / E 0.015  4.27x
+  K 0.125           2.96x                      K 0.25 / E 0.06   2.87x
+  K 0.5             2.42x                      K 0.25 / E 0.12   1.68x
+  K 1               1.25x
+```
+
+**Across an eight-fold span of gearbox stiffness and an eight-fold span of link stiffness every
+cell still HELPS, worst 1.25x, and nothing is made worse than the conventional machine.** That is
+graceful, and the old sentence says the opposite. What the record does support is the narrower
+claim: a phase-indexed MEMORY degrades catastrophically off its program — which is why it was
+retired — and the deployed MAP degrades gracefully on the plant axis. Stiffer hurts more than
+softer, and the policy's ABSOLUTE result is 3.7x worse at K 1, so this is real degradation
+honestly reported rather than a null.
+
+**AND THE DRIFT IS DETECTABLE FOR FREE, WHICH IS WHAT MAKES IT A PRODUCT PROPERTY.** The object
+has no plant-side guard and cannot tell the machine changed — the coverage guard fades on
+commanded SPEED and there is no analogue — so graceful-and-silent would be worth little. Read the
+delivered error at the 64 touches §74 priced and the ratio to the full-rate number is
+**0.707-0.711 in every cell, constant to 0.6%** across the whole span: the sparse read loses
+essentially nothing, and a drift costing the policy 2.2x to 3.7x shows up in the probe at the same
+factor. The first-article check a shop already runs is the recommission trigger. (The constant is
+1/√2 and is a difference of rms CONVENTION between the two instruments, not something the sampling
+did — what the measurement supports is its constancy.) A number that
 holds only where it was measured is a calibration, not a controller.
 
 **Commissioning WAS outrageous, and on the arm it is now two minutes.** This line used to say

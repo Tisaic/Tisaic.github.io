@@ -17910,3 +17910,112 @@ is µm-class where §50.1 measured the tracker's own noise as costing about 2x, 
 assumption and not a measurement. One plant, one cell, one seed, one program. And this prices the
 TEACHER only: the cascade below it is still commissioned from the machine's own signals, and the
 scored verify in these runs is still the tracker's.
+
+## §75 THE ROB COLUMN: "CATASTROPHICALLY" IS NOT SUPPORTED ON THE PLANT AXIS
+
+With INS moved 3 → 6 by §74, `docs/scorecard.md`'s largest remaining gap is **ROB, 4 against 8** —
+what happens off the envelope the commissioning saw. CLAUDE.md states it in one sentence:
+
+> Anything the commissioning did not see, breaks it. Change the feedrate, the plant or the path
+> and the machine degrades — not gracefully, catastrophically.
+
+Rule 4 first, in the direction this project keeps paying for: **a claim can be stale in EITHER
+direction.** That sentence names three axes and cites evidence for two of them — a composite
+measured 4.9x to 20.3x across five programs with one going backwards, and a phase-indexed table
+worth 125x at home and 0.55x on a sine. **Both of those are the RETIRED memory**, and the third
+axis, the plant itself, has never been measured at all.
+
+### §75.1 What a customer actually changes
+
+Target 1 is the PROGRAM and target 2 the FEEDRATE, and both are measured. The third thing a
+customer changes is the MACHINE: it wears, the tool changes, the fixture differs, the payload
+moves. The deployed object is a frozen weight vector with no idea any of that happened.
+
+`PLANTSPAN` commissions ONCE on the bench cell and then deploys that same vector on a machine
+built at another stiffness, scored against the CONVENTIONAL machine AT THAT STIFFNESS — the
+discipline `FEEDSPAN` already uses, so a cell the machine simply finds harder cannot read as the
+policy failing. Nothing is recommissioned and nothing refitted. The commissioning cell is in the
+ladder as the control.
+
+### §75.2 It degrades, monotonically, and NOTHING is made worse
+
+```
+  cell                     conventional  ->  with the frozen policy      factor
+  K 0.25  / E 0.03           1.3044e-1        1.5962e-2                  8.17x   <- the CONTROL
+  K 0.125 / E 0.03           1.6478e-1        5.5663e-2                  2.96x    half the gearbox
+  K 0.5   / E 0.03           9.6656e-2        3.9963e-2                  2.42x    twice
+  K 1     / E 0.03           7.4087e-2        5.9070e-2                  1.25x    four times
+  K 0.25  / E 0.015          1.5025e-1        3.5192e-2                  4.27x    half the links
+  K 0.25  / E 0.06           1.0441e-1        3.6403e-2                  2.87x    twice
+  K 0.25  / E 0.12           8.8771e-2        5.2994e-2                  1.68x    four times
+```
+
+**Across an eight-fold span of gearbox stiffness and an eight-fold span of link stiffness, every
+cell still helps, and the worst is 1.25x.** No cell is made worse than the conventional machine at
+its own stiffness. That is graceful degradation, and the standing sentence says the opposite.
+
+**THE CLAIM IS THEREFORE CORRECTED, NOT DEFENDED.** What the record supports is: a phase-indexed
+MEMORY degrades catastrophically off its program — which is why it was retired — and the deployed
+MAP degrades gracefully on the plant axis. Conflating them kept a memory-era sentence alive three
+sections after the memory went.
+
+### §75.3 The shape, and the half that is honest to state against it
+
+Degradation is monotone in the size of the change and **STIFFER hurts more than SOFTER** (4x stiff
+1.25x, 4x soft — read off the K column's other end — 2.96x at 2x soft). Two things contribute and
+they must not be conflated:
+
+- the DENOMINATOR improves as the plant stiffens (1.3044e-1 → 7.4087e-2, 1.76x), so there is less
+  to win and part of the fall is the machine getting better rather than the policy getting worse;
+- but the policy's ABSOLUTE result is **3.7x worse** at K 1 than at the cell it was taught on
+  (5.9070e-2 against 1.5962e-2), so the correction really is mistuned and this is not an artefact
+  of the ratio.
+
+**AND IT IS SILENT, WHICH IS THE REAL GAP.** The coverage guard fades on commanded SPEED and there
+is nothing analogous for the plant: the object cannot tell that the machine underneath it changed,
+and on every row above it goes on applying a correction sized for a different machine. Graceful is
+worth much less than graceful-and-detectable. The page carries a PLANT MISMATCH pill keyed on K
+and E, which works only because a slider was moved; on a real machine stiffness drifts and nobody
+types it in.
+
+### §75.5 AND IT IS DETECTABLE, FROM THE SIXTY-FOUR TOUCHES §74 JUST PRICED
+
+The quantity a shop has is the PART, and §74 priced reading it at 64 evenly spaced touches. So the
+delivered error is re-read at exactly that resolution and printed beside the full-rate number:
+
+```
+  cell                  full rate     64-touch read    ratio    against the control's read
+  K 0.25  / E 0.03      1.5962e-2       1.1346e-2      0.711        1.00x   <- the CONTROL
+  K 0.125 / E 0.03      5.5663e-2       3.9381e-2      0.707        3.47x
+  K 0.5   / E 0.03      3.9963e-2       2.8289e-2      0.708        2.49x
+  K 1     / E 0.03      5.9070e-2       4.1807e-2      0.708        3.68x
+  K 0.25  / E 0.015     3.5192e-2       2.4924e-2      0.708        2.20x
+  K 0.25  / E 0.06      3.6403e-2       2.5735e-2      0.707        2.27x
+  K 0.25  / E 0.12      5.2994e-2       3.7439e-2      0.707        3.30x
+```
+
+**The ratio is 0.707-0.711 in EVERY row — constant to 0.6% across an eight-fold stiffness span and
+a 3.7-fold range of delivered error.** So the sparse read is a fixed scalar multiple of the true
+rms rather than a noisy estimate of it: 64 touches lose essentially nothing, and a plant drift that
+costs the policy a factor of 2.2 to 3.7 shows up in the probe read at the same factor.
+
+**That closes the gap §75.3 opened.** The object still cannot tell that the machine changed — it
+has no plant-side guard and this does not add one — but the SHOP can, from the first-article check
+it already runs, with no instrument it does not already own and no tracker. Graceful degradation
+plus a free detector is a usable product property where graceful-and-silent is not.
+
+**The constant itself is a CONVENTION, not a probe property, and saying so is the point.** 0.707 is
+1/√2 to three figures, which is a difference between two rms conventions — the host's scored run
+averages over its scored laps and both channels, this reads the per-lap averaged error array — and
+not something the sampling did. Reading it as "the probe under-reads by 30%" would be exactly the
+instrument fault this file's rule 17 is about. What the measurement supports is the CONSTANCY, and
+the constancy is what makes it a detector.
+
+### §75.4 Not claimed
+
+One plant, one program, one seed, one commissioning. Stiffness is the only plant parameter moved:
+mass, friction, backlash and the servo loop are all held, and §52.46 already measured backlash as
+a separate axis on which MORE lash is better. And the scoring loop here is the diet-run shape
+rather than the ladder's scored run, so the control reads 8.17x against the headline's 6.63x —
+the same policy on a different instrument with the CONVENTIONAL machine as its denominator instead
+of the bare one. Every row is read against that control and not against the headline.

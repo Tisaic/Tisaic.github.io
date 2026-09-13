@@ -450,6 +450,67 @@ if (process.env.FEEDSPAN && host.auto.deployed.distil) {
       + `   ${(b.score / w.score).toFixed(2)}x   coverage ${cov.toFixed(3)}${cov < 1 ? ' — FADED' : ''}`);
   }
 }
+// PLANTSPAN=<K:E,K:E,...>: THE ROB COLUMN, AND THE AXIS NOTHING HERE HAS EVER MEASURED
+// (plan §75). Target 1 is the PROGRAM changing and target 2 the FEEDRATE; both are measured.
+// The third thing a customer changes is the MACHINE — it wears, the tool changes, the fixture
+// differs, the payload moves — and CLAUDE.md's "change the feedrate, the plant or the path and
+// the machine degrades, not gracefully, catastrophically" cites evidence for the first and third
+// of those and none at all for the plant.
+//
+// So: commission ONCE on the bench cell, then deploy that SAME frozen weight vector on a machine
+// built at another stiffness, and score it against the CONVENTIONAL machine AT THAT STIFFNESS —
+// the same discipline `FEEDSPAN` uses, so a cell the machine simply finds harder cannot read as
+// the policy failing. Nothing is recommissioned and nothing is refitted: the deployed object is a
+// weight vector and this asks what happens when the plant underneath it is not the one it was
+// taught on. The `K:E` of the commissioning cell is the CONTROL and must reproduce the headline.
+if (process.env.PLANTSPAN && host.auto.deployed.distil) {
+  const cells = process.env.PLANTSPAN.split(',').map((c) => c.split(':').map(Number));
+  const pol = host.auto.distil;
+  console.log(`\n  PLANT SPAN — one commissioning at K ${K} / E ${E}, the same frozen policy on other machines:`);
+  console.log('    (each scored against the CONVENTIONAL machine at ITS OWN stiffness, so a harder cell is not the policy failing)');
+  for (const [k2, e2] of cells) {
+    const h2 = makeArmHost({
+      makeMachine: async () => {
+        const m = await machine({ K: k2, E: e2 });
+        const rc = commissionComp(m.arm, m.servo);
+        const c0 = path.at(0); const [q1, q2] = m.arm.ik(c0.x, c0.y, true);
+        settle(m.arm, m.servo, q1, q2);
+        return { arm: m.arm, l1: m.l1, l2: m.l2, servo: m.servo, rc };
+      },
+      path, lap: LAP, K: k2, centre: (await machine({ K: k2, E: e2 })).arm.ik(12, 0, true),
+      classic: false, maxDepth: 0, demo: null, lapMemory: false, distil: DISTIL,
+      distilReplaces: REPLACE, grade: GRADE });
+    const tr = (await h2.distilRuns({ paths: [path] }))[0];
+    const hp = heldPolicy(pol, tr);
+    const b = await tr.run(null), w = await tr.run(hp, { tap: hp.tap });
+    const same = k2 === K && e2 === E;
+    // ---- IS THE DRIFT DETECTABLE FROM WHAT THE SHOP ALREADY MEASURES? (plan §75.5)
+    //
+    // Graceful is worth much less than graceful-AND-detectable: on every row here the object goes
+    // on applying a correction sized for a different machine and says nothing, because the
+    // coverage guard fades on commanded SPEED and there is no plant analogue. The quantity a shop
+    // has is the PART — and §74 just priced reading it at 64 touches. So the delivered error is
+    // re-read at that resolution, evenly spaced exactly as the probe takes it, and reported
+    // beside the full-rate number: if the probe sees the rise, a first-article check is the
+    // recommission trigger and no new instrument is needed.
+    const probeRms = (r, kk) => {
+      const e = r.err || null;
+      if (!e || !e.length) return null;
+      const L = e[0].length; let s2 = 0, n = 0;
+      for (let i = 0; i < kk; i++) {
+        const j = Math.round(i * L / kk) % L;
+        for (const ch of e) { s2 += ch[j] * ch[j]; n++; }
+      }
+      return Math.sqrt(s2 / n);
+    };
+    const wp = probeRms(w, 64);
+    console.log(`    K ${String(k2).padStart(5)} / E ${String(e2).padStart(6)}  `
+      + `${b.score.toExponential(4)} -> ${w.score.toExponential(4)}   ${(b.score / w.score).toFixed(2)}x`
+      + (wp === null ? '' : `   64-touch read ${wp.toExponential(4)}`)
+      + `${same ? '   <- the commissioning cell, the CONTROL' : ''}`
+      + `${b.score / w.score < 1 ? '   WORSE THAN DOING NOTHING' : ''}`);
+  }
+}
 // HELDOUT=1: score the deployed policy on the two programs no diet contains — the rounded
 // rectangle and the circle — so a diet that lifts the square can be told from one that memorises
 // its edges (plan §52.27).

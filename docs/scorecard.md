@@ -33,7 +33,7 @@ machines these plants model, and every factor this project quotes is against it.
 | 5 | **GEN** generalisation | does it hold off the program it was commissioned on? | **6** | 7 | target 2 MET inside its bound (6.65-7.94x across a 5x feed span, nothing made worse, plan §52.41); target 1 partly — the deployed map transfers by construction and the retired memory did not (0.53x, reproduced by a textbook norm-optimal ILC) |
 | 6 | **INS** instrument the customer must own | what does it cost to commission at all? | **6** | 9 | was 3. plan §52.42: a tracker is worth **3.9x** over the best permanently mounted alternative and motor encoders alone deliver **nothing**. plan §74: a TOUCH PROBE at **64 points per lap delivers the tracker's result to 0.6%**, 32 points to 2%, reproducing across three draws — the instrument a shop already owns, on a two-to-three-minute inspection routine. Not 9, because the count's scaling law is unestablished (the plant-timescale account is refuted, the lap-length axis confounded) and it is one plant |
 | 7 | **SAF** safe failure | what happens when it cannot help? | **8** | 7 | it REFUSES with a stated reason and applies nothing — 4 of 4 cart-pole seeds on a well-tuned loop, the barrel before §66, Wood-Berry's 12 of 12 under `verifyRef`. `AutoStack` scores every rung on the machine and reverts |
-| 8 | **ROB** robustness to what it was not shown | does it degrade or fall over? | **4** | 8 | CLAUDE.md states it plainly: change the feedrate, plant or path outside what was commissioned and it degrades — the coverage guard FADES rather than extrapolating (1.17-1.19x above the trained span), which is a refusal rather than robustness |
+| 8 | **ROB** robustness to what it was not shown | does it degrade or fall over? | **6** | 8 | was 4, on a memory-era claim. plan §75: across an **eight-fold span of gearbox stiffness and eight-fold of link stiffness** the frozen map still helps in every cell, worst 1.25x, nothing made worse — graceful, not catastrophic — **and the drift reads at the 64 touches §74 priced, to 0.6%**, so a first-article check is the recommission trigger. Not higher: the object itself has no plant-side guard and degrades SILENTLY, and only stiffness was moved |
 | 9 | **EXP** explainability | can the engineer see why? | **6** | 9 | the record IS the controller (a weight vector plus a window), and every rung prints its own verdict, cost and refusal reason — but nobody can read 111 coefficients the way they read a PID gain |
 | 10 | **BRD** breadth of plant classes | how many kinds of machine? | **7** | 9 | eleven plants, three with real-hardware provenance, one open-loop unstable, one with a dominant transport delay. Two error classes of three tried (mechanical compliance/friction; periodic disturbance through a declared dead time); the class it loses on is strongly coupled MIMO |
 
@@ -42,18 +42,24 @@ machines these plants model, and every factor this project quotes is against it.
 The gaps against the incumbent, largest first:
 
 ```
-  ROB   4 vs 8   -4     anything the commissioning did not see
   COM   4 vs 8   -4     was -5 before plan §72-§73
-  INS   6 vs 9   -3     was -6 before plan §74's touch probe
   EXP   6 vs 9   -3
+  INS   6 vs 9   -3     was -6 before plan §74's touch probe
   DIS   4 vs 6   -2     was -4 before plan §71
+  ROB   6 vs 8   -2     was -4 before plan §75
   BRD   7 vs 9   -2
 ```
 
-**Updated once, by the column it named.** §74 measured the touch probe and moved INS from 3 to 6,
-so the largest gap is now **ROB** — what happens off the envelope the commissioning saw. That is
-also the column CLAUDE.md describes most bluntly ("change the feedrate, the plant or the path and
-the machine degrades — not gracefully, catastrophically") and the one targets 1 and 2 exist for.
+**Updated twice, both times by the column it named.** §74 measured the touch probe and moved INS
+3 → 6; §75 then measured ROB's untouched PLANT axis and moved it 4 → 6, retracting half of the
+sentence that had made it look worst ("not gracefully, catastrophically" was evidence about the
+retired memory, on two axes, quoted against a third that nobody had measured).
+
+**The largest gap is now COM again, and the second is EXP.** COM is the one three sections have
+already worked and the remaining 30-day plants are a property of a five-hour lap rather than of the
+method (§72.12), so the next column by *tractability* rather than by size is **EXP** —
+explainability, 6 against 9 — which nothing in this project has ever attempted and which decides
+whether an engineer will arm the thing at all.
 
 **INS was the largest when this file was written and is no longer** (see the update above).
 It was picked first for the reason below and the pick was right: it moved 3 points in one section.
