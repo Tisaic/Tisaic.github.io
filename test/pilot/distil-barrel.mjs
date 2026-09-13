@@ -218,7 +218,7 @@ const distilRuns = () => dietN(DIETS).map((rec, di) => {
         // The last lap is the RECORD the teacher inverts; the last two are what it is SCORED on,
         // so a run is never scored across the lap that established its own operating point.
         if (k >= (TLAPS - 1) * lap) for (let c = 0; c < 3; c++) err[c][kk] = y[c] - want[c];
-        if (k >= lap) for (let c = 0; c < 3; c++) { s2 += (y[c] - want[c]) ** 2; n++; }
+        if (k >= (TLAPS - 1) * lap) for (let c = 0; c < 3; c++) { s2 += (y[c] - want[c]) ** 2; n++; }
       }
       return { score: Math.sqrt(s2 / n), err };
     },

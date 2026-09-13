@@ -133,8 +133,16 @@ const dietN = (d) => (process.env.DIETN ? d.slice(0, Math.max(1, +process.env.DI
  * and 6.085e-3 -> 5.865e-3, BETTER. So two is the default and `TLAPS=3` is the control. The
  * mechanism is §49's law once more: a second scored lap makes `hff`'s own score quieter, which
  * lets it refine FURTHER, and a more converged teacher teaches a worse policy.
+ *
+ * AND `TLAPS=1` IS NOW EXPRESSIBLE, WHICH IS THE QUESTION "WHAT IF WE DO NOT SETTLE AT ALL?"
+ * (plan §73.8). It scores and records the SAME lap the new correction was applied on, so the
+ * teacher's target carries that correction's own transient rather than the periodic steady state
+ * it settles to. Every harness scores the LAST lap — `(TLAPS-1)*lap`, which at two is exactly the
+ * `k >= lap` they all had, so the shipped default is byte-identical and only the new setting is
+ * new. Whether a transient-contaminated target teaches a worse policy or, by §49's law, a better
+ * one is a measurement and not a prediction.
  */
-const teachLaps = () => Math.max(2, +(process.env.TLAPS || 2));
+const teachLaps = () => Math.max(1, +(process.env.TLAPS || 2));
 
 /**
  * THE TEACHER'S OPERATOR REUSE, READ ONCE — now the default, `REUSE=0` the control. It hands the

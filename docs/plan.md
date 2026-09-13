@@ -17498,3 +17498,35 @@ of ten, because the oracle port replaces exactly the forecast `hff` spends its p
 identifying. None of these four plant harnesses supplies it; all four score `hff`. That is a build
 rather than a knob, it is the largest single number left in this section, and it is named here
 rather than claimed.
+
+### §73.8 "What if we don't settle at all?" — measured, and the settle lap cannot go
+
+Each teacher call runs two laps: the first absorbs the transient from the correction just handed
+over, the second is scored and is the record the teacher inverts. `TLAPS=1` removes the first, so
+the SAME lap is applied, scored and recorded and the target carries that correction's own transient
+rather than the periodic steady state. The record pointed both ways before the run — §49's law has
+fired six times (a less converged, noisier teacher teaches a BETTER policy, §73.2 being the most
+recent) against `hff` inverting at the LAP'S HARMONICS, where a transient is not periodic at all.
+
+```
+  cold mill    control (2 laps)   54.8 min   5.865e-3          byte-identical, as the rewrite requires
+  cold mill    TLAPS=1            48.7 min   6.193e-3          1.13x cheaper, 5.6% WORSE
+  Wood-Berry   TLAPS=1            25.0 days  REFUSED, 1.00x
+  quad tank    TLAPS=1            31.4 h     REFUSED, and the HELD-OUT recipe reads 0.664x
+```
+
+**Two plants of three refuse outright and the third is cheaper-but-worse, so the answer is no.**
+The settle lap is not slack: it is what makes the teacher's target periodic, and `hff` cannot
+invert a target that is not. That draws a line through §49's law which this project had not drawn
+— **a less CONVERGED teacher is better; a teacher inverting a NON-PERIODIC target is broken** —
+and they had been running together because every previous cut (passes, trial passes, the second
+scored lap) moved convergence while leaving periodicity intact.
+
+It also cost less than it looks: the column at one lap is 25.0 days against 30.0, only 1.2x rather
+than the 2x the arithmetic promises, because a noisier score makes `hff` spend MORE calls. So even
+the cheap half of the trade was half imaginary.
+
+**And the plant's own 7,861-step settle is a different object and cannot be touched at all.** It is
+not a wait, it is the plant's memory; it sets the minimum lap, and §73.6 is the measurement of what
+happens below it — every configuration refuses. Between §73.6 and §73.8 the two obvious "stop
+waiting" levers are both closed, from opposite ends.

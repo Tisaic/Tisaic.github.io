@@ -115,7 +115,7 @@ const distilRuns = () => dietN([0, 1, 2, 3]).map((i) => {
         const w = want.length > RM.DLY ? want[want.length - 1 - RM.DLY] : RM.HREF;
         const g = m.gauge();
         if (j >= (TLAPS - 1) * LAP) err[0][kk] = g - w;
-        if (j >= LAP) { s2 += (g - w) ** 2; n++; }
+        if (j >= (TLAPS - 1) * LAP) { s2 += (g - w) ** 2; n++; }
       }
       return { score: Math.sqrt(s2 / n), err };
     },

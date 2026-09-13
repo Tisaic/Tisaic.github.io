@@ -316,7 +316,7 @@ async function once(seed) {
           const u = corr ? corr.at(kk) : [0, 0];
           p.step(v[0] + (u[0] || 0), v[1] + (u[1] || 0));
           if (k >= (TLAPS - 1) * lap) { e0[kk] = p.h[0] - h[0]; e1[kk] = p.h[1] - h[1]; }
-          if (k >= lap) { s2 += (p.h[0] - h[0]) ** 2 + (p.h[1] - h[1]) ** 2; n += 2; }
+          if (k >= (TLAPS - 1) * lap) { s2 += (p.h[0] - h[0]) ** 2 + (p.h[1] - h[1]) ** 2; n += 2; }
         }
         return { score: Math.sqrt(s2 / n), err: [e0, e1] };
       }),
