@@ -203,7 +203,7 @@ async function once(seed) {
     ...(process.env.TPASSES ? { hff: { passes: +process.env.TPASSES } } : {}),
     distil: { refDim: 2, ridge: Number(process.env.RIDGE || 1e-6), offsets: OFFSETS,
       ...(ridgeLadder() ? { ridges: ridgeLadder() } : {}),
-      ...(teacherReuse() ? { teacherReuse: true } : {}),
+      ...(teacherReuse() ? {} : { teacherReuse: false }),
       ...(process.env.STD === '1' ? { standardize: true } : {}),
       ...(process.env.ONLINE === '0' ? { online: false } : {}) },
   });

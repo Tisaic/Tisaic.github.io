@@ -95,22 +95,31 @@ const human = (s) => (s < 90 ? `${s.toFixed(0)} s`
  * `DEFAULT_RIDGES` is a fixed geometric grid spanning six decades and is a DESIGN in the same
  * sense as `SHAPE` above: it carries no plant's number, which is the whole point — `1e-6` was the
  * arm's value carried to every plant after it, and on the quadruple tank that carried value
- * delivers 0.08x where 1e-1 delivers 1.80x (plan §70, §72).
+ * delivers 0.08x where the machine's own pick delivers 2.591x (plan §70, §72).
+ *
+ * IT IS THE DEFAULT ON ALL FOUR PLANTS, and `RIDGES=none` is the control. What licenses that is
+ * four plants sharing no physics, measured (plan §72.9): the tank goes from a REFUSAL to 2.591x,
+ * the mill +25%, the column +19%, and the barrel -0.4% — the one plant it costs anything, because
+ * it is the only one whose band has more than one member. The bill is +1% of plant time, because
+ * the teacher's prefixes are converged once and a candidate is a refit plus one scored run.
  */
 const DEFAULT_RIDGES = [1e-6, 1e-4, 1e-3, 1e-2, 1e-1, 1];
 function ridgeLadder(env = process.env.RIDGES) {
-  if (!env) return null;
-  if (env === '1' || env === 'default') return DEFAULT_RIDGES;
+  if (env === 'none' || env === '0') return null;
+  if (!env || env === '1' || env === 'default') return DEFAULT_RIDGES;
   const v = env.split(',').map(Number).filter((x) => Number.isFinite(x) && x > 0);
   return v.length > 1 ? v : null;
 }
 
 /**
- * THE TEACHER'S OPERATOR REUSE, READ ONCE. `REUSE=1` hands the operator identified on the first
- * KEPT training run to every later member of the diet, which is where 94-98% of the product's
- * plant time goes (plan §72.6). Unset is false and byte-identical.
+ * THE TEACHER'S OPERATOR REUSE, READ ONCE — now the default, `REUSE=0` the control. It hands the
+ * operator identified on the first KEPT training run to every later member of the diet, which is
+ * where 84-98% of the product's plant time goes (plan §72.6). Measured on all four plants: the
+ * bill falls 2.4-2.8x and the DELIVERED NUMBER DOES NOT MOVE on any of them, which is rule 21's
+ * signature rather than a trade. The library carries the same default for the same reason — the
+ * operator is a property of the plant, not of the program — so this reads it only for the control.
  */
-const teacherReuse = () => process.env.REUSE === '1';
+const teacherReuse = () => process.env.REUSE !== '0';
 
 /** The geometric offset SHAPE — dense near now where the correction is decided, sparse far out
  * where it only has to span the memory. The shape is a design; the reach is the plant's. */

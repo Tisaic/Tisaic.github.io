@@ -17071,3 +17071,58 @@ held-out R² peaks at ridge 1e-3 (0.9941 / 0.9931) and that cell delivers **0.07
 0.088x held out** — worse than doing nothing on both, by a criterion reading 0.99. `distil.js` says
 in its own header that the gate is a PRE-FILTER and the decision is a machine-scored verify; this
 is that sentence with a number on it, on the one constant nobody had ever put through the verify.
+
+### §72.9 Both defaults move, on four plants sharing no physics
+
+The barrel under the instrument-resolution band picks 1e-3 from an indistinguishable {1e-6, 1e-4,
+1e-3} and reads **11.176x** — 0.4% against the grid's best, where the invented 5% cost 2.7%. The
+other three are unchanged by the band because their winners beat everything by far more than the
+machine's own repeatability. So, everything at defaults:
+
+```
+  plant        delivered                        product's commissioning
+  barrel       11.223x -> 11.176x   -0.4%       337.9 d -> 124.0 d   2.72x
+  Wood-Berry     2.50x ->  2.978x   +19%        251.6 d ->  90.7 d   2.77x
+  quad tank    REFUSED ->  2.591x   (0.08x)      19.3 d ->   8.1 d   2.38x
+  cold mill     1.153x ->  1.446x   +25%          4.7 h ->   1.7 h   2.76x
+```
+
+`RIDGES=none` and `REUSE=0` are the controls. Operator reuse is the LIBRARY's default because the
+argument is about the plant rather than about a harness, and the path is unreachable for the arm
+(which supplies its own `converge`) and for EMPS (which reaches the policy outside this rung), so
+the contract tests are byte-identical by construction rather than by luck.
+
+### §72.10 Against the bar the owner actually set — a day or less
+
+```
+  cold mill      1.7 h     MET
+  quad tank      8.1 d     8x over
+  Wood-Berry    90.7 d     91x over
+  barrel       124.0 d    124x over
+```
+
+Read as laps rather than days, which is what decides whether any of it is reachable: a day is
+**4 laps of the barrel** (20,000 steps at 1 s), **5 laps of the column** (3,000 steps at 6 min),
+**156 laps of the tank** (5,540 steps at 0.1 s) and thousands of the mill. So the tank and the
+mill are engineering; the barrel and the column are a question about how many times a method may
+watch a plant respond, and no teacher converges a prefix in four laps.
+
+Three levers, in the order their size justifies, and the third is the one that changes the claim
+rather than the number:
+
+1. **Carry the plant between teacher calls.** Every call currently pays `settled()`'s 20,000 steps
+   plus a warm lap plus the scored lap — 80,000 steps on the barrel where 40,000 is enough, because
+   the lap is CLOSED and the plant ends a call where it starts one. `lib/flexisim/autohost.js`
+   already does exactly this for the arm and states why ("it drives ONE machine between runs and
+   never restores a snapshot"); the plant harnesses rebuild. Worth about 2x and it is not a
+   controller change.
+2. **The diet's own size.** Wood-Berry DROPS three of its four members and still pays 22.5 days for
+   them; the barrel's lap is four segments where the window rule only needs the lap to exceed the
+   settle.
+3. **THE OPERATOR IS THE PLANT, SO THE FIRST COMMISSIONING AND THE NEXT PROGRAM ARE DIFFERENT
+   NUMBERS.** §72.6 hands the operator across the diet and the per-run split says what that is
+   worth: the barrel's run 0 costs 79.6 days and every member after it 8.3; the column's 59.2 and
+   7.5. That is not an accounting convenience — it is the north star's own target 1 ("commission
+   once on a plant, then run programs the commissioning never saw") priced for the first time. The
+   number a customer pays REPEATEDLY is the second one, and it is 15x smaller. Neither reaches a
+   day on the slow two, and saying which of the two a figure refers to is now compulsory.

@@ -133,7 +133,7 @@ const spec = { ...wbSpec,
     ? { pilotOpts: { ...(wbSpec.pilotOpts || {}), mimo: true } } : {}),
   distil: { refDim: 2, ridge: env('RIDGE', 1e-6), offsets: OFFSETS,
     ...(ridgeLadder() ? { ridges: ridgeLadder() } : {}),
-    ...(teacherReuse() ? { teacherReuse: true } : {}),
+    ...(teacherReuse() ? {} : { teacherReuse: false }),
     ...(process.env.STD === '1' ? { standardize: true } : {}),
     ...(process.env.ONLINE === '0' ? { online: false } : {}) },
   distilRuns };
