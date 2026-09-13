@@ -206,6 +206,12 @@ async function reportDistil({ rep, runs, nFeat, segs = null, auto = null }) {
         + `teacher ${c.gain.toFixed(3)}x  rows ${c.used}  ${c.dropped ? 'DROPPED' : 'kept'}`
         + `  engine ${c.engine}`
         + (c.passes === null || c.passes === undefined ? '' : `  passes ${c.passes}`));
+      // The teacher's own laps by phase, which decides what can be cut (plan §72.11).
+      if (c.budget) {
+        console.log(`             laps: ${Object.entries(c.budget)
+          .filter(([k]) => k !== 'total').map(([k, v]) => `${k} ${v}`).join(' · ')}`
+          + `   TOTAL ${c.budget.total}`);
+      }
     }
   }
   // THE LADDER'S OWN TABLE, printed whenever one ran — the fit's score beside what the MACHINE
