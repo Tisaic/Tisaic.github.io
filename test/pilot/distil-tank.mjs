@@ -99,8 +99,23 @@ const FAR = [
 // `DIET=near` remain as the controls that say what each of the other two measured.
 const SPEED = [0.20, 0.35, 0.60, 0.85].map((A) => [
   [10.7 + A, 10.7 - A], [10.7 - A, 10.7 + A], [10.7 + A, 10.7 + A], [10.7 - A, 10.7 - A]]);
+// AND THE DIET MUST SPAN PRODUCTION'S LEVEL RANGE, NOT ONLY ITS RATE — which is why the rung
+// SATURATES here (plan §70). `_rowFrom` leads with the ABSOLUTE reference, and the SPEED diet
+// above is four amplitudes about ONE centre: levels 9.85-11.55 cm against a production program
+// that runs 8.4-13.5, so **33% of the range**. A linear map asked for the other 67% extrapolates,
+// and a saturated output at exactly the cap is what that looks like — in-sample 129x-564x, on
+// production 0.08x. Moving the CENTRES across the range and keeping the amplitude and the ramp
+// fixed covers **100%** of it at the same commanded speed (1.75e-3, inside production's own
+// 4.3e-4..1.82e-3): four local excursions placed where the machine actually goes, chosen to sit
+// on production's own corners. Amplitude stays 0.85 because 2A/969 is production's TOP speed —
+// a bigger excursion at this ramp would leave the span the coverage guard protects.
+const RANGE = [[12.4, 9.0], [9.0, 12.4], [12.0, 11.5], [9.5, 9.8]].map(([c0, c1]) => {
+  const A = 0.85;
+  return [[c0 + A, c1 - A], [c0 - A, c1 + A], [c0 + A, c1 + A], [c0 - A, c1 - A]];
+});
 const DIETS = process.env.DIET === 'far' ? FAR
-  : process.env.DIET === 'near' ? NEAR : SPEED;
+  : process.env.DIET === 'near' ? NEAR
+  : process.env.DIET === 'speed' ? SPEED : RANGE;
 
 // THE DIET'S RATE LADDER, AND IT TOOK TWO WRONG DIETS TO ARRIVE AT, BOTH RECORDED.
 //
@@ -128,7 +143,7 @@ const DIETS = process.env.DIET === 'far' ? FAR
 // amplitudes spans the same commanded speeds and leaves every recipe with something to teach.
 const DSEGS = (process.env.DIET === 'far' || process.env.DIET === 'near')
   ? [Math.round(0.5 * 2769), 2770, SEG, Math.round(1.5 * SEG)]
-  : [1385, 1385, 1385, 1385];
+  : [1385, 1385, 1385, 1385];   // one exciting rate; the ladder is in PLACEMENT, not in rate
 const holdOf = (seg) => Math.round(seg * (HOLD / SEG));
 /** One recipe's reference in LEVELS, at raw step k, cycled at its own lap. */
 const refOf = (rec, seg) => (k) => {
@@ -175,7 +190,13 @@ async function once(seed) {
     // (rule 32); and the BATCH route, because the streaming shared-covariance fit could not find
     // a fit that exists, is well posed and has hundreds of rows per feature — reading held-out
     // -20 where batch read 0.95. Neither was ever tried on this plant.
-    distil: { refDim: 2, ridge: 1e-6, offsets: OFFSETS,
+    // THE RIDGE IS A KNOB BECAUSE THIS PLANT'S FOUR FIT CONFIGURATIONS ORDER **INVERSELY** IN IT
+    // (plan §70): streaming+STD fits its own runs at 9.4x-42.0x and delivers 0.09x, while batch
+    // without standardisation fits at 6.8x-23.0x and delivers 0.58x — 7x better on the machine
+    // from the WORST in-sample fit of the four. That is overfitting, and it is §49's own law
+    // ("a more converged prefix teaches a worse policy") arriving as fit capacity rather than as
+    // teacher convergence. 1e-6 was carried here from the arm and never re-derived (rule 31).
+    distil: { refDim: 2, ridge: Number(process.env.RIDGE || 1e-6), offsets: OFFSETS,
       ...(process.env.STD === '1' ? { standardize: true } : {}),
       ...(process.env.ONLINE === '0' ? { online: false } : {}) },
   });
@@ -278,6 +299,45 @@ async function once(seed) {
   // the diet or the plant's program-to-program similarity is the subject. Cannot help even the
   // programs it was fitted on -> the map cannot EXPRESS this plant's correction, and no diet fixes
   // that. Without this column a refusal has two explanations and the table cannot tell them apart.
+  // A SECOND PRODUCTION PROGRAM, SO A RIDGE CHOSEN BY MACHINE SCORE CAN BE CHECKED ON ONE THE
+  // CHOICE NEVER SAW (plan §70). The ridge sweep found a win at 1e-2 (1.53x) that the FIT'S OWN
+  // held-out criterion cannot find — that score is monotone DECREASING in the ridge and would
+  // pick 1e-6, which delivers 0.58x, the worst cell of five. So selection has to move to the
+  // machine, which is `select.mjs`'s established method ("commission k times and keep the best"),
+  // and that method is only honest if the pick is then validated on a program it did not score.
+  // This is the tank's own recipe in an order production never runs — same levels, same rates,
+  // same settle, different sequence.
+  if (rep.distil && rep.distil.policy) {
+    const pol = rep.distil.policy;
+    const ALT = [RECIPE[0], RECIPE[3], RECIPE[1], RECIPE[4], RECIPE[2]];
+    const altAt = (k) => {
+      const i = Math.min(ALT.length - 2, Math.floor(k / SEG));
+      const t = (k - i * SEG - HOLD) / (SEG - HOLD);
+      const q = t <= 0 ? 0 : t >= 1 ? 1 : quintic(t);
+      const a = ALT[i], b = ALT[i + 1];
+      return [a[0] + (b[0] - a[0]) * q, a[1] + (b[1] - a[1]) * q];
+    };
+    const driveAlt = (on) => {
+      const p = makeTanks(G);
+      const h0 = altAt(0), v0 = voltsFor(G, h0[0], h0[1]);
+      for (let i = 0; i < 30000; i++) p.step(v0[0], v0[1]);
+      let s2 = 0, n = 0;
+      for (let k = 0; k < PROG; k++) {
+        const h = altAt(k), v = voltsFor(G, h[0], h[1]);
+        const u = on ? pol.actLook((o) => {
+          const hh = altAt(Math.min(PROG - 1, Math.max(0, k + o)));
+          return voltsFor(G, hh[0], hh[1]);
+        }) : [0, 0];
+        p.step(v[0] + (u[0] || 0), v[1] + (u[1] || 0));
+        if (k > SEG) { s2 += (p.h[0] - h[0]) ** 2 + (p.h[1] - h[1]) ** 2; n += 2; }
+      }
+      return Math.sqrt(s2 / n);
+    };
+    const b = driveAlt(false), w = driveAlt(true);
+    console.log(`    HELD-OUT PROGRAM (the recipe in an order production never runs): `
+      + `${b.toExponential(4)} → ${w.toExponential(4)}   ${(b / w).toFixed(3)}x`);
+  }
+
   // WHAT THE POLICY ACTUALLY APPLIES ON PRODUCTION, measured rather than inferred. The rung's row
   // reads identical to the bare machine to five digits while the fit VOUCHES (held-out 0.99999)
   // and the in-sample column reads 129-564x. There are only two ways that happens: the applied

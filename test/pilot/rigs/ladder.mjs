@@ -81,7 +81,12 @@ async function ladder(spec) {
     // `pilotOpts` is applied AFTER the shared defaults and BEFORE `SOLVER`, so a plant may state
     // what it knows about itself while the environment override still wins — an env knob that a
     // spec could silently defeat would make the six-plant pass measure the wrong configuration.
-    pilot: { nMeasured, start, guards, workspace: () => true, seed: 1, autoRefuse: false,
+    // THE COMMISSIONING SEED IS A KNOB, because a plant's number is a DRAW and this project has
+    // already mistaken one for a result: the tank's 1.32x came from a distribution that deployed
+    // four harmful controllers in eight, and `spread.mjs` exists because of it. Unset is seed 1
+    // and byte-identical to every number this driver has ever produced (rule 21).
+    pilot: { nMeasured, start, guards, workspace: () => true,
+      seed: +(process.env.SEED || 1), autoRefuse: false,
       ...(pilotOpts || {}), ...SOLVER },
     // THE DISTILLED RUNG, OFFERED ONLY WHERE A SPEC SUPPLIES ITS OWN TRAINING DIET. It is the
     // DEPLOYED object — every other plant in this driver scores the TEACHER — and §62 measured

@@ -16691,3 +16691,81 @@ So the honest scope of the deployed object's record is: **of the plants whose re
 is asked on five and wins four** — the arm, EMPS, the column (2.50x) and the barrel (11.22x), with
 the tank the one honest refusal (0.08x, saturated, correctly gated). The cart-pole has a varying
 reference and has never been asked; the mill cannot be.
+
+## §70 — THE TANK IS A WIN (1.80x), AND THE RIDGE HAD TO BE RE-DERIVED BY 100,000x
+
+**A REFUSAL IS A LOSS.** This file has been scoring "improves or refuses with a stated reason" as
+target 3 satisfied, and for a customer it is not: they wire it up, press the button and get
+nothing. §69's "the mill is not addressed rather than refused" was the same comfortable label.
+Re-scored, the deployed object had FOUR wins and TWO losses (the tank at 0.08x, the mill
+inapplicable). This takes the tank.
+
+### §70.1 Four fit configurations order INVERSELY in their own in-sample score
+
+With the rung finally reaching the machine (§67.3), the cells split — and the better the fit, the
+worse the machine:
+
+```
+  configuration          delivered    in sample
+  streaming, no STD        0.08x      8.2  8.1 22.6 33.9
+  streaming, STD=1         0.09x      9.4  9.3 29.5 42.0
+  batch, STD=1             0.16x      7.9  7.9 21.0 31.5
+  batch, no STD            0.58x      6.8  6.9 15.2 23.0
+```
+
+That is overfitting, and it is §49's law ("a more converged prefix teaches a worse policy")
+arriving as fit CAPACITY rather than as teacher convergence. The ridge was 1e-6, carried from the
+arm and never re-derived (rule 31).
+
+### §70.2 Swept, it peaks at 1e-1 — and BOTH columns agree, so the pick is not circular
+
+A ridge chosen by sweeping the DELIVERED score is fitting to the scoreboard, so the sweep carries
+a second production program the choice never scores: the tank's own recipe in an order production
+never runs, same levels, same rates, same settle.
+
+```
+  ridge   production   held-out    in sample
+  1e-3      0.75x        0.751x    5.7  5.6  6.7  8.1
+  1e-2      1.53x        1.003x    3.6  3.5  3.6  3.8
+  1e-1      1.80x        1.266x    1.6  1.6  1.6  1.6     <- peak in BOTH
+  3e-1      1.36x        1.200x    1.25
+  1         1.12x        1.084x    1.08
+  3         1.04x        1.031x    1.03
+```
+
+**Production and the held-out program peak at the SAME ridge**, which is what says the selection
+generalises rather than fitting the scoreboard — `select.mjs`'s own protocol ("commission k times
+and keep the best", checked on a program the gate did not score).
+
+### §70.3 AND THE FIT'S OWN GATE WOULD PICK THE WORST CELL — a third plant, and the clearest
+
+```
+  ridge    delivered   the FIT's held-out R²
+  1e-6       0.58x     0.987 / 0.986
+  1e-4       0.32x     0.984 / 0.969
+  1e-2       1.53x     0.831 / 0.717
+  1          1.12x     0.191 / 0.102
+  1e2        1.00x     0.002 / 0.001
+```
+
+The capacity gate is **monotone decreasing** in the ridge and would choose 1e-6 — the worst
+delivering cell of five. The barrel showed this at 0.977-delivering-0.266x and the column at
+0.397-delivering-2.44x; here it is a monotone ranking that is exactly backwards over five
+decades. `distil.js` states that the gate is a cheap PRE-FILTER and the decision is a
+machine-scored verify; three plants now demonstrate that reading it as anything more would ship
+the wrong controller.
+
+### §70.4 What is claimed, and what a customer actually gets
+
+**The deployed object now IMPROVES the tank rather than harming it: 0.08x → 1.80x, validated at
+1.266x on a program the selection never saw.** That converts a loss into a win.
+
+**It is a small win, and the ladder ships something better.** The conventional rung delivers
+10.53x on this plant — 5.8x more — so what a customer receives here is still the conventional
+rung, and the distilled map is the second-best thing on the machine rather than the product.
+
+**AND THE RIDGE IS NOT A NEW CONSTANT.** 1e-1 against the arm's 1e-6 is a factor of 100,000, which
+is rule 31 with the largest span this project has recorded — so the finding is not "the tank's
+ridge is 1e-1" but that the ridge MUST BE SELECTED PER PLANT BY MACHINE SCORE, because the fit's
+own criterion ranks it backwards. That selection is a real commissioning cost (six fits here) and
+it is not what the ladder does today.
