@@ -51,14 +51,36 @@
  * columns print side by side, because the second is not a correction of the first — they are the
  * costs of two different objects and only one of them ships:
  *
- *     plant         TEACHER              PRODUCT            factor
- *     cold mill     5.5 min   MET        4.6 h   MISSED       50x
- *     Wood-Berry    6.3 days  MISSED     249 days MISSED      40x
+ *     plant         TEACHER              PRODUCT, first measured      factor
+ *     cold mill     5.5 min   MET        4.6 h     MISSED           50x
+ *     quad tank     7.0 h     MISSED     18.9 days MISSED           65x
+ *     Wood-Berry    6.3 days  MISSED     249 days  MISSED           40x
  *
  * SO TARGET 4 IS WORSE THAN THE FILE SAYS, AND ON THE ONE PLANT IT CLAIMED. The mill was the
  * single plant of four meeting "commissioning in minutes"; the object that actually deploys
  * there costs fifty times more and misses. A target measured against the teacher was measuring
  * a component that the retirement had already removed from the deliverable.
+ *
+ * AND THEN SIX LEVERS TOOK 3.5x TO 9.6x OFF THE PRODUCT COLUMN, none of them a controller change
+ * (plan §72.6-§72.18) — the operator identified once per PLANT rather than once per training run,
+ * the ridge scored on the machine rather than carried from the arm, one trial pass per candidate
+ * rather than three, four refinement passes rather than twenty-four, and the plant carried across
+ * the teacher's calls on the two plants that measured it free:
+ *
+ *     plant        product, first measured  ->  at today's defaults     delivered
+ *     cold mill        4.6 h                    80 min      MET         1.153x -> 1.450x
+ *     quad tank       18.9 days                  2.0 days   2x over     REFUSED -> 2.591x
+ *     Wood-Berry     249 days                   59.3 days  59x over     2.50x  -> 3.643x
+ *     barrel         338 days                   77.9 days  78x over     retracted to 3.951x
+ *
+ * AND A DAY IS A NUMBER OF LAPS, NOT OF STEPS, which is what decides reachability: a day is
+ * 13,000 laps of the mill, 156 of the tank, 4.8 of the column and 4.3 of the barrel. On the slow
+ * two the teacher's REFINEMENT alone is 4-12 laps, so a day is below what any method needs to
+ * watch the plant respond — a property of a five-hour lap and not of this teacher — and the lap
+ * cannot be shortened to buy it, because the window rule already has `lap/8` binding against the
+ * plant's own memory. What those two offer instead is the split the operator handoff exposed:
+ * the plant is characterised ONCE (79.6 days barrel, 59.2 column) and each new program after that
+ * costs a fraction (8.3 and 7.5). Which of the two a figure refers to is now compulsory to state.
  *
  * Run: node test/pilot/commtime.mjs [LOG=<a full-tier node run's log>] [PRODUCT=1]
  *      With no LOG it runs each plant's own test in a child, which is the same work the suite
