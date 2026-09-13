@@ -36,7 +36,7 @@
  */
 import { ladder, announce } from './rigs/ladder.mjs';
 import { wbSpec } from './rigs/specs.mjs';
-import { deriveWindow, reportDistil, priceFrom, ridgeLadder, teacherReuse, carrier, teachLaps } from './rigs/distilkit.mjs';
+import { deriveWindow, reportDistil, priceFrom, ridgeLadder, teacherReuse, carrier, teachLaps, dietN } from './rigs/distilkit.mjs';
 import * as WB from './rigs/woodberry-rig.mjs';
 
 if (process.env.SUITE !== 'full') {
@@ -99,7 +99,7 @@ console.log(`  ${OFFSETS.length} offsets per channel, ${DIETS.length} training p
 // first is the only settle there is, so `TLAPS=2` asks whether the second scored lap is buying
 // noise reduction worth a third of the commissioning. Unset is 3 and byte-identical.
 const TLAPS = teachLaps();
-const distilRuns = () => DIETS.map((rec) => {
+const distilRuns = () => dietN(DIETS).map((rec) => {
   const lap = LAP(rec), ref = refOf(rec);
   // ONE PLANT FOR THIS RUN, CARRIED ACROSS THE TEACHER'S CALLS (plan §72.15).
   const hold = carrier(() => settled(rec));

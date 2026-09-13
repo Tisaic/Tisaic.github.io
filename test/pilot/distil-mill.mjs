@@ -42,7 +42,7 @@
  */
 import { ladder, announce } from './rigs/ladder.mjs';
 import { millSpec } from './rigs/specs.mjs';
-import { deriveWindow, reportDistil, priceFrom, ridgeLadder, teacherReuse, teachLaps } from './rigs/distilkit.mjs';
+import { deriveWindow, reportDistil, priceFrom, ridgeLadder, teacherReuse, teachLaps, dietN } from './rigs/distilkit.mjs';
 import * as RM from './rigs/rollmill-rig.mjs';
 
 if (process.env.SUITE !== 'full') {
@@ -84,7 +84,7 @@ console.log(`  the UNMEASURED entry wander runs at 2150 and 950 steps, NOT comme
 // first is the only settle there is, so `TLAPS=2` asks whether the second scored lap is buying
 // noise reduction worth a third of the commissioning. Unset is 3 and byte-identical.
 const TLAPS = teachLaps();
-const distilRuns = () => [0, 1, 2, 3].map((i) => {
+const distilRuns = () => dietN([0, 1, 2, 3]).map((i) => {
   // Each run starts a whole number of TURNS in, so the declared phase is aligned to the lap,
   // and a different number of them, so the UNMEASURED entry wander sits at a different phase.
   const W = Math.round((37 + 11 * i) * PER);

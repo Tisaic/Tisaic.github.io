@@ -112,6 +112,16 @@ function ridgeLadder(env = process.env.RIDGES) {
 }
 
 /**
+ * HOW MUCH OF THE DIET TO USE, READ ONCE (plan §73.3).
+ *
+ * Wood-Berry DROPS three of its four training runs below the rung's 1.5x bar and pays a full
+ * teacher for each of them — three quarters of that plant's commissioning buying no rows at all.
+ * `DIETN=<n>` takes the first n members, which measures the bound on stopping the diet early
+ * before any stopping RULE is built. Unset is the whole diet and byte-identical.
+ */
+const dietN = (d) => (process.env.DIETN ? d.slice(0, Math.max(1, +process.env.DIETN)) : d);
+
+/**
  * HOW MANY LAPS A TEACHER CALL COSTS, READ ONCE (plan §73.2).
  *
  * Every diet closure runs `3*lap` per call: one lap to settle under the correction just handed to
@@ -290,4 +300,4 @@ async function reportDistil({ rep, runs, nFeat, segs = null, auto = null }) {
   return { inSample, dr };
 }
 
-export { deriveWindow, reportDistil, priceFrom, ridgeLadder, teacherReuse, carrier, teachLaps, human, SHAPE, DEFAULT_RIDGES };
+export { deriveWindow, reportDistil, priceFrom, ridgeLadder, teacherReuse, carrier, teachLaps, dietN, human, SHAPE, DEFAULT_RIDGES };

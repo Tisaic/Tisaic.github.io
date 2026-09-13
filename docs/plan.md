@@ -17394,3 +17394,39 @@ commissioning.
 1.42x, 1.51x and 1.05x, and the mill is 3.6% better delivered. The mechanism is §49's law for the
 sixth time: a second scored lap makes `hff`'s own score quieter, which lets it refine FURTHER, and
 a more converged teacher teaches a worse policy. `TLAPS=3` is the control.
+
+### §73.3 The diet's COUNT buys nothing; its CONTENT buys everything
+
+Wood-Berry drops three of four training runs below the rung's 1.5x bar and pays a full teacher for
+each, so the bound on stopping early is worth measuring before any stopping RULE is built.
+`DIETN=<n>` takes the first n members:
+
+```
+  plant          4 members    2 members    1 member     delivered
+  Wood-Berry     30.0 days    22.1 days    18.1 days    3.744e-2 at ALL THREE
+  cold mill      54.8 min     34.0 min     25.2 min     5.865e-3 / 5.852e-3 / 5.855e-3
+```
+
+**A ONE-MEMBER diet delivers the identical number at 1.66x and 2.17x less plant time.** On the
+column that is half expected — three of the four were dropped anyway — but on the MILL all four
+were KEPT and it still makes no difference: the four training runs are near-duplicates as far as
+the fit is concerned.
+
+Read against §66, which measured the barrel's diet CONTENT as worth 10x (0.85x on unrelated
+profiles against 10.6x on the machine's own), the pair is one sentence: **what a diet costs is its
+count and what it buys is its content**, and this project has been paying for the first to get the
+second. Not defaulted on two plants; the tank and barrel are measuring, and the tank is the one
+that can check a one-member diet against a HELD-OUT production recipe.
+
+### §73.4 And dropping the cascade made the barrel BETTER, not merely cheaper
+
+```
+  barrel   with a cascade   77.9 days   3.951x   3/4 runs kept, 60,000 rows
+  barrel   depth 0          33.3 days   6.12x    4/4 runs kept, 80,000 rows
+```
+
+2.34x cheaper and 1.55x better, at the same deployed object (70 features, 276 MAC/decision,
+1.6 kB). The cascade was not merely wasted: with it armed the rung's decision stride is the
+cascade's own `sample` rather than 1, so the policy decided less often and one training run fell
+below the 1.5x bar. The mill shows the same sign at a smaller size. So "the cascade is commissioned
+and then thrown away" understates it — on two plants it was also making the thing that ships worse.

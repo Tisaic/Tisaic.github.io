@@ -52,7 +52,7 @@
  */
 import { ladder, announce } from './rigs/ladder.mjs';
 import { barrelSpec } from './rigs/specs.mjs';
-import { deriveWindow, reportDistil, priceFrom, ridgeLadder, teacherReuse, carrier, teachLaps } from './rigs/distilkit.mjs';
+import { deriveWindow, reportDistil, priceFrom, ridgeLadder, teacherReuse, carrier, teachLaps, dietN } from './rigs/distilkit.mjs';
 import * as TH from './rigs/thermal-rig.mjs';
 
 if (process.env.SUITE !== 'full') {
@@ -163,7 +163,7 @@ console.log(`  ${OFFSETS.length} offsets per channel, ${DIETS.length} training r
 // first is the only settle there is, so `TLAPS=2` asks whether the second scored lap is buying
 // noise reduction worth a third of the commissioning. Unset is 3 and byte-identical.
 const TLAPS = teachLaps();
-const distilRuns = () => DIETS.map((rec, di) => {
+const distilRuns = () => dietN(DIETS).map((rec, di) => {
   const seg = DSEGS[di % DSEGS.length];
   const lap = LAP(rec, seg), ref = refOf(rec, seg);
   // THE PLANT IS CARRIED, AND THAT COSTS THIS PLANT'S HEADLINE 11.176x -> 3.951x (plan §72.18).

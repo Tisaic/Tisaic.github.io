@@ -40,7 +40,7 @@
  * Run: SUITE=full node test/pilot/distil-tank.mjs   [SEEDS=1,2]  [GRADE=fast]
  */
 import { AutoStack } from '../../lib/pilot/autostack.js';
-import { priceFrom, ridgeLadder, teacherReuse, carrier, teachLaps } from './rigs/distilkit.mjs';
+import { priceFrom, ridgeLadder, teacherReuse, carrier, teachLaps, dietN } from './rigs/distilkit.mjs';
 import { into } from './rigs/meter.mjs';
 import { UCAP, makeTanks, voltsFor, SEG, HOLD, RECIPE, quintic, refAtStep, PROG, DT }
   from './rigs/tanks-rig.mjs';
@@ -279,7 +279,7 @@ async function once(seed) {
 
   /** The training diet: four recipes the scored program is not one of. */
   const run = (corr, cname) => inPhase('verify', () => run0(corr, cname));
-  const distilRuns = () => DIETS.map((rec, di) => {
+  const distilRuns = () => dietN(DIETS).map((rec, di) => {
     const seg = DSEGS[di % DSEGS.length];
     const lap = seg * rec.length, ref = refOf(rec, seg);
     // ONE PLANT FOR THIS RUN, CARRIED ACROSS THE TEACHER'S CALLS (plan §72.15). The settle is
