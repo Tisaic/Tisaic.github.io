@@ -17184,3 +17184,39 @@ So the honest statement has two halves and both are now measured:
   on the barrel — and each new program after that costs 7.5 and 8.3 days. Neither is a day either,
   but the first number is a one-off per PLANT and the second is what a customer pays per PROGRAM,
   and quoting one where the other is meant is the kind of thing this file exists to stop.
+
+### §72.13 One trial pass becomes the teacher's default — four plants, free
+
+```
+  plant        product's commissioning     delivered
+  barrel       124.0 d  ->  94.4 d  1.31x  11.176x -> 11.176x
+  Wood-Berry    90.7 d  ->  77.4 d  1.17x   2.978x ->  2.978x
+  quad tank      8.1 d  ->   6.4 d  1.27x   2.591x ->  2.591x  (held out 2.299x both)
+  cold mill      1.7 h  ->  80 min  1.28x   1.446x ->  1.450x
+```
+
+Free on all four, which is the same signature the operator handoff gave. It is the TEACHER's
+default and not `hff`'s: as a RUNG the same sweep picks what SHIPS, while the teaching port
+replaces exactly the forecast a rung's verify scores (§52.33), so the two are judged on different
+things and `hff.test.mjs` stays byte-identical.
+
+**Cumulatively, from where this section started:**
+
+```
+  barrel       337.9 d  ->  94.4 d    3.58x
+  Wood-Berry   251.6 d  ->  77.4 d    3.25x
+  quad tank     19.3 d  ->   6.4 d    3.02x
+  cold mill      4.7 h  ->  80 min    3.53x
+```
+
+— with the delivered number unmoved on the barrel and *better* on the other three (the ridge:
+REFUSED → 2.591x on the tank, +19% column, +25% mill). None of it is a controller change.
+
+What the budget now says is left, per plant, is the PROBE phase: 28 laps of the barrel's 53, 20 of
+the tank's 56, 20 of the column's 54, 12 of the mill's 37. That is `hff` deciding whether the
+operator can be identified at all, so it is the phase where cutting has a cost rather than being
+free, and it has not been swept. Beside it sits one thing that is not `hff`'s at all: every teacher
+call pays `settled()` plus a warm lap plus the scored lap — four laps of plant where two would do,
+because the lap is CLOSED and a carried plant ends a call where it starts one. That is a flat 2x
+across every phase and it is a harness change, which `lib/flexisim/autohost.js` already makes for
+the arm and states the reason for.
