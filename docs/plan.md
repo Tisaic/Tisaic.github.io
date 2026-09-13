@@ -17455,3 +17455,46 @@ So §73.3's sentence is corrected rather than kept: **what a diet costs is its c
 is its content, and only a HELD-OUT program can tell you which you are cutting.** `DIETN` stays a
 knob on every plant and a default on none. The tank is the only one of the four that carries such
 a program, and on this experiment it was the whole instrument.
+
+### §73.6 The barrel's lap CANNOT be halved — the plant refuses it
+
+The hypothesis was that the file's own rule ("the lap must EXCEED the 7,861-step settle") permits
+two setpoints at 10,000 steps, halving 5.56 hours of extruder per lap and moving the window from
+±2,500 to ±1,250 — closer to the ±983 §62.5 measured offline as this plant's transfer optimum.
+
+```
+  DPTS=2                      32.5 days   REFUSED, 1.00x
+  DPTS=2  DIETN=2             17.2 days   REFUSED, 1.00x
+  DPTS=2  DIETN=1  one design  5.2 days   REFUSED, 1.00x
+```
+
+**Every one refuses.** `hff` inverts at the LAP's own harmonics, so the lap is not merely a
+container for setpoints — it is the fundamental period of the model being identified, and
+10,000/7,861 = 1.27 does not give one where 20,000/7,861 = 2.5 does. The rule as written
+("exceed") is too weak, and the margin rather than the inequality is what matters. §65.3 recorded
+the same thing from the other side (a 5,000-step lap is "a converged correction the machine never
+reached steady state inside") and it applies to the ratio, not just to the count.
+
+So the cheapest configuration that WORKS is 5.2 days of extruder — and it delivers nothing.
+
+### §73.7 Which prices the barrel honestly, and names the only lever that can move it
+
+```
+  barrel   4 diet members   33.3 days   6.12x
+  barrel   2 diet members   23.6 days   5.72x    1.4x cheaper for 6.5%
+  barrel   1 diet member    19.2 days   4.08x    1.7x cheaper for 33%
+```
+
+**The floor for this route on this plant is about three weeks, not the two or three days I
+estimated.** The teacher spends 31-36 CALLS at two laps each — 62-72 laps of 5.56 h — and neither
+the lap nor the call count will go lower: the lap is set by the plant's own settle and the calls
+by a probe-and-iterate identification.
+
+**The lever that remains is not a cheaper teacher, it is a DIFFERENT one, and it is already built
+and already measured.** `makeArmHost` supplies `converge()` — the commissioned pilot iterated with
+the MEASURED error as its free response through `oracleF0` — and CLAUDE.md records what that is
+worth against `hff` on the arm: **6.6x in 10.1 machine-minutes where `hff` needs 107**, a factor
+of ten, because the oracle port replaces exactly the forecast `hff` spends its probe sets
+identifying. None of these four plant harnesses supplies it; all four score `hff`. That is a build
+rather than a knob, it is the largest single number left in this section, and it is named here
+rather than claimed.
