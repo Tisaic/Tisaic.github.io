@@ -36,7 +36,7 @@
  */
 import { ladder, announce } from './rigs/ladder.mjs';
 import { wbSpec } from './rigs/specs.mjs';
-import { deriveWindow, reportDistil, priceFrom, ridgeLadder, teacherReuse } from './rigs/distilkit.mjs';
+import { deriveWindow, reportDistil, priceFrom, ridgeLadder, teacherReuse, carrier } from './rigs/distilkit.mjs';
 import * as WB from './rigs/woodberry-rig.mjs';
 
 if (process.env.SUITE !== 'full') {
@@ -96,6 +96,8 @@ console.log(`  ${OFFSETS.length} offsets per channel, ${DIETS.length} training p
 /** The training diet as the rung consumes it: a lap, its reference, and a run closure. */
 const distilRuns = () => DIETS.map((rec) => {
   const lap = LAP(rec), ref = refOf(rec);
+  // ONE PLANT FOR THIS RUN, CARRIED ACROSS THE TEACHER'S CALLS (plan §72.15).
+  const hold = carrier(() => settled(rec));
   return {
     lap,
     refAt: (k) => { const s = ref(k); return WB.inputsFor(s[0], s[1]); },
@@ -109,7 +111,7 @@ const distilRuns = () => DIETS.map((rec) => {
     closed: true,
 
     run: async (corr) => {
-      const c = settled(rec);
+      const c = hold();
       let s2 = 0, n = 0;
       const err = [0, 1].map(() => new Float64Array(lap));
       for (let k = 0; k < 3 * lap; k++) {

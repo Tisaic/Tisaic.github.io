@@ -52,7 +52,7 @@
  */
 import { ladder, announce } from './rigs/ladder.mjs';
 import { barrelSpec } from './rigs/specs.mjs';
-import { deriveWindow, reportDistil, priceFrom, ridgeLadder, teacherReuse } from './rigs/distilkit.mjs';
+import { deriveWindow, reportDistil, priceFrom, ridgeLadder, teacherReuse, carrier } from './rigs/distilkit.mjs';
 import * as TH from './rigs/thermal-rig.mjs';
 
 if (process.env.SUITE !== 'full') {
@@ -161,6 +161,8 @@ console.log(`  ${OFFSETS.length} offsets per channel, ${DIETS.length} training r
 const distilRuns = () => DIETS.map((rec, di) => {
   const seg = DSEGS[di % DSEGS.length];
   const lap = LAP(rec, seg), ref = refOf(rec, seg);
+  // ONE PLANT FOR THIS RUN, CARRIED ACROSS THE TEACHER'S CALLS (plan §72.15).
+  const hold = carrier(() => settled(rec, seg));
   return {
     lap,
     refAt: (k) => TH.powerFor(ref(k)),
@@ -174,7 +176,7 @@ const distilRuns = () => DIETS.map((rec, di) => {
     closed: true,
 
     run: async (corr) => {
-      const p = settled(rec, seg);
+      const p = hold();
       let s2 = 0, n = 0;
       const err = [0, 1, 2].map(() => new Float64Array(lap));
       for (let k = 0; k < 3 * lap; k++) {

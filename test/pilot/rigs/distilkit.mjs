@@ -121,6 +121,29 @@ function ridgeLadder(env = process.env.RIDGES) {
  */
 const teacherReuse = () => process.env.REUSE !== '0';
 
+/**
+ * ONE PLANT PER TRAINING RUN, CARRIED ACROSS THE TEACHER'S CALLS (plan §72.15).
+ *
+ * Every diet closure here rebuilds and re-settles its plant on every call the teacher makes, and
+ * the teacher makes tens of them per run. On the quadruple tank that settle is 30,000 steps
+ * against a 5,540-step lap — **64% of every call is bringing a plant to an operating point it was
+ * already at**, because the lap is CLOSED and a run ends where it starts.
+ *
+ * `lib/flexisim/autohost.js` already makes the opposite choice for the arm and states the reason
+ * in its own header: it "drives ONE machine between runs and never restores a snapshot", and
+ * plan §52.12 measured that a per-run snapshot restore was dozens of teleports per commissioning.
+ * The plant harnesses are the copy that never got the lesson (rule 61).
+ *
+ * IT IS NOT A FREE CHANGE AND IS NOT CLAIMED AS ONE. The carried plant begins a call where the
+ * previous one left it — under the previous correction — rather than at a cold settle, so the
+ * numbers move and must be re-measured. It is also the more honest configuration: a deployed
+ * machine runs continuously and is not re-settled from cold between laps (rule 34).
+ */
+function carrier(build) {
+  let p = null;
+  return () => (p === null ? (p = build()) : p);
+}
+
 /** The geometric offset SHAPE — dense near now where the correction is decided, sparse far out
  * where it only has to span the memory. The shape is a design; the reach is the plant's. */
 const SHAPE = [0, 0.008, 0.016, 0.031, 0.063, 0.125, 0.219, 0.344, 0.5, 0.719, 1];
@@ -156,6 +179,18 @@ function deriveWindow({ settle, lapMin, win }) {
  * distinguishes them.
  */
 async function reportDistil({ rep, runs, nFeat, segs = null, auto = null }) {
+  // ---- AN EXCEPTION INSIDE THE RUNG MUST NOT PASS FOR A REFUSAL (plan §72.15).
+  //
+  // `AutoStack` catches whatever `host.distilRuns()` throws into `rep.distil.error` — right, so
+  // one bad diet cannot take a commissioning down — and nothing above it ever read that field.
+  // A missing import in this very change duly produced `{"error":"carrier is not defined"}`, a
+  // rung that never ran, a 1.000x, and a GREEN test whose own summary read "it REFUSED". That is
+  // rule 25 exactly: "did not run" and "ran and declined" are different states, and the harness
+  // could not tell them apart. It throws now, because a refusal is a result and a crash is not.
+  if (rep.distil && rep.distil.error) {
+    throw new Error(`the distilled rung THREW rather than refusing: ${rep.distil.error} `
+      + '— a crash is not a verdict (rule 25)');
+  }
   // ---- THE TWO CHECKS THAT WOULD HAVE CAUGHT §65's DEFECTS, AND DID NOT EXIST.
   //
   // Both faults were silent, both were of a class this project had already paid for once, and
@@ -240,4 +275,4 @@ async function reportDistil({ rep, runs, nFeat, segs = null, auto = null }) {
   return { inSample, dr };
 }
 
-export { deriveWindow, reportDistil, priceFrom, ridgeLadder, teacherReuse, human, SHAPE, DEFAULT_RIDGES };
+export { deriveWindow, reportDistil, priceFrom, ridgeLadder, teacherReuse, carrier, human, SHAPE, DEFAULT_RIDGES };

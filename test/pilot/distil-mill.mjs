@@ -87,6 +87,14 @@ const distilRuns = () => [0, 1, 2, 3].map((i) => {
     lap: LAP,
     closed: true,
     refAt: (k) => refOf(W + ((k % LAP) + LAP) % LAP),
+    // THIS PLANT IS DELIBERATELY NOT CARRIED ACROSS THE TEACHER'S CALLS, and it is the only one
+    // (plan §72.15). Everywhere else the per-call warm-up is a SETTLE and rebuilding it wastes the
+    // plant's time; here `W` is a PHASE ALIGNMENT — a whole number of roll turns, so the declared
+    // cos/sin reference matches the shaft the correction will meet (plan §71.2). A carried plant
+    // would advance by `3*LAP` = 3267 steps against a 408.4-step turn, which is 8.0 turns and not
+    // exactly 8, so the phase would drift a fifth of a step per call while `refAt` stayed put.
+    // That is §71.2's own defect — the object handed a shaft angle that is not the shaft's — and
+    // a blanket "carry the plant" would have reintroduced it silently.
     run: async (corr) => {
       const m = RM.makeMill(1 + i);
       for (let j = 0; j < W; j++) m.step(RM.S0);

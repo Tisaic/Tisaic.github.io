@@ -40,7 +40,7 @@
  * Run: SUITE=full node test/pilot/distil-tank.mjs   [SEEDS=1,2]  [GRADE=fast]
  */
 import { AutoStack } from '../../lib/pilot/autostack.js';
-import { priceFrom, ridgeLadder, teacherReuse } from './rigs/distilkit.mjs';
+import { priceFrom, ridgeLadder, teacherReuse, carrier } from './rigs/distilkit.mjs';
 import { into } from './rigs/meter.mjs';
 import { UCAP, makeTanks, voltsFor, SEG, HOLD, RECIPE, quintic, refAtStep, PROG, DT }
   from './rigs/tanks-rig.mjs';
@@ -272,6 +272,10 @@ async function once(seed) {
   const distilRuns = () => DIETS.map((rec, di) => {
     const seg = DSEGS[di % DSEGS.length];
     const lap = seg * rec.length, ref = refOf(rec, seg);
+    // ONE PLANT FOR THIS RUN, CARRIED ACROSS THE TEACHER'S CALLS (plan §72.15). The settle is
+    // 30,000 steps against a 5,540-step lap, so rebuilding per call spent 64% of every call
+    // bringing a plant to an operating point it was already at.
+    const hold = carrier(() => settled(rec, seg));
     return {
       lap,
       refAt: (k) => { const h = ref(k); return voltsFor(G, h[0], h[1]); },
@@ -293,7 +297,7 @@ async function once(seed) {
       // through it; the row count is what says so, and `distilkit.mjs` now checks it for free.
       closed: true,
       run: (corr) => inPhase(`teacher#${di}`, async () => {
-        const p = settled(rec, seg);
+        const p = hold();
         let s2 = 0, n = 0;
         const e0 = new Float64Array(lap), e1 = new Float64Array(lap);
         for (let k = 0; k < 3 * lap; k++) {
@@ -442,6 +446,15 @@ for (const seed of SEEDS) {
   const shipped = JSON.stringify(rep.deployed);
   console.log(`    seed ${seed}: shipped ${shipped}  ${rep.base.toExponential(4)} -> `
     + `${rep.best.toExponential(4)} cm rms   ${rep.gain.toFixed(3)}x   ${secs}s`);
+  // AN EXCEPTION INSIDE THE RUNG IS NOT A REFUSAL (plan §72.15). `AutoStack` catches what
+  // `distilRuns()` throws into `rep.distil.error`, which is right — one bad diet must not take a
+  // commissioning down — and this harness never read it. A missing import produced
+  // `{"error":"carrier is not defined"}`, a rung that never ran, a 1.000x, and a GREEN run whose
+  // own summary read "it REFUSED". "Did not run" and "ran and declined" are different states
+  // (rule 25) and this file's whole question is which one happened.
+  if (rep.distil && rep.distil.error) {
+    throw new Error(`the distilled rung THREW rather than refusing: ${rep.distil.error}`);
+  }
   // THE RUNG'S OWN REPORT, read from the object rather than from a field this harness invented.
   if (rep.distil) console.log(`    ②d fit: deploy ${rep.distil && rep.distil.fit ? rep.distil.fit.deploy : '—'}, held-out ${
       rep.distil && rep.distil.fit ? JSON.stringify(rep.distil.fit.heldOutR2) : '—'}, rows ${
