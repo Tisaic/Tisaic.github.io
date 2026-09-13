@@ -17430,3 +17430,28 @@ that can check a one-member diet against a HELD-OUT production recipe.
 cascade's own `sample` rather than 1, so the policy decided less often and one training run fell
 below the 1.5x bar. The mill shows the same sign at a smaller size. So "the cascade is commissioned
 and then thrown away" understates it — on two plants it was also making the thing that ships worse.
+
+### §73.5 …and the tank and barrel REFUSE it, which is why the held-out program exists
+
+§73.3's "a one-member diet delivers the identical number" was measured on the column and the mill
+and was one run away from becoming a default. The two plants that can check it say no:
+
+```
+  plant        4 members              2 members              1 member
+  Wood-Berry   30.0 d   3.744e-2      22.1 d   3.744e-2      18.1 d   3.744e-2
+  cold mill    54.8 min 5.865e-3      34.0 min 5.852e-3      25.2 min 5.855e-3
+  barrel       33.3 d   6.12x         23.6 d   5.72x         19.2 d   4.08x
+  quad tank    31.7 h   held out 2.301x   23.9 h  0.918x     20.0 h   held out 1.839x
+```
+
+**On the tank a two-member diet is WORSE THAN DOING NOTHING on the recipe it has not seen** —
+0.918x, against 2.301x on the full diet — and the one-member diet is better than the two-member
+one, so it is not even monotone. That is the diet's CONTENT deciding it, exactly as §66 measured
+on the barrel (0.85x on unrelated profiles against 10.6x on the machine's own), and the count only
+looked free on the two plants whose members happen to be near-duplicates. The barrel degrades
+gracefully instead — 6.5% at two members, 33% at one.
+
+So §73.3's sentence is corrected rather than kept: **what a diet costs is its count, what it buys
+is its content, and only a HELD-OUT program can tell you which you are cutting.** `DIETN` stays a
+knob on every plant and a default on none. The tank is the only one of the four that carries such
+a program, and on this experiment it was the whole instrument.

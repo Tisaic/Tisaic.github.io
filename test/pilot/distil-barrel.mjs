@@ -102,7 +102,15 @@ const POINTS = process.env.DIET === 'far' ? FAR : NEAR;
 const PICK = process.env.DIET === 'far'
   ? [[0, 1, 2, 3], [2, 3, 4, 5], [0, 2, 4, 5], [1, 3, 5, 0]]
   : [[0, 2, 1, 3], [1, 0, 3, 2], [0, 3, 1, 2], [2, 0, 1, 3]];
-const DIETS = PICK.map((ix) => ix.map((i) => POINTS[i]));
+// AND HOW MANY SETPOINTS A RECIPE CYCLES THROUGH, WHICH IS THE LAP ITSELF (plan §73.5). The rule
+// above is "the lap must EXCEED the plant's settle", and at the production segment two setpoints
+// give 10,000 steps against a 7,861-step settle — still legal, half the lap, and a reach of ±1,250
+// which is CLOSER to the ±983 §62.5 measured offline as this plant's transfer optimum than the
+// ±2,500 four setpoints give. Every teacher lap is 5.56 h of extruder at four and 2.8 h at two, so
+// this is the one knob that halves the commissioning without touching a phase count. `DPTS=4` is
+// the control.
+const DPTS = Math.max(2, +(process.env.DPTS || 4));
+const DIETS = PICK.map((ix) => ix.slice(0, DPTS).map((i) => POINTS[i]));
 // THE DIET'S RATE LADDER, WHICH IS THE LEVER §63.6 MEASURED AND HAS NO CONSTANT IN IT. The first
 // diet ran every recipe at SEG 2500 against the production program's 5000, so every training ramp
 // was twice production's rate and the whole diet sat to ONE SIDE of it — `distil-tank.mjs`'s
