@@ -16769,3 +16769,65 @@ is rule 31 with the largest span this project has recorded — so the finding is
 ridge is 1e-1" but that the ridge MUST BE SELECTED PER PLANT BY MACHINE SCORE, because the fit's
 own criterion ranks it backwards. That selection is a real commissioning cost (six fits here) and
 it is not what the ladder does today.
+
+## §71 — DISTURBANCE REJECTION: THE COLUMN CALLED STRUCTURAL IS NOT
+
+Rated against the field the deployed object scores 2/10 on disturbance rejection, its worst
+aspect, and §69 called it structural: a map of the commanded reference cannot act when the
+reference is constant. That is right about the SETPOINT and wrong about the REFERENCE.
+
+### §71.1 What a mill knows ahead
+
+The cold mill's dominant error is not the setpoint moving — it never moves — it is ROLL
+ECCENTRICITY: 30 µm entering the gap through `MM/(MM+QM)` = 2/3, about **14 µm rms of a 15.15 µm
+open loop**, periodic at the backup roll's rotation. Every mill measures roll angle with an
+encoder: no delay, no tracking error, no metrology the shop does not own. So it is known ahead
+exactly as a setpoint is, and **it is machine STATE rather than position in a lap**, which is what
+the retirement permits — the test of that being that there is no lap here to memorise.
+
+Declared as two extra reference channels (cos and sin of roll angle, so a linear map can
+synthesise any amplitude AND any phase, which the 100-step transport delay needs), the existing
+window machinery carries it with **no library change**: `refDim` widens, `_rowFrom` reads it, the
+deploy path reaches it through the host's own `ctx.lookRaw`, and the plant still sees `ref[0]`.
+
+### §71.2 A FOURTH frame error, same class as the other three
+
+First run: 0.52x refused, with in-sample 2.45x on all four training runs — the map learning the
+disturbance and the deploy throwing it away. `millSpec.fresh()` warms the mill **4,000 steps**,
+and 4,000/408.4 is **9.79 TURNS**, so at scored step 0 the roll is 0.79 of a revolution from where
+`phase(0)` says it is. The training runs hid it because each warms a WHOLE number of turns by
+construction. **The object was handed a shaft angle that was not the shaft's** — the unclosed lap
+(§65.1), the decimated look-ahead (§65.2) and this are one fault in three costumes: the fit is
+fine and the deploy reads the wrong frame. Corrected:
+
+```
+  0.52x REFUSED  →  1.153x DEPLOYED
+```
+
+### §71.3 The falsifier fires, and the window rule survives its own override
+
+```
+  phase DECLARED    1.153x DEPLOYED   in sample 2.450  2.459  2.469  2.396
+  phase WITHHELD    1.000x REFUSED    in sample 1.000  1.000  1.000  1.000
+```
+
+**Withheld, the object is provably inert** — every row identical, nothing expressible — so the win
+is entirely the declared input and none of it is leakage. And the plant supplies its own second
+control: the mill's OTHER disturbance, the entry gauge, is declared unmeasured with periods of
+2,150 and 950 steps, **not commensurate** with the 408-step roll turn, so it cannot be memorised
+against the declared phase.
+
+The window rule was also tested against my own intuition that it must span a full period, and the
+intuition lost: `min(0.61·settle, lap/8)` gives ±244 and reads **1.153x**, against 1.043x at ±408
+(one whole turn), 0.997x at ±600 and 0.858x at ±800. Aliasing dominates; the derivation stands
+unoverridden.
+
+### §71.4 What this is worth, stated against the field
+
+**Disturbance rejection moves from 2 to about 4**, not to best-in-class, and the distinction is
+exact: the object can now reject a disturbance that is DECLARED, MEASURABLE and known ahead, by
+feedforward, at no cost in runtime instruments or arithmetic. It still cannot touch an UNMEASURED
+or stochastic one — the entry wander here — which is what feedback is for, and on this very plant
+the pilot cascade delivers 1.74x against the distilled map's 1.15x. So the mill remains a plant
+where a customer receives the cascade, and what changed is that the deployed object is no longer
+structurally excluded from regulators.

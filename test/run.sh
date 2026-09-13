@@ -376,6 +376,10 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # defects hid a factor of 22.
     if [ "${SUITE}" = "full" ]; then t node test/pilot/distil-column.mjs; fi
     if [ "${SUITE}" = "full" ]; then t node test/pilot/distil-barrel.mjs; fi
+    # THE DEPLOYED OBJECT ON A REGULATOR (plan §71) — the column this project rates worst on and
+    # the one §69 called structural. A map of the commanded reference on a plant whose setpoint
+    # NEVER MOVES, made to work by declaring the one thing a mill knows ahead: roll angle.
+    if [ "${SUITE}" = "full" ]; then t node test/pilot/distil-mill.mjs; fi
     t node test/pilot/tanks.test.mjs
     t node test/pilot/thermal.test.mjs
     t node test/pilot/woodberry.test.mjs
