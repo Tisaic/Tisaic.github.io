@@ -17220,3 +17220,50 @@ call pays `settled()` plus a warm lap plus the scored lap — four laps of plant
 because the lap is CLOSED and a carried plant ends a call where it starts one. That is a flat 2x
 across every phase and it is a harness change, which `lib/flexisim/autohost.js` already makes for
 the arm and states the reason for.
+
+### §72.14 Four refinement passes as the teacher's default, re-measured at the new base
+
+```
+  barrel   94.4 d, 11.176x — byte-identical      mill  80 min, 1.450x — byte-identical
+  column   77.4 -> 74.9 d,  2.978x -> 3.643x     tank   6.4 ->  4.6 d, held out 2.301x
+```
+
+Two plants unmoved and two cheaper AND better. That is §49's law — a more converged teacher
+teaches a worse policy — arriving through a fifth knob, and it is the cleanest shape a default can
+have. Like `trialPasses`, it is the TEACHER's and not `hff`'s.
+
+### §72.15 The plant is carried across the teacher's calls, and the mill must not be
+
+Every diet closure rebuilt and re-settled its plant on EVERY call the teacher makes. On the tank
+that settle is **30,000 steps against a 5,540-step lap — 64% of every call spent bringing a plant
+to an operating point it was already at**, because the lap is CLOSED and a run ends where it
+starts. `lib/flexisim/autohost.js` made the opposite choice for the arm long ago and says why in
+its own header; the plant harnesses are the copy that never got the lesson (rule 61).
+
+```
+  quad tank     4.6 d  ->  2.0 days   2.3x     held out 2.301x -> 2.301x
+  Wood-Berry   74.9 d  -> 59.3 days   1.26x            3.643x -> 3.643x
+  cold mill    80 min  -> 80 min      —                1.450x  (not carried, see below)
+```
+
+**THE MILL IS DELIBERATELY NOT CARRIED AND IT IS THE ONLY ONE.** Everywhere else the per-call
+warm-up is a SETTLE; on the mill it is a PHASE ALIGNMENT to a whole number of roll turns, so the
+declared cos/sin reference matches the shaft the correction will meet (§71.2). A carried plant
+advances `3*LAP` = 3,267 steps against a 408.4-step turn — 8.0 turns and not exactly 8 — so the
+phase would drift a fifth of a step per call while `refAt` stayed put. That is §71.2's own defect,
+the object handed a shaft angle that is not the shaft's, and a blanket "carry the plant" would
+have reintroduced it silently on the one plant where the warm-up is not a warm-up.
+
+### §72.16 And a hole this change fell into: a crash that reported itself as a refusal
+
+A missing import made the rung THROW. `AutoStack` catches that into `rep.distil.error` — which is
+right, one bad diet must not take a commissioning down — and **nothing above it had ever read the
+field**. So the run printed `②d report: {"error":"carrier is not defined"}`, scored 1.000x,
+summarised itself as *"the deployed object reached a third plant: NO — it REFUSED"*, and the test
+went GREEN.
+
+"Did not run" and "ran and declined" are different states (rule 25) and this harness's entire
+question is which one happened. Both the shared reporter and `distil-tank.mjs` now throw on it: a
+refusal is a result and a crash is not. It is the same shape as the two holes this project has
+already paid for — a `SUITE=full` skip and an `if (canLearn)` race — a check that existed, ran, and
+could not fail.
