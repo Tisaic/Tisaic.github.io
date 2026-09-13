@@ -337,14 +337,14 @@ async function once(seed) {
       const a = ALT[i], b = ALT[i + 1];
       return [a[0] + (b[0] - a[0]) * q, a[1] + (b[1] - a[1]) * q];
     };
-    const driveAlt = (on) => {
+    const driveAlt = (on, useP = pol) => {
       const p = makeTanks(G);
       const h0 = altAt(0), v0 = voltsFor(G, h0[0], h0[1]);
       for (let i = 0; i < 30000; i++) p.step(v0[0], v0[1]);
       let s2 = 0, n = 0;
       for (let k = 0; k < PROG; k++) {
         const h = altAt(k), v = voltsFor(G, h[0], h[1]);
-        const u = on ? pol.actLook((o) => {
+        const u = on ? useP.actLook((o) => {
           const hh = altAt(Math.min(PROG - 1, Math.max(0, k + o)));
           return voltsFor(G, hh[0], hh[1]);
         }) : [0, 0];
@@ -356,6 +356,26 @@ async function once(seed) {
     const b = driveAlt(false), w = driveAlt(true);
     console.log(`    HELD-OUT PROGRAM (the recipe in an order production never runs): `
       + `${b.toExponential(4)} → ${w.toExponential(4)}   ${(b / w).toFixed(3)}x`);
+    // ---- IS RULE 42's TIE-BREAK RIGHT HERE, OR ONLY APPLIED? (plan §72.7)
+    //
+    // The ladder picks the LARGEST ridge within 5% of the best MEASURED improvement — the
+    // smoothest map — because a best-of-grid is a suspect result and this project has already
+    // disqualified a rival for running away with its own grid. On the barrel that tie-break costs
+    // 2.7% (11.223x at the grid's best against 10.919x at the band's edge), so it is a preference
+    // unless something outside the grid says otherwise. This plant is the one that can say: every
+    // candidate is scored on the recipe the CHOICE never saw, so "best measured" and "smoothest
+    // in band" can be read against a program neither of them was selected on.
+    if (rep.distil.ridges) {
+      console.log('    the ladder against the HELD-OUT program (which no candidate was chosen on):');
+      for (const c of rep.distil.ridges) {
+        if (!c.policy) { console.log(`      ridge ${String(c.ridge).padStart(7)}  the fit refused`); continue; }
+        const x = b / driveAlt(true, c.policy);
+        console.log(`      ridge ${String(c.ridge).padStart(7)}  production `
+          + `${c.score === null ? "—" : (rep.base / c.score).toFixed(3) + "x"}`
+          + `   held out ${x.toFixed(3)}x`
+          + (c.ridge === rep.distil.ridgePicked ? '   <- PICKED' : ''));
+      }
+    }
   }
 
   // WHAT THE POLICY ACTUALLY APPLIES ON PRODUCTION, measured rather than inferred. The rung's row

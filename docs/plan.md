@@ -17006,3 +17006,30 @@ What it does NOT fix, stated: run 0 still pays full identification and on the co
 of what remains (59.2 of 90.7 days). That is the plant identification itself and it is irreducible
 for this teacher. And on Wood-Berry runs 1-3 are DROPPED below the 1.5x bar either way, so their
 22.5 days still buy no rows — the diet, not the teacher, is what would remove that.
+
+### §72.7 The barrel is where the ladder costs something, and it is rule 42's own tie-break
+
+```
+  the RIDGE LADDER on the barrel, scored on the machine:
+    ridge 1e-6   4.4612e-1     <- the grid's best, and the harness's committed default
+    ridge 1e-4   4.4640e-1
+    ridge 1e-3   4.4802e-1
+    ridge 1e-2   4.5854e-1     <- PICKED (largest within 5% of the best improvement)
+    ridge 1e-1   4.7277e-1        (94.4% — outside the band)
+    ridge 1       4.7516e-1
+```
+
+Monotone: here the machine and the fit AGREE that small is better, and the ladder still moves the
+pick to the band's edge because rule 42 says *"among the candidates within 5% of the best MEASURED
+score, take the cheapest — or the smoothest."* It costs **11.223x → 10.919x, 2.7%**.
+
+That is the honest shape of the ladder across four plants: it converts a REFUSAL to 2.591x on the
+tank, adds 19% on the column and 25% on the mill, and costs 2.7% on the barrel. Net it is not
+close — but "rule 42 says so" is a preference until something outside the grid rules on it, and
+this project has warned about best-of-grid results often enough that the warning cannot be applied
+in one direction only. The tank is the plant that can settle it: it carries a HELD-OUT production
+recipe no candidate was selected on, so every candidate is scored there too and "best measured"
+and "smoothest in band" are read against a program neither of them was chosen on.
+
+The teacher's budget is inert here as it is on the mill and the tank: `TPASSES=4` reproduces the
+ladder run at 337.9 days and 10.919x to every digit.
