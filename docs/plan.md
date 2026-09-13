@@ -17033,3 +17033,41 @@ and "smoothest in band" are read against a program neither of them was chosen on
 
 The teacher's budget is inert here as it is on the mill and the tank: `TPASSES=4` reproduces the
 ladder run at 337.9 days and 10.919x to every digit.
+
+### §72.8 The tie-break falsifier fires, and it retires the band's own constant
+
+The tank scores every ridge candidate on the HELD-OUT production recipe — the order production
+never runs, which no candidate was selected on:
+
+```
+  ridge     production   held out
+  1e-6        0.083x      0.090x
+  1e-4        0.074x      0.072x
+  1e-3        0.076x      0.088x
+  1e-2        0.128x      0.166x
+  1e-1        2.591x      2.299x   <- PICKED
+  1           0.259x      0.296x
+```
+
+**Production and held out rank identically**, and the winner is twenty times clear of its nearest
+neighbour. So a machine-scored pick is not fitting the program it was scored on, which is the
+concern "smoothest in the band" existed to hedge. Two things then retire that hedge:
+
+- **No candidate is cheaper.** Every ridge produces the same features, the same MAC and the same
+  bytes — 64 on the barrel and the mill, 43 on the column, 55 on the tank, whatever the ridge. Rule
+  42's band exists so a CHEAPER candidate can win; here it has nothing to spend itself on.
+- **What smoothness stands in for is now measured**, on the one plant that carries a program the
+  selection never saw, and it agrees with the machine.
+
+So the band becomes `beats()` — this library's own "does this differ at the INSTRUMENT'S
+resolution", the median measured repeatability with the stated floor beneath it — and the largest
+ridge breaks a tie only among candidates indistinguishable from the best. That replaces an invented
+5% with the machine's own number, which is the whole of the self-tuning claim: the change REMOVES a
+constant rather than adding one. On the barrel it costs 0.4% instead of 2.7%; where nothing ties it
+is simply the best measured candidate.
+
+**AND THE FIT'S OWN GATE IS NOT MERELY UNINFORMATIVE HERE, IT IS CONFIDENTLY WRONG.** The tank's
+held-out R² peaks at ridge 1e-3 (0.9941 / 0.9931) and that cell delivers **0.076x on production and
+0.088x held out** — worse than doing nothing on both, by a criterion reading 0.99. `distil.js` says
+in its own header that the gate is a PRE-FILTER and the decision is a machine-scored verify; this
+is that sentence with a number on it, on the one constant nobody had ever put through the verify.

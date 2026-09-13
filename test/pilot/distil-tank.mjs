@@ -409,7 +409,8 @@ async function once(seed) {
         console.log(`      ridge ${String(c.ridge).padStart(7)}  `
           + `machine ${c.score === null ? 'not scored (the fit refused)' : c.score.toExponential(4)}`
           + `  held-out ${JSON.stringify(c.heldOutR2)}`
-          + (c.ridge === rep.distil.ridgePicked ? '   <- PICKED (rule 42: largest in the band)' : ''));
+          + (c.ridge === rep.distil.ridgePicked ? '   <- PICKED'
+          : (rep.distil.ridgeBand || []).includes(c.ridge) ? '   (in band)' : ''));
       }
     }
     if (rep.distil.ridgeNote) console.log(`    ${rep.distil.ridgeNote}`);
