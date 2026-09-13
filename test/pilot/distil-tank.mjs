@@ -200,7 +200,9 @@ async function once(seed) {
     // teacher convergence. 1e-6 was carried here from the arm and never re-derived (rule 31).
     // THE TEACHER'S BUDGET, matching `rigs/ladder.mjs`'s knob so the sweep is the same experiment
     // on every plant (rule 61). Unset is the library's own 24 and byte-identical.
-    ...(process.env.TPASSES ? { hff: { passes: +process.env.TPASSES } } : {}),
+    ...(process.env.TPASSES || process.env.TTRIALS ? { hff: {
+      ...(process.env.TPASSES ? { passes: +process.env.TPASSES } : {}),
+      ...(process.env.TTRIALS ? { trialPasses: +process.env.TTRIALS } : {}) } } : {}),
     distil: { refDim: 2, ridge: Number(process.env.RIDGE || 1e-6), offsets: OFFSETS,
       ...(ridgeLadder() ? { ridges: ridgeLadder() } : {}),
       ...(teacherReuse() ? {} : { teacherReuse: false }),
@@ -447,6 +449,13 @@ for (const seed of SEEDS) {
     ②d fit: deploy ${rep.distil && rep.distil.fit ? rep.distil.fit.deploy : '—'}, held-out ${rep.distil && rep.distil.fit ? JSON.stringify(rep.distil.fit.heldOutR2) : '—'}  — act() returns ZEROS when deploy is false, so an EXACT 1.000x is a fit that refused and
       not a correction that was scored and lost
     ②d report: ${JSON.stringify(rep.distil).slice(0, 400)}`);
+  // The teacher's own laps by phase — the decomposition that says what can be cut (plan §72.11).
+  for (const [i, c] of ((rep.distil && rep.distil.runs) || []).entries()) {
+    if (!c.budget) continue;
+    console.log(`    teacher run ${i} laps: ${Object.entries(c.budget)
+      .filter(([k]) => k !== 'total').map(([k, v]) => `${k} ${v}`).join(' · ')}`
+      + `   TOTAL ${c.budget.total}`);
+  }
   if (r0.inSample) {
     console.log(`    IN SAMPLE — the policy on its OWN training runs: `
       + r0.inSample.map((x) => x.toFixed(3) + 'x').join('  '));

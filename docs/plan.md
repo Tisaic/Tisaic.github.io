@@ -17126,3 +17126,61 @@ rather than the number:
    once on a plant, then run programs the commissioning never saw") priced for the first time. The
    number a customer pays REPEATEDLY is the second one, and it is 15x smaller. Neither reaches a
    day on the slow two, and saying which of the two a figure refers to is now compulsory.
+
+### §72.11 The teacher's own lap budget, and it is not the phase anyone would cut
+
+Run 0's identification is the whole of what remains, so "identification is expensive" is not a
+decomposition. `hff` has counted its laps by phase since it was written and nothing above it ever
+read them; they now travel on `conv[].budget` and print per training run:
+
+```
+  Wood-Berry run 0   base 1 · probeSizing 1 · probes 20 · trials 32 · refocus 5 · refine 12  = 70
+  cold mill  run 0   base 1 · probeSizing 1 · probes 12 · trials 40 · refocus 0 · refine  8  = 61
+```
+
+**The CANDIDATE SWEEP is 46% of the teacher's bill on the column and 66% on the mill**, against
+the REFINEMENT at 12 and 8 laps — which is what §72.5 cut first and what anyone would cut first.
+Two plants sharing no physics landing on the same phase is a property of the code rather than of
+either plant (rule 18), and `hff`'s own header records the same shape on the arm a third time:
+"8 probe sets where 4 suffice: 20 wasted laps of 64".
+
+`trialPasses` is 2 by default over 16 candidates. At 1:
+
+```
+  Wood-Berry   trials 32 -> 16, total 70 -> 54 laps    90.7 d -> 77.4 d   1.17x    2.978x -> 2.978x
+```
+
+Free — the delivered number is identical, which is the same signature the operator handoff gave.
+What is left inside `trials` is then one lap per CANDIDATE, and cutting that is a change to which
+designs `hff` sweeps rather than to how long it dwells on each.
+
+### §72.12 What is and is not reachable in a day, with the arithmetic rather than an opinion
+
+A day is not a number of steps, it is a number of LAPS, and the diet's lap is set by the plant:
+
+```
+  plant        one lap        a day is        teacher's run 0     product today
+  cold mill     6.5 s          13,000 laps      61 laps             1.7 h    MET
+  quad tank     9.2 min          156 laps        —                  8.1 d    8x over
+  Wood-Berry     5.0 h            4.8 laps      54-70 laps         77.4 d   77x over
+  barrel         5.6 h            4.3 laps       —                124.0 d  124x over
+```
+
+**For the column and the barrel a day is four or five laps, and no method that has to watch a
+plant respond can identify it and converge a correction in four.** That is a property of a plant
+with a five-hour lap, not of this teacher: the refinement alone is 8-12 laps and it is the cheapest
+phase. The lap cannot simply be shortened either — the window rule already has `lap/8` binding
+against the plant's own memory, so a shorter training lap buys time by taking the window below the
+reach it needs (rule 37 against §41's aliasing bound, the same forced trade as everywhere else).
+
+So the honest statement has two halves and both are now measured:
+
+- **The tank and the mill are an engineering target.** The mill is met at 1.7 h; the tank is 8.1
+  days against a day, which is 8x on a plant where a day is 156 laps, and the levers left (the
+  candidate sweep, and the harness paying four laps per teacher call where two would do) are worth
+  about that.
+- **On the column and the barrel the figure that can meet a day is the SECOND one, not the first.**
+  The operator handoff split them: the plant is characterised once — 59.2 days on the column, 79.6
+  on the barrel — and each new program after that costs 7.5 and 8.3 days. Neither is a day either,
+  but the first number is a one-off per PLANT and the second is what a customer pays per PROGRAM,
+  and quoting one where the other is meant is the kind of thing this file exists to stop.
