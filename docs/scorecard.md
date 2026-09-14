@@ -34,7 +34,9 @@ machines these plants model, and every factor this project quotes is against it.
 | 6 | **INS** instrument the customer must own | what does it cost to commission at all? | **6** | 9 | was 3. plan §52.42: a tracker is worth **3.9x** over the best permanently mounted alternative and motor encoders alone deliver **nothing**. plan §74: a TOUCH PROBE at **64 points per lap delivers the tracker's result to 0.6%**, 32 points to 2%, reproducing across three draws — the instrument a shop already owns, on a two-to-three-minute inspection routine. Not 9, because the count's scaling law is unestablished (the plant-timescale account is refuted, the lap-length axis confounded) and it is one plant |
 | 7 | **SAF** safe failure | what happens when it cannot help? | **8** | 7 | it REFUSES with a stated reason and applies nothing — 4 of 4 cart-pole seeds on a well-tuned loop, the barrel before §66, Wood-Berry's 12 of 12 under `verifyRef`. `AutoStack` scores every rung on the machine and reverts |
 | 8 | **ROB** robustness to what it was not shown | does it degrade or fall over? | **6** | 8 | was 4, on a memory-era claim. plan §75: across an **eight-fold span of gearbox stiffness and eight-fold of link stiffness** the frozen map still helps in every cell, worst 1.25x, nothing made worse — graceful, not catastrophic — **and the drift reads at the 64 touches §74 priced, to 0.6%**, so a first-article check is the recommission trigger. Not higher: the object itself has no plant-side guard and degrades SILENTLY, and only stiffness was moved |
-| 9 | **EXP** explainability | can the engineer see why? | **6** | 9 | the record IS the controller (a weight vector plus a window), and every rung prints its own verdict, cost and refusal reason — but nobody can read 111 coefficients the way they read a PID gain |
+| 9a | **PRED** predictable and well behaved | can it be tuned once and then left alone? | **8** | 9 | the property an engineer actually asks for. Pinned in `artefact.test.mjs`: **STATELESS** (the same window gives the same number after 100 other decisions), **BOUNDED at the set authority over 2,000 adversarial windows** driven a thousandfold outside the trained scale and never NaN, with the bound shown to be exercised (rule 9); no clock, no RNG, no accumulation; the coverage guard fades to exactly 0 rather than extrapolating; a **NON-FINITE window returns no correction** rather than a NaN command, which asking this question found as a LIVE DEFECT on the deploy path (§77.4, rule 55); and plan §75 measures graceful degradation across an eight-fold stiffness span. Not 9: one plant's worth of evidence, and a window that is wrong but FINITE is bounded by the cap and detected by nothing |
+| 9b | **FOR** forensic reconstructibility | after a bad part, can an investigation establish how the number was computed? | **9** | 7 | **the one column where this object BEATS the incumbent, and for a structural reason.** plan §77: a decision replays **BIT-EXACTLY from 31 logged numbers** (15 offsets x 2 reference channels + speed) and from nothing else, and `explain()` in the deployed file returns the per-term account whose contributions sum to the applied number **bit-exactly, in the applied order** — checked to be non-decorative by perturbing one weight and seeing exactly one term move. A PID's output depends on accumulated integrator state that logs usually do not carry; this is a pure function of a window the machine already knows |
+| 9c | **INT** interpretability of the coefficients | can it be read at a glance? | **3** | 9 | kept separate because the old EXP cell was conflating it with the two above. plan §76: **78.8% of the applied rms on the better channel and 93.2% on the other** is outside the four names an engineer owns. Two gross properties ARE readable off the record with no fit: the kernel is nearly DC-free (sum 1% and 0.1% of its peak tap, so it will not shift a held pose) and its peak tap is at **+512 steps, about one plant rise-time early** — the same number a regression on four classical columns found by a route sharing no arithmetic |
 | 10 | **BRD** breadth of plant classes | how many kinds of machine? | **7** | 9 | eleven plants, three with real-hardware provenance, one open-loop unstable, one with a dominant transport delay. Two error classes of three tried (mechanical compliance/friction; periodic disturbance through a declared dead time); the class it loses on is strongly coupled MIMO |
 
 ## Which column is next, and why
@@ -42,24 +44,45 @@ machines these plants model, and every factor this project quotes is against it.
 The gaps against the incumbent, largest first:
 
 ```
+  INT   3 vs 9   -6     interpretability of the coefficients — and this is the one that does not matter
+  PRED  8 vs 9   -1     predictable and well behaved: tune once, leave alone
+  FOR   9 vs 7   +2     forensic reconstructibility — the one column this object WINS
   COM   4 vs 8   -4     was -5 before plan §72-§73
-  EXP   6 vs 9   -3
   INS   6 vs 9   -3     was -6 before plan §74's touch probe
   DIS   4 vs 6   -2     was -4 before plan §71
   ROB   6 vs 8   -2     was -4 before plan §75
   BRD   7 vs 9   -2
 ```
 
+**AND THE EXP COLUMN WAS THE WRONG QUESTION, WHICH SPLITTING IT SHOWS (plan §77).** It asked "can
+the engineer see why?" and scored one number for three different properties. What an engineer
+actually asks is: *can I tune it once and never look at it again* (PRED), and *when something goes
+wrong, can an investigation establish how the number was computed* (FOR) — explicitly not the same
+as *can I read the coefficients* (INT). Split, the object reads **8 / 9 / 3** where the single EXP
+cell read 5, and the middle one is the first column here that beats the incumbent. A composite score
+across properties that pull in different directions is a preference dressed as a result, which is
+rule 42 aimed at a scorecard.
+
+**Three columns measured, and the third went the other way.** §74 moved INS 3 → 6 and §75 moved
+ROB 4 → 6, both by measuring an axis nobody had; §76 measured EXP and it fell 6 → 4, because the 6
+was written from an impression. That is the most useful thing this file has done so far: a scorecard
+whose cells can only improve is a marketing document, and the honest ordering now puts EXP first.
+
 **Updated twice, both times by the column it named.** §74 measured the touch probe and moved INS
 3 → 6; §75 then measured ROB's untouched PLANT axis and moved it 4 → 6, retracting half of the
 sentence that had made it look worst ("not gracefully, catastrophically" was evidence about the
 retired memory, on two axes, quoted against a third that nobody had measured).
 
-**The largest gap is now COM again, and the second is EXP.** COM is the one three sections have
-already worked and the remaining 30-day plants are a property of a five-hour lap rather than of the
-method (§72.12), so the next column by *tractability* rather than by size is **EXP** —
-explainability, 6 against 9 — which nothing in this project has ever attempted and which decides
-whether an engineer will arm the thing at all.
+**EXP was picked next for tractability, and measuring it split it into three.** INT is the largest
+gap on the board at -6 and is the one that does not matter: an engineer tunes once and leaves it
+alone, so *readable at a glance* is not a requirement, and six capacity experiments plus five
+function classes bound what any explanation of it could capture anyway (R² ~0.84). What does matter
+is PRED at -1 and FOR at **+2**, and both are now pinned rather than argued.
+
+**So the honest next column is COM at -4**, where three sections have already worked and the
+remaining 30-day plants are a property of a five-hour lap rather than of the method (§72.12) — or
+DIS at -2, which is the other half of what a regulator customer buys and where the mill's win came
+from declaring an input rather than changing the controller.
 
 **INS was the largest when this file was written and is no longer** (see the update above).
 It was picked first for the reason below and the pick was right: it moved 3 points in one section.

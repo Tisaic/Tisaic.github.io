@@ -18019,3 +18019,237 @@ a separate axis on which MORE lash is better. And the scoring loop here is the d
 rather than the ladder's scored run, so the control reads 8.17x against the headline's 6.63x —
 the same policy on a different instrument with the CONVENTIONAL machine as its denominator instead
 of the bare one. Every row is read against that control and not against the headline.
+
+## §76 THE EXP COLUMN: THE LEARNED MAP IS NOT THE TEXTBOOK FEEDFORWARD, AND THE NUMBER SAYS SO
+
+`docs/scorecard.md` rated explainability **6 against the incumbent's 9** with a stated reason —
+the record IS the controller and every rung prints its own verdict, but nobody reads 111
+coefficients the way they read a PID gain. Nothing in this project had ever attempted that column.
+
+**The cheapest thing that can move it is a measurement, not a picture.** The engineer already owns
+four names — acceleration (inertia), velocity (lag), direction of travel (friction) and bias — and
+`classic.js` fits exactly that basis, its own header recording the dominant coefficient coming back
+at 0.797 mm against the position loop's `vPeak/kp` of 0.778, which is a learned number an engineer
+can check by hand. So `EXPLAIN=1` regresses the APPLIED correction of the deployed policy onto that
+basis, per channel, at a ladder of LEADS — because §49.14 measured causal taps as worthless and
+straddling taps as carrying the whole result, so the answer was expected to sit at a lead.
+
+**It is not circular.** §49.14 already measured that basis DISTILLED as delivering 1.02x, i.e.
+nothing, so it cannot produce this correction; how much of the correction it CORRELATES with is a
+different question, and it is the one an engineer asks.
+
+### §76.1 At most 30% of one channel, 10% of the other
+
+```
+  lead (raw steps)   -1024  -512  -256  -128    +0  +128  +256  +512  +1024  +2048
+  channel 0  R²      0.116 0.055 0.037 0.031 0.033 0.106 0.264 0.298  0.158  0.013
+  channel 1  R²      0.100 0.091 0.063 0.060 0.062 0.054 0.035 0.010  0.019  0.039
+
+  channel 0  best +512:  R² 0.2983   accel -4.12e+3  vel 4.69e+1  sign 4.74e-2  bias 2.59e-2
+             the four names do NOT explain 78.8% of the applied rms
+  channel 1  best -1024: R² 0.0998   accel -5.45e+2  vel -4.29e+1  sign -2.66e-4  bias 7.99e-3
+             the four names do NOT explain 93.2% of the applied rms
+```
+
+**So EXP is worse than the 6 this file wrote down, and the honest score is about 4.** The deployed
+object is not a textbook feedforward with a learned correction on top: four fifths of what it
+applies on the better channel, and nineteen twentieths on the other, is outside everything an
+engineer has a name for. Writing 6 was a guess dressed as a rating, which is what `scorecard.md`'s
+own preamble warns about; this is the first cell in it backed by its own measurement and the first
+to move DOWN.
+
+### §76.2 The half that IS explainable is PREVIEW, and that is a physical statement
+
+Channel 0's ladder is not flat. It reads **0.033 at lead 0** and climbs monotonically to **0.298 at
++512**, then falls away (0.158 at +1024, 0.013 at +2048). The explainable part of the correction is
+not a feedforward evaluated now — it is one evaluated about five hundred machine steps in the
+FUTURE, and at now it explains three percent.
+
+**That is §49.14's finding arriving through an instrument that shares none of its machinery.** There
+it was measured by building the map twice, once with 79 causal taps and once with the same 79
+translated across now (0.89x against 1.43x); here it falls out of regressing a frozen policy onto
+four columns. And the lead has a physical scale beside it: §52.28's bandwidth ladder measures the
+tool error's 10-90% rise at **509 steps at bw 8e-3**, the nearest measured point below the shipped
+1.6e-2, so **the explainable part of the correction is applied about one plant rise-time early** —
+exactly what a feedforward should do, and exactly what `motionBasis.delay()` cannot express, since
+it shifts backwards only and `live()` refuses a lagged basis outright.
+
+### §76.3 What this gives an engineer, and what it does not
+
+What it gives is real and it is not the R²: **a lead in machine steps and four coefficients an
+engineer can check against the machine's own constants.** "It acts about one rise-time early, with
+this much velocity term" is a sentence a commissioning engineer can argue with, and it is more than
+this project could say yesterday.
+
+What it does not give is a controller anyone can read. Four fifths of the applied signal has no
+name here, and the honest form of the EXP claim is: *the deployed object is auditable (the record
+IS the controller, bit-exactly, and `deploy.js` is 117 lines importing nothing) and it is not
+interpretable.* Those are different properties and the scorecard was conflating them.
+
+### §76.4 Not claimed
+
+One plant, one program, one commissioning, one basis. Channel 1's best cell is at a NEGATIVE lead
+with R² 0.10, which is close enough to nothing that its sign should not be read as a finding. No
+ridge is used deliberately — the question is the ceiling of what those four columns can explain, and
+a regulariser would lower it — so the R² is the most favourable number available to the classical
+basis rather than a conservative one.
+
+### §76.5 The kernel read off the weights — and it agrees with the regression, then corrects it
+
+§76.1 and §76.2 are a regression, so they can only be as good as the four columns they use.
+`_rowFrom` leads with the ABSOLUTE reference and follows with DIFFERENCES from it, so for each
+reference channel the stored weights ARE an FIR kernel over the commanded reference once the
+differences are folded back — `(w_abs − Σ_o w_o)` at lead 0 and `w_o` at every other lead. That is
+a filter an engineer reads, and reading it needs **no fit at all**: it is arithmetic on the record.
+
+```
+                    DC sum      centroid of |k|    peak tap
+  ch 0 <- ref 0    4.01e-2         +264 steps      +512  (4.84e+0)
+  ch 0 <- ref 1    8.12e-3         +245 steps      +384  (6.57e-1)
+  ch 1 <- ref 0   -1.05e-2         +114 steps        +0  (3.73e+0)
+  ch 1 <- ref 1    6.46e-4         +149 steps      +256  (7.16e+0)
+```
+
+**THE TWO ROUTES AGREE ON THE CHANNEL THAT CARRIES THE RESULT, EXACTLY.** The regression's best
+lead on channel 0 is **+512** and the kernel's peak tap is **+512** — one number from a
+least-squares fit against four classical columns, the other from folding a difference basis back
+into a filter, sharing no arithmetic (rule 15). The centroid sits nearer at +264 because |k| has
+mass spread across the whole window and the centroid is pulled toward now; the PEAK is what the
+regression's single best lead corresponds to.
+
+**AND THE KERNEL CORRECTS THE REGRESSION WHERE THE REGRESSION WAS NOISE.** §76.1 reported channel
+1's best cell at lead **−1024** and flagged its R² of 0.0998 as close enough to nothing that the
+sign should not be read. The kernel — which has no fit in it to be noisy — puts channel 1's peaks at
+**+0 and +256**, forward or at now on both reference channels. So the object looks AHEAD on both
+channels, and §76.1's negative lead was an artefact of a near-zero R². The instrument with nothing
+fitted in it is what settles it, which is the ordering this project is built around.
+
+**AND IT IS NEARLY DC-FREE, WHICH IS THE FIRST THING AN ENGINEER ASKS.** The DC sums are 1% and
+0.1% of their channels' peak taps, so held at a constant commanded pose the object applies about a
+hundredth of what it applies in motion: **it will not shift a static pose.** That is a property a
+commissioning engineer needs before arming anything, it is now readable straight off the stored
+record, and nothing in this project could state it yesterday.
+
+### §76.6 What that is worth on the scorecard, stated precisely
+
+EXP moves **4 → 5**, and what bought the point is not interpretability — four fifths of the applied
+signal still has no classical name. What bought it is that **the two questions an engineer asks
+FIRST now have direct answers from the record**: *will it move a held pose?* (no — DC sum is ~1% of
+the peak tap) and *when does it act?* (about one plant rise-time early — peak tap +512 against a
+measured rise of 509 steps at the nearest bandwidth below the shipped loop). Leaving it at 4 after
+adding two checkable facts would be as wrong as the 6 that was there before it was measured.
+
+The honest form of the claim is unchanged: **auditable, not interpretable.** The record IS the
+controller bit-exactly; what it applies is mostly unnameable; and two of its gross properties are
+now readable without running the machine at all.
+
+## §77 EXP WAS THE WRONG QUESTION — PREDICTABILITY AND FORENSICS ARE THE RIGHT ONES
+
+§76 measured explainability honestly and moved it 6 → 4 → 5. The owner's response is the correction
+that matters more than the number:
+
+> EXP going down makes sense for this type of controller. What we would need to say is whether it
+> behaves predictably and reliably. Typically when I tune a controller I never look at it again as
+> long as it is stable and well behaved after commissioning. Also if something bad happens an
+> investigation needs to be able to make sense of how the bad thing happened got computed so it
+> can't be like a neural network where it cannot be made sense of.
+
+**That is three properties, and the EXP cell was scoring them as one.** *Can I tune it once and
+leave it alone* is not *can I read the coefficients*, and neither is *can an investigation
+reconstruct a bad decision*. A single score across properties that pull in different directions is
+a preference dressed as a result — rule 42's own warning, aimed at this scorecard.
+
+Split:
+
+```
+  PRED  predictable and well behaved     8 vs 9    -1
+  FOR   forensic reconstructibility      9 vs 7    +2   <- the first column this object WINS
+  INT   interpretability of coefficients 3 vs 9    -6   <- and this is the one that does not matter
+```
+
+### §77.1 PRED — pinned, not argued
+
+Four properties now asserted in `test/pilot/artefact.test.mjs`, because "well behaved" without a
+check is the sort of claim this file exists to prevent:
+
+- **STATELESS.** The same window gives the same number after a hundred other decisions, bit-identical
+  — asserted by interleaving rather than by inspection. This is what licenses "tune once and never
+  look again": there is no accumulated state to drift, no integrator to wind up, no clock.
+- **BOUNDED AT THE ENGINEER'S AUTHORITY, ADVERSARIALLY.** 2,000 windows driven a thousandfold
+  outside anything the fit saw, across three decades of scale and both signs: worst |u| never
+  exceeds the cap and never goes NaN. **And the bound is shown to be EXERCISED** — those windows
+  clamp in well over a hundred cases — because a bound nothing reaches is not a test (rule 9).
+- **FADES RATHER THAN EXTRAPOLATES.** Coverage is exactly 1 across the trained speed span and
+  exactly 0 beyond the fade, already pinned, so an out-of-envelope program is UNCORRECTED rather
+  than corrected wrongly.
+- **DEGRADES GRACEFULLY WHEN THE MACHINE CHANGES**, which §75 measured across an eight-fold span of
+  both stiffnesses with every cell still helping.
+
+Not 9: one plant's worth of evidence against an incumbent with decades of field history.
+
+### §77.2 FOR — and this is the column the object wins
+
+The requirement is not that a human can read the weights; it is that **months later, from a log, an
+investigation can establish exactly how a bad number was produced.** Two things were added to
+`lib/pilot/deploy.js` — deliberately in the DEPLOYED file, because an investigation happens on an
+installation from the stored record and not from this repository:
+
+- **`logSpec(rec)`** states what an installation must record per decision for any decision to be
+  reconstructible. On the reference record that is **31 numbers — 15 offsets × 2 reference channels,
+  plus the commanded speed** — and a decision rebuilt from ONLY those fields reproduces the original
+  **bit-exactly**, with the replay closure throwing if it is asked for an offset the spec omitted.
+  So the spec is checked to be sufficient rather than asserted to be.
+- **`explain(rec, look, speed)`** returns the term-by-term account: every feature's name, the value
+  it took, the weight it met, the product it contributed, plus the coverage gain and whether the
+  clamp fired. **The contributions sum to the applied number bit-exactly, in the order `decide` sums
+  them** — floating-point addition is not associative, and an attribution that reordered the sum
+  would disagree in the last bits exactly when an investigation cared most. Checked non-decorative
+  by rule 9: perturb one stored weight and **exactly one term moves.**
+
+**Why this beats a PID+FF rather than merely matching it.** A PID's output depends on accumulated
+integrator state; reconstructing a past output needs that state at that instant, and real logs
+usually do not carry it — which is why "why did it do that" is hard on conventional loops too. This
+object is a pure function of a window the machine already knows, because the window IS the program.
+Statelessness is what makes forensics cheap, and it is pinned.
+
+### §77.3 INT — low, and correctly ignored
+
+78.8% and 93.2% of the applied rms has no classical name (§76.1), and the two gross properties that
+ARE readable — DC-free, peak tap at one rise-time early (§76.5) — are the useful part. INT is the
+largest gap on the board at −6 and it is the one property the stated workflow does not need. Saying
+so is more useful than trying to raise it, and six capacity experiments plus five function classes
+bound what any explanation could capture anyway (R² ~0.84).
+
+### §77.4 And asking that question found a LIVE DEFECT ON THE DEPLOY PATH
+
+The PRED gap this section first wrote down was "nothing tests the object under a corrupted window
+rather than merely an unusual one". Asked, and it was not a gap — it was a bug:
+
+```
+  before        finite window  ->  0.4 (the cap)
+                NaN at one offset  ->  NaN reaches the machine
+                Inf at one offset  ->  0.4 (clamped, by luck)
+  after         NaN / +-Inf at any offset  ->  0, i.e. no correction
+```
+
+**Every comparison with NaN is FALSE**, so the clamp `s > cap ? cap : s < -cap ? -cap : s` passed a
+NaN straight through as the commanded correction. That is rule 55 in its exact wording — *0/0 is
+NaN, which passes every bounds check* — sitting on the DEPLOY path, the one file this project
+describes as "a dot product and a clamp". The boundedness check written twenty minutes earlier
+missed it because it drove finite-but-huge windows: **the easy half of rule 9 again, in the section
+that was invoking rule 9.**
+
+Fixed in both implementations — `deploy.js` and `distil.js`'s two act paths — which is also what
+keeps `artefact.test.mjs`'s bit-identity green, since a guard in one and not the other would show up
+there. `Infinity` now returns 0 as well, where it used to clamp to the cap: a non-finite window is
+corrupted rather than legitimately large, so the rule is uniform and the more conservative of the
+two available answers.
+
+**Zero is the correct control action and not a sentinel (rule 26).** It means apply no correction,
+which is exactly what the coverage guard does outside its span, so a corrupted window degrades the
+machine to the CONVENTIONAL one rather than to a NaN command or a held stale value.
+
+**This is what the owner's reframing bought.** Scoring interpretability produced a number; asking
+instead whether the thing behaves predictably produced a defect on the deployed artefact. Still not
+taken: a window that is wrong but FINITE — a stale program, an off-by-one lap phase, a sensor stuck
+at its last value — which the cap bounds and nothing detects.

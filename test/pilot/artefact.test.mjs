@@ -22,7 +22,7 @@
  * Run: node test/pilot/deploy.test.mjs
  */
 import { DistilPolicy } from '../../lib/pilot/distil.js';
-import { decide, coverageGain, macPerDecision, strideOf, featureRow } from '../../lib/pilot/deploy.js';
+import { decide, coverageGain, macPerDecision, strideOf, featureRow, explain, logSpec } from '../../lib/pilot/deploy.js';
 import { writeFileSync } from 'node:fs';
 
 let pass = 0, fail = 0;
@@ -150,6 +150,111 @@ check('the 60-line deploy core reproduces the shipped act path BIT-EXACTLY over 
 // WHAT A CUSTOMER'S PORT IS CHECKED AGAINST. The record, a window of commanded reference and the
 // corrections this code produces — enough to verify an implementation in any language without
 // running any of this repository.
+// ---------------------------------------------------------------------------------------------
+// THE PROPERTIES AN INVESTIGATION DEPENDS ON (plan §77).
+//
+// The engineer's own statement of what matters: a controller is tuned once and never looked at
+// again provided it is stable and well behaved — and if something bad happens, an investigation
+// must be able to establish HOW the number was computed. So interpretability of the coefficients
+// is the wrong property to test; these four are the right ones, and they are what separates this
+// object from a network nobody can reconstruct.
+{
+  const win = (k) => (o) => refAt(k + o);
+  const k0 = 733, sp0 = 0.91;
+
+  // (1) EXACT ATTRIBUTION. The per-term account must sum to the number that was applied, to the
+  // LAST BIT — an attribution that only roughly adds up is not evidence. Summed in `decide`'s own
+  // order, because floating-point addition is not associative and a reordered sum would disagree
+  // in the last bits exactly when an investigation cared.
+  const ex = explain(rec, win(k0), sp0);
+  const dd = decide(rec, win(k0), sp0);
+  let attribExact = true, sumExact = true;
+  for (let c = 0; c < rec.channels; c++) {
+    if (ex.channels[c].u !== dd[c]) attribExact = false;
+    let t = 0; for (const tm of ex.channels[c].terms) t += tm.contribution;
+    if (t !== ex.channels[c].raw) sumExact = false;
+  }
+  check('the forensic account returns exactly what the machine applied', attribExact);
+  check('…and its per-term contributions sum to that total BIT-EXACTLY, in the applied order', sumExact);
+
+  // (2) BOTH HALVES (rule 9): the attribution must also be able to FAIL. Perturb one weight and
+  // the contribution of that term alone must move, or the account is decorative.
+  {
+    const r2 = JSON.parse(JSON.stringify(rec));
+    const j = 3; r2.W[0][j] *= 1.5;
+    const e2 = explain(r2, win(k0), sp0);
+    const moved = e2.channels[0].terms.filter((t, i) => t.contribution !== ex.channels[0].terms[i].contribution);
+    check('…and it is not decorative: changing ONE weight moves exactly that one term',
+      moved.length === 1 && moved[0] === e2.channels[0].terms[j], `${moved.length} term(s) moved`);
+  }
+
+  // (3) STATELESS, therefore PREDICTABLE. The same window must give the same number no matter what
+  // the object was asked before it — which is what lets an engineer stop looking at it. Asserted
+  // by interleaving: A, then a hundred other windows, then A again, bit-identical.
+  const first = decide(rec, win(k0), sp0);
+  for (let t = 0; t < 100; t++) decide(rec, win(Math.floor(rnd() * LAP)), 0.5 + rnd());
+  const again = decide(rec, win(k0), sp0);
+  check('it is STATELESS: the same window gives the same number after 100 other decisions',
+    first.every((v, c) => v === again[c]));
+
+  // (4) BOUNDED BY THE AUTHORITY, WHATEVER THE PROGRAM DOES. The safety property: no reference,
+  // however wrong, can make the correction exceed the cap the engineer set. Driven with windows
+  // far outside anything the fit saw — a thousand times the reference's own scale — so this is
+  // the adversarial case and not the nominal one.
+  let worstAbs = 0, nClamp = 0;
+  for (let t = 0; t < 2000; t++) {
+    const s = (rnd() < 0.5 ? 1 : -1) * Math.pow(10, 3 * rnd());
+    const lk = (o) => refAt(k0 + o).map((v) => v * s * 1e3);
+    const u = decide(rec, lk, null);
+    for (const v of u) { if (!Number.isFinite(v)) { worstAbs = Infinity; break; } worstAbs = Math.max(worstAbs, Math.abs(v)); }
+    if (u.some((v) => Math.abs(v) >= rec.uMax * (1 - 1e-12))) nClamp++;
+  }
+  check('it is BOUNDED at the engineer\'s authority on 2,000 adversarial windows, and never NaN',
+    worstAbs <= rec.uMax * (1 + 1e-12), `worst |u| ${worstAbs} against a cap of ${rec.uMax}`);
+  check('…and those windows DID drive it to the cap, so the bound was actually exercised',
+    nClamp > 100, `${nClamp} of 2000 clamped`);
+
+  // (4b) A CORRUPTED WINDOW, WHICH IS NOT THE SAME AS AN UNUSUAL ONE — AND WAS A LIVE DEFECT.
+  //
+  // (4) drove finite-but-huge windows and found the bound held. That was the easy half: every
+  // comparison with NaN is FALSE, so the clamp `s > cap ? cap : s < -cap ? -cap : s` passed a NaN
+  // straight through to the machine — rule 55 on the deploy path, measured at a NaN correction
+  // before the fix while an Inf happened to clamp because `Infinity > cap` is true. A sensor or a
+  // program that hands this object a corrupted look-ahead is exactly the case an engineer who
+  // never looks again gets burned by, so it is checked rather than assumed.
+  {
+    let worstBad = null, allZero = true;
+    for (const bad of [NaN, Infinity, -Infinity]) {
+      for (const off of [rec.offsets[0], 0, rec.offsets[rec.offsets.length - 1]]) {
+        const lk = (o) => { const v = refAt(k0 + o).slice(); if (o === off) v[0] = bad; return v; };
+        const u = decide(rec, lk, sp0);
+        for (const v of u) { if (!Number.isFinite(v)) worstBad = v; if (v !== 0) allZero = false; }
+      }
+    }
+    check('a NON-FINITE window never reaches the machine: NaN and ±Inf at any offset',
+      worstBad === null, `got ${worstBad}`);
+    check('…and the fallback is NO CORRECTION, so it degrades to the machine below (rule 26: '
+      + 'zero is the right action here, not a sentinel)', allZero);
+  }
+
+  // (5) REPLAYABLE FROM THE LOG ALONE. `logSpec` states what an installation has to record; a
+  // decision rebuilt from ONLY those fields must reproduce the original bit-exactly, or the log
+  // is not sufficient for an investigation and the spec is wrong.
+  const spec = logSpec(rec);
+  const logged = {};
+  for (const o of spec.lookOffsets) logged[o] = refAt(k0 + o).slice();
+  const replay = decide(rec, (o) => {
+    if (!(o in logged)) throw new Error(`the log spec omitted offset ${o}`);
+    return logged[o];
+  }, spec.needsSpeed ? sp0 : null);
+  check('a decision REPLAYS bit-exactly from the logged fields alone, and from nothing else',
+    replay.every((v, c) => v === dd[c]),
+    `${spec.numbersPerDecision} numbers per decision over ${spec.lookOffsets.length} offsets`);
+  console.log(`    a log of ${spec.numbersPerDecision} numbers per decision `
+    + `(${spec.lookOffsets.length} offsets x ${spec.refDim} channels`
+    + `${spec.needsSpeed ? ' + speed' : ''}) makes every decision reconstructible`);
+}
+
 if (process.env.EXPORT) {
   const cases = [];
   for (let t = 0; t < 64; t++) {

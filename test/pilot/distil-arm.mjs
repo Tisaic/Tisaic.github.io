@@ -450,6 +450,139 @@ if (process.env.FEEDSPAN && host.auto.deployed.distil) {
       + `   ${(b.score / w.score).toFixed(2)}x   coverage ${cov.toFixed(3)}${cov < 1 ? ' — FADED' : ''}`);
   }
 }
+// EXPLAIN=1: THE EXP COLUMN — HOW MUCH OF THE LEARNED MAP IS THE TEXTBOOK FEEDFORWARD?
+// (plan §76). `docs/scorecard.md` rates explainability 6 against the incumbent's 9 for a stated
+// reason: the record IS the controller and every rung prints its own verdict, but nobody reads 111
+// coefficients the way they read a PID gain. Nothing in this project has ever attempted that
+// column, and the cheapest thing that can move it is not a picture — it is a MEASUREMENT.
+//
+// The engineer already owns four names: acceleration (inertia), velocity (lag), direction of
+// travel (friction) and bias. `classic.js` fits exactly that basis and its own header records the
+// dominant coefficient coming back at 0.797 mm against the position loop's `vPeak/kp` of 0.778 —
+// a learned number an engineer can check by hand. So: regress the APPLIED correction of the
+// deployed policy onto that basis and report what fraction of it an engineer could have written
+// down, per channel, at a LADDER of leads — because §49.14 measured causal taps as worthless and
+// straddling taps as the whole result, so the answer is expected to sit at a lead rather than at
+// now. Nothing is fitted into the control path: this reads a frozen policy and explains it.
+//
+// It is not circular. §49.14 already measured that the classical basis DISTILLED delivers 1.02x,
+// i.e. nothing, so the basis cannot produce this correction; how much of the correction it
+// CORRELATES with is a different question and is the one an engineer asks.
+if (process.env.EXPLAIN === '1' && host.auto.deployed.distil) {
+  const tr = (await host.distilRuns({ paths: [path] }))[0];
+  // ONE DRIVE FIRST: the host fills its reference row cache inside `drive`, so `refAt` reads an
+  // unbuilt array until a run has happened. It cost a `Cannot read properties of undefined` and
+  // is worth the comment — a lazily filled cache behind a pure-looking accessor.
+  await tr.run(null);
+  const L = tr.lap, ra = tr.refAt;
+  // The row is `[q1, q2, tau1, tau2]` at the shipped `distilRef` and the engineer's basis is
+  // about the JOINT REFERENCE, so columns 0 and 1 are what is differenced. A row shape this pass
+  // cannot interpret is refused rather than silently regressed against torques (rule 25).
+  if (process.env.REF && process.env.REF !== 'both') throw new Error('EXPLAIN=1 reads the angle columns of the shipped row; REF=' + process.env.REF + ' does not have them first');
+  // The joint reference and its two derivatives, central-differenced on the CLOSED lap so no
+  // sample is special (the lap wraps; a clamped end would put a spurious step in `a`).
+  const w = (k) => ((k % L) + L) % L;
+  const nc = host.auto.channels.length;
+  const q = new Array(L); for (let k = 0; k < L; k++) q[k] = ra(k).slice(0, nc);
+  const V = Array.from({ length: nc }, () => new Float64Array(L));
+  const A = Array.from({ length: nc }, () => new Float64Array(L));
+  for (let k = 0; k < L; k++) for (let c = 0; c < nc; c++) {
+    V[c][k] = (q[w(k + 1)][c] - q[w(k - 1)][c]) / 2;
+    A[c][k] = q[w(k + 1)][c] - 2 * q[k][c] + q[w(k - 1)][c];
+  }
+  // What the deployed object actually applies, held between decisions exactly as it deploys.
+  const pol = host.auto.distil, st = pol.stride || 1;
+  const U = Array.from({ length: nc }, () => new Float64Array(L));
+  { let held = new Array(nc).fill(0);
+    for (let k = 0; k < L; k++) {
+      if (k % st === 0) held = pol.act(ra, k, tr.speedAt(k), null);
+      for (let c = 0; c < nc; c++) U[c][k] = held[c] || 0;
+    } }
+  // Ordinary least squares on [a, v, sign v, 1] at a given lead, per channel. Four unknowns, so
+  // a 4x4 normal solve by Gaussian elimination — no library, and the residue is what it cannot
+  // explain rather than what a regulariser suppressed (no ridge: the point is the ceiling).
+  const fit = (c, lead) => {
+    const n = 4, M = Array.from({ length: n }, () => new Float64Array(n + 1));
+    let uu = 0, um = 0;
+    for (let k = 0; k < L; k++) {
+      const j = w(k + lead);
+      const x = [A[c][j], V[c][j], Math.sign(V[c][j]), 1], y = U[c][k];
+      for (let i = 0; i < n; i++) { for (let jj = 0; jj < n; jj++) M[i][jj] += x[i] * x[jj]; M[i][n] += x[i] * y; }
+      uu += y * y; um += y;
+    }
+    for (let i = 0; i < n; i++) M[i][i] += 1e-12 * (M[i][i] || 1);
+    for (let i = 0; i < n; i++) {
+      let p2 = i; for (let r = i + 1; r < n; r++) if (Math.abs(M[r][i]) > Math.abs(M[p2][i])) p2 = r;
+      const t = M[i]; M[i] = M[p2]; M[p2] = t;
+      if (!M[i][i]) continue;
+      for (let r = 0; r < n; r++) if (r !== i) { const f = M[r][i] / M[i][i]; for (let cc = i; cc <= n; cc++) M[r][cc] -= f * M[i][cc]; }
+    }
+    const b = new Float64Array(n); for (let i = 0; i < n; i++) b[i] = M[i][i] ? M[i][n] / M[i][i] : 0;
+    let ss = 0; const mean = um / L;
+    for (let k = 0; k < L; k++) {
+      const j = w(k + lead);
+      const p3 = b[0] * A[c][j] + b[1] * V[c][j] + b[2] * Math.sign(V[c][j]) + b[3];
+      ss += (U[c][k] - p3) ** 2;
+    }
+    const tot = uu - L * mean * mean;
+    return { r2: tot > 0 ? 1 - ss / tot : 0, b, resid: Math.sqrt(ss / L) };
+  };
+  const leads = [-1024, -512, -256, -128, 0, 128, 256, 512, 1024, 2048];
+  console.log('\n  EXPLAINING THE DEPLOYED MAP — the applied correction regressed on the engineer\'s own');
+  console.log('  basis [accel, vel, sign vel, bias] at a ladder of leads (positive = the basis read AHEAD):');
+  for (let c = 0; c < nc; c++) {
+    const rows = leads.map((l) => ({ l, ...fit(c, l) }));
+    const best = rows.reduce((x, y) => (y.r2 > x.r2 ? y : x));
+    console.log(`    channel ${c}:  ` + rows.map((r) => `${r.l >= 0 ? '+' : ''}${r.l}: ${r.r2.toFixed(3)}`).join('  '));
+    const uRms = Math.sqrt(U[c].reduce((t, v) => t + v * v, 0) / L);
+    console.log(`      best at lead ${best.l >= 0 ? '+' : ''}${best.l}: R2 ${best.r2.toFixed(4)}  `
+      + `— accel ${best.b[0].toExponential(2)}  vel ${best.b[1].toExponential(2)}  `
+      + `sign ${best.b[2].toExponential(2)}  bias ${best.b[3].toExponential(2)}`);
+    console.log(`      what the four names DO NOT explain: ${(100 * best.resid / uRms).toFixed(1)}% of the applied rms`);
+  }
+  // ---- AND THE KERNEL ITSELF, READ STRAIGHT OFF THE WEIGHTS WITH NO REGRESSION IN THE ROUTE.
+  //
+  // `_rowFrom` leads with the ABSOLUTE reference and follows with DIFFERENCES from it, so for each
+  // reference channel the weights ARE an FIR kernel over the commanded reference once the
+  // differences are folded back: u = w_abs·q0 + Σ_o w_o·(q(o) − q0), which is
+  // (w_abs − Σ_o w_o) at lead 0 and w_o at every other lead. That is a filter an engineer reads.
+  //
+  // TWO PROPERTIES THAT NEED NO FIT AND ARE THE POINT (rule 15 — a second route to one number):
+  //   SUM is the DC gain. A correction that must not shift a held pose sums to about zero; one
+  //     carrying a static offset does not, and which it is decides whether the object can be armed
+  //     on a machine that is already at its commanded position.
+  //   CENTROID of |kernel| is WHERE IN TIME the object looks, computed from the stored weights
+  //     alone — so it can be set against the +512 the regression above found by a completely
+  //     different route. Two readings of one object that must agree.
+  const js = pol.toJSON();
+  if (js && js.W) {
+    const D = js.refDim, offs = js.offsets;
+    console.log('    the KERNEL, folded out of the stored weights (no fit in this route):');
+    for (let c = 0; c < nc; c++) {
+      const W = js.W[c];
+      for (let d = 0; d < Math.min(D, nc); d++) {
+        const kern = new Map();
+        let sumOther = 0, i = D + 0;
+        // Layout: D absolute terms, then for each NONZERO offset D difference terms, in order.
+        let idx = D;
+        for (const o of offs) {
+          if (o === 0) continue;
+          const wv = W[idx + d]; kern.set(o, wv); sumOther += wv; idx += D;
+        }
+        kern.set(0, W[d] - sumOther);
+        let sum = 0, mass = 0, mom = 0;
+        for (const [o, v] of kern) { sum += v; mass += Math.abs(v); mom += Math.abs(v) * o; }
+        const cent = mass > 0 ? mom / mass : 0;
+        const pk = [...kern.entries()].reduce((x, y) => (Math.abs(y[1]) > Math.abs(x[1]) ? y : x));
+        console.log(`      ch ${c} <- ref ${d}:  DC sum ${sum.toExponential(2)}  `
+          + `centroid of |k| ${cent >= 0 ? '+' : ''}${cent.toFixed(0)} steps  `
+          + `peak tap at ${pk[0] >= 0 ? '+' : ''}${pk[0]} (${pk[1].toExponential(2)})`);
+      }
+    }
+    console.log('      (the centroid is arithmetic on the weights; the +512 above is a regression '
+      + 'on four columns — two routes, one object, and they have to agree)');
+  }
+}
 // PLANTSPAN=<K:E,K:E,...>: THE ROB COLUMN, AND THE AXIS NOTHING HERE HAS EVER MEASURED
 // (plan §75). Target 1 is the PROGRAM changing and target 2 the FEEDRATE; both are measured.
 // The third thing a customer changes is the MACHINE — it wears, the tool changes, the fixture
