@@ -19283,3 +19283,31 @@ plant has to be found or built, and the bar it must clear is now stated as a num
 hope: an exogenous component that is a LARGE share of the open-loop error AND worth more than the
 incumbent already recovers from knowing it. The mill passes at 87% / 3/2-amplification; the barrel
 fails at ±5% / 1.008x.
+
+---
+
+## §84.2 — THE SIX-PLANT PASS AFTER TWO LADDER AXES LANDED: CLEAN
+
+Two axes have been added to `AutoStack`'s ②d rung since the last pass — the RIDGE chosen by
+scoring candidates on the machine (§72.9) and the APPLIED GAIN (§79) — and this project has
+shipped two regressions when defaults moved without the CONTRACTS being checked, which is the
+fault `sixplant.mjs` exists to close and itself had until §54.3. Run at the shipped defaults
+(`qpIters` 4, `horizonTs` 1.5):
+
+```
+  4:1.5  tanks            1.00 x      pass   refused
+  4:1.5  thermal          1.00 x      pass   refused
+  4:1.5  woodberry       43.90 IAE    pass   (the do-nothing number — the refusal, which is correct)
+  4:1.5  rollmill        10.17 um     pass
+  4:1.5  emps           0.0393 mm     pass   14.7x
+  4:1.5  arm          2.173e-2 rms    pass   6.18x
+  4:1.5  ~stack                       CONTRACT pass
+  4:1.5  ~autostack                   CONTRACT pass
+     -> contracts green (2) — eligible; 6/6 plant headlines scraped, 2 refused
+```
+
+Every number reproduces the record and both contracts are green, so the two ladder axes have not
+moved anything one level down. Stated because it is the whole point of running it: these six rows
+score the TEACHER — `tanks.test.mjs` and the rest drive a bare `Pilot` — so a clean pass here says
+the ladder axes did not disturb the plants, not that the deployed object is unchanged on them.
+The deployed object's own numbers are in the `distil-*` harnesses and were re-run under §84.1.

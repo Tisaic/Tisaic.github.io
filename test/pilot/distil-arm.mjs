@@ -848,27 +848,45 @@ if (process.env.SHOVE && host.auto.deployed.distil) {
 // the policy failing. Nothing is recommissioned and nothing is refitted: the deployed object is a
 // weight vector and this asks what happens when the plant underneath it is not the one it was
 // taught on. The `K:E` of the commissioning cell is the CONTROL and must reproduce the headline.
+//
+// AND THE AXES ARE NO LONGER ONLY STIFFNESS (plan §84.4). §75 moved K and E and nothing else, so
+// "the plant axis degrades gracefully" was a claim about two of the machine's constants. A cell
+// may now be written as named overrides — `bl=1e-3`, `drive=8`, `bw=8e-3` — and `machine()`
+// already accepts every one of them, so this is a parser change and not a plant change. The
+// legacy `K:E` form still parses, and the commissioning cell remains the CONTROL.
 if (process.env.PLANTSPAN && host.auto.deployed.distil) {
-  const cells = process.env.PLANTSPAN.split(',').map((c) => c.split(':').map(Number));
+  // `K:E` (legacy) or `k=v&k=v` (named). A cell containing '=' is named; otherwise it is the pair.
+  const cells = process.env.PLANTSPAN.split(',').map((c) => {
+    if (!c.includes('=')) {
+      const [k2, e2] = c.split(':').map(Number);
+      return { over: { K: k2, E: e2 }, label: `K ${k2} / E ${e2}` };
+    }
+    const over = {};
+    for (const kv of c.split('&')) { const [k2, v] = kv.split('='); over[k2.trim()] = Number(v); }
+    const full = { K, E, ...over };
+    return { over: full, label: Object.entries(over).map(([a, b2]) => `${a} ${b2}`).join(' / ') };
+  });
   const pol = host.auto.distil;
   console.log(`\n  PLANT SPAN — one commissioning at K ${K} / E ${E}, the same frozen policy on other machines:`);
-  console.log('    (each scored against the CONVENTIONAL machine at ITS OWN stiffness, so a harder cell is not the policy failing)');
-  for (const [k2, e2] of cells) {
+  console.log('    (each scored against the CONVENTIONAL machine at ITS OWN cell, so a harder machine is not the policy failing)');
+  for (const cell of cells) {
+    const over = cell.over, k2 = over.K ?? K, e2 = over.E ?? E;
     const h2 = makeArmHost({
       makeMachine: async () => {
-        const m = await machine({ K: k2, E: e2 });
+        const m = await machine(over);
         const rc = commissionComp(m.arm, m.servo);
         const c0 = path.at(0); const [q1, q2] = m.arm.ik(c0.x, c0.y, true);
         settle(m.arm, m.servo, q1, q2);
         return { arm: m.arm, l1: m.l1, l2: m.l2, servo: m.servo, rc };
       },
-      path, lap: LAP, K: k2, centre: (await machine({ K: k2, E: e2 })).arm.ik(12, 0, true),
+      path, lap: LAP, K: k2, centre: (await machine(over)).arm.ik(12, 0, true),
       classic: false, maxDepth: 0, demo: null, lapMemory: false, distil: DISTIL,
       distilReplaces: REPLACE, grade: GRADE });
     const tr = (await h2.distilRuns({ paths: [path] }))[0];
     const hp = heldPolicy(pol, tr);
     const b = await tr.run(null), w = await tr.run(hp, { tap: hp.tap });
-    const same = k2 === K && e2 === E;
+    const same = Object.entries(over).every(([a, b2]) => (a === 'K' ? b2 === K : a === 'E' ? b2 === E : false))
+      && k2 === K && e2 === E;
     // ---- IS THE DRIFT DETECTABLE FROM WHAT THE SHOP ALREADY MEASURES? (plan §75.5)
     //
     // Graceful is worth much less than graceful-AND-detectable: on every row here the object goes
@@ -889,7 +907,7 @@ if (process.env.PLANTSPAN && host.auto.deployed.distil) {
       return Math.sqrt(s2 / n);
     };
     const wp = probeRms(w, 64);
-    console.log(`    K ${String(k2).padStart(5)} / E ${String(e2).padStart(6)}  `
+    console.log(`    ${cell.label.padEnd(22)}  `
       + `${b.score.toExponential(4)} -> ${w.score.toExponential(4)}   ${(b.score / w.score).toFixed(2)}x`
       + (wp === null ? '' : `   64-touch read ${wp.toExponential(4)}`)
       + `${same ? '   <- the commissioning cell, the CONTROL' : ''}`
