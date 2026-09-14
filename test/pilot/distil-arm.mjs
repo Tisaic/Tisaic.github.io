@@ -229,8 +229,72 @@ if (process.env.BASIS) host.auto.pilotOpts.forceBasis = process.env.BASIS;
 // held-out R² per lead (plan §52.25) — is one weight vector for every lead what the feedback
 // layer's forecast is paying for?
 if (process.env.LEADPROBE === '1') globalThis.__LEADPROBE = {};
+// ---- TRAINSHOVE=<kind:mag[:a:b]>: A DISTURBANCE PRESENT WHILE THE TEACHER CONVERGES (plan §83).
+//
+// §81 measured the object degrading under an unmodelled load because it goes on applying a
+// correction sized for the NOMINAL plant. The obvious answer is domain randomisation: show it
+// disturbances during training. This project can PREDICT what that does, and the prediction is
+// worth writing down before the run (rules 16, 59).
+//
+// The map's input is a window of the COMMANDED REFERENCE, and a disturbance does not change the
+// commanded reference. So the same row now carries different targets depending on how the plant
+// happened to be pushed, and least squares AVERAGES over them. The map cannot become
+// disturbance-dependent — §80.3's finding from another side — it can only become HEDGED: target
+// variance rises, the fit shrinks, and the deployed map applies LESS authority.
+//
+//   PREDICTION (kind `rand`): equivalent to turning §79's applied gain DOWN, and therefore
+//   reproducible by the clean policy at a matched gain. If so it is a REGULARISER and not a
+//   capability, and the gain ladder is the cheaper way to buy it.
+//   PREDICTION (kind `phase`): the disturbance is switched at a FIXED lap phase, so the REFERENCE
+//   PREDICTS IT and the map CAN express it. This is the industrially realistic case — a cutting
+//   force that depends on where you are in the path, a payload picked up at a known program point
+//   — and it is the one where a win would be real rather than a hedge.
+//
+// KNOWN HAZARD, and it is this session's own finding: §80.7 measured a lap-INCOMMENSURATE
+// component at 0.9% of the error costing a lap-indexed teacher a factor of 1.6-2.5. `rand` is
+// exactly such a component by construction, so it may HARM through the teacher rather than
+// through the map, and `TLAPS`/averaging is the control that separates the two.
+if (process.env.TRAINSHOVE) {
+  const [tk = 'rand', tmS, taS, tbS] = process.env.TRAINSHOVE.split(':');
+  const tmag = Number(tmS || 0.5), ta = Number(taS || 0.30), tb = Number(tbS || 0.55);
+  const tTau = m0.servo.tauMax;
+  let tseed = 20260914;
+  const rnd = () => ((tseed = (tseed * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+  // `rand`: on/off in blocks of an eighth of a lap with a random sign, redrawn per block, so it is
+  // uncorrelated with the reference BY CONSTRUCTION and the map has nothing to key on.
+  let blk = -1, amp = 0;
+  const trainShove = (nn, lap, tau) => {
+    // `payload`: the machine is carrying something it was not commissioned with, so the torque
+    // ACTUALLY REQUIRED scales up. Injecting a fraction of the commanded torque is scale-free —
+    // no constant in the plant's units — and it is REFERENCE-CORRELATED in the only sense that
+    // matters here: it is a function of what the machine is already being asked to do, which the
+    // map's own features (the rigid-body reference torques, §52.16) already carry.
+    //
+    // `phase` is NOT that, and measuring it is what showed the difference: a lap FRACTION is a
+    // memory index, and the diet is four different polygons, so "fraction 0.30-0.55" is a
+    // different region of reference-space on each one. Phase-locked is not reference-correlated —
+    // the retirement's own lesson arriving inside a disturbance (plan §83.3).
+    if (tk === 'payload') return [tmag * (tau ? tau[0] : 0), 0];
+    if (tk === 'phase') {
+      const f = ((nn % lap) + lap) % lap / lap;
+      return (f >= ta && f < tb) ? [tmag * tTau, 0] : [0, 0];
+    }
+    const b = Math.floor(nn / Math.max(1, Math.round(lap / 8)));
+    if (b !== blk) { blk = b; amp = (rnd() < 0.5 ? -1 : 1) * tmag * tTau * (rnd() < 0.5 ? 0 : 1); }
+    return [amp, 0];
+  };
+  host.setTrainDisturb(trainShove);
+  console.log(`\n  TRAINING WITH A ${tk === 'phase' ? 'REFERENCE-CORRELATED' : 'RANDOM'} DISTURBANCE: `
+    + `${(100 * tmag).toFixed(0)}% of tauMax on joint 1`
+    + (tk === 'payload' ? ` of the COMMANDED TORQUE — an unmodelled payload, and a function of what the reference already asks for`
+      : tk === 'phase' ? `, on between lap fractions ${ta} and ${tb} — locked to LAP PHASE, which is not the same thing`
+      : `, redrawn every lap/8 with random sign and duty — the reference CANNOT predict it`));
+}
 const rep = await host.auto.commission({ run: host.run, drivePilot: host.drivePilot,
   recordDemo: host.recordDemo, distilRuns: host.distilRuns });
+// The teacher is done; the training disturbance must not leak into the scored comparisons, which
+// arm their own through `setDisturb` (rule 20 — one variable).
+if (process.env.TRAINSHOVE) host.setTrainDisturb(null);
 // FBFORECAST=1: THE FEEDBACK LAYER'S FORECAST SCORED ON THE SQUARE (rule 16, plan §52.26). Its
 // held-out R² is measured on its own excitation, which is not the regime it deploys on. Here the
 // layer is forced on, its lead-0 prediction of the error is captured per decision through the
@@ -608,6 +672,169 @@ if (process.env.EXPLAIN === '1' && host.auto.deployed.distil) {
       + 'on four columns — two routes, one object, and they have to agree)');
   }
 }
+// SHOVE=<kind:mag:start:len>: AN UNMODELLED EXTERNAL FORCE, AND THE COLUMN THE DEPLOYED OBJECT
+// STRUCTURALLY CANNOT ANSWER (plan §81).
+//
+// Everything this project calls "disturbance rejection" so far is a MEASURED, DECLARED, known-ahead
+// signal (§71's roll phase) or an undeclared drift that turned out to be 0.9% of the error (§80.6).
+// Neither is what an owner means. An owner means: the payload changes unexpectedly, or something
+// pushes the machine, and the controller does not explode — and ideally kills the disturbance.
+//
+// THE DEPLOYED OBJECT'S OUTPUT IS A FUNCTION OF THE COMMANDED REFERENCE AND NOTHING ELSE, so its
+// applied correction under a shove is BIT-IDENTICAL to its correction without one. That is worth
+// asserting rather than trusting (rule 30) — the state term (§52.27), the instrument tap and the
+// feedback layer are all BUILT and all read measured signals, so this is a property of the SHIPPED
+// configuration and not of the design, and any of them armed removes it silently.
+//
+// **IT DOES NOT FOLLOW THAT THE OBJECT "CANNOT EXPLODE", AND AN EARLIER DRAFT OF THIS FILE SAID SO.**
+// The disturbance is plainly visible on this machine — in the actual motor torque, the encoder and
+// the wind-up — and the servo is a PD on the MEASURED encoder, so the machine responds to it even
+// though our object cannot. Two things follow that a bit-identity check cannot see:
+//
+//   (1) BIT-IDENTICAL OUTPUT IS NOT BIT-IDENTICAL EFFECT. The policy goes on demanding a correction
+//       sized for the NOMINAL plant on top of a loop already fighting the shove. The demand is
+//       ADDITIVE on one drive, so the policy makes SATURATION MORE LIKELY, not less — and this
+//       bench already clips 2.0-6.9% of samples with no disturbance at all (§52.29, §52.30). That
+//       is why `sat` is in the table and is the number any safety claim actually rests on.
+//   (2) ALL of the rejection is the loop underneath, which the installation already owns. This
+//       object contributes exactly zero to it.
+//
+// So the question worth measuring is: DOES IT GET IN THE WAY? A correction sized for the nominal
+// plant is still being applied while the plant is not nominal, and it could be actively wrong
+// during and after the event. The table is scored against the CONVENTIONAL machine taking the SAME
+// shove, so a disturbance the plant simply finds hard cannot read as the policy failing
+// (`PLANTSPAN`'s own discipline).
+//
+//   kind   `pulse` an impulse (something hit it) | `load` a sustained step (a payload appeared)
+//   mag    as a fraction of the servo's OWN tauMax, so it carries no absolute constant
+//   start  where in the lap it begins, as a fraction
+//   len    how long it lasts, as a fraction of the lap (`load` runs to the lap's end)
+if (process.env.SHOVE && host.auto.deployed.distil) {
+  const [kind = 'pulse', magS, startS, lenS] = process.env.SHOVE.split(':');
+  const mag = Number(magS || 0.05), startF = Number(startS || 0.30), lenF = Number(lenS || 0.02);
+  const mm = await machine({ K, E });
+  const tauMax = mm.servo.tauMax;
+  await mm.l1.destroy(); await mm.l2.destroy();
+  // SIZED AGAINST WHAT IS ACTUALLY FLYING AROUND, NOT AGAINST tauMax (rule 17, and the first
+  // version of this got it wrong): this loop's PEAK DEMAND runs to tens of times its own torque
+  // limit, so a shove at 5% of tauMax is about a thousandth of the joint's working torque and the
+  // machine does not notice it — conventional read 1.0717 undisturbed against 1.0711 shoved, a
+  // 0.06% move that is a null and not a robustness result. `mag` is therefore a multiple of
+  // tauMax and is expected to be of order 1, and the table prints the ratio it actually reached.
+  const k0 = Math.round(startF * LAP), k1 = kind === 'load' ? LAP : Math.round((startF + lenF) * LAP);
+
+  // ---- LOADGUARD=<lo:hi>: THE PLANT-SIDE COVERAGE GUARD, ARMED (plan §82).
+  //
+  // The scale is what THIS COMMISSIONING observed, snapshotted BEFORE any shoved run touches it —
+  // a guard calibrated on the disturbance it is meant to catch would be calibrating on its own
+  // answer (rule 15). `lo` and `hi` are multiples of that, so nothing here is in the plant's units.
+  const LG = process.env.LOADGUARD;
+  // The shove is on JOINT 1 only, because a disturbance that loads both joints in the ratio the
+  // program already uses is a scaled command and not a disturbance at all.
+  const shove = (k, lap, tau) => {
+    if (kind === 'payload') return [mag * (tau ? tau[0] : 0), 0];
+    const kk = ((k % LAP) + LAP) % LAP;
+    return (kk >= k0 && kk < k1) ? [mag * tauMax, 0] : [0, 0]; };
+
+  // ---- THE ASSERTION FIRST (rule 27): the applied correction cannot depend on the shove.
+  const tapU = () => { const rec = []; const orig = host.auto.act.bind(host.auto);
+    host.auto.act = (...a) => { const u = orig(...a); rec.push(u[0], u[1]); return u; };
+    return { rec, restore: () => { host.auto.act = orig; } }; };
+  const t1 = tapU(); host.setDisturb(null); const clean = await host.run(null, null); t1.restore();
+
+  // ---- LOADGUARD=<lo:hi>: THE PLANT-SIDE COVERAGE GUARD, ARMED (plan §82).
+  //
+  // THE SCALE IS THE SHIPPED CONFIGURATION'S OWN DISTRESS ON THE PROGRAM IT WILL RUN, which is
+  // the exact analogue of the speed span, and the first version got it wrong: `host.loadSeen()`
+  // maxes over EVERY scored run of the commissioning — probe runs, cascade scoring, runs with no
+  // correction armed — and read 28.48% where the deployed policy's own run reads 7.0%. With a
+  // 4x-10x band on 28.48% the fade began at 1.14, and the reading is a FRACTION capped at 1, so
+  // the guard could never fire at any load. It was armed, inert, and would have been written up
+  // as "no false refusals" (rules 17, 25).
+  //
+  // Taken from the clean run just measured with the guard DISARMED, so it cannot be calibrated on
+  // the disturbance it exists to catch (rule 15), and the clean run is then REPEATED with it armed
+  // as the both-halves check — the guard must be inert where nothing is wrong (rule 9).
+  let guarded = null;
+  if (LG) {
+    const [lo, hi] = LG.split(':').map(Number);
+    const pol = host.auto.distil;
+    pol.loadGuard = true;
+    pol.loadLo = Number.isFinite(lo) ? lo : 4;
+    pol.loadHi = Number.isFinite(hi) ? hi : 10;
+    pol.report.loadMax = clean.loadPeak;
+    console.log(`\n  PLANT-SIDE GUARD ARMED: the shipped policy's own run shows drive distress `
+      + `${(100 * clean.loadPeak).toFixed(1)}%; fading between ${pol.loadLo}x (${(100 * pol.loadLo * clean.loadPeak).toFixed(1)}%) `
+      + `and ${pol.loadHi}x (${(100 * pol.loadHi * clean.loadPeak).toFixed(1)}%) of it`);
+    host.setDisturb(null); guarded = await host.run(null, null);
+    console.log(`    INERT CHECK — undisturbed with the guard armed: ${guarded.score.toExponential(4)} `
+      + `against ${clean.score.toExponential(4)} unarmed  ${guarded.score === clean.score ? '(IDENTICAL)' : `(${(100 * (guarded.score / clean.score - 1)).toFixed(2)}% apart)`}`);
+  }
+  const t2 = tapU(); host.setDisturb(shove); const shoved = await host.run(null, null); t2.restore();
+  let same = t1.rec.length === t2.rec.length && t1.rec.length > 0;
+  if (same) for (let i = 0; i < t1.rec.length; i++) if (t1.rec[i] !== t2.rec[i]) { same = false; break; }
+
+  // ...and the CONVENTIONAL machine taking the same shove, which is the denominator.
+  const wasArmed = host.auto.deployed.distil;
+  host.auto.deployed.distil = false;
+  host.setDisturb(null); const bareClean = await host.run(null, null);
+  host.setDisturb(shove); const bareShoved = await host.run(null, null);
+  host.auto.deployed.distil = wasArmed;
+  host.setDisturb(null);
+
+  const rmsOn = (r, lo, hi) => { const [ex, ey] = r.err; let s2 = 0, n = 0;
+    for (let k = lo; k < Math.min(hi, ex.length); k++) { s2 += ex[k] * ex[k] + ey[k] * ey[k]; n += 2; }
+    return n ? Math.sqrt(s2 / n) : NaN; };
+  const peakOn = (r, lo, hi) => { const [ex, ey] = r.err; let p = 0;
+    for (let k = lo; k < Math.min(hi, ex.length); k++) p = Math.max(p, Math.hypot(ex[k], ey[k]));
+    return p; };
+  const evLen = Math.max(1, k1 - k0), rec0 = k1, rec1 = Math.min(LAP, k1 + 3 * evLen);
+  const hasRec = rec1 > rec0;   // a SUSTAINED load never ends, so it has no recovery window
+
+  console.log(`\n  SHOVE — an unmodelled ${kind === 'payload' ? 'PAYLOAD (a fraction of the COMMANDED TORQUE, all lap)' : kind === 'load' ? 'LOAD (sustained)' : 'IMPULSE'} of `
+    + `${(mag * 100).toFixed(1)}% of tauMax on joint 1, steps ${k0}-${k1} of ${LAP}:`);
+  console.log(`    the applied correction is ${same ? 'BIT-IDENTICAL' : '*** NOT IDENTICAL ***'} `
+    + `shoved against clean over ${t1.rec.length.toLocaleString()} decisions — `
+    + `${same ? 'in THIS configuration the object reads only the commanded reference' : 'SOMETHING ON THE DEPLOY PATH READS THE PLANT'}`);
+  console.log('    that is NOT a stability claim: the demand is additive on one drive, so read `sat` below.');
+  const satOf = (r) => (!r.sat ? 'n/a' : r.sat.map((x) => `${(100 * x.fraction).toFixed(1)}%/${x.peak.toFixed(2)}x`).join(' '));
+  const row = (label, r, b) => console.log(`    ${label.padEnd(26)}`
+    + `during ${rmsOn(r, k0, k1).toExponential(3)} (peak ${peakOn(r, k0, k1).toExponential(3)})   `
+    + `after ${hasRec ? rmsOn(r, rec0, rec1).toExponential(3) : '        —'}   lap ${r.score.toExponential(4)}   `
+    + `drive ${satOf(r)}  distress ${(100 * (r.loadPeak ?? 0)).toFixed(1)}%`
+    + (b ? `   ${(b.score / r.score).toFixed(2)}x over conventional` : ''));
+  // ---- SHOVEGAIN=<list>: THE MATCHED CONTROL FOR DOMAIN RANDOMISATION (plan §83.2).
+  //
+  // Training with random disturbances is PREDICTED above to be equivalent to applying less
+  // authority — a regulariser, not a capability. The test is not whether it helps under load; it
+  // is whether a UNIFORM GAIN on the CLEAN policy, chosen to give up the same nominal performance,
+  // buys the same protection. If it does, §79's ladder is the cheaper way to buy it and the
+  // augmentation adds nothing. Same policy, same machine, same shove — only the scalar moves.
+  if (process.env.SHOVEGAIN) {
+    const pol0 = host.auto.distil;
+    const W0 = pol0.W.map((w) => Float64Array.from(w));
+    console.log('    the MATCHED GAIN control — the CLEAN policy scaled, scored on both machines:');
+    for (const g of process.env.SHOVEGAIN.split(',').map(Number).filter((x) => x > 0)) {
+      for (let c = 0; c < pol0.W.length; c++) for (let j = 0; j < pol0.W[c].length; j++) pol0.W[c][j] = W0[c][j] * g;
+      host.setDisturb(null); const gc = await host.run(null, null);
+      host.setDisturb(shove); const gs = await host.run(null, null);
+      console.log(`      gain ${String(g).padStart(5)}  undisturbed ${gc.score.toExponential(4)} `
+        + `(${(bareClean.score / gc.score).toFixed(2)}x)   SHOVED ${gs.score.toExponential(4)} `
+        + `(${(bareShoved.score / gs.score).toFixed(2)}x)   drive ${satOf(gs)}`);
+    }
+    for (let c = 0; c < pol0.W.length; c++) for (let j = 0; j < pol0.W[c].length; j++) pol0.W[c][j] = W0[c][j];
+    host.setDisturb(null);
+  }
+  row('conventional, undisturbed', bareClean, null);
+  row('conventional, SHOVED', bareShoved, null);
+  row('policy, undisturbed', clean, bareClean);
+  row('policy, SHOVED', shoved, bareShoved);
+  console.log('    "during" and "after" are rms over the event and over 3x its length past it;'
+    + ' the policy row is scored against the CONVENTIONAL machine taking the SAME shove.');
+  console.log('    `drive` is per joint: SATURATED fraction of scored steps / PEAK demand as a multiple'
+    + ' of tauMax. A peak above 1.00x is the drive being asked for torque it does not have.');
+}
+
 // PLANTSPAN=<K:E,K:E,...>: THE ROB COLUMN, AND THE AXIS NOTHING HERE HAS EVER MEASURED
 // (plan §75). Target 1 is the PROGRAM changing and target 2 the FEEDRATE; both are measured.
 // The third thing a customer changes is the MACHINE — it wears, the tool changes, the fixture

@@ -18761,3 +18761,241 @@ byte-identical.
 — **a 0.9% non-repeating component costs the commissioned result a factor of 1.6 to 2.5**, and
 every real plant has small non-repeating components, which is what makes a plant real. The
 fragility is in the lap-indexed TEACHER, it is now measured, and it has a cure that costs laps.
+
+## §81 AN UNMODELLED EXTERNAL FORCE — AND "IT CANNOT EXPLODE" IS RETRACTED
+
+§80 measured "disturbance rejection" as a DECLARED exogenous signal, which is not what an owner
+means. An owner means: the payload changes unexpectedly, or something pushes the machine, and the
+controller does not make things worse. That question had never been asked here at all.
+
+`SHOVE=<kind:mag:start:len>` injects a torque at the MOTORS on top of whatever the servo asked for
+— the same injection point `stepresp.mjs` uses — so it is the plant being pushed rather than the
+command being changed. `pulse` is an impulse, `load` a sustained step (a payload appearing). Both
+are scored against the CONVENTIONAL machine taking the SAME shove, so a disturbance the plant
+simply finds hard cannot read as the policy failing.
+
+### §81.1 What survives, and it is narrower than the sentence I wrote
+
+The deployed object's OUTPUT is a function of the commanded reference window and nothing else, so
+its applied correction under a shove is **BIT-IDENTICAL** to its correction without one — asserted
+here over 49,234 decisions rather than argued, because the state term (§52.27), the instrument tap
+and the feedback layer are all BUILT and all read measured signals, so this is a property of the
+SHIPPED configuration and any of them armed removes it silently (rule 30).
+
+**AND IT DOES NOT MEAN WHAT I CLAIMED.** An earlier draft of this work said the object "cannot
+explode under a disturbance, because it cannot see one". That is wrong in substance. The
+disturbance is plainly visible on this machine — in the actual motor torque, the encoder and the
+wind-up — and the servo is a PD on the MEASURED encoder, so the machine responds to it even though
+our object cannot. Two things follow that no bit-identity check can see:
+
+1. **BIT-IDENTICAL OUTPUT IS NOT BIT-IDENTICAL EFFECT.** The policy goes on demanding a correction
+   sized for the NOMINAL plant on top of a loop already fighting the shove. The demand is ADDITIVE
+   on one drive, so the policy makes SATURATION MORE LIKELY, not less.
+2. **It contributes exactly ZERO to the rejection.** All of that is the loop the installation
+   already owns.
+
+### §81.2 Measured, and the object makes the machine WORSE before the machine itself fails
+
+```
+  sustained load      conventional     policy      advantage    drive saturated
+   (x tauMax)            lap             lap                    policy / conventional
+      0                1.0717          0.1618        6.62x        4.8%  /  7.7%
+      0.1              1.0644          0.1613        6.60x        5.0%  /  7.6%
+      0.25             1.0553          0.1738        6.07x        7.6%  /  7.7%
+      0.5              1.0523          0.2904        3.62x       14.0%  /  8.1%
+      1.0              8.8223         10.155         0.87x       74.9%  / 72.3%
+
+  impulse, 200% of tauMax for 164 steps
+      conventional   lap 1.0717 -> 1.1332  (+5.7%)    recovery "after" 0.458 -> 0.561
+      policy         lap 0.1618 -> 1.0249  (+533%)    recovery "after" 0.121 -> 0.730
+                     advantage 6.62x -> 1.11x
+```
+
+**THE SATURATION COLUMN IS THE MECHANISM AND IT CROSSES OVER.** Undisturbed, the policy saturates
+LESS than the bare machine (4.8% against 7.7%) because it tracks better and asks the drive for
+less. Under load it saturates MORE (14.0% against 8.1% at half tauMax, and a peak demand of 417x
+tauMax against the conventional machine's 315x at full). The policy is consuming the drive headroom
+the loop needs to reject the disturbance — the additive-demand account, measured rather than
+argued.
+
+**AND ITS RECOVERY DEGRADES FAR MORE THAN THE BARE MACHINE'S.** After the impulse the conventional
+machine's error rises 22% and the policy's rises 503%. During the event the policy is actually
+BETTER (5.667e-2 against 8.871e-2); it is the tail that is ruinous, which is the signature of a
+feedforward that is still confidently applying a correction for a plant that has moved.
+
+So the honest envelope: **graceful to about a quarter of tauMax of unmodelled sustained load
+(6.07x), degrading by half (3.62x), and WORSE THAN NOT HAVING IT by full tauMax (0.87x)** — though
+by then the conventional machine is itself 8x worse, so that last cell is a machine that has
+already fallen over rather than a controller comparison.
+
+### §81.3 The first version of this experiment was a null, and the instrument was the fault
+
+A 5% of tauMax shove moved the conventional machine's lap rms from 1.0717 to 1.0711 — 0.06%, a
+null. The reason is in the rig's own numbers: this loop's PEAK DEMAND runs to 47x its own torque
+limit and it already clips 7.7% of scored steps, so a shove at 5% of tauMax is about a thousandth
+of the joint's working torque. The disturbance was sized against the wrong quantity (rule 17), and
+had the null been written up it would have read as "the object is robust" when it means "nothing
+happened". Magnitudes are now multiples of tauMax and of order 1, and the table prints the
+saturation it actually reached so the null cannot recur silently.
+
+STATED LIMITS: one plant, one cell, one seed, one joint. The bench cell is heavily drive-limited
+(47x peak demand undisturbed), so every saturation figure here is cell-specific and the crossing
+point is not a constant to carry (rule 31). Nothing is claimed about a cell with drive headroom.
+
+### §81.4 What would fix it, and why it is not the disturbance term
+
+The failure is not that the object mispredicts the disturbance — it never predicted anything. It is
+that it keeps applying full authority into a plant that has changed, and that authority competes
+for the drive. Two candidates, both cheap, neither built:
+
+- **A PLANT-SIDE COVERAGE GUARD.** The object already fades its correction outside the commanded
+  SPEED span the fit saw, and §75 records that it has no analogue for the plant. The drive's own
+  saturation is a plant-side signal the machine already computes and the guard could read: if the
+  drive is clipping far above what commissioning saw, fade. That needs no new instrument, and it is
+  `report.bendMax`'s pattern — a threshold the commissioning measures rather than a constant.
+- **AUTHORITY THAT YIELDS.** The applied-gain axis (§79) is already machine-scored and already
+  folds into the weights; the same scalar driven DOWN by observed saturation is the smallest
+  possible version of yielding to the loop when the loop needs the drive.
+
+Both are falsifiable the same way: they must be inert on the undisturbed machine (the 6.62x must
+come back byte-identical) and must move the 0.5x and 1.0x rows.
+
+## §82 THE PLANT-SIDE GUARD: BUILT, PROVABLY INERT, AND REFUTED AS A FIX
+
+§81 measured the object degrading under an unmodelled sustained load, with the mechanism apparently
+visible in one column: undisturbed the policy clips the drive LESS than the bare machine (4.8%
+against 7.7%) because it tracks better, and under load it clips MORE (14.0% against 8.1%). The
+obvious reading is that the policy is consuming the drive headroom the loop needs, and the obvious
+fix is to back off. Both were built. The reading is a symptom; the fix is **wrong**.
+
+`DistilPolicy.loadGuard` / `deploy.js`'s `loadGain` are the exact twin of the speed-coverage guard
+one level down: a normalised plant-side distress reading — the fraction of recent steps the drive
+could not deliver what it was asked for — faded between MULTIPLES of `report.loadMax`, the worst
+reading the COMMISSIONING itself observed, so no constant enters in the plant's units. It is free
+on a real installation: the drive already reports its own limit status, which is the one instrument
+in this project a customer does not have to buy. The gain is in [0,1], so it can only ever reduce
+the correction and cannot add energy.
+
+**IT IS INERT WHERE NOTHING IS WRONG, AND THAT HALF IS EXACT.** Undisturbed, with the guard armed,
+the arm reads 1.6181e-1 against 1.6181e-1 unarmed — **0.00% apart at both bands tried** (rule 9's
+half that a guard usually fails).
+
+**AND IT DOES NOT RESCUE THE FAILURE CASE. IT MAKES IT WORSE, MONOTONICALLY.**
+
+```
+  at one tauMax of sustained load       delivered
+    no guard                              0.87x
+    guard, fade 2x-5x of commissioned     0.84x
+    guard, fade 5x-10x                    0.80x
+  at half a tauMax (where the policy still delivers)
+    no guard                              3.62x
+    guard, fade 5x-10x                    3.62x   <- inert, as designed
+```
+
+So backing off does not recover anything, and the more it backs off the worse it gets. The
+hypothesis that the policy's additive demand is what costs the result is **refuted on the machine**
+(rule 16), and it was my own proposal.
+
+### §82.1 Which corrects §81's headline as well
+
+If removing the correction does not help, the correction was not the problem. At one tauMax the
+CONVENTIONAL machine is itself **8.2x worse than nominal** (8.8223 against 1.0717): the machine has
+already fallen over, the drive is saturated 72-75% of the time on both, and the part is scrap
+whichever controller is fitted. A controller comparison in that regime is not meaningful, and
+§81's "worse than not having it" is true arithmetic about a machine that has failed.
+
+**The honest envelope is where the machine still works**, and there the object is fine:
+
+```
+  sustained load (x tauMax)    0     0.1    0.25    0.5      1.0
+  delivered                  6.62x  6.60x  6.07x   3.62x    (machine failed)
+  conventional lap           1.0717 1.0644 1.0553  1.0523   8.8223
+```
+
+The conventional machine is flat to half a tauMax and collapses by one; the policy degrades
+smoothly across that same span and keeps 3.62x at the edge of it. That is better news than §81
+stated, and it is the sentence that should be quoted.
+
+### §82.2 The first version of the guard was armed, inert, and would have shipped as a success
+
+`host.loadSeen()` maxes the distress over EVERY scored run of a commissioning — probe runs, cascade
+scoring, runs with no correction armed — and read **28.48%** where the deployed policy's own run
+reads **7.0%**. With a 4x-10x band on 28.48% the fade began at 1.14, and the reading is a FRACTION
+capped at 1, so **the guard could never fire at any load whatsoever**. Every cell came back
+identical to unguarded, which is exactly what "no false refusals" looks like. Rules 17 and 25: the
+scale is now the SHIPPED configuration's own distress on the program it will run — the exact
+analogue of the speed span — taken from a clean run with the guard DISARMED so it cannot be
+calibrated on the disturbance it exists to catch (rule 15).
+
+Kept, opt-in and off, because the inert half is worth having and the mechanism is now on record as
+measured rather than plausible.
+
+## §83 TRAINING WITH THE DISTURBANCE PRESENT — MOSTLY A GAIN, AND NOT WHERE IT LOOKED
+
+The owner's proposal: inject simulated disturbances during training so the model has seen them —
+domain randomisation. The prediction was written down first (rules 16, 59): the map's input is a
+window of the COMMANDED REFERENCE and a disturbance does not change it, so the same row now carries
+different targets and least squares AVERAGES over them. The map cannot become
+disturbance-dependent; it can only become HEDGED, which should be equivalent to turning §79's
+applied gain down.
+
+### §83.1 Half right, and the half that is wrong is the interesting half
+
+```
+                         undisturbed      at load 0.5      drive under load
+  clean, gain 1.00         6.62x            3.62x             14.0%
+  clean, gain 0.99         6.60x            3.72x             13.7%
+  clean, gain 0.97         6.46x            3.89x             13.3%
+  clean, gain 0.95         6.10x            4.00x             12.9%
+  clean, gain 0.90         4.93x            4.05x             12.0%
+  RANDOM-DISTURBED TRAINING 5.36x           4.32x             12.1%
+```
+
+Domain randomisation trades **19% of nominal for 19% under load** and asks the drive for less,
+which is the hedge exactly as predicted. **But the matched-gain control refutes the strong form**:
+interpolated to the same nominal cost (clean ≈ 5.36x sits near gain 0.92, load ≈ 4.03x), the
+augmentation reaches **4.32x where the matched gain reaches ~4.03x** — and the gain axis SATURATES
+at about 4.05x however far it is turned down. So it is mostly a gain and not only a gain; a uniform
+scale cannot buy the last ~7%.
+
+### §83.2 And the reference-correlated case LOST, for a reason worth more than a win
+
+The case worth having is a disturbance the reference PREDICTS — a cutting force that depends on
+where you are in the path, a payload picked up at a known program point. Trained with the load
+switched on between lap fractions 0.30 and 0.55 and tested on **exactly that disturbance**:
+
+```
+    clean-trained    6.62x undisturbed -> 5.96x shoved   (x0.90)
+    phase-trained    5.31x undisturbed -> 4.74x shoved   (x0.89)
+```
+
+The phase-trained policy degrades by the SAME RATIO under the shove. It learned nothing about the
+disturbance; it simply got worse. **And the design was the fault: a lap FRACTION is a memory index,
+and the diet is four DIFFERENT polygons, so "fraction 0.30-0.55" is a different region of
+reference-space on each one.** Phase-locked is not reference-correlated — the retirement's own
+lesson arriving inside a disturbance.
+
+The scale-free repair is a disturbance that is a function of what the machine is already being
+asked to do: an unmodelled PAYLOAD, injected as a fraction of the COMMANDED TORQUE, which the map's
+own features (the rigid-body reference torques, §52.16) already carry. **It answers nothing,
+because the disturbance is too benign to discriminate**: 30% of commanded torque moves the clean
+policy 1.6181e-1 to 1.6307e-1 — 0.8% — and training on it changes the result by nothing at all
+(6.23x against 6.24x). The loop absorbs a torque-gain error, so this is a null about the test and
+not a finding about the method (rule 25), and the genuinely reference-correlated case remains
+unmeasured.
+
+### §83.3 What is established, and what to do with it
+
+- Domain randomisation WORKS on this plant, is ~85-90% reproducible by §79's gain ladder, and the
+  residual is real but small. Since the gain ladder costs four scored runs and disturbance-training
+  costs a whole commissioning under injected loads, **the gain ladder is the cheaper way to buy
+  almost all of it** — and it is already machine-scored and already shipped.
+- Both are the same trade and it should be stated as one: **nominal performance for tolerance**,
+  at roughly 1:1 on this plant.
+- NOT MEASURED: a disturbance that is genuinely a function of the reference and large enough to
+  matter. That is the experiment that could still produce a capability rather than a hedge, and
+  §83.2 says what it must NOT be (lap phase) and why.
+
+STATED LIMITS throughout §81-§83: one plant, one cell, one seed, one joint, one disturbance shape
+at a time. The bench cell is heavily drive-limited (47x peak demand undisturbed), so every
+saturation figure is cell-specific and no crossing point here is a constant to carry (rule 31).
