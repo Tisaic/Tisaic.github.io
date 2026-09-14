@@ -246,6 +246,26 @@ check('the 60-line deploy core reproduces the shipped act path BIT-EXACTLY over 
   {
     const bm = rec.report.bendMax;
     check('the commissioning recorded its own worst window bend', bm > 0, `bendMax ${bm}`);
+    // ARMED ONLY FOR THIS BLOCK. It is opt-in and OFF by default (plan §78.5): armed by the mere
+    // presence of `bendMax` it refused healthy windows on any plant that holds or ramps.
+    rec.bendGuard = true;
+
+    // THE DEFECT THAT MADE IT OPT-IN, PINNED SO IT CANNOT COME BACK QUIETLY. The statistic is a
+    // ratio against the window's own MEDIAN bend, so a LOCALLY STRAIGHT window — a hold, or a
+    // constant-slope ramp — has a median of exactly zero and one tap off that line reads Infinity.
+    // Every healthy check in this block runs on a SINE, which is never locally straight, so it
+    // could not see this: calibrated and checked on the same kind of signal (rule 15).
+    {
+      const r1 = { refDim: 1, offsets: rec.offsets };
+      const hold = windowBend(r1, () => [3.0]);
+      const ramp = windowBend(r1, (o) => [3 + 0.001 * o]);
+      const entering = windowBend(r1, (o) => [o === rec.offsets[rec.offsets.length - 1] ? 3.001 : 3.0]);
+      check('a locally straight window has NO bend signal at all (hold and ramp both 0)',
+        hold === 0 && ramp === 0, `hold ${hold}, ramp ${ramp}`);
+      check('…and one legitimate tap entering such a window reads INFINITE, which is the false '
+        + 'refusal that made this guard opt-in — not a corruption', entering === Infinity,
+        `${entering}`);
+    }
 
     // The two implementations must agree, which is what this file exists for.
     let bendSame = true;

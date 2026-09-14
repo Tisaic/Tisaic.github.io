@@ -18348,3 +18348,75 @@ What is NOT yet done is the form of that evidence: it is the tier passing rather
 `sixplant.mjs` printing each plant's own headline beside its accepted defaults, which is the
 instrument §54.3 built precisely because a green tier and an unchanged headline are different
 claims. Until that has run, "inert on six plants" rests on the contracts rather than on the numbers.
+
+### §78.5 The guard was armed by default and it was WRONG — retracted to opt-in
+
+§78.4 ended by naming the confirmation it owed: the guard arms itself wherever a commissioning
+recorded a `bendMax`, which is everywhere, so it was a DEFAULT on one synthetic record's evidence.
+The full node tier was green, which is what that section leaned on. **It was not enough, and the
+targeted check is what found it.**
+
+`sixplant.mjs` runs plant tests that score the TEACHER, and the guard only acts on the distilled
+rung, so the confirmation that actually bears is each plant's own DISTIL headline against its
+recorded value. Run at defaults with the guard armed:
+
+```
+  plant     guard ARMED    recorded     verdict
+  arm       6.63x          6.63x        unchanged
+  column    3.64x          3.64x        unchanged
+  mill      2.62x          2.62x        unchanged
+  barrel    6.12x          6.12x        unchanged
+  tank      3.09x          2.593x       MOVED — and it moved UP
+```
+
+**A guard can only refuse decisions, so an improvement is a reason to check the instrument
+(rule 14).** The tank's held-out R² came back IDENTICAL to fifteen digits — the fit is byte-for-byte
+the same — so whatever moved is on the ACT path, which is exactly where the guard sits.
+
+### §78.6 A LOCALLY STRAIGHT WINDOW HAS NO BEND SIGNAL, AND EVERY PROCESS PLANT HOLDS
+
+The statistic is a RATIO against the window's own median bend. Asked directly:
+
+```
+  a sine (the artefact test's own window)     bend = 49.3
+  a HOLD, perfectly constant                  bend = 0
+  a straight RAMP, constant slope             bend = 0
+  a hold with ONE ramp tap entering            bend = Infinity   <- a healthy window, REFUSED
+  a ramp with one tap 0.1% off                 bend = Infinity
+```
+
+**A hold and a constant-slope ramp both have a median bend of exactly zero**, so any single tap
+off that line — a ramp legitimately entering the window, which is an ordinary thing on every
+recipe-driven plant here — reads Infinity and is refused.
+
+**AND THE SWEEP THAT LICENSED ARMING IT COULD NOT HAVE SEEN THIS.** Both halves of §78.3's
+"zero false refusals at every margin from 1 to 64" were scored on a SINE, in sample and held out.
+A sine is never locally straight. That is rule 15 in the plainest form available: the guard was
+calibrated on one kind of signal and checked on the same kind of signal, and the two agreed.
+
+Both directions are now measured, which is what settles it:
+
+```
+  tank, guard ARMED      1.6387e-1   3.090x production, 3.310x held out
+  tank, guard OFF        1.9531e-1   2.593x production, 2.299x held out   <- the recorded number, exactly
+```
+
+**So the 3.09x was a false refusal improving a score by accident, and it is retracted.** The guard
+is now OPT-IN and OFF (`bendGuard`), and the arm, column, mill and barrel all reproduce their
+recorded headlines with it off.
+
+**What stands and what does not.** Corrupted-tap detection stands — 200/200 at margins 1-4, 198 at
+8 — and so does the finding that a corrupted tap is the fault that costs (106% of rms, past the
+cap) while the cheap speed detector catches only the harmless one. What is retracted is the
+false-refusal rate: it is zero on a sine and **UNCHARACTERISED on any plant with holds or ramps**,
+and the deeper problem is that this statistic cannot tell an isolated corrupted tap from a
+legitimate CORNER, since both put one tap off the local line — and on a geometrically spaced
+window a corner at a wide gap is barely resolved at all.
+
+**AND THE ACCIDENT LEFT A REAL QUESTION BEHIND, WHICH MAY BE WORTH MORE THAN THE GUARD.** What the
+false refusal did was stop the map acting during HOLDS and RAMPS, and on the tank that is worth
+**2.593x → 3.090x on production and 2.299x → 3.310x on the held-out recipe** — a 19% and 44%
+improvement from applying LESS. That is not a corruption question at all; it is *when should a
+reference-addressed map act*, and it has never been asked. It is recorded as its own measurement
+rather than folded into this one, because a finding reached through a bug is a hypothesis until it
+is reproduced by something that is not a bug.
