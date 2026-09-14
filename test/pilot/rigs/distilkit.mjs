@@ -170,6 +170,46 @@ const dietN = (d) => (process.env.DIETN ? d.slice(0, Math.max(1, +process.env.DI
 const teachLaps = () => Math.max(1, +(process.env.TLAPS || 2));
 
 /**
+ * AVERAGE THE TEACHER'S RECORD OVER THE LAST n LAPS (plan §80.7, §84.1).
+ *
+ * §72.18 read the barrel's ambient drift as costing 3.951x against 14.949x and filed it as a
+ * DISTURBANCE the teacher cannot invert. §80.6 refuted that: the drift is **0.9% of the open-loop
+ * error** and the engineer's own closed-form feedforward recovers 1.008x from being told it, so a
+ * component that small cannot cost a factor of 3.8 by going uncorrected. What it costs it by is
+ * CORRUPTING A LAP-INDEXED TEACHER, whose target has to be COMMENSURATE with its lap. The
+ * barrel's is not — 9,300 and 4,100 against a 20,000-step lap land near harmonics 2 and 5 and
+ * BEAT against them — so the record moves between calls and the iteration fights that.
+ *
+ * If that is the mechanism the cure needs no new architecture, because a component incommensurate
+ * with the lap averages DOWN over laps and a lap-periodic one does not. Every harness's teacher
+ * inverts the LAST lap; this averages the record over the last n instead, which costs laps and
+ * nothing else. MEASURED ON THE BARREL: 6.116x (no averaging) -> 9.995x at 5 laps / 4 averaged,
+ * with the MATCHED CONTROL firing the right way — more laps ALONE reads 3.643x, WORSE, so a
+ * ladder that only raised the lap count would have concluded the opposite (rule 20) — and the
+ * FALSIFIER firing too: with the drift removed there is nothing incommensurate to average and the
+ * knob is inert at 15.054x against 15.069x (rule 21).
+ *
+ * IT IS HERE AND NOT IN ONE HARNESS BECAUSE §80.7 IS ONE PLANT AND ITS CLAIM IS GENERAL — *a 0.9%
+ * NON-REPEATING component costs the commissioned result 1.6 to 2.5x, and every real plant has
+ * small non-repeating components*. Rule 31 says that is a constant to re-derive on another plant
+ * rather than to carry, and it cannot be re-derived from a knob that exists in one file.
+ *
+ * `TAVG=1` is the default and is byte-identical: the accumulator starts at zero and `/1` is
+ * exact, so `err[c][kk] += r / TAVG` over one lap is the assignment it replaces.
+ *
+ * @param {number} tlaps The harness's own `teachLaps()`, which bounds the averaging window: one
+ *   lap always establishes the operating point and is never part of the record (rule 13).
+ */
+const teachAvg = (tlaps) => {
+  const n = Math.max(1, Number(process.env.TAVG || 1));
+  if (n > tlaps - 1) {
+    throw new Error(`TAVG ${n} needs TLAPS >= ${n + 1} (one lap establishes the operating point `
+      + 'and is never part of the record — rule 13); raise TLAPS');
+  }
+  return n;
+};
+
+/**
  * THE TEACHER'S OPERATOR REUSE, READ ONCE — now the default, `REUSE=0` the control. It hands the
  * operator identified on the first KEPT training run to every later member of the diet, which is
  * where 84-98% of the product's plant time goes (plan §72.6). Measured on all four plants: the
@@ -360,4 +400,4 @@ async function reportDistil({ rep, runs, nFeat, segs = null, auto = null }) {
   return { inSample, dr };
 }
 
-export { deriveWindow, reportDistil, priceFrom, ridgeLadder, gainLadder, teacherReuse, carrier, teachLaps, dietN, human, SHAPE, DEFAULT_RIDGES, DEFAULT_GAINS };
+export { deriveWindow, reportDistil, priceFrom, ridgeLadder, gainLadder, teacherReuse, carrier, teachLaps, teachAvg, dietN, human, SHAPE, DEFAULT_RIDGES, DEFAULT_GAINS };

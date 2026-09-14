@@ -19121,3 +19121,84 @@ states this as left open).
 pass is machine time with no new thinking in it; both gate everything below. And 1's NULL is the
 more informative outcome, which is the only reason to run it before the plants where it would
 pay.
+
+---
+
+## §84.1 — `TAVG` ON FOUR PLANTS: THREE INERT, ONE WORTH 1.63x, AND THE MILL IS WHAT NAMES THE DIFFERENCE
+
+§80.7 measured record-averaging on the BARREL — 6.116x → 9.995x — and stated a claim about any
+plant: *a 0.9% NON-REPEATING component costs the commissioned result 1.6 to 2.5x, and every real
+plant has small non-repeating components*. That is a constant carried from one plant, which rule
+31 says must be re-derived, and it could not be: `TAVG` existed only in `distil-barrel.mjs`. It
+is now `teachAvg(TLAPS)` in `rigs/distilkit.mjs` beside `ridgeLadder` and `gainLadder`, and the
+column, the mill and the tank are wired to it. Unset is 1 and byte-identical by construction —
+the accumulator starts at zero, the range is exactly one lap, and `/1` is exact, so
+`err[c][kk] += r / TAVG` IS the assignment it replaces.
+
+**THE CLAIM DOES NOT GENERALISE, AND THE REASON IS BETTER THAN THE CLAIM WAS.**
+
+```
+  plant    non-repeating component   TAVG on the PRODUCT        TAVG on the TEACHER
+  barrel   ambient drift, incomm.    6.116x -> 9.995x  +1.63x   1.85-4.03x -> 9.0-12.5x
+  mill     entry wander, incomm.     2.623x -> 2.630x  +0.3%    7.5x       -> 2.6x  (2.9x DOWN)
+  column   none — deterministic      3.643x -> 3.643x  EXACT    2.109x     -> 2.109x EXACT
+  tank     none — deterministic      3.268x -> 3.268x  0.006%   —
+```
+
+Mill, at TLAPS/TAVG, delivered exit gauge and the teacher's four training runs:
+
+```
+  2/1   5.8649e-3  2.625x   6.78 / 7.51 / 6.82 / 8.25     58.0 min   <- ships
+  3/1   5.8680e-3  2.623x   6.94 / 7.51 / 7.68 / 8.15     65.1 min   the matched control
+  3/2   5.8543e-3  2.630x   2.65 / 2.63 / 2.69 / 2.61     65.1 min
+  5/1   5.8691e-3  2.623x   7.46 / 7.59 / 8.19 / 7.68     77.0 min
+  5/4   5.8560e-3  2.629x   2.64 / 2.72 / 2.69 / 2.65     77.0 min
+```
+
+**THE COLUMN AND THE TANK ARE THE EXACT NULL AND THEY ARE WORTH STATING FIRST (rule 27).** Both
+are deterministic rigs carried across the teacher's calls, so once settled every lap of a run is
+the same lap — averaging n copies of one thing returns it. The column comes back BYTE-IDENTICAL
+at 3.7440e-2 with an identical 2.109x teacher at every setting up to 5 laps averaging 4, and the
+tank moves 0.006%. That is rule 21's signature in the place it belongs: a plant with no
+non-repeating component cannot be moved by a knob that only removes non-repeating components,
+and if either had moved the instrument would have been the finding.
+
+**THE MILL IS THE RESULT.** Its product is inert — 2.623x to 2.630x, a 0.3% spread over a ladder
+that triples the laps — which is what §84.1 predicted from commensurability. But its TEACHER
+FALLS BY 2.9x, from ~7.5x to ~2.6x, and the delivered object does not notice. Two things follow
+and the second is worth more than this whole section:
+
+**(1) The teacher's headline on this plant is mostly a MEMORY the distillation was already
+discarding.** `hff` inverts the entry wander (2,150 and 950 steps against a 3,267-step lap) lap
+by lap and scores 7.5x for it; averaging removes it from the record and the score collapses to
+what remains. The delivered number does not move because the deployed object is a map of the
+COMMANDED REFERENCE and could never have expressed an unmeasured wander in the first place. So
+on the mill, averaging is FREE AND USELESS — and it costs 12% of the commissioning bill, which
+is why it is not a default here.
+
+**(2) A TEACHER'S SCORE AND A PRODUCT'S SCORE ARE DIFFERENT QUANTITIES, and the gap between them
+is a SCREEN.** Where the teacher succeeds at inverting a non-repeating component, its target
+carries a large lap-specific term, averaging is inert on the product, and the teacher's own
+number is inflated. Where the teacher FAILS at it — the barrel's 1.85 / 1.03 / 2.17 / 4.03x,
+erratic by a factor of FOUR across a diet of four — it is not merely missing that component, it
+is being CORRUPTED by it: the iteration fights a target that moves between calls. That second
+case is the one averaging repairs, and it is visible in a report the ladder ALREADY PRINTS, with
+no extra run:
+
+> **The screen: read the SPREAD of the teacher's per-run scores across the diet.** Tight (mill
+> 6.78-8.25, 1.22x; column 2.109x on its one kept run) means the teacher is converging and
+> averaging will be inert. Erratic (barrel 1.03-4.03x, 3.9x) means it is fighting a moving
+> target and averaging is worth trying. The barrel is the only plant of four that fails it, and
+> it is the only plant of four where the knob pays.
+
+**SO §80.7's GENERAL SENTENCE IS RETRACTED AND REPLACED BY A NARROWER ONE THAT IS ACTUALLY
+USEFUL.** Not *a small non-repeating component costs 1.6-2.5x* — three plants of four say it
+costs nothing at all. Instead: **a non-repeating component costs the commissioned result only
+when it is large enough to DESTABILISE the teacher's iteration, and the teacher's own per-run
+spread says whether it is.** Averaging is then free-or-better everywhere it was tried (worst
+cell of eleven: −0.1% on the mill at 5/1, inside its own seed spread) and pays on one plant, so
+it remains OPT-IN and OFF (rule 31) with the screen deciding when to reach for it.
+
+NOT CLAIMED: one seed per cell, four plants, and the two nulls are deterministic rigs — a
+stochastic plant with a tight teacher spread has not been tried and is the cell that would
+falsify the screen.

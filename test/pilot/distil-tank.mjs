@@ -40,7 +40,7 @@
  * Run: SUITE=full node test/pilot/distil-tank.mjs   [SEEDS=1,2]  [GRADE=fast]
  */
 import { AutoStack } from '../../lib/pilot/autostack.js';
-import { priceFrom, ridgeLadder, gainLadder, teacherReuse, carrier, teachLaps, dietN } from './rigs/distilkit.mjs';
+import { priceFrom, ridgeLadder, gainLadder, teacherReuse, carrier, teachLaps, teachAvg, dietN } from './rigs/distilkit.mjs';
 import { into } from './rigs/meter.mjs';
 import { oracleConverge } from './rigs/oracleteach.mjs';
 import { windowBend } from '../../lib/pilot/deploy.js';
@@ -52,6 +52,11 @@ import { UCAP, makeTanks, voltsFor, levelsAt, SEG, HOLD, RECIPE, quintic, refAtS
 // first is the only settle there is, so `TLAPS=2` asks whether the second scored lap is buying
 // noise reduction worth a third of the commissioning. Unset is 3 and byte-identical.
 const TLAPS = teachLaps();
+// TAVG=<n>: average the teacher's record over the last n laps (plan §80.7, §84.1). The mechanism,
+// the measurement and the two controls live in `distilkit.mjs` beside the knob, because §80.7's
+// claim — a 0.9% NON-REPEATING component costs the commissioned result 1.6-2.5x — is about any
+// plant with one and not about the barrel it was measured on. Unset is 1 and byte-identical.
+const TAVG = teachAvg(TLAPS);
 
 // THE ORACLE TEACHER (plan §73.13). The third plant asked, and the one whose cascade sits between
 // the mill's 1.74x and the column's 0.39x. `maxDepth` is already 1 here, so the pilot the port
@@ -406,7 +411,7 @@ async function once(seed) {
           const h = ref(k), v = voltsFor(G, h[0], h[1]);
           const u = corr ? corr.at(kk) : [0, 0];
           p.step(v[0] + (u[0] || 0), v[1] + (u[1] || 0));
-          if (k >= (TLAPS - 1) * lap) { e0[kk] = p.h[0] - h[0]; e1[kk] = p.h[1] - h[1]; }
+          if (k >= (TLAPS - TAVG) * lap) { e0[kk] += (p.h[0] - h[0]) / TAVG; e1[kk] += (p.h[1] - h[1]) / TAVG; }
           if (k >= (TLAPS - 1) * lap) { s2 += (p.h[0] - h[0]) ** 2 + (p.h[1] - h[1]) ** 2; n += 2; }
         }
         return { score: Math.sqrt(s2 / n), err: [e0, e1] };

@@ -52,7 +52,7 @@
  */
 import { ladder, announce } from './rigs/ladder.mjs';
 import { barrelSpec } from './rigs/specs.mjs';
-import { deriveWindow, reportDistil, priceFrom, ridgeLadder, gainLadder, teacherReuse, carrier, teachLaps, dietN } from './rigs/distilkit.mjs';
+import { deriveWindow, reportDistil, priceFrom, ridgeLadder, gainLadder, teacherReuse, carrier, teachLaps, teachAvg, dietN } from './rigs/distilkit.mjs';
 import { oracleConverge } from './rigs/oracleteach.mjs';
 
 // THE ORACLE TEACHER IS OPT-IN UNTIL IT IS MEASURED (plan §73.9). It needs a cascade to iterate,
@@ -205,24 +205,10 @@ console.log(`  ${OFFSETS.length} offsets per channel, ${DIETS.length} training r
 // first is the only settle there is, so `TLAPS=2` asks whether the second scored lap is buying
 // noise reduction worth a third of the commissioning. Unset is 3 and byte-identical.
 const TLAPS = teachLaps();
-// TAVG=<n>: AVERAGE THE TEACHER'S RECORD OVER THE LAST n LAPS (plan §80.7).
-//
-// §72.18 read this plant's ambient drift as costing 3.951x against 14.949x and filed it as a
-// DISTURBANCE the teacher cannot invert. §80.6 measures the drift at **0.9% of the open-loop
-// error** (5.6301 against 5.5802 K rms) and the engineer's own feedforward recovering 1.008x from
-// declaring it — so it is not a disturbance-rejection deficit at all. A 0.9% component cannot cost
-// a factor of 3.8 by being uncorrected; it costs it by CORRUPTING a lap-indexed teacher, whose
-// target must be commensurate with its lap. This drift is not: 9,300 and 4,100 against a 20,000
-// lap land near harmonics 2 and 5 and BEAT against them, so the teacher's record moves between
-// calls and its iteration fights that instead of the plant.
-//
-// If that is the mechanism, the cure needs no new architecture: a component incommensurate with
-// the lap averages DOWN over laps and a lap-periodic one does not. The teacher inverts the LAST
-// lap; this averages the record over the last n, which costs laps and nothing else. `TAVG=1` is
-// the default and byte-identical.
-const TAVG = Math.max(1, Number(process.env.TAVG || 1));
-if (TAVG > TLAPS - 1) throw new Error(`TAVG ${TAVG} needs TLAPS >= ${TAVG + 1} (one lap establishes `
-  + 'the operating point and is never part of the record — rule 13); set TEACHLAPS');
+// TAVG=<n>: AVERAGE THE TEACHER'S RECORD OVER THE LAST n LAPS (plan §80.7). The mechanism, the
+// measurement and the two controls are in `distilkit.mjs` beside the knob, because §80.7's claim
+// is about any plant with a small non-repeating component and not about this one (§84.1).
+const TAVG = teachAvg(TLAPS);
 const distilRuns = (auto) => dietN(DIETS).map((rec, di) => {
   const seg = DSEGS[di % DSEGS.length];
   const lap = LAP(rec, seg), ref = refOf(rec, seg);

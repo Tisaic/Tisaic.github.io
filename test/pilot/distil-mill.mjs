@@ -42,7 +42,7 @@
  */
 import { ladder, announce } from './rigs/ladder.mjs';
 import { millSpec } from './rigs/specs.mjs';
-import { deriveWindow, reportDistil, priceFrom, ridgeLadder, gainLadder, teacherReuse, teachLaps, dietN } from './rigs/distilkit.mjs';
+import { deriveWindow, reportDistil, priceFrom, ridgeLadder, gainLadder, teacherReuse, teachLaps, teachAvg, dietN } from './rigs/distilkit.mjs';
 import { oracleConverge } from './rigs/oracleteach.mjs';
 
 // THE ORACLE TEACHER, AND THIS PLANT IS ITS FALSIFIER (plan §73.11). It needs a cascade to
@@ -91,6 +91,13 @@ console.log(`  the UNMEASURED entry wander runs at 2150 and 950 steps, NOT comme
 // first is the only settle there is, so `TLAPS=2` asks whether the second scored lap is buying
 // noise reduction worth a third of the commissioning. Unset is 3 and byte-identical.
 const TLAPS = teachLaps();
+// TAVG=<n>: average the teacher's record over the last n laps (plan §80.7, §84.1). This plant is
+// the FALSIFIER rather than a confirmation: every run here starts a whole number of roll turns in
+// (`W` below), which MAKES the declared disturbance commensurate with the lap — §80.6's own
+// account of why the mill wins where the barrel does not. A component already commensurate cannot
+// average down, so if the mechanism is right this knob must read INERT here (rule 9's half that
+// instruments usually fail). Unset is 1 and byte-identical.
+const TAVG = teachAvg(TLAPS);
 const distilRuns = (auto) => dietN([0, 1, 2, 3]).map((i) => {
   // Each run starts a whole number of TURNS in, so the declared phase is aligned to the lap,
   // and a different number of them, so the UNMEASURED entry wander sits at a different phase.
@@ -121,7 +128,7 @@ const distilRuns = (auto) => dietN([0, 1, 2, 3]).map((i) => {
         if (want.length > RM.DLY + 2) want.shift();
         const w = want.length > RM.DLY ? want[want.length - 1 - RM.DLY] : RM.HREF;
         const g = m.gauge();
-        if (j >= (TLAPS - 1) * LAP) err[0][kk] = g - w;
+        if (j >= (TLAPS - TAVG) * LAP) err[0][kk] += (g - w) / TAVG;
         if (j >= (TLAPS - 1) * LAP) { s2 += (g - w) ** 2; n++; }
       }
       return { score: Math.sqrt(s2 / n), err };

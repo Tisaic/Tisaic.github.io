@@ -36,7 +36,7 @@
  */
 import { ladder, announce } from './rigs/ladder.mjs';
 import { wbSpec } from './rigs/specs.mjs';
-import { deriveWindow, reportDistil, priceFrom, ridgeLadder, gainLadder, teacherReuse, carrier, teachLaps, dietN } from './rigs/distilkit.mjs';
+import { deriveWindow, reportDistil, priceFrom, ridgeLadder, gainLadder, teacherReuse, carrier, teachLaps, teachAvg, dietN } from './rigs/distilkit.mjs';
 import { oracleConverge } from './rigs/oracleteach.mjs';
 import * as WB from './rigs/woodberry-rig.mjs';
 
@@ -109,6 +109,11 @@ console.log(`  ${OFFSETS.length} offsets per channel, ${DIETS.length} training p
 // first is the only settle there is, so `TLAPS=2` asks whether the second scored lap is buying
 // noise reduction worth a third of the commissioning. Unset is 3 and byte-identical.
 const TLAPS = teachLaps();
+// TAVG=<n>: average the teacher's record over the last n laps (plan §80.7, §84.1). The mechanism,
+// the measurement and the two controls live in `distilkit.mjs` beside the knob, because §80.7's
+// claim — a 0.9% NON-REPEATING component costs the commissioned result 1.6-2.5x — is about any
+// plant with one and not about the barrel it was measured on. Unset is 1 and byte-identical.
+const TAVG = teachAvg(TLAPS);
 const distilRuns = (auto) => dietN(DIETS).map((rec) => {
   const lap = LAP(rec), ref = refOf(rec);
   // ONE PLANT FOR THIS RUN, CARRIED ACROSS THE TEACHER'S CALLS (plan §72.15).
@@ -137,7 +142,7 @@ const distilRuns = (auto) => dietN(DIETS).map((rec) => {
         const want = WB.outputsFor(u0);
         // The last lap is the RECORD the teacher inverts; the last two are what it is SCORED on,
         // so a run is never scored across the lap that established its own operating point.
-        if (k >= (TLAPS - 1) * lap) for (let j = 0; j < 2; j++) err[j][kk] = c.y[j] - want[j];
+        if (k >= (TLAPS - TAVG) * lap) for (let j = 0; j < 2; j++) err[j][kk] += (c.y[j] - want[j]) / TAVG;
         if (k >= (TLAPS - 1) * lap) for (let j = 0; j < 2; j++) { s2 += (c.y[j] - want[j]) ** 2; n++; }
       }
       return { score: Math.sqrt(s2 / n), err };
