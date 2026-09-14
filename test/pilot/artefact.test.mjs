@@ -22,7 +22,7 @@
  * Run: node test/pilot/deploy.test.mjs
  */
 import { DistilPolicy } from '../../lib/pilot/distil.js';
-import { decide, coverageGain, macPerDecision, strideOf, featureRow, explain, logSpec } from '../../lib/pilot/deploy.js';
+import { decide, coverageGain, macPerDecision, strideOf, featureRow, explain, logSpec, windowBend } from '../../lib/pilot/deploy.js';
 import { writeFileSync } from 'node:fs';
 
 let pass = 0, fail = 0;
@@ -235,6 +235,87 @@ check('the 60-line deploy core reproduces the shipped act path BIT-EXACTLY over 
       worstBad === null, `got ${worstBad}`);
     check('…and the fallback is NO CORRECTION, so it degrades to the machine below (rule 26: '
       + 'zero is the right action here, not a sentinel)', allZero);
+  }
+
+  // (4c) A WINDOW THAT IS WRONG BUT FINITE — the corruption guard (plan §78).
+  //
+  // (4b) closed the non-finite case. The one that actually costs is a single CORRUPTED TAP: it
+  // moves the applied correction by 106% of its own rms and past the cap, where a frozen input
+  // costs 5.4% and an off-by-one lap phase 0.2%. The guard is a smoothness ratio whose threshold
+  // is the worst bend the COMMISSIONING ITSELF saw, stored beside the speed span.
+  {
+    const bm = rec.report.bendMax;
+    check('the commissioning recorded its own worst window bend', bm > 0, `bendMax ${bm}`);
+
+    // The two implementations must agree, which is what this file exists for.
+    let bendSame = true;
+    for (let t = 0; t < 200; t++) {
+      const k = Math.floor(rnd() * LAP);
+      if (windowBend(rec, win(k)) !== pol.bendOf(win(k))) bendSame = false;
+    }
+    check('…and the deploy-side bend matches the fit-side bend exactly over 200 windows', bendSame);
+
+    // BOTH HALVES (rule 9). It must fire on a corrupted tap AND leave healthy windows alone —
+    // a guard that refuses everything is not a guard, and one that refuses nothing is not either.
+    let firedBad = 0, firedGood = 0;
+    for (let t = 0; t < 500; t++) {
+      const k = Math.floor(rnd() * LAP);
+      if (decide(rec, win(k), sp0).every((v) => v === 0)) firedGood++;
+      const off = rec.offsets[3 + (t % (rec.offsets.length - 6))];
+      const lk = (o) => { const v = refAt(k + o).slice(); if (o === off) v[0] *= 7; return v; };
+      if (decide(rec, lk, sp0).every((v) => v === 0)) firedBad++;
+    }
+    check('the guard FIRES on a single corrupted tap', firedBad > 480, `${firedBad}/500`);
+    check('…and does NOT fire on healthy windows', firedGood === 0, `${firedGood}/500 refused`);
+
+    // HOW WIDE THE USABLE BAND ACTUALLY IS, measured rather than asserted. A first version of this
+    // claimed the verdict was flat across a 64-fold sweep, on numbers from a scratch record with
+    // different offsets and a different reference; on THIS record it is flat over about eight-fold
+    // and then the detection falls away. The band is printed so its edges are visible rather than
+    // hidden behind a pass.
+    //
+    // AND THE HEALTHY HALF IS SCORED ON A PROGRAM THE FIT NEVER SAW, which is the test that
+    // matters: `bendMax` is the worst bend of the TRAINING windows, and the whole point of this
+    // object is that it runs on programs it was not commissioned on. A guard calibrated in sample
+    // and checked in sample would be two wrongs agreeing (rule 15).
+    const unseen = new Array(LAP);
+    for (let k = 0; k < LAP; k++) {
+      const t = 2 * Math.PI * k / LAP;       // a different shape, different harmonics, same scale
+      unseen[k] = [0.55 * Math.sin(2 * t + 0.7) + 0.25 * Math.sin(5 * t), 0.45 * Math.cos(3 * t) + 0.2 * Math.sin(t)];
+    }
+    const uAt = (k) => unseen[((k % LAP) + LAP) % LAP];
+    const verdicts = [];
+    for (const m of [1, 2, 4, 8, 16, 32, 64]) {
+      const r2 = JSON.parse(JSON.stringify(rec)); r2.bendMargin = m;
+      let gSeen = 0, gUnseen = 0, b = 0;
+      for (let t = 0; t < 200; t++) {
+        const k = Math.floor(rnd() * LAP);
+        if (decide(r2, win(k), sp0).every((v) => v === 0)) gSeen++;
+        if (decide(r2, (o) => uAt(k + o), sp0).every((v) => v === 0)) gUnseen++;
+        const lk = (o) => { const v = refAt(k + o).slice(); if (o === rec.offsets[4]) v[0] *= 7; return v; };
+        if (decide(r2, lk, sp0).every((v) => v === 0)) b++;
+      }
+      verdicts.push({ m, gSeen, gUnseen, b });
+    }
+    console.log('      margin   false-refusals in sample / on an UNSEEN program   corrupted-tap catches');
+    for (const v of verdicts) {
+      console.log(`        ${String(v.m).padStart(3)}        ${String(v.gSeen).padStart(3)}/200  ${String(v.gUnseen).padStart(3)}/200`
+        + `                        ${String(v.b).padStart(3)}/200`);
+    }
+    const dflt = verdicts.find((v) => v.m === 8);
+    check('at the shipped margin the guard refuses NO healthy window, in sample OR on a program '
+      + 'the fit never saw', dflt.gSeen === 0 && dflt.gUnseen === 0,
+      `${dflt.gSeen} in sample, ${dflt.gUnseen} unseen`);
+    const band = verdicts.filter((v) => v.gSeen === 0 && v.gUnseen === 0 && v.b >= 190);
+    check('…and the band where that holds AND the corruption is still caught spans at least 4x',
+      band.length >= 3, `margins ${band.map((v) => v.m).join(',') || 'none'}`);
+
+    // WHAT IT COSTS, stated rather than hidden — it runs on every decision.
+    const nInt = Math.max(0, rec.offsets.length - 2);
+    const guardMac = nInt * (3 * rec.refDim + 2);
+    console.log(`    the guard costs about ${guardMac} MAC per decision on top of `
+      + `${macPerDecision(rec)} — ${(100 * guardMac / macPerDecision(rec)).toFixed(0)}% more, `
+      + `and it is what stops a 106%-of-rms excursion reaching the machine`);
   }
 
   // (5) REPLAYABLE FROM THE LOG ALONE. `logSpec` states what an installation has to record; a

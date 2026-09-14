@@ -18253,3 +18253,98 @@ machine to the CONVENTIONAL one rather than to a NaN command or a held stale val
 instead whether the thing behaves predictably produced a defect on the deployed artefact. Still not
 taken: a window that is wrong but FINITE — a stale program, an off-by-one lap phase, a sensor stuck
 at its last value — which the cap bounds and nothing detects.
+
+## §78 A WINDOW THAT IS WRONG BUT FINITE — and the cheap detector catches the wrong fault
+
+§77.4 closed the non-finite case and named what was left: a stale program, an off-by-one lap phase,
+a sensor stuck at its last value. The cap bounds those and nothing detects them.
+
+### §78.1 The cheap detector first, and it is mostly negative (rule 1)
+
+The host supplies TWO things — the window and a commanded speed — and the window implies a speed of
+its own. Two independently supplied quantities that must agree is rule 15's shape and carries no
+plant constant. Measured over 400 phases, as the ratio of implied to declared speed:
+
+```
+  healthy    1.0000 exactly          onebad     1.0000     <- a single corrupted tap, INVISIBLE
+  stuck      0.0000  <- caught       phase1     1.0000 +-1%
+  stale64    1.02, p05-p95 0.55-1.98 reversed   1.0000     <- reversal preserves |b-a|
+  stale256   1.03, p05-p95 0.24-4.05
+```
+
+It catches a FROZEN input exactly and nothing else. Three of the misses are structural: a stale
+program, an off-by-one phase and a reversed window are all VALID windows at the wrong time, so no
+test of the window alone can find them — that needs a second source of truth this object does not
+have.
+
+### §78.2 AND IT CATCHES THE LEAST HARMFUL FAULT WHILE MISSING THE WORST (rule 19)
+
+The correction is capped, so "is the window wrong" is the wrong question; "how far does the applied
+correction move" is the right one:
+
+```
+  fault      detector          moves the correction by   worst single deviation (cap 0.4)
+  stuck      CAUGHT exactly      5.4% of its own rms          0.0398
+  phase1     missed              0.2%                         0.0014
+  stale64    partly              9.9%                         0.0813
+  reversed   missed             10.7%                         0.0719
+  stale256   partly             35.7%                         0.2432
+  onebad     MISSED            106.2%                         0.6496  <- past the cap
+```
+
+**A single corrupted tap is the only fault here that matters, and the cheap detector is blind to
+it** — because the implied speed reads the two offsets nearest now and the corruption is further
+out. The detector was being judged on whether it fires rather than on whether it fires on what
+matters.
+
+### §78.3 The guard that does work, and its threshold is the plant's own number
+
+A window is a SAMPLED SMOOTH TRAJECTORY, so every interior tap lies near the line through its two
+neighbours to within curvature times the gap. One corrupted tap breaks that and nothing else here
+does. The statistic is the WORST interior tap's bend over the MEDIAN tap's — a ratio, so the
+plant's own curvature divides out and no constant crosses plants — and the threshold is
+`report.bendMax`, **the worst ratio the COMMISSIONING ITSELF observed on its own rows**, stored
+beside the speed span it already stores. It is tracked only where the speed span is, i.e. on the
+FIT's rows, so a row replayed for scoring cannot widen the envelope it is being judged against.
+
+Swept, with the healthy half scored BOTH in sample and on a program the fit never saw — because
+`bendMax` is calibrated in sample and checking it in sample would be two wrongs agreeing (rule 15):
+
+```
+  margin   false refusals in sample / on an UNSEEN program   corrupted-tap catches
+     1              0/200        0/200                            200/200
+     2              0/200        0/200                            199/200
+     4              0/200        0/200                            200/200
+     8              0/200        0/200                            198/200   <- shipped
+    16              0/200        0/200                            194/200
+    32              0/200        0/200                            164/200
+    64              0/200        0/200                            113/200
+```
+
+**Zero false refusals at every margin tried, on both programs**, so the risk of arming it is
+measured at zero; what a margin set too high costs is missed detections. The band is asymmetric and
+that is the useful shape.
+
+**AND THE FIRST VERSION OF THIS CLAIM WAS WRONG IN THIS FILE'S OWN FAVOURITE WAY.** It asserted the
+verdict flat across a 64-fold sweep, on figures from a SCRATCH record with different offsets and a
+different reference — a number measured on one object quoted as a property of another. The check
+duly went red at margins 32 and 64. The scratch numbers were not wrong; they were not this record's,
+and writing them into the module's comment as justification is rule 30 in the file whose whole value
+is that its claims are checkable.
+
+### §78.4 What it costs, and what is not established
+
+**It roughly DOUBLES the deployed arithmetic** — about 104 MAC against the act path's 102 on the
+reference record — which is stated rather than folded into `macPerDecision`, because "a dot product
+and a clamp" is this object's whole claim. At 206 MAC it is still 2% of a 1 ms scan's 10% budget.
+
+**It is inert on the six real plants**, which is what licenses it being armed by default: the full
+node tier runs every plant's own commissioning and its own contract checks, and it is green with the
+guard live — so no plant's held-out program bends more than eight times its training worst, and no
+correction silently went to zero. That is six plants sharing no physics, which is the bar rule 31
+asks for.
+
+What is NOT yet done is the form of that evidence: it is the tier passing rather than
+`sixplant.mjs` printing each plant's own headline beside its accepted defaults, which is the
+instrument §54.3 built precisely because a green tier and an unchanged headline are different
+claims. Until that has run, "inert on six plants" rests on the contracts rather than on the numbers.
