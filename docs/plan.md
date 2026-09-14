@@ -19202,3 +19202,84 @@ it remains OPT-IN and OFF (rule 31) with the screen deciding when to reach for i
 NOT CLAIMED: one seed per cell, four plants, and the two nulls are deterministic rigs — a
 stochastic plant with a tight teacher spread has not been tried and is the cell that would
 falsify the screen.
+
+---
+
+## §84.3 — THE DISTURBANCE SCREEN: OF ELEVEN PLANTS, ONE IS A TESTBED AND IT IS 95% EXHAUSTED
+
+`test/pilot/disscreen.mjs`. §80 spent three sections building a declared-disturbance channel for
+the barrel on a premise §80.6 then destroyed, and one run would have said so first. This is that
+run, generalised: **decompose the OPEN-LOOP ERROR, and if the exogenous component sits below what
+the incumbent already recovers from knowing it, the plant is not a disturbance-rejection testbed
+however much it looks like one.** It is §55.12's KUKA screen — *decompose the torque before
+vendoring* — in a second costume.
+
+Three readings per plant, all open loop with no controller of ours anywhere: **REPEATS** (the same
+rig twice from `fresh()` with identical inputs — a bit-exact match is a positive statement that
+the plant has no stochastic component, taken on the machine rather than read off the source),
+**SHARE** (the component switched off AT THE RIG and the error re-measured, so no model of it is
+involved), and **CEILING** (what the plant's own incumbent recovers when given the component's
+true value — an upper bound, since no controller can reject more of a disturbance than knowing it
+exactly is worth).
+
+### The cold mill — a real testbed, and nearly used up
+
+```
+  everything on              15.154 µm rms
+  roll eccentricity OFF       5.459      -> 87.02% of the open-loop error ENERGY
+  entry wander FLAT          14.138      -> 12.96%
+  both off                    0.000      -> the two are 99.98% of it; there is nothing else here
+  orthogonality check        15.156 against 15.154 — the energies add, so the shares separate
+  two draws agree to          0.0 µm     — BIT-EXACT; the truth carries no stochastic term
+```
+
+**SHARE IS AN ENERGY SHARE AND THE FIRST DRAFT GOT IT WRONG (rule 19).** Reporting
+`1 - rms_off/rms_all` called the eccentricity 64% of an error it is 87% of, because rms is not
+additive. The orthogonality check is what licenses the energy split and it is printed.
+
+**AND THE CEILING IS THE NUMBER THIS FILE EXISTS FOR: a PERFECT eccentricity rejector leaves 5.459
+µm, which is 2.78x, and the shipped object delivers 2.63x — 95% of the bound.** So the mill's win
+is essentially ALL of its declared component, which is §71's *withhold the roll phase and the
+object is inert at exactly 1.000x* read from the other end. **This plant is close to exhausted as
+a source of DIS headroom**, and that is worth knowing before another session is spent on it. My
+first draft of this line said the object was "already past that bound", which is false — 2.63 is
+below 2.78 — and the arithmetic in the file now prints the percentage rather than a claim.
+
+### The extruder barrel — screened OUT, and more decisively than §80.6 screened it
+
+```
+  as it ships                 4.3943 K rms   (over the HOLD segments alone: 3.3527)
+  ambient drift OFF           4.5441         (HOLD: 3.2979)
+  share of the error ENERGY  -6.93% of the whole run,  +3.24% of the settled part
+  two draws agree to          0.0 K          — BIT-EXACT; the drift is a deterministic
+                                               function of the plant's own step counter
+```
+
+**THE SIGN FLIPS WITH THE DENOMINATOR, which is a stronger finding than a small positive share.**
+Over the whole run the drift is NEGATIVE — switching it off makes the plant WORSE open loop, so on
+average it partly CANCELS the changeover error rather than adding to it — and over the settled
+part it is a positive 3%. A component whose contribution changes sign depending on which part of
+the program is measured is not one the plant is failing to reject, and it is a few percent either
+way. §80.6's ceiling stands beside it: the engineer's own closed-form feedforward computed at the
+MEASURED ambient recovers 1.008x, 1.009x with a perfect thermometer. (Both denominators are
+printed because conflating them is how a share gets argued — rule 19; my own first draft said
+"negative on both", which the file itself contradicts.)
+
+### Everything else — screened out, and this is the useful half (rule 27)
+
+The quadruple tank and Wood-Berry have no stochastic term and no exogenous input, and **§84.1 says
+so ON THE MACHINE rather than from the source**: both come back BYTE-IDENTICAL under record
+averaging, which a plant carrying a non-repeating component cannot do. EMPS is a nonlinear
+simulation whose every irregularity — binned friction, drive saturation, encoder quantisation — is
+a deterministic function of state. The 2R arm is deterministic and its only non-repeating input is
+one the harness INJECTS (§81's `SHOVE`), so any DIS result there is a property of the injection.
+The cart-pole is deterministic. The three real-data plants are identified models simulated
+deterministically: their RECORDS are disturbance-dominated, their RIGS are not — §55's own
+distinction about "real data" plants, arriving on a second axis.
+
+**SO DIS RESTS ON ONE PLANT, AND THAT PLANT IS 95% USED UP.** #51 said DIS rested on one plant;
+this measures it, and adds that the one plant has 5% of its declared component left. A second DIS
+plant has to be found or built, and the bar it must clear is now stated as a number rather than a
+hope: an exogenous component that is a LARGE share of the open-loop error AND worth more than the
+incumbent already recovers from knowing it. The mill passes at 87% / 3/2-amplification; the barrel
+fails at ±5% / 1.008x.
