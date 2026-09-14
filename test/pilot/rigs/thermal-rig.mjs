@@ -29,6 +29,37 @@ function gauss(rnd) {
 }
 const rad = (T, Ta) => RAD * ((T + 273) ** 4 - (Ta + 273) ** 4);
 
+/**
+ * THE AMBIENT, AS A PURE FUNCTION OF THE ABSOLUTE STEP — true and as an instrument reads it.
+ *
+ * It was a method on the plant and a closure over its own counter, which is right for the plant
+ * and useless to anything that wants to DECLARE it: a map fitted on this disturbance and the
+ * plant experiencing it must agree on what it was at a given step, and a counter nobody can read
+ * cannot be agreed on. Both forms are here so there is ONE definition (rule 61) — the plant calls
+ * `ambientAt`, a declared reference channel calls `ambientRead`.
+ *
+ * `ambientRead` is what a WALL THERMOCOUPLE reads: the truth plus this rig's own stated 0.35 K
+ * noise, from a fixed seeded sequence so the fit and the machine agree on what the instrument
+ * said at every step. Declaring the TRUE ambient instead would be handing the map an instrument
+ * no shop owns, and on a disturbance this smooth it reads R2 > 0.9995 — the simulator, not a
+ * barrel (rule 15).
+ */
+const ambientAt = (k) => (NOAMB ? TA0
+  : TA0 + 0.6 * Math.sin(2 * Math.PI * k / 9300) + 0.4 * Math.sin(2 * Math.PI * k / 4100));
+// LAZY, because the table is 1 MB and every importer of this rig would otherwise pay for it
+// whether or not anything declares the channel — and almost nothing does. A negative index wraps
+// correctly: `-1 & AMB_MASK` is AMB_MASK in JS's 32-bit bitwise semantics.
+const AMB_N = 1 << 17, AMB_MASK = AMB_N - 1;
+let ambNoise = null;
+const ambientRead = (k) => {
+  if (!ambNoise) {
+    const r = lcg(90210);
+    ambNoise = new Float64Array(AMB_N);
+    for (let i = 0; i < AMB_N; i++) ambNoise[i] = NOISE * gauss(r);
+  }
+  return ambientAt(k) + ambNoise[Math.round(k) & AMB_MASK];
+};
+
 function makeBarrel(seed) {
   const T = [180, 200, 210];
   const rnd = lcg(seed);
@@ -36,7 +67,9 @@ function makeBarrel(seed) {
   let k = 0;
   return {
     T,
-    ambient(kk) {                       // UNMEASURED and drifting
+    /** The absolute step this plant has advanced to — what `ambientAt` must be indexed by. */
+    steps() { return k; },
+    ambient(kk) {                       // UNMEASURED unless the installation DECLARES it
       // SIZED BELOW THE PROBE'S OWN RESPONSE, and that bound is a measured finding
       // rather than a convenience — see the note at the foot of this file. A drift
       // comparable to the probe corrupts `dc`, and every statistic derived from the
@@ -49,8 +82,7 @@ function makeBarrel(seed) {
       // the second, the barrel's teacher has been relying on an unmeasured disturbance being
       // phase-locked across calls, which is a property of the SIMULATOR and not of a barrel.
       // `TH_NOAMB=1` holds it flat; unset is byte-identical (rule 21).
-      if (NOAMB) return TA0;
-      return TA0 + 0.6 * Math.sin(2 * Math.PI * kk / 9300) + 0.4 * Math.sin(2 * Math.PI * kk / 4100);
+      return ambientAt(kk);
     },
     step(P) {
       tick();
@@ -74,15 +106,26 @@ function makeBarrel(seed) {
     },
   };
 }
-/** Power that holds a profile — closed form, and the engineer's own model. */
-function powerFor(Tset) {
+/**
+ * Power that holds a profile AT A STATED AMBIENT — closed form, and the engineer's own model.
+ *
+ * `powerFor` is this with the NOMINAL ambient written in, which is what a real installation does
+ * because it has no reason to think the wall moves. Splitting them costs nothing and makes the
+ * incumbent's own version of "declare the disturbance" expressible (plan §80.6): the classical fix
+ * for a measured ambient is to compute the feedforward AT IT, with nothing learned at all — and on
+ * this plant the loss term makes a 1 K ambient drop need exactly the power a 1 K setpoint rise
+ * needs, so the correction is available to the engineer's model in closed form. Pricing that first
+ * is rule 20: a learned layer has to beat the incumbent WITH the same information, not without it.
+ */
+function powerForAt(Tset, Ta) {
   return Tset.map((t, i) => {
-    let q = HL * (t - TA0) + rad(t, TA0);
+    let q = HL * (t - Ta) + rad(t, Ta);
     if (i > 0) q += KC * (t - Tset[i - 1]);
     if (i < NZ - 1) q += KC * (t - Tset[i + 1]);
     return q / KH;
   });
 }
+const powerFor = (Tset) => powerForAt(Tset, TA0);
 /** Steady temperatures for a held power vector — Gauss-Seidel, the same model inverted. */
 function tempsAt(P) {
   const T = [180, 200, 210];
@@ -119,4 +162,4 @@ const PBOX = { lo: 18, hi: 62 };
 const UCAP = Number(process.env.UC || 12);
 
 
-export { CAP, DEAD, DT, HL, HOLD, KC, KH, NOISE, NZ, PBOX, PROG, RAD, RECIPE, SEG, TA0, UCAP, gauss, lcg, makeBarrel, powerFor, quintic, rad, setpointAt, tempsAt };
+export { CAP, DEAD, DT, HL, HOLD, KC, KH, NOISE, NZ, PBOX, PROG, RAD, RECIPE, SEG, TA0, UCAP, ambientAt, ambientRead, gauss, lcg, makeBarrel, powerFor, powerForAt, quintic, rad, setpointAt, tempsAt };

@@ -131,6 +131,34 @@ const DIETS = PICK.map((ix) => ix.slice(0, DPTS).map((i) => POINTS[i]));
 // different feature. Laps are then rec.length*SEG — equal across the diet, and longer than this
 // plant's 7,861-step settle, which §65.3 measured as necessary. Deriving SEG from a lap budget
 // instead gave 3,750 and read 8.69x where production's own 5,000 reads 11.22x.
+// ---------------------------------------------------------- THE DECLARED DISTURBANCE (plan §80)
+//
+// `EXO=causal|oracle|off` (default off, byte-identical). The cold mill wins 1.45x and §71 proved
+// the win is ALL of one declaration — withhold its roll phase and the object is inert at exactly
+// 1.000x. This asks whether that route is GENERAL, on the plant that is its own counterexample:
+// §72.18 measured this barrel's UNDECLARED ambient drift at 3.951x against 14.949x with the drift
+// held flat, so a factor of 3.8 sits in a disturbance the machine already has a sensor for.
+//
+// THE MILL'S PHASE IS KNOWN AHEAD AND AMBIENT IS NOT, WHICH DECIDES THE DESIGN. `phase(k)` is
+// closed form in k, so the straddling window previews it legitimately; a wall thermocouple has no
+// future. Appending `ambientRead(k)` as a reference channel would let the window read +2500 steps
+// of a disturbance's FUTURE, which is an ORACLE and not a controller — and it would read well.
+//
+// So the admissible channel is a DELAYED copy: at decision k the map is handed the thermocouple
+// as it read at k - REACH, and the window's most-future tap (+REACH) is therefore ambient NOW.
+// Every tap is causal by CONSTRUCTION rather than by a guard, no library change is needed, and an
+// installation implements it with a ring buffer. `oracle` removes the delay and is the BOUND (as
+// §48's perfect forecast is), never a product. The falsifier ran first (rule 1): a causal read of
+// this signal's own noisy past predicts its true future at R2 0.88 at +60 and 0.82 at +250, at
+// the rig's own 0.35 K instrument noise — and >0.9995 at zero noise, which is the simulator.
+const EXO = process.env.EXO || 'off';
+if (!['off', 'causal', 'oracle'].includes(EXO)) throw new Error(`EXO must be off|causal|oracle, got ${EXO}`);
+const EXO_ON = EXO !== 'off';
+const REFDIM = EXO_ON ? 4 : 3;
+// The declared value at ABSOLUTE plant step `kAbs`, centred so the channel is a deviation rather
+// than a 25-K pedestal the standardiser has to absorb (rule 32).
+const exoAt = (kAbs, lag) => TH.ambientRead(kAbs - lag) - TH.TA0;
+
 const DSEGS = DIETS.map(() => env('DSEG', TH.SEG));
 const holdOf = (seg) => Math.round(seg * (TH.HOLD / TH.SEG));
 const LAP = (rec, seg) => seg * rec.length;
@@ -177,6 +205,24 @@ console.log(`  ${OFFSETS.length} offsets per channel, ${DIETS.length} training r
 // first is the only settle there is, so `TLAPS=2` asks whether the second scored lap is buying
 // noise reduction worth a third of the commissioning. Unset is 3 and byte-identical.
 const TLAPS = teachLaps();
+// TAVG=<n>: AVERAGE THE TEACHER'S RECORD OVER THE LAST n LAPS (plan §80.7).
+//
+// §72.18 read this plant's ambient drift as costing 3.951x against 14.949x and filed it as a
+// DISTURBANCE the teacher cannot invert. §80.6 measures the drift at **0.9% of the open-loop
+// error** (5.6301 against 5.5802 K rms) and the engineer's own feedforward recovering 1.008x from
+// declaring it — so it is not a disturbance-rejection deficit at all. A 0.9% component cannot cost
+// a factor of 3.8 by being uncorrected; it costs it by CORRUPTING a lap-indexed teacher, whose
+// target must be commensurate with its lap. This drift is not: 9,300 and 4,100 against a 20,000
+// lap land near harmonics 2 and 5 and BEAT against them, so the teacher's record moves between
+// calls and its iteration fights that instead of the plant.
+//
+// If that is the mechanism, the cure needs no new architecture: a component incommensurate with
+// the lap averages DOWN over laps and a lap-periodic one does not. The teacher inverts the LAST
+// lap; this averages the record over the last n, which costs laps and nothing else. `TAVG=1` is
+// the default and byte-identical.
+const TAVG = Math.max(1, Number(process.env.TAVG || 1));
+if (TAVG > TLAPS - 1) throw new Error(`TAVG ${TAVG} needs TLAPS >= ${TAVG + 1} (one lap establishes `
+  + 'the operating point and is never part of the record — rule 13); set TEACHLAPS');
 const distilRuns = (auto) => dietN(DIETS).map((rec, di) => {
   const seg = DSEGS[di % DSEGS.length];
   const lap = LAP(rec, seg), ref = refOf(rec, seg);
@@ -199,9 +245,19 @@ const distilRuns = (auto) => dietN(DIETS).map((rec, di) => {
   // restores the old configuration as the control.
   const hold = process.env.CARRY === '0' ? () => settled(rec, seg)
     : carrier(() => settled(rec, seg));
+  // THE DECLARED CHANNEL IS INDEXED BY THE PLANT'S OWN STEP, NOT THE LAP'S (plan §80.2), and that
+  // is the whole reason the rig had to expose its counter. The reference wraps because it really
+  // is lap-periodic; the ambient does not, because it is not — §72.18's entire finding. So the
+  // window near a lap's start reads the ambient just BEFORE that lap began, which is what the
+  // plant actually experienced, where wrapping it would invent a discontinuity that never
+  // happened. `scoredBase` is set by `run` below: the teacher inverts the LAST lap, so the rows
+  // `addProgram` builds correspond to plant steps [base, base + lap).
+  let scoredBase = 0;
+  const lag = EXO === 'oracle' ? 0 : REACH;
   return {
     lap,
-    refAt: (k) => TH.powerFor(ref(k)),
+    refAt: (k) => (EXO_ON ? [...TH.powerFor(ref(k)), exoAt(scoredBase + k, lag)]
+      : TH.powerFor(ref(k))),
     // THE LAP IS CLOSED AND MUST SAY SO. `refAt` above wraps at `lap`, but `addProgram` clamps
     // the window at index 0 unless the run declares itself closed — so without this the fit skips
     // the first REACH samples of every recipe (measured: 939 of 7500 on the barrel, 376 of 3000
@@ -213,6 +269,7 @@ const distilRuns = (auto) => dietN(DIETS).map((rec, di) => {
 
     run: async (corr) => {
       const p = hold();
+      scoredBase = p.steps() + (TLAPS - 1) * lap;
       let s2 = 0, n = 0;
       const err = [0, 1, 2].map(() => new Float64Array(lap));
       for (let k = 0; k < TLAPS * lap; k++) {
@@ -221,9 +278,10 @@ const distilRuns = (auto) => dietN(DIETS).map((rec, di) => {
         const u = corr ? corr.at(kk) : [0, 0, 0];
         p.step(P.map((v, j) => v + (u[j] || 0)));
         const y = p.read();
-        // The last lap is the RECORD the teacher inverts; the last two are what it is SCORED on,
-        // so a run is never scored across the lap that established its own operating point.
-        if (k >= (TLAPS - 1) * lap) for (let c = 0; c < 3; c++) err[c][kk] = y[c] - want[c];
+        // The last TAVG laps are the RECORD the teacher inverts, accumulated here and divided
+        // below; the last two are what it is SCORED on, so a run is never scored across the lap
+        // that established its own operating point.
+        if (k >= (TLAPS - TAVG) * lap) for (let c = 0; c < 3; c++) err[c][kk] += (y[c] - want[c]) / TAVG;
         if (k >= (TLAPS - 1) * lap) for (let c = 0; c < 3; c++) { s2 += (y[c] - want[c]) ** 2; n++; }
       }
       return { score: Math.sqrt(s2 / n), err };
@@ -268,7 +326,21 @@ const distilRuns = (auto) => dietN(DIETS).map((rec, di) => {
   };
 });
 
+// The ladder's plant is `barrelSpec.fresh()`, which settles 20,000 steps before step 0 — so the
+// absolute step at ladder index k is `EXO_WARM + k`, and the declared channel must say the same
+// thing to the machine that it said to the fit or the map is reading a different disturbance
+// (rule 61 aimed at a clock). It is a literal here because it is the rig's, and it is asserted
+// against the rig rather than trusted.
+const EXO_WARM = 20000;
+if (EXO_ON) {
+  const w = barrelSpec.fresh().steps();
+  if (w !== EXO_WARM) throw new Error(`EXO: the rig settles ${w} steps, not the ${EXO_WARM} this `
+    + 'harness indexes the declared channel by — the map would be fitted on one disturbance and '
+    + 'deployed against another (rule 61)');
+}
 const spec = { ...barrelSpec,
+  ...(EXO_ON ? { refAt: (k) => [...TH.powerFor(TH.setpointAt(Math.min(k, TH.PROG))),
+    exoAt(EXO_WARM + k, EXO === 'oracle' ? 0 : REACH)] } : {}),
   // NO CASCADE: this rung's teacher is `hff`, so the cascade would be commissioned,
   // scored and then REPLACED by the rung that wins (plan §73.1). `DEPTH=2` is the control.
   depth: ORACLE ? 1 : 0,
@@ -279,7 +351,7 @@ const spec = { ...barrelSpec,
   // PERCENT OF FULL POWER, 18-62, beside differences of order 0.1, so one ridge and one
   // covariance prior act on blocks ~400x apart. Measured on this plant: 8.69x → 11.22x.
   // `STD=0` turns it off as the control.
-  distil: { refDim: 3, ridge: env('RIDGE', 1e-6), offsets: OFFSETS,
+  distil: { refDim: REFDIM, ridge: env('RIDGE', 1e-6), offsets: OFFSETS,
     // THE CASCADE IS THE TEACHER AND NOT A CANDIDATE TO SHIP (plan §73.14). A cascade exists on
     // these plants only because `ORACLE=1` asks for one to iterate; judged as a RUNG it changes
     // the bar the distilled policy must clear, and on the quadruple tank that is the difference
@@ -311,7 +383,7 @@ price.close({ dt: TH.DT, rep });
 
 // ---------------------------------------------------------------- what it says and why
 const { inSample } = await reportDistil({ rep, runs: distilRuns(),
-  nFeat: OFFSETS.length * 3 + 1, segs: DSEGS, auto });
+  nFeat: OFFSETS.length * REFDIM + 1, segs: DSEGS, auto });
 
 // ---------------------------------------------------------------- WHERE the harm is
 // THE TRAINING RUNS ARE CLOSED LAPS AND THE PRODUCTION PROGRAM IS AN OPEN RECORD. Every row the
@@ -328,9 +400,13 @@ if (rep.distil && rep.distil.policy) {
     const p = barrelSpec.fresh();
     const e = new Float64Array(N);
     for (let k = 0; k < N; k++) {
+      // TWO READERS, DELIBERATELY: the PLANT is driven by the three power channels
+      // (`barrelSpec.refAt`) and the POLICY reads whatever the commissioning declared
+      // (`spec.refAt`, four channels under EXO). Handing the plant the declared row would
+      // step it with an ambient reading as though it were a power demand.
       const ref = barrelSpec.refAt(k);
       const u = on
-        ? pol.actLook((o) => barrelSpec.refAt(Math.min(N - 1, Math.max(0, k + o))))
+        ? pol.actLook((o) => spec.refAt(Math.min(N - 1, Math.max(0, k + o))))
         : [0, 0, 0];
       const r = barrelSpec.step(p, ref, u, k);
       let s2 = 0; for (const v of r.truth) s2 += v * v;

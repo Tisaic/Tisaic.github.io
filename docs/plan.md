@@ -18560,3 +18560,204 @@ it sees a handful of times. Either would predict an over-confident map. Neither 
 meter reads 36.8 h of plant time against 31.7 h, so the gain axis is **16%** of that plant's
 commissioning bill — the verify share moving 30% to 42% — and it bought 1.26x. That is a worse
 ratio than the ridge axis (which bought 32x for 1%) and a better one than everything else here.
+
+## §80 DIS: DECLARING A DISTURBANCE IS NECESSARY AND NOT SUFFICIENT — THE TEACHER IS THE BLOCKED HALF
+
+`docs/scorecard.md` rates disturbance rejection **4 against the incumbent's 6**, and the record
+already contained both halves of an explanation nobody had put together. The COLD MILL wins 1.45x
+and §71 proved the win is ALL of one declaration — withhold the roll phase and the object is inert
+at exactly 1.000x. The BARREL is its counterexample: §72.18 measured its undeclared ambient drift
+at **3.951x against 14.949x with the drift held flat**, a factor of 3.8 sitting in a disturbance
+the machine already has a sensor for.
+
+So the obvious product claim was: *declare what you measure*. It is wrong, and the way it is wrong
+is worth more than it would have been worth right.
+
+### §80.1 The falsifier first, and it did not fire
+
+The mill's phase is CLOSED FORM in `k`, so its straddling window previews it legitimately. A wall
+thermocouple has no future, so the only admissible read of a measured disturbance is CAUSAL — and
+that is only worth building if a causal window can predict the disturbance at the lead the
+correction acts at. Asked with no plant in it, fitted on 20,000 steps and scored on the next
+20,000:
+
+```
+  sigma(K)    lead +0    +60     +250    +500    +1000   +2500
+   0.00      >0.9995  >0.9995  >0.9995 >0.9995 >0.9995 >0.9995   <- the SIMULATOR, not a barrel
+   0.05       0.9965   0.9947   0.9821  0.9437  0.7948  0.8733
+   0.35       0.8942   0.8816   0.8212  0.6970  0.3740  0.4499   <- the rig's OWN 0.35 K noise
+```
+
+**A causal read of a measured disturbance's own noisy past predicts its true future well at the
+leads that matter** — 0.88 at the 60-step transport delay, 0.82 at +250. The noiseless row is
+rule 15 made visible and is why the noise column exists at all: this rig's ambient is two exact
+sines, so a linear map predicts it perfectly by construction and that number would be measuring
+the simulator. Every figure below is taken at the rig's own stated instrument noise.
+
+### §80.2 Built with no library change, and the design is forced by admissibility
+
+`refDim` already widens — the mill needs nothing else. The trap is that appending `ambientRead(k)`
+as a reference channel lets the ±2500 window read **+2500 steps of a disturbance's future**, which
+is an oracle and not a controller, and it would have read well.
+
+The admissible channel is therefore a **DELAYED copy**: at decision `k` the map is handed the
+thermocouple as it read at `k - REACH`, so the window's most-future tap is ambient NOW and every
+tap is causal BY CONSTRUCTION rather than by a guard. An installation implements it with a ring
+buffer. `EXO=oracle` removes the delay and is the BOUND, as §48's perfect forecast is — never a
+product. `EXO=off` is the control and reproduces **6.116x byte-identically**.
+
+The rig had to expose its own step counter for it: the reference wraps because it really is
+lap-periodic and the ambient must NOT, because it is not, so `ambientAt`/`ambientRead` became pure
+functions of the absolute step with one definition for the plant and the declaration (rule 61).
+
+```
+  EXO=off      6.116x   64 features   held-out 0.8525 / 0.8677 / 0.7610   <- the control
+  EXO=causal   5.533x   85 features   held-out 0.8534 / 0.8683 / 0.7621
+  EXO=oracle   5.793x   85 features   held-out 0.8528 / 0.8680 / 0.7613
+```
+
+**THE ORACLE RUNG IS WHAT MAKES THIS DECISIVE.** Handed the disturbance's TRUE FUTURE the map is
+still 5% worse than not being told at all, so this is not a limit of causality, of the instrument,
+or of the delay trick. And the channel is NOT inert — causal and oracle differ, which is the
+control that says it reaches the fit and moves the result (rule 25: "wired and useless" and "not
+wired" are different states). Held-out R² RISES by about 0.001 while the machine falls 6-10%,
+which is this project's signature for the tenth time and here has one cause: 21 extra columns
+diluting a fit whose target does not depend on them.
+
+### §80.3 Why — and it is structural, not a defect
+
+**The teacher gains are BYTE-IDENTICAL across all three rungs** — 4.283 / 3.943 / 7.047 / 8.063 —
+because the declaration cannot reach the teacher by construction. The teacher converges a
+**LAP-INDEXED** correction from the measured error and never reads `refAt`'s extra channel.
+
+And the barrel's ambient is not lap-periodic: 20,000 steps is a whole number of neither 9,300 nor
+4,100, which is §72.18's own finding. So **the converged target has the ambient effect averaged
+away**, and there is nothing in it for the declared channel to explain. The ΔR² of 0.001 IS that
+measurement: adding 21 columns carrying the disturbance moves the fit's agreement with its target
+by nothing, because the target never contained a disturbance correction to begin with.
+
+**REJECTING A DISTURBANCE NEEDS TWO THINGS AND THIS PROJECT ONLY EVER HAD ONE:**
+
+1. the **TEACHER** must be able to REPRESENT the correction — the disturbance must repeat over the
+   teacher's lap;
+2. the **MAP** must be able to EXPRESS it — the disturbance or its phase must be a declared channel.
+
+The mill has both, which is why withholding its phase reads exactly 1.000x — remove (2) and a
+plant that has (1) still dies. The barrel has neither, and declaring supplies only (2), which
+alone is worth **−6%**. That single sentence explains both plants without re-measuring either, and
+it retires "declare what you measure" as a product claim.
+
+**AND IT IS NOT ONE TEACHER'S LIMITATION.** `oracleteach.mjs` indexes its prefixes `k % L`
+explicitly and `hff` inverts at the lap's own harmonics — its own comment says "on a fixed program
+q(k) is a deterministic function of lap phase". **Every teacher in this repository is lap-indexed.**
+So the memory's retirement removed lap-indexing from the PRODUCT and left it in the TEACHER, and
+the teacher's lap-indexing is what caps disturbance rejection. That is the DIS ceiling, named.
+
+### §80.4 What would actually move DIS, stated so it can be shown false
+
+The teacher has to stop being lap-indexed, or be bypassed for this term. The cheapest shape that
+does not require a new teacher class: **fit the disturbance term on the RESIDUAL the teacher
+leaves, not on the teacher's prefix.** The teacher removes the lap-periodic part; what is left in
+the measured error under that correction is where the drift lives, and THAT is what a declared
+channel can be regressed against. It is a second, small weight vector on the same deployed shape,
+and its falsifier is already priced: it must recover a real share of 3.951x → 14.949x, and if it
+recovers nothing then the drift is not expressible from the declared channel either and the
+barrel's DIS ceiling is the plant's rather than the teacher's.
+
+NOT CLAIMED: one plant, one disturbance, one seed. The barrel's ambient is smooth and
+quasi-periodic BY CONSTRUCTION, so even a success here would have owed part of itself to the
+simulator — which is the reason the noise column exists and why the 0.35 K row is the only one
+quoted.
+
+### §80.5 ROB: the audit says the cell was RIGHT and two sweeps that look like evidence are not
+
+The ROB cell says "only stiffness was moved", and two sweeps in the record look like they
+contradict it — §52.46 swept backlash from 0 to 10x the rig's, and §52.30 swept the drive's torque
+limit. Neither is robustness evidence, and the reason is rule 20: **§52.46 is "one commissioning
+each"**, so it measures how the plant's own difficulty changes under a knob, with the controller
+re-fitted every time. Robustness is a FROZEN map meeting a plant it was not taught on, which is
+what `PLANTSPAN` does and what those two do not. §52.30's drive sweep is the same shape and its
+protocol is not stated either way in the record, so it reads UNKNOWN rather than supporting (rule
+25).
+
+So the cell stands as written, and the work is to run those axes through `PLANTSPAN`'s frozen-map
+protocol — one commissioning, deployed onto a worn machine, scored against the conventional
+machine at that wear. The axes a customer actually moves, in order: **payload mass** (a different
+tool, never moved here at all), **backlash growth** (wear, and §52.46 says the plant gets EASIER
+with it, so the interesting question is whether a map taught on a tight machine survives a loose
+one), and the **torque limit** (a tiring drive).
+
+### §80.6 The premise was wrong: the drift is 0.9% of the error, so §72.18's factor is TEACHER CORRUPTION
+
+Before building a second learned layer for the disturbance, price the INCUMBENT with the same
+information (rule 20) — because on this plant ambient enters as `-HL*(T-Ta)`, so a 1 K ambient
+drop needs exactly the power a 1 K setpoint rise needs, and that correction is available to the
+engineer's closed-form feedforward with nothing learned. `test/pilot/exopred.mjs` computes
+`powerFor` at the MEASURED ambient instead of the nominal one:
+
+```
+  feedforward at the NOMINAL ambient (what ships)      5.6301e+0 K rms
+  ...at the MEASURED ambient, 0.35 K thermocouple      5.5837e+0 K rms   1.008x
+  ...at the TRUE ambient, a perfect thermometer        5.5803e+0 K rms   1.009x   <- the bound
+```
+
+**THE INCUMBENT GETS NOTHING, AND THAT IS THE FINDING.** A perfect thermometer is worth 0.9%, so
+the declaration is not being wasted by our architecture — there is almost nothing there to declare.
+The control confirms it directly: with `TH_NOAMB=1` the same open-loop run reads **5.5802 against
+5.6301**, so **the drift is 0.9% of the open-loop error**.
+
+**Stated precisely, because the obvious objection is a fair one**: 0.9% is of the OPEN-LOOP error,
+which is dominated by the changeover transient, and the deployed rung removes most of that — so the
+drift is a larger share of what REMAINS, of order 5%. That is the honest version and it does not
+rescue the old account: a component at a few percent of the residual cannot cost a factor of 3.8 by
+going uncorrected, and the incumbent's 1.008x with a PERFECT thermometer bounds what correcting it
+is worth however the denominator is chosen.
+
+So §72.18's headline — which
+this repository has carried as "a real barrel's room temperature costs a factor of three" and which
+reads as a disturbance-rejection deficit — is **not about disturbance rejection at all**. It is
+TEACHER CORRUPTION: a lap-indexed teacher requires its target to be commensurate with its lap, and
+this drift is not — 9,300 and 4,100 against a 20,000-step lap land near harmonics 2 and 5 and BEAT
+against them, so the record moves between calls and the iteration fights that instead of the plant.
+
+It also explains the mill with no new idea: `distil-mill.mjs` starts every run "a whole number of
+TURNS in, so the declared phase is aligned to the lap" — that harness MAKES its disturbance
+lap-commensurate. Same mechanism, both plants, opposite outcomes.
+
+### §80.7 Which makes the cure free of architecture — and it recovers half the gap
+
+If the mechanism is commensurability, an incommensurate component averages DOWN over laps and a
+lap-periodic one does not. The teacher inverts the LAST lap; `TAVG=n` averages its record over the
+last n. No new rung, no new channel, no library change — it costs laps and nothing else.
+
+```
+  TLAPS/TAVG   teacher gains                     delivered
+   2 / 1       4.28 / 3.94 / 7.05 / 8.06          6.116x   <- today's default
+   3 / 1       4.12 / 2.29 / 6.37 / 8.77          3.643x   <- MORE LAPS ALONE, AND WORSE
+   3 / 2       1.03 / 3.30 / 5.88 / 8.23          4.535x
+   5 / 4       9.79 / 12.50 / 9.82 / 8.96         9.995x
+```
+
+**THE MATCHED CONTROL IS WHAT MAKES THIS A MECHANISM (rule 20).** More laps without averaging reads
+3.643x, WORSE than today — so this is the averaging and not the lap count, and a ladder that only
+raised `TLAPS` would have concluded the opposite. At 5/4 the teacher reads 9.8/12.5/9.8/9.0x
+against the **10.9/13.2/10.9/10.4x §72.18 measured with the drift DELETED**: averaging with the
+disturbance present recovers what removing the disturbance recovered.
+
+**AND THE FALSIFIER FIRES THE RIGHT WAY.** With `TH_NOAMB=1` there is nothing incommensurate to
+average down, so the knob must be inert — and it is: **15.054x at 2/1 against 15.069x at 5/4, 0.1%
+apart**, rule 21's signature where the case that should not move comes back unmoved. The averaging
+is undoing lap-incommensurate corruption specifically, not reducing noise in general.
+
+**WHAT IT COSTS, AND WHY IT IS NOT A DEFAULT.** 34.9 days of plant time to **84.9 days** — 2.4x,
+the teacher's share going 85% to 94% — for 1.63x delivered, on a plant already missing target 4 by
+33x. It recovers about half the log gap to the no-drift ceiling (9.995x against 15.05x). That is a
+real trade an owner should make rather than a free win, and it is one plant, one disturbance, one
+seed, so rule 31 says measure it elsewhere before any default moves. `TAVG=1` is the default and
+byte-identical.
+
+**WHAT THIS SAYS ABOUT DIS GENERALLY.** The barrel was the wrong DIS test case and this is why: its
+"disturbance" is 0.9% of the error. What it is instead is the clearest ROB evidence in the project
+— **a 0.9% non-repeating component costs the commissioned result a factor of 1.6 to 2.5**, and
+every real plant has small non-repeating components, which is what makes a plant real. The
+fragility is in the lap-indexed TEACHER, it is now measured, and it has a cure that costs laps.
