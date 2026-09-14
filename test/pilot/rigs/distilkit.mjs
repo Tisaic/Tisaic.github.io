@@ -103,6 +103,31 @@ const human = (s) => (s < 90 ? `${s.toFixed(0)} s`
  * it is the only one whose band has more than one member. The bill is +1% of plant time, because
  * the teacher's prefixes are converged once and a candidate is a refit plus one scored run.
  */
+/**
+ * THE APPLIED-GAIN LADDER (plan §79.2), and it was found by an accident rather than designed.
+ *
+ * The ridge above selects the FIT's regularisation. The gain the fitted map is APPLIED at is a
+ * different quantity with its own optimum and nothing in this project had ever scored it: §78.6's
+ * false refusal zeroed the tank's map on 28% of its steps and was worth 19%, and §79.1 reproduced
+ * that entire benefit with a UNIFORM 0.9 — so there was no structure in it, only a gain, and the
+ * tank's own optimum sits at 0.72 for 2.59x -> 3.19x.
+ *
+ * IT IS THE CHEAPEST CANDIDATE HERE. A gain needs NO REFIT — scaling the stored weights by `g` is
+ * exactly equivalent to scaling the output — so a candidate costs ONE SCORED RUN against the ridge
+ * axis's refit-plus-run, and the deployed object is unchanged in form: same weight vector, same
+ * MAC, same bytes, because the gain is folded into the weights and never appears at deploy.
+ *
+ * **1.0 IS IN THE GRID**, so a plant with no gain deficit picks it and is byte-identical, which is
+ * what makes this a measurement rather than a tuning (rule 21). `GAINS=none` is the control.
+ */
+const DEFAULT_GAINS = [0.5, 0.72, 0.85, 1];
+function gainLadder(env = process.env.GAINS) {
+  if (env === 'none' || env === '0') return null;
+  if (!env || env === '1' || env === 'default') return DEFAULT_GAINS;
+  const v = env.split(',').map(Number).filter((x) => Number.isFinite(x) && x > 0);
+  return v.length > 1 ? v : null;
+}
+
 const DEFAULT_RIDGES = [1e-6, 1e-4, 1e-3, 1e-2, 1e-1, 1];
 function ridgeLadder(env = process.env.RIDGES) {
   if (env === 'none' || env === '0') return null;
@@ -313,6 +338,15 @@ async function reportDistil({ rep, runs, nFeat, segs = null, auto = null }) {
           : (rep.distil.ridgeBand || []).includes(c.ridge) ? '   (in band)' : ''));
     }
   }
+  if (rep.distil && rep.distil.gains) {
+    console.log('  the APPLIED-GAIN LADDER, scored on the machine (no refit — the gain folds into '
+      + 'the weights, so a candidate costs one scored run):');
+    for (const c of rep.distil.gains) {
+      console.log(`    gain ${String(c.gain).padStart(5)}  machine `
+        + `${c.score === null ? 'not scored' : c.score.toExponential(4)}`
+        + (c.gain === rep.distil.gainPicked ? '   <- PICKED' : ''));
+    }
+  }
   if (rep.distil && rep.distil.ridgeNote) console.log(`  ${rep.distil.ridgeNote}`);
   if (rep.distil && rep.distil.fit) {
     const f = rep.distil.fit;
@@ -326,4 +360,4 @@ async function reportDistil({ rep, runs, nFeat, segs = null, auto = null }) {
   return { inSample, dr };
 }
 
-export { deriveWindow, reportDistil, priceFrom, ridgeLadder, teacherReuse, carrier, teachLaps, dietN, human, SHAPE, DEFAULT_RIDGES };
+export { deriveWindow, reportDistil, priceFrom, ridgeLadder, gainLadder, teacherReuse, carrier, teachLaps, dietN, human, SHAPE, DEFAULT_RIDGES, DEFAULT_GAINS };

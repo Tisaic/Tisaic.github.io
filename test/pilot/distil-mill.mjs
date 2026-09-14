@@ -42,7 +42,7 @@
  */
 import { ladder, announce } from './rigs/ladder.mjs';
 import { millSpec } from './rigs/specs.mjs';
-import { deriveWindow, reportDistil, priceFrom, ridgeLadder, teacherReuse, teachLaps, dietN } from './rigs/distilkit.mjs';
+import { deriveWindow, reportDistil, priceFrom, ridgeLadder, gainLadder, teacherReuse, teachLaps, dietN } from './rigs/distilkit.mjs';
 import { oracleConverge } from './rigs/oracleteach.mjs';
 
 // THE ORACLE TEACHER, AND THIS PLANT IS ITS FALSIFIER (plan §73.11). It needs a cascade to
@@ -178,6 +178,7 @@ const spec = { ...millSpec,
     // for exactly this reason; the plant harnesses never set it because they never had a cascade.
     ...(ORACLE ? { teacherOnly: true } : {}),
     ...(ridgeLadder() ? { ridges: ridgeLadder() } : {}),
+    ...(gainLadder() ? { gains: gainLadder() } : {}),
     ...(teacherReuse() ? {} : { teacherReuse: false }),
     ...(process.env.STD === '0' ? {} : { standardize: true }),
     ...(process.env.ONLINE === '0' ? { online: false } : {}) },

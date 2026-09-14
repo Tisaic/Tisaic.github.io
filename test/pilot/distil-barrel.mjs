@@ -52,7 +52,7 @@
  */
 import { ladder, announce } from './rigs/ladder.mjs';
 import { barrelSpec } from './rigs/specs.mjs';
-import { deriveWindow, reportDistil, priceFrom, ridgeLadder, teacherReuse, carrier, teachLaps, dietN } from './rigs/distilkit.mjs';
+import { deriveWindow, reportDistil, priceFrom, ridgeLadder, gainLadder, teacherReuse, carrier, teachLaps, dietN } from './rigs/distilkit.mjs';
 import { oracleConverge } from './rigs/oracleteach.mjs';
 
 // THE ORACLE TEACHER IS OPT-IN UNTIL IT IS MEASURED (plan §73.9). It needs a cascade to iterate,
@@ -288,6 +288,7 @@ const spec = { ...barrelSpec,
     // for exactly this reason; the plant harnesses never set it because they never had a cascade.
     ...(ORACLE ? { teacherOnly: true } : {}),
     ...(ridgeLadder() ? { ridges: ridgeLadder() } : {}),
+    ...(gainLadder() ? { gains: gainLadder() } : {}),
     ...(teacherReuse() ? {} : { teacherReuse: false }),
     ...(process.env.STD === '0' ? {} : { standardize: true }),
     // AND THE FIT STREAMS BY DEFAULT, WHICH §63.6 SAID IT COULD NOT. That section measured the

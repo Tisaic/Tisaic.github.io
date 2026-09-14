@@ -40,9 +40,10 @@
  * Run: SUITE=full node test/pilot/distil-tank.mjs   [SEEDS=1,2]  [GRADE=fast]
  */
 import { AutoStack } from '../../lib/pilot/autostack.js';
-import { priceFrom, ridgeLadder, teacherReuse, carrier, teachLaps, dietN } from './rigs/distilkit.mjs';
+import { priceFrom, ridgeLadder, gainLadder, teacherReuse, carrier, teachLaps, dietN } from './rigs/distilkit.mjs';
 import { into } from './rigs/meter.mjs';
 import { oracleConverge } from './rigs/oracleteach.mjs';
+import { windowBend } from '../../lib/pilot/deploy.js';
 import { UCAP, makeTanks, voltsFor, levelsAt, SEG, HOLD, RECIPE, quintic, refAtStep, PROG, DT }
   from './rigs/tanks-rig.mjs';
 
@@ -235,6 +236,7 @@ async function once(seed) {
       // for exactly this reason; the plant harnesses never set it because they never had a cascade.
       ...(ORACLE ? { teacherOnly: true } : {}),
       ...(ridgeLadder() ? { ridges: ridgeLadder() } : {}),
+      ...(gainLadder() ? { gains: gainLadder() } : {}),
       ...(teacherReuse() ? {} : { teacherReuse: false }),
       ...(process.env.STD === '1' ? { standardize: true } : {}),
       ...(process.env.ONLINE === '0' ? { online: false } : {}) },
@@ -256,6 +258,10 @@ async function once(seed) {
     const back = into(label);
     try { return await fn(); } finally { into(back); }
   };
+  // PHASE=1: the §79 diagnostic — report only, gates nothing.
+  const PHASE = process.env.PHASE === '1';
+  const UG = Number(process.env.UGAIN || 1);
+  const ph = { kink: { s2: 0, n: 0, u2: 0, k: 0 }, smooth: { s2: 0, n: 0, u2: 0, k: 0 } };
   const run0 = async (corr, cname) => {
     const p = makeTanks(G);
     for (let i = 0; i < 30000; i++) p.step(start[0], start[1]);
@@ -280,7 +286,12 @@ async function once(seed) {
         const v0 = voltsFor(G, p0[0], p0[1]), v1 = voltsFor(G, p1[0], p1[1]);
         return Math.hypot(v1[0] - v0[0], v1[1] - v0[1]) * 0.5;
       })();
-      const a = auto.act({ look, lookRaw: look, k, speed: sp });
+      const a0 = auto.act({ look, lookRaw: look, k, speed: sp });
+      // UGAIN=<x>: the CHEAPEST explanation for §78.6's leftover, killed before any structural one
+      // (rule 1). The false refusal zeroed the map on 3,411 of 11,999 steps — 28% — and was worth
+      // 19%. If simply applying LESS everywhere buys the same thing, there is no kink structure in
+      // it at all and this plant just wants a smaller gain. Unset is 1 and byte-identical.
+      const a = UG === 1 ? a0 : a0.map((v) => v * UG);
       const w = corr ? auto.into(corr.at(k), cname, {}) : [0, 0];
       const u = [(a[0] || 0) + (w[0] || 0), (a[1] || 0) + (w[1] || 0)];
       uPk = Math.max(uPk, Math.abs(u[0] || 0), Math.abs(u[1] || 0));
@@ -288,8 +299,38 @@ async function once(seed) {
       auto.observe([p.h[0], p.h[1], p.h[2], p.h[3]]);
       e0[k] = p.h[0] - h[0]; e1[k] = p.h[1] - h[1];
       if (k > SEG) { s2 += (p.h[0] - h[0]) ** 2 + (p.h[1] - h[1]) ** 2; n += 2; }
+      // ---- WHERE THE MAP'S ERROR AND ITS EFFORT ACTUALLY SIT (plan §79).
+      //
+      // §78.6's accident stopped the map acting during HOLDS and RAMPS and was worth 19% on this
+      // recipe and 44% on the held-out one — from applying LESS. That was a BUG, so it is a
+      // hypothesis until an instrument built for the question agrees. This is that instrument: it
+      // splits the delivered squared error and the applied effort by whether the COMMANDED
+      // REFERENCE IS MOVING, which is the one distinction the false refusal was drawing, and it
+      // fits nothing and gates nothing — it only reports (rule 16's cheap half first).
+      if (PHASE && k > SEG) {
+        // THE SPLIT THE FALSE REFUSAL ACTUALLY DREW, which is NOT moving-vs-held. `windowBend`
+        // returns Infinity exactly where the window is LOCALLY STRAIGHT with one tap off that
+        // line — the CORNER of a ramp, not a hold — so bucketing on its own verdict is the direct
+        // test of where §78.6's 19% came from. The first version of this diagnostic split on
+        // moving-vs-held and refuted the obvious reading: the map helps in BOTH (2.68x moving,
+        // 1.35x held) and applies 7x less when held, so holds were never the harm.
+        const kink = !Number.isFinite(windowBend({ refDim: 2, offsets: OFFSETS }, look));
+        const b = kink ? ph.kink : ph.smooth;
+        b.s2 += (p.h[0] - h[0]) ** 2 + (p.h[1] - h[1]) ** 2; b.n += 2;
+        b.u2 += (u[0] || 0) ** 2 + (u[1] || 0) ** 2;
+        b.k++;
+      }
     }
     const out = { score: Math.sqrt(s2 / n), err: [e0, e1], uPk };
+    if (PHASE) {
+      const f = (b) => b.n ? `rms ${Math.sqrt(b.s2 / b.n).toExponential(4)}  |u| rms `
+        + `${Math.sqrt(b.u2 / Math.max(1, 2 * b.k)).toExponential(3)}  (${b.k} steps)` : '—';
+      console.log(`      PHASE SPLIT [${cname || (corr ? 'corr' : 'as-run')}]  `
+        + `AT A KINK: ${f(ph.kink)}`);
+      console.log(`                       ${' '.repeat((cname || (corr ? 'corr' : 'as-run')).length)}  `
+        + `SMOOTH:    ${f(ph.smooth)}`);
+      ph.kink = { s2: 0, n: 0, u2: 0, k: 0 }; ph.smooth = { s2: 0, n: 0, u2: 0, k: 0 };
+    }
     if (process.env.APPLIED === '1') {
       console.log(`      scored run [${cname || 'bare'}]: rms ${out.score.toExponential(4)}, `
         + `peak |u| ${uPk.toExponential(3)} of ${UCAP}`);
@@ -479,6 +520,18 @@ async function once(seed) {
           + `   held out ${x.toFixed(3)}x`
           + (c.ridge === rep.distil.ridgePicked && c.passes === rep.distil.teacherPicked ? '   <- PICKED' : ''));
       }
+      // This table is the RIDGE axis only — every candidate here is the fitted map at gain 1,
+      // because the gain is chosen after the ridge and applied to the winner alone. So the
+      // PICKED row is the un-gained policy and the HELD-OUT line above is the shipped one, and
+      // the difference between them is what the gain delivered on a program it was NOT chosen
+      // on, which is the only reading of the gain axis this plant can give that is not in sample.
+      if (rep.distil.gainPicked !== undefined && rep.distil.gainPicked !== 1) {
+        const pk = rep.distil.ridges.find((c) => c.ridge === rep.distil.ridgePicked
+          && c.passes === rep.distil.teacherPicked && c.policy);
+        if (pk) console.log(`      the GAIN, on the held-out recipe it was not chosen on: `
+          + `${(b / driveAlt(true, pk.policy)).toFixed(3)}x at gain 1 -> ${(b / w).toFixed(3)}x `
+          + `at the picked gain ${rep.distil.gainPicked}`);
+      }
     }
   }
 
@@ -516,6 +569,19 @@ async function once(seed) {
           + `  held-out ${JSON.stringify(c.heldOutR2)}`
           + (c.ridge === rep.distil.ridgePicked ? '   <- PICKED'
           : (rep.distil.ridgeBand || []).includes(c.ridge) ? '   (in band)' : ''));
+      }
+    }
+    // AND THE APPLIED GAIN, which this plant is also the reason for (plan §79.2). It is
+    // printed separately from the ridge because it is a different quantity: the ridge
+    // regularises the FIT and the gain scales what the fitted map APPLIES, and on this plant
+    // they do not agree about what is best.
+    if (rep.distil.gains) {
+      console.log('    the APPLIED-GAIN LADDER, scored on the machine (no refit — the gain folds '
+        + 'into the weights, so a candidate costs one scored run):');
+      for (const c of rep.distil.gains) {
+        console.log(`      gain ${String(c.gain).padStart(5)}  machine `
+          + `${c.score === null ? 'not scored' : c.score.toExponential(4)}`
+          + (c.gain === rep.distil.gainPicked ? '   <- PICKED' : ''));
       }
     }
     if (rep.distil.ridgeNote) console.log(`    ${rep.distil.ridgeNote}`);

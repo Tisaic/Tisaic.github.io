@@ -429,6 +429,31 @@ const scoreSet = async (label, p2, set, names) => {
   }
   return out;
 };
+// GAINS=<list>: THE APPLIED-GAIN AXIS, ASKED ON THE PLANT THIS PROJECT KNOWS BEST (plan §79.2).
+//
+// The ladder scores a gain ladder on the four plants that carry the ridge ladder, and the tank
+// picks 0.72 while the mill, the column and the barrel pick 1.0. The arm does not carry the ridge
+// ladder at all, so it is byte-identical BY CONSTRUCTION rather than by measurement — which is a
+// weaker statement than it sounds, and rule 25's distinction exactly: "the block was skipped" and
+// "the block ran and chose 1.0" are different states. This asks the machine.
+//
+// It scales the DEPLOYED weight vector, which is exactly what the ladder does, and re-scores the
+// square and both held-out programs — because a gain fitted to the square and worse on the two it
+// never saw would be a memory in the one place this object is not supposed to have one.
+if (process.env.GAINS && host.auto.deployed.distil && host.auto.distil && host.auto.distil.W) {
+  const gs = process.env.GAINS.split(',').map(Number).filter((x) => Number.isFinite(x) && x > 0);
+  const pol0 = host.auto.distil;
+  const W0 = pol0.W.map((w) => Float64Array.from(w));
+  console.log('\n  THE APPLIED-GAIN LADDER on the arm (the deployed weights scaled, nothing refitted):');
+  for (const g of gs) {
+    for (let c = 0; c < pol0.W.length; c++) for (let j = 0; j < pol0.W[c].length; j++) pol0.W[c][j] = W0[c][j] * g;
+    const sq = await host.run(null, null);
+    console.log(`    gain ${String(g).padStart(5)}  square ${sq.score.toExponential(4)}   ${(rep.base / sq.score).toFixed(3)}x over the conventional machine`);
+    await scoreSet(`      gain ${g}`, pol0, heldOut, heldNames);
+  }
+  for (let c = 0; c < pol0.W.length; c++) for (let j = 0; j < pol0.W[c].length; j++) pol0.W[c][j] = W0[c][j];
+}
+
 // FEEDSPAN=<list>: TARGET 2, THE ONE THE NORTH STAR HAS NEVER MEASURED ON THIS CONFIGURATION.
 // The deployed policy's offsets are indexed in TIME, so a feedrate change moves how far the same
 // window reaches along the PATH — and the coverage guard fades the correction outside the

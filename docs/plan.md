@@ -18420,3 +18420,143 @@ improvement from applying LESS. That is not a corruption question at all; it is 
 reference-addressed map act*, and it has never been asked. It is recorded as its own measurement
 rather than folded into this one, because a finding reached through a bug is a hypothesis until it
 is reproduced by something that is not a bug.
+
+## §79 THE THING §78.6's ACCIDENT LEFT BEHIND IS AN UNSCORED GAIN, NOT A STRUCTURE
+
+§78.6 ended with a hypothesis it was careful not to claim: the false refusal stopped the map acting
+during holds and ramps, and that was worth 2.593x → 3.090x on the tank's production recipe. A
+finding reached through a bug is a hypothesis until an instrument built for it agrees.
+
+**TWO STRUCTURAL READINGS WERE PUT TO THE MACHINE AND BOTH ARE REFUTED.** The diagnostic splits the
+delivered error and the applied effort on the scored run, fitting nothing and gating nothing.
+
+The obvious reading, moving against held:
+
+```
+                 bare machine      with the map      factor    |u| rms
+  MOVING         5.9794e-1         2.2310e-1         2.68x     2.80e-1
+  HELD           1.4196e-1         1.0482e-1         1.35x     3.81e-2
+```
+
+**The map helps in BOTH phases and applies 7x less when held** — consistent with §76.5's near
+DC-free kernel — so holds were never the harm.
+
+Then the split the false refusal ACTUALLY drew, which is not moving-against-held at all:
+`windowBend` returns Infinity exactly where the window is locally straight with one tap off that
+line, which is the CORNER of a ramp:
+
+```
+                 bare machine      with the map      factor    |u| rms     steps
+  AT A KINK      1.3853e-1         1.0185e-1         1.36x     3.70e-2     3,411
+  SMOOTH         5.9212e-1         2.2176e-1         2.67x     2.77e-1     8,588
+```
+
+**It helps at kinks too.** So neither candidate survives, and the per-step attribution could not
+have settled the question anyway — which is the more useful half: **on a plant with memory a
+correction's benefit is not additive over steps**, so "where does it help, measured with it on"
+does not predict "what would removing it there do". The tank answers hundreds of steps later.
+
+### §79.1 The cheap explanation, run before any structural one, and it is the whole effect
+
+The false refusal zeroed the map on **3,411 of 11,999 steps — 28%**. If applying LESS everywhere
+buys the same thing, there is no kink structure in it at all (rule 1). A uniform gain on the
+applied correction, nothing else touched:
+
+```
+  gain    delivered on production
+  1.00    2.59x      <- what ships
+  0.90    3.09x      <- EXACTLY the number the buggy guard produced
+  0.72    3.19x      <- the best of the ladder
+  0.50    2.15x
+  0.25    1.39x
+```
+
+**A uniform 10% reduction reproduces the guard's entire benefit to three figures.** So §78.6's
+leftover is not a statement about when a map should act; it is a statement that **this plant's map
+is applied at the wrong gain**, and the false refusal was a clumsy way of applying less.
+
+### §79.2 What that actually exposes: a knob with an optimum that nothing has ever scored
+
+The ridge ladder selects the FIT's regularisation on the machine (§72.9). The APPLIED GAIN is a
+different quantity, it has its own optimum, and no ladder in this project has ever looked at it —
+on the tank it is worth **2.59x → 3.19x, a factor of 1.23**, at the already-picked ridge.
+
+It is also the cheapest candidate this project has: a gain needs **no refit at all**, since scaling
+the stored weights by `g` is exactly equivalent to scaling the output, so k candidates cost k
+SCORED RUNS and nothing else — cheaper than the ridge ladder, which refits each time. And the
+deployed object is unchanged in form: the same weight vector, the same MAC, the same bytes.
+
+**NOT CLAIMED: one plant.** The guard never fired on the arm, column, mill or barrel, which is
+independent evidence that whatever the tank has, those four do not — so there is no reason yet to
+believe the gain optimum sits below 1 anywhere else, and a gain ladder that is inert on four plants
+and worth 1.23x on one is exactly what rule 31 says to measure before defaulting.
+
+### §79.3 Built as the ladder's own kind of candidate, and asked on five plants
+
+`AutoStack`'s ②d rung gained a third axis after the joint depth × ridge ladder: a fixed geometric
+grid of APPLIED GAINS, each folded into the winning policy's stored weights and **scored on the
+machine** like everything else, with rule 42's band broken toward the LARGEST gain — change the
+shipped object as little as the measurement allows. **1.0 is in the grid**, so a plant with no gain
+deficit picks it and is byte-identical (rule 21); `GAINS=none` is the control.
+
+It is the cheapest axis here. Scaling the stored weights by `g` is exactly equivalent to scaling
+the output, so a candidate is **one scored run and no refit**, against the ridge axis's
+refit-plus-run; and the deployed object is unchanged in form — same weight vector, same 55-64
+features, same MAC, same bytes — because the gain never appears at deploy.
+
+```
+  plant          gain picked     delivered            before        held out
+  quadruple tank      0.85       2.593x -> 3.268x     1.26x         2.299x -> 2.657x
+  cold mill           1          2.625x               byte-identical
+  Wood-Berry          1          3.643x               byte-identical
+  extruder barrel     1          6.116x               byte-identical
+  2R arm              1          6.623x               byte-identical
+```
+
+**ONE PLANT OF FIVE HAS A GAIN DEFICIT AND THE OTHER FOUR PICK 1.0 BY MEASUREMENT.** That is the
+result, and the two halves of it are worth separating.
+
+**The tank's is confirmed on a program the gain was not chosen on.** The gain is selected on
+production; the held-out recipe — the same three-zone changeover in an order production never runs —
+reads **2.301x at gain 1 and 2.657x at the picked 0.85**, so this is not the gain fitting the
+program it was scored on. It also reproduces §79.1's ladder by a completely different route: that
+sweep was a harness knob scaling the applied correction, this is the commissioning ladder folding
+the gain into the weights, and they agree that the tank's optimum sits below 1.
+
+**The arm's 1.0 is a MEASUREMENT and not a skip**, which is rule 25's distinction and the reason
+the knob was wired there at all. The arm does not carry the ridge ladder, so it would have been
+byte-identical by construction, and "the block was skipped" and "the block ran and chose 1.0" are
+different states. Asked directly, with the ladder widened ABOVE 1 because a one-sided grid cannot
+find an optimum at its own edge:
+
+```
+  gain    square      rounded rect    circle
+  0.50    1.429x      2.03x           2.00x
+  0.72    2.442x      3.60x           3.50x
+  0.85    3.969x      6.21x           6.07x
+  1.00    6.623x     10.88x          15.94x   <- the optimum, on all three
+  1.15    3.973x      5.35x            —
+```
+
+**0.85 and 1.15 read 3.969x and 3.973x**, four significant figures apart on either side of the
+peak — a locally quadratic optimum sitting exactly at 1.0, on the program the fit was taken on AND
+on the two it has never run. So the arm's map is applied at its own best gain already, and the
+tank's is not, and neither is an accident of where a grid happened to stop.
+
+Said so it is not read as a regression: the gain-1 ROW is 1.6181e-1 where the run's own headline
+is **1.6159e-1, byte-identical to the record**. The ladder scales the weights by exactly 1.0 there,
+so the 0.14% is the host driving ONE machine continuously and never restoring a snapshot (§52.12) —
+the gain-0.85 run precedes it and the arm starts the next run where the last one left it. It is the
+scale of this harness's own run-to-run repeatability and is smaller than every gap in the table.
+
+**WHAT IT DOES NOT SAY.** It does not say why the tank is different. The cheap hypotheses are all
+live and none is measured: the tank is the plant whose teacher converges to gains of 4e5 and whose
+ridge had to move four decades from the arm's carried `1e-6` (§70), so its fit is the one furthest
+from the machine's own scale; and it is the only one of the five whose scored program is a
+SETPOINT SEQUENCE rather than a trajectory, so the correction it learns is dominated by transitions
+it sees a handful of times. Either would predict an over-confident map. Neither is tested.
+
+**COST, stated rather than folded in.** Four extra scored runs per commissioning. On the tank the
+meter reads 36.8 h of plant time against 31.7 h, so the gain axis is **16%** of that plant's
+commissioning bill — the verify share moving 30% to 42% — and it bought 1.26x. That is a worse
+ratio than the ridge axis (which bought 32x for 1%) and a better one than everything else here.
