@@ -18999,3 +18999,125 @@ unmeasured.
 STATED LIMITS throughout §81-§83: one plant, one cell, one seed, one joint, one disturbance shape
 at a time. The bench cell is heavily drive-limited (47x peak demand undisturbed), so every
 saturation figure is cell-specific and no crossing point here is a constant to carry (rule 31).
+
+---
+
+## §84 — WHAT IS NEXT, ORDERED, AND THE TENSION THAT ORDERS IT
+
+This section records a PRIORITY ORDER. It measures nothing. It exists because
+`docs/scorecard.md`'s own origin says why: the rating that drove three sessions of work lived
+in conversation and nowhere in this repository, which is rule 30 aimed at a list — an ordering
+nobody can re-derive is a preference wearing a result's clothes. Written down it can be argued
+with, and it is expected to be overturned by the measurements it schedules.
+
+**THE TENSION THAT SHAPES THE ORDER, WHICH NO SECTION STATES.** The last three sections all
+bought DELIVERED PERFORMANCE WITH COMMISSIONING TIME. §79's gain axis cost the tank 16% of its
+bill (31.7 h → 36.8 h) for 2.593x → 3.268x. §80.7's averaging would cost the barrel 2.4x (34.9
+→ 84.9 days) for 1.63x. Meanwhile COM stands at 3 against PID+FF's 7 on the scorecard — a −4
+gap, second only to INS, which no controller change can close. §72 spent six sections taking
+3.5-9.6x OFF the product bill and the three sections since have spent a fraction of it back,
+one trade at a time, each defensible alone. So the ordering rule here is: **anything free, or
+anything that buys commissioning time back, outranks anything that spends more.**
+
+### 1. `TAVG` into the shared kit, and ask the mill FIRST
+
+§80.7 is the broadest ROB statement in this record — *a 0.9% NON-REPEATING component costs the
+commissioned result a factor of 1.6 to 2.5, and every real plant has small non-repeating
+components* — and it rests on ONE seed of ONE plant, with the knob living only in
+`test/pilot/distil-barrel.mjs`. Rule 31: that is a constant to re-derive, not to carry. Move it
+to `rigs/distilkit.mjs` beside `ridgeLadder` and `gainLadder`.
+
+Ask the **MILL first**, for both of rule 1's reasons. It is the cheapest (55 min against the
+barrel's 33 days). And it is the FALSIFIER rather than a confirmation: §80.6 established that
+the mill's harness starts every run a whole number of ROLL TURNS in, which MAKES its disturbance
+commensurate with the teacher's lap — so averaging the teacher's record over laps must read
+**INERT** there. A second plant confirming the mechanism's own NULL is worth more than a third
+plant confirming its gain (rule 9).
+
+### 2. Re-run `test/pilot/sixplant.mjs`
+
+Two ladder axes have landed since the last pass — the ridge (§72.9) and the applied gain (§79)
+— and this project has shipped two regressions when defaults moved without the CONTRACTS being
+checked, which is the fault `sixplant.mjs` exists to close and then had itself until §54.3. It
+carries `stack.test.mjs` and `autostack.test.mjs`, neither of which is a plant test. No new
+thinking in it; it gates everything below.
+
+### 3. #51 as a SCREEN, not a build
+
+Before any second disturbance plant is vendored or written: ONE run per existing plant answering
+§80.6's two numbers — the disturbance's share of the OPEN-LOOP error, and what the incumbent's
+own closed-form feedforward recovers from being told it. The barrel fails both (0.9%, 1.008x)
+and still looked like a DIS testbed for three sections. This is §55.12's KUKA lesson —
+decompose the torque BEFORE vendoring — transplanted from excitation to disturbance.
+
+### 4. #50 — `PLANTSPAN`'s frozen-map protocol on axes that are not stiffness
+
+§75 measured a frozen weight vector across an eight-fold span of gearbox stiffness and an
+eight-fold span of link stiffness. Stiffness is the ONLY plant axis ever moved that way. Payload
+mass, backlash growth and torque limit are knobs that already exist (`ARM_BL`, `ARM_DRIVE`) and
+none has been run under the frozen-map protocol. §81 gives the drive axis a PREDICTED NEGATIVE,
+which is what makes it worth running rather than a formality (rule 59).
+
+### 5. COM, attacked where §72.12 left it
+
+The unmeasured item is the split the operator handoff exposed and only two plants ever priced:
+**the plant is characterised ONCE and each new program after that costs a fraction of it**
+(barrel 79.6 days then 8.3; column 59.2 then 7.5). Nobody has measured a second program's cost
+on the mill, the tank or the arm — and that number IS target 1's price, which this file has
+never stated for those three.
+
+### 6. Why the TANK has a gain deficit and the other four do not
+
+§79's own stated unknown, with two hypotheses on record and neither tested: it is the one plant
+whose ridge had to move four decades from the arm's, and the only one whose scored program is a
+**setpoint SEQUENCE** rather than a trajectory. Both discriminate cheaply and in opposite
+directions — give the mill a setpoint sequence, or give the tank a trajectory.
+
+### 7. #53 — a reference-correlated disturbance large enough to discriminate
+
+§83.2's phase design failed for a reason worth more than a win: a lap FRACTION is a memory index
+and the diet is four different polygons, so it was never reference-correlated at all. §83.3's
+scale-free payload design was too benign to separate at 0.8%, which is a null about the TEST
+rather than a finding (rule 25). What is needed is a disturbance that is a genuine function of
+the COMMANDED reference — a payload proportional to commanded acceleration, which the map's
+rigid-body features already carry — sized from §81's own envelope at ~0.25 of tauMax, where the
+machine still works.
+
+### 8. #46 — distributions for the column's 5.49x and the barrel's 6.12x
+
+Both are single draws. `SEED` will not do it: `distil-tank.mjs`'s three byte-identical seeds are
+the recorded signature of a seed that varies nothing on the oracle route (no cascade builds, so
+no seeded excitation runs — rule 61 aimed at a seed), and §74 found the same on the arm, where
+the seed sets the cascade's excitation and the teacher replaces exactly that through `oracleF0`.
+The DIET or the PLANT has to move.
+
+### 9. The older backlog in one pass: #34 first, then #32 and #33
+
+**#34 first.** `test/pilot/invert.mjs` has produced four diagnoses — non-minimum phase refuted,
+nonlinearity refuted, the column's RGA 2.01, the mill's dead/rise 0.83 — and every one of them
+is on a plant that LOSES. It has no positive control, which is rule 9's half that instruments
+usually fail. Putting the arm or EMPS in its table is what makes its verdicts usable on the next
+plant. Then **#32** (the cart-pole: winner or struck — the 9.4-9.8x was the loop, and a plant
+this project cannot claim should not sit in the count) and **#33** (the real flexible arm's
+cascade refusal, which is the one refusal here with no stated cause).
+
+### 10. The lap-indexed teacher itself
+
+§80.3 named it and nothing has acted on it: **the retirement removed lap-indexing from the
+PRODUCT and left it in the TEACHER.** `hff` inverts at the lap's harmonics; `oracleteach.mjs`
+indexes `k % L`. Every teacher in this repository is addressed by lap phase, which is why a
+disturbance the teacher's lap cannot represent is invisible to the product however well the
+product could express it. A teacher addressed by something other than lap phase is the
+structural item the record now points at, and it is the PREREQUISITE for #49 rather than an
+alternative to it.
+
+Separately and not a technical question: the KUKA records are deleted but still in git history,
+so a fresh clone pays 222 MB. Whether that history is rewritten is the owner's call (§55.12
+states this as left open).
+
+### WHERE TO START
+
+**1 and 2 together.** The mill's `TAVG` run is under an hour of plant time and the six-plant
+pass is machine time with no new thinking in it; both gate everything below. And 1's NULL is the
+more informative outcome, which is the only reason to run it before the plants where it would
+pay.
