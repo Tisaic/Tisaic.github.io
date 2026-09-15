@@ -20049,3 +20049,201 @@ four times, plus the table it produces and the housekeeping that keeps the recor
 8. The shaking load cell: in the table or struck, with the reason stated.
 9. `CLAUDE.md` and `docs/scorecard.md` updated from the table rather than from memory.
 10. Verify, stamp, push.
+
+## §86.2 — THE CART-POLE IS A WINNER: 12.0x ON THE SHIPPED LOOP, 9.2x ON ONE TUNED 3.5x BETTER
+
+`test/pilot/rigs/pend-rig.mjs` (extracted, `pend.test.mjs` byte-identical), `distil-pend.mjs`.
+
+§84.10 settled the cart-pole as ASKED AND CORRECTLY REFUSED and named what it had not done: *"the
+DEPLOYED object has never been asked here at all, and all four plants converted since §64 were
+converted by asking it instead of the teacher (rule 59)."* Asked, it deploys.
+
+```
+  the SHIPPED loop            1.0378e-1 -> 8.7013e-3   11.93x     ladder's own score
+                              1.028e-1  -> 8.560e-3    12.01x     an independent scored run
+    conventional rung                    2.2279e-2      4.66x     13 laps, 4 coefficients
+    + the DEPLOYED OBJECT                8.7013e-3      2.56x on top, gain 0.266
+    8 MAC/cycle sliced, 0.2 kB, 24 features, 46 MAC/decision, 41.6 min of plant time
+
+  the TUNED loop (3.5x better) 2.8887e-2 -> 3.1248e-3   9.24x     ladder's own score
+                                                        9.46x     an independent scored run
+    conventional rung alone; the distilled rung's TEACHER could not improve one training run
+```
+
+**Both loops improve, nothing is made worse, and the strong denominator still gives 9.2x** — where
+§84.10's bare `Pilot` refused it at every one of five authorities. The window is ±171 raw steps
+from a measured 281-step tip settle against a 1,390-step shortest training lap; the diet is four
+moves at different distance, feed, acceleration and dwell, and the scored program (0.5 m at 0.35 /
+0.5, dwell 0.6) is in none of them.
+
+### THE RIG'S INTEGRATOR COULD NOT CARRY A COMMISSIONING, AND IT LOOKED EXACTLY LIKE A LOOP
+
+Explicit Euler at 200 Hz holds the TUNED gains for about 32 laps and then walks away: per-lap tip
+rms **2.910e-2 at lap 0, 3.244e-2 at lap 32, 4.386e+0 by lap 59**. That is the signature of a
+marginally stable loop, and it is the INTEGRATOR (rule 17, and §55.10's own repair on the KUKA):
+sub-stepped 4x with the loop still evaluated at 200 Hz, the same run is FLAT to 60 laps
+(2.913e-2 / 2.919e-2 / 2.892e-2), and 16x agrees with 4x to 0.6%. **On the DEFAULT loop it is inert
+— 1.031e-1 / 1.032e-1 / 1.032e-1 at 1x / 4x / 16x, 0.1%** — which is rule 21's signature and is
+what licenses making it the default: the cell that should not move does not. `pend.test.mjs` scores
+4 laps, inside the artefact-free region, so every number it has reported stands at 9.770x → 9.816x;
+what could not have been run is a COMMISSIONING, which is tens of laps per teacher call.
+
+### AND THE REPAIR EXPOSED A GATE FAILURE §84.10 COULD NOT SEE
+
+§84.10 swept the bare `Pilot`'s authority on the tuned loop over 24-fold and reported five
+refusals. With the integrator repaired, **uMax 0.60 DEPLOYS and delivers 0.126x — the machine eight
+times worse — having vouched for itself at 2.02x on its own representative regime**; at 16x
+sub-stepping it is 1.39x vouched and 0.190x delivered, so it is the plant and not the integrator.
+Under the old integrator that same cell refused, because a diverging plant scored the verify badly.
+**So one of §84.10's five refusals was an accident of a broken rig, and the corrected reading is
+that the gate can vouch at 1.4-2.0x and deliver 0.19x on this plant class.** It is the first
+deployed-and-harmful cell in the plant table since the quadruple tank's early seeds, it is at an
+authority four times the shipped one (0.60 m against 0.15 on a 0.5 m move), and it is recorded
+rather than tuned away. `pend.test.mjs` exits 1 there, which is the check doing its job.
+
+### TWO FAULTS OF MY OWN, BOTH RECORDED BECAUSE EACH LOOKED LIKE A RESULT
+
+The first scored run read **2.468x where the ladder read 6.30x**, because it called `auto.act`
+without `v` and `a` — which is what routes the reference's own rate and acceleration to the
+CONVENTIONAL rung, whose basis is `[a, v, sign v, 1]`. Without them that rung reads zero and
+contributes nothing: `distil-tank.mjs`'s recorded fault exactly (plan §67.3), a harness scoring a
+rung that was absent from the run it scored, and the tell is the same one — the ladder and the
+harness disagreeing about one machine.
+
+The second is the GAIN GRID and it produced a library change (§86.6): the machine picked **0.72,
+the bottom of `DEFAULT_GAINS`**, which is an EDGE and not an optimum — the exact fault §84.6 named
+when it widened the grid above 1.0 and left the bottom where it was. Swept by hand the optimum is
+interior at ~0.30 and worth **11.77x against 6.30x at gain 1.0**.
+
+## §86.3 — THE REAL FLEXIBLE ARM: A WINNER AT 1.93x, AND THE DEPLOYED OBJECT REFUSED SEVEN WAYS
+
+`test/pilot/distil-realarm.mjs`.
+
+§84.11 gave this plant's cascade refusal a cause — it is the only plant of six reading **INVERSE
+128.3%**, so hold a correction and it first goes 1.28 times further the wrong way than it ever goes
+the right way, and the pilot INVERTS a forecast — and then said what it did not say: *"the DEPLOYED
+object has never been asked here."* The deployed object does not invert a model, so this was the
+open case.
+
+**IT REFUSES, AND THE REFUSAL SURVIVES EVERY VARIATION.** The ladder ships the conventional rung at
+1.93x (1.8511e-1 → 9.6063e-2, against 73.81x for doing nothing), which is a legitimate improvement
+and is what this plant has always shipped. Below it:
+
+```
+  variation                              machine    in sample on its own diet   held-out R²
+  window ±128                             0.95x     1.235 / 1.094 / 1.114 / 1.112    0.290
+  window ±384  (the rule's own value)     0.98x     1.069 / 1.069 / 1.098 / 1.084    0.280
+  window ±1024                            0.91x     1.039 / 1.045 / 1.041 / 1.064    0.251
+  window ±2048                            0.96x     1.047 / 1.051 / 1.070 / 1.065    0.239
+  tours 4x longer, window ±1536           0.99x     1.028 / 1.047 / 1.075 / 1.059    0.335
+  tours 8x longer, window ±2675           1.00x     1.024 / 1.046 / 1.051 / 1.055    0.238
+  BATCH fit instead of streaming          1.02x     0.960 / 1.044 / 1.074 / 1.059    0.260
+  batch + tours 4x                        0.94x     1.010 / 1.017 / 1.026 / 1.023    0.133
+  + a RESONATOR BANK at the plant's modes  0.88x     0.867 / 1.010 / 0.925 / 0.958    0.342
+```
+
+The TEACHER reaches 4.1-7.2x on those same runs, so there is a correction to learn. **The map
+cannot express it, and it is not the window, not the diet's lap length, not the fit route and not a
+recursive state.** `reportDistil`'s own split says so directly: a map that cannot help even the
+runs it was fitted on is a map that cannot express this plant's correction, and no diet repairs
+that.
+
+### THE DIET IS TOURS, AND SIZED ON THE MACHINE, BECAUSE BOTH HALVES OF THE WINDOW RULE BIND HERE
+
+This plant's memory is **4,385 steps against a 512-step lap — 8.6 LAPS**, the worst ratio in this
+project (the lattice arm is 1.07). So `min(0.61·settle, lap/8)` on the scored program's own lap
+gives ±64 and reaches 1.5% of the memory, and §49.11's forced trade has one measured escape: a
+single long TOUR. Every diet member is therefore one closed lap of 12-16 transitions at different
+edge widths, `TOURX` scaling the lap while the segment duration stays at the program's own 256
+samples. And every tour is **bisected on the machine** to demand the same fraction of the drive the
+shipped program actually demands (16.8%), because the rig's own spectral amplitude rule is a
+worst-case sum over harmonics whose conservatism GROWS with the harmonic count — sized by it, a
+tour comes out 10-40x smaller than the program, which is rule 41b in its other direction and a
+fault this rig has already paid for once.
+
+### AND THE RESONATOR BANK IS THE RESULT, BECAUSE THIS IS THE PLANT IT WAS PROPOSED FOR
+
+§52.34 proposed second-order resonators driven by the commanded reference as the answer to exactly
+this shape, and §52.36 refused them on the lattice arm at LOPO 0.814 against the window's 0.836 —
+on a plant whose ring decays **5.6x per cycle**. This plant's three identified modes decay
+**1.026x, 1.030x and 1.276x** per cycle, fifty times lighter, and the bank is legal with no library
+change and no instrument: three extra reference channels, 15 MAC/step at deploy, each section
+normalised at its own mode so the gain is a property of the filter and not of the program (rule 32).
+**It fits BETTER and delivers WORSE** — held-out R² 0.280 → 0.342 while in-sample falls to
+0.867-1.010x and the machine reads 0.88x. That is this project's capacity signature for the tenth
+time, and it is a much stronger statement than §52.36's: the refusal holds on the plant the
+proposal was designed for.
+
+NOT CLAIMED: the plant still ships 1.93x and nothing is made worse; a different OBJECT — §56's
+stable inversion, which exists for precisely this inverse response — has not been asked here.
+
+## §86.4 — THE REAL CASCADED TANKS: THE DEPLOYED OBJECT BEATS THE CASCADE AT A FIVE-THOUSANDTH OF IT
+
+`test/pilot/distil-realtanks.mjs`.
+
+`realtanks.test.mjs` ships the PILOT CASCADE on this plant, which makes it one of only two in the
+directory where that cascade is the result — at **43,673 MAC/cycle and 16.5 kB, 437% of a PLC
+scan**, an improvement no PLC would accept. That is the objection §63 raised about the barrel and
+the deployed object answered there. Asked here, on the OVERFLOW plant (the linear one reads 2012x
+and measures the conventional rung's own hypothesis class, §55):
+
+```
+  shipped {"classic":true,"distil":true}   7.081e-1 -> 8.145e-2   8.69x
+    at 8 MAC/cycle sliced and 0.2 kB, against the cascade's 8.00x at 43,673 MAC and 16.5 kB
+  the distilled rung alone: DEPLOYED at 2.03x, gain 0.314 (an INTERIOR optimum, found by §86.6's
+    edge extension — the fixed grid's bottom at 0.72 reads 1.220e-1 against 8.145e-2)
+```
+
+**Better than the cascade and 5,400 times cheaper.** The diet is four CLOSED recipes, none of them
+production and every one visiting the overflow region; the production recipe is not even closed,
+which the harness prints because it is the reason the diet's laps are.
+
+### AND ITS OWN SPEC WAS READING THE WRONG PROGRAM'S LIMITS
+
+Extracting the two specs found that BOTH were built from the LINEAR recipe's measured peaks, so the
+overflow plant — whose recipe reaches 10.6 against 8.2 and therefore ramps harder — was
+commissioned inside a channel box its own program does not fit. That is rule 41b at the channel
+limits rather than at an excitation, and it was worth a factor: **the overflow plant reads 8.00x on
+its own peaks against 6.54x on the other recipe's**, its cascade admitting a SCHEDULED basis at
+layer 1 (R² lead0 0.948 against 0.928) and reaching R² 0.498 at layer 2 against 0.210. The linear
+plant is byte-identical across the repair, which is what says it is a repair and not a re-tune.
+
+## §86.5 — THE REAL HEAT EXCHANGER: A WINNER AT 89.8x, AND THE OBJECT CORRECTLY HAS NOTHING TO ADD
+
+`test/pilot/distil-realexch.mjs`.
+
+The conventional rung delivers **89.77x** here (1.1815e-1 → 1.316e-3 °C rms) and the distilled rung
+reads 2.9433e-2, which is 0.045x of it — refused, correctly. This is the one plant in the set where
+the refusal is not about what the map can express: **in sample it helps every training run 1.33x**,
+so the map does express this plant's correction; there is simply nothing left once a four-coefficient
+`[a, v, sign v, 1]` rung has taken 89.8x. §55's standing caution applies to that 89.8x and is not
+withdrawn: this plant is near-linear and the rung's basis is inside its own hypothesis class, and
+the same plant as a LINEAR ARX reads 1364x.
+
+By §84.9's screen this should have been the easiest plant in the set — a 37-sample settle against a
+1,600-sample recipe is **43 response times per program**, against 5-8 for the losers — and it is, in
+the sense that the conventional rung wins outright. The window rule gives ±23 samples, which
+collapsed four of the geometric shape's taps onto their neighbours and produced exactly collinear
+columns; `deriveWindow` dedupes now, which is inert above a reach of about 100 and therefore
+byte-identical on the four plants that carry the rule today.
+
+## §86.6 — AN EDGE IS NOT AN OPTIMUM, SO THE GAIN GRID FOLLOWS ITS OWN PICK
+
+`lib/pilot/autostack.js`.
+
+§84.6 caught this once: the gain grid stopped at 1.0, so *"the mill, column, barrel and arm all
+pick 1.0"* was three EDGES read as four agreements, and widening above 1.0 moved two plants. It
+widened one side and left the other at 0.72 — and the cart-pole then picked 0.72, the real tank
+0.72, the real arm 0.72: the same fault, the same grid, the other end.
+
+A wider fixed grid is the wrong repair, because it charges every plant a scored run for a region
+only some of them occupy (the tank's verify is already 44% of its bill). So the grid EXTENDS ONLY
+WHEN IT HAS TO: if the best-scoring candidate is the smallest or largest tried, step once more in
+that direction at the grid's own geometric ratio and score it, bounded at six steps and at
+(0.02, 4). It extends on the ARGMIN and not on the band's tie-break winner, or a rung that is inert
+at every gain would walk the grid upward for ever.
+
+**The control is that the four plants already carrying the ladder pick interior values and come
+back byte-identical** — mill 2.62x at gain 1.0, tank 3.268x at 0.85, column 3.96x at 1.15, barrel
+7.00x at 1.15 (rule 21). What it is worth where it fires: the cart-pole 6.30x → 11.93x, the real
+tank 8.69x with an interior 0.314.

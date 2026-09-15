@@ -124,6 +124,87 @@ console.log(`  the SCORED program (lap ${A.LAP}, edge ${A.EDGE}) is in NO traini
 // ring locks in over ~13 laps of the scored program, and the memory above is 4,385 steps: with a
 // tour lap of 3,072-4,096 two settle laps clear it and one lap is the record. The default
 // everywhere else is 2; here it is 3, stated rather than carried (rule 31).
+// ---------------------------------------------------------------- RESONATOR CHANNELS (§86.6)
+/**
+ * WHAT THE WINDOW LADDER SAYS, AND THE ONE THING IT LEAVES OPEN. Across ±128 to ±2675, tour laps
+ * 3,072 to 24,576, and both fit routes, the rung reads 0.94-1.02x with in-sample 0.96-1.07x and
+ * held-out R² 0.13-0.33 — so the map cannot express this plant's correction, and it is not the
+ * window, not the diet's lap length and not the streaming fit. §52.34 predicted exactly this and
+ * named the object: an FIR window is a hopeless basis for a LIGHTLY DAMPED resonance, where two
+ * state variables per mode do it exactly. §52.36 then REFUSED a resonator bank on the lattice arm
+ * — and that plant's ring decays 5.6x per cycle, where these modes decay **1.026x, 1.030x and
+ * 1.276x**. This is the plant where that refusal should not hold.
+ *
+ * IT NEEDS NO LIBRARY CHANGE AND NO INSTRUMENT. A resonator driven by the COMMANDED REFERENCE is
+ * a function of what the machine was asked to do, so it is legal under the retirement and costs
+ * 5 MAC per mode per step at deploy. It enters as extra reference channels, exactly as the mill's
+ * roll phase does: `refDim` widens and `_rowFrom` reads them.
+ *
+ * THE GAIN IS NORMALISED AT THE MODE, WHICH IS A PROPERTY OF THE FILTER AND NOT OF THE PROGRAM
+ * (rule 32) — a DC-normalised all-pole section at |p| = 0.9985 would hand the fit a column
+ * hundreds of times the reference's own scale, and the normaliser would then be program-dependent
+ * and could not be frozen at commissioning.
+ */
+const MODES = (() => {
+  const N = 20000, m = [];
+  for (let i = 1; i < N; i++) { const w = Math.PI * i / N; m.push([w, A.mag(w)]); }
+  const pk = [];
+  for (let i = 1; i < m.length - 1; i++) if (m[i][1] > m[i - 1][1] && m[i][1] > m[i + 1][1]) pk.push(m[i]);
+  pk.sort((a, b) => b[1] - a[1]);
+  return pk.slice(0, Math.max(0, env('RESON', 0) > 1 ? env('RESON') : 3)).map(([w, v]) => {
+    const h = v / Math.SQRT2;
+    let lo = w, hi = w;
+    while (lo > 1e-6 && A.mag(lo) > h) lo -= Math.PI / N;
+    while (hi < Math.PI && A.mag(hi) > h) hi += Math.PI / N;
+    const Q = w / (hi - lo), r = Math.exp(-w / (2 * Q));
+    // |1 - 2r cos(w) e^{-iw} + r² e^{-2iw}| at the mode — the section's own peak, so g·H peaks at 1.
+    const dre = 1 - 2 * r * Math.cos(w) * Math.cos(w) + r * r * Math.cos(2 * w);
+    const dim = 2 * r * Math.cos(w) * Math.sin(w) - r * r * Math.sin(2 * w);
+    return { w, Q, r, g: Math.hypot(dre, dim), period: 2 * Math.PI / w,
+      decay: Math.exp(Math.PI / Q) };
+  });
+})();
+const RESON = process.env.RESON !== undefined && process.env.RESON !== '0';
+const NRES = RESON ? MODES.length : 0;
+const REFDIM = 1 + NRES;
+
+/** The resonators' PERIODIC STEADY STATE over one lap of a program, tabulated. A closed lap has
+ *  one, and reaching it is a matter of running the filter long enough — 60 laps here, which is 15
+ *  memories of the slowest mode. */
+function resTable(at, lap) {
+  const out = MODES.map(() => new Float64Array(lap));
+  for (const [j, md] of MODES.entries()) {
+    let y1 = 0, y2 = 0;
+    const a1 = 2 * md.r * Math.cos(md.w), a2 = -md.r * md.r;
+    for (let pass = 0; pass < 60; pass++) {
+      for (let k = 0; k < lap; k++) {
+        const y = a1 * y1 + a2 * y2 + md.g * at(k)[0];
+        y2 = y1; y1 = y;
+        if (pass === 59) out[j][k] = y;
+      }
+    }
+  }
+  return out;
+}
+if (RESON) {
+  console.log('  RESONATOR CHANNELS, driven by the commanded reference (plan §86.6):');
+  for (const md of MODES) {
+    console.log(`    period ${md.period.toFixed(1)} steps, Q ${md.Q.toFixed(0)}, `
+      + `decay ${md.decay.toFixed(3)}x per cycle, pole |p| ${md.r.toFixed(5)}`);
+  }
+  console.log(`    ${NRES} channels beside the reference, ${5 * NRES} MAC/step at deploy
+`);
+}
+/** One program's reference-with-resonators closure. */
+function withRes(at, lap) {
+  if (!RESON) return at;
+  const t = resTable(at, lap);
+  return (k) => {
+    const kk = ((k % lap) + lap) % lap;
+    return [at(kk)[0], ...t.map((c) => c[kk])];
+  };
+}
+
 const TLAPS = teachLaps(3);
 const TAVG = teachAvg(TLAPS);
 const distilRuns = () => dietN([0, 1, 2, 3]).map((i) => {
@@ -132,7 +213,7 @@ const distilRuns = () => dietN([0, 1, 2, 3]).map((i) => {
   return {
     lap: g.lap,
     closed: true,
-    refAt: (k) => g.at(k),
+    refAt: withRes(g.at, g.lap),
     run: async (corr) => {
       const m = plant();
       let s2 = 0, n = 0;
@@ -156,7 +237,8 @@ const spec = { ...realarmLadderSpec,
   // be commissioned, scored and then replaced by the rung that wins (plan §73.1). `DEPTH=1` is
   // the control and reproduces `realarm.test.mjs`'s own refusal.
   depth: process.env.DEPTH !== undefined ? +process.env.DEPTH : 0,
-  distil: { refDim: 1, ridge: env('RIDGE', 1e-6), offsets: OFFSETS,
+  refAt: withRes((k) => A.refAtStep(Math.min(k, A.PROG - 1)), A.LAP),
+  distil: { refDim: REFDIM, ridge: env('RIDGE', 1e-6), offsets: OFFSETS,
     ...(ridgeLadder() ? { ridges: ridgeLadder() } : {}),
     ...(gainLadder() ? { gains: gainLadder() } : {}),
     ...(teacherReuse() ? {} : { teacherReuse: false }),
@@ -168,7 +250,7 @@ announce();
 const price = priceFrom();
 const { rep, auto } = await ladder(spec);
 price.close({ dt: 1, rep });
-await reportDistil({ rep, runs: distilRuns(), nFeat: OFFSETS.length + 1, auto });
+await reportDistil({ rep, runs: distilRuns(), nFeat: OFFSETS.length * REFDIM + 1, auto });
 
 check('the arm is not made worse by anything the ladder ships',
   rep.best <= rep.base, `${rep.base.toExponential(3)} → ${rep.best.toExponential(3)}`);
