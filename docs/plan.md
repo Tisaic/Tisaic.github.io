@@ -20873,3 +20873,322 @@ this project, and `objtable` was reading `not asked` for it. Emitted, the table 
 
 The count did not change. Its MEMBERSHIP did, and every member is now emitted where it was
 measured.
+
+---
+
+## §89 — TARGET 1's STRONG FORM, AND THE QUESTION A REGULATOR CAN BE ASKED
+
+§88 took target 1 from one plant's number to eight, and it did so with a comparator its own
+comment names as the weak one: the factor on the SCORED program, where the target says *a
+controller commissioned on each program individually*. Those are the same number only if the two
+programs are equally hard, and three of §88's five MET verdicts are rows where the held-out factor
+EXCEEDS the scored one — which makes the cheap comparator more GENEROUS than the target rather
+than tighter. A ratio above 1 in that table is not evidence of meeting the bound; it is evidence
+that the denominator moved.
+
+This section pays for the strong form on the two cheapest plants — the cart-pole at 42.7 min of
+product commissioning and the cold mill at 55 min (§87.7's own scrape) — and asks the mill the
+question §88.6 had to correct itself about.
+
+### §89.1 — The cart-pole: the frozen object BEATS a per-program commission, 2.30x
+
+`distil-pend.mjs` gained `T1COMM=1`: a SECOND full ladder, same diet, same window rule, same
+authority, same ridge and gain ladders, with the HELD program in the place the scored program
+occupied so the machine-scored axes optimise for IT — and then that object is scored on HELD by
+the SAME `score()` the frozen one is scored by, the acting object passed in rather than closed
+over (rule 61).
+
+```
+  the object that SHIPS, on HELD                  7.337e-3 m rms   11.402x   uPk 0.1500 of 0.15
+  an object COMMISSIONED on HELD                  1.688e-2 m rms    4.956x   uPk 0.1500 of 0.15
+  the SAME per-program object, back on SHIPPED    1.698e-2 m rms    6.055x   (frozen reads 12.009x)
+  TARGET 1, strong form: 2.301 of a per-program commission — INCONCLUSIVE
+```
+
+**THE RATIO IS 2.301 AND IT MEASURES NOTHING, AND THE CONTROL IS WHAT SAYS SO.** Read alone, the
+first two rows say the frozen object BEATS a per-program commission by 2.3x on that program,
+which is surprising enough to be a reason to check the instrument rather than to celebrate
+(rule 14). Scoring the per-program object back on the SHIPPED program costs one run and settles
+it: it reads **6.055x where the frozen one reads 12.009x**. It is worse EVERYWHERE, by about the
+same factor, so it is a worse COMMISSIONING and not a per-program one — and a ratio computed
+against it would have reported a triumph that is entirely the draw.
+
+**THAT IS THE SECTION'S REAL RESULT, AND IT IS ABOUT THE METHOD RATHER THAN THE PLANT.** A
+commissioning is a DRAW — §87.3 measured THIS plant at 11.789-12.113x over six of them, a 1.03x
+spread, the tightest in this project — and a second commissioning landing 2x below that entire
+distribution is not a sample from it. So **the strong form is not "run the ladder again on the
+other program": it needs a per-program commission that is as good a draw as the shipped one**, and
+establishing that costs a distribution per program rather than a run. The harness now prints
+INCONCLUSIVE and says why, rather than printing MET.
+
+**TWO CANDIDATE CAUSES WERE PUT TO THE MACHINE AND BOTH ARE DEAD**, which is why the draw reading
+is what is left rather than the first thing reached for.
+
+**Commissioning ON the program produces a WORSE controller for it**, which is surprising enough
+to be a reason to check the instrument rather than to celebrate (rule 14). Two candidates were
+put to the machine and the first is dead:
+
+**THE CHANNEL BOX IS NOT IT.** A per-program commission states the program's own limits, because
+an excitation built to limits the program does not run describes a machine that is not there
+(rule 41b, which this project has paid for on the real flexible arm). HELD accelerates at 0.90
+against the shipped program's 0.50, so its box is genuinely different — |a| 2.250e-5 against
+1.250e-5. `T1BOX=ship` is the control, holding the shipped box so ONLY the program moves, and it
+reads **1.688e-2, identical to four figures**. The box is inert here; the difference is the
+program.
+
+**WHAT THE LADDER'S OWN ROWS SAY** is that the whole gap is the CONVENTIONAL rung, not the
+distilled one:
+
+```
+                          on the SHIPPED program     on HELD
+  conventional rung            4.66x                   2.20x
+  ②d distilled on top          2.56x                   2.27x
+  clamping                  34% of samples, 1.22x   50% of samples, 1.80x the cap
+```
+
+The distilled map contributes the same factor either way — it is the four-coefficient
+`[a, v, sign v, 1]` rung that loses more than half its value, and the whole stack on HELD is
+clipped on half its samples at 1.8x the authority it was given.
+
+**AND AUTHORITY IS NOT IT EITHER.** `T1UCAP` raises the per-program object's cap threefold. The
+conventional rung duly improves — 2.20x to 3.98x, and its uPk goes to 0.4247 of 0.45 so the cap
+is genuinely no longer what binds — and the DISTILLED rung is then REFUSED at 0.83x, so the stack
+ships the conventional rung alone and the whole object reads **3.990x, WORSE than the 4.956x it
+managed clipped**. More authority makes it worse, which is the opposite of what a clipping
+account predicts.
+
+So: not the box, not the authority, and the ladder's own rows show the loss is in the
+conventional rung rather than the distilled map. What the control then establishes is that the
+loss is not about HELD at all — the same object is equally short on the program it was NOT
+commissioned for. The cause of a bad draw is not established and this section does not claim one.
+
+### §89.2 — The cold mill: a regulator's second OPERATING POINT, both predictions confirmed
+
+CLAUDE.md read *not asked, deliberately — a regulator whose setpoint never moves does not have a
+second program*. The premise is true and the conclusion does not follow: a regulator has no second
+TRAJECTORY and plainly has a second OPERATING POINT, and *does the object hold where it was not
+commissioned* is target 1's question in the form this plant can be asked it. §88.6 already
+corrected the prose; this measures it.
+
+**THE PREDICTIONS WERE WRITTEN DOWN FIRST AND THEY WERE OPPOSITE** (rule 59), which is what makes
+the pair worth running rather than either alone. A GAUGE change should be MET comfortably, because
+§71 proved the win is ALL of one DECLARED roll phase — withhold it and the object is provably
+inert at exactly 1.000x — and a roll phase is a property of the SHAFT. A LINE-SPEED change should
+NOT be, because it moves the transport delay the whole result rests on and that delay is DECLARED
+at commissioning rather than re-measured.
+
+`makeMill(seed, opts)` takes `{ href, h0, vLine }` and DERIVES what follows from them — the
+transport delay `L_GAUGE/vLine/DT`, the roll frequency `vLine/(π·D_BUR)`, the gap setpoint — rather
+than carrying the module constants, because a mill run at another speed has different ones (rule
+31). `millSpec.step` reads them off the mill it is stepping instead of off this module, which is
+what makes a second operating point reachable through `scoreOn` at all. Unset is byte-identical:
+the open loop reads 15.154335422210291 µm and the two classical AGCs 18.08 and 14.00, unchanged.
+
+```
+  operating point                             bare → armed        factor   of the commissioned
+  h 1.50 mm, 5.0 m/s   (the commissioning)    15.39 → 5.86 µm     2.625x     —
+  GAUGE  h 1.40 mm, 5.0 m/s                   15.39 → 5.87 µm     2.625x    1.000   MET
+  GAUGE  h 1.65 mm, 5.0 m/s                   15.39 → 5.86 µm     2.625x    1.000   MET
+  SPEED  h 1.50 mm, 4.0 m/s  (delay 100→125)  15.24 → 7.55 µm     2.020x    0.770   MET
+  SPEED  h 1.50 mm, 6.5 m/s  (delay 100→ 77)  15.26 → 10.35 µm    1.474x    0.562   NOT MET
+```
+
+**A GAUGE CHANGE IS INERT TO THREE FIGURES** across a ±10% span of target thickness, and a LINE
+SPEED change is monotone in how far the declared delay has moved — 0.770 at a 25% delay error,
+which lands exactly on the 1.3x bound, and 0.562 at a 23% error the other way, which misses it.
+Nothing is made worse at any point, so the mandate's own clause holds. Each point is scored
+against the BARE machine AT THAT OPERATING POINT, so a harder gauge cannot read as the object
+failing (rule 19).
+
+The asymmetry is the finding and it was predicted: the declaration this plant's win rests on
+splits in two. The roll phase is read by an ENCODER, which is honest at any line speed, so it
+survives; the transport delay is a NUMBER TYPED IN at commissioning, and it does not. That is a
+product statement rather than a controller one — a mill that changes line speed needs its declared
+delay updated, which is a division the engineer already knows how to do, and a mill that changes
+gauge needs nothing at all.
+
+The mill is no longer `not asked`. It reads its worst held-out operating point into `objtable`,
+which is the 0.562 row, so the table gains a plant and a NOT MET rather than a plant and a
+flattering number.
+
+### §89.3 — The real flexible arm's guard: the speed reading is refuted and a SHAPE reading is not
+
+§88.3 found the first plant in this project where target 1's *none made worse* clause fails, and
+named the repair: the deployed object fades outside the commanded-SPEED span its fit saw, and
+`classic.js` — which is what actually ships here — has no analogue and extrapolates silently. Task
+#66 was to build that analogue, **with the prediction on record that the obvious form cannot
+work**. It cannot, and now by measurement rather than by argument.
+
+```
+  program                                 delivers   peak |v| of the commissioning   |a|/|v| of it
+  edge  96, own amp     (sharper)          0.877x  ← HARM        0.577x                 1.666x
+  edge  96, SHIPPED amp (sharper)          0.921x  ← HARM        1.666x                 1.666x
+  edge 160, 0.35x amp   (amplitude only)   1.152x                0.346x                 1.000x
+  edge 200, own amp     (softer)           2.825x                1.341x                 0.800x
+  edge 160, own amp     (the commission)   1.927x                1.000x                 1.000x
+```
+
+**THE SPEED COLUMN CANNOT SEPARATE THEM AND THE REASON IS STRUCTURAL: THE TWO HARMFUL ROWS
+STRADDLE THE COMMISSIONING VALUE.** One runs at 0.577x of it and the other at 1.666x, so any
+threshold that refuses one either admits the other or refuses the SOFTER program at 1.341x that
+delivers 2.825x. The prediction was written down before this ran and it holds (rule 59).
+
+**THE SHAPE COLUMN DOES, AND IT IS ARITHMETIC RATHER THAN A FIT.** `peak|a|/peak|v|` over the lap
+is a reciprocal TIME — the edge's own risetime — and scaling a program leaves it EXACTLY
+unchanged. The two edge-96 rows demonstrate that by reading ONE number at amplitudes 2.9x apart,
+and the amplitude-only row by reading the commissioned program's number exactly; both are asserted
+(to 1e-9, not bit-equality — the two peaks are maxima over independently scaled arrays, so they
+agree to 13 significant figures and differ in the last bits). Over the four held-out rows it is
+monotone in what they deliver: 1.666x harms, 1.000x is the commission, 0.800x is better than the
+commission itself.
+
+**AND THE GUARD IS STILL NOT BUILT, WHICH IS THE USEFUL HALF.** A coverage guard fades outside the
+span THE COMMISSIONING SAW, and the rung that ships on this plant is identified on ONE program:
+its span is a POINT, not an interval, so there is nothing to fade against. Four rows on one plant
+is a reading and not a threshold — which is §78.5's own lesson, where a guard calibrated on one
+kind of signal and checked on the same kind shipped and had to be retracted. **What this plant
+needs is not a guard but a DIET**: a commissioning of the conventional rung that visits more than
+one edge width, so it HAS a shape span. That is a different build with a different cost, and it is
+named here rather than attempted.
+
+
+### §89.4 — The tank's slowed gate: not a regulariser, and the harm boundary is the NATURAL rate
+
+§88.2 measured that the tank's 2.2x-slowed verify clock is LOAD-BEARING AND BENEFICIAL and could
+not say why, so the default was left where the measurement put it rather than where an argument
+would. Two accounts were on the table and they predict different shapes: a genuine REGULARISER on
+the deploy decision is MONOTONE in the clock, a coincidence of where `5·segLen + PAD` lands is not.
+`verifyclock.mjs` gained `VSCALE=<s>`, a pure multiplier on the index the mode already computes —
+`s = 1` is `resample` exactly and byte-identical, `s ≈ n/prog` is `natural` — and `tankspread.mjs`
+was routed through `verifyIndex` rather than keeping the sixth private copy of the idiom it had
+written for itself (rule 61).
+
+```
+  VSCALE   deployed   median of the deployed
+    0.5      0/8        —
+    0.75     1/8        1.094x
+    1        0/8        —          <- the shipped clock
+    1.5      1/8        1.094x
+    2.2      3/8        0.553x     <- the NATURAL rate, and where harm starts
+    3        3/8        0.553x
+    4.4      3/8        0.553x
+```
+
+**THE REGULARISER ACCOUNT IS REFUTED: the count is NOT monotone**, running 0, 1, 0, 1 as the clock
+speeds up through the slowed region. A knob whose result alternates is a marginal decision being
+flipped, which is `tanks.test.mjs`'s own recorded signature from §54.2 — *9 refuses, 16 refuses,
+24 DEPLOYS, 32 refuses* — arriving on a fourth knob of the same plant.
+
+**WHAT IS REAL AND SHARP IS THE BOUNDARY, AND IT SITS EXACTLY AT THE NATURAL RATE.** Every slowed
+clock that deploys anything deploys a HELPING candidate at 1.094x; at the natural rate and above,
+three deploy with a median of **0.553x — harmful**. Above natural the knob SATURATES by
+construction, because the index clamps at `prog - 1` once the program has been played out, and the
+three identical rows at 2.2 / 3 / 4.4 are the control saying the instrument does what it claims.
+
+**SO THE MECHANISM IS REFUSAL RATHER THAN RANKING**, and that narrows the claim usefully. The
+slowed gate is not sorting candidates better; it is refusing nearly all of them, and the one it
+lets through happens to be good. On this plant that costs almost nothing — the best draw is 1.094x
+— and on a plant with real headroom it would cost most of it. The default does not move, for the
+reason §88.2 gave and now with the mechanism named: it is the clock under which this plant's gate
+does not deploy harm, obtained by refusing seven candidates of eight.
+
+**STATED, because the two sets of numbers are not the same instrument**: these are
+`tankspread.mjs`'s — a bare `Pilot` with `REP=1` — where §88.2's *3 of 8 all helping against 6 of 8
+with two harming* is `tanks.test.mjs`'s ladder. The counts differ and the DIRECTION agrees: slower
+refuses, faster deploys more and deploys harm.
+
+### §89.5 — Target 5 re-scoped, against this file's own evidence
+
+Target 5 read *beat 22.42x on the arm while satisfying 1 and 2*. The intent is right and the
+assumption underneath it is not, and three independent bodies of evidence in this repository say
+so rather than an argument.
+
+**THE NUMBER IT NAMES IS A RETIRED OBJECT'S.** The retirement's own accounting: model layers alone
+7.70x, the lap table on top 22.42x. So 2.91x of the target is the component that was retired for
+being worth 0.53x-0.55x off its program, measured three ways including a textbook norm-optimal ILC
+that reproduces the failure to four figures. A target defined as *beat the memory* is defined
+against something the product does not contain.
+
+**THE MAP'S CEILING IS THE INPUT.** `consist.mjs` fits nothing and reads an information ceiling at
+R² 0.894 measured / 0.931 extrapolated to zero row distance against a shipped fit of 0.856-0.870 —
+1.1x to 1.6x of the residual is all that is left in the window. Nine capacity experiments agree
+from the feature side and several improve in-sample while harming transfer. §54.9 then tested it
+with a different FUNCTION CLASS rather than more features — kernel ridge, locally weighted linear,
+an MLP, kNN — and nothing beat the linear ridge, so the claim is not *no basis* but *no function
+class of the commanded reference window*.
+
+**SO THE TARGET BECOMES**: beat 7.70x on the arm by changing what the object is TOLD or what the
+machine IS, while satisfying 1 and 2. The three routes with priced evidence behind them are the
+MACHINE (§52.30, §52.33), the INSTRUMENT (§52.42, §74) and the DECLARATION (§71, §85) — and none
+of them is a fit. The arm already ships 8.23x through the one press, so the bar is live rather
+than retrospective.
+
+**AND IT IS FALSIFIABLE IN ONE NUMBER**: a map of the commanded reference window reading above
+R² 0.93 leave-one-program-out on the arm's own rows would reopen the fit route, and `consist.mjs`
+is the instrument that reads it.
+
+### §89.6 — How much of each headline is the incumbent class
+
+The owner's objection, in his words: *we have spent this much time and effort on a controller that
+cannot beat a PID FF.* It is worth answering with a number rather than an argument, and the number
+did not exist.
+
+**WHAT THE RECORD ALREADY SAID.** The scorecard reads SET **8 against the incumbent's 5**, every
+factor quoted is against a machine that already carries a model feedforward, and on EMPS
+`classic.js` alone reaches **425x past the published inverse-dynamics feedforward at its own
+published parameters (275x)**. Eight of ten plants ship the deployed object and none is made
+worse. So *cannot beat* is not what the record says.
+
+**WHAT THE RECORD DID NOT SAY, AND THE OBJECTION IS RIGHT ABOUT.** The first rung of every ladder
+is `classic.js` — `[a, v, sign v, 1]` fitted on the machine — which is a self-tuned feedforward and
+IS the incumbent class. Every headline in `objtable` is the WHOLE ladder against the bare machine,
+so a plant's factor can be almost entirely the incumbent with a small learned increment on top, and
+**nothing here had ever separated the two**. The split has been printed in every ladder's own rows
+since §63 and collected nowhere, which is the same shape as every other count this project has had
+to turn from a sentence into a scrape (rule 30) — and the evidence that it matters is already on
+file in three places: the real steam exchanger, where the four coefficients take 89.8x and the
+learned object refuses because nothing is left; the real flexible arm, where they take 1.93x and
+the object refuses; and §89.1 today, where they take 4.66x of the cart-pole's 11.93x.
+
+**SO IT IS A COLUMN NOW.** `emitRow` reads `rep.rungs` — the row named `conventional (self-tuned)`
+and the ladder's own best — and emits `xClassic = base/classic` and `xAdded = classic/best`, which
+MULTIPLY to the headline by construction, so a row where they do not is an instrument fault rather
+than a result. Where the conventional rung was not built or was refused, `xClassic` is 1 and the
+whole factor lands in `xAdded`, because a rung that did not run must not read as one that ran and
+contributed nothing (rule 25). `objtable` prints both, the product, the learned share of the log
+factor, and a count of how many plants get essentially all of their factor from four coefficients.
+
+It is a READ of the object's own record and not a second measurement, so it costs no plant time and
+cannot disagree with the ladder that produced it. Whatever it says is what this project is actually
+selling on top of the incumbent, and it should have been the first table here rather than the last.
+
+### §89.7 — What §89 changed, and what it did not
+
+**NO `lib/` MODULE WAS TOUCHED.** Every change is in `test/` and the three documents, so the deploy
+boundary, the deployed object and every shipped number are untouched by construction — which is
+worth stating because four of the five findings below are corrections to how this project MEASURES
+itself rather than to what it delivers.
+
+```
+  §89.1  target 1's strong form               INCONCLUSIVE, and its own control says why
+  §89.2  target 1 on a regulator              gauge inert to 3 figures, line speed 0.562 — both predicted
+  §89.3  the real arm's guard                 speed refuted; an amplitude-free SHAPE reading orders all four
+  §89.4  the tank's slowed gate               not a regulariser; it works by REFUSAL, boundary at natural rate
+  §89.5  target 5                             re-scoped against nine negatives and a measured ceiling
+  §89.6  the incumbent's share of each headline   a column, scraped from `rep.rungs`
+```
+
+**THREE OF MY OWN PREDICTIONS WERE WRITTEN DOWN FIRST AND TWO HELD** (rule 59). The mill's two —
+gauge survives because the roll phase is an ENCODER reading, line speed does not because the delay
+is TYPED IN — both held, and the second is monotone in how far the delay moved. The real arm's —
+that a speed guard cannot work there — held, and by the mechanism predicted: the two harmful rows
+STRADDLE the commissioning value. The one that did not survive contact is §89.1's, where I expected
+a per-program commission to be the tighter comparator and its own control showed it was simply a
+worse draw.
+
+**AND THE MOST USEFUL THING HERE IS NOT A RESULT BUT A COLUMN THAT SHOULD HAVE EXISTED FIRST.**
+§89.6 exists because the owner asked whether any of this beats a PID+FF, and the honest answer
+required separating the four-coefficient self-tuned feedforward from the learned increment stacked
+on it — a split every ladder has printed since §63 and nothing ever collected. That is rule 30
+aimed at the one number the product claim rests on, and it was found by being asked rather than by
+a check.

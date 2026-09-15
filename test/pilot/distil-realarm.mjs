@@ -321,6 +321,44 @@ const xProg = rep.base / rep.best;
 console.log(`\n  TARGET 1 — the SAME object on programs it was not scored on, no refit`);
 console.log(`    scored program  lap ${A.LAP} edge ${A.EDGE} amp ${A.AMP.toExponential(2)}   `
   + `${rep.base.toExponential(3)} → ${rep.best.toExponential(3)}   ${xProg.toFixed(3)}x`);
+/**
+ * THE GUARD QUESTION, ANSWERED WITH A NUMBER RATHER THAN A BUILD (plan §89.3, task #66).
+ *
+ * The deployed object fades outside the commanded-SPEED span its fit saw; `classic.js`, which is
+ * what actually ships on this plant, has no analogue and extrapolates silently. So the obvious
+ * repair for §88.3's failure is a speed guard — and the PREDICTION written down when that task
+ * was raised is that it CANNOT work here, because the harmful edge-96 program runs at peak |v|
+ * 2.16e-1 against the commissioning's 3.75e-1: it sits INSIDE the trained span, and its
+ * shipped-amplitude twin at 6.25e-1 sits outside on the other side. Two harmful rows straddling
+ * the commissioning value is a configuration no threshold on speed can separate, and this loop
+ * prints both readings so that is measured rather than argued.
+ *
+ * WHAT DOES SEPARATE THEM IS AMPLITUDE-FREE AND IS ARITHMETIC RATHER THAN A FIT: `peak|a|/peak|v|`
+ * over the lap is a reciprocal TIME, the edge's own risetime, and scaling a program leaves it
+ * EXACTLY unchanged — which the two edge-96 rows demonstrate by reading one number at amplitudes
+ * 2.9x apart, and the amplitude-only row by reading the commissioned program's number exactly.
+ * Over the four held-out rows it is monotone in what they deliver.
+ *
+ * AND THE GUARD IS STILL NOT BUILT, WHICH IS THE USEFUL HALF (rule 59, and §78.5's own lesson —
+ * a guard calibrated on one kind of signal and checked on the same kind shipped and had to be
+ * retracted). A coverage guard fades outside the span THE COMMISSIONING SAW, and the rung that
+ * ships here is identified on ONE program: its span is a POINT, not an interval, so there is
+ * nothing to fade against. What this plant needs is not a guard but a DIET — a commissioning that
+ * visits more than one edge width — and that is a different build with a different cost. Four
+ * rows on one plant is a reading, not a threshold.
+ */
+const shapeOf = (g, n) => {
+  let pv = 0, pa = 0;
+  for (let k = 1; k < n - 1; k++) {
+    const p0 = g.at(k - 1)[0], p1 = g.at(k)[0], p2 = g.at(k + 1)[0];
+    pv = Math.max(pv, Math.abs((p2 - p0) / 2));
+    pa = Math.max(pa, Math.abs(p2 - 2 * p1 + p0));
+  }
+  return { pv, pa, av: pa / pv };
+};
+const COMM = shapeOf(E160, A.LAP);
+console.log(`    the commissioned program reads peak |v| ${COMM.pv.toExponential(3)} and `
+  + `|a|/|v| ${COMM.av.toExponential(3)}  (the SHAPE reading, exactly amplitude-free)`);
 const rows = [];
 for (const [tag, g] of VARIANTS) {
   const ref = withRes((k) => g.at(Math.min(k, A.PROG - 1)), A.LAP);
@@ -329,8 +367,12 @@ for (const [tag, g] of VARIANTS) {
   const n = await scoreOn({ refAt: ref, fresh: () => A.makeMachine(A.LOOP), N: A.PROG });
   const x = o.score / n.score;
   rows.push({ tag, x, o: o.score, n: n.score });
+  const sh = shapeOf(g, A.LAP);
+  rows[rows.length - 1].sh = sh;
   console.log(`    ${tag}  amp ${g.amp.toExponential(2)}   ${o.score.toExponential(3)} → `
     + `${n.score.toExponential(3)}   ${x.toFixed(3)}x   ${(x / xProg).toFixed(3)} of the scored factor`);
+  console.log(`      speed ${(sh.pv / COMM.pv).toFixed(3)}x of the commissioning   `
+    + `SHAPE |a|/|v| ${(sh.av / COMM.av).toFixed(3)}x of it`);
 }
 console.log(`    target 1 forbids a held-out factor below ${(xProg / 1.3).toFixed(3)}x `
   + `(1/1.3 of the scored ${xProg.toFixed(3)}x) and forbids any of them below 1.000x\n`);
@@ -360,6 +402,32 @@ check('AMPLITUDE alone does not harm — the prediction this run refuted', ampOn
   `amplitude-only reads ${ampOnly.x.toFixed(3)}x`);
 check('a SOFTER edge than the commissioning is not harmed either', softer.x > 1,
   `edge 200 reads ${softer.x.toFixed(3)}x`);
+/**
+ * THE GUARD READINGS, ASSERTED AS THE TWO CLAIMS THEY SUPPORT (rule 9 — both halves).
+ * The SPEED reading must FAIL to separate: the two harmful rows straddle the commissioning, so
+ * any threshold admitting one admits a safe row or refuses the commissioned program itself.
+ * The SHAPE reading must be EXACTLY amplitude-free: the two edge-96 rows differ only in
+ * amplitude, so their |a|/|v| must be bit-equal, and the amplitude-only row must equal the
+ * commissioned program's. Those are arithmetic identities and go red only if the reading stops
+ * being the one this section measured.
+ */
+check('the SPEED guard cannot separate: the two harmful rows straddle the commissioning value',
+  (sharpBoth.sh.pv < COMM.pv) !== (sharpOnly.sh.pv < COMM.pv),
+  `${sharpBoth.sh.pv.toExponential(3)} and ${sharpOnly.sh.pv.toExponential(3)} `
+  + `against ${COMM.pv.toExponential(3)}`);
+/** NOT `===`, AND THE FIRST VERSION WAS (rule 17 before rule 4). The invariance is ANALYTIC —
+ *  scaling a program scales |a| and |v| by one factor and their ratio not at all — but the two
+ *  numbers are maxima over independently scaled arrays, so they agree to 13 significant figures
+ *  and differ in the last bits. Asserting bit-equality tests the float and not the claim; 1e-9 is
+ *  four orders tighter than the 1.666x and 0.800x separations it has to support. */
+const AV_EQ = (a, b) => Math.abs(a - b) <= 1e-9 * Math.abs(b);
+check('the SHAPE reading is amplitude-free — two amplitudes of one edge read one number',
+  AV_EQ(sharpBoth.sh.av, sharpOnly.sh.av) && AV_EQ(ampOnly.sh.av, COMM.av),
+  `${sharpBoth.sh.av} / ${sharpOnly.sh.av} / ${ampOnly.sh.av} / ${COMM.av}`);
+check('and it ORDERS the four held-out rows: sharper reads higher, softer lower',
+  sharpBoth.sh.av > COMM.av && AV_EQ(ampOnly.sh.av, COMM.av) && softer.sh.av < COMM.av,
+  `${(sharpBoth.sh.av / COMM.av).toFixed(3)} / ${(ampOnly.sh.av / COMM.av).toFixed(3)} / `
+  + `${(softer.sh.av / COMM.av).toFixed(3)} of the commissioned`);
 
 check('the arm is not made worse by anything the ladder ships',
   rep.best <= rep.base, `${rep.base.toExponential(3)} → ${rep.best.toExponential(3)}`);

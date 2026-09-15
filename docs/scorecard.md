@@ -110,6 +110,30 @@ rather than ROB: plan §74 degrades what the TEACHER may measure to a handful of
 lap while the delivered number stays on the tracker, so what is read is a cheap teacher and not a
 cheap scoreboard (rule 15).
 
+## How much of this is the incumbent already? (plan §89.6)
+
+**The objection this section answers, in the owner's words: *a controller that cannot beat a
+PID FF*.** It deserves a number and the number did not exist.
+
+**Every factor in the SET row is the WHOLE ladder against the bare machine**, and the ladder's
+FIRST rung is `classic.js` — `[a, v, sign v, 1]` fitted on the machine — which is a self-tuned
+feedforward and IS the incumbent class named at the top of this file. So a headline can be almost
+entirely the incumbent with a small learned increment on top. Three rows on file already say that
+is not hypothetical: the real steam exchanger's four coefficients take **89.8x** and the learned
+object REFUSES because nothing is left; the real flexible arm's take 1.93x and it refuses; and on
+the cart-pole they take **4.66x of an 11.93x headline** (§89.1).
+
+`objtable.mjs` now prints the split — `xClassic` and `xAdded`, which multiply to the headline by
+construction — read from `rep.rungs` rather than measured a second time. **Whatever that column
+says is what this project sells on top of the incumbent, and it is the honest denominator for
+every cell above.** Until it had been run, this file's SET score of 8 against 5 was a comparison
+against *no* feedforward on some rows and against a *self-tuned* one on others, which is rule 19:
+the metric's support has to match the claim's.
+
+What does NOT change with it: EMPS, where `classic.js` alone reads **425x past the published
+inverse-dynamics feedforward at its own published parameters (275x)**, so on that plant the
+incumbent class self-tuned beats the incumbent as installed, before any learned map is added.
+
 ## What this file is not
 
 It is **not** a claim about the field. One rival has been properly built and run on the arm

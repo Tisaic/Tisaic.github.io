@@ -98,15 +98,20 @@ const millSpec = {
   guards: [{ index: 0, max: 400 }],
   start: [RM.S0], N: RM.T_RUN, floor: 0,
   refAt: () => [RM.S0],
-  fresh: () => { const m = RM.makeMill(1); for (let i = 0; i < 4000; i++) m.step(RM.S0); return { m, want: [] }; },
+  // THE OPERATING POINT TRAVELS ON THE STATE, NOT IN THIS MODULE'S CONSTANTS (plan §89.2).
+  // `step` used to read `RM.S0`, `RM.H0`, `RM.HREF` and `RM.DLY` directly, which is right for one
+  // mill and makes a SECOND operating point unreachable through `scoreOn` — the instrument target
+  // 1 is measured with everywhere else. It reads them off the mill it is stepping now. Unset is
+  // byte-identical, because `makeMill()` with no overrides returns exactly those constants.
+  fresh: () => { const m = RM.makeMill(1); for (let i = 0; i < 4000; i++) m.step(m.s0); return { m, want: [] }; },
   step: (st, ref, u) => {
     st.m.step(ref[0] + u[0]);
     // THE REFERENCE IS DELAYED TO MATCH THE MEASUREMENT — strip tracking, and what every
     // mill does. The X-ray gauge is a metre downstream, so the metal it reads left the gap
     // 200 ms ago and must be compared against the target the gap was holding THEN.
-    st.want.push((RM.MM * ref[0] + RM.QM * RM.H0) / (RM.MM + RM.QM));
-    if (st.want.length > RM.DLY + 2) st.want.shift();
-    const want = st.want.length > RM.DLY ? st.want[st.want.length - 1 - RM.DLY] : RM.HREF;
+    st.want.push((RM.MM * ref[0] + RM.QM * st.m.h0) / (RM.MM + RM.QM));
+    if (st.want.length > st.m.dly + 2) st.want.shift();
+    const want = st.want.length > st.m.dly ? st.want[st.want.length - 1 - st.m.dly] : st.m.href;
     // ONE READING PER SAMPLE. Calling the gauge twice draws two independent noise samples,
     // so the signal the model is given and the truth it is asked to predict would disagree
     // by pure noise.

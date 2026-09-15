@@ -298,6 +298,36 @@ function emitRow(rep, auto, extra = {}) {
     // 0.045x, so the table read DEPLOYED for a rung that did not (rule 25, and `distil.js`'s own
     // "the gate is a PRE-FILTER and the decision is a machine-scored verify").
     rung: rep.distil ? ((rep.deployed && rep.deployed.distil) ? 'DEPLOYED' : 'REFUSED') : null,
+    /**
+     * WHAT THE FOUR-COEFFICIENT RUNG TAKES, AND WHAT THE LEARNED MAP ADDS ON TOP OF IT.
+     *
+     * The headline factor is the WHOLE ladder against the bare machine, and `classic.js` —
+     * `[a, v, sign v, 1]` fitted on the machine — is essentially a self-tuned feedforward, which
+     * is the incumbent class. So a plant's headline can be mostly the incumbent with a small
+     * learned increment on it, and nothing here has ever separated the two: the split is printed
+     * per plant in each ladder's own rows and has never been collected, which is the same shape
+     * as every other count this project has had to turn from a sentence into a scrape (rule 30).
+     * `rep.rungs` already carries it — the row NAMED `conventional (self-tuned)` and the row
+     * named for the distilled rung, each with the score it was measured at — so this is a read of
+     * the object's own record and not a second measurement.
+     *
+     * `xClassic` is base/classic and `xAdded` is classic/best, so their product is the headline
+     * by construction; where the conventional rung was not built or was refused, `xClassic` is 1
+     * and the whole factor lands in `xAdded` (rule 25 — a rung that did not run must not read as
+     * one that ran and contributed nothing).
+     */
+    ...(() => {
+      const rs = Array.isArray(rep.rungs) ? rep.rungs : [];
+      const cl = rs.find((r) => r.name === 'conventional (self-tuned)' && r.deployed);
+      const xClassic = (cl && Number.isFinite(rep.base) && Number.isFinite(cl.score) && cl.score > 0)
+        ? rep.base / cl.score : 1;
+      const afterClassic = cl && Number.isFinite(cl.score) ? cl.score : rep.base;
+      const xAdded = (Number.isFinite(afterClassic) && Number.isFinite(rep.best) && rep.best > 0)
+        ? afterClassic / rep.best : null;
+      return { xClassic: +xClassic.toFixed(4),
+        xAdded: xAdded === null ? null : +xAdded.toFixed(4),
+        classicRan: !!cl };
+    })(),
     ...extra,
   };
   try {

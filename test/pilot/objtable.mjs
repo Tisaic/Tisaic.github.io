@@ -165,19 +165,60 @@ if (READ) {
   }
   const nObj = got.filter((r) => r.deployed && r.deployed.distil).length;
   console.log(`\n  ${nObj} of ${got.length} ship the DEPLOYED OBJECT; made WORSE: ${bad || 'none'}`);
+  /**
+   * HOW MUCH OF EACH HEADLINE IS THE INCUMBENT CLASS (plan §89.6).
+   *
+   * Every factor in this table is the WHOLE ladder against the bare machine, and the first rung
+   * of that ladder — `classic.js`, `[a, v, sign v, 1]` fitted on the machine — IS a self-tuned
+   * feedforward, which is the class `docs/scorecard.md` names as the incumbent. So a headline can
+   * be mostly the incumbent with a small learned increment on top, and until this column existed
+   * nothing separated the two: the split was printed in every ladder's own rows and collected
+   * nowhere, which is the shape rule 30 warns about and which this table exists to fix. It is a
+   * READ of `rep.rungs` rather than a second measurement, and the two columns MULTIPLY to the
+   * headline by construction, so a row where they do not is an instrument fault and not a result.
+   */
+  const sp = got.filter((r) => Number.isFinite(r.xClassic) && Number.isFinite(r.xAdded));
+  if (sp.length) {
+    console.log(`\n  WHAT THE FOUR-COEFFICIENT RUNG TAKES, AND WHAT THE LEARNED MAP ADDS ON TOP`);
+    console.log(`  (the first is the INCUMBENT CLASS self-tuned; the two multiply to the headline)`);
+    console.log(`  harness                     classic     learned    headline   learned share of log`);
+    for (const r of sp) {
+      const tot = r.xClassic * r.xAdded;
+      const share = tot > 1 ? Math.log(r.xAdded) / Math.log(tot) : null;
+      console.log(`  ${r.file.padEnd(27)} ${(r.classicRan ? r.xClassic.toFixed(2) + 'x' : 'none')
+        .padStart(8)} ${(r.xAdded.toFixed(2) + 'x').padStart(10)} `
+        + `${(tot.toFixed(2) + 'x').padStart(10)}   `
+        + `${share === null ? '—' : (100 * share).toFixed(0) + '%'}`);
+    }
+    const carried = sp.filter((r) => r.classicRan && r.xAdded < 1.05);
+    console.log(`\n  ${carried.length} of ${sp.length} plants get essentially ALL of their factor `
+      + `from the four-coefficient rung${carried.length ? ': ' + carried.map((r) => r.file).join(', ') : ''}`);
+  }
   // TARGET 1's COLUMN, REPORTED AND NOT ASSERTED (plan §88.1). Every harness that scores a second
   // program emits the ratio it delivers there against the one it was scored on; the target
   // forbids that ratio falling below 1/1.3. It is PRINTED rather than checked because the real
   // flexible arm is measured as failing it — a suite pinned to a bar a plant is known to fail is
   // permanently red and hides the next real failure (rule 3) — and because a plant whose harness
   // does not ask reads `not asked` rather than dropping out of the count (rule 25).
-  // THE QUADRUPLE TANK AND THE COLD MILL READ `not asked`, AND BOTH ARE OPEN ITEMS RATHER THAN
-  // EXCLUSIONS (plan §88.9). The tank HAS a held-out recipe on record — 2.657x against production's
+  // ONLY THE QUADRUPLE TANK READS `not asked` NOW, AND IT IS AN OPEN ITEM RATHER THAN AN
+  // EXCLUSION (plan §88.9). It HAS a held-out recipe on record — 2.657x against production's
   // 3.268x (§79.3) — but that number comes from the GAIN LADDER'S OWN candidate scoring, which is
   // a different instrument from the one every other row here uses, and counting the two together
-  // would put two quantities in one column (rule 19). The mill is §88.6's own correction: a
-  // regulator has no second TRAJECTORY and plainly has a second OPERATING POINT, so "not
-  // applicable" over "not measured" was rule 25 committed while citing rule 25.
+  // would put two quantities in one column (rule 19).
+  // THE COLD MILL IS ASKED AS OF §89.2, having read `not asked` since this column existed. §88.6
+  // corrected the reason — a regulator has no second TRAJECTORY and plainly has a second
+  // OPERATING POINT, so "not applicable" over "not measured" was rule 25 committed while citing
+  // rule 25 — and §89.2 measured it: a GAUGE change is inert to three figures, a LINE SPEED
+  // change is not, because it moves a transport delay DECLARED at commissioning. Its row is the
+  // WORST of the four points tried, which is a NOT MET, so asking it costs the table a verdict
+  // rather than handing it a flattering one.
+  //
+  // AND EVERY RATIO IN THIS COLUMN IS THE CHEAP COMPARATOR, which §89.1 tried to replace and
+  // could not: it is the held-out factor over the SCORED program's, where the target says a
+  // controller commissioned on each program INDIVIDUALLY. A second commissioning was built on the
+  // cheapest plant and its own control disqualified it — the per-program object is worse on the
+  // SHIPPED program too (6.055x against 12.009x), so it is a worse DRAW and not a per-program
+  // one. The strong form costs a distribution per program, not a run.
   const asked = got.filter((r) => r.t1 !== undefined && r.t1 !== null);
   const met = asked.filter((r) => !r.t1Worse && r.t1 >= 1 / 1.3);
   console.log(`  TARGET 1 asked on ${asked.length} of ${got.length}: ${met.length} MET, `

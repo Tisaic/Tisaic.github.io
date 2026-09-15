@@ -31,6 +31,7 @@ import { Pilot, setSolverDefaults, setVerifyRateDiv, setVerifyRef } from '../../
 import { ensemble, freezeConfig } from '../../lib/pilot/ensemble.js';
 import { UCAP, makeTanks, levelsAt, voltsFor, RECIPE, refAtStep, PROG }
   from './rigs/tanks-rig.mjs';
+import { verifyIndex } from './rigs/verifyclock.mjs';
 
 const SEEDS = +(process.env.SEEDS || 8);
 // THE VERIFY'S RATE DIVISOR. Quarter rate is a MEASURED result about choosing lambda and an
@@ -43,9 +44,15 @@ if (process.env.RDIV) setVerifyRateDiv(+process.env.RDIV);
 // everything, so it cannot distinguish a gate that RANKS from one that merely refuses harder.
 // This plant can: some draws here deliver 1.775x, so a gate that refuses those is worse, not
 // better. The reference is the plant's own recipe, which is what the score is taken on.
+// AND ITS CLOCK COMES FROM THE SHARED MODULE RATHER THAN A SIXTH PRIVATE COPY OF THE IDIOM
+// (plan §89.4, rule 61). This file wrote `round(i * PROG / n)` itself, which is exactly the line
+// §88.2 found in four plant tests and measured at 22x on a fifth; routing it through
+// `verifyIndex` makes `VREF` and `VSCALE` reach the one instrument that can sweep this plant's
+// gate, and `VSCALE=1` with `VREF` unset reproduces the line it replaces character for character.
 if (process.env.REP === '1') {
+  const vidx = verifyIndex(PROG);
   setVerifyRef((i, n) => {
-    const h = refAtStep(Math.round(i * PROG / n));
+    const h = refAtStep(vidx(i, n));
     return voltsFor(GMP, h[0], h[1]);
   });
 }

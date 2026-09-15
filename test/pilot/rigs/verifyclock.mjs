@@ -28,11 +28,29 @@
  * It returns an INDEX, not a reference, because each plant composes its own map from setpoint to
  * command (volts, power, two inputs) and a helper that owned that would be a second copy of it.
  */
+/**
+ * VSCALE=<s>: THE CLOCK AS A CONTINUOUS KNOB, WHICH IS WHAT TURNS §88.2's FINDING INTO A
+ * FALSIFIER (plan §89.4, task #65).
+ *
+ * §88.2 measured that the tank's 2.2x-slowed resampling is LOAD-BEARING AND BENEFICIAL — 3 of 8
+ * seeds deploy and ALL THREE HELP, against 6 of 8 deploying and TWO HARMING at the program's own
+ * rate — and could not say WHY, so the default was left where the measurement put it rather than
+ * where an argument would. A slowed gate could be a genuine REGULARISER on the deploy decision
+ * (a candidate must hold up over a longer excursion, so a marginal one is refused), or it could
+ * be a coincidence of where `5·segLen + PAD` happens to land. Those predict different things and
+ * one run separates them: a regulariser is MONOTONE in the clock, a coincidence is not.
+ *
+ * `s` multiplies the playback rate, so `s = 1` is `resample` exactly and `s = n/prog` is
+ * `natural`. It is a pure multiplier on the index the mode already computes, which is what keeps
+ * `VSCALE=1` byte-identical to the default rather than merely close to it.
+ */
 function verifyIndex(prog, { legacy = null } = {}) {
   const mode = process.env.VREF || 'resample';
-  if (mode === 'natural') return (i) => Math.min(i, prog - 1);
-  if (mode === 'legacy' && legacy !== null) return (i, n) => Math.round(i * legacy / n);
-  return (i, n) => Math.round(i * prog / n);
+  const s = process.env.VSCALE ? Number(process.env.VSCALE) : 1;
+  if (mode === 'natural') return (i) => Math.min(Math.round(i * s), prog - 1);
+  const span = (mode === 'legacy' && legacy !== null) ? legacy : prog;
+  if (s === 1) return (i, n) => Math.round(i * span / n);
+  return (i, n) => Math.min(prog - 1, Math.round(i * span * s / n));
 }
 
 /**
@@ -46,9 +64,10 @@ const verifyStretch = (prog, rep, { legacy = null } = {}) => {
   const mode = process.env.VREF || 'resample';
   const n = (rep && rep.verifyRegimes && rep.verifyRegimes.steps) || null;
   if (!n) return { mode, n: null, factor: null };
-  if (mode === 'natural') return { mode, n, factor: 1 };
+  const s = process.env.VSCALE ? Number(process.env.VSCALE) : 1;
+  if (mode === 'natural') return { mode, n, factor: s, scale: s };
   const span = (mode === 'legacy' && legacy !== null) ? legacy : prog;
-  return { mode, n, factor: span / n };
+  return { mode, n, factor: (span * s) / n, scale: s };
 };
 
 export { verifyIndex, verifyStretch };

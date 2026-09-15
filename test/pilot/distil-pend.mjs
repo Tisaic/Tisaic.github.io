@@ -205,18 +205,18 @@ function tabulate(g, laps = 4) {
   }
   return { n, vv, aa };
 }
-function score(active, g = SHIPPED) {
+function score(active, g = SHIPPED, A = auto) {
   const { n: NSC, vv: VV, aa: AA } = tabulate(g);
   const p = PD.makeSettled();
-  if (active) auto.beginRun();
+  if (active) A.beginRun();
   let s2 = 0, n = 0, uPk = 0, thPk = 0;
   for (let k = 0; k < NSC; k++) {
     const xr = g.at(k);
     const look = (off) => [g.at(k + off)];
-    const u = active ? auto.act({ v: [VV[k]], a: [AA[k]], look, lookRaw: look, k }) : [0];
+    const u = active ? A.act({ v: [VV[k]], a: [AA[k]], look, lookRaw: look, k }) : [0];
     uPk = Math.max(uPk, Math.abs(u[0] || 0));
     PD.stepCart(p, PD.baseline(p, xr + (u[0] || 0)));
-    auto.observe([p.x, p.v, p.th, p.w]);
+    A.observe([p.x, p.v, p.th, p.w]);
     thPk = Math.max(thPk, Math.abs(p.th));
     if (k >= g.lap) { const e = PD.tipOf(p) - xr; s2 += e * e; n++; }
   }
@@ -279,6 +279,114 @@ check('target 1: the held-out program is not made worse', hOn.rms <= hOff.rms * 
  */
 console.log(`    TARGET 1's 1.3x BOUND: ${xHeld >= xProg / 1.3 ? 'MET' : 'NOT MET'} — the held-out `
   + `program delivers ${(xHeld / xProg).toFixed(3)} of the scored factor`);
+
+/**
+ * TARGET 1's STRONG FORM: THE COMPARATOR IS A PER-PROGRAM COMMISSION, NOT THE SCORED PROGRAM'S
+ * OWN FACTOR (plan §89.1, task #64).
+ *
+ * Everything above is the CHEAP form, and its own comment says what that costs: the comparator is
+ * the factor on the program the object was commissioned against, where the TARGET names *a
+ * controller commissioned on each program individually*. Those are the same number only if the
+ * two programs are equally hard, and the §88 table shows they are not — three of its five MET
+ * verdicts are rows where the held-out factor EXCEEDS the scored one, which makes the cheap
+ * comparator more GENEROUS than the target rather than tighter. A ratio above 1 in that table is
+ * therefore not evidence of meeting the bound; it is evidence the denominator moved.
+ *
+ * The strong form costs a second commissioning, which is why it runs on the two cheapest plants
+ * first: this one at 42.7 min of product commissioning (§87.7's own scrape) and the cold mill at
+ * 55 min. It commissions the SAME ladder — same diet, same window rule, same authority, same
+ * ridge and gain ladders — with the HELD program in the place the scored program occupied, so the
+ * machine-scored axes optimise for IT, and then scores that object on HELD. Target 1's real
+ * ratio is this object's factor on HELD over THAT one's.
+ *
+ * THE CHANNEL BOX IS REBUILT FROM THE HELD PROGRAM'S OWN PEAKS AND THE REASON IS RULE 41b: HELD
+ * accelerates at 0.90 against the shipped program's 0.50, so commissioning it inside the shipped
+ * box would excite a machine that cannot run the program it is being commissioned for — the fault
+ * that cost the real flexible arm 88 gain cells (§55). A per-program commission states the
+ * program's own limits, which is what an engineer does.
+ *
+ * Opt-in (`T1COMM=1`) because it doubles this harness's plant time and the suite pays for what it
+ * runs (rule 2); the number it produces is recorded in CLAUDE.md and `docs/plan.md`.
+ */
+if (process.env.T1COMM === '1') {
+  const pk = (g, n) => {
+    let v = 0, a = 0;
+    for (let k = 1; k < n - 1; k++) {
+      const p0 = g.at(k - 1), p1 = g.at(k), p2 = g.at(k + 1);
+      v = Math.max(v, Math.abs((p2 - p0) / 2));
+      a = Math.max(a, Math.abs(p2 - 2 * p1 + p0));
+    }
+    return { v, a };
+  };
+  const hp = pk(HELD, HELD.lap * 4);
+  // T1BOX=ship: the CONTROL for the box choice, and it is the one that decided this measurement
+  // (plan §89.1). Stating the held program's own limits is right by rule 41b and it also CHANGES
+  // THE EXCITATION every rung below is identified from, so "commissioned on HELD" and "probed for
+  // HELD" move together and a difference cannot be attributed to either. Run both.
+  const BOX = process.env.T1BOX === 'ship' ? spec.channels[0]
+    : { ...spec.channels[0], vMax: hp.v, aMax: hp.a, jMax: hp.a / PD.TA };
+  const spec2 = { ...spec,
+    name: spec.name + ' [per-program commission on the HELD program]',
+    channels: [BOX],
+    // T1UCAP: the per-program object's own authority. The shipped cap is the default, so unset is
+    // the honest comparison; it exists because the first run's per-program object came back
+    // CLAMPED on 50% of samples at 1.80x its cap where the frozen one clamps 34% at 1.22x, and a
+    // heavily clipped map is a different object from the one that was fitted (rule 17 — check
+    // what the instrument could deliver before concluding about what it learned).
+    uMax: env('T1UCAP', spec.uMax),
+    N: HELD.lap * 4,
+    refAt: (k) => [HELD.at(k)],
+    pilotOpts: { ...spec.pilotOpts, verifyRef: (i) => [HELD.at(i)] } };
+  console.log(`\n  TARGET 1, STRONG FORM — commissioning a SECOND object on the held-out program`);
+  console.log(`    its own peaks  |v| ${hp.v.toExponential(3)}  |a| ${hp.a.toExponential(3)}`
+    + `   (the shipped box was |v| ${spec.channels[0].vMax.toExponential(3)}`
+    + `  |a| ${spec.channels[0].aMax.toExponential(3)})`);
+  const { auto: auto2 } = await ladder(spec2);
+  // ONE scoring loop for both objects, the acting one passed in — a second copy of this loop is
+  // how `distil-tank.mjs` came to score a rung its own run never applied (rule 61).
+  const pOn = score(true, HELD, auto2);
+  /**
+   * THE CONTROL THAT SEPARATES THE TWO READINGS OF A SURPRISE (rules 14, 20).
+   * The per-program object coming back WORSE on its own program has two explanations and the
+   * numbers above cannot tell them apart: either HELD is a program that resists being
+   * commissioned ON, or this second commissioning is simply a worse DRAW and would be worse
+   * everywhere. Scoring it on the SHIPPED program costs one scored run and decides it.
+   */
+  const pOnShip = score(true, SHIPPED, auto2);
+  const xPer = hOff.rms / pOn.rms;
+  console.log(`    the object that SHIPS, on HELD          ${hOn.rms.toExponential(3)}`
+    + `   ${xHeld.toFixed(3)}x   uPk ${hOn.uPk.toFixed(4)} of ${spec.uMax}`);
+  console.log(`    an object COMMISSIONED on HELD         ${pOn.rms.toExponential(3)}`
+    + `   ${xPer.toFixed(3)}x   uPk ${pOn.uPk.toFixed(4)} of ${spec2.uMax}`);
+  console.log(`    the SAME per-program object, back on SHIPPED   ${pOnShip.rms.toExponential(3)}`
+    + `   ${(off.rms / pOnShip.rms).toFixed(3)}x   (the frozen one reads ${xProg.toFixed(3)}x there)`);
+  /**
+   * AND THE CONTROL DISQUALIFIES THE NUMBER, WHICH IS WHY IT RUNS (rule 27 — the unflattering
+   * diagnostic first). A per-program object that is ALSO worse on the program the frozen one was
+   * commissioned for is not telling us anything about transfer; it is a worse COMMISSIONING, and
+   * a ratio computed against it would report the frozen object "beating a per-program
+   * commission" when what it beat was a bad draw. A commissioning is a DRAW and this project has
+   * said so since §87.3 — which measured THIS plant at 11.789-12.113x over six of them, a 1.03x
+   * spread, the tightest here. A second commissioning landing 2x below that entire distribution
+   * is not a sample from it.
+   */
+  const xPerShip = off.rms / pOnShip.rms;
+  const SOUND = xPerShip >= xProg / 1.3;
+  console.log(`    TARGET 1, strong form: ${(xHeld / xPer).toFixed(3)} of a per-program `
+    + `commission${SOUND ? ` — ${xHeld >= xPer / 1.3 ? 'MET' : 'NOT MET'} (forbids < 0.769)`
+      : ''}`);
+  if (!SOUND) {
+    console.log(`    INCONCLUSIVE, AND THE CONTROL IS WHY: the per-program object reads `
+      + `${xPerShip.toFixed(3)}x on the SHIPPED program where the frozen one reads `
+      + `${xProg.toFixed(3)}x.`);
+    console.log(`    It is worse EVERYWHERE, so it is a worse commissioning rather than a `
+      + `per-program one, and the ratio above measures the draw and not the target.`);
+    console.log(`    What the strong form needs is a per-program commission as good a DRAW as `
+      + `the shipped one; one second run is not that (rules 14, 20).`);
+  }
+  console.log(`    the cheap form read ${(xHeld / xProg).toFixed(3)}; it remains the only `
+    + `comparator this plant has measured, with the looseness its own comment states\n`);
+}
 
 check('the pole stays up with whatever the ladder shipped applied',
   on.thPk < 0.30, `|θ| peak ${on.thPk.toFixed(3)} against the 0.30 guard`);

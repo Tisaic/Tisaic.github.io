@@ -27,12 +27,32 @@ const NOWAND = process.env.NOWANDER === '1';           // gap holding the target
 function lcg(s0) { let s = s0 >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32); }
 function gauss(r) { const u = Math.max(1e-12, r()); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
 
-function makeMill(seed) {
+/**
+ * A SECOND OPERATING POINT, WHICH IS TARGET 1's QUESTION IN THE FORM A REGULATOR CAN BE ASKED IT
+ * (plan §89.2, task #67).
+ *
+ * This mill's setpoint never moves, so it has no second TRAJECTORY — and CLAUDE.md wrote
+ * "not applicable" over that, which is rule 25 exactly. A regulator plainly has a second
+ * OPERATING POINT: a different target gauge, a different line speed. `opts` states one, and the
+ * quantities that follow from it are DERIVED here rather than carried, because the transport
+ * delay and the roll frequency are both functions of the line speed and a mill run at another
+ * speed has different ones (rule 31).
+ *
+ * Unset is byte-identical: every default is the module constant the rig has always used.
+ */
+function makeMill(seed, opts = {}) {
+  const href = opts.href === undefined ? HREF : opts.href;
+  const h0 = opts.h0 === undefined ? H0 : opts.h0;
+  const vLine = opts.vLine === undefined ? V_LINE : opts.vLine;
+  const dly = Math.round(L_GAUGE / vLine / DT);
+  const fEcc = vLine / (Math.PI * D_BUR);
+  const s0 = (href * (MM + QM) - QM * h0) / MM;
   const rnd = lcg(seed);
-  let S = S0, k = 0;
+  let S = s0, k = 0;
   const buf = [];
   return {
-    h: HREF, F: QM * (H0 - HREF), S,
+    href, h0, vLine, dly, fEcc, s0,
+    h: href, F: QM * (h0 - href), S,
     /** entry gauge wanders slowly — the previous pass's own error, and unmeasured.
      *
      * `NOWANDER=1` HOLDS IT FLAT, which sizes the one component the shipped object cannot
@@ -42,11 +62,11 @@ function makeMill(seed) {
      * of the OPEN-LOOP error at 12.96% of the energy. Neither says what share of what the
      * shipped object LEAVES is wander, and that is the number that prices any feedback
      * structure aimed at it. Unset is byte-identical. */
-    entryAt(kk) { return NOWAND ? H0
-      : H0 + 0.020 * Math.sin(2 * Math.PI * kk * DT / 4.3)
+    entryAt(kk) { return NOWAND ? h0
+      : h0 + 0.020 * Math.sin(2 * Math.PI * kk * DT / 4.3)
         + 0.012 * Math.sin(2 * Math.PI * kk * DT / 1.9); },
     quiet: false,
-    ecc(kk) { return this.quiet ? 0 : A_ECC * Math.sin(2 * Math.PI * F_ECC * kk * DT); },
+    ecc(kk) { return this.quiet ? 0 : A_ECC * Math.sin(2 * Math.PI * fEcc * kk * DT); },
     step(Scmd) {
       tick();
       S += (DT / TAU_A) * (Scmd - S);                    // hydraulic capsule
@@ -55,11 +75,11 @@ function makeMill(seed) {
       this.F = QM * (H - this.h);
       this.S = S;
       buf.push(this.h);
-      if (buf.length > DLY + 2) buf.shift();
+      if (buf.length > dly + 2) buf.shift();
       k++;
     },
     /** what the X-ray gauge reports: the truth, late and noisy. */
-    gauge() { return (buf.length > DLY ? buf[buf.length - 1 - DLY] : HREF) + NOISE * gauss(rnd); },
+    gauge() { return (buf.length > dly ? buf[buf.length - 1 - dly] : href) + NOISE * gauss(rnd); },
     /** the gaugemeter's inference, from signals available with no delay at all. */
     hHat() { return this.S + this.F / MM; },
   };

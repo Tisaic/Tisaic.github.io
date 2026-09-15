@@ -42,7 +42,7 @@
  */
 import { ladder, announce } from './rigs/ladder.mjs';
 import { millSpec } from './rigs/specs.mjs';
-import { deriveWindow, reportDistil, priceFrom, ridgeLadder, gainLadder, teacherReuse, teachLaps, teachAvg, dietN } from './rigs/distilkit.mjs';
+import { deriveWindow, reportDistil, priceFrom, ridgeLadder, gainLadder, teacherReuse, teachLaps, teachAvg, dietN, emitRow } from './rigs/distilkit.mjs';
 import { oracleConverge } from './rigs/oracleteach.mjs';
 
 // THE ORACLE TEACHER, AND THIS PLANT IS ITS FALSIFIER (plan §73.11). It needs a cascade to
@@ -193,10 +193,80 @@ const spec = { ...millSpec,
 
 announce();
 const price = priceFrom();
-const { rep, auto } = await ladder(spec);
+const { rep, auto, scoreOn } = await ladder(spec);
 price.close({ dt: RM.DT, rep });
 const { inSample } = await reportDistil({ rep, runs: distilRuns(),
   nFeat: OFFSETS.length * REFDIM + 1, auto });
+
+/**
+ * TARGET 1 ON A REGULATOR, WHICH IS A QUESTION THIS FILE'S OWN DOCUMENTATION SAID DID NOT EXIST
+ * (plan §89.2, task #67).
+ *
+ * CLAUDE.md read: *not asked, deliberately — a regulator whose setpoint never moves does not have
+ * a second program*. The premise is true and the conclusion does not follow. A regulator has no
+ * second TRAJECTORY and plainly has a second OPERATING POINT — a different target gauge, a
+ * different line speed — and *does the object hold where it was not commissioned* is target 1's
+ * question in the form this plant can be asked it. Writing "not applicable" over "not measured" is
+ * rule 25 itself, committed two sentences after citing it.
+ *
+ * THE PREDICTIONS WERE WRITTEN DOWN BEFORE THIS RAN (rule 59) and they are opposite, which is
+ * what makes the pair worth running rather than either alone:
+ *
+ *   A GAUGE CHANGE should be MET comfortably. §71 proved the win is ALL of one DECLARED roll
+ *   phase — withhold it and the object is provably inert at exactly 1.000x — and a roll phase is
+ *   a property of the SHAFT. Nothing about rolling to 1.40 mm instead of 1.50 moves it.
+ *
+ *   A LINE-SPEED CHANGE should NOT be. It moves the transport delay the whole result rests on,
+ *   and that delay is DECLARED at commissioning (`pilotOpts.deadTime`) rather than re-measured —
+ *   so the commissioned object is holding a number about the plant that the plant has changed.
+ *   The roll frequency moves with it, but the ENCODER is honest at any speed, so the declared
+ *   phase handed to the object stays correct and the delay is the only thing that goes stale.
+ *   That separation is the point: one axis where the declaration survives and one where it does
+ *   not, on one plant, with the same frozen weight vector.
+ *
+ * Each operating point is scored against the BARE machine AT THAT OPERATING POINT, so a harder
+ * gauge cannot read as the object failing (rule 19, and §75's own protocol).
+ */
+const OPS = [
+  { tag: 'the commissioned point  h 1.50 mm, 5.0 m/s', o: {} },
+  { tag: 'GAUGE   h 1.40 mm, 5.0 m/s (delay unmoved)', o: { href: 1.40 } },
+  { tag: 'GAUGE   h 1.65 mm, 5.0 m/s (delay unmoved)', o: { href: 1.65 } },
+  { tag: 'SPEED   h 1.50 mm, 4.0 m/s (delay 100→125)', o: { vLine: 4.0 } },
+  { tag: 'SPEED   h 1.50 mm, 6.5 m/s (delay 100→ 77)', o: { vLine: 6.5 } },
+];
+console.log(`\n  TARGET 1 ON A REGULATOR — the SAME frozen object at a second OPERATING POINT`);
+console.log(`    (no refit, no recommission; each point against the BARE machine at that point)\n`);
+const t1rows = [];
+for (const { tag, o } of OPS) {
+  const probe = RM.makeMill(1, o);
+  // The reference this operating point commands, and the roll phase an ENCODER would report on
+  // it — honest at any line speed, which is what isolates the transport delay as the one stale
+  // declaration.
+  const ph = (k) => 2 * Math.PI * probe.fEcc * k * RM.DT;
+  const rAt = (k) => (NOECC ? [probe.s0]
+    : [probe.s0, Math.cos(ph(WARM + k)), Math.sin(ph(WARM + k))]);
+  const fr = () => { const m = RM.makeMill(1, o); for (let i = 0; i < 4000; i++) m.step(m.s0); return { m, want: [] }; };
+  const bare = (await scoreOn({ refAt: rAt, fresh: fr, N: RM.T_RUN }, { armed: false })).score;
+  const on = (await scoreOn({ refAt: rAt, fresh: fr, N: RM.T_RUN })).score;
+  const x = bare / on;
+  t1rows.push({ tag, x, bare, on, dly: probe.dly });
+  console.log(`    ${tag}   ${(1000 * bare).toFixed(2)} → ${(1000 * on).toFixed(2)} µm   `
+    + `${x.toFixed(3)}x`);
+}
+const xComm = t1rows[0].x;
+console.log(`\n    against the commissioned point's ${xComm.toFixed(3)}x:`);
+for (const r of t1rows.slice(1)) {
+  console.log(`    ${r.tag}   ${(r.x / xComm).toFixed(3)} of it   `
+    + `${r.x / xComm >= 1 / 1.3 ? 'MET' : 'NOT MET'}${r.x < 1 ? '   ← MADE WORSE' : ''}`);
+}
+const held = t1rows.slice(1);
+const worst = held.reduce((a, b) => (b.x < a.x ? b : a));
+console.log('');
+// The MANDATE's clause is asserted; the 1.3x bound is reported, exactly as every other plant
+// does it (plan §88.4) — a suite pinned to a bar plants are measured to fail is permanently red.
+check('target 1: no operating point is made worse by the frozen object',
+  held.every((r) => r.x >= 0.98), `worst ${worst.tag} at ${worst.x.toFixed(3)}x`);
+emitRow(rep, auto, { t1: worst.x / xComm, t1Worse: worst.x < 1 });
 
 check('the mill is not made worse by anything the ladder ships',
   rep.best <= rep.base, `${rep.base.toExponential(3)} → ${rep.best.toExponential(3)}`);
