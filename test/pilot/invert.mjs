@@ -45,19 +45,19 @@
  * KNOBS: PLANTS (comma list), AMP (fraction of uMax, default 0.25), WINDOW (steps), K0
  * (fraction of the program at which the step is applied). It asserts nothing.
  */
-import { tankSpec, wbSpec, millSpec, barrelSpec, empsSpec } from './rigs/specs.mjs';
+import { tankSpec, wbSpec, millSpec, barrelSpec, empsSpec, realarmSpec } from './rigs/specs.mjs';
 
 const env = (k, d) => (process.env[k] === undefined ? d : Number(process.env[k]));
 const AMP = env('AMP', 0.25);
 const K0F = env('K0', 0.10);
-const WANT = (process.env.PLANTS || 'tank,column,mill,barrel,emps').split(',');
+const WANT = (process.env.PLANTS || 'tank,column,mill,barrel,emps,realarm').split(',');
 
 // THE FIFTH ROW IS A WINNER, AND IT IS THE CONTROL THIS FILE SHIPPED WITHOUT (plan §84.9).
 // Every diagnosis here was taken on a plant that LOSES, so a reading shared by all four could be
 // a property of the instrument rather than of failure. EMPS deploys at 14.7x, so what it reads on
 // these same axes is what "nothing wrong" looks like (rule 9).
 const SPECS = [['tank', tankSpec], ['column', wbSpec], ['mill', millSpec], ['barrel', barrelSpec],
-  ['emps', empsSpec]];
+  ['emps', empsSpec], ['realarm', realarmSpec]];
 
 /**
  * Run one plant for `n` steps from a fresh state, holding a correction `amp` on channel `j`
@@ -214,6 +214,9 @@ const VERDICT = {
   barrel: 'plants.test DEPLOYS 1.05x (stack 2) · representative regime 0.22x, forced deploy at cap',
   // THE POSITIVE CONTROL. The only row here the record calls a clear, repeatable win.
   emps: 'emps.test 14.7x DEPLOYED · spread.mjs 1.05x over 8 seeds — the WINNER (rule 9)',
+  // THE OPEN CASE. Ships 1.93x on the conventional rung and REFUSES the cascade with no cause
+  // stated — the authority is already ruled out (byte-identical at every cap).
+  realarm: 'realarm.test 1.93x conventional · REFUSES the cascade, correction WRONG not clipped',
 };
 // PROG/RISE IS ADDED BY THE POSITIVE CONTROL, AND IT IS THE ONE AXIS THE WINNER SEPARATES ON
 // (plan §84.9). Free arithmetic on numbers already here — how many of the plant's own response
@@ -226,10 +229,14 @@ console.log('    plant    dead     rise  dead/rise  prog/rise  INVERSE  DC@25%  
 for (const s of summary) {
   console.log(`    ${s.name.padEnd(8)}${String(s.dead).padStart(5)}${String(s.rise).padStart(8)}`
     + `${fmt(s.dead / Math.max(1, s.rise), 11, 2)}`
-    + `${fmt(s.N / Math.max(1, s.rise), 11, 1)}${(s.inv * 100).toFixed(1).padStart(8)}%`
+    + `${fmt(s.rise > 0 ? s.N / s.rise : NaN, 11, 1)}${(s.inv * 100).toFixed(1).padStart(8)}%`
     + `${(s.dc * 100).toFixed(0).padStart(7)}%   `
     + `${(s.rga ? s.rga.map((v) => v.toFixed(2)).join('/') : '—').padEnd(14)}`
     + `${fmt(s.scale, 6, 2)}  ${VERDICT[s.name]}`);
 }
+// A RISE OF ZERO IS NOT A FAST PLANT, IT IS A COLUMN THAT DOES NOT APPLY (rule 25). The real arm
+// reaches 90% of its final value within a step because the correction is a POSITION reference the
+// loop's own feedforward passes straight through, so `prog/rise` has no meaning there and prints
+// `—` rather than the clamped 143,360 a `max(1, rise)` would have rendered as a plausible number.
 console.log('\n  A diagnostic is only worth something if it splits the table the way the record does,');
 console.log('  AND explains the mill in both of its states from one measurement. Read it that way.\n');

@@ -26,6 +26,7 @@ import * as WB from './woodberry-rig.mjs';
 import * as RM from './rollmill-rig.mjs';
 import * as TH from './thermal-rig.mjs';
 import * as EM from '../emps-rig.mjs';
+import * as RA from './realarm-rig.mjs';
 
 // Minimum-phase configuration. Outflow goes as sqrt(level), so nothing about it is linear,
 // and the two pumps cross-feed: each fills one tank directly and the other's upper tank.
@@ -163,4 +164,30 @@ const empsSpec = {
   },
 };
 
-export { tankSpec, wbSpec, millSpec, barrelSpec, empsSpec, G_MP };
+/**
+ * THE REAL FLEXIBLE ROBOT ARM (DaISy 96-009) — the plant whose cascade refusal has NO STATED CAUSE
+ * (plan §84.11). `realarm.test.mjs` records that it "REFUSES the pilot cascade, whose correction is
+ * WRONG rather than merely clipped — opened 3x it clamps 56% of samples at 0.00x, opened 10x it
+ * trips the guard, and the shipped result is byte-identical at every cap", which rules out the
+ * authority and leaves the reason open. §84.9 gave `invert.mjs` a column that separates winners
+ * from losers, so the cheapest thing to do with a new diagnostic is point it at the open case
+ * before building anything (rule 1).
+ *
+ * The correction is a POSITION-REFERENCE offset, which is where the pilot puts it on this plant,
+ * and the machine is the rig's own settled `makeMachine()` — the same starting condition
+ * `realarm.test.mjs` scores from, so the two cannot disagree about what plant this is.
+ */
+const realarmSpec = {
+  name: 'real flexible robot arm (DaISy 96-009) — tip position',
+  channels: [{ lo: -3 * RA.AMP, hi: 3 * RA.AMP, vMax: RA.AMP / 32, aMax: RA.AMP / 1024, jMax: RA.AMP / 32768 }],
+  uMax: RA.UCORR, nMeasured: 3,
+  start: RA.refAtStep(0), N: RA.PROG, floor: 0,
+  refAt: (k) => RA.refAtStep(k),
+  fresh: () => ({ m: RA.makeMachine() }),
+  step: (st, ref, u) => {
+    const x = st.m.step(ref[0] + (u[0] || 0));
+    return { measured: [x, st.m.v, st.m.torque], truth: [x - ref[0]] };
+  },
+};
+
+export { tankSpec, wbSpec, millSpec, barrelSpec, empsSpec, realarmSpec, G_MP };

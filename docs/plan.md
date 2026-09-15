@@ -19667,3 +19667,106 @@ the five. What it licenses is a SCREEN with a number in it — a plant whose pro
 than about ten of its own response times should be expected to need a diet and a re-derived window
 rather than to work out of the box — and a caution against reading INVERSE or the scaling control
 as though they said something about a particular plant.
+
+---
+
+## §84.10 — THE CART-POLE, SETTLED: NOT A WINNER, NOT STRUCK, AND THE AUTHORITY SWEEP IS WHAT SETTLES IT
+
+§52.32 left this plant in an unresolved state: 9.77x on the loop the rig ships, and a REFUSAL on a
+loop swept 3.5x better, with the reading "the headline was the loop". The standing objection was
+that the shipped number's correction sits at **exactly its cap** (uPk 0.1500 of 0.15) — which is
+the BARREL's own failure signature (§62, target 7), where a correction pinned at its authority
+means the number is an artefact of the cap and not a controller result. If so, the tuned loop's
+refusal might be an authority artefact too, and the plant would still be winnable.
+
+**It is not. Swept over a 24-fold span of authority on both loops — the cheapest falsifier, rule 1,
+and no build at all:**
+
+```
+  uMax (m)     0.05      0.15      0.30      0.60      1.20
+  shipped loop  1.559x    9.770x   13.681x   13.345x    7.472x     all DEPLOY
+  tuned  loop   1.000x    1.000x    1.000x    1.000x    1.000x     all REFUSE
+```
+
+**THE SHIPPED LOOP'S CURVE IS REAL AND HAS AN INTERIOR OPTIMUM.** 13.681x at 0.30 rising from
+1.559x and falling away to 7.472x at 1.20 — so the shipped 0.15 is a point on a genuine curve
+rather than a cap-limited artefact, and the barrel's signature does not apply here. The plant has
+more to give at a larger authority; it is simply not being given it.
+
+**AND THE TUNED LOOP REFUSES AT EVERY AUTHORITY, FOR TWO DIFFERENT REASONS, WHICH IS WHAT MAKES
+THE REFUSAL STRUCTURAL.** At 0.05 and 1.20 *no channel's forecast survived held-out validation* —
+nothing about the truth is predictable from these signals. At 0.15, 0.30 and 0.60 the forecast
+does survive and the VERIFY refuses: 0.99x, 1.10x, 1.00x on the representative regime. So it is
+not one threshold being missed narrowly across the sweep; the plant yields nothing to this method
+once its own loop is doing its job, at any authority tried.
+
+**THE VERDICT, and it is the one the governing question asks for.** The cart-pole is **NOT A
+WINNER and must not be counted as one** — its 9.4-9.8x is the loop, confirmed now by a sweep
+rather than by a single tuned cell. It is **NOT STRUCK** either, and the reason is worth more than
+a win would be: it is this project's only OPEN-LOOP UNSTABLE plant, and across ten cells (five
+authorities, two loops) **nothing is made worse, minimum 1.000x**, with every refusal stating a
+reason. Target 3's improve-or-refuse clause holds on a plant class the other six do not contain.
+It belongs in the plant count as *asked and correctly refused*, never as a factor.
+
+**ONE CELL IS WORTH FLAGGING AGAINST MYSELF.** At tuned / 0.30 the verify reads **1.10x
+representative and 1.41x program** and the gate still refuses. That is the instrument floor
+declining to credit an improvement it cannot resolve — the same mechanism that produced
+`autostack.test.mjs`'s correct EMPS refusal — but whether it is right or over-cautious HERE is not
+established, and it is the one cell that could still hide a small real win.
+
+**WHAT IS NOT BUILT, AND WHAT WOULD CHANGE THE ANSWER (rule 59).** The DEPLOYED OBJECT has never
+been asked on this plant — every number here is the TEACHER, a bare `Pilot`, and all four plants
+converted since §64 were converted by asking `distil.js`'s weight vector instead. A
+`distil-pend.mjs` on the TUNED loop is the experiment that could still make this plant a winner,
+and it is the honest next move rather than another sweep of the teacher.
+
+---
+
+## §84.11 — THE REAL FLEXIBLE ARM'S REFUSAL HAS A CAUSE AT LAST, AND IT FIRES THE COLUMN §84.9 HAD JUST DISQUALIFIED
+
+`realarm.test.mjs` ships 1.93x on the conventional rung and REFUSES the pilot cascade, and the
+record is explicit that the authority is already ruled out: *the correction is WRONG rather than
+merely clipped — opened 3x it clamps 56% of samples at 0.00x, opened 10x it trips the guard, and
+the shipped result is byte-identical at every cap*. No cause was ever stated. The cheapest thing
+to do with a new diagnostic is point it at the open case before building anything (rule 1), so the
+plant went into `invert.mjs` as a sixth row.
+
+```
+  plant    dead     rise  dead/rise  prog/rise  INVERSE  DC@25%   RGA diag        scale
+  tank       17    2016       0.01        7.9     0.0%     98%   1.38/1.38        2.04
+  column     32     393       0.08        7.6     0.0%     98%   2.01/2.01        2.00
+  mill      100     121       0.83      165.3     0.0%    100%   —                2.00
+  barrel     76    2912       0.03        5.2     0.0%     93%   1.39/1.78/1.39   2.00
+  emps        5      36       0.14      173.3     0.0%    100%   —                2.00
+  realarm     0       0       0.00          —   128.3%    100%   —                2.00   <- the open case
+```
+
+**IT IS THE ONLY NON-ZERO INVERSE IN THE TABLE, AND IT IS 128.3%.** The largest excursion of
+OPPOSITE sign to the final value is 1.28 TIMES that final value: hold a correction on this plant
+and it first goes further the wrong way than it ever goes the right way. §59 refuted non-minimum
+phase as the structural account of "good forecast, harmful correction" — *INVERSE 0.0% on all four
+plants* — and §84.9 then showed the winner reads 0.0% too, so the column discriminated nothing in
+that set. **It discriminated nothing because none of those five had it.** The sixth does, and it
+is the one plant in the project whose cascade refusal had no stated cause.
+
+**AND IT EXPLAINS THE RECORD'S OWN WORDING.** The pilot INVERTS A FORECAST. On a plant whose
+response to a correction is initially of the opposite sign, the inversion produces a correction
+that is wrong in SIGN for the first part of its horizon — which is precisely "the correction is
+wrong rather than merely clipped", measured now rather than inferred.
+
+**THE INSTRUMENT WAS CHECKED BEFORE THE CLAIM (rules 14, 17), AND ONE COLUMN HAD TO BE REPAIRED.**
+The run reports `settled: yes` with a well-defined `final 1.39e-1`, so the ratio has a real
+denominator. The `scale(x2)` control reads **2.00** — halve the correction and the whole response
+including the inverse excursion halves — so this is a LINEAR property of the plant (a
+non-minimum-phase zero, or a lightly damped mode whose first swing is negative) and not an
+amplitude artefact. And `dead 0 / rise 0` is not a fast plant: the correction is a POSITION
+reference which the loop's own `aff/G_DC` feedforward passes straight through, so the 90% crossing
+is immediate and **`prog/rise` does not apply** — it now prints `—` rather than the clamped
+143,360.0 a `max(1, rise)` rendered as a plausible number, which is rule 25 in the exact costume
+this project keeps paying for.
+
+**WHAT IT DOES NOT SAY.** It does not say the plant is unwinnable — §56's ZPETC rival exists
+precisely for non-minimum-phase inversion, and the DEPLOYED object has never been asked here
+either. What it says is that the cascade's refusal is CORRECT and now has a reason, and that the
+next thing to try on this plant is an inverse-response-aware correction rather than more authority.
+`realarm.test.mjs` is byte-identical across the change (the spec is additive in `specs.mjs`).
