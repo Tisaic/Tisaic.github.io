@@ -19931,3 +19931,78 @@ the timescale separation the arm does not.
 names the one thing that is left on the one plant where DIS is real, and prices it at 2.68x.** That
 is a better-posed DIS experiment than "find a second disturbance plant", which is what §84.3's
 corrected reading leaves as the alternative.
+
+---
+
+## §85.2 — THE OBSERVER, BUILT AND MEASURED: WORTH 1.29x AND DESTROYED BY 2% OF MODEL ERROR
+
+`test/pilot/millobs.mjs`. §85 answered the structural half from the record; this is the machine's
+answer. Plant and SIMULATED plant under the same command, their difference low-passed and driven to
+zero through the plant's own modulus split — a disturbance observer, and with the mill's 100-step
+transport delay in it, a Smith predictor. Scored on the TRUTH through the rig's own `score()`, so
+every row is comparable to the classical baselines by construction (rule 15).
+
+**THE FIRST VERSION MEASURED THE WRONG CONFIGURATION AND READ A NULL (rule 19, again, and it is the
+same fault §84.3 made about this same plant).** Run on the BARE machine the observer reads **1.03x**
+— because the wander is 7% of the OPEN-LOOP error and the eccentricity is the other 93%. §85 priced
+the wander at 88% of what the SHIPPED OBJECT LEAVES, and that is a different support. Working at
+1.03x of an available 1.07x, the observer was in fact performing at 93% of a prize that was not
+there.
+
+```
+  open loop                                   15.154 µm
+  gaugemeter / BISRA (the incumbent)          18.083 µm   0.84x   it AMPLIFIES the eccentricity
+  declared eccentricity rejected, nothing else 5.775 µm   2.62x   <- the object's PROXY
+  + observer, tau 100, gain 0.8                4.470 µm   3.39x   1.29x over what it was added to
+```
+
+The proxy is good: a perfect rejector of the DECLARED component reads 2.62x where the shipped
+object delivers 2.625x (§84.6) and where §84.3's independent bound put it at 2.78x. So the observer
+is measured on a machine that behaves like the one the object leaves, without paying a
+commissioning per cell — stated as a proxy, not as the object.
+
+**SO THE STRUCTURE WORKS AND IS WORTH 1.29x ON TOP** — 2.62x → 3.39x over open loop, against the
+7.03x a PERFECT wander rejector reaches. The remaining gap is the instrument: the observer reads a
+gauge carrying 2.0 µm of noise, 100 steps late, and feeds that noise back through its own
+correction.
+
+### And then the falsifier fires, which is what decides it
+
+An observer is only as good as the model it differences against: **everything the model gets wrong
+appears in `y − ŷ` as a disturbance and is corrected as one.** Moving the model's two moduli away
+from the plant's, at the best cell:
+
+```
+  model error on MM and QM     0%      1%      2%      5%     10%
+  x over what it was added to  1.29x   1.12x   0.84x   0.41x   0.21x
+```
+
+**AT 2% IT IS WORSE THAN NOT HAVING IT, AND AT 5% IT IS WORSE THAN DOING NOTHING AT ALL.** A lower
+observer gain buys most of the tolerance back and gives up some of the win — gain 0.3 reads 1.17x
+nominal and **1.09x at 2%**, still 0.83x at 5% — which is §79's applied-gain axis and §83's
+domain-randomisation trade arriving in a third place: **nominal performance for tolerance, about
+1:1.**
+
+### Which is exactly the property this object has and that one does not
+
+§84.4 deployed the FROZEN weight vector across an eight-fold span of gearbox stiffness, an
+eight-fold span of link stiffness, thirty times the rig's backlash, a four-fold span of drive limit
+and a four-fold span of loop bandwidth — **eleven cells, nothing made worse than the conventional
+machine, worst 1.78x.** The observer is harmful at **2%** of one modulus. The two structures sit at
+opposite ends of the same axis, and that is the real answer to the question:
+
+> **A feedforward identified once is robust to plant error and blind to disturbance. An observer
+> differenced against a running model sees the disturbance and cannot tell it from plant error.**
+> They fail in orthogonal directions, which is why the composition is worth 1.29x and why neither
+> can be the other.
+
+**AND THE MILL'S OWN HISTORY ALREADY SAID SO.** Its incumbent, the gaugemeter AGC, IS a model-based
+inference — and it reads **0.84x, worse than open loop**, because it amplifies the eccentricity by
+3/2. A model-based estimator failing on this plant is not a new result; what is new is the number
+on how little model error it takes.
+
+**WHAT IS NOT CLAIMED.** The base is a PROXY for the object and not the object; the model error is
+moved on two moduli only, not on the delay, the hydraulic lag or the line speed; one plant; and the
+2% figure is this rig's, not a law. What would change the answer is an observer that ESTIMATES the
+mismatch rather than assuming it away — which is adaptive IMC, is a different object again, and
+would have to be scored against the same eleven-cell robustness bar the frozen map already passes.
