@@ -19311,3 +19311,68 @@ moved anything one level down. Stated because it is the whole point of running i
 score the TEACHER — `tanks.test.mjs` and the rest drive a bare `Pilot` — so a clean pass here says
 the ladder axes did not disturb the plants, not that the deployed object is unchanged on them.
 The deployed object's own numbers are in the `distil-*` harnesses and were re-run under §84.1.
+
+---
+
+## §84.4 — THE PLANT AXIS BEYOND STIFFNESS: BACKLASH IS FREE, THE DRIVE IS NOT, AND THE PROBE SEES BOTH
+
+§75 measured a frozen weight vector across an eight-fold span of gearbox stiffness and an
+eight-fold span of link stiffness and concluded the plant axis degrades gracefully. That was a
+claim about TWO of the machine's constants. `PLANTSPAN` now takes named overrides —
+`bl=1e-3&drive=8`, and `machine()` already accepted every one of them, so this is a parser change
+and not a plant change — and the protocol is unchanged: **commission ONCE at the bench cell, then
+deploy that same frozen weight vector on a machine built differently, each scored against the
+CONVENTIONAL machine AT ITS OWN cell** so a harder machine cannot read as the policy failing. The
+commissioning cell is the control and reproduces the headline.
+
+```
+  cell                conventional -> policy        factor   64-touch read
+  K 0.25 / E 0.03     1.3044e-1 -> 1.5962e-2         8.17x   1.1346e-2   <- the CONTROL
+  bl 0                1.3035e-1 -> 1.5994e-2         8.15x   1.1370e-2
+  bl 3e-4             1.3063e-1 -> 1.5887e-2         8.22x   1.1295e-2
+  bl 1e-3             1.3127e-1 -> 1.5718e-2         8.35x   1.1177e-2
+  bl 3e-3             1.3300e-1 -> 1.5656e-2         8.49x   1.1138e-2
+  drive 4             2.7150e-1 -> 1.5232e-1         1.78x   1.0771e-1
+  drive 8             1.3609e-1 -> 6.5258e-2         2.09x   4.6138e-2
+  drive 16            1.3057e-1 -> 2.2564e-2         5.79x   1.5993e-2
+  drive 64            1.3043e-1 -> 1.7758e-2         7.34x   1.2601e-2
+  bw 8e-3             1.3081e-1 -> 3.3784e-2         3.87x   2.3901e-2
+  bw 3.2e-2           1.3003e-1 -> 2.1158e-2         6.15x   1.5029e-2
+```
+
+**BACKLASH IS FREE AND THE SIGN IS THE INTERESTING PART: more lash is BETTER, monotonically, under
+the frozen map.** From none to thirty times the rig's own, the conventional machine gets WORSE
+(1.3035e-1 → 1.3300e-1) while the policy's delivered error FALLS (1.5994e-2 → 1.5656e-2), so the
+factor climbs 8.15x → 8.49x. §52.46 measured the same direction by a ladder of PER-CELL
+commissionings; this is the stronger form of it — a map taught on one machine does BETTER on a
+lashier one than on the machine it was taught on — and it closes the obvious objection to §52.46,
+that each cell there got its own fit. The mechanism is already on record read from the other side:
+the dead zone decouples the motor inertia from the link across a reversal, so it is an impulse
+limiter acting exactly where the corner energy goes.
+
+**THE DRIVE IS THE FAILURE AXIS, AND IT WAS PREDICTED.** 8.17x → 5.79x → 2.09x → 1.78x as the
+torque limit falls, a **4.6x collapse of the delivered factor**, and §81 reached the same
+conclusion from the opposite direction — by adding a sustained load rather than by removing
+headroom. Two routes, one answer: **this object's tolerance is bounded by the drive, not by the
+structure.** Note that at drive 4 the CONVENTIONAL machine is itself 2.1x worse, so part of the
+row is a harder cell — but the protocol already scores against that machine, so the 1.78x is
+after that allowance.
+
+**AND MORE DRIVE IS ALSO WORSE: 64 reads 7.34x against 32's 8.17x**, so the axis has an interior
+optimum sitting on the commissioning value rather than a monotone "bigger is safer". The loop
+bandwidth behaves the same way — 3.87x below and 6.15x above against 8.17x at the value it was
+taught on. A frozen map is tuned to the machine's response TIME as much as to its gain, and both
+of those axes move it.
+
+**NOTHING IS MADE WORSE THAN THE CONVENTIONAL MACHINE ON ANY CELL, worst 1.78x.** So "graceful"
+survives in the weak sense — the object never harms a machine it was not taught on across three
+new axes — and fails in the strong sense, because a 4.6x loss of factor is a different product.
+
+**AND §75.5's DETECTOR HOLDS ON ALL THREE AXES, WHICH IS WHAT MAKES ANY OF THIS A PRODUCT
+PROPERTY.** The 64-touch read tracks the full-rate number at a ratio of **0.707-0.711 in every one
+of the eleven rows, constant to 0.6%** — the same constant §75.5 measured across the stiffness
+span, now holding across backlash, drive and bandwidth. So the first-article check a shop already
+runs sees these drifts at the same factor they cost: at drive 8 the probe reads 4.61e-2 against
+the control's 1.13e-2, a factor of 4.1 against the policy's own 3.9x loss. The object still has no
+plant-side guard and cannot tell the machine changed (§82 built one and refuted it), so detection
+remains external — and it works.

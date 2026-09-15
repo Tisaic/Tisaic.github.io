@@ -197,7 +197,21 @@ stiffness so a harder cell cannot read as the policy failing.
 ```
 
 **Across an eight-fold span of gearbox stiffness and an eight-fold span of link stiffness every
-cell still HELPS, worst 1.25x, and nothing is made worse than the conventional machine.** That is
+cell still HELPS, worst 1.25x, and nothing is made worse than the conventional machine.**
+**AND THREE MORE AXES ARE NOW MEASURED UNDER THE SAME FROZEN MAP, WHICH SPLITS THE VERDICT IN TWO
+(plan §84.4).** `PLANTSPAN` takes named overrides now, so the protocol reaches the constants §75
+never moved. **BACKLASH IS FREE AND MORE OF IT IS BETTER** — from none to thirty times the rig's,
+the conventional machine gets worse while the policy's delivered error FALLS, 8.15x → 8.49x, which
+is §52.46's direction in its stronger form since no cell here got its own fit. **THE DRIVE IS THE
+FAILURE AXIS: 8.17x → 5.79x → 2.09x → 1.78x as the torque limit falls, a 4.6x collapse**, reached
+independently of §81, which found the same bound by ADDING load rather than removing headroom —
+so this object's tolerance is set by the drive and not by the structure. **And more drive is also
+worse (64 reads 7.34x against 32's 8.17x)**, as is more or less loop bandwidth, so both axes have
+an interior optimum sitting on the commissioning value rather than a safe direction. Nothing is
+made worse than the conventional machine on any of the eleven cells, worst 1.78x — so graceful
+survives in the weak sense and fails in the strong one. **And §75.5's free detector holds on all
+three new axes**: the 64-touch read tracks the full-rate number at 0.707-0.711 in every row,
+constant to 0.6%, and at drive 8 it reads the drift at 4.1x against the policy's own 3.9x loss. That is
 graceful, and the old sentence says the opposite. What the record does support is the narrower
 claim: a phase-indexed MEMORY degrades catastrophically off its program — which is why it was
 retired — and the deployed MAP degrades gracefully on the plant axis. Stiffer hurts more than
