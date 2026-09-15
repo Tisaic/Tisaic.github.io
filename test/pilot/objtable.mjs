@@ -148,7 +148,7 @@ if (READ) {
     + (missing.length ? `  —  NOT EMITTED: ${missing.join(', ')} (not run in this pass)` : '')
     + '\n');
   console.log('  harness                     ships                 base -> best            '
-    + '  x      MAC   kB     ②d      TARGET 1');
+    + '  x      MAC   kB     ②d          TARGET 1');
   let bad = 0;
   for (const r of got) {
     const kind = classify(r.deployed ? { ship: r.deployed } : null);
@@ -158,7 +158,7 @@ if (READ) {
       + `${r.base === null ? '—'.padEnd(21) : (r.base.toExponential(3) + ' -> ' + r.best.toExponential(3)).padEnd(21)} `
       + `${(r.gain === null ? 'UNKNOWN' : r.gain.toFixed(2) + 'x').padStart(8)} `
       + `${(r.mac === null ? '—' : String(r.mac)).padStart(6)} `
-      + `${(r.kb === null ? '—' : r.kb.toFixed(1)).padStart(5)}  ${(r.rung || '—').padEnd(8)}`
+      + `${(r.kb === null ? '—' : r.kb.toFixed(1)).padStart(5)}  ${(r.rung || '—').padEnd(10)}`
       + `${r.t1 === undefined || r.t1 === null ? 'not asked'
         : `${r.t1.toFixed(2)} of scored${r.t1Worse ? ', MADE WORSE' : (r.t1 >= 1 / 1.3 ? ', MET' : ', under 1/1.3')}`}`
       + `${worse ? '   <- MADE WORSE' : ''}`);
