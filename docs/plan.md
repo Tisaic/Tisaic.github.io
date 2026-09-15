@@ -19770,3 +19770,67 @@ precisely for non-minimum-phase inversion, and the DEPLOYED object has never bee
 either. What it says is that the cascade's refusal is CORRECT and now has a reason, and that the
 next thing to try on this plant is an inverse-response-aware correction rather than more authority.
 `realarm.test.mjs` is byte-identical across the change (the spec is additive in `specs.mjs`).
+
+---
+
+## §84.12 — THE "DIS CEILING" IS MEASURABLE, IT IS ALREADY IN EVERY REPORT, AND IT IS SMALL EXACTLY WHERE THE METHOD WINS
+
+§80.3 named a structural ceiling and nothing has acted on it: *the retirement removed lap-indexing
+from the PRODUCT and left it in the TEACHER* — `hff` inverts at the lap's harmonics, `oracleteach`
+accumulates a `Float64Array(L)` read at `k % L`, so a disturbance the lap does not repeat cannot
+enter the teacher's target at all. The natural response is to build a teacher addressed by
+something else. **Two things say do not build it yet, and both were already on file.**
+
+**(1) THE OBVIOUS FORM IS BUILT AND MEASURED NEGATIVE.** `AutoStack._iteratePolicy` is joint
+PROJECTED iteration — each pass fits one policy across all programs in the PRODUCT's own row space
+and takes the next increment against its own residual, so the thing being iterated is a map of the
+reference and never a lap table. §52.16 read it at **5.06x against the lap-table teacher's 6.04x**
+with in-sample R² 0.98, which is this project's transfer law firing for the fifth time. So
+"iterate in the map's space instead of the lap's" is not an unbuilt idea; it is a measured loss on
+the one plant that has been asked.
+
+**(2) §84.1 MEASURED WHAT THE LAP-SPECIFIC PART IS ACTUALLY WORTH TO THE PRODUCT, AND ON THE MILL
+IT IS NOTHING.** Averaging the teacher's record over laps removes exactly the component the lap
+does not repeat: the mill's **teacher fell 2.9x, 7.5x → 2.6x, and the delivered object did not
+move by 0.3%**. `hff` was inverting the unmeasured entry wander lap by lap and scoring itself for
+it, and the distillation was already discarding every bit of that. A ceiling that costs nothing
+when you walk into it is not the binding constraint.
+
+### How big the prize is, per plant — and it is already printed
+
+The teacher's converged target regressed on the PRODUCT's own row is exactly the fit each harness
+reports. **`1 − R²` is the share of the teacher's target the deployed object cannot express**, and
+that is the ceiling §80.3 named, plant by plant, with no new run:
+
+```
+  plant     held-out R² (fit's own)      unexpressible    what the record says
+  tank      0.993 / 0.991                    ~0.8%        3.268x, wants a gain BELOW 1
+  arm       0.952 / 0.840                  5% / 16%       6.63x
+  mill      0.857                             14%         2.625x, and averaging is free-and-useless
+  barrel    0.852 / 0.868 / 0.761          13-24%         6.997x
+  column    0.686 / 0.463                  31-54%         3.959x, the plant we lost on longest
+```
+
+**The ordering is the finding: the ceiling is SMALLEST on the plants whose teacher target is
+already a function of the reference, and LARGEST on the column** — and the column is the plant this
+project lost on for its whole history and the one where the oracle teacher is worth the most
+(§73.14: 3.64x → 5.49x). So if a differently-addressed teacher is ever worth building, the column
+is where to build it and the tank is where it provably cannot help: **0.8% of that target is
+outside the product's reach, so no teacher of any address can buy more than that there.**
+
+**STATED LIMITS, because this is a re-reading of existing numbers rather than a new measurement.**
+The R² is the FIT's, taken on the diet with the fit's own folds, so it conflates "the target is not
+a function of the reference" with "this particular linear map did not capture it" — §52.31's
+information ceiling and §54.9's function-class sweep both bear on the arm's row and neither has
+been run on the other four. And the fits differ in channel count and row count, so the columns are
+not commensurable across plants at better than the ordering. What it supports is a PRIORITY, not a
+number: **the DIS ceiling is real, it is bounded by `1 − R²`, and on four plants of five that
+bound is under a quarter.**
+
+**WHAT WOULD CHANGE THE ANSWER (rule 59).** A teacher whose target is addressed by the DECLARED
+reference channels rather than by lap phase — which the mill already has in the only sense that
+matters, since its roll phase IS a declared channel and §71 proved its entire win is that
+declaration. The experiment is the column with a declared channel it does not currently have, and
+the screen for whether one exists is §84.3's: an exogenous component that is a large share of the
+open-loop error. The column has none, which is why this item is a priority statement and not a
+build.
