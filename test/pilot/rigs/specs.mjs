@@ -218,7 +218,16 @@ const pendSpec = {
   start: [0], N: PD.LAP * 4, floor: 0,
   refAt: (k) => [PD.xrefAt(k)],
   pilotOpts: { workspace: (q) => q[0] > -0.30 && q[0] < 0.85,
-    verifyRef: (i, n) => [PD.xrefAt(Math.round(i * PD.LAP / n))] },
+    // THE PROGRAM AT ITS OWN CLOCK, AND THE FIRST VERSION RESAMPLED IT (plan §87.4).
+    // `verifyRef(i, n)` invites the caller to map its program onto the verify's step budget, and
+    // `PD.xrefAt(round(i * LAP / n))` did exactly that — n is 24,000 against a 1,091-step lap, so the
+    // move was handed to the gate **22 times SLOWED**, as a staircase. On that trajectory the
+    // CONVENTIONAL machine reads 4.211e-1 where the real program reads 2.913e-2: the gate was
+    // scoring a machine fourteen times worse than the one that runs, vouched at 2.02x, and
+    // delivered **0.126x** — the plant table's only deployed-and-harmful cell (§86.2). At the
+    // natural clock the same commissioning reads 0.74x and REFUSES, and the machine is left alone
+    // at 1.000x. Rule 11, on the gate rather than on a test.
+    verifyRef: (i) => [PD.xrefAt(i)] },
   fresh: () => PD.makeSettled(),
   step: (p, ref, u) => {
     PD.stepCart(p, PD.baseline(p, ref[0] + (u[0] || 0)));

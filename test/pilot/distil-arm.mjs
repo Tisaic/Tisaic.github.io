@@ -18,6 +18,7 @@ import { sharpRect, roundedRect, circle } from '../../lib/flexisim/toolpath.js';
 import { designDemoPaths } from '../../lib/flexisim/demopath.js';
 import { HarmonicFF } from '../../lib/pilot/hff.js';
 import { DistilPolicy } from '../../lib/pilot/distil.js';
+import { printCost } from './rigs/distilkit.mjs';
 
 const GRADE = process.env.GRADE || 'fast';
 // PERIODIC=1 declares a periodic application, so the ladder also builds lap learning — the
@@ -493,6 +494,7 @@ for (const stF of host.auto.built.stacks || []) for (const p of stF.layers) if (
 }
 
 console.log(`\n  shipped ${JSON.stringify(rep.deployed)}   ${rep.base.toExponential(4)} -> ${rep.best.toExponential(4)}   ${rep.gain.toFixed(2)}x`);
+printCost(host.auto, '      ');
 const _st = host.auto.built.stack; if (_st) console.log(`  pilot sample stride ${_st.sample} steps, so the ±256-sample window spans ±${256 * _st.sample} steps${process.env.WIN ? ` (WIN ${process.env.WIN}: ±${Math.round(256 * +process.env.WIN) * _st.sample})` : ''}${process.env.WINRAW ? ` (WINRAW: the window is ±${process.env.WINRAW} RAW steps whatever the stride)` : ''}`);
 console.log(`  machine samples ${host.samples().samples.toLocaleString()} over ${host.samples().runs} runs`
   + `  (${(host.samples().samples / 1000 / 60).toFixed(1)} min at 1 ms)  wall ${Math.round((Date.now() - t0) / 1000)} s`);

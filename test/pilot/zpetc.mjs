@@ -328,7 +328,7 @@ function score(q, lap, ff) {
 }
 
 // ---------------------------------------------------------------- the run
-export { identify, zpetc, roots, arxFir, score, UM, ORDERS };
+export { arx, identify, zpetc, roots, arxFir, score, UM, ORDERS };
 
 // Importable: a probe drives THESE functions rather than a second copy of them (rule 61).
 if (process.env.ZPETC_LIB) { /* imported as a library — the run below is skipped */ } else {

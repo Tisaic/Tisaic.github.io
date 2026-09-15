@@ -102,12 +102,30 @@ function sizeTour(lap, edges) {
  *  window that reaches this memory needs a lap of at least ~21,000. Unset is 1. */
 const TOURX = Math.max(1, env('TOURX', 1));
 const rep4 = (a) => Array.from({ length: TOURX }, () => a).flat();
-const DIET = [
+const SHIPPED_TOURS = [
   [4096, [40, 90, 140, 190, 240, 140, 60, 200, 110, 250, 80, 170, 220, 50, 130, 190]],
   [4096, [60, 120, 180, 240, 200, 100, 150, 220, 80, 140, 200, 60, 240, 160, 100, 180]],
   [3072, [50, 110, 170, 230, 90, 150, 210, 70, 130, 190, 240, 120]],
   [3584, [70, 130, 190, 250, 110, 170, 230, 90, 150, 210, 60, 200, 140, 180]],
-].map(([lap, edges]) => sizeTour(lap * TOURX, rep4(edges)));
+];
+/** DSEED=<n>: DRAW THE DIET (plan §87.3). §86.3 refuses this plant seven ways on ONE diet; the
+ *  question a draw answers is whether that refusal is the plant or that diet. Edge widths drawn
+ *  from the same [40, 256] span the shipped tours occupy, an EVEN number of segments per lap so
+ *  the tour is closed, segment duration held at the program's own 256 samples. */
+const DSEED = process.env.DSEED ? +process.env.DSEED : null;
+const DIET = (DSEED === null ? SHIPPED_TOURS : (() => {
+  let st = (DSEED * 2654435761) >>> 0;
+  const rnd = () => ((st = (st * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+  return Array.from({ length: 4 }, () => {
+    const nSeg = 2 * (5 + Math.floor(rnd() * 4));        // 10, 12, 14 or 16 segments
+    return [256 * nSeg, Array.from({ length: nSeg },
+      () => Math.round(40 + 216 * rnd()))];
+  });
+})()).map(([lap, edges]) => sizeTour(lap * TOURX, rep4(edges)));
+if (DSEED !== null) {
+  console.log(`  DIET DRAW ${DSEED}: ` + DIET.map((g) =>
+    `lap ${g.lap} n ${g.edges.length}`).join('  ·  '));
+}
 const LAPMIN = Math.min(...DIET.map((g) => g.lap));
 const { reach: REACH, offsets: OFFSETS, rule: RULE } = deriveWindow({
   settle: SETTLE, lapMin: LAPMIN, win: process.env.WIN === undefined ? undefined : env('WIN') });

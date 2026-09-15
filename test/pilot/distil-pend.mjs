@@ -65,12 +65,47 @@ const SETTLE = measureSettle();
 // ------------------------------------------------------------------------- the diet
 /** Four moves the scored program is not. The dwells are long so the REACH half of the window
  *  rule binds; the distances, feeds and accelerations differ from the program in every member. */
-const DIET = [
+const SHIPPED_DIET = [
   { d: 0.30, acc: 0.80, vmx: 0.30, dwell: 2.10 },
   { d: 0.65, acc: 0.35, vmx: 0.40, dwell: 0.90 },
   { d: 0.45, acc: 1.20, vmx: 0.25, dwell: 1.50 },
   { d: 0.60, acc: 0.50, vmx: 0.45, dwell: 1.30 },
-].map((o) => PD.makeProgram(o));
+];
+/**
+ * DSEED=<n>: DRAW THE DIET, BECAUSE THE SEED VARIES NOTHING HERE (plan §87.3, §84.8's method).
+ *
+ * §86.2's 11.93x is ONE commissioning draw and this project has already mistaken one of those for
+ * a result. `spread.mjs` cannot make it a distribution: this rig is DETERMINISTIC and there is no
+ * cascade to seed, so `SEED` moves nothing (the recorded signature is `distil-tank.mjs`'s three
+ * byte-identical "seeds" — one draw three times, rule 61 aimed at a seed). What varies between two
+ * commissionings of the same plant is WHICH FOUR MOVES the engineer picked, so that is the random
+ * variable, drawn from the same design space the shipped diet occupies. Unset is byte-identical.
+ *
+ * The DWELL is drawn to keep each lap past 1,380 steps, which is what makes the window rule's
+ * REACH half bind rather than its aliasing half — a constraint the shipped diet also obeys, so
+ * the draw explores the same space rather than a larger one (rule 20).
+ */
+const DSEED = process.env.DSEED ? +process.env.DSEED : null;
+const DIET = (DSEED === null ? SHIPPED_DIET : (() => {
+  let st = (DSEED * 2654435761) >>> 0;
+  const rnd = () => ((st = (st * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+  const pick = (lo, hi) => lo + (hi - lo) * rnd();
+  return Array.from({ length: 4 }, () => {
+    for (let tries = 0; tries < 200; tries++) {
+      const d = pick(0.25, 0.65), acc = pick(0.30, 1.30), vmx = pick(0.22, 0.48);
+      const ta = vmx / acc, da = 0.5 * acc * ta * ta;
+      if (d - 2 * da <= 0.02) continue;                    // too short for this feed and accel
+      const tmove = 2 * ta + (d - 2 * da) / vmx;
+      const dwell = Math.max(0.3, 1380 * PD.DT / 2 - tmove + pick(0, 0.8));
+      return { d, acc, vmx, dwell };
+    }
+    return SHIPPED_DIET[0];
+  });
+})()).map((o) => PD.makeProgram(o));
+if (DSEED !== null) {
+  console.log(`  DIET DRAW ${DSEED}: ` + DIET.map((g) =>
+    `${g.d.toFixed(2)}m@${g.vmx.toFixed(2)}/${g.acc.toFixed(2)} dwell ${g.dwell.toFixed(2)}`).join('  ·  '));
+}
 const LAPMIN = Math.min(...DIET.map((g) => g.lap));
 const { reach: REACH, offsets: OFFSETS, rule: RULE } = deriveWindow({
   settle: SETTLE, lapMin: LAPMIN, win: process.env.WIN === undefined ? undefined : env('WIN') });

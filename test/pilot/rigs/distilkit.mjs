@@ -259,6 +259,29 @@ function carrier(build) {
   return () => (p === null ? (p = build()) : p);
 }
 
+/**
+ * THE DEPLOYED COST LINE, PRINTED THE SAME WAY EVERYWHERE (plan §87.2).
+ *
+ * `rigs/ladder.mjs` has printed this for every plant it drives since §63, and the three harnesses
+ * that drive their own host — the arm, EMPS and the quadruple tank — never did. `objtable.mjs`
+ * reads exactly this line, so those three read `—` for MAC and kB in a table built to stop
+ * hand-carried numbers (rule 30): the arm's 274 MAC/decision and EMPS' 78 live in `CLAUDE.md`
+ * prose and nowhere a check can see them. One formatter, four callers.
+ *
+ * It prints the SLICED figure and the peak beside it, because `cost()` reports both and a rung
+ * that decides on its own stride and HOLDS between pays the peak on the scan it decides and
+ * nothing on the others (§52.38) — quoting one without the other is the reassuring half.
+ */
+function printCost(auto, indent = '      ') {
+  const cost = auto && auto.cost && auto.cost();
+  if (!cost) return null;
+  const rungs = Object.keys(cost.rungs || {}).join('+') || 'none';
+  console.log(`${indent}cost: ${Math.round(cost.slicedMac)} MAC/cycle sliced, `
+    + `${(cost.bytes / 1024).toFixed(1)} kB   rungs ${rungs}`
+    + (cost.mac !== undefined ? `   peak ${Math.round(cost.mac)} MAC/decision` : ''));
+  return cost;
+}
+
 /** The geometric offset SHAPE — dense near now where the correction is decided, sparse far out
  * where it only has to span the memory. The shape is a design; the reach is the plant's. */
 const SHAPE = [0, 0.008, 0.016, 0.031, 0.063, 0.125, 0.219, 0.344, 0.5, 0.719, 1];
@@ -422,4 +445,4 @@ async function reportDistil({ rep, runs, nFeat, segs = null, auto = null }) {
   return { inSample, dr };
 }
 
-export { deriveWindow, reportDistil, priceFrom, ridgeLadder, gainLadder, teacherReuse, carrier, teachLaps, teachAvg, dietN, human, SHAPE, DEFAULT_RIDGES, DEFAULT_GAINS };
+export { printCost, deriveWindow, reportDistil, priceFrom, ridgeLadder, gainLadder, teacherReuse, carrier, teachLaps, teachAvg, dietN, human, SHAPE, DEFAULT_RIDGES, DEFAULT_GAINS };

@@ -15,6 +15,7 @@
 import { AutoStack } from '../../../lib/pilot/autostack.js';
 import { motionBasis } from '../../../lib/pilot/classic.js';
 import { into } from './meter.mjs';
+import { printCost } from './distilkit.mjs';
 // THE SOLVER BUDGET AS A KNOB, so `docs/plan.md` step 6b can be gated on plants that share
 // no physics. Both are pass-through Pilot options and both default to the library's own
 // values, so an unset environment runs byte-identically (rule 21). The proposed joint change
@@ -245,11 +246,9 @@ async function ladder(spec) {
         + `   leverage ${lev === null ? '—' : lev.toExponential(2)}`);
     }
   }
-  const cost = auto.cost && auto.cost();
-  if (cost) {
-    console.log(`      cost: ${Math.round(cost.slicedMac)} MAC/cycle sliced, `
-      + `${(cost.bytes / 1024).toFixed(1)} kB   rungs ${Object.keys(cost.rungs).join('+') || 'none'}`);
-  }
+  // ONE FORMATTER (plan §87.2). `objtable.mjs` reads this line, so the three harnesses that drive
+  // their own host print it through the same function rather than a second copy of the format.
+  printCost(auto);
   return { rep, auto };
 }
 

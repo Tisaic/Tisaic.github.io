@@ -58,12 +58,30 @@ function measureSettle(N = 6000) {
 const SETTLE = measureSettle();
 
 /** Four CLOSED recipes, none of them production, every one visiting the overflow region. */
-const RECIPES = [
+const SHIPPED_RECIPES = [
   [4.6, 10.4, 6.8, 9.0, 4.6],
   [6.2, 9.6, 4.0, 10.8, 6.2],
   [5.4, 8.6, 10.5, 4.4, 5.4],
   [7.0, 4.2, 10.2, 8.0, 7.0],
 ];
+/** DSEED=<n>: DRAW THE DIET (plan §87.3). §86.4's 8.69x is one commissioning draw, this rig is
+ *  DETERMINISTIC and its cascade is not built here, so a seed moves nothing — the diet is the
+ *  random variable. Drawn on the same [4.0, 10.8] level grid the shipped recipes occupy, closed
+ *  by construction, every one still visiting the overflow region. Unset is byte-identical. */
+const DSEED = process.env.DSEED ? +process.env.DSEED : null;
+const RECIPES = DSEED === null ? SHIPPED_RECIPES : (() => {
+  let st = (DSEED * 2654435761) >>> 0;
+  const rnd = () => ((st = (st * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+  const lo = () => 4.0 + 3.0 * rnd(), hi = () => 9.2 + 1.6 * rnd();
+  return Array.from({ length: 4 }, () => {
+    const a = lo();
+    return [a, hi(), lo(), hi(), a];
+  });
+})();
+if (DSEED !== null) {
+  console.log(`  DIET DRAW ${DSEED}: ` + RECIPES.map((r) =>
+    r.map((v) => v.toFixed(1)).join('→')).join('  ·  '));
+}
 const LAP = T.SEG * (RECIPES[0].length - 1);
 const { reach: REACH, offsets: OFFSETS, rule: RULE } = deriveWindow({
   settle: SETTLE, lapMin: LAP, win: process.env.WIN === undefined ? undefined : env('WIN') });

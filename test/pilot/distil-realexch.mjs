@@ -57,12 +57,26 @@ function measureSettle(N = 4000) {
 const SETTLE = measureSettle();
 
 /** Four CLOSED recipes, none of them production, all inside the record's own span. */
-const RECIPES = [
+const SHIPPED_RECIPES = [
   [96.0, 100.5, 94.0, 98.5, 96.0],
   [98.8, 94.8, 100.0, 95.8, 98.8],
   [95.2, 99.0, 93.6, 100.8, 95.2],
   [97.0, 93.8, 99.8, 96.6, 97.0],
 ];
+/** DSEED=<n>: DRAW THE DIET (plan §87.3). A REFUSAL is a result too, and a refusal from one diet
+ *  draw is a refusal from one diet draw — the question is whether the object refuses on every
+ *  diet or only on this one. Drawn inside the record's own 92.8-101.4 °C span, closed. */
+const DSEED = process.env.DSEED ? +process.env.DSEED : null;
+const RECIPES = DSEED === null ? SHIPPED_RECIPES : (() => {
+  let st = (DSEED * 2654435761) >>> 0;
+  const rnd = () => ((st = (st * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+  const t = () => 93.5 + 7.3 * rnd();
+  return Array.from({ length: 4 }, () => { const a = t(); return [a, t(), t(), t(), a]; });
+})();
+if (DSEED !== null) {
+  console.log(`  DIET DRAW ${DSEED}: ` + RECIPES.map((r) =>
+    r.map((v) => v.toFixed(1)).join('→')).join('  ·  '));
+}
 const LAP = E.SEG * (RECIPES[0].length - 1);
 const { reach: REACH, offsets: OFFSETS, rule: RULE } = deriveWindow({
   settle: SETTLE, lapMin: LAP, win: process.env.WIN === undefined ? undefined : env('WIN') });
