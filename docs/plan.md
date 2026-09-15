@@ -19834,3 +19834,100 @@ declaration. The experiment is the column with a declared channel it does not cu
 the screen for whether one exists is §84.3's: an exogenous component that is a large share of the
 open-loop error. The column has none, which is why this item is a priority statement and not a
 build.
+
+---
+
+## §85 — THE OBSERVER QUESTION, AND THE NUMBER THAT MAKES IT WORTH ASKING: 88% OF WHAT THE MILL'S OBJECT LEAVES IS THE COMPONENT IT CANNOT SEE
+
+The question put: *could our object stand in for a state-space controller in the structure where the
+plant is wrapped in a controller, a SIMULATED plant is wrapped in the same controller, and the
+DIFFERENCE between the two is given a controller to drive to zero?*
+
+That structure is a DISTURBANCE OBSERVER — internal model control, and with a transport delay in it,
+a Smith predictor. It is not a new idea to this project and it should be scored against what the
+record already holds rather than against its own appeal.
+
+### The measurement, taken before answering (rule 16)
+
+`NOWANDER=1` holds the cold mill's entry-gauge wander flat — the rig's own "unmeasured" disturbance,
+the one §84.1 measured `hff` inverting lap by lap while the DEPLOYED map discards every bit of it.
+Each column scored against its OWN open loop, so removing a disturbance cannot read as the
+controller improving:
+
+```
+                       open loop     shipped object      factor
+  as it ships          15.394 µm        5.865 µm         2.625x
+  entry wander FLAT    14.289 µm        2.033 µm         7.029x
+```
+
+**THE WANDER IS 7% OF THE OPEN-LOOP ERROR AND 88% OF THE ERROR ENERGY THE SHIPPED OBJECT LEAVES**
+(1 − (2.033/5.865)² = 87.98%). Removing it is worth **2.68x** of delivered factor. And 2.033 µm is
+the X-ray gauge's own 2.0 µm noise: **with the wander gone the object is AT this plant's instrument
+floor**, so 7.03x is 91% of the 7.7x that floor allows and there is nothing else left in the plant.
+
+### Which CORRECTS §84.3, an hour old, in the way rule 19 names
+
+§84.3 wrote: *a PERFECT eccentricity rejector leaves 2.78x where the shipped object delivers 2.63x,
+which is 95% of the bound — this plant is nearly EXHAUSTED as a DIS testbed.* The arithmetic is
+right and the conclusion does not follow, because **the bound was computed on the wrong support**: it
+bounds corrections of the ECCENTRICITY, which is the declared component, and the object is indeed 95%
+of the way through that one. The wander is a DIFFERENT component against which the object has done
+nothing whatever, and it is what remains. The mill is **95% exhausted of its declared disturbance and
+0% exhausted of its undeclared one**, and the undeclared one is 88% of the residual.
+
+### So: can the deployed object be the inner controller of that loop? No, and the record says why
+
+The signal the structure produces, `e = y − ŷ`, is by construction NOT a function of the commanded
+reference — the reference cancels between the two branches, which is the whole point. The deployed
+object is a map of the commanded reference and reads no measured signal at deploy (§84.7 asserts it
+bit-identically over 49,234 decisions under a disturbance). So it cannot be that controller without
+ceasing to be the object whose properties this project has spent sections establishing.
+
+And when a measured deviation HAS been put into it, three times, it lost: §52.27's state term fits at
+0.992/0.928 and deploys at **1.44x**, stabilising at 3.24x in the loop against 6.04x without it;
+§52.44's slow modulation reads below the window alone at every smoother; §52.33's smoothed deviation
+is worth less the more it is smoothed. **The cause is not the map's capacity — it is the ARM's
+timescale**: §52.26 measured the forecast's reach at ~300 steps against a ~950-step rise, and closed
+torque injection as well. *Preview is the only correction that can be in place when the error arrives.*
+
+### But the structure is right, and the record says exactly where it pays
+
+It is COMPLEMENTARY rather than a replacement, and it attacks precisely the class §84.7 established
+this object cannot express. That classification is the map:
+
+```
+  reference-correlated load   FREE already — advantage RISES 6.62x → 7.25x, training adds nothing
+  sustained / constant load   COSTLY — 6.62x → 3.62x; not a function of the reference
+  unmeasured slow wander      INVISIBLE — 88% of the mill's residual, 2.68x of factor
+```
+
+The first needs no observer. The second and third are what an observer is for, and the third now has
+a number on it.
+
+**The COLD MILL is where it would pay and the case is unusually clean.** Its output IS measured at
+runtime (the X-ray gauge), so the observer needs no instrument the plant does not have — which is the
+INS objection that kills this on the arm, where tool position is not measured in production. Its
+wander runs at 2,150 and 950 steps against a 121-step rise and a 100-step transport delay, so it is
+SLOW relative to what the loop can reach — and the delay is exactly why the structure needs the
+simulated-plant branch rather than plain output feedback. `prog/rise` 165 (§84.9) says this plant has
+the timescale separation the arm does not.
+
+**WHAT WOULD KILL IT, stated before any build (rule 59):**
+
+- **The simulator has to be good enough that `y − ŷ` is mostly disturbance and not model error.** §55's
+  standing caution bites hardest here: a plant identified as a linear ARX is a soft target, and the
+  residual of a bad model is indistinguishable from a disturbance to this structure.
+- **It reintroduces a runtime instrument and a runtime plant model.** The deployed object is 136
+  MAC/decision on this plant and needs neither; a simulated mill plus an observer is a different
+  artefact against target 6, and `inventory.test.mjs` would reclassify it.
+- **It gives back the ability to go unstable.** §84.7's "bit-identical under a disturbance" is a
+  property of having no feedback path at all; an observer loop has margins, and §81's saturation
+  crossover says this object already competes for drive headroom under load.
+- **The 2.0 µm gauge noise is the ceiling, and the observer has to work through it AND the delay.**
+  7.03x with the wander deleted is what a PERFECT rejector gets; an estimator reading a noisy,
+  100-step-late gauge gets less, and how much less is the measurement that decides this.
+
+**THE HONEST SUMMARY: the object cannot BE that controller, and it should not be — but the structure
+names the one thing that is left on the one plant where DIS is real, and prices it at 2.68x.** That
+is a better-posed DIS experiment than "find a second disturbance plant", which is what §84.3's
+corrected reading leaves as the alternative.

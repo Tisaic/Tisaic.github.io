@@ -21,7 +21,8 @@ const D_BUR = 1.3;         // backup roll diameter, m
 const F_ECC = V_LINE / (Math.PI * D_BUR);               // Hz, roll rotation
 const A_ECC = 0.030;       // eccentricity amplitude, mm  (30 microns)
 const NOISE = 0.002;       // X-ray gauge noise, mm rms (2 microns)
-const S0 = (HREF * (MM + QM) - QM * H0) / MM;           // gap holding the target
+const S0 = (HREF * (MM + QM) - QM * H0) / MM;
+const NOWAND = process.env.NOWANDER === '1';           // gap holding the target
 
 function lcg(s0) { let s = s0 >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32); }
 function gauss(r) { const u = Math.max(1e-12, r()); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
@@ -32,9 +33,18 @@ function makeMill(seed) {
   const buf = [];
   return {
     h: HREF, F: QM * (H0 - HREF), S,
-    /** entry gauge wanders slowly — the previous pass's own error, and unmeasured. */
-    entryAt(kk) { return H0 + 0.020 * Math.sin(2 * Math.PI * kk * DT / 4.3)
-      + 0.012 * Math.sin(2 * Math.PI * kk * DT / 1.9); },
+    /** entry gauge wanders slowly — the previous pass's own error, and unmeasured.
+     *
+     * `NOWANDER=1` HOLDS IT FLAT, which sizes the one component the shipped object cannot
+     * express (plan §85). §84.1 measured that `hff` inverts this wander lap by lap and scores
+     * itself for it while the DEPLOYED map discards every bit of it — a map of the COMMANDED
+     * REFERENCE cannot represent an unmeasured entry-gauge excursion. §84.3 measured its share
+     * of the OPEN-LOOP error at 12.96% of the energy. Neither says what share of what the
+     * shipped object LEAVES is wander, and that is the number that prices any feedback
+     * structure aimed at it. Unset is byte-identical. */
+    entryAt(kk) { return NOWAND ? H0
+      : H0 + 0.020 * Math.sin(2 * Math.PI * kk * DT / 4.3)
+        + 0.012 * Math.sin(2 * Math.PI * kk * DT / 1.9); },
     quiet: false,
     ecc(kk) { return this.quiet ? 0 : A_ECC * Math.sin(2 * Math.PI * F_ECC * kk * DT); },
     step(Scmd) {
