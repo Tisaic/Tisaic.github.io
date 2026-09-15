@@ -105,9 +105,28 @@ const POINTS = process.env.DIET === 'far' ? FAR : NEAR;
 // Four setpoints each at the production segment gives laps of 20,000: longer than the settle,
 // equal across the diet so no recipe outweighs another, and a reach of ±2,500 against a
 // production ramp of SEG-HOLD = 3,500 steps, which is the feature the correction has to invert.
-const PICK = process.env.DIET === 'far'
+// DSEED=<n>: DRAW THE DIET, BECAUSE THE SEED VARIES NOTHING HERE EITHER (plan §84.8). This rig
+// is deterministic — §84.3 measured two runs from `fresh()` agreeing bit-exactly, the ambient
+// drift being a function of the plant's own step counter — so a commissioning "seed" cannot make
+// this plant's headline a distribution. What varies between two engineers commissioning the same
+// barrel is WHICH ORDERS OF THE SAME RECIPE POINTS they trained on, which is exactly what `PICK`
+// is. Unset is the shipped ordering and byte-identical.
+const DSEED = process.env.DSEED ? +process.env.DSEED : null;
+const PICK = DSEED !== null ? (() => {
+  let st = (DSEED * 2654435761) >>> 0;
+  const rnd = () => ((st = (st * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+  // The index set is POINTS.length, not a literal 6: the NEAR set is the rig's own four-recipe
+  // RECIPE and the FAR set has six, and a hard-coded 6 duly indexed off the end of NEAR on the
+  // first draw. The error was loud, which is the only good thing about it.
+  return Array.from({ length: 4 }, () => {
+    const ix = POINTS.map((_, i) => i);
+    for (let i = ix.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [ix[i], ix[j]] = [ix[j], ix[i]]; }
+    return ix;
+  });
+})() : process.env.DIET === 'far'
   ? [[0, 1, 2, 3], [2, 3, 4, 5], [0, 2, 4, 5], [1, 3, 5, 0]]
   : [[0, 2, 1, 3], [1, 0, 3, 2], [0, 3, 1, 2], [2, 0, 1, 3]];
+if (DSEED !== null) console.log(`  DIET DRAW ${DSEED}: ${JSON.stringify(PICK.map((r) => r.slice(0, 4)))}\n`);
 // AND HOW MANY SETPOINTS A RECIPE CYCLES THROUGH, WHICH IS THE LAP ITSELF (plan §73.5). The rule
 // above is "the lap must EXCEED the plant's settle", and at the production segment two setpoints
 // give 10,000 steps against a 7,861-step settle — still legal, half the lap, and a reach of ±1,250

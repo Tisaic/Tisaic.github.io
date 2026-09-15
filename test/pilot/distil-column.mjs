@@ -67,12 +67,34 @@ console.log('\ndistil-column: the DEPLOYED object on the plant we lose on\n');
 // scenario's own timescale. They differ in WHICH loop moves, WHEN, and BY HOW MUCH — the
 // dimensions a column's operator actually varies — and none of them is the scored scenario.
 const SEG = env('SEG', 750);
-const DIETS = [
+const SHIPPED_DIETS = [
   [[0.8, 0.0], [0.8, 0.8], [0.0, 0.8], [0.0, 0.0]],
   [[1.2, 0.4], [0.4, 1.2], [1.2, 1.2], [0.4, 0.4]],
   [[0.6, 1.0], [1.4, 0.2], [0.2, 0.6], [1.0, 1.4]],
   [[1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [0.5, 0.5]],
 ];
+// DSEED=<n>: DRAW THE DIET, BECAUSE THE SEED VARIES NOTHING HERE (plan §84.8).
+//
+// Every headline on this plant is ONE commissioning draw, and `test/pilot/spread.mjs` cannot make
+// it a distribution: this rig is DETERMINISTIC — §84.3 measured two runs from `fresh()` agreeing
+// bit-exactly — and the cascade it would seed REFUSES, so nothing downstream of a seed moves.
+// `distil-tank.mjs` has the recorded signature of exactly this (three byte-identical "seeds",
+// which is one draw three times, rule 61 aimed at a seed).
+//
+// What DOES vary between two commissionings of the same plant is the DIET — which four patterns
+// the engineer happened to pick — so that is the random variable, drawn from the same design
+// space the shipped diet occupies: four closed cycles of four composition targets on the same
+// [0, 1.4] grid. Unset is the shipped diet and byte-identical.
+const DSEED = process.env.DSEED ? +process.env.DSEED : null;
+const DIETS = DSEED === null ? SHIPPED_DIETS : (() => {
+  let st = (DSEED * 2654435761) >>> 0;
+  const rnd = () => ((st = (st * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+  const grid = [0, 0.2, 0.4, 0.5, 0.6, 0.8, 1.0, 1.2, 1.4];
+  const pick = () => grid[Math.floor(rnd() * grid.length)];
+  return Array.from({ length: 4 }, () =>
+    Array.from({ length: 4 }, () => [pick(), pick()]));
+})();
+if (DSEED !== null) console.log(`  DIET DRAW ${DSEED}: ${JSON.stringify(DIETS)}\n`);
 const LAP = (rec) => SEG * rec.length;
 
 /** One pattern's setpoints at raw step k, cycled at its own lap, stepping rather than ramping —

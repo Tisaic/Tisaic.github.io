@@ -19562,3 +19562,54 @@ injected on joint 1 only, because a load that pushes both joints in the ratio th
 uses is a scaled command rather than a disturbance. `drag` and `inertia` unset are byte-identical
 (checked), and the drag row is kept rather than deleted because "the loop absorbs it" is a finding
 about what a disturbance test must avoid.
+
+---
+
+## §84.8 — THE COLUMN AND THE BARREL BECOME DISTRIBUTIONS, AND THE RANDOM VARIABLE HAD TO BE THE DIET
+
+Both plants' headlines are ONE commissioning draw, and `spread.mjs` cannot make either a
+distribution: both rigs are DETERMINISTIC — §84.3 measured two runs from `fresh()` agreeing
+bit-exactly — and on the column the cascade a seed would perturb REFUSES, so nothing downstream of
+a seed moves. `distil-tank.mjs` has the recorded signature of exactly this (three byte-identical
+"seeds", which is one draw three times, rule 61 aimed at a seed), and §74 found the same on the
+arm.
+
+**So the random variable is the DIET — which four programs the engineer happened to pick — drawn
+from the same design space the shipped diet occupies.** `DSEED=<n>` on both harnesses: on the
+column, four closed cycles of four composition targets on the same [0, 1.4] grid; on the barrel,
+four orderings of the rig's own recipe points. Unset is the shipped diet and byte-identical (both
+reproduce their headlines exactly, which is the control).
+
+```
+  COLUMN                                  BARREL
+    shipped diet   3.959x                   shipped ordering   6.997x
+    draw 1         2.929x                   draw 1             6.543x
+    draw 2         3.352x                   draw 2             5.581x
+    draw 3         2.412x                   draw 3             9.282x
+    draw 4         3.682x                   draw 4             9.033x
+    draw 5         2.452x                   draw 5             7.833x
+    draw 6         3.629x                   draw 6             8.486x
+    spread 1.53x, median ~3.14x            spread 1.66x, median ~8.16x
+    6 of 6 DEPLOY, 6 of 6 HELP             6 of 6 DEPLOY, 6 of 6 HELP
+```
+
+**TWELVE DRAWS ON TWO PLANTS AND NOTHING IS MADE WORSE.** That is the result, and it should be read
+against what the record says about these plants: `spread.mjs` measured Wood-Berry at a 4.2x spread
+with **9 of 12 deployments worse than the 3 refusals**. That was the TEACHER — a bare `Pilot`
+cascade — and this is the PRODUCT. On the object that actually ships, the plant this project lost
+on for its whole history deploys on 6 of 6 diets and helps on 6 of 6, at a 1.53x spread.
+
+**AND THE TWO SHIPPED DIETS SIT ON OPPOSITE SIDES OF THEIR OWN DISTRIBUTIONS, WHICH IS THE USEFUL
+PART.** The column's hand-designed diet (3.959x) **beats every one of six random draws** — it was
+designed, and the design is worth about 1.26x over a median draw, so quoting it as a typical
+result would overstate what an arbitrary engineer's diet delivers. The barrel's shipped ordering
+(6.997x) sits **BELOW the median of six random orderings** (8.16x) — §66 chose orders "production
+never runs" to keep the scored program held out, and that choice costs about 14% against an
+ordering drawn at random. Both are honest and they point opposite ways: one headline is flattered
+by its diet and the other is penalised by a deliberately conservative one.
+
+**WHAT THIS DOES NOT ESTABLISH.** Six draws each, one seed inside each draw, and the barrel's
+draws do NOT all hold production out the way the shipped ordering deliberately does — a random
+ordering may contain production's own transition sequence, which is precisely why the shipped one
+avoids it. So the barrel's median is an upper reading and the shipped 6.997x remains the number to
+quote; the column's median is the honest one and its 3.959x is the selected one.
