@@ -20272,3 +20272,55 @@ instrument column, not about SET.
 
 `objtable.mjs` therefore does not list it, and this section is why: a table that counted it would
 be counting two different claims in one column, which is the fault §86.7 exists to stop.
+
+## §86.7 — THE WINNING TABLE, AND IT IS A SCRAPE
+
+`test/pilot/objtable.mjs`. Each plant's OWN harness in a child process; this file reads that
+harness's own printed line, so no plant is re-scored by a metric it invented (`commtime.mjs`'s and
+`sixplant.mjs`'s own discipline). A row whose line cannot be found reads UNKNOWN rather than being
+dropped (rule 25) — which is how the EMPS and quadruple-tank rows were caught reading UNKNOWN on the
+first pass, because both harnesses print a UNIT between the error and the ratio (`mm`, `cm rms`) and
+the pattern assumed there was none.
+
+```
+  plant                              ships              base -> best              x    MAC   kB    ②d
+  2R arm (lattice, bench cell)       DEPLOYED OBJECT    1.072e+0 -> 1.616e-1    6.63x    —     —    —
+  EMPS servo axis                    object + MEMORY    —                      32.75x    —     —    —
+  quadruple tank                     DEPLOYED OBJECT    5.064e-1 -> 1.549e-1    3.27x    —     —    —
+  Wood-Berry column                  DEPLOYED OBJECT    1.364e-1 -> 3.445e-2    3.96x    0   0.7   DEPLOYED 3.96x
+  cold mill AGC                      DEPLOYED OBJECT    1.539e-2 -> 5.865e-3    2.62x    0   0.5   DEPLOYED 2.63x
+  extruder barrel                    DEPLOYED OBJECT    5.271e+0 -> 7.533e-1    7.00x    0   1.6   DEPLOYED 7.00x
+  cart-pole (open-loop UNSTABLE)     DEPLOYED OBJECT    1.038e-1 -> 8.701e-3   11.93x    8   0.2   DEPLOYED 2.56x
+  cart-pole, loop tuned 3.5x better  conventional rung  2.889e-2 -> 3.125e-3    9.24x    8   0.0   NO TEACHER
+  real flexible arm (DaISy 96-009)   conventional rung  1.851e-1 -> 9.606e-2    1.93x    8   0.0   REFUSED 0.98x
+  real cascaded tanks (overflow)     DEPLOYED OBJECT    7.081e-1 -> 8.145e-2    8.69x    8   0.2   DEPLOYED 2.03x
+  real steam heat exchanger          conventional rung  1.182e-1 -> 1.316e-3   89.77x    8   0.0   REFUSED 0.04x
+
+  of 11 rows (10 distinct plants): 8 ship the DEPLOYED OBJECT, 3 the conventional rung,
+  ZERO the pilot cascade, and NONE is made worse.
+```
+
+**THREE THINGS IN THAT TABLE ARE NEW AND ONE OF THEM IS THE HEADLINE.**
+
+**The pilot cascade ships NOWHERE.** It was the result on the real cascaded tanks until §86.4, at
+43,673 MAC/cycle and 16.5 kB — 437% of a PLC scan — and the deployed object beat it at 8 MAC and
+0.2 kB. So across ten plants sharing no physics, what a machine receives is now either
+`distil.js`'s weight vector or four coefficients of `[a, v, sign v, 1]`, and never a forecast bank
+and a QP. That is the retirement's own claim in the form a customer would check it.
+
+**The deployed object is offered to ten plants and deploys on eight.** The two it does not are the
+real flexible arm — where the map provably cannot express the correction, seven ways (§86.3) — and
+the real steam heat exchanger, where it can express it (in sample 1.33x) and there is nothing left
+after 89.8x. Neither refusal harms anything; both state a reason.
+
+**The table distinguishes three claims the record had been conflating**, and EMPS is the row that
+forced it: that harness ships the deployed object AND the retired lap-periodic rung on top, so its
+`shipped` line is 341.7x and the object's OWN column is 32.75x. The table prints the second and
+drops the composition's base→best pair with it, because two different quantities in one row is the
+fault this file exists to stop (rule 19).
+
+**WHAT THE TABLE DOES NOT KNOW, PRINTED AS A DASH RATHER THAN OMITTED (rule 25):** the arm, EMPS
+and quadruple-tank harnesses do not print a `cost:` line, so their deployed MAC and kB read `—`
+here — each is on record elsewhere (the arm at 274 MAC/decision, EMPS at 78, the tank through
+`distilkit`) and none of them is scraped, which is exactly the kind of hand-carried number this
+file was built to stop. Wiring those three to print the shared cost line is the next thing it wants.

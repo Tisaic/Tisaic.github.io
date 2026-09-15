@@ -70,7 +70,14 @@ function scrape(txt, p) {
   else if (/distilled rung: not reported/.test(txt)) { out.rung = 'NO TEACHER'; }
   if (p && p.prefer) {
     const q = last(txt, p.prefer);
-    if (q) { out.x = +q[1]; out.note = "the object's own column, not the shipped composition"; }
+    if (q) {
+      out.x = +q[1]; out.note = "the object's own column, not the shipped composition";
+      // AND THE base -> best PAIR IS DROPPED WITH IT, because that pair belongs to the
+      // COMPOSITION and printing it beside the object's own ratio would put two different
+      // quantities in one row (rule 19). A dash is what "this harness does not report it for
+      // this object" looks like (rule 25).
+      out.base = null; out.best = null;
+    }
   }
   // The tank harness prints its own shape.
   if (!out.x) {
