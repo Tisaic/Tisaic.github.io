@@ -20347,3 +20347,182 @@ found a deployed-and-harmful cell and §86.3 left exactly one route open.
 8. Target 1 on the new plants: a second held-out program each.
 9. The record read against itself, and the scorecard from the table rather than from memory.
 10. Verify, stamp, push.
+
+## §87.1 — THE MANDATE IS A CHECK NOW, AND IT COSTS THE SUITE NOTHING
+
+`test/pilot/objtable.mjs READ=1`, `distilkit.mjs`'s `emitRow`, `test/run.sh`.
+
+§86.7's table SPAWNED all ten harnesses and scraped their stdout — fifteen minutes of plant time to
+learn what the suite had just measured, which is why it was an instrument nobody ran. A table
+nobody runs is not a check, and this project's governing sentence — *every plant is a legitimate
+winner or is struck with a reason* — had never had one.
+
+So each harness EMITS its row where it measured it (`OBJTABLE_OUT` unset writes nothing and every
+run is byte-identical), and the suite reads them back at the end of the pilot block. The row is
+keyed by the SCRIPT that produced it rather than by a name passed in, which is what lets the reader
+keep only the `distil-*` harnesses: `plants.test.mjs` drives four of the same plants through the
+same driver and scores the TEACHER, and a table that mixed the two would be counting two claims in
+one column (rule 19).
+
+**Its first version reported a rung that did not ship.** `emitRow` read `rep.distil.policy`, which
+is true whenever the FIT vouched for itself — and on the real steam exchanger the fit vouches and
+the MACHINE refuses it at 0.045x, so the table read DEPLOYED for a refusal. It reads
+`rep.deployed.distil` now, which is `distil.js`'s own "the gate is a PRE-FILTER and the decision is
+a machine-scored verify" showing up in an instrument (rule 25).
+
+## §87.2 — THE THREE CELLS THAT READ A DASH
+
+§86.7 printed `—` for the arm's, EMPS' and the tank's deployed MAC and kB, because `rigs/ladder.mjs`
+has printed that line since §63 and the three harnesses that drive their own host never did. Those
+figures lived in `CLAUDE.md` prose and nowhere a check could see them — a hand-carried number in a
+table built to stop hand-carried numbers (rule 30). One formatter, four callers:
+
+```
+  2R arm       274 MAC/decision   1.5 kB   rungs distil
+  EMPS          79 MAC/decision  49.1 kB   rungs hff+distil   (the composition, so the lap table's bytes are in it)
+  quad tank    162 MAC/decision   0.9 kB   rungs distil
+```
+
+The arm's 274 is the number `CLAUDE.md` has quoted since §52.16 and it now comes from the run.
+
+## §87.3 — THE FOUR NEW NUMBERS ARE DISTRIBUTIONS, AND THREE OF THEM ARE TIGHT
+
+§86 produced four headline numbers from ONE commissioning draw each — the exact fault `spread.mjs`
+and §84.8's `DSEED` exist for. `spread.mjs` cannot reach any of them: all four rigs are
+DETERMINISTIC and none builds a cascade here, so `SEED` moves nothing. The random variable is the
+DIET — which four programs the engineer happened to pick — drawn from the same design space the
+shipped diet occupies. Unset is byte-identical on all four, checked.
+
+```
+  plant                 shipped   six diet draws                          spread   deploy   help
+  cart-pole             12.009x   11.789 12.040 12.093 12.113 12.059 12.113  1.03x    6/6    6/6
+  real cascaded tanks    8.69x     8.41  8.66  8.82  8.59  8.62  8.72        1.05x    6/6    6/6
+  real steam exchanger  89.77x    89.77 on all six, byte-identical          1.00x     —     refused 6/6
+  real flexible arm      1.93x     1.93 on all six, rung refused 0.949-1.011x 1.00x    —     refused 6/6
+```
+
+**The cart-pole's 1.03x is the tightest distribution in this project** (the previous best was the
+mill's 1.07x over seeds), and the shipped diet sits in the middle of it rather than at an edge —
+which the column's own draw could not say (§84.8 found its hand-designed diet beating all six).
+The two refusals are refusals on every diet tried, so they are properties of those plants and not
+of one diet: the real arm's is now an EIGHTH independent way of refusing, after §86.3's seven.
+
+## §87.4 — THE CART-POLE'S GATE FAILURE WAS A STRETCHED VERIFY CLOCK, AND IT IS FIXED
+
+§86.2 found the plant table's only deployed-and-harmful cell: on the tuned loop at uMax 0.60 the
+bare `Pilot` vouched for itself at 2.02x on its own representative regime and delivered **0.126x**.
+Two hypotheses, cheapest first (rule 1).
+
+**The transient hypothesis is dead.** Scored per lap the ratio is 0.129 / 0.119 / 0.132 / 0.128 …
+flat to lap 11, and cumulative over 2, 4, 8 and 12 laps it reads 0.119 / 0.126 / 0.128 / 0.128. No
+crossing, no divergence — the verify is not merely too short.
+
+**The instrument was the fault (rule 17).** `verifyRef(i, n)` invites the caller to map its program
+onto the verify's step budget, and `pend.test.mjs` wrote `xrefAt(round(i * LAP / n))`. `n` is
+**24,000 against a 1,091-step lap**, so the program was handed to the gate **22 times SLOWED**, as a
+staircase. On that trajectory the CONVENTIONAL machine reads **4.211e-1 where the real program reads
+2.913e-2** — the gate was scoring a machine fourteen times worse than the one that runs, and a
+correction that damps a slow-loop ringing there is far too large on the program. It is rule 11 —
+*a test must drive the machine with the command it tells the model about* — aimed at the gate.
+
+At the program's own clock the same commissioning refuses:
+
+```
+  uMax                     0.05      0.15      0.30      0.60      1.20
+  shipped loop, delivered  1.558x    9.816x   13.961x   13.452x    7.446x     (all DEPLOY, all help)
+  the gate's own estimate  1.54x     8.64x    12.98x    12.37x     7.49x
+  TUNED loop, delivered    1.000x    1.000x    1.000x    1.000x    1.000x     (all REFUSE)
+```
+
+**There is no harmful cell left**, the shipped-loop curve still has its interior optimum, and the
+gate's estimate is now close to what it delivers where before it read 2.73x against 9.770x. The
+default row is unchanged at 9.816x, which is the control that says this repaired an instrument
+rather than moving a result (rule 21).
+
+**AND THE IDIOM IS ON THREE MORE PLANTS.** `wbonline.mjs`, `tanks.test.mjs` and `thermal.test.mjs`
+all resample their program onto `n`. Nothing here says they are wrong — the tank's gate correlates
+0.989 with what it delivers, which is the opposite of a broken regime — but any resampling re-times
+the trajectory, and the amount is `LAP/n`, which no check reads. Stated rather than fixed, because
+a change to a gate that is measured as working needs its own measurement.
+
+## §87.5 — THE REAL FLEXIBLE ARM REFUSES THE CLASSICAL RIVAL TOO, AND ITS MODELS FIT AT R² 0.997
+
+`test/pilot/zpetc-realarm.mjs`, using `zpetc.mjs`'s own `arx`, `roots`, `zpetc` and `arxFir` rather
+than a second copy of the method (rule 61 — §56's own headline defect was an ordering error inside
+one of those functions).
+
+§86.3 named this as the one route it had not taken: *"§56's stable inversion, which exists for
+precisely this inverse response."* This plant reads **INVERSE 128.3%** — the only non-zero in
+`invert.mjs`'s table — and §56 ran ZPETC only on EMPS, where the identified path turned out to be
+MINIMUM PHASE and the reflection never engaged. So this is the first time the rival's own mechanism
+can fire. Held equal: the same machine, the same program, the same authority `UCORR`, the
+identification multisine bisected ON THE MACHINE to the same 16.8% of the drive the program
+demands; the rival's order and ridge are SWEPT and the deployed object ran at its defaults.
+
+```
+   na  ridge    out lead  R2(Gu) R2(Gr)  taps   program     x       held-out    x
+    3   1e-2     2    3   0.973  0.852     32  1.630e-1  1.135x    6.332e-2  1.005x   <- best of 16
+    6   1e-4     0    1   0.996  0.998    220  1.855e-1  0.998x    6.827e-2  0.933x
+    4   1e-2     2    3   0.984  0.885    405  1.085e+0  0.171x    6.930e+0  0.009x
+    …  every other cell 0.02x to 1.00x, saturated at the cap
+```
+
+**The best of sixteen cells is 1.135x on the program and 1.005x on a trajectory it has never run** —
+against the conventional rung's 1.93x, which is what the ladder ships there. So the rival does not
+beat the cheapest thing in the ladder either, and the reflection DID engage (2 zeros reflected) in
+the cell that produced the best row.
+
+**The sharp form is §56's own finding on a second plant, and here with the mechanism working**:
+every model in the sweep predicts this plant at **R²(Gu) 0.973 to 0.997**, and they deliver 0.02x to
+1.135x. A model can be exact in prediction and still be a bad thing to invert. Which makes the real
+flexible arm the one plant in this project that resists BOTH admissible objects — ours refuses it
+eight ways, the classical one cannot beat four coefficients of `[a, v, sign v, 1]` — and that is a
+statement about the plant rather than about either method.
+
+## §87.6 — `prog/rise` GOES FROM FIVE POINTS TO NINE, AND THE SPLIT HOLDS AT TEN
+
+`test/pilot/invert.mjs`, three rows added. §84.9 licensed that screen — *under about ten response
+times per program, expect to need a diet and a re-derived window* — on five plants with one winner,
+and said so. §86 supplied three more plants whose verdict is known:
+
+```
+  plant       prog/rise   what it took to win
+  emps           173.3    nothing — the conventional rung at 14.7x
+  mill           165.3    a declared delay and a gate reading the first live lead
+  realexch        80.0    nothing — the conventional rung at 89.8x, the map correctly has nothing to add
+  pend            31.6    nothing — the window rule's own derived value, 11.93x
+  realtanks       20.2    nothing — the window rule's own derived value, 8.69x
+  ────────────────────────  the gap the screen predicts  ────────────────────────
+  tank             7.9    a ridge re-derived four decades and a machine-scored gain
+  column           7.6    the deployed object in place of the cascade, and a machine-scored ridge
+  barrel           5.2    three harness repairs and a designed diet
+  realarm            —    rise unmeasurable; INVERSE 128.3% instead, and it refuses everything
+```
+
+**Every plant above ten won at the rule's own derived window with no re-derived constant, and every
+plant below ten needed a designed diet or a carried constant re-derived.** Nine points, a clean
+split, and the three new ones were added after the screen was written rather than before — which is
+the only way a screen earns anything.
+
+## §87.7 — WHAT THE PRODUCT COSTS THE FOUR NEW PLANTS, AND ONE OF THEM MEETS TARGET 4
+
+Scraped from `priceFrom`'s own line, so no plant is re-scored (`commtime.mjs`'s discipline):
+
+```
+  plant                 PRODUCT commissioning        where it goes
+  cart-pole             42.7 min          MET        teacher 59% · verify 41%
+  real steam exchanger   2.7 days       MISSED       teacher 76% · verify 24%
+  real cascaded tanks   15.9 days       MISSED       teacher 77% · verify 23%
+  real flexible arm     73.5 days       MISSED       VERIFY 87% · teacher 13%
+```
+
+**The cart-pole is the cheapest product commissioning in this project** — 42.7 min against the
+mill's 55 — so target 4 is met on two plants of eight rather than one of four, and the plant that
+meets it is the OPEN-LOOP UNSTABLE one.
+
+**The real arm is the outlier and its shape is the opposite of everyone else's**: 87% VERIFY where
+every other plant is 76-98% teacher. That is the price of the two machine-scored ladders on a plant
+whose scored program is 143,360 steps — the ridge axis refits and scores six candidates and the
+gain axis scores up to eleven, each one a 40-lap run. It is the first time the verify has been the
+dominant term anywhere, and it is a direct consequence of §86.6's edge extension being allowed to
+walk six steps on a plant where every step is a long run.

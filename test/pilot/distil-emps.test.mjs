@@ -20,7 +20,7 @@
 import { runEmpsDistil, rates, tone } from './distil-emps.mjs';
 import { P, PR, makeMachine } from './emps-rig.mjs';
 import { AutoStack } from '../../lib/pilot/autostack.js';
-import { printCost } from './rigs/distilkit.mjs';
+import { printCost, emitRow } from './rigs/distilkit.mjs';
 
 let failed = 0;
 const check = (name, ok, detail = '') => {
@@ -125,6 +125,7 @@ console.log(A2.table());
 console.log(`    shipped ${JSON.stringify(rep2.deployed)}   ${rep2.base.toExponential(4)} -> `
   + `${rep2.best.toExponential(4)} mm   ${rep2.gain.toFixed(1)}x`);
 printCost(A2, '      ');
+emitRow(rep2, A2, { name: 'EMPS servo axis — position, mm rms' });
 const drow2 = rep2.rungs.find((r) => r.name.startsWith('②d'));
 
 check('the ladder REACHES the distilled rung on a real plant and produces a row for it',

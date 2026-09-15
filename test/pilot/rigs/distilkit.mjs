@@ -23,6 +23,7 @@
  * window could span, so a diet of mixed rates is bounded by its fastest recipe.
  */
 
+import fs from 'node:fs';
 import { count, reset, split } from './meter.mjs';
 
 /**
@@ -260,6 +261,55 @@ function carrier(build) {
 }
 
 /**
+ * THE TABLE'S ROW, EMITTED BY THE HARNESS THAT MEASURED IT (plan §87.1).
+ *
+ * `objtable.mjs` built the winning table by SPAWNING every plant's harness and scraping its
+ * stdout, which is right for an instrument run on demand and wrong for a CHECK: the suite already
+ * runs every one of those harnesses, so spawning them again is fifteen minutes of duplicated plant
+ * time to learn what the suite just measured. Worse, a table nobody runs is not a check, and the
+ * mandate this project works to — *every plant is a legitimate winner or is struck with a reason*
+ * — has never had one.
+ *
+ * So each harness EMITS its row where it measured it, and `objtable.mjs READ=1` reads them. The
+ * row is keyed by the SCRIPT that produced it (`process.argv[1]`'s basename) rather than by a name
+ * the caller passes, because a name passed by hand is a second description that can drift from the
+ * thing (rule 30) — and the same key is what lets the reader keep only the `distil-*` harnesses,
+ * so the TEACHER rows `plants.test.mjs` produces through the same driver do not land in a table
+ * about the deployed object.
+ *
+ * Unset `OBJTABLE_OUT` and nothing is written, so every existing run is byte-identical (rule 21).
+ */
+function emitRow(rep, auto, extra = {}) {
+  const dir = process.env.OBJTABLE_OUT;
+  if (!dir || !rep) return;
+  const cost = (auto && auto.cost && auto.cost()) || null;
+  const file = (process.argv[1] || '').split('/').pop().replace(/\.mjs$/, '');
+  const row = {
+    file, name: extra.name || null, deployed: rep.deployed || null,
+    base: Number.isFinite(rep.base) ? rep.base : null,
+    best: Number.isFinite(rep.best) ? rep.best : null,
+    gain: Number.isFinite(rep.gain) ? rep.gain : null,
+    mac: cost ? Math.round(cost.slicedMac) : null,
+    peak: cost && cost.mac !== undefined ? Math.round(cost.mac) : null,
+    kb: cost ? +(cost.bytes / 1024).toFixed(1) : null,
+    // WHETHER THE RUNG SHIPPED, WHICH IS `deployed.distil` AND NOT WHETHER A POLICY EXISTS.
+    // The first version read `rep.distil.policy`, which is true whenever the FIT vouched for
+    // itself — and on the real steam exchanger the fit vouches and the MACHINE refuses it at
+    // 0.045x, so the table read DEPLOYED for a rung that did not (rule 25, and `distil.js`'s own
+    // "the gate is a PRE-FILTER and the decision is a machine-scored verify").
+    rung: rep.distil ? ((rep.deployed && rep.deployed.distil) ? 'DEPLOYED' : 'REFUSED') : null,
+    ...extra,
+  };
+  try {
+    // Appended rather than rewritten, because several harnesses run in one suite and a row that
+    // overwrites the file would leave a table of one plant (rule 25 — a missing row must read as
+    // missing, not as the table being complete).
+    fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(`${dir}/rows.jsonl`, JSON.stringify(row) + '\n');
+  } catch (e) { console.log(`  (objtable row not emitted: ${e.message})`); }
+}
+
+/**
  * THE DEPLOYED COST LINE, PRINTED THE SAME WAY EVERYWHERE (plan §87.2).
  *
  * `rigs/ladder.mjs` has printed this for every plant it drives since §63, and the three harnesses
@@ -445,4 +495,4 @@ async function reportDistil({ rep, runs, nFeat, segs = null, auto = null }) {
   return { inSample, dr };
 }
 
-export { printCost, deriveWindow, reportDistil, priceFrom, ridgeLadder, gainLadder, teacherReuse, carrier, teachLaps, teachAvg, dietN, human, SHAPE, DEFAULT_RIDGES, DEFAULT_GAINS };
+export { printCost, emitRow, deriveWindow, reportDistil, priceFrom, ridgeLadder, gainLadder, teacherReuse, carrier, teachLaps, teachAvg, dietN, human, SHAPE, DEFAULT_RIDGES, DEFAULT_GAINS };

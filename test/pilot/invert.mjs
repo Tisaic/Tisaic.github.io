@@ -45,19 +45,28 @@
  * KNOBS: PLANTS (comma list), AMP (fraction of uMax, default 0.25), WINDOW (steps), K0
  * (fraction of the program at which the step is applied). It asserts nothing.
  */
-import { tankSpec, wbSpec, millSpec, barrelSpec, empsSpec, realarmSpec } from './rigs/specs.mjs';
+import { tankSpec, wbSpec, millSpec, barrelSpec, empsSpec, realarmSpec, pendSpec,
+  realtanksLadderSpec, realexchLadderSpec } from './rigs/specs.mjs';
 
 const env = (k, d) => (process.env[k] === undefined ? d : Number(process.env[k]));
 const AMP = env('AMP', 0.25);
 const K0F = env('K0', 0.10);
-const WANT = (process.env.PLANTS || 'tank,column,mill,barrel,emps,realarm').split(',');
+const WANT = (process.env.PLANTS || 'tank,column,mill,barrel,emps,realarm,pend,realtanks,realexch').split(',');
 
 // THE FIFTH ROW IS A WINNER, AND IT IS THE CONTROL THIS FILE SHIPPED WITHOUT (plan §84.9).
 // Every diagnosis here was taken on a plant that LOSES, so a reading shared by all four could be
 // a property of the instrument rather than of failure. EMPS deploys at 14.7x, so what it reads on
 // these same axes is what "nothing wrong" looks like (rule 9).
+// THREE MORE ROWS, AND THEY ARE THE ONES THE SCREEN NEEDED (plan §87.6). §84.9 put EMPS in as the
+// first WINNER and found that three of this file's four columns discriminate nothing — every plant
+// read 0.0% INVERSE, scale 2.00 and DC 100% — while a FIFTH column, `prog/rise`, split the table
+// cleanly. That split was five points and a correlation. §86 then asked the deployed object on
+// four more plants and got two wins (cart-pole 11.93x, real tanks 8.69x) and two refusals (the real
+// arm, the real exchanger), so the screen can now be read against nine rows with four winners
+// rather than five rows with one.
 const SPECS = [['tank', tankSpec], ['column', wbSpec], ['mill', millSpec], ['barrel', barrelSpec],
-  ['emps', empsSpec], ['realarm', realarmSpec]];
+  ['emps', empsSpec], ['realarm', realarmSpec], ['pend', pendSpec],
+  ['realtanks', realtanksLadderSpec({ overflow: true })], ['realexch', realexchLadderSpec()]];
 
 /**
  * Run one plant for `n` steps from a fresh state, holding a correction `amp` on channel `j`
@@ -216,7 +225,15 @@ const VERDICT = {
   emps: 'emps.test 14.7x DEPLOYED · spread.mjs 1.05x over 8 seeds — the WINNER (rule 9)',
   // THE OPEN CASE. Ships 1.93x on the conventional rung and REFUSES the cascade with no cause
   // stated — the authority is already ruled out (byte-identical at every cap).
-  realarm: 'realarm.test 1.93x conventional · REFUSES the cascade, correction WRONG not clipped',
+  realarm: 'realarm.test 1.93x conventional · REFUSES the cascade, correction WRONG not clipped'
+    + ' · distil-realarm REFUSES on 6 of 6 diet draws (0.949-1.011x)',
+  // THREE MORE WINNERS FOR THE `prog/rise` COLUMN (plan §87.6). §84.9 licensed that screen on FIVE
+  // points and one winner; these are three more, every one of them ABOVE ten response times per
+  // program and every one won at the window rule's own derived value with no re-derived constant.
+  pend: 'distil-pend 11.93x DEPLOYED · 11.79-12.11x over 6 diet draws, 6/6 deploy and help',
+  realtanks: 'distil-realtanks 8.69x DEPLOYED at 8 MAC · 8.41-8.82x over 6 draws, 6/6 help',
+  realexch: 'distil-realexch: the CONVENTIONAL rung takes 89.8x and the map correctly has nothing'
+    + ' left to add (0.045x), byte-identical on 6 draws',
 };
 // PROG/RISE IS ADDED BY THE POSITIVE CONTROL, AND IT IS THE ONE AXIS THE WINNER SEPARATES ON
 // (plan §84.9). Free arithmetic on numbers already here — how many of the plant's own response

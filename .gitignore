@@ -10,3 +10,4 @@ scratchpad/
 # would nest the repo inside itself. Scoped to `worktrees/` rather than `.claude/`
 # so genuine tracked content there (skills, settings) is still possible.
 .claude/worktrees/
+.objtable/

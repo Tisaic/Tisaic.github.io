@@ -23,6 +23,20 @@
  * ONLY=<names>, SKIP=<names>, TIMEOUT=<seconds>.
  */
 import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+
+/**
+ * READ=1 (or `--read`): read the rows the harnesses EMITTED rather than spawning them (plan §87.1).
+ *
+ * The spawn path is right for an instrument run on demand and wrong for a CHECK: the suite already
+ * runs every one of these harnesses, so spawning them again is fifteen minutes of plant time to
+ * learn what the suite just measured — and a table nobody runs is not a check. With
+ * `OBJTABLE_OUT` set, every harness appends its own row where it measured it and this mode reads
+ * them. A plant whose row is MISSING reads as missing rather than as a shorter table (rule 25).
+ */
+const READ = process.env.READ === '1' || process.argv.includes('--read');
+const OUT = process.env.OBJTABLE_OUT || null;
+
 
 const PLANTS = [
   { key: 'arm', label: '2R arm (lattice, bench cell)', file: 'distil-arm.mjs' },
@@ -100,6 +114,50 @@ function classify(s) {
   if (s.ship.hff) return 'lap-periodic MEMORY';
   if (s.ship.classic) return 'conventional rung';
   return 'nothing';
+}
+
+if (READ) {
+  const f = `${OUT || '.'}/rows.jsonl`;
+  let lines = [];
+  try { lines = fs.readFileSync(f, 'utf8').trim().split('\n').filter(Boolean); }
+  catch (e) {
+    console.log(`  no rows to read at ${f} — set OBJTABLE_OUT and run the plant harnesses first`);
+    console.log('\nobjtable: NOTHING READ (rule 25: that is not an empty table, it is no table)\n');
+    process.exit(1);
+  }
+  // Only the harnesses that ask the DEPLOYED object. `plants.test.mjs` drives four of the same
+  // plants through the same driver and scores the TEACHER; those rows are a different claim and a
+  // table that mixed them would be counting two things in one column (rule 19).
+  const seen = new Map();
+  for (const l of lines) {
+    let r; try { r = JSON.parse(l); } catch { continue; }
+    if (!/^distil-/.test(r.file || '')) continue;
+    seen.set(r.file, r);                                   // the LAST row a file emitted wins
+  }
+  const got = [...seen.values()].sort((a, b) => a.file.localeCompare(b.file));
+  console.log(`  read ${got.length} row(s) from ${lines.length} emitted\n`);
+  console.log('  harness                     ships                 base -> best            '
+    + '  x      MAC   kB     ②d');
+  let bad = 0;
+  for (const r of got) {
+    const kind = classify(r.deployed ? { ship: r.deployed } : null);
+    const worse = r.gain !== null && r.gain < 0.995;
+    if (worse) bad++;
+    console.log(`  ${r.file.padEnd(27)} ${kind.padEnd(20)} `
+      + `${r.base === null ? '—'.padEnd(21) : (r.base.toExponential(3) + ' -> ' + r.best.toExponential(3)).padEnd(21)} `
+      + `${(r.gain === null ? 'UNKNOWN' : r.gain.toFixed(2) + 'x').padStart(8)} `
+      + `${(r.mac === null ? '—' : String(r.mac)).padStart(6)} `
+      + `${(r.kb === null ? '—' : r.kb.toFixed(1)).padStart(5)}  ${r.rung || '—'}`
+      + `${worse ? '   <- MADE WORSE' : ''}`);
+  }
+  const nObj = got.filter((r) => r.deployed && r.deployed.distil).length;
+  console.log(`\n  ${nObj} of ${got.length} ship the DEPLOYED OBJECT; made WORSE: ${bad || 'none'}`);
+  // THE MANDATE, AS A CHECK. Every plant asked either improves or refuses — a refusal delivers the
+  // machine unchanged, so `gain >= 1` covers both and nothing else is asserted here, because a
+  // threshold on HOW MUCH each plant must win by would be a number this file invented.
+  console.log(bad ? `\nobjtable: ${bad} plant(s) made WORSE — the mandate is not met\n`
+    : '\nobjtable: every plant asked either improves or refuses, and none is made worse\n');
+  process.exit(bad ? 1 : 0);
 }
 
 const rows = [];

@@ -40,7 +40,7 @@
  * Run: SUITE=full node test/pilot/distil-tank.mjs   [SEEDS=1,2]  [GRADE=fast]
  */
 import { AutoStack } from '../../lib/pilot/autostack.js';
-import { priceFrom, printCost, ridgeLadder, gainLadder, teacherReuse, carrier, teachLaps, teachAvg, dietN } from './rigs/distilkit.mjs';
+import { priceFrom, printCost, emitRow, ridgeLadder, gainLadder, teacherReuse, carrier, teachLaps, teachAvg, dietN } from './rigs/distilkit.mjs';
 import { into } from './rigs/meter.mjs';
 import { oracleConverge } from './rigs/oracleteach.mjs';
 import { windowBend } from '../../lib/pilot/deploy.js';
@@ -617,6 +617,7 @@ for (const seed of SEEDS) {
   console.log(`    seed ${seed}: shipped ${shipped}  ${rep.base.toExponential(4)} -> `
     + `${rep.best.toExponential(4)} cm rms   ${rep.gain.toFixed(3)}x   ${secs}s`);
   printCost(auto, '      ');
+  emitRow(rep, auto, { name: 'quadruple tank — levels, cm rms' });
   // AN EXCEPTION INSIDE THE RUNG IS NOT A REFUSAL (plan §72.15). `AutoStack` catches what
   // `distilRuns()` throws into `rep.distil.error`, which is right — one bad diet must not take a
   // commissioning down — and this harness never read it. A missing import produced

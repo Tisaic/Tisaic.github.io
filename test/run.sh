@@ -95,6 +95,19 @@ for arg in "$@"; do
 done
 export SUITE
 
+# THE WINNING TABLE, COLLECTED FROM THE RUNS THE SUITE IS ALREADY PAYING FOR (plan §87.1).
+#
+# `objtable.mjs` can SPAWN every plant harness and scrape it, which is right for an instrument run
+# on demand and wrong for a check: the suite runs all ten of them anyway, so spawning them again is
+# fifteen minutes of duplicated plant time. With `OBJTABLE_OUT` set every harness appends its own
+# row where it measured it, and the read-back at the end of the pilot block is the first CHECK this
+# project's own mandate has ever had — every plant asked either improves or refuses, and none is
+# made worse. The file is cleared per run so a stale row cannot stand in for a harness that failed
+# to reach the machine (rule 25).
+OBJTABLE_OUT="${OBJTABLE_OUT:-$(cd "$(dirname "$0")" && pwd)/.objtable}"
+export OBJTABLE_OUT
+rm -f "$OBJTABLE_OUT/rows.jsonl"
+
 # WHAT CHANGED DECIDES WHAT RUNS. A FlowSim edit judged by NGRC's warm-up timers
 # is cost without information -- those checks cannot fail for a reason the edit is
 # responsible for, and when they do fail it is for load-related reasons that send
@@ -411,6 +424,11 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # ceiling over the agnostic recipe, same program, same instrument) inside 1.3x, with
     # the ceiling real and the agnostic recipe clearly above baseline.
     t node test/pilot/agnosticprice.mjs
+    # THE MANDATE, AS A CHECK (plan §87.1). Reads the rows the harnesses above emitted — no plant
+    # is re-run and no plant is re-scored by a metric this file invented. It goes red when any
+    # plant asked is made WORSE, which is the one thing the project's own governing sentence says
+    # must never happen. Full tier only, because that is where the ten harnesses run.
+    if [ "${SUITE}" = "full" ]; then t node test/pilot/objtable.mjs --read; fi
     t node test/pilot/hff.test.mjs
     # The banded operator on a plant with KNOWN neighbour coupling, and the control that it
     # is byte-identical where there is none. It shipped once with every harmonic's fit null
