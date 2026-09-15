@@ -20768,3 +20768,66 @@ plant tests that have nothing to do with them — 16 s of suite time and three n
 two pure functions. They are in `rigs/verifyclock.mjs` now, which imports nothing and loads in
 0.04 s. Rule 2 aimed at an import, and the general form is worth keeping: **rule 61's remedy does
 not require the shared thing to live in the largest module that happens to be shared.**
+
+## §88.8 — WHAT §88 DID NOT RUN, AND THE PREDICTIONS THAT WOULD FALSIFY EACH (rule 59)
+
+Three experiments follow from §88 and none is run here. Each is written with its prediction
+FIRST, because §88.3 is this section's own argument for the practice: the bisection there was
+worth having precisely because it refuted what had been written down before it.
+
+### (a) TARGET 1 AGAINST A REAL PER-PROGRAM COMMISSION
+
+Every ratio in §88 uses the SCORED program's factor as its comparator. The target's own words are
+*within 1.3x of a controller commissioned on EACH program individually*, which needs a second
+commissioning per plant. Where the held-out factor is the LARGER — realtanks 1.440, the arm
+1.330, realexch 1.271 — the cheap form is **looser** than the target, so three of the five MET
+verdicts are upper readings rather than measurements of the bar.
+
+Start on the two cheapest product commissionings in the project: the cart-pole at 42.7 min and
+the cold mill at 55 min (§87.7).
+
+**PREDICTION.** The strong form will be WORSE than the cheap form on every plant, because a
+commission that sees the program can fit its own diet to it — and the gap will be largest where
+the held-out factor currently exceeds the scored one, since that is where the cheap comparator is
+most generous. If instead the strong form comes back EQUAL, the cheap form is not merely
+convenient but sufficient, and every future plant is one scored run rather than one
+commissioning. **What would falsify the whole §88 table**: any plant where the strong form drops
+a MET verdict to NOT MET. Then every ratio here is an upper reading and CLAUDE.md must say so in
+the same breath as the count.
+
+### (b) WHY THE SLOWED VERIFY GATE RANKS BETTER ON THE TANK
+
+§88.2 measured the tank's 2.2x-SLOWED representative regime as LOAD-BEARING and BENEFICIAL — 3 of
+8 seeds deploy and all three help, against 6 of 8 deploying and TWO HARMING at the program's own
+rate. That is the opposite sign to the cart-pole's 22x, where slowing the gate was the defect. No
+mechanism is established and the default stayed where measurement put it, which is right and is
+not an explanation.
+
+The experiment is a LADDER rather than a pair: sweep the tank's clock over roughly 0.25x to 4x of
+the program's own rate, and read the deploy/harm split at each.
+
+**PREDICTION.** If the clock is acting as a GATE REGULARISER — a slower program sitting lower in
+the plant's own frequency band, so the gate sees the low-frequency over-correction the harmful
+seeds carry — the split is MONOTONE in the factor over that span, and the current 0.461x is
+somewhere on the useful side rather than at an optimum nobody chose. If it is NOT monotone, the
+0.461x is a coincidence of `5·segLen + PAD` against this plant's recipe length, and the default
+should be revisited rather than defended. Either way the answer belongs in the report as a
+property of the gate, because a knob measured as load-bearing and left unexplained is the shape
+this project's own record keeps having to retract.
+
+### (c) A COVERAGE GUARD FOR THE CONVENTIONAL RUNG
+
+§88.3 is the first *none made worse* failure here, and it is the CONVENTIONAL rung on the real
+flexible arm. `distil.js` fades its correction outside the commanded-SPEED span the fit saw;
+`classic.js` has no analogue and extrapolates silently.
+
+**PREDICTION, AND IT IS A PREDICTION THAT THE OBVIOUS GUARD FAILS.** A speed guard will NOT catch
+this, because the bisection says the harm is the SHAPE and not the size: the harmful edge-96
+program runs at peak |v| 2.16e-1 against the commissioning's 3.75e-1, so it sits INSIDE the
+trained speed span and a speed fade would never fire. What would have to be read instead is a
+SPECTRAL coverage — the share of the program's energy above the band the commissioning program
+occupied — and the test of whether it is worth building is whether one threshold separates the
+two harmful rows (edge 96 at both amplitudes) from the safe one (edge 200) with the commissioned
+program between them. If no single threshold does, say so and leave the rung unguarded with the
+failure recorded, because a guard calibrated on the three points it was built from is rule 15
+exactly, and §78.5 already shipped one of those and had to retract it.
