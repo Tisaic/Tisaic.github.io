@@ -125,7 +125,16 @@ console.log(A2.table());
 console.log(`    shipped ${JSON.stringify(rep2.deployed)}   ${rep2.base.toExponential(4)} -> `
   + `${rep2.best.toExponential(4)} mm   ${rep2.gain.toFixed(1)}x`);
 printCost(A2, '      ');
-emitRow(rep2, A2, { name: 'EMPS servo axis — position, mm rms' });
+/**
+ * TARGET 1's COLUMN, FROM NUMBERS THIS FILE ALREADY HAD (plan §88.9). `r.sinePol` is the
+ * distilled policy on a two-tone sine the axis has NEVER run and that appears in no training
+ * set, and `r.homePolX` is the same object on the program it was commissioned against — which is
+ * exactly the comparison every other plant's harness makes. It was measured here since §50 and
+ * never emitted, so `objtable` read `not asked` for the one plant whose transfer result is this
+ * project's cleanest.
+ */
+emitRow(rep2, A2, { name: 'EMPS servo axis — position, mm rms',
+  t1: r.sinePol / r.homePolX, t1Worse: r.sinePol < 1 });
 const drow2 = rep2.rungs.find((r) => r.name.startsWith('②d'));
 
 check('the ladder REACHES the distilled rung on a real plant and produces a row for it',

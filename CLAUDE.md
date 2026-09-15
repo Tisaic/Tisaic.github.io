@@ -319,14 +319,15 @@ Four consequences, all of them binding:
 
 Each of these is a claim that can be shown false, which is the only kind worth writing down.
 
-1. **PROGRAM-AGNOSTIC. MEASURED ON SEVEN PLANTS FOR THE FIRST TIME, AND MET ON FOUR (plan §88).**
+1. **PROGRAM-AGNOSTIC. MEASURED ON EIGHT PLANTS FOR THE FIRST TIME, MET ON FIVE, AND THE COUNT IS A SCRAPE (plan §88, §88.9).**
    Commission once on a plant. Then run programs the commissioning never saw — different shapes,
    different corner counts, different lengths — with NO recommissioning. Target: within 1.3x of a
    controller commissioned on each program individually, on every program in the set, with none
-   made worse than the conventional machine. **This target had exactly one plant's number against
-   it (the quadruple tank's 2.657x held out against 3.268x) until `rigs/ladder.mjs` gained
-   `scoreOn`** — the driver's OWN scored run, parameterised over the program, so a second program
-   costs ONE scored run and no refit and is not a fourth private copy of the loop (rule 61).
+   made worse than the conventional machine. **This target had almost no evidence against it until
+   `rigs/ladder.mjs` gained `scoreOn`** — the driver's OWN scored run, parameterised over the
+   program, so a second program costs ONE scored run and no refit and is not a fourth private copy
+   of the loop (rule 61). What stood in its place was the quadruple tank's 2.657x against 3.268x,
+   which §88.9 then had to remove from the count because it comes from a different instrument.
 
    ```
      plant        prog/rise   held-out / scored   verdict
@@ -334,14 +335,26 @@ Each of these is a claim that can be shown false, which is the only kind worth w
      pend             31.6         0.950          MET
      realtanks        20.2         1.440          MET
      2R arm              —         1.330          MET   <- BETTER on both it never ran
-     quad tank         7.9         0.813          MET
+     EMPS                —         1.012          MET   <- a sine the axis has never run
      column            7.6         0.339          NOT MET  (still helps at 1.342x)
      barrel            5.2         0.393          NOT MET  (still helps at 2.747x)
      real arm            —         0.455          NOT MET, and 2 of 4 held-out programs MADE WORSE
+     ── NOT ASKED, both OPEN ITEMS rather than exclusions ──
+     quad tank         7.9           —            §79.3's 2.657x is the GAIN LADDER's instrument
+     cold mill       165.3           —            a regulator's second OPERATING POINT (§88.6)
    ```
 
-   **FIVE OF EIGHT MEET THE BOUND AND ONE OF EIGHT HAS A PROGRAM MADE WORSE**, and the flagship
-   plant is the cleanest row: the 2R arm reads **10.88x on the rounded rectangle and 15.94x on
+   **THE TABLE IS A SCRAPE AND IT CAUGHT THIS FILE (plan §88.9).** `objtable --read` printed
+   *asked on 7 of 10: 4 MET* while these three documents asserted *5 of 8 MET*, and having two
+   counts is the condition that table exists to remove (rule 30). Resolved AGAINST the prose: the
+   quadruple tank's 0.813 comes from the GAIN LADDER'S OWN candidate scoring rather than from the
+   comparison every other row makes, so counting them together is rule 19 — it reads NOT ASKED.
+   What was genuinely missing is EMPS, which has had the number since §50 and never emitted it.
+   The count did not change; its MEMBERSHIP did, and every member is now emitted where it was
+   measured.
+
+   **FIVE OF EIGHT ASKED MEET THE BOUND, ONE HAS A PROGRAM MADE WORSE, AND TWO OF TEN ARE NOT
+   ASKED.** The flagship plant is the cleanest row: the 2R arm reads **10.88x on the rounded rectangle and 15.94x on
    the circle against 8.18x on the sharp square it was scored on**, every factor over the BARE
    machine so the comparison has one reference (rule 19 — `scoreSet` scores bare→policy while
    `rep.base/rep.best` is over the conventional machine, and dividing one by the other would have
@@ -352,8 +365,7 @@ Each of these is a claim that can be shown false, which is the only kind worth w
    **AND §84.9's OWN SCREEN PREDICTS IT (plan §88.7).** `prog/rise` — how many of the plant's own
    response times its program contains — was derived for the WINDOW rule and written down before
    any of these numbers existed: three of three plants above its ~10 split meet target 1, two of
-   three below it miss, the quadruple tank is the exception and the real arm fails hardest. That
-   is one number predicting two things, and the reason is the same constraint from two sides: a
+   two below it miss, and the real arm fails hardest. That is one number predicting two things, and the reason is the same constraint from two sides: a
    plant whose program is few of its own rises needs a window that REACHES its memory, and a
    window that reaches its memory SPANS the program, so the map reads where it is rather than what
    is commanded. Six points and one exception is a correlation, not a law.

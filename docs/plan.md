@@ -20749,17 +20749,20 @@ plants after that screen was written, and it lines up with it:
   pend             31.6        0.950         MET
   realtanks        20.2        1.440         MET
   ───────────────────── the screen's split ─────────────────────
-  quad tank         7.9        0.813         MET        <- the exception
   column            7.6        0.339         NOT MET    (still helps at 1.342x)
   barrel            5.2        0.393         NOT MET    (still helps at 2.747x)
   ───────────────────── no prog/rise on file ───────────────────
+  EMPS servo axis     —        1.012         MET        <- a sine the axis has never run
   2R arm (lattice)    —        1.330         MET        <- BETTER on both it never ran
   realarm             —        0.455         NOT MET, and 2 of 4 held-out programs MADE WORSE
+  ───────────────────── NOT ASKED, both open items ─────────────
+  quad tank         7.9          —           §79.3's 2.657x is the GAIN LADDER'S instrument
+  cold mill       165.3          —           a regulator's second OPERATING POINT (§88.6)
 ```
 
-**Three of three above the split meet it; two of three below it miss it; the quadruple tank is
-the exception and the real arm, whose rise is unmeasurable and whose INVERSE reads 128.3%, fails
-hardest.** Six points and one exception is a correlation and not a law, and it is stated as one.
+**Three of three above the split meet it and two of two below it miss it**, with the real arm —
+whose rise is unmeasurable and whose INVERSE reads 128.3% — failing hardest. Five points is a
+correlation and not a law, and it is stated as one.
 
 **AND THE FLAGSHIP PLANT IS THE CLEANEST ROW OF THE EIGHT, WITH ITS DENOMINATORS MATCHED
 (plan §88.5).** The 2R arm reads **10.88x on the rounded rectangle and 15.94x on the circle
@@ -20849,3 +20852,24 @@ two harmful rows (edge 96 at both amplitudes) from the safe one (edge 200) with 
 program between them. If no single threshold does, say so and leave the rung unguarded with the
 failure recorded, because a guard calibrated on the three points it was built from is rule 15
 exactly, and §78.5 already shipped one of those and had to retract it.
+
+## §88.9 — THE SCRAPE CAUGHT THE PROSE, WHICH IS WHAT IT IS FOR
+
+`objtable --read` inside the green suite printed **TARGET 1 asked on 7 of 10: 4 MET, 1 made
+WORSE** while this plan, CLAUDE.md and the scorecard all asserted **5 of 8 MET**. Both readings
+were defensible and that is the problem: having two counts is the condition `objtable` exists to
+remove, and rule 30 is aimed at exactly this — a count nobody can re-derive is a preference.
+
+The gap was the QUADRUPLE TANK, which I had counted at 0.813 from §79.3's held-out production
+recipe. Resolved AGAINST my own prose: that 2.657x comes from the GAIN LADDER'S OWN candidate
+scoring, not from the comparison every other row makes, and putting the two in one column is
+rule 19. The tank reads NOT ASKED and is an open item beside the mill.
+
+What was genuinely missing is EMPS, which has had the measurement since §50 and never emitted it:
+the distilled policy reads **33.15x on a two-tone sine the axis has NEVER run against 32.75x on
+the program it was commissioned against — a ratio of 1.012**, the cleanest transfer result in
+this project, and `objtable` was reading `not asked` for it. Emitted, the table reads **8 asked,
+5 MET, 1 made worse**, every row of it re-derivable from a harness rather than from a sentence.
+
+The count did not change. Its MEMBERSHIP did, and every member is now emitted where it was
+measured.

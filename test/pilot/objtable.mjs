@@ -171,6 +171,13 @@ if (READ) {
   // flexible arm is measured as failing it — a suite pinned to a bar a plant is known to fail is
   // permanently red and hides the next real failure (rule 3) — and because a plant whose harness
   // does not ask reads `not asked` rather than dropping out of the count (rule 25).
+  // THE QUADRUPLE TANK AND THE COLD MILL READ `not asked`, AND BOTH ARE OPEN ITEMS RATHER THAN
+  // EXCLUSIONS (plan §88.9). The tank HAS a held-out recipe on record — 2.657x against production's
+  // 3.268x (§79.3) — but that number comes from the GAIN LADDER'S OWN candidate scoring, which is
+  // a different instrument from the one every other row here uses, and counting the two together
+  // would put two quantities in one column (rule 19). The mill is §88.6's own correction: a
+  // regulator has no second TRAJECTORY and plainly has a second OPERATING POINT, so "not
+  // applicable" over "not measured" was rule 25 committed while citing rule 25.
   const asked = got.filter((r) => r.t1 !== undefined && r.t1 !== null);
   const met = asked.filter((r) => !r.t1Worse && r.t1 >= 1 / 1.3);
   console.log(`  TARGET 1 asked on ${asked.length} of ${got.length}: ${met.length} MET, `
