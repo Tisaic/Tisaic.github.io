@@ -34,6 +34,7 @@
  * lives in 4.0 to 8.5, and the guard is set at the overflow rather than at a round number.
  */
 import { readCsv, identify, makePlant, simulate } from './realdata/sysid.mjs';
+import { tick } from './meter.mjs';
 
 const R = (k) => Array.from({ length: k }, (_, i) => i + 1);
 const REC = readCsv('cascaded-tanks.csv');
@@ -115,13 +116,17 @@ function makeMachine({ overflow = false, rec = RECIPE } = {}) {
   const v0 = voltsFor(rec[0]);
   const p = makePlant(MODEL, new Array(8).fill(rec[0]), new Array(8).fill(v0));
   for (let i = 0; i < 2000; i++) p.step(v0);
-  if (!overflow) return p;
+  // EVERY ADVANCE OF THE PLANT IS COUNTED, so `priceFrom` reports this plant's commissioning in
+  // its own 4-second samples instead of printing a 0 that reads as "free" (rule 25). The counter
+  // is ticked HERE and not in `sysid.mjs`'s `makePlant`, because the flexible arm wraps that same
+  // plant inside a servo loop and would be counted twice.
+  if (!overflow) return { get y() { return p.y; }, step(u) { tick(); return p.step(u); } };
   // THE TANK CANNOT HOLD MORE THAN THE TANK. Applied on top of the identified model rather
   // than inside it, and stated as the modelling decision it is: the fit was made through the
   // clipped samples and so has absorbed some of the ceiling already, which means this clamp
   // is a LOWER bound on the real nonlinearity, not a reconstruction of it.
   return { get y() { return Math.min(OVERFLOW, p.y); },
-    step(u) { return Math.min(OVERFLOW, p.step(u)); } };
+    step(u) { tick(); return Math.min(OVERFLOW, p.step(u)); } };
 }
 
 /** The conventional machine's own tracking error on the program — the denominator. */

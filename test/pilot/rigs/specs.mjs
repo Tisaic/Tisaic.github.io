@@ -27,6 +27,9 @@ import * as RM from './rollmill-rig.mjs';
 import * as TH from './thermal-rig.mjs';
 import * as EM from '../emps-rig.mjs';
 import * as RA from './realarm-rig.mjs';
+import * as PD from './pend-rig.mjs';
+import * as RT from './realtanks-rig.mjs';
+import * as RX from './realexch-rig.mjs';
 
 // Minimum-phase configuration. Outflow goes as sqrt(level), so nothing about it is linear,
 // and the two pumps cross-feed: each fills one tank directly and the other's upper tank.
@@ -190,4 +193,153 @@ const realarmSpec = {
   },
 };
 
-export { tankSpec, wbSpec, millSpec, barrelSpec, empsSpec, realarmSpec, G_MP };
+
+/**
+ * THE CART-POLE — the one plant class the other six do not contain: OPEN-LOOP UNSTABLE.
+ *
+ * `pend.test.mjs` has driven this plant with a bare `Pilot` since §52.32 and the record's verdict
+ * is "asked and correctly refused, never a factor" (§84.10). What that record does NOT contain is
+ * the DEPLOYED object: every plant converted since §64 — the column, the mill, the tank, the
+ * barrel — was converted by asking `distil.js`'s weight vector instead of the teacher, and §84.10
+ * names this as the honest next move in its own words. A spec is what the ladder needs to ask.
+ *
+ * THE BOX IS WIDER THAN `pend.test.mjs`'s because the TRAINING DIET is wider than the scored
+ * program: the diet moves as far as 0.65 m where the program moves 0.5, and a channel box that
+ * clipped the diet would be the commissioning refusing to see what it is being taught on.
+ */
+const pendSpec = {
+  name: 'cart-pole (OPEN-LOOP UNSTABLE) — tip position, m rms',
+  channels: [{ lo: -0.25, hi: 0.80, vMax: PD.VMX * PD.DT, aMax: PD.ACC * PD.DT * PD.DT,
+    jMax: PD.ACC * PD.DT * PD.DT / PD.TA }],
+  uMax: 0.15, nMeasured: 4,
+  // The guard is the pole angle, routed as measured signal 2 — a number the engineer knows about
+  // their own machine and the only pendulum-specific thing here.
+  guards: [{ index: 2, max: 0.30 }],
+  start: [0], N: PD.LAP * 4, floor: 0,
+  refAt: (k) => [PD.xrefAt(k)],
+  pilotOpts: { workspace: (q) => q[0] > -0.30 && q[0] < 0.85,
+    verifyRef: (i, n) => [PD.xrefAt(Math.round(i * PD.LAP / n))] },
+  fresh: () => PD.makeSettled(),
+  step: (p, ref, u) => {
+    PD.stepCart(p, PD.baseline(p, ref[0] + (u[0] || 0)));
+    return { measured: [p.x, p.v, p.th, p.w], truth: [PD.tipOf(p) - ref[0]] };
+  },
+};
+
+
+/**
+ * THE REAL FLEXIBLE ARM AS THE LADDER DRIVES IT (plan §86.3).
+ *
+ * `realarm.test.mjs` built this inline and `distil-realarm.mjs` needs the same plant with a diet
+ * attached, so it moves here rather than being copied — the move this file exists for. The test
+ * is byte-identical across it (rule 21).
+ *
+ * THE CHANNEL'S LIMITS ARE THE PROGRAM'S OWN PEAKS, MEASURED (rule 41b). An excitation built to
+ * DECLARED limits describes a machine the program does not run, and this rig has already paid
+ * for that once: its first program was sized from the record's RESONANT acceleration range and
+ * demanded eleven times the torque the machine has.
+ */
+const raPK = (() => {
+  let v = 0, a = 0, j = 0;
+  const r = (i) => RA.refAtStep(i)[0];
+  for (let k = 2; k < RA.PROG - 2; k++) {
+    v = Math.max(v, Math.abs((r(k + 1) - r(k - 1)) / 2));
+    a = Math.max(a, Math.abs(r(k + 1) - 2 * r(k) + r(k - 1)));
+    j = Math.max(j, Math.abs((r(k + 2) - 2 * r(k + 1) + 2 * r(k - 1) - r(k - 2)) / 2));
+  }
+  return { v, a, j };
+})();
+
+const realarmLadderSpec = {
+  name: 'real flexible robot arm (DaISy 96-009) — position, rms',
+  channels: [{ lo: -1.25 * RA.AMP, hi: 1.25 * RA.AMP, vMax: raPK.v, aMax: raPK.a, jMax: raPK.j }],
+  uMax: RA.UCORR,
+  // Position, velocity, acceleration and the drive's own torque — a real servo publishes all
+  // four, and nothing here is a quantity the machine would not have.
+  nMeasured: 4,
+  guards: [{ index: 0, max: 4 * RA.AMP }],
+  start: [RA.refAtStep(0)[0]],
+  N: RA.PROG,
+  refAt: (k) => RA.refAtStep(Math.min(k, RA.PROG - 1)),
+  floor: 0,
+  fresh: () => RA.makeMachine(),
+  step: (m, ref, u) => {
+    const x = m.step(ref[0] + u[0]);
+    return { measured: [x, m.v, m.acc, m.torque], truth: [x - ref[0]] };
+  },
+};
+
+
+/** A program's own peaks in COMMAND space, measured rather than declared (rule 41b). Three rigs
+ *  had a private copy of this loop; it is one function now. */
+function progPeaks(refAt, n) {
+  let v = 0, a = 0, j = 0;
+  const r = (i) => refAt(Math.max(0, Math.min(n - 1, i)))[0];
+  for (let k = 2; k < n - 2; k++) {
+    v = Math.max(v, Math.abs((r(k + 1) - r(k - 1)) / 2));
+    a = Math.max(a, Math.abs(r(k + 1) - 2 * r(k) + r(k - 1)));
+    j = Math.max(j, Math.abs((r(k + 2) - 2 * r(k + 1) + 2 * r(k - 1) - r(k - 2)) / 2));
+  }
+  return { v, a, j };
+}
+
+/**
+ * THE REAL CASCADED TANKS (Schoukens & Noël 2017) AS THE LADDER DRIVES THEM (plan §86.4).
+ *
+ * Two plants, because the comparison between them is the result: the identified LINEAR model is
+ * inside the conventional rung's own hypothesis class and reads 2012x, and the benchmark's own
+ * documented OVERFLOW — 84 samples pinned at exactly 10.00 in the record — collapses it to 6.5x.
+ * `overflow: true` is the honest one and is the one a distilled rung is asked on.
+ */
+function realtanksLadderSpec({ overflow = true } = {}) {
+  const rec = overflow ? RT.RECIPE_OF : RT.RECIPE;
+  const at = overflow ? RT.refAtStepOF : RT.refAtStep;
+  // EACH SPEC READS ITS OWN PROGRAM'S PEAKS, AND THE FIRST VERSION DID NOT (plan §86.4). Both
+  // specs were built from the LINEAR recipe's peaks, so the overflow plant — whose recipe reaches
+  // 10.6 against 8.2 and therefore ramps harder — was commissioned inside a box its own program
+  // does not fit. That is rule 41b at the channel limits rather than at an excitation, and it was
+  // worth a factor: the overflow plant reads **8.00x** on its own peaks against 6.54x on the
+  // other recipe's, its cascade admitting a SCHEDULED basis at layer 1 (R² lead0 0.948 against
+  // 0.928) and reaching R² 0.498 at layer 2 against 0.210. The linear plant is byte-identical,
+  // which is what says this is the repair and not a re-tune (rule 21).
+  const PK = progPeaks((k) => at(k), RT.PROG);
+  return {
+    name: `real cascaded tanks${overflow ? ', overflow active' : ' (benchmark hardware)'} — lower tank level, rms`,
+    channels: [{ lo: RT.voltsFor(Math.min(...rec)) - 0.4, hi: RT.voltsFor(Math.max(...rec)) + 0.4,
+      vMax: PK.v, aMax: PK.a, jMax: PK.j }],
+    uMax: RT.UCORR, nMeasured: 1,
+    guards: [{ index: 0, max: overflow ? RT.OVERFLOW * 1.5 : RT.OVERFLOW }],
+    start: [at(0)[0]], N: RT.PROG,
+    refAt: (k) => at(Math.min(k, RT.PROG - 1)), floor: 0,
+    fresh: () => RT.makeMachine({ overflow, rec }),
+    step: (p, ref, u) => {
+      const y = p.step(ref[0] + u[0]);
+      // The wanted level is what the STATIC MAP promises for this command, clamped by the tank
+      // where the tank clamps — the conventional machine's own belief, which is what the
+      // correction is measured against.
+      return { measured: [y],
+        truth: [y - (overflow ? Math.min(RT.OVERFLOW, RT.levelAt(ref[0])) : RT.levelAt(ref[0]))] };
+    },
+  };
+}
+
+/** THE REAL STEAM HEAT EXCHANGER (DaISy 97-002) AS THE LADDER DRIVES IT (plan §86.5). */
+function realexchLadderSpec(model = RX.MODEL, tag = 'nonlinear') {
+  const PK = progPeaks((k) => RX.refAtStep(k), RX.PROG);
+  return {
+    name: `real heat exchanger (${tag}) — outlet temperature, °C rms`,
+    channels: [{ lo: RX.UMIN, hi: RX.UMAX, vMax: PK.v, aMax: PK.a, jMax: PK.j }],
+    uMax: RX.UCORR, nMeasured: 1,
+    guards: [{ index: 0, max: RX.TMAX_T + 5 }],
+    start: [RX.refAtStep(0)[0]], N: RX.PROG,
+    refAt: (k) => RX.refAtStep(Math.min(k, RX.PROG - 1)), floor: 0,
+    fresh: () => RX.makeMachine(model),
+    step: (p, ref, u) => {
+      const y = p.step(ref[0] + u[0]);
+      return { measured: [y], truth: [y - RX.tempAt(model, ref[0])] };
+    },
+  };
+}
+
+export { tankSpec, wbSpec, millSpec, barrelSpec, empsSpec, realarmSpec, realarmLadderSpec,
+  realtanksLadderSpec, realexchLadderSpec, pendSpec, progPeaks, raPK, G_MP };

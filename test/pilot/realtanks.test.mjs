@@ -16,6 +16,7 @@
  * same recipe shape of holds and ramps. What differs is where the dynamics came from.
  */
 import { ladder, announce } from './rigs/ladder.mjs';
+import { realtanksLadderSpec } from './rigs/specs.mjs';
 import * as T from './rigs/realtanks-rig.mjs';
 
 let failed = 0;
@@ -37,40 +38,9 @@ console.log(`  static map y = ${T.GAIN.toFixed(3)}·u ${T.OFF < 0 ? '−' : '+'}
 console.log(`  conventional machine (the static inversion): ${T.CONV_RMS.toFixed(4)} rms over a `
   + `${T.PROG} sample recipe = ${(T.PROG * T.TS / 3600).toFixed(2)} h of plant time`);
 
-// The program's own peaks in COMMAND space, measured rather than declared (rule 41b).
-const PK = (() => {
-  let v = 0, a = 0, j = 0;
-  const r = (i) => T.refAtStep(Math.max(0, Math.min(T.PROG - 1, i)))[0];
-  for (let k = 2; k < T.PROG - 2; k++) {
-    v = Math.max(v, Math.abs((r(k + 1) - r(k - 1)) / 2));
-    a = Math.max(a, Math.abs(r(k + 1) - 2 * r(k) + r(k - 1)));
-    j = Math.max(j, Math.abs((r(k + 2) - 2 * r(k + 1) + 2 * r(k - 1) - r(k - 2)) / 2));
-  }
-  return { v, a, j };
-})();
-
-const res = await ladder({
-  name: 'real cascaded tanks (benchmark hardware) — lower tank level, rms',
-  channels: [{ lo: T.voltsFor(Math.min(...T.RECIPE)) - 0.4, hi: T.voltsFor(Math.max(...T.RECIPE)) + 0.4,
-    vMax: PK.v, aMax: PK.a, jMax: PK.j }],
-  uMax: T.UCORR,
-  // The level is the one thing this machine measures. Handing the pilot anything else would
-  // be handing it an instrument the benchmark does not have.
-  nMeasured: 1,
-  guards: [{ index: 0, max: T.OVERFLOW }],
-  start: [T.refAtStep(0)[0]],
-  N: T.PROG,
-  refAt: (k) => T.refAtStep(Math.min(k, T.PROG - 1)),
-  floor: 0,
-  fresh: () => T.makeMachine(),
-  step: (p, ref, u) => {
-    const y = p.step(ref[0] + u[0]);
-    // The WANTED level comes from the COMMAND through the static map, exactly as the
-    // quadruple tank's `levelsAt` does — not from the step index, because the pilot drives
-    // this plant on its own excitation where there is no step index to read.
-    return { measured: [y], truth: [y - T.levelAt(ref[0])] };
-  },
-});
+// THE SPECS MOVED TO `rigs/specs.mjs` when `distil-realtanks.mjs` needed the same plants
+// (plan §86.4); this file is byte-identical across the move (rule 21).
+const res = await ladder(realtanksLadderSpec({ overflow: false }));
 
 // ---- THE CONTROL THAT SAYS WHAT THE FIRST NUMBER MEASURED (rules 14, 15, 9) -------------
 // 2012x is not a controller result. The plant above is an identified LINEAR model and the
@@ -82,23 +52,7 @@ const res = await ladder({
 // extrapolates to 20.9 V where there is no 20 cm of tank. If the 2012x survives the clamp it
 // was a controller result after all; if it collapses, it was the model class.
 console.log('\n  the same plant with its documented OVERFLOW restored (clips 15.6% of samples):');
-const ofl = await ladder({
-  name: 'real cascaded tanks, overflow active — lower tank level, rms',
-  channels: [{ lo: T.voltsFor(Math.min(...T.RECIPE_OF)) - 0.4, hi: T.voltsFor(Math.max(...T.RECIPE_OF)) + 0.4,
-    vMax: PK.v, aMax: PK.a, jMax: PK.j }],
-  uMax: T.UCORR, nMeasured: 1,
-  guards: [{ index: 0, max: T.OVERFLOW * 1.5 }],
-  start: [T.refAtStepOF(0)[0]], N: T.PROG,
-  refAt: (k) => T.refAtStepOF(Math.min(k, T.PROG - 1)), floor: 0,
-  fresh: () => T.makeMachine({ overflow: true, rec: T.RECIPE_OF }),
-  step: (p, ref, u) => {
-    const y = p.step(ref[0] + u[0]);
-    // The wanted level is what the STATIC MAP promises for this command, clamped by the tank
-    // — the conventional machine's own belief, which is what the correction is measured
-    // against. Asking for more than the tank holds is not an error the controller can fix.
-    return { measured: [y], truth: [y - Math.min(T.OVERFLOW, T.levelAt(ref[0]))] };
-  },
-});
+const ofl = await ladder(realtanksLadderSpec({ overflow: true }));
 
 check('the real tank commissions and ships something that does not make it worse',
   res.rep.best <= res.rep.base, `${res.rep.base.toExponential(3)} → ${res.rep.best.toExponential(3)}`);

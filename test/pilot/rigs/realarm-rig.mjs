@@ -28,6 +28,7 @@
  * the order of magnitude, not the figure.
  */
 import { readCols, identify, makePlant, simulate } from './realdata/sysid.mjs';
+import { tick } from './meter.mjs';
 
 const R = (k) => Array.from({ length: k }, (_, i) => i + 1);
 
@@ -140,6 +141,54 @@ const TORQUE_PER_AMP = (() => {
 const HEADROOM = 0.30;
 const AMP = HEADROOM * TMAX / TORQUE_PER_AMP;
 const refAtStep = (k) => [AMP * shape(k)];
+
+/**
+ * THE PROGRAM, PARAMETRISED — so a TRAINING DIET can exist that is not the scored program
+ * (plan §86.3). The amplitude is re-derived for every member by the SAME rule the shipped
+ * program uses: sum the program's own harmonics through the identified position response and
+ * take a stated fraction of what the torque cap delivers. Sizing a diet member any other way is
+ * rule 41b, which this rig has already paid for once — a reference built to a RESONANT range
+ * demanded eleven times the torque the machine has, and the symptom read as "this plant cannot
+ * be controlled".
+ *
+ * `makeProgram()` with no argument reproduces `refAtStep` exactly, which the harness asserts
+ * rather than assumes (rule 61).
+ */
+/**
+ * A TOUR: one CLOSED lap containing several different transitions, which is the only escape this
+ * project has measured from its own forced trade (§49.11). This plant's memory is **4,385 steps
+ * against a 512-step lap — 8.6 laps long**, the worst ratio here, so `min(0.61·settle, lap/8)`
+ * on the scored program's own lap gives ±64 and reaches 1.5% of the memory. The lattice arm hit
+ * the same wall and the measurement that broke it was a single long tour: "one closed lap of
+ * ~6,500 samples takes the same ±1024 window from 0.47x to 3.29x".
+ *
+ * `edges` is one edge width per transition; the level alternates and each segment reaches its
+ * new level within its own edge and then holds, so the reference is continuous by construction.
+ * Two entries at the shipped edge reproduce `shape` exactly, which is what makes this a
+ * generalisation of the program rather than a second description of it (rule 61).
+ */
+function makeProgram({ lap = LAP, edge = EDGE, edges = null, headroom = HEADROOM } = {}) {
+  const ed = edges || [edge, edge];
+  const nSeg = ed.length, seg = lap / nSeg;
+  const sh = (k) => {
+    const pp = ((k % lap) + lap) % lap;
+    const i = Math.min(nSeg - 1, Math.floor(pp / seg));
+    const t = (pp - i * seg) / ed[i];
+    const sv = t >= 1 ? 1 : quintic(t);
+    const a0 = (i % 2 === 0) ? -1 : 1;
+    return a0 + (-2 * a0) * sv;
+  };
+  let need = 0;
+  for (let m = 1; m < lap / 2; m++) {
+    let re = 0, im = 0;
+    for (let k = 0; k < lap; k++) { const A = -2 * Math.PI * m * k / lap; re += sh(k) * Math.cos(A); im += sh(k) * Math.sin(A); }
+    const M = Math.hypot(re, im) * 2 / lap;
+    if (M < 1e-4) continue;
+    need += M / magPos(2 * Math.PI * m / lap);
+  }
+  const amp = headroom * TMAX / need;
+  return { lap, edge, edges: ed, headroom, amp, at: (k) => [amp * sh(k)] };
+}
 // LONG ENOUGH THAT THE DRIVER'S 5% SCORING SKIP CLEARS THE RE-SETTLE. The machine reaches
 // its final per-lap error 13 laps after anything changes, and a correction is a change, so a
 // run must discard at least that much: 5% of 280 laps is 14. Sized from the measurement, not
@@ -217,6 +266,7 @@ function makeMachine(loop = LOOP, { warm = true } = {}) {
     get torque() { return tq; }, get saturated() { return Math.abs(tq) >= TMAX * 0.999; },
     /** `ref` is the commanded position — the program plus whatever correction is riding on it. */
     step(ref) {
+      tick();
       const aff = ref - 2 * r1 + r2;
       r2 = r1; r1 = ref;
       const un = aff / G_DC - loop.kp * (ref - x) + loop.kd * v;
@@ -284,4 +334,4 @@ const DO_NOTHING = (() => {
 
 export { IDENT, MODEL, VALID, K0, U_REC, Y_REC, HALF, TMAX, UCAP, UCORR, CONV_RMS, JEFF,
   G_DC, mag, magPos, LAP, EDGE, AMP, TORQUE_PER_AMP, HEADROOM, PROG, refAtStep, shape,
-  makeMachine, makePlant, sweepLoop, LOOP, DO_NOTHING };
+  makeMachine, makeProgram, makePlant, sweepLoop, LOOP, DO_NOTHING };

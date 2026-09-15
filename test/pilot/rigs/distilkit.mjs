@@ -184,7 +184,7 @@ const dietN = (d) => (process.env.DIETN ? d.slice(0, Math.max(1, +process.env.DI
  * new. Whether a transient-contaminated target teaches a worse policy or, by §49's law, a better
  * one is a measurement and not a prediction.
  */
-const teachLaps = () => Math.max(1, +(process.env.TLAPS || 2));
+const teachLaps = (def = 2) => Math.max(1, +(process.env.TLAPS || def));
 
 /**
  * AVERAGE THE TEACHER'S RECORD OVER THE LAST n LAPS (plan §80.7, §84.1).
@@ -272,8 +272,13 @@ const SHAPE = [0, 0.008, 0.016, 0.031, 0.063, 0.125, 0.219, 0.344, 0.5, 0.719, 1
 function deriveWindow({ settle, lapMin, win }) {
   const rule = Math.min(0.61 * settle, lapMin / 8);
   const reach = Math.round(win === undefined || win === null || !Number.isFinite(win) ? rule : win);
-  const offsets = SHAPE
-    .flatMap((f) => { const o = Math.round(f * reach); return o === 0 ? [0] : [-o, o]; })
+  // DEDUPED, because a plant with a SHORT reach rounds several shape fractions to the same tap
+  // and two identical columns are exactly collinear. On the real heat exchanger the reach is 23
+  // steps and the geometric shape collapses to 0, ±1, ±3, ±5, ±8, ±12, ±17, ±23 with four
+  // duplicates; on every plant with a reach above ~100 the shape is already distinct, so the four
+  // that carry this rule today are byte-identical (rule 21).
+  const offsets = [...new Set(SHAPE
+    .flatMap((f) => { const o = Math.round(f * reach); return o === 0 ? [0] : [-o, o]; }))]
     .sort((a, b) => a - b);
   return { reach, offsets, rule: Math.round(rule) };
 }

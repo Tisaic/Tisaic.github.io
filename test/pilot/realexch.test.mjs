@@ -17,6 +17,7 @@
  * below is a factor on the part of this exchanger the record explains.
  */
 import { ladder, announce } from './rigs/ladder.mjs';
+import { realexchLadderSpec } from './rigs/specs.mjs';
 import * as E from './rigs/realexch-rig.mjs';
 
 let failed = 0;
@@ -35,36 +36,13 @@ console.log(`    linear ARX:                                          na=${E.MOD
 console.log(`  the record's whole output range is ${(E.TMAX_T - E.TMIN).toFixed(2)} °C, so this plant's `
   + `dynamics are known to about ${(100 * E.VAL_RMS / (E.TMAX_T - E.TMIN)).toFixed(0)}% of its own span`);
 
-const PK = (() => {
-  let v = 0, a = 0, j = 0;
-  const r = (i) => E.refAtStep(Math.max(0, Math.min(E.PROG - 1, i)))[0];
-  for (let k = 2; k < E.PROG - 2; k++) {
-    v = Math.max(v, Math.abs((r(k + 1) - r(k - 1)) / 2));
-    a = Math.max(a, Math.abs(r(k + 1) - 2 * r(k) + r(k - 1)));
-    j = Math.max(j, Math.abs((r(k + 2) - 2 * r(k + 1) + 2 * r(k - 1) - r(k - 2)) / 2));
-  }
-  return { v, a, j };
-})();
-
+// THE SPEC MOVED TO `rigs/specs.mjs` when `distil-realexch.mjs` needed the same plant (plan
+// §86.5); this file is byte-identical across the move (rule 21).
 async function run(tag, model) {
   const conv = E.convRms(model);
   console.log(`\n  conventional machine on the ${tag} plant: ${conv.toFixed(4)} °C rms over `
     + `${E.PROG} s = ${(E.PROG / 60).toFixed(0)} min of plant time`);
-  return ladder({
-    name: `real heat exchanger (${tag}) — outlet temperature, °C rms`,
-    channels: [{ lo: E.UMIN, hi: E.UMAX, vMax: PK.v, aMax: PK.a, jMax: PK.j }],
-    uMax: E.UCORR,
-    // The outlet temperature is the one thing this exchanger measures.
-    nMeasured: 1,
-    guards: [{ index: 0, max: E.TMAX_T + 5 }],
-    start: [E.refAtStep(0)[0]], N: E.PROG,
-    refAt: (k) => E.refAtStep(Math.min(k, E.PROG - 1)), floor: 0,
-    fresh: () => E.makeMachine(model),
-    step: (p, ref, u) => {
-      const y = p.step(ref[0] + u[0]);
-      return { measured: [y], truth: [y - E.tempAt(model, ref[0])] };
-    },
-  });
+  return ladder(realexchLadderSpec(model, tag));
 }
 
 const nl = await run('nonlinear', E.MODEL);

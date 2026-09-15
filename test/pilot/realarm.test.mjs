@@ -23,7 +23,7 @@
  * be quoting an instrument's accuracy about a quantity nobody controls.
  */
 import { ladder, announce } from './rigs/ladder.mjs';
-import { motionBasis } from '../../lib/pilot/classic.js';
+import { realarmLadderSpec } from './rigs/specs.mjs';
 import * as A from './rigs/realarm-rig.mjs';
 
 let failed = 0;
@@ -49,38 +49,10 @@ console.log(`  every run starts settled (${A.PROG / A.LAP} laps, ${A.LAP}-sample
   + ' locks in over ~13 laps because the program\'s 30th harmonic lands 0.8% off a mode whose'
   + ' half-power bandwidth is 1.1%');
 
-// THE PROGRAM'S OWN PEAKS, MEASURED (rule 41b). An excitation built to declared limits
-// describes a machine the program does not run, and this project has paid for that twice.
-const PK = (() => {
-  let v = 0, a = 0, j = 0;
-  const r = (i) => A.refAtStep(i)[0];
-  for (let k = 2; k < A.PROG - 2; k++) {
-    v = Math.max(v, Math.abs((r(k + 1) - r(k - 1)) / 2));
-    a = Math.max(a, Math.abs(r(k + 1) - 2 * r(k) + r(k - 1)));
-    j = Math.max(j, Math.abs((r(k + 2) - 2 * r(k + 1) + 2 * r(k - 1) - r(k - 2)) / 2));
-  }
-  return { v, a, j };
-})();
-
-const N = A.PROG;
-const res = await ladder({
-  name: 'real flexible robot arm (DaISy 96-009) — position, rms',
-  channels: [{ lo: -1.25 * A.AMP, hi: 1.25 * A.AMP, vMax: PK.v, aMax: PK.a, jMax: PK.j }],
-  uMax: A.UCORR,
-  // Position, velocity, acceleration and the drive's own torque — a real servo publishes all
-  // four, and nothing here is a quantity the machine would not have.
-  nMeasured: 4,
-  guards: [{ index: 0, max: 4 * A.AMP }],
-  start: [A.refAtStep(0)[0]],
-  N,
-  refAt: (k) => A.refAtStep(Math.min(k, N - 1)),
-  floor: 0,
-  fresh: () => A.makeMachine(),
-  step: (m, ref, u) => {
-    const x = m.step(ref[0] + u[0]);
-    return { measured: [x, m.v, m.acc, m.torque], truth: [x - ref[0]] };
-  },
-});
+// THE SPEC MOVED TO `rigs/specs.mjs` when `distil-realarm.mjs` needed the same plant with a diet
+// attached (plan §86.3) — the program's own measured peaks travel with it. This file is
+// byte-identical across the move (rule 21).
+const res = await ladder(realarmLadderSpec);
 
 check('the arm commissions and ships something that does not make it worse',
   res.rep.best <= res.rep.base, `${res.rep.base.toExponential(3)} → ${res.rep.best.toExponential(3)}`);

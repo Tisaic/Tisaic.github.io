@@ -34,6 +34,7 @@
  * comparison runs on a plant sharing no physics with a water tank.
  */
 import { readCols, identify, makePlant, simulate } from './realdata/sysid.mjs';
+import { tick } from './meter.mjs';
 
 const R = (k) => Array.from({ length: k }, (_, i) => i + 1);
 const [, U_REC, Y_REC] = readCols('daisy-heat-exchanger.dat');
@@ -107,7 +108,9 @@ function makeMachine(m = MODEL) {
   const u0 = flowFor(RECIPE[0]), t0 = tempAt(m, u0);
   const p = makePlant(m, new Array(12).fill(t0), new Array(12).fill(u0));
   for (let i = 0; i < 1500; i++) p.step(u0);
-  return p;
+  // Every advance is counted, so `priceFrom` reports commissioning in this plant's own seconds
+  // rather than printing a 0 that reads as "free" (rule 25).
+  return { get y() { return p.y; }, step(u) { tick(); return p.step(u); } };
 }
 
 /** The conventional machine's own tracking error on the program — the denominator. */

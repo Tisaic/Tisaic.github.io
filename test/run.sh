@@ -380,6 +380,19 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # the one §69 called structural. A map of the commanded reference on a plant whose setpoint
     # NEVER MOVES, made to work by declaring the one thing a mill knows ahead: roll angle.
     if [ "${SUITE}" = "full" ]; then t node test/pilot/distil-mill.mjs; fi
+    # THE DEPLOYED OBJECT ON THE FOUR PLANTS THAT HAD ONLY EVER BEEN ASKED THE TEACHER (plan
+    # §86). Every plant converted since §64 was converted by asking `distil.js`'s weight vector
+    # instead of `Pilot`'s QP, and four plants were still scored on a bare `Pilot`: the cart-pole
+    # (the one OPEN-LOOP UNSTABLE plant here), the real flexible arm, the real cascaded tanks and
+    # the real steam heat exchanger. Two are wins — the cart-pole 12.0x on the shipped loop and
+    # 9.5x on one tuned 3.5x better, the real tank 8.69x at 8 MAC/cycle against the pilot
+    # cascade's 8.00x at 43,673 — and two are correct refusals with a measured cause. They are
+    # registered here because a test that exists and never runs is the hole this project has
+    # already paid for twice.
+    if [ "${SUITE}" = "full" ]; then t node test/pilot/distil-pend.mjs; fi
+    if [ "${SUITE}" = "full" ]; then t node test/pilot/distil-realarm.mjs; fi
+    if [ "${SUITE}" = "full" ]; then t node test/pilot/distil-realtanks.mjs; fi
+    if [ "${SUITE}" = "full" ]; then t node test/pilot/distil-realexch.mjs; fi
     t node test/pilot/tanks.test.mjs
     t node test/pilot/thermal.test.mjs
     t node test/pilot/woodberry.test.mjs

@@ -56,46 +56,10 @@ if (process.env.SUITE !== 'full') {
 console.log(`THE SEVENTH PLANT: an OPEN-LOOP UNSTABLE cart-pole, corrected at the reference${process.env.PEND_TUNED === '1' ? ' (loop TUNED)' : ''}\n`);
 
 // ---------------------------------------------------------------- the plant
-const M = 0.5, m = 0.2, L = 0.3, G = 9.81, B = 0.1, DT = 0.005;
-const makeCart = () => ({ x: 0, v: 0, th: 0, w: 0 });
-function stepCart(p, F) {
-  const s = Math.sin(p.th), c = Math.cos(p.th), den = M + m * s * s;
-  const ax = (F + m * L * p.w * p.w * s - m * G * s * c - B * p.v) / den;
-  const aw = (-F * c - m * L * p.w * p.w * s * c + (M + m) * G * s + B * p.v * c) / (L * den);
-  p.v += DT * ax; p.x += DT * p.v; p.w += DT * aw; p.th += DT * p.w;
-}
-// THE CONVENTIONAL MACHINE — the loop the installation already has.
-// AND ITS GAINS ARE A KNOB, because §52.28 and §52.30 cost this project three sections: a
-// stabilising loop nobody derived is a carried constant, and a ratio quoted against a weak
-// denominator is the loop's number and not the controller's. Swept over 560 cells of its own
-// four gains, the best cell reads 2.91e-2 m against this default's 1.03e-1 — 3.5x better — so
-// BOTH are measured and both are reported. `PEND_TUNED=1` selects the swept best.
-const TUNED = process.env.PEND_TUNED === '1';
-const KX = TUNED ? 2 : 1, KV = TUNED ? 0.25 : 0.5, KP = TUNED ? 240 : 60, KD = TUNED ? 28 : 14;
-const TH_LEAN = 0.25, F_MAX = 20;
-function baseline(p, xr) {
-  const thd = Math.max(-TH_LEAN, Math.min(TH_LEAN, -KX * (p.x - xr) - KV * p.v));
-  return Math.max(-F_MAX, Math.min(F_MAX, KP * (p.th - thd) + KD * p.w));
-}
-const tipOf = (p) => p.x + L * Math.sin(p.th);
-
-// ---------------------------------------------------------------- the program
-const D = 0.5, ACC = 0.5, VMX = 0.35;
-const TA = VMX / ACC, DA = 0.5 * ACC * TA * TA, TC = (D - 2 * DA) / VMX;
-const TMOVE = 2 * TA + TC, DWELL = 0.6, LAP = Math.round(2 * (TMOVE + DWELL) / DT);
-function ramp(t) {
-  if (t < TA) return 0.5 * ACC * t * t;
-  if (t < TA + TC) return DA + VMX * (t - TA);
-  if (t < TMOVE) return D - 0.5 * ACC * (TMOVE - t) ** 2;
-  return D;
-}
-function xrefAt(k) {
-  const t = (((k % LAP) + LAP) % LAP) * DT;
-  if (t < TMOVE) return ramp(t);
-  if (t < TMOVE + DWELL) return D;
-  if (t < 2 * TMOVE + DWELL) return D - ramp(t - TMOVE - DWELL);
-  return 0;
-}
+// EXTRACTED to `rigs/pend-rig.mjs` when the DEPLOYED object needed the same plant (plan §86.2);
+// the narrative above stays here and this file is byte-identical across the move (rule 21).
+import { ACC, DT, LAP, TA, VMX, baseline, makeCart, stepCart, tipOf, xrefAt }
+  from './rigs/pend-rig.mjs';
 
 // ------------------------------------------------- the plant really is unstable
 {
