@@ -25,6 +25,7 @@ import { UCAP, makeTanks, levelsAt, voltsFor, refAtStep, PROG } from './tanks-ri
 import * as WB from './woodberry-rig.mjs';
 import * as RM from './rollmill-rig.mjs';
 import * as TH from './thermal-rig.mjs';
+import * as EM from '../emps-rig.mjs';
 
 // Minimum-phase configuration. Outflow goes as sqrt(level), so nothing about it is linear,
 // and the two pumps cross-feed: each fills one tank directly and the other's upper tank.
@@ -131,4 +132,35 @@ const barrelSpec = {
   },
 };
 
-export { tankSpec, wbSpec, millSpec, barrelSpec, G_MP };
+/**
+ * THE EMPS SERVO AXIS — THE POSITIVE CONTROL `invert.mjs` NEVER HAD (plan §84.9).
+ *
+ * The four specs above are the four plants `plants.test.mjs` drives, and every diagnosis
+ * `invert.mjs` has produced is on a plant that LOSES: non-minimum phase refuted on four losers,
+ * nonlinearity refuted on four losers, the column's RGA 2.01 and the mill's dead/rise 0.83. An
+ * instrument whose every reading comes from failing cases has no idea what a WINNING plant looks
+ * like on its own axes, which is rule 9's half that instruments usually fail — if 0.0% INVERSE
+ * and a 2.00 scaling are what a bad plant reads too, they discriminate nothing.
+ *
+ * EMPS is the cheapest winner here: 14.7x in the six-plant pass, one channel, and a rig that loads
+ * in 44 ms. It is a SPEC and not a second drive loop — `emps.test.mjs` keeps its own `score()`
+ * because that scores a controller over laps, where this holds a correction and watches the plant,
+ * which is a different question with a different shape (rule 61 is about two copies of ONE thing).
+ *
+ * The correction enters as a REFERENCE OFFSET, which is where the pilot puts it on this axis, and
+ * the machine is BARE (`ff = 0`) exactly as the other four specs drive raw plants.
+ */
+const empsSpec = {
+  name: 'EMPS servo axis — position, mm rms',
+  channels: [{ lo: -0.2, hi: 0.2, vMax: 1e-3, aMax: 1e-4, jMax: 1e-5 }],
+  uMax: 0.02, nMeasured: 2,
+  start: [EM.PR.q[0]], N: EM.P, floor: 0,
+  refAt: (k) => [EM.PR.q[Math.min(k, EM.P - 1)]],
+  fresh: () => ({ m: EM.makeMachine(EM.PR.q[0], 0) }),
+  step: (st, ref, u) => {
+    st.m.step(ref[0] + (u[0] || 0));
+    return { measured: [st.m.q, st.m.v], truth: [st.m.q - ref[0]] };
+  },
+};
+
+export { tankSpec, wbSpec, millSpec, barrelSpec, empsSpec, G_MP };

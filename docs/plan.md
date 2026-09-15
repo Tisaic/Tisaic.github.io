@@ -19613,3 +19613,57 @@ draws do NOT all hold production out the way the shipped ordering deliberately d
 ordering may contain production's own transition sequence, which is precisely why the shipped one
 avoids it. So the barrel's median is an upper reading and the shipped 6.997x remains the number to
 quote; the column's median is the honest one and its 3.959x is the selected one.
+
+---
+
+## §84.9 — `invert.mjs` GETS A WINNER, AND THE POSITIVE CONTROL DISQUALIFIES THREE OF ITS OWN COLUMNS
+
+Every diagnosis `invert.mjs` has produced was taken on a plant that LOSES: non-minimum phase
+refuted on four losers, nonlinearity refuted on four losers, the column's RGA 2.01, the mill's
+dead/rise 0.83. An instrument whose every reading comes from failing cases has no idea what a
+WORKING plant looks like on its own axes — rule 9's half that instruments usually fail. **EMPS is
+now the fifth row**: one channel, a 44 ms module load, and the record's clearest repeatable win
+(14.7x deployed, 1.05x spread over 8 seeds). It is a SPEC in `specs.mjs` beside the other four and
+not a second drive loop; `plants.test.mjs` is untouched and the diff is purely additive.
+
+```
+  plant    dead     rise  dead/rise  prog/rise  INVERSE  DC@25%   RGA diag        scale
+  tank       17    2016       0.01        7.9     0.0%     98%   1.38/1.38        2.04
+  column     32     393       0.08        7.6     0.0%     98%   2.01/2.01        2.00
+  mill      100     121       0.83      165.3     0.0%    100%   —                2.00
+  barrel     76    2912       0.03        5.2     0.0%     93%   1.39/1.78/1.39   2.00
+  emps        5       36       0.14      173.3     0.0%    100%   —               2.00   <- the WINNER
+```
+
+**THE CONTROL FIRES IMMEDIATELY AND IT DISQUALIFIES THREE COLUMNS.** The winner reads **0.0%
+INVERSE, scale 2.00 and DC 100%** — indistinguishable from all four losers. So those three columns
+discriminate nothing in this set: "non-minimum phase is refuted on four plants" and "every plant is
+linear at correction amplitudes" were never evidence *about those plants*, because the plant that
+works reads the same. They remain correct measurements and are now correctly scoped — they rule
+out two explanations for failure rather than saying anything about which plants fail.
+
+**AND THE CONTROL ADDS A COLUMN THAT DOES SEPARATE.** `prog/rise` is free arithmetic on numbers
+already in the table — how many of the plant's own response times its program contains — and it
+was invisible until a winner sat in it:
+
+```
+  emps  173.3      the winner
+  mill  165.3      wins 1.45x on 8 of 8 seeds once its delay is declared
+  ----------------- a twentyfold gap with nothing in it -----------------
+  tank    7.9      needs a distilled map, a re-derived ridge and a gain below 1
+  column  7.6      the plant this project lost on for its whole history
+  barrel  5.2      refused until three harness defects and a diet were repaired
+```
+
+**That split is the same one the record makes, and it has a mechanism already on file.** A
+correction addressed by a WINDOW of the commanded reference needs the program to contain many
+response times; a plant whose program is five of its own rises has a window that must reach the
+plant's memory and therefore SPANS most of the program — §41's aliasing theorem, which §49.11
+recorded as the forced trade on the arm and §62.5 measured on the barrel as a window ladder
+collapsing from 5.38x to 0.16x. Here it is visible as a plant property, before any controller.
+
+**NOT CLAIMED**: five points, a correlation, and the record column is about the TEACHER on four of
+the five. What it licenses is a SCREEN with a number in it — a plant whose program contains fewer
+than about ten of its own response times should be expected to need a diet and a re-derived window
+rather than to work out of the box — and a caution against reading INVERSE or the scaling control
+as though they said something about a particular plant.

@@ -45,14 +45,19 @@
  * KNOBS: PLANTS (comma list), AMP (fraction of uMax, default 0.25), WINDOW (steps), K0
  * (fraction of the program at which the step is applied). It asserts nothing.
  */
-import { tankSpec, wbSpec, millSpec, barrelSpec } from './rigs/specs.mjs';
+import { tankSpec, wbSpec, millSpec, barrelSpec, empsSpec } from './rigs/specs.mjs';
 
 const env = (k, d) => (process.env[k] === undefined ? d : Number(process.env[k]));
 const AMP = env('AMP', 0.25);
 const K0F = env('K0', 0.10);
-const WANT = (process.env.PLANTS || 'tank,column,mill,barrel').split(',');
+const WANT = (process.env.PLANTS || 'tank,column,mill,barrel,emps').split(',');
 
-const SPECS = [['tank', tankSpec], ['column', wbSpec], ['mill', millSpec], ['barrel', barrelSpec]];
+// THE FIFTH ROW IS A WINNER, AND IT IS THE CONTROL THIS FILE SHIPPED WITHOUT (plan §84.9).
+// Every diagnosis here was taken on a plant that LOSES, so a reading shared by all four could be
+// a property of the instrument rather than of failure. EMPS deploys at 14.7x, so what it reads on
+// these same axes is what "nothing wrong" looks like (rule 9).
+const SPECS = [['tank', tankSpec], ['column', wbSpec], ['mill', millSpec], ['barrel', barrelSpec],
+  ['emps', empsSpec]];
 
 /**
  * Run one plant for `n` steps from a fresh state, holding a correction `amp` on channel `j`
@@ -192,7 +197,7 @@ for (const [name, spec] of SPECS) {
   summary.push({ name, inv: worstInv, dc: worstDc, rga: R ? R.map((r, i) => r[i]) : null,
     dead: Math.max(...rows.filter((r) => r.j === r.c).map((r) => r.dead)),
     rise: Math.max(...rows.filter((r) => r.j === r.c).map((r) => r.rise)),
-    unsettled: anyUnsettled, scale: worstScale });
+    unsettled: anyUnsettled, scale: worstScale, N: n });
   console.log('');
 }
 
@@ -207,11 +212,21 @@ const VERDICT = {
   column: 'plants.test REFUSES 1.00x · every deployment of 12 seeds worse than doing nothing',
   mill: 'plants.test REFUSES 1.00x undeclared · rollmill 1.45x on 8 of 8 once DECLARED',
   barrel: 'plants.test DEPLOYS 1.05x (stack 2) · representative regime 0.22x, forced deploy at cap',
+  // THE POSITIVE CONTROL. The only row here the record calls a clear, repeatable win.
+  emps: 'emps.test 14.7x DEPLOYED · spread.mjs 1.05x over 8 seeds — the WINNER (rule 9)',
 };
-console.log('    plant    dead     rise  dead/rise  INVERSE  DC@25%   RGA diag        scale  record');
+// PROG/RISE IS ADDED BY THE POSITIVE CONTROL, AND IT IS THE ONE AXIS THE WINNER SEPARATES ON
+// (plan §84.9). Free arithmetic on numbers already here — how many of the plant's own response
+// times its program contains — and it exists because EMPS reads IDENTICALLY to all four losers on
+// INVERSE (0.0%), scaling (2.00) and DC (100%), so those three cannot be what distinguishes a
+// plant that works. A correction addressed by a WINDOW of the reference needs the program to
+// contain many response times; a plant whose program is a handful of its own rises has nothing
+// for a window to key on.
+console.log('    plant    dead     rise  dead/rise  prog/rise  INVERSE  DC@25%   RGA diag        scale  record');
 for (const s of summary) {
   console.log(`    ${s.name.padEnd(8)}${String(s.dead).padStart(5)}${String(s.rise).padStart(8)}`
-    + `${fmt(s.dead / Math.max(1, s.rise), 11, 2)}${(s.inv * 100).toFixed(1).padStart(8)}%`
+    + `${fmt(s.dead / Math.max(1, s.rise), 11, 2)}`
+    + `${fmt(s.N / Math.max(1, s.rise), 11, 1)}${(s.inv * 100).toFixed(1).padStart(8)}%`
     + `${(s.dc * 100).toFixed(0).padStart(7)}%   `
     + `${(s.rga ? s.rga.map((v) => v.toFixed(2)).join('/') : '—').padEnd(14)}`
     + `${fmt(s.scale, 6, 2)}  ${VERDICT[s.name]}`);
