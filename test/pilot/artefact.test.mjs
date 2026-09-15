@@ -22,7 +22,7 @@
  * Run: node test/pilot/deploy.test.mjs
  */
 import { DistilPolicy } from '../../lib/pilot/distil.js';
-import { decide, coverageGain, macPerDecision, strideOf, featureRow, explain, logSpec, windowBend } from '../../lib/pilot/deploy.js';
+import { decide, coverageGain, declGain, macPerDecision, strideOf, featureRow, explain, logSpec, windowBend } from '../../lib/pilot/deploy.js';
 import { writeFileSync } from 'node:fs';
 
 let pass = 0, fail = 0;
@@ -366,6 +366,58 @@ if (process.env.EXPORT) {
   }
   writeFileSync(process.env.EXPORT, JSON.stringify({ note: 'DistilPolicy conformance vector. Implement lib/pilot/deploy.js decide() and reproduce every expect[] from its window and speed.', record: rec, cases }, null, 1));
   console.log(`    conformance vector written to ${process.env.EXPORT} (${cases.length} cases)`);
+}
+
+/**
+ * THE DECLARED-OPERATING-POINT GUARD, BOTH HALVES (plan §90.4, rule 9).
+ *
+ * §82's plant-side guard shipped ARMED, INERT and looking like a success because its reading could
+ * never exceed its own threshold, and §78.5's window guard shipped on a sweep that scored both
+ * halves on a signal that could not trigger it. So this one is asserted the way those two should
+ * have been: the half that must NOT fire, the half that MUST, and the deployed twin agreeing with
+ * the fit side on every one of them.
+ *
+ * `declSpan` is absent on this record — nothing was declared — which is the case every existing
+ * plant is in, and it must read EXACTLY 1 whatever it is handed. That is what makes the whole
+ * addition byte-identical everywhere it was not asked for (rule 21).
+ */
+check('with nothing declared the guard is exactly 1, whatever it is told',
+  declGain(rec, null) === 1 && declGain(rec, { vLine: 4 }) === 1 && declGain(rec, {}) === 1);
+{
+  // A POINT span — one operating point, which is what one commissioning observes — and a WIDE one.
+  const pt = { ...rec, report: { ...rec.report, declSpan: { vLine: [5, 5] } } };
+  const wide = { ...rec, report: { ...rec.report, declSpan: { vLine: [4, 6] } } };
+  check('at the declared point the guard is exactly 1', declGain(pt, { vLine: 5 }) === 1);
+  check('a POINT span REFUSES outside itself rather than softening — there is no evidence there',
+    declGain(pt, { vLine: 5.001 }) === 0 && declGain(pt, { vLine: 4.999 }) === 0,
+    `${declGain(pt, { vLine: 5.001 })} / ${declGain(pt, { vLine: 4.999 })}`);
+  check('NOT TOLD is not out of range — a missing field reads full coverage, so a guard cannot '
+    + 'refuse invisibly on a wiring fault (rule 25)',
+    declGain(pt, { other: 1 }) === 1 && declGain(pt, {}) === 1);
+  check('a span DECLARED ACROSS operating points carries that span, which is the only way this '
+    + 'guard is ever anything but a refusal (target 2\'s own lesson)',
+    declGain(wide, { vLine: 4 }) === 1 && declGain(wide, { vLine: 5 }) === 1
+    && declGain(wide, { vLine: 6 }) === 1);
+  const m = (6 - 4) * rec.coverageFade;
+  check('…and it FADES beyond it rather than switching', (() => {
+    const gs = [0.1, 0.5, 0.9].map((f) => declGain(wide, { vLine: 6 + m * f }));
+    return gs.every((g) => g > 0 && g < 1) && gs[0] > gs[1] && gs[1] > gs[2];
+  })());
+  check('…and reaches exactly 0 past the fade', declGain(wide, { vLine: 6 + m * 1.001 }) === 0);
+  // THE TWIN. `distil.js` computes the same gain on the fit side and the whole value of this file
+  // is that the two are separate implementations; a guard added to one and forgotten on the other
+  // is precisely what this check exists to catch.
+  const fitSide = new DistilPolicy({ channels: NC, refDim: D, offsets: OFFS, uMax: 0.4, ridge: 1e-6, online: false });
+  fitSide.report = { deploy: true, declSpan: { vLine: [4, 6] } };
+  fitSide.coverageFade = rec.coverageFade;
+  let worst = 0;
+  for (let i = 0; i <= 200; i++) {
+    const v = 3 + (i / 200) * 4;
+    const a = fitSide._declCoverage({ vLine: v }), b = declGain(wide, { vLine: v });
+    if (a !== b) worst = Math.max(worst, Math.abs(a - b));
+  }
+  check('the deployed guard and the fit-side guard agree BIT-EXACTLY over 201 values', worst === 0,
+    `worst disagreement ${worst}`);
 }
 
 console.log(`\nartefact: ${fail === 0 ? 'all checks passed' : fail + ' FAILED'}\n`);

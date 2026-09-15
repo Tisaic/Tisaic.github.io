@@ -21192,3 +21192,268 @@ required separating the four-coefficient self-tuned feedforward from the learned
 on it — a split every ladder has printed since §63 and nothing ever collected. That is rule 30
 aimed at the one number the product claim rests on, and it was found by being asked rather than by
 a check.
+
+---
+
+## §90 — THE ARCHITECTURE, ASKED FROM SCRATCH
+
+The owner asked: *if I were to try from scratch to meet the north star and performance table,
+would we do this controller or something different?* The honest answer the record supports is
+**the same artefact by a different route** — and this section is that route, built.
+
+**WHAT THE EVIDENCE SAYS TO KEEP**, because a plan that does not say what it is not changing is a
+rewrite wearing a plan's clothes:
+
+- **The machine-scored ladder with revert.** The only row in the north star table that reads
+  SUPPORTED, and the reason *improve or refuse with a stated reason* holds on 10 of 10 plants. It
+  is not tied to this controller and would wrap any candidate.
+- **The deploy boundary as a hard artefact.** 117 lines importing nothing, bit-identical over
+  4,000 windows, `logSpec` replaying a decision from 31 numbers. It is the one scorecard column
+  this object BEATS the incumbent on (FOR 9 against 7).
+- **Teacher/product separation.** Pay for an expensive correction once, regress it into a cheap
+  one. It is what beat a 43,673-MAC cascade with **8 MAC** on the real cascaded tanks.
+- **The conventional rung first.** §89.6's own column is the argument FOR it, not against: where
+  it takes everything (the real exchanger at 89.8x) the learned rung correctly refuses and almost
+  nothing has been spent.
+
+**WHAT THE EVIDENCE SAYS TO CHANGE**, in the order their dependencies force rather than the order
+their prizes suggest:
+
+```
+  §90.1  the SCREEN, as one gate that runs first        free — a scrape, no plant time
+  §90.2  PRICE the pilot cascade's removal              needed before §90.3 can be scoped
+  §90.3  a teacher that is not addressed by lap phase   the big one
+  §90.4  DECLARED channels, with a KIND                 generalises §89.2's own split
+```
+
+**THE DEPENDENCY THAT REORDERS THEM, AND IT WAS FOUND BY READING THE CODE RATHER THAN ASSUMED.**
+`AutoStack._iteratePolicy` already IS the lap-free teacher — what iterates is a `DistilPolicy`, a
+map of the commanded reference, and the lap index survives only as an addressing scheme for one
+pass's target vector rather than as the thing that converges. §52.16 read it at **5.06x against
+the lap table's 6.04x** on the arm. But it is reachable only when every training run supplies
+`teach(corr, rec)` — one pilot increment against the policy's own error — **and `grep` says
+exactly one module in this repository supplies that: `lib/flexisim/autohost.js`.** No plant
+harness does, which is why `parametric` has been an arm-only number for thirty sections.
+
+And the increment generator IS the pilot cascade. So *remove the cascade* and *make the teacher
+lap-free* are the same question asked from two ends, and the cascade must be PRICED before either
+is decided. That is why §90.2 precedes §90.3 and why the obvious order is wrong.
+
+### §90.1 — The screen, as one gate
+
+Three instruments already answer *is this plant worth building for, and what will it need* and no
+caller runs them together: `invert.mjs`'s `prog/rise` (the ~10 split that predicts BOTH the window
+rule and target 1, on nine plants), its `INVERSE %` (128.3% on the one plant that resists both
+admissible objects), and `disscreen.mjs`'s exogenous decomposition (one testbed in eleven). Each
+costs about one run. Together they are the cheap falsifier that should precede any plant work, and
+§55.12's KUKA is the standing argument: four sections were spent before anyone decomposed a torque.
+
+**PREDICTION, written first (rule 59):** the screen re-derives every published verdict from the
+plants' own rigs with no new measurement, and disagrees with this file's prose on at least one row
+— because every other scrape in this project has (rule 30, §86.7, §88.9).
+
+### §90.2 — What the pilot cascade actually costs
+
+It ships on **zero of ten plants** and is 4,534 lines. It survives only as a TEACHER, and
+`oracleteach.mjs` replaces exactly the thing it inverts. The question is not whether to delete it
+— that is the owner's call — but what a plant loses when it is not built at all.
+
+**PREDICTION:** on the plants whose teacher is `hff` (the mill, the column, the barrel, the
+cart-pole, the real tanks) `depth: 0` is already the default and the answer is *nothing*; on the
+real cascaded tanks, where §86.4 records the cascade as the plant's own former result, dropping it
+costs the TEACHER and not the product. If that holds, the cascade is COMMISSION-only machinery
+whose whole remaining job is generating increments — which is precisely what §90.3 needs.
+
+### §90.2a — The cascade cannot be removed, and the reason REVERSES what I recommended
+
+I told the owner the pilot cascade *probably would not exist* if this were built again: 4,534
+lines, shipping on **zero of ten plants**, surviving only as a teacher that `oracleteach.mjs`
+replaces. §90.3's build answered §90.2 before it was run as its own experiment, and the answer is
+the opposite.
+
+**THE INCREMENT GENERATOR IS THE CASCADE.** `_iteratePolicy` iterates a policy, and what produces
+each pass's increment is a commissioned `Stack` with its `oracleF0` port armed. There is no other
+object in this repository that turns *the measured error at this decision* into *the command
+correction that cancels it*. So the lap-free teacher — the single biggest change on the from-scratch
+list, the one that lifts the DIS ceiling and takes 17% off the mill's commissioning — **is built on
+the component I proposed deleting.**
+
+It arrived as a measurement rather than an argument, which is the only reason it is trustworthy:
+the first mill run under `PARAM=1` returned an increment of exactly zero, because that plant runs
+`depth: 0` and no cascade was ever built. The report read *teacher 1.000x, rows 0, DROPPED, engine
+parametric, passes 0* — indistinguishable from a teacher that ran and found nothing (rule 25, for
+the third time in this project), and `oracleTeach` throws on it now.
+
+**SO THE HONEST CLASSIFICATION CHANGES RATHER THAN THE CODE.** The cascade is not dead weight
+waiting to be deleted; it is COMMISSION-only machinery whose remaining job is generating
+increments, and `inventory.test.mjs` already has the category for exactly that. What the record
+supports saying is narrower and more useful than what I said: *the cascade should never SHIP, and
+it has not shipped on any plant — and it is not removable, because the teacher needs it.* A
+from-scratch build would still write it; it would simply never offer it as a rung.
+
+**WHAT IS STILL OPEN**: whether a cheaper increment generator exists — the cascade is commissioned
+in full to be used for one thing — and that is a real question this section does not answer. It is
+also the first time an architectural recommendation in this project has been reversed by building
+it rather than by measuring a number, which is worth its own line.
+
+### §90.3 — A teacher that is not addressed by lap phase
+
+`oracleteach` returns a CONVERGED LAP PREFIX; `_iteratePolicy` wants ONE INCREMENT. The build is to
+expose the second from the machinery that already computes the first, hand it to every training run
+through `distilkit`, and let the plants run `parametric`.
+
+What it is worth if it works, from the record rather than from hope: the teacher is **74-89% of
+what the product costs these plants** (§73.13) and is why target 4 fails on 6 of 8; the lap index
+is the named DIS ceiling (§80.3); and a lap-free teacher does not need its training runs CLOSED,
+which is the constraint §49.11 calls forced and §86.3 pays for with tours.
+
+**PREDICTION:** it will be WORSE than `hff` on the plants where `hff` already converges tightly
+(§84.1's own screen: a tight per-run spread means the teacher is converging), and better or equal
+where `hff` is fighting a target that moves between calls — the barrel's 3.9x spread. If that is
+what comes back, the pass is a SELECTION rule rather than a replacement, and the honest outcome is
+a third machine-scored ladder axis, not a new default (rule 31).
+
+### §90.4 — A declared channel has a KIND
+
+§89.2 measured that this project's one disturbance-rejection win rests on TWO declarations that
+behave differently: the roll phase is read by an ENCODER and survives an operating-point change
+exactly (1.000 across ±10% of gauge), and the transport delay is a NUMBER TYPED IN and does not
+(0.770, then 0.562). The library does not know the difference — `refDim` widens and `deadTime` is
+a constant, with nothing recording which is which.
+
+**THE BUILD:** a declared channel states its kind, and the deployed object's coverage guard —
+which today fades on commanded SPEED alone — gains the analogue for each declared channel, so a
+plant run outside the operating point its declaration was taken at FADES rather than
+extrapolating silently. That is §75's own finding (the object has no plant-side guard and cannot
+tell the machine changed) aimed at the one axis where the change is READABLE.
+
+**PREDICTION:** the guard is INERT at the commissioned operating point on every plant (rule 9's
+half that guards usually fail, and §82's own first version shipped armed and inert), and on the
+mill's line-speed rows it converts 0.562 into a REFUSAL rather than a repair — because a fading
+guard can only reduce a correction, never re-time a delay. If it repairs rather than refuses, the
+instrument is wrong (rule 14).
+
+### §90.3a — The lap-free teacher reaches a plant, and the mill says it costs nothing
+
+Built as §90.3 scoped it: `oracleTeach` in `rigs/oracleteach.mjs` returns `{run, teach}` from the
+SAME `drive` closure `oracleConverge` already takes, so a plant that can be taught by the oracle
+can be taught parametrically with no new plumbing of its own (rule 61).
+
+**THREE THINGS HAD TO BE REPAIRED FIRST, AND ALL THREE ARE WHY THIS WAS ARM-ONLY.** None is a
+design decision; each is the arm's shape left in a shared path.
+
+- `heldCorr` initialised `let held = [0, 0]` — the CHANNEL COUNT written in — and called
+  `tr.speedAt(k)`, **a field no plant harness supplies**. `addProgram` has always tolerated
+  `speedAt: undefined`, which is why the SIGNAL engine runs everywhere; this line did not, so the
+  parametric engine threw on the first decision of any plant that reached it.
+- `_iteratePolicy` built `target[k] = [c[0] + uOut[0][k], c[1] + uOut[1][k]]`. Two channels,
+  always. On a one-channel plant every target carried a second column of `undefined + undefined`;
+  on the three-channel barrel the third was silently dropped.
+- The increment generator is the PILOT CASCADE, and the plants that ship `hff` run `depth: 0`.
+
+**The arm is byte-identical across all three** (nc is 2 and it supplies `speedAt`), which is what
+says these were repairs rather than changes (rule 21).
+
+**THE THIRD IS §90.2's COUPLING, MEASURED RATHER THAN ASSUMED, AND IT ARRIVED AS A SILENT ZERO.**
+The first mill run returned an increment of all zeros, a target of zeros, a fit that refused, and a
+report reading *teacher 1.000x, rows 0, DROPPED, engine parametric, passes 0* — every line of which
+is what a teacher that RAN AND FOUND NOTHING looks like. What had happened is that no cascade
+existed to take an increment from. `oracleTeach` THROWS on it now, naming the missing `depth`
+(rule 25), because this is the third time in this project that "did not run" has rendered as "ran
+and declined".
+
+**AND THEN THE MILL — the first plant in this project to be taught without a lap index:**
+
+```
+                       lap-indexed (hff)     lap-free (parametric)
+  delivered              2.625x                2.610x        (5.8649e-3 against 5.8913e-3)
+  teacher, per run       6.78-8.25x            2.56-3.04x
+  held-out R²            0.861                 0.865
+  COMMISSIONING          58.8 min              49.1 min      <- 17% less plant time
+  where it goes          teacher 81%           teacher 69% · cascade 6%
+```
+
+**It delivers 0.6% less for 17% less of the plant's time, and the teacher that produced it
+converged 2.5x LESS FAR.** That last column is §49's law arriving through a ninth knob — a more
+faithful teacher teaches a worse policy — and here it is not a trade at all: the shallower teacher
+is also the cheaper one. The teacher's share of the bill, which §73.13 measured at 74-89% across
+these plants and named as why target 4 fails on six of eight, falls to 69%.
+
+**NOT CLAIMED: one plant.** The mill is also the plant §84.1's own screen predicts should show the
+LEAST benefit — its `hff` per-run spread is 1.22x, which that screen reads as a teacher that is
+converging — so a level result here is the prediction holding, not a win. The discriminating plant
+is the barrel at a 3.9x spread, and it is asked next.
+
+### §90.4a — A declared channel now has a span, and a point span REFUSES
+
+Built. `addProgram({ declare: { name: value } })` widens a span per declared scalar exactly as the
+commanded-speed span is widened; `report.declSpan` carries it; `_declCoverage` on the fit side and
+`declGain` on the deploy side fade the correction outside it. `logSpec` names the declared fields,
+because a decision that was FADED by one cannot be replayed without it and that spec is checked
+SUFFICIENT rather than asserted.
+
+**THE DESIGN DECISION THAT MATTERS IS THAT A POINT SPAN REFUSES.** One commissioning at one line
+speed observes one value, so the span is a point and everything outside it reads exactly 0. That
+is deliberate and it is the alternative to a tuned margin: widening a point span by some fraction
+would be a per-plant constant invented to soften a refusal (rule 31), and this project already
+knows where tolerance comes from — *feed-invariance comes from TRAINING ACROSS FEEDS, never from
+INDEXING BY FEED* (target 2). Declare the scalar across a span at commissioning and the guard
+carries that span, fading beyond it like every other guard here.
+
+**ASSERTED BOTH WAYS, because the last two guards in this project shipped armed and inert.** §82's
+plant-side guard could never exceed its own threshold and every cell came back identical, which is
+exactly what *no false refusals* looks like; §78.5's window guard was calibrated on a signal that
+could not trigger it. So: with nothing declared it is **exactly 1 whatever it is handed** — which
+is what makes the whole addition byte-identical on every existing plant; at the declared point
+exactly 1; **outside a point span exactly 0**; NOT TOLD reads full coverage rather than refusing
+invisibly on a wiring fault (rule 25); a span declared across operating points carries that span
+and fades monotonically beyond it, reaching exactly 0; and the deployed guard agrees with the fit
+side **BIT-EXACTLY over 201 values**, which is the check that catches a guard added on one side and
+forgotten on the other.
+
+`artefact.test.mjs` is green, including its existing bit-exact replay over 4,000 windows, so the
+deploy boundary is unchanged by construction.
+
+**WHAT IS NOT DONE AND IS THE MEASUREMENT THAT DECIDES IT:** no plant declares anything yet, so the
+guard is provably inert everywhere and has not been shown to do its job. The prediction is on
+record — on the mill's line-speed rows it should convert 0.770x and 0.562x into REFUSALS at
+1.000x, and if it REPAIRS them instead the instrument is wrong (rule 14), because a fading guard
+can only reduce a correction and can never re-time a delay.
+
+### §90.3b — The barrel refutes the prediction about WHICH plant, and confirms the one about WHY
+
+§90.3's prediction, written before either run: *worse where `hff` already converges tightly,
+better or equal where `hff` is fighting a target that moves between calls* — §84.1's own screen,
+which reads the mill's per-run spread at 1.22x (tight) and the barrel's at **3.9x** (erratic). So
+the mill should be level and the barrel should be the win.
+
+**The mill was level (2.610x against 2.625x) and the barrel did not work at all:**
+
+```
+  run 0-3:  teacher 1.000x   rows 0   DROPPED   engine parametric   passes 1
+  shipped:  the CASCADE at 1.05x, where this plant ships the distilled object at 6.997x
+```
+
+`passes 1` is the diagnosis: the fit DEPLOYED, the machine scored the candidate WORSE than doing
+nothing, and the iteration stopped with nothing to distil.
+
+**AND THAT IS THE SECOND PREDICTION, WHICH WAS WRITTEN INTO `oracleTeach`'s OWN DOC COMMENT BEFORE
+THE RUN** — difference (1), *no backtracking*: `oracleConverge` halves a failing step up to three
+times and §73.10 measured that as load-bearing **on this exact plant**, *without it the barrel
+overshoots on pass 0 and diverges on pass 1*. `_iteratePolicy` had no line search: it fits, scores
+on the machine and keeps-or-abandons, so an overshooting pass is rejected WHOLE rather than scaled.
+
+So the screen's prediction about which plant benefits is REFUTED, and the mechanism that refutes it
+is one the module named first. Those are different claims and only the first was about the plant.
+
+**THE REMEDY IS THE ONE `hff` AND THE ORACLE TEACHER ALREADY CARRY**, in the one place that did not
+have it. `_iteratePolicy` gained `backtracks`, **default 0 — which is exactly what it did before,
+so the arm is byte-identical** — and a rejected increment is now halved and the policy RE-FITTED to
+the damped target, which is a different object from scaling a fitted map: the fit sees the target
+it will actually be asked to reproduce. A fit that REFUSES still ends the iteration rather than
+being retried, because a map that cannot beat a shuffled null on the full increment will not beat
+one on a smaller one, and the report distinguishes that from a scored rejection (rule 25).
+
+It carries no plant constant — a scale that fails is halved, and only failing at the smallest scale
+ends the iteration — and it costs one fit plus one scored run per program per retry, which is why
+it is opt-in rather than default.

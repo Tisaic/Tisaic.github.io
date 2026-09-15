@@ -195,4 +195,140 @@ function oracleConverge({ auto, lap, nc, drive, passes = 4, backtracks = 3, debu
   };
 }
 
-export { oracleConverge };
+/**
+ * ONE PILOT INCREMENT AGAINST THE POLICY'S OWN ERROR — the plant harnesses' missing `teach`
+ * (plan §90.3).
+ *
+ * `AutoStack._iteratePolicy` is already the LAP-FREE teacher this project's retirement asks for:
+ * what iterates is a `DistilPolicy`, a map of the commanded reference, and the lap index survives
+ * only as an addressing scheme for ONE pass's target vector rather than as the thing that
+ * converges. §52.16 measured it at 5.06x against the lap table's 6.04x on the arm.
+ *
+ * It has been arm-only for thirty sections and the reason is one line: it runs when
+ * `runs.every((t) => t.teach)`, and `grep` says exactly ONE module in this repository supplies
+ * `teach` — `lib/flexisim/autohost.js`. This is that closure for the plant harnesses, built from
+ * the SAME `drive` they already hand `oracleConverge`, so a plant that can be taught by the oracle
+ * can be taught parametrically with no new plumbing of its own (rule 61).
+ *
+ * WHAT IT IS AND IS NOT DOING. `oracleConverge` iterates a LAP PREFIX to convergence and hands the
+ * distillation a finished target — *a target that contains, fully converged, everything the basis
+ * cannot express*, which is §49's law and the reason a more faithful teacher teaches a worse
+ * policy. This returns ONE increment and lets the LADDER fit and re-measure, so what the basis
+ * cannot express is never accumulated. Same machinery, same oracle port, same units; a different
+ * thing converges.
+ *
+ * TWO DIFFERENCES FROM `oracleConverge` ARE STATED BECAUSE THEY ARE NOT FREE:
+ *
+ * (1) NO BACKTRACKING. `oracleConverge` halves a failing step up to three times and §73.10
+ *     measured that as load-bearing — without it *the barrel overshoots on pass 0 and diverges on
+ *     pass 1*. `_iteratePolicy` has no line search: it fits the policy, scores it ON THE MACHINE
+ *     and keeps it only if better, so an overshooting pass is REJECTED WHOLE rather than scaled.
+ *     That is a machine-scored guard rather than a weaker one, and it is also a coarser one, so
+ *     the prediction on record is that the barrel stalls early here (plan §90.3).
+ * (2) THE CORRECTION IS MATERIALISED. `drive` takes a `pre` array indexed by lap position and
+ *     `_iteratePolicy` hands round a closure; evaluating the closure over [0, L) is EXACT, because
+ *     a policy's held output under a fixed program is a function of k and nothing else. No plant's
+ *     drive closure changes.
+ *
+ * @param {object} o  the same bag `oracleConverge` takes: `auto`, `lap`, `nc`, `drive`
+ * @returns {{run: Function, teach: Function}}  spread into one training-run descriptor
+ */
+function oracleTeach({ auto, lap, nc, drive }) {
+  const L = Math.round(lap);
+  const zero = () => Array.from({ length: nc }, () => new Float64Array(L));
+  /** A correction closure evaluated over the lap — exact, see (2) above. */
+  const materialise = (corr) => {
+    const pre = zero();
+    if (!corr) return pre;
+    for (let k = 0; k < L; k++) {
+      const c = corr.at(k);
+      for (let ch = 0; ch < nc; ch++) pre[ch][k] = (c && c[ch]) || 0;
+    }
+    return pre;
+  };
+  /**
+   * A REFUSED CASCADE IS STILL A TEACHER, recovered exactly as `oracleConverge` recovers it and
+   * for the reason written out at length there: as a RUNG the cascade is judged on whether its
+   * forecast inverts the machine well enough to ship, and as a TEACHER it is handed the measured
+   * error and asked only for the increment that cancels it. `deployed.stack` is not touched
+   * outside the teaching drive, so what is recovered here can never become a controller.
+   */
+  const layersOf = () => {
+    let st = auto.stack;
+    if (!(st && st.layers && st.layers.length)) {
+      const b = auto.built && auto.built.stacks;
+      if (b && b.length) { st = b[b.length - 1]; if (!auto.stack) auto.stack = st; }
+    }
+    return { st, layers: (st && st.layers) || [] };
+  };
+  return {
+    /**
+     * Score this program under a correction, and return the error record the teacher inverts.
+     *
+     * IT DELIBERATELY OVERRIDES THE HARNESS'S OWN `run`, AND THE REASON IS A SHAPE (rule 17).
+     * A plant harness's `run` returns `err` indexed `[channel][k]` — what `hff` inverts — while
+     * the oracle port reads `rec` indexed `[k][channel]`. They are different objects, not two
+     * names for one, and handing `_iteratePolicy` the first would index a Float64Array by a
+     * channel number and read `undefined` at every step without throwing. So this spread must sit
+     * AFTER the harness's own `run` in the descriptor, which is where a reader should check first
+     * if a parametric run ever reports an increment of exactly zero.
+     *
+     * BOTH shapes come back, `err` transposed from `rec`, so no consumer can be broken by the
+     * override — the in-sample column in `reportDistil` calls the same `run`. What `err` here does
+     * NOT carry is the TAVG multi-lap average, because that is a property of the LAP-INDEXED
+     * teacher and this route has no lap to average over; under `parametric` that teacher does not
+     * run, and the two knobs are armed together for exactly this reason.
+     */
+    run: async (corr) => {
+      const r = await drive({ pre: materialise(corr), trace: true });
+      const err = r.rec ? Array.from({ length: nc }, (_, c) => {
+        const a = new Float64Array(L);
+        for (let k = 0; k < L; k++) a[k] = r.rec[k] ? (r.rec[k][c] || 0) : 0;
+        return a;
+      }) : null;
+      return { score: r.score, rec: r.rec, err };
+    },
+    /**
+     * One increment. `rec` is the error record from the matching `run`, and the oracle port reads
+     * it at this decision's step PLUS the lead in PILOT SAMPLES times the cascade's raw stride —
+     * the units conversion that made the arm's first oracle steer the machine wrong in both signs
+     * (plan §52.8), and the reason this is not re-derived here.
+     */
+    teach: async (corr, rec) => {
+      const { st, layers } = layersOf();
+      const uOut = zero();
+      /**
+       * NO CASCADE IS NOT A ZERO INCREMENT, IT IS A MISCONFIGURATION, AND IT MUST SAY SO (rule 25).
+       *
+       * The first version returned `uOut` all zeros here, and on the cold mill — which runs
+       * `depth: 0`, because its shipped teacher is `hff` and a cascade would be commissioned only
+       * to be replaced — that produced a target of zeros, a fit that refused, and a report reading
+       * `teacher 1.000x, rows 0, DROPPED, engine parametric, passes 0`. Every one of those lines
+       * is what a teacher that RAN AND FOUND NOTHING looks like, and what had actually happened is
+       * that the increment generator was never built.
+       *
+       * That is the §90.2 coupling measured rather than assumed: the parametric engine iterates a
+       * POLICY, but the thing that produces each increment is the PILOT CASCADE, so a plant cannot
+       * have the lap-free teacher without commissioning one. A caller arming `parametric` must
+       * also ask for `depth >= 1`.
+       */
+      if (!layers.length) {
+        throw new Error('oracleTeach: no cascade layer exists to take an increment from — the '
+          + 'parametric teacher needs `depth >= 1` commissioned, even though the cascade itself '
+          + 'never ships (plan §90.2). Arming `distil.parametric` alone leaves nothing to iterate.');
+      }
+      const S = st.sample || 1;
+      let kNow = 0;
+      const or = rec ? (c, leadSamp) => rec[(((kNow + leadSamp * S) % L) + L) % L][c] : null;
+      for (const p of layers) p.oracleF0 = or;
+      const wasDeployed = auto.deployed.stack;
+      auto.deployed.stack = layers.length;
+      try {
+        await drive({ pre: materialise(corr), active: true, uOut, trace: true, onStep: (k) => { kNow = k; } });
+      } finally { for (const p of layers) p.oracleF0 = null; auto.deployed.stack = wasDeployed; }
+      return { uOut };
+    },
+  };
+}
+
+export { oracleConverge, oracleTeach };

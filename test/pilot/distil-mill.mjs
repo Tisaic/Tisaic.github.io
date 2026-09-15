@@ -43,13 +43,28 @@
 import { ladder, announce } from './rigs/ladder.mjs';
 import { millSpec } from './rigs/specs.mjs';
 import { deriveWindow, reportDistil, priceFrom, ridgeLadder, gainLadder, teacherReuse, teachLaps, teachAvg, dietN, emitRow } from './rigs/distilkit.mjs';
-import { oracleConverge } from './rigs/oracleteach.mjs';
+import { oracleConverge, oracleTeach } from './rigs/oracleteach.mjs';
 
 // THE ORACLE TEACHER, AND THIS PLANT IS ITS FALSIFIER (plan §73.11). It needs a cascade to
 // iterate, and this plant's cascade is the GOOD one — 1.74x, deploying — where the barrel's is
 // 1.05x and the column's 0.39x. If the barrel's refusal is the cascade's plant model rather than
 // the teacher, this is where it should work.
 const ORACLE = process.env.ORACLE === '1';
+/**
+ * PARAM=1: THE LAP-FREE TEACHER (plan §90.3).
+ *
+ * The default teacher on this plant converges a LAP-INDEXED correction and hands the distillation
+ * a finished target. That is the object the retirement removed from the PRODUCT and left in the
+ * TEACHER, which §80.3 names as this project's disturbance-rejection ceiling and §73.13 prices at
+ * 74-89% of what the product costs these plants. `AutoStack`'s PARAMETRIC engine iterates the
+ * POLICY instead — a map of the commanded reference, fitted and re-measured on the machine every
+ * pass — so what the basis cannot express is never accumulated.
+ *
+ * It needs BOTH halves and the ladder says so by refusing quietly: `runs.every((t) => t.teach)`
+ * has to hold AND `distil.parametric` has to be armed, or the run silently takes the other route
+ * and the report reads `engine: hff` (rule 25).
+ */
+const PARAM = process.env.PARAM === '1';
 import * as RM from './rigs/rollmill-rig.mjs';
 
 if (process.env.SUITE !== 'full') {
@@ -102,6 +117,34 @@ const distilRuns = (auto) => dietN([0, 1, 2, 3]).map((i) => {
   // Each run starts a whole number of TURNS in, so the declared phase is aligned to the lap,
   // and a different number of them, so the UNMEASURED entry wander sits at a different phase.
   const W = Math.round((37 + 11 * i) * PER);
+  // THE PLANT'S OWN DRIVE LOOP, NAMED ONCE AND HANDED TO BOTH TEACHERS (plan §90.3).
+  // `oracleConverge` iterates a lap prefix with it and `oracleTeach` takes ONE increment with it;
+  // a second copy is how a harness comes to teach through a loop its own scoring never ran
+  // (rule 61, and `distil-tank.mjs` paid for exactly that in §67.3).
+  const DRIVE = async ({ pre, active = false, uOut = null, trace = false, onStep = null }) => {
+    const m = RM.makeMill(1 + i);
+    for (let q = 0; q < W; q++) m.step(RM.S0);
+    const want = [];
+    let s2 = 0, n = 0;
+    const out = trace ? Array.from({ length: LAP }, () => [0]) : null;
+    for (let j = 0; j < TLAPS * LAP; j++) {
+      const kk = ((j % LAP) + LAP) % LAP;
+      if (onStep) onStep(kk);
+      const look = (o) => refOf(W + ((j + o) % LAP + LAP) % LAP);
+      const a = active ? auto.act({ look, lookRaw: look, k: j }) : null;
+      const u = pre[0][kk] + (a ? (a[0] || 0) : 0);
+      if (uOut && a) uOut[0][kk] = a[0] || 0;
+      m.step(RM.S0 + u);
+      want.push((RM.MM * RM.S0 + RM.QM * RM.H0) / (RM.MM + RM.QM));
+      if (want.length > RM.DLY + 2) want.shift();
+      const w = want.length > RM.DLY ? want[want.length - 1 - RM.DLY] : RM.HREF;
+      const g = m.gauge();
+      if (trace && j >= (TLAPS - 1) * LAP) out[kk][0] = g - w;
+      if (j >= (TLAPS - 1) * LAP) { s2 += (g - w) ** 2; n++; }
+    }
+    return { score: Math.sqrt(s2 / n), rec: out };
+  };
+
   return {
     lap: LAP,
     closed: true,
@@ -133,32 +176,18 @@ const distilRuns = (auto) => dietN([0, 1, 2, 3]).map((i) => {
       }
       return { score: Math.sqrt(s2 / n), err };
     },
+
+    // PARAM=1: THE LAP-FREE TEACHER (plan §90.3). `oracleTeach` builds `run` and `teach` from the
+    // SAME drive closure `oracleConverge` takes below, so what changes is which thing iterates —
+    // a `DistilPolicy` in the product's own row space rather than a lap prefix — and nothing about
+    // this plant's loop. It needs `distil.parametric` armed on the spec as well, which is where
+    // `AutoStack` decides; supplying `teach` alone is inert (rule 25 — and the ladder's own
+    // `runs.every((t) => t.teach)` means a partially-wired diet silently takes the other route).
+    ...(PARAM ? oracleTeach({ auto, lap: LAP, nc: 1, drive: DRIVE }) : {}),
     // The plant's own drive loop for the oracle teacher; the iteration is in `oracleteach.mjs`.
     ...(ORACLE ? { converge: oracleConverge({
       auto, lap: LAP, nc: 1, passes: +(process.env.OPASSES || 8), debug: process.env.ODBG === '1',
-      drive: async ({ pre, active = false, uOut = null, trace = false, onStep = null }) => {
-        const m = RM.makeMill(1 + i);
-        for (let q = 0; q < W; q++) m.step(RM.S0);
-        const want = [];
-        let s2 = 0, n = 0;
-        const out = trace ? Array.from({ length: LAP }, () => [0]) : null;
-        for (let j = 0; j < TLAPS * LAP; j++) {
-          const kk = ((j % LAP) + LAP) % LAP;
-          if (onStep) onStep(kk);
-          const look = (o) => refOf(W + ((j + o) % LAP + LAP) % LAP);
-          const a = active ? auto.act({ look, lookRaw: look, k: j }) : null;
-          const u = pre[0][kk] + (a ? (a[0] || 0) : 0);
-          if (uOut && a) uOut[0][kk] = a[0] || 0;
-          m.step(RM.S0 + u);
-          want.push((RM.MM * RM.S0 + RM.QM * RM.H0) / (RM.MM + RM.QM));
-          if (want.length > RM.DLY + 2) want.shift();
-          const w = want.length > RM.DLY ? want[want.length - 1 - RM.DLY] : RM.HREF;
-          const g = m.gauge();
-          if (trace && j >= (TLAPS - 1) * LAP) out[kk][0] = g - w;
-          if (j >= (TLAPS - 1) * LAP) { s2 += (g - w) ** 2; n++; }
-        }
-        return { score: Math.sqrt(s2 / n), rec: out };
-      },
+      drive: DRIVE,
     }) } : {}),
   };
 });
@@ -174,9 +203,15 @@ const WARM = 4000;
 const spec = { ...millSpec,
   // NO CASCADE: this rung's teacher is `hff`, so the cascade would be commissioned,
   // scored and then REPLACED by the rung that wins (plan §73.1). `DEPTH=2` is the control.
-  depth: ORACLE ? 1 : 0,
+  // A CASCADE IS COMMISSIONED ONLY WHEN A TEACHER NEEDS ONE TO ITERATE (plan §90.2). `hff`, the
+  // default teacher here, does not — it probes at the lap's harmonics — so this plant runs
+  // `depth: 0` and the cascade never exists. BOTH the oracle teacher and the PARAMETRIC one take
+  // their increments from a commissioned cascade, so both must ask for one; it is still never
+  // armed, because what ships is decided by scoring the distilled policy afterwards.
+  depth: (ORACLE || PARAM) ? 1 : 0,
   refAt: (k) => refOf(WARM + k),
   distil: { refDim: REFDIM, ridge: env('RIDGE', 1e-6), offsets: OFFSETS,
+    ...(PARAM ? { parametric: true, passes: +(process.env.PPASSES || 4) } : {}),
     // THE CASCADE IS THE TEACHER AND NOT A CANDIDATE TO SHIP (plan §73.14). A cascade exists on
     // these plants only because `ORACLE=1` asks for one to iterate; judged as a RUNG it changes
     // the bar the distilled policy must clear, and on the quadruple tank that is the difference

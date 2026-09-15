@@ -47,6 +47,7 @@
  */
 import { tankSpec, wbSpec, millSpec, barrelSpec, empsSpec, realarmSpec, pendSpec,
   realtanksLadderSpec, realexchLadderSpec } from './rigs/specs.mjs';
+import { emitTo } from './rigs/emit.mjs';
 
 const env = (k, d) => (process.env[k] === undefined ? d : Number(process.env[k]));
 const AMP = env('AMP', 0.25);
@@ -250,6 +251,20 @@ for (const s of summary) {
     + `${(s.dc * 100).toFixed(0).padStart(7)}%   `
     + `${(s.rga ? s.rga.map((v) => v.toFixed(2)).join('/') : '—').padEnd(14)}`
     + `${fmt(s.scale, 6, 2)}  ${VERDICT[s.name]}`);
+  // AND IT EMITS ITS ROW WHERE IT MEASURED IT (plan §90.1). `screen.mjs` reads these back and
+  // turns them into a verdict per plant; emitting is what keeps that table from being a fourth
+  // hand-maintained copy of numbers this file already has (rule 30). `SCREEN_OUT` unset writes
+  // nothing, so every existing run is byte-identical (rule 21).
+  emitTo(process.env.SCREEN_OUT, 'screen.jsonl', {
+    name: s.name, dead: s.dead, rise: s.rise, N: s.N,
+    // A RISE OF ZERO IS NOT A FAST PLANT — it is a column that does not apply, so it emits null
+    // rather than a clamped number a reader would treat as measured (rule 25, and the same
+    // reasoning the printed `—` above carries).
+    progRise: s.rise > 0 ? s.N / s.rise : null,
+    deadRise: s.rise > 0 ? s.dead / s.rise : null,
+    inverse: s.inv, dc: s.dc, scale: s.scale,
+    rga: s.rga ? s.rga.slice() : null,
+  });
 }
 // A RISE OF ZERO IS NOT A FAST PLANT, IT IS A COLUMN THAT DOES NOT APPLY (rule 25). The real arm
 // reaches 90% of its final value within a step because the correction is a POSITION reference the

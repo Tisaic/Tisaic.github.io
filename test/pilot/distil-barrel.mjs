@@ -53,12 +53,21 @@
 import { ladder, announce } from './rigs/ladder.mjs';
 import { barrelSpec } from './rigs/specs.mjs';
 import { deriveWindow, reportDistil, priceFrom, ridgeLadder, gainLadder, teacherReuse, carrier, teachLaps, teachAvg, dietN, emitRow } from './rigs/distilkit.mjs';
-import { oracleConverge } from './rigs/oracleteach.mjs';
+import { oracleConverge, oracleTeach } from './rigs/oracleteach.mjs';
 
 // THE ORACLE TEACHER IS OPT-IN UNTIL IT IS MEASURED (plan §73.9). It needs a cascade to iterate,
 // which §73.1 dropped here as waste — so `ORACLE=1` also restores `depth`, and the two must be
 // priced together: the cascade is 4.0 days on this plant at depth 1 against hff's 29.6.
 const ORACLE = process.env.ORACLE === '1';
+/**
+ * PARAM=1: THE LAP-FREE TEACHER (plan §90.3), and this plant is where it is DISCRIMINATING.
+ *
+ * §84.1's screen reads the SPREAD of the teacher's per-run scores across the diet: tight means it
+ * is converging and a different teacher will not help; erratic means it is fighting a target that
+ * moves between calls. The mill reads 6.78-8.25x (1.22x, tight) and this plant reads 1.03-4.03x
+ * (**3.9x**), so the prediction written down first is level-or-worse there and BETTER here.
+ */
+const PARAM = process.env.PARAM === '1';
 import * as TH from './rigs/thermal-rig.mjs';
 
 if (process.env.SUITE !== 'full') {
@@ -231,6 +240,34 @@ const TAVG = teachAvg(TLAPS);
 const distilRuns = (auto) => dietN(DIETS).map((rec, di) => {
   const seg = DSEGS[di % DSEGS.length];
   const lap = LAP(rec, seg), ref = refOf(rec, seg);
+  // THE PLANT'S OWN DRIVE LOOP, NAMED ONCE AND HANDED TO BOTH TEACHERS (plan §90.3) — it differs
+  // from `run` above in three ways: it applies a frozen PREFIX rather than a candidate, it may arm
+  // `auto.act` on top of that prefix and capture what it applied, and it may return the measured
+  // truth per raw step.
+  const DRIVE = async ({ pre, active = false, uOut = null, trace = false, onStep = null }) => {
+      const p = hold();
+      let s2 = 0, n = 0;
+      const out = trace ? Array.from({ length: lap }, () => [0, 0, 0]) : null;
+      for (let k = 0; k < TLAPS * lap; k++) {
+        const kk = ((k % lap) + lap) % lap;
+        if (onStep) onStep(kk);
+        const want = ref(k), P = TH.powerFor(want);
+        // The pilot decides on the cascade's own grid and the prefix is per raw step, so both
+        // are read at `kk` and the pilot's own stride is its business (plan §51.5).
+        const look = (o) => TH.powerFor(ref(k + o));
+        const a = active ? auto.act({ look, lookRaw: look, k }) : null;
+        for (let c = 0; c < 3; c++) {
+          const v = pre[c][kk] + (a ? (a[c] || 0) : 0);
+          if (uOut && a) uOut[c][kk] = a[c] || 0;
+          P[c] += v;
+        }
+        p.step(P);
+        const y = p.read();
+        if (trace && k >= (TLAPS - 1) * lap) for (let c = 0; c < 3; c++) out[kk][c] = y[c] - want[c];
+        if (k >= (TLAPS - 1) * lap) for (let c = 0; c < 3; c++) { s2 += (y[c] - want[c]) ** 2; n++; }
+      }
+    return { score: Math.sqrt(s2 / n), rec: out };
+  };
   // THE PLANT IS CARRIED, AND THAT COSTS THIS PLANT'S HEADLINE 11.176x -> 3.951x (plan §72.18).
   //
   // Rebuilding per teacher call scored far better and the reason is not a property of the barrel.
@@ -301,32 +338,16 @@ const distilRuns = (auto) => dietN(DIETS).map((rec, di) => {
     // is only the plant's own drive loop, which differs from `run` above in three ways — it
     // applies a frozen PREFIX rather than a candidate, it may arm `auto.act` on top of that
     // prefix and capture what it applied, and it may return the measured truth per raw step.
+    // PARAM=1: THE LAP-FREE TEACHER (plan §90.3). This plant is the DISCRIMINATING one, because
+    // §84.1's own screen predicts opposite results on it and on the mill: read the SPREAD of the
+    // teacher's per-run scores across the diet, and a TIGHT one (the mill at 6.78-8.25, 1.22x)
+    // means `hff` is converging and a different teacher should not help, while an ERRATIC one
+    // (this plant at 1.03-4.03x, **3.9x**) means it is fighting a target that moves between calls.
+    // The prediction on record is that parametric is level-or-worse on the mill and BETTER here.
+    ...(PARAM ? oracleTeach({ auto, lap, nc: 3, drive: DRIVE }) : {}),
     ...(ORACLE ? { converge: oracleConverge({
       auto, lap, nc: 3, passes: +(process.env.OPASSES || 8), debug: process.env.ODBG === '1',
-      drive: async ({ pre, active = false, uOut = null, trace = false, onStep = null }) => {
-        const p = hold();
-        let s2 = 0, n = 0;
-        const out = trace ? Array.from({ length: lap }, () => [0, 0, 0]) : null;
-        for (let k = 0; k < TLAPS * lap; k++) {
-          const kk = ((k % lap) + lap) % lap;
-          if (onStep) onStep(kk);
-          const want = ref(k), P = TH.powerFor(want);
-          // The pilot decides on the cascade's own grid and the prefix is per raw step, so both
-          // are read at `kk` and the pilot's own stride is its business (plan §51.5).
-          const look = (o) => TH.powerFor(ref(k + o));
-          const a = active ? auto.act({ look, lookRaw: look, k }) : null;
-          for (let c = 0; c < 3; c++) {
-            const v = pre[c][kk] + (a ? (a[c] || 0) : 0);
-            if (uOut && a) uOut[c][kk] = a[c] || 0;
-            P[c] += v;
-          }
-          p.step(P);
-          const y = p.read();
-          if (trace && k >= (TLAPS - 1) * lap) for (let c = 0; c < 3; c++) out[kk][c] = y[c] - want[c];
-          if (k >= (TLAPS - 1) * lap) for (let c = 0; c < 3; c++) { s2 += (y[c] - want[c]) ** 2; n++; }
-        }
-        return { score: Math.sqrt(s2 / n), rec: out };
-      },
+      drive: DRIVE,
     }) } : {}),
   };
 });
@@ -348,7 +369,10 @@ const spec = { ...barrelSpec,
     exoAt(EXO_WARM + k, EXO === 'oracle' ? 0 : REACH)] } : {}),
   // NO CASCADE: this rung's teacher is `hff`, so the cascade would be commissioned,
   // scored and then REPLACED by the rung that wins (plan §73.1). `DEPTH=2` is the control.
-  depth: ORACLE ? 1 : 0,
+  // BOTH non-default teachers take their increments from a commissioned cascade, so both ask for
+  // one; it is never armed, because what ships is decided by scoring the distilled policy after
+  // (plan §90.2 — the mill measured this coupling by producing a silent zero without it).
+  depth: (ORACLE || PARAM) ? 1 : 0,
   // STANDARDISATION IS ON BY DEFAULT HERE, AND IT IS A SCALE REPAIR RATHER THAN A TUNED KNOB
   // (rule 32). `_rowFrom` leads with the ABSOLUTE reference and follows with DIFFERENCES: on the
   // arm that is a joint angle beside small travels, all within an order of magnitude of the
@@ -357,6 +381,8 @@ const spec = { ...barrelSpec,
   // covariance prior act on blocks ~400x apart. Measured on this plant: 8.69x → 11.22x.
   // `STD=0` turns it off as the control.
   distil: { refDim: REFDIM, ridge: env('RIDGE', 1e-6), offsets: OFFSETS,
+    ...(PARAM ? { parametric: true, passes: +(process.env.PPASSES || 4),
+      backtracks: +(process.env.PBT === undefined ? 3 : process.env.PBT) } : {}),
     // THE CASCADE IS THE TEACHER AND NOT A CANDIDATE TO SHIP (plan §73.14). A cascade exists on
     // these plants only because `ORACLE=1` asks for one to iterate; judged as a RUNG it changes
     // the bar the distilled policy must clear, and on the quadruple tank that is the difference

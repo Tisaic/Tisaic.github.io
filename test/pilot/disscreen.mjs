@@ -43,6 +43,8 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 
+import { emitTo } from './rigs/emit.mjs';
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const thUrl = pathToFileURL(join(HERE, 'rigs', 'thermal-rig.mjs')).href;
 
@@ -115,7 +117,11 @@ console.log('\ndisscreen: is this plant a disturbance testbed at all? (plan §84
   console.log('        nearly EXHAUSTED as a DIS testbed rather than a source of more headroom.');
   console.log(`     VERDICT: a real disturbance testbed — ${pc(shEcc)} of the error energy, `
     + 'measurable ahead with a shaft encoder the shop already owns.\n');
-}
+
+  // EMITTED WHERE IT WAS MEASURED (plan §90.1) — `screen.mjs` reads it back beside `invert.mjs`'s
+  // row so one verdict per plant exists without a hand-maintained copy (rule 30). Unset writes
+  // nothing and the run is byte-identical (rule 21).
+  emitTo(process.env.SCREEN_OUT, 'dis.jsonl', { name: 'mill', exoShare: shEcc, testbed: true });}
 
 // ---------------------------------------------------------------- the EXTRUDER BARREL
 //
@@ -186,9 +192,22 @@ console.log('\ndisscreen: is this plant a disturbance testbed at all? (plan §84
   console.log('     VERDICT: NOT a disturbance-rejection testbed. The factor of 3.8 §72.18 read');
   console.log('        here is TEACHER CORRUPTION by a lap-incommensurate component, which is a');
   console.log('        different fault with a different cure (§80.6, §84.1).\n');
-}
+
+  // The barrel's share is SIGNED and flips with the denominator, so it emits the WHOLE-RUN
+  // figure and the settled one rather than a single number a reader would treat as the share
+  // (rule 19 — the fault this file's own first version committed).
+  emitTo(process.env.SCREEN_OUT, 'dis.jsonl', { name: 'barrel',
+    exoShare: 1 - offRms ** 2 / rms(all) ** 2,
+    exoShareSettled: 1 - offHold ** 2 / rms(hold) ** 2, testbed: false });}
 
 // ---------------------------------------------------------------- everything else
+// SCREENED OUT IS A MEASURED STATE AND NOT A MISSING ONE (rule 25). These plants were each
+// checked — two `fresh()` runs agreeing bit-exactly is a POSITIVE statement that a plant has no
+// stochastic component — so they emit `exoShare: 0` rather than nothing, and `screen.mjs` can
+// tell "measured, has none" from "never asked".
+for (const n of ['tank', 'column', 'emps', 'arm', 'realarm', 'realtanks', 'realexch', 'pend']) {
+  emitTo(process.env.SCREEN_OUT, 'dis.jsonl', { name: n, exoShare: 0, testbed: false });
+}
 console.log('  THE OTHER PLANTS — screened OUT, and this is the useful half (rule 27)\n');
 console.log('     quadruple tank    no stochastic term and no exogenous input, and §84.1 says so');
 console.log('     Wood-Berry        ON THE MACHINE rather than from the source: both come back');
