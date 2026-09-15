@@ -20526,3 +20526,29 @@ whose scored program is 143,360 steps — the ridge axis refits and scores six c
 gain axis scores up to eleven, each one a 40-lap run. It is the first time the verify has been the
 dominant term anywhere, and it is a direct consequence of §86.6's edge extension being allowed to
 walk six steps on a plant where every step is a long run.
+
+## §87.8 — WHAT THIS PASS DID NOT RUN, AND WHY (rule 25, rule 59)
+
+The tenth step of §87 was *a second held-out program on each of the four new plants* — target 1's
+own bar (*within 1.3x of a per-program commission on EVERY program*) measured on the plants §86
+added. It is **NOT RUN**, and the reason is a scheduling one rather than a judgement about its
+value: it needs a scored-program knob in four harnesses, and the full `--all --full` pass that
+verifies this section was already running against the tree at that point. Adding a knob to four
+harnesses mid-verification would have meant a number verified against a tree that no longer
+existed, which is the fault this project's own verification section exists to prevent.
+
+What it would measure, stated now so the next pass does not have to re-derive it: the quadruple
+tank already carries this comparison (production 3.268x against a held-out recipe 2.657x, a ratio
+of 1.23x, inside target 1's 1.3x bound), and the four new plants each score ONE program. The
+cheapest form is a second CLOSED recipe or move on each, scored with the same commissioned object —
+no refit, no second commissioning — which costs one scored run per plant and reads target 1's ratio
+directly.
+
+Two of the four can be predicted from what §87.6 measured, and writing the prediction down first is
+the point (rule 59): the cart-pole and the real cascaded tanks sit at 31.6 and 20.2 response times
+per program, above the screen's split, and won at the window rule's own derived value — so target
+1's ratio should be comfortably inside 1.3x on both. The real exchanger ships the conventional rung,
+which is a four-coefficient map of the reference's own rate and acceleration and is
+program-agnostic by construction, so its ratio should be ~1.0. The real flexible arm refuses, so
+there is nothing to transfer. If any of those four comes back outside 1.3x, the screen is weaker
+than §87.6 says.
