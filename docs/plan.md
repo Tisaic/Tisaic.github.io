@@ -20006,3 +20006,46 @@ moved on two moduli only, not on the delay, the hydraulic lag or the line speed;
 2% figure is this rig's, not a law. What would change the answer is an observer that ESTIMATES the
 mismatch rather than assuming it away — which is adaptive IMC, is a different object again, and
 would have to be scored against the same eleven-cell robustness bar the frozen map already passes.
+
+---
+
+# §86 — THE WINNING TABLE: ASK THE DEPLOYED OBJECT ON EVERY PLANT THAT HAS NEVER BEEN ASKED
+
+The mandate is that every plant is a legitimate winner or is struck with a reason. The table
+today is not that, and the reason is the same on four rows: **the deployed object has never been
+asked.** Every plant converted since §64 — the column, the mill, the tank, the barrel — was
+converted by asking `distil.js`'s weight vector instead of the teacher, and not one of them was
+converted by changing the controller. Four plants are still scored on a bare `Pilot`:
+
+```
+  plant                          asked?   what the record has
+  2R arm                          yes     6.62x          deployed object
+  EMPS                            yes     32.75x         deployed object
+  Wood-Berry column               yes     3.959x         deployed object
+  cold mill                       yes     2.63x          deployed object
+  quadruple tank                  yes     3.268x         deployed object
+  extruder barrel                 yes     6.997x         deployed object
+  cart-pole                       NO      refuses on a tuned loop        — the TEACHER (§84.10)
+  real flexible arm (DaISy)       NO      conventional 1.93x, cascade refused — the TEACHER
+  real cascaded tanks             NO      cascade deploys, 6.54x         — the TEACHER
+  real steam heat exchanger       NO      conventional 89.8x             — the TEACHER
+  shaking load cell               n/a     1.65x self-commissioned estimator, not a controller
+```
+
+§84.10 says it in its own words about the cart-pole — *"the DEPLOYED object has never been asked
+here at all, and all four plants converted since §64 were converted by asking it instead of the
+teacher (rule 59)"* — and §84.11 says it about the real arm. So the ten steps are that experiment,
+four times, plus the table it produces and the housekeeping that keeps the record honest.
+
+1. Fold §85.2 into `CLAUDE.md` and the scorecard's DIS cell.
+2. `distil-pend.mjs` — the deployed object on the cart-pole, on the TUNED loop.
+3. `distil-realarm.mjs` — the deployed object on the real flexible arm, the one plant that reads
+   INVERSE 128.3%.
+4. `distil-realtanks.mjs` — the deployed object on the real cascaded tanks.
+5. `distil-realexch.mjs` — the deployed object on the real steam heat exchanger.
+6. Whatever the four need: a re-derived ridge, a gain, a window, a diet — each on the machine.
+7. `objtable.mjs` — the winning table, SCRAPED from each harness's own headline rather than
+   written, so it cannot drift from what the plants report (rule 30).
+8. The shaking load cell: in the table or struck, with the reason stated.
+9. `CLAUDE.md` and `docs/scorecard.md` updated from the table rather than from memory.
+10. Verify, stamp, push.
