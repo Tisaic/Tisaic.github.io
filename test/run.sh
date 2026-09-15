@@ -406,6 +406,13 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     if [ "${SUITE}" = "full" ]; then t node test/pilot/distil-realarm.mjs; fi
     if [ "${SUITE}" = "full" ]; then t node test/pilot/distil-realtanks.mjs; fi
     if [ "${SUITE}" = "full" ]; then t node test/pilot/distil-realexch.mjs; fi
+    # AND THE FLAGSHIP PLANT, WHICH THE MANDATE TABLE HAD BEEN MISSING (plan §88.5). `distil-arm`
+    # is an INSTRUMENT with three dozen knobs and was never registered, so the 2R arm — the plant
+    # more of this project's numbers are quoted on than any other — was the one row `objtable`
+    # could never read, and §87.1b duly printed `NOT EMITTED: distil-arm`. At its defaults it
+    # runs the host's own shipped configuration in 231 s, which is cheaper than four of the
+    # harnesses above, and a count that omits the flagship is a preference (rule 30).
+    if [ "${SUITE}" = "full" ]; then t node test/pilot/distil-arm.mjs; fi
     t node test/pilot/tanks.test.mjs
     t node test/pilot/thermal.test.mjs
     t node test/pilot/woodberry.test.mjs

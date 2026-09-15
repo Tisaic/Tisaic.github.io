@@ -52,7 +52,7 @@
  */
 import { ladder, announce } from './rigs/ladder.mjs';
 import { barrelSpec } from './rigs/specs.mjs';
-import { deriveWindow, reportDistil, priceFrom, ridgeLadder, gainLadder, teacherReuse, carrier, teachLaps, teachAvg, dietN } from './rigs/distilkit.mjs';
+import { deriveWindow, reportDistil, priceFrom, ridgeLadder, gainLadder, teacherReuse, carrier, teachLaps, teachAvg, dietN, emitRow } from './rigs/distilkit.mjs';
 import { oracleConverge } from './rigs/oracleteach.mjs';
 
 // THE ORACLE TEACHER IS OPT-IN UNTIL IT IS MEASURED (plan §73.9). It needs a cascade to iterate,
@@ -383,7 +383,7 @@ announce();
 // `reportDistil`'s in-sample column re-runs every training program and that is SCORING, not
 // commissioning — charging it would price the instrument.
 const price = priceFrom();
-const { rep, auto } = await ladder(spec);
+const { rep, auto, scoreOn } = await ladder(spec);
 price.close({ dt: TH.DT, rep });
 
 // ---------------------------------------------------------------- what it says and why
@@ -437,6 +437,53 @@ if (rep.distil && rep.distil.policy) {
     + 'closed-lap diet and the open production record are the mismatch (plan §65.4).');
 }
 
+
+// ------------------------------------------- target 1, on a recipe it was not scored on
+/**
+ * TARGET 1's OWN BAR (plan §88.1). The SAME commissioned weight vector — no refit — on a second
+ * changeover the ladder never scored, through `scoreOn`, which is this driver's own verify loop
+ * (rule 61). §66 recorded that what bounds this object here is *how far the diet is from the
+ * program it will run*, and the diet contains production's transitions in other orders; this
+ * asks the complementary question, which is how far the object carries to a changeover that is
+ * neither the diet's nor production's.
+ *
+ * The held-out recipe visits the same zone-temperature band at different levels and in a
+ * different order, so it stays inside the power box the commissioning declared.
+ */
+const HELD_REC = [[186, 204, 214], [174, 194, 206], [194, 212, 220], [180, 200, 210]];
+const heldSet = (k) => {
+  const i = Math.min(HELD_REC.length - 2, Math.floor(k / TH.SEG));
+  const t = (k - i * TH.SEG - TH.HOLD) / (TH.SEG - TH.HOLD);
+  const q = t <= 0 ? 0 : t >= 1 ? 1 : TH.quintic(t);
+  return HELD_REC[i].map((a, j) => a + (HELD_REC[i + 1][j] - a) * q);
+};
+const heldRef = (k) => TH.powerFor(heldSet(Math.min(k, TH.PROG)));
+const hOff = await scoreOn({ refAt: heldRef, fresh: barrelSpec.fresh, N: TH.PROG },
+  { armed: false });
+const hOn = await scoreOn({ refAt: heldRef, fresh: barrelSpec.fresh, N: TH.PROG });
+const xProg = rep.base / rep.best, xHeld = hOff.score / hOn.score;
+console.log(`\n  TARGET 1 — the SAME object on a second changeover, no refit`);
+console.log(`    scored recipe  ${TH.RECIPE.map((r) => r.join('/')).join(' → ')}`);
+console.log(`                   ${rep.base.toExponential(3)} → ${rep.best.toExponential(3)}   ${xProg.toFixed(3)}x`);
+console.log(`    held out       ${HELD_REC.map((r) => r.join('/')).join(' → ')}`);
+console.log(`                   ${hOff.score.toExponential(3)} → ${hOn.score.toExponential(3)}   ${xHeld.toFixed(3)}x`
+  + `   ${(xHeld / xProg).toFixed(3)} of the scored factor\n`);
+emitRow(rep, auto, { t1: xHeld / xProg, t1Worse: xHeld < 1 });
+check('target 1: the held-out changeover is not made worse', hOn.score <= hOff.score * 1.02,
+  `${hOff.score.toExponential(3)} → ${hOn.score.toExponential(3)} = ${xHeld.toFixed(3)}x`);
+/**
+ * AND THE BOUND IS PRINTED RATHER THAN ASSERTED, WHILE "NOT MADE WORSE" IS ASSERTED (plan §88.4).
+ * Target 1's 1.3x bound is measured as MISSED on three plants of seven — the Wood-Berry column at
+ * 0.339 of its scored factor, the extruder barrel, and the real flexible arm, which is made
+ * WORSE on two held-out programs of four. A suite pinned to a bar plants are known to fail is
+ * permanently red and hides the next real failure (rule 3), and this project does not redden the
+ * suite for target 4 either, which is missed on six plants of eight. What IS asserted is the
+ * MANDATE's own clause — nothing made worse — and the bound's verdict per plant is carried in
+ * `objtable.mjs`'s TARGET 1 column, where a count nobody can re-derive would otherwise become a
+ * preference (rule 30).
+ */
+console.log(`    TARGET 1's 1.3x BOUND: ${xHeld >= xProg / 1.3 ? 'MET' : 'NOT MET'} — the held-out `
+  + `changeover delivers ${(xHeld / xProg).toFixed(3)} of the scored factor`);
 check('the barrel is not made worse by anything the ladder ships',
   rep.best <= rep.base, `${rep.base.toExponential(3)} → ${rep.best.toExponential(3)}`);
 check('the distilled rung reached this plant at all — it was offered, fitted and SCORED on the '

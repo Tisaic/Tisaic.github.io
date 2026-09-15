@@ -32,7 +32,7 @@
 import { ladder, announce } from './rigs/ladder.mjs';
 import { pendSpec } from './rigs/specs.mjs';
 import { deriveWindow, reportDistil, priceFrom, ridgeLadder, gainLadder, teacherReuse, teachLaps,
-  teachAvg, dietN, carrier } from './rigs/distilkit.mjs';
+  teachAvg, dietN, carrier, emitRow } from './rigs/distilkit.mjs';
 import * as PD from './rigs/pend-rig.mjs';
 
 if (process.env.SUITE !== 'full') {
@@ -178,27 +178,54 @@ await reportDistil({ rep, runs: distilRuns(), nFeat: OFFSETS.length + 1, auto })
  *  2.468x where the ladder's own run read 6.30x. That is `distil-tank.mjs`'s recorded fault
  *  exactly — a harness scoring a rung that was not in the run it scored (plan §67.3) — and the
  *  tell is the same one: the ladder and the harness disagreeing about one machine. */
-const NSC = PD.LAP * 4;
-const VV = new Float64Array(NSC), AA = new Float64Array(NSC);
-for (let k = 1; k < NSC - 1; k++) {
-  const p0 = PD.xrefAt(k - 1), p1 = PD.xrefAt(k), p2 = PD.xrefAt(k + 1);
-  VV[k] = (p2 - p0) / 2; AA[k] = p2 - 2 * p1 + p0;
+/**
+ * TARGET 1's OWN BAR, ON A SECOND PROGRAM THIS OBJECT WAS NEITHER FITTED ON NOR SCORED ON
+ * (plan §88.1, the step §87.8 named and did not run).
+ *
+ * The bar is *within 1.3x of a per-program commission on EVERY program, none made worse*. The
+ * cheapest honest form costs ONE scored run: take the SAME commissioned object — no refit, no
+ * second commissioning, the ladder is already closed — and score a second program against the
+ * conventional machine on THAT program, then read the two factors' ratio. That is exactly the
+ * comparison the quadruple tank already carries (3.268x production against 2.657x on a recipe it
+ * was not chosen on, 1.23x).
+ *
+ * The held-out program is in NO training run AND is not the scored one: a different distance,
+ * feed, acceleration and dwell, so its lap length differs too and nothing about it is a rescaling
+ * of what the object has seen.
+ */
+const HELD = PD.makeProgram({ d: 0.38, acc: 0.90, vmx: 0.28, dwell: 0.95 });
+const SHIPPED = PD.makeProgram({});
+
+function tabulate(g, laps = 4) {
+  const n = g.lap * laps;
+  const vv = new Float64Array(n), aa = new Float64Array(n);
+  for (let k = 1; k < n - 1; k++) {
+    const p0 = g.at(k - 1), p1 = g.at(k), p2 = g.at(k + 1);
+    vv[k] = (p2 - p0) / 2; aa[k] = p2 - 2 * p1 + p0;
+  }
+  return { n, vv, aa };
 }
-function score(active) {
+function score(active, g = SHIPPED) {
+  const { n: NSC, vv: VV, aa: AA } = tabulate(g);
   const p = PD.makeSettled();
   if (active) auto.beginRun();
   let s2 = 0, n = 0, uPk = 0, thPk = 0;
   for (let k = 0; k < NSC; k++) {
-    const xr = PD.xrefAt(k);
-    const look = (off) => [PD.xrefAt(k + off)];
+    const xr = g.at(k);
+    const look = (off) => [g.at(k + off)];
     const u = active ? auto.act({ v: [VV[k]], a: [AA[k]], look, lookRaw: look, k }) : [0];
     uPk = Math.max(uPk, Math.abs(u[0] || 0));
     PD.stepCart(p, PD.baseline(p, xr + (u[0] || 0)));
     auto.observe([p.x, p.v, p.th, p.w]);
     thPk = Math.max(thPk, Math.abs(p.th));
-    if (k >= PD.LAP) { const e = PD.tipOf(p) - xr; s2 += e * e; n++; }
+    if (k >= g.lap) { const e = PD.tipOf(p) - xr; s2 += e * e; n++; }
   }
   return { rms: Math.sqrt(s2 / n), uPk, thPk };
+}
+// The parametrised program and the shipped constants must be one description, or the diet and
+// the program are two different moves wearing one name (rule 61).
+if (SHIPPED.lap !== PD.LAP || Math.abs(SHIPPED.at(137) - PD.xrefAt(137)) > 0) {
+  throw new Error('pend-rig: makeProgram({}) is not xrefAt');
 }
 const off = score(false), on = score(true);
 console.log(`\n  the CONVENTIONAL machine   tip rms ${off.rms.toExponential(3)} m   `
@@ -207,6 +234,51 @@ console.log(`  the DEPLOYED object        tip rms ${on.rms.toExponential(3)} m  
   + `|θ| peak ${on.thPk.toFixed(3)} rad   uPk ${on.uPk.toFixed(4)} of ${spec.uMax}`);
 console.log(`  delivered ${(off.rms / on.rms).toFixed(3)}x   shipped `
   + `${JSON.stringify(rep.deployed)}\n`);
+
+// -------------------------------------------------- target 1, on a program it has never run
+const hOff = score(false, HELD), hOn = score(true, HELD);
+/**
+ * TARGET 1's BAR IS ONE-SIDED, AND THE FIRST VERSION OF THIS CHECK WAS NOT (plan §88.1).
+ * The target reads *within 1.3x of a controller commissioned on each program individually, on
+ * every program, with none made worse*, so what it forbids is the held-out program DELIVERING
+ * LESS — a program that is easier, and on which the same object therefore reads a LARGER factor,
+ * satisfies the target rather than failing it. Written symmetrically it duly went red on the real
+ * cascaded tanks at 8.694x against 12.515x, which is the object doing better than it was asked to
+ * (rule 19: the metric's support has to match the claim's).
+ *
+ * STATED, because it bounds what this number is worth: the comparator is the factor on the SCORED
+ * program, not a per-program COMMISSION. A true per-program commission costs a second
+ * commissioning per plant and is the stronger test; this is the cheap form, and it is the same
+ * comparison the quadruple tank already carries (3.268x production against 2.657x held out).
+ * Where the held-out factor is the larger, the cheap form is LOOSER than the target — the object
+ * could still be short of what a commissioning on that program alone would have reached.
+ */
+const xProg = off.rms / on.rms, xHeld = hOff.rms / hOn.rms;
+const ratio = Math.max(xProg, xHeld) / Math.min(xProg, xHeld);
+console.log(`  TARGET 1 — the SAME object on a second program, no refit`);
+console.log(`    scored program  ${PD.D}m@${PD.VMX}/${PD.ACC} dwell ${PD.DWELL} (lap ${SHIPPED.lap})`
+  + `   ${off.rms.toExponential(3)} → ${on.rms.toExponential(3)}   ${xProg.toFixed(3)}x`);
+console.log(`    held out        ${HELD.d}m@${HELD.vmx}/${HELD.acc} dwell ${HELD.dwell} `
+  + `(lap ${HELD.lap})   ${hOff.rms.toExponential(3)} → ${hOn.rms.toExponential(3)}   `
+  + `${xHeld.toFixed(3)}x   |θ| ${hOn.thPk.toFixed(3)}`);
+console.log(`    the held-out program delivers ${(xHeld / xProg).toFixed(3)}x of what the `
+  + `scored one does; target 1 forbids < 0.769 (1/1.3), spread ${ratio.toFixed(3)}x\n`);
+emitRow(rep, auto, { t1: xHeld / xProg, t1Worse: xHeld < 1 });
+check('target 1: the held-out program is not made worse', hOn.rms <= hOff.rms * 1.02,
+  `${hOff.rms.toExponential(3)} → ${hOn.rms.toExponential(3)} = ${xHeld.toFixed(3)}x`);
+/**
+ * AND THE BOUND IS PRINTED RATHER THAN ASSERTED, WHILE "NOT MADE WORSE" IS ASSERTED (plan §88.4).
+ * Target 1's 1.3x bound is measured as MISSED on three plants of seven — the Wood-Berry column at
+ * 0.339 of its scored factor, the extruder barrel, and the real flexible arm, which is made
+ * WORSE on two held-out programs of four. A suite pinned to a bar plants are known to fail is
+ * permanently red and hides the next real failure (rule 3), and this project does not redden the
+ * suite for target 4 either, which is missed on six plants of eight. What IS asserted is the
+ * MANDATE's own clause — nothing made worse — and the bound's verdict per plant is carried in
+ * `objtable.mjs`'s TARGET 1 column, where a count nobody can re-derive would otherwise become a
+ * preference (rule 30).
+ */
+console.log(`    TARGET 1's 1.3x BOUND: ${xHeld >= xProg / 1.3 ? 'MET' : 'NOT MET'} — the held-out `
+  + `program delivers ${(xHeld / xProg).toFixed(3)} of the scored factor`);
 
 check('the pole stays up with whatever the ladder shipped applied',
   on.thPk < 0.30, `|θ| peak ${on.thPk.toFixed(3)} against the 0.30 guard`);

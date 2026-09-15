@@ -48,6 +48,9 @@ console.log('\npilot: the Wood–Berry column — a published benchmark against 
 import {
   DET, DLY, DT, K, MAXD, TAU, TH, T_END, UBOX, UMAX, iaeOf, inputsFor, makeColumn, outputsFor, runBLT, runOpen, setpointAt,
 } from './rigs/woodberry-rig.mjs';
+import { verifyIndex, verifyStretch } from './rigs/verifyclock.mjs';
+
+const VIDX = verifyIndex(T_END, { legacy: Math.round(T_END / DT) });
 
 // ------------------------------------------------------------ route, limit, run
 async function commission(seed = 1) {
@@ -69,8 +72,15 @@ async function commission(seed = 1) {
     // refuse. On this plant the measurement says refusing is correct: the steady-state inversion
     // alone reads 43.90 IAE against the published BLT's 51.95, so the machine the pilot sits on
     // already beats the classical baseline, and every deployment has been making it worse.
+    // AND ITS CLOCK WAS WRONG BY A FACTOR OF TEN, WHICH NOTHING COULD READ (plan §88.2).
+    // `T_END` is 3000 STEPS and `setpointAt` takes a step index, so `T_END / DT` is 30,000 — the
+    // resampling mapped the verify's whole budget onto ten program lengths, and `setpointAt`
+    // saturates past its own end. This program is two steps (channel 0 at k = 0, channel 1 at
+    // k = 1000), so the second step landed at i = n/30 instead of n/3 and the regime was
+    // **29/30 a constant hold at [1, 1]** — a steady state, where the plant's whole difficulty
+    // is its interaction during a transition. `VREF=legacy` reproduces it exactly.
     verifyRef: process.env.NOREP === '1' ? null
-      : (i, n) => inputsFor(...setpointAt(Math.round(i * (T_END / DT) / n))),
+      : (i, n) => inputsFor(...setpointAt(VIDX(i, n))),
     seed,
   });
   let steps = 0;
@@ -119,6 +129,12 @@ console.log(`    commissioned in ${steps} steps = ${(steps * DT / 60).toFixed(0)
   + `Ts ${st.Ts}, Tset ${st.Tset}, sample ${st.sample}, N ${st.N}, `
   + `rings ${JSON.stringify(st.rings)}`);
 console.log(`    verify ${st.report.verify ? st.report.verify.ratio.toFixed(2) + 'x' : '—'} — ${pilot.verdict.why}`);
+const _vsW = verifyStretch(T_END, st.report, { legacy: Math.round(T_END / DT) });
+console.log(`    verify clock: mode ${_vsW.mode}, budget ${_vsW.n || '—'} steps against a `
+  + `${T_END}-step program`
+  + `${_vsW.factor === null ? '' : `  —  the representative regime runs at ${_vsW.factor.toFixed(3)}x `
+    + `the program's own rate`}`);
+
 const run = runPilot(pilot, pilot.verdict.deploy);
 
 console.log(`    IAE over the scenario (composition·min, both loops summed):`);

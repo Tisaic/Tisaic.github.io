@@ -148,7 +148,7 @@ if (READ) {
     + (missing.length ? `  —  NOT EMITTED: ${missing.join(', ')} (not run in this pass)` : '')
     + '\n');
   console.log('  harness                     ships                 base -> best            '
-    + '  x      MAC   kB     ②d');
+    + '  x      MAC   kB     ②d      TARGET 1');
   let bad = 0;
   for (const r of got) {
     const kind = classify(r.deployed ? { ship: r.deployed } : null);
@@ -158,11 +158,25 @@ if (READ) {
       + `${r.base === null ? '—'.padEnd(21) : (r.base.toExponential(3) + ' -> ' + r.best.toExponential(3)).padEnd(21)} `
       + `${(r.gain === null ? 'UNKNOWN' : r.gain.toFixed(2) + 'x').padStart(8)} `
       + `${(r.mac === null ? '—' : String(r.mac)).padStart(6)} `
-      + `${(r.kb === null ? '—' : r.kb.toFixed(1)).padStart(5)}  ${r.rung || '—'}`
+      + `${(r.kb === null ? '—' : r.kb.toFixed(1)).padStart(5)}  ${(r.rung || '—').padEnd(8)}`
+      + `${r.t1 === undefined || r.t1 === null ? 'not asked'
+        : `${r.t1.toFixed(2)} of scored${r.t1Worse ? ', MADE WORSE' : (r.t1 >= 1 / 1.3 ? ', MET' : ', under 1/1.3')}`}`
       + `${worse ? '   <- MADE WORSE' : ''}`);
   }
   const nObj = got.filter((r) => r.deployed && r.deployed.distil).length;
   console.log(`\n  ${nObj} of ${got.length} ship the DEPLOYED OBJECT; made WORSE: ${bad || 'none'}`);
+  // TARGET 1's COLUMN, REPORTED AND NOT ASSERTED (plan §88.1). Every harness that scores a second
+  // program emits the ratio it delivers there against the one it was scored on; the target
+  // forbids that ratio falling below 1/1.3. It is PRINTED rather than checked because the real
+  // flexible arm is measured as failing it — a suite pinned to a bar a plant is known to fail is
+  // permanently red and hides the next real failure (rule 3) — and because a plant whose harness
+  // does not ask reads `not asked` rather than dropping out of the count (rule 25).
+  const asked = got.filter((r) => r.t1 !== undefined && r.t1 !== null);
+  const met = asked.filter((r) => !r.t1Worse && r.t1 >= 1 / 1.3);
+  console.log(`  TARGET 1 asked on ${asked.length} of ${got.length}: ${met.length} MET, `
+    + `${asked.filter((r) => r.t1Worse).length} made WORSE on the held-out program`
+    + `${asked.length === met.length ? '' : ` — ${asked.filter((r) => !met.includes(r))
+      .map((r) => r.file).join(', ')}`}`);
   // THE MANDATE, AS A CHECK. Every plant asked either improves or refuses — a refusal delivers the
   // machine unchanged, so `gain >= 1` covers both and nothing else is asserted here, because a
   // threshold on HOW MUCH each plant must win by would be a number this file invented.

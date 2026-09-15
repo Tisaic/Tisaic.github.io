@@ -27,7 +27,7 @@
 import { ladder, announce } from './rigs/ladder.mjs';
 import { realtanksLadderSpec } from './rigs/specs.mjs';
 import { deriveWindow, reportDistil, priceFrom, ridgeLadder, gainLadder, teacherReuse, teachLaps,
-  teachAvg, dietN, carrier } from './rigs/distilkit.mjs';
+  teachAvg, dietN, carrier, emitRow } from './rigs/distilkit.mjs';
 import * as T from './rigs/realtanks-rig.mjs';
 
 if (process.env.SUITE !== 'full') {
@@ -142,9 +142,65 @@ const spec = { ...realtanksLadderSpec({ overflow: OVER }),
 
 announce();
 const price = priceFrom();
-const { rep, auto } = await ladder(spec);
+const { rep, auto, scoreOn } = await ladder(spec);
 price.close({ dt: T.TS, rep });
 await reportDistil({ rep, runs: distilRuns(), nFeat: OFFSETS.length + 1, auto });
+
+// ------------------------------------------- target 1, on a recipe it was not scored on
+/**
+ * TARGET 1's OWN BAR (plan §88.1, the step §87.8 named and did not run). The SAME commissioned
+ * object — no refit, the ladder is closed — scored on a second PRODUCTION-SHAPED recipe through
+ * `scoreOn`, which is this driver's own verify loop rather than a fourth copy of it (rule 61).
+ * The recipe is in no training run and is not the one the ladder scored; its levels sit inside
+ * the box the commissioning declared, because an object asked to act outside its own declared
+ * channel limits is being asked a different question.
+ */
+const HELD_REC = OVER ? [6.4, 8.8, 5.2, 10.1, 4.8] : [5.6, 6.9, 4.6, 7.8, 5.1];
+const heldRef = (k) => [refOn(HELD_REC, Math.min(k, T.PROG - 1))];
+const heldFresh = () => T.makeMachine({ overflow: OVER, rec: HELD_REC });
+const hOff = await scoreOn({ refAt: heldRef, fresh: heldFresh, N: T.PROG }, { armed: false });
+const hOn = await scoreOn({ refAt: heldRef, fresh: heldFresh, N: T.PROG });
+/**
+ * TARGET 1's BAR IS ONE-SIDED, AND THE FIRST VERSION OF THIS CHECK WAS NOT (plan §88.1).
+ * The target reads *within 1.3x of a controller commissioned on each program individually, on
+ * every program, with none made worse*, so what it forbids is the held-out program DELIVERING
+ * LESS — a program that is easier, and on which the same object therefore reads a LARGER factor,
+ * satisfies the target rather than failing it. Written symmetrically it duly went red on the real
+ * cascaded tanks at 8.694x against 12.515x, which is the object doing better than it was asked to
+ * (rule 19: the metric's support has to match the claim's).
+ *
+ * STATED, because it bounds what this number is worth: the comparator is the factor on the SCORED
+ * program, not a per-program COMMISSION. A true per-program commission costs a second
+ * commissioning per plant and is the stronger test; this is the cheap form, and it is the same
+ * comparison the quadruple tank already carries (3.268x production against 2.657x held out).
+ * Where the held-out factor is the larger, the cheap form is LOOSER than the target — the object
+ * could still be short of what a commissioning on that program alone would have reached.
+ */
+const xProg = rep.base / rep.best, xHeld = hOff.score / hOn.score;
+const ratio = Math.max(xProg, xHeld) / Math.min(xProg, xHeld);
+console.log(`\n  TARGET 1 — the SAME object on a second recipe, no refit`);
+console.log(`    scored recipe  ${(OVER ? T.RECIPE_OF : T.RECIPE).join('→')}   `
+  + `${rep.base.toExponential(3)} → ${rep.best.toExponential(3)}   ${xProg.toFixed(3)}x`);
+console.log(`    held out       ${HELD_REC.join('→')}   `
+  + `${hOff.score.toExponential(3)} → ${hOn.score.toExponential(3)}   ${xHeld.toFixed(3)}x`);
+console.log(`    the held-out program delivers ${(xHeld / xProg).toFixed(3)}x of what the `
+  + `scored one does; target 1 forbids < 0.769 (1/1.3), spread ${ratio.toFixed(3)}x\n`);
+emitRow(rep, auto, { t1: xHeld / xProg, t1Worse: xHeld < 1 });
+check('target 1: the held-out recipe is not made worse', hOn.score <= hOff.score * 1.02,
+  `${hOff.score.toExponential(3)} → ${hOn.score.toExponential(3)} = ${xHeld.toFixed(3)}x`);
+/**
+ * AND THE BOUND IS PRINTED RATHER THAN ASSERTED, WHILE "NOT MADE WORSE" IS ASSERTED (plan §88.4).
+ * Target 1's 1.3x bound is measured as MISSED on three plants of seven — the Wood-Berry column at
+ * 0.339 of its scored factor, the extruder barrel, and the real flexible arm, which is made
+ * WORSE on two held-out programs of four. A suite pinned to a bar plants are known to fail is
+ * permanently red and hides the next real failure (rule 3), and this project does not redden the
+ * suite for target 4 either, which is missed on six plants of eight. What IS asserted is the
+ * MANDATE's own clause — nothing made worse — and the bound's verdict per plant is carried in
+ * `objtable.mjs`'s TARGET 1 column, where a count nobody can re-derive would otherwise become a
+ * preference (rule 30).
+ */
+console.log(`    TARGET 1's 1.3x BOUND: ${xHeld >= xProg / 1.3 ? 'MET' : 'NOT MET'} — the held-out `
+  + `recipe delivers ${(xHeld / xProg).toFixed(3)} of the scored factor`);
 
 check('the real tank is not made worse by anything the ladder ships',
   rep.best <= rep.base, `${rep.base.toExponential(3)} → ${rep.best.toExponential(3)}`);

@@ -141,20 +141,22 @@ async function ladder(spec) {
     const back = into(label);
     try { return await fn(); } finally { into(back); }
   };
-  const run0 = async (corr, cname) => {
-    const st = fresh();
+  const run0 = async (corr, cname, prog) => {
+    const P = prog || { refAt, fresh, N, v, a };
+    const { refAt: pRefAt, fresh: pFresh, N: pN, v: pV, a: pA } = P;
+    const st = pFresh();
     auto.beginRun();
     let ss = 0, n = 0;
     // The error signal per channel over the whole program — what the conventional rung's
     // operator is identified against. One output per channel, in the output's own units:
     // the operator is a derivative of THIS with respect to the coefficients, so the units
     // divide out and the correction comes back in command space.
-    const err = Array.from({ length: nc }, () => new Float64Array(N));
-    for (let k = 0; k < N; k++) {
-      const ref = refAt(k);
+    const err = Array.from({ length: nc }, () => new Float64Array(pN));
+    for (let k = 0; k < pN; k++) {
+      const ref = pRefAt(k);
       const S = auto.stack ? auto.stack.sample : 1;
       const kS = Math.floor(k / S);
-      const look = (off) => refAt(Math.min(N - 1, Math.max(0, (kS + off) * S)));
+      const look = (off) => pRefAt(Math.min(pN - 1, Math.max(0, (kS + off) * S)));
       // AND THE RAW-STEP LOOK-AHEAD BESIDE IT, because two rungs here read the reference on two
       // different grids. The cascade decides on its own `sample` and its offsets are in DECISIONS,
       // so `look` is decimated by S; the distilled rung's offsets are RAW machine steps, because
@@ -166,20 +168,42 @@ async function ladder(spec) {
       // it (plan §51.5). It was invisible on the column, where the cascade REFUSES and S is 1,
       // and it is the barrel's whole signature: in-sample 9-14x read through the raw reference,
       // and 0.27-0.48x on the machine read through a window S times too wide.
-      const lookRaw = (off) => refAt(Math.min(N - 1, Math.max(0, k + off)));
-      const u = auto.act({ v: channels.map((_, c) => v[c][k]), a: channels.map((_, c) => a[c][k]),
-        look, lookRaw });
+      const lookRaw = (off) => pRefAt(Math.min(pN - 1, Math.max(0, k + off)));
+      const u = P.armed === false ? channels.map(() => 0)
+        : auto.act({ v: channels.map((_, c) => pV[c][k]), a: channels.map((_, c) => pA[c][k]),
+          look, lookRaw });
       if (corr) { const w = auto.into(corr.at(k), cname, {}); for (let c = 0; c < nc; c++) u[c] += w[c]; }
       const r = step(st, ref, u, k);
       auto.observe(r.measured);
       for (let c = 0; c < nc; c++) err[c][k] = r.truth[c];
       // SCORED AFTER THE START TRANSIENT, not across it: a measurement taken over a
       // transient describes the transient.
-      if (k >= N * 0.05) { for (const e of r.truth) { ss += e * e; n++; } }
+      if (k >= pN * 0.05) { for (const e of r.truth) { ss += e * e; n++; } }
     }
     return { score: Math.sqrt(ss / n), err };
   };
   const run = (corr, cname) => inPhase('verify', () => run0(corr, cname));
+  /**
+   * TARGET 1's INSTRUMENT: THE SAME COMMISSIONED OBJECT ON A PROGRAM IT WAS NOT SCORED ON
+   * (plan §88.1). A harness hands back an alternate `{refAt, fresh, N}` and gets the SCORED RUN
+   * this driver already runs — the same `auto.act`, the same look-ahead pair, the same 5% start
+   * transient dropped — rather than a fourth private copy of the loop, which is the fault
+   * `arm-rig.mjs` and `rigs/ladder.mjs` both exist to prevent (rule 61) and which
+   * `distil-tank.mjs` already paid for once by scoring a rung its own loop never applied.
+   * `armed: false` applies NOTHING rather than disarming the rungs, so the denominator belongs
+   * to THAT program and the commissioned object is never mutated to measure it — a harness that
+   * had to un-arm and re-arm to read a baseline could leave the ladder in a state its own
+   * verify never saw.
+   */
+  const scoreOn = async ({ refAt: rAt, fresh: fr, N: n2 }, { armed = true } = {}) => {
+    const v2 = Array.from({ length: nc }, () => new Float64Array(n2));
+    const a2 = Array.from({ length: nc }, () => new Float64Array(n2));
+    for (let k = 1; k < n2 - 1; k++) {
+      const p0 = rAt(k - 1), p1 = rAt(k), p2 = rAt(k + 1);
+      for (let c = 0; c < nc; c++) { v2[c][k] = (p2[c] - p0[c]) / 2; a2[c][k] = p2[c] - 2 * p1[c] + p0[c]; }
+    }
+    return run0(null, null, { refAt: rAt, fresh: fr, N: n2, v: v2, a: a2, armed });
+  };
   const drivePilot0 = async (stk) => {
     const st = fresh();
     let guard = 0;
@@ -251,7 +275,7 @@ async function ladder(spec) {
   printCost(auto);
   // The table's row, where it was measured (plan §87.1).
   emitRow(rep, auto, { name });
-  return { rep, auto };
+  return { rep, auto, scoreOn };
 }
 
 

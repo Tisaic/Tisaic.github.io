@@ -52,6 +52,8 @@ console.log('\npilot: the quadruple-tank process — same algorithm, different s
 // of a plant drift apart; this project has paid for that already.
 import { UCAP, G, AREA, AO, KP, DT, makeTanks, levelsAt, voltsFor,
   SEG, HOLD, RECIPE, quintic, refAtStep, PROG } from './rigs/tanks-rig.mjs';
+import { verifyIndex, verifyStretch } from './rigs/verifyclock.mjs';
+const VIDX = verifyIndex(PROG);
 
 // ------------------------------------------------------------ route, limit, run
 async function commission(g, dwell, seed = 1, gate = true) {
@@ -74,8 +76,13 @@ async function commission(g, dwell, seed = 1, gate = true) {
     // and between 4 of 8 draws deploying controllers that ALL make the plant worse and 3 of 8
     // deploying controllers that ALL help, with the minimum across every seed at 1.000x because
     // a refusal applies nothing. `test/pilot/tankspread.mjs` holds the measurement.
+    // ITS CLOCK IS NOW STATED RATHER THAN IMPLIED (plan §88.2). `VREF=natural` runs the recipe
+    // at its OWN rate and holds, `VREF=legacy` reproduces the resampling exactly, and the
+    // harness prints the factor. Nothing here says the resampling is wrong on this plant — the
+    // gate correlates 0.989 with what it delivers, which is the opposite of a broken regime —
+    // so the change is an instrument that can be read, and the verdict is a measurement.
     verifyRef: process.env.NOREP === '1' ? null : (i, n) => {
-      const h = refAtStep(Math.round(i * PROG / n));
+      const h = refAtStep(VIDX(i, n));
       return voltsFor(g, h[0], h[1]);
     },
     dwell,
@@ -150,6 +157,12 @@ console.log(`    commissioned in ${D.steps} steps = ${(D.steps * DT / 60).toFixe
   + `process time; Ts ${D.st.Ts}, Tset ${D.st.Tset}, sample ${D.st.sample}, N ${D.st.N}, `
   + `rings ${JSON.stringify(D.st.rings)}, windows `
   + `${D.st.report.readouts.map((r) => r.stride).join('/')}`);
+const _vsT = verifyStretch(PROG, D.st.report);
+console.log(`    verify clock: mode ${_vsT.mode}, budget ${_vsT.n || '—'} steps against a `
+  + `${PROG}-step program`
+  + `${_vsT.factor === null ? '' : `  —  the representative regime runs at ${_vsT.factor.toFixed(3)}x `
+    + `the program's own rate`}`);
+
 
 // --- what transferred with no change to lib/pilot at all
 check('the pilot measures a timescale on a plant with no inertia in it anywhere',

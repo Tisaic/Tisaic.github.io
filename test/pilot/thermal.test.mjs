@@ -40,6 +40,8 @@ console.log('\npilot: a three-zone extruder barrel — delay, noise, and a distu
 import {
   CAP, DEAD, DT, HL, KC, KH, NOISE, NZ, PBOX, PROG, RAD, RECIPE, SEG, TA0, UCAP, gauss, lcg, makeBarrel, powerFor, quintic, rad, setpointAt, tempsAt,
 } from './rigs/thermal-rig.mjs';
+import { verifyIndex, verifyStretch } from './rigs/verifyclock.mjs';
+const VIDX = verifyIndex(PROG);
 
 // ------------------------------------------------------------ route, limit, run
 async function commission(seed = 1) {
@@ -60,7 +62,10 @@ async function commission(seed = 1) {
     // cannot cross a 44 K box at quarter rates, i.e. a construction failure wearing a rate-limit
     // message. A regime built from the recipe cannot fail that way, because the recipe is a
     // trajectory the machine demonstrably runs.
-    verifyRef: process.env.NOREP === '1' ? null : (i, n) => powerFor(setpointAt(Math.round(i * PROG / n))),
+    // ITS CLOCK IS NOW STATED RATHER THAN IMPLIED (plan §88.2); `VREF=natural` is the control.
+    // This is the plant that had never once been SCORED before this regime existed, so its
+    // representative verdict rests entirely on a re-timing nobody had measured.
+    verifyRef: process.env.NOREP === '1' ? null : (i, n) => powerFor(setpointAt(VIDX(i, n))),
     dwell: true,                        // brick 48: this program HOLDS, so the excitation must
     seed,
   });
@@ -122,6 +127,12 @@ console.log(`    commissioned in ${steps} steps = ${(steps * DT / 3600).toFixed(
 console.log(`    readouts: ${(st.report.readouts||[]).map((r, i) =>
   `z${i + 1} stride ${r.stride}/ridge ${r.ridge.toExponential(0)} R² ${r.r2Lead0.toFixed(3)}`).join(' · ')}`);
 console.log(`    verify ${st.report.verify ? st.report.verify.ratio.toFixed(2) + 'x' : '—'} — ${pilot.verdict.why}`);
+const _vsB = verifyStretch(PROG, st.report);
+console.log(`    verify clock: mode ${_vsB.mode}, budget ${_vsB.n || '—'} steps against a `
+  + `${PROG}-step program`
+  + `${_vsB.factor === null ? '' : `  —  the representative regime runs at ${_vsB.factor.toFixed(3)}x `
+    + `the program's own rate`}`);
+
 
 check('THREE channels commission from THREE signals, one measurement per channel',
   (st.report.readouts||[]).length === 3 && (st.report.readouts||[]).every((r) => !r.gated),

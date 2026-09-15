@@ -38,7 +38,7 @@
 import { ladder, announce } from './rigs/ladder.mjs';
 import { realarmLadderSpec } from './rigs/specs.mjs';
 import { deriveWindow, reportDistil, priceFrom, ridgeLadder, gainLadder, teacherReuse, teachLaps,
-  teachAvg, dietN, carrier } from './rigs/distilkit.mjs';
+  teachAvg, dietN, carrier, emitRow } from './rigs/distilkit.mjs';
 import * as A from './rigs/realarm-rig.mjs';
 
 if (process.env.SUITE !== 'full') {
@@ -266,9 +266,100 @@ const spec = { ...realarmLadderSpec,
 
 announce();
 const price = priceFrom();
-const { rep, auto } = await ladder(spec);
+const { rep, auto, scoreOn } = await ladder(spec);
 price.close({ dt: 1, rep });
 await reportDistil({ rep, runs: distilRuns(), nFeat: OFFSETS.length * REFDIM + 1, auto });
+
+// ------------------------------------------- target 1, on a program it was not scored on
+/**
+ * TARGET 1's OWN BAR (plan §88.1), on the plant that REFUSES the deployed object. What ships
+ * here is the CONVENTIONAL rung at 1.93x — four coefficients of `[a, v, sign v, 1]`, a map of
+ * the reference's own rate and acceleration and therefore program-agnostic by construction — so
+ * this measures the object the ladder actually ships rather than the one it declined, and the
+ * prediction §87.8 wrote down first is that the ratio reads ~1.0.
+ *
+ * The held-out program is the same lap at a SHARPER edge (96 against the shipped 160), so its
+ * spectrum is broader and its peak drive higher: it is a harder program of the same family,
+ * which is the direction that can falsify the bar rather than flatter it. It is in no tour.
+ */
+/**
+ * AND IT IS BISECTED, BECAUSE THE FIRST READING FAILED AND A FAILURE WITH TWO VARIABLES IN IT IS
+ * NOT A FINDING (plan §88.3). A sharper edge at the rig's own headroom rule moves TWO things at
+ * once — measured before any claim: edge 96 reads amp 5.54e+0 against the shipped 1.60e+1 and
+ * peak |v| 2.16e-1 against 3.75e-1, at a comparable 15.4% of the drive against 16.8%, so it is
+ * neither saturating nor a rate-limit artefact. Three variants separate shape from amplitude:
+ *
+ *   edge 96 at its own amplitude     both move   <- the row that failed
+ *   edge 96 at the SHIPPED amplitude shape only  (drive rises to ~44%, still inside the cap)
+ *   edge 160 at 0.35x amplitude      amplitude only, the shipped shape held
+ *
+ * The prediction was written down first and the machine REFUTED IT (rule 59 doing its job). It
+ * said: the rung's basis is `[a, v, sign v, 1]` and two of its four terms — `sign v` and the bias
+ * — are AMPLITUDE-INDEPENDENT, so fitted at one amplitude they are three times too large on a
+ * program a third the size, and *the amplitude-only row harms and the shape-only row does not*.
+ * Measured, it is the other way round: the amplitude-only row still HELPS at 1.152x and the
+ * SHAPE-ONLY row harms at 0.921x. So it is the edge, not the size.
+ *
+ * A SOFTER edge is the third point that turns two rows into an ordering, and it is what makes the
+ * mechanism checkable rather than asserted: this plant's identified modes decay about 1.03x per
+ * cycle — fifty times lighter than the lattice arm — and a sharper edge puts more of the
+ * program's energy near them. If that is the cause the ordering is monotone in edge width, and a
+ * softer edge than the commissioning's should be safe.
+ */
+const AMP_R = A.makeProgram({ edge: 96 }).amp / A.AMP;
+const unitOf = (g) => (k) => [g.at(k)[0] / g.amp];
+const atAmp = (g, amp) => ({ lap: g.lap, edge: g.edge, amp,
+  at: (k) => [amp * unitOf(g)(k)[0]] });
+const E96 = A.makeProgram({ edge: 96 }), E160 = A.makeProgram({}), E200 = A.makeProgram({ edge: 200 });
+const VARIANTS = [
+  ['edge  96, own amp     (sharper: shape + amplitude)', E96],
+  ['edge  96, SHIPPED amp (sharper: shape only)       ', atAmp(E96, A.AMP)],
+  ['edge 160, 0.35x amp   (amplitude only, shape held)', atAmp(E160, AMP_R * A.AMP)],
+  ['edge 200, own amp     (SOFTER than the commission)', E200],
+];
+const xProg = rep.base / rep.best;
+console.log(`\n  TARGET 1 — the SAME object on programs it was not scored on, no refit`);
+console.log(`    scored program  lap ${A.LAP} edge ${A.EDGE} amp ${A.AMP.toExponential(2)}   `
+  + `${rep.base.toExponential(3)} → ${rep.best.toExponential(3)}   ${xProg.toFixed(3)}x`);
+const rows = [];
+for (const [tag, g] of VARIANTS) {
+  const ref = withRes((k) => g.at(Math.min(k, A.PROG - 1)), A.LAP);
+  const o = await scoreOn({ refAt: ref, fresh: () => A.makeMachine(A.LOOP), N: A.PROG },
+    { armed: false });
+  const n = await scoreOn({ refAt: ref, fresh: () => A.makeMachine(A.LOOP), N: A.PROG });
+  const x = o.score / n.score;
+  rows.push({ tag, x, o: o.score, n: n.score });
+  console.log(`    ${tag}  amp ${g.amp.toExponential(2)}   ${o.score.toExponential(3)} → `
+    + `${n.score.toExponential(3)}   ${x.toFixed(3)}x   ${(x / xProg).toFixed(3)} of the scored factor`);
+}
+console.log(`    target 1 forbids a held-out factor below ${(xProg / 1.3).toFixed(3)}x `
+  + `(1/1.3 of the scored ${xProg.toFixed(3)}x) and forbids any of them below 1.000x\n`);
+const worst = rows.reduce((a, b) => (b.x < a.x ? b : a));
+const [sharpBoth, sharpOnly, ampOnly, softer] = rows;
+/**
+ * TARGET 1 IS NOT MET ON THIS PLANT AND THE REPORT SAYS SO FIRST (rule 27). Two of four held-out
+ * programs are made WORSE and every one of the four is below 1/1.3 of the scored factor, so this
+ * is the first plant in this project where target 1's own bar fails — and it fails for the
+ * CONVENTIONAL rung, which is what ships here, rather than for the distilled object, which
+ * refuses on this plant anyway.
+ *
+ * The CHECKS assert the bisection's conclusion rather than the target, because a suite pinned to
+ * a bar a plant is measured as failing is permanently red and hides the next real failure
+ * (rule 3), and a check frozen on today's number goes stale in either direction (rule 4). What
+ * is asserted is the ORDERING the measurement established: sharper harms, softer does not, and
+ * amplitude alone does not. If any of those three reverses, this goes red and someone reads it.
+ */
+const MET = worst.x >= 1 && worst.x >= xProg / 1.3;
+console.log(`    TARGET 1 ON THIS PLANT: ${MET ? 'MET' : 'NOT MET'} — worst held-out row `
+  + `${worst.x.toFixed(3)}x, ${rows.filter((r) => r.x < 1).length} of ${rows.length} made worse\n`);
+emitRow(rep, auto, { t1: worst.x / xProg, t1Worse: worst.x < 1 });
+check('the SHARPER edge is what harms, at its own amplitude and at the shipped one',
+  sharpBoth.x < 1 && sharpOnly.x < 1,
+  `${sharpBoth.x.toFixed(3)}x and ${sharpOnly.x.toFixed(3)}x`);
+check('AMPLITUDE alone does not harm — the prediction this run refuted', ampOnly.x > 1,
+  `amplitude-only reads ${ampOnly.x.toFixed(3)}x`);
+check('a SOFTER edge than the commissioning is not harmed either', softer.x > 1,
+  `edge 200 reads ${softer.x.toFixed(3)}x`);
 
 check('the arm is not made worse by anything the ladder ships',
   rep.best <= rep.base, `${rep.base.toExponential(3)} → ${rep.best.toExponential(3)}`);

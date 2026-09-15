@@ -36,7 +36,7 @@
  */
 import { ladder, announce } from './rigs/ladder.mjs';
 import { wbSpec } from './rigs/specs.mjs';
-import { deriveWindow, reportDistil, priceFrom, ridgeLadder, gainLadder, teacherReuse, carrier, teachLaps, teachAvg, dietN } from './rigs/distilkit.mjs';
+import { deriveWindow, reportDistil, priceFrom, ridgeLadder, gainLadder, teacherReuse, carrier, teachLaps, teachAvg, dietN, emitRow } from './rigs/distilkit.mjs';
 import { oracleConverge } from './rigs/oracleteach.mjs';
 import * as WB from './rigs/woodberry-rig.mjs';
 
@@ -224,13 +224,56 @@ const spec = { ...wbSpec,
 announce();
 const price = priceFrom();
 if (process.env.MIMO === '1') console.log('  pilotOpts + {"mimo":true}');
-const { rep, auto } = await ladder(spec);
+const { rep, auto, scoreOn } = await ladder(spec);
 // Closed the moment the ladder returns: `reportDistil`'s in-sample column re-runs every
 // training program, and that is SCORING rather than commissioning (plan §72).
 price.close({ dt: WB.DT, unit: 'min', rep });
 
 const { inSample } = await reportDistil({ rep, runs: distilRuns(),
   nFeat: OFFSETS.length * 2 + 1, auto });
+
+// ------------------------------------------- target 1, on a setpoint schedule it never scored
+/**
+ * TARGET 1's OWN BAR (plan §88.1), on the plant this project lost on for its whole history and
+ * now wins. The SAME commissioned weight vector — no refit — through `scoreOn`, which is the
+ * shared driver's own verify loop rather than a fourth copy of it (rule 61).
+ *
+ * The held-out program REVERSES THE ORDER OF THE TWO LOOPS: the shipped scenario steps channel 0
+ * at k = 0 and channel 1 at k = 1000, and this one steps channel 1 first. Magnitudes are held at
+ * 1, so it sits in the same input box, and the only thing that moves is WHICH INTERACTION the
+ * column has to ride out — which on a plant whose whole difficulty is its 2x2 coupling (RGA 2.01,
+ * measured with no model in the route) is the axis a transfer claim has to survive.
+ */
+const heldSet = (k) => [k >= 1500 ? 1 : 0, 1];
+const heldRef = (k) => { const sp = heldSet(Math.min(k, WB.T_END - 1));
+  return WB.inputsFor(sp[0], sp[1]); };
+const heldFresh = () => { const c = WB.makeColumn(); const sp = heldSet(0);
+  const u = WB.inputsFor(sp[0], sp[1]); for (let i = 0; i < 3000; i++) c.step(u); return c; };
+const hOff = await scoreOn({ refAt: heldRef, fresh: heldFresh, N: WB.T_END }, { armed: false });
+const hOn = await scoreOn({ refAt: heldRef, fresh: heldFresh, N: WB.T_END });
+const xProg = rep.base / rep.best, xHeld = hOff.score / hOn.score;
+console.log(`\n  TARGET 1 — the SAME object on a setpoint schedule it never scored, no refit`);
+console.log(`    scored     channel 0 at k=0, channel 1 at k=1000   `
+  + `${rep.base.toExponential(3)} → ${rep.best.toExponential(3)}   ${xProg.toFixed(3)}x`);
+console.log(`    held out   channel 1 at k=0, channel 0 at k=1500   `
+  + `${hOff.score.toExponential(3)} → ${hOn.score.toExponential(3)}   ${xHeld.toFixed(3)}x`
+  + `   ${(xHeld / xProg).toFixed(3)} of the scored factor\n`);
+emitRow(rep, auto, { t1: xHeld / xProg, t1Worse: xHeld < 1 });
+check('target 1: the held-out schedule is not made worse', hOn.score <= hOff.score * 1.02,
+  `${hOff.score.toExponential(3)} → ${hOn.score.toExponential(3)} = ${xHeld.toFixed(3)}x`);
+/**
+ * AND THE BOUND IS PRINTED RATHER THAN ASSERTED, WHILE "NOT MADE WORSE" IS ASSERTED (plan §88.4).
+ * Target 1's 1.3x bound is measured as MISSED on three plants of seven — the Wood-Berry column at
+ * 0.339 of its scored factor, the extruder barrel, and the real flexible arm, which is made
+ * WORSE on two held-out programs of four. A suite pinned to a bar plants are known to fail is
+ * permanently red and hides the next real failure (rule 3), and this project does not redden the
+ * suite for target 4 either, which is missed on six plants of eight. What IS asserted is the
+ * MANDATE's own clause — nothing made worse — and the bound's verdict per plant is carried in
+ * `objtable.mjs`'s TARGET 1 column, where a count nobody can re-derive would otherwise become a
+ * preference (rule 30).
+ */
+console.log(`    TARGET 1's 1.3x BOUND: ${xHeld >= xProg / 1.3 ? 'MET' : 'NOT MET'} — the held-out `
+  + `schedule delivers ${(xHeld / xProg).toFixed(3)} of the scored factor`);
 
 // ---------------------------------------------------------------- the PUBLISHED comparison
 // THE LADDER SCORES AN RMS AND THE LITERATURE SCORES AN IAE, AND THEY ARE NOT THE SAME CLAIM

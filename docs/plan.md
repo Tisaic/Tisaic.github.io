@@ -20565,3 +20565,206 @@ which is a four-coefficient map of the reference's own rate and acceleration and
 program-agnostic by construction, so its ratio should be ~1.0. The real flexible arm refuses, so
 there is nothing to transfer. If any of those four comes back outside 1.3x, the screen is weaker
 than §87.6 says.
+
+# §88 — TARGET 1, MEASURED ON SEVEN PLANTS FOR THE FIRST TIME, AND THE VERIFY'S OWN CLOCK
+
+§87.8 named its own undone tenth step — *a second held-out program on each of the four new
+plants* — and wrote the prediction down. This section runs it, then follows where it leads: onto
+three more plants, onto the re-timing §87.4 found on the cart-pole and never checked elsewhere,
+and onto a failure that needed bisecting before it could be called anything.
+
+## §88.1 — `scoreOn`: THE SAME COMMISSIONED OBJECT ON A PROGRAM IT WAS NOT SCORED ON
+
+`test/pilot/rigs/ladder.mjs` returns `scoreOn({refAt, fresh, N}, {armed})` — the driver's OWN
+scored run, parameterised over the program. A harness hands back an alternate program and gets
+the same `auto.act`, the same `look`/`lookRaw` pair, the same 5% start transient dropped. It is
+not a fourth private copy of the loop, which is the fault `arm-rig.mjs` and `rigs/ladder.mjs`
+both exist to prevent (rule 61) and which `distil-tank.mjs` already paid for once by scoring a
+rung its own loop never applied. `armed: false` applies NOTHING rather than disarming the rungs,
+so the denominator belongs to that program and the commissioned object is never mutated to read
+a baseline.
+
+Target 1's bar is *within 1.3x of a controller commissioned on each program individually, on
+every program, with none made worse*. The cheap form costs ONE scored run per program: the same
+object, no refit, against the conventional machine on THAT program. It is the comparison the
+quadruple tank already carries (3.268x production against 2.657x on a recipe it was not chosen
+on). **STATED, because it bounds what the number is worth**: the comparator is the SCORED
+program's factor, not a per-program COMMISSION, so where the held-out factor is the larger the
+cheap form is LOOSER than the target.
+
+**AND THE FIRST VERSION OF THE CHECK WAS TWO-SIDED WHERE THE TARGET IS ONE-SIDED** (rule 19).
+What the target forbids is the held-out program delivering LESS; a program that is easier, and on
+which the same object reads a LARGER factor, satisfies it. Written symmetrically it duly went red
+on the real cascaded tanks at 8.694x against 12.515x — the object doing better than it was asked
+to.
+
+## §88.2 — THE VERIFY'S CLOCK, ON FOUR PLANTS: ONE WAS WRONG BY TEN, AND THE DEFAULT STAYS
+
+`verifyRef(i, n)` hands the caller the verify's own step budget, which invites exactly one idiom
+— `refAt(round(i * PROG / n))` — and four plants wrote it independently. That RE-TIMES the
+program by `PROG / n` and nothing stated the factor. §87.4 found it at **22x SLOWED** on the
+cart-pole, where the gate was scoring a machine fourteen times worse than the one that runs.
+`pilot.js` now reports `report.verifyRegimes.steps`, `rigs/specs.mjs` carries `verifyIndex` and
+`verifyStretch`, every one of the four plants PRINTS its factor, and `VREF=natural|resample|legacy`
+makes the clock a knob (rule 61: four private copies of a re-timing nobody had measured).
+
+**WOOD-BERRY'S WAS WRONG BY A FACTOR OF TEN.** `T_END` is 3000 STEPS and `setpointAt` takes a
+step index, so `T_END / DT` is 30,000 — the resampling mapped the budget onto ten program
+lengths. Its scenario is two steps (channel 0 at k = 0, channel 1 at k = 1000), so the second
+step landed at i = n/30 instead of n/3 and the regime was **29/30 a constant hold at [1, 1]** — a
+steady state, on the plant whose whole difficulty is its interaction during a transition.
+
+```
+  Wood-Berry          verify ratio    delivered IAE     u peak
+    legacy  1.250x        0.01x          43.90          0.000
+    resample 0.125x       0.14x          43.90          0.000
+    natural  1.000x       0.01x          43.90          0.000
+  extruder barrel
+    resample 0.291x       0.22x          1.00x (refused)
+    natural  1.000x       0.21x          1.00x (refused)
+```
+
+**On both, the clock is INERT: same verdict, same delivered number.** So the units repair changes
+nothing that ships, which is what says it repaired an instrument (rule 21).
+
+**AND THE TANK SAYS DO NOT CHANGE THE DEFAULT, WHICH IS THE OPPOSITE OF WHAT I EXPECTED.** Its
+resampling is 0.461x — 2.2x SLOWED — and it is LOAD-BEARING AND BENEFICIAL:
+
+```
+  quadruple tank, 8 commissioning seeds
+    resample (2.2x slowed, the default)   3 of 8 deploy, ALL THREE HELP   worst draw 1.000x
+    natural  (the program's own rate)     6 of 8 deploy, TWO HARM         worst draw 0.831x
+```
+
+The tank's own standing check — *no commissioning draw makes this plant worse than leaving it
+alone* — catches it and goes red under `natural`. So the gate this file credits with correlation
+0.989 is partly the re-timing, and there is **no single right clock**: `natural` ships on the
+cart-pole because there the factor was 22x and the gate was scoring a broken machine; `resample`
+stays everywhere else because it is measured as inert on two plants and better on the third. The
+factor is now printed on every one of them, which is the part that could not be read before.
+
+## §88.3 — THE REAL FLEXIBLE ARM FAILS TARGET 1, AND THE BISECTION REFUTED MY OWN PREDICTION
+
+This plant refuses the deployed object eight ways (§86.3) and ships the CONVENTIONAL rung at
+1.93x. Asked for a second program, the shipped rung makes it WORSE — the first target-1 failure
+in this project. A failure with two variables in it is not a finding, so it was bisected; the
+variables were measured first, with no machine run: edge 96 reads amp 5.54e+0 against the
+shipped 1.60e+1 and peak |v| 2.16e-1 against 3.75e-1, at 15.4% of the drive against 16.8% — so
+neither saturating nor a rate-limit artefact.
+
+```
+  scored program   lap 512 edge 160 amp 1.60e+1   1.851e-1 -> 9.606e-2   1.927x
+  edge  96, own amp     (shape + amplitude)       1.137e-1 -> 1.295e-1   0.877x   0.455 of scored
+  edge  96, SHIPPED amp (shape only)              3.273e-1 -> 3.553e-1   0.921x   0.478
+  edge 160, 0.35x amp   (amplitude only)          6.475e-2 -> 5.618e-2   1.152x   0.598
+  edge 200, own amp     (SOFTER than commission)  2.573e-1 -> 9.109e-2   2.825x   1.466
+```
+
+**THE PREDICTION WAS WRITTEN DOWN FIRST AND THE MACHINE REFUTED IT** (rule 59 doing its job). It
+said: the basis is `[a, v, sign v, 1]` and two of its four terms are AMPLITUDE-INDEPENDENT, so
+*the amplitude-only row harms and the shape-only row does not*. It is the other way round — the
+amplitude-only row still HELPS at 1.152x and the shape-only row harms at 0.921x. **It is the
+edge, not the size**, and the ordering is monotone in edge width with a SOFTER edge reading
+2.825x, better than the commissioned program's own 1.927x. That is consistent with the one thing
+this plant is known for: identified modes decaying about **1.03x per cycle**, fifty times lighter
+than the lattice arm, so a sharper edge puts more of the program's energy near them. The
+mechanism is a hypothesis; the ordering is the measurement, and the checks assert the ordering
+rather than the target (rule 3: a suite pinned to a bar a plant is measured as failing is
+permanently red and hides the next real failure).
+
+## §88.4 — THE COLUMN AND THE BARREL, AND WHY THE BOUND IS PRINTED RATHER THAN ASSERTED
+
+```
+  Wood-Berry column   scored: ch0 at k=0, ch1 at k=1000   1.364e-1 -> 3.445e-2   3.959x
+                      held out: ch1 first, ch0 at k=1500  1.071e-1 -> 7.985e-2   1.342x  0.339
+  extruder barrel     scored   180/200/210 -> ... -> 190/208/218  5.271e+0 -> 7.533e-1  6.997x
+                      held out 186/204/214 -> ... -> 180/200/210  4.040e+0 -> 1.471e+0  2.747x  0.393
+```
+
+Both still HELP — nothing is made worse — and both are well under 1/1.3 of their scored factor.
+The column's held-out program REVERSES THE ORDER OF THE TWO LOOPS, which on a plant whose whole
+difficulty is its 2x2 coupling (RGA 2.01, measured with no model in the route) is the axis a
+transfer claim has to survive.
+
+So target 1's bound is missed on three plants of seven. Every harness now ASSERTS the mandate's
+own clause — nothing made worse — and PRINTS the bound's verdict, because this project does not
+redden the suite for target 4 either, which is missed on six plants of eight, and because the
+per-plant verdict is carried in `objtable.mjs`'s TARGET 1 column where it can be re-derived
+rather than believed (rule 30).
+
+## §88.5 — THE FLAGSHIP PLANT JOINS THE MANDATE TABLE, WITH ITS DENOMINATORS MATCHED
+
+`distil-arm.mjs` is an INSTRUMENT with three dozen knobs and was never registered in
+`test/run.sh`, so the 2R arm — the plant more of this project's numbers are quoted on than any
+other — was the one row `objtable` could never read, and §87.1b duly printed
+`NOT EMITTED: distil-arm`. At its defaults it runs the host's own shipped configuration in
+**231 s**, cheaper than four of the harnesses already registered. It is registered now, and its
+two held-out programs (the rounded rectangle and the circle, in no diet) are scored by DEFAULT
+rather than behind `HELDOUT=1`, because they ARE target 1 and leaving the flagship out of a count
+seven other plants carry would make the count a preference.
+
+**AND ITS DENOMINATORS NEARLY DID NOT MATCH** (rule 19). `scoreSet` scores each run BARE
+machine → policy while `rep.base / rep.best` is over the CONVENTIONAL machine — two different
+references, and dividing one by the other would have produced a target-1 ratio with a baseline
+change hidden inside it. The SQUARE is scored through the same `scoreSet` path, so every factor
+in the comparison shares one denominator.
+
+## §88.6 — TARGET 1 AS A COLUMN IN THE MANDATE TABLE
+
+Every harness emits its own ratio through `emitRow`, and `objtable --read` prints a TARGET 1
+column beside what each plant ships. It is REPORTED and not asserted, for §88.4's reason, and a
+plant whose harness does not ask reads `not asked` rather than dropping out of the count
+(rule 25) — the COLD MILL is that plant and deliberately so: its `refAt` is a constant, because
+it is a REGULATOR whose setpoint never moves, so "a second program" is not a thing this plant
+has and inventing one would be measuring the harness.
+
+## §88.7 — AND §84.9's SCREEN PREDICTS TARGET 1 AS WELL AS THE WINDOW RULE
+
+§84.9 read `prog/rise` — how many of the plant's own response times its program contains — off
+five plants and licensed a screen: *under about ten response times per program, expect to need a
+diet and a re-derived window*. §87.6 took it to nine points. Target 1 was measured on seven
+plants after that screen was written, and it lines up with it:
+
+```
+  plant        prog/rise   target 1 ratio   verdict
+  realexch         80.0        1.271         MET
+  pend             31.6        0.950         MET
+  realtanks        20.2        1.440         MET
+  ───────────────────── the screen's split ─────────────────────
+  quad tank         7.9        0.813         MET        <- the exception
+  column            7.6        0.339         NOT MET    (still helps at 1.342x)
+  barrel            5.2        0.393         NOT MET    (still helps at 2.747x)
+  ───────────────────── no prog/rise on file ───────────────────
+  2R arm (lattice)    —        1.330         MET        <- BETTER on both it never ran
+  realarm             —        0.455         NOT MET, and 2 of 4 held-out programs MADE WORSE
+```
+
+**Three of three above the split meet it; two of three below it miss it; the quadruple tank is
+the exception and the real arm, whose rise is unmeasurable and whose INVERSE reads 128.3%, fails
+hardest.** Six points and one exception is a correlation and not a law, and it is stated as one.
+
+**AND THE FLAGSHIP PLANT IS THE CLEANEST ROW OF THE EIGHT, WITH ITS DENOMINATORS MATCHED
+(plan §88.5).** The 2R arm reads **10.88x on the rounded rectangle and 15.94x on the circle
+against 8.18x on the sharp square it was scored on** — every factor over the BARE machine, so
+the comparison has one reference — which is the ordering a plant MODEL produces and the opposite
+of a memory's: better on the two programs it has never run than on the one it was commissioned
+against. Five of eight plants meet target 1's bound; one of eight has a program made worse.
+What it adds to the screen is a second consequence from the same number: a plant whose program
+contains few of its own response times needs a window that reaches its memory, and a window that
+reaches its memory spans the program — so the map reads WHERE IT IS rather than WHAT IS
+COMMANDED, which is exactly the failure mode target 1 measures. §41's aliasing theorem and
+target 1's bound are the same constraint seen from two sides.
+
+NOT CLAIMED: one held-out program per plant (four on the real arm), one seed, one diet each; the
+comparator is the scored program's factor rather than a per-program commission, which is the
+stronger test and costs a second commissioning per plant.
+
+### §88.2b — AND THE HELPERS MOVED, FOR A MEASURED REASON
+
+`verifyIndex` and `verifyStretch` lived in `rigs/specs.mjs` for about an hour. That module
+RE-IDENTIFIES four plants from their published records at load, so importing it costs **5.4 s**
+and drags the real flexible arm, the real cascaded tanks and the real steam exchanger into three
+plant tests that have nothing to do with them — 16 s of suite time and three new couplings for
+two pure functions. They are in `rigs/verifyclock.mjs` now, which imports nothing and loads in
+0.04 s. Rule 2 aimed at an import, and the general form is worth keeping: **rule 61's remedy does
+not require the shared thing to live in the largest module that happens to be shared.**

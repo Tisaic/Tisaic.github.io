@@ -1009,9 +1009,43 @@ if (process.env.PLANTSPAN && host.auto.deployed.distil) {
 // HELDOUT=1: score the deployed policy on the two programs no diet contains — the rounded
 // rectangle and the circle — so a diet that lifts the square can be told from one that memorises
 // its edges (plan §52.27).
-if (process.env.HELDOUT === '1' && host.auto.deployed.distil) {
+/**
+ * AND THE HELD-OUT PROGRAMS ARE NOW SCORED BY DEFAULT, BECAUSE THEY ARE TARGET 1 (plan §88.4).
+ * §52.27 added this as an opt-in diagnostic about DIETS; it is the same measurement target 1
+ * asks of every other plant here — *within 1.3x of a per-program commission on EVERY program,
+ * none made worse* — and leaving the project's flagship plant out of that count while seven
+ * others carry it would make the count a preference (rule 30). `HELDOUT=0` is the control.
+ *
+ * THE DENOMINATORS MUST MATCH AND THEY NEARLY DID NOT (rule 19). `scoreSet` scores each run
+ * BARE machine → policy, while `rep.base / rep.best` is over the CONVENTIONAL machine — two
+ * different references, and dividing one by the other would have produced a target-1 ratio with
+ * a baseline change hidden inside it. The SQUARE is therefore scored through the SAME `scoreSet`
+ * path as the two held-out programs, so every factor in the comparison shares one denominator.
+ */
+let t1Arm = null, t1Worse = false;
+if (process.env.HELDOUT !== '0' && host.auto.deployed.distil) {
   console.log('\n  held-out programs, the deployed policy against the bare machine:');
-  await scoreSet('held-out', host.auto.distil, heldOut, heldNames);
+  const hs = await scoreSet('held-out', host.auto.distil, heldOut, heldNames);
+  const sq = await scoreSet('scored  ', host.auto.distil,
+    await host.distilRuns({ paths: [path] }), ['sharp square']);
+  const xs = (hs || []).filter((x) => Number.isFinite(x) && x > 0);
+  const xSq = (sq || []).filter((x) => Number.isFinite(x) && x > 0)[0] || null;
+  if (xs.length && xSq) {
+    const worstX = Math.min(...xs);
+    t1Arm = worstX / xSq; t1Worse = worstX < 1;
+    console.log(`\n  TARGET 1 — the same object on ${xs.length} programs no diet contains, every `
+      + `factor over the BARE machine so the denominators match:`);
+    console.log(`    worst held-out ${worstX.toFixed(3)}x against the scored square's `
+      + `${xSq.toFixed(3)}x = ${t1Arm.toFixed(3)} of it`);
+    console.log(`    TARGET 1's 1.3x BOUND: ${t1Arm >= 1 / 1.3 ? 'MET' : 'NOT MET'}`
+      + `${worstX < 1 ? '   — and one of them is MADE WORSE' : ''}`);
+    // EMITTED AGAIN, because the row above is written where the ladder returns and target 1 is
+    // measured five hundred lines later. `objtable --read` keeps the LAST row a file emits, so
+    // this supersedes it with the same numbers plus the target-1 column rather than duplicating
+    // the plant (rule 25: a row without the column would read `not asked` and be wrong).
+    emitRow(rep, host.auto, { name: '2R arm (lattice, bench cell) — contour rms',
+      t1: t1Arm, t1Worse });
+  }
 }
 if (process.env.LEARN && host.auto.deployed.distil) {
   const before = await host.run(null, null);
