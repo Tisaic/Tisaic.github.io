@@ -366,9 +366,17 @@ Each of these is a claim that can be shown false, which is the only kind worth w
    edge reads **2.825x, better than the commissioned program itself**. Monotone in edge width on
    the one plant here whose modes decay 1.03x per cycle.
 
-   **THE MILL IS THE ONE PLANT NOT ASKED AND THAT IS DELIBERATE (rule 25)**: its `refAt` is a
-   constant because it is a REGULATOR whose setpoint never moves, so "a second program" is not
-   something this plant has and inventing one would measure the harness. **NOT CLAIMED**: one
+   **THE MILL READS NOT ASKED, AND THE REASON THIS FILE FIRST GAVE FOR IT WAS WRONG (plan §88.6).**
+   It said the exclusion was deliberate because a REGULATOR's setpoint never moves, so a second
+   program is not something this plant has. The premise is true and the conclusion does not
+   follow: a regulator has no second TRAJECTORY and plainly has a second OPERATING POINT — a
+   different target gauge, a different line speed — and *does the object hold where it was not
+   commissioned* is target 1's question in the form this plant can be asked it. Writing "not
+   applicable" over "not measured" is rule 25 itself, committed two sentences after citing it.
+   It is an OPEN ITEM now, with the prediction on record: a gauge change should be met
+   comfortably, because the win is provably all of one DECLARED roll phase and a roll phase is a
+   property of the shaft; a LINE SPEED change should not, because it moves the transport delay
+   the whole result rests on and that delay is declared at commissioning rather than re-measured. **NOT CLAIMED**: one
    held-out program per plant (four on the real arm), one seed, one diet each, and the comparator
    is the SCORED program's factor rather than a per-program COMMISSION — the stronger test, which
    costs a second commissioning per plant. Where the held-out factor is the larger, the cheap form

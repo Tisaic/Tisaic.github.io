@@ -20714,9 +20714,27 @@ in the comparison shares one denominator.
 Every harness emits its own ratio through `emitRow`, and `objtable --read` prints a TARGET 1
 column beside what each plant ships. It is REPORTED and not asserted, for §88.4's reason, and a
 plant whose harness does not ask reads `not asked` rather than dropping out of the count
-(rule 25) — the COLD MILL is that plant and deliberately so: its `refAt` is a constant, because
-it is a REGULATOR whose setpoint never moves, so "a second program" is not a thing this plant
-has and inventing one would be measuring the harness.
+(rule 25) — the COLD MILL is that plant, and the reason first written here was TOO QUICK and is
+corrected below.
+
+**THE MILL'S EXCLUSION IS A SELF-CORRECTION, BECAUSE THE FIRST REASON GIVEN WAS RULE 25's OWN
+FAILURE IN A NEW COSTUME.** It read: *its `refAt` is a constant, because it is a REGULATOR whose
+setpoint never moves, so "a second program" is not a thing this plant has and inventing one would
+be measuring the harness.* The first clause is true and the conclusion does not follow. A
+regulator has no second TRAJECTORY; it plainly has a second OPERATING POINT — a different target
+gauge, a different line speed, a different entry-wander realisation — and *does the commissioned
+object hold at an operating point it was not commissioned at* is target 1's question in the only
+form this plant can be asked it. Writing "not applicable" over "not measured" is exactly what
+rule 25 forbids, and this file had done it while arguing rule 25 two sentences earlier.
+
+So the mill reads NOT ASKED and is an open item rather than an exclusion. **PREDICTION, first
+(rule 59)**: the object's win there is provably ALL of one declaration — withhold the roll phase
+and it is inert at exactly 1.000x (§71) — and a roll phase is a property of the SHAFT rather than
+of the setpoint, so a change of target gauge should leave the correction's mechanism untouched
+and target 1 should be met comfortably. A change of LINE SPEED should not, because it moves the
+transport delay the whole result rests on, and that delay is DECLARED at commissioning rather
+than re-measured. If the gauge axis fails, the §71 account is wrong; if the speed axis fails, the
+declaration is a commissioning-time constant the product has been treating as a plant constant.
 
 ## §88.7 — AND §84.9's SCREEN PREDICTS TARGET 1 AS WELL AS THE WINDOW RULE
 
