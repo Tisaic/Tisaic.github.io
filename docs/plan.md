@@ -20527,6 +20527,19 @@ gain axis scores up to eleven, each one a 40-lap run. It is the first time the v
 dominant term anywhere, and it is a direct consequence of §86.6's edge extension being allowed to
 walk six steps on a plant where every step is a long run.
 
+### §87.1b — AND ITS FIRST SUITE RUN EXPOSED THE FAULT IT WAS BUILT TO AVOID
+
+The check ran green inside `--all --full` on its first pass — **9 rows read, 7 shipping the
+deployed object, none made worse** — and printed `read 9 row(s)` without saying anything about the
+tenth. `distil-arm.mjs` is an INSTRUMENT and is not registered in `test/run.sh`, so its row is
+legitimately absent; a table that prints a count and not the absence is "not measured rendered as a
+shorter table", which is the exact thing this reader exists to stop (rule 25). It names absentees
+now — `NOT EMITTED: distil-arm (not run in this pass)` — and does not fail on them, because a
+harness the suite never runs is not evidence about a plant in either direction.
+
+The same line also shows the filter working: **9 rows kept of 18 emitted**, the other nine being
+`plants.test.mjs` driving four of the same plants through the same driver and scoring the TEACHER.
+
 ## §87.8 — WHAT THIS PASS DID NOT RUN, AND WHY (rule 25, rule 59)
 
 The tenth step of §87 was *a second held-out program on each of the four new plants* — target 1's

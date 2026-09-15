@@ -135,7 +135,18 @@ if (READ) {
     seen.set(r.file, r);                                   // the LAST row a file emitted wins
   }
   const got = [...seen.values()].sort((a, b) => a.file.localeCompare(b.file));
-  console.log(`  read ${got.length} row(s) from ${lines.length} emitted\n`);
+  // WHICH HARNESSES DID NOT EMIT, NAMED (rule 25). The first suite run of this check read "9
+  // row(s)" and said nothing about the tenth: `distil-arm.mjs` is an INSTRUMENT and is not
+  // registered in `test/run.sh`, so its row is legitimately absent — but a table that prints a
+  // count without naming what is missing is exactly the "not measured rendered as a shorter
+  // table" this reader exists to avoid. An absence is reported and does NOT fail, because a
+  // harness the suite never runs cannot be evidence about a plant either way.
+  const EXPECT = PLANTS.map((q) => (q.file || '').replace(/\.mjs$/, ''))
+    .filter((f, i, a) => f && a.indexOf(f) === i);
+  const missing = EXPECT.filter((f) => !seen.has(f));
+  console.log(`  read ${got.length} row(s) from ${lines.length} emitted`
+    + (missing.length ? `  —  NOT EMITTED: ${missing.join(', ')} (not run in this pass)` : '')
+    + '\n');
   console.log('  harness                     ships                 base -> best            '
     + '  x      MAC   kB     ②d');
   let bad = 0;
