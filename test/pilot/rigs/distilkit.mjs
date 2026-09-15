@@ -119,8 +119,25 @@ const human = (s) => (s < 90 ? `${s.toFixed(0)} s`
  *
  * **1.0 IS IN THE GRID**, so a plant with no gain deficit picks it and is byte-identical, which is
  * what makes this a measurement rather than a tuning (rule 21). `GAINS=none` is the control.
+ *
+ * AND THE GRID IS NOW TWO-SIDED, BECAUSE THE ONE-SIDED ONE WAS ANSWERING A QUESTION IT COULD NOT
+ * ASK (plan §84.6). §79 recorded that "the mill, column, barrel and arm all pick 1.0 and come back
+ * byte-identical" and read that as four plants with no gain deficit. For three of them 1.0 was the
+ * TOP OF THE GRID, so the pick was an EDGE and not an optimum — the exact fault §79 itself named
+ * when it widened the arm's grid above 1 and then left every other plant's one-sided. Widened:
+ *
+ *     plant     0.85     1.0      1.15     1.3      picks   delivered
+ *     mill     6.35e-3  5.86e-3  6.10e-3  6.97e-3   1.00    2.625x  <- a real interior optimum
+ *     column   4.73e-2  3.74e-2  3.45e-2  4.16e-2   1.15    3.643x -> 3.959x
+ *     barrel   1.39e+0  8.62e-1  7.53e-1  1.19e+0   1.15    6.116x -> 6.997x
+ *     tank     1.55e-1  1.95e-1  2.62e-1  3.41e-1   0.85    2.593x -> 3.268x
+ *
+ * So THREE of four plants want a gain off 1.0 and TWO of them want it ABOVE — the opposite of what
+ * a one-sided grid could ever have found — and only the mill's 1.0 is an optimum rather than an
+ * edge. The grid keeps 1.0, drops 0.5 (worst on all four by a wide margin, and never picked), and
+ * reaches 1.3; the cost is one more scored run than §79 priced.
  */
-const DEFAULT_GAINS = [0.5, 0.72, 0.85, 1];
+const DEFAULT_GAINS = [0.72, 0.85, 1, 1.15, 1.3];
 function gainLadder(env = process.env.GAINS) {
   if (env === 'none' || env === '0') return null;
   if (!env || env === '1' || env === 'default') return DEFAULT_GAINS;

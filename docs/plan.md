@@ -19376,3 +19376,112 @@ runs sees these drifts at the same factor they cost: at drive 8 the probe reads 
 the control's 1.13e-2, a factor of 4.1 against the policy's own 3.9x loss. The object still has no
 plant-side guard and cannot tell the machine changed (§82 built one and refuted it), so detection
 remains external — and it works.
+
+---
+
+## §84.5 — WHAT A SECOND PROGRAM COSTS, ON ALL FOUR PLANTS — AND THE ANSWER A CUSTOMER GETS IS ZERO
+
+`test/pilot/progcost.mjs`. §72.12's split is the most useful thing in that section — *the plant is
+characterised ONCE and each new program after that costs a fraction of it* — and it measured two
+plants of four. Every harness has been PRINTING the split all along (`priceFrom` emits `the
+teacher, per training run: 0: … · 1: …`), so this is a SCRAPE like `commtime.mjs` and no plant is
+re-scored by a metric this file invented.
+
+```
+  plant         product total   ONCE per plant   + per program ADDED   marginal share
+  cold mill       58.8 min        29.2 min            9.9 min           17%
+  quad tank         38.1 h          26.4 h              3.9 h           10%
+  Wood-Berry     32.1 days       20.1 days           4.0 days           12%
+  barrel         35.3 days       21.1 days           4.7 days           13%
+
+  where it goes (the report's own split, not re-derived):
+    cold mill    teacher 81%  ·  verify 19%
+    quad tank    teacher 56%  ·  verify 44%
+    Wood-Berry   teacher 82%  ·  verify 18%
+    barrel       teacher 84%  ·  verify 16%
+```
+
+**ADDING ONE MORE PROGRAM TO THE DIET COSTS 10-17% OF THE COMMISSIONING, ON ALL FOUR PLANTS.** The
+spread is narrow across plants that share no physics and whose bills differ by 900x, which is what
+makes it a property of the method: run 0 pays probe sizing, the probe set, the trial sweep and the
+refinement, and every run after it REUSES the operator (§72.6) and pays the refinement alone.
+§72.12's column figures (59.2 then 7.5 days) are superseded by the cost work of §72.6-§72.17 —
+the column now reads 14.4 then 4.0 — and the RATIO is what survives.
+
+**AND THE NUMBER A CUSTOMER ACTUALLY PAYS FOR A NEW PART IS ZERO, which is the sentence that
+should be quoted.** The deployed object is a map of the commanded reference and is program-agnostic
+by construction — that IS target 1, and §50 and §75 measure it transferring to programs no diet
+contained. A program inside the trained envelope costs no lap, no refit and no download. The
+per-program column is what a DIET ENLARGEMENT costs, which is what you pay when transfer is *not*
+good enough, and that is a different event from a new part arriving. Quoting the marginal column
+as "the cost of a new program" would overstate the bill by infinity; quoting zero alone would hide
+what the fallback costs. **Both belong in the same sentence, and the instrument prints both.**
+
+**THE TANK'S VERIFY SHARE IS THE OUTLIER AND IT IS THE GAIN AXIS.** 44% against 16-19% on the other
+three, because the tank is the one plant that carries both machine-scored ladders at full width
+(§79 priced the gain axis at 16% of its bill). That is the cost of the two axes stated where it
+can be read rather than argued.
+
+---
+
+## §84.6 — THE GAIN QUESTION WAS MALFORMED: THREE PLANTS OF FOUR WANT A GAIN OFF 1.0, AND TWO WANT IT ABOVE
+
+§79 recorded that *the tank is the ONE plant of five with a gain deficit, the mill, column, barrel
+and arm all picking 1.0 and coming back byte-identical*, and offered two hypotheses for why: the
+tank is the plant whose ridge had to move four decades from the arm's, and it is the only one
+whose scored program is a setpoint SEQUENCE rather than a trajectory. **Both are dead, and so is
+the question.**
+
+**THE GRID STOPPED AT 1.0, SO THREE OF THOSE FOUR PICKS WERE EDGES AND NOT OPTIMA.** §79 named that
+exact fault when it widened the ARM's grid above 1 — *a one-sided grid cannot find an optimum at
+its own edge* — and then left every other plant's grid one-sided. Widened:
+
+```
+  plant     0.85      1.0       1.15      1.3       picks   delivered
+  mill     6.35e-3   5.86e-3   6.10e-3   6.97e-3    1.00    2.625x  <- a real interior optimum
+  column   4.73e-2   3.74e-2   3.45e-2   4.16e-2    1.15    3.643x -> 3.959x
+  barrel   1.39e+0   8.62e-1   7.53e-1   1.19e+0    1.15    6.116x -> 6.997x
+  tank     1.55e-1   1.95e-1   2.62e-1   3.41e-1    0.85    2.593x -> 3.268x
+```
+
+**Only the mill's 1.0 survives as an optimum. The column gains 8.7% and the barrel 14.4%, both by
+applying MORE than the fit asks for**, and the tank's 0.85 is confirmed with the grid open above
+it. `DEFAULT_GAINS` is now `[0.72, 0.85, 1, 1.15, 1.3]` — 1.0 kept so a plant with no offset is
+still byte-identical (rule 21, and the mill duly is), 0.5 dropped because it is worst on all four
+by a wide margin and was never picked, and the cost is one more scored run than §79 priced. All
+four harnesses are green.
+
+### Both of §79's hypotheses are refuted by the same scrape, with no new run
+
+**(a) DISTANCE OF THE RIDGE FROM THE ARM's IS NOT IT.** The picked ridges are mill **1**, barrel
+**1**, tank **0.1**, column **1e-3** — so the mill and the barrel sit SIX decades from the arm's
+`1e-6`, further than the tank's five, and they pick gains 1.00 and 1.15. The plant with the least
+extreme ridge of the three is the one that wants shrinking.
+
+**(b) SETPOINT SEQUENCE AGAINST TRAJECTORY IS NOT IT EITHER.** The barrel's scored program is a
+four-recipe setpoint sequence and the column's is setpoint steps; both want 1.15.
+
+### What the four points do line up with, offered as a hypothesis and not a result
+
+The gain optimum runs **monotonically against the fit's own held-out R²**:
+
+```
+  tank     held-out 0.993 / 0.991    gain 0.85    shrink
+  mill              0.857            gain 1.00
+  barrel            0.852/0.868/0.761 gain 1.15   amplify
+  column            0.686/0.463      gain 1.15    amplify
+```
+
+A reading that fits it: **the ridge and the gain are two ends of one knob.** A heavily-ridged fit
+is SHRUNK toward zero by its own regulariser, and the machine wants some of that back — a gain
+above 1 undoes excess ridge shrinkage. The tank's fit is barely shrunk at all (R² 0.99, it
+essentially interpolates its diet) and the machine wants it damped, because a map confident about
+the DIET is not thereby confident about production. That is this project's own recurring shape —
+two regularisers of one inversion, exactly as `qpIters` and `lambda` are (§6) — arriving on the
+distillation route.
+
+**NOT CLAIMED: four points, one seed each, and the R² values are not commensurable across plants
+with different channel counts.** The falsifier is cheap and is the next thing to run on this axis:
+if ridge and gain are one knob, a JOINT ladder should find a cell better than either alone and
+should show a ridge-gain valley rather than a single optimum. If they are independent, the joint
+ladder returns the product of the two separate picks.
