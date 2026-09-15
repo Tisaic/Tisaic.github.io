@@ -124,6 +124,40 @@ console.log(`\ndistil on the arm through the ladder — K ${K} / E ${E}, sharp s
 const t0 = Date.now();
 const m0 = await machine({ K, E });
 const centre = m0.arm.ik(12, 0, true);
+
+// THE COMMANDED JOINT SPEED SCALE, DERIVED FROM THE REFERENCE AND NOT FROM THE PLANT (plan §84.7).
+//
+// A reference-correlated disturbance has to be normalised by something, and §81's first attempt
+// failed because it was sized against the wrong quantity (rule 17) — as did this one's: scaling a
+// viscous drag by `servo.speedMax` moved the machine 0.08%, because `speedMax` is a rate limit in
+// rad/step of a different order from the per-step joint motion a 4e-3 feed actually produces.
+//
+// So the scale is taken from the COMMANDED JOINT REFERENCE of the scored program — the 99th
+// percentile of |Δq₁| over one lap. That is a property of the REFERENCE, which is exactly the
+// signal the deployed map reads, so a disturbance normalised by it stays a function of what the
+// map can see; it is not a plant constant and nothing about the machine enters it (rule 31).
+const QV0 = (() => {
+  const d = [];
+  let prev = m0.arm.ik(path.at(0).x, path.at(0).y, true)[0];
+  for (let k = 1; k < LAP; k++) {
+    const c = path.at(k), q = m0.arm.ik(c.x, c.y, true)[0];
+    d.push(Math.abs(q - prev)); prev = q;
+  }
+  d.sort((a, b) => a - b);
+  return Math.max(1e-12, d[Math.floor(0.99 * (d.length - 1))]);
+})();
+/** The same scale for the commanded joint ACCELERATION — the 99th percentile of |Δ²q₁| over a lap. */
+const QA0 = (() => {
+  const d = [];
+  let p2 = m0.arm.ik(path.at(0).x, path.at(0).y, true)[0];
+  let p1 = m0.arm.ik(path.at(1).x, path.at(1).y, true)[0];
+  for (let k = 2; k < LAP; k++) {
+    const c = path.at(k), q = m0.arm.ik(c.x, c.y, true)[0];
+    d.push(Math.abs(q - 2 * p1 + p2)); p2 = p1; p1 = q;
+  }
+  d.sort((a, b) => a - b);
+  return Math.max(1e-12, d[Math.floor(0.99 * (d.length - 1))]);
+})();
 const host = makeArmHost({
   makeMachine: async () => {
     const m = await machine({ K, E });
@@ -263,7 +297,8 @@ if (process.env.TRAINSHOVE) {
   // `rand`: on/off in blocks of an eighth of a lap with a random sign, redrawn per block, so it is
   // uncorrelated with the reference BY CONSTRUCTION and the map has nothing to key on.
   let blk = -1, amp = 0;
-  const trainShove = (nn, lap, tau) => {
+  let qPrev = 0, qP1 = 0, qP2 = 0;
+  const trainShove = (nn, lap, tau, qRef) => {
     // `payload`: the machine is carrying something it was not commissioned with, so the torque
     // ACTUALLY REQUIRED scales up. Injecting a fraction of the commanded torque is scale-free —
     // no constant in the plant's units — and it is REFERENCE-CORRELATED in the only sense that
@@ -275,6 +310,41 @@ if (process.env.TRAINSHOVE) {
     // different region of reference-space on each one. Phase-locked is not reference-correlated —
     // the retirement's own lesson arriving inside a disturbance (plan §83.3).
     if (tk === 'payload') return [tmag * (tau ? tau[0] : 0), 0];
+    // `drag`: A VISCOUS LOAD THE MACHINE WAS NOT COMMISSIONED WITH — a stiff way, a dragging
+    // cover, a coolant seal. This is #53's design and it is the one §83.2 could not express
+    // (plan §84.7). It is a function of the COMMANDED JOINT VELOCITY, which the host now hands
+    // over, so it is:
+    //   REFERENCE-CORRELATED — the same function of the reference on every program, unlike a lap
+    //     fraction, which is a different region of reference-space on each polygon of the diet;
+    //   EXPRESSIBLE — the map's window already carries the commanded reference at many offsets,
+    //     so a difference of two taps IS a velocity and a linear map can form it exactly;
+    //   SCALE-FREE — normalised by `QV0`, the 99th percentile of the commanded joint speed of
+    //     the REFERENCE itself, so no plant number enters (rule 31);
+    //   LARGE ENOUGH — `tmag` is a fraction of tauMax, sized inside §81's own envelope where the
+    //     machine still works (0.25-0.5), which is what §83.3's 0.8% payload was not.
+    if (tk === 'drag') {
+      const v = qRef ? (qRef[0] - qPrev) : 0;
+      if (qRef) qPrev = qRef[0];
+      return [tmag * tTau * Math.max(-1, Math.min(1, v / QV0)), 0];
+    }
+    // `inertia`: THE PAYLOAD CHANGED — the machine is carrying a mass it was not commissioned
+    // with, so the torque actually required rises in proportion to the commanded ACCELERATION.
+    // This is the discriminating design and `drag` above is why it had to exist (plan §84.7): a
+    // viscous load is absorbed by the position loop's own velocity feedback and moved the
+    // conventional machine 0.9%, which cannot separate anything. An inertial load peaks at the
+    // corners and REVERSES SIGN there, which a PD cannot absorb — and a linear map of the
+    // commanded reference forms it from a SECOND difference of three taps, so it is predictable
+    // by exactly the object under test.
+    if (tk === 'inertia') {
+      const a = qRef ? (qRef[0] - 2 * qP1 + qP2) : 0;
+      if (qRef) { qP2 = qP1; qP1 = qRef[0]; }
+      // NEGATIVE: carrying an unaccounted mass CONSUMES accelerating torque, it does not
+      // supply it. The first version had this sign backwards and the machine said so —
+      // the conventional arm got 10% BETTER under it, because a positive term is an
+      // inertia feedforward and not a payload (rule 14: a surprising measurement checks
+      // the instrument, and this instrument was mine).
+      return [-tmag * tTau * Math.max(-1, Math.min(1, a / QA0)), 0];
+    }
     if (tk === 'phase') {
       const f = ((nn % lap) + lap) % lap / lap;
       return (f >= ta && f < tb) ? [tmag * tTau, 0] : [0, 0];
@@ -284,9 +354,11 @@ if (process.env.TRAINSHOVE) {
     return [amp, 0];
   };
   host.setTrainDisturb(trainShove);
-  console.log(`\n  TRAINING WITH A ${tk === 'phase' ? 'REFERENCE-CORRELATED' : 'RANDOM'} DISTURBANCE: `
+  console.log(`\n  TRAINING WITH A ${tk === 'drag' || tk === 'payload' || tk === 'inertia' ? 'REFERENCE-CORRELATED' : tk === 'phase' ? 'PHASE-LOCKED' : 'RANDOM'} DISTURBANCE: `
     + `${(100 * tmag).toFixed(0)}% of tauMax on joint 1`
-    + (tk === 'payload' ? ` of the COMMANDED TORQUE — an unmodelled payload, and a function of what the reference already asks for`
+    + (tk === 'inertia' ? ` scaled by the COMMANDED JOINT ACCELERATION over its own 99th percentile — an unmodelled PAYLOAD, a second difference of three taps and so expressible by the map exactly`
+      : tk === 'drag' ? ` scaled by the COMMANDED JOINT VELOCITY over its own 99th percentile — a viscous load, which the position loop's velocity feedback largely absorbs`
+      : tk === 'payload' ? ` of the COMMANDED TORQUE — an unmodelled payload, and a function of what the reference already asks for`
       : tk === 'phase' ? `, on between lap fractions ${ta} and ${tb} — locked to LAP PHASE, which is not the same thing`
       : `, redrawn every lap/8 with random sign and duty — the reference CANNOT predict it`));
 }
@@ -731,8 +803,24 @@ if (process.env.SHOVE && host.auto.deployed.distil) {
   const LG = process.env.LOADGUARD;
   // The shove is on JOINT 1 only, because a disturbance that loads both joints in the ratio the
   // program already uses is a scaled command and not a disturbance at all.
-  const shove = (k, lap, tau) => {
+  let sPrev = 0, sP1 = 0, sP2 = 0;
+  const shove = (k, lap, tau, qRef) => {
     if (kind === 'payload') return [mag * (tau ? tau[0] : 0), 0];
+    // `drag` at SCORING time, so the same disturbance can be present in training and in the test
+    // — which is what makes the reference-correlated experiment a matched comparison rather than
+    // two different questions (rule 20). Same construction as `TRAINSHOVE=drag`.
+    if (kind === 'drag') {
+      const v = qRef ? (qRef[0] - sPrev) : 0;
+      if (qRef) sPrev = qRef[0];
+      return [mag * tauMax * Math.max(-1, Math.min(1, v / QV0)), 0];
+    }
+    // `inertia` at scoring time — the same construction, so training and test can carry the
+    // identical disturbance and the comparison is matched (rule 20).
+    if (kind === 'inertia') {
+      const a = qRef ? (qRef[0] - 2 * sP1 + sP2) : 0;
+      if (qRef) { sP2 = sP1; sP1 = qRef[0]; }
+      return [-mag * tauMax * Math.max(-1, Math.min(1, a / QA0)), 0];
+    }
     const kk = ((k % LAP) + LAP) % LAP;
     return (kk >= k0 && kk < k1) ? [mag * tauMax, 0] : [0, 0]; };
 
@@ -789,9 +877,10 @@ if (process.env.SHOVE && host.auto.deployed.distil) {
     for (let k = lo; k < Math.min(hi, ex.length); k++) p = Math.max(p, Math.hypot(ex[k], ey[k]));
     return p; };
   const evLen = Math.max(1, k1 - k0), rec0 = k1, rec1 = Math.min(LAP, k1 + 3 * evLen);
-  const hasRec = rec1 > rec0;   // a SUSTAINED load never ends, so it has no recovery window
+  // A SUSTAINED load and an all-lap DRAG never end, so neither has a recovery window.
+  const hasRec = rec1 > rec0 && kind !== 'drag' && kind !== 'payload' && kind !== 'inertia';
 
-  console.log(`\n  SHOVE — an unmodelled ${kind === 'payload' ? 'PAYLOAD (a fraction of the COMMANDED TORQUE, all lap)' : kind === 'load' ? 'LOAD (sustained)' : 'IMPULSE'} of `
+  console.log(`\n  SHOVE — an unmodelled ${kind === 'payload' ? 'PAYLOAD (a fraction of the COMMANDED TORQUE, all lap)' : kind === 'drag' ? 'VISCOUS DRAG (scaled by the COMMANDED JOINT SPEED over its own 99th percentile, all lap)' : kind === 'inertia' ? 'INERTIAL PAYLOAD (scaled by the COMMANDED JOINT ACCELERATION over its own 99th percentile, all lap)' : kind === 'load' ? 'LOAD (sustained)' : 'IMPULSE'} of `
     + `${(mag * 100).toFixed(1)}% of tauMax on joint 1, steps ${k0}-${k1} of ${LAP}:`);
   console.log(`    the applied correction is ${same ? 'BIT-IDENTICAL' : '*** NOT IDENTICAL ***'} `
     + `shoved against clean over ${t1.rec.length.toLocaleString()} decisions — `

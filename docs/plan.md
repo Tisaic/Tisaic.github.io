@@ -19485,3 +19485,80 @@ with different channel counts.** The falsifier is cheap and is the next thing to
 if ridge and gain are one knob, a JOINT ladder should find a cell better than either alone and
 should show a ridge-gain valley rather than a single optimum. If they are independent, the joint
 ladder returns the product of the two separate picks.
+
+---
+
+## §84.7 — A REFERENCE-CORRELATED DISTURBANCE, LARGE ENOUGH AT LAST: THE OBJECT IS ALREADY RIGHT FOR IT
+
+#53 asked for the thing §83 could not build. §83.2's phase-locked design failed for a reason worth
+more than a win — a lap FRACTION is a memory index, and the diet is four different polygons, so
+"fraction 0.30-0.55" is a different region of reference-space on each — and §83.3's scale-free
+payload was too benign at 0.8% to separate anything, which is a null about the test (rule 25).
+
+**THE HOOK NEEDED ONE ARGUMENT.** Both disturbance closures in `autohost.js` now receive the
+COMMANDED JOINT REFERENCE alongside the commanded torque, so a closure can difference it itself
+and build a drag, a payload or a cutting force — each a function of what the machine was ASKED to
+do, identical on every program, and formable by a linear map of the commanded reference. Every
+existing closure ignores the extra argument, so unset is byte-identical.
+
+### Two designs, and the first one failed usefully
+
+**`drag` — a viscous load ∝ commanded joint velocity.** Physically an obvious choice and it does
+not discriminate: at 25% of tauMax the CONVENTIONAL machine degrades **0.9%** (1.0717 → 1.0818).
+The reason is structural — a torque proportional to velocity is a damping term and the position
+loop's own velocity feedback absorbs most of it — so no controller comparison downstream of it can
+mean anything. (Its first version was worse still: normalised by `servo.speedMax` it moved the
+machine 0.08%, because `speedMax` is a rate limit of a different order from the per-step joint
+motion a 4e-3 feed produces. Rule 17, and the same fault §81's first `SHOVE` had.)
+
+**`inertia` — the payload changed, which is what the question actually meant.** The machine carries
+a mass it was not commissioned with, so the torque REQUIRED rises with commanded acceleration. It
+peaks at the corners and REVERSES SIGN there, which a PD cannot absorb; and a linear map forms it
+from a SECOND DIFFERENCE OF THREE TAPS, so it is predictable by exactly the object under test.
+
+**ITS FIRST VERSION HAD THE SIGN BACKWARDS AND THE MACHINE SAID SO (rule 14).** Injected positive,
+the conventional arm got **10% BETTER** under it — because a positive term is an inertia
+feedforward and not a payload. Carrying an unaccounted mass CONSUMES accelerating torque.
+
+### The three cells, at 50% of tauMax — the magnitude §81 measured the machine still working at
+
+```
+                                        conventional      policy      ratio
+  A  clean training, payload at score   1.0717 -> 1.1764   1.6181e-1 -> 1.6223e-1   6.62x -> 7.25x
+  B  TRAINED with it, payload at score  1.0717 -> 1.1764   1.6166e-1 -> 1.6209e-1   6.63x -> 7.26x
+  C  TRAINED with it, scored CLEAN                         1.6160e-1                6.63x
+```
+
+**THE PAYLOAD COSTS THE CONVENTIONAL MACHINE 10% AND THE POLICY 0.26%, SO THE POLICY'S ADVANTAGE
+RISES — 6.62x to 7.25x.** And training with it is INERT: 7.25x → 7.26x disturbed, 6.63x → 6.63x
+clean. There is nothing to learn because the object is already right.
+
+**THE MECHANISM IS THE OBJECT'S OWN FEATURES.** §52.16 put the rigid-body REFERENCE TORQUES in the
+map's regressor, which is why that section moved the arm at all. An inertial payload's extra torque
+is proportional to commanded acceleration — the same quantity — so the correction the map already
+applies is, to first order, already the right SHAPE for the heavier machine and only its scale is
+off. Being off by a scale on one term of a correction costs 0.26%.
+
+### Which completes §81's and §83's picture into one classification
+
+**The deployed object's tolerance to an unmodelled load is decided by whether the load is a
+function of the commanded reference.**
+
+```
+  REFERENCE-CORRELATED (inertial payload)   FREE — the advantage RISES, 6.62x -> 7.25x, and
+                                            training with it adds nothing at all
+  SUSTAINED / CONSTANT (§81)                COSTLY — 6.62x -> 3.62x at the same 0.5 tauMax,
+                                            because a constant is not a function of the reference
+  RANDOM (§83)                              A HEDGE — 19% of nominal for 19% under load,
+                                            reproducible by turning the applied gain down
+```
+
+That is a three-way split with a mechanism, and it says where DIS work on this object should go:
+not into showing it disturbances, but into the one class it cannot express — anything whose
+required correction is not a function of what the machine was asked to do.
+
+**NOT CLAIMED:** one plant, one cell, one seed, one joint, one magnitude. The inertial payload is
+injected on joint 1 only, because a load that pushes both joints in the ratio the program already
+uses is a scaled command rather than a disturbance. `drag` and `inertia` unset are byte-identical
+(checked), and the drag row is kept rather than deleted because "the loop absorbs it" is a finding
+about what a disturbance test must avoid.
