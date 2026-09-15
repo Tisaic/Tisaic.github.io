@@ -20247,3 +20247,28 @@ at every gain would walk the grid upward for ever.
 back byte-identical** — mill 2.62x at gain 1.0, tank 3.268x at 0.85, column 3.96x at 1.15, barrel
 7.00x at 1.15 (rule 21). What it is worth where it fires: the cart-pole 6.30x → 11.93x, the real
 tank 8.69x with an interior 0.314.
+
+## §86.8 — THE SHAKING LOAD CELL IS NOT A CONTROLLER ROW, AND SAYING SO IS THE DECISION
+
+The eleventh plant (§57) is a real load cell under sustained vibration, and the mandate asks that
+every plant be a legitimate winner or be struck with a reason. It is neither, and the reason is
+that it is not the same KIND of object.
+
+**There is no correction channel.** Every other plant here has something a controller can move —
+a gap, a voltage, a power, a position reference — and is scored on what the machine then does. The
+load cell has nothing to drive: the question is *what does the basket weigh*, and the answer is an
+ESTIMATE. `distil.js`'s object is a map of a window of the COMMANDED REFERENCE onto a correction,
+and there is no commanded reference here and no correction to make. Asking it would be asking a
+feedforward controller to do soft sensing, which is `lib/probesense/` and `lib/ngrc/`, and those
+have their own tests.
+
+So it stays in the record as a SENSING row and never as a controller win, with its own result
+intact: a learned window beats a CALIBRATED mean by **1.65x** (2.51 g → 1.52 g at K=32), the
+calibration itself earning its place at 1.39x so the comparison is against a real incumbent, held
+out by LOAD LEVEL, and it does NOT transfer between rigs (median 1.08x over 12 ordered pairs), so
+it ships self-commissioned or not at all. What it contributes to the product claim is the one thing
+nothing else here has — **its ground truth is free** — and that is a statement about INS, the
+instrument column, not about SET.
+
+`objtable.mjs` therefore does not list it, and this section is why: a table that counted it would
+be counting two different claims in one column, which is the fault §86.7 exists to stop.

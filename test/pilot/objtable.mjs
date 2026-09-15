@@ -26,7 +26,11 @@ import { spawnSync } from 'node:child_process';
 
 const PLANTS = [
   { key: 'arm', label: '2R arm (lattice, bench cell)', file: 'distil-arm.mjs' },
-  { key: 'emps', label: 'EMPS servo axis', file: 'distil-emps.test.mjs' },
+  // EMPS' harness ships the DEPLOYED OBJECT *and* the retired lap-periodic rung on top (§50.2's
+  // 342x composition), so its `shipped` line is not the object's own column. Its own harness
+  // prints that column — `home: table Ax  distilled Bx` — and B is what belongs here.
+  { key: 'emps', label: 'EMPS servo axis', file: 'distil-emps.test.mjs',
+    prefer: String.raw`home: table [0-9.]+x\s+distilled ([0-9.]+)x` },
   { key: 'tank', label: 'quadruple tank', file: 'distil-tank.mjs' },
   { key: 'column', label: 'Wood-Berry column', file: 'distil-column.mjs' },
   { key: 'mill', label: 'cold mill AGC', file: 'distil-mill.mjs' },
@@ -49,11 +53,13 @@ console.log('\nobjtable: WHAT EVERY PLANT SHIPS, scraped from its own harness\n'
 const last = (txt, re) => { let m = null, r; const g = new RegExp(re, 'g');
   while ((r = g.exec(txt)) !== null) m = r; return m; };
 
-function scrape(txt) {
+function scrape(txt, p) {
   const out = { ship: null, base: null, best: null, x: null, mac: null, kb: null,
     rung: null, note: '' };
   // The shared ladder's own summary: `shipped {...}   B → E   Xx   Ns`
-  const sh = last(txt, String.raw`shipped (\{[^}]*\})\s+([0-9.eE+-]+)\s*(?:→|->)\s*([0-9.eE+-]+)\s+([0-9.]+)x`);
+  // The unit between the second number and the ratio is the plant's own (`mm`, `cm rms`, `°C rms`),
+  // so it is skipped rather than assumed absent — the tank and EMPS rows read UNKNOWN until it was.
+  const sh = last(txt, String.raw`shipped (\{[^}]*\})\s+([0-9.eE+-]+)\s*(?:→|->)\s*([0-9.eE+-]+)[^0-9\n]*?([0-9.]+)x`);
   if (sh) {
     out.ship = JSON.parse(sh[1]); out.base = +sh[2]; out.best = +sh[3]; out.x = +sh[4];
   }
@@ -62,7 +68,11 @@ function scrape(txt) {
   const dr = last(txt, String.raw`distilled rung:\s*(DEPLOYED|REFUSED) at ([0-9.]+)x`);
   if (dr) { out.rung = dr[1]; out.rungX = +dr[2]; }
   else if (/distilled rung: not reported/.test(txt)) { out.rung = 'NO TEACHER'; }
-  // The tank and EMPS harnesses print their own shapes.
+  if (p && p.prefer) {
+    const q = last(txt, p.prefer);
+    if (q) { out.x = +q[1]; out.note = "the object's own column, not the shipped composition"; }
+  }
+  // The tank harness prints its own shape.
   if (!out.x) {
     const tk = last(txt, String.raw`worst delivered ratio across \d+ seed\(s\):\s*([0-9.]+)x`);
     if (tk) out.x = +tk[1];
@@ -77,6 +87,7 @@ function scrape(txt) {
 /** What the ship set means for the product claim. */
 function classify(s) {
   if (!s || !s.ship) return 'UNKNOWN';
+  if (s.ship.distil && s.ship.hff) return 'object + MEMORY';
   if (s.ship.distil) return 'DEPLOYED OBJECT';
   if (s.ship.stack) return 'pilot cascade';
   if (s.ship.hff) return 'lap-periodic MEMORY';
@@ -92,7 +103,7 @@ for (const p of pick) {
     env: { ...process.env, SUITE: 'full', ...(p.env || {}) },
   });
   const txt = (r.stdout || '') + (r.stderr || '');
-  const s = scrape(txt);
+  const s = scrape(txt, p);
   rows.push({ ...p, ...s, code: r.status, secs: (Date.now() - t0) / 1000, kind: classify(s) });
   const l = rows[rows.length - 1];
   console.log(`  ${p.key.padEnd(11)} ${l.code === 0 ? 'ok  ' : 'FAIL'} `
@@ -111,7 +122,7 @@ for (const r of rows) {
 }
 
 // ---- THE COUNT, WHICH IS THE ONLY THING THIS FILE IS FOR ------------------------------------
-const nObj = rows.filter((r) => r.kind === 'DEPLOYED OBJECT').length;
+const nObj = rows.filter((r) => r.kind === 'DEPLOYED OBJECT' || r.kind === 'object + MEMORY').length;
 const nConv = rows.filter((r) => r.kind === 'conventional rung').length;
 const nCasc = rows.filter((r) => r.kind === 'pilot cascade').length;
 const nUnk = rows.filter((r) => r.kind === 'UNKNOWN').length;
