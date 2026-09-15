@@ -20324,3 +20324,26 @@ and quadruple-tank harnesses do not print a `cost:` line, so their deployed MAC 
 here — each is on record elsewhere (the arm at 274 MAC/decision, EMPS at 78, the tank through
 `distilkit`) and none of them is scraped, which is exactly the kind of hand-carried number this
 file was built to stop. Wiring those three to print the shared cost line is the next thing it wants.
+
+---
+
+# §87 — THE TEN AFTER THE TABLE: MAKE IT REPRODUCIBLE, MAKE IT A CHECK, AND CLOSE WHAT IT OPENED
+
+§86 produced a table and, in producing it, created four new obligations that this project's own
+rules name. Four plants got a number from ONE commissioning draw — the exact fault `spread.mjs`
+and `DSEED` exist for. Three cells of the table read `—` because three harnesses do not print the
+shared cost line, which is a hand-carried number in a table built to stop hand-carried numbers.
+The table is an instrument nobody runs, so the mandate's own question is not a CHECK. And §86.2
+found a deployed-and-harmful cell and §86.3 left exactly one route open.
+
+1. `objtable` becomes a CHECK the suite gets for free: every harness EMITS its row, the table
+   READS them, and the mandate's question goes red when it fails.
+2. The three `—` cells: the arm, EMPS and tank harnesses print the shared cost line.
+3. The four new numbers are ONE DRAW each — make them distributions.
+4. The cart-pole's uMax 0.60 gate failure: diagnosed or bounded.
+5. §56's stable inversion on the real flexible arm — the one route §86.3 left open.
+6. `invert.mjs` on the three new plants — the `prog/rise` screen has six rows and now ten plants.
+7. Target 4 for the four new plants: what does the PRODUCT cost them?
+8. Target 1 on the new plants: a second held-out program each.
+9. The record read against itself, and the scorecard from the table rather than from memory.
+10. Verify, stamp, push.
