@@ -21703,3 +21703,159 @@ be a valid inverse, which is checkable on the diet before anything is fitted; RU
 model inside a loop is positive feedback unless trained over the operating points the loop will
 occupy, so the commissioning must dither; and COVERAGE — at deploy it is asked for setpoints the
 machine never achieved, which is the diet's job and where rule 41b bites.
+
+## §93 — LEARN THE COMMAND DIRECTLY: THE OWNER'S ROUTING, RUN DYNAMICALLY
+
+**THE PROPOSAL, IN THE OWNER'S WORDS**: *learn the controller output directly; set and actuals
+routed in; the ground truth is routed as the "setpoint" at commissioning, and after commissioning
+the setpoint is the setpoint.* It is direct inverse learning (Jordan & Rumelhart), and it deletes
+the four things the teacher route costs: §49's law that a MORE converged teacher teaches a WORSE
+policy, §73.13's 74-89% of the commissioning bill, §80.3's lap-indexed disturbance ceiling, and
+§90.2's dependence on a commissioned cascade as the increment generator.
+
+**THIS PROJECT HAD ALREADY DONE IT STATICALLY AND IT WON BY 23-44x** — brick 40's `ikfree.test.mjs`
+fits the direct inverse (x,y)→commands from held tracker points and beats the analytic `ik()`.
+`test/pilot/dirinv.mjs` is the DYNAMIC version, which had never been run. The routing, exactly:
+
+```
+  fit:      window of ACHIEVED y   ->   c - y      "to have been here, I commanded that much more"
+  deploy:   window of DESIRED  r   ->   c = r + f(r)
+```
+
+The truth never appears at runtime because its job was to LABEL THE INPUT, not to compute a target.
+The target is `c - y` and not `c`, so what is learned is the PRE-DISTORTION — which means it reuses
+`DistilPolicy` UNCHANGED: same 40-odd coefficients, same straddling window, same clamp, same
+coverage guard, same `deploy.js` at runtime. It is a routing experiment and not a new controller.
+
+### IT LOSES, AND IT LOSES WITH ITS FIT INTACT
+
+On the EMPS axis, the program held out of every diet, scored on the last four of six laps:
+
+```
+  diet                        in-diet held-out R²    R² on the PROGRAM    delivered
+  6 filtered-noise scribbles          0.9953              -1.8864          0.588x
+  6 own-class trapezoids              0.9265              -1.0172          0.701x
+```
+
+**Worse than doing nothing under both diets, with a fit that reads 0.93-0.995 on its own held-out
+folds.** That is rule 16 in its sharpest form — the fit and the machine disagree — and a failure
+with no cause is not a finding, so six causes were measured and every one of them is dead.
+
+**1. SCALE — no.** §79's applied-gain axis, which costs one scored run and no refit: 1.000x /
+0.998x / 0.991x / 0.946x / 0.824x / 0.588x at gain 0.02 / 0.05 / 0.1 / 0.25 / 0.5 / 1. Monotone
+toward 1.000x as the correction vanishes, so it is pure harm at every magnitude and the SHAPE is
+wrong rather than the size.
+
+**2. THE INPUT AT DEPLOY — no.** Handed the ACHIEVED trajectory of a bare run instead of the
+desired one it reads 0.587x against 0.588x. The fit/deploy distribution mismatch, which is the
+textbook direct-inverse objection, is worth 0.1%.
+
+**3. THE DIET'S DISTANCE — a real lever, and nowhere near enough.** §52.17 and §66 both measured
+that what bounds a program-agnostic feedforward is how far the diet is from the program. A diet of
+the program's OWN CLASS — bang-bang acceleration trapezoids with the run lengths and accelerations
+perturbed, at **98.0% of the program's own bare error** against the scribble diet's 10.7% — moves
+it from 0.588x to 0.701x and R² from -1.886 to -1.017. The direction is right and the size is not.
+
+**4. THE FORWARD WINDOW — REFUTED, AND IT WAS MY OWN HYPOTHESIS (rule 59).** The window straddles
+now, so it sees `y[k+1..k+96]` — and those samples are what `c[k]` DROVE THE MACHINE TO, so
+recovering `c[k]` from them is nearly exact and completely non-transferable. Written down first
+with its signature: in-diet R² must FALL and program R² must RISE, opposite directions, which no
+other account predicts. Measured, shrinking the forward reach 96 → 48 → 16 → 4 → 1 with the back
+reach held:
+
+```
+  fwd    in-diet R²    program R²    delivered
+   96       0.9265       -1.0172      0.701x
+   48       0.9221       -1.0276      0.700x
+   16       0.9202       -1.0314      0.700x
+    4       0.9151       -1.0154      0.702x
+    1       0.9121       -1.0096      0.703x
+```
+
+Both columns move together and barely; the delivered factor moves 0.3%. The forward taps are not
+where the non-transferability lives, and the hypothesis is dead.
+
+**5. NON-UNIQUENESS WITHIN THE DIET — no**, checked BEFORE anything was fitted (rule 1). Target
+disagreement against window distance reads 0.0317 / 0.0644 / 0.0965 / 0.1894 across the distance
+bins — falling toward zero as the windows close, which is what a function looks like.
+
+**6. NON-UNIQUENESS ACROSS THE BOUNDARY — no, AND THIS IS THE ONE THAT MATTERS.** Check 5 was
+pointed at the wrong pair of signals: it binned WITHIN the diet, and within the diet the map works
+(rule 19 — match the metric's support). Pointed across the diet→program boundary instead, for each
+PROGRAM window the NEAREST window in the diet sits at **mean distance 0.0425 (worst 0.0821)** and
+carries a command disagreeing by **0.0462 of the target's own rms** — which **BOUNDS R² at 0.998
+on the program, from the DATA, before any fit.**
+
+### SO WHAT IS LEFT IS THE FUNCTION CLASS, AND IT INVERTS §54.9
+
+The information is in the data to within 4.6%. The fit is 0.93 on its own folds. The delivered map
+is UNCORRELATED with the correct pre-distortion on the program — which is what R² ≈ -1.0 at matched
+magnitude means arithmetically, and it is the invariant that survives every one of the six causes
+above, and every window in the ladder, and both diets. A linear map of this window throws away
+information that a nearest-neighbour over the same window has.
+
+That is the exact opposite of §54.9, where the same question asked of the TEACHER routing gave
+ridge 0.8610 against kernel ridge 0.8303, locally weighted 0.8266, MLP 0.7456 and kNN 0.7147 —
+nothing beat the linear fit, because under that routing the linear map sits at the information
+ceiling `consist.mjs` measures. Under THIS routing the linear map would be the only thing in the
+way. Two routings, opposite verdicts on the same function-class question, on the same plant.
+
+### AND ASKED THAT WAY IT DELIVERS 22.6x WITH NO TEACHER AT ALL
+
+`nonlinear.mjs`'s question, on the identical rows, deployed the identical way — `c = r + f(r)` on
+the machine, scored over the last four of six laps:
+
+```
+  bank = the program's OWN CLASS (8769 windows x 49 taps)
+    R² on the PROGRAM     0.9966        (the linear map read -1.0172; F bounds it at 0.998)
+    applies               0.5822 mm rms against a target of 0.5764
+    ON THE MACHINE        0.0255 mm rms   22.599x   uPk 0.866 mm
+
+  bank = the SCRIBBLE diet, a different class and 10.7% as hard — the CONTROL
+    R² on the PROGRAM     0.1589
+    applies               0.0549 mm rms against a target of 0.5764
+    ON THE MACHINE        0.5286 mm rms    1.090x   uPk 0.066 mm
+```
+
+**F's bound predicted 0.998 from the data with nothing fitted, and the machine returned 0.9966 and
+22.599x.** That is the instrument and the machine agreeing by routes that share no arithmetic
+(rule 15), which is what makes this a measurement rather than a lucky cell.
+
+**THE DIRECT INVERSE IS REAL ON THIS PLANT, AND IT NEEDS NO TEACHER.** No iteration, no cascade, no
+lap index, no forecast bank, no QP — the thing §73.13 prices at 74-89% of every commissioning bill
+and §90.2 shows dragging 4,534 lines behind it is simply absent. 22.599x against the shipped
+distilled policy's 32.75x, which is 69% of it, obtained from records the commissioning already has.
+
+### THREE THINGS THAT MUST BE SAID AT THE SAME VOLUME
+
+**IT CANNOT SHIP.** 8769 windows x 49 taps is **430k MAC/decision — 43x over the whole 10,000-MAC
+budget, not 10% of it — in 1.7 MB**, against the deployed object's 78 MAC and 0.2 kB. Target 6 is
+unconditional, so this artefact is disqualified as it stands.
+
+**THE DIET READING IS CONFOUNDED AND THE FILE SAYS SO (rule 19).** The scribble bank does not make a
+WRONG correction; it makes almost NO correction — 0.05 mm applied against a 0.58 mm target — which
+is a neighbour search finding only windows that carry small commands. That diet is 10.7% as hard as
+the program, so CLASS and MAGNITUDE are confounded exactly as they were in test C. What is
+established is that **a diet nine times too gentle buys nothing**. That a diet must share the
+program's CLASS is NOT established, and the shipped object's own transfer claim is stronger than
+this one — it reads 33.15x on a two-tone sine of a genuinely different class.
+
+**ONE PLANT, ONE SEED, ONE PROGRAM.** EMPS is also the rival's strong ground (near-LTI, single
+channel), which is where §56's ZPETC did best too.
+
+### WHAT IT OPENS, AND THE ONE MEASUREMENT THAT DECIDES IT
+
+The local model is a **FREE TEACHER**. Every teacher in this project spends plant time — `hff`
+probes at the lap's harmonics, `oracleteach` iterates the commissioned pilot — and this one is a
+lookup over records already taken, so it costs no laps at all. This project's entire distillation
+machinery exists to turn a teacher into a 78-MAC artefact, and it has never been pointed at a
+teacher that is free.
+
+**WHAT WOULD KILL IT, WRITTEN DOWN FIRST (rule 59):** G is itself evidence against, and the file
+says so rather than burying it — a linear map of this window fitted on `c - y` reads 0.701x on the
+identical rows, so if the distillation target were the same quantity it would fail by construction.
+The target is NOT the same quantity: fitting a linear map to the LOCAL MODEL'S OUTPUT across many
+programs is a different fit from fitting `c - y` within one diet. If that distilled map reads below
+about 1.3x on the program, the route is closed and §54.9's ceiling holds under both routings. The
+instrument for it already exists and costs no plant time.
+
