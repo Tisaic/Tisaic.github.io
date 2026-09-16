@@ -22070,3 +22070,83 @@ incumbent or a replacement of it — which is the owner's question in the only f
 rather than re-scored, so it inherits whatever that commissioning was; and `xClassic` for a REFUSED
 rung is exactly 1 by definition rather than by measurement — the measurement is that the rung found
 no headroom, which the column, mill and barrel all report with a stated reason.
+
+## §96 — THE INCUMBENT ON ALL TEN PLANTS: IT FINDS NOTHING ON FIVE OF THEM
+
+§95 measured the incumbent's share on eight plants and left the three carrying this project's
+flagship factors unmeasured, because their harnesses pass `classic: false` deliberately. That is a
+reason about what SHIPS and not a reason to leave the comparison unmade. All three are now asked.
+
+### THE THREE THAT WERE MISSING
+
+**EMPS NEEDED NO NEW KNOB AND ITS ANSWER IS THE MOST INTERESTING.** `autostack.test.mjs` already
+arms the conventional rung there; run live it reads **424.8x** — 5.7640e-1 → 1.3568e-3 mm in 14
+laps on four coefficients — against the distilled object's 32.75x on the same axis. **And the row
+is not *our method loses to a PID FF*, because the ONE PRESS SHIPS THAT RUNG** and refuses the
+other two, with both refusals asserted correct for the right reasons. The ladder measured the
+incumbent, found it best, and deployed it: target 3's improve-or-refuse clause working, and the
+self-tuning claim demonstrated rather than asserted. Two details belong with it — the rung sits
+**AT THE INSTRUMENT'S FLOOR** (1.60e-3), so 424.8x is a number the rig cannot resolve, and the
+harmonic rung scored 10x better still and was refused for exactly that reason.
+
+**THE ARM AND THE TANK BOTH REFUSE IT, AND THE CONTROL IS BYTE-IDENTITY.** On the arm the
+conventional rung takes **20 laps and 8.5 machine-minutes to reach 1.01x and is NOT DEPLOYED**; on
+the tank it reads **1.00x, refused in commissioning, the basis spanning 0.0% of the error energy**.
+In both cases the delivered result comes back **unchanged to five figures** — arm 1.6159e-1 at
+6.63x, tank 1.5494e-1 at 3.268x, the same digits as the runs with the rung never offered. That is
+rule 21's signature: arming the incumbent cost machine time and moved the machine not at all, which
+is what says a measurement was taken rather than a result moved.
+
+### THE COMPLETE TABLE — ELEVEN ROWS OVER TEN PLANTS
+
+```
+  plant                              incumbent   learned     total   what the incumbent did
+  ── IT FINDS NOTHING: the learned object is the whole result ──
+  extruder barrel                       1.00x     7.00x      7.00x   refused, 0.0% of the error energy
+  2R arm (lattice, bench cell)          1.01x     6.63x      6.63x   20 laps, NOT deployed
+  Wood-Berry column                     1.00x     3.96x      3.96x   refused, 0.0% of the error energy
+  quadruple tank                        1.00x     3.27x      3.27x   refused, 0.0% of the error energy
+  cold mill AGC                         1.00x     2.62x      2.62x   refused
+  ── THEY COMPOSE ──
+  cart-pole (shipped loop)              4.66x     2.56x     11.93x   deployed
+  real cascaded tanks (overflow)        4.28x     2.03x      8.69x   deployed
+  ── THE INCUMBENT IS THE RESULT ──
+  EMPS servo axis                     424.80x     1.00x    424.80x   deployed — AND THE LADDER SHIPS IT
+  real steam heat exchanger            89.77x     1.00x     89.77x   deployed
+  cart-pole (loop tuned 3.5x better)    9.24x     1.00x      9.24x   deployed
+  real flexible arm (DaISy 96-009)      1.93x     1.00x      1.93x   deployed
+```
+
+**OF TEN PLANTS: ON FIVE THE INCUMBENT FINDS NO HEADROOM AT ALL — three of them measured at
+literally 0.0% of the error energy — AND THE LEARNED OBJECT DELIVERS 2.6x TO 7.0x ENTIRELY BY
+ITSELF. On two they compose. On four the incumbent wins, and where it wins by the largest margin
+the ladder SHIPS IT.**
+
+### WHAT THIS ANSWERS, AND IT IS THE OWNER'S OWN QUESTION
+
+The objection was *a controller that cannot beat a PID FF*. The measured answer is that **the
+learned object is not a better PID+FF — it is the thing that works where a PID+FF finds nothing at
+all.** The five plants it carries alone are exactly the ones whose error a
+`[a, v, sign v, 1]` basis cannot express: a tank at √h, a barrel radiating as T⁴, a strongly
+coupled 2x2 column, a mill whose dominant error arrives through a 100-step transport delay, and a
+compliant arm whose residual is link bend and gearbox wind-up.
+
+And the four it loses are all already explained by this record rather than by new excuses. Two are
+plants **identified as a linear ARX from a published record**, which §55 states sit INSIDE the
+conventional rung's own hypothesis class so the number measures the class and not the machine
+(rule 15). One is the cart-pole on the loop §84.10 had already shown was carrying the headline. And
+EMPS is a near-LTI single axis whose whole error is velocity lag — which is precisely what those
+four coefficients are for, and where `classic.js`'s own dominant coefficient is checkable against
+the position loop's `vPeak/kp` to 2.4%.
+
+**SO THE HONEST PRODUCT SENTENCE IS NARROWER AND STRONGER THAN THE HEADLINE FACTORS**: on a plant
+whose error a classical feedforward can express, the ladder measures that, ships the classical rung
+and adds nothing — and on a plant whose error it cannot, the learned object is the entire result.
+The value is the DISCRIMINATION, and the one press performing it unprompted on ten plants is the
+thing worth selling.
+
+**NOT CLAIMED**: one seed and one diet per plant; the incumbent is `classic.js` at its own defaults
+with no sweep, where a hand-tuned industrial feedforward might do better; the EMPS rung's 424.8x
+is below its rig's stated instrument fidelity; and `xClassic` for a refused rung is exactly 1 by
+definition — the measurement is that the rung found no headroom, which four plants report with a
+stated reason.
