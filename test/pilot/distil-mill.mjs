@@ -87,8 +87,53 @@ const LAP = Math.round(TURNS * PER);
 const NOECC = process.env.NOECC === '1';
 /** Roll angle, as an encoder reports it. `NOECC=1` withholds it — the falsifier. */
 const phase = (k) => 2 * Math.PI * RM.F_ECC * k * RM.DT;
-const refOf = (k) => (NOECC ? [RM.S0] : [RM.S0, Math.cos(phase(k)), Math.sin(phase(k))]);
-const REFDIM = NOECC ? 1 : 3;
+/**
+ * ENTRY=1: DECLARE THE ENTRY GAUGE — the component §85 measured as 88% of what this object LEAVES
+ * (plan §92).
+ *
+ * §71's win rests on declaring the ROLL PHASE, and §85 then found the bound was on the wrong
+ * support: the object is 95% through the DECLARED eccentricity and **0% through the undeclared
+ * entry wander**, which is 7% of the open-loop error, **88% of the error ENERGY the shipped
+ * object leaves**, and worth **2.68x** (2.625x against 7.029x with it held flat). At that point
+ * the residual IS this plant's 2 µm X-ray noise, so there is nothing else in the plant.
+ *
+ * The rig has called that wander "unmeasured" since it was written, and that is a MODELLING
+ * CHOICE rather than a physical fact: every cold mill has an entry gauge, more standard than the
+ * roll-angle encoder §71 already relies on. So this is the same product move on the component
+ * that is left — and §80's rule says it should work, because rejecting a disturbance needs the
+ * TEACHER to represent it AND the MAP to express it, and §84.1 measured that `hff` DOES represent
+ * this one (averaging it out of the record drops the teacher 2.9x) while a map of the commanded
+ * reference cannot.
+ *
+ * IT ENTERS AS A PREVIEW CHANNEL, WHICH IS WHAT AN ENTRY GAUGE PHYSICALLY IS. Mounted 3 m
+ * upstream at 5 m/s it reads, at step k, the metal that reaches the roll gap 300 steps later —
+ * three times this plant's own transport delay. The window's own offsets then straddle that, so
+ * the map sees the disturbance coming rather than arriving. Preview is the one correction class
+ * that has ever worked in this project.
+ *
+ * DECLARED RELATIVE TO NOMINAL, because the absolute reading is ~2 mm against a setpoint of 1.25
+ * and differences of order 0.02 — one ridge acting on blocks a hundred apart is rule 32, which
+ * this plant's own harness already paid for once (§63.4).
+ */
+const ENTRY = process.env.ENTRY === '1';
+/**
+ * ONE GAUGE ON THE LINE, which is what a mill has. `entryAt` is the same deterministic function of
+ * step in every mill this rig builds — the wander is a property of the incoming coil, not of a
+ * particular run — so the readings the fit sees and the readings the scored run sees describe the
+ * same metal through the same instrument, and only the gauge's own noise separates them. Building
+ * a gauge per caller would have modelled several gauges on one stand, and sharing a mill with the
+ * rolling one would have tied the reading to whichever run happened to step it (rule 61).
+ */
+const GAUGE = RM.makeMill(9001);
+const refOf = (k) => {
+  const base = NOECC ? [RM.S0] : [RM.S0, Math.cos(phase(k)), Math.sin(phase(k))];
+  // DECLARED RELATIVE TO NOMINAL — the absolute reading is ~2 mm against a setpoint of 1.25 and
+  // wander of order 0.02, and one ridge acting on blocks a hundred apart is rule 32, which this
+  // plant's own harness paid for once already (§63.4).
+  if (ENTRY) base.push(GAUGE.entryGauge(k) - RM.H0);
+  return base;
+};
+const REFDIM = (NOECC ? 1 : 3) + (ENTRY ? 1 : 0);
 
 const SETTLE = 400;   // the capsule lag is 10 steps; what must be spanned is the 100-step delay
 const { reach: REACH, offsets: OFFSETS, rule: RULE } = deriveWindow({

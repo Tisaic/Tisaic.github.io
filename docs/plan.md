@@ -21593,3 +21593,113 @@ REGRESSION.** With the distilled rung producing nothing the ladder ships the CAS
 the cascade does not transfer — so the barrel's target-1 check reads 0.971x and fails *none made
 worse*. That is the correct behaviour of a plant whose teacher failed, it is confined to an opt-in
 knob, and the default run is unaffected.
+
+---
+
+## §92 — DECLARE THE ENTRY GAUGE: WORTH 1.58x, AND THE WINDOW IS WHAT BINDS
+
+§85 left the largest unclaimed number in this project sitting on a winning plant: the cold mill's
+entry wander is 7% of the OPEN-LOOP error and **88% of the error ENERGY the shipped object
+LEAVES**, worth **2.68x** — held flat the mill reads 7.029x against the 2.625x it ships, and at
+that point the residual IS the X-ray gauge's own 2 µm noise, so there is nothing else in the plant.
+
+The rig has called that wander "unmeasured" since it was written, and that is a MODELLING CHOICE
+rather than a physical fact. **Every cold mill has an entry gauge** — more standard instrumentation
+than the roll-angle encoder §71's whole win already rests on — and it is mounted UPSTREAM, which
+makes it a PREVIEW instrument: at 3 m and 5 m/s it reads, at step k, the metal that reaches the
+roll gap **300 steps later**, three times this plant's own transport delay. So this is §71's
+product move on the component §85 identified, and §80's rule predicts it should work: rejecting a
+disturbance needs the TEACHER to represent it AND the MAP to express it, and §84.1 measured that
+`hff` DOES represent this one (averaging it out drops the teacher 2.9x) while a map of the
+commanded reference cannot.
+
+It is modelled as a real instrument: the same 2 µm noise as the exit gauge, its own INDEPENDENT
+noise stream (sharing one would correlate the two gauges and let a map cancel its own measurement
+noise — rule 15), one reading per sample memoised (the fit builds rows by calling `refAt(k)`
+repeatedly, and an unmemoised gauge would hand the same step a different number every time it was
+asked), and one gauge for the line rather than one per caller. Unset is byte-identical: the open
+loop reads 15.154335422210291 µm and the distilled rung 5.8649e-3 at 2.625x.
+
+### §92.1 — The result, and my own first reading of it was wrong by rule 20
+
+```
+  configuration                              delivered      fit R²
+  shipped      window ±244,  no channel       2.625x         0.861
+  ENTRY        window ±244,  declared         1.648x         0.915
+  ENTRY oracle window ±244,  noise 0          1.630x         0.566
+  ENTRY+PARAM  window ±244,  lap-free teacher 0.953x REFUSED 0.915
+  WIDE         window ±2400, no channel       1.135x         0.872
+  WIDE+ENTRY   window ±2400, declared         1.792x         0.9975
+```
+
+**I reported the second row against the first and called the declaration harmful. That is a
+comparison across two configurations, which is rule 20 exactly** — and the matched control
+inverts it: **at window ±2400 the declaration is worth 1.58x (1.135x → 1.792x)**. What costs 2.31x
+is the WIDE WINDOW itself, not the channel.
+
+**AND THE TWO ROWS TOGETHER ARE THE FINDING, because the channel's sign flips with the window.**
+The wander's periods are **950 and 2150 steps** and the shipped window reaches **±244**. A channel
+whose period the window cannot reach is 23 columns of dilution, and it duly costs 1.59x; a window
+that reaches it is worth 1.58x. That is rule 37 — *a lag window must REACH the period of what it
+has to see* — arriving on a DECLARED channel for the first time, and the fit's own R² tracks it
+from 0.915 to **0.9975**.
+
+**THE ORACLE ROW IS WHAT KEPT ME HONEST ABOUT THE CAUSE AND THEN CORRECTED ME AGAIN.** At the
+shipped window, handed the disturbance's TRUE FUTURE with no noise at all, the map still reads
+1.630x — so it is not the instrument. I then wrote that it must be the TEACHER, which the wide row
+refutes: with the same teacher and a window that reaches the period, the channel pays. **It was the
+WINDOW throughout**, and the oracle's own held-out R² of 0.566 — WORSE than the noisy channel's
+0.915 — is the signature, a perfectly informative channel fitting worse than a noisy one because
+neither can be phased and only the noisy one correlates with what the target actually contains.
+
+### §92.2 — What binds is one window for two timescales, and that names the build
+
+The mill now declares two components: the roll phase, whose period is **408 steps**, and the entry
+wander, whose periods are **950 and 2150**. `deriveWindow` gives ONE reach for the whole row —
+`min(0.61·settle, lap/8)` — so serving the wander means a window nine times too wide for the
+eccentricity, and a lap eight times longer to carry it without spanning (§41). The eccentricity
+correction pays for that: 2.625x → 1.135x with no channel at all.
+
+**So the constraint is not the declaration and not the teacher: it is that two declared components
+with timescales 9x apart are being forced to share one window.** That is §49.11's forced trade —
+*the window must REACH the plant's memory and must not SPAN the training lap* — arriving on
+declared channels rather than on a program, and it has a fix the record already argues for:
+**PER-CHANNEL OFFSETS.** The eccentricity needs ±244, the wander needs ±2400, and nothing requires
+them to be the same vector. Both are served at a fraction of the 93 features the shared window
+costs, and the lap need only be long enough for the slowest channel rather than for all of them.
+
+**NOT CLAIMED**: one plant, one seed, one diet, and the per-channel window is NOT BUILT. What is
+established is that the declaration is worth 1.58x where the window can carry it, that the
+shipped window cannot, and that the cost of widening the shared window exceeds what the
+declaration buys — so the 2.68x §85 named is not reachable by declaration alone.
+
+### §92.3 — And the routing the owner proposed is the one the record most supports
+
+*Learn the controller output directly: setpoint and actuals routed in, the ground truth routed as
+the setpoint at commissioning, and afterwards the setpoint is the setpoint.*
+
+**This project has done it — statically — and it won by 23-44x.** `docs/history/flexisim.md`
+brick 40, `test/pilot/ikfree.test.mjs`: *fed only held tracker points during commissioning it fits
+the direct inverse (x,y)→commands itself (1.2e-4 rad holdout from 180 points), and holding real
+path points that learned map beats the analytic `ik()` 23-44x statically — the analytic kinematics
+commands the drawing, the learned map commands the machine, droop and wind-up included.* Exactly
+the proposed routing, on the KINEMATIC map only. The dynamic version, with actuals routed in, has
+never been tried here.
+
+**WHAT IT DELETES IS THE REASON IT MATTERS.** Everything downstream today imitates a correction
+produced by a TEACHER, and that one fact is behind four separate entries in this record: §49's law
+(a more converged teacher teaches a WORSE policy, because the target carries what the map cannot
+express); §73.13's 74-89% of the commissioning bill, which is why target 4 fails on six plants of
+eight; §80.3's lap-indexed disturbance ceiling; and §90.2's coupling, which drags 4,534 lines of
+cascade along as the increment generator. Learning the command directly removes all four, and
+§56's *a model can be exact in prediction and still be a bad thing to invert* cannot apply to
+something that was never inverted. **§92.1 is evidence for it rather than against**: the map fit
+its teacher's target at R² 0.9975 and delivered worse, so fitting the teacher better is not the
+lever.
+
+**THE THREE THINGS THAT WOULD KILL IT, NAMED BEFORE THE BUILD (rule 59):** NON-UNIQUENESS —
+direct inverse learning averages over commands producing the same output and the average need not
+be a valid inverse, which is checkable on the diet before anything is fitted; RULE 35 — an inverse
+model inside a loop is positive feedback unless trained over the operating points the loop will
+occupy, so the commissioning must dither; and COVERAGE — at deploy it is asked for setpoints the
+machine never achieved, which is the diet's job and where rule 41b bites.

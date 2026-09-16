@@ -21,6 +21,37 @@ const D_BUR = 1.3;         // backup roll diameter, m
 const F_ECC = V_LINE / (Math.PI * D_BUR);               // Hz, roll rotation
 const A_ECC = 0.030;       // eccentricity amplitude, mm  (30 microns)
 const NOISE = 0.002;       // X-ray gauge noise, mm rms (2 microns)
+/**
+ * THE ENTRY GAUGE, AND IT IS A DECLARATION RATHER THAN A NEW PLANT (plan §92).
+ *
+ * This rig has called the entry-gauge wander "unmeasured" since it was written, and §85 measured
+ * what that costs: held flat the mill reads 14.289 → 2.033 µm at **7.029x** against the 15.394 →
+ * 5.865 µm at 2.625x it ships — so the wander is 7% of the OPEN-LOOP error and **88% of the error
+ * ENERGY the shipped object LEAVES**, worth 2.68x of delivered factor, and 2.033 µm IS this
+ * plant's own X-ray noise floor, so with it gone there is nothing else in the plant.
+ *
+ * "Unmeasured" is a MODELLING CHOICE and not a physical fact. **Every cold mill has an entry
+ * gauge** — it is more standard instrumentation than the roll-angle encoder §71's win already
+ * rests on — and it is mounted UPSTREAM of the stand, which makes it a PREVIEW instrument: at
+ * time k it reads metal that will not reach the roll gap for `ENTRY_LEAD` steps. Preview is the
+ * one correction class that has ever worked in this project.
+ *
+ * So this is the same product move as §71, on the component §85 identified: DECLARE what the
+ * machine already measures. §80's rule says rejecting a disturbance needs the TEACHER to represent
+ * it AND the MAP to express it — and §84.1 measured that `hff` DOES represent this one (averaging
+ * it out of the record drops the teacher 2.9x), so the map is the only missing half.
+ *
+ * IT IS A REAL INSTRUMENT AND IS MODELLED AS ONE: the same 2 µm noise as the exit gauge, its own
+ * independent noise stream, and a finite mounting distance. `ENTRY_L` is stated rather than tuned
+ * — 3 m upstream at 5 m/s is 300 steps of lead, which is geometry an engineer reads off the
+ * stand.
+ */
+const ENTRY_L = 3.0;       // m from the entry gauge to the roll gap
+// `ENTRY_NOISE=0` makes it an ORACLE, which is a DIAGNOSTIC and not a plant: handed the
+// disturbance's true future, a map that still loses has a TEACHER problem rather than an
+// instrument problem. §80 used exactly this move on the barrel and it is what made that result
+// decisive (rule 15 — a perfect instrument is the control that separates the two).
+const ENTRY_NOISE = process.env.ENTRY_NOISE === undefined ? 0.002 : +process.env.ENTRY_NOISE;
 const S0 = (HREF * (MM + QM) - QM * H0) / MM;
 const NOWAND = process.env.NOWANDER === '1';           // gap holding the target
 
@@ -48,6 +79,11 @@ function makeMill(seed, opts = {}) {
   const fEcc = vLine / (Math.PI * D_BUR);
   const s0 = (href * (MM + QM) - QM * h0) / MM;
   const rnd = lcg(seed);
+  // A SECOND, INDEPENDENT STREAM. Sharing `rnd` would correlate the entry gauge's noise with the
+  // exit gauge's, which is the one thing that could let a map cancel its own measurement noise —
+  // a plant flattering a controller through its instruments (rule 15).
+  const rnd2 = lcg(seed * 2654435761 + 12345);
+  const eCache = new Map();
   let S = s0, k = 0;
   const buf = [];
   return {
@@ -67,6 +103,27 @@ function makeMill(seed, opts = {}) {
         + 0.012 * Math.sin(2 * Math.PI * kk * DT / 1.9); },
     quiet: false,
     ecc(kk) { return this.quiet ? 0 : A_ECC * Math.sin(2 * Math.PI * fEcc * kk * DT); },
+    /** Steps of preview this gauge's mounting distance buys at this mill's line speed. */
+    entryLead: Math.round(ENTRY_L / vLine / DT),
+    /**
+     * WHAT THE ENTRY GAUGE REPORTS AT STEP `kk`: the thickness of the metal that will reach the
+     * roll gap `entryLead` steps from now, read through a real instrument. It is the truth ahead
+     * of time and NOT the truth now, which is what makes it preview rather than an oracle — and
+     * it is noisy, because a gauge is.
+     */
+    entryGauge(kk) {
+      // ONE READING PER SAMPLE, memoised — `millSpec.step` already carries this reasoning for the
+      // EXIT gauge (*calling the gauge twice draws two independent noise samples, so the signal
+      // the model is given and the truth it is asked to predict would disagree by pure noise*).
+      // It matters more here: the fit builds its rows by calling `refAt(k)` repeatedly, so an
+      // unmemoised gauge would hand the same step a different number every time it was asked and
+      // the map would be fitted to a row that does not exist.
+      const hit = eCache.get(kk);
+      if (hit !== undefined) return hit;
+      const v = this.entryAt(kk + this.entryLead) + ENTRY_NOISE * gauss(rnd2);
+      eCache.set(kk, v);
+      return v;
+    },
     step(Scmd) {
       tick();
       S += (DT / TAU_A) * (Scmd - S);                    // hydraulic capsule
@@ -126,4 +183,4 @@ function monitor() {
 const mon = score(monitor());
 
 
-export { A_ECC, DLY, DT, D_BUR, F_ECC, H0, HREF, L_GAUGE, MM, NOISE, QM, S0, TAU_A, T_RUN, V_LINE, bisra, gaugemeter, gauss, lcg, makeMill, mon, monitor, openLoop, score };
+export { A_ECC, DLY, DT, D_BUR, ENTRY_L, ENTRY_NOISE, F_ECC, H0, HREF, L_GAUGE, MM, NOISE, QM, S0, TAU_A, T_RUN, V_LINE, bisra, gaugemeter, gauss, lcg, makeMill, mon, monitor, openLoop, score };
