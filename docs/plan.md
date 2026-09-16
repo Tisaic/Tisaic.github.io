@@ -21859,3 +21859,82 @@ programs is a different fit from fitting `c - y` within one diet. If that distil
 about 1.3x on the program, the route is closed and §54.9's ceiling holds under both routings. The
 instrument for it already exists and costs no plant time.
 
+
+## §94 — THE FREE TEACHER CANNOT BE DISTILLED ONTO WHAT SHIPS, AND THE SET WAS UNLIMITED
+
+§93 left exactly one question and it is the only one that matters commercially. The local model
+delivers **22.599x with no teacher, no cascade, no lap index and no iteration**, and it is 430k
+MAC/decision in 1.7 MB, which target 6 forbids outright. This project's whole distillation
+machinery exists to turn a teacher into a 78-MAC weight vector, and it had never been pointed at
+a teacher that costs no plant time.
+
+**AND THE DISTILLATION SET IS FREE TOO, WHICH IS WHAT MAKES THIS DECISIVE RATHER THAN SUGGESTIVE.**
+Every teacher in this project must be CONVERGED ON THE MACHINE for each training program, so
+enlarging a diet costs laps — §84.5 prices it at 10-17% of a commissioning per program. This
+teacher's input is a window of the COMMANDED REFERENCE, so it can be evaluated on ANY reference at
+all with the machine switched off. The set is as large and as diverse as we care to make it, at
+zero cost. **So "more data would have fixed it" is ruled out by construction, which no other
+negative in this record can claim.**
+
+```
+  4 reference trajectories labelled by the teacher with the MACHINE OFF
+    25,167 labels (target rms 0.5371 mm against the true target's 0.5764), ZERO plant steps
+  the FIT          25,167 rows, held-out R² -0.1142, null -0.0060, deploy FALSE
+  R² against its TEACHER on the program      -0.0005
+  R² against the TRUE target                 -0.0000   (the teacher itself reads 0.9966)
+  ON THE MACHINE                              1.000x   (the teacher reads 22.599x)
+```
+
+**A GLOBAL LINEAR MAP OF THIS WINDOW CANNOT FIT THE FREE TEACHER'S OWN LABELS** — held out at
+-0.1142 against a shuffled null of -0.0060, on an unlimited set the teacher generated itself. The
+fit RAN and DECLINED; it applied nothing, so the 1.000x is the gate working rather than a result.
+
+**THE PREDICTION WAS WRITTEN DOWN FIRST AND IT HELD (rule 59)**: *a map that is right locally and
+wrong globally is a locally-valid LINEAR APPROXIMATION of a relation that is not linear, and no
+amount of relabelling changes the function class.* What would have refuted it — the failure being
+DISTRIBUTION rather than CLASS — is exactly what an unlimited free set repairs, and it did not.
+
+### AND IT CORRECTS §93's OWN IN-DIET NUMBER
+
+§93 reports the direct linear fit at held-out R² **0.9265** within the own-class diet and -1.017 on
+the program, and read the pair as transfer failure. §94 says the first number is worth less than it
+looks: those folds are contiguous within trajectories that repeat similar accelerate-hold-decelerate
+segments, so rows far apart in time are near neighbours in the window, and the fold measures
+NEIGHBOURHOOD LEAKAGE rather than generalisation. Asked to generalise to trajectories it has not
+seen — which is what H does, pooling four — the same function class reads **-0.11**. The honest
+pair is therefore -0.11 and -1.02, not 0.93 and -1.02, and rule 36 is what names it: a fit
+validated against data it has effectively seen.
+
+### SO THE BOUNDARY IS THE FUNCTION CLASS, AND IT IS §54.9 EXACTLY INVERTED
+
+Three numbers on one window, one plant, one target:
+
+```
+  the relation IS a function of the window        R² bounded at 0.998 from the DATA (§93 F)
+  a LOCAL model of that window                    R² 0.9966, delivers 22.599x
+  a GLOBAL LINEAR map of that window              R² -0.1142 held out, delivers nothing
+```
+
+Under the TEACHER routing §54.9 asked the same question and got the opposite answer — ridge 0.8610
+against kernel ridge 0.8303, locally weighted 0.8266, MLP 0.7456, kNN 0.7147 — nothing beat the
+linear fit, because there the linear map sits at `consist.mjs`'s information ceiling. Under the
+DIRECT INVERSE routing the information is present to 0.998 and the linear map is the only thing in
+the way. **Two routings, opposite verdicts on the function-class question, same plant.**
+
+### WHAT THIS DOES AND DOES NOT CLOSE
+
+**CLOSED**: the direct inverse cannot ship through the artefact this project deploys. Not for want
+of data, not for want of diet, not for want of a teacher — for want of expressiveness in a linear
+map of the commanded reference window.
+
+**OPEN, with its falsifier**: the deployed artefact need not be linear in the RAW window. A LIFTED
+basis is still linear-in-parameters, still a weight vector, still `deploy.js`'s dot product, and
+would cost MAC rather than architecture. §54.9 measured lifts losing under the teacher routing, and
+that evidence does not carry here because the verdict it belongs to is the one §94 inverts. The
+test is cheap and the set is still free: relabel with the same teacher, fit the same policy over a
+lift, and read held-out R² against the teacher's own labels. **Below about 0.9 the route is closed
+for good; above it, the remaining question is only how many MAC the lift costs.**
+
+**NOT CLAIMED**: one plant, one seed, one program, one teacher (k = 8 inverse-distance over 49
+shape-normalised taps), and EMPS is the rival's own strong ground.
+

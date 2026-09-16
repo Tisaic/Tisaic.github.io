@@ -690,6 +690,137 @@ function localRun(bank, label) {
   console.log(`      CANNOT SHIP — which is a different sentence from the one the linear map gave.`);
 }
 
+
+// ---------------------------------------------------------------- H: CAN THE FREE TEACHER SHIP?
+/**
+ * G LEAVES ONE QUESTION AND IT IS THE ONLY ONE THAT MATTERS COMMERCIALLY (plan §94).
+ *
+ * The local model delivers 22.599x with no teacher, no cascade, no lap index and no iteration —
+ * and it is 430k MAC/decision in 1.7 MB, which target 6 forbids outright. This project's entire
+ * distillation machinery exists to turn a teacher into a 78-MAC weight vector, and it has never
+ * been pointed at a teacher that costs NO PLANT TIME.
+ *
+ * **AND THE DISTILLATION SET IS FREE TOO, WHICH IS THE PART THAT MAKES THIS DIFFERENT FROM EVERY
+ * OTHER DISTILLATION HERE.** Every teacher in this project must be CONVERGED ON THE MACHINE for
+ * each training program, so enlarging the diet costs laps (§84.5 prices it at 10-17% of a
+ * commissioning per program). This teacher's input is a window of the COMMANDED REFERENCE, so it
+ * can be evaluated on ANY reference at all with the machine switched off. The distillation set is
+ * as large and as diverse as we care to make it, at zero cost, which is exactly the lever §52.17
+ * and §66 identify as what bounds a program-agnostic feedforward.
+ *
+ * ---------------------------------------------------------------- THE PREDICTION, FIRST (rule 59)
+ *
+ * I expect this to FAIL, and the evidence is already in hand: the linear map fits its own diet at
+ * R² 0.9265 and transfers to the program at -1.017. A map that is right locally and wrong globally
+ * is a locally-valid LINEAR APPROXIMATION of a relation that is not linear — and no amount of
+ * relabelling changes the function class. If that reading is right, the distilled linear map
+ * reproduces its teacher where the diet is dense and diverges where it is not, and reads far below
+ * 22.599x on the program.
+ *
+ * What would REFUTE it, and it is worth knowing either way: if the failure was DISTRIBUTION rather
+ * than CLASS — the diet's windows never covering the program's — then labelling a wide, cheap
+ * distillation set with a teacher that DOES transfer is precisely the repair, and this delivers.
+ *
+ * Two R² columns are printed because they answer different questions (rule 19): against the
+ * TEACHER's output, which says whether the distillation succeeded as a distillation, and against
+ * the TRUE target, which says whether that was worth anything.
+ */
+console.log(`\n  H — CAN THE FREE TEACHER BE DISTILLED ONTO WHAT SHIPS? (plan §94)`);
+{
+  const r7 = lcg(SEED * 7919 + 13);
+  const bank = bankFrom(Array.from({ length: SCRIB }, () => trapezoid(r7)));
+  const W = 24;
+  const K = 8;
+  const predict = (w) => {
+    const best = [];
+    for (let i = 0; i < bank.length; i++) {
+      let d = 0; const b = bank[i].w;
+      for (let j = 0; j < w.length; j++) { const e = w[j] - b[j]; d += e * e; }
+      if (best.length < K) { best.push({ d, t: bank[i].t }); best.sort((x, y2) => x.d - y2.d); }
+      else if (d < best[K - 1].d) { best[K - 1] = { d, t: bank[i].t }; best.sort((x, y2) => x.d - y2.d); }
+    }
+    let sw = 0, st2 = 0;
+    for (const b of best) { const g = 1 / (Math.sqrt(b.d) + 1e-12); sw += g; st2 += g * b.t; }
+    return st2 / sw;
+  };
+
+  // The distillation set: references the teacher is EVALUATED on, with the machine switched off.
+  // They are drawn from the same design space and none of them is the scored program.
+  const r8 = lcg(SEED * 31337 + 5);
+  // EVERY STEP IS LABELLED, and the reason is a fault this harness already made: `addProgram`
+  // iterates `for (i = lo + 1; i < n; i += stride)` with `lo = -offsets[0]`, so a strided label
+  // set at k ≡ 0 (mod 4) is read at k ≡ 1 (mod 4) and EVERY row used carries target 0. The fit
+  // duly read held-out R² 0.0000 and REFUSED, which is a fit that never happened rather than a
+  // route that declined (rule 25). Labelling every step removes the alignment rather than
+  // patching it, and the assertion below is the check whose absence let it through.
+  const NDIS = 4;
+  const pol3 = new DistilPolicy({
+    channels: 1, refDim: 1, offsets: UNIQ, ridge: RIDGE,
+    uMax: 0.05, online: false, standardize: true,
+  });
+  let labels = 0, tSum = 0, tSq = 0;
+  for (let d = 0; d < NDIS; d++) {
+    const rr = trapezoid(r8), n = rr.length;
+    const prefix = new Array(n);
+    for (let k = 0; k < n; k++) {
+      const w = new Float64Array(2 * W + 1);
+      const c0 = rr[k];
+      for (let j = -W; j <= W; j++) w[j + W] = rr[(((k + j) % n) + n) % n] - c0;
+      const t = predict(w);
+      prefix[k] = [t]; labels++; tSum += t; tSq += t * t;
+    }
+    // `closed: true` because these references are played as closed laps by `score` and the
+    // teacher labelled them through WRAPPED windows — §52.14's own lesson, which otherwise
+    // drops the first 96 rows of every trajectory and deploys windows the fit never saw.
+    pol3.addProgram({ refAt: (k) => [rr[(((k % n) + n) % n)]], n, prefix, stride: 1, closed: true });
+  }
+  const tVar = tSq / labels - (tSum / labels) ** 2;
+  const fr = pol3.fit();
+  // THE CHECK THAT WAS MISSING. A target with no variance, or a fit that used a different number
+  // of rows than there are labels, is an instrument fault and not a result (rules 17, 25).
+  if (!(tVar > 0)) throw new Error(`H: the distillation target has no variance (${tVar})`);
+  if (Math.abs(fr.rows - labels) > labels * 0.02) {
+    throw new Error(`H: the fit used ${fr.rows} rows against ${labels} labels — the stride and the `
+      + `label set are misaligned, which is what made this read R² 0.0000 the first time`);
+  }
+  console.log(`    ${NDIS} reference trajectories labelled by the teacher with the MACHINE OFF:`);
+  console.log(`      ${labels} labels (target rms ${(1000 * Math.sqrt(tSq / labels)).toFixed(4)} mm), `
+    + `ZERO plant steps — the teacher is a lookup and its input is`);
+  console.log(`      a window of the commanded reference, so the set costs nothing`);
+  console.log(`    the FIT: ${fr.rows} rows, held-out R² ${fr.heldOutR2.map((z) => z.toFixed(4))}, `
+    + `null ${fr.controlR2.map((z) => z.toFixed(4))}, deploy ${fr.deploy}`);
+
+  // Both R² columns on the PROGRAM, against two different references (rule 19).
+  let seT = 0, stT = 0, mT = 0, seY = 0, stY = 0, mY = 0;
+  const tea = new Float64Array(P), mine = new Float64Array(P);
+  for (let i = 0; i < P; i++) {
+    const w = new Float64Array(2 * W + 1);
+    const c0 = PR.q[i];
+    for (let j = -W; j <= W; j++) w[j + W] = PR.q[(((i + j) % P) + P) % P] - c0;
+    tea[i] = predict(w);
+    mine[i] = pol3.act((o) => [PR.q[(((i + o) % P) + P) % P]], i, null)[0];
+    mT += tea[i]; mY += PR.q[i] - yb[i];
+  }
+  mT /= P; mY /= P;
+  for (let i = 0; i < P; i++) {
+    seT += (tea[i] - mine[i]) ** 2; stT += (tea[i] - mT) ** 2;
+    seY += ((PR.q[i] - yb[i]) - mine[i]) ** 2; stY += ((PR.q[i] - yb[i]) - mY) ** 2;
+  }
+  console.log(`    R² against its TEACHER on the program   ${(1 - seT / stT).toFixed(4)}   `
+    + `(did the distillation succeed?)`);
+  console.log(`    R² against the TRUE target              ${(1 - seY / stY).toFixed(4)}   `
+    + `(the teacher itself reads 0.9966; the direct linear fit read -1.0172)`);
+
+  const a = score(true, 1, null, null, null);
+  // score() closes over `pol`, so swap it for this one run and put it back.
+  const keep = pol; pol = pol3;
+  const b = score(true, 1);
+  pol = keep;
+  console.log(`    ON THE MACHINE          ${b.rms.toFixed(4)} mm rms   ${(off.rms / b.rms).toFixed(3)}x`
+    + `   (teacher 22.599x · direct linear fit 0.701x · bare 1.000x)`);
+  void a;
+}
+
 console.log(`\n  for scale, on this axis: the shipped distilled policy reads 32.75x over the`);
 console.log(`  cascade's 0.5764 mm and the conventional rung alone reads 425x — both of them`);
 console.log(`  taught by an iterated teacher this route does not have (plan §93).\n`);
