@@ -22288,3 +22288,206 @@ feature rows for the SAME window index and diff them element by element. The dif
 row or in what the row is evaluated against, both paths are ~60 lines, and a row dump settles in
 one run what four hypotheses did not. `consist.mjs`'s `DUMP=` already does exactly this for the
 shipped routing and is the model to copy (rule 61).
+
+
+## §99 — IT WAS THE READER. §93 IS RETRACTED AND §94's CONCLUSION WITH IT
+
+§98 left one open discrepancy and named the step that would close it: *dump both paths' feature
+rows for the SAME window index and diff them element by element.* Done in one run, and the
+difference is in the row — the two paths were never reading the same window.
+
+### THE FAULT
+
+`DistilPolicy` has two act entry points and they take **different reader shapes**:
+
+```
+  act(refAt, k)    `refAt` is an ABSOLUTE-INDEX reader. act builds its own window internally,
+                   look = (o) => refAt(k + o).
+  actLook(look)    `look` is an OFFSET-FROM-NOW reader, already centred. Identical arithmetic.
+```
+
+Every deploy site in `dirinv.mjs` — all seven — passed an offset-from-now closure
+`(o) => [ref[i + o]]` to `act(…, i)`. The closure was therefore handed `k + o = i + o` as its own
+offset and indexed `ref[i + (i + o)]`: **the window was read centred at 2i.** Section L dumps both
+rows with the reference replaced by a RAMP, so every entry IS the index it was read at:
+
+```
+    offsets              -96    -31     -2      8     49
+    act(look, k)         104    169    198    208    249   <- centred at 2i
+    actLook(look)          4     69     98    108    149   <- centred at i
+    wanted                 4     69     98    108    149
+```
+
+**At i = 0 the two agree on every tap**, which is exactly why this survived §93, §94 and §98 — the
+first decision of every run was correct and nothing downstream had a reason to look.
+
+### THE BLAST RADIUS IS ONE FILE, AND THE LIBRARY WAS ALREADY RIGHT
+
+Grepped every `act` and `actLook` call site in the repository: `dirinv.mjs` is the only place that
+hands `DistilPolicy.act` a look-form closure. Every other `actLook` caller is look-form
+(`distil-barrel`, `distil-tank` ×3, `distil-column`, `distilkit`, `directopt`, `artefact.test`,
+`autostack.js`) and every `Pilot.act(look)` site is a different class. And the contract is PINNED
+both ways in `distil.test.mjs` — *away from a record boundary the two readers agree exactly* and
+*at the boundary they differ, because only one of them may clamp* — built with the correct
+`look = (k) => (o) => refAt(k + o)`. Nothing that ships moved; no plant's number moved.
+
+### WHAT MOVES, AT THE SAME FIT AND THE SAME MACHINE
+
+Only the window's centre changes. Everything else — diet, offsets, ridge, cap, scoring — is held.
+
+```
+  scribble diet, gain 1        0.588x  ->   2.658x      program R²  -1.886  ->  0.8584
+  own-class diet (D)           0.701x  ->   5.508x      program R²  -1.017  ->  0.9671
+  gain ladder (A)    monotone to 1.00x  ->   3.183x at gain 0.5 — an interior optimum
+  forward reach 96 -> 1  0.701 -> 0.703x  ->   5.505x -> 6.084x
+```
+
+**§93's HEADLINE IS FALSE.** It reads *THE SHIPPED LINEAR ARTEFACT LOSES AND ITS FIT IS INTACT*,
+with "six causes measured and every one dead". Five of those six were measured through the broken
+reader and are void. The artefact does not lose: through the SHIPPED `DistilPolicy`, and therefore
+`deploy.js`, it delivers **5.508x on a program in no training run**, at 78 MAC and 0.2 kB.
+
+### §93's OWN PREDICTION WAS RIGHT AND ITS INSTRUMENT WAS WRONG
+
+This is the part worth more than the number. §93 wrote the forward-window hypothesis down first
+(rule 59) with its signature stated: shrinking the forward reach should move in-diet R² **DOWN**
+and program R² **UP** — opposite directions. It then recorded the hypothesis as **refuted by its
+own signature**, because "both move together and barely, 0.701x → 0.703x". Corrected:
+
+```
+  fwd   in-diet R²   program R²   delivered
+   96      0.9265      0.9671      5.505x
+   48      0.9221      0.9666      5.469x
+   16      0.9202      0.9657      5.396x
+    4      0.9151      0.9711      5.876x
+    1      0.9121      0.9730      6.084x
+```
+
+In-diet down, program up, monotone at the ends, 5.505x → **6.084x**. The prediction holds. Rule 59
+is normally cited when a prediction dies; this is the case it is actually for — a prediction that
+was killed by a broken instrument and had to be given back.
+
+### §94's MEASUREMENTS ARE BYTE-IDENTICAL AND ITS CONCLUSION IS RETRACTED
+
+Re-run, §94 reproduces to every digit: 25,167 free labels, held-out R² **-0.1142** against a
+shuffled null of -0.0044, **deploy FALSE**, and the lift at -0.4340 / -0.0182 / 0.0020. That is
+rule 21's signature from the far side — §94's fit REFUSED, so nothing was ever applied and the
+broken deploy reader never ran. Its numbers were never at risk.
+
+Its CONCLUSION was. §94 published *the obstacle is the FUNCTION CLASS and it is now measured from
+four directions*, and counted **-1.02 fitted directly** as one of the four. That direction now
+reads **+0.9671**. A linear-in-parameters map of the commanded-reference window expresses this
+relation on the program at R² 0.967 and delivers 5.5x, so the class is not the obstacle.
+
+**AND WHAT §94's SURVIVING MEASUREMENT SAYS IS STRANGER AND NARROWER THAN WHAT IT CLAIMED.** The
+same class, same window shape, same plant: fitted on the TRUE target `c - y` it reads **0.967** on
+the program; fitted on the kNN TEACHER's approximation of that same target it reads **-0.11** and
+refuses. **The teacher is the harder thing to fit, not the easier one** — so §94 was distilling a
+surrogate onto a class that already fitted the original, and the route it declared closed never
+needed opening.
+
+**STATED NARROWLY, BECAUSE THE TWO FITS ARE NOT A CLEAN ONE-VARIABLE COMPARISON (rule 20).** They
+differ in their INPUT as well as their target: §93 D's rows are windows of the ACHIEVED `y` — with
+the train/deploy shift bisection B prices at ~0.3% on this plant — while §94's are windows of a
+COMMANDED reference the machine never ran. And there is an untested alternative reading of -0.11
+with direct evidence behind it: a kNN teacher is only as good as its bank is near, and §93 G's own
+control shows exactly that failure, the scribble bank reading 0.1589 on the program and applying
+0.05 mm against a 0.58 mm target. So *the teacher's labels are poor off-bank* and *the class cannot
+fit the teacher* both explain -0.11, and nothing here separates them. What IS established is that
+§94's conclusion does not follow, because the class fits the TRUE target on the program at 0.967.
+
+### THE RIDGE IS A REAL AXIS HERE, AND THE FIT'S GATE RANKS IT BACKWARDS
+
+§98.1 swept the ridge to explain -1.017, found no row recovered, and filed it refuted. That verdict
+stands as an account of -1.017 (no ridge could repair a window read at 2i) and is wrong as a
+statement about the axis. With the reader fixed:
+
+```
+    ridge     in-diet R²   program R²   on the machine
+    1e-6         0.9265       0.9671      5.510x      <- the default, nothing selected
+    1e-4         0.9266       0.9672      5.512x
+    1e-2         0.9197       0.9707      5.839x
+    1e-1         0.8888       0.9874      8.918x
+       1         0.8266       0.9946     13.688x
+      10         0.6598       0.8290      2.418x
+```
+
+**In-diet R² falls MONOTONICALLY while program R² rises** — §49's law on a ninth knob, and
+`distil.js`'s stated *the gate is a cheap PRE-FILTER and the decision is a machine-scored verify*
+with a number on it for the third time. **READ THE DELIVERED COLUMN NARROWLY (rule 19): ridge 1 is
+picked by scoring the very program it is quoted on, so 13.688x measures the AXIS and is not a claim
+about a controller.** The claimable figure is **5.510x at the default with nothing selected**; a
+real pick needs the ladder's own machine-scored verify on a representative regime, as §70 and §84.6
+do it. And §98.2's 2x2 explains the 3% that was left over: standardisation costs ~18% on this
+routing (6.513x off against 5.510x on) and the sign taps are inert to 0.6%, which is §63's barrel
+finding with its sign reversed by a row whose leading term is a position rather than a power level.
+
+### AND THE TWO ROUTINGS NOW AGREE, WHICH §93 HAD BACKWARDS
+
+§93 wrote *two routings, opposite verdicts on one question* — §54.9 measuring a global linear ridge
+BEATING kernel ridge, locally weighted, an MLP and kNN under the TEACHER routing, against the
+linear map being "the only thing in the way" under the DIRECT one. With the reader fixed there is
+no opposition, and the agreement is more useful than the conflict was:
+
+```
+  routing    plant   the SHIPPABLE class                        what locality buys
+  teacher     arm    ridge 0.8610 beats KRR/LWR/MLP/kNN (§54.9)  nothing
+  direct     EMPS    global R = 1 is the BEST row (§98 I)        nothing, monotonically harmful
+```
+
+Both routings say the same thing about what should SHIP: a global linear-in-parameters map of the
+commanded-reference window, and coarse locality on top of it is a cost with no return — the
+capacity signature for the eleventh and twelfth time.
+
+**What is NOT settled, and §99 sharpens rather than closes it**, is that an UNSHIPPABLE local model
+reads 0.9966 and delivers **22.599x** where the global linear reads 0.9671 and delivers 5.510x. So
+on this routing there is about **4x still in the window** that no PLC-shaped class has reached —
+1 nearest-neighbour bank at 430k MAC in 1.7 MB against 78 MAC in 0.2 kB. That is the same shape as
+§52.31's ceiling argument seen from the other side: there the input was exhausted and the class was
+not the limitation; here the class IS the limitation and the input has headroom. The two are not in
+conflict because they are different routings on different plants, and saying which of the two a
+given plant is in is now a question worth asking before building for it.
+
+### NOTHING IS INTEGRATED, AND THE REASON IS A MEASUREMENT
+
+The direct inverse is real, it runs through the artefact that ships, and it costs **ZERO teacher
+laps** — no iteration, no probe set, no cascade, no lap index — against §73.13's *the teacher is
+74-89% of the commissioning bill*. Its diet is six open-loop trapezoids, one pass, about 35,000 machine
+steps (34,778 fitted rows).
+
+It still does not go in the portfolio, for one reason that is measured rather than argued: **on
+EMPS the incumbent reads 424.8x and the portfolio already ships it**, and the distilled object
+reads 32.75x. A 5.5x route is third of three on the only plant it has been asked. Adding it there
+would be a preference (rule 31).
+
+**WHERE IT COULD BE WORTH SOMETHING IS NAMED AND HAS NOT BEEN RUN**: the BARREL and the COLUMN,
+where §72 prices the whole commissioning at 30.0 and 33.3 DAYS of plant time, §73.13 prices the
+teacher at 74-89% of that, and §96 measures the incumbent finding **nothing at all** (1.00x on
+both). A teacher-free route that reaches even a fraction of
+the distilled object's 7.00x and 3.96x there would be worth more than its factor, because it would
+be worth most of the calendar. That is the test, and until it is run this is one plant, one seed,
+one diet class, with CLASS and MAGNITUDE confounded in the diet exactly as §93 already stated
+(the scribble diet is 10.7% as hard as the program and reads 2.658x; the own-class diet is 98.0%
+and reads 5.508x).
+
+### THE STANDING LESSON
+
+Rule 17, and the company it keeps is the point. §55 sized a program from a RESONANT acceleration
+range and read *this plant cannot be controlled* off 88 gain cells that could not beat doing
+nothing; §55 again scored a gain sweep over 20 laps on a machine that locks in over 300 and picked
+the gain that locks ONTO the resonance (1.06 at lap 20, 12.36 settled); §67.3's `distil-tank.mjs`
+scored a rung its own loop never applied and read 1.000x as TRANSFER; §87.4 handed a gate a program
+22x SLOWED and read the result as a gate failure; §97.2 never passed `v` and `a` to the incumbent's
+deploy path and read a rung that never acted as one that found nothing. **Six of these are one
+defect class — the instrument quietly measuring something adjacent to the question — and the shape
+repeats: a fault EXACT at one point and wrong everywhere else, so every cheap sanity check passes.**
+
+And there is a second thing to guard against, which this one shows more clearly than any of the
+others: **the wrong reading was the more interesting one.** A broken reader turned a working route
+into a clean, well-bounded negative result with four independent-looking confirmations — a more
+satisfying shape to write up than *it works* — and nothing about a negative invites re-checking.
+§98 is what saved it, and only because it refused to close a discrepancy it could not explain.
+
+**The general form is worth writing down: an API with two entry points taking different reader
+shapes, and no way to tell them apart at the call site, is a trap — and the only defence that
+worked here was dumping the rows and looking at them.**

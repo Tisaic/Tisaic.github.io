@@ -1,6 +1,34 @@
 /**
  * @file LEARN THE COMMAND DIRECTLY — the owner's routing, run dynamically (plan §93).
  *
+ * ---------------------------------------------------------------- READ THIS FIRST (plan §99)
+ *
+ * **EVERY DELIVERED NUMBER THIS FILE PRODUCED BEFORE §99 WAS TAKEN THROUGH A BROKEN READER, AND
+ * §93's CENTRAL NEGATIVE IS RETRACTED.** `DistilPolicy` has two entry points taking DIFFERENT
+ * reader shapes — `act(refAt, k)` wants an ABSOLUTE-INDEX reader and builds its own window
+ * `look = (o) => refAt(k + o)`; `actLook(look)` wants an OFFSET-FROM-NOW reader, already centred.
+ * All seven deploy sites here passed an offset-from-now closure to `act(…, i)`, so the closure was
+ * handed `k + o = i + o` as its own offset and the window was read **centred at 2i**. At i = 0 the
+ * two agree exactly, which is why it survived §93, §94 and §98 unnoticed. Section L is the dump.
+ *
+ * The library was right and only this caller was wrong: `distil.test.mjs` pins the two readers to
+ * agree away from a record boundary and to differ at it, and a grep of every `act`/`actLook` call
+ * site in the repository finds this file alone (plan §99). Nothing that ships was affected.
+ *
+ * WHAT MOVES, at the same fit, same diet, same machine — only the window's centre:
+ *
+ *     scribble diet, gain 1          0.588x  ->  2.658x     program R²  -1.886  ->  0.8584
+ *     own-class diet (D)             0.701x  ->  5.508x     program R²  -1.017  ->  0.9671
+ *     the gain ladder (A)   monotone to 1.00x  ->  3.183x at gain 0.5, an interior optimum
+ *     forward-reach ladder (E)  0.701->0.703x  ->  5.505x -> 6.084x, and MONOTONE as predicted
+ *
+ * §94 is NOT affected and reproduces byte-identically (25,167 labels, held-out -0.1142 against a
+ * null of -0.0044, deploy FALSE, the lift -0.4340 / -0.0182 / 0.0020) because its fit REFUSED, so
+ * nothing was ever applied and the broken reader never ran — rule 21's signature from the far side.
+ * What §94's CONCLUSION rested on does not survive: *the obstacle is the FUNCTION CLASS, measured
+ * from four directions* counted `-1.02 fitted directly` as one of the four, and that direction now
+ * reads **+0.9671**.
+ *
  * NOT A TEST. The proposal: *learn the controller output directly; set and actuals routed in; the
  * ground truth is routed as the "setpoint" at commissioning, and after commissioning the setpoint
  * is the setpoint.*
@@ -239,7 +267,7 @@ function score(active, g = 1, src = null, ref = null, P2 = null) {
   const LAPS = 6;
   for (let k = 0; k < LAPS * Q; k++) {
     const i = k % Q;
-    const u = active ? g * pol.act((o) => [inp[(((i + o) % Q) + Q) % Q]], i, null)[0] : 0;
+    const u = active ? g * pol.actLook((o) => [inp[(((i + o) % Q) + Q) % Q]], null)[0] : 0;
     uPk = Math.max(uPk, Math.abs(u));
     const e = m.q - R[i];
     if (k >= (LAPS - 4) * Q) { s += e * e; n++; }
@@ -310,7 +338,7 @@ console.log(`\n  DOES THE 0.9953 TRANSFER TO THE PROGRAM? (the program's own lab
   mt /= P;
   for (let i = 0; i < P; i++) {
     const t = PR.q[i] - yb[i];
-    const f = pol.act((o) => [yb[(((i + o) % P) + P) % P]], i, null)[0];
+    const f = pol.actLook((o) => [yb[(((i + o) % P) + P) % P]], null)[0];
     se += (t - f) ** 2; st += (t - mt) ** 2; sp += f * f;
     spk = Math.max(spk, Math.abs(f));
   }
@@ -416,15 +444,15 @@ console.log(`\n  D — THE DIET IS THE PROGRAM'S OWN CLASS (bang-bang trapezoids
   for (let i = 0; i < P; i++) mt += PR.q[i] - yb[i]; mt /= P;
   for (let i = 0; i < P; i++) {
     const t = PR.q[i] - yb[i];
-    const f = pol2.act((o) => [yb[(((i + o) % P) + P) % P]], i, null)[0];
+    const f = pol2.actLook((o) => [yb[(((i + o) % P) + P) % P]], null)[0];
     se += (t - f) ** 2; st += (t - mt) ** 2;
   }
   console.log(`    the FIT: ${fr.rows} rows, held-out R² `
     + `${fr.heldOutR2.map((z) => z.toFixed(4))}, null ${fr.controlR2.map((z) => z.toFixed(4))}, `
     + `deploy ${fr.deploy}`);
-  console.log(`    R² on the PROGRAM       ${(1 - se / st).toFixed(4)}   (the scribble diet read -1.886)`);
+  console.log(`    R² on the PROGRAM       ${(1 - se / st).toFixed(4)}   (the scribble diet read 0.8584)`);
   console.log(`    direct inverse          ${a.rms.toFixed(4)} mm rms   ${(off.rms / a.rms).toFixed(3)}x`
-    + `   (the scribble diet read 0.588x)`);
+    + `   (the scribble diet read 2.658x)`);
   pol = keep;
 }
 
@@ -479,7 +507,7 @@ console.log(`    in-diet R² FALLS and program R² RISES — opposite directions
     for (let i = 0; i < P; i++) mt += PR.q[i] - yb[i]; mt /= P;
     for (let i = 0; i < P; i++) {
       const t = PR.q[i] - yb[i];
-      const f = pe.act((o) => [yb[(((i + o) % P) + P) % P]], i, null)[0];
+      const f = pe.actLook((o) => [yb[(((i + o) % P) + P) % P]], null)[0];
       se += (t - f) ** 2; st += (t - mt) ** 2;
     }
     const keep = pol; pol = pe;
@@ -641,7 +669,7 @@ function localRun(bank, label) {
   console.log(`    ${label}`);
   console.log(`      bank ${bank.length} windows x ${2 * W + 1} taps`);
   console.log(`      R² on the PROGRAM     ${(1 - se / st).toFixed(4)}   `
-    + `(the linear map read -1.0172)`);
+    + `(the linear map read 0.9671 — §99; it read -1.0172 through a broken reader)`);
   console.log(`      applies               ${(1000 * Math.sqrt(sp / P)).toFixed(4)} mm rms `
     + `against a target of ${(1000 * Math.sqrt(st / P)).toFixed(4)}`);
 
@@ -711,7 +739,10 @@ function localRun(bank, label) {
  * ---------------------------------------------------------------- THE PREDICTION, FIRST (rule 59)
  *
  * I expect this to FAIL, and the evidence is already in hand: the linear map fits its own diet at
- * R² 0.9265 and transfers to the program at -1.017. A map that is right locally and wrong globally
+ * R² 0.9265 and transfers to the program at -1.017. **THAT SECOND NUMBER IS RETRACTED BY §99 — it
+ * was the deploy reader and the transfer is +0.9671 — so the premise of this prediction was false
+ * when it was written. The prediction is kept verbatim because the block below still REFUSES, and
+ * an argument that reaches a true conclusion from a false premise is worth knowing about.** A map that is right locally and wrong globally
  * is a locally-valid LINEAR APPROXIMATION of a relation that is not linear — and no amount of
  * relabelling changes the function class. If that reading is right, the distilled linear map
  * reproduces its teacher where the diet is dense and diverges where it is not, and reads far below
@@ -798,7 +829,7 @@ console.log(`\n  H — CAN THE FREE TEACHER BE DISTILLED ONTO WHAT SHIPS? (plan 
     const c0 = PR.q[i];
     for (let j = -W; j <= W; j++) w[j + W] = PR.q[(((i + j) % P) + P) % P] - c0;
     tea[i] = predict(w);
-    mine[i] = pol3.act((o) => [PR.q[(((i + o) % P) + P) % P]], i, null)[0];
+    mine[i] = pol3.actLook((o) => [PR.q[(((i + o) % P) + P) % P]], null)[0];
     mT += tea[i]; mY += PR.q[i] - yb[i];
   }
   mT /= P; mY /= P;
@@ -809,7 +840,7 @@ console.log(`\n  H — CAN THE FREE TEACHER BE DISTILLED ONTO WHAT SHIPS? (plan 
   console.log(`    R² against its TEACHER on the program   ${(1 - seT / stT).toFixed(4)}   `
     + `(did the distillation succeed?)`);
   console.log(`    R² against the TRUE target              ${(1 - seY / stY).toFixed(4)}   `
-    + `(the teacher itself reads 0.9966; the direct linear fit read -1.0172)`);
+    + `(the teacher itself reads 0.9966; the direct linear fit reads 0.9671 — §99)`);
 
   {
     // score() closes over `pol`, so swap it for this one run and put it back.
@@ -817,7 +848,7 @@ console.log(`\n  H — CAN THE FREE TEACHER BE DISTILLED ONTO WHAT SHIPS? (plan 
     const b = score(true, 1);
     pol = keep;
     console.log(`    ON THE MACHINE          ${b.rms.toFixed(4)} mm rms   `
-      + `${(off.rms / b.rms).toFixed(3)}x   (teacher 22.599x · direct linear fit 0.701x)`);
+      + `${(off.rms / b.rms).toFixed(3)}x   (teacher 22.599x · direct linear fit 5.510x — §99)`);
   }
 
   // -------------------------------------------------------------- THE LIFT, §94's OWN FALSIFIER
@@ -895,7 +926,8 @@ console.log(`\n  H — CAN THE FREE TEACHER BE DISTILLED ONTO WHAT SHIPS? (plan 
  * rather than ignored.
  *
  * THE BAR, STATED BEFORE THE RUN: held-out R² on the PROGRAM, where the global linear map reads
- * -1.0172 and the local model reads 0.9966. Above ~0.9 at under 10,000 MAC this is a rung worth
+ * -1.0172 (RETRACTED by §99: the reader; it reads 0.9671) and the local model reads 0.9966.
+ * Above ~0.9 at under 10,000 MAC this is a rung worth
  * registering; below it, §94's verdict stands and the route really is closed.
  *
  * The selector is the window's own local VELOCITY, binned by quantile over the training rows,
@@ -944,7 +976,8 @@ console.log(`\n  I — A PLC-SHAPED LOCAL MODEL: R local linear maps, blended (p
 
   console.log(`\n     R   feat   MAC/dec   held-out R² on the PROGRAM   on the machine`);
   // R = 1 IS THE MATCHED CONTROL AND WITHOUT IT THIS TABLE MEANS NOTHING (rules 15, 20).
-  // The global figures it would be read against — -1.0172 fitted directly, 0.0020 lifted — come
+  // The global figures it would be read against — 0.9671 fitted directly (§99; -1.0172 as first
+  // measured, through a reader centred at 2i), 0.0020 lifted — come
   // from `DistilPolicy`, which standardises, carries sign taps and applies its own gate. This
   // section uses a self-contained ridge over a plainer row, so a difference between them could be
   // the ROW BUILDER rather than the locality. R = 1 is this file's own global fit: same builder,
@@ -1012,37 +1045,36 @@ console.log(`\n  I — A PLC-SHAPED LOCAL MODEL: R local linear maps, blended (p
     console.log(`    ${String(R).padStart(2)}   ${String(NF).padStart(4)}   ${String(mac).padStart(7)}`
       + `   ${(1 - se / st).toFixed(4).padStart(22)}   ${(off.rms / rms).toFixed(3)}x`);
   }
-  console.log(`    global linear -1.0172 · global lifted 0.0020 · the LOCAL model 0.9966 at 430k MAC`);
+  console.log(`    global linear 0.9671 (§99) · global lifted 0.0020 · the LOCAL model 0.9966 at 430k MAC`);
   console.log(`    the bar (stated before the run): above ~0.9 under 10,000 MAC is a rung worth having.`);
 }
 
 
-// ---------------------------------------------------------------- J: WAS IT EVER THE CLASS?
+// ---------------------------------------------------------------- J: THE RIDGE IS A REAL AXIS
 /**
- * SECTION I's MATCHED CONTROL INVERTED SECTION I (plan §98.1), AND IT PUTS §94 IN QUESTION.
+ * WHY THIS BLOCK EXISTS, AND WHAT IT NOW MEASURES (plan §98.1, then §99).
  *
- * `R = 1` — a GLOBAL fit through this file's own plain row builder and trace-scaled ridge — reads
- * **0.9607 and 5.681x, the best row in the table.** Locality contributes nothing and is
- * monotonically harmful. So the gap is not local-against-global; it is that a plain global fit
- * reads 0.96 where `DistilPolicy`'s global fit read **-1.0172 on the same data** (§93 D).
+ * It was built to test whether §94's closure was a RIDGE — rule 32, with precedent: §70's "the
+ * 0.08x was the ridge, `1e-6`, the ARM's value, carried here and never re-derived", and
+ * `headroom.mjs`, where a ridge 3e-8 of the diagonal it regularised "read as a transfer failure at
+ * R² -13273". Swept over seven decades it never recovered from -1.017, so the ridge was recorded
+ * as refuted and §98's discrepancy left open.
  *
- * TWO THINGS DIFFER AND ONLY ONE IS A LIKELY CAUSE. `DistilPolicy` standardises the row and can
- * carry sign taps; those change the conditioning but not by two orders of magnitude of R². What
- * does is the RIDGE: section I scales it to the NORMAL MATRIX'S OWN TRACE, while the §93/§94 runs
- * passed `1e-6` ABSOLUTELY. This project has paid for that exact fault twice — §70's "the 0.08x
- * was the ridge, `1e-6`, the ARM's value, carried here and never re-derived", and `headroom.mjs`,
- * where a ridge computed against a mean ROW norm was 3e-8 of the diagonal it was regularising and
- * "read as a transfer failure at R² -13273" (rule 32: a threshold must be scaled to the quantity
- * it acts on).
+ * **§99 FOUND THE ACTUAL CAUSE — the deploy READER, centred at 2i (section L) — AND THIS TABLE
+ * BECAME SOMETHING ELSE.** With the window read where it belongs, the ridge is not inert: it is
+ * worth a factor of 2.5x, 5.510x at the default `1e-6` to **13.688x at ridge 1**, with an interior
+ * optimum and a collapse past it. So §98.1's verdict stands as an account of the -1.017 (no ridge
+ * repaired it, because no ridge could) and is wrong as a statement about the axis.
  *
- * **-1.0172 and -13273 are the same signature.** If that is what §93 D and §94 measured, then
- * their shared conclusion — *the obstacle is the FUNCTION CLASS* — is wrong, and the direct
- * inverse route is open rather than closed.
- *
- * So the ridge is swept over the SAME `DistilPolicy` configuration §93 D used, changing nothing
- * else. If the program R² recovers anywhere, the class was never the obstacle.
+ * AND THE SHAPE IS THE FINDING, because it is not selected: in-diet held-out R² falls
+ * MONOTONICALLY (0.9265 → 0.8266) while R² on the PROGRAM rises (0.9671 → 0.9946). The fit's own
+ * gate ranks this axis BACKWARDS — §49's law on a ninth knob, and `distil.js`'s stated "the gate is
+ * a cheap PRE-FILTER and the decision is a machine-scored verify" with a number on it for the third
+ * time. Read the delivered column NARROWLY (rule 19): ridge 1 is picked by scoring the program it
+ * is quoted on, so 13.688x is a measurement of the AXIS and not a claim about the controller. The
+ * claimable number is 5.510x, the default, with nothing selected.
  */
-console.log(`\n  J — WAS §94's CLOSURE A RIDGE? (plan §98.1, rule 32)`);
+console.log(`\n  J — THE RIDGE LADDER ON THIS ROUTING (plan §98.1, re-read by §99)`);
 {
   const r10 = lcg(SEED * 7919 + 13);
   const diet = [];
@@ -1064,7 +1096,7 @@ console.log(`\n  J — WAS §94's CLOSURE A RIDGE? (plan §98.1, rule 32)`);
     let se = 0, st = 0;
     for (let i = 0; i < P; i++) {
       const t = PR.q[i] - yb[i];
-      const f = pj.act((o) => [yb[(((i + o) % P) + P) % P]], i, null)[0];
+      const f = pj.actLook((o) => [yb[(((i + o) % P) + P) % P]], null)[0];
       se += (t - f) ** 2; st += (t - mt) ** 2;
     }
     const keep = pol; pol = pj; const sc = score(true, 1); pol = keep;
@@ -1072,34 +1104,30 @@ console.log(`\n  J — WAS §94's CLOSURE A RIDGE? (plan §98.1, rule 32)`);
       + `   ${(1 - se / st).toFixed(4).padStart(17)}   ${(off.rms / sc.rms).toFixed(3)}x`
       + `${fr.deploy ? '' : '   (fit REFUSED)'}`);
   }
-  console.log(`    §93 D read -1.0172 at ridge 1e-6; this file's own plain global fit reads 0.9607.`);
-  console.log(`    If any row here recovers, §94's "the obstacle is the FUNCTION CLASS" is wrong.`);
+  console.log(`    in-diet R² FALLS monotonically while PROGRAM R² RISES — §49's law on a ninth knob,`);
+  console.log(`    so this fit's own gate ranks the ridge BACKWARDS and cannot be used to pick it.`);
 }
 
 
-// ---------------------------------------------------------------- K: THEN WHAT IS THE DIFFERENCE?
+// ---------------------------------------------------------------- K: STANDARDISE vs SIGN TAPS
 /**
- * THE RIDGE IS NOT IT (§98.1, section J: seven decades, program R² -1.02 to -0.35, never
- * recovering), so §94's MEASUREMENT stands. But the discrepancy it exposed does not go away: the
- * SAME data, the SAME function class, `DistilPolicy` reads **-1.0172** and this file's plain
- * global fit reads **+0.9607**. One of those two numbers is not measuring what it is being read as
- * measuring, and until it is known which, §94's conclusion is unsafe either way.
+ * BUILT TO SEPARATE TWO CANDIDATES FOR §98's DISCREPANCY, AND IT IS WHAT EXPLAINS WHAT IS LEFT OF
+ * IT (plan §98.2, then §99).
  *
- * Two differences remain and this is the 2x2 that separates them (rule 20 — one variable at a
- * time, everything else held):
+ * §99 established that the discrepancy was the deploy READER (section L), which accounts for
+ * -1.0172 against +0.9607. What it does NOT account for is the remaining 3%: with the reader
+ * fixed, `DistilPolicy` reads 0.9671 / 5.510x where section I's plain global fit reads 0.9607 /
+ * 5.681x, and the two are still not the same object. This 2x2 is that gap, measured one variable
+ * at a time (rule 20).
  *
- *   STANDARDISE  the row leads with the ABSOLUTE reference (1e-2 here) and follows with
- *                DIFFERENCES (1e-4), so dividing by each feature's own rms is right in principle
- *                and §63 measured it worth 3-5x on the barrel.
- *   SIGN TAPS    `signOffsets` defaults to `[0]`, which appends `sign(v)` and `|v|`. `sign(v)` is
- *                DISCONTINUOUS. A large weight on it produces a correction that FLIPS, and a
- *                flipped correction of about the right size is exactly what R² = -1 looks like.
- *
- * The plain fit has neither. If turning the sign taps off recovers the program R², then §94's
- * four "directions" were four runs of ONE basis carrying a term that cannot transfer here — and
- * the deployed object's own default basis is implicated, which matters well beyond this routing.
+ * **STANDARDISATION IS THE WHOLE OF IT AND IT COSTS ~18% ON THIS ROUTING**: off, the same fit reads
+ * 6.513x against 5.510x, and the SIGN TAPS are inert to 0.6% in both rows. That is not a general
+ * verdict — §63 measured standardisation worth 3-5x on the barrel, where `_rowFrom`'s absolute
+ * leading term is 18-62% of full power against differences of order 0.1 — it is this routing's
+ * row, whose leading term is a POSITION and whose differences carry the command, being flattened
+ * by a per-feature rms that treats them as commensurable.
  */
-console.log(`\n  K — STANDARDISATION vs THE SIGN TAPS, one variable at a time (plan §98.2)`);
+console.log(`\n  K — STANDARDISATION vs THE SIGN TAPS, one variable at a time (plan §98.2, §99)`);
 {
   const r11 = lcg(SEED * 7919 + 13);
   const diet = [];
@@ -1122,7 +1150,7 @@ console.log(`\n  K — STANDARDISATION vs THE SIGN TAPS, one variable at a time 
       let se = 0, st = 0;
       for (let i = 0; i < P; i++) {
         const t = PR.q[i] - yb[i];
-        const f = pk.act((o) => [yb[(((i + o) % P) + P) % P]], i, null)[0];
+        const f = pk.actLook((o) => [yb[(((i + o) % P) + P) % P]], null)[0];
         se += (t - f) ** 2; st += (t - mt) ** 2;
       }
       const keep = pol; pol = pk; const sc = score(true, 1); pol = keep;
@@ -1131,7 +1159,63 @@ console.log(`\n  K — STANDARDISATION vs THE SIGN TAPS, one variable at a time 
         + `${(off.rms / sc.rms).toFixed(3)}x${fr.deploy ? '' : '   (REFUSED)'}`);
     }
   }
-  console.log(`    the plain global fit (neither) reads 0.9607 and 5.681x.`);
+  console.log(`    the plain global fit of section I (neither) reads 0.9607 and 5.681x — the 3% gap`);
+  console.log(`    §98 could not explain is this table: standardisation costs ~18% on this routing.`);
+}
+
+// ---------------------------------------------------------------- L: IT WAS THE READER
+/**
+ * §98 LEFT AN OPEN DISCREPANCY AND NAMED THE STEP THAT WOULD CLOSE IT: *dump both paths' feature
+ * rows for the SAME window index and diff them element by element.* Done, and the difference is
+ * in the ROW — the two paths were not reading the same window at all.
+ *
+ * `DistilPolicy` has TWO entry points and they take DIFFERENT READER SHAPES:
+ *
+ *   act(refAt, k)    `refAt` is an ABSOLUTE-INDEX reader. It builds its own window internally,
+ *                    `look = (o) => refAt(k + o)`.
+ *   actLook(look)    `look` is an OFFSET-FROM-NOW reader, already centred. Identical arithmetic.
+ *
+ * Every call in this file passed an offset-from-now closure `(o) => [ref[i + o]]` to `act(…, i)`,
+ * so the closure was handed `k + o = i + o` as its OWN offset and indexed `ref[i + (i + o)]`.
+ * **The window was read centred at 2i.** At i = 0 the two agree exactly, which is why the deploy
+ * path never looked wrong — and it is the reason a fit at R² 0.9953 delivered 0.588x.
+ *
+ * The dump below is the evidence rather than the argument: the reference is replaced by a RAMP,
+ * so every entry of the row IS the index it was read at, and the two rows can be compared by eye.
+ * Rule 17 again — the instrument fails before the model does, and this one had been failing
+ * since §93 was written.
+ */
+console.log(`\n  L — THE ROW DUMP §98 ASKED FOR (plan §99, rule 17)`);
+{
+  const ramp = new Float64Array(P);
+  for (let i = 0; i < P; i++) ramp[i] = i;            // value === index
+  const I = 100;
+  const lookC = (o) => [ramp[(((I + o) % P) + P) % P]];
+  const SHOW = UNIQ.filter((_, j) => j % 3 === 0).slice(0, 5);
+  const viaAct = SHOW.map((o) => lookC(I + o)[0]);    // what act(lookC, I) builds internally
+  const viaLook = SHOW.map((o) => lookC(o)[0]);       // what actLook(lookC) builds
+  const pad = (v) => String(v).padStart(7);
+  console.log(`      offsets          ${SHOW.map(pad).join('')}`);
+  console.log(`      act(look, k)     ${viaAct.map(pad).join('')}   <- centred at 2i`);
+  console.log(`      actLook(look)    ${viaLook.map(pad).join('')}   <- centred at i`);
+  console.log(`      wanted           ${SHOW.map((o) => pad((((I + o) % P) + P) % P)).join('')}`);
+  const wrong = SHOW.filter((o, j) => viaAct[j] !== viaLook[j]).length;
+  console.log(`      ${wrong} of ${SHOW.length} taps differ at i = ${I}; at i = 0 all of them AGREE,`);
+  console.log(`      which is exactly why this survived §93, §94 and §98 unnoticed.`);
+  // BOTH HALVES (rule 9). The i = 0 row must be built by the SAME construction as the row above,
+  // or it is the identity `f(o) === f(o)` wearing a check's clothes: what makes it a control is
+  // that ONE closure, read two ways, disagrees at i = 100 and agrees at i = 0 — which is the
+  // double offset `i + (i + o)` collapsing to `o` exactly where i is zero and nowhere else.
+  const rowsAt = (c) => {
+    const lk = (o) => [ramp[(((c + o) % P) + P) % P]];
+    return [UNIQ.map((o) => lk(c + o)[0]), UNIQ.map((o) => lk(o)[0])];
+  };
+  const [a0, b0] = rowsAt(0), [aI, bI] = rowsAt(I);
+  const agree0 = a0.every((v, j) => v === b0[j]);
+  const differI = aI.filter((v, j) => v !== bI[j]).length;
+  console.log(`      i = 0 control: the two readers agree on all ${UNIQ.length} taps — ${agree0}`);
+  console.log(`      i = ${I}:        they differ on ${differI} of ${UNIQ.length} — so the control has teeth`);
+  if (!agree0 || differI === 0) throw new Error('L: the row dump is not measuring the reader shape');
 }
 
 console.log(`\n  for scale, on this axis: the shipped distilled policy reads 32.75x over the`);
