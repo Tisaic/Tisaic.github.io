@@ -811,14 +811,66 @@ console.log(`\n  H — CAN THE FREE TEACHER BE DISTILLED ONTO WHAT SHIPS? (plan 
   console.log(`    R² against the TRUE target              ${(1 - seY / stY).toFixed(4)}   `
     + `(the teacher itself reads 0.9966; the direct linear fit read -1.0172)`);
 
-  const a = score(true, 1, null, null, null);
-  // score() closes over `pol`, so swap it for this one run and put it back.
-  const keep = pol; pol = pol3;
-  const b = score(true, 1);
-  pol = keep;
-  console.log(`    ON THE MACHINE          ${b.rms.toFixed(4)} mm rms   ${(off.rms / b.rms).toFixed(3)}x`
-    + `   (teacher 22.599x · direct linear fit 0.701x · bare 1.000x)`);
-  void a;
+  {
+    // score() closes over `pol`, so swap it for this one run and put it back.
+    const keep = pol; pol = pol3;
+    const b = score(true, 1);
+    pol = keep;
+    console.log(`    ON THE MACHINE          ${b.rms.toFixed(4)} mm rms   `
+      + `${(off.rms / b.rms).toFixed(3)}x   (teacher 22.599x · direct linear fit 0.701x)`);
+  }
+
+  // -------------------------------------------------------------- THE LIFT, §94's OWN FALSIFIER
+  /**
+   * §94 CLOSES THE ROUTE FOR A LINEAR MAP OF THE RAW WINDOW AND NAMES EXACTLY ONE THING LEFT.
+   *
+   * The deployed artefact does not have to be linear in the raw window — a LIFTED basis is still
+   * linear in parameters, still one weight vector, still `deploy.js`'s dot product, and costs MAC
+   * rather than architecture. §54.9 measured lifts LOSING, but that belongs to the TEACHER
+   * routing, which is the verdict §94 inverts, so its evidence does not carry here.
+   *
+   * The lift is the LIBRARY'S OWN and not a second copy (rule 61): `signOffsets` pushes
+   * `sign(v)` and `|v|` at each named offset, which is `classic.js`'s basis and is exactly the
+   * shape this plant's nonlinearity has — a 61-bin friction curve, a drive saturation and an
+   * encoder quantisation, all of which switch on the SIGN of velocity where no window of
+   * POSITIONS can recover a switch.
+   *
+   * THE BAR IS STATED FIRST (rule 59): held-out R² against the teacher's own labels. Below about
+   * 0.9 the route is closed for good; above it the only remaining question is the MAC.
+   */
+  console.log(`\n    THE LIFT — §94's own falsifier, on the same free labels`);
+  for (const nSign of [1, 5, 15]) {
+    const so = [];
+    for (let i = 0; i < nSign; i++) {
+      so.push(UNIQ[Math.round((i / Math.max(1, nSign - 1)) * (UNIQ.length - 1))]);
+    }
+    const sq = [...new Set(so)];
+    const pl = new DistilPolicy({
+      channels: 1, refDim: 1, offsets: UNIQ, signOffsets: sq, ridge: RIDGE,
+      uMax: 0.05, online: false, standardize: true,
+    });
+    const r9 = lcg(SEED * 31337 + 5);
+    for (let d = 0; d < NDIS; d++) {
+      const rr = trapezoid(r9), n = rr.length;
+      const prefix = new Array(n);
+      for (let k = 0; k < n; k++) {
+        const w = new Float64Array(2 * W + 1);
+        const c0 = rr[k];
+        for (let j = -W; j <= W; j++) w[j + W] = rr[(((k + j) % n) + n) % n] - c0;
+        prefix[k] = [predict(w)];
+      }
+      pl.addProgram({ refAt: (k) => [rr[(((k % n) + n) % n)]], n, prefix, stride: 1, closed: true });
+    }
+    const f2 = pl.fit();
+    const keep2 = pol; pol = pl;
+    const b2 = score(true, 1);
+    pol = keep2;
+    console.log(`      ${String(sq.length).padStart(2)} sign taps, ${f2.features} features   `
+      + `held-out R² ${f2.heldOutR2[0].toFixed(4).padStart(8)}   deploy ${String(f2.deploy).padEnd(5)}   `
+      + `${(off.rms / b2.rms).toFixed(3)}x on the machine`);
+  }
+  console.log(`    the raw window read -0.1142. Below ~0.9 the route is CLOSED for good; above it`);
+  console.log(`    what remains is only how many MAC the lift costs (rule 59, stated first).`);
 }
 
 console.log(`\n  for scale, on this axis: the shipped distilled policy reads 32.75x over the`);
