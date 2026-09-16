@@ -20,6 +20,7 @@
 import { runEmpsDistil, rates, tone } from './distil-emps.mjs';
 import { P, PR, makeMachine } from './emps-rig.mjs';
 import { AutoStack } from '../../lib/pilot/autostack.js';
+import { motionBasis } from '../../lib/pilot/classic.js';
 import { printCost, emitRow } from './rigs/distilkit.mjs';
 
 let failed = 0;
@@ -81,6 +82,21 @@ const VP = rates(PR.q).v;
 const A2 = new AutoStack({
   channels: [{ lo: -0.02, hi: 0.27, vMax: 1.25e-4, aMax: 8.3e-7, jMax: 5e-8 }],
   uMax: UM, floor: 1.6e-3, periodic: P,
+  // THE INCUMBENT IS OFFERED HERE TOO, BECAUSE THE BLOCK IS A PORTFOLIO (plan §97).
+  //
+  // This ladder was narrowed to distil -> lap-periodic deliberately — "those two are the whole
+  // question", one addressed by the commanded reference and one by lap phase — and that was the
+  // right narrowing for the question §50.2 was asking. It is the wrong one for the question the
+  // product answers, and §96 measured the cost: this plant's incumbent column read `not offered`
+  // while `autostack.test.mjs`, the FULL ladder on the same axis, ships that rung at 424.8x.
+  // A table about what a machine receives cannot have the strongest rung on its strongest plant
+  // sitting outside the ladder that emits the row (rule 19).
+  //
+  // Same construction as `rigs/ladder.mjs`, from this channel's own declared peaks, so it is the
+  // same incumbent every other plant was measured against (rule 61). `NOCLASSIC=1` disables it and
+  // reproduces every number this file produced before §97.
+  ...(process.env.NOCLASSIC === '1'
+    ? {} : { basis: motionBasis([{ v: 1.25e-4, a: 8.3e-7 }]) }),
   distil: { refDim: 1, ridge: 1e-8,
     offsets: [-512, -256, -128, -64, -32, -16, -8, -4, -2, -1, 0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512],
     signOffsets: [-128, -32, -8, -2, 0, 2, 8, 32, 128] },

@@ -198,6 +198,10 @@ async function once(seed) {
     // column as `not offered` — a NON-measurement that the first emitter rendered as 1.00x,
     // indistinguishable from a rung that ran and found nothing.
     //
+    // OFFERED BY DEFAULT NOW — THE BLOCK IS A PORTFOLIO AND PICKS (plan §97). Measured here at
+    // 1.00x, refused, the basis spanning 0.0% of the error energy, with the delivered result
+    // unchanged to five figures (1.5494e-1, 3.268x) — rule 21's licence. `NOCLASSIC=1` disables.
+    //
     // IT IS `basis` AND NOT `classic`, AND THE FIRST VERSION SET THE WRONG ONE. `AutoStack` reads
     // `o.basis` (line 112); `lib/flexisim/autohost.js` is the module that translates a `classic`
     // FLAG into that basis, and this harness does not go through it. So `classic: true` here set
@@ -209,8 +213,8 @@ async function once(seed) {
     // The basis is constructed exactly as `rigs/ladder.mjs` constructs it, from the channels'
     // own declared peaks, so this is the same incumbent the column, mill and barrel were measured
     // against and not a second one (rule 61). Unset is byte-identical.
-    ...(process.env.CLASSIC === '1'
-      ? { basis: motionBasis([0, 1].map(() => ({ v: 4e-3, a: 2e-5 }))) } : {}),
+    ...(process.env.NOCLASSIC === '1'
+      ? {} : { basis: motionBasis([0, 1].map(() => ({ v: 4e-3, a: 2e-5 }))) }),
     maxDepth: 1, periodic: false,
     // THE PILOT'S OWN OPTIONS, which `Stack` reads and which this file has never supplied. It
     // routes them exactly as `rigs/ladder.mjs` does — `pilot: { nMeasured, start, guards,

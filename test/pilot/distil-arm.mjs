@@ -170,14 +170,24 @@ const host = makeArmHost({
   path, lap: LAP, K, centre,
   // LAPSYNC=1: re-phase the cascade's tick at each lap start (measured 2.23x -> 2.19x; off, plan §52.15).
   ...(process.env.LAPSYNC === '1' ? { lapSync: true } : {}),
-  // CLASSIC=1: ARM THE INCUMBENT, which this harness has never done (plan §95, §96).
-  // `classic: false` is here for a stated reason — the distilled object REPLACES the conventional
-  // rung AND the compliance feedforward (§52.8 measured bare 0.217 beating under-the-feedforward
-  // 0.338), and target 4's own table records the ladder commissioning that rung, scoring it at
-  // 1.07x and DISCARDING it. But a reason about what SHIPS is not a reason to leave the
-  // COMPARISON unmeasured, and §95 found this plant's incumbent column reading `not offered`
-  // while three others read a real refusal. Unset is byte-identical.
-  classic: process.env.CLASSIC === '1', maxDepth: ENGINE === 'pilot' ? 1 : 0, demo: null, lapMemory: PERIODIC, distil: DISTIL,
+  // THE INCUMBENT IS OFFERED BY DEFAULT — THE BLOCK IS A PORTFOLIO AND PICKS (plan §97).
+  //
+  // This read `classic: false` for a stated reason: the distilled object REPLACES the conventional
+  // rung and the compliance feedforward (§52.8 measured bare 0.217 beating under-the-feedforward
+  // 0.338), and target 4's table records the ladder commissioning that rung, scoring it 1.07x and
+  // DISCARDING it — two of four minutes for nothing. That is a COMMISSIONING-COST argument, and
+  // §96 measured what it was costing instead: this plant's incumbent column read `not offered`,
+  // a non-measurement, while five other plants read a real refusal.
+  //
+  // Offered, it takes 20 laps and 8.5 machine-minutes to reach **1.01x** and is NOT DEPLOYED, and
+  // **the delivered result comes back unchanged to five figures** (1.6159e-1, 6.63x). That
+  // byte-identity is the licence (rule 21): the portfolio costs commissioning time here and
+  // changes the machine not at all, so what it buys is the block being able to SAY the incumbent
+  // was tried and found nothing — which on five plants of ten is the product's own claim.
+  //
+  // `NOCLASSIC=1` disables it, which is `rigs/ladder.mjs`'s existing convention rather than a
+  // second one (rule 61), and is the control that reproduces every number taken before §97.
+  classic: process.env.NOCLASSIC !== '1', maxDepth: ENGINE === 'pilot' ? 1 : 0, demo: null, lapMemory: PERIODIC, distil: DISTIL,
   ...(DIETS[DIET] ? { distilDiet: DIETS[DIET] } : {}), distilReplaces: REPLACE,
   // DIET=self: the bench square ITSELF as the only training program — the in-sample ceiling of the
   // basis on the program it is scored on; DIET=selfpoly: the square plus the four polygons.
