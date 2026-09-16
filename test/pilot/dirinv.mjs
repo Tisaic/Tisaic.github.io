@@ -943,7 +943,13 @@ console.log(`\n  I — A PLC-SHAPED LOCAL MODEL: R local linear maps, blended (p
   vs.sort((a, b) => a - b);
 
   console.log(`\n     R   feat   MAC/dec   held-out R² on the PROGRAM   on the machine`);
-  for (const R of [2, 4, 8, 16]) {
+  // R = 1 IS THE MATCHED CONTROL AND WITHOUT IT THIS TABLE MEANS NOTHING (rules 15, 20).
+  // The global figures it would be read against — -1.0172 fitted directly, 0.0020 lifted — come
+  // from `DistilPolicy`, which standardises, carries sign taps and applies its own gate. This
+  // section uses a self-contained ridge over a plainer row, so a difference between them could be
+  // the ROW BUILDER rather than the locality. R = 1 is this file's own global fit: same builder,
+  // same solver, same ridge, same scoring, only the region count moving.
+  for (const R of [1, 2, 4, 8, 16]) {
     const edge = [];
     for (let i = 1; i < R; i++) edge.push(vs[Math.floor((i / R) * vs.length)]);
     const ctr = [];
