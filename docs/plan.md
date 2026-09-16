@@ -21983,3 +21983,90 @@ dot product. A local model is what works and it is 430k MAC in 1.7 MB against a 
 regression. That is a product decision and not a measurement, and this record's job is to say so
 rather than to keep fitting.
 
+
+## §95 — THE INCUMBENT'S SHARE, MEASURED ON EIGHT PLANTS
+
+The owner's standing objection is *we have spent this much effort on a controller that cannot beat
+a PID FF*, and until now this record could not answer it, because every headline here is the WHOLE
+ladder against the bare machine and the ladder's FIRST rung — `classic.js`, `[a, v, sign v, 1]`
+fitted on the machine — IS the incumbent class. §89.6 built the column that separates them.
+`emitRow` reads `rep.rungs` and emits `xClassic = base/classic` beside `xAdded = classic/best`,
+which multiply to the headline by construction, so it costs no plant time.
+
+### THE INSTRUMENT WAS WRONG FIRST, AND IT WAS WRONG IN THE DIRECTION THAT FLATTERS
+
+§89.6's own comment reads *a rung that did not run must not read as one that ran and contributed
+nothing* — and the code then emitted `xClassic: 1` for both, because it found the rung with
+`&& r.deployed`. Scraped across ten plants that read `classicRan: false` on SIX of them, including
+every plant carrying this project's headline factors, and a table built on it would have published
+six non-measurements as measurements on exactly the question the column exists to answer (rules 25,
+30). **Three states, now separated by `classicVerdict`:**
+
+```
+  NOT OFFERED   no rung by that name exists   -> xClassic null   NOT MEASURED
+  REFUSED       it ran and found no headroom  -> xClassic 1      a REAL reading of the incumbent
+  DEPLOYED      it ran and shipped            -> base/score      a REAL reading of the incumbent
+```
+
+The middle state is the one the first version destroyed, and it is a third of the table.
+
+### THE TABLE, ELEVEN ROWS OVER TEN PLANTS
+
+```
+  plant                              incumbent   learned    total   verdict
+  ── the incumbent CANNOT DO THE JOB: the learned object is the whole result ──
+  Wood-Berry column                     1.00x     3.96x     3.96x   refused, 0.0% of the error energy
+  cold mill AGC                         1.00x     2.62x     2.62x   refused
+  extruder barrel                       1.00x     7.00x     7.00x   refused, 0.0% of the error energy
+  ── they COMPOSE ──
+  cart-pole (shipped loop)              4.66x     2.56x    11.93x   deployed
+  real cascaded tanks (overflow)        4.28x     2.03x     8.69x   deployed
+  ── the incumbent IS the result and the learned object adds NOTHING ──
+  cart-pole (loop tuned 3.5x better)    9.24x     1.00x     9.24x   deployed
+  real flexible arm (DaISy 96-009)      1.93x     1.00x     1.93x   deployed
+  real steam heat exchanger            89.77x     1.00x    89.77x   deployed
+  ── NOT MEASURED: the harness never offered the rung ──
+  2R arm (lattice, bench cell)            —       6.63x     6.63x   not offered
+  EMPS servo axis                         —     341.69x   341.69x   not offered  (object + MEMORY)
+  quadruple tank                          —       3.27x     3.27x   not offered
+```
+
+**OF EIGHT PLANTS WHERE THE INCUMBENT WAS ACTUALLY MEASURED: on THREE it cannot do the job at all
+and the learned object delivers 2.6x-7.0x entirely on its own; on TWO they compose, the incumbent
+taking 4.3-4.7x and the learned object adding 2.0-2.6x on top; and on THREE the incumbent is the
+whole result and the learned object adds exactly 1.00x.**
+
+### AND THE THREE PLANTS THE INCUMBENT WINS OUTRIGHT ARE THE THREE §55 PREDICTS IT WOULD
+
+This is the line that keeps the table from being read as worse than it is, and it was already on
+file before the column existed. Two of the three — the real flexible arm and the real steam
+exchanger — are plants **IDENTIFIED AS A LINEAR ARX FROM A PUBLISHED RECORD**, and §55 states the
+consequence outright: *a plant identified as a linear ARX sits INSIDE the conventional rung's own
+hypothesis class — the basis is `[a, v, sign v, 1]`, the plant is linear, the inversion is exact,
+and the number measures the class rather than the machine (rule 15)*. The exchanger's 89.77x is
+that sentence with a number on it. The third is the cart-pole ON A LOOP TUNED 3.5x BETTER, where
+§84.10 had already established by a 24-fold authority sweep that the headline was the LOOP.
+
+So the incumbent's three clean wins are one prediction holding twice and one finding already
+recorded, rather than three independent defeats. **Read against the plants that are NOT soft
+targets for a linear feedforward, the learned object is the entire result on three of them.**
+
+### WHAT IS ACTUALLY OPEN, AND IT IS THE PART THAT MATTERS
+
+**The three plants carrying this project's flagship numbers — the 2R arm at 6.63x, EMPS at
+341.69x, the quadruple tank at 3.27x — have NEVER HAD THE INCUMBENT RUN AGAINST THEM.** Their
+harnesses pass `classic: false` deliberately and for a stated reason (the arm's bench config
+commissions the cascade as the distilled object's TEACHER, and the distilled object REPLACES the
+conventional rung and the compliance feedforward — §52.8 measured bare beating
+under-the-feedforward at 0.217 against 0.338). That reason is about what SHIPS; it is not a reason
+to leave the comparison unmeasured, and this record has now spent one section nearly reporting
+those three as if they had been.
+
+**What it costs**: one extra commissioning per plant with `classic` armed, and the arm's is 408 s
+of wall clock. **What it would establish**: whether the flagship factors are an increment over the
+incumbent or a replacement of it — which is the owner's question in the only form that settles it.
+
+**NOT CLAIMED**: one seed and one diet per plant; the split is read off each ladder's own record
+rather than re-scored, so it inherits whatever that commissioning was; and `xClassic` for a REFUSED
+rung is exactly 1 by definition rather than by measurement — the measurement is that the rung found
+no headroom, which the column, mill and barrel all report with a stated reason.
