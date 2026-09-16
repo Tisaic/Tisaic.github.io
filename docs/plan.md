@@ -21938,3 +21938,48 @@ for good; above it, the remaining question is only how many MAC the lift costs.*
 **NOT CLAIMED**: one plant, one seed, one program, one teacher (k = 8 inverse-distance over 49
 shape-normalised taps), and EMPS is the rival's own strong ground.
 
+### AND THE LIFT IS REFUTED BY THE BAR SET BEFORE IT RAN, SO THE ROUTE IS CLOSED FOR GOOD
+
+§94 named exactly one thing left — the artefact need not be linear in the RAW window, and a LIFTED
+basis is still linear in parameters, still one weight vector, still `deploy.js`'s dot product. The
+lift is the LIBRARY'S OWN rather than a second copy (rule 61): `signOffsets` pushes `sign(v)` and
+`|v|` at each named offset, which is `classic.js`'s basis and is the shape this plant's
+nonlinearity actually has — a 61-bin friction curve, a drive saturation and an encoder
+quantisation, every one of which switches on the SIGN of velocity where no window of POSITIONS can
+recover a switch. Fitted on the identical free 25,167-label set, scored on the machine:
+
+```
+   sign taps   features   held-out R²   deploy   on the machine
+       1          18        -0.4340     false      1.000x
+       5          26        -0.0182     false      1.000x
+      15          46         0.0020     TRUE       0.698x
+   the raw window                       -0.1142    false      1.000x
+```
+
+**THE BAR WAS STATED FIRST AND NOTHING COMES NEAR IT (rule 59)**: *below about 0.9 the route is
+closed for good.* The best of four reads **0.0020**. So the direct inverse cannot ship through this
+artefact under any basis tried, and the failure is not the raw window's — lifting it in exactly the
+direction the plant's physics points moves the held-out score from -0.11 to 0.00 and no further.
+
+**AND THE ONE ROW THAT DEPLOYS IS THE CAPACITY GATE'S OWN FALSE POSITIVE, CAUGHT BY THE MACHINE.**
+At 15 sign taps the fit vouches for itself at R² 0.0020 — a hair above its shuffled null — and
+delivers **0.698x, worse than doing nothing**, which is the raw linear map's 0.701x reproduced. That
+is `distil.js`'s own stated property arriving in the open: *the gate is a cheap PRE-FILTER and on a
+pure-noise target it still deploys about one commissioning in twelve, so the decision is a
+machine-scored verify*. Here the pre-filter passed and the machine refused, which is the two-stage
+design working rather than failing (rule 16).
+
+**SO §93 AND §94 TOGETHER ARE A COMPLETE, BOUNDED RESULT.** The routing is real and the teacher is
+free — 22.599x on the machine with no teacher, no cascade, no lap index, no iteration, from records
+the commissioning already has. The information is present in the commanded reference window to
+R² 0.998, measured from the data with nothing fitted. And no linear-in-parameters map of that
+window, raw or lifted, can express it: -1.02 fitted directly, -0.11 distilled from the free teacher
+on an unlimited set, 0.00 lifted in the direction the physics names. **The obstacle is the FUNCTION
+CLASS and it is now measured from four directions rather than argued.**
+
+**WHAT WOULD REOPEN IT, and it is not a fit**: the deployed artefact would have to stop being a
+dot product. A local model is what works and it is 430k MAC in 1.7 MB against a 10,000-MAC budget —
+5,500x the shipped object — so reopening this means a different deploy boundary, not a better
+regression. That is a product decision and not a measurement, and this record's job is to say so
+rather than to keep fitting.
+
