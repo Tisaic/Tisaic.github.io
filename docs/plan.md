@@ -22150,3 +22150,77 @@ with no sweep, where a hand-tuned industrial feedforward might do better; the EM
 is below its rig's stated instrument fidelity; and `xClassic` for a refused rung is exactly 1 by
 definition — the measurement is that the rung found no headroom, which four plants report with a
 stated reason.
+
+## §97.3 — WHAT THE PORTFOLIO WAS WORTH IMMEDIATELY, AND §96's COUNT IS RETRACTED
+
+With the incumbent offered, its basis built from the program's own series (§97.1) and its deploy
+path actually handed `v` and `a` (§97.2), two plants move and one of them moves a long way.
+
+```
+  plant          before §97          after                      what changed
+  quadruple tank  3.268x  distil     19.910x  CONVENTIONAL      6.1x, and the ladder switched
+  EMPS axis     341.692x  hff+distil 424.816x CONVENTIONAL      1.24x, and the ladder switched
+```
+
+**THE TANK'S CONVENTIONAL RUNG READS 5.0636e-1 → 2.5432e-2 = 19.91x IN 24 LAPS ON 7 COEFFICIENTS**,
+and the distilled rung scored on top of that better machine reads **0.16x and is REFUSED**. Six
+times better than everything §70, §72 and §79 built on that plant, from four coefficients that were
+in the box the whole time.
+
+### §96's COUNT IS WRONG AND THIS IS THE CORRECTION
+
+§96 published *on FIVE plants the incumbent finds no headroom at all*, and listed the quadruple
+tank among them at 1.00x. **That was never a measurement** — the rung was never applied there, for
+the two reasons §97.1 and §97.2 name. The corrected table over ten plants:
+
+```
+  ── THE LEARNED OBJECT IS THE WHOLE RESULT (4, was 5) ──
+  extruder barrel                       1.00x     7.00x      refused, 0.0% of the error energy
+  2R arm (lattice, bench cell)          1.01x     6.63x      20 laps, NOT deployed
+  Wood-Berry column                     1.00x     3.96x      refused, 0.0% of the error energy
+  cold mill AGC                         1.00x     2.62x      refused
+  ── THEY COMPOSE (2) ──
+  cart-pole (shipped loop)              4.66x     2.56x     11.93x
+  real cascaded tanks (overflow)        4.28x     2.03x      8.69x
+  ── THE INCUMBENT IS THE RESULT (5 rows, was 4) ──
+  EMPS servo axis                     424.82x     1.00x      and the ladder SHIPS it
+  real steam heat exchanger            89.77x     1.00x
+  quadruple tank                       19.91x     1.00x      <- MOVED HERE from the first block
+  cart-pole (loop tuned 3.5x better)    9.24x     1.00x
+  real flexible arm (DaISy 96-009)      1.93x     1.00x
+```
+
+**Four plants of ten, not five.** And the tank is the sharper correction, because that plant has
+been worked on harder than any other here — §70 turned a 0.08x refusal into a win by re-deriving a
+carried ridge, §72 cut its commissioning 19.3 days to 2.0, §79 built a whole third ladder axis on
+it for 2.593x → 3.268x — and **four coefficients beat all of it by 6.1x once they were allowed to
+act.** That is worth more to this project than the factor: it is a standing warning that a plant
+declared hard should be re-asked with the cheapest thing in the box before anything is built for it.
+
+### AND IT IS THE OWNER'S OWN DIRECTIVE PAYING OFF ON THE DAY IT WAS GIVEN
+
+The instruction was: *it can be a combination of controllers packaged together, as long as the
+block is PLC-shaped, and it wins everywhere by choosing and reporting.* Measured, on the two plants
+where the portfolio could newly choose:
+
+**the block got 6.1x better on the tank and 1.24x better on EMPS by carrying a controller it
+already had and being allowed to pick it.** No new algorithm, no new fit, no extra plant time
+beyond one commissioning of a 7-coefficient rung.
+
+And the selection is right in both directions, which is the half that makes it a portfolio rather
+than a bundle: on the tank it ships the incumbent and REFUSES the distilled rung at 0.16x; on the
+barrel, arm, column and mill it refuses the incumbent and ships the distilled object; on the real
+cascaded tanks it ships BOTH. `portfolio.mjs` asserts the claim on all ten rows — **never worse
+than doing nothing, never worse than its own best part** — at a worst deployed peak of 276
+MAC/decision, 2.8% of budget.
+
+### WHAT THIS COSTS THE PROJECT'S OWN HEADLINES, STATED PLAINLY
+
+The tank's 3.268x and EMPS' 341.69x appear throughout `CLAUDE.md` as results of the distilled
+object. They stand as what THAT OBJECT delivers and they are no longer what the BLOCK ships on
+those plants. Any sentence quoting them as the plant's result is now wrong by 6.1x and 1.24x
+respectively, and the block's own scrape is what should be quoted instead.
+
+**NOT CLAIMED**: one seed and one diet per plant; the incumbent runs at `classic.js`'s own defaults
+with no sweep; and the tank's 19.91x is one commissioning, where §84.8's own lesson is that a
+headline from one draw is a coin until its distribution is measured.
