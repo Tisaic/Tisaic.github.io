@@ -22646,3 +22646,104 @@ reads BELOW 1.000x. `scoreOn` now takes `decls`, `PLANTSPAN` takes named overrid
 `makeMill` takes an operating point — so three instruments exist for looking and none has found
 one. Until one does, "the deployed object carries guards" should be read as *the object implements
 them and two plants arm one*, which is a narrower sentence than the record has been making.
+
+
+## §101 — THE LAP-FREE TEACHER ON THE COLUMN AND THE TANK: ONE PREDICTION HOLDS, ONE IS REFUTED
+
+§90.3c bounded `_iteratePolicy` by measurement rather than argument — *the increments come from the
+CASCADE, so the lap-free teacher can be no better than the cascade it takes them from* — and named
+two plants it had not run, with the falsifier stated: **"the COLUMN (0.39x) and the QUADRUPLE TANK
+(refuses every layer) should produce nothing, and if the column works anyway this account is
+wrong."**
+
+The column works. The account is wrong.
+
+### IT WAS UNTESTABLE, NOT UNRUN
+
+Neither harness wired `oracleTeach` — `PARAM` and `oracleTeach` each appeared **zero times** in both
+files — so the prediction could not have been checked however often it was quoted. Both already had
+a suitable drive closure, passed INLINE and anonymous to `oracleConverge`; the mill and the barrel
+had NAMED theirs precisely so both teachers could share one loop (rule 61). Hoisting it is the whole
+change, and both controls are byte-identical to what the full suite recorded:
+
+```
+  column   1.364e-1 -> 3.445e-2   3.96x, gain 1.15 picked
+  tank     5.0636e-1 -> 2.5432e-2  19.910x
+```
+
+The tank also had to be OFFERED a cascade: §73.16 records that it *has never supplied a
+`drivePilot`, so its `maxDepth: 1` was inert from the day it was written*. Without one a throw would
+mean "no cascade was ever built" rather than the predicted "the cascade was built and refused" —
+different sentences (rule 25). Wired, it builds one: **depth 1 at 0.17x, refused**. So the tank was
+genuinely asked.
+
+### AND MY FIRST RUN WAS THE EXACT MISTAKE §90.3 WARNS ABOUT IN WRITING
+
+The gate is `!!distilOpts.parametric && runs.every((t) => t.teach)`. I wired `teach` and not
+`parametric`, so the run took the hff route SILENTLY and printed `engine hff` at 3.96x — which is
+**indistinguishable from the parametric engine running and finding nothing**, and would have been
+written up as the prediction holding. `distil-mill.mjs` says so in its own header —
+*`distil.parametric` has to be armed, or the run silently takes the other route* — and I wired it
+anyway. Rule 25 is not something you read once. It is recorded in both harnesses' comments rather
+than quietly fixed.
+
+### THE RESULT
+
+```
+  plant    cascade as a RUNG    teacher, per run              rows     delivered
+  column   0.39x                3.223 / 3.261 / 2.935 / 2.686x  12,000   3.40x
+    (hff control)               2.109x + 3 DROPPED at 1.25-1.37x  3,000   3.96x
+  tank     built, 0.17x, refused  0.985 / 1.083 / 1.093 / 1.012x  22,160   REFUSED at 0.12x
+```
+
+**THE TANK'S PREDICTION HOLDS AND FOR THE RIGHT REASON.** A cascade was built, `_iteratePolicy` ran
+and took increments from it, and the teacher gained essentially nothing — one run below 1.000x. The
+rung is refused and the block ships the incumbent at 19.910x, unchanged.
+
+**THE COLUMN'S IS REFUTED OUTRIGHT.** 4 of 4 training runs KEPT, the teacher reaching 2.7-3.3x on
+every one of them, 12,000 rows against the hff route's 3,000, and a delivered 3.40x. That is not
+"nothing" by any reading.
+
+### THE MECHANISM IS THE PART THAT FALLS, AND THIS PROJECT ALREADY KNEW BETTER
+
+Ordered by the cascade's verify as a RUNG, the teaching ability is not monotone and not even close:
+
+```
+  cascade as a rung    lap-free teacher
+    0.17x  (tank)        nothing
+    0.39x  (column)      2.7-3.3x, 4/4 kept
+    1.05x  (barrel)      nothing, 4/4 dropped at every damping scale
+    1.33x  (arm)         works
+    1.74x  (mill)        works
+```
+
+The worst cascade in the table teaches the second-best. So **the cascade's verify does not order its
+value as a teacher** — and that is §52.33's finding, already measured for the OTHER teacher and
+stated in `autostack.js`'s own comments: *as a RUNG the cascade is judged on whether its FORECAST
+inverts the machine well enough to ship, and as a TEACHER it is handed the measured error and asked
+only for the increment that cancels it — its verify measures exactly what the teaching port
+replaces.* §90.3c re-made, for `_iteratePolicy`, the conflation §52.33 had already refuted for
+`hff`, and the column is the plant that catches it.
+
+What survives is weaker and still useful: the teacher needs a cascade that EXISTS, and §90.3's own
+throw covers the case where none does. What it needs beyond that is not the cascade's score.
+
+### THE FORWARD-LOOKING HALF: IT TEACHES BETTER PER RUN AND DELIVERS WORSE
+
+On the column the parametric teacher improves **every** training run 2.7-3.3x where `hff` improves
+one at 2.109x and DROPS the other three below the rung's own 1.5x bar — four times the rows, a diet
+fully used instead of a quarter used — and then delivers **3.40x against 3.96x**. A better-converged
+teacher teaching a worse policy is §49's law, on a tenth knob; stated as suggestive rather than
+clean, because these are two different teachers and not one knob moved.
+
+**WHERE THAT MATTERS IS NAMED AND NOT RUN**: a plant where `hff` drops most of its diet is one where
+the parametric teacher would supply a usable one, and the column is exactly that plant (1 of 4 kept
+against 4 of 4). It did not pay here. Whether it pays where the diet is the binding constraint —
+§52.17 and §66's own finding that *what bounds a program-agnostic feedforward is how far the diet is
+from the program it will run* — is a different question from the one §90.3c asked.
+
+### NOT CLAIMED
+
+Two plants, one seed each, `passes 4` on the column and whatever the tank's own ladder chose (it
+reports 2). `PARAM` is opt-in and OFF on both, and both plants ship exactly what they shipped
+before: the column 3.96x by the hff route, the tank 19.910x by the incumbent.
