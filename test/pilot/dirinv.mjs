@@ -1076,6 +1076,64 @@ console.log(`\n  J — WAS §94's CLOSURE A RIDGE? (plan §98.1, rule 32)`);
   console.log(`    If any row here recovers, §94's "the obstacle is the FUNCTION CLASS" is wrong.`);
 }
 
+
+// ---------------------------------------------------------------- K: THEN WHAT IS THE DIFFERENCE?
+/**
+ * THE RIDGE IS NOT IT (§98.1, section J: seven decades, program R² -1.02 to -0.35, never
+ * recovering), so §94's MEASUREMENT stands. But the discrepancy it exposed does not go away: the
+ * SAME data, the SAME function class, `DistilPolicy` reads **-1.0172** and this file's plain
+ * global fit reads **+0.9607**. One of those two numbers is not measuring what it is being read as
+ * measuring, and until it is known which, §94's conclusion is unsafe either way.
+ *
+ * Two differences remain and this is the 2x2 that separates them (rule 20 — one variable at a
+ * time, everything else held):
+ *
+ *   STANDARDISE  the row leads with the ABSOLUTE reference (1e-2 here) and follows with
+ *                DIFFERENCES (1e-4), so dividing by each feature's own rms is right in principle
+ *                and §63 measured it worth 3-5x on the barrel.
+ *   SIGN TAPS    `signOffsets` defaults to `[0]`, which appends `sign(v)` and `|v|`. `sign(v)` is
+ *                DISCONTINUOUS. A large weight on it produces a correction that FLIPS, and a
+ *                flipped correction of about the right size is exactly what R² = -1 looks like.
+ *
+ * The plain fit has neither. If turning the sign taps off recovers the program R², then §94's
+ * four "directions" were four runs of ONE basis carrying a term that cannot transfer here — and
+ * the deployed object's own default basis is implicated, which matters well beyond this routing.
+ */
+console.log(`\n  K — STANDARDISATION vs THE SIGN TAPS, one variable at a time (plan §98.2)`);
+{
+  const r11 = lcg(SEED * 7919 + 13);
+  const diet = [];
+  for (let i = 0; i < SCRIB; i++) { const c = trapezoid(r11); diet.push({ c, y: drive(c), n: c.length }); }
+  let mt = 0; for (let i = 0; i < P; i++) mt += PR.q[i] - yb[i]; mt /= P;
+  console.log(`      standardise   sign taps   held-out R²   R² on the PROGRAM   on the machine`);
+  for (const std of [true, false]) {
+    for (const sgn of [true, false]) {
+      const pk = new DistilPolicy({
+        channels: 1, refDim: 1, offsets: UNIQ, ridge: RIDGE,
+        signOffsets: sgn ? [0] : [], uMax: 0.05, online: false, standardize: std,
+      });
+      for (const d of diet) {
+        const pre = new Array(d.n);
+        for (let k = 0; k < d.n; k++) pre[k] = [d.c[k] - d.y[k]];
+        pk.addProgram({ refAt: (k) => [d.y[Math.max(0, Math.min(d.n - 1, k))]], n: d.n, prefix: pre,
+          stride: 1, closed: true });
+      }
+      const fr = pk.fit();
+      let se = 0, st = 0;
+      for (let i = 0; i < P; i++) {
+        const t = PR.q[i] - yb[i];
+        const f = pk.act((o) => [yb[(((i + o) % P) + P) % P]], i, null)[0];
+        se += (t - f) ** 2; st += (t - mt) ** 2;
+      }
+      const keep = pol; pol = pk; const sc = score(true, 1); pol = keep;
+      console.log(`    ${String(std).padStart(11)}   ${String(sgn).padStart(9)}   `
+        + `${fr.heldOutR2[0].toFixed(4).padStart(11)}   ${(1 - se / st).toFixed(4).padStart(17)}   `
+        + `${(off.rms / sc.rms).toFixed(3)}x${fr.deploy ? '' : '   (REFUSED)'}`);
+    }
+  }
+  console.log(`    the plain global fit (neither) reads 0.9607 and 5.681x.`);
+}
+
 console.log(`\n  for scale, on this axis: the shipped distilled policy reads 32.75x over the`);
 console.log(`  cascade's 0.5764 mm and the conventional rung alone reads 425x — both of them`);
 console.log(`  taught by an iterated teacher this route does not have (plan §93).\n`);
