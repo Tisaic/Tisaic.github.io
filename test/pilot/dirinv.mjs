@@ -1016,6 +1016,66 @@ console.log(`\n  I — A PLC-SHAPED LOCAL MODEL: R local linear maps, blended (p
   console.log(`    the bar (stated before the run): above ~0.9 under 10,000 MAC is a rung worth having.`);
 }
 
+
+// ---------------------------------------------------------------- J: WAS IT EVER THE CLASS?
+/**
+ * SECTION I's MATCHED CONTROL INVERTED SECTION I (plan §98.1), AND IT PUTS §94 IN QUESTION.
+ *
+ * `R = 1` — a GLOBAL fit through this file's own plain row builder and trace-scaled ridge — reads
+ * **0.9607 and 5.681x, the best row in the table.** Locality contributes nothing and is
+ * monotonically harmful. So the gap is not local-against-global; it is that a plain global fit
+ * reads 0.96 where `DistilPolicy`'s global fit read **-1.0172 on the same data** (§93 D).
+ *
+ * TWO THINGS DIFFER AND ONLY ONE IS A LIKELY CAUSE. `DistilPolicy` standardises the row and can
+ * carry sign taps; those change the conditioning but not by two orders of magnitude of R². What
+ * does is the RIDGE: section I scales it to the NORMAL MATRIX'S OWN TRACE, while the §93/§94 runs
+ * passed `1e-6` ABSOLUTELY. This project has paid for that exact fault twice — §70's "the 0.08x
+ * was the ridge, `1e-6`, the ARM's value, carried here and never re-derived", and `headroom.mjs`,
+ * where a ridge computed against a mean ROW norm was 3e-8 of the diagonal it was regularising and
+ * "read as a transfer failure at R² -13273" (rule 32: a threshold must be scaled to the quantity
+ * it acts on).
+ *
+ * **-1.0172 and -13273 are the same signature.** If that is what §93 D and §94 measured, then
+ * their shared conclusion — *the obstacle is the FUNCTION CLASS* — is wrong, and the direct
+ * inverse route is open rather than closed.
+ *
+ * So the ridge is swept over the SAME `DistilPolicy` configuration §93 D used, changing nothing
+ * else. If the program R² recovers anywhere, the class was never the obstacle.
+ */
+console.log(`\n  J — WAS §94's CLOSURE A RIDGE? (plan §98.1, rule 32)`);
+{
+  const r10 = lcg(SEED * 7919 + 13);
+  const diet = [];
+  for (let i = 0; i < SCRIB; i++) { const c = trapezoid(r10); diet.push({ c, y: drive(c), n: c.length }); }
+  let mt = 0; for (let i = 0; i < P; i++) mt += PR.q[i] - yb[i]; mt /= P;
+  console.log(`      ridge      held-out R² (fit)   R² on the PROGRAM   on the machine`);
+  for (const rg of [1e-6, 1e-4, 1e-2, 1e-1, 1, 10]) {
+    const pj = new DistilPolicy({
+      channels: 1, refDim: 1, offsets: UNIQ, ridge: rg,
+      uMax: 0.05, online: false, standardize: true,
+    });
+    for (const d of diet) {
+      const pre = new Array(d.n);
+      for (let k = 0; k < d.n; k++) pre[k] = [d.c[k] - d.y[k]];
+      pj.addProgram({ refAt: (k) => [d.y[Math.max(0, Math.min(d.n - 1, k))]], n: d.n, prefix: pre,
+        stride: 1, closed: true });
+    }
+    const fr = pj.fit();
+    let se = 0, st = 0;
+    for (let i = 0; i < P; i++) {
+      const t = PR.q[i] - yb[i];
+      const f = pj.act((o) => [yb[(((i + o) % P) + P) % P]], i, null)[0];
+      se += (t - f) ** 2; st += (t - mt) ** 2;
+    }
+    const keep = pol; pol = pj; const sc = score(true, 1); pol = keep;
+    console.log(`    ${String(rg).padStart(8)}   ${fr.heldOutR2[0].toFixed(4).padStart(15)}`
+      + `   ${(1 - se / st).toFixed(4).padStart(17)}   ${(off.rms / sc.rms).toFixed(3)}x`
+      + `${fr.deploy ? '' : '   (fit REFUSED)'}`);
+  }
+  console.log(`    §93 D read -1.0172 at ridge 1e-6; this file's own plain global fit reads 0.9607.`);
+  console.log(`    If any row here recovers, §94's "the obstacle is the FUNCTION CLASS" is wrong.`);
+}
+
 console.log(`\n  for scale, on this axis: the shipped distilled policy reads 32.75x over the`);
 console.log(`  cascade's 0.5764 mm and the conventional rung alone reads 425x — both of them`);
 console.log(`  taught by an iterated teacher this route does not have (plan §93).\n`);
