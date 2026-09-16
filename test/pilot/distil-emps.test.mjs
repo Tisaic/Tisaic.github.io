@@ -95,8 +95,17 @@ const A2 = new AutoStack({
   // Same construction as `rigs/ladder.mjs`, from this channel's own declared peaks, so it is the
   // same incumbent every other plant was measured against (rule 61). `NOCLASSIC=1` disables it and
   // reproduces every number this file produced before §97.
+  //
+  // AND IT IS `PR.v, PR.a` — THE PROGRAM'S OWN SERIES — NOT THE CHANNEL'S DECLARED PEAKS, WHICH
+  // IS WHAT THE FIRST VERSION PASSED AND IT FLATTERED US (plan §97.1). Built from the declared
+  // scalars this rung read **1 lap, refused, "the basis spans 0.0% of the error energy"** on the
+  // one plant where `autostack.test.mjs` — same axis, same base 5.7640e-1 — reaches 1.3568e-3 in
+  // 14 laps at 424.8x. Rule 41b exactly: a basis built to the DECLARED limits describes a machine
+  // the program does not run, and here it would have put a "the incumbent finds nothing" row on
+  // EMPS in §97's portfolio table, in our favour. Caught only by checking the contradiction
+  // between two ladders on one plant rather than accepting a table that passed.
   ...(process.env.NOCLASSIC === '1'
-    ? {} : { basis: motionBasis([{ v: 1.25e-4, a: 8.3e-7 }]) }),
+    ? {} : { basis: motionBasis([{ v: PR.v, a: PR.a }]) }),
   distil: { refDim: 1, ridge: 1e-8,
     offsets: [-512, -256, -128, -64, -32, -16, -8, -4, -2, -1, 0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512],
     signOffsets: [-128, -32, -8, -2, 0, 2, 8, 32, 128] },

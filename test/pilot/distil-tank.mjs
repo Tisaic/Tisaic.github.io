@@ -185,6 +185,20 @@ function settled(rec, seg) {
   return p;
 }
 
+// THE RECIPE'S OWN RATE AND ACCELERATION, IN COMMAND SPACE, BY DIFFERENCING THE PROGRAM IT WILL
+// ACTUALLY RUN — the construction `rigs/ladder.mjs` uses verbatim, so the conventional rung here
+// reads the same kind of basis it reads on the column, the mill and the barrel (rule 61). It is
+// not a model: it is the commanded reference differenced twice.
+const TANK_RATES = (() => {
+  const nc = 2, v = [new Float64Array(PROG), new Float64Array(PROG)],
+    a = [new Float64Array(PROG), new Float64Array(PROG)];
+  for (let k = 1; k < PROG - 1; k++) {
+    const p0 = refAtStep(k - 1), p1 = refAtStep(k), p2 = refAtStep(k + 1);
+    for (let c = 0; c < nc; c++) { v[c][k] = (p2[c] - p0[c]) / 2; a[c][k] = p2[c] - 2 * p1[c] + p0[c]; }
+  }
+  return [0, 1].map((c) => ({ v: v[c], a: a[c] }));
+})();
+
 // ---------------------------------------------------------------- the ladder
 async function once(seed) {
   const auto = new AutoStack({
@@ -213,8 +227,15 @@ async function once(seed) {
     // The basis is constructed exactly as `rigs/ladder.mjs` constructs it, from the channels'
     // own declared peaks, so this is the same incumbent the column, mill and barrel were measured
     // against and not a second one (rule 61). Unset is byte-identical.
-    ...(process.env.NOCLASSIC === '1'
-      ? {} : { basis: motionBasis([0, 1].map(() => ({ v: 4e-3, a: 2e-5 }))) }),
+    //
+    // AND IT IS THE PROGRAM'S OWN DIFFERENCED SERIES, NOT THE CHANNEL'S DECLARED PEAKS — the same
+    // fault the EMPS row caught (plan §97.1, rule 41b). `rigs/ladder.mjs` builds this by
+    // DIFFERENCING THE PROGRAM IT WILL ACTUALLY RUN and `lib/flexisim/autohost.js` does the same
+    // from the path's own per-sample rates; passing declared scalars instead describes a machine
+    // the program does not run, and on EMPS it made the incumbent read "0.0% of the error energy"
+    // where the full ladder reaches 424.8x. Constructed the same way here so the tank's incumbent
+    // is the same object every other plant was measured against (rule 61).
+    ...(process.env.NOCLASSIC === '1' ? {} : { basis: motionBasis(TANK_RATES) }),
     maxDepth: 1, periodic: false,
     // THE PILOT'S OWN OPTIONS, which `Stack` reads and which this file has never supplied. It
     // routes them exactly as `rigs/ladder.mjs` does — `pilot: { nMeasured, start, guards,
