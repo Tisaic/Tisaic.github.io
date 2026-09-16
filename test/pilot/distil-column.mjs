@@ -37,7 +37,7 @@
 import { ladder, announce } from './rigs/ladder.mjs';
 import { wbSpec } from './rigs/specs.mjs';
 import { deriveWindow, reportDistil, priceFrom, ridgeLadder, gainLadder, teacherReuse, carrier, teachLaps, teachAvg, dietN, emitRow } from './rigs/distilkit.mjs';
-import { oracleConverge } from './rigs/oracleteach.mjs';
+import { oracleConverge, oracleTeach } from './rigs/oracleteach.mjs';
 import * as WB from './rigs/woodberry-rig.mjs';
 
 // THE ORACLE TEACHER, AND THIS PLANT IS THE SHARP PREDICTION (plan §73.13). §73.12 read the mill
@@ -140,6 +140,30 @@ const distilRuns = (auto) => dietN(DIETS).map((rec) => {
   const lap = LAP(rec), ref = refOf(rec);
   // ONE PLANT FOR THIS RUN, CARRIED ACROSS THE TEACHER'S CALLS (plan §72.15).
   const hold = carrier(() => settled(rec));
+  // THE PLANT'S OWN DRIVE LOOP, NAMED ONCE (plan §101). It re-settles per call rather than using
+  // `hold()`, because the iteration compares scores ACROSS passes and a carried plant makes pass
+  // k's starting point pass k-1's ending one — the confound §72.15's carry was allowed precisely
+  // because `run` does not have it. Verbatim from the closure that was inline inside
+  // `oracleConverge`, so `ORACLE=1` is byte-identical across the hoist.
+  const DRIVE = async ({ pre, active = false, uOut = null, trace = false, onStep = null }) => {
+    const c = settled(rec);
+    let s2 = 0, n = 0;
+    const out = trace ? Array.from({ length: lap }, () => [0, 0]) : null;
+    for (let k = 0; k < TLAPS * lap; k++) {
+      const kk = ((k % lap) + lap) % lap;
+      if (onStep) onStep(kk);
+      const sp = ref(k), u0 = WB.inputsFor(sp[0], sp[1]);
+      const look = (o) => { const t = ref(k + o); return WB.inputsFor(t[0], t[1]); };
+      const a = active ? auto.act({ look, lookRaw: look, k }) : null;
+      const u = [0, 1].map((j) => pre[j][kk] + (a ? (a[j] || 0) : 0));
+      if (uOut && a) for (let j = 0; j < 2; j++) uOut[j][kk] = a[j] || 0;
+      c.step(u0.map((v, j) => v + u[j]));
+      const want = WB.outputsFor(u0);
+      if (trace && k >= (TLAPS - 1) * lap) for (let j = 0; j < 2; j++) out[kk][j] = c.y[j] - want[j];
+      if (k >= (TLAPS - 1) * lap) for (let j = 0; j < 2; j++) { s2 += (c.y[j] - want[j]) ** 2; n++; }
+    }
+    return { score: Math.sqrt(s2 / n), rec: out };
+  };
   return {
     lap,
     refAt: (k) => { const s = ref(k); return WB.inputsFor(s[0], s[1]); },
@@ -174,39 +198,66 @@ const distilRuns = (auto) => dietN(DIETS).map((rec) => {
     // It re-settles per call rather than using `hold()`, because the iteration compares scores
     // ACROSS passes and a carried plant makes pass k's starting point pass k-1's ending one —
     // which is the confound §72.15's carry was allowed precisely because `run` does not do.
+    // THE PLANT'S OWN DRIVE LOOP, NAMED ONCE AND HANDED TO BOTH TEACHERS (plan §101, following
+    // `distil-mill.mjs` and `distil-barrel.mjs`). It was INLINE and anonymous inside
+    // `oracleConverge`, which is why `_iteratePolicy` could not be asked on this plant at all —
+    // not a decision, just the one thing that was never hoisted (rule 61).
     ...(ORACLE ? { converge: oracleConverge({
       auto, lap, nc: 2, passes: +(process.env.OPASSES || 8), debug: process.env.ODBG === '1',
-      drive: async ({ pre, active = false, uOut = null, trace = false, onStep = null }) => {
-        const c = settled(rec);
-        let s2 = 0, n = 0;
-        const out = trace ? Array.from({ length: lap }, () => [0, 0]) : null;
-        for (let k = 0; k < TLAPS * lap; k++) {
-          const kk = ((k % lap) + lap) % lap;
-          if (onStep) onStep(kk);
-          const sp = ref(k), u0 = WB.inputsFor(sp[0], sp[1]);
-          const look = (o) => { const t = ref(k + o); return WB.inputsFor(t[0], t[1]); };
-          const a = active ? auto.act({ look, lookRaw: look, k }) : null;
-          const u = [0, 1].map((j) => pre[j][kk] + (a ? (a[j] || 0) : 0));
-          if (uOut && a) for (let j = 0; j < 2; j++) uOut[j][kk] = a[j] || 0;
-          c.step(u0.map((v, j) => v + u[j]));
-          const want = WB.outputsFor(u0);
-          if (trace && k >= (TLAPS - 1) * lap) for (let j = 0; j < 2; j++) out[kk][j] = c.y[j] - want[j];
-          if (k >= (TLAPS - 1) * lap) for (let j = 0; j < 2; j++) { s2 += (c.y[j] - want[j]) ** 2; n++; }
-        }
-        return { score: Math.sqrt(s2 / n), rec: out };
-      },
+      drive: DRIVE,
     }) } : {}),
+    // PARAM=1: the lap-free teacher. `oracleTeach` builds `run` AND `teach` from the SAME closure
+    // `oracleConverge` takes, so a plant the oracle can teach can be taught parametrically with no
+    // plumbing of its own — and its `run` deliberately overrides the one above, because the two
+    // want opposite index orders and handing `_iteratePolicy` the wrong one reads `undefined` at
+    // every step without throwing (plan §90.3).
+    ...(PARAM ? oracleTeach({ auto, lap, nc: 2, drive: DRIVE }) : {}),
   };
 });
+
+/**
+ * PARAM=1: THE LAP-FREE TEACHER, AND A PREDICTION THIS PROJECT WROTE DOWN FIRST (plan §90.3c,
+ * reached in §101).
+ *
+ * `AutoStack._iteratePolicy` iterates a POLICY rather than a lap table, and §90.3c bounded it by
+ * measurement rather than by argument: the increments come from the CASCADE, so *the lap-free
+ * teacher can be no better than the cascade it takes them from*. The arm's cascade deploys at
+ * 1.33-1.34x and the teacher works; the mill's is 1.74x and it works; the barrel's is the standing
+ * refusal at 1.05x and it produced `passes 1` with all four runs dropped at every damping scale.
+ *
+ * It then named two plants it had NOT run, so the account could be read against what happens:
+ * *the COLUMN (0.39x) and the QUADRUPLE TANK (refuses every layer) should produce nothing, and if
+ * the column works anyway this account is wrong.*
+ *
+ * **IT WAS UNTESTABLE RATHER THAN UNRUN, WHICH IS A DIFFERENT STATE (rule 25).** Neither harness
+ * wired `oracleTeach` at all — `PARAM` and `oracleTeach` each appeared zero times in both files —
+ * so the prediction could not have been checked however many times it was quoted. Both DID already
+ * have a suitable drive closure, passed INLINE and anonymous to `oracleConverge`; the mill and the
+ * barrel NAMED theirs so both teachers could share one loop, which is rule 61, and that is the
+ * whole of the change here.
+ *
+ * AND A CASCADE MUST EXIST FOR THE TEACHER TO TAKE INCREMENTS FROM: this plant runs `depth: 0` by
+ * default, and §90.3 records that the first mill run under `PARAM=1` returned an increment of
+ * exactly zero for precisely that reason, now a throw rather than a `teacher 1.000x, rows 0`
+ * (rule 25, third time in this project). So `PARAM` raises the depth exactly as `ORACLE` does.
+ */
+const PARAM = process.env.PARAM === '1';
 
 const spec = { ...wbSpec,
   // NO CASCADE: this rung's teacher is `hff`, so the cascade would be commissioned,
   // scored and then REPLACED by the rung that wins (plan §73.1). `DEPTH=2` is the control.
   // `ORACLE=1` needs one, because the oracle teacher IS the commissioned pilot iterated.
-  depth: ORACLE ? 1 : 0,
+  depth: (ORACLE || PARAM) ? 1 : 0,
   ...(process.env.MIMO === '1'
     ? { pilotOpts: { ...(wbSpec.pilotOpts || {}), mimo: true } } : {}),
   distil: { refDim: 2, ridge: env('RIDGE', 1e-6), offsets: OFFSETS,
+    // THE ENGINE NEEDS BOTH HALVES AND MY FIRST RUN PROVED IT (plan §101). `AutoStack`'s gate is
+    // `!!this.distilOpts.parametric && runs.every((t) => t.teach)`, so wiring `teach` alone takes
+    // the hff route SILENTLY and reports `engine hff` — which is what the first PARAM=1 run here
+    // printed, at 3.96x byte-identical to the control, looking exactly like "the parametric engine
+    // ran and changed nothing". `distil-mill.mjs` says so in its own header and I wired it anyway;
+    // rule 25 is not a thing you read once (plan §90.3).
+    ...(PARAM ? { parametric: true, passes: +(process.env.PPASSES || 4) } : {}),
     // THE CASCADE IS THE TEACHER AND NOT A CANDIDATE TO SHIP (plan §73.14). A cascade exists on
     // these plants only because `ORACLE=1` asks for one to iterate; judged as a RUNG it changes
     // the bar the distilled policy must clear, and on the quadruple tank that is the difference

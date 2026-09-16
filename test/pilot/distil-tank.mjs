@@ -43,7 +43,7 @@ import { AutoStack } from '../../lib/pilot/autostack.js';
 import { motionBasis } from '../../lib/pilot/classic.js';
 import { priceFrom, printCost, emitRow, ridgeLadder, gainLadder, teacherReuse, carrier, teachLaps, teachAvg, dietN } from './rigs/distilkit.mjs';
 import { into } from './rigs/meter.mjs';
-import { oracleConverge } from './rigs/oracleteach.mjs';
+import { oracleConverge, oracleTeach } from './rigs/oracleteach.mjs';
 import { windowBend } from '../../lib/pilot/deploy.js';
 import { UCAP, makeTanks, voltsFor, levelsAt, SEG, HOLD, RECIPE, quintic, refAtStep, PROG, DT }
   from './rigs/tanks-rig.mjs';
@@ -63,6 +63,21 @@ const TAVG = teachAvg(TLAPS);
 // the mill's 1.74x and the column's 0.39x. `maxDepth` is already 1 here, so the pilot the port
 // iterates is the one this file already commissions.
 const ORACLE = process.env.ORACLE === '1';
+/**
+ * PARAM=1: THE LAP-FREE TEACHER, AND THE SECOND HALF OF A PREDICTION (plan §90.3c, run in §101).
+ *
+ * §90.3c bounded `_iteratePolicy` by measurement — its increments come from the CASCADE, so it can
+ * be no better than the cascade it takes them from — and named two plants it had not run: *the
+ * COLUMN (0.39x) and the QUADRUPLE TANK (refuses every layer) should produce nothing.*
+ *
+ * THE TANK MUST BE OFFERED A CASCADE OR THE TEST IS VACUOUS. §73.16 records that this harness
+ * *has never supplied a `drivePilot`, so its `maxDepth: 1` was inert from the day it was written*
+ * — so without wiring one, `_iteratePolicy` would throw because no cascade was ever BUILT, which
+ * is a different sentence from the predicted one: the cascade was built and REFUSED. Those are
+ * "did not run" against "ran and declined" (rule 25), the distinction this project has paid for
+ * three times, and the prediction is only tested if the plant was actually asked.
+ */
+const PARAM = process.env.PARAM === '1';
 
 if (process.env.SUITE !== 'full') {
   console.log('\ndistil-tank: SKIPPED (full tier only — one commissioning per seed)\n');
@@ -276,6 +291,11 @@ async function once(seed) {
         ...(process.env.TFRACS ? { probeFracs: process.env.TFRACS.split(',').map(Number) } : {}),
       } } : {}),
     distil: { refDim: 2, ridge: Number(process.env.RIDGE || 1e-6), offsets: OFFSETS,
+      // BOTH HALVES OR THE ENGINE IS INERT (plan §101): `AutoStack` gates on
+      // `!!distilOpts.parametric && runs.every((t) => t.teach)`, so a diet that supplies `teach`
+      // and a spec that does not arm `parametric` takes the hff route and PRINTS `engine hff` —
+      // indistinguishable from the parametric engine running and finding nothing (rule 25).
+      ...(PARAM ? { parametric: true, passes: +(process.env.PPASSES || 4) } : {}),
       // THE CASCADE IS THE TEACHER AND NOT A CANDIDATE TO SHIP (plan §73.14). A cascade exists on
       // these plants only because `ORACLE=1` asks for one to iterate; judged as a RUNG it changes
       // the bar the distilled policy must clear, and on the quadruple tank that is the difference
@@ -430,6 +450,33 @@ async function once(seed) {
     // 30,000 steps against a 5,540-step lap, so rebuilding per call spent 64% of every call
     // bringing a plant to an operating point it was already at.
     const hold = carrier(() => settled(rec, seg));
+    // THE PLANT'S OWN DRIVE LOOP, NAMED ONCE AND HANDED TO BOTH TEACHERS (plan §101). Verbatim
+    // from the closure that was inline inside `oracleConverge`, so `ORACLE=1` is byte-identical
+    // across the hoist. It re-settles per call rather than using `hold()`, because the iteration
+    // compares scores ACROSS passes and a carried plant makes pass k's start pass k-1's end.
+    const DRIVE = async ({ pre, active = false, uOut = null, trace = false, onStep = null }) => {
+      const p = settled(rec, seg);
+      let s2 = 0, n = 0;
+      const out = trace ? Array.from({ length: lap }, () => [0, 0]) : null;
+      for (let k = 0; k < TLAPS * lap; k++) {
+        const kk = ((k % lap) + lap) % lap;
+        if (onStep) onStep(kk);
+        const h = ref(k), v = voltsFor(G, h[0], h[1]);
+        const look = (o) => { const t = ref(k + o); return voltsFor(G, t[0], t[1]); };
+        const spd = (() => { const a0 = ref(k - 1), b0 = ref(k + 1);
+          return Math.hypot(b0[0] - a0[0], b0[1] - a0[1]) * 0.5; })();
+        const ki2 = Math.max(0, Math.min(PROG - 1, k));
+        const a = active ? au.act({ v: TANK_RATES.map((r) => r.v[ki2]),
+          a: TANK_RATES.map((r) => r.a[ki2]), look, lookRaw: look, k, speed: spd }) : null;
+        const u = [0, 1].map((j) => pre[j][kk] + (a ? (a[j] || 0) : 0));
+        if (uOut && a) for (let j = 0; j < 2; j++) uOut[j][kk] = a[j] || 0;
+        p.step(v[0] + u[0], v[1] + u[1]);
+        if (active) au.observe([p.h[0], p.h[1], p.h[2], p.h[3]]);
+        if (trace && k >= (TLAPS - 1) * lap) { out[kk][0] = p.h[0] - h[0]; out[kk][1] = p.h[1] - h[1]; }
+        if (k >= (TLAPS - 1) * lap) { s2 += (p.h[0] - h[0]) ** 2 + (p.h[1] - h[1]) ** 2; n += 2; }
+      }
+      return { score: Math.sqrt(s2 / n), rec: out };
+    };
     return {
       lap,
       refAt: (k) => { const h = ref(k); return voltsFor(G, h[0], h[1]); },
@@ -470,31 +517,12 @@ async function once(seed) {
       // ACROSS passes and a carried plant makes pass k's starting point pass k-1's ending one.
       ...(ORACLE ? { converge: oracleConverge({
         auto: au, lap, nc: 2, passes: +(process.env.OPASSES || 8),
-        debug: process.env.ODBG === '1',
-        drive: async ({ pre, active = false, uOut = null, trace = false, onStep = null }) => {
-          const p = settled(rec, seg);
-          let s2 = 0, n = 0;
-          const out = trace ? Array.from({ length: lap }, () => [0, 0]) : null;
-          for (let k = 0; k < TLAPS * lap; k++) {
-            const kk = ((k % lap) + lap) % lap;
-            if (onStep) onStep(kk);
-            const h = ref(k), v = voltsFor(G, h[0], h[1]);
-            const look = (o) => { const t = ref(k + o); return voltsFor(G, t[0], t[1]); };
-            const spd = (() => { const a0 = ref(k - 1), b0 = ref(k + 1);
-              return Math.hypot(b0[0] - a0[0], b0[1] - a0[1]) * 0.5; })();
-            const ki2 = Math.max(0, Math.min(PROG - 1, k));
-            const a = active ? au.act({ v: TANK_RATES.map((r) => r.v[ki2]),
-              a: TANK_RATES.map((r) => r.a[ki2]), look, lookRaw: look, k, speed: spd }) : null;
-            const u = [0, 1].map((j) => pre[j][kk] + (a ? (a[j] || 0) : 0));
-            if (uOut && a) for (let j = 0; j < 2; j++) uOut[j][kk] = a[j] || 0;
-            p.step(v[0] + u[0], v[1] + u[1]);
-            if (active) au.observe([p.h[0], p.h[1], p.h[2], p.h[3]]);
-            if (trace && k >= (TLAPS - 1) * lap) { out[kk][0] = p.h[0] - h[0]; out[kk][1] = p.h[1] - h[1]; }
-            if (k >= (TLAPS - 1) * lap) { s2 += (p.h[0] - h[0]) ** 2 + (p.h[1] - h[1]) ** 2; n += 2; }
-          }
-          return { score: Math.sqrt(s2 / n), rec: out };
-        },
+        debug: process.env.ODBG === '1', drive: DRIVE,
       }) } : {}),
+      // PARAM=1: the lap-free teacher (plan §101). Same closure, both teachers — the hoist is the
+      // whole change, and `oracleTeach`'s `run` deliberately overrides the one above because the
+      // two want opposite index orders (plan §90.3).
+      ...(PARAM ? oracleTeach({ auto: au, lap, nc: 2, drive: DRIVE }) : {}),
     };
   });
 
@@ -511,7 +539,7 @@ async function once(seed) {
     // OFFERED ONLY UNDER `ORACLE=1`, so every number this file has ever produced is reproducible
     // by leaving it unset — a cascade commissioned where none was before changes the ladder's
     // own best-so-far and would silently re-base the hff route's comparison (rule 20).
-    ...(ORACLE ? { drivePilot } : {}) });
+    ...(ORACLE || PARAM ? { drivePilot } : {}) });
   price.close({ dt: DT, rep });
 
   // THE SPLIT THAT SAYS *WHY*, and the one `distil-arm.mjs` exists to make: score the fitted
