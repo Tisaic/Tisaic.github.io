@@ -22224,3 +22224,67 @@ respectively, and the block's own scrape is what should be quoted instead.
 **NOT CLAIMED**: one seed and one diet per plant; the incumbent runs at `classic.js`'s own defaults
 with no sweep; and the tank's 19.91x is one commissioning, where §84.8's own lesson is that a
 headline from one draw is a coin until its distribution is measured.
+
+## §98 — THE PLC-SHAPED LOCAL MODEL, AND AN OPEN DISCREPANCY I AM NOT CLOSING
+
+§94 wrote *the route is closed for good* having tested only GLOBAL forms, and named the gap
+itself: a local model is what delivers, and a handful of local linear maps with a cheap selector
+is that object in PLC shape. Built (section I), selector on the window's own local velocity,
+blended between the two nearest centres, bar stated first at R² 0.9 under 10,000 MAC.
+
+```
+   R   MAC/dec   held-out R² on the PROGRAM   on the machine
+   1      51                   0.9607          5.681x   <- the MATCHED CONTROL, and the best row
+   2      51                   0.9601          5.616x
+   4      51                   0.9581          5.436x
+   8      51                   0.9554          5.206x
+  16      51                   0.9539          5.084x
+```
+
+**THE CONTROL INVERTED THE EXPERIMENT.** `R = 1` is a GLOBAL fit and it is the best row; locality
+contributes nothing and is monotonically harmful — this project's capacity signature for the
+eleventh time. So the thing worth explaining is not local-against-global. It is that **two global
+linear fits of the same window, on the same diet, deploying the same `c = r + f(r)`, read 0.701x
+and 5.681x on the machine.**
+
+### THREE EXPLANATIONS, ALL TESTED, ALL DEAD
+
+**THE RIDGE — refuted by its own sweep (§98.1).** My hypothesis was rule 32, and it had precedent:
+§70's *"the 0.08x was the ridge — 1e-6, the ARM's value, carried here and never re-derived"* and
+`headroom.mjs`'s ridge at 3e-8 of the diagonal it was regularising, which *"read as a transfer
+failure at R² -13273"*. -1.0172 and -13273 are the same signature. Swept over seven decades on the
+identical configuration, the program R² reads -1.0171 / -1.0169 / -1.0184 / -0.9992 / -0.8753 /
+-0.3458 at 1e-6 → 10 and **never recovers**. So §94's number is a measurement and not a carried
+constant.
+
+**STANDARDISATION AND THE SIGN TAPS — both refuted, 2x2 (§98.2).** `sign(v)` is discontinuous and
+a large weight on it produces a correction that FLIPS, which is exactly what R² = -1 looks like;
+standardisation matters because the row leads with an absolute reference at 1e-2 and follows with
+differences at 1e-4. Neither is it: all four cells read -0.999 to -1.017 and 0.701x to 0.706x.
+
+### SO THE DISCREPANCY IS OPEN, AND THAT IS WHERE IT STAYS
+
+**§94's MEASUREMENTS STAND.** 0.701x delivered, -1.0172 on the program, ridge-insensitive over
+seven decades, lift-insensitive, held-out -0.1142 against its own free teacher on an unlimited set.
+Nothing here contradicts any of them.
+
+**AND §94's MECHANISM IS NO LONGER SAFE TO QUOTE.** It concluded *the obstacle is the FUNCTION
+CLASS, measured from four directions rather than argued* — and a plain global fit of the same class
+on the same routing reads 5.681x. Both cannot be describing the same thing. Until the difference is
+isolated, the honest statement is that **one of these two paths is not measuring what it is being
+read as measuring, and I do not know which.**
+
+**WHAT I AM NOT DOING, AND WHY.** Not integrating it: nothing whose own provenance is unresolved
+belongs in the block (rule 16 — where a design and its prediction disagree with each other, put the
+question to the machine, and here the machine has been asked four times and the two answers stand).
+Not retracting §94: its measurements survived every test aimed at them. And not continuing to dig
+right now — this route is in no plant's ladder, and on the only plant it has been measured on it
+delivers 5.681x against an incumbent that delivers **424.8x**, so its value is entirely
+hypothetical until it is asked on the barrel and the column where the teacher costs 82-84% of a
+30-day commissioning.
+
+**THE NEXT STEP, NAMED SO IT CAN BE PICKED UP COLD**: instrument the two paths to emit their
+feature rows for the SAME window index and diff them element by element. The difference is in the
+row or in what the row is evaluated against, both paths are ~60 lines, and a row dump settles in
+one run what four hypotheses did not. `consist.mjs`'s `DUMP=` already does exactly this for the
+shipped routing and is the model to copy (rule 61).
