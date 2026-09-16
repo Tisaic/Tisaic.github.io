@@ -873,6 +873,143 @@ console.log(`\n  H — CAN THE FREE TEACHER BE DISTILLED ONTO WHAT SHIPS? (plan 
   console.log(`    what remains is only how many MAC the lift costs (rule 59, stated first).`);
 }
 
+
+// ---------------------------------------------------------------- I: THE PLC-SHAPED LOCAL MODEL
+/**
+ * §94 WROTE "THE ROUTE IS CLOSED FOR GOOD" AND IT TESTED ONLY *GLOBAL* FORMS (plan §98).
+ *
+ * What delivers on this routing is a LOCAL model — R² 0.9966, 22.599x — and it was priced at 430k
+ * MAC in 1.7 MB and abandoned. But a local model does not have to be an 8,769-window
+ * nearest-neighbour search. A handful of LOCAL LINEAR MAPS with a cheap selector is the same
+ * object in PLC shape: `R` weight vectors, two evaluated per decision with a blend, which is the
+ * form `distil.js` already ships and costs order 40 MAC here. §94 tested global linear and global
+ * lifted and wrote its verdict as though it had tested every linear-in-parameters form. That is
+ * the gap, and this closes it.
+ *
+ * THE PRIOR EVIDENCE IS AGAINST AND IS STATED FIRST (rule 59). §51 measured PER-FEED BANDING on
+ * the arm and found **blending beats switching (2.34x against 2.14x) and BOTH lose to the POOLED
+ * map at 3.37x**, with the mechanism named: at one feed the band index is confounded with the
+ * thing it indexes, so a band map restores the very confound the pooled map breaks. That is a
+ * band on an EXTERNAL index. This bands on a SCALAR OF THE WINDOW ITSELF, which is what "local"
+ * means and is not the same object — but the prior is close enough that it has to be beaten
+ * rather than ignored.
+ *
+ * THE BAR, STATED BEFORE THE RUN: held-out R² on the PROGRAM, where the global linear map reads
+ * -1.0172 and the local model reads 0.9966. Above ~0.9 at under 10,000 MAC this is a rung worth
+ * registering; below it, §94's verdict stands and the route really is closed.
+ *
+ * The selector is the window's own local VELOCITY, binned by quantile over the training rows,
+ * because that is the scalar this plant's nonlinearity actually switches on — a friction curve, a
+ * drive saturation and a quantiser all turn on the sign and size of v (rule 32: scale the
+ * threshold to the quantity it acts on).
+ */
+console.log(`\n  I — A PLC-SHAPED LOCAL MODEL: R local linear maps, blended (plan §98)`);
+{
+  /** Ridge solve of a small normal system, Cholesky. Self-contained: this is an instrument. */
+  const solve = (XtX, Xty, n, lam) => {
+    const A = XtX.slice(); for (let i = 0; i < n; i++) A[i * n + i] += lam;
+    const L = new Float64Array(n * n);
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j <= i; j++) {
+        let v = A[i * n + j];
+        for (let k = 0; k < j; k++) v -= L[i * n + k] * L[j * n + k];
+        if (i === j) { if (v <= 1e-300) return null; L[i * n + i] = Math.sqrt(v); }
+        else L[i * n + j] = v / L[j * n + j];
+      }
+    }
+    const y = new Float64Array(n);
+    for (let i = 0; i < n; i++) { let v = Xty[i]; for (let k = 0; k < i; k++) v -= L[i * n + k] * y[k]; y[i] = v / L[i * n + i]; }
+    const w = new Float64Array(n);
+    for (let i = n - 1; i >= 0; i--) { let v = y[i]; for (let k = i + 1; k < n; k++) v -= L[k * n + i] * w[k]; w[i] = v / L[i * n + i]; }
+    return w;
+  };
+  // The same window shape the global fit used, so only the FUNCTION CLASS moves (rule 20).
+  const OF = UNIQ, NF = OF.length + 1;
+  const rowOf = (get) => {
+    const q0 = get(0), r = new Float64Array(NF);
+    let i = 0; r[i++] = q0;
+    for (const o of OF) { if (o === 0) continue; r[i++] = get(o) - q0; }
+    r[NF - 1] = 1; return r;
+  };
+  const velOf = (get) => (get(1) - get(-1)) * 0.5;
+
+  const r9 = lcg(SEED * 7919 + 13);
+  const diet = [];
+  for (let i = 0; i < SCRIB; i++) { const c = trapezoid(r9); diet.push({ c, y: drive(c), n: c.length }); }
+
+  // Bin edges by QUANTILE of the training velocity, so every region carries rows (rule 32).
+  const vs = [];
+  for (const d of diet) for (let k = 1; k < d.n - 1; k++) vs.push(velOf((o) => d.y[Math.max(0, Math.min(d.n - 1, k + o))]));
+  vs.sort((a, b) => a - b);
+
+  console.log(`\n     R   feat   MAC/dec   held-out R² on the PROGRAM   on the machine`);
+  for (const R of [2, 4, 8, 16]) {
+    const edge = [];
+    for (let i = 1; i < R; i++) edge.push(vs[Math.floor((i / R) * vs.length)]);
+    const ctr = [];
+    for (let i = 0; i < R; i++) ctr.push(vs[Math.floor(((i + 0.5) / R) * vs.length)]);
+    // Blend between the two nearest centres — §51 measured blending beating switching.
+    const mix = (v) => {
+      let j = 0; while (j < R - 1 && v > ctr[j + 1]) j++;
+      if (v <= ctr[0]) return [[0, 1]];
+      if (v >= ctr[R - 1]) return [[R - 1, 1]];
+      const t = (v - ctr[j]) / Math.max(1e-300, ctr[j + 1] - ctr[j]);
+      return [[j, 1 - t], [j + 1, t]];
+    };
+    const XtX = Array.from({ length: R }, () => new Float64Array(NF * NF));
+    const Xty = Array.from({ length: R }, () => new Float64Array(NF));
+    let nrow = 0;
+    for (const d of diet) {
+      for (let k = 1; k < d.n - 1; k++) {
+        const get = (o) => d.y[Math.max(0, Math.min(d.n - 1, k + o))];
+        const row = rowOf(get), t = d.c[k] - d.y[k];
+        for (const [j, wj] of mix(velOf(get))) {
+          const A = XtX[j], b = Xty[j];
+          for (let p2 = 0; p2 < NF; p2++) { const rp = row[p2] * wj; b[p2] += rp * t; for (let q = 0; q <= p2; q++) A[p2 * NF + q] += rp * row[q]; }
+        }
+        nrow++;
+      }
+    }
+    for (let j = 0; j < R; j++) { const A = XtX[j]; for (let p2 = 0; p2 < NF; p2++) for (let q = p2 + 1; q < NF; q++) A[p2 * NF + q] = A[q * NF + p2]; }
+    let tr = 0; for (let j = 0; j < R; j++) for (let p2 = 0; p2 < NF; p2++) tr += XtX[j][p2 * NF + p2];
+    const lam = RIDGE * (tr / (R * NF));
+    const W = []; let bad = false;
+    for (let j = 0; j < R; j++) { const w = solve(XtX[j], Xty[j], NF, lam); if (!w) { bad = true; break; } W.push(w); }
+    if (bad) { console.log(`    ${String(R).padStart(2)}   ${NF}   — singular`); continue; }
+
+    const predict = (get) => {
+      const row = rowOf(get); let s = 0;
+      for (const [j, wj] of mix(velOf(get))) { const w = W[j]; let t = 0; for (let p2 = 0; p2 < NF; p2++) t += w[p2] * row[p2]; s += wj * t; }
+      return s;
+    };
+    // R² on the PROGRAM against its own labelled target — the identical comparison §93 D/G made.
+    let se = 0, st = 0, mt = 0;
+    for (let i = 0; i < P; i++) mt += PR.q[i] - yb[i]; mt /= P;
+    const uL = new Float64Array(P);
+    for (let i = 0; i < P; i++) {
+      const get = (o) => PR.q[(((i + o) % P) + P) % P];
+      uL[i] = predict(get);
+      const t = PR.q[i] - yb[i];
+      se += (t - uL[i]) ** 2; st += (t - mt) ** 2;
+    }
+    // On the machine, six laps, last four scored — the same score every row here is quoted on.
+    const UCAP = 0.05, m = makeMachine(PR.q[0], 0);
+    let s2 = 0, n2 = 0;
+    for (let k = 0; k < 6 * P; k++) {
+      const i = k % P, u = Math.max(-UCAP, Math.min(UCAP, uL[i]));
+      const e = m.q - PR.q[i];
+      if (k >= 2 * P) { s2 += e * e; n2++; }
+      m.step(PR.q[i] + u);
+    }
+    const rms = 1000 * Math.sqrt(s2 / n2);
+    const mac = 2 * NF + (NF - 1) + 4;       // two maps blended, the row, the selector
+    console.log(`    ${String(R).padStart(2)}   ${String(NF).padStart(4)}   ${String(mac).padStart(7)}`
+      + `   ${(1 - se / st).toFixed(4).padStart(22)}   ${(off.rms / rms).toFixed(3)}x`);
+  }
+  console.log(`    global linear -1.0172 · global lifted 0.0020 · the LOCAL model 0.9966 at 430k MAC`);
+  console.log(`    the bar (stated before the run): above ~0.9 under 10,000 MAC is a rung worth having.`);
+}
+
 console.log(`\n  for scale, on this axis: the shipped distilled policy reads 32.75x over the`);
 console.log(`  cascade's 0.5764 mm and the conventional rung alone reads 425x — both of them`);
 console.log(`  taught by an iterated teacher this route does not have (plan §93).\n`);

@@ -436,6 +436,13 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # plant asked is made WORSE, which is the one thing the project's own governing sentence says
     # must never happen. Full tier only, because that is where the ten harnesses run.
     if [ "${SUITE}" = "full" ]; then t node test/pilot/objtable.mjs --read; fi
+    # THE PORTFOLIO'S CENTRAL CLAIM, AS A CHECK (plan §97). The block carries several controllers
+    # and picks on the machine, so the promise is not "our controller beats a PID+FF" — no single
+    # controller wins everywhere and none should — it is: NEVER WORSE THAN DOING NOTHING, AND
+    # NEVER WORSE THAN ITS OWN BEST PART. Both halves, because a portfolio that merely CONTAINS a
+    # winner is worth nothing if its selection can pick the loser (rule 9). Like the row above it
+    # this is a READ of what the harnesses already emitted, so it costs no plant time.
+    if [ "${SUITE}" = "full" ]; then t node test/pilot/portfolio.mjs; fi
     t node test/pilot/hff.test.mjs
     # The banded operator on a plant with KNOWN neighbour coupling, and the control that it
     # is byte-identical where there is none. It shipped once with every harmonic's fit null
