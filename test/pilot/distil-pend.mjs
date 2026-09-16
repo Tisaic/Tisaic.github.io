@@ -149,6 +149,18 @@ const distilRuns = () => dietN([0, 1, 2, 3]).map((i) => {
 });
 
 const spec = { ...pendSpec,
+  // THE LOOP GOES IN THE SPEC'S NAME, WHICH IS THE ONLY PLACE THAT FIXES IT (plan §97.4).
+  //
+  // This harness emits under two configurations — the shipped loop and one tuned 3.5x better —
+  // and `rigs/ladder.mjs` emits its own row under the SPEC'S name for every plant, so overriding
+  // the name at one `emitRow` call site leaves that automatic row still colliding. Keyed on
+  // script + name, the two loops then collapse to one and the LAST wins: `portfolio.mjs` showed
+  // only the tuned row, so this plant read as REFUSING the learned object when its SHIPPED
+  // configuration composes `classic+distil` at 11.93x. A count of where the learned object ships
+  // was wrong by one plant because of a label. Naming it once, here, fixes both emissions
+  // (rules 30, 61) — and a dropped row and a measured-then-lost row are different states, only
+  // one of which is visible (rule 25).
+  name: `${pendSpec.name}${PD.TUNED ? ' [loop tuned 3.5x better]' : ' [shipped loop]'}`,
   uMax: env('PEND_UCAP', pendSpec.uMax),
   // NO CASCADE: the teacher here is `hff`, so a cascade would be commissioned, scored and then
   // REPLACED by the rung that wins (plan §73.1).
@@ -263,7 +275,14 @@ console.log(`    held out        ${HELD.d}m@${HELD.vmx}/${HELD.acc} dwell ${HELD
   + `${xHeld.toFixed(3)}x   |θ| ${hOn.thPk.toFixed(3)}`);
 console.log(`    the held-out program delivers ${(xHeld / xProg).toFixed(3)}x of what the `
   + `scored one does; target 1 forbids < 0.769 (1/1.3), spread ${ratio.toFixed(3)}x\n`);
-emitRow(rep, auto, { t1: xHeld / xProg, t1Worse: xHeld < 1 });
+// THE LOOP GOES IN THE LABEL, OR ONE ROW HIDES THE OTHER (plan §97.4). This harness emits under
+// two configurations — the shipped loop and one tuned 3.5x better — and a table keyed on the
+// script and the spec's own name collapses them: `portfolio.mjs` duly showed only the tuned row,
+// so the plant appeared to REFUSE the learned object when its shipped configuration composes
+// `classic+distil` at 11.93x. A count of where the learned object ships was wrong by one plant
+// because of a label (rule 25: a row that is silently dropped and a row that was measured and
+// lost are different states, and only one of them is visible).
+emitRow(rep, auto, { t1: xHeld / xProg, t1Worse: xHeld < 1, name: spec.name });
 check('target 1: the held-out program is not made worse', hOn.rms <= hOff.rms * 1.02,
   `${hOff.rms.toExponential(3)} → ${hOn.rms.toExponential(3)} = ${xHeld.toFixed(3)}x`);
 /**
