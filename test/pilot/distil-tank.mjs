@@ -40,6 +40,7 @@
  * Run: SUITE=full node test/pilot/distil-tank.mjs   [SEEDS=1,2]  [GRADE=fast]
  */
 import { AutoStack } from '../../lib/pilot/autostack.js';
+import { motionBasis } from '../../lib/pilot/classic.js';
 import { priceFrom, printCost, emitRow, ridgeLadder, gainLadder, teacherReuse, carrier, teachLaps, teachAvg, dietN } from './rigs/distilkit.mjs';
 import { into } from './rigs/meter.mjs';
 import { oracleConverge } from './rigs/oracleteach.mjs';
@@ -193,7 +194,24 @@ async function once(seed) {
     nMeasured: 4, channels: [0, 1].map(() => ({ lo: 2.0, hi: 3.6, vMax: 4e-3, aMax: 2e-5, jMax: 2e-7 })),
     uMax: UCAP, guards: [{ index: 0, max: 19 }, { index: 1, max: 19 }],
     workspace: () => true, seed,
-    classic: false, maxDepth: 1, periodic: false,
+    // CLASSIC=1: ARM THE INCUMBENT (plan §95, §96). §95's scrape read this plant's incumbent
+    // column as `not offered` — a NON-measurement that the first emitter rendered as 1.00x,
+    // indistinguishable from a rung that ran and found nothing.
+    //
+    // IT IS `basis` AND NOT `classic`, AND THE FIRST VERSION SET THE WRONG ONE. `AutoStack` reads
+    // `o.basis` (line 112); `lib/flexisim/autohost.js` is the module that translates a `classic`
+    // FLAG into that basis, and this harness does not go through it. So `classic: true` here set
+    // an option nothing reads, the run came back reporting `{"classic":false}` and 3.268x
+    // unchanged, and it would have been filed as "the incumbent finds nothing on the tank" when
+    // the incumbent had never been built — rule 25 for the third time in one session, caught only
+    // by reading the shipped-rungs line instead of trusting the knob.
+    //
+    // The basis is constructed exactly as `rigs/ladder.mjs` constructs it, from the channels'
+    // own declared peaks, so this is the same incumbent the column, mill and barrel were measured
+    // against and not a second one (rule 61). Unset is byte-identical.
+    ...(process.env.CLASSIC === '1'
+      ? { basis: motionBasis([0, 1].map(() => ({ v: 4e-3, a: 2e-5 }))) } : {}),
+    maxDepth: 1, periodic: false,
     // THE PILOT'S OWN OPTIONS, which `Stack` reads and which this file has never supplied. It
     // routes them exactly as `rigs/ladder.mjs` does — `pilot: { nMeasured, start, guards,
     // workspace, seed }` — and they are only ever read when a cascade is commissioned, so every

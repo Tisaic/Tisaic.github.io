@@ -170,7 +170,14 @@ const host = makeArmHost({
   path, lap: LAP, K, centre,
   // LAPSYNC=1: re-phase the cascade's tick at each lap start (measured 2.23x -> 2.19x; off, plan §52.15).
   ...(process.env.LAPSYNC === '1' ? { lapSync: true } : {}),
-  classic: false, maxDepth: ENGINE === 'pilot' ? 1 : 0, demo: null, lapMemory: PERIODIC, distil: DISTIL,
+  // CLASSIC=1: ARM THE INCUMBENT, which this harness has never done (plan §95, §96).
+  // `classic: false` is here for a stated reason — the distilled object REPLACES the conventional
+  // rung AND the compliance feedforward (§52.8 measured bare 0.217 beating under-the-feedforward
+  // 0.338), and target 4's own table records the ladder commissioning that rung, scoring it at
+  // 1.07x and DISCARDING it. But a reason about what SHIPS is not a reason to leave the
+  // COMPARISON unmeasured, and §95 found this plant's incumbent column reading `not offered`
+  // while three others read a real refusal. Unset is byte-identical.
+  classic: process.env.CLASSIC === '1', maxDepth: ENGINE === 'pilot' ? 1 : 0, demo: null, lapMemory: PERIODIC, distil: DISTIL,
   ...(DIETS[DIET] ? { distilDiet: DIETS[DIET] } : {}), distilReplaces: REPLACE,
   // DIET=self: the bench square ITSELF as the only training program — the in-sample ceiling of the
   // basis on the program it is scored on; DIET=selfpoly: the square plus the four polygons.
