@@ -21457,3 +21457,96 @@ one on a smaller one, and the report distinguishes that from a scored rejection 
 It carries no plant constant — a scale that fails is halved, and only failing at the smallest scale
 ends the iteration — and it costs one fit plus one scored run per program per retry, which is why
 it is opt-in rather than default.
+
+---
+
+## §91 — RELATE THE CONTROLLER TO THE PREDICTION, RATHER THAN INVERTING IT
+
+The owner's reframing: *instead of inverting the prediction, relate the controller to the
+prediction itself.* It is sharper than the architecture §90 was built to, and three things already
+in this record support it — none of which had been assembled into one argument.
+
+**THE OBJECT IT DESCRIBES IS ALREADY BUILT, AND ONLY ITS PROVENANCE IS WRONG.** §6's explicit gain
+collapses the whole QP to `u0 = k·f0 + bias`, 61,006 MAC to 120 — a LINEAR RELATION between the
+prediction and the correction, which is exactly what the reframing asks for. But `_buildGain`
+obtains it as `k[i] = solve(e_i, 0) - bias`: the solver PROBED with unit vectors. That is the
+inversion, reassociated. The code says so in its own comment — *the truncation is part of the map,
+and the converged map is on record as not the one that ships (two iterations beat sixty on this
+arm)*.
+
+**SO THE PROJECT HAS BEEN APPROXIMATING "DO NOT INVERT" WITH THREE REGULARISERS ON AN INVERSION IT
+NEVER WANTED**: `qpIters`, `lambda` and §79's applied gain. §6 states the first two are one knob
+from opposite ends; §84.6 found the third wants to be off 1.0 on three plants of four. Read
+together they are a project repeatedly pulling a derived inverse back toward something the machine
+prefers, without ever asking the machine what it wanted instead.
+
+**THE EVIDENCE THAT SAYS DO IT:**
+
+1. **§56 and §87.5, on two plants sharing no physics.** Every model in either sweep predicts at
+   R² 0.973-1.000 and they DELIVER 0.03x to 2.45x. *A model can be exact in prediction and still be
+   a bad thing to invert* — the owner's argument, already measured, twice, and already cited in
+   this file as the reason the deployed route regresses a correction instead.
+2. **§84.11.** The real flexible arm reads **INVERSE 128.3%**, the only non-zero in six plants: it
+   goes further the wrong way first, so the inversion is wrong in SIGN. A fitted relation has no
+   sign to get wrong, and that plant refuses BOTH admissible objects today.
+3. **This project is 3 for 3 on this exact move.** The ridge, the applied gain and the teacher's
+   pass count each went from DERIVED to MACHINE-SCORED, and the first two took the quadruple tank
+   from 0.08x to 3.268x. `k` is the largest derived object left in the commissioning path.
+
+**AND ONE DISTINCTION THE PROPOSAL HAS TO CARRY, OR IT REBUILDS SOMETHING ALREADY MEASURED
+NEGATIVE.** If *the prediction* means the pilot's forecast from MEASURED STATE, the deployed object
+stops being instrument-free — and §52.26 and §52.27 already deployed that at 1.44x and 3.24x,
+BELOW the map without it. What survives the retirement is a forecast of the COMMANDED REFERENCE
+alone, which makes it a MODEL-BASED NONLINEAR FEATURE of the window. §54.9's function-class sweep
+tested kernel ridge, locally weighted linear, an MLP and kNN — all GENERIC classes, none of them
+derived from the plant's own physics — so this is untested rather than re-tested.
+
+### §91.1 — The cheap falsifier, which goes first (rule 1)
+
+Do not build the fit. `k` from the solver traces a ONE-PARAMETER FAMILY as `qpIters` moves, and the
+machine is already on record preferring a point far down it (2 iterations beat 60 on the arm, 1
+beats 68 on EMPS). The question the whole proposal turns on is narrower than it looks:
+
+> **Is the `k` the machine wants even IN the family the solver produces?**
+
+Perturb `k` OFF that family — random directions, and structured ones — and score on the machine.
+
+- **If the machine improves off-family**, the inversion's span does not contain the answer, and
+  fitting the relation is the build rather than a better description of the same object.
+- **If it does not**, the family contains what the machine wants, only the regulariser choice ever
+  mattered, and the reframing is a truer ACCOUNT of the shipped object rather than a different one
+  — which is worth knowing and is not a new controller.
+
+It costs scored runs and no commissioning, because `k` deploys as a stored row and a perturbed `k`
+needs no refit — the same property that made §79's gain ladder the cheapest axis in this project.
+
+**PREDICTION, WRITTEN FIRST (rule 59):** it improves on the plants where the inversion is measured
+ill-posed — the real flexible arm (INVERSE 128.3%) and Wood-Berry (RGA 2.01 against a diagonal
+solve) — and is INERT on EMPS, where §56 found the identified path minimum phase and `out` ZERO in
+every delivering row, so the inverse is well-posed and the family should already contain the
+answer. If it improves EVERYWHERE by a similar factor, that is not this mechanism: it is the
+applied gain again in a new costume, and §79's uniform-gain control is what separates them.
+
+### §91.2 — The instrument was broken, and the digits caught it rather than a check
+
+`gainspan.mjs`'s first run printed a complete table and the verdict *the family holds*. It was
+measuring nothing. Every scale row and every random row read **0.1091 mm — bit-identical to the
+unperturbed baseline** — including a perturbation of 20% of `|k|`, which is not a null but an
+instrument whose knob is disconnected.
+
+The fault: `setK` closed over `pilot._gain[0]` captured BEFORE the on-family sweep, and
+`_buildGain` REPLACES `pilot._gain` with a fresh array. Every perturbation after the first rebuild
+was written to a detached object while the machine scored the built gain. The on-family rows varied
+correctly, because those rebuild the gain wholesale — which is exactly what made the table look
+credible.
+
+**It was caught by the digits and not by a check, so the check now exists** (rule 9): before any
+row is reported, `k` is DOUBLED and the score must move, then restored and the baseline must come
+back EXACTLY. A file whose every number is a comparison against a baseline is most exposed to the
+perturbation never arriving, and this one could not detect its own no-op.
+
+**AND THE QUESTION IT ASKS IS DEMOTED BY §92's REFRAME rather than answered.** Whether `k`'s
+PROVENANCE matters is a question inside the current framing — the correction is still a map of the
+commanded reference, and §52.31 caps that input at R² 0.84 however `k` is obtained. It is left
+built and unrun, with its own control in place, because it is cheap and it would settle whether the
+solver's span contains what the machine wants; it is not on the critical path.
