@@ -21550,3 +21550,46 @@ PROVENANCE matters is a question inside the current framing — the correction i
 commanded reference, and §52.31 caps that input at R² 0.84 however `k` is obtained. It is left
 built and unrun, with its own control in place, because it is cheap and it would settle whether the
 solver's span contains what the machine wants; it is not on the critical path.
+
+### §90.3c — The line search does not rescue the barrel, and the cause bounds the whole route
+
+`backtracks: 3` on the barrel reads **`passes 1`, all four runs DROPPED, exactly as without it**.
+Four scales — 1, 1/2, 1/4, 1/8 — and none beat the bare machine. So the increment is not merely
+too large; damping it does not make it right, and §90.3b's remedy is REFUTED on the plant it was
+built for. Its default in that harness goes back to 0, because a constant that bought nothing is
+not a constant to carry (rule 31).
+
+**AND THE CAUSE IS WORTH FAR MORE THAN THE REMEDY WAS, BECAUSE IT BOUNDS THE ROUTE RATHER THAN
+THIS PLANT.** §90.2 established that the increment generator IS the pilot cascade. It follows —
+and nothing had said it — that **the lap-free teacher can be no better than the cascade it takes
+increments from.** The two plants asked are the two ends of that:
+
+```
+  plant     its cascade                    parametric teacher
+  mill      1.74x, DEPLOYING (§60)         works: 2.610x delivered, 17% less plant time
+  barrel    1.05x, the standing refusal    nothing, at any scale
+```
+
+The barrel is the plant where §62.4 measured the pilot's own correction as harmful at every
+setting — *forced to deploy, its correction sits at EXACTLY its cap and costs the changeover 1.5x*,
+and *every setting that applies a real correction is worse than doing nothing*. The parametric
+teacher's increment IS that correction. So it inherits the failure, where `hff` — a completely
+different teacher, inverting at the lap's own harmonics and never consulting the cascade — does
+not, and reaches 1.03-4.03x there.
+
+**THIS IS THE DEEPER REASON IT WAS ARM-ONLY**, and it is not the plumbing §90.3 repaired: the arm
+has a working cascade (1.33-1.34x, deploying), the mill has the best one of the plant set, and the
+plants whose cascades refuse were never going to be taught this way whatever was wired.
+
+**SO THE LAP-FREE TEACHER IS NOT A GENERAL REPLACEMENT — IT IS AVAILABLE WHERE THE CASCADE IS
+GOOD**, which is a narrower and more useful claim than §90.3 set out to make, and it comes with a
+screen that costs nothing: the cascade's own verify, which every ladder already prints. **PREDICTED
+AND NOT YET RUN**, so it can be read against what happens: the COLUMN (cascade 0.39x) and the
+QUADRUPLE TANK (refuses every layer) should both produce nothing, and a plant whose cascade
+deploys should work. If the column works anyway, this account is wrong.
+
+**AND ONE CHECK GOES RED UNDER `PARAM=1`, WHICH IS THE HARNESS BEING HONEST RATHER THAN A
+REGRESSION.** With the distilled rung producing nothing the ladder ships the CASCADE at 1.05x, and
+the cascade does not transfer — so the barrel's target-1 check reads 0.971x and fails *none made
+worse*. That is the correct behaviour of a plant whose teacher failed, it is confined to an opt-in
+knob, and the default run is unaffected.

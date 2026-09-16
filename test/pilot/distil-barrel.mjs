@@ -382,7 +382,7 @@ const spec = { ...barrelSpec,
   // `STD=0` turns it off as the control.
   distil: { refDim: REFDIM, ridge: env('RIDGE', 1e-6), offsets: OFFSETS,
     ...(PARAM ? { parametric: true, passes: +(process.env.PPASSES || 4),
-      backtracks: +(process.env.PBT === undefined ? 3 : process.env.PBT) } : {}),
+      backtracks: +(process.env.PBT || 0) } : {}),
     // THE CASCADE IS THE TEACHER AND NOT A CANDIDATE TO SHIP (plan §73.14). A cascade exists on
     // these plants only because `ORACLE=1` asks for one to iterate; judged as a RUNG it changes
     // the bar the distilled policy must clear, and on the quadruple tank that is the difference
