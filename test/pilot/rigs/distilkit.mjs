@@ -312,21 +312,40 @@ function emitRow(rep, auto, extra = {}) {
      * the object's own record and not a second measurement.
      *
      * `xClassic` is base/classic and `xAdded` is classic/best, so their product is the headline
-     * by construction; where the conventional rung was not built or was refused, `xClassic` is 1
-     * and the whole factor lands in `xAdded` (rule 25 — a rung that did not run must not read as
-     * one that ran and contributed nothing).
+     * by construction.
+     *
+     * **THERE ARE THREE STATES AND THE FIRST VERSION COLLAPSED THEM INTO TWO, WHICH IS THE FAULT
+     * ITS OWN COMMENT WARNED AGAINST (plan §95, rules 25 and 30).** It read *a rung that did not
+     * run must not read as one that ran and contributed nothing* and then emitted `xClassic: 1`
+     * for both, because it looked the rung up with `&& r.deployed` — so a rung the harness NEVER
+     * OFFERED and a rung that RAN AND FOUND NO HEADROOM were indistinguishable in the row. Six
+     * plants of ten duly read `classicRan: false`, and the barrel's own log shows it offered the
+     * rung, ran it and refused it at a genuine 1.00x. A table built on that would have reported
+     * six non-measurements as measurements, on exactly the question the incumbent column exists
+     * to answer.
+     *
+     *   NOT OFFERED   no rung by that name exists      -> `xClassic: null`, verdict 'not offered'
+     *   REFUSED       it ran and found no headroom     -> `xClassic: 1`,    verdict 'refused'
+     *   DEPLOYED      it ran and shipped               -> `base/score`,     verdict 'deployed'
+     *
+     * The middle row is a REAL measurement of the incumbent and belongs in the count; the first is
+     * not and must not.
      */
     ...(() => {
       const rs = Array.isArray(rep.rungs) ? rep.rungs : [];
-      const cl = rs.find((r) => r.name === 'conventional (self-tuned)' && r.deployed);
-      const xClassic = (cl && Number.isFinite(rep.base) && Number.isFinite(cl.score) && cl.score > 0)
-        ? rep.base / cl.score : 1;
-      const afterClassic = cl && Number.isFinite(cl.score) ? cl.score : rep.base;
+      const cl = rs.find((r) => r.name === 'conventional (self-tuned)');
+      const ran = !!cl;
+      const dep = !!(cl && cl.deployed);
+      const xClassic = !ran ? null
+        : (dep && Number.isFinite(rep.base) && Number.isFinite(cl.score) && cl.score > 0)
+          ? rep.base / cl.score : 1;
+      const afterClassic = dep && Number.isFinite(cl.score) ? cl.score : rep.base;
       const xAdded = (Number.isFinite(afterClassic) && Number.isFinite(rep.best) && rep.best > 0)
         ? afterClassic / rep.best : null;
-      return { xClassic: +xClassic.toFixed(4),
+      return { xClassic: xClassic === null ? null : +xClassic.toFixed(4),
         xAdded: xAdded === null ? null : +xAdded.toFixed(4),
-        classicRan: !!cl };
+        classicRan: ran,
+        classicVerdict: !ran ? 'not offered' : dep ? 'deployed' : 'refused' };
     })(),
     ...extra,
   };
