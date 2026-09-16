@@ -289,6 +289,67 @@ check('…and contributes through act() on the host\'s own look-ahead closure, w
   + 'rung that is armed but never reached would not',
   Math.abs(auto.act({ look: (o) => pref(500 + o) })[0]) > 1e-6,
   `${auto.act({ look: (o) => pref(500 + o) })[0]}`);
+
+// ---- THE DECLARED OPERATING POINT, ASSERTED THROUGH `AutoStack` AND NOT AT UNIT LEVEL (rule 9b).
+//
+// `artefact.test.mjs` has pinned `_declCoverage`'s ARITHMETIC bit-exactly since §90.4 and the guard
+// was still inert on every plant, because `AutoStack` called `actLook` with FOUR arguments and the
+// fifth was the one that mattered (plan §100). A unit test reaches the function directly; what was
+// broken was the PATH, and that is the third guard here to fail exactly that way after §78.5's and
+// §82's. So this drives the guard through `auto.act` — the call a host actually makes — and asserts
+// all three states, because a guard that only ever refuses is as broken as one that never does.
+{
+  const a3 = new AutoStack({
+    channels: [{ max: 10 }], uMax: 1, resolve: 1e-9,
+    distil: { offsets: [-16, -8, -4, -2, 0, 2, 4, 8, 16], signOffsets: [0], ridge: 1e-9 },
+  });
+  // ITS OWN CLEAN PLANT, and the reason is worth stating: `host.run` closes over the FIRST
+  // `AutoStack` and subtracts its deployed correction, so reusing it hands this ladder a machine
+  // that has already been fixed and it duly REFUSES — which showed up here as declSpan `null` and
+  // an act() of exactly 0, i.e. as a guard that appeared to refuse correctly while the rung under
+  // it had never been built (rule 25 again, caught by the `|told| > 1e-6` half rather than by the
+  // refusal half, which any all-zero controller satisfies).
+  // …and it APPLIES THE RUNG'S OWN CORRECTION, exactly as `runLap` does for the first ladder and
+  // as `rigs/ladder.mjs` does for every plant: the verify calls `host.run(null)` and the HOST is
+  // what puts `act()` on the machine. Without that the rung fits (2649 rows here) and then loses
+  // its own verify, which reads as a refusal and is a harness that never applied it — the very
+  // defect `distil-tank.mjs` paid for in §67.3.
+  const bare3 = (corr) => {
+    const e = new Float64Array(LAP); let s = 0;
+    for (let k = 0; k < LAP; k++) {
+      e[k] = trueErr(k) - (corr ? corr.at(k)[0] : 0)
+        - (a3.deployed.distil ? a3.act({ look: (o) => pref(k + o) })[0] : 0);
+      s += e[k] * e[k];
+    }
+    return { score: Math.sqrt(s / LAP), err: [e] };
+  };
+  const h3 = { run: async (corr) => bare3(corr),
+    distilRuns: () => host.distilRuns().map((r) => ({ ...r, declare: { vLine: 5 } })) };
+  const r3 = await a3.commission(h3);
+  if (process.env.DBG3) console.log('    DBG3 rungs', JSON.stringify(r3.rungs.map((r) => [r.name, r.note])),
+    'deployed', JSON.stringify(a3.deployed), 'distil?', !!a3.distil,
+    'err', r3.distil && r3.distil.error, 'runs', JSON.stringify(r3.distil && r3.distil.runs));
+  const lk = (o) => pref(500 + o);
+  const span = a3.distil && a3.distil.report ? a3.distil.report.declSpan : null;
+  check('a declared operating point reaches the POLICY through AutoStack\'s own commission path',
+    !!span && Array.isArray(span.vLine) && span.vLine[0] === 5 && span.vLine[1] === 5,
+    JSON.stringify(span));
+  const told = a3.act({ look: lk, decls: { vLine: 5 } })[0];
+  const untold = a3.act({ look: lk })[0];
+  const off = a3.act({ look: lk, decls: { vLine: 4 } })[0];
+  check('…and AT the declared point it is BIT-IDENTICAL to declaring nothing, so the guard is not '
+    + 'a second controller', told === untold && Math.abs(told) > 1e-6,
+    `told ${told} untold ${untold}`);
+  check('…and NOT TOLD reads full coverage rather than refusing invisibly on a wiring fault '
+    + '(rule 25)', untold === told, `${untold}`);
+  check('…and OFF a point span it refuses through act(), which is the half that was unreachable '
+    + 'for ten sections (rule 9b, plan §100)', off === 0, `${off}`);
+  // AND THE HOST THAT DECLARES NOTHING IS UNTOUCHED — without this the check above is satisfied
+  // by a guard that fires on every plant, which is the failure mode §100 measured as costing 2x.
+  check('…while a host that declares NOTHING is unaffected by being handed decls at all',
+    auto.act({ look: lk, decls: { vLine: 4 } })[0] === auto.act({ look: lk })[0],
+    `${auto.act({ look: lk, decls: { vLine: 4 } })[0]} vs ${auto.act({ look: lk })[0]}`);
+}
 // ---- KEEPING THE TRACKER ON: THE SAME RECURSION, CONTINUED.
 //
 // The commissioning fit streams, so the estimator that produced `W` is still here and can be

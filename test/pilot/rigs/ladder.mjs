@@ -169,9 +169,14 @@ async function ladder(spec) {
       // and it is the barrel's whole signature: in-sample 9-14x read through the raw reference,
       // and 0.27-0.48x on the machine read through a window S times too wide.
       const lookRaw = (off) => pRefAt(Math.min(pN - 1, Math.max(0, k + off)));
+      // THE DECLARED OPERATING POINT THIS PROGRAM IS BEING RUN AT (plan §90.4, reached in §100).
+      // A spec that declares nothing passes `undefined` and every existing plant is
+      // byte-identical, exactly as `speed` and `load` are. It is stated per SCORED RUN rather
+      // than per plant because that is what the guard is about: the same frozen object asked to
+      // act somewhere its commissioning did not observe.
       const u = P.armed === false ? channels.map(() => 0)
         : auto.act({ v: channels.map((_, c) => pV[c][k]), a: channels.map((_, c) => pA[c][k]),
-          look, lookRaw });
+          look, lookRaw, decls: P.decls || undefined });
       if (corr) { const w = auto.into(corr.at(k), cname, {}); for (let c = 0; c < nc; c++) u[c] += w[c]; }
       const r = step(st, ref, u, k);
       auto.observe(r.measured);
@@ -195,14 +200,14 @@ async function ladder(spec) {
    * had to un-arm and re-arm to read a baseline could leave the ladder in a state its own
    * verify never saw.
    */
-  const scoreOn = async ({ refAt: rAt, fresh: fr, N: n2 }, { armed = true } = {}) => {
+  const scoreOn = async ({ refAt: rAt, fresh: fr, N: n2, decls: d2 = null }, { armed = true } = {}) => {
     const v2 = Array.from({ length: nc }, () => new Float64Array(n2));
     const a2 = Array.from({ length: nc }, () => new Float64Array(n2));
     for (let k = 1; k < n2 - 1; k++) {
       const p0 = rAt(k - 1), p1 = rAt(k), p2 = rAt(k + 1);
       for (let c = 0; c < nc; c++) { v2[c][k] = (p2[c] - p0[c]) / 2; a2[c][k] = p2[c] - 2 * p1[c] + p0[c]; }
     }
-    return run0(null, null, { refAt: rAt, fresh: fr, N: n2, v: v2, a: a2, armed });
+    return run0(null, null, { refAt: rAt, fresh: fr, N: n2, v: v2, a: a2, armed, decls: d2 });
   };
   const drivePilot0 = async (stk) => {
     const st = fresh();

@@ -22491,3 +22491,158 @@ satisfying shape to write up than *it works* — and nothing about a negative in
 **The general form is worth writing down: an API with two entry points taking different reader
 shapes, and no way to tell them apart at the call site, is a trap — and the only defence that
 worked here was dumping the rows and looking at them.**
+
+
+## §100 — THE DECLARED-POINT GUARD IS REACHED, DOES EXACTLY WHAT IT WAS BUILT TO DO, AND COSTS 2x
+
+§90.4 built a coverage guard for a DECLARED OPERATING POINT and ended with a stated gap: *no plant
+declares anything, so the guard is provably inert everywhere and has not been shown to do its job.*
+It put the prediction on record — *on the mill's line-speed rows it should convert 0.770x and 0.562x
+into REFUSALS at 1.000x, and if it REPAIRS them instead the instrument is wrong.* This is that run.
+
+### IT WAS WORSE THAN "NO PLANT DECLARES ANYTHING": NOTHING COULD HAVE
+
+`DistilPolicy.actLook(look, speed, state, load, decls)` has carried `_declCoverage` since §90.4 and
+`AutoStack` called it with **four arguments**. The fifth defaulted to `null`, `_declCoverage(null)`
+returns 1, and the guard was inert **through the one press by construction rather than by
+measurement**. A host could not have reached it however much it declared.
+
+**That is the third guard here shipped armed and unreachable**, and the shape is identical every
+time: §82's plant-side load guard maxed its reading over probe runs with no correction armed, so
+its fade began at 1.14 against a reading capped at 1 and it *could never fire at any load*; §78.5's
+bend guard was calibrated on a sine, which is never locally straight, so a hold or a ramp read
+Infinity and it *could never be trusted*; and this one was *never called*. All three passed their
+own unit tests, because a unit test reaches the function directly and the thing that was broken was
+the path to it (rule 25, and rule 9's half that says guards usually fail by not firing).
+
+Fixed: `AutoStack` forwards `ctx.decls` to `actLook` and `tr.declare` to all **six** `addProgram`
+sites — including the ridge/pass ladder, which is the one that builds the candidate that actually
+ships — and `rigs/ladder.mjs`'s `scoreOn` takes a `decls` per scored program. A host that declares
+nothing passes `null` and is byte-identical.
+
+### THE MECHANICAL PREDICTION IS CONFIRMED, WITH THE CONTROL THAT GIVES IT TEETH
+
+The mill declares `vLine`, read off the plant rather than restated (rule 61), on every training run
+— so the observed span is a POINT, which is §90.4's own case: one commissioning observes one value,
+and widening it with a margin would be a per-plant constant invented to soften a refusal.
+
+```
+                                             DECL off        DECL on
+  the commissioned point  1.50 mm, 5.0 m/s   2.625x          2.625x      <- unchanged
+  GAUGE   1.40 mm                            2.625x          2.625x      <- unchanged
+  GAUGE   1.65 mm                            2.625x          2.625x      <- unchanged
+  SPEED   4.0 m/s  (delay 100 -> 125)        2.020x          1.000x      <- REFUSED
+  SPEED   6.5 m/s  (delay 100 ->  77)        1.474x          1.000x      <- REFUSED
+```
+
+**The gauge rows are the control and they have teeth.** Nothing declared changes on them, and they
+come back untouched to four figures — so the guard is refusing on the OPERATING POINT and not on the
+fact that a knob was turned. The commissioned point is byte-identical at 2.625x, which is rule 21's
+signature saying the declaration changed the fit not at all.
+
+### AND THE PRODUCT PREDICTION — MINE, WRITTEN BEFORE THE RUN — IS CONFIRMED TOO, AGAINST §90.4
+
+§90.4's success criterion was *convert 0.770x and 0.562x into REFUSALS at 1.000x*. **Those two
+numbers are FRACTIONS OF THE COMMISSIONED FACTOR, and reading a fraction as a verdict is rule 19.**
+In the units the machine is in, the same two rows are **2.020x and 1.474x — both HELPING**, with
+nothing made worse at any operating point §89.2 tried.
+
+So the guard, working exactly as designed, **takes the machine from 2.020x to 1.000x and from
+1.474x to 1.000x.** It also makes target 1 worse by its own column, both speed rows falling from
+0.770 and 0.562 to **0.381**. The mandate's clause survives in the weak sense — 1.000x is not
+"made worse" — and that is precisely what makes the row worth writing down: *nothing made worse* is
+satisfied by a guard that throws away half the benefit.
+
+### THE CRITERION THIS CORRECTS, WHICH IS WORTH MORE THAN THE GUARD
+
+**A guard must be scored on DELIVERED OUTCOME, not on faithfulness to its declaration.** A stale
+declaration is a reason to RE-MEASURE, not a reason to stop correcting. The only thing that
+licenses refusing is evidence that the correction HARMS — and on this plant that evidence does not
+exist at any point tried, which is why the right action here is to keep correcting with a stale
+delay and tell the engineer to update it.
+
+This is the same error §90.4 warned about one level down and then committed one level up. Its own
+text says tolerance *comes from declaring the scalar ACROSS a span*, citing target 2's lesson that
+feed-invariance comes from TRAINING ACROSS FEEDS and never from INDEXING BY FEED. Correct — and a
+point span does not merely fail to provide tolerance, it actively removes performance the object
+had. The guard is the indexing, not the training.
+
+### WHAT SHIPS
+
+`DECL` is **opt-in and OFF**, on the measurement rather than on caution, and every mill figure on
+record is reproduced with it off. The guard stays built because the case it was designed for is
+real — a declared scalar the weights depend on, gone stale, with the correction turning HARMFUL —
+but no plant here has ever produced that case, and §90.4 mistook *degraded* for *harmful*. Three
+guards now (§78.5, §82, §100) have been built for a failure this object has not been shown to have,
+and all three are off.
+
+**WHAT WOULD TURN IT ON, stated so it is falsifiable**: one operating point, on any plant, where a
+stale declaration makes the frozen object read BELOW 1.000x. `scoreOn` with `decls` is now the
+instrument for looking, and the mill's own ±10% gauge and 4.0-6.5 m/s speed spans are the first
+place it was looked and did not find one.
+
+### NOT CLAIMED
+
+One plant, one declared scalar, two operating points per axis, one seed. The mill is the only
+regulator here and the only plant whose win rests on a typed-in number, so it is the best available
+test and it is still one. And the guard has not been shown to fire USEFULLY anywhere — only to fire
+correctly and cost 2x, which is a different sentence.
+
+
+## §100.1 — ON SEVEN PLANTS OF TEN THE DEPLOYED OBJECT SHIPS WITH NO ARMED GUARD AT ALL
+
+Rule 9b was written in §100 off three guards that shipped armed and unreachable. Applying it to
+the rest of the deploy path — *which of `actLook`'s guard inputs does a host actually pass?* —
+gives a scope statement this record has never made.
+
+`DistilPolicy.actLook(look, speed, state, load, decls)` carries four guards. On a plant driven by
+the shared `rigs/ladder.mjs`:
+
+```
+  bend    (§78)    `bendGuard = !!o.bendGuard`  -> default FALSE, opt-in, off on the measurement
+  load    (§82)    `loadGuard = !!o.loadGuard`  -> default FALSE, opt-in, off on the measurement
+  decl    (§90.4)  no host declares             -> declSpan null, off (and §100 measured it costing 2x)
+  speed   (§49)    no host supplies `speedAt`   -> speedSpan NULL, and the ladder passes no `ctx.speed`
+```
+
+**So on the mill, the barrel, the column, the cart-pole, the real flexible arm, the real cascaded
+tanks and the real steam exchanger — seven of the ten — the deployed object runs with ZERO armed
+guards.** Only the 2R arm (through `lib/flexisim/autohost.js`, which supplies both `speedAt` and
+`ctx.speed`) and the quadruple tank (its own loop, which passes `speed`) ever arm one.
+
+### THIS IS NOT A DEFECT, AND SAYING WHY IS THE POINT
+
+The speed guard is **doubly** inert there and CONSISTENTLY so: with no `speedAt` the fit records
+`speedSpan: null` rather than inventing a span, and `_coverage(null)` returns 1. That is rule 25
+done correctly — no span was observed, so none is claimed — and it is the right answer, because
+those plants have no commanded-speed analogue at all. A mill's LINE speed is not a trajectory
+speed; a column's flows are not; a regulator holding a setpoint has none.
+
+The problem is only that the record generalises. `distil.js`'s own row lists the speed fade as one
+of three guards "each carrying the measurement that justifies it", and §88.3 says *the deployed
+object has a speed-coverage guard that FADES outside the span it was fitted over* — both true of
+the OBJECT and true on the two plants that arm it, and neither true of what ships on the other
+seven. The measurements behind the fade (0.75x at half the trained feed, 0.53x at an untrained
+one, §52.40's 1.17-1.19x above the commissioning feed) are all on the ARM.
+
+### WHAT IT MEANS FOR THE PRODUCT, STATED PLAINLY
+
+**On seven plants of ten, an operating point the commissioning never saw is met by an object with
+no mechanism of any kind for noticing.** §75's own sentence — *graceful-and-silent would be worth
+little* — applies to those seven in full, and the free detector it offers (read the delivered error
+at the 64 touches §74 priced) is a COMMISSIONING-time instrument and not a runtime guard.
+
+That is not obviously wrong. §100 measured the one guard that could be armed on one of those seven
+and found it costing **2.020x → 1.000x and 1.474x → 1.000x** — so on the evidence available,
+shipping with no guard is the better of the two configurations that have been measured. What is
+missing is not a guard; it is the measurement that would tell us whether any of these seven ever
+needs one, and §84.4's eleven-cell plant-span sweep on the arm is the only place that has been
+asked at all (answer there: nothing made worse across an eight-fold span of two stiffnesses).
+
+### WHAT WOULD CHANGE IT
+
+The same falsifier §100 named, widened: ONE operating point, on ANY plant, where the frozen object
+reads BELOW 1.000x. `scoreOn` now takes `decls`, `PLANTSPAN` takes named overrides, and
+`makeMill` takes an operating point — so three instruments exist for looking and none has found
+one. Until one does, "the deployed object carries guards" should be read as *the object implements
+them and two plants arm one*, which is a narrower sentence than the record has been making.

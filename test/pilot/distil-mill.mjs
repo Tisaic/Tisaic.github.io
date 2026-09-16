@@ -85,6 +85,51 @@ const TURNS = env('TURNS', 8);
 const PER = 1 / (RM.F_ECC * RM.DT);                 // steps per backup-roll revolution
 const LAP = Math.round(TURNS * PER);
 const NOECC = process.env.NOECC === '1';
+/**
+ * DECLARE THE LINE SPEED, AND SO REACH THE GUARD §90.4 SHIPPED AND NEVER DEMONSTRATED (plan §100).
+ *
+ * §89.2 measured that this plant's win rests on TWO declarations that behave completely
+ * differently: the roll phase is read by an ENCODER, honest at any line speed, so a GAUGE change
+ * is inert to three figures; the transport delay is a NUMBER TYPED IN at commissioning, and the
+ * lead the fit chose against it is baked into the WEIGHTS, so another line speed reads 0.770x and
+ * then 0.562x. Nothing made worse, but quietly degrading.
+ *
+ * §90.4 built the guard for exactly that and could not demonstrate it: no plant declared anything.
+ * It was worse than that, and §100 found it — `AutoStack` never passed `decls` to `actLook` at
+ * all, so the fifth argument defaulted to null and the guard was inert THROUGH THE ONE PRESS by
+ * construction rather than by measurement. That is §82's and §78.5's shape for the third time: a
+ * guard shipped armed and unreachable.
+ *
+ * THE PREDICTION IS ON RECORD AND IS WRITTEN HERE BEFORE THE RUN (rule 59, quoting §90.4): *on the
+ * mill's line-speed rows it should convert 0.770x and 0.562x into REFUSALS at 1.000x, and if it
+ * REPAIRS them instead the instrument is wrong (rule 14), because a fading guard can only reduce a
+ * correction and can never re-time a delay.* The GAUGE rows must not move at all, because nothing
+ * declared has changed on them — and that is the half that makes this a control rather than a
+ * demonstration (rule 9): a guard that refuses the speed rows AND the gauge rows is refusing on
+ * the fact that a knob was turned, not on the operating point.
+ *
+ * ---------------------------------------------------------------- AND A SECOND PREDICTION, MINE,
+ * WRITTEN BEFORE THE RUN AND CONTRADICTING §90.4's OWN (rule 59).
+ *
+ * §90.4 states the success criterion as *convert 0.770x and 0.562x into REFUSALS at 1.000x*, and
+ * those two numbers are FRACTIONS OF THE COMMISSIONED FACTOR, not factors. Read §89.2's own table
+ * in absolute terms and the same two rows are **2.020x and 1.474x — both of them HELPING**, with
+ * nothing made worse at any operating point. So a guard that fires there takes this machine from
+ * 2.020x to 1.000x and from 1.474x to 1.000x, and doing exactly what it was designed to do is
+ * STRICTLY WORSE than not having it.
+ *
+ * I therefore predict the mechanical half CONFIRMS (the speed rows read 1.000x, the gauge rows are
+ * untouched) and the product half REFUTES: the guard is correct about the declaration and wrong
+ * about the machine. If instead the speed rows come back BETTER than 2.020x and 1.474x, the
+ * instrument is wrong and not the design (rule 14) — a fading guard multiplies the correction by a
+ * number in [0,1] and cannot re-time a delay, so it has no way to improve anything.
+ *
+ * What that would establish is a criterion rather than a verdict: **a guard must be scored on
+ * DELIVERED OUTCOME, not on faithfulness to its declaration.** A stale declaration is a reason to
+ * re-measure, not a reason to stop correcting, and the only thing that licenses refusing is
+ * evidence that the correction HARMS — which on this plant does not exist at any point tried.
+ */
+const DECL = process.env.DECL !== '0' && process.env.DECL !== undefined;
 /** Roll angle, as an encoder reports it. `NOECC=1` withholds it — the falsifier. */
 const phase = (k) => 2 * Math.PI * RM.F_ECC * k * RM.DT;
 /**
@@ -194,6 +239,14 @@ const distilRuns = (auto) => dietN([0, 1, 2, 3]).map((i) => {
     lap: LAP,
     closed: true,
     refAt: (k) => refOf(W + ((k % LAP) + LAP) % LAP),
+    // THE OPERATING POINT THIS RUN WAS TAKEN AT (plan §90.4, reached in §100). Every training run
+    // is at the commissioning line speed, so the observed SPAN is a POINT — which is the whole
+    // case §90.4 makes: *one commissioning observes one value, and widening it with a margin
+    // would be a per-plant constant invented to soften a refusal*. Tolerance would have to come
+    // from a DIET that varies the line speed, which is target 2's own lesson (feed-invariance
+    // comes from training across feeds, never from indexing by feed) and is not what this diet
+    // does. `DECL=0` is the control and is byte-identical to every mill number on record.
+    ...(DECL ? { declare: { vLine: RM.makeMill(1 + i).vLine } } : {}),
     // THIS PLANT IS DELIBERATELY NOT CARRIED ACROSS THE TEACHER'S CALLS, and it is the only one
     // (plan §72.15). Everywhere else the per-call warm-up is a SETTLE and rebuilding it wastes the
     // plant's time; here `W` is a PHASE ALIGNMENT — a whole number of roll turns, so the declared
@@ -326,8 +379,14 @@ for (const { tag, o } of OPS) {
   const rAt = (k) => (NOECC ? [probe.s0]
     : [probe.s0, Math.cos(ph(WARM + k)), Math.sin(ph(WARM + k))]);
   const fr = () => { const m = RM.makeMill(1, o); for (let i = 0; i < 4000; i++) m.step(m.s0); return { m, want: [] }; };
-  const bare = (await scoreOn({ refAt: rAt, fresh: fr, N: RM.T_RUN }, { armed: false })).score;
-  const on = (await scoreOn({ refAt: rAt, fresh: fr, N: RM.T_RUN })).score;
+  // WHAT THE ENGINEER WOULD TYPE IN AT THIS OPERATING POINT. `probe.vLine` is the mill's own
+  // line speed, so the declaration is READ OFF THE PLANT rather than restated here — a second
+  // copy of the number is how a declaration comes to disagree with the machine it describes
+  // (rule 61). With `DECL` unset nothing is declared and the guard reads full coverage, which is
+  // the byte-identical control for every mill figure on record.
+  const dc = DECL ? { vLine: probe.vLine } : null;
+  const bare = (await scoreOn({ refAt: rAt, fresh: fr, N: RM.T_RUN, decls: dc }, { armed: false })).score;
+  const on = (await scoreOn({ refAt: rAt, fresh: fr, N: RM.T_RUN, decls: dc })).score;
   const x = bare / on;
   t1rows.push({ tag, x, bare, on, dly: probe.dly });
   console.log(`    ${tag}   ${(1000 * bare).toFixed(2)} → ${(1000 * on).toFixed(2)} µm   `
