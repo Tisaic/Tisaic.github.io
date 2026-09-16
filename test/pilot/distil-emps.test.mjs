@@ -117,7 +117,14 @@ const run2 = async (extra) => {
   let s = 0, n = 0; const e = new Float64Array(P);
   for (let k = 0; k < 8 * P; k++) {
     const kk = ((k - 1) % P + P) % P;
-    let u = A2.act({ k: kk, look: look2(kk) })[0];
+    // `v` AND `a` ARE WHAT THE CONVENTIONAL RUNG READS AT DEPLOY, AND THIS LOOP DID NOT PASS THEM
+    // (plan §97.2). `ClassicFF` evaluates `[a, v, sign v, 1]`, so without them the rung
+    // COMMISSIONS correctly — 14 laps, 4 coefficients, the same as `autostack.test.mjs` — and then
+    // contributes EXACTLY ZERO when the ladder scores it, which reads as "the incumbent finds
+    // nothing on EMPS" on the one plant where it is worth 424.8x. The ladder reverting a rung that
+    // genuinely did nothing is the GATE WORKING; the fault was that the deploy path was never
+    // handed the rung's inputs, which is `distil-tank.mjs`'s own §67.3 defect in a second place.
+    let u = A2.act({ v: [PR.v[kk]], a: [PR.a[kk]], k: kk, look: look2(kk) })[0];
     if (extra) u += extra.at(kk)[0];
     m.step(PR.q[kk] + Math.max(-UM, Math.min(UM, u)));
     A2.observe([m.q]);

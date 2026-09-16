@@ -334,7 +334,12 @@ async function once(seed) {
         const v0 = voltsFor(G, p0[0], p0[1]), v1 = voltsFor(G, p1[0], p1[1]);
         return Math.hypot(v1[0] - v0[0], v1[1] - v0[1]) * 0.5;
       })();
-      const a0 = auto.act({ look, lookRaw: look, k, speed: sp });
+      // `v`/`a` for the conventional rung's deploy path — see plan §97.2. Without them
+      // `ClassicFF` has nothing to evaluate and contributes exactly zero however well it
+      // commissioned, so a rung that was never applied reads as a rung that found nothing.
+      const ki = Math.max(0, Math.min(PROG - 1, k));
+      const a0 = auto.act({ v: TANK_RATES.map((r) => r.v[ki]), a: TANK_RATES.map((r) => r.a[ki]),
+        look, lookRaw: look, k, speed: sp });
       // UGAIN=<x>: the CHEAPEST explanation for §78.6's leftover, killed before any structural one
       // (rule 1). The false refusal zeroed the map on 3,411 of 11,999 steps — 28% — and was worth
       // 19%. If simply applying LESS everywhere buys the same thing, there is no kink structure in
@@ -477,7 +482,9 @@ async function once(seed) {
             const look = (o) => { const t = ref(k + o); return voltsFor(G, t[0], t[1]); };
             const spd = (() => { const a0 = ref(k - 1), b0 = ref(k + 1);
               return Math.hypot(b0[0] - a0[0], b0[1] - a0[1]) * 0.5; })();
-            const a = active ? au.act({ look, lookRaw: look, k, speed: spd }) : null;
+            const ki2 = Math.max(0, Math.min(PROG - 1, k));
+            const a = active ? au.act({ v: TANK_RATES.map((r) => r.v[ki2]),
+              a: TANK_RATES.map((r) => r.a[ki2]), look, lookRaw: look, k, speed: spd }) : null;
             const u = [0, 1].map((j) => pre[j][kk] + (a ? (a[j] || 0) : 0));
             if (uOut && a) for (let j = 0; j < 2; j++) uOut[j][kk] = a[j] || 0;
             p.step(v[0] + u[0], v[1] + u[1]);
