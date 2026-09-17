@@ -473,6 +473,14 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # record alone, asserted bit-identical to the shipped one. Quick tier — it is a CONTRACT and
     # it runs in two seconds (rule 2).
     t node test/pilot/artefact.test.mjs
+    # THE GAIN LADDER'S EARLY EXIT (plan §109), replayed on §107's recorded rows in
+    # milliseconds. A ladder axis that spends scored runs selecting a gain for a rung the
+    # machine then throws away is commissioning time nobody gets back, and the decision is
+    # pure arithmetic on numbers four harnesses already print — so re-running four plants to
+    # exercise it would spend days of plant time to learn what their own rows say (rule 30,
+    # the `objtable --read` argument). Both halves: the three plants §107 measured as
+    # INTERIOR must be untouched, and a candidate that already beats its bar is never tested.
+    t node test/pilot/gainexit.test.mjs
     # WHAT SHIPS, WHAT COMMISSIONS, WHAT IS ONLY THE BENCH. Fails when a module appears that
     # nobody classified, so the deploy boundary cannot rot quietly (rule 30 on a dependency graph).
     t node test/inventory.test.mjs

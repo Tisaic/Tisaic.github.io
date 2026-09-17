@@ -23537,3 +23537,107 @@ CARRIED ridge of 1e-4. It read in-sample 0.869/0.958, **in-situ −9.68/−4.10*
 against static's 6.17x — a clean, spectacular, entirely spurious negative. TWO instrument faults: a
 guide program whose tracker-fed adaptation does not transfer at all, so there was no lever to fail
 to reproduce (rule 20), and a sensor starved of rows at a ridge nobody derived (rule 31).
+
+## §109 — #82 CLOSED: THE GAIN LADDER STOPS WHEN IT HAS NOTHING LEFT TO SELECT, AND THE BOUND IT REPLACES WAS TIGHT ENOUGH TO CHECK ITSELF
+
+§107 left #82 half done. It confirmed that the applied-gain grid does NOT run away upward on shipped
+diets — three of four picks are genuine interior optima — and found the fault surviving at the OTHER
+end: the QUADRUPLE TANK's extension walks DOWNWARD through all six of §86.6's steps monotonically,
+the argmin never turns, so **the pick IS the bound** — the very EDGE fault §86.6 was built to remove.
+**And the rung is REFUSED anyway at 0.16x**, losing to the conventional rung's 19.91x (§97.3). Eleven
+scored runs selecting a gain the machine then throws away, on the one plant whose verify share §84.5
+already measured as the outlier at **44% against 16-19%**.
+
+§107 named the fix and did not build it: **not widening the bound** — that buys a better gain for a
+refused rung, which is rule 19 — but an **EARLY EXIT**, `beats()`'s own question asked one level up.
+
+### THE TEST, AND WHY IT IS SAFE
+
+`gainLadderExit(cands, bar, margin, left)` is a pure function of the ladder's own rows. It takes the
+**BEST per-step improvement observed anywhere on this ladder** and asks whether SUSTAINING it for
+every remaining step could reach the bar. Three properties, in the order they matter:
+
+- **It is optimistic by construction.** Sustaining the best rate ever seen is a bound no real
+  continuation beats for long, because the gain → 0 limit applies no correction at all and therefore
+  converges TO the bar rather than passing it. A ladder still a factor away with its whole budget
+  spent at its own best rate has nothing to select.
+- **It cannot move a winner.** It is consulted only where the best candidate already LOSES the bar.
+  A candidate that beats it has a real selection to make and is never tested — asserted, because
+  that is the one case where being wrong would cost a shipped result.
+- **The three interior plants are untouched BY CONSTRUCTION, not by re-measurement.** An interior
+  argmin breaks the extension loop on its own first iteration (`next === null`), so mill 1.00,
+  column 1.15 and barrel 1.15 never reach the exit at all (rule 21).
+
+### THE MEASUREMENT IS A REPLAY, AND THAT IS THE POINT
+
+The decision is arithmetic on scores four harnesses already print, so re-running four plants to
+exercise it would spend **days of plant time to learn what their own recorded rows say** — the
+`objtable --read` argument, rule 30, and the reason `commtime.mjs` is a scrape.
+`test/pilot/gainexit.test.mjs` replays §107's table verbatim in milliseconds, in the QUICK tier.
+
+```
+  mill     0.72 7.24e-3 · 0.85 6.35e-3 · 1.00 5.86e-3 PICKED · 1.15 6.10e-3 · 1.30 6.97e-3   silent
+  column   0.72 5.88e-2 · 0.85 4.73e-2 · 1.00 3.74e-2 · 1.15 3.45e-2 PICKED · 1.30 4.16e-2   silent
+  barrel   0.72 1.944   · 0.85 1.389   · 1.00 0.862   · 1.15 0.753 PICKED   · 1.30 1.185     silent
+
+  tank     0.7200 4.3624e-1 · 0.6099 3.6993e-1 · [STOPS HERE] · 0.5166 · 0.4376 · 0.3707
+                                                 · 0.3140 · 0.2660
+           the best candidate loses the bar (2.5432e-2) by 14.55x, and 5 more steps at this
+           ladder's own best rate (1.1793 per step) reaches only 1.6221e-1
+```
+
+**ONE extension step instead of six: five scored runs saved on the plant that could least afford
+them**, and the rung is refused at 0.16x either way, so the delivered result is the conventional
+rung's 19.910x unchanged.
+
+### THE BOUND CHECKED ITSELF, WHICH IS THE LINE WORTH KEEPING
+
+The exit predicted that five more steps could reach only **1.6221e-1**. The recorded six-step walk
+actually ends at **1.6348e-1** — the optimistic extrapolation lands within **0.8%** of where the full
+walk really finished. So on the one plant where this can be checked against a completed record, the
+bound is not merely conservative, it is *tight*: the ladder's own rate did hold for all six steps,
+and the exit correctly read that holding it was still not enough. A rule that predicts the thing it
+skips, to within a percent, is a rule that was measuring rather than guessing.
+
+### CONTROLS
+
+- **The CART-POLE is the load-bearing control, and it turned out to be a sharper one than it was
+  chosen for.** §86.6's extension is what takes that plant 6.30x → 11.93x and its rung DEPLOYS, so
+  the exit must stay silent and the result must come back byte-identical. **It does — all 70 lines
+  of `SUITE=full distil-pend.mjs` byte-identical against the same file run at `dcdf93e` in an
+  isolated worktree**, 11.93x shipped, distilled rung DEPLOYED at 2.560x, the gain ladder running
+  its full six-step extension and picking 0.2660 exactly as before.
+
+  **The sharpness is that its extension traverses the SAME SIX GAINS AS THE TANK** — 0.6099 ·
+  0.5166 · 0.4376 · 0.3707 · 0.3140 · 0.2660, identical because both start at 0.72 and step at the
+  grid's own geometric ratio — and walks DOWNWARD monotonically just as the tank does
+  (1.6466e-2 → 8.7013e-3). Two plants, the same ladder shape, the same argmin, and opposite
+  verdicts: the tank is cut after one step and the cart-pole is not touched. **So the exit is
+  discriminating on the BAR and not on the shape of the walk**, which is the one thing a rule of
+  this kind could plausibly have got wrong, and it is checked on a plant where getting it wrong
+  would have cost 11.93x.
+
+  **AND THE FIRST RUN OF THIS CONTROL WAS VACUOUS, WHICH IS WORTH RECORDING.** `distil-pend.mjs`
+  is full-tier and prints `SKIPPED (full tier only — one commissioning)` without it, so the first
+  base/after diff compared two skip messages and reported BYTE-IDENTICAL. That is rule 25 exactly
+  — *did not run* reading as *ran and agreed* — and it is the same fault this project has now paid
+  for in `sixplant.mjs`, in the `SUITE=full` hole, in `distil-tank.mjs`'s §67.3 rung, and in the
+  `learnLive` race. A control that cannot fail is not a control; the run above asserts the ladder
+  rows are PRESENT in both files, so a future skip cannot pass as agreement.
+- Both halves and the degenerate cases are asserted rather than argued (rule 9): a winning candidate
+  at the grid EDGE is not tested, a LOSING ladder still within reach of its bar keeps extending, a
+  FLAT losing ladder stops at once (the "a rung inert at every gain walks the grid for ever" failure
+  §86.6 warned about, from the other side), and one candidate / no bar / no budget each report a
+  refusal to decide rather than a verdict (rule 25).
+- `gainEarlyExit: false` is the control knob; the exit reports itself in `rep.distil.gainExit` and
+  the shared printer leads with it (rule 27), because an axis that spent its runs and had nothing to
+  select is the row's headline and not a footnote.
+
+### NOT CLAIMED
+
+The tank's base ladder rows are not on record — §107 printed only the extension — so whether the
+exit would have fired at step ZERO is not measured, and the test replays exactly what exists rather
+than reconstructing what does not. Whether the tank's argmin ever turns below 0.266 is still not
+known: the bound stopped it before, and the exit stops it sooner. That is the right trade for a rung
+the machine refuses, and it would be the wrong one for a rung that wins — which is exactly the case
+the exit never tests.

@@ -530,6 +530,13 @@ async function reportDistil({ rep, runs, nFeat, segs = null, auto = null }) {
         + `${c.score === null ? 'not scored' : c.score.toExponential(4)}`
         + (c.gain === rep.distil.gainPicked ? '   <- PICKED' : ''));
     }
+    // AN UNFLATTERING DIAGNOSTIC FIRST (rule 27): if the ladder stopped extending because the
+    // rung was already losing by more than its budget could close, that is the row's headline
+    // and not a footnote — the axis spent its runs and had nothing to select (plan §109).
+    if (rep.distil.gainExit) {
+      console.log(`    EXTENSION STOPPED after ${rep.distil.gainExit.at} step`
+        + `${rep.distil.gainExit.at === 1 ? '' : 's'}: ${rep.distil.gainExit.reason}`);
+    }
   }
   if (rep.distil && rep.distil.ridgeNote) console.log(`  ${rep.distil.ridgeNote}`);
   if (rep.distil && rep.distil.fit) {
