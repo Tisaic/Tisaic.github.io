@@ -64,17 +64,54 @@ function announce() {
  */
 async function ladder(spec) {
   const { name, channels, uMax, guards, nMeasured, start, N, refAt, fresh, step, floor,
-    pilotOpts, distil, distilRuns, depth } = spec;
+    pilotOpts, distil, distilRuns, depth, classicDiet } = spec;
 
   // The reference's own rate and acceleration, in COMMAND space, by differencing the program
   // it will actually run. This is what the conventional rung reads; it is not a model.
   const nc = channels.length;
-  const v = Array.from({ length: nc }, () => new Float64Array(N));
-  const a = Array.from({ length: nc }, () => new Float64Array(N));
-  for (let k = 1; k < N - 1; k++) {
-    const p0 = refAt(k - 1), p1 = refAt(k), p2 = refAt(k + 1);
-    for (let c = 0; c < nc; c++) { v[c][k] = (p2[c] - p0[c]) / 2; a[c][k] = p2[c] - 2 * p1[c] + p0[c]; }
-  }
+  // ONE DIFFERENCER. The same five lines were written three times in this file — here, in
+  // `scoreOn`, and now for the diet — and a second copy of a plant's routing has shipped a
+  // defect three times in this project (rule 61). Byte-identical to what it replaces.
+  const derive = (rAt, n) => {
+    const dv = Array.from({ length: nc }, () => new Float64Array(n));
+    const da = Array.from({ length: nc }, () => new Float64Array(n));
+    for (let k = 1; k < n - 1; k++) {
+      const p0 = rAt(k - 1), p1 = rAt(k), p2 = rAt(k + 1);
+      for (let c = 0; c < nc; c++) { dv[c][k] = (p2[c] - p0[c]) / 2; da[c][k] = p2[c] - 2 * p1[c] + p0[c]; }
+    }
+    return { v: dv, a: da };
+  };
+  const { v, a } = derive(refAt, N);
+
+  // ---- THE CONVENTIONAL RUNG'S DIET (plan §89.3's named repair, task #70) ------------------
+  //
+  // `classic.js` is identified on ONE program, so it has a shape SPAN of a POINT — which is
+  // why §89.3 refused to build a coverage guard for the real flexible arm and named a DIET
+  // instead. A diet here is one POOLED record: several programs concatenated, one basis
+  // normalised over all of them, one least-squares fit, one deployed object of the SAME FORM
+  // (the rung is `live(v, a)` — a static map of the reference's own state — so pooling changes
+  // the four coefficients and nothing else; there is no table and no index).
+  //
+  // POOLING IS EXACT HERE ONLY BECAUSE THE BASIS IS LAG-FREE. `motionBasis`'s delay taps WRAP
+  // modulo the record, which across a pooled record wraps one program's start onto another
+  // program's end; this driver builds the default (unlagged) basis at every call site, so the
+  // question does not arise — and it is written down rather than assumed, because a lagged
+  // pooled basis would need a segment table and would be silently wrong without one.
+  //
+  // The DEPLOY decision is still taken on the scored program (`run`), because that is what the
+  // machine runs. A spec that declares no diet leaves every number this driver produces
+  // byte-identical: `cv`/`ca` are then `v`/`a` and no `runClassic` is passed (rule 21).
+  const DIETP = (classicDiet || []).map((P) => ({ ...P, ...derive(P.refAt, P.N) }));
+  const POOL = DIETP.length ? DIETP.reduce((t, P) => t + P.N, 0) : N;
+  const cv = Array.from({ length: nc }, () => new Float64Array(POOL));
+  const ca = Array.from({ length: nc }, () => new Float64Array(POOL));
+  if (DIETP.length) {
+    let off = 0;
+    for (const P of DIETP) {
+      for (let c = 0; c < nc; c++) { cv[c].set(P.v[c], off); ca[c].set(P.a[c], off); }
+      off += P.N;
+    }
+  } else for (let c = 0; c < nc; c++) { cv[c].set(v[c]); ca[c].set(a[c]); }
   const auto = new AutoStack({
     // DEPTH IS A KNOB SO THE DEPTH QUESTION CAN BE ASKED ON PLANTS THAT SHARE NO PHYSICS.
     // The default 2 is what every number in this file is quoted at; `DEPTH=4` runs the
@@ -99,7 +136,7 @@ async function ladder(spec) {
     // an expensive one"), while on the EMPS axis it IS the result (425x in 14 laps, past the
     // published inverse-dynamics feedforward). Six plants decide it, not either one.
     basis: process.env.NOCLASSIC === '1' ? null
-      : motionBasis(channels.map((_, c) => ({ v: v[c], a: a[c] }))),
+      : motionBasis(channels.map((_, c) => ({ v: cv[c], a: ca[c] }))),
     // PER-PLANT PILOT OPTIONS, WHICH EXIST FOR ONE REASON AND IT IS NOT TUNING. A transport
     // delay is DECLARED BY THE ENGINEER WHO MOUNTED THE INSTRUMENT — a mounting distance over a
     // line speed, geometry rather than a fitted constant — and the probe provably CANNOT recover
@@ -141,7 +178,7 @@ async function ladder(spec) {
     const back = into(label);
     try { return await fn(); } finally { into(back); }
   };
-  const run0 = async (corr, cname, prog) => {
+  const run0 = async (corr, cname, prog, kOff = 0) => {
     const P = prog || { refAt, fresh, N, v, a };
     const { refAt: pRefAt, fresh: pFresh, N: pN, v: pV, a: pA } = P;
     const st = pFresh();
@@ -177,7 +214,9 @@ async function ladder(spec) {
       const u = P.armed === false ? channels.map(() => 0)
         : auto.act({ v: channels.map((_, c) => pV[c][k]), a: channels.map((_, c) => pA[c][k]),
           look, lookRaw, decls: P.decls || undefined });
-      if (corr) { const w = auto.into(corr.at(k), cname, {}); for (let c = 0; c < nc; c++) u[c] += w[c]; }
+      // `kOff` is the POOLED index of this program's first sample, and it is 0 — hence
+      // `corr.at(k)` — for every run but a diet member's (rule 21).
+      if (corr) { const w = auto.into(corr.at(k + kOff), cname, {}); for (let c = 0; c < nc; c++) u[c] += w[c]; }
       const r = step(st, ref, u, k);
       auto.observe(r.measured);
       for (let c = 0; c < nc; c++) err[c][k] = r.truth[c];
@@ -185,9 +224,25 @@ async function ladder(spec) {
       // transient describes the transient.
       if (k >= pN * 0.05) { for (const e of r.truth) { ss += e * e; n++; } }
     }
-    return { score: Math.sqrt(ss / n), err };
+    return { score: Math.sqrt(ss / n), err, ss, n };
   };
   const run = (corr, cname) => inPhase('verify', () => run0(corr, cname));
+  /**
+   * THE DIET'S POOLED RUN — one trial of the conventional rung over every training program, in
+   * the POOLED index its basis was built in. The score is the rms over all of them (each
+   * member's own 5% start transient dropped by `run0`, rule 13), so the commission's monotone
+   * guard is judged on the diet as a whole and cannot buy one member with another.
+   */
+  const runClassic = DIETP.length ? async (corr, cname) => inPhase('verify', async () => {
+    const err = Array.from({ length: nc }, () => new Float64Array(POOL));
+    let ss = 0, n = 0, off = 0;
+    for (const P of DIETP) {
+      const r = await run0(corr, cname, P, off);
+      for (let c = 0; c < nc; c++) err[c].set(r.err[c], off);
+      ss += r.ss; n += r.n; off += P.N;
+    }
+    return { score: Math.sqrt(ss / n), err };
+  }) : null;
   /**
    * TARGET 1's INSTRUMENT: THE SAME COMMISSIONED OBJECT ON A PROGRAM IT WAS NOT SCORED ON
    * (plan §88.1). A harness hands back an alternate `{refAt, fresh, N}` and gets the SCORED RUN
@@ -201,12 +256,7 @@ async function ladder(spec) {
    * verify never saw.
    */
   const scoreOn = async ({ refAt: rAt, fresh: fr, N: n2, decls: d2 = null }, { armed = true } = {}) => {
-    const v2 = Array.from({ length: nc }, () => new Float64Array(n2));
-    const a2 = Array.from({ length: nc }, () => new Float64Array(n2));
-    for (let k = 1; k < n2 - 1; k++) {
-      const p0 = rAt(k - 1), p1 = rAt(k), p2 = rAt(k + 1);
-      for (let c = 0; c < nc; c++) { v2[c][k] = (p2[c] - p0[c]) / 2; a2[c][k] = p2[c] - 2 * p1[c] + p0[c]; }
-    }
+    const { v: v2, a: a2 } = derive(rAt, n2);
     return run0(null, null, { refAt: rAt, fresh: fr, N: n2, v: v2, a: a2, armed, decls: d2 });
   };
   const drivePilot0 = async (stk) => {
@@ -246,6 +296,7 @@ async function ladder(spec) {
     return w;
   }) : null;
   const rep = await auto.commission({ run, drivePilot,
+    ...(runClassic ? { runClassic } : {}),
     ...(metered ? { distilRuns: metered } : {}) });
   console.log(`\n  ${name}`);
   console.log(auto.table());

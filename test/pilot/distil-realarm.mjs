@@ -306,17 +306,12 @@ await reportDistil({ rep, runs: distilRuns(), nFeat: OFFSETS.length * REFDIM + 1
  * program's energy near them. If that is the cause the ordering is monotone in edge width, and a
  * softer edge than the commissioning's should be safe.
  */
-const AMP_R = A.makeProgram({ edge: 96 }).amp / A.AMP;
-const unitOf = (g) => (k) => [g.at(k)[0] / g.amp];
-const atAmp = (g, amp) => ({ lap: g.lap, edge: g.edge, amp,
-  at: (k) => [amp * unitOf(g)(k)[0]] });
-const E96 = A.makeProgram({ edge: 96 }), E160 = A.makeProgram({}), E200 = A.makeProgram({ edge: 200 });
-const VARIANTS = [
-  ['edge  96, own amp     (sharper: shape + amplitude)', E96],
-  ['edge  96, SHIPPED amp (sharper: shape only)       ', atAmp(E96, A.AMP)],
-  ['edge 160, 0.35x amp   (amplitude only, shape held)', atAmp(E160, AMP_R * A.AMP)],
-  ['edge 200, own amp     (SOFTER than the commission)', E200],
-];
+// THE FOUR VARIANTS AND THE SHAPE READING MOVED TO THE RIG when `classicdiet-realarm.mjs`
+// needed the IDENTICAL four (plan §89.3, task #70) — a second copy of these five lines is
+// exactly the fault this project has paid for three times (rule 61). The move is asserted
+// BIT-IDENTICAL over 4,096 samples of every variant and on `AMP_R`, not merely inspected,
+// because a program built two ways is two programs until something says otherwise (rule 21).
+const { E160, rows: VARIANTS } = A.t1Variants();
 const xProg = rep.base / rep.best;
 console.log(`\n  TARGET 1 — the SAME object on programs it was not scored on, no refit`);
 console.log(`    scored program  lap ${A.LAP} edge ${A.EDGE} amp ${A.AMP.toExponential(2)}   `
@@ -347,15 +342,7 @@ console.log(`    scored program  lap ${A.LAP} edge ${A.EDGE} amp ${A.AMP.toExpon
  * visits more than one edge width — and that is a different build with a different cost. Four
  * rows on one plant is a reading, not a threshold.
  */
-const shapeOf = (g, n) => {
-  let pv = 0, pa = 0;
-  for (let k = 1; k < n - 1; k++) {
-    const p0 = g.at(k - 1)[0], p1 = g.at(k)[0], p2 = g.at(k + 1)[0];
-    pv = Math.max(pv, Math.abs((p2 - p0) / 2));
-    pa = Math.max(pa, Math.abs(p2 - 2 * p1 + p0));
-  }
-  return { pv, pa, av: pa / pv };
-};
+const shapeOf = A.shapeOf;
 const COMM = shapeOf(E160, A.LAP);
 console.log(`    the commissioned program reads peak |v| ${COMM.pv.toExponential(3)} and `
   + `|a|/|v| ${COMM.av.toExponential(3)}  (the SHAPE reading, exactly amplitude-free)`);

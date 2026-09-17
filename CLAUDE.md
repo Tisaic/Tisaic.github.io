@@ -338,7 +338,7 @@ Each of these is a claim that can be shown false, which is the only kind worth w
      EMPS                —         1.012          MET   <- a sine the axis has never run
      column            7.6         0.339          NOT MET  (still helps at 1.342x)
      barrel            5.2         0.393          NOT MET  (still helps at 2.747x)
-     real arm            —         0.455          NOT MET, and 2 of 4 held-out programs MADE WORSE
+     real arm            —         0.455          NOT MET — and the MADE WORSE clause is CLOSED (§106)
      cold mill       165.3         0.562          NOT MET on LINE SPEED, exactly 1.000 on GAUGE (§89.2)
      ── NOT ASKED, an OPEN ITEM rather than an exclusion ──
      quad tank         7.9           —            §79.3's 2.657x is the GAIN LADDER's instrument
@@ -386,6 +386,25 @@ Each of these is a claim that can be shown false, which is the only kind worth w
    plant whose program is few of its own rises needs a window that REACHES its memory, and a
    window that reaches its memory SPANS the program, so the map reads where it is rather than what
    is commanded. Six points and one exception is a correlation, not a law.
+
+   **AND §88.3's *NONE MADE WORSE* FAILURE IS NOW CLOSED BY A DIET, AT 0.42x OF THE COMMISSIONING IT
+   REPLACES (plan §106).** §89.3 named the repair and §106 built it: the conventional rung
+   commissioned on TWO edge widths reads **0.877x → 1.134x** and **0.921x → 1.128x** on the two
+   harmful programs while the commissioned one goes 1.927x → 2.255x and the softer 2.825x → 3.350x —
+   **every one of five rows better than the control, 0 of 4 made worse, in 1,167,360 plant steps
+   against 2,764,800**. Nine of nine shape-varied diets do it and member length is INERT, which is
+   what makes the repair cheaper than the fault. **TARGET 1's 1.3x BOUND IS STILL MISSED** (0.50 of
+   the scored factor) — what closed is the clause that was binding. **AND THE MECHANISM PREDICTED FOR
+   IT WAS REFUTED BY ITS OWN CONTROL**: a diet of edges 176-256, every one SOFTER than the
+   commissioning and none near the harmful 96, fixes 96 just as well, so COVERAGE is not the
+   mechanism. What moves is exactly ONE deployed coefficient — the ACCELERATION term, `a0` 19.45 →
+   8.4-10.4, the very term `|a|/|v|` measures — while collinearity is refuted offline at
+   `R²(a | v, sgn v, 1) = 0.000000` and the single-program fit turns out not to be at its own
+   delivered optimum. **It is not "turn a0 down"**: at MATCHED `a0` a hand scale reads 1.165x where
+   the diet reads 2.240x. **And one configuration MEETS target 1's ratio and must not be read as a
+   win (rule 19)** — a sharp-only diet does it by wrecking the DENOMINATOR, dropping the commissioned
+   program to 1.255x. `classicDiet` and `runClassic` are opt-in, no plant declares either, and EMPS
+   comes back at **424.82x** byte-identical.
 
    **THE ONE PLANT MADE WORSE IS THE REAL FLEXIBLE ARM, AND IT IS THE SHAPE RATHER THAN THE SIZE
    (plan §88.3) — AND THE OBVIOUS REPAIR IS NOW REFUTED, WITH A READING THAT IS NOT (plan §89.3).**

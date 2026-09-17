@@ -23299,3 +23299,96 @@ accelerations by hand at 4e-4 against this axis's own 0.83, so the excitation tr
 the program travels 230: saturated at its cap, delivered 0.027x, **held-out R² 1.000**. A fit perfect
 on its diet says nothing when the diet describes another machine. The cart-pole's first diet THREW
 its own feasibility test and now uses `distil-pend.mjs`'s rejection sampling (rule 20).
+
+## §106 — §88.3's "NONE MADE WORSE" FAILURE IS CLOSED BY A DIET, IT COSTS LESS THAN THE FAULT, AND THE MECHANISM I PREDICTED WAS REFUTED BY ITS OWN CONTROL
+
+The real flexible arm is the one plant in this project that fails target 1's *none made worse*
+clause. §89.3 refuted the obvious repair — a coverage guard cannot work because the two harmful
+programs STRADDLE the commissioning value — and named the alternative: *what this plant needs is a
+DIET, not a guard*, because the rung is identified on ONE program and its span is a POINT.
+
+```
+                                          CONTROL (as it ships)      DIET (112/224, 40 laps)
+  scored   lap 512 edge 160          1.8511e-1 → 9.6063e-2  1.927x   → 8.210e-2   2.255x
+  edge  96, own amp   (shape+amp)    1.137e-1  → 1.295e-1   0.877x   → 1.003e-1   1.134x
+  edge  96, SHIPPED amp (shape only) 3.273e-1  → 3.553e-1   0.921x   → 2.902e-1   1.128x
+  edge 160, 0.35x amp (amp only)     6.475e-2  → 5.618e-2   1.152x   → 3.018e-2   2.145x
+  edge 200, own amp   (SOFTER)       2.573e-1  → 9.109e-2   2.825x   → 7.681e-2   3.350x
+  made worse                                    2 of 4                            0 of 4
+  commissioning                       2,764,800 steps                  1,167,360 steps
+```
+
+**Every one of the five rows is better than the control, and the repair costs 0.42x of the
+commissioning it replaces.** The control reproduces §88.3 and §89.3 to every printed digit, which is
+what says the instrument is the one those sections used.
+
+**TARGET 1's 1.3x BOUND IS STILL NOT MET** — the sharp rows read 0.50 of the scored factor against
+the 0.769 the bound needs. What is closed is the clause that was binding: *none made worse*.
+
+### TEN DRAWS, NOT ONE DIET
+
+The rig is deterministic and `ClassicFF`'s probe carries no seed, so the DIET is the random variable
+(§84.8's reasoning). **Nine of nine shape-varied diets read 0 of 4 made worse**, and eight also
+improve the commissioned program. Member length is INERT — 40/60/100/140/280 laps read
+2.246-2.268x — which is what makes the repair cheaper than the fault.
+
+### THE MECHANISM I PREDICTED IS REFUTED BY ITS OWN CONTROL (rule 59 doing its job)
+
+The prediction was that a diet works by giving the rung a shape SPAN that BRACKETS the held-out
+programs. **The `soft` control kills it**: a diet of edges 176-256, every one SOFTER than the
+commissioning and none near edge 96, fixes edge 96 just as well (1.107x / 1.113x). **Coverage is not
+the mechanism.** What is measured instead:
+
+- **Pooling alone does nothing.** The scored program as a one-member diet, and the same program
+  TWICE, both come back BYTE-IDENTICAL to the control — identical coefficients, identical held-out
+  rows (rule 21 on the plumbing).
+- **Varying AMPLITUDE is not enough**: four amplitudes at one edge move the sharp rows to
+  0.963x/1.000x, still harmful — §89.3's own exact invariance showing through, since scaling a
+  program leaves `|a|/|v|` unchanged.
+- **Exactly ONE deployed coefficient moves and it is the ACCELERATION term.** In physical units,
+  `a0` goes **19.45 → 8.4-10.4** on every working diet while `v0` moves 6% and the sign and bias
+  terms shrink. That is exactly the term whose relative size `|a|/|v|` measures, so §89.3's monotone
+  shape ordering now has a cause with a number in it.
+- **COLLINEARITY IS REFUTED offline, with no machine and no fit in the route**: `R²(a | v, sgn v, 1)`
+  reads **0.000000 on every record**, single-program and pooled alike. The a-coefficient is
+  perfectly determined either way, so conditioning is not the mechanism.
+- **AND THE SINGLE-PROGRAM FIT IS NOT EVEN AT ITS OWN DELIVERED OPTIMUM.** Scaling the control fit's
+  a-term after commissioning reads 2.026x at `a0` 11.67 against the fit's own 19.45 at 1.927x.
+  **But the diet is NOT "just turn a0 down"**: at MATCHED `a0` the hand sweep reads 1.165x on the
+  amplitude row where the diet reads 2.240x, because the diet also shrinks `sgn v` 6.7x. The hand
+  scale is a one-parameter trade along which every cell gives something up; the diet is off that
+  curve.
+
+### THE ROW THAT SHOULD NOT BE READ AS A WIN (rule 19)
+
+A SHARP-ONLY diet is the only configuration that **MEETS target 1's 1.3x ratio** — worst held-out
+0.888 of the scored factor, 0 of 4 made worse. It does it by WRECKING THE DENOMINATOR: the
+commissioned program falls to **1.255x** and every absolute error is worse than the bracketing
+diet's. That is a live demonstration, produced by accident, of the looseness this file already
+states about the cheap comparator — and it is why what is recommended is the bracketing diet.
+
+### WHAT CHANGED
+
+`lib/pilot/autostack.js` gains ONE line — `host.runClassic || host.run` for the conventional rung's
+TRAINING runs only; the DEPLOY decision still re-scores on `host.run`, the program the machine will
+actually run, and a host that does not supply the hook is byte-identical by construction.
+`rigs/ladder.mjs` lets a spec declare `classicDiet` and pools the members into one record, each
+member's own 5% transient dropped (rule 13); it also folds a differencing loop written three times
+in that file into one `derive()` (rule 61). `realarm-rig.mjs` exports the four §88.3 variants that
+were built inline, asserted bit-identical over 4,096 samples before `distil-realarm.mjs` was moved
+onto them. `classic.js` and `motionBasis` are UNTOUCHED.
+
+**Pooling is exact here only because the basis is lag-free**, and that is written down rather than
+assumed: `motionBasis`'s delay taps wrap modulo the record, which across a pooled record would wrap
+one program's start onto another's end. The task's segment-table hypothesis is NOT needed as the
+code stands, and a lagged pooled basis would be silently wrong without one.
+
+### NOT ESTABLISHED
+
+Target 1's bound is still missed. ONE plant and one program FAMILY — the diet varies the SAME
+parameter the test set varies, both smoothed squares, so a program differing in lap length, shape or
+segment count is untested. WHY the single fit lands at `a0` 19.45 is a hypothesis (projected-residual
+optimum ≠ delivered optimum under the plant's smearing), not a measurement. The diet's widths are a
+design an owner picks; nothing here derives them. **No default is moved** — `classicDiet` and
+`runClassic` are both opt-in and no plant declares either, because rule 31 says one plant is not a
+method and the six-plant pass has not run.

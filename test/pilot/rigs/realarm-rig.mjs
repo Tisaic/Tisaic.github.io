@@ -189,6 +189,44 @@ function makeProgram({ lap = LAP, edge = EDGE, edges = null, headroom = HEADROOM
   const amp = headroom * TMAX / need;
   return { lap, edge, edges: ed, headroom, amp, at: (k) => [amp * sh(k)] };
 }
+/**
+ * THE FOUR HELD-OUT PROGRAMS TARGET 1 IS READ ON, IN ONE PLACE (plan §88.3, §89.3).
+ *
+ * `distil-realarm.mjs` built these inline and a second harness now needs the IDENTICAL four —
+ * and a second copy of a plant's routing has shipped a defect three times in this project
+ * (rule 61). They are here rather than in a harness because they are a property of the PLANT's
+ * program family: the same lap at a sharper and a softer edge, plus the amplitude/shape
+ * bisection §88.3 needed when the first reading failed with two variables in it.
+ *
+ * The amplitude of each `makeProgram` member is re-derived by the rig's own headroom rule;
+ * `atAmp` re-scales a member's SHAPE to a stated amplitude, which is what makes the shape-only
+ * and amplitude-only rows a bisection rather than two more programs.
+ */
+function t1Variants() {
+  const unitOf = (g) => (k) => [g.at(k)[0] / g.amp];
+  const atAmp = (g, amp) => ({ lap: g.lap, edge: g.edge, amp, at: (k) => [amp * unitOf(g)(k)[0]] });
+  const E96 = makeProgram({ edge: 96 }), E160 = makeProgram({}), E200 = makeProgram({ edge: 200 });
+  const AMP_R = E96.amp / AMP;
+  return { E96, E160, E200, AMP_R, atAmp, rows: [
+    ['edge  96, own amp     (sharper: shape + amplitude)', E96],
+    ['edge  96, SHIPPED amp (sharper: shape only)       ', atAmp(E96, AMP)],
+    ['edge 160, 0.35x amp   (amplitude only, shape held)', atAmp(E160, AMP_R * AMP)],
+    ['edge 200, own amp     (SOFTER than the commission)', E200],
+  ] };
+}
+
+/** `peak|a|/peak|v|` over one lap — a reciprocal TIME, the edge's own risetime, EXACTLY
+ *  invariant to amplitude (plan §89.3). Reported beside every held-out row. */
+function shapeOf(g, n) {
+  let pv = 0, pa = 0;
+  for (let k = 1; k < n - 1; k++) {
+    const p0 = g.at(k - 1)[0], p1 = g.at(k)[0], p2 = g.at(k + 1)[0];
+    pv = Math.max(pv, Math.abs((p2 - p0) / 2));
+    pa = Math.max(pa, Math.abs(p2 - 2 * p1 + p0));
+  }
+  return { pv, pa, av: pa / pv };
+}
+
 // LONG ENOUGH THAT THE DRIVER'S 5% SCORING SKIP CLEARS THE RE-SETTLE. The machine reaches
 // its final per-lap error 13 laps after anything changes, and a correction is a change, so a
 // run must discard at least that much: 5% of 280 laps is 14. Sized from the measurement, not
@@ -334,4 +372,4 @@ const DO_NOTHING = (() => {
 
 export { IDENT, MODEL, VALID, K0, U_REC, Y_REC, HALF, TMAX, UCAP, UCORR, CONV_RMS, JEFF,
   G_DC, mag, magPos, LAP, EDGE, AMP, TORQUE_PER_AMP, HEADROOM, PROG, refAtStep, shape,
-  makeMachine, makeProgram, makePlant, sweepLoop, LOOP, DO_NOTHING };
+  makeMachine, makeProgram, makePlant, sweepLoop, LOOP, DO_NOTHING, t1Variants, shapeOf };
