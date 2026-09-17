@@ -23641,3 +23641,145 @@ than reconstructing what does not. Whether the tank's argmin ever turns below 0.
 known: the bound stopped it before, and the exit stops it sooner. That is the right trade for a rung
 the machine refuses, and it would be the wrong one for a rung that wins — which is exactly the case
 the exit never tests.
+
+## §109.1 — §109's OWN REPLAY WAS NOT THE SHIPPED PATH, AND THE LIVE RUN CORRECTS IT IN THE PROJECT'S FAVOUR
+
+§109 shipped a number that was wrong by one step, and the fault is the one this file names most
+often: the INSTRUMENT was incomplete before anything else was (rule 17).
+
+**What it claimed**: *ONE extension step instead of six: five scored runs saved.*
+**What the shipped path does**: **ZERO extension steps — all SIX saved.**
+
+### WHY THE REPLAY DISAGREED WITH THE MACHINE
+
+§107 printed only the tank's EXTENSION rows, never its five BASE candidates, so
+`gainexit.test.mjs` replayed the exit by feeding it one candidate at a time starting from
+`0.7200` alone. With one row in hand the exit correctly declines to decide (`fewer than two
+scored candidates`), so it could not be evaluated until `0.6099` existed. **Live, `AutoStack`
+scores the whole base grid BEFORE the extension loop begins**, so the exit is consulted with five
+rows already in hand and fires before the grid extends at all. Same rule, same arithmetic, one
+step apart — and that one step is the difference between five saved scored runs and six.
+
+The base rows had simply never been printed anywhere. They are now, from a live
+`SUITE=full distil-tank.mjs`:
+
+```
+    gain  0.72  machine 4.3624e-1   <- PICKED
+    gain  0.85  machine 5.1457e-1
+    gain     1  machine 6.0498e-1
+    gain  1.15  machine 6.9409e-1
+    gain   1.3  machine 7.7668e-1
+    EXTENSION STOPPED after 0 steps: the best candidate (4.3624e-1 at gain 0.72) loses to the
+    bar (2.5432e-2) by 17.15x, and 6 more steps at this ladder's own best rate (1.1796 per
+    step) reaches only 1.6197e-1 — the axis has nothing to select
+```
+
+`gainexit.test.mjs` now replays the base ladder and THEN the extension, which is what
+`AutoStack` does, and pins `spent === 0` exactly rather than bounding it — a bound is what let
+the discrepancy hide in the first place.
+
+### AND THE BOUND IS TIGHTER THAN §109 CLAIMED, NOT LOOSER
+
+Evaluated one step EARLIER the exit has strictly less information, so the honest expectation was
+a worse prediction. It is not: from the base ladder alone it predicts the full walk reaches
+**1.6197e-1**, and the recorded six-step walk really ends at **1.6348e-1** — **0.9%**, against
+§109's 0.8% from one step further in. Both are pinned now.
+
+### THE REACHABILITY HALF WAS ALSO NOT WHAT IT LOOKED LIKE (rule 9b, again)
+
+§109's diagnostic line lives in `distilkit.mjs`'s `reportDistil` — and **`distil-tank.mjs` does
+not call `reportDistil`**. It keeps its own copy of the gain-ladder format, so the one plant
+§107 measured the walk on had NO ROUTE to the message explaining why its walk had stopped. Asked
+whether the line appears, the honest answer would have been *no* — and that absence would have
+been REPORTING and not reachability, which is precisely the confusion rule 9b exists to prevent
+and precisely how §82's, §78.5's and §100's guards each survived a passing unit test. The print
+is in the tank's own block now; **the standing debt is that the second copy of the format is
+still there** and should go to the shared printer.
+
+### CONSEQUENCES FOR NUMBERS ALREADY ON RECORD
+
+`gainPicked` moves `0.2660 → 0.72` on the tank, and everything downstream of it moves with it.
+The DELIVERED result does not: the block still ships the conventional rung at **19.910x**
+(5.0636e-1 → 2.5432e-2), and the entire ridge ladder is bit-identical including 16-digit held-out
+R², which is what says a selection was made cheaper rather than a result moved (rule 21). What
+DOES move is how far the refused rung lost by, and it must not be quoted as if unchanged:
+
+```
+  ②d distilled — REFUSED   1.6348e-1   0.16x     <- before §109 (§97.3, §107)
+  ②d distilled — REFUSED   4.3624e-1   0.06x     <- after
+  commissioning 3.2 -> 2.9 days, verify share 72% -> 69%
+```
+
+Both stand: 0.16x is what the rung reaches when six scored runs are spent finding its best gain,
+0.06x is what it reaches when they are not. The rung is refused either way and the machine
+receives the same controller, which is the whole argument for not paying for them.
+
+## §109.2 — THE TANK IS ASKED TARGET 1 AT LAST, AND IT IS **NOT MET AT 0.369 WITH NOTHING MADE WORSE**
+
+The quadruple tank has read `not asked` in `objtable`'s target-1 column since that column existed,
+and §88.9 put it there CORRECTLY: §79.3's 2.657x comes from `driveAlt` — the gain ladder scoring
+its own candidates, driving the DISTILLED POLICY ALONE — while every other row in that column is
+the whole commissioned object through the driver's own scored loop. Two instruments in one column
+is rule 19, so §88.9 struck the row rather than restating it. This asks the other question.
+
+```
+  scored recipe  10.7/10.7 -> 13.5/8.8 -> 8.4/12.8 -> 12.2/11.6 -> 9.2/9.6
+    5.0636e-1 -> 2.5432e-2 cm rms   19.910x
+  held out       10.7/10.7 -> 12.2/11.6 -> 13.5/8.8 -> 9.2/9.6 -> 8.4/12.8
+    4.2608e-1 -> 5.8071e-2 cm rms    7.337x   (peak |u| 3.534e-1 of 1.2, off its cap)
+
+  0.369 of the scored factor   TARGET 1's 1.3x BOUND: NOT MET   nothing made worse
+```
+
+**IT IS NOT A FIFTH PRIVATE COPY OF THE LOOP**, which is the fault this plant has already paid for
+once (§67.3, where the rung was absent from the run that scored it). `distil-tank.mjs` does not go
+through `rigs/ladder.mjs` at all — it drives `AutoStack` directly and owns the loop whose own
+comment says *"It is the same loop `rigs/ladder.mjs` runs"* — so §88.1's move was made to THAT
+loop: `run0` is parameterised over the program, and `prog` absent is today's program with today's
+value in every field, so the shipped row is unchanged BY CONSTRUCTION rather than by inspection.
+
+Three things that required, each a rule already paid for: **`ratesOf(refAt, N)`**, because
+`TANK_RATES` was baked to the shipped program and §97.1's fault is a basis built from anything but
+the program's OWN series; the **settle at the held-out program's own start** (rule 13); and
+`armed: false` applying NOTHING rather than disarming rungs, so the commissioned object is never
+mutated to read a baseline.
+
+### THE DENOMINATOR ARGUMENT CUTS AGAINST THE OBJECT HERE, WHICH IS WORTH MORE THAN THE RATIO
+
+§89.1's standing objection to this cheap comparator is that a ratio can move because the
+DENOMINATOR did — the held-out program being easier. On this plant the held-out program's BARE
+error is **4.2608e-1 against production's 5.0636e-1**: it is the EASIER program and still delivers
+the SMALLER factor, so the loophole is closed in the unflattering direction rather than left open.
+And the baseline has two routes (rule 15): `driveAlt`'s own bare reading is **4.2608e-1 against
+`scoreOn`'s 4.2608e-1, IDENTICAL**, from a loop sharing no code.
+
+### §84.9's SCREEN PREDICTED IT, ON A TENTH POINT
+
+`prog/rise` 7.9 puts the tank below the ~10 split with the column's 7.6 and the barrel's 5.2 — all
+three NOT MET — while every plant above the split is MET. That number was derived for the WINDOW
+rule before any of this existed and has now predicted target 1 on ten plants.
+
+### CONTROLS, AND ONE IS STRONGER THAN THE HEADLINE
+
+The shipped result is unchanged not merely in its headline but **bit-identically through the whole
+ridge ladder, including 16-digit held-out R²** (`[0.9925389174380155, 0.9912310174264074]` at the
+picked ridge) — and every one of those rows is scored THROUGH `run0`, so the parameterisation is
+asserted inert on six independent scored runs rather than on one (rule 21). Held-out-ness is
+asserted FROM THE DATA rather than from a comment (rule 30): 0 of 4 transitions and 0 of 5 level
+pairs shared with the diet, and not the scored program's sequence.
+
+**One assertion was DELIBERATELY WEAKENED rather than shipped brittle**, and the reason is a
+control: `DIET=near` builds its recipes FROM production's own level pairs in other orders — that is
+§66's construction carried over from the barrel — so it shares **1 of 4 transitions and 5 of 5
+levels** BY DESIGN, and pinning zero overlap would turn a documented control red. What is asserted
+is *not the scored program* and *not wholly contained in the diet*; the overlap is PRINTED with the
+diet named. Under the shipped `range` diet the strong form holds anyway.
+
+### NOT CLAIMED
+
+The comparator is the cheap one (§89.1) and is printed as such, not upgraded. One seed, one diet,
+one held-out recipe — and §84.8 records this plant's three "seeds" as byte-identical because no
+cascade builds, so a real spread needs the DIET varied and that was not run. **And the 0.369 is
+against a denominator of 19.910x, which is the INCUMBENT rung's factor and not the learned
+object's** (`xClassic 19.91x / xAdded 1.00x`): whether this plant's target-1 ratio should be read
+against the learned object at all is a question this measurement raises and does not answer.

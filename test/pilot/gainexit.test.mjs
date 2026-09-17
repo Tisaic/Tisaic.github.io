@@ -68,10 +68,21 @@ for (const [name, cands] of Object.entries(INTERIOR)) {
 
 // ---------------------------------------------------------------------------- the TANK
 //
-// §107 verbatim. The five base candidates are not in that table — only the extension is —
-// so the base ladder is reconstructed from its own geometric ratio rather than invented:
-// the grid is [0.72, 0.85, 1, 1.15, 1.3] and 0.72 is the argmin, which is what triggered the
-// extension. The extension's own rows are quoted exactly.
+// §107 printed only the EXTENSION, and the first version of this file replayed only that —
+// feeding the exit one candidate at a time starting from 0.7200 alone. **That was not the
+// shipped path and it cost this test a wrong answer** (plan §109.1): live, all FIVE base
+// candidates are already scored before the grid extends at all, so the exit is evaluated with
+// five rows in hand and fires at step ZERO, where the incremental replay could not evaluate
+// it until step one. Same rule, same arithmetic, one step apart — and the difference is six
+// saved scored runs against five. The instrument was incomplete before the codebase was
+// (rule 17), and it was a LIVE RUN of `distil-tank.mjs` that settled it, not more reasoning.
+//
+// The base rows below are that live run's own output; the extension rows are §107's, kept
+// because they are what the exit is being asked to skip and are the only record of where the
+// full walk actually ends.
+const TANK_BASE = L([
+  [0.72, 4.3624e-1], [0.85, 5.1457e-1], [1.00, 6.0498e-1], [1.15, 6.9409e-1], [1.30, 7.7668e-1],
+]);
 const TANK_EXT = L([
   [0.7200, 4.3624e-1], [0.6099, 3.6993e-1], [0.5166, 3.1379e-1], [0.4376, 2.6629e-1],
   [0.3707, 2.2612e-1], [0.3140, 1.9216e-1], [0.2660, 1.6348e-1],
@@ -85,18 +96,28 @@ ck(`the reconstructed bar reproduces the reported 0.16x refusal`,
   Math.abs(TANK_BAR / TANK_EXT[TANK_EXT.length - 1].score - 0.16) < 0.005,
   `${(TANK_BAR / TANK_EXT[TANK_EXT.length - 1].score).toFixed(4)}x against a reported 0.16x`);
 
-// Walk the ladder the way AutoStack does and count what the exit saves.
-let spent = 0, stoppedAt = null, reason = '';
+// WALK IT THE WAY `AutoStack` DOES: the base ladder is scored in full, THEN the extension
+// loop begins and the exit is consulted at the top of each iteration. Anything else is a
+// different experiment wearing this one's label.
+let spent = 0, stoppedAt = null, reason = '', reach = null;
 for (let ext = 0; ext < MAXEXT; ext++) {
-  const seen = TANK_EXT.slice(0, ext + 1);
+  const seen = TANK_BASE.concat(TANK_EXT.slice(1, ext + 1));
   const ex = gainLadderExit(seen, TANK_BAR, MARGIN, MAXEXT - ext);
-  if (ex.stop) { stoppedAt = ext; reason = ex.reason; break; }
+  if (ex.stop) { stoppedAt = ext; reason = ex.reason; reach = ex.reach; break; }
   spent++;
 }
 console.log(`    extension steps taken ${spent} of ${MAXEXT}`);
 if (stoppedAt !== null) console.log(`    STOPPED: ${reason}`);
 ck('the tank\'s extension is cut short', stoppedAt !== null, 'it ran the full budget');
-ck(`it stops with at least four of six steps unspent (spent ${spent})`, spent <= 2, `spent ${spent}`);
+// ZERO, not one. This is the assertion the first version of this file got wrong, so it is
+// pinned exactly rather than bounded — a bound is what let the discrepancy hide.
+ck(`it stops before extending AT ALL, so all ${MAXEXT} scored runs are saved (spent ${spent})`,
+  spent === 0, `spent ${spent}`);
+// AND IT REPRODUCES THE LIVE RUN'S OWN PRINTED REACH to the digits that run prints, which is
+// what says this replay is the shipped path and not merely near it (rule 21).
+ck('the reach reproduces the live harness\'s 1.6197e-1',
+  reach !== null && Math.abs(reach - 1.6197e-1) / 1.6197e-1 < 5e-4,
+  reach === null ? 'no reach' : reach.toExponential(4));
 
 // THE HALF THAT MATTERS MOST: it must not have been able to reach the bar anyway. The whole
 // recorded walk is six steps and ends 6.4x above the bar, so every step the exit skipped was
@@ -105,6 +126,14 @@ ck(`it stops with at least four of six steps unspent (spent ${spent})`, spent <=
 const endRatio = TANK_EXT[TANK_EXT.length - 1].score / TANK_BAR;
 ck(`nothing was lost: the FULL six-step walk still ends ${endRatio.toFixed(2)}x above the bar`,
   endRatio > 1 / (1 - MARGIN), `${endRatio.toFixed(3)}x`);
+// THE BOUND CHECKS ITSELF. The exit predicted 1.6197e-1 from the base ladder alone; the
+// recorded six-step walk really ends at 1.6348e-1. Pinned, because a rule that predicts the
+// thing it skips to within a percent is measuring rather than guessing, and if a later change
+// breaks that agreement this is where it shows.
+const predErr = Math.abs(1.6197e-1 - TANK_EXT[TANK_EXT.length - 1].score)
+  / TANK_EXT[TANK_EXT.length - 1].score;
+ck(`the prediction lands within 1% of where the full walk ends (${(predErr * 100).toFixed(1)}%)`,
+  predErr < 0.01, `${(predErr * 100).toFixed(2)}%`);
 
 // ------------------------------------------------------------------ the two negative halves
 console.log('\nBOTH HALVES — the exit must stay silent where there is a selection to make:');

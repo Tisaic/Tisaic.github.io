@@ -200,11 +200,17 @@ if (READ) {
   // flexible arm is measured as failing it — a suite pinned to a bar a plant is known to fail is
   // permanently red and hides the next real failure (rule 3) — and because a plant whose harness
   // does not ask reads `not asked` rather than dropping out of the count (rule 25).
-  // ONLY THE QUADRUPLE TANK READS `not asked` NOW, AND IT IS AN OPEN ITEM RATHER THAN AN
-  // EXCLUSION (plan §88.9). It HAS a held-out recipe on record — 2.657x against production's
-  // 3.268x (§79.3) — but that number comes from the GAIN LADDER'S OWN candidate scoring, which is
-  // a different instrument from the one every other row here uses, and counting the two together
-  // would put two quantities in one column (rule 19).
+  // THE QUADRUPLE TANK IS ASKED NOW, AND IT IS ASKED THROUGH THIS COLUMN'S OWN INSTRUMENT.
+  // §88.9 struck it for a good reason: the held-out recipe it had on record was scored by the
+  // GAIN LADDER'S OWN candidate scoring (`driveAlt`, which drives the distilled policy ALONE),
+  // and counting that beside rows produced by the driver's scored loop is two quantities in one
+  // column (rule 19). It is not re-quoted — the same held-out recipe is put through the tank
+  // harness's own `scoreOn`, which is its `run0` handed a different `{refAt, N}`, so the object
+  // asked is whatever the block SHIPS (since §97.3 the conventional rung) rather than a rung the
+  // machine refused. It reads 19.910x scored against 7.337x held out — 0.369, NOT MET, and
+  // nothing made worse — which is the verdict §84.9's own `prog/rise` screen predicts for it
+  // (7.9, below the ~10 split, alongside the column's 7.6 and the barrel's 5.2, all three NOT
+  // MET). Asking it costs the table a verdict rather than handing it a flattering one.
   // THE COLD MILL IS ASKED AS OF §89.2, having read `not asked` since this column existed. §88.6
   // corrected the reason — a regulator has no second TRAJECTORY and plainly has a second
   // OPERATING POINT, so "not applicable" over "not measured" was rule 25 committed while citing

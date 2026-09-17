@@ -204,15 +204,38 @@ function settled(rec, seg) {
 // ACTUALLY RUN — the construction `rigs/ladder.mjs` uses verbatim, so the conventional rung here
 // reads the same kind of basis it reads on the column, the mill and the barrel (rule 61). It is
 // not a model: it is the commanded reference differenced twice.
-const TANK_RATES = (() => {
-  const nc = 2, v = [new Float64Array(PROG), new Float64Array(PROG)],
-    a = [new Float64Array(PROG), new Float64Array(PROG)];
-  for (let k = 1; k < PROG - 1; k++) {
-    const p0 = refAtStep(k - 1), p1 = refAtStep(k), p2 = refAtStep(k + 1);
+// PARAMETERISED OVER THE PROGRAM, because target 1 asks for this same construction on a program
+// the ladder did NOT score (plan §88.1). `rigs/ladder.mjs` already derives `v`/`a` per scored
+// program for exactly this reason — its `scoreOn` calls `derive(rAt, n2)` — and this harness had
+// the series baked to the shipped one, which is §97.1's own fault (a basis built from anything
+// but the program's own series) waiting to be committed again the moment a second program was
+// asked. `ratesOf(refAtStep, PROG)` is the old body verbatim, so the shipped row is unchanged.
+const ratesOf = (refAt, N) => {
+  const nc = 2, v = [new Float64Array(N), new Float64Array(N)],
+    a = [new Float64Array(N), new Float64Array(N)];
+  for (let k = 1; k < N - 1; k++) {
+    const p0 = refAt(k - 1), p1 = refAt(k), p2 = refAt(k + 1);
     for (let c = 0; c < nc; c++) { v[c][k] = (p2[c] - p0[c]) / 2; a[c][k] = p2[c] - 2 * p1[c] + p0[c]; }
   }
   return [0, 1].map((c) => ({ v: v[c], a: a[c] }));
-})();
+};
+const TANK_RATES = ratesOf(refAtStep, PROG);
+
+// ---- THE HELD-OUT PROGRAM, HOISTED SO TARGET 1 AND THE GAIN LADDER CAN BOTH NAME IT.
+//
+// The same five level pairs production runs, in an order production never runs: [0,3,1,4,2]
+// against production's [0,1,2,3,4]. It has lived inside the ridge/gain report since §72.7 and is
+// the program §79.3's 2.657x was read on; it is hoisted verbatim so that number and target 1's
+// refer to the SAME program and can be told apart by their INSTRUMENT rather than by their
+// subject (plan §88.9 — putting two instruments in one column is rule 19).
+const ALT = [RECIPE[0], RECIPE[3], RECIPE[1], RECIPE[4], RECIPE[2]];
+const altAt = (k) => {
+  const i = Math.min(ALT.length - 2, Math.floor(k / SEG));
+  const t = (k - i * SEG - HOLD) / (SEG - HOLD);
+  const q = t <= 0 ? 0 : t >= 1 ? 1 : quintic(t);
+  const a = ALT[i], b = ALT[i + 1];
+  return [a[0] + (b[0] - a[0]) * q, a[1] + (b[1] - a[1]) * q];
+};
 
 // ---------------------------------------------------------------- the ladder
 async function once(seed) {
@@ -330,13 +353,23 @@ async function once(seed) {
   const PHASE = process.env.PHASE === '1';
   const UG = Number(process.env.UGAIN || 1);
   const ph = { kink: { s2: 0, n: 0, u2: 0, k: 0 }, smooth: { s2: 0, n: 0, u2: 0, k: 0 } };
-  const run0 = async (corr, cname) => {
+  /**
+   * THE SCORED RUN, PARAMETERISED OVER THE PROGRAM (plan §88.1's construction, on this plant).
+   * `prog` absent is today's shipped program with today's values in every field, so the row this
+   * harness has always printed is unchanged BY CONSTRUCTION rather than by inspection.
+   * `armed: false` applies NOTHING rather than disarming the rungs, exactly as `rigs/ladder.mjs`
+   * does it, so reading a baseline never leaves the commissioned object in a state its own
+   * verify did not see.
+   */
+  const run0 = async (corr, cname, prog) => {
+    const P = prog || { refAt: refAtStep, N: PROG, rates: TANK_RATES, start, drop: SEG };
+    const { refAt: pRefAt, N: pN, rates: pRates, start: pStart, drop: pDrop } = P;
     const p = makeTanks(G);
-    for (let i = 0; i < 30000; i++) p.step(start[0], start[1]);
+    for (let i = 0; i < 30000; i++) p.step(pStart[0], pStart[1]);
     let s2 = 0, n = 0, uPk = 0;
-    const e0 = new Float64Array(PROG), e1 = new Float64Array(PROG);
-    for (let k = 0; k < PROG; k++) {
-      const h = refAtStep(k), v = voltsFor(G, h[0], h[1]);
+    const e0 = new Float64Array(pN), e1 = new Float64Array(pN);
+    for (let k = 0; k < pN; k++) {
+      const h = pRefAt(k), v = voltsFor(G, h[0], h[1]);
       // THE DEPLOYED RUNGS ACT THROUGH `auto.act`, AND THIS HOST NEVER CALLED IT. The distilled
       // rung is applied by `act()` — `rigs/ladder.mjs` calls it every step and adds the candidate
       // on top through `auto.into` — while this file applied ONLY the candidate `corr`. So the
@@ -346,20 +379,21 @@ async function once(seed) {
       // scored at all. (plan §67.3; rule 25 — "not measured" and "no better" are different
       // states, and this is the third time that distinction has cost this project a verdict.)
       const look = (o) => {
-        const hh = refAtStep(Math.min(PROG - 1, Math.max(0, k + o)));
+        const hh = pRefAt(Math.min(pN - 1, Math.max(0, k + o)));
         return voltsFor(G, hh[0], hh[1]);
       };
       const sp = (() => {
-        const p0 = refAtStep(Math.max(0, k - 1)), p1 = refAtStep(Math.min(PROG - 1, k + 1));
+        const p0 = pRefAt(Math.max(0, k - 1)), p1 = pRefAt(Math.min(pN - 1, k + 1));
         const v0 = voltsFor(G, p0[0], p0[1]), v1 = voltsFor(G, p1[0], p1[1]);
         return Math.hypot(v1[0] - v0[0], v1[1] - v0[1]) * 0.5;
       })();
       // `v`/`a` for the conventional rung's deploy path — see plan §97.2. Without them
       // `ClassicFF` has nothing to evaluate and contributes exactly zero however well it
       // commissioned, so a rung that was never applied reads as a rung that found nothing.
-      const ki = Math.max(0, Math.min(PROG - 1, k));
-      const a0 = auto.act({ v: TANK_RATES.map((r) => r.v[ki]), a: TANK_RATES.map((r) => r.a[ki]),
-        look, lookRaw: look, k, speed: sp });
+      const ki = Math.max(0, Math.min(pN - 1, k));
+      const a0 = P.armed === false ? [0, 0]
+        : auto.act({ v: pRates.map((r) => r.v[ki]), a: pRates.map((r) => r.a[ki]),
+          look, lookRaw: look, k, speed: sp });
       // UGAIN=<x>: the CHEAPEST explanation for §78.6's leftover, killed before any structural one
       // (rule 1). The false refusal zeroed the map on 3,411 of 11,999 steps — 28% — and was worth
       // 19%. If simply applying LESS everywhere buys the same thing, there is no kink structure in
@@ -371,7 +405,7 @@ async function once(seed) {
       p.step(v[0] + (u[0] || 0), v[1] + (u[1] || 0));
       auto.observe([p.h[0], p.h[1], p.h[2], p.h[3]]);
       e0[k] = p.h[0] - h[0]; e1[k] = p.h[1] - h[1];
-      if (k > SEG) { s2 += (p.h[0] - h[0]) ** 2 + (p.h[1] - h[1]) ** 2; n += 2; }
+      if (k > pDrop) { s2 += (p.h[0] - h[0]) ** 2 + (p.h[1] - h[1]) ** 2; n += 2; }
       // ---- WHERE THE MAP'S ERROR AND ITS EFFORT ACTUALLY SIT (plan §79).
       //
       // §78.6's accident stopped the map acting during HOLDS and RAMPS and was worth 19% on this
@@ -380,7 +414,7 @@ async function once(seed) {
       // splits the delivered squared error and the applied effort by whether the COMMANDED
       // REFERENCE IS MOVING, which is the one distinction the false refusal was drawing, and it
       // fits nothing and gates nothing — it only reports (rule 16's cheap half first).
-      if (PHASE && k > SEG) {
+      if (PHASE && k > pDrop) {
         // THE SPLIT THE FALSE REFUSAL ACTUALLY DREW, which is NOT moving-vs-held. `windowBend`
         // returns Infinity exactly where the window is LOCALLY STRAIGHT with one tap off that
         // line — the CORNER of a ramp, not a hold — so bucketing on its own verdict is the direct
@@ -413,6 +447,31 @@ async function once(seed) {
 
   /** The training diet: four recipes the scored program is not one of. */
   const run = (corr, cname) => inPhase('verify', () => run0(corr, cname));
+  /**
+   * TARGET 1's INSTRUMENT, AND IT IS THE ONE EVERY OTHER PLANT USES (plan §88.1, §88.9).
+   *
+   * The quadruple tank has read `not asked` in `objtable`'s TARGET 1 column since that column
+   * existed, and §88.9 put it there DELIBERATELY: the 2.657x this file has quoted since §79.3
+   * comes from `driveAlt` — the gain ladder's own candidate scoring, which drives the DISTILLED
+   * POLICY ALONE — while every other row in that column is the whole commissioned object through
+   * the driver's own scored loop. Counting the two together is rule 19, so the honest fix is not
+   * to re-quote the number but to ask this plant the same question the others are asked.
+   *
+   * This is that question. It is `run0` — the loop that scores the shipped program — handed a
+   * different `{refAt, N}`, with the plant settled at THAT program's own start (rule 13) and the
+   * conventional rung's `v`/`a` series RE-DERIVED from it (§97.1: a basis built from anything but
+   * the program's own series is not measuring the program). It is emphatically not a fifth
+   * private copy of the loop, which is the fault this file has already paid for once — §67.3,
+   * where the rung was absent from the run that scored it.
+   *
+   * NO REFIT AND NO SECOND COMMISSIONING: the ladder is closed before this runs, and the object
+   * asked is the one the block ships.
+   */
+  const scoreOn = async ({ refAt: rAt, N: n2, drop = SEG }, { armed = true } = {}) => {
+    const h0 = rAt(0);
+    return run0(null, null, { refAt: rAt, N: n2, rates: ratesOf(rAt, n2),
+      start: voltsFor(G, h0[0], h0[1]), drop, armed });
+  };
 
   // ---- THE CASCADE'S PHASE MACHINE, WHICH THIS HARNESS HAS NEVER SUPPLIED (plan §73.13).
   //
@@ -555,16 +614,18 @@ async function once(seed) {
   // and that method is only honest if the pick is then validated on a program it did not score.
   // This is the tank's own recipe in an order production never runs — same levels, same rates,
   // same settle, different sequence.
+  // `driveAlt`'s OWN bare reading is kept so target 1's baseline has a check from a route that
+  // shares no code with `run0` (rule 15): two instruments on one quantity, and if they disagree
+  // the number is the instrument's rather than the plant's.
+  let altBare = null;
   if (rep.distil && rep.distil.policy) {
     const pol = rep.distil.policy;
-    const ALT = [RECIPE[0], RECIPE[3], RECIPE[1], RECIPE[4], RECIPE[2]];
-    const altAt = (k) => {
-      const i = Math.min(ALT.length - 2, Math.floor(k / SEG));
-      const t = (k - i * SEG - HOLD) / (SEG - HOLD);
-      const q = t <= 0 ? 0 : t >= 1 ? 1 : quintic(t);
-      const a = ALT[i], b = ALT[i + 1];
-      return [a[0] + (b[0] - a[0]) * q, a[1] + (b[1] - a[1]) * q];
-    };
+    // `ALT`/`altAt` are module-level now, so target 1 and this ladder read ONE program.
+    // `driveAlt` is NOT `scoreOn`: it drives the DISTILLED POLICY ALONE through `pol.actLook`,
+    // with no conventional rung and no `auto.act`, which is what makes §79.3's 2.657x a reading
+    // of the GAIN LADDER'S OWN candidate scoring rather than of the object the block ships
+    // (plan §88.9). It is kept because the ridge and gain tables below are that instrument's
+    // columns and re-scoring them through another one would silently restate them.
     const driveAlt = (on, useP = pol) => {
       const p = makeTanks(G);
       const h0 = altAt(0), v0 = voltsFor(G, h0[0], h0[1]);
@@ -582,6 +643,7 @@ async function once(seed) {
       return Math.sqrt(s2 / n);
     };
     const b = driveAlt(false), w = driveAlt(true);
+    altBare = b;
     console.log(`    HELD-OUT PROGRAM (the recipe in an order production never runs): `
       + `${b.toExponential(4)} → ${w.toExponential(4)}   ${(b / w).toFixed(3)}x`);
     // ---- IS RULE 42's TIE-BREAK RIGHT HERE, OR ONLY APPLIED? (plan §72.7)
@@ -666,6 +728,15 @@ async function once(seed) {
           + `${c.score === null ? 'not scored' : c.score.toExponential(4)}`
           + (c.gain === rep.distil.gainPicked ? '   <- PICKED' : ''));
       }
+      // THE EXTENSION'S OWN EXIT, WHICH THIS BLOCK COULD NOT PRINT (plan §109, rule 30).
+      // `distilkit.mjs`'s `reportDistil` prints this and THIS HARNESS DOES NOT CALL IT — it keeps
+      // its own copy of the gain-ladder format — so the diagnostic existed with no path to the
+      // one plant §107 measured the runaway walk on. A description written in a second place
+      // eventually describes the behaviour the first one used to have.
+      if (rep.distil.gainExit) {
+        console.log(`      EXTENSION STOPPED after ${rep.distil.gainExit.at} step`
+          + `${rep.distil.gainExit.at === 1 ? '' : 's'}: ${rep.distil.gainExit.reason}`);
+      }
     }
     if (rep.distil.ridgeNote) console.log(`    ${rep.distil.ridgeNote}`);
   }
@@ -680,7 +751,7 @@ async function once(seed) {
       inSample.push(bare.score / withP.score);
     }
   }
-  return { auto, rep, inSample };
+  return { auto, rep, inSample, scoreOn, altBare };
 }
 
 // ---------------------------------------------------------------- the run
@@ -725,8 +796,106 @@ for (const seed of SEEDS) {
   } else {
     console.log('    IN SAMPLE — not scored: the rung published no policy to score (a refusal before the fit)');
   }
+
+  // ----------------------------------------- target 1, through the instrument every plant uses
+  /**
+   * THE QUADRUPLE TANK, ASKED TARGET 1 THE WAY THE OTHER NINE PLANTS ARE ASKED IT
+   * (plan §88.1, §88.9).
+   *
+   * This plant has read `not asked` in `objtable`'s TARGET 1 column since the column existed, and
+   * that was the RIGHT reading of what was available: §79.3's 2.657x is `driveAlt`'s number — the
+   * gain ladder scoring its own candidates, the DISTILLED POLICY ALONE — while every other row in
+   * that column is the whole commissioned object through the driver's own scored loop. Two
+   * instruments in one column is rule 19, so §88.9 struck the row rather than restating it.
+   *
+   * What is asked here is the other question, on the same program: the SAME commissioned object —
+   * whatever the block ships, which since §97.3 is the CONVENTIONAL rung — no refit, no second
+   * commissioning, through `scoreOn`, which is `run0` with a different `{refAt, N}`.
+   *
+   * BOTH ABSOLUTE NUMBERS ARE PRINTED AND NOT ONLY THE RATIO, because §89.1's whole finding is
+   * that a ratio above 1 in this column can mean the DENOMINATOR moved — the held-out program
+   * being easier — rather than the object transferring. A reader cannot tell those apart from a
+   * ratio, and this column's comparator is the SCORED program's factor rather than a per-program
+   * COMMISSION, which is looser than target 1's letter and is stated rather than upgraded.
+   */
+  const t1Diet = dietN(DIETS);
+  const key = (q) => `${q[0]},${q[1]}`;
+  // NOT IN THE TRAINING DIET, FROM THE DATA (rule 30): a comment saying a program is held out is
+  // the thing that goes stale when the diet changes. The diet's recipes are CYCLED, so the
+  // transitions it teaches are `rec[i] -> rec[(i+1) % len]`; the held-out program is a finite
+  // 5-point ramp sequence, so its transitions are `ALT[i] -> ALT[i+1]`.
+  const dietTrans = new Set(t1Diet.flatMap((rec) =>
+    rec.map((q, i) => `${key(q)}>${key(rec[(i + 1) % rec.length])}`)));
+  const altTrans = ALT.slice(0, -1).map((q, i) => `${key(q)}>${key(ALT[i + 1])}`);
+  const sharedTrans = altTrans.filter((t) => dietTrans.has(t));
+  // AND THE LEVELS SEPARATELY FROM THE TRANSITIONS, because `DIET=near` builds its recipes FROM
+  // production's own level pairs in other orders — there the levels ARE shared and only the
+  // sequence is held out, and reporting one number would hide which of the two is true today.
+  const dietLevels = new Set(t1Diet.flatMap((rec) => rec.map(key)));
+  const sharedLevels = ALT.filter((q) => dietLevels.has(key(q))).length;
+  const altIsProd = ALT.every((q, i) => q[0] === RECIPE[i][0] && q[1] === RECIPE[i][1]);
+
+  const hOff = await r0.scoreOn({ refAt: altAt, N: PROG }, { armed: false });
+  const hOn = await r0.scoreOn({ refAt: altAt, N: PROG });
+  const xProg = rep.base / rep.best, xHeld = hOff.score / hOn.score;
+  console.log(`\n  TARGET 1 — the SAME commissioned object on a second recipe, no refit`);
+  console.log(`    scored recipe  ${RECIPE.map((q) => q.join('/')).join(' -> ')}`);
+  console.log(`      ${rep.base.toExponential(4)} -> ${rep.best.toExponential(4)} cm rms   `
+    + `${xProg.toFixed(3)}x`);
+  console.log(`    held out       ${ALT.map((q) => q.join('/')).join(' -> ')}`);
+  console.log(`      ${hOff.score.toExponential(4)} -> ${hOn.score.toExponential(4)} cm rms   `
+    + `${xHeld.toFixed(3)}x   (peak |u| ${hOn.uPk.toExponential(3)} of ${UCAP})`);
+  console.log(`    the held-out program delivers ${(xHeld / xProg).toFixed(3)} of the scored `
+    + `factor; target 1's bound forbids < 0.769 (1/1.3)`);
+  console.log(`    TARGET 1's 1.3x BOUND: ${xHeld >= xProg / 1.3 ? 'MET' : 'NOT MET'}`);
+  console.log(`    the comparator is the SCORED program's factor, not a per-program COMMISSION `
+    + `(plan §89.1) — the cheap form, and where the held-out factor is the LARGER it is LOOSER `
+    + `than the target rather than tighter`);
+  console.log(`    HELD OUT, from the data (diet '${process.env.DIET || 'range'}'): `
+    + `${sharedTrans.length} of ${altTrans.length} of its transitions occur in the `
+    + `${t1Diet.length}-recipe diet; ${sharedLevels} of ${ALT.length} of its level pairs do; `
+    + `it ${altIsProd ? 'IS' : 'is NOT'} the scored program's sequence`);
+  // TWO ROUTES TO THE BASELINE (rule 15). `driveAlt` settles and scores this same program with a
+  // loop that shares no code with `run0`, so if the two bare readings disagree the number belongs
+  // to an instrument and not to the plant. It only exists when a policy was published, so its
+  // absence is reported rather than passed over (rule 25).
+  console.log(`    the bare machine on the held-out recipe, by a second route that shares no code: `
+    + `${r0.altBare === null ? 'not available — no policy was published to trigger it'
+      : `${r0.altBare.toExponential(4)} against scoreOn's ${hOff.score.toExponential(4)}, `
+        + `${Math.abs(r0.altBare / hOff.score - 1) < 1e-9 ? 'IDENTICAL' : 'DIFFERENT'}`}`);
+
+  /**
+   * HELD OUT, ASSERTED FROM THE DATA — AND THE BAR IS "NOT FULLY TAUGHT" RATHER THAN "NO OVERLAP",
+   * WHICH IS A WEAKER CLAIM DELIBERATELY.
+   *
+   * The shipped RANGE diet shares NOTHING with this program — 0 of 4 transitions and 0 of 5 level
+   * pairs, printed above — so the strong form holds where it is measured. It is not what is
+   * ASSERTED, because `DIET=near` builds its recipes FROM production's own level pairs in other
+   * orders (that is the whole construction §66 brought over from the barrel), so one of the four
+   * transitions is taught there BY DESIGN. Pinning zero overlap would make a documented control
+   * diet turn this harness red, and a suite that is red for a reason nobody intends to fix hides
+   * the next real failure (rule 3). The overlap is the number to READ; what is asserted is the
+   * structural claim target 1 actually rests on — the scored program is not being re-scored, and
+   * the held-out program is not merely a training recipe replayed.
+   */
+  check('target 1: the held-out recipe is not the scored program',
+    !altIsProd, `altIsProd=${altIsProd}`);
+  check('target 1: the held-out recipe is not wholly contained in the training diet',
+    sharedTrans.length < altTrans.length,
+    `${sharedTrans.length} of ${altTrans.length} transitions taught, `
+    + `${sharedLevels} of ${ALT.length} level pairs`);
+  check('target 1: the held-out recipe is not made worse by what the block ships',
+    hOn.score <= hOff.score * 1.02,
+    `${hOff.score.toExponential(4)} -> ${hOn.score.toExponential(4)} = ${xHeld.toFixed(3)}x`);
+  // The bound itself is REPORTED and not asserted, exactly as on the other nine plants: three
+  // plants of nine are measured as missing it and a suite pinned to a bar plants are known to
+  // fail is permanently red and hides the next real failure (rule 3, plan §88.4).
+  emitRow(rep, auto, { name: 'quadruple tank — levels, cm rms',
+    t1: xHeld / xProg, t1Worse: xHeld < 1 });
+
   results.push({ seed, rep, inSample: r0.inSample,
-    deployedDistil: !!(rep.deployed && rep.deployed.distil), gain: rep.gain });
+    deployedDistil: !!(rep.deployed && rep.deployed.distil), gain: rep.gain,
+    t1: xHeld / xProg, t1Worse: xHeld < 1 });
 }
 
 // ---------------------------------------------------------------- what it means
