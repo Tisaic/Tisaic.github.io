@@ -30,6 +30,9 @@ import * as RA from './realarm-rig.mjs';
 import * as PD from './pend-rig.mjs';
 import * as RT from './realtanks-rig.mjs';
 import * as RX from './realexch-rig.mjs';
+import { makeArm, mkPath, homeAt, stepArm, ikOf, randomPolygon, PG } from './arm-rig.mjs';
+import { designTour } from '../../../lib/flexisim/demopath.js';
+import { BENCH_SERVO } from '../../../lib/flexisim/compensator.js';
 
 // Minimum-phase configuration. Outflow goes as sqrt(level), so nothing about it is linear,
 // and the two pumps cross-feed: each fills one tank directly and the other's upper tank.
@@ -356,5 +359,144 @@ function realexchLadderSpec(model = RX.MODEL, tag = 'nonlinear') {
 }
 
 
+
+/**
+ * THE 2R COMPLIANT ARM AS A SPEC — the tenth plant, and the one §105 recorded as NOT ASKED.
+ *
+ * §105 asks the teacher-free direct inverse of nine plants and says in its own words why the
+ * flagship is missing: *it HAS a nominal inverse — its own IK, which is what produces its
+ * `refAt` — but `rigs/arm-rig.mjs` exports `commissionArm`/`deployOn` and no `{fresh, step,
+ * refAt, uMax}` spec, so asking it means a second copy of that plant's routing.* This is the
+ * move that file names, and the routing stays in the rig: `fresh` is `makeArm` + `homeAt` and
+ * `step` is `stepArm`, both of them `arm-rig.mjs`'s own.
+ *
+ * THREE THINGS ABOUT THIS PLANT THE OTHER NINE DO NOT HAVE, each stated because each is a
+ * constraint on what the route can mean here rather than an implementation detail.
+ *
+ * 1. IT IS BUILT ASYNCHRONOUSLY. Every other `fresh()` is a synchronous constructor; this one
+ *    needs two LATTICE links and `buildLink` is async. So the spec carries a POOL: `prime(n)`
+ *    builds n machines (31 ms for forty — the cost is the SETTLE, not the build), and `fresh`
+ *    takes one and homes it. It THROWS when the pool is empty rather than handing back a used
+ *    machine, because a re-homed arm carries its links' own ring and history and the ZERO
+ *    control's bit-exactness is exactly what that would destroy (rule 25).
+ * 2. ITS COMMAND IS A TRAJECTORY, NOT A POINT. `ChainServo.torques` reads {theta, omega, alpha};
+ *    `stepArm`'s own note measures what deriving the last two from the command series costs
+ *    (11%, so it is a different machine) and takes them from the program's `ikRates` instead.
+ *    A segment therefore hands its PATH through `meta`, and a caller with no path is holding a
+ *    pose and gets zeros.
+ * 3. ITS OUTPUT IS NOT ON ITS OWN SENSORS. The route inverts an ACHIEVED OUTPUT; here that is
+ *    the TOOL, which no motor-side signal carries. `stepArm` publishes it as measured channels
+ *    6 and 7 and labels them the TRACKER — a COMMISSIONING instrument, the same footing the
+ *    truth is already on. On the other nine `inv` reads a thermocouple, a level or an encoder,
+ *    and this is the requirement-1 fine print the nine could not show.
+ *
+ * THE CELL IS THE OWNER'S STANDING BENCH RULE — K 0.25 / E 0.03 on the SHARP-CORNER program —
+ * and the loop is `BENCH_SERVO`, §52.37's own single source, passed EXPLICITLY. `arm-rig.mjs`'s
+ * `makeArm` still defaults `ARM_BW` to 2e-3, the pre-§52.37 constant, so a spec that took the
+ * rig's default would be a machine the shipped numbers were not measured on (rule 31).
+ */
+const ARM_CELL = { K: 0.25, E: 0.03, bw: BENCH_SERVO.bandwidth };
+const armPath = mkPath('sharp', 4e-3);
+const armPool = [];
+let armIK = null;
+
+/** The rate feedforward a program supplies at step k, through the arm's own `ikRates`. */
+function armRatesFrom(arm, path, N) {
+  return (k) => {
+    const c = path.at(Math.max(0, Math.min(N, k)));
+    const [q1, q2] = arm.ik(c.x, c.y, true);
+    return arm.ikRates(q1, q2, c.vx, c.vy, c.ax, c.ay);
+  };
+}
+
+const armSpec = {
+  name: '2R compliant arm (K 0.25 / E 0.03, sharp square) — tool error in joint space, rms',
+  // The correction is a JOINT REFERENCE OFFSET, which is where `deployOn` puts it, and 0.15 rad
+  // is `commissionArm`'s own shipped `uCap` on this plant rather than a number chosen here.
+  uMax: 0.15,
+  // Six motor-side signals AND TWO TRACKER CHANNELS. `nMeasured` is the count a deployed object
+  // may read; `measured` is longer, and the extra two are commissioning-only (see above).
+  nMeasured: 6,
+  channels: [0, 1].map(() => ({ lo: -1.6, hi: 1.6, vMax: 8e-4, aMax: 4e-6, jMax: 2e-7 })),
+  N: Math.ceil(armPath.lap),
+  floor: 0,
+  // The SCORED program's own path, so `scoreOn`'s default segment carries it and the scored run
+  // is driven with the same rate feedforward the excitation runs are.
+  meta: { path: armPath },
+  /** THE NOMINAL INVERSE — the arm's own IK, which is what produces this plant's reference. */
+  refAt: (k) => {
+    if (!armIK) throw new Error('armSpec: not primed — call `await armSpec.prime(n)` first (rule 25)');
+    const c = armPath.at(Math.max(0, Math.min(Math.ceil(armPath.lap), k)));
+    return armIK(c.x, c.y);
+  },
+  /** The same map applied to an ACHIEVED tool position, read off the tracker channels. */
+  inv: (y) => armIK(y[6], y[7]),
+  get start() { return armSpec.refAt(0); },
+  async prime(n) {
+    if (+(process.env.ARM_TOOL_NOISE || 0) !== 0) {
+      throw new Error('armSpec: ARM_TOOL_NOISE degrades `routeSignals`\' tracker read but not the '
+        + 'tracker CHANNEL, so the two would disagree by noise — not supported here (rule 17)');
+    }
+    while (armPool.length < n) armPool.push(await makeArm(ARM_CELL));
+    if (!armIK) armIK = ikOf(armPool[0].arm);
+    return n;
+  },
+  /**
+   * A MACHINE SETTLED AT THE COMMAND IT IS ABOUT TO BE GIVEN. Every other spec arranges this by
+   * hardcoding its settle point and requiring the diet to start there (`tankSpec`'s diet says so
+   * in its own comment); on this plant the home is a SERVO ACTION at an arbitrary pose, so the
+   * kit hands the segment in and the machine is homed where that segment begins.
+   */
+  fresh(seg) {
+    const m = armPool.pop();
+    if (!m) throw new Error('armSpec: the arm pool is EXHAUSTED — prime more (rule 25: a re-homed '
+      + 'arm carries its links\' own ring and would break the ZERO control\'s bit-exactness)');
+    const path = seg && seg.meta && seg.meta.path ? seg.meta.path : null;
+    const n = seg && seg.n ? seg.n : Math.ceil(armPath.lap);
+    const q0 = seg && seg.refAt ? seg.refAt(0) : armSpec.refAt(0);
+    homeAt(m.arm, m.servo, q0[0], q0[1]);
+    // A CALLER THAT FREEZES THE REFERENCE MUST FREEZE ITS RATE TERMS TOO. `invert.mjs` runs the
+    // program to `k0` and then HOLDS it, for a reason it states in its own comment — a moving
+    // program makes the paired subtraction a moving target on a nonlinear plant. On a plant whose
+    // command carries omega and alpha, holding theta while the program's rates run on is not a
+    // held reference at all; `holdFrom` says where the hold starts and every other spec ignores it.
+    const rates = path ? armRatesFrom(m.arm, path, n) : () => ({ dq: [0, 0], ddq: [0, 0] });
+    const k0 = seg && Number.isFinite(seg.holdFrom) ? seg.holdFrom : Infinity;
+    const ZERO = { dq: [0, 0], ddq: [0, 0] };
+    return { arm: m.arm, servo: m.servo, rates: (k) => (k < k0 ? rates(k) : ZERO) };
+  },
+  step: stepArm,
+};
+
+/**
+ * THE DIET: closed polygon laps at the PROGRAMS' OWN SCALE, none of them the scored square.
+ *
+ * It is `distil-arm.mjs`'s shipped `poly4` design — `randomPolygon` at rMin 3.4 / rSpan 2.4 and
+ * the bench feed, convex and star alternating so the turn angles bracket the square's 90° — and
+ * the design is the rig's rather than a new one (rule 20, rule 61). The scored program is a
+ * sharp square and appears in no segment.
+ */
+function armDiet(rnd) {
+  const segs = [];
+  for (let s = 0; s < 6; s++) {
+    // ARMTOUR=<nShapes>: ONE CLOSED LAP OF SEVERAL SHAPES instead of one polygon (plan §49.11).
+    // The window rule is `min(0.61·settle, lap/8)` and on THIS plant the aliasing half binds hard
+    // — a polygon lap of ~3,900 steps caps the reach at 485 against a measured settle of 4,433 —
+    // which is §49.11's forced trade with nothing left to choose. A long tour is that section's
+    // one MEASURED escape (it took a ±1024 window from 0.47x to 3.29x), so it is the knob that
+    // says whether the reach is what binds here or whether something else is. Unset is the
+    // shipped `poly4` design and byte-identical.
+    const path = process.env.ARMTOUR
+      ? designTour(rnd, 4e-3, { centre: PG.centre, nShapes: +process.env.ARMTOUR,
+        rMin: 3.4, rSpan: 2.4 })
+      : randomPolygon(rnd, 4e-3, { centre: PG.centre, star: s % 2 === 1,
+        rMin: 3.4, rSpan: 2.4 });
+    const n = Math.ceil(path.lap);
+    segs.push({ n, meta: { path },
+      refAt: (k) => { const c = path.at(Math.max(0, Math.min(n, k))); return armIK(c.x, c.y); } });
+  }
+  return segs;
+}
+
 export { tankSpec, wbSpec, millSpec, barrelSpec, empsSpec, realarmSpec, realarmLadderSpec,
-  realtanksLadderSpec, realexchLadderSpec, pendSpec, progPeaks, raPK, G_MP };
+  realtanksLadderSpec, realexchLadderSpec, pendSpec, armSpec, armDiet, progPeaks, raPK, G_MP };

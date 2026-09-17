@@ -67,7 +67,12 @@ export function excite(spec, diet, { seed = 1 } = {}) {
   const segs = diet(rnd);
   const out = [];
   for (const s of segs) {
-    const p = spec.fresh();
+    // THE MACHINE IS SETTLED AT THE COMMAND IT IS ABOUT TO BE GIVEN, and the SEGMENT says what
+    // that is. Every spec written before this ignores the argument and is byte-identical, because
+    // each of them hardcodes its settle point and requires its diet to start there — `tankSpec`'s
+    // diet says exactly that in its own comment. A plant whose home is a SERVO ACTION at an
+    // arbitrary pose cannot arrange it in the diet, so the kit hands the segment in.
+    const p = spec.fresh(s);
     const C = [], Y = [];
     for (let k = 0; k < s.n; k++) {
       const c = s.refAt(k);
@@ -144,8 +149,11 @@ export function heldOutR2(segs, inv, opts, reach) {
  * SCORED THROUGH THE SPEC'S OWN ROUTING, on `rigs/ladder.mjs`'s own support.
  * `pol` null means the open loop. Returns rms over the scored support and the peak correction.
  */
-export function scoreOn(spec, R, pol, { N }) {
-  const p = spec.fresh();
+export function scoreOn(spec, R, pol, { N, seg = null }) {
+  // The scored run is a segment too — its own program, so a plant that homes per program homes
+  // here on the SCORED one and not on whichever diet segment ran last.
+  const p = spec.fresh(seg || { n: N, refAt: (k) => R[Math.max(0, Math.min(R.length - 1, k))],
+    meta: spec.meta || null });
   let ss = 0, n = 0, pk = 0;
   // THE CORRECTION'S OWN SPREAD, per channel. A map of the commanded reference deployed on a
   // CONSTANT reference can emit only one number for the whole run, however well it was fitted —
@@ -184,6 +192,8 @@ export function refSeries(refAt, N) { const R = []; for (let k = 0; k <= N; k++)
  * than 1, because "no reading" and "settles instantly" are different states (rule 25).
  */
 export function measureSettle(spec, { delta, idx = 0, N = 20000, warm = 200 } = {}) {
+  // NO SEGMENT: this probe HOLDS a reference (rule 33), so a plant whose command carries rate
+  // terms is told it is holding a pose rather than handed a program it is not being driven on.
   const p = spec.fresh();
   const r0 = spec.refAt(0);
   const zero = r0.map(() => 0);

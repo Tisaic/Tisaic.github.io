@@ -1080,6 +1080,102 @@ if (process.env.LEARN && host.auto.deployed.distil) {
   await scoreSet('held-out', host.auto.distil, heldOut, heldNames);
   await scoreSet('diet', host.auto.distil, dietRuns, dietRuns.map((t, i) => `polygon ${i}`));
 }
+// LEARNLADDER=<max passes>: §108's QUESTION, ASKED OF THE ONE ADAPTATION ROUTE THAT REACHES THE
+// SHIPPED OBJECT (plan §108's scope limit, from the other side).
+//
+// §108 measured GUIDED ADAPTATION — the pilot cascade's RLS, with a PERFECT TRACKER —
+// monotonically DESTROYING a program it never ran: the circle 7.72x -> 4.57x -> 1.29x -> 0.88x
+// at 0/2/8/24 guide laps, below doing nothing on all three seeds. Its own scope limit says that
+// is the PILOT CASCADE, which `objtable.mjs` measures as shipping on ZERO of ten plants, and
+// §52.29 measured guided adaptation as BIT-IDENTICAL on the shipped DISTILLED object with
+// `oracleF0` armed — so none of it touches the object a machine receives.
+//
+// `learnLive` DOES touch it. CLAUDE.md records it at 6.04x -> 7.71x on the bench square "with
+// the rounded rectangle, circle and polygons UNCHANGED", and §108's third named killer is
+// *excellent immediately, bad slowly, invisible to a short test* — which FIRED for both the
+// chain and the tracker there. That figure is quoted at ONE pass count. Nobody has run the
+// ladder.
+//
+// WHY THIS IS THE SAME HARNESS AND NOT A SECOND DRIVER (rule 61): it uses this file's own
+// `host`, `heldPolicy`, `heldOut` and `path`, and the ladder's own `host.auto.learnLive` — the
+// page's *Learn on this program* law. `learnLive` KEEPS ONLY IMPROVEMENTS and mutates
+// `auto.distil` in place, so calling it one pass at a time gives the cumulative policy after k
+// accepted passes; a rejected pass ends the iteration exactly as a single N-pass call does.
+// `LEARN=4` is the control that says the two agree.
+//
+// ONE REFERENCE FOR EVERY FACTOR (rule 19). Every number below is BARE machine -> policy on the
+// SAME program, which is `scoreSet`'s denominator and the one target 1 is quoted on here. The
+// bare score is taken ONCE per program and reused: the bare machine does not move when the
+// policy does, and re-measuring it per rung would put noise in a denominator that has none.
+//
+// TWO LAP COLUMNS, THE FIRST SCORED LAP LEADING (CLAUDE.md, "THE SCORE IS THE UNSEEN PATH").
+// `laps: 2` scores lap 1 alone — one warmup lap, then the FIRST scored lap. The default is the
+// grade's warmup + average and is a CONVERGED score. They should agree here and the agreement
+// is the control: `learnLive` returns a FROZEN policy and `heldPolicy` never adapts, so unlike
+// §108's guided laps there is no lap-over-lap learning for a later lap to hide.
+if (process.env.LEARNLADDER && host.auto.deployed.distil) {
+  const MAXP = +process.env.LEARNLADDER;
+  const live = await host.liveRuns();
+  const sqRuns = await host.distilRuns({ paths: [path] });
+  const progs = [...sqRuns, ...heldOut];
+  const names = ['sharp square  (LEARNED ON)', 'rounded rect  (never run)', 'circle        (never run)'];
+  const baseF = [], base1 = [];
+  for (const tr of progs) { baseF.push((await tr.run(null)).score); base1.push((await tr.run(null, { laps: 2 })).score); }
+  console.log(`\n  LEARN LADDER (mode ${process.env.LEARNMODE || 'diet'}), every factor BARE machine -> policy on its own program:`);
+  console.log('    bare machine: ' + progs.map((t, i) => `${names[i].trim()} ${baseF[i].toExponential(4)} (lap1 ${base1[i].toExponential(4)})`).join(' · '));
+  const rows = [];
+  const scoreRung = async (p2) => {
+    const row = { p: p2, x1: [], xF: [], e1: [], eF: [] };
+    for (let i = 0; i < progs.length; i++) {
+      const tr = progs[i];
+      const h1 = heldPolicy(host.auto.distil, tr);
+      const w1 = await tr.run(h1, { tap: h1.tap, laps: 2 });
+      const hF = heldPolicy(host.auto.distil, tr);
+      const wF = await tr.run(hF, { tap: hF.tap });
+      row.x1.push(base1[i] / w1.score); row.xF.push(baseF[i] / wF.score);
+      row.e1.push(w1.score); row.eF.push(wF.score);
+    }
+    rows.push(row);
+    console.log(`    passes ${String(p2).padStart(3)}  `
+      + progs.map((t, i) => `${names[i]} ${row.x1[i].toFixed(3)}x [conv ${row.xF[i].toFixed(3)}x]`).join('  |  ')
+      + `   ${host.samples().samples.toLocaleString()} samples`);
+    return row;
+  };
+  // LEARNNOGATE=1: THE FALSIFIER FOR THE MECHANISM SENTENCE, AND IT MEASURES AN OBJECT THE
+  // PRODUCT CANNOT PRODUCE — which is exactly why it is opt-in and why its rows must never be
+  // quoted as a delivered result.
+  //
+  // The claim under test is *what prevents §108's shape is the commissioning DIET staying in
+  // every pass's fit, not the monotone gate*. The evidence for it is ONE contrast — diet mode
+  // never crosses 1.0x, fresh mode crosses at pass 1 — in which the diet and the REACHABLE PASS
+  // COUNT move together: the gate stops diet mode at 3-5 accepted passes and lets fresh mode
+  // run to 8. So "diet mode never crosses" and "diet mode was never allowed to go as far as
+  // fresh mode went" are not separated by anything the shipped law can be asked (rule 20).
+  // With the gate off, diet mode is readable at fresh mode's own pass count.
+  //
+  // The gate's OWN verdict is still printed on every pass (`wouldAccept`), so a row that the
+  // shipped law would have refused is visible as such rather than folded into the table.
+  const NOGATE = process.env.LEARNNOGATE === '1';
+  if (NOGATE) console.log('    GATE OFF (LEARNNOGATE=1) — every scored pass is KEPT. These rows are a FALSIFIER, not a deliverable: the shipped law stops at its own fixed point and cannot reach them.');
+  await scoreRung(0);
+  let done = 0, stopped = null, firstRefused = null;
+  for (let p2 = 1; p2 <= MAXP; p2++) {
+    const lr = await host.auto.learnLive(live, { passes: 1, mode: process.env.LEARNMODE || 'diet', noGate: NOGATE,
+      onPass: (pp) => { if (!pp.wouldAccept && firstRefused === null) firstRefused = p2;
+        console.log(`      [pass ${p2}] live geo ${pp.score.toExponential(4)}${pp.wouldAccept ? '' : ' — the shipped GATE would have REFUSED this pass' + (NOGATE ? ' (kept anyway)' : '')}`); } });
+    if (!lr.changed) { stopped = p2; console.log(`      [pass ${p2}] the monotone gate ENDED the iteration — the policy is unchanged and every further pass is identical (rule 25: this is "the gate stopped it", not "it was not measured")`); break; }
+    done = p2;
+    await scoreRung(p2);
+  }
+  console.log(`\n  LADDER SUMMARY — ${done} accepted pass(es)${stopped ? `, gate stopped at pass ${stopped}` : `, ran to the requested ${MAXP}`}`
+    + (NOGATE ? `   [GATE OFF; the shipped gate would first have refused at pass ${firstRefused ?? 'never, within this ladder'}]` : ''));
+  console.log('    pass |   square (learned)   |  rounded rect (unseen) |   circle (unseen)      [first scored lap; converged in brackets]');
+  for (const r of rows) console.log(`    ${String(r.p).padStart(4)} | ` + r.x1.map((x, i) => `${x.toFixed(3)}x [${r.xF[i].toFixed(3)}x]`.padEnd(22)).join(' | '));
+  const below = rows.filter((r) => r.x1.slice(1).some((x) => x < 1) || r.xF.slice(1).some((x) => x < 1));
+  console.log(below.length
+    ? `    A HELD-OUT PROGRAM CROSSES 1.0x at pass ${below[0].p} — below doing nothing, §108's shape`
+    : `    NO held-out program crosses 1.0x out to ${done} accepted passes — NOT MEASURED past there (rule 25)`);
+}
 const pol = host.auto.built.distil;
 if (pol && pol.W) {
   console.log('\n  the policy on its OWN training programs (BARE machine -> with the policy; the square above is over the CONVENTIONAL machine):');

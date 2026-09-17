@@ -23836,3 +23836,259 @@ exactly the kind of hand-maintained count rule 30 distrusts — including when t
 one. It stands as PENDING a scrape, alongside target 1's *asked on ten of ten* total (§109.2), and
 **both should be settled by the same run**: a full suite with `OBJTABLE_OUT` set, then `READ=1`.
 That is one thing to do, not two, and it is the cheapest way to stop this recurring.
+
+## §110 — §108's QUESTION ASKED OF THE ONE ADAPTATION ROUTE THAT REACHES THE SHIPPED OBJECT: IT DOES NOT HAPPEN, AND THE GATE IS NOT WHAT PREVENTS IT
+
+§108 measured guided adaptation, **with a perfect tracker**, monotonically destroying a program it
+never ran — circle 7.72x → 4.57x → 1.29x → **0.88x** at 0/2/8/24 guide laps, below doing nothing,
+on all three seeds — and its own scope limit says that is the PILOT CASCADE, which ships on zero of
+ten plants. The route that DOES reach the shipped object is `learnLive` / `_iteratePolicy`, the
+page's own *Learn on this program ▶*. CLAUDE.md quotes it at ONE pass count. §108's third named
+killer is *excellent immediately, bad slowly, invisible to a short test* — and it FIRED for both the
+chain and the tracker there. Nobody had asked this route.
+
+**Every factor below is BARE machine → policy on that same program, one reference for all three
+(rule 19 — §88.4's own warning about `scoreSet` against `rep.base/rep.best`).** Leading column is
+the FIRST SCORED LAP; the converged score is in brackets, never instead (CLAUDE.md's *THE SCORE IS
+THE UNSEEN PATH*).
+
+```
+  seed 131 (the default) — 4 accepted passes, the gate stopped at 5
+    pass | sharp square (LEARNED ON) | rounded rect (never run) | circle (never run)
+       0 |  8.187x [ 8.182x]         | 10.884x [10.881x]        | 15.791x [15.940x]
+       1 |  9.876x [ 9.873x]         | 13.350x [13.375x]        | 16.858x [17.006x]
+       2 |  9.962x [ 9.959x]         | 13.420x [13.437x]        | 17.027x [17.188x]
+       3 |  9.971x [ 9.975x]         | 13.443x [13.450x]        | 17.072x [17.231x]
+       4 |  9.988x [ 9.983x]         | 13.434x [13.443x]        | 17.066x [17.222x]
+
+  seed 7  — 5 accepted passes:  8.306 → 10.192 | 10.878 → 13.599 | 13.442 → 14.280
+  seed 23 — 3 accepted passes:  8.175 → 10.005 | 10.929 → 13.539 | 15.112 → 16.080
+```
+
+**BOTH PROGRAMS THE COMMISSIONING NEVER RAN IMPROVE, MONOTONICALLY, ON EVERY SEED, AT EVERY PASS.
+Nothing crosses 1.0x anywhere and the worst of 36 scored program-rungs is 8.175x.** The two lap
+columns agree to ≤1% everywhere, which is expected and is worth stating: `learnLive` returns a
+FROZEN policy, so unlike §108's guided laps there is no lap-over-lap learning for a later lap to
+hide.
+
+### THE POSITIVE CONTROL IS WHAT MAKES THIS A MEASUREMENT AND NOT A BLIND INSTRUMENT
+
+`LEARNMODE=fresh` is §52.19's memory — each pass fitted to the live program's rows ALONE, the
+commissioning diet dropped. Same harness, same seed, same reference, same columns:
+
+```
+       0 |  8.187x  | 10.884x           | 15.791x
+       1 | 13.352x  |  0.774x  <- CROSSES |  0.355x  <- CROSSES
+       2 | 15.793x  |  0.671x           |  0.311x
+       8 | 22.818x  |  0.875x           |  0.381x        its own diet at pass 8: 0.29-0.48x
+```
+
+It crosses at **pass 1**, to 0.774x and 0.355x — **deeper than §108's 0.88x** — and never recovers.
+So the same instrument, with one knob moved, reproduces §108's shape in full. **And it reaches
+22.818x on the square, which is the RETIRED lap-periodic memory's 22.42x rebuilt by an adaptive
+law** — exactly the object CLAUDE.md warns an adaptive law can reconstruct, arriving unprompted.
+
+### THE PASS COUNT IS A MECHANISM, NOT A BUDGET (rule 25)
+
+16 passes were asked for and the route REFUSES to go there: `_iteratePolicy` accepts a pass only if
+the LIVE program's geometric score improves and `break`s on the first rejection, so diet mode
+reaches a deterministic FIXED POINT at 3-5 accepted passes and every further pass is byte-identical.
+*Not measured past there* and *cannot go past there* are different states, and this is the second.
+It is §52.19's *"the passes plateau by the third"* measured as a mechanism rather than observed.
+
+### THE SHARP HALF: THE MONOTONE GATE IS NOT THE PROTECTION
+
+Fresh mode carries the SAME gate, and the gate happily accepted **eight consecutive passes** (live
+geometric 9.77e-3 → 5.72e-3, monotone) while both unseen programs sat at 0.31-0.88x. **The gate
+scores only the LIVE program and therefore cannot see §108's failure at all.** What differs between
+the two modes is the commissioning DIET staying in every pass's fit.
+
+**THAT MECHANISM SENTENCE IS PENDING ITS OWN FALSIFIER AND MUST NOT BE QUOTED UNTIL IT RETURNS.**
+Diet and fresh mode differ in the diet AND in how far each is allowed to run (3-5 accepted passes
+against 8), and nothing above separates them — rule 20, matched capacity and matched age, one
+variable. The run that separates them is diet mode with the acceptance test DISABLED, driven to 16
+passes: if it still does not cross, the diet is the protection and the gate is a stopping rule; if
+it crosses, the shipped safety is the gate-AND-diet PAIR and the product statement changes to *the
+route is safe because it stops*, which against §108's *bad slowly, invisible to a short test* is a
+materially different thing to tell an owner.
+
+### CONTROLS
+
+- **INERT UNSET, EXACT**: with `LEARNLADDER` unset the harness reads `1.0717e+0 -> 1.6159e-1,
+  6.63x`, held-out 10.88x / 15.94x, scored square 8.18x, target 1 `1.330 — MET` — CLAUDE.md's own
+  published arm figure AND its published target-1 row, digit for digit. The knob is `+79/-0` and
+  entirely gated, so unset is byte-identical by construction as well as by measurement.
+- **The ladder's pass-0 rung reproduces that run** to every printed digit, so the ladder starts from
+  the shipped object rather than from something the block rebuilt.
+- **`LEARN=4`, the shipped single-call path, reproduces CLAUDE.md exactly**: 1.6181e-1 → 1.3025e-1,
+  **8.23x**, held-out 13.42x / 17.19x.
+- Cumulative ladder against that single call agrees to **0.2%**, not bit-identically, and the reason
+  is the HOST rather than the fit: `autohost` drives ONE machine and never restores a snapshot
+  (§52.12), so inter-pass scoring runs leave the machine elsewhere before the next teaching pass.
+- Three seeds' shipped lines read 6.63x / 6.76x / 6.61x, a 1.02x spread inside the recorded 1.13x.
+
+### NOT CLAIMED
+
+One plant, one cell, one feedrate, **ONE GUIDE PROGRAM** — and §108's own narrowing finding is that
+the GUIDE PROGRAM decides transfer (guiding on the diamond takes the sharp square to 1.93x, on the
+rounded rectangle to 1.66x, worse than static), so a different guide program is the most likely
+place this null breaks and it is unmeasured. The diet's protection is **not bisected**: diet against
+fresh moves one knob and changes everything, but how MUCH diet — row weighting, diet size,
+`mode: 'continue'` — was not varied. And **this is not §108's law**: guided adaptation is the
+cascade's RLS updating DURING laps against a tracker, `learnLive` is fit-score-keep-or-revert. That
+the second does not show the first's failure is a DISTINCTION, not a contradiction, and §52.29's
+bit-identity means RLS-style adaptation has effectively never been run on the shipped object at all.
+
+## §111 — §105's "NOT ASKED" IS CLOSED: THE 2R ARM HAS A SPEC, AND THE TEACHER-FREE ROUTE READS 1.41x ON THE FLAGSHIP
+
+§105 priced the teacher-free direct inverse on nine plants and recorded the 2R arm as **NOT ASKED**,
+saying plainly it was *a missing measurement and not an exclusion, because `arm-rig.mjs` exports no
+spec and asking it today would mean the very second copy the kit exists to prevent*. Closed.
+
+```
+  2R compliant arm, bench cell K 0.25 / E 0.03, window ±485 raw steps / 21 taps
+  open loop 6.3962e-2 joint rms
+    seed 1  4.476e-2  1.429x     seed 3  4.595e-2  1.392x
+    seed 2  3.754e-2  1.704x     seed 4  4.592e-2  1.393x
+  1.392x .. 1.704x over 4 seeds, median 1.411x, spread 1.22x, HELPS on every seed
+  held-out R² 0.92-0.97 · SHUFFLE 1.000x on every seed · ZERO asserted bit-exact · 0 teacher laps
+```
+
+**THE ROUTING STAYED IN THE RIG, WHICH IS THE WHOLE REASON §105 DID NOT ASK (rule 61)**, and the
+control says so exactly: **`armSpec`'s open loop is BIT-EXACT to `recordOpenLoop`/`deployOn`'s own
+analytic loop over 16,412 samples, max |diff| 0.000e+0.** The spec is not a second copy of the
+routing; it IS the routing.
+
+### THREE THINGS THIS PLANT NEEDED THAT THE OTHER NINE DID NOT, each a finding rather than plumbing
+
+**(a) It is built ASYNCHRONOUSLY**, so `fresh()` cannot be a synchronous constructor. The spec
+carries a POOL, and `fresh` **THROWS when the pool is empty rather than re-homing a used arm** —
+because a re-homed arm carries its links' own ring, which is precisely what would destroy the ZERO
+control's bit-exactness. Cost measured rather than feared: `makeArm` is 4 ms, forty arms 31 ms.
+
+**(b) Its command is a TRAJECTORY, not a point — and this nearly cost the result.**
+`ChainServo.torques` reads `{theta, omega, alpha}`. Central-differencing the commanded joint series
+reproduces ω to 0.5-0.9% and **α only to a factor of 3 to 10** (the corner rule's acceleration
+profile is not the second difference of its own position), and driven that way the machine reads
+**1.511e-2 against the analytic route's 1.703e-2 — an 11% DIFFERENT MACHINE, in the flattering
+direction.** The rates now come from the program's own `at(k)`, which is why the kit hands the
+SEGMENT to `fresh`.
+
+**(c) Its output is not on its own sensors.** The route inverts an ACHIEVED OUTPUT and here that is
+the TOOL, which no motor-side signal carries — so the spec publishes it as a labelled TRACKER
+channel, commissioning-only, the same footing `routeSignals`' truth is already on.
+
+### THE UNITS HOOK IS THE ARM'S OWN INVERSE KINEMATICS
+
+```
+  barrel   refAt(k) = TH.powerFor(TH.setpointAt(k))     inv(y) = TH.powerFor(achieved T)
+  2R arm   refAt(k) = ik(path.at(k))                    inv(y) = ik(achieved tool x, y)
+```
+
+Same shape, non-trivial, and to first order the target is minus `routeSignals`' own truth computed
+exactly instead of linearised. `DistilPolicy` needs NO change — §103's generalisation holding on a
+tenth plant.
+
+### THE AUTHORITY FLAG FIRED AND THE SWEEP DISQUALIFIED IT
+
+Peak |u| sits at the cap on 4 of 4 seeds, which is the BARREL's own failure signature (§62.4,
+§84.10), so the row could have been measuring the clamp. Over a **12-fold span** it reads
+**1.445 / 1.406 / 1.429 / 1.422 / 1.422x — a 1.03x band, byte-identical from 0.300 up.** It measures
+the MAP; the demand at the cap is isolated corner spikes.
+
+### WHAT BINDS IS THE ALIASING BOUND, AND RELIEVING IT IS WORTH 1.30x
+
+`min(0.61·settle, lap/8) = min(2704, 485) = 485`: the aliasing half binds hard and the reach is
+**11% of the plant's own measured settle** — §49.11's forced trade on this plant with nothing left
+to choose. Its one measured escape is a long closed TOUR:
+
+```
+  polygon diet  lap  3,877  window ±485    1.392-1.704x / 4 seeds  median 1.411x  spread 1.22x
+  tour diet     lap 41,203  window ±2,704  1.821-1.839x / 2 seeds  median 1.830x  spread 1.01x
+```
+
+**NOT MATCHED-COST (rule 20)** — a tour segment is 5.0x the excitation — and two seeds. What it
+establishes is that the window is a real term here **and not the whole gap**: 1.83x against the
+teacher-taught object's 6.63x.
+
+### §105's FOUR REQUIREMENTS, AND ONE OF THEM GAINS FINE PRINT THE NINE COULD NOT SHOW
+
+1. **A nominal inverse exists — MET, but on all nine `inv` reads an ORDINARY SENSOR and here it
+   reads a LASER TRACKER.** Legal, commissioning-only, and the teacher needs it too — but **not
+   free**, and §52.42 prices it at 3.9x over the best permanently-mounted alternative. The
+   requirement is really *a nominal inverse exists AND the achieved output is measurable at
+   commissioning*, and only the flagship made the second clause visible.
+2. **The deployed input must vary — MET and ASSERTED**, spread 3.0000e-1 rad against the mill's
+   `0.0e+0`. The driver gained the OTHER half (rule 9): a plant declared non-constant must have
+   spread > 0 or the row is not a map. It passes on all ten.
+3. **A function of the commanded trajectory — MET**: held-out R² 0.92-0.97, SHUFFLE flat.
+4. **Invertible in the class — MET, and it is NOT the real flexible arm's failure.** `invert.mjs`'s
+   tenth row: **INVERSE 0.0%**, scale 2.00 on the diagonal, RGA 1.00/1.00, and **prog/rise 10.8 —
+   right on §84.9's ~10 split, on the winning side.**
+
+### CONTROLS, AND THE MOST USEFUL ONE IS A FALSE POSITIVE THE AGENT REPORTED RATHER THAN SUPPRESSED
+
+`invert.mjs`'s nine existing rows are **BYTE-IDENTICAL at e334c48 against the changed tree, with
+realarm's INVERSE 128.3% reproduced exactly** — the control this change needed, because `drive()`
+now passes options to `spec.fresh()` where it passed none. And the reason it is inert is stronger
+than convention: **every pre-existing spec declares `fresh` with an EMPTY PARAMETER LIST**, so the
+argument is unreachable in JS rather than ignored by habit. `dirinvall.mjs` on five plants and
+`plants.test.mjs` are byte-identical too.
+
+**THE FALSE POSITIVE IS THE LESSON.** The FIRST `plants.test.mjs` comparison DIFFERED — mill 1.74x
+against 1.00x, the declared dead time apparently absent, a whole reported field present in one run
+and missing in the other. It looked exactly like the change. Re-run alone it reproduces the control
+to every digit; the anomalous run was taken while a concurrent session had edits transiently in the
+shared tree under 2x CPU contention. **A byte-identity control taken in a tree another agent is
+editing is not a control unless it is repeated** — a new entry in this project's long list of
+instruments failing before models do (rule 17).
+
+### WHAT IS NOT ESTABLISHED, AND THE FIRST ONE BOUNDS EVERYTHING ABOVE
+
+**The 1.41x is NOT comparable to `distil-arm.mjs`'s 6.63x in the same metric and was not made so**:
+the spec's truth is the tool error through J⁻¹ in JOINT space, which is the units the fit's target
+must be in, while `distil-arm.mjs` quotes CONTOUR rms. One number locates the machine on the same
+bit-exact run — open-loop contour 6.0202e-1, lag 8.2070e-1, total 1.018 against `distil-arm.mjs`'s
+1.0717e+0, 5% apart, which is the SUPPORT and not the machine. **So *the teacher is worth 4.7x on
+this plant* is NOT a claim the record supports.** The gap is also not decomposed: the window is
+shown to be a real term worth 1.30x of it and shown not to be all of it, while ridge, applied gain,
+diet class and the structural fact that this route fits ONCE with **no machine-scored selection**
+where the teacher-taught figure carries a ridge ladder AND a gain ladder are all unseparated.
+Target 1 was not asked. `ARM_TOOL_NOISE` is refused by the spec (it throws) because `routeSignals`
+already draws for its own tracker read and the channel would draw again, so §50.1's degraded-tracker
+ladder cannot run through this spec as written. The calendar is **UNKNOWN by the meter** and printed
+as such — `arm-rig.mjs` does not tick `meter.mjs`, exactly as `commtime.mjs` already records — with
+a hand count of 372,761 solver steps total and ~112,737 for one commissioning, and **no "days"
+figure is quoted because no wall-clock conversion exists for this rig** (rule 25).
+
+## §111.1 — §52.37's "ONE HOME" FOR THE SERVO LOOP IS A THIRD SITE SHORT, AND SIX INSTRUMENTS RUN ON THE OLD VALUE
+
+Found while building §111's spec, reported and deliberately NOT fixed.
+
+§52.37 records: *"`bandwidth: 2e-3` was hard-coded in the page's `makePlant` AND the rig's
+`machine()` with nothing linking them — rule 61 waiting for one to move — so it becomes
+`BENCH_SERVO` in `compensator.js` and both read it, at 1.6e-2."* There were **three** sites, and it
+unified two. `test/pilot/rigs/arm-rig.mjs:46` still reads:
+
+```
+  const ARM_BW = process.env.ARM_BW === undefined ? 2e-3 : +process.env.ARM_BW;
+```
+
+against `compensator.js`'s `BENCH_SERVO = { bandwidth: 1.6e-2, drive: 32 }`. So `makeArm`'s default
+is the **pre-§52.37 loop**, and it reaches `twin.test.mjs`, `_ssforecast`, `_mimobudget`, `_hpose`,
+`_armswhich` and `_binding` — six instruments measuring the arm at a loop the product no longer
+uses, while §52.37's own claim is that the constant has one home.
+
+**THE SHIPPED PATH IS NOT AFFECTED**, which is why this is a latent trap rather than a live defect:
+`distil-arm.mjs` routes through `makeArmHost`/`autohost.js`, which reads `bandwidthFor`, and §111's
+inert-unset control reproduces CLAUDE.md's published `1.6159e-1 / 6.63x` and its target-1 row digit
+for digit.
+
+**NOT FIXED, AND THE REASON IS RULE 31 RATHER THAN CAUTION**: every existing caller's history is on
+2e-3, so unifying the constant moves every number those six instruments have ever produced, and that
+is a measurement with its own controls rather than a tidy-up. What it needs is the §52.37 treatment
+— one home, and each instrument re-measured and its history restated — or an explicit statement that
+those instruments are deliberately on the old cell. What it must not do is stay as two silent
+defaults, because that is rule 61's exact failure mode: *value for value the copies agreed, so
+nothing was ever wrong and no check ever went red; the duplicate simply waited for one of them to
+change.*

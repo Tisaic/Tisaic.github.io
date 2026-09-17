@@ -682,9 +682,24 @@ Each of these is a claim that can be shown false, which is the only kind worth w
    deterministic rigs where nothing bounds an inverse map except the cap. **AND EMPS DOES NOT
    REPRODUCE §99's 5.510x**, reading 0.924-0.983x through the shared kit with clean controls; three
    differences are named rather than one called wrong (rule 20), and it is the THIRD time here a
-   private routing read higher than the shared one. The 2R arm is NOT ASKED — a missing measurement
-   and not an exclusion, because `arm-rig.mjs` exports no spec and asking it today would mean the
-   very second copy the kit exists to prevent. Target: 10x down, under three minutes on the arm, while
+   private routing read higher than the shared one. **THE 2R ARM IS NOW ASKED, AND IT HELPS ON EVERY SEED — 1.392x to
+   1.704x over four, median 1.411x, ZERO teacher laps (plan §111).** `arm-rig.mjs` gained a spec and
+   the routing STAYED IN THE RIG, which the control states rather than claims: `armSpec`'s open loop
+   is **BIT-EXACT to `deployOn`'s own analytic loop over 16,412 samples, max |diff| 0.000e+0** — not
+   a second copy of the routing, it IS the routing. Its units hook is the arm's own INVERSE
+   KINEMATICS (`refAt = ik(path.at(k))`, `inv(y) = ik(achieved tool)`), so §103's generalisation
+   holds on a tenth plant with `DistilPolicy` unchanged. **Requirement 1 gains fine print only the
+   flagship could show**: on all nine other plants `inv` reads an ORDINARY SENSOR and here it reads a
+   LASER TRACKER — legal, commissioning-only, and priced by §52.42 at 3.9x — so the requirement is
+   really *a nominal inverse exists AND the achieved output is measurable at commissioning*. **What
+   binds is the ALIASING bound**: the window reaches 11% of the plant's own settle, and relieving it
+   with a long closed TOUR reads 1.83x and tightens the spread 1.22x → 1.01x, at 5.0x the excitation
+   and two seeds, so it is a mechanism reading and not a matched-cost result. **AND THE FACTOR IS NOT
+   COMPARABLE TO 6.63x IN THE SAME METRIC** — this is JOINT rms and `distil-arm.mjs` quotes CONTOUR
+   rms — so *the teacher is worth 4.7x here* is NOT a claim the record supports (rule 19). The
+   authority flag FIRED (peak |u| at the cap on 4 of 4 seeds, the barrel's own signature) and a
+   12-fold sweep disqualified it: 1.445 / 1.406 / 1.429 / 1.422 / 1.422x, byte-identical from 0.300
+   up, so it measures the MAP. Target: 10x down, under three minutes on the arm, while
    holding the contract bar. Measured end to end on the page's own configuration at K 0.25 /
    E 0.03:
 
@@ -2524,9 +2539,28 @@ an engineer would actually meet:
   against the measured error, one increment per pass, the model re-fitted and re-measured —
   together with the commissioning diet the deployed recursion already carries — **6.04x → 7.71x
   on the bench square with the rounded rectangle, circle and polygons unchanged (5.9x / 7.0x /
-  4.5-6.2x), 3.98x → 6.47x on the soft cell** (plan §52.19). Fitted to the live program ALONE it
+  4.5-6.2x), 3.98x → 6.47x on the soft cell** (plan §52.19). **THE *UNCHANGED* IN THAT SENTENCE IS
+  STALE AT THE SHIPPED LOOP, AND IN THE GOOD DIRECTION (plan §110).** It was measured at §52.19's
+  loop; at §52.37's the held-out programs are not unchanged, they **IMPROVE — 10.88x → 13.43x and
+  15.79x → 17.07x, MORE in proportion than the square itself** (1.23x and 1.08x against 1.22x),
+  monotonically, on three seeds, at every pass the route can reach. Better on programs it has never
+  run than on the one it was taught is the ordering a plant MODEL produces. Fitted to the live program ALONE it
   reads 15.9x there and 0.3-1.0x everywhere else — a memory, which is the check the owner asked
-  for and the reason the diet stays in the fit; and **lap learning**, withheld by the
+  for and the reason the diet stays in the fit — **and that check is now §108's own question asked
+  of this route, with the answer on three seeds out to the route's own fixed point: it does NOT
+  happen here.** §108 measured guided adaptation with a PERFECT TRACKER monotonically destroying a
+  program it never ran (circle 7.72x → 0.88x, below doing nothing); this route's held-out programs
+  cross 1.0x **nowhere, at any pass count it can reach, on any seed**, worst of 36 scored
+  program-rungs 8.175x. **The positive control is what makes that a measurement rather than a blind
+  instrument**: the same harness with ONE knob moved to `LEARNMODE=fresh` — the commissioning diet
+  dropped from each pass's fit — reproduces §108's shape in full and **crosses at pass 1, to 0.774x
+  and 0.355x, deeper than §108's 0.88x**, never recovering through all 8 passes. It also reaches
+  **22.818x on the square, which is the RETIRED lap-periodic memory's 22.42x rebuilt by an adaptive
+  law** — precisely the failure this file warns an adaptive law can reconstruct.
+  **AND THE PASS COUNT IS A MECHANISM RATHER THAN A BUDGET (rule 25)**: `_iteratePolicy` accepts a
+  pass only if the LIVE program's score improves and breaks on the first rejection, so diet mode
+  reaches a deterministic FIXED POINT at 3-5 accepted passes and every further pass is
+  byte-identical — *not measured past there* and *cannot go past there* being different states; and **lap learning**, withheld by the
   library on any program but the one it learned. The box that used to sit here — "the tracker
   stays on the machine, keep learning every scan", a unit-gain law fed every decision — was
   measured at **0.54x after twelve laps and is gone**: a law with no plant model in it pairs the

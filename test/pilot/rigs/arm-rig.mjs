@@ -138,14 +138,73 @@ function mkPath(shape, feed) {
   return roundedRect({ ...o, w: 8, h: 8, r: 1.5, closed: true });
 }
 
-function homeArm(arm, servo, path) {
-  const c0 = path.at(0);
-  const [q1, q2] = arm.ik(c0.x, c0.y, true);
+/**
+ * HOME AT A JOINT POSE, which is `homeArm`'s whole body with the path's own IK lifted out.
+ *
+ * `homeArm` takes a PATH, and a spec's `fresh()` is handed a COMMAND — the first entry of
+ * whatever series the machine is about to be driven with, which on a diet segment is not this
+ * rig's program at all. Splitting it is not a new settle: `homeArm` calls this with the IK of
+ * `path.at(0)`, so the two are the same four thousand steps and every existing caller is
+ * byte-identical by construction rather than by comparison.
+ */
+function homeAt(arm, servo, q1, q2) {
   arm.setPose(q1, q2);
   const refs = [{ theta: q1, omega: 0, alpha: 0 }, { theta: q2, omega: 0, alpha: 0 }];
   for (let i = 0; i < 4000; i++) { const t = servo.torques(refs); arm.step(t[0], t[1], 1); }
   servo.resetLimitStats();
 }
+
+function homeArm(arm, servo, path) {
+  const c0 = path.at(0);
+  const [q1, q2] = arm.ik(c0.x, c0.y, true);
+  homeAt(arm, servo, q1, q2);
+}
+
+/**
+ * ONE STEP OF THIS MACHINE UNDER A COMMANDED JOINT REFERENCE — `deployOn`'s inner loop, in the
+ * rig, so a SPEC can drive this plant without owning a fourth copy of it (plan §105).
+ *
+ * `arm-rig.mjs`'s own header says what this is for: the knowledge that matters lives in the
+ * ROUTING, and a second copy of it has shipped a defect three times here. `commissionArm`,
+ * `deployOn` and `recordOpenLoop` each carry these five lines already; this is the one a spec
+ * calls, and it is checked against `recordOpenLoop`'s own open loop bit-for-bit rather than by
+ * eye (rule 21).
+ *
+ * THE RATE FEEDFORWARD IS NOT DERIVABLE FROM THE COMMAND SEQUENCE AND THAT IS A PROPERTY OF THIS
+ * PLANT, not a convenience. `ChainServo.torques` reads {theta, omega, alpha} and the inverse-
+ * dynamics term reads all three, so a servo reference here is a TRAJECTORY and not a point.
+ * Central-differencing the commanded joint series reproduces omega to 0.5-0.9% and alpha to a
+ * factor of 3 to 10 — the corner rule's acceleration profile is not the second difference of its
+ * own position — and driven that way this machine reads 1.511e-2 against the analytic route's
+ * 1.703e-2 on the bench square, an 11% DIFFERENT MACHINE. So the rates come from the program's own
+ * `at(k)` through `ikRates`, exactly as `deployOn` takes them, and a caller with no program (a
+ * held-step settle probe) gets zeros and is holding a pose, which is what it asked for.
+ *
+ * `u` is added to THETA ONLY and `routeSignals` is handed the UNCORRECTED command, both as
+ * `deployOn` does — the correction is a reference offset and the truth is measured against the
+ * reference the program asked for, not against the one the controller moved to.
+ */
+function stepArm(st, ref, u, k) {
+  const rt = st.rates(k);
+  const tau = st.servo.torques([
+    { theta: ref[0] + (u[0] || 0), omega: rt.dq[0], alpha: rt.ddq[0] },
+    { theta: ref[1] + (u[1] || 0), omega: rt.dq[1], alpha: rt.ddq[1] }]);
+  st.arm.step(tau[0], tau[1], 1);
+  const rs = routeSignals(st.arm, [{ pos: ref[0] }, { pos: ref[1] }], tau);
+  // THE TRACKER, AS TWO EXTRA MEASURED CHANNELS AND LABELLED AS SUCH. The direct-inverse route
+  // needs the plant's ACHIEVED OUTPUT in order to invert it, and on this plant the output is the
+  // TOOL — which no motor-side signal carries and which `truth` above already reads. A process
+  // plant's thermocouple is free; this is a laser tracker, and it is legal here only because it
+  // is a COMMISSIONING instrument (the same footing `routeSignals`' truth is on). Nothing
+  // deployed may read indices 6 and 7.
+  const tool = st.arm.toolXY();
+  return { measured: [...rs.measured, tool[0], tool[1]], truth: rs.truth };
+}
+
+/** The arm's own inverse kinematics as a free function — the plant's NOMINAL INVERSE, which is
+ *  what `refAt` is built from and therefore what the direct-inverse route must apply to an
+ *  achieved tool position. Bound to a machine's own L1/L2 so no geometry is restated here. */
+function ikOf(arm) { return (x, y) => arm.ik(x, y, true); }
 
 /**
  * THE ROUTING, WHICH IS PART OF THE RIG AND NOT PART OF THE EXPERIMENT.
@@ -802,7 +861,7 @@ async function recordCornerProbe(pilot, { steps = 30000, width = 40, dwell = 40,
 
 
 
-export { PG, RATIO, makeArm, mkPath, homeArm, routeSignals, deployOn, commissionArm,
-  recordOpenLoop, recordCornerProbe, randomPolygon, fitCornerBanks };
+export { PG, RATIO, makeArm, mkPath, homeArm, homeAt, stepArm, ikOf, routeSignals, deployOn,
+  commissionArm, recordOpenLoop, recordCornerProbe, randomPolygon, fitCornerBanks, ARM_TOOL_NOISE };
 
 

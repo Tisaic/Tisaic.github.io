@@ -77,7 +77,7 @@ import * as PD from './rigs/pend-rig.mjs';
 import * as RA from './rigs/realarm-rig.mjs';
 import * as EM from './emps-rig.mjs';
 import { barrelSpec, wbSpec, tankSpec, empsSpec, pendSpec, realarmLadderSpec,
-  realtanksLadderSpec, realexchLadderSpec, millSpec, G_MP } from './rigs/specs.mjs';
+  realtanksLadderSpec, realexchLadderSpec, millSpec, armSpec, armDiet, G_MP } from './rigs/specs.mjs';
 import { excite, fitInverse, heldOutR2, scoreOn, refSeries, deriveWindow, lcg,
   measureSettle, priceOf } from './rigs/dirinvkit.mjs';
 
@@ -349,6 +349,49 @@ const PLANTS = [{
   },
 },
 
+{
+  // ---------------------------------------------------------------- THE PLANT §105 RECORDED AS NOT ASKED
+  //
+  // §105's own words: *the 2R arm is NOT ASKED and that is a missing measurement, not an
+  // exclusion — it has a nominal inverse, its own IK, which is what produces its `refAt`, but
+  // `rigs/arm-rig.mjs` exports no spec, so asking it means a second copy of that plant's
+  // routing.* `specs.mjs` carries `armSpec` now and the routing stayed in the rig (`homeAt`,
+  // `stepArm`), so this row is the move §105 named rather than a tenth private loop.
+  //
+  // IT IS THE ONE PLANT HERE WHOSE `inv` READS AN INSTRUMENT THE CUSTOMER MUST BUY. Requirement 1
+  // says a nominal inverse must exist; the nine that came before could not show its fine print,
+  // because on every one of them the ACHIEVED OUTPUT the route inverts is an ordinary sensor — a
+  // thermocouple, a level, a position encoder. Here it is the TOOL, which no motor-side signal
+  // carries, so `inv` reads a LASER TRACKER. That is legal, because the tracker is already this
+  // project's commissioning instrument and the teacher needs it too; it is not free, and §52.42
+  // prices it at 3.9x over the best permanently mounted alternative.
+  name: '2R compliant arm (bench cell)',
+  spec: armSpec, nc: 2, N: armSpec.N,
+  // THE RIG STATES NO CLOCK. `arm.step(tau1, tau2, 1)` advances one SOLVER step and nothing here
+  // converts that to seconds — `commtime.mjs` already records this plant as *UNKNOWN, the rig
+  // states no clock*, and it does not tick `meter.mjs` either, so the CALENDAR column below reads
+  // UNKNOWN rather than zero (rule 25). The step count is exact and is printed by hand.
+  dt: 1, unit: 'step',
+  incumbent: 'the block ships 6.63x = conventional 1.01x (REFUSED) x learned 6.63x (§96); '
+    + 'the teacher-taught distilled object 1.6159e-1 contour rms',
+  baseline: null,
+  // THE SETTLE IS READ ON THE TRACKER, NOT ON THE ENCODER. Channel 6 is the tool; channels 0-1
+  // are motor-side and settle with the POSITION LOOP while the thing the window has to reach is
+  // the LINK's ring (§52.36 measures its memory at ~7,850 raw steps). Reading the encoder here
+  // would size the window from the loop and call it the plant.
+  settle: () => measureSettle(armSpec, { delta: 0.25 * armSpec.uMax, idx: 6, N: 30000 }),
+  inv: (y) => armSpec.inv(y),
+  // THE DIET'S LAPS ARE DRAWN, so the aliasing bound must be the SHORTEST lap any seed produces
+  // and not one seed's. §103's headline moved 2.3x on exactly this (rule 31).
+  seglen: () => Math.min(...SEEDS.flatMap((sd) => armDiet(lcg(sd)).map((g) => g.n))),
+  diet: armDiet,
+  // ONE MACHINE PER `fresh()`, BECAUSE A RE-HOMED ARM IS NOT A FRESH ONE. Counted rather than
+  // guessed: 1 settle probe + 1 open loop + 1 ZERO control + 1 price + per seed (6 excitation
+  // segments + the fitted run + the shuffle), with a few spare so an exhausted pool is a bug and
+  // never a silent re-use.
+  prime: () => armSpec.prime(12 + 8 * (SEEDS.length - 1) + 6),
+},
+
 // ============================================================ CLASS C: a REGULATOR, and the route cannot address it
 {
   name: 'cold mill AGC',
@@ -415,9 +458,13 @@ for (const P of PLANTS) {
   // THE SETTLE IS MEASURED ON THE PLANT WHERE THE PLANT ALLOWS IT (rule 31). The barrel's and the
   // column's are the numbers their OWN `distil-*.mjs` harnesses derive, carried here so those two
   // rows stay the §104 control; every plant added since measures its own through the shared kit.
+  // A PLANT MAY NEED BUILDING BEFORE IT CAN BE ASKED ANYTHING (the 2R arm's links are lattices and
+  // `buildLink` is async). Every other plant declares no `prime` and this line is inert for it.
+  if (P.prime) await P.prime();
   const settle = typeof P.settle === 'function' ? P.settle() : P.settle;
   if (settle === null) throw new Error(`${P.name}: the settle probe read NO MOVEMENT — that is an instrument fault, not a fast plant (rule 25)`);
-  const { reach, offsets, rule } = deriveWindow({ settle, lapMin: P.seglen });
+  const seglen = typeof P.seglen === 'function' ? P.seglen() : P.seglen;
+  const { reach, offsets, rule } = deriveWindow({ settle, lapMin: seglen });
   const R = refSeries(P.spec.refAt, P.N);
   // THE AUTHORITY IS A KNOB BECAUSE A CORRECTION PINNED AT ITS CAP IS NOT A CONTROLLER RESULT.
   // §62.4 is the precedent: the barrel's forced correction sat at EXACTLY uPk 12.0000 of 12, and
@@ -429,7 +476,7 @@ for (const P of PLANTS) {
 
   console.log(`${P.name}`);
   console.log(`  window ±${reach} raw steps, ${offsets.length} taps  (settle ${settle}, diet lap `
-    + `${P.seglen}, min(0.61·settle, lap/8) = ${rule})`);
+    + `${seglen}, min(0.61·settle, lap/8) = ${rule})`);
   if (P.incumbent) console.log(`  the INCUMBENT on this plant: ${P.incumbent}`);
 
   const openP = priceOf(() => scoreOn(P.spec, R, null, { N: P.N }));
@@ -468,6 +515,15 @@ for (const P of PLANTS) {
     if (P.constant && got.spread !== 0) {
       throw new Error(`${P.name}: declared a REGULATOR but the correction varies by ${got.spread} — `
         + 'either the reference is not constant or this claim is wrong');
+    }
+    // ---- AND THE OTHER HALF OF IT (rule 9). Requirement 2 was only ever asserted in the
+    // direction that fails: the mill's spread must be 0. A plant declared NON-constant must then
+    // have a spread that is NOT 0, or "the deployed input varies" is an assumption about every
+    // other row rather than a measurement — and a harness that only ever checks the failing half
+    // cannot tell a working map from one that emitted a constant for a different reason.
+    if (!P.constant && !(got.spread > 0)) {
+      throw new Error(`${P.name}: the deployed correction is CONSTANT (spread ${got.spread}) on a `
+        + 'plant whose reference moves — requirement 2 fails here and the row is not a map (rule 9)');
     }
 
     rows.push({ seed, x: open.rms / got.rms, pk: got.pk, r2: ho.r2, shuf: open.rms / shs.rms, rms: got.rms });

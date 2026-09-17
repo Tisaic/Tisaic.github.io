@@ -46,13 +46,13 @@
  * (fraction of the program at which the step is applied). It asserts nothing.
  */
 import { tankSpec, wbSpec, millSpec, barrelSpec, empsSpec, realarmSpec, pendSpec,
-  realtanksLadderSpec, realexchLadderSpec } from './rigs/specs.mjs';
+  realtanksLadderSpec, realexchLadderSpec, armSpec } from './rigs/specs.mjs';
 import { emitTo } from './rigs/emit.mjs';
 
 const env = (k, d) => (process.env[k] === undefined ? d : Number(process.env[k]));
 const AMP = env('AMP', 0.25);
 const K0F = env('K0', 0.10);
-const WANT = (process.env.PLANTS || 'tank,column,mill,barrel,emps,realarm,pend,realtanks,realexch').split(',');
+const WANT = (process.env.PLANTS || 'tank,column,mill,barrel,emps,realarm,pend,realtanks,realexch,arm2r').split(',');
 
 // THE FIFTH ROW IS A WINNER, AND IT IS THE CONTROL THIS FILE SHIPPED WITHOUT (plan §84.9).
 // Every diagnosis here was taken on a plant that LOSES, so a reading shared by all four could be
@@ -67,14 +67,25 @@ const WANT = (process.env.PLANTS || 'tank,column,mill,barrel,emps,realarm,pend,r
 // rather than five rows with one.
 const SPECS = [['tank', tankSpec], ['column', wbSpec], ['mill', millSpec], ['barrel', barrelSpec],
   ['emps', empsSpec], ['realarm', realarmSpec], ['pend', pendSpec],
-  ['realtanks', realtanksLadderSpec({ overflow: true })], ['realexch', realexchLadderSpec()]];
+  ['realtanks', realtanksLadderSpec({ overflow: true })], ['realexch', realexchLadderSpec()],
+  // THE TENTH ROW, AND THE FLAGSHIP (plan §105). Every column here has been read on nine plants
+  // and never on the one this project's headline factors come from, because `arm-rig.mjs` had no
+  // spec. It has one now. Requirement 4 of the direct-inverse route — INVERTIBILITY IN THE CLASS —
+  // is exactly this file's INVERSE column, which is non-zero on exactly one plant of nine, so
+  // reading it here is what says whether the 2R arm is that plant's kind of failure or not.
+  ['arm2r', armSpec]];
 
 /**
  * Run one plant for `n` steps from a fresh state, holding a correction `amp` on channel `j`
  * from step `k0`. Returns the truth record per channel. `j < 0` is the undriven baseline.
  */
 function drive(spec, n, k0, j, amp) {
-  const st = spec.fresh();
+  const hold = spec.refAt(k0);
+  // THE SEGMENT, SO A PLANT THAT SETTLES PER PROGRAM SETTLES ON THIS ONE — and `holdFrom` carries
+  // the freeze below to a plant whose command has rate terms. Every spec written before this
+  // ignores the argument (see `dirinvkit.excite`).
+  const st = spec.fresh({ n, refAt: (k) => (k < k0 ? spec.refAt(k) : hold),
+    meta: spec.meta || null, holdFrom: k0 });
   const nc = spec.channels.length;
   const out = Array.from({ length: nc }, () => new Float64Array(n));
   const u = new Array(nc).fill(0);
@@ -85,7 +96,6 @@ function drive(spec, n, k0, j, amp) {
   // operating point the program has moved to, and the difference of two runs is then a moving
   // target rather than a response. It showed as a tail that never settled (rules 12, 13). The
   // plant still REACHES k0 through its own program; only after that is the reference held.
-  const hold = spec.refAt(k0);
   for (let k = 0; k < n; k++) {
     for (let c = 0; c < nc; c++) u[c] = (j >= 0 && c === j && k >= k0) ? amp : 0;
     const r = spec.step(st, k < k0 ? spec.refAt(k) : hold, u, k);
@@ -161,6 +171,9 @@ const summary = [];
 for (const [name, spec] of SPECS) {
   if (!WANT.includes(name)) continue;
   const nc = spec.channels.length;
+  // A PLANT MAY NEED BUILDING BEFORE IT CAN BE DRIVEN (the 2R arm's links are lattices). One
+  // machine per `drive` and never a re-homed one: base + on/half per channel, plus spare.
+  if (spec.prime) await spec.prime(2 + 2 * nc + 2);
   // WINDOW MAY EXCEED THE PROGRAM, and it has to: the barrel's own account of its failure
   // concerns a probe halting at 16,400 and 30,200 steps against a program of 15,000, so a knob
   // that can only SHORTEN cannot test it. Every rig's `refAt` clamps at its own program end and
@@ -235,6 +248,8 @@ const VERDICT = {
   realtanks: 'distil-realtanks 8.69x DEPLOYED at 8 MAC · 8.41-8.82x over 6 draws, 6/6 help',
   realexch: 'distil-realexch: the CONVENTIONAL rung takes 89.8x and the map correctly has nothing'
     + ' left to add (0.045x), byte-identical on 6 draws',
+  // THE FLAGSHIP, READ ON THESE AXES FOR THE FIRST TIME (plan §105).
+  arm2r: 'distil-arm 6.63x DEPLOYED through the one press — the plant every headline here is from',
 };
 // PROG/RISE IS ADDED BY THE POSITIVE CONTROL, AND IT IS THE ONE AXIS THE WINNER SEPARATES ON
 // (plan §84.9). Free arithmetic on numbers already here — how many of the plant's own response
