@@ -20,8 +20,14 @@ printf '{"version":%s,"built":"%s"}\n' "${NUM}" "${BUILT}" > version.json
 
 # Regenerate the docs manifest: every .md file in the repo (excluding git,
 # vendored libs, and node_modules). The Docs viewer fetches this to list files.
+# `.claude/` IS EXCLUDED AND THE REASON IS A DEFECT THIS SHIPPED ONCE: agent worktrees live at
+# `.claude/worktrees/<name>/`, each a FULL CHECKOUT of this repository, so a run with four agents
+# live took this manifest from 17 entries to 93 — 76 of them paths inside worktrees that are
+# DELETED when the agents finish. The Docs viewer fetches this list and would have offered files
+# that do not exist. Excluding the directory rather than the word "worktree" because any tool that
+# puts a checkout under `.claude/` has the same effect.
 FILES="$(find . -type f -name '*.md' \
-  -not -path './.git/*' -not -path './vendor/*' \
+  -not -path './.git/*' -not -path './vendor/*' -not -path './.claude/*' \
   -not -path '*/node_modules/*' -not -path './test/*' \
   | sed 's|^\./||' | sort)"
 {
