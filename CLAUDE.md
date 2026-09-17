@@ -592,8 +592,20 @@ Each of these is a claim that can be shown false, which is the only kind worth w
    every seed, which is §62.4's own failure signature — but swept it is the OPPOSITE of that
    failure: the demand has a natural size of 0.724 and the delivered factor saturates
    byte-identically at **4.85-5.04x** from UCAP 2 upward, so the cap is simply below what this class
-   of correction wants. **NOT CLAIMED: whether the TEACHER-TAUGHT object is also cap-limited there**,
-   which would move its 3.96x too. Two plants, no ridge or gain selection, target 1 measured on the
+   of correction wants. **AND THAT IS NOW ANSWERED (plan §104.1): NO, AND §104's RAISED-CAP ADVANTAGE IS REAL —
+   BUT IT IS OUTSIDE THE PLANT'S OWN INPUT BOX.** The comparison is matched first (`UCAP = x` and
+   `UM = 0.4x` set the same clamp, checked through `authority('distil')` falling through to
+   `spec.uMax`). Over a **40x span** the teacher-taught object lives in **3.70x-4.01x**, a 1.08x
+   band, byte-identical from clamp 4 up; its natural peak uncapped is **1.4326, 3.6x its shipped
+   cap**, and relieving that cap 10x is worth a median **1.044x** over six drawn diets while the
+   distribution TIGHTENS — a relieved constraint that was not what bounded the result. So at clamp
+   0.4 the two are level (3.43-4.45x against 3.959x) and above it only the teacher-free object
+   converts authority into delivery, 1.36x against 1.04x. **THE CAVEAT IS AGAINST OUR OWN ROW**:
+   `wbSpec`'s channel box is ±0.5, sized from the plant's gains, and §104's natural demand of 0.724
+   is OUTSIDE it — so on BOTH routes *raise the cap and it improves* asks this machine for a
+   correction larger than its whole declared input travel. **The number that belongs in a portfolio
+   table is the 3.43-4.45x at the shipped authority**; the raised-authority figure states the map's
+   appetite, not a deployable setting. Two plants, no ridge or gain selection, target 1 measured on the
    barrel only, and nothing integrated — `dirinvall.mjs` is an INSTRUMENT and no `AutoStack` rung
    offers this route. Target: 10x down, under three minutes on the arm, while
    holding the contract bar. Measured end to end on the page's own configuration at K 0.25 /

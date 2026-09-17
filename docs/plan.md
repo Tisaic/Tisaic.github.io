@@ -23134,3 +23134,66 @@ Two plants. No ridge or gain selection, so this is not a like-for-like ladder fi
 are scope-mismatched as above. Target 1 is measured for the barrel (§103: flat at 1.90-2.01x while
 the scored factor swings 3.3x) and NOT for the column. Nothing is integrated — `dirinvall.mjs` is an
 INSTRUMENT, exactly as `dirinv.mjs` is, and no rung in `AutoStack` offers this route.
+
+## §104.1 — THE COLUMN'S CAP QUESTION IS ANSWERED, AND THE ANSWER CARRIES A CAVEAT AGAINST §104's OWN RAISED-CAP ROW
+
+§104 measured the teacher-free direct inverse SATURATED at the Wood-Berry column's shipped
+authority and could not say whether that made its 4.85-5.04x a cap artefact. Task #81 asked the
+TEACHER-TAUGHT object the same question.
+
+### THE COMPARISON IS MATCHED, WHICH HAD TO BE CHECKED FIRST (rule 20)
+
+`ladder.mjs` passes `spec.uMax` to `AutoStack`; `distil-column.mjs` declares no frames, so
+`authority('distil')` falls through to `this.uMax` = `wbSpec.uMax` = `WB.UMAX` = `env UM`; and
+`dirinvall.mjs` clamps the policy at `spec.uMax * UCAP`. **So `UCAP = x` and `UM = 0.4x` set the
+same number**, and the two sweeps are on one axis.
+
+### THE ANSWER
+
+    policy clamp   teacher-free (§104)    teacher-taught (#81)
+    0.4            3.43 .. 4.45x           3.959x        <- ships; level
+    0.8            4.85 .. 5.04x           3.705x
+    1.6            4.85 .. 5.04x           3.874x
+    (both saturate byte-identically above their own knee)
+
+Over a **40x span of authority** the teacher-taught object lives in **3.70x-4.01x**, a 1.08x band
+with an interior optimum at clamp 0.5 and byte-identical rows from 4 upward. Its natural peak with
+the cap removed is **1.4326, which is 3.6x its shipped cap** — so its demand is larger than the
+teacher-free map's 0.724 and it converts none of it. On 5 of 6 DRAWN diets its own clamp IS firing
+at 0.4, and relieving it 10x is worth a median **1.044x** and at most 1.101x, with the distribution
+TIGHTENING (1.094x → 1.028x) — which is what a relieved constraint looks like when the constraint
+was not what bounded the result.
+
+**So the 3.96x is not an authority artefact, and §104's raised-cap advantage is real: the two
+objects are level at the authority the plant ships, and the teacher-free one is the only one of the
+two that gets better when the authority is relieved (1.36x against 1.04x).**
+
+### AND THE CAVEAT IS AGAINST §104, NOT AGAINST THE ANSWER
+
+`wbSpec`'s channel box is **±0.5**, sized from the plant's own gains, with the rig recording that a
+wider box tripped the over-range guard three times and correctly refused the plant. **§104's own
+natural demand of 0.724 is OUTSIDE that box**, and the teacher-taught object's 1.43 is further
+outside still. So *raise the cap and it gets better* is, on BOTH routes, a claim about asking this
+machine for a correction larger than its entire declared input travel.
+
+No over-range guard tripped at any cap up to 16 and nothing was made worse anywhere — which is a
+result that did not happen rather than one being reported (rule 25) — but the product sentence for
+§104's column row is now: **level with the teacher-taught object at the authority the plant ships,
+and the raised-authority figure is a statement about the map's appetite rather than a deployable
+setting.** The 3.43-4.45x at clamp 0.4 is the number that belongs in a portfolio table.
+
+### AN INSTRUMENT QUESTION FOUND AND NOT CLOSED
+
+On drawn diets the gain ladder's §86.6 edge-extension walks the applied gain to 1.47-1.88, which is
+precisely what drives this object into its own clamp. On DSEED 4 the **PICKED** gain 1.4696 delivers
+3.7709e-2 where the 1.3 candidate delivers 3.7053e-2 — the pick is WORSE than a candidate inside
+rule 42's own band, taken because the band breaks toward the largest gain. Whether *extend on the
+argmin, then take the largest within the band* is right when the object's clamp is saturating is a
+separate question, and it is filed rather than answered.
+
+### NOT ESTABLISHED
+
+One held-out program and one scoring convention; the cap sweep is on the shipped diet except at
+clamp 0.4 and 1.6. Target 1's fraction on the teacher-taught object RISES steadily with the cap
+(0.339 → 0.709 → 1.023 at clamp 0.4 / 2 / 4) — the held-out schedule gains where the scored one
+does not — which is unexamined and interesting.
