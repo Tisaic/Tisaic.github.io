@@ -23903,17 +23903,51 @@ geometric 9.77e-3 → 5.72e-3, monotone) while both unseen programs sat at 0.31-
 scores only the LIVE program and therefore cannot see §108's failure at all.** What differs between
 the two modes is the commissioning DIET staying in every pass's fit.
 
-**THAT MECHANISM SENTENCE IS PENDING ITS OWN FALSIFIER AND MUST NOT BE QUOTED UNTIL IT RETURNS.**
-Diet and fresh mode differ in the diet AND in how far each is allowed to run (3-5 accepted passes
-against 8), and nothing above separates them — rule 20, matched capacity and matched age, one
-variable. The run that separates them is diet mode with the acceptance test DISABLED, driven to 16
-passes: if it still does not cross, the diet is the protection and the gate is a stopping rule; if
-it crosses, the shipped safety is the gate-AND-diet PAIR and the product statement changes to *the
-route is safe because it stops*, which against §108's *bad slowly, invisible to a short test* is a
-materially different thing to tell an owner.
+**THE FALSIFIER RAN AND IT DID NOT FIRE (plan §110.1).** Diet and fresh mode differed in the diet
+AND in how far each was allowed to run — 3-5 accepted passes against 8 — and nothing separated them
+(rule 20, matched capacity and matched AGE). `noGate` removes the stop, and driven to **16 passes,
+three times its own fixed point and twice the age fresh mode ever reached, diet mode does not cross
+1.0x anywhere and does not even move**:
+
+```
+    pass | sharp square (LEARNED ON) | rounded rect (never run) | circle (never run)
+       4 |  9.988x                   | 13.434x                  | 17.066x   <- the gate's fixed point
+       5 |  9.974x                   | 13.428x                  | 17.026x   <- first pass the gate REFUSES
+       8 |  9.989x                   | 13.405x                  | 17.151x
+      16 |  9.977x                   | 13.411x                  | 17.129x
+```
+
+**Rows 0-4 are BYTE-IDENTICAL to the gated ladder**, which is what says the knob removed the stop
+and changed nothing before it (rule 21). From pass 5 the live score merely OSCILLATES in its fourth
+figure around 1.307e-2 — the object has converged and **the gate is reporting convergence, not
+preventing a divergence.** Its four commissioning programs at 16 passes read 6.14 / 8.10 / 8.82 /
+9.01x against 6.31 / 7.96 / 8.72 / 9.45x at pass 0, the same ±5% as at four.
+
+**AT MATCHED AGE, GATE OFF IN BOTH, THE PASS COUNT EXPLAINS NONE OF IT:**
+
+```
+    pass | DIET: square / rect / circle    | FRESH: square / rect / circle
+       1 |  9.876 / 13.350 / 16.858        | 13.352 /  0.774 /  0.355   <- CROSSES
+       8 |  9.989 / 13.405 / 17.151        | 22.818 /  0.875 /  0.381
+      16 |  9.977 / 13.411 / 17.129        | 21.163 /  1.077 /  0.461
+```
+
+Fresh mode run gate-off to 16 adds its own shape: the square **PEAKS at 22.818x on pass 8 and then
+falls back**, the rounded rectangle crawls back over 1.0x at pass 11, and **the circle never
+recovers** — 0.355x at pass 1, 0.461x at pass 16 — with its four commissioning programs at
+0.37-0.60x.
+
+**SO THE MECHANISM SENTENCE STANDS WITHOUT ITS CAVEAT, AND THE ALTERNATIVE IS REFUTED.** *The route
+is safe because it stops* is dead: remove the stop and it is still safe. What prevents §108's shape
+is the COMMISSIONING DIET staying in every pass's fit — a property of what the object is FITTED ON,
+surviving three times past the point the shipped law would halt — and **the gate is a stopping rule
+that reports convergence, not a safety mechanism.** On this route the safety does not need one.
 
 ### CONTROLS
 
+- **INERT UNSET, RE-VERIFIED AFTER THE `noGate` KNOB WAS ADDED and `diff`ed line-for-line against
+  the pre-knob run: IDENTICAL.** The condition is `noGate || g < curScore` with `noGate = false` and
+  no caller in `lib/` sets it, so the shipped path is byte-identical by construction as well.
 - **INERT UNSET, EXACT**: with `LEARNLADDER` unset the harness reads `1.0717e+0 -> 1.6159e-1,
   6.63x`, held-out 10.88x / 15.94x, scored square 8.18x, target 1 `1.330 — MET` — CLAUDE.md's own
   published arm figure AND its published target-1 row, digit for digit. The knob is `+79/-0` and
@@ -24092,3 +24126,63 @@ those instruments are deliberately on the old cell. What it must not do is stay 
 defaults, because that is rule 61's exact failure mode: *value for value the copies agreed, so
 nothing was ever wrong and no check ever went red; the duplicate simply waited for one of them to
 change.*
+
+## §110.1 — THE FALSIFIER RAN AND DID NOT FIRE, WHICH IS THE OUTCOME THAT MAKES §110's MECHANISM SAYABLE
+
+§110 wrote down a mechanism — *what prevents §108's shape is the commissioning DIET, not the
+monotone gate* — and immediately marked it PENDING, because diet and fresh mode differ in the diet
+AND in how far each is allowed to run (3-5 accepted passes against 8), and nothing separated them.
+That is rule 20 in its exact form: matched capacity, matched AGE, one variable.
+
+`noGate` is the knob the shipped law cannot be asked for — default FALSE, `noGate || g < curScore`,
+no caller in `lib/` sets it. **Diet mode at 16 passes does not cross 1.0x anywhere and does not even
+move**, and the four commissioning programs read 6.14 / 8.10 / 8.82 / 9.01x against 6.31 / 7.96 /
+8.72 / 9.45x at pass 0 — the same ±5% they showed at four.
+
+**THE TWO CONTROLS THAT MAKE IT READABLE.** Rows 0-4 are BYTE-IDENTICAL to the gated ladder, so the
+knob removed the stop and changed nothing before it (rule 21); and inert-unset was re-verified
+AFTER the knob was added and `diff`ed line-for-line against the pre-knob run — identical, including
+CLAUDE.md's published `6.63x`, `10.88x / 15.94x` and its target-1 `1.330 MET`.
+
+From pass 5 the shipped gate would have refused 5, 8, 9, 10, 12 and 13, and the live score merely
+OSCILLATES in its fourth figure around 1.307e-2. **The object has converged and the gate is
+reporting convergence, not preventing a divergence.**
+
+### MATCHED AGE, GATE OFF IN BOTH — the pass count explains none of it
+
+```
+    pass | DIET: square / rect / circle    | FRESH: square / rect / circle
+       1 |  9.876 / 13.350 / 16.858        | 13.352 /  0.774 /  0.355   <- CROSSES
+       8 |  9.989 / 13.405 / 17.151        | 22.818 /  0.875 /  0.381
+      16 |  9.977 / 13.411 / 17.129        | 21.163 /  1.077 /  0.461
+```
+
+Fresh mode gate-off to 16 adds a shape worth recording on its own: the square **PEAKS at 22.818x on
+pass 8 and then falls back**, the rounded rectangle crawls back over 1.0x at pass 11, and **the
+circle never recovers** — 0.355x at pass 1, 0.461x at pass 16 — with its four commissioning programs
+at 0.37-0.60x. A route that gets worse at home AND stays below doing nothing away from it, past its
+own peak, is the memory failing in both directions at once.
+
+### THE SENTENCE, NOW WITHOUT ITS CAVEAT
+
+**What prevents §108's shape in `learnLive` is the COMMISSIONING DIET staying in every pass's fit,
+not the monotone gate.** The gate scores only the LIVE program and is blind to held-out harm by
+construction — it accepted eight consecutive fresh-mode passes while both unseen programs sat below
+1.0x. Remove it and diet mode still does not cross at 16 passes, on any of the three programs or the
+four diet programs; remove it and fresh mode still crosses at pass 1. **The gate is a stopping rule
+that reports convergence, not a safety mechanism**, and on this route the safety does not need one.
+
+**§110's SECOND NAMED OUTCOME IS REFUTED**: *the route is safe because it stops* is false — remove
+the stop and it is still safe. So the product statement is the stronger one, and it is a statement
+about what the object is FITTED ON rather than about when it halts.
+
+### STILL NOT ESTABLISHED
+
+**16 passes is not for ever** (rule 25), the same limit §108 states at 24 guide laps — the
+difference being that diet mode's last twelve rungs are FLAT to the third figure with no trend in
+either direction where §108's tracker column was still falling at 24. One plant, one cell, one
+feedrate, **ONE GUIDE PROGRAM**, which is §108's own named variable and the likeliest place this
+null breaks. The diet's protection is established by a CONTRAST and not decomposed — diet size, row
+weighting and `mode: 'continue'` were not varied. And this is still not §108's law: nothing here
+says RLS on the distilled object is safe, because §52.29's bit-identity means that has effectively
+never been run.

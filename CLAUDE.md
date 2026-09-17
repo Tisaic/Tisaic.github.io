@@ -2560,7 +2560,22 @@ an engineer would actually meet:
   **AND THE PASS COUNT IS A MECHANISM RATHER THAN A BUDGET (rule 25)**: `_iteratePolicy` accepts a
   pass only if the LIVE program's score improves and breaks on the first rejection, so diet mode
   reaches a deterministic FIXED POINT at 3-5 accepted passes and every further pass is
-  byte-identical — *not measured past there* and *cannot go past there* being different states; and **lap learning**, withheld by the
+  byte-identical — *not measured past there* and *cannot go past there* being different states.
+  **AND THE MONOTONE GATE IS NOT WHAT PROTECTS IT, WHICH ITS OWN FALSIFIER SETTLED (plan §110.1).**
+  Fresh mode carries the SAME gate and it accepted EIGHT consecutive passes while both unseen
+  programs sat at 0.31-0.88x — the gate scores only the LIVE program and is blind to held-out harm
+  by construction. So *diet mode never crosses* and *diet mode is never allowed to run as far* were
+  confounded (rule 20), and a default-off `noGate` separates them: driven to **16 passes, three
+  times its own fixed point and twice the age fresh mode ever reached, diet mode does not cross
+  anywhere and does not even move** (square 9.99 → 9.98x, rounded 13.43 → 13.41x, circle 17.07 →
+  17.13x), with **rows 0-4 byte-identical to the gated ladder** and the live score merely
+  OSCILLATING in its fourth figure thereafter. **So *the route is safe because it stops* is REFUTED
+  — remove the stop and it is still safe.** What prevents §108's shape is the COMMISSIONING DIET
+  staying in every pass's fit, a property of what the object is FITTED ON; the gate is a **stopping
+  rule that reports convergence, not a safety mechanism**, and on this route the safety does not
+  need one. Fresh mode gate-off to 16 completes the contrast: its square PEAKS at 22.818x on pass 8
+  and falls back, its rounded rectangle crawls over 1.0x at pass 11, and **its circle never
+  recovers** (0.355x → 0.461x); and **lap learning**, withheld by the
   library on any program but the one it learned. The box that used to sit here — "the tracker
   stays on the machine, keep learning every scan", a unit-gain law fed every decision — was
   measured at **0.54x after twelve laps and is gone**: a law with no plant model in it pairs the
