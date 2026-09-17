@@ -23783,3 +23783,56 @@ cascade builds, so a real spread needs the DIET varied and that was not run. **A
 against a denominator of 19.910x, which is the INCUMBENT rung's factor and not the learned
 object's** (`xClassic 19.91x / xAdded 1.00x`): whether this plant's target-1 ratio should be read
 against the learned object at all is a question this measurement raises and does not answer.
+
+## §109.3 — THE PROJECT'S MOST-QUOTED NUMBER WAS STALE BY TWO PLANTS, AND ITS OWN LATER SECTION IS WHAT MOVED THEM
+
+Found by auditing CLAUDE.md against itself, at no plant cost. **The file carried two counts of its
+own headline and they disagree:**
+
+```
+  §86.7, the north star's "Reusable across plants" row
+    "of eleven rows over ten distinct plants, EIGHT ship the deployed object,
+     THREE ship the conventional rung, NONE ships the pilot cascade"
+
+  §97.3, further down the same file, row by row
+    FOUR where the learned object is the whole result   barrel · arm · column · mill
+    TWO where they compose                              cart-pole · real tanks
+    FIVE where the incumbent is the result              EMPS · exchanger · TANK ·
+                                                        tuned cart-pole · real arm
+```
+
+Six and five, against eight and three. **The arithmetic closes exactly and names the cause**:
+8 − 2 = 6 and 3 + 2 = 5, and the two are the plants §97.3 itself flipped when it armed the
+conventional rung — the TANK, where four coefficients read **19.91x** and the distilled rung is
+refused, and EMPS, where they read **424.82x**.
+
+**§97.3 SAW HALF OF THIS AND STOPPED.** Its own closing paragraph is headed *CONSEQUENCE FOR THIS
+FILE'S OWN NUMBERS, STATED PLAINLY* and warns that the tank's 3.268x and EMPS' 341.69x are no
+longer what the block ships — so it corrected the FACTORS and never revisited the COUNT those
+factors are counted in. That is rule 30 aimed at the headline, and it is **§88.9's fault for the
+second time**: §88.9 caught `objtable --read` printing *asked on 7 of 10: 4 MET* against prose
+asserting *5 of 8 MET*, and wrote that having two counts is the condition the table exists to
+remove. It was right, and the same file then grew a second pair.
+
+**THE CORRECTED READING: SIX OF TEN PLANTS SHIP THE DEPLOYED OBJECT.** Still none ships the pilot
+cascade — §86.7's genuinely load-bearing claim, and the one that made §90.2 worth doing — and
+still none is made worse.
+
+### WHY THIS IS NOT SIMPLY A WORSE RESULT
+
+The two plants did not stop being winners; they changed WHICH object wins them, and in both cases
+the block MEASURED that and shipped the better one. §97.3's own reading is the right one: the
+portfolio *"paid for itself the day it was armed — 6.1x better on the tank and 1.24x better on
+EMPS by carrying a controller it already had and being allowed to pick it."* What the count change
+costs is a claim about the DISTILLED OBJECT's reach; what it buys is the discrimination working in
+both directions, which is the thing target 3's improve-or-refuse clause actually asks for.
+
+### NOT CONFIRMED BY THE SCRAPE, AND THAT IS THE STANDING DEBT
+
+`objtable` writes rows only where `OBJTABLE_OUT` is set during a harness run and persists nothing
+between runs, so re-deriving this count costs a full suite of plant commissionings. **The
+correction above is derived from §97.3's own explicit row-by-row list, not re-measured**, so it is
+exactly the kind of hand-maintained count rule 30 distrusts — including when the hand is correcting
+one. It stands as PENDING a scrape, alongside target 1's *asked on ten of ten* total (§109.2), and
+**both should be settled by the same run**: a full suite with `OBJTABLE_OUT` set, then `READ=1`.
+That is one thing to do, not two, and it is the cheapest way to stop this recurring.
