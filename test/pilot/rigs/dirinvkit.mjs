@@ -50,6 +50,7 @@
  */
 import { DistilPolicy } from '../../../lib/pilot/distil.js';
 import { deriveWindow } from './distilkit.mjs';
+import { reset as meterReset, count as meterCount } from './meter.mjs';
 
 export function lcg(s0) { let s = s0 >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32); }
 const DROP = 0.05;          // `rigs/ladder.mjs`'s own start-transient drop (rule 13)
@@ -80,11 +81,26 @@ export function excite(spec, diet, { seed = 1 } = {}) {
   return out;
 }
 
+/**
+ * The nominal inverse applied to a segment's achieved output, MEMOISED on the segment.
+ *
+ * Purely a cost change and it cannot move a number — the same `inv` on the same `Y` — but one
+ * commissioning calls it nine times per segment (the fit, six held-out refits, the shuffle and
+ * the zero control) and on the heat exchanger `flowFor` is a 60-step bisection, so without this
+ * the instrument spends most of its wall clock re-deriving a value it already had. Keyed on the
+ * function identity, so a caller that changes `inv` gets a fresh evaluation rather than a stale
+ * cache (rule 61 — a cache that cannot tell which question it answered is a second copy).
+ */
+function invOf(s, inv) {
+  if (s.__invFn !== inv) { s.__invFn = inv; s.__U = s.Y.map((y) => inv(y)); }
+  return s.__U;
+}
+
 /** Fit the direct inverse on a list of excitation segments. `inv` maps an ACHIEVED output to command units. */
 export function fitInverse(segs, inv, { offsets, uMax, ridge = 1e-6, nc, refDim, stride = 7, shuffle = null }) {
   const pol = new DistilPolicy({ channels: nc, refDim, offsets, uMax, ridge, online: false, standardize: true });
   for (const s of segs) {
-    const U = s.Y.map((y) => inv(y));
+    const U = invOf(s, inv);
     let TGT = s.C.map((c, k) => c.map((v, j) => v - U[k][j]));
     // THE SHUFFLE CONTROL: the same rows against a PERMUTED target. Everything else identical, so a
     // fit that still delivers is not reading the map (rule 15).
@@ -131,19 +147,68 @@ export function heldOutR2(segs, inv, opts, reach) {
 export function scoreOn(spec, R, pol, { N }) {
   const p = spec.fresh();
   let ss = 0, n = 0, pk = 0;
+  // THE CORRECTION'S OWN SPREAD, per channel. A map of the commanded reference deployed on a
+  // CONSTANT reference can emit only one number for the whole run, however well it was fitted —
+  // so on a REGULATOR this reads exactly 0 and the driver asserts it rather than inferring the
+  // structural point from a score near 1.000x (rule 25).
+  let lo = null, hi = null;
   for (let k = 0; k < N; k++) {
     let u = R[k].map(() => 0);
     if (pol) {
       u = pol.actLook((o) => R[Math.max(0, Math.min(R.length - 1, k + o))], null);
       for (const v of u) pk = Math.max(pk, Math.abs(v));
     }
+    if (lo === null) { lo = u.slice(); hi = u.slice(); }
+    else for (let j = 0; j < u.length; j++) { if (u[j] < lo[j]) lo[j] = u[j]; if (u[j] > hi[j]) hi[j] = u[j]; }
     const r = spec.step(p, R[k], u, k);
     if (k >= N * DROP) for (const e of r.truth) { ss += e * e; n++; }
   }
-  return { rms: Math.sqrt(ss / n), pk };
+  const spread = lo === null ? 0 : Math.max(...hi.map((v, j) => v - lo[j]));
+  return { rms: Math.sqrt(ss / n), pk, spread };
 }
 
 /** The reference series a program produces, in COMMAND units — the spec's own `refAt`. */
 export function refSeries(refAt, N) { const R = []; for (let k = 0; k <= N; k++) R.push(refAt(k)); return R; }
+
+/**
+ * THE PLANT'S OWN 2% SETTLE, MEASURED THROUGH THE SPEC (rule 31, plan §105).
+ *
+ * `deriveWindow` needs a settle and a lap, and §103's worst mistake was carrying a reach from a
+ * plant with a different lap. Every `distil-*.mjs` harness already measures this and every one
+ * wrote its own loop against its own plant module; driven through `spec.fresh()`/`spec.step()`
+ * it is ONE function, and a plant supplies only the size of the step to hit it with — itself
+ * sized from that plant's own authority and never carried (rule 61).
+ *
+ * The step is HELD (rule 33: a settle read under a moving reference describes the reference) and
+ * the machine is settled at `refAt(0)` first. A plant that does not move returns `null` rather
+ * than 1, because "no reading" and "settles instantly" are different states (rule 25).
+ */
+export function measureSettle(spec, { delta, idx = 0, N = 20000, warm = 200 } = {}) {
+  const p = spec.fresh();
+  const r0 = spec.refAt(0);
+  const zero = r0.map(() => 0);
+  for (let i = 0; i < warm; i++) spec.step(p, r0, zero, i);
+  const u = r0.map((_, j) => (j === 0 ? delta : 0));
+  const y = new Float64Array(N);
+  for (let k = 0; k < N; k++) y[k] = spec.step(p, r0, u, k).measured[idx];
+  const fin = y[N - 1], y0 = y[0], span = Math.abs(fin - y0);
+  if (!(span > 0)) return null;
+  for (let k = N - 1; k >= 0; k--) if (Math.abs(y[k] - fin) > 0.02 * span) return k + 1;
+  return 1;
+}
+
+/**
+ * WHAT A PHASE COST THE PLANT, IN ITS OWN STEPS — `rigs/meter.mjs` read around a closure.
+ *
+ * §104 computed its calendar by hand from segment lengths, which is right only while nothing else
+ * advances the plant — and `spec.fresh()` pre-rolls thousands of settling steps on most of these
+ * plants, which is plant time a customer pays for. The meter ticks inside each plant's own `step`
+ * so no caller can bypass it (rule 61), and both columns are reported rather than one (rule 25).
+ */
+export function priceOf(fn) {
+  meterReset();
+  const value = fn();
+  return { value, steps: meterCount() };
+}
 
 export { deriveWindow };

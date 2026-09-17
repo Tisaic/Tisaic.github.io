@@ -23081,8 +23081,23 @@ in each plant's own time base:
     barrel   45,000 excitation + 20,000 verify =  65,000 steps @ 1 s     =  18.1 h   against 799 h   44x
     column   18,000 excitation +  3,000 verify =  21,000 steps @ 0.1 min =  35.0 h   against 720 h   21x
 
-**33.3 DAYS TO 18 HOURS, AND 30.0 DAYS TO 35 HOURS.** A 44x and a 21x, at delivered factors in the
-same range as the objects those calendars bought.
+**THOSE TWO LINES ARE RETRACTED BY §105 AND THE CORRECTED FIGURES ARE 14.4x AND 10.3x.** They were
+computed BY HAND from segment lengths, and the route makes SEVEN `spec.fresh()` calls — six to
+excite and one to score — each of which pre-rolls a settle (`barrelSpec.fresh()` runs 20,000 steps
+before it returns). That is 140,000 steps, **68% of the true bill**, counted by nobody. Read by
+`rigs/meter.mjs`, which ticks inside each plant's own `step` and is the SAME meter `priceFrom`
+prices the teacher-taught route with, the barrel costs **200,000 steps = 2.3 days** and the column
+**42,000 steps = 2.9 days**. The delivered factors are byte-identical across the repair, so this is
+an instrument correction and not a result moving (rule 21).
+
+**33.3 DAYS TO 2.3 DAYS, AND 30.0 DAYS TO 2.9 DAYS** — a 14.4x and a 10.3x, at delivered factors in
+the same range as the objects those calendars bought. Hand-counting a cost this project already has
+a meter for is rule 30 exactly, and it flattered the result by 3x.
+
+**AND MOST OF WHAT REMAINS IS A KNOWN, ALREADY-SOLVED COST.** §72 measured the teacher's own
+plant-rebuild at 64% of every call on the tank and made CARRYING the plant across calls the default
+(`distilkit.carrier`). This route rebuilds and re-settles seven times for the same reason the
+teacher used to, so the same lever applies and is not yet taken.
 
 ### AND THE ARITHMETIC SAYS IT IS NOT ONLY THE TEACHER, WHICH IS WORTH STATING (rule 19)
 
@@ -23197,3 +23212,90 @@ One held-out program and one scoring convention; the cap sweep is on the shipped
 clamp 0.4 and 1.6. Target 1's fraction on the teacher-taught object RISES steadily with the cap
 (0.339 → 0.709 → 1.023 at clamp 0.4 / 2 / 4) — the held-out schedule gains where the scored one
 does not — which is unexamined and interesting.
+
+## §105 — THE TEACHER-FREE DIRECT INVERSE ON NINE PLANTS: SIX ADDRESSED, TWO STRUCTURALLY OUT, ONE UNRESOLVED
+
+§104 asked two plants through a shared kit. This asks nine, four seeds each, at every plant's own
+shipped authority, with the calendar read by `rigs/meter.mjs` rather than counted by hand.
+
+```
+  plant                teacher-free, 4 seeds    med       SHUFFLE  SAT   CALENDAR (0 teacher laps)
+  real steam exch      88.136 .. 100.266x     95.570x     1.000x    no     11,200 @1s    =  3.1 h
+  cart-pole            11.757 ..  11.807x     11.783x     1.000x   YES     55,876 @5ms   =  4.7 min
+  real cascaded tanks   8.140 ..   9.121x      9.114x     1.000x   YES     16,800 @4s    = 18.7 h
+  quadruple tank        6.860 ..   7.702x      7.488x     1.000x    no    322,000 @0.1s  =  8.9 h
+  extruder barrel       3.705 ..   6.388x      4.641x  1.000-1.008  no    200,000 @1s    =  2.3 days
+  Wood-Berry column     3.427 ..   4.450x      3.652x     1.000x   YES     42,000 @6s    =  2.9 days
+  ── structurally out of scope ─────────────────────────────────────────────────────────────────
+  cold mill AGC        1.000x exactly, correction SPREAD = 0.0e+0 ASSERTED   168,000 @2ms =  5.6 min
+  real flexible arm     0.301 ..   0.364x   MADE WORSE            YES    264,192 @10ms   = 44.0 min
+  ── does not reproduce §99 ────────────────────────────────────────────────────────────────────
+  EMPS servo axis       0.924 ..   0.983x   MADE WORSE             no    UNKNOWN (rig never ticks)
+```
+
+Controls clean on every row: ZERO asserted bit-exact on all nine, SHUFFLE 1.000-1.008x everywhere so
+no row is void, the barrel reproducing **5.2708e+0** and the mill **15.154335422210291 µm** (rule 21).
+**And the barrel and column reproduce §104 digit for digit**, so the kit's changes are inert where
+they should be.
+
+### THE PLANT-CLASS ANSWER — FOUR REQUIREMENTS, EACH EXCLUDING SOMETHING DIFFERENT
+
+1. **A nominal inverse must exist.** Every plant here has one, which is why §103's units objection
+   was never one: process plants because `refAt` IS that map, servos because it is the identity.
+2. **THE DEPLOYED INPUT MUST VARY**, and this is the one worth having. The map reads a window of
+   `refAt`; on a REGULATOR that window is identical at every k, so the map emits ONE NUMBER for the
+   whole run whatever the fit found. Not a poor fit — a REPRESENTATIONAL IMPOSSIBILITY. **Asserted
+   rather than inferred**: `scoreOn` returns the correction's own spread and the driver THROWS
+   unless it is exactly 0. The mill reads `0.0e+0` over 20,000 steps on every seed, at 1.000x, with
+   a perfectly good held-out R² of 0.919 — of a setpoint that does not move.
+3. **The error must be a function of the commanded trajectory.** The mill fails this too, so a
+   moving operating point would not rescue it (§84.3: 87% roll eccentricity, 13% entry wander).
+   What works there is §71's DECLARED roll phase — a channel the engineer supplies and this route
+   cannot discover.
+4. **The plant must be invertible in the class.** The real flexible arm fails, and the authority
+   sweep says WHICH failure: 0.576x / 0.487x / 0.349x / 0.252x / 0.251x as the cap rises, saturating
+   with the demand OFF its cap. **A map that is merely too big shrinks toward 1.000x; one that is
+   WRONG does this.** It is the plant `invert.mjs` reads at INVERSE 128.3%, the only non-zero in
+   that table — third object to fail there after §86.3's eight refusals and §87.5's ZPETC.
+
+### TWO ROWS ARE NOT CONTROLLER RESULTS AND ARE FLAGGED AS SUCH (rule 14)
+
+At raised authority the real cascaded tanks read **13.705x .. 2099.861x over six seeds — a 153x
+spread** — and the cart-pole 567-584x. Two findings on file arrive together: §55 (a plant identified
+as a linear ARX sits inside a linear feedforward's own hypothesis class, so its factor measures the
+CLASS) and §54.8 (a score climbing as a regulariser is removed, on a DETERMINISTIC rig, is exact
+interpolation). These rigs carry no measurement noise, so **nothing bounds an inverse map except the
+cap — the cap is acting as the regulariser.** The capped column is the one to quote, and there both
+land level with what the block already ships (8.69x, 11.93x). The real steam exchanger is the clean
+case: byte-identical from UCAP 1 upward, so its 88-100x is the map.
+
+### EMPS DOES NOT REPRODUCE §99, AND THAT IS THE THIRD TIME A PRIVATE ROUTING READ HIGHER
+
+§99 measured this routing on this plant through its own private loop at **5.510x**; the kit reads
+**0.924-0.983x**, unsaturated, controls clean. Three differences are named rather than one being
+called wrong (rule 20): §99 scores the LAST FOUR of six repeated laps with the window wrapped MODULO
+the lap where the kit scores one pass from `fresh()` on the ladder's support with the window CLAMPED;
+§99 records `y[k]` BEFORE stepping and the kit after; §99 fixes ±96/15 quadratic taps where the kit
+DERIVES ±113/21 geometric. **§103's 9.783x against the shared routing's 7.0x, `distil-tank.mjs`'s
+never-applied 1.000x, and now this** — the optimistic number is the private one all three times.
+Neither number is withdrawn here; what is claimed is that the kit's is the one comparable to the
+other eight rows.
+
+### NOT ESTABLISHED
+
+The **2R arm is NOT ASKED and that is a missing measurement, not an exclusion** (rule 25): it has a
+nominal inverse — its own IK, which is what produces its `refAt` — but `rigs/arm-rig.mjs` exports
+`commissionArm`/`deployOn` and no `{fresh, step, refAt, uMax}` spec, so asking it today means a
+second copy of that plant's routing, which is the exact fault the kit exists to prevent. The route is
+the move `specs.mjs` already made for the other nine. Also: target 1 on no new plant; no ridge or
+gain selection anywhere, so these are not like-for-like ladder figures and that is most of why the
+calendar ratios are large; four seeds and one diet design per plant; and nothing is integrated —
+`dirinvall.mjs` is an INSTRUMENT and no `AutoStack` rung offers this route.
+
+### TWO DIETS WERE WRONG FIRST AND THE MACHINE CAUGHT BOTH
+
+**Rule 41b, and it produced a PERFECT fit on a different machine.** The first EMPS diet picked
+accelerations by hand at 4e-4 against this axis's own 0.83, so the excitation travelled 2.5 mm where
+the program travels 230: saturated at its cap, delivered 0.027x, **held-out R² 1.000**. A fit perfect
+on its diet says nothing when the diet describes another machine. The cart-pole's first diet THREW
+its own feasibility test and now uses `distil-pend.mjs`'s rejection sampling (rule 20).

@@ -570,9 +570,20 @@ Each of these is a claim that can be shown false, which is the only kind worth w
      extruder barrel     3.705x .. 6.388x  med 4.641x      7.00x        0 against ~33 days
      Wood-Berry column   3.427x .. 4.450x  med 3.652x      3.96x        0 against ~30 days
 
-     barrel   45,000 excite + 20,000 verify @ 1 s      =  18.1 h  against 799 h   44x
-     column   18,000 excite +  3,000 verify @ 0.1 min  =  35.0 h  against 720 h   21x
+     barrel   200,000 steps = 2.3 days  against 33.3 days   14.4x
+     column    42,000 steps = 2.9 days  against 30.0 days   10.3x
    ```
+
+   **THOSE FIGURES ARE §105's AND THEY RETRACT §104's OWN 44x AND 21x BY ABOUT 3x.** §104 counted
+   the calendar BY HAND from segment lengths and missed that the route makes SEVEN `spec.fresh()`
+   calls — six to excite, one to score — each pre-rolling a settle, which is **68% of the true
+   bill**. `rigs/meter.mjs` ticks inside each plant's own `step` and is the SAME meter `priceFrom`
+   prices the teacher-taught route with; the delivered factors are byte-identical across the repair,
+   so it is an instrument correction and not a result moving (rule 21). Hand-counting a cost this
+   project already has a meter for is rule 30, and it flattered the number by 3x. **And most of what
+   remains is already-solved**: §72 measured the teacher's own plant-rebuild at 64% of every call
+   and made CARRYING the plant the default (`distilkit.carrier`); this route re-settles seven times
+   for the same reason and has not yet taken that lever.
 
    **THE CALENDAR IS THE RESULT AND THE FACTOR IS NOT.** Both land in the same range as the objects
    those calendars bought. **AND THE ARITHMETIC SAYS IT IS NOT ONLY THE TEACHER (rule 19)**:
@@ -607,7 +618,30 @@ Each of these is a claim that can be shown false, which is the only kind worth w
    table is the 3.43-4.45x at the shipped authority**; the raised-authority figure states the map's
    appetite, not a deployable setting. Two plants, no ridge or gain selection, target 1 measured on the
    barrel only, and nothing integrated — `dirinvall.mjs` is an INSTRUMENT and no `AutoStack` rung
-   offers this route. Target: 10x down, under three minutes on the arm, while
+   offers this route.
+
+   **AND IT IS NOW NINE PLANTS: SIX ADDRESSED, TWO STRUCTURALLY OUT, ONE UNRESOLVED (plan §105).**
+   Real steam exchanger **95.6x**, cart-pole **11.8x**, real cascaded tanks **9.1x**, quadruple tank
+   **7.5x**, barrel **4.6x**, column **3.7x** — medians of four seeds at each plant's own shipped
+   authority, ZERO asserted bit-exact and SHUFFLE at 1.000-1.008x on every row.
+   **THE PLANT-CLASS ANSWER IS WORTH MORE THAN THE SCORES**, and one requirement of four is new:
+   **THE DEPLOYED INPUT MUST VARY.** The map reads a window of `refAt`, so on a REGULATOR that window
+   is identical at every k and the map emits ONE NUMBER for the whole run whatever the fit found —
+   a representational impossibility, not a poor fit, and ASSERTED rather than inferred: the driver
+   THROWS unless the correction's spread is exactly 0, and the mill reads `0.0e+0` over 20,000 steps
+   at 1.000x with a perfectly good held-out R² of 0.919 on a setpoint that does not move. The REAL
+   FLEXIBLE ARM fails a different requirement — invertibility in the class — and the authority sweep
+   says which: 0.576x → 0.251x as the cap rises, saturating with the demand OFF its cap, where a map
+   that is merely too big would shrink toward 1.000x. It is the plant `invert.mjs` reads at INVERSE
+   128.3%, third object to fail there. **TWO ROWS ARE FLAGGED AS NOT CONTROLLER RESULTS (rule 14)**:
+   at raised authority the real tanks read 13.7x-2099.9x over six seeds and the cart-pole 567-584x —
+   §55's hypothesis-class finding and §54.8's exact-interpolation signature arriving together on
+   deterministic rigs where nothing bounds an inverse map except the cap. **AND EMPS DOES NOT
+   REPRODUCE §99's 5.510x**, reading 0.924-0.983x through the shared kit with clean controls; three
+   differences are named rather than one called wrong (rule 20), and it is the THIRD time here a
+   private routing read higher than the shared one. The 2R arm is NOT ASKED — a missing measurement
+   and not an exclusion, because `arm-rig.mjs` exports no spec and asking it today would mean the
+   very second copy the kit exists to prevent. Target: 10x down, under three minutes on the arm, while
    holding the contract bar. Measured end to end on the page's own configuration at K 0.25 /
    E 0.03:
 
