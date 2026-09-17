@@ -24186,3 +24186,80 @@ null breaks. The diet's protection is established by a CONTRAST and not decompos
 weighting and `mode: 'continue'` were not varied. And this is still not §108's law: nothing here
 says RLS on the distilled object is safe, because §52.29's bit-identity means that has effectively
 never been run.
+
+## §112 — THE TEACHER-FREE DIRECT INVERSE IS NOW A RUNG THE ONE PRESS OFFERS
+
+§105 priced the route on TEN plants and ended with a standing line: *nothing is integrated —
+`dirinvall.mjs` is an INSTRUMENT and no `AutoStack` rung offers this route.* Built.
+
+**①d, BEFORE THE CASCADE.** Fit a window of the ACHIEVED output mapped back through the plant's own
+nominal inverse onto `c - inv(y)` from OPEN-LOOP runs; deploy `c = refAt(k) + f(...)`. No teacher,
+no cascade, no probe set, no lap index, no forecast. **`DistilPolicy` is UNCHANGED** — every process
+plant's `refAt` is already that nominal inverse — so `deploy.js` and the whole boundary
+`artefact.test.mjs` pins are untouched: what changes is where the weight vector CAME FROM, not what
+a machine receives.
+
+It sits first because §73.13 prices the teacher at 74-89% of what a commissioning costs these plants
+and §86.7 measures the pilot cascade shipping on ZERO of ten, and this rung costs neither. Placing
+it there means the ladder HAS a candidate before it pays for either, and every later rung is judged
+against a bar this one may already have raised.
+
+**THE HOST OWNS THE INVERSE, because it is plant knowledge and the library has none.**
+`host.dirInvRuns()` returns segments `{ C, U, n }` already in REFERENCE units — `C` commanded, `U`
+the achieved output through that inverse — so the library states what it fitted and never guesses a
+plant's units. The asymmetry IS the route: fitted on what the machine ACHIEVED, deployed on what it
+is ASKED for, and the other way round it is an identity.
+
+### WHAT IT DOES NOT DO, WRITTEN INTO THE RUNG SO NOBODY READS A CALENDAR INTO IT
+
+**Adding the rung buys NO commissioning time by itself.** The ladder still runs the teacher
+afterwards, so the bill is this rung's cost ON TOP. §104-§105's saving — barrel 33.3 days → 2.3,
+column 30.0 → 2.9 — comes from NOT RUNNING THE TEACHER, which is a CALLER POLICY and a separate
+measurement: §109's early-exit reasoning one level up, *do not pay for a stage that cannot change
+the outcome*. This rung makes that policy possible and does not implement it.
+
+### THE TEST IS OF THE PATH, AND IT CAUGHT ITS OWN AUTHOR
+
+`test/pilot/dirinvrung.test.mjs` drives everything through `commission()` and never through
+`DistilPolicy`, because rule 9b exists for exactly this: three guards here shipped armed and
+unreachable and every one passed its own unit test, and §102.1 found two more where `AutoStack`
+never passed the option to the object it built.
+
+**IT FIRED ON THE FIRST RUN, AGAINST ME.** The fit vouched at held-out R² **0.999999999978** and the
+machine read **EXACTLY 1.000x** — `distil-tank.mjs`'s §67.3 signature, the rung absent from the run
+that scored it. The fault was the MOCK: `scored(corr, ...)` hands the host the CANDIDATE correction
+and the host is expected to call `auto.act(ctx)` itself for what is ARMED, and my host treated the
+callback as the act path, so with no candidate it applied nothing. **The test written to prevent
+that fault contained it.** The loop now mirrors `rigs/ladder.mjs`'s — `auto.act(...)` then
+`auto.into(corr.at(k))` on top (rule 61, one shape for one thing, even in a mock).
+
+### AND THE NUMBER IT PRINTS IS NOT A CONTROLLER RESULT (rule 14)
+
+Wired correctly it reads **1,289,143x**, which is reported here only to be dismissed. The test's
+plant is a NOISELESS, EXACTLY INVERTIBLE first-order lag, so a linear map of the right window
+inverts it to machine precision — **§54.8's exact-interpolation signature, the one DeePC was
+disqualified for**, and here it is the RIG BY CONSTRUCTION. That is what makes it a good PATH test:
+if the route is wired correctly the answer is unmistakable, and any wiring fault collapses it to
+exactly 1.000x. The assertion is therefore a LOOSE BOUND on the path and never on the magnitude,
+and the file says so in its header. The route's real factors stay where they were measured:
+3.0-10.0x on the barrel, 3.4-4.5x on the column, 1.39-1.70x on the 2R arm.
+
+### CONTROLS
+
+- `dirInv` defaults **null**, so every existing caller is byte-identical by construction — and
+  measured, not asserted: distil, artefact, gainexit, dirinvrung, deploy, **inventory** (the deploy
+  boundary) and **autostack on EMPS at 20.2x** all green with the rung in the file.
+- **BOTH HALVES, and the negative ones are the point** (rule 9): a host with no `dirInvRuns` gets a
+  STATED skip; a host that offers the hook but no WINDOW is told so rather than given a default,
+  because the window is the plant's own and §103 measured a carried one costing **2.3x of a
+  headline**; and the SHUFFLE control — the same rows against a permuted target — must not deliver.
+- It arms through the SAME `deployed.distil` path the ②d rung uses, asserted, so there is one deploy
+  path for one kind of object and a later rung replaces it exactly as it would a teacher-taught one.
+
+### NOT DONE
+
+**No plant harness declares `dirInvRuns` yet**, so the rung is reachable and unexercised on real
+plants — which is precisely the state rule 9b warns about, and is why the path test exists rather
+than being deferred. Wiring a plant is the next step and the barrel is the one to ask first, since
+§103 measured it at 3.0-10.0x through the instrument and its teacher costs 33.3 days. The caller
+policy that converts this into calendar is unbuilt and unmeasured.

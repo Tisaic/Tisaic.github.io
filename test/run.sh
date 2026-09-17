@@ -481,6 +481,14 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # the `objtable --read` argument). Both halves: the three plants §107 measured as
     # INTERIOR must be untouched, and a candidate that already beats its bar is never tested.
     t node test/pilot/gainexit.test.mjs
+    # THE TEACHER-FREE DIRECT INVERSE, DRIVEN THROUGH `AutoStack` RATHER THAN CALLED (plan §112).
+    # Rule 9b: three guards here shipped armed and unreachable and every one passed its own unit
+    # test, because a unit test calls the function and what breaks is the wiring to it — and
+    # §102.1 found two more where AutoStack never passed the option to the object it built. So
+    # every check goes through `commission()`. Its toy plant is exactly invertible, so the factor
+    # it prints is the RIG and not a result (rule 14) and the file says so; what is pinned is the
+    # PATH, and a rung that is fitted, vouched for and never applied reads exactly 1.000x.
+    t node test/pilot/dirinvrung.test.mjs
     # WHAT SHIPS, WHAT COMMISSIONS, WHAT IS ONLY THE BENCH. Fails when a module appears that
     # nobody classified, so the deploy boundary cannot rot quietly (rule 30 on a dependency graph).
     t node test/inventory.test.mjs
