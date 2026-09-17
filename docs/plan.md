@@ -24517,3 +24517,51 @@ rung offers this route, and the deployed artefact would need `deploy.js`'s own r
 `artefact.test.mjs`'s bit-identity before it could be called a product. And the Koopman ① price is an
 ANALYTIC MAC count of a controller that was not built, itemised so it can be checked — the same class
 of instrument that has shipped faults twice here (rules 17, 30).
+
+## §114 — THE NORTH STAR AUDITED AGAINST ITS OWN LATER SECTIONS, AND IT WAS STALE IN THREE MORE PLACES
+
+§109.3 found the project's most-quoted number wrong by two plants because §97.3 moved them and never
+came back for the count. That was not a one-off. Auditing the whole north star against the record
+below it, at no plant cost, turned up three more — **all of the same shape: a later section moved a
+result and the summary above it kept the old one.**
+
+**(1) THE RIVALS HEADER CONTRADICTED ITS OWN BODY.** It read *ONE RIVAL HAS BEEN BUILT AND RUN* while
+the paragraph under it, updated by §113, read *the field is now THREE admissible rivals*. Corrected
+to three (NOILC, ZPETC, Koopman ②), with DeePC built and disqualified and MPC/L1 inadmissible on the
+same ground. The closing sentence is unchanged and still the right one: **three rivals on one axis
+are not a field.**
+
+**(2) *ROBUST AND TOLERANT* STILL CARRIED A FAILURE §106 HAD CLOSED.** It cited the real flexible
+arm's 0.877x as *the first target-1 "none made worse" failure in this project* with no note that a
+DIET repairs it — 0.877x → 1.134x and 0.921x → 1.128x on the two harmful programs, the commissioned
+one improving 1.927x → 2.255x, **0 of 4 made worse in 0.42x of the commissioning it replaces**, on
+nine of nine shape-varied diets. Target 1's 1.3x bound is still missed there; the clause that row is
+about is closed. **And §110/§110.1 add a robustness column that belongs in that row**: the one
+adapting object that reaches a machine improves both never-run programs monotonically on three seeds
+and does not cross 1.0x with its gate REMOVED at 16 passes, while the same harness with the diet
+dropped crosses at pass 1.
+
+**(3) *LINEAR AND NONLINEAR ALIKE* QUOTED THE TANK AT 2.591x AS A PLANT THE LEARNED OBJECT WINS.**
+§97.3 had already retracted that: four coefficients of `[a, v, sign v, 1]` take **19.91x** there once
+they are allowed to act, and the distilled rung is REFUSED at 0.16x. The tank is still a nonlinear
+plant this block WINS — by a larger factor than the row ever claimed — and it is NOT one the learned
+object carries. §97.3 warned in writing that its change made this file's quoted factors stale and
+named the tank explicitly; **this is the second place that warning went unactioned, after §109.3's.**
+
+**AND ONE SENTENCE IS KEPT WITH ITS ARITHMETIC FLAGGED RATHER THAN FIXED**: *three of six is still
+not "alike"* now has a denominator of TEN plants. It counts CLASSES and not plants, so the fraction
+is not wrong, but it reads as a plant count and is marked as counting classes.
+
+### WHAT THIS SAYS ABOUT THE DOCUMENT, WHICH IS WORTH MORE THAN THE THREE FIXES
+
+Every one of these is rule 30 on the project's own summary: a result that lives in a section AND in
+the table above it will eventually disagree with itself, and here it did so **four times from one
+cause** — §97.3's retraction — because that section corrected the numbers it moved and not the
+places those numbers are counted. The instrument that would catch it exists (`objtable.mjs`, whose
+whole argument is that a count nobody can re-derive is a preference) and cannot run without a full
+suite, which is why §109.2 and §109.3 both stand PENDING a scrape. **That scrape is now the single
+highest-value cheap thing outstanding**: it settles target 1's total, the shipping count, and would
+have caught all three of the above.
+
+**NOT CLAIMED**: this was an audit by reading, not a scrape, so it has the exact weakness it
+criticises. It found what it found; it cannot say the summary is now consistent.
