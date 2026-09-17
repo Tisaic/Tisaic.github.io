@@ -24263,3 +24263,257 @@ plants — which is precisely the state rule 9b warns about, and is why the path
 than being deferred. Wiring a plant is the next step and the barrel is the one to ask first, since
 §103 measured it at 3.0-10.0x through the instrument and its teacher costs 33.3 days. The caller
 policy that converts this into calendar is unbuilt and unmeasured.
+
+---
+
+## §113 — KOOPMAN-EDMD, TARGET 8's LAST NAMED RIVAL: ONE FORM IS INADMISSIBLE, THE OTHER IS THE STRONGEST ADMISSIBLE RIVAL YET BUILT — AND WHAT DECIDES IT IS THE EXCITATION, NOT THE LIFT
+
+CLAUDE.md's target 8 has carried the same sentence for several sections: *"Still absent entirely:
+modern MPC, L1 adaptive, DeePC, Koopman-EDMD. One method is not a field."* DeePC was built and then
+RECLASSIFIED (§54.8b); ZPETC was built, debugged and measured (§56). Koopman-EDMD was the last name
+on that list nobody had touched. `test/pilot/koopman.mjs`.
+
+### §113.1 — THE ADMISSIBILITY VERDICT COMES FIRST, BECAUSE THERE ARE TWO KOOPMANS AND ONLY ONE IS A RIVAL
+
+§54.8b states the test once so it can be applied rather than re-argued: a competitor must deploy with
+(a) no runtime truth, (b) no lap index or per-program table, (c) transfer to programs the
+commissioning never saw, (d) inside the scan budget. Koopman splits cleanly across it.
+
+**KOOPMAN ①, THE LITERATURE'S CONTROLLER — INADMISSIBLE, ON DeePC's OWN GROUND.** Koopman MPC (Korda
+& Mezić 2018, and the whole "Koopman operator control" line since) lifts the MEASURED STATE through a
+dictionary, advances it with an identified linear operator, and solves a linear MPC in the lifted
+space. The lift is evaluated at ψ(x_k): the commissioning instrument stays bolted on for ever, which
+is exactly what disqualified DeePC and what §54.8b's table already rules MPC, L1 and MRAC out on.
+§52.42 prices that instrument at 3.9x over the best permanently-mounted alternative. It is NOT built,
+and it is COSTED rather than waved at: a lifted MPC over this file's own best dictionary (nF = 39-44,
+horizon 40) is **~4,700-5,100 MAC/decision at ONE projected-gradient iteration, about half a PLC
+scan's budget**. **So the arithmetic would have been affordable and the INSTRUMENT is what
+disqualifies it** — which matters, because it means this is not a cost objection dressed as a
+principle.
+
+**KOOPMAN ②, THE ADMISSIBLE ONE — BUILT AND MEASURED.** The lift is used ONLY at commissioning, to
+identify a model that is then INVERTED into a feedforward deployed as a fixed map of the COMMANDED
+REFERENCE. It is the nonlinear generalisation of §56's ZPETC: same product shape, same non-causality,
+one change — the model is linear in a NONLINEAR DICTIONARY of the state, which is the entire Koopman
+claim.
+
+**AND "IT READS NOTHING AT RUNTIME" IS ASSERTED, NOT STATED**, because it is the claim that decides
+the classification: start the MACHINE 5 mm off its program and the correction sequence is
+**BIT-IDENTICAL over 4,000 decisions** (§81's own form). If a measurement ever leaked into the act
+path, that check goes red whatever the prose says.
+
+### §113.2 — TWO WRONG TURNS FIRST, AND BOTH ARE THIS PROJECT'S OWN RULES ARRIVING ON A NEW OBJECT
+
+**THE OBVIOUS EDMDc MODELS THE OUTPUT, AND IT IS RULE 19 EXACTLY.** Lift lagged `y` and lagged
+command and predict `y_k`: it fits at one-step **R² 0.9998** and delivers **0.03x-0.09x, thirty times
+worse than doing nothing**. Both numbers are right. `y` on this axis spans ~30 mm and the quantity a
+rung exists to cancel is 0.49 mm, so 1 − R² = 1.8e-4 of `y`'s variance IS the whole tracking error: a
+model can be a superb predictor of the trajectory and carry no information about the thing being
+corrected. It is why ZPETC identifies ERROR paths (`Gu`, `Gr`) and not the output, and an R² of 0.9998
+attached to a 0.03x is the most persuasive wrong number this file could have produced.
+
+**AND THE ERROR-TARGET ARX IS §56's OWN FINDING ARRIVING AS A GRID AXIS.** With an autoregressive term
+on the error the model predicts `e_k` almost perfectly from `e_{k-1}` and `e_{k-2}` (a 1 kHz sample of
+a smooth signal), R² reads **1.00000**, and the input coefficients are fitted as tiny corrections to
+that autoregression — the DC gain rests on a fourth-digit cancellation, 1 − Σa = 1.85e-4. The inverse
+SETS every error lag to zero, extrapolating far outside anything the fit constrained, and delivers
+**0.22x**. §56 wrote *a model can be exact in prediction and still be a bad thing to invert*; here it
+is a swept axis (`na` down to 0) rather than a sentence, and the sweep does pick the FIR form.
+
+### §113.3 — THE EXCITATION IS THE BINDING CONSTRAINT, AND IT IS WORTH A FACTOR OF 136
+
+Rule 41b: an excitation built to the DECLARED limits describes a machine the program does not run.
+`zpetc.mjs` and `deepc.mjs` both excite at `2 * UM` = **±0.02 m**, which is the AUTHORITY and not
+anything the machine's own numbers imply. The correction this axis actually needs peaks at
+**7.3e-4 m** — measured rather than argued: the open-loop error trace applied as a hand feedforward
+reaches 65.7x at a peak |u| of 7.27e-4. So the default drives the machine 27x further off its program
+than any deployed correction ever will, through the friction reversal and the drive's clip.
+
+The ladder, on the LINEAR arm so the dictionary cannot be credited with it:
+
+```
+  probe |u|      program       x           probe |u|      program       x
+  2.0e-2       1.747e+0     0.28x          2.0e-4       1.283e-2    38.07x   <- the argmin
+  4.0e-3       4.858e-1     1.01x          1.0e-4       1.762e-2    27.72x
+  1.0e-3       7.679e-2     6.36x          5.0e-5       2.187e-2    22.33x
+  4.0e-4       5.604e-2     8.72x          2.0e-5 .. 3.0e-6       11.09x .. 5.63x
+```
+
+**0.28x at the amplitude the other two rivals use and 38.07x two decades below it — a factor of 136,
+with the optimum INTERIOR in a ladder spanning 6667x.** It is not a runaway: below the optimum the
+score falls again, which is what separates it from DeePC's unbounded climb (§54.8, rule 14). **And it
+is the one thing here that reproduces across identification draws**: all four seeds read 0.26-0.39x at
+the ±0.02 default, and every one puts its own optimum 50-400x below it.
+
+### §113.4 — AND §56's ZPETC IS **NOT** RETRACTED: THE SAME LADDER THROUGH ITS OWN HARNESS PEAKS AT EXACTLY THE PUBLISHED VALUE
+
+The obvious inference from §113.3 is that §56's published **2.45x / 3.28x** measured the PROBE and not
+the method, which would make target 8's "two admissible rivals" table wrong about how strong one of
+them is. That is the shape rule 41b has fooled this record with twice (the real flexible arm's program
+demanding 11x the torque the machine has; the KUKA's excitation identifying statics), so it was put to
+`zpetc.mjs` rather than reasoned about. **The inference is REFUTED.** `ZPROBE` was added there,
+defaulting to the `UM` that was already hardcoded, and swept over the same eleven amplitudes:
+
+```
+  1e-1  1.01x     2e-2  2.45x  <- §56's published value, and the ladder's own PEAK
+  4e-2  1.53x     1e-2  1.53x     4e-3  1.59x    1e-3  1.66x    4e-4  1.33x
+                  2e-4  1.15x     1e-4  1.07x    5e-5  1.12x    2e-5  1.04x
+```
+
+**§56's excitation is at an INTERIOR OPTIMUM of its own probe ladder**, and the two controls a
+retraction would have needed both pass in the direction that says there is nothing to retract:
+the unset run reproduces §56's exact published figures — **1.9921e-1 mm / 2.45x on the program and
+9.8764e-2 mm / 3.28x on the sine** (rule 21), re-verified independently at `SUITE=full` rather than
+taken on report.
+
+**AND THE OTHER CONTROL THAT WAS OFFERED HERE IS VACUOUS AND IS STRUCK RATHER THAN QUIETLY DROPPED.**
+It read *`ZPROBE` unset and `ZPROBE=0.02` produce byte-identical output (`diff` exit 0)* — and
+`UM = 0.02` in that file, so `ZPROBE=0.02` IS the default and the diff compares the default against
+itself. It cannot fail, so it establishes nothing (rule 9's own point: a one-sided claim that any
+weak version satisfies has no teeth). **The coordinator then reproduced the fault while checking
+it**, diffing two runs of a FULL-TIER file without `SUITE=full` — two `SKIPPED` messages, reported
+as agreement, which is the identical vacuous control §109.1 had already caught once today on
+`distil-pend.mjs`. Twice in one session, on two different files, by two different readers.
+
+**What carries the claim is the SECOND control alone**: the published numbers reproducing with the
+knob present. That one can fail — a mis-wired knob changes them — and it passed. So the knob MEASURED something rather than moving it, and what it
+measured is that §56 was right about its own cap: ZPETC is limited by the sensitivity of its composed
+polynomial inversion, not by the regime it was identified in.
+
+**THE FINDING IS THEREFORE NARROWER AND MORE USEFUL THAN A RETRACTION.** Two admissible rivals on one
+axis want identification excitations **100x apart**, and each is badly served by the other's. The probe
+amplitude is not a harness constant to be got right once; it is a property of WHAT THE MODEL WILL BE
+USED FOR — a polynomial factor-and-divide inversion wants a large well-conditioned signal, a
+one-regression FIR inverse wants the regime the correction will actually occupy. Nothing here
+generalises to a third method without measuring it.
+
+### §113.5 — THE KOOPMAN LIFT ITSELF: MORE CAPACITY, BETTER IN SAMPLE, WORSE ON THE PROGRAM IT HAS NEVER RUN
+
+The harness is built so the LIFT IS THE ONLY VARIABLE: `LIFTS=none` is the same data, the same solver,
+the same inverse and the same scoring with the dictionary EMPTY — a matched control (rule 20) inside
+one table rather than across two files. Every dictionary is chosen against this plant's stated
+nonlinearities (a Coulomb curve jumping −18.7 → +17.3 N across v = 0, a ±10 V drive clip, a 0.05 µm
+encoder) and every scale is taken from the identification data's own spread (rules 31, 32). Noiseless,
+seed 0, each row the best of its own 2,268-cell sweep:
+
+```
+  lift        nF   R2(e)      program           sine          lift        nF   R2(e)   program      sine
+  none        41  0.72958   38.07x   <- best transfer         rbfa        55  0.90070  35.01x     8.23x
+  sgn         44  0.84512   40.16x           19.81x           sgn+quad    47  0.84455  28.45x    19.76x
+  tanh        46  0.73491   24.92x           17.75x           tanh+quad   49  0.73497  19.76x    18.87x
+  quad        44  0.72874   29.62x           23.06x           rbf+sgn     55  0.74563  15.98x     4.41x
+  rbf         53  0.74213   16.44x            6.53x           rbf+quad    56  0.74232  16.09x     6.42x
+  none (sine)                                 25.77x          rbf+rbfa    99  0.90180  15.57x     6.12x
+                                                              all five   107  0.77430  13.01x     5.75x
+```
+
+**THE LINEAR CONTROL HAS THE BEST TRANSFER IN THE TABLE.** `sgn` — the Coulomb term, the one the
+plant's own friction table says should matter most — buys **5% at home and gives up 23% on the program
+it has never run**. Every other dictionary is worse on both columns. And `rbfa`, Gaussians on
+acceleration, has the BEST in-sample fit in the table (R² 0.901 against the linear arm's 0.730) and one
+of the worst transfers, with `rbf+rbfa` at 99 features reading 0.902 and 15.57x/6.12x. **More capacity,
+better in sample, worse transfer** — §54.9's result reached from a completely different direction:
+there it was a held-out R² under the TEACHER routing, here it is the DELIVERED MACHINE ERROR on a
+rival's own object, and the function class is the literature's own rather than one of ours.
+
+Rule 42's band settles what this rival would ship: among candidates within 5% of the best measured
+score take the cheapest, and 40.16x against 38.07x is inside it, so **the LINEAR inverse is the
+selection** — fewer features and better on the held-out column.
+
+**THE ONE PLACE THE LIFT EARNS ANYTHING IS UNDER NOISE**, where `sgn` reads 19.58x/17.62x against the
+linear arm's 18.25x/13.42x — better on BOTH columns, +7% and +31%. Offered as one seed and one
+dictionary, not as a result.
+
+### §113.6 — THE FOUR CONTROLS, AND THE RESULT IS **NOT ESTABLISHED** BECAUSE OF THE FOURTH
+
+**CONTROL 1 — GRID RUNAWAY: PASSES.** The noiseless best cell is INTERIOR in every knob — ridge 1 in
+[1e-10 … 1e2], probe 2e-4 in a ladder spanning 6667x, `na` 1 in [0,1,2], input lags 8 in [4,8,32],
+delay 8 in [0,8,16,32], reference lags 16 in [4,16,32]. Under noise one knob came back on its bottom
+edge (input lags 4 of [4,8,32]); widened to [1,2,4,8] the argmin stays at 4 and is interior. Nothing
+here climbs without bound as a regulariser is removed, which is what disqualified DeePC.
+
+**CONTROL 2 — THE NOISE FALSIFIER: IT SURVIVES, AND IT IS THE FIRST RIVAL HERE THAT DOES.** At the
+rig's OWN stated 1.6 µm identification fidelity, on what the COMMISSIONING reads:
+
+```
+                              program      held-out sine
+  KOOPMAN ② best (sgn)         19.58x          17.62x
+  KOOPMAN ② linear control     18.25x          13.42x
+  ZPETC (§56)               0.06x-0.27x   — worse than doing nothing
+  DeePC (§54.8)                 1.00x           1.00x   — it cannot act at all
+```
+
+The optimum probe moves a decade down with the noise (2e-4 → 2e-5), which is the opposite of the naive
+expectation and is stated as measured rather than explained. **DeePC died under this falsifier and
+ZPETC died under it; this one loses a factor of two and keeps working**, which is the strongest thing
+in this section.
+
+**CONTROL 3 — WHAT IT COSTS: IT FITS THE SCAN.** 43 MAC/decision (38 under noise) = **0.4% of the
+budget**, in 544 bytes, with 8 steps of reference preview and ZERO transcendental evaluations in the
+shipping cell. Against the distilled policy's 78 MAC / 0.2 kB and DeePC's 145,082 MAC at 1451%. The
+transcendental count is priced separately and both ways because an `exp` is not one MAC on a PLC; the
+cell that ships has none.
+
+**CONTROL 4 — REPRODUCIBILITY ACROSS IDENTIFICATION DRAWS: IT FAILS, AND THIS IS WHY THE 40x IS NOT
+A RESULT.** §56 required of ZPETC that ONE fixed cell reproduce across draws, and it does — 2.45x /
+2.18x / 2.36x / 2.28x. The same question put to this rival:
+
+```
+  ONE FIXED CELL (the noiseless winner), four identification draws:
+     38.07x / 25.77x      6.27x / 6.67x      3.63x / 3.81x      0.08x / 0.04x
+     R² 0.730             R² 0.793           R² 0.704           R² 0.760, CAPPED 41% of samples
+
+  EACH DRAW'S OWN BEST-OF-SWEEP (linear arm, full stage 1 + stage 2 per seed):
+     seed 0  38.07x / 25.77x  at probe 2e-4      seed 2  37.43x / 22.77x  at probe 4e-4
+     seed 1  49.28x / 37.15x  at probe 1e-4      seed 3  24.05x / 29.59x  at probe 1e-4
+```
+
+**The METHOD reproduces at 24.05x-49.28x over four draws; the CONFIGURATION does not transfer at all,
+and one draw carrying the winner's settings is 12x WORSE than doing nothing.** The fit cannot tell
+them apart — R² is 0.70-0.79 in all four while delivery spans 476x — which is §56's sharpest line
+(*every model in the sweep fits at R² 1.000 and they deliver 0.03x to 2.45x*) reproduced on a
+nonlinear-lift route by a completely different mechanism.
+
+**SO THE HONEST STATEMENT IS: 24-49x IS A BEST-OF-SWEEP WHOSE SELECTION MUST BE REDONE PER
+COMMISSIONING DRAW, AND THE SELECTION NEEDS THE DELIVERED SCORE.** That is a protocol §54.8 and §56
+both used and it is the protocol this comparison is held to — but it is not a commissioning procedure
+a customer could run, and ZPETC passes the stronger form of the control that this fails. The number is
+reported and is NOT quoted as a deployable factor (§54.10's discipline).
+
+### §113.7 — WHAT IT DOES TO TARGET 8
+
+Both scoring conventions are printed, because `zpetc.mjs` and `deepc.mjs` both quote "32.75x / 33.15x
+[on record]" beside columns produced by their own `score()` on their own sine, which is neither the
+loop nor the trajectory those two numbers were measured on (rule 19). The (b) object is
+RE-COMMISSIONED in `driveRef`'s loop at the same structure, because the two loops' open loops differ
+by 18% (5.7640e-1 against 4.8849e-1, entirely from one sample of commanded lag) and carrying the (a)
+object across would measure transfer rather than the object.
+
+```
+  (b) the DISTILLED POLICY'S OWN convention, `driveRef`/`transfer` on `twoTone`:
+                                       program            held-out sine
+     KOOPMAN ② noiseless               39.00x                 25.62x
+     KOOPMAN ② at 1.6 um               11.61x                 12.08x
+     the DISTILLED policy              32.75x                 33.15x
+     the CONVENTIONAL rung            424.8x     — and it is what the one press SHIPS on this axis
+```
+
+**TARGET 8 NOW HAS THREE ADMISSIBLE RIVALS BUILT AND ONE UPPER BOUND, AND THE LAST NAMED ABSENCE IS
+HALF CLOSED.** Koopman ① is inadmissible with its arithmetic priced; Koopman ② is built, and it is the
+first rival in this project to be COMPETITIVE with the shipped object on its own convention — better at
+home (39.00x against 32.75x), worse on the held-out trajectory (25.62x against 33.15x), at half the
+arithmetic. And it loses the comparison that decides the plant anyway, because the CONVENTIONAL RUNG
+reads 424.8x on EMPS and is what the block actually ships there (§96, §97.3). Still absent: modern MPC
+and L1 adaptive, both inadmissible on §54.8b's grounds. **Three methods are still not a field.**
+
+### §113.8 — WHAT IS NOT ESTABLISHED (rule 59)
+
+One plant, one axis. EMPS is where ZPETC and DeePC were measured so the three are comparable by
+construction, and it is also the rival's STRONG ground — near-LTI, single channel — which is the same
+caveat §56 carries. The 24-49x is a best-of-sweep selected on the program it is quoted on, and control
+4 shows the selection does not transfer across identification draws. The dictionary sweep is one seed;
+its noise column is one seed. Nothing is integrated: `koopman.mjs` is an INSTRUMENT, no `AutoStack`
+rung offers this route, and the deployed artefact would need `deploy.js`'s own reimplementation and
+`artefact.test.mjs`'s bit-identity before it could be called a product. And the Koopman ① price is an
+ANALYTIC MAC count of a controller that was not built, itemised so it can be checked — the same class
+of instrument that has shipped faults twice here (rules 17, 30).

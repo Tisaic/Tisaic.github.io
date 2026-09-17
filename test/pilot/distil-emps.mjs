@@ -80,7 +80,7 @@ export function tone(lap, c1, c2, vFrac, vProg, mix = 0.35, mid = 0.125) {
 }
 
 // ---- THE HELD-OUT TRAJECTORY, copied from `noilcbench.mjs` so the bar is the same object.
-function twoTone(n) {
+export function twoTone(n) {
   const q = new Float64Array(n);
   const mid = 0.125, A1 = 0.055, A2 = 0.022, w1 = 2 * Math.PI * 0.21, w2 = 2 * Math.PI * 0.53;
   for (let k = 0; k < n; k++) {
@@ -90,9 +90,19 @@ function twoTone(n) {
   return q;
 }
 const N2 = 12000, TQ = twoTone(N2);
+export { N2, TQ };
 
-/** Score any correction on the held-out sine. `corr(k)` is a function of ABSOLUTE sample. */
-function transfer(corr) {
+/**
+ * Score any correction on the held-out sine. `corr(k)` is a function of ABSOLUTE sample.
+ *
+ * EXPORTED (plan §113) so a RIVAL can be scored in the DISTILLED POLICY'S OWN CONVENTION rather
+ * than in a second copy of it. `zpetc.mjs` and `deepc.mjs` both quote "32.75x / 33.15x [on record]"
+ * against columns built by their own `score()` on their own `tone(4800,3,7,0.9,...)` sine — a
+ * different scoring loop and a different trajectory from the one those two numbers were measured
+ * on. That looseness is invisible while every rival shares it; exporting this lets the next rival
+ * print BOTH columns and say which is which (rules 19, 61).
+ */
+export function transfer(corr) {
   const m = makeMachine(TQ[0], 0);
   let s = 0, n = 0;
   for (let k = 0; k < N2; k++) {

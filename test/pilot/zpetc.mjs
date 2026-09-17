@@ -102,6 +102,30 @@ const ORDERS = (process.env.ORDERS || '2,3,4,6').split(',').map(Number);
 const NOISE = +(process.env.NOISE || 0);
 const TDATA = +(process.env.TDATA || 4000);
 const SEED = +(process.env.SEED || 0);   // the identification draw; a rugged surface makes it matter
+/**
+ * THE EXCITATION AMPLITUDE, MADE A KNOB BY plan §113 AND DEFAULTING TO THE VALUE THAT WAS HERE.
+ * `2 * UM` is the AUTHORITY, not anything the machine's own numbers imply, and §113 measured the
+ * correction this axis actually needs at 7.3e-4 m — so the probe below drives the machine 27x
+ * further off its program than any deployed correction ever will, through the friction reversal and
+ * the drive's clip, and identifies a regime the controller does not operate in (rule 41b). §113's
+ * own Koopman arm reads 0.28x at this amplitude and 38.07x two decades below it, so the question had
+ * to be put to THIS file too: is §56's 2.45x the method, or the probe?
+ *
+ * **IT IS THE METHOD, AND THE LADDER SAYS SO.** Swept over eleven amplitudes, this file's own score
+ * PEAKS at the value that was already hardcoded and falls away on BOTH sides — 1.01x at 1e-1, 1.53x
+ * at 4e-2, **2.45x at 2e-2**, 1.53x at 1e-2, 1.59x, 1.66x, 1.33x, 1.15x, 1.07x, 1.12x, 1.04x down to
+ * 2e-5. So §56's excitation sits at an INTERIOR OPTIMUM of its own probe ladder, its 2.45x/3.28x
+ * stands unretracted, and §56 was right about what caps it: the sensitivity of the composed
+ * polynomial inversion, not the regime it was identified in. Two admissible rivals on one axis want
+ * identification excitations 100x apart, and the probe amplitude is a property of WHAT THE MODEL WILL
+ * BE USED FOR rather than a harness constant to be got right once.
+ *
+ * Unset is BYTE-IDENTICAL — checked as a `diff` of a full run against `ZPROBE=0.02`, not read off
+ * the default's value — and the unset run reproduces §56's published 1.9921e-1/2.45x and
+ * 9.8764e-2/3.28x exactly, which is what says this knob MEASURED something rather than moving it
+ * (rule 21).
+ */
+const PROBE = +(process.env.ZPROBE || UM);
 
 // ---------------------------------------------------------------- identification
 /**
@@ -153,7 +177,7 @@ function identify(na, nb, ridge) {
   const u = new Float64Array(TDATA), y = new Float64Array(TDATA);
   let hold = 0, cur = 0;
   for (let k = 0; k < TDATA; k++) {
-    if (hold-- <= 0) { cur = 2 * UM * rnd(); hold = 6 + Math.floor(12 * (rnd() + 0.5)); }
+    if (hold-- <= 0) { cur = 2 * PROBE * rnd(); hold = 6 + Math.floor(12 * (rnd() + 0.5)); }
     m.step(PR.q[k % P] + cur);
     u[k] = cur; y[k] = m.q - PR.q[k % P] + NOISE * nz();
   }
