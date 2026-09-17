@@ -22747,3 +22747,390 @@ from the program it will run* — is a different question from the one §90.3c a
 Two plants, one seed each, `passes 4` on the column and whatever the tank's own ladder chose (it
 reports 2). `PARAM` is opt-in and OFF on both, and both plants ship exactly what they shipped
 before: the column 3.96x by the hff route, the tank 19.910x by the incumbent.
+
+## §102 — DECLARING A SCALAR AND REFUSING ON IT WERE ONE SWITCH. THEY ARE TWO NOW, AND THE MILL SHOWS ALL THREE STATES
+
+§100 reached the declared-point guard for the first time, measured it doing exactly what it was
+designed to do, and measured that as a LOSS: with `vLine` declared the mill's two speed rows go
+2.020x → 1.000x and 1.474x → 1.000x, and both of those are rows where the frozen object HELPS. It
+drew the criterion that follows — *a guard must be scored on DELIVERED OUTCOME, not on faithfulness
+to its declaration* — and shipped `DECL` off at the harness level.
+
+It left the library where it found it, and that is what this section is about.
+
+### THE DEFECT, AND IT IS RULE 9b's MIRROR IMAGE
+
+`loadGuard` and `bendGuard` are constructor flags, carried on the record, read by `deploy.js` from
+the record, and both default FALSE. `_declCoverage` and `declGain` had no flag at all: they armed
+themselves off the PRESENCE of `report.declSpan`, which `addProgram` writes whenever a host passes
+`declare`. So DECLARING a scalar and REFUSING outside it were one switch.
+
+That matters because declaring has independent value and this repository already relies on it.
+`logSpec` lists `declared` and counts it in `numbersPerDecision`, and `artefact.test.mjs` checks the
+spec is SUFFICIENT by replaying a decision from those fields alone — the forensic column §77 exists
+for. A host that declared `vLine` so an investigation could replay a decision months later bought,
+silently and without asking, the refusal §100 priced at 2x.
+
+Rule 9b came from three guards that shipped ARMED AND UNREACHABLE, each passing its own unit test.
+This one is the mirror image: **REACHABLE AND ARMED WITHOUT BEING ASKED.**
+
+### THE FALSIFIER RAN FIRST AND IT HAS A CONTROL (rule 1)
+
+One policy, fitted TWICE on identical rows and identical targets, differing only in whether
+`declare: {vLine: 5}` was passed. Nothing in the repository modified:
+
+```
+  weights bit-identical between the two fits : TRUE
+
+  A  not declared, no decls at deploy   2.910098e-1
+  B  not declared, decls={vLine:4}      2.910098e-1   <- the control with teeth
+  C  declared,     no decls at deploy   2.910098e-1   <- rule 25 working as designed
+  D  declared,     decls={vLine:5}      2.910098e-1
+  E  declared,     decls={vLine:4}      0.000000e+0   <- the finding
+```
+
+B is what stops E being a tautology: `vLine: 4` is not refusable in itself, and becomes refusable
+only because the fit was TOLD A NUMBER. The weights being identical says the entire effect is the
+guard and none of it is the map. `deploy.js` agrees on D and E, so it is the ARTEFACT's behaviour.
+
+### THE CHANGE
+
+`declGuard`, default FALSE, beside the other two — on the policy, on the record, read by
+`deploy.js`, and flowed through all three of `AutoStack`'s `DistilPolicy` construction sites (none
+of them carried it, so without that the flag would have been unreachable from `distil: {...}`,
+which is the §100 defect committed again while fixing it).
+
+The span is still RECORDED whenever a host declares, still in `report.declSpan`, still named by
+`logSpec`. What changes is only whether it reaches a decision.
+
+Two things deliberately NOT done, each stated rather than left to be discovered:
+
+- **`logSpec` still names declared fields with the guard off**, which OVERSTATES the log budget by
+  the declared count. That direction is chosen: a superset of fields is safe for replay and an
+  understated budget is not, and an investigation wants the operating point recorded whether or not
+  it faded anything.
+- **The record stays at `v: 1`.** §52.37 bumped the version when a missing field could silently
+  DIFFER; this one cannot — every record written before §102 carries `declSpan: null`, because no
+  host declared anything, and an absent flag against a null span is the same behaviour either way.
+  Retiring every stored record for a field that cannot differ is caution, not correctness.
+
+### THE MILL, ALL THREE STATES, AND THE MIDDLE ONE IS THE POINT
+
+```
+  state                 declSpan        guard       SPEED rows          target 1
+  DECL=0                nothing         not armed   2.020x / 1.474x     0.770 / 0.562
+  DECL=1 DGUARD=0       vLine [5, 5]    not armed   2.020x / 1.474x     0.770 / 0.562
+  DECL=1 DGUARD=1       vLine [5, 5]    ARMED       1.000x / 1.000x     0.381 / 0.381
+```
+
+The commissioned point and both GAUGE rows read 2.625x in all three, which is the control that says
+the guard refuses on the OPERATING POINT and not on the fact that a knob moved.
+
+**Row 1 reproduces §89.2 exactly and row 3 reproduces §100 exactly** — so the reclassification
+preserves both measurements rather than removing either (rule 21). **Row 2 is the new one: on a real
+plant, declaring the line speed is FREE.** The span is on the record for an investigation and
+reaches no decision, and the machine delivers the 2.020x and 1.474x it delivers when told nothing.
+
+### AND ROWS 1 AND 2 WERE BYTE-IDENTICAL IN THE OUTPUT, WHICH IS THE RIGHT BEHAVIOUR AND UNREADABLE REPORTING
+
+Checked with `diff`: the two runs produced identical text. That is correct — declaring changes no
+decision — and it means that **if the `declare` plumbing broke, that run would look exactly the
+same.** A declaration that never reaches the guard, invisible, is precisely what §90.4 shipped and
+§100 found (rules 25, 9b). The harness now PRINTS which of the three states it is in, read off
+`auto.distil.report.declSpan` rather than off the env knob, so the two states are distinguishable
+in the record where they are identical in the numbers.
+
+### WHAT THIS DOES NOT CLAIM
+
+It does not overturn §90.4's design argument — that a point span honestly has no evidence anywhere
+else. It relocates the switch. The argument was already measured and lost on the one plant where it
+has been checked: at 4.0 and 6.5 m/s the frozen object reads 2.020x and 1.474x, HELPING at both, so
+*the honest gain there is zero* is empirically false there and an a-priori argument loses to a
+measurement (rule 16). §102 makes that the DEFAULT rather than a harness setting, and leaves the
+guard fully reachable for the plant that produces the evidence §100 asked for: ONE operating point,
+on ANY plant, where the frozen object reads BELOW 1.000x. None has.
+
+### FOUND IN PASSING AND DELIBERATELY NOT FIXED
+
+`learnLive`'s `fresh()` builds a policy from `cur` and copies thirteen fields — and NOT
+`loadGuard`, `loadLo`, `loadHi`, `bendGuard` or `bendMargin`. So a re-fit from scratch drops those
+two guards where the commissioning had armed them. (`mode: 'continue'` goes through `fromJSON` and
+is unaffected.) It is LATENT: both default FALSE and §100.1 measured that seven plants of ten arm
+nothing at all. It is recorded as its own item rather than repaired in passing, because a guard
+defect fixed silently inside another change is how three of them shipped armed and unreachable.
+
+## §102.1 — "FIX THE ISSUES": THREE DEFECTS I HAD FILED AND DEFERRED, AND THE THIRD IS THE ONE THAT MATTERS
+
+Three things were sitting flagged-but-unfixed. Fixing them in order turned the smallest one into
+the largest, which is why they are written up together.
+
+### (1) THE BARREL BASELINE I COULD NOT EXPLAIN WAS MY OWN SCORING WINDOW
+
+§78's probe read an open loop of 5.1379e+0 K rms where the record says 5.2708e+0, and I wrote *this
+is unexplained and must be run down before either number is quoted*. It is `rigs/ladder.mjs`'s own
+`if (k >= pN * 0.05)`: the driver **drops the first 5% of the program as a start transient** and my
+scored loop began at k = 0. Corrected, the open loop reads **5.2708e+0 — the record's figure to five
+figures** (rule 21), and the teacher-free route reads **7.051x** rather than 7.012x.
+
+Rule 13, committed by me, in a probe written to check someone else's instrument.
+
+### (2) `learnLive`'s `fresh()` DROPPED EVERY GUARD FLAG
+
+It copied thirteen fields and none of `loadGuard`, `loadLo`, `loadHi`, `bendGuard`, `bendMargin`,
+so a re-fit from scratch returned a policy with those guards OFF where the commissioning had armed
+them. (`mode: 'continue'` goes through `fromJSON` and was never affected — that asymmetry is what
+hid it.) Fixed, and all three flags are carried.
+
+### (3) AND THAT WAS A SYMPTOM: `AutoStack` NEVER PASSED THOSE FLAGS AT ALL
+
+The test written for (2) went RED with the flag reading FALSE **straight after commissioning**, so
+`fresh()` was dropping something that had never been set. `AutoStack`'s `DistilPolicy` construction
+spreads thirteen options and **`loadGuard` and `bendGuard` are not among them** — so
+`distil: { loadGuard: true }` through the one press was silently ignored and **neither guard could
+be armed from the shipped configuration at all.** The only way §82's load guard was ever armed is
+`distil-arm.mjs:870` doing `pol.loadGuard = true` on the object AFTER the ladder built it.
+
+**Rule 9b's original shape for the FOURTH time**: §82's guard could never exceed its own threshold,
+§78.5's was calibrated on a signal that could not trigger it, §100's was never called — and this
+one had no path from the option to the object. Every one of them has a thorough unit test.
+`artefact.test.mjs` exercises `loadGain` over a whole ladder of readings and could not see it,
+because a unit test calls the function and what was missing was the wiring to it.
+
+Fixed at both construction sites. Defaults unchanged, so every plant is byte-identical, and the
+`distil-arm.mjs` poke still sets the same field, so §82's measurements are untouched.
+
+### THE TEST, AND WHY IT COULD SEE WHAT THE SUITE COULD NOT
+
+`learnLive` had **NO NODE TEST AT ALL** — it is reachable only from `flexisim.html`'s *Learn on this
+program* button and from `distil-arm.mjs` behind `LEARN=`. That is the whole reason two defects sat
+in it. The new block in `distil.test.mjs` drives it on a **ONE-CHANNEL host that supplies no
+`speedAt`**, and that choice is the instrument:
+
+### (3b) WHICH EXPOSED A SECOND COPY OF THE HELPER §90.3 REPAIRED
+
+`learnLive` built its own `heldCorr` with `let held = [0, 0]` — the channel count written in — and
+an unguarded `tr.speedAt(k)`. Those are **exactly** the two faults §90.3 found and fixed in the
+commission path's copy, still present in this one, because §90.3 repaired the copy it was looking
+at. So the page's own *Learn on this program* button threw on any host without `speedAt` and
+mis-shaped its held correction on anything that is not two-channel. The arm hid it twice over: nc
+is 2 there and `autohost.js` supplies `speedAt`, so both copies agreed on the only host that ever
+ran them. There is **one `_heldCorr` method** now and both sites call it (rule 61 — a shared helper
+exists so two copies cannot drift, and duplicating it is what let a repair land on one of them).
+
+### ASSERTED, BOTH HALVES AND THROUGH THE DECISION
+
+- `learnLive` runs at all on a one-channel host with no `speedAt` — which is (3b).
+- a re-fit KEEPS a guard the commissioning armed — the half that was red before (2) and (3).
+- a commissioning that armed NOTHING does not ACQUIRE one through a re-fit — without which the
+  check above passes on a flag that is always true.
+- and the carried flag reaches an **actual decision**: the armed policy fades under load and the
+  unarmed one is bit-identical under the same load (rule 9b — the field is not the observable).
+
+Controls: `artefact.test.mjs` green, `autostack.test.mjs` green with EMPS at **424.82x**
+byte-identical, and the shipped defaults arm nothing so no plant's number moves.
+
+### WHAT THIS SAYS ABOUT THE GUARD SURFACE, HONESTLY
+
+Four guards exist. Of the four, **one has ever been armed through the one press** (the speed fade,
+which rides on `report.speedSpan` rather than a flag and is therefore the only one with no wiring to
+get wrong). The other three were each unreachable in a different way, and each was found by asking
+*what does the shipped configuration actually pass?* rather than by a test. §100.1's table should be
+read accordingly: "default FALSE, off on the measurement" was true and too kind — until §102.1 two
+of those rows were *not armable*.
+
+## §103 — THE TEACHER-FREE DIRECT INVERSE REACHES THE BARREL, IN THE SAME RANGE AS THE TEACHER AT ZERO TEACHER LAPS
+
+§99 built the direct inverse on EMPS, measured it at 5.510x, and did not integrate it for a reason
+that was a measurement rather than caution: the incumbent reads 424.8x there and the portfolio
+already ships it, so a 5.5x route is third of three. It then NAMED where it would be worth
+something and did not run it — *the BARREL and the COLUMN, where §72 prices the whole commissioning
+at 30.0 and 33.3 DAYS of plant time, §73.13 prices the teacher at 74-89% of that, and §96 measures
+the incumbent finding nothing at all.* This is the barrel.
+
+### THE UNITS OBJECTION WAS THE REASON IT WAS PARKED, AND IT IS NOT ONE
+
+`c - y` needs command and output in the same units. On a barrel the command is POWER and the output
+is TEMPERATURE. But this plant's reference ALREADY goes through the engineer's closed-form nominal
+inverse — `specs.mjs` hands the map `TH.powerFor(TH.setpointAt(k))` — so the identity sitting
+implicitly inside EMPS' `c - y` is `powerFor` here:
+
+    fit     window of powerFor(ACHIEVED T)  ->  c - powerFor(ACHIEVED T)
+    deploy  window of powerFor(SETPOINT)    ->  c = powerFor(r) + f(...)
+
+`DistilPolicy` needs NO change, because the fit's input is already in the units of the reference the
+shipped object reads. Every process plant here has the same shape (`WB.inputsFor`, `voltsFor`), so
+it generalises by construction. **NARROWED: "no model" becomes "no model IDENTIFIED BY US"** —
+`powerFor` is the engineer's own closed form, already ships as this plant's reference, and §80.6
+priced it at 1.008x. What the route removes is the TEACHER, not every model.
+
+### DELIVERED, THROUGH `barrelSpec`'s OWN `fresh()`/`step()`
+
+    open loop (powerFor alone)   5.2708e+0 K rms   <- the record's figure, reproduced (rule 21)
+    + teacher-free correction    1.7391e+0 K rms   3.031x   peak |u| 4.29 of 12   [seed 3]
+    ~230 MAC/decision, 45,000 open-loop excitation steps, ZERO teacher laps
+
+### AND THE DISTRIBUTION IS THE FINDING, NOT THAT NUMBER
+
+    SEED   held-out R2 by segment            SCORED      HELD-OUT ORDER
+    1      0.7003 / 0.9333 / 0.7293          3.688x      1.954x
+    2      0.7580 / 0.3571 / 0.7545          6.989x      1.973x
+    3      0.7571 / 0.9192 / 0.9104          3.031x      1.896x
+    4      0.8868 / 0.7855 / 0.6796         10.006x      2.013x
+
+**THE SCORED FACTOR SWINGS 3.3x AND WHAT TRANSFERS DOES NOT MOVE AT ALL.** 3.03-10.01x on the
+program it was scored on, median about 5.3x — and **1.896x-2.013x on a recipe order it has never
+run, a 1.06x spread**. Against the teacher-taught 7.00x, itself one draw of a LADDER carrying rung
+selection and the ridge and gain axes and whose DIET spread §84.8 measures at 1.66x, **the
+distributions OVERLAP**. The claim is *the same range at zero teacher laps* — not *it matches* and
+certainly not *it wins*.
+
+### AND THE TARGET-1 RATIO MOVES BECAUSE ITS DENOMINATOR DOES, WHICH IS §89.1 FROM THE OTHER SIDE
+
+The ratio reads 0.530 / 0.282 / 0.626 / 0.201 — NOT MET on all four, nothing made worse — and the
+numerator behind it is FLAT to 6% while the denominator swings 3.3x. So the apparent variation in
+target 1 here is not the object transferring differently; it is how well a given draw fits the one
+program it was scored on. §89.1 made exactly this objection to the cheap comparator from the other
+direction (*a ratio above 1 is evidence the DENOMINATOR moved*), and this is the first place in the
+project where both halves of the ratio have been measured as distributions at once.
+
+The teacher-taught object's own target-1 row on this plant reads **0.393, NOT MET, still helping at
+2.747x** (§88) — squarely inside the teacher-free route's own 0.201-0.626, so the two do not differ
+in kind, which §84.9's `prog/rise` of 5.2 predicts for this plant either way.
+
+### AND THE FIT'S GATE DOES NOT RANK THE MACHINE, ON A THIRD PLANT
+
+Seed 3 has the best held-out R2 of the four and the WORST delivery; seed 4 the reverse. That is
+`distil.js`'s own *the gate is a PRE-FILTER and the decision is a machine-scored verify*, after the
+tank (gate correlation -0.057 before `verifyRef`) and the barrel's own 0.94-0.98 over a rung the
+machine refused.
+
+### RULE 35 IS IN CONFLICT WITH ITSELF ON A LOW-PASSED PLANT, AND THAT IS THE TRANSFERABLE FINDING
+
+Rule 35 requires an inverse model to be DITHERED so it is trained over the operating points the loop
+will occupy. The target `c - powerFor(y)` contains that dither, and this plant attenuates a fast
+dither out of `y` before a thermocouple sees it — so it is unrecoverable from the window BY
+CONSTRUCTION and enters the fit as pure label noise:
+
+    DITH      R2 zone0 / zone1 / zone2        DELIVERED
+    0         0.8652 / 0.8984 / 0.9096        7.051x
+    0.015     0.7992 / 0.8924 / 0.7869        4.476x
+    0.06      0.3200 / 0.4115 / 0.2145        4.022x
+    0.12     -0.0204 / 0.1507 / 0.0511        3.331x
+
+**Read the two columns differently (rule 19).** The R2 collapse is clean and far outside anything the
+seed moves. The DELIVERED column is CONFOUNDED with the commissioning draw except at the extremes —
+the seed spread is 4.18-7.26x, so 4.476x at DITH 0.015 sits inside it and only the 0.12 row is
+separable. The finding is the R2 collapse; delivery agrees in direction and cannot carry it alone.
+
+On a servo the dither survives into the achieved position and `c - y` stays learnable; here it does
+not. **Coverage must come from SLOW excitation** — the random changeovers themselves. That is a
+screen rather than a barrel fact: expect the same conflict wherever actuator bandwidth greatly
+exceeds output bandwidth.
+
+### TWO OF MY OWN NUMBERS WERE WRONG FIRST AND BOTH ARE RECORDED
+
+**RULE 61.** The first version scored through a PRIVATE copy of the barrel's routing and read
+**9.783x**; through `barrelSpec.fresh()`/`step()` the same fit reads 7.0x. A second copy of a plant's
+routing has now shipped a wrong number four times in this project, and the optimistic one is the one
+that would have been quoted.
+
+**RULE 13.** That private loop also scored from k = 0 where `rigs/ladder.mjs` scores from
+`k >= pN * 0.05`. That is the entire 2.5% baseline discrepancy §78's notes recorded as unexplained:
+on the ladder's own support the open loop reproduces the record's 5.2708e+0 exactly.
+
+**RULE 30.** And the first version of this file's own header quoted the scratch probe's dither table
+rather than the numbers this harness emits. Corrected to its own.
+
+**RULE 31, AND IT MOVED THE HEADLINE BY 2.3x.** The first version HARDCODED the window at ±938 —
+which is `deriveWindow`'s output for `distil-barrel.mjs`'s 7500-step diet laps — while exciting in
+5000-step segments, where the same rule gives 625. So the window spanned 37% of the training lap
+against the aliasing bound's 25%, and it read **7.051x**. Derived from this file's own diet it reads
+**3.031x on the same seed, with target 1 IMPROVING from 0.310 to 0.626** — §41's theorem and
+§49.11's forced trade, arriving in my own instrument: a window that over-spans its training lap
+memorises the diet, scores better on the program and transfers worse. `deriveWindow` is imported
+now rather than reimplemented (rule 61).
+
+### WHAT IS NOT DONE
+
+The COLUMN, which is the other plant §99 named and where `WB.inputsFor` is the same hook. No ladder:
+one ridge, one window, one excitation design, no gain axis, no rung selection — so this is not yet
+comparable to a ladder figure and the file says so in its own summary. And nothing here is
+integrated: `dirinv-barrel.mjs` is an INSTRUMENT, not a rung, exactly as `dirinv.mjs` is.
+
+## §104 — THE TEACHER IS REMOVABLE ON THE TWO PLANTS TARGET 4 FAILS WORST ON: 33 DAYS TO 18 HOURS, 30 DAYS TO 35 HOURS
+
+Target 4 is the target that fails hardest — met on two plants of eight — and §73.13 measures the
+TEACHER at 74-89% of what a commissioning costs. The teacher also ships on ZERO plants of ten
+(§86.7). §103 showed it is removable on the barrel in a file of its own. This asks the same question
+of the COLUMN through ONE SHARED KIT, because §103's own three mistakes were each a second copy of
+something that already existed (rules 61, 13, 31) and a fourth plant asked privately would repeat
+them.
+
+`rigs/dirinvkit.mjs` holds the excitation loop, the window, the fit, the scoring support and the
+controls. A plant supplies only its DIET and its NOMINAL INVERSE.
+
+### THE RESULT
+
+    plant               teacher-free, 4 seeds        teacher-taught     teacher laps
+    extruder barrel     3.705x .. 6.388x  med 4.641x      7.00x         0 against ~33 days
+    Wood-Berry column   3.427x .. 4.450x  med 3.652x      3.96x         0 against ~30 days
+
+**And the calendar is the point, not the factor.** Counting the excitation AND one scored verify,
+in each plant's own time base:
+
+    barrel   45,000 excitation + 20,000 verify =  65,000 steps @ 1 s     =  18.1 h   against 799 h   44x
+    column   18,000 excitation +  3,000 verify =  21,000 steps @ 0.1 min =  35.0 h   against 720 h   21x
+
+**33.3 DAYS TO 18 HOURS, AND 30.0 DAYS TO 35 HOURS.** A 44x and a 21x, at delivered factors in the
+same range as the objects those calendars bought.
+
+### AND THE ARITHMETIC SAYS IT IS NOT ONLY THE TEACHER, WHICH IS WORTH STATING (rule 19)
+
+Removing a component that is 74-89% of a bill gives 4x to 9x. This gives 44x, so the route is also
+removing the DIET's teacher-side cost, the probe set, the refinement passes and **both machine-scored
+ladders** — §84.5 prices the tank's verify share alone at 44%. So the comparison is *this route as
+built* against *the full ladder*, and they are not the same scope: the ladder SELECTS a ridge and a
+gain on the machine and this fits once at `1e-6` with no selection at all. Quoting 44x as "the cost
+of removing the teacher" would be wrong by about 5x.
+
+### THE CONTROLS, WHICH ARE WHY THE NUMBERS ARE WORTH ANYTHING
+
+Three of them exist because this project has already published a number of exactly that shape:
+
+- **ZERO** — an all-zero map must reproduce the open loop BIT-EXACTLY, ASSERTED and not printed.
+  That is `distil-tank.mjs`'s §67.3 defect, which read *1.000x, nothing harmed, TRANSFER* for two
+  sections while the rung was absent from the run that scored it. Passed on both plants.
+- **SHUFFLE** — the same rows against a PERMUTED target. It reads **1.000x-1.008x on both plants**,
+  so the fit is reading the map and not the excitation's mean, the settle or a scoring artefact
+  (rule 15). Without this the whole table could be an artefact and look identical.
+- **BASELINE** — the barrel's open loop reads **5.2708e+0, the record's own figure** (rule 21).
+- Held out **BY SEGMENT**, never shuffled: contiguous rows read most of the same window.
+- Reported as a **DISTRIBUTION**: §103's own headline moved 3.3x across four seeds.
+
+### THE COLUMN IS SATURATED AT ITS SHIPPED AUTHORITY, AND THAT IS A PRODUCT FINDING
+
+Its peak correction is **0.400 of 0.4 on every seed** — the barrel's own §62.4 failure signature, and
+what §84.10 had to sweep 24-fold before the cart-pole's factor could be called a result. Swept:
+
+    UCAP   peak |u|          delivered
+    0.5    0.200 SATURATED   3.420 .. 3.771x
+    1      0.400 SATURATED   3.850 .. 4.450x     <- the shipped cap
+    2      0.724 of 0.800    4.850 .. 5.041x
+    4      0.724 of 1.600    4.850 .. 5.041x     <- identical
+    8      0.724 of 3.200    4.850 .. 5.041x     <- identical
+
+**This is the OPPOSITE of §62.4.** There, more authority made the barrel worse and the correction
+stayed pinned; here the map's demand has a natural size of 0.724 and stops, byte-identically, from
+UCAP 2 upward. So the shipped cap is simply BELOW what a correction of this class wants on this
+plant, and the route reads **4.85-5.04x** when allowed its own authority.
+
+**NOT CLAIMED, and it is the obvious next question**: whether the TEACHER-TAUGHT object is also
+cap-limited at 0.4. If it is, its 3.96x would move too and the comparison at the shipped cap stands
+as the only fair one. Nothing here measures that. The barrel is NOT cap-limited (5.2-6.0 of 12).
+
+### WHAT IS NOT ESTABLISHED
+
+Two plants. No ridge or gain selection, so this is not a like-for-like ladder figure and the 44x/21x
+are scope-mismatched as above. Target 1 is measured for the barrel (§103: flat at 1.90-2.01x while
+the scored factor swings 3.3x) and NOT for the column. Nothing is integrated — `dirinvall.mjs` is an
+INSTRUMENT, exactly as `dirinv.mjs` is, and no rung in `AutoStack` offers this route.

@@ -130,6 +130,13 @@ const NOECC = process.env.NOECC === '1';
  * evidence that the correction HARMS — which on this plant does not exist at any point tried.
  */
 const DECL = process.env.DECL !== '0' && process.env.DECL !== undefined;
+// DECLARING AND REFUSING ARE TWO SWITCHES SINCE §102, AND THIS HARNESS IS WHERE THAT IS SHOWN ON A
+// PLANT. `DECL` states the line speed; `DGUARD` arms the guard that refuses outside it. They were
+// one thing — the span was recorded by `addProgram` and `_declCoverage` armed itself off the
+// presence of that record — so a host declaring `vLine` for the forensic value alone (§77:
+// `logSpec` names declared fields, and a faded decision cannot be replayed without them) bought a
+// refusal it never asked for. `DGUARD` defaults to `DECL`, so `DECL=1` reproduces §100 unchanged.
+const DGUARD = process.env.DGUARD !== undefined ? process.env.DGUARD !== '0' : DECL;
 /** Roll angle, as an encoder reports it. `NOECC=1` withholds it — the falsifier. */
 const phase = (k) => 2 * Math.PI * RM.F_ECC * k * RM.DT;
 /**
@@ -309,6 +316,13 @@ const spec = { ...millSpec,
   depth: (ORACLE || PARAM) ? 1 : 0,
   refAt: (k) => refOf(WARM + k),
   distil: { refDim: REFDIM, ridge: env('RIDGE', 1e-6), offsets: OFFSETS,
+    // DECL ARMS THE GUARD AS WELL AS SUPPLYING THE DECLARATION (plan §102). Until §102 these were
+    // one switch — the span was recorded by `addProgram` and the guard armed itself off the
+    // presence of that record — so a host declaring `vLine` for the forensic value alone bought
+    // the refusal this harness measured at 2.020x -> 1.000x and 1.474x -> 1.000x. The table below
+    // is unchanged with `DECL=1`, which is what says the measurement was RECLASSIFIED and not
+    // removed (rule 21); `DECL=0` remains byte-identical to every mill number on record.
+    ...(DGUARD ? { declGuard: true } : {}),
     ...(PARAM ? { parametric: true, passes: +(process.env.PPASSES || 4) } : {}),
     // THE CASCADE IS THE TEACHER AND NOT A CANDIDATE TO SHIP (plan §73.14). A cascade exists on
     // these plants only because `ORACLE=1` asks for one to iterate; judged as a RUNG it changes
@@ -367,6 +381,17 @@ const OPS = [
   { tag: 'SPEED   h 1.50 mm, 4.0 m/s (delay 100→125)', o: { vLine: 4.0 } },
   { tag: 'SPEED   h 1.50 mm, 6.5 m/s (delay 100→ 77)', o: { vLine: 6.5 } },
 ];
+// WHICH OF THE THREE STATES THIS RUN IS IN, PRINTED — because with the guard unarmed the whole
+// table is BYTE-IDENTICAL to declaring nothing (checked: `DECL=0` and `DECL=1 DGUARD=0` produce
+// identical output), which is the correct BEHAVIOUR and unreadable REPORTING. If the `declare`
+// plumbing broke, that run would look exactly the same — and a declaration that never reached the
+// guard, invisible, is precisely what §90.4 shipped and §100 found (rules 25, 9b).
+{
+  const sp = auto.distil && auto.distil.report ? auto.distil.report.declSpan : null;
+  console.log(`\n  DECLARED: ${sp ? Object.entries(sp).map(([k, [lo, hi]]) => `${k} [${lo}, ${hi}]`).join(', ') : 'nothing'}`
+    + `   ·   the refusal guard is ${DGUARD ? 'ARMED' : 'NOT armed'}`
+    + `${sp && !DGUARD ? '  — so the span is on the record for an investigation and reaches no decision (§102)' : ''}`);
+}
 console.log(`\n  TARGET 1 ON A REGULATOR — the SAME frozen object at a second OPERATING POINT`);
 console.log(`    (no refit, no recommission; each point against the BARE machine at that point)\n`);
 const t1rows = [];

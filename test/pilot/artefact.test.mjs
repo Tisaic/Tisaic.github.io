@@ -385,8 +385,11 @@ check('with nothing declared the guard is exactly 1, whatever it is told',
   declGain(rec, null) === 1 && declGain(rec, { vLine: 4 }) === 1 && declGain(rec, {}) === 1);
 {
   // A POINT span — one operating point, which is what one commissioning observes — and a WIDE one.
-  const pt = { ...rec, report: { ...rec.report, declSpan: { vLine: [5, 5] } } };
-  const wide = { ...rec, report: { ...rec.report, declSpan: { vLine: [4, 6] } } };
+  // ARMED, because since §102 the span alone does not fade anything: `declGuard` is the switch and
+  // it lives beside `loadGuard` and `bendGuard`. These records exist to test the guard's
+  // ARITHMETIC, so they turn it on; the check below is the one that pins the switch itself.
+  const pt = { ...rec, declGuard: true, report: { ...rec.report, declSpan: { vLine: [5, 5] } } };
+  const wide = { ...rec, declGuard: true, report: { ...rec.report, declSpan: { vLine: [4, 6] } } };
   check('at the declared point the guard is exactly 1', declGain(pt, { vLine: 5 }) === 1);
   check('a POINT span REFUSES outside itself rather than softening — there is no evidence there',
     declGain(pt, { vLine: 5.001 }) === 0 && declGain(pt, { vLine: 4.999 }) === 0,
@@ -398,6 +401,21 @@ check('with nothing declared the guard is exactly 1, whatever it is told',
     + 'guard is ever anything but a refusal (target 2\'s own lesson)',
     declGain(wide, { vLine: 4 }) === 1 && declGain(wide, { vLine: 5 }) === 1
     && declGain(wide, { vLine: 6 }) === 1);
+  // THE SWITCH, BOTH HALVES (plan §102). DECLARING and REFUSING are different things and were one
+  // switch until §102: `declGain` armed itself off the presence of `declSpan`, so a host that
+  // declared a scalar only so `logSpec` and `explain` could name it in a forensic log bought a
+  // refusal it never asked for — measured on the mill at 2.020x -> 1.000x and 1.474x -> 1.000x, on
+  // rows where the frozen object HELPS. The half that fails if the flag is decorative is the
+  // SECOND one: the same span, the same out-of-range value, and the correction is untouched.
+  const ptOff = { ...rec, report: { ...rec.report, declSpan: { vLine: [5, 5] } } };
+  check('a declared span with the guard NOT ARMED applies the correction in full, however far '
+    + 'outside it the value is — declaring is forensics, refusing is a control decision (§102)',
+    declGain(ptOff, { vLine: 4 }) === 1 && declGain(ptOff, { vLine: 500 }) === 1
+    && declGain(pt, { vLine: 4 }) === 0,
+    `off ${declGain(ptOff, { vLine: 4 })} / far ${declGain(ptOff, { vLine: 500 })} / on ${declGain(pt, { vLine: 4 })}`);
+  check('…and the span is still RECORDED and still named in the log spec with the guard off, '
+    + 'which is what makes a declaration free rather than merely ignored',
+    logSpec(ptOff).declared.length === 1 && logSpec(ptOff).declared[0] === 'vLine');
   const m = (6 - 4) * rec.coverageFade;
   check('…and it FADES beyond it rather than switching', (() => {
     const gs = [0.1, 0.5, 0.9].map((f) => declGain(wide, { vLine: 6 + m * f }));
@@ -407,7 +425,7 @@ check('with nothing declared the guard is exactly 1, whatever it is told',
   // THE TWIN. `distil.js` computes the same gain on the fit side and the whole value of this file
   // is that the two are separate implementations; a guard added to one and forgotten on the other
   // is precisely what this check exists to catch.
-  const fitSide = new DistilPolicy({ channels: NC, refDim: D, offsets: OFFS, uMax: 0.4, ridge: 1e-6, online: false });
+  const fitSide = new DistilPolicy({ channels: NC, refDim: D, offsets: OFFS, uMax: 0.4, ridge: 1e-6, online: false, declGuard: true });
   fitSide.report = { deploy: true, declSpan: { vLine: [4, 6] } };
   fitSide.coverageFade = rec.coverageFade;
   let worst = 0;

@@ -301,7 +301,10 @@ check('…and contributes through act() on the host\'s own look-ahead closure, w
 {
   const a3 = new AutoStack({
     channels: [{ max: 10 }], uMax: 1, resolve: 1e-9,
-    distil: { offsets: [-16, -8, -4, -2, 0, 2, 4, 8, 16], signOffsets: [0], ridge: 1e-9 },
+    // ARMED EXPLICITLY (plan §102). Until then the guard armed itself off the presence of a
+    // declared span, so this block passed without ever asking for a refusal — which is what made
+    // declaring a scalar for forensics buy one. The `a4` ladder below is the other half.
+    distil: { offsets: [-16, -8, -4, -2, 0, 2, 4, 8, 16], signOffsets: [0], ridge: 1e-9, declGuard: true },
   });
   // ITS OWN CLEAN PLANT, and the reason is worth stating: `host.run` closes over the FIRST
   // `AutoStack` and subtracts its deployed correction, so reusing it hands this ladder a machine
@@ -349,6 +352,105 @@ check('…and contributes through act() on the host\'s own look-ahead closure, w
   check('…while a host that declares NOTHING is unaffected by being handed decls at all',
     auto.act({ look: lk, decls: { vLine: 4 } })[0] === auto.act({ look: lk })[0],
     `${auto.act({ look: lk, decls: { vLine: 4 } })[0]} vs ${auto.act({ look: lk })[0]}`);
+  // ---- THE SWITCH, THROUGH THE SAME COMMISSION PATH (plan §102).
+  //
+  // The same host, declaring the same scalar, with `declGuard` NOT asked for: the span must still
+  // be RECORDED — a declaration is forensics and `logSpec` names it — and the correction must be
+  // applied IN FULL at a value the armed ladder refuses outright. This is the half that fails if
+  // the flag is decorative, and it is asserted through `commission` rather than on a synthetic
+  // record because what was broken in §100 was the PATH and not the arithmetic (rule 9b).
+  const a4 = new AutoStack({
+    channels: [{ max: 10 }], uMax: 1, resolve: 1e-9,
+    distil: { offsets: [-16, -8, -4, -2, 0, 2, 4, 8, 16], signOffsets: [0], ridge: 1e-9 },
+  });
+  const bare4 = (corr) => {
+    const e = new Float64Array(LAP); let s = 0;
+    for (let k = 0; k < LAP; k++) {
+      e[k] = trueErr(k) - (corr ? corr.at(k)[0] : 0)
+        - (a4.deployed.distil ? a4.act({ look: (o) => pref(k + o) })[0] : 0);
+      s += e[k] * e[k];
+    }
+    return { score: Math.sqrt(s / LAP), err: [e] };
+  };
+  await a4.commission({ run: async (corr) => bare4(corr),
+    distilRuns: () => host.distilRuns().map((r) => ({ ...r, declare: { vLine: 5 } })) });
+  const sp4 = a4.distil && a4.distil.report ? a4.distil.report.declSpan : null;
+  const off4 = a4.act({ look: lk, decls: { vLine: 4 } })[0];
+  const on4 = a4.act({ look: lk })[0];
+  check('an UNARMED ladder still RECORDS the declared span — declaring is free, and an '
+    + 'investigation still gets the number (§77, §102)',
+    !!sp4 && Array.isArray(sp4.vLine) && sp4.vLine[0] === 5 && sp4.vLine[1] === 5,
+    JSON.stringify(sp4));
+  check('…and applies the correction IN FULL at the value the ARMED ladder refuses, which is the '
+    + 'half that fails if the flag is decorative (§102)',
+    off4 === on4 && Math.abs(off4) > 1e-6 && off === 0,
+    `unarmed off-point ${off4} vs untold ${on4}; armed off-point ${off}`);
+}
+// ---- `learnLive` — THE PAGE'S OWN "Learn on this program" BUTTON, WHICH HAD NO NODE TEST AT ALL
+//
+// It is reachable only from `flexisim.html` and from `distil-arm.mjs` behind `LEARN=`, and that is
+// why two defects sat in it. Both are fixed in plan §102.1 and both are asserted here:
+//
+//   1. `fresh()` copied thirteen fields and NONE of the three guard switches, so a re-fit silently
+//      returned a policy with the load and bend guards OFF where the commissioning had armed them.
+//   2. its `heldCorr` was a SECOND COPY of the helper §90.3 repaired, still carrying both of that
+//      section's faults — `let held = [0, 0]` (the channel count written in) and an unguarded
+//      `tr.speedAt(k)` (a field no plant harness supplies). There is one implementation now.
+//
+// The arm hid both: nc is 2 there and `autohost.js` supplies `speedAt`. THIS substrate is
+// ONE-CHANNEL and supplies NO `speedAt`, which is what makes it able to see them at all.
+{
+  const teachOf = () => async (corr) => ({
+    uOut: [Float64Array.from({ length: LAP }, (_, k) => trueErr(k) - (corr ? corr.at(k)[0] : 0))] });
+  const mkRuns = () => [{ lap: LAP, refAt: pref, teach: teachOf(),
+    run: async (corr) => {
+      const e = new Float64Array(LAP); let s = 0;
+      for (let k = 0; k < LAP; k++) { e[k] = trueErr(k) - (corr ? corr.at(k)[0] : 0); s += e[k] * e[k]; }
+      return { score: Math.sqrt(s / LAP), err: [e], rec: null };
+    } }];
+
+  const commission = async (guards) => {
+    const a = new AutoStack({ channels: [{ max: 10 }], uMax: 1, resolve: 1e-9,
+      distil: { offsets: [-16, -8, -4, -2, 0, 2, 4, 8, 16], signOffsets: [0], ridge: 1e-9, ...guards } });
+    const bare = (corr) => {
+      const e = new Float64Array(LAP); let s = 0;
+      for (let k = 0; k < LAP; k++) {
+        e[k] = trueErr(k) - (corr ? corr.at(k)[0] : 0)
+          - (a.deployed.distil ? a.act({ look: (o) => pref(k + o) })[0] : 0);
+        s += e[k] * e[k];
+      }
+      return { score: Math.sqrt(s / LAP), err: [e] };
+    };
+    await a.commission({ run: async (corr) => bare(corr), distilRuns: () => host.distilRuns() });
+    return a;
+  };
+
+  // A ONE-CHANNEL host with NO speedAt reaches learnLive at all, which is defect 2.
+  const armed = await commission({ loadGuard: true });
+  check('learnLive runs on a ONE-CHANNEL host that supplies no speedAt — the two faults §90.3 '
+    + 'repaired in one copy of heldCorr and left in the other (§102.1)',
+    await (async () => {
+      const r = await armed.learnLive(mkRuns(), { passes: 1, mode: 'fresh' });
+      return !!r && Number.isFinite(r.after);
+    })());
+  check('…and a re-fit from scratch KEEPS the guard the commissioning armed, which it silently '
+    + 'dropped before §102.1', armed.distil.loadGuard === true, `${armed.distil.loadGuard}`);
+
+  // THE OTHER HALF, without which the check above is satisfied by a flag that is always true.
+  const plain = await commission({});
+  await plain.learnLive(mkRuns(), { passes: 1, mode: 'fresh' });
+  check('…while a commissioning that armed NOTHING does not acquire a guard through a re-fit',
+    plain.distil.loadGuard === false, `${plain.distil.loadGuard}`);
+  // AND THE OBSERVABLE, not the field (rule 9b): the flag has to reach a DECISION.
+  const lk2 = (o) => pref(500 + o);
+  armed.distil.report.loadMax = 0.05;
+  const fadedA = armed.act({ look: lk2, load: 1 })[0], freeA = armed.act({ look: lk2 })[0];
+  plain.distil.report.loadMax = 0.05;
+  const fadedB = plain.act({ look: lk2, load: 1 })[0], freeB = plain.act({ look: lk2 })[0];
+  check('…and the carried flag reaches an ACTUAL DECISION after the re-fit: the armed policy fades '
+    + 'under load and the unarmed one is untouched by it',
+    Math.abs(freeA) > 1e-6 && Math.abs(fadedA) < Math.abs(freeA) && fadedB === freeB,
+    `armed ${freeA}->${fadedA}; unarmed ${freeB}->${fadedB}`);
 }
 // ---- KEEPING THE TRACKER ON: THE SAME RECURSION, CONTINUED.
 //
