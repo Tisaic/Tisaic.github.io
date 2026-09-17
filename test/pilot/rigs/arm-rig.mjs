@@ -14,7 +14,7 @@
  */
 import { Joint } from '../../../lib/flexisim/joint.js';
 import { FlexArm2R } from '../../../lib/flexisim/arm2r.js';
-import { buildLink, massProperties } from '../../../lib/flexisim/link.js';
+import { buildLink, massProperties, tipDeflection, tipSlope } from '../../../lib/flexisim/link.js';
 import { ChainServo } from '../../../lib/flexisim/compensator.js';
 import { roundedRect, circle, sharpRect, ToolPath, SEG } from '../../../lib/flexisim/toolpath.js';
 import { ContourScore, decompose } from '../../../lib/flexisim/contour.js';
@@ -207,7 +207,7 @@ function routeSignals(arm, cmd, tau) {
  */
 async function deployOn(pilot, shape, active, feed = 0.004,
   { laps = 3, scoreFromLap = 2, truthUntilLap = Infinity, oracle = null, trace = null,
-    pre = null, preOut = null, policy = null } = {}) {
+    pre = null, preOut = null, policy = null, softTruth = null, truthTap = null } = {}) {
   const { arm: a2, servo: s2 } = await makeArm();
   const path = typeof shape === 'string' ? mkPath(shape, feed) : shape;
   homeArm(a2, s2, path);
@@ -313,11 +313,49 @@ async function deployOn(pilot, shape, active, feed = 0.004,
     if (trace && k % S === 0) {
       trace.push({ u: [u[0], u[1]], e: rs.truth.slice(), m: rs.measured.slice(),
         cmd: [q1, q2],
+        // THE HIDDEN STATES, for a soft sensor's stage 1 (plan §52.23, task #73). A load-side
+        // encoder reads the gearbox wind-up and a strain gauge the link's bend; both are
+        // COMMISSIONING instruments here and neither is a deploy-time signal. Five numbers on a
+        // path that only runs when a caller asked for a trace, so nothing that ships moves.
+        x: { wu: [a2.j1.windup(), a2.j2.windup()],
+          w: [tipDeflection(a2.l1), tipDeflection(a2.l2)], s1: tipSlope(a2.l1) },
         // WHAT THE FROZEN PREFIX CONTRIBUTED AT THIS SAMPLE, so a harness pairing state with
         // target reads the same indexing the run applied rather than recomputing it.
         pre: pre ? [pre[0][k % pre[0].length], pre[1][k % pre[1].length]] : null });
     }
-    pilot.observe(rs.measured, k < truthUntil ? rs.truth : null);
+    // ---- WHAT THE ADAPTATION IS ALLOWED TO MEASURE (task #73).
+    //
+    // This one line is the whole reason online adaptation ships as a COMMISSIONING phase: it
+    // hands the pilot `rs.truth`, which is the tool error through the inverse Jacobian, which is
+    // a laser tracker. `softTruth` substitutes an ESTIMATE of that same quantity, computed from
+    // the motor-side signals alone, so the question "could adaptation run at deploy" becomes a
+    // measurement rather than a story.
+    //
+    // IT DEGRADES WHAT THE LEARNER SEES AND NEVER WHAT THE SCORE SEES (rule 15, and exactly
+    // `ARM_TOOL_NOISE`'s own direction two hundred lines up): the contour report below is built
+    // from `a2.toolXY()`, which this cannot reach. So what is read is the cost of a cheap
+    // instrument for the LEARNER and not a cheap scoreboard.
+    //
+    // It is consulted only where the pilot would consume a truth at all — `_deployObserve` acts
+    // on `(kObs-1) % sample === 0`, which is this loop's `k % S === 0` — so a closure that keeps
+    // its own history is fed exactly once per pilot sample. `truthTap` receives the estimate
+    // beside the truth it is standing in for, which is how the estimator's own quality is read
+    // IN SITU on the program it is running on rather than offline on the one it was fitted on.
+    // Both null is byte-identical.
+    let obsTruth = k < truthUntil ? rs.truth : null;
+    if (softTruth && k % S === 0) {
+      // `kSamp` has already been advanced by this step, so the index `act()` decided on — and
+      // therefore the index the row the RLS is about to be updated with was built at — is
+      // `kSamp - 1`. Handing the closure the advanced one would shift its command window by a
+      // whole pilot sample against the row it is the target for.
+      const kA = kSamp - 1;
+      const est = softTruth(rs.measured, kA, refAt, rs.truth);
+      if (truthTap) truthTap(est, rs.truth, kA);
+      obsTruth = (k < truthUntil && est) ? est : null;
+    } else if (softTruth) {
+      obsTruth = null;
+    }
+    pilot.observe(rs.measured, obsTruth);
     if (k >= scoreFrom) {
       const dec = decompose(path, a2.toolXY(), cmd);
       score.step(dec.contour, dec.lag, tau, [a2.j1.wM, a2.j2.wM]);

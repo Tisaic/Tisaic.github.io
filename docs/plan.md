@@ -23392,3 +23392,143 @@ optimum ≠ delivered optimum under the plant's smearing), not a measurement. Th
 design an owner picks; nothing here derives them. **No default is moved** — `classicDiet` and
 `runClassic` are both opt-in and no plant declares either, because rule 31 says one plant is not a
 method and the six-plant pass has not run.
+
+## §107 — #82's SCRAPE: THE GAIN LADDER DOES NOT RUN AWAY UPWARD, AND THE TANK'S EXTENSION PICKS ITS OWN BOUND
+
+Free. No plant time. Read off the gain-ladder rows every harness already prints, in the PASSING
+`--full` run, exactly as `commtime.mjs` and `objtable.mjs` scrape.
+
+**THE SUSPICION IS NOT CONFIRMED ON SHIPPED DIETS.** §104.1 saw the §86.6 edge-extension walk the
+applied gain UP to 1.47-1.88 on DRAWN diets, into the object's own clamp, and asked whether rule
+42's band breaking toward the largest gain is right when the clamp is saturating. On the shipped
+diets three of four picks are genuine INTERIOR optima — the score rises on both sides:
+
+```
+  mill     0.72 7.24e-3 · 0.85 6.35e-3 · 1.00 5.86e-3 PICKED · 1.15 6.10e-3 · 1.30 6.97e-3
+  column   0.72 5.88e-2 · 0.85 4.73e-2 · 1.00 3.74e-2 · 1.15 3.45e-2 PICKED · 1.30 4.16e-2
+  barrel   0.72 1.944   · 0.85 1.389   · 1.00 0.862   · 1.15 0.753 PICKED   · 1.30 1.185
+```
+
+§86.6's own control reproduces, and the drawn-diet behaviour §104.1 saw is not re-measured here.
+
+**WHAT THE SCRAPE DID FIND IS ON THE TANK, AND IT IS THE SAME FAULT AT THE OTHER END.** Its
+extension walks DOWNWARD and never turns:
+
+```
+  0.7200 4.3624e-1 · 0.6099 3.6993e-1 · 0.5166 3.1379e-1 · 0.4376 2.6629e-1
+  0.3707 2.2612e-1 · 0.3140 1.9216e-1 · 0.2660 1.6348e-1  <- PICKED
+```
+
+**Monotone for all six steps: it exhausts §86.6's own six-step bound without the argmin ever
+turning.** So the true optimum is BELOW 0.266 and the ladder cannot reach it — the pick IS the
+bound, which is precisely the EDGE fault §86.6 was built to remove, surviving at the other end
+because the bound binds before the curve does.
+
+**AND THE RUNG IS REFUSED ANYWAY** — 0.16x, *did not beat the machine below it; NOT deployed* —
+losing to the conventional rung's 19.91x (§97.3). So the axis spends **5 base candidates + 6
+extensions = 11 scored runs** selecting a gain for a candidate the machine then throws away.
+
+That itemises something already on file: §84.5 measured the TANK's verify share as the outlier,
+**44% against 16-19%** on the other three, and named it *the cost of the ridge and gain axes at full
+width*. This is that cost with a number on it.
+
+**THE CHEAP FIX IS NOT "WIDEN THE BOUND" (rule 19).** Widening buys a better gain for a REFUSED
+rung — more scored runs to lose by less. What the scrape argues for is an EARLY EXIT: when the best
+candidate so far already loses to the machine below it by more than the remaining extension can
+close, the axis has nothing to select and those runs are not worth paying for. That is `beats()`'s
+own question asked one level up.
+
+NOT ESTABLISHED: whether the argmin turns below 0.266 (the bound stops it, so it was never
+measured), and whether an early exit changes any shipped result — it must not, since mill, column
+and barrel all pick interior and would be untouched, which is the rule-21 control such a change
+needs.
+
+## §108 — THE INSTRUMENT IS NOT THE BLOCKER ON ADAPTATION. THE LAW IS. AND §52.23's OWN RECOMMENDED OBJECT IS THE ONE THAT FAILS
+
+Online adaptation is the largest measured lever on the replacement list and ships as a
+commissioning-only phase for ONE reason: it needs the tracker, and the tracker is the instrument
+this file names as the biggest gap between the work and a buyer.
+
+**A ONE-STAGE SOFT SENSOR FROM MOTOR-SIDE SIGNALS ALONE — NO INSTRUMENT ANYWHERE AT DEPLOY —
+SUBSTITUTES FOR THE TRACKER INSIDE GUIDED ADAPTATION AT 0.92x-1.11x OVER 36 SCORED CELLS**, on the
+FIRST SCORED LAP of programs the controller never ran. Six of nine stiff-cell held-out cells are
+within 3%.
+
+```
+                    diamond (adapted)    sharp square (never run)   circle (never run)
+  static            1.73 / 1.78 / 1.79   1.67 / 1.72 / 1.69         10.02 / 6.72 / 7.72
+  tracker  2 laps   1.85 / 1.88 / 1.87   1.80 / 1.83 / 1.81          4.06 / 3.72 / 4.57
+  SOFT     2 laps   1.85 / 1.89 / 1.86   1.81 / 1.83 / 1.80          3.83 / 3.82 / 4.77
+  tracker 24 laps   2.37 / 2.42 / 2.29   1.99 / 2.13 / 1.89          0.90 / 0.90 / 0.88
+  SOFT    24 laps   2.28 / 2.22 / 2.20   1.96 / 2.09 / 1.82          0.86 / 0.91 / 0.87
+```
+
+**AND §52.23's RECOMMENDED OBJECT IS THE ONE THAT FAILS.** The CHAIN — two-stage,
+instrument-at-commissioning, which this file has pointed at since §52.23 — is BOTH the worse
+estimator (leave-one-program-out 0.804-0.909 against the direct map's 0.954-0.968) AND the one that
+collapses over 24 guided laps. Adding §52.23's estimated-state block on top of a full row makes the
+sensor WORSE (0.95/0.97 → 0.80/0.79): capacity transferring worse, for the Nth time. Stated
+narrowly — §52.23's "plain linear observer" had no pose-scheduled block and its 0.488 chain row used
+estimated states ALONE, so `cmd + sched_m0` with no instrument is a cell that table never reported.
+
+### THE BLOCKER MOVES, WHICH IS THE ACTUAL HEADLINE
+
+**With a PERFECT TRACKER, guided adaptation on one program monotonically destroys a program it never
+ran**: circle **7.72x → 4.57x → 1.29x → 0.88x** at 0/2/8/24 guide laps, and 10.02x → 0.90x and
+6.72x → 0.90x on the other two seeds. Below 1.0x is worse than doing nothing. **That is not the
+sensor — it happens with ground truth.** So making adaptation legal at deploy is now an INSTRUMENT
+question that is answered and a LAW question that is not.
+
+### AGAINST THE THREE NAMED KILLERS (rule 59), PLUS A PRE-REGISTERED FOURTH
+
+1. *"channel 1 at R² 0.2-0.6 is too poor; §50.1 prices degraded truth at 2x"* — **DID NOT FIRE.**
+   The deployable one-stage sensor reads 0.954/0.968 LOPO, and §50.1's 2x is about degrading what
+   the ORACLE-fed teacher converges against, a different quantity.
+2. **rule 35 FIRES, IS MEASURED AND IS BOUNDED.** The estimate's in-situ R² decays with guided laps
+   — chain 0.87 → 0.77 → 0.47, direct 0.91 → 0.89 → 0.82, FLAT at the bench cell — and where it
+   decays fastest the delivered factor REVERSES rather than stalling. The adapting loop does walk
+   the machine off the sensor's training distribution; how fast decides everything.
+3. *"excellent immediately, bad slowly, invisible to a short test"* — **FIRES FOR THE CHAIN AND ALSO
+   FOR THE TRACKER.** A 2-lap test passes the chain within 3% and 24 laps says it is worse than
+   nothing. The same test convicts the LEVER itself.
+4. The measuring agent's OWN pre-registered killer — that the RLS regresses on the same signals the
+   sensor is a function of, so SOFT should land at or below STATIC — **REFUTED by its own stated
+   falsifier.**
+
+### WHAT NARROWS A CLAIM IN CLAUDE.md, CAREFULLY
+
+CLAUDE.md records guided adaptation as *9 of 9 cells improve, geometric 1.79x* at SIX guided laps on
+the ROUNDED RECTANGLE. **That is not refuted at its own configuration.** What is shown is that it
+does not generalise across GUIDE PROGRAMS: guiding on the diamond takes the sharp square
+1.71x → 1.93x, guiding on the rounded rectangle takes it 1.71x → **1.66x**, worse than static. This
+file already records six laps as the optimum with both columns falling past it; what is new is the
+guide program as a variable nobody had moved, and that past the optimum a held-out program can go
+BELOW 1.0x rather than merely losing gain.
+
+### CONTROLS
+
+`trackaway.mjs` BYTE-IDENTICAL after the rig change, all 8 protocols. **`IDENT=1` — a `softTruth`
+closure returning the tracker's OWN value — reproduces every SOFT row to every printed digit
+INCLUDING update counts**, which is what says the knob measured something rather than moved it. The
+fast multi-target solver agrees with the shared `solveRidge` at 0.0e+0. The sensor is fitted on 4
+random polygons, asserted NOT the guide or any scored program (rule 36), with the pilot's correction
+ARMED (rule 34). Only what the LEARNER sees is degraded — the contour score is still taken from
+`a2.toolXY()`, which the knob cannot reach (rule 15).
+
+### THE SCOPE LIMIT, WHICH TRAVELS WITH EVERY NUMBER ABOVE
+
+This is the **PILOT CASCADE**, which `objtable.mjs` says ships on **ZERO of ten plants**, and §52.29
+measured guided adaptation as BIT-IDENTICAL on the shipped DISTILLED object with `oracleF0` armed.
+**So none of this yet touches the object a machine receives.** Also: one plant, two cells, one
+feedrate; 24 laps is not *for ever* and the trend is still downward at 24 for BOTH truths; the
+sensor's inputs carry no noise, latency or quantisation; and the circle collapse under the tracker
+was **NOT BISECTED** — lambda's forgetting, the innovation gate and the authority were not
+separated, and neither `lambda = 1` nor `setAnchor` was run.
+
+### ONE RUN THAT WOULD HAVE CLOSED AN OPEN ROUTE
+
+The first configuration guided on the rounded rectangle and fitted the sensor on ONE program at a
+CARRIED ridge of 1e-4. It read in-sample 0.869/0.958, **in-situ −9.68/−4.10**, and delivered 1.48x
+against static's 6.17x — a clean, spectacular, entirely spurious negative. TWO instrument faults: a
+guide program whose tracker-fed adaptation does not transfer at all, so there was no lever to fail
+to reproduce (rule 20), and a sensor starved of rows at a ridge nobody derived (rule 31).
