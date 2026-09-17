@@ -23507,7 +23507,12 @@ BELOW 1.0x rather than merely losing gain.
 
 ### CONTROLS
 
-`trackaway.mjs` BYTE-IDENTICAL after the rig change, all 8 protocols. **`IDENT=1` — a `softTruth`
+`trackaway.mjs` BYTE-IDENTICAL after the rig change, all 8 protocols — **and re-verified
+independently here rather than taken on report**: the same instrument run at `66bd227` in an
+isolated worktree and diffed against the post-change run is byte-identical INCLUDING the update and
+gated counts (4733,4733 / 2409,2409 and the rest). The measuring agent ran its own control on a tree
+carrying neither §102 nor §106; this one carries both, so the change is inert against everything
+landed since. **`IDENT=1` — a `softTruth`
 closure returning the tracker's OWN value — reproduces every SOFT row to every printed digit
 INCLUDING update counts**, which is what says the knob measured something rather than moved it. The
 fast multi-target solver agrees with the shared `solveRidge` at 0.0e+0. The sensor is fitted on 4
