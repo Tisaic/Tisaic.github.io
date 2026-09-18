@@ -24127,6 +24127,41 @@ defaults, because that is rule 61's exact failure mode: *value for value the cop
 nothing was ever wrong and no check ever went red; the duplicate simply waited for one of them to
 change.*
 
+## §111.2 — §111.1's TWO SILENT DEFAULTS ARE NOW ONE STATED DIVERGENCE, AND THE NUMBERS DID NOT MOVE
+
+§111.1 found `test/pilot/rigs/arm-rig.mjs:46` defaulting the servo loop to **2e-3** against
+`compensator.js`'s shipped `BENCH_SERVO.bandwidth = 1.6e-2`, reported it, and deliberately did not
+fix it. Its own closing sentence names the two acceptable outcomes: *the §52.37 treatment — one
+home, and each instrument re-measured and its history restated — or an explicit statement that
+those instruments are deliberately on the old cell. What it must not do is stay as two silent
+defaults.*
+
+**THE SECOND OUTCOME IS TAKEN, BECAUSE THE FIRST IS A MEASUREMENT AND THIS IS NOT.** Unifying the
+constant moves every number `twin.test.mjs`, `_ssforecast`, `_mimobudget`, `_hpose`, `_armswhich`
+and `_binding` have ever produced, and a re-measurement of six instruments needs its own controls
+and its own section (rule 31). What was cheap and is now done is removing the SILENCE:
+
+- The shipped constant is **IMPORTED** at the site that disagrees with it, so the divergence is
+  visible in the file rather than inferable by reading two files and noticing.
+- The old value is **NAMED** — `ARM_BW_LEGACY` — with the reason it is still the default.
+- `servoProvenance()` reports `{ bandwidth, shipped, legacy, onShippedLoop, note }`, reading
+  `BENCH_SERVO` **at call time**, so a future unification makes it report agreement BY CONSTRUCTION
+  rather than needing this line edited too (rule 30 — the description is generated from the thing).
+
+**BOTH HALVES, because a provenance report that always says the same thing is not a report
+(rule 9):** unset it reads `onShippedLoop: false` with the note naming both values, and at
+`ARM_BW=1.6e-2` it reads `onShippedLoop: true` and *on the shipped loop*. The two states are
+reachable and distinguishable.
+
+**AND THE CONTROL IS RULE 21's SIGNATURE:** `invert.mjs` — an instrument that drives this rig — is
+**BYTE-IDENTICAL across the change over 83 lines**, 13 plant rows, zero skips (rule 9c, checked
+rather than assumed). Nothing was re-scored; a constant that was implied is now stated.
+
+**WHAT IS STILL OPEN AND IS THE ACTUAL DEBT**: six instruments measure the 2R arm at a loop the
+product does not use. That is a defensible position only while it is stated, which it now is — and
+it is not a resolved one. The remaining work is §111.1's first outcome, and it is a section's worth
+of re-measurement rather than a line.
+
 ## §110.1 — THE FALSIFIER RAN AND DID NOT FIRE, WHICH IS THE OUTCOME THAT MAKES §110's MECHANISM SAYABLE
 
 §110 wrote down a mechanism — *what prevents §108's shape is the commissioning DIET, not the

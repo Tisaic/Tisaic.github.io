@@ -15,7 +15,7 @@
 import { Joint } from '../../../lib/flexisim/joint.js';
 import { FlexArm2R } from '../../../lib/flexisim/arm2r.js';
 import { buildLink, massProperties, tipDeflection, tipSlope } from '../../../lib/flexisim/link.js';
-import { ChainServo } from '../../../lib/flexisim/compensator.js';
+import { ChainServo, BENCH_SERVO } from '../../../lib/flexisim/compensator.js';
 import { roundedRect, circle, sharpRect, ToolPath, SEG } from '../../../lib/flexisim/toolpath.js';
 import { ContourScore, decompose } from '../../../lib/flexisim/contour.js';
 import { Pilot, solveRidge } from '../../../lib/pilot/pilot.js';
@@ -43,7 +43,41 @@ const ARM_K = +(process.env.ARM_K || 16);
 // 1e-4 rad of lost motion, and a sharp corner is exactly where the machine reverses and has to
 // cross it.
 const ARM_BL = process.env.ARM_BL === undefined ? 1e-4 : +process.env.ARM_BL;
-const ARM_BW = process.env.ARM_BW === undefined ? 2e-3 : +process.env.ARM_BW;
+// AND THE SERVO LOOP, WHICH IS THE ONE CONSTANT §52.37 CLAIMED HAD ONE HOME AND HAS THREE
+// (plan §111.1). This default is the PRE-§52.37 loop and it is DELIBERATE, not an oversight:
+// `twin.test.mjs`, `_ssforecast`, `_mimobudget`, `_hpose`, `_armswhich` and `_binding` have their
+// whole recorded history on 2e-3, so unifying it MOVES every number those six have ever produced,
+// which is a measurement with its own controls and not a tidy-up (rule 31).
+//
+// What must not happen is the two defaults sitting here SILENTLY, because that is rule 61's exact
+// failure mode — *value for value the copies agreed, so nothing was ever wrong and no check ever
+// went red; the duplicate simply waited for one of them to change*. So the shipped constant is
+// IMPORTED and the divergence is NAMED and reported by `servoProvenance()` rather than implied by
+// two literals in different files. The SHIPPED path is unaffected: `distil-arm.mjs` routes through
+// `autohost.js`, which reads `bandwidthFor`, and reproduces 1.6159e-1 / 6.63x.
+const ARM_BW_LEGACY = 2e-3;
+const ARM_BW = process.env.ARM_BW === undefined ? ARM_BW_LEGACY : +process.env.ARM_BW;
+
+/**
+ * WHICH LOOP IS THIS RIG ON, AND IS IT THE ONE THE PRODUCT SHIPS? (plan §111.1, §111.2)
+ *
+ * Returns both values and whether they agree, so an instrument can PRINT its own provenance
+ * instead of a reader having to know that two files disagree. `shipped` is read from
+ * `compensator.js` at call time, so unifying the constant makes this report agreement by
+ * construction rather than needing this line to be edited too (rule 30).
+ */
+export function servoProvenance() {
+  const shipped = BENCH_SERVO.bandwidth;
+  return {
+    bandwidth: ARM_BW,
+    shipped,
+    legacy: ARM_BW_LEGACY,
+    onShippedLoop: ARM_BW === shipped,
+    note: ARM_BW === shipped
+      ? 'on the shipped loop'
+      : `on the PRE-§52.37 loop (${ARM_BW}) — shipped is ${shipped}; deliberate, see plan §111.1`,
+  };
+}
 
 // THE TRACKER'S OWN ERROR, WHICH EVERY NUMBER IN THIS PROJECT HAS ASSUMED AWAY.
 //
