@@ -125,6 +125,19 @@ ck('offered the hook but no offsets, it says so rather than inventing a window (
   !!(a1.report.dirInv && /no offsets/.test(a1.report.dirInv.note || '')),
   JSON.stringify(a1.report.dirInv));
 
+/**
+ * THE PLACEMENT AND THE SLOT-RESTORE CONTRACT ARE PINNED ON A PLANT, NOT HERE, AND THAT IS
+ * DELIBERATE (plan §117, rule 9b). `dirInv.first` moves this rung to the other side of the
+ * conventional one, and §117 found that with ①d deployed a LATER rung's refusal disarmed it —
+ * `②d` nulled `deployed.distil` unconditionally, which had been right by accident for as long as
+ * nothing else could fill that slot. Neither fault is reachable from this file: it runs
+ * `classic: false, maxDepth: 0`, so there is no rung on either side to be placed against and no
+ * teacher-taught candidate to refuse. Reproducing them here would mean building a second ladder
+ * in a mock, which is the thing rule 9b says does not catch this class — what catches it is the
+ * SHIPPED path, and `distil-pend.mjs` carries it: `DIRFIRST=1` exercises the placement and a check
+ * asserts the ladder's own shipped factor against an independent scored run, fired both ways.
+ */
+
 // ------------------------------------------------------------- (3) THE RUNG REACHES THE MACHINE
 const a2 = new AutoStack({ channels: [{ max: 3 }], authority: 0.6, floor: 0,
   classic: false, maxDepth: 0, dirInv: { offsets: OFFS } });

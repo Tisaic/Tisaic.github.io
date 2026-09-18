@@ -688,8 +688,30 @@ Each of these is a claim that can be shown false, which is the only kind worth w
    throws away 2.35x of what the route can do here, and the cause is RULE 34** — ①d is FITTED on
    open-loop segments of the BARE plant and DEPLOYED after the conventional rung, so it inverts a
    machine that no longer exists, and it clamps 54% of samples at 2.00x its cap as that mismatch
-   shows. Whether it belongs FIRST in the ladder or should be excited on the machine below it is a
-   measurement on a plant where the route is worth something, and is NOT BUILT. **Getting there cost rule 9b a sixth time**: `rigs/ladder.mjs`
+   shows. **AND THE FIRST OF THOSE TWO REPAIRS IS NOW BUILT AND IT RECOVERS THE ROUTE EXACTLY
+   (plan §117).** `dirInv.first` places the rung BEFORE the conventional one, default FALSE and the
+   refactor byte-identical over 69 lines: the ①d row goes **2.0680e-2 (1.08x) → 8.8017e-3 (11.79x),
+   which is `dirinvall.mjs`'s standalone figure to every digit**, and the clamp note vanishes with
+   it — so the rule-34 diagnosis is confirmed by its own repair and the 2.35x was the placement
+   alone. **And then the whole ladder above it REFUSES** — conventional 0.94x, the teacher-taught
+   rung 0.90x, both correctly — so the block ships **①d ALONE at 11.79x in 46 MAC and 0.2 kB at
+   ZERO teacher laps**, against the other order's 11.93x on classic plus a map costing 24.1 minutes
+   of teacher: **the same machine to within 1.2% by two completely different objects**, reproducing at
+   **11.76-11.81x over four EXCITATION seeds, a 1.004x spread** — a different random variable from
+   §87.3's diet draws, so not comparable to them (rule 20), but enough to say it is not a draw.
+   Commissioning falls only 46.2 → 43.0 min because the ladder still RUNS the teacher and then
+   throws it away, which is §109's early exit one level up and is NOT implemented. **`first` stays
+   OFF (rule 31)**: one plant, 1.2% worse delivered there, and the plants where the prize is a
+   CALENDAR do not arm the rung yet. **AND THE DEFECT IT EXPOSED IS THE MORE USEFUL HALF**: ②d's
+   refusal path nulled `deployed.distil` unconditionally — correct by accident until a rung below
+   it could fill that slot — so a ②d refusal DISARMED a deployed rung while `best` still carried
+   its score, and the ladder printed **`11.79x` beside `rungs none` for a machine running bare**,
+   every safety check green because nothing applied cannot make anything worse. That is
+   `distil-tank.mjs`'s §67.3 defect from the opposite side, and what caught it was the harness's own
+   second route reading **`delivered 1.000x` two lines below** with nothing comparing the two
+   (rule 15). The comparison is a CHECK now, asserted both ways, and no shipped result moves
+   (rule 21). **Whether the placement is WORTH anything is still not measured** — that needs the
+   barrel or the column, where the teacher is 30-33 days. **Getting there cost rule 9b a sixth time**: `rigs/ladder.mjs`
    never forwarded `dirInv`, so the first armed run printed that it had armed the rung and the rung
    never ran — indistinguishable from a refusal (rule 25). *Built* and *run on a plant* are
    different states, and this file has paid for conflating them four times now.
@@ -2207,6 +2229,14 @@ measurement behind each is in `docs/history/` — the pointer in brackets.
     baseline built on the same formula cannot check each other. Bring in a route that does
     not share the mistake: a cruder estimator, a conservation law, an independently
     derived matrix, a zero rung that measures the instrument itself.
+15b. **AND THE SECOND ROUTE HAS TO BE COMPARED, NOT MERELY PRINTED (plan §117).** Having one is
+    half the rule; a harness printed the ladder's own shipped factor and an independent scored
+    run's **two lines apart, at 11.79x and 1.000x**, both true of different objects, for a whole
+    run — because nothing looked at both. Two routes sitting in one report with no assertion
+    between them is one route and a decoration. Assert the agreement, with a band loose enough
+    that a legitimate difference in support does not fire it and tight enough that a wiring fault
+    cannot hide: here the honest routes read 11.93x against 12.009x, so 1.25x catches everything
+    worth catching.
 16. **A number computed from the model cannot check the model.** Where a design and its
     own prediction agree with each other and disagree with the machine, put the question
     to the machine. Three separate black-box defects were caught only by deploying and

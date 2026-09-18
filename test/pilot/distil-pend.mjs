@@ -189,7 +189,11 @@ if (DIRINV) {
   console.log(`  ①d DIRECT INVERSE armed: window ±${w.reach} raw steps, ${w.offsets.length} taps `
     + `[rule ${w.rule} = min(0.61·${diSettle}, ${diSeglen}/8)] — the CART's settle (${diSettle}), `
     + `not the TIP's (${SETTLE}) this harness's own window uses`);
-  dirInvOpts = { refDim: 1, ridge: env('DIRIDGE', 1e-6), offsets: w.offsets, stride: 7 };
+  // `DIRFIRST=1` places the rung BEFORE the conventional one (plan §117): it is FITTED on
+  // open-loop segments of the BARE plant, so deploying it after a rung that has changed the
+  // machine is rule 34, and this is the half of §116's open question that costs nothing.
+  dirInvOpts = { refDim: 1, ridge: env('DIRIDGE', 1e-6), offsets: w.offsets, stride: 7,
+    first: process.env.DIRFIRST === '1' };
   // ZERO TEACHER LAPS: open-loop segments only, through the SHARED kit's one inversion path.
   dirInvRuns = () => segsFor(pendSpec, P.diet, P.inv, { seed: env('DISEED', 1) });
 }
@@ -319,7 +323,18 @@ console.log(`    scored program  ${PD.D}m@${PD.VMX}/${PD.ACC} dwell ${PD.DWELL} 
   + `   ${off.rms.toExponential(3)} → ${on.rms.toExponential(3)}   ${xProg.toFixed(3)}x`);
 console.log(`    held out        ${HELD.d}m@${HELD.vmx}/${HELD.acc} dwell ${HELD.dwell} `
   + `(lap ${HELD.lap})   ${hOff.rms.toExponential(3)} → ${hOn.rms.toExponential(3)}   `
-  + `${xHeld.toFixed(3)}x   |θ| ${hOn.thPk.toFixed(3)}`);
+  + `${xHeld.toFixed(3)}x   |θ| ${hOn.thPk.toFixed(3)}   uPk ${hOn.uPk.toFixed(4)}`);
+// THE CAP BELONGS BESIDE BOTH FACTORS, NOT ONE (plan §117). A ratio between two programs is only
+// a transfer reading if the object was allowed to act the same on both; where one saturates and
+// the other does not, the ratio is measuring the CLAMP (rule 19). Printed for both rows because
+// the first placement produced 11.97x scored at `uPk 0.1500 of 0.15` against 398.755x held out,
+// and without this column that table cannot be read at all.
+if (on.uPk >= spec.uMax * 0.999 && hOn.uPk < spec.uMax * 0.999) {
+  console.log(`    READ THE RATIO WITH THE CLAMP IN MIND: the SCORED program saturates `
+    + `(${on.uPk.toFixed(4)} of ${spec.uMax}) and the held-out one does not `
+    + `(${hOn.uPk.toFixed(4)}), so the held-out factor is of an UNCLIPPED object and the scored `
+    + `one is not — they are two different controllers (rules 14, 19)`);
+}
 console.log(`    the held-out program delivers ${(xHeld / xProg).toFixed(3)}x of what the `
   + `scored one does; target 1 forbids < 0.769 (1/1.3), spread ${ratio.toFixed(3)}x\n`);
 // THE LOOP GOES IN THE LABEL, OR ONE ROW HIDES THE OTHER (plan §97.4). This harness emits under
@@ -460,5 +475,34 @@ check('the machine is not made worse by what shipped', on.rms <= off.rms * 1.02,
   `${off.rms.toExponential(3)} → ${on.rms.toExponential(3)} = ${(off.rms / on.rms).toFixed(3)}x`);
 check('the correction stayed inside the authority it was given', on.uPk <= spec.uMax * 1.001,
   `${on.uPk.toFixed(4)} of ${spec.uMax}`);
+/**
+ * THE LADDER'S OWN FACTOR AND THIS RUN'S MUST AGREE, AND THEY DISAGREED BY 11.8x WITH NOTHING
+ * SAYING SO (plan §117). `rep.base/rep.best` come from INSIDE the commissioning; `off/on` come
+ * from a driver that re-runs the plant through `auto.act` afterwards. Two code paths, one
+ * machine — the condition rule 15 exists for, and it was never checked. §117's defect disarmed a
+ * rung that had deployed, so the ladder printed `1.038e-1 → 8.802e-3  11.79x` while the line
+ * above it read `delivered 1.000x`, and both were true of different objects. That is
+ * `distil-tank.mjs`'s §67.3 fault — a rung absent from the run that scored it — arriving from the
+ * other direction, and it is the one thing a shipped-factor table cannot survive.
+ *
+ * THE BAND IS LOOSE ON PURPOSE. The two runs are not required to be bit-identical: the ladder
+ * scores its own program through its own loop and this one re-drives the plant, which on this
+ * plant read 11.93x against 12.009x, 0.7% apart. A 1.25x band cannot see that and cannot miss a
+ * wiring fault, which is the only thing it is for.
+ */
+{
+  // UNCONDITIONAL, because a check inside an `if` that its own inputs can fail is a check that
+  // reports PASSED by disappearing (rules 9c, 25). A missing or non-finite field is itself the
+  // failure: it means the report this comparison is built on no longer carries what it claims.
+  const haveRep = Number.isFinite(rep.base) && Number.isFinite(rep.best) && rep.best > 0;
+  const xLadder = haveRep ? rep.base / rep.best : NaN, xHere = off.rms / on.rms;
+  const apart = Math.max(xLadder, xHere) / Math.max(1e-300, Math.min(xLadder, xHere));
+  check('the ladder\'s shipped factor and an independent scored run agree',
+    haveRep && apart <= 1.25, haveRep
+      ? `ladder ${xLadder.toFixed(3)}x against ${xHere.toFixed(3)}x re-driven through act() — `
+        + `${apart.toFixed(3)} apart`
+      : `rep.base/rep.best are not both finite positive numbers `
+        + `(${rep.base}, ${rep.best}) — the comparison could not be made`);
+}
 console.log(failed ? `\n  ${failed} check(s) failed\n` : '\n  all checks passed\n');
 process.exit(failed ? 1 : 0);

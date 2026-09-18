@@ -24780,3 +24780,114 @@ path `fitInverse` uses, so no caller builds a second one.
 **NOT CLAIMED**: one plant, one seed of the excitation, one placement. `DIRINV` is opt-in and OFF,
 and the unset run is byte-identical apart from the two lines the armed one prints.
 
+
+## §117 — ①d's PLACEMENT IS WORTH 2.35x AND RECOVERS THE STANDALONE NUMBER EXACTLY; PLACED FIRST IT ABSORBS THE WHOLE LADDER, AND IT EXPOSED A RUNG THAT DISARMED A DEPLOYED ONE
+
+§116 measured `AutoStack`'s ①d rung at **2.0680e-2 (1.08x)** on the cart-pole where the SAME route
+standalone reaches **8.8017e-3 (11.79x)**, named the cause as **rule 34** — it is FITTED on
+open-loop segments of the BARE plant and DEPLOYED after the conventional rung, so it inverts a
+machine that no longer exists — and left the repair as a question rather than a change (rule 59):
+*either the rung is placed FIRST, where the plant it was fitted on is the plant it meets, or its
+excitation is taken on the machine the preceding rungs have built.* The first is free. This is it.
+
+**`dirInv.first`, DEFAULT FALSE.** The rung's body becomes a closure and the ladder calls it on
+one side of the conventional rung or the other, so the ordering every existing caller commissioned
+with is unchanged by construction. The control is that the refactor alone, with `DIRINV` unset,
+is **BYTE-IDENTICAL over 69 lines against `1cb59a2` in an isolated worktree** — asserted to have
+produced its rows first (rule 9c).
+
+**THE REPAIR RECOVERS THE ROUTE EXACTLY, TO EVERY DIGIT:**
+
+```
+                              §116's order (after ①)        first (DIRINV=1 DIRFIRST=1)
+  as it arrived               1.0378e-1                     1.0378e-1
+  conventional (self-tuned)   2.2279e-2    4.66x            9.4022e-3    0.94x   NOT deployed
+  ①d direct inverse           2.0680e-2    1.08x            8.8017e-3   11.79x
+                              CLAMPED on 54% of samples,    no clamp note
+                              worst demand 2.00x the cap
+  ②d distilled                8.7013e-3    2.38x            9.7774e-3    0.90x   NOT deployed
+    shipped                   8.701e-3    11.93x            8.802e-3    11.79x
+    commissioning             46.2 min                      43.0 min
+```
+
+**8.8017e-3 is `dirinvall.mjs`'s standalone figure to every digit** — two files that share a spec
+and nothing else, one reading it through the driver's ladder and one through its own instrument
+(rule 15) — and the clamp goes with it: the *CLAMPED on 54% of samples, worst demand 2.00x the
+cap* note disappears entirely. **So §116's rule-34 diagnosis is confirmed by its own repair, and
+the 2.35x it recorded as thrown away was the placement and nothing else.**
+
+**AND THEN THE ENTIRE LADDER ABOVE IT REFUSES, WHICH IS THE RESULT AND NOT A SIDE EFFECT.** The
+conventional rung reads 0.94x and the teacher-taught rung 0.90x, both correctly refused, and the
+block ships **①d ALONE at 11.79x — 46 MAC/decision, 0.2 kB, ZERO teacher laps** — against the
+other order's 11.93x on classic + a teacher-taught map that cost **24.1 minutes of teacher**. The
+two orderings deliver the same machine to within **1.2%** by two completely different objects.
+
+**AND THE MECHANISM IS EXACT RATHER THAN APPROXIMATE, WHICH IS WHY THE RECOVERY IS TO EVERY
+DIGIT.** Every OTHER rung is commissioned through `host.run`, and `rigs/ladder.mjs`'s `run` calls
+`auto.act(...)` before adding the candidate — so each of them is already fitted ON the machine the
+rungs below it built, and rule 34 does not touch them. **①d is the one exception in the ladder**,
+because its data comes from `host.dirInvRuns()` — `segsFor` builds its own plant with `spec.fresh`
+and never consults `auto` at all, by design, since the whole point is that it costs no laps of the
+commissioned machine. So the mismatch was not general to the ladder and the placement does not
+MOVE it onto the conventional rung: it removes it. The conventional rung's 0.94x here is a real
+refusal on a machine it was genuinely commissioned against, not the same fault changing places.
+
+**AND IT REPRODUCES TO 1.004x: 11.76x / 11.78x / 11.79x / 11.81x over four EXCITATION seeds**, on
+36,560-37,776 open-loop rows. **Stated narrowly, because the obvious comparison is not one (rule
+20)**: §87.3's 1.03x on this plant is over DIET draws and this is over the seed of one diet's
+excitation, so they are different random variables and this is not "tighter than the tightest".
+What it establishes is its own claim — the 11.79x is not a draw.
+
+**WHAT IT DOES NOT BUY, STATED BECAUSE THE ARITHMETIC INVITES THE ERROR.** Commissioning falls
+46.2 → 43.0 min, not to the ~19 min the teacher's share would suggest, because **the ladder still
+RAN the teacher and then threw it away**. That is §109's early-exit reasoning one level up — do
+not pay for a stage that cannot change the outcome — and it is NOT implemented here, exactly as
+§112 said of the calendar saving. What this section establishes is that on this plant the stage is
+now provably throw-away; turning that into minutes is a caller policy and a separate measurement.
+
+**THE DEFECT IT EXPOSED IS THE MORE USEFUL HALF, AND IT IS THIS FILE'S OWN §67.3 FROM THE OTHER
+DIRECTION.** `②d`'s refusal path did `this.distil = null; this.deployed.distil = false`
+UNCONDITIONALLY. That was correct by accident for the whole of §112's life, because nothing else
+had ever filled that slot; placed first, ①d fills it — **so a ②d refusal DISARMED a rung that had
+deployed, while `best` still carried its score.** The ladder duly printed:
+
+```
+    shipped {"classic":false,"stack":0,"hff":false,"distil":false}   1.038e-1 → 8.802e-3   11.79x
+      cost: 0 MAC/cycle sliced, 0.0 kB   rungs none   peak 0 MAC/decision
+```
+
+**A shipped factor of 11.79x for a machine running bare**, with `rungs none` printed two lines
+below it and every safety check green — because a machine with nothing applied is trivially not
+made worse, and target 1 read a perfect 1.000 because both programs were the bare machine.
+`objtable` would have taken that row. It is `distil-tank.mjs`'s §67.3 defect — *a rung ABSENT from
+the run that scored it* — reached from the opposite side: there the rung was never applied, here
+it was applied and then removed.
+
+**WHAT CAUGHT IT WAS THE HARNESS'S OWN SECOND ROUTE, WHICH NOTHING COMPARED TO THE FIRST.** Two
+lines below that row `distil-pend.mjs` re-drives the plant through `auto.act` and printed
+**`delivered 1.000x`**. Both numbers were true of different objects, 11.8x apart, and no check
+looked at both (rule 15 — the condition it exists for). That comparison is now a CHECK, **asserted
+both ways (rule 9)**: on the pre-repair build it fires with `ladder 11.791x against 1.000x
+re-driven through act() — 11.791 apart`, and with the repair it passes in all three configurations.
+The band is **1.25x and loose on purpose** — the two routes are not required to agree bit-exactly,
+and on this plant they read 11.93x against 12.009x, 0.7% apart. **No shipped result moves**: the
+repair is `this.distil = keptBelow.pol; this.deployed.distil = keptBelow.armed`, and the unset and
+§116-order runs come back byte-identical apart from the new passing check line (rule 21).
+
+**AND TARGET 1 READS 33.3, WHICH IS NOT A CONTROLLER RESULT AND THE HARNESS NOW SAYS SO (rules 14,
+19).** Placed first, the object reads **398.755x on the held-out program** — 8.366e-2 → 2.098e-4 —
+against 11.968x on the one it was scored on, reproducing at **382x / 399x / 433x / 468x** over the
+four seeds, so it is not one draw. The mechanism is the CLAMP and it was found by printing the
+column that was missing: **the SCORED program saturates at `uPk 0.1500 of 0.15` and the held-out
+one does not, at 0.1429.** A ratio between two programs is a transfer reading only if the object
+was allowed to act the same on both; here one is clipped and the other is not, so the ratio is
+measuring the clamp and the two rows are two different controllers. The held-out cap is printed on
+every row now and the harness states the asymmetry where it occurs — which in §116's ORDER it
+correctly does not, because there both rows read `uPk 0.1500` and the comparison is honest.
+
+**WHAT IS NOT CHANGED, AND WHY (rule 31).** `first` stays OFF. One plant; it delivers 1.2% WORSE
+there; and the plants where the route's prize is a CALENDAR rather than a factor — the barrel and
+the column, at 30-33 days of teacher (§72, §103) — do not arm `dirInv` at all yet. What this
+section licenses is exactly one sentence: **the placement, not the route, is what reduced ①d to
+1.08x, and the fix is free.** Whether it is worth anything is still a measurement on a plant where
+the route is worth something, and it is still not taken.
