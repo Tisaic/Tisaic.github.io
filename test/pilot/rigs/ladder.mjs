@@ -64,7 +64,7 @@ function announce() {
  */
 async function ladder(spec) {
   const { name, channels, uMax, guards, nMeasured, start, N, refAt, fresh, step, floor,
-    pilotOpts, distil, distilRuns, depth, classicDiet } = spec;
+    pilotOpts, distil, distilRuns, dirInv, dirInvRuns, depth, classicDiet } = spec;
 
   // The reference's own rate and acceleration, in COMMAND space, by differencing the program
   // it will actually run. This is what the conventional rung reads; it is not a model.
@@ -163,6 +163,13 @@ async function ladder(spec) {
     // delivers 1.05x and refuses. A spec that declares neither field leaves every number this
     // driver produces byte-identical (rule 21).
     ...(distil ? { distil } : {}),
+    // AND THE TEACHER-FREE RUNG'S OPTIONS, WHICH THIS DRIVER DID NOT FORWARD (plan §116).
+    // §112 built ①d and shipped a PATH test for it, and the path it tested was the library's.
+    // This driver never destructured `dirInv`, so a spec declaring it was silently ignored: the
+    // harness printed that it had armed the rung, the rung never ran, and the output was
+    // indistinguishable from one where it ran and declined — rule 9b for the SIXTH time, and
+    // rule 25's *did not run* wearing *ran and found nothing*. Unset is byte-identical.
+    ...(dirInv ? { dirInv } : {}),
     ...(Object.keys(HFF).length ? { hff: HFF } : {}),
   });
 
@@ -297,7 +304,10 @@ async function ladder(spec) {
   }) : null;
   const rep = await auto.commission({ run, drivePilot,
     ...(runClassic ? { runClassic } : {}),
-    ...(metered ? { distilRuns: metered } : {}) });
+    ...(metered ? { distilRuns: metered } : {}),
+    // The ①d rung's OPEN-LOOP segments. They cost ZERO teacher laps, so they are not wrapped in
+    // the teacher's phase meter; the excitation is priced by the harness that supplies it.
+    ...(dirInvRuns ? { dirInvRuns } : {}) });
   console.log(`\n  ${name}`);
   console.log(auto.table());
   console.log(`    shipped ${JSON.stringify(rep.deployed)}   ${rep.base.toExponential(3)} → `

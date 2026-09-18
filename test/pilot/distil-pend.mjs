@@ -34,6 +34,11 @@ import { pendSpec } from './rigs/specs.mjs';
 import { deriveWindow, reportDistil, priceFrom, ridgeLadder, gainLadder, teacherReuse, teachLaps,
   teachAvg, dietN, carrier, emitRow } from './rigs/distilkit.mjs';
 import * as PD from './rigs/pend-rig.mjs';
+// ALIASED, because this harness ALREADY HAS a `measureSettle` and they are different instruments:
+// the local one reads the TIP (281 steps), the kit's reads a MEASURED channel and here that is the
+// CART (411). The collision is the distinction, and the compiler found it (rule 17).
+import { segsFor, measureSettle as diMeasureSettle,
+  deriveWindow as diDeriveWindow } from './rigs/dirinvkit.mjs';
 
 if (process.env.SUITE !== 'full') {
   console.log('\ndistil-pend: SKIPPED (full tier only — one commissioning)\n');
@@ -148,6 +153,47 @@ const distilRuns = () => dietN([0, 1, 2, 3]).map((i) => {
   };
 });
 
+/**
+ * THE TEACHER-FREE RUNG (①d), REACHED ON A PLANT FOR THE FIRST TIME (plan §116).
+ *
+ * §112 built it and CLAUDE.md states plainly that it was REACHABLE AND UNEXERCISED on all ten —
+ * *built* and *run on a plant* being different states this project has paid for conflating three
+ * times. The cart-pole goes first on rule 1: it is the cheapest product commissioning here (42.7
+ * min of plant time), its nominal inverse is already declared, and `dirinvall.mjs` measures it at
+ * 11.76x-11.81x over four seeds, so there is a DISTRIBUTION to read the rung against rather than a
+ * single number to be impressed by.
+ *
+ * THE DIET AND THE INVERSE ARE IMPORTED, NOT COPIED. `dirinvall.mjs`'s `PLANTS` entry for this
+ * plant holds all three things this needs — diet, nominal inverse, settle probe — and until §116
+ * importing that module RAN THE WHOLE DRIVER, so a harness would have had to duplicate them. That
+ * is the second copy rule 61 exists to prevent and which has shipped a defect four times here. The
+ * import is lazy so an unset run does not pay for ten rigs loading.
+ *
+ * THE WINDOW IS DERIVED FROM THE EXCITATION SEGMENT'S OWN LAP AND NEVER CARRIED. §103's headline
+ * moved 2.3x from a window carried across diets — §41's aliasing theorem biting inside the
+ * instrument itself — so this derives its own, and it is NOT this harness's `OFFSETS`: that one
+ * comes from the TIP's 281-step settle and the teacher diet's lap, where the direct inverse's
+ * segments are a different diet and `dirinvall.mjs` probes the CART at 411 steps. Two instrument
+ * readings, stated rather than reconciled (rule 17).
+ */
+const DIRINV = process.env.DIRINV === '1';
+let dirInvOpts = null, dirInvRuns = null;
+if (DIRINV) {
+  const { PLANTS } = await import('./dirinvall.mjs');
+  const P = PLANTS.find((q) => /cart-pole/i.test(q.name));
+  if (!P) throw new Error('DIRINV: no cart-pole entry in dirinvall PLANTS — the table moved (rule 25)');
+  const diSettle = diMeasureSettle(pendSpec, { delta: 0.05, idx: 0 });
+  if (diSettle === null) throw new Error('DIRINV: the settle probe read NO MOVEMENT (rule 25)');
+  const diSeglen = typeof P.seglen === 'function' ? P.seglen() : P.seglen;
+  const w = diDeriveWindow({ settle: diSettle, lapMin: diSeglen });
+  console.log(`  ①d DIRECT INVERSE armed: window ±${w.reach} raw steps, ${w.offsets.length} taps `
+    + `[rule ${w.rule} = min(0.61·${diSettle}, ${diSeglen}/8)] — the CART's settle (${diSettle}), `
+    + `not the TIP's (${SETTLE}) this harness's own window uses`);
+  dirInvOpts = { refDim: 1, ridge: env('DIRIDGE', 1e-6), offsets: w.offsets, stride: 7 };
+  // ZERO TEACHER LAPS: open-loop segments only, through the SHARED kit's one inversion path.
+  dirInvRuns = () => segsFor(pendSpec, P.diet, P.inv, { seed: env('DISEED', 1) });
+}
+
 const spec = { ...pendSpec,
   // THE LOOP GOES IN THE SPEC'S NAME, WHICH IS THE ONLY PLACE THAT FIXES IT (plan §97.4).
   //
@@ -171,6 +217,7 @@ const spec = { ...pendSpec,
     ...(teacherReuse() ? {} : { teacherReuse: false }),
     ...(process.env.STD === '0' ? {} : { standardize: true }),
     ...(process.env.ONLINE === '0' ? { online: false } : {}) },
+  ...(dirInvOpts ? { dirInv: dirInvOpts, dirInvRuns } : {}),
   distilRuns };
 
 announce();

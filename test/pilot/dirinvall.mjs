@@ -83,6 +83,9 @@ import { excite, fitInverse, heldOutR2, scoreOn, refSeries, deriveWindow, lcg,
 
 const SEEDS = (process.env.SEEDS || '1,2,3,4').split(',').map(Number);
 const RIDGE = +(process.env.RIDGE || 1e-6);
+import { pathToFileURL } from 'node:url';
+
+const IS_ENTRY = !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 const ONLY = process.env.ONLY ? process.env.ONLY.split(',') : null;
 
 // ---------------------------------------------------------------- THE PLANTS
@@ -441,8 +444,12 @@ const quintic = (t) => t * t * t * (10 + t * (-15 + 6 * t));
 
 const fmt = (v) => (Math.abs(v) >= 1e4 || (v !== 0 && Math.abs(v) < 1e-2)) ? v.toExponential(4) : v.toFixed(4);
 
-console.log(`\ndirinvall — the TEACHER-FREE direct inverse, one kit, every plant with a nominal inverse`);
-console.log(`  seeds ${SEEDS.join(',')}, ridge ${RIDGE}\n`);
+// THE BANNER IS THE DRIVER'S, NOT THE MODULE'S. A harness importing `PLANTS` for one plant's
+// declarations should not print this file's header into the middle of its own report (rule 30).
+if (IS_ENTRY) {
+  console.log(`\ndirinvall — the TEACHER-FREE direct inverse, one kit, every plant with a nominal inverse`);
+  console.log(`  seeds ${SEEDS.join(',')}, ridge ${RIDGE}\n`);
+}
 
 /** Plant steps in that plant's own time base — target 4's units, never the simulator's clock. */
 const human = (steps, dt) => {
@@ -453,7 +460,24 @@ const human = (steps, dt) => {
   return `${(s / 86400).toFixed(1)} days`;
 };
 
-for (const P of PLANTS) {
+/**
+ * THE DECLARATIONS ARE IMPORTABLE; THE DRIVER RUNS ONLY AS AN ENTRY POINT (plan §116).
+ *
+ * `PLANTS` holds each plant's DIET, its nominal INVERSE and its settle probe — the three things a
+ * harness needs to reach `AutoStack`'s ①d rung — and until now importing this module RAN THE WHOLE
+ * DRIVER, verified by a bare `import()` that began commissioning the barrel. So the table could not
+ * be consumed without executing every plant, and a harness reaching for one plant's diet would have
+ * had to COPY it, which is the second copy rule 61 exists to prevent.
+ *
+ * The guard is the ITERABLE rather than a wrapper block, deliberately: wrapping 130 lines would
+ * reindent every one of them and bury the real change in whitespace, where iterating an EMPTY list
+ * on import is one line and obviously equivalent. Everything above is a `const` or a pure function,
+ * and every plant's `settle` is a CLOSURE that probes only when the driver calls it — so an import
+ * advances no plant. The control is that running this file as a script is BYTE-IDENTICAL.
+ */
+export { PLANTS };
+
+for (const P of (IS_ENTRY ? PLANTS : [])) {
   if (ONLY && !ONLY.some((o) => P.name.toLowerCase().includes(o.toLowerCase()))) continue;
   // THE SETTLE IS MEASURED ON THE PLANT WHERE THE PLANT ALLOWS IT (rule 31). The barrel's and the
   // column's are the numbers their OWN `distil-*.mjs` harnesses derive, carried here so those two

@@ -24678,3 +24678,105 @@ Reproducing the fault is what makes the check a measurement rather than a senten
 commissioning draw per plant, as they have always been; §87.3's diet distributions are the
 spread and this is not a re-run of them.
 
+## §116 — §112's TEACHER-FREE RUNG REACHES A PLANT: IT DEPLOYS, IT IS THEN COMPLETELY ABSORBED, AND ITS PLACEMENT IS A RULE-34 FAULT
+
+§112 built the direct inverse as `AutoStack`'s ①d rung and CLAUDE.md stated plainly that it was
+**REACHABLE AND UNEXERCISED on all ten** — *built* and *run on a plant* being different states this
+project has paid for conflating three times. The CART-POLE goes first on rule 1: cheapest product
+commissioning here, nominal inverse already declared, and `dirinvall.mjs` measures it over four
+seeds so there is a DISTRIBUTION to read the rung against rather than one number to be impressed by.
+
+**IT RUNS, IT VOUCHES, IT IS SCORED ON THE MACHINE AND IT DEPLOYS:**
+
+```
+  as it arrived              1.0378e-1
+  conventional (self-tuned)  2.2279e-2   4.66x   13 laps, 4 coefficients
+  ①d direct inverse          2.0680e-2   1.08x   6 OPEN-LOOP runs, 37,512 rows, 24 features,
+                                                 46 MAC/decision, ZERO teacher laps
+  ②d distilled               8.7013e-3   2.38x   4/4 runs kept (hff teacher)
+    shipped  1.038e-1 -> 8.701e-3   11.93x
+```
+
+**AND THE RESULT IS THAT IT CHANGES NOTHING, WHICH IS THE FINDING.** The teacher-taught rung lands
+on **8.7013e-3 whether or not ①d ran first** — the delivered error identical to every digit, 11.93x
+either way, target 1 unchanged at 0.949 and all four safety checks green. ②d's own factor moves
+2.560x → 2.377x for one reason and it is not a controller one: its DENOMINATOR moved, because it is
+now scored against a machine ①d already improved (rule 19). **It costs 41.6 → 46.2 min of plant
+time, +11%, for exactly zero delivered change.**
+
+That is the portfolio working: a rung that wins its own row and is then replaced by a better one.
+The route's prize is the CALENDAR on the plants where the teacher is 30-33 DAYS (§72, §103), and
+the cart-pole was chosen for cheapness rather than because it is where the value is — but see the
+next paragraph, which is why that framing is too kind to the ladder and too hard on the route.
+
+**AND THE 1.08x IS THE PLACEMENT AND NOT THE ROUTE, WHICH IS A MUCH STRONGER STATEMENT AND IS THE
+REASON THIS SECTION EXISTS.** `dirinvall.mjs` measures the direct inverse ALONE on this plant at
+**11.76x-11.81x over four seeds, reaching 8.8017e-3 absolute** — against the FULL teacher-taught
+ladder's **8.7013e-3**. **The teacher-free route by itself lands within 1.2% of conventional +
+distilled combined, at ZERO teacher laps against 24 minutes of teacher.**
+
+**THE TWO NUMBERS ARE COMPARABLE AND THAT WAS CHECKED RATHER THAN ASSUMED (rule 19).** Both score
+through `pendSpec`'s own `step` on `r.truth`, both drop the same 5% start transient
+(`dirinvkit.DROP = 0.05` against the ladder's `k >= pN * 0.05`, rule 13), both saturate at the same
+0.150 cap — and the independent confirmation is that the two instruments read the SAME OPEN LOOP,
+0.1038 against 1.0378e-1, to four digits. A shared support and a shared denominator, from two files
+that share a spec and nothing else.
+
+**SO WHAT THE LADDER THROWS AWAY IS 2.35x OF WHAT THE ROUTE CAN DO HERE, AND THE CAUSE IS RULE 34.**
+The ladder's ①d reaches 2.068e-2 where the standalone route reaches 8.80e-3, and it clamps **54% of
+samples at a worst demand of 2.00x its cap**. That is not a tuning gap: **the rung is FITTED on
+open-loop segments of the BARE plant and DEPLOYED after the conventional rung, so it inverts a
+machine that no longer exists** — commissioned in one configuration and run in another, with the
+clamp fraction the mismatch showing. Read together, the route is capable of essentially the whole
+delivered result on this plant and its PLACEMENT in the ladder is what reduces it to 1.08x.
+
+**THAT ALSO CORRECTS THIS SECTION'S OWN FIRST READING, WHICH WAS WRITTEN AND NOT YET SHIPPED.** It
+said the rung *changes nothing* and the route's value here *is nil because the teacher already gets
+everything*. The delivered-result half stands — 8.7013e-3 either way — but the inference does not:
+the teacher is not getting something this route cannot, it is getting the same thing through 24
+minutes of laps that the route gets through none. The honest sentence is that **the LADDER gains
+nothing from ①d as placed**, not that the route has nothing to give.
+
+**WHAT THAT LICENSES, STATED AS A QUESTION RATHER THAN A CHANGE (rule 59)**: either the rung is
+placed FIRST in the ladder, where the plant it was fitted on is the plant it meets, or its
+excitation is taken on the machine the preceding rungs have built. The first is free and the second
+costs the excitation twice. Neither is built, and which is right is a measurement on a plant where
+the route is worth something — the barrel or the column, not this one.
+
+**THREE FAULTS WERE FOUND ON THE WAY AND EVERY ONE IS A RULE THIS FILE ALREADY HAS.**
+
+**(1) RULE 9b, THE SIXTH TIME: `rigs/ladder.mjs` NEVER FORWARDED `dirInv`.** §112 shipped a path
+test and the path it tested was the LIBRARY's; the DRIVER never destructured the option, so the
+first armed run printed *①d DIRECT INVERSE armed* and the rung never ran — output indistinguishable
+from a run where it ran and declined (rule 25). The shape is identical every time: §82's guard could
+not exceed its own threshold, §78.5's was calibrated on a signal that could not trigger it, §100's
+was never called, §102.1's two had no path from the option to the object, and this one had no path
+from the spec to the library. Fixed; unset is byte-identical.
+
+**(2) RULE 9c IN A THIRD COSTUME: A FILTER THAT MATCHES NOTHING.** The first before-control ran
+`ONLY=pend` against a plant named `cart-pole (open-loop unstable)`. It matched nothing, the loop ran
+zero times, the process exited 0 with a banner — and a diff of two such runs would have read
+BYTE-IDENTICAL. That is rule 9c's own signature arriving through neither of its two recorded forms:
+not a tier skip and not a knob at its default, but a SELECTOR with no match. The rule's general form
+covers it (*ask what would make it go red*) and the specific costume is now on record.
+
+**(3) A NAME COLLISION THAT IS THE FINDING.** `distil-pend.mjs` already has a `measureSettle` and
+the kit exports one; importing it unaliased failed to parse. They are DIFFERENT INSTRUMENTS — the
+local one reads the TIP (281 steps, window ±171), the kit's reads a MEASURED channel and here that
+is the CART (411 steps, window ±251). The compiler found a distinction the prose had only asserted
+(rule 17), and the harness now prints both readings rather than reconciling them.
+
+**AND THE DECLARATIONS ARE IMPORTABLE NOW, WHICH IS WHAT MADE ANY OF IT POSSIBLE WITHOUT A SECOND
+COPY (rule 61).** `dirinvall.mjs`'s `PLANTS` holds each plant's diet, nominal inverse and settle
+probe, and importing the module RAN THE WHOLE DRIVER — verified by a bare `import()` that began
+commissioning the barrel — so a harness would have had to duplicate all three. The guard is the
+ITERABLE rather than a wrapper block, deliberately: wrapping 130 lines reindents every one of them
+and buries the change in whitespace, where iterating an EMPTY list on import is one line and
+obviously equivalent. **The control is that the driver run as a script is BYTE-IDENTICAL over 20
+lines and 4 seed rows** (11.757x..11.807x), asserted to have PRODUCED ITS ROWS before being compared
+(rule 9c). The kit gained `segsFor`, which excites and inverts through the ONE memoised inversion
+path `fitInverse` uses, so no caller builds a second one.
+
+**NOT CLAIMED**: one plant, one seed of the excitation, one placement. `DIRINV` is opt-in and OFF,
+and the unset run is byte-identical apart from the two lines the armed one prints.
+

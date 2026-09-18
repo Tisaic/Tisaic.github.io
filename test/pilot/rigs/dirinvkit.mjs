@@ -101,6 +101,25 @@ function invOf(s, inv) {
   return s.__U;
 }
 
+/**
+ * EXCITE AND INVERT IN ONE CALL — the shape `AutoStack`'s ①d rung actually consumes (plan §116).
+ *
+ * `excite` returns `{ C, Y, n }` with `Y` the ACHIEVED output in the plant's own units, and the
+ * rung wants `{ C, U, n }` with `U` that output mapped back through the plant's nominal inverse.
+ * `invOf` is private and memoises on the segment, so a caller assembling `U` itself would build a
+ * SECOND inversion path beside the one `fitInverse` uses — the duplicate rule 61 exists to prevent
+ * and which has shipped a defect four times in this project. One call, one inversion, shared cache.
+ *
+ * It returns the SAME segment objects `excite` produced with `U` attached, not copies: the memo
+ * lives on the segment, so a harness that calls this and then `fitInverse` on the result pays for
+ * the inversion once.
+ */
+export function segsFor(spec, diet, inv, { seed = 1 } = {}) {
+  const segs = excite(spec, diet, { seed });
+  for (const s of segs) s.U = invOf(s, inv);
+  return segs;
+}
+
 /** Fit the direct inverse on a list of excitation segments. `inv` maps an ACHIEVED output to command units. */
 export function fitInverse(segs, inv, { offsets, uMax, ridge = 1e-6, nc, refDim, stride = 7, shuffle = null }) {
   const pol = new DistilPolicy({ channels: nc, refDim, offsets, uMax, ridge, online: false, standardize: true });

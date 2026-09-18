@@ -670,11 +670,29 @@ Each of these is a claim that can be shown false, which is the only kind worth w
    segments a host supplies, scored on the machine like every rung and reverting if it does not win,
    arming through the SAME `deployed.distil` the distilled rung uses so `deploy.js` is unchanged.
    `dirInv` defaults to NULL and **every existing caller is byte-identical** (EMPS 20.2x through
-   `autostack.test.mjs`, `inventory` and `artefact` green). **What is still true is the other half,
-   and it is stated rather than softened (rule 25): NO PLANT HARNESS DECLARES `dirInvRuns`, so the
-   rung is REACHABLE AND UNEXERCISED on all ten** — a route offered by the one press that no plant
-   has yet been asked through it. *Built* and *run on a plant* are different states, and this file
-   has paid for conflating them three times.
+   `autostack.test.mjs`, `inventory` and `artefact` green). **AND IT HAS NOW BEEN RUN ON A PLANT, WHICH IS WHAT
+   THIS PARAGRAPH USED TO SAY IT HAD NOT (plan §116).** It read *NO PLANT HARNESS DECLARES
+   `dirInvRuns`, so the rung is REACHABLE AND UNEXERCISED on all ten*. The CART-POLE declares it
+   now — rule 1, the cheapest plant with a nominal inverse already on record — and the rung **runs,
+   vouches, is scored ON THE MACHINE and DEPLOYS at 1.08x** from 6 open-loop runs, 37,512 rows and
+   ZERO teacher laps. **And the LADDER gains nothing from it as placed**: the
+   teacher-taught rung lands on **8.7013e-3 either way**, 11.93x, target 1 unchanged at 0.949 —
+   ②d's own factor moving 2.560x → 2.377x only because its DENOMINATOR moved (rule 19) — at **+11%
+   of commissioning for zero delivered change**. **BUT THE 1.08x IS THE PLACEMENT AND NOT THE
+   ROUTE, AND THAT IS THE RESULT**: `dirinvall.mjs` measures this route ALONE at 11.76-11.81x over
+   four seeds, reaching **8.8017e-3 against the FULL teacher-taught ladder's 8.7013e-3** — **the
+   teacher-free object by itself lands within 1.2% of conventional + distilled combined, at ZERO
+   teacher laps against 24 minutes of teacher.** The two are comparable and it was CHECKED rather
+   than assumed (rule 19): same `step`, same `r.truth`, same 5% drop, same 0.150 cap, and the two
+   instruments read the SAME OPEN LOOP to four digits (0.1038 against 1.0378e-1). **So the ladder
+   throws away 2.35x of what the route can do here, and the cause is RULE 34** — ①d is FITTED on
+   open-loop segments of the BARE plant and DEPLOYED after the conventional rung, so it inverts a
+   machine that no longer exists, and it clamps 54% of samples at 2.00x its cap as that mismatch
+   shows. Whether it belongs FIRST in the ladder or should be excited on the machine below it is a
+   measurement on a plant where the route is worth something, and is NOT BUILT. **Getting there cost rule 9b a sixth time**: `rigs/ladder.mjs`
+   never forwarded `dirInv`, so the first armed run printed that it had armed the rung and the rung
+   never ran — indistinguishable from a refusal (rule 25). *Built* and *run on a plant* are
+   different states, and this file has paid for conflating them four times now.
 
    **AND IT IS NOW NINE PLANTS: SIX ADDRESSED, TWO STRUCTURALLY OUT, ONE UNRESOLVED (plan §105).**
    Real steam exchanger **95.6x**, cart-pole **11.8x**, real cascaded tanks **9.1x**, quadruple tank
@@ -2140,8 +2158,14 @@ measurement behind each is in `docs/history/` — the pointer in brackets.
    `UM = 0.02`, because it is the default compared with itself. A knob's inertness is shown by the
    PUBLISHED NUMBERS REPRODUCING with it present, which a mis-wiring breaks; not by setting it to
    the value it already has.
+   **(c) THE SELECTOR THAT MATCHES NOTHING (plan §116).** `ONLY=pend` against a plant named
+   `cart-pole (open-loop unstable)` matches no row: the loop runs zero times, the process exits 0
+   with a banner, and two such runs diff BYTE-IDENTICAL. Neither a tier skip nor a knob at its
+   default — a FILTER with no match, and it read as a passing control until the row count was
+   looked at.
    The general form: before quoting a control, ask what would make it go red. If nothing would, it
-   is a sentence and not a measurement.
+   is a sentence and not a measurement. **Assert the run PRODUCED ITS ROWS — a count, a factor, a
+   named line — before comparing anything**, which catches all three costumes at once.
 9b. **A GUARD IS NOT VERIFIED BY A UNIT TEST, BECAUSE WHAT FAILS IS THE PATH TO IT — ASSERT
    THAT IT FIRES THROUGH THE SHIPPED CONFIGURATION.** Three guards here shipped armed and
    inert and every one of them passed its own unit test, because a unit test calls the
