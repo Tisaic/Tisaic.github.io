@@ -24600,3 +24600,81 @@ have caught all three of the above.
 
 **NOT CLAIMED**: this was an audit by reading, not a scrape, so it has the exact weakness it
 criticises. It found what it found; it cannot say the summary is now consistent.
+
+## §115 — THE THREE PENDING COUNTS ARE SCRAPED AND ALL THREE CONFIRM THE PROSE, AFTER THE TABLE'S OWN KEY WAS FOUND COLLAPSING TWO PLANTS INTO ONE
+
+Three counts stood as PENDING A SCRAPE rather than measured: target 1's *ten of ten asked, five
+MET* (§109.2), the shipping count corrected by hand from 8/3 to **6/5** (§109.3), and §114's
+read-only audit. §88.9's lesson is that prose and scrape disagreeing is the condition `objtable`
+exists to remove, and it had already caught this file once reading *5 of 8 MET* against a scrape's
+*4 of 7*. One run settles all three: the full eleven-row pass with `OBJTABLE_OUT` set, then
+`READ=1`.
+
+**AND THE FIRST READ DISAGREED — 4 MET WHERE THE PROSE SAYS 5, AND *5 of 10* SHIPPING THE OBJECT
+WHERE §109.3's CORRECTION SAYS 6.** That is §88.9's condition for the fifth time. It is resolved
+**IN FAVOUR OF THE PROSE**, which is the opposite of §88.9, and the cause is in the instrument.
+
+**ONE SCRIPT IS TWO PLANTS, AND THE READER KEYED ON THE SCRIPT.** `distil-pend.mjs` is registered
+TWICE in `PLANTS` — once bare, once under `PEND_TUNED=1` — and emits FOUR rows, two per loop (each
+harness emits a row and then re-emits it enriched with `t1`). The reader did
+`seen.set(r.file, r)` with the comment *the LAST row a file emitted wins*, so the TUNED loop's row
+**overwrote the SHIPPED loop's** and the table lost a plant:
+
+```
+  #11 [shipped loop]              11.93x   t1 null     <- first emit
+  #12 [shipped loop]              11.93x   t1 0.9495   <- the row the prose quotes
+  #13 [loop tuned 3.5x better]     9.24x   t1 null
+  #14 [loop tuned 3.5x better]     9.24x   t1 0.4245   <- the only one that survived
+```
+
+So the target-1 count was reading the TUNED cart-pole's **0.4245** in place of the shipped loop's
+**0.9495**, and the shipping count lost a DEPLOYED-OBJECT row and kept a conventional-rung one —
+undercounting by exactly one in both columns. CLAUDE.md's `pend 31.6 0.950 MET` was right all
+along.
+
+**THE KEYING WAS DEFENDED BY A COMMENT THAT IS ABOUT SOMETHING ELSE.** The header states the row
+is *keyed by the SCRIPT that produced it rather than by a passed name*, so `plants.test.mjs`'s
+TEACHER rows stay out of a table about the deployed object (rule 19). That protection is the
+`/^distil-/` **FILTER** and not the **KEY**, and the two were conflated — the key is free to carry
+a variant without weakening it at all.
+
+**THE REPAIR, AND ITS OWN FIRST ATTEMPT WAS WRONG IN THE OTHER DIRECTION (rule 17).** Keying on
+file + the WHOLE name split every harness into a pair, because only the enriched emit carries a
+`name`: seventeen rows over ten plants, reading *10 of 17 ship the DEPLOYED OBJECT*. The variant
+is the BRACKETED TAIL of the name and nothing else. Keyed on that:
+
+```
+  distil-pend [shipped loop]          DEPLOYED OBJECT    11.93x   0.95 of scored, MET
+  distil-pend [loop tuned 3.5x...]    conventional rung   9.24x   0.42 of scored, under 1/1.3
+```
+
+**ALL THREE COUNTS NOW SETTLE, AND EVERY ONE CONFIRMS THE PROSE:**
+
+```
+  6 of 11 ship the DEPLOYED OBJECT; made WORSE: none        <- §109.3's hand-correction, confirmed
+  TARGET 1 asked on 11 of 11: 5 MET, 1 made WORSE           <- "FIVE OF TEN ASKED MEET THE BOUND"
+  5 of 11 get essentially ALL of their factor from the      <- §97.3's corrected "FIVE rows where
+    four-coefficient rung                                      the incumbent is the result"
+```
+
+and the READ path now agrees with the STDOUT-SCRAPED table, which had eleven rows and 6/5/0 all
+along because it keys by the `PLANTS` entry. **The project's two counting paths disagreed by one
+plant with nothing saying so**, which is the fault this table exists to remove, appearing inside
+the table.
+
+**AND THE CHECK THAT WOULD HAVE CAUGHT IT NOW EXISTS, ASSERTED BOTH WAYS (rule 9).** A script
+registered N times in `PLANTS` must return N rows; fewer is reported as `COLLAPSED`, because a
+count that collapses is indistinguishable from a harness that did not run unless something
+compares it against what was ASKED (rule 25).
+
+- **Silent on the correct rows**: `read 11 row(s) from 21 emitted`, no warning.
+- **FIRES on the pre-repair state**, reproduced by stripping the bracketed variant from the
+  cart-pole's rows: `COLLAPSED — distil-pend (1 of 2)`, and the count drops to **5 of 10** —
+  the exact wrong number this section started from.
+
+Reproducing the fault is what makes the check a measurement rather than a sentence (rule 9c).
+
+**WHAT IS NOT CLAIMED**: this settles the three counts and nothing else. The rows are one
+commissioning draw per plant, as they have always been; §87.3's diet distributions are the
+spread and this is not a re-run of them.
+

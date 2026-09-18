@@ -128,13 +128,40 @@ if (READ) {
   // Only the harnesses that ask the DEPLOYED object. `plants.test.mjs` drives four of the same
   // plants through the same driver and scores the TEACHER; those rows are a different claim and a
   // table that mixed them would be counting two things in one column (rule 19).
+  //
+  // AND THE KEY IS THE SCRIPT *PLUS THE ROW'S OWN NAME*, BECAUSE ONE SCRIPT IS TWO PLANTS
+  // (plan §115). Keying on `file` alone is what the header above defends — it is what keeps
+  // `plants.test.mjs`'s TEACHER rows out — but that protection is the `/^distil-/` FILTER and
+  // not the key, and the two were conflated. `distil-pend.mjs` is registered TWICE in `PLANTS`,
+  // once bare and once under `PEND_TUNED=1`, so it emits FOUR rows for TWO different plants and
+  // the last-wins rule silently discarded the SHIPPED loop in favour of the TUNED one. The
+  // stdout-scraped table printed both rows correctly and this reader printed ten where there
+  // are eleven, so the project's two counting paths disagreed by exactly one plant — which is
+  // the condition this table exists to REMOVE (rule 30), reappearing inside the table itself.
+  //
+  // Within one variant the LAST row still wins, which is right: a harness emits a row and then
+  // re-emits it enriched (the cart-pole's first emit of each pair carries no `t1`).
+  // THE VARIANT IS THE BRACKETED TAIL OF THE ROW'S OWN NAME AND NOTHING ELSE. Keying on the
+  // WHOLE name was this repair's own first attempt and it was wrong in the other direction
+  // (rule 17, the instrument failing before the model): six harnesses emit a row and then
+  // re-emit it enriched with `t1`, and only the second carries a `name`, so a whole-name key
+  // split every one of them into a pair — a table of seventeen rows over ten plants, reading
+  // *10 of 17 ship the DEPLOYED OBJECT*. Only the bracketed tail distinguishes two PLANTS from
+  // one plant emitted twice.
+  const variantOf = (r) => {
+    const m = /\[([^\]]+)\]\s*$/.exec(String(r.name || ''));
+    return m ? m[1] : '';
+  };
   const seen = new Map();
+  const files = new Set();
   for (const l of lines) {
     let r; try { r = JSON.parse(l); } catch { continue; }
     if (!/^distil-/.test(r.file || '')) continue;
-    seen.set(r.file, r);                                   // the LAST row a file emitted wins
+    files.add(r.file);
+    seen.set(`${r.file}\u0000${variantOf(r)}`, r);         // the LAST row a VARIANT emitted wins
   }
-  const got = [...seen.values()].sort((a, b) => a.file.localeCompare(b.file));
+  const got = [...seen.values()].sort((a, b) =>
+    a.file.localeCompare(b.file) || variantOf(a).localeCompare(variantOf(b)));
   // WHICH HARNESSES DID NOT EMIT, NAMED (rule 25). The first suite run of this check read "9
   // row(s)" and said nothing about the tenth: `distil-arm.mjs` is an INSTRUMENT and is not
   // registered in `test/run.sh`, so its row is legitimately absent — but a table that prints a
@@ -143,10 +170,31 @@ if (READ) {
   // harness the suite never runs cannot be evidence about a plant either way.
   const EXPECT = PLANTS.map((q) => (q.file || '').replace(/\.mjs$/, ''))
     .filter((f, i, a) => f && a.indexOf(f) === i);
-  const missing = EXPECT.filter((f) => !seen.has(f));
+  const missing = EXPECT.filter((f) => !files.has(f));
+  // AND A SCRIPT REGISTERED N TIMES MUST PRODUCE N ROWS, WHICH IS THE CHECK THAT WOULD HAVE
+  // CAUGHT §115 (rule 9's other half, rule 25). `distil-pend.mjs` appears TWICE in `PLANTS` —
+  // once bare and once under `PEND_TUNED=1` — and for as long as the reader keyed on `file`
+  // alone it silently returned ONE row for that pair, so this table and the stdout-scraped one
+  // disagreed by a plant with nothing saying so. A count that collapses is indistinguishable
+  // from a harness that did not run unless something compares it against what was ASKED.
+  const wantPer = new Map();
+  for (const q of PLANTS) {
+    const f = (q.file || '').replace(/\.mjs$/, '');
+    if (f) wantPer.set(f, (wantPer.get(f) || 0) + 1);
+  }
+  const collapsed = [...wantPer.entries()]
+    .filter(([f, n]) => files.has(f) && got.filter((r) => r.file === f).length < n)
+    .map(([f, n]) => `${f} (${got.filter((r) => r.file === f).length} of ${n})`);
   console.log(`  read ${got.length} row(s) from ${lines.length} emitted`
     + (missing.length ? `  —  NOT EMITTED: ${missing.join(', ')} (not run in this pass)` : '')
+    + (collapsed.length ? `\n  COLLAPSED — a script registered more than once returned fewer `
+      + `rows than it was asked for: ${collapsed.join(', ')}` : '')
     + '\n');
+  // AND TWO ROWS FROM ONE SCRIPT MUST NOT PRINT UNDER ONE NAME (rule 25/30). The harness's own
+  // `name` ends in a bracketed variant where it has one, so the label carries it — otherwise the
+  // repaired key would produce two visually identical rows and the table would look like a
+  // duplicate rather than like two plants.
+  const label = (r) => (variantOf(r) ? `${r.file} [${variantOf(r)}]` : r.file);
   console.log('  harness                     ships                 base -> best            '
     + '  x      MAC   kB     ②d          TARGET 1');
   let bad = 0;
@@ -154,7 +202,7 @@ if (READ) {
     const kind = classify(r.deployed ? { ship: r.deployed } : null);
     const worse = r.gain !== null && r.gain < 0.995;
     if (worse) bad++;
-    console.log(`  ${r.file.padEnd(27)} ${kind.padEnd(20)} `
+    console.log(`  ${label(r).padEnd(27)} ${kind.padEnd(20)} `
       + `${r.base === null ? '—'.padEnd(21) : (r.base.toExponential(3) + ' -> ' + r.best.toExponential(3)).padEnd(21)} `
       + `${(r.gain === null ? 'UNKNOWN' : r.gain.toFixed(2) + 'x').padStart(8)} `
       + `${(r.mac === null ? '—' : String(r.mac)).padStart(6)} `
@@ -185,14 +233,14 @@ if (READ) {
     for (const r of sp) {
       const tot = r.xClassic * r.xAdded;
       const share = tot > 1 ? Math.log(r.xAdded) / Math.log(tot) : null;
-      console.log(`  ${r.file.padEnd(27)} ${(r.classicRan ? r.xClassic.toFixed(2) + 'x' : 'none')
+      console.log(`  ${label(r).padEnd(27)} ${(r.classicRan ? r.xClassic.toFixed(2) + 'x' : 'none')
         .padStart(8)} ${(r.xAdded.toFixed(2) + 'x').padStart(10)} `
         + `${(tot.toFixed(2) + 'x').padStart(10)}   `
         + `${share === null ? '—' : (100 * share).toFixed(0) + '%'}`);
     }
     const carried = sp.filter((r) => r.classicRan && r.xAdded < 1.05);
     console.log(`\n  ${carried.length} of ${sp.length} plants get essentially ALL of their factor `
-      + `from the four-coefficient rung${carried.length ? ': ' + carried.map((r) => r.file).join(', ') : ''}`);
+      + `from the four-coefficient rung${carried.length ? ': ' + carried.map((r) => label(r)).join(', ') : ''}`);
   }
   // TARGET 1's COLUMN, REPORTED AND NOT ASSERTED (plan §88.1). Every harness that scores a second
   // program emits the ratio it delivers there against the one it was scored on; the target
@@ -230,7 +278,7 @@ if (READ) {
   console.log(`  TARGET 1 asked on ${asked.length} of ${got.length}: ${met.length} MET, `
     + `${asked.filter((r) => r.t1Worse).length} made WORSE on the held-out program`
     + `${asked.length === met.length ? '' : ` — ${asked.filter((r) => !met.includes(r))
-      .map((r) => r.file).join(', ')}`}`);
+      .map((r) => label(r)).join(', ')}`}`);
   // THE MANDATE, AS A CHECK. Every plant asked either improves or refuses — a refusal delivers the
   // machine unchanged, so `gain >= 1` covers both and nothing else is asserted here, because a
   // threshold on HOW MUCH each plant must win by would be a number this file invented.
