@@ -406,6 +406,29 @@ function deriveWindow({ settle, lapMin, win }) {
 }
 
 /**
+ * THE APPLIED-GAIN LADDER'S REPORT, WRITTEN ONCE (plan §119). `distil-tank.mjs` kept its own copy of
+ * this format and so had no path to the extension-exit line §109 added here (rule 30); both sites
+ * call this now, at their own indent, and the output is byte-identical at each.
+ */
+export function printGainLadder(rep, pad = '  ') {
+  if (!rep.distil || !rep.distil.gains) return;
+  console.log(`${pad}the APPLIED-GAIN LADDER, scored on the machine (no refit — the gain folds into `
+    + 'the weights, so a candidate costs one scored run):');
+  for (const c of rep.distil.gains) {
+    console.log(`${pad}  gain ${String(c.gain).padStart(5)}  machine `
+      + `${c.score === null ? 'not scored' : c.score.toExponential(4)}`
+      + (c.gain === rep.distil.gainPicked ? '   <- PICKED' : ''));
+  }
+  // AN UNFLATTERING DIAGNOSTIC FIRST (rule 27): if the ladder stopped extending because the
+  // rung was already losing by more than its budget could close, that is the row's headline
+  // and not a footnote — the axis spent its runs and had nothing to select (plan §109).
+  if (rep.distil.gainExit) {
+    console.log(`${pad}  EXTENSION STOPPED after ${rep.distil.gainExit.at} step`
+      + `${rep.distil.gainExit.at === 1 ? '' : 's'}: ${rep.distil.gainExit.reason}`);
+  }
+}
+
+/**
  * The verdict, with the unflattering diagnostics FIRST (rule 27).
  *
  * A prequential R² below zero has at least three cheap explanations that the score itself cannot
@@ -522,22 +545,7 @@ async function reportDistil({ rep, runs, nFeat, segs = null, auto = null }) {
           : (rep.distil.ridgeBand || []).includes(c.ridge) ? '   (in band)' : ''));
     }
   }
-  if (rep.distil && rep.distil.gains) {
-    console.log('  the APPLIED-GAIN LADDER, scored on the machine (no refit — the gain folds into '
-      + 'the weights, so a candidate costs one scored run):');
-    for (const c of rep.distil.gains) {
-      console.log(`    gain ${String(c.gain).padStart(5)}  machine `
-        + `${c.score === null ? 'not scored' : c.score.toExponential(4)}`
-        + (c.gain === rep.distil.gainPicked ? '   <- PICKED' : ''));
-    }
-    // AN UNFLATTERING DIAGNOSTIC FIRST (rule 27): if the ladder stopped extending because the
-    // rung was already losing by more than its budget could close, that is the row's headline
-    // and not a footnote — the axis spent its runs and had nothing to select (plan §109).
-    if (rep.distil.gainExit) {
-      console.log(`    EXTENSION STOPPED after ${rep.distil.gainExit.at} step`
-        + `${rep.distil.gainExit.at === 1 ? '' : 's'}: ${rep.distil.gainExit.reason}`);
-    }
-  }
+  printGainLadder(rep, '  ');
   if (rep.distil && rep.distil.ridgeNote) console.log(`  ${rep.distil.ridgeNote}`);
   if (rep.distil && rep.distil.fit) {
     const f = rep.distil.fit;

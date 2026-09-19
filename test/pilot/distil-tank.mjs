@@ -41,7 +41,7 @@
  */
 import { AutoStack } from '../../lib/pilot/autostack.js';
 import { motionBasis } from '../../lib/pilot/classic.js';
-import { priceFrom, printCost, emitRow, ridgeLadder, gainLadder, teacherReuse, carrier, teachLaps, teachAvg, dietN } from './rigs/distilkit.mjs';
+import { priceFrom, printCost, emitRow, printGainLadder, ridgeLadder, gainLadder, teacherReuse, carrier, teachLaps, teachAvg, dietN } from './rigs/distilkit.mjs';
 import { into } from './rigs/meter.mjs';
 import { oracleConverge, oracleTeach } from './rigs/oracleteach.mjs';
 import { windowBend } from '../../lib/pilot/deploy.js';
@@ -720,24 +720,7 @@ async function once(seed) {
     // printed separately from the ridge because it is a different quantity: the ridge
     // regularises the FIT and the gain scales what the fitted map APPLIES, and on this plant
     // they do not agree about what is best.
-    if (rep.distil.gains) {
-      console.log('    the APPLIED-GAIN LADDER, scored on the machine (no refit — the gain folds '
-        + 'into the weights, so a candidate costs one scored run):');
-      for (const c of rep.distil.gains) {
-        console.log(`      gain ${String(c.gain).padStart(5)}  machine `
-          + `${c.score === null ? 'not scored' : c.score.toExponential(4)}`
-          + (c.gain === rep.distil.gainPicked ? '   <- PICKED' : ''));
-      }
-      // THE EXTENSION'S OWN EXIT, WHICH THIS BLOCK COULD NOT PRINT (plan §109, rule 30).
-      // `distilkit.mjs`'s `reportDistil` prints this and THIS HARNESS DOES NOT CALL IT — it keeps
-      // its own copy of the gain-ladder format — so the diagnostic existed with no path to the
-      // one plant §107 measured the runaway walk on. A description written in a second place
-      // eventually describes the behaviour the first one used to have.
-      if (rep.distil.gainExit) {
-        console.log(`      EXTENSION STOPPED after ${rep.distil.gainExit.at} step`
-          + `${rep.distil.gainExit.at === 1 ? '' : 's'}: ${rep.distil.gainExit.reason}`);
-      }
-    }
+    printGainLadder(rep, '    ');
     if (rep.distil.ridgeNote) console.log(`    ${rep.distil.ridgeNote}`);
   }
 

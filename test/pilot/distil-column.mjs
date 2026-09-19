@@ -37,6 +37,7 @@
 import { ladder, announce } from './rigs/ladder.mjs';
 import { wbSpec } from './rigs/specs.mjs';
 import { deriveWindow, reportDistil, priceFrom, ridgeLadder, gainLadder, teacherReuse, carrier, teachLaps, teachAvg, dietN, emitRow } from './rigs/distilkit.mjs';
+import { dirInvFor } from './rigs/dirinvkit.mjs';
 import { oracleConverge, oracleTeach } from './rigs/oracleteach.mjs';
 import * as WB from './rigs/woodberry-rig.mjs';
 
@@ -243,7 +244,13 @@ const distilRuns = (auto) => dietN(DIETS).map((rec) => {
  */
 const PARAM = process.env.PARAM === '1';
 
+// THE TEACHER-FREE ①d RUNG, ARMED BY `DIRINV=1` AND PLACED FIRST BY `DIRFIRST=1` (plan §119).
+// Its diet, inverse and window come from this plant's `dirinvall.mjs` entry through the one
+// shared wiring; unset spreads to nothing and the ladder is byte-identical (rule 21).
+const DI = await dirInvFor(/Wood-Berry column/i);
+
 const spec = { ...wbSpec,
+  ...DI,
   // NO CASCADE: this rung's teacher is `hff`, so the cascade would be commissioned,
   // scored and then REPLACED by the rung that wins (plan §73.1). `DEPTH=2` is the control.
   // `ORACLE=1` needs one, because the oracle teacher IS the commissioned pilot iterated.

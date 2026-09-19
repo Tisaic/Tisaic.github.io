@@ -34,11 +34,7 @@ import { pendSpec } from './rigs/specs.mjs';
 import { deriveWindow, reportDistil, priceFrom, ridgeLadder, gainLadder, teacherReuse, teachLaps,
   teachAvg, dietN, carrier, emitRow } from './rigs/distilkit.mjs';
 import * as PD from './rigs/pend-rig.mjs';
-// ALIASED, because this harness ALREADY HAS a `measureSettle` and they are different instruments:
-// the local one reads the TIP (281 steps), the kit's reads a MEASURED channel and here that is the
-// CART (411). The collision is the distinction, and the compiler found it (rule 17).
-import { segsFor, measureSettle as diMeasureSettle,
-  deriveWindow as diDeriveWindow } from './rigs/dirinvkit.mjs';
+import { dirInvFor } from './rigs/dirinvkit.mjs';
 
 if (process.env.SUITE !== 'full') {
   console.log('\ndistil-pend: SKIPPED (full tier only — one commissioning)\n');
@@ -171,32 +167,16 @@ const distilRuns = () => dietN([0, 1, 2, 3]).map((i) => {
  *
  * THE WINDOW IS DERIVED FROM THE EXCITATION SEGMENT'S OWN LAP AND NEVER CARRIED. §103's headline
  * moved 2.3x from a window carried across diets — §41's aliasing theorem biting inside the
- * instrument itself — so this derives its own, and it is NOT this harness's `OFFSETS`: that one
- * comes from the TIP's 281-step settle and the teacher diet's lap, where the direct inverse's
+ * instrument itself — so `dirInvFor` derives its own, and it is NOT this harness's `OFFSETS`: that
+ * one comes from the TIP's 281-step settle and the teacher diet's lap, where the direct inverse's
  * segments are a different diet and `dirinvall.mjs` probes the CART at 411 steps. Two instrument
- * readings, stated rather than reconciled (rule 17).
+ * readings, stated rather than reconciled (rule 17). The wiring itself is the kit's, shared with
+ * the barrel and the column (plan §119, rule 61).
  */
-const DIRINV = process.env.DIRINV === '1';
-let dirInvOpts = null, dirInvRuns = null;
-if (DIRINV) {
-  const { PLANTS } = await import('./dirinvall.mjs');
-  const P = PLANTS.find((q) => /cart-pole/i.test(q.name));
-  if (!P) throw new Error('DIRINV: no cart-pole entry in dirinvall PLANTS — the table moved (rule 25)');
-  const diSettle = diMeasureSettle(pendSpec, { delta: 0.05, idx: 0 });
-  if (diSettle === null) throw new Error('DIRINV: the settle probe read NO MOVEMENT (rule 25)');
-  const diSeglen = typeof P.seglen === 'function' ? P.seglen() : P.seglen;
-  const w = diDeriveWindow({ settle: diSettle, lapMin: diSeglen });
-  console.log(`  ①d DIRECT INVERSE armed: window ±${w.reach} raw steps, ${w.offsets.length} taps `
-    + `[rule ${w.rule} = min(0.61·${diSettle}, ${diSeglen}/8)] — the CART's settle (${diSettle}), `
-    + `not the TIP's (${SETTLE}) this harness's own window uses`);
-  // `DIRFIRST=1` places the rung BEFORE the conventional one (plan §117): it is FITTED on
-  // open-loop segments of the BARE plant, so deploying it after a rung that has changed the
-  // machine is rule 34, and this is the half of §116's open question that costs nothing.
-  dirInvOpts = { refDim: 1, ridge: env('DIRIDGE', 1e-6), offsets: w.offsets, stride: 7,
-    first: process.env.DIRFIRST === '1' };
-  // ZERO TEACHER LAPS: open-loop segments only, through the SHARED kit's one inversion path.
-  dirInvRuns = () => segsFor(pendSpec, P.diet, P.inv, { seed: env('DISEED', 1) });
-}
+// ONE SHARED WIRING (plan §119): the cart-pole's entry in `dirinvall.mjs` supplies the diet, the
+// nominal inverse and the CART's settle (411 — the TIP's 281 is this harness's own window, and
+// the two are stated rather than reconciled, rule 17). Unset spreads to nothing.
+const DI = await dirInvFor(/cart-pole/i);
 
 const spec = { ...pendSpec,
   // THE LOOP GOES IN THE SPEC'S NAME, WHICH IS THE ONLY PLACE THAT FIXES IT (plan §97.4).
@@ -221,7 +201,7 @@ const spec = { ...pendSpec,
     ...(teacherReuse() ? {} : { teacherReuse: false }),
     ...(process.env.STD === '0' ? {} : { standardize: true }),
     ...(process.env.ONLINE === '0' ? { online: false } : {}) },
-  ...(dirInvOpts ? { dirInv: dirInvOpts, dirInvRuns } : {}),
+  ...DI,
   distilRuns };
 
 announce();

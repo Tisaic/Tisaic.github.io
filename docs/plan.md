@@ -25015,3 +25015,45 @@ both tiers.
 **ASSERTED BOTH WAYS (rule 9)**: the quick tier goes green with the skip stated, and the full tier
 still RUNS the check and still passes — the second half being what says the repair did not simply
 delete a real assertion.
+
+## §119 — The teacher-free rung where the calendar is: ①d lands inside the taught distribution on both plants, and the TEACHER STILL WINS on both (task #91)
+
+§117's open half: is ①d's placement worth anything on the barrel and the column, where the teacher is
+30-33 days? Three configurations per plant, one shared wiring (`dirInvFor` in `rigs/dirinvkit.mjs` —
+the block §116 wrote inline in `distil-pend.mjs`, which would have been a third copy, rule 61; the
+cart-pole is byte-identical through it on both `unset` and `DIRINV=1 DIRFIRST=1`, 67 lines against §117).
+
+```
+                     unset (control)     ①d ALONE, zero teacher laps     ②d taught, on top     ships
+  extruder barrel    7.00x  (7.5326e-1)   4.21x  (1.2525e+0)              7.00x  (7.5326e-1)    ②d
+  Wood-Berry column  3.96x  (3.4453e-2)   3.85x  (3.5428e-2)              3.96x  (3.4453e-2)    ②d
+```
+
+**Both ①d rows sit inside §105's standalone distributions** (barrel 3.705-6.388x, column 3.43-4.45x),
+so the rung reaches both plants through the one press exactly as it does standalone. **The taught
+object beats it on both** — by 1.66x on the barrel and by 2.8% on the column — and its delivered
+number is IDENTICAL to five digits with or without ①d beneath it, because both plants' `hff` teacher
+drives the BARE plant (`DRIVE` defaults `active: false`) and ②d REPLACES the `deployed.distil` slot
+rather than composing with it. So this is the clean comparison: taught against free, same machine,
+same window rule, same deploy path. **Placement is inert on both plants** (`after` and `first` differ
+only in row order), because the conventional rung refuses on both and ①d has no changed machine to
+invert — §117's rule-34 finding needs a rung below it that deploys, and here there is none.
+
+**What it means for gap 1.** On the COLUMN the two objects are within rule 42's 5% band and the
+cheaper one costs ZERO of the 26.3 teacher-days in a 32.1-day bill — the band's own rule would ship
+①d and remove 82% of the calendar for 2.8% of the factor. The ladder does not apply that band across
+rungs (`beats()` is the instrument's repeatability, and ②d clears it), so today it pays 26 days for
+2.8%. On the BARREL the teacher is worth 1.66x and stays. **So the early exit (#92) is not "skip a
+throw-away teacher" — on neither plant is the teacher thrown away. It is rule 42 across rungs with
+the calendar as the cost: ship the cheapest object within the band of the best MEASURED one, and do
+not commission the expensive one where the cheap one already sits at the bar.** That needs a bar
+before the teacher runs, and the only one on record is ①d's own machine score.
+
+Controls: both `unset` runs reproduce the shipped rows to every digit (7.00x, 3.96x); `after` ≡ `first`
+on both plants; the cart-pole is byte-identical through the refactor. Cost: the armed ladders bill
+37.6 and 35.0 days against 35.3 and 32.1, the open-loop excitation being 2.3-2.9 days (§105). One seed
+per plant, one diet each. `DIRINV` stays OFF (rule 31).
+
+**Cleanup in the same commit (rule 61, rule 30):** `printGainLadder` is one function in the kit, called
+by `reportDistil` and by `distil-tank.mjs` at their own indents — the tank's private copy, which §109
+named as the reason its extension-exit line was unreachable, is gone.

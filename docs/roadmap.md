@@ -58,9 +58,10 @@ alone at **ZERO teacher laps**. §105 already measured that route standalone on 
 plants: **barrel 4.641x median, column 3.652x median** over four seeds, against teacher-taught
 7.00x and 3.96x — overlapping distributions at no teacher cost.
 
-**What has never been done is putting the two together on a plant where the calendar is the prize.**
-The cart-pole was chosen for cheapness (rule 1) and there the placement delivers 1.2% WORSE, which
-is why §117 refused to call it a win.
+**DONE (§119): on both plants ①d lands inside the standalone distribution through the one press —
+barrel 4.21x, column 3.85x, zero teacher laps — and the TAUGHT rung still wins on both, 7.00x and
+3.96x.** Placement is inert (the conventional rung refuses on both). On the column the two objects
+are 2.8% apart and the teacher is 26.3 of 32.1 days; on the barrel the teacher is worth 1.66x.
 
 **AND ONE HALF OF IT IS NOT BUILT, WHICH IS WHY THE FACTOR IS NOT YET A CALENDAR.** §117 measured
 commissioning falling only **46.2 → 43.0 min** — because the ladder still RAN the teacher and then
@@ -125,7 +126,7 @@ ROUGHING gap regulation is stochastic and the gate should REFUSE it.
 Ordered by dependency, not by prize. Every step names what would kill it, because a step that
 cannot fail is a preference (rules 25, 59).
 
-**1. The teacher-free route where the calendar is — the BARREL and the COLUMN.** (task #91)
+**1. The teacher-free route where the calendar is — the BARREL and the COLUMN.** (task #91 — DONE, §119)
 Arm `dirInv` + `DIRFIRST` the way `distil-pend.mjs` does, window from `deriveWindow` on a MEASURED
 settle, three configurations per plant (unset byte-identical, `DIRINV=1`, `DIRINV=1 DIRFIRST=1`).
 *Makes it a result:* the ladder ships ①d alone on a plant whose teacher costs weeks, inside the
@@ -133,10 +134,13 @@ teacher-taught distribution. *Kills it:* ①d refuses, or lands below that distr
 the conventional rung still wins — in which case the placement is free and worth nothing, and that
 is publishable too.
 
-**2. The early exit that turns step 1 into days.** Do not commission a stage that cannot change the
-outcome. Depends entirely on step 1 producing a *provably throw-away teacher* on a real plant; it is
-§109's arithmetic one level up and must be scored on DELIVERED OUTCOME, never on the prediction
-(rule 9b's own correction). *Kills it:* the exit fires on a plant where the teacher would have won.
+**2. Rule 42 across rungs, with the calendar as the cost.** §119 says the premise was wrong: on
+neither expensive plant is the teacher thrown away — it beats ①d by 2.8% on the column and 1.66x on
+the barrel. So the exit is not a throw-away detector; it is *ship the cheapest object within 5% of
+the best MEASURED one, and do not commission the expensive one where the cheap one already sits at
+the bar* — which on the column removes 26.3 of 32.1 days for 2.8% of the factor and on the barrel
+correctly runs the teacher. Must be scored on DELIVERED OUTCOME (rule 9b's correction). *Kills it:*
+the exit fires on a plant where the teacher would have won by more than the band.
 
 **3. The diet repair on the three plants below the `prog/rise` split.** Column, barrel, quad tank.
 *Makes it a result:* target 1's ratio moves on plants the screen predicted would miss, at the 10-17%

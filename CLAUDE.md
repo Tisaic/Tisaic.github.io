@@ -710,8 +710,14 @@ Each of these is a claim that can be shown false, which is the only kind worth w
    `distil-tank.mjs`'s §67.3 defect from the opposite side, and what caught it was the harness's own
    second route reading **`delivered 1.000x` two lines below** with nothing comparing the two
    (rule 15). The comparison is a CHECK now, asserted both ways, and no shipped result moves
-   (rule 21). **Whether the placement is WORTH anything is still not measured** — that needs the
-   barrel or the column, where the teacher is 30-33 days. **Getting there cost rule 9b a sixth time**: `rigs/ladder.mjs`
+   (rule 21). **AND THAT IS NOW MEASURED ON BOTH, AND THE TEACHER WINS ON BOTH (plan §119)**: through the
+   one press ①d reads **4.21x on the barrel and 3.85x on the column at ZERO teacher laps** — inside
+   §105's standalone distributions — and the taught rung on top reads 7.00x and 3.96x, identical to
+   the control to five digits, so placement is INERT there (the conventional rung refuses on both
+   and ①d has no changed machine to invert). On the column the two are within rule 42's band and
+   the cheaper one removes 26.3 of 32.1 days; on the barrel the teacher is worth 1.66x and stays.
+   The early exit (#92) is therefore rule 42 ACROSS RUNGS with the calendar as the cost, not a
+   throw-away detector. **Getting there cost rule 9b a sixth time**: `rigs/ladder.mjs`
    never forwarded `dirInv`, so the first armed run printed that it had armed the rung and the rung
    never ran — indistinguishable from a refusal (rule 25). *Built* and *run on a plant* are
    different states, and this file has paid for conflating them four times now.

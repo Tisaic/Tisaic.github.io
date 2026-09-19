@@ -240,4 +240,39 @@ export function priceOf(fn) {
   return { value, steps: meterCount() };
 }
 
+/**
+ * THE `DIRINV` HOST WIRING, WRITTEN ONCE (plan §119). §116 wrote it inline in `distil-pend.mjs`;
+ * pasting it into the barrel and the column would be the third copy of one block (rule 61), and
+ * every plant's entry — diet, nominal inverse, settle probe, segment lap — is ALREADY in
+ * `dirinvall.mjs`'s `PLANTS`, so the harness names its row and this builds `{ dirInv, dirInvRuns }`
+ * for the spec. Unset returns `{}`, so a spec spreading it is byte-identical (rule 21).
+ *
+ *   DIRINV=1    arm the ①d rung        DIRFIRST=1  place it BEFORE the conventional rung (§117)
+ *   DIRIDGE     the fit's ridge (1e-6)  DISEED      the open-loop excitation's seed (1)
+ *
+ * The window is derived from the EXCITATION's own lap, never from the harness's teacher diet
+ * (§103 moved 2.3x from a window carried across diets), and the settle is the PLANTS entry's —
+ * a stated number where the harness states one, the kit's probe where it measures one.
+ */
+export async function dirInvFor(nameRe, { stride = 7 } = {}) {
+  if (process.env.DIRINV !== '1') return {};
+  const { PLANTS } = await import('../dirinvall.mjs');
+  const P = PLANTS.find((q) => nameRe.test(q.name));
+  if (!P) throw new Error(`DIRINV: no ${nameRe} entry in dirinvall PLANTS — the table moved (rule 25)`);
+  if (P.prime) await P.prime();
+  const settle = typeof P.settle === 'function' ? P.settle() : P.settle;
+  if (settle === null) throw new Error(`DIRINV: ${P.name}'s settle probe read NO MOVEMENT (rule 25)`);
+  const seglen = typeof P.seglen === 'function' ? P.seglen() : P.seglen;
+  const w = deriveWindow({ settle, lapMin: seglen });
+  const first = process.env.DIRFIRST === '1';
+  const ridge = process.env.DIRIDGE === undefined ? 1e-6 : +process.env.DIRIDGE;
+  const seed = process.env.DISEED === undefined ? 1 : +process.env.DISEED;
+  console.log(`  ①d DIRECT INVERSE armed${first ? ' FIRST (before the conventional rung)' : ''}: `
+    + `window ±${w.reach} raw steps, ${w.offsets.length} taps [rule ${w.rule} = `
+    + `min(0.61·${settle}, ${seglen}/8)], ridge ${ridge}, excitation seed ${seed}`);
+  return { dirInv: { refDim: P.nc, ridge, offsets: w.offsets, stride, first },
+    // ZERO TEACHER LAPS: open-loop segments only, through the kit's one inversion path.
+    dirInvRuns: () => segsFor(P.spec, P.diet, P.inv, { seed }) };
+}
+
 export { deriveWindow };

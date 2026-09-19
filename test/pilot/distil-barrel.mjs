@@ -53,6 +53,7 @@
 import { ladder, announce } from './rigs/ladder.mjs';
 import { barrelSpec } from './rigs/specs.mjs';
 import { deriveWindow, reportDistil, priceFrom, ridgeLadder, gainLadder, teacherReuse, carrier, teachLaps, teachAvg, dietN, emitRow } from './rigs/distilkit.mjs';
+import { dirInvFor } from './rigs/dirinvkit.mjs';
 import { oracleConverge, oracleTeach } from './rigs/oracleteach.mjs';
 
 // THE ORACLE TEACHER IS OPT-IN UNTIL IT IS MEASURED (plan §73.9). It needs a cascade to iterate,
@@ -364,7 +365,14 @@ if (EXO_ON) {
     + 'harness indexes the declared channel by — the map would be fitted on one disturbance and '
     + 'deployed against another (rule 61)');
 }
+// THE TEACHER-FREE ①d RUNG, ARMED BY `DIRINV=1` AND PLACED FIRST BY `DIRFIRST=1` (plan §119).
+// Its diet, inverse and window come from this plant's `dirinvall.mjs` entry through the one
+// shared wiring; unset spreads to nothing and the ladder is byte-identical (rule 21).
+const DI = await dirInvFor(/extruder barrel/i);
+if (DI.dirInv && EXO_ON) throw new Error('DIRINV with EXO: the inverse route reads 3 channels and the declared channel is a 4th (rule 25)');
+
 const spec = { ...barrelSpec,
+  ...DI,
   ...(EXO_ON ? { refAt: (k) => [...TH.powerFor(TH.setpointAt(Math.min(k, TH.PROG))),
     exoAt(EXO_WARM + k, EXO === 'oracle' ? 0 : REACH)] } : {}),
   // NO CASCADE: this rung's teacher is `hff`, so the cascade would be commissioned,
