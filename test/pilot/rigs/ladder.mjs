@@ -14,8 +14,8 @@
  */
 import { AutoStack } from '../../../lib/pilot/autostack.js';
 import { motionBasis } from '../../../lib/pilot/classic.js';
-import { into } from './meter.mjs';
-import { printCost, emitRow } from './distilkit.mjs';
+import { into, count as meterCount } from './meter.mjs';
+import { printCost, emitRow, probeRuns } from './distilkit.mjs';
 // THE SOLVER BUDGET AS A KNOB, so `docs/plan.md` step 6b can be gated on plants that share
 // no physics. Both are pass-through Pilot options and both default to the library's own
 // values, so an unset environment runs byte-identically (rule 21). The proposed joint change
@@ -49,6 +49,13 @@ if (process.env.TFRACS) HFF.probeFracs = process.env.TFRACS.split(',').map(Numbe
 const BUDGET = process.env.BUDGET
   ? { mac: +process.env.BUDGET.split(',')[0], bytes: +process.env.BUDGET.split(',')[1] }
   : null;
+// THE PLANT TIME THE LADDER MAY SPEND, in this plant's own STEPS (plan §120): `PLANTBUDGET=n`.
+// Read off the meter that ticks inside the plant's `step`, from the moment the ladder starts, so
+// a rig's module-load baseline is not charged. Unset, nothing is enforced.
+const PLANTBUDGET = process.env.PLANTBUDGET ? +process.env.PLANTBUDGET : null;
+// THE TEACHER'S INSTRUMENT, DEGRADED TO K TOUCHES PER LAP (plan §121): `PROBEPTS=K`. The arm's
+// `distilProbePts` for every plant that drives its teacher through this driver. Unset is untouched.
+const PROBEPTS = process.env.PROBEPTS ? +process.env.PROBEPTS : 0;
 
 /** Print the active overrides at the caller's chosen point in its own output. */
 function announce() {
@@ -56,6 +63,8 @@ function announce() {
   if (Object.keys(HFF).length) console.log(`  teacher budget override: ${JSON.stringify(HFF)}`);
   if (BUDGET) console.log(`  scan budget: ${BUDGET.mac.toLocaleString()} MAC/cycle, `
     + `${(BUDGET.bytes / 1024).toFixed(0)} kB`);
+  if (PLANTBUDGET !== null) console.log(`  plant-time budget: ${PLANTBUDGET.toLocaleString()} steps`);
+  if (PROBEPTS) console.log(`  the TEACHER reads the truth at ${PROBEPTS} touches per lap and nowhere else`);
 }
 
 /**
@@ -127,6 +136,7 @@ async function ladder(spec) {
     // field and not a driver default because `plants.test.mjs` drives the same plants through
     // this driver and there the cascade IS the result — the mill ships at 1.74x on it.
     channels, uMax, periodic: null, floor, budget: BUDGET,
+    ...(PLANTBUDGET !== null ? { plantBudget: PLANTBUDGET } : {}),
     maxDepth: process.env.DEPTH !== undefined ? +process.env.DEPTH
       : (depth !== undefined ? depth : 2),
     // THE CONVENTIONAL RUNG, WITHHOLDABLE FOR THE SIX-PLANT PASS. `basis` is what unlocks it —
@@ -295,19 +305,21 @@ async function ladder(spec) {
   // iterates the COMMISSIONED PILOT, so a harness that wants it must reach the stack whose
   // `oracleF0` port it arms — and this driver builds that object internally. A closure that takes
   // no argument is unaffected, so every existing spec is byte-identical.
-  const metered = distilRuns ? async () => (await distilRuns(auto)).map((t, i) => {
+  const metered = distilRuns ? async () => probeRuns(await distilRuns(auto), PROBEPTS).map((t, i) => {
     const w = { ...t, run: (...a) => inPhase(`teacher#${i}`, () => t.run(...a)) };
     for (const k of ['teach', 'converge', 'captureState']) {
       if (t[k]) w[k] = (...a) => inPhase(`teacher#${i}`, () => t[k](...a));
     }
     return w;
   }) : null;
+  const spentBase = meterCount();
   const rep = await auto.commission({ run, drivePilot,
+    spent: () => meterCount() - spentBase,
     ...(runClassic ? { runClassic } : {}),
     ...(metered ? { distilRuns: metered } : {}),
     // The ①d rung's OPEN-LOOP segments. They cost ZERO teacher laps, so they are not wrapped in
     // the teacher's phase meter; the excitation is priced by the harness that supplies it.
-    ...(dirInvRuns ? { dirInvRuns } : {}) });
+    ...(dirInvRuns ? { dirInvRuns: () => inPhase('excite', () => dirInvRuns()) } : {}) });
   console.log(`\n  ${name}`);
   console.log(auto.table());
   console.log(`    shipped ${JSON.stringify(rep.deployed)}   ${rep.base.toExponential(3)} → `

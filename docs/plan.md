@@ -25057,3 +25057,105 @@ per plant, one diet each. `DIRINV` stays OFF (rule 31).
 **Cleanup in the same commit (rule 61, rule 30):** `printGainLadder` is one function in the kit, called
 by `reportDistil` and by `distil-tank.mjs` at their own indents — the tank's private copy, which §109
 named as the reason its extension-exit line was unreachable, is gone.
+
+## §120 — The calendar is an INPUT: a plant-time budget across rungs ships the teacher-free object in 3-4 days where the teacher costs 30 (task #92)
+
+§119 refuted the "throw-away teacher" premise: on both expensive plants the taught rung WINS the
+scored program. Whether to pay 26-30 days for it is the customer's trade, so the ladder now takes
+the calendar as an input. `AutoStack({ plantBudget })` — steps of the host's own plant time, read
+through `host.spent()` — is asked BEFORE each rung that spends laps (② cascade, ②d teacher, ③
+lap-periodic); a rung past the budget gets a SKIPPED row stating the spend (rule 25) and the ladder
+ships what it has. A rung that starts is finished; the gate never stops one mid-way. `PLANTBUDGET=n`
+in `rigs/ladder.mjs`, `spent` read off the meter from the ladder's start so a rig's module-load
+baseline is not charged. Default null: pend, column and barrel unset are byte-identical (§119's
+logs), and `dirinvrung.test.mjs` pins both halves — no budget calls the teacher, an unspent budget
+calls it, a spent one skips it without calling it and the ①d rung below still ships.
+
+```
+                       unbudgeted (§119)              PLANTBUDGET ≈ 3 days, DIRINV=1 DIRFIRST=1
+                       ships    days   held-out       ships    days   held-out
+  extruder barrel      7.00x    35.3   2.747x (0.393) 4.21x    3.1    3.962x (0.941)  target 1 MET
+  Wood-Berry column    3.96x    32.1   1.342x (0.339) 3.85x    3.8    1.169x (0.304)
+```
+
+**Target 4 on the two plants that missed it by 30x now reads 3.1 and 3.8 days at the customer's
+choice**, 11.4x and 8.4x less plant time, for 1.66x and 2.8% of the scored factor. **And on the
+barrel the cheaper object TRANSFERS better in absolute terms**: 1.020 K rms on the changeover it
+never ran against the taught object's 1.471 — 1.44x better where the teacher's 1.66x was bought —
+so the teacher's advantage there is on the program it was taught on and target 1 flips from NOT
+MET to MET. One held-out program per plant (rule 19); the column goes the other way by 13%.
+
+The budget's split is now readable: the ①d excitation lands under its own `excite` label rather
+than `other` (column 2.5 days, barrel 45.8 h — 61-67% of the budgeted bill), which is §105's
+"seven `fresh()` re-settles" lever still untaken. Controls: unbudgeted runs byte-identical; the
+harness check that read a skip as *never reached* now accepts a stated skip (rule 25).
+
+## §121 — Sixty-four touches is ONE PLANT'S number: the probe instrument in the shared kit, and the column refutes the arm's knee (task #94)
+
+`distilProbePts` lived in `lib/flexisim/autohost.js` alone, so §74's *64 touches buy a laser
+tracker* was one plant's evidence. `probeRuns(runs, K)` in `rigs/distilkit.mjs` is the same
+degradation for every harness that drives its teacher through `distilRuns` — each training run's
+RECORD (`err[c][k]` for `hff`, `rec[k][c]` for the oracle port) replaced by K evenly spaced touches
+interpolated around the closed lap, its SCORE by the rms at those touches — applied by
+`rigs/ladder.mjs` under `PROBEPTS=K`; the ladder's own scored runs stay on the full instrument
+(rule 15). `K = 0` is untouched; K ≥ lap is asserted identity on the record.
+
+```
+  Wood-Berry column, tracker 3.96x (hff) / 3.40x (parametric), one seed
+    K            8      16      32      64     128     256     512
+    hff       1.19x   1.12x   1.00x   1.87x   1.38x   3.92x   4.07x     (0.47x of the tracker at 64)
+    parametric                        1.56x   2.00x                    (0.59x at 64)
+                                           (K=32)  (K=64)
+  §74's arm, oracle teacher:  0.23x / 0.73x / 0.98x / 1.006x of the tracker at 8 / 16 / 32 / 64
+```
+
+**The knee is a property of the TEACHER's identification bandwidth, not of the map or the plant's
+timescales.** `hff` identifies `nh = min(256, lap/8) = 256` harmonics of the 3000-step lap and a
+K-touch record carries K/2, so it is starved below K ≈ 512 — predicted before the 128-512 rows were
+run and confirmed: 3.92x at 256, 4.07x at 512, non-monotone below with a harmful cell at **K=128
+(held-out schedule 0.543x, made WORSE)** — the first instrument degradation here to harm a
+held-out program. The arm's oracle teacher never identifies from the record (it reads it as a
+target through `oracleF0`), which is why 64 sufficed there. **And the parametric teacher, the
+arm's own increment generator, does not saturate at 64 on this plant either** (2.00x against 3.40x),
+with its per-run teacher scores READING HIGHER at K=32 (5.26x against 3.22x) — the probe rms
+flatters the gate and it converges further onto a degraded target, §50.1's early-stopping
+signature inverted.
+
+So the roadmap's *kills it* branch fired: **the count moves with the plant and the teacher, and INS
+returns to one plant's evidence.** The product sentence a customer can be given is *the touch count
+must be commissioned like everything else — sweep it on the machine and read the delivered number*,
+not *sixty-four, whatever the part*. NOT reached: the `ORACLE=1` route on the plant harnesses, whose
+`oracleConverge` reads the harness `drive` directly and is not wrapped — three runs were launched
+before that was checked and are a vacuous control (rule 9c); the barrel ladder waits on this reading.
+
+## §122 — Enlarging the diet does NOT move target 1 on the two plants below the `prog/rise` split; the teacher, not the diet, is the lever (task #93)
+
+Roadmap step 3 predicted that a diet enlargement at §84.5's 10-17% per recipe would move target 1's
+ratio on the plants `prog/rise` flags. `DIETADD=n` appends n recipes drawn from each harness's own
+design space (fixed seed; the barrel never draws production's order), unset byte-identical.
+
+```
+                          diet   scored     held-out    ratio    plant time
+  Wood-Berry column       4      3.96x      1.342x      0.339    32.1 d     (shipped)
+                          +1     3.96x      1.342x      0.339    36.5 d     added recipe DROPPED
+                          +2     3.96x      1.342x      0.339    40.8 d     both DROPPED
+                          +4     3.50x      1.325x      0.379    48.8 d     3 of 8 kept
+  extruder barrel         4      7.00x      2.747x      0.393    35.3 d     (shipped)
+                          +1     6.74x      2.122x      0.315    40.2 d
+                          +2     6.79x      2.232x      0.329    45.0 d
+                          +4     7.02x      2.130x      0.303    54.3 d
+```
+
+**The kill branch fired on both plants.** On the column the enlargement is REFUSED BY THE TEACHER:
+`hff` improves the added recipes below its own 1.5x bar and drops them, so +1 and +2 are the shipped
+fit to every digit and +4 keeps three of eight for +0.04 of ratio at +52% of plant time. On the
+barrel every recipe is kept, the scored factor is flat at 6.74-7.02x, and the held-out changeover
+gets WORSE on all three enlargements (2.75x → 2.12-2.23x). More laps of the same class give a
+lap-taught object more to memorise; §49's law, on the diet axis.
+
+**What does move target 1 here is on record two sections up**: the teacher-free ①d object reads
+0.941 on the same barrel changeover (§120) where every taught diet reads 0.30-0.39 — so the ratio
+`prog/rise` predicts is a property of the TAUGHT object, and the repair is a different teacher, not
+a bigger diet. The column's ①d reads 0.304, so this is one plant's finding and not a law. The
+quadruple tank (conventional rung, its own loop, no `classicDiet` path) was not asked. `DIETADD`
+ships off.

@@ -188,5 +188,42 @@ ck('it arms through the SAME deployed.distil path the ②d rung uses (rule 61)',
   a2.deployed.distil === true, `distil ${a2.deployed.distil}`);
 ck('and what it armed is the object it fitted', a2.distil === rep2.dirInv.policy);
 
+// ------------------------------------------------ (6) THE PLANT-TIME BUDGET GATE (plan §120)
+//
+// A rung past the budget must NOT START — the gate is asked before `host.distilRuns()` is called,
+// so a skipped teacher spends nothing. BOTH HALVES (rule 9): no budget calls the teacher and is
+// byte-identical to the report shape above; a budget that is not yet spent calls it too; a budget
+// already spent skips it with a STATED row and never calls it (rule 25).
+const teacherRow = (rep) => rep.rungs.find((r) => /②d distilled/.test(r.name));
+for (const [label, spent, budget, expectCalled] of [
+  ['no budget', 10, null, true], ['budget not yet spent', 10, 100, true], ['budget spent', 200, 100, false]]) {
+  let called = false;
+  const a = new AutoStack({ channels: [{ max: 3 }], authority: 0.6, floor: 0, classic: false,
+    maxDepth: 0, dirInv: { offsets: OFFS }, distil: { offsets: OFFS },
+    ...(budget === null ? {} : { plantBudget: budget }) });
+  const rep = await a.commission(mkHost(a, { dirInvRuns: dietRuns, spent: () => spent,
+    distilRuns: () => { called = true; return []; } }));
+  ck(`${label}: the teacher is ${expectCalled ? 'CALLED' : 'NOT called'}`, called === expectCalled);
+  const row = teacherRow(rep);
+  if (expectCalled) {
+    ck(`${label}: no SKIPPED row and the ②d note is the host's own`, !row && /returned no runs/.test((rep.distil || {}).note || ''),
+      JSON.stringify(rep.distil));
+    ck(`${label}: the report's budget field is ${budget === null ? 'null' : 'empty'}`,
+      budget === null ? rep.budget === null : rep.budget.skipped.length === 0, JSON.stringify(rep.budget));
+  } else {
+    ck(`${label}: a SKIPPED row states the spend against the budget`,
+      !!row && /SKIPPED/.test(row.name) && row.deployed === false && /200 of 100/.test(row.note), row && row.note);
+    ck(`${label}: the report names the skipped phase`, rep.budget.skipped.length === 1
+      && /②d/.test(rep.budget.skipped[0].phase) && rep.budget.skipped[0].spent === 200, JSON.stringify(rep.budget));
+    ck(`${label}: the ①d rung below it still shipped`, a.deployed.distil === true && rep.dirInv && rep.dirInv.policy === a.distil);
+  }
+}
+let a5 = new AutoStack({ channels: [{ max: 3 }], authority: 0.6, floor: 0, classic: false, maxDepth: 0,
+  dirInv: { offsets: OFFS }, distil: { offsets: OFFS }, plantBudget: 1 });
+let called5 = false;
+const rep5 = await a5.commission(mkHost(a5, { dirInvRuns: dietRuns, distilRuns: () => { called5 = true; return []; } }));
+ck('a budget on a host with NO spent() enforces nothing and SAYS so (rule 25)',
+  called5 && /no spent/.test(rep5.budget.note || ''), JSON.stringify(rep5.budget));
+
 console.log(`\n${failed === 0 ? 'PASS' : 'FAIL'} — ${failed} check(s) failed\n`);
 process.exit(failed === 0 ? 0 : 1);

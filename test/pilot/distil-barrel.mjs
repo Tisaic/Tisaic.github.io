@@ -137,6 +137,20 @@ const PICK = DSEED !== null ? (() => {
   ? [[0, 1, 2, 3], [2, 3, 4, 5], [0, 2, 4, 5], [1, 3, 5, 0]]
   : [[0, 2, 1, 3], [1, 0, 3, 2], [0, 3, 1, 2], [2, 0, 1, 3]];
 if (DSEED !== null) console.log(`  DIET DRAW ${DSEED}: ${JSON.stringify(PICK.map((r) => r.slice(0, 4)))}\n`);
+// DIETADD=<n>: ENLARGE the diet by n more orderings of the same points (plan §122, roadmap step
+// 3), drawn from a fixed seed, never production's own order [0,1,2,3] (§66). Unset is byte-identical.
+const DIETADD = process.env.DIETADD ? +process.env.DIETADD : 0;
+if (DIETADD) {
+  let st = (17 * 2654435761) >>> 0;
+  const rnd = () => ((st = (st * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+  while (PICK.length < 4 + DIETADD) {
+    const ix = POINTS.map((_, i) => i);
+    for (let i = ix.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [ix[i], ix[j]] = [ix[j], ix[i]]; }
+    if (ix.slice(0, 4).join() === '0,1,2,3') continue;
+    PICK.push(ix);
+  }
+  console.log(`  DIET ENLARGED by ${DIETADD}: ${JSON.stringify(PICK.slice(4).map((r) => r.slice(0, 4)))}\n`);
+}
 // AND HOW MANY SETPOINTS A RECIPE CYCLES THROUGH, WHICH IS THE LAP ITSELF (plan §73.5). The rule
 // above is "the lap must EXCEED the plant's settle", and at the production segment two setpoints
 // give 10,000 steps against a 7,861-step settle — still legal, half the lap, and a reach of ±1,250
@@ -520,10 +534,15 @@ console.log(`    TARGET 1's 1.3x BOUND: ${xHeld >= xProg / 1.3 ? 'MET' : 'NOT ME
   + `changeover delivers ${(xHeld / xProg).toFixed(3)} of the scored factor`);
 check('the barrel is not made worse by anything the ladder ships',
   rep.best <= rep.base, `${rep.base.toExponential(3)} → ${rep.best.toExponential(3)}`);
-check('the distilled rung reached this plant at all — it was offered, fitted and SCORED on the '
-  + 'machine, whatever it then decided',
-  !!(rep.distil && (rep.distil.policy || rep.distil.note)),
-  JSON.stringify(rep.distil || null));
+// A rung SKIPPED by the plant-time budget (plan §120) is a stated state and not "never reached":
+// the ladder wrote a row saying so, and that is what this check accepts (rule 25).
+const skippedByBudget = !!(rep.budget && rep.budget.skipped.some((x) => /②d/.test(x.phase)));
+check(skippedByBudget
+  ? 'the distilled rung was SKIPPED by the plant-time budget, with a stated row'
+  : 'the distilled rung reached this plant at all — it was offered, fitted and SCORED on the '
+    + 'machine, whatever it then decided',
+  skippedByBudget || !!(rep.distil && (rep.distil.policy || rep.distil.note)),
+  JSON.stringify(rep.distil || rep.budget || null));
 if (inSample) {
   check('…and its in-sample column exists, so a refusal can be read to TRANSFER or to the fit '
     + 'rather than left with two explanations (rule 9)',

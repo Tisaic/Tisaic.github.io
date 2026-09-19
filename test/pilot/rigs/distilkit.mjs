@@ -238,6 +238,61 @@ const teachAvg = (tlaps) => {
 const teacherReuse = () => process.env.REUSE !== '0';
 
 /**
+ * THE TEACHER MAY READ THE TRUTH AT K TOUCHES OF THE LAP AND NOWHERE ELSE (plan §121).
+ *
+ * §74 measured on the arm that 64 evenly spaced touches buy what a laser tracker buys, and it lived
+ * in `lib/flexisim/autohost.js` alone — one plant's evidence because the instrument was one plant's
+ * (the `_iteratePolicy` history repeating). This is the same degradation for every harness that
+ * drives its teacher through `distilRuns`: each training run's RECORD (`err[c][k]`, what `hff`
+ * inverts; `rec[k][c]`, what the oracle port reads) is replaced by its K probe points linearly
+ * interpolated around the CLOSED lap — an unmeasured sample is not a zero (rule 25) — and its
+ * SCORE, the teacher's monotone gate, by the rms at those K points alone, which is what a probe
+ * report gives a shop. The ladder's own scored runs stay on the full instrument, exactly as the arm
+ * keeps them (rule 15): what is measured is a cheap TEACHER, never a cheap scoreboard. `K = 0`
+ * returns the runs untouched.
+ */
+function probeRuns(runs, K) {
+  K = Math.max(0, Math.round(K || 0));
+  if (!K) return runs;
+  return runs.map((t) => {
+    const L = Math.ceil(t.lap);
+    const ix = []; const on = new Uint8Array(L);
+    for (let i = 0; i < K; i++) { const j = Math.round(i * L / K) % L; if (!on[j]) { on[j] = 1; ix.push(j); } }
+    ix.sort((a, b) => a - b);
+    const interp = (get, set) => {
+      for (let i = 0; i < ix.length; i++) {
+        const a = ix[i], b = ix[(i + 1) % ix.length];
+        const span = ((b - a) + L) % L || L;
+        const va = get(a), vb = get(b);
+        for (let d = 1; d < span; d++) set((a + d) % L, va + (vb - va) * (d / span));
+      }
+    };
+    const degrade = (r) => {
+      if (!r) return r;
+      let s2 = 0, n = 0;
+      if (r.err) {
+        for (const e of r.err) {
+          for (const j of ix) { s2 += e[j] * e[j]; n++; }
+          interp((k) => e[k], (k, v) => { e[k] = v; });
+        }
+      }
+      if (r.rec) {
+        const nc = r.rec[0].length;
+        for (let c = 0; c < nc; c++) {
+          if (!r.err) for (const j of ix) { s2 += r.rec[j][c] ** 2; n++; }
+          interp((k) => r.rec[k][c], (k, v) => { r.rec[k][c] = v; });
+        }
+      }
+      if (n) r.score = Math.sqrt(s2 / n);
+      return r;
+    };
+    const w = { ...t, probePts: ix.length };
+    for (const k of ['run', 'teach']) if (t[k]) w[k] = async (...a) => degrade(await t[k](...a));
+    return w;
+  });
+}
+
+/**
  * ONE PLANT PER TRAINING RUN, CARRIED ACROSS THE TEACHER'S CALLS (plan §72.15).
  *
  * Every diet closure here rebuilds and re-settles its plant on every call the teacher makes, and
@@ -553,10 +608,11 @@ async function reportDistil({ rep, runs, nFeat, segs = null, auto = null }) {
       + `held-out ${JSON.stringify(f.heldOutR2)}, deploy ${f.deploy}`);
   }
   const dr = rep.rungs.find((r) => /distil/.test(r.name));
-  console.log(`  distilled rung: ${dr ? `${dr.deployed ? 'DEPLOYED' : 'REFUSED'} at `
-    + `${dr.gain === null ? '—' : dr.gain.toFixed(3)}x` : 'not reported'}`);
+  console.log(`  distilled rung: ${dr ? /SKIPPED/.test(dr.name) ? `SKIPPED — ${dr.note}`
+    : `${dr.deployed ? 'DEPLOYED' : 'REFUSED'} at ${dr.gain === null ? '—' : dr.gain.toFixed(3)}x`
+    : 'not reported'}`);
   if (rep.distil && rep.distil.note) console.log(`  ${rep.distil.note}`);
   return { inSample, dr };
 }
 
-export { printCost, emitRow, deriveWindow, reportDistil, priceFrom, ridgeLadder, gainLadder, teacherReuse, carrier, teachLaps, teachAvg, dietN, human, SHAPE, DEFAULT_RIDGES, DEFAULT_GAINS };
+export { printCost, emitRow, deriveWindow, reportDistil, priceFrom, ridgeLadder, gainLadder, probeRuns, teacherReuse, carrier, teachLaps, teachAvg, dietN, human, SHAPE, DEFAULT_RIDGES, DEFAULT_GAINS };

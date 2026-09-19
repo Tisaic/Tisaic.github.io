@@ -96,6 +96,18 @@ const DIETS = DSEED === null ? SHIPPED_DIETS : (() => {
     Array.from({ length: 4 }, () => [pick(), pick()]));
 })();
 if (DSEED !== null) console.log(`  DIET DRAW ${DSEED}: ${JSON.stringify(DIETS)}\n`);
+// DIETADD=<n>: ENLARGE the diet by n more recipes drawn from the same design space (plan §122,
+// roadmap step 3) — the 10-17% per-program cost §84.5 priced, asked whether it moves target 1.
+// Drawn from a fixed seed so the added recipes are the same on every run; unset is byte-identical.
+const DIETADD = process.env.DIETADD ? +process.env.DIETADD : 0;
+if (DIETADD) {
+  let st = (17 * 2654435761) >>> 0;
+  const rnd = () => ((st = (st * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+  const grid = [0, 0.2, 0.4, 0.5, 0.6, 0.8, 1.0, 1.2, 1.4];
+  const pick = () => grid[Math.floor(rnd() * grid.length)];
+  for (let i = 0; i < DIETADD; i++) DIETS.push(Array.from({ length: 4 }, () => [pick(), pick()]));
+  console.log(`  DIET ENLARGED by ${DIETADD}: ${JSON.stringify(DIETS.slice(-DIETADD))}\n`);
+}
 const LAP = (rec) => SEG * rec.length;
 
 /** One pattern's setpoints at raw step k, cycled at its own lap, stepping rather than ramping —
@@ -428,10 +440,15 @@ if (rep.distil && rep.distil.policy) {
 
 check('the column is not made worse by anything the ladder ships',
   rep.best <= rep.base, `${rep.base.toExponential(3)} → ${rep.best.toExponential(3)}`);
-check('the distilled rung reached this plant at all — it was offered, fitted and SCORED on the '
-  + 'machine, whatever it then decided',
-  !!(rep.distil && (rep.distil.policy || rep.distil.note)),
-  JSON.stringify(rep.distil || null));
+// A rung SKIPPED by the plant-time budget (plan §120) is a stated state and not "never reached":
+// the ladder wrote a row saying so, and that is what this check accepts (rule 25).
+const skippedByBudget = !!(rep.budget && rep.budget.skipped.some((x) => /②d/.test(x.phase)));
+check(skippedByBudget
+  ? 'the distilled rung was SKIPPED by the plant-time budget, with a stated row'
+  : 'the distilled rung reached this plant at all — it was offered, fitted and SCORED on the '
+    + 'machine, whatever it then decided',
+  skippedByBudget || !!(rep.distil && (rep.distil.policy || rep.distil.note)),
+  JSON.stringify(rep.distil || rep.budget || null));
 if (inSample) {
   check('…and its in-sample column exists, so a refusal can be read to TRANSFER or to the fit '
     + 'rather than left with two explanations (rule 9)',

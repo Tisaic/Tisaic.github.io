@@ -140,7 +140,12 @@ eight-times slower servo loop the ratios read 0.649 / 0.969 / 0.997 at 16 / 32 /
 shipped cell's 0.733 / 0.983 / 1.006 — **the slower plant needs MORE**. What survives is the SHAPE,
 a knee at 32 and saturation at 64 on two cells eight times apart in bandwidth, which makes the
 count a property of the MAP and its window rather than of the plant — so the shop's number reads
-"sixty-four touches, whatever the part" rather than "one per N millimetres". **And the FEED test — the other half — was BUILT and cannot be asked on this plant**, which is a
+"sixty-four touches, whatever the part" rather than "one per N millimetres". **AND THAT SENTENCE
+IS RETRACTED ON A SECOND PLANT (plan §121)**: `probeRuns` in the shared kit puts the same instrument on
+every harness, and the COLUMN reads 0.47x of the tracker at 64 touches with `hff` (recovering only
+at 256-512, its own harmonic count) and 0.59x with the parametric teacher, with a held-out program
+made WORSE at K=128. The knee is the TEACHER's identification bandwidth, not the map's; the touch
+count is a thing to commission, and INS is one plant's evidence again. **And the FEED test — the other half — was BUILT and cannot be asked on this plant**, which is a
 stronger statement than "not run": `DIETFEED` scales the training feeds with the plant held (unset
 byte-identical), and at half feed the diet REFUSES at 0.75x with nothing for the probe to degrade,
 while at double feed it delivers only 1.65x and the ladder is NON-MONOTONE with **16 points beating
@@ -405,6 +410,12 @@ Each of these is a claim that can be shown false, which is the only kind worth w
    hidden a baseline change inside the ratio). Better on both programs it has never run than on
    the one it was commissioned against is the ordering a plant MODEL produces and the opposite of
    a memory's.
+
+   **AND A DIET ENLARGEMENT DOES NOT MOVE IT ON EITHER PLANT BELOW THE SPLIT (plan §122)**: the
+   column's teacher DROPS the added recipes (+1, +2 identical to the shipped fit; +4 reads 0.379 at
+   +52% plant time) and the barrel's held-out changeover gets WORSE on every enlargement (0.393 →
+   0.303-0.329). The lever is the teacher — the teacher-free object reads 0.941 on the same barrel
+   changeover (§120) — not the diet.
 
    **AND §84.9's OWN SCREEN PREDICTS IT (plan §88.7).** `prog/rise` — how many of the plant's own
    response times its program contains — was derived for the WINDOW rule and written down before
@@ -716,8 +727,12 @@ Each of these is a claim that can be shown false, which is the only kind worth w
    the control to five digits, so placement is INERT there (the conventional rung refuses on both
    and ①d has no changed machine to invert). On the column the two are within rule 42's band and
    the cheaper one removes 26.3 of 32.1 days; on the barrel the teacher is worth 1.66x and stays.
-   The early exit (#92) is therefore rule 42 ACROSS RUNGS with the calendar as the cost, not a
-   throw-away detector. **Getting there cost rule 9b a sixth time**: `rigs/ladder.mjs`
+   **AND THE CALENDAR IS NOW AN INPUT (plan §120)**: `AutoStack({ plantBudget })` skips, with a stated
+   row, any lap-spending rung that would start past the budget. At a 3-day budget the barrel ships
+   ①d at **4.21x in 3.1 days** (was 7.00x in 35.3) and the column **3.85x in 3.8 days** (was 3.96x
+   in 32.1) — and on the barrel's held-out changeover the cheaper object is 1.44x BETTER than the
+   taught one (3.96x against 2.75x), taking target 1 there from 0.393 to 0.941, MET. Default null,
+   byte-identical unset. **Getting there cost rule 9b a sixth time**: `rigs/ladder.mjs`
    never forwarded `dirInv`, so the first armed run printed that it had armed the rung and the rung
    never ran — indistinguishable from a refusal (rule 25). *Built* and *run on a plant* are
    different states, and this file has paid for conflating them four times now.

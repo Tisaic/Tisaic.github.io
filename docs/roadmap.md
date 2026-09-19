@@ -62,6 +62,10 @@ plants: **barrel 4.641x median, column 3.652x median** over four seeds, against 
 barrel 4.21x, column 3.85x, zero teacher laps — and the TAUGHT rung still wins on both, 7.00x and
 3.96x.** Placement is inert (the conventional rung refuses on both). On the column the two objects
 are 2.8% apart and the teacher is 26.3 of 32.1 days; on the barrel the teacher is worth 1.66x.
+**AND CLOSED AS A CALENDAR (§120): with a 3-day `plantBudget` the barrel commissions in 3.1 days and
+the column in 3.8, shipping ①d, every skipped rung stated — 11.4x and 8.4x less plant time for
+1.66x and 2.8% of the scored factor, and on the barrel's held-out changeover the cheap object is
+1.44x BETTER.** Gap 1 is no longer *unbuyable*; it is a priced trade.
 
 **AND ONE HALF OF IT IS NOT BUILT, WHICH IS WHY THE FACTOR IS NOT YET A CALENDAR.** §117 measured
 commissioning falling only **46.2 → 43.0 min** — because the ladder still RAN the teacher and then
@@ -134,24 +138,25 @@ teacher-taught distribution. *Kills it:* ①d refuses, or lands below that distr
 the conventional rung still wins — in which case the placement is free and worth nothing, and that
 is publishable too.
 
-**2. Rule 42 across rungs, with the calendar as the cost.** §119 says the premise was wrong: on
-neither expensive plant is the teacher thrown away — it beats ①d by 2.8% on the column and 1.66x on
-the barrel. So the exit is not a throw-away detector; it is *ship the cheapest object within 5% of
-the best MEASURED one, and do not commission the expensive one where the cheap one already sits at
-the bar* — which on the column removes 26.3 of 32.1 days for 2.8% of the factor and on the barrel
-correctly runs the teacher. Must be scored on DELIVERED OUTCOME (rule 9b's correction). *Kills it:*
-the exit fires on a plant where the teacher would have won by more than the band.
+**2. The calendar as an input.** (task #92 — DONE, §120) §119 said the teacher is never thrown
+away, so no exit can decide for the customer; `plantBudget` lets the customer decide. At 3 days
+the barrel ships 4.21x in 3.1 days (was 7.00x in 35.3) and the column 3.85x in 3.8 days (was 3.96x
+in 32.1), every skipped rung stated. Target 4's two 30-day misses are now 3-4 days at a stated
+cost in factor. *What is still open:* the excitation is 61-67% of the budgeted bill and re-settles
+seven times (§105's untaken lever).
 
-**3. The diet repair on the three plants below the `prog/rise` split.** Column, barrel, quad tank.
-*Makes it a result:* target 1's ratio moves on plants the screen predicted would miss, at the 10-17%
-a diet enlargement costs. *Kills it:* the ratio does not move — which would say `prog/rise` predicts
-something a diet cannot repair, and that is a finding about the screen worth more than the repair.
+**3. The diet repair on the plants below the `prog/rise` split.** (task #93 — DONE on the column
+and barrel, §122, and the KILL branch fired.) The column's teacher drops the added recipes and the
+barrel's held-out transfer gets worse on every enlargement; the ratio does not move. What moves it
+is the TEACHER: the teacher-free object reads 0.941 on the barrel changeover where every taught
+diet reads 0.30-0.39. The tank (conventional rung, own loop) is not asked.
 
-**4. `distilProbePts` into the shared kit, then a second plant.** *Makes it a result:* the knee at 32
-and saturation at 64 reproduce on a plant sharing no physics with the arm, at which point *sixty-four
-touches, whatever the part* is a product sentence rather than one cell's. *Kills it:* the count
-moves with the plant, which returns INS to one plant's evidence and is worth knowing before anyone
-quotes it to a customer.
+**4. `distilProbePts` into the shared kit, then a second plant.** (task #94 — DONE, §121, and the
+KILL branch fired.) `probeRuns` reaches every harness; on the column 64 touches read 0.47x of the
+tracker with `hff` and 0.59x with the parametric teacher, `hff` recovering only at 256-512 — its own
+harmonic count — and K=128 makes a held-out program WORSE. The knee is the teacher's identification
+bandwidth, not the plant's timescale or the map's window. *Sixty-four, whatever the part* is
+withdrawn; the touch count is commissioned on the machine like every other constant.
 
 **5. One EDM LOGGING run — no controller.** The falsifier `docs/edm.md` already names: **LEAD TIME
 against the gap's own settling**, readable off records the machine produces anyway (§52.26
