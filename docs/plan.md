@@ -24891,3 +24891,127 @@ the column, at 30-33 days of teacher (§72, §103) — do not arm `dirInv` at al
 section licenses is exactly one sentence: **the placement, not the route, is what reduced ①d to
 1.08x, and the fix is free.** Whether it is worth anything is still a measurement on a plant where
 the route is worth something, and it is still not taken.
+
+---
+
+## §118 — THE FORWARD SEQUENCE IS WRITTEN DOWN, AND THE ORDER IT PRODUCES IS NOT THE ORDER THE SCORECARD GIVES
+
+The owner asked for a plan to reach the north star. Three documents already exist and none of them
+is one, which is the same fault `docs/scorecard.md` was built to fix one level down.
+
+**`plan.md` IS A RECORD AND A PRIORITY ORDER READ OUT OF A LOG IS A PREFERENCE (rule 30).** This
+file is 117 sections of what was measured and what was retracted; CLAUDE.md calls it *the plan to
+get there*, and it has never been one. `scorecard.md` closed exactly this hole for the ten COLUMNS —
+its own header says the rating driving three sessions of work *lived in conversation and nowhere in
+the repository* — and nothing closed it for the CLAIM. So *what to do next* has lived in prose and a
+task list, which is where §74 found the column order and had to go and write it down.
+
+**AND THE TWO ORDERINGS DIFFER AT THE FIRST LINE, WHICH IS WHY A SECOND DOCUMENT IS NOT A DUPLICATE.**
+The scorecard orders by GAP AGAINST THE INCUMBENT and its largest is **INT at −6**, which that file
+itself calls *the one that does not matter* — an engineer tunes once and leaves it alone, and R² ~0.84
+bounds what any explanation could capture anyway. The roadmap orders by **what blocks the north-star
+sentence**, and by that measure the first item is not a column at all:
+
+```
+  GAP 1  COMMISSIONING   target 4, met on 2 plants of 8, misses 30.0 and 33.3 DAYS
+  GAP 2  PROGRAMS        target 1, 5 of 11 rows MET, 1 made WORSE in the SHIPPED configuration
+  GAP 3  THE INSTRUMENT  64 touches buy a tracker — on ONE plant
+  GAP 4  NO MACHINE      every plant is a simulation; three have real PROVENANCE
+```
+
+**GAP 1 IS FIRST BECAUSE IT IS THE ONLY ONE THAT MAKES THE PRODUCT UNBUYABLE RATHER THAN WEAKER.**
+Nobody stops a distillation column for a month. The teacher is 74-89% of that bill (§73.13) and
+ships on zero plants (§86.7), and §117 has just put a lever under it: placed FIRST the teacher-free
+rung recovered its full standalone capability EXACTLY on the cart-pole and the whole ladder above it
+then refused, so the block shipped it alone at zero teacher laps. **What that section also measured
+is why the lever is not yet a calendar** — commissioning fell 46.2 → 43.0 min because the ladder ran
+the teacher and threw it away — so the roadmap splits it into two steps and blocks the second on the
+first, which is §112's own warning (*adding the rung buys NO commissioning time by itself*) surviving
+into the plan rather than being rediscovered.
+
+**THREE THINGS THE RECORD DECIDES THAT A PLAN WRITTEN FROM IMPRESSION WOULD GET WRONG**, and each is
+why its step reads the way it does:
+
+- **Gap 2's repair is not a better map.** §52.31's ceiling (0.894 measured / 0.931 extrapolated
+  against a shipped 0.856-0.870) and §54.9's five function classes close that from two sides. It is a
+  DIET, demonstrated twice on plants sharing no physics (§106 at 0.42x of the commissioning it
+  replaces, §66's whole result), and §84.9's `prog/rise` already says which three plants to ask.
+- **Gap 3 is one plant's evidence for a mechanical reason, not a scientific one.** `grep` says
+  `distilProbePts` appears in `lib/flexisim/autohost.js` and `distil-arm.mjs` and nowhere else, so
+  a second plant is a small BUILD into the shared kit. That is `_iteratePolicy`'s own history —
+  arm-only for thirty sections because exactly one module supplied what it needed (§90.3) — and
+  recognising the shape is what turns "unmeasured" into "one afternoon".
+- **Gap 4 is not reducible by gaps 1-3 at all**, and §55 is why it is a risk rather than a caveat: a
+  plant identified as a linear ARX sits inside the conventional rung's own hypothesis class, proved
+  by 2012x → 6.5x and 1364x → 89.8x when the documented nonlinearity is restored. So the EDM step is
+  scheduled INDEPENDENT of the others and explicitly not behind them.
+
+**IT ALSO LISTS WHAT IS NOT ON IT, WITH THE MEASUREMENT THAT CLOSED EACH** — a better map, deleting
+the pilot cascade (§90.2a reversed that recommendation by BUILDING the thing that would have replaced
+it), a runtime plant-side guard (§82 refuted, §100 priced a working one at 2x), more rivals before a
+real machine, and INT. A plan that does not say what it is not doing is a wish list.
+
+**AND IT ENDS WITH WHAT WOULD MAKE ITS OWN ORDERING WRONG (rule 59)**: the teacher-free route
+refusing on both expensive plants; any plant where the deployed object's OWN diet draws produce a
+harmful deployment (which would end the *robust and tolerant* row's current re-scopeability, since
+every contradiction on record today belongs to a component that ships nowhere); the EDM's logs
+showing no lead time; and `objtable` or `screen` going red, those two scrapes being the only checks
+the governing mandate has ever had.
+
+**AND MY OWN DRAFT GOT ONE OF ITS CITATIONS WRONG IN THE FLATTERING DIRECTION, WHICH IS WHY THE
+CORRECTION IS HERE RATHER THAN SILENTLY FIXED.** It wrote target 1 as *5 of 11 MET, 0 made worse*,
+reading §106's repair of the real arm as though it had closed the clause in the shipped
+configuration. It has not: §106 built that repair behind `classicDiet`, **no plant declares it**, and
+the row `objtable` scrapes is what ships — `5 MET, 1 made WORSE`. The clause is closed as a
+CAPABILITY and open as a DEFAULT, and conflating those is rule 25 on a document rather than on an
+instrument. Both files now say so, and it strengthens the step rather than weakening it: *the repair
+exists, is cheaper than the fault, and is armed nowhere* is the argument for generalising it.
+
+**NOTHING WAS MEASURED IN THIS SECTION.** Every number in `roadmap.md` is a citation, and the one
+new fact it contains is the `grep` above — which is a property of this repository rather than of any
+plant.
+
+### §118.1 — A CHECK THAT COULD NOT PASS, FOUND BY RUNNING THE TIER NOBODY RUNS
+
+Verifying a DOCS-ONLY change turned the browser half red, which is the one thing a markdown edit
+cannot cause — so the failure was pre-existing and the run that found it was the first of its kind
+in a long time.
+
+```
+  ✗ flowsim: the extreme corner reports its divergence rather than failing silently
+      → saw 0 console errors, none naming a divergence
+```
+
+**THE PROVOCATION IS `FULL`-ONLY AND THE CHECK WAS NOT.** The block that injects a diverged
+diagnostic and drives the page's own `diverged()` path sits inside `if (FULL)` at the head of
+`flowsim core`; the check that reads `flowConsole` for `flowsim DIVERGED` sits *after* that block
+and ran on both tiers. So on the quick tier it asserted that the page had shouted about something
+nothing had asked it to do — **unpassable by construction**, and it had been for as long as both
+halves have existed.
+
+**IT IS RULE 9c INVERTED, WHICH IS WHY IT IS WORTH ITS OWN NUMBER.** Every costume of 9c on record
+is a check that cannot FAIL — a tier skip diffing two skip messages, a knob set to its own default,
+a selector matching nothing. This is the mirror: a check that cannot PASS, for the same reason (its
+tier skipped the thing it reads). And the mirror is the more expensive one, because a vacuous pass
+is silent while this **reads as a live regression** and sends whoever meets it looking at code that
+is fine. Yesterday's `--all --full --browser` was green and today's `--all --browser` was red on the
+identical tree, which is the signature.
+
+**WHY IT SURVIVED.** `FOCUS` defaults to `flexisim`, so a plain `./test/run.sh` — the command
+CLAUDE.md's verification step names — never opens FlowSim at all, and anything shared is verified
+with `--all --full`, which provokes the divergence and passes. The one combination that fails is
+`--all` at the quick tier, which is exactly what a docs change should be verified with and what
+nothing had reason to run. A hole that only appears where the suite is cheapest is the hole a suite
+is least likely to find.
+
+**THE FIX IS A STATED SKIP RATHER THAN A GATE (rule 25).** Wrapping the check in `if (FULL)` alone
+would make the quick tier silently drop it, which is the same confusion one level down — *did not
+run* and *ran and agreed* are different states. The quick tier now prints
+`divergence report SKIPPED — the provocation is FULL-only` and says how many reports it saw anyway,
+so a divergence appearing where nothing provoked one is still visible. The companion check
+(*nothing logged beyond that report*) is unconditional and unchanged, because it is meaningful on
+both tiers.
+
+**ASSERTED BOTH WAYS (rule 9)**: the quick tier goes green with the skip stated, and the full tier
+still RUNS the check and still passes — the second half being what says the repair did not simply
+delete a real assertion.

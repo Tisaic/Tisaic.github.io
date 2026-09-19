@@ -1676,10 +1676,25 @@ check('flowsim: no errors overall', flowErrors.length === 0, flowErrors.join(' |
 // that the page stayed quiet about the very thing the test asked it to shout about, and
 // it failed for exactly that reason. Assert BOTH halves instead (rule 9): the expected
 // report WAS made, and nothing else was.
+//
+// AND THE PROVOCATION IS FULL-ONLY WHILE THIS CHECK WAS NOT, WHICH MADE IT UNPASSABLE ON
+// THE QUICK TIER (plan §118.1). The block that injects the diverged diagnostic sits inside
+// `if (FULL)` at the top of `flowsim core`; this check sits after it and ran on both tiers,
+// so `--all` without `--full` asserted that a page had shouted about something nothing had
+// asked it to do. That is rule 9c's shape inverted: 9c(a) is a check that cannot FAIL
+// because its tier skipped, and this is a check that cannot PASS for the same reason —
+// and it reads as a real regression, which is what makes it worse than a vacuous pass.
+// Stated skip rather than silent pass (rule 25): *did not run* and *ran and agreed* are
+// different states, and the quick tier is entitled to say which one it is in.
 const diverged = flowConsole.filter((t) => t.includes('flowsim DIVERGED'));
 const unexpected = flowConsole.filter((t) => !t.includes('flowsim DIVERGED'));
-check('flowsim: the extreme corner reports its divergence rather than failing silently',
-  diverged.length > 0, `saw ${flowConsole.length} console errors, none naming a divergence`);
+if (FULL) {
+  check('flowsim: the extreme corner reports its divergence rather than failing silently',
+    diverged.length > 0, `saw ${flowConsole.length} console errors, none naming a divergence`);
+} else {
+  check('flowsim: divergence report SKIPPED — the provocation is FULL-only (rule 25)', true,
+    `${diverged.length} divergence report(s) seen, which the quick tier does not provoke`);
+}
 check('flowsim: nothing logged to console.error beyond that report',
   unexpected.length === 0, unexpected.join(' | '));
 
