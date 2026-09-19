@@ -30,10 +30,12 @@ the headline suggests and the calendar is what is not.**
 And eight targets, of which one is badly missed and it is not the one the table above leads with:
 
 ```
-  1  program-agnostic     5 of 11 MET, 1 made WORSE       the DIET repair — built (§106), armed nowhere
+  1  program-agnostic     5 of 11 MET, 1 made WORSE       the DIET is NOT the lever below the split (§122);
+                                                        the teacher-free object is (barrel 0.941, §120)
   2  feedrate-agnostic    MET inside its bound, 1 plant   never asked on plant 2
   3  plant-agnostic       improve-or-refuse on 10 of 10   holds
-  4  commissioning        MET on 2 of 8 — MISSES ARE 30-33 DAYS      <-- the blocker
+  4  commissioning        MET on 2 of 8 unbudgeted; 3.1 and 3.8 DAYS on the two 30-day plants
+                          under plantBudget (§120), at 1.66x and 2.8% of the factor   <-- a priced trade now
   5  higher not merely    arm ships 8.23x past the 7.70x bar          met, re-scoped
   6  PLC scan             met for the deployed object     the fit is scoped, not closed
   7  breadth              both standing refusals closed   met
@@ -67,11 +69,15 @@ the column in 3.8, shipping ①d, every skipped rung stated — 11.4x and 8.4x l
 1.66x and 2.8% of the scored factor, and on the barrel's held-out changeover the cheap object is
 1.44x BETTER.** Gap 1 is no longer *unbuyable*; it is a priced trade.
 
-**AND ONE HALF OF IT IS NOT BUILT, WHICH IS WHY THE FACTOR IS NOT YET A CALENDAR.** §117 measured
-commissioning falling only **46.2 → 43.0 min** — because the ladder still RAN the teacher and then
-threw it away. Turning *provably throw-away* into *not paid for* is §109's early-exit reasoning one
-level up and it is a caller policy nobody has written. **Without it this route buys a factor and no
-days**, and days are the gap.
+**WHAT IS STILL OPEN IN IT, STATED SO THE GAP IS NOT READ AS CLOSED.** Two things. **(a) The
+excitation is now the bill**: under the budget ①d's open-loop segments are **61-67% of the plant
+time** (column 2.5 days, barrel 45.8 h), and §105 already measured why — the route makes SEVEN
+`fresh()` calls, each pre-rolling a settle, 68% of its own cost — and §72 already built the lever
+for the teacher (`distilkit.carrier`, 64% of every call) and never applied it here. That is a
+factor of about three on the calendar with no controller change, untaken. **(b) There is no bar
+before the teacher runs.** Unbudgeted, the column still pays 26 teacher-days for 2.8% of factor,
+because rule 42's band is applied WITHIN a rung and never ACROSS rungs with the calendar as the
+cost. §119 names the only bar on record — ①d's own machine score — and nothing consults it.
 
 ### GAP 2 — PROGRAMS THE COMMISSIONING DID NOT SEE. 5 of 11.
 
@@ -93,21 +99,37 @@ QUOTED AS ONE.** §106 built that repair behind `classicDiet`, **no plant declar
 DEFAULT, and the honest sentence is *the repair exists, is cheaper than the fault, and is armed
 nowhere* — which is this list's own argument for generalising it rather than evidence it is done.
 
-So this is a procedure to generalise, not a discovery to make.
+So this is a procedure to generalise, not a discovery to make — **AND ON THE TWO PLANTS BELOW THE
+SPLIT THAT PROCEDURE IS REFUTED (§122).** `DIETADD` enlarges each diet from its harness's own design
+space: the column's teacher DROPS the added recipes (+1, +2 byte-identical to the shipped fit; +4
+reads 0.379 at +52% of plant time) and the barrel's held-out changeover gets WORSE on every
+enlargement (0.393 → 0.303-0.329). More laps of the same class give a lap-taught object more to
+memorise — §49's law on the diet axis. **What moves the ratio is the TEACHER**: the teacher-free ①d
+object reads **0.941 on the barrel changeover, MET**, where every taught diet reads 0.30-0.39 (§120),
+and on the column it reads 0.304, so the finding is one plant's. The diet repair therefore stands
+where it was demonstrated — the real arm's conventional rung, §106 — and does not generalise
+downward. The quadruple tank has not been asked either way.
 
-### GAP 3 — THE INSTRUMENT, AND THE REASON ITS EVIDENCE IS ONE PLANT IS THAT THE INSTRUMENT IS ARM-ONLY.
+### GAP 3 — THE INSTRUMENT. "SIXTY-FOUR TOUCHES" WAS THE ARM'S NUMBER, AND THE COUNT IS A CONSTANT TO COMMISSION.
 
-§74 is the best news in the record: **64 touches per lap buy what a laser tracker buys** (6.67x
-against 6.63x), 32 within 2%, reproducing to 0.6% over three draws — the instrument a shop already
-owns, on a two-to-three-minute first-article routine, against a metrology service and machine
-downtime. And its mechanism was REFUTED by its own falsifier (a slower plant needs MORE, not
-fewer), so what survives is a property of the MAP and its window rather than of the plant — which
-is precisely the kind of claim that should transfer.
+§74 read that **64 touches per lap buy what a laser tracker buys** (6.67x against 6.63x), 32 within
+2%, reproducing to 0.6% over three draws, and this file called it the best news in the record. It
+had never been asked on a second plant because `distilProbePts` lived in `autohost.js` alone.
 
-**It has never been asked on a second plant, and `grep` says why: `distilProbePts` lives in
-`lib/flexisim/autohost.js` and nowhere else.** That is `_iteratePolicy`'s own history repeating —
-arm-only for thirty sections because exactly one module supplied what it needed (§90.3) — and it
-means "a second plant" is a small BUILD into the shared kit, not a knob.
+**Asked (§121), the second plant refuted the knee.** `probeRuns` in the shared kit puts the same
+degradation on every harness, and the COLUMN reads **0.47x of the tracker at 64 touches with `hff`**,
+0.59x with the parametric teacher, non-monotone below, recovering only at **256-512 — `hff`'s own
+harmonic count** — with **K=128 making a held-out program WORSE (0.543x)**, the first instrument
+degradation here to harm transfer. So the knee is the TEACHER's identification bandwidth: the arm's
+oracle teacher reads the record as a target and never identifies from it, which is why 64 sufficed
+there. *Sixty-four, whatever the part* is withdrawn.
+
+**What survives is smaller and is still the product statement**: a touch probe commissions this
+object on both plants once its count is swept ON THE MACHINE like every other constant — at K=512
+the column reads 4.07x against the tracker's 3.96x. That makes the count a LADDER AXIS (the ridge
+and the gain already are), and no harness has one. NOT reached: the barrel, and the `ORACLE=1` route
+on any plant harness — `oracleConverge` reads the harness `drive` directly and is not wrapped, so
+three runs launched under it were a vacuous control (rule 9c).
 
 ### GAP 4 — NOTHING HERE HAS EVER MOVED A MACHINE.
 
@@ -158,14 +180,46 @@ harmonic count — and K=128 makes a held-out program WORSE. The knee is the tea
 bandwidth, not the plant's timescale or the map's window. *Sixty-four, whatever the part* is
 withdrawn; the touch count is commissioned on the machine like every other constant.
 
-**5. One EDM LOGGING run — no controller.** The falsifier `docs/edm.md` already names: **LEAD TIME
+**5. Carry the plant across ①d's excitation segments.** (task #96) The lever §105 measured (seven `fresh()`
+re-settles, 68% of the route's bill) and §72 already built for the teacher (`distilkit.carrier`).
+Apply it to `segsFor` in `dirinvkit.mjs`. *Makes it a result:* the budgeted column and barrel bills
+fall by about the excitation's share (2.5 days and 45.8 h of 3.8 days and 3.1) with the delivered
+factor BYTE-IDENTICAL (rule 21 — a carried plant is the same plant). *Kills it:* the factor moves,
+which means the segments were not independent of their start state and the carried fit is a
+different fit — the barrel refused exactly this for the teacher (§72.18) and may again.
+
+**6. A bar before the teacher runs — rule 42 ACROSS rungs.** (task #97) Score ①d on the machine, then let the
+ladder decline to commission a rung whose calendar is more than the customer's budget when the
+cheap object already sits within 5% of the best MEASURED bar. *Makes it a result:* the column ships
+①d unbudgeted (3.85x within 2.8% of 3.96x) and pays 0 of its 26 teacher-days, while the barrel still
+buys its teacher (1.66x is outside any band) — both halves asserted. *Kills it:* the band picks the
+cheap object on a plant where the taught one is later shown to transfer better — the column's own
+held-out reads 0.304 against the taught 0.339, so this rule can only be scored on a HELD-OUT program,
+never on the scored one.
+
+**7. The probe count as a ladder axis, and the barrel.** (task #98) `probeRuns` becomes a machine-scored ladder
+like the ridge and the gain — commission at a geometric ladder of K, ship the cheapest within rule
+42's band of the full-instrument row. Wrap `oracleConverge`'s `drive` so the `ORACLE=1` route is
+reachable, then run the barrel. *Makes it a result:* every plant that ships the deployed object
+states a touch count and a factor at it. *Kills it:* a plant where no K below the lap reaches the
+band, in which case that plant needs the tracker and the INS column says so per plant.
+
+**8. Why does ①d transfer on the barrel and not the column?** (task #99) 0.941 against 0.304 (§120), one plant
+each. The named suspect is authority: the column's ①d sits at **0.400 of a 0.4 cap on every seed**
+(§104), so its held-out reading is clamp-shaped where the barrel's is not. *Falsifier:* `UCAP` swept
+on the held-out schedule with the scored program's factor held — if the ratio rises with the cap the
+suspect stands; if it is flat, it is the plant and the column keeps its teacher.
+
+**9. One EDM LOGGING run — no controller.** (task #95) The falsifier `docs/edm.md` already names: **LEAD TIME
 against the gap's own settling**, readable off records the machine produces anyway (§52.26
 transplanted). *Makes it a result:* the first evidence in this project that is not a simulation.
 *Kills it:* no lead time, in which case the preview-shaped sub-problem is not there and the doc's
 own prediction was wrong before anything was built for it.
 
-Steps 3, 4 and 5 are independent of 1-2 and of each other. Step 5 is the only one that changes the
-KIND of evidence and should not wait for the others to finish.
+Steps 5 and 6 are gap 1 and compose (a carried excitation lowers the calendar of the object the bar
+would ship). Steps 7 and 8 are independent of them and of each other. Step 9 is the only one that
+changes the KIND of evidence and should not wait for the others. **The program that puts these in
+the context of a world-class bar, with the bar stated as measurements, is `docs/program.md`.**
 
 ---
 
@@ -195,8 +249,13 @@ already answer:
 
 Stated so it can fail rather than be revised (rule 59):
 
-- **Step 1 refuses on both expensive plants.** Then the teacher is not removable where it costs, gap
-  1 has no lever in hand, and the ordering above is wrong at its first line.
+- **Step 1 refused on both expensive plants** — was the first entry here, and it did not fire:
+  ①d landed inside the taught distribution on both (§119). What replaces it: **the carried
+  excitation moves the delivered factor** (step 5). Then the route's cost is not the settles, the
+  calendar has no cheap lever left, and gap 1 goes back to being a trade the customer pays in days.
+- **A third plant reads the touch-probe knee somewhere the teacher's harmonic count does not
+  predict.** §121's account is one plant's confirmation of one prediction; a plant whose knee sits
+  off `2·nh` says the mechanism is not the teacher's bandwidth either.
 - **A plant appears where the deployed object's own diet draws produce a harmful deployment.** The
   *robust and tolerant* row is currently re-scopeable because every contradiction on record belongs
   to a component that ships nowhere; one such draw ends that.

@@ -25159,3 +25159,26 @@ lap-taught object more to memorise; §49's law, on the diet axis.
 a bigger diet. The column's ①d reads 0.304, so this is one plant's finding and not a law. The
 quadruple tank (conventional rung, its own loop, no `classicDiet` path) was not asked. `DIETADD`
 ships off.
+
+### §122.1 — The scorecard and the roadmap re-read against §119-§122, and the bars written down
+
+Two cells move, in opposite directions, and both by measurement rather than by revision: **COM 5 → 6**
+(§120 made the calendar an input; the two 30-day plants read 3.1 and 3.8 days at 1.66x and 2.8% of
+factor) and **INS 6 → 5** (§121 found the 64-touch knee was the arm's teacher, and the column reads
+0.47x of the tracker at 64 with K=128 harming a held-out program). The ordering that follows puts INS
+at −4 as the largest gap that matters and COM at −2 as a priced trade with one untaken lever — the
+excitation's seven re-settles, 61-67% of the budgeted bill. The scorecard's SET cell also still read
+*eight ship the deployed object, three the conventional rung*, which §115's scrape corrected to 6/5/0
+two sections before this; fixed (rule 30). GEN holds at 6 with its lever changed by §122.
+
+`docs/roadmap.md` retitles gap 3 (the touch count is a constant to commission, not a number to
+quote), replaces gap 1's *one half is not built* paragraph — §120 built it — with the two things
+still open (the excitation, and a bar before the teacher), and adds steps 5-9: the carried excitation,
+rule 42 across rungs, the probe count as a ladder axis with the oracle route wrapped, the
+barrel-against-column transfer question (§104's 0.400-of-0.4 cap as the named suspect), and the EDM
+logging run. Its first kill branch — *step 1 refuses on both* — did not fire and is replaced.
+
+`docs/program.md` is new: the owner's *world-class universal controller* read as ten bars, each a
+count on this record (U1-U4, W1-W6), six phases ordered by what a buyer checks, and what world-class
+CANNOT mean here with the measurement that closed each. No measurement in this section; every number
+is a citation.
