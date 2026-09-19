@@ -62,17 +62,50 @@ const DROP = 0.05;          // `rigs/ladder.mjs`'s own start-transient drop (rul
  * step i of that segment — already through the plant's nominal inverse, exactly as `spec.refAt` is.
  * Nothing is scored here and no correction is applied: this is the machine being driven open loop.
  */
-export function excite(spec, diet, { seed = 1 } = {}) {
+export function excite(spec, diet, { seed = 1, carry = false, dwell = 0 } = {}) {
   const rnd = lcg(seed);
   const segs = diet(rnd);
   const out = [];
+  // THE PLANT CARRIED ACROSS SEGMENTS (plan §123). Every segment used to begin with its own
+  // `spec.fresh(s)`, and on the barrel that is 20,000 pre-rolled settling steps per 7,500-step
+  // segment — §105 metered it at 68% of the route's whole bill, and §72 already made carrying the
+  // default for the TEACHER (`distilkit.carrier`) for the same reason. Carried, the plant is built
+  // ONCE at the first segment and every later segment begins where the previous one ended — the
+  // configuration a real machine is in, which is not re-settled from cold between recipes (rule
+  // 34). It is NOT a free change and is not claimed as one: a segment then starts INSIDE the
+  // previous segment's transient, so the rows near a boundary differ and the fit's window must be
+  // allowed to read the true past across it (`at`, below) rather than a clamp that says the
+  // command was held for ever. Default OFF; unset is byte-identical.
+  //
+  // AND ON THE BARREL EVERY CARRIED CONFIGURATION IS VOID — ITS OWN SHUFFLE CONTROL DELIVERS
+  // (§123): a fit on PERMUTED targets passes its own held-out gate and reads 1.18-1.72x on 3 of 4
+  // seeds, where every fresh excitation here reads 1.000-1.008x. The `dwell` below was built on
+  // the first hypothesis — that a carried segment begins inside the previous transient (7,500-step
+  // segments against a 7,861-step settle) and so carries a per-segment offset a permutation keeps
+  // — and it did NOT repair the control (dwelled: 1.18-1.44x); nor did holding the ambient drift
+  // flat (`TH_NOAMB=1`: 1.54-1.72x carried against 1.000-1.006x fresh), so §72.18's variable is
+  // refuted as the cause too. What survives is a DIET difference the rig makes silently:
+  // `barrelSpec.fresh` ignores the segment and settles at the recipe's FIRST level, so every fresh
+  // segment carries an extra transition from that level to its own start that the carried record
+  // never contains. Not proved — the falsifier is a `fresh(s)` that honours the segment. On the
+  // COLUMN, whose segments are three settles long, the carry is clean both ways and saves 1.3x of
+  // the calendar. The dwell stays because it is what a real recipe change does (rule 34) and
+  // because a dwell of at least the window's reach makes the clamp honest, so a dwelled segment
+  // gets NO neighbour links.
+  let p = null;
   for (const s of segs) {
     // THE MACHINE IS SETTLED AT THE COMMAND IT IS ABOUT TO BE GIVEN, and the SEGMENT says what
     // that is. Every spec written before this ignores the argument and is byte-identical, because
     // each of them hardcodes its settle point and requires its diet to start there — `tankSpec`'s
     // diet says exactly that in its own comment. A plant whose home is a SERVO ACTION at an
     // arbitrary pose cannot arrange it in the diet, so the kit hands the segment in.
-    const p = spec.fresh(s);
+    if (!carry || p === null) p = spec.fresh(s);
+    else if (dwell > 0) {
+      // Through the spec's own `step` with a zero correction, so the dwell is METERED as plant
+      // time like everything else here and no second routing exists. Not recorded.
+      const c0 = s.refAt(0);
+      for (let k = 0; k < dwell; k++) spec.step(p, c0, c0.map(() => 0), k);
+    }
     const C = [], Y = [];
     for (let k = 0; k < s.n; k++) {
       const c = s.refAt(k);
@@ -81,9 +114,33 @@ export function excite(spec, diet, { seed = 1 } = {}) {
       const r = spec.step(p, c, c.map(() => 0), k);
       C.push(c); Y.push(r.measured);
     }
-    out.push({ C, Y, n: s.n });
+    out.push({ C, Y, n: s.n, carried: carry, dwell: carry ? dwell : 0 });
   }
+  // A RAW-CARRIED SEGMENT KNOWS ITS NEIGHBOURS, so a window straddling its start reads what the
+  // plant actually saw — the previous segment's tail — instead of the clamp. A dwelled segment
+  // was HELD at its first command before the record began, so the clamp IS the truth and it gets
+  // no links; un-carried segments get none and read exactly as before.
+  if (carry && !(dwell > 0)) for (let i = 0; i < out.length; i++) { out[i].prev = out[i - 1] || null; out[i].next = out[i + 1] || null; }
   return out;
+}
+
+/**
+ * THE SEGMENT'S OWN READER OF `U` (the achieved output through the nominal inverse) at index k,
+ * INCLUDING k OUTSIDE [0, n). For a segment excited from a fresh settle the clamp is honest: the
+ * machine WAS held at U[0] before the record began. For a CARRIED segment it is not — the machine
+ * was finishing the previous segment — so the reader falls through to the neighbours' records,
+ * and only clamps where there is no neighbour (the very start and the very end of the excitation).
+ * The same reader serves the fit, the held-out score and `AutoStack`'s ①d rung, so there is one
+ * boundary convention and not three (rule 61).
+ */
+export function readerFor(s, inv) {
+  const U = invOf(s, inv);
+  const prev = s.prev ? invOf(s.prev, inv) : null, next = s.next ? invOf(s.next, inv) : null;
+  return (k) => {
+    if (k < 0) return prev ? prev[Math.max(0, s.prev.n + k)] : U[0];
+    if (k >= s.n) return next ? next[Math.min(s.next.n - 1, k - s.n)] : U[s.n - 1];
+    return U[k];
+  };
 }
 
 /**
@@ -114,9 +171,12 @@ function invOf(s, inv) {
  * lives on the segment, so a harness that calls this and then `fitInverse` on the result pays for
  * the inversion once.
  */
-export function segsFor(spec, diet, inv, { seed = 1 } = {}) {
-  const segs = excite(spec, diet, { seed });
+export function segsFor(spec, diet, inv, { seed = 1, carry = false, dwell = 0 } = {}) {
+  const segs = excite(spec, diet, { seed, carry, dwell });
   for (const s of segs) s.U = invOf(s, inv);
+  // The rung reads the window through `at` when a segment carries one; a host that hands plain
+  // `{ C, U, n }` gets the clamp it always had.
+  if (carry) for (const s of segs) s.at = readerFor(s, inv);
   return segs;
 }
 
@@ -133,7 +193,7 @@ export function fitInverse(segs, inv, { offsets, uMax, ridge = 1e-6, nc, refDim,
       for (let i = idx.length - 1; i > 0; i--) { const j = Math.floor(shuffle() * (i + 1)); [idx[i], idx[j]] = [idx[j], idx[i]]; }
       TGT = idx.map((i) => TGT[i]);
     }
-    pol.addProgram({ refAt: (k) => U[Math.max(0, Math.min(s.n - 1, k))], n: s.n, prefix: TGT, stride });
+    pol.addProgram({ refAt: readerFor(s, inv), n: s.n, prefix: TGT, stride });
   }
   pol.fit();
   return pol;
@@ -148,12 +208,12 @@ export function heldOutR2(segs, inv, opts, reach) {
   const sse = new Array(nc).fill(0), sst = new Array(nc).fill(0); let n = 0;
   for (let h = 0; h < segs.length; h++) {
     const pol = fitInverse(segs.filter((_, i) => i !== h), inv, opts);
-    const s = segs[h], U = s.Y.map((y) => inv(y));
+    const s = segs[h], U = invOf(s, inv), at = readerFor(s, inv);
     const TGT = s.C.map((c, k) => c.map((v, j) => v - U[k][j]));
     const mean = new Array(nc).fill(0);
     for (let j = 0; j < nc; j++) { let m = 0; for (let k = 0; k < s.n; k++) m += TGT[k][j]; mean[j] = m / s.n; }
     for (let k = reach; k < s.n - reach; k += opts.stride || 7) {
-      const pred = pol.actLook((o) => U[Math.max(0, Math.min(s.n - 1, k + o))], null);
+      const pred = pol.actLook((o) => at(k + o), null);
       for (let j = 0; j < nc; j++) {
         const e = TGT[k][j] - pred[j]; sse[j] += e * e;
         const d = TGT[k][j] - mean[j]; sst[j] += d * d;
@@ -267,12 +327,18 @@ export async function dirInvFor(nameRe, { stride = 7 } = {}) {
   const first = process.env.DIRFIRST === '1';
   const ridge = process.env.DIRIDGE === undefined ? 1e-6 : +process.env.DIRIDGE;
   const seed = process.env.DISEED === undefined ? 1 : +process.env.DISEED;
+  // `DICARRY=1` carries the plant with a DWELL of one measured settle at each new segment's first
+  // command; `DICARRY=raw` carries it with no dwell, which is the configuration §123 measured as
+  // VOID on the barrel and is kept reachable as that negative's control.
+  const carry = process.env.DICARRY === '1' || process.env.DICARRY === 'raw';
+  const dwell = process.env.DICARRY === '1' ? settle : 0;
   console.log(`  ①d DIRECT INVERSE armed${first ? ' FIRST (before the conventional rung)' : ''}: `
     + `window ±${w.reach} raw steps, ${w.offsets.length} taps [rule ${w.rule} = `
-    + `min(0.61·${settle}, ${seglen}/8)], ridge ${ridge}, excitation seed ${seed}`);
+    + `min(0.61·${settle}, ${seglen}/8)], ridge ${ridge}, excitation seed ${seed}`
+    + (carry ? `, the plant CARRIED across segments (${dwell > 0 ? `a ${dwell}-step dwell at each new segment, one rebuild for the whole excitation` : 'RAW — no dwell, the record begins inside the previous transient'})` : ''));
   return { dirInv: { refDim: P.nc, ridge, offsets: w.offsets, stride, first },
     // ZERO TEACHER LAPS: open-loop segments only, through the kit's one inversion path.
-    dirInvRuns: () => segsFor(P.spec, P.diet, P.inv, { seed }) };
+    dirInvRuns: () => segsFor(P.spec, P.diet, P.inv, { seed, carry, dwell }) };
 }
 
 export { deriveWindow };

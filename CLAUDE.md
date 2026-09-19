@@ -735,7 +735,17 @@ Each of these is a claim that can be shown false, which is the only kind worth w
    byte-identical unset. **Getting there cost rule 9b a sixth time**: `rigs/ladder.mjs`
    never forwarded `dirInv`, so the first armed run printed that it had armed the rung and the rung
    never ran — indistinguishable from a refusal (rule 25). *Built* and *run on a plant* are
-   different states, and this file has paid for conflating them four times now.
+   different states, and this file has paid for conflating them four times now. **AND THE
+   EXCITATION'S SEVEN RE-SETTLES ARE NOW A LEVER ON ONE PLANT OF TWO (plan §123)**: carried across
+   segments with a dwell of one settle, the COLUMN reads 3.443-4.474x against fresh 3.427-4.450x with
+   its shuffle control at 1.000x and ships **3.86x in 3.1 days against 3.85x in 3.8** at the same
+   budget — while the BARREL is VOID by its own shuffle control on 3 of 4 seeds (a fit on PERMUTED
+   targets passes its own gate at 1.18-1.72x), raw or dwelled, with §72.18's drift refuted as the
+   cause by `TH_NOAMB=1`. The surviving candidate is a diet difference the rig makes silently —
+   `barrelSpec.fresh` ignores the segment and settles at the recipe's first level. `DICARRY` ships
+   OFF (rule 31). And the budget gate admitted a 26-day teacher under a 3-day budget the moment the
+   excitation got cheaper, because it estimates nothing about the rung it admits — task #97's
+   motivating defect.
 
    **AND IT IS NOW NINE PLANTS: SIX ADDRESSED, TWO STRUCTURALLY OUT, ONE UNRESOLVED (plan §105).**
    Real steam exchanger **95.6x**, cart-pole **11.8x**, real cascaded tanks **9.1x**, quadruple tank

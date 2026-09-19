@@ -70,7 +70,8 @@ the column in 3.8, shipping ①d, every skipped rung stated — 11.4x and 8.4x l
 1.44x BETTER.** Gap 1 is no longer *unbuyable*; it is a priced trade.
 
 **WHAT IS STILL OPEN IN IT, STATED SO THE GAP IS NOT READ AS CLOSED.** Two things. **(a) The
-excitation is now the bill**: under the budget ①d's open-loop segments are **61-67% of the plant
+excitation is now the bill — and carrying the plant across it is clean on the column and VOID on
+the barrel (§123)**, so the lever is one plant's: under the budget ①d's open-loop segments are **61-67% of the plant
 time** (column 2.5 days, barrel 45.8 h), and §105 already measured why — the route makes SEVEN
 `fresh()` calls, each pre-rolling a settle, 68% of its own cost — and §72 already built the lever
 for the teacher (`distilkit.carrier`, 64% of every call) and never applied it here. That is a
@@ -180,13 +181,15 @@ harmonic count — and K=128 makes a held-out program WORSE. The knee is the tea
 bandwidth, not the plant's timescale or the map's window. *Sixty-four, whatever the part* is
 withdrawn; the touch count is commissioned on the machine like every other constant.
 
-**5. Carry the plant across ①d's excitation segments.** (task #96) The lever §105 measured (seven `fresh()`
-re-settles, 68% of the route's bill) and §72 already built for the teacher (`distilkit.carrier`).
-Apply it to `segsFor` in `dirinvkit.mjs`. *Makes it a result:* the budgeted column and barrel bills
-fall by about the excitation's share (2.5 days and 45.8 h of 3.8 days and 3.1) with the delivered
-factor BYTE-IDENTICAL (rule 21 — a carried plant is the same plant). *Kills it:* the factor moves,
-which means the segments were not independent of their start state and the carried fit is a
-different fit — the barrel refused exactly this for the teacher (§72.18) and may again.
+**5. Carry the plant across ①d's excitation segments.** (task #96 — DONE, §123, and the kill
+branch fired on ONE plant of two.) The COLUMN is clean: carried seeds within 1.7% of fresh, the
+shuffle at 1.000x, and the ladder ships **3.86x in 3.1 days against 3.85x in 3.8** at §120's own
+budget. The BARREL is VOID by its own shuffle control on 3 of 4 seeds, raw or dwelled, with the
+ambient drift refuted as the cause (`TH_NOAMB=1` still delivers) and the surviving candidate a diet
+difference the rig makes silently (`barrelSpec.fresh` ignores the segment). `DICARRY` ships off.
+*What it found on the way:* the budget gate admitted a 26-day teacher under a 3-day budget the
+moment the excitation got cheaper — it estimates nothing about the rung it admits — which is step 6's
+motivating defect.
 
 **6. A bar before the teacher runs — rule 42 ACROSS rungs.** (task #97) Score ①d on the machine, then let the
 ladder decline to commission a rung whose calendar is more than the customer's budget when the
@@ -249,10 +252,12 @@ already answer:
 
 Stated so it can fail rather than be revised (rule 59):
 
-- **Step 1 refused on both expensive plants** — was the first entry here, and it did not fire:
-  ①d landed inside the taught distribution on both (§119). What replaces it: **the carried
-  excitation moves the delivered factor** (step 5). Then the route's cost is not the settles, the
-  calendar has no cheap lever left, and gap 1 goes back to being a trade the customer pays in days.
+- **Step 1 refused on both expensive plants** — the first entry here, and it did not fire (§119).
+  **The carried excitation moves the delivered factor** — the second, and it fired on the barrel in
+  a stronger form than written: the shuffle CONTROL fails there, raw or dwelled (§123), while the
+  column is clean. So gap 1's cheap lever is one plant's, and on the barrel the calendar is a trade
+  the customer pays in days until a `fresh(s)` that honours the segment settles whether the void is
+  the rig's own diet difference.
 - **A third plant reads the touch-probe knee somewhere the teacher's harmonic count does not
   predict.** §121's account is one plant's confirmation of one prediction; a plant whose knee sits
   off `2·nh` says the mechanism is not the teacher's bandwidth either.

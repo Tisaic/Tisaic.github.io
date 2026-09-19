@@ -83,6 +83,8 @@ import { excite, fitInverse, heldOutR2, scoreOn, refSeries, deriveWindow, lcg,
 
 const SEEDS = (process.env.SEEDS || '1,2,3,4').split(',').map(Number);
 const RIDGE = +(process.env.RIDGE || 1e-6);
+const CARRY = process.env.CARRY === '1' || process.env.CARRY === 'raw';   // plan §123: one rebuild for the whole excitation
+const DWELL = process.env.CARRY === '1';   // and a dwell of one settle at each new segment; `raw` is the void negative
 import { pathToFileURL } from 'node:url';
 
 const IS_ENTRY = !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
@@ -498,7 +500,7 @@ for (const P of (IS_ENTRY ? PLANTS : [])) {
   const uMax = P.spec.uMax * +(process.env.UCAP || 1);
   const opts = { offsets, uMax, ridge: RIDGE, nc: P.nc, refDim: P.nc, stride: 7 };
 
-  console.log(`${P.name}`);
+  console.log(`${P.name}${CARRY ? `   [plant CARRIED across excitation segments${DWELL ? `, ${settle}-step dwell at each` : ', RAW — no dwell'}]` : ''}`);
   console.log(`  window ±${reach} raw steps, ${offsets.length} taps  (settle ${settle}, diet lap `
     + `${seglen}, min(0.61·settle, lap/8) = ${rule})`);
   if (P.incumbent) console.log(`  the INCUMBENT on this plant: ${P.incumbent}`);
@@ -510,9 +512,27 @@ for (const P of (IS_ENTRY ? PLANTS : [])) {
   const rows = [];
   let exciteSteps = 0;
   for (const seed of SEEDS) {
-    const ex = priceOf(() => excite(P.spec, P.diet, { seed }));
+    const ex = priceOf(() => excite(P.spec, P.diet, { seed, carry: CARRY, dwell: DWELL ? settle : 0 }));
     const segs = ex.value;
     if (seed === SEEDS[0]) exciteSteps = ex.steps;
+    // THE PER-SEGMENT MEAN OF THE TARGET `c − inv(y)`, printed under `SEGMEANS=1` (plan §123).
+    // Built to name the mechanism behind the carried barrel's DELIVERING shuffle control — the
+    // hypothesis being that a carried segment begins inside the previous transient and so carries
+    // a per-segment offset a permutation keeps — AND IT REFUTED IT: fresh segments carry offsets of
+    // the same size (0.4-1.3 against an rms of 1.2-2.4 on seed 1, all of one sign on channel 0),
+    // and carried ones alternate in sign. Kept because a refuted instrument on record is worth more
+    // than a deleted one (rule 59), and because the sign pattern is the one reading here that
+    // separates the two excitations.
+    if (process.env.SEGMEANS === '1' && seed === SEEDS[0]) {
+      const rmsT = (seg) => { let ss = 0, n = 0; for (let k = 0; k < seg.n; k++) for (let j = 0; j < P.nc; j++) { const t = seg.C[k][j] - P.inv(seg.Y[k])[j]; ss += t * t; n++; } return Math.sqrt(ss / n); };
+      console.log(`  per-segment target MEAN (c − inv(y)), each channel, against the target's rms:`);
+      for (const seg of segs) {
+        const m = new Array(P.nc).fill(0);
+        for (let k = 0; k < seg.n; k++) { const u = P.inv(seg.Y[k]); for (let j = 0; j < P.nc; j++) m[j] += (seg.C[k][j] - u[j]) / seg.n; }
+        console.log(`    mean [${m.map((v) => v.toExponential(2)).join(', ')}]   rms ${rmsT(seg).toExponential(2)}`
+          + (seg.dwell ? `   (dwell ${seg.dwell})` : seg.carried ? '   (raw carry)' : '   (fresh)'));
+      }
+    }
 
     // ---- CONTROL 1: an all-zero map must reproduce the open loop BIT-EXACTLY. This is the check
     // `distil-tank.mjs` lacked for two sections while reporting "1.000x, nothing harmed".

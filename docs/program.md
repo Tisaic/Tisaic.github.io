@@ -116,7 +116,12 @@ own settles, and lower only by a lever not yet named.
 
 **Kills it.** The carried excitation moves the delivered factor (rule 21 says it must not; the
 barrel refused the same lever for the teacher in §72.18). Then the calendar's floor is the plant's
-own settle times seven, and W1 is a trade rather than a bar.
+own settle times seven, and W1 is a trade rather than a bar. **MEASURED (§123): it fired on the
+barrel and not on the column.** The column's carried rows are within 1.7% of fresh with the shuffle
+control at 1.000x, and the ladder ships 3.86x in 3.1 days against 3.85x in 3.8 at the same budget;
+the barrel's carried rows are VOID by their own shuffle control on 3 of 4 seeds, raw or dwelled,
+with the drift refuted as the cause. So roadmap step 5 is one plant's lever, and the barrel's
+calendar floor stands at seven settles until the rig's own diet difference is settled.
 
 ### PHASE 2 — U2, any program. The lever changed hands this week.
 

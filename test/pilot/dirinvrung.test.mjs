@@ -225,5 +225,24 @@ const rep5 = await a5.commission(mkHost(a5, { dirInvRuns: dietRuns, distilRuns: 
 ck('a budget on a host with NO spent() enforces nothing and SAYS so (rule 25)',
   called5 && /no spent/.test(rep5.budget.note || ''), JSON.stringify(rep5.budget));
 
+// ------------------------------------------------------------ (7) a segment that carries its OWN
+// reader of `U` outside [0, n) — the shape a host hands when it excited the plant CONTINUOUSLY
+// across segments (plan §123). Rule 9b, both halves: a reader that IS the clamp must leave the fit
+// bit-identical (the wiring changes nothing where it should not, rule 21), and a reader that says
+// something DIFFERENT outside the record must change the fit (the wiring is live, not decorative).
+const fitWith = async (mk) => {
+  const a = new AutoStack({ channels: [{ max: 3 }], authority: 0.6, floor: 0, classic: false,
+    maxDepth: 0, dirInv: { offsets: OFFS } });
+  const rep = await a.commission(mkHost(a, { dirInvRuns: () => dietRuns().map(mk) }));
+  return rep.dirInv && rep.dirInv.policy ? rep.dirInv.policy.W.map((w) => Array.from(w)) : null;
+};
+const plainW = await fitWith((sg) => sg);
+const clampW = await fitWith((sg) => ({ ...sg, at: (k) => sg.U[Math.max(0, Math.min(sg.n - 1, k))] }));
+const shiftW = await fitWith((sg) => ({ ...sg, at: (k) => (k < 0 || k >= sg.n) ? [sg.U[0][0] + 0.5] : sg.U[k] }));
+ck('a segment reader that IS the clamp leaves the ①d fit BIT-IDENTICAL',
+  !!plainW && JSON.stringify(plainW) === JSON.stringify(clampW));
+ck('a segment reader that differs outside the record CHANGES the fit — the path is live, not decorative',
+  !!shiftW && JSON.stringify(plainW) !== JSON.stringify(shiftW));
+
 console.log(`\n${failed === 0 ? 'PASS' : 'FAIL'} — ${failed} check(s) failed\n`);
 process.exit(failed === 0 ? 0 : 1);

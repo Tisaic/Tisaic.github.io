@@ -25182,3 +25182,70 @@ logging run. Its first kill branch — *step 1 refuses on both* — did not fire
 count on this record (U1-U4, W1-W6), six phases ordered by what a buyer checks, and what world-class
 CANNOT mean here with the measurement that closed each. No measurement in this section; every number
 is a citation.
+
+## §123 — Carrying the plant across ①d's excitation: clean on the column (3.8 → 3.1 days at the same factor), VOID on the barrel by its own shuffle control (task #96)
+
+§105 metered the teacher-free route's seven `fresh()` re-settles at 68% of its bill and §120 read the
+excitation at 61-67% of the budgeted one; §72 had already built the lever for the teacher
+(`distilkit.carrier`) and never applied it here. `excite(spec, diet, { carry, dwell })` now builds the
+plant ONCE at the first segment and every later segment begins where the previous one ended, with a
+metered DWELL of `dwell` steps at the new segment's first command before recording (`dwell = 0` is
+the RAW carry, and a raw-carried segment gets neighbour links so a window straddling its start reads
+the previous segment's tail rather than a clamp). `segsFor` attaches the segment's own reader as
+`at`, `AutoStack`'s ①d rung reads through it when present — a host handing plain `{ C, U, n }` is
+byte-identical, pinned both ways in `dirinvrung.test.mjs` (a reader that IS the clamp leaves the
+fit bit-identical; one that differs outside the record changes it). `DICARRY=1` in the ladder
+harnesses (dwell of one measured settle), `DICARRY=raw`, `CARRY=1|raw` in `dirinvall.mjs`; unset is
+byte-identical — the uncarried `dirinvall` rows reproduce §105 digit for digit on both plants.
+
+```
+  standalone, 4 seeds        fresh (§105)              carried RAW              carried + dwell(settle)
+  Wood-Berry column       3.427-4.450x  med 3.652     3.370-4.460x  med 3.632   3.443-4.474x  med 3.657
+                          42,000 steps  2.9 days      27,000  45.0 h            31,970  2.2 days
+                          SHUFFLE 1.000x              SHUFFLE 1.000x            SHUFFLE 1.000x
+  extruder barrel         3.705-6.388x  med 4.641     2.782-9.295x  med 3.677   3.093-7.080x  med 5.818
+                          200,000 steps 2.3 days      100,000  27.8 h           139,305  38.7 h
+                          SHUFFLE 1.000-1.008x        SHUFFLE 1.000-1.516x      SHUFFLE 1.000-1.443x
+                                                      *** VOID on 3 of 4 ***    *** VOID on 3 of 4 ***
+```
+
+**THE COLUMN IS CLEAN AND THE CALENDAR MOVES.** Every carried seed is within 1.7% of its fresh
+reading, the medians agree to 0.7%, the shuffle stays at 1.000x, and the excitation falls by exactly
+the five pre-rolls it no longer pays (36,000 → 21,000 raw; 25,970 with the dwell). Through the one
+press at §120's OWN budget of 43,200 steps the ladder ships **3.86x in 3.1 days against 3.85x in
+3.8** — the dwelled spend at the teacher's gate is 43,970, so the same budget still skips it.
+
+**THE BARREL IS VOID, AND THE FIRST TWO MECHANISMS NAMED FOR IT ARE BOTH REFUTED.** A fit on
+PERMUTED targets passes its own held-out gate and delivers 1.18-1.72x on 3 of 4 seeds — a reading of
+exactly 1.000x means the shuffled fit REFUSED itself and applied zero weights, which is what every
+fresh excitation in this project does — so whatever the carried rows carry, the map is not what is
+being read (rule 15) and no carried barrel factor is quoted, including the 5.818x median that would
+have beaten §105's. (1) *A carried segment begins inside the previous transient* (7,500-step segments
+against a 7,861-step settle) predicted that a dwell of one settle repairs it: dwelled, the shuffle
+still reads 1.18-1.44x. The `SEGMEANS=1` instrument built for it refuted the premise too — fresh
+segments carry per-segment target offsets of the same size (0.4-1.3 against an rms of 1.2-2.4),
+all of one sign on channel 0, where carried ones alternate. (2) *§72.18's ambient drift now advances
+across the whole record instead of resetting per segment*: with `TH_NOAMB=1` the carried shuffle
+reads **1.540x / 1.717x** against the fresh **1.000x / 1.006x** on the same seeds, so the drift is not
+it either — though the same runs price the drift for this route at 1.2-2.2x on the fresh factor
+(7.88x / 8.11x flat against 6.39x / 3.71x drifting). **What survives is a diet difference the rig
+makes silently**: `barrelSpec.fresh` ignores the segment it is handed and settles at the recipe's
+FIRST level, so every fresh segment carries an extra transition from that level to its own start
+during the diet's nominal 30% hold, and the carried record never contains it. Consistent with the
+shuffle (a carried segment's first 30% is a genuine HOLD at a level that identifies the segment, and
+a permuted target's per-segment mean is then predictable from the level across contiguous folds)
+and NOT proved; the falsifier is a `fresh(s)` that honours the segment, which changes every barrel
+harness and is not taken here.
+
+**AND THE BUDGET GATE HAS THE OTHER HALF OF RULE 9 MISSING.** Raw-carried, the column's spend at the
+teacher's gate fell to 39,000, UNDER §120's 43,200 — so the gate admitted the 26.3-day teacher and
+the ladder commissioned in **34.0 days under a 3-day budget**. `plantBudget` asks only whether the
+spend is ALREADY past the budget and estimates nothing about the rung it is admitting, so a cheaper
+excitation makes an expensive rung affordable. That is task #97's territory (a bar, or a cost
+estimate, before the teacher runs) and is recorded here as its motivating defect.
+
+`DICARRY`/`CARRY` ship OFF (rule 31): clean on one plant, void by its own control on the other.
+Controls: unset byte-identical on both plants and the cart-pole's rung test; the fresh rows
+reproduce §105; the rung-path test pins both halves of the reader wiring. The roadmap's step-5 kill
+branch — *the factor moves* — fired on the barrel in a stronger form than written (the CONTROL
+fails, not merely the factor) and did not fire on the column.
