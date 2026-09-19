@@ -188,6 +188,10 @@ const distilRuns = (auto) => dietN(DIETS).map((rec) => {
     // exactly, which cost the arm 19% and the soft cell 2.61x -> 3.98x, reappearing because a new
     // host is the one place the flag has to be set by hand.
     closed: true,
+    // WHAT ONE TEACHER CALL COSTS THIS PLANT, so the budget gate can price the rung BEFORE it
+    // runs (plan §124): `run` drives TLAPS laps per call on a carried plant, and the carrier
+    // settles it ONCE, on the first call (`settled` is 3,000 steps).
+    callSteps: TLAPS * lap, settleSteps: 3000,
 
     run: async (corr) => {
       const c = hold();

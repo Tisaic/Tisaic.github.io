@@ -744,8 +744,18 @@ Each of these is a claim that can be shown false, which is the only kind worth w
    cause by `TH_NOAMB=1`. The surviving candidate is a diet difference the rig makes silently —
    `barrelSpec.fresh` ignores the segment and settles at the recipe's first level. `DICARRY` ships
    OFF (rule 31). And the budget gate admitted a 26-day teacher under a 3-day budget the moment the
-   excitation got cheaper, because it estimates nothing about the rung it admits — task #97's
-   motivating defect.
+   excitation got cheaper, because it estimated nothing about the rung it admits — **CLOSED IN §124:
+   the gate now PRICES the rung before admitting it**, from the teacher's own `plan()` per training
+   run at what one call costs the plant (`callSteps`, stated by the diet) plus the verify at the
+   ladder's own measured scored-run cost, and skips on `spent + estimate`. Raw-carried the column
+   reads *39,000 spent + ~504,000 this rung would spend > 43,200* and ships ①d at 3.79x in 2.7 days
+   where the same budget had admitted 34.0; unbudgeted, the estimate is an UPPER BOUND on the bill
+   on both plants (column 1.12x, barrel 1.18x) with the ladders byte-identical to §119, and every
+   lap-spending rung records what it spent beside its estimate so the bound is audited by the run
+   it gated (rule 15). What roadmap step 6 asked for — rule 42 ACROSS rungs — is not a gate: the
+   taught rung's score is what the teacher produces, so the band is read after it (2.8% on the
+   column, 1.66x on the barrel) and never before. Seven harnesses declare no `callSteps` and are
+   priced at one lap per call where their teachers drive two; the estimate says so (rule 25).
 
    **AND IT IS NOW NINE PLANTS: SIX ADDRESSED, TWO STRUCTURALLY OUT, ONE UNRESOLVED (plan §105).**
    Real steam exchanger **95.6x**, cart-pole **11.8x**, real cascaded tanks **9.1x**, quadruple tank

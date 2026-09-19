@@ -244,5 +244,83 @@ ck('a segment reader that IS the clamp leaves the ①d fit BIT-IDENTICAL',
 ck('a segment reader that differs outside the record CHANGES the fit — the path is live, not decorative',
   !!shiftW && JSON.stringify(plainW) !== JSON.stringify(shiftW));
 
+// ------------------------------------------------ (8) THE GATE PRICES THE RUNG BEFORE IT RUNS
+//
+// §123's motivating defect: with the excitation cheaper, the column's spend at the gate fell
+// UNDER a 3-day budget and the gate admitted a 26-day teacher, because it asked only whether the
+// budget was already spent. Now a rung hands the gate an ESTIMATE (plan §124). BOTH HALVES
+// (rule 9): a budget the rung's estimate would overrun SKIPS it with a stated row and the teacher
+// is never called; a budget it fits RUNS it, records what it spent beside the estimate, and the
+// estimate is an UPPER BOUND on the bill (the teacher's `plan()` is its sweep at its widest).
+// The meter is a real counter ticked by every plant step the mock advances, because an estimate
+// checked against a constant is not checked (rule 15).
+let meter = 0, teacherCalls = 0;
+const teachRun = (lap, phase, withCost = true) => {
+  const ref = (k) => { const t = (((k % lap) + lap) % lap) / lap; return [0.5 + 0.4 * Math.sin(2 * Math.PI * (t + phase))]; };
+  let p = null;
+  return {
+    lap, refAt: ref, closed: true, ...(withCost ? { callSteps: lap, settleSteps: 0 } : {}),
+    run: async (corr) => {
+      if (!p) p = mkPlant();
+      meter += lap; teacherCalls++;
+      const err = [new Float64Array(lap)]; let s2 = 0;
+      for (let k = 0; k < lap; k++) {
+        const c = ref(k); const u = corr ? corr.at(k) : [0];
+        const e = inv(p.step(c[0] + (u[0] || 0))) - c[0];
+        err[0][k] = e; s2 += e * e;
+      }
+      return { score: Math.sqrt(s2 / lap), err };
+    },
+  };
+};
+const meteredHost = (a, extra) => {
+  const h = mkHost(a, { ...extra, spent: () => meter });
+  const run0 = h.run;
+  h.run = async (...x) => { meter += N; return run0(...x); };
+  return h;
+};
+const distilRow = (rep) => rep.budget && rep.budget.rungs && rep.budget.rungs['②d distilled'];
+for (const [label, budget, fits] of [['a budget the estimate OVERRUNS', 5000, false], ['a budget the rung FITS', 1e7, true]]) {
+  meter = 0; teacherCalls = 0;
+  const a = new AutoStack({ channels: [{ max: 3 }], authority: 0.6, floor: 0, classic: false,
+    maxDepth: 0, dirInv: { offsets: OFFS }, distil: { offsets: OFFS }, plantBudget: budget });
+  const rep = await a.commission(meteredHost(a, { dirInvRuns: dietRuns,
+    distilRuns: () => [teachRun(300, 0), teachRun(300, 0.3), teachRun(300, 0.6, false)] }));
+  const row = teacherRow(rep), br = distilRow(rep);
+  ck(`${label}: one scored run is PRICED by the baseline lap, off the meter (${rep.budget.scoredRunSteps})`,
+    rep.budget.scoredRunSteps === N);
+  ck(`${label}: the estimate exists and prices teacher AND verify`,
+    !!(br && br.estimate && br.estimate.teacher > 0 && br.estimate.verify > 0 && br.estimate.steps === br.estimate.teacher + br.estimate.verify),
+    JSON.stringify(br));
+  ck(`${label}: a run that states no callSteps is priced at one lap per call and the estimate SAYS so (rule 25)`,
+    !!(br && br.estimate && br.estimate.notes.some((n) => /callSteps assumed/.test(n))), br && JSON.stringify(br.estimate.notes));
+  if (!fits) {
+    ck(`${label}: the teacher was NEVER called`, teacherCalls === 0, `${teacherCalls} calls`);
+    ck(`${label}: a SKIPPED row states spent + estimate against the budget`,
+      !!row && /SKIPPED/.test(row.name) && row.deployed === false && /would spend/.test(row.note) && /5,000/.test(row.note), row && row.note);
+    ck(`${label}: the report names the phase and that it was skipped ON THE ESTIMATE, with the spend still under budget`,
+      rep.budget.skipped.length === 1 && rep.budget.skipped[0].by === 'estimate' && rep.budget.skipped[0].spent < budget
+      && rep.budget.skipped[0].estimate === br.estimate.steps, JSON.stringify(rep.budget.skipped));
+    ck(`${label}: the ②d note says why, and the ①d rung below it still shipped`,
+      /SKIPPED on the plant-time estimate/.test((rep.distil || {}).note || '') && a.deployed.distil === true, JSON.stringify(rep.distil));
+    ck(`${label}: a skipped rung records NO spend (it never ran)`, br.spent === undefined, JSON.stringify(br));
+  } else {
+    ck(`${label}: the teacher RAN`, teacherCalls > 0 && !!row && !/SKIPPED/.test(row.name), `${teacherCalls} calls, ${row && row.name}`);
+    ck(`${label}: no rung was skipped`, rep.budget.skipped.length === 0, JSON.stringify(rep.budget.skipped));
+    ck(`${label}: what the rung SPENT is recorded beside its estimate`, !!br && br.spent > 0 && br.estimateOverSpent > 0, JSON.stringify(br));
+    ck(`${label}: and the estimate was an UPPER BOUND on the bill (estimate/spent ${br && br.estimateOverSpent && br.estimateOverSpent.toFixed(2)})`,
+      !!br && br.estimate.steps >= br.spent, JSON.stringify(br));
+    ck(`${label}: the bound is not vacuous — within 4x of the bill`, !!br && br.estimateOverSpent < 4, br && br.estimateOverSpent);
+  }
+}
+// And WITHOUT a budget nothing is priced: the report carries no budget at all (rule 21).
+{
+  meter = 0; teacherCalls = 0;
+  const a = new AutoStack({ channels: [{ max: 3 }], authority: 0.6, floor: 0, classic: false,
+    maxDepth: 0, dirInv: { offsets: OFFS }, distil: { offsets: OFFS } });
+  const rep = await a.commission(meteredHost(a, { dirInvRuns: dietRuns, distilRuns: () => [teachRun(300, 0)] }));
+  ck('no budget: nothing is priced, the teacher runs, and the report carries no budget field', rep.budget === null && teacherCalls > 0);
+}
+
 console.log(`\n${failed === 0 ? 'PASS' : 'FAIL'} — ${failed} check(s) failed\n`);
 process.exit(failed === 0 ? 0 : 1);

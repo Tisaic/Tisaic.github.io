@@ -106,9 +106,12 @@ read 3.1 and 3.8 days for 1.66x and 2.8% of factor (§120), and the bill is now 
 seven `fresh()` re-settles (§105) on a route whose teacher is already gone.
 
 **Steps.** Roadmap 5 (carry the plant across the excitation segments — `distilkit.carrier` was
-built for the teacher in §72 and never applied here) and roadmap 6 (a bar BEFORE the teacher, rule
-42 across rungs with the calendar as the cost, ①d's machine score as the bar). Then the fit's own
-arithmetic as sliced background compute on every plant, not the arm alone (W3's open half, target 6).
+built for the teacher in §72 and never applied here; §123: one plant's lever) and roadmap 6 (a bar
+BEFORE the teacher — **done as a calendar gate, §124**: the rung is priced from the teacher's own
+plan and the ladder's measured scored-run cost, the estimate bounds the bill within 12-18% on both
+plants, and a band across rungs is not a gate because the taught rung's score is what the teacher
+produces). Then the fit's own arithmetic as sliced background compute on every plant, not the arm
+alone (W3's open half, target 6).
 
 **Closes it.** Every plant in `commtime.mjs`'s table under 8 hours of plant time at a STATED factor
 and a stated rung — the column and barrel at roughly a day if the excitation's share falls by its

@@ -322,6 +322,20 @@ async function ladder(spec) {
     ...(dirInvRuns ? { dirInvRuns: () => inPhase('excite', () => dirInvRuns()) } : {}) });
   console.log(`\n  ${name}`);
   console.log(auto.table());
+  // THE BUDGET GATE'S ESTIMATE, BESIDE WHAT THE RUNG THEN COST (plan §124). An estimate the
+  // bill never checks is a sentence; here every rung that spends laps prints both, and the
+  // ratio is what says whether the bound was a bound.
+  if (rep.budget && rep.budget.rungs && Object.keys(rep.budget.rungs).length) {
+    console.log(`    plant-time budget ${rep.budget.steps.toLocaleString()} steps; one scored run `
+      + `${rep.budget.scoredRunSteps === null ? 'unpriced' : rep.budget.scoredRunSteps.toLocaleString() + ' steps'}`);
+    for (const [ph, r] of Object.entries(rep.budget.rungs)) {
+      const e = r.estimate;
+      console.log(`      ${ph.padEnd(18)} estimate ${e ? Math.round(e.steps).toLocaleString().padStart(11) : '    (none)'}`
+        + `   spent ${r.spent === undefined ? '(skipped)' : r.spent.toLocaleString().padStart(11)}`
+        + (r.estimateOverSpent ? `   estimate/spent ${r.estimateOverSpent.toFixed(2)}` : '')
+        + (e && e.notes && e.notes.length ? `   [${e.notes.join('; ')}]` : ''));
+    }
+  }
   console.log(`    shipped ${JSON.stringify(rep.deployed)}   ${rep.base.toExponential(3)} → `
     + `${rep.best.toExponential(3)}   ${rep.gain.toFixed(2)}x   ${((Date.now() - t0) / 1000).toFixed(0)}s`);
   // ---- CAN A CASCADE KNOW WHEN TO STOP WITHOUT PAYING A COMMISSION TO FIND OUT? ---------

@@ -25249,3 +25249,62 @@ Controls: unset byte-identical on both plants and the cart-pole's rung test; the
 reproduce §105; the rung-path test pins both halves of the reader wiring. The roadmap's step-5 kill
 branch — *the factor moves* — fired on the barrel in a stronger form than written (the CONTROL
 fails, not merely the factor) and did not fire on the column.
+
+
+## §124 — The budget gate prices the rung before it runs: the column's 26-day teacher is skipped under a 3-day budget from a spend of 2.7 days, and the estimate is an upper bound on the bill on both plants (1.12x, 1.18x) (task #97)
+
+**THE DEFECT.** §123 recorded it: `plantBudget` asked only whether the spend was ALREADY past the
+budget before a rung started, and estimated nothing about the rung it admitted. Raw-carried, the
+column's spend at the ②d gate fell to 39,000 steps, under §120's 43,200, and the gate admitted a
+26.3-day teacher — **34.0 days under a 3-day budget**. A cheaper excitation made an expensive rung
+affordable.
+
+**WHAT IS BUILT.** `overBudget(phase, estimate)` skips a rung when `spent + estimate > budget`, and
+the estimate is derived from what the rung will actually do rather than declared: the TEACHER's own
+`plan()` — `hff.js`'s sweep at its widest, which that file already marks inexact for the trial count
+and the early-stopping refine — per training run, on the SAME constructor the rung builds it with
+(`mkTeacher`, named once, rule 61); runs after the first priced at `1 + passes + backtracks`, because
+they reuse the first's operator; each lap priced at what one teacher call costs THIS plant, which the
+diet descriptor now states (`callSteps`, `settleSteps` — the column's `TLAPS × lap` and a 3,000-step
+settle once; the barrel's `TLAPS × lap` and 20,000 once, or per call under `CARRY=0`); and the VERIFY
+at one scored run per ridge and gain candidate plus the gain extension at its six-step bound, priced
+by what the ladder's OWN baseline lap cost on the meter (`scoredRunSteps`, read rather than declared,
+rule 30). A run that states no `callSteps` is priced at one lap per call and the estimate SAYS so; a
+host-supplied teacher is not priced (the lap-harmonic fallback is) and says so; the cascade is
+charged and not priced, and says so (rule 25). **And every rung that spends laps records what it
+SPENT beside the estimate** (`rep.budget.rungs`, printed by the driver as `estimate / spent`), so the
+bound is audited by the run it gated rather than trusted (rule 15).
+
+**MEASURED, BOTH HALVES (rule 9).**
+
+```
+  column, DICARRY=raw, budget 43,200 (§123's defect configuration)
+    ②d distilled — SKIPPED   plant-time budget: 39,000 spent + ~504,000 this rung would spend > 43,200
+    ships ①d 3.79x in 2.7 days                              was 3.96x in 34.0 days under the same budget
+  column, budget 1e8 (nothing skipped)   estimate 504,000   spent 450,000   estimate/spent 1.12
+    3.445e-2, 3.96x, 35.0 days — byte-identical to §119's own log (504,000 steps)
+  barrel, budget 1e8 (nothing skipped)   estimate 3,510,000   spent 2,980,000   estimate/spent 1.18
+    7.533e-1, 7.00x, 37.6 days — byte-identical to §119 (3,250,000 steps)
+```
+
+The estimate is an UPPER BOUND on both plants and within 20% of the bill; on the column its
+teacher half reads 1.05x of the teacher's actual 26.3 days and its verify half 1.5x, the slack being
+the gain extension priced at its bound and not spent. `dirinvrung.test.mjs` pins the path: a budget
+the estimate overruns skips the rung with a stated row, the teacher never called and the ①d rung
+below still shipped; a budget it fits runs it, records the spend, and the estimate bounds it
+(1.00x on the toy, which exhausts every planned phase); no budget prices nothing and the report
+carries no budget field (rule 21). Unset is byte-identical on every plant, since nothing is computed
+without a `plantBudget` and a `spent()`.
+
+**WHAT ROADMAP STEP 6 ASKED FOR AND WHAT THIS IS NOT.** The step was written as rule 42 ACROSS rungs
+— ship the cheap object when it sits within the band of the best MEASURED bar. That bar is the taught
+rung's own score, which exists only after the teacher has run, so it cannot gate the teacher; what is
+knowable before the teacher runs is its CALENDAR, and that is what the gate now reads. The band
+across rungs is therefore a post-hoc reading (§119 already makes it: the column's two objects within
+2.8%, the barrel's 1.66x apart) and not a gate, and the step's own kill — the band picking on the
+scored program — does not arise. **Stated limits**: the seven harnesses that declare no `callSteps`
+(mill, tank, cart-pole, the three real-data plants, EMPS) are priced at ONE lap per call where their
+teachers drive two, so the estimate there is a lower bound on the teacher and the note says so; the
+bound was checked on two plants and one toy; and a budget that a rung's estimate overruns by a
+margin the bound's own slack (12-18%) would cover is refused where it might have fit — the cost of
+a bound that errs toward refusing, which is the direction a budget should err.

@@ -75,10 +75,15 @@ the barrel (§123)**, so the lever is one plant's: under the budget ①d's open-
 time** (column 2.5 days, barrel 45.8 h), and §105 already measured why — the route makes SEVEN
 `fresh()` calls, each pre-rolling a settle, 68% of its own cost — and §72 already built the lever
 for the teacher (`distilkit.carrier`, 64% of every call) and never applied it here. That is a
-factor of about three on the calendar with no controller change, untaken. **(b) There is no bar
-before the teacher runs.** Unbudgeted, the column still pays 26 teacher-days for 2.8% of factor,
-because rule 42's band is applied WITHIN a rung and never ACROSS rungs with the calendar as the
-cost. §119 names the only bar on record — ①d's own machine score — and nothing consults it.
+factor of about three on the calendar with no controller change, untaken. **(b) There WAS no bar
+before the teacher runs, and there is now a calendar one (§124).** The gate prices the rung from the
+teacher's own `plan()` and the ladder's own measured scored-run cost before admitting it, and the
+estimate is an upper bound on the bill on both plants (1.12x column, 1.18x barrel). What it is not
+is rule 42 across rungs: the taught rung's score is what the teacher produces, so the band can only
+be read after the teacher has run (§119 reads it: 2.8% on the column, 1.66x on the barrel), and
+unbudgeted the column still pays 26 teacher-days for 2.8% of factor. The lever that remains is the
+BUDGET being set — a customer states a calendar and the gate holds it — not a bar the ladder
+could find for itself.
 
 ### GAP 2 — PROGRAMS THE COMMISSIONING DID NOT SEE. 5 of 11.
 
@@ -191,14 +196,19 @@ difference the rig makes silently (`barrelSpec.fresh` ignores the segment). `DIC
 moment the excitation got cheaper — it estimates nothing about the rung it admits — which is step 6's
 motivating defect.
 
-**6. A bar before the teacher runs — rule 42 ACROSS rungs.** (task #97) Score ①d on the machine, then let the
-ladder decline to commission a rung whose calendar is more than the customer's budget when the
-cheap object already sits within 5% of the best MEASURED bar. *Makes it a result:* the column ships
-①d unbudgeted (3.85x within 2.8% of 3.96x) and pays 0 of its 26 teacher-days, while the barrel still
-buys its teacher (1.66x is outside any band) — both halves asserted. *Kills it:* the band picks the
-cheap object on a plant where the taught one is later shown to transfer better — the column's own
-held-out reads 0.304 against the taught 0.339, so this rule can only be scored on a HELD-OUT program,
-never on the scored one.
+**6. A bar before the teacher runs — rule 42 ACROSS rungs.** (task #97) **DONE IN ITS CALENDAR FORM
+(§124), AND THE BAND FORM IS NOT A GATE.** The gate now prices the rung before admitting it — the
+teacher's own `plan()` per training run at what one call costs the plant, plus the verify at the
+ladder's own measured scored-run cost — and skips it when `spent + estimate` overruns. §123's defect
+closes: raw-carried, the column reads *39,000 spent + ~504,000 this rung would spend > 43,200*, ships
+①d at 3.79x in 2.7 days where the same budget had admitted 34.0 days. The estimate is an upper bound
+on the bill on both plants (column 504,000 against 450,000, 1.12x; barrel 3,510,000 against
+2,980,000, 1.18x) with the unbudgeted ladders byte-identical to §119. *What was asked and cannot be
+built:* a band across rungs needs the taught rung's score, which is what the teacher produces, so
+it is read after the teacher and never gates it; the step's kill (the band picking on the scored
+program) therefore does not arise. *Still open:* seven harnesses state no `callSteps` and are priced
+at one lap per call where their teachers drive two — the note says so, and the number is a lower
+bound there until they declare.
 
 **7. The probe count as a ladder axis, and the barrel.** (task #98) `probeRuns` becomes a machine-scored ladder
 like the ridge and the gain — commission at a geometric ladder of K, ship the cheapest within rule
