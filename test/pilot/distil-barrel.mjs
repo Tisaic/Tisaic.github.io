@@ -311,7 +311,7 @@ const distilRuns = (auto) => dietN(DIETS).map((rec, di) => {
   // `addProgram` builds correspond to plant steps [base, base + lap).
   let scoredBase = 0;
   const lag = EXO === 'oracle' ? 0 : REACH;
-  return {
+  const t = {
     lap,
     refAt: (k) => (EXO_ON ? [...TH.powerFor(ref(k)), exoAt(scoredBase + k, lag)]
       : TH.powerFor(ref(k))),
@@ -364,12 +364,24 @@ const distilRuns = (auto) => dietN(DIETS).map((rec, di) => {
     // means `hff` is converging and a different teacher should not help, while an ERRATIC one
     // (this plant at 1.03-4.03x, **3.9x**) means it is fighting a target that moves between calls.
     // The prediction on record is that parametric is level-or-worse on the mill and BETTER here.
-    ...(PARAM ? oracleTeach({ auto, lap, nc: 3, drive: DRIVE }) : {}),
-    ...(ORACLE ? { converge: oracleConverge({
-      auto, lap, nc: 3, passes: +(process.env.OPASSES || 8), debug: process.env.ODBG === '1',
-      drive: DRIVE,
-    }) } : {}),
+    // ---- THE DRIVE LOOP, PUBLISHED SO THE PROBE INSTRUMENT CAN REACH IT (plan §125).
+    //
+    // Both teachers below take `drive` and both are built HERE, so a driver that degrades what the
+    // teacher may measure (`probeRuns`) cannot reach them by wrapping the descriptor's `run` and
+    // `teach` — which is what §121 did, and why its three `ORACLE=1` rows were a vacuous control
+    // (rule 9c). Published on the descriptor and read at CALL time through `via`, so a replacement
+    // made after this object is built still reaches the teacher that was built before it.
+    drive: DRIVE,
   };
+  const via = (a) => t.drive(a);
+  if (PARAM) Object.assign(t, oracleTeach({ auto, lap, nc: 3, drive: via }));
+  if (ORACLE) {
+    t.converge = oracleConverge({
+      auto, lap, nc: 3, passes: +(process.env.OPASSES || 8), debug: process.env.ODBG === '1',
+      drive: via,
+    });
+  }
+  return t;
 });
 
 // The ladder's plant is `barrelSpec.fresh()`, which settles 20,000 steps before step 0 — so the

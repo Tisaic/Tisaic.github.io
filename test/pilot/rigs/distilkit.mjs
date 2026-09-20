@@ -288,6 +288,27 @@ function probeRuns(runs, K) {
     };
     const w = { ...t, probePts: ix.length };
     for (const k of ['run', 'teach']) if (t[k]) w[k] = async (...a) => degrade(await t[k](...a));
+    // ---- AND THE ORACLE TEACHER'S DRIVE, WHICH IS NOT ON THIS DESCRIPTOR'S SURFACE (plan §125).
+    //
+    // `converge` is built by the HARNESS, closed over the harness's own drive loop, so wrapping
+    // `run` and `teach` degrades the `hff` and parametric routes and leaves the ORACLE route
+    // reading the FULL instrument. §121 launched three `ORACLE=1 PROBEPTS=K` runs on exactly that
+    // configuration before anyone checked, and recorded them as a vacuous control (rule 9c) — a
+    // knob set, a route unreached, and an output indistinguishable from one where the knob did
+    // nothing because it did nothing.
+    //
+    // The seam is `t.drive`: a harness that builds a teacher publishes its drive loop and hands
+    // the teacher a CALL-TIME read of it, and this replaces it IN PLACE. In place rather than on
+    // the spread copy, because the teacher's closure was built before this runs and would never
+    // see a new object — which is the same reason §121's wrap missed it. A harness that publishes
+    // no drive is untouched and says so, rather than reading as one that was degraded (rule 25).
+    if (typeof t.drive === 'function') {
+      const raw = t.drive;
+      let hits = 0;
+      t.drive = async (...a) => { hits++; return degrade(await raw(...a)); };
+      w.drive = t.drive;
+      w.probeDrives = () => hits;
+    }
     return w;
   });
 }

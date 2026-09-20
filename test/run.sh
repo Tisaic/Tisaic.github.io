@@ -489,6 +489,12 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # it prints is the RIG and not a result (rule 14) and the file says so; what is pinned is the
     # PATH, and a rung that is fitted, vouched for and never applied reads exactly 1.000x.
     t node test/pilot/dirinvrung.test.mjs
+    # THE PROBE INSTRUMENT REACHES A TEACHER THE HARNESS ALREADY BUILT (plan §125). §121 wrapped
+    # the descriptor's `run` and `teach` on a SPREAD COPY, so the ORACLE teacher — built by the
+    # harness, closed over its own drive loop — kept reading the full instrument and three runs
+    # were recorded as a vacuous control (rule 9c). What is pinned is the CLOSURE TIMING, which a
+    # test of `probeRuns` alone cannot see, and it is checked to FAIL on the pre-repair state.
+    t node test/pilot/probe.test.mjs
     # WHAT SHIPS, WHAT COMMISSIONS, WHAT IS ONLY THE BENCH. Fails when a module appears that
     # nobody classified, so the deploy boundary cannot rot quietly (rule 30 on a dependency graph).
     t node test/inventory.test.mjs

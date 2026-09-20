@@ -130,12 +130,28 @@ degradation here to harm transfer. So the knee is the TEACHER's identification b
 oracle teacher reads the record as a target and never identifies from it, which is why 64 sufficed
 there. *Sixty-four, whatever the part* is withdrawn.
 
-**What survives is smaller and is still the product statement**: a touch probe commissions this
-object on both plants once its count is swept ON THE MACHINE like every other constant — at K=512
-the column reads 4.07x against the tracker's 3.96x. That makes the count a LADDER AXIS (the ridge
-and the gain already are), and no harness has one. NOT reached: the barrel, and the `ORACLE=1` route
-on any plant harness — `oracleConverge` reads the harness `drive` directly and is not wrapped, so
-three runs launched under it were a vacuous control (rule 9c).
+**AND THAT ACCOUNT IS ITSELF REFUTED BY THE ROUTE §121 COULD NOT RUN (§125).** The drive seam is
+repaired — the wrap was on a SPREAD COPY the harness's already-built teacher never saw — and on the
+column the ORACLE teacher, which does not identify from the record, reads **0.48x at 64 against
+`hff`'s 0.47x**: the same knee from two different mechanisms. `2·nh` now holds on one plant of four
+and fails on three (arm 64 of 512, barrel 128-256 of 512, and the CART-POLE, the only plant asked
+whose `nh` is not capped, at **≤32 of a predicted 260-366**). Three more proxies were tried and
+refuted, including this section's own — a longer diet segment makes the column's knee WORSE with the
+window held. **The barrel is asked**: 0.45 / 0.46 / 0.14 / 0.62 / 0.78 / **1.19** / 0.93 of the
+tracker at K = 8 / 16 / 32 / 64 / 128 / 256 / 512, and the 1.19x is that plant's own drift, which
+its `TH_NOAMB=1` control establishes by reversing it to 0.73x.
+
+**What survives is the product statement and it is now narrower**: a touch probe commissions this
+object where its count is swept ON THE MACHINE, and **no cheaper proxy for that count exists — four
+were tried**. The CART-POLE is the one plant where the shop's instrument is free (11.93x flat from
+K=32 to 512). **The LADDER AXIS this gap asked for is refused on two measured grounds (§125)**: a
+touch-count candidate costs a FULL COMMISSIONING where a ridge candidate costs a refit — 335 days
+of barrel to choose among seven counts, against the 35.3 its commissioning costs — and SCORING a
+candidate uses the full instrument by construction, so the axis presupposes the tracker it exists to
+avoid buying. It stays a bench instrument. **And the sharpest open risk is new**: under a degraded
+instrument the teacher's own score is ANTI-correlated with what it delivers, reporting 22.7x while
+delivering 1.71x on the column at K=32 — a 13x lie in the flattering direction, read by the gate
+that stops the iteration.
 
 ### GAP 4 — NOTHING HERE HAS EVER MOVED A MACHINE.
 
@@ -210,12 +226,17 @@ program) therefore does not arise. *Still open:* seven harnesses state no `callS
 at one lap per call where their teachers drive two — the note says so, and the number is a lower
 bound there until they declare.
 
-**7. The probe count as a ladder axis, and the barrel.** (task #98) `probeRuns` becomes a machine-scored ladder
-like the ridge and the gain — commission at a geometric ladder of K, ship the cheapest within rule
-42's band of the full-instrument row. Wrap `oracleConverge`'s `drive` so the `ORACLE=1` route is
-reachable, then run the barrel. *Makes it a result:* every plant that ships the deployed object
-states a touch count and a factor at it. *Kills it:* a plant where no K below the lap reaches the
-band, in which case that plant needs the tracker and the INS column says so per plant.
+**7. The probe count as a ladder axis, and the barrel.** (task #98) **DONE, AND THE AXIS IS REFUSED
+ON A MEASUREMENT (§125).** The drive seam is repaired and pinned by a test checked to fail on the
+pre-repair state; the ORACLE route is measured for the first time and refutes §121's attribution of
+the knee to `hff`; the barrel is asked and reads 0.45-1.19 of its tracker across K = 8-512; the
+cart-pole is FLAT from 32 up. *What killed the axis:* a candidate costs a FULL commissioning (335
+barrel-days for seven counts against a 35.3-day commissioning, and the REFUSED candidate was the
+most expensive row), and scoring one needs the full instrument by construction — the axis
+presupposes the tracker it exists to replace. *Still open:* four proxies for the count are refuted
+and none replaces them, so the count is swept per plant or the tracker is owned; and the teacher's
+own score is anti-correlated with delivery under a degraded instrument (a 13x lie at K=32), which
+no gate here detects.
 
 **8. Why does ①d transfer on the barrel and not the column?** (task #99) 0.941 against 0.304 (§120), one plant
 each. The named suspect is authority: the column's ①d sits at **0.400 of a 0.4 cap on every seed**

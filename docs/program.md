@@ -45,8 +45,10 @@ what a buyer would actually check, each again with a count:
                                   2 of 8 unbudgeted (mill 55 min, cart-pole 42.7 min, §87.7);
                                   the two 30-day plants read 3.1 and 3.8 DAYS budgeted (§120)
   W2  THE SHOP'S OWN INSTRUMENT  a touch probe or motor-side signals commission it, no tracker
-                                  arm: 64 touches = the tracker (§74); column: 0.47x of it at 64,
-                                  recovering at 256-512 (§121) — a constant to COMMISSION, one plant of two
+                                  FOUR plants, no portable count (§74, §121, §125): cart-pole FREE
+                                  (flat from 32), arm 64, barrel 128-256, column 256-512, and four
+                                  proxies refuted — a constant to COMMISSION, and the ladder that
+                                  would commission it costs a COMMISSIONING PER CANDIDATE
   W3  FITS THE SCAN               under 10% of a 1 ms task, every cycle, deployed AND fitted
                                   deployed 8-330 MAC, 0.8-3.3% (§53, artefact.test.mjs); the FIT is
                                   scoped as a conditional (28% at stride 9) and not costed as sliced
@@ -149,21 +151,33 @@ program below ten response times per lap*, which §84.5 prices at 10-17% each.
 
 ### PHASE 3 — W2, the shop's own instrument. Now a constant to commission, not a number to quote.
 
-**Where it stands.** The arm's 64 touches equal the tracker (§74); the column's do not (§121), and
-the knee is the teacher's identification bandwidth (`2·nh`). One cell (K=128) makes a held-out
-program worse.
+**Where it stands.** FOUR plants now, and no portable number (§74, §121, §125). The CART-POLE is
+free — 11.93x flat from K=32 to 512 against a tracker of 11.93x — the arm needs 64, the barrel
+128-256, the column 256-512. `2·nh`, the account §121 gave, holds on one of the four: the drive seam
+is repaired and the column's ORACLE teacher, which does not identify from the record, knees where
+`hff` does (0.48x against 0.47x at 64). Three further proxies were tried and refuted. One cell on
+the column (K=128) makes a held-out program worse.
 
-**Steps.** Roadmap 7: the probe count as a machine-scored LADDER AXIS beside the ridge and the gain,
-shipping the cheapest K within rule 42's band of the full instrument; wrap `oracleConverge` so the
-`ORACLE=1` route is reachable under `probeRuns`; run the barrel. Then the cheaper truths §52.42
-priced on the arm — wind-up readings at 1.72x against the tracker's 6.63x, encoders alone at
-nothing — asked on the plants where a wind-up reading has no analogue.
+**Steps.** Roadmap 7 is DONE and its LADDER AXIS is refused on measurement (§125): a touch-count
+candidate costs a FULL commissioning — 335 barrel-days to choose among seven counts against a
+35.3-day commissioning, the refused candidate the most expensive of the eight — and scoring one
+uses the full instrument by construction, so the axis presupposes the tracker it exists to replace.
+What remains is the cheaper truths §52.42 priced on the arm — wind-up readings at 1.72x against the
+tracker's 6.63x, encoders alone at nothing — asked on plants where a wind-up reading has no
+analogue, and a SCREEN that predicts the count from something cheaper than a commissioning.
 
 **Closes it.** Every plant that ships the deployed object states a touch count and a factor at it,
 and the INS column reads per plant rather than per arm.
 
 **Kills it.** A plant where no K below the lap reaches the band. Then that plant needs the tracker,
-INS says so per plant, and W2 is a per-plant property rather than a bar.
+INS says so per plant, and W2 is a per-plant property rather than a bar. **AND A SECOND KILL IS NOW
+LIVE AND IS ABOUT THE PROCEDURE RATHER THAN THE COUNT (§125):** under a degraded instrument the
+teacher's own score is ANTI-CORRELATED with what it delivers — 22.7x reported against 1.71x
+delivered on the column at K=32, shrinking monotonically to nothing as the instrument improves. A
+customer commissioning on a probe alone watches a teacher converge beautifully on a machine that is
+not improving, and the monotone gate that stops the iteration reads the flattered number. Until
+something detects that, *sweep the count on your own machine* is advice a customer cannot safely
+follow without the tracker they were told they would not need.
 
 ### PHASE 4 — W5, robust and self-reporting, on more than the arm.
 
@@ -225,7 +239,8 @@ response is another machine, not building for this one anyway.
   phase   bar   what it buys                              blocked on
   1       W1    a product a customer can stop a plant for  nothing — two roadmap steps, both cheap
   2       U2    the sentence "for any program"             phase 1's object (①d is what transfers)
-  3       W2    the instrument the shop owns               the oracle wrap, then plant time
+  3       W2    the instrument the shop owns               a SCREEN for the count — the sweep is priced
+                                                            at a commissioning per candidate (§125)
   4       W5    "robust" on a second plant                 plant time only
   5       W4    "world class" as a comparison              phases 1-3 (a rival must be run at the cost we pay)
   6       W6    evidence that is not a simulation          the owner's hardware

@@ -305,7 +305,13 @@ async function ladder(spec) {
   // iterates the COMMISSIONED PILOT, so a harness that wants it must reach the stack whose
   // `oracleF0` port it arms — and this driver builds that object internally. A closure that takes
   // no argument is unaffected, so every existing spec is byte-identical.
+  // WHAT THE PROBE INSTRUMENT ACTUALLY REACHED, kept so the run can say it rather than assert it
+  // (plan §125). `announce()` claims the teacher reads K touches and nowhere else, and on the
+  // ORACLE route that claim was FALSE for a whole section — so the claim is now a reading.
+  const probed = [];
+  let probe = null;
   const metered = distilRuns ? async () => probeRuns(await distilRuns(auto), PROBEPTS).map((t, i) => {
+    probed.push(t);
     const w = { ...t, run: (...a) => inPhase(`teacher#${i}`, () => t.run(...a)) };
     for (const k of ['teach', 'converge', 'captureState']) {
       if (t[k]) w[k] = (...a) => inPhase(`teacher#${i}`, () => t[k](...a));
@@ -325,6 +331,29 @@ async function ladder(spec) {
   // THE BUDGET GATE'S ESTIMATE, BESIDE WHAT THE RUNG THEN COST (plan §124). An estimate the
   // bill never checks is a sentence; here every rung that spends laps prints both, and the
   // ratio is what says whether the bound was a bound.
+  if (PROBEPTS) {
+    // BOTH HALVES OF WHAT THE KNOB DID (rules 9, 25). A descriptor that published no drive is a
+    // route the instrument cannot reach and reads as such; one that published a drive and was
+    // never called is *wired and inert*, which is the state §121 was in and could not see.
+    //
+    // AND THE ONE STATE THAT IS A DEFECT IS NAMED RATHER THAN LEFT TO BE READ: a descriptor that
+    // BUILT a drive-taking teacher, PUBLISHED its drive, and degraded ZERO drives is §121 exactly
+    // — the knob set, the route unreached, and an output indistinguishable from the knob doing
+    // nothing. A harness that never built such a teacher is not that, and must not read as it.
+    const withDrive = probed.filter((t) => t.probeDrives);
+    const hits = withDrive.reduce((a, t) => a + t.probeDrives(), 0);
+    const built = probed.filter((t) => t.converge || t.teach).length;
+    probe = { k: PROBEPTS, runs: probed.length, published: withDrive.length, built, drives: hits,
+      unreached: !!(built && withDrive.length && !hits) };
+    console.log(`    probe instrument: ${PROBEPTS} touches/lap on ${probed.length} training run(s)`
+      + `, record+score degraded on run/teach`
+      + (withDrive.length
+        ? `, and on the TEACHER'S OWN DRIVE — ${hits} drive(s) degraded across `
+          + `${withDrive.length} run(s)`
+          + (hits ? '' : built ? '  *** UNREACHED: a drive-taking teacher was BUILT and none was degraded (§121) ***'
+            : ' — wired, and no drive-taking teacher was built')
+        : '; NO run published a drive, so an ORACLE/PARAM teacher built by the harness is NOT degraded'));
+  }
   if (rep.budget && rep.budget.rungs && Object.keys(rep.budget.rungs).length) {
     console.log(`    plant-time budget ${rep.budget.steps.toLocaleString()} steps; one scored run `
       + `${rep.budget.scoredRunSteps === null ? 'unpriced' : rep.budget.scoredRunSteps.toLocaleString() + ' steps'}`);
@@ -367,7 +396,7 @@ async function ladder(spec) {
   printCost(auto);
   // The table's row, where it was measured (plan §87.1).
   emitRow(rep, auto, { name });
-  return { rep, auto, scoreOn };
+  return { rep, auto, scoreOn, probe };
 }
 
 

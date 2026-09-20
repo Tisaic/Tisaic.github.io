@@ -177,7 +177,7 @@ const distilRuns = (auto) => dietN(DIETS).map((rec) => {
     }
     return { score: Math.sqrt(s2 / n), rec: out };
   };
-  return {
+  const t = {
     lap,
     refAt: (k) => { const s = ref(k); return WB.inputsFor(s[0], s[1]); },
     // THE LAP IS CLOSED AND MUST SAY SO. `refAt` above wraps at `lap`, but `addProgram` clamps
@@ -219,17 +219,29 @@ const distilRuns = (auto) => dietN(DIETS).map((rec) => {
     // `distil-mill.mjs` and `distil-barrel.mjs`). It was INLINE and anonymous inside
     // `oracleConverge`, which is why `_iteratePolicy` could not be asked on this plant at all —
     // not a decision, just the one thing that was never hoisted (rule 61).
-    ...(ORACLE ? { converge: oracleConverge({
-      auto, lap, nc: 2, passes: +(process.env.OPASSES || 8), debug: process.env.ODBG === '1',
-      drive: DRIVE,
-    }) } : {}),
-    // PARAM=1: the lap-free teacher. `oracleTeach` builds `run` AND `teach` from the SAME closure
-    // `oracleConverge` takes, so a plant the oracle can teach can be taught parametrically with no
-    // plumbing of its own — and its `run` deliberately overrides the one above, because the two
-    // want opposite index orders and handing `_iteratePolicy` the wrong one reads `undefined` at
-    // every step without throwing (plan §90.3).
-    ...(PARAM ? oracleTeach({ auto, lap, nc: 2, drive: DRIVE }) : {}),
+    // ---- THE DRIVE LOOP, PUBLISHED SO THE PROBE INSTRUMENT CAN REACH IT (plan §125).
+    //
+    // Both teachers below take `drive` and both are built HERE, so a driver that degrades what the
+    // teacher may measure (`probeRuns`) cannot reach them by wrapping the descriptor's `run` and
+    // `teach` — which is what §121 did, and why its three `ORACLE=1` rows were a vacuous control
+    // (rule 9c). Published on the descriptor and read at CALL time through `via`, so a replacement
+    // made after this object is built still reaches the teacher that was built before it.
+    drive: DRIVE,
   };
+  const via = (a) => t.drive(a);
+  if (ORACLE) {
+    t.converge = oracleConverge({
+      auto, lap, nc: 2, passes: +(process.env.OPASSES || 8), debug: process.env.ODBG === '1',
+      drive: via,
+    });
+  }
+  // PARAM=1: the lap-free teacher. `oracleTeach` builds `run` AND `teach` from the SAME closure
+  // `oracleConverge` takes, so a plant the oracle can teach can be taught parametrically with no
+  // plumbing of its own — and its `run` deliberately overrides the one above, because the two
+  // want opposite index orders and handing `_iteratePolicy` the wrong one reads `undefined` at
+  // every step without throwing (plan §90.3).
+  if (PARAM) Object.assign(t, oracleTeach({ auto, lap, nc: 2, drive: via }));
+  return t;
 });
 
 /**
@@ -298,7 +310,7 @@ const spec = { ...wbSpec,
 announce();
 const price = priceFrom();
 if (process.env.MIMO === '1') console.log('  pilotOpts + {"mimo":true}');
-const { rep, auto, scoreOn } = await ladder(spec);
+const { rep, auto, scoreOn, probe } = await ladder(spec);
 // Closed the moment the ladder returns: `reportDistil`'s in-sample column re-runs every
 // training program, and that is SCORING rather than commissioning (plan §72).
 price.close({ dt: WB.DT, unit: 'min', rep });
@@ -440,6 +452,18 @@ if (rep.distil && rep.distil.policy) {
     + 'through the rig\'s, which is the control that the shared loop did not change it',
     Math.abs(cold.blt - WB.iaeOf(WB.runBLT())) < 1e-9,
     `${cold.blt.toFixed(4)} against the rig's ${WB.iaeOf(WB.runBLT()).toFixed(4)}`);
+}
+
+// THE PROBE INSTRUMENT REACHED THE TEACHER THAT WAS BUILT (plan §125, rule 9b). This is the
+// assertion §121 did not have: it set `ORACLE=1 PROBEPTS=K`, the oracle teacher kept reading the
+// full instrument, and the three rows it printed were a vacuous control (rule 9c). It fires only
+// where both knobs are set, so an ordinary run is untouched — and it asserts the DEFECT state
+// rather than the presence of a knob, because a plant that built no drive-taking teacher (this
+// plant without `ORACLE` or `PARAM`) is a different and legitimate thing.
+if (probe) {
+  check(`the probe instrument reached every teacher that was BUILT — ${probe.drives} drive(s) `
+    + `degraded, ${probe.built} drive-taking teacher(s) built, ${probe.published} run(s) publishing one`,
+    !probe.unreached, JSON.stringify(probe));
 }
 
 check('the column is not made worse by anything the ladder ships',

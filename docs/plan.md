@@ -25308,3 +25308,118 @@ teachers drive two, so the estimate there is a lower bound on the teacher and th
 bound was checked on two plants and one toy; and a budget that a rung's estimate overruns by a
 margin the bound's own slack (12-18%) would cover is refused where it might have fit — the cost of
 a bound that errs toward refusing, which is the direction a budget should err.
+
+## §125 — The probe instrument reaches the ORACLE teacher at last, and every portable number for the touch count is refuted: four plants, four proxies, no constant (task #98)
+
+**THE REACHABILITY REPAIR, AND WHAT THE DEFECT ACTUALLY WAS.** §121 put §74's tracker substitute
+into the shared kit as `probeRuns(runs, K)` and wrapped the descriptor's `run` and `teach`. The
+ORACLE teacher is neither: `oracleConverge` is built BY THE HARNESS, closed over the harness's own
+drive loop, so `ORACLE=1 PROBEPTS=K` degraded nothing it read — three rows were launched on that
+configuration and §121 recorded them as a vacuous control (rule 9c). **The mechanism is closure
+TIMING and not a missing key**: the wrap was applied to a SPREAD COPY of the descriptor, and the
+teacher's closure was built before that copy existed, so it kept reading the original. Both objects
+were correct; which one the already-built closure saw was not. The seam is `t.drive`, published by
+the harness and read at CALL time, replaced IN PLACE. `test/pilot/probe.test.mjs` pins exactly that
+property and is **checked to FAIL on the pre-repair state** — three checks red, the drive counter
+reading `0 drive(s) for 1 call(s)`, which is the state §121 was in and could not see. The driver
+now prints which of four states it is in (no drive published · wired with no drive-taking teacher
+built · **UNREACHED**, a teacher built and none degraded · N degraded), and `distil-column.mjs`
+asserts the defect state through the shipped path (rule 9b).
+
+**THE COLUMN'S ORACLE ROUTE, MEASURED FOR THE FIRST TIME — AND IT AGREES WITH `hff` TO A POINT.**
+
+```
+  Wood-Berry column, ORACLE teacher, tracker 5.49x        (hff, §121, for comparison)
+    K              32      64     256     512   tracker      K      64     256     512
+    delivered    1.71x   2.64x   4.81x   5.36x   5.49x            1.87x  3.92x   4.07x
+    of tracker    0.31    0.48    0.88    0.98    1.00             0.47   0.99    1.03
+    the TEACHER'S OWN SCORE, which its monotone gate reads:
+                 22.7x   19.6x    6.0x    5.5x    4.7x
+```
+
+**§121's MECHANISM IS REFUTED BY THE ROUTE IT COULD NOT RUN.** It read *the knee is a property of
+the TEACHER's identification bandwidth* — `hff` identifies `nh = min(256, lap >> 3)` harmonics, a
+K-touch record carries K/2, so it is starved below K ≈ 2·nh — and explained the arm's 64 by *the
+oracle teacher never identifies from the record*. The oracle route on the column reads **0.48x at
+64 against `hff`'s 0.47x**: two teachers with different mechanisms, the same knee on the same
+plant. What that account predicts (2·nh) now holds on **one plant of four** and fails on three:
+the arm needs 64 of 512, the barrel 128-256 of 512, and the CART-POLE — the one plant here whose
+`nh` is NOT capped, 130-183 across its diet's 1,047-1,467-step laps — needs **at most 32 of a
+predicted 260-366**. Rule 31 on a rule derived from one plant one section earlier, and the
+cart-pole is the row that separates the two accounts because it is the only plant asked whose
+harmonic count is set by its lap rather than by the 256 ceiling.
+
+**THE BARREL, ASKED FOR THE FIRST TIME — AND AT 256 TOUCHES THE PROBE BEATS THE TRACKER.**
+
+```
+  extruder barrel, hff teacher, tracker 7.00x, diet lap 20,000
+    K              8      16      32      64     128     256     512   tracker
+    delivered   3.14x   3.25x   1.00x   4.33x   5.47x   8.34x   6.53x   7.00x
+    of tracker   0.45    0.46    0.14    0.62    0.78    1.19    0.93    1.00
+                               REFUSED
+```
+
+**That 1.19x is rule 14 and the instrument was checked rather than celebrated.** With the ambient
+drift held flat (`TH_NOAMB=1`) the tracker reads **15.05x** — reproducing §72.18's 14.949x, the
+control — and K=256 reads **11.05x, 0.73x of it**. So the advantage is EXACTLY the drift: a
+256-touch interpolation low-passes part of the lap-INCOMMENSURATE component §80.6 named as this
+plant's teacher corruption, and the teacher stops chasing it. That is §80.7's `TAVG` mechanism
+reached through a completely different knob — both remove an incommensurate component from the
+teacher's record and both are worth a factor here — and it means the row is a statement about the
+BARREL's disturbance and not about probes.
+
+**AND THE CART-POLE IS FLAT, WHICH IS THE FIRST PLANT WHERE THE SHOP'S INSTRUMENT IS FREE**:
+11.93x / 11.93x / 11.98x / 11.94x / 11.93x at K = 32 / 64 / 128 / 256 / 512 against the tracker's
+11.93x, on diet laps of 1,047-1,467 so K=512 is still a real degradation and not identity.
+
+**FOUR PROXIES FOR THE TOUCH COUNT WERE TRIED AND ALL FOUR ARE REFUTED.** Touches per LAP spans
+16x across the four plants (arm 64 · cart-pole ≤32 · barrel 128-256 · column 256-512). Touches per
+`2·nh` is above. Touches per the plant's own SETTLE does not order them either — one touch per
+0.12 of a rise on the arm and per 0.13 of a settle on the cart-pole (both upper bounds on what
+those plants need), against 0.010-0.020 on the barrel and 0.006-0.012 on the column, a 20x span. And the account this section
+wrote down first — that the two plants needing the finest sampling are the two whose diet SEGMENT
+is shorter than the plant's own settle (column 0.75, barrel 0.64), so their record is all transient
+— **was refuted by its own falsifier**: the column's segment lengthened to 3.0 settles WITH THE
+WINDOW HELD (`SEG=3000 WIN=375`, rule 20) makes the knee WORSE rather than better, 256 touches
+falling 0.99 → **0.39** and 512 reaching only 0.83, with the `SEG=750 WIN=375` control reproducing
+§121 exactly (1.87x at 64, 3.92x at 256). So the honest statement is stronger than §121's and
+narrower: **the touch count must be commissioned, and no cheaper proxy for it has been found —
+four were tried.**
+
+**THE SHARPEST PRODUCT FINDING IS THAT THE PROBE LIES TO THE TEACHER, AND IN THE FLATTERING
+DIRECTION.** Read the teacher's own score against what it delivers on the column's oracle route:
+the teacher reports **22.7x while delivering 1.71x** at K=32 and 4.7x while delivering 5.49x on the
+tracker — a **13x lie that shrinks monotonically to nothing as the instrument improves**, perfectly
+anti-correlated with delivery. §121 saw a 1.6x version of this on the parametric route and called
+it §50.1's early-stopping signature inverted; at 13x it is a different kind of statement. A
+customer commissioning on a probe alone sees a teacher converging beautifully on a machine that is
+not getting better, and the teacher's monotone gate — which is what stops the iteration — reads the
+flattered number.
+
+**AND THE ROADMAP'S STEP 7 ASKED FOR A LADDER AXIS, WHICH IS PRICED HERE AND REFUSED ON TWO
+GROUNDS.** The ridge axis costs a REFIT per candidate and the gain axis a RESCALE; a touch-count
+candidate costs a **FULL COMMISSIONING**, because what the probe degrades is what the teacher
+measures and the teacher must re-converge. Measured on the barrel rather than argued:
+
+```
+  K           tracker      8      16      32      64     128     256     512     TOTAL
+  steps      3,050,000  3,405k  2,965k  5,970k  3,405k  3,405k  3,370k  3,370k  28,940,000
+                                 ^ the REFUSED candidate is the most expensive row of the eight
+  = 335 DAYS of plant time to choose among seven touch counts, on a plant whose whole
+    commissioning is 35.3 days — 9.5x, and the worst candidate cost 2x the winning one.
+```
+
+**The second ground is structural and it is DeePC's own disqualification**: to score a candidate
+against a bar you need the bar, and `rigs/ladder.mjs`'s scored runs are deliberately on the FULL
+instrument (rule 15) — they never pass through `probeRuns`. So a machine-scored touch-count ladder
+presupposes the very instrument it exists to let the customer not buy. It stays a BENCH instrument;
+`PROBEPTS` is unchanged and off.
+
+**CONTROLS.** `PROBEPTS` unset is byte-identical on every plant (the `via` indirection is a pure
+pass-through and `probeRuns` returns the descriptor itself at K = 0, asserted); the column's
+`SEG=750 WIN=375` row reproduces §121's 1.87x/3.92x; the barrel's `TH_NOAMB=1` tracker reproduces
+§72.18's 14.949x; the barrel's K=8 and K=16 rows were re-run on the final code and came back
+3.14x and 3.25x unchanged; and `K ≥ lap` is exact on the record, asserted. **NOT CLAIMED**: four
+plants, one diet each, one seed; the column's ladder is non-monotone in both teachers, so a single
+K is a draw from a rough surface rather than a knee with a position; and the barrel's 1.19x row is
+a property of that plant's drift, which its own control establishes.
