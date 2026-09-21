@@ -267,8 +267,49 @@ const raPK = (() => {
   return { v, a, j };
 })();
 
+/**
+ * THE CONVENTIONAL RUNG'S DIET, ARMED ON THE SHIPPED PATH (plan §129).
+ *
+ * This is the one plant in the project that fails target 1's *none made worse* clause: the rung
+ * it ships makes a sharper-edged program of the same family WORSE at 0.877x (§88.3). §89.3
+ * refuted the obvious repair — a coverage guard cannot separate two harmful programs that
+ * STRADDLE the commissioning value — and named a DIET instead, because the rung is identified on
+ * ONE program and its span is a POINT rather than an interval. §106 built it and measured
+ * **0.877x → 1.134x and 0.921x → 1.128x on the two harmful programs while the commissioned one
+ * improves 1.927x → 2.255x — 0 of 4 made worse, in 0.42x of the commissioning it replaces**, with
+ * nine of nine shape-varied diets doing it and member length INERT.
+ *
+ * It was measured through `classicdiet-realarm.mjs` and armed NOWHERE for three sections. Here it
+ * is on the path `realarm.test.mjs` and `distil-realarm.mjs` both commission through, at §106's
+ * own winning setting — edges 112/224 at 40 laps — so the repair reaches the object that ships.
+ * `RA_CDIET=off` restores the single-program rung, which is what every number before §129 was
+ * taken on.
+ *
+ * Each member's amplitude is RE-DERIVED by the rig's own headroom rule rather than invented, and
+ * each `fresh` warms on ITS OWN program: a run that settles onto one trajectory and is scored on
+ * another measures the change-over (rules 12, 13, 41b), and this rig has already paid once for a
+ * reference sized from a quantity the program does not live at.
+ */
+const RA_CDIET = process.env.RA_CDIET === undefined ? '112,224' : process.env.RA_CDIET;
+const RA_DLAPS = +(process.env.RA_DLAPS || 40);
+const realarmClassicDiet = (RA_CDIET === 'off' || RA_CDIET === '') ? null
+  : RA_CDIET.split(',').map(Number).map((edge) => {
+    const g = RA.makeProgram({ edge });
+    const N = RA_DLAPS * RA.LAP;
+    return {
+      refAt: (k) => g.at(Math.min(k, N - 1)),
+      N,
+      fresh: () => {
+        const m = RA.makeMachine(RA.LOOP, { warm: false });
+        for (let k = 0; k < 20 * RA.LAP; k++) m.step(g.at(k)[0]);
+        return m;
+      },
+    };
+  });
+
 const realarmLadderSpec = {
   name: 'real flexible robot arm (DaISy 96-009) — position, rms',
+  ...(realarmClassicDiet ? { classicDiet: realarmClassicDiet } : {}),
   channels: [{ lo: -1.25 * RA.AMP, hi: 1.25 * RA.AMP, vMax: raPK.v, aMax: raPK.a, jMax: raPK.j }],
   uMax: RA.UCORR,
   // Position, velocity, acceleration and the drive's own torque — a real servo publishes all

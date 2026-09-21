@@ -382,13 +382,38 @@ const MET = worst.x >= 1 && worst.x >= xProg / 1.3;
 console.log(`    TARGET 1 ON THIS PLANT: ${MET ? 'MET' : 'NOT MET'} — worst held-out row `
   + `${worst.x.toFixed(3)}x, ${rows.filter((r) => r.x < 1).length} of ${rows.length} made worse\n`);
 emitRow(rep, auto, { t1: worst.x / xProg, t1Worse: worst.x < 1 });
-check('the SHARPER edge is what harms, at its own amplitude and at the shipped one',
-  sharpBoth.x < 1 && sharpOnly.x < 1,
-  `${sharpBoth.x.toFixed(3)}x and ${sharpOnly.x.toFixed(3)}x`);
-check('AMPLITUDE alone does not harm — the prediction this run refuted', ampOnly.x > 1,
+/**
+ * AND THE SHARP ROWS WENT GREEN, WHICH TURNED THIS CHECK RED IN THE GOOD DIRECTION (rule 4,
+ * plan §129). It asserted `sharpBoth.x < 1 && sharpOnly.x < 1` — the bisection's conclusion as
+ * §88.3 measured it — and §129 armed §106's two-edge diet on `realarmLadderSpec`, which is the
+ * spec THIS file commissions through, so the two harmful rows read 1.405x and 1.367x and the
+ * frozen fact stopped being true. A check that freezes one moment's number goes stale in EITHER
+ * direction, and the repair is to assert the PROPERTY the measurement established rather than
+ * the values it had that day.
+ *
+ * What survives §106 and is asserted here: the ORDERING is monotone in edge width — sharper is
+ * always the worst of the four and a SOFTER edge than the commissioning is always the best — and
+ * NOTHING is made worse. The first half goes red if the shape ordering reverses; the second goes
+ * red if any diet change reopens §88.3's clause. `RA_CDIET=off` restores the single-program rung
+ * and reproduces §88.3's own 0.877x/0.921x, which is the control that says this file still
+ * measures what that section measured.
+ */
+check('the ORDERING is monotone in edge width: the SHARPER rows are the worst of the four and a '
+  + 'SOFTER edge than the commissioning is the best',
+  Math.max(sharpBoth.x, sharpOnly.x) <= Math.min(ampOnly.x, softer.x) && softer.x >= ampOnly.x,
+  `sharp ${sharpBoth.x.toFixed(3)}/${sharpOnly.x.toFixed(3)}, amp ${ampOnly.x.toFixed(3)}, `
+  + `soft ${softer.x.toFixed(3)}`);
+check('AMPLITUDE alone does not harm — the prediction §88.3 refuted', ampOnly.x > 1,
   `amplitude-only reads ${ampOnly.x.toFixed(3)}x`);
 check('a SOFTER edge than the commissioning is not harmed either', softer.x > 1,
   `edge 200 reads ${softer.x.toFixed(3)}x`);
+// TARGET 1's *NONE MADE WORSE* CLAUSE, WHICH IS THE ONE §88.3 BROKE AND §106 CLOSED. Asserted
+// only where the diet is armed, because with `RA_CDIET=off` this plant is MEASURED as failing it
+// and a suite pinned to a bar a plant is known to fail is permanently red (rule 3).
+if (process.env.RA_CDIET === undefined) {
+  check('with the §106 diet armed, NOTHING is made worse (target 1\'s binding clause)',
+    rows.every((r) => r.x >= 1), rows.map((r) => r.x.toFixed(3)).join(' / '));
+}
 /**
  * THE GUARD READINGS, ASSERTED AS THE TWO CLAIMS THEY SUPPORT (rule 9 — both halves).
  * The SPEED reading must FAIL to separate: the two harmful rows straddle the commissioning, so

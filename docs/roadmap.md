@@ -30,7 +30,7 @@ the headline suggests and the calendar is what is not.**
 And eight targets, of which one is badly missed and it is not the one the table above leads with:
 
 ```
-  1  program-agnostic     5 of 11 MET, 1 made WORSE       the DIET is NOT the lever below the split (§122);
+  1  program-agnostic     5 of 11 MET, 0 made WORSE (§129) the DIET is NOT the lever below the split (§122);
                                                         the teacher-free object is (barrel 0.941, §120)
   2  feedrate-agnostic    MET inside its bound, 1 plant   never asked on plant 2
   3  plant-agnostic       improve-or-refuse on 10 of 10   holds
@@ -81,6 +81,13 @@ the third time), and the ladder reproduces `dirinvall.mjs` DIGIT FOR DIGIT on al
 draws. Stated against it: the tanks' ①d is SATURATED at its cap on 4 of 4 seeds, and §105 measured
 raising it there as a non-result, so 9.11x is a shipped-authority figure.
 
+**AND THEN THE VERIFY TURNED OUT TO BE THE CONVENTIONAL RUNG (§127).** With the teacher gone the
+bill inverted, and 15 of the real tanks' 17 scored runs are rung ① — 65% of the commissioning, on a
+rung the machine refuses. Priced from `ClassicFF.plan()` and gated on `spent + estimate`: **the
+tanks ship 9.11x in 21.3 HOURS against 15.9 days unbudgeted, 17.9x less plant time at an identical
+factor**, and the exchanger still admits the rung and keeps the 1.11x it buys. Gap 1 on the two
+real-provenance process plants is now hours and days rather than days and weeks.
+
 **WHAT IS STILL OPEN IN IT, STATED SO THE GAP IS NOT READ AS CLOSED.** Two things. **(a) The
 excitation is now the bill — and carrying the plant across it is clean on the column and VOID on
 the barrel (§123)**, so the lever is one plant's: under the budget ①d's open-loop segments are **61-67% of the plant
@@ -111,11 +118,14 @@ it is demonstrated twice on plants sharing no physics** — §106 took the real 
 programs to 1.134x and 1.128x with 0 of 4 made worse **in 0.42x of the commissioning it replaces**,
 and §66 is the barrel's whole result. §84.5 prices a diet enlargement at **10-17% per program**.
 
-**AND THE SCRAPE STILL READS ONE PROGRAM MADE WORSE, WHICH IS NOT A CONTRADICTION AND MUST NOT BE
-QUOTED AS ONE.** §106 built that repair behind `classicDiet`, **no plant declares it**, and the row
-`objtable` reads is the SHIPPED configuration. So the clause is closed as a CAPABILITY and open as a
-DEFAULT, and the honest sentence is *the repair exists, is cheaper than the fault, and is armed
-nowhere* — which is this list's own argument for generalising it rather than evidence it is done.
+**AND THAT CLAUSE IS NOW CLOSED AS A DEFAULT AND NOT ONLY AS A CAPABILITY (§129).** This paragraph
+read *the repair exists, is cheaper than the fault, and is armed nowhere* — true for three sections
+and no longer: `classicDiet` is in `realarmLadderSpec` at §106's own winning setting (edges 112/224,
+40 laps), so the path `realarm.test.mjs` and `distil-realarm.mjs` both commission through carries
+it. **1.93x → 2.25x on the scored program, the worst held-out row 0.877x → 1.367x, made worse 2 of
+4 → 0 of 4.** `RA_CDIET=off` reproduces §88.3's numbers exactly. **The 1.3x BOUND is still missed
+there** (1.367 against 1.73), so the count stays 5 of 11 MET and what changed is the *none made
+worse* clause — which was the binding one.
 
 So this is a procedure to generalise, not a discovery to make — **AND ON THE TWO PLANTS BELOW THE
 SPLIT THAT PROCEDURE IS REFUTED (§122).** `DIETADD` enlarges each diet from its harness's own design
@@ -250,26 +260,38 @@ and none replaces them, so the count is swept per plant or the tracker is owned;
 own score is anti-correlated with delivery under a degraded instrument (a 13x lie at K=32), which
 no gate here detects.
 
-**8. Arm ①d on the plants that never asked it.** (task #101) **DONE, §126.** Two of five added; both
-beat the incumbent at a sixth of the calendar. *What is left of it:* the 2R arm, EMPS and the
-quadruple tank are still not asked, and the placement is a FLAG where the ladder already knows on
-the machine which rungs deploy — **place ①d before any rung that will deploy** is measured 3 of 3
-and scoring it rather than declaring it is not built.
+**8. Arm ①d on the plants that never asked it.** (task #101) **DONE, §126 and §128.** Three of five
+added. Two beat the incumbent at a sixth of the calendar; the QUADRUPLE TANK is asked and correctly
+REFUSES at 0.05x, with the control byte-identical at 19.910x. *And the placement rule this step
+proposed is REFUTED by that third plant (§128):* **place ①d before any rung that will deploy** would
+send it first on the tank, where going first costs 1.82x and POISONS the incumbent (19.91x → 1.51x).
+What separates the four is which of the two is stronger ALONE, which needs both orders run — so the
+placement is a measurement per plant and `dirInv.first` stays a knob. *What is left:* the 2R arm and
+EMPS, and neither is an edit — `distil-emps.mjs` is not a ladder, EMPS' ladder is a contract test,
+and the arm's ladder plant is not the plant `dirinvall`'s arm entry drives (rule 61).
 
-**9. Why does ①d transfer on the barrel and not the column?** (task #99) 0.941 against 0.304 (§120), one plant
+**9. Price the CONVENTIONAL rung before the budget admits it.** (task #101) **DONE, §127.** It was
+the one lap-spending rung with no estimate and, wherever the teacher is gone, the bill: 15 of the
+real tanks' 17 scored runs, 65% of the commissioning, on a rung that is REFUSED. Gated on
+`spent + estimate`, the tanks ship 9.11x in **21.3 hours** (was 2.6 days, was 15.9 days) at an
+identical factor while the exchanger admits it and keeps its 1.11x. *What is left of it:* the
+tanks' bill is now 75% EXCITATION, so §105's seven `fresh()` re-settles are the next term, and
+§123 measured that lever as clean on one plant of two.
+
+**10. Why does ①d transfer on the barrel and not the column?** (task #99) 0.941 against 0.304 (§120), one plant
 each. The named suspect is authority: the column's ①d sits at **0.400 of a 0.4 cap on every seed**
 (§104), so its held-out reading is clamp-shaped where the barrel's is not. *Falsifier:* `UCAP` swept
 on the held-out schedule with the scored program's factor held — if the ratio rises with the cap the
 suspect stands; if it is flat, it is the plant and the column keeps its teacher.
 
-**10. One EDM LOGGING run — no controller.** (task #95) The falsifier `docs/edm.md` already names: **LEAD TIME
+**11. One EDM LOGGING run — no controller.** (task #95) The falsifier `docs/edm.md` already names: **LEAD TIME
 against the gap's own settling**, readable off records the machine produces anyway (§52.26
 transplanted). *Makes it a result:* the first evidence in this project that is not a simulation.
 *Kills it:* no lead time, in which case the preview-shaped sub-problem is not there and the doc's
 own prediction was wrong before anything was built for it.
 
 Steps 5 and 6 are gap 1 and compose (a carried excitation lowers the calendar of the object the bar
-would ship). Steps 7, 8 and 9 are independent of them and of each other. Step 10 is the only one that
+would ship). Steps 7, 9 and 10 are independent of them and of each other. Step 11 is the only one that
 changes the KIND of evidence and should not wait for the others. **The program that puts these in
 the context of a world-class bar, with the bar stated as measurements, is `docs/program.md`.**
 

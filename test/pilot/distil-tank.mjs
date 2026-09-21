@@ -44,6 +44,7 @@ import { motionBasis } from '../../lib/pilot/classic.js';
 import { priceFrom, printCost, emitRow, printGainLadder, ridgeLadder, gainLadder, teacherReuse, carrier, teachLaps, teachAvg, dietN } from './rigs/distilkit.mjs';
 import { into } from './rigs/meter.mjs';
 import { oracleConverge, oracleTeach } from './rigs/oracleteach.mjs';
+import { dirInvFor } from './rigs/dirinvkit.mjs';
 import { windowBend } from '../../lib/pilot/deploy.js';
 import { UCAP, makeTanks, voltsFor, levelsAt, SEG, HOLD, RECIPE, quintic, refAtStep, PROG, DT }
   from './rigs/tanks-rig.mjs';
@@ -239,11 +240,18 @@ const altAt = (k) => {
 
 // ---------------------------------------------------------------- the ladder
 async function once(seed) {
+  // THE TEACHER-FREE ①d RUNG, ARMED BY `DIRINV=1` AND PLACED FIRST BY `DIRFIRST=1` (plan §128).
+  // This plant had never been ASKED: §95's scrape recorded the incumbent as `not offered` here
+  // and §97.3 then found four coefficients worth 19.91x, and the same omission applies to the
+  // teacher-free route — `dirinvall.mjs` has carried a `quadruple tank` entry since §105 and no
+  // ladder ever armed it. Unset spreads to nothing and the commissioning is byte-identical.
+  const DI = await dirInvFor(/quadruple tank/i);
   const auto = new AutoStack({
     // ROUTED EXACTLY AS `tanks.test.mjs` ROUTES IT — same signals, same box, same guard, same cap.
     // If this harness gave the plant a different envelope it would be measuring a different plant
     // and the comparison against that file's numbers would be worthless (rule 20).
     nMeasured: 4, channels: [0, 1].map(() => ({ lo: 2.0, hi: 3.6, vMax: 4e-3, aMax: 2e-5, jMax: 2e-7 })),
+    ...(DI.dirInv ? { dirInv: DI.dirInv } : {}),
     uMax: UCAP, guards: [{ index: 0, max: 19 }, { index: 1, max: 19 }],
     workspace: () => true, seed,
     // CLASSIC=1: ARM THE INCUMBENT (plan §95, §96). §95's scrape read this plant's incumbent
@@ -595,6 +603,7 @@ async function once(seed) {
   // an unbound `distilRuns` would have produced a `converge` closure reading `auto.stack` off
   // `undefined`, which is a throw into `rep.distil.error` and a rung that never ran (rule 25).
   const rep = await auto.commission({ run, distilRuns: () => distilRuns(auto),
+    ...(DI.dirInvRuns ? { dirInvRuns: DI.dirInvRuns } : {}),
     // OFFERED ONLY UNDER `ORACLE=1`, so every number this file has ever produced is reproducible
     // by leaving it unset — a cascade commissioned where none was before changes the ladder's
     // own best-so-far and would silently re-base the hff route's comparison (rule 20).

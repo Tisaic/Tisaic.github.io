@@ -368,6 +368,18 @@ function emitRow(rep, auto, extra = {}) {
     mac: cost ? Math.round(cost.slicedMac) : null,
     peak: cost && cost.mac !== undefined ? Math.round(cost.mac) : null,
     kb: cost ? +(cost.bytes / 1024).toFixed(1) : null,
+    // THE FIT'S OWN ARITHMETIC, WHICH IS TARGET 6'S UNBUILT HALF (plan §130). The owner's rule is
+    // unconditional — commissioning, identification and fit all run ON the PLC, sliced into the
+    // 10%-of-scan budget — and the DEPLOYED figure above has been quoted on every plant while the
+    // FIT has only ever been quoted on the arm. `fitCost()` returns a per-ROW number and a row
+    // arrives once per DECISION, so the scan figure is that over the rung's own `cadence`; both
+    // are carried because quoting a per-row cost against a per-scan budget is the units error
+    // this project keeps paying for. `null` where no distilled rung shipped (rule 25) — a plant
+    // that ships the conventional rung alone has no fit to price, which is not the same as a
+    // fit that costs nothing.
+    fitPerRow: cost && cost.rungs && cost.rungs.distil ? Math.round(cost.rungs.distil.fitMacPerRow) : null,
+    fitCadence: cost && cost.rungs && cost.rungs.distil ? (cost.rungs.distil.cadence || 1) : null,
+    fitBytes: cost && cost.rungs && cost.rungs.distil ? cost.rungs.distil.fitBytes : null,
     // WHETHER THE RUNG SHIPPED, WHICH IS `deployed.distil` AND NOT WHETHER A POLICY EXISTS.
     // The first version read `rep.distil.policy`, which is true whenever the FIT vouched for
     // itself — and on the real steam exchanger the fit vouches and the MACHINE refuses it at

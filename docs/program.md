@@ -27,8 +27,10 @@ five parts and eight targets. Read as bars it is four things, each with a count 
                     a class it has never met                      10 of 10 plants (§55, §86); 4 error
                                                                   classes of 4 tried (§86.2)
   U2  ANY PROGRAM   none made worse, and within 1.3x of a per-program commission on every program
-                                                                  5 of 11 MET, 1 made WORSE — of the
-                                                                  SHIPPED configuration (§115)
+                                                                  5 of 10 MET, 0 made WORSE (§129,
+                                                                  scraped §130) — the binding clause
+                                                                  CLOSED on the shipped path; the
+                                                                  1.3x bound not
   U3  ANY LOOP      it corrects the reference of the loop an installation already has, and refuses
                     when that loop is already good              the cart-pole on two loops (§84.10, §86.2);
                                                                   it does NOT synthesise a stabiliser (§52.32)
@@ -46,7 +48,8 @@ what a buyer would actually check, each again with a count:
                                   STEAM EXCHANGER at 9.8 h budgeted — §126, the first plant taken
                                   under the bar by a change rather than by being cheap);
                                   the two 30-day plants read 3.1 and 3.8 DAYS budgeted (§120),
-                                  the real cascaded tanks 2.6 days (§126)
+                                  the real cascaded tanks 21.3 h at an unchanged 9.11x (§127) —
+                                  0.9 of a shift short, and the rung skipped was refused anyway
   W2  THE SHOP'S OWN INSTRUMENT  a touch probe or motor-side signals commission it, no tracker
                                   FOUR plants, no portable count (§74, §121, §125): cart-pole FREE
                                   (flat from 32), arm 64, barrel 128-256, column 256-512, and four
@@ -54,8 +57,10 @@ what a buyer would actually check, each again with a count:
                                   would commission it costs a COMMISSIONING PER CANDIDATE
   W3  FITS THE SCAN               under 10% of a 1 ms task, every cycle, deployed AND fitted
                                   deployed 8-330 MAC, 0.8-3.3% (§53, artefact.test.mjs); the FIT is
-                                  scoped as a conditional (28% at stride 9) and not costed as sliced
-                                  background compute on any plant but the arm (target 6)
+                                  now priced on all SEVEN plants that ship one (§130) and fits on
+                                  SIX — barrel 100.1%, mill 98.7%, column 45.1%, arm 43.7%, three
+                                  at 11.8% — so what is left offline is the BATCH route, not the
+                                  streaming one; nothing yet SCHEDULES it sliced (target 6)
   W4  BEATS THE FIELD ON ITS AXES admissible rivals, same machine, same authority, their own knobs swept
                                   3 rivals on ONE axis (NOILC, ZPETC, Koopman-EDMD), ZPETC on a second
                                   plant (§87.5), DeePC disqualified (§54.8) — not a field
@@ -141,6 +146,14 @@ mechanism: it is roadmap steps 6 and 8 composing — ①d armed and placed first
 the bill's shape INVERTS, teacher 75-77% becoming verify 73-74%, so once the teacher is gone W1 is
 bounded by the ladder's own SCORED RUNS and not by any teacher lever. That is the next thing to
 price, and it is named nowhere else.
+
+**AND IT IS NOW BOUNDED BY THE EXCITATION RATHER THAN BY ANY RUNG (§127).** Pricing the conventional
+rung and gating it on `spent + estimate` took the real cascaded tanks 2.6 days → **21.3 hours** at an
+identical 9.11x — 17.9x less plant time than the 15.9 days they started at, and within a shift of the
+bar — because 15 of that commissioning's 17 scored runs were a rung the machine refuses. What is left
+there is 75% EXCITATION: §105's seven `fresh()` re-settles, a lever §123 measured as clean on the
+column and VOID on the barrel. So W1's remaining term on this plant is one already-named experiment
+and not a new idea.
 
 ### PHASE 2 — U2, any program. The lever changed hands this week.
 

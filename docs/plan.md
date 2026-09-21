@@ -25536,3 +25536,200 @@ now arm the rung; the five that do not are the 2R arm, EMPS, the quadruple tank,
 (structurally out — a regulator's `refAt` is constant, so the deployed input cannot vary) and the
 real flexible arm (structurally out — `invert.mjs` reads it at INVERSE 128.3% and §105 measured the
 route's factor FALLING as the cap rises).
+
+## §127 — The conventional rung is priced before the budget admits it, and on the real cascaded tanks that is 65% of the commissioning: 9.11x in 2.6 days → 9.11x in 21.3 HOURS (task #101)
+
+§126 left both real-provenance process plants with their bill INVERTED — teacher 75-77% became
+verify 73-74% — and said the ladder's own scored runs were the floor now and nothing had priced
+them. Decomposing those two runs answers it, and the answer is not the verify at all:
+
+```
+                    excite      verify (one scored run)      of which the CONVENTIONAL rung
+  real tanks       6 runs      17 runs (2,400 steps)         14 laps + 1 re-score = 15 of 17
+  real exchanger   6 runs      16 runs (1,600 steps)         13 laps + 1 re-score = 14 of 16
+```
+
+`trainC = host.runClassic || host.run` runs inside `inPhase('verify')`, so on these plants the
+conventional rung IS the verify. **On the tanks that is 65% of the whole commissioning spent on a
+rung that reads 1.00x and is refused; on the exchanger the same 64% buys 1.11x and is worth every
+lap.** So the decision belongs to a budget and never to a blanket skip.
+
+**THE EXIT I WENT LOOKING FOR ALREADY EXISTS, WHICH IS WHY IT WAS CHECKED FIRST (rule 30 aimed at
+myself).** `classic.js` has carried `minHeadroom` since the rung was built — it projects the
+BASELINE error onto the basis and refuses when the span is under 2%, before a probe lap is spent.
+It does not fire here because after ①d the residual is small and the basis spans plenty of it
+PROPORTIONALLY while being worth nothing ABSOLUTELY. A span is not a predicted gain against a bar.
+
+**WHAT WAS MISSING IS §124's OWN SHAPE ONE RUNG DOWN.** `ClassicFF.plan()` returns the loop's own
+worst case — ONE baseline, `m + 1` probes at `m = nb · channels`, and `passes + backtracks`
+refinement trials, which is the `budget` the loop initialises — and `AutoStack` gates rung ① on
+`spent + estimate` exactly as it gates ②d and ③. The caller adds one for the deploy re-score,
+because that is the ladder's lap and not the rung's. The three exits inside `commission`
+(headroom, dead trials, pace) can only make the bill smaller, which is what makes it a BOUND.
+
+```
+  plant              at the gate      estimate     verdict     ships
+  real tanks         19,200 spent   +  48,000  >  60,000   SKIPPED   9.11x in 21.3 h
+  real exchanger     12,800 spent   +  32,000  <  60,000   ADMITTED  104.72x in 9.8 h
+```
+
+**The tanks go 2.6 days → 21.3 hours at an IDENTICAL 9.11x**, because the rung the budget refused
+was refused by the machine anyway — 17.9x less plant time than the 15.9 days they started at. The
+exchanger is untouched at 104.72x in 9.8 h, and its estimate is an **upper bound at 1.43x of the
+spend** (32,000 against 22,400), which is looser than §124's 1.12x/1.18x and is stated rather than
+smoothed: the refinement loop usually exits before its budget.
+
+**AND THE BILL INVERTS AGAIN ON THE PLANT THAT SKIPPED**: the tanks now read excite 75% · verify
+25%, so the next thing to price there is §105's seven `fresh()` re-settles, which §123 measured as
+clean on the column and VOID on the barrel.
+
+**THE TEST FOUND A DEFECT IN THE MACHINERY §124 BUILT, AND IT IS RULE 9b's SHAPE.** Its first mock
+host returned a CONSTANT `spent()`. `stepsPerScored` then measured ZERO, every estimate multiplied
+out to `0 steps`, and **every rung was admitted whatever the budget — a gate that cannot fire, in
+silence.** That is the condition three guards here shipped in. `stepsPerScored` reads null unless
+the baseline run actually advanced the plant, every estimate that depends on it is WITHHELD rather
+than invented, and `rep.budget.note` says so (rule 25). Pinned both ways: a frozen meter prices
+nothing and states the reason, and nothing is skipped on an estimate that does not exist.
+
+**CONTROLS.** `test/pilot/classicprice.test.mjs` asserts BOTH HALVES through `commission()` — no
+budget and a budget that FITS both run the rung to completion, a budget that does not SKIPS it with
+a stated row and never calls the training closure, and a skipped rung records NO spend. The bound
+is asserted in the one direction that matters (a completed commission never exceeds its own plan)
+against a plant the rung can actually improve, with a rule-9c check that it was a real commission
+rather than an exit on lap one. Unbudgeted, both plants come back byte-identical to §126 — tanks
+8.69x, exchanger 89.77x, every digit — and `dirinvrung.test.mjs` is green. **NOT CLAIMED**: two
+plants, one budget, and the estimate's 1.43x slack is measured on one of them.
+
+## §128 — The teacher-free rung is armed on the quadruple tank, correctly REFUSED, and its DIRFIRST reading REFUTES the placement rule §126 proposed (task #101)
+
+§126 ended by naming a mechanism — *place ①d before any rung that will deploy* — as measured 3 of
+3 and said scoring it rather than declaring it was the next step. The quadruple tank was one of
+three plants `dirinvall.mjs` has carried an entry for since §105 and no ladder had ever armed,
+so it was asked before anything was built on the rule.
+
+```
+                                 ①d row        conventional        ships
+  control (DIRINV unset)            —          19.91x, 24 laps     19.910x   <- byte-identical
+  DIRINV=1   (after classic)     0.05x REFUSED 19.91x              19.910x
+  DIRINV=1 DIRFIRST=1            7.25x         1.51x, 23 laps      10.924x
+```
+
+**Placed FIRST it costs the machine 1.82x.** The default order is the correct one here and the
+rung is correctly refused at 0.05x — rule 34's signature for the fourth time, a map inverting a
+machine a rung below it has already moved.
+
+**SO THE RULE IS REFUTED ON ITS FOURTH PLANT, BEFORE IT WAS BUILT (rule 59 doing its job).** The
+quadruple tank's conventional rung DEPLOYS at 19.91x, which is exactly the condition the rule says
+should make ①d go first, and going first is the worse of the two. What separates the four plants is
+not whether the rung below deploys but **which of the two is stronger alone**: ①d beats classic on
+the real tanks (9.11x against 4.28x) and the exchanger (94.70x against 89.77x) and loses on the
+quadruple tank (7.25x against 19.91x) and the cart-pole (11.79x against 11.93x composed). That is a
+comparison the ladder cannot make without running both orders, so the placement is a MEASUREMENT
+per plant and not a rule — and `dirInv.first` stays the knob it is.
+
+**AND IT IS RULE 34 IN BOTH DIRECTIONS, WHICH IS THE useful half.** Whichever rung goes first, the
+second inverts a machine that has changed. On the tank ①d-first does not merely fail to help: it
+POISONS a strong incumbent, taking the conventional rung 19.91x → 1.51x. The absolute numbers say
+it plainly — 2.5432e-2 the shipped way against 4.6354e-2 the other.
+
+**WHAT IS NOT ARMED AND WHY (rule 25).** The 2R arm and EMPS are still not asked THROUGH A LADDER.
+`distil-emps.mjs` is not an `AutoStack` ladder at all — it drives `HarmonicFF` and `DistilPolicy`
+directly — and EMPS' ladder is `autostack.test.mjs`, a contract test. The arm commissions through
+`makeArmHost`, whose plant is the bench lattice arm while `dirinvall.mjs`'s arm entry drives
+`armSpec`'s analytic loop; arming one from the other is a second routing, which is the fault
+`arm-rig.mjs`'s own header exists to prevent (rule 61) and would be a defect wearing a measurement's
+clothes. Both have been asked STANDALONE (§105, §111: 0.92-0.98x and 1.41x); what is missing is the
+ladder, and it needs a routing check rather than an edit.
+
+## §129 — §106's diet is armed on the path that ships, and the project's only *made worse* row closes: the real flexible arm 1.93x → 2.25x with 2 of 4 made worse → 0 of 4 (task #101)
+
+§106 measured the repair and armed it NOWHERE: `classicDiet` lived in `classicdiet-realarm.mjs`
+and `realarmLadderSpec` — the spec `realarm.test.mjs` and `distil-realarm.mjs` both commission
+through — carried a single-program rung for three sections. It is in the spec now at §106's own
+winning setting, edges 112/224 at 40 laps, with `RA_CDIET=off` restoring the old rung.
+
+```
+                                         RA_CDIET=off (as it shipped)    armed (the default)
+  scored   lap 512 edge 160                 1.8511e-1 → 9.6063e-2 1.93x    → 8.2102e-2  2.25x
+  worst held-out row                        0.877x                         1.367x
+  made worse                                2 of 4                         0 of 4
+```
+
+**The one plant in this project that failed target 1's *none made worse* clause no longer does, on
+the object that ships.** Target 1's 1.3x BOUND is still missed (1.367 against the 1.73 it would
+need), which is §106's own reading and is unchanged. The distilled rung also DEPLOYS here for the
+first time — `{"classic":true,...,"distil":true}` at 2.35x through `distil-realarm.mjs` — because
+a better conventional rung changes what is left for it; through `realarm.test.mjs`, which offers no
+diet, the plant ships 2.25x on the conventional rung alone.
+
+**AND IT TURNED A CHECK RED IN THE GOOD DIRECTION, WHICH IS RULE 4 EXACTLY.**
+`distil-realarm.mjs` asserted `sharpBoth.x < 1 && sharpOnly.x < 1` — §88.3's conclusion frozen as
+two values — and the repair made it false. A check frozen on one moment's number goes stale in
+EITHER direction, so what is asserted now is the PROPERTY the measurement established: the ordering
+is monotone in edge width (the sharp rows are the worst of the four, a softer edge than the
+commissioning is the best), amplitude alone does not harm, and — only where the diet is armed —
+NOTHING is made worse. `RA_CDIET=off` reproduces §88.3's 0.877x and its 2-of-4 exactly, which is
+the control that says this file still measures what that section measured, and both configurations
+are green. **NOT CLAIMED**: one plant, §106's own diet, and the bound is still missed.
+
+## §130 — The FIT is priced on every plant that ships one, which is target 6's unbuilt half read rather than re-measured (task #101)
+
+The owner's standing rule is unconditional — commissioning, identification and fit all run ON the
+PLC, sliced into 10% of a 1 ms task — and this project has quoted the DEPLOYED figure on every
+plant while quoting the FIT on exactly one: the arm, where `distil.js` records 24,864 MAC/ROW,
+249% of budget at decision stride 1 and 28% at the stride that method uses. One plant standing for
+ten, on the half of the target the record itself calls unbuilt.
+
+It costs NO plant time. `fitCost()` is a property of the fitted object and `cadence` is read off
+the deployed one, so `emitRow` carries `fitPerRow`, `fitCadence` and `fitBytes` and `objtable
+--read` prints the sliced figure per plant — the same READ the target-1 column is, and the same
+argument `commtime.mjs` and `gainexit.test.mjs` are built on. A row that ships no distilled rung
+has NO fit to price and reads `—` rather than zero (rule 25): a plant shipping four coefficients is
+not a plant whose fit is free.
+
+**REPORTED AND NOT ASSERTED**, for the reason the target-1 column is: the record already states
+that batch normal-equations-and-Cholesky is an offline algorithm, so a suite pinned to a bar the
+method is known to miss is permanently red and hides the next real failure (rule 3).
+
+**AND THE ANSWER IS BETTER THAN THE ONE PLANT SUGGESTED: THE FIT FITS THE SCAN ON SIX PLANTS OF
+SEVEN.**
+
+```
+    plant                          MAC/row   cadence   MAC/scan   % of budget   state kB
+    extruder barrel                  10010         1      10010         100.1%       19.1
+    cold mill                         9870         1       9870          98.7%       19.1
+    Wood-Berry column                 4512         1       4512          45.1%        8.6
+    2R arm                           17484         4       4371          43.7%       33.8
+    cart-pole (shipped loop)          1176         1       1176          11.8%        2.3
+    real flexible arm                 1176         1       1176          11.8%        2.3
+    real cascaded tanks               1176         1       1176          11.8%        2.3
+    3 rows ship no distilled rung and so have NO fit to price (rule 25)
+```
+
+**Only the BARREL exceeds the whole budget, and by 0.1%.** The arm — the one plant this figure has
+ever been quoted on — reads **43.7%**, not the 249% the record carries, because that number is the
+per-ROW cost at decision stride 1 and this plant's stride is 4. The two facts the table settles:
+the STREAMING fit (`online`, one shared-covariance update per row) is what these plants actually
+use and it is affordable on six of seven, and **what `distil.js` calls the offline half is the
+BATCH route** — normal equations and a Cholesky per lead — which is still an offline algorithm and
+is still not what target 6 needs. Quoting 249% as *the fit's cost* was one plant's stride standing
+for ten.
+
+**THE CADENCE IS WHERE THE HEADROOM IS AND THE TABLE SAYS SO.** Three plants read exactly 1,176
+MAC/scan because their stride is 1 and their feature count is small; the two over 98% are the two
+whose stride is 1 with a large window. A rung that decides once per N scans divides its fit by N by
+construction, which is why the arm is the cheapest large fit here. **NOT CLAIMED**: this is the
+fit's ARITHMETIC and not a demonstration that it runs sliced on a PLC — nothing here schedules it —
+and the three rows with no fit are the plants shipping four coefficients, which is not the same as
+a fit that is free.
+
+**AND THE SAME READ MOVED TWO HEADLINE COUNTS, WHICH IS §129's DOING AND NOT THIS SECTION'S.**
+`objtable --read` over the suite's own rows now prints **`7 of 10 ship the DEPLOYED OBJECT; made
+WORSE: none`** and **`TARGET 1 asked on 10 of 10: 5 MET, 0 made WORSE`**. Both moves are the real
+flexible arm: with §106's diet armed its conventional rung reaches 2.25x and the distilled rung
+DEPLOYS on top for the first time (2.35x, a 1.04x increment), so that row changes from
+`conventional rung` to `DEPLOYED OBJECT`; and its held-out worst row crosses 1.0x, so the one
+`made WORSE` this project has ever carried leaves the table. **The denominator is 10 and not
+§115's 11** because the suite emits one row per harness RUN and the tuned cart-pole variant is
+reached only by `objtable`'s own spawn; §115's COLLAPSED check is silent, so nothing is hidden —
+the two passes count different sets and each says which.

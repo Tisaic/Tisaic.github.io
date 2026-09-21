@@ -495,6 +495,7 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # were recorded as a vacuous control (rule 9c). What is pinned is the CLOSURE TIMING, which a
     # test of `probeRuns` alone cannot see, and it is checked to FAIL on the pre-repair state.
     t node test/pilot/probe.test.mjs
+    t node test/pilot/classicprice.test.mjs
     # WHAT SHIPS, WHAT COMMISSIONS, WHAT IS ONLY THE BENCH. Fails when a module appears that
     # nobody classified, so the deploy boundary cannot rot quietly (rule 30 on a dependency graph).
     t node test/inventory.test.mjs

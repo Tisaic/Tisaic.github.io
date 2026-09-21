@@ -279,6 +279,44 @@ if (READ) {
     + `${asked.filter((r) => r.t1Worse).length} made WORSE on the held-out program`
     + `${asked.length === met.length ? '' : ` — ${asked.filter((r) => !met.includes(r))
       .map((r) => label(r)).join(', ')}`}`);
+  // ---- THE FIT'S OWN ARITHMETIC AGAINST THE PLC SCAN (plan §130).
+  //
+  // Target 6 is UNCONDITIONAL by the owner's standing rule — commissioning, identification and
+  // fit all run ON the PLC, sliced into 10% of a 1 ms task — and this project has quoted the
+  // DEPLOYED figure on every plant while quoting the FIT on exactly one, the arm, where
+  // `distil.js` records 24,864 MAC/ROW: 249% of budget at decision stride 1 and 28% at the
+  // stride that method uses. That is one plant standing for ten on the half of the target the
+  // record itself calls unbuilt.
+  //
+  // It costs NO plant time: `fitCost()` is a property of the fitted object and the cadence is
+  // read off the deployed one, so this is a READ of rows the harnesses already emitted, exactly
+  // as the target-1 column is. A row that ships no distilled rung has NO fit to price and reads
+  // `—` rather than zero (rule 25): a plant shipping four coefficients is not a plant whose fit
+  // is free. BUDGET is the same 10,000 MAC/cycle every other figure here is quoted against.
+  const BUD = 10000;
+  const fitRows = got.filter((r) => r.fitPerRow !== undefined && r.fitPerRow !== null);
+  if (fitRows.length) {
+    console.log('\n  THE FIT, SLICED — target 6\'s unbuilt half, priced per plant (plan §130)');
+    console.log('    plant                          MAC/row   cadence   MAC/scan   % of budget   state kB');
+    for (const r of fitRows.sort((a, b) => (b.fitPerRow / (b.fitCadence || 1)) - (a.fitPerRow / (a.fitCadence || 1)))) {
+      const per = r.fitPerRow / (r.fitCadence || 1);
+      console.log(`    ${label(r).padEnd(30)} ${String(r.fitPerRow).padStart(7)}   `
+        + `${String(r.fitCadence || 1).padStart(7)}   ${String(Math.round(per)).padStart(8)}   `
+        + `${(100 * per / BUD).toFixed(1).padStart(11)}%   ${((r.fitBytes || 0) / 1024).toFixed(1).padStart(8)}`);
+    }
+    const over = fitRows.filter((r) => r.fitPerRow / (r.fitCadence || 1) > BUD);
+    console.log(`    ${fitRows.length} plant(s) ship a fit; ${over.length} exceed the whole `
+      + `${BUD.toLocaleString()} MAC scan budget sliced`
+      + `${over.length ? ` — ${over.map((r) => label(r)).join(', ')}` : ''}`);
+    // REPORTED AND NOT ASSERTED, for the reason the target-1 column is: the record already
+    // states the batch fit is an offline algorithm, so a suite pinned to a bar the method is
+    // known to miss is permanently red and hides the next real failure (rule 3).
+    console.log(`    ${got.length - fitRows.length} row(s) ship no distilled rung and so have `
+      + 'NO fit to price — not a fit that costs nothing (rule 25)');
+  } else {
+    console.log('\n  THE FIT: no row carried a fit cost — nothing is priced rather than priced at zero (rule 25)');
+  }
+
   // THE MANDATE, AS A CHECK. Every plant asked either improves or refuses — a refusal delivers the
   // machine unchanged, so `gain >= 1` covers both and nothing else is asserted here, because a
   // threshold on HOW MUCH each plant must win by would be a number this file invented.
