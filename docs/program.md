@@ -42,8 +42,11 @@ what a buyer would actually check, each again with a count:
 
 ```
   W1  COMMISSIONS IN A SHIFT     under 8 hours of plant time, every plant, at a stated factor
-                                  2 of 8 unbudgeted (mill 55 min, cart-pole 42.7 min, §87.7);
-                                  the two 30-day plants read 3.1 and 3.8 DAYS budgeted (§120)
+                                  3 of 10 (mill 55 min, cart-pole 42.7 min, §87.7, and the REAL
+                                  STEAM EXCHANGER at 9.8 h budgeted — §126, the first plant taken
+                                  under the bar by a change rather than by being cheap);
+                                  the two 30-day plants read 3.1 and 3.8 DAYS budgeted (§120),
+                                  the real cascaded tanks 2.6 days (§126)
   W2  THE SHOP'S OWN INSTRUMENT  a touch probe or motor-side signals commission it, no tracker
                                   FOUR plants, no portable count (§74, §121, §125): cart-pole FREE
                                   (flat from 32), arm 64, barrel 128-256, column 256-512, and four
@@ -127,6 +130,17 @@ control at 1.000x, and the ladder ships 3.86x in 3.1 days against 3.85x in 3.8 a
 the barrel's carried rows are VOID by their own shuffle control on 3 of 4 seeds, raw or dwelled,
 with the drift refuted as the cause. So roadmap step 5 is one plant's lever, and the barrel's
 calendar floor stands at seven settles until the rig's own diet difference is settled.
+
+**AND THE BAR MOVED FOR THE FIRST TIME BY A CHANGE RATHER THAN BY A CHEAP PLANT (§126).** The two
+plants already under W1 were under it because their commissionings were small; the REAL STEAM
+EXCHANGER was at 2.7 days and is now at **9.8 hours** — inside a shift by the bar's own clock, on
+the third try at the boundary — and it DELIVERS MORE there, 104.72x against the incumbent's 89.77x.
+The real cascaded tanks move 15.9 days → **2.6 days at 9.11x against 8.69x**. Neither is a new
+mechanism: it is roadmap steps 6 and 8 composing — ①d armed and placed first, the teacher skipped on
+§124's estimate before it runs. **What that says about the bar is the useful part**: on both plants
+the bill's shape INVERTS, teacher 75-77% becoming verify 73-74%, so once the teacher is gone W1 is
+bounded by the ladder's own SCORED RUNS and not by any teacher lever. That is the next thing to
+price, and it is named nowhere else.
 
 ### PHASE 2 — U2, any program. The lever changed hands this week.
 

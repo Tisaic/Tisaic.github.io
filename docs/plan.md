@@ -25423,3 +25423,116 @@ pass-through and `probeRuns` returns the descriptor itself at K = 0, asserted); 
 plants, one diet each, one seed; the column's ladder is non-monotone in both teachers, so a single
 K is a draw from a rough surface rather than a knee with a position; and the barrel's 1.19x row is
 a property of that plant's drift, which its own control establishes.
+
+## §126 — The teacher-free rung reaches two more plants, and on both it is BETTER than what ships at a SIXTH of the calendar: real cascaded tanks 8.69x/15.9 days → 9.11x/2.6 days, real steam exchanger 89.77x/2.7 days → 104.72x/9.8 hours (task #101)
+
+§125 closed the instrument question and left the CALENDAR one where §120 put it: the teacher is
+74-89% of what a commissioning costs these plants, it ships on ZERO of ten, and the route that
+removes it — ①d, the direct inverse, fitted on open-loop segments through the plant's own nominal
+inverse — was armed on **three plants of ten** (barrel, column, cart-pole). Nothing about that was
+a measurement; `dirInvFor` has been one shared call since §119 and `dirinvall.mjs` already carries
+an entry for every plant. So this arms two more, and picks the two where the record predicts it
+will be worth most: the two REAL-PROVENANCE process plants, whose commissionings are 15.9 days and
+2.7 days and whose incumbents are strong (the conventional rung takes 4.28x on one and 89.77x on
+the other), so neither is a plant where a teacher-free route wins by default.
+
+**THE PREDICTION WAS WRITTEN INTO BOTH HARNESSES BEFORE EITHER RAN (rule 59).** On the barrel and
+the column §119 measured the PLACEMENT as inert, and the reason is structural rather than lucky:
+the conventional rung REFUSES on both, so ①d has no changed machine to invert. On these two it
+DEPLOYS — so §117's rule-34 mechanism should bite, ①d fitted on the BARE plant and deployed after
+a rung that moved it inverting a machine that no longer exists, and `DIRFIRST=1` should recover
+the standalone route's own figure where the default order does not.
+
+**IT HELD ON BOTH, WITH THE SAME SIGNATURE §117 FOUND ON THE CART-POLE — THE CLAMP.**
+
+```
+                              DEFAULT ORDER (after the conventional rung)      FIRST
+  real cascaded tanks         1.03x   CLAMPED on 37% of samples, 2.00x cap     9.11x
+  real steam exchanger        0.01x   CLAMPED on 16% of samples, 1.53x cap    94.70x   (REFUSED at 0.01x)
+```
+
+Three plants where the rung below ①d deploys, three times the placement is the whole result, and
+the clamp note is the diagnosis printing itself: a map asked to invert a machine that is no longer
+there demands a correction the plant's input box cannot deliver.
+
+**WHAT THE LADDER THEN DOES IS DIFFERENT ON THE TWO PLANTS, AND THE SECOND IS THE PART I DID NOT
+PREDICT.** On the TANKS ①d takes 9.11x alone and the two rungs above it both REFUSE — the
+conventional rung at 1.00x (clamped on 22% of samples) and the teacher-taught rung at 0.99x — so
+the block ships **①d ALONE, 46 MAC/decision, 0.2 kB, 0 MAC/cycle sliced, ZERO teacher laps**, in
+place of the conventional-plus-learned pair that reads 8.69x at 54 MAC. On the EXCHANGER the
+prediction was half right and the miss is the useful half: ①d takes 94.70x, **and then the
+conventional rung finds ANOTHER 1.11x on top of it**, so the two COMPOSE and the block ships
+**104.72x** where the incumbent alone reads 89.77x. Four coefficients of `[a, v, sign v, 1]` still
+have something to say about a machine a 15-tap inverse has already corrected; I predicted they
+would not.
+
+**AND THE CALENDAR IS WHAT THIS IS FOR.** Under §124's estimate-aware budget the teacher is skipped
+before it runs, on its own plan rather than on a spend that has already happened:
+
+```
+  plant                    ships today            with ①d first, 60,000-step budget      calendar
+  real cascaded tanks      8.69x   15.9 days      9.11x    2.6 days   (①d alone)          6.1x less
+  real steam exchanger     89.77x   2.7 days      104.72x  9.8 hours  (①d + conventional) 6.6x less
+
+  ②d SKIPPED — tanks:     55,200 spent + ~182,400 this rung would spend  >  60,000
+              exchanger:  35,200 spent + ~121,600                        >  60,000
+```
+
+Both plants deliver MORE than what ships today, at a sixth of the plant time, and on both the
+bill's shape inverts: the teacher was 75-77% of it and what is left is VERIFY (73-74%) and the
+excitation (26-27%). Target 4's *minutes* bar is still missed on both — 9.8 hours is not minutes —
+but the exchanger is now inside a single shift, which is `docs/program.md`'s W1 bar rather than
+this target's.
+
+**THE SPREAD, AND THE CONTROL THAT MAKES THE WHOLE SECTION WORTH SOMETHING (rule 15).** Four
+excitation seeds each, through the LADDER, against `dirinvall.mjs` driving the same route through
+its own loop — two instruments sharing no driver:
+
+```
+  seed                        1         2         3         4      spread   median
+  tanks    ladder         9.11x     8.14x     9.12x     9.12x      1.12x    9.11x
+           dirinvall      9.112x    8.140x    9.117x    9.121x     1.12x    9.114x
+  exch     ladder        94.70x   100.27x    88.14x    96.44x      1.14x   95.57x
+           dirinvall     94.697x  100.266x   88.136x   96.444x     1.14x   95.570x
+```
+
+**Digit for digit on all eight draws**, which is the control §117 used on the cart-pole holding on
+two more plants, and it says the ladder is running the route rather than something adjacent to it.
+`dirinvall`'s own SHUFFLE control reads 1.000x on every draw and its ZERO control reproduces each
+open loop bit-exactly, so the fit is reading the map. The block's shipped exchanger factor over the
+four seeds is 100.56x / 103.79x / 104.72x / 106.80x — a 1.06x spread with **all four above the
+incumbent's 89.77x**.
+
+**TARGET 1 IS MET ON BOTH AND NOTHING IS MADE WORSE.** The tanks read 9.112x scored against
+28.690x on a recipe the commissioning never ran (ratio 3.149) and the exchanger 104.716x against
+140.126x (1.338). Both ratios have their DENOMINATOR moving, which is §89.1's standing objection to
+the cheap comparator and is stated rather than claimed away; what is not a ratio is that the
+held-out program's ABSOLUTE error falls on both plants.
+
+**STATED AGAINST MY OWN RESULT.** The tanks' ①d is **SATURATED at the cap on 4 of 4 seeds**
+(peak |u| 0.286 of 0.286) — the barrel's own failure signature, which this project has twice
+treated as grounds to disqualify a number — and the obvious sweep is already on record as
+producing a non-result there: §105 measured this plant at 13.7x-2099.9x at raised authority and
+flagged it as §54.8's exact-interpolation signature on a deterministic rig. So 9.11x is quoted at
+the SHIPPED authority with the saturation named, and the honest reading is that this plant wants
+more correction than its declared input box allows — §104.1's finding on the column, on a second
+plant.
+
+**CONTROLS.** `DIRINV` unset is BYTE-IDENTICAL on both harnesses, checked before and after every
+edit in this section (tanks 8.69x, exchanger 89.77x, every digit of both ladders). The new
+armed-and-reached check is asserted BOTH WAYS (rule 9c): it passes on the armed run and was driven
+RED by reproducing §120's exact state — `const DI` built, `...DI` withheld from the spec — where it
+reads `rep.dirInv is absent entirely`, which is the state that let a rung print its banner and
+never run.
+
+**WHAT IS NOT DONE, AND IT IS NOW A DECISION RATHER THAN A MEASUREMENT.** `DIRINV` and `DIRFIRST`
+stay OFF (rule 31): the tanks' figure is saturated, and `dirInv.first` is a LIBRARY default that
+the cart-pole votes against (§117: first ships 11.79x where the other order ships 11.93x, 1.2%
+worse and far cheaper). But the MECHANISM is no longer one plant's story — **place ①d before any
+rung that will deploy** is derivable from rule 34 and is now measured 3 of 3 — and a flag is the
+wrong shape for it, because the ladder already knows on the machine which rungs deploy. Scoring
+the placement rather than declaring it is the named next step and is not built. Five plants of ten
+now arm the rung; the five that do not are the 2R arm, EMPS, the quadruple tank, the cold mill
+(structurally out — a regulator's `refAt` is constant, so the deployed input cannot vary) and the
+real flexible arm (structurally out — `invert.mjs` reads it at INVERSE 128.3% and §105 measured the
+route's factor FALLING as the cap rises).

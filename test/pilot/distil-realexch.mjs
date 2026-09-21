@@ -25,6 +25,7 @@ import { ladder, announce } from './rigs/ladder.mjs';
 import { realexchLadderSpec } from './rigs/specs.mjs';
 import { deriveWindow, reportDistil, priceFrom, ridgeLadder, gainLadder, teacherReuse, teachLaps,
   teachAvg, dietN, carrier, emitRow } from './rigs/distilkit.mjs';
+import { dirInvFor } from './rigs/dirinvkit.mjs';
 import * as E from './rigs/realexch-rig.mjs';
 
 if (process.env.SUITE !== 'full') {
@@ -122,7 +123,19 @@ const distilRuns = () => dietN([0, 1, 2, 3]).map((i) => {
   };
 });
 
+// THE TEACHER-FREE ①d RUNG, ARMED BY `DIRINV=1` AND PLACED FIRST BY `DIRFIRST=1` (plan §126).
+// Its diet, nominal inverse and window come from this plant's `dirinvall.mjs` entry through the
+// one shared wiring; unset spreads to nothing and the ladder is byte-identical (rule 21).
+//
+// THE PREDICTION, WRITTEN BEFORE THE RUN (rule 59): this plant's conventional rung takes 89.77x
+// and leaves the distilled rung nothing (§86.5), so ①d placed AFTER it should find nothing
+// either — a machine already corrected by four coefficients is not the bare one its open-loop
+// segments describe (rule 34). Placed FIRST it inverts the machine it was fitted on, and
+// `dirinvall.mjs` measures this route standalone at 95.6x, ABOVE the incumbent.
+const DI = await dirInvFor(/real steam exchanger/i);
+
 const spec = { ...realexchLadderSpec(MODEL, LIN ? 'linear' : 'nonlinear'),
+  ...DI,
   depth: process.env.DEPTH !== undefined ? +process.env.DEPTH : 0,
   distil: { refDim: 1, ridge: env('RIDGE', 1e-6), offsets: OFFSETS,
     ...(ridgeLadder() ? { ridges: ridgeLadder() } : {}),
@@ -196,6 +209,16 @@ console.log(`    TARGET 1's 1.3x BOUND: ${xHeld >= xProg / 1.3 ? 'MET' : 'NOT ME
 
 check('the exchanger is not made worse by anything the ladder ships',
   rep.best <= rep.base, `${rep.base.toExponential(3)} → ${rep.best.toExponential(3)}`);
+// THE ①d RUNG IS ARMED-AND-REACHED, OR IT IS NOT ARMED (rule 9c, plan §126). §120 paid for the
+// other state: `rigs/ladder.mjs` never forwarded `dirInv`, so a run PRINTED that it had armed the
+// rung and the rung never ran — indistinguishable from a refusal (rule 25). `DI` non-empty is the
+// harness's own intent; `rep.dirInv.rows` is the ladder saying the fit saw the plant.
+if (DI.dirInv) {
+  check('DIRINV=1 REACHED the rung — a fit with rows, not a printed banner (rule 9c)',
+    !!(rep.dirInv && rep.dirInv.rows > 0),
+    rep.dirInv ? JSON.stringify(rep.dirInv).slice(0, 140) : 'rep.dirInv is absent entirely');
+}
+
 check('the distilled rung reached the plant — a fit, a refusal with a reason, or a stated skip, '
   + 'never silence (rule 25)',
   !!(rep.distil && (rep.distil.policy || rep.distil.note || rep.distil.error)),

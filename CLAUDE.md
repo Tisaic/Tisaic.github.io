@@ -780,6 +780,36 @@ Each of these is a claim that can be shown false, which is the only kind worth w
    column, 1.66x on the barrel) and never before. Seven harnesses declare no `callSteps` and are
    priced at one lap per call where their teachers drive two; the estimate says so (rule 25).
 
+   **AND THE ROUTE NOW REACHES FIVE PLANTS OF TEN, AND ON THE TWO ADDED IT BEATS WHAT SHIPS AT A
+   SIXTH OF THE CALENDAR (plan §126).** ①d was armed on three plants — barrel, column, cart-pole —
+   and that was an accident of which harnesses had been edited rather than a measurement, since
+   `dirInvFor` has been one shared call since §119 and `dirinvall.mjs` carries an entry for every
+   plant. Armed on the two REAL-PROVENANCE process plants, whose incumbents are strong so neither
+   is a default win: **real cascaded tanks 8.69x in 15.9 days → 9.11x in 2.6 days shipping ①d ALONE
+   at 46 MAC, 0.2 kB and ZERO teacher laps; real steam exchanger 89.77x in 2.7 days → 104.72x in
+   9.8 HOURS.** Both deliver MORE than what ships, at 6.1x and 6.6x less plant time, with target 1
+   MET on both (3.149, 1.338) and nothing made worse. **THE PLACEMENT IS THE WHOLE RESULT AND THE
+   PREDICTION WAS WRITTEN FIRST (rule 59)**: in the default order ①d reads 1.03x and 0.01x, CLAMPED
+   on 37% and 16% of samples — §117's rule-34 signature, a map inverting a machine the rung below it
+   has already moved — and placed FIRST it reads 9.11x and 94.70x. Three plants, three times the
+   placement decides it. **What I did NOT predict is the exchanger's composition**: after ①d takes
+   94.70x the conventional rung finds ANOTHER 1.11x, so four coefficients still have something to
+   say about a machine a 15-tap inverse has corrected. **The control is two instruments with no
+   shared driver agreeing DIGIT FOR DIGIT on all eight excitation draws** — the ladder against
+   `dirinvall.mjs`'s own loop, tanks 9.11/8.14/9.12/9.12 and exchanger 94.70/100.27/88.14/96.44,
+   spreads 1.12x and 1.14x — with `dirinvall`'s SHUFFLE at 1.000x and its ZERO control bit-exact.
+   **Stated against the result**: the tanks' ①d is SATURATED at its cap on 4 of 4 seeds, the
+   barrel's own disqualifying signature, and §105 already measured raising it there as a non-result
+   (13.7x-2099.9x, exact interpolation on a deterministic rig) — so it is quoted at the shipped
+   authority and this plant wants more correction than its declared input box allows, which is
+   §104.1 on a second plant. `DIRINV` and `DIRFIRST` stay OFF and both harnesses are byte-identical
+   unset (rule 31), because `dirInv.first` is a library default the cart-pole votes against at
+   −1.2%. What is no longer one plant's story is the MECHANISM — **place ①d before any rung that
+   will deploy** — and a flag is the wrong shape for it, since the ladder already knows on the
+   machine which rungs deploy; scoring the placement rather than declaring it is named and NOT
+   built. The five plants that do not arm the rung are the 2R arm, EMPS and the quadruple tank
+   (not asked) and the cold mill and real flexible arm (structurally out).
+
    **AND IT IS NOW NINE PLANTS: SIX ADDRESSED, TWO STRUCTURALLY OUT, ONE UNRESOLVED (plan §105).**
    Real steam exchanger **95.6x**, cart-pole **11.8x**, real cascaded tanks **9.1x**, quadruple tank
    **7.5x**, barrel **4.6x**, column **3.7x** — medians of four seeds at each plant's own shipped

@@ -69,6 +69,18 @@ the column in 3.8, shipping ①d, every skipped rung stated — 11.4x and 8.4x l
 1.66x and 2.8% of the scored factor, and on the barrel's held-out changeover the cheap object is
 1.44x BETTER.** Gap 1 is no longer *unbuyable*; it is a priced trade.
 
+**AND IT IS NOW FIVE PLANTS OF TEN, WITH THE TWO ADDED BEATING WHAT SHIPS (§126).** The rung was
+armed on three plants because three harnesses had been edited, not because the others had been
+asked — `dirInvFor` is one shared call and `dirinvall.mjs` carries an entry for every plant. The two
+REAL-PROVENANCE process plants now arm it, and unlike the barrel and column the taught rung does
+NOT win there: **real cascaded tanks 8.69x/15.9 days → 9.11x/2.6 days shipping ①d ALONE at 46 MAC;
+real steam exchanger 89.77x/2.7 days → 104.72x/9.8 HOURS**, 6.1x and 6.6x less plant time for MORE
+delivered, target 1 MET on both, nothing made worse. The placement is the whole result on both
+(1.03x and 0.01x in the default order, CLAMPED on 37% and 16% of samples — rule 34's signature for
+the third time), and the ladder reproduces `dirinvall.mjs` DIGIT FOR DIGIT on all eight excitation
+draws. Stated against it: the tanks' ①d is SATURATED at its cap on 4 of 4 seeds, and §105 measured
+raising it there as a non-result, so 9.11x is a shipped-authority figure.
+
 **WHAT IS STILL OPEN IN IT, STATED SO THE GAP IS NOT READ AS CLOSED.** Two things. **(a) The
 excitation is now the bill — and carrying the plant across it is clean on the column and VOID on
 the barrel (§123)**, so the lever is one plant's: under the budget ①d's open-loop segments are **61-67% of the plant
@@ -238,20 +250,26 @@ and none replaces them, so the count is swept per plant or the tracker is owned;
 own score is anti-correlated with delivery under a degraded instrument (a 13x lie at K=32), which
 no gate here detects.
 
-**8. Why does ①d transfer on the barrel and not the column?** (task #99) 0.941 against 0.304 (§120), one plant
+**8. Arm ①d on the plants that never asked it.** (task #101) **DONE, §126.** Two of five added; both
+beat the incumbent at a sixth of the calendar. *What is left of it:* the 2R arm, EMPS and the
+quadruple tank are still not asked, and the placement is a FLAG where the ladder already knows on
+the machine which rungs deploy — **place ①d before any rung that will deploy** is measured 3 of 3
+and scoring it rather than declaring it is not built.
+
+**9. Why does ①d transfer on the barrel and not the column?** (task #99) 0.941 against 0.304 (§120), one plant
 each. The named suspect is authority: the column's ①d sits at **0.400 of a 0.4 cap on every seed**
 (§104), so its held-out reading is clamp-shaped where the barrel's is not. *Falsifier:* `UCAP` swept
 on the held-out schedule with the scored program's factor held — if the ratio rises with the cap the
 suspect stands; if it is flat, it is the plant and the column keeps its teacher.
 
-**9. One EDM LOGGING run — no controller.** (task #95) The falsifier `docs/edm.md` already names: **LEAD TIME
+**10. One EDM LOGGING run — no controller.** (task #95) The falsifier `docs/edm.md` already names: **LEAD TIME
 against the gap's own settling**, readable off records the machine produces anyway (§52.26
 transplanted). *Makes it a result:* the first evidence in this project that is not a simulation.
 *Kills it:* no lead time, in which case the preview-shaped sub-problem is not there and the doc's
 own prediction was wrong before anything was built for it.
 
 Steps 5 and 6 are gap 1 and compose (a carried excitation lowers the calendar of the object the bar
-would ship). Steps 7 and 8 are independent of them and of each other. Step 9 is the only one that
+would ship). Steps 7, 8 and 9 are independent of them and of each other. Step 10 is the only one that
 changes the KIND of evidence and should not wait for the others. **The program that puts these in
 the context of a world-class bar, with the bar stated as measurements, is `docs/program.md`.**
 
