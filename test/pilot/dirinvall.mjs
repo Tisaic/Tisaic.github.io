@@ -610,9 +610,16 @@ for (const P of (IS_ENTRY ? PLANTS : [])) {
   //
   // IT IS THE SAME METER `priceFrom` PRICES THE TEACHER-TAUGHT ROUTE WITH, so each plant's RATIO
   // is like for like whatever that plant's rig does. What the rigs do is NOT uniform and is
-  // printed rather than assumed (rule 30): six of them tick during `fresh()`, two return their
-  // counting wrapper only AFTER the settle so their pre-roll is invisible to any caller, and
-  // EMPS never ticks at all.
+  // printed rather than assumed (rule 30): they tick during `fresh()`, except EMPS and the 2R
+  // arm, which never tick at all and read UNKNOWN rather than zero (rule 25).
+  //
+  // AND UNTIL plan §131 TWO OF THEM RETURNED THEIR COUNTING WRAPPER ONLY AFTER THE SETTLE, so
+  // their pre-roll was invisible to any caller — THE LINE BELOW SAID SO, on the real cascaded
+  // tanks and the real steam exchanger, while §126 and §127 published `priceFrom`'s number from
+  // the same run. Printing a disagreement is not comparing it (rule 15b, which §117 wrote after
+  // paying for exactly this), so `test/pilot/freshmeter.test.mjs` is that comparison made a
+  // check: a plant that ticks on `step` and meters 0 on `fresh()` is now RED, and it is checked
+  // to fail on the pre-repair state.
   const freshSteps = priceOf(() => P.spec.fresh()).steps;
   const totSteps = exciteSteps + openP.steps;
   if (totSteps === 0) {

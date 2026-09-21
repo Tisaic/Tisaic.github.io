@@ -45,11 +45,14 @@ what a buyer would actually check, each again with a count:
 ```
   W1  COMMISSIONS IN A SHIFT     under 8 hours of plant time, every plant, at a stated factor
                                   3 of 10 (mill 55 min, cart-pole 42.7 min, §87.7, and the REAL
-                                  STEAM EXCHANGER at 9.8 h budgeted — §126, the first plant taken
-                                  under the bar by a change rather than by being cheap);
+                                  STEAM EXCHANGER at 6.9 h — §126/§131, the first plant taken
+                                  under the bar by a change rather than by being cheap, and the
+                                  first whose row depends on WHICH factor is stated: 94.70x fits
+                                  the shift, its best 104.72x costs 18.9 h and does not);
                                   the two 30-day plants read 3.1 and 3.8 DAYS budgeted (§120),
-                                  the real cascaded tanks 21.3 h at an unchanged 9.11x (§127) —
-                                  0.9 of a shift short, and the rung skipped was refused anyway
+                                  the real cascaded tanks 28.0 h at 9.12x with the carry armed
+                                  (§127, §131 — the 21.3 h once quoted here was a meter that
+                                  could not see its own plant's settle)
   W2  THE SHOP'S OWN INSTRUMENT  a touch probe or motor-side signals commission it, no tracker
                                   FOUR plants, no portable count (§74, §121, §125): cart-pole FREE
                                   (flat from 32), arm 64, barrel 128-256, column 256-512, and four
@@ -140,7 +143,9 @@ calendar floor stands at seven settles until the rig's own diet difference is se
 plants already under W1 were under it because their commissionings were small; the REAL STEAM
 EXCHANGER was at 2.7 days and is now at **9.8 hours** — inside a shift by the bar's own clock, on
 the third try at the boundary — and it DELIVERS MORE there, 104.72x against the incumbent's 89.77x.
-The real cascaded tanks move 15.9 days → **2.6 days at 9.11x against 8.69x**. Neither is a new
+The real cascaded tanks move 15.9 days → **2.6 days at 9.11x against 8.69x**. (Both calendars in
+this paragraph are superseded by §131 below, which found these two rigs settling outside their own
+meter; the factors stand.) Neither is a new
 mechanism: it is roadmap steps 6 and 8 composing — ①d armed and placed first, the teacher skipped on
 §124's estimate before it runs. **What that says about the bar is the useful part**: on both plants
 the bill's shape INVERTS, teacher 75-77% becoming verify 73-74%, so once the teacher is gone W1 is
@@ -149,11 +154,23 @@ price, and it is named nowhere else.
 
 **AND IT IS NOW BOUNDED BY THE EXCITATION RATHER THAN BY ANY RUNG (§127).** Pricing the conventional
 rung and gating it on `spent + estimate` took the real cascaded tanks 2.6 days → **21.3 hours** at an
-identical 9.11x — 17.9x less plant time than the 15.9 days they started at, and within a shift of the
-bar — because 15 of that commissioning's 17 scored runs were a rung the machine refuses. What is left
-there is 75% EXCITATION: §105's seven `fresh()` re-settles, a lever §123 measured as clean on the
-column and VOID on the barrel. So W1's remaining term on this plant is one already-named experiment
-and not a new idea.
+identical 9.11x — because 15 of that commissioning's 17 scored runs were a rung the machine refuses.
+What is left there is 75% EXCITATION: §105's seven `fresh()` re-settles, a lever §123 measured as
+clean on the column and VOID on the barrel. So W1's remaining term on this plant is one
+already-named experiment and not a new idea.
+
+**AND THAT EXPERIMENT, ASKED, FOUND THE BAR'S OWN CLOCK WRONG ON EXACTLY THESE TWO PLANTS (§131).**
+Both rigs ran their settle on the RAW plant and wrapped it afterwards, so `fresh()` cost the meter
+ZERO — and `dirinvall.mjs` PRINTED *NOT counted by this rig, so this calendar OMITS its settle* on
+both, in the same runs the paragraphs above were written from (rule 15b). Every delivered factor is
+byte-identical and every calendar here moves: **the exchanger's 9.8 h is 18.9 h at 104.72x, the
+tanks' 21.3 h is 39.1 h, and 15.9 days and 2.7 days are 19.3 and 3.1.** Then the lever itself is
+CLEAN on both — the carry removes 38% of the excitation with every SHUFFLE control at 1.000x, and
+the plants ship **9.12x in 28.0 h and 103.94x in 16.9 h**. **What W1 keeps is one plant and one
+sentence of fine print**: at 60,000 steps the exchanger's conventional rung is now unaffordable, so
+it ships 94.70x in **6.9 h** — under the bar — while its best factor costs 18.9 h and is not. The
+bar is met at a stated factor, which is what the bar says, and the two readings are a customer's
+choice rather than a rounding.
 
 ### PHASE 2 — U2, any program. The lever changed hands this week.
 

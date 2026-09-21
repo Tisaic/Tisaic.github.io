@@ -25733,3 +25733,106 @@ DEPLOYS on top for the first time (2.35x, a 1.04x increment), so that row change
 §115's 11** because the suite emits one row per harness RUN and the tuned cart-pole variant is
 reached only by `objtable`'s own spawn; §115's COLLAPSED check is silent, so nothing is hidden —
 the two passes count different sets and each says which.
+
+## §131 — A settle is charged now, and it was the two plants whose calendars §126 and §127 published: real cascaded tanks 21.3 h → 39.1 h, real steam exchanger 104.72x at 9.8 h → 18.9 h. The carry then takes them to 28.0 h and 16.9 h, clean on both. (tasks #102, #103)
+
+§127 named its own next term — *the tanks' bill is now 75% EXCITATION, which is §105's seven
+`fresh()` re-settles, a lever §123 measured as clean on the column and VOID on the barrel*. Asking
+it on the two real-provenance plants found something one level below the lever: **on those two
+plants a `fresh()` costs the meter NOTHING.**
+
+```
+  fresh() metered, one call        barrel 20,000 · quad tank 30,000 · real arm 10,240 · mill 4,000
+                                   column 3,000 · cart-pole 2,000
+                                   REAL CASCADED TANKS 0     REAL STEAM EXCHANGER 0
+                                   EMPS 0 — and that one is correct: no settle, no tick at all
+```
+
+`RT.makeMachine` and `RX.makeMachine` run their settle loop on the RAW `makePlant` object and only
+THEN wrap it in the object whose `step` calls `tick()`. It is 2,000 steps of tank (2.2 h) and 1,500
+of exchanger (25 min), spent once per excitation segment and once per scored run, and invisible to
+the one instrument that prices these plants' calendars (rules 17, 25).
+
+**IT WAS NOT HIDDEN. THE PROJECT'S OWN SECOND ROUTE PRINTED IT, IN WORDS, ON BOTH PLANTS.**
+`dirinvall.mjs` measures `priceOf(() => spec.fresh())` and its calendar line read, at the commit
+§126 and §127 were written from:
+
+```
+  CALENDAR: excitation 14,400 steps + verify 2,400 = 16,800 @ 4 s/step  =  18.7 h
+            of which each `fresh()` pre-roll is 0 steps — NOT counted by this rig,
+            so this calendar OMITS its settle
+```
+
+Two routes in one report with nothing comparing them is one route and a decoration — **rule 15b,
+which §117 wrote after paying for exactly this shape**, and the fault it names is the one it was
+written about. So the comparison is a CHECK now, not a note.
+
+**THE REPAIR IS THE WRAPPER BUILT FIRST AND THE SETTLE RUN THROUGH IT.** Nothing about the
+trajectory changes — the overflow clamp is on the RETURN value and never on the plant's state — so
+every delivered number is byte-identical and only the bill moves, which is what says an instrument
+was repaired and not a result (rule 21).
+
+```
+  plant / configuration                    delivered      published     metered      out by
+  real tanks, ships today (no ①d)          8.69x          15.9 days     19.3 days     1.21x
+  real tanks, ①d first, 60,000 budget      9.11x          21.3 h        39.1 h        1.84x
+  real exchanger, ships today (no ①d)     89.77x           2.7 days      3.1 days     1.15x
+  real exchanger, ①d + conventional      104.72x           9.8 h        18.9 h        1.93x
+```
+
+**THE WHOLE-LADDER BILLS ARE OUT BY 1.15-1.21x AND THE SHORT BUDGETED ROUTES BY 1.84-1.93x, WHICH
+IS THE SHAPE THE FAULT HAS TO HAVE**: a settle is a per-`fresh()` CONSTANT, so a route that spends
+few plant steps and still pays one settle per scored run is understated most — and the
+teacher-free route is precisely the route that spends few plant steps. **§127's headline is
+therefore reduced: the tanks are 11.8x less plant time than what ships, not 17.9x** (19.3 days
+against 39.1 h), at the same identical 9.11x. It is still the largest calendar lever on that plant.
+
+**AND A BUDGET IS A NUMBER IN PLANT STEPS, SO CORRECTING THE METER CHANGES WHAT A FIXED ONE BUYS.**
+At the SAME `PLANTBUDGET=60000` the exchanger's spend and its measured scored-run cost both rise,
+its rung ① goes ADMITTED → SKIPPED, and the plant ships **94.70x in 6.9 h instead of 104.72x in
+9.8 h**. Raising the budget to 90,000 buys the rung back and reads the honest price of its 1.11x:
+**104.72x in 18.9 h**. That is a product table that did not exist before and could not have, since
+one of its two rows was a number the instrument could not see.
+
+**THEN THE LEVER §127 ASKED FOR, AND THE PREDICTION WRITTEN FIRST HELD ON BOTH PLANTS (rule 59).**
+§123's surviving candidate for the barrel's VOID is a fresh-segment initial-condition mismatch:
+`barrelSpec.fresh` settles at the recipe's FIRST level while its diet segments start at a RANDOM
+one, so a fresh record contains an uncommanded recovery transition that a carried record does not.
+Neither real-provenance plant has that shape — both diets start every segment at `RECIPE[0]`,
+exactly where `fresh()` settles, which the quadruple tank's own diet comment already states as the
+design rule — so both were predicted CLEAN, and both are:
+
+```
+  real cascaded tanks    excitation   delivered, 4 seeds            spread   SHUFFLE
+    CARRY off              26,400     8.140x .. 9.121x  med 9.114x   1.12x    1.000x
+    CARRY raw              16,400     8.847x .. 9.137x  med 9.120x   1.03x    1.000x
+    CARRY dwelled          17,375     8.109x .. 9.121x  med 9.115x   1.12x    1.000x
+
+  real steam exchanger
+    CARRY off              18,600    88.136x ..100.266x med 95.570x  1.14x    1.000x
+    CARRY raw              11,100    88.025x .. 99.234x med 95.215x  1.13x    1.000x
+    CARRY dwelled          11,285    88.220x ..100.242x med 95.573x  1.14x    1.000x
+```
+
+**The carry removes 38% of the excitation on both, every shuffle control reads 1.000x and every
+ZERO control is bit-exact, and on the tanks the raw carry also TIGHTENS the distribution 1.12x →
+1.03x.** Through the one press: **the tanks ship 9.12x in 28.0 h (from 39.1) and the exchanger
+103.94x in 16.9 h (from 18.9)**, both delivered numbers inside their own seed spreads. So the carry
+is clean on two plants of three asked and VOID on one, and it stays a KNOB (rule 31) — what §123
+recorded about the barrel is unchanged and its named falsifier, a `fresh(s)` that honours the
+segment, is still not built.
+
+**SO THE HONEST CALENDAR CLAIM ON THESE TWO PLANTS, END TO END**: the tanks are **16.5x less plant
+time than what ships** (19.3 days against 28.0 h) at 9.12x against 8.69x, and the exchanger is
+**4.4x less** (3.1 days against 16.9 h) at 103.94x against 89.77x — both larger than §126's 6.1x and
+6.6x and smaller than §127's 17.9x, and both measured on a clock that now charges the plant for
+standing still.
+
+**THE CHECK.** `test/pilot/freshmeter.test.mjs` separates the three states a plant can be in and
+only one is a fault — TICKS and `fresh() > 0` is charged; never ticks at all is UNKNOWN and is
+asserted to be exactly ONE plant, so the exemption cannot silently grow; TICKS and `fresh() === 0`
+is a settle outside the meter and is RED. **Checked to FAIL on the pre-repair state** — three red,
+naming both plants (rule 9c) — and both halves of the rule are pinned against a reconstructed fault
+shape and its repair. Controls: `realtanks.test.mjs` and `realexch.test.mjs` come back at
+2012.19x and 89.77x, and every ①d row above is byte-identical to §126's (tanks 7.7708e-2, exchanger
+1.2477e-3).

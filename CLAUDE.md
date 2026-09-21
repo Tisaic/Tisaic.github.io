@@ -812,7 +812,9 @@ Each of these is a claim that can be shown false, which is the only kind worth w
    is a default win: **real cascaded tanks 8.69x in 15.9 days → 9.11x in 2.6 days shipping ①d ALONE
    at 46 MAC, 0.2 kB and ZERO teacher laps; real steam exchanger 89.77x in 2.7 days → 104.72x in
    9.8 HOURS.** Both deliver MORE than what ships, at 6.1x and 6.6x less plant time, with target 1
-   MET on both (3.149, 1.338) and nothing made worse. **THE PLACEMENT IS THE WHOLE RESULT AND THE
+   MET on both (3.149, 1.338) and nothing made worse. **EVERY CALENDAR IN THIS SENTENCE IS
+   UNDERSTATED AND THE DELIVERED FACTORS ARE NOT — see §131 below, where these two rigs are found to
+   settle OUTSIDE their own meter: read 19.3 days → 28.0 h and 3.1 days → 16.9 h.** **THE PLACEMENT IS THE WHOLE RESULT AND THE
    PREDICTION WAS WRITTEN FIRST (rule 59)**: in the default order ①d reads 1.03x and 0.01x, CLAMPED
    on 37% and 16% of samples — §117's rule-34 signature, a map inverting a machine the rung below it
    has already moved — and placed FIRST it reads 9.11x and 94.70x. Three plants, three times the
@@ -855,6 +857,39 @@ Each of these is a claim that can be shown false, which is the only kind worth w
    in silence.** Estimates are now WITHHELD rather than invented when the scored-run cost is
    unmeasurable, and the report says why (rule 25). `test/pilot/classicprice.test.mjs` pins both
    halves; unbudgeted, both plants are byte-identical to §126.
+
+   **AND EVERY CALENDAR IN THE TWO PARAGRAPHS ABOVE IS UNDERSTATED, BECAUSE ON THOSE TWO PLANTS A
+   `fresh()` COST THE METER NOTHING (plan §131).** `RT.makeMachine` and `RX.makeMachine` ran their
+   settle loop on the RAW plant and only THEN wrapped it in the object whose `step` ticks — 2,000
+   steps of tank and 1,500 of exchanger, once per excitation segment and once per scored run,
+   invisible to the instrument that prices these plants (rules 17, 25). **It was not hidden: the
+   project's own second route PRINTED it** — `dirinvall.mjs`'s calendar line read *of which each
+   `fresh()` pre-roll is 0 steps — NOT counted by this rig, so this calendar OMITS its settle* on
+   both plants, in the same runs §126 and §127 published `priceFrom`'s number from. Two routes in
+   one report with nothing comparing them is one route and a decoration (rule 15b, written after
+   §117 paid for this exact shape), so the comparison is a CHECK now. Repaired, with every
+   delivered number byte-identical (rule 21): **the tanks' ships-today 15.9 days is 19.3, their
+   budgeted 21.3 h is 39.1 h, the exchanger's 2.7 days is 3.1, and its 104.72x costs 18.9 h and not
+   9.8.** The whole-ladder bills are out by 1.15-1.21x and the SHORT budgeted routes by 1.84-1.93x,
+   which is the shape the fault must have — a settle is a per-`fresh()` constant, so the route that
+   spends fewest plant steps is understated most. **§127's headline is reduced accordingly: the
+   tanks are 11.8x less plant time than what ships, not 17.9x**, at the same 9.11x. And a budget is
+   a number in PLANT STEPS, so correcting the meter changes what a fixed one buys: at the same
+   60,000 the exchanger's rung ① flips ADMITTED → SKIPPED and the plant ships **94.70x in 6.9 h**,
+   while 90,000 buys it back at **104.72x in 18.9 h** — a product table that could not exist while
+   one of its rows was a number the instrument could not see.
+
+   **AND THE LEVER §127 NAMED IS CLEAN ON BOTH, WITH THE PREDICTION WRITTEN FIRST (plan §131,
+   rule 59).** §123's surviving candidate for the barrel's VOID is a fresh-segment initial-condition
+   mismatch — `barrelSpec.fresh` settles at the recipe's FIRST level while its segments start at a
+   RANDOM one — and neither real-provenance plant has that shape, both diets starting every segment
+   where `fresh()` settles. Both were predicted clean and both are: the carry removes **38% of the
+   excitation** on each, **every SHUFFLE control reads 1.000x** on all six draws per plant, every
+   ZERO control is bit-exact, and on the tanks the raw carry also TIGHTENS the spread 1.12x →
+   1.03x. Through the one press the **tanks ship 9.12x in 28.0 h** and the **exchanger 103.94x in
+   16.9 h**, both inside their own seed spreads. Clean on two plants of three asked, VOID on one, so
+   `DICARRY` stays a knob (rule 31) and §123's named falsifier for the barrel — a `fresh(s)` that
+   honours the segment — is still not built.
 
    **AND THE TANK IS ARMED, CORRECTLY REFUSED, AND REFUTES THE PLACEMENT RULE §126 PROPOSED
    (plan §128).** That section named *place ①d before any rung that will deploy* as measured 3 of 3
@@ -1020,8 +1055,8 @@ Each of these is a claim that can be shown false, which is the only kind worth w
 
    ```
      cart-pole             42.7 min      MET      teacher 59% · verify 41%
-     real heat exchanger    2.7 days   MISSED     teacher 76% · verify 24%
-     real cascaded tanks   15.9 days   MISSED     teacher 77% · verify 23%
+     real heat exchanger    3.1 days   MISSED     teacher 68% · verify 32%   (was 2.7 d — §131)
+     real cascaded tanks   19.3 days   MISSED     teacher 65% · verify 35%   (was 15.9 d — §131)
      real flexible arm     73.5 days   MISSED     VERIFY 87% · teacher 13%
    ```
 
@@ -2662,6 +2697,7 @@ measurement behind each is in `docs/history/` — the pointer in brackets.
 | `test/pilot/gainexit.test.mjs` | **A LADDER AXIS THAT SPENDS SCORED RUNS ON A RUNG THE MACHINE THROWS AWAY, AND THE ARITHMETIC THAT STOPS IT — REPLAYED IN MILLISECONDS (plan §109).** The decision is a pure function of scores four harnesses already print, so re-running four plants to exercise it would spend DAYS of plant time to learn what their own recorded rows say — the `objtable --read` argument (rule 30), and the reason `commtime.mjs` is a scrape. Every row is §107's table verbatim, which is also what makes it falsifiable: if a later change moves those ladders, these numbers are on record to be compared against. **BOTH HALVES (rule 9), because a rule that only ever stops is worth nothing if it stops the wrong ladder**: the three plants §107 measured as INTERIOR are silent (mill 1.00, column 1.15, barrel 1.15), a winning candidate at the grid EDGE is never tested, a losing ladder still within reach of its bar keeps extending, a FLAT losing ladder stops at once — the *a rung inert at every gain walks the grid for ever* failure §86.6 warned about, from the other side — and one candidate / no bar / no budget each report a REFUSAL TO DECIDE rather than a verdict (rule 25). The tank's bar is reconstructed and then CHECKED against the reported 0.16x refusal rather than assumed (rule 15). |
 | `test/pilot/dirinvrung.test.mjs` | **THE TEACHER-FREE RUNG'S CONTRACT, DRIVEN THROUGH `commission()` RATHER THAN THROUGH THE FIT (plan §112).** A rung is not verified by calling the thing it fits — rule 9b three times over, and this file's own §67.3 defect, where `distil-tank.mjs` scored a rung its loop never applied and read *1.000x, nothing harmed, TRANSFER* for two sections. So the mock host runs the SHIPPED act path — `auto.act(...)` for what is deployed and `auto.into(...)` for the candidate the ladder is scoring — and the first version of this test had the defect it exists to catch: the fit vouched at held-out R² 0.999999999978 while the machine read EXACTLY 1.000x, because the mock treated the scored candidate as the act path. **BOTH HALVES (rule 9)**: a host that declares no `dirInvRuns` gets a STATED skip and a byte-identical commissioning, a host that declares them reaches the machine, and a rung that loses its verify is REVERTED with `deployed.distil` left null. **And its headline factor is NOT a result and says so (rule 14)**: 1,289,143x on a noiseless invertible toy plant is §54.8's exact-interpolation signature, so the assertion is a loose bound on the PATH and never on the number. |
 | `test/pilot/objtable.mjs` — THE FIT COLUMN | **TARGET 6'S UNBUILT HALF, PRICED ON EVERY PLANT THAT SHIPS A FIT (plan §130).** The DEPLOYED figure has been quoted on ten plants and the FIT on one — the arm, 24,864 MAC/ROW, 249% of budget at decision stride 1 — which is one plant's stride standing for ten. `fitCost()` is a property of the fitted object and `cadence` is read off the deployed one, so `emitRow` carries `fitPerRow`, `fitCadence` and `fitBytes` and the read prints the sliced figure at NO plant cost — the same READ the target-1 column is. **It fits the scan on SIX of SEVEN**: barrel 100.1%, mill 98.7%, column 45.1%, arm 43.7%, cart-pole / real arm / real tanks 11.8%. Only the barrel is over, by 0.1%, and the arm reads 43.7% rather than 249% because its stride is 4. So the STREAMING fit is affordable and **what is still offline is the BATCH route**. A row shipping no distilled rung reads `—` rather than zero, because a plant shipping four coefficients is not a plant whose fit is free (rule 25). REPORTED and not asserted, for the target-1 column's own reason (rule 3). |
+| `test/pilot/freshmeter.test.mjs` | **EVERY PLANT'S SETTLE IS INSIDE ITS OWN METER, OR THE PLANT STATES IT HAS NO CLOCK (plan §131).** `meter.mjs` puts the tick inside the rig's own `step` so no caller can bypass it, and that does not defend against the other shape: `realtanks-rig.mjs` and `realexch-rig.mjs` ran their settle on the RAW plant and wrapped it AFTERWARDS, so `fresh()` cost the meter ZERO on the two plants whose calendars §126 and §127 published — 2.2 h of tank and 25 min of exchanger, once per excitation segment and once per scored run. **It was not a hidden fault**: `dirinvall.mjs` printed *each `fresh()` pre-roll is 0 steps — NOT counted by this rig, so this calendar OMITS its settle* on both, in the same runs, and nothing compared the two routes (rule 15b, which §117 wrote after paying for exactly this). Three states, one of them a fault (rule 25): ticks and `fresh() > 0` is charged; never ticks at all is UNKNOWN and is asserted to be exactly ONE plant so the exemption cannot grow; ticks and `fresh() === 0` is RED. **Checked to FAIL on the pre-repair state** — three red, naming both plants (rule 9c) — with both halves pinned against a reconstructed fault shape and its repair. |
 | `test/pilot/classicprice.test.mjs` | **THE CONVENTIONAL RUNG IS PRICED BEFORE THE BUDGET ADMITS IT (plan §127).** §124 gave ②d and ③ an estimate so a `plantBudget` could refuse either before it spent a lap; rung ① had none and is the LARGER bill wherever the teacher is gone — **15 of the real cascaded tanks' 17 scored runs, 65% of the commissioning, on a rung that is REFUSED**, against the same 64% on the real exchanger buying 1.11x. So the decision belongs to a budget and never to a blanket skip, and BOTH outcomes are asserted: no budget and a budget that FITS run the rung to completion, a budget that does not SKIPS it with a stated row and never calls the training closure, and a skipped rung records NO spend (rule 25). **The BOUND is asserted in the one direction that matters** — a completed commission never spends more laps than `plan()` said — against a plant the rung can actually improve, with a rule-9c check that it was a real commission rather than an exit on lap one. **Its own first mock found the defect that matters more than the test**: a host returning a CONSTANT `spent()` made `stepsPerScored` read ZERO, every estimate multiply out to `0 steps`, and every rung be admitted whatever the budget — a gate that cannot fire, in silence, which is rule 9b's shape one level up from the three guards that shipped armed and unreachable. Estimates are WITHHELD now when the scored-run cost is unmeasurable and `rep.budget.note` says why, pinned both ways. |
 | `test/pilot/probe.test.mjs` | **THE PROBE INSTRUMENT REACHES A TEACHER THE HARNESS ALREADY BUILT (plan §125).** §121's `probeRuns` wrapped the descriptor's `run` and `teach` on a SPREAD COPY, and the ORACLE teacher is neither — `oracleConverge` is built BY THE HARNESS, closed over its own drive loop, so `ORACLE=1 PROBEPTS=K` degraded nothing it read and three rows were recorded as a vacuous control (rule 9c). **The defect is closure TIMING and not a missing key**, which is why a test of `probeRuns` alone cannot see it: both objects were correct and the already-built closure saw the wrong one. What is pinned is that property and nothing else — a teacher built BEFORE the degradation must still be degraded BY it — and it is **checked to FAIL on the pre-repair state** (three checks red, the drive counter reading `0 drive(s) for 1 call(s)`, which IS the state §121 was in), because a control that cannot fail is not a control (rule 9c). Both halves: `K = 0` returns the descriptor itself, `K ≥ lap` is exact on the record, a run that publishes no drive gets no counter rather than reading as degraded (rule 25), and the SCORE the teacher's monotone gate reads moves with the record — the quantity §125 measures lying by 13x at K=32. |
 | `test/inventory.test.mjs` | **WHAT SHIPS, WHAT COMMISSIONS, WHAT IS ONLY THE BENCH (plan §53).** Classifies every module in `lib/` as DEPLOY / COMMISSION / BENCH / RETIRED / OTHER and fails when one appears that nobody classified — a document would drift, and this file's own tables have already demonstrated that. Asserts nothing in `lib/` is unreachable AND untested, that the deploy set imports nothing, and that every retired module states WHY rather than merely that. Its walker follows `import(...)` as well as `from '...'`, because the first version did not and duly reported 1,900 lines of live FlowSim code as dead. |

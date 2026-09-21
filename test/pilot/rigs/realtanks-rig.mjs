@@ -115,18 +115,29 @@ const PROG = SEG * (RECIPE.length - 1);
 function makeMachine({ overflow = false, rec = RECIPE } = {}) {
   const v0 = voltsFor(rec[0]);
   const p = makePlant(MODEL, new Array(8).fill(rec[0]), new Array(8).fill(v0));
-  for (let i = 0; i < 2000; i++) p.step(v0);
   // EVERY ADVANCE OF THE PLANT IS COUNTED, so `priceFrom` reports this plant's commissioning in
   // its own 4-second samples instead of printing a 0 that reads as "free" (rule 25). The counter
   // is ticked HERE and not in `sysid.mjs`'s `makePlant`, because the flexible arm wraps that same
   // plant inside a servo loop and would be counted twice.
-  if (!overflow) return { get y() { return p.y; }, step(u) { tick(); return p.step(u); } };
-  // THE TANK CANNOT HOLD MORE THAN THE TANK. Applied on top of the identified model rather
-  // than inside it, and stated as the modelling decision it is: the fit was made through the
-  // clipped samples and so has absorbed some of the ceiling already, which means this clamp
-  // is a LOWER bound on the real nonlinearity, not a reconstruction of it.
-  return { get y() { return Math.min(OVERFLOW, p.y); },
-    step(u) { tick(); return Math.min(OVERFLOW, p.step(u)); } };
+  //
+  // AND THE SETTLE IS INSIDE THE METER, WHICH IT WAS NOT UNTIL plan §131. The 2,000-step settle
+  // below ran on the RAW plant and only THEN was the object wrapped, so `fresh()` on this plant
+  // cost the meter ZERO — measured directly against the barrel's 20,000, the quadruple tank's
+  // 30,000 and the mill's 4,000. This is a real 2.2 hours of tank, once per excitation segment
+  // and once per scored run, and it was invisible to the one instrument that prices this plant's
+  // calendar (rules 17, 25). Nothing about the trajectory changes: the overflow clamp is on the
+  // RETURN value and never on `p`'s state, so every delivered number is byte-identical and only
+  // the bill moves, which is what says an instrument was repaired (rule 21).
+  const m = !overflow
+    // THE TANK CANNOT HOLD MORE THAN THE TANK. Applied on top of the identified model rather
+    // than inside it, and stated as the modelling decision it is: the fit was made through the
+    // clipped samples and so has absorbed some of the ceiling already, which means this clamp
+    // is a LOWER bound on the real nonlinearity, not a reconstruction of it.
+    ? { get y() { return p.y; }, step(u) { tick(); return p.step(u); } }
+    : { get y() { return Math.min(OVERFLOW, p.y); },
+      step(u) { tick(); return Math.min(OVERFLOW, p.step(u)); } };
+  for (let i = 0; i < 2000; i++) m.step(v0);
+  return m;
 }
 
 /** The conventional machine's own tracking error on the program — the denominator. */

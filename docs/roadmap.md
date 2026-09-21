@@ -88,9 +88,26 @@ tanks ship 9.11x in 21.3 HOURS against 15.9 days unbudgeted, 17.9x less plant ti
 factor**, and the exchanger still admits the rung and keeps the 1.11x it buys. Gap 1 on the two
 real-provenance process plants is now hours and days rather than days and weeks.
 
+**AND EVERY CALENDAR IN THOSE TWO PARAGRAPHS IS UNDERSTATED, BECAUSE THOSE TWO RIGS SETTLED OUTSIDE
+THEIR OWN METER (§131).** `fresh()` cost the meter ZERO on both — 2.2 h of tank and 25 min of
+exchanger, once per excitation segment and once per scored run — while `dirinvall.mjs` PRINTED *NOT
+counted by this rig, so this calendar OMITS its settle* in the same runs and nothing compared the
+two (rule 15b). Repaired, every delivered factor byte-identical: **15.9 days is 19.3, 21.3 h is
+39.1 h, 2.7 days is 3.1, and the exchanger's 104.72x costs 18.9 h and not 9.8.** The short budgeted
+routes are out by 1.84-1.93x and the whole-ladder ones by 1.15-1.21x, which is what a per-`fresh()`
+constant does to a route that spends few plant steps, so **§127's 17.9x is really 11.8x** at the
+same 9.11x. A budget is a number in plant steps, so the exchanger's rung ① now flips ADMITTED →
+SKIPPED at 60,000 and the plant ships 94.70x in 6.9 h; 90,000 buys it back at 104.72x in 18.9 h.
+`test/pilot/freshmeter.test.mjs` makes the comparison a check and is asserted to fail on the
+pre-repair state.
+
 **WHAT IS STILL OPEN IN IT, STATED SO THE GAP IS NOT READ AS CLOSED.** Two things. **(a) The
-excitation is now the bill — and carrying the plant across it is clean on the column and VOID on
-the barrel (§123)**, so the lever is one plant's: under the budget ①d's open-loop segments are **61-67% of the plant
+excitation is the bill — and carrying the plant across it is clean on the column (§123) and on
+BOTH real-provenance plants (§131), and VOID on the barrel alone**: on the two added the carry
+removes 38% of the excitation with every SHUFFLE control at 1.000x and ships **9.12x in 28.0 h and
+103.94x in 16.9 h**, and the prediction that separated them was written first — the barrel is the
+only plant whose diet segments start somewhere other than where its `fresh()` settles. What remains
+one plant's is the VOID, not the lever: under the budget ①d's open-loop segments are **61-67% of the plant
 time** (column 2.5 days, barrel 45.8 h), and §105 already measured why — the route makes SEVEN
 `fresh()` calls, each pre-rolling a settle, 68% of its own cost — and §72 already built the lever
 for the teacher (`distilkit.carrier`, 64% of every call) and never applied it here. That is a

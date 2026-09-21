@@ -107,10 +107,14 @@ const PROG = SEG * (RECIPE.length - 1);
 function makeMachine(m = MODEL) {
   const u0 = flowFor(RECIPE[0]), t0 = tempAt(m, u0);
   const p = makePlant(m, new Array(12).fill(t0), new Array(12).fill(u0));
-  for (let i = 0; i < 1500; i++) p.step(u0);
   // Every advance is counted, so `priceFrom` reports commissioning in this plant's own seconds
-  // rather than printing a 0 that reads as "free" (rule 25).
-  return { get y() { return p.y; }, step(u) { tick(); return p.step(u); } };
+  // rather than printing a 0 that reads as "free" (rule 25) — AND THE SETTLE IS INSIDE THAT
+  // COUNT, which it was not until plan §131. The 1,500-step settle below ran on the RAW plant
+  // before the wrapper existed, so `fresh()` here cost the meter ZERO while costing the
+  // exchanger 25 minutes, once per excitation segment and once per scored run (rules 17, 25).
+  const w = { get y() { return p.y; }, step(u) { tick(); return p.step(u); } };
+  for (let i = 0; i < 1500; i++) w.step(u0);
+  return w;
 }
 
 /** The conventional machine's own tracking error on the program — the denominator. */
