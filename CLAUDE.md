@@ -434,6 +434,27 @@ Each of these is a claim that can be shown false, which is the only kind worth w
    the one it was commissioned against is the ordering a plant MODEL produces and the opposite of
    a memory's.
 
+   **AND ON THE COLUMN THE LEVER IS NEITHER THE DIET NOR THE MAP — THE TWO PROGRAMS WANT
+   CORRECTIONS FOUR TIMES APART AND THE MACHINE'S INPUT BOX IS SMALLER THAN THE LARGER ONE
+   (plan §134).** §120 left the teacher-free object transferring at **0.941 on the barrel and 0.304
+   on the column**, one held-out program each, with authority named as the suspect. Swept with
+   everything else held, the column's ratio rises **0.304 → 0.657** while the BARREL is
+   **BYTE-IDENTICAL at 0.941 across a 16x span of its own cap** — the control that gives the sweep
+   teeth. What separates them is where the two programs SATURATE: the column's scored schedule is
+   byte-identical from a cap of 0.8 and its held-out one only from 3.2, so their demands differ by
+   about **4x** and the shipped 0.4 is sized for the smaller. It is not broad clipping — no ladder
+   row prints CLAMPED at any cap, so under 1% of samples clamp while the 0.4 → 0.8 step is worth
+   1.26x, which is *a clip FRACTION does not measure what a cap costs* on a plant whose error is a
+   changeover transient. **AND IT CHANGES NOTHING THAT SHIPS**: 0.657 still misses target 1's 0.77,
+   and reaching it asks for **6.4x the plant's whole declared input travel**, so no authority is
+   both large enough to help and small enough to be a setting (§104.1's sentence, on the
+   teacher-free object this time). **The column keeps its teacher, for a measured reason.** The
+   sweep is bounded rather than runaway — byte-identical from 3.2 through 51.2 — so it is a demand
+   and not §54.8's exact-interpolation signature (rule 14). **AND THE SHIPPED CAP IS WHAT KEEPS
+   §130's `0 made WORSE` CLEAN, WHICH NOBODY HAD NOTICED**: at caps of 0.1 and 0.2 the held-out
+   schedule reads 0.804x and 0.920x, so that count is a property of this plant's authority and not
+   of the object.
+
    **AND A DIET ENLARGEMENT DOES NOT MOVE IT ON EITHER PLANT BELOW THE SPLIT (plan §122)**: the
    column's teacher DROPS the added recipes (+1, +2 identical to the shipped fit; +4 reads 0.379 at
    +52% plant time) and the barrel's held-out changeover gets WORSE on every enlargement (0.393 →

@@ -26014,3 +26014,102 @@ and it costs 10-16% of a calendar on plants where the calendar is the gap this p
 close. Where ①d is armed at all it is the better setting and the record says so; where the third
 candidate matters it is still unmeasured. And the 2R arm and EMPS still have no ladder that arms
 ①d, which §128 already recorded as a routing question rather than a measurement one.
+
+## §134 — Why ①d transfers on the barrel and not the column: the two programs want corrections 4x apart, and the machine's input box is smaller than the larger one (roadmap step 10, task #99)
+
+§120 armed the teacher-free `①d` rung under a 3-day budget on both expensive plants and the two
+transferred completely differently — **barrel 0.941 of its scored factor (MET), column 0.304** —
+one held-out program each. `docs/roadmap.md` step 10 named the suspect and its falsifier: the
+column's ①d sits at **0.400 of a 0.4 cap on every seed** (§104), so its held-out reading may be
+CLAMP-SHAPED where the barrel's is not. *Sweep the cap on the held-out schedule with the scored
+program's factor held — if the ratio rises the suspect stands; if it is flat it is the plant and
+the column keeps its teacher.*
+
+It stands, it is bounded, and the mechanism is sharper than "clamped".
+
+### The column, `UM` swept with everything else held
+
+`UM` sets `WB.UMAX`, which is the spec's `uMax` and nothing else — the plant's declared input box
+`WB.UBOX` (±0.5) is a separate constant and does not move, so the sweep isolates the CORRECTION's
+authority. Every row is `SUITE=full DIRINV=1 DIRFIRST=1 PLANTBUDGET=43200` (3 days at DT 0.1 min),
+which is §120's own configuration.
+
+```
+   UM        scored        held out      ratio
+   0.1       1.937x        0.804x        0.415    <- held-out MADE WORSE
+   0.2       3.420x        0.920x        0.269    <- held-out MADE WORSE
+   0.4       3.850x        1.169x        0.304    <- SHIPS. §120's row, reproduced digit for digit
+   0.8       4.850x        1.387x        0.286
+   1.6       4.850x        1.809x        0.373
+   3.2       4.850x        3.185x        0.657
+   6.4 · 12.8 · 25.6 · 51.2   byte-identical to 3.2 on both columns
+```
+
+**READ THE TWO ABSOLUTE COLUMNS AND NOT THE RATIO (rule 19).** The ratio is non-monotone —
+0.415 / 0.269 / 0.304 / 0.286 / 0.373 / 0.657 — and its high value at `UM 0.1` is the DENOMINATOR
+collapsing, the same artefact §106 flagged when a sharp-only diet met target 1 by wrecking the
+program it was commissioned on. What carries the finding is that the two programs SATURATE IN
+DIFFERENT PLACES:
+
+```
+  the SCORED schedule is byte-identical from UM 0.8 up     -> its correction demands <= 0.8
+  the HELD-OUT schedule is byte-identical from UM 3.2 up   -> its correction demands 1.6-3.2
+```
+
+**Two programs of the same family, in the same input box, on the same commissioned weight vector,
+want corrections about FOUR TIMES apart — and the shipped cap is sized for the smaller one.** It
+is not that the object is broadly clipped: no ladder row prints a CLAMPED note at any cap, so
+`clip.frac` stays under 1% throughout, and §104's "peak 0.400 of 0.400" is a PEAK that touches the
+cap on a handful of samples. On a plant whose whole error is a changeover transient, a few clipped
+samples at the transition are where the correction matters, and the 0.4 → 0.8 step is worth 1.26x
+on the scored program with under 1% of samples clamped. *A clip FRACTION does not measure what a
+cap costs* — which is worth having, because this project reads that fraction as a diagnostic in
+every ladder row.
+
+**AND IT IS NOT AN UNBOUNDED CLIMB, WHICH IS THE CHECK THAT MAKES THE ROW QUOTABLE (rule 14).**
+§54.8 disqualified DeePC for a score that grew every time its grid widened; here both columns stop
+moving at 3.2 and stay byte-identical over a further 16x, so the sweep found a demand rather than
+an interpolation runaway.
+
+### The barrel is the control, and it is clean
+
+The suspect predicts the barrel does NOT move, because its object was never at its cap. `UC` swept
+on the same configuration:
+
+```
+   UC        scored        ratio
+   3         2.98x         1.106    <- BELOW the barrel's own demand; the ratio rises because the
+                                       SCORED factor collapsed 4.21x -> 2.98x (rule 19 again)
+   6 · 12 (ships) · 24 · 48 · 96    1.2525e+0, 4.21x, ratio 0.941 — BYTE-IDENTICAL across 16x
+```
+
+**Sixteen-fold span, one number.** The barrel's two programs are satisfied by the same cap and
+saturate together; the column's are not. So the asymmetry §120 recorded is a DEMAND MISMATCH
+BETWEEN PROGRAMS and not a difference in the plant's invertibility, the map's capacity or the diet.
+
+### What it does NOT buy, stated before the number is quoted
+
+**0.657 IS NOT A DEPLOYABLE FIGURE AND IT STILL MISSES THE BOUND.** Target 1's 1.3x bound is a
+ratio of 0.77, so even at infinite authority this plant does not meet it — relieving the cap closes
+a little over half the gap (0.304 → 0.657 against a possible 1.0) and no more. And `wbSpec`'s
+channel box is ±0.5, so `UM 3.2` asks for a correction **6.4x the plant's entire declared input
+travel**: the figure states the map's appetite, exactly as §104.1 said of the teacher-taught object
+on this same plant, and there is no authority both large enough to reach 0.657 and small enough to
+be a setting. **The column keeps its teacher, and the reason is now measured rather than suspected.**
+
+**AND THE SHIPPED CAP IS WHAT KEEPS THE PROJECT'S *NONE MADE WORSE* COUNT CLEAN, WHICH NOBODY HAD
+NOTICED.** At `UM` 0.1 and 0.2 the held-out schedule reads 0.804x and 0.920x — MADE WORSE — where
+§130's scrape prints `TARGET 1 asked on 10 of 10: 5 MET, 0 made WORSE`. That count is a property of
+the shipped authority on this plant and not of the object, and a customer who sized this cap
+conservatively would have bought the one failure the record currently does not carry.
+
+### Controls
+
+- **Unset reproduces §120 digit for digit**: 1.364e-1 → 3.543e-2 = 3.850x scored, 1.071e-1 →
+  9.162e-2 = 1.169x held out, 0.304. The published row is the control rather than `UM=0.4` against
+  unset, which is rule 9c(b)'s knob-at-its-own-default and proves nothing.
+- **Nothing ships differently.** `UM` and `UC` are rig knobs that predate this section, no default
+  moves, and no library file is touched — this is a measurement against existing switches, which is
+  why it costs no verification beyond its own runs.
+- **The barrel's flat rows are the both-halves half (rule 9)**: a sweep that moved everything it
+  touched would be measuring the sweep.

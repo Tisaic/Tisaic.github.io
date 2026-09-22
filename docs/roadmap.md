@@ -304,11 +304,18 @@ identical factor while the exchanger admits it and keeps its 1.11x. *What is lef
 tanks' bill is now 75% EXCITATION, so §105's seven `fresh()` re-settles are the next term, and
 §123 measured that lever as clean on one plant of two.
 
-**10. Why does ①d transfer on the barrel and not the column?** (task #99) 0.941 against 0.304 (§120), one plant
-each. The named suspect is authority: the column's ①d sits at **0.400 of a 0.4 cap on every seed**
-(§104), so its held-out reading is clamp-shaped where the barrel's is not. *Falsifier:* `UCAP` swept
-on the held-out schedule with the scored program's factor held — if the ratio rises with the cap the
-suspect stands; if it is flat, it is the plant and the column keeps its teacher.
+**10. Why does ①d transfer on the barrel and not the column?** (task #99) **DONE, §134 — THE SUSPECT
+STANDS, IT IS BOUNDED, AND THE COLUMN KEEPS ITS TEACHER ANYWAY.** Swept, the column's ratio rises
+**0.304 → 0.657** and the barrel's is **BYTE-IDENTICAL at 0.941 across a 16x span of its own cap**
+— the control the falsifier needed. The mechanism is sharper than *clamped*: the two programs
+SATURATE IN DIFFERENT PLACES (scored demand ≤ 0.8, held-out demand 1.6-3.2), so they want
+corrections about **four times apart** and the shipped cap is sized for the smaller. Read the
+absolute columns and not the ratio, which is non-monotone because its denominator collapses at
+small caps (rule 19). *What it does not buy:* 0.657 still misses target 1's 0.77, and reaching it
+asks for **6.4x the plant's whole declared input box**, so there is no authority both large enough
+to help and small enough to be a setting — §104.1's sentence on the teacher-taught object, now on
+the teacher-free one. *And the shipped cap is what keeps the project's `0 made WORSE` count clean*:
+at UM 0.1-0.2 the held-out schedule reads 0.804x and 0.920x.
 
 **11. One EDM LOGGING run — no controller.** (task #95) The falsifier `docs/edm.md` already names: **LEAD TIME
 against the gap's own settling**, readable off records the machine produces anyway (§52.26
@@ -317,8 +324,8 @@ transplanted). *Makes it a result:* the first evidence in this project that is n
 own prediction was wrong before anything was built for it.
 
 Steps 5 and 6 are gap 1 and compose (a carried excitation lowers the calendar of the object the bar
-would ship). Steps 7, 9 and 10 are independent of them and of each other. Step 11 is the only one that
-changes the KIND of evidence and should not wait for the others. **The program that puts these in
+would ship). Steps 7, 9 and 10 are independent of them and of each other. **Step 11 is the only one
+still open on this list, and it is the only one that changes the KIND of evidence.** **The program that puts these in
 the context of a world-class bar, with the bar stated as measurements, is `docs/program.md`.**
 
 ---
