@@ -24,7 +24,7 @@ the headline suggests and the calendar is what is not.**
 | Completely self-tuning | **SUPPORTED** | nothing — this is the strongest thing here and the work is to not break it |
 | PLC memory and CPU | **MET for what ships** (8-330 MAC/decision, 0.7-1.8 kB, `artefact.test.mjs` bit-identical) | the COMMISSIONING arithmetic, which the PLC-only rule also binds and which has never been costed as sliced background compute |
 | Reusable across plants | **6 of 11 rows ship the deployed object, 5 the conventional rung, 0 the cascade, none made worse** (§115, scraped) | nothing on the plants already asked — this is the portfolio working. It moves by a plant nobody here chose |
-| Robust and tolerant | **CONTRADICTED on two plants — and both contradictions belong to `pilot.js`'s GATE, which ships on 0 of 11** | the OBJECT's own diet-draw distributions on the plants where only the TEACHER was ever spread (§84.8, §87.3 did four; the rest are unmeasured) |
+| Robust and tolerant | **CONTRADICTED on two plants — and both contradictions belong to `pilot.js`'s GATE, which ships on 0 of 11** | the OBJECT's own diet-draw distributions — §84.8 and §87.3 did six plants, **§136 did the last two that ship the object (cold mill 7/7 at 1.002x, 2R arm 7/7 at 1.57x, nothing made worse on either)**, so what is left undrawn ships the CONVENTIONAL rung and is a different question |
 | Linear AND nonlinear alike | **four error classes of four tried** | a fifth class. Hysteresis (Bouc-Wen) is the named gap and is a vendoring problem, not a controller one |
 
 And eight targets, of which one is badly missed and it is not the one the table above leads with:
@@ -371,7 +371,12 @@ Stated so it can fail rather than be revised (rule 59):
   off `2·nh` says the mechanism is not the teacher's bandwidth either.
 - **A plant appears where the deployed object's own diet draws produce a harmful deployment.** The
   *robust and tolerant* row is currently re-scopeable because every contradiction on record belongs
-  to a component that ships nowhere; one such draw ends that.
+  to a component that ships nowhere; one such draw ends that. **Two more plants were asked and it did not
+  fire (§136):** the cold mill's 7 draws deploy and help at a spread of 1.002x with the GAUGE
+  transfer at exactly 1.000 on every one, and the 2R arm's 7 deploy and help on all three programs
+  with target 1 MET on every one. **What §136 found instead is on a different row**: the arm's
+  shipped diet is the BEST draw of seven on all three programs at once, so the flagship factors in
+  this record sit about 1.29x above a median commissioning of the same machine.
 - **The EDM's logs show no lead time.** Then gap 4's named route is the wrong first machine, and the
   right response is to find another rather than to build for it anyway.
 - **`objtable` or `screen` goes red.** Those two scrapes are the only checks the governing mandate —

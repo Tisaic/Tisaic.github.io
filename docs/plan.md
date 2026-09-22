@@ -26256,3 +26256,221 @@ pose-dependent and so weights the two tool axes differently along the path, whic
 candidate and is not established. And the 1.43x/1.44x between the two harnesses is ATTRIBUTED to
 the support by elimination — the feedforward is accounted for, the normalisation is accounted
 for, and what is left is the lap count and the transient — rather than measured term by term.
+
+## §136 — THE DEPLOYED OBJECT'S OWN DIET DISTRIBUTION ON THE TWO PLANTS THAT SHIP IT AND WERE NEVER DRAWN (task #11)
+
+**WHY THIS AND NOT SOMETHING ELSE.** `CLAUDE.md`'s north-star table has five rows and exactly one
+is **CONTRADICTED** — *robust and tolerant* — and that same table names THE ONE THING that would
+move it: *the OBJECT's own diet-draw distributions on the plants where only the TEACHER was ever
+spread.* `test/pilot/spread.mjs` scores the TEACHER, which `objtable` says ships on zero of eleven
+rows; §84.8 and §87.3 drew six diets each on six plants through `DSEED`. **Four harnesses have no
+`DSEED` at all — the 2R ARM, the COLD MILL, the quadruple tank and EMPS — and two of those four
+ship the deployed object.** So every arm number and every mill number in this record is ONE
+commissioning, on the two plants that carry the flagship factor and this project's only
+disturbance-rejection win.
+
+**WHAT THE RANDOM VARIABLE HAD TO BE, AND WHY A SEED IS NOT IT.** Both rigs are deterministic in
+the way that matters: the arm's cell is deterministic and the teacher replaces the cascade's
+excitation through `oracleF0`, which §52.29 measured as returning a BIT-IDENTICAL policy; the
+mill's scored run is a fixed `makeMill(1, o)`. `distil-tank.mjs` carries the recorded signature of
+getting this wrong — three byte-identical "seeds", one draw three times (rule 61 aimed at a seed).
+What genuinely varies between two commissionings of the same machine is the DIET, so that is what
+is drawn, from the same design space the shipped diet occupies and nothing else.
+
+---
+
+### §136.1 — THE COLD MILL: THE TIGHTEST DISTRIBUTION IN THIS PROJECT, AND A TRANSFER COLUMN THAT MOVES 1.37x WHILE IT DOES NOT
+
+This plant's diet is four training runs, each stating two numbers: how many WHOLE ROLL TURNS in the
+run starts — which sets the phase of the UNMEASURED entry wander, the one component §84.1 and §85
+establish the deployed map cannot express — and the mill's measurement-noise seed. `DSEED=<n>`
+draws both from the same space; the whole-turn constraint is preserved exactly, because a
+fractional offset would hand the object a shaft angle that is not the shaft's (§71.2's own defect).
+
+```
+  draw   turns              deployed   GAUGE ±10%   SPEED 4.0 m/s   SPEED 6.5 m/s
+  d0     37, 48, 59, 70      2.625x      1.000        0.770 MET      0.562 NOT MET   <- the SHIPPED diet
+  d1     40, 34, 81, 26      2.628x      1.000        0.857 MET      0.838 MET
+  d2     42, 27, 77, 59      2.629x      1.000        0.962 MET      0.879 MET
+  d3     44, 99, 73, 92      2.626x      1.000        0.782 MET      0.757 NOT MET
+  d4     45, 92, 69, 88      2.626x      1.000        0.757 NOT MET  0.703 NOT MET
+  d5     47, 84, 66, 78      2.629x      1.000        0.823 MET      0.761 NOT MET
+  d6     49, 77, 62, 31      2.628x      1.000        0.805 MET      0.706 NOT MET
+```
+
+**7 of 7 DEPLOY AND HELP, the delivered factor spans 2.625x to 2.629x — a spread of 1.002x — and
+nothing is made worse on any operating point of any draw.** That is the tightest distribution in
+this project by a factor of fifteen; the previous tightest was the cart-pole's 1.03x over six
+draws (§87.3). The roadmap's own kill clause for this row — *a plant appears where the deployed
+object's own diet draws produce a harmful deployment* — does not fire here.
+
+**AND THE GAUGE COLUMN READS EXACTLY 1.000 ON ALL SEVEN, WHICH IS WHAT GIVES THE KNOB TEETH.**
+§89.2 measured a ±10% target-gauge change as inert to three figures on ONE diet and read that as a
+property of the object; it is one, and this is the first evidence that says so rather than assuming
+it. It is also rule 9's half that instruments usually fail: a draw that moved the rows it should
+not move would be a wiring fault wearing a finding.
+
+**WHAT DOES MOVE IS THE LINE-SPEED TRANSFER, BY 1.37x, WHILE THE DELIVERED FACTOR MOVES 0.2%.**
+§89.2's *a mill that changes gauge needs nothing, a mill that changes line speed needs its delay
+updated* is quoted throughout this record from the numbers 0.770 and 0.562. Those are ONE DRAW.
+Across seven, the 4.0 m/s row spans 0.757-0.962 and the 6.5 m/s row 0.562-0.879, **the shipped diet
+is the WORST draw on the 6.5 m/s row**, and on draw 2 BOTH speed rows meet target 1's bound. The
+ratio's DENOMINATOR is fixed to three figures here, which is what makes this column unusually
+clean: §103's barrel had the opposite problem — an apparent target-1 swing that was its denominator
+moving (§89.1's objection to the cheap comparator) — and there is none of that to argue about.
+
+**AND IT IS BISECTED, BECAUSE A DRAW THAT MOVES TWO THINGS CANNOT SAY WHICH ONE A RESULT BELONGS TO
+(rule 20).** The two halves are different claims — the TURN COUNTS are the excursions the ENGINEER
+picked, the SEEDS are the noise the PLANT happened to make — so `DDRAW=turns|seeds` holds one at
+the shipped value and draws the other, consuming the same streams either way so the three modes are
+three readings of ONE draw rather than three draws:
+
+```
+  DDRAW=seeds   shipped excursions, drawn noise      DDRAW=turns   drawn excursions, shipped noise
+    d1  2.619x   0.777 / 0.569                         d1  2.628x   0.870 / 0.862
+    d2  2.618x   0.773 / 0.564                         d2  2.572x   0.968 / 0.926
+    d3  2.624x   0.773 / 0.575                         d3  2.626x   0.780 / 0.739
+    d4  2.624x   0.758 / 0.552                         d4  2.625x   0.744 / 0.672
+    d5  2.623x   0.786 / 0.588                         d5  2.629x   0.832 / 0.785
+    d6  2.617x   0.774 / 0.574                         d6  2.628x   0.785 / 0.694
+    spread 1.04x / 1.07x, 6 of 6 NOT MET               spread 1.30x / 1.38x, 1 of 6 meets both
+    the shipped diet reads 0.770 / 0.562
+```
+
+**THE TRANSFER BELONGS ENTIRELY TO WHICH EXCURSIONS THE ENGINEER TRAINED ON, AND THE PLANT'S OWN
+MEASUREMENT NOISE IS INERT.** Hold the shipped turn schedule and draw only the seeds, and all six
+draws reproduce the shipped diet's own 0.770 / 0.562 to within 3% and 5% — the signature of a
+variable that does not matter. Draw the schedule instead and the same six span 1.30x and 1.38x. So
+§89.2's line-speed weakness is half the declaration going stale and **half a property of the four
+excursions that commissioning happened to contain**, which is a product statement of a different
+kind: a mill that will change line speed should be commissioned on a diet chosen for it, and
+nothing here yet says which diet that is.
+
+**THE MECHANISM I PROPOSED FOR IT IS NOT SUPPORTED, AND IT WAS POST-HOC (rules 25, 59).** The
+shipped schedule is an ARITHMETIC PROGRESSION — 37, 48, 59, 70, step 11 — and the unmeasured
+wander's two components have periods of 5.264 and 2.326 turns, so a constant step samples their
+phase in a cluster rather than across it. Read as a circular resultant (1 = all four runs at one
+wander phase, 0 = uniform) the shipped diet is the worst of the seven at 0.812 against 0.241-0.565,
+which looks like the answer. It is not: the correlation against the mean speed ratio is **−0.481 on
+the slow component and +0.014 on the fast one over seven points**, and draw 5 has the second-worst
+coverage of the seven (0.565) while transferring better than draws 3 and 4, which cover better. The
+hypothesis was formed AFTER seeing the table, which is why it is recorded as unsupported rather than
+as a finding.
+
+**THE CONTROLS.** `DSEED=0` IS the shipped diet, so the knob's inertness is checkable rather than
+asserted, and it reproduces the unset run line for line apart from the draw banner (rules 9, 21).
+`DDRAW=both` on draw 2 reproduces the plain `DSEED=2` row exactly — 2.629x, 0.962, 0.879 — so the
+bisection knob did not move the thing it was built to split. The SCORED runs are untouched by any
+draw (`makeMill(1, o)` at every operating point), so the spread is the fitted object and not the
+scoring. Drawn seeds start at 1001, disjoint from the scored mill's seed 1 and the gauge
+instrument's 9001, and both halves of the design space are ASSERTED in the harness — four distinct
+integer turn counts in [20,100) and seeds in range or held — checked to fire in both states.
+
+**NOT CLAIMED.** The design space is a choice: four excursions drawn uniformly over 20-99 whole
+turns is not necessarily what an engineer's four look like. **Picking draw 2 because it transfers
+best would be selecting on the held-out operating points, which is fitting to the test**, and it is
+stated rather than done — what the table supports is the SPREAD and the bisection, not a
+recommended diet. And the 1.002x is the like-for-like main draw; across all nineteen mill
+commissionings in this section the delivered factor spans 2.572x-2.629x, 1.022x, the low being
+`DDRAW=turns` draw 2.
+
+---
+
+### §136.2 — THE 2R ARM: THE FLAGSHIP FACTOR IS A 1.57x DRAW, THE SHIPPED DIET IS THE BEST OF SEVEN, AND TARGET 1 HOLDS ON EVERY ONE
+
+This plant's diet is four programs — two random convex polygons and two stars at the programs' own
+scale on one feed — produced by `designDemoPaths` from a base seed. That is already a DRAW; nothing
+had ever moved it. `DSEED=<n>` moves the base seed by 16, which is the step that guarantees two
+draws cannot share a polygon (the designer consumes `seed+i` for the convex shapes and `seed+4+i`
+for the stars), and `DSEED=0` IS the shipped diet. Nothing else changes: same designer, same scale,
+same feed, same count, same shape classes, same machine, same window, same teacher.
+
+```
+  draw      scored square        target 1        held-out (rounded / circle)   fit held-out R²
+  shipped   1.5944e-2   8.18x    1.330  MET      10.88x   15.94x               0.9518 / 0.8399
+  d1        2.2247e-2   5.86x    1.315  MET       7.71x   11.84x               0.9459 / 0.8904
+  d2        1.8594e-2   7.02x    1.166  MET       8.18x   10.25x               0.9553 / 0.8677
+  d3        2.0882e-2   6.25x    1.360  MET       8.50x   11.37x               0.9494 / 0.8683
+  d4        2.0508e-2   6.36x    1.119  MET       7.12x   10.08x               0.9588 / 0.8658
+  d5        2.5031e-2   5.21x    1.288  MET       6.71x   11.39x               0.9543 / 0.8702
+  d6        1.8380e-2   7.10x    1.218  MET       8.65x    9.81x               0.9493 / 0.8674
+```
+
+**7 OF 7 DEPLOY AND HELP, ON ALL THREE PROGRAMS, AND NOTHING IS MADE WORSE ANYWHERE.** So the
+roadmap's kill clause for the *robust and tolerant* row — *a plant appears where the deployed
+object's own diet draws produce a harmful deployment* — does not fire on the flagship any more than
+on the mill. Worst cell of twenty-one is 5.21x.
+
+**AND THE SHIPPED DIET IS THE BEST DRAW OF THE SEVEN ON ALL THREE PROGRAMS AT ONCE.** 8.18x, 10.88x
+and 15.94x are each the MAXIMUM of their column. The median draw scores 6.36x, so **the flagship
+headline is a selected value worth about 1.29x over a median commissioning**, and the honest
+central figures for this plant are about **6.4x on the bench square, 8.2x on the rounded rectangle
+and 11.4x on the circle**. That is §84.8's finding on a third plant — there the COLUMN's
+hand-designed diet beat all six of its draws and the BARREL's shipped ordering sat below the median
+of six — and it is the first time it has been measured on the plant this project quotes most.
+Said plainly, because it is the uncomfortable half: every arm number in this record is the top of
+its own distribution, and it was not selected ON PURPOSE (seed 81 is `designDemoPaths`' default),
+which makes it a lucky draw rather than a cheat and does not make it typical.
+
+**TARGET 1 IS MET ON ALL SEVEN AND ITS SPREAD IS A QUARTER OF THE FACTOR'S.** The ratios run
+1.119-1.360, a spread of 1.22x, while the delivered factor spans 1.57x and the held-out programs
+1.62x each. Both halves of that ratio move together, which is what a PLANT MODEL does and what a
+memory does not — and it is the sharper statement of §88's *better on both programs it never ran
+than on the one it was commissioned against*, because it now holds across the diet rather than at
+one diet. **Read the ratio's DIRECTION correctly (rule 19, and §89.1's own caveat)**: on this plant
+the held-out programs are the EASIER ones, so the bound is `≥ 1/1.3` and a ratio above 1 means the
+DENOMINATOR moved, not that the bound was cleared with margin. A first reading of this table
+recorded d2 and d4 as NOT MET by comparing 1.166 and 1.119 against 1.3, which is the wrong
+threshold in the wrong direction.
+
+**AND THE FIT'S OWN GATE RANKS THE MACHINE BACKWARDS ON A FOURTH PLANT.** Held-out R² is nearly
+constant across the seven — 0.9459-0.9588 on channel 0 and 0.8399-0.8904 on channel 1 — while the
+delivered factor moves 1.57x, and **the shipped diet has the LOWEST channel-1 R² of all seven and
+the BEST machine result**. `distil.js` states outright that its capacity gate is a cheap PRE-FILTER
+and the decision is a machine-scored verify; this is that claim measured, after the tank's -0.057
+gate correlation (§54), the barrel's 0.94-0.98 over a rung the machine refused (§63), and §103's
+seed-wise reversal on the barrel.
+
+**THE CONTROLS.** `DSEED=0` reproduces the unset run line for line — 1.5944e-2, 8.18x, TOOL 9.34x,
+target 1 = 1.330, held-out 10.88x and 15.94x, held-out R² to four figures — so the knob is inert at
+the shipped value and the whole table is one variable (rules 9, 21). The banner prints the SHAPE
+SEEDS each draw consumes (draw 1 takes 97, 98, 101, 102 against the shipped 81, 82, 85, 86), so the
+disjointness the step of 16 exists for is readable rather than asserted in a comment (rule 30). The
+scored program, the machine, the cell, the window rule, the teacher and the authority are untouched
+by the draw, so the spread is the DIET and nothing else. `DSEED` throws on a TOUR diet, which builds
+its paths by another route and would ignore it (rule 25).
+
+**NOT CLAIMED.** One cell (K 0.25 / E 0.03), one feed, one scored program, seven draws. The design
+space is the designer's own and a real engineer's four programs need not be drawn from it. And
+nothing here says WHICH property of a draw predicts its factor — the seven differ in shape, scale
+within the designer's band, and pose coverage all at once, and no bisection of those was run.
+
+---
+
+### §136.3 — WHAT THE TWO PLANTS TOGETHER SAY, AND THE COUNT THEY MOVE
+
+**THE TWO PLANTS FAIL COMPLETELY DIFFERENTLY AND NEITHER FAILS THE CLAUSE THAT MATTERS.** On the
+MILL the delivered factor is invariant to the diet (1.002x) and its TRANSFER to an uncommissioned
+operating point moves 1.37x; on the ARM the delivered factor moves 1.57x and its transfer ratio
+moves only 1.22x. A regulator whose whole win is one declared periodic channel has a correction the
+diet cannot much change and a declaration the diet decides how far it survives; a contouring machine
+whose win is a map of the commanded reference has a correction the diet sets outright and a transfer
+that rides along with it. **Nothing made worse on either plant, on any draw, on any program or
+operating point** — 7 draws x 5 operating points on the mill and 7 x 3 programs on the arm, worst
+cell 1.474x and 5.21x.
+
+**THE COUNT THE `robust and tolerant` ROW CAN NOW CARRY.** Before this the DEPLOYED object had been
+drawn on six plants — column and barrel (§84.8), cart-pole, real cascaded tanks, real flexible arm
+and real steam exchanger (§87.3) — and the two that carry this project's flagship factor and its
+only disturbance-rejection win had never been drawn at all. It is **EIGHT** now, and every
+contradiction that row records still belongs to `pilot.js`'s gate, which ships on zero of eleven
+rows. What is still undrawn is the QUADRUPLE TANK and EMPS, and on both of those the block ships
+the CONVENTIONAL rung (§97.3) rather than the deployed object, so the question there is a different
+one.
+
+**WHAT THIS DOES NOT DO.** It does not make the *robust and tolerant* row SUPPORTED. Two plants of
+two asked produce no harmful draw, which is evidence against the row's contradiction being general
+and is not evidence that it is gone — the contradiction on record is `spread.mjs`'s, on Wood-Berry
+and the tank, through the teacher. And §136.2's own finding cuts the other way for a different row:
+the flagship's numbers are the top of their distribution, so every arm factor quoted in this record
+is about 1.29x above a median commissioning of the same machine by the same procedure.

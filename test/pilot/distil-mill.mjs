@@ -37,8 +37,10 @@
  * WINDOW: 8 roll turns is a lap of 3,267 steps, so `min(0.61·settle, lap/8)` gives ±408 — one
  * whole turn, and four times the 100-step transport delay it has to lead.
  *
- * KNOBS: TURNS (roll turns per training lap), RIDGE, STD, ONLINE, SEED, NOECC=1 (the falsifier —
- * withhold the declared phase and the object is back to a constant reference).
+ * KNOBS: TURNS (roll turns per training lap), RIDGE, STD, ONLINE, DSEED / DDRAW (draw the diet
+ * and bisect the draw — §136; this line used to name a SEED knob this file has never had, rule
+ * 30), NOECC=1 (the falsifier — withhold the declared phase and the object is back to a constant
+ * reference).
  */
 import { ladder, announce } from './rigs/ladder.mjs';
 import { millSpec } from './rigs/specs.mjs';
@@ -210,16 +212,84 @@ const TLAPS = teachLaps();
 // average down, so if the mechanism is right this knob must read INERT here (rule 9's half that
 // instruments usually fail). Unset is 1 and byte-identical.
 const TAVG = teachAvg(TLAPS);
+/**
+ * DSEED=<n>: DRAW THE DIET — this regulator's own commissioning distribution (plan §136).
+ *
+ * The north star's *robust and tolerant* row is CONTRADICTED and CLAUDE.md names the one thing
+ * that would move it: the DEPLOYED OBJECT's own diet-draw distributions on the plants where only
+ * the TEACHER was ever spread. `spread.mjs` scores this plant's TEACHER — 8 of 8 seeds deploying
+ * and helping, the cleanest distribution here — and says nothing about the object `distil-mill`
+ * ships; every number in §71 and §89.2 is ONE commissioning draw.
+ *
+ * WHAT VARIES BETWEEN TWO COMMISSIONINGS OF THIS MILL is which four excursions the engineer
+ * happened to train on, and this diet states that in two numbers per run: how many WHOLE ROLL
+ * TURNS in the run starts — which sets the phase of the UNMEASURED entry wander, the component
+ * the deployed map provably cannot express (§84.1, §85) — and the mill's measurement-noise seed.
+ * The draw moves both and nothing else: same count of runs, same declared phase, same line speed,
+ * same lap.
+ *
+ * THE WHOLE-TURN CONSTRAINT IS LOAD-BEARING AND SURVIVES THE DRAW. Every offset is an INTEGER
+ * number of turns, exactly as the shipped `37 + 11·i` is, so the declared cos/sin reference still
+ * meets the shaft it was fitted against (§71.2's own defect, which a careless draw would
+ * reintroduce silently).
+ *
+ * **`DSEED=0` IS the shipped diet** — turns 37/48/59/70 and seeds 1/2/3/4 — so the knob's
+ * inertness is checkable rather than asserted (rules 9, 21), and unset takes the literal path.
+ */
+const DSEED = process.env.DSEED === undefined ? null : +process.env.DSEED;
+if (DSEED !== null && !Number.isFinite(DSEED)) throw new Error(`DSEED ${process.env.DSEED}: a number`);
+const SHIPPED_DIET = [0, 1, 2, 3].map((i) => ({ turns: 37 + 11 * i, seed: 1 + i }));
+const DDRAW = process.env.DDRAW || 'both';
+if (!['both', 'turns', 'seeds'].includes(DDRAW)) throw new Error(`DDRAW ${DDRAW}: both, turns or seeds`);
+const DIET = DSEED === null || DSEED === 0 ? SHIPPED_DIET : (() => {
+  let st = (DSEED * 2654435761) >>> 0;
+  const rnd = () => ((st = (st * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+  // The same design space the shipped diet occupies: four runs starting 20-99 whole turns in,
+  // DISTINCT so two runs cannot sit at the same wander phase, at four distinct noise seeds.
+  const turns = [];
+  while (turns.length < 4) { const t = 20 + Math.floor(rnd() * 80); if (!turns.includes(t)) turns.push(t); }
+  // Seeds start at 1001 so no drawn run can share a noise stream with the SCORED mill
+  // (`makeMill(1, o)` below) or the gauge instrument (`makeMill(9001)`).
+  const seeds = turns.map((_, j) => 1000 * (j + 1) + 1 + Math.floor(rnd() * 900));
+  // DDRAW: WHICH HALF OF THE DRAW MOVES (plan §136). A draw that moves two things at once cannot
+  // say which of them a result belongs to (rule 20), and here they are different claims: the TURN
+  // COUNTS are the excursions the ENGINEER picked, and the SEEDS are the measurement noise the
+  // PLANT happened to make. `both` is the draw; `turns` holds the shipped noise seeds and moves
+  // only the engineer's choice; `seeds` holds the shipped excursions and moves only the plant's
+  // noise. Every stream is consumed either way, so the three modes are three readings of ONE
+  // draw and not three different draws.
+  return turns.map((t, j) => ({
+    turns: DDRAW === 'seeds' ? SHIPPED_DIET[j].turns : t,
+    seed: DDRAW === 'turns' ? SHIPPED_DIET[j].seed : seeds[j] }));
+})();
+if (DSEED !== null) console.log(`  DIET DRAW ${DSEED}${DDRAW === 'both' ? '' : ` (${DDRAW} only)`}: ${JSON.stringify(DIET)}`
+  + `${DSEED === 0 ? '  — which IS the shipped diet, so this row must reproduce it exactly' : ''}\n`);
+// BOTH HALVES OF THE DRAW, ASSERTED RATHER THAN DESCRIBED (rule 9). A diet knob whose own
+// design space is only stated in a comment is the thing this project has paid for four times.
+if (DSEED === null || DSEED === 0) {
+  check('DSEED unset or 0 IS the shipped diet — turns 37/48/59/70, seeds 1/2/3/4',
+    JSON.stringify(DIET) === JSON.stringify(SHIPPED_DIET), JSON.stringify(DIET));
+} else {
+  const t = DIET.map((d) => d.turns);
+  check('the drawn diet keeps every constraint the shipped one has: four DISTINCT WHOLE turn '
+    + 'counts in [20,100) — so the declared cos/sin reference still meets the shaft (§71.2) — '
+    + 'and seeds ≥1001, disjoint from the SCORED mill (seed 1) and the gauge instrument (9001)',
+    t.length === 4 && new Set(t).size === 4 && t.every((x) => Number.isInteger(x) && x >= 20 && x < 100)
+      && DIET.every((d, j) => (DDRAW === 'turns' ? d.seed === SHIPPED_DIET[j].seed : d.seed >= 1001 && d.seed !== 9001))
+      && (DDRAW !== 'seeds' || t.every((x, j) => x === SHIPPED_DIET[j].turns)),
+    JSON.stringify(DIET));
+}
 const distilRuns = (auto) => dietN([0, 1, 2, 3]).map((i) => {
   // Each run starts a whole number of TURNS in, so the declared phase is aligned to the lap,
   // and a different number of them, so the UNMEASURED entry wander sits at a different phase.
-  const W = Math.round((37 + 11 * i) * PER);
+  const W = Math.round(DIET[i].turns * PER);
+  const MSEED = DIET[i].seed;
   // THE PLANT'S OWN DRIVE LOOP, NAMED ONCE AND HANDED TO BOTH TEACHERS (plan §90.3).
   // `oracleConverge` iterates a lap prefix with it and `oracleTeach` takes ONE increment with it;
   // a second copy is how a harness comes to teach through a loop its own scoring never ran
   // (rule 61, and `distil-tank.mjs` paid for exactly that in §67.3).
   const DRIVE = async ({ pre, active = false, uOut = null, trace = false, onStep = null }) => {
-    const m = RM.makeMill(1 + i);
+    const m = RM.makeMill(MSEED);
     for (let q = 0; q < W; q++) m.step(RM.S0);
     const want = [];
     let s2 = 0, n = 0;
@@ -253,7 +323,7 @@ const distilRuns = (auto) => dietN([0, 1, 2, 3]).map((i) => {
     // from a DIET that varies the line speed, which is target 2's own lesson (feed-invariance
     // comes from training across feeds, never from indexing by feed) and is not what this diet
     // does. `DECL=0` is the control and is byte-identical to every mill number on record.
-    ...(DECL ? { declare: { vLine: RM.makeMill(1 + i).vLine } } : {}),
+    ...(DECL ? { declare: { vLine: RM.makeMill(MSEED).vLine } } : {}),
     // THIS PLANT IS DELIBERATELY NOT CARRIED ACROSS THE TEACHER'S CALLS, and it is the only one
     // (plan §72.15). Everywhere else the per-call warm-up is a SETTLE and rebuilding it wastes the
     // plant's time; here `W` is a PHASE ALIGNMENT — a whole number of roll turns, so the declared
@@ -263,7 +333,7 @@ const distilRuns = (auto) => dietN([0, 1, 2, 3]).map((i) => {
     // That is §71.2's own defect — the object handed a shaft angle that is not the shaft's — and
     // a blanket "carry the plant" would have reintroduced it silently.
     run: async (corr) => {
-      const m = RM.makeMill(1 + i);
+      const m = RM.makeMill(MSEED);
       for (let j = 0; j < W; j++) m.step(RM.S0);
       const want = [];
       let s2 = 0, n = 0;

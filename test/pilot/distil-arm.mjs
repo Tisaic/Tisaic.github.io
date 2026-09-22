@@ -116,6 +116,50 @@ const DIETS = {
   tour1: { feeds: [F], rMin: 3.4, rSpan: 2.4, tour: { nShapes: 6 } },
 };
 if (!(DIET in DIETS) && !['self', 'selfpoly', 'rects', 'rectspoly'].includes(DIET)) throw new Error(`DIET ${DIET}: one of ${Object.keys(DIETS).join(', ')}, self, selfpoly, rects, rectspoly`);
+/**
+ * DSEED=<n>: DRAW THE DIET — the flagship plant's own commissioning distribution (plan §136).
+ *
+ * The north star's *robust and tolerant* row is the one part of the claim the record CONTRADICTS,
+ * and CLAUDE.md names the one thing that would move it: the DEPLOYED OBJECT's own diet-draw
+ * distributions on the plants where only the TEACHER was ever spread. `spread.mjs` scores the
+ * teacher; §84.8 and §87.3 drew six diets each on six plants, two of them refusals; this plant —
+ * which ships the deployed object and carries this project's flagship factor — has never been
+ * drawn at all, and
+ * every arm number here is ONE commissioning.
+ *
+ * WHAT THE RANDOM VARIABLE HAS TO BE. `ARM_SEED` is not it: this cell is deterministic and the
+ * teacher replaces the cascade's excitation through `oracleF0`, which §52.29 measured as
+ * BIT-IDENTICAL — `distil-tank.mjs` has the recorded signature of exactly that mistake (three
+ * byte-identical "seeds", one draw three times, rule 61 aimed at a seed). What genuinely varies
+ * between two commissionings of this machine is WHICH FOUR PROGRAMS the engineer drew, and the
+ * shipped diet is itself a `designDemoPaths` draw — base seed 81, two convex and two stars at
+ * rMin 3.4 / rSpan 2.4 on one feed. So the draw moves that base seed and NOTHING else: same
+ * designer, same scale, same feed, same count, same shape classes.
+ *
+ * The step is 16 because `designDemoPaths` consumes `seed+i` for the convex shapes and `seed+4+i`
+ * for the stars, so two draws 16 apart cannot share a polygon. **`DSEED=0` IS the shipped diet**,
+ * which makes the knob's own inertness checkable rather than asserted (rules 9, 21), and unset
+ * passes no `seed` at all so the default path is untouched.
+ *
+ * It reaches `designDemoPaths` with NO library change: `autohost.js` spreads every key of
+ * `distilDiet` except `tour` into that call. The TOUR diets build their paths by another route
+ * and ignore it, which the guard below states rather than leaving to be discovered (rule 25).
+ */
+const DSEED = process.env.DSEED === undefined ? null : +process.env.DSEED;
+if (DSEED !== null && !Number.isFinite(DSEED)) throw new Error(`DSEED ${process.env.DSEED}: a number`);
+if (DSEED !== null && (!DIETS[DIET] || DIETS[DIET].tour)) {
+  throw new Error(`DSEED needs a designDemoPaths diet — DIET=${DIET} builds its paths another way and would ignore it (rule 25)`);
+}
+const DIETOPTS = DIETS[DIET] && DSEED !== null ? { ...DIETS[DIET], seed: 81 + 16 * DSEED } : DIETS[DIET];
+if (DSEED !== null) {
+  // Name the shape seeds this draw will actually consume, so the disjointness the step of 16
+  // exists for is READABLE rather than asserted in a comment (rule 30). `designDemoPaths` takes
+  // `seed+i` for the convex shapes and `seed+4+i` for the stars, one of each per feed.
+  const b = 81 + 16 * DSEED, nf = (DIETS[DIET].feeds || []).length;
+  const used = [...Array(nf).keys()].map((i) => b + i).concat([...Array(nf).keys()].map((i) => b + 4 + i));
+  console.log(`  DIET DRAW ${DSEED}: designDemoPaths base seed ${b} — shape seeds ${used.join(', ')}`
+    + `${DSEED === 0 ? '  — which IS the shipped diet, so this row must reproduce it exactly' : ''}`);
+}
 const K = +(process.env.ARM_K || 0.25), E = +(process.env.ARM_E || 0.03);
 const path = sharpRect({ w: 8, h: 8, centre: [12, 0], feed: 4e-3, accel: 4e-5, cornerDt: 40 });
 const LAP = Math.ceil(path.lap);
@@ -188,7 +232,7 @@ const host = makeArmHost({
   // `NOCLASSIC=1` disables it, which is `rigs/ladder.mjs`'s existing convention rather than a
   // second one (rule 61), and is the control that reproduces every number taken before §97.
   classic: process.env.NOCLASSIC !== '1', maxDepth: ENGINE === 'pilot' ? 1 : 0, demo: null, lapMemory: PERIODIC, distil: DISTIL,
-  ...(DIETS[DIET] ? { distilDiet: DIETS[DIET] } : {}), distilReplaces: REPLACE,
+  ...(DIETOPTS ? { distilDiet: DIETOPTS } : {}), distilReplaces: REPLACE,
   // DIET=self: the bench square ITSELF as the only training program — the in-sample ceiling of the
   // basis on the program it is scored on; DIET=selfpoly: the square plus the four polygons.
   ...(DIET === 'self' ? { distilPath: [path] } : DIET === 'selfpoly' ? { distilPath: [path, ...designDemoPaths({ centre: [12, 0], feeds: [F, F], rMin: 3.4, rSpan: 2.4 })] } : {}),
