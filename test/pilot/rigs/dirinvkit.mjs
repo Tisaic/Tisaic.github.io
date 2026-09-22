@@ -238,7 +238,7 @@ export function heldOutR2(segs, inv, opts, reach) {
  * SCORED THROUGH THE SPEC'S OWN ROUTING, on `rigs/ladder.mjs`'s own support.
  * `pol` null means the open loop. Returns rms over the scored support and the peak correction.
  */
-export function scoreOn(spec, R, pol, { N, seg = null }) {
+export function scoreOn(spec, R, pol, { N, seg = null, tap = null }) {
   // The scored run is a segment too — its own program, so a plant that homes per program homes
   // here on the SCORED one and not on whichever diet segment ran last.
   const p = spec.fresh(seg || { n: N, refAt: (k) => R[Math.max(0, Math.min(R.length - 1, k))],
@@ -258,7 +258,16 @@ export function scoreOn(spec, R, pol, { N, seg = null }) {
     if (lo === null) { lo = u.slice(); hi = u.slice(); }
     else for (let j = 0; j < u.length; j++) { if (u[j] < lo[j]) lo[j] = u[j]; if (u[j] > hi[j]) hi[j] = u[j]; }
     const r = spec.step(p, R[k], u, k);
-    if (k >= N * DROP) for (const e of r.truth) { ss += e * e; n++; }
+    // A SECOND METRIC ON THE SAME RUN, INSIDE THE SAME SUPPORT (rule 19). A plant may declare an
+    // alternate reading of the machine it has just stepped — the 2R arm's tool `totalRms`, which is
+    // the metric `distil-arm.mjs` quotes and which this kit's joint rms is NOT comparable to (§111
+    // says so in its own words). It is gated on the SAME condition as the primary rather than on a
+    // second one of its own, so the two cannot drift apart in what they are averaged over; it only
+    // READS, so every plant that declares none is byte-identical and so is every primary number.
+    if (k >= N * DROP) {
+      for (const e of r.truth) { ss += e * e; n++; }
+      if (tap) tap(k, r);
+    }
   }
   const spread = lo === null ? 0 : Math.max(...hi.map((v, j) => v - lo[j]));
   return { rms: Math.sqrt(ss / n), pk, spread };

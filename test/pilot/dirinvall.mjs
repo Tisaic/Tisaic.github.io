@@ -80,6 +80,10 @@ import { barrelSpec, wbSpec, tankSpec, empsSpec, pendSpec, realarmLadderSpec,
   realtanksLadderSpec, realexchLadderSpec, millSpec, armSpec, armDiet, G_MP } from './rigs/specs.mjs';
 import { excite, fitInverse, heldOutR2, scoreOn, refSeries, deriveWindow, lcg,
   measureSettle, priceOf } from './rigs/dirinvkit.mjs';
+// THE ARM'S SECOND METRIC — see its `alt` row. `decompose` is the SHARED geometry `deployOn` and
+// `autohost.js` both score through, so the number below is produced by the same code that produced
+// the 8.18x it is being set against, and not by a second reading of "contour error" (rule 61).
+import { ContourScore, decompose } from '../../lib/flexisim/contour.js';
 
 const SEEDS = (process.env.SEEDS || '1,2,3,4').split(',').map(Number);
 const RIDGE = +(process.env.RIDGE || 1e-6);
@@ -402,6 +406,66 @@ const PLANTS = [{
   // segments + the fitted run + the shuffle), with a few spare so an exhausted pool is a bug and
   // never a silent re-use.
   prime: () => armSpec.prime(12 + 8 * (SEEDS.length - 1) + 6),
+  /**
+   * THE SECOND METRIC, AND IT EXISTS TO CLOSE A RULE-19 GAP THE RECORD NAMES IN ITS OWN WORDS.
+   *
+   * §111: *THE FACTOR IS NOT COMPARABLE TO 6.63x IN THE SAME METRIC — this is JOINT rms and
+   * `distil-arm.mjs` quotes CONTOUR rms — so "the teacher is worth 4.7x here" is NOT a claim the
+   * record supports.* Every other term in that comparison already matches: same plant, same cell
+   * (K 0.25 / E 0.03), same SHIPPED loop (`armSpec` passes `BENCH_SERVO.bandwidth` explicitly
+   * rather than taking `arm-rig.mjs`'s pre-§52.37 default), same sharp square, same BARE
+   * denominator — `scoreSet` scores bare→policy and reads **8.18x** there (CLAUDE.md's target-1
+   * table). One term differed, and it is the only one this row could not state.
+   *
+   * AND §111's OWN SENTENCE IS HALF WRONG, WHICH ONLY READING BOTH LOOPS SHOWS. It says
+   * `distil-arm.mjs` quotes CONTOUR rms; that is true of `rep.base / rep.best` (6.63x), which
+   * comes from `autohost.js`'s top-level `run` returning `{ score: rep.totalRms }` — but the
+   * 8.18x is `scoreSet`, and `scoreSet` drives the TRAINING-RUN closure, whose `run` returns
+   * `score: Math.sqrt(s2/n)` where `s2` accumulates `worldToJoint(tool − commanded)`. So the
+   * 8.18x is JOINT rms — THE SAME QUANTITY THIS ROW ALREADY PRINTS — by the same Jacobian-inverse
+   * formula `routeSignals` uses. The metric gap §111 names is real; it is between the 6.63x and
+   * this row, not between the 8.18x and this row.
+   *
+   * SO IT IS THE SAME READING, NOT A SECOND ONE. `stepArm` publishes the tool on measured channels
+   * 6 and 7 — the tracker, commissioning-only — and `decompose` + `ContourScore` are the objects
+   * `deployOn` and `autohost.js` already score through (rule 61).
+   *
+   * WHAT STILL DIFFERS AND IS STATED RATHER THAN FOLDED IN (rule 19, from the other side): the
+   * SUPPORT and the NORMALISATION. This kit scores ONE pass of the lap with the first 5% dropped
+   * and advances `n` ONCE PER CHANNEL; `autohost.js` runs `warmup` laps, averages `avg` settled
+   * ones and advances `n` once per STEP — exactly √2 apart for a two-channel plant, before any
+   * support difference. Asked for the same BARE machine the two read 1.0178e+0 against
+   * `scoreSet`'s 1.4564e+0 in TOOL units (1.43x) and 6.400e-2 against 1.3046e-1 in JOINT units
+   * (2.04x); divide out the √2 and the joint column reads 1.44x — ONE support factor, measured
+   * the same size by two metrics sharing no arithmetic (rule 15). Both apply to numerator and
+   * denominator alike, so a common factor cancels in a FACTOR and not in an rms.
+   *
+   * DO NOT COMPARE AGAINST `host.run`'s 1.0717e+0: that loop arms `rc.feedforward` and is the
+   * CONVENTIONAL machine, where `scoreSet`'s closure runs `ZFF` because the distilled rung
+   * REPLACES that feedforward. The first draft of this comparison did exactly that, read 5.3%
+   * and called two harnesses in agreement — a bare machine against a conventional one, agreeing
+   * by coincidence (rules 14, 17).
+   *
+   * The tau and omega handed to `ContourScore.step` are ZERO: this row wants the three deviation
+   * rms values and not the energy or reversal columns, and those accumulate harmlessly from zeros.
+   */
+  alt: {
+    name: 'tool totalRms (contour ⊕ lag) — `distil-arm.mjs`\'s own metric, bare → ①d',
+    make: () => {
+      const path = armSpec.meta.path;
+      const kMax = Math.ceil(path.lap);
+      const sc = new ContourScore({ joints: 2 });
+      const Z = [0, 0];
+      return {
+        tap: (k, r) => {
+          const cmd = path.at(Math.max(0, Math.min(kMax, k)));
+          const d = decompose(path, [r.measured[6], r.measured[7]], cmd);
+          sc.step(d.contour, d.lag, Z, Z);
+        },
+        read: () => { const rp = sc.report(); return { v: rp.totalRms, c: rp.contourRms, l: rp.lagRms }; },
+      };
+    },
+  },
 },
 
 // ============================================================ CLASS C: a REGULATOR, and the route cannot address it
@@ -512,9 +576,17 @@ for (const P of (IS_ENTRY ? PLANTS : [])) {
     + `${seglen}, min(0.61·settle, lap/8) = ${rule})`);
   if (P.incumbent) console.log(`  the INCUMBENT on this plant: ${P.incumbent}`);
 
-  const openP = priceOf(() => scoreOn(P.spec, R, null, { N: P.N }));
+  // A PLANT MAY DECLARE A SECOND READING OF THE SAME RUN (the 2R arm does; see its `alt`). It is
+  // built fresh per scored run and only READS, so every other plant is byte-identical.
+  const openAlt = P.alt ? P.alt.make() : null;
+  const openP = priceOf(() => scoreOn(P.spec, R, null, { N: P.N, tap: openAlt && openAlt.tap }));
   const open = openP.value;
+  const openA = openAlt && openAlt.read();
   console.log(`  open loop  ${fmt(open.rms)}${P.baseline ? `   [${P.baseline}]` : ''}`);
+  if (openA) {
+    console.log(`  ALSO, on the same run and the same support: ${P.alt.name}`);
+    console.log(`  open loop  ${fmt(openA.v)}   (contour ${fmt(openA.c)}, lag ${fmt(openA.l)})`);
+  }
 
   const rows = [];
   let exciteSteps = 0;
@@ -552,7 +624,9 @@ for (const P of (IS_ENTRY ? PLANTS : [])) {
     }
 
     const pol = fitInverse(segs, P.inv, opts);
-    const got = scoreOn(P.spec, R, pol, { N: P.N });
+    const gotAlt = P.alt ? P.alt.make() : null;
+    const got = scoreOn(P.spec, R, pol, { N: P.N, tap: gotAlt && gotAlt.tap });
+    const gotA = gotAlt && gotAlt.read();
     const ho = heldOutR2(segs, P.inv, opts, reach);
 
     // ---- CONTROL 2: the SAME rows against a PERMUTED target. If this delivers, the harness is not
@@ -577,12 +651,17 @@ for (const P of (IS_ENTRY ? PLANTS : [])) {
         + 'plant whose reference moves — requirement 2 fails here and the row is not a map (rule 9)');
     }
 
-    rows.push({ seed, x: open.rms / got.rms, pk: got.pk, r2: ho.r2, shuf: open.rms / shs.rms, rms: got.rms });
+    rows.push({ seed, x: open.rms / got.rms, pk: got.pk, r2: ho.r2, shuf: open.rms / shs.rms, rms: got.rms,
+      xAlt: gotA ? openA.v / gotA.v : null, altRms: gotA ? gotA.v : null });
     console.log(`    seed ${seed}   ${fmt(got.rms)}  ${(open.rms / got.rms).toFixed(3)}x`
       + `   peak |u| ${got.pk.toFixed(3)} of ${uMax.toFixed(3)}${got.pk >= uMax * 0.999 ? ' SATURATED' : ''}`
       + `   held-out R² ${ho.r2.map((v) => v.toFixed(3)).join('/')}`
       + `   SHUFFLE ${(open.rms / shs.rms).toFixed(3)}x`
       + (P.constant ? `   correction SPREAD ${got.spread.toExponential(1)}` : ''));
+    if (gotA) {
+      console.log(`             ALT ${fmt(gotA.v)}  ${(openA.v / gotA.v).toFixed(3)}x`
+        + `   (contour ${(openA.c / gotA.c).toFixed(3)}x, lag ${(openA.l / gotA.l).toFixed(3)}x)`);
+    }
   }
   const xs = rows.map((r) => r.x).sort((a, b) => a - b);
   const shf = rows.map((r) => r.shuf);
@@ -596,6 +675,11 @@ for (const P of (IS_ENTRY ? PLANTS : [])) {
   console.log(`  ---- ${P.name}: ${xs[0].toFixed(3)}x .. ${xs[xs.length - 1].toFixed(3)}x over ${xs.length} seeds`
     + `  (spread ${(xs[xs.length - 1] / xs[0]).toFixed(2)}x, median ${((xs[(xs.length - 1) >> 1] + xs[xs.length >> 1]) / 2).toFixed(3)}x)`
     + `   ${verdict}`);
+  if (rows.every((r) => r.xAlt != null)) {
+    const as = rows.map((r) => r.xAlt).sort((a, b) => a - b);
+    console.log(`  ---- ${P.name}, ${P.alt.name}: ${as[0].toFixed(3)}x .. ${as[as.length - 1].toFixed(3)}x`
+      + `  (median ${((as[(as.length - 1) >> 1] + as[as.length >> 1]) / 2).toFixed(3)}x)`);
+  }
   if (rows.some((r) => r.pk >= uMax * 0.999)) {
     console.log(`       *** SATURATED at the cap on ${rows.filter((r) => r.pk >= uMax * 0.999).length} of `
       + `${rows.length} seeds — this number may measure the CAP and not the MAP. Sweep \`UCAP\` `

@@ -1003,7 +1003,37 @@ Each of these is a claim that can be shown false, which is the only kind worth w
    with a long closed TOUR reads 1.83x and tightens the spread 1.22x → 1.01x, at 5.0x the excitation
    and two seeds, so it is a mechanism reading and not a matched-cost result. **AND THE FACTOR IS NOT
    COMPARABLE TO 6.63x IN THE SAME METRIC** — this is JOINT rms and `distil-arm.mjs` quotes CONTOUR
-   rms — so *the teacher is worth 4.7x here* is NOT a claim the record supports (rule 19). The
+   rms — so *the teacher is worth 4.7x here* is NOT a claim the record supports (rule 19).
+   **AND THAT CAVEAT POINTED AT THE WRONG NUMBER, IS NOW MEASURED, AND FLATTERS THE ROUTE THAT
+   DOES NOT SHIP (plan §135).** `distil-arm.mjs` quotes TWO factors: 6.63x is `rep.base/rep.best`
+   from the host's top-level `run` (`score: rep.totalRms`, the TOOL metric), while **8.18x is
+   `scoreSet`, whose closure returns `worldToJoint(tool − commanded)` — JOINT rms, the same
+   quantity this row prints** — so that pair was comparable in metric all along. Both objects are
+   now read BOTH ways on the same runs, at ZERO plant cost, because `stepArm` has published the
+   tool on channels 6-7 since §105 and `drive` has returned `toolRms` beside `score` since it was
+   written and nothing ever read either. **The metric is NOT a uniform discount**: it costs the
+   teacher-free route **1.24x-1.32x on all four seeds** (median 1.411x JOINT against **1.083x
+   TOOL**) and costs the SHIPPED object nothing — sharp square 8.18x → **9.34x**, rounded
+   rectangle 10.88x → **12.18x**, circle 15.94x → **15.45x**, two of three in the object's
+   FAVOUR. **And the split says why**: the teacher-free route's CONTOUR component — the
+   dimensional error, the reason a part is scrap — reads **~1.016x, essentially nothing; it
+   removes LAG and not SHAPE**, on an open loop that is lag-dominated here (contour 0.6020
+   against lag 0.8207). **So §111's unsupportable sentence is now supportable and LARGER than it
+   guessed: 1.083x against 9.34x is the teacher worth 8.6x on this plant** in the machine's own
+   units (5.8x in joint rms), one plant, one cell, one loop, one program, one BARE denominator.
+   **Its looseness is ONE COMMON SUPPORT FACTOR and both metrics measure it at the
+   same size, which is what makes the comparison sound**: two harnesses sharing no driver read the
+   same BARE machine **1.43x apart in TOOL units and 2.04x apart in JOINT units**, and exactly √2
+   of the second is a per-channel against per-step normalisation visible in the two loops' source
+   — divide it out and the joint column reads **1.44x against the tool column's 1.43x**, one
+   factor measured the same size by two metrics sharing no arithmetic (rule 15). **The first
+   version of that control was wrong in the flattering direction (rules 14, 17)**: it set the bare
+   1.0178e+0 against `host.run`'s 1.0717e+0, read 5.3% and called it agreement — but `host.run`
+   arms `rc.feedforward`, so that is the CONVENTIONAL machine, while `scoreSet`'s closure runs
+   `ZFF` because the distilled rung REPLACES that feedforward; 1.4564e+0 against 1.0717e+0 is
+   1.36x, this plant's own documented bare-against-conventional gap, and `distil-arm.mjs`'s own
+   comment said so in writing. The metric the machine is judged in is the one
+   that survives a change of harness; the one this project's arm rows are mostly quoted in is not. The
    authority flag FIRED (peak |u| at the cap on 4 of 4 seeds, the barrel's own signature) and a
    12-fold sweep disqualified it: 1.445 / 1.406 / 1.429 / 1.422 / 1.422x, byte-identical from 0.300
    up, so it measures the MAP. Target: 10x down, under three minutes on the arm, while

@@ -26113,3 +26113,146 @@ conservatively would have bought the one failure the record currently does not c
   why it costs no verification beyond its own runs.
 - **The barrel's flat rows are the both-halves half (rule 9)**: a sweep that moved everything it
   touched would be measuring the sweep.
+
+## §135 — §111's METRIC CAVEAT, MEASURED: IT FLATTERS THE TEACHER-FREE ROUTE AND NOT THE OBJECT THAT SHIPS
+
+§111 closed with a caveat it could not put a number on: **THE FACTOR IS NOT COMPARABLE TO 6.63x
+IN THE SAME METRIC — this is JOINT rms and `distil-arm.mjs` quotes CONTOUR rms — so *the teacher
+is worth 4.7x here* is NOT a claim the record supports (rule 19).** Every other term in that
+comparison already matched: same plant, same bench cell (K 0.25 / E 0.03), same SHIPPED loop
+(`armSpec` passes `BENCH_SERVO.bandwidth` explicitly rather than taking `arm-rig.mjs`'s
+pre-§52.37 default), same sharp square, same BARE denominator. The one term that did not was the
+only one no row in this project printed.
+
+**BOTH ROWS PRINT IT NOW AND NEITHER COSTS A SINGLE PLANT STEP.** `stepArm` has published the
+tool on measured channels 6 and 7 since §105 and `autohost.js`'s `drive` has returned `toolRms`
+beside `score` since it was written; nothing ever read either. `dirinvkit`'s `scoreOn` gained an
+optional `tap`, gated INSIDE the primary's own support condition rather than on a second one, and
+the arm row declares one built from `decompose` + `ContourScore` — the objects `deployOn` and
+`autohost.js` already score through, so this is the same reading and not a second one (rule 61).
+`scoreSet` simply prints the `toolRms` it was already handed.
+
+### AND §111's SENTENCE NAMED THE WRONG PAIR, WHICH ONLY READING BOTH LOOPS SHOWS
+
+`distil-arm.mjs` quotes TWO factors and they are not the same metric:
+
+- **6.63x** is `rep.base / rep.best`, from `autohost.js`'s TOP-LEVEL `run`, which returns
+  `{ score: rep.totalRms }` — the tool metric.
+- **8.18x** is `scoreSet`, which drives the TRAINING-RUN closure, whose `run` returns
+  `score: Math.sqrt(s2/n)` with `s2` accumulating `worldToJoint(tool − commanded)` — **JOINT rms,
+  by the same Jacobian-inverse formula `routeSignals` uses, which is the quantity the
+  teacher-free row already printed.**
+
+So the incomparable pair is 6.63x against 1.411x; 8.18x against 1.411x was comparable in METRIC
+all along, and the caveat sent the reader to the wrong number.
+
+### WHAT THE METRIC IS ACTUALLY WORTH, ON BOTH OBJECTS
+
+`dirinvall.mjs`'s arm row, four excitation seeds, everything else untouched:
+
+```
+  seed   JOINT rms                  TOOL totalRms            contour   lag     tool/joint
+    1    0.0640 → 0.0448  1.429x    1.0178 → 0.9296  1.095x   1.010x   1.150x     0.766
+    2    0.0640 → 0.0375  1.704x    1.0178 → 0.7416  1.372x   1.214x   1.488x     0.805
+    3    0.0640 → 0.0459  1.392x    1.0178 → 0.9502  1.071x   1.008x   1.110x     0.769
+    4    0.0640 → 0.0459  1.393x    1.0178 → 0.9622  1.058x   1.023x   1.078x     0.759
+  ----   1.392x .. 1.704x, median 1.411x   |   1.058x .. 1.372x, median 1.083x
+```
+
+`distil-arm.mjs`'s `scoreSet`, the TEACHER-TAUGHT object, every factor BARE → policy:
+
+```
+  program                  JOINT rms                  TOOL totalRms            tool/joint
+  sharp square (scored)    1.3046e-1 → 1.5944e-2   8.18x   1.4564e+0 → 1.5593e-1   9.34x    1.14
+  rounded rect (held out)  1.2134e-1 → 1.1151e-2  10.88x   1.3945e+0 → 1.1449e-1  12.18x    1.12
+  circle      (held out)   1.0693e-1 → 6.7092e-3  15.94x   1.3494e+0 → 8.7354e-2  15.45x    0.97
+```
+
+**THE METRIC IS NOT A UNIFORM DISCOUNT AND THAT IS THE RESULT.** It costs the TEACHER-FREE route
+**1.24x-1.32x on every one of four seeds** — tight enough to be a property of the pair and not of
+a draw — and it costs the SHIPPED OBJECT nothing: 0.97x, 1.12x, 1.14x, two of three in the
+object's FAVOUR. So the joint reading flatters the route that does not ship and understates the
+one that does, which is the opposite of what a caveat about a flagship number usually turns out
+to be.
+
+**AND THE SPLIT SAYS WHY.** Contour — the deviation NORMAL to the commanded path, which is the
+dimensional error and the reason a part is scrap — reads **1.008x-1.214x, median ~1.016x** for
+the teacher-free route: essentially nothing. Lag reads 1.078x-1.488x. The open loop is
+lag-dominated on this support (contour 0.6020 against lag 0.8207, totalRms 1.0178 = their
+hypotenuse to four figures), so a route that only shortens the lag still moves the total and the
+joint-space reading credits it more than the part is improved by. `contour.js`'s own opening
+argument — *lag is as much a defect as shape, and they need different fixes* — with this
+project's own teacher-free route as the worked example.
+
+### SO §111's UNSUPPORTABLE CLAIM IS NOW SUPPORTABLE, AND LARGER THAN IT GUESSED
+
+On one plant, one cell, one loop, one program and one BARE denominator, in the machine's own
+units: **1.083x teacher-free against 9.34x teacher-taught — the teacher is worth 8.6x here**
+(5.8x read in joint rms). §111 said *the teacher is worth 4.7x here* is not a claim the record
+supports; it is now, and the number is bigger in both metrics.
+
+**ITS LOOSENESS IS ONE COMMON FACTOR AND BOTH METRICS MEASURE IT AT THE SAME SIZE, WHICH IS WHAT
+MAKES THE COMPARISON SOUND.** The two harnesses share no driver. Asked for the same BARE machine
+on the same square they read:
+
+```
+                          TOOL (totalRms)        JOINT rms
+  dirinvall.mjs             1.0178e+0             6.400e-2
+  distil-arm `scoreSet`     1.4564e+0             1.3046e-1
+  ----                      1.43x apart           2.04x apart
+```
+
+Exactly √2 of the JOINT column is a NORMALISATION CONVENTION visible in the two loops' source
+rather than inferred: `dirinvkit` does `for (const e of r.truth) { ss += e*e; n++; }`, so `n`
+advances ONCE PER CHANNEL, while `autohost` does `s2 += j[0]*j[0] + j[1]*j[1]; n++;`, once per
+STEP — √2 apart for any two-channel plant. **Divide it out and the joint column reads 1.44x,
+against the tool column's 1.43x: one support factor, measured the same size by two metrics that
+share no arithmetic** (rule 15). It is the support — one pass from `homeAt` with 5% dropped
+against `warmup` + `avg` settled laps. Factors are ratios, so a common factor cancels; the 8.6x
+carries only whatever of it is not common — **and the direction of what is left runs AGAINST the
+claim, which is why it is stated here rather than in a footnote**: a single pass carries more
+start transient, and a transient no correction can remove adds to the bare and the corrected
+number alike, so `(bare+T)/(corr+T) < bare/corr`. `dirinvall`'s factors are therefore if anything
+UNDERSTATED against `scoreSet`'s support, which makes the true teacher advantage smaller than
+8.6x rather than larger.
+
+**AND THE FIRST VERSION OF THAT TABLE WAS WRONG IN THE FLATTERING DIRECTION, WHICH IS WHY THE
+CODE HAD TO SETTLE IT (rules 14, 17).** It set dirinvall's bare 1.0178e+0 against `host.run`'s
+1.0717e+0, read **5.3%**, and called the two harnesses in agreement. They are not the same
+machine: `host.run` arms `rc.feedforward`, so its number is the CONVENTIONAL machine, while
+`scoreSet`'s closure runs `ZFF` because the distilled rung REPLACES that feedforward
+(`distilReplaces`) and its training runs must be bare exactly as the deployed machine will be.
+1.4564e+0 against 1.0717e+0 is **1.36x, this plant's own documented bare-against-conventional
+gap** (§52.8 measures 6.29x bare against 4.88x conventional, 1.29x, by a route sharing none of
+this arithmetic). A 5.3% agreement between a bare machine and a conventional one is a
+coincidence, and reading it as a control is the failure this project has on record five times.
+`distil-arm.mjs`'s own comment said so in writing — *`scoreSet` scores each run BARE machine →
+policy, while `rep.base / rep.best` is over the CONVENTIONAL machine* — which is rule 30 aimed at
+a reader rather than at a document.
+
+**The metric the machine is judged in is the one that survives a change of harness; the one this
+project's arm rows are mostly quoted in is not.**
+
+### CONTROLS
+
+- **Rule 21, three times.** The arm's teacher-free row is byte-identical to the pre-change code
+  on all four seeds (open loop 0.0640, 1.392x .. 1.704x, median 1.411x, every held-out R², every
+  SHUFFLE at 1.000x), diffed line for line, reproducing §111 exactly. A second plant — the real
+  steam exchanger — is byte-identical end to end (88.136x .. 100.266x, median 95.570x), which is
+  what says the shared `scoreOn` change is a read and not a second criterion. And `distil-arm.mjs`
+  is byte-identical with the TOOL column stripped: every rung (1.0717e+0 → 1.0661e+0 → 8.0212e-1
+  → 1.6159e-1), every training-run gain, held-out R² [0.9518,0.8399], **target 1 = 1.330 MET**.
+- **The alt metric is gated on the SAME condition as the primary**, inside the same block rather
+  than on a second test of its own, so the two cannot drift apart in what they are averaged over.
+- **`out` is unchanged in `scoreSet`**, so target 1's row and the emitted `objtable` row do not
+  move: the TOOL column is a print, not a criterion.
+- **A run that cannot read the second column says so** (`[TOOL not measured]`) rather than
+  printing nothing, because absent and equal-to-one are different states (rule 25).
+
+### WHAT IS NOT CLAIMED
+
+One plant. The `tool/joint` ratio is measured and its MECHANISM is not: the Jacobian inverse is
+pose-dependent and so weights the two tool axes differently along the path, which is the
+candidate and is not established. And the 1.43x/1.44x between the two harnesses is ATTRIBUTED to
+the support by elimination — the feedforward is accounted for, the normalisation is accounted
+for, and what is left is the lap count and the transient — rather than measured term by term.

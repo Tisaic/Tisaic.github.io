@@ -581,7 +581,32 @@ const scoreSet = async (label, p2, set, names) => {
     const hp = heldPolicy(p2, tr);
     const b = await tr.run(null), w = await tr.run(hp, { tap: hp.tap });
     out.push(b.score / w.score);
-    console.log(`    ${label}: ${names[i]} (lap ${tr.lap})  ${b.score.toExponential(4)} -> ${w.score.toExponential(4)}   ${(b.score / w.score).toFixed(2)}x`);
+    // THE SAME RUN IN THE MACHINE'S OWN UNITS, AND IT COSTS NO PLANT TIME (rule 19, plan §135).
+    //
+    // `score` is the tool error mapped into JOINT space through the Jacobian inverse; `toolRms`
+    // is that same tool error left in the tool's own units, accumulated on the SAME laps by the
+    // same loop — `drive` has returned both since it was written and nothing ever read the
+    // second. §111 records the gap this closes in its own words: *THE FACTOR IS NOT COMPARABLE
+    // TO 6.63x IN THE SAME METRIC — this is JOINT rms and `distil-arm.mjs` quotes CONTOUR rms*,
+    // and that caveat was unquantified because no row here printed the other column.
+    //
+    // AND HALF OF §111's SENTENCE IS WRONG, WHICH ONLY READING BOTH LOOPS SHOWS: the CONTOUR
+    // figure is `rep.base / rep.best` (6.63x), from the host's top-level `run`; the 8.18x below
+    // is THIS function, and the closure it drives returns `score` from `worldToJoint(tool −
+    // commanded)` — JOINT rms, the same quantity `dirinvall.mjs` already prints. So the metric
+    // gap is between 6.63x and the teacher-free row, not between 8.18x and it.
+    //
+    // THEY ARE NOT THE SAME FACTOR, MEASURED: on the teacher-free route, which shares this plant,
+    // this cell, this loop and this program, the two disagree by 1.24x-1.32x on every one of four
+    // seeds. The Jacobian inverse is pose-dependent, so it weights the two tool axes differently
+    // along the path — that is the CANDIDATE mechanism and it is not established here (rule 25);
+    // what is measured is the disagreement and its tightness.
+    //
+    // `out` is UNCHANGED, so target 1's row and the emitted table are byte-identical: this is a
+    // print, not a second criterion (rule 21).
+    const tx = b.toolRms > 0 && w.toolRms > 0 ? b.toolRms / w.toolRms : null;
+    console.log(`    ${label}: ${names[i]} (lap ${tr.lap})  ${b.score.toExponential(4)} -> ${w.score.toExponential(4)}   ${(b.score / w.score).toFixed(2)}x`
+      + (tx ? `   [TOOL ${b.toolRms.toExponential(4)} -> ${w.toolRms.toExponential(4)}  ${tx.toFixed(2)}x]` : '   [TOOL not measured]'));
   }
   return out;
 };
