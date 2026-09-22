@@ -406,6 +406,11 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     if [ "${SUITE}" = "full" ]; then t node test/pilot/distil-realarm.mjs; fi
     if [ "${SUITE}" = "full" ]; then t node test/pilot/distil-realtanks.mjs; fi
     if [ "${SUITE}" = "full" ]; then t node test/pilot/distil-realexch.mjs; fi
+    # THE ORDINARY PID LOOP (plan §137) — one PV, one MV, one PID tuned by SIMC at its published
+    # rule, a setpoint that moves. It is registered because it is the SANITY CHECK: every other
+    # plant here was chosen for being hard, and a block about to be translated to ST has to do
+    # the obviously right thing on the case whose answer everyone already knows.
+    if [ "${SUITE}" = "full" ]; then t node test/pilot/distil-pidloop.mjs; fi
     # AND THE FLAGSHIP PLANT, WHICH THE MANDATE TABLE HAD BEEN MISSING (plan §88.5). `distil-arm`
     # is an INSTRUMENT with three dozen knobs and was never registered, so the 2R arm — the plant
     # more of this project's numbers are quoted on than any other — was the one row `objtable`

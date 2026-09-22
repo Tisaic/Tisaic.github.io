@@ -30,6 +30,7 @@ import * as RA from './realarm-rig.mjs';
 import * as PD from './pend-rig.mjs';
 import * as RT from './realtanks-rig.mjs';
 import * as RX from './realexch-rig.mjs';
+import * as PL from './pidloop-rig.mjs';
 import { makeArm, mkPath, homeAt, stepArm, ikOf, randomPolygon, PG } from './arm-rig.mjs';
 import { designTour } from '../../../lib/flexisim/demopath.js';
 import { BENCH_SERVO } from '../../../lib/flexisim/compensator.js';
@@ -341,6 +342,44 @@ const realarmLadderSpec = {
 
 /** A program's own peaks in COMMAND space, measured rather than declared (rule 41b). Three rigs
  *  had a private copy of this loop; it is one function now. */
+/**
+ * THE ORDINARY PID LOOP AS THE LADDER DRIVES IT — the sanity check before any ST translation.
+ *
+ * THE BLOCK TRIMS THE SETPOINT AND THE EXISTING LOOP IS UNTOUCHED. `step` adds `u` to the
+ * setpoint the PID is given and scores the PV against the UNCORRECTED schedule, exactly as
+ * `pendSpec` corrects the cart's position reference into a stabiliser it does not replace. On a
+ * real installation that is the only retrofit anyone will accept: the loop, its tuning, its
+ * alarms and its faceplate all stay, and what ships is a trim on a setpoint it already follows.
+ *
+ * THE MEASURED VECTOR IS WHAT A PLC ALREADY HAS — the PV and the valve output. No tracker, no
+ * added instrument, which is the whole reason this plant is the right sanity check: every other
+ * plant here needs a commissioning truth the customer may not own (§52.42 prices the arm's at
+ * 3.9x), and a closed loop's own PV *is* the truth because the setpoint is what it should equal.
+ *
+ * `uMax` is 3x the error the correction exists to remove, in the SETPOINT's own units — the
+ * same derivation `realexchLadderSpec` uses, without its division, because there the correction
+ * is in flow and the error in °C while here both are °C (rule 31: a constant re-derived, not
+ * carried). `floor` is the instrument's own 0.02 °C resolution, so the gate cannot credit an
+ * improvement the measurement could not have seen — EMPS' 1.6 µm rule on a second plant.
+ */
+function pidLoopLadderSpec(model = PL.MODEL, opts = {}) {
+  const PK = progPeaks((k) => PL.refAtStep(k), PL.PROG);
+  const CONV = PL.convRms(model, opts);
+  return {
+    name: `PID temperature loop (${model.tag} valve) — PV against the schedule, °C rms`,
+    channels: [{ lo: PL.SP_LO, hi: PL.SP_HI, vMax: PK.v, aMax: PK.a, jMax: PK.j }],
+    uMax: 3 * CONV, nMeasured: 2,
+    guards: [{ index: 0, max: PL.SP_HI + 10 }],
+    start: [PL.refAtStep(0)[0]], N: PL.PROG, floor: PL.QUANT,
+    refAt: (k) => PL.refAtStep(Math.min(k, PL.PROG - 1)),
+    fresh: () => PL.makeLoop(model, opts),
+    step: (p, ref, u) => {
+      const y = p.step(ref[0] + (u[0] || 0));
+      return { measured: [y, p.travel], truth: [y - ref[0]] };
+    },
+  };
+}
+
 function progPeaks(refAt, n) {
   let v = 0, a = 0, j = 0;
   const r = (i) => refAt(Math.max(0, Math.min(n - 1, i)))[0];
@@ -551,4 +590,4 @@ function armDiet(rnd) {
 }
 
 export { tankSpec, wbSpec, millSpec, barrelSpec, empsSpec, realarmSpec, realarmLadderSpec,
-  realtanksLadderSpec, realexchLadderSpec, pendSpec, armSpec, armDiet, progPeaks, raPK, G_MP };
+  realtanksLadderSpec, realexchLadderSpec, pidLoopLadderSpec, pendSpec, armSpec, armDiet, progPeaks, raPK, G_MP };

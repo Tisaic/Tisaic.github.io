@@ -55,6 +55,10 @@ const PLANTS = [
   { key: 'realarm', label: 'real flexible arm (DaISy 96-009)', file: 'distil-realarm.mjs' },
   { key: 'realtanks', label: 'real cascaded tanks (overflow)', file: 'distil-realtanks.mjs' },
   { key: 'realexch', label: 'real steam heat exchanger', file: 'distil-realexch.mjs' },
+  // THE ORDINARY PID LOOP (plan §137). Registered because a count nobody can re-derive is a
+  // preference (rule 30) and because this row is the one a buyer recognises: one PV, one MV, one
+  // PID tuned by a published rule, a setpoint that moves. It ships the CONVENTIONAL rung.
+  { key: 'pidloop', label: 'PID temperature loop (equal-% valve)', file: 'distil-pidloop.mjs' },
 ];
 const only = process.env.ONLY ? process.env.ONLY.split(',') : null;
 const skip = process.env.SKIP ? process.env.SKIP.split(',') : [];

@@ -26673,3 +26673,115 @@ about a plant whose stale-declaration harm is LARGE rather than 4.7%, and the cr
 here is about ANY plant — what is established is that a single sub-1.000x reading is not by itself a
 licence, which is a statement about the CRITERION and not about the guard. Both directions of the
 guard are measured on this plant and only this plant.
+
+## §137 — THE SANITY CHECK: AN ORDINARY PID LOOP, AND THE INCUMBENT TAKES ALL OF IT (task #14)
+
+Every plant in this project was chosen for being hard — a lattice arm, an open-loop-unstable
+cart-pole, a coupled 2x2 column, a mill whose error arrives through a 100-step transport delay.
+None is what a controls engineer meets on a Tuesday, and before any of this is translated to ST
+and put on a real controller the question is not *how large is the factor* but **does the block
+do the obviously right thing on a case whose answer everyone already knows.**
+
+**THE PLANT IS DESIGNED BY TWO CONSTRAINTS OUT OF THE RECORD RATHER THAN BY TASTE.** §105: a
+REGULATOR's reference window is identical at every k, so the map emits ONE NUMBER for the whole
+run — the mill proves it with a correction spread of exactly `0.0e+0` at 1.000x against a
+held-out R² of 0.919 — and a fixed-setpoint loop would therefore read 1.000x for a reason that
+has nothing to do with whether the method works. So the loop SEQUENCES SETPOINTS, which is also
+the commoner kind. §55: on a LINEAR plant `classic.js`'s `[a, v, sign v, 1]` inverts exactly and
+the factor measures the hypothesis class, which cost 2012x → 6.5x on the real tanks and 1364x →
+89.8x on the real exchanger. So the valve carries its documented nonlinearity — equal-percentage
+trim (R = 50), two-parameter stiction, a 5 %/s rate limit, 0.02 °C quantisation — and `LINEAR=1`
+is the matched control (rule 20).
+
+`rigs/pidloop-rig.mjs`: FOPDT, K 80 °C, tau 60 s, theta 20 s (theta/tau 0.33) at Ts 1 s, under an
+ISA-form PID with back-calculation anti-windup and derivative on measurement, tuned by **SIMC at
+its published rule** (tauc = theta; Td = 0, so it runs as PI, which is what most real loops are).
+**The block TRIMS THE SETPOINT and does not replace the loop** — `pendSpec`'s shape, and the only
+retrofit a real installation accepts. The measured vector is what a PLC already has, the PV and
+the valve output; no tracker, because a closed loop's own PV *is* the truth.
+
+**THE FIRST VERSION BUILT THE STRAW MAN THIS RIG EXISTS TO AVOID, AND THE SMOKE TEST CAUGHT IT.**
+It tuned at travel 0.5 while the schedule lives at 0.70-0.90, where the installed gain is 2.2x to
+4.9x higher — so `Kc` was that much too high, the loop never settled (the "2% settle" read 1499 of
+1500 samples and `prog/rise` 1.6) and the conventional machine would have been a BADLY TUNED PID.
+That is §52.32 exactly, where the cart-pole's 9.770x turned out to be its stabiliser and a re-tune
+made the same commissioning refuse four times of four. Tuned where the loop actually runs, both
+plants settle dead on setpoint and `prog/rise` is 11.7 — above §84.9's ~10 split and **not by
+much, which is stated rather than tuned, because lengthening a segment to clear a screen is
+fitting the benchmark.** What survives is the honest nonlinearity: the installed gain still varies
+0.98 → 2.15 across the schedule's own span, a 2.2x detune no fixed PID can express.
+
+```
+  the conventional machine (the PID alone)      2.4088 °C rms
+  conventional rung, self-tuned ON the machine  4.0764e-1   5.91x   13 laps, 4 coefficients
+  ②d distilled                                  REFUSED at 0.298x, with a stated reason
+  SHIPPED                                       8 MAC/cycle sliced, 0.0 kB, rungs = classic
+  TARGET 1   held out 5.516x against 5.909x  =  0.933      MET
+  nothing made worse on either schedule · ZERO control BIT-EXACT
+  commissioning 380,400 steps = 4.4 days of plant time (teacher 74%, verify 26%)
+```
+
+**P1 IS CONFIRMED MORE STRONGLY THAN IT WAS WRITTEN.** It predicted the conventional rung would
+take the MAJORITY; it takes **all** of it — 5.909x x 1.000x. A FOPDT loop's residual is lag during
+the ramps, which is precisely what four coefficients of the reference's own rate and acceleration
+are for, and it is EMPS' 424.82x on a plant sharing no physics with a servo axis.
+
+**§52.32's KILL DID NOT FIRE: THE FACTOR IS NOT THE TUNING.** Swept over an 8x span of SIMC's own
+constant, the DENOMINATOR moves 2.8x and the FACTOR moves 1.13x:
+
+```
+  tauc  10 s   Kc 1.271   1.8155 → 3.1477e-1   5.77x   held-out 5.386x   MET
+  tauc  20 s   Kc 0.954   2.4088 → 4.0764e-1   5.91x   held-out 5.516x   MET   <- published tight
+  tauc  40 s   Kc 0.636   3.4692 → 5.3233e-1   6.52x   held-out 6.480x   MET
+  tauc  80 s   Kc 0.381   5.1486 → 7.8878e-1   6.53x   held-out 6.869x   MET
+```
+
+A sloppier loop leaves slightly more for the feedforward, which is what physics predicts, and
+target 1 is MET on all four. Nothing made worse in any row.
+
+**§55's MECHANISM IS CONFIRMED ON A FIFTH PLANT — AND MY OWN PREDICTION NAMED THE WRONG OBJECT.**
+P2 said *the DISTILLED rung's increment collapses under `LINEAR=1`*. There IS no distilled
+increment: the rung refuses on all five configurations. What collapses is the INCUMBENT's factor,
+because on this plant the incumbent is the whole result:
+
+```
+  LINEAR valve      2.2892 → 8.1955e-2   27.93x      held-out 23.889x
+  NONLINEAR valve   2.4088 → 4.0764e-1    5.91x      held-out  5.516x      a factor of 4.7
+```
+
+So the mechanism holds and the prediction's FORM was wrong, which is stated rather than smoothed
+(rule 59 is for both outcomes). **And the collapse's SIZE orders correctly against the record**,
+which is what makes it a mechanism rather than a coincidence (rule 18): a hard OVERFLOW clip costs
+307x on the real tanks, a smooth exponential 15x on the real exchanger, and an equal-percentage
+valve with stiction — the mildest departure of the three — **4.7x here**. **The number that belongs
+in a portfolio table is therefore 5.91x and never 27.93x**, for the reason §55 states about
+anything built by fitting a linear model to a record.
+
+**THE DISTILLED RUNG'S REFUSAL IS A CORRECT VERDICT AND IS NOT A STATEMENT ABOUT THE MAP, AND THAT
+DISTINCTION IS THE OPEN ITEM.** Its signature is identical in all five runs — **CLAMPED on 10-16%
+of samples, worst demand 1.5-1.7x the cap**, the gain ladder walking monotonically to its floor
+and §109's early exit firing with *the axis has nothing to select*. That is §117's and §126's
+rule-34 signature, and the cause is in this harness: `distilRuns` teaches on the BARE loop while
+the ladder deploys the result ON TOP of a conventional rung that has already removed 5.91x, so the
+map inverts a machine that no longer exists. The ladder scoring it and throwing it away is the
+portfolio working; what is NOT established is whether the rung would find anything if it were
+taught on the corrected machine, and nothing here answers that. It is §133's placement question in
+another costume.
+
+**AND THE RUN SURFACED A PORTING FINDING THAT CHANGES THE ORDER OF THE ST WORK.** `inventory.test.mjs`
+reads `DEPLOY = ['lib/pilot/deploy.js']` and nothing else, and the whole deploy-boundary apparatus
+— the 117-line no-import reimplementation, `artefact.test.mjs`'s bit-exactness over 4,000 windows,
+`EXPORT`'s conformance vector, `logSpec`, `explain` — is drawn around **`distil.js`'s weight
+vector**. But §97.3's own portfolio list says the CONVENTIONAL rung is what five rows of eleven
+actually ship, and this plant makes it **six**. There is no `deploy.js` analogue for `classic.js`,
+no bit-exact pin, no conformance vector and no log spec: **the object the majority of plants ship
+is outside the boundary the project audits.** It is also the easiest thing here to port — four
+coefficients evaluated on the reference's own derivatives, 8 MAC/cycle, 0.0 kB — so the gap is
+cheap to close and it is the first thing an ST translation should close, ahead of `deploy.js`.
+
+**NOT CLAIMED.** One plant, one loop family, one diet, one held-out schedule. A simulated valve is
+not a valve, and §55's caution applies to this rig exactly as it applies to every other here. The
+distilled rung has not been asked on the corrected machine. What this run is for is the machinery,
+not an eleventh plant's worth of evidence: the ladder was handed the most ordinary loop in process
+control and it self-tuned a four-coefficient feedforward to 5.9x, held it across an 8x tuning
+span, met target 1, refused the rung that did not help, and made nothing worse.
