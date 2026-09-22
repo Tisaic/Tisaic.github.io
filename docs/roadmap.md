@@ -343,9 +343,13 @@ Stated so it can fail rather than be revised (rule 59):
 - **Step 1 refused on both expensive plants** — the first entry here, and it did not fire (§119).
   **The carried excitation moves the delivered factor** — the second, and it fired on the barrel in
   a stronger form than written: the shuffle CONTROL fails there, raw or dwelled (§123), while the
-  column is clean. So gap 1's cheap lever is one plant's, and on the barrel the calendar is a trade
-  the customer pays in days until a `fresh(s)` that honours the segment settles whether the void is
-  the rig's own diet difference.
+  column is clean. So gap 1's cheap lever is one plant's — and §131 then measured it CLEAN on both
+  real-provenance process plants (38% of the excitation removed, every SHUFFLE control at 1.000x),
+  so it is the BARREL that is the exception and not the lever. **§132 built the `fresh(s)` this
+  line was waiting on and it settled the question the other way**: honour the segment and the
+  FRESH arm voids too, so carrying is not what breaks this plant — the barrel's fresh rows were
+  clean only because a settle ignoring its own segment injected an uncommanded transition into
+  every segment. Its teacher-free figures stand as measured and its DIET is now on notice.
 - **A third plant reads the touch-probe knee somewhere the teacher's harmonic count does not
   predict.** §121's account is one plant's confirmation of one prediction; a plant whose knee sits
   off `2·nh` says the mechanism is not the teacher's bandwidth either.

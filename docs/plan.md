@@ -25836,3 +25836,77 @@ naming both plants (rule 9c) — and both halves of the rule are pinned against 
 shape and its repair. Controls: `realtanks.test.mjs` and `realexch.test.mjs` come back at
 2012.19x and 89.77x, and every ①d row above is byte-identical to §126's (tanks 7.7708e-2, exchanger
 1.2477e-3).
+
+## §132 — §123's named falsifier is built, and it confirms the mechanism by BREAKING THE CLEAN ARM: the barrel's teacher-free rows are identifiable because of a harness accident, and neither repair works (task #104)
+
+§123 recorded the barrel's carried excitation as VOID by its own SHUFFLE control — a fit on
+PERMUTED targets passes its own gate and delivers 1.18-1.72x on 3 of 4 seeds, raw or dwelled — and
+named ONE surviving candidate with its falsifier: *`barrelSpec.fresh` ignores the segment and
+settles at the recipe's FIRST level, so every fresh segment carries an extra transition from that
+level to its own start that the carried record never contains. Not proved — the falsifier is a
+`fresh(s)` that honours the segment.*
+
+§131 tested that account NEGATIVELY, on two plants that do not have the shape, and both were
+clean. This is the positive test: **remove the shape from the plant that has it.**
+
+**THE PREDICTION WAS WRITTEN FIRST AND SO WAS ITS FAILURE MODE (rule 59).** P1 said honouring the
+segment should return the carried shuffle to ~1.000x. P2, written in the same file, said the
+repair also IMPOVERISHES the fresh arm, so the fresh shuffle may deliver too — *that would confirm
+the mechanism by making the clean arm dirty.* **P2 is what happened.**
+
+```
+  barrel, 4 seeds                 delivered            SHUFFLE control
+  settle ignores segment, ramp    3.705-6.388x   med 4.641x   1.000-1.008   CLEAN  <- what ships
+  ...carried raw                  2.782-9.295x   med 3.677x   1.000-1.516   VOID   <- §123
+  ...carried, dwelled             3.093-7.080x   med 5.818x   1.000-1.443   VOID   <- §123
+  settle HONOURS segment, FRESH   3.545-9.554x   med 5.324x   1.000-1.570   VOID   <- the falsifier
+  ...carried raw                  2.837-9.114x   med 3.954x   0.985-1.549   VOID
+  ...carried, dwelled             3.100-7.312x   med 5.906x   1.158-1.485   VOID
+```
+
+**THE FIRST ROW REPRODUCES §105 DIGIT FOR DIGIT** — 3.705x .. 6.388x, median 4.641x — with both
+knobs unset, which is what says the knobs measured something rather than moved it (rule 21).
+
+**SO THE MECHANISM IS CONFIRMED AND ITS REPAIR IS REFUTED IN ONE RUN.** The void is not caused by
+CARRYING. It is caused by REMOVING the uncommanded recovery transition, and the fresh arm was only
+ever clean because a settle that ignores its own segment was accidentally injecting one into every
+segment. **The barrel's teacher-free excitation does not identify this plant; a harness artefact
+does.**
+
+**AND MY OWN REPAIR IS REFUTED TOO, WHICH IS WHY IT IS HERE RATHER THAN SHIPPED.** If the accident
+supplies an EDGE, put one in the diet on purpose: `TH_DIETSTEP=1` makes the segment's transition a
+commanded STEP at the same instant between the same levels, so only its shape moves. It is not a
+substitute:
+
+```
+  settle honours segment, STEP diet, fresh     5.304-8.562x   med 6.728x   1.000-1.281   VOID
+  ...carried raw                               5.193-12.175x  med 5.859x   1.000-1.236   VOID
+  settle ignores segment, STEP diet, fresh     4.432-6.971x   med 5.421x   1.027-1.100   clean, WORSE
+```
+
+It HELPS the honoured arm (1.570 → 1.281) and is mildly HARMFUL on the shipped one (1.008 →
+1.100), and neither reaches clean. Matched edge count, matched levels, matched segment length —
+six discontinuities either way — so *number of edges* is not what separates them.
+
+**AND IT IS NOT AMPLITUDE EITHER, MEASURED RATHER THAN ARGUED (rule 17).** `RECIPE[0]` is
+`[180, 200, 210]` and the diet's own span is `[170,190,200]`-`[200,218,226]`, so the accidental
+mismatch averages **3-5 K against the diet's own transitions at ~9-10 K**: the accident supplies a
+SMALLER excursion than the thing it is rescuing. What it supplies that the diet does not is a
+discontinuity at k = 0 **with the plant off-command**, where the designed step is a discontinuity
+at k = hold with the plant settled on it.
+
+**WHY THAT DIFFERENCE IDENTIFIES THE PLANT IS NOT ESTABLISHED, AND IS NAMED RATHER THAN GUESSED
+AT (rule 25).** Three candidates are untested: the window CLAMP at a segment's start, where the
+fit reads a held past that the plant did not have; the plant's own low-pass, which this section
+shows attenuates a 5,250-step quintic and does not show what it does to the two step positions;
+and the SEGMENT-MEAN removal `excite` applies, which an early transient and a mid-segment one
+enter differently.
+
+**WHAT THIS CHANGES ABOUT WHAT IS QUOTED.** The shipped configuration is untouched, both knobs
+default OFF, and its control still passes — so **§105's 4.641x, §119's 4.21x and §120's 3.1 days
+stand as measured**. What they no longer carry is the implication that the barrel's diet was
+designed to identify this plant. It was not; it is on notice, with the reason stated and the
+instrument to re-ask it already built. **And §123's lever question is settled the other way from
+how it was posed**: carrying the excitation is not what breaks this plant, so the barrel's 2.3-day
+calendar floor is not defended by the void — what defends it is that nobody has yet built an
+excitation this plant is identifiable from BY DESIGN.

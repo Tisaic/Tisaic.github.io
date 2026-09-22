@@ -102,15 +102,22 @@ const PLANTS = [{
   // SIZED FROM THE RECIPE'S OWN SPAN (rule 41b), laps at the shipped diet's own 7500 so the window
   // rule produces the reach it produces there rather than one carried in.
   seglen: 7500,
+  // THE TRANSITION IS A QUINTIC RAMP OVER 70% OF THE SEGMENT, AND plan §132 MEASURED THAT AS TOO
+  // LITTLE EXCITATION TO IDENTIFY THIS PLANT. `TH_DIETSTEP=1` makes it a commanded STEP at the
+  // same instant instead — the same levels, the same segment length, the same hold, only the
+  // transition's shape moving, so what it buys is excitation bandwidth and nothing else. Default
+  // OFF and byte-identical, because every barrel figure on record was taken on the ramp.
   diet: (rnd) => {
     const lo = [170, 190, 200], hi = [200, 218, 226];
     const pick = () => lo.map((a, j) => a + (hi[j] - a) * rnd());
+    const STEP = process.env.TH_DIETSTEP === '1';
     const segs = []; let cur = pick();
     for (let s = 0; s < 6; s++) {
       const nxt = pick(), n = 7500, hold = Math.floor(n * 0.3);
       const c0 = cur.slice(), c1 = nxt.slice();
       segs.push({ n, refAt: (k) => {
-        const t = (k - hold) / (n - hold), f = t <= 0 ? 0 : t >= 1 ? 1 : TH.quintic(t);
+        const t = (k - hold) / (n - hold);
+        const f = t <= 0 ? 0 : t >= 1 ? 1 : (STEP ? 1 : TH.quintic(t));
         return TH.powerFor(c0.map((a, j) => a + (c1[j] - a) * f));
       } });
       cur = nxt;

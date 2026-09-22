@@ -87,11 +87,21 @@ export function excite(spec, diet, { seed = 1, carry = false, dwell = 0 } = {}) 
   // refuted as the cause too. What survives is a DIET difference the rig makes silently:
   // `barrelSpec.fresh` ignores the segment and settles at the recipe's FIRST level, so every fresh
   // segment carries an extra transition from that level to its own start that the carried record
-  // never contains. Not proved — the falsifier is a `fresh(s)` that honours the segment. On the
-  // COLUMN, whose segments are three settles long, the carry is clean both ways and saves 1.3x of
-  // the calendar. The dwell stays because it is what a real recipe change does (rule 34) and
-  // because a dwell of at least the window's reach makes the clamp honest, so a dwelled segment
-  // gets NO neighbour links.
+  // never contains. On the COLUMN, whose segments are three settles long, the carry is clean both
+  // ways and saves 1.3x of the calendar. The dwell stays because it is what a real recipe change
+  // does (rule 34) and because a dwell of at least the window's reach makes the clamp honest, so a
+  // dwelled segment gets NO neighbour links.
+  //
+  // THAT FALSIFIER IS BUILT NOW (`TH_FRESHSEG=1`, plan §132) AND IT CONFIRMED THE MECHANISM BY
+  // BREAKING THE CLEAN ARM RATHER THAN FIXING THE VOID ONE: honour the segment and the FRESH arm
+  // voids too (shuffle 1.000-1.570), so the void is not caused by CARRYING — it is caused by
+  // REMOVING that accidental transition, and the barrel's fresh rows were only ever clean because
+  // a settle ignoring its own segment was injecting one. A commanded STEP in the diet
+  // (`TH_DIETSTEP=1`) is NOT a substitute (1.281 honoured, and 1.100 against 1.008 on the shipped
+  // settle), and the accident is not AMPLITUDE — it is 3-5 K against the diet's own 9-10 K.
+  // §131 measured the carry CLEAN on the real cascaded tanks and the real steam exchanger, whose
+  // diets start every segment where their `fresh()` settles, so the lever is fine and this plant's
+  // DIET is what is not.
   let p = null;
   for (const s of segs) {
     // THE MACHINE IS SETTLED AT THE COMMAND IT IS ABOUT TO BE GIVEN, and the SEGMENT says what

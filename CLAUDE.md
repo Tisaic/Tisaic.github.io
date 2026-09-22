@@ -888,8 +888,28 @@ Each of these is a claim that can be shown false, which is the only kind worth w
    ZERO control is bit-exact, and on the tanks the raw carry also TIGHTENS the spread 1.12x →
    1.03x. Through the one press the **tanks ship 9.12x in 28.0 h** and the **exchanger 103.94x in
    16.9 h**, both inside their own seed spreads. Clean on two plants of three asked, VOID on one, so
-   `DICARRY` stays a knob (rule 31) and §123's named falsifier for the barrel — a `fresh(s)` that
-   honours the segment — is still not built.
+   `DICARRY` stays a knob (rule 31).
+
+   **AND §123's NAMED FALSIFIER FOR THE BARREL IS NOW BUILT, AND IT CONFIRMED THE MECHANISM BY
+   BREAKING THE CLEAN ARM RATHER THAN FIXING THE VOID ONE (plan §132).** P1 said honouring the
+   segment should return the carried shuffle to 1.000x; P2, written in the same file, said the
+   repair also impoverishes the FRESH arm so its shuffle may deliver too — *which would confirm the
+   mechanism by making the clean arm dirty.* **P2 is what happened**: `TH_FRESHSEG=1` reads
+   **1.000-1.570 on the FRESH arm**, where the shipped settle reads 1.000-1.008 and reproduces
+   §105 digit for digit. So the void is not caused by CARRYING — it is caused by REMOVING an
+   uncommanded recovery transition, and **the barrel's fresh rows were only ever clean because a
+   settle that ignores its own segment was injecting one into every segment.** My own repair is
+   refuted too: a commanded STEP in the diet at the same instant between the same levels
+   (`TH_DIETSTEP=1`) helps the honoured arm 1.570 → 1.281 and is mildly HARMFUL on the shipped one
+   (1.008 → 1.100), reaching clean on neither, at matched edge count. **And it is not AMPLITUDE,
+   measured rather than argued**: `RECIPE[0]` sits near the diet's own middle, so the accident is
+   3-5 K against the diet's own 9-10 K transitions — it supplies a SHARPER excursion, not a bigger
+   one. Why a discontinuity at k = 0 with the plant off-command identifies this plant where a
+   matched one at k = hold with the plant settled does not is NAMED and not established (the window
+   clamp, the plant's low-pass, `excite`'s segment-mean removal). **What this changes about what is
+   quoted**: both knobs default OFF, the shipped configuration is untouched and still passes its own
+   control, so §105's 4.641x, §119's 4.21x and §120's 3.1 days STAND — what they no longer carry is
+   the implication that this plant's diet was designed to identify it.
 
    **AND THE TANK IS ARMED, CORRECTLY REFUSED, AND REFUTES THE PLACEMENT RULE §126 PROPOSED
    (plan §128).** That section named *place ①d before any rung that will deploy* as measured 3 of 3

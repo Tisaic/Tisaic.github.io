@@ -131,9 +131,20 @@ const barrelSpec = {
   guards: [0, 1, 2].map((i) => ({ index: i, max: 265 })),
   start: TH.powerFor(TH.RECIPE[0]), N: TH.PROG, floor: 0,
   refAt: (k) => TH.powerFor(TH.setpointAt(Math.min(k, TH.PROG))),
-  fresh: () => {
+  // §123's NAMED FALSIFIER, BUILT (plan §132). This settle ignores the segment it is about to
+  // run and holds the RECIPE's first level, so on `dirinvkit`'s excitation every FRESH segment
+  // opens with an uncommanded recovery transition from that level to its own random start — and
+  // the CARRIED record, which begins where the previous segment ended, never contains one. That
+  // is the one surviving candidate §123 left for the barrel's carried rows being VOID by their
+  // own shuffle control, and it is the ONE plant of four with this shape: the real tanks, the
+  // real exchanger and the column all start every segment where their `fresh()` settles, and
+  // §131 measured the carry CLEAN on all three. `TH_FRESHSEG=1` honours the segment instead.
+  // Default OFF and byte-identical, which the knob is FOR — `excite` passes `s` on every call,
+  // so without a flag this would silently move §119, §120 and §123's barrel numbers (rule 21).
+  fresh: (seg) => {
     const p = TH.makeBarrel(7);
-    const st = TH.powerFor(TH.RECIPE[0]);
+    const st = (process.env.TH_FRESHSEG === '1' && seg && seg.refAt)
+      ? seg.refAt(0) : TH.powerFor(TH.RECIPE[0]);
     for (let i = 0; i < 20000; i++) p.step(st);
     return p;
   },
