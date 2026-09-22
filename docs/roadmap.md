@@ -344,7 +344,16 @@ already answer:
 - **A runtime plant-side guard.** §82 built the obvious one and measured it making the failure case
   monotonically WORSE; §100 reached a guard that works exactly as designed and it cost **2.020x →
   1.000x**. The standing criterion is now the finding: score a guard on DELIVERED OUTCOME, and
-  *degraded* is not *harmful*.
+  *degraded* is not *harmful*. **§100's own falsifier has since FIRED and this item stays off the
+  list (§136.4, §136.5)**: two of fourteen mill diet draws read **0.953x and 0.985x** at an
+  uncommissioned line speed, so the licence was granted, and armed there the guard is a **1.19x and
+  1.22x LOSS on the very draws that license it** — it also refuses the 4.0 m/s row that is 0 of 14
+  harmful. Over the 28 uncommissioned points those draws carry it replaces a geometric mean of
+  **1.861x** with exactly 1.000x to remove a worst case of 4.7%. What that corrects is the CRITERION
+  (a guard's support is the whole region it refuses, so one point below 1.000x cannot decide it —
+  rule 19), and the replacement is *licensed where the distribution over the refused region has a
+  geometric mean at or below 1.000x*. The repair with precedent is a DIET across the declared axis
+  and not a guard, which is target 2's own lesson and §106's on the real arm; it is not built.
 - **More rivals before a real machine.** Three admissible rivals is not a field, and a fourth
   measured on the same simulated axis does not make it one.
 - **INT, the largest column gap on the scorecard.** −6, and that file states why it does not matter:

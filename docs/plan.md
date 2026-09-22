@@ -26585,3 +26585,91 @@ not about plants in general. And nothing here proposes a guard: §100 measured t
 guard converting these same speed rows from 2.020x and 1.474x into 1.000x and called that a loss,
 and two harmful draws of fourteen do not overturn a measurement that says refusing costs more than
 correcting on a stale declaration.
+
+## §136.5 — §100'S OWN FALSIFIER HAS FIRED, AND THE GUARD IT LICENSES IS A LOSS ON THE VERY DRAW THAT LICENSES IT (task #13)
+
+§136.4's closing paragraph said in prose that two harmful draws do not overturn §100's measurement.
+That was an ARGUMENT where this project's own standard is a measurement, and the reason it needed
+one is that **§100 wrote down a falsifier and §136.4 satisfied it**. CLAUDE.md, verbatim: *"`DECL` is
+opt-in and OFF on the measurement rather than on caution. What would turn it on, stated so it is
+falsifiable: ONE operating point on ANY plant where a stale declaration makes the frozen object read
+BELOW 1.000x."* Draw 10 reads **0.953x** at 6.5 m/s and draw 12 reads **0.985x**. The condition is
+met, so the guard has to be armed and scored rather than dismissed (rule 59 cuts both ways — a
+falsifier that fires and is then talked around is not a falsifier).
+
+**THE PREDICTION WAS WRITTEN BEFORE THE RUN AND ALL THREE PARTS HOLD.**
+
+```
+  P1  DSEED=10 DECL=1 DGUARD=1 reads EXACTLY 1.000x on both SPEED rows and leaves the
+      commissioned point and both GAUGE rows untouched                          CONFIRMED
+  P2  DSEED=10 DECL=1 DGUARD=0 reproduces the unguarded draw on every row       CONFIRMED
+  P3  the 14-draw geometric mean at 6.5 m/s is ABOVE 1.5x, so arming the guard
+      gives up more than it saves even with its licence granted                 CONFIRMED (1.714x)
+```
+
+```
+  DSEED=10  guard OFF   2.624x commissioned · GAUGE 2.624/2.623x · SPEED 1.485x / 0.953x
+  DSEED=10  guard ON    2.624x commissioned · GAUGE 2.624/2.623x · SPEED 1.000x / 1.000x
+  DSEED=12  guard ON    2.618x commissioned · GAUGE 2.617/2.618x · SPEED 1.000x / 1.000x
+  shipped   guard ON    2.625x commissioned · GAUGE 2.625/2.625x · SPEED 1.000x / 1.000x   <- §100, exactly
+```
+
+The guarded SPEED rows read `15.24 → 15.24 µm` and `15.26 → 15.26 µm` — the open loop to the last
+digit, so the correction is exactly zero and this is the guard rather than an inert object (rule
+25). The shipped row reproduces §100 digit for digit, which is what says the harness is in the state
+that measurement was taken in and the drawn diets are comparable to it (rule 21). And **declaring
+alone is free on a drawn diet too**: `DGUARD=0` returns 1.485x / 0.953x with the harness check still
+red, so §102's separation holds where §136.4 found the harm.
+
+**THE TRADE, OVER THE DISTRIBUTION RATHER THAN OVER ONE DRAW.** Fourteen draws times two
+uncommissioned line speeds is 28 operating points:
+
+```
+  guard OFF   geometric mean 1.861x   ·   min 0.953x   ·   2 of 28 below 1.000x
+  guard ON    every one of the 28 at exactly 1.000x
+```
+
+**So the guard gives up 1.861x of geometric mean to remove a worst case of 4.7%** — and the 4.0 m/s
+column, which the guard refuses identically, is **0 of 14 below 1.000x with a minimum of 1.485x**.
+That is rule 19 on a guard: **the guard's support is the whole uncommissioned region and the harm's
+support is one corner of it**, so a criterion counting points below 1.000x cannot decide it.
+
+**AND THE SHARPEST FORM NEEDS NO AVERAGE AT ALL: ON EACH LICENSING DRAW THE GUARD IS ITSELF A LOSS.**
+
+```
+  d10   4.0 1.485x + 6.5 0.953x  ->  geo 1.190x   replaced by 1.000x   a 1.190x loss to save 4.7%
+  d12   4.0 1.507x + 6.5 0.985x  ->  geo 1.218x   replaced by 1.000x   a 1.218x loss to save 1.5%
+```
+
+The draw that grants the licence is made worse by exercising it. No aggregation argument is needed
+and none is offered: this is two rows of one plant read against each other.
+
+**WHAT IS CORRECTED IS THE CRITERION AND NOT THE GUARD.** §100's verdict — score a guard on
+DELIVERED OUTCOME, never on faithfulness to its declaration — stands and is reinforced. What was
+wrong is the falsifier it attached to that verdict, which counts a SINGLE point below 1.000x as a
+licence for a mechanism that refuses everywhere. The replacement, stated so it can be checked:
+**a guard is licensed where the DISTRIBUTION of delivered outcomes over the region it refuses has a
+geometric mean at or below 1.000x, or where the worst-case harm exceeds the mean benefit it gives
+up.** On this plant that reads 1.861x against 4.7% and the guard stays OFF — now on a measurement of
+28 operating points rather than on the two §100 had. `DECL` and `DGUARD` are unchanged and default
+off; nothing in the library moved and no shipped number moved.
+
+**WHAT THIS LEAVES OPEN, AND IT IS §136.4's ITEM UNDER A DIFFERENT NAME.** A guard that refuses is
+the wrong shape here; CLAUDE.md already names the right one and this project has already built it
+twice — *tolerance comes from declaring the scalar ACROSS a span*, which is target 2's own
+*feed-invariance comes from TRAINING ACROSS FEEDS, never from INDEXING BY FEED* and is §106's repair
+on the real flexible arm. The mill's four training runs all run at one line speed, so its declared
+span is a POINT by construction and the guard can only refuse. A diet drawn across LINE SPEEDS would
+make the span an interval, turn the refusal into a fade, and let the object see the transport delay
+move — which is the one repair with two plants of precedent behind it. It is NOT built and NOT
+measured, and the cost is stated rather than guessed: `makeMill` already derives the delay, the roll
+frequency and the gap setpoint from the operating point (§89.2), so the change is a diet and not a
+controller, but the declared phase alignment is in whole ROLL TURNS and a per-run line speed moves
+what a turn is worth in steps — which is the constraint §71.2 made load-bearing and the first thing
+such a build has to check.
+
+**NOT CLAIMED.** One plant, one held-out axis, fourteen draws of one diet design. It says nothing
+about a plant whose stale-declaration harm is LARGE rather than 4.7%, and the criterion corrected
+here is about ANY plant — what is established is that a single sub-1.000x reading is not by itself a
+licence, which is a statement about the CRITERION and not about the guard. Both directions of the
+guard are measured on this plant and only this plant.
