@@ -41,7 +41,7 @@
  */
 import { AutoStack } from '../../lib/pilot/autostack.js';
 import { motionBasis } from '../../lib/pilot/classic.js';
-import { priceFrom, printCost, emitRow, printGainLadder, ridgeLadder, gainLadder, teacherReuse, carrier, teachLaps, teachAvg, dietN } from './rigs/distilkit.mjs';
+import { priceFrom, printCost, emitRow, printGainLadder, printPlacement, ridgeLadder, gainLadder, teacherReuse, carrier, teachLaps, teachAvg, dietN } from './rigs/distilkit.mjs';
 import { into } from './rigs/meter.mjs';
 import { oracleConverge, oracleTeach } from './rigs/oracleteach.mjs';
 import { dirInvFor } from './rigs/dirinvkit.mjs';
@@ -732,6 +732,10 @@ async function once(seed) {
     printGainLadder(rep, '    ');
     if (rep.distil.ridgeNote) console.log(`    ${rep.distil.ridgeNote}`);
   }
+  // THE PLACEMENT VERDICT, THROUGH THE SHARED PRINTER (plan §133). This plant is the one that
+  // does not call `reportDistil` — §109.1's standing debt — so a decision taken here would
+  // otherwise be taken and never reported, which is the state rule 25 exists for.
+  printPlacement(rep, '  ');
 
   let inSample = null;
   if (rep.distil && rep.distil.policy) {

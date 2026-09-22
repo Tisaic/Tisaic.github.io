@@ -335,6 +335,10 @@ export async function dirInvFor(nameRe, { stride = 7 } = {}) {
   const seglen = typeof P.seglen === 'function' ? P.seglen() : P.seglen;
   const w = deriveWindow({ settle, lapMin: seglen });
   const first = process.env.DIRFIRST === '1';
+  // `DIRPLACE=score` makes the PLACEMENT a measurement instead of a flag (plan §133): the ladder
+  // runs the {①d, ①} pair both ways and keeps the better. Unset is byte-identical, because the
+  // library then calls the two rungs exactly where the flag says.
+  const placement = process.env.DIRPLACE === 'score' ? 'score' : undefined;
   const ridge = process.env.DIRIDGE === undefined ? 1e-6 : +process.env.DIRIDGE;
   const seed = process.env.DISEED === undefined ? 1 : +process.env.DISEED;
   // `DICARRY=1` carries the plant with a DWELL of one measured settle at each new segment's first
@@ -345,8 +349,9 @@ export async function dirInvFor(nameRe, { stride = 7 } = {}) {
   console.log(`  ①d DIRECT INVERSE armed${first ? ' FIRST (before the conventional rung)' : ''}: `
     + `window ±${w.reach} raw steps, ${w.offsets.length} taps [rule ${w.rule} = `
     + `min(0.61·${settle}, ${seglen}/8)], ridge ${ridge}, excitation seed ${seed}`
+    + (placement ? ', PLACEMENT SCORED on the machine (both orders run, the better kept)' : '')
     + (carry ? `, the plant CARRIED across segments (${dwell > 0 ? `a ${dwell}-step dwell at each new segment, one rebuild for the whole excitation` : 'RAW — no dwell, the record begins inside the previous transient'})` : ''));
-  return { dirInv: { refDim: P.nc, ridge, offsets: w.offsets, stride, first },
+  return { dirInv: { refDim: P.nc, ridge, offsets: w.offsets, stride, first, placement },
     // ZERO TEACHER LAPS: open-loop segments only, through the kit's one inversion path.
     dirInvRuns: () => segsFor(P.spec, P.diet, P.inv, { seed, carry, dwell }) };
 }

@@ -531,6 +531,27 @@ export function printGainLadder(rep, pad = '  ') {
  * correction and no diet repairs that. Without it a refusal has two explanations and nothing
  * distinguishes them.
  */
+/**
+ * WHERE ①d WENT AND WHETHER THE MACHINE CHOSE IT (plan §133) — ONE PRINTER, because a verdict
+ * described in two places eventually describes the behaviour it used to have (rule 30). It is
+ * exported rather than inlined in `reportDistil` for the plant that does not call that function:
+ * `distil-tank.mjs` keeps its own copy of the ladder's format, which §109.1 recorded as a standing
+ * debt and which duly made this plant the one plant whose placement decision was taken and never
+ * reported (rule 25).
+ */
+export function printPlacement(rep, pad = '  ') {
+  if (!rep || !rep.placement) return;
+  const pl = rep.placement;
+  if (!pl.scored) console.log(`${pad}①d PLACEMENT: not scored — ${pl.why}`);
+  else if (pl.xFirstAlone === undefined) console.log(`${pad}①d PLACEMENT: kept ${pl.chose.toUpperCase()} — ${pl.why}`);
+  else console.log(`${pad}①d PLACEMENT, TWO COMPLETE CONTROLLERS: ①d ALONE `
+    + `${pl.xFirstAlone === null ? '—' : pl.xFirstAlone.toFixed(3) + 'x'} against the DECLARED ladder `
+    + `${pl.xDeclared === null ? '—' : pl.xDeclared.toFixed(3) + 'x'} — kept ${pl.chose.toUpperCase()}; ${pl.why}`
+    + (pl.probeSteps === null || pl.probeSteps === undefined
+      ? ' (the probe NOT priced — no meter or no budget, rule 25)'
+      : ` (the probe cost ${human(pl.probeSteps)} plant steps)`));
+}
+
 async function reportDistil({ rep, runs, nFeat, segs = null, auto = null }) {
   // ---- AN EXCEPTION INSIDE THE RUNG MUST NOT PASS FOR A REFUSAL (plan §72.15).
   //
@@ -544,6 +565,12 @@ async function reportDistil({ rep, runs, nFeat, segs = null, auto = null }) {
     throw new Error(`the distilled rung THREW rather than refusing: ${rep.distil.error} `
       + '— a crash is not a verdict (rule 25)');
   }
+  // ---- WHERE ①d WENT, AND WHETHER THE MACHINE CHOSE IT (plan §133). Printed by the shared
+  // printer rather than by each harness, because a verdict described in five places is five
+  // descriptions of the behaviour it used to have (rule 30).
+  printPlacement(rep);
+
+
   // ---- THE TWO CHECKS THAT WOULD HAVE CAUGHT §65's DEFECTS, AND DID NOT EXIST.
   //
   // Both faults were silent, both were of a class this project had already paid for once, and

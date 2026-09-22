@@ -489,6 +489,16 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # it prints is the RIG and not a result (rule 14) and the file says so; what is pinned is the
     # PATH, and a rung that is fitted, vouched for and never applied reads exactly 1.000x.
     t node test/pilot/dirinvrung.test.mjs
+    # WHERE ①d GOES IS DECIDED BETWEEN TWO COMPLETE CONTROLLERS (plan §133). §126 proposed a
+    # placement RULE and §128 refuted it on a fourth plant, both ending with the same sentence:
+    # scoring it is the next step and is not built. The obvious form of the scoring is ALSO wrong
+    # and this file pins why — comparing the {①d, ①} PAIR reads 11.791x against 5.019x on the
+    # cart-pole and picks FIRST, where the COMPLETE declared ladder reads 11.93x because ②d still
+    # has 2.38x to find above them. BOTH HALVES (rule 9): a plant where ①d alone wins ships it
+    # alone with everything else dropped, and a plant where the declared ladder wins ships
+    # BYTE-IDENTICALLY to the run that never scored the placement — including leaving no row
+    # behind for a candidate it did not keep.
+    t node test/pilot/placement.test.mjs
     # THE PROBE INSTRUMENT REACHES A TEACHER THE HARNESS ALREADY BUILT (plan §125). §121 wrapped
     # the descriptor's `run` and `teach` on a SPREAD COPY, so the ORACLE teacher — built by the
     # harness, closed over its own drive loop — kept reading the full instrument and three runs

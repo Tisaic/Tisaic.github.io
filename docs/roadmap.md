@@ -283,9 +283,18 @@ REFUSES at 0.05x, with the control byte-identical at 19.910x. *And the placement
 proposed is REFUTED by that third plant (§128):* **place ①d before any rung that will deploy** would
 send it first on the tank, where going first costs 1.82x and POISONS the incumbent (19.91x → 1.51x).
 What separates the four is which of the two is stronger ALONE, which needs both orders run — so the
-placement is a measurement per plant and `dirInv.first` stays a knob. *What is left:* the 2R arm and
-EMPS, and neither is an edit — `distil-emps.mjs` is not a ladder, EMPS' ladder is a contract test,
-and the arm's ladder plant is not the plant `dirinvall`'s arm entry drives (rule 61).
+placement is a measurement per plant and `dirInv.first` stays a knob. **And that measurement is now
+BUILT and run on six plants (§133), after the obvious form of it turned out to be wrong.** Scoring
+the {①d, ①} PAIR reads 11.791x against 5.019x on the cart-pole and picks FIRST, where the COMPLETE
+declared ladder reads 11.93x — the pair is wrong by the entire contribution of the rungs above it,
+which is ④'s own opening sentence one rung lower down. Comparing two COMPLETE controllers instead
+(①d probed alone before the ladder, against the ladder as it finished) picks the better of the two
+library defaults on **6 of 6**, gaining 1.05x on two plants and losing nothing, for ONE extra scored
+run (+10-16% of the calendar) — so `DIRPLACE` ships OFF on the cost, not on the result. *What is
+left:* the 2R arm and EMPS, and neither is an edit — `distil-emps.mjs` is not a ladder, EMPS' ladder
+is a contract test, and the arm's ladder plant is not the plant `dirinvall`'s arm entry drives
+(rule 61); and the THIRD candidate, *①d first WITH the rungs above it*, is unmeasured and worth
+1.11x on the exchanger.
 
 **9. Price the CONVENTIONAL rung before the budget admits it.** (task #101) **DONE, §127.** It was
 the one lap-spending rung with no estimate and, wherever the teacher is gone, the bill: 15 of the

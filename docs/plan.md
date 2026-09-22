@@ -25910,3 +25910,107 @@ instrument to re-ask it already built. **And §123's lever question is settled t
 how it was posed**: carrying the excitation is not what breaks this plant, so the barrel's 2.3-day
 calendar floor is not defended by the void — what defends it is that nobody has yet built an
 excitation this plant is identifiable from BY DESIGN.
+
+## §133 — Where ①d goes is a measurement, and the obvious way to measure it is wrong: two complete controllers, six plants, no flag (task #102)
+
+§126 proposed a placement RULE — *place ①d before any rung that will deploy* — measured it 3 of 3
+and said a flag was the wrong shape for it because the ladder already knows on the machine which
+rungs deploy. §128 then REFUTED the rule on a fourth plant: on the quadruple tank, whose
+conventional rung deploys at 19.91x, going first costs 1.82x and POISONS that rung down to 1.51x.
+Both sections ended with the same sentence — what separates the plants is WHICH IS STRONGER, that
+cannot be known without running both orders, so scoring the placement is the next step and is not
+built. This is that, and the first thing it produced was a negative about itself.
+
+### The obvious form of it is wrong, and the cart-pole said so on the first run
+
+Score the {①d, ①} PAIR both ways and keep the better. Built, run, and the prediction written first
+was that the cart-pole would keep DEFAULT, since §117 measured `first` shipping 11.79x there
+against the declared order's 11.93x. What it printed instead:
+
+```
+  ①d PLACEMENT SCORED ON THE MACHINE: ①d FIRST 11.791x against the DECLARED order 5.019x
+    — kept FIRST
+```
+
+**5.019x is not the declared ladder.** It is the declared PAIR — ① at 4.66x and ①d after it at
+1.08x — and the declared LADDER goes on to 11.93x because ②d still finds 2.38x above them. Placed
+first, ①d takes 11.79x and then REFUSES both rungs above it (① 0.94x, ②d 0.90x). So the pair's own
+scores say FIRST by 2.35x and the complete ladders say DEFAULT by 1.2%: **the pair-scored placement
+is wrong by the entire contribution of the rungs above it**, and it shipped a machine 1.2% worse
+for 19% more plant time (46.2 → 55.1 min).
+
+That is the ④ drop-one pass's own opening sentence — *a greedy ladder cannot see that a rung which
+helps alone may cost the rung above it* — arriving one rung lower down, in the code written to fix
+the greedy ladder. It is on the record because it is the version anyone would build first.
+
+### So the comparison is between two complete controllers
+
+①d is PROBED in the first position on the bare plant, scored, and put back; the declared ladder
+then runs untouched; and at the end, beside ④, the finished machine is compared against that probe.
+Both sides are things a machine could actually receive and both were scored on it. The probe's row
+is withheld from the ladder's table unless it wins, because a candidate that is not shipped would
+otherwise sit between two rungs it was never scored against.
+
+**Six plants, and the machine picks the better of the two library defaults on every one of them:**
+
+```
+  plant                    ①d ALONE   declared ladder   kept        ships    `first: true` ships
+  real steam exchanger      94.697x       89.773x       FIRST       94.70x       104.72x
+  quadruple tank             7.254x       19.910x       DECLARED    19.91x        10.92x
+  cart-pole                 11.791x       11.927x       DECLARED    11.93x        11.79x
+  real cascaded tanks        9.112x        8.694x       FIRST        9.11x         9.11x
+  extruder barrel            4.208x        6.997x       DECLARED     7.00x         4.21x
+  Wood-Berry column          3.850x        3.959x       DECLARED     3.96x         3.85x
+```
+
+Against today's library default (`first: false`) it **gains 1.05x on two plants and loses nothing
+on any**. Against `first: true` it gains 1.83x, 1.66x, 1.03x and 1.01x on four and is 1.11x short
+on one. §128's poisoning is avoided by measurement rather than by a flag, and §126's three wins are
+kept — the rule those two sections disagreed about is now a thing the ladder reads off the machine.
+
+**THE COST IS ONE SCORED RUN AND IT IS NOT FREE.** ①d's fit spends no plant time and its excitation
+is paid either way, so the probe is one lap: cart-pole 46.2 → 50.9 min, real cascaded tanks 19.3 →
+22.2 days, real steam exchanger 3.1 → 3.6 days, +10% to +16%. A customer who knows their plant
+declares the placement and pays nothing; a customer who does not pays for the measurement. That is
+rule 31's own shape and it is why `DIRPLACE` ships OFF.
+
+**WHAT IT DOES NOT MEASURE, STATED BECAUSE IT IS WORTH 1.11x ON ONE PLANT (rule 25).** It asks *①d
+alone, or the declared ladder* and never *①d first WITH the rungs above it*, which §126 measured
+reaching 104.72x on the real steam exchanger against ①d-alone's 94.70x. That third candidate costs
+a second COMPLETE ladder, teacher included, and is not paid for here. On the two plants where the
+declared ladder wins by composing (cart-pole, barrel) the third candidate is the one that loses, so
+this is not a uniform under-reading.
+
+### Controls
+
+- **`DIRPLACE` unset is BYTE-IDENTICAL** on the cart-pole (`DIRINV=1` against `0873d8a`, every digit
+  of the ladder, wall clock excepted) and on the quadruple tank (19.910x, and `rep.placement`
+  absent entirely rather than present-and-empty).
+- **The chosen score IS a scored run of exactly that configuration**, not a number assembled from
+  two others — asserted, because that is the licence ④ already takes and the one place this could
+  ship a machine nobody measured.
+- **The loser leaves no row**, asserted, so the ladder's table cannot come to contain a candidate
+  it did not score against its neighbours.
+- **`test/pilot/placement.test.mjs` pins both halves** on a mock ladder, since the plants take
+  minutes each and a decision needs a check that runs in milliseconds. The lever that makes the two
+  candidates trade places had to be the INSTRUMENT and not the window: a first-order lag is
+  invertible from `y[k]` and `y[k-1]`, so three straddling taps read 2.4e6x where thirteen read
+  1.5e6x, and what weakens ①d is noise on the record it is fitted from — §50.1's own axis, and
+  something a real plant varies. Fourteen checks: chooses FIRST and drops everything else when ①d
+  alone wins; ships BYTE-IDENTICALLY to the unscored run when the declared ladder wins; costs
+  exactly one extra scored run in both; states the inert cases rather than skipping them (no
+  conventional rung to place against; a caller that already declared `first` is not charged a probe
+  to re-decide it).
+- **The tank's verdict was taken and not reported until the printer moved.** `distil-tank.mjs` is
+  the one plant that does not call `reportDistil` — §109.1 recorded that second copy of the format
+  as a standing debt — so this plant made the decision and printed nothing, which is rule 25's own
+  state. `printPlacement` is exported from the shared kit now and both call it; the rest of that
+  debt stands.
+
+### What is NOT done
+
+`DIRPLACE=score` is opt-in and OFF (rule 31): it never loses delivery on the six plants measured
+and it costs 10-16% of a calendar on plants where the calendar is the gap this project is trying to
+close. Where ①d is armed at all it is the better setting and the record says so; where the third
+candidate matters it is still unmeasured. And the 2R arm and EMPS still have no ladder that arms
+①d, which §128 already recorded as a routing question rather than a measurement one.
