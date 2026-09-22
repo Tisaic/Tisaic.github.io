@@ -498,7 +498,15 @@ const worst = held.reduce((a, b) => (b.x < a.x ? b : a));
 console.log('');
 // The MANDATE's clause is asserted; the 1.3x bound is reported, exactly as every other plant
 // does it (plan §88.4) — a suite pinned to a bar plants are measured to fail is permanently red.
-check('target 1: no operating point is made worse by the frozen object',
+// THE TOLERANCE IS STATED IN THE CHECK'S OWN NAME, BECAUSE THIS BLOCK CARRIED TWO THRESHOLDS
+// FOR ONE QUANTITY IN ADJACENT LINES (plan §136.4). The printed `← MADE WORSE` marker above and
+// `emitRow`'s `t1Worse` below both use `x < 1`; this assertion allows 2%, so §136.4's draw 12
+// (0.985x) is EMITTED as made worse and passes here. Changing the number would change what goes
+// red across the suite on a judgement nothing has measured, so what changed is that the number
+// is readable (rules 25, 30). The slack is the rig's own instrument floor and not a controller
+// result: this plant's X-ray gauge reads 2.0 µm against a 15.15 µm open loop.
+check('target 1: no operating point is made worse by the frozen object, within the 2% the rig\'s '
+  + 'own gauge noise cannot resolve — the emitted row uses a strict x < 1 and can disagree',
   held.every((r) => r.x >= 0.98), `worst ${worst.tag} at ${worst.x.toFixed(3)}x`);
 emitRow(rep, auto, { t1: worst.x / xComm, t1Worse: worst.x < 1 });
 

@@ -26474,3 +26474,114 @@ and is not evidence that it is gone — the contradiction on record is `spread.m
 and the tank, through the teacher. And §136.2's own finding cuts the other way for a different row:
 the flagship's numbers are the top of their distribution, so every arm factor quoted in this record
 is about 1.29x above a median commissioning of the same machine by the same procedure.
+
+---
+
+### §136.4 — THE FALSIFIER FOR §136's OWN SELECTOR, AND IT FOUND THE HARMFUL DRAW THIS PROJECT HAS NEVER HAD (task #12)
+
+**WHY THIS RAN AT ALL.** §136.2 ended with *nothing here says WHICH property of a draw predicts
+its factor*, and the cheapest form of that question needs no plant time: the fourteen rows §136
+left on disk already carry, for each draw, the factor on the program the ladder SCORES and the
+factors on the programs the record QUOTES. So — **can a commissioning draw be selected without
+scoring what you will quote?** `select.mjs` asks that on the SEED axis for the pilot; this asks it
+on the DIET axis for the object that ships.
+
+**THE POST-HOC READ LOOKED LIKE A RESULT ON THE MILL AND LIKE A WARNING ON THE ARM.** Over the
+first seven draws the mill's commissioned-point delivered error ranks the LINE-SPEED transfer at
+Spearman **+0.929, exact two-tailed p = 0.007**, and it holds against the raw µm at the held-out
+points as well as against the target-1 ratio, so it is not a denominator artefact (rule 19). The
+factor doing the ranking moves **0.17%**; what it ranks moves 27% and 57%. On the ARM the same
+procedure is the opposite: `rho(scored, rounded) = +0.821` but `rho(scored, circle) = -0.179`, the
+two held-out programs rank the draws independently of each other (+0.071), and **among the six
+DRAWN diets picking the best on the scored square gives rank 1 of 6 on the rounded rectangle and
+rank 6 of 6 on the circle.** Its fit gate is backwards with a number for the first time:
+`rho(held-out R² ch1, delivered) = -0.857, p = 0.024` over seven draws — `distil.js`'s PRE-FILTER
+claim as a monotone reversal across a whole distribution rather than as one row.
+
+**AND IT WAS POST-HOC, SO THE FALSIFIER WAS WRITTEN BEFORE THE RUN (rule 59).** About five
+correlations were examined per plant, so the mill's p = 0.007 survives a crude multiplicity
+correction and the arm's p = 0.033 does not. Three predictions were recorded first — P1 the
+ranking repeats with rho > 0 on seven NEW draws, P2 the two speed rows again agree with each
+other, P3 the best-scoring draw lands in the top half — with what would kill each.
+
+```
+  DSEED 7-13, the held-out seven
+  P1  rho(factor, 6.5 transfer) = +0.393  p = 0.396     technically holds, and is DEAD
+      pooled over all 14:        +0.440   t = 1.70 on 12 df, against 2.18 for p<0.05
+  P2  rho(4.0, 6.5)             = +0.929  p = 0.007     REPLICATES, exactly the discovery figure
+      pooled over all 14:        +0.895   t = 6.93
+  P3  best-scoring draw d7 ranks 4 of 7 on the 6.5 row  MIDDLE — no better than random
+```
+
+**SO THE SELECTOR IS REFUTED AND THE THING UNDERNEATH IT IS CONFIRMED.** The commissioned-point
+score does NOT predict which draw transfers — +0.929 became +0.393 and the pooled fourteen are not
+significant — but the TRANSFER ITSELF is a coherent property of a draw: the two speed rows rank
+fourteen draws at +0.895. A draw is reliably good or bad at line speed, and the number the ladder
+already has cannot tell you which.
+
+**AND THE RUN FOUND SOMETHING WORTH MORE THAN THE CORRELATION IT WAS TESTING: TWO OF ITS
+SENTENCES ARE WRONG, AND ONE OF THEM IS THIS PROJECT'S KILL CLAUSE.**
+
+```
+  draw   factor    turns                 4.0     6.5    6.5 µm    6.5 absolute
+  d0    2.62404   [37, 48, 59, 70]      0.770   0.562   10.35     1.474x   <- the SHIPPED diet
+  d2    2.62852   [42, 27, 77, 59]      0.962   0.879    6.60     2.311x   <- best of fourteen
+  d9    2.62628   [54, 50, 51, 56]      0.845   0.869    6.68     2.284x
+  d11   2.62942   [58, 40, 42, 37]      0.708   0.475   12.22     1.249x
+  d12   2.61690   [59, 32, 38, 70]      0.576   0.376   15.50     0.985x   <- made worse
+  d10   2.62315   [56, 47, 46, 84]      0.566   0.363   16.01     0.953x   <- MADE WORSE, check RED
+```
+
+**§136.1's *the shipped diet is the WORST draw on the 6.5 m/s row* is RETRACTED**: three of fourteen
+are worse (0.475, 0.376, 0.363 against its 0.562), and the transfer spans **0.363 to 0.879, a 2.42x
+spread**, where seven draws showed 0.562 to 0.879. **And §136.3's *the roadmap's kill clause for
+this row does not fire on either plant* is RETRACTED OUTRIGHT: it fires.** Draw 10 takes the 6.5 m/s
+point from an open loop of 15.26 µm to **16.01 µm, 0.953x — worse than doing nothing** — and the
+harness's own standing check goes RED on it unprompted. That is the first harmful deployment the
+DEPLOYED OBJECT has produced from its own diet draws anywhere in this record, it is one of the four
+results `docs/roadmap.md` lists as making its own ordering wrong, and it was produced by running
+seven more of exactly the draws §136 had already run seven of.
+
+**AND THE HARM BISECTS THE SAME WAY THE TRANSFER DID, WHICH MAKES IT AN ENGINEER'S PROPERTY AND NOT
+A PLANT'S (rule 20).** `DDRAW` holds one half of the draw at the shipped value:
+
+```
+  d10  turns drawn, shipped noise    0.360   16.17 µm   0.944x   STILL HARMFUL, still red
+  d10  shipped turns, noise drawn    0.556   10.47 µm   1.458x   not harmful — reproduces d0
+  d12  turns drawn, shipped noise    0.377   15.49 µm   0.985x   STILL HARMFUL
+  d12  shipped turns, noise drawn    0.587    9.91 µm   1.540x   not harmful — reproduces d0
+```
+
+**A harmful commissioning on this plant is caused by WHICH FOUR EXCURSIONS the engineer trained on
+and cannot be caused by the plant's measurement noise** — holding the shipped schedule and drawing
+only the noise returns both harmful draws to the shipped diet's own 0.556-0.587 on both rows. That
+is §136.1's bisection reproduced on a different quantity, and it says the failure is in principle
+controllable. What it does NOT say is how: P1 and P3 are dead, so nothing measured here tells an
+engineer which schedules are the bad ones before the commissioning is spent.
+
+**AND THE CHECK THAT CAUGHT IT CARRIED TWO THRESHOLDS FOR ONE QUANTITY IN ADJACENT LINES.** The
+printed `← MADE WORSE` marker and `emitRow`'s `t1Worse` both use `x < 1`; the assertion allowed
+`x >= 0.98`. So **draw 12 at 0.985x is EMITTED as made worse and PASSES the local check**, which is
+`objtable`'s scrape and the harness disagreeing about the project's own mandate clause with nothing
+saying so (rules 19, 30) — the condition `objtable` exists to remove, arriving inside a check. The
+number is NOT changed, because moving it would change what goes red across the suite on a judgement
+nothing has measured; what changed is that the check's own name now states its tolerance and says
+the emitted row can disagree. The slack is defensible and is now written where it is read: 2% of
+this plant's delivered error is under its X-ray gauge's own 2.0 µm floor against a 15.15 µm open
+loop. The shipped run is unchanged at **2.625x** with the check green (rule 21).
+
+**WHAT THIS DOES TO THE COUNTS.** *Nothing made worse* survives for **what the block SHIPS** — the
+shipped diet's own operating points are 2.020x and 1.474x and the ladder is byte-identical — and it
+does NOT survive for *the deployed object under its own diet draws*, which is the claim §136.3 made
+and the one the *robust and tolerant* row was about. The honest reading of fourteen draws is: 14 of
+14 deploy and help at the commissioned point at a spread of 1.005x, the GAUGE transfer is exactly
+1.000 on all fourteen, and **2 of 14 are harmful at an uncommissioned LINE SPEED, one of them past
+the rig's own noise floor.**
+
+**NOT CLAIMED.** One plant, fourteen draws, one design space. The arm's anti-informative reading is
+six drawn diets and its p does not survive multiplicity. P2's +0.895 is the one figure here that
+replicated on data it was predicted for, and it is a statement about this mill's diet family and
+not about plants in general. And nothing here proposes a guard: §100 measured the declared-point
+guard converting these same speed rows from 2.020x and 1.474x into 1.000x and called that a loss,
+and two harmful draws of fourteen do not overturn a measurement that says refusing costs more than
+correcting on a stale declaration.

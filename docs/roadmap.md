@@ -24,7 +24,7 @@ the headline suggests and the calendar is what is not.**
 | Completely self-tuning | **SUPPORTED** | nothing — this is the strongest thing here and the work is to not break it |
 | PLC memory and CPU | **MET for what ships** (8-330 MAC/decision, 0.7-1.8 kB, `artefact.test.mjs` bit-identical) | the COMMISSIONING arithmetic, which the PLC-only rule also binds and which has never been costed as sliced background compute |
 | Reusable across plants | **6 of 11 rows ship the deployed object, 5 the conventional rung, 0 the cascade, none made worse** (§115, scraped) | nothing on the plants already asked — this is the portfolio working. It moves by a plant nobody here chose |
-| Robust and tolerant | **CONTRADICTED on two plants — and both contradictions belong to `pilot.js`'s GATE, which ships on 0 of 11** | the OBJECT's own diet-draw distributions — §84.8 and §87.3 did six plants, **§136 did the last two that ship the object (cold mill 7/7 at 1.002x, 2R arm 7/7 at 1.57x, nothing made worse on either)**, so what is left undrawn ships the CONVENTIONAL rung and is a different question |
+| Robust and tolerant | **CONTRADICTED on two plants — and both contradictions belong to `pilot.js`'s GATE, which ships on 0 of 11** | the OBJECT's own diet-draw distributions — §84.8 and §87.3 did six plants and **§136 the last two that ship the object; §136.4 then took the mill to 14 draws and found 2 HARMFUL at an uncommissioned line speed (0.953x, 0.985x), so this row's contradiction now includes the DEPLOYED object.** What would move it is a way to tell a harmful excursion schedule from a good one BEFORE the commissioning — §136.4 refuted the obvious one |
 | Linear AND nonlinear alike | **four error classes of four tried** | a fifth class. Hysteresis (Bouc-Wen) is the named gap and is a vendoring problem, not a controller one |
 
 And eight targets, of which one is badly missed and it is not the one the table above leads with:
@@ -371,10 +371,16 @@ Stated so it can fail rather than be revised (rule 59):
   off `2·nh` says the mechanism is not the teacher's bandwidth either.
 - **A plant appears where the deployed object's own diet draws produce a harmful deployment.** The
   *robust and tolerant* row is currently re-scopeable because every contradiction on record belongs
-  to a component that ships nowhere; one such draw ends that. **Two more plants were asked and it did not
-  fire (§136):** the cold mill's 7 draws deploy and help at a spread of 1.002x with the GAUGE
-  transfer at exactly 1.000 on every one, and the 2R arm's 7 deploy and help on all three programs
-  with target 1 MET on every one. **What §136 found instead is on a different row**: the arm's
+  to a component that ships nowhere; one such draw ends that. **IT FIRED, on the fourteenth mill draw (§136.4).** §136
+  asked two more plants and reported it did not fire on seven draws each; seven MORE mill draws
+  take the line-speed transfer's span from 1.56x to **2.42x** and produce **draw 10 at 0.953x —
+  worse than doing nothing at an uncommissioned line speed, with the harness's own check red**.
+  So the *robust and tolerant* row is no longer re-scopeable on the grounds that every
+  contradiction belongs to a component shipping nowhere: this one belongs to the DEPLOYED OBJECT.
+  What survives is narrower and still load-bearing — what the block SHIPS is unharmed (2.020x,
+  1.474x, ladder byte-identical), 14 of 14 draws deploy and help at the commissioned point, the
+  GAUGE transfer is exactly 1.000 on all fourteen, and the harm bisects to the ENGINEER's choice
+  of excursions rather than the plant's noise. **What §136 found instead is on a different row**: the arm's
   shipped diet is the BEST draw of seven on all three programs at once, so the flagship factors in
   this record sit about 1.29x above a median commissioning of the same machine.
 - **The EDM's logs show no lead time.** Then gap 4's named route is the wrong first machine, and the
