@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="theme-color" content="#0b1220" />
   <link rel="icon" href="data:," />
-  <title>FlexiSim — Commissioning Bench</title>
+  <title>FlexiSim — FB_AutoFF on a compliant arm</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:64,built:"2026-09-23T05:20:55Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:65,built:"2026-09-23T13:53:42Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
 
   <style>
@@ -23,33 +23,27 @@
     main { padding:0 12px 40px; }
     .stage { width:100%; height:42vh; border-radius:14px; overflow:hidden; background:#060a14;
       border:1px solid var(--line); position:relative; }
-    /* An unpainted canvas defaults to WHITE, which against this page reads as a broken
-       render rather than an empty one. */
+    /* An unpainted canvas defaults to WHITE, which reads as a broken render rather than an empty one. */
     .stage canvas { display:block; width:100%; height:100%; background:#060a14; }
     .badge { position:absolute; left:10px; top:10px; font-size:.7rem; padding:4px 8px; border-radius:6px;
       background:rgba(15,23,42,.85); border:1px solid var(--line); color:var(--muted); max-width:70%; }
     .badge.r { left:auto; right:10px; max-width:28%; text-align:right; }
-    .pill { display:inline-block; font-size:.7rem; padding:4px 8px; border-radius:6px;
+    .pill { display:inline-block; font-size:.72rem; padding:4px 8px; border-radius:6px;
       background:var(--card); border:1px solid var(--line); color:var(--muted); }
     .good { color:var(--accent2); } .warn { color:var(--warn); } .bad { color:var(--bad); }
-    /* The mismatch flag sits inside the group header, whose muted span rule outranks `.warn`
-       on specificity — a warning rendered in the caption colour is not a warning (rule 52). */
-    #plant-note { color:var(--warn); font-weight:600; border-color:var(--warn); display:block; margin-top:6px; }
     .controls { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; align-items:center; }
     .controls > label { max-width:100%; }
-    .controls label > select { max-width:100%; }
     .controls > .hint { flex:1 0 100%; }
     button { background:var(--accent); color:#2b1a02; border:0; border-radius:10px; padding:11px 16px;
       font-weight:700; font-size:.92rem; cursor:pointer; flex:1 1 auto; min-width:120px; }
     button.sec { background:var(--card); color:var(--text); border:1px solid var(--line); }
     button:disabled { opacity:.45; cursor:default; }
-    select, input[type=checkbox] { font-size:.9rem; }
-    select { background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:8px;
-      padding:9px 10px; }
+    select { font-size:.9rem; background:var(--card); color:var(--text); border:1px solid var(--line);
+      border-radius:8px; padding:9px 10px; max-width:100%; }
     label { font-size:.9rem; display:flex; align-items:center; gap:8px; }
     input[type=checkbox] { width:18px; height:18px; }
     .slider { flex:1 1 100%; display:flex; align-items:center; gap:10px; font-size:.82rem; color:var(--muted); }
-    .slider input[type=range] { flex:1; }
+    .slider input[type=range] { flex:1; min-width:0; }
     .slider .v { min-width:96px; text-align:right; font-variant-numeric:tabular-nums; color:var(--text); }
     .lead { color:var(--muted); font-size:.85rem; line-height:1.5; margin:10px 0 4px; }
     .lead b { color:var(--text); }
@@ -58,32 +52,30 @@
     h4.grp { margin:16px 0 -4px; font-size:.78rem; color:var(--text); font-weight:700;
       letter-spacing:.3px; border-top:1px solid var(--line); padding-top:10px; }
     h4.grp span { font-weight:400; color:var(--muted); letter-spacing:0; }
-    table.tbl { width:100%; border-collapse:collapse; font-size:.72rem; margin:8px 0 0;
-      display:block; overflow-x:auto; white-space:nowrap; }
+    table.tbl { width:100%; border-collapse:collapse; font-size:.74rem; margin:8px 0 0; }
     table.tbl th, table.tbl td { border:1px solid var(--line); padding:5px 7px; text-align:left;
       font-variant-numeric:tabular-nums; }
     table.tbl th { background:var(--card); color:var(--muted); font-weight:600; }
     table.tbl td.num { text-align:right; }
     .stat { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-size:.82rem; margin-top:12px;
       background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px; }
-    .stat dt { color:var(--muted); } .stat dd { margin:0; font-variant-numeric:tabular-nums; }
+    .stat dt { color:var(--muted); } .stat dd { margin:0; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
     code { background:var(--card); padding:.1em .35em; border-radius:5px;
       font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.92em; }
   </style>
 </head>
 <body>
 <header>
-  <h1>FlexiSim — the commissioning bench</h1>
+  <h1>FlexiSim — FB_AutoFF on a compliant arm</h1>
   <a href="index.html">← back to test page</a>
 </header>
 
 <main>
-  <p class="lead"><b>One machine, one program, one controller.</b> The controller is the
-    <b>distilled model</b> — the north star's best rung that fits a PLC scan outright: a
-    correction addressed by the commanded reference, 234 MAC per decision, no solver, no
-    forecast bank, no tracker at deploy. The <b>ghost</b> underneath is the same machine without
-    it, so the gap is the picture. Two things stack on top when the installation allows them:
-    the tracker staying on the machine, and lap learning for a periodic application.</p>
+  <p class="lead"><b>One machine, one function block.</b> A two-link arm with flexible links and
+    geared joints, under its conventional joint servo. <b>FB_AutoFF</b> is called once per scan:
+    press <b>Commission</b> and it measures the machine, fits its own feedforward, keeps what helps
+    and refuses what does not — then trims the joint setpoints for ever after. The <b>ghost</b>
+    underneath is the same machine without the block.</p>
 
   <div class="stage" id="stage">
     <canvas id="cv"></canvas>
@@ -93,456 +85,231 @@
 
   <div class="controls">
     <button id="run" disabled>Run ▶</button>
-    <button id="reset" class="sec">Reset</button>
-    <div class="slider"><span>Speed</span>
-      <input type="range" id="s-spf" min="50" max="1200" step="50" value="400" />
-      <span class="v" id="v-spf">400 steps/frame</span></div>
-    <div class="slider"><span>Error ×</span>
-      <input type="range" id="s-mag" min="1" max="20" step="1" value="10" />
-      <span class="v" id="v-mag">×10</span></div>
+    <button id="reset" class="sec" disabled>Reset</button>
+    <div class="slider">speed
+      <input type="range" id="s-spf" min="100" max="4000" step="100" value="400" />
+      <span class="v" id="v-spf">400 scans/frame</span></div>
+    <div class="slider">error ×
+      <input type="range" id="s-mag" min="1" max="20" step="1" value="3" />
+      <span class="v" id="v-mag">×3</span></div>
   </div>
 
-  <h4 class="grp">Machine <span>— the plant; a change keeps the model and re-records the ghost</span> <span class="pill warn" id="plant-note" hidden></span></h4>
+  <h4 class="grp">Machine <span>— a change rebuilds the arm; a stored block record belongs to the plant it was fitted on</span></h4>
   <div class="controls">
-    <div class="slider"><span>Gearbox K</span>
-      <input type="range" id="s-k" min="0" max="8" step="1" value="0" />
+    <div class="slider">gearbox K
+      <input type="range" id="s-k" min="0" max="5" step="1" value="0" />
       <span class="v" id="v-k">0.25</span></div>
-    <div class="slider"><span>Link E</span>
-      <input type="range" id="s-e" min="0" max="7" step="1" value="3" />
+    <div class="slider">link E
+      <input type="range" id="s-e" min="0" max="5" step="1" value="2" />
       <span class="v" id="v-e">0.030</span></div>
   </div>
 
-  <h4 class="grp">Program <span>— applied at the next lap boundary</span></h4>
+  <h4 class="grp">Program <span>— changes take effect at the next lap; the block keeps running on the new program</span></h4>
   <div class="controls">
     <select id="shape" aria-label="Toolpath">
-      <option value="sharp" selected>square — four real corners (the bench program)</option>
-      <option value="rounded">rounded rectangle — straights and arcs</option>
-      <option value="circle">circle — the ball-bar test</option>
+      <option value="sharp" selected>sharp square (the bench program)</option>
+      <option value="rounded">rounded rectangle</option>
+      <option value="circle">circle</option>
     </select>
-    <div class="slider"><span>Feedrate</span>
-      <input type="range" id="s-feed" min="0" max="5" step="1" value="2" />
+    <div class="slider">feed
+      <input type="range" id="s-feed" min="0" max="3" step="1" value="1" />
       <span class="v" id="v-feed">4.0e-3</span></div>
-    <label>Ghost
-      <select id="ghost-mode">
-        <option value="conventional" selected>conventional machine — the denominator</option>
-        <option value="open">open loop — nothing at all</option>
-      </select></label>
     <label><input type="checkbox" id="ghost-off" /> hide the ghost</label>
   </div>
 
-  <h4 class="grp">Commission <span>— the machine produces nothing while this runs</span></h4>
+  <h4 class="grp">FB_AutoFF <span>— the block; one press, then it runs itself</span></h4>
   <div class="controls">
     <button id="commission" disabled>Commission ▶</button>
-    <span class="pill" id="state">not commissioned</span>
-    <label>Grade
-      <select id="grade">
-        <option value="full" selected>full — the grade every number was measured at</option>
-        <option value="fast">fast — half the scored laps</option>
-        <option value="demo">demo — for watching, not quoting</option>
-      </select></label>
-    <label><input type="checkbox" id="periodic" /> periodic application — also build lap
-      learning (a MEMORY of this program; it will not transfer)</label>
-    <div id="rungs"></div>
-    <p class="hint" id="prog"></p>
-    <div id="cost"></div>
-    <p class="hint" id="stored"></p>
+    <span class="pill" id="state">IDLE</span>
+    <label><input type="checkbox" id="excite" checked /> the block may drive the setpoint to excite the machine</label>
+    <label><input type="checkbox" id="arm" checked /> armed — apply the trim</label>
   </div>
+  <div id="rungs"></div>
+  <p class="hint" id="prog"></p>
+  <p class="hint" id="plc"></p>
+  <p class="hint" id="stored"></p>
 
-  <h4 class="grp">Controller <span>— live; nothing here recommissions</span></h4>
-  <div class="controls">
-    <label><input type="checkbox" id="arm-distil" disabled /> <b>the distilled model</b>
-      — addressed by the commanded reference, transfers to any program</label>
-    <label><input type="checkbox" id="arm-stack" disabled /> the pilot cascade — the distilled
-      model's TEACHER, kept only when the distilled model REFUSED on this plant; a receding-horizon
-      solve at ~9,500 MAC per cycle, so read the scan budget below</label>
-    <div class="controls" style="margin:6px 0">
-      <button id="learn" class="sec" disabled>Learn on this program ▶</button>
-      <label>passes
-        <select id="learn-passes">
-          <option value="4" selected>4 — measured 6.0× → 7.7× on the bench square, held-out programs unchanged</option>
-          <option value="2">2</option>
-          <option value="1">1 — a quick look</option>
-        </select></label>
-    </div>
-    <p class="hint">With the tracker attached, the deployed model is taught on the program in front of it by the
-      ladder's own law — the pilot's model inverse against the measured error, one increment per pass, the
-      model re-fitted to what it applied plus that increment — TOGETHER WITH the commissioning diet, so it
-      stays a model rather than becoming a memory of this lap — and kept only if it measures better. Measured:
-      6.0× → 7.7× on the bench square with the rounded rectangle, circle and polygons unchanged; fitted to this
-      program alone it reads 15.9× here and WORSE THAN NOTHING elsewhere, which is the memory the retirement
-      forbids. The old "keep learning every scan" box was a unit-gain law that measured 0.54× and is gone.</p>
-    <label><input type="checkbox" id="arm-hff" disabled /> lap learning — a table indexed by
-      lap phase, applied only on the program it learned</label>
-    <label>PLC scan
-      <select id="scan">
-        <option value="1" selected>1 ms task — 10,000 MAC budget</option>
-        <option value="0.5">0.5 ms — 5,000</option>
-        <option value="2">2 ms — 20,000</option>
-        <option value="5">5 ms — 50,000</option>
-      </select></label>
-    <div id="plc"></div>
-    <p class="hint" id="ctl-hint"></p>
-  </div>
-
-  <h4 class="grp">Score <span>— read on the last complete lap</span></h4>
   <dl class="stat" id="stats"></dl>
 </main>
 
 <script type="module">
-import { Joint } from './lib/flexisim/joint.js';
-import { buildLink, massProperties } from './lib/flexisim/link.js';
-import { FlexArm2R, snapshotArm, restoreArm } from './lib/flexisim/arm2r.js';
-import { ChainServo, BENCH_SERVO, bandwidthFor } from './lib/flexisim/compensator.js';
-import { roundedRect, sharpRect, circle as circlePath } from './lib/flexisim/toolpath.js';
-import { ContourScore, decompose } from './lib/flexisim/contour.js';
-import { RobotComp } from './lib/ngrc/robotcomp.js';
-import { makeArmHost, programSignature } from './lib/flexisim/autohost.js';
-import { DistilPolicy } from './lib/pilot/distil.js';
-import { planApproach, approachStep as approachStepOf, driveTo } from './lib/flexisim/approach.js';
+import { FB_AutoFF, E_AFF_STATE, E_AFF_VERDICT, AFF_MAX_REACH, affStateName, affReasonName, affVerdictName }
+  from './lib/autoff/autoff.js';
+import { AFF_MAX_CH } from './lib/autoff/runtime.js';
+import { buildArm, calibrateComp, benchPath, jointProgram, ikOf, conventional, snapshotArm, BENCH }
+  from './lib/flexisim/bench.js';
+import { planApproach, approachStep } from './lib/flexisim/approach.js';
+import { decompose } from './lib/flexisim/contour.js';
 
 const $ = (id) => document.getElementById(id);
-
-/* ==================================================================================
- * THE MACHINE. These constants ARE the plant every number in this project is quoted on, and
- * they are carried over from the previous page unchanged so the numbers stay comparable —
- * the bench cell is K 0.25 / E 0.03 on the square at feed 4e-3, accel 4e-5, corner 40.
- */
-const H = 4, CLAMP = 3, NU = 0.3, RHO = 1, G = 2e-6;
-const RATIO = 100, DAMPING = 3e-3, NO_LOAD_SPEED = 0.2, BACKLASH = 1e-4;
-const PG = { LEN1: 14, LEN2: 10, centre: [12, 0], drive: BENCH_SERVO.drive };
-const K_LADDER = [0.25, 0.5, 1, 2, 4, 8, 16, 20, 32];
-const E_LADDER = [0.005, 0.01, 0.02, 0.03, 0.06, 0.10, 0.15, 0.22];
-const FEED_LADDER = [0.001, 0.002, 0.004, 0.006, 0.010, 0.016];
-const ACCEL = 4e-5, CORNER = 40;
-const magNow = () => +$('s-mag').value;   // the error trail's exaggeration along the normal (slider)
-const STORE_KEY = 'flexisim.model.v1';
-
-/**
- * COMMISSIONING GRADE buys wall clock with resolution, and says so. Fewer pooled laps is a
- * NOISIER score; the ladder measures its own spread and raises its floor to match, so a rung
- * can then be refused for being indistinguishable rather than for being bad.
- */
-const GRADES = {
-  full: { avg: 4, warmup: 2, probeLaps: { warmup: 1, avg: 2 }, passes: 24,
-    note: 'the grade every recorded number on this project was measured at' },
-  fast: { avg: 2, warmup: 1, probeLaps: { warmup: 1, avg: 1 }, passes: 8,
-    note: 'about half the scored laps — a noisier score and a higher instrument floor' },
-  demo: { avg: 1, warmup: 1, probeLaps: { warmup: 0, avg: 1 }, passes: 4,
-    note: 'the fewest laps that still score — for WATCHING the machine, not for quoting it' },
-};
-
+const K_LADDER = [0.25, 0.5, 1, 4, 16, 32];
+const E_LADDER = [0.01, 0.02, 0.03, 0.06, 0.10, 0.15];
+const FEED_LADDER = [0.003, 0.004, 0.006, 0.010];
+const STORE_KEY = 'flexisim.autoff.v1';
 const kNow = () => K_LADDER[+$('s-k').value];
 const eNow = () => E_LADDER[+$('s-e').value];
 const feedNow = () => FEED_LADDER[+$('s-feed').value];
-const scanMs = () => +$('scan').value;
-const budget = () => 10000 * scanMs();
-// THE WHOLE SCAN, which is the denominator "CPU usage" means. `budget()` is the 10% ALLOWANCE,
-// so a percentage against it is a fraction of what we are permitted rather than of the task —
-// two numbers a factor of ten apart that read identically if the denominator is not named.
-const scanMac = () => 100000 * scanMs();
-
-// ---------------------------------------------------------------- state
-let arm = null, servo = null, rc = null, prof = null, view = null;
-let l1 = null, l2 = null;
-let k = 0, lap = 0, running = false, busy = false, pendingProgram = false;
-let score = null, lapScore = null, lastLap = null, trail = [];
-let frames = 0;
-
-// The ladder: host, report, and the arm it is turning.
-let host = null, rep = null, commissioning = false, abort = false, liveArm = null;
-let t0 = 0, t1 = 0, lastProg = 0, stage = null, plan = null, grade = 'full';
-let learning = false;                // a learn-on-this-program pass is running the arm
-let restored = null;                 // what storage handed back, if it matched this machine
-
-/*
- * THE CONTINUITY INSTRUMENT. "The arm never jumps" is a claim about consecutive SOLVER STEPS,
- * and a per-frame sample cannot test it: at 600 steps a frame the program itself moves the
- * tool 2-4 units between frames, which is 600 steps of motion and not a jump, while a
- * teleport of the same size is one step. So every arm this page builds reports the largest
- * tool displacement between two consecutive steps — ACROSS a rebuild too, since a new plant
- * initialised somewhere else would be a jump nobody stepped — and the browser asserts it stays
- * a small multiple of the feed through a Reset, a plant change and a commissioning. Off unless
- * asked (`__flxHop(true)`): it costs a tool solve per step.
- */
-const hop = { on: false, last: null, max: 0, n: 0, maxAt: null, big: [], lastQ: null };
-function trackHops(a) {
-  const step0 = a.step.bind(a);
-  a.step = (...args) => {
-    const r = step0(...args);
-    if (hop.on) {
-      const t = a.toolXY(), q = [a.q[0], a.q[1]];
-      if (hop.last) {
-        const h = Math.hypot(t[0] - hop.last[0], t[1] - hop.last[1]);
-        if (h > hop.max) { hop.max = h; hop.maxAt = { n: hop.n, from: hop.last, to: t }; }
-        // Every hop past a few feeds is logged with the JOINTS on both sides, so a jump can be
-        // read to its cause: the joints moved (a reference step) or they did not (link state).
-        if (h > 0.05 && hop.big.length < 40) hop.big.push({ n: hop.n, h, from: hop.last, to: t, q0: hop.lastQ, q1: q, comm: commissioning });
-      }
-      hop.last = t; hop.lastQ = q; hop.n++;
-    }
-    return r;
-  };
-}
-window.__flxHop = (on) => { hop.on = !!on; hop.last = null; hop.lastQ = null; hop.max = 0; hop.n = 0; hop.maxAt = null; hop.big = []; };
-
-/** One plant, exactly as the numbers were measured on. */
-async function makePlant(K, E, carry = null) {
-  const mk = (length) => buildLink({ length, section: H, clamp: CLAMP, E,
-    nu: NU, rho: RHO, damping: DAMPING });
-  const link1 = await mk(PG.LEN1), link2 = await mk(PG.LEN2);
-  const j = (mp) => new Joint({ ratio: RATIO, motorInertia: mp.inertiaAboutPivot / 1e4,
-    loadInertia: mp.inertiaAboutPivot, stiffness: K, backlash: BACKLASH,
-    damping: 2 * Math.sqrt(K * mp.inertiaAboutPivot / 2) });
-  const a = new FlexArm2R({ joint1: j(massProperties(link1)), link1,
-    joint2: j(massProperties(link2)), link2, gravityWorld: [0, -G, 0], dt: 1 });
-  a.K = K; a.E = E;
-  trackHops(a);
-  const hold = Math.abs(a.gravityTorque([0, 0])[0]) / RATIO;
-  const sv = new ChainServo({ arm: a, bandwidth: bandwidthFor(a), tauMax: PG.drive * hold,
-    speedMax: NO_LOAD_SPEED });
-  const m = { arm: a, servo: sv, l1: link1, l2: link2 };
-  // A MACHINE IS SOMEWHERE WHEN IT IS SWITCHED ON. A rebuilt plant (K or E moved) takes the
-  // WHOLE state of the one it replaces — joints, rates, gearbox wind-up AND the links' bend —
-  // so the arm on screen does not jump. The joint pose alone was not enough: the continuity
-  // instrument read a 0.54 hop with the joints unchanged to 1e-7, because fresh links are
-  // STRAIGHT and the old ones were bent under load. Restoring the old stress into a link of a
-  // different modulus is a material that changed while loaded; it relaxes, continuously.
-  if (carry) restoreArm(carry, m);
-  return m;
-}
-
-/**
- * THE CONVENTIONAL MACHINE'S OWN COMPLIANCE, identified at four held poses. This is the
- * denominator: the ladder commissions ON TOP of it, the ghost's default baseline IS it, and
- * the controller switched off falls back to it. One routine serves all three, because a
- * baseline described twice is two baselines.
- */
-async function calibrateComp(m, yieldFn) {
-  const comp = new RobotComp(2, 2, 1e6);
-  // THE ARM IS DRIVEN BETWEEN THE POSES, drawn as it goes — it used to be SET at each one and
-  // held, which is a jump no machine can make. Each pose is read once the tool has stopped
-  // moving (rule 45), through the same planner every move on this page uses.
-  for (const [a, b] of [[0.10, 0.30], [-0.05, 0.55], [0.25, 0.15], [0.00, 0.42]]) {
-    await driveTo(m.arm, m.servo, [a, b], feedNow(), { yieldEvery: 200, onYield: yieldFn || (() => Promise.resolve()) });
-    const refs = [{ theta: a, omega: 0, alpha: 0 }, { theta: b, omega: 0, alpha: 0 }];
-    comp.calibrate([[1, 0], [0, 1]], m.servo.jointTorques(refs),
-      [m.arm.j1.windup(), m.arm.j2.windup()], 1.0);
-  }
-  return comp;
-}
-
-function makePath() {
-  const o = { feed: feedNow(), accel: ACCEL, cornerDt: CORNER, centre: PG.centre };
-  const shape = $('shape').value;
-  if (shape === 'circle') return circlePath({ ...o, r: 4 });
-  if (shape === 'rounded') return roundedRect({ ...o, w: 8, h: 8, r: 1.5, closed: true });
-  return sharpRect({ ...o, w: 8, h: 8 });
-}
-const newScore = () => new ContourScore({ joints: 2, reversalTravel: 2 * BACKLASH * RATIO });
+const magNow = () => +$('s-mag').value;
+/** The plant key the block's record carries: another K or E is another machine. */
+const plantKey = () => 1 + 16 * +$('s-k').value + +$('s-e').value;
 const frameYield = () => new Promise((r) => requestAnimationFrame(r));
 
-/** Build the machine for the sliders, calibrate its baseline, and home it. */
+// ---------------------------------------------------------------------------- state
+let M = null, rc = null, conv = null, ik = null, prog = null, view = null;
+let fb = null, busy = false, running = false, approach = null, pendingProgram = false;
+let pc = 0, frames = 0, stored = null, restored = false, t0 = 0;
+let lapSs = 0, lapN = 0, lastLap = null, trail = [];
+const meas = new Float64Array(AFF_MAX_CH), sp = [0, 0];
+// THE GHOST: this machine without the block, one lap, recorded for each plant+program. It is
+// recorded by running the machine with the block DISARMED, so it is the same arm and the same
+// loop, differing only in the trim.
+let ghost = null, ghostRec = null;
+const ghostKey = () => `${kNow()}|${eNow()}|${$('shape').value}|${feedNow()}`;
+
+function setBadge(s, cls) { $('badge').textContent = s; $('badge').className = 'badge' + (cls ? ' ' + cls : ''); }
+
+// ---------------------------------------------------------------------------- build
 async function build() {
-  busy = true; setBadge('building the machine…', 'warn');
+  busy = true; running = false; sync();
+  setBadge('building the machine…', 'warn');
   try {
-    const carry = arm ? snapshotArm({ arm, l1, l2 }) : null;
-    if (arm) { await l1.destroy(); await l2.destroy(); arm = null; }
+    const carry = M ? snapshotArm(M) : null;
+    if (M) { await M.l1.destroy(); await M.l2.destroy(); }
+    M = await buildArm(kNow(), eNow(), carry);
+    ik = ikOf(M.arm.L1, M.arm.L2);
+    setBadge('calibrating the conventional compliance feedforward — four held poses, driven', 'warn');
+    rc = await calibrateComp(M, feedNow(), frameYield);
+    conv = conventional(M, rc);
     ghost = null; ghostRec = null;
-    const m = await makePlant(kNow(), eNow(), carry);
-    arm = m.arm; servo = m.servo; l1 = m.l1; l2 = m.l2;
-    prof = makePath();
-    if (!view) fitView();
-    setBadge('calibrating the conventional baseline — four held poses, driven', 'warn');
-    rc = await calibrateComp(m, frameYield);
+    newBlock();
     home();
-    // THE MODEL SURVIVES A PLANT CHANGE, AND THE PAGE SAYS WHOSE IT IS. Moving K or E builds a
-    // new plant and re-records the ghost (the conventional machine on THIS plant), but the
-    // commissioned or restored model is re-attached to it as it stands, armed as it was, so
-    // the score reads how a controller trained on one plant degrades on another. The
-    // mismatch is flagged (`plantMismatch`) in the Machine header, the score panel and the
-    // stored-model line — it is never silently a different machine.
-    if (host && rep) { host.attach(arm, servo, rc, prof, prof.lap); host.auto.beginRun(); }
-    else tryRestore();
-    setBadge(rep ? (plantMismatch() ? 'model kept — PLANT MISMATCH, press Run to see it degrade'
-      : (restored ? 'restored from storage — press Run' : 'model kept — press Run'))
-      : 'ready — press Run', rep ? (plantMismatch() ? 'warn' : 'good') : '');
-  } finally { busy = false; sync(); }
+    setBadge(fb.out.xDeployed ? 'block record restored — press Run' : 'ready — press Run', fb.out.xDeployed ? 'good' : '');
+  } catch (e) { setBadge('halted: ' + e.message, 'bad'); throw e; }
+  finally { busy = false; sync(); }
 }
 
-/*
- * LEARN ON THE PROGRAM IN FRONT OF THE MACHINE, WITH THE TRACKER ATTACHED (plan §52.18). The
- * deployed model is iterated by the ladder's own parametric law on the live program: measured
- * on the bench square 6.04x → 15.88x in four passes and 17.98x in eight, and on the soft cell
- * 3.98x → 20.52x, at 4-7 machine-minutes. It runs the arm through the same host and the same
- * borrowed machine a commissioning does, so Stop, the stage and the cost record all behave as
- * they do there; the machine is then driven home and the learned model replaces the deployed
- * one in storage.
- */
-async function startLearn() {
-  if (commissioning || learning || busy || !arm || !host || !rep || !host.auto.deployed.distil) return;
-  const passes = +$('learn-passes').value;
-  running = false; pendingProgram = false; approach = null;
-  k = 0; lap = 0; score = newScore(); lapScore = newScore(); lastLap = null; trail = [];
-  learning = true; commissioning = true; abort = false; liveArm = arm;
-  t0 = performance.now(); t1 = 0;
-  host.attach(arm, servo, rc, prof, prof.lap);
-  setBadge(`learning on this program — ${passes} pass(es) with the tracker attached`, 'warn');
-  const before = rep.best;
-  sync();
-  let lr = null;
-  // WHERE THE TIME GOES, PER PHASE (plan §52.40). One learn pass exceeds 63 minutes of browser
-  // where the identical work costs ~230 s in Node, and the page's own commissioning — same host,
-  // same yield closure — does not show that ratio. "It is slow" is not a diagnosis and the whole
-  // difference has been invisible because only the total was ever recorded. Machine SAMPLES are
-  // taken beside the wall clock at every boundary, because samples are what the work is and the
-  // ratio of the two is the only thing that separates "doing more" from "running slower" (rule
-  // 17 before the physics).
-  const ph = [];
-  const mark = (what) => { ph.push({ what, ms: Math.round(performance.now() - t0), samples: host.samples().samples }); };
-  mark('start');
+/** A fresh block for this plant, with the stored record offered to it. */
+function newBlock() {
+  fb = new FB_AutoFF({ nChannels: 2, nAhead: AFF_MAX_REACH, udiKey: plantKey() });
+  fb.in.xEnable = true;
+  fb.in.xArm = $('arm').checked;
+  fb.in.xExciteAllowed = $('excite').checked;
+  stored = loadStored();
+  restored = !!(stored && fb.loadRecord(stored));
+}
+
+function loadStored() {
   try {
-    const live = await host.liveRuns();
-    mark('liveRuns');
-    lr = await host.auto.learnLive(live, { passes, onPass: (p2) => {
-      mark(`pass ${p2.pass}`);
-      rep.rungs.push({ name: `learned on this program — pass ${p2.pass}`, score: p2.score, gain: null, deployed: p2.accepted, note: p2.accepted ? 'kept' : 'not kept' });
-      $('rungs').innerHTML = rungsHTML(rep.rungs);
-    } });
-    // THE NUMBER IS A SCORED RUN, the same one every rung is judged by, not the teaching laps'.
-    mark('learnLive');
-    const r = await host.run(null, null);
-    mark('scored');
-    rep.best = r.score; rep.gain = rep.base / rep.best;
-    rep.learned = { passes: lr.passes, before, after: r.score, changed: lr.changed,
-      // The per-phase record, as DELTAS with the samples each phase advanced the machine, so a
-      // phase that is slow per sample is distinguishable from one that simply runs more.
-      phases: ph.map((e, i) => ({ what: e.what, ms: e.ms - (i ? ph[i - 1].ms : 0),
-        samples: e.samples - (i ? ph[i - 1].samples : 0) })) };
-  } catch (e) {
-    const msg = e && e.message ? e.message : String(e);
-    setBadge(abort ? 'stopped — the model is as it was' : `learning failed — ${msg}`, abort ? 'warn' : 'bad');
-    learning = false; commissioning = false; abort = false; liveArm = null;
-    host.attach(arm, servo, rc, prof, prof.lap); host.auto.beginRun();
-    home(); sync(); return;
-  }
-  learning = false; commissioning = false; abort = false; liveArm = null; t1 = performance.now();
-  host.attach(arm, servo, rc, prof, prof.lap);
-  host.auto.beginRun();
-  home();
-  $('rungs').innerHTML = rungsHTML(rep.rungs);
-  saveModel();
-  setBadge(`learned on this program in ${Math.round((t1 - t0) / 1000)} s — ${before.toExponential(3)} → ${rep.best.toExponential(3)} (${rep.gain.toFixed(2)}× over the conventional machine). Press Run`, 'good');
-  sync();
+    const s = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
+    if (!s) return null;
+    for (const [k, v] of Object.entries(s)) if (v && v.f64) s[k] = Float64Array.from(v.f64);
+    return s;
+  } catch { return null; }
+}
+function saveRecord() {
+  const r = fb.saveRecord(), out = {};
+  for (const [k, v] of Object.entries(r)) out[k] = v instanceof Float64Array ? { f64: Array.from(v) } : v;
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(out)); } catch { /* storage is a convenience */ }
+  stored = r;
 }
 
-/* ==================================================================================
- * GOING TO THE PROGRAM START IS A MOVE, NOT A TELEPORT. The first version of this page set
- * the pose and held it for 4000 steps inside one call, so the arm on screen jumped to the
- * start at the end of every run, every program change and every Reset — a thing no machine
- * can do. `home()` now only ASKS for the start; the frame loop servos the arm there from
- * wherever it is, drawn every frame, and declares it arrived by rule 45 — the TOOL has not
- * moved over a 300-step window — with a stated cap, never by a step count alone. A run that
- * was in progress resumes when the arm arrives.
- */
-let approach = null;
+function makeProg() { prog = jointProgram(benchPath($('shape').value, feedNow()), ik); fitView(); }
+
+/** Drive the arm to the program's start; the block is disabled while the program is not running. */
 function home(resume = false) {
-  prof = makePath();
-  if (host && !commissioning) host.attach(arm, servo, rc, prof, prof.lap);
-  const c0 = prof.at(0);
-  const [q1, q2] = arm.ik(c0.x, c0.y, true);
-  // A RAPID, PLANNED: the reference is interpolated in joint space from where the arm IS to
-  // the start, timed so the tool covers the distance at the program's feedrate — a step
-  // reference to a far target is a move no controller issues, and the servo's answer to one
-  // reads on screen as the very snap this replaces. Then the quiet settle.
-  // Planned by the SAME module the ladder drives its machine with (`lib/flexisim/approach.js`).
-  approach = Object.assign(planApproach(arm, [q1, q2], feedNow()), { resume: resume || running });
-  running = false;
-  k = 0; lap = 0; pendingProgram = false;
-  // A GHOST RECORDING DOES NOT SURVIVE A MOVE. It drives the program from its own index; left
-  // alive across a Reset or a program change it resumed mid-lap on an arm now standing at the
-  // start, a step in the reference. It restarts from k = 0 when the run resumes.
+  makeProg();
+  approach = Object.assign(planApproach(M.arm, prog.at(0), feedNow()), { resume: resume || running });
+  running = false; pc = 0; pendingProgram = false; lapSs = 0; lapN = 0; lastLap = null; trail = [];
   ghostRec = null;
-  score = newScore(); lapScore = newScore(); lastLap = null; trail = [];
-  fitView();
 }
-/** One solver step of the approach; true once the tool has stopped moving (or the cap hit). */
-function approachStep() { return approachStepOf(approach, arm, servo); }
 function approachDone() {
   const a = approach; approach = null;
-  servo.resetLimitStats();
-  if (host && rep && !commissioning) host.auto.beginRun();
+  conv.reset(prog.at(0));
   running = a.resume;
-  if (a.capped) setBadge(`at the program start — settle capped at ${a.policy.cap.toLocaleString()} steps, the tool was still moving`, 'warn');
-  sync();                                  // the controls unlock the frame the arm arrives, not six later
+  sync();
 }
 
 function fitView() {
   let x0 = 0, x1 = 0, y0 = 0, y1 = 0;
   const see = (x, y) => { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); };
   for (let i = 0; i <= 120; i++) {
-    const p = prof.point((i / 120) * prof.length);
-    see(p[0], p[1]);
-    try { const q = arm.ik(p[0], p[1], true); see(arm.L1 * Math.cos(q[0]), arm.L1 * Math.sin(q[0])); }
-    catch { /* unreachable points cannot constrain the view */ }
+    const c = prog.cmd(Math.round((i / 120) * prog.lap));
+    see(c.x, c.y);
+    const q = prog.at(Math.round((i / 120) * prog.lap));
+    see(M.arm.L1 * Math.cos(q[0]), M.arm.L1 * Math.sin(q[0]));
   }
   const pad = 0.06 * Math.max(x1 - x0, y1 - y0, 1e-6);
   view = { x0: x0 - pad, x1: x1 + pad, y0: y0 - pad, y1: y1 + pad };
 }
 
-/* ==================================================================================
- * THE GHOST: the machine without our tools, recorded once per plant+program and drawn
- * underneath. Recorded rather than simulated live because a second lattice plant every frame
- * is the difference between watching and waiting on a phone — and exact rather than
- * approximate, because this machine's lap-to-lap repeatability is 0.03%. Keyed on the plant
- * and the SAME program signature the ladder uses, so a ghost from another machine is never
- * drawn under this one.
- */
-let ghost = null, ghostRec = null;
-const ghostMode = () => $('ghost-mode').value;
-const ghostOn = () => !$('ghost-off').checked;
-const ghostKey = () => (arm && prof
-  ? `${arm.K}|${arm.E}|${ghostMode()}|${programSignature(prof, Math.ceil(prof.lap))}` : null);
-const ghostValid = () => !!(ghost && ghost.key === ghostKey());
+// ---------------------------------------------------------------------------- one scan
+const commissioning = () => !!fb && fb.in.xCommission && !fb.out.xDone && fb.out.eState !== E_AFF_STATE.FAULT;
 
-function ghostStart() {
-  const L = Math.ceil(prof.lap);
-  ghostRec = { key: ghostKey(), lap: L, warm: 1, l: 0, k: 0,
-    ex: new Float64Array(L), ey: new Float64Array(L), tx: new Float64Array(L), ty: new Float64Array(L),
-    s2: 0, n: 0 };
-}
-function ghostStepOnce() {
-  const r = ghostRec, cmd = prof.at(r.k);
-  const [q1, q2] = arm.ik(cmd.x, cmd.y, true);
-  const rt = arm.ikRates(q1, q2, cmd.vx, cmd.vy, cmd.ax, cmd.ay);
-  const refs = [{ theta: q1, omega: rt.dq[0], alpha: rt.ddq[0] }, { theta: q2, omega: rt.dq[1], alpha: rt.ddq[1] }];
-  // The conventional machine's own term and nothing else — this is the machine our tools
-  // were not given.
-  let d = [0, 0];
-  if (ghostMode() === 'conventional') d = rc.feedforward([[1, 0], [0, 1]], servo.jointTorques(refs), { enableToolff: false }).dq;
-  const tau = servo.torques([{ ...refs[0], theta: q1 + d[0] }, { ...refs[1], theta: q2 + d[1] }]);
-  arm.step(tau[0], tau[1], 1);
-  if (r.l >= r.warm) {
-    const e = elbowXY(arm), tool = arm.toolXY();
-    r.ex[r.k] = e[0]; r.ey[r.k] = e[1]; r.tx[r.k] = tool[0]; r.ty[r.k] = tool[1];
-    const dd = decompose(prof, tool, cmd);
-    r.s2 += dd.contour * dd.contour + dd.lag * dd.lag; r.n++;
-  }
-  if (++r.k >= r.lap) {
-    r.k = 0;
-    if (++r.l > r.warm) {
-      ghost = { key: r.key, lap: r.lap, ex: r.ex, ey: r.ey, tx: r.tx, ty: r.ty,
-        rms: Math.sqrt(r.s2 / Math.max(1, r.n)), mode: ghostMode() };
-      ghostRec = null; return true;
-    }
-  }
-  return false;
+/** One PLC scan: preview and measurement in, the block, the setpoint out, the machine one step. */
+function scan() {
+  const L = prog.lap, A = fb.in.aRefAhead;
+  for (let i = 0; i <= AFF_MAX_REACH; i++) { const r = prog.at(pc + i); A[i * AFF_MAX_CH] = r[0]; A[i * AFF_MAX_CH + 1] = r[1]; }
+  const t = M.arm.toolXY(), q = ik(t[0], t[1]);
+  fb.in.aMeas[0] = q[0]; fb.in.aMeas[1] = q[1];
+  fb.in.xCycleStart = pc % L === 0;
+  const recording = !!ghostRec;
+  fb.in.xArm = recording ? false : $('arm').checked;
+  fb.cycle();
+  sp[0] = fb.out.aRefOut[0]; sp[1] = fb.out.aRefOut[1];
+  const owned = fb.out.xOwnsRef;
+  conv.step(sp);
+  if (owned) return;
+  // score the PROGRAM (never the block's excitation): the tool's error off the path, per lap
+  const tool = M.arm.toolXY(), d = decompose(prog.path, tool, prog.cmd(pc));
+  const e2 = d.contour * d.contour + d.lag * d.lag;
+  if (pc % L >= Math.ceil(0.05 * L)) { lapSs += e2; lapN++; }
+  if (recording) ghostStep(tool, pc % L);
+  if (pc % 8 === 0 && !commissioning()) trail.push([tool[0], tool[1], d.s]);
+  pc++;
+  if (pc % L === 0) onLap();
 }
 
-/* ==================================================================================
- * DRAWING. The live arm is drawn through the SAME transform `toolXY()` uses, so the picture
- * and the reading cannot disagree; the ghost is drawn from points the recorder took through
- * the same routine (`elbowXY`), so it cannot be drawn by a different rule either.
- */
+function onLap() {
+  lastLap = { rms: Math.sqrt(lapSs / Math.max(1, lapN)), armed: fb.in.xArm && fb.out.xDeployed, key: ghostKey(),
+    experiment: commissioning() };
+  lapSs = 0; lapN = 0; trail = [];
+  if (ghostRec && ++ghostRec.laps > 1) {           // one warm lap, then one recorded lap
+    ghost = { key: ghostRec.key, lap: ghostRec.lap, ex: ghostRec.ex, ey: ghostRec.ey, tx: ghostRec.tx, ty: ghostRec.ty, rms: lastLap.rms };
+    ghostRec = null;
+  }
+  if (!ghostRec && !commissioning() && (!ghost || ghost.key !== ghostKey())) startGhost();
+  if (pendingProgram && !commissioning()) home(true);
+}
+function startGhost() {
+  const L = prog.lap;
+  ghostRec = { key: ghostKey(), lap: L, laps: 0, ex: new Float64Array(L), ey: new Float64Array(L), tx: new Float64Array(L), ty: new Float64Array(L) };
+}
+function ghostStep(tool, i) {
+  if (ghostRec.laps < 1) return;
+  const e = elbowXY(M.arm);
+  ghostRec.ex[i] = e[0]; ghostRec.ey[i] = e[1]; ghostRec.tx[i] = tool[0]; ghostRec.ty[i] = tool[1];
+}
+
+// ---------------------------------------------------------------------------- the frame
+function stepFrame() {
+  if (busy) return;
+  const n = +$('s-spf').value, tEnd = performance.now() + 30;
+  for (let i = 0; i < n; i++) {
+    if (approach) { if (approachStep(approach, M.arm, M.servo)) { approachDone(); } continue; }
+    if (!running) return;
+    scan();
+    if ((i & 63) === 63 && performance.now() > tEnd) return;
+  }
+}
+
+function frame() {
+  frames++;
+  try { stepFrame(); draw(); if (frames % 6 === 0) sync(); }
+  catch (e) { running = false; setBadge('halted: ' + e.message, 'bad'); console.error(e); }
+  requestAnimationFrame(frame);
+}
+
+// ---------------------------------------------------------------------------- drawing
 const bendAt = (p, bx, piv) => {
   const want = piv + bx; let lo = 0;
   while (lo < p.x.length - 2 && p.x[lo + 1] < want) lo++;
@@ -554,9 +321,21 @@ function elbowXY(a) {
   const c1 = Math.cos(a.q[0]), s1 = Math.sin(a.q[0]), b1 = bendAt(p1, a.L1, piv1);
   return [c1 * a.L1 - s1 * b1, s1 * a.L1 + c1 * b1];
 }
-// WHICH ARM THE STAGE DRAWS: the ladder's while it commissions, this page's otherwise. It
-// is the same OBJECT the ladder is scoring, not a pose copied from it.
-const drawnArm = () => ((commissioning || learning) && liveArm ? liveArm : arm);
+function tipSlopeOf(p) {
+  const n = p.x.length, m = Math.min(5, n); if (m < 2) return 0;
+  let sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (let i = n - m; i < n; i++) { sx += p.x[i]; sy += p.dy[i]; sxx += p.x[i] * p.x[i]; sxy += p.x[i] * p.dy[i]; }
+  const den = m * sxx - sx * sx; return den === 0 ? 0 : (m * sxy - sx * sy) / den;
+}
+/** A trail sample drawn with its error off the path magnified along the path normal (×1 is the tool). */
+function trailPoint(t, mag) {
+  const [tx, ty, u] = t;
+  if (mag === 1) return [tx, ty];
+  const p = prog.path.point(u), tg = prog.path.tangent(u), nx = -tg[1], ny = tg[0];
+  const en = (tx - p[0]) * nx + (ty - p[1]) * ny;
+  return [tx + (mag - 1) * nx * en, ty + (mag - 1) * ny * en];
+}
+window.__flxTrail = (mag) => trail.map((t) => ({ tool: [t[0], t[1]], drawn: trailPoint(t, mag) }));
 
 function draw() {
   const cv = $('cv'), st = $('stage');
@@ -567,634 +346,154 @@ function draw() {
   const g = cv.getContext('2d');
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
   g.fillStyle = '#060a14'; g.fillRect(0, 0, w, h);
-  const A = drawnArm();
-  if (!A || !prof || !view) return;
-  const isComm = commissioning && liveArm;
+  if (!M || !prog || !view) return;
+  const A = M.arm, own = fb && fb.out.xOwnsRef;
   const { x0, x1, y0, y1 } = view;
   const scale = Math.min((w - 20) / (x1 - x0), (h - 20) / (y1 - y0));
   const ox = w / 2 - 0.5 * (x0 + x1) * scale, oy = h / 2 + 0.5 * (y0 + y1) * scale;
   const X = (x) => ox + x * scale, Y = (y) => oy - y * scale;
 
-  // The program, dashed.
   g.strokeStyle = '#475569'; g.lineWidth = 1.5; g.setLineDash([5, 4]); g.beginPath();
-  for (let i = 0; i <= 240; i++) { const p = prof.point((i / 240) * prof.length); if (i === 0) g.moveTo(X(p[0]), Y(p[1])); else g.lineTo(X(p[0]), Y(p[1])); }
-  if (prof.closed) g.closePath();
+  for (let i = 0; i <= 240; i++) { const c = prog.cmd(Math.round((i / 240) * prog.lap)); if (i === 0) g.moveTo(X(c.x), Y(c.y)); else g.lineTo(X(c.x), Y(c.y)); }
   g.stroke(); g.setLineDash([]);
 
-  // THE GHOST, underneath everything, at TRUE scale: the shape the untooled machine cuts,
-  // and its arm at this moment of the lap. Not while commissioning — the live arm is then
-  // running an excitation and is not on the program, and a baseline beside it would invite a
-  // comparison between two machines doing different things.
-  if (ghostOn() && ghostValid() && !isComm && ghost.lap > 1) {
-    // AT THE LAP'S TRUE PHASE. The program wraps at its fractional period (7356.6 here) and
-    // the ghost was recorded on integer steps of one lap, so `k % ceil(lap)` slid the ghost
-    // 0.4 steps per lap against the machine beside it — the deploy path's own old slip, drawn.
-    const Gh = ghost, T = prof.lap, gk = Math.min(Gh.lap - 1, Math.floor(((k % T) + T) % T));
+  if (!$('ghost-off').checked && ghost && ghost.key === ghostKey() && !own) {
+    const G = ghost, gk = ((pc % G.lap) + G.lap) % G.lap;
     g.save(); g.globalAlpha = 0.38;
     g.strokeStyle = '#f87171'; g.lineWidth = 1.5; g.beginPath();
-    for (let i = 0; i <= 240; i++) { const j = Math.min(Gh.lap - 1, Math.round((i / 240) * (Gh.lap - 1))); if (i === 0) g.moveTo(X(Gh.tx[j]), Y(Gh.ty[j])); else g.lineTo(X(Gh.tx[j]), Y(Gh.ty[j])); }
+    for (let i = 0; i <= 240; i++) { const j = Math.min(G.lap - 1, Math.round((i / 240) * (G.lap - 1))); if (i === 0) g.moveTo(X(G.tx[j]), Y(G.ty[j])); else g.lineTo(X(G.tx[j]), Y(G.ty[j])); }
     g.closePath(); g.stroke();
     g.strokeStyle = '#94a3b8'; g.lineWidth = 4; g.lineCap = 'round'; g.beginPath();
-    g.moveTo(X(0), Y(0)); g.lineTo(X(Gh.ex[gk]), Y(Gh.ey[gk])); g.lineTo(X(Gh.tx[gk]), Y(Gh.ty[gk])); g.stroke();
-    g.fillStyle = '#f87171'; g.beginPath(); g.arc(X(Gh.tx[gk]), Y(Gh.ty[gk]), 4, 0, 7); g.fill();
+    g.moveTo(X(0), Y(0)); g.lineTo(X(G.ex[gk]), Y(G.ey[gk])); g.lineTo(X(G.tx[gk]), Y(G.ty[gk])); g.stroke();
     g.restore();
   }
 
-  // The error trail: the TOOL'S OWN PATH, with its deviation from the program exaggerated
-  // along the path normal — and only for the deployed run.
-  if (!isComm && trail.length > 1) {
-    g.strokeStyle = '#f59e0b'; g.lineWidth = 2; g.beginPath(); let pen = false;
+  if (!own && trail.length > 1) {
+    g.strokeStyle = '#f59e0b'; g.lineWidth = 2; g.beginPath();
     const mag = magNow();
-    for (const t of trail) {
-      if (!t) { pen = false; continue; }
-      const [px, py] = trailPoint(t, mag);
-      if (!pen) { g.moveTo(X(px), Y(py)); pen = true; } else g.lineTo(X(px), Y(py));
-    }
+    trail.forEach((t, i) => { const [px, py] = trailPoint(t, mag); if (i === 0) g.moveTo(X(px), Y(py)); else g.lineTo(X(px), Y(py)); });
     g.stroke();
   }
 
-  // The live arm, TRUE: each link's deflected centre line in its own frame.
   const [p1, p2] = A.profiles();
   const piv1 = A.l1.meta.pivot[0], piv2 = A.l2.meta.pivot[0];
-  const q1 = A.q[0], q2 = A.q[1];
-  const s1 = tipSlopeOf(p1);
-  const c1 = Math.cos(q1), sn1 = Math.sin(q1);
-  const a2 = q1 + s1 + q2, c2 = Math.cos(a2), sn2 = Math.sin(a2);
-  const ex = c1 * A.L1 - sn1 * bendAt(p1, A.L1, piv1), ey = sn1 * A.L1 + c1 * bendAt(p1, A.L1, piv1);
+  const c1 = Math.cos(A.q[0]), s1 = Math.sin(A.q[0]);
+  const a2 = A.q[0] + tipSlopeOf(p1) + A.q[1], c2 = Math.cos(a2), s2 = Math.sin(a2);
+  const ex = c1 * A.L1 - s1 * bendAt(p1, A.L1, piv1), ey = s1 * A.L1 + c1 * bendAt(p1, A.L1, piv1);
   g.strokeStyle = '#94a3b8'; g.lineWidth = 4; g.lineCap = 'round'; g.beginPath();
-  for (let i = 0; i <= 20; i++) { const bx = (i / 20) * A.L1, by = bendAt(p1, bx, piv1); const px = c1 * bx - sn1 * by, py = sn1 * bx + c1 * by; if (i === 0) g.moveTo(X(px), Y(py)); else g.lineTo(X(px), Y(py)); }
-  g.stroke();
-  g.beginPath();
-  for (let i = 0; i <= 20; i++) { const bx = (i / 20) * A.L2, by = bendAt(p2, bx, piv2); const px = ex + c2 * bx - sn2 * by, py = ey + sn2 * bx + c2 * by; if (i === 0) g.moveTo(X(px), Y(py)); else g.lineTo(X(px), Y(py)); }
+  for (let i = 0; i <= 20; i++) { const bx = (i / 20) * A.L1, by = bendAt(p1, bx, piv1); const px = c1 * bx - s1 * by, py = s1 * bx + c1 * by; if (i === 0) g.moveTo(X(px), Y(py)); else g.lineTo(X(px), Y(py)); }
+  g.stroke(); g.beginPath();
+  for (let i = 0; i <= 20; i++) { const bx = (i / 20) * A.L2, by = bendAt(p2, bx, piv2); const px = ex + c2 * bx - s2 * by, py = ey + s2 * bx + c2 * by; if (i === 0) g.moveTo(X(px), Y(py)); else g.lineTo(X(px), Y(py)); }
   g.stroke();
   g.fillStyle = '#64748b';
   g.beginPath(); g.arc(X(0), Y(0), 6, 0, 7); g.fill();
   g.beginPath(); g.arc(X(ex), Y(ey), 4, 0, 7); g.fill();
   const tool = A.toolXY();
-  if (!isComm) { const cmd = prof.at(ghostRec ? ghostRec.k : k); g.strokeStyle = '#22d3ee'; g.lineWidth = 1.5; g.beginPath(); g.arc(X(cmd.x), Y(cmd.y), 5, 0, 7); g.stroke(); }
-  g.fillStyle = isComm ? '#22c55e' : '#fbbf24';
+  if (!own) { const c = prog.cmd(pc); g.strokeStyle = '#22d3ee'; g.lineWidth = 1.5; g.beginPath(); g.arc(X(c.x), Y(c.y), 5, 0, 7); g.stroke(); }
+  g.fillStyle = own ? '#22c55e' : '#fbbf24';
   g.beginPath(); g.arc(X(tool[0]), Y(tool[1]), 4.5, 0, 7); g.fill();
-
   g.font = '10px ui-monospace, monospace'; g.fillStyle = '#64748b';
-  const gl = ghostOn() && ghostValid() && !isComm ? ` · ghost = ${ghost.mode === 'open' ? 'open loop' : 'conventional'}` : '';
-  g.fillText(isComm ? 'COMMISSIONING — the ladder’s own machine, not the program'
-    : `program (dashed) · tool ● · orange = tool path with its error off the program ×${magNow()}${gl}`, 12, h - 8);
-}
-/*
- * WHERE A TRAIL SAMPLE IS DRAWN. It used to be RECONSTRUCTED — the program point nearest the
- * tool, pushed out along that segment's normal by the contour error — which is not the tool's
- * path: it drops the lag component, and at a CORNER the nearest point sticks on the vertex while
- * the tool sails past it, so the drawn point ran out sideways along the old edge and snapped to
- * the new one. On the soft plant at x1 that read as a bright spike hanging off the corner, on a
- * line whose legend said "tool path". Now the base is the tool's true position and only the
- * component along the local normal is scaled, so x1 IS the tool path — pinned in the browser —
- * and higher magnifications grow the deviation out of the path rather than out of a projection.
- */
-function trailPoint(t, mag) {
-  const [tx, ty, , u] = t;
-  if (mag === 1) return [tx, ty];
-  const p = prof.point(u), tg = prof.tangent(u), nx = -tg[1], ny = tg[0];
-  const en = (tx - p[0]) * nx + (ty - p[1]) * ny;
-  return [tx + (mag - 1) * nx * en, ty + (mag - 1) * ny * en];
-}
-window.__flxTrail = (mag) => trail.filter(Boolean).map((t) => ({ tool: [t[0], t[1]], drawn: trailPoint(t, mag) }));
-function tipSlopeOf(p) {
-  const n = p.x.length, m = Math.min(5, n); if (m < 2) return 0;
-  let sx = 0, sy = 0, sxx = 0, sxy = 0;
-  for (let i = n - m; i < n; i++) { sx += p.x[i]; sy += p.dy[i]; sxx += p.x[i] * p.x[i]; sxy += p.x[i] * p.dy[i]; }
-  const den = m * sxx - sx * sx; return den === 0 ? 0 : (m * sxy - sx * sy) / den;
+  g.fillText(own ? 'EXCITING — the block is driving the setpoint; the program is held'
+    : `program (dashed) · tool ● · orange = tool path, error ×${magNow()}${ghost ? ' · red = the ghost' : ''}`, 12, h - 8);
 }
 
-/* ==================================================================================
- * THE RUN. One step of the deployed machine: the controller on, or the conventional machine
- * when it is off. Both go through the ladder's own `actAt` when armed, never a re-statement
- * of it here — a correction described twice is two controllers.
- */
-const armedAny = () => !!(host && rep && (host.auto.deployed.distil || host.auto.deployed.hff || host.auto.deployed.stack > 0));
+// ---------------------------------------------------------------------------- the panels
+const fx = (x, d = 2) => (Number.isFinite(x) ? x.toFixed(d) : '—');
+const verdictCell = (v, r, x) => `${affVerdictName(v)}${r ? ' — ' + affReasonName(r) : ''}`
+  + (v === E_AFF_VERDICT.DEPLOYED || v === E_AFF_VERDICT.REFUSED ? ` · ${fx(x)}×` : '');
+const mins = (scans) => `${(scans / 60000).toFixed(1)} machine-minutes at a 1 ms scan`;
 
-function stepOnce() {
-  const cmd = prof.at(k);
-  const [q1, q2] = arm.ik(cmd.x, cmd.y, true);
-  const rt = arm.ikRates(q1, q2, cmd.vx, cmd.vy, cmd.ax, cmd.ay);
-  const refs = [{ theta: q1, omega: rt.dq[0], alpha: rt.ddq[0] }, { theta: q2, omega: rt.dq[1], alpha: rt.ddq[1] }];
-  // ARMED: the ladder's whole correction, baseline compliance included (see `actAt`).
-  // OFF: the conventional machine — which is what the ghost's default baseline is, so with
-  // nothing armed the score against the ghost must read 1.00, and does.
-  const dq = armedAny() ? host.actAt(k, cmd, refs)
-    : rc.feedforward([[1, 0], [0, 1]], servo.jointTorques(refs), { enableToolff: false }).dq;
-  const tau = servo.torques([{ ...refs[0], theta: q1 + dq[0] }, { ...refs[1], theta: q2 + dq[1] }]);
-  arm.step(tau[0], tau[1], 1);
-  k++;
-  const tool = arm.toolXY();
-  if (armedAny()) {
-    const en = arm.encoders();
-    // THE TRACKER IS AN INSTALLATION PROPERTY. Withheld, every rung stays frozen at what
-    // commissioning fitted. Supplied, the distilled model keeps learning from the error the
-    // machine really has. A cached flag, because this runs once per servo step.
-    // NO TRUTH AT DEPLOY. The unit-gain law that used to be fed here measured 0.54x after twelve
-    // laps (plan §52.18); learning on the program is a teaching pass, not a per-step update.
-    host.auto.observe([en[0].angle, en[1].angle, en[0].speed * 1e3, en[1].speed * 1e3, tau[0] * 1e3, tau[1] * 1e3], null);
-  }
-  const dec = decompose(prof, tool, cmd);
-  score.step(dec.contour, dec.lag, tau, [arm.j1.wM, arm.j2.wM]);
-  lapScore.step(dec.contour, dec.lag, tau, [arm.j1.wM, arm.j2.wM]);
-  return { dec, tool };
-}
-
-function stepN(n) {
-  for (let i = 0; i < n; i++) {
-    const lapNow = Math.floor(k / prof.lap);
-    if (lapNow !== lap) { lap = lapNow; onLapBoundary(); }
-    // A program change at the lap boundary starts an APPROACH to the new start; the rest of
-    // this frame belongs to that move, not to stepping a program the arm is not at.
-    if (approach || !running) return;
-    const { dec, tool } = stepOnce();
-    const back = trail.length && trail[trail.length - 1] && dec.s < trail[trail.length - 1][3] - 0.1 * prof.length;
-    if (k % 8 === 0 || back) {
-      if (back) trail.push(null);
-      trail.push([tool[0], tool[1], dec.contour, dec.s]);
-      if (trail.length > 4000) trail.splice(0, 1000);
-    }
-  }
-}
-
-function onLapBoundary() {
-  // KEEP THE LAP THAT JUST FINISHED. The lap score resets here, so mid-lap it is a partial
-  // sum over whichever part of the shape has been cut so far; the completed lap is the only
-  // comparable quantity, and lap 0 carries the start-up transient (rules 12, 13).
-  const fin = lapScore.report();
-  if (fin.steps > 0.9 * prof.lap) lastLap = fin;
-  lapScore = newScore();
-  if (pendingProgram) { pendingProgram = false; home(); }
-}
-
-/* ==================================================================================
- * COMMISSIONING: the ladder, configured for the one rung this bench is about. The
- * conventional rung and the model layers are NOT built (`classic: false`, `maxDepth: 0`)
- * — the distilled model replaces the pilot rather than sitting under it, measured at
- * 0.96x–1.30x stacked — and lap learning is built only when the installation says the
- * program repeats. Every rung is still SCORED on the machine and reverted if it does not
- * win; this page decides what is offered, never what is deployed.
- */
-function autoYield() { if (abort) throw new Error('stopped'); return frameYield(); }
-const WHAT = { distil: 'distilled model', hff: 'lap learning', scoring: 'scoring' };
-function onStage(d) { if (d.plan) plan = d.plan; stage = d; lastProg = 0; }
-function onProgress(d) {
-  const now = performance.now();
-  if (now - lastProg < 1000) return;
-  lastProg = now;
-  const secs = Math.round((now - t0) / 1000), mm = Math.floor(secs / 60), ss = String(secs % 60).padStart(2, '0');
-  const what = WHAT[d.what] || d.what;
-  const where = d.phase === 'build' ? 'preparing the machine' : d.phase === 'fit' ? 'fitting'
-    : d.lap ? `lap ${d.lap}/${d.laps}` + (d.LAP ? ` · ${Math.round(100 * d.k / d.LAP)}%` : '') : d.phase;
-  let head = `<b>${mm}:${ss}</b> — <b>${what}</b>`;
-  if (stage && stage.stage && stage.stage !== 'starting') head += ` · ${stage.stage}`;
-  if (stage && stage.of > 1) head += ` ${stage.i + 1}/${stage.of}`;
-  head += ` · run ${d.run} · ${where}`;
-  $('prog').innerHTML = head + (stage && stage.ends ? `<br><b>moves on when:</b> ${stage.ends}` : '');
-}
-function rungsHTML(rows) {
-  return '<table class="tbl"><tr><th>rung</th><th>total rms</th><th>gain</th><th></th></tr>'
-    + rows.map((r) => `<tr${r.deployed ? '' : ' style="opacity:.55"'}><td>${r.name}</td>`
-      + `<td class="num">${r.score.toExponential(4)}</td>`
-      + `<td class="num">${r.gain === null ? '' : r.gain.toFixed(2) + '×'}</td>`
-      + `<td>${r.deployed ? '' : 'not deployed'}${r.note ? ' — ' + r.note : ''}</td></tr>`).join('') + '</table>';
-}
-
-function makeHost(periodic, gr) {
-  const K = kNow(), c0 = prof.at(0), LAP = Math.ceil(prof.lap);
-  const centre = arm.ik(PG.centre[0], PG.centre[1], true);
-  const G2 = GRADES[gr] || GRADES.full;
-  const h = makeArmHost({
-    // THE LADDER COMMISSIONS THE MACHINE ON THE BENCH, not a second one built for it. It
-    // used to build and calibrate its own arm, which appeared on screen at a calibration pose
-    // — a jump — and left this one standing at the start. Now the host BORROWS the live arm
-    // and its identified baseline, drives it to every run's start from wherever the last run
-    // ended, and hands it back where the last scored run left it; `home()` then drives it to
-    // the program start. One machine, continuous, which is what a commissioning is.
-    makeMachine: async () => { liveArm = arm; return { arm, l1, l2, servo, rc, borrowed: true }; },
-    path: prof, lap: LAP, K, centre,
-    // THE CASCADE IS COMMISSIONED AS THE DISTILLED MODEL'S TEACHER, NOT AS A RUNG THAT SHIPS
-    // (plan §52.8): the rung converges its training prefixes with the pilot's QP handed the
-    // measured error as its free response, then the distilled policy REPLACES the cascade and
-    // the compliance feedforward at deploy — 138 MAC/decision, no solver on the machine. The
-    // cascade's row stays in the table so what it taught is on record.
-    classic: false, maxDepth: 1, demo: null, lapMemory: periodic, distil: {},
-    // THE DIET IS MEASURED, NOT DEFAULTED (plan §52.7). The designer's own defaults — a feed
-    // ladder at r 2.2-3.8 — refuse on this square at 0.74x; the same designer at the programs'
-    // scale and the CURRENT feed deploys at 1.36x; laddering the feed at that scale reads 0.96x.
-    // Off the feed it was fitted at the block's own coverage guard fades the correction out.
-    // FOUR PROGRAMS, NOT SIX: two convex polygons and two stars at the programs' own scale, which
-    // reads 0.2263 against six programs' 0.2169 on the square (4%, inside the band) for 12.7 →
-    // 9.7 machine-minutes (plan §52.9).
-    distilDiet: { feeds: [feedNow(), feedNow()], rMin: 3.4, rSpan: 2.4 },
-    avg: G2.avg, warmup: G2.warmup, passes: G2.passes, probeLaps: G2.probeLaps,
-    yieldEvery: 150, onYield: autoYield, onProgress, onStage,
-    onRung: (r) => { rows.push(r); $('rungs').innerHTML = rungsHTML(rows); },
-  });
-  const rows = [];
-  h.auto.pilotOpts.start = arm.ik(c0.x, c0.y, true);
-  h.auto.pilotOpts.workspace = (q) => { const rr = Math.hypot(arm.L1 * Math.cos(q[0]) + arm.L2 * Math.cos(q[0] + q[1]), arm.L1 * Math.sin(q[0]) + arm.L2 * Math.sin(q[0] + q[1])); return rr > Math.abs(arm.L1 - arm.L2) + 0.5 && rr < arm.L1 + arm.L2 - 0.5; };
-  return h;
-}
-
-async function startCommission() {
-  if (commissioning || busy || !arm) return;
-  // NO APPROACH HERE. The ladder drives the arm to every run's start itself, and an approach
-  // left running in the frame loop would step the same arm the host is stepping — two
-  // drivers, one machine, which the continuity instrument read as a 0.64 hop in one step
-  // and the badge as a settle that never arrived (plan §52.12).
-  running = false; pendingProgram = false; approach = null;
-  prof = makePath();
-  k = 0; lap = 0; score = newScore(); lapScore = newScore(); lastLap = null; trail = []; fitView();
-  if (host) { await host.dispose(); host = null; }
-  rep = null; restored = null; commissioning = true; abort = false; liveArm = null;
-  grade = $('grade').value; t0 = performance.now(); t1 = 0; lastProg = 0; stage = null; plan = null;
-  $('rungs').innerHTML = '<p class="hint">commissioning…</p>'; $('prog').innerHTML = '<b>0:00</b> — starting';
-  sync();
-  host = makeHost($('periodic').checked, grade);
-  setBadge(`commissioning at grade ${grade} — the ladder's machine, not the program`, 'warn');
-  try {
-    rep = await host.auto.commission({ run: host.run, drivePilot: host.drivePilot, recordDemo: host.recordDemo, distilRuns: host.distilRuns });
-  } catch (e) {
-    const msg = e && e.message ? e.message : String(e);
-    setBadge(abort ? 'stopped — nothing was deployed' : `commissioning failed — ${msg}`, abort ? 'warn' : 'bad');
-    if (host) await host.dispose();
-    host = null; rep = null; liveArm = null; t1 = performance.now();
-    home();                                 // from wherever the stopped ladder left the arm
-    // The record must say what happened, not what was happening: a progress line left reading
-    // 'scoring · lap 2/2 · 94%' after a stop describes a state the page has left.
-    $('rungs').innerHTML = '';
-    $('prog').innerHTML = abort ? `<b>stopped</b> after ${Math.round((t1 - t0) / 1000)} s — nothing was deployed, nothing was kept`
-      : `<b>failed</b> after ${Math.round((t1 - t0) / 1000)} s — ${msg}`;
-    commissioning = false; abort = false;
-    sync(); return;
-  }
-  commissioning = false; abort = false; t1 = performance.now();
-  await host.dispose(); liveArm = null;
-  host.attach(arm, servo, rc, prof, prof.lap);
-  host.auto.beginRun();
-  home();                                   // a move from where the last scored run ended
-  $('rungs').innerHTML = rungsHTML(rep.rungs);
-  $('prog').innerHTML = `<b>done</b> in ${Math.round((t1 - t0) / 1000)} s of wall clock`;
-  trainedOn = { K: arm.K, E: arm.E }; restored = null;
-  saveModel();
-  const d = rep.deployed;
-  setBadge(`shipped {distilled:${d.distil}, lap learning:${d.hff}} — ${rep.base.toExponential(3)} → ${rep.best.toExponential(3)} (${rep.gain.toFixed(2)}×). Press Run`, 'good');
-  home(); sync();
-}
-
-/* ==================================================================================
- * PERSISTENCE: THE LAST COMMISSIONED MODEL, KEPT FOR THE MACHINE IT WAS FITTED ON.
- *
- * What is stored is the DEPLOYED object exactly — the distilled weights and window, the lap
- * table, the recursion so adaptation resumes — plus the plant, the program signature and the
- * machine-time record. It is replaced by the next commissioning and offered back ONLY when
- * the sliders and the program match what it was fitted on; on any other machine it is
- * reported and not armed. Restoring is a deployment through the same host and the same
- * `act()` the ladder scored with, never a re-statement of the controller here.
- */
-/**
- * THE STORED RECORD'S VERSION, IN ONE PLACE. It was written in `saveModel` and checked in BOTH
- * `storedMatches` and `tryRestore`, and raising it for the servo-loop key (plan §52.37) updated
- * two of the three — so the page saved a v2 record and then refused to restore it, with the
- * smoke test reading `13.65 vs null`. Rule 30 in its smallest form: a value described in a second
- * place eventually describes the value it used to have. Bumping this retires every record written
- * before the loop moved, which is intended — a v1 record carries no bandwidth to compare.
- */
-const STORE_V = 2;
-
-function saveModel() {
-  if (!rep || !host) return;
-  const a = host.auto;
-  // ONLY A MODEL THAT DEPLOYED IS WORTH KEEPING. A rung that was built, scored and REFUSED
-  // still sits in `built.*` — that is what lets a refusal be inspected — but storing it wrote
-  // a record that read "matches this machine, 1.00x" for a controller the ladder had just
-  // measured as harmful. Measured on the bench: the fast-grade run refused ②d at 0.43x and
-  // the page stored it anyway. Nothing deployed means nothing stored, and a stale record from
-  // an earlier commissioning is removed rather than left to be offered back.
-  if (!a.deployed.distil && !a.deployed.hff) { try { localStorage.removeItem(STORE_KEY); } catch {} return; }
-  const L = Math.ceil(prof.lap);
-  let hff = null;
-  if (a.built.hff) {
-    const t = [[], []];
-    for (let i = 0; i < L; i++) { const u = a.built.hff.at(i); t[0].push(u[0]); t[1].push(u[1]); }
-    hff = { lap: L, channels: 2, table: t, program: a._hffProgram };
-  }
-  const saved = {
-    // THE SERVO LOOP IS PART OF THE MACHINE AND MUST BE PART OF THE KEY (plan §52.37). The record
-    // keyed on K, E and the program signature, which was complete while `bandwidth` was one
-    // hard-coded literal everywhere. It is now a shipped constant that has MOVED (2e-3 -> 1.6e-2),
-    // and a policy fitted under the old loop restored onto the new one is a model of a different
-    // plant offered as a match — silently, with a gain pill from the machine it no longer runs on.
-    // `v: 2` retires every record written before the loop moved rather than trusting the key to
-    // catch them, because a v1 record carries no bandwidth to compare.
-    v: STORE_V, bw: BENCH_SERVO.bandwidth, savedAt: new Date().toISOString(), K: kNow(), E: eNow(), shape: $('shape').value,
-    feed: +$('s-feed').value, program: programSignature(prof, L), lap: L, grade, scanMs: scanMs(),
-    deployed: { ...a.deployed },
-    rungs: rep.rungs.map((r) => ({ name: r.name, score: r.score, gain: r.gain, deployed: r.deployed, note: r.note })),
-    base: rep.base, best: rep.best, gain: rep.gain, cost: host.samples(),
-    distil: a.built.distil ? a.built.distil.toJSON() : null, hff,
-  };
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(saved)); } catch (e) { console.warn('model not stored:', e); }
-}
-function loadStored() { try { const s = localStorage.getItem(STORE_KEY); return s ? JSON.parse(s) : null; } catch { return null; } }
-function storedMatches(s) {
-  return !!(s && s.v === STORE_V && arm && prof && s.K === kNow() && s.E === eNow()
-    && s.bw === BENCH_SERVO.bandwidth
-    && s.program === programSignature(prof, Math.ceil(prof.lap)));
-}
-/** What the live model was trained on — the commissioning's plant, or the stored record's. */
-let trainedOn = null;
-function plantMismatch() {
-  return !!(rep && trainedOn && arm && (trainedOn.K !== arm.K || trainedOn.E !== arm.E));
-}
-function plantNote() {
-  return plantMismatch() ? `PLANT MISMATCH — trained on K ${trainedOn.K} / E ${trainedOn.E}, running on K ${arm.K} / E ${arm.E}` : '';
-}
-function tryRestore() {
-  const s = loadStored();
-  // A STORED MODEL IS OFFERED TO ANY PLANT, FLAGGED. The distilled model transfers across
-  // programs by construction and lap learning withholds itself off its program, so the
-  // program need not match; a different K or E is exactly the degradation the owner wants
-  // to see, so it restores armed and `plantMismatch()` says so wherever the model is named.
-  if (!s || s.v !== STORE_V || !arm || !prof) return false;
-  try {
-    const h = makeHost(!!s.hff, s.grade || 'full');
-    const a = h.auto;
-    if (s.distil) a.built.distil = DistilPolicy.fromJSON(s.distil);
-    if (s.hff) {
-      const t = s.hff.table.map((c) => Float64Array.from(c)), L = s.hff.lap;
-      a.built.hff = { lap: L, channels: 2, at(i) { const kk = ((i % L) + L) % L; return [t[0][kk], t[1][kk]]; } };
-      a._hffProgram = s.hff.program;
-    }
-    // Armed as it shipped. `setArmed` refuses what was not built, so a record with a rung
-    // missing arms only what it actually carries.
-    if (s.deployed.distil) a.setArmed('distil', true);
-    if (s.deployed.hff) a.setArmed('hff', true);
-    h.attach(arm, servo, rc, prof, prof.lap);
-    host = h;
-    rep = { rungs: s.rungs, deployed: { ...a.deployed }, base: s.base, best: s.best, gain: s.gain, restored: true };
-    grade = s.grade || 'full'; restored = s; t0 = 0; t1 = 0; trainedOn = { K: s.K, E: s.E };
-    $('rungs').innerHTML = rungsHTML(s.rungs);
-    $('prog').innerHTML = `<b>restored</b> from storage — commissioned ${new Date(s.savedAt).toLocaleString()}`;
-    a.beginRun();
-    return true;
-  } catch (e) {
-    console.error('restore failed:', e); host = null; rep = null; restored = null;
-    return false;
-  }
-}
-function forgetModel() { try { localStorage.removeItem(STORE_KEY); } catch {} sync(); }
-
-/* ==================================================================================
- * READOUTS, all generated from state rather than remembered (rule 30).
- */
-function setBadge(s, cls) { $('badge').textContent = s; $('badge').className = 'badge' + (cls ? ' ' + cls : ''); }
-const mmss = (x) => `${Math.floor(x / 60)}:${String(Math.round(x % 60)).padStart(2, '0')}`;
-
-function costHTML() {
-  const sm = restored ? restored.cost : (host && host.samples ? host.samples() : null);
-  if (!sm || !sm.samples) return '';
-  const secs = sm.samples * (scanMs() / 1000);
-  const wall = restored ? null : ((t1 || performance.now()) - t0) / 1000;
-  const gr = GRADES[grade] || GRADES.full;
-  return '<table class="tbl">'
-    + `<tr><th>${commissioning ? 'cost so far' : 'this commissioning cost'}</th><th></th></tr>`
-    + `<tr><td>machine time at a ${scanMs()} ms task</td><td class="num"><b>${mmss(secs)}</b></td></tr>`
-    + `<tr><td>machine samples · scored runs</td><td class="num">${sm.samples.toLocaleString()} · ${sm.runs}</td></tr>`
-    + `<tr><td>laps of this program</td><td class="num">${(sm.samples / sm.lap).toFixed(0)}</td></tr>`
-    + (wall === null ? '' : `<tr><td>wall clock in this browser</td><td class="num">${mmss(wall)}</td></tr>`)
-    + `<tr><td>grade</td><td class="num">${grade}</td></tr></table>`
-    + `<p class="hint"><b>Machine time is the number that transfers.</b> Wall clock is this browser `
-    + 'simulating a lattice arm; machine time is laps the plant spends producing nothing, which is '
-    + `what an owner pays. Grade <b>${grade}</b> — ${gr.note}.`
-    + (grade === 'full' ? '' : ' <b>This is what THIS run would cost a PLC, not a full-grade one.</b>') + '</p>';
-}
-
-function plcHTML() {
-  if (!host || !rep) return '<p class="hint">Commission, or restore a stored model, and the armed set’s cost per scan appears here.</p>';
-  const c = host.auto.cost(), label = { distil: 'the distilled model', hff: 'lap learning', stack: 'the pilot cascade' };
-  const rows = Object.entries(c.rungs).map(([kk, r]) => {
-    const cad = Math.max(1, r.cadence || 1);
-    return `<tr><td>${label[kk] || kk}</td>`
-      + `<td class="num">${(r.mac || 0).toLocaleString()}</td>`
-      + `<td class="num">${cad === 1 ? 'every scan' : `1 in ${cad}`}</td>`
-      + `<td class="num">${((r.mac || 0) / cad / scanMac() * 100).toFixed(2)}%</td>`
-      + `<td class="num">${((r.bytes || 0) / 1024).toFixed(1)} kB</td></tr>`;
-  });
-  if (!rows.length) rows.push('<tr><td colspan="5">nothing armed — the conventional machine is running, 0.00% of the scan</td></tr>');
-  // THE PEAK IS THE VERDICT AND THE AVERAGE IS THE CPU READING (plan §52.38). "Under 10%,
-  // ALWAYS" is a statement about the WORST scan, so the verdict stays on the peak; but "what is
-  // the CPU doing right now" is the average, and on this arm they differ by the distilled map's
-  // stride — it decides once in 8-9 scans and HOLDS the correction between. Reporting only the
-  // average would hide a spike an order of magnitude larger, and reporting only the peak
-  // overstates the load by the same factor, so both are shown against the SAME denominator: the
-  // whole 1 ms task, which is what "CPU usage" plainly means. The 10%-of-scan budget rule is
-  // then stated against the peak, where it belongs. Unflattering number first (rule 27).
-  const peak = c.mac, avg = c.avgMac || 0;
-  const peakPct = 100 * peak / scanMac(), avgPct = 100 * avg / scanMac();
-  const fits = peak <= budget();
-  const live = `<p><b>CPU now — <span class="${fits ? 'good' : 'bad'}">${peakPct.toFixed(2)}% in the peak scan</span>`
-    + ` · ${avgPct.toFixed(2)}% average</b> of a ${scanMs()} ms task`
-    + (peak > 0 && avg > 0 && peak / avg > 1.5 ? `, a ${(peak / avg).toFixed(1)}× spread because the correction is decided on its own cadence and HELD between` : '')
-    + `.</p>`;
-  const verdict = fits
-    ? `<b class="good">FITS</b> — ${peak.toLocaleString()} MAC in the peak cycle, ${(100 * peak / budget()).toFixed(1)}% of the ${budget().toLocaleString()} allowed`
-    : `<b class="bad">DOES NOT FIT</b> — ${peak.toLocaleString()} MAC in the peak cycle, ${(100 * peak / budget()).toFixed(0)}% of the allowance`;
-  return live
-    + `<table class="tbl"><tr><th>armed</th><th>MAC/decision</th><th>decides</th><th>% of scan</th><th>state</th></tr>${rows.join('')}</table>`
-    + `<p class="hint">${verdict}. The budget is 10% of a ${scanMs()} ms task met in <b>every</b> cycle, so the PEAK is the verdict and the average is what the CPU carries. Excluded and said so: ${c.excludes.join(', ')}.</p>`;
-}
-
-/*
- * A CORRECTION THAT HAS FADED TO NOTHING MUST SAY SO. The distilled model fades outside the
- * commanded-speed span it was fitted on (the coverage guard), so at a feed the training diet
- * did not cover the box reads "armed" while the machine runs conventional — a silent zero that
- * would be read as the model doing nothing. The fade is reported beside the armed set.
- */
-function distilFadeNote() {
-  const d = host && host.auto.deployed.distil ? host.auto.distil : null;
-  if (!d || !prof) return '';
-  const g = d.coverage(feedNow());
-  if (g >= 1) return '';
-  const sp = d.report && d.report.speedSpan;
-  return ` · <b>the distilled correction is FADED to ${(100 * g).toFixed(0)}%</b> — feed ${feedNow().toExponential(1)} is outside the trained span`
-    + (sp ? ` [${sp[0].toExponential(1)}, ${sp[1].toExponential(1)}]` : '');
-}
-function statsHTML() {
-  if (!arm) return '';
-  const rows = [];
-  const e = (x) => (Number.isFinite(x) ? x.toExponential(3) : '—');
-  // THE SERVO LOOP IS NAMED, because it is now a shipped choice rather than a carried literal and
-  // it is worth as much as anything the controller does (plan §52.37). It is stated FROM the
-  // machine that is running, not from the constant, so the panel cannot describe a loop the arm
-  // does not have (rule 30).
-  rows.push(['plant', `K ${arm.K} · E ${arm.E} · position loop ${(servo.bw ?? BENCH_SERVO.bandwidth).toExponential(1)}`
-    + ` · ${$('shape').value} at feed ${feedNow().toExponential(1)}`]);
-  if (rep && trainedOn) rows.push(['model trained on', plantMismatch()
-    ? `<b>K ${trainedOn.K} · E ${trainedOn.E} — NOT this plant</b>` : `K ${trainedOn.K} · E ${trainedOn.E} — this plant`]);
-  if (ghostValid() && lastLap && lastLap.totalRms > 0) {
-    const gx = ghost.rms / lastLap.totalRms;
-    rows.push(['<b>vs the ghost</b>', `<b>${gx >= 1 ? gx.toFixed(2) + '× better' : (1 / gx).toFixed(2) + '× WORSE'}</b>`
-      + ` <span style="opacity:.7">— ${e(ghost.rms)} without our tools, ${e(lastLap.totalRms)} with what is armed, last complete lap</span>`]);
-  } else if (ghostValid()) rows.push(['<b>vs the ghost</b>', 'waiting for the first complete lap — lap 0 is the start-up transient, not the controller']);
-  else if (ghostRec) rows.push(['<b>vs the ghost</b>', `recording the baseline — lap ${ghostRec.l + 1} of ${ghostRec.warm + 1}, the machine without our tools`]);
-  else if (ghost) rows.push(['<b>vs the ghost</b>', 'the recorded baseline belongs to another plant or program — not drawn; a fresh one records on the next run']);
-  if (lastLap) rows.push(['last lap — contour · lag · <b>total</b>', `${e(lastLap.contourRms)} · ${e(lastLap.lagRms)} · <b>${e(lastLap.totalRms)}</b>`]);
-  const r = score ? score.report() : { steps: 0 };
-  if (r.steps) rows.push(['since reset — total rms', `${e(r.totalRms)} over ${lap} lap(s)`]);
-  if (host && rep) {
-    const a = host.auto.armed();
-    const on = Object.entries(a).filter(([, v]) => v.on).map(([kk]) => kk === 'distil' ? 'distilled' : kk === 'hff' ? 'lap learning' : kk === 'stack' ? 'pilot cascade' : kk);
-    rows.push(['armed', (on.join(' + ') || 'nothing — the conventional machine')
-      + (a.hff.on && a.hff.offProgram > 0 ? ' · <b>lap learning is being WITHHELD: this is not the program it learned</b>' : '')
-      + (rep && rep.learned ? ` · <b>learned on this program</b>: ${rep.learned.passes} pass(es), ${rep.learned.before.toExponential(3)} → ${rep.learned.after.toExponential(3)}` : '')
-      + distilFadeNote()]);
-  }
-  return rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('');
-}
-
-function storedHTML() {
-  const s = loadStored();
-  if (!s) return '';
-  const match = storedMatches(s);
-  return `<b>Stored model:</b> K ${s.K} / E ${s.E}, ${s.shape} at feed ${FEED_LADDER[s.feed].toExponential(1)}, `
-    + `grade ${s.grade}, ${s.gain.toFixed(2)}×, commissioned ${new Date(s.savedAt).toLocaleString()} — `
-    + (match ? (restored ? '<b>restored and armed as it shipped.</b>' : 'matches this machine.')
-      : (restored ? `<b>restored and armed on a plant it was NOT trained on</b> (K ${arm.K} / E ${arm.E}) so the degradation can be seen; commissioning replaces it.`
-        : 'a different plant or program; it restores armed and flagged on the next load.'))
-    + ' <a href="#" id="forget">forget it</a>';
-}
-
-/* ==================================================================================
- * SYNC: every control's enabled state and every readout, from state, every few frames.
- */
-function applyArm() {
-  if (!host || !rep) return;
-  const notes = [];
-  for (const [name, id] of [['distil', 'arm-distil'], ['stack', 'arm-stack'], ['hff', 'arm-hff']]) {
-    const want = $(id).checked, r = host.auto.setArmed(name, want);
-    if (want && !r.armed) { $(id).checked = false; notes.push(r.why); }
-  }
-  if (notes.length) $('ctl-hint').innerHTML = '<b>' + notes.join(' · ') + '</b>';
-  sync();
-}
 function sync() {
-  $('v-k').textContent = kNow().toFixed(2); $('v-e').textContent = eNow().toFixed(3);
-  $('v-feed').textContent = feedNow().toExponential(1); $('v-spf').textContent = `${$('s-spf').value} steps/frame`;
+  const O = fb ? fb.out : null, idle = !busy && !approach, comm = commissioning();
+  $('run').disabled = busy || !!approach || comm;
+  $('run').textContent = running ? 'Pause ❚❚' : 'Run ▶';
+  $('reset').disabled = busy || comm;
+  for (const id of ['s-k', 's-e', 'shape', 's-feed']) $(id).disabled = busy || comm;
+  $('commission').disabled = busy || !fb || (!comm && (!idle || !running));
+  $('commission').textContent = comm ? 'Abort ■' : 'Commission ▶';
+  $('v-spf').textContent = `${$('s-spf').value} scans/frame`;
   $('v-mag').textContent = `×${magNow()}`;
-  // The run controls and the plant wait for an approach to arrive; arming a rung does not
-  // need the machine idle, so the controller boxes follow only the commissioning state.
-  const settled = !commissioning && !busy && !!arm;
-  const idle = settled && !approach;
-  $('run').disabled = !idle; $('run').textContent = running ? 'Pause ‖' : 'Run ▶';
-  $('reset').disabled = !idle;
-  $('commission').disabled = busy || !arm || !!approach; $('commission').textContent = commissioning ? 'Stop ■' : 'Commission ▶';
-  for (const id of ['s-k', 's-e', 'grade', 'periodic']) $(id).disabled = !idle;
-  const pn = $('plant-note'); pn.hidden = !plantMismatch(); pn.textContent = plantNote();
-  const a = host && rep ? host.auto.armed() : null;
-  $('arm-distil').disabled = !a || !a.distil.built || !settled;
-  $('arm-hff').disabled = !a || !a.hff.built || !settled;
-  // THE CASCADE IS OFFERED ONLY WHEN IT IS WHAT SHIPPED. On the bench plant the distilled
-  // model replaces it and it is never armed; on a plant where the distilled model REFUSED
-  // (measured: E 0.005, distil 0.59x, cascade 4.39x) the ladder keeps the cascade, and a page
-  // that could not arm it ran the conventional machine under a pill reading "shipped".
-  $('arm-stack').disabled = !a || !a.stack.built || !settled;
-  // `hidden` loses to the label's own `display` rule (rule 52), so the box is hidden by style.
-  $('arm-stack').parentElement.style.display = (!a || !a.stack.built || (!a.stack.on && a.distil.on)) ? 'none' : '';
-  if (!a) { $('arm-distil').checked = false; $('arm-hff').checked = false; $('arm-stack').checked = false; }
-  else { $('arm-distil').checked = a.distil.on; $('arm-hff').checked = a.hff.on; $('arm-stack').checked = a.stack.on; }
-  // Learning continues the deployed model's own recursion, which carries the commissioning
-  // diet (a model, not a memory — plan §52.19); it needs the teacher, which a restored model
-  // does not carry: commission first.
-  $('learn').disabled = !a || !a.distil.on || !idle || !(host && host.auto.built && host.auto.built.stack);
-  $('learn').textContent = learning ? 'Stop ■' : 'Learn on this program ▶';
-  $('learn-passes').disabled = !idle;
-  $('state').textContent = commissioning ? 'commissioning…' : rep ? `${rep.restored ? 'restored' : 'shipped'} ${rep.gain.toFixed(2)}×` : 'not commissioned';
-  $('state').className = 'pill ' + (commissioning ? 'warn' : rep ? 'good' : '');
-  $('cost').innerHTML = costHTML(); $('cost').hidden = !$('cost').innerHTML.trim();
-  $('rungs').hidden = !$('rungs').innerHTML.trim(); $('prog').hidden = !$('prog').innerHTML.trim();
-  $('stored').innerHTML = storedHTML(); $('stored').hidden = !$('stored').innerHTML.trim();
-  const f = $('forget'); if (f) f.onclick = (ev) => { ev.preventDefault(); forgetModel(); };
-  $('plc').innerHTML = plcHTML();
-  $('ctl-hint').innerHTML = $('ctl-hint').innerHTML && $('ctl-hint').innerHTML.startsWith('<b>') ? $('ctl-hint').innerHTML
-    : (a ? 'Every box is live: the ladder keeps each rung it built, and the correction is whatever is '
-      + 'ticked, summed and clamped once. <b>Lap learning</b> is the only rung addressed by lap phase — switch the '
-      + 'program with it armed and watch it stop contributing. <b>The tracker staying on</b> lets the distilled '
-      + 'model keep learning; it is new on this rung and unmeasured, so score it a lap either way.'
-      : 'Commission an installation and the rungs it built appear here.');
-  $('stats').innerHTML = statsHTML();
-  $('badge-r').textContent = approach ? `moving to the program start · ${approach.steps.toLocaleString()} steps`
-    : lastLap ? `total ${lastLap.totalRms.toExponential(2)}` : (lap ? 'lap 0' : '—');
+  $('v-k').textContent = String(kNow()); $('v-e').textContent = eNow().toFixed(3);
+  $('v-feed').textContent = feedNow().toExponential(1);
+  if (!O) return;
+  const st = $('state');
+  st.textContent = affStateName(O.eState) + (O.eReason ? ` — ${affReasonName(O.eReason)}` : '');
+  st.className = 'pill ' + (O.eState === E_AFF_STATE.FAULT ? 'bad' : O.eState === E_AFF_STATE.RUN && O.xDeployed ? 'good' : comm ? 'warn' : '');
+  $('rungs').innerHTML = '<table class="tbl"><tr><th>rung</th><th>verdict</th></tr>'
+    + `<tr><td>conventional (acceleration, velocity, direction, bias)</td><td>${verdictCell(O.eConvVerdict, O.eConvReason, O.rConvFactor)}</td></tr>`
+    + `<tr><td>learned map of the reference window</td><td>${verdictCell(O.eLearnVerdict, O.eLearnReason, O.rLearnFactor)}</td></tr>`
+    + `<tr><td><b>the block, as it reports itself</b></td><td><b>${O.xDeployed ? fx(O.rFactor) + '×' : 'nothing deployed'}</b></td></tr></table>`;
+  $('prog').innerHTML = comm || O.udiCommissionScans
+    ? `<b>${affStateName(O.eState)}</b> · ${O.udiLaps} laps · ${O.udiCommissionScans.toLocaleString()} scans = ${mins(O.udiCommissionScans)}`
+      + (O.nLap ? ` · lap ${O.nLap} · window ±${O.nReach}` : '') : 'not commissioned on this plant';
+  $('plc').innerHTML = `PLC budget: the worst scan so far cost <b>${O.udiMacPeak.toLocaleString()}</b> of ${fb.udiMacBudget.toLocaleString()} MAC `
+    + `— <b class="${O.udiMacPeak <= fb.udiMacBudget ? 'good' : 'bad'}">${O.udiMacPeak <= fb.udiMacBudget ? 'FITS' : 'DOES NOT FIT'}</b> 10% of a 1 ms scan, the commissioning included`;
+  $('stored').innerHTML = stored
+    ? (restored ? 'a stored record for <b>this plant</b> was loaded — it runs after a predict-only washout'
+      : stored.udiKey === plantKey() ? 'a stored record is kept for this plant' : 'the stored record belongs to <b>another plant</b> and was REJECTED — commission to fit this one')
+    : 'no record stored';
+  const rows = [
+    ['plant', `gearbox K ${kNow()} · link E ${eNow()}${M ? '' : ' · building'}`],
+    ['program', prog ? `${$('shape').value} · feed ${feedNow().toExponential(1)} · ${prog.lap.toLocaleString()} scans a lap` : '—'],
+    ['last lap', lastLap ? `${lastLap.rms.toExponential(3)} tool rms — ${lastLap.experiment ? 'an experiment lap, the block commissioning'
+      : lastLap.armed ? 'the block acting' : 'the block not acting'}` : '—'],
+    ['the ghost', ghost && ghost.key === ghostKey() ? `${ghost.rms.toExponential(3)} — this machine without the block` : ghostRec ? 'recording…' : '—'],
+  ];
+  if (lastLap && !lastLap.experiment && ghost && ghost.key === lastLap.key) rows.push(['vs the ghost', `<b>${fx(ghost.rms / lastLap.rms)}×</b> ${ghost.rms / lastLap.rms >= 1 ? 'better' : 'worse'}`]);
+  $('stats').innerHTML = rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('');
+  $('badge-r').textContent = `lap ${Math.floor(pc / (prog ? prog.lap : 1))}`;
+  if (comm) setBadge(`commissioning — ${affStateName(O.eState)}`, 'warn');
 }
 
-// ---------------------------------------------------------------- frame loop
-function frame() {
-  frames++;
-  if (arm && !busy) {
-    try {
-      if (approach && !commissioning) { let n = +$('s-spf').value; while (n-- > 0) { if (approachStep()) { approachDone(); break; } } }
-      else if (ghostRec && running) { let n = +$('s-spf').value; while (n-- > 0) { if (ghostStepOnce()) { home(true); break; } } }
-      // A STALE GHOST IS RE-RECORDED FROM THE PROGRAM START, never from mid-lap: the record
-      // drives the program from k = 0, and starting it with the arm mid-lap handed the servo a
-      // step to the start. If the arm is not at the start (a ghost-mode change mid-run), it is
-      // driven there first and the recording begins when it arrives.
-      else if (running && ghostOn() && !ghostValid() && !commissioning) { if (k === 0) ghostStart(); else home(true); }
-      else if (running && !commissioning) stepN(+$('s-spf').value);
-    } catch (e) { running = false; setBadge('halted: ' + e.message, 'bad'); console.error(e); }
+// ---------------------------------------------------------------------------- controls
+$('run').onclick = () => { running = !running; sync(); };
+$('reset').onclick = () => { if (!busy) { home(false); sync(); } };
+for (const id of ['s-spf', 's-mag']) $(id).oninput = sync;
+for (const id of ['s-k', 's-e']) $(id).onchange = () => { sync(); build(); };
+$('shape').onchange = () => { pendingProgram = true; if (!running && !approach) home(false); sync(); };
+$('s-feed').onchange = $('shape').onchange;
+$('s-feed').oninput = sync;
+$('ghost-off').onchange = sync;
+$('excite').onchange = () => { if (fb) fb.in.xExciteAllowed = $('excite').checked; };
+$('arm').onchange = () => { if (fb && !ghostRec) fb.in.xArm = $('arm').checked; sync(); };
+$('commission').onclick = () => {
+  if (!fb) return;
+  trail = [];
+  if (commissioning()) { fb.in.xAbort = true; fb.cycle(); fb.in.xAbort = false; fb.in.xCommission = false; setBadge('aborted — the trim was removed at once', 'warn'); sync(); return; }
+  ghostRec = null;
+  fb.in.xCommission = false; fb.cycle();     // a rising edge on the next scan
+  fb.in.xCommission = true; t0 = performance.now();
+  sync();
+};
+// When the block finishes, keep what it deployed and drop the button.
+setInterval(() => {
+  if (fb && fb.in.xCommission && (fb.out.xDone || fb.out.eState === E_AFF_STATE.FAULT)) {
+    fb.in.xCommission = false;
+    if (fb.out.xDeployed && fb.out.eState === E_AFF_STATE.RUN) { saveRecord(); restored = false; }
+    const secs = Math.round((performance.now() - t0) / 1000);
+    setBadge(fb.out.eState === E_AFF_STATE.FAULT ? `stopped — ${affReasonName(fb.out.eReason)}`
+      : `commissioned in ${secs} s — ${fb.out.xDeployed ? fx(fb.out.rFactor) + '× reported' : 'nothing deployed'}`,
+    fb.out.eState === E_AFF_STATE.FAULT ? 'warn' : 'good');
+    sync();
   }
-  draw();
-  if (frames % 6 === 0) sync();
-  requestAnimationFrame(frame);
-}
+}, 250);
 
-// ---------------------------------------------------------------- wiring
-$('run').addEventListener('click', () => { running = !running; if (running && !commissioning) setBadge(armedAny() ? 'running the armed controller' : 'running the conventional machine', ''); sync(); });
-$('reset').addEventListener('click', () => { running = false; home(); setBadge('moving to the program start — press Run when it arrives', ''); sync(); });
-$('commission').addEventListener('click', () => { if (commissioning) { abort = true; setBadge('stopping at the next frame…', 'warn'); return; } startCommission(); });
-for (const id of ['s-k', 's-e']) $(id).addEventListener('change', () => { if (!commissioning) build(); });
-$('shape').addEventListener('change', () => { pendingProgram = true; if (!running) { home(); tryRestore(); } sync(); });
-$('s-feed').addEventListener('change', () => { pendingProgram = true; if (!running) { home(); tryRestore(); } sync(); });
-for (const id of ['s-spf', 's-feed', 's-k', 's-e', 's-mag']) $(id).addEventListener('input', sync);
-for (const id of ['arm-distil', 'arm-stack', 'arm-hff']) $(id).addEventListener('change', applyArm);
-$('learn').addEventListener('click', () => { if (learning) { abort = true; setBadge('stopping at the next frame…', 'warn'); return; } startLearn(); });
-for (const id of ['scan', 'grade', 'periodic', 'ghost-mode', 'ghost-off']) $(id).addEventListener('input', sync);
+// The page's own debug hook — what the browser checks read, and what a phone report can paste.
+window.__flxDbg = () => ({
+  busy, running, approaching: !!approach, frames, K: kNow(), E: eNow(), shape: $('shape').value, feed: feedNow(),
+  cells: M ? 1 : 0, k: pc, lap: prog ? Math.floor(pc / prog.lap) : 0, lapT: prog ? prog.lap : 0, mag: magNow(),
+  recording: !!ghostRec, ghost: ghost ? { rms: ghost.rms, lap: ghost.lap, stale: ghost.key !== ghostKey() } : null,
+  lastLap, badge: $('badge').textContent, stored: stored ? { key: stored.udiKey } : null, restored,
+  drawnPose: M ? { q: [M.arm.q[0], M.arm.q[1]], tool: M.arm.toolXY() } : null,
+  fb: fb ? { state: fb.out.eState, stateName: affStateName(fb.out.eState), reason: affReasonName(fb.out.eReason),
+    conv: affVerdictName(fb.out.eConvVerdict), learn: affVerdictName(fb.out.eLearnVerdict), factor: fb.out.rFactor,
+    deployed: fb.out.xDeployed, done: fb.out.xDone, ownsRef: fb.out.xOwnsRef, laps: fb.out.udiLaps,
+    scans: fb.out.udiCommissionScans, macPeak: fb.out.udiMacPeak, budget: fb.udiMacBudget,
+    trim: [fb.out.aTrim[0], fb.out.aTrim[1]], commissioning: commissioning() } : null,
+});
 
-/** The debug dump, so a phone report can be a paste (rule 28) and the smoke test a number. */
-window.__flxDbg = () => (arm ? {
-  cells: l1.lattice.cellCount + l2.lattice.cellCount, K: arm.K, E: arm.E,
-  shape: $('shape').value, feed: feedNow(), k, lap, running, busy, pending: pendingProgram,
-  drawnPose: (() => { const A = drawnArm(); return { q: [A.q[0], A.q[1]], tool: A.toolXY(), live: !!(commissioning && liveArm) }; })(),
-  ghost: ghost ? { rms: ghost.rms, mode: ghost.mode, lap: ghost.lap, stale: ghost.key !== ghostKey() } : (ghostRec ? { recording: true, l: ghostRec.l } : null),
-  lastLap: lastLap ? { totalRms: lastLap.totalRms, contourRms: lastLap.contourRms, lagRms: lastLap.lagRms } : null,
-  auto: { commissioning, have: !!host, rows: rep ? rep.rungs.length : 0, deployed: rep ? rep.deployed : null,
-    gain: rep ? rep.gain : null, restored: !!(rep && rep.restored), grade, scanMs: scanMs(),
-    cost: restored ? restored.cost : (host && host.samples ? host.samples() : null),
-    armed: host && rep ? host.auto.armed() : null, plc: host && rep ? host.auto.cost() : null,
-    learned: rep && rep.learned ? rep.learned : null, learning,
-    // THE RUNG'S OWN DIAGNOSTICS, so a refusal can be read to its cause: which training runs
-    // converged and how far, and what the fit thought of itself before the machine scored it.
-    // A 0.22x with a high in-sample R² is a deploy-side fault; with a low one it is the diet or
-    // the grade. Without this the two are one number.
-    distil: rep && rep.distil ? { runs: rep.distil.runs, fit: rep.distil.fit ? {
-      deploy: rep.distil.fit.deploy, rows: rep.distil.fit.rows, features: rep.distil.fit.features,
-      heldOutR2: rep.distil.fit.heldOutR2, speedSpan: rep.distil.fit.speedSpan,
-      reason: rep.distil.fit.reason } : null, note: rep.distil.note || null } : null },
-  stored: (() => { const s = loadStored(); return s ? { K: s.K, E: s.E, shape: s.shape, gain: s.gain, matches: storedMatches(s) } : null; })(),
-  trainedOn, mismatch: plantMismatch(), plantNote: plantNote(), bw: servo.bw ?? null, drive: PG.drive,
-  recording: !!ghostRec, recordingLap: ghostRec ? ghostRec.l : null,
-  ghostK: ghost ? Math.min(ghost.lap - 1, Math.floor(((k % prof.lap) + prof.lap) % prof.lap)) : null, lapT: prof ? prof.lap : null,
-  fade: host && host.auto.deployed.distil ? host.auto.distil.coverage(feedNow()) : null,
-  approaching: !!approach, approachSteps: approach ? approach.steps : 0, frames, mag: magNow(),
-  hop: { on: hop.on, max: hop.max, n: hop.n, maxAt: hop.maxAt, big: hop.big },
-  badge: $('badge').textContent,
-} : null);
-
-// THE FRAME LOOP STARTS BEFORE THE FIRST BUILD, so the calibration drives are drawn too — a
-// machine that is switched on is visible while it moves to its first pose.
+build().then(() => { running = false; sync(); });
 requestAnimationFrame(frame);
-build().catch((e) => { setBadge('build failed: ' + e.message, 'bad'); console.error(e); });
 </script>
 </body>
 </html>

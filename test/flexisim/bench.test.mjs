@@ -1,87 +1,64 @@
-/**
- * @file PHASE 1 — WHAT THE LADDER IS WORTH AWAY FROM HOME.
- *
- * This is the experiment that can kill `docs/plan.md`. The plan's premise is that the ladder
- * wins at home and degrades badly off it, and that the degradation is carried by the ONE
- * rung addressed by lap position rather than by machine state. If the full ladder does not
- * degrade away from home, the premise is wrong and the north star needs rewriting — so this
- * runs before anything is built.
- *
- * ONE COMMISSION, TWO CONFIGURATIONS. The ladder is commissioned once, on the home cell, and
- * then scored across the matrix twice: as shipped, and with the lap-periodic rung disarmed.
- * Both use the SAME commissioned object, so the comparison is one variable — whether the
- * memory is armed — and not two separately-commissioned machines. That is the only way to
- * attribute the degradation rather than infer it.
- *
- * Run with SUITE=full. It is a long measurement, not a check.
- */
-import { machine, settle, commissionComp } from './_rig.mjs';
-import { makeArmHost } from '../../lib/flexisim/autohost.js';
-import { PROGRAMS, FEEDS, HOME_FEED, CENTRE, runMatrix, printMatrix } from './bench.mjs';
+// THE BENCH MACHINE (`lib/flexisim/bench.js`) — the arm the FlexiSim page shows and the Node plant
+// library commissions, checked as a machine before anything is fitted to it.
+//
+//   IK         the length-only inverse kinematics equals the arm's own, exactly
+//   PROGRAM    a joint program has a whole number of scans per lap and is closed
+//   CONVENTIONAL  the conventional machine follows the program, and its compliance feedforward
+//              earns its place (the denominator must be a real incumbent, not a straw man)
+//   REPEATS    two machines built alike and driven alike agree bit for bit
+//   CARRY      a rebuilt arm that takes the old one's state has not moved
+import { buildArm, calibrateComp, benchPath, jointProgram, ikOf, conventional, snapshotArm, BENCH }
+  from '../../lib/flexisim/bench.js';
+import { driveTo } from '../../lib/flexisim/approach.js';
+import { decompose } from '../../lib/flexisim/contour.js';
 
-const T0 = Date.now();
-const el = () => `[${((Date.now() - T0) / 60000).toFixed(0)}m]`;
-const K = +(process.env.K || 1), E = +(process.env.E || 0.06);
+let failed = 0;
+const ck = (n, c, d) => { console.log(`  ${c ? '✓' : '✗'} ${n}${(!c && d !== undefined) ? '  → ' + d : ''}`); if (!c) failed++; };
+console.log('\nthe bench machine\n');
 
-const home = PROGRAMS.find((p) => p.home).make(HOME_FEED);
-const LAP = Math.ceil(home.lap);
-console.log(`\nflexisim: the transfer bench — one commission, ${PROGRAMS.length} programs x `
-  + `${FEEDS.length} feedrates`);
-console.log(`  [arm K ${K} E ${E}, home = rounded 8x8 at ${HOME_FEED.toExponential(0)}, lap ${LAP}]`);
-
-const p0 = home.at(0);
-async function fresh() {
-  const m = await machine({ K, E });
-  const rc = commissionComp(m.arm, m.servo);
-  const [q1, q2] = m.arm.ik(p0.x, p0.y, true);
-  settle(m.arm, m.servo, q1, q2);
-  return { ...m, rc };
+const m = await buildArm();
+const ik = ikOf(m.arm.L1, m.arm.L2);
+const prog = jointProgram(benchPath('sharp'), ik);
+{
+  let e = 0;
+  for (let k = 0; k < prog.lap; k += 97) { const c = prog.cmd(k), a = ik(c.x, c.y), b = m.arm.ik(c.x, c.y, true); e = Math.max(e, Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1])); }
+  ck('IK: the length-only inverse kinematics equals the arm\'s own', e < 1e-12, e);
+  ck('PROGRAM: a whole number of scans per lap, and closed', Number.isInteger(prog.lap) && prog.lap >= prog.path.lap
+    && prog.at(prog.lap)[0] === prog.at(0)[0] && prog.at(-1)[1] === prog.at(prog.lap - 1)[1], prog.lap);
 }
 
-const live = await fresh();
-const host = makeArmHost({
-  makeMachine: fresh, path: home, lap: LAP, K,
-  centre: live.arm.ik(CENTRE[0], CENTRE[1], true),
-  onRung: (r) => console.log(`  ${el()} ${r.name}  ${r.score.toExponential(4)}`
-    + `${r.gain === null ? '' : '  ' + r.gain.toFixed(2) + 'x'}`
-    + `${r.deployed ? '' : '  — NOT deployed'}`),
-});
-host.auto.pilotOpts.start = live.arm.ik(p0.x, p0.y, true);
-host.auto.pilotOpts.workspace = (q) => {
-  const rr = Math.hypot(live.arm.L1 * Math.cos(q[0]) + live.arm.L2 * Math.cos(q[0] + q[1]),
-    live.arm.L1 * Math.sin(q[0]) + live.arm.L2 * Math.sin(q[0] + q[1]));
-  return rr > Math.abs(live.arm.L1 - live.arm.L2) + 0.5 && rr < live.arm.L1 + live.arm.L2 - 0.5;
-};
+const rc = await calibrateComp(m);
+const NONE = { feedforward: () => ({ dq: [0, 0] }) };
+async function lap(comp) {
+  const mm = await buildArm();
+  await driveTo(mm.arm, mm.servo, prog.at(0), BENCH.feed);
+  const c = conventional(mm, comp);
+  c.reset(prog.at(0));
+  let s = 0, n = 0;
+  const tools = [];
+  for (let L = 0; L < 2; L++) {
+    for (let k = 0; k < prog.lap; k++) {
+      c.step(prog.at(k));
+      if (L === 1) { const t = mm.arm.toolXY(), d = decompose(prog.path, t, prog.cmd(k)); s += d.contour ** 2 + d.lag ** 2; n++; if (k % 500 === 0) tools.push(t[0], t[1]); }
+    }
+  }
+  await mm.l1.destroy(); await mm.l2.destroy();
+  return { rms: Math.sqrt(s / n), tools };
+}
+{
+  const a = await lap(rc), b = await lap(rc), z = await lap(NONE);
+  console.log(`    conventional machine on the sharp square: ${a.rms.toExponential(3)} tool rms, without its compliance feedforward ${z.rms.toExponential(3)}`);
+  ck('CONVENTIONAL: the compliance feedforward improves the machine (the incumbent is real)', a.rms < 0.9 * z.rms, `${a.rms} against ${z.rms}`);
+  ck('CONVENTIONAL: the machine follows the program (tool error well inside the program\'s size)', a.rms < 0.25 * 8, a.rms);
+  ck('REPEATS: two machines built and driven alike agree bit for bit', a.rms === b.rms && a.tools.every((v, i) => v === b.tools[i]));
+}
+{
+  const s = snapshotArm(m), t1 = m.arm.toolXY();
+  const m2 = await buildArm(0.5, 0.03, s), t2 = m2.arm.toolXY();
+  ck('CARRY: a rebuilt arm (another gearbox) that takes the old state has not moved', Math.hypot(t1[0] - t2[0], t1[1] - t2[1]) < 1e-9);
+  await m2.l1.destroy(); await m2.l2.destroy();
+}
+await m.l1.destroy(); await m.l2.destroy();
 
-console.log(`  ${el()} commissioning on the home cell…`);
-const rep = await host.auto.commission({ run: host.run, drivePilot: host.drivePilot });
-console.log(`  ${el()} shipped ${JSON.stringify(rep.deployed)}  `
-  + `${rep.base.toExponential(4)} → ${rep.best.toExponential(4)}  ${rep.gain.toFixed(2)}x at home`);
-
-// THE MACHINE THE MATRIX IS SCORED ON is the one on screen, not a throwaway: `attach` points
-// the frame maps at it and supplies the baseline every scored run was driven with.
-host.attach(live.arm, live.servo, live.rc);
-const auto = host.auto;
-
-const full = runMatrix({ m: live, rc: live.rc, auto, label: 'FULL LADDER (as shipped)' });
-printMatrix(full);
-
-// ONE VARIABLE: the memory, disarmed. Same commissioned object, same machine, same cells.
-const hadHff = auto.deployed.hff;
-auto.deployed.hff = false;
-const model = runMatrix({ m: live, rc: live.rc, auto, label: 'MODEL LAYERS ONLY (lap-periodic rung disarmed)' });
-printMatrix(model);
-auto.deployed.hff = hadHff;
-
-console.log(`\n  WHAT THIS DECIDES`);
-console.log(`    the memory is worth ${(full.home.gain / model.home.gain).toFixed(2)}x at HOME`
-  + ` and ${(full.worst.gain / model.worst.gain).toFixed(2)}x at the WORST CELL.`);
-console.log(`    full ladder   home ${full.home.gain.toFixed(2)}x  worst ${full.worst.gain.toFixed(2)}x`
-  + `  spread ${(full.home.gain / full.worst.gain).toFixed(1)}x  hurt ${full.hurt.length}/${full.rows.length}`);
-console.log(`    model only    home ${model.home.gain.toFixed(2)}x  worst ${model.worst.gain.toFixed(2)}x`
-  + `  spread ${(model.home.gain / model.worst.gain).toFixed(1)}x  hurt ${model.hurt.length}/${model.rows.length}`);
-console.log(`    If the full ladder's SPREAD is not materially worse than the model-only`);
-console.log(`    spread, docs/plan.md's premise is wrong and the plan is the thing to change.`);
-
-await live.l1.destroy(); await live.l2.destroy();
-console.log('');
+console.log(failed ? `\nbench: ${failed} check(s) FAILED` : '\nbench: all checks passed');
+process.exit(failed ? 1 : 0);

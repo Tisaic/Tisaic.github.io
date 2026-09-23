@@ -1776,436 +1776,122 @@ await flow.close().catch(() => {});
 
 }   // end AREA-gated flowsim page
 
-// ---- FlexiSim (flexisim.html): the hybrid arm, commissioned in the browser ----
+// ---- FlexiSim (flexisim.html): FB_AutoFF on the compliant arm, one scan at a time ----
 //
-// EVERY PHYSICS CLAIM ON THIS PAGE IS ALREADY PINNED IN PLAIN NODE, in
-// test/flexisim/, where f64 is available and a run costs seconds. What only a
-// browser can check is the WIRING: that the modules load as modules over HTTP,
-// that the commissioning lifecycle actually reaches `ready`, that the canvas is
-// painted, and that the controls change what they claim to. So this section drives
-// the lifecycle and reads the page's own debug hook -- it does not re-measure the
-// physics.
+// The block's behaviour is pinned in Node (test/autoff/, on the same machine through
+// lib/flexisim/bench.js). What only a browser can check is the WIRING: the modules load over HTTP,
+// the page drives the block scan by scan, the ghost's control reads ~1, the controls do what they
+// say, and — in the full tier — a commissioning completes in the page, is stored, and is restored
+// onto the same plant and rejected on another.
 if (AREA.flexisim) {
-// ---- FlexiSim: THE COMMISSIONING BENCH. One machine, one program, the distilled model.
-//
-// WIRING AND INSTRUMENTS, DELIBERATELY NOT PERFORMANCE: the numbers belong in Node where the
-// plant is STATED. What only the browser can break is what is asserted — the page builds with
-// zero errors, the controls gate as they claim, the ghost's CONTROL reads ~1, the arm MOVES
-// while it commissions, the machine-time record is a real reading, and a commissioned model
-// survives a reload onto the same machine and is refused on a different one.
-section('flexisim bench');
-// CLOSE EVERY OTHER PAGE BEFORE FLEXISIM RUNS, AND THE REASON IS A MEASUREMENT (plan §52.45).
-// FlexiSim's host yields one `requestAnimationFrame` per 150 machine samples, so the rAF PERIOD
-// is a hard ceiling on its throughput that no physics change can move. FlowSim was left open
-// — last used a thousand lines above, and closed at the end of its own block since `flow` is
-// scoped there — running its lattice sim on the SwiftShader adapter, which is software and pegs
-// the GPU process at more than a core. Measured in ONE page with nothing else open, a full-grade
-// commissioning runs at 3,532 samples/s and one learn pass at 4,207 — 29 seconds, against the
-// SIXTY-THREE MINUTES this suite recorded for the same pass in §52.35. Neither page is needed
-// again; leaving them open was starving the measurement — rule 17 aimed at a test harness.
+section('flexisim');
+// Close the other pages first: this page's throughput is bounded by the frame rate, and a
+// SwiftShader lattice sim left running in another tab starves it.
 await page.close().catch(() => {});
 
 const fx = await ctx.newPage();
 const fxErrors = [];
 fx.on('pageerror', (e) => fxErrors.push(String(e)));
 await fx.goto(BASE.replace(/index\.html$/, '') + 'flexisim.html', { waitUntil: 'load' });
-await fx.evaluate(() => { window.__dbg && window.__dbg.clear && window.__dbg.clear(); try { localStorage.removeItem('flexisim.model.v1'); } catch {} });
-await fx.waitForFunction(() => window.__flxDbg && window.__flxDbg() && window.__flxDbg().cells > 0 && !window.__flxDbg().busy, null, { timeout: 180000 });
+await fx.evaluate(() => { window.__dbg && window.__dbg.clear && window.__dbg.clear(); try { localStorage.removeItem('flexisim.autoff.v1'); } catch {} });
+await fx.reload({ waitUntil: 'load' });
+const fxReady = () => fx.waitForFunction(() => { const d = window.__flxDbg && window.__flxDbg(); return (d && d.cells > 0 && !d.busy && !d.approaching)
+  || /^halted:/.test(document.getElementById('badge').textContent); }, null, { timeout: 180000 });
+await fxReady();
 check('flexisim.html loads and builds the machine with zero page errors', fxErrors.length === 0, fxErrors.join(' | '));
 await checkConsoleUsable(fx, 'flexisim');
 const halted = async (label) => {
   const b = await fx.evaluate(() => document.getElementById('badge').textContent);
-  check(`flexisim: ${label} runs without halting`, !/^halted:|failed/.test(b), b);
+  check(`flexisim: ${label} runs without halting`, !/^halted:/.test(b), b);
 };
+const dbg = () => fx.evaluate(() => window.__flxDbg());
 {
   const geo = await fx.evaluate(() => { const r = document.getElementById('stage').getBoundingClientRect();
-    return { w: Math.round(r.width), h: Math.round(r.height), doc: document.documentElement.scrollWidth, win: window.innerWidth,
-      bench: window.__flxDbg().K === 0.25 && window.__flxDbg().E === 0.03 && window.__flxDbg().shape === 'sharp' }; });
+    return { w: Math.round(r.width), h: Math.round(r.height), doc: document.documentElement.scrollWidth, win: window.innerWidth }; });
+  const d = await dbg();
   check('flexisim: the stage has a real box and the page does not scroll sideways', geo.w > 200 && geo.h > 150 && geo.doc <= geo.win + 2, JSON.stringify(geo));
-  check('flexisim: it opens on the bench configuration — K 0.25 / E 0.03 on the square', geo.bench, JSON.stringify(geo));
-  const gate = await fx.evaluate(() => ['arm-distil', 'arm-hff', 'learn'].map((id) => document.getElementById(id).disabled));
-  check('flexisim: with nothing commissioned, no rung can be armed', gate.every(Boolean), JSON.stringify(gate));
-  const stkBox = await fx.evaluate(() => getComputedStyle(document.getElementById('arm-stack').parentElement).display === 'none');
-  check('flexisim: …and the cascade box is not on screen until a ladder has built one (hidden by style, not by `hidden` — rule 52)', stkBox, `display none: ${stkBox}`);
+  check('flexisim: it opens on the bench cell — K 0.25 / E 0.03 on the sharp square', d.K === 0.25 && d.E === 0.03 && d.shape === 'sharp', JSON.stringify(d));
+  check('flexisim: the block starts IDLE with nothing deployed and no record stored', d.fb.stateName === 'IDLE' && !d.fb.deployed && d.stored === null, JSON.stringify(d.fb));
 }
 
-// ---- THE GHOST AND ITS CONTROL. With nothing armed the machine runs the conventional
-// baseline, and the ghost's default IS that baseline — one machine compared with itself,
-// so the ratio must read ~1. A ghost recorded wrong, drawn at the wrong index, or scored on a
-// partial lap would still render and would not read 1 (rules 15, 21).
-await fx.evaluate(() => { const s = document.getElementById('s-spf'); s.value = '600'; s.dispatchEvent(new Event('input', { bubbles: true })); });
+// THE GHOST AND ITS CONTROL. With nothing commissioned the block passes the setpoint through, and
+// the ghost is this machine with the block disarmed — one machine twice, so the ratio must be ~1.
+await fx.evaluate(() => { const s = document.getElementById('s-spf'); s.value = '4000'; s.dispatchEvent(new Event('input')); });
 await fx.click('#run');
-await fx.waitForFunction(() => { const d = window.__flxDbg(); return (d.ghost && d.ghost.rms && !d.ghost.stale) || /^halted:/.test(document.getElementById('badge').textContent); }, null, { timeout: 900000 });
+await fx.waitForFunction(() => { const d = window.__flxDbg(); return (d.ghost && !d.ghost.stale && d.lastLap && d.lap >= 3)
+  || /^halted:/.test(document.getElementById('badge').textContent); }, null, { timeout: 300000 });
 await halted('the ghost recording');
 {
-  const lap0 = await fx.evaluate(() => window.__flxDbg().lap);
-  await fx.waitForFunction((l0) => window.__flxDbg().lap >= l0 + 2 || /^halted:/.test(document.getElementById('badge').textContent), lap0, { timeout: 900000 });
-  const g = await fx.evaluate(() => { const d = window.__flxDbg(); return { ghost: d.ghost, lastLap: d.lastLap, row: document.getElementById('stats').textContent.indexOf('vs the ghost') >= 0 }; });
-  const ratio = g.ghost.rms / g.lastLap.totalRms;
-  console.log(`  flexisim/ghost: baseline ${g.ghost.rms.toExponential(3)}, live lap ${g.lastLap.totalRms.toExponential(3)}, ratio ${ratio.toFixed(3)}`);
-  check('flexisim/ghost: a baseline lap is recorded for THIS plant and program', g.ghost.stale === false && g.ghost.lap > 100, JSON.stringify(g.ghost));
-  check('flexisim/ghost: THE CONTROL — nothing armed against the conventional ghost is one machine twice, and reads ~1', ratio > 0.85 && ratio < 1.18 && g.row, `ratio ${ratio.toFixed(4)}`);
-  // THE GHOST IS DRAWN AT THE LAP'S TRUE PHASE. After two laps the continuous counter has
-  // passed the fractional period twice; the ghost index must be the in-lap step by that
-  // period, not `k % ceil(lap)`, which slides 0.4 steps a lap against the machine.
-  const gp = await fx.evaluate(() => { const d = window.__flxDbg(); const T = d.lapT; return { k: d.k, T, ghostK: d.ghostK, want: Math.floor(((d.k % T) + T) % T), lapInt: Math.ceil(T) }; });
-  check('flexisim/ghost: …and after two laps the ghost is drawn at the in-lap step by the TRUE period, not by its ceiling', gp.k > gp.lapInt && gp.ghostK === gp.want && gp.T !== gp.lapInt, JSON.stringify(gp));
-  // A STALE GHOST MID-LAP IS RE-RECORDED FROM THE START, AND PAUSE PAUSES THE RECORDING.
-  // Switching the ghost mode mid-run invalidates the record; the old page began recording
-  // where the arm stood (a step to the start for the servo), and Pause left the recording
-  // stepping the arm. Now the arm is driven home first, records from k = 0, and holds still
-  // under Pause.
-  {
-    const kMid = await fx.evaluate(() => window.__flxDbg().k % window.__flxDbg().lapT);
-    await fx.selectOption('#ghost-mode', 'open');
-    // The whole sequence — drive home, record two laps — takes a few seconds at this speed,
-    // so it is SAMPLED rather than awaited state by state, and the trace is the diagnostic.
-    const seen = [];
-    let paused = false, still = null;
-    for (let i = 0; i < 1500; i++) {
-      const d = await fx.evaluate(() => { const x = window.__flxDbg(); return { k: x.k, appr: x.approaching, rec: x.recording, recLap: x.recordingLap, running: x.running, tool: x.drawnPose.tool, done: !!(x.ghost && x.ghost.rms && !x.ghost.stale && x.ghost.mode === 'open') }; });
-      seen.push(d);
-      if (d.rec && !paused) {
-        // PAUSE DURING THE RECORDING: the arm must hold still.
-        await fx.click('#run'); paused = true;
-        const p0 = await fx.evaluate(() => window.__flxDbg().drawnPose.tool);
-        await fx.waitForTimeout(400);
-        const p1 = await fx.evaluate(() => window.__flxDbg().drawnPose.tool);
-        still = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]);
-        await fx.click('#run');   // resume
-      }
-      if (d.done && paused) break;
-      await fx.waitForTimeout(20);
-    }
-    const sawApproach = seen.some((d) => d.appr);
-    const firstRec = seen.find((d) => d.rec);
-    const trace = seen.filter((d, i) => i === 0 || d.appr !== seen[i - 1].appr || d.rec !== seen[i - 1].rec).map((d) => `${d.appr ? 'A' : d.rec ? 'R' : 'r'}@${d.k}`).join(' ');
-    console.log(`  flexisim/ghost: stale mid-lap (k ${kMid}) → ${trace}`);
-    check('flexisim/ghost: a ghost made stale mid-lap is re-recorded only after the arm is DRIVEN to the start, from k = 0', kMid > 50 && sawApproach && !!firstRec && firstRec.k === 0, JSON.stringify({ kMid, sawApproach, firstRec }));
-    check('flexisim/ghost: …and Pause pauses the recording — the arm holds still', paused && still === 0, `paused ${paused}, moved ${still === null ? 'n/a' : still.toExponential(2)} while paused`);
-    await fx.waitForFunction(() => { const d = window.__flxDbg(); return d.ghost && d.ghost.rms && !d.ghost.stale && d.ghost.mode === 'open' && d.running; }, null, { timeout: 180000 });
-    await fx.selectOption('#ghost-mode', 'conventional');
-    await fx.waitForFunction(() => { const d = window.__flxDbg(); return d.ghost && d.ghost.rms && !d.ghost.stale && d.ghost.mode === 'conventional' && d.running; }, null, { timeout: 180000 });
-  }
-  // ---- GOING HOME IS A MOVE. Reset from mid-lap: the arm must SERVO to the program start
-  // — an approach the page reports, drawn every frame — and never jump there. Sampled at
-  // frame rate: at least a few distinct tool positions on the way, no single sample-to-
-  // sample jump larger than a third of the whole travel, and the run controls locked until
-  // it arrives. The old page set the pose in one call, which no machine can do.
-  {
-    // From MID-LAP — the re-recordings above end with the arm driven home, and a Reset from
-    // the start is no move at all.
-    await fx.waitForFunction(() => { const d = window.__flxDbg(); return d.running && !d.approaching && !d.recording && (d.k % d.lapT) > 1500; }, null, { timeout: 120000 });
-    const mid = await fx.evaluate(() => window.__flxDbg().drawnPose.tool);
-    const perFrame = await fx.evaluate(() => (+document.getElementById('s-spf').value) * window.__flxDbg().feed);
-    await fx.evaluate(() => window.__flxHop(true));
-    await fx.click('#reset');
-    const samples = [];
-    for (let i = 0; i < 60; i++) {
-      const d = await fx.evaluate(() => { const x = window.__flxDbg(); return { tool: x.drawnPose.tool, on: x.approaching, steps: x.approachSteps, frames: x.frames, runOff: document.getElementById('run').disabled }; });
-      samples.push(d);
-      if (!d.on && i > 2) break;
-      await fx.waitForTimeout(40);
-    }
-    const seen = samples.filter((d) => d.on);
-    // Samples are coarser than frames, so each hop is judged against the frames it spans.
-    let travel = 0, jump = 0, worst = 0;
-    for (let i = 1; i < samples.length; i++) {
-      const a = samples[i - 1], b = samples[i];
-      const h = Math.hypot(b.tool[0] - a.tool[0], b.tool[1] - a.tool[1]);
-      travel += h; jump = Math.max(jump, h);
-      worst = Math.max(worst, h / Math.max(1, b.frames - a.frames));
-    }
-    const dist = Math.hypot(samples[samples.length - 1].tool[0] - mid[0], samples[samples.length - 1].tool[1] - mid[1]);
-    console.log(`  flexisim/home: ${seen.length} frames approaching, ${seen.length ? seen[seen.length - 1].steps : 0} steps, distance ${dist.toFixed(3)}, largest frame jump ${jump.toFixed(3)}`);
-    check('flexisim/home: Reset from mid-lap is a reported APPROACH, drawn over several frames, with Run locked meanwhile', seen.length >= 3 && seen.every((d) => d.runOff), `${seen.length} frames, run locked ${seen.map((d) => d.runOff).join('')}`);
-    await fx.waitForFunction(() => !window.__flxDbg().approaching, null, { timeout: 60000 });
-    // THE PHYSICAL CLAIM, READ PER SOLVER STEP: the largest tool displacement between two
-    // consecutive steps stays a small multiple of the feed (a rapid reversing a moving arm
-    // peaks near 2x) — a teleport to the start would be a whole program width in one step.
-    // Per-frame samples cannot see this: at 600 steps a frame the program itself moves the
-    // tool 3-4 units between frames, which is exactly what a jump looks like from outside.
-    const hp = await fx.evaluate(() => window.__flxDbg().hop);
-    check('flexisim/home: …and the tool travels there CONTINUOUSLY — no step moves it more than a few feeds, it never jumps', dist > 0.05 && hp.n > 1000 && hp.max < 4 * (perFrame / (+await fx.evaluate(() => document.getElementById('s-spf').value))), `dist ${dist.toFixed(3)} largest per-step hop ${hp.max.toExponential(2)} over ${hp.n} steps (feed ${(await fx.evaluate(() => window.__flxDbg().feed)).toExponential(1)}); per-frame worst ${worst.toFixed(3)}, travel ${travel.toFixed(3)}`);
-    await fx.click('#run');   // the Reset stopped the run; resume it so the pause below pauses
-    await fx.waitForFunction(() => window.__flxDbg().running === true, null, { timeout: 10000 });
-  }
-  // THE ARM IS CONTINUOUS THROUGH A PLANT CHANGE TOO. Moving E rebuilds the plant, which
-  // used to appear at a calibration pose and then be SET at the start — two jumps. The new
-  // plant is initialised where the old one stood, driven between the four calibration poses,
-  // then driven to the start: sampled per frame, no hop exceeds what the feed allows.
-  {
-    const feed = await fx.evaluate(() => window.__flxDbg().feed);
-    const before = await fx.evaluate(() => window.__flxDbg().drawnPose.tool);
-    await fx.evaluate(() => window.__flxHop(true));
-    await fx.evaluate(() => { const e = document.getElementById('s-e'); e.value = '2'; e.dispatchEvent(new Event('input')); e.dispatchEvent(new Event('change')); });
-    const samples = [];
-    for (let i = 0; i < 4000; i++) {
-      const d = await fx.evaluate(() => { const x = window.__flxDbg(); return x ? { tool: x.drawnPose.tool, frames: x.frames, busy: x.busy, on: x.approaching, E: x.E, badge: x.badge } : null; });
-      if (d) samples.push(d);
-      if (d && d.E === 0.02 && !d.busy && !d.on && i > 5) break;
-      await fx.waitForTimeout(40);
-    }
-    let worst = 0, travel = 0;
-    for (let i = 1; i < samples.length; i++) {
-      const a = samples[i - 1], b = samples[i];
-      const h = Math.hypot(b.tool[0] - a.tool[0], b.tool[1] - a.tool[1]);
-      travel += h; worst = Math.max(worst, h / Math.max(1, b.frames - a.frames));
-    }
-    const first = samples.find((d) => d.E === 0.02);
-    const hop0 = first ? Math.hypot(first.tool[0] - before[0], first.tool[1] - before[1]) : NaN;
-    const last = samples[samples.length - 1];
-    const hp = await fx.evaluate(() => window.__flxDbg().hop);
-    console.log(`  flexisim/plant: ${samples.length} samples over the rebuild, travel ${travel.toFixed(2)}, largest per-step hop ${hp.max.toExponential(2)} over ${hp.n} steps, first new-plant sample ${hop0.toFixed(3)} away, ended '${last.badge}'`);
-    // The instrument spans the rebuild: the first step of the NEW plant is measured against
-    // the last tool position of the old one, so a plant initialised anywhere but where the
-    // old one stood reads as the jump it is.
-    check('flexisim/plant: a plant change rebuilds the machine WHERE IT STOOD and calibrates it by driving — the tool never jumps', last.E === 0.02 && !last.busy && hp.n > 1000 && hp.max < 4 * feed, `largest per-step hop ${hp.max.toExponential(2)} (feed ${feed.toExponential(1)}) E ${last.E} busy ${last.busy} per-frame worst ${worst.toFixed(3)}`);
-    check('flexisim/plant: …calibration went through four driven poses, more than one program width of travel', travel > 8, `travel ${travel.toFixed(2)}`);
-    // Back to the bench cell, the same way, so every check below runs where the numbers are quoted.
-    await fx.evaluate(() => { const e = document.getElementById('s-e'); e.value = '3'; e.dispatchEvent(new Event('input')); e.dispatchEvent(new Event('change')); });
-    await fx.waitForFunction(() => { const x = window.__flxDbg(); return x && x.E === 0.03 && !x.busy && !x.approaching; }, null, { timeout: 120000 });
-    const bench = await fx.evaluate(() => { const x = window.__flxDbg(); return { K: x.K, E: x.E }; });
-    check('flexisim/plant: …and back on the bench cell', bench.K === 0.25 && bench.E === 0.03, JSON.stringify(bench));
-    // The run was going when the plant changed, so it resumes by itself once the arm is home
-    // and the new plant's ghost is recorded; wait for that rather than toggling the button.
-    await fx.waitForFunction(() => { const d = window.__flxDbg(); return d.ghost && d.ghost.rms && !d.ghost.stale && d.running && !d.approaching && !d.recording; }, null, { timeout: 180000 });
-  }
-  // THE ERROR MAGNIFICATION IS A SLIDER, and the legend says what the orange trail is.
-  {
-    const m0 = await fx.evaluate(() => window.__flxDbg().mag);
-    await fx.evaluate(() => { const e = document.getElementById('s-mag'); e.value = '1'; e.dispatchEvent(new Event('input')); });
-    await fx.waitForTimeout(300);
-    const m1 = await fx.evaluate(() => ({ mag: window.__flxDbg().mag, v: document.getElementById('v-mag').textContent }));
-    check('flexisim/stage: the error trail’s magnification is a slider, ×10 by default and readable down to ×1', m0 === 10 && m1.mag === 1 && /×1$/.test(m1.v), JSON.stringify({ m0, m1 }));
-    // AT x1 THE ORANGE LINE IS THE TOOL PATH, EXACTLY — not a projection of it. The projected
-    // form hung a spike off every corner on the soft plant (the nearest program point stuck on
-    // the vertex while the tool passed it), on a line the legend called the tool path.
-    const tr = await fx.evaluate(() => { const r = window.__flxTrail(1); let worst = 0; for (const q of r) worst = Math.max(worst, Math.hypot(q.drawn[0] - q.tool[0], q.drawn[1] - q.tool[1])); const r10 = window.__flxTrail(10); let moved = 0; for (const q of r10) moved = Math.max(moved, Math.hypot(q.drawn[0] - q.tool[0], q.drawn[1] - q.tool[1])); return { n: r.length, worst, moved }; });
-    check('flexisim/stage: …and at ×1 the orange trail IS the tool’s path (every drawn point on the tool), while ×10 moves it', tr.n > 50 && tr.worst === 0 && tr.moved > 0, JSON.stringify(tr));
-    await fx.evaluate(() => { const e = document.getElementById('s-mag'); e.value = '10'; e.dispatchEvent(new Event('input')); });
-  }
+  const d = await dbg();
+  const ratio = d.ghost.rms / d.lastLap.rms;
+  console.log(`  flexisim/ghost: baseline ${d.ghost.rms.toExponential(3)}, live lap ${d.lastLap.rms.toExponential(3)}, ratio ${ratio.toFixed(6)}`);
+  check('flexisim/ghost: a baseline lap is recorded for THIS plant and program', d.ghost.lap === d.lapT && d.ghost.lap > 1000, JSON.stringify(d.ghost));
+  check('flexisim/ghost: THE CONTROL — with nothing commissioned the live lap IS the ghost (ratio 1 to 1e-3)', Math.abs(ratio - 1) < 1e-3, ratio);
+  // The trail restarts every lap, so wait until this lap has drawn some of it (rule 12).
+  await fx.waitForFunction(() => window.__flxTrail(1).length > 50, null, { timeout: 60000 });
+  const tr = await fx.evaluate(() => { const r = window.__flxTrail(1); let worst = 0; for (const q of r) worst = Math.max(worst, Math.hypot(q.drawn[0] - q.tool[0], q.drawn[1] - q.tool[1]));
+    const r5 = window.__flxTrail(5); let moved = 0; for (const q of r5) moved = Math.max(moved, Math.hypot(q.drawn[0] - q.tool[0], q.drawn[1] - q.tool[1])); return { n: r.length, worst, moved }; });
+  check('flexisim/stage: at ×1 the orange trail IS the tool’s path, and a magnification moves it', tr.n > 20 && tr.worst === 0 && tr.moved > 0, JSON.stringify(tr));
+  await fx.screenshot({ path: join(SHOTS, '12-flexisim.png') });
 }
-await fx.click('#run');   // pause
 
-// ---- COMMISSION, AT DEMO GRADE, AND WATCH. The ladder is configured distil-only; either
-// outcome for the rung is a result and both are handled. What is asserted is the machine
-// visibly turning, the record being real, and the deployed state matching what shipped.
-// QUICK presses it, watches the machine turn, and STOPS it — the operator's way out, which is
-// the state a half-hour measurement most needs and which nothing else exercises: the throw out
-// of the yield point must unwind the ladder, destroy the lattices, re-enable the button, deploy
-// nothing and store nothing. FULL lets a PERIODIC commission run to the end — lap learning
-// deploys there and the restore and the off-program withholding are exercised for real. The
-// whole commission at demo grade is ~35 minutes of browser on the scale-matched diet the page
-// now ships (plan §52.7), and a check that long has no place in the tier that runs before
-// every push (rule 2); what the quick tier can no longer see is the shipped state, which is
-// pinned on the object in Node (`distil.test.mjs`, `deploy.test.mjs`) and here in FULL.
-await fx.evaluate((full) => { const g = document.getElementById('grade'); g.value = 'demo'; g.dispatchEvent(new Event('input', { bubbles: true }));
-  const p = document.getElementById('periodic'); p.checked = full; p.dispatchEvent(new Event('input', { bubbles: true })); }, FULL);
+// COMMISSION — the arm must move while the block drives it, and the block must advance its states.
 await fx.click('#commission');
-await fx.waitForFunction(() => { const d = window.__flxDbg(); return d.drawnPose.live || /^halted:|failed/.test(document.getElementById('badge').textContent); }, null, { timeout: 300000 });
-await halted('commissioning');
+await fx.waitForFunction(() => { const f = window.__flxDbg().fb; return f.stateName === 'CONV_PROBE' || f.stateName === 'FAULT'; }, null, { timeout: 300000 });
 {
-  const poses = [];
-  for (let i = 0; i < 6; i++) { await fx.waitForTimeout(500); poses.push(await fx.evaluate(() => window.__flxDbg().drawnPose.q)); }
+  const seen = new Set(), poses = [];
+  for (let i = 0; i < 6; i++) { await fx.waitForTimeout(400); const d = await dbg(); seen.add(d.fb.stateName); poses.push(d.drawnPose.q); }
   let moved = 0; for (let i = 1; i < poses.length; i++) if (Math.hypot(poses[i][0] - poses[i - 1][0], poses[i][1] - poses[i - 1][1]) > 1e-9) moved++;
-  check('flexisim/commission: the stage FOLLOWS the ladder’s machine — the drawn pose moves while it commissions', moved >= poses.length - 2, `${moved}/${poses.length - 1}`);
-  await fx.screenshot({ path: join(SHOTS, '05-flexisim-commissioning.png') });
-}
-if (!FULL) {
-  // STOP. The button is the same element in its commissioning state; the abort is a throw at
-  // the next yield, so the unwind is asynchronous and is awaited on the page's own flag.
-  const btn0 = await fx.evaluate(() => document.getElementById('commission').textContent);
-  await fx.click('#commission');
-  await fx.waitForFunction(() => !window.__flxDbg().auto.commissioning, null, { timeout: 120000 });
-  await fx.waitForTimeout(300);
-  const st = await fx.evaluate(() => { const d = window.__flxDbg(); return {
-    badge: document.getElementById('badge').textContent, btn: document.getElementById('commission').textContent,
-    disabled: document.getElementById('commission').disabled, have: d.auto.have, rows: d.auto.rows, live: d.drawnPose.live,
-    gate: ['arm-distil', 'arm-hff', 'learn'].map((id) => document.getElementById(id).disabled), stored: d.stored, cells: d.cells,
-    prog: document.getElementById('prog').textContent, rungs: document.getElementById('rungs').textContent }; });
-  check('flexisim/commission: Stop unwinds the ladder — the page says so, nothing is deployed and the host is gone', /^stopped/.test(st.badge) && !st.have && st.rows === 0 && !st.live, JSON.stringify(st));
-  check('flexisim/commission: …and the record says STOPPED rather than describing the scoring it was doing', /stopped/.test(st.prog) && !/commissioning|scoring|lap \d/.test(st.prog + st.rungs), JSON.stringify({ prog: st.prog, rungs: st.rungs }));
-  // After a Stop the arm is DRIVEN home from wherever the ladder left it, and the button
-  // waits for it to arrive — so the assertion waits for the approach, not the click.
-  await fx.waitForFunction(() => !window.__flxDbg().approaching, null, { timeout: 120000 });
-  const btn1 = await fx.evaluate(() => ({ btn: document.getElementById('commission').textContent, disabled: document.getElementById('commission').disabled }));
-  check('flexisim/commission: …the button comes back as Commission, enabled once the arm has been driven home from where the ladder left it', /Stop/.test(btn0) && /Commission/.test(btn1.btn) && !btn1.disabled, JSON.stringify({ btn0, btn1 }));
-  const hpc = await fx.evaluate(() => window.__flxDbg().hop);
-  check('flexisim/commission: …and through the whole stopped commissioning — its drives, its scored runs, the drive home — the arm never jumped', hpc.on && hpc.n > 5000 && hpc.max < 4 * (await fx.evaluate(() => window.__flxDbg().feed)), `largest per-step hop ${hpc.max.toExponential(2)} over ${hpc.n} steps${hpc.maxAt ? ' at step ' + hpc.maxAt.n : ''}`);
-  check('flexisim/commission: …no rung is armable and nothing was stored', st.gate.every(Boolean) && st.stored === null, JSON.stringify({ gate: st.gate, stored: st.stored }));
-  // The stage's own machine must still be there and runnable after the ladder's was destroyed.
-  await fx.click('#run');
-  await fx.waitForFunction((k0) => window.__flxDbg().k > k0 + 200, await fx.evaluate(() => window.__flxDbg().k), { timeout: 60000 });
-  await fx.click('#run');
-  check('flexisim/commission: …and the page’s own machine still runs afterwards', true, 'ran 200 steps');
-  await fx.screenshot({ path: join(SHOTS, '06-flexisim-stopped.png') });
-}
-if (FULL) {
-// Let it finish. Demo grade is ~35 minutes of browser non-periodic on the shipped diet, more periodic.
-await fx.waitForFunction(() => { const d = window.__flxDbg(); return (!d.auto.commissioning && d.auto.rows > 0) || /^halted:|failed/.test(document.getElementById('badge').textContent); }, null, { timeout: FULL ? 5400000 : 1800000 });
-await halted('the whole commissioning');
-{
-  const d = await fx.evaluate(() => window.__flxDbg());
-  const names = await fx.evaluate(() => [...document.querySelectorAll('#rungs tr td:first-child')].map((x) => x.textContent));
-  console.log(`  flexisim/commission: rungs ${JSON.stringify(names)}, shipped ${JSON.stringify(d.auto.deployed)}, gain ${d.auto.gain && d.auto.gain.toFixed(2)}x`);
-  check('flexisim/commission: the ladder reaches the distilled rung and produces a row for it — deployed or refused, either is a result', names.some((n) => /②d/.test(n)), JSON.stringify(names));
-  if (FULL) check('flexisim/commission: …and, declared periodic, it builds and scores lap learning too', names.some((n) => /lap-periodic/.test(n)), JSON.stringify(names));
-  const hffArm = await fx.evaluate(() => ({ on: document.getElementById('arm-hff').checked, dis: document.getElementById('arm-hff').disabled }));
-  check('flexisim/commission: the lap-learning box agrees with what shipped', hffArm.on === !!d.auto.deployed.hff && hffArm.dis === !d.auto.armed.hff.built, JSON.stringify({ hffArm, deployed: d.auto.deployed }));
-  check('flexisim/commission: the machine-time record is a real reading and names its grade', d.auto.cost && d.auto.cost.samples > 1000 && d.auto.grade === 'demo', JSON.stringify(d.auto.cost));
-  const arm = await fx.evaluate(() => ({ distil: document.getElementById('arm-distil').checked, dis: document.getElementById('arm-distil').disabled }));
-  check('flexisim/commission: the armed box agrees with what shipped, and is enabled only if the rung was built', arm.distil === !!d.auto.deployed.distil && arm.dis === !d.auto.armed.distil.built, JSON.stringify({ arm, deployed: d.auto.deployed }));
-  // THE CASCADE IS OFFERED WHEN IT SHIPPED. On a plant where the distilled model refuses the
-  // ladder keeps its teacher, and a page that could not arm it ran the conventional machine
-  // under a pill reading "shipped" (measured at E 0.005: distil 0.59x, cascade 4.39x).
-  const stk = await fx.evaluate(() => { const b = document.getElementById('arm-stack'); return { on: b.checked, dis: b.disabled, shown: getComputedStyle(b.parentElement).display !== 'none' }; });
-  check('flexisim/commission: the cascade box agrees with what shipped — armed when it is what the ladder kept, hidden when the distilled model replaced it', stk.on === (d.auto.deployed.stack > 0) && stk.shown === (d.auto.armed.stack.built && (stk.on || !d.auto.deployed.distil)), JSON.stringify({ stk, deployed: d.auto.deployed }));
-  // AND THE ARM ON SCREEN IS THE PAGE'S OWN, handed back where the ladder left it and driven
-  // home — the ladder borrowed it rather than building a second machine.
-  const own = await fx.evaluate(() => { const x = window.__flxDbg(); return { live: x.drawnPose.live, on: x.approaching || !x.busy }; });
-  check('flexisim/commission: after commissioning the stage shows the page’s own machine, not a second one', own.live === false && own.on, JSON.stringify(own));
-  const plc = await fx.evaluate(() => document.getElementById('plc').textContent);
-  check('flexisim/plc: the budget panel renders a verdict for the armed set', /FITS|DOES NOT FIT|nothing armed/.test(plc), plc.slice(0, 120));
-  if (d.auto.deployed.distil) check('flexisim/plc: …and the distilled model FITS a 1 ms scan outright', /FITS/.test(plc) && !/DOES NOT/.test(plc), plc.slice(0, 160));
-  // THE LIVE CPU READING, BOTH HALVES (rule 9, plan §52.38). The peak is the verdict and the
-  // average is what the CPU carries; asserting only that a percentage appears would pass on a
-  // panel that printed one number twice, which is exactly the failure worth catching here since
-  // the two differ only by a cadence read from the deployed object. So: the line renders, the
-  // average never exceeds the peak, and where a rung actually HOLDS between decisions the
-  // average is strictly BELOW it — the half that would fail if `cadence` came back 1.
-  check('flexisim/plc: the panel states the live CPU load against the whole scan',
-    /CPU now/.test(plc) && /% in the peak scan/.test(plc) && /% average/.test(plc), plc.slice(0, 200));
-  if (d.auto.plc) {
-    const { mac, avgMac, rungs } = d.auto.plc;
-    check('flexisim/plc: …the average load never exceeds the peak', avgMac <= mac + 1e-9, `avg ${avgMac} peak ${mac}`);
-    const held = Object.entries(rungs || {}).filter(([, r]) => (r.cadence || 1) > 1);
-    if (held.length) check('flexisim/plc: …and a rung that HOLDS between decisions costs strictly less on average',
-      avgMac < mac, `avg ${avgMac} peak ${mac} — held: ${held.map(([k, r]) => `${k} 1-in-${r.cadence}`).join(', ')}`);
-  }
-  // LEARN ON THIS PROGRAM (plan §52.18): one pass with the tracker attached, through the same
-  // host; a "learned" row appears, the machine is driven home, and the model is re-stored.
-  if (d.auto.deployed.distil) {
-    // WAIT FOR THE ARM TO ARRIVE BEFORE READING THE BUTTON (rule 12). The button's own gate is
-    // `idle = settled && !approach`, and the check three lines above EXPLICITLY accepts that the
-    // arm may still be approaching home (`x.approaching || !x.busy`) — so this asserted a control
-    // is enabled while permitting the one state that disables it. It passed on a quiet machine and
-    // went red under load, which is a race and not a product fault (rule 3). The wait ends on
-    // EITHER outcome, so a button that is genuinely disabled still fails here rather than hanging.
-    await fx.waitForFunction(() => { const x = window.__flxDbg(); return (!x.approaching && !x.busy)
-      || /^halted:|failed/.test(document.getElementById('badge').textContent); }, null, { timeout: 600000 });
-    const canLearn = await fx.evaluate(() => !document.getElementById('learn').disabled);
-    const why = await fx.evaluate(() => { const x = window.__flxDbg(); return JSON.stringify({
-      approaching: x.approaching, busy: x.busy, distilOn: !!(x.auto.armed && x.auto.armed.distil.on),
-      teacher: !!(x.auto.armed && x.auto.armed.stack.built) }); });
-    check('flexisim/learn: the learn button is offered once a distilled model is deployed with its teacher built', canLearn, `disabled ${why}`);
-    // THE BODY RUNS EVERY TIME AGAIN, AND THE 63-MINUTE READING THAT GATED IT WAS THE HARNESS
-    // (plan §52.45). It had never run at all: the race above kept the button disabled, so
-    // `if (canLearn)` skipped it silently on every suite since §52.19 — a check that cannot fail
-    // is not a check (rule 25). With the race fixed it ran and took over an hour, which was
-    // written down as a browser-side defect in the learn path. It was not: measured in one page
-    // with nothing else open, a full-grade commissioning runs at 3,532 samples/s and one learn
-    // pass at 4,207 — 120k samples in TWENTY-NINE SECONDS, FASTER per sample than the
-    // commissioning it follows. What made it an hour was FlowSim, left open above and still
-    // running its SwiftShader lattice sim against the rAF this page's throughput is bounded by.
-    // Both other pages are closed before this one opens, and this body is un-gated.
-    if (canLearn) {
-      await fx.selectOption('#learn-passes', '1');
-      // THIS BODY HAD NEVER RUN. The button was disabled by the race above, so `if (canLearn)`
-      // skipped it silently every time — a check that cannot fail is not a check (rule 25: "not
-      // measured" and "passed" are different states). With the race fixed it runs, and the first
-      // thing it did was exceed the 30-minute wait it was given, so the wait is now sized from a
-      // MEASUREMENT rather than a guess (rule 2) and the elapsed time is printed on every run so
-      // the margin can be re-read instead of re-derived.
-      const tLearn = Date.now();
-      await fx.click('#learn');
-      // ASSERT THE CLICK ACTUALLY STARTED IT BEFORE WAITING FOR IT TO FINISH (plan §52.45).
-      // `startLearn` opens with a guard that RETURNS SILENTLY, and the button being enabled is a
-      // different predicate from that guard — so a click can land, do nothing, change no badge,
-      // and leave a wait to sit until its timeout. A wait that cannot tell "still running" from
-      // "never started" reports the wrong thing for as long as its timeout allows.
-      await fx.waitForFunction(() => window.__flxDbg().auto.learning
-        || /failed/.test(document.getElementById('badge').textContent), null, { timeout: 60000 });
-      // AND THE FIELDS ARE `auto.learning` / `auto.learned`, WHICH IS THE WHOLE "63-MINUTE
-      // DEFECT". This read `x.learning` and `x.learned`, which do not exist at that path: the
-      // condition is `(!undefined && undefined) || badge`, i.e. `undefined || false`, which can
-      // NEVER become true. Every run therefore sat here for the full 5,400,000 ms and the hour
-      // was written into the project's record as a browser-side fault in the learn path. It is
-      // not: measured in one page, one pass is 22-29 s at ~4,000 samples/s in every
-      // configuration this suite puts the page in — spf 600, the run going, demo or full grade,
-      // periodic, the continuity instrument on — FASTER per sample than the commissioning it
-      // follows. Rule 17 aimed at a test: the instrument failed before the model did, and a
-      // timeout is not a measurement.
-      await fx.waitForFunction(() => { const x = window.__flxDbg(); return (!x.auto.learning && x.auto.learned) || /^halted:|failed/.test(document.getElementById('badge').textContent); }, null, { timeout: 600000 });
-      console.log(`  flexisim/learn: one pass took ${Math.round((Date.now() - tLearn) / 1000)} s of browser`);
-      await fx.waitForFunction(() => !window.__flxDbg().approaching, null, { timeout: 120000 });
-      const l = await fx.evaluate(() => { const x = window.__flxDbg(); return { learned: x.auto.learned, rows: [...document.querySelectorAll('#rungs tr td:first-child')].map((t) => t.textContent).filter((t) => /learned on this program/.test(t)), badge: document.getElementById('badge').textContent, stored: x.stored }; });
-      console.log(`  flexisim/learn: ${JSON.stringify(l.learned)} rows ${JSON.stringify(l.rows)}`);
-      check('flexisim/learn: one pass ran through the ladder\u2019s law, produced its row, and re-scored the deployed model', !!l.learned && l.learned.passes === 1 && l.rows.length === 1 && Number.isFinite(l.learned.after), JSON.stringify(l));
-    }
-  }
-  await fx.screenshot({ path: join(SHOTS, '06-flexisim-shipped.png') });
+  const d = await dbg();
+  check('flexisim/commission: the block is commissioning and the arm moves while it does', d.fb.commissioning && moved >= poses.length - 2, `${[...seen]} moved ${moved}/${poses.length - 1}`);
+  check('flexisim/commission: the Commission button became Abort, and the machine controls are locked', await fx.evaluate(() =>
+    /Abort/.test(document.getElementById('commission').textContent) && document.getElementById('s-k').disabled && document.getElementById('shape').disabled));
+  check(`flexisim/plc: no scan so far exceeded the budget (${d.fb.macPeak} of ${d.fb.budget} MAC)`, d.fb.macPeak > 0 && d.fb.macPeak <= d.fb.budget);
+  await fx.screenshot({ path: join(SHOTS, '13-flexisim-commissioning.png') });
 }
 
-// ---- PERSISTENCE, BOTH HALVES. The model must come back on the SAME machine, armed as it
-// shipped; and must be reported and NOT armed on a different one.
-{
-  const before = await fx.evaluate(() => window.__flxDbg());
-  const shipped = before.auto.deployed.distil || before.auto.deployed.hff;
-  if (shipped) {
-    await fx.reload({ waitUntil: 'load' });
-    await fx.waitForFunction(() => window.__flxDbg && window.__flxDbg() && window.__flxDbg().cells > 0 && !window.__flxDbg().busy, null, { timeout: 180000 });
-    const after = await fx.evaluate(() => window.__flxDbg());
-    check('flexisim/store: a reload restores the last commissioned model on the same machine, armed as it shipped',
-      after.auto.restored === true && after.auto.deployed.distil === before.auto.deployed.distil
-      && after.auto.deployed.hff === before.auto.deployed.hff && after.stored && after.stored.matches === true, JSON.stringify(after.auto));
-    const same = Math.abs(after.auto.gain - before.auto.gain) < 1e-12;
-    check('flexisim/store: …carrying the same record it was saved with', same, `${before.auto.gain} vs ${after.auto.gain}`);
-    // THE OWNER'S SCENARIO: switch the program with lap learning armed. It is a MEMORY of the
-    // program it learned, and the library WITHHOLDS it on any other — the retirement's whole
-    // argument in one toggle. Asserted as a count the ladder publishes, not as an impression.
-    if (before.auto.deployed.hff) {
-      await fx.evaluate(() => { const e = document.getElementById('shape'); e.value = 'rounded'; e.dispatchEvent(new Event('change', { bubbles: true })); });
-      await fx.click('#run');
-      await fx.waitForFunction(() => { const d = window.__flxDbg(); return (d.shape === 'rounded' && d.auto.armed && d.auto.armed.hff.offProgram > 200) || /^halted:/.test(document.getElementById('badge').textContent); }, null, { timeout: 600000 });
-      await fx.click('#run');
-      const w = await fx.evaluate(() => ({ off: window.__flxDbg().auto.armed.hff.offProgram, row: /WITHHELD/.test(document.getElementById('stats').textContent) }));
-      check('flexisim/store: lap learning is WITHHELD on a program it did not learn, and the page says so', w.off > 200 && w.row, JSON.stringify(w));
-      // Back to the program it learned, so the plant-change check below starts from a restore.
-      await fx.evaluate(() => { const e = document.getElementById('shape'); e.value = 'sharp'; e.dispatchEvent(new Event('change', { bubbles: true })); });
-      await fx.waitForFunction(() => window.__flxDbg().shape === 'sharp' && !window.__flxDbg().busy, null, { timeout: 180000 });
-    }
-    // A DIFFERENT MACHINE: move K one notch. The owner wants to SEE a model degrade on a plant
-    // it was not trained on, so the model stays armed and the page flags the mismatch wherever
-    // the model is named — the Machine header pill, the score panel, the debug dump. Both
-    // halves: flagged on the other plant, and NOT flagged back on its own.
-    await fx.evaluate(() => { const s = document.getElementById('s-k'); s.value = '1'; s.dispatchEvent(new Event('change', { bubbles: true })); });
-    await fx.waitForFunction(() => { const d = window.__flxDbg(); return d && d.K === 0.5 && !d.busy; }, null, { timeout: 180000 });
-    const other = await fx.evaluate(() => { const d = window.__flxDbg(); const p = document.getElementById('plant-note');
-      return { ...d, pill: { hidden: p.hidden, text: p.textContent, box: p.getBoundingClientRect().width } }; });
-    check('flexisim/store: …and on a different machine the model stays ARMED and is flagged as a PLANT MISMATCH',
-      other.auto.have === true && other.auto.deployed && other.auto.deployed.distil === before.auto.deployed.distil
-      && other.mismatch === true && other.trainedOn && other.trainedOn.K === 0.25 && other.stored && other.stored.matches === false,
-      JSON.stringify({ mismatch: other.mismatch, trainedOn: other.trainedOn, deployed: other.auto.deployed }));
-    check('flexisim/store: …the flag is ON SCREEN and names both plants', !other.pill.hidden && other.pill.box > 40 && /PLANT MISMATCH/.test(other.pill.text) && /K 0.25/.test(other.pill.text) && /K 0.5/.test(other.pill.text), JSON.stringify(other.pill));
-    await fx.screenshot({ path: join(SHOTS, '07-flexisim-mismatch.png') });
-    await fx.evaluate(() => { const s = document.getElementById('s-k'); s.value = '0'; s.dispatchEvent(new Event('change', { bubbles: true })); });
-    await fx.waitForFunction(() => { const d = window.__flxDbg(); return d && d.K === 0.25 && !d.busy; }, null, { timeout: 180000 });
-    const backHome = await fx.evaluate(() => ({ mismatch: window.__flxDbg().mismatch, hidden: document.getElementById('plant-note').hidden }));
-    check('flexisim/store: …and back on its own plant the flag clears', backHome.mismatch === false && backHome.hidden === true, JSON.stringify(backHome));
-  } else {
-    // THE OTHER HALF: a refused model must NOT be stored. The first version stored it and
-    // reported "matches this machine, 1.00x" for a controller the ladder had just measured as
-    // harmful — a stale, misleading record offered back on the next load.
-    check('flexisim/store: a REFUSED model is not stored — nothing deployed means nothing kept',
-      before.stored === null, JSON.stringify(before.stored));
-    console.log('  flexisim/store: nothing deployed at demo grade, so the same-machine restore is not exercised — stated');
-  }
+if (!FULL) {
+  // ABORT: the trim is removed on that scan and the page says so.
+  await fx.click('#commission');
+  await fx.waitForTimeout(500);
+  const d = await dbg();
+  check('flexisim/abort: FAULT ABORTED, trim exactly zero, the button back to Commission',
+    d.fb.stateName === 'FAULT' && d.fb.reason === 'ABORTED' && d.fb.trim[0] === 0 && d.fb.trim[1] === 0
+      && await fx.evaluate(() => /Commission/.test(document.getElementById('commission').textContent)), JSON.stringify(d.fb));
+  check('flexisim/abort: nothing was stored', d.stored === null, JSON.stringify(d.stored));
+} else {
+  // THE WHOLE COMMISSIONING, in the page. About a minute of browser on the bench cell.
+  const tc = Date.now();
+  await fx.waitForFunction(() => { const f = window.__flxDbg().fb; return !f.commissioning; }, null, { timeout: 1800000 });
+  console.log(`  flexisim/commission: ${Math.round((Date.now() - tc) / 1000)} s of browser`);
+  await halted('the commissioning');
+  const lap0 = (await dbg()).lap;
+  await fx.waitForFunction((l) => window.__flxDbg().lap >= l + 2, lap0, { timeout: 300000 });
+  const d = await dbg();
+  const vs = d.ghost.rms / d.lastLap.rms;
+  console.log(`  flexisim/commission: ${d.fb.stateName}, conventional ${d.fb.conv}, learned ${d.fb.learn}, reported ${d.fb.factor.toFixed(2)}x, against the ghost ${vs.toFixed(2)}x`);
+  check('flexisim/commission: the block completes in RUN with a controller deployed and stored', d.fb.stateName === 'RUN' && d.fb.deployed && d.stored !== null, JSON.stringify(d.fb));
+  check('flexisim/commission: the running machine beats the ghost', vs > 1, vs);
+  check('flexisim/commission: 15b — the block\'s reported factor and the page\'s ghost ratio agree within 1.25x',
+    Math.max(vs / d.fb.factor, d.fb.factor / vs) < 1.25, `${d.fb.factor} against ${vs}`);
+  check(`flexisim/plc: the whole commissioning stayed inside ${d.fb.budget} MAC every scan`, d.fb.macPeak <= d.fb.budget, d.fb.macPeak);
+  await fx.screenshot({ path: join(SHOTS, '14-flexisim-deployed.png') });
+
+  // RESTORE: a reload offers the stored record back to the same plant.
+  await fx.reload({ waitUntil: 'load' });
+  await fxReady();
+  const r = await dbg();
+  check('flexisim/store: after a reload the stored record is RESTORED onto the same plant', r.restored && r.fb.deployed, JSON.stringify(r.fb));
+  // …and REJECTED on another plant.
+  await fx.evaluate(() => { const s = document.getElementById('s-k'); s.value = '1'; s.dispatchEvent(new Event('change')); });
+  await fx.waitForFunction(() => { const d = window.__flxDbg(); return d.K === 0.5 && !d.busy; }, null, { timeout: 180000 });
+  const o = await dbg();
+  check('flexisim/store: on another plant the stored record is REJECTED and nothing is deployed',
+    !o.restored && !o.fb.deployed && o.fb.reason === 'RECORD_REJECTED', JSON.stringify(o.fb));
 }
-}   // end FULL
 
 const fxBuf = await fx.evaluate(() => window.__dbg.buffer().filter((e) => e.type === 'error'));
-check('flexisim: the page reports no errors of its own', fxBuf.length === 0, JSON.stringify(fxBuf).slice(0, 300));
+check('flexisim: the page reports no errors of its own', fxBuf.length === 0 && fxErrors.length === 0, JSON.stringify(fxBuf).slice(0, 300) + fxErrors.join(' | '));
 await fx.close();
 }   // end AREA-gated flexisim page
 

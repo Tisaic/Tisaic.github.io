@@ -1,611 +1,111 @@
 #!/usr/bin/env bash
-# Runs the smoke test: ensures the (dev-only) test deps, serves the repo over
-# HTTP the way GitHub Pages does, drives it in a mobile-emulated Chromium, and
-# tears the server down. Exits non-zero if any check fails.
+# The suite: the Node checks for each area, then the pages served the way GitHub Pages serves them
+# and driven in a mobile-emulated Chromium. Exits non-zero if any check fails.
+#
+#   ./test/run.sh                 quick tier, the flexisim area (FB_AutoFF, its plants, the page)
+#   ./test/run.sh --full          full tier: adds the slow plants and the long browser scenarios
+#   ./test/run.sh --all           every area (run --all --full before pushing anything shared)
+#   ./test/run.sh --only=ngrc     named areas: ngrc, flowsim, flexisim
+#   ./test/run.sh --node          Node checks only;  --browser  browser checks only
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
 PORT="${PORT:-8137}"
 
-# ONE RED TEST MUST NOT CANCEL THE REST OF THE BLOCK.
-#
-# Under `set -e` the first non-zero exit aborts the whole run, so a single failure takes every
-# test after it down and their state is simply unknown. This repository has already paid for
-# that once — `composite.test.mjs` exited 1 from the commit that added it and "set -e meant it
-# took the whole pilot block down with it" — and it happened again: `tanks.test.mjs` went red
-# and twenty pilot tests after it never ran, on a suite whose job is to tell me what is broken.
-# A red suite that hides the next real failure is rule 3 in its most expensive form.
-#
-# So every check runs, failures are collected by name, and the run exits non-zero at the END
-# with the list. The suite is exactly as red as it was; it now says how red.
+# EVERY CHECK RUNS. A failure is collected by name and the run exits non-zero at the END with the
+# list, so one red test cannot hide the ones after it. Each check is timed, and the suite prints
+# its own cost, slowest first.
 FAILED_TESTS=""
 TEST_TIMES=""
-# EVERY TEST GOES THROUGH HERE, which makes this the one place the suite can be made to
-# state its own cost. Rule 2 — "a check too slow to be run is a verification problem" — has
-# been applied to individual checks throughout this project and never to the SUITE, because
-# nothing measured where the minutes went. A tier split that drifts silently is one nobody can
-# re-derive, and this file's own notes say it has drifted and been cut twice. Timing is free
-# here (one `date` per test) and the summary is printed at the end, slowest first.
 t() {
   local __t0 __dt
   __t0=$(date +%s%N)
-  if "$@"; then
-    :
-  else
-    FAILED_TESTS="${FAILED_TESTS}${FAILED_TESTS:+
-}  $*"
-  fi
+  if "$@"; then :; else FAILED_TESTS="${FAILED_TESTS}${FAILED_TESTS:+
+}  $*"; fi
   __dt=$(( ($(date +%s%N) - __t0) / 1000000 ))
   TEST_TIMES="${TEST_TIMES}${TEST_TIMES:+
 }${__dt} $*"
 }
-
-# The suite's own cost, slowest first. Printed on success AND on failure, because the run you
-# most want the timing from is the one that just cost you twenty minutes.
-report_timing() {
-  [ -n "${TEST_TIMES}" ] || return 0
-  local total
-  total=$(printf '%s\n' "${TEST_TIMES}" | awk '{s+=$1} END {printf "%.0f", s/1000}')
-  echo
-  echo "suite cost — ${total} s over $(printf '%s\n' "${TEST_TIMES}" | wc -l | tr -d ' ') checks, slowest first:"
-  printf '%s\n' "${TEST_TIMES}" | sort -rn | head -12 | awk '{ms=$1; $1=""; printf "  %7.1f s  %s\n", ms/1000, substr($0,2)}'
-}
-# Called before any `exit 0`, so a clean exit cannot step over a collected failure.
 report_failures() {
-  report_timing
+  if [ -n "${TEST_TIMES}" ]; then
+    local total
+    total=$(printf '%s\n' "${TEST_TIMES}" | awk '{s+=$1} END {printf "%.0f", s/1000}')
+    echo
+    echo "suite cost — ${total} s over $(printf '%s\n' "${TEST_TIMES}" | wc -l | tr -d ' ') checks, slowest first:"
+    printf '%s\n' "${TEST_TIMES}" | sort -rn | head -12 | awk '{ms=$1; $1=""; printf "  %7.1f s  %s\n", ms/1000, substr($0,2)}'
+  fi
   if [ -n "${FAILED_TESTS}" ]; then
-    echo
-    echo "FAILED:"
-    echo "${FAILED_TESTS}"
-    echo
+    echo; echo "FAILED:"; echo "${FAILED_TESTS}"; echo
     exit 1
   fi
 }
 
-# TWO TIERS. The full suite drives several thousand solver steps through a
-# software GPU and a few minutes of anti-slosh control simulation, which is the
-# right thing before a push and the wrong thing on every edit.
-#   ./test/run.sh          quick  — everything cheap, plus the analytic physics
-#   ./test/run.sh --full   full   — adds the long-horizon browser scenarios
 SUITE="quick"
-# BOTH HALVES BY DEFAULT -- the flags below narrow it, and nothing narrows it silently.
 PHASE="both"
-AREAS=""
-# WHILE FLEXISIM IS BEING BUILT, IT IS THE ONLY THING WORTH RUNNING. FlowSim and
-# NGRC are finished features; re-testing them on every elastic-operator edit buys
-# nothing and costs minutes, so the default focus is flexisim and the others are
-# opt-in. Clear it (FOCUS= ./test/run.sh) or pass --all to go back to deriving
-# areas from git, which is what this should return to once the tab has shipped.
-FOCUS="${FOCUS-flexisim}"
+AREAS="flexisim"
 for arg in "$@"; do
   case "$arg" in
     --full) SUITE="full" ;;
     --quick) SUITE="quick" ;;
-    # WHICH HALF, not just which tier. A wiring or layout change cannot break a
-    # golden-vector parity check or a Poiseuille profile, so re-running 450 Node
-    # checks to see whether a button is reachable is 40 minutes of cost that
-    # cannot produce information. That cost was being paid on every UI edit, and
-    # paying it is what made the suite something to avoid rather than to run.
     --browser) PHASE="browser" ;;
     --node) PHASE="node" ;;
-    --all) AREAS="ngrc,flowsim,flexisim"; FOCUS="" ;;
-    --only=*) AREAS="${arg#--only=}"; FOCUS="" ;;
+    --all) AREAS="ngrc,flowsim,flexisim" ;;
+    --only=*) AREAS="${arg#--only=}" ;;
     *) echo "usage: $0 [--quick|--full] [--node|--browser] [--all|--only=ngrc,flowsim,flexisim]" >&2; exit 2 ;;
   esac
 done
-export SUITE
+export SUITE AREAS
+in_area() { case ",${AREAS}," in *,"$1",*) true ;; *) false ;; esac; }
+echo "Suite: ${SUITE}   areas: ${AREAS}   phase: ${PHASE}"
 
-# THE WINNING TABLE, COLLECTED FROM THE RUNS THE SUITE IS ALREADY PAYING FOR (plan §87.1).
-#
-# `objtable.mjs` can SPAWN every plant harness and scrape it, which is right for an instrument run
-# on demand and wrong for a check: the suite runs all ten of them anyway, so spawning them again is
-# fifteen minutes of duplicated plant time. With `OBJTABLE_OUT` set every harness appends its own
-# row where it measured it, and the read-back at the end of the pilot block is the first CHECK this
-# project's own mandate has ever had — every plant asked either improves or refuses, and none is
-# made worse. The file is cleared per run so a stale row cannot stand in for a harness that failed
-# to reach the machine (rule 25).
-OBJTABLE_OUT="${OBJTABLE_OUT:-$(cd "$(dirname "$0")" && pwd)/.objtable}"
-export OBJTABLE_OUT
-rm -f "$OBJTABLE_OUT/rows.jsonl"
-
-# WHAT CHANGED DECIDES WHAT RUNS. A FlowSim edit judged by NGRC's warm-up timers
-# is cost without information -- those checks cannot fail for a reason the edit is
-# responsible for, and when they do fail it is for load-related reasons that send
-# you looking in the wrong place. So the areas are derived from git rather than
-# always both.
-#
-# The mapping is GENEROUS in one direction on purpose: anything shared -- the
-# console bootstrap, this script, the smoke test, the module parser, vendor --
-# selects EVERY area, because a change there can break any page. Under-testing a
-# shared file is the expensive mistake; over-testing one costs a few minutes.
-#
-# Anything the map does not recognise (docs, CLAUDE.md, the version stamp) selects
-# NOTHING, which leaves the module parse and the index page -- the checks that are
-# cheap enough to be worth running unconditionally.
-if [ -n "${FOCUS}" ]; then
-  AREAS="${FOCUS}"
-elif [ -z "${AREAS}" ]; then
-  BASE="$(git merge-base HEAD origin/main 2>/dev/null || true)"
-  CHANGED="$(
-    { git diff --name-only HEAD 2>/dev/null
-      git diff --name-only --cached 2>/dev/null
-      git ls-files --others --exclude-standard 2>/dev/null
-      [ -n "${BASE}" ] && git diff --name-only "${BASE}" HEAD 2>/dev/null
-    } | sort -u
-  )"
-  want_ngrc=0; want_flow=0; want_flex=0
-  while IFS= read -r f; do
-    [ -z "$f" ] && continue
-    case "$f" in
-      # Shared: everything.
-      console-boot.js|index.html|test/run.sh|test/smoke.mjs|test/parse.mjs|vendor/*)
-        want_ngrc=1; want_flow=1 ;;
-      # probesense is the composition layer -- ngrc's model, flowsim's soft sensor.
-      lib/probesense/*|test/probesense/*)
-        want_ngrc=1; want_flow=1 ;;
-      lib/ngrc/*|test/ngrc/*|ngrc.html)   want_ngrc=1 ;;
-      # FlexiSim's own files, listed BEFORE the general lattsim rule so they do
-      # not drag the whole FlowSim suite in. The elastic operator has no page yet
-      # and shares no kernel with the fluid.
-      lib/lattsim/operators/elastic.js|lib/lattsim/operators/frame.js|test/lattsim/elastic*|\
-lib/flexisim/*|test/flexisim/*|flexisim.html|lib/blackbox/*|test/blackbox/*|lib/pilot/*|test/pilot/*)
-        want_flex=1 ;;
-      # The shared engine -- lattice, fields, solver, backends -- is under both.
-      lib/lattsim/*|test/lattsim/*|flowsim.html) want_flow=1; want_flex=1 ;;
-    esac
-  done <<EOF
-${CHANGED}
-EOF
-  # Written as if-statements rather than `[ x ] && y`: under `set -e` a false
-  # test makes the whole `&&` list return 1, and a standalone list returning 1
-  # exits the script -- so "nothing in this area changed" would have looked
-  # exactly like "the suite failed".
-  if [ "$want_ngrc" = 1 ]; then AREAS="ngrc"; fi
-  if [ "$want_flow" = 1 ]; then AREAS="${AREAS:+${AREAS},}flowsim"; fi
-  if [ "$want_flex" = 1 ]; then AREAS="${AREAS:+${AREAS},}flexisim"; fi
-fi
-export AREAS
-# THE NODE TESTS ARE ALL GATED ON `AREAS`, so emptying it for their half is the whole
-# implementation -- and it is restored before the browser gate reads it, which is why
-# BROWSER_AREAS exists rather than a second variable threaded through thirty `case`s.
-BROWSER_AREAS="${AREAS}"
-if [ "${PHASE}" = "browser" ]; then AREAS=""; fi
-echo "Suite level: ${SUITE}   areas: ${BROWSER_AREAS:-none changed (parse + index only)}   phase: ${PHASE}"
-echo "  (--all forces both; --only=ngrc,flowsim selects explicitly)"
-
-# Ensure playwright-core (installed under test/, never shipped to the page).
+# playwright-core lives under test/ and is never shipped to a page.
 if ! node -e "require.resolve('playwright-core',{paths:['${ROOT}/test']})" >/dev/null 2>&1; then
   echo "Installing playwright-core (dev-only)…"
   (cd test && npm install --no-audit --no-fund --silent)
 fi
 
-# PARSE EVERY SHIPPED MODULE AS A MODULE, first and fast. `node --check` parses a
-# .js file as a CommonJS script and PASSES on a duplicate `const` in one scope --
-# verified on a four-line reproduction -- so it let an unparseable webgpu.js
-# through. The page then reported "CPU reference backend is capped at 131072
-# cells", three layers from the cause, because an import failure is also what a
-# browser without WebGPU looks like and is caught on purpose.
+# PARSE EVERY SHIPPED MODULE AS A MODULE, first and fast. `node --check` parses a .js file as a
+# CommonJS script and passes things a browser's module loader rejects.
 node --experimental-vm-modules test/parse.mjs 2>&1 | grep -v 'ExperimentalWarning\|--trace-warnings'
 test "${PIPESTATUS[0]}" -eq 0 || { echo "module parse failed"; exit 1; }
 
-# NGRC library unit tests (pure Node, golden-vector parity — no server needed).
-# Gated on the area: golden-vector parity cannot break unless lib/ngrc or
-# something shared moved, so on a FlowSim-only edit these are 2 s of noise.
-if [ -d lib/ngrc ] && case ",${AREAS}," in *,ngrc,*) true ;; *) false ;; esac; then
-  t node test/ngrc/primitives.test.mjs
-  t node test/ngrc/afm.test.mjs
-  t node test/ngrc/universal.test.mjs
-  t node test/ngrc/softsensor.test.mjs
-  t node test/ngrc/commission.test.mjs
-  t node test/ngrc/continuous.test.mjs
-  t node test/ngrc/dropin.test.mjs
-  t node test/ngrc/robotcomp.test.mjs
-  t node test/ngrc/commstore.test.mjs
-  t node test/ngrc/autotune.test.mjs
-  t node test/ngrc/servoff.test.mjs
-  t node test/ngrc/axiscomp.test.mjs
-fi
+if [ "${PHASE}" != "browser" ]; then
+  # What ships, what commissions, what is only the bench — and nothing unclassified.
+  t node test/inventory.test.mjs
 
-# LattSim engine + physics verification. Pure Node, against the CPU reference:
-# there is no WebGPU here at all, and even in the browser below it exists only
-# behind a flag and only as a software adapter. The production WGSL kernel is
-# checked in the smoke test, cell by cell against this same reference.
-if [ -d lib/lattsim ] && case ",${AREAS}," in *,flowsim,*) true ;; *) false ;; esac; then
-  t node test/lattsim/d3q19.test.mjs
-  t node test/lattsim/engine.test.mjs
-  t node test/lattsim/conservation.test.mjs
-  # Poiseuille is the check that the solver solves the right equations, so it
-  # runs at both tiers -- but the tau sweep and the resolution study behind it
-  # are full-tier.
-  t node test/lattsim/poiseuille.test.mjs
-  # The equation of state, checked against the analytic sound speed of an acoustic
-  # wave -- the same class of closed-form check as Poiseuille for shear viscosity.
-  t node test/lattsim/eos.test.mjs
-  # The passive scalar's diffusivity, advection speed and conservation against
-  # their closed forms -- a contract, so both tiers.
-  t node test/lattsim/scalar.test.mjs
-  # End-to-end field reconstruction (wall sensors -> concentration slice). It
-  # drives ~1200 CPU-reference steps, so it is full-tier; the pipeline's cheaper
-  # pieces (probeMany parity, the FieldReconstructor unit test) run every time.
-  if [ "${SUITE}" = "full" ]; then
-    t node test/lattsim/reconstruct.test.mjs
+  if in_area ngrc; then
+    for f in primitives afm universal softsensor commission continuous dropin robotcomp commstore autotune servoff axiscomp; do
+      t node "test/ngrc/${f}.test.mjs"
+    done
+    t node test/probesense/sensor.test.mjs
   fi
-fi
 
-# FLEXISIM: linear elastodynamics against its closed forms. Plain Node, CPU
-# reference, no browser and no adapter -- tier 1 of the verification rule, and it
-# runs in well under a second, which is what makes it usable on every edit.
-if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; esac; then
-  t node test/lattsim/elastic.test.mjs
-  # The lumped joint -- gearbox, motor, backlash, friction -- against its own
-  # closed forms. No lattice at all, so it verifies in milliseconds. Verifying
-  # each side of the hybrid plant ALONE is what makes the eventual joint-vs-link
-  # split measurable rather than a discrepancy with two possible homes.
-  if [ -d lib/flexisim ]; then
+  if in_area flowsim; then
+    for f in d3q19 engine conservation poiseuille eos scalar; do t node "test/lattsim/${f}.test.mjs"; done
+    if [ "${SUITE}" = "full" ]; then t node test/lattsim/reconstruct.test.mjs; fi
+  fi
+
+  if in_area flexisim; then
+    # The bench machine's physics, each part against its own closed forms.
+    t node test/lattsim/elastic.test.mjs
     t node test/flexisim/joint.test.mjs
-    # The hybrid plant: a lumped joint carrying a lattice link, and the
-    # joint-vs-link split of tip error MEASURED rather than inherited from the
-    # literature. It is the number the link resolution is chosen from.
-    t node test/flexisim/arm.test.mjs
-    # THE CHAIN: two joints, two lattice links, one coupled solve. Rigid-core
-    # conservation laws (energy, and the momentum conjugate to the cyclic shoulder
-    # angle) plus the closed forms for the mass matrix, the gravity torques and the
-    # elbow's own acceleration. Two seconds -- the conservation checks never touch a
-    # lattice, which is the whole reason stepRigid() is separable.
     t node test/flexisim/arm2r.test.mjs
-    # The payoff: tip error inferred from motor-side signals alone, trained
-    # against the tracker and then LOCKED, against the physics-based compliance
-    # model a good engineer would build.
-    t node test/flexisim/tipsensor.test.mjs
-    # THE GENERAL N-LINK CHAIN by recursive Newton-Euler, verified by REPRODUCING
-    # the hand-derived 2R to machine precision -- two independent routes to the same
-    # matrix, which is what lets a third link be trusted without a third derivation.
-    # Three seconds: the conservation checks never touch a lattice.
-    t node test/flexisim/armnr.test.mjs
-    # THE ARCHITECTURE QUESTION A CHAIN MAKES ASKABLE: per-joint signals against
-    # whole-arm ones, at MATCHED model capacity so the gap is information and not
-    # feature count. 5 s quick (the whole-arm readout alone), 20 s full (the
-    # three-way comparison and the forecast).
-    t node test/flexisim/chainsensor.test.mjs
-    # THE TWO BLOCKS THAT BOLT A LEARNER ONTO A CONVENTIONAL CONTROLLER, as contracts
-    # rather than as physics -- no arm, no lattice, milliseconds. Both quick tier, because
-    # what they pin is the kind of thing that fails silently: a trim that is not EXACTLY
-    # off when switched off makes an A/B meaningless, and a NaN estimate reaching a servo
-    # command is unrecoverable.
-    t node test/flexisim/residual.test.mjs
-    # THE HONEST HEAD-TO-HEAD: a properly commissioned CONVENTIONAL machine, and three
-    # learned layers switched over it one at a time. Full tier -- six commissioned runs
-    # per stiffness -- because what it pins is a comparison, not a contract.
-    if [ "${SUITE}" = "full" ]; then t node test/flexisim/hybrid.test.mjs; fi
-    # WHAT A LOCKED READOUT SAYS ABOUT A PATH IT HAS NEVER RUN -- the one claim here that
-    # the classical rivals cannot structurally reach, since an ILC table indexed by arc
-    # length on a path that no longer exists supplies nothing. Full tier: six commissioned
-    # trajectories plus five transfers.
-    if [ "${SUITE}" = "full" ]; then t node test/flexisim/transfer.test.mjs; fi
-    # THE PILOT AND THE STACK ON ONE DENOMINATOR -- same plant, same path, same
-    # conventional baseline. It exists because they were quoted side by side for a whole
-    # session while sharing none of those three.
-    if [ "${SUITE}" = "full" ]; then t node test/flexisim/reconcile.test.mjs; fi
-    # HARMONIC FEEDFORWARD. Full tier only: it drives ~20 laps of the contouring plant to
-    # pin that the world frame beats the rotating path-normal one by more than 2x, which is
-    # the entire finding and is not something a browser check can see.
-    if [ "${SUITE}" = "full" ]; then t node test/flexisim/harmonic.test.mjs; fi
-    # THE COMPOSITE — a cascade of pilots with harmonic feedforward on top, 30x over a
-    # conventional machine. Full tier only: it commissions two pilot layers and drives ~90
-    # laps of the contouring plant.
-    if [ "${SUITE}" = "full" ]; then t node test/flexisim/composite.test.mjs; fi
-    # A PATH-AGNOSTIC CORRECTION and the selection rule that finds it. Full tier only: it
-    # converges a harmonic table on six programs and then deploys twelve candidate maps.
-    if [ "${SUITE}" = "full" ]; then t node test/flexisim/pathmap.test.mjs; fi
-    # THE BUTTON ON THE ARM, against the strongest number this repository has. Full tier
-    # ONLY, and it is the most expensive check here by a wide margin — ~24 minutes, because
-    # it commissions the pilot cascade TWICE (on and off the rung below it, which is worth
-    # 1.66x and cannot be recovered by re-scoring afterwards) and then identifies and
-    # refines a harmonic layer over ~46 laps. It is here rather than in the quick tier for
-    # exactly the reason rule 2 states: what makes a suite something to avoid is charging
-    # a wiring change for a physics measurement. Run it when a rung changes.
-    if [ "${SUITE}" = "full" ]; then t node test/flexisim/autostack.test.mjs; fi
-    # THE MODULE THAT IS GIVEN NOTHING, on three plants that share no physics: a
-    # lightly damped actuator, an over-damped process with a NEGATIVE gain two hundred
-    # times smaller, and the real hybrid arm. One module, one set of options apart from a
-    # sample rate. If any plant constant had leaked in, exactly one of them would work --
-    # which is the only way a portability claim can be checked. Full tier: it drives
-    # ~200k solver steps of the real arm.
-    if [ "${SUITE}" = "full" ]; then t node test/blackbox/blackbox.test.mjs; fi
-    # THE DRIVE-SIDE FEEDFORWARD, self-commissioned. Full tier: it is a documented
-    # measurement about a library block rather than a contract of the shipped page,
-    # which uses the hand-built model, and it drives ~100k solver steps.
-    if [ "${SUITE}" = "full" ]; then t node test/flexisim/servoff.test.mjs; fi
-    # The STRUCTURED rival: identify the compliance itself (a physical constant)
-    # rather than the error, from static pose touches the way CompCommissioner
-    # expects. Full tier -- six settles.
-    if [ "${SUITE}" = "full" ]; then t node test/flexisim/compliance.test.mjs; fi
-    # ACTIVE COMPENSATION: the identified constant pre-distorting a commanded move,
-    # and the 2x2 that separates the deflection from the vibration. It runs at BOTH
-    # tiers despite costing ~13 s, because it is the only check that exercises the
-    # loop end to end -- commission, identify, lock, correct -- and a sign error in
-    # the correction DOUBLES the tip error rather than degrading it.
-    t node test/flexisim/compensator.test.mjs
-    # THE LEARNED DYNAMIC FEEDFORWARD, and it is FULL TIER because it drives ~400k
-    # solver steps: five iterative convergences plus the held-out scoring. What it
-    # pins that nothing else can is the pair of failures either side of the working
-    # configuration -- refining with NO lead diverges, and fitting to ONE trajectory
-    # produces something 25x WORSE than no correction on a move it never saw. Both
-    # are the shapes a later simplification would reach for.
-    if [ "${SUITE}" = "full" ]; then t node test/flexisim/learnedff.test.mjs; fi
-    # THE CONTOURING SIDE, which is what the end application is. Three files and none
-    # of them measures a point-to-point move.
-    #   toolpath  the geometry and the feedrate profile: arc length, the corner rule,
-    #             and the acceleration ELLIPSE (spending the whole budget tangentially
-    #             into an arc that then needs it all centripetally is sqrt(2) over the
-    #             limit while every scalar check passes). No plant, milliseconds.
-    #   pathilc   iterative learning against a plant whose delay is known, so the
-    #             update's LEAD can be swept across it: no lead winds up, too much lead
-    #             winds up harder, and the optimum is interior. No plant, milliseconds.
-    #   contour   the two of them on the real arm -- the IK round trip, the
-    #             contour/lag split, and the pair of findings the Path tab is built on
-    #             (contour error FLOORS as the feedrate falls, and motor energy has an
-    #             interior minimum, so the two do not optimise together).
     t node test/flexisim/toolpath.test.mjs
-    t node test/flexisim/pathilc.test.mjs
     t node test/flexisim/contour.test.mjs
-    # THE COMPILED TWIN (§42) — identify from one wander with the tracker, compile any
-    # program in software, deliver lap 1 at e-3/e-4. Agnostic core + arm adapter.
-    if [ "${SUITE}" = "full" ]; then t node test/flexisim/twin.test.mjs; fi
-    # THE PILOT — route, limit, run, deploy. The excitation builder and the whole
-    # pipeline on a plant that shares no physics with the arm are quick (the plant is
-    # three scalar states); the arm end-to-end — commissioning ~110k lattice steps and
-    # four scored contour runs — is full tier, and it is the test that pins the flagship
-    # claim: commissioned once from noise, better on programs it has never seen, on less
-    # energy, or refused.
-    t node test/pilot/excite.test.mjs
-    t node test/pilot/pilot.test.mjs
-    # THE DISTILLED POLICY'S CONTRACT (plan §49). Synthetic reference, synthetic converged
-    # prefix, no plant — what it pins is the BLOCK: fit and deploy build the same row, a
-    # causal-only window is refused rather than fitted, a fit that has learned its own
-    # dictionary is refused on a HELD-OUT score through leakage-safe folds, the authority cap
-    # and the coverage fade do what they say, and cost() is the arithmetic performed. It runs
-    # in under a second on purpose — a contract test that needs fifteen minutes of lattice is
-    # one nobody runs, which is how three defects here survived.
-    t node test/pilot/distil.test.mjs
-    # AND THE SECOND PLANT (plan §50), full tier: five harmonic commissions on the EMPS axis,
-    # distilling the converged tables through the shipped module and scoring a two-tone sine the
-    # machine has never run. It asserts BOTH halves — the table HARMS the machine there (0.53x,
-    # a negative control a textbook norm-optimal ILC reproduces to four figures) and the policy
-    # distilled from that same correction HELPS (33x) — plus the price at home, because a
-    # transfer bought by giving up the trained program is a different product.
-    if [ "${SUITE}" = "full" ]; then t node test/pilot/distil-emps.test.mjs; fi
-    # THE DEPLOYED OBJECT ON A THIRD PLANT (plan §54.4). It asserts the two halves that matter
-    # whichever way the plant answers: the rung REACHES the tank, and nothing is made worse
-    # whether it deploys or refuses. Today it refuses at 1.000x with in-sample 14-28x, so the
-    # count for the SHIPPED object is 2 of 7 — and if a diet or a basis ever changes that, this
-    # is the file that says so rather than a claim in a document.
-    if [ "${SUITE}" = "full" ]; then t node test/pilot/distil-tank.mjs; fi
-    # THE DEPLOYED OBJECT ON THE TWO PLANTS THAT WERE STANDING REFUSALS (plan §64, §66). Both
-    # DEPLOY — the column at 2.58x past the published BLT, the barrel at 10.61x replacing a
-    # 21,440-MAC cascade — and both got there by repairing an instrument or a diet rather than the
-    # controller. They are registered here because a test that exists and never runs is the hole
-    # this project has already paid for twice, and `distil-barrel` is where four separate harness
-    # defects hid a factor of 22.
-    if [ "${SUITE}" = "full" ]; then t node test/pilot/distil-column.mjs; fi
-    if [ "${SUITE}" = "full" ]; then t node test/pilot/distil-barrel.mjs; fi
-    # THE DEPLOYED OBJECT ON A REGULATOR (plan §71) — the column this project rates worst on and
-    # the one §69 called structural. A map of the commanded reference on a plant whose setpoint
-    # NEVER MOVES, made to work by declaring the one thing a mill knows ahead: roll angle.
-    if [ "${SUITE}" = "full" ]; then t node test/pilot/distil-mill.mjs; fi
-    # THE DEPLOYED OBJECT ON THE FOUR PLANTS THAT HAD ONLY EVER BEEN ASKED THE TEACHER (plan
-    # §86). Every plant converted since §64 was converted by asking `distil.js`'s weight vector
-    # instead of `Pilot`'s QP, and four plants were still scored on a bare `Pilot`: the cart-pole
-    # (the one OPEN-LOOP UNSTABLE plant here), the real flexible arm, the real cascaded tanks and
-    # the real steam heat exchanger. Two are wins — the cart-pole 12.0x on the shipped loop and
-    # 9.5x on one tuned 3.5x better, the real tank 8.69x at 8 MAC/cycle against the pilot
-    # cascade's 8.00x at 43,673 — and two are correct refusals with a measured cause. They are
-    # registered here because a test that exists and never runs is the hole this project has
-    # already paid for twice.
-    if [ "${SUITE}" = "full" ]; then t node test/pilot/distil-pend.mjs; fi
-    if [ "${SUITE}" = "full" ]; then t node test/pilot/distil-realarm.mjs; fi
-    if [ "${SUITE}" = "full" ]; then t node test/pilot/distil-realtanks.mjs; fi
-    if [ "${SUITE}" = "full" ]; then t node test/pilot/distil-realexch.mjs; fi
-    # THE ORDINARY PID LOOP (plan §137) — one PV, one MV, one PID tuned by SIMC at its published
-    # rule, a setpoint that moves. It is registered because it is the SANITY CHECK: every other
-    # plant here was chosen for being hard, and a block about to be translated to ST has to do
-    # the obviously right thing on the case whose answer everyone already knows.
-    if [ "${SUITE}" = "full" ]; then t node test/pilot/distil-pidloop.mjs; fi
-    # AND THE FLAGSHIP PLANT, WHICH THE MANDATE TABLE HAD BEEN MISSING (plan §88.5). `distil-arm`
-    # is an INSTRUMENT with three dozen knobs and was never registered, so the 2R arm — the plant
-    # more of this project's numbers are quoted on than any other — was the one row `objtable`
-    # could never read, and §87.1b duly printed `NOT EMITTED: distil-arm`. At its defaults it
-    # runs the host's own shipped configuration in 231 s, which is cheaper than four of the
-    # harnesses above, and a count that omits the flagship is a preference (rule 30).
-    if [ "${SUITE}" = "full" ]; then t node test/pilot/distil-arm.mjs; fi
-    t node test/pilot/tanks.test.mjs
-    t node test/pilot/thermal.test.mjs
-    t node test/pilot/woodberry.test.mjs
-    t node test/pilot/rollmill.test.mjs
-    t node test/pilot/emps.test.mjs
-    # THE GATED-ADAPTATION CONTRACT on the same axis: the innovation gate fires on repeats,
-    # adaptation multiplies the static machine, the take-away installation holds after the
-    # truth source is removed, the adapted bank passes the memory test on a program it never
-    # ran, and the forgetting is pinned as the mechanism (lambda 1 loses the gain).
-    t node test/pilot/onlinegate.test.mjs
-    # TARGET 6'S ONE NUMBER: the full deployed composition (QP + forecast + router + RLS)
-    # fits 10% of a 1 ms scan SLICED, each arming moves exactly its own part, and the sum
-    # is asserted against the parts.
-    t node test/pilot/scancost.test.mjs
-    # TARGET 1'S CONTRACT on the claim it can own: the price of agnosticism (self-fit
-    # ceiling over the agnostic recipe, same program, same instrument) inside 1.3x, with
-    # the ceiling real and the agnostic recipe clearly above baseline.
-    t node test/pilot/agnosticprice.mjs
-    # THE MANDATE, AS A CHECK (plan §87.1). Reads the rows the harnesses above emitted — no plant
-    # is re-run and no plant is re-scored by a metric this file invented. It goes red when any
-    # plant asked is made WORSE, which is the one thing the project's own governing sentence says
-    # must never happen. Full tier only, because that is where the ten harnesses run.
-    if [ "${SUITE}" = "full" ]; then t node test/pilot/objtable.mjs --read; fi
-    # THE PORTFOLIO'S CENTRAL CLAIM, AS A CHECK (plan §97). The block carries several controllers
-    # and picks on the machine, so the promise is not "our controller beats a PID+FF" — no single
-    # controller wins everywhere and none should — it is: NEVER WORSE THAN DOING NOTHING, AND
-    # NEVER WORSE THAN ITS OWN BEST PART. Both halves, because a portfolio that merely CONTAINS a
-    # winner is worth nothing if its selection can pick the loser (rule 9). Like the row above it
-    # this is a READ of what the harnesses already emitted, so it costs no plant time.
-    if [ "${SUITE}" = "full" ]; then t node test/pilot/portfolio.mjs; fi
-    t node test/pilot/hff.test.mjs
-    # The banded operator on a plant with KNOWN neighbour coupling, and the control that it
-    # is byte-identical where there is none. It shipped once with every harmonic's fit null
-    # and reported a ratio of exactly 1.000 at three coupling strengths.
-    t node test/pilot/band.test.mjs
-    # Every contribution intentional, summed exactly once, mapped through its OWN frame, and
-    # every signal inside a stated range — including the two states a bounds check cannot
-    # see by itself: a demand that never reached the cap, and a NaN that compares false
-    # against every limit.
-    t node test/pilot/sum.test.mjs
-    # An operator identified on one program, reused on another: the lap cost it saves, and
-    # the refusal when the lap length differs and harmonic h is not the same frequency.
-    t node test/pilot/reuse.test.mjs
-    # The one assumption the browser integration rests on: a host that awaits a frame
-    # mid-run reaches the same result as one that runs straight through.
-    t node test/pilot/yield.test.mjs
-    # THE PLAN A RUNG PUBLISHES MUST BE THE PLAN IT SPENDS. The page shows a denominator and
-    # a per-stage criterion so an operator can tell a long measurement from a stall; a plan
-    # that drifts from the run turns that into a lie in the direction that reads as a stall.
-    # Its first version published 40 runs for a commission that spent 76.
-    t node test/pilot/plan.test.mjs
-    # WHAT THE LADDER DEPLOYS MUST BE WHAT THE LADDER SCORED. Every scored run drives
-    # `theta = c + ff.dq + u`; the page deployed `u` alone, so a rung table reading 1.7316e-2
-    # drove a machine delivering 3.5e-1 to 7.7e-1 against an open loop of 4.1e-1. Rule 6:
-    # where two views show one quantity, assert they AGREE.
-    t node test/pilot/deploy.test.mjs
-    # THE DEPLOYABLE ARTEFACT: a dependency-free reimplementation of the act path from the stored
-    # record alone, asserted bit-identical to the shipped one. Quick tier — it is a CONTRACT and
-    # it runs in two seconds (rule 2).
-    t node test/pilot/artefact.test.mjs
-    # THE GAIN LADDER'S EARLY EXIT (plan §109), replayed on §107's recorded rows in
-    # milliseconds. A ladder axis that spends scored runs selecting a gain for a rung the
-    # machine then throws away is commissioning time nobody gets back, and the decision is
-    # pure arithmetic on numbers four harnesses already print — so re-running four plants to
-    # exercise it would spend days of plant time to learn what their own rows say (rule 30,
-    # the `objtable --read` argument). Both halves: the three plants §107 measured as
-    # INTERIOR must be untouched, and a candidate that already beats its bar is never tested.
-    t node test/pilot/gainexit.test.mjs
-    # THE TEACHER-FREE DIRECT INVERSE, DRIVEN THROUGH `AutoStack` RATHER THAN CALLED (plan §112).
-    # Rule 9b: three guards here shipped armed and unreachable and every one passed its own unit
-    # test, because a unit test calls the function and what breaks is the wiring to it — and
-    # §102.1 found two more where AutoStack never passed the option to the object it built. So
-    # every check goes through `commission()`. Its toy plant is exactly invertible, so the factor
-    # it prints is the RIG and not a result (rule 14) and the file says so; what is pinned is the
-    # PATH, and a rung that is fitted, vouched for and never applied reads exactly 1.000x.
-    t node test/pilot/dirinvrung.test.mjs
-    # WHERE ①d GOES IS DECIDED BETWEEN TWO COMPLETE CONTROLLERS (plan §133). §126 proposed a
-    # placement RULE and §128 refuted it on a fourth plant, both ending with the same sentence:
-    # scoring it is the next step and is not built. The obvious form of the scoring is ALSO wrong
-    # and this file pins why — comparing the {①d, ①} PAIR reads 11.791x against 5.019x on the
-    # cart-pole and picks FIRST, where the COMPLETE declared ladder reads 11.93x because ②d still
-    # has 2.38x to find above them. BOTH HALVES (rule 9): a plant where ①d alone wins ships it
-    # alone with everything else dropped, and a plant where the declared ladder wins ships
-    # BYTE-IDENTICALLY to the run that never scored the placement — including leaving no row
-    # behind for a candidate it did not keep.
-    t node test/pilot/placement.test.mjs
-    # THE PROBE INSTRUMENT REACHES A TEACHER THE HARNESS ALREADY BUILT (plan §125). §121 wrapped
-    # the descriptor's `run` and `teach` on a SPREAD COPY, so the ORACLE teacher — built by the
-    # harness, closed over its own drive loop — kept reading the full instrument and three runs
-    # were recorded as a vacuous control (rule 9c). What is pinned is the CLOSURE TIMING, which a
-    # test of `probeRuns` alone cannot see, and it is checked to FAIL on the pre-repair state.
-    t node test/pilot/probe.test.mjs
-    t node test/pilot/classicprice.test.mjs
-    t node test/pilot/composebelow.test.mjs
-    # FB_AUTOFF, DRIVEN AS A PLC DRIVES IT (plan §139): one `cycle()` per scan, no host closures,
-    # on the PID loop, Wood-Berry under BLT and four channels — zero control bit-exact, nothing made
-    # worse, the reported factor against an independent scored run and against `ClassicFF` (rule
-    # 15b), the MAC budget on every scan including the commissioning, the record's fail-safe load.
-    t node test/pilot/fb_autoff.test.mjs
-    # EVERY PLANT'S SETTLE IS INSIDE ITS OWN METER, OR THE PLANT STATES IT HAS NO CLOCK (plan
-    # §131). Two rigs settled on the RAW plant and only then returned the object whose `step`
-    # ticks, so `fresh()` cost the meter ZERO on the two plants whose calendars §126 and §127
-    # published. `dirinvall.mjs` had printed *NOT counted by this rig* on both all along and
-    # nothing compared the two routes (rule 15b). Checked to FAIL on the pre-repair state.
-    t node test/pilot/freshmeter.test.mjs
-    # WHAT SHIPS, WHAT COMMISSIONS, WHAT IS ONLY THE BENCH. Fails when a module appears that
-    # nobody classified, so the deploy boundary cannot rot quietly (rule 30 on a dependency graph).
-    t node test/inventory.test.mjs
-    # A MEMORY MAY ONLY BE APPLIED WHERE IT WAS FORMED. The bench measured the lap-periodic
-    # rung as a NET NEGATIVE across five programs and four feedrates — model layers alone beat
-    # the full ladder in 14 of 20 cells — so it is withheld off its own program. Both halves
-    # pinned: inert at home, and withheld elsewhere with a reason distinct from 'starved'.
-    t node test/pilot/offprogram.test.mjs
-    # THE PREDICTIVE VARIANCE THE RIDGE FIT WAS ALREADY PAYING FOR: x'(X'X+lam I)^-1 x from
-    # the Cholesky factor it was discarding, checked against an independently inverted matrix.
-    t node test/pilot/leverage.test.mjs
-    # THE CLAIM THE PLC REBUILD RESTS ON: every lead shares a design matrix, so one covariance
-    # serves the whole forecast bank. It is the difference between 4079% of the online budget
-    # and 56%, so it is asserted numerically rather than argued structurally.
-    t node test/pilot/shared.test.mjs
-    # WHAT SIXTY QP ITERATIONS ARE ACTUALLY WORTH. One-iteration-per-cycle (the real-time
-    # iteration scheme) does not track sixty, and sixty is itself 36% from this solver's own
-    # optimum -- so every delivered number in the project came out of a truncated solve. The
-    # rate is set by the Hessian's conditioning, not by the horizon (same curve at N=8 as at
-    # N=48), and the step size comes off a bound 1.8x looser than it needs to be.
-    t node test/pilot/rti.test.mjs
-    # THE ONLINE FIT THAT REPLACES BATCH RIDGE, and the second-order adaptation that replaces
-    # the retired lap rung -- one object, because they are the same recursion. Asserted to
-    # reproduce solveRidge to 4.6e-10% at matched absolute ridge, since a new fitting method
-    # that quietly changes the model is worse than a slow one. Also pins what the batch
-    # convention costs: the ridge is scale-relative, so its penalty depends on a statistic of
-    # the whole record that an online prior cannot know at row 1.
-    t node test/pilot/ensemble.test.mjs
-    t node test/pilot/rls.test.mjs
-    t node test/pilot/autostack.test.mjs
-    # THE BUTTON ON FOUR MORE PLANTS THAT SHARE NO PHYSICS — a tank whose outflow goes as
-    # sqrt(level), a column that is linear transfer functions with dead time, a mill whose
-    # gauge is read a metre downstream, a barrel radiating as T^4 through a delay. Rule 18
-    # from the other side: a ladder measured on one plant has measured one plant. It is
-    # ~4 minutes because three of the four correctly refuse and stop early.
-    if [ "${SUITE}" = "full" ]; then t node test/pilot/plants.test.mjs; fi
-    # THE BUTTON ON THREE PLANTS WHOSE DYNAMICS CAME FROM REAL HARDWARE -- a flexible robot
-    # arm, cascaded water tanks and a steam heat exchanger, each identified from its own
-    # published record and validated by FREE-RUN simulation on a cut the fit never saw. Every
-    # other plant here is a simulation somebody wrote, EMPS included: what separates these is
-    # the provenance of their parameters, and `rigs/realdata/PROVENANCE.md` says so plainly.
-    # They are registered in BOTH tiers on purpose. Each is seconds to a minute, and the two
-    # holes this project has already paid for -- a `SUITE=full` skip and an `if (canLearn)`
-    # race -- were both a test that existed and never ran.
-    t node test/pilot/realarm.test.mjs
-    t node test/pilot/realtanks.test.mjs
-    t node test/pilot/realexch.test.mjs
-    # A REAL LOAD CELL UNDER VIBRATION (Sitorus 2021, CC BY 4.0) — and the first plant here
-    # whose ground truth is FREE, which is the assumption §52.42 prices at 3.9x everywhere else.
-    t node test/pilot/shakeweigh.test.mjs
-    # THE KUKA KR300 IS GONE AND ITS FINDINGS ARE NOT (plan §55.8-§55.12). Its records were
-    # 222 MB — 89% of this repository — against 272 kB for the three real-data plants above,
-    # and four sections of measurement established that the record cannot support a plant at
-    # all: it identifies the robot's STATICS while a forward simulation needs its DYNAMICS.
-    # Once that is settled the data buys nothing and costs every clone, so it was removed on
-    # the owner's call. The measurement record stays in docs/plan.md, which is the point.
-    if [ "${SUITE}" = "full" ]; then t node test/pilot/stack.test.mjs; fi
-    if [ "${SUITE}" = "full" ]; then t node test/pilot/arm.test.mjs; fi
-    if [ "${SUITE}" = "full" ]; then t node test/pilot/ikfree.test.mjs; fi
-    # THE §40 CORRECTOR AS A LIBRARY — converge/freeze/gate, two-sided, on the soft arm.
-    if [ "${SUITE}" = "full" ]; then t node test/pilot/refine.test.mjs; fi
+    t node test/flexisim/bench.test.mjs
+    # FB_AutoFF: its contract, then one press on every plant in test/plants/ (the slow plants and
+    # the 2R arm in the full tier).
+    t node test/autoff/contract.test.mjs
+    t node test/autoff/portfolio.test.mjs
   fi
 fi
 
-AREAS="${BROWSER_AREAS}"
-if [ "${PHASE}" = "node" ]; then
-  echo; echo "(--node — skipping the browser)"; echo; report_failures; exit 0
-fi
+if [ "${PHASE}" = "node" ]; then echo; echo "(--node — skipping the browser)"; report_failures; exit 0; fi
 
-# NO BROWSER WHEN NO PAGE IS UNDER TEST. Every area now has a page, so this only
-# fires when the change touched nothing a page owns (docs, the version stamp).
-case ",${AREAS}," in
-  *,ngrc,*|*,flowsim,*|*,flexisim,*) ;;
-  *) echo; echo "(no page in scope — skipping the browser)"; echo; report_failures; exit 0 ;;
-esac
-
-# Serve the repo and always clean up the server on exit.
 python3 -m http.server "${PORT}" >/dev/null 2>&1 &
 SRV=$!
 trap 'kill "${SRV}" 2>/dev/null || true' EXIT
 sleep 1
-
 t env BASE_URL="http://127.0.0.1:${PORT}/" node test/smoke.mjs
 
-# THE LAST WORD, so a browser pass cannot bury a Node failure collected an hour earlier.
 report_failures

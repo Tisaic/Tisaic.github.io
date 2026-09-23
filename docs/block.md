@@ -1,8 +1,10 @@
 # FB_AutoFF — the auto-commissioning feedforward trim, as one function block
 
-`lib/pilot/autoff.js` (commissioning) + `lib/pilot/autoff_runtime.js` (the deployed decision),
-tested by `test/pilot/fb_autoff.test.mjs`. Plan §139. This is the object an ST port starts from;
-it is written in JS for the test environment and shaped for IEC 61131-3 throughout.
+`lib/autoff/autoff.js` (commissioning) + `lib/autoff/runtime.js` (the deployed decision),
+tested by `test/autoff/` — its contract, and one press on every machine in `test/plants/`. This is
+the object an ST port starts from; it is written in JS for the test environment and shaped for
+IEC 61131-3 throughout. Section references (§NN) point into the development record,
+`docs/history/plan.md`.
 
 ## What it is, in one paragraph
 
@@ -135,23 +137,43 @@ setpoints, and a sequencer that knows when a recipe starts. Wiring:
    engineer accepts setpoint moves inside the recipe's own envelope, at its own ramp rate.
 5. Press `xCommission` at the start of a production run and leave it.
 
-Measured (`fb_autoff.test.mjs`, the closed recipe 55→75→45→68→55 °C):
+Measured (`test/autoff/`, the closed recipe 55→75→45→68→55 °C):
 
 ```
-  conventional rung DEPLOYED 6.16x · learned rung REFUSED (LEARN_NO_GAIN) · total 6.16x
-  bare 2.4973 °C rms → running 0.4067 °C rms, 6.14x measured independently
-  ClassicFF on the same program, same plant:          0.4066 °C rms, 6.14x
-  29 laps, 84,071 scans = 23.4 h of furnace at 1 s; worst scan 9,997 MAC of 10,000
+  conventional rung DEPLOYED 6.12x · learned rung REFUSED (LEARN_NO_GAIN) · total 6.12x
+  6.11x measured independently by the host on the running machine
+  ClassicFF (test/reference/, sharing no code) on the same program and plant: 6.15x
+  27 laps, 79,271 scans = 22.0 h of furnace at 1 s; worst scan 9,997 MAC of 10,000
 ```
 
 The refusal of the learned rung is the §138 reading: what a self-tuned PID+FF leaves on this
 loop is not a function of the reference window.
 
-On Wood–Berry under its published BLT PI pair (two coupled channels), the conventional rung reads
-3.53x and the learned rung 1.46x on top of it, for **5.17x** over the bare BLT loops. That took 69
-laps and 225,845 scans, **15.7 days of column at 6 s per scan**, which is target 4's bill stated
-rather than hidden. The program is the block's own closed two-channel recipe, so the figure is
-**not comparable** to §64's step scenario (rule 19).
+## Across the plant library
+
+One press on every machine in `test/plants/`, commissioned on its main program and then loaded
+from the SAVED RECORD onto a fresh machine running a program it never saw
+(`test/autoff/portfolio.test.mjs`, seed 7):
+
+```
+  plant                                  verdict                  main    held-out   laps   plant time
+  PID temperature loop, nonlinear valve  conventional              6.11x    5.13x      27    22.0 h
+  Wood–Berry column under BLT PI         conventional + learned    4.95x    4.73x      69     6.3 h
+  EMPS servo axis                        conventional            459.96x  200.46x      27     3.5 min
+  cart-pole (open-loop unstable)         conventional             25.88x   10.22x      51     5.2 min
+  steam heat exchanger (real record)     conventional            149.85x  190.37x      15     7.1 h
+  quadruple tank                         conventional + learned    9.02x    6.57x      69    33.5 h
+  extruder barrel                        learned                   1.13x    1.07x      87    17.3 d
+  compliant 2R arm (the FlexiSim page)   learned                   1.65x    1.34x      32     5.3 min
+  flexible robot arm (real record)       FAULT — its guard tripped while probing; nothing applied
+  cold mill gauge regulator              refused — a regulator, nothing to trim
+```
+
+Nothing is made worse on any plant, on the commissioned or the held-out program. Three rows not
+shown are linear plants inside the conventional feedforward's own model class (a linear valve, the
+real tanks below their overflow, four synthetic loops), whose factors measure the class and are not
+results. The Wood–Berry figure is on the library's own closed two-channel recipe and is **not
+comparable** to the literature's step scenario.
 
 ## What v1 does not contain, and what would justify adding each
 
@@ -199,6 +221,6 @@ rather than hidden. The program is the block's own closed two-channel recipe, so
   dimension and charge nothing themselves; their callers charge the unit. Port them as
   functions on `REFERENCE TO ARRAY` with explicit `n` and `ld`.
 - **Conformance.** Drive the ST block and this JS block with the same `aRefAhead`/`aMeas`
-  sequence (the test's `makeHost` is the recipe). Every output must agree bit-exactly, because
+  sequence (`test/autoff/host.mjs` is the recipe). Every output must agree bit-exactly, because
   the arithmetic is IEEE-754 binary64 in the same order. Start with `affDecide` on a stored
-  record, which is what `fb_autoff.test.mjs`'s RECORD block already checks in JS.
+  record, which is what `test/autoff/contract.test.mjs`'s RECORD block already checks in JS.
