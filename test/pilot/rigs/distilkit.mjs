@@ -498,6 +498,23 @@ function deriveWindow({ settle, lapMin, win }) {
  * this format and so had no path to the extension-exit line §109 added here (rule 30); both sites
  * call this now, at their own indent, and the output is byte-identical at each.
  */
+/**
+ * THE CONVENTIONAL RUNG'S OWN `v` AND `a` ON A CLOSED TRAINING LAP (plan §138): central
+ * differences per step of the run's reference, which is the formula `rigs/ladder.mjs`'s `derive`
+ * builds that rung's basis with — so this is right for a basis the ladder built and for no other.
+ * A harness that builds its own basis in other units states its own `motion` on the run (the
+ * quadruple tank does: its basis is on LEVELS and its runs speak VOLTS). Null without a lap.
+ */
+export function motionOf(t, nc) {
+  if (!t || !t.refAt || !t.lap) return null;
+  const L = t.lap, at = (k) => t.refAt(((k % L) + L) % L);
+  return (k) => {
+    const p0 = at(k - 1), p1 = at(k), p2 = at(k + 1), v = [], a = [];
+    for (let c = 0; c < nc; c++) { v.push((p2[c] - p0[c]) / 2); a.push(p2[c] - 2 * p1[c] + p0[c]); }
+    return { v, a };
+  };
+}
+
 export function printGainLadder(rep, pad = '  ') {
   if (!rep.distil || !rep.distil.gains) return;
   console.log(`${pad}the APPLIED-GAIN LADDER, scored on the machine (no refit — the gain folds into `
@@ -510,6 +527,7 @@ export function printGainLadder(rep, pad = '  ') {
   // AN UNFLATTERING DIAGNOSTIC FIRST (rule 27): if the ladder stopped extending because the
   // rung was already losing by more than its budget could close, that is the row's headline
   // and not a footnote — the axis spent its runs and had nothing to select (plan §109).
+  if (rep.distil.composedBelow) console.log(`${pad}  TEACHER: ${rep.distil.composedBelow}`);
   if (rep.distil.gainExit) {
     console.log(`${pad}  EXTENSION STOPPED after ${rep.distil.gainExit.at} step`
       + `${rep.distil.gainExit.at === 1 ? '' : 's'}: ${rep.distil.gainExit.reason}`);
@@ -606,13 +624,27 @@ async function reportDistil({ rep, runs, nFeat, segs = null, auto = null }) {
   let inSample = null;
   if (rep.distil && rep.distil.policy) {
     inSample = [];
-    for (const r of runs) {
+    // ON THE MACHINE THE RUNG IS SCORED ON (plan §138). Where the conventional rung is armed the
+    // verify scores the policy ON TOP of it, and a column taken on the bare machine beside that
+    // measures two machines and reads as one (rule 19) — §86.5's *helps every training run 1.33x
+    // in sample, so there is nothing left* was read off exactly that pair. Composed when the
+    // teacher was; otherwise the column is printed as what it is.
+    const below = auto && auto.deployed && auto.deployed.classic;
+    const nc = auto && auto.channels ? auto.channels.length : 1;
+    const cb = below && /composed under/.test(rep.distil.composedBelow || '') && auto.composeBelow
+      ? auto.composeBelow(runs.map((r) => (r.motion ? r : { ...r, motion: motionOf(r, nc) }))) : null;
+    const composed = !!(cb && cb.composed);
+    const evalRuns = composed ? cb.runs : runs;
+    for (const r of evalRuns) {
       const bare = await r.run(null);
       const withP = await r.run({ at: (k) => rep.distil.policy.actLook((o) => r.refAt(k + o)) });
       inSample.push(bare.score / withP.score);
     }
     console.log('\n  in sample, on its own training runs: '
-      + inSample.map((x) => `${x.toFixed(3)}x`).join('  '));
+      + inSample.map((x) => `${x.toFixed(3)}x`).join('  ')
+      + (composed ? '   (on top of the conventional rung, as the verify scores it)' : ''));
+    if (below && !composed) console.log('  ⚠ that column is on the BARE machine and the verify '
+      + 'scores the rung ON TOP of the conventional rung — two machines (plan §138, rule 19)');
   }
   if (rep.distil && rep.distil.teacherFallback) {
     console.log(`  the TEACHER FELL BACK: ${rep.distil.teacherFallback}`);

@@ -322,6 +322,9 @@ async function once(seed) {
         ...(process.env.TFRACS ? { probeFracs: process.env.TFRACS.split(',').map(Number) } : {}),
       } } : {}),
     distil: { refDim: 2, ridge: Number(process.env.RIDGE || 1e-6), offsets: OFFSETS,
+      // THE TEACHER ON THE MACHINE THE RUNG DEPLOYS ON (plan §138): this harness builds its own
+      // `AutoStack`, so `rigs/ladder.mjs`'s `DCOMPOSE=0` control does not reach it and is read here.
+      ...(process.env.DCOMPOSE === '0' ? { composeBelow: false } : {}),
       // BOTH HALVES OR THE ENGINE IS INERT (plan §101): `AutoStack` gates on
       // `!!distilOpts.parametric && runs.every((t) => t.teach)`, so a diet that supplies `teach`
       // and a spec that does not arm `parametric` takes the hff route and PRINTS `engine hff` —
@@ -547,6 +550,13 @@ async function once(seed) {
     return {
       lap,
       refAt: (k) => { const h = ref(k); return voltsFor(G, h[0], h[1]); },
+      // THE CONVENTIONAL RUNG'S OWN UNITS (plan §138). Its basis is built on the LEVEL reference
+      // (`ratesOf(refAtStep)`, cm), while `refAt` above is in VOLTS; composing it under a training
+      // run off `refAt` would scale the correction by the plant's own gain with nothing thrown.
+      motion: (k) => {
+        const a = ref(k - 1), b = ref(k), c = ref(k + 1);
+        return { v: [0, 1].map((j) => (c[j] - a[j]) / 2), a: [0, 1].map((j) => c[j] - 2 * b[j] + a[j]) };
+      },
       // THE COVERAGE GUARD NEEDS A COMMANDED SPEED, AND THIS HOST NEVER GAVE IT ONE. `distil.js`
       // fades its correction outside the speed span the fit saw, and `_coverage(null)` returns 1
       // — so a host that omits `speedAt` disables the one mechanism built to stop a linear map

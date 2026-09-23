@@ -323,9 +323,24 @@ transplanted). *Makes it a result:* the first evidence in this project that is n
 *Kills it:* no lead time, in which case the preview-shaped sub-problem is not there and the doc's
 own prediction was wrong before anything was built for it.
 
+**12. ONE TRAINING LOOP, OWNED BY THE DRIVER — BEFORE ANY ST PORT.** (§138) An end-to-end trace
+of the easiest plant here found the distilled rung's teacher had run on the BARE plant on every
+plant where the conventional rung ships, and set it beside thirteen earlier defects of the same
+shape: a piece of the commissioning loop written twice, once on the library's path and once in a
+closure a host writes, with nothing checking they agree. §138 repaired the instance
+(`AutoStack.composeBelow`, default on). The class is repaired by making a training run DATA —
+`{ refAt, lap, fresh, step }` — driven by `rigs/ladder.mjs`'s own `run0`, which already applies
+`act()`, the meter, `lookRaw` and `v`/`a`, and deleting the eleven hand-written training loops.
+*Makes it a result:* the next plant added cannot reproduce any of the fourteen, because none of
+them is a thing it writes. *Kills it:* a migrated harness that cannot reproduce §138's composed
+numbers digit for digit — then the loops are not equivalent and the difference is the finding.
+It belongs before the ST port because the ported block will be commissioned by exactly this
+boundary, on a machine where a silent disagreement costs more than a re-run.
+
 Steps 5 and 6 are gap 1 and compose (a carried excitation lowers the calendar of the object the bar
-would ship). Steps 7, 9 and 10 are independent of them and of each other. **Step 11 is the only one
-still open on this list, and it is the only one that changes the KIND of evidence.** **The program that puts these in
+would ship). Steps 7, 9 and 10 are independent of them and of each other. **Steps 11 and 12 are
+the two still open: 11 is the only one that changes the KIND of evidence, and 12 is the only one
+that removes a CLASS of defect rather than an instance.** **The program that puts these in
 the context of a world-class bar, with the bar stated as measurements, is `docs/program.md`.**
 
 ---

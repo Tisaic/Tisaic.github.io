@@ -511,6 +511,7 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     # test of `probeRuns` alone cannot see, and it is checked to FAIL on the pre-repair state.
     t node test/pilot/probe.test.mjs
     t node test/pilot/classicprice.test.mjs
+    t node test/pilot/composebelow.test.mjs
     # EVERY PLANT'S SETTLE IS INSIDE ITS OWN METER, OR THE PLANT STATES IT HAS NO CLOCK (plan
     # §131). Two rigs settled on the RAW plant and only then returned the object whose `step`
     # ticks, so `fresh()` cost the meter ZERO on the two plants whose calendars §126 and §127

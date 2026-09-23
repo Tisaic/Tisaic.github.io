@@ -26785,3 +26785,116 @@ distilled rung has not been asked on the corrected machine. What this run is for
 not an eleventh plant's worth of evidence: the ladder was handed the most ordinary loop in process
 control and it self-tuned a four-coefficient feedforward to 5.9x, held it across an 8x tuning
 span, met target 1, refused the rung that did not help, and made nothing worse.
+
+## §138 — END TO END: WHY AN EASY TEST STILL PRODUCES ERRORS, AND THE ONE THAT WAS SYSTEMIC
+
+§137 passed and it passed in the shape this project keeps producing: a result, and beside it a
+list of things that were wrong on the way. On the most ordinary loop in process control that list
+should be empty this late. So instead of patching the run, the pipeline was traced end to end on
+that plant — rig → spec → harness → ladder → commissioning → deploy → score — asking of every
+stage *which machine is this computed on, and is it the machine the next stage assumes?*
+
+**THE FINDING: THE DISTILLED RUNG'S TEACHER HAS NEVER RUN ON THE MACHINE THE RUNG DEPLOYS ON.**
+`AutoStack` trains every rung but one through `host.run`, which applies `act()` — so the cascade,
+the lap-periodic rung and the conventional rung's own probes all see whatever is already armed.
+②d is the exception: its training runs are closures the HOST writes (`distilRuns`, eleven
+hand-written copies across the harnesses), each applies the teacher's correction to the BARE
+plant, and the policy they teach is then deployed ON TOP of the conventional rung. On every plant
+where that rung ships, the teacher converged a correction for a machine that no longer exists and
+the policy double-corrects — rule 34, the §117/§126 signature at the rung above. The library
+already had the tool (`actBelow`, which the cascade's commissioning uses); ②d never called it.
+
+**Repaired and measured on the seven plants where ②d sits on a deployed conventional rung**
+(`DCOMPOSE=0` is the control and reproduces every prior number; the three plants with nothing
+below — barrel, column, mill — and the arm are byte-identical by construction and checked):
+
+```
+                        ②d, teacher on the BARE plant         ②d, teacher ON the deployed machine
+  real steam exchanger  REFUSED 0.02x · ships 89.77x          DEPLOYED 1.16x · ships 103.94x   held-out 114.1x → 127.5x
+  cart-pole (shipped)   2.56x at gain 0.27 · 11.93x           2.61x at gain 1.15 · 12.14x      held-out 11.40x → 19.11x
+  real cascaded tanks   2.03x at gain 0.31 · 8.69x            2.07x at gain 1.47 · 8.84x       held-out 12.5x → 13.3x
+  real flexible arm     1.04x at gain 0.27 · 2.35x            1.17x at gain 0.52 · 2.64x       worst held-out 1.37x → 1.82x
+  PID loop (§137)       REFUSED 0.30x, CLAMPED 11%            REFUSED 1.00x                    ships 5.91x either way
+  quadruple tank        REFUSED 0.06x                         REFUSED 0.16x                    ships 19.91x either way
+  cart-pole (tuned)     teacher 1.000x on all four runs       identical                        ships 9.24x either way
+```
+
+**Four improve, three keep their verdict, none is made worse.** The signatures of a double
+correction all go: the gain ladders that walked DOWN to 0.27-0.31 to shrink a correction sized for
+the bare plant come back to 0.52-1.47, and the clamping §137 flagged on the PID loop disappears.
+**Two published readings fall with it.** §86.5's *the map expresses the exchanger's correction —
+it helps every training run 1.33x in sample — so there is nothing left* compared an in-sample
+column taken on the BARE plant with a verify taken on the composed one, two machines read as one
+(rule 19); composed, there was 1.16x left and the plant now ships the deployed object. And §137's
+PID refusal is still a refusal, but for the stated reason now: at 0.30x it was the double
+correction, at 1.00x with held-out R² 0.09 it is that what a self-tuned PID+FF leaves on this loop
+is not a function of the reference window — while the LAP-INDEXED teacher still finds 3.8-9.4x on
+top of it, so the residual is real and lap-specific, which is the memory this project retired.
+
+**THE TANK IS THE PREDICTION THAT FAILED, AND IT IS WORTH MORE THAN A CONFIRMATION.** Composition
+predicted ~1.0x there; it reads 0.16x. The first composed run read 0.09x and was WRONG FOR A
+REASON THAT IS THIS SECTION'S WHOLE SUBJECT: the tank's conventional rung is built on tank LEVELS
+while its training runs hand the rung VOLTS, so a wrapper that differenced `refAt` composed a
+correction off by the plant's gain with nothing thrown (rule 17). The library therefore does NOT
+guess units: a run composes only if it states the rung's own series as `motion(k)`; `rigs/
+ladder.mjs` supplies it from the same differencer it builds the basis with, the tank states its
+own, and a run that states none is left bare with the report saying composition was NEEDED and not
+done (EMPS' `distil-emps.test.mjs`, whose basis is in m/s). With the units right the tank still
+refuses at 0.16x, so its refusal is NOT the double correction: the incumbent takes 19.9x and a map
+whose diet does not transfer to this program (`prog/rise` 7.9, below §84.9's split) cannot predict
+a residual that small. That is a legitimate refusal with a reason.
+
+**WHAT MADE IT SYSTEMIC, AND WHY EASY TESTS KEEP PRODUCING ERRORS.** Set the fourteen defects this
+record has written up of the same shape side by side:
+
+```
+  §51.5   host did not declare lookRaw        → deployed window stretched vs the fitted one
+  §52.14  run did not declare `closed`        → fit skipped the first REACH samples of every lap
+  §67.3   tank's own loop never applied ②d     → *1.000x, nothing harmed* for two sections
+  §87.4   verify clock re-derived by hand      → gate scored a program 22x slowed (four plants)
+  §97.2   tank/EMPS loops never passed v, a   → conventional rung contributed exactly zero
+  §100    AutoStack passed 4 args of 5        → declared-point guard never called
+  §102.1  guard flags never passed to policy  → two guards unarmable through the one press
+  §111.1  servo constant in a third home      → six instruments on a loop the product does not use
+  §116    ladder did not forward dirInv       → rung "armed", never ran
+  §117    ①d fitted bare, deployed after ①     → 1.08x where the route reads 11.79x
+  §125    probe wrapped a spread copy         → oracle teacher kept reading the full instrument
+  §131    two rigs settled outside the meter  → calendars understated 1.2-1.9x
+  §137    PID tuned at the wrong travel       → the incumbent would have been a straw man
+  §138    ②d teacher on the bare plant         → double correction on every conventional plant
+```
+
+**Every one is the same fault: a piece of the commissioning loop exists in TWO places — the
+library's path and a closure or constant a host writes by hand — and nothing checks that they
+agree.** The library's own path is consistent by construction (a rung trained through `host.run`
+sees `act()`); everything handed across the host boundary as a closure (training runs, open-loop
+segments, host teachers, drive loops, verify references) or as an option bag is a second copy.
+Each plant harness re-implements that boundary — eleven hand-written training loops, the private scored loops of every harness that builds its own `AutoStack`,
+per-harness diets, windows, held-out programs and controls — so a new plant, however easy, is a
+fresh chance to get one of them wrong, and the checks that exist pin FUNCTIONS (a unit test calls
+the helper) while what breaks is the WIRING between them (rule 9b, now fourteen times). That is
+why the PID loop, the easiest plant here, produced four errors: one in the rig (the tuning point),
+one in the rig's stiction latch, one in a prediction, and one — this one — in the contract every
+harness shares and none owns.
+
+**WHAT FIXES THE CLASS rather than the instance, in order of what it removes:**
+
+1. **ONE TRAINING LOOP, OWNED BY THE DRIVER.** A training run should be DATA — `{ refAt, lap,
+   fresh, step }` — driven by `rigs/ladder.mjs`'s own `run0`, which already applies `auto.act()`
+   (so composition, `lookRaw`, `closed`, the meter and `v`/`a` come for free) and already scores
+   alternate programs for target 1. That deletes the eleven hand-written loops and `motion(k)`
+   with them. §138's wrapper is the minimal repair; this is the structural one. **Falsifier:**
+   every migrated harness reproduces §138's composed numbers digit for digit.
+2. **A CONTRACT CHECK AT THE BOUNDARY, not a unit test behind it.** `commission()` can assert what
+   it was handed: every training run declares `closed`, every host with a decimated `look`
+   declares `lookRaw`, every rung ② trains through composes what is armed below — and refuse to
+   commission otherwise, rather than print a plausible number. `composebelow.test.mjs` is the
+   first test of that kind (it drives `commission()` and inspects what the host's run receives,
+   and goes red on the pre-§138 library).
+3. **RIGS DERIVE THEIR OPERATING POINT; THEY DO NOT CARRY IT.** §137's straw man and §111.1's
+   third loop are the same thing at the rig level (rule 31).
+
+**NOT CLAIMED.** Seven plants, one diet each, one seed. Only `run` is composed: a host-supplied
+`converge`, `teach` or `captureState` drives its own loop and is NOT composed, and the report says
+so where it applies (none of the seven uses one by default). The ①d rung's open-loop segments are
+still fitted on the bare plant, which is §117's placement question and is left where §133 left it.

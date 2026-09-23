@@ -15,7 +15,7 @@
 import { AutoStack } from '../../../lib/pilot/autostack.js';
 import { motionBasis } from '../../../lib/pilot/classic.js';
 import { into, count as meterCount } from './meter.mjs';
-import { printCost, emitRow, probeRuns } from './distilkit.mjs';
+import { printCost, emitRow, probeRuns, motionOf } from './distilkit.mjs';
 // THE SOLVER BUDGET AS A KNOB, so `docs/plan.md` step 6b can be gated on plants that share
 // no physics. Both are pass-through Pilot options and both default to the library's own
 // values, so an unset environment runs byte-identically (rule 21). The proposed joint change
@@ -56,10 +56,16 @@ const PLANTBUDGET = process.env.PLANTBUDGET ? +process.env.PLANTBUDGET : null;
 // THE TEACHER'S INSTRUMENT, DEGRADED TO K TOUCHES PER LAP (plan §121): `PROBEPTS=K`. The arm's
 // `distilProbePts` for every plant that drives its teacher through this driver. Unset is untouched.
 const PROBEPTS = process.env.PROBEPTS ? +process.env.PROBEPTS : 0;
+// THE DISTILLED RUNG'S TEACHER ON THE MACHINE IT DEPLOYS ON (plan §138). The library composes
+// the armed conventional rung under every training run by default; `DCOMPOSE=0` is the control
+// that reproduces the pre-§138 bare-teacher configuration. One knob here reaches every plant this
+// driver runs, rather than one per harness (rule 61).
+const DCOMPOSE_OFF = process.env.DCOMPOSE === '0';
 
 /** Print the active overrides at the caller's chosen point in its own output. */
 function announce() {
   if (Object.keys(SOLVER).length) console.log(`  solver budget override: ${JSON.stringify(SOLVER)}`);
+  if (DCOMPOSE_OFF) console.log('  DCOMPOSE=0: the distilled rung\'s teacher runs on the BARE machine — the pre-§138 control');
   if (Object.keys(HFF).length) console.log(`  teacher budget override: ${JSON.stringify(HFF)}`);
   if (BUDGET) console.log(`  scan budget: ${BUDGET.mac.toLocaleString()} MAC/cycle, `
     + `${(BUDGET.bytes / 1024).toFixed(0)} kB`);
@@ -172,7 +178,7 @@ async function ladder(spec) {
     // 2.62x at home, and the barrel's reaches 5.38x on a program it never saw where the pilot
     // delivers 1.05x and refuses. A spec that declares neither field leaves every number this
     // driver produces byte-identical (rule 21).
-    ...(distil ? { distil } : {}),
+    ...(distil ? { distil: DCOMPOSE_OFF ? { ...distil, composeBelow: false } : distil } : {}),
     // AND THE TEACHER-FREE RUNG'S OPTIONS, WHICH THIS DRIVER DID NOT FORWARD (plan §116).
     // §112 built ①d and shipped a PATH test for it, and the path it tested was the library's.
     // This driver never destructured `dirInv`, so a spec declaring it was silently ignored: the
@@ -316,6 +322,10 @@ async function ladder(spec) {
     for (const k of ['teach', 'converge', 'captureState']) {
       if (t[k]) w[k] = (...a) => inPhase(`teacher#${i}`, () => t[k](...a));
     }
+    // THE CONVENTIONAL RUNG'S OWN SERIES ON THIS RUN (plan §138), so `composeBelow` can put
+    // the armed rung under the teacher in its own units. One helper, shared with the in-sample
+    // column that re-runs these programs (rule 61). Read only when composing.
+    if (!t.motion) { const m = motionOf(t, nc); if (m) w.motion = m; }
     return w;
   }) : null;
   const spentBase = meterCount();
