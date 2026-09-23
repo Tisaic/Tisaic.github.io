@@ -70,7 +70,10 @@ const rel = (f) => relative(ROOT, f);
 // THE DEPLOY SET IS TINY AND THAT IS THE PRODUCT. `deploy.js` is the whole controller a machine
 // runs; `distil.js` is on this list only because the page restores a stored policy through it,
 // and `test/pilot/artefact.test.mjs` is what proves the deployed arithmetic needs neither.
-const DEPLOY = ['lib/pilot/deploy.js'];
+// `autoff_runtime.js` is FB_AutoFF's deployed half (plan §139) — the conventional rung AND the
+// learned map in one decision, which is the first time the object most plants ship (§137) sits
+// inside the boundary; `lib/pilot/autoff.js` is its commissioning half and classifies as COMMISSION.
+const DEPLOY = ['lib/pilot/deploy.js', 'lib/pilot/autoff_runtime.js'];
 
 // THE BENCH: the plant simulator and its geometry. An installation HAS a machine.
 const BENCH = [

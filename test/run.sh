@@ -512,6 +512,11 @@ if [ -d lib/lattsim ] && case ",${AREAS}," in *,flexisim,*) true ;; *) false ;; 
     t node test/pilot/probe.test.mjs
     t node test/pilot/classicprice.test.mjs
     t node test/pilot/composebelow.test.mjs
+    # FB_AUTOFF, DRIVEN AS A PLC DRIVES IT (plan §139): one `cycle()` per scan, no host closures,
+    # on the PID loop, Wood-Berry under BLT and four channels — zero control bit-exact, nothing made
+    # worse, the reported factor against an independent scored run and against `ClassicFF` (rule
+    # 15b), the MAC budget on every scan including the commissioning, the record's fail-safe load.
+    t node test/pilot/fb_autoff.test.mjs
     # EVERY PLANT'S SETTLE IS INSIDE ITS OWN METER, OR THE PLANT STATES IT HAS NO CLOCK (plan
     # §131). Two rigs settled on the RAW plant and only then returned the object whose `step`
     # ticks, so `fresh()` cost the meter ZERO on the two plants whose calendars §126 and §127

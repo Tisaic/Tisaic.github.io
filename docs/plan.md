@@ -26898,3 +26898,97 @@ harness shares and none owns.
 `converge`, `teach` or `captureState` drives its own loop and is NOT composed, and the report says
 so where it applies (none of the seven uses one by default). The ①d rung's open-loop segments are
 still fitted on the bare plant, which is §117's placement question and is left where §133 left it.
+
+## §139 — FB_AutoFF: THE WHOLE COMMISSIONING AS ONE SCAN-CYCLIC BLOCK, AND FOUR THINGS IT MEASURED ON THE WAY (tasks #16-#18)
+
+§138's structural repair 1 was *one training loop, owned by the driver*. The owner's decision went
+further: package the end-to-end functionality as ONE function block, multi-channel, LREAL, shaped
+for the ST port, kept in the test environment. `lib/pilot/autoff.js` is that block and
+`lib/pilot/autoff_runtime.js` its deployed half; `docs/block.md` is the engineer's page. It is
+§138's fix taken to its limit: **there are no host closures at all.** The block is called once per
+scan with the reference preview and the measurement, and every experiment (baseline, probe, Newton
+trial, excitation, candidate map) is applied by writing it into a live record and calling the same
+`affDecide` that runs for ever afterwards. The fourteen-defect class cannot occur inside it: there
+is no second copy of the loop to disagree with.
+
+**WHAT v1 CARRIES, chosen by the portfolio's own record rather than by completeness:** the
+CONVENTIONAL rung (§97.3's portfolio ships it on five rows of eleven, §137 on a sixth), run by
+`ClassicFF`'s algorithm in production on the repeating program; and the TEACHER-FREE learned map ①d
+(§104-§126), fitted from a generated excitation with the conventional rung armed underneath (rule
+34), ridge and applied gain chosen on the machine. Not the taught rung, the cascade, the memory,
+placement scoring or runtime guards, each for a measured reason listed in `docs/block.md`. **And
+for the first time the object most plants ship is inside the deploy boundary**: §137 noted that
+`classic.js` had no `deploy.js` analogue; `autoff_runtime.js` imports nothing, `inventory.test.mjs`
+classifies it DEPLOY, and the RECORD checks pin a reloaded record deciding bit-exactly.
+
+**RESULTS, through `test/pilot/fb_autoff.test.mjs`, the host a PLC would be:**
+
+```
+                          conventional   learned      total    measured independently   commissioning
+  PID loop (§137, closed)  6.16x          REFUSED      6.16x    6.14x                    29 laps · 23.4 h
+     ClassicFF, same program, same plant:                        6.14x   (0.4066 against the block's 0.4067 °C)
+  Wood–Berry under BLT     3.53x          1.46x        5.17x    5.17x                    69 laps · 15.7 days
+  four channels (linear)   deploys        REFUSED      —        agrees                   145 laps
+  worst scan, every plant, the commissioning included:  9,997 of 10,000 MAC
+```
+
+The PID row is the control that matters: a scan-cyclic block commissioning in production, with no
+fresh plant per run, reaches `ClassicFF`'s own number to four figures (rule 15b, asserted within
+1.25x). The learned rung's refusal there is §138's reading reproduced by a route sharing none of the
+ladder's code. The Wood–Berry program is the block's own closed two-channel recipe and is not
+comparable to §64's step scenario (rule 19). The four-channel plant is linear and inside the
+conventional basis's class, so its factor measures the class (§55) and is printed only with that
+note; it is there for completion and the budget at the compile-time maximum.
+
+**FOUR THINGS THE BUILD MEASURED, each a defect in the first draft that a check caught:**
+
+1. **PER-CHANNEL SCALING BENDS A COUPLED CORRECTION.** The first draft capped each channel's Newton
+   trial separately by a Σ|w| bound. At four channels every trial made the machine WORSE (1.16x-1.18x
+   at steps 1 to 1/4), and at step 1/4, where no channel was capped, it still harmed. The direction
+   itself was the cause: different factors per channel rotate the vector the operator solved for.
+   `ClassicFF` scales the whole correction by ONE factor from its exact peak. The exact peak is a
+   lap-long pass, so it is a sliced job run during the lap's unscored first 5%: its cost per sample
+   is about nb·nc against a budget of thousands, so it finishes in about 1% of the lap whatever the
+   lap length. Scoring waits until the trial is armed. **Wood–Berry's conventional rung went 1.74x →
+   3.62x on that change alone.**
+2. **AN EXPERIMENT'S SWITCH IS A TRANSIENT THE NEXT LAP SCORES.** With the lap barely longer than the
+   loop's memory, the carryover from each probe contaminated the next probe's response. Lengthening
+   the lap with everything else held deployed the rung at 3.35x where it had been refused, which
+   confirmed the cause. The repair is a MEASURED rule with no constant: each experiment gets one
+   unscored warm-up lap wherever the settle read off the production lap's own holds is longer than
+   the 5% drop or cannot be measured (`nWarmLaps`). On the PID loop the settle is 45 against a drop
+   of 120, so it is inert there. On Wood–Berry it is worth **4.56x → 5.17x at 36 → 69 laps**, a
+   calendar cost that is stated.
+3. **THE BUDGET CHECK WENT RED BY ONE MAC, AND THAT IS RULE 9c WORKING.** `udiMacPeak` read 10,001:
+   two helpers (`_cholSolve`, `_basisAt`) charged for themselves inside units whose cost had already
+   been checked. Kernels now charge nothing and callers charge the unit they checked. The check is
+   the evidence the budget assertion can fail. A budget below the largest unit
+   (`affMinBudget`, 8,164 + 1,500 at four channels) is refused at construction rather than stalling a
+   commissioning in the field.
+4. **A PLANT I INVENTED BADLY TRIPPED THE GUARD, CORRECTLY.** The first four-channel test plant
+   coupled through the neighbour's setpoint DERIVATIVE at gain 3, a kick no real loop pair has. The
+   block's own probes then drove errors to 4-5x the baseline peak, and its guard aborted, which is
+   what it is for. It is replaced by Wood–Berry's kind of coupling and recorded in the test, so the
+   abort is not read as a block fault.
+
+**THE HOST CONTRACT IS THREE LINES AND IS TESTED AS SUCH:** write the preview and the measurement
+and call `cycle()`; pulse `xCycleStart` at each program start; hold the program while `xOwnsRef`.
+Asserted:
+- an enabled, uncommissioned block passes the setpoint through BIT-EXACTLY;
+- disabling mid-excitation releases the setpoint that scan;
+- a different program mid-commissioning faults with `PROGRAM_CHANGED` and removes the trim;
+- without `xExciteAllowed` the setpoint is never taken;
+- `xArm` FALSE during a commissioning ABORTS it, since zeroed experiments would otherwise score as
+  *no gain* from measurements never taken (rule 25);
+- an abort removes the trim at once and restores a previous controller if one exists;
+- a record moved in one weight's last bits, another plant key, another channel count or a missing
+  record is each REJECTED and arms nothing.
+
+**NOT CLAIMED.**
+- One seed and one program per plant.
+- The conventional trim is computed from the REFERENCE's motion, so with the learned trim armed the
+  second-order term `conv(learned)` is missing and unmeasured.
+- The excitation draws each channel's levels independently inside its own production range, so a
+  plant with an unsafe COMBINATION of levels must deny `xExciteAllowed`.
+- The health check scores only laps of the commissioned length.
+- Nothing here is ST yet; the port is the next step and `docs/block.md` carries its notes.
