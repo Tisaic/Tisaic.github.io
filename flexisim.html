@@ -8,7 +8,7 @@
   <title>FlexiSim — FB_AutoFF on a compliant arm</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:65,built:"2026-09-23T13:53:42Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:66,built:"2026-09-23T17:20:54Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
 
   <style>
@@ -112,8 +112,8 @@
       <option value="circle">circle</option>
     </select>
     <div class="slider">feed
-      <input type="range" id="s-feed" min="0" max="3" step="1" value="1" />
-      <span class="v" id="v-feed">4.0e-3</span></div>
+      <input type="range" id="s-feed" min="0" max="4" step="1" value="3" />
+      <span class="v" id="v-feed">2.0e-3</span></div>
     <label><input type="checkbox" id="ghost-off" /> hide the ghost</label>
   </div>
 
@@ -144,8 +144,8 @@ import { decompose } from './lib/flexisim/contour.js';
 const $ = (id) => document.getElementById(id);
 const K_LADDER = [0.25, 0.5, 1, 4, 16, 32];
 const E_LADDER = [0.01, 0.02, 0.03, 0.06, 0.10, 0.15];
-const FEED_LADDER = [0.003, 0.004, 0.006, 0.010];
-const STORE_KEY = 'flexisim.autoff.v1';
+const FEED_LADDER = [5e-4, 1e-3, 1.5e-3, 2e-3, 3e-3];
+const STORE_KEY = 'flexisim.autoff.v2';
 const kNow = () => K_LADDER[+$('s-k').value];
 const eNow = () => E_LADDER[+$('s-e').value];
 const feedNow = () => FEED_LADDER[+$('s-feed').value];
@@ -181,7 +181,7 @@ async function build() {
     rc = await calibrateComp(M, feedNow(), frameYield);
     conv = conventional(M, rc);
     ghost = null; ghostRec = null;
-    newBlock();
+    await newBlock();
     home();
     setBadge(fb.out.xDeployed ? 'block record restored — press Run' : 'ready — press Run', fb.out.xDeployed ? 'good' : '');
   } catch (e) { setBadge('halted: ' + e.message, 'bad'); throw e; }
@@ -189,28 +189,43 @@ async function build() {
 }
 
 /** A fresh block for this plant, with the stored record offered to it. */
-function newBlock() {
+async function newBlock() {
   fb = new FB_AutoFF({ nChannels: 2, nAhead: AFF_MAX_REACH, udiKey: plantKey() });
   fb.in.xEnable = true;
   fb.in.xArm = $('arm').checked;
   fb.in.xExciteAllowed = $('excite').checked;
-  stored = loadStored();
+  stored = await storeGet();
   restored = !!(stored && fb.loadRecord(stored));
 }
 
-function loadStored() {
+// THE STORED RECORD lives in IndexedDB: with its program table it runs to megabytes, past what
+// localStorage holds, and IndexedDB keeps the typed arrays as they are. Storage is a convenience —
+// every failure reads as "no record stored".
+const storeOpen = () => new Promise((res, rej) => {
+  const q = indexedDB.open('flexisim', 1);
+  q.onupgradeneeded = () => q.result.createObjectStore('records');
+  q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error);
+});
+async function storeDo(mode, fn) {
   try {
-    const s = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
-    if (!s) return null;
-    for (const [k, v] of Object.entries(s)) if (v && v.f64) s[k] = Float64Array.from(v.f64);
-    return s;
+    const db = await storeOpen();
+    return await new Promise((res) => {
+      const t = db.transaction('records', mode), q = fn(t.objectStore('records'));
+      let v = null;
+      q.onsuccess = () => { v = q.result === undefined ? null : q.result; };
+      t.oncomplete = () => { db.close(); res(v); };
+      t.onerror = t.onabort = () => { db.close(); res(null); };
+    });
   } catch { return null; }
 }
-function saveRecord() {
-  const r = fb.saveRecord(), out = {};
-  for (const [k, v] of Object.entries(r)) out[k] = v instanceof Float64Array ? { f64: Array.from(v) } : v;
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(out)); } catch { /* storage is a convenience */ }
+const storeGet = () => storeDo('readonly', (s) => s.get(STORE_KEY));
+window.__flxClearStore = () => storeDo('readwrite', (s) => s.delete(STORE_KEY));
+try { localStorage.removeItem('flexisim.autoff.v1'); } catch { /* the old, smaller format */ }
+async function saveRecord() {
+  const r = fb.saveRecord();
+  await storeDo('readwrite', (s) => s.put(r, STORE_KEY));
   stored = r;
+  sync();
 }
 
 function makeProg() { prog = jointProgram(benchPath($('shape').value, feedNow()), ik); fitView(); }
@@ -422,6 +437,9 @@ function sync() {
   $('rungs').innerHTML = '<table class="tbl"><tr><th>rung</th><th>verdict</th></tr>'
     + `<tr><td>conventional (acceleration, velocity, direction, bias)</td><td>${verdictCell(O.eConvVerdict, O.eConvReason, O.rConvFactor)}</td></tr>`
     + `<tr><td>learned map of the reference window</td><td>${verdictCell(O.eLearnVerdict, O.eLearnReason, O.rLearnFactor)}</td></tr>`
+    + `<tr><td>program table — learned lap by lap on the commissioned program, applied only while it runs`
+    + `${fb.live.xProgArmed ? ` · <b>${O.xProgActive ? 'applied now' : 'off: this is not its program'}</b>` : ''}</td>`
+    + `<td>${verdictCell(O.eProgVerdict, O.eProgReason, O.rProgFactor)}</td></tr>`
     + `<tr><td><b>the block, as it reports itself</b></td><td><b>${O.xDeployed ? fx(O.rFactor) + '×' : 'nothing deployed'}</b></td></tr></table>`;
   $('prog').innerHTML = comm || O.udiCommissionScans
     ? `<b>${affStateName(O.eState)}</b> · ${O.udiLaps} laps · ${O.udiCommissionScans.toLocaleString()} scans = ${mins(O.udiCommissionScans)}`
@@ -486,7 +504,8 @@ window.__flxDbg = () => ({
   lastLap, badge: $('badge').textContent, stored: stored ? { key: stored.udiKey } : null, restored,
   drawnPose: M ? { q: [M.arm.q[0], M.arm.q[1]], tool: M.arm.toolXY() } : null,
   fb: fb ? { state: fb.out.eState, stateName: affStateName(fb.out.eState), reason: affReasonName(fb.out.eReason),
-    conv: affVerdictName(fb.out.eConvVerdict), learn: affVerdictName(fb.out.eLearnVerdict), factor: fb.out.rFactor,
+    conv: affVerdictName(fb.out.eConvVerdict), learn: affVerdictName(fb.out.eLearnVerdict),
+    prog: affVerdictName(fb.out.eProgVerdict), progActive: fb.out.xProgActive, factor: fb.out.rFactor,
     deployed: fb.out.xDeployed, done: fb.out.xDone, ownsRef: fb.out.xOwnsRef, laps: fb.out.udiLaps,
     scans: fb.out.udiCommissionScans, macPeak: fb.out.udiMacPeak, budget: fb.udiMacBudget,
     trim: [fb.out.aTrim[0], fb.out.aTrim[1]], commissioning: commissioning() } : null,

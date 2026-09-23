@@ -14,6 +14,11 @@
  * The host SCORES the program as it runs — per completed lap, the rms error of each channel
  * against the reference, with the first 5% of the lap dropped — and never scores the scans the
  * block owns. With `fb` null the setpoint is the reference: the bare loop.
+ *
+ * `noise` (per channel, in the measurement's units) adds a seeded white noise to what the BLOCK
+ * reads, never to what the host scores: every simulated plant here repeats exactly, and a real
+ * sensor does not. `edges: false` never raises `xCycleStart`, which is a host that does not say
+ * where the lap starts: the program table cannot engage, and the rungs below run alone.
  */
 import { FB_AutoFF, AFF_MAX_REACH, affStateName, affReasonName, affVerdictName } from '../../lib/autoff/autoff.js';
 import { AFF_MAX_CH } from '../../lib/autoff/runtime.js';
@@ -22,13 +27,19 @@ import { AFF_MAX_CH } from '../../lib/autoff/runtime.js';
 export const nAheadFor = (prog) => Math.min(AFF_MAX_REACH, Math.ceil(prog.lap / 8) + 1);
 
 /** A host around a machine `m` (from `await plant.make(prog)`) running `prog`. */
-export function hostOn(plant, prog, m, { nAhead = nAheadFor(prog) } = {}) {
+export function hostOn(plant, prog, m, { nAhead = nAheadFor(prog), noise = null, seed = 12345, edges = true } = {}) {
   const nc = plant.nc, lap = prog.lap, drop = Math.ceil(0.05 * lap);
+  let s = seed >>> 0;
+  const uni = () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return (s + 0.5) / 4294967296; };
+  const gauss = () => Math.sqrt(-2 * Math.log(uni())) * Math.cos(2 * Math.PI * uni());
   const meas = new Float64Array(AFF_MAX_CH), sp = new Float64Array(nc);
   let pc = 0, lapSs = new Float64Array(nc), lapN = 0, lapK = 0;
   const laps = [];
+  let progOn = 0;
   return {
     laps,
+    /** Scans on which the block applied its program table. */
+    get progOn() { return progOn; },
     get pc() { return pc; },
     /** One scan. `refAt` may be overridden to change the program under the block. */
     scan(fb, refAt = prog.at) {
@@ -40,9 +51,10 @@ export function hostOn(plant, prog, m, { nAhead = nAheadFor(prog) } = {}) {
           const r = refAt(pc + i);
           for (let c = 0; c < nc; c++) A[i * AFF_MAX_CH + c] = r[c];
         }
-        for (let c = 0; c < nc; c++) fb.in.aMeas[c] = meas[c];
-        fb.in.xCycleStart = pc % lap === 0;
+        for (let c = 0; c < nc; c++) fb.in.aMeas[c] = meas[c] + (noise ? noise[c] * gauss() : 0);
+        fb.in.xCycleStart = edges && pc % lap === 0;
         fb.cycle();
+        if (fb.out.xProgActive) progOn++;
         for (let c = 0; c < nc; c++) sp[c] = fb.out.aRefOut[c];
       } else for (let c = 0; c < nc; c++) sp[c] = r0[c];
       const owned = !!(fb && fb.out.xOwnsRef);
@@ -79,10 +91,10 @@ export const bareLap = async (plant, prog, n = 3) => (await makeHost(plant, prog
  * Commission on `plant.main`: two bare laps, press the button, run until DONE (or a lap limit),
  * then `after` production laps. `abortAt` aborts the first time the block enters that state.
  */
-export async function commission(plant, cfg = {}, { after = 3, excite = true, abortAt = null, maxLaps = 250 } = {}) {
+export async function commission(plant, cfg = {}, { after = 3, excite = true, abortAt = null, maxLaps = 250, noise = null } = {}) {
   const prog = plant.main;
   const fb = new FB_AutoFF({ nChannels: plant.nc, nAhead: nAheadFor(prog), ...cfg });
-  const h = await makeHost(plant, prog);
+  const h = await makeHost(plant, prog, { noise });
   fb.in.xEnable = true; fb.in.xExciteAllowed = excite;
   h.run(fb, 2);
   fb.in.xCommission = true;
@@ -103,22 +115,23 @@ export async function commission(plant, cfg = {}, { after = 3, excite = true, ab
  * Deploy a saved record on a FRESH machine running `prog`, through `loadRecord` and its washout,
  * exactly as an installation restarts; return the last of `n` laps.
  */
-export async function deployOn(plant, prog, record, n = 3) {
+export async function deployOn(plant, prog, record, n = 3, o = {}) {
   const fb = new FB_AutoFF({ nChannels: plant.nc, nAhead: nAheadFor(prog) });
   fb.in.xEnable = true;
   const ok = fb.loadRecord(record);
-  const h = await makeHost(plant, prog);
-  return { ok, fb, lap: h.run(fb, n) };
+  const h = await makeHost(plant, prog, o);
+  return { ok, fb, h, lap: h.run(fb, n) };
 }
 
 const fx = (x, d = 2) => (Number.isFinite(x) ? x.toFixed(d) : String(x));
 export { fx };
 
-/** One line on what the block did — state, both rungs, and what it cost. */
+/** One line on what the block did — state, the three rungs, and what it cost. */
 export function describe(fb) {
   const O = fb.out;
   const rung = (v, r, x) => `${affVerdictName(v)}${r ? '/' + affReasonName(r) : ''} ${fx(x)}x`;
   return `${affStateName(O.eState)}${O.eReason ? ' (' + affReasonName(O.eReason) + ')' : ''} · conventional `
     + `${rung(O.eConvVerdict, O.eConvReason, O.rConvFactor)} · learned ${rung(O.eLearnVerdict, O.eLearnReason, O.rLearnFactor)}`
+    + ` · program ${rung(O.eProgVerdict, O.eProgReason, O.rProgFactor)}`
     + ` · total ${fx(O.rFactor)}x · ${O.udiLaps} laps, peak ${O.udiMacPeak} MAC/scan`;
 }

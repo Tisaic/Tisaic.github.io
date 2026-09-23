@@ -1793,7 +1793,7 @@ const fx = await ctx.newPage();
 const fxErrors = [];
 fx.on('pageerror', (e) => fxErrors.push(String(e)));
 await fx.goto(BASE.replace(/index\.html$/, '') + 'flexisim.html', { waitUntil: 'load' });
-await fx.evaluate(() => { window.__dbg && window.__dbg.clear && window.__dbg.clear(); try { localStorage.removeItem('flexisim.autoff.v1'); } catch {} });
+await fx.evaluate(async () => { window.__dbg && window.__dbg.clear && window.__dbg.clear(); await window.__flxClearStore(); });
 await fx.reload({ waitUntil: 'load' });
 const fxReady = () => fx.waitForFunction(() => { const d = window.__flxDbg && window.__flxDbg(); return (d && d.cells > 0 && !d.busy && !d.approaching)
   || /^halted:/.test(document.getElementById('badge').textContent); }, null, { timeout: 180000 });
@@ -1860,7 +1860,7 @@ if (!FULL) {
       && await fx.evaluate(() => /Commission/.test(document.getElementById('commission').textContent)), JSON.stringify(d.fb));
   check('flexisim/abort: nothing was stored', d.stored === null, JSON.stringify(d.stored));
 } else {
-  // THE WHOLE COMMISSIONING, in the page. About a minute of browser on the bench cell.
+  // THE WHOLE COMMISSIONING, in the page, at the page's default feed.
   const tc = Date.now();
   await fx.waitForFunction(() => { const f = window.__flxDbg().fb; return !f.commissioning; }, null, { timeout: 1800000 });
   console.log(`  flexisim/commission: ${Math.round((Date.now() - tc) / 1000)} s of browser`);
@@ -1869,8 +1869,10 @@ if (!FULL) {
   await fx.waitForFunction((l) => window.__flxDbg().lap >= l + 2, lap0, { timeout: 300000 });
   const d = await dbg();
   const vs = d.ghost.rms / d.lastLap.rms;
-  console.log(`  flexisim/commission: ${d.fb.stateName}, conventional ${d.fb.conv}, learned ${d.fb.learn}, reported ${d.fb.factor.toFixed(2)}x, against the ghost ${vs.toFixed(2)}x`);
+  console.log(`  flexisim/commission: ${d.fb.stateName}, conventional ${d.fb.conv}, learned ${d.fb.learn}, program ${d.fb.prog}${d.fb.progActive ? ' (applied)' : ''}, reported ${d.fb.factor.toFixed(2)}x, against the ghost ${vs.toFixed(2)}x`);
   check('flexisim/commission: the block completes in RUN with a controller deployed and stored', d.fb.stateName === 'RUN' && d.fb.deployed && d.stored !== null, JSON.stringify(d.fb));
+  check('flexisim/commission: the program table reached a verdict, and if deployed it is applied on its own program',
+    (d.fb.prog === 'DEPLOYED' && d.fb.progActive) || d.fb.prog === 'REFUSED', JSON.stringify(d.fb));
   check('flexisim/commission: the running machine beats the ghost', vs > 1, vs);
   check('flexisim/commission: 15b — the block\'s reported factor and the page\'s ghost ratio agree within 1.25x',
     Math.max(vs / d.fb.factor, d.fb.factor / vs) < 1.25, `${d.fb.factor} against ${vs}`);

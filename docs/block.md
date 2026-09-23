@@ -48,6 +48,7 @@ being taught, because there is only one loop.
 | `sScope` | `'FULL'`/`'CONVENTIONAL'` | `'FULL'` | `CONVENTIONAL` never runs the learned rung |
 | `udiSeed` | UDINT | 1 | the excitation's seed; commissioning is deterministic |
 | `rGuardFactor` | LREAL | 4 | abort commissioning if any channel's error exceeds this x its baseline peak |
+| `udiProgLaps` | UDINT | 60 | laps the program table may spend learning (warm-up laps included); 0 turns the rung off (`PROG_OFF`) |
 
 ### VAR_INPUT (`fb.in`)
 
@@ -57,7 +58,7 @@ being taught, because there is only one loop.
 | `xCommission` | rising edge starts a commissioning |
 | `xAbort` | stops a commissioning: trim removed at once, the previous controller restored if one exists |
 | `xArm` | FALSE ramps the trim to zero without forgetting the controller; during a commissioning it ABORTS it (a zeroed experiment would read as "no gain"). **Declare it `:= TRUE` in ST**, where a BOOL input defaults FALSE |
-| `xCycleStart` | TRUE on the scan the repeating program starts (a sequencer already has this signal) |
+| `xCycleStart` | TRUE on the scan the repeating program starts (a sequencer already has this signal) — in commissioning AND in production: the program table is indexed from this edge, and without it the table never engages |
 | `xExciteAllowed` | grants the block the setpoint for a generated excitation inside the production envelope. FALSE: the learned rung is SKIPPED, stated |
 | `aRefAhead` | the reference NOW and up to `nAhead` scans ahead, row-major `[i * 4 + c]` |
 | `aMeas` | each channel's achieved output, in the SAME UNITS as its reference |
@@ -72,8 +73,9 @@ being taught, because there is only one loop.
 | `xBusy`, `xDone`, `xDeployed` | commissioning; finished (latched until the next start); a controller is running |
 | `xOwnsRef` | **the host must hold its program while this is TRUE** |
 | `xRecommission` | a REQUEST: three laps of the commissioned program in a row worse than 1.5x the commissioned score |
-| `eConvVerdict`/`eConvReason`, `eLearnVerdict`/`eLearnReason` | per rung: DEPLOYED, REFUSED or SKIPPED, with the reason |
-| `rFactor`, `rConvFactor`, `rLearnFactor` | total over the bare loop; the conventional rung over bare; the learned rung over the conventional |
+| `eConvVerdict`/`eConvReason`, `eLearnVerdict`/`eLearnReason`, `eProgVerdict`/`eProgReason` | per rung: DEPLOYED, REFUSED or SKIPPED, with the reason |
+| `rFactor`, `rConvFactor`, `rLearnFactor`, `rProgFactor` | total over the bare loop; the conventional rung over bare; the learned rung over the conventional; the program table over the rungs below it |
+| `xProgActive`, `rProgGain`, `iPhase` | the program table is being applied this scan; its gain (0 or 1); the scan's position in the lap (-1 before the first edge) |
 | `rHealth` | the last complete RUN lap's score over the commissioned score (0 = not measured) |
 | `rCoverage` | the learned map's speed-coverage gain this scan |
 | `rHeadroom`, `aUMax`, `nLap`, `nSettle`, `nReach`, `nWarmLaps`, `nFitRows` | what the analysis measured and derived |
@@ -89,7 +91,7 @@ record starts with a predict-only washout and a bumpless ramp (TC_NGRC paybacks 
 ## The host contract — all of it
 
 1. Once per scan: write `aRefAhead` and `aMeas`, call `cycle()`, apply `aRefOut`.
-2. Pulse `xCycleStart` on the first scan of each program repetition.
+2. Pulse `xCycleStart` on the first scan of each program repetition, always.
 3. While `xOwnsRef` is TRUE, **hold** the program counter. The block ramps back to the held value
    before releasing.
 
@@ -107,6 +109,8 @@ IDLE ─xCommission─► DISARM (trim ramps to 0: the baseline is the machine a
                           rung armed underneath; fit rows accumulate; then a ramp home)
      ─► LEARN_WAIT (sliced job: six ridge candidates) ─► LEARN_BAR (the bar lap)
      ─► LEARN_SCORE (six ridge laps, then four gain laps on the best)
+     ─► PROG_LEARN (the bar lap with the table at zero, then trials of warm lap + scored lap;
+                    sliced job 5 builds each trial; a closing lap measures what is kept)
      ─► RUN   (health on every lap of the commissioned length)
 ```
 
@@ -118,6 +122,26 @@ IDLE ─xCommission─► DISARM (trim ramps to 0: the baseline is the machine a
   fitted onto `c − y` from the excitation, deployed on the same window of the reference. The
   window is `distilkit.deriveWindow`'s rule `min(0.61·settle, lap/8)`, capped by the preview.
   Ridge and applied gain are both chosen ON THE MACHINE.
+- **The program table** is P-type iterative learning on the commissioned program, with ① and ②
+  armed underneath as they will run. Each trial is `U' = Q(U − β·e(k + τ))` per channel: the kept
+  table less a step of the error it was measured with, read τ scans ahead because the loop answers
+  late, then `Q`, a circular moving average of half-width W applied twice. τ and W have no closed
+  form on a machine the block cannot see inside, so each channel walks a ladder of eight (τ, W)
+  pairs scaled to the lap (τ ∈ L·{1/128, 1/64, 1/256, 1/32}, W ∈ L·{1/100, 1/200}), moving on after
+  three trials that did not gain 2%; β starts at 0.5 and halves on a trial that made the channel
+  worse. A channel keeps its trial only if its own lap rms fell; a trial kept on some channels and
+  not others is measured again as kept, so every score the rung holds is a lap of exactly the table
+  it holds. Every table is scored on its SECOND lap — the learning reads a lap's error as the answer
+  to that lap's table alone, which is true only once the machine is periodic under it; scored on
+  its first lap the arm stalled at 3.3x/2.0x. Six trials in a row kept on no channel end it early.
+  Job 5 costs about 10 MAC per sample per channel and finishes inside the lap's unscored 5%.
+- **The program table's guard.** The table is right only on its own program. At a lap edge it may
+  engage only if the lap just ended was its program throughout and of its length (the machine's
+  state at a lap start is the last lap's doing); then it stays on while the reference matches the
+  stored one within `rProgTol` = 1e-6·(1 + span), both NOW and at the preview offset the table
+  reaches (`nProgAhead` = the longest lead plus two filter widths, capped by `nAhead`). The first
+  scan that fails turns it off until an edge closes a clean lap again. A program change therefore
+  turns it off BEFORE the new reference arrives, as far ahead as the preview allows.
 - **Every experiment switches at a lap boundary**, and the first 5% of every lap is unscored. Where
   the loop's own settle, read off the production lap's holds, is longer than that drop or
   unmeasurable, each experiment gets **one unscored warm-up lap** first (`nWarmLaps`).
@@ -140,34 +164,43 @@ setpoints, and a sequencer that knows when a recipe starts. Wiring:
 Measured (`test/autoff/`, the closed recipe 55→75→45→68→55 °C):
 
 ```
-  conventional rung DEPLOYED 6.12x · learned rung REFUSED (LEARN_NO_GAIN) · total 6.12x
-  6.11x measured independently by the host on the running machine
+  conventional rung DEPLOYED 6.12x · learned rung REFUSED (LEARN_NO_GAIN) · program table DEPLOYED 5.04x
+  total 30.79x reported; 30.48x measured independently by the host on the running machine
+  the same record with the table unable to engage: 6.11x; on a recipe it never saw: 5.13x
   ClassicFF (test/reference/, sharing no code) on the same program and plant: 6.15x
-  27 laps, 79,271 scans = 22.0 h of furnace at 1 s; worst scan 9,997 MAC of 10,000
+  67 laps = 2.0 days of furnace at 1 s; worst scan 9,997 MAC of 10,000
+  with sensor noise at 10% of the bare error: table 1.84x, 30.28x measured (contract NOISE)
 ```
 
 The refusal of the learned rung is the §138 reading: what a self-tuned PID+FF leaves on this
-loop is not a function of the reference window.
+loop is not a function of the reference window. The table's 5x is what repeating the same recipe
+buys on a loop that repeats exactly; the day of furnace it costs is the price of that.
 
 ## Across the plant library
 
 One press on every machine in `test/plants/`, commissioned on its main program and then loaded
-from the SAVED RECORD onto a fresh machine running a program it never saw
+from the SAVED RECORD onto fresh machines running the same program and a program it never saw
 (`test/autoff/portfolio.test.mjs`, seed 7):
 
 ```
-  plant                                  verdict                  main    held-out   laps   plant time
-  PID temperature loop, nonlinear valve  conventional              6.11x    5.13x      27    22.0 h
-  Wood–Berry column under BLT PI         conventional + learned    4.95x    4.73x      69     6.3 h
-  EMPS servo axis                        conventional            459.96x  200.46x      27     3.5 min
-  cart-pole (open-loop unstable)         conventional             25.88x   10.22x      51     5.2 min
-  steam heat exchanger (real record)     conventional            149.85x  190.37x      15     7.1 h
-  quadruple tank                         conventional + learned    9.02x    6.57x      69    33.5 h
-  extruder barrel                        learned                   1.13x    1.07x      87    17.3 d
-  compliant 2R arm (the FlexiSim page)   learned                   1.65x    1.34x      32     5.3 min
+  plant                                  deployed                     main   table off  held-out  laps  plant time
+  PID temperature loop, nonlinear valve  conventional + table        30.48x     6.11x     5.13x    67    2.0 d
+  Wood–Berry column under BLT PI         conv + learned + table      12.61x     4.95x     4.73x   127   11.1 h
+  EMPS servo axis                        conventional + table       817.51x   460.00x   200.46x    55    6.4 min
+  cart-pole (open-loop unstable)         conventional (table refused) 25.88x      —      10.22x    67    6.7 min
+  steam heat exchanger (real record)     conventional + table      2314.18x   149.85x   190.37x    67   30.2 h
+  quadruple tank                         conv + learned + table      28.48x     9.02x     6.57x   131    2.5 d
+  extruder barrel                        learned (table refused)      1.14x      —        1.07x   103   20.3 d
+  compliant 2R arm (the FlexiSim page)   learned + table              8.54x     1.85x     1.86x    94   18.1 min
   flexible robot arm (real record)       FAULT — its guard tripped while probing; nothing applied
   cold mill gauge regulator              refused — a regulator, nothing to trim
 ```
+
+"table off" is the commissioned program and the same record with no lap edge from the host, so the
+program table cannot engage; "held-out" is a program never seen, where it never engages (asserted).
+**The "main" column is not a set of controller results**: every plant here repeats exactly, and
+iterative learning on an exactly repeating simulation removes nearly all of the error (see NOT
+CLAIMED). The transferable result is "held-out".
 
 Nothing is made worse on any plant, on the commissioned or the held-out program. Three rows not
 shown are linear plants inside the conventional feedforward's own model class (a linear valve, the
@@ -181,7 +214,7 @@ comparable** to the literature's step scenario.
 |---|---|---|
 | the teacher-taught distilled rung (`hff` + distillation) | its teacher costs 74-89% of a commissioning (§73.13) and ships on zero plants as a cascade | a plant where ①d is refused and the taught rung wins by more than rule 42's band at an affordable calendar (§119: the barrel, 1.66x) |
 | the pilot cascade | ships on zero of ten plants (§86.7) | none foreseen |
-| the lap-periodic memory | retired (owner's decision) | none |
+| a table that transfers to another program | the transferable rung (②) is capped near 1.8x on the arm by its linear map class; the table does not transfer by construction | a map class that reaches the table's result on a program it never saw |
 | placement scoring (①d before ①) | costs a scored run; wins on two plants of six (§133) | a plant family where it is decisive |
 | runtime guards beyond the speed fade | every one measured was a loss or unreachable (§100, §136.5) | a distribution over the refused region with geometric mean ≤ 1.000x |
 | MIMO scaling per channel | measured harmful: bends the Newton direction (§139) | — |
@@ -203,6 +236,19 @@ comparable** to the literature's step scenario.
   so by faulting — which restores the previous controller rather than leaving the machine bare.
 - The health check scores only laps of the commissioned length. A different program is not
   scored, and `rHealth` reads 0 (not measured) rather than a number.
+- **The program table's factors on the simulated plants measure how exactly a simulation repeats.**
+  Every plant here repeats bit for bit, so iterative learning can remove almost all of the error,
+  and several plants read in the hundreds or thousands with it (rule 14). With white sensor noise
+  at 1% and 10% of the bare error rms (the host scores the truth; `contract.test.mjs` NOISE), the
+  table gave 1.0x–1.8x on top or was refused, and nothing was made worse. A real machine's
+  lap-to-lap repeatability bounds it; it is not measured here.
+- The table is learned on ONE program and is worth nothing on another; the held-out column is the
+  transferable result, and the portfolio's "table off" column is the commissioned program without it.
+- The record grows with the table: two arrays of `nProgLap × 4` LREAL, up to 4 MB at the largest
+  lap (65,536 scans). Its checksum and copies cover only the used part, but `saveRecord`,
+  `loadRecord` and the copy from the live record into the deployed one at the end of commissioning
+  are not sliced: on a PLC they are a one-shot MEMCPY of up to 4 MB and an FNV pass over it, outside
+  the scan budget. Slicing them is ST-port work, not done here.
 
 ## Notes for the ST port
 
@@ -211,7 +257,9 @@ comparable** to the literature's step scenario.
   are BOOL.
 - **No allocation after construction.** `cycle()` and every job only index preallocated arrays.
   `saveRecord()` builds a new record, which in ST is a copy into a retained `ST_AFF_Record`.
-- **Record layout.** `affFlatten` is the single definition of field order; the checksum is
+- **Record layout.** `affFlatten` is the single definition of field order (the program table
+  contributes `nProgLap × 4` entries of each array, so the flattened length follows `nProgLap`,
+  which the checksum covers); the checksum is
   FNV-1a (32-bit, `Math.imul` = multiplication modulo 2^32) over each LREAL's 8 little-endian
   bytes (`MEMCPY` into an `ARRAY[0..7] OF BYTE`). **Bump `AFF_VERSION` on any layout change.**
 - **Jobs.** Each job is a small state machine (`_job`, `_jobPhase`, `_jobI`, `_jobJ`) that

@@ -33,37 +33,56 @@ starts a lap; call `cycle()`; apply `out.aRefOut` as the loop's setpoint; while 
 TRUE, hold the program (the block is exciting the machine).
 
 **What it does when the button is pressed.** It records the machine as it arrived, then tries
-two rungs, each scored on the machine and kept only if it beats what came before:
+three rungs, each scored on the machine and kept only if it beats what came before:
 
 1. **conventional** — coefficients on the reference's own acceleration, velocity, direction of
    travel and a bias, fitted by probes and a damped Newton step (the classical self-tuned
    feedforward, with the hand taken out);
 2. **learned** — a linear map of a window of the reference, fitted from an excitation the block
-   generates inside the program's own envelope, with the conventional rung armed underneath.
+   generates inside the program's own envelope, with the conventional rung armed underneath;
+3. **program table** — a correction for each scan of the commissioned program, learned lap by lap
+   (P-type iterative learning, lead and filter width chosen per channel on the machine) with ① and
+   ② armed underneath. It is applied only while the reference matches that program, now and as far
+   ahead as the table reaches, after one clean lap of it; on any other program ① and ② run alone.
 
 It refuses with a stated reason (`eReason`) rather than deploy something that did not win, and a
 guard aborts if the error runs away while probing. The result is a checksummed record that loads
 fail-safe: another plant key, another channel count or one moved bit is rejected.
 
 **Where it stands** — one press on every machine in the plant library (`test/autoff/portfolio`,
-saved record reloaded onto a program it never saw):
+the saved record reloaded onto the commissioned program and onto one it never saw):
 
 ```
-  PID temperature loop, nonlinear valve  conventional              6.11x    held-out  5.13x
-  Wood–Berry column under BLT PI         conventional + learned    4.95x              4.73x
-  EMPS servo axis                        conventional            459.96x            200.46x
-  cart-pole (open-loop unstable)         conventional             25.88x             10.22x
-  steam heat exchanger (real record)     conventional            149.85x            190.37x
-  quadruple tank                         conventional + learned    9.02x              6.57x
-  extruder barrel                        learned                   1.13x              1.07x
-  compliant 2R arm (the FlexiSim page)   learned                   1.65x              1.34x
+                                         deployed                       main   table off   held-out
+  PID temperature loop, nonlinear valve  conventional + table          30.48x      6.11x      5.13x
+  Wood–Berry column under BLT PI         conventional + learned + table 12.61x     4.95x      4.73x
+  EMPS servo axis                        conventional + table         817.51x    460.00x    200.46x
+  cart-pole (open-loop unstable)         conventional (table refused)  25.88x       —        10.22x
+  steam heat exchanger (real record)     conventional + table        2314.18x    149.85x    190.37x
+  quadruple tank                         conventional + learned + table 28.48x     9.02x      6.57x
+  extruder barrel                        learned (table refused)        1.14x       —         1.07x
+  compliant 2R arm (the FlexiSim page)   learned + table                8.54x      1.85x      1.86x
   flexible robot arm (real record)       FAULT: guard tripped while probing, nothing applied
   cold mill gauge regulator              refused: a regulator, nothing to trim
 ```
 
+"main" is the commissioned program with everything deployed; "table off" is the same program and
+record with the host giving no lap edge, so ③ cannot engage (① and ② alone); "held-out" is a
+program the block never saw, where ③ never engages. **Read "main" with the first bullet of Not
+claimed: every plant here repeats exactly, and on a noise-free repeating simulation lap learning
+removes nearly all of the error, so factors in the hundreds and thousands measure the simulator's
+repeatability, not a controller (rule 14).**
+
 **Nothing is made worse on any plant, on either program**, and no scan exceeds the budget.
 
 **Not claimed:**
+- **The program table's factors are not controller results on these plants.** Every plant repeats
+  bit for bit. With white sensor noise at 1% and 10% of the bare error rms given to the block (the
+  host scores the truth), the table added 1.0x–1.8x or was refused, and nothing was made worse.
+  A real machine's lap-to-lap repeatability bounds it; that is not measured here.
+- The table is learned on ONE program and is worth nothing on another: "held-out" is the
+  transferable result. On the arm, ② underneath costs ③: from the bare arm the table alone reached
+  12.39x in the same 60 laps, against 8.54x on top of ②. The block does not yet try ③ without ②.
 - Every plant is a simulation. Some have constants identified from a real record, but nothing
   here has moved a real machine.
 - The linear plants sit inside the conventional rung's own model class: the PID loop with a
@@ -82,12 +101,18 @@ compliance feedforward identified at four held poses. It is defined once in
 `lib/flexisim/bench.js`, which both the page and the Node plant library use.
 
 The block trims the two joint setpoints. Its measurement is the tool's position mapped back to
-joints, which is a tracker. **Commission** runs the whole thing in about a minute of browser. The
+joints, which is a tracker. **Commission** runs the whole thing in about five minutes of browser at
+the default feed (321 s measured by the gate; 94 laps, 27 machine-minutes), and reports about 11x,
+12.9x against the ghost. The
 **ghost** is the same machine with the block disarmed, recorded per plant and program; with
 nothing commissioned the live lap IS the ghost, which is the page's control.
 
-A program change keeps the block running, which shows transfer to the new program. A plant change
-(K or E) rebuilds the arm, and the stored record is rejected because the plant key moved.
+The feed runs 5e-4 … 3e-3 (default 2e-3; laps of 64,000 down to 10,784 scans on the sharp square).
+A program change keeps the block running: the program table switches off, because it belongs to
+the commissioned program, and ① and ② carry on, which shows what transfers. Back on the
+commissioned program the table re-engages after one clean lap. A plant change (K or E) rebuilds
+the arm, and the stored record (in IndexedDB: with its table it runs to megabytes) is rejected
+because the plant key moved.
 
 ## The plant library and the harness
 
@@ -133,7 +158,8 @@ A program change keeps the block running, which shows transfer to the new progra
 
 **Owner's standing rules:**
 - Performance claims on the arm are measured on the bench cell: K 0.25 / E 0.03, the sharp square
-  at feed 4e-3. It is the softest cell on the hardest program, the one that cannot flatter.
+  at feed 3e-3, the fastest the page offers. It is the softest cell on the hardest program, the one
+  that cannot flatter.
 - Everything runs on the PLC, including commissioning, identification and fitting, inside
   10,000 MAC per 1 ms scan, every scan. Any new fitting machinery must state its per-scan cost.
 

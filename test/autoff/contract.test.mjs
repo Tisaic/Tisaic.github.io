@@ -10,6 +10,9 @@
 //   HOST      no excitation without permission; disable releases the setpoint that scan; xArm
 //             FALSE mid-commissioning aborts; a different program mid-commissioning faults
 //   15b       the conventional rung agrees with ClassicFF (test/reference) on the same program
+//   TABLE     the program table engages on its own program after a reload, never on another, and
+//             drops out on the scan a different program begins
+//   NOISE     with a noisy sensor (the host scores the truth) the block still helps, and it saw the noise
 import { readFileSync } from 'node:fs';
 import { FB_AutoFF, E_AFF_STATE, E_AFF_REASON, E_AFF_VERDICT, affStateName, affReasonName, affVerdictName,
   affMinBudget } from '../../lib/autoff/autoff.js';
@@ -17,7 +20,7 @@ import { AFF_MAX_CH, affDecide } from '../../lib/autoff/runtime.js';
 import { ClassicFF, motionBasis } from '../reference/classic.mjs';
 import { pidloop as PID } from '../plants/pidloop.mjs';
 import { recipe } from '../plants/program.mjs';
-import { makeHost, commission, nAheadFor, describe, fx } from './host.mjs';
+import { makeHost, commission, nAheadFor, describe, fx, deployOn, bareLap, factorOf } from './host.mjs';
 
 let failed = 0;
 const ck = (n, c, d) => {
@@ -62,6 +65,8 @@ ck('the learned rung ran and reached a verdict (DEPLOYED or REFUSED, never NOT_R
   [E_AFF_VERDICT.DEPLOYED, E_AFF_VERDICT.REFUSED].includes(base.fb.out.eLearnVerdict), affVerdictName(base.fb.out.eLearnVerdict));
 ck('the excitation ran and produced fit rows', base.states.has(E_AFF_STATE.EXCITE) && base.fb.out.nFitRows > 0,
   `rows ${base.fb.out.nFitRows}`);
+ck('the program table ran and reached a verdict', [E_AFF_VERDICT.DEPLOYED, E_AFF_VERDICT.REFUSED].includes(base.fb.out.eProgVerdict),
+  affVerdictName(base.fb.out.eProgVerdict));
 
 // ================================================================================= 15b: ClassicFF
 {
@@ -101,7 +106,7 @@ ck('the excitation ran and produced fit rows', base.states.has(E_AFF_STATE.EXCIT
   const aB = new Float64Array(32), aF = new Float64Array(128), out = new Float64Array(AFF_MAX_CH);
   for (let k = 0; k < 500; k++) {
     h.scan(fresh);
-    affDecide(base.fb.rec, fresh._aTap, fresh._aV, fresh._aA, fresh._speed, aB, aF, out);
+    affDecide(base.fb.rec, fresh._aTap, fresh._aV, fresh._aA, fresh._speed, fresh.out.iPhase, fresh.out.rProgGain, aB, aF, out);
     maxd = Math.max(maxd, Math.abs(out[0] - fresh._aTarget[0]));
   }
   ck('...and decides BIT-EXACTLY as the commissioned record on the same inputs', maxd === 0, `max |diff| ${maxd}`);
@@ -115,6 +120,42 @@ ck('the excitation ran and produced fit rows', base.states.has(E_AFF_STATE.EXCIT
   const two = new FB_AutoFF({ nChannels: 2, nAhead: NA });
   ck('another channel count is REJECTED', !two.loadRecord(rec));
   ck('a missing record is REJECTED rather than thrown', !two.loadRecord(null));
+}
+
+// ================================================================================= TABLE
+if (base.fb.out.eProgVerdict === E_AFF_VERDICT.DEPLOYED) {
+  const rec = base.fb.saveRecord();
+  const own = await deployOn(PID, PID.main, rec);
+  ck('TABLE: after a reload it engages on the program it was learned on', own.ok && own.h.progOn > 0 && own.fb.out.xProgActive,
+    `${own.h.progOn} scans`);
+  const other = recipe([55, 70, 50, 65, 55], 600, 250);
+  const off = await deployOn(PID, other, rec);
+  ck('TABLE: on another program it never engages, and the rungs below still run', off.ok && off.h.progOn === 0
+    && off.fb.out.eState === E_AFF_STATE.RUN, `${off.h.progOn} scans`);
+  // mid-lap, the program under the block changes: the table must drop out on that very scan
+  const h = await makeHost(PID, PID.main), fb = newFb();
+  fb.loadRecord(rec);
+  h.run(fb, 2);
+  for (let k = 0; k < PID.main.lap >> 1; k++) h.scan(fb);
+  const before = fb.out.xProgActive;
+  const shifted = (k) => other.at(k + 17);
+  h.scan(fb, shifted);
+  const after = fb.out.xProgActive;
+  let back = false;
+  for (let k = 0; k < PID.main.lap; k++) { h.scan(fb, shifted); back ||= fb.out.xProgActive; }
+  ck('TABLE: a different program mid-lap turns it off on that scan, and it stays off',
+    before && !after && !back, `before ${before}, after ${after}, came back ${back}`);
+} else ck('TABLE: the PID loop deploys a program table to test (it did not)', false, describe(base.fb));
+
+// ================================================================================= NOISE
+{
+  const bare = await bareLap(PID, PID.main);
+  const r = await commission(PID, { udiSeed: 7 }, { noise: bare.map((b) => 0.1 * b) });
+  const x = factorOf(r.h.laps[r.h.laps.length - 1], bare);
+  console.log(`    with sensor noise at 10% of the bare error: ${describe(r.fb)}; the host scores ${fx(x)}x`);
+  ck('NOISE: with a noisy sensor the block commissions and the true error improves', r.fb.out.eState === E_AFF_STATE.RUN && x > 1, fx(x));
+  ck('NOISE: and the block saw the noise (it reports less than the noise-free run did)', r.fb.out.rFactor < base.fb.out.rFactor,
+    `${fx(r.fb.out.rFactor)}x against ${fx(base.fb.out.rFactor)}x`);
 }
 
 // ================================================================================= ABORT

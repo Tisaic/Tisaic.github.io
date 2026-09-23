@@ -7,7 +7,10 @@
 //   SETTLES   the commissioning finishes — in RUN, or refusing/faulting with a STATED reason
 //   HARM      nothing is made worse: a deployment improves the commissioned program, and a
 //             refusal leaves the trim at exactly zero
-//   HELD-OUT  a deployed record does not make the program it never saw worse
+//   HELD-OUT  a deployed record does not make the program it never saw worse, and its program
+//             table never engages there
+//   TABLE     a deployed program table engages on its own program; with no lap edge from the host
+//             it cannot, and the rungs below alone do not make the program worse either
 //   15b       the block's own reported factor agrees with the host's independent scored lap
 //   BUDGET    no scan, commissioning included, exceeded the MAC budget
 //
@@ -17,7 +20,7 @@
 // Quick tier: every plant not marked `slow`. Full tier (SUITE=full): all of them.
 // ONLY=key,key limits the run to named plants.
 import { PLANTS } from '../plants/index.mjs';
-import { E_AFF_STATE, E_AFF_REASON, affReasonName } from '../../lib/autoff/autoff.js';
+import { E_AFF_STATE, E_AFF_REASON, E_AFF_VERDICT, affReasonName } from '../../lib/autoff/autoff.js';
 import { commission, bareLap, factorOf, deployOn, describe, fx } from './host.mjs';
 
 const FULL = process.env.SUITE === 'full';
@@ -54,32 +57,42 @@ for (const p of plants) {
     `state ${O.eState}, reason ${affReasonName(O.eReason)}`);
   ck(`BUDGET: peak ${O.udiMacPeak} of ${r.fb.udiMacBudget} MAC in any scan`, O.udiMacPeak <= r.fb.udiMacBudget);
 
-  let xh = null;
+  let xh = null, xo = null;
   if (deployed) {
     ck(`HARM: the commissioned program improves — ${fx(x)}x`, x > 1, `${fx(x, 4)}x`);
     ck(`15b: reported ${fx(O.rFactor)}x agrees with the scored lap's ${fx(x)}x within 1.25x`,
       Math.max(x / O.rFactor, O.rFactor / x) < 1.25);
-    const d = await deployOn(p, p.heldOut, r.fb.saveRecord());
+    const rec = r.fb.saveRecord();
+    const d = await deployOn(p, p.heldOut, rec);
     xh = factorOf(d.lap, bareH);
     ck(`HELD-OUT: the saved record loads and the unseen program is not made worse — ${fx(xh)}x`,
       d.ok && xh >= 1, `loaded ${d.ok}, ${fx(xh, 4)}x`);
+    ck('HELD-OUT: the program table never engaged on the program it was not learned on', d.h.progOn === 0, `${d.h.progOn} scans`);
+    if (O.eProgVerdict === E_AFF_VERDICT.DEPLOYED) {
+      ck('TABLE: it engages on its own program', r.h.progOn > 0, `${r.h.progOn} scans`);
+      const off = await deployOn(p, p.main, rec, 3, { edges: false });
+      xo = factorOf(off.lap, bare);
+      ck(`TABLE: with no lap edge it never engages, and the rungs below alone give ${fx(xo)}x — not worse`,
+        off.ok && off.h.progOn === 0 && xo >= 1, `${off.h.progOn} scans, ${fx(xo, 4)}x`);
+    }
   } else {
     ck('HARM: nothing deployed, and the trim is exactly zero', Array.from(O.aTrim.slice(0, p.nc)).every((t) => t === 0),
       Array.from(O.aTrim.slice(0, p.nc)).join('/'));
   }
-  rows.push({ p, O, x: deployed ? x : null, xh, laps: O.udiLaps, time: O.udiCommissionScans * p.dt,
+  rows.push({ p, O, x: deployed ? x : null, xh, xo, laps: O.udiLaps, time: O.udiCommissionScans * p.dt,
     secs: (Date.now() - t0) / 1000 });
 }
 
-console.log('\n  plant        verdict                             main     held-out   laps   plant time');
-for (const { p, O, x, xh, laps, time } of rows) {
+console.log('\n  plant        verdict                             main   table off   held-out   laps   plant time');
+for (const { p, O, x, xh, xo, laps, time } of rows) {
   const v = O.eState === E_AFF_STATE.RUN ? (O.xDeployed ? 'deployed' : 'refused') : `FAULT ${affReasonName(O.eReason)}`;
   const flag = p.insideClass ? '  (inside the model class — not a result)' : p.regulator ? '  (a regulator — nothing to trim)' : '';
   console.log(`  ${p.key.padEnd(11)}  ${v.padEnd(34)} ${x === null ? '    —  ' : (fx(x) + 'x').padStart(8)}  `
+    + `${xo === null ? '     —    ' : (fx(xo) + 'x').padStart(10)}  `
     + `${xh === null ? '    —   ' : (fx(xh) + 'x').padStart(8)}  ${String(laps).padStart(5)}   ${plantTime(time)}${flag}`);
 }
 const deployedN = rows.filter((r) => r.x !== null).length;
 console.log(`\n  ${deployedN} of ${rows.length} deployed; the rest refused or faulted with a stated reason; made worse: `
-  + `${rows.filter((r) => (r.x !== null && r.x <= 1) || (r.xh !== null && r.xh < 1)).length}`);
+  + `${rows.filter((r) => (r.x !== null && r.x <= 1) || (r.xh !== null && r.xh < 1) || (r.xo !== null && r.xo < 1)).length}`);
 console.log(failed ? `\nportfolio: ${failed} check(s) FAILED` : '\nportfolio: all checks passed');
 process.exit(failed ? 1 : 0);
