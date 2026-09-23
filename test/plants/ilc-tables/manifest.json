@@ -1,0 +1,118 @@
+{
+ "plant": "arm2r",
+ "cell": {
+  "K": 0.25,
+  "E": 0.03
+ },
+ "layout": "Float64 little-endian: ref[2L] then U[2L], each row-major [k*2 + joint]",
+ "tables": [
+  {
+   "file": "circle-2e-3.f64",
+   "shape": "circle",
+   "feed": 0.002,
+   "lap": 12567,
+   "bareRms": [
+    0.013454685606675279,
+    0.0070250129724124186
+   ],
+   "learnedRms": [
+    1.8136547018184297e-05,
+    6.73444852650322e-06
+   ],
+   "factor": 854.979,
+   "sha256": "1cb36e515c17ed43a025de1a68b20b9add323bfb3398bab04f5ae2c1fb92f8b4",
+   "generatedAt": "81edcd1",
+   "iterations": 35
+  },
+  {
+   "file": "circle-3e-3.f64",
+   "shape": "circle",
+   "feed": 0.003,
+   "lap": 8378,
+   "bareRms": [
+    0.018343201459215027,
+    0.01040739835992531
+   ],
+   "learnedRms": [
+    3.15138852412892e-05,
+    1.8529155820910376e-05
+   ],
+   "factor": 571.599,
+   "sha256": "5a5140b133c163d5a623a30992f4ab71131e4b86c5ce5ba4da354487c3c68d9a",
+   "generatedAt": "81edcd1",
+   "iterations": 35
+  },
+  {
+   "file": "rounded-2e-3.f64",
+   "shape": "rounded",
+   "feed": 0.002,
+   "lap": 14713,
+   "bareRms": [
+    0.014070619291455986,
+    0.007680928210442048
+   ],
+   "learnedRms": [
+    0.0001702931485932754,
+    0.0004894831657009462
+   ],
+   "factor": 21.802,
+   "sha256": "92390103c2463d02d7447787c050c4f259b775034f260d722ef573a0d058ede9",
+   "generatedAt": "81edcd1",
+   "iterations": 35
+  },
+  {
+   "file": "rounded-3e-3.f64",
+   "shape": "rounded",
+   "feed": 0.003,
+   "lap": 9809,
+   "bareRms": [
+    0.018601026118691487,
+    0.011398689427576526
+   ],
+   "learnedRms": [
+    0.0003916862279330911,
+    0.0013394822888640817
+   ],
+   "factor": 11.846,
+   "sha256": "e600692dde9f2c8dac64c349a8ab6ab651e6ecc7a7236724b7311e1799f6957e",
+   "generatedAt": "81edcd1",
+   "iterations": 35
+  },
+  {
+   "file": "sharp-2e-3.f64",
+   "shape": "sharp",
+   "feed": 0.002,
+   "lap": 16038,
+   "bareRms": [
+    0.03338825705541827,
+    0.012419256749541975
+   ],
+   "learnedRms": [
+    0.001696121184935959,
+    0.0024000261695603206
+   ],
+   "factor": 7.078,
+   "sha256": "7df551ae5d629235999885138f344795728c650f693c421ef007e1fddb8c9b53",
+   "generatedAt": "81edcd1",
+   "iterations": 35
+  },
+  {
+   "file": "sharp-3e-3.f64",
+   "shape": "sharp",
+   "feed": 0.003,
+   "lap": 10784,
+   "bareRms": [
+    0.06019086236673945,
+    0.0171250081956362
+   ],
+   "learnedRms": [
+    0.0033286353029933556,
+    0.0022588384202978902
+   ],
+   "factor": 9.888,
+   "sha256": "27f51d21c587971017d2ba9944179402b451324c6926df352c1cb3a606b9f5ab",
+   "generatedAt": "81edcd1",
+   "iterations": 35
+  }
+ ]
+}

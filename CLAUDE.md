@@ -129,6 +129,10 @@ because the plant key moved.
   - The real records and their identification are in `test/plants/records/` and
     `test/plants/sysid.mjs`, with provenance in `records/PROVENANCE.md`.
   - **To add a plant:** write one module, add it to `index.mjs`, and the portfolio test asks it.
+  - `test/plants/ilc-tables/` — the bench arm's exact per-scan correction on six programs (three
+    shapes × feeds 2e-3 and 3e-3), learned lap by lap and stored with a loader (`ilcTables()`),
+    sha256s and the generator. The target any transferable model must reproduce; the bench test
+    fails if the programs they were learned on stop matching the bench.
 - `test/autoff/host.mjs` — the ONE host every test drives the block through: the contract above,
   plus a scorer that reads each lap of the program and never the block's excitation.
 - `test/autoff/contract.test.mjs` — what the block promises: boundary, zero control, record, abort,

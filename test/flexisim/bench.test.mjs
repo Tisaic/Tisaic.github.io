@@ -7,10 +7,13 @@
 //              earns its place (the denominator must be a real incumbent, not a straw man)
 //   REPEATS    two machines built alike and driven alike agree bit for bit
 //   CARRY      a rebuilt arm that takes the old one's state has not moved
+//   TABLES     the stored ILC tables (test/plants/ilc-tables) were learned on the programs this bench
+//              generates today, bit for bit — otherwise they are stale
 import { buildArm, calibrateComp, benchPath, jointProgram, ikOf, conventional, snapshotArm, BENCH }
   from '../../lib/flexisim/bench.js';
 import { driveTo } from '../../lib/flexisim/approach.js';
 import { decompose } from '../../lib/flexisim/contour.js';
+import { ilcTables, refMismatch } from '../plants/ilc-tables/index.mjs';
 
 let failed = 0;
 const ck = (n, c, d) => { console.log(`  ${c ? '✓' : '✗'} ${n}${(!c && d !== undefined) ? '  → ' + d : ''}`); if (!c) failed++; };
@@ -25,6 +28,17 @@ const prog = jointProgram(benchPath('sharp'), ik);
   ck('IK: the length-only inverse kinematics equals the arm\'s own', e < 1e-12, e);
   ck('PROGRAM: a whole number of scans per lap, and closed', Number.isInteger(prog.lap) && prog.lap >= prog.path.lap
     && prog.at(prog.lap)[0] === prog.at(0)[0] && prog.at(-1)[1] === prog.at(prog.lap - 1)[1], prog.lap);
+}
+
+{
+  const tabs = ilcTables();
+  const bad = tabs.filter((t) => refMismatch(t, jointProgram(benchPath(t.shape, t.feed), ik)) !== 0);
+  ck(`TABLES: all ${tabs.length} stored ILC tables match the bench's programs bit for bit`, tabs.length === 6 && bad.length === 0,
+    bad.map((t) => t.file).join(', ') + ' — regenerate with test/plants/ilc-tables/gen.mjs');
+  const t = tabs[0], moved = { ...t, ref: Float64Array.from(t.ref) };
+  moved.ref[2 * (t.lap >> 1)] += 1e-12;
+  ck('TABLES: …and the check sees one stored sample moved by 1e-12 rad (the control)',
+    refMismatch(moved, jointProgram(benchPath(t.shape, t.feed), ik)) > 0);
 }
 
 const rc = await calibrateComp(m);
