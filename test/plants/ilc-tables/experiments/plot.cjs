@@ -1,0 +1,12 @@
+const fs = require('fs');
+const { chromium } = require('../../../node_modules/playwright-core');
+const [csv, out, title] = process.argv.slice(2);
+const lines = fs.readFileSync(csv, 'utf8').trim().split('\n'); const hdr = lines[0].split(',');
+const cols = hdr.map((_, i) => lines.slice(1).map((l) => +l.split(',')[i]));
+const series = hdr.slice(1).map((h, i) => ({ h, y: cols[i + 1] }));
+const W = 1400, H = 180, x = cols[0];
+const svg = series.map((s, j) => { const lo = Math.min(...s.y), hi = Math.max(...s.y), sc = (v) => H - 10 - (H - 20) * (v - lo) / ((hi - lo) || 1);
+  const step = Math.max(1, Math.floor(x.length / 3000)); let d = ''; for (let i = 0; i < x.length; i += step) d += (i ? 'L' : 'M') + (10 + (W - 20) * i / x.length).toFixed(1) + ',' + sc(s.y[i]).toFixed(1);
+  return `<div style="font:12px monospace">${s.h} [${lo.toExponential(2)}, ${hi.toExponential(2)}]</div><svg width="${W}" height="${H}" style="background:#fff;border:1px solid #ccc"><path d="${d}" fill="none" stroke="#1f4e9c" stroke-width="1"/></svg>`; }).join('');
+(async () => { const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' }).catch(() => chromium.launch()); const p = await b.newPage({ viewport: { width: W + 40, height: 100 } });
+  await p.setContent(`<body style="margin:10px;background:#fff"><h3 style="font:14px sans-serif">${title}</h3>${svg}</body>`); await p.screenshot({ path: out, fullPage: true }); await b.close(); })();
