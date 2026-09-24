@@ -82,6 +82,11 @@ repeatability, not a controller (rule 14).**
   A real machine's lap-to-lap repeatability bounds it; that is not measured here.
 - The table is learned on ONE program and is worth nothing on another: "held-out" is the
   transferable result.
+- **"Nothing is made worse" is NOT established for arbitrary motion on the arm.** On eight programs
+  it never saw (new shapes, sizes, positions, feeds; one lap each), a transferable model commissioned
+  once gave 0.86x-2.45x — one of them worse than the untouched machine — and keeping it learning in
+  production did not help (a short memory harmed, down to 0.47x). The portfolio's held-out check
+  tries one program per plant. `test/plants/ilc-tables/experiments/transfer/FINDINGS.md`.
 - **On the arm, the table's rms gain is bought with rough, inconsistent corners.** On the sharp square
   at 3e-3, lap learning takes the tool rms 12x down but the corner error goes from 1.3% to 6.9% faster
   than the jerk filter, and from 53% to 72% not common to the four corners (`cornerSignatures`). The
