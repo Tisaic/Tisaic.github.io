@@ -191,7 +191,7 @@ from the SAVED RECORD onto fresh machines running the same program and a program
   steam heat exchanger (real record)     conventional + table      2314.18x   149.85x   190.37x    67   30.2 h
   quadruple tank                         conv + learned + table      28.48x     9.02x     6.57x   131    2.5 d
   extruder barrel                        learned (table refused)      1.14x      —        1.07x   103   20.3 d
-  compliant 2R arm (the FlexiSim page)   learned + table              8.54x     1.85x     1.86x    94   18.1 min
+  compliant 2R arm (the FlexiSim page)   learned + table             13.50x     2.21x     2.10x    94   21.9 min
   flexible robot arm (real record)       FAULT — its guard tripped while probing; nothing applied
   cold mill gauge regulator              refused — a regulator, nothing to trim
 ```

@@ -61,7 +61,7 @@ the saved record reloaded onto the commissioned program and onto one it never sa
   steam heat exchanger (real record)     conventional + table        2314.18x    149.85x    190.37x
   quadruple tank                         conventional + learned + table 28.48x     9.02x      6.57x
   extruder barrel                        learned (table refused)        1.14x       —         1.07x
-  compliant 2R arm (the FlexiSim page)   learned + table                8.54x      1.85x      1.86x
+  compliant 2R arm (the FlexiSim page)   learned + table               13.50x      2.21x      2.10x
   flexible robot arm (real record)       FAULT: guard tripped while probing, nothing applied
   cold mill gauge regulator              refused: a regulator, nothing to trim
 ```
@@ -81,8 +81,16 @@ repeatability, not a controller (rule 14).**
   host scores the truth), the table added 1.0x–1.8x or was refused, and nothing was made worse.
   A real machine's lap-to-lap repeatability bounds it; that is not measured here.
 - The table is learned on ONE program and is worth nothing on another: "held-out" is the
-  transferable result. On the arm, ② underneath costs ③: from the bare arm the table alone reached
-  12.39x in the same 60 laps, against 8.54x on top of ②. The block does not yet try ③ without ②.
+  transferable result.
+- **On the arm, the table's rms gain is bought with rough, inconsistent corners.** On the sharp square
+  at 3e-3, lap learning takes the tool rms 12x down but the corner error goes from 1.3% to 6.9% faster
+  than the jerk filter, and from 53% to 72% not common to the four corners (`cornerSignatures`). The
+  block does not yet weigh corner shape. Learning allowed to keep only trials that stay smooth and no
+  less consistent reached 2.9x in rms and 2.7x in peak with the baseline's character intact
+  (scratch experiment, not in the block).
+- The four corners of the arm genuinely differ (pose-dependent dynamics and the slow mode carried
+  from corner to corner): one correction shared by all four removed only the small common part
+  (0.277 -> 0.227). Consistent corners need a correction that knows the pose; none is built.
 - Every plant is a simulation. Some have constants identified from a real record, but nothing
   here has moved a real machine.
 - The linear plants sit inside the conventional rung's own model class: the PID loop with a
@@ -101,13 +109,21 @@ compliance feedforward identified at four held poses. It is defined once in
 `lib/flexisim/bench.js`, which both the page and the Node plant library use.
 
 The block trims the two joint setpoints. Its measurement is the tool's position mapped back to
-joints, which is a tracker. **Commission** runs the whole thing in about five minutes of browser at
-the default feed (321 s measured by the gate; 94 laps, 27 machine-minutes), and reports about 11x,
-12.9x against the ghost. The
+joints, which is a tracker. **Commission** runs the whole thing in about nine minutes of browser at
+the default feed (519 s measured by the gate), and reports about 7.5x in its own per-joint measure,
+12.6x against the ghost at the tool. The page shows both, and the CORNERS beside them: how much of
+the corner error is not common to all four corners, how rough it is, and its peak, for the lap and
+for the ghost (`cornerSignatures` in `lib/flexisim/contour.js`). The
 **ghost** is the same machine with the block disarmed, recorded per plant and program; with
 nothing commissioned the live lap IS the ghost, which is the page's control.
 
-The feed runs 5e-4 … 3e-3 (default 2e-3; laps of 64,000 down to 10,784 scans on the sharp square).
+**The programs are ones the drives can follow** (`benchProgram` in `lib/flexisim/bench.js`): exact stops
+at corners, the tool's acceleration limited to 3 g, and the interpolator's 100-scan jerk filter on the
+joint setpoints with a matching dwell at each stop. The old deviation-rule corners asked the shoulder
+for ~2,240x its torque at every corner of the sharp square (4.4% of scans saturated); now the closed
+loop saturates on 0.02% of them, and the untouched machine's tool error fell 2.5x (0.70 to 0.28). The
+bench test asserts both halves. The feed runs 5e-4 … 3e-3 (default 2e-3; the sharp square's lap is
+13,067 scans at 3e-3 and 17,734 at 2e-3).
 A program change keeps the block running: the program table switches off, because it belongs to
 the commissioned program, and ① and ② carry on, which shows what transfers. Back on the
 commissioned program the table re-engages after one clean lap. A plant change (K or E) rebuilds
@@ -162,8 +178,9 @@ because the plant key moved.
 
 **Owner's standing rules:**
 - Performance claims on the arm are measured on the bench cell: K 0.25 / E 0.03, the sharp square
-  at feed 3e-3, the fastest the page offers. It is the softest cell on the hardest program, the one
-  that cannot flatter.
+  at feed 3e-3, the fastest the page offers, with its exact-stop, 3 g, jerk-filtered timing. It is the
+  softest cell on the hardest program the drives can follow. Report the corners (spread, roughness,
+  peak) beside the rms: a smaller error that is erratic is not an improvement to an engineer.
 - Everything runs on the PLC, including commissioning, identification and fitting, inside
   10,000 MAC per 1 ms scan, every scan. Any new fitting machinery must state its per-scan cost.
 

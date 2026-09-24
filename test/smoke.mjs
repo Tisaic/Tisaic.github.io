@@ -1827,6 +1827,12 @@ await halted('the ghost recording');
   console.log(`  flexisim/ghost: baseline ${d.ghost.rms.toExponential(3)}, live lap ${d.lastLap.rms.toExponential(3)}, ratio ${ratio.toFixed(6)}`);
   check('flexisim/ghost: a baseline lap is recorded for THIS plant and program', d.ghost.lap === d.lapT && d.ghost.lap > 1000, JSON.stringify(d.ghost));
   check('flexisim/ghost: THE CONTROL — with nothing commissioned the live lap IS the ghost (ratio 1 to 1e-3)', Math.abs(ratio - 1) < 1e-3, ratio);
+  check('flexisim/ghost: …and so does the block\'s own per-joint measure (ratio 1 to 1e-3)', Math.abs(d.jointVsGhost - 1) < 1e-3, d.jointVsGhost);
+  const lc = d.lastLap && d.lastLap.corners, gc = d.ghostCorners;
+  console.log(`  flexisim/corners: live ${lc && JSON.stringify(lc)}, ghost ${gc && JSON.stringify(gc)}`);
+  check('flexisim/corners: the corner signatures are measured for the lap and the ghost, and agree where the laps do (1e-2)',
+    lc && gc && lc.n === 4 && gc.n === 4 && Number.isFinite(lc.spread) && Number.isFinite(lc.rough) && lc.peak > 0
+      && Math.abs(lc.spread - gc.spread) < 1e-2 && Math.abs(lc.rough - gc.rough) < 1e-2, JSON.stringify({ lc, gc }));
   // The trail restarts every lap, so wait until this lap has drawn some of it (rule 12).
   await fx.waitForFunction(() => window.__flxTrail(1).length > 50, null, { timeout: 60000 });
   const tr = await fx.evaluate(() => { const r = window.__flxTrail(1); let worst = 0; for (const q of r) worst = Math.max(worst, Math.hypot(q.drawn[0] - q.tool[0], q.drawn[1] - q.tool[1]));
@@ -1874,8 +1880,13 @@ if (!FULL) {
   check('flexisim/commission: the program table reached a verdict, and if deployed it is applied on its own program',
     (d.fb.prog === 'DEPLOYED' && d.fb.progActive) || d.fb.prog === 'REFUSED', JSON.stringify(d.fb));
   check('flexisim/commission: the running machine beats the ghost', vs > 1, vs);
-  check('flexisim/commission: 15b — the block\'s reported factor and the page\'s ghost ratio agree within 1.25x',
-    Math.max(vs / d.fb.factor, d.fb.factor / vs) < 1.25, `${d.fb.factor} against ${vs}`);
+  // 15b IN THE BLOCK'S OWN MEASURE: per joint over the ghost, as the block scores per joint over its
+  // baseline. The tool-space ratio above is a different quantity (the joints weighted by their lever
+  // arms) and is reported, not compared: on the feasible programs it read 12.57x against 7.55x.
+  const vj = d.jointVsGhost;
+  console.log(`  flexisim/commission: in the block's own measure (per joint) ${vj && vj.toFixed(2)}x against the ghost`);
+  check('flexisim/commission: 15b — the block\'s reported factor and the page\'s per-joint ghost ratio agree within 1.25x',
+    vj > 0 && Math.max(vj / d.fb.factor, d.fb.factor / vj) < 1.25, `${d.fb.factor} against ${vj}`);
   check(`flexisim/plc: the whole commissioning stayed inside ${d.fb.budget} MAC every scan`, d.fb.macPeak <= d.fb.budget, d.fb.macPeak);
   await fx.screenshot({ path: join(SHOTS, '14-flexisim-deployed.png') });
 

@@ -1,5 +1,9 @@
 # What limits the arm — measured 2026-09-23
 
+**Measured on the OLD programs** (deviation-rule corners, 20 g, no jerk filter). They were replaced
+by feasible ones because of finding 1; the stored tables were regenerated on the new programs, so
+these scripts no longer reproduce these numbers exactly. The conclusions are the record.
+
 Scripts here run from this directory (`node sat.mjs`, `node inv.mjs`, …) against the stored tables
 and the bench machine. Every number below is from the bench arm (K 0.25 / E 0.03), joint rms after
 a 5% drop, factor = 1 / rms-over-joints of (rms / bare rms).

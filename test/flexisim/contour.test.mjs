@@ -12,7 +12,8 @@ import { FlexArm2R } from '../../lib/flexisim/arm2r.js';
 import { buildLink, massProperties } from '../../lib/flexisim/link.js';
 import { ChainServo } from '../../lib/flexisim/compensator.js';
 import { ToolPath, roundedRect, SEG } from '../../lib/flexisim/toolpath.js';
-import { ContourScore, decompose } from '../../lib/flexisim/contour.js';
+import { ContourScore, decompose, cornerSignatures } from '../../lib/flexisim/contour.js';
+import { benchProgram, ikOf } from '../../lib/flexisim/bench.js';
 
 let failed = 0;
 function check(name, cond, detail) {
@@ -269,6 +270,37 @@ const arm = new FlexArm2R({ joint1: jt(massProperties(l1)), link1: l1,
   check('…and on a stream with both, rms² = bias² + osc² identically',
     Math.abs(b.contourRms ** 2 - (b.contourBias ** 2 + b.contourOsc ** 2)) < 1e-12,
     `${b.contourRms ** 2} vs ${b.contourBias ** 2 + b.contourOsc ** 2}`);
+}
+
+// ---- THE CORNER SIGNATURES: a machine that does the same thing at every corner reads as the same,
+// one that does something different at one corner does not, and a fast wiggle reads as rough.
+{
+  const prog = benchProgram('sharp', 3e-3, ikOf(14, 10)), L = prog.lap;
+  const base = cornerSignatures(prog, new Float64Array(2 * L).map((_, i) => (i % 2 ? prog.cmd(i >> 1).y : prog.cmd(i >> 1).x)));
+  const ks = base.k, half = Math.round(L / 16);
+  // the same excursion at every corner, in each corner's own frame: a lag, then a swing outward
+  const tool = (odd, wiggle) => {
+    const t = new Float64Array(2 * L);
+    for (let k = 0; k < L; k++) { const c = prog.cmd(k); t[2 * k] = c.x; t[2 * k + 1] = c.y; }
+    ks.forEach((kc, i) => {
+      const d = base.dir[i], n = [-d[1], d[0]];   // the metric's own frame: a test that defines it again can disagree
+      for (let j = -half; j <= half; j++) {
+        const k = (((kc + j) % L) + L) % L, x = j / half;
+        let al = -0.05 * Math.exp(-4 * x * x), ac = 0.03 * Math.exp(-8 * (x - 0.3) ** 2);
+        if (odd && i === 2) { al *= -1.5; ac *= 0.2; }
+        if (wiggle) ac += 0.01 * Math.sin(2 * Math.PI * j / 20);
+        t[2 * k] += al * d[0] + ac * n[0]; t[2 * k + 1] += al * d[1] + ac * n[1];
+      }
+    });
+    return t;
+  };
+  const same = cornerSignatures(prog, tool(false, false)), odd = cornerSignatures(prog, tool(true, false)),
+    rough = cornerSignatures(prog, tool(false, true));
+  console.log(`    [corners] alike: spread ${(100 * same.spread).toFixed(2)}% rough ${(100 * same.rough).toFixed(2)}% · one corner different: spread ${(100 * odd.spread).toFixed(1)}% · with a 20-scan wiggle: rough ${(100 * rough.rough).toFixed(1)}%`);
+  check('CORNERS: four corners doing the same thing in their own frames read as alike (spread under 1%)', same.n === 4 && same.spread < 0.01, same.spread);
+  check('CORNERS: …and one corner doing something else is seen (spread over 30%)', odd.spread > 0.3, odd.spread);
+  check('CORNERS: a smooth excursion is not rough (under 2%), a 20-scan wiggle is (over 10%)', same.rough < 0.02 && rough.rough > 0.1,
+    `${same.rough} / ${rough.rough}`);
 }
 
 await l1.destroy(); await l2.destroy();

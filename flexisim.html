@@ -8,7 +8,7 @@
   <title>FlexiSim — FB_AutoFF on a compliant arm</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:68,built:"2026-09-23T20:21:11Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:69,built:"2026-09-24T05:25:27Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
 
   <style>
@@ -136,10 +136,10 @@
 import { FB_AutoFF, E_AFF_STATE, E_AFF_VERDICT, AFF_MAX_REACH, affStateName, affReasonName, affVerdictName }
   from './lib/autoff/autoff.js';
 import { AFF_MAX_CH } from './lib/autoff/runtime.js';
-import { buildArm, calibrateComp, benchPath, jointProgram, ikOf, conventional, snapshotArm, BENCH }
+import { buildArm, calibrateComp, benchProgram, ikOf, conventional, snapshotArm, BENCH }
   from './lib/flexisim/bench.js';
 import { planApproach, approachStep } from './lib/flexisim/approach.js';
-import { decompose } from './lib/flexisim/contour.js';
+import { decompose, cornerSignatures } from './lib/flexisim/contour.js';
 
 const $ = (id) => document.getElementById(id);
 const K_LADDER = [0.25, 0.5, 1, 4, 16, 32];
@@ -158,7 +158,12 @@ const frameYield = () => new Promise((r) => requestAnimationFrame(r));
 let M = null, rc = null, conv = null, ik = null, prog = null, view = null;
 let fb = null, busy = false, running = false, approach = null, pendingProgram = false;
 let pc = 0, frames = 0, stored = null, restored = false, t0 = 0;
-let lapSs = 0, lapN = 0, lastLap = null, trail = [];
+let lapSs = 0, lapN = 0, lastLap = null, trail = [], lapTool = null;
+// THE BLOCK'S OWN MEASURE, kept beside the tool's: each joint's error as the block reads it (the
+// tracker's joints against the program's, before the step), rms over the lap after the 5% drop.
+// The block's factor is per joint over its own baseline, which is not the tool's distance from the
+// path — measured on the feasible programs, 7.55x against the tool's 12.57x on one commissioning.
+let jointSs = [0, 0], jointN = 0;
 const meas = new Float64Array(AFF_MAX_CH), sp = [0, 0];
 // THE GHOST: this machine without the block, one lap, recorded for each plant+program. It is
 // recorded by running the machine with the block DISARMED, so it is the same arm and the same
@@ -228,13 +233,14 @@ async function saveRecord() {
   sync();
 }
 
-function makeProg() { prog = jointProgram(benchPath($('shape').value, feedNow()), ik); fitView(); }
+function makeProg() { prog = benchProgram($('shape').value, feedNow(), ik); fitView(); }
 
 /** Drive the arm to the program's start; the block is disabled while the program is not running. */
 function home(resume = false) {
   makeProg();
   approach = Object.assign(planApproach(M.arm, prog.at(0), feedNow()), { resume: resume || running });
-  running = false; pc = 0; pendingProgram = false; lapSs = 0; lapN = 0; lastLap = null; trail = [];
+  running = false; pc = 0; pendingProgram = false; lapSs = 0; lapN = 0; lastLap = null; trail = []; lapTool = null;
+  jointSs = [0, 0]; jointN = 0;
   ghostRec = null;
 }
 function approachDone() {
@@ -274,10 +280,13 @@ function scan() {
   const owned = fb.out.xOwnsRef;
   conv.step(sp);
   if (owned) return;
+  if (pc % L >= Math.ceil(0.05 * L)) { const r = prog.at(pc); jointSs[0] += (q[0] - r[0]) ** 2; jointSs[1] += (q[1] - r[1]) ** 2; jointN++; }
   // score the PROGRAM (never the block's excitation): the tool's error off the path, per lap
   const tool = M.arm.toolXY(), d = decompose(prog.path, tool, prog.cmd(pc));
   const e2 = d.contour * d.contour + d.lag * d.lag;
   if (pc % L >= Math.ceil(0.05 * L)) { lapSs += e2; lapN++; }
+  if (!lapTool || lapTool.length !== 2 * L) lapTool = new Float64Array(2 * L);
+  lapTool[2 * (pc % L)] = tool[0]; lapTool[2 * (pc % L) + 1] = tool[1];
   if (recording) ghostStep(tool, pc % L);
   if (pc % 8 === 0 && !commissioning()) trail.push([tool[0], tool[1], d.s]);
   pc++;
@@ -286,15 +295,32 @@ function scan() {
 
 function onLap() {
   lastLap = { rms: Math.sqrt(lapSs / Math.max(1, lapN)), armed: fb.in.xArm && fb.out.xDeployed, key: ghostKey(),
-    experiment: commissioning() };
-  lapSs = 0; lapN = 0; trail = [];
+    experiment: commissioning(), corners: lapTool && lapTool.length === 2 * prog.lap ? cornersOf(lapTool) : null,
+    jrms: jointSs.map((x) => Math.sqrt(x / Math.max(1, jointN))) };
+  lapSs = 0; lapN = 0; trail = []; jointSs = [0, 0]; jointN = 0;
   if (ghostRec && ++ghostRec.laps > 1) {           // one warm lap, then one recorded lap
-    ghost = { key: ghostRec.key, lap: ghostRec.lap, ex: ghostRec.ex, ey: ghostRec.ey, tx: ghostRec.tx, ty: ghostRec.ty, rms: lastLap.rms };
+    const gt = new Float64Array(2 * ghostRec.lap);
+    for (let i = 0; i < ghostRec.lap; i++) { gt[2 * i] = ghostRec.tx[i]; gt[2 * i + 1] = ghostRec.ty[i]; }
+    ghost = { key: ghostRec.key, lap: ghostRec.lap, ex: ghostRec.ex, ey: ghostRec.ey, tx: ghostRec.tx, ty: ghostRec.ty, rms: lastLap.rms,
+      jrms: lastLap.jrms, corners: cornersOf(gt) };
     ghostRec = null;
   }
   if (!ghostRec && !commissioning() && (!ghost || ghost.key !== ghostKey())) startGhost();
   if (pendingProgram && !commissioning()) home(true);
 }
+/** The last lap against the ghost in the block's own measure: 1 / rms over joints of (lap / ghost). */
+function jointVsGhost() {
+  if (!lastLap || !ghost || !lastLap.jrms || !ghost.jrms) return null;
+  return 1 / Math.sqrt(((lastLap.jrms[0] / ghost.jrms[0]) ** 2 + (lastLap.jrms[1] / ghost.jrms[1]) ** 2) / 2);
+}
+
+/** The corner signatures of one lap: spread (not common to every corner), roughness, peak. */
+function cornersOf(tool) {
+  const c = cornerSignatures(prog, tool, { smooth: BENCH.JERK });
+  return { spread: c.spread, rough: c.rough, peak: c.peak, n: c.n };
+}
+const cornerText = (c) => c ? `${c.n} corners: ${fx(100 * c.spread, 0)}% not in common · rough ${fx(100 * c.rough, 1)}% · peak ${c.peak.toExponential(2)}` : '—';
+
 function startGhost() {
   const L = prog.lap;
   ghostRec = { key: ghostKey(), lap: L, laps: 0, ex: new Float64Array(L), ey: new Float64Array(L), tx: new Float64Array(L), ty: new Float64Array(L) };
@@ -457,7 +483,14 @@ function sync() {
       : lastLap.armed ? 'the block acting' : 'the block not acting'}` : '—'],
     ['the ghost', ghost && ghost.key === ghostKey() ? `${ghost.rms.toExponential(3)} — this machine without the block` : ghostRec ? 'recording…' : '—'],
   ];
-  if (lastLap && !lastLap.experiment && ghost && ghost.key === lastLap.key) rows.push(['vs the ghost', `<b>${fx(ghost.rms / lastLap.rms)}×</b> ${ghost.rms / lastLap.rms >= 1 ? 'better' : 'worse'}`]);
+  if (lastLap && !lastLap.experiment && ghost && ghost.key === lastLap.key) {
+    rows.push(['vs the ghost', `<b>${fx(ghost.rms / lastLap.rms)}×</b> ${ghost.rms / lastLap.rms >= 1 ? 'better' : 'worse'} at the tool`
+      + ` · ${fx(jointVsGhost())}× per joint, the block's own measure`]);
+  }
+  // THE CORNERS, beside the rms: a smaller error that is rough, or different at every corner,
+  // reads as erratic — so the page shows whether the corners look alike, for the lap and the ghost.
+  if (lastLap && lastLap.corners) rows.push(['corners, last lap', cornerText(lastLap.corners)]);
+  if (ghost && ghost.key === ghostKey() && ghost.corners) rows.push(['corners, the ghost', cornerText(ghost.corners)]);
   $('stats').innerHTML = rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('');
   $('badge-r').textContent = `lap ${Math.floor(pc / (prog ? prog.lap : 1))}`;
   if (comm) setBadge(`commissioning — ${affStateName(O.eState)}`, 'warn');
@@ -502,6 +535,7 @@ window.__flxDbg = () => ({
   cells: M ? 1 : 0, k: pc, lap: prog ? Math.floor(pc / prog.lap) : 0, lapT: prog ? prog.lap : 0, mag: magNow(),
   recording: !!ghostRec, ghost: ghost ? { rms: ghost.rms, lap: ghost.lap, stale: ghost.key !== ghostKey() } : null,
   lastLap, badge: $('badge').textContent, stored: stored ? { key: stored.udiKey } : null, restored,
+  ghostCorners: ghost ? ghost.corners : null, jointVsGhost: jointVsGhost(),
   drawnPose: M ? { q: [M.arm.q[0], M.arm.q[1]], tool: M.arm.toolXY() } : null,
   fb: fb ? { state: fb.out.eState, stateName: affStateName(fb.out.eState), reason: affReasonName(fb.out.eReason),
     conv: affVerdictName(fb.out.eConvVerdict), learn: affVerdictName(fb.out.eLearnVerdict),

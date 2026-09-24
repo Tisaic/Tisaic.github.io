@@ -12,16 +12,16 @@
    "feed": 0.002,
    "lap": 12567,
    "bareRms": [
-    0.013454685606675279,
-    0.0070250129724124186
+    0.013453964613481277,
+    0.0070245113449146366
    ],
    "learnedRms": [
-    1.8136547018184297e-05,
-    6.73444852650322e-06
+    1.811609781837137e-05,
+    6.928072341169116e-06
    ],
-   "factor": 854.979,
-   "sha256": "1cb36e515c17ed43a025de1a68b20b9add323bfb3398bab04f5ae2c1fb92f8b4",
-   "generatedAt": "81edcd1",
+   "factor": 847.296,
+   "sha256": "272633b1c1adcf8a21af999e1ed8715412bf49bf5b6782208ed895c1bb0c72bb",
+   "generatedAt": "4558760 + the feasible programs (exact stops, 3 g, 100-scan jerk filter)",
    "iterations": 35
   },
   {
@@ -30,16 +30,16 @@
    "feed": 0.003,
    "lap": 8378,
    "bareRms": [
-    0.018343201459215027,
-    0.01040739835992531
+    0.018337007974315127,
+    0.01040416309469717
    ],
    "learnedRms": [
-    3.15138852412892e-05,
-    1.8529155820910376e-05
+    2.7467437100376208e-05,
+    1.9609955137356334e-05
    ],
-   "factor": 571.599,
-   "sha256": "5a5140b133c163d5a623a30992f4ab71131e4b86c5ce5ba4da354487c3c68d9a",
-   "generatedAt": "81edcd1",
+   "factor": 587.407,
+   "sha256": "251e960f3069a7443bf576bd64159886bd75f24d5b4f9d10b1073c6b3ec225fb",
+   "generatedAt": "4558760 + the feasible programs (exact stops, 3 g, 100-scan jerk filter)",
    "iterations": 35
   },
   {
@@ -48,16 +48,16 @@
    "feed": 0.002,
    "lap": 14713,
    "bareRms": [
-    0.014070619291455986,
-    0.007680928210442048
+    0.014093964865684313,
+    0.007667167942851159
    ],
    "learnedRms": [
-    0.0001702931485932754,
-    0.0004894831657009462
+    0.00016308745633712547,
+    0.00045964325369755795
    ],
-   "factor": 21.802,
-   "sha256": "92390103c2463d02d7447787c050c4f259b775034f260d722ef573a0d058ede9",
-   "generatedAt": "81edcd1",
+   "factor": 23.163,
+   "sha256": "dfbef48bb8362aab3879f636b4bf17d7a8c3267a503310bf93ee9c8bc7ed2e0d",
+   "generatedAt": "4558760 + the feasible programs (exact stops, 3 g, 100-scan jerk filter)",
    "iterations": 35
   },
   {
@@ -66,52 +66,52 @@
    "feed": 0.003,
    "lap": 9809,
    "bareRms": [
-    0.018601026118691487,
-    0.011398689427576526
+    0.019150348377304,
+    0.011296357184683197
    ],
    "learnedRms": [
-    0.0003916862279330911,
-    0.0013394822888640817
+    0.00042720587927245964,
+    0.00114271487633856
    ],
-   "factor": 11.846,
-   "sha256": "e600692dde9f2c8dac64c349a8ab6ab651e6ecc7a7236724b7311e1799f6957e",
-   "generatedAt": "81edcd1",
+   "factor": 13.652,
+   "sha256": "7679fcc204acbd5890f77a6b5eca88e182caa93714438eb4da0bb6f9c1b285ea",
+   "generatedAt": "4558760 + the feasible programs (exact stops, 3 g, 100-scan jerk filter)",
    "iterations": 35
   },
   {
    "file": "sharp-2e-3.f64",
    "shape": "sharp",
    "feed": 0.002,
-   "lap": 16038,
+   "lap": 17734,
    "bareRms": [
-    0.03338825705541827,
-    0.012419256749541975
+    0.014429040774114282,
+    0.010216456019033107
    ],
    "learnedRms": [
-    0.001696121184935959,
-    0.0024000261695603206
+    0.0004300179191808165,
+    0.0043447103715542595
    ],
-   "factor": 7.078,
-   "sha256": "7df551ae5d629235999885138f344795728c650f693c421ef007e1fddb8c9b53",
-   "generatedAt": "81edcd1",
+   "factor": 3.317,
+   "sha256": "09cb51b10344ae2b6a2e134e89810c4ac7b817a19df7398a6590d7af6c01f62f",
+   "generatedAt": "4558760 + the feasible programs (exact stops, 3 g, 100-scan jerk filter)",
    "iterations": 35
   },
   {
    "file": "sharp-3e-3.f64",
    "shape": "sharp",
    "feed": 0.003,
-   "lap": 10784,
+   "lap": 13067,
    "bareRms": [
-    0.06019086236673945,
-    0.0171250081956362
+    0.01879893288621943,
+    0.013418818389541972
    ],
    "learnedRms": [
-    0.0033286353029933556,
-    0.0022588384202978902
+    0.0003937945418341343,
+    0.001921133361829256
    ],
-   "factor": 9.888,
-   "sha256": "27f51d21c587971017d2ba9944179402b451324c6926df352c1cb3a606b9f5ab",
-   "generatedAt": "81edcd1",
+   "factor": 9.774,
+   "sha256": "38e4c09ec22e20cbe79551ef53086cbcf132e45aff92bad45fadf6905289c69b",
+   "generatedAt": "4558760 + the feasible programs (exact stops, 3 g, 100-scan jerk filter)",
    "iterations": 35
   }
  ]
