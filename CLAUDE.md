@@ -90,6 +90,8 @@ repeatability, not a controller (rule 14).**
   **Not in the block yet:** on the same eight programs, a correction learned on a reduced-order
   TWIN of the arm gave 6.1x-20.5x on first use, never worse, with every corner metric smaller in
   absolute terms. The twin is identified from the tool alone and is unmoved by 50% tracker noise.
+  On machines built to differ from it (a tool payload, a stiffening gearbox, friction, triple
+  backlash) it identifies the payload and the stiffening and still gives 4.4x-34x.
   `test/plants/ilc-tables/experiments/twin/FINDINGS.md`.
 - **On the arm, the table's rms gain is bought with rough, inconsistent corners.** On the sharp square
   at 3e-3, lap learning takes the tool rms 12x down but the corner error goes from 1.3% to 6.9% faster

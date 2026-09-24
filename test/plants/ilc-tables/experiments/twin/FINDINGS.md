@@ -4,7 +4,10 @@
 applied ONCE to programs the machine has never run:
 - gives 11-27x with the full lattice twin;
 - gives **6-20x with a reduced-order twin identified from the tool alone**, small enough for a
-  controller.
+  controller;
+- gives **4.4-34x on machines the twin was not built to match** (a tool payload, a stiffening
+  gearbox, friction, triple backlash, all at once), once the twin identifies its payload and
+  stiffening from the tool too. Every corner metric shrinks, and nothing is made worse.
 
 Every correction learned from data and meant to transfer gave 0.86-2.45x on the same programs.
 
@@ -85,11 +88,59 @@ machine), on the eight unseen programs where every transferable model gave 0.86-
   shares rise (53% -> 59%, 1.3% -> 4.0%) because the smooth part is what the correction removes
   (rule 19).
 
+## A machine the twin does not model (`mismatch.mjs`, `rident3.mjs`)
+
+The reduced twin shares the machine's structure because both are built from the same code, which
+flatters it (rules 15, 16). So the MACHINE is changed in its physics only; its drive and
+conventional controller keep their nominal model, as a real drive's configured payload would:
+- `payload`: a point mass at the tool, 20% of the links' mass, in the rigid solve only;
+- `backlash3`: three times the gearbox backlash;
+- `friction`: Stribeck friction on both motors, breakaway 8% and Coulomb 5% of the hold torque;
+- `stiff`: a progressive gearbox, K 50% higher at the gravity-hold wind-up;
+- `all`: every one of the above;
+- `off`: all of them at values off the search grid (payload 0.13, stiffening 0.35).
+
+**The nominal twin** (K-only search) was:
+- unmoved by backlash and friction: 5.8-17.5x;
+- badly hurt by the payload (2.1-7.8x) and the stiffening (2.0-7.0x);
+- never worse than the untouched machine.
+
+**The twin now carries a payload and gearbox stiffening, identified from the tool.** How they are
+found matters:
+- A coordinate search at fixed modes stalls (miss 12-29%): the modes, picked under the wrong
+  physics, absorb the mismatch.
+- The oracle settles it. With the true physics and only the modes fitted, the miss is 5.4-8.9%.
+  The model was right and the search was wrong (rule 43 checked in the other direction).
+- `rident3.mjs` searches the physics against a FIXED BANK of 16 modes per link, gains by least
+  squares, so its objective does not hinge on a discrete mode choice. It uses a 48-run grid, then a
+  coordinate refine, and only then picks the compact two-mode twin.
+
+| machine | identified from the tool (truth) | twin's miss | first use on the lattice machine, nine unseen programs |
+|---|---|---|---|
+| nominal | K x1.09, payload 0, stiff 0 (1, 0, 0) | 6.1% | 7.3-21.6x |
+| payload | K x0.975, payload 0.181 (1, 0.2) | 5.4% | 8.9-34.1x |
+| stiff | K x1.000, stiff 0.500 (1, 0.5) | 8.6% | 6.2-22.3x |
+| all | K x0.994, payload 0.191, stiff 0.445 (1, 0.2, 0.5) | 9.0% | 4.4-12.8x |
+| off (off-grid) | K x1.045, payload 0.153, stiff 0.305 (1, 0.13, 0.35) | 8.8% | 4.6-22.1x |
+
+- Both halves hold. On the nominal machine the payload and the stiffening come back at exactly 0.
+- The grid contains 0.2 and 0.5, which flatters the search. The `off` machine is the control; its
+  values are recovered to within 0.02 and 0.05.
+- **Corners, all 54 program x machine rows (six machines, nine programs each): every corner metric
+  is smaller than on the untouched machine.**
+  - The part not common to the corners falls 2.6-21x.
+  - The fast part falls 1.4-18x.
+  - The peak falls 3.1-36x.
+- Nothing was made worse anywhere. The worst factor on any machine is 4.4x.
+
 ## Not claimed
 
 - The twin has the machine's STRUCTURE (a rigid 2R, geared joints with backlash, the servo, the
-  controller, bending links). A real robot's differs; structural error is measured here only as far
-  as two modes stand in for a lattice (a 6-9% miss).
+  controller, bending links). The mismatches tried are the ones listed: a payload, a stiffening
+  gearbox, friction and backlash. A real robot differs in ways not tried, including more axes,
+  link-to-joint coupling and thermal drift.
+- The masses and lengths of the links are taken as known (CAD), and so is the controller's
+  configuration.
 - The factors in the hundreds on the twin itself are the noise-free simulator (rule 14). The
   machine columns are the result.
 - The correction for a program is learned from the WHOLE lap of its reference. A program must be

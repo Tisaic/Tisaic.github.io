@@ -5,7 +5,7 @@
 // dampings and K are searched outside. Output: modal-tool.json in rtwin.mjs's format, plus K.
 import { buildArm, calibrateComp, ikOf, conventional, BENCH } from '../../../../../lib/flexisim/bench.js';
 import { driveTo } from '../../../../../lib/flexisim/approach.js';
-import { machineArm } from './mismatch.mjs';
+import { machineArm, physics } from './mismatch.mjs';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 const N = +(process.env.N || 40000), NOISE = +(process.env.NOISE || 0), OUT = process.env.OUT || 'modal-tool.json';
 const MM = process.env.MM || '', real = await machineArm(MM); if (MM) console.log(`MACHINE: ${MM} (the twin is nominal)`); const ik = ikOf(real.arm.L1, real.arm.L2), rc = await calibrateComp(real);
@@ -23,9 +23,10 @@ if (NOISE > 0) { let s0 = 0; for (let i = 0; i < 2 * N; i++) s0 += yM[i] ** 2; c
 let ssM = 0; for (let i = 0; i < 2 * N; i++) ssM += yM[i] ** 2;
 // ---- one rigid run of the twin at stiffness K: e_rigid, frame inputs, Jacobian of the measured joint error wrt (w1, s1, w2)
 function toolOf(a, q1, q2, w1, s1, w2) { const c1 = Math.cos(q1), sn1 = Math.sin(q1), ex = c1 * a.L1 - sn1 * w1, ey = sn1 * a.L1 + c1 * w1, a2 = q1 + s1 + q2; return [ex + Math.cos(a2) * a.L2 - Math.sin(a2) * w2, ey + Math.sin(a2) * a.L2 + Math.cos(a2) * w2]; }
-async function rigidRun(K) {
-  const t = await buildArm(K, BENCH.E), a = t.arm; await t.l1.destroy(); await t.l2.destroy();
-  a.step = function (tc1, tc2, dt) { const t1 = this.j1.stepMotor(tc1, dt), t2 = this.j2.stepMotor(tc2, dt); this.stepRigid(t1, t2, dt); return this; };
+async function rigidRun(K, ph = {}) {
+  const t = await buildArm(K, BENCH.E), a = t.arm; await t.l1.destroy(); await t.l2.destroy(); physics(a, ph);
+  const rigidStep = a.stepRigid;
+  a.step = function (tc1, tc2, dt) { const t1 = this.j1.stepMotor(tc1, dt), t2 = this.j2.stepMotor(tc2, dt); rigidStep.call(this, t1, t2, dt); return this; };
   a.toolXY = function () { return toolOf(this, this.q[0], this.q[1], 0, 0, 0); };
   await driveTo(a, t.servo, home, BENCH.feed); const c = conventional(t, rc); c.reset(home); for (let k = 0; k < 6000; k++) c.step(home);
   const e = new Float64Array(2 * N), u1 = new Float64Array(2 * N), u2 = new Float64Array(3 * N), G = new Float64Array(6 * N), h = 1e-5;
@@ -56,26 +57,38 @@ function solve(R, K, m1, m2) {
   return { x, cols, held: miss(split, N), m1, m2 };
 }
 const grid = []; for (let p = 300; p <= 12000; p *= 1.2) for (const z of [0.03, 0.1, 0.3, 0.6]) grid.push([2 * Math.PI / p, z]);
-async function fitAt(K) {
-  const R = await rigidRun(K); let m1 = [], m2 = [], best = null;
-  for (let pass = 0; pass < 4; pass++) {   // add one mode per link per pass until two each, then re-pick each
-    for (const link of [1, 2]) { const cur = link === 1 ? m1 : m2, slot = cur.length < 2 ? cur.length : (pass % 2);
-      let b = null; for (const g of grid) { const t = cur.slice(); t[slot] = g; const r = link === 1 ? solve(R, K, t, m2) : solve(R, K, m1, t); if (!b || r.held < b.held) b = r; }
-      m1 = b.m1; m2 = b.m2; best = b; }
-  }
-  featCache.clear();
-  return best;
+// the twin's physical parameters: k (gearbox K, multiplicative), payload (fraction of link mass), stiff (K rise at hold)
+const phOf = (p) => ({ payload: p.payload, stiff: p.stiff });
+async function pickModes(p, m1, m2) {   // modes re-picked on the grid at fixed physics
+  const R = await rigidRun(BENCH.K * p.k, phOf(p)); const K = BENCH.K * p.k; let best = null;
+  for (let pass = 0; pass < 4; pass++) for (const link of [1, 2]) { const cur = link === 1 ? m1 : m2, slot = cur.length < 2 ? cur.length : (pass % 2);
+    let b = null; for (const g of grid) { const t = cur.slice(); t[slot] = g; const r = link === 1 ? solve(R, K, t, m2) : solve(R, K, m1, t); if (!b || r.held < b.held) b = r; }
+    m1 = b.m1; m2 = b.m2; best = b; }
+  featCache.clear(); return best;
 }
+async function gainsOnly(p, m1, m2) { const R = await rigidRun(BENCH.K * p.k, phOf(p)); const b = solve(R, BENCH.K * p.k, m1, m2); featCache.clear(); return b; }
+const PHYS = (process.env.PHYS ?? 'payload,stiff').split(',').filter(Boolean);
 const pp = (b) => `link1 ${b.m1.map(([w, z]) => `${(2 * Math.PI / w).toFixed(0)}/ζ${z}`).join('+')} · link2 ${b.m2.map(([w, z]) => `${(2 * Math.PI / w).toFixed(0)}/ζ${z}`).join('+')}`;
-let bestK = null;
-for (const kf of (process.env.KS || '0.6,0.8,1,1.25,1.6').split(',').map(Number)) {
-  const b = await fitAt(BENCH.K * kf); console.log(`K x${kf}: twin misses the machine's tool error by ${(100 * b.held).toFixed(2)}% (held-out) · ${pp(b)}`);
-  if (!bestK || b.held < bestK.b.held) bestK = { kf, b };
-}
-// refine K by golden-ish bisection around the best
-let step = 0.1; while (step > 0.02) { for (const s of [1, -1]) { const kf = bestK.kf * Math.exp(s * step); const b = await fitAt(BENCH.K * kf); console.log(`K x${kf.toFixed(3)}: ${(100 * b.held).toFixed(2)}%`); if (b.held < bestK.b.held) bestK = { kf, b }; } step /= 2; }
-const { kf, b } = bestK;
+const ps = (p) => `K x${p.k.toFixed(3)} payload ${p.payload.toFixed(3)} stiff ${p.stiff.toFixed(3)}`;
+// THE PHYSICS IS SEARCHED AGAINST A FIXED, RICH BANK OF MODES (gains by least squares), so its
+// objective does not hinge on a discrete mode choice made under the wrong physics; the compact
+// two-mode twin is picked only once the physics is settled.
+const BANK = []; for (let q = 400; q <= 6400; q *= Math.SQRT2) for (const z of [0.1, 0.4]) BANK.push([2 * Math.PI / q, z]);
+const bankMiss = async (p) => { const R = await rigidRun(BENCH.K * p.k, phOf(p)); const b = solve(R, BENCH.K * p.k, BANK, BANK); featCache.clear(); return b.held; };
+let p = { k: 1, payload: 0, stiff: 0 }, best = Infinity;
+const KG = [0.8, 1, 1.25], PG = PHYS.includes('payload') ? [0, 0.1, 0.2, 0.3] : [0], SG = PHYS.includes('stiff') ? [0, 0.25, 0.5, 0.75] : [0];
+for (const k of KG) for (const payload of PG) for (const stiff of SG) { const q = { k, payload, stiff }, c = await bankMiss(q); if (c < best) { best = c; p = q; } }
+console.log(`grid (${KG.length * PG.length * SG.length} rigid runs, bank of ${BANK.length} modes per link): ${ps(p)} · misses by ${(100 * best).toFixed(2)}%`);
+{ const steps = { k: 0.1, payload: 0.05, stiff: 0.125 }, names = ['k', ...PHYS];
+  for (let it = 0; it < 60; it++) { let moved = false;
+    for (const n of names) for (const s of [1, -1]) { const q = { ...p }; q[n] = n === 'k' ? p.k * Math.exp(s * steps.k) : Math.max(0, p[n] + s * steps[n]); if (q[n] === p[n]) continue;
+      const c = await bankMiss(q); if (c < best) { best = c; p = q; moved = true; } }
+    if (!moved) { let small = true; for (const n of names) { steps[n] /= 2; if (steps[n] > (n === 'k' ? 0.01 : 0.005)) small = false; } if (small) break; } } }
+console.log(`refined: ${ps(p)} · misses by ${(100 * best).toFixed(2)}% (bank)`);
+let b = await pickModes(p, [], []);
+console.log(`compact twin, two modes per link: ${pp(b)} · misses by ${(100 * b.held).toFixed(2)}%`);
+const kf = p.k;
 // write rtwin's format: per output [w1, s1, w2] { ms, x (mi*nu+i), nu }
 const out = [0, 1, 2].map((o) => { const ms = o < 2 ? b.m1 : b.m2, nu = o < 2 ? 2 : 3, x = new Array(ms.length * nu).fill(0); b.cols.forEach((c, a) => { if (c.o === o) x[c.mi * nu + c.i] = b.x[a]; }); return { ms, x, nu, nrmse: b.held }; });
-writeFileSync(OUT, JSON.stringify({ K: BENCH.K * kf, fit: out }));
-console.log(`IDENTIFIED FROM THE TOOL: K x${kf.toFixed(3)} (truth 1) · ${pp(b)} · held-out miss ${(100 * b.held).toFixed(2)}%`);
+writeFileSync(OUT, JSON.stringify({ K: BENCH.K * kf, phys: phOf(p), fit: out }));
+console.log(`IDENTIFIED FROM THE TOOL: ${ps(p)} · ${pp(b)} · held-out miss ${(100 * b.held).toFixed(2)}%`);

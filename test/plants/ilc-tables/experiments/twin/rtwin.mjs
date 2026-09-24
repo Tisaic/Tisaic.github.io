@@ -7,14 +7,15 @@ import { driveTo } from '../../../../../lib/flexisim/approach.js';
 import { tipDeflection, tipSlope } from '../../../../../lib/flexisim/link.js';
 import { sharpRect, roundedRect, circle } from '../../../../../lib/flexisim/toolpath.js';
 import { cornerSignatures } from '../../../../../lib/flexisim/contour.js';
+import { machineArm, physics } from './mismatch.mjs';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 const N = +(process.env.N || 60000), IT = +(process.env.IT || 15), MODES = +(process.env.MODES || 2);
-const m = await buildArm(), ik = ikOf(m.arm.L1, m.arm.L2), rc = await calibrateComp(m), A = m.arm;
+const MM = process.env.MM || '', m = await machineArm(MM), ik = ikOf(m.arm.L1, m.arm.L2), rc = await calibrateComp(m), A = m.arm;
 const home = [-0.8, 2.0];
 // ---------- 1. fit the modal links (cached)
 const FITF = process.env.MODAL || `modal-${MODES}.json`;
-let FIT, KT = BENCH.K;
-if (existsSync(FITF)) { const j = JSON.parse(readFileSync(FITF, 'utf8')); if (j.fit) { FIT = j.fit; KT = j.K; } else FIT = j; }
+let FIT, KT = BENCH.K, PH = {};
+if (existsSync(FITF)) { const j = JSON.parse(readFileSync(FITF, 'utf8')); if (j.fit) { FIT = j.fit; KT = j.K; PH = j.phys || {}; } else FIT = j; }
 else {
   let sd = 11 >>> 0; const rnd = () => { sd = (Math.imul(sd, 1664525) + 1013904223) >>> 0; return sd / 4294967296; };
   const exc = new Float64Array(2 * N), lo = [-1.2, 1.6], hi = [-0.35, 2.5];
@@ -26,7 +27,8 @@ else {
   FIT = [[0, 2, 0], [0, 2, 1], [1, 3, 2]].map(([ui, nu, oi]) => fitOutput(U[ui], nu, Y, oi, N));
   writeFileSync(FITF, JSON.stringify(FIT));
 }
-console.log(`twin gearbox K ${KT} (machine ${BENCH.K}), modes from ${FITF}`);
+if (MM) console.log(`MACHINE: ${MM} (the twin is nominal)`);
+console.log(`twin gearbox K ${KT} (machine ${BENCH.K}), physics ${JSON.stringify(PH)}, modes from ${FITF}`);
 for (const [i, f] of FIT.entries()) console.log(`${['w1', 's1', 'w2'][i]}: ${f.ms.map(([w, z]) => `${(2 * Math.PI / w).toFixed(0)} scans ζ${z}`).join(' + ')} · held-out NRMSE ${f.nrmse.toFixed(4)}`);
 function inputs(a) { const f1 = a.frameParams(0), f2 = a.frameParams(1); return [[f1.gravity[1], f1.alpha[2]], [f2.gravity[1], f2.alpha[2], f2.originAccel[1]]]; }
 function reson(u, stride, idx, n, w, z) { const out = new Float64Array(n); let y = 0, v = 0; for (let k = 0; k < n; k++) { v += (u[stride * k + idx] - 2 * z * w * v - w * w * y); y += v; out[k] = y; } return out; }
@@ -45,12 +47,12 @@ function fitOutput(Uin, nu, Y, oi, n) {
 function gauss(Am, b, n) { const M = Float64Array.from(Am), x = Float64Array.from(b); for (let c = 0; c < n; c++) { let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(M[r * n + c]) > Math.abs(M[p * n + c])) p = r; for (let j = 0; j < n; j++) { const t = M[c * n + j]; M[c * n + j] = M[p * n + j]; M[p * n + j] = t; } { const t = x[c]; x[c] = x[p]; x[p] = t; } for (let r = c + 1; r < n; r++) { const f = M[r * n + c] / M[c * n + c]; for (let j = c; j < n; j++) M[r * n + j] -= f * M[c * n + j]; x[r] -= f * x[c]; } } for (let r = n - 1; r >= 0; r--) { let s = x[r]; for (let j = r + 1; j < n; j++) s -= M[r * n + j] * x[j]; x[r] = s / M[r * n + r]; } return x; }
 // ---------- 2. the reduced twin: same chain, links replaced by the modes
 async function reducedTwin(K = BENCH.K) {
-  const t = await buildArm(K, BENCH.E), a = t.arm;
+  const t = await buildArm(K, BENCH.E), a = t.arm; physics(a, PH); const rigidStep = a.stepRigid;
   const st = FIT.map((f) => f.ms.map(() => new Float64Array(2 * f.nu)));   // per output, per mode: [y_i, v_i] per input
   const out = new Float64Array(3);
   a.step = function (tc1, tc2, dt, load = null) {
     const t1 = this.j1.stepMotor(tc1, dt), t2 = this.j2.stepMotor(tc2, dt);
-    this.stepRigid(t1 + (load ? load[0] : 0), t2 + (load ? load[1] : 0), dt);
+    rigidStep.call(this, t1 + (load ? load[0] : 0), t2 + (load ? load[1] : 0), dt);
     const u = inputs(this);
     FIT.forEach((f, o) => { const uu = u[o === 2 ? 1 : 0]; let s = 0;
       f.ms.forEach(([w, z], mi) => { const S = st[o][mi]; for (let i = 0; i < f.nu; i++) { let y = S[2 * i], v = S[2 * i + 1]; v += uu[i] - 2 * z * w * v - w * w * y; y += v; S[2 * i] = y; S[2 * i + 1] = v; s += f.x[mi * f.nu + i] * y; } });
@@ -101,7 +103,7 @@ for (const { name, prog } of WORK) {
   }
   const twinX = 1 / Math.sqrt(((st[0].rms / r0[0]) ** 2 + (st[1].rms / r0[1]) ** 2) / 2), tTwin = (Date.now() - t0) / 1000;
   // the LATTICE machine: untouched lap (the twin's prediction is compared with it), then the twin's correction once
-  const rm = await buildArm(); const mc = await settle(rm, prog);
+  const rm = await machineArm(MM); const mc = await settle(rm, prog);
   const T0 = new Float64Array(2 * L), T1 = new Float64Array(2 * L);
   const Em = lapOn(mc, prog, new Float64Array(2 * L), T0), bare = rmsOf(Em, L);
   lapOn(mc, prog, U); const got = rmsOf(lapOn(mc, prog, U, T1), L);
