@@ -87,6 +87,10 @@ repeatability, not a controller (rule 14).**
   once gave 0.86x-2.45x — one of them worse than the untouched machine — and keeping it learning in
   production did not help (a short memory harmed, down to 0.47x). The portfolio's held-out check
   tries one program per plant. `test/plants/ilc-tables/experiments/transfer/FINDINGS.md`.
+  **Not in the block yet:** on the same eight programs, a correction learned on a reduced-order
+  TWIN of the arm gave 6.1x-20.5x on first use, never worse, with every corner metric smaller in
+  absolute terms. The twin is identified from the tool alone and is unmoved by 50% tracker noise.
+  `test/plants/ilc-tables/experiments/twin/FINDINGS.md`.
 - **On the arm, the table's rms gain is bought with rough, inconsistent corners.** On the sharp square
   at 3e-3, lap learning takes the tool rms 12x down but the corner error goes from 1.3% to 6.9% faster
   than the jerk filter, and from 53% to 72% not common to the four corners (`cornerSignatures`). The

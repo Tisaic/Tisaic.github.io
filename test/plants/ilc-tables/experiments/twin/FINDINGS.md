@@ -1,8 +1,12 @@
 # The digital twin — measured 2026-09-24
 
-**The breakthrough.** A correction learned entirely on a MODEL of the arm (the same structure, its
-parameters identified from the machine), never on the machine, applied ONCE to programs the machine
-has never run, gives 11-27x. Every correction learned from data and meant to transfer gave 2-3x.
+**The breakthrough.** A correction learned entirely on a MODEL of the arm, never on the machine, and
+applied ONCE to programs the machine has never run:
+- gives 11-27x with the full lattice twin;
+- gives **6-20x with a reduced-order twin identified from the tool alone**, small enough for a
+  controller.
+
+Every correction learned from data and meant to transfer gave 0.86-2.45x on the same programs.
 
 ## Why the transferable models capped (`decomp.mjs`, `modes.mjs`, `arx.mjs`, `arx2.mjs`)
 
@@ -34,12 +38,63 @@ Identification: 40,000 scans of commissioning excitation measured on the machine
 search over (K, E, D) in log space, starting 20-50% wrong, reproduces the machine's error to 1.33%
 and recovers K x0.995, E x1.011, D x0.999 (truth 1, 1, 1) in 79 twin runs.
 
+## The reduced-order twin, identified from the tool alone (`rident.mjs`, `rtwin.mjs`)
+
+The lattice twin is far too heavy for a PLC. The reduced twin keeps the rigid 2R chain, both
+geared joints, the servo and the machine's conventional controller, and replaces each lattice link
+by TWO resonant modes driven by the inputs the lattice sees in its own frame (transverse gravity,
+angular acceleration, and for link 2 the elbow's acceleration). Its outputs are link 1's tip
+deflection and slope and link 2's tip deflection, assembled into the tool exactly as `toolXY` does.
+
+**Identified from the tool alone.** A real machine gives only a tracker reading of the tool. The
+links never push back on the joints (one-way coupling), so ONE rigid run of the twin per gearbox
+stiffness K gives the pose, the links' frame inputs and the tool's Jacobian with respect to the
+three deflections. The tool error is then LINEAR in the modal gains: least squares, with the mode
+periods and dampings searched on a grid and K searched outside. 40,000 scans of excitation. It
+lands on K x1.10 (truth 1: the modes absorb a little of the joint compliance) and misses the
+machine's held-out tool error by 6.0%.
+
+**Applied ONCE to the lattice machine** (15 learning steps, 32 twin laps, 1-2 s each, none on the
+machine), on the eight unseen programs where every transferable model gave 0.86-2.45x
+(`../transfer/FINDINGS.md`, the frozen row) and on the bench program:
+
+| program | before (frozen model) | reduced twin, fitted from the links' own signals | from the TOOL alone | from the tool, 50% tracker noise | twin's miss of the untouched error |
+|---|---|---|---|---|---|
+| sq6 f2.5 | 1.66 | 11.51 | **8.02** | 8.80 | 8.4% |
+| circ3 f3 | 0.86 | 41.11 | **13.53** | 13.59 | 7.2% |
+| rect7x5 f1.5 | 1.63 | — | **6.14** | 7.16 | 7.8% |
+| rnd6 f2 | 1.68 | — | **12.25** | 12.15 | 6.2% |
+| circ3.5 f2 | 1.28 | — | **10.51** | 10.67 | 7.4% |
+| sq5 f3 | 1.67 | — | **13.31** | 13.33 | 7.1% |
+| rnd8x6 f2.5 | 1.45 | 23.06 | **11.51** | 11.29 | 7.5% |
+| circ2.5 f1 | 2.45 | — | **20.47** | 20.06 | 3.5% |
+| bench sharp 3e-3 | — | 14.38 | **10.95** | 8.60 | 8.9% |
+
+- **The factor is set by the twin's fidelity, not by the learning.** It tracks 1 / (the twin's miss
+  of the untouched error). Learning four times longer on the twin (60 steps) changes nothing
+  (6.0-20.5x).
+- **Tracker noise does not move the identification.** At 10% and 50% of the error rms it picks the
+  same K and the same modes. Least squares averages white noise away over 40,000 scans.
+- **Every corner metric improves in absolute terms, on every program.** Tool-only twin, untouched
+  -> corrected:
+  - the part not common to the corners falls 4-11x;
+  - the fast part falls 1.8-8x;
+  - the peak falls 4-12x.
+
+  Bench sharp 3e-3: not common 1.5e-1 -> 1.6e-2, fast 3.7e-3 -> 1.1e-3, peak 0.600 -> 0.074. The
+  shares rise (53% -> 59%, 1.3% -> 4.0%) because the smooth part is what the correction removes
+  (rule 19).
+
 ## Not claimed
 
-- The twin has EXACTLY the machine's structure; only its parameters were unknown. A real robot's
-  twin differs in structure too. The wrong-parameter columns bound what parameter error costs;
-  structural error is not measured.
-- The circle's 120-236x is the noise-free simulator (rule 14).
-- The twin here is the full lattice simulation: far too heavy for a PLC. A reduced-order twin
-  (flexible joints + a first bending mode per link) is what a controller would run; not built.
-- Noise-free. Corners (spread, roughness) not yet measured for the twin's correction.
+- The twin has the machine's STRUCTURE (a rigid 2R, geared joints with backlash, the servo, the
+  controller, bending links). A real robot's differs; structural error is measured here only as far
+  as two modes stand in for a lattice (a 6-9% miss).
+- The factors in the hundreds on the twin itself are the noise-free simulator (rule 14). The
+  machine columns are the result.
+- The correction for a program is learned from the WHOLE lap of its reference. A program must be
+  known one lap ahead (a closed program seen once, or a part program read ahead). Motion only known
+  a preview horizon ahead is not covered.
+- Not in the block. The twin's per-scan cost is estimated, not measured: a few hundred MAC per
+  twin step (rigid 2R solve, two joints, servo, ten resonators, tool kinematics). The
+  identification's cost is not yet sliced against the 10,000 MAC budget.
