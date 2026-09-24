@@ -1,7 +1,9 @@
 /**
  * @file WHAT SHIPS, WHAT COMMISSIONS, WHAT IS ONLY THE BENCH — and nothing unaccounted for.
  *
- *   DEPLOY      runs on the machine for ever: FB_AutoFF's decision (`lib/autoff/runtime.js`).
+ *   DEPLOY      runs on the machine for ever: FB_AutoFF's decision (`lib/autoff/runtime.js`), and the
+ *               arm's twin with the job that learns each new program's table on it
+ *               (`twin2r.js`, `twinlearn.js`).
  *   COMMISSION  runs on the PLC while commissioning, then idles: the rest of the block.
  *   BENCH       the simulated machines and the physics engine they are built on. An installation
  *               has a real machine; none of this exists there.
@@ -53,7 +55,7 @@ const libFiles = listFiles(join(ROOT, 'lib'), (e) => e.endsWith('.js'));
 const rel = (f) => relative(ROOT, f);
 const lines = (f) => readFileSync(f, 'utf8').split('\n').length;
 
-const DEPLOY = ['lib/autoff/runtime.js'];
+const DEPLOY = ['lib/autoff/runtime.js', 'lib/autoff/twin2r.js', 'lib/autoff/twinlearn.js'];
 const COMMISSION = ['lib/autoff/autoff.js'];
 const BENCH = [/^lib\/lattsim\//, /^lib\/flexisim\//, /^lib\/ngrc\/(robotcomp|primitives)\.js$/];
 const OTHER = [/^lib\/ngrc\//, /^lib\/probesense\//];
@@ -83,18 +85,22 @@ console.log();
 check('every module in lib/ is classified', !tally.UNCLASSIFIED, tally.UNCLASSIFIED && tally.UNCLASSIFIED.files.join(', '));
 for (const d of [...DEPLOY, ...COMMISSION]) check(`${d} exists`, existsSync(join(ROOT, d)));
 
+// this file names modules in its own lists, so it must not count as exercising them
 const testSrc = listFiles(join(ROOT, 'test'), (e) => e.endsWith('.mjs') || e.endsWith('.js'))
+  .filter((f) => f !== fileURLToPath(import.meta.url))
   .map((f) => readFileSync(f, 'utf8')).join('\n');
 const orphans = libFiles.filter((f) => !live.has(f) && !testSrc.includes('/' + f.split('/').pop()));
 check('every module in lib/ is reached by a page or exercised by a test', orphans.length === 0, orphans.map(rel).join(', '));
 
 for (const d of DEPLOY) {
   const imports = [...readFileSync(join(ROOT, d), 'utf8').matchAll(EDGE)].map((m) => m[1]);
-  check(`${d} imports NOTHING — the deployed decision is self-contained`, imports.length === 0, imports.join(', '));
+  const outside = imports.filter((i) => !DEPLOY.includes(relative(ROOT, resolve(dirname(join(ROOT, d)), i))));
+  check(`${d} imports nothing outside the deployed set — what a machine runs is self-contained`, outside.length === 0, outside.join(', '));
 }
+check('the deployed decision itself imports NOTHING', [...readFileSync(join(ROOT, DEPLOY[0]), 'utf8').matchAll(EDGE)].length === 0);
 {
   const imports = [...readFileSync(join(ROOT, COMMISSION[0]), 'utf8').matchAll(EDGE)].map((m) => m[1]);
-  check('the commissioning half imports only the deployed half', imports.every((i) => i === './runtime.js'), imports.join(', '));
+  check('the commissioning half imports only the deployed half', imports.every((i) => DEPLOY.includes(`lib/autoff/${i.replace('./', '')}`)), imports.join(', '));
 }
 console.log(`    a machine receives DEPLOY (${tally.DEPLOY.lines} lines) and runs COMMISSION (${tally.COMMISSION.lines} lines) once.`);
 

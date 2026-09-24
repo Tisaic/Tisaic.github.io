@@ -133,6 +133,25 @@ found matters:
   - The peak falls 3.1-36x.
 - Nothing was made worse anywhere. The worst factor on any machine is 4.4x.
 
+## What the identification has to excite (`rident3b.mjs`)
+
+Rule 41 says to size an excitation from the program's own peaks. For a PHYSICS twin that is wrong.
+Identified inside the envelope of the smallest, slowest program (a 2.5 circle at feed 1e-3: q1
+span 0.43 rad, q2 0.55, peak speed 1.1e-4 rad/scan, against 0.93, 0.95 and 2.5e-4 for the bench
+square), the gearbox comes out at K x1.89. The slow excitation hardly loads it, and the modes
+absorb what K should explain. The held-out miss is still 8.3%, on that same excitation.
+
+| program | twin from the working range | twin from the small program's envelope | its miss of the untouched error |
+|---|---|---|---|
+| circ2.5 f1 (the one it was identified inside) | 21.55 | **12.26** | 6.5% |
+| the other eight | 7.28-14.63 | **2.76-4.14** | 21-37% |
+
+- Never worse, but the parameters do not transfer. The identification must excite the machine's
+  working range, in pose and in speed, not one program's.
+- **The twin's miss of a program's untouched lap says, before anything is applied, whether that
+  program is inside what the twin knows** (6.5% here against 21-37%). A block without the first two
+  rungs records exactly that lap. This is not yet used.
+
 ## Not claimed
 
 - The twin has the machine's STRUCTURE (a rigid 2R, geared joints with backlash, the servo, the
