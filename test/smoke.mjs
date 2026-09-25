@@ -1894,12 +1894,15 @@ if (!FULL) {
   // program), and the button learns a table for the program running now.
   const before = await dbg();
   await fx.evaluate(() => { const s = document.getElementById('s-feed'); s.value = '4'; s.dispatchEvent(new Event('change')); });
-  await fx.waitForFunction(() => { const d = window.__flxDbg(); return (d.feed === 3e-3 && d.running && d.ghost && !d.ghost.stale && d.lap >= 2
+  // wait for a lap WITH THE BLOCK ACTING after the ghost is recorded: the lap that records the ghost is
+  // the ghost, and read as "the rungs alone" it gave exactly 1.00x on the first run of this check
+  await fx.waitForFunction(() => { const d = window.__flxDbg(); return (d.feed === 3e-3 && d.running && d.ghost && !d.ghost.stale
+    && d.lastLap && d.lastLap.armed && !d.lastLap.experiment && d.lastLap.key === d.ghostKey
     && d.fb.stateName === 'RUN' && !document.getElementById('relearn').disabled) || /^halted:/.test(document.getElementById('badge').textContent); }, null, { timeout: 600000 });
   await halted('the program change');
   const off = await dbg();
   check('flexisim/relearn: on another feed the old table is off and the conventional and learned rungs run, and the button is offered',
-    off.fb.stateName === 'RUN' && off.fb.deployed && !off.fb.progActive, JSON.stringify(off.fb));
+    off.fb.stateName === 'RUN' && off.fb.deployed && !off.fb.progActive && off.lastLap.armed, JSON.stringify(off.fb));
   const tr = Date.now();
   await fx.click('#relearn');
   await fx.waitForFunction(() => window.__flxDbg().fb.commissioning, null, { timeout: 60000 });

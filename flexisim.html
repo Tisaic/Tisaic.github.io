@@ -569,7 +569,7 @@ window.__flxDbg = () => ({
   busy, running, approaching: !!approach, frames, K: kNow(), E: eNow(), shape: $('shape').value, feed: feedNow(),
   cells: M ? 1 : 0, k: pc, lap: prog ? Math.floor(pc / prog.lap) : 0, lapT: prog ? prog.lap : 0, mag: magNow(),
   recording: !!ghostRec, ghost: ghost ? { rms: ghost.rms, lap: ghost.lap, stale: ghost.key !== ghostKey() } : null,
-  lastLap, badge: $('badge').textContent, restored,
+  lastLap, ghostKey: ghostKey(), badge: $('badge').textContent, restored,
   stored: stored ? { key: stored.udiKey, progLap: stored.nProgLap, progArmed: !!stored.xProgArmed,
     rungs: [...stored.aConvW, ...stored.aConvScale, stored.xConvArmed, stored.xLearnArmed, ...stored.aLearnW, ...stored.aXScale, ...stored.aOffsets.slice(0, stored.nOffsets), ...stored.aUMax].join(',') } : null,
   ghostCorners: ghost ? ghost.corners : null, jointVsGhost: jointVsGhost(),
