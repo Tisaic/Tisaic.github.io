@@ -1,5 +1,11 @@
 # The digital twin — measured 2026-09-24
 
+> **Measured before the corner fixes of 2026-09-25**: the path's speed staircase, the stops
+> between samples, the direction term's step and the excitation's acceleration. Those changed
+> the sharp programs' timing. The identified twin does not depend on the programs, but the
+> per-program factors below would move a little. The shipped checks re-measure them: the page's
+> twin scenario and `test/flexisim/twin.test.mjs`.
+
 **The breakthrough.** A correction learned entirely on a MODEL of the arm, never on the machine, and
 applied ONCE to programs the machine has never run:
 - gives 11-27x with the full lattice twin;

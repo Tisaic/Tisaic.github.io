@@ -150,7 +150,7 @@ const $ = (id) => document.getElementById(id);
 const K_LADDER = [0.25, 0.5, 1, 4, 16, 32];
 const E_LADDER = [0.01, 0.02, 0.03, 0.06, 0.10, 0.15];
 const FEED_LADDER = [5e-4, 1e-3, 1.5e-3, 2e-3, 3e-3];
-const STORE_KEY = 'flexisim.autoff.v2';
+const STORE_KEY = 'flexisim.autoff.v3';          // v3: record format 3 (the saturated direction term)
 const kNow = () => K_LADDER[+$('s-k').value];
 const eNow = () => E_LADDER[+$('s-e').value];
 const feedNow = () => FEED_LADDER[+$('s-feed').value];
@@ -235,6 +235,7 @@ async function storeDo(mode, fn) {
 const storeGet = () => storeDo('readonly', (s) => s.get(STORE_KEY));
 window.__flxClearStore = () => storeDo('readwrite', (s) => s.delete(STORE_KEY));
 try { localStorage.removeItem('flexisim.autoff.v1'); } catch { /* the old, smaller format */ }
+storeDo('readwrite', (s) => s.delete('flexisim.autoff.v2'));   // fitted with the direction term that stepped the setpoint
 async function saveRecord() {
   const r = fb.saveRecord();
   await storeDo('readwrite', (s) => s.put(r, STORE_KEY));
@@ -273,7 +274,12 @@ function fitView() {
 }
 
 // ---------------------------------------------------------------------------- one scan
-const commissioning = () => !!fb && fb.in.xCommission && !fb.out.xDone && fb.out.eState !== E_AFF_STATE.FAULT;
+// COMMISSIONING IS WHAT THE BLOCK SAYS IT IS (xBusy), from the scan it takes the press. It used to be
+// the page's own reckoning — pressed, and neither done nor FAULT — which a guard trip with a stored
+// controller to fall back on is neither of: the block went back to RUN and the page stayed
+// "commissioning" for ever, the Abort button up, the controls locked, every lap an "experiment".
+let commStarted = false;
+const commissioning = () => !!fb && fb.in.xCommission && (fb.out.xBusy || !commStarted);
 
 /** One PLC scan: preview and measurement in, the block, the setpoint out, the machine one step. */
 function scan() {
@@ -285,6 +291,7 @@ function scan() {
   const recording = !!ghostRec;
   fb.in.xArm = recording ? false : $('arm').checked;
   fb.cycle();
+  if (fb.out.xBusy) commStarted = true;
   sp[0] = fb.out.aRefOut[0]; sp[1] = fb.out.aRefOut[1];
   const owned = fb.out.xOwnsRef;
   conv.step(sp);
@@ -535,17 +542,19 @@ $('commission').onclick = () => {
   if (!fb) return;
   trail = [];
   if (commissioning()) { fb.in.xAbort = true; fb.cycle(); fb.in.xAbort = false; fb.in.xCommission = false; setBadge('aborted — the trim was removed at once', 'warn'); sync(); return; }
-  ghostRec = null;
+  ghostRec = null; commStarted = false;
   fb.in.xCommission = false; fb.cycle();     // a rising edge on the next scan
   fb.in.xCommission = true; t0 = performance.now();
   sync();
 };
 // When the block finishes, keep what it deployed and drop the button.
 setInterval(() => {
-  if (fb && fb.in.xCommission && (fb.out.xDone || fb.out.eState === E_AFF_STATE.FAULT)) {
+  if (fb && fb.in.xCommission && (fb.out.xDone || fb.out.eState === E_AFF_STATE.FAULT || (commStarted && !fb.out.xBusy))) {
     fb.in.xCommission = false;
-    if (fb.out.xDeployed && fb.out.eState === E_AFF_STATE.RUN) { saveRecord(); restored = false; }
+    const stopped = !fb.out.xDone;             // a fault, or a trip back to the stored controller
+    if (!stopped && fb.out.xDeployed && fb.out.eState === E_AFF_STATE.RUN) { saveRecord(); restored = false; }
     const secs = Math.round((performance.now() - t0) / 1000);
+    if (stopped) { setBadge(`stopped — ${affReasonName(fb.out.eReason)}${fb.out.eState === E_AFF_STATE.FAULT ? ' — nothing applied' : ' — the stored controller runs again'}`, 'warn'); sync(); return; }
     setBadge(fb.out.eState === E_AFF_STATE.FAULT ? `stopped — ${affReasonName(fb.out.eReason)}`
       : `commissioned in ${secs} s — ${fb.out.xDeployed ? fx(fb.out.rFactor) + '× reported' : 'nothing deployed'}`,
     fb.out.eState === E_AFF_STATE.FAULT ? 'warn' : 'good');

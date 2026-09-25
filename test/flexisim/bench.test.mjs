@@ -12,7 +12,7 @@
 //   CARRY      a rebuilt arm that takes the old one's state has not moved
 //   TABLES     the stored ILC tables (test/plants/ilc-tables) were learned on the programs this bench
 //              generates today, bit for bit — otherwise they are stale
-import { buildArm, calibrateComp, benchProgram, jointProgram, ikOf, conventional, snapshotArm, BENCH }
+import { buildArm, calibrateComp, benchProgram, benchPath, jointProgram, ikOf, conventional, snapshotArm, BENCH }
   from '../../lib/flexisim/bench.js';
 import { sharpRect } from '../../lib/flexisim/toolpath.js';
 import { driveTo } from '../../lib/flexisim/approach.js';
@@ -76,6 +76,21 @@ async function lap(comp, p = prog) {
   console.log(`    drive saturated on ${(100 * a.sat).toFixed(3)}% of the bench program's scans; on the old deviation-rule corners ${(100 * old.sat).toFixed(2)}%`);
   ck('FEASIBLE: the drive follows the bench program (saturated on at most 0.1% of its scans)', a.sat <= 1e-3, a.sat);
   ck('FEASIBLE: …and the check sees the old deviation-rule corners saturate it (the control)', old.sat > 10 * Math.max(a.sat, 1e-4), old.sat);
+}
+// BOUNDED JERK. The interpolator's jerk filter spreads every change of acceleration over JERK scans,
+// so the joint program's acceleration may change by about 1/JERK of its peak a scan and no more;
+// the program WITHOUT the filter is the control, and must break it.
+{
+  const jerkOf = (p) => { const a = (k, c) => p.at(k + 1)[c] - 2 * p.at(k)[c] + p.at(k - 1)[c]; let worst = 0;
+    for (let c = 0; c < 2; c++) { let pk = 0, d = 0; for (let k = 0; k < p.lap; k++) { pk = Math.max(pk, Math.abs(a(k, c))); d = Math.max(d, Math.abs(a(k + 1, c) - a(k, c))); } worst = Math.max(worst, d / pk); }
+    return worst; };
+  const J = BENCH.JERK;
+  let filtered = 0, worstAt = '';
+  for (const sh of ['sharp', 'rounded', 'circle']) for (const f of [5e-4, 1e-3, 1.5e-3, 2e-3, 3e-3]) {
+    const x = jerkOf(benchProgram(sh, f, ik)); if (x > filtered) { filtered = x; worstAt = `${sh} at ${f}`; } }
+  const raw = jerkOf(jointProgram(benchPath('sharp', 3e-3), ik));
+  ck(`JERK: every page program's acceleration changes by at most 1.5/JERK of its peak in a scan (worst ${(filtered * J).toFixed(2)}/JERK, ${worstAt})`, filtered <= 1.5 / J);
+  ck(`JERK: …and without the jerk filter it does not (${(raw * J).toFixed(1)}/JERK): the check can fail`, raw > 5 / J);
 }
 {
   const s = snapshotArm(m), t1 = m.arm.toolXY();

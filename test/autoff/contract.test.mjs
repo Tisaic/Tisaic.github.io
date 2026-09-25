@@ -177,6 +177,17 @@ if (base.fb.out.eProgVerdict === E_AFF_VERDICT.DEPLOYED) {
   ck('ABORT with a controller deployed before: it is RESTORED through a washout, the reason kept',
     reached && after === E_AFF_STATE.WASHOUT && fb.out.eState === E_AFF_STATE.RUN && fb.out.eReason === E_AFF_REASON.ABORTED
       && fb.out.xDeployed, `${affStateName(after)} → ${describe(fb)}`);
+  // what a host reads to know the commissioning is over: NOT busy, and NOT done (it did not finish)
+  ck('…and says the commissioning is over without finishing: xBusy FALSE, xDone FALSE',
+    !fb.out.xBusy && !fb.out.xDone, `busy ${fb.out.xBusy} done ${fb.out.xDone}`);
+  // the GUARD, with a controller deployed: the same fall-back, through the shipped path (factor 1.0 trips on the first probe)
+  fb.rGuardFactor = 1.0;
+  fb.in.xCommission = false; h.scan(fb); fb.in.xCommission = true;
+  let tripped = false, seen = false;
+  for (let k = 0; k < 20 * PID.main.lap && !tripped; k++) { h.scan(fb); seen = seen || fb.out.xBusy; tripped = seen && fb.out.eReason === E_AFF_REASON.GUARD_TRIPPED; }
+  fb.in.xCommission = false; h.run(fb, 1); fb.rGuardFactor = 4;
+  ck('GUARD tripped with a controller deployed: it falls back to it in RUN, and says it is not busy and not done',
+    tripped && fb.out.eState === E_AFF_STATE.RUN && fb.out.xDeployed && !fb.out.xBusy && !fb.out.xDone, describe(fb));
 }
 
 // ================================================================================= THE HOST CONTRACT

@@ -161,6 +161,23 @@ for ~2,240x its torque at every corner of the sharp square (4.4% of scans satura
 loop saturates on 0.02% of them, and the untouched machine's tool error fell 2.5x (0.70 to 0.28). The
 bench test asserts both halves. The feed runs 5e-4 … 3e-3 (default 2e-3; the sharp square's lap is
 13,067 scans at 3e-3 and 17,734 at 2e-3).
+**The jerk is bounded, and checked:** every page program's acceleration changes by at most
+1.2/JERK of its peak in a scan, and the bench test fails at 1.5/JERK (control: without the filter,
+105/JERK). Three defects in the corners were found this way, after the arm was seen lurching at
+every corner on K 0.25 / E 0.01:
+- the path's speed rose in a staircase leaving a stop. It now interpolates at uniform
+  acceleration (`_locate`);
+- a stop fell between two samples wherever the sample spacing did not divide an edge (2e-4 short
+  of the corner at 3e-3). Every segment boundary is now a sample;
+- the excitation's moves obeyed only the program's peak speed, so short moves asked for ~150x its
+  acceleration. On that arm this tripped the guard every time. They now obey the program's peak
+  acceleration and jerk too. The real flexible arm, which used to trip its guard, now commissions:
+  its learned rung deploys and the held-out program is not made worse.
+
+**Still there:** the conventional rung's `sign v` switches at every reversal. Where that rung
+deploys on the arm (not the bench cell, where it is refused), it steps a joint's setpoint by up to
+0.031 rad at every corner. Ramping or dropping it cost other plants or the gain; see "What v1 does
+not contain" in `docs/block.md`.
 The **twin** checkbox, on by default on the bench cell, gives the block the arm's twin
 (`BENCH_TWIN`, identified from the tool on that plant; on another K or E the block runs without
 one). With it, and no commissioning at all, the page records a lap of the running program, learns

@@ -12,16 +12,16 @@
    "feed": 0.002,
    "lap": 12567,
    "bareRms": [
-    0.013453964613481277,
-    0.0070245113449146366
+    0.013453964613482703,
+    0.007024511344916104
    ],
    "learnedRms": [
-    1.811609781837137e-05,
-    6.928072341169116e-06
+    0.000018116097819227955,
+    0.000006928072340690847
    ],
    "factor": 847.296,
-   "sha256": "272633b1c1adcf8a21af999e1ed8715412bf49bf5b6782208ed895c1bb0c72bb",
-   "generatedAt": "4558760 + the feasible programs (exact stops, 3 g, 100-scan jerk filter)",
+   "sha256": "64595f21f4e236244c37bac25e3339571821e7fcd5a00e9e760c18973c4f725c",
+   "generatedAt": "4896da9",
    "iterations": 35
   },
   {
@@ -30,16 +30,16 @@
    "feed": 0.003,
    "lap": 8378,
    "bareRms": [
-    0.018337007974315127,
-    0.01040416309469717
+    0.018337007974326594,
+    0.010404163094702025
    ],
    "learnedRms": [
-    2.7467437100376208e-05,
-    1.9609955137356334e-05
+    0.00002746743709988798,
+    0.000019609955181131915
    ],
    "factor": 587.407,
-   "sha256": "251e960f3069a7443bf576bd64159886bd75f24d5b4f9d10b1073c6b3ec225fb",
-   "generatedAt": "4558760 + the feasible programs (exact stops, 3 g, 100-scan jerk filter)",
+   "sha256": "2183e11076359dd3578eddb45b4c8a979de5a8d434e02280d9e60cff7d3fd2ee",
+   "generatedAt": "4896da9",
    "iterations": 35
   },
   {
@@ -48,16 +48,16 @@
    "feed": 0.002,
    "lap": 14713,
    "bareRms": [
-    0.014093964865684313,
-    0.007667167942851159
+    0.014093964865684124,
+    0.007667167942855919
    ],
    "learnedRms": [
-    0.00016308745633712547,
-    0.00045964325369755795
+    0.00016308745633651655,
+    0.00045964325370193883
    ],
    "factor": 23.163,
-   "sha256": "dfbef48bb8362aab3879f636b4bf17d7a8c3267a503310bf93ee9c8bc7ed2e0d",
-   "generatedAt": "4558760 + the feasible programs (exact stops, 3 g, 100-scan jerk filter)",
+   "sha256": "d4ced74f14d3d2ee6bfe1abcdcd25b06dc6cc1a6469984f2454570ab4fe02a8c",
+   "generatedAt": "4896da9",
    "iterations": 35
   },
   {
@@ -66,16 +66,16 @@
    "feed": 0.003,
    "lap": 9809,
    "bareRms": [
-    0.019150348377304,
-    0.011296357184683197
+    0.019150348377320332,
+    0.01129635718494977
    ],
    "learnedRms": [
-    0.00042720587927245964,
-    0.00114271487633856
+    0.00042720587928409584,
+    0.0011427148764851932
    ],
    "factor": 13.652,
-   "sha256": "7679fcc204acbd5890f77a6b5eca88e182caa93714438eb4da0bb6f9c1b285ea",
-   "generatedAt": "4558760 + the feasible programs (exact stops, 3 g, 100-scan jerk filter)",
+   "sha256": "6d5b5a388a97044c95613d07a3554a7528a9c95dd1b6238efc26610259866686",
+   "generatedAt": "4896da9",
    "iterations": 35
   },
   {
@@ -84,16 +84,16 @@
    "feed": 0.002,
    "lap": 17734,
    "bareRms": [
-    0.014429040774114282,
-    0.010216456019033107
+    0.014429048888996886,
+    0.010216581816602253
    ],
    "learnedRms": [
-    0.0004300179191808165,
-    0.0043447103715542595
+    0.0004323763402336699,
+    0.004349410999203421
    ],
-   "factor": 3.317,
-   "sha256": "09cb51b10344ae2b6a2e134e89810c4ac7b817a19df7398a6590d7af6c01f62f",
-   "generatedAt": "4558760 + the feasible programs (exact stops, 3 g, 100-scan jerk filter)",
+   "factor": 3.314,
+   "sha256": "8132dc7ba6a3414ad71965caf7a571687160b830ab44408d0284d0fa2854f1fc",
+   "generatedAt": "4896da9",
    "iterations": 35
   },
   {
@@ -102,16 +102,16 @@
    "feed": 0.003,
    "lap": 13067,
    "bareRms": [
-    0.01879893288621943,
-    0.013418818389541972
+    0.018805113624035034,
+    0.013423847615150114
    ],
    "learnedRms": [
-    0.0003937945418341343,
-    0.001921133361829256
+    0.0005258212083266521,
+    0.0026883592308661803
    ],
-   "factor": 9.774,
-   "sha256": "38e4c09ec22e20cbe79551ef53086cbcf132e45aff92bad45fadf6905289c69b",
-   "generatedAt": "4558760 + the feasible programs (exact stops, 3 g, 100-scan jerk filter)",
+   "factor": 6.994,
+   "sha256": "eac00deb875cae8ee57073df86d2e5da37ee5ec436d37fdd1af1b9df244fcdcc",
+   "generatedAt": "4896da9",
    "iterations": 35
   }
  ]

@@ -8,7 +8,7 @@
  * really does respect the limits it was given. Whether a compliant arm can FOLLOW it is a
  * different claim and lives with the arm.
  */
-import { ToolPath, roundedRect, SEG } from '../../lib/flexisim/toolpath.js';
+import { ToolPath, roundedRect, sharpRect, SEG } from '../../lib/flexisim/toolpath.js';
 
 let failed = 0;
 function check(name, cond, detail) {
@@ -171,6 +171,27 @@ console.log('\nflexisim: the toolpath and its feedrate');
   if (worst > 1e-6) console.log(`    [decompose] worst at ${JSON.stringify(worstAt)}`);
   check('…while a deviation NORMAL to it is a contour error of exactly that size',
     worst < 1e-6, `worst ${worst.toExponential(2)}`);
+}
+
+// THE SPEED IS CONTINUOUS. Leaving a stop, one sample interval lasts many scans; the speed must
+// rise through it at the acceleration it was planned with, not hold and then step at the next
+// sample (it did: steps of 2.5% of the feed against a limit of 0.3% a scan, and the jerk filter
+// turned each into a step of acceleration that the block's acceleration term kicked the setpoint
+// with). And `timeAt` must invert `at`, or a feedrate change teleports the command.
+{
+  const accel = 6e-6, feed = 2e-3;
+  // the rounded one's radius is small enough that its arcs force a slowdown, so it too has changes of speed
+  for (const [name, p] of [['sharp', sharpRect({ w: 8, h: 8, feed, accel, cornerStop: true, dwell: 100 })],
+    ['rounded (r 0.3)', roundedRect({ w: 8, h: 8, r: 0.3, closed: true, feed, accel, cornerStop: true, dwell: 100 })]]) {
+    let worst = 0, inv = 0, n = 0;
+    const speedAt = (k) => { const a = p.at(k), b = p.at(k + 1); return Math.hypot(b.x - a.x, b.y - a.y); };
+    for (let k = 1; k < p.period - 1; k++) {
+      worst = Math.max(worst, Math.abs(speedAt(k) - speedAt(k - 1)));
+      const q = p.at(k); if (q.v > 1e-3 * feed) { inv = Math.max(inv, Math.abs(p.timeAt(q.s) - k)); n++; }
+    }
+    check(`${name}: the commanded speed never changes by more than the acceleration limit in one scan (worst ${(worst / accel).toFixed(3)}x the limit)`, worst <= 1.05 * accel && worst > 0.5 * accel);
+    check(`${name}: timeAt inverts at, to ${inv.toExponential(1)} scans over ${n} moving scans`, n > 1000 && inv < 1e-6);
+  }
 }
 
 console.log(failed ? `\ntoolpath: ${failed} check(s) FAILED\n` : '\ntoolpath: all checks passed\n');

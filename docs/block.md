@@ -261,6 +261,7 @@ against the budget is not done.
 | a table that transfers to another program | the transferable rung (②) is capped near 1.8x on the arm by its linear map class; the table does not transfer by construction | ANSWERED for an arm with a twin: the twin rung learns each program's table from one lap of its reference (above) |
 | placement scoring (①d before ①) | costs a scored run; wins on two plants of six (§133) | a plant family where it is decisive |
 | runtime guards beyond the speed fade | every one measured was a loss or unreachable (§100, §136.5) | a distribution over the refused region with geometric mean ≤ 1.000x |
+| a direction term without steps | `sign v` switches at every reversal. On the arm at K 0.25 / E 0.01 the deployed rung steps a joint's setpoint by 0.031 rad in one scan at every corner, and the arm jerks there. Ramping it inside 10% of the peak speed halved the EMPS axis's gain and let a rung that harms the held-out program ship on the real arm. Dropping it gives up 37% of the gain on the soft arm (1.57x against 1.90x). | the ramp chosen per channel on the machine (rule 42: ramped where it keeps 95% of the gain), in the block AND in `ClassicFF` (rule 61), with a check that the deployed trim has no step |
 | MIMO scaling per channel | measured harmful: bends the Newton direction (§139) | — |
 
 ## NOT CLAIMED
