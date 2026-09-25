@@ -1890,6 +1890,37 @@ if (!FULL) {
   check(`flexisim/plc: the whole commissioning stayed inside ${d.fb.budget} MAC every scan`, d.fb.macPeak <= d.fb.budget, d.fb.macPeak);
   await fx.screenshot({ path: join(SHOTS, '14-flexisim-deployed.png') });
 
+  // RELEARN THE TABLE on another feed: ① and ② carry on untouched, the old table is off (not its
+  // program), and the button learns a table for the program running now.
+  const before = await dbg();
+  await fx.evaluate(() => { const s = document.getElementById('s-feed'); s.value = '4'; s.dispatchEvent(new Event('change')); });
+  await fx.waitForFunction(() => { const d = window.__flxDbg(); return (d.feed === 3e-3 && d.running && d.ghost && !d.ghost.stale && d.lap >= 2
+    && d.fb.stateName === 'RUN' && !document.getElementById('relearn').disabled) || /^halted:/.test(document.getElementById('badge').textContent); }, null, { timeout: 600000 });
+  await halted('the program change');
+  const off = await dbg();
+  check('flexisim/relearn: on another feed the old table is off and the conventional and learned rungs run, and the button is offered',
+    off.fb.stateName === 'RUN' && off.fb.deployed && !off.fb.progActive, JSON.stringify(off.fb));
+  const tr = Date.now();
+  await fx.click('#relearn');
+  await fx.waitForFunction(() => window.__flxDbg().fb.commissioning, null, { timeout: 60000 });
+  check('flexisim/relearn: the Commission button became Abort and the controls are locked while it relearns', await fx.evaluate(() =>
+    /Abort/.test(document.getElementById('commission').textContent) && document.getElementById('relearn').disabled && document.getElementById('s-feed').disabled));
+  await fx.waitForFunction(() => !window.__flxDbg().fb.commissioning, null, { timeout: 1800000 });
+  console.log(`  flexisim/relearn: ${Math.round((Date.now() - tr) / 1000)} s of browser`);
+  await halted('the relearn');
+  const l0 = (await dbg()).lap;
+  await fx.waitForFunction((l) => window.__flxDbg().lap >= l + 2, l0, { timeout: 300000 });
+  const rl = await dbg();
+  const vr = rl.ghost.rms / rl.lastLap.rms, vo = off.ghost.rms / off.lastLap.rms;
+  console.log(`  flexisim/relearn: program ${rl.fb.prog}${rl.fb.progActive ? ' (applied)' : ''}, ${rl.fb.progFactor.toFixed(2)}x over ① and ②, `
+    + `reported ${rl.fb.factor.toFixed(2)}x; against the ghost ${vo.toFixed(2)}x before, ${vr.toFixed(2)}x after · ${rl.badge}`);
+  check('flexisim/relearn: it ends in RUN, the table DEPLOYED for this program, applied, and stored',
+    rl.fb.stateName === 'RUN' && rl.fb.prog === 'DEPLOYED' && rl.fb.progActive && rl.stored && rl.stored.progLap === rl.lapT, JSON.stringify({ fb: rl.fb, stored: rl.stored && rl.stored.progLap }));
+  check('flexisim/relearn: the stored conventional and learned rungs are BIT-IDENTICAL to the commissioned ones',
+    rl.stored && before.stored && rl.stored.rungs === before.stored.rungs && rl.stored.key === before.stored.key);
+  check(`flexisim/relearn: the machine beats the ghost by more than with the rungs alone (${vr.toFixed(2)}x against ${vo.toFixed(2)}x)`, vr > vo);
+  await fx.screenshot({ path: join(SHOTS, '15-flexisim-relearned.png') });
+
   // RESTORE: a reload offers the stored record back to the same plant.
   await fx.reload({ waitUntil: 'load' });
   await fxReady();

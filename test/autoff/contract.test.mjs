@@ -12,6 +12,8 @@
 //   15b       the conventional rung agrees with ClassicFF (test/reference) on the same program
 //   TABLE     the program table engages on its own program after a reload, never on another, and
 //             drops out on the scan a different program begins
+//   RELEARN   `xRelearnTable` learns the table afresh on the program running now and leaves ① and ②
+//             bit-identical; a relearn that does not win, or faults, leaves the whole record as it was
 //   NOISE     with a noisy sensor (the host scores the truth) the block still helps, and it saw the noise
 import { readFileSync } from 'node:fs';
 import { FB_AutoFF, E_AFF_STATE, E_AFF_REASON, E_AFF_VERDICT, affStateName, affReasonName, affVerdictName,
@@ -20,6 +22,7 @@ import { AFF_MAX_CH, affDecide } from '../../lib/autoff/runtime.js';
 import { ClassicFF, motionBasis } from '../reference/classic.mjs';
 import { pidloop as PID } from '../plants/pidloop.mjs';
 import { emps as EMPS } from '../plants/emps.mjs';
+import { cartpole as CARTPOLE } from '../plants/cartpole.mjs';
 import { recipe } from '../plants/program.mjs';
 import { makeHost, commission, nAheadFor, describe, fx, deployOn, bareLap, factorOf } from './host.mjs';
 
@@ -198,6 +201,86 @@ if (base.fb.out.eProgVerdict === E_AFF_VERDICT.DEPLOYED) {
   ck('TABLE: a different program mid-lap turns it off on that scan, and it stays off',
     before && !after && !back, `before ${before}, after ${after}, came back ${back}`);
 } else ck('TABLE: the PID loop deploys a program table to test (it did not)', false, describe(base.fb));
+
+// ================================================================================= RELEARN
+// Commissioned on one program, the machine moves to another: ① and ② carry on, the table is off. The
+// button learns a table for the program running now and touches nothing else in the record.
+{
+  const TABLE_FIELDS = new Set(['aBaseRms', 'aProgRef', 'aProgU', 'nProgLap', 'rProgTol', 'nProgAhead', 'xProgArmed',
+    'nLap', 'rBestScore', 'udiChecksum']);
+  const flat = (v) => (ArrayBuffer.isView(v) ? Array.from(v) : v);
+  const differs = (a, b, skip = new Set()) => Object.keys(a).filter((k) => !skip.has(k)
+    && JSON.stringify(flat(a[k])) !== JSON.stringify(flat(b[k])));
+  const press = (fb, h, lapLen) => {
+    fb.in.xRelearnTable = false; h.scan(fb);                  // a rising edge: the button was up
+    fb.in.xRelearnTable = true;
+    const seen = new Set();
+    let busy = false;
+    for (let k = 0; k < 200 * lapLen; k++) {
+      h.scan(fb); seen.add(fb.out.eState); busy ||= fb.out.xBusy;
+      if (busy && !fb.out.xBusy) break;
+    }
+    fb.in.xRelearnTable = false;
+    return seen;
+  };
+
+  const r = await commission(PID, { udiSeed: 7 }, { after: 1 });
+  const fb = r.fb, rec0 = fb.saveRecord(), P = PID.heldOut;
+  const h = await makeHost(PID, P), bare = await bareLap(PID, P);
+  h.run(fb, 3);
+  const before = factorOf(h.laps[h.laps.length - 1], bare);
+  const seen = press(fb, h, P.lap);
+  const rec1 = fb.saveRecord();
+  h.run(fb, 3);
+  const after = factorOf(h.laps[h.laps.length - 1], bare);
+  console.log(`    on the held-out program: ${fx(before)}x with ① and ② alone, ${fx(after)}x after the relearn · ${describe(fb)}`);
+  ck('RELEARN: the table is learned on the program running now, and deployed',
+    fb.out.xDone && fb.out.eState === E_AFF_STATE.RUN && fb.out.eProgVerdict === E_AFF_VERDICT.DEPLOYED
+      && rec1.xProgArmed && rec1.nProgLap === P.lap && fb.out.xProgActive, describe(fb));
+  ck('…without running ① or ② again: no probe, no Newton trial, no excitation, no learned candidate',
+    seen.has(E_AFF_STATE.PROG_LEARN) && ![E_AFF_STATE.CONV_PROBE, E_AFF_STATE.CONV_REFINE, E_AFF_STATE.EXCITE,
+      E_AFF_STATE.LEARN_BAR, E_AFF_STATE.LEARN_SCORE].some((s) => seen.has(s)), [...seen].map(affStateName).join(','));
+  const moved = differs(rec0, rec1, TABLE_FIELDS);
+  ck('…and every field of ① and ② (weights, scales, window, authority, key) is BIT-IDENTICAL', moved.length === 0, moved.join(', '));
+  let refOk = true;
+  for (let k = 0; k < P.lap; k++) if (rec1.aProgRef[k * AFF_MAX_CH] !== P.at(k)[0]) { refOk = false; break; }
+  ck('…the table\'s program is the one running now', refOk);
+  // the relearn measures the bare machine on this program two laps after taking ① and ② away, and the
+  // loop's slow thermal mode is still settling then and while the table learns: production reads a
+  // little better than the block scored. It must agree within the block's own resolution, its margin.
+  const m = fb._margin;
+  ck(`…it helps there (${fx(after)}x against ${fx(before)}x), and production agrees with what it reported (${fx(fb.out.rFactor)}x, `
+    + `${fx(100 * Math.abs(after / fb.out.rFactor - 1))}% apart, the block's margin ${fx(100 * m)}%)`,
+    after > before && Math.abs(after / fb.out.rFactor - 1) < m);
+  const back = await deployOn(PID, PID.main, rec1);
+  ck('…and the other half: back on the commissioned program the new table never engages, and ① and ② run',
+    back.ok && back.h.progOn === 0 && back.fb.out.eState === E_AFF_STATE.RUN, `${back.h.progOn} scans`);
+
+  // a relearn that does not win: the cart-pole's table never does (it is refused at commissioning)
+  const c = await commission(CARTPOLE, {}, { after: 1 });
+  const c0 = c.fb.saveRecord();
+  press(c.fb, c.h, CARTPOLE.main.lap);
+  ck('RELEARN that does not win (the cart-pole): the record stands BIT-IDENTICAL, RUN, reason PROG_NO_GAIN',
+    differs(c0, c.fb.saveRecord()).length === 0 && c.fb.out.eState === E_AFF_STATE.RUN && !c.fb.out.xBusy
+      && c.fb.out.eReason === E_AFF_REASON.PROG_NO_GAIN && c.fb.out.eProgVerdict === E_AFF_VERDICT.REFUSED, describe(c.fb));
+  // a relearn that faults: the guard (a factor of 1e-6 stands in for a runaway) falls back to the record
+  c.fb.rGuardFactor = 1e-6;
+  press(c.fb, c.h, CARTPOLE.main.lap);
+  c.fb.rGuardFactor = 4;
+  c.h.run(c.fb, 1);
+  ck('RELEARN that faults (guard): it falls back to the deployed record, BIT-IDENTICAL, in RUN, reason kept',
+    differs(c0, c.fb.saveRecord()).length === 0 && c.fb.out.eState === E_AFF_STATE.RUN && c.fb.out.xDeployed
+      && c.fb.out.eReason === E_AFF_REASON.GUARD_TRIPPED, describe(c.fb));
+  // refused at the press, stating why: nothing running, or a scope with no table
+  const idle = newFb(), hi = await makeHost(PID, PID.main);
+  idle.in.xRelearnTable = true; hi.run(idle, 1);
+  ck('RELEARN pressed with no controller running is refused (NOT_RUNNING) and nothing starts',
+    idle.out.eState === E_AFF_STATE.IDLE && idle.out.eReason === E_AFF_REASON.NOT_RUNNING && !idle.out.xBusy, describe(idle));
+  const cv = await commission(CARTPOLE, { sScope: 'CONVENTIONAL' }, { after: 1 });
+  cv.fb.in.xRelearnTable = true; cv.h.run(cv.fb, 1);
+  ck('RELEARN in the CONVENTIONAL scope is refused (SCOPE_CONVENTIONAL) and RUN carries on',
+    cv.fb.out.eState === E_AFF_STATE.RUN && cv.fb.out.eReason === E_AFF_REASON.SCOPE_CONVENTIONAL && !cv.fb.out.xBusy, describe(cv.fb));
+}
 
 // ================================================================================= NOISE
 {

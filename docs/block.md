@@ -57,6 +57,7 @@ being taught, because there is only one loop.
 |---|---|
 | `xEnable` | FALSE: passthrough, no trim, IDLE. TRUE with a deployed record: washout, then run it |
 | `xCommission` | rising edge starts a commissioning |
+| `xRelearnTable` | rising edge, in RUN with a controller deployed: learn the program table afresh on the program running NOW, keeping ① and ② exactly as deployed. Refused with a stated reason otherwise (`BUSY`, `NOT_RUNNING`, `SCOPE_CONVENTIONAL`, `PROG_OFF`) |
 | `xAbort` | stops a commissioning: trim removed at once, the previous controller restored if one exists |
 | `xArm` | FALSE ramps the trim to zero without forgetting the controller; during a commissioning it ABORTS it (a zeroed experiment would read as "no gain"). **Declare it `:= TRUE` in ST**, where a BOOL input defaults FALSE |
 | `xCycleStart` | TRUE on the scan the repeating program starts (a sequencer already has this signal) — in commissioning AND in production: the program table is indexed from this edge, and without it the table never engages |
@@ -75,7 +76,7 @@ being taught, because there is only one loop.
 | `xOwnsRef` | **the host must hold its program while this is TRUE** |
 | `xRecommission` | a REQUEST: three laps of the commissioned program in a row worse than 1.5x the commissioned score |
 | `eConvVerdict`/`eConvReason`, `eLearnVerdict`/`eLearnReason`, `eProgVerdict`/`eProgReason` | per rung: DEPLOYED, REFUSED or SKIPPED, with the reason |
-| `rFactor`, `rConvFactor`, `rLearnFactor`, `rProgFactor` | total over the bare loop; the conventional rung over bare; the learned rung over the conventional; the program table over the rungs below it |
+| `rFactor`, `rConvFactor`, `rLearnFactor`, `rProgFactor` | total over the bare loop; the conventional rung over bare; the learned rung over the conventional; the program table over the rungs below it. After a table relearn, `rFactor` and `rProgFactor` are measured on the new program; `rConvFactor` and `rLearnFactor` still describe the commissioning |
 | `xProgActive`, `rProgGain`, `iPhase` | the program table is being applied this scan; its gain (0 or 1); the scan's position in the lap (-1 before the first edge) |
 | `rHealth` | the last complete RUN lap's score over the commissioned score (0 = not measured) |
 | `rCoverage` | the learned map's speed-coverage gain this scan |
@@ -114,7 +115,28 @@ IDLE ─xCommission─► DISARM (trim ramps to 0: the baseline is the machine a
      ─► PROG_LEARN (the bar lap with the table at zero, then trials of warm lap + scored lap;
                     sliced job 5 builds each trial; a closing lap measures what is kept)
      ─► RUN   (health on every lap of the commissioned length)
+
+RUN ─xRelearnTable─► DISARM ─► WAIT_LAP ─► RECORD ─► ANALYSE     (the same bare laps, on THIS program)
+     ─► ① and ② back from the record, untouched ─► PROG_LEARN ─► RUN
 ```
+
+- **Relearning the table alone** (`xRelearnTable`). ① and ② transfer to another program; the table
+  does not. After a program change the table is off and ① and ② run alone; a rising edge on
+  `xRelearnTable` learns a table for the program running now. It runs the commissioning's own path
+  with the ① and ② stages left out: the trim fades out, one bare lap is recorded and one analysed
+  (the baseline, the guard's peak, the lap length, the noise: the machine as it arrived on THIS
+  program), then the live record is reloaded from the deployed one (every ① and ② weight, scale,
+  window and the authority, bit for bit) and the table learns on top exactly as in a commissioning,
+  against the bar of ① and ② alone. A table that wins replaces the record's table, lap length and
+  baseline. One that does not win, and any fault on the way (guard, abort, program change), leaves
+  the deployed record exactly as it was, table and all, and says why in `eReason` (`PROG_NO_GAIN`,
+  `GUARD_TRIPPED`, …). The record holds ONE table: a new one replaces the old, and the old
+  program's table is then gone. The contract test checks each of these on the PID loop and the
+  cart-pole.
+  The bare laps are measured two laps after ① and ② were taken away; on a loop with a slow mode
+  (the PID temperature loop) the machine is still settling then, so production reads a little better
+  than the block reports (0.3% and 1.4% on the PID loop, pressed one scan apart; the check holds it
+  inside the block's own margin, 2%).
 
 - **The conventional rung** is `ClassicFF`'s algorithm in production: `[a, v, sign v]` per
   channel plus a bias, unit-peak scaled; unit-slot probes at a quarter of each channel's error

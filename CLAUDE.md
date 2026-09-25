@@ -155,7 +155,11 @@ guard in the excitation. The changes:
 The contract test checks each, both halves. `docs/block.md` has the detail.
 A program change keeps the block running: the program table switches off, because it belongs to
 the commissioned program, and ① and ② carry on, which shows what transfers. Back on the
-commissioned program the table re-engages after one clean lap. A plant change (K or E) rebuilds
+commissioned program the table re-engages after one clean lap. **Relearn table** (the block's
+`xRelearnTable`) learns a table for the program running now and keeps ① and ② bit for bit: two
+bare laps on this program, then the table on top of ① and ②. A table that wins replaces the
+record's one table (the old program's is gone); one that does not, or a fault, leaves the record as
+it was. A plant change (K or E) rebuilds
 the arm, and the stored record (in IndexedDB: with its table it runs to megabytes) is rejected
 because the plant key moved.
 
@@ -181,7 +185,8 @@ because the plant key moved.
 - `test/autoff/host.mjs` — the ONE host every test drives the block through: the contract above,
   plus a scorer that reads each lap of the program and never the block's excitation.
 - `test/autoff/contract.test.mjs` — what the block promises: boundary, zero control, record, abort,
-  permission, disable, program change, and agreement with the reference implementation.
+  permission, disable, program change, the table relearn, and agreement with the reference
+  implementation.
 - `test/autoff/portfolio.test.mjs` — one press on every plant (`ONLY=key,…` narrows it). It asserts
   that the commissioning settles, that nothing is made worse on the commissioned or held-out
   program, that the reported factor agrees with the host's independent score, and the budget.

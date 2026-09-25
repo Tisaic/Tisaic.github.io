@@ -120,6 +120,7 @@
   <h4 class="grp">FB_AutoFF <span>— the block; one press, then it runs itself</span></h4>
   <div class="controls">
     <button id="commission" disabled>Commission ▶</button>
+    <button id="relearn" class="sec" disabled title="keep the conventional and learned rungs; learn the program table again on the program running now">Relearn table ▶</button>
     <span class="pill" id="state">IDLE</span>
     <label><input type="checkbox" id="excite" checked /> the block may drive the setpoint to excite the machine</label>
     <label><input type="checkbox" id="arm" checked /> armed — apply the trim</label>
@@ -269,8 +270,10 @@ function fitView() {
 // the page's own reckoning — pressed, and neither done nor FAULT — which a guard trip with a stored
 // controller to fall back on is neither of: the block went back to RUN and the page stayed
 // "commissioning" for ever, the Abort button up, the controls locked, every lap an "experiment".
-let commStarted = false;
-const commissioning = () => !!fb && fb.in.xCommission && (fb.out.xBusy || !commStarted);
+// `job` is the button the page is holding down: 'commission' (xCommission) or 'relearn'
+// (xRelearnTable, the program table alone, on the program running now).
+let job = null, commStarted = false;
+const commissioning = () => !!fb && !!job && (fb.out.xBusy || !commStarted);
 
 /** One PLC scan: preview and measurement in, the block, the setpoint out, the machine one step. */
 function scan() {
@@ -461,6 +464,8 @@ function sync() {
   for (const id of ['s-k', 's-e', 'shape', 's-feed']) $(id).disabled = busy || comm;
   $('commission').disabled = busy || !fb || (!comm && (!idle || !running));
   $('commission').textContent = comm ? 'Abort ■' : 'Commission ▶';
+  // RELEARN needs a controller running: it keeps ① and ② and learns ③ on the program running now
+  $('relearn').disabled = busy || !fb || comm || !idle || !running || fb.out.eState !== E_AFF_STATE.RUN || !fb.out.xDeployed;
   $('v-spf').textContent = `${$('s-spf').value} scans/frame`;
   $('v-mag').textContent = `×${magNow()}`;
   $('v-k').textContent = String(kNow()); $('v-e').textContent = eNow().toFixed(3);
@@ -472,7 +477,7 @@ function sync() {
   $('rungs').innerHTML = '<table class="tbl"><tr><th>rung</th><th>verdict</th></tr>'
     + `<tr><td>conventional (acceleration, velocity, direction, bias)</td><td>${verdictCell(O.eConvVerdict, O.eConvReason, O.rConvFactor)}</td></tr>`
     + `<tr><td>learned map of the reference window</td><td>${verdictCell(O.eLearnVerdict, O.eLearnReason, O.rLearnFactor)}</td></tr>`
-    + `<tr><td>program table — learned lap by lap on the commissioned program, applied only while it runs`
+    + `<tr><td>program table — learned lap by lap on one program, applied only while it runs`
     + `${fb.live.xProgArmed ? ` · <b>${O.xProgActive ? 'applied now' : 'off: this is not its program'}</b>` : ''}</td>`
     + `<td>${verdictCell(O.eProgVerdict, O.eProgReason, O.rProgFactor)}</td></tr>`
     + `<tr><td><b>the block, as it reports itself</b></td><td><b>${O.xDeployed ? fx(O.rFactor) + '×' : 'nothing deployed'}</b></td></tr></table>`;
@@ -502,7 +507,7 @@ function sync() {
   if (ghost && ghost.key === ghostKey() && ghost.corners) rows.push(['corners, the ghost', cornerText(ghost.corners)]);
   $('stats').innerHTML = rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('');
   $('badge-r').textContent = `lap ${Math.floor(pc / (prog ? prog.lap : 1))}`;
-  if (comm) setBadge(`commissioning — ${affStateName(O.eState)}`, 'warn');
+  if (comm) setBadge(`${job === 'relearn' ? 'relearning the program table' : 'commissioning'} — ${affStateName(O.eState)}`, 'warn');
 }
 
 // ---------------------------------------------------------------------------- controls
@@ -519,17 +524,36 @@ $('arm').onchange = () => { if (fb && !ghostRec) fb.in.xArm = $('arm').checked; 
 $('commission').onclick = () => {
   if (!fb) return;
   trail = [];
-  if (commissioning()) { fb.in.xAbort = true; fb.cycle(); fb.in.xAbort = false; fb.in.xCommission = false; setBadge('aborted — the trim was removed at once', 'warn'); sync(); return; }
-  ghostRec = null; commStarted = false;
+  if (commissioning()) {
+    fb.in.xAbort = true; fb.cycle(); fb.in.xAbort = false; fb.in.xCommission = false; fb.in.xRelearnTable = false; job = null;
+    setBadge(`aborted — the trim was removed at once${fb.out.xDeployed ? '; the stored controller runs again' : ''}`, 'warn'); sync(); return;
+  }
+  ghostRec = null; commStarted = false; job = 'commission';
   fb.in.xCommission = false; fb.cycle();     // a rising edge on the next scan
   fb.in.xCommission = true; t0 = performance.now();
   sync();
 };
+// RELEARN THE TABLE: ① and ② stay exactly as commissioned; the block records this program bare,
+// then learns a table for it on top of them. The record holds one table, so this one replaces it.
+$('relearn').onclick = () => {
+  if (!fb || commissioning() || fb.out.eState !== E_AFF_STATE.RUN) return;
+  trail = []; ghostRec = null; commStarted = false; job = 'relearn';
+  fb.in.xRelearnTable = true; t0 = performance.now();   // the input was down since the last job: an edge
+  sync();
+};
 // When the block finishes, keep what it deployed and drop the button.
 setInterval(() => {
-  if (fb && fb.in.xCommission && (fb.out.xDone || fb.out.eState === E_AFF_STATE.FAULT || (commStarted && !fb.out.xBusy))) {
-    fb.in.xCommission = false;
+  if (fb && job && (fb.out.xDone || fb.out.eState === E_AFF_STATE.FAULT || (commStarted && !fb.out.xBusy))) {
+    const was = job;
+    fb.in.xCommission = false; fb.in.xRelearnTable = false; job = null;
     const stopped = !fb.out.xDone;             // a fault, or a trip back to the stored controller
+    if (was === 'relearn' && !stopped) {
+      const won = fb.out.eProgVerdict === E_AFF_VERDICT.DEPLOYED, secs = Math.round((performance.now() - t0) / 1000);
+      if (won) { saveRecord(); restored = false; }
+      setBadge(won ? `table relearned in ${secs} s — ${fx(fb.out.rProgFactor)}× over the conventional and learned rungs, ${fx(fb.out.rFactor)}× reported`
+        : `table relearn refused — ${affReasonName(fb.out.eReason)} — the stored controller runs on, unchanged`, won ? 'good' : 'warn');
+      sync(); return;
+    }
     if (!stopped && fb.out.xDeployed && fb.out.eState === E_AFF_STATE.RUN) { saveRecord(); restored = false; }
     const secs = Math.round((performance.now() - t0) / 1000);
     if (stopped) { setBadge(`stopped — ${affReasonName(fb.out.eReason)}${fb.out.eState === E_AFF_STATE.FAULT ? ' — nothing applied' : ' — the stored controller runs again'}`, 'warn'); sync(); return; }
@@ -545,7 +569,9 @@ window.__flxDbg = () => ({
   busy, running, approaching: !!approach, frames, K: kNow(), E: eNow(), shape: $('shape').value, feed: feedNow(),
   cells: M ? 1 : 0, k: pc, lap: prog ? Math.floor(pc / prog.lap) : 0, lapT: prog ? prog.lap : 0, mag: magNow(),
   recording: !!ghostRec, ghost: ghost ? { rms: ghost.rms, lap: ghost.lap, stale: ghost.key !== ghostKey() } : null,
-  lastLap, badge: $('badge').textContent, stored: stored ? { key: stored.udiKey } : null, restored,
+  lastLap, badge: $('badge').textContent, restored,
+  stored: stored ? { key: stored.udiKey, progLap: stored.nProgLap, progArmed: !!stored.xProgArmed,
+    rungs: [...stored.aConvW, ...stored.aConvScale, stored.xConvArmed, stored.xLearnArmed, ...stored.aLearnW, ...stored.aXScale, ...stored.aOffsets.slice(0, stored.nOffsets), ...stored.aUMax].join(',') } : null,
   ghostCorners: ghost ? ghost.corners : null, jointVsGhost: jointVsGhost(),
   drawnPose: M ? { q: [M.arm.q[0], M.arm.q[1]], tool: M.arm.toolXY() } : null,
   fb: fb ? { state: fb.out.eState, stateName: affStateName(fb.out.eState), reason: affReasonName(fb.out.eReason),
@@ -553,7 +579,8 @@ window.__flxDbg = () => ({
     prog: affVerdictName(fb.out.eProgVerdict), progActive: fb.out.xProgActive, factor: fb.out.rFactor,
     deployed: fb.out.xDeployed, done: fb.out.xDone, ownsRef: fb.out.xOwnsRef, laps: fb.out.udiLaps,
     scans: fb.out.udiCommissionScans, macPeak: fb.out.udiMacPeak, budget: fb.udiMacBudget,
-    trim: [fb.out.aTrim[0], fb.out.aTrim[1]], commissioning: commissioning() } : null,
+    trim: [fb.out.aTrim[0], fb.out.aTrim[1]], commissioning: commissioning(), job,
+    progFactor: fb.out.rProgFactor, convFactor: fb.out.rConvFactor, learnFactor: fb.out.rLearnFactor, progLap: fb.rec.nProgLap } : null,
 });
 
 build().then(() => { running = false; sync(); });
