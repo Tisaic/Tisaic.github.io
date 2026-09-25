@@ -93,13 +93,9 @@ if [ "${PHASE}" != "browser" ]; then
     t node test/flexisim/toolpath.test.mjs
     t node test/flexisim/contour.test.mjs
     t node test/flexisim/bench.test.mjs
-    # the arm's twin: the controller-shaped code against the object-built one, the per-program
-    # learning on a budget, and (full tier) its table on the lattice arm on a program it never ran
-    t node test/flexisim/twin.test.mjs
     # FB_AutoFF: its contract, then one press on every plant in test/plants/ (the slow plants and
     # the 2R arm in the full tier).
     t node test/autoff/contract.test.mjs
-    t node test/autoff/twin.test.mjs
     t node test/autoff/portfolio.test.mjs
   fi
 fi

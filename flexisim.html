@@ -8,7 +8,7 @@
   <title>FlexiSim — FB_AutoFF on a compliant arm</title>
 
   <!-- Shared debug console, first and dependency-free so it catches load-time errors. -->
-  <script>window.__BUILD = {version:76,built:"2026-09-24T18:36:07Z"}; // __FLEXISIM_STAMP__</script>
+  <script>window.__BUILD = {version:73,built:"2026-09-24T16:10:04Z"}; // __FLEXISIM_STAMP__</script>
   <script src="console-boot.js"></script>
 
   <style>
@@ -74,10 +74,7 @@
   <p class="lead"><b>One machine, one function block.</b> A two-link arm with flexible links and
     geared joints, under its conventional joint servo. <b>FB_AutoFF</b> is called once per scan:
     press <b>Commission</b> and it measures the machine, fits its own feedforward, keeps what helps
-    and refuses what does not — then trims the joint setpoints for ever after. With the arm's
-    <b>twin</b> it needs no commissioning at all: it records one lap of whatever program runs, learns
-    that program's correction on the twin (never on the machine), and applies it from a few laps
-    later — on every program, with a guard that withdraws it if the machine does worse. The <b>ghost</b>
+    and refuses what does not — then trims the joint setpoints for ever after. The <b>ghost</b>
     underneath is the same machine without the block.</p>
 
   <div class="stage" id="stage">
@@ -126,7 +123,6 @@
     <span class="pill" id="state">IDLE</span>
     <label><input type="checkbox" id="excite" checked /> the block may drive the setpoint to excite the machine</label>
     <label><input type="checkbox" id="arm" checked /> armed — apply the trim</label>
-    <label><input type="checkbox" id="twin" checked /> twin — learn each program's table on the arm's twin</label>
   </div>
   <div id="rungs"></div>
   <p class="hint" id="prog"></p>
@@ -137,9 +133,8 @@
 </main>
 
 <script type="module">
-import { FB_AutoFF, E_AFF_STATE, E_AFF_VERDICT, E_AFF_TWIN, AFF_MAX_REACH, affStateName, affReasonName, affVerdictName, affTwinName }
+import { FB_AutoFF, E_AFF_STATE, E_AFF_VERDICT, AFF_MAX_REACH, affStateName, affReasonName, affVerdictName }
   from './lib/autoff/autoff.js';
-import { twinParams, BENCH_TWIN } from './lib/flexisim/twin.js';
 import { AFF_MAX_CH } from './lib/autoff/runtime.js';
 import { buildArm, calibrateComp, benchProgram, ikOf, conventional, snapshotArm, BENCH }
   from './lib/flexisim/bench.js';
@@ -150,7 +145,7 @@ const $ = (id) => document.getElementById(id);
 const K_LADDER = [0.25, 0.5, 1, 4, 16, 32];
 const E_LADDER = [0.01, 0.02, 0.03, 0.06, 0.10, 0.15];
 const FEED_LADDER = [5e-4, 1e-3, 1.5e-3, 2e-3, 3e-3];
-const STORE_KEY = 'flexisim.autoff.v3';          // v3: record format 3 (the saturated direction term)
+const STORE_KEY = 'flexisim.autoff.v3';          // v3: records fitted on the corrected program paths
 const kNow = () => K_LADDER[+$('s-k').value];
 const eNow = () => E_LADDER[+$('s-e').value];
 const feedNow = () => FEED_LADDER[+$('s-feed').value];
@@ -199,12 +194,8 @@ async function build() {
 }
 
 /** A fresh block for this plant, with the stored record offered to it. */
-// THE TWIN was identified from the tool on the bench cell and belongs to that plant; elsewhere the
-// block runs without one (identification inside the block is not built yet).
-const twinHere = () => kNow() === BENCH_TWIN.K && eNow() === BENCH_TWIN.E;
 async function newBlock() {
-  const aTwinP = $('twin').checked && twinHere() ? twinParams(M, rc, BENCH_TWIN.ident) : null;
-  fb = new FB_AutoFF({ nChannels: 2, nAhead: AFF_MAX_REACH, udiKey: plantKey(), aTwinP });
+  fb = new FB_AutoFF({ nChannels: 2, nAhead: AFF_MAX_REACH, udiKey: plantKey() });
   fb.in.xEnable = true;
   fb.in.xArm = $('arm').checked;
   fb.in.xExciteAllowed = $('excite').checked;
@@ -235,7 +226,7 @@ async function storeDo(mode, fn) {
 const storeGet = () => storeDo('readonly', (s) => s.get(STORE_KEY));
 window.__flxClearStore = () => storeDo('readwrite', (s) => s.delete(STORE_KEY));
 try { localStorage.removeItem('flexisim.autoff.v1'); } catch { /* the old, smaller format */ }
-storeDo('readwrite', (s) => s.delete('flexisim.autoff.v2'));   // fitted with the direction term that stepped the setpoint
+storeDo('readwrite', (s) => s.delete('flexisim.autoff.v2'));   // fitted on the old program paths
 async function saveRecord() {
   const r = fb.saveRecord();
   await storeDo('readwrite', (s) => s.put(r, STORE_KEY));
@@ -310,7 +301,7 @@ function scan() {
 }
 
 function onLap() {
-  lastLap = { rms: Math.sqrt(lapSs / Math.max(1, lapN)), armed: fb.in.xArm && (fb.out.xDeployed || fb.out.rTwinGain > 0), key: ghostKey(),
+  lastLap = { rms: Math.sqrt(lapSs / Math.max(1, lapN)), armed: fb.in.xArm && fb.out.xDeployed, key: ghostKey(),
     experiment: commissioning(), corners: lapTool && lapTool.length === 2 * prog.lap ? cornersOf(lapTool) : null,
     jrms: jointSs.map((x) => Math.sqrt(x / Math.max(1, jointN))) };
   lapSs = 0; lapN = 0; trail = []; jointSs = [0, 0]; jointN = 0;
@@ -460,17 +451,6 @@ function draw() {
 const fx = (x, d = 2) => (Number.isFinite(x) ? x.toFixed(d) : '—');
 const verdictCell = (v, r, x) => `${affVerdictName(v)}${r ? ' — ' + affReasonName(r) : ''}`
   + (v === E_AFF_VERDICT.DEPLOYED || v === E_AFF_VERDICT.REFUSED ? ` · ${fx(x)}×` : '');
-/** The twin rung's cell: what it is doing, and what it measured against the lap it recorded. */
-function twinCell(O) {
-  if (!fb._twP) return $('twin').checked ? 'not on this plant — the twin was identified on K 0.25 / E 0.03' : 'off';
-  const T = E_AFF_TWIN, st = O.eTwinState, name = affTwinName(st);
-  if (st === T.WATCHING) return `${name} — recording a lap of the program`;
-  if (st === T.LEARNING) return `${name} on the twin — ${Math.round(100 * O.rTwinProgress)}%`;
-  const meas = O.rTwinFactor > 0 ? ` · <b>${fx(O.rTwinFactor)}×</b> measured` : ' · measuring';
-  if (st === T.APPLIED) return `APPLIED${meas} against the lap it recorded`;
-  if (st === T.HELD) return 'HELD — off: this is not its program';
-  return `REFUSED — ${affReasonName(O.eTwinReason)}: withdrawn on this program`;
-}
 const mins = (scans) => `${(scans / 60000).toFixed(1)} machine-minutes at a 1 ms scan`;
 
 function sync() {
@@ -478,7 +458,7 @@ function sync() {
   $('run').disabled = busy || !!approach || comm;
   $('run').textContent = running ? 'Pause ❚❚' : 'Run ▶';
   $('reset').disabled = busy || comm;
-  for (const id of ['s-k', 's-e', 'shape', 's-feed', 'twin']) $(id).disabled = busy || comm;
+  for (const id of ['s-k', 's-e', 'shape', 's-feed']) $(id).disabled = busy || comm;
   $('commission').disabled = busy || !fb || (!comm && (!idle || !running));
   $('commission').textContent = comm ? 'Abort ■' : 'Commission ▶';
   $('v-spf').textContent = `${$('s-spf').value} scans/frame`;
@@ -495,7 +475,6 @@ function sync() {
     + `<tr><td>program table — learned lap by lap on the commissioned program, applied only while it runs`
     + `${fb.live.xProgArmed ? ` · <b>${O.xProgActive ? 'applied now' : 'off: this is not its program'}</b>` : ''}</td>`
     + `<td>${verdictCell(O.eProgVerdict, O.eProgReason, O.rProgFactor)}</td></tr>`
-    + `<tr><td>twin table — learned on the arm's twin from one lap of the program, applied while it runs</td><td>${twinCell(O)}</td></tr>`
     + `<tr><td><b>the block, as it reports itself</b></td><td><b>${O.xDeployed ? fx(O.rFactor) + '×' : 'nothing deployed'}</b></td></tr></table>`;
   $('prog').innerHTML = comm || O.udiCommissionScans
     ? `<b>${affStateName(O.eState)}</b> · ${O.udiLaps} laps · ${O.udiCommissionScans.toLocaleString()} scans = ${mins(O.udiCommissionScans)}`
@@ -536,7 +515,6 @@ $('s-feed').onchange = $('shape').onchange;
 $('s-feed').oninput = sync;
 $('ghost-off').onchange = sync;
 $('excite').onchange = () => { if (fb) fb.in.xExciteAllowed = $('excite').checked; };
-$('twin').onchange = async () => { if (!busy && M) { await newBlock(); sync(); } };
 $('arm').onchange = () => { if (fb && !ghostRec) fb.in.xArm = $('arm').checked; sync(); };
 $('commission').onclick = () => {
   if (!fb) return;
@@ -575,9 +553,7 @@ window.__flxDbg = () => ({
     prog: affVerdictName(fb.out.eProgVerdict), progActive: fb.out.xProgActive, factor: fb.out.rFactor,
     deployed: fb.out.xDeployed, done: fb.out.xDone, ownsRef: fb.out.xOwnsRef, laps: fb.out.udiLaps,
     scans: fb.out.udiCommissionScans, macPeak: fb.out.udiMacPeak, budget: fb.udiMacBudget,
-    trim: [fb.out.aTrim[0], fb.out.aTrim[1]], commissioning: commissioning(),
-    twin: { on: !!fb._twP, state: affTwinName(fb.out.eTwinState), gain: fb.out.rTwinGain, factor: fb.out.rTwinFactor,
-      predicted: fb.out.rTwinPredicted, tables: fb.out.udiTwinTables, lap: fb.out.nTwinLap, progress: fb.out.rTwinProgress } } : null,
+    trim: [fb.out.aTrim[0], fb.out.aTrim[1]], commissioning: commissioning() } : null,
 });
 
 build().then(() => { running = false; sync(); });

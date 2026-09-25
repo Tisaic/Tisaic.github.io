@@ -24,17 +24,6 @@ setpoint. It never replaces or reads inside the loop.
   the deployed controller runs for ever. There are no host closures.
 - `lib/autoff/runtime.js` — the deployed half: the decision `affDecide`, the record, its checksum.
   It imports nothing. This is what a machine runs for ever.
-- `lib/autoff/twin2r.js`, `lib/autoff/twinlearn.js` — the arm's TWIN, controller-shaped:
-  - a reduced-order model of the arm under its own control: rigid chain, geared joints, the
-    conventional controller, and each link as resonant modes;
-  - the budgeted job that learns a program's table on it. It needs only one lap of the program's
-    reference, never a machine lap.
-
-  They agree with the object-built twin to 1e-15 (`test/flexisim/twin.test.mjs`). A twin scan
-  costs 891 MAC. The block runs them as the **twin rung** when given `aTwinP` (below).
-  **Identification is not in the block**: the parameters come from the experiments'
-  identification from the tool (`test/plants/ilc-tables/experiments/twin/`);
-  `lib/flexisim/twin.js` holds the bench cell's (`BENCH_TWIN`) and fills them from the bench.
 - `docs/block.md` — the engineer's page: interface tables, the host contract, the state flow,
   what v1 excludes and why, notes for the ST port.
 
@@ -55,17 +44,6 @@ three rungs, each scored on the machine and kept only if it beats what came befo
    (P-type iterative learning, lead and filter width chosen per channel on the machine) with ① and
    ② armed underneath. It is applied only while the reference matches that program, now and as far
    ahead as the table reaches, after one clean lap of it; on any other program ① and ② run alone.
-
-**The twin rung, on an arm with a twin (`cfg.aTwinP`).** With or without a commissioned record:
-- **Learn.** Every program the machine runs gets a table learned on the twin from ONE lap of its
-  reference, in the background, on the scan budget's leftovers. This takes about 4 laps of
-  machine time on the bench arm.
-- **Apply.** The table acts while that program runs, in place of ① and ②; ③ keeps priority on its
-  own program.
-- **Health.** From the second lap under it, a table worse than the lap recorded without it is
-  withdrawn for good on that program (`TWIN_WORSE`).
-- **Result.** It gives 8.86x on first use on the lattice arm, on a program it never ran. The lap
-  learning of ③ needs the machine to repeat; this needs only the reference.
 
 It refuses with a stated reason (`eReason`) rather than deploy something that did not win, and a
 guard aborts if the error runs away while probing. The result is a checksummed record that loads
@@ -104,17 +82,11 @@ repeatability, not a controller (rule 14).**
   A real machine's lap-to-lap repeatability bounds it; that is not measured here.
 - The table is learned on ONE program and is worth nothing on another: "held-out" is the
   transferable result.
-- **"Nothing is made worse" is NOT established for arbitrary motion on the arm without a twin.** On eight programs
+- **"Nothing is made worse" is NOT established for arbitrary motion on the arm.** On eight programs
   it never saw (new shapes, sizes, positions, feeds; one lap each), a transferable model commissioned
   once gave 0.86x-2.45x — one of them worse than the untouched machine — and keeping it learning in
   production did not help (a short memory harmed, down to 0.47x). The portfolio's held-out check
   tries one program per plant. `test/plants/ilc-tables/experiments/transfer/FINDINGS.md`.
-  With a twin (now the block's twin rung): on the same eight programs, a correction learned on a
-  reduced-order TWIN of the arm gave 6.1x-20.5x on first use, never worse, with every corner
-  metric smaller in absolute terms. The twin is identified from the tool alone and is unmoved by 50% tracker noise.
-  On machines built to differ from it (a tool payload, a stiffening gearbox, friction, triple
-  backlash) it identifies the payload and the stiffening and still gives 4.4x-34x.
-  `test/plants/ilc-tables/experiments/twin/FINDINGS.md`.
 - **On the arm, the table's rms gain is bought with rough, inconsistent corners.** On the sharp square
   at 3e-3, lap learning takes the tool rms 12x down but the corner error goes from 1.3% to 6.9% faster
   than the jerk filter, and from 53% to 72% not common to the four corners (`cornerSignatures`). The
@@ -133,10 +105,6 @@ repeatability, not a controller (rule 14).**
   by the portfolio test.
 - The real flexible arm is not helped: its guard trips while probing.
 - The arm plants need a tracker, a commissioning instrument the customer may not own.
-- The twin rung needs a twin: the arm's structure, its CAD masses and lengths, and its drives' and
-  controller's configuration, with the rest identified from the tool. Identification is measured in
-  the experiments, not built into the block. The twin rung needs a program's reference one lap
-  ahead of using its table: motion known only a preview ahead is not covered.
 
 ## The FlexiSim page — `flexisim.html`
 
@@ -161,28 +129,21 @@ for ~2,240x its torque at every corner of the sharp square (4.4% of scans satura
 loop saturates on 0.02% of them, and the untouched machine's tool error fell 2.5x (0.70 to 0.28). The
 bench test asserts both halves. The feed runs 5e-4 … 3e-3 (default 2e-3; the sharp square's lap is
 13,067 scans at 3e-3 and 17,734 at 2e-3).
-**The jerk is bounded, and checked:** every page program's acceleration changes by at most
-1.2/JERK of its peak in a scan, and the bench test fails at 1.5/JERK (control: without the filter,
-105/JERK). Three defects in the corners were found this way, after the arm was seen lurching at
-every corner on K 0.25 / E 0.01:
-- the path's speed rose in a staircase leaving a stop. It now interpolates at uniform
-  acceleration (`_locate`);
-- a stop fell between two samples wherever the sample spacing did not divide an edge (2e-4 short
-  of the corner at 3e-3). Every segment boundary is now a sample;
-- the excitation's moves obeyed only the program's peak speed, so short moves asked for ~150x its
-  acceleration. On that arm this tripped the guard every time. They now obey the program's peak
-  acceleration and jerk too. The real flexible arm, which used to trip its guard, now commissions:
-  its learned rung deploys and the held-out program is not made worse.
+**The jerk is bounded, and checked.** Every page program's acceleration changes by at most
+1.2/JERK of its peak in a scan. The bench test fails at 1.5/JERK, and without the filter the
+programs reach 105/JERK, the control. Two defects in the paths were found this way, after the arm
+was seen lurching at the corners on K 0.25 / E 0.01:
+- **leaving a stop, the path's speed rose in a staircase** (steps of 2.5% of the feed against a
+  limit of 0.3% a scan). It now interpolates at uniform acceleration (`_locate`, `timeAt`);
+- **a stop fell between two path samples** wherever the sample spacing did not divide an edge
+  (2e-4 short of the corner at 3e-3). Every segment boundary is now a sample.
 
-**Still there:** the conventional rung's `sign v` switches at every reversal. Where that rung
-deploys on the arm (not the bench cell, where it is refused), it steps a joint's setpoint by up to
-0.031 rad at every corner. Ramping or dropping it cost other plants or the gain; see "What v1 does
-not contain" in `docs/block.md`.
-The **twin** checkbox, on by default on the bench cell, gives the block the arm's twin
-(`BENCH_TWIN`, identified from the tool on that plant; on another K or E the block runs without
-one). With it, and no commissioning at all, the page records a lap of the running program, learns
-its table on the twin, applies it a few laps later, and shows what it measured against the lap it
-recorded. Change the program and the new one gets its own table.
+**Still there, in the block** (it is back at `81edcd1`, the version before the transfer and twin
+work):
+- the conventional rung's `sign v` switches at every reversal. Where that rung deploys on the arm,
+  it steps a joint's setpoint by up to 0.031 rad at the corners;
+- the excitation's moves are sized from the program's peak SPEED only, so a short move asks for
+  up to ~150x the program's acceleration. On the soft arm (E 0.01) that trips the guard.
 A program change keeps the block running: the program table switches off, because it belongs to
 the commissioned program, and ① and ② carry on, which shows what transfers. Back on the
 commissioned program the table re-engages after one clean lap. A plant change (K or E) rebuilds

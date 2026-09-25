@@ -49,8 +49,6 @@ being taught, because there is only one loop.
 | `udiSeed` | UDINT | 1 | the excitation's seed; commissioning is deterministic |
 | `rGuardFactor` | LREAL | 4 | abort commissioning if any channel's error exceeds this x its baseline peak |
 | `udiProgLaps` | UDINT | 60 | laps the program table may spend learning (warm-up laps included); 0 turns the rung off (`PROG_OFF`) |
-| `aTwinP` | ARRAY OF LREAL | none | a TWIN of the machine under its own control (`twin2r.js`'s parameter vector; two channels, an arm's joints). With it the block runs the **twin rung** below. The bench arm's is `twinParams(m, rc, BENCH_TWIN.ident)` (`lib/flexisim/twin.js`) |
-| `xTwinNoHealth` | BOOL | FALSE | TEST ONLY: disables the twin table's health guard |
 
 ### VAR_INPUT (`fb.in`)
 
@@ -82,8 +80,6 @@ being taught, because there is only one loop.
 | `rCoverage` | the learned map's speed-coverage gain this scan |
 | `rHeadroom`, `aUMax`, `nLap`, `nSettle`, `nReach`, `nWarmLaps`, `nFitRows` | what the analysis measured and derived |
 | `udiLaps`, `udiCommissionScans`, `udiMacLast`, `udiMacPeak` | what it cost, and the worst scan |
-| `eTwinState`, `eTwinReason` | the twin rung (`E_AFF_TWIN`): OFF, WATCHING (recording a lap), LEARNING, APPLIED, HELD (a table for another program), REFUSED (`TWIN_WORSE`) |
-| `rTwinGain`, `rTwinFactor`, `rTwinProgress`, `rTwinPredicted`, `udiTwinTables`, `nTwinLap` | its gain this scan; the last judged lap against the lap recorded without it (0 = not yet judged); learning progress; the twin's own factor (a model's number, not a result); tables learned; the applied table's lap |
 
 ### Persistence
 
@@ -195,7 +191,7 @@ from the SAVED RECORD onto fresh machines running the same program and a program
   steam heat exchanger (real record)     conventional + table      2314.18x   149.85x   190.37x    67   30.2 h
   quadruple tank                         conv + learned + table      28.48x     9.02x     6.57x   131    2.5 d
   extruder barrel                        learned (table refused)      1.14x      —        1.07x   103   20.3 d
-  compliant 2R arm (the FlexiSim page)   learned + table             13.50x     2.21x     2.10x    94   21.9 min
+  compliant 2R arm (the FlexiSim page)   learned + table              8.54x     1.85x     1.86x    94   18.1 min
   flexible robot arm (real record)       FAULT — its guard tripped while probing; nothing applied
   cold mill gauge regulator              refused — a regulator, nothing to trim
 ```
@@ -212,56 +208,15 @@ real tanks below their overflow, four synthetic loops), whose factors measure th
 results. The Wood–Berry figure is on the library's own closed two-channel recipe and is **not
 comparable** to the literature's step scenario.
 
-## The twin rung (an arm with a twin)
-
-Every correction learned from data and meant to transfer capped at 2-3x on the arm, because the
-arm's modes move with its pose. A correction learned on a TWIN of the arm transfers, because the
-twin carries the pose dependence in its physics. The twin (`twin2r.js`) is controller-shaped:
-- the rigid chain, with an optional tool payload;
-- geared joints with backlash and a progressive stiffness;
-- the machine's own conventional controller, exactly;
-- each link as up to four resonant modes, driven by what the link feels in its own frame;
-- the tool mapped back to joints.
-
-A twin scan costs 891 MAC with two modes per link. The mapped tool is the same quantity the block
-reads as `aMeas` on a tracked arm.
-
-**What the rung does, in RUN, with or without a commissioned record:**
-1. **Record.** Each lap's reference is recorded, with the error's running sums, while armed and
-   not owning the setpoint.
-2. **Learn.** A complete lap of a program that has no table starts learning it on the twin
-   (`twinlearn.js`). It is rung ③'s P-type algorithm on twin laps, charged to whatever MAC the scan
-   has left. The machine needs to have run the reference once and never has to repeat for it.
-3. **Apply.** The learned table becomes the applied one at an edge that closes a clean lap of its
-   program. It acts while `affTableMatch` holds, now and as far ahead as it reaches, and REPLACES
-   ① and ② where it acts (it was learned on the conventional control alone). Where ③ is engaged,
-   ③ has priority. Its authority is 3x the twin's own prediction of that program's untouched rms
-   (rule 32).
-4. **Health.** From the second lap under the table, each lap is judged against the lap recorded
-   without it. Worse, and it is withdrawn for good on that program (`TWIN_WORSE`). A disarmed lap
-   is neither recorded nor judged.
-
-Measured (`test/autoff/twin.test.mjs`, `test/flexisim/twin.test.mjs`,
-`test/plants/ilc-tables/experiments/twin/FINDINGS.md`):
-- 8.86x on first use on the lattice arm, on a program it never ran;
-- 3.6x and 3.1x on a machine carrying a payload its twin does not know;
-- a deliberately wrong twin, unguarded, makes the machine 0.36x; the guard returns it to 1.000x.
-
-**Not built:** the twin's IDENTIFICATION inside the block. Its parameters come from the
-experiments' identification from the tool, supplied as `aTwinP`. The identification is measured
-there, recovering a payload and gearbox stiffening on machines built to differ; slicing it
-against the budget is not done.
-
 ## What v1 does not contain, and what would justify adding each
 
 | Not in v1 | Why not yet | What would add it |
 |---|---|---|
 | the teacher-taught distilled rung (`hff` + distillation) | its teacher costs 74-89% of a commissioning (§73.13) and ships on zero plants as a cascade | a plant where ①d is refused and the taught rung wins by more than rule 42's band at an affordable calendar (§119: the barrel, 1.66x) |
 | the pilot cascade | ships on zero of ten plants (§86.7) | none foreseen |
-| a table that transfers to another program | the transferable rung (②) is capped near 1.8x on the arm by its linear map class; the table does not transfer by construction | ANSWERED for an arm with a twin: the twin rung learns each program's table from one lap of its reference (above) |
+| a table that transfers to another program | the transferable rung (②) is capped near 1.8x on the arm by its linear map class; the table does not transfer by construction | a map class that reaches the table's result on a program it never saw |
 | placement scoring (①d before ①) | costs a scored run; wins on two plants of six (§133) | a plant family where it is decisive |
 | runtime guards beyond the speed fade | every one measured was a loss or unreachable (§100, §136.5) | a distribution over the refused region with geometric mean ≤ 1.000x |
-| a direction term without steps | `sign v` switches at every reversal. On the arm at K 0.25 / E 0.01 the deployed rung steps a joint's setpoint by 0.031 rad in one scan at every corner, and the arm jerks there. Ramping it inside 10% of the peak speed halved the EMPS axis's gain and let a rung that harms the held-out program ship on the real arm. Dropping it gives up 37% of the gain on the soft arm (1.57x against 1.90x). | the ramp chosen per channel on the machine (rule 42: ramped where it keeps 95% of the gain), in the block AND in `ClassicFF` (rule 61), with a check that the deployed trim has no step |
 | MIMO scaling per channel | measured harmful: bends the Newton direction (§139) | — |
 
 ## NOT CLAIMED

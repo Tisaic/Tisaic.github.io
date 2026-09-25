@@ -1814,13 +1814,8 @@ const dbg = () => fx.evaluate(() => window.__flxDbg());
   check('flexisim: the block starts IDLE with nothing deployed and no record stored', d.fb.stateName === 'IDLE' && !d.fb.deployed && d.stored === null, JSON.stringify(d.fb));
 }
 
-// THE GHOST AND ITS CONTROL. With nothing commissioned and no twin the block passes the setpoint
-// through, and the ghost is this machine with the block disarmed — one machine twice, so the ratio
-// must be ~1. The twin is on by default; the control runs without it.
-const setTwin = async (on) => { await fx.evaluate(async (v) => { const b = document.getElementById('twin'); if (b.checked !== v) { b.checked = v; b.dispatchEvent(new Event('change')); } }, on);
-  await fx.waitForFunction((v) => { const d = window.__flxDbg(); return d.fb && d.fb.twin.on === v; }, on, { timeout: 30000 }); };
-check('flexisim/twin: the twin is on by default on the bench cell', (await dbg()).fb.twin.on === true);
-await setTwin(false);
+// THE GHOST AND ITS CONTROL. With nothing commissioned the block passes the setpoint through, and
+// the ghost is this machine with the block disarmed — one machine twice, so the ratio must be ~1.
 await fx.evaluate(() => { const s = document.getElementById('s-spf'); s.value = '4000'; s.dispatchEvent(new Event('input')); });
 await fx.click('#run');
 await fx.waitForFunction(() => { const d = window.__flxDbg(); return (d.ghost && !d.ghost.stale && d.lastLap && d.lap >= 3)
@@ -1844,27 +1839,6 @@ await halted('the ghost recording');
     const r5 = window.__flxTrail(5); let moved = 0; for (const q of r5) moved = Math.max(moved, Math.hypot(q.drawn[0] - q.tool[0], q.drawn[1] - q.tool[1])); return { n: r.length, worst, moved }; });
   check('flexisim/stage: at ×1 the orange trail IS the tool’s path, and a magnification moves it', tr.n > 20 && tr.worst === 0 && tr.moved > 0, JSON.stringify(tr));
   await fx.screenshot({ path: join(SHOTS, '12-flexisim.png') });
-}
-
-// THE TWIN: with no commissioning, the block records a lap of the program, learns its table on the
-// arm's twin, applies it, and judges it against the lap it recorded. The page's per-joint ratio to
-// the ghost is the same quantity measured another way (rule 6): the two must agree.
-{
-  const tw0 = Date.now();
-  await setTwin(true);
-  await fx.waitForFunction(() => { const d = window.__flxDbg(); return (d.fb.twin.state === 'APPLIED' && d.fb.twin.factor > 0 && d.lastLap && !d.lastLap.experiment)
-    || d.fb.twin.state === 'REFUSED' || /^halted:/.test(document.getElementById('badge').textContent); }, null, { timeout: 600000 });
-  await halted('the twin');
-  const d = await dbg(), t = d.fb.twin, tool = d.ghost.rms / d.lastLap.rms, lc = d.lastLap.corners, gc = d.ghostCorners;
-  console.log(`  flexisim/twin: ${Math.round((Date.now() - tw0) / 1000)} s · ${t.state}, ${t.tables} table(s), measured ${t.factor.toFixed(3)}x (the twin predicted ${t.predicted.toFixed(1)}x) · per joint vs the ghost ${d.jointVsGhost.toFixed(3)}x · at the tool ${tool.toFixed(2)}x`);
-  console.log(`  flexisim/twin corners: live ${JSON.stringify(lc)}, ghost ${JSON.stringify(gc)}`);
-  check('flexisim/twin: with no commissioning the twin\'s table is learned and applied on the running program', t.state === 'APPLIED' && t.tables === 1 && t.lap === d.lapT);
-  check(`flexisim/twin: it beats the ghost — ${d.jointVsGhost.toFixed(2)}x per joint, ${tool.toFixed(2)}x at the tool`, d.jointVsGhost > 3 && tool > 3);
-  check('flexisim/twin: the block\'s measure and the page\'s ratio to the ghost agree (1e-2)', Math.abs(t.factor / d.jointVsGhost - 1) < 1e-2, `${t.factor} vs ${d.jointVsGhost}`);
-  check('flexisim/twin: the corners shrink — the part not common to them, and the peak', lc && gc && lc.osc < gc.osc && lc.peak < gc.peak, JSON.stringify({ lc, gc }));
-  check(`flexisim/plc: learning on the twin stayed inside ${d.fb.budget} MAC every scan (${d.fb.macPeak})`, d.fb.macPeak <= d.fb.budget);
-  await fx.screenshot({ path: join(SHOTS, '15-flexisim-twin.png') });
-  await setTwin(false);
 }
 
 // COMMISSION — the arm must move while the block drives it, and the block must advance its states.
