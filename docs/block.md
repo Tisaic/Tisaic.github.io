@@ -49,6 +49,7 @@ being taught, because there is only one loop.
 | `udiSeed` | UDINT | 1 | the excitation's seed; commissioning is deterministic |
 | `rGuardFactor` | LREAL | 4 | abort commissioning if any channel's error exceeds this x its baseline peak |
 | `udiProgLaps` | UDINT | 60 | laps the program table may spend learning (warm-up laps included); 0 turns the rung off (`PROG_OFF`) |
+| `xKeepSign` | BOOL | FALSE | TEST ONLY: never try the conventional rung without its sign terms |
 
 ### VAR_INPUT (`fb.in`)
 
@@ -80,6 +81,7 @@ being taught, because there is only one loop.
 | `rCoverage` | the learned map's speed-coverage gain this scan |
 | `rHeadroom`, `aUMax`, `nLap`, `nSettle`, `nReach`, `nWarmLaps`, `nFitRows` | what the analysis measured and derived |
 | `udiLaps`, `udiCommissionScans`, `udiMacLast`, `udiMacPeak` | what it cost, and the worst scan |
+| `xConvSign`, `rConvSignFree` | the deployed conventional rung carries its `sign v` terms; what the step-free candidate scored (0 = not tried) |
 
 ### Persistence
 
@@ -117,7 +119,24 @@ IDLE ─xCommission─► DISARM (trim ramps to 0: the baseline is the machine a
 - **The conventional rung** is `ClassicFF`'s algorithm in production: `[a, v, sign v]` per
   channel plus a bias, unit-peak scaled; unit-slot probes at a quarter of each channel's error
   peak; a least-squares operator; damped Newton with backtracking. The cap SCALES the whole
-  correction by one factor from its exact peak; it never clips it.
+  correction by one factor from its exact peak; it never clips it. When the refine ends, the rung
+  is tried once more WITHOUT its `sign v` terms: they step the setpoint at every reversal (0.031 rad
+  on a joint at the arm's corners, which it answers with a visible jerk). Rule 42: if the step-free rung is
+  indistinguishable on the gain (within 5% of it, or twice the noise margin), it ships. Where the
+  terms earn their gain they stay: on the EMPS axis (real friction) and on the soft arm.
+- **Bumpless is a fade, not a slew limit.** In RUN the whole trim fades in and out over 1% of the
+  lap (on load, disarm, washout), and so does the program table's gain when it engages or leaves
+  on a change seen ahead (a program that already differs cuts it at once);
+  faded in, the trim is EXACTLY the decision. It used to cap the trim's change at `uMax / rampN` a
+  scan in every RUN scan, which clipped any correction moving faster: on the arm on its jerk-limited
+  paths production ran a slewed copy of what was scored and settled at 3.8e-3 rms per joint against
+  the 7.6e-4 scored (reported 7.35x, 3.42x against the ghost). Now production equals the last scored
+  lap.
+- **The excitation** moves as quintics that exceed none of the program's own peaks: speed,
+  acceleration AND jerk (rule 41). Sized from the speed alone, a short move asked for ~150x the
+  program's acceleration. Its guard is twice the guard elsewhere: its error is bounded but larger
+  than the program's (3.6x the program's baseline peak routinely on the arm, 4.0x at worst), and a
+  runaway still trips it.
 - **The learned rung** is the teacher-free route (①d, §104-§126): a window of the ACHIEVED output
   fitted onto `c − y` from the excitation, deployed on the same window of the reference. The
   window is `distilkit.deriveWindow`'s rule `min(0.61·settle, lap/8)`, capped by the preview.

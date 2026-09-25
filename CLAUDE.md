@@ -54,15 +54,15 @@ the saved record reloaded onto the commissioned program and onto one it never sa
 
 ```
                                          deployed                       main   table off   held-out
-  PID temperature loop, nonlinear valve  conventional + table          30.48x      6.11x      5.13x
-  Wood–Berry column under BLT PI         conventional + learned + table 12.61x     4.95x      4.73x
-  EMPS servo axis                        conventional + table         817.51x    460.00x    200.46x
-  cart-pole (open-loop unstable)         conventional (table refused)  25.88x       —        10.22x
-  steam heat exchanger (real record)     conventional + table        2314.18x    149.85x    190.37x
-  quadruple tank                         conventional + learned + table 28.48x     9.02x      6.57x
-  extruder barrel                        learned (table refused)        1.14x       —         1.07x
-  compliant 2R arm (the FlexiSim page)   learned + table               13.50x      2.21x      2.10x
-  flexible robot arm (real record)       FAULT: guard tripped while probing, nothing applied
+  PID temperature loop, nonlinear valve  conventional + table          31.04x      6.07x      5.31x
+  Wood–Berry column under BLT PI         conventional + learned + table 12.52x     6.06x      5.07x
+  EMPS servo axis                        conventional + table         757.27x    449.94x    200.33x
+  cart-pole (open-loop unstable)         conventional (table refused)  25.89x       —        10.24x
+  steam heat exchanger (real record)     conventional + table        2161.15x    147.94x    205.92x
+  quadruple tank                         conventional + learned + table 27.79x     7.70x      5.69x
+  extruder barrel                        learned (table refused)        1.11x       —         1.00x
+  compliant 2R arm (the FlexiSim page)   conv + learned + table        10.60x      1.68x      3.22x
+  flexible robot arm (real record)       learned                        1.56x       —         1.05x
   cold mill gauge regulator              refused: a regulator, nothing to trim
 ```
 
@@ -103,7 +103,8 @@ repeatability, not a controller (rule 14).**
   measure the class, not the method.
 - Commissioning costs the plant real time: hours to days on the process plants, stated per plant
   by the portfolio test.
-- The real flexible arm is not helped: its guard trips while probing.
+- The real flexible arm is helped only a little: 1.56x on its program, 1.05x on one it never saw (it
+  tripped its guard while probing until the excitation obeyed the program's acceleration).
 - The arm plants need a tracker, a commissioning instrument the customer may not own.
 
 ## The FlexiSim page — `flexisim.html`
@@ -114,9 +115,9 @@ compliance feedforward identified at four held poses. It is defined once in
 `lib/flexisim/bench.js`, which both the page and the Node plant library use.
 
 The block trims the two joint setpoints. Its measurement is the tool's position mapped back to
-joints, which is a tracker. **Commission** runs the whole thing in about nine minutes of browser at
-the default feed (519 s measured by the gate), and reports about 7.5x in its own per-joint measure,
-12.6x against the ghost at the tool. The page shows both, and the CORNERS beside them: how much of
+joints, which is a tracker. **Commission** runs the whole thing in about seven minutes of browser at
+the default feed (412 s measured by the gate), and reports 7.35x in its own per-joint measure,
+which the page's per-joint ratio to the ghost matches exactly, and 10.5x against the ghost at the tool. The page shows both, and the CORNERS beside them: how much of
 the corner error is not common to all four corners, how rough it is, and its peak, for the lap and
 for the ghost (`cornerSignatures` in `lib/flexisim/contour.js`). The
 **ghost** is the same machine with the block disarmed, recorded per plant and program; with
@@ -138,12 +139,20 @@ was seen lurching at the corners on K 0.25 / E 0.01:
 - **a stop fell between two path samples** wherever the sample spacing did not divide an edge
   (2e-4 short of the corner at 3e-3). Every segment boundary is now a sample.
 
-**Still there, in the block** (it is back at `81edcd1`, the version before the transfer and twin
-work):
-- the conventional rung's `sign v` switches at every reversal. Where that rung deploys on the arm,
-  it steps a joint's setpoint by up to 0.031 rad at the corners;
-- the excitation's moves are sized from the program's peak SPEED only, so a short move asks for
-  up to ~150x the program's acceleration. On the soft arm (E 0.01) that trips the guard.
+**The block is the pre-trail one (`81edcd1`) with four changes the corrected paths needed.**
+On the clean paths the original block let the arm down in two ways. Production no longer matched
+what was scored (reported 12.21x, 4.17x in production). And the page's commissioning tripped its
+guard in the excitation. The changes:
+- **bumpless is a fade, not a slew limit.** It used to cap the trim's change a scan in every RUN
+  scan, which clipped the program table's corner corrections and the sign steps. The whole trim now
+  fades in and out, and faded in it is exactly the decision, so production equals the last scored
+  lap;
+- the conventional rung is tried once without its `sign v` terms, which step the setpoint at every
+  reversal, and ships so where that is indistinguishable on the gain (rule 42);
+- the excitation obeys the program's peak acceleration and jerk, not only its speed (rule 41);
+- the excitation's guard is twice the guard elsewhere.
+
+The contract test checks each, both halves. `docs/block.md` has the detail.
 A program change keeps the block running: the program table switches off, because it belongs to
 the commissioned program, and ① and ② carry on, which shows what transfers. Back on the
 commissioned program the table re-engages after one clean lap. A plant change (K or E) rebuilds

@@ -19,6 +19,7 @@ import { FB_AutoFF, E_AFF_STATE, E_AFF_REASON, E_AFF_VERDICT, affStateName, affR
 import { AFF_MAX_CH, affDecide } from '../../lib/autoff/runtime.js';
 import { ClassicFF, motionBasis } from '../reference/classic.mjs';
 import { pidloop as PID } from '../plants/pidloop.mjs';
+import { emps as EMPS } from '../plants/emps.mjs';
 import { recipe } from '../plants/program.mjs';
 import { makeHost, commission, nAheadFor, describe, fx, deployOn, bareLap, factorOf } from './host.mjs';
 
@@ -67,6 +68,57 @@ ck('the excitation ran and produced fit rows', base.states.has(E_AFF_STATE.EXCIT
   `rows ${base.fb.out.nFitRows}`);
 ck('the program table ran and reached a verdict', [E_AFF_VERDICT.DEPLOYED, E_AFF_VERDICT.REFUSED].includes(base.fb.out.eProgVerdict),
   affVerdictName(base.fb.out.eProgVerdict));
+
+// ================================================================================= WHAT IT SCORED IS WHAT IT SHIPS
+// In RUN the trim fades in and out and is otherwise exactly the decision. It used to be slew-limited
+// in every RUN scan, and a correction that moved faster than the limit ran in production as a
+// slewed copy of what was scored.
+{
+  const bare = await bareLap(PID, PID.main), got = factorOf(base.h.laps[base.h.laps.length - 1], bare);
+  ck(`production agrees with what the block scored: ${fx(got, 3)}x on the host against ${fx(base.fb.out.rFactor, 3)}x reported (1%)`,
+    Math.abs(got / base.fb.out.rFactor - 1) < 0.01);
+}
+
+// ================================================================================= THE SIGN TERMS
+// `sign v` steps the setpoint at every reversal; the block tries the rung without it and ships that
+// where it is indistinguishable on the gain. Both halves, through the shipped path.
+{
+  const O = base.fb.out;
+  ck(`the step-free candidate was scored on the PID loop (${fx(O.rConvSignFree)}x against the rung's ${fx(O.rConvFactor)}x)`, O.rConvSignFree > 0);
+  const kept = await commission(PID, { udiSeed: 7, xKeepSign: true }, { after: 0 });
+  ck(`on the PID loop, where it is indistinguishable, the rung ships WITHOUT its sign terms; with the test flag it keeps them`,
+    O.xConvSign === false && kept.fb.out.xConvSign === true && kept.fb.out.rConvSignFree === 0, `default ${O.xConvSign}, flag ${kept.fb.out.xConvSign}`);
+  const e = await commission(EMPS, {}, { after: 0 });
+  ck(`on the EMPS axis (real friction) they earn their gain and stay (${fx(e.fb.out.rConvFactor)}x with them, ${fx(e.fb.out.rConvSignFree)}x without)`,
+    e.fb.out.xConvSign === true && e.fb.out.rConvSignFree > 0 && e.fb.out.rConvSignFree < e.fb.out.rConvFactor, describe(e.fb));
+}
+
+// ================================================================================= THE EXCITATION
+// Its moves obey the program's own peaks of speed AND acceleration (rule 41); its guard is twice the
+// guard elsewhere, and still catches a runaway.
+{
+  const fb = newFb({ udiSeed: 7 }), h = await makeHost(PID, PID.main);
+  fb.in.xExciteAllowed = true; h.run(fb, 2); fb.in.xCommission = true;
+  const ref = [];
+  for (let k = 0; k < 60 * PID.main.lap && !fb.out.xDone; k++) {
+    h.scan(fb);
+    if (fb.out.eState === E_AFF_STATE.EXCITE) ref.push(fb.out.aRefOut[0] - fb.out.aTrim[0]);
+  }
+  let vx = 0, ax = 0;
+  for (let i = 1; i + 1 < ref.length; i++) { vx = Math.max(vx, Math.abs(ref[i + 1] - ref[i - 1]) / 2); ax = Math.max(ax, Math.abs(ref[i + 1] - 2 * ref[i] + ref[i - 1])); }
+  const vp = fb._vPk[0], ap = fb._aPk[0];
+  ck(`the excitation (${ref.length} scans) stays inside the program's peak speed (${fx(vx / vp, 3)}x of it) and peak acceleration (${fx(ax / ap, 3)}x)`,
+    ref.length > 1000 && vx <= 1.01 * vp && ax <= 1.01 * ap);
+  const g = newFb({ udiSeed: 7 }), hg = await makeHost(PID, PID.main);
+  g.in.xExciteAllowed = true; hg.run(g, 2); g.in.xCommission = true;
+  let inExcite = false;
+  for (let k = 0; k < 60 * PID.main.lap && !g.out.xDone && g.out.eState !== E_AFF_STATE.FAULT; k++) {
+    hg.scan(g);
+    if (!inExcite && g.out.eState === E_AFF_STATE.EXCITE) { inExcite = true; g.rGuardFactor = 1e-6; }
+  }
+  ck('the guard still trips during the excitation when the error runs away (a guard factor of 1e-6 stands in for it)',
+    inExcite && g.out.eState === E_AFF_STATE.FAULT && g.out.eReason === E_AFF_REASON.GUARD_TRIPPED, describe(g));
+}
 
 // ================================================================================= 15b: ClassicFF
 {
