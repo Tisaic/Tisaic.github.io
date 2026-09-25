@@ -159,7 +159,19 @@ commissioned program the table re-engages after one clean lap. **Relearn table**
 `xRelearnTable`) learns a table for the program running now and keeps ① and ② bit for bit: two
 bare laps on this program, then the table on top of ① and ②. A table that wins replaces the
 record's one table (the old program's is gone); one that does not, or a fault, leaves the record as
-it was. A plant change (K or E) rebuilds
+it was. Measured in Node on the bench cell: commissioned at 2e-3, then moved to the sharp square
+at 3e-3 and relearned there (tool rms; corners as not-in-common / fast / peak):
+```
+                            tool rms  vs ghost  not common    fast            peak
+  the ghost                 0.2745       —      0.15 (54%)    3.8e-3 (1.3%)   0.594
+  ① ② from 2e-3, alone      0.1937     1.42x    0.21 (92%)    4.5e-3 (2.0%)   0.559
+  + the relearned table     0.0279     9.84x    0.034 (92%)   2.1e-3 (5.6%)   0.0998
+  a full commission at 3e-3 0.0156    17.62x    0.015 (76%)   2.2e-3 (10.6%)  0.0454
+```
+① and ② carried over from 2e-3 make the corners LESS alike than the untouched machine's (0.15 to
+0.21 not in common). The relearned table (62 laps) shrinks every corner number in absolute terms,
+but 92% of what is left still differs from corner to corner. A full commission at 3e-3 is 1.8x
+better again: ① and ② fitted at 2e-3 are worse at 3e-3 than ones fitted there. A plant change (K or E) rebuilds
 the arm, and the stored record (in IndexedDB: with its table it runs to megabytes) is rejected
 because the plant key moved.
 
