@@ -242,6 +242,11 @@ if (base.fb.out.eProgVerdict === E_AFF_VERDICT.DEPLOYED) {
       E_AFF_STATE.LEARN_BAR, E_AFF_STATE.LEARN_SCORE].some((s) => seen.has(s)), [...seen].map(affStateName).join(','));
   const moved = differs(rec0, rec1, TABLE_FIELDS);
   ck('…and every field of ① and ② (weights, scales, window, authority, key) is BIT-IDENTICAL', moved.length === 0, moved.join(', '));
+  // the relearn's analysis derives a reach for THIS program (±15 on the PID held-out program) for a map
+  // it never fits; reported, it described a window the deployed controller does not have (±27)
+  const wDeployed = Math.abs(rec1.aOffsets[rec1.nOffsets - 1]);
+  ck(`…and the window it reports is the deployed one (±${fb.out.nReach})`,
+    rec1.nOffsets > 0 && fb.out.nReach === wDeployed, `deployed ±${wDeployed}`);
   let refOk = true;
   for (let k = 0; k < P.lap; k++) if (rec1.aProgRef[k * AFF_MAX_CH] !== P.at(k)[0]) { refOk = false; break; }
   ck('…the table\'s program is the one running now', refOk);
