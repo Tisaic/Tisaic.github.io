@@ -1929,14 +1929,19 @@ if (!FULL) {
   check('flexisim/library: one record per program is kept, the commissioned one and the relearned one',
     rl.library.length === 2 && rl.library.includes('sharp|0.002') && rl.library.includes('sharp|0.003') && rl.loadedFor === 'sharp|0.003', JSON.stringify(rl.library));
   await fx.evaluate(() => { const s = document.getElementById('s-feed'); s.value = '3'; s.dispatchEvent(new Event('change')); });
-  await fx.waitForFunction(() => { const d = window.__flxDbg(); return (d.feed === 2e-3 && d.running && d.ghost && !d.ghost.stale
-    && d.lastLap && d.lastLap.armed && !d.lastLap.experiment && d.lastLap.key === d.ghostKey && d.fb.progActive)
+  await fx.waitForFunction(() => { const d = window.__flxDbg(); return (d.feed === 2e-3 && d.running && d.ghost && !d.ghost.stale && d.fb.progActive)
     || /^halted:/.test(document.getElementById('badge').textContent); }, null, { timeout: 600000 });
   await halted('the return to the commissioned program');
+  // THE FIRST LAP WITH THE TABLE IS A TRANSIENT: it starts from the state the laps without it left (the
+  // block scores every table on its second lap for this reason). It is reported; the next is judged.
+  const lOn = (await dbg()).lap;
+  await fx.waitForFunction((l) => window.__flxDbg().lap >= l + 1, lOn, { timeout: 300000 });
+  const b1 = await dbg();
+  await fx.waitForFunction((l) => window.__flxDbg().lap >= l + 2, lOn, { timeout: 300000 });
   const bk = await dbg();
-  const vb = bk.ghost.rms / bk.lastLap.rms;
+  const v1 = b1.ghost.rms / b1.lastLap.rms, vb = bk.ghost.rms / bk.lastLap.rms;
   console.log(`  flexisim/library: back on ${bk.progKey}: record for ${bk.loadedFor}, table ${bk.fb.progActive ? 'applied' : 'off'} (lap ${bk.fb.progLap}), `
-    + `against the ghost ${vb.toFixed(2)}x (${vs.toFixed(2)}x when commissioned)`);
+    + `against the ghost ${v1.toFixed(2)}x on the first lap with the table, ${vb.toFixed(2)}x on the next (${vs.toFixed(2)}x when commissioned)`);
   check('flexisim/library: back on the commissioned program its own record is loaded and its table is applied',
     bk.loadedFor === 'sharp|0.002' && bk.fb.progActive && bk.fb.progLap === bk.lapT && bk.stored && bk.stored.rungs === before.stored.rungs, JSON.stringify({ loadedFor: bk.loadedFor, fb: bk.fb }));
   check(`flexisim/library: …and it performs as it did when commissioned (${vb.toFixed(2)}x against ${vs.toFixed(2)}x, within 10%)`,
