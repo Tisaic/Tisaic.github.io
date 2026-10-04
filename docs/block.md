@@ -91,6 +91,14 @@ IEEE-754 bytes of every field). `loadRecord(r)` **fails safe**: version, channel
 and checksum must all match or nothing is armed and `eReason` reads `RECORD_REJECTED`. A loaded
 record starts with a predict-only washout and a bumpless ramp (TC_NGRC paybacks §7b).
 
+**One table per record; one record per program is the host's job.** The record holds ONE program
+table, fixed at `AFF_MAX_LAP × AFF_MAX_CH` LREALs twice (4 MB in the ST layout), so the block does
+not carry a table per program. A machine that runs several programs keeps one record per program in
+its recipe system, every one from the same commissioning (a relearn copies ① and ② bit for bit),
+and calls `loadRecord` with the program's record when the program changes. The load fails safe and
+washes in like any other: the trim fades out for the washout (`2·reach + 2` scans) and the table
+engages after one clean lap. The FlexiSim page does exactly this, in IndexedDB.
+
 ## The host contract — all of it
 
 1. Once per scan: write `aRefAhead` and `aMeas`, call `cycle()`, apply `aRefOut`.

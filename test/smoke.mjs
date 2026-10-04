@@ -1924,6 +1924,24 @@ if (!FULL) {
   check(`flexisim/relearn: the machine beats the ghost by more than with the rungs alone (${vr.toFixed(2)}x against ${vo.toFixed(2)}x)`, vr > vo);
   await fx.screenshot({ path: join(SHOTS, '15-flexisim-relearned.png') });
 
+  // THE RECIPE LIBRARY: back on the commissioned feed, that program's record comes back from the
+  // library — its own table, engaged after one clean lap — and performs as it did when commissioned.
+  check('flexisim/library: one record per program is kept, the commissioned one and the relearned one',
+    rl.library.length === 2 && rl.library.includes('sharp|0.002') && rl.library.includes('sharp|0.003') && rl.loadedFor === 'sharp|0.003', JSON.stringify(rl.library));
+  await fx.evaluate(() => { const s = document.getElementById('s-feed'); s.value = '3'; s.dispatchEvent(new Event('change')); });
+  await fx.waitForFunction(() => { const d = window.__flxDbg(); return (d.feed === 2e-3 && d.running && d.ghost && !d.ghost.stale
+    && d.lastLap && d.lastLap.armed && !d.lastLap.experiment && d.lastLap.key === d.ghostKey && d.fb.progActive)
+    || /^halted:/.test(document.getElementById('badge').textContent); }, null, { timeout: 600000 });
+  await halted('the return to the commissioned program');
+  const bk = await dbg();
+  const vb = bk.ghost.rms / bk.lastLap.rms;
+  console.log(`  flexisim/library: back on ${bk.progKey}: record for ${bk.loadedFor}, table ${bk.fb.progActive ? 'applied' : 'off'} (lap ${bk.fb.progLap}), `
+    + `against the ghost ${vb.toFixed(2)}x (${vs.toFixed(2)}x when commissioned)`);
+  check('flexisim/library: back on the commissioned program its own record is loaded and its table is applied',
+    bk.loadedFor === 'sharp|0.002' && bk.fb.progActive && bk.fb.progLap === bk.lapT && bk.stored && bk.stored.rungs === before.stored.rungs, JSON.stringify({ loadedFor: bk.loadedFor, fb: bk.fb }));
+  check(`flexisim/library: …and it performs as it did when commissioned (${vb.toFixed(2)}x against ${vs.toFixed(2)}x, within 10%)`,
+    Math.abs(vb / vs - 1) < 0.1);
+
   // RESTORE: a reload offers the stored record back to the same plant.
   await fx.reload({ waitUntil: 'load' });
   await fxReady();

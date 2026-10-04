@@ -171,9 +171,13 @@ at 3e-3 and relearned there (tool rms; corners as not-in-common / fast / peak):
 ① and ② carried over from 2e-3 make the corners LESS alike than the untouched machine's (0.15 to
 0.21 not in common). The relearned table (62 laps) shrinks every corner number in absolute terms,
 but 92% of what is left still differs from corner to corner. A full commission at 3e-3 is 1.8x
-better again: ① and ② fitted at 2e-3 are worse at 3e-3 than ones fitted there. A plant change (K or E) rebuilds
-the arm, and the stored record (in IndexedDB: with its table it runs to megabytes) is rejected
-because the plant key moved.
+better again: ① and ② fitted at 2e-3 are worse at 3e-3 than ones fitted there.
+**The page keeps one record per program** (a recipe library, in IndexedDB: each record runs to
+megabytes with its table). The block holds one table, so the host keeps the records and loads the
+program's own on a program change, through `loadRecord` and its washout. Commission starts a new
+library; Relearn table adds or replaces the running program's record. A program with no record runs
+① and ② with the table off. A plant change (K or E) rebuilds the arm, and the stored records are
+rejected because the plant key moved.
 
 ## The plant library and the harness
 

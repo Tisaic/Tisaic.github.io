@@ -146,7 +146,8 @@ const $ = (id) => document.getElementById(id);
 const K_LADDER = [0.25, 0.5, 1, 4, 16, 32];
 const E_LADDER = [0.01, 0.02, 0.03, 0.06, 0.10, 0.15];
 const FEED_LADDER = [5e-4, 1e-3, 1.5e-3, 2e-3, 3e-3];
-const STORE_KEY = 'flexisim.autoff.v3';          // v3: records fitted on the corrected program paths
+const STORE_KEY = 'flexisim.autoff.v3';          // v3: ONE record, fitted on the corrected program paths
+const LIB_KEY = 'flexisim.autoff.v4|';           // v4: one record per program — the page's recipe library
 const kNow = () => K_LADDER[+$('s-k').value];
 const eNow = () => E_LADDER[+$('s-e').value];
 const feedNow = () => FEED_LADDER[+$('s-feed').value];
@@ -159,6 +160,14 @@ const frameYield = () => new Promise((r) => requestAnimationFrame(r));
 let M = null, rc = null, conv = null, ik = null, prog = null, view = null;
 let fb = null, busy = false, running = false, approach = null, pendingProgram = false;
 let pc = 0, frames = 0, stored = null, restored = false, t0 = 0;
+// THE RECIPE LIBRARY. The block holds ONE program table (65,536 scans x 4 channels x 2 arrays of
+// LREAL in the ST layout), so a host that runs several programs keeps one record per program — its
+// recipe system — and loads the program's record when the program changes; `loadRecord` fails safe
+// and washes in. Every record in it comes from ONE commissioning: Commission clears it, and a
+// relearn copies ① and ② from the record it started on. `loadedFor` names the program whose record
+// the block holds (null: none loaded, or one with no table for the program running).
+let library = new Map(), loadedFor = null;
+const progKeyNow = () => `${$('shape').value}|${feedNow()}`;
 let lapSs = 0, lapN = 0, lastLap = null, trail = [], lapTool = null;
 // THE BLOCK'S OWN MEASURE, kept beside the tool's: each joint's error as the block reads it (the
 // tracker's joints against the program's, before the step), rms over the lap after the 5% drop.
@@ -200,8 +209,39 @@ async function newBlock() {
   fb.in.xEnable = true;
   fb.in.xArm = $('arm').checked;
   fb.in.xExciteAllowed = $('excite').checked;
-  stored = await storeGet();
+  library = await libRead();
+  const old = await storeGet();                 // a v3 record: file it under the program its table was learned on
+  if (old) { const k = progKeyOf(old) || progKeyNow(); if (!library.has(k)) { library.set(k, old); await libPut(k, old); }
+    await storeDo('readwrite', (s) => s.delete(STORE_KEY)); }
+  // this program's record if there is one; otherwise any (① and ② carry, the table stays off)
+  const key = library.has(progKeyNow()) ? progKeyNow() : library.keys().next().value;
+  stored = key ? library.get(key) : null;
   restored = !!(stored && fb.loadRecord(stored));
+  loadedFor = restored ? key : null;
+}
+
+/** The program a record's table was learned on, read from the table itself: lap length and reference. */
+function progKeyOf(r) {
+  if (!r || !r.xProgArmed || !ik) return null;
+  for (const shape of ['sharp', 'rounded', 'circle']) for (const feed of FEED_LADDER) {
+    const p = benchProgram(shape, feed, ik);
+    if (p.lap !== r.nProgLap) continue;
+    let ok = true;
+    for (const k of [0, p.lap >> 2, p.lap >> 1, p.lap - 1]) {
+      const q = p.at(k);
+      if (Math.abs(q[0] - r.aProgRef[k * AFF_MAX_CH]) > r.rProgTol || Math.abs(q[1] - r.aProgRef[k * AFF_MAX_CH + 1]) > r.rProgTol) ok = false;
+    }
+    if (ok) return `${shape}|${feed}`;
+  }
+  return null;
+}
+
+/** On a program change: the block takes this program's record from the library, if it holds one. */
+function offerRecord() {
+  const key = progKeyNow(), r = library.get(key);
+  if (!fb || !r || key === loadedFor || commissioning()) return;
+  if (fb.loadRecord(r)) { stored = r; restored = true; loadedFor = key;
+    setBadge(`the record for this program was loaded — its table engages after one clean lap`, 'good'); }
 }
 
 // THE STORED RECORD lives in IndexedDB: with its program table it runs to megabytes, past what
@@ -225,17 +265,34 @@ async function storeDo(mode, fn) {
   } catch { return null; }
 }
 const storeGet = () => storeDo('readonly', (s) => s.get(STORE_KEY));
-window.__flxClearStore = () => storeDo('readwrite', (s) => s.delete(STORE_KEY));
+window.__flxClearStore = () => storeDo('readwrite', (s) => s.clear());
+const libPut = (k, r) => storeDo('readwrite', (s) => s.put(r, LIB_KEY + k));
+/** Every library record, by program. A failure reads as an empty library. */
+async function libRead() {
+  const m = new Map();
+  try {
+    const db = await storeOpen();
+    await new Promise((res) => {
+      const t = db.transaction('records', 'readonly'), q = t.objectStore('records').openCursor();
+      q.onsuccess = () => { const c = q.result; if (!c) return; if (String(c.key).startsWith(LIB_KEY)) m.set(String(c.key).slice(LIB_KEY.length), c.value); c.continue(); };
+      t.oncomplete = () => { db.close(); res(); };
+      t.onerror = t.onabort = () => { db.close(); res(); };
+    });
+  } catch { /* no storage: an empty library */ }
+  return m;
+}
 try { localStorage.removeItem('flexisim.autoff.v1'); } catch { /* the old, smaller format */ }
 storeDo('readwrite', (s) => s.delete('flexisim.autoff.v2'));   // fitted on the old program paths
-async function saveRecord() {
-  const r = fb.saveRecord();
-  await storeDo('readwrite', (s) => s.put(r, STORE_KEY));
-  stored = r;
+/** Keep the block's record as THIS program's. A commissioning starts a new library: its ① and ② differ. */
+async function saveRecord(fresh) {
+  const r = fb.saveRecord(), key = progKeyNow();
+  if (fresh) { library.clear(); await storeDo('readwrite', (s) => s.clear()); }
+  library.set(key, r); loadedFor = key; stored = r;
+  await libPut(key, r);
   sync();
 }
 
-function makeProg() { prog = benchProgram($('shape').value, feedNow(), ik); fitView(); }
+function makeProg() { prog = benchProgram($('shape').value, feedNow(), ik); fitView(); offerRecord(); }
 
 /** Drive the arm to the program's start; the block is disabled while the program is not running. */
 function home(resume = false) {
@@ -486,9 +543,11 @@ function sync() {
       + (O.nLap ? ` · lap ${O.nLap} · window ±${O.nReach}` : '') : 'not commissioned on this plant';
   $('plc').innerHTML = `PLC budget: the worst scan so far cost <b>${O.udiMacPeak.toLocaleString()}</b> of ${fb.udiMacBudget.toLocaleString()} MAC `
     + `— <b class="${O.udiMacPeak <= fb.udiMacBudget ? 'good' : 'bad'}">${O.udiMacPeak <= fb.udiMacBudget ? 'FITS' : 'DOES NOT FIT'}</b> 10% of a 1 ms scan, the commissioning included`;
+  const kept = [...library.keys()].map((k) => { const [sh, f] = k.split('|'); return `${k === progKeyNow() ? '<b>' : ''}${sh} ${(+f).toExponential(1)}${k === progKeyNow() ? '</b>' : ''}`; });
   $('stored').innerHTML = stored
-    ? (restored ? 'a stored record for <b>this plant</b> was loaded — it runs after a predict-only washout'
-      : stored.udiKey === plantKey() ? 'a stored record is kept for this plant' : 'the stored record belongs to <b>another plant</b> and was REJECTED — commission to fit this one')
+    ? (stored.udiKey !== plantKey() ? 'the stored records belong to <b>another plant</b> and were REJECTED — commission to fit this one'
+      : `records kept, one per program: ${kept.join(' · ')} — ${loadedFor === progKeyNow() ? 'this program\'s is loaded'
+        : library.has(progKeyNow()) ? 'this program\'s is kept' : 'none for this program: ① and ② run, the table is off; <b>Relearn table</b> adds one'}`)
     : 'no record stored';
   const rows = [
     ['plant', `gearbox K ${kNow()} · link E ${eNow()}${M ? '' : ' · building'}`],
@@ -549,12 +608,12 @@ setInterval(() => {
     const stopped = !fb.out.xDone;             // a fault, or a trip back to the stored controller
     if (was === 'relearn' && !stopped) {
       const won = fb.out.eProgVerdict === E_AFF_VERDICT.DEPLOYED, secs = Math.round((performance.now() - t0) / 1000);
-      if (won) { saveRecord(); restored = false; }
+      if (won) { saveRecord(false); restored = false; }
       setBadge(won ? `table relearned in ${secs} s — ${fx(fb.out.rProgFactor)}× over the conventional and learned rungs, ${fx(fb.out.rFactor)}× reported`
         : `table relearn refused — ${affReasonName(fb.out.eReason)} — the stored controller runs on, unchanged`, won ? 'good' : 'warn');
       sync(); return;
     }
-    if (!stopped && fb.out.xDeployed && fb.out.eState === E_AFF_STATE.RUN) { saveRecord(); restored = false; }
+    if (!stopped && fb.out.xDeployed && fb.out.eState === E_AFF_STATE.RUN) { saveRecord(true); restored = false; }
     const secs = Math.round((performance.now() - t0) / 1000);
     if (stopped) { setBadge(`stopped — ${affReasonName(fb.out.eReason)}${fb.out.eState === E_AFF_STATE.FAULT ? ' — nothing applied' : ' — the stored controller runs again'}`, 'warn'); sync(); return; }
     setBadge(fb.out.eState === E_AFF_STATE.FAULT ? `stopped — ${affReasonName(fb.out.eReason)}`
@@ -569,7 +628,7 @@ window.__flxDbg = () => ({
   busy, running, approaching: !!approach, frames, K: kNow(), E: eNow(), shape: $('shape').value, feed: feedNow(),
   cells: M ? 1 : 0, k: pc, lap: prog ? Math.floor(pc / prog.lap) : 0, lapT: prog ? prog.lap : 0, mag: magNow(),
   recording: !!ghostRec, ghost: ghost ? { rms: ghost.rms, lap: ghost.lap, stale: ghost.key !== ghostKey() } : null,
-  lastLap, ghostKey: ghostKey(), badge: $('badge').textContent, restored,
+  lastLap, ghostKey: ghostKey(), badge: $('badge').textContent, restored, library: [...library.keys()], loadedFor, progKey: progKeyNow(),
   stored: stored ? { key: stored.udiKey, progLap: stored.nProgLap, progArmed: !!stored.xProgArmed,
     rungs: [...stored.aConvW, ...stored.aConvScale, stored.xConvArmed, stored.xLearnArmed, ...stored.aLearnW, ...stored.aXScale, ...stored.aOffsets.slice(0, stored.nOffsets), ...stored.aUMax].join(',') } : null,
   ghostCorners: ghost ? ghost.corners : null, jointVsGhost: jointVsGhost(),
