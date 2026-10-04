@@ -1944,8 +1944,9 @@ if (!FULL) {
     + `against the ghost ${v1.toFixed(2)}x on the first lap with the table, ${vb.toFixed(2)}x on the next (${vs.toFixed(2)}x when commissioned)`);
   check('flexisim/library: back on the commissioned program its own record is loaded and its table is applied',
     bk.loadedFor === 'sharp|0.002' && bk.fb.progActive && bk.fb.progLap === bk.lapT && bk.stored && bk.stored.rungs === before.stored.rungs, JSON.stringify({ loadedFor: bk.loadedFor, fb: bk.fb }));
-  check(`flexisim/library: …and it performs as it did when commissioned (${vb.toFixed(2)}x against ${vs.toFixed(2)}x, within 10%)`,
-    Math.abs(vb / vs - 1) < 0.1);
+  // the same record on the same machine and program: measured 10.51x against 10.51x
+  check(`flexisim/library: …and on its second lap it performs as it did when commissioned (${vb.toFixed(2)}x against ${vs.toFixed(2)}x, within 1%)`,
+    Math.abs(vb / vs - 1) < 0.01);
 
   // RESTORE: a reload offers the stored record back to the same plant.
   await fx.reload({ waitUntil: 'load' });

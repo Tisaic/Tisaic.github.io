@@ -176,7 +176,9 @@ better again: ① and ② fitted at 2e-3 are worse at 3e-3 than ones fitted ther
 megabytes with its table). The block holds one table, so the host keeps the records and loads the
 program's own on a program change, through `loadRecord` and its washout. Commission starts a new
 library; Relearn table adds or replaces the running program's record. A program with no record runs
-① and ② with the table off. A plant change (K or E) rebuilds the arm, and the stored records are
+① and ② with the table off. Back on the commissioned feed after a relearn elsewhere, the first lap
+with its table is a transient (6.76x against the ghost: it starts from the state the laps without
+the table left); the next reads 10.51x, what it read when commissioned. A plant change (K or E) rebuilds the arm, and the stored records are
 rejected because the plant key moved.
 
 ## The plant library and the harness
